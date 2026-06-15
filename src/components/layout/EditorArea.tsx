@@ -1,9 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { save } from "@tauri-apps/plugin-dialog";
 import { useProjectStore } from "../../stores/projectStore";
 import { useEditorStore, type ViewMode } from "../../stores/editorStore";
 import { CodeEditor } from "../editor/CodeEditor";
 import { Preview } from "../editor/Preview";
+import { exportMarkdown, exportHtml, exportPdf } from "../../lib/export";
 import styles from "./EditorArea.module.css";
 
 const VIEW_MODES: { id: ViewMode; label: string }[] = [
@@ -51,9 +53,31 @@ export function EditorArea() {
     );
   }
 
+  const [showExportMenu, setShowExportMenu] = useState(false);
+
   const fileName = activeFilePath.split("/").pop() ?? t("editor.untitled");
+  const title = fileName.replace(/\.md$/i, "");
   const showEditor = viewMode === "editor" || viewMode === "split";
   const showPreview = viewMode === "preview" || viewMode === "split";
+
+  const handleExportMd = async () => {
+    setShowExportMenu(false);
+    await exportMarkdown(content);
+  };
+
+  const handleExportHtml = async () => {
+    setShowExportMenu(false);
+    const savePath = await save({
+      defaultPath: `${title}.html`,
+      filters: [{ name: "HTML", extensions: ["html"] }],
+    });
+    if (savePath) await exportHtml(content, title, savePath);
+  };
+
+  const handleExportPdf = () => {
+    setShowExportMenu(false);
+    exportPdf(content, title);
+  };
 
   return (
     <div className={styles.area}>
@@ -79,6 +103,25 @@ export function EditorArea() {
             保存
           </button>
         )}
+
+        <div style={{ position: "relative" }}>
+          <button className={styles.saveBtn} onClick={() => setShowExportMenu((v) => !v)}>
+            导出 ▾
+          </button>
+          {showExportMenu && (
+            <div className={styles.exportMenu} onMouseLeave={() => setShowExportMenu(false)}>
+              <button className={styles.exportItem} onClick={handleExportMd}>
+                复制 Markdown
+              </button>
+              <button className={styles.exportItem} onClick={handleExportHtml}>
+                导出 HTML…
+              </button>
+              <button className={styles.exportItem} onClick={handleExportPdf}>
+                打印 / PDF…
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Editor + Preview panes */}
