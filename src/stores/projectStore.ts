@@ -8,6 +8,7 @@ import {
   type FileNode,
 } from "../lib/project";
 import { useLoreStore } from "./loreStore";
+import { useAiStore } from "./aiStore";
 
 interface ProjectState {
   projectPath: string | null;
@@ -44,6 +45,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       set({ projectPath: path, activeFilePath: null, fileTree: [] });
       await get().refreshFileTree();
       await useLoreStore.getState().scanProject(path);
+      await useAiStore.getState().loadConfig(path);
     } finally {
       set({ isLoading: false });
     }

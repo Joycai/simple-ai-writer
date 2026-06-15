@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../stores/appStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { OutlinePanel } from "../editor/OutlinePanel";
+import { AiPanel } from "../ai/AiPanel";
 import styles from "./RightPanel.module.css";
 
 const TABS = [
@@ -32,11 +33,7 @@ export function RightPanel() {
         {activeRightTab === "outline" && (
           <OutlinePanel headings={headings} />
         )}
-        {activeRightTab === "ai" && (
-          <span style={{ color: "var(--color-text-muted)", fontSize: "var(--font-size-xs)" }}>
-            AI Assistant — Phase 5
-          </span>
-        )}
+        {activeRightTab === "ai" && <AiPanel />}
         {activeRightTab === "loreCards" && (
           <span style={{ color: "var(--color-text-muted)", fontSize: "var(--font-size-xs)" }}>
             Lore Cards — Phase 5
