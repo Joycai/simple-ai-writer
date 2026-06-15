@@ -5,8 +5,10 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--color-bg-base);
+  min-width: 0;
 }
 
+/* Empty / welcome screen */
 .empty {
   flex: 1;
   display: flex;
@@ -27,11 +29,6 @@
   background-clip: text;
 }
 
-.emptySubtitle {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-}
-
 .logo {
   width: 64px;
   height: 64px;
@@ -43,4 +40,102 @@
   font-size: 32px;
   margin-bottom: var(--space-2);
   box-shadow: 0 8px 32px rgba(59, 130, 246, 0.25);
+}
+
+/* Toolbar */
+.toolbar {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-3);
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+  flex-shrink: 0;
+}
+
+.fileName {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dirty {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  flex-shrink: 0;
+}
+
+.viewToggle {
+  display: flex;
+  gap: 2px;
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+
+.viewBtn {
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.viewBtn:hover {
+  color: var(--color-text-secondary);
+}
+
+.viewBtn.active {
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+}
+
+.saveBtn {
+  font-size: var(--font-size-xs);
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--color-accent);
+  transition: background var(--transition-fast);
+}
+
+.saveBtn:hover {
+  background: rgba(59, 130, 246, 0.25);
+}
+
+/* Pane area */
+.panes {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.editorPane {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.previewPane {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--color-border);
+  min-width: 0;
+}
+
+.divider {
+  width: 1px;
+  background: var(--color-border);
+  flex-shrink: 0;
 }

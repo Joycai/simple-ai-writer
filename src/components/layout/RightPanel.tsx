@@ -1,5 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../stores/appStore";
+import { useEditorStore } from "../../stores/editorStore";
+import { OutlinePanel } from "../editor/OutlinePanel";
 import styles from "./RightPanel.module.css";
 
 const TABS = [
@@ -11,6 +13,7 @@ const TABS = [
 export function RightPanel() {
   const { t } = useTranslation();
   const { rightPanelCollapsed, activeRightTab, setActiveRightTab } = useAppStore();
+  const { headings } = useEditorStore();
 
   return (
     <div className={`${styles.panel} ${rightPanelCollapsed ? styles.collapsed : ""}`}>
@@ -26,9 +29,19 @@ export function RightPanel() {
         ))}
       </div>
       <div className={styles.content}>
-        {activeRightTab === "outline" && <span>Outline — coming in Phase 2</span>}
-        {activeRightTab === "ai" && <span>AI Assistant — coming in Phase 5</span>}
-        {activeRightTab === "loreCards" && <span>Lore Cards — coming in Phase 5</span>}
+        {activeRightTab === "outline" && (
+          <OutlinePanel headings={headings} />
+        )}
+        {activeRightTab === "ai" && (
+          <span style={{ color: "var(--color-text-muted)", fontSize: "var(--font-size-xs)" }}>
+            AI Assistant — Phase 5
+          </span>
+        )}
+        {activeRightTab === "loreCards" && (
+          <span style={{ color: "var(--color-text-muted)", fontSize: "var(--font-size-xs)" }}>
+            Lore Cards — Phase 5
+          </span>
+        )}
       </div>
     </div>
   );

@@ -16,6 +16,8 @@ interface AppState {
   setLanguage: (lang: Language) => void;
   toggleSidebar: () => void;
   toggleRightPanel: () => void;
+  setSidebarCollapsed: (v: boolean) => void;
+  setRightPanelCollapsed: (v: boolean) => void;
   setActiveSideTab: (tab: AppState["activeSideTab"]) => void;
   setActiveRightTab: (tab: AppState["activeRightTab"]) => void;
 }
@@ -62,6 +64,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   toggleRightPanel: () =>
     set((s) => ({ rightPanelCollapsed: !s.rightPanelCollapsed })),
+
+  setSidebarCollapsed: (v) => set({ sidebarCollapsed: v }),
+  setRightPanelCollapsed: (v) => set({ rightPanelCollapsed: v }),
 
   setActiveSideTab: (tab) => set({ activeSideTab: tab }),
   setActiveRightTab: (tab) => set({ activeRightTab: tab }),

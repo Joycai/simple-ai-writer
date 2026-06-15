@@ -1,0 +1,94 @@
+.wrap {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Override CodeMirror defaults to match our theme */
+.wrap :global(.cm-editor) {
+  height: 100%;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  line-height: 1.7;
+  background: transparent;
+}
+
+.wrap :global(.cm-scroller) {
+  overflow: auto;
+  padding: 24px 0;
+}
+
+.wrap :global(.cm-content) {
+  max-width: var(--editor-max-width);
+  margin: 0 auto;
+  padding: 0 40px;
+  caret-color: var(--color-accent);
+}
+
+.wrap :global(.cm-focused) {
+  outline: none;
+}
+
+.wrap :global(.cm-cursor) {
+  border-left-color: var(--color-accent);
+  border-left-width: 2px;
+}
+
+.wrap :global(.cm-selectionBackground),
+.wrap :global(.cm-focused .cm-selectionBackground) {
+  background: rgba(59, 130, 246, 0.2) !important;
+}
+
+/* Markdown syntax colors */
+.wrap :global(.cm-line) {
+  color: var(--color-text-primary);
+}
+
+/* Heading highlight */
+.wrap :global(.tok-heading1),
+.wrap :global(.tok-heading2),
+.wrap :global(.tok-heading3) {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.wrap :global(.tok-heading1) { font-size: 1.3em; }
+.wrap :global(.tok-heading2) { font-size: 1.15em; }
+
+.wrap :global(.tok-emphasis) { font-style: italic; }
+.wrap :global(.tok-strong) { font-weight: 700; }
+
+.wrap :global(.tok-url),
+.wrap :global(.tok-link) { color: var(--color-accent); }
+
+.wrap :global(.tok-quote) { color: var(--color-text-muted); }
+
+.wrap :global(.tok-monospace),
+.wrap :global(.tok-atom) {
+  font-family: var(--font-mono);
+  color: #7dd3fc;
+  background: rgba(125, 211, 252, 0.08);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+.wrap :global(.tok-processingInstruction) { color: #94a3b8; }
+
+/* Active line subtle highlight */
+.wrap :global(.cm-activeLine) {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.wrap :global(.cm-activeLineGutter) {
+  background: transparent;
+}
+
+/* Scrollbar inside editor */
+.wrap :global(.cm-scroller::-webkit-scrollbar) {
+  width: 6px;
+}
+.wrap :global(.cm-scroller::-webkit-scrollbar-thumb) {
+  background: var(--color-border-strong);
+  border-radius: 3px;
+}
