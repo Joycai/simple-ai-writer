@@ -5,20 +5,30 @@ import { useAiStore } from "../../stores/aiStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { LORE_CATEGORIES, type CategoryId } from "../../lib/lore";
 import {
-  scanProjectImages,
+  scanProjectFiles,
   imageToDataUrl,
+  readTextFileContent,
   generateLore,
-  type ProjectImage,
+  type ProjectFile,
 } from "../../lib/loreGenerator";
 import { loadApiKey } from "../../lib/keyStore";
 import styles from "./LoreGenerator.module.css";
 
-// Tiny image thumbnail for @ picker — loads lazily to avoid blocking
-function PickerThumb({ path }: { path: string }) {
+type AttachedImage = { kind: "image"; file: ProjectFile; dataUrl: string };
+type AttachedText  = { kind: "text";  file: ProjectFile; content: string };
+type AttachedItem  = AttachedImage | AttachedText;
+
+// Thumbnail for @ picker — lazy image load, emoji icon for text files
+function PickerThumb({ file }: { file: ProjectFile }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
-    imageToDataUrl(path).then(({ dataUrl }) => setUrl(dataUrl)).catch(() => {});
-  }, [path]);
+    if (file.kind === "image") {
+      imageToDataUrl(file.path).then(({ dataUrl }) => setUrl(dataUrl)).catch(() => {});
+    }
+  }, [file.path, file.kind]);
+  if (file.kind === "text") {
+    return <div className={styles.atPickerThumbPlaceholder}>{file.name.endsWith(".md") ? "📝" : "📄"}</div>;
+  }
   if (!url) return <div className={styles.atPickerThumbPlaceholder}>🖼</div>;
   return <img src={url} alt="" className={styles.atPickerThumb} />;
 }
@@ -35,11 +45,11 @@ export function LoreGenerator({ onClose }: Props) {
 
   // ── Input state ──────────────────────────────────────────────────────────
   const [description, setDescription] = useState("");
-  const [attached, setAttached] = useState<{ image: ProjectImage; dataUrl: string }[]>([]);
+  const [attached, setAttached] = useState<AttachedItem[]>([]);
   const [category, setCategory] = useState<CategoryId>("characters");
 
   // ── @ picker state ───────────────────────────────────────────────────────
-  const [projectImages, setProjectImages] = useState<ProjectImage[]>([]);
+  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const [showPicker, setShowPicker] = useState(false);
   const [atIndex, setAtIndex] = useState(0);
   const [atQuery, setAtQuery] = useState("");
@@ -70,7 +80,7 @@ export function LoreGenerator({ onClose }: Props) {
 
   useEffect(() => {
     if (projectPath) {
-      scanProjectImages(projectPath).then(setProjectImages).catch(() => {});
+      scanProjectFiles(projectPath).then(setProjectFiles).catch(() => {});
     }
   }, [projectPath]);
 
@@ -90,24 +100,29 @@ export function LoreGenerator({ onClose }: Props) {
     }
   };
 
-  const handlePickImage = async (img: ProjectImage) => {
-    if (attached.find((a) => a.image.path === img.path)) {
+  const handlePickFile = async (file: ProjectFile) => {
+    if (attached.find((a) => a.file.path === file.path)) {
       setShowPicker(false);
       return;
     }
     try {
-      const { dataUrl } = await imageToDataUrl(img.path);
-      setAttached((prev) => [...prev, { image: img, dataUrl }]);
+      if (file.kind === "image") {
+        const { dataUrl } = await imageToDataUrl(file.path);
+        setAttached((prev) => [...prev, { kind: "image", file, dataUrl }]);
+      } else {
+        const content = await readTextFileContent(file.path);
+        setAttached((prev) => [...prev, { kind: "text", file, content }]);
+      }
       const before = description.slice(0, atIndex);
       const after = description.slice(atIndex + 1 + atQuery.length);
-      setDescription(`${before}@[${img.name}]${after}`);
+      setDescription(`${before}@[${file.name}]${after}`);
     } catch { /* unreadable — skip */ }
     setShowPicker(false);
     textareaRef.current?.focus();
   };
 
   const removeAttached = (path: string) =>
-    setAttached((prev) => prev.filter((a) => a.image.path !== path));
+    setAttached((prev) => prev.filter((a) => a.file.path !== path));
 
   // ── Tag input helpers ────────────────────────────────────────────────────
   const commitTag = () => {
@@ -142,7 +157,8 @@ export function LoreGenerator({ onClose }: Props) {
       const loreScenePrompt = prompts.find((p) => p.scene === "lore");
       const result = await generateLore({
         description,
-        images: attached.map((a) => ({ dataUrl: a.dataUrl })),
+        images: attached.filter((a): a is AttachedImage => a.kind === "image").map((a) => ({ dataUrl: a.dataUrl })),
+        textAttachments: attached.filter((a): a is AttachedText => a.kind === "text").map((a) => ({ name: a.file.name, content: a.content })),
         baseUrl: provider.baseUrl,
         apiKey,
         standard: provider.apiStandard,
@@ -190,8 +206,9 @@ export function LoreGenerator({ onClose }: Props) {
       ].join("\n");
       const dirPath = `${projectPath}/.ai-writer/lore/${editCat}/${id}`;
       await writeEntityFile(dirPath, "index.md", full);
-      if (attached.length > 0) {
-        const { bytes, ext } = await imageToDataUrl(attached[0].image.path);
+      const firstImage = attached.find((a): a is AttachedImage => a.kind === "image");
+      if (firstImage) {
+        const { bytes, ext } = await imageToDataUrl(firstImage.file.path);
         const { writeFile } = await import("@tauri-apps/plugin-fs");
         await writeFile(`${dirPath}/avatar.${ext}`, bytes);
       }
@@ -204,8 +221,8 @@ export function LoreGenerator({ onClose }: Props) {
     }
   };
 
-  const filteredImages = projectImages.filter(
-    (img) => !atQuery || img.name.toLowerCase().includes(atQuery.toLowerCase()),
+  const filteredFiles = projectFiles.filter(
+    (f) => !atQuery || f.name.toLowerCase().includes(atQuery.toLowerCase()),
   );
   const multimodalModels = models.filter((m) => m.type === "multimodal" || m.type === "text");
 
@@ -284,16 +301,16 @@ export function LoreGenerator({ onClose }: Props) {
                       <kbd className={styles.atPickerEsc}>{t("lore.generator.closeEsc")}</kbd>
                     </div>
                     <div className={styles.atPickerList}>
-                      {filteredImages.length === 0
-                        ? <div className={styles.atPickerEmpty}>{t("lore.generator.noImages")}</div>
-                        : filteredImages.slice(0, 12).map((img) => (
-                          <button key={img.path} className={styles.atPickerItem}
-                            onClick={() => handlePickImage(img)}>
-                            <PickerThumb path={img.path} />
+                      {filteredFiles.length === 0
+                        ? <div className={styles.atPickerEmpty}>{t("lore.generator.noFiles")}</div>
+                        : filteredFiles.slice(0, 12).map((file) => (
+                          <button key={file.path} className={styles.atPickerItem}
+                            onClick={() => handlePickFile(file)}>
+                            <PickerThumb file={file} />
                             <div className={styles.atPickerInfo}>
-                              <div className={styles.atPickerName}>{img.name}</div>
+                              <div className={styles.atPickerName}>{file.name}</div>
                               <div className={styles.atPickerPath}>
-                                {img.path.replace(projectPath ?? "", "").slice(1)}
+                                {file.path.replace(projectPath ?? "", "").slice(1)}
                               </div>
                             </div>
                           </button>
@@ -305,17 +322,22 @@ export function LoreGenerator({ onClose }: Props) {
               </div>
             </div>
 
-            {/* Attached images */}
+            {/* Attached files */}
             {attached.length > 0 && (
               <div className={styles.attachedSection}>
-                <div className={styles.attachedLabel}>{t("lore.generator.referenceImages")} ({attached.length})</div>
+                <div className={styles.attachedLabel}>{t("lore.generator.attachedFiles")} ({attached.length})</div>
                 <div className={styles.attachedGrid}>
                   {attached.map((a) => (
-                    <div key={a.image.path} className={styles.attachedChip}>
-                      <img src={a.dataUrl} alt={a.image.name} className={styles.chipThumb} />
-                      <span className={styles.chipLabel}>{a.image.name}</span>
+                    <div key={a.file.path} className={styles.attachedChip}>
+                      {a.kind === "image"
+                        ? <img src={a.dataUrl} alt={a.file.name} className={styles.chipThumb} />
+                        : <span className={styles.chipThumb} style={{ display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
+                            {a.file.name.endsWith(".md") ? "📝" : "📄"}
+                          </span>
+                      }
+                      <span className={styles.chipLabel}>{a.file.name}</span>
                       <button className={styles.chipRemove}
-                        onClick={() => removeAttached(a.image.path)}>✕</button>
+                        onClick={() => removeAttached(a.file.path)}>✕</button>
                     </div>
                   ))}
                 </div>

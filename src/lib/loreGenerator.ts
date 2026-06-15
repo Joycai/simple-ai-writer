@@ -1,18 +1,24 @@
 /**
  * AI-assisted Lore entity generation.
- * Takes a text description + optional reference images, calls the selected
- * multimodal model, and returns a structured GeneratedLore ready to save.
+ * Takes a text description + optional reference images/text files, calls the
+ * selected model, and returns a structured GeneratedLore ready to save.
  */
 
-import { readFile as readBinaryFile, readDir } from "@tauri-apps/plugin-fs";
+import { readFile as readBinaryFile, readTextFile, readDir } from "@tauri-apps/plugin-fs";
 import i18n from "../i18n";
 import type { ApiStandard } from "./aiConfig";
 import type { CategoryId } from "./lore";
 
-export interface ProjectImage {
+export type ProjectFileKind = "image" | "text";
+
+export interface ProjectFile {
   name: string;
   path: string;
+  kind: ProjectFileKind;
 }
+
+/** @deprecated use ProjectFile */
+export type ProjectImage = ProjectFile;
 
 export interface GeneratedLore {
   name: string;
@@ -23,18 +29,19 @@ export interface GeneratedLore {
 }
 
 const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "webp", "gif"]);
+const TEXT_EXTS  = new Set(["md", "txt"]);
 
 const MIME: Record<string, string> = {
-  png: "image/png",
-  jpg: "image/jpeg",
+  png:  "image/png",
+  jpg:  "image/jpeg",
   jpeg: "image/jpeg",
   webp: "image/webp",
-  gif: "image/gif",
+  gif:  "image/gif",
 };
 
-/** Recursively scan the project folder for image files (max depth 5). */
-export async function scanProjectImages(projectPath: string): Promise<ProjectImage[]> {
-  const results: ProjectImage[] = [];
+/** Recursively scan the project folder for image and text files (max depth 5). */
+export async function scanProjectFiles(projectPath: string): Promise<ProjectFile[]> {
+  const results: ProjectFile[] = [];
 
   async function walk(dir: string, depth: number) {
     if (depth > 5) return;
@@ -47,7 +54,9 @@ export async function scanProjectImages(projectPath: string): Promise<ProjectIma
         } else if (!e.isDirectory) {
           const ext = e.name.split(".").pop()?.toLowerCase() ?? "";
           if (IMAGE_EXTS.has(ext)) {
-            results.push({ name: e.name, path: `${dir}/${e.name}` });
+            results.push({ name: e.name, path: `${dir}/${e.name}`, kind: "image" });
+          } else if (TEXT_EXTS.has(ext)) {
+            results.push({ name: e.name, path: `${dir}/${e.name}`, kind: "text" });
           }
         }
       }
@@ -59,6 +68,9 @@ export async function scanProjectImages(projectPath: string): Promise<ProjectIma
   await walk(projectPath, 0);
   return results;
 }
+
+/** @deprecated use scanProjectFiles */
+export const scanProjectImages = scanProjectFiles;
 
 /** Read an image file and return a base64 data URL. */
 export async function imageToDataUrl(imagePath: string): Promise<{ dataUrl: string; ext: string; bytes: Uint8Array }> {
@@ -77,10 +89,15 @@ export async function imageToDataUrl(imagePath: string): Promise<{ dataUrl: stri
   return { dataUrl: `data:${mime};base64,${base64}`, ext, bytes: u8 };
 }
 
+/** Read a text file (.md / .txt) and return its content string. */
+export async function readTextFileContent(filePath: string): Promise<string> {
+  return readTextFile(filePath);
+}
 
 export async function generateLore(opts: {
   description: string;
   images: { dataUrl: string }[];
+  textAttachments?: { name: string; content: string }[];
   baseUrl: string;
   apiKey: string;
   standard: ApiStandard;
@@ -96,6 +113,10 @@ export async function generateLore(opts: {
     ...opts.images.map((img) => ({
       type: "image_url" as const,
       image_url: { url: img.dataUrl },
+    })),
+    ...(opts.textAttachments ?? []).map((ta) => ({
+      type: "text" as const,
+      text: `\n--- Reference: ${ta.name} ---\n${ta.content}\n---`,
     })),
   ];
 
