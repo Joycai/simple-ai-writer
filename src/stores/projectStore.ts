@@ -7,6 +7,7 @@ import {
   resetDb,
   type FileNode,
 } from "../lib/project";
+import { useLoreStore } from "./loreStore";
 
 interface ProjectState {
   projectPath: string | null;
@@ -42,6 +43,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       await getDb(path);
       set({ projectPath: path, activeFilePath: null, fileTree: [] });
       await get().refreshFileTree();
+      await useLoreStore.getState().scanProject(path);
     } finally {
       set({ isLoading: false });
     }

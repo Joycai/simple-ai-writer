@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { FileTree } from "./FileTree";
+import { LorePanel } from "../lore/LorePanel";
 import styles from "./Sidebar.module.css";
 
 const TAB_LABELS: Record<string, string> = {
@@ -36,11 +37,7 @@ export function Sidebar() {
         ) : (
           <>
             {activeSideTab === "files" && <FileTree />}
-            {activeSideTab === "lore" && (
-              <div style={{ color: "var(--color-text-muted)", fontSize: "var(--font-size-xs)", padding: "var(--space-3)" }}>
-                Lore library — coming in Phase 3
-              </div>
-            )}
+            {activeSideTab === "lore" && <LorePanel />}
             {activeSideTab === "search" && (
               <div style={{ color: "var(--color-text-muted)", fontSize: "var(--font-size-xs)", padding: "var(--space-3)" }}>
                 Search — coming soon
