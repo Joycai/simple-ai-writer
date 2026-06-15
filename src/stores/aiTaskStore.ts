@@ -61,17 +61,23 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const provider = providers.find((p) => p.id === model.providerId);
     if (!provider) { set({ error: "找不到供应商" }); return; }
 
+    // System prompt: user-selected prompt (scene === "system"), else default
     const prompt = prompts.find((p) => p.id === activePromptId);
     const systemPrompt = prompt?.content ?? "你是一位专业的写作助手。";
 
-    const apiKey = await loadApiKey(projectPath, provider.id) ?? "";
+    const apiKey = await loadApiKey(provider.id) ?? "";
 
     // Gather current document text from editorStore lazily (avoid circular import)
     const { useEditorStore } = await import("./editorStore");
     const { content: documentText } = useEditorStore.getState();
 
+    // Task instruction: use scene-matched user prompt if one exists, else built-in default
+    const scenePrompt = kind !== "custom"
+      ? prompts.find((p) => p.scene === kind)
+      : undefined;
     const instruction =
-      kind === "custom" ? (customInstruction ?? "") : TASK_INSTRUCTIONS[kind];
+      kind === "custom" ? (customInstruction ?? "")
+      : scenePrompt?.content ?? TASK_INSTRUCTIONS[kind];
 
     const bundle = await assembleContext(
       systemPrompt,

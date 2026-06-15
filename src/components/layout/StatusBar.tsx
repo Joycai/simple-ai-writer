@@ -65,7 +65,7 @@ export function StatusBar({ onOpenSettings }: Props) {
       </button>
 
       <button className={styles.control} onClick={onOpenSettings} title={t("settings.aiConfig")}>
-        ⚙
+        ⚙ {t("settings.aiConfig")}
       </button>
     </div>
   );

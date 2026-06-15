@@ -1,14 +1,28 @@
 import { useState } from "react";
 import { useAiStore } from "../../stores/aiStore";
-import { useProjectStore } from "../../stores/projectStore";
 import type { ApiStandard, ModelType } from "../../lib/aiConfig";
 import styles from "./SettingsModal.module.css";
+
+const BUILTIN_PROMPTS: { scene: string; label: string; content: string }[] = [
+  { scene: "system",   label: "系统 (System)",   content: "你是一位专业的写作助手。" },
+  { scene: "continue", label: "续写 (Continue)",  content: "请根据以上内容，继续写作下一段，风格保持一致，约200字。" },
+  { scene: "polish",   label: "润色 (Polish)",    content: "请润色以上选中内容，保留原意，使文字更加流畅优美。" },
+  { scene: "rewrite",  label: "重写 (Rewrite)",   content: "请重写以上选中内容，保留核心情节，改变表达方式。" },
+  { scene: "summary",  label: "总结 (Summary)",   content: "请对以上内容进行简要总结，提炼主要情节和人物动态。" },
+  { scene: "lore",     label: "世界观生成 (Lore)", content: "你是一位专业的世界观构建助手。根据用户提供的描述（以及可能附带的参考图片），创建一个结构化的设定条目。请严格按指定JSON格式回复。" },
+];
 
 const API_STANDARDS: { value: ApiStandard; label: string }[] = [
   { value: "openai", label: "OpenAI" },
   { value: "openai_compat", label: "OpenAI Compatible" },
   { value: "gemini", label: "Google Gemini" },
 ];
+
+const STANDARD_ENDPOINTS: Record<ApiStandard, string> = {
+  openai: "https://api.openai.com/v1",
+  gemini: "https://generativelanguage.googleapis.com/v1beta",
+  openai_compat: "",
+};
 
 const MODEL_TYPES: { value: ModelType; label: string }[] = [
   { value: "text", label: "文本" },
@@ -20,19 +34,25 @@ const MODEL_TYPES: { value: ModelType; label: string }[] = [
 // ─── Providers Tab ────────────────────────────────────────────────────────────
 
 function ProvidersTab() {
-  const { projectPath } = useProjectStore();
   const { providers, addProvider, removeProvider } = useAiStore();
-  const [form, setForm] = useState({ name: "", baseUrl: "", apiStandard: "openai" as ApiStandard, apiKey: "" });
+  const [form, setForm] = useState({ name: "", baseUrl: STANDARD_ENDPOINTS.openai, apiStandard: "openai" as ApiStandard, apiKey: "" });
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleAdd = async () => {
-    if (!projectPath || !form.name || !form.apiKey) return;
+    if (!form.name || !form.apiKey) return;
     setSaving(true);
+    setError(null);
     try {
-      await addProvider(projectPath, { name: form.name, baseUrl: form.baseUrl, apiStandard: form.apiStandard }, form.apiKey);
-      setForm({ name: "", baseUrl: "", apiStandard: "openai", apiKey: "" });
+      await addProvider(
+        { name: form.name, baseUrl: form.baseUrl, apiStandard: form.apiStandard },
+        form.apiKey,
+      );
+      setForm({ name: "", baseUrl: STANDARD_ENDPOINTS.openai, apiStandard: "openai", apiKey: "" });
       setShowForm(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
@@ -51,7 +71,7 @@ function ProvidersTab() {
                 <div className={styles.itemMeta}>{p.baseUrl || "(默认端点)"} · {p.apiStandard}</div>
               </div>
               <span className={styles.badge}>{p.apiStandard}</span>
-              <button className={styles.deleteBtn} onClick={() => projectPath && removeProvider(projectPath, p.id)}>✕</button>
+              <button className={styles.deleteBtn} onClick={() => removeProvider(p.id)}>✕</button>
             </div>
           ))}
         </div>
@@ -60,6 +80,7 @@ function ProvidersTab() {
       {showForm ? (
         <div className={styles.form}>
           <div className={styles.sectionTitle}>添加供应商</div>
+          {error && <div className={styles.errorNote}>{error}</div>}
           <div className={styles.formRow}>
             <div className={styles.fieldGroup}>
               <label className={styles.label}>名称</label>
@@ -69,7 +90,10 @@ function ProvidersTab() {
             <div className={styles.fieldGroup}>
               <label className={styles.label}>API 标准</label>
               <select className={styles.select} value={form.apiStandard}
-                onChange={(e) => setForm({ ...form, apiStandard: e.target.value as ApiStandard })}>
+                onChange={(e) => {
+                  const standard = e.target.value as ApiStandard;
+                  setForm({ ...form, apiStandard: standard, baseUrl: STANDARD_ENDPOINTS[standard] });
+                }}>
                 {API_STANDARDS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
             </div>
@@ -85,7 +109,7 @@ function ProvidersTab() {
               onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
           </div>
           <div className={styles.formActions}>
-            <button className={styles.btnSecondary} onClick={() => setShowForm(false)}>取消</button>
+            <button className={styles.btnSecondary} onClick={() => { setShowForm(false); setError(null); }}>取消</button>
             <button className={styles.btnPrimary} onClick={handleAdd}
               disabled={!form.name || !form.apiKey || saving}>
               {saving ? "保存中…" : "保存"}
@@ -102,32 +126,34 @@ function ProvidersTab() {
 // ─── Models Tab ───────────────────────────────────────────────────────────────
 
 function ModelsTab() {
-  const { projectPath } = useProjectStore();
   const { providers, models, addModel, removeModel, fetchAndImportModels } = useAiStore();
   const [form, setForm] = useState({ providerId: "", modelId: "", name: "", type: "text" as ModelType, priceIn: "", priceCachedIn: "", priceOut: "" });
   const [showForm, setShowForm] = useState(false);
   const [fetching, setFetching] = useState(false);
   const [fetchedList, setFetchedList] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleFetch = async () => {
-    if (!projectPath || !form.providerId) return;
+    if (!form.providerId) return;
     setFetching(true);
+    setError(null);
     try {
-      const list = await fetchAndImportModels(projectPath, form.providerId);
+      const list = await fetchAndImportModels(form.providerId);
       setFetchedList(list);
     } catch (e) {
-      alert(String(e));
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setFetching(false);
     }
   };
 
   const handleAdd = async () => {
-    if (!projectPath || !form.providerId || !form.modelId) return;
+    if (!form.providerId || !form.modelId) return;
     setSaving(true);
+    setError(null);
     try {
-      await addModel(projectPath, {
+      await addModel({
         providerId: form.providerId,
         modelId: form.modelId,
         name: form.name || form.modelId,
@@ -140,6 +166,8 @@ function ModelsTab() {
       setForm({ providerId: "", modelId: "", name: "", type: "text", priceIn: "", priceCachedIn: "", priceOut: "" });
       setShowForm(false);
       setFetchedList([]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
@@ -160,7 +188,7 @@ function ModelsTab() {
                   <div className={styles.itemMeta}>{pname} · {m.modelId}</div>
                 </div>
                 <span className={styles.badge}>{m.type}</span>
-                <button className={styles.deleteBtn} onClick={() => projectPath && removeModel(projectPath, m.id)}>✕</button>
+                <button className={styles.deleteBtn} onClick={() => removeModel(m.id)}>✕</button>
               </div>
             );
           })}
@@ -170,6 +198,7 @@ function ModelsTab() {
       {showForm ? (
         <div className={styles.form}>
           <div className={styles.sectionTitle}>添加模型</div>
+          {error && <div className={styles.errorNote}>{error}</div>}
           <div className={styles.formRow}>
             <div className={styles.fieldGroup}>
               <label className={styles.label}>供应商</label>
@@ -233,7 +262,7 @@ function ModelsTab() {
           </div>
 
           <div className={styles.formActions}>
-            <button className={styles.btnSecondary} onClick={() => { setShowForm(false); setFetchedList([]); }}>取消</button>
+            <button className={styles.btnSecondary} onClick={() => { setShowForm(false); setFetchedList([]); setError(null); }}>取消</button>
             <button className={styles.btnPrimary} onClick={handleAdd} disabled={!form.providerId || !form.modelId || saving}>
               {saving ? "保存中…" : "添加"}
             </button>
@@ -249,19 +278,22 @@ function ModelsTab() {
 // ─── Prompts Tab ──────────────────────────────────────────────────────────────
 
 function PromptsTab() {
-  const { projectPath } = useProjectStore();
   const { prompts, addPrompt, removePrompt } = useAiStore();
   const [form, setForm] = useState({ name: "", content: "", scene: "system" });
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleAdd = async () => {
-    if (!projectPath || !form.name || !form.content) return;
+    if (!form.name || !form.content) return;
     setSaving(true);
+    setError(null);
     try {
-      await addPrompt(projectPath, form);
+      await addPrompt(form);
       setForm({ name: "", content: "", scene: "system" });
       setShowForm(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }
@@ -270,8 +302,28 @@ function PromptsTab() {
   return (
     <div>
       <div className={styles.section}>
-        <div className={styles.sectionTitle}>预置 Prompt</div>
-        {prompts.length === 0 && <div className={styles.emptyNote}>暂无预置 Prompt</div>}
+        <div className={styles.sectionTitle}>内置默认指令 (只读)</div>
+        <div className={styles.itemList}>
+          {BUILTIN_PROMPTS.map((b) => {
+            const overridden = prompts.some((p) => p.scene === b.scene);
+            return (
+              <div key={b.scene} className={`${styles.item} ${styles.builtinItem}`}>
+                <div className={styles.itemInfo}>
+                  <div className={styles.itemName} style={{ opacity: overridden ? 0.4 : 1 }}>
+                    {b.content}
+                    {overridden && <span className={styles.overriddenTag}> 已被覆盖</span>}
+                  </div>
+                </div>
+                <span className={styles.badge}>{b.scene}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>自定义 Prompt (覆盖同场景默认)</div>
+        {prompts.length === 0 && <div className={styles.emptyNote}>暂无自定义 Prompt</div>}
         <div className={styles.itemList}>
           {prompts.map((p) => (
             <div key={p.id} className={styles.item}>
@@ -280,7 +332,7 @@ function PromptsTab() {
                 <div className={styles.itemMeta} style={{ maxWidth: 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.content}</div>
               </div>
               <span className={styles.badge}>{p.scene}</span>
-              <button className={styles.deleteBtn} onClick={() => projectPath && removePrompt(projectPath, p.id)}>✕</button>
+              <button className={styles.deleteBtn} onClick={() => removePrompt(p.id)}>✕</button>
             </div>
           ))}
         </div>
@@ -289,6 +341,7 @@ function PromptsTab() {
       {showForm ? (
         <div className={styles.form}>
           <div className={styles.sectionTitle}>新建 Prompt</div>
+          {error && <div className={styles.errorNote}>{error}</div>}
           <div className={styles.formRow}>
             <div className={styles.fieldGroup}>
               <label className={styles.label}>名称</label>
@@ -299,7 +352,7 @@ function PromptsTab() {
               <label className={styles.label}>场景</label>
               <select className={styles.select} value={form.scene}
                 onChange={(e) => setForm({ ...form, scene: e.target.value })}>
-                {["system", "continue", "polish", "rewrite", "summary"].map((s) => (
+                {["system", "continue", "polish", "rewrite", "summary", "lore"].map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
@@ -312,7 +365,7 @@ function PromptsTab() {
               style={{ resize: "vertical", fontFamily: "inherit" }} />
           </div>
           <div className={styles.formActions}>
-            <button className={styles.btnSecondary} onClick={() => setShowForm(false)}>取消</button>
+            <button className={styles.btnSecondary} onClick={() => { setShowForm(false); setError(null); }}>取消</button>
             <button className={styles.btnPrimary} onClick={handleAdd} disabled={!form.name || !form.content || saving}>
               {saving ? "保存中…" : "添加"}
             </button>

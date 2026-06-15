@@ -8,7 +8,15 @@ import {
   type Provider, type Model, type Prompt,
 } from "../lib/aiConfig";
 import { saveApiKey, loadApiKey, deleteApiKey } from "../lib/keyStore";
-import { getDb } from "../lib/project";
+import { getGlobalDb } from "../lib/project";
+
+const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+async function db() {
+  const globalDb = await getGlobalDb();
+  await ensureAiSchema(globalDb);
+  return globalDb;
+}
 
 interface AiState {
   providers: Provider[];
@@ -18,20 +26,20 @@ interface AiState {
   activePromptId: string | null;
   isLoading: boolean;
 
-  loadConfig: (projectPath: string) => Promise<void>;
+  loadConfig: () => Promise<void>;
 
-  addProvider: (projectPath: string, p: Omit<Provider, "id" | "createdAt">, apiKey: string) => Promise<string>;
-  updateProvider: (projectPath: string, p: Provider, apiKey?: string) => Promise<void>;
-  removeProvider: (projectPath: string, id: string) => Promise<void>;
-  getApiKey: (projectPath: string, providerId: string) => Promise<string | null>;
+  addProvider: (p: Omit<Provider, "id" | "createdAt">, apiKey: string) => Promise<string>;
+  updateProvider: (p: Provider, apiKey?: string) => Promise<void>;
+  removeProvider: (id: string) => Promise<void>;
+  getApiKey: (providerId: string) => Promise<string | null>;
 
-  addModel: (projectPath: string, m: Omit<Model, "id">) => Promise<void>;
-  updateModel: (projectPath: string, m: Model) => Promise<void>;
-  removeModel: (projectPath: string, id: string) => Promise<void>;
-  fetchAndImportModels: (projectPath: string, providerId: string) => Promise<{ id: string; name: string }[]>;
+  addModel: (m: Omit<Model, "id">) => Promise<void>;
+  updateModel: (m: Model) => Promise<void>;
+  removeModel: (id: string) => Promise<void>;
+  fetchAndImportModels: (providerId: string) => Promise<{ id: string; name: string }[]>;
 
-  addPrompt: (projectPath: string, p: Omit<Prompt, "id">) => Promise<void>;
-  removePrompt: (projectPath: string, id: string) => Promise<void>;
+  addPrompt: (p: Omit<Prompt, "id">) => Promise<void>;
+  removePrompt: (id: string) => Promise<void>;
 
   setActiveModel: (id: string) => void;
   setActivePrompt: (id: string) => void;
@@ -45,89 +53,109 @@ export const useAiStore = create<AiState>((set, get) => ({
   activePromptId: null,
   isLoading: false,
 
-  loadConfig: async (projectPath) => {
-    const db = await getDb(projectPath);
-    await ensureAiSchema(db);
-    const [providers, models, prompts] = await Promise.all([
-      listProviders(db),
-      listModels(db),
-      listPrompts(db),
-    ]);
-    set({ providers, models, prompts });
-    // Seed default active model if none set
-    if (!get().activeModelId && models.length > 0) {
-      set({ activeModelId: models[0].id });
+  loadConfig: async () => {
+    if (!isTauri) return;
+    set({ isLoading: true });
+    try {
+      const d = await db();
+      const [providers, models, prompts] = await Promise.all([
+        listProviders(d),
+        listModels(d),
+        listPrompts(d),
+      ]);
+      set({ providers, models, prompts });
+      if (!get().activeModelId && models.length > 0) {
+        set({ activeModelId: models[0].id });
+      }
+    } finally {
+      set({ isLoading: false });
     }
   },
 
-  addProvider: async (projectPath, p, apiKey) => {
-    const db = await getDb(projectPath);
+  addProvider: async (p, apiKey) => {
     const provider: Provider = { ...p, id: nanoid(), createdAt: Date.now() };
-    await saveProvider(db, provider);
-    await saveApiKey(projectPath, provider.id, apiKey);
+    if (isTauri) {
+      const d = await db();
+      await saveProvider(d, provider);
+      await saveApiKey(provider.id, apiKey);
+    }
     set((s) => ({ providers: [...s.providers, provider] }));
     return provider.id;
   },
 
-  updateProvider: async (projectPath, p, apiKey) => {
-    const db = await getDb(projectPath);
-    await saveProvider(db, p);
-    if (apiKey !== undefined) await saveApiKey(projectPath, p.id, apiKey);
+  updateProvider: async (p, apiKey) => {
+    if (isTauri) {
+      const d = await db();
+      await saveProvider(d, p);
+      if (apiKey !== undefined) await saveApiKey(p.id, apiKey);
+    }
     set((s) => ({ providers: s.providers.map((x) => (x.id === p.id ? p : x)) }));
   },
 
-  removeProvider: async (projectPath, id) => {
-    const db = await getDb(projectPath);
-    await deleteProvider(db, id);
-    await deleteApiKey(projectPath, id);
+  removeProvider: async (id) => {
+    if (isTauri) {
+      const d = await db();
+      await deleteProvider(d, id);
+      await deleteApiKey(id);
+    }
     set((s) => ({
       providers: s.providers.filter((p) => p.id !== id),
       models: s.models.filter((m) => m.providerId !== id),
     }));
   },
 
-  getApiKey: (projectPath, providerId) => loadApiKey(projectPath, providerId),
+  getApiKey: (providerId) => loadApiKey(providerId),
 
-  addModel: async (projectPath, m) => {
-    const db = await getDb(projectPath);
+  addModel: async (m) => {
     const model: Model = { ...m, id: nanoid() };
-    await saveModel(db, model);
+    if (isTauri) {
+      const d = await db();
+      await saveModel(d, model);
+    }
     set((s) => ({ models: [...s.models, model] }));
     if (!get().activeModelId) set({ activeModelId: model.id });
   },
 
-  updateModel: async (projectPath, m) => {
-    const db = await getDb(projectPath);
-    await saveModel(db, m);
+  updateModel: async (m) => {
+    if (isTauri) {
+      const d = await db();
+      await saveModel(d, m);
+    }
     set((s) => ({ models: s.models.map((x) => (x.id === m.id ? m : x)) }));
   },
 
-  removeModel: async (projectPath, id) => {
-    const db = await getDb(projectPath);
-    await deleteModel(db, id);
+  removeModel: async (id) => {
+    if (isTauri) {
+      const d = await db();
+      await deleteModel(d, id);
+    }
     set((s) => ({
       models: s.models.filter((m) => m.id !== id),
       activeModelId: s.activeModelId === id ? null : s.activeModelId,
     }));
   },
 
-  fetchAndImportModels: async (projectPath, providerId) => {
+  fetchAndImportModels: async (providerId) => {
     const provider = get().providers.find((p) => p.id === providerId);
     if (!provider) throw new Error("Provider not found");
-    const apiKey = await loadApiKey(projectPath, providerId) ?? "";
+    const apiKey = await loadApiKey(providerId) ?? "";
     return fetchRemoteModels(provider.baseUrl, apiKey, provider.apiStandard);
   },
 
-  addPrompt: async (projectPath, p) => {
-    const db = await getDb(projectPath);
+  addPrompt: async (p) => {
     const prompt: Prompt = { ...p, id: nanoid() };
-    await savePrompt(db, prompt);
+    if (isTauri) {
+      const d = await db();
+      await savePrompt(d, prompt);
+    }
     set((s) => ({ prompts: [...s.prompts, prompt] }));
   },
 
-  removePrompt: async (projectPath, id) => {
-    const db = await getDb(projectPath);
-    await deletePrompt(db, id);
+  removePrompt: async (id) => {
+    if (isTauri) {
+      const d = await db();
+      await deletePrompt(d, id);
+    }
     set((s) => ({ prompts: s.prompts.filter((p) => p.id !== id) }));
   },
 

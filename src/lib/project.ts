@@ -22,6 +22,8 @@ export async function readDirRecursive(dirPath: string): Promise<FileNode[]> {
   return invoke("read_dir_recursive", { dirPath });
 }
 
+// ── Per-project DB (lore, token usage, project settings) ─────────────────────
+
 let _db: Awaited<ReturnType<typeof Database.load>> | null = null;
 
 export async function getDb(projectPath: string) {
@@ -34,6 +36,19 @@ export async function getDb(projectPath: string) {
 
 export function resetDb() {
   _db = null;
+}
+
+// ── Global app-level DB (AI providers, models, prompts) ──────────────────────
+// Stored in appDataDir so it is available without a project open.
+
+let _globalDb: Awaited<ReturnType<typeof Database.load>> | null = null;
+
+export async function getGlobalDb() {
+  if (_globalDb) return _globalDb;
+  const { appDataDir } = await import("@tauri-apps/api/path");
+  const dir = await appDataDir();
+  _globalDb = await Database.load(`sqlite:${dir}/config.db`);
+  return _globalDb;
 }
 
 async function initSchema(db: Awaited<ReturnType<typeof Database.load>>) {

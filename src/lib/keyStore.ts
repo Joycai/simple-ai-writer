@@ -1,11 +1,15 @@
 /**
- * Thin wrapper around tauri-plugin-stronghold for API key storage.
- * Keys are stored under the vault path `{projectPath}/.ai-writer/keys.hold`
- * and accessed with the record path `provider:{providerId}`.
+ * API key storage backed by the global config SQLite DB (appDataDir/config.db).
+ * Falls back to sessionStorage in the browser dev environment.
  *
- * Falls back to in-memory sessionStorage for the browser preview/dev environment
- * where Tauri IPC is not available.
+ * Stronghold was removed because its Rust actor deadlocks on some macOS setups,
+ * causing every save/delete that touched the vault to hang indefinitely.
+ * The keys never leave the local machine — the app-data directory is already
+ * OS-protected — so SQLite storage is an acceptable trade-off here.
  */
+
+import { saveKeyToDb, loadKeyFromDb, deleteKeyFromDb, ensureAiSchema } from "./aiConfig";
+import { getGlobalDb } from "./project";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -13,64 +17,40 @@ function sessionKey(providerId: string) {
   return `apikey:${providerId}`;
 }
 
-export async function saveApiKey(
-  _projectPath: string,
-  providerId: string,
-  apiKey: string
-): Promise<void> {
+async function keyDb() {
+  const d = await getGlobalDb();
+  await ensureAiSchema(d);
+  return d;
+}
+
+export async function saveApiKey(providerId: string, apiKey: string): Promise<void> {
   if (!isTauri) {
     sessionStorage.setItem(sessionKey(providerId), apiKey);
     return;
   }
-  const { Stronghold } = await import("@tauri-apps/plugin-stronghold");
-  const { appDataDir } = await import("@tauri-apps/api/path");
-  const vaultPath = `${await appDataDir()}/keys.hold`;
-  const stronghold = await Stronghold.load(vaultPath, "simple-ai-writer-vault");
-  const client = await stronghold.createClient("api-keys");
-  const store = client.getStore();
-  const encoded = Array.from(new TextEncoder().encode(apiKey));
-  await store.insert(`provider:${providerId}`, encoded);
-  await stronghold.save();
+  const d = await keyDb();
+  await saveKeyToDb(d, providerId, apiKey);
 }
 
-export async function loadApiKey(
-  _projectPath: string,
-  providerId: string
-): Promise<string | null> {
+export async function loadApiKey(providerId: string): Promise<string | null> {
   if (!isTauri) {
     return sessionStorage.getItem(sessionKey(providerId));
   }
   try {
-    const { Stronghold } = await import("@tauri-apps/plugin-stronghold");
-    const { appDataDir } = await import("@tauri-apps/api/path");
-    const vaultPath = `${await appDataDir()}/keys.hold`;
-    const stronghold = await Stronghold.load(vaultPath, "simple-ai-writer-vault");
-    const client = await stronghold.createClient("api-keys");
-    const store = client.getStore();
-    const bytes = await store.get(`provider:${providerId}`);
-    if (!bytes) return null;
-    return new TextDecoder().decode(new Uint8Array(bytes));
+    const d = await keyDb();
+    return await loadKeyFromDb(d, providerId);
   } catch {
     return null;
   }
 }
 
-export async function deleteApiKey(
-  _projectPath: string,
-  providerId: string
-): Promise<void> {
+export async function deleteApiKey(providerId: string): Promise<void> {
   if (!isTauri) {
     sessionStorage.removeItem(sessionKey(providerId));
     return;
   }
   try {
-    const { Stronghold } = await import("@tauri-apps/plugin-stronghold");
-    const { appDataDir } = await import("@tauri-apps/api/path");
-    const vaultPath = `${await appDataDir()}/keys.hold`;
-    const stronghold = await Stronghold.load(vaultPath, "simple-ai-writer-vault");
-    const client = await stronghold.createClient("api-keys");
-    const store = client.getStore();
-    await store.remove(`provider:${providerId}`);
-    await stronghold.save();
+    const d = await keyDb();
+    await deleteKeyFromDb(d, providerId);
   } catch {}
 }

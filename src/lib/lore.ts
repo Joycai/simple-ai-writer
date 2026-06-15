@@ -1,4 +1,4 @@
-import { readTextFile, writeTextFile, mkdir, readDir, exists } from "@tauri-apps/plugin-fs";
+import { readTextFile, writeTextFile, writeFile, mkdir, readDir, exists } from "@tauri-apps/plugin-fs";
 import { parseFrontmatter } from "./markdown";
 
 export const LORE_CATEGORIES = [
@@ -106,6 +106,40 @@ export async function createEntity(
 
   const indexContent = `---\nname: ${name}\naliases: []\ncategory: ${category}\nsummary: \n---\n\n# ${name}\n\n`;
   await writeTextFile(`${dirPath}/index.md`, indexContent);
+
+  return dirPath;
+}
+
+/** Create an entity with full content and optional avatar image bytes. */
+export async function createEntityWithContent(
+  projectPath: string,
+  category: CategoryId,
+  entityId: string,
+  name: string,
+  aliases: string[],
+  summary: string,
+  content: string,
+  avatarBytes?: { data: Uint8Array; ext: string },
+): Promise<string> {
+  const dirPath = `${projectPath}/.ai-writer/lore/${category}/${entityId}`;
+  await mkdir(dirPath, { recursive: true });
+
+  const aliasLines = aliases.map((a) => `  - "${a}"`).join("\n");
+  const frontmatter = [
+    "---",
+    `name: ${name}`,
+    `aliases:`,
+    aliasLines,
+    `category: ${category}`,
+    `summary: "${summary.replace(/"/g, '\\"')}"`,
+    "---",
+    "",
+  ].join("\n");
+  await writeTextFile(`${dirPath}/index.md`, frontmatter + content);
+
+  if (avatarBytes) {
+    await writeFile(`${dirPath}/avatar.${avatarBytes.ext}`, avatarBytes.data);
+  }
 
   return dirPath;
 }

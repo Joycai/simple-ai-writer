@@ -7,14 +7,23 @@ import type { ApiStandard } from "./aiConfig";
 
 export type StreamChunk = { text: string } | { done: true; inputTokens: number; outputTokens: number };
 
+/** A single part inside a multimodal user message. */
+export type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } }; // url = data:<mime>;base64,<data>
+
+export type MessageContent = string | ContentPart[];
+
 export interface StreamOptions {
   baseUrl: string;
   apiKey: string;
   standard: ApiStandard;
   modelId: string;
-  messages: { role: "system" | "user" | "assistant"; content: string }[];
+  messages: { role: "system" | "user" | "assistant"; content: MessageContent }[];
   onChunk: (chunk: StreamChunk) => void;
   signal?: AbortSignal;
+  /** Extra top-level fields merged into the OpenAI request body (e.g. response_format). */
+  extraBody?: Record<string, unknown>;
 }
 
 // ─── OpenAI / compat ─────────────────────────────────────────────────────────
@@ -32,6 +41,7 @@ async function streamOpenAI(opts: StreamOptions): Promise<void> {
       messages: opts.messages,
       stream: true,
       stream_options: { include_usage: true },
+      ...opts.extraBody,
     }),
     signal: opts.signal,
   });
@@ -87,7 +97,16 @@ async function streamGemini(opts: StreamOptions): Promise<void> {
   const body: Record<string, unknown> = {
     contents: userMessages.map((m) => ({
       role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content }],
+      parts: Array.isArray(m.content)
+        ? m.content.map((p) => {
+            if (p.type === "text") return { text: p.text };
+            // image_url with data URI → Gemini inline_data
+            const url = p.image_url.url; // "data:<mime>;base64,<data>"
+            const [meta, data] = url.split(",");
+            const mimeType = meta.slice("data:".length).replace(";base64", "");
+            return { inline_data: { mime_type: mimeType, data } };
+          })
+        : [{ text: m.content }],
     })),
   };
   if (systemMsg) {

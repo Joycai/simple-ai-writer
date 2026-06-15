@@ -12,16 +12,28 @@
 }
 
 .tab {
-  width: 36px;
-  height: 36px;
+  width: calc(var(--tab-bar-width) - 8px);
+  height: 52px;
   border-radius: var(--radius-md);
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2px;
   color: var(--color-text-muted);
   transition: background var(--transition-fast), color var(--transition-fast);
-  font-size: 18px;
   position: relative;
+}
+
+.tabIcon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.tabLabel {
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  line-height: 1;
 }
 
 .tab:hover {

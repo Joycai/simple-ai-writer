@@ -21,7 +21,8 @@ export function SideTabBar() {
           onClick={() => setActiveSideTab(tab.id)}
           title={t(tab.labelKey)}
         >
-          {tab.icon}
+          <span className={styles.tabIcon}>{tab.icon}</span>
+          <span className={styles.tabLabel}>{t(tab.labelKey)}</span>
         </button>
       ))}
     </div>

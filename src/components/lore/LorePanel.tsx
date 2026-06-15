@@ -3,6 +3,7 @@ import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { LORE_CATEGORIES, assetUrl, type CategoryId, type LoreEntity } from "../../lib/lore";
 import { CodeEditor } from "../editor/CodeEditor";
+import { LoreGenerator } from "./LoreGenerator";
 import styles from "./LorePanel.module.css";
 
 // ─── New entity form ─────────────────────────────────────────────────────────
@@ -148,6 +149,7 @@ export function LorePanel() {
   const { index, selectedEntity, selectEntity } = useLoreStore();
   const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set());
   const [newEntityCat, setNewEntityCat] = useState<CategoryId | null>(null);
+  const [showGenerator, setShowGenerator] = useState(false);
 
   const toggleCat = (id: string) =>
     setCollapsedCats((prev) => {
@@ -158,6 +160,18 @@ export function LorePanel() {
 
   return (
     <div className={styles.panel}>
+      {showGenerator && <LoreGenerator onClose={() => setShowGenerator(false)} />}
+      {/* Toolbar */}
+      <div style={{ display: "flex", justifyContent: "flex-end", padding: "4px var(--space-2)", borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
+        <button
+          onClick={() => setShowGenerator(true)}
+          style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: "var(--radius-sm)", background: "rgba(59,130,246,0.12)", color: "var(--color-accent)", fontSize: "var(--font-size-xs)", fontWeight: 500 }}
+          title="用 AI 根据描述和图片生成设定条目"
+        >
+          🤖 AI 生成
+        </button>
+      </div>
+
       {/* Entity list (top, scrollable) */}
       <div className={styles.categoryList} style={{ maxHeight: "45%" }}>
         {LORE_CATEGORIES.map((cat) => {

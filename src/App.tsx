@@ -7,6 +7,7 @@ import { RightPanel } from "./components/layout/RightPanel";
 import { StatusBar } from "./components/layout/StatusBar";
 import { SettingsModal } from "./components/settings/SettingsModal";
 import { useAppStore } from "./stores/appStore";
+import { useAiStore } from "./stores/aiStore";
 
 // Auto-collapse panels when viewport is too narrow to show the editor
 const COLLAPSE_SIDEBAR_BELOW = 900;
@@ -14,7 +15,13 @@ const COLLAPSE_RIGHT_BELOW = 700;
 
 export default function App() {
   const { setSidebarCollapsed, setRightPanelCollapsed } = useAppStore();
+  const { loadConfig } = useAiStore();
   const [showSettings, setShowSettings] = useState(false);
+
+  useEffect(() => {
+    loadConfig();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const onResize = () => {

@@ -63,6 +63,42 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
       scene TEXT NOT NULL DEFAULT 'system'
     )
   `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      provider_id TEXT PRIMARY KEY,
+      api_key TEXT NOT NULL DEFAULT ''
+    )
+  `);
+}
+
+export async function saveKeyToDb(
+  db: Awaited<ReturnType<typeof Database.load>>,
+  providerId: string,
+  apiKey: string,
+): Promise<void> {
+  await db.execute(
+    `INSERT OR REPLACE INTO api_keys (provider_id, api_key) VALUES (?, ?)`,
+    [providerId, apiKey],
+  );
+}
+
+export async function loadKeyFromDb(
+  db: Awaited<ReturnType<typeof Database.load>>,
+  providerId: string,
+): Promise<string | null> {
+  const rows = await db.select<{ api_key: string }[]>(
+    `SELECT api_key FROM api_keys WHERE provider_id = ?`,
+    [providerId],
+  );
+  return rows[0]?.api_key ?? null;
+}
+
+export async function deleteKeyFromDb(
+  db: Awaited<ReturnType<typeof Database.load>>,
+  providerId: string,
+): Promise<void> {
+  await db.execute(`DELETE FROM api_keys WHERE provider_id = ?`, [providerId]);
 }
 
 export async function listProviders(db: Awaited<ReturnType<typeof Database.load>>): Promise<Provider[]> {
