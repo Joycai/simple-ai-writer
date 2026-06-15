@@ -1,0 +1,91 @@
+/* Design tokens — all UI reads from these vars, never raw values */
+
+:root {
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+
+  /* Typography */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", Menlo, monospace;
+  --font-size-xs: 11px;
+  --font-size-sm: 13px;
+  --font-size-md: 15px;
+  --font-size-lg: 18px;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Transitions */
+  --transition-fast: 120ms ease;
+  --transition-base: 200ms ease;
+
+  /* Layout */
+  --sidebar-width: 240px;
+  --right-panel-width: 280px;
+  --status-bar-height: 28px;
+  --tab-bar-width: 44px;
+  --editor-max-width: 800px;
+}
+
+/* Dark theme (default) */
+[data-theme="dark"] {
+  --color-bg-base:        #0D0F12;
+  --color-bg-surface:     #13161B;
+  --color-bg-elevated:    #1C2029;
+  --color-bg-overlay:     rgba(19, 22, 27, 0.85);
+
+  --color-text-primary:   #E2E8F0;
+  --color-text-secondary: #94A3B8;
+  --color-text-muted:     #4A5568;
+
+  --color-accent-start:   #3B82F6;
+  --color-accent-end:     #8B5CF6;
+  --color-accent:         #3B82F6;
+  --color-accent-hover:   #60A5FA;
+
+  --color-border:         rgba(255, 255, 255, 0.08);
+  --color-border-strong:  rgba(255, 255, 255, 0.14);
+
+  --color-success:        #10B981;
+  --color-warning:        #F59E0B;
+  --color-error:          #EF4444;
+
+  /* Glassmorphism */
+  --glass-bg:             rgba(19, 22, 27, 0.7);
+  --glass-blur:           blur(16px);
+  --glass-border:         1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Light theme */
+[data-theme="light"] {
+  --color-bg-base:        #FAF9F6;
+  --color-bg-surface:     #F3F2EF;
+  --color-bg-elevated:    #ECEAE5;
+  --color-bg-overlay:     rgba(243, 242, 239, 0.88);
+
+  --color-text-primary:   #1F2937;
+  --color-text-secondary: #4B5563;
+  --color-text-muted:     #9CA3AF;
+
+  --color-accent-start:   #2563EB;
+  --color-accent-end:     #7C3AED;
+  --color-accent:         #2563EB;
+  --color-accent-hover:   #1D4ED8;
+
+  --color-border:         rgba(0, 0, 0, 0.08);
+  --color-border-strong:  rgba(0, 0, 0, 0.14);
+
+  --color-success:        #059669;
+  --color-warning:        #D97706;
+  --color-error:          #DC2626;
+
+  --glass-bg:             rgba(243, 242, 239, 0.75);
+  --glass-blur:           blur(16px);
+  --glass-border:         1px solid rgba(0, 0, 0, 0.07);
+}

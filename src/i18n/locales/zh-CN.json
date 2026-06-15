@@ -1,0 +1,40 @@
+{
+  "app": {
+    "name": "Simple AI Writer"
+  },
+  "sidebar": {
+    "files": "文件",
+    "lore": "设定库",
+    "search": "搜索"
+  },
+  "rightPanel": {
+    "outline": "大纲",
+    "ai": "AI 助手",
+    "loreCards": "设定卡片"
+  },
+  "statusBar": {
+    "noProject": "未打开项目",
+    "words": "字数",
+    "chars": "字符",
+    "tokens": "Token",
+    "cost": "费用",
+    "theme": "主题",
+    "language": "语言"
+  },
+  "settings": {
+    "theme": "主题",
+    "dark": "暗色",
+    "light": "亮色",
+    "system": "跟随系统",
+    "language": "语言"
+  },
+  "project": {
+    "openFolder": "打开文件夹",
+    "noProjectTitle": "打开一个文件夹以开始写作",
+    "noProjectDesc": "系统将自动初始化项目结构"
+  },
+  "editor": {
+    "placeholder": "开始写作…",
+    "untitled": "未命名"
+  }
+}

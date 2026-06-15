@@ -1,0 +1,40 @@
+{
+  "app": {
+    "name": "Simple AI Writer"
+  },
+  "sidebar": {
+    "files": "Files",
+    "lore": "Lore",
+    "search": "Search"
+  },
+  "rightPanel": {
+    "outline": "Outline",
+    "ai": "AI Assistant",
+    "loreCards": "Lore Cards"
+  },
+  "statusBar": {
+    "noProject": "No project open",
+    "words": "Words",
+    "chars": "Chars",
+    "tokens": "Tokens",
+    "cost": "Cost",
+    "theme": "Theme",
+    "language": "Language"
+  },
+  "settings": {
+    "theme": "Theme",
+    "dark": "Dark",
+    "light": "Light",
+    "system": "System",
+    "language": "Language"
+  },
+  "project": {
+    "openFolder": "Open Folder",
+    "noProjectTitle": "Open a folder to start writing",
+    "noProjectDesc": "The project structure will be initialized automatically"
+  },
+  "editor": {
+    "placeholder": "Start writing…",
+    "untitled": "Untitled"
+  }
+}
