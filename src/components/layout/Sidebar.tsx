@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
+import { FileTree } from "./FileTree";
 import styles from "./Sidebar.module.css";
 
 const TAB_LABELS: Record<string, string> = {
@@ -12,7 +13,7 @@ const TAB_LABELS: Record<string, string> = {
 export function Sidebar() {
   const { t } = useTranslation();
   const { sidebarCollapsed, activeSideTab } = useAppStore();
-  const { projectPath } = useProjectStore();
+  const { projectPath, openProject, isLoading } = useProjectStore();
 
   return (
     <div className={`${styles.sidebar} ${sidebarCollapsed ? styles.collapsed : ""}`}>
@@ -24,14 +25,28 @@ export function Sidebar() {
             <div style={{ fontSize: "var(--font-size-xs)", marginTop: 4 }}>
               {t("project.noProjectDesc")}
             </div>
-            <button className={styles.openBtn}>{t("project.openFolder")}</button>
+            <button
+              className={styles.openBtn}
+              onClick={openProject}
+              disabled={isLoading}
+            >
+              {isLoading ? "…" : t("project.openFolder")}
+            </button>
           </div>
         ) : (
-          <div style={{ color: "var(--color-text-secondary)", fontSize: "var(--font-size-sm)" }}>
-            {activeSideTab === "files" && <span>File tree — coming in Phase 1</span>}
-            {activeSideTab === "lore" && <span>Lore library — coming in Phase 3</span>}
-            {activeSideTab === "search" && <span>Search — coming soon</span>}
-          </div>
+          <>
+            {activeSideTab === "files" && <FileTree />}
+            {activeSideTab === "lore" && (
+              <div style={{ color: "var(--color-text-muted)", fontSize: "var(--font-size-xs)", padding: "var(--space-3)" }}>
+                Lore library — coming in Phase 3
+              </div>
+            )}
+            {activeSideTab === "search" && (
+              <div style={{ color: "var(--color-text-muted)", fontSize: "var(--font-size-xs)", padding: "var(--space-3)" }}>
+                Search — coming soon
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    simple_ai_writer_scaffold_lib::run()
+    simple_ai_writer_lib::run()
 }
