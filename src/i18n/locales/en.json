@@ -26,7 +26,8 @@
     "dark": "Dark",
     "light": "Light",
     "system": "System",
-    "language": "Language"
+    "language": "Language",
+    "aiConfig": "AI Config"
   },
   "project": {
     "openFolder": "Open Folder",

@@ -14,7 +14,11 @@ const LANGUAGES: { value: Language; label: string }[] = [
   { value: "en", label: "EN" },
 ];
 
-export function StatusBar() {
+interface Props {
+  onOpenSettings: () => void;
+}
+
+export function StatusBar({ onOpenSettings }: Props) {
   const { t } = useTranslation();
   const { theme, setTheme, language, setLanguage } = useAppStore();
   const { projectPath, wordCount, charCount } = useProjectStore();
@@ -58,6 +62,10 @@ export function StatusBar() {
 
       <button className={styles.control} onClick={cycleLanguage} title={t("settings.language")}>
         {LANGUAGES.find((l) => l.value === language)?.label}
+      </button>
+
+      <button className={styles.control} onClick={onOpenSettings} title={t("settings.aiConfig")}>
+        ⚙
       </button>
     </div>
   );
