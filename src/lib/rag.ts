@@ -8,6 +8,7 @@
  *   Layer 4 – Current selection / task instruction
  */
 
+import i18n from "../i18n";
 import type { LoreIndex } from "./lore";
 
 const MAX_LORE_CARDS = 3;
@@ -111,7 +112,7 @@ export function bundleToMessages(
   parts.push(bundle.taskText);
 
   return [
-    { role: "system", content: bundle.systemPrompt || "你是一位专业的写作助手。" },
+    { role: "system", content: bundle.systemPrompt || i18n.t("ai.instructions.system") },
     { role: "user", content: parts.join("\n\n") },
   ];
 }
