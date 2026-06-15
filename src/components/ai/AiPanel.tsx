@@ -1,17 +1,19 @@
 import { useState, useRef, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { useAiTaskStore, type TaskKind } from "../../stores/aiTaskStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useEditorStore } from "../../stores/editorStore";
 import styles from "./AiPanel.module.css";
 
-const TASK_BUTTONS: { kind: TaskKind; label: string; desc: string }[] = [
-  { kind: "continue", label: "续写", desc: "从当前位置继续写作" },
-  { kind: "polish", label: "润色", desc: "润色选中内容" },
-  { kind: "rewrite", label: "重写", desc: "重写选中内容" },
-  { kind: "summary", label: "总结", desc: "总结全文或选中段落" },
+const TASK_BUTTONS_CONFIG = [
+  { kind: "continue" as TaskKind, labelKey: "ai.tasks.continue", descKey: "ai.tasks.continueDesc" },
+  { kind: "polish" as TaskKind, labelKey: "ai.tasks.polish", descKey: "ai.tasks.polishDesc" },
+  { kind: "rewrite" as TaskKind, labelKey: "ai.tasks.rewrite", descKey: "ai.tasks.rewriteDesc" },
+  { kind: "summary" as TaskKind, labelKey: "ai.tasks.summary", descKey: "ai.tasks.summaryDesc" },
 ];
 
 export function AiPanel() {
+  const { t } = useTranslation();
   const {
     isRunning, output, error, usage,
     runTask, abort, clearOutput, selection, setSelection,
@@ -22,6 +24,12 @@ export function AiPanel() {
   const [customInstr, setCustomInstr] = useState("");
   const [showCustom, setShowCustom] = useState(false);
   const outputRef = useRef<HTMLDivElement>(null);
+
+  const taskButtons = TASK_BUTTONS_CONFIG.map((b) => ({
+    ...b,
+    label: t(b.labelKey),
+    desc: t(b.descKey),
+  }));
 
   // Auto-scroll output
   useEffect(() => {
@@ -60,7 +68,7 @@ export function AiPanel() {
           value={activeModelId ?? ""}
           onChange={(e) => setActiveModel(e.target.value)}
         >
-          <option value="">选择模型…</option>
+          <option value="">{t("ai.panel.selectModel")}</option>
           {models.map((m) => {
             const pname = providers.find((p) => p.id === m.providerId)?.name ?? "";
             return (
@@ -80,7 +88,7 @@ export function AiPanel() {
             value={activePromptId ?? ""}
             onChange={(e) => setActivePrompt(e.target.value)}
           >
-            <option value="">默认系统提示…</option>
+            <option value="">{t("ai.panel.defaultSystemPrompt")}</option>
             {prompts
               .filter((p) => p.scene === "system")
               .map((p) => (
@@ -91,19 +99,19 @@ export function AiPanel() {
       )}
 
       {!hasConfig ? (
-        <div className={styles.emptyHint}>请先在 ⚙ AI 配置中添加供应商和模型</div>
+        <div className={styles.emptyHint}>{t("ai.panel.noProvider")}</div>
       ) : (
         <>
           {/* Selection indicator */}
           {selection && (
             <div className={styles.selectionBadge}>
-              已选中 {selection.length} 字
+              {t("ai.panel.selectedChars", { count: selection.length })}
             </div>
           )}
 
           {/* Task buttons */}
           <div className={styles.taskGrid}>
-            {TASK_BUTTONS.map((t) => (
+            {taskButtons.map((t) => (
               <button
                 key={t.kind}
                 className={styles.taskBtn}
@@ -123,7 +131,7 @@ export function AiPanel() {
                 <textarea
                   className={styles.textarea}
                   rows={3}
-                  placeholder="输入自定义指令…"
+                  placeholder={t("ai.panel.customInstruction")}
                   value={customInstr}
                   onChange={(e) => setCustomInstr(e.target.value)}
                 />
@@ -131,12 +139,12 @@ export function AiPanel() {
                   <button
                     className={styles.btnSecondary}
                     onClick={() => setShowCustom(false)}
-                  >取消</button>
+                  >{t("ai.panel.cancel")}</button>
                   <button
                     className={styles.btnPrimary}
                     disabled={!customInstr || isRunning}
                     onClick={() => { clearOutput(); runTask("custom", customInstr); }}
-                  >发送</button>
+                  >{t("ai.panel.send")}</button>
                 </div>
               </div>
             ) : (
@@ -144,7 +152,7 @@ export function AiPanel() {
                 className={styles.customToggle}
                 onClick={() => setShowCustom(true)}
               >
-                + 自定义指令
+                + {t("ai.panel.addCustom")}
               </button>
             )}
           </div>
@@ -152,7 +160,7 @@ export function AiPanel() {
           {/* Abort button */}
           {isRunning && (
             <button className={styles.abortBtn} onClick={abort}>
-              ■ 停止生成
+              {t("ai.panel.stop")}
             </button>
           )}
 
@@ -165,10 +173,10 @@ export function AiPanel() {
           {output && (
             <div className={styles.outputSection}>
               <div className={styles.outputHeader}>
-                <span className={styles.outputLabel}>生成结果</span>
+                <span className={styles.outputLabel}>{t("ai.panel.generatedOutput")}</span>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <button className={styles.btnSecondary} onClick={clearOutput}>清除</button>
-                  <button className={styles.btnPrimary} onClick={handleInsert}>插入文档</button>
+                  <button className={styles.btnSecondary} onClick={clearOutput}>{t("ai.panel.clear")}</button>
+                  <button className={styles.btnPrimary} onClick={handleInsert}>{t("ai.panel.insertToDoc")}</button>
                 </div>
               </div>
               <div className={styles.output} ref={outputRef}>
@@ -181,8 +189,8 @@ export function AiPanel() {
           {/* Token usage */}
           {usage && (
             <div className={styles.usageBar}>
-              <span>输入 {usage.inputTokens.toLocaleString()} tokens</span>
-              <span>输出 {usage.outputTokens.toLocaleString()} tokens</span>
+              <span>{t("ai.panel.inputTokens", { count: usage.inputTokens.toLocaleString() })}</span>
+              <span>{t("ai.panel.outputTokens", { count: usage.outputTokens.toLocaleString() })}</span>
               <span>≈ ${usage.cost.toFixed(5)}</span>
             </div>
           )}

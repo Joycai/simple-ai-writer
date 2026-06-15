@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useProjectStore } from "../../stores/projectStore";
 import type { FileNode } from "../../lib/project";
 import styles from "./FileTree.module.css";
@@ -44,12 +45,13 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
 }
 
 export function FileTree() {
+  const { t } = useTranslation();
   const { fileTree } = useProjectStore();
 
   if (fileTree.length === 0) {
     return (
       <div style={{ padding: "var(--space-3)", color: "var(--color-text-muted)", fontSize: "var(--font-size-xs)" }}>
-        写作目录为空，创建 .md 文件开始吧
+        {t("project.emptyTree")}
       </div>
     );
   }

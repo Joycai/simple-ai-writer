@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, KeyboardEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { useProjectStore } from "../../stores/projectStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useLoreStore } from "../../stores/loreStore";
@@ -27,6 +28,7 @@ interface Props {
 }
 
 export function LoreGenerator({ onClose }: Props) {
+  const { t } = useTranslation();
   const { projectPath } = useProjectStore();
   const { models, providers, activeModelId, setActiveModel, prompts } = useAiStore();
   const { createNewEntity, scanProject } = useLoreStore();
@@ -57,6 +59,14 @@ export function LoreGenerator({ onClose }: Props) {
   const [editSummary, setEditSummary] = useState("");
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Status messages for generation
+  const statusMessages = [
+    t("lore.generator.status1"),
+    t("lore.generator.status2"),
+    t("lore.generator.status3"),
+    t("lore.generator.status4"),
+  ];
 
   useEffect(() => {
     if (projectPath) {
@@ -115,19 +125,18 @@ export function LoreGenerator({ onClose }: Props) {
   const handleGenerate = async () => {
     const model = models.find((m) => m.id === activeModelId);
     const provider = model ? providers.find((p) => p.id === model.providerId) : null;
-    if (!model || !provider) { setError("请先在 AI 配置中选择模型"); return; }
+    if (!model || !provider) { setError(t("ai.errors.noModel")); return; }
 
     const apiKey = await loadApiKey(provider.id) ?? "";
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setError(null);
-    setGenStatus("正在分析描述内容");
+    setGenStatus(statusMessages[0]);
     setPhase("generating");
 
     // Cycle status messages so UI feels alive
-    const statuses = ["正在分析描述内容", "理解角色设定中", "生成世界观条目", "整理结构化数据"];
     let si = 0;
-    const tick = setInterval(() => { si = (si + 1) % statuses.length; setGenStatus(statuses[si]); }, 1800);
+    const tick = setInterval(() => { si = (si + 1) % statusMessages.length; setGenStatus(statusMessages[si]); }, 1800);
 
     try {
       const loreScenePrompt = prompts.find((p) => p.scene === "lore");
@@ -210,8 +219,8 @@ export function LoreGenerator({ onClose }: Props) {
           <div className={styles.headerLeft}>
             <div className={styles.headerIcon}>🤖</div>
             <div className={styles.headerText}>
-              <div className={styles.title}>AI 生成设定条目</div>
-              <div className={styles.subtitle}>粘贴描述文档，引用参考图片，让 AI 自动构建世界观条目</div>
+              <div className={styles.title}>{t("lore.generator.title")}</div>
+              <div className={styles.subtitle}>{t("lore.generator.subtitle")}</div>
             </div>
           </div>
           <button className={styles.closeBtn} onClick={onClose}>✕</button>
@@ -223,13 +232,13 @@ export function LoreGenerator({ onClose }: Props) {
           {/* ── Input card ── */}
           <div className={styles.card}>
             <div className={styles.cardTitle}>
-              <span>① 输入设定描述</span>
+              <span>{t("lore.generator.step1")}</span>
             </div>
 
             {/* Category + Model */}
             <div className={styles.row}>
               <div className={styles.fieldGroup}>
-                <label className={styles.label}>条目分类</label>
+                <label className={styles.label}>{t("lore.generator.categoryLabel")}</label>
                 <select className={styles.select} value={category}
                   onChange={(e) => setCategory(e.target.value as CategoryId)}>
                   {LORE_CATEGORIES.map((c) => (
@@ -238,10 +247,10 @@ export function LoreGenerator({ onClose }: Props) {
                 </select>
               </div>
               <div className={styles.fieldGroup}>
-                <label className={styles.label}>AI 模型</label>
+                <label className={styles.label}>{t("lore.generator.modelLabel")}</label>
                 <select className={styles.select} value={activeModelId ?? ""}
                   onChange={(e) => setActiveModel(e.target.value)}>
-                  <option value="">选择模型…</option>
+                  <option value="">{t("lore.generator.selectModel")}</option>
                   {multimodalModels.map((m) => {
                     const pname = providers.find((p) => p.id === m.providerId)?.name ?? "";
                     return <option key={m.id} value={m.id}>{pname} / {m.name}</option>;
@@ -253,14 +262,14 @@ export function LoreGenerator({ onClose }: Props) {
             {/* Description textarea */}
             <div className={styles.fieldGroup}>
               <label className={styles.label}>
-                描述文本 <span className={styles.hint}>· 输入 @ 可从项目中选择参考图片</span>
+                {t("lore.generator.descriptionText")} <span className={styles.hint}>· {t("lore.generator.descriptionHint")}</span>
               </label>
               <div className={styles.textareaWrap}>
                 <textarea
                   ref={textareaRef}
                   className={styles.textarea}
                   rows={6}
-                  placeholder={"粘贴角色设定、背景描述、世界观文档…\n输入 @ 引用项目中的图片作为视觉参考。"}
+                  placeholder={t("lore.generator.descriptionPlaceholder")}
                   value={description}
                   onChange={handleDescChange}
                   onKeyDown={(e) => { if (e.key === "Escape") setShowPicker(false); }}
@@ -271,12 +280,12 @@ export function LoreGenerator({ onClose }: Props) {
                 {showPicker && (
                   <div className={styles.atPicker}>
                     <div className={styles.atPickerHeader}>
-                      <span className={styles.atPickerLabel}>选择参考图片</span>
-                      <kbd className={styles.atPickerEsc}>Esc 关闭</kbd>
+                      <span className={styles.atPickerLabel}>{t("lore.generator.selectReferenceImage")}</span>
+                      <kbd className={styles.atPickerEsc}>{t("lore.generator.closeEsc")}</kbd>
                     </div>
                     <div className={styles.atPickerList}>
                       {filteredImages.length === 0
-                        ? <div className={styles.atPickerEmpty}>项目中未找到图片文件</div>
+                        ? <div className={styles.atPickerEmpty}>{t("lore.generator.noImages")}</div>
                         : filteredImages.slice(0, 12).map((img) => (
                           <button key={img.path} className={styles.atPickerItem}
                             onClick={() => handlePickImage(img)}>
@@ -299,7 +308,7 @@ export function LoreGenerator({ onClose }: Props) {
             {/* Attached images */}
             {attached.length > 0 && (
               <div className={styles.attachedSection}>
-                <div className={styles.attachedLabel}>参考图片 ({attached.length})</div>
+                <div className={styles.attachedLabel}>{t("lore.generator.referenceImages")} ({attached.length})</div>
                 <div className={styles.attachedGrid}>
                   {attached.map((a) => (
                     <div key={a.image.path} className={styles.attachedChip}>
@@ -332,25 +341,25 @@ export function LoreGenerator({ onClose }: Props) {
           {/* ── Result card ── */}
           {phase === "result" && (
             <>
-              <div className={styles.divider}>AI 生成完成，可直接编辑后保存</div>
+              <div className={styles.divider}>{t("lore.generator.completed")}</div>
 
               <div className={styles.card}>
                 <div className={styles.resultHeader}>
                   <div className={styles.cardTitle}>
-                    <span className={styles.cardTitleAccent}>② 编辑并确认</span>
+                    <span className={styles.cardTitleAccent}>{t("lore.generator.step2")}</span>
                   </div>
-                  <span className={styles.resultBadge}>✓ 生成成功</span>
+                  <span className={styles.resultBadge}>{t("lore.generator.success")}</span>
                 </div>
 
                 {/* Name + Category */}
                 <div className={styles.row}>
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>名称</label>
+                    <label className={styles.label}>{t("lore.generator.nameLabel")}</label>
                     <input className={styles.input} value={editName}
-                      onChange={(e) => setEditName(e.target.value)} placeholder="条目名称" />
+                      onChange={(e) => setEditName(e.target.value)} placeholder={t("lore.generator.namePlaceholder")} />
                   </div>
                   <div className={styles.fieldGroup}>
-                    <label className={styles.label}>分类</label>
+                    <label className={styles.label}>{t("lore.generator.categoryLabel2")}</label>
                     <select className={styles.select} value={editCat}
                       onChange={(e) => setEditCat(e.target.value as CategoryId)}>
                       {LORE_CATEGORIES.map((c) => (
@@ -363,7 +372,7 @@ export function LoreGenerator({ onClose }: Props) {
                 {/* Aliases as tags */}
                 <div className={styles.fieldGroup}>
                   <label className={styles.label}>
-                    别名 <span className={styles.hint}>· 回车或逗号确认，Backspace 删除</span>
+                    {t("lore.generator.aliasLabel")} <span className={styles.hint}>· {t("lore.generator.aliasHint")}</span>
                   </label>
                   <div className={styles.tagsWrap} onClick={() => document.getElementById("tag-input")?.focus()}>
                     {editTags.map((t) => (
@@ -382,22 +391,22 @@ export function LoreGenerator({ onClose }: Props) {
                       onChange={(e) => setTagInput(e.target.value)}
                       onKeyDown={handleTagKey}
                       onBlur={commitTag}
-                      placeholder={editTags.length === 0 ? "添加别名…" : ""}
+                      placeholder={editTags.length === 0 ? t("lore.generator.aliasPlaceholder") : ""}
                     />
                   </div>
                 </div>
 
                 {/* Summary */}
                 <div className={styles.fieldGroup}>
-                  <label className={styles.label}>摘要 <span className={styles.hint}>· 用于 RAG 关键词检索</span></label>
+                  <label className={styles.label}>{t("lore.generator.summaryLabel")} <span className={styles.hint}>· {t("lore.generator.summaryHint")}</span></label>
                   <input className={styles.input} value={editSummary}
                     onChange={(e) => setEditSummary(e.target.value)}
-                    placeholder="一句话简洁描述" />
+                    placeholder={t("lore.generator.summaryPlaceholder")} />
                 </div>
 
                 {/* Content */}
                 <div className={styles.fieldGroup}>
-                  <label className={styles.label}>详细内容 <span className={styles.hint}>· Markdown 格式</span></label>
+                  <label className={styles.label}>{t("lore.generator.contentLabel")} <span className={styles.hint}>· {t("lore.generator.contentHint")}</span></label>
                   <textarea className={styles.textarea} rows={10} value={editContent}
                     onChange={(e) => setEditContent(e.target.value)}
                     style={{ resize: "vertical" }} />
@@ -411,29 +420,29 @@ export function LoreGenerator({ onClose }: Props) {
         <div className={styles.footer}>
           {phase === "input" && (
             <>
-              <button className={styles.btnSecondary} onClick={onClose}>取消</button>
+              <button className={styles.btnSecondary} onClick={onClose}>{t("lore.generator.cancel")}</button>
               <button className={styles.btnPrimary} onClick={handleGenerate}
                 disabled={!activeModelId || !description.trim()}>
-                ✨ 生成设定条目
+                ✨ {t("lore.generator.submitBtn")}
               </button>
             </>
           )}
           {phase === "generating" && (
             <button className={styles.btnAbort}
               onClick={() => { abortRef.current?.abort(); setPhase("input"); }}>
-              ■ 停止生成
+              {t("lore.generator.stopBtn")}
             </button>
           )}
           {phase === "result" && (
             <>
-              <button className={styles.btnSecondary} onClick={onClose}>取消</button>
+              <button className={styles.btnSecondary} onClick={onClose}>{t("lore.generator.cancel")}</button>
               <button className={styles.btnSecondary} onClick={handleGenerate}
                 disabled={!activeModelId || !description.trim()}>
-                🔄 重新生成
+                {t("lore.generator.regenerateBtn")}
               </button>
               <button className={styles.btnPrimary} onClick={handleSave}
                 disabled={!editName.trim() || saving}>
-                {saving ? "保存中…" : "保存到 Lore"}
+                {saving ? t("lore.generator.submitBtnSaving") : t("lore.generator.saveTolore")}
               </button>
             </>
           )}

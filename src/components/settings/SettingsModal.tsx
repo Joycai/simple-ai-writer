@@ -1,21 +1,16 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAiStore } from "../../stores/aiStore";
 import type { ApiStandard, ModelType } from "../../lib/aiConfig";
 import styles from "./SettingsModal.module.css";
 
-const BUILTIN_PROMPTS: { scene: string; label: string; content: string }[] = [
-  { scene: "system",   label: "系统 (System)",   content: "你是一位专业的写作助手。" },
-  { scene: "continue", label: "续写 (Continue)",  content: "请根据以上内容，继续写作下一段，风格保持一致，约200字。" },
-  { scene: "polish",   label: "润色 (Polish)",    content: "请润色以上选中内容，保留原意，使文字更加流畅优美。" },
-  { scene: "rewrite",  label: "重写 (Rewrite)",   content: "请重写以上选中内容，保留核心情节，改变表达方式。" },
-  { scene: "summary",  label: "总结 (Summary)",   content: "请对以上内容进行简要总结，提炼主要情节和人物动态。" },
-  { scene: "lore",     label: "世界观生成 (Lore)", content: "你是一位专业的世界观构建助手。根据用户提供的描述（以及可能附带的参考图片），创建一个结构化的设定条目。请严格按指定JSON格式回复。" },
-];
-
-const API_STANDARDS: { value: ApiStandard; label: string }[] = [
-  { value: "openai", label: "OpenAI" },
-  { value: "openai_compat", label: "OpenAI Compatible" },
-  { value: "gemini", label: "Google Gemini" },
+const BUILTIN_PROMPTS_CONFIG = [
+  { scene: "system", instructionKey: "ai.instructions.system" },
+  { scene: "continue", instructionKey: "ai.instructions.continue" },
+  { scene: "polish", instructionKey: "ai.instructions.polish" },
+  { scene: "rewrite", instructionKey: "ai.instructions.rewrite" },
+  { scene: "summary", instructionKey: "ai.instructions.summary" },
+  { scene: "lore", instructionKey: "ai.instructions.lore" },
 ];
 
 const STANDARD_ENDPOINTS: Record<ApiStandard, string> = {
@@ -24,16 +19,16 @@ const STANDARD_ENDPOINTS: Record<ApiStandard, string> = {
   openai_compat: "",
 };
 
-const MODEL_TYPES: { value: ModelType; label: string }[] = [
-  { value: "text", label: "文本" },
-  { value: "multimodal", label: "多模态" },
-  { value: "image", label: "图像生成" },
-  { value: "video", label: "视频" },
-];
-
 // ─── Providers Tab ────────────────────────────────────────────────────────────
 
 function ProvidersTab() {
+  const { t } = useTranslation();
+  const apiStandardOptions = [
+    { value: "openai" as ApiStandard, label: t("aiConfig.apiStandards.openai") },
+    { value: "openai_compat" as ApiStandard, label: t("aiConfig.apiStandards.openai_compat") },
+    { value: "gemini" as ApiStandard, label: t("aiConfig.apiStandards.gemini") },
+  ];
+
   const { providers, addProvider, removeProvider } = useAiStore();
   const [form, setForm] = useState({ name: "", baseUrl: STANDARD_ENDPOINTS.openai, apiStandard: "openai" as ApiStandard, apiKey: "" });
   const [saving, setSaving] = useState(false);
@@ -61,14 +56,14 @@ function ProvidersTab() {
   return (
     <div>
       <div className={styles.section}>
-        <div className={styles.sectionTitle}>已配置供应商</div>
-        {providers.length === 0 && <div className={styles.emptyNote}>暂无供应商，点击下方添加</div>}
+        <div className={styles.sectionTitle}>{t("aiConfig.providers.configured")}</div>
+        {providers.length === 0 && <div className={styles.emptyNote}>{t("aiConfig.providers.empty")}</div>}
         <div className={styles.itemList}>
           {providers.map((p) => (
             <div key={p.id} className={styles.item}>
               <div className={styles.itemInfo}>
                 <div className={styles.itemName}>{p.name}</div>
-                <div className={styles.itemMeta}>{p.baseUrl || "(默认端点)"} · {p.apiStandard}</div>
+                <div className={styles.itemMeta}>{p.baseUrl || t("aiConfig.providers.defaultEndpoint")} · {p.apiStandard}</div>
               </div>
               <span className={styles.badge}>{p.apiStandard}</span>
               <button className={styles.deleteBtn} onClick={() => removeProvider(p.id)}>✕</button>
@@ -79,45 +74,45 @@ function ProvidersTab() {
 
       {showForm ? (
         <div className={styles.form}>
-          <div className={styles.sectionTitle}>添加供应商</div>
+          <div className={styles.sectionTitle}>{t("aiConfig.providers.addTitle")}</div>
           {error && <div className={styles.errorNote}>{error}</div>}
           <div className={styles.formRow}>
             <div className={styles.fieldGroup}>
-              <label className={styles.label}>名称</label>
+              <label className={styles.label}>{t("aiConfig.providers.nameLabel")}</label>
               <input className={styles.input} placeholder="OpenAI" value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div className={styles.fieldGroup}>
-              <label className={styles.label}>API 标准</label>
+              <label className={styles.label}>{t("aiConfig.providers.apiStandardLabel")}</label>
               <select className={styles.select} value={form.apiStandard}
                 onChange={(e) => {
                   const standard = e.target.value as ApiStandard;
                   setForm({ ...form, apiStandard: standard, baseUrl: STANDARD_ENDPOINTS[standard] });
                 }}>
-                {API_STANDARDS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                {apiStandardOptions.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
               </select>
             </div>
           </div>
           <div className={styles.fieldGroup}>
-            <label className={styles.label}>Base URL (留空使用默认)</label>
+            <label className={styles.label}>{t("aiConfig.providers.baseUrlLabel")}</label>
             <input className={styles.input} placeholder="https://api.openai.com/v1" value={form.baseUrl}
               onChange={(e) => setForm({ ...form, baseUrl: e.target.value })} />
           </div>
           <div className={styles.fieldGroup}>
-            <label className={styles.label}>API Key</label>
+            <label className={styles.label}>{t("aiConfig.providers.apiKeyLabel")}</label>
             <input className={styles.input} type="password" placeholder="sk-…" value={form.apiKey}
               onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
           </div>
           <div className={styles.formActions}>
-            <button className={styles.btnSecondary} onClick={() => { setShowForm(false); setError(null); }}>取消</button>
+            <button className={styles.btnSecondary} onClick={() => { setShowForm(false); setError(null); }}>{t("aiConfig.providers.cancel")}</button>
             <button className={styles.btnPrimary} onClick={handleAdd}
               disabled={!form.name || !form.apiKey || saving}>
-              {saving ? "保存中…" : "保存"}
+              {saving ? t("aiConfig.providers.saving") : t("aiConfig.providers.save")}
             </button>
           </div>
         </div>
       ) : (
-        <button className={styles.btnPrimary} onClick={() => setShowForm(true)}>+ 添加供应商</button>
+        <button className={styles.btnPrimary} onClick={() => setShowForm(true)}>+ {t("aiConfig.providers.add")}</button>
       )}
     </div>
   );
@@ -126,6 +121,14 @@ function ProvidersTab() {
 // ─── Models Tab ───────────────────────────────────────────────────────────────
 
 function ModelsTab() {
+  const { t } = useTranslation();
+  const modelTypeOptions = [
+    { value: "text" as ModelType, label: t("aiConfig.modelTypes.text") },
+    { value: "multimodal" as ModelType, label: t("aiConfig.modelTypes.multimodal") },
+    { value: "image" as ModelType, label: t("aiConfig.modelTypes.image") },
+    { value: "video" as ModelType, label: t("aiConfig.modelTypes.video") },
+  ];
+
   const { providers, models, addModel, removeModel, fetchAndImportModels } = useAiStore();
   const [form, setForm] = useState({ providerId: "", modelId: "", name: "", type: "text" as ModelType, priceIn: "", priceCachedIn: "", priceOut: "" });
   const [showForm, setShowForm] = useState(false);
@@ -176,8 +179,8 @@ function ModelsTab() {
   return (
     <div>
       <div className={styles.section}>
-        <div className={styles.sectionTitle}>已配置模型</div>
-        {models.length === 0 && <div className={styles.emptyNote}>暂无模型</div>}
+        <div className={styles.sectionTitle}>{t("aiConfig.models.configured")}</div>
+        {models.length === 0 && <div className={styles.emptyNote}>{t("aiConfig.models.empty")}</div>}
         <div className={styles.itemList}>
           {models.map((m) => {
             const pname = providers.find((p) => p.id === m.providerId)?.name ?? m.providerId;
@@ -197,22 +200,22 @@ function ModelsTab() {
 
       {showForm ? (
         <div className={styles.form}>
-          <div className={styles.sectionTitle}>添加模型</div>
+          <div className={styles.sectionTitle}>{t("aiConfig.models.addTitle")}</div>
           {error && <div className={styles.errorNote}>{error}</div>}
           <div className={styles.formRow}>
             <div className={styles.fieldGroup}>
-              <label className={styles.label}>供应商</label>
+              <label className={styles.label}>{t("aiConfig.models.providerLabel")}</label>
               <select className={styles.select} value={form.providerId}
                 onChange={(e) => { setForm({ ...form, providerId: e.target.value }); setFetchedList([]); }}>
-                <option value="">选择供应商…</option>
+                <option value="">{t("aiConfig.models.selectProvider")}</option>
                 {providers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
             <div className={styles.fieldGroup}>
-              <label className={styles.label}>模型类型</label>
+              <label className={styles.label}>{t("aiConfig.models.typeLabel")}</label>
               <select className={styles.select} value={form.type}
                 onChange={(e) => setForm({ ...form, type: e.target.value as ModelType })}>
-                {MODEL_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                {modelTypeOptions.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
           </div>
@@ -220,12 +223,12 @@ function ModelsTab() {
           {form.providerId && (
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <button className={styles.fetchBtn} onClick={handleFetch} disabled={fetching}>
-                {fetching ? "拉取中…" : "从 API 拉取可用模型"}
+                {fetching ? t("aiConfig.models.fetching") : t("aiConfig.models.fetchBtn")}
               </button>
               {fetchedList.length > 0 && (
                 <select className={styles.select} style={{ flex: 1 }}
                   onChange={(e) => { const m = fetchedList.find(x => x.id === e.target.value); if (m) setForm(f => ({ ...f, modelId: m.id, name: m.name })); }}>
-                  <option value="">选择…</option>
+                  <option value="">{t("aiConfig.models.selectOption")}</option>
                   {fetchedList.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
               )}
@@ -234,23 +237,23 @@ function ModelsTab() {
 
           <div className={styles.formRow}>
             <div className={styles.fieldGroup}>
-              <label className={styles.label}>Model ID</label>
+              <label className={styles.label}>{t("aiConfig.models.modelIdLabel")}</label>
               <input className={styles.input} placeholder="gpt-4o" value={form.modelId}
                 onChange={(e) => setForm({ ...form, modelId: e.target.value })} />
             </div>
             <div className={styles.fieldGroup}>
-              <label className={styles.label}>显示名称</label>
+              <label className={styles.label}>{t("aiConfig.models.displayNameLabel")}</label>
               <input className={styles.input} placeholder="GPT-4o" value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
           </div>
 
-          <div className={styles.sectionTitle} style={{ marginBottom: 0 }}>计费 (USD / 1M tokens)</div>
+          <div className={styles.sectionTitle} style={{ marginBottom: 0 }}>{t("aiConfig.models.billing")}</div>
           <div className={styles.formRow}>
             {[
-              { key: "priceIn", label: "输入" },
-              { key: "priceCachedIn", label: "缓存输入" },
-              { key: "priceOut", label: "输出" },
+              { key: "priceIn", label: t("aiConfig.models.priceInput") },
+              { key: "priceCachedIn", label: t("aiConfig.models.priceCachedInput") },
+              { key: "priceOut", label: t("aiConfig.models.priceOutput") },
             ].map(({ key, label }) => (
               <div key={key} className={styles.fieldGroup}>
                 <label className={styles.label}>{label}</label>
@@ -262,14 +265,14 @@ function ModelsTab() {
           </div>
 
           <div className={styles.formActions}>
-            <button className={styles.btnSecondary} onClick={() => { setShowForm(false); setFetchedList([]); setError(null); }}>取消</button>
+            <button className={styles.btnSecondary} onClick={() => { setShowForm(false); setFetchedList([]); setError(null); }}>{t("aiConfig.models.cancel")}</button>
             <button className={styles.btnPrimary} onClick={handleAdd} disabled={!form.providerId || !form.modelId || saving}>
-              {saving ? "保存中…" : "添加"}
+              {saving ? t("aiConfig.models.saving") : t("aiConfig.models.add")}
             </button>
           </div>
         </div>
       ) : (
-        <button className={styles.btnPrimary} onClick={() => setShowForm(true)}>+ 添加模型</button>
+        <button className={styles.btnPrimary} onClick={() => setShowForm(true)}>+ {t("aiConfig.models.add")}</button>
       )}
     </div>
   );
@@ -278,11 +281,18 @@ function ModelsTab() {
 // ─── Prompts Tab ──────────────────────────────────────────────────────────────
 
 function PromptsTab() {
+  const { t } = useTranslation();
   const { prompts, addPrompt, removePrompt } = useAiStore();
   const [form, setForm] = useState({ name: "", content: "", scene: "system" });
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const builtinPrompts = BUILTIN_PROMPTS_CONFIG.map((b) => ({
+    ...b,
+    label: t(`ai.tasks.${b.scene}`),
+    content: t(b.instructionKey),
+  }));
 
   const handleAdd = async () => {
     if (!form.name || !form.content) return;
@@ -302,16 +312,16 @@ function PromptsTab() {
   return (
     <div>
       <div className={styles.section}>
-        <div className={styles.sectionTitle}>内置默认指令 (只读)</div>
+        <div className={styles.sectionTitle}>{t("aiConfig.prompts.builtinTitle")}</div>
         <div className={styles.itemList}>
-          {BUILTIN_PROMPTS.map((b) => {
+          {builtinPrompts.map((b) => {
             const overridden = prompts.some((p) => p.scene === b.scene);
             return (
               <div key={b.scene} className={`${styles.item} ${styles.builtinItem}`}>
                 <div className={styles.itemInfo}>
                   <div className={styles.itemName} style={{ opacity: overridden ? 0.4 : 1 }}>
                     {b.content}
-                    {overridden && <span className={styles.overriddenTag}> 已被覆盖</span>}
+                    {overridden && <span className={styles.overriddenTag}>{t("aiConfig.prompts.overridden")}</span>}
                   </div>
                 </div>
                 <span className={styles.badge}>{b.scene}</span>
@@ -322,8 +332,8 @@ function PromptsTab() {
       </div>
 
       <div className={styles.section}>
-        <div className={styles.sectionTitle}>自定义 Prompt (覆盖同场景默认)</div>
-        {prompts.length === 0 && <div className={styles.emptyNote}>暂无自定义 Prompt</div>}
+        <div className={styles.sectionTitle}>{t("aiConfig.prompts.customTitle")}</div>
+        {prompts.length === 0 && <div className={styles.emptyNote}>{t("aiConfig.prompts.empty")}</div>}
         <div className={styles.itemList}>
           {prompts.map((p) => (
             <div key={p.id} className={styles.item}>
@@ -340,16 +350,16 @@ function PromptsTab() {
 
       {showForm ? (
         <div className={styles.form}>
-          <div className={styles.sectionTitle}>新建 Prompt</div>
+          <div className={styles.sectionTitle}>{t("aiConfig.prompts.addTitle")}</div>
           {error && <div className={styles.errorNote}>{error}</div>}
           <div className={styles.formRow}>
             <div className={styles.fieldGroup}>
-              <label className={styles.label}>名称</label>
-              <input className={styles.input} placeholder="古风写作风格" value={form.name}
+              <label className={styles.label}>{t("aiConfig.prompts.nameLabel")}</label>
+              <input className={styles.input} placeholder={t("lore.generator.placeholder")} value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div className={styles.fieldGroup}>
-              <label className={styles.label}>场景</label>
+              <label className={styles.label}>{t("aiConfig.prompts.sceneLabel")}</label>
               <select className={styles.select} value={form.scene}
                 onChange={(e) => setForm({ ...form, scene: e.target.value })}>
                 {["system", "continue", "polish", "rewrite", "summary", "lore"].map((s) => (
@@ -359,20 +369,20 @@ function PromptsTab() {
             </div>
           </div>
           <div className={styles.fieldGroup}>
-            <label className={styles.label}>内容</label>
-            <textarea className={styles.input} rows={4} placeholder="你是一位擅长古风写作的助手…"
+            <label className={styles.label}>{t("aiConfig.prompts.contentLabel")}</label>
+            <textarea className={styles.input} rows={4} placeholder={t("ai.panel.customInstruction")}
               value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })}
               style={{ resize: "vertical", fontFamily: "inherit" }} />
           </div>
           <div className={styles.formActions}>
-            <button className={styles.btnSecondary} onClick={() => { setShowForm(false); setError(null); }}>取消</button>
+            <button className={styles.btnSecondary} onClick={() => { setShowForm(false); setError(null); }}>{t("aiConfig.prompts.cancel")}</button>
             <button className={styles.btnPrimary} onClick={handleAdd} disabled={!form.name || !form.content || saving}>
-              {saving ? "保存中…" : "添加"}
+              {saving ? t("aiConfig.prompts.saving") : t("aiConfig.prompts.add")}
             </button>
           </div>
         </div>
       ) : (
-        <button className={styles.btnPrimary} onClick={() => setShowForm(true)}>+ 新建 Prompt</button>
+        <button className={styles.btnPrimary} onClick={() => setShowForm(true)}>+ {t("aiConfig.prompts.add")}</button>
       )}
     </div>
   );
@@ -380,29 +390,30 @@ function PromptsTab() {
 
 // ─── Main modal ───────────────────────────────────────────────────────────────
 
-const TABS = [
-  { id: "providers", label: "供应商" },
-  { id: "models", label: "模型" },
-  { id: "prompts", label: "Prompt" },
-];
-
 interface Props {
   onClose: () => void;
 }
 
 export function SettingsModal({ onClose }: Props) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState("providers");
+
+  const tabs = [
+    { id: "providers", label: t("aiConfig.tabs.providers") },
+    { id: "models", label: t("aiConfig.tabs.models") },
+    { id: "prompts", label: t("aiConfig.tabs.prompts") },
+  ];
 
   return (
     <div className={styles.overlay} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className={styles.modal}>
         <div className={styles.header}>
-          <span className={styles.title}>⚙️ AI 配置</span>
+          <span className={styles.title}>{t("aiConfig.title")}</span>
           <button className={styles.closeBtn} onClick={onClose}>✕</button>
         </div>
 
         <div className={styles.tabs}>
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <button key={t.id} className={`${styles.tab} ${activeTab === t.id ? styles.active : ""}`}
               onClick={() => setActiveTab(t.id)}>
               {t.label}

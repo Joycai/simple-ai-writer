@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { LORE_CATEGORIES, assetUrl, type CategoryId, type LoreEntity } from "../../lib/lore";
@@ -15,6 +16,7 @@ function NewEntityForm({
   category: CategoryId;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const { projectPath } = useProjectStore();
   const { createNewEntity } = useLoreStore();
   const [name, setName] = useState("");
@@ -34,10 +36,10 @@ function NewEntityForm({
 
   return (
     <div className={styles.newEntityForm}>
-      <div className={styles.formTitle}>新建设定条目</div>
+      <div className={styles.formTitle}>{t("lore.form.title")}</div>
       <input
         className={styles.input}
-        placeholder="名称 (e.g. 艾尔登)"
+        placeholder={t("lore.form.namePlaceholder")}
         value={name}
         onChange={(e) => {
           setName(e.target.value);
@@ -47,18 +49,18 @@ function NewEntityForm({
       />
       <input
         className={styles.input}
-        placeholder="目录ID (e.g. elden)"
+        placeholder={t("lore.form.idPlaceholder")}
         value={id}
         onChange={(e) => setId(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
       />
       <div className={styles.formActions}>
-        <button className={styles.btnSecondary} onClick={onClose}>取消</button>
+        <button className={styles.btnSecondary} onClick={onClose}>{t("lore.form.cancel")}</button>
         <button
           className={styles.btnPrimary}
           onClick={handleCreate}
           disabled={!name.trim() || !id.trim() || saving}
         >
-          {saving ? "创建中…" : "创建"}
+          {saving ? t("lore.form.creating") : t("lore.form.create")}
         </button>
       </div>
     </div>
@@ -68,6 +70,7 @@ function NewEntityForm({
 // ─── Entity detail ────────────────────────────────────────────────────────────
 
 function EntityDetail({ entity }: { entity: LoreEntity }) {
+  const { t } = useTranslation();
   const { selectedFile, fileContent, isDirty, selectFile, setFileContent, saveNow } =
     useLoreStore();
   const catInfo = LORE_CATEGORIES.find((c) => c.id === entity.category);
@@ -130,14 +133,14 @@ function EntityDetail({ entity }: { entity: LoreEntity }) {
                 onClick={saveNow}
                 style={{ fontSize: "var(--font-size-xs)", color: "var(--color-accent)", padding: "2px 8px", background: "rgba(59,130,246,0.12)", borderRadius: "var(--radius-sm)" }}
               >
-                保存
+                {t("lore.form.save")}
               </button>
             )}
           </div>
           <CodeEditor value={fileContent} onChange={setFileContent} />
         </div>
       ) : (
-        <div className={styles.emptyDetail}>选择一个文件查看</div>
+        <div className={styles.emptyDetail}>{t("lore.form.selectFile")}</div>
       )}
     </div>
   );
@@ -146,6 +149,7 @@ function EntityDetail({ entity }: { entity: LoreEntity }) {
 // ─── Main LorePanel ───────────────────────────────────────────────────────────
 
 export function LorePanel() {
+  const { t } = useTranslation();
   const { index, selectedEntity, selectEntity } = useLoreStore();
   const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set());
   const [newEntityCat, setNewEntityCat] = useState<CategoryId | null>(null);
@@ -166,9 +170,9 @@ export function LorePanel() {
         <button
           onClick={() => setShowGenerator(true)}
           style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: "var(--radius-sm)", background: "rgba(59,130,246,0.12)", color: "var(--color-accent)", fontSize: "var(--font-size-xs)", fontWeight: 500 }}
-          title="用 AI 根据描述和图片生成设定条目"
+          title={t("lore.panel.generateTitle")}
         >
-          🤖 AI 生成
+          🤖 {t("lore.panel.generate")}
         </button>
       </div>
 
@@ -191,7 +195,7 @@ export function LorePanel() {
                     e.stopPropagation();
                     setNewEntityCat(cat.id as CategoryId);
                   }}
-                  title="新建条目"
+                  title={t("lore.panel.newEntry")}
                 >
                   +
                 </button>
@@ -225,7 +229,7 @@ export function LorePanel() {
                   ))}
                   {entities.length === 0 && newEntityCat !== cat.id && (
                     <div style={{ padding: "2px 12px 4px 28px", fontSize: "var(--font-size-xs)", color: "var(--color-text-muted)" }}>
-                      暂无条目
+                      {t("lore.panel.empty")}
                     </div>
                   )}
                 </div>
@@ -239,7 +243,7 @@ export function LorePanel() {
       {selectedEntity ? (
         <EntityDetail entity={selectedEntity} />
       ) : (
-        <div className={styles.emptyDetail}>选择一个设定条目查看详情</div>
+        <div className={styles.emptyDetail}>{t("lore.panel.selectEntity")}</div>
       )}
     </div>
   );

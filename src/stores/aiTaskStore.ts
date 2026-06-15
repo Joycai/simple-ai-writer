@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import i18n from "../i18n";
 import { streamCompletion } from "../lib/aiClient";
 import { assembleContext, bundleToMessages } from "../lib/rag";
 import { useAiStore } from "./aiStore";
@@ -10,10 +11,10 @@ import { loadApiKey } from "../lib/keyStore";
 export type TaskKind = "continue" | "polish" | "rewrite" | "summary" | "custom";
 
 const TASK_INSTRUCTIONS: Record<TaskKind, string> = {
-  continue: "请根据以上内容，继续写作下一段，风格保持一致，约200字。",
-  polish: "请润色以上选中内容，保留原意，使文字更加流畅优美。",
-  rewrite: "请重写以上选中内容，保留核心情节，改变表达方式。",
-  summary: "请对以上内容进行简要总结，提炼主要情节和人物动态。",
+  continue: i18n.t("ai.instructions.continue"),
+  polish: i18n.t("ai.instructions.polish"),
+  rewrite: i18n.t("ai.instructions.rewrite"),
+  summary: i18n.t("ai.instructions.summary"),
   custom: "",
 };
 
@@ -52,18 +53,18 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const { projectPath } = useProjectStore.getState();
     const { index: loreIndex } = useLoreStore.getState();
 
-    if (!projectPath) { set({ error: "请先打开项目" }); return; }
-    if (!activeModelId) { set({ error: "请先在 AI 配置中选择模型" }); return; }
+    if (!projectPath) { set({ error: i18n.t("ai.errors.noProject") }); return; }
+    if (!activeModelId) { set({ error: i18n.t("ai.errors.noModel") }); return; }
 
     const model = models.find((m) => m.id === activeModelId);
-    if (!model) { set({ error: "找不到选中的模型" }); return; }
+    if (!model) { set({ error: i18n.t("ai.errors.modelNotFound") }); return; }
 
     const provider = providers.find((p) => p.id === model.providerId);
-    if (!provider) { set({ error: "找不到供应商" }); return; }
+    if (!provider) { set({ error: i18n.t("ai.errors.providerNotFound") }); return; }
 
     // System prompt: user-selected prompt (scene === "system"), else default
     const prompt = prompts.find((p) => p.id === activePromptId);
-    const systemPrompt = prompt?.content ?? "你是一位专业的写作助手。";
+    const systemPrompt = prompt?.content ?? i18n.t("ai.instructions.system");
 
     const apiKey = await loadApiKey(provider.id) ?? "";
 

@@ -8,10 +8,10 @@ import { Preview } from "../editor/Preview";
 import { exportMarkdown, exportHtml, exportPdf } from "../../lib/export";
 import styles from "./EditorArea.module.css";
 
-const VIEW_MODES: { id: ViewMode; label: string }[] = [
-  { id: "editor", label: "编辑" },
-  { id: "split", label: "分栏" },
-  { id: "preview", label: "预览" },
+const VIEW_MODES_CONFIG: { id: ViewMode; labelKey: string }[] = [
+  { id: "editor", labelKey: "editor.viewMode.editor" },
+  { id: "split", labelKey: "editor.viewMode.split" },
+  { id: "preview", labelKey: "editor.viewMode.preview" },
 ];
 
 export function EditorArea() {
@@ -19,6 +19,11 @@ export function EditorArea() {
   const { projectPath, activeFilePath } = useProjectStore();
   const { content, filePath, isDirty, viewMode, loadFile, setContent, saveNow, setViewMode } =
     useEditorStore();
+
+  const viewModes = VIEW_MODES_CONFIG.map((m) => ({
+    ...m,
+    label: t(m.labelKey),
+  }));
 
   // Load file when active path changes
   useEffect(() => {
@@ -87,7 +92,7 @@ export function EditorArea() {
         <span className={styles.fileName}>{fileName}</span>
 
         <div className={styles.viewToggle}>
-          {VIEW_MODES.map((m) => (
+          {viewModes.map((m) => (
             <button
               key={m.id}
               className={`${styles.viewBtn} ${viewMode === m.id ? styles.active : ""}`}
@@ -100,24 +105,24 @@ export function EditorArea() {
 
         {isDirty && (
           <button className={styles.saveBtn} onClick={saveNow}>
-            保存
+            {t("editor.save")}
           </button>
         )}
 
         <div style={{ position: "relative" }}>
           <button className={styles.saveBtn} onClick={() => setShowExportMenu((v) => !v)}>
-            导出 ▾
+            {t("editor.export")} ▾
           </button>
           {showExportMenu && (
             <div className={styles.exportMenu} onMouseLeave={() => setShowExportMenu(false)}>
               <button className={styles.exportItem} onClick={handleExportMd}>
-                复制 Markdown
+                {t("editor.exportMarkdown")}
               </button>
               <button className={styles.exportItem} onClick={handleExportHtml}>
-                导出 HTML…
+                {t("editor.exportHtml")}
               </button>
               <button className={styles.exportItem} onClick={handleExportPdf}>
-                打印 / PDF…
+                {t("editor.exportPdf")}
               </button>
             </div>
           )}

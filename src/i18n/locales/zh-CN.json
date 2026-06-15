@@ -32,10 +32,204 @@
   "project": {
     "openFolder": "打开文件夹",
     "noProjectTitle": "打开一个文件夹以开始写作",
-    "noProjectDesc": "系统将自动初始化项目结构"
+    "noProjectDesc": "系统将自动初始化项目结构",
+    "emptyTree": "写作目录为空，创建 .md 文件开始吧"
   },
   "editor": {
     "placeholder": "开始写作…",
-    "untitled": "未命名"
+    "untitled": "未命名",
+    "save": "保存",
+    "export": "导出",
+    "exportMarkdown": "复制 Markdown",
+    "exportHtml": "导出 HTML…",
+    "exportPdf": "打印 / PDF…",
+    "viewMode": {
+      "editor": "编辑",
+      "split": "分栏",
+      "preview": "预览"
+    }
+  },
+  "ai": {
+    "tasks": {
+      "continue": "续写",
+      "continueDesc": "从当前位置继续写作",
+      "polish": "润色",
+      "polishDesc": "润色选中内容",
+      "rewrite": "重写",
+      "rewriteDesc": "重写选中内容",
+      "summary": "总结",
+      "summaryDesc": "总结全文或选中段落",
+      "custom": "自定义指令"
+    },
+    "instructions": {
+      "continue": "请根据以上内容，继续写作下一段，风格保持一致，约200字。",
+      "polish": "请润色以上选中内容，保留原意，使文字更加流畅优美。",
+      "rewrite": "请重写以上选中内容，保留核心情节，改变表达方式。",
+      "summary": "请对以上内容进行简要总结，提炼主要情节和人物动态。",
+      "system": "你是一位专业的写作助手。",
+      "lore": "你是一位专业的世界观构建助手。根据用户提供的描述（以及可能附带的参考图片），创建一个结构化的设定条目。请严格按指定JSON格式回复。"
+    },
+    "panel": {
+      "selectModel": "选择模型…",
+      "defaultSystemPrompt": "默认系统提示…",
+      "noProvider": "请先在 ⚙ AI 配置中添加供应商和模型",
+      "selectedChars": "已选中 {count} 字",
+      "customInstruction": "输入自定义指令…",
+      "cancel": "取消",
+      "send": "发送",
+      "addCustom": "+ 自定义指令",
+      "stop": "■ 停止生成",
+      "generatedOutput": "生成结果",
+      "clear": "清除",
+      "insertToDoc": "插入文档",
+      "inputTokens": "输入 {count} tokens",
+      "outputTokens": "输出 {count} tokens"
+    },
+    "errors": {
+      "noProject": "请先打开项目",
+      "noModel": "请先在 AI 配置中选择模型",
+      "modelNotFound": "找不到选中的模型",
+      "providerNotFound": "找不到供应商"
+    }
+  },
+  "aiConfig": {
+    "title": "⚙️ AI 配置",
+    "tabs": {
+      "providers": "供应商",
+      "models": "模型",
+      "prompts": "Prompt"
+    },
+    "providers": {
+      "configured": "已配置供应商",
+      "empty": "暂无供应商，点击下方添加",
+      "add": "添加供应商",
+      "addTitle": "添加供应商",
+      "nameLabel": "名称",
+      "apiStandardLabel": "API 标准",
+      "baseUrlLabel": "Base URL (留空使用默认)",
+      "apiKeyLabel": "API Key",
+      "cancel": "取消",
+      "save": "保存",
+      "saving": "保存中…",
+      "defaultEndpoint": "(默认端点)"
+    },
+    "models": {
+      "configured": "已配置模型",
+      "empty": "暂无模型",
+      "add": "添加模型",
+      "addTitle": "添加模型",
+      "providerLabel": "供应商",
+      "selectProvider": "选择供应商…",
+      "typeLabel": "模型类型",
+      "fetchBtn": "从 API 拉取可用模型",
+      "fetching": "拉取中…",
+      "selectOption": "选择…",
+      "modelIdLabel": "Model ID",
+      "displayNameLabel": "显示名称",
+      "billing": "计费 (USD / 1M tokens)",
+      "priceInput": "输入",
+      "priceCachedInput": "缓存输入",
+      "priceOutput": "输出",
+      "cancel": "取消",
+      "add": "添加",
+      "saving": "保存中…"
+    },
+    "prompts": {
+      "builtinTitle": "内置默认指令 (只读)",
+      "customTitle": "自定义 Prompt (覆盖同场景默认)",
+      "empty": "暂无自定义 Prompt",
+      "overridden": " 已被覆盖",
+      "add": "新建 Prompt",
+      "addTitle": "新建 Prompt",
+      "nameLabel": "名称",
+      "sceneLabel": "场景",
+      "contentLabel": "内容",
+      "cancel": "取消",
+      "add": "添加",
+      "saving": "保存中…"
+    },
+    "modelTypes": {
+      "text": "文本",
+      "multimodal": "多模态",
+      "image": "图像生成",
+      "video": "视频"
+    },
+    "apiStandards": {
+      "openai": "OpenAI",
+      "openai_compat": "OpenAI Compatible",
+      "gemini": "Google Gemini"
+    }
+  },
+  "lore": {
+    "generator": {
+      "title": "AI 生成设定条目",
+      "subtitle": "粘贴描述文档，引用参考图片，让 AI 自动构建世界观条目",
+      "description": "生成新的设定条目",
+      "placeholder": "输入设定描述…",
+      "generate": "生成",
+      "cancel": "取消",
+      "generating": "生成中…",
+      "status1": "正在分析描述内容",
+      "status2": "理解角色设定中",
+      "status3": "生成世界观条目",
+      "status4": "整理结构化数据",
+      "step1": "① 输入设定描述",
+      "categoryLabel": "条目分类",
+      "modelLabel": "AI 模型",
+      "selectModel": "选择模型…",
+      "descriptionText": "描述文本",
+      "descriptionHint": "· 输入 @ 可从项目中选择参考图片",
+      "descriptionPlaceholder": "粘贴角色设定、背景描述、世界观文档…\n输入 @ 引用项目中的图片作为视觉参考。",
+      "referenceImages": "参考图片",
+      "selectReferenceImage": "选择参考图片",
+      "closeEsc": "Esc 关闭",
+      "noImages": "项目中未找到图片文件",
+      "completed": "AI 生成完成，可直接编辑后保存",
+      "step2": "② 编辑并确认",
+      "success": "✓ 生成成功",
+      "nameLabel": "名称",
+      "namePlaceholder": "条目名称",
+      "categoryLabel2": "分类",
+      "aliasLabel": "别名",
+      "aliasHint": "· 回车或逗号确认，Backspace 删除",
+      "aliasPlaceholder": "添加别名…",
+      "summaryLabel": "摘要",
+      "summaryHint": "· 用于 RAG 关键词检索",
+      "summaryPlaceholder": "一句话简洁描述",
+      "contentLabel": "详细内容",
+      "contentHint": "· Markdown 格式",
+      "submitBtn": "✨ 生成设定条目",
+      "submitBtnSaving": "保存中…",
+      "stopBtn": "■ 停止生成",
+      "regenerateBtn": "🔄 重新生成",
+      "saveTolore": "保存到 Lore"
+    },
+    "panel": {
+      "title": "设定条目",
+      "empty": "暂无条目",
+      "generate": "AI 生成",
+      "generateTitle": "用 AI 根据描述和图片生成设定条目",
+      "newEntry": "新建条目",
+      "selectEntity": "选择一个设定条目查看详情"
+    },
+    "form": {
+      "title": "新建设定条目",
+      "namePlaceholder": "名称 (e.g. 艾尔登)",
+      "idPlaceholder": "目录ID (e.g. elden)",
+      "cancel": "取消",
+      "create": "创建",
+      "creating": "创建中…",
+      "save": "保存",
+      "selectFile": "选择一个文件查看"
+    }
+  },
+  "fileTree": {
+    "newFile": "新建文件",
+    "delete": "删除",
+    "deleteConfirm": "确认删除此文件？"
+  },
+  "language": {
+    "chinese": "中文",
+    "english": "EN"
   }
 }

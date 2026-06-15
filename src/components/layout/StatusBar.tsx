@@ -9,9 +9,9 @@ const THEMES: { value: ThemeMode; labelKey: string }[] = [
   { value: "system", labelKey: "settings.system" },
 ];
 
-const LANGUAGES: { value: Language; label: string }[] = [
-  { value: "zh-CN", label: "中文" },
-  { value: "en", label: "EN" },
+const LANGUAGES: { value: Language; labelKey: string }[] = [
+  { value: "zh-CN", labelKey: "language.chinese" },
+  { value: "en", labelKey: "language.english" },
 ];
 
 interface Props {
@@ -61,7 +61,7 @@ export function StatusBar({ onOpenSettings }: Props) {
       </button>
 
       <button className={styles.control} onClick={cycleLanguage} title={t("settings.language")}>
-        {LANGUAGES.find((l) => l.value === language)?.label}
+        {t(LANGUAGES.find((l) => l.value === language)?.labelKey || "language.english")}
       </button>
 
       <button className={styles.control} onClick={onOpenSettings} title={t("settings.aiConfig")}>

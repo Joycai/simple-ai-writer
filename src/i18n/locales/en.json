@@ -32,10 +32,204 @@
   "project": {
     "openFolder": "Open Folder",
     "noProjectTitle": "Open a folder to start writing",
-    "noProjectDesc": "The project structure will be initialized automatically"
+    "noProjectDesc": "The project structure will be initialized automatically",
+    "emptyTree": "Writing directory is empty, create a .md file to start"
   },
   "editor": {
     "placeholder": "Start writing…",
-    "untitled": "Untitled"
+    "untitled": "Untitled",
+    "save": "Save",
+    "export": "Export",
+    "exportMarkdown": "Copy Markdown",
+    "exportHtml": "Export HTML…",
+    "exportPdf": "Print / PDF…",
+    "viewMode": {
+      "editor": "Editor",
+      "split": "Split",
+      "preview": "Preview"
+    }
+  },
+  "ai": {
+    "tasks": {
+      "continue": "Continue",
+      "continueDesc": "Continue writing from current position",
+      "polish": "Polish",
+      "polishDesc": "Polish selected content",
+      "rewrite": "Rewrite",
+      "rewriteDesc": "Rewrite selected content",
+      "summary": "Summary",
+      "summaryDesc": "Summarize full text or selected passage",
+      "custom": "Custom Instruction"
+    },
+    "instructions": {
+      "continue": "Based on the above content, continue writing the next section with consistent style, approximately 200 words.",
+      "polish": "Polish the above selected content, preserve the original meaning, make the text more fluent and beautiful.",
+      "rewrite": "Rewrite the above selected content, keep the core plot, change the way of expression.",
+      "summary": "Provide a brief summary of the above content, extract the main plot and character dynamics.",
+      "system": "You are a professional writing assistant.",
+      "lore": "You are a professional world-building assistant. Based on the description provided by the user (and possibly accompanying reference images), create a structured lore entry. Please strictly reply in the specified JSON format."
+    },
+    "panel": {
+      "selectModel": "Select model…",
+      "defaultSystemPrompt": "Default system prompt…",
+      "noProvider": "Please add providers and models in ⚙ AI Config first",
+      "selectedChars": "Selected {count} characters",
+      "customInstruction": "Enter custom instruction…",
+      "cancel": "Cancel",
+      "send": "Send",
+      "addCustom": "+ Custom Instruction",
+      "stop": "■ Stop Generation",
+      "generatedOutput": "Generated Output",
+      "clear": "Clear",
+      "insertToDoc": "Insert to Document",
+      "inputTokens": "Input {count} tokens",
+      "outputTokens": "Output {count} tokens"
+    },
+    "errors": {
+      "noProject": "Please open a project first",
+      "noModel": "Please select a model in AI Config first",
+      "modelNotFound": "Selected model not found",
+      "providerNotFound": "Provider not found"
+    }
+  },
+  "aiConfig": {
+    "title": "⚙️ AI Config",
+    "tabs": {
+      "providers": "Providers",
+      "models": "Models",
+      "prompts": "Prompts"
+    },
+    "providers": {
+      "configured": "Configured Providers",
+      "empty": "No providers yet, click below to add",
+      "add": "Add Provider",
+      "addTitle": "Add Provider",
+      "nameLabel": "Name",
+      "apiStandardLabel": "API Standard",
+      "baseUrlLabel": "Base URL (leave empty to use default)",
+      "apiKeyLabel": "API Key",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving…",
+      "defaultEndpoint": "(default endpoint)"
+    },
+    "models": {
+      "configured": "Configured Models",
+      "empty": "No models",
+      "add": "Add Model",
+      "addTitle": "Add Model",
+      "providerLabel": "Provider",
+      "selectProvider": "Select provider…",
+      "typeLabel": "Model Type",
+      "fetchBtn": "Fetch Available Models from API",
+      "fetching": "Fetching…",
+      "selectOption": "Select…",
+      "modelIdLabel": "Model ID",
+      "displayNameLabel": "Display Name",
+      "billing": "Billing (USD / 1M tokens)",
+      "priceInput": "Input",
+      "priceCachedInput": "Cached Input",
+      "priceOutput": "Output",
+      "cancel": "Cancel",
+      "add": "Add",
+      "saving": "Saving…"
+    },
+    "prompts": {
+      "builtinTitle": "Built-in Default Instructions (Read-only)",
+      "customTitle": "Custom Prompts (Override default for same scene)",
+      "empty": "No custom prompts",
+      "overridden": " (overridden)",
+      "add": "Add Prompt",
+      "addTitle": "Add New Prompt",
+      "nameLabel": "Name",
+      "sceneLabel": "Scene",
+      "contentLabel": "Content",
+      "cancel": "Cancel",
+      "add": "Add",
+      "saving": "Saving…"
+    },
+    "modelTypes": {
+      "text": "Text",
+      "multimodal": "Multimodal",
+      "image": "Image Generation",
+      "video": "Video"
+    },
+    "apiStandards": {
+      "openai": "OpenAI",
+      "openai_compat": "OpenAI Compatible",
+      "gemini": "Google Gemini"
+    }
+  },
+  "lore": {
+    "generator": {
+      "title": "AI Generate Lore Entry",
+      "subtitle": "Paste description document, reference images, let AI automatically build lore entries",
+      "description": "Generate new lore entries",
+      "placeholder": "Enter lore description…",
+      "generate": "Generate",
+      "cancel": "Cancel",
+      "generating": "Generating…",
+      "status1": "Analyzing description content",
+      "status2": "Understanding character settings",
+      "status3": "Generating worldview entries",
+      "status4": "Organizing structured data",
+      "step1": "① Input Lore Description",
+      "categoryLabel": "Entry Category",
+      "modelLabel": "AI Model",
+      "selectModel": "Select model…",
+      "descriptionText": "Description Text",
+      "descriptionHint": "· Press @ to select reference images from project",
+      "descriptionPlaceholder": "Paste character settings, background descriptions, world documents…\nPress @ to reference images from project as visual references.",
+      "referenceImages": "Reference Images",
+      "selectReferenceImage": "Select Reference Image",
+      "closeEsc": "Close (Esc)",
+      "noImages": "No image files found in project",
+      "completed": "AI generation completed, can edit and save directly",
+      "step2": "② Edit and Confirm",
+      "success": "✓ Generation Success",
+      "nameLabel": "Name",
+      "namePlaceholder": "Entry Name",
+      "categoryLabel2": "Category",
+      "aliasLabel": "Aliases",
+      "aliasHint": "· Press Enter or comma to confirm, Backspace to delete",
+      "aliasPlaceholder": "Add alias…",
+      "summaryLabel": "Summary",
+      "summaryHint": "· Used for RAG keyword retrieval",
+      "summaryPlaceholder": "One-line concise description",
+      "contentLabel": "Detailed Content",
+      "contentHint": "· Markdown format",
+      "submitBtn": "✨ Generate Lore Entry",
+      "submitBtnSaving": "Saving…",
+      "stopBtn": "■ Stop Generation",
+      "regenerateBtn": "🔄 Regenerate",
+      "saveTolore": "Save to Lore"
+    },
+    "panel": {
+      "title": "Lore Entries",
+      "empty": "No entries",
+      "generate": "AI Generate",
+      "generateTitle": "Generate lore entries with AI based on description and images",
+      "newEntry": "New Entry",
+      "selectEntity": "Select a lore entry to view details"
+    },
+    "form": {
+      "title": "Create New Entry",
+      "namePlaceholder": "Name (e.g. Elden)",
+      "idPlaceholder": "Directory ID (e.g. elden)",
+      "cancel": "Cancel",
+      "create": "Create",
+      "creating": "Creating…",
+      "save": "Save",
+      "selectFile": "Select a file to view"
+    }
+  },
+  "fileTree": {
+    "newFile": "New File",
+    "delete": "Delete",
+    "deleteConfirm": "Delete this file?"
+  },
+  "language": {
+    "chinese": "中文",
+    "english": "EN"
   }
 }
