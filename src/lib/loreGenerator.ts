@@ -5,6 +5,7 @@
  */
 
 import { readFile as readBinaryFile, readDir } from "@tauri-apps/plugin-fs";
+import i18n from "../i18n";
 import type { ApiStandard } from "./aiConfig";
 import type { CategoryId } from "./lore";
 
@@ -76,18 +77,6 @@ export async function imageToDataUrl(imagePath: string): Promise<{ dataUrl: stri
   return { dataUrl: `data:${mime};base64,${base64}`, ext, bytes: u8 };
 }
 
-const SYSTEM_PROMPT = `你是一位专业的世界观构建助手。根据用户提供的描述（以及可能附带的参考图片），创建一个结构化的设定条目。
-
-请严格按以下JSON格式回复，不要包含Markdown代码块标记或其他任何文字：
-{
-  "name": "角色或实体的名称",
-  "category": "characters",
-  "aliases": ["别名1", "别名2"],
-  "summary": "一句话简洁描述，用于RAG关键词检索",
-  "content": "完整的Markdown格式详细描述内容"
-}
-
-category 字段只能是以下值之一：characters（人物）、world（世界观）、factions（势力）、items（道具）、skills（技能）、custom（自定义）`;
 
 export async function generateLore(opts: {
   description: string;
@@ -122,7 +111,7 @@ export async function generateLore(opts: {
     standard: opts.standard,
     modelId: opts.modelId,
     messages: [
-      { role: "system", content: opts.systemPrompt ?? SYSTEM_PROMPT },
+      { role: "system", content: opts.systemPrompt ?? i18n.t("ai.instructions.lore") },
       { role: "user", content: userParts },
     ],
     extraBody,
