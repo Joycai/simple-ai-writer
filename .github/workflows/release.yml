@@ -1,0 +1,118 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 1.2.3). Leave blank to use YYYY.M.D date stamp.'
+        required: false
+        type: string
+
+jobs:
+  determine-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.set-version.outputs.version }}
+    steps:
+      - id: set-version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=$(date +'%Y.%-m.%-d')" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    needs: determine-version
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            rust-targets: ''
+            args: ''
+          - platform: windows-latest
+            rust-targets: ''
+            args: ''
+          - platform: macos-latest
+            rust-targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
+            args: '--target universal-apple-darwin'
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies (Ubuntu)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - name: Rust build cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Update version in manifests
+        shell: node {0}
+        env:
+          VERSION: ${{ needs.determine-version.outputs.version }}
+        run: |
+          const fs = require('fs');
+          const v = process.env.VERSION;
+
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          pkg.version = v;
+          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+
+          const tauriConf = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
+          tauriConf.version = v;
+          fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(tauriConf, null, 2) + '\n');
+
+          let cargo = fs.readFileSync('src-tauri/Cargo.toml', 'utf8');
+          cargo = cargo.replace(/^version = "[^"]*"/m, `version = "${v}"`);
+          fs.writeFileSync('src-tauri/Cargo.toml', cargo);
+
+          console.log(`Bumped version to ${v}`);
+
+      - name: Build and publish Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v${{ needs.determine-version.outputs.version }}
+          releaseName: 'Simple AI Writer v${{ needs.determine-version.outputs.version }}'
+          releaseBody: |
+            Download the installer for your platform from the assets below.
+
+            | Platform | File |
+            | -------- | ---- |
+            | macOS (Universal) | `.dmg` |
+            | Windows | `.msi` / `.exe` |
+            | Linux | `.AppImage` / `.deb` |
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
