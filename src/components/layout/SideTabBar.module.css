@@ -1,7 +1,9 @@
 .tabBar {
   width: var(--tab-bar-width);
   height: 100%;
-  background: var(--color-bg-surface);
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border-right: 1px solid var(--color-border);
   display: flex;
   flex-direction: column;
@@ -21,8 +23,12 @@
   justify-content: center;
   gap: 2px;
   color: var(--color-text-muted);
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
   position: relative;
+}
+
+.tab:active {
+  transform: scale(0.92);
 }
 
 .tabIcon {
@@ -51,11 +57,17 @@
   position: absolute;
   left: -8px;
   top: 50%;
-  transform: translateY(-50%);
   width: 3px;
   height: 20px;
   border-radius: 0 2px 2px 0;
-  background: linear-gradient(180deg, var(--color-accent-start), var(--color-accent-end));
+  background: var(--color-accent);
+  transform: translateY(-50%);
+  animation: tabIndicator 280ms var(--ease-spring);
+}
+
+@keyframes tabIndicator {
+  from { height: 0; opacity: 0; }
+  to   { height: 20px; opacity: 1; }
 }
 
 .spacer {

@@ -6,7 +6,9 @@
   align-items: center;
   justify-content: center;
   z-index: 100;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: fadeIn 200ms var(--ease-out);
 }
 
 .modal {
@@ -15,11 +17,12 @@
   max-height: 85vh;
   background: var(--color-bg-surface);
   border: var(--glass-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-xl);
+  animation: scaleIn 240ms var(--ease-out);
 }
 
 .header {
@@ -182,7 +185,7 @@
   font-size: 11px;
   padding: 2px 7px;
   border-radius: 10px;
-  background: rgba(59, 130, 246, 0.12);
+  background: var(--color-accent-tint);
   color: var(--color-accent);
   flex-shrink: 0;
 }
@@ -208,20 +211,21 @@
 }
 .editBtn:hover {
   color: var(--color-accent);
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--color-accent-tint);
 }
 
 /* Primary / secondary buttons */
 .btnPrimary {
   padding: var(--space-2) var(--space-4);
-  background: linear-gradient(135deg, var(--color-accent-start), var(--color-accent-end));
+  background: var(--color-accent);
   color: #fff;
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
   font-weight: 500;
-  transition: opacity var(--transition-fast);
+  transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast), opacity var(--transition-fast);
 }
-.btnPrimary:hover { opacity: 0.88; }
+.btnPrimary:hover:not(:disabled) { background: var(--color-accent-hover); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.btnPrimary:active:not(:disabled) { transform: translateY(0) scale(0.98); box-shadow: none; }
 .btnPrimary:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .btnSecondary {
@@ -237,13 +241,13 @@
 
 .fetchBtn {
   padding: var(--space-2) var(--space-3);
-  background: rgba(59, 130, 246, 0.12);
+  background: var(--color-accent-tint);
   color: var(--color-accent);
   border-radius: var(--radius-sm);
   font-size: var(--font-size-xs);
   transition: background var(--transition-fast);
 }
-.fetchBtn:hover { background: rgba(59, 130, 246, 0.22); }
+.fetchBtn:hover { background: var(--color-accent-tint-strong); }
 .fetchBtn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .emptyNote {

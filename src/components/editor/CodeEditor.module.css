@@ -37,7 +37,7 @@
 
 .wrap :global(.cm-selectionBackground),
 .wrap :global(.cm-focused .cm-selectionBackground) {
-  background: rgba(59, 130, 246, 0.2) !important;
+  background: var(--color-accent-tint-strong) !important;
 }
 
 /* Markdown syntax colors */

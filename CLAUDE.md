@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> **Progressive disclosure** — This file is the always-loaded high-level map. Subsystem deep-dives, the UI/design spec, and step-by-step recipes live under `docs/` and are read on demand (see [Detailed References](#detailed-references)). Keep this file lean: add new detail to the relevant `docs/` file, not here.
+
 ## Commands
 
 ### Frontend Development
@@ -59,14 +61,12 @@ All in `src/stores/`:
 
 1. **User selection** → `aiTaskStore.setSelection()`
 2. **Task trigger** → `aiTaskStore.runTask(kind, customInstruction?)`
-   - Loads system prompt from active prompt template (or default)
-   - Calls `assembleContext()` (4-layer context assembly: system → lore → document → task)
-   - Formats messages via `bundleToMessages()`
-3. **Streaming** → `streamCompletion()` (SSE from OpenAI/Gemini)
-   - Parses chunks, updates `output` state
-   - On final chunk, extracts token counts and cost
+   - Loads system prompt, calls `assembleContext()` (4-layer: system → lore → document → task), formats via `bundleToMessages()`
+3. **Streaming** → `streamCompletion()` (SSE) — parses chunks into `output`, extracts token counts/cost on final chunk
 4. **Persist** → Writes to `token_usage` table in SQLite
 5. **Insert** → User clicks "Insert to Document" → `editorStore.setContent()`
+
+> Details: RAG context assembly, SSE parsing, and DB schema are in `docs/architecture.md`.
 
 ### Project Structure
 
@@ -83,124 +83,19 @@ All in `src/stores/`:
 - `src/components/settings/` — SettingsModal (provider/model/prompt config)
 - `src/lib/` — Core logic (project, editor, RAG, AI client, export, file I/O)
 - `src/stores/` — Zustand state managers
+- `src/styles/` — Design tokens (`tokens.css`) + global styles (`global.css`)
 - `src/i18n/locales/` — JSON translation files (en, zh-CN)
 
-## Key Implementation Details
+## Detailed References
 
-### Database Schema (SQLite)
+Load the relevant doc **before** working in that area — don't reconstruct it from scratch:
 
-Initialized in `src/lib/project.ts` and extended in `src/lib/aiConfig.ts`:
-
-```
-settings (id → str, value → str)
-lore_entities (id, category, dir_path, name, aliases_json, summary, embedding_status, updated_at)
-providers (id, name, baseUrl, apiStandard, createdAt)
-models (id, name, modelId, providerId, priceIn, priceOut)
-prompts (id, name, content, taskHints, category)
-token_usage (id, model_id, task, prompt_tokens, cached_tokens, completion_tokens, cost_usd, created_at)
-```
-
-### RAG (Retrieval-Augmented Generation)
-
-- **Location** — `src/lib/rag.ts`
-- **Method** — Alias-based keyword matching (no embeddings, fast)
-- **Context Assembly** (4 layers in `assembleContext()`):
-  1. System prompt (from active template or default)
-  2. Lore snippets (up to 3 matching entity summaries, max 1800 chars each)
-  3. Recent document context (last 2400 chars before selection)
-  4. Task instruction (continue/polish/rewrite/summary/custom)
-- **Output** → `ContextBundle` → formatted to messages via `bundleToMessages()`
-
-### Streaming (SSE)
-
-- **Location** — `src/lib/aiClient.ts`
-- **Providers** — OpenAI + compatible APIs (SSE `data: {...}` lines), Google Gemini (alt=sse format)
-- **Parsing** — Fetch + ReadableStream, line-by-line JSON parsing
-- **Token Tracking** — OpenAI sends `include_usage: true` in stream_options; Gemini in final `usageMetadata`
-
-### Secure Key Storage
-
-- **Library** — `tauri-plugin-stronghold` (v2.3.1)
-- **Location** — `src/lib/keyStore.ts`
-- **Setup** — `.setup()` hook in `src-tauri/src/lib.rs` with argon2 KDF (salt at `~/.config/simple-ai-writer/salt.txt`)
-- **API** — `saveApiKey(projectPath, providerId, key)`, `loadApiKey(projectPath, providerId)`
-
-### Export
-
-- **Location** — `src/lib/export.ts`
-- **Markdown** — Copy to clipboard
-- **HTML** — Self-contained file (inline CSS, no external assets)
-- **PDF** — Create hidden iframe, render HTML, call `window.print()`, remove iframe after 2s
-
-### Theming
-
-- **System** — CSS variables (dark/light modes) set via `data-theme` attribute
-- **Location** — `src/styles/global.css` (variables), component modules (CSS Modules)
-- **Theme Modes** — dark, light, system (auto-detect)
-
-### Internationalization (i18n)
-
-- **Library** — react-i18next (i18next backend)
-- **Locales** — `src/i18n/locales/{en,zh-CN}.json`
-- **Hook** — `useTranslation()` returns `t()` and i18n methods
-- **Store** — `appStore.language` syncs with `i18n.changeLanguage()`
-
-## Important Notes
-
-### Circular Dependencies
-- `aiTaskStore` imports from `editorStore` lazily inside `runTask()` to avoid circular imports at module load
-
-### Tauri IPC Commands
-- Implemented in `src-tauri/src/lib.rs` (minimal; most logic in TypeScript)
-- Commands exposed: `scaffold_project`, `read_dir_recursive`
-- Plugin permissions in `src-tauri/capabilities/default.json`
-
-### File I/O
-- `src/lib/fileio.ts` wraps Tauri fs plugin commands (read, write, metadata, etc.)
-- All paths resolved via Tauri plugin (no raw fs access)
-
-### CodeMirror 6 Setup
-- Extensions: GFM, Markdown language, history, search, Vim bindings optional
-- Line wrapping enabled via `EditorView.lineNumbers` extension
-- Theme: One Dark (dark mode); light mode via CSS override
-
-### Capabilities & Permissions
-- `src-tauri/capabilities/default.json` — Explicit permissions for all Tauri plugins
-- Must include: `stronghold:*`, `sql:*`, `fs:*`, `dialog:*`
-
-## Performance Considerations
-
-- **Editor debouncing** — `editorStore` uses `setTimeout` to auto-save on content change (not on every keystroke)
-- **Lore scanning** — Scans `lore/` tree at project open only; manual refresh via store action
-- **RAG caching** — Entity summaries cached in `loreStore.index` after first scan
-- **Context assembly** — 4-layer context capped at ~4000 tokens total to keep request size reasonable
+- **[`docs/design-system.md`](docs/design-system.md)** — UI/visual spec & theming: design tokens, Apple-like aesthetic rules, animation/shadow/color/component patterns. **Read before building or restyling any UI.**
+- **[`docs/architecture.md`](docs/architecture.md)** — Subsystem deep-dives: DB schema, RAG, SSE streaming, secure key storage, export, Tauri IPC, file I/O, CodeMirror, capabilities, performance.
+- **[`docs/workflows.md`](docs/workflows.md)** — Recipes: add an AI task type / provider / language; modify lore format.
 
 ## Testing & Type Safety
 
 - TypeScript strict mode enabled (noUnusedLocals, noUnusedParameters, noFallthroughCasesInSwitch)
 - No test framework currently; tests welcome via PR
 - Frontend type-checks via `pnpm tsc --noEmit`
-
-## Common Workflows
-
-**Add a new AI task type**
-1. Add to `TaskKind` union in `aiTaskStore.ts`
-2. Add default instruction to `TASK_INSTRUCTIONS` map
-3. Update `AiPanel.tsx` UI button grid
-4. Update i18n (en.json, zh-CN.json)
-
-**Add a new provider/API**
-1. Implement `StreamOptions` parsing in `aiClient.ts` (`streamOpenAI()` or new provider branch)
-2. Add `ApiStandard` enum value if needed
-3. UI already supports custom base URLs in SettingsModal
-
-**Add a new language**
-1. Copy `src/i18n/locales/en.json` → `src/i18n/locales/[lang].json`
-2. Translate all values
-3. Update `src/i18n/config.ts` languages array (if exists)
-4. Restart dev server
-
-**Modify lore entity format**
-1. Edit expected folder structure in `src/lib/lore.ts` (filename patterns)
-2. Update `loreStore.scanProject()` parsing logic
-3. Migration: rebuild lore index via store action

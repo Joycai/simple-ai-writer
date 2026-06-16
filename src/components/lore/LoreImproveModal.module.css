@@ -2,25 +2,28 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(3px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 200;
   padding: var(--space-4);
+  animation: fadeIn 200ms var(--ease-out);
 }
 
 .panel {
   background: var(--color-bg-base);
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   width: 100%;
   max-width: 680px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-xl);
   overflow: hidden;
+  animation: scaleIn 240ms var(--ease-out);
 }
 
 /* ── Header ── */
@@ -213,8 +216,9 @@
   background: var(--color-bg-base);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-lg);
   overflow-y: auto;
+  animation: slideUp 160ms var(--ease-out);
   max-height: 240px;
 }
 
@@ -287,7 +291,7 @@
   gap: 4px;
   padding: 2px 8px;
   border-radius: 10px;
-  background: rgba(59, 130, 246, 0.12);
+  background: var(--color-accent-tint);
   color: var(--color-accent);
   font-size: 12px;
   font-weight: 500;
@@ -344,14 +348,15 @@
   align-items: center;
   gap: 5px;
   padding: var(--space-2) var(--space-4);
-  background: linear-gradient(135deg, var(--color-accent-start), var(--color-accent-end));
+  background: var(--color-accent);
   color: #fff;
   border-radius: var(--radius-md);
   font-size: var(--font-size-sm);
   font-weight: 500;
-  transition: opacity var(--transition-fast);
+  transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast), opacity var(--transition-fast);
 }
-.btnPrimary:hover { opacity: 0.88; }
+.btnPrimary:hover:not(:disabled) { background: var(--color-accent-hover); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.btnPrimary:active:not(:disabled) { transform: translateY(0) scale(0.98); box-shadow: none; }
 .btnPrimary:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .btnSecondary {

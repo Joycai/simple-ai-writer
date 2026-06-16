@@ -31,13 +31,13 @@
   gap: 4px;
   padding: 3px 9px;
   border-radius: var(--radius-sm);
-  background: rgba(59, 130, 246, 0.12);
+  background: var(--color-accent-tint);
   color: var(--color-accent);
   font-size: 11px;
   font-weight: 500;
   transition: background var(--transition-fast);
 }
-.genBtn:hover { background: rgba(59, 130, 246, 0.22); }
+.genBtn:hover { background: var(--color-accent-tint-strong); }
 
 /* ── Scrollable library ──────────────────────────────────────────────────── */
 
@@ -138,10 +138,11 @@
 }
 .entityCard:hover {
   border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-sm);
 }
 .entityCardOpen {
   border-color: var(--color-border-strong);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-sm);
 }
 
 .entityRow {
@@ -229,7 +230,7 @@
   font-size: 10px;
   padding: 1px 5px;
   border-radius: 8px;
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--color-accent-tint);
   color: var(--color-accent);
   font-weight: 500;
 }
@@ -260,7 +261,7 @@
   font-weight: 600;
 }
 .entityFile.activeFile {
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--color-accent-tint);
   color: var(--color-accent);
 }
 
@@ -280,11 +281,12 @@
   background: var(--color-bg-base);
   border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-md);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-lg);
   padding: 4px;
   display: flex;
   flex-direction: column;
   gap: 1px;
+  animation: slideUp 160ms var(--ease-out);
 }
 
 .ctxItem {
@@ -374,9 +376,9 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  border: 1px solid rgba(59, 130, 246, 0.4);
+  border: 1px solid var(--color-accent);
   border-radius: var(--radius-md);
-  background: rgba(59, 130, 246, 0.05);
+  background: var(--color-accent-tint);
 }
 
 .newEntityInput {
@@ -402,14 +404,15 @@
 
 .btnPrimary {
   padding: 3px 10px;
-  background: linear-gradient(135deg, var(--color-accent-start), var(--color-accent-end));
+  background: var(--color-accent);
   color: #fff;
   border-radius: var(--radius-sm);
   font-size: var(--font-size-xs);
   font-weight: 500;
-  transition: opacity var(--transition-fast);
+  transition: background var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast);
 }
-.btnPrimary:hover { opacity: 0.88; }
+.btnPrimary:hover:not(:disabled) { background: var(--color-accent-hover); }
+.btnPrimary:active:not(:disabled) { transform: scale(0.97); }
 .btnPrimary:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .btnSecondary {

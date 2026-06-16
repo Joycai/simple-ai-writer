@@ -36,7 +36,7 @@
 
 .selectionBadge {
   font-size: 11px;
-  background: rgba(59, 130, 246, 0.12);
+  background: var(--color-accent-tint);
   color: var(--color-accent);
   border-radius: var(--radius-sm);
   padding: 3px 8px;
@@ -64,16 +64,22 @@
 .taskOption:hover:not(:disabled) {
   border-color: var(--color-accent);
   color: var(--color-text-primary);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+.taskOption:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+  box-shadow: none;
 }
 .taskOption:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .taskOptionActive {
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--color-accent-tint);
   border-color: var(--color-accent);
   color: var(--color-accent);
 }
 .taskOptionActive:hover:not(:disabled) {
-  background: rgba(59, 130, 246, 0.15);
+  background: var(--color-accent-tint);
   color: var(--color-accent);
 }
 
@@ -95,7 +101,7 @@
 }
 .taskOptionFull:disabled { opacity: 0.4; cursor: not-allowed; }
 .taskOptionFull.taskOptionActive {
-  background: rgba(59, 130, 246, 0.1);
+  background: var(--color-accent-tint);
   border-style: solid;
   border-color: var(--color-accent);
   color: var(--color-accent);
@@ -147,7 +153,7 @@
   color: var(--color-accent);
 }
 .lengthChipActive {
-  background: rgba(59, 130, 246, 0.12);
+  background: var(--color-accent-tint);
   border-color: var(--color-accent);
   color: var(--color-accent);
 }
@@ -196,7 +202,7 @@
   font-size: 10px;
   font-weight: 600;
   color: var(--color-accent);
-  background: rgba(59,130,246,0.12);
+  background: var(--color-accent-tint);
   border-radius: 8px;
   padding: 0 5px;
   line-height: 1.6;
@@ -295,14 +301,15 @@
   gap: var(--space-2);
   width: 100%;
   padding: var(--space-2) var(--space-3);
-  background: linear-gradient(135deg, var(--color-accent-start), var(--color-accent-end));
+  background: var(--color-accent);
   color: #fff;
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
   font-weight: 600;
-  transition: opacity var(--transition-fast);
+  transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast), opacity var(--transition-fast);
 }
-.runBtn:hover:not(:disabled) { opacity: 0.88; }
+.runBtn:hover:not(:disabled) { background: var(--color-accent-hover); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.runBtn:active:not(:disabled) { transform: translateY(0) scale(0.98); box-shadow: none; }
 .runBtn:disabled { opacity: 0.35; cursor: not-allowed; }
 
 /* Abort */
@@ -358,6 +365,7 @@
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
   padding: var(--space-3);
   font-size: var(--font-size-sm);
   line-height: 1.7;
@@ -365,6 +373,7 @@
   white-space: pre-wrap;
   max-height: 320px;
   overflow-y: auto;
+  animation: slideUp 240ms var(--ease-out);
 }
 
 .cursor {
@@ -483,14 +492,15 @@
 /* Shared button styles */
 .btnPrimary {
   padding: var(--space-1) var(--space-3);
-  background: linear-gradient(135deg, var(--color-accent-start), var(--color-accent-end));
+  background: var(--color-accent);
   color: #fff;
   border-radius: var(--radius-sm);
   font-size: var(--font-size-xs);
   font-weight: 500;
-  transition: opacity var(--transition-fast);
+  transition: background var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast);
 }
-.btnPrimary:hover { opacity: 0.88; }
+.btnPrimary:hover:not(:disabled) { background: var(--color-accent-hover); }
+.btnPrimary:active:not(:disabled) { transform: scale(0.97); }
 .btnPrimary:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .btnSecondary {

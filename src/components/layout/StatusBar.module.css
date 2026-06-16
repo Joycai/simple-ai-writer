@@ -1,6 +1,8 @@
 .statusBar {
   height: var(--status-bar-height);
-  background: var(--color-bg-surface);
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
   border-top: 1px solid var(--color-border);
   display: flex;
   align-items: center;
@@ -34,12 +36,16 @@
   gap: var(--space-1);
   padding: 2px var(--space-2);
   border-radius: var(--radius-sm);
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
 }
 
 .control:hover {
   background: var(--color-bg-elevated);
   color: var(--color-text-primary);
+}
+
+.control:active {
+  transform: scale(0.94);
 }
 
 .accentDot {

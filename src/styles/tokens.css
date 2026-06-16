@@ -16,14 +16,21 @@
   --font-size-md: 16px;
   --font-size-lg: 20px;
 
-  /* Radius */
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  /* Radius — larger, continuous-curve feel */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  /* Easing — Apple-like curves */
+  --ease-out:    cubic-bezier(0.32, 0.72, 0, 1);     /* enter/expand, gentle overshoot settle */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);  /* bouncy press/pop, sparingly */
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);     /* symmetric size/position */
 
   /* Transitions */
-  --transition-fast: 120ms ease;
-  --transition-base: 200ms ease;
+  --transition-fast: 120ms var(--ease-out);
+  --transition-base: 200ms var(--ease-out);
+  --transition-slow: 320ms var(--ease-out);
 
   /* Layout */
   --sidebar-width: 240px;
@@ -44,10 +51,14 @@
   --color-text-secondary: #94A3B8;
   --color-text-muted:     #4A5568;
 
+  /* Accent — refined single System Blue; gradient reserved for logo only */
   --color-accent-start:   #3B82F6;
   --color-accent-end:     #8B5CF6;
-  --color-accent:         #3B82F6;
-  --color-accent-hover:   #60A5FA;
+  --color-accent:         #0A84FF;
+  --color-accent-hover:   #409CFF;
+  --color-accent-ring:    rgba(10, 132, 255, 0.35);
+  --color-accent-tint:    rgba(10, 132, 255, 0.14);
+  --color-accent-tint-strong: rgba(10, 132, 255, 0.26);
 
   --color-border:         rgba(255, 255, 255, 0.08);
   --color-border-strong:  rgba(255, 255, 255, 0.14);
@@ -56,8 +67,16 @@
   --color-warning:        #F59E0B;
   --color-error:          #EF4444;
 
+  /* Elevation — soft, layered shadows (dark: deeper) */
+  --shadow-sm:    0 1px 2px rgba(0, 0, 0, 0.24), 0 1px 1px rgba(0, 0, 0, 0.16);
+  --shadow-md:    0 4px 12px rgba(0, 0, 0, 0.32), 0 2px 4px rgba(0, 0, 0, 0.20);
+  --shadow-lg:    0 12px 32px rgba(0, 0, 0, 0.42), 0 4px 8px rgba(0, 0, 0, 0.26);
+  --shadow-xl:    0 24px 64px rgba(0, 0, 0, 0.55), 0 8px 16px rgba(0, 0, 0, 0.34);
+  --shadow-focus: 0 0 0 3px var(--color-accent-ring);
+
   /* Glassmorphism */
   --glass-bg:             rgba(19, 22, 27, 0.7);
+  --glass-bg-strong:      rgba(19, 22, 27, 0.55);
   --glass-blur:           blur(16px);
   --glass-border:         1px solid rgba(255, 255, 255, 0.08);
 }
@@ -73,10 +92,14 @@
   --color-text-secondary: #4B5563;
   --color-text-muted:     #9CA3AF;
 
+  /* Accent — refined single System Blue; gradient reserved for logo only */
   --color-accent-start:   #2563EB;
   --color-accent-end:     #7C3AED;
-  --color-accent:         #2563EB;
-  --color-accent-hover:   #1D4ED8;
+  --color-accent:         #007AFF;
+  --color-accent-hover:   #0066D6;
+  --color-accent-ring:    rgba(0, 122, 255, 0.30);
+  --color-accent-tint:    rgba(0, 122, 255, 0.10);
+  --color-accent-tint-strong: rgba(0, 122, 255, 0.20);
 
   --color-border:         rgba(0, 0, 0, 0.08);
   --color-border-strong:  rgba(0, 0, 0, 0.14);
@@ -85,7 +108,15 @@
   --color-warning:        #D97706;
   --color-error:          #DC2626;
 
+  /* Elevation — soft, layered shadows (light: subtle) */
+  --shadow-sm:    0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 1px rgba(0, 0, 0, 0.04);
+  --shadow-md:    0 4px 12px rgba(0, 0, 0, 0.10), 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow-lg:    0 12px 32px rgba(0, 0, 0, 0.16), 0 4px 8px rgba(0, 0, 0, 0.08);
+  --shadow-xl:    0 24px 64px rgba(0, 0, 0, 0.22), 0 8px 16px rgba(0, 0, 0, 0.10);
+  --shadow-focus: 0 0 0 3px var(--color-accent-ring);
+
   --glass-bg:             rgba(243, 242, 239, 0.75);
+  --glass-bg-strong:      rgba(243, 242, 239, 0.62);
   --glass-blur:           blur(16px);
   --glass-border:         1px solid rgba(0, 0, 0, 0.07);
 }
