@@ -241,15 +241,14 @@ function ProvidersTab() {
         <div className={styles.form}>
           <div className={styles.sectionTitle}>{editingId ? t("aiConfig.providers.editTitle") : t("aiConfig.providers.addTitle")}</div>
           {!editingId && (
-            <div style={{ marginBottom: 16 }}>
-              <div className={styles.label} style={{ marginBottom: 8 }}>{t("aiConfig.providers.presetsLabel")}</div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div className={styles.presetSection}>
+              <div className={styles.label}>{t("aiConfig.providers.presetsLabel")}</div>
+              <div className={styles.presetGrid}>
                 {PROVIDER_PRESETS.map((preset) => (
                   <button
                     key={preset.name}
                     className={styles.btnSecondary}
                     onClick={() => setForm({ ...form, name: preset.name, apiStandard: preset.apiStandard, baseUrl: preset.baseUrl })}
-                    style={{ flex: "1 1 auto", minWidth: 100 }}
                   >
                     {preset.name}
                   </button>
@@ -285,24 +284,14 @@ function ProvidersTab() {
             <input className={styles.input} type="password" placeholder="sk-…" value={form.apiKey}
               onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className={styles.btnSecondary} onClick={handleTest} disabled={!form.baseUrl || !form.apiKey || testing}
-              style={{ flex: 0 }}>
+          <div className={styles.testRow}>
+            <button className={styles.btnSecondary} onClick={handleTest} disabled={!form.baseUrl || !form.apiKey || testing}>
               {testing ? t("aiConfig.providers.testing") : t("aiConfig.providers.testConnection")}
             </button>
             {testResult && (
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                padding: "0 8px",
-                borderRadius: 4,
-                backgroundColor: testResult.ok ? "#d1fae5" : "#fee2e2",
-                color: testResult.ok ? "#065f46" : "#7f1d1d",
-                fontSize: "0.875rem",
-              }}>
+              <div className={testResult.ok ? styles.testResultOk : styles.testResultError}>
                 {testResult.ok ? <Check size={14} /> : <AlertCircle size={14} />}
-                <span>{testResult.message}</span>
+                <span className={styles.testResultMessage}>{testResult.message}</span>
               </div>
             )}
           </div>
@@ -472,12 +461,12 @@ function ModelsTab() {
           </div>
 
           {form.providerId && !editingId && (
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <div className={styles.fetchRow}>
               <button className={styles.fetchBtn} onClick={handleFetch} disabled={fetching}>
                 {fetching ? t("aiConfig.models.fetching") : t("aiConfig.models.fetchBtn")}
               </button>
               {fetchedList.length > 0 && (
-                <select className={styles.select} style={{ flex: 1 }}
+                <select className={`${styles.select} ${styles.fetchRowSelect}`}
                   onChange={(e) => { const m = fetchedList.find(x => x.id === e.target.value); if (m) setForm(f => ({ ...f, modelId: m.id, name: m.name })); }}>
                   <option value="">{t("aiConfig.models.selectOption")}</option>
                   {fetchedList.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
@@ -499,7 +488,7 @@ function ModelsTab() {
             </div>
           </div>
 
-          <div className={styles.sectionTitle} style={{ marginBottom: 0 }}>{t("aiConfig.models.billing")}</div>
+          <div className={styles.billingTitle}>{t("aiConfig.models.billing")}</div>
           <div className={styles.formRow}>
             {[
               { key: "priceIn", label: t("aiConfig.models.priceInput") },
@@ -572,7 +561,7 @@ function PromptsTab() {
             return (
               <div key={b.scene} className={`${styles.item} ${styles.builtinItem}`}>
                 <div className={styles.itemInfo}>
-                  <div className={styles.itemName} style={{ opacity: overridden ? 0.4 : 1 }}>
+                  <div className={`${styles.itemName} ${overridden ? styles.itemNameDimmed : ""}`}>
                     {b.content}
                     {overridden && <span className={styles.overriddenTag}>{t("aiConfig.prompts.overridden")}</span>}
                   </div>
@@ -592,7 +581,7 @@ function PromptsTab() {
             <div key={p.id} className={styles.item}>
               <div className={styles.itemInfo}>
                 <div className={styles.itemName}>{p.name}</div>
-                <div className={styles.itemMeta} style={{ maxWidth: 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.content}</div>
+                <div className={styles.itemMetaTruncated}>{p.content}</div>
               </div>
               <span className={styles.badge}>{p.scene}</span>
               <button className={styles.deleteBtn} onClick={() => removePrompt(p.id)}><X size={13} /></button>
@@ -623,9 +612,8 @@ function PromptsTab() {
           </div>
           <div className={styles.fieldGroup}>
             <label className={styles.label}>{t("aiConfig.prompts.contentLabel")}</label>
-            <textarea className={styles.input} rows={4} placeholder={t("ai.panel.customInstruction")}
-              value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })}
-              style={{ resize: "vertical", fontFamily: "inherit" }} />
+            <textarea className={`${styles.input} ${styles.textarea}`} rows={4} placeholder={t("ai.panel.customInstruction")}
+              value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} />
           </div>
           <div className={styles.formActions}>
             <button className={styles.btnSecondary} onClick={() => { setShowForm(false); setError(null); }}>{t("aiConfig.prompts.cancel")}</button>

@@ -13,8 +13,9 @@
 
 .modal {
   width: 780px;
+  height: 640px;
   max-width: 95vw;
-  max-height: 85vh;
+  max-height: 90vh;
   background: var(--color-bg-surface);
   border: var(--glass-border);
   border-radius: var(--radius-xl);
@@ -205,6 +206,11 @@
   font-weight: 500;
 }
 
+.textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
 .input, .select {
   padding: var(--space-2) var(--space-3);
   background: var(--color-bg-base);
@@ -254,6 +260,8 @@
   font-weight: 500;
   color: var(--color-text-primary);
 }
+.itemNameDimmed { opacity: 0.4; }
+
 .itemMeta {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
@@ -397,6 +405,98 @@
   background: var(--color-accent);
   border: 2px solid var(--color-bg-elevated);
   cursor: pointer;
+}
+
+/* ─── Preset grid ────────────────────────────────────────────────────────── */
+
+.presetSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.presetGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+/* ─── Test connection row ─────────────────────────────────────────────────── */
+
+.testRow {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.testResultOk {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: var(--color-success);
+  font-size: var(--font-size-sm);
+  flex: 1;
+  min-width: 0;
+}
+
+.testResultError {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+  flex: 1;
+  min-width: 0;
+}
+
+.testResultMessage {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Fetch models row ────────────────────────────────────────────────────── */
+
+.fetchRow {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.fetchRowSelect {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ─── Billing sub-title ───────────────────────────────────────────────────── */
+
+.billingTitle {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+
+/* ─── Truncated item meta ─────────────────────────────────────────────────── */
+
+.itemMetaTruncated {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  margin-top: 2px;
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ─── Misc ────────────────────────────────────────────────────────────────── */
