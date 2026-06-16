@@ -23,6 +23,13 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::scaffold_project,
             commands::read_dir_recursive,
+            commands::fs_write_binary_file,
+            commands::fs_write_text_file,
+            commands::fs_read_text_file,
+            commands::fs_create_dir,
+            commands::fs_exists,
+            commands::fs_read_dir,
+            commands::fs_remove_dir,
         ]);
 
     protocol::register_asset_protocol(builder)

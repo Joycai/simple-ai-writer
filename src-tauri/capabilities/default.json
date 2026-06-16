@@ -6,6 +6,7 @@
   "permissions": [
     "core:default",
     "opener:default",
+    "opener:allow-reveal-item-in-dir",
     "dialog:default",
     "dialog:allow-open",
     "dialog:allow-save",
@@ -20,6 +21,13 @@
     "fs:allow-rename",
     "fs:allow-exists",
     "fs:allow-stat",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "/**" },
+        { "path": "**" }
+      ]
+    },
     "sql:default",
     "sql:allow-execute",
     "sql:allow-select",

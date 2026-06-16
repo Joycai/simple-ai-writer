@@ -62,7 +62,7 @@
       "custom": "自定义指令"
     },
     "instructions": {
-      "continue": "请从当前文本结尾处继续写作。\n- 设定忠实：【设定资料】中出现的角色名称、世界规则或实体，必须严格按照定义描写，不得凭空捏造矛盾细节。\n- 风格匹配：保持前文的句式节奏、用词层次、叙事时态和视角。\n- 长度：约200字（根据作者自然段落长度适当调整）。\n- 只输出续写内容，不加标题或任何说明。",
+      "continue": "请从当前文本结尾处继续写作。\n- 设定忠实：【设定资料】中出现的角色名称、世界规则或实体，必须严格按照定义描写，不得凭空捏造矛盾细节。\n- 风格匹配：保持前文的句式节奏、用词层次、叙事时态和视角。\n- 长度：约{{length}}字（根据作者自然段落长度适当调整）。\n- 只输出续写内容，不加标题或任何说明。",
       "polish": "请润色以上选中内容，保留原意，使文字更加流畅优美。",
       "rewrite": "请重写以上选中内容，保留核心情节，改变表达方式。",
       "summary": "请对以上内容进行简要总结，提炼主要情节和人物动态。",
@@ -72,18 +72,36 @@
     "panel": {
       "selectModel": "选择模型…",
       "defaultSystemPrompt": "默认系统提示…",
-      "noProvider": "请先在 ⚙ AI 配置中添加供应商和模型",
+      "noProvider": "请先在 AI 配置中添加供应商和模型",
       "selectedChars": "已选中 {count} 字",
       "customInstruction": "输入自定义指令…",
       "cancel": "取消",
       "send": "发送",
       "addCustom": "+ 自定义指令",
-      "stop": "■ 停止生成",
+      "continueLength": "续写长度",
+      "continueLorePicker": "指定 Lore",
+      "continueLoreSearch": "搜索设定…",
+      "continueLoreEmpty": "暂无设定条目",
+      "continueOutline": "大纲/写作方向",
+      "continueOutlinePlaceholder": "输入本章大纲或续写方向，AI 将遵循这些内容…",
+      "continueExtraKnowledge": "附加知识",
+      "continueExtraKnowledgePlaceholder": "不在设定库中的背景知识（角色经历、世界规则等）…",
+      "run": "执行",
+      "stop": "停止生成",
       "generatedOutput": "生成结果",
       "clear": "清除",
       "insertToDoc": "插入文档",
       "inputTokens": "输入 {count} tokens",
       "outputTokens": "输出 {count} tokens"
+    },
+    "agent": {
+      "stepsTitle": "Agent 步骤",
+      "tool": {
+        "list_lore_entities": "列举设定",
+        "read_lore_entity": "读取设定",
+        "list_files": "列举文件",
+        "read_file": "读取文件"
+      }
     },
     "errors": {
       "noProject": "请先打开项目",
@@ -93,7 +111,7 @@
     }
   },
   "aiConfig": {
-    "title": "⚙️ AI 配置",
+    "title": "AI 配置",
     "tabs": {
       "providers": "供应商",
       "models": "模型",
@@ -111,7 +129,10 @@
       "cancel": "取消",
       "save": "保存",
       "saving": "保存中…",
-      "defaultEndpoint": "(默认端点)"
+      "defaultEndpoint": "(默认端点)",
+      "editTitle": "编辑供应商",
+      "edit": "保存修改",
+      "editing": "保存中…"
     },
     "models": {
       "configured": "已配置模型",
@@ -132,7 +153,10 @@
       "priceOutput": "输出",
       "cancel": "取消",
       "add": "添加",
-      "saving": "保存中…"
+      "saving": "保存中…",
+      "editTitle": "编辑模型",
+      "edit": "保存修改",
+      "editing": "保存中…"
     },
     "prompts": {
       "builtinTitle": "内置默认指令 (只读)",
@@ -173,7 +197,7 @@
       "status2": "理解角色设定中",
       "status3": "生成世界观条目",
       "status4": "整理结构化数据",
-      "step1": "① 输入设定描述",
+      "step1": "1. 输入设定描述",
       "categoryLabel": "条目分类",
       "modelLabel": "AI 模型",
       "selectModel": "选择模型…",
@@ -185,8 +209,8 @@
       "closeEsc": "Esc 关闭",
       "noFiles": "项目中未找到图片或文本文件",
       "completed": "AI 生成完成，可直接编辑后保存",
-      "step2": "② 编辑并确认",
-      "success": "✓ 生成成功",
+      "step2": "2. 编辑并确认",
+      "success": "生成成功",
       "nameLabel": "名称",
       "namePlaceholder": "条目名称",
       "categoryLabel2": "分类",
@@ -198,10 +222,10 @@
       "summaryPlaceholder": "一句话简洁描述",
       "contentLabel": "详细内容",
       "contentHint": "· Markdown 格式",
-      "submitBtn": "✨ 生成设定条目",
+      "submitBtn": "生成设定条目",
       "submitBtnSaving": "保存中…",
-      "stopBtn": "■ 停止生成",
-      "regenerateBtn": "🔄 重新生成",
+      "stopBtn": "停止生成",
+      "regenerateBtn": "重新生成",
       "saveTolore": "保存到 Lore"
     },
     "panel": {
@@ -210,7 +234,27 @@
       "generate": "AI 生成",
       "generateTitle": "用 AI 根据描述和图片生成设定条目",
       "newEntry": "新建条目",
-      "selectEntity": "选择一个设定条目查看详情"
+      "selectEntity": "选择一个设定条目查看详情",
+      "showInBrowser": "在文件浏览器中显示",
+      "aiImprove": "AI 优化",
+      "deleteEntity": "删除",
+      "deleteConfirm": "删除「{{name}}」？此操作不可撤销。",
+      "deleteBtn": "删除"
+    },
+    "improve": {
+      "subtitle": "AI 优化",
+      "instructionLabel": "优化指令",
+      "atHint": "输入 @ 可引用其他设定条目",
+      "instructionPlaceholder": "例如：补充更多背景故事，扩展技能描述，修正前后矛盾…",
+      "currentContent": "当前 index.md",
+      "generating": "生成中…",
+      "resultLabel": "优化结果（可在应用前编辑）",
+      "cancel": "取消",
+      "generate": "生成",
+      "stop": "停止",
+      "regenerate": "重新生成",
+      "apply": "应用到 index.md",
+      "applying": "应用中…"
     },
     "form": {
       "title": "新建设定条目",

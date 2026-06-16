@@ -1,14 +1,16 @@
 import { create } from "zustand";
 import i18n from "../i18n";
 import { streamCompletion } from "../lib/aiClient";
-import { assembleContext, bundleToMessages } from "../lib/rag";
+import { assembleContext, bundleToMessages, type ContinueExtras } from "../lib/rag";
 import { useAiStore } from "./aiStore";
 import { useLoreStore } from "./loreStore";
 import { useProjectStore } from "./projectStore";
 import { getDb } from "../lib/project";
 import { loadApiKey } from "../lib/keyStore";
+import type { ToolStep } from "../lib/agentLoop";
 
 export type TaskKind = "continue" | "polish" | "rewrite" | "summary" | "custom";
+export type { ToolStep };
 
 const TASK_INSTRUCTIONS: Record<TaskKind, string> = {
   continue: i18n.t("ai.instructions.continue"),
@@ -31,11 +33,13 @@ interface AiTaskState {
   usage: TokenUsage | null;
   selection: string;
   abortController: AbortController | null;
+  toolSteps: ToolStep[];
 
   setSelection: (s: string) => void;
-  runTask: (kind: TaskKind, customInstruction?: string) => Promise<void>;
+  runTask: (kind: TaskKind, customInstruction?: string, continueLength?: number, continueExtras?: ContinueExtras) => Promise<void>;
   abort: () => void;
   clearOutput: () => void;
+  addToolStep: (step: ToolStep) => void;
 }
 
 export const useAiTaskStore = create<AiTaskState>((set, get) => ({
@@ -45,10 +49,24 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
   usage: null,
   selection: "",
   abortController: null,
+  toolSteps: [],
 
   setSelection: (s) => set({ selection: s }),
 
-  runTask: async (kind, customInstruction) => {
+  addToolStep: (step) =>
+    set((s) => {
+      const idx = s.toolSteps.findIndex(
+        (t) => t.toolCallId === step.toolCallId && t.name === step.name,
+      );
+      if (idx >= 0) {
+        const updated = [...s.toolSteps];
+        updated[idx] = step;
+        return { toolSteps: updated };
+      }
+      return { toolSteps: [...s.toolSteps, step] };
+    }),
+
+  runTask: async (kind, customInstruction, continueLength, continueExtras) => {
     const { activeModelId, activePromptId, models, providers, prompts } = useAiStore.getState();
     const { projectPath } = useProjectStore.getState();
     const { index: loreIndex } = useLoreStore.getState();
@@ -76,43 +94,92 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const scenePrompt = kind !== "custom"
       ? prompts.find((p) => p.scene === kind)
       : undefined;
-    const instruction =
-      kind === "custom" ? (customInstruction ?? "")
-      : scenePrompt?.content ?? TASK_INSTRUCTIONS[kind];
-
-    const bundle = await assembleContext(
-      systemPrompt,
-      loreIndex,
-      documentText,
-      get().selection,
-      instruction
-    );
-    const messages = bundleToMessages(bundle);
+    let instruction: string;
+    if (kind === "custom") {
+      instruction = customInstruction ?? "";
+    } else if (kind === "continue") {
+      instruction = scenePrompt?.content
+        ?? i18n.t("ai.instructions.continue", { length: continueLength ?? 500 });
+    } else {
+      instruction = scenePrompt?.content ?? TASK_INSTRUCTIONS[kind];
+    }
 
     const controller = new AbortController();
-    set({ isRunning: true, output: "", error: null, usage: null, abortController: controller });
+    set({ isRunning: true, output: "", error: null, usage: null, toolSteps: [], abortController: controller });
+
+    const baseUrl = provider.baseUrl || defaultBaseUrl(provider.apiStandard);
 
     try {
-      await streamCompletion({
-        baseUrl: provider.baseUrl || defaultBaseUrl(provider.apiStandard),
-        apiKey,
-        standard: provider.apiStandard,
-        modelId: model.modelId,
-        messages,
-        signal: controller.signal,
-        onChunk: (chunk) => {
-          if ("done" in chunk) {
-            const { inputTokens, outputTokens } = chunk;
-            const cost =
-              (inputTokens * model.priceIn + outputTokens * model.priceOut) / 1_000_000;
+      if (kind === "continue") {
+        // ── Agentic mode: AI reads context autonomously with tools ─────────
+        const bundle = await assembleContext(
+          systemPrompt,
+          loreIndex,
+          documentText,
+          get().selection,
+          instruction,
+          continueExtras,
+        );
+        const initialMessages = bundleToMessages(bundle);
+        // Extract the user message content for the first agent turn
+        const initialUserMessage =
+          typeof initialMessages[1]?.content === "string"
+            ? initialMessages[1].content
+            : JSON.stringify(initialMessages[1]?.content ?? "");
+
+        const { runAgentLoop } = await import("../lib/agentLoop");
+        const { AGENT_TOOLS } = await import("../lib/tools");
+
+        await runAgentLoop({
+          baseUrl,
+          apiKey,
+          standard: provider.apiStandard,
+          modelId: model.modelId,
+          systemPrompt,
+          initialUserMessage,
+          projectPath,
+          loreIndex,
+          tools: AGENT_TOOLS,
+          signal: controller.signal,
+          onToolStep: (step) => get().addToolStep(step),
+          onOutputChunk: (text) => set((s) => ({ output: s.output + text })),
+          onDone: ({ inputTokens, outputTokens }) => {
+            const cost = (inputTokens * model.priceIn + outputTokens * model.priceOut) / 1_000_000;
             set({ usage: { inputTokens, outputTokens, cost } });
-            // Persist usage to SQLite
             void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind);
-          } else {
-            set((s) => ({ output: s.output + chunk.text }));
-          }
-        },
-      });
+          },
+        });
+      } else {
+        // ── Simple streaming: polish / rewrite / summary / custom / Gemini ─
+        const bundle = await assembleContext(
+          systemPrompt,
+          loreIndex,
+          documentText,
+          get().selection,
+          instruction,
+        );
+        const messages = bundleToMessages(bundle);
+
+        await streamCompletion({
+          baseUrl,
+          apiKey,
+          standard: provider.apiStandard,
+          modelId: model.modelId,
+          messages,
+          signal: controller.signal,
+          onChunk: (chunk) => {
+            if ("done" in chunk) {
+              const { inputTokens, outputTokens } = chunk;
+              const cost =
+                (inputTokens * model.priceIn + outputTokens * model.priceOut) / 1_000_000;
+              set({ usage: { inputTokens, outputTokens, cost } });
+              void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind);
+            } else if ("text" in chunk) {
+              set((s) => ({ output: s.output + chunk.text }));
+            }
+          },
+        });
+      }
     } catch (e) {
       if ((e as Error).name !== "AbortError") {
         set({ error: String(e) });
@@ -127,7 +194,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     set({ isRunning: false, abortController: null });
   },
 
-  clearOutput: () => set({ output: "", error: null, usage: null }),
+  clearOutput: () => set({ output: "", error: null, usage: null, toolSteps: [] }),
 }));
 
 function defaultBaseUrl(standard: string): string {

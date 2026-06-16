@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { PenLine, ChevronDown } from "lucide-react";
 import { save } from "@tauri-apps/plugin-dialog";
 import { useProjectStore } from "../../stores/projectStore";
 import { useEditorStore, type ViewMode } from "../../stores/editorStore";
@@ -19,6 +20,7 @@ export function EditorArea() {
   const { projectPath, activeFilePath } = useProjectStore();
   const { content, filePath, isDirty, viewMode, loadFile, setContent, saveNow, setViewMode } =
     useEditorStore();
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   const viewModes = VIEW_MODES_CONFIG.map((m) => ({
     ...m,
@@ -48,7 +50,7 @@ export function EditorArea() {
     return (
       <div className={styles.area}>
         <div className={styles.empty}>
-          <div className={styles.logo}>✍️</div>
+          <div className={styles.logo}><PenLine size={32} strokeWidth={1.5} /></div>
           <div className={styles.emptyTitle}>{t("app.name")}</div>
           <div style={{ color: "var(--color-text-muted)", fontSize: "var(--font-size-sm)" }}>
             {t("project.noProjectTitle")}
@@ -57,8 +59,6 @@ export function EditorArea() {
       </div>
     );
   }
-
-  const [showExportMenu, setShowExportMenu] = useState(false);
 
   const fileName = activeFilePath.split("/").pop() ?? t("editor.untitled");
   const title = fileName.replace(/\.md$/i, "");
@@ -110,8 +110,8 @@ export function EditorArea() {
         )}
 
         <div style={{ position: "relative" }}>
-          <button className={styles.saveBtn} onClick={() => setShowExportMenu((v) => !v)}>
-            {t("editor.export")} ▾
+          <button className={styles.saveBtn} onClick={() => setShowExportMenu((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            {t("editor.export")} <ChevronDown size={12} />
           </button>
           {showExportMenu && (
             <div className={styles.exportMenu} onMouseLeave={() => setShowExportMenu(false)}>

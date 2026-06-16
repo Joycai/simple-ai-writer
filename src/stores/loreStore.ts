@@ -8,6 +8,7 @@ import {
   type LoreEntity,
   type CategoryId,
 } from "../lib/lore";
+import { removeDir } from "../lib/fileio";
 
 interface LoreState {
   index: LoreIndex;
@@ -24,6 +25,7 @@ interface LoreState {
   setFileContent: (content: string) => void;
   saveNow: () => Promise<void>;
   createNewEntity: (projectPath: string, category: CategoryId, id: string, name: string) => Promise<void>;
+  deleteEntity: (projectPath: string, entity: LoreEntity) => Promise<void>;
 }
 
 export const useLoreStore = create<LoreState>((set, get) => ({
@@ -89,8 +91,15 @@ export const useLoreStore = create<LoreState>((set, get) => ({
   createNewEntity: async (projectPath, category, id, name) => {
     await createEntity(projectPath, category, id, name);
     await get().scanProject(projectPath);
-    // Select the newly created entity
     const entity = get().index[category]?.find((e) => e.id === id);
     if (entity) get().selectEntity(entity);
+  },
+
+  deleteEntity: async (projectPath, entity) => {
+    await removeDir(entity.dirPath);
+    await get().scanProject(projectPath);
+    if (get().selectedEntity?.id === entity.id) {
+      set({ selectedEntity: null, selectedFile: null, fileContent: "" });
+    }
   },
 }));

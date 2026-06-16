@@ -1,11 +1,12 @@
 import { useTranslation } from "react-i18next";
+import { FolderTree, BookOpen, Search } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import styles from "./SideTabBar.module.css";
 
 const TABS = [
-  { id: "files" as const, icon: "⌂", labelKey: "sidebar.files" },
-  { id: "lore" as const, icon: "◈", labelKey: "sidebar.lore" },
-  { id: "search" as const, icon: "⌕", labelKey: "sidebar.search" },
+  { id: "files" as const, icon: <FolderTree size={20} strokeWidth={1.5} />, labelKey: "sidebar.files" },
+  { id: "lore" as const, icon: <BookOpen size={20} strokeWidth={1.5} />, labelKey: "sidebar.lore" },
+  { id: "search" as const, icon: <Search size={20} strokeWidth={1.5} />, labelKey: "sidebar.search" },
 ];
 
 export function SideTabBar() {

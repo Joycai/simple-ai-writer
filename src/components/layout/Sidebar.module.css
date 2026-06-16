@@ -32,6 +32,15 @@
   padding: var(--space-2);
 }
 
+/* Full-height flush container for the FileTree (manages its own scroll) */
+.contentFlush {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
 .emptyState {
   padding: var(--space-4);
   text-align: center;

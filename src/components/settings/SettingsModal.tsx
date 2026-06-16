@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { X, Pencil } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
 import type { ApiStandard, ModelType } from "../../lib/aiConfig";
 import styles from "./SettingsModal.module.css";
@@ -29,23 +30,48 @@ function ProvidersTab() {
     { value: "gemini" as ApiStandard, label: t("aiConfig.apiStandards.gemini") },
   ];
 
-  const { providers, addProvider, removeProvider } = useAiStore();
+  const { providers, addProvider, updateProvider, removeProvider, getApiKey } = useAiStore();
   const [form, setForm] = useState({ name: "", baseUrl: STANDARD_ENDPOINTS.openai, apiStandard: "openai" as ApiStandard, apiKey: "" });
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleAdd = async () => {
+  const resetForm = () => {
+    setForm({ name: "", baseUrl: STANDARD_ENDPOINTS.openai, apiStandard: "openai", apiKey: "" });
+    setEditingId(null);
+    setShowForm(false);
+    setError(null);
+  };
+
+  const handleEdit = async (id: string) => {
+    const p = providers.find((x) => x.id === id);
+    if (!p) return;
+    const key = await getApiKey(id) ?? "";
+    setForm({ name: p.name, baseUrl: p.baseUrl, apiStandard: p.apiStandard, apiKey: key });
+    setEditingId(id);
+    setShowForm(true);
+    setError(null);
+  };
+
+  const handleSave = async () => {
     if (!form.name || !form.apiKey) return;
     setSaving(true);
     setError(null);
     try {
-      await addProvider(
-        { name: form.name, baseUrl: form.baseUrl, apiStandard: form.apiStandard },
-        form.apiKey,
-      );
-      setForm({ name: "", baseUrl: STANDARD_ENDPOINTS.openai, apiStandard: "openai", apiKey: "" });
-      setShowForm(false);
+      if (editingId) {
+        const existing = providers.find((x) => x.id === editingId)!;
+        await updateProvider(
+          { ...existing, name: form.name, baseUrl: form.baseUrl, apiStandard: form.apiStandard },
+          form.apiKey,
+        );
+      } else {
+        await addProvider(
+          { name: form.name, baseUrl: form.baseUrl, apiStandard: form.apiStandard },
+          form.apiKey,
+        );
+      }
+      resetForm();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -66,7 +92,8 @@ function ProvidersTab() {
                 <div className={styles.itemMeta}>{p.baseUrl || t("aiConfig.providers.defaultEndpoint")} · {p.apiStandard}</div>
               </div>
               <span className={styles.badge}>{p.apiStandard}</span>
-              <button className={styles.deleteBtn} onClick={() => removeProvider(p.id)}>✕</button>
+              <button className={styles.editBtn} onClick={() => handleEdit(p.id)}><Pencil size={13} /></button>
+              <button className={styles.deleteBtn} onClick={() => removeProvider(p.id)}><X size={13} /></button>
             </div>
           ))}
         </div>
@@ -74,7 +101,7 @@ function ProvidersTab() {
 
       {showForm ? (
         <div className={styles.form}>
-          <div className={styles.sectionTitle}>{t("aiConfig.providers.addTitle")}</div>
+          <div className={styles.sectionTitle}>{editingId ? t("aiConfig.providers.editTitle") : t("aiConfig.providers.addTitle")}</div>
           {error && <div className={styles.errorNote}>{error}</div>}
           <div className={styles.formRow}>
             <div className={styles.fieldGroup}>
@@ -104,10 +131,12 @@ function ProvidersTab() {
               onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
           </div>
           <div className={styles.formActions}>
-            <button className={styles.btnSecondary} onClick={() => { setShowForm(false); setError(null); }}>{t("aiConfig.providers.cancel")}</button>
-            <button className={styles.btnPrimary} onClick={handleAdd}
+            <button className={styles.btnSecondary} onClick={resetForm}>{t("aiConfig.providers.cancel")}</button>
+            <button className={styles.btnPrimary} onClick={handleSave}
               disabled={!form.name || !form.apiKey || saving}>
-              {saving ? t("aiConfig.providers.saving") : t("aiConfig.providers.save")}
+              {saving
+                ? (editingId ? t("aiConfig.providers.editing") : t("aiConfig.providers.saving"))
+                : (editingId ? t("aiConfig.providers.edit") : t("aiConfig.providers.save"))}
             </button>
           </div>
         </div>
@@ -129,13 +158,40 @@ function ModelsTab() {
     { value: "video" as ModelType, label: t("aiConfig.modelTypes.video") },
   ];
 
-  const { providers, models, addModel, removeModel, fetchAndImportModels } = useAiStore();
+  const { providers, models, addModel, updateModel, removeModel, fetchAndImportModels } = useAiStore();
   const [form, setForm] = useState({ providerId: "", modelId: "", name: "", type: "text" as ModelType, priceIn: "", priceCachedIn: "", priceOut: "" });
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
   const [fetchedList, setFetchedList] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const resetForm = () => {
+    setForm({ providerId: "", modelId: "", name: "", type: "text", priceIn: "", priceCachedIn: "", priceOut: "" });
+    setEditingId(null);
+    setShowForm(false);
+    setFetchedList([]);
+    setError(null);
+  };
+
+  const handleEdit = (id: string) => {
+    const m = models.find((x) => x.id === id);
+    if (!m) return;
+    setForm({
+      providerId: m.providerId,
+      modelId: m.modelId,
+      name: m.name,
+      type: m.type,
+      priceIn: m.priceIn ? String(m.priceIn) : "",
+      priceCachedIn: m.priceCachedIn ? String(m.priceCachedIn) : "",
+      priceOut: m.priceOut ? String(m.priceOut) : "",
+    });
+    setEditingId(id);
+    setShowForm(true);
+    setFetchedList([]);
+    setError(null);
+  };
 
   const handleFetch = async () => {
     if (!form.providerId) return;
@@ -151,24 +207,36 @@ function ModelsTab() {
     }
   };
 
-  const handleAdd = async () => {
+  const handleSave = async () => {
     if (!form.providerId || !form.modelId) return;
     setSaving(true);
     setError(null);
     try {
-      await addModel({
-        providerId: form.providerId,
-        modelId: form.modelId,
-        name: form.name || form.modelId,
-        type: form.type,
-        priceIn: parseFloat(form.priceIn) || 0,
-        priceCachedIn: parseFloat(form.priceCachedIn) || 0,
-        priceOut: parseFloat(form.priceOut) || 0,
-        enabled: true,
-      });
-      setForm({ providerId: "", modelId: "", name: "", type: "text", priceIn: "", priceCachedIn: "", priceOut: "" });
-      setShowForm(false);
-      setFetchedList([]);
+      if (editingId) {
+        const existing = models.find((x) => x.id === editingId)!;
+        await updateModel({
+          ...existing,
+          providerId: form.providerId,
+          modelId: form.modelId,
+          name: form.name || form.modelId,
+          type: form.type,
+          priceIn: parseFloat(form.priceIn) || 0,
+          priceCachedIn: parseFloat(form.priceCachedIn) || 0,
+          priceOut: parseFloat(form.priceOut) || 0,
+        });
+      } else {
+        await addModel({
+          providerId: form.providerId,
+          modelId: form.modelId,
+          name: form.name || form.modelId,
+          type: form.type,
+          priceIn: parseFloat(form.priceIn) || 0,
+          priceCachedIn: parseFloat(form.priceCachedIn) || 0,
+          priceOut: parseFloat(form.priceOut) || 0,
+          enabled: true,
+        });
+      }
+      resetForm();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -191,7 +259,8 @@ function ModelsTab() {
                   <div className={styles.itemMeta}>{pname} · {m.modelId}</div>
                 </div>
                 <span className={styles.badge}>{m.type}</span>
-                <button className={styles.deleteBtn} onClick={() => removeModel(m.id)}>✕</button>
+                <button className={styles.editBtn} onClick={() => handleEdit(m.id)}><Pencil size={13} /></button>
+                <button className={styles.deleteBtn} onClick={() => removeModel(m.id)}><X size={13} /></button>
               </div>
             );
           })}
@@ -200,12 +269,12 @@ function ModelsTab() {
 
       {showForm ? (
         <div className={styles.form}>
-          <div className={styles.sectionTitle}>{t("aiConfig.models.addTitle")}</div>
+          <div className={styles.sectionTitle}>{editingId ? t("aiConfig.models.editTitle") : t("aiConfig.models.addTitle")}</div>
           {error && <div className={styles.errorNote}>{error}</div>}
           <div className={styles.formRow}>
             <div className={styles.fieldGroup}>
               <label className={styles.label}>{t("aiConfig.models.providerLabel")}</label>
-              <select className={styles.select} value={form.providerId}
+              <select className={styles.select} value={form.providerId} disabled={!!editingId}
                 onChange={(e) => { setForm({ ...form, providerId: e.target.value }); setFetchedList([]); }}>
                 <option value="">{t("aiConfig.models.selectProvider")}</option>
                 {providers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -220,7 +289,7 @@ function ModelsTab() {
             </div>
           </div>
 
-          {form.providerId && (
+          {form.providerId && !editingId && (
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <button className={styles.fetchBtn} onClick={handleFetch} disabled={fetching}>
                 {fetching ? t("aiConfig.models.fetching") : t("aiConfig.models.fetchBtn")}
@@ -265,9 +334,11 @@ function ModelsTab() {
           </div>
 
           <div className={styles.formActions}>
-            <button className={styles.btnSecondary} onClick={() => { setShowForm(false); setFetchedList([]); setError(null); }}>{t("aiConfig.models.cancel")}</button>
-            <button className={styles.btnPrimary} onClick={handleAdd} disabled={!form.providerId || !form.modelId || saving}>
-              {saving ? t("aiConfig.models.saving") : t("aiConfig.models.add")}
+            <button className={styles.btnSecondary} onClick={resetForm}>{t("aiConfig.models.cancel")}</button>
+            <button className={styles.btnPrimary} onClick={handleSave} disabled={!form.providerId || !form.modelId || saving}>
+              {saving
+                ? (editingId ? t("aiConfig.models.editing") : t("aiConfig.models.saving"))
+                : (editingId ? t("aiConfig.models.edit") : t("aiConfig.models.add"))}
             </button>
           </div>
         </div>
@@ -342,7 +413,7 @@ function PromptsTab() {
                 <div className={styles.itemMeta} style={{ maxWidth: 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.content}</div>
               </div>
               <span className={styles.badge}>{p.scene}</span>
-              <button className={styles.deleteBtn} onClick={() => removePrompt(p.id)}>✕</button>
+              <button className={styles.deleteBtn} onClick={() => removePrompt(p.id)}><X size={13} /></button>
             </div>
           ))}
         </div>
@@ -409,7 +480,7 @@ export function SettingsModal({ onClose }: Props) {
       <div className={styles.modal}>
         <div className={styles.header}>
           <span className={styles.title}>{t("aiConfig.title")}</span>
-          <button className={styles.closeBtn} onClick={onClose}>✕</button>
+          <button className={styles.closeBtn} onClick={onClose}><X size={16} /></button>
         </div>
 
         <div className={styles.tabs}>

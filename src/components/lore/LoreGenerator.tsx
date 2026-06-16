@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { FileText, Image, X, Bot, Sparkles, RotateCw, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useProjectStore } from "../../stores/projectStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useLoreStore } from "../../stores/loreStore";
@@ -11,6 +13,7 @@ import {
   generateLore,
   type ProjectFile,
 } from "../../lib/loreGenerator";
+import { writeBinaryFile } from "../../lib/fileio";
 import { loadApiKey } from "../../lib/keyStore";
 import styles from "./LoreGenerator.module.css";
 
@@ -18,7 +21,6 @@ type AttachedImage = { kind: "image"; file: ProjectFile; dataUrl: string };
 type AttachedText  = { kind: "text";  file: ProjectFile; content: string };
 type AttachedItem  = AttachedImage | AttachedText;
 
-// Thumbnail for @ picker — lazy image load, emoji icon for text files
 function PickerThumb({ file }: { file: ProjectFile }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
@@ -27,9 +29,13 @@ function PickerThumb({ file }: { file: ProjectFile }) {
     }
   }, [file.path, file.kind]);
   if (file.kind === "text") {
-    return <div className={styles.atPickerThumbPlaceholder}>{file.name.endsWith(".md") ? "📝" : "📄"}</div>;
+    return (
+      <div className={styles.atPickerThumbPlaceholder}>
+        <FileText size={18} strokeWidth={1.5} />
+      </div>
+    );
   }
-  if (!url) return <div className={styles.atPickerThumbPlaceholder}>🖼</div>;
+  if (!url) return <div className={styles.atPickerThumbPlaceholder}><Image size={18} strokeWidth={1.5} /></div>;
   return <img src={url} alt="" className={styles.atPickerThumb} />;
 }
 
@@ -53,7 +59,10 @@ export function LoreGenerator({ onClose }: Props) {
   const [showPicker, setShowPicker] = useState(false);
   const [atIndex, setAtIndex] = useState(0);
   const [atQuery, setAtQuery] = useState("");
+  const [pickerStyle, setPickerStyle] = useState<React.CSSProperties>({});
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaWrapRef = useRef<HTMLDivElement>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
 
   // ── Generation state ─────────────────────────────────────────────────────
   const [phase, setPhase] = useState<"input" | "generating" | "result">("input");
@@ -84,6 +93,32 @@ export function LoreGenerator({ onClose }: Props) {
     }
   }, [projectPath]);
 
+  // Recompute picker position whenever it opens
+  useEffect(() => {
+    if (showPicker && textareaWrapRef.current) {
+      const r = textareaWrapRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - r.bottom - 8;
+      const pickerH = Math.min(280, window.innerHeight * 0.4);
+      if (spaceBelow >= pickerH) {
+        setPickerStyle({ top: r.bottom + 4, left: r.left, width: r.width });
+      } else {
+        setPickerStyle({ bottom: window.innerHeight - r.top + 4, left: r.left, width: r.width });
+      }
+    }
+  }, [showPicker]);
+
+  // Close picker on outside click — but NOT when clicking inside the picker portal
+  useEffect(() => {
+    if (!showPicker) return;
+    const handler = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (textareaWrapRef.current?.contains(t) || pickerRef.current?.contains(t)) return;
+      setShowPicker(false);
+    };
+    document.addEventListener("mousedown", handler, true);
+    return () => document.removeEventListener("mousedown", handler, true);
+  }, [showPicker]);
+
   // ── @ detection ──────────────────────────────────────────────────────────
   const handleDescChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
@@ -111,7 +146,7 @@ export function LoreGenerator({ onClose }: Props) {
         setAttached((prev) => [...prev, { kind: "image", file, dataUrl }]);
       } else {
         const content = await readTextFileContent(file.path);
-        setAttached((prev) => [...prev, { kind: "text", file, content }]);
+setAttached((prev) => [...prev, { kind: "text", file, content }]);
       }
       const before = description.slice(0, atIndex);
       const after = description.slice(atIndex + 1 + atQuery.length);
@@ -209,8 +244,7 @@ export function LoreGenerator({ onClose }: Props) {
       const firstImage = attached.find((a): a is AttachedImage => a.kind === "image");
       if (firstImage) {
         const { bytes, ext } = await imageToDataUrl(firstImage.file.path);
-        const { writeFile } = await import("@tauri-apps/plugin-fs");
-        await writeFile(`${dirPath}/avatar.${ext}`, bytes);
+        await writeBinaryFile(`${dirPath}/avatar.${ext}`, bytes);
       }
       await scanProject(projectPath);
       onClose();
@@ -228,19 +262,20 @@ export function LoreGenerator({ onClose }: Props) {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
+    <>
     <div className={styles.overlay} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className={styles.panel}>
 
         {/* Header */}
         <div className={styles.header}>
           <div className={styles.headerLeft}>
-            <div className={styles.headerIcon}>🤖</div>
+            <div className={styles.headerIcon}><Bot size={20} strokeWidth={1.5} /></div>
             <div className={styles.headerText}>
               <div className={styles.title}>{t("lore.generator.title")}</div>
               <div className={styles.subtitle}>{t("lore.generator.subtitle")}</div>
             </div>
           </div>
-          <button className={styles.closeBtn} onClick={onClose}>✕</button>
+          <button className={styles.closeBtn} onClick={onClose}><X size={16} /></button>
         </div>
 
         {/* Scrollable body */}
@@ -259,7 +294,7 @@ export function LoreGenerator({ onClose }: Props) {
                 <select className={styles.select} value={category}
                   onChange={(e) => setCategory(e.target.value as CategoryId)}>
                   {LORE_CATEGORIES.map((c) => (
-                    <option key={c.id} value={c.id}>{c.icon} {c.labelZh}</option>
+                    <option key={c.id} value={c.id}>{c.labelZh}</option>
                   ))}
                 </select>
               </div>
@@ -281,7 +316,7 @@ export function LoreGenerator({ onClose }: Props) {
               <label className={styles.label}>
                 {t("lore.generator.descriptionText")} <span className={styles.hint}>· {t("lore.generator.descriptionHint")}</span>
               </label>
-              <div className={styles.textareaWrap}>
+              <div ref={textareaWrapRef}>
                 <textarea
                   ref={textareaRef}
                   className={styles.textarea}
@@ -292,33 +327,6 @@ export function LoreGenerator({ onClose }: Props) {
                   onKeyDown={(e) => { if (e.key === "Escape") setShowPicker(false); }}
                   disabled={phase === "generating"}
                 />
-
-                {/* @ picker dropdown */}
-                {showPicker && (
-                  <div className={styles.atPicker}>
-                    <div className={styles.atPickerHeader}>
-                      <span className={styles.atPickerLabel}>{t("lore.generator.selectReferenceImage")}</span>
-                      <kbd className={styles.atPickerEsc}>{t("lore.generator.closeEsc")}</kbd>
-                    </div>
-                    <div className={styles.atPickerList}>
-                      {filteredFiles.length === 0
-                        ? <div className={styles.atPickerEmpty}>{t("lore.generator.noFiles")}</div>
-                        : filteredFiles.slice(0, 12).map((file) => (
-                          <button key={file.path} className={styles.atPickerItem}
-                            onClick={() => handlePickFile(file)}>
-                            <PickerThumb file={file} />
-                            <div className={styles.atPickerInfo}>
-                              <div className={styles.atPickerName}>{file.name}</div>
-                              <div className={styles.atPickerPath}>
-                                {file.path.replace(projectPath ?? "", "").slice(1)}
-                              </div>
-                            </div>
-                          </button>
-                        ))
-                      }
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -331,13 +339,13 @@ export function LoreGenerator({ onClose }: Props) {
                     <div key={a.file.path} className={styles.attachedChip}>
                       {a.kind === "image"
                         ? <img src={a.dataUrl} alt={a.file.name} className={styles.chipThumb} />
-                        : <span className={styles.chipThumb} style={{ display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
-                            {a.file.name.endsWith(".md") ? "📝" : "📄"}
+                        : <span className={styles.chipThumb} style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <FileText size={16} strokeWidth={1.5} />
                           </span>
                       }
                       <span className={styles.chipLabel}>{a.file.name}</span>
                       <button className={styles.chipRemove}
-                        onClick={() => removeAttached(a.file.path)}>✕</button>
+                        onClick={() => removeAttached(a.file.path)}><X size={11} /></button>
                     </div>
                   ))}
                 </div>
@@ -346,7 +354,7 @@ export function LoreGenerator({ onClose }: Props) {
           </div>
 
           {/* Error */}
-          {error && <div className={styles.error}>⚠ {error}</div>}
+          {error && <div className={styles.error}><AlertTriangle size={13} style={{ flexShrink: 0 }} /> {error}</div>}
 
           {/* ── Generating state ── */}
           {phase === "generating" && (
@@ -370,7 +378,7 @@ export function LoreGenerator({ onClose }: Props) {
                   <div className={styles.cardTitle}>
                     <span className={styles.cardTitleAccent}>{t("lore.generator.step2")}</span>
                   </div>
-                  <span className={styles.resultBadge}>{t("lore.generator.success")}</span>
+                  <span className={styles.resultBadge}><CheckCircle2 size={13} /> {t("lore.generator.success")}</span>
                 </div>
 
                 {/* Name + Category */}
@@ -385,7 +393,7 @@ export function LoreGenerator({ onClose }: Props) {
                     <select className={styles.select} value={editCat}
                       onChange={(e) => setEditCat(e.target.value as CategoryId)}>
                       {LORE_CATEGORIES.map((c) => (
-                        <option key={c.id} value={c.id}>{c.icon} {c.labelZh}</option>
+                        <option key={c.id} value={c.id}>{c.labelZh}</option>
                       ))}
                     </select>
                   </div>
@@ -402,7 +410,7 @@ export function LoreGenerator({ onClose }: Props) {
                         {t}
                         <button className={styles.tagRemove}
                           onClick={(e) => { e.stopPropagation(); setEditTags((prev) => prev.filter((x) => x !== t)); }}>
-                          ✕
+                          <X size={10} />
                         </button>
                       </span>
                     ))}
@@ -444,8 +452,9 @@ export function LoreGenerator({ onClose }: Props) {
             <>
               <button className={styles.btnSecondary} onClick={onClose}>{t("lore.generator.cancel")}</button>
               <button className={styles.btnPrimary} onClick={handleGenerate}
-                disabled={!activeModelId || !description.trim()}>
-                ✨ {t("lore.generator.submitBtn")}
+                disabled={!activeModelId || !description.trim()}
+                style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <Sparkles size={14} /> {t("lore.generator.submitBtn")}
               </button>
             </>
           )}
@@ -459,8 +468,9 @@ export function LoreGenerator({ onClose }: Props) {
             <>
               <button className={styles.btnSecondary} onClick={onClose}>{t("lore.generator.cancel")}</button>
               <button className={styles.btnSecondary} onClick={handleGenerate}
-                disabled={!activeModelId || !description.trim()}>
-                {t("lore.generator.regenerateBtn")}
+                disabled={!activeModelId || !description.trim()}
+                style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <RotateCw size={13} /> {t("lore.generator.regenerateBtn")}
               </button>
               <button className={styles.btnPrimary} onClick={handleSave}
                 disabled={!editName.trim() || saving}>
@@ -471,5 +481,37 @@ export function LoreGenerator({ onClose }: Props) {
         </div>
       </div>
     </div>
+
+      {/* @ picker via portal — escapes overflow context */}
+      {showPicker && createPortal(
+        <div ref={pickerRef} className={styles.atPicker} style={{ position: "fixed", zIndex: 500, ...pickerStyle }}>
+          <div className={styles.atPickerHeader}>
+            <span className={styles.atPickerLabel}>{t("lore.generator.selectReferenceImage")}</span>
+            <kbd className={styles.atPickerEsc}>{t("lore.generator.closeEsc")}</kbd>
+          </div>
+          <div className={styles.atPickerList}>
+            {filteredFiles.length === 0
+              ? <div className={styles.atPickerEmpty}>{t("lore.generator.noFiles")}</div>
+              : filteredFiles.slice(0, 12).map((file) => (
+                <button
+                  key={file.path}
+                  className={styles.atPickerItem}
+                  onMouseDown={(e) => { e.preventDefault(); void handlePickFile(file); }}
+                >
+                  <PickerThumb file={file} />
+                  <div className={styles.atPickerInfo}>
+                    <div className={styles.atPickerName}>{file.name}</div>
+                    <div className={styles.atPickerPath}>
+                      {file.path.replace(projectPath ?? "", "").slice(1)}
+                    </div>
+                  </div>
+                </button>
+              ))
+            }
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }

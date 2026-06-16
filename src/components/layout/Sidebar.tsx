@@ -16,10 +16,16 @@ export function Sidebar() {
   const { sidebarCollapsed, activeSideTab } = useAppStore();
   const { projectPath, openProject, isLoading } = useProjectStore();
 
+  const isFlush = activeSideTab === "files" || activeSideTab === "lore";
+
   return (
     <div className={`${styles.sidebar} ${sidebarCollapsed ? styles.collapsed : ""}`}>
-      <div className={styles.header}>{t(TAB_LABELS[activeSideTab])}</div>
-      <div className={styles.content}>
+      {/* Files and Lore panels have their own toolbars */}
+      {!isFlush && (
+        <div className={styles.header}>{t(TAB_LABELS[activeSideTab])}</div>
+      )}
+
+      <div className={isFlush ? styles.contentFlush : styles.content}>
         {!projectPath ? (
           <div className={styles.emptyState}>
             <div>{t("project.noProjectTitle")}</div>

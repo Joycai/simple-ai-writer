@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { Moon, Sun, Monitor, Settings } from "lucide-react";
 import { useAppStore, type ThemeMode, type Language } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
 import styles from "./StatusBar.module.css";
@@ -56,7 +57,7 @@ export function StatusBar({ onOpenSettings }: Props) {
       <div className={styles.spacer} />
 
       <button className={styles.control} onClick={cycleTheme} title={t("settings.theme")}>
-        {theme === "dark" ? "🌙" : theme === "light" ? "☀️" : "💻"}
+        {theme === "dark" ? <Moon size={13} /> : theme === "light" ? <Sun size={13} /> : <Monitor size={13} />}
         {t(`settings.${theme}`)}
       </button>
 
@@ -65,7 +66,8 @@ export function StatusBar({ onOpenSettings }: Props) {
       </button>
 
       <button className={styles.control} onClick={onOpenSettings} title={t("settings.aiConfig")}>
-        ⚙ {t("settings.aiConfig")}
+        <Settings size={13} />
+        {t("settings.aiConfig")}
       </button>
     </div>
   );

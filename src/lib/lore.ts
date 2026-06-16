@@ -1,13 +1,13 @@
-import { readTextFile, writeTextFile, writeFile, mkdir, readDir, exists } from "@tauri-apps/plugin-fs";
+import { readFile, writeFile, makeDir, writeBinaryFile, readDir, fileExists } from "./fileio";
 import { parseFrontmatter } from "./markdown";
 
 export const LORE_CATEGORIES = [
-  { id: "characters", labelZh: "人物", labelEn: "Characters", icon: "👤" },
-  { id: "world",      labelZh: "世界观", labelEn: "World",   icon: "🌍" },
-  { id: "factions",   labelZh: "势力",  labelEn: "Factions", icon: "⚔️" },
-  { id: "items",      labelZh: "道具",  labelEn: "Items",    icon: "🗡️" },
-  { id: "skills",     labelZh: "技能",  labelEn: "Skills",   icon: "✨" },
-  { id: "custom",     labelZh: "自定义", labelEn: "Custom",  icon: "📦" },
+  { id: "characters", labelZh: "人物",   labelEn: "Characters", icon: "user" },
+  { id: "world",      labelZh: "世界观", labelEn: "World",      icon: "globe" },
+  { id: "factions",   labelZh: "势力",   labelEn: "Factions",   icon: "shield" },
+  { id: "items",      labelZh: "道具",   labelEn: "Items",      icon: "package" },
+  { id: "skills",     labelZh: "技能",   labelEn: "Skills",     icon: "zap" },
+  { id: "custom",     labelZh: "自定义", labelEn: "Custom",     icon: "grid" },
 ] as const;
 
 export type CategoryId = (typeof LORE_CATEGORIES)[number]["id"];
@@ -41,7 +41,7 @@ export async function scanLore(projectPath: string): Promise<LoreIndex> {
       for (const entry of entries) {
         if (!entry.isDirectory) continue;
         const entityDir = `${catPath}/${entry.name}`;
-        const entity = await readEntity(cat.id, entry.name!, entityDir);
+        const entity = await readEntity(cat.id, entry.name, entityDir);
         if (entity) index[cat.id].push(entity);
       }
     } catch {
@@ -63,7 +63,7 @@ async function readEntity(
   let summary = "";
 
   try {
-    const raw = await readTextFile(indexPath);
+    const raw = await readFile(indexPath);
     const { data } = parseFrontmatter(raw);
     if (typeof data.name === "string") name = data.name;
     if (Array.isArray(data.aliases)) aliases = data.aliases as string[];
@@ -78,13 +78,13 @@ async function readEntity(
   try {
     const entries = await readDir(dirPath);
     mdFiles = entries
-      .filter((e) => !e.isDirectory && e.name?.endsWith(".md"))
-      .map((e) => e.name!);
+      .filter((e) => !e.isDirectory && e.name.endsWith(".md"))
+      .map((e) => e.name);
 
     const avatarExts = ["png", "jpg", "jpeg", "webp"];
     for (const ext of avatarExts) {
       const candidate = `${dirPath}/avatar.${ext}`;
-      if (await exists(candidate)) {
+      if (await fileExists(candidate)) {
         avatarPath = candidate;
         break;
       }
@@ -102,10 +102,10 @@ export async function createEntity(
   name: string,
 ): Promise<string> {
   const dirPath = `${projectPath}/.ai-writer/lore/${category}/${entityId}`;
-  await mkdir(dirPath, { recursive: true });
+  await makeDir(dirPath);
 
   const indexContent = `---\nname: ${name}\naliases: []\ncategory: ${category}\nsummary: \n---\n\n# ${name}\n\n`;
-  await writeTextFile(`${dirPath}/index.md`, indexContent);
+  await writeFile(`${dirPath}/index.md`, indexContent);
 
   return dirPath;
 }
@@ -122,7 +122,7 @@ export async function createEntityWithContent(
   avatarBytes?: { data: Uint8Array; ext: string },
 ): Promise<string> {
   const dirPath = `${projectPath}/.ai-writer/lore/${category}/${entityId}`;
-  await mkdir(dirPath, { recursive: true });
+  await makeDir(dirPath);
 
   const aliasLines = aliases.map((a) => `  - "${a}"`).join("\n");
   const frontmatter = [
@@ -135,10 +135,10 @@ export async function createEntityWithContent(
     "---",
     "",
   ].join("\n");
-  await writeTextFile(`${dirPath}/index.md`, frontmatter + content);
+  await writeFile(`${dirPath}/index.md`, frontmatter + content);
 
   if (avatarBytes) {
-    await writeFile(`${dirPath}/avatar.${avatarBytes.ext}`, avatarBytes.data);
+    await writeBinaryFile(`${dirPath}/avatar.${avatarBytes.ext}`, avatarBytes.data);
   }
 
   return dirPath;
@@ -146,7 +146,7 @@ export async function createEntityWithContent(
 
 /** Read a specific file inside an entity directory. */
 export async function readEntityFile(dirPath: string, filename: string): Promise<string> {
-  return readTextFile(`${dirPath}/${filename}`);
+  return readFile(`${dirPath}/${filename}`);
 }
 
 /** Write a specific file inside an entity directory. */
@@ -155,10 +155,10 @@ export async function writeEntityFile(
   filename: string,
   content: string,
 ): Promise<void> {
-  await writeTextFile(`${dirPath}/${filename}`, content);
+  await writeFile(`${dirPath}/${filename}`, content);
 }
 
 /** Build the ai-writer-asset:// URL for a local file path. */
 export function assetUrl(absolutePath: string): string {
-  return `ai-writer-asset://localhost${absolutePath}`;
+  return `ai-writer-asset://localhost${encodeURI(absolutePath)}`;
 }

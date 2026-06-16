@@ -1,33 +1,101 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  User, Globe, Shield, Package, Zap, Grid2X2,
+  FileText, Bot, ChevronRight, Plus, Star, Sparkles, Trash2, FolderOpen,
+} from "lucide-react";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { LORE_CATEGORIES, assetUrl, type CategoryId, type LoreEntity } from "../../lib/lore";
-import { CodeEditor } from "../editor/CodeEditor";
 import { LoreGenerator } from "./LoreGenerator";
+import { LoreImproveModal } from "./LoreImproveModal";
 import styles from "./LorePanel.module.css";
 
-// ─── New entity form ─────────────────────────────────────────────────────────
+const CAT_ICONS: Record<string, React.ReactNode> = {
+  user:    <User size={12} />,
+  globe:   <Globe size={12} />,
+  shield:  <Shield size={12} />,
+  package: <Package size={12} />,
+  zap:     <Zap size={12} />,
+  grid:    <Grid2X2 size={12} />,
+};
 
-function NewEntityForm({
-  category,
-  onClose,
-}: {
-  category: CategoryId;
+const CAT_PLACEHOLDER: Record<string, React.ReactNode> = {
+  user:    <User size={15} strokeWidth={1.5} />,
+  globe:   <Globe size={15} strokeWidth={1.5} />,
+  shield:  <Shield size={15} strokeWidth={1.5} />,
+  package: <Package size={15} strokeWidth={1.5} />,
+  zap:     <Zap size={15} strokeWidth={1.5} />,
+  grid:    <Grid2X2 size={15} strokeWidth={1.5} />,
+};
+
+// ── Context menu ─────────────────────────────────────────────────────────────
+
+interface CtxMenuProps {
+  x: number;
+  y: number;
   onClose: () => void;
-}) {
+  items: { label: string; icon?: React.ReactNode; danger?: boolean; onClick: () => void }[];
+}
+
+function ContextMenu({ x, y, onClose, items }: CtxMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
+    };
+    // Use capture so this fires before any other click handlers
+    document.addEventListener("mousedown", handler, true);
+    return () => document.removeEventListener("mousedown", handler, true);
+  }, [onClose]);
+
+  // Flip menu left/up if it would overflow viewport
+  const style: React.CSSProperties = { position: "fixed", zIndex: 300 };
+  if (x + 180 > window.innerWidth) {
+    style.right = window.innerWidth - x;
+  } else {
+    style.left = x;
+  }
+  if (y + items.length * 34 + 8 > window.innerHeight) {
+    style.bottom = window.innerHeight - y;
+  } else {
+    style.top = y;
+  }
+
+  return (
+    <div ref={menuRef} className={styles.ctxMenu} style={style}>
+      {items.map((item) => (
+        <button
+          key={item.label}
+          className={`${styles.ctxItem} ${item.danger ? styles.ctxItemDanger : ""}`}
+          onClick={() => { item.onClick(); onClose(); }}
+        >
+          {item.icon && <span className={styles.ctxIcon}>{item.icon}</span>}
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── Inline new-entity form ────────────────────────────────────────────────────
+
+function NewEntityForm({ category, onClose }: { category: CategoryId; onClose: () => void }) {
   const { t } = useTranslation();
   const { projectPath } = useProjectStore();
   const { createNewEntity } = useLoreStore();
   const [name, setName] = useState("");
-  const [id, setId] = useState("");
   const [saving, setSaving] = useState(false);
 
   const handleCreate = async () => {
-    if (!projectPath || !name.trim() || !id.trim()) return;
+    if (!projectPath || !name.trim()) return;
     setSaving(true);
     try {
-      await createNewEntity(projectPath, category, id.trim(), name.trim());
+      const id =
+        name.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_-]/g, "") || "entity";
+      await createNewEntity(projectPath, category, id, name.trim());
       onClose();
     } finally {
       setSaving(false);
@@ -36,29 +104,25 @@ function NewEntityForm({
 
   return (
     <div className={styles.newEntityForm}>
-      <div className={styles.formTitle}>{t("lore.form.title")}</div>
       <input
-        className={styles.input}
+        className={styles.newEntityInput}
         placeholder={t("lore.form.namePlaceholder")}
         value={name}
-        onChange={(e) => {
-          setName(e.target.value);
-          if (!id) setId(e.target.value.toLowerCase().replace(/\s+/g, "_"));
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") void handleCreate();
+          if (e.key === "Escape") onClose();
         }}
         autoFocus
       />
-      <input
-        className={styles.input}
-        placeholder={t("lore.form.idPlaceholder")}
-        value={id}
-        onChange={(e) => setId(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
-      />
-      <div className={styles.formActions}>
-        <button className={styles.btnSecondary} onClick={onClose}>{t("lore.form.cancel")}</button>
+      <div className={styles.newEntityActions}>
+        <button className={styles.btnSecondary} onClick={onClose}>
+          {t("lore.form.cancel")}
+        </button>
         <button
           className={styles.btnPrimary}
           onClick={handleCreate}
-          disabled={!name.trim() || !id.trim() || saving}
+          disabled={!name.trim() || saving}
         >
           {saving ? t("lore.form.creating") : t("lore.form.create")}
         </button>
@@ -67,90 +131,209 @@ function NewEntityForm({
   );
 }
 
-// ─── Entity detail ────────────────────────────────────────────────────────────
+// ── Delete confirmation ───────────────────────────────────────────────────────
 
-function EntityDetail({ entity }: { entity: LoreEntity }) {
+function DeleteConfirm({ entity, onCancel, onConfirm }: {
+  entity: LoreEntity;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
   const { t } = useTranslation();
-  const { selectedFile, fileContent, isDirty, selectFile, setFileContent, saveNow } =
-    useLoreStore();
-  const catInfo = LORE_CATEGORIES.find((c) => c.id === entity.category);
-
   return (
-    <div className={styles.detail}>
-      {/* Header: avatar + name + summary + aliases */}
-      <div className={styles.detailHeader}>
-        <div className={styles.detailHero}>
-          {entity.avatarPath ? (
-            <img
-              src={assetUrl(entity.avatarPath)}
-              alt={entity.name}
-              className={styles.detailAvatar}
-            />
-          ) : (
-            <div className={styles.detailAvatarPlaceholder}>
-              {catInfo?.icon ?? "📄"}
-            </div>
-          )}
-          <div className={styles.detailInfo}>
-            <div className={styles.detailName}>{entity.name}</div>
-            {entity.summary && (
-              <div className={styles.detailSummary}>{entity.summary}</div>
-            )}
-            {entity.aliases.length > 0 && (
-              <div className={styles.detailAliases}>
-                {entity.aliases.map((a) => (
-                  <span key={a} className={styles.alias}>{a}</span>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+    <div className={styles.deleteConfirm}>
+      <span className={styles.deleteMsg}>
+        {t("lore.panel.deleteConfirm", { name: entity.name })}
+      </span>
+      <div className={styles.deleteActions}>
+        <button className={styles.btnSecondary} onClick={onCancel}>{t("lore.form.cancel")}</button>
+        <button className={styles.btnDanger} onClick={onConfirm}>{t("lore.panel.deleteBtn")}</button>
       </div>
-
-      {/* File tabs */}
-      <div className={styles.fileTabs}>
-        {entity.mdFiles.map((f) => (
-          <button
-            key={f}
-            className={`${styles.fileTab} ${selectedFile === f ? styles.activeTab : ""}`}
-            onClick={() => selectFile(f)}
-          >
-            {f}
-            {isDirty && selectedFile === f && " •"}
-          </button>
-        ))}
-      </div>
-
-      {/* Editor for selected file */}
-      {selectedFile ? (
-        <div className={styles.entityEditor}>
-          <div style={{ height: 30, display: "flex", alignItems: "center", padding: "0 12px", gap: 8, borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
-            <span style={{ fontSize: "var(--font-size-xs)", color: "var(--color-text-muted)", flex: 1 }}>
-              {selectedFile}
-            </span>
-            {isDirty && (
-              <button
-                onClick={saveNow}
-                style={{ fontSize: "var(--font-size-xs)", color: "var(--color-accent)", padding: "2px 8px", background: "rgba(59,130,246,0.12)", borderRadius: "var(--radius-sm)" }}
-              >
-                {t("lore.form.save")}
-              </button>
-            )}
-          </div>
-          <CodeEditor value={fileContent} onChange={setFileContent} />
-        </div>
-      ) : (
-        <div className={styles.emptyDetail}>{t("lore.form.selectFile")}</div>
-      )}
     </div>
   );
 }
 
-// ─── Main LorePanel ───────────────────────────────────────────────────────────
+// ── Entity card ───────────────────────────────────────────────────────────────
+
+function EntityCard({ entity }: { entity: LoreEntity }) {
+  const { t } = useTranslation();
+  const { activeFilePath, setActiveFilePath, projectPath } = useProjectStore();
+  const { deleteEntity: doDelete } = useLoreStore();
+  const [expanded, setExpanded] = useState(false);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  const [showImprove, setShowImprove] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const catInfo = LORE_CATEGORIES.find((c) => c.id === entity.category);
+
+  const files = [...entity.mdFiles].sort((a, b) => {
+    if (a === "index.md") return -1;
+    if (b === "index.md") return 1;
+    return a.localeCompare(b);
+  });
+
+  const openFile = (filename: string) => {
+    setActiveFilePath(`${entity.dirPath}/${filename}`);
+  };
+
+  const handleReveal = async () => {
+    try { await revealItemInDir(entity.dirPath); } catch { /* best-effort */ }
+  };
+
+  const handleDelete = async () => {
+    if (!projectPath) return;
+    await doDelete(projectPath, entity);
+  };
+
+  const ctxItems = [
+    {
+      label: t("lore.panel.showInBrowser"),
+      icon: <FolderOpen size={13} />,
+      onClick: handleReveal,
+    },
+    {
+      label: t("lore.panel.aiImprove"),
+      icon: <Sparkles size={13} />,
+      onClick: () => setShowImprove(true),
+    },
+    {
+      label: t("lore.panel.deleteEntity"),
+      icon: <Trash2 size={13} />,
+      danger: true,
+      onClick: () => setShowDeleteConfirm(true),
+    },
+  ];
+
+  return (
+    <>
+      {showImprove && (
+        <LoreImproveModal entity={entity} onClose={() => setShowImprove(false)} />
+      )}
+
+      <div
+        className={`${styles.entityCard} ${expanded ? styles.entityCardOpen : ""}`}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setCtxMenu({ x: e.clientX, y: e.clientY });
+        }}
+      >
+        {ctxMenu && (
+          <ContextMenu
+            x={ctxMenu.x}
+            y={ctxMenu.y}
+            onClose={() => setCtxMenu(null)}
+            items={ctxItems}
+          />
+        )}
+
+        {/* Header row */}
+        <div className={styles.entityRow} onClick={() => setExpanded((v) => !v)}>
+          <div className={styles.entityThumb}>
+            {entity.avatarPath ? (
+              <img
+                src={assetUrl(entity.avatarPath)}
+                alt={entity.name}
+                className={styles.entityThumbImg}
+              />
+            ) : (
+              <div className={styles.entityThumbPlaceholder}>
+                {CAT_PLACEHOLDER[catInfo?.icon ?? ""] ?? <FileText size={15} strokeWidth={1.5} />}
+              </div>
+            )}
+          </div>
+          <span className={styles.entityCardName}>{entity.name}</span>
+          <ChevronRight
+            size={12}
+            className={`${styles.entityChevron} ${expanded ? styles.entityChevronOpen : ""}`}
+          />
+        </div>
+
+        {/* Expanded body */}
+        {expanded && (
+          <div className={styles.entityBody}>
+            {/* Meta */}
+            {(entity.summary || entity.aliases.length > 0) && (
+              <div className={styles.entityMeta}>
+                {entity.summary && (
+                  <div className={styles.entitySummary}>{entity.summary}</div>
+                )}
+                {entity.aliases.length > 0 && (
+                  <div className={styles.entityAliases}>
+                    {entity.aliases.map((a) => (
+                      <span key={a} className={styles.alias}>{a}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Delete confirm */}
+            {showDeleteConfirm && (
+              <DeleteConfirm
+                entity={entity}
+                onCancel={() => setShowDeleteConfirm(false)}
+                onConfirm={handleDelete}
+              />
+            )}
+
+            {/* Action bar */}
+            {!showDeleteConfirm && (
+              <div className={styles.entityActions}>
+                <button
+                  className={styles.entityActionBtn}
+                  onClick={() => setShowImprove(true)}
+                  title={t("lore.panel.aiImprove")}
+                >
+                  <Sparkles size={11} />
+                  {t("lore.panel.aiImprove")}
+                </button>
+                <button
+                  className={styles.entityActionBtn}
+                  onClick={handleReveal}
+                  title={t("lore.panel.showInBrowser")}
+                >
+                  <FolderOpen size={11} />
+                </button>
+                <button
+                  className={`${styles.entityActionBtn} ${styles.entityActionDanger}`}
+                  onClick={() => setShowDeleteConfirm(true)}
+                  title={t("lore.panel.deleteEntity")}
+                >
+                  <Trash2 size={11} />
+                </button>
+              </div>
+            )}
+
+            {/* File tree */}
+            <div className={styles.entityFiles}>
+              {files.map((f) => {
+                const isEntry = f === "index.md";
+                const fullPath = `${entity.dirPath}/${f}`;
+                const isActive = activeFilePath === fullPath;
+                return (
+                  <div
+                    key={f}
+                    className={`${styles.entityFile} ${isEntry ? styles.entryFile : ""} ${isActive ? styles.activeFile : ""}`}
+                    onClick={(e) => { e.stopPropagation(); openFile(f); }}
+                  >
+                    {isEntry
+                      ? <Star size={11} className={styles.entryIcon} />
+                      : <FileText size={11} className={styles.fileIcon} />}
+                    <span className={styles.fileName}>{f}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+// ── Main LorePanel ────────────────────────────────────────────────────────────
 
 export function LorePanel() {
   const { t } = useTranslation();
-  const { index, selectedEntity, selectEntity } = useLoreStore();
+  const { index } = useLoreStore();
   const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set());
   const [newEntityCat, setNewEntityCat] = useState<CategoryId | null>(null);
   const [showGenerator, setShowGenerator] = useState(false);
@@ -165,44 +348,51 @@ export function LorePanel() {
   return (
     <div className={styles.panel}>
       {showGenerator && <LoreGenerator onClose={() => setShowGenerator(false)} />}
+
       {/* Toolbar */}
-      <div style={{ display: "flex", justifyContent: "flex-end", padding: "4px var(--space-2)", borderBottom: "1px solid var(--color-border)", flexShrink: 0 }}>
-        <button
-          onClick={() => setShowGenerator(true)}
-          style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: "var(--radius-sm)", background: "rgba(59,130,246,0.12)", color: "var(--color-accent)", fontSize: "var(--font-size-xs)", fontWeight: 500 }}
-          title={t("lore.panel.generateTitle")}
-        >
-          🤖 {t("lore.panel.generate")}
+      <div className={styles.toolbar}>
+        <span className={styles.toolbarTitle}>LORE</span>
+        <button className={styles.genBtn} onClick={() => setShowGenerator(true)}>
+          <Bot size={12} />
+          {t("lore.panel.generate")}
         </button>
       </div>
 
-      {/* Entity list (top, scrollable) */}
-      <div className={styles.categoryList} style={{ maxHeight: "45%" }}>
+      {/* Scrollable library */}
+      <div className={styles.library}>
         {LORE_CATEGORIES.map((cat) => {
           const entities: LoreEntity[] = index[cat.id] ?? [];
           const collapsed = collapsedCats.has(cat.id);
+
           return (
             <div key={cat.id} className={styles.category}>
               <div className={styles.categoryHeader} onClick={() => toggleCat(cat.id)}>
-                <span className={styles.categoryIcon}>{cat.icon}</span>
-                <span className={styles.categoryLabel}>{cat.labelZh}</span>
-                <span style={{ fontSize: 10, opacity: 0.5, marginRight: 4 }}>
-                  {entities.length}
-                </span>
+                <ChevronRight
+                  size={11}
+                  className={`${styles.catChevron} ${!collapsed ? styles.catChevronOpen : ""}`}
+                />
+                <span className={styles.catIcon}>{CAT_ICONS[cat.icon]}</span>
+                <span className={styles.catLabel}>{cat.labelZh}</span>
+                <span className={styles.catCount}>{entities.length}</span>
                 <button
-                  className={styles.addBtn}
+                  className={styles.catAddBtn}
+                  title={t("lore.panel.newEntry")}
                   onClick={(e) => {
                     e.stopPropagation();
+                    setCollapsedCats((prev) => {
+                      const next = new Set(prev);
+                      next.delete(cat.id);
+                      return next;
+                    });
                     setNewEntityCat(cat.id as CategoryId);
                   }}
-                  title={t("lore.panel.newEntry")}
                 >
-                  +
+                  <Plus size={11} />
                 </button>
               </div>
 
               {!collapsed && (
-                <div className={styles.entityList}>
+                <div className={styles.categoryBody}>
                   {newEntityCat === cat.id && (
                     <NewEntityForm
                       category={cat.id as CategoryId}
@@ -210,27 +400,10 @@ export function LorePanel() {
                     />
                   )}
                   {entities.map((entity) => (
-                    <div
-                      key={entity.id}
-                      className={`${styles.entity} ${selectedEntity?.id === entity.id ? styles.active : ""}`}
-                      onClick={() => selectEntity(entity)}
-                    >
-                      {entity.avatarPath ? (
-                        <img
-                          src={assetUrl(entity.avatarPath)}
-                          alt={entity.name}
-                          className={styles.entityAvatar}
-                        />
-                      ) : (
-                        <span style={{ fontSize: 14 }}>{cat.icon}</span>
-                      )}
-                      <span className={styles.entityName}>{entity.name}</span>
-                    </div>
+                    <EntityCard key={entity.id} entity={entity} />
                   ))}
                   {entities.length === 0 && newEntityCat !== cat.id && (
-                    <div style={{ padding: "2px 12px 4px 28px", fontSize: "var(--font-size-xs)", color: "var(--color-text-muted)" }}>
-                      {t("lore.panel.empty")}
-                    </div>
+                    <div className={styles.catEmpty}>{t("lore.panel.empty")}</div>
                   )}
                 </div>
               )}
@@ -238,13 +411,6 @@ export function LorePanel() {
           );
         })}
       </div>
-
-      {/* Entity detail (bottom) */}
-      {selectedEntity ? (
-        <EntityDetail entity={selectedEntity} />
-      ) : (
-        <div className={styles.emptyDetail}>{t("lore.panel.selectEntity")}</div>
-      )}
     </div>
   );
 }

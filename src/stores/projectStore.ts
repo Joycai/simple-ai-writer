@@ -52,9 +52,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   refreshFileTree: async () => {
     const { projectPath } = get();
     if (!projectPath) return;
-    const writingPath = `${projectPath}/writing`;
     try {
-      const tree = await readDirRecursive(writingPath);
+      const tree = await readDirRecursive(projectPath);
       set({ fileTree: tree });
     } catch {
       set({ fileTree: [] });

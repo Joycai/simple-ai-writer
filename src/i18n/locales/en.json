@@ -62,7 +62,7 @@
       "custom": "Custom Instruction"
     },
     "instructions": {
-      "continue": "Continue writing the next passage from where the text ends.\n- Lore fidelity: Any character names, world rules, or entities appearing in 【设定资料】 must be portrayed exactly as defined — do not invent contradictory details.\n- Style matching: Preserve the sentence rhythm, vocabulary level, narrative tense, and point-of-view of the preceding text.\n- Length: Approximately 200 characters, adjusted to match the author's natural paragraph length.\n- Output only the continuation — no headings, no commentary.",
+      "continue": "Continue writing the next passage from where the text ends.\n- Lore fidelity: Any character names, world rules, or entities appearing in 【设定资料】 must be portrayed exactly as defined — do not invent contradictory details.\n- Style matching: Preserve the sentence rhythm, vocabulary level, narrative tense, and point-of-view of the preceding text.\n- Length: Approximately {{length}} characters, adjusted to match the author's natural paragraph length.\n- Output only the continuation — no headings, no commentary.",
       "polish": "Polish the above selected content, preserve the original meaning, make the text more fluent and beautiful.",
       "rewrite": "Rewrite the above selected content, keep the core plot, change the way of expression.",
       "summary": "Provide a brief summary of the above content, extract the main plot and character dynamics.",
@@ -72,18 +72,36 @@
     "panel": {
       "selectModel": "Select model…",
       "defaultSystemPrompt": "Default system prompt…",
-      "noProvider": "Please add providers and models in ⚙ AI Config first",
+      "noProvider": "Please add providers and models in AI Config first",
       "selectedChars": "Selected {count} characters",
       "customInstruction": "Enter custom instruction…",
       "cancel": "Cancel",
       "send": "Send",
       "addCustom": "+ Custom Instruction",
-      "stop": "■ Stop Generation",
+      "continueLength": "Length",
+      "continueLorePicker": "Specify Lore",
+      "continueLoreSearch": "Search lore…",
+      "continueLoreEmpty": "No lore entities",
+      "continueOutline": "Outline / Direction",
+      "continueOutlinePlaceholder": "Outline or writing direction the AI should follow…",
+      "continueExtraKnowledge": "Additional Knowledge",
+      "continueExtraKnowledgePlaceholder": "Background knowledge not in Lore (character backstory, world rules, etc.)…",
+      "run": "Run",
+      "stop": "Stop Generation",
       "generatedOutput": "Generated Output",
       "clear": "Clear",
       "insertToDoc": "Insert to Document",
       "inputTokens": "Input {count} tokens",
       "outputTokens": "Output {count} tokens"
+    },
+    "agent": {
+      "stepsTitle": "Agent Steps",
+      "tool": {
+        "list_lore_entities": "List Lore",
+        "read_lore_entity": "Read Lore",
+        "list_files": "List Files",
+        "read_file": "Read File"
+      }
     },
     "errors": {
       "noProject": "Please open a project first",
@@ -93,7 +111,7 @@
     }
   },
   "aiConfig": {
-    "title": "⚙️ AI Config",
+    "title": "AI Config",
     "tabs": {
       "providers": "Providers",
       "models": "Models",
@@ -111,7 +129,10 @@
       "cancel": "Cancel",
       "save": "Save",
       "saving": "Saving…",
-      "defaultEndpoint": "(default endpoint)"
+      "defaultEndpoint": "(default endpoint)",
+      "editTitle": "Edit Provider",
+      "edit": "Save Changes",
+      "editing": "Saving…"
     },
     "models": {
       "configured": "Configured Models",
@@ -132,7 +153,10 @@
       "priceOutput": "Output",
       "cancel": "Cancel",
       "add": "Add",
-      "saving": "Saving…"
+      "saving": "Saving…",
+      "editTitle": "Edit Model",
+      "edit": "Save Changes",
+      "editing": "Saving…"
     },
     "prompts": {
       "builtinTitle": "Built-in Default Instructions (Read-only)",
@@ -173,7 +197,7 @@
       "status2": "Understanding character settings",
       "status3": "Generating worldview entries",
       "status4": "Organizing structured data",
-      "step1": "① Input Lore Description",
+      "step1": "1. Input Lore Description",
       "categoryLabel": "Entry Category",
       "modelLabel": "AI Model",
       "selectModel": "Select model…",
@@ -185,8 +209,8 @@
       "closeEsc": "Close (Esc)",
       "noFiles": "No image or text files found in project",
       "completed": "AI generation completed, can edit and save directly",
-      "step2": "② Edit and Confirm",
-      "success": "✓ Generation Success",
+      "step2": "2. Edit and Confirm",
+      "success": "Generation Success",
       "nameLabel": "Name",
       "namePlaceholder": "Entry Name",
       "categoryLabel2": "Category",
@@ -198,10 +222,10 @@
       "summaryPlaceholder": "One-line concise description",
       "contentLabel": "Detailed Content",
       "contentHint": "· Markdown format",
-      "submitBtn": "✨ Generate Lore Entry",
+      "submitBtn": "Generate Lore Entry",
       "submitBtnSaving": "Saving…",
-      "stopBtn": "■ Stop Generation",
-      "regenerateBtn": "🔄 Regenerate",
+      "stopBtn": "Stop Generation",
+      "regenerateBtn": "Regenerate",
       "saveTolore": "Save to Lore"
     },
     "panel": {
@@ -210,7 +234,27 @@
       "generate": "AI Generate",
       "generateTitle": "Generate lore entries with AI based on description and images",
       "newEntry": "New Entry",
-      "selectEntity": "Select a lore entry to view details"
+      "selectEntity": "Select a lore entry to view details",
+      "showInBrowser": "Show in File Browser",
+      "aiImprove": "AI Improve",
+      "deleteEntity": "Delete",
+      "deleteConfirm": "Delete \"{{name}}\"? This cannot be undone.",
+      "deleteBtn": "Delete"
+    },
+    "improve": {
+      "subtitle": "AI Improve",
+      "instructionLabel": "Instruction",
+      "atHint": "type @ to reference another lore entry",
+      "instructionPlaceholder": "e.g. Add more backstory, expand her abilities section, fix inconsistencies…",
+      "currentContent": "Current index.md",
+      "generating": "Generating…",
+      "resultLabel": "Improved content (editable before applying)",
+      "cancel": "Cancel",
+      "generate": "Generate",
+      "stop": "Stop",
+      "regenerate": "Regenerate",
+      "apply": "Apply to index.md",
+      "applying": "Applying…"
     },
     "form": {
       "title": "Create New Entry",

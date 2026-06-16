@@ -4,7 +4,8 @@
  * selected model, and returns a structured GeneratedLore ready to save.
  */
 
-import { readFile as readBinaryFile, readTextFile, readDir } from "@tauri-apps/plugin-fs";
+import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
+import { readFile as readTextFile, readDir } from "./fileio";
 import i18n from "../i18n";
 import type { ApiStandard } from "./aiConfig";
 import type { CategoryId } from "./lore";
@@ -48,15 +49,14 @@ export async function scanProjectFiles(projectPath: string): Promise<ProjectFile
     try {
       const entries = await readDir(dir);
       for (const e of entries) {
-        if (!e.name) continue;
         if (e.isDirectory && !e.name.startsWith(".")) {
-          await walk(`${dir}/${e.name}`, depth + 1);
+          await walk(e.path, depth + 1);
         } else if (!e.isDirectory) {
           const ext = e.name.split(".").pop()?.toLowerCase() ?? "";
           if (IMAGE_EXTS.has(ext)) {
-            results.push({ name: e.name, path: `${dir}/${e.name}`, kind: "image" });
+            results.push({ name: e.name, path: e.path, kind: "image" });
           } else if (TEXT_EXTS.has(ext)) {
-            results.push({ name: e.name, path: `${dir}/${e.name}`, kind: "text" });
+            results.push({ name: e.name, path: e.path, kind: "text" });
           }
         }
       }
@@ -91,7 +91,7 @@ export async function imageToDataUrl(imagePath: string): Promise<{ dataUrl: stri
 
 /** Read a text file (.md / .txt) and return its content string. */
 export async function readTextFileContent(filePath: string): Promise<string> {
-  return readTextFile(filePath);
+  return readTextFile(filePath);  // from fileio.ts
 }
 
 export async function generateLore(opts: {
@@ -108,22 +108,53 @@ export async function generateLore(opts: {
 }): Promise<GeneratedLore> {
   const { streamCompletion } = await import("./aiClient");
 
+  // Strip @[filename] visual placeholders from the user description — they're UI labels only.
+  const cleanDesc = opts.description.replace(/@\[[^\]]*\]/g, "").trim();
+
+  // Build the text portion of the prompt.
+  // 200 000 chars ≈ 50–100 k tokens — covers even large settings docs on modern
+  // models (Gemini 1.5/2.0 Flash/Pro support 1 M token context windows).
+  const MAX_REF_CHARS = 500_000;
+  const refs = (opts.textAttachments ?? [])
+    .map((ta) => {
+      const body = ta.content.length > MAX_REF_CHARS
+        ? ta.content.slice(0, MAX_REF_CHARS) + `\n…[truncated, ${ta.content.length - MAX_REF_CHARS} chars omitted]`
+        : ta.content;
+      return `--- Reference: ${ta.name} ---\n${body}\n---`;
+    })
+    .join("\n\n");
+
+  let promptText: string;
+  if (refs) {
+    // Explicit extraction instruction so the model treats the file as reference material.
+    promptText = cleanDesc
+      ? `${cleanDesc}\n\nReference materials:\n${refs}`
+      : `Extract a lore entity from the following reference text and output as JSON:\n\n${refs}`;
+  } else {
+    promptText = cleanDesc || "请根据附图创建一个设定条目。";
+  }
+
   const userParts: Array<{ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } }> = [
-    { type: "text", text: opts.description || "请根据附图创建一个设定条目。" },
+    { type: "text", text: promptText },
     ...opts.images.map((img) => ({
       type: "image_url" as const,
       image_url: { url: img.dataUrl },
     })),
-    ...(opts.textAttachments ?? []).map((ta) => ({
-      type: "text" as const,
-      text: `\n--- Reference: ${ta.name} ---\n${ta.content}\n---`,
-    })),
   ];
 
-  // OpenAI JSON mode: pass response_format only for openai/compat standards
-  const extraBody = opts.standard !== "gemini"
-    ? { response_format: { type: "json_object" } }
-    : {};
+  // JSON mode: use native API enforcement where available.
+  // For Gemini, also append a text reminder as belt-and-suspenders (some older models
+  // silently ignore responseMimeType and need the text cue too).
+  const extraBody = opts.standard === "gemini"
+    ? { generationConfig: { responseMimeType: "application/json" } }
+    : { response_format: { type: "json_object" } };
+
+  if (opts.standard === "gemini") {
+    userParts.push({
+      type: "text",
+      text: "Output ONLY valid JSON matching the schema in the system instructions. No markdown fences, no explanation.",
+    });
+  }
 
   let fullText = "";
   await streamCompletion({
@@ -145,14 +176,31 @@ export async function generateLore(opts: {
     signal: opts.signal,
   });
 
-  const jsonMatch = fullText.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error("AI 未返回有效 JSON，请换个模型重试。");
+  // Extract JSON: try clean parse first, then markdown fences, then first-{-to-last-}
+  const trimmed = fullText.trim();
+  let jsonStr: string | undefined;
+  if (trimmed.startsWith("{")) {
+    jsonStr = trimmed;
+  } else {
+    const fenceMatch = trimmed.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+    if (fenceMatch) {
+      jsonStr = fenceMatch[1];
+    } else {
+      const start = trimmed.indexOf("{");
+      const end = trimmed.lastIndexOf("}");
+      if (start !== -1 && end > start) jsonStr = trimmed.slice(start, end + 1);
+    }
+  }
+  if (!jsonStr) {
+    const preview = trimmed.slice(0, 300) || "(empty response)";
+    throw new Error(`Model did not return valid JSON.\n\nResponse preview:\n${preview}`);
+  }
 
   let parsed: Record<string, unknown>;
   try {
-    parsed = JSON.parse(jsonMatch[0]);
+    parsed = JSON.parse(jsonStr);
   } catch {
-    throw new Error("解析 AI 响应失败，请重试。");
+    throw new Error(`Failed to parse model response as JSON.\n\nResponse preview:\n${jsonStr!.slice(0, 300)}`);
   }
 
   return {

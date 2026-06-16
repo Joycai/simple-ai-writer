@@ -199,6 +199,18 @@
   background: rgba(239, 68, 68, 0.1);
 }
 
+.editBtn {
+  color: var(--color-text-muted);
+  font-size: 16px;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.editBtn:hover {
+  color: var(--color-accent);
+  background: rgba(59, 130, 246, 0.1);
+}
+
 /* Primary / secondary buttons */
 .btnPrimary {
   padding: var(--space-2) var(--space-4);
