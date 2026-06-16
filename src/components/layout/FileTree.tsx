@@ -30,6 +30,7 @@ const TreeCtx = createContext<TreeCtx>(null!);
 // ── Inline create input ───────────────────────────────────────────────────────
 
 function CreateInput({ depth }: { depth: number }) {
+  const { t } = useTranslation();
   const { cancelCreate, confirmCreate, createError, creatingType } = useContext(TreeCtx);
   const [name, setName] = useState("");
   const submittingRef = useRef(false);
@@ -73,7 +74,7 @@ function CreateInput({ depth }: { depth: number }) {
           onChange={(e) => setName(e.target.value)}
           onKeyDown={handleKeyDown}
           onBlur={handleBlur}
-          placeholder={creatingType === "folder" ? "folder name" : "filename.md"}
+          placeholder={creatingType === "folder" ? t("fileTree.folderNamePlaceholder") : t("fileTree.fileNamePlaceholder")}
         />
       </div>
       {createError && <div className={styles.createError}>{createError}</div>}
@@ -93,6 +94,7 @@ function FileIcon({ name }: { name: string }) {
 // ── Tree node ─────────────────────────────────────────────────────────────────
 
 function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
+  const { t } = useTranslation();
   const { activeFilePath, setActiveFilePath, creatingIn, startCreate } = useContext(TreeCtx);
   const [open, setOpen] = useState(depth === 0 || node.name === "writing");
   const isActive = !node.is_dir && activeFilePath === node.path;
@@ -132,14 +134,14 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
           <span className={styles.nodeActions} onClick={(e) => e.stopPropagation()}>
             <button
               className={styles.nodeActionBtn}
-              title="New File"
+              title={t("fileTree.newFile")}
               onClick={() => { setOpen(true); startCreate(node.path, "file"); }}
             >
               <FilePlus size={12} />
             </button>
             <button
               className={styles.nodeActionBtn}
-              title="New Folder"
+              title={t("fileTree.newFolder")}
               onClick={() => { setOpen(true); startCreate(node.path, "folder"); }}
             >
               <FolderPlus size={12} />
@@ -229,7 +231,7 @@ export function FileTree() {
             </button>
             <button
               className={styles.toolbarBtn}
-              title="Refresh"
+              title={t("fileTree.refresh")}
               onClick={() => void refreshFileTree()}
             >
               <RotateCw size={13} />

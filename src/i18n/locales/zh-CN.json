@@ -47,7 +47,9 @@
       "editor": "编辑",
       "split": "分栏",
       "preview": "预览"
-    }
+    },
+    "unsavedChanges": "未保存的更改",
+    "noHeadings": "暂无标题"
   },
   "ai": {
     "tasks": {
@@ -86,6 +88,8 @@
       "continueOutlinePlaceholder": "输入本章大纲或续写方向，AI 将遵循这些内容…",
       "continueExtraKnowledge": "附加知识",
       "continueExtraKnowledgePlaceholder": "不在设定库中的背景知识（角色经历、世界规则等）…",
+      "taskRequirement": "额外要求",
+      "taskRequirementPlaceholder": "对本次任务的额外要求（语气、侧重、限制等）…",
       "run": "执行",
       "stop": "停止生成",
       "generatedOutput": "生成结果",
@@ -137,7 +141,7 @@
     "models": {
       "configured": "已配置模型",
       "empty": "暂无模型",
-      "add": "添加模型",
+      "add": "添加",
       "addTitle": "添加模型",
       "providerLabel": "供应商",
       "selectProvider": "选择供应商…",
@@ -152,7 +156,6 @@
       "priceCachedInput": "缓存输入",
       "priceOutput": "输出",
       "cancel": "取消",
-      "add": "添加",
       "saving": "保存中…",
       "editTitle": "编辑模型",
       "edit": "保存修改",
@@ -163,13 +166,12 @@
       "customTitle": "自定义 Prompt (覆盖同场景默认)",
       "empty": "暂无自定义 Prompt",
       "overridden": " 已被覆盖",
-      "add": "新建 Prompt",
+      "add": "添加",
       "addTitle": "新建 Prompt",
       "nameLabel": "名称",
       "sceneLabel": "场景",
       "contentLabel": "内容",
       "cancel": "取消",
-      "add": "添加",
       "saving": "保存中…"
     },
     "modelTypes": {
@@ -270,7 +272,11 @@
   "fileTree": {
     "newFile": "新建文件",
     "delete": "删除",
-    "deleteConfirm": "确认删除此文件？"
+    "deleteConfirm": "确认删除此文件？",
+    "newFolder": "新建文件夹",
+    "refresh": "刷新",
+    "fileNamePlaceholder": "文件名.md",
+    "folderNamePlaceholder": "文件夹名称"
   },
   "language": {
     "chinese": "中文",

@@ -54,27 +54,62 @@ export function parseFrontmatter(source: string): { data: Record<string, unknown
   const content = source.slice(end + 4).trimStart();
 
   try {
-    // Simple YAML parser for common frontmatter keys
+    // Simple YAML parser for common frontmatter keys.
+    // Supports inline arrays (`aliases: [a, b]`), block lists
+    // (`aliases:` followed by `  - item` lines), and quoted scalars.
     const data: Record<string, unknown> = {};
-    yamlStr.split("\n").forEach((line) => {
+    const lines = yamlStr.split("\n");
+    let blockKey: string | null = null; // key currently accumulating a block list
+
+    for (const line of lines) {
+      // Block list continuation: `  - value`
+      const listMatch = line.match(/^\s*-\s+(.*)$/);
+      if (blockKey && listMatch) {
+        (data[blockKey] as unknown[]).push(unquote(listMatch[1].trim()));
+        continue;
+      }
+
       const colonIdx = line.indexOf(":");
-      if (colonIdx === -1) return;
+      if (colonIdx === -1) continue;
       const key = line.slice(0, colonIdx).trim();
       const val = line.slice(colonIdx + 1).trim();
+
+      if (val === "") {
+        // Possibly the start of a block list — seed an array; if no list items
+        // follow it stays empty, which round-trips fine for empty values.
+        data[key] = [];
+        blockKey = key;
+        continue;
+      }
+
+      blockKey = null;
       if (val.startsWith("[")) {
         try {
-          data[key] = JSON.parse(val.replace(/'/g, '"'));
+          data[key] = (JSON.parse(val.replace(/'/g, '"')) as unknown[]).map((v) =>
+            typeof v === "string" ? unquote(v) : v
+          );
         } catch {
           data[key] = val;
         }
       } else {
-        data[key] = val;
+        data[key] = unquote(val);
       }
-    });
+    }
     return { data, content };
   } catch {
     return { data: {}, content: source };
   }
+}
+
+/** Strip a single layer of matching surrounding quotes and unescape inner quotes. */
+function unquote(s: string): string {
+  if (
+    (s.startsWith('"') && s.endsWith('"') && s.length >= 2) ||
+    (s.startsWith("'") && s.endsWith("'") && s.length >= 2)
+  ) {
+    return s.slice(1, -1).replace(/\\"/g, '"');
+  }
+  return s;
 }
 
 export function countWords(text: string): number {

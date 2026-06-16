@@ -88,7 +88,7 @@ export function EditorArea() {
     <div className={styles.area}>
       {/* Toolbar */}
       <div className={styles.toolbar}>
-        {isDirty && <span className={styles.dirty} title="Unsaved changes" />}
+        {isDirty && <span className={styles.dirty} title={t("editor.unsavedChanges")} />}
         <span className={styles.fileName}>{fileName}</span>
 
         <div className={styles.viewToggle}>

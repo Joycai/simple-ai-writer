@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import i18n from "../i18n";
 import { streamCompletion } from "../lib/aiClient";
-import { assembleContext, bundleToMessages, type ContinueExtras } from "../lib/rag";
+import { assembleContext, bundleToMessages, type TaskExtras } from "../lib/rag";
 import { useAiStore } from "./aiStore";
 import { useLoreStore } from "./loreStore";
 import { useProjectStore } from "./projectStore";
@@ -12,13 +12,11 @@ import type { ToolStep } from "../lib/agentLoop";
 export type TaskKind = "continue" | "polish" | "rewrite" | "summary" | "custom";
 export type { ToolStep };
 
-const TASK_INSTRUCTIONS: Record<TaskKind, string> = {
-  continue: i18n.t("ai.instructions.continue"),
-  polish: i18n.t("ai.instructions.polish"),
-  rewrite: i18n.t("ai.instructions.rewrite"),
-  summary: i18n.t("ai.instructions.summary"),
-  custom: "",
-};
+// Resolve the built-in instruction at call time so it follows the active
+// language — module-load lookups would freeze to the initial locale.
+function taskInstruction(kind: Exclude<TaskKind, "custom" | "continue">): string {
+  return i18n.t(`ai.instructions.${kind}`);
+}
 
 interface TokenUsage {
   inputTokens: number;
@@ -36,7 +34,7 @@ interface AiTaskState {
   toolSteps: ToolStep[];
 
   setSelection: (s: string) => void;
-  runTask: (kind: TaskKind, customInstruction?: string, continueLength?: number, continueExtras?: ContinueExtras) => Promise<void>;
+  runTask: (kind: TaskKind, customInstruction?: string, continueLength?: number, extras?: TaskExtras) => Promise<void>;
   abort: () => void;
   clearOutput: () => void;
   addToolStep: (step: ToolStep) => void;
@@ -66,7 +64,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       return { toolSteps: [...s.toolSteps, step] };
     }),
 
-  runTask: async (kind, customInstruction, continueLength, continueExtras) => {
+  runTask: async (kind, customInstruction, continueLength, extras) => {
     const { activeModelId, activePromptId, models, providers, prompts } = useAiStore.getState();
     const { projectPath } = useProjectStore.getState();
     const { index: loreIndex } = useLoreStore.getState();
@@ -101,7 +99,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       instruction = scenePrompt?.content
         ?? i18n.t("ai.instructions.continue", { length: continueLength ?? 500 });
     } else {
-      instruction = scenePrompt?.content ?? TASK_INSTRUCTIONS[kind];
+      instruction = scenePrompt?.content ?? taskInstruction(kind);
     }
 
     const controller = new AbortController();
@@ -118,7 +116,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           documentText,
           get().selection,
           instruction,
-          continueExtras,
+          extras,
         );
         const initialMessages = bundleToMessages(bundle);
         // Extract the user message content for the first agent turn
@@ -157,6 +155,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           documentText,
           get().selection,
           instruction,
+          extras,
         );
         const messages = bundleToMessages(bundle);
 

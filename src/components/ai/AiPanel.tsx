@@ -5,7 +5,7 @@ import { useAiTaskStore, type TaskKind, type ToolStep } from "../../stores/aiTas
 import { useAiStore } from "../../stores/aiStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { useLoreStore } from "../../stores/loreStore";
-import type { ContinueExtras } from "../../lib/rag";
+import type { TaskExtras } from "../../lib/rag";
 import { LORE_CATEGORIES } from "../../lib/lore";
 import styles from "./AiPanel.module.css";
 
@@ -85,6 +85,50 @@ function ExtraSection({
   );
 }
 
+/** Reusable lore reference picker (search + checkbox list). */
+function LorePicker({
+  entities,
+  search,
+  setSearch,
+  selectedPaths,
+  toggle,
+}: {
+  entities: { dirPath: string; name: string; categoryLabel: string }[];
+  search: string;
+  setSearch: (v: string) => void;
+  selectedPaths: string[];
+  toggle: (dirPath: string) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <input
+        className={styles.extraSearchInput}
+        placeholder={t("ai.panel.continueLoreSearch")}
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+      <div className={styles.lorePickerList}>
+        {entities.length === 0 ? (
+          <span className={styles.lorePickerEmpty}>{t("ai.panel.continueLoreEmpty")}</span>
+        ) : (
+          entities.map((entity) => (
+            <label key={entity.dirPath} className={styles.lorePickerItem}>
+              <input
+                type="checkbox"
+                checked={selectedPaths.includes(entity.dirPath)}
+                onChange={() => toggle(entity.dirPath)}
+              />
+              <span className={styles.lorePickerName}>{entity.name}</span>
+              <span className={styles.lorePickerCat}>{entity.categoryLabel}</span>
+            </label>
+          ))
+        )}
+      </div>
+    </>
+  );
+}
+
 export function AiPanel() {
   const { t, i18n } = useTranslation();
   const {
@@ -102,9 +146,12 @@ export function AiPanel() {
   const [selectedLorePaths, setSelectedLorePaths] = useState<string[]>([]);
   const [loreSearch, setLoreSearch] = useState("");
 
-  // Outline + extra knowledge state
+  // Outline + extra knowledge state (continue)
   const [outline, setOutline] = useState("");
   const [additionalKnowledge, setAdditionalKnowledge] = useState("");
+
+  // Extra requirement for polish / rewrite / summary
+  const [requirement, setRequirement] = useState("");
 
   const [customInstr, setCustomInstr] = useState("");
   const outputRef = useRef<HTMLDivElement>(null);
@@ -134,17 +181,26 @@ export function AiPanel() {
     clearOutput();
   };
 
+  const supportsExtras =
+    selectedTask === "polish" || selectedTask === "rewrite" || selectedTask === "summary";
+
   const handleRun = () => {
     if (!selectedTask) return;
     clearOutput();
-    const extras: ContinueExtras | undefined =
-      selectedTask === "continue"
-        ? {
-            manualLorePaths: selectedLorePaths.length > 0 ? selectedLorePaths : undefined,
-            outline: outline.trim() || undefined,
-            additionalKnowledge: additionalKnowledge.trim() || undefined,
-          }
-        : undefined;
+    const manualLorePaths = selectedLorePaths.length > 0 ? selectedLorePaths : undefined;
+    let extras: TaskExtras | undefined;
+    if (selectedTask === "continue") {
+      extras = {
+        manualLorePaths,
+        outline: outline.trim() || undefined,
+        additionalKnowledge: additionalKnowledge.trim() || undefined,
+      };
+    } else if (supportsExtras) {
+      extras = {
+        manualLorePaths,
+        requirement: requirement.trim() || undefined,
+      };
+    }
     runTask(
       selectedTask,
       selectedTask === "custom" ? customInstr : undefined,
@@ -280,29 +336,13 @@ export function AiPanel() {
                     label={t("ai.panel.continueLorePicker")}
                     badge={selectedLorePaths.length > 0 ? String(selectedLorePaths.length) : undefined}
                   >
-                    <input
-                      className={styles.extraSearchInput}
-                      placeholder={t("ai.panel.continueLoreSearch")}
-                      value={loreSearch}
-                      onChange={(e) => setLoreSearch(e.target.value)}
+                    <LorePicker
+                      entities={filteredLoreEntities}
+                      search={loreSearch}
+                      setSearch={setLoreSearch}
+                      selectedPaths={selectedLorePaths}
+                      toggle={toggleLorePath}
                     />
-                    <div className={styles.lorePickerList}>
-                      {filteredLoreEntities.length === 0 ? (
-                        <span className={styles.lorePickerEmpty}>{t("ai.panel.continueLoreEmpty")}</span>
-                      ) : (
-                        filteredLoreEntities.map((entity) => (
-                          <label key={entity.dirPath} className={styles.lorePickerItem}>
-                            <input
-                              type="checkbox"
-                              checked={selectedLorePaths.includes(entity.dirPath)}
-                              onChange={() => toggleLorePath(entity.dirPath)}
-                            />
-                            <span className={styles.lorePickerName}>{entity.name}</span>
-                            <span className={styles.lorePickerCat}>{entity.categoryLabel}</span>
-                          </label>
-                        ))
-                      )}
-                    </div>
                   </ExtraSection>
 
                   {/* Outline */}
@@ -330,6 +370,39 @@ export function AiPanel() {
                       placeholder={t("ai.panel.continueExtraKnowledgePlaceholder")}
                       value={additionalKnowledge}
                       onChange={(e) => setAdditionalKnowledge(e.target.value)}
+                    />
+                  </ExtraSection>
+                </>
+              )}
+
+              {/* ── Polish / Rewrite / Summary options ── */}
+              {supportsExtras && (
+                <>
+                  {/* Extra requirement */}
+                  <ExtraSection
+                    label={t("ai.panel.taskRequirement")}
+                    badge={requirement.trim() ? "✓" : undefined}
+                  >
+                    <textarea
+                      className={styles.extraTextarea}
+                      rows={3}
+                      placeholder={t("ai.panel.taskRequirementPlaceholder")}
+                      value={requirement}
+                      onChange={(e) => setRequirement(e.target.value)}
+                    />
+                  </ExtraSection>
+
+                  {/* Lore reference */}
+                  <ExtraSection
+                    label={t("ai.panel.continueLorePicker")}
+                    badge={selectedLorePaths.length > 0 ? String(selectedLorePaths.length) : undefined}
+                  >
+                    <LorePicker
+                      entities={filteredLoreEntities}
+                      search={loreSearch}
+                      setSearch={setLoreSearch}
+                      selectedPaths={selectedLorePaths}
+                      toggle={toggleLorePath}
                     />
                   </ExtraSection>
                 </>

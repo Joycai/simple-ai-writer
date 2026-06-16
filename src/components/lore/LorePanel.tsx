@@ -332,7 +332,8 @@ function EntityCard({ entity }: { entity: LoreEntity }) {
 // ── Main LorePanel ────────────────────────────────────────────────────────────
 
 export function LorePanel() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isZh = i18n.language.startsWith("zh");
   const { index } = useLoreStore();
   const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set());
   const [newEntityCat, setNewEntityCat] = useState<CategoryId | null>(null);
@@ -372,7 +373,7 @@ export function LorePanel() {
                   className={`${styles.catChevron} ${!collapsed ? styles.catChevronOpen : ""}`}
                 />
                 <span className={styles.catIcon}>{CAT_ICONS[cat.icon]}</span>
-                <span className={styles.catLabel}>{cat.labelZh}</span>
+                <span className={styles.catLabel}>{isZh ? cat.labelZh : cat.labelEn}</span>
                 <span className={styles.catCount}>{entities.length}</span>
                 <button
                   className={styles.catAddBtn}

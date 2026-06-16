@@ -44,7 +44,8 @@ interface Props {
 }
 
 export function LoreGenerator({ onClose }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isZh = i18n.language.startsWith("zh");
   const { projectPath } = useProjectStore();
   const { models, providers, activeModelId, setActiveModel, prompts } = useAiStore();
   const { createNewEntity, scanProject } = useLoreStore();
@@ -294,7 +295,7 @@ setAttached((prev) => [...prev, { kind: "text", file, content }]);
                 <select className={styles.select} value={category}
                   onChange={(e) => setCategory(e.target.value as CategoryId)}>
                   {LORE_CATEGORIES.map((c) => (
-                    <option key={c.id} value={c.id}>{c.labelZh}</option>
+                    <option key={c.id} value={c.id}>{isZh ? c.labelZh : c.labelEn}</option>
                   ))}
                 </select>
               </div>
@@ -393,7 +394,7 @@ setAttached((prev) => [...prev, { kind: "text", file, content }]);
                     <select className={styles.select} value={editCat}
                       onChange={(e) => setEditCat(e.target.value as CategoryId)}>
                       {LORE_CATEGORIES.map((c) => (
-                        <option key={c.id} value={c.id}>{c.labelZh}</option>
+                        <option key={c.id} value={c.id}>{isZh ? c.labelZh : c.labelEn}</option>
                       ))}
                     </select>
                   </div>

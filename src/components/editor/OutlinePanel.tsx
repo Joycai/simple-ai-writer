@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { HeadingNode } from "../../lib/markdown";
 import styles from "./OutlinePanel.module.css";
 
@@ -16,8 +17,9 @@ interface Props {
 }
 
 export function OutlinePanel({ headings, onClickHeading }: Props) {
+  const { t } = useTranslation();
   if (headings.length === 0) {
-    return <div className={styles.empty}>No headings yet</div>;
+    return <div className={styles.empty}>{t("editor.noHeadings")}</div>;
   }
 
   return (

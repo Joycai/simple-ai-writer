@@ -17,14 +17,16 @@ const APPROX_CHARS_PER_TOKEN = 3; // rough CJK-aware estimate
 const MAX_LORE_CHARS = 600 * APPROX_CHARS_PER_TOKEN;
 const MAX_CONTEXT_CHARS = 800 * APPROX_CHARS_PER_TOKEN;
 
-/** Extra options available for the "continue" task. */
-export interface ContinueExtras {
+/** Extra options available for AI tasks (continue / polish / rewrite / summary). */
+export interface TaskExtras {
   /** dirPaths of manually pinned lore entities — merged with auto-matched. */
   manualLorePaths?: string[];
-  /** Outline or writing direction the model should follow. */
+  /** Outline or writing direction the model should follow ("continue" only). */
   outline?: string;
-  /** Free-form background knowledge not captured in the Lore system. */
+  /** Free-form background knowledge not captured in the Lore system ("continue" only). */
   additionalKnowledge?: string;
+  /** Extra requirement appended to the task instruction (polish/rewrite/summary). */
+  requirement?: string;
 }
 
 export interface ContextBundle {
@@ -82,7 +84,7 @@ export async function assembleContext(
   documentText: string,
   selection: string,
   taskInstruction: string,
-  extras?: ContinueExtras
+  extras?: TaskExtras
 ): Promise<ContextBundle> {
   // Layer 2: auto-match entities, then prepend any manually pinned ones (deduped)
   const matchTarget = selection + documentText.slice(-500);
@@ -103,10 +105,14 @@ export async function assembleContext(
     .slice(Math.max(0, endIdx - MAX_CONTEXT_CHARS), endIdx)
     .trim();
 
-  // Layer 5: task text
-  const taskText = selection
+  // Layer 5: task text — base instruction plus any extra requirement
+  const baseTask = selection
     ? `【选中内容】\n${selection}\n\n${taskInstruction}`
     : taskInstruction;
+  const requirement = extras?.requirement?.trim();
+  const taskText = requirement
+    ? `${baseTask}\n\n【额外要求】\n${requirement}`
+    : baseTask;
 
   const outline = extras?.outline?.trim() || undefined;
   const additionalKnowledge = extras?.additionalKnowledge?.trim() || undefined;

@@ -47,7 +47,9 @@
       "editor": "Editor",
       "split": "Split",
       "preview": "Preview"
-    }
+    },
+    "unsavedChanges": "Unsaved changes",
+    "noHeadings": "No headings yet"
   },
   "ai": {
     "tasks": {
@@ -86,6 +88,8 @@
       "continueOutlinePlaceholder": "Outline or writing direction the AI should follow…",
       "continueExtraKnowledge": "Additional Knowledge",
       "continueExtraKnowledgePlaceholder": "Background knowledge not in Lore (character backstory, world rules, etc.)…",
+      "taskRequirement": "Requirement",
+      "taskRequirementPlaceholder": "Extra requirement for this task (tone, focus, constraints, etc.)…",
       "run": "Run",
       "stop": "Stop Generation",
       "generatedOutput": "Generated Output",
@@ -137,7 +141,7 @@
     "models": {
       "configured": "Configured Models",
       "empty": "No models",
-      "add": "Add Model",
+      "add": "Add",
       "addTitle": "Add Model",
       "providerLabel": "Provider",
       "selectProvider": "Select provider…",
@@ -152,7 +156,6 @@
       "priceCachedInput": "Cached Input",
       "priceOutput": "Output",
       "cancel": "Cancel",
-      "add": "Add",
       "saving": "Saving…",
       "editTitle": "Edit Model",
       "edit": "Save Changes",
@@ -163,13 +166,12 @@
       "customTitle": "Custom Prompts (Override default for same scene)",
       "empty": "No custom prompts",
       "overridden": " (overridden)",
-      "add": "Add Prompt",
+      "add": "Add",
       "addTitle": "Add New Prompt",
       "nameLabel": "Name",
       "sceneLabel": "Scene",
       "contentLabel": "Content",
       "cancel": "Cancel",
-      "add": "Add",
       "saving": "Saving…"
     },
     "modelTypes": {
@@ -270,7 +272,11 @@
   "fileTree": {
     "newFile": "New File",
     "delete": "Delete",
-    "deleteConfirm": "Delete this file?"
+    "deleteConfirm": "Delete this file?",
+    "newFolder": "New Folder",
+    "refresh": "Refresh",
+    "fileNamePlaceholder": "filename.md",
+    "folderNamePlaceholder": "folder name"
   },
   "language": {
     "chinese": "中文",
