@@ -72,6 +72,15 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
+          shared-key: ${{ matrix.platform }}
+
+      - name: Clear stale Tauri bundles from cache
+        shell: bash
+        run: |
+          rm -rf src-tauri/target/release/bundle
+          rm -rf src-tauri/target/universal-apple-darwin/release/bundle
+          rm -rf src-tauri/target/aarch64-apple-darwin/release/bundle
+          rm -rf src-tauri/target/x86_64-apple-darwin/release/bundle
 
       - name: Install frontend dependencies
         run: pnpm install
