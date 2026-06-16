@@ -27,13 +27,32 @@
     "light": "Light",
     "system": "System",
     "language": "Language",
-    "aiConfig": "AI Config"
+    "aiConfig": "Settings"
+  },
+  "systemSettings": {
+    "title": "System Settings",
+    "tabs": {
+      "general": "General",
+      "aiGroup": "AI Config",
+      "providers": "Providers",
+      "models": "Models",
+      "prompts": "Prompts"
+    },
+    "general": {
+      "appearance": "Appearance",
+      "themeLabel": "Theme",
+      "themeHint": "Choose how the app looks",
+      "languageSection": "Language",
+      "languageLabel": "Interface Language"
+    }
   },
   "project": {
     "openFolder": "Open Folder",
     "noProjectTitle": "Open a folder to start writing",
     "noProjectDesc": "The project structure will be initialized automatically",
-    "emptyTree": "Writing directory is empty, create a .md file to start"
+    "emptyTree": "Writing directory is empty, create a .md file to start",
+    "closeProject": "Close Project",
+    "switchProject": "Open Another Folder"
   },
   "editor": {
     "placeholder": "Start writing…",

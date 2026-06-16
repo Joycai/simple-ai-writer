@@ -4,8 +4,8 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Folder, FolderOpen, FileText, File, ChevronRight,
-  FilePlus, FolderPlus, RotateCw,
+  Folder, FolderOpen, FolderInput, FileText, File, ChevronRight,
+  FilePlus, FolderPlus, RotateCw, LogOut,
 } from "lucide-react";
 import { writeFile, makeDir } from "../../lib/fileio";
 import { useProjectStore } from "../../stores/projectStore";
@@ -166,7 +166,8 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
 
 export function FileTree() {
   const { t } = useTranslation();
-  const { fileTree, projectPath, refreshFileTree, activeFilePath, setActiveFilePath } =
+  const { fileTree, projectPath, refreshFileTree, activeFilePath, setActiveFilePath,
+          openProject, closeProject } =
     useProjectStore();
 
   const [creatingIn, setCreatingIn] = useState<string | null>(null);
@@ -222,6 +223,20 @@ export function FileTree() {
         <div className={styles.toolbar}>
           <span className={styles.rootLabel}>{projectName}</span>
           <span className={styles.toolbarActions}>
+            <button
+              className={styles.toolbarBtn}
+              title={t("project.switchProject")}
+              onClick={() => void openProject()}
+            >
+              <FolderInput size={14} />
+            </button>
+            <button
+              className={styles.toolbarBtn}
+              title={t("project.closeProject")}
+              onClick={() => void closeProject()}
+            >
+              <LogOut size={14} />
+            </button>
             <button
               className={styles.toolbarBtn}
               title={t("fileTree.newFile")}

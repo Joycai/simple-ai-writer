@@ -65,7 +65,7 @@ export function StatusBar({ onOpenSettings }: Props) {
         {t(LANGUAGES.find((l) => l.value === language)?.labelKey || "language.english")}
       </button>
 
-      <button className={styles.control} onClick={onOpenSettings} title={t("settings.aiConfig")}>
+      <button className={styles.control} onClick={onOpenSettings} title={t("systemSettings.title")}>
         <Settings size={13} />
         {t("settings.aiConfig")}
       </button>

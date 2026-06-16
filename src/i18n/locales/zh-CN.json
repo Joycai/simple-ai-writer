@@ -27,13 +27,32 @@
     "light": "亮色",
     "system": "跟随系统",
     "language": "语言",
-    "aiConfig": "AI 配置"
+    "aiConfig": "设置"
+  },
+  "systemSettings": {
+    "title": "系统设置",
+    "tabs": {
+      "general": "通用",
+      "aiGroup": "AI 配置",
+      "providers": "供应商",
+      "models": "模型",
+      "prompts": "Prompt"
+    },
+    "general": {
+      "appearance": "外观",
+      "themeLabel": "主题",
+      "themeHint": "选择应用的显示主题",
+      "languageSection": "语言",
+      "languageLabel": "界面语言"
+    }
   },
   "project": {
     "openFolder": "打开文件夹",
     "noProjectTitle": "打开一个文件夹以开始写作",
     "noProjectDesc": "系统将自动初始化项目结构",
-    "emptyTree": "写作目录为空，创建 .md 文件开始吧"
+    "emptyTree": "写作目录为空，创建 .md 文件开始吧",
+    "closeProject": "关闭项目",
+    "switchProject": "切换项目"
   },
   "editor": {
     "placeholder": "开始写作…",

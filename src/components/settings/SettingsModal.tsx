@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { X, Pencil } from "lucide-react";
+import { X, Pencil, Moon, Sun, Monitor, SlidersHorizontal, Server, Cpu, MessageSquare } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
+import { useAppStore, type ThemeMode, type Language } from "../../stores/appStore";
 import type { ApiStandard, ModelType, GeminiSafetySettings, GeminiHarmCategory } from "../../lib/aiConfig";
 import { GEMINI_HARM_CATEGORIES, GEMINI_THRESHOLD_LEVELS, defaultSafetySettings } from "../../lib/aiConfig";
 import styles from "./SettingsModal.module.css";
@@ -20,6 +21,65 @@ const STANDARD_ENDPOINTS: Record<ApiStandard, string> = {
   gemini: "https://generativelanguage.googleapis.com/v1beta",
   openai_compat: "",
 };
+
+const THEMES: { value: ThemeMode; icon: React.ReactNode; labelKey: string }[] = [
+  { value: "dark", icon: <Moon size={14} />, labelKey: "settings.dark" },
+  { value: "light", icon: <Sun size={14} />, labelKey: "settings.light" },
+  { value: "system", icon: <Monitor size={14} />, labelKey: "settings.system" },
+];
+
+const LANGUAGES: { value: Language; label: string }[] = [
+  { value: "zh-CN", label: "中文" },
+  { value: "en", label: "English" },
+];
+
+// ─── General Tab ──────────────────────────────────────────────────────────────
+
+function GeneralTab() {
+  const { t } = useTranslation();
+  const { theme, setTheme, language, setLanguage } = useAppStore();
+
+  return (
+    <div>
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>{t("systemSettings.general.appearance")}</div>
+        <div className={styles.fieldGroup}>
+          <label className={styles.label}>{t("systemSettings.general.themeLabel")}</label>
+          <div className={styles.optionGroup}>
+            {THEMES.map((th) => (
+              <button
+                key={th.value}
+                className={`${styles.optionBtn} ${theme === th.value ? styles.optionBtnActive : ""}`}
+                onClick={() => setTheme(th.value)}
+              >
+                {th.icon}
+                {t(th.labelKey)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>{t("systemSettings.general.languageSection")}</div>
+        <div className={styles.fieldGroup}>
+          <label className={styles.label}>{t("systemSettings.general.languageLabel")}</label>
+          <div className={styles.optionGroup}>
+            {LANGUAGES.map((lang) => (
+              <button
+                key={lang.value}
+                className={`${styles.optionBtn} ${language === lang.value ? styles.optionBtnActive : ""}`}
+                onClick={() => setLanguage(lang.value)}
+              >
+                {lang.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── Gemini safety filtering editor ───────────────────────────────────────────
 
@@ -512,41 +572,50 @@ function PromptsTab() {
 
 // ─── Main modal ───────────────────────────────────────────────────────────────
 
+type TabId = "general" | "providers" | "models" | "prompts";
+
 interface Props {
   onClose: () => void;
 }
 
 export function SettingsModal({ onClose }: Props) {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState("providers");
+  const [activeTab, setActiveTab] = useState<TabId>("general");
 
-  const tabs = [
-    { id: "providers", label: t("aiConfig.tabs.providers") },
-    { id: "models", label: t("aiConfig.tabs.models") },
-    { id: "prompts", label: t("aiConfig.tabs.prompts") },
-  ];
+  const navBtn = (id: TabId, icon: React.ReactNode, labelKey: string) => (
+    <button
+      key={id}
+      className={`${styles.navItem} ${activeTab === id ? styles.navItemActive : ""}`}
+      onClick={() => setActiveTab(id)}
+    >
+      {icon}
+      {t(labelKey)}
+    </button>
+  );
 
   return (
     <div className={styles.overlay} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className={styles.modal}>
         <div className={styles.header}>
-          <span className={styles.title}>{t("aiConfig.title")}</span>
+          <span className={styles.title}>{t("systemSettings.title")}</span>
           <button className={styles.closeBtn} onClick={onClose}><X size={16} /></button>
         </div>
 
-        <div className={styles.tabs}>
-          {tabs.map((t) => (
-            <button key={t.id} className={`${styles.tab} ${activeTab === t.id ? styles.active : ""}`}
-              onClick={() => setActiveTab(t.id)}>
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <div className={styles.modalBody}>
+          <nav className={styles.nav}>
+            {navBtn("general", <SlidersHorizontal size={15} />, "systemSettings.tabs.general")}
+            <div className={styles.navGroupLabel}>{t("systemSettings.tabs.aiGroup")}</div>
+            {navBtn("providers", <Server size={15} />, "systemSettings.tabs.providers")}
+            {navBtn("models", <Cpu size={15} />, "systemSettings.tabs.models")}
+            {navBtn("prompts", <MessageSquare size={15} />, "systemSettings.tabs.prompts")}
+          </nav>
 
-        <div className={styles.content}>
-          {activeTab === "providers" && <ProvidersTab />}
-          {activeTab === "models" && <ModelsTab />}
-          {activeTab === "prompts" && <PromptsTab />}
+          <div className={styles.content}>
+            {activeTab === "general" && <GeneralTab />}
+            {activeTab === "providers" && <ProvidersTab />}
+            {activeTab === "models" && <ModelsTab />}
+            {activeTab === "prompts" && <PromptsTab />}
+          </div>
         </div>
       </div>
     </div>

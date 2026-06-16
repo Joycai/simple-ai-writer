@@ -4,6 +4,12 @@ import i18n from "../i18n";
 export type ThemeMode = "dark" | "light" | "system";
 export type Language = "zh-CN" | "en";
 
+const THEME_KEY = "app:theme";
+const LANG_KEY = "app:language";
+
+const storedTheme = (localStorage.getItem(THEME_KEY) as ThemeMode | null) ?? "dark";
+const storedLang = (localStorage.getItem(LANG_KEY) as Language | null) ?? "zh-CN";
+
 interface AppState {
   theme: ThemeMode;
   language: Language;
@@ -35,26 +41,34 @@ function applyTheme(mode: ThemeMode) {
   document.documentElement.setAttribute("data-theme", resolveTheme(mode));
 }
 
+let systemThemeListener: (() => void) | null = null;
+
 export const useAppStore = create<AppState>((set, get) => ({
-  theme: "dark",
-  language: "zh-CN",
+  theme: storedTheme,
+  language: storedLang,
   sidebarCollapsed: false,
   rightPanelCollapsed: false,
   activeSideTab: "files",
   activeRightTab: "outline",
 
   setTheme: (theme) => {
+    localStorage.setItem(THEME_KEY, theme);
     set({ theme });
     applyTheme(theme);
 
+    if (systemThemeListener) {
+      window.matchMedia("(prefers-color-scheme: dark)").removeEventListener("change", systemThemeListener);
+      systemThemeListener = null;
+    }
     if (theme === "system") {
       const mq = window.matchMedia("(prefers-color-scheme: dark)");
-      const handler = () => applyTheme(get().theme);
-      mq.addEventListener("change", handler);
+      systemThemeListener = () => applyTheme(get().theme);
+      mq.addEventListener("change", systemThemeListener);
     }
   },
 
   setLanguage: (language) => {
+    localStorage.setItem(LANG_KEY, language);
     set({ language });
     i18n.changeLanguage(language);
   },
@@ -72,5 +86,5 @@ export const useAppStore = create<AppState>((set, get) => ({
   setActiveRightTab: (tab) => set({ activeRightTab: tab }),
 }));
 
-// Initialize theme on load
-applyTheme("dark");
+// Initialize theme on load using persisted value
+applyTheme(storedTheme);

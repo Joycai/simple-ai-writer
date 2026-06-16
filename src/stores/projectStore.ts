@@ -8,6 +8,7 @@ import {
   type FileNode,
 } from "../lib/project";
 import { useLoreStore } from "./loreStore";
+import { useEditorStore } from "./editorStore";
 
 interface ProjectState {
   projectPath: string | null;
@@ -18,6 +19,7 @@ interface ProjectState {
   isLoading: boolean;
 
   openProject: () => Promise<void>;
+  closeProject: () => Promise<void>;
   refreshFileTree: () => Promise<void>;
   setActiveFilePath: (path: string | null) => void;
   setWordCount: (n: number) => void;
@@ -47,6 +49,21 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     } finally {
       set({ isLoading: false });
     }
+  },
+
+  closeProject: async () => {
+    const editor = useEditorStore.getState();
+    if (editor.isDirty && editor.filePath) await editor.saveNow();
+    if (editor.saveTimer) clearTimeout(editor.saveTimer);
+    useEditorStore.setState({ content: "", filePath: null, headings: [], isDirty: false, saveTimer: null });
+
+    const lore = useLoreStore.getState();
+    if (lore.isDirty && lore.selectedEntity && lore.selectedFile) await lore.saveNow();
+    if (lore.saveTimer) clearTimeout(lore.saveTimer);
+    useLoreStore.setState({ index: {}, selectedEntity: null, selectedFile: null, fileContent: "", isDirty: false, saveTimer: null });
+
+    resetDb();
+    set({ projectPath: null, activeFilePath: null, fileTree: [], wordCount: 0, charCount: 0 });
   },
 
   refreshFileTree: async () => {
