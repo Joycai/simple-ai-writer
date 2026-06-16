@@ -33,12 +33,15 @@ jobs:
           - platform: ubuntu-22.04
             rust-targets: ''
             args: ''
+            bundle-path: 'src-tauri/target/release/bundle/'
           - platform: windows-latest
             rust-targets: ''
             args: ''
+            bundle-path: 'src-tauri/target/release/bundle/'
           - platform: macos-latest
             rust-targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
             args: '--target universal-apple-darwin'
+            bundle-path: 'src-tauri/target/universal-apple-darwin/release/bundle/'
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -118,7 +121,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-${{ matrix.platform }}
-          path: src-tauri/target/release/bundle/
+          path: ${{ matrix.bundle-path }}
           retention-days: 1
 
   create-release:
