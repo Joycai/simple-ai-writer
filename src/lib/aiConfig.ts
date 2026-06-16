@@ -285,6 +285,46 @@ export async function fetchRemoteModels(
   }));
 }
 
+export async function testProviderConnection(
+  baseUrl: string,
+  apiKey: string,
+  standard: ApiStandard
+): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+  try {
+    if (standard === "gemini") {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}&pageSize=1`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        const error = await res.text();
+        return { ok: false, error: `Gemini API error ${res.status}: ${error}` };
+      }
+      return { ok: true, message: "Gemini connection successful" };
+    }
+
+    if (standard === "openai_compat" || standard === "openai") {
+      const url = `${baseUrl.replace(/\/$/, "")}/models`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      if (!res.ok) {
+        const error = await res.text();
+        return { ok: false, error: `API error ${res.status}: ${error}` };
+      }
+      const data = await res.json();
+      const models = (data.data ?? []) as Array<{ id?: string }>;
+      return {
+        ok: true,
+        message: `Connection successful. Found ${models.length} model(s).`,
+      };
+    }
+
+    return { ok: false, error: "Unknown API standard" };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: `Connection failed: ${msg}` };
+  }
+}
+
 function rowToModel(r: Record<string, unknown>): Model {
   return {
     id: r.id as string,

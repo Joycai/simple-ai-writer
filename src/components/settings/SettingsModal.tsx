@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { X, Pencil, Moon, Sun, Monitor, SlidersHorizontal, Server, Cpu, MessageSquare } from "lucide-react";
+import { X, Pencil, Moon, Sun, Monitor, SlidersHorizontal, Server, Cpu, MessageSquare, Check, AlertCircle } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
 import { useAppStore, type ThemeMode, type Language } from "../../stores/appStore";
 import type { ApiStandard, ModelType, GeminiSafetySettings, GeminiHarmCategory } from "../../lib/aiConfig";
-import { GEMINI_HARM_CATEGORIES, GEMINI_THRESHOLD_LEVELS, defaultSafetySettings } from "../../lib/aiConfig";
+import { GEMINI_HARM_CATEGORIES, GEMINI_THRESHOLD_LEVELS, defaultSafetySettings, testProviderConnection } from "../../lib/aiConfig";
 import styles from "./SettingsModal.module.css";
 
 const BUILTIN_PROMPTS_CONFIG = [
@@ -21,6 +21,19 @@ const STANDARD_ENDPOINTS: Record<ApiStandard, string> = {
   gemini: "https://generativelanguage.googleapis.com/v1beta",
   openai_compat: "",
 };
+
+interface ProviderPreset {
+  name: string;
+  apiStandard: ApiStandard;
+  baseUrl: string;
+}
+
+const PROVIDER_PRESETS: ProviderPreset[] = [
+  { name: "OpenAI", apiStandard: "openai", baseUrl: "https://api.openai.com/v1" },
+  { name: "Google Gemini", apiStandard: "gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta" },
+  { name: "DeepSeek", apiStandard: "openai_compat", baseUrl: "https://api.deepseek.com" },
+  { name: "Anthropic", apiStandard: "openai_compat", baseUrl: "https://api.anthropic.com/v1" },
+];
 
 const THEMES: { value: ThemeMode; icon: React.ReactNode; labelKey: string }[] = [
   { value: "dark", icon: <Moon size={14} />, labelKey: "settings.dark" },
@@ -140,12 +153,32 @@ function ProvidersTab() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const resetForm = () => {
     setForm({ name: "", baseUrl: STANDARD_ENDPOINTS.openai, apiStandard: "openai", apiKey: "", safetySettings: defaultSafetySettings() });
     setEditingId(null);
     setShowForm(false);
     setError(null);
+    setTestResult(null);
+  };
+
+  const handleTest = async () => {
+    if (!form.baseUrl || !form.apiKey) {
+      setTestResult({ ok: false, message: "Base URL and API key are required" });
+      return;
+    }
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const result = await testProviderConnection(form.baseUrl, form.apiKey, form.apiStandard);
+      setTestResult({ ok: result.ok, message: result.ok ? result.message : result.error });
+    } catch (e) {
+      setTestResult({ ok: false, message: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setTesting(false);
+    }
   };
 
   const handleEdit = async (id: string) => {
@@ -207,6 +240,23 @@ function ProvidersTab() {
       {showForm ? (
         <div className={styles.form}>
           <div className={styles.sectionTitle}>{editingId ? t("aiConfig.providers.editTitle") : t("aiConfig.providers.addTitle")}</div>
+          {!editingId && (
+            <div style={{ marginBottom: 16 }}>
+              <div className={styles.label} style={{ marginBottom: 8 }}>{t("aiConfig.providers.presetsLabel")}</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {PROVIDER_PRESETS.map((preset) => (
+                  <button
+                    key={preset.name}
+                    className={styles.btnSecondary}
+                    onClick={() => setForm({ ...form, name: preset.name, apiStandard: preset.apiStandard, baseUrl: preset.baseUrl })}
+                    style={{ flex: "1 1 auto", minWidth: 100 }}
+                  >
+                    {preset.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           {error && <div className={styles.errorNote}>{error}</div>}
           <div className={styles.formRow}>
             <div className={styles.fieldGroup}>
@@ -234,6 +284,27 @@ function ProvidersTab() {
             <label className={styles.label}>{t("aiConfig.providers.apiKeyLabel")}</label>
             <input className={styles.input} type="password" placeholder="sk-…" value={form.apiKey}
               onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className={styles.btnSecondary} onClick={handleTest} disabled={!form.baseUrl || !form.apiKey || testing}
+              style={{ flex: 0 }}>
+              {testing ? t("aiConfig.providers.testing") : t("aiConfig.providers.testConnection")}
+            </button>
+            {testResult && (
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "0 8px",
+                borderRadius: 4,
+                backgroundColor: testResult.ok ? "#d1fae5" : "#fee2e2",
+                color: testResult.ok ? "#065f46" : "#7f1d1d",
+                fontSize: "0.875rem",
+              }}>
+                {testResult.ok ? <Check size={14} /> : <AlertCircle size={14} />}
+                <span>{testResult.message}</span>
+              </div>
+            )}
           </div>
           {form.apiStandard === "gemini" && (
             <GeminiSafetyEditor
