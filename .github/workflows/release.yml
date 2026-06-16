@@ -107,14 +107,52 @@ jobs:
 
           console.log(`Bumped version to ${v}`);
 
-      - name: Build and publish Tauri app
+      - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: v${{ needs.determine-version.outputs.version }}
-          releaseName: 'Simple AI Writer v${{ needs.determine-version.outputs.version }}'
-          releaseBody: |
+          args: ${{ matrix.args }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.platform }}
+          path: src-tauri/target/release/bundle/
+          retention-days: 1
+
+  create-release:
+    needs: [determine-version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-artifacts
+
+      - name: Organize release files
+        shell: bash
+        run: |
+          mkdir -p release-files
+
+          # Copy all bundle files from artifacts
+          find dist-artifacts -type f \( -name "*.dmg" -o -name "*.msi" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.tar.gz" \) -exec cp {} release-files/ \;
+
+          # List all collected files
+          echo "=== Release Files ==="
+          ls -lh release-files/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: 'Simple AI Writer v${{ needs.determine-version.outputs.version }}'
+          tag_name: v${{ needs.determine-version.outputs.version }}
+          draft: false
+          body: |
             Download the installer for your platform from the assets below.
 
             | Platform | File |
@@ -122,6 +160,6 @@ jobs:
             | macOS (Universal) | `.dmg` |
             | Windows | `.msi` / `.exe` |
             | Linux | `.AppImage` / `.deb` |
-          releaseDraft: true
-          prerelease: false
-          args: ${{ matrix.args }}
+          files: release-files/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
