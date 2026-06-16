@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { PenLine, ChevronDown } from "lucide-react";
+import { PenLine, ChevronDown, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { save } from "@tauri-apps/plugin-dialog";
+import { useAppStore } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useEditorStore, type ViewMode } from "../../stores/editorStore";
 import { CodeEditor } from "../editor/CodeEditor";
@@ -17,6 +18,7 @@ const VIEW_MODES_CONFIG: { id: ViewMode; labelKey: string }[] = [
 
 export function EditorArea() {
   const { t } = useTranslation();
+  const { sidebarCollapsed, rightPanelCollapsed, toggleSidebar, toggleRightPanel } = useAppStore();
   const { projectPath, activeFilePath } = useProjectStore();
   const { content, filePath, isDirty, viewMode, loadFile, setContent, saveNow, setViewMode } =
     useEditorStore();
@@ -49,6 +51,23 @@ export function EditorArea() {
   if (!projectPath || !activeFilePath) {
     return (
       <div className={styles.area}>
+        <div className={styles.toolbar}>
+          <button
+            className={styles.panelToggleBtn}
+            onClick={toggleSidebar}
+            title={sidebarCollapsed ? t("editor.showSidebar") : t("editor.hideSidebar")}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+          </button>
+          <span style={{ flex: 1 }} />
+          <button
+            className={styles.panelToggleBtn}
+            onClick={toggleRightPanel}
+            title={rightPanelCollapsed ? t("editor.showRightPanel") : t("editor.hideRightPanel")}
+          >
+            {rightPanelCollapsed ? <PanelRightOpen size={15} /> : <PanelRightClose size={15} />}
+          </button>
+        </div>
         <div className={styles.empty}>
           <div className={styles.logo}><PenLine size={32} strokeWidth={1.5} /></div>
           <div className={styles.emptyTitle}>{t("app.name")}</div>
@@ -88,6 +107,14 @@ export function EditorArea() {
     <div className={styles.area}>
       {/* Toolbar */}
       <div className={styles.toolbar}>
+        <button
+          className={styles.panelToggleBtn}
+          onClick={toggleSidebar}
+          title={sidebarCollapsed ? t("editor.showSidebar") : t("editor.hideSidebar")}
+        >
+          {sidebarCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+        </button>
+
         {isDirty && <span className={styles.dirty} title={t("editor.unsavedChanges")} />}
         <span className={styles.fileName}>{fileName}</span>
 
@@ -127,6 +154,14 @@ export function EditorArea() {
             </div>
           )}
         </div>
+
+        <button
+          className={styles.panelToggleBtn}
+          onClick={toggleRightPanel}
+          title={rightPanelCollapsed ? t("editor.showRightPanel") : t("editor.hideRightPanel")}
+        >
+          {rightPanelCollapsed ? <PanelRightOpen size={15} /> : <PanelRightClose size={15} />}
+        </button>
       </div>
 
       {/* Editor + Preview panes */}

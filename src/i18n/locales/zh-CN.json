@@ -9,8 +9,7 @@
   },
   "rightPanel": {
     "outline": "大纲",
-    "ai": "AI 助手",
-    "loreCards": "设定卡片"
+    "ai": "AI 助手"
   },
   "statusBar": {
     "noProject": "未打开项目",
@@ -68,7 +67,11 @@
       "preview": "预览"
     },
     "unsavedChanges": "未保存的更改",
-    "noHeadings": "暂无标题"
+    "noHeadings": "暂无标题",
+    "showSidebar": "展开左侧栏",
+    "hideSidebar": "收起左侧栏",
+    "showRightPanel": "展开右侧栏",
+    "hideRightPanel": "收起右侧栏"
   },
   "ai": {
     "tasks": {

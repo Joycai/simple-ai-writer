@@ -9,8 +9,7 @@
   },
   "rightPanel": {
     "outline": "Outline",
-    "ai": "AI Assistant",
-    "loreCards": "Lore Cards"
+    "ai": "AI Assistant"
   },
   "statusBar": {
     "noProject": "No project open",
@@ -68,7 +67,11 @@
       "preview": "Preview"
     },
     "unsavedChanges": "Unsaved changes",
-    "noHeadings": "No headings yet"
+    "noHeadings": "No headings yet",
+    "showSidebar": "Show sidebar",
+    "hideSidebar": "Hide sidebar",
+    "showRightPanel": "Show right panel",
+    "hideRightPanel": "Hide right panel"
   },
   "ai": {
     "tasks": {

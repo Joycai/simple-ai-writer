@@ -115,6 +115,23 @@
   transform: scale(0.96);
 }
 
+.panelToggleBtn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.panelToggleBtn:hover {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+}
+
 /* Pane area */
 .panes {
   flex: 1;

@@ -4,6 +4,7 @@ import { SideTabBar } from "./components/layout/SideTabBar";
 import { Sidebar } from "./components/layout/Sidebar";
 import { EditorArea } from "./components/layout/EditorArea";
 import { RightPanel } from "./components/layout/RightPanel";
+import { ResizeHandle } from "./components/layout/ResizeHandle";
 import { StatusBar } from "./components/layout/StatusBar";
 import { SettingsModal } from "./components/settings/SettingsModal";
 import { useAppStore } from "./stores/appStore";
@@ -14,7 +15,12 @@ const COLLAPSE_SIDEBAR_BELOW = 900;
 const COLLAPSE_RIGHT_BELOW = 700;
 
 export default function App() {
-  const { setSidebarCollapsed, setRightPanelCollapsed } = useAppStore();
+  const {
+    setSidebarCollapsed, setRightPanelCollapsed,
+    sidebarWidth, rightPanelWidth,
+    sidebarCollapsed, rightPanelCollapsed,
+    setSidebarWidth, setRightPanelWidth,
+  } = useAppStore();
   const { loadConfig } = useAiStore();
   const [showSettings, setShowSettings] = useState(false);
 
@@ -45,10 +51,24 @@ export default function App() {
         background: "var(--color-bg-base)",
       }}
     >
-      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+      <div
+        style={{
+          display: "flex",
+          flex: 1,
+          overflow: "hidden",
+          "--sidebar-width": `${sidebarWidth}px`,
+          "--right-panel-width": `${rightPanelWidth}px`,
+        } as React.CSSProperties}
+      >
         <SideTabBar />
         <Sidebar />
+        {!sidebarCollapsed && (
+          <ResizeHandle onDelta={(d) => setSidebarWidth((prev) => prev + d)} />
+        )}
         <EditorArea />
+        {!rightPanelCollapsed && (
+          <ResizeHandle onDelta={(d) => setRightPanelWidth((prev) => prev - d)} />
+        )}
         <RightPanel />
       </div>
       <StatusBar onOpenSettings={() => setShowSettings(true)} />

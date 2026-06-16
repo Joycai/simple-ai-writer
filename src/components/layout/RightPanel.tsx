@@ -8,7 +8,6 @@ import styles from "./RightPanel.module.css";
 const TABS = [
   { id: "outline" as const, labelKey: "rightPanel.outline" },
   { id: "ai" as const, labelKey: "rightPanel.ai" },
-  { id: "loreCards" as const, labelKey: "rightPanel.loreCards" },
 ];
 
 export function RightPanel() {
@@ -34,11 +33,6 @@ export function RightPanel() {
           <OutlinePanel headings={headings} />
         )}
         {activeRightTab === "ai" && <AiPanel />}
-        {activeRightTab === "loreCards" && (
-          <span style={{ color: "var(--color-text-muted)", fontSize: "var(--font-size-xs)" }}>
-            Lore Cards — Phase 5
-          </span>
-        )}
       </div>
     </div>
   );

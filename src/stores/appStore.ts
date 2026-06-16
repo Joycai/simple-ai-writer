@@ -6,17 +6,39 @@ export type Language = "zh-CN" | "en";
 
 const THEME_KEY = "app:theme";
 const LANG_KEY = "app:language";
+const SIDEBAR_WIDTH_KEY = "app:sidebarWidth";
+const RIGHT_PANEL_WIDTH_KEY = "app:rightPanelWidth";
 
 const storedTheme = (localStorage.getItem(THEME_KEY) as ThemeMode | null) ?? "dark";
 const storedLang = (localStorage.getItem(LANG_KEY) as Language | null) ?? "zh-CN";
+
+const SIDEBAR_MIN = 160;
+const SIDEBAR_MAX = 500;
+const RIGHT_PANEL_MIN = 160;
+const RIGHT_PANEL_MAX = 500;
+
+function clamp(v: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, v));
+}
+
+const storedSidebarWidth = clamp(
+  parseInt(localStorage.getItem(SIDEBAR_WIDTH_KEY) ?? "240", 10),
+  SIDEBAR_MIN, SIDEBAR_MAX,
+);
+const storedRightPanelWidth = clamp(
+  parseInt(localStorage.getItem(RIGHT_PANEL_WIDTH_KEY) ?? "280", 10),
+  RIGHT_PANEL_MIN, RIGHT_PANEL_MAX,
+);
 
 interface AppState {
   theme: ThemeMode;
   language: Language;
   sidebarCollapsed: boolean;
   rightPanelCollapsed: boolean;
+  sidebarWidth: number;
+  rightPanelWidth: number;
   activeSideTab: "files" | "lore" | "search";
-  activeRightTab: "outline" | "ai" | "loreCards";
+  activeRightTab: "outline" | "ai";
 
   setTheme: (theme: ThemeMode) => void;
   setLanguage: (lang: Language) => void;
@@ -24,6 +46,8 @@ interface AppState {
   toggleRightPanel: () => void;
   setSidebarCollapsed: (v: boolean) => void;
   setRightPanelCollapsed: (v: boolean) => void;
+  setSidebarWidth: (w: number | ((prev: number) => number)) => void;
+  setRightPanelWidth: (w: number | ((prev: number) => number)) => void;
   setActiveSideTab: (tab: AppState["activeSideTab"]) => void;
   setActiveRightTab: (tab: AppState["activeRightTab"]) => void;
 }
@@ -48,6 +72,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   language: storedLang,
   sidebarCollapsed: false,
   rightPanelCollapsed: false,
+  sidebarWidth: storedSidebarWidth,
+  rightPanelWidth: storedRightPanelWidth,
   activeSideTab: "files",
   activeRightTab: "outline",
 
@@ -81,6 +107,24 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setSidebarCollapsed: (v) => set({ sidebarCollapsed: v }),
   setRightPanelCollapsed: (v) => set({ rightPanelCollapsed: v }),
+
+  setSidebarWidth: (wOrFn) => {
+    set((state) => {
+      const w = typeof wOrFn === "function" ? wOrFn(state.sidebarWidth) : wOrFn;
+      const clamped = clamp(w, SIDEBAR_MIN, SIDEBAR_MAX);
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(clamped));
+      return { sidebarWidth: clamped };
+    });
+  },
+
+  setRightPanelWidth: (wOrFn) => {
+    set((state) => {
+      const w = typeof wOrFn === "function" ? wOrFn(state.rightPanelWidth) : wOrFn;
+      const clamped = clamp(w, RIGHT_PANEL_MIN, RIGHT_PANEL_MAX);
+      localStorage.setItem(RIGHT_PANEL_WIDTH_KEY, String(clamped));
+      return { rightPanelWidth: clamped };
+    });
+  },
 
   setActiveSideTab: (tab) => set({ activeSideTab: tab }),
   setActiveRightTab: (tab) => set({ activeRightTab: tab }),
