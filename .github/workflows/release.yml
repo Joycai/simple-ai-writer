@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. 1.2.3). Leave blank to use YYYY.M.D date stamp.'
+        description: 'Release version (e.g. 1.2.3). Leave blank to use YY.M.D date stamp.'
         required: false
         type: string
 
@@ -19,7 +19,7 @@ jobs:
           if [ -n "${{ inputs.version }}" ]; then
             echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
           else
-            echo "version=$(date +'%Y.%-m.%-d')" >> $GITHUB_OUTPUT
+            echo "version=$(date +'%y.%-m.%-d')" >> $GITHUB_OUTPUT
           fi
 
   build:
