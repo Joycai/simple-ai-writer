@@ -18,6 +18,13 @@ pub fn run() {
             app.handle().plugin(
                 tauri_plugin_stronghold::Builder::with_argon2(&salt_path).build()
             )?;
+
+            // Set the app icon explicitly at runtime on the window (helps show custom icon on macOS Dock / Windows taskbar during `tauri dev`)
+            if let Some(window) = app.get_webview_window("main") {
+                let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png"))?;
+                window.set_icon(icon)?;
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
