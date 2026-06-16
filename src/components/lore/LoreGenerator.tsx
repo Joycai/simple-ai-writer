@@ -198,6 +198,7 @@ setAttached((prev) => [...prev, { kind: "text", file, content }]);
         baseUrl: provider.baseUrl,
         apiKey,
         standard: provider.apiStandard,
+        safetySettings: provider.safetySettings,
         modelId: model.modelId,
         onProgress: () => {}, // we show spinner, not raw text
         signal: ctrl.signal,

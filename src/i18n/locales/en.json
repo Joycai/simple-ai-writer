@@ -136,7 +136,22 @@
       "defaultEndpoint": "(default endpoint)",
       "editTitle": "Edit Provider",
       "edit": "Save Changes",
-      "editing": "Saving…"
+      "editing": "Saving…",
+      "safetyLabel": "Safety Filtering (Gemini)",
+      "safetyHint": "Block thresholds sent with each request. Slide left for more freedom, right for stricter filtering.",
+      "harmCategories": {
+        "HARM_CATEGORY_HARASSMENT": "Harassment",
+        "HARM_CATEGORY_HATE_SPEECH": "Hate speech",
+        "HARM_CATEGORY_SEXUALLY_EXPLICIT": "Sexually explicit",
+        "HARM_CATEGORY_DANGEROUS_CONTENT": "Dangerous content"
+      },
+      "thresholds": {
+        "OFF": "Off",
+        "BLOCK_NONE": "Block none",
+        "BLOCK_ONLY_HIGH": "Only high",
+        "BLOCK_MEDIUM_AND_ABOVE": "Medium & above",
+        "BLOCK_LOW_AND_ABOVE": "Low & above"
+      }
     },
     "models": {
       "configured": "Configured Models",

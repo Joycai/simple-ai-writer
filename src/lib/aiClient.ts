@@ -3,7 +3,8 @@
  * Uses fetch() with SSE / streaming JSON parsing.
  */
 
-import type { ApiStandard } from "./aiConfig";
+import type { ApiStandard, GeminiSafetySettings } from "./aiConfig";
+import { toSafetySettingsArray } from "./aiConfig";
 
 /** A single part inside a multimodal user message. */
 export type ContentPart =
@@ -59,6 +60,8 @@ export interface StreamOptions {
   tools?: ToolDefinition[];
   /** Extra top-level fields merged into the OpenAI request body (e.g. response_format). */
   extraBody?: Record<string, unknown>;
+  /** Gemini-only: per-request safety filter thresholds. Ignored for OpenAI. */
+  safetySettings?: GeminiSafetySettings;
 }
 
 // ─── OpenAI / compat ─────────────────────────────────────────────────────────
@@ -245,6 +248,15 @@ async function streamGemini(opts: StreamOptions): Promise<void> {
       })),
     }];
   }
+  const safetySettings = toSafetySettingsArray(opts.safetySettings);
+  if (safetySettings.length) {
+    body.safetySettings = safetySettings;
+  }
+
+  console.debug("[Gemini request]", {
+    model: opts.modelId,
+    safetySettings: body.safetySettings ?? "(none)",
+  });
 
   const res = await fetch(url, {
     method: "POST",

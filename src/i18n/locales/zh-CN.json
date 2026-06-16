@@ -136,7 +136,22 @@
       "defaultEndpoint": "(默认端点)",
       "editTitle": "编辑供应商",
       "edit": "保存修改",
-      "editing": "保存中…"
+      "editing": "保存中…",
+      "safetyLabel": "安全过滤（Gemini）",
+      "safetyHint": "每次请求随附的拦截阈值。向左更自由，向右过滤更严格。",
+      "harmCategories": {
+        "HARM_CATEGORY_HARASSMENT": "骚扰内容",
+        "HARM_CATEGORY_HATE_SPEECH": "仇恨言论",
+        "HARM_CATEGORY_SEXUALLY_EXPLICIT": "露骨色情内容",
+        "HARM_CATEGORY_DANGEROUS_CONTENT": "危险内容"
+      },
+      "thresholds": {
+        "OFF": "关闭",
+        "BLOCK_NONE": "不拦截",
+        "BLOCK_ONLY_HIGH": "仅拦截高风险",
+        "BLOCK_MEDIUM_AND_ABOVE": "拦截中及以上",
+        "BLOCK_LOW_AND_ABOVE": "拦截低及以上"
+      }
     },
     "models": {
       "configured": "已配置模型",

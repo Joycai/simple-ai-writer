@@ -248,6 +248,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
         baseUrl: provider.baseUrl,
         apiKey,
         standard: provider.apiStandard,
+        safetySettings: provider.safetySettings,
         modelId: model.modelId,
         messages: [
           { role: "system", content: systemPrompt },

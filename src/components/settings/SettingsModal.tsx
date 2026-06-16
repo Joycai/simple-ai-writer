@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Pencil } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
-import type { ApiStandard, ModelType } from "../../lib/aiConfig";
+import type { ApiStandard, ModelType, GeminiSafetySettings, GeminiHarmCategory } from "../../lib/aiConfig";
+import { GEMINI_HARM_CATEGORIES, GEMINI_THRESHOLD_LEVELS, defaultSafetySettings } from "../../lib/aiConfig";
 import styles from "./SettingsModal.module.css";
 
 const BUILTIN_PROMPTS_CONFIG = [
@@ -20,6 +21,49 @@ const STANDARD_ENDPOINTS: Record<ApiStandard, string> = {
   openai_compat: "",
 };
 
+// ─── Gemini safety filtering editor ───────────────────────────────────────────
+
+function GeminiSafetyEditor({
+  value,
+  onChange,
+}: {
+  value: GeminiSafetySettings;
+  onChange: (next: GeminiSafetySettings) => void;
+}) {
+  const { t } = useTranslation();
+  const maxIdx = GEMINI_THRESHOLD_LEVELS.length - 1;
+
+  return (
+    <div className={styles.fieldGroup}>
+      <label className={styles.label}>{t("aiConfig.providers.safetyLabel")}</label>
+      <div className={styles.safetyHint}>{t("aiConfig.providers.safetyHint")}</div>
+      <div className={styles.safetyList}>
+        {GEMINI_HARM_CATEGORIES.map((category: GeminiHarmCategory) => {
+          const threshold = value[category] ?? "BLOCK_NONE";
+          const idx = Math.max(0, GEMINI_THRESHOLD_LEVELS.indexOf(threshold));
+          return (
+            <div key={category} className={styles.safetyRow}>
+              <span className={styles.safetyCategory}>{t(`aiConfig.providers.harmCategories.${category}`)}</span>
+              <input
+                type="range"
+                className={styles.safetySlider}
+                min={0}
+                max={maxIdx}
+                step={1}
+                value={idx}
+                onChange={(e) =>
+                  onChange({ ...value, [category]: GEMINI_THRESHOLD_LEVELS[Number(e.target.value)] })
+                }
+              />
+              <span className={styles.safetyThreshold}>{t(`aiConfig.providers.thresholds.${threshold}`)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Providers Tab ────────────────────────────────────────────────────────────
 
 function ProvidersTab() {
@@ -31,14 +75,14 @@ function ProvidersTab() {
   ];
 
   const { providers, addProvider, updateProvider, removeProvider, getApiKey } = useAiStore();
-  const [form, setForm] = useState({ name: "", baseUrl: STANDARD_ENDPOINTS.openai, apiStandard: "openai" as ApiStandard, apiKey: "" });
+  const [form, setForm] = useState({ name: "", baseUrl: STANDARD_ENDPOINTS.openai, apiStandard: "openai" as ApiStandard, apiKey: "", safetySettings: defaultSafetySettings() });
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const resetForm = () => {
-    setForm({ name: "", baseUrl: STANDARD_ENDPOINTS.openai, apiStandard: "openai", apiKey: "" });
+    setForm({ name: "", baseUrl: STANDARD_ENDPOINTS.openai, apiStandard: "openai", apiKey: "", safetySettings: defaultSafetySettings() });
     setEditingId(null);
     setShowForm(false);
     setError(null);
@@ -48,7 +92,7 @@ function ProvidersTab() {
     const p = providers.find((x) => x.id === id);
     if (!p) return;
     const key = await getApiKey(id) ?? "";
-    setForm({ name: p.name, baseUrl: p.baseUrl, apiStandard: p.apiStandard, apiKey: key });
+    setForm({ name: p.name, baseUrl: p.baseUrl, apiStandard: p.apiStandard, apiKey: key, safetySettings: p.safetySettings ?? defaultSafetySettings() });
     setEditingId(id);
     setShowForm(true);
     setError(null);
@@ -59,15 +103,16 @@ function ProvidersTab() {
     setSaving(true);
     setError(null);
     try {
+      const safetySettings = form.apiStandard === "gemini" ? form.safetySettings : undefined;
       if (editingId) {
         const existing = providers.find((x) => x.id === editingId)!;
         await updateProvider(
-          { ...existing, name: form.name, baseUrl: form.baseUrl, apiStandard: form.apiStandard },
+          { ...existing, name: form.name, baseUrl: form.baseUrl, apiStandard: form.apiStandard, safetySettings },
           form.apiKey,
         );
       } else {
         await addProvider(
-          { name: form.name, baseUrl: form.baseUrl, apiStandard: form.apiStandard },
+          { name: form.name, baseUrl: form.baseUrl, apiStandard: form.apiStandard, safetySettings },
           form.apiKey,
         );
       }
@@ -130,6 +175,12 @@ function ProvidersTab() {
             <input className={styles.input} type="password" placeholder="sk-…" value={form.apiKey}
               onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
           </div>
+          {form.apiStandard === "gemini" && (
+            <GeminiSafetyEditor
+              value={form.safetySettings}
+              onChange={(safetySettings) => setForm({ ...form, safetySettings })}
+            />
+          )}
           <div className={styles.formActions}>
             <button className={styles.btnSecondary} onClick={resetForm}>{t("aiConfig.providers.cancel")}</button>
             <button className={styles.btnPrimary} onClick={handleSave}

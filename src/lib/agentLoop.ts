@@ -4,7 +4,7 @@
  * MAX_ROUNDS caps the loop to prevent unbounded tool calls.
  */
 
-import type { ApiStandard } from "./aiConfig";
+import type { ApiStandard, GeminiSafetySettings } from "./aiConfig";
 import type { ToolDefinition, StreamMessage, AccumulatedToolCall, ContentPart } from "./aiClient";
 import { streamCompletion } from "./aiClient";
 import type { ToolCall, ToolResult } from "./tools";
@@ -31,6 +31,8 @@ export interface AgentLoopOptions {
   apiKey: string;
   standard: ApiStandard;
   modelId: string;
+  /** Gemini-only: per-request safety filter thresholds. */
+  safetySettings?: GeminiSafetySettings;
   systemPrompt: string;
   /** The assembled user message content (from RAG) for the first turn */
   initialUserMessage: string;
@@ -75,6 +77,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<void> {
       standard: opts.standard,
       modelId: opts.modelId,
       messages: history,
+      safetySettings: opts.safetySettings,
       tools: isLastRound ? undefined : opts.tools,
       signal: opts.signal,
       onChunk: (chunk) => {

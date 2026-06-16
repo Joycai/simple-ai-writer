@@ -7,7 +7,7 @@
 import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
 import { readFile as readTextFile, readDir } from "./fileio";
 import i18n from "../i18n";
-import type { ApiStandard } from "./aiConfig";
+import type { ApiStandard, GeminiSafetySettings } from "./aiConfig";
 import type { CategoryId } from "./lore";
 
 export type ProjectFileKind = "image" | "text";
@@ -101,6 +101,7 @@ export async function generateLore(opts: {
   baseUrl: string;
   apiKey: string;
   standard: ApiStandard;
+  safetySettings?: GeminiSafetySettings;
   modelId: string;
   onProgress: (text: string) => void;
   signal?: AbortSignal;
@@ -161,6 +162,7 @@ export async function generateLore(opts: {
     baseUrl: opts.baseUrl,
     apiKey: opts.apiKey,
     standard: opts.standard,
+    safetySettings: opts.safetySettings,
     modelId: opts.modelId,
     messages: [
       { role: "system", content: opts.systemPrompt ?? i18n.t("ai.instructions.lore") },

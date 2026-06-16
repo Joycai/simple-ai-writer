@@ -3,11 +3,56 @@ import Database from "@tauri-apps/plugin-sql";
 export type ApiStandard = "openai" | "openai_compat" | "gemini";
 export type ModelType = "text" | "multimodal" | "image" | "video";
 
+// ─── Gemini safety filtering (per-request) ────────────────────────────────────
+// Docs: https://ai.google.dev/gemini-api/docs/safety-settings#safety-filtering-per-request
+
+/** Harm categories that can be configured per request. */
+export const GEMINI_HARM_CATEGORIES = [
+  "HARM_CATEGORY_HARASSMENT",
+  "HARM_CATEGORY_HATE_SPEECH",
+  "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+  "HARM_CATEGORY_DANGEROUS_CONTENT",
+] as const;
+
+export type GeminiHarmCategory = (typeof GEMINI_HARM_CATEGORIES)[number];
+
+/** Block thresholds, ordered from most permissive (index 0) to strictest. */
+export const GEMINI_THRESHOLD_LEVELS = [
+  "OFF",
+  "BLOCK_NONE",
+  "BLOCK_ONLY_HIGH",
+  "BLOCK_MEDIUM_AND_ABOVE",
+  "BLOCK_LOW_AND_ABOVE",
+] as const;
+
+export type GeminiHarmThreshold = (typeof GEMINI_THRESHOLD_LEVELS)[number];
+
+export type GeminiSafetySettings = Partial<Record<GeminiHarmCategory, GeminiHarmThreshold>>;
+
+/** Default: don't block — this is a creative-writing tool that values freedom. */
+export function defaultSafetySettings(): GeminiSafetySettings {
+  return Object.fromEntries(
+    GEMINI_HARM_CATEGORIES.map((c) => [c, "BLOCK_NONE"] as const),
+  ) as GeminiSafetySettings;
+}
+
+/** Convert the stored record into the array shape the Gemini API expects. */
+export function toSafetySettingsArray(
+  s: GeminiSafetySettings | undefined,
+): { category: GeminiHarmCategory; threshold: GeminiHarmThreshold }[] {
+  if (!s) return [];
+  return GEMINI_HARM_CATEGORIES.flatMap((category) =>
+    s[category] ? [{ category, threshold: s[category]! }] : [],
+  );
+}
+
 export interface Provider {
   id: string;
   name: string;
   baseUrl: string;
   apiStandard: ApiStandard;
+  /** Gemini-only: per-request safety filter thresholds. */
+  safetySettings?: GeminiSafetySettings;
   createdAt: number;
 }
 
@@ -37,9 +82,16 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
       name TEXT NOT NULL,
       base_url TEXT NOT NULL,
       api_standard TEXT NOT NULL DEFAULT 'openai',
+      safety_settings TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     )
   `);
+
+  // Migration: add safety_settings to providers created before this column existed.
+  const providerCols = await db.select<{ name: string }[]>(`PRAGMA table_info(providers)`);
+  if (!providerCols.some((c) => c.name === "safety_settings")) {
+    await db.execute(`ALTER TABLE providers ADD COLUMN safety_settings TEXT`);
+  }
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS models (
@@ -103,15 +155,25 @@ export async function deleteKeyFromDb(
 
 export async function listProviders(db: Awaited<ReturnType<typeof Database.load>>): Promise<Provider[]> {
   const rows = await db.select<Record<string, unknown>[]>(
-    "SELECT id, name, base_url, api_standard, created_at FROM providers ORDER BY created_at ASC"
+    "SELECT id, name, base_url, api_standard, safety_settings, created_at FROM providers ORDER BY created_at ASC"
   );
   return rows.map((r) => ({
     id: r.id as string,
     name: r.name as string,
     baseUrl: r.base_url as string,
     apiStandard: r.api_standard as ApiStandard,
+    safetySettings: parseSafetySettings(r.safety_settings),
     createdAt: r.created_at as number,
   }));
+}
+
+function parseSafetySettings(raw: unknown): GeminiSafetySettings | undefined {
+  if (typeof raw !== "string" || !raw) return undefined;
+  try {
+    return JSON.parse(raw) as GeminiSafetySettings;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function saveProvider(
@@ -119,9 +181,9 @@ export async function saveProvider(
   p: Provider
 ): Promise<void> {
   await db.execute(
-    `INSERT OR REPLACE INTO providers (id, name, base_url, api_standard, created_at)
-     VALUES (?, ?, ?, ?, ?)`,
-    [p.id, p.name, p.baseUrl, p.apiStandard, p.createdAt]
+    `INSERT OR REPLACE INTO providers (id, name, base_url, api_standard, safety_settings, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [p.id, p.name, p.baseUrl, p.apiStandard, p.safetySettings ? JSON.stringify(p.safetySettings) : null, p.createdAt]
   );
 }
 
