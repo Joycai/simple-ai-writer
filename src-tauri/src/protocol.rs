@@ -1,7 +1,7 @@
 use std::fs;
-use std::path::PathBuf;
-use tauri::{Runtime, UriSchemeContext};
+use std::path::{Path, PathBuf};
 use tauri::http::{Request, Response};
+use tauri::{Runtime, UriSchemeContext};
 
 pub fn register_asset_protocol<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder.register_uri_scheme_protocol("ai-writer-asset", handle_asset_request)
@@ -46,8 +46,11 @@ fn handle_asset_request<R: Runtime>(
     }
 }
 
-fn mime_for_path(path: &PathBuf) -> Option<&'static str> {
-    let ext = path.extension().and_then(|e| e.to_str())?.to_ascii_lowercase();
+fn mime_for_path(path: &Path) -> Option<&'static str> {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())?
+        .to_ascii_lowercase();
     match ext.as_str() {
         "png" => Some("image/png"),
         "jpg" | "jpeg" => Some("image/jpeg"),
