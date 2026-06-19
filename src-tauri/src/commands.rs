@@ -1,6 +1,6 @@
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-use serde::{Deserialize, Serialize};
 use tauri::command;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -90,7 +90,12 @@ pub fn fs_read_dir(path: String) -> Result<Vec<FileNode>, String> {
             let is_dir = e.file_type().map(|t| t.is_dir()).unwrap_or(false);
             let name = e.file_name().to_string_lossy().to_string();
             let full_path = e.path().to_string_lossy().to_string();
-            FileNode { name, path: full_path, is_dir, children: None }
+            FileNode {
+                name,
+                path: full_path,
+                is_dir,
+                children: None,
+            }
         })
         .collect();
     entries.sort_by(|a, b| a.name.cmp(&b.name));
@@ -125,16 +130,19 @@ fn read_dir_inner(path: &Path, depth: u8) -> Result<Vec<FileNode>, String> {
             } else {
                 None
             };
-            FileNode { name, path: full_path, is_dir, children }
+            FileNode {
+                name,
+                path: full_path,
+                is_dir,
+                children,
+            }
         })
         .collect();
 
-    entries.sort_by(|a, b| {
-        match (a.is_dir, b.is_dir) {
-            (true, false) => std::cmp::Ordering::Less,
-            (false, true) => std::cmp::Ordering::Greater,
-            _ => a.name.cmp(&b.name),
-        }
+    entries.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.name.cmp(&b.name),
     });
 
     Ok(entries)

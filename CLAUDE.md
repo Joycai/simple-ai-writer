@@ -93,9 +93,11 @@ Load the relevant doc **before** working in that area — don't reconstruct it f
 - **[`docs/design-system.md`](docs/design-system.md)** — UI/visual spec & theming: design tokens, Apple-like aesthetic rules, animation/shadow/color/component patterns. **Read before building or restyling any UI.**
 - **[`docs/architecture.md`](docs/architecture.md)** — Subsystem deep-dives: DB schema, RAG, SSE streaming, secure key storage, export, Tauri IPC, file I/O, CodeMirror, capabilities, performance.
 - **[`docs/workflows.md`](docs/workflows.md)** — Recipes: add an AI task type / provider / language; modify lore format.
+- **[`docs/ci.md`](docs/ci.md)** — CI / PR quality gate: what the `CI` workflow checks (frontend type-check + build, Rust fmt/clippy/test/build), how to enforce it via branch protection, and how to run the same checks locally.
 
 ## Testing & Type Safety
 
 - TypeScript strict mode enabled (noUnusedLocals, noUnusedParameters, noFallthroughCasesInSwitch)
 - No test framework currently; tests welcome via PR
 - Frontend type-checks via `pnpm tsc --noEmit`
+- CI gate on PRs to `main` runs frontend (type-check + build) and Rust (fmt/clippy/test/build) — see [`docs/ci.md`](docs/ci.md)
