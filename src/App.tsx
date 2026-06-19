@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./styles/global.css";
 import { SideTabBar } from "./components/layout/SideTabBar";
 import { Sidebar } from "./components/layout/Sidebar";
@@ -29,13 +29,23 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const prevWidthRef = useRef(window.innerWidth);
   useEffect(() => {
+    // Apply the responsive default once on mount…
+    setSidebarCollapsed(window.innerWidth < COLLAPSE_SIDEBAR_BELOW);
+    setRightPanelCollapsed(window.innerWidth < COLLAPSE_RIGHT_BELOW);
+
+    // …then only force collapse/expand when the width *crosses* a breakpoint, so a
+    // manual toggle isn't clobbered on every resize tick.
     const onResize = () => {
       const w = window.innerWidth;
-      setSidebarCollapsed(w < COLLAPSE_SIDEBAR_BELOW);
-      setRightPanelCollapsed(w < COLLAPSE_RIGHT_BELOW);
+      const prev = prevWidthRef.current;
+      if (prev >= COLLAPSE_SIDEBAR_BELOW && w < COLLAPSE_SIDEBAR_BELOW) setSidebarCollapsed(true);
+      else if (prev < COLLAPSE_SIDEBAR_BELOW && w >= COLLAPSE_SIDEBAR_BELOW) setSidebarCollapsed(false);
+      if (prev >= COLLAPSE_RIGHT_BELOW && w < COLLAPSE_RIGHT_BELOW) setRightPanelCollapsed(true);
+      else if (prev < COLLAPSE_RIGHT_BELOW && w >= COLLAPSE_RIGHT_BELOW) setRightPanelCollapsed(false);
+      prevWidthRef.current = w;
     };
-    onResize();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -209,7 +209,12 @@ export function LoreImproveModal({ entity, onClose }: Props) {
         .filter((a): a is AttachedText => a.kind === "text")
         .map((a) => `--- ${a.file.name} ---\n${a.content}`);
 
-      const imageAttachments = attached.filter((a): a is AttachedImage => a.kind === "image");
+      // Only multimodal models can consume images; sending them to a text model
+      // either errors or is silently dropped, so omit them here.
+      const supportsImages = model.type === "multimodal";
+      const imageAttachments = supportsImages
+        ? attached.filter((a): a is AttachedImage => a.kind === "image")
+        : [];
 
       const systemPrompt = [
         "You are a lore writing assistant improving an existing lore entity document.",
@@ -327,7 +332,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
             <button className={styles.currentToggle} onClick={() => setShowCurrent((v) => !v)}>
               <ChevronDown size={13} className={`${styles.toggleChevron} ${showCurrent ? styles.toggleChevronOpen : ""}`} />
               <span>{t("lore.improve.currentContent")}</span>
-              <span className={styles.currentBytes}>{currentContent.length} chars</span>
+              <span className={styles.currentBytes}>{t("lore.improve.charCount", { count: currentContent.length })}</span>
             </button>
             {showCurrent && (
               <pre className={styles.currentPre}>{currentContent || "(empty)"}</pre>

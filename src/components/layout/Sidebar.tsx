@@ -46,7 +46,7 @@ export function Sidebar() {
             {activeSideTab === "lore" && <LorePanel />}
             {activeSideTab === "search" && (
               <div style={{ color: "var(--color-text-muted)", fontSize: "var(--font-size-xs)", padding: "var(--space-3)" }}>
-                Search — coming soon
+                {t("sidebar.searchComingSoon")}
               </div>
             )}
           </>

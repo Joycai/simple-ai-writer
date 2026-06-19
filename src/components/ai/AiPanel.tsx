@@ -469,8 +469,8 @@ export function AiPanel() {
           {/* Token usage */}
           {usage && (
             <div className={styles.usageBar}>
-              <span>{t("ai.panel.inputTokens", { count: usage.inputTokens.toLocaleString() })}</span>
-              <span>{t("ai.panel.outputTokens", { count: usage.outputTokens.toLocaleString() })}</span>
+              <span>{t("ai.panel.inputTokens", { tokens: usage.inputTokens.toLocaleString() })}</span>
+              <span>{t("ai.panel.outputTokens", { tokens: usage.outputTokens.toLocaleString() })}</span>
               <span>≈ ${usage.cost.toFixed(5)}</span>
             </div>
           )}

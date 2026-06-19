@@ -28,15 +28,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   saveTimer: null,
 
   loadFile: async (path) => {
+    // Flush any pending autosave for the previously open file before switching.
+    // Otherwise edits made within the debounce window are lost: the stale timer
+    // would later fire and write the *new* file's content. Mirrors loreStore.selectFile.
+    const { saveTimer, isDirty, filePath: prev } = get();
+    if (saveTimer) clearTimeout(saveTimer);
+    if (isDirty && prev && prev !== path) await get().saveNow();
+
     try {
       const content = await readFile(path);
       const headings = extractHeadings(content);
-      set({ content, filePath: path, headings, isDirty: false });
+      set({ content, filePath: path, headings, isDirty: false, saveTimer: null });
       const words = countWords(content);
       useProjectStore.getState().setWordCount(words);
       useProjectStore.getState().setCharCount(content.length);
     } catch {
-      set({ content: "", filePath: path, headings: [], isDirty: false });
+      set({ content: "", filePath: path, headings: [], isDirty: false, saveTimer: null });
     }
   },
 
@@ -60,7 +67,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const { content, filePath } = get();
     if (!filePath) return;
     await writeFile(filePath, content);
-    set({ isDirty: false });
+    set({ isDirty: false, saveTimer: null });
   },
 
   setViewMode: (mode) => set({ viewMode: mode }),

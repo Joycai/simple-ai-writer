@@ -20,15 +20,25 @@ fn handle_asset_request<R: Runtime>(
     let decoded = percent_decode(&path_str);
     let path = PathBuf::from(&decoded);
 
-    match fs::read(&path) {
-        Ok(bytes) => {
-            let mime = mime_for_path(&path);
-            Response::builder()
-                .header("Content-Type", mime)
-                .header("Access-Control-Allow-Origin", "*")
-                .body(bytes)
-                .unwrap()
+    // This protocol only ever serves lore avatar images. Restrict it to known image
+    // extensions so it can't be coerced (e.g. via a crafted markdown image URL) into
+    // reading arbitrary files off disk.
+    let mime = match mime_for_path(&path) {
+        Some(m) => m,
+        None => {
+            return Response::builder()
+                .status(403)
+                .body(b"Forbidden".to_vec())
+                .unwrap();
         }
+    };
+
+    match fs::read(&path) {
+        Ok(bytes) => Response::builder()
+            .header("Content-Type", mime)
+            .header("Access-Control-Allow-Origin", "*")
+            .body(bytes)
+            .unwrap(),
         Err(_) => Response::builder()
             .status(404)
             .body(b"Not found".to_vec())
@@ -36,14 +46,15 @@ fn handle_asset_request<R: Runtime>(
     }
 }
 
-fn mime_for_path(path: &PathBuf) -> &'static str {
-    match path.extension().and_then(|e| e.to_str()) {
-        Some("png") => "image/png",
-        Some("jpg") | Some("jpeg") => "image/jpeg",
-        Some("gif") => "image/gif",
-        Some("webp") => "image/webp",
-        Some("svg") => "image/svg+xml",
-        _ => "application/octet-stream",
+fn mime_for_path(path: &PathBuf) -> Option<&'static str> {
+    let ext = path.extension().and_then(|e| e.to_str())?.to_ascii_lowercase();
+    match ext.as_str() {
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "gif" => Some("image/gif"),
+        "webp" => Some("image/webp"),
+        "svg" => Some("image/svg+xml"),
+        _ => None,
     }
 }
 

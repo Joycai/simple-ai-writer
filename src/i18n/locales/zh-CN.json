@@ -5,7 +5,8 @@
   "sidebar": {
     "files": "文件",
     "lore": "设定库",
-    "search": "搜索"
+    "search": "搜索",
+    "searchComingSoon": "搜索 — 即将推出"
   },
   "rightPanel": {
     "outline": "大纲",
@@ -97,7 +98,7 @@
       "selectModel": "选择模型…",
       "defaultSystemPrompt": "默认系统提示…",
       "noProvider": "请先在 AI 配置中添加供应商和模型",
-      "selectedChars": "已选中 {count} 字",
+      "selectedChars": "已选中 {{count}} 字",
       "customInstruction": "输入自定义指令…",
       "cancel": "取消",
       "send": "发送",
@@ -117,8 +118,8 @@
       "generatedOutput": "生成结果",
       "clear": "清除",
       "insertToDoc": "插入文档",
-      "inputTokens": "输入 {count} tokens",
-      "outputTokens": "输出 {count} tokens"
+      "inputTokens": "输入 {{tokens}} tokens",
+      "outputTokens": "输出 {{tokens}} tokens"
     },
     "agent": {
       "stepsTitle": "Agent 步骤",
@@ -155,6 +156,7 @@
       "presetsLabel": "快速选择",
       "testConnection": "测试连接",
       "testing": "测试中…",
+      "testMissingFields": "请填写 Base URL 和 API Key",
       "cancel": "取消",
       "save": "保存",
       "saving": "保存中…",
@@ -209,6 +211,7 @@
       "add": "添加",
       "addTitle": "新建 Prompt",
       "nameLabel": "名称",
+      "namePlaceholder": "Prompt 名称…",
       "sceneLabel": "场景",
       "contentLabel": "内容",
       "cancel": "取消",
@@ -289,6 +292,7 @@
       "atHint": "输入 @ 可引用其他设定条目",
       "instructionPlaceholder": "例如：补充更多背景故事，扩展技能描述，修正前后矛盾…",
       "currentContent": "当前 index.md",
+      "charCount": "{{count}} 字",
       "generating": "生成中…",
       "resultLabel": "优化结果（可在应用前编辑）",
       "cancel": "取消",

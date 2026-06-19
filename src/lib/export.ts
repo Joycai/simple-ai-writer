@@ -7,6 +7,12 @@
 
 import { renderMarkdown } from "./markdown";
 import { writeFile } from "./fileio";
+import i18n from "../i18n";
+
+/** BCP-47 lang attribute for exported documents, following the active UI language. */
+function docLang(): string {
+  return i18n.language?.startsWith("zh") ? "zh" : "en";
+}
 
 // ─── Markdown ─────────────────────────────────────────────────────────────────
 
@@ -46,7 +52,7 @@ const HTML_CSS = `
 export async function exportHtml(source: string, title: string, savePath: string): Promise<void> {
   const body = renderMarkdown(source);
   const html = `<!DOCTYPE html>
-<html lang="zh">
+<html lang="${docLang()}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -65,7 +71,7 @@ ${body}
 export function exportPdf(source: string, title: string): void {
   const body = renderMarkdown(source);
   const html = `<!DOCTYPE html>
-<html lang="zh">
+<html lang="${docLang()}">
 <head>
 <meta charset="utf-8">
 <title>${escapeHtml(title)}</title>

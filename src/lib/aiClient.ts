@@ -96,58 +96,72 @@ async function streamOpenAI(opts: StreamOptions): Promise<void> {
   let outputTokens = 0;
   // Index-keyed map for accumulating streamed tool_calls across SSE chunks
   const toolCallMap = new Map<number, { id: string; name: string; args: string }>();
+  // Carry an incomplete trailing line across reads: a single SSE line can be split
+  // across network chunks, and parsing the halves would silently drop tokens/usage.
+  let buffer = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const text = decoder.decode(value, { stream: true });
-    for (const line of text.split("\n")) {
-      const trimmed = line.trim();
-      if (!trimmed || !trimmed.startsWith("data:")) continue;
-      const data = trimmed.slice(5).trim();
-      if (data === "[DONE]") {
-        if (toolCallMap.size > 0) {
-          const toolCalls: AccumulatedToolCall[] = [...toolCallMap.entries()]
-            .sort(([a], [b]) => a - b)
-            .map(([index, tc]) => ({ index, id: tc.id, name: tc.name, arguments: tc.args }));
-          opts.onChunk({ toolCalls });
-        }
-        opts.onChunk({ done: true, inputTokens, outputTokens });
-        return;
-      }
-      try {
-        const json = JSON.parse(data);
-        if (json.usage) {
-          inputTokens = json.usage.prompt_tokens ?? 0;
-          outputTokens = json.usage.completion_tokens ?? 0;
-        }
-        const delta = json.choices?.[0]?.delta;
-        if (delta?.content) opts.onChunk({ text: delta.content });
-        // Accumulate tool_calls across partial SSE chunks
-        if (delta?.tool_calls && Array.isArray(delta.tool_calls)) {
-          for (const partial of delta.tool_calls as Array<{
-            index?: number; id?: string;
-            function?: { name?: string; arguments?: string };
-          }>) {
-            const idx = partial.index ?? 0;
-            if (!toolCallMap.has(idx)) toolCallMap.set(idx, { id: "", name: "", args: "" });
-            const entry = toolCallMap.get(idx)!;
-            if (partial.id) entry.id += partial.id;
-            if (partial.function?.name) entry.name += partial.function.name;
-            if (partial.function?.arguments) entry.args += partial.function.arguments;
-          }
-        }
-      } catch {
-        // ignore malformed SSE lines
-      }
-    }
-  }
-  if (toolCallMap.size > 0) {
+  const emitToolCalls = () => {
+    if (toolCallMap.size === 0) return;
     const toolCalls: AccumulatedToolCall[] = [...toolCallMap.entries()]
       .sort(([a], [b]) => a - b)
       .map(([index, tc]) => ({ index, id: tc.id, name: tc.name, arguments: tc.args }));
     opts.onChunk({ toolCalls });
+  };
+
+  const parseData = (data: string) => {
+    try {
+      const json = JSON.parse(data);
+      if (json.usage) {
+        inputTokens = json.usage.prompt_tokens ?? 0;
+        outputTokens = json.usage.completion_tokens ?? 0;
+      }
+      const delta = json.choices?.[0]?.delta;
+      if (delta?.content) opts.onChunk({ text: delta.content });
+      // Accumulate tool_calls across partial SSE chunks
+      if (delta?.tool_calls && Array.isArray(delta.tool_calls)) {
+        for (const partial of delta.tool_calls as Array<{
+          index?: number; id?: string;
+          function?: { name?: string; arguments?: string };
+        }>) {
+          const idx = partial.index ?? 0;
+          if (!toolCallMap.has(idx)) toolCallMap.set(idx, { id: "", name: "", args: "" });
+          const entry = toolCallMap.get(idx)!;
+          if (partial.id) entry.id += partial.id;
+          if (partial.function?.name) entry.name += partial.function.name;
+          if (partial.function?.arguments) entry.args += partial.function.arguments;
+        }
+      }
+    } catch {
+      // ignore malformed SSE lines
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? ""; // keep the last (possibly incomplete) line for next read
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith("data:")) continue;
+      const data = trimmed.slice(5).trim();
+      if (data === "[DONE]") {
+        emitToolCalls();
+        opts.onChunk({ done: true, inputTokens, outputTokens });
+        return;
+      }
+      parseData(data);
+    }
   }
+
+  // Stream ended without a [DONE] sentinel — flush any buffered final line.
+  const tail = buffer.trim();
+  if (tail.startsWith("data:")) {
+    const data = tail.slice(5).trim();
+    if (data !== "[DONE]") parseData(data);
+  }
+  emitToolCalls();
   opts.onChunk({ done: true, inputTokens, outputTokens });
 }
 
@@ -226,8 +240,12 @@ function convertToGeminiContents(messages: StreamMessage[]): GeminiContent[] {
   return contents;
 }
 
+/** Gemini API base used when a provider hasn't configured a custom endpoint. */
+const DEFAULT_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
+
 async function streamGemini(opts: StreamOptions): Promise<void> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${opts.modelId}:streamGenerateContent?key=${opts.apiKey}&alt=sse`;
+  const base = (opts.baseUrl || DEFAULT_GEMINI_BASE).replace(/\/$/, "");
+  const url = `${base}/models/${opts.modelId}:streamGenerateContent?key=${opts.apiKey}&alt=sse`;
 
   const systemMsg = opts.messages.find((m) => m.role === "system");
   const nonSystemMsgs = opts.messages.filter((m) => m.role !== "system");
@@ -279,56 +297,66 @@ async function streamGemini(opts: StreamOptions): Promise<void> {
   // so they can be echoed back verbatim in subsequent turns — required by thinking models.
   const geminiAllModelParts: unknown[] = [];
 
+  // Carry an incomplete trailing line across reads: a single SSE line can be split
+  // across network chunks, and parsing the halves would silently drop content.
+  let buffer = "";
+
+  const processLine = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("data:")) return;
+    let json: Record<string, unknown>;
+    try {
+      json = JSON.parse(trimmed.slice(5).trim()) as Record<string, unknown>;
+    } catch {
+      return; // skip malformed SSE lines
+    }
+    if (json.error) {
+      const msg = (json.error as { message?: string }).message ?? JSON.stringify(json.error);
+      throw new Error(`Gemini: ${msg}`);
+    }
+    const blockReason = (json.promptFeedback as { blockReason?: string } | undefined)?.blockReason;
+    if (blockReason) {
+      throw new Error(`Gemini blocked this request (${blockReason}). The content may have triggered a safety filter — try a different model or provider.`);
+    }
+    const rawParts: unknown[] =
+      (json.candidates as Array<{ content?: { parts?: unknown[] } }> | undefined)?.[0]?.content?.parts ?? [];
+    const parts = rawParts as Array<{
+      text?: string;
+      thought?: boolean;
+      thoughtSignature?: string;
+      functionCall?: { name: string; args?: Record<string, unknown> };
+    }>;
+    for (const part of parts) {
+      geminiAllModelParts.push(part);
+      if (part.text && !part.thought) {
+        opts.onChunk({ text: part.text });
+      } else if (part.functionCall) {
+        // Gemini sends complete functionCall objects (not streamed fragments)
+        geminiToolCalls.push({
+          index: geminiToolCalls.length,
+          id: `gtc_${Date.now()}_${geminiToolCalls.length}`,
+          name: part.functionCall.name,
+          arguments: JSON.stringify(part.functionCall.args ?? {}),
+        });
+      }
+    }
+    const usage = json.usageMetadata as { promptTokenCount?: number; candidatesTokenCount?: number } | undefined;
+    if (usage) {
+      inputTokens = usage.promptTokenCount ?? 0;
+      outputTokens = usage.candidatesTokenCount ?? 0;
+    }
+  };
+
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    const text = decoder.decode(value, { stream: true });
-    for (const line of text.split("\n")) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith("data:")) continue;
-      let json: Record<string, unknown>;
-      try {
-        json = JSON.parse(trimmed.slice(5).trim()) as Record<string, unknown>;
-      } catch {
-        continue; // skip malformed SSE lines
-      }
-      if (json.error) {
-        const msg = (json.error as { message?: string }).message ?? JSON.stringify(json.error);
-        throw new Error(`Gemini: ${msg}`);
-      }
-      const blockReason = (json.promptFeedback as { blockReason?: string } | undefined)?.blockReason;
-      if (blockReason) {
-        throw new Error(`Gemini blocked this request (${blockReason}). The content may have triggered a safety filter — try a different model or provider.`);
-      }
-      const rawParts: unknown[] =
-        (json.candidates as Array<{ content?: { parts?: unknown[] } }> | undefined)?.[0]?.content?.parts ?? [];
-      const parts = rawParts as Array<{
-        text?: string;
-        thought?: boolean;
-        thoughtSignature?: string;
-        functionCall?: { name: string; args?: Record<string, unknown> };
-      }>;
-      for (const part of parts) {
-        geminiAllModelParts.push(part);
-        if (part.text && !part.thought) {
-          opts.onChunk({ text: part.text });
-        } else if (part.functionCall) {
-          // Gemini sends complete functionCall objects (not streamed fragments)
-          geminiToolCalls.push({
-            index: geminiToolCalls.length,
-            id: `gtc_${Date.now()}_${geminiToolCalls.length}`,
-            name: part.functionCall.name,
-            arguments: JSON.stringify(part.functionCall.args ?? {}),
-          });
-        }
-      }
-      const usage = json.usageMetadata as { promptTokenCount?: number; candidatesTokenCount?: number } | undefined;
-      if (usage) {
-        inputTokens = usage.promptTokenCount ?? 0;
-        outputTokens = usage.candidatesTokenCount ?? 0;
-      }
-    }
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? ""; // keep the last (possibly incomplete) line for next read
+    for (const line of lines) processLine(line);
   }
+  // Flush any buffered final line that arrived without a trailing newline.
+  if (buffer.trim()) processLine(buffer);
 
   if (geminiToolCalls.length > 0) {
     opts.onChunk({ toolCalls: geminiToolCalls, _geminiModelParts: geminiAllModelParts });

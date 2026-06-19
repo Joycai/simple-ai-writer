@@ -191,9 +191,14 @@ setAttached((prev) => [...prev, { kind: "text", file, content }]);
 
     try {
       const loreScenePrompt = prompts.find((p) => p.scene === "lore");
+      // Only multimodal models can consume images; sending them to a text model
+      // either errors or is silently dropped, so omit them here.
+      const supportsImages = model.type === "multimodal";
       const result = await generateLore({
         description,
-        images: attached.filter((a): a is AttachedImage => a.kind === "image").map((a) => ({ dataUrl: a.dataUrl })),
+        images: supportsImages
+          ? attached.filter((a): a is AttachedImage => a.kind === "image").map((a) => ({ dataUrl: a.dataUrl }))
+          : [],
         textAttachments: attached.filter((a): a is AttachedText => a.kind === "text").map((a) => ({ name: a.file.name, content: a.content })),
         baseUrl: provider.baseUrl,
         apiKey,

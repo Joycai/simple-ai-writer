@@ -29,12 +29,16 @@ export function CodeEditor({ value, onChange }: Props) {
 
   // Update content when external value changes (e.g. file switch)
   const externalValueRef = useRef(value);
+  // True while we push an external value into the doc; prevents the resulting
+  // docChanged event from being reported back as a user edit (which would flip
+  // the file to "dirty" and schedule a redundant save on every file open).
+  const isSyncingRef = useRef(false);
 
   useEffect(() => {
     if (!containerRef.current) return;
 
     const updateListener = EditorView.updateListener.of((update) => {
-      if (update.docChanged) {
+      if (update.docChanged && !isSyncingRef.current) {
         const newValue = update.state.doc.toString();
         onChangeRef.current(newValue);
       }
@@ -83,9 +87,11 @@ export function CodeEditor({ value, onChange }: Props) {
     const current = view.state.doc.toString();
     if (current !== value && externalValueRef.current !== value) {
       externalValueRef.current = value;
+      isSyncingRef.current = true;
       view.dispatch({
         changes: { from: 0, to: current.length, insert: value },
       });
+      isSyncingRef.current = false;
     }
   }, [value]);
 
