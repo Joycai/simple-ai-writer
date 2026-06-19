@@ -10,6 +10,23 @@ import {
 import { useLoreStore } from "./loreStore";
 import { useEditorStore } from "./editorStore";
 
+/** Persist any unsaved editor/lore edits and cancel their pending autosave timers. */
+async function flushDirtyDocuments(): Promise<void> {
+  const editor = useEditorStore.getState();
+  if (editor.saveTimer) clearTimeout(editor.saveTimer);
+  if (editor.isDirty && editor.filePath) await editor.saveNow();
+
+  const lore = useLoreStore.getState();
+  if (lore.saveTimer) clearTimeout(lore.saveTimer);
+  if (lore.isDirty && lore.selectedEntity && lore.selectedFile) await lore.saveNow();
+}
+
+/** Reset the in-memory editor + lore state so stale content can't leak across projects. */
+function resetDocuments(): void {
+  useEditorStore.setState({ content: "", filePath: null, headings: [], isDirty: false, saveTimer: null });
+  useLoreStore.setState({ index: {}, selectedEntity: null, selectedFile: null, fileContent: "", isDirty: false, saveTimer: null });
+}
+
 interface ProjectState {
   projectPath: string | null;
   activeFilePath: string | null;
@@ -38,12 +55,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const path = await openProjectFolder();
     if (!path) return;
 
+    // Persist unsaved edits from the currently open project before switching away.
+    await flushDirtyDocuments();
+
     set({ isLoading: true });
     try {
       await scaffoldProject(path);
       resetDb();
+      resetDocuments();
       await getDb(path);
-      set({ projectPath: path, activeFilePath: null, fileTree: [] });
+      set({ projectPath: path, activeFilePath: null, fileTree: [], wordCount: 0, charCount: 0 });
       await get().refreshFileTree();
       await useLoreStore.getState().scanProject(path);
     } finally {
@@ -52,16 +73,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   closeProject: async () => {
-    const editor = useEditorStore.getState();
-    if (editor.isDirty && editor.filePath) await editor.saveNow();
-    if (editor.saveTimer) clearTimeout(editor.saveTimer);
-    useEditorStore.setState({ content: "", filePath: null, headings: [], isDirty: false, saveTimer: null });
-
-    const lore = useLoreStore.getState();
-    if (lore.isDirty && lore.selectedEntity && lore.selectedFile) await lore.saveNow();
-    if (lore.saveTimer) clearTimeout(lore.saveTimer);
-    useLoreStore.setState({ index: {}, selectedEntity: null, selectedFile: null, fileContent: "", isDirty: false, saveTimer: null });
-
+    await flushDirtyDocuments();
+    resetDocuments();
     resetDb();
     set({ projectPath: null, activeFilePath: null, fileTree: [], wordCount: 0, charCount: 0 });
   },

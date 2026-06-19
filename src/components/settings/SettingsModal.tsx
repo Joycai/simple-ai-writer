@@ -166,7 +166,7 @@ function ProvidersTab() {
 
   const handleTest = async () => {
     if (!form.baseUrl || !form.apiKey) {
-      setTestResult({ ok: false, message: "Base URL and API key are required" });
+      setTestResult({ ok: false, message: t("aiConfig.providers.testMissingFields") });
       return;
     }
     setTesting(true);
@@ -597,7 +597,7 @@ function PromptsTab() {
           <div className={styles.formRow}>
             <div className={styles.fieldGroup}>
               <label className={styles.label}>{t("aiConfig.prompts.nameLabel")}</label>
-              <input className={styles.input} placeholder={t("lore.generator.placeholder")} value={form.name}
+              <input className={styles.input} placeholder={t("aiConfig.prompts.namePlaceholder")} value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div className={styles.fieldGroup}>

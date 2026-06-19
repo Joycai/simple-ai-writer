@@ -18,7 +18,9 @@ export function Preview({ source }: Props) {
     if (mermaidBlocks.length === 0) return;
 
     import("mermaid").then(({ default: mermaid }) => {
-      mermaid.initialize({ startOnLoad: false, theme: "dark", securityLevel: "loose" });
+      // Follow the app theme so diagrams aren't dark-on-white in light mode.
+      const isLight = document.documentElement.getAttribute("data-theme") === "light";
+      mermaid.initialize({ startOnLoad: false, theme: isLight ? "default" : "dark", securityLevel: "loose" });
       mermaidBlocks.forEach((block, i) => {
         const pre = block.parentElement;
         if (!pre) return;

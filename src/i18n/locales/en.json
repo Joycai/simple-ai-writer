@@ -5,7 +5,8 @@
   "sidebar": {
     "files": "Files",
     "lore": "Lore",
-    "search": "Search"
+    "search": "Search",
+    "searchComingSoon": "Search — coming soon"
   },
   "rightPanel": {
     "outline": "Outline",
@@ -97,7 +98,7 @@
       "selectModel": "Select model…",
       "defaultSystemPrompt": "Default system prompt…",
       "noProvider": "Please add providers and models in AI Config first",
-      "selectedChars": "Selected {count} characters",
+      "selectedChars": "Selected {{count}} characters",
       "customInstruction": "Enter custom instruction…",
       "cancel": "Cancel",
       "send": "Send",
@@ -117,8 +118,8 @@
       "generatedOutput": "Generated Output",
       "clear": "Clear",
       "insertToDoc": "Insert to Document",
-      "inputTokens": "Input {count} tokens",
-      "outputTokens": "Output {count} tokens"
+      "inputTokens": "Input {{tokens}} tokens",
+      "outputTokens": "Output {{tokens}} tokens"
     },
     "agent": {
       "stepsTitle": "Agent Steps",
@@ -155,6 +156,7 @@
       "presetsLabel": "Quick Select",
       "testConnection": "Test Connection",
       "testing": "Testing…",
+      "testMissingFields": "Base URL and API key are required",
       "cancel": "Cancel",
       "save": "Save",
       "saving": "Saving…",
@@ -209,6 +211,7 @@
       "add": "Add",
       "addTitle": "Add New Prompt",
       "nameLabel": "Name",
+      "namePlaceholder": "Prompt name…",
       "sceneLabel": "Scene",
       "contentLabel": "Content",
       "cancel": "Cancel",
@@ -289,6 +292,7 @@
       "atHint": "type @ to reference another lore entry",
       "instructionPlaceholder": "e.g. Add more backstory, expand her abilities section, fix inconsistencies…",
       "currentContent": "Current index.md",
+      "charCount": "{{count}} chars",
       "generating": "Generating…",
       "resultLabel": "Improved content (editable before applying)",
       "cancel": "Cancel",

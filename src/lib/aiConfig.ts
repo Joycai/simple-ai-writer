@@ -3,6 +3,9 @@ import Database from "@tauri-apps/plugin-sql";
 export type ApiStandard = "openai" | "openai_compat" | "gemini";
 export type ModelType = "text" | "multimodal" | "image" | "video";
 
+/** Gemini API base used when a provider hasn't configured a custom endpoint. */
+const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
+
 // ─── Gemini safety filtering (per-request) ────────────────────────────────────
 // Docs: https://ai.google.dev/gemini-api/docs/safety-settings#safety-filtering-per-request
 
@@ -191,6 +194,11 @@ export async function deleteProvider(
   db: Awaited<ReturnType<typeof Database.load>>,
   id: string
 ): Promise<void> {
+  // SQLite does not enforce the models.provider_id FK cascade unless
+  // `PRAGMA foreign_keys = ON` is set per connection (it isn't), so delete the
+  // dependent model rows explicitly — otherwise they survive as orphans that
+  // reappear on the next launch.
+  await db.execute("DELETE FROM models WHERE provider_id = ?", [id]);
   await db.execute("DELETE FROM providers WHERE id = ?", [id]);
 }
 
@@ -263,7 +271,8 @@ export async function fetchRemoteModels(
   standard: ApiStandard
 ): Promise<{ id: string; name: string }[]> {
   if (standard === "gemini") {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+    const base = (baseUrl || GEMINI_API_BASE).replace(/\/$/, "");
+    const url = `${base}/models?key=${apiKey}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Gemini models fetch failed: ${res.status}`);
     const data = await res.json();
@@ -292,7 +301,8 @@ export async function testProviderConnection(
 ): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
   try {
     if (standard === "gemini") {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}&pageSize=1`;
+      const base = (baseUrl || GEMINI_API_BASE).replace(/\/$/, "");
+      const url = `${base}/models?key=${apiKey}&pageSize=1`;
       const res = await fetch(url);
       if (!res.ok) {
         const error = await res.text();
