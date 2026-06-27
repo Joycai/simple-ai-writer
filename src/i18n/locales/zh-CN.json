@@ -5,8 +5,45 @@
   "sidebar": {
     "files": "文件",
     "lore": "设定库",
+    "outline": "大纲",
     "search": "搜索",
-    "searchComingSoon": "搜索 — 即将推出"
+    "searchComingSoon": "搜索 — 即将推出",
+    "loreWall": "设定库 · 全图",
+    "outlineFull": "大纲 · 全图",
+    "settings": "设置",
+    "project": "PROJECT",
+    "manuscript": "MANUSCRIPT · 正文",
+    "drafts": "DRAFTS · 草稿",
+    "notes": "NOTES · 笔记",
+    "projectSearch": "搜索文稿与设定"
+  },
+  "titleBar": {
+    "modified": "已修改",
+    "saved": "已保存",
+    "saving": "保存中",
+    "summonAi": "AI · ⌘K",
+    "noProject": "未命名项目",
+    "noFile": "未命名"
+  },
+  "editorStrip": {
+    "summon": "⌘ K · 召唤 AI",
+    "paragraph": "段落 {{p}} · 第 {{s}} 句",
+    "cumulative": "累计 {{n}} 字",
+    "refs": "引用 {{n}} 设定"
+  },
+  "empty": {
+    "firstLine": "在这里写下你的第一行",
+    "ornament": "— · —",
+    "hint1": "第一句永远是最难的。可以从一个场景、一句对话、一个名字开始。",
+    "hint2": "你不需要现在就完美。Manuscript 会一直在这里。",
+    "dontKnow": "不知道从哪开始？",
+    "letAi": "让 AI 给你一个开头 · ⌘ K",
+    "tipCmdkLabel": "⌘ K",
+    "tipCmdk": "任何时候召唤 AI · 跳转、续写、问问题",
+    "tipBrackets": "双方括号标设定 · 自动入设定库",
+    "tipSaveLabel": "⌘ S",
+    "tipSave": "自动保存到本地",
+    "chapterEyebrow": "章 一 · CHAPTER ONE"
   },
   "rightPanel": {
     "outline": "大纲",

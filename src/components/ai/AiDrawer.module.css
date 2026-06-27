@@ -1,0 +1,114 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--color-bg-overlay);
+  z-index: 90;
+  animation: fadeIn 200ms var(--ease-out);
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 680px;
+  max-width: 90vw;
+  background: var(--color-bg-elevated);
+  border-left: 1px solid var(--color-border);
+  box-shadow: var(--shadow-drawer);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  animation: slideInRight 240ms var(--ease-out);
+}
+
+/* Header */
+.header {
+  padding: 18px 24px 14px;
+  border-bottom: 1px solid var(--color-border-soft);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-sienna);
+  flex-shrink: 0;
+}
+.titleBlock { flex: 1; min-width: 0; }
+.title {
+  font: 400 16px/1 var(--font-serif);
+  color: var(--color-text-primary);
+}
+.subtitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font: 400 11px/1 var(--font-sans);
+  color: var(--color-text-muted);
+}
+.modelChip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  font: 500 10px/1.4 var(--font-sans);
+  color: var(--color-text-secondary);
+}
+.modelChip strong {
+  color: var(--color-sienna);
+  font-weight: 500;
+  margin: 0 2px;
+}
+
+.modeTabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--color-border);
+}
+.modeTab {
+  padding: 5px 11px;
+  font: 500 11px/1 var(--font-sans);
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.modeTabActive {
+  background: var(--color-sienna);
+  color: var(--color-card);
+}
+
+.closeBtn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+  color: var(--color-text-muted);
+  font: 400 13px/1 var(--font-serif);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.closeBtn:hover { color: var(--color-sienna); }
+
+/* Body container — scrollable */
+.body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}

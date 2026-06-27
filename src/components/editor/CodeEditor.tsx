@@ -14,6 +14,7 @@ import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
+import { useEditorStore } from "../../stores/editorStore";
 import styles from "./CodeEditor.module.css";
 
 interface Props {
@@ -73,7 +74,19 @@ export function CodeEditor({ value, onChange }: Props) {
     viewRef.current = view;
     externalValueRef.current = value;
 
+    useEditorStore.getState().setScrollToLine((line) => {
+      const doc = view.state.doc;
+      const lineNo = Math.min(Math.max(line + 1, 1), doc.lines);
+      const pos = doc.line(lineNo).from;
+      view.dispatch({
+        selection: { anchor: pos },
+        effects: EditorView.scrollIntoView(pos, { y: "start", yMargin: 80 }),
+      });
+      view.focus();
+    });
+
     return () => {
+      useEditorStore.getState().setScrollToLine(null);
       view.destroy();
       viewRef.current = null;
     };

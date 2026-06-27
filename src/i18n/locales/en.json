@@ -5,8 +5,45 @@
   "sidebar": {
     "files": "Files",
     "lore": "Lore",
+    "outline": "Outline",
     "search": "Search",
-    "searchComingSoon": "Search — coming soon"
+    "searchComingSoon": "Search — coming soon",
+    "loreWall": "Lore Wall",
+    "outlineFull": "Outline Full",
+    "settings": "Settings",
+    "project": "PROJECT",
+    "manuscript": "MANUSCRIPT",
+    "drafts": "DRAFTS",
+    "notes": "NOTES",
+    "projectSearch": "Search manuscript & lore"
+  },
+  "titleBar": {
+    "modified": "modified",
+    "saved": "saved",
+    "saving": "saving",
+    "summonAi": "AI · ⌘K",
+    "noProject": "Untitled project",
+    "noFile": "Untitled"
+  },
+  "editorStrip": {
+    "summon": "⌘ K · summon AI",
+    "paragraph": "Paragraph {{p}} · sentence {{s}}",
+    "cumulative": "Total {{n}} words",
+    "refs": "{{n}} lore refs"
+  },
+  "empty": {
+    "firstLine": "Write your first line here",
+    "ornament": "— · —",
+    "hint1": "The first sentence is always the hardest. Begin with a scene, a line of dialogue, a name.",
+    "hint2": "You don't have to be perfect now. Manuscript will always be here.",
+    "dontKnow": "Don't know where to begin?",
+    "letAi": "Let AI give you an opening · ⌘ K",
+    "tipCmdkLabel": "⌘ K",
+    "tipCmdk": "Summon AI anytime — jump, continue, ask",
+    "tipBrackets": "Tag lore with double brackets — auto-indexed",
+    "tipSaveLabel": "⌘ S",
+    "tipSave": "Auto-saves to your local folder",
+    "chapterEyebrow": "CHAPTER ONE"
   },
   "rightPanel": {
     "outline": "Outline",

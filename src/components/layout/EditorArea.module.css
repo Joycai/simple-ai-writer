@@ -4,131 +4,103 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--color-bg-base);
+  background: var(--color-bg-surface);
   min-width: 0;
 }
 
-/* Empty / welcome screen */
+/* Manuscript empty state — first chapter prompt */
 .empty {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-3);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
+  padding: 80px 100px 32px;
+  text-align: center;
+}
+
+.emptyInner {
+  max-width: 580px;
+}
+
+.emptyEyebrow {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: var(--letter-eyebrow);
+  color: var(--color-border-strong);
+  text-transform: uppercase;
+  margin-bottom: 22px;
 }
 
 .emptyTitle {
-  font-size: var(--font-size-lg);
-  font-weight: 300;
-  background: linear-gradient(135deg, var(--color-accent-start), var(--color-accent-end));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  margin: 0;
+  font: italic 300 44px/1.18 var(--font-serif);
+  color: var(--color-text-faint);
+  letter-spacing: -0.012em;
 }
 
-.logo {
-  width: 64px;
-  height: 64px;
-  border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, var(--color-accent-start), var(--color-accent-end));
+.emptyOrnament {
+  margin: 32px 0 36px;
+  font: 400 15px/1 var(--font-serif);
+  color: var(--color-text-ghost);
+  letter-spacing: 0.7em;
+}
+
+.emptyHint {
+  margin: 0 0 1em;
+  font: italic 400 16px/1.78 var(--font-serif);
+  color: var(--color-text-ghost);
+  text-indent: 2em;
+  text-align: left;
+}
+
+.emptyCta {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 32px;
-  margin-bottom: var(--space-2);
-  box-shadow: var(--shadow-lg);
+  gap: 14px;
+  margin-top: 48px;
+  padding-top: 24px;
+  border-top: 1px dashed var(--color-border);
 }
-
-/* Toolbar */
-.toolbar {
-  height: 36px;
-  display: flex;
-  align-items: center;
-  padding: 0 var(--space-3);
-  gap: var(--space-2);
-  border-bottom: 1px solid var(--color-border);
+.emptyCtaText {
+  font: italic 400 12px/1.4 var(--font-serif);
+  color: var(--color-text-muted);
+}
+.emptyCtaBtn {
+  padding: 9px 16px;
   background: var(--color-bg-surface);
-  flex-shrink: 0;
-}
-
-.fileName {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  font-weight: 500;
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.dirty {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--color-accent);
-  flex-shrink: 0;
-}
-
-.viewToggle {
-  display: flex;
-  gap: 2px;
-  background: var(--color-bg-elevated);
-  border-radius: var(--radius-sm);
-  padding: 2px;
-}
-
-.viewBtn {
-  padding: 2px 8px;
-  border-radius: 3px;
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  transition: background var(--transition-fast), color var(--transition-fast);
-}
-
-.viewBtn:hover {
-  color: var(--color-text-secondary);
-}
-
-.viewBtn.active {
-  background: var(--color-bg-base);
-  color: var(--color-text-primary);
-}
-
-.saveBtn {
-  font-size: var(--font-size-xs);
-  padding: 3px 10px;
-  border-radius: var(--radius-sm);
-  background: var(--color-accent-tint);
-  color: var(--color-accent);
-  transition: background var(--transition-fast), transform var(--transition-fast);
-}
-
-.saveBtn:hover {
-  background: var(--color-accent);
-  color: #fff;
-}
-
-.saveBtn:active {
-  transform: scale(0.96);
-}
-
-.panelToggleBtn {
-  width: 24px;
-  height: 24px;
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-sienna);
+  font: 500 12px/1 var(--font-sans);
+  cursor: pointer;
   display: flex;
   align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  color: var(--color-text-muted);
-  flex-shrink: 0;
-  transition: background var(--transition-fast), color var(--transition-fast);
+  gap: 8px;
 }
 
-.panelToggleBtn:hover {
+.tipGrid {
+  margin-top: 36px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 14px;
+  text-align: left;
+}
+.tipCard {
+  padding: 12px 14px;
   background: var(--color-bg-elevated);
+  border-left: 2px solid var(--color-border-strong);
+}
+.tipLabel {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: 0.18em;
+  color: var(--color-sienna);
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+.tipText {
+  font: italic 400 12px/1.5 var(--font-serif);
   color: var(--color-text-secondary);
 }
 
@@ -137,58 +109,52 @@
   flex: 1;
   display: flex;
   overflow: hidden;
+  min-height: 0;
 }
 
 .editorPane {
   flex: 1;
-  overflow: hidden;
+  overflow: auto;
   display: flex;
   flex-direction: column;
   min-width: 0;
+  background: var(--color-bg-surface);
 }
 
 .previewPane {
   flex: 1;
-  overflow: hidden;
+  overflow: auto;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid var(--color-border);
+  border-left: 1px solid var(--color-border-soft);
   min-width: 0;
+  background: var(--color-bg-surface);
 }
 
-.divider {
-  width: 1px;
-  background: var(--color-border);
-  flex-shrink: 0;
-}
-
-/* Export dropdown */
-.exportMenu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  min-width: 160px;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  z-index: 50;
-  padding: var(--space-1);
-  transform-origin: top right;
-  animation: slideUp 180ms var(--ease-out);
-}
-
-.exportItem {
-  display: block;
+/* Chapter header — shown above editor */
+.chapterHeader {
+  text-align: center;
+  padding: 64px 100px 32px;
+  max-width: 880px;
+  margin: 0 auto;
   width: 100%;
-  text-align: left;
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  border-radius: var(--radius-sm);
-  transition: background var(--transition-fast), color var(--transition-fast);
 }
-.exportItem:hover {
-  background: var(--color-bg-base);
+.chapterEyebrow {
+  font: 500 11px/1 var(--font-sans);
+  letter-spacing: var(--letter-eyebrow);
+  color: var(--color-sienna);
+  text-transform: uppercase;
+  margin-bottom: 22px;
+}
+.chapterTitle {
+  margin: 0;
+  font: 300 44px/1.18 var(--font-serif);
   color: var(--color-text-primary);
+  letter-spacing: -0.012em;
+}
+.chapterOrnament {
+  margin: 32px 0 0;
+  font: 400 15px/1 var(--font-serif);
+  color: var(--color-text-ghost);
+  letter-spacing: 0.7em;
 }

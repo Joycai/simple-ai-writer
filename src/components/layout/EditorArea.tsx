@@ -1,33 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { PenLine, ChevronDown, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from "lucide-react";
-import { save } from "@tauri-apps/plugin-dialog";
+import { Sparkles } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
-import { useEditorStore, type ViewMode } from "../../stores/editorStore";
+import { useEditorStore } from "../../stores/editorStore";
 import { CodeEditor } from "../editor/CodeEditor";
 import { Preview } from "../editor/Preview";
-import { exportMarkdown, exportHtml, exportPdf } from "../../lib/export";
+import { EditorBottomStrip } from "./EditorBottomStrip";
 import styles from "./EditorArea.module.css";
-
-const VIEW_MODES_CONFIG: { id: ViewMode; labelKey: string }[] = [
-  { id: "editor", labelKey: "editor.viewMode.editor" },
-  { id: "split", labelKey: "editor.viewMode.split" },
-  { id: "preview", labelKey: "editor.viewMode.preview" },
-];
 
 export function EditorArea() {
   const { t } = useTranslation();
-  const { sidebarCollapsed, rightPanelCollapsed, toggleSidebar, toggleRightPanel } = useAppStore();
   const { projectPath, activeFilePath } = useProjectStore();
-  const { content, filePath, isDirty, viewMode, loadFile, setContent, saveNow, setViewMode } =
-    useEditorStore();
-  const [showExportMenu, setShowExportMenu] = useState(false);
-
-  const viewModes = VIEW_MODES_CONFIG.map((m) => ({
-    ...m,
-    label: t(m.labelKey),
-  }));
+  const { content, filePath, viewMode, loadFile, setContent, saveNow } = useEditorStore();
+  const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
 
   // Load file when active path changes
   useEffect(() => {
@@ -51,120 +37,51 @@ export function EditorArea() {
   if (!projectPath || !activeFilePath) {
     return (
       <div className={styles.area}>
-        <div className={styles.toolbar}>
-          <button
-            className={styles.panelToggleBtn}
-            onClick={toggleSidebar}
-            title={sidebarCollapsed ? t("editor.showSidebar") : t("editor.hideSidebar")}
-          >
-            {sidebarCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
-          </button>
-          <span style={{ flex: 1 }} />
-          <button
-            className={styles.panelToggleBtn}
-            onClick={toggleRightPanel}
-            title={rightPanelCollapsed ? t("editor.showRightPanel") : t("editor.hideRightPanel")}
-          >
-            {rightPanelCollapsed ? <PanelRightOpen size={15} /> : <PanelRightClose size={15} />}
-          </button>
-        </div>
         <div className={styles.empty}>
-          <div className={styles.logo}><PenLine size={32} strokeWidth={1.5} /></div>
-          <div className={styles.emptyTitle}>{t("app.name")}</div>
-          <div style={{ color: "var(--color-text-muted)", fontSize: "var(--font-size-sm)" }}>
-            {t("project.noProjectTitle")}
+          <div className={styles.emptyInner}>
+            <div className={styles.emptyEyebrow}>{t("empty.chapterEyebrow")}</div>
+            <h1 className={styles.emptyTitle}>{t("empty.firstLine")}</h1>
+            <div className={styles.emptyOrnament}>{t("empty.ornament")}</div>
+            <p className={styles.emptyHint}>{t("empty.hint1")}</p>
+            <p className={styles.emptyHint}>{t("empty.hint2")}</p>
+
+            <div className={styles.emptyCta}>
+              <span className={styles.emptyCtaText}>{t("empty.dontKnow")}</span>
+              <button
+                className={styles.emptyCtaBtn}
+                onClick={() => setShowCommandPalette(true)}
+              >
+                <Sparkles size={11} />
+                {t("empty.letAi")}
+              </button>
+            </div>
+
+            <div className={styles.tipGrid}>
+              <div className={styles.tipCard}>
+                <div className={styles.tipLabel}>{t("empty.tipCmdkLabel")}</div>
+                <div className={styles.tipText}>{t("empty.tipCmdk")}</div>
+              </div>
+              <div className={styles.tipCard}>
+                <div className={styles.tipLabel}>[[ 名 ]]</div>
+                <div className={styles.tipText}>{t("empty.tipBrackets")}</div>
+              </div>
+              <div className={styles.tipCard}>
+                <div className={styles.tipLabel}>{t("empty.tipSaveLabel")}</div>
+                <div className={styles.tipText}>{t("empty.tipSave")}</div>
+              </div>
+            </div>
           </div>
         </div>
+        <EditorBottomStrip />
       </div>
     );
   }
 
-  const fileName = activeFilePath.split("/").pop() ?? t("editor.untitled");
-  const title = fileName.replace(/\.md$/i, "");
   const showEditor = viewMode === "editor" || viewMode === "split";
   const showPreview = viewMode === "preview" || viewMode === "split";
 
-  const handleExportMd = async () => {
-    setShowExportMenu(false);
-    await exportMarkdown(content);
-  };
-
-  const handleExportHtml = async () => {
-    setShowExportMenu(false);
-    const savePath = await save({
-      defaultPath: `${title}.html`,
-      filters: [{ name: "HTML", extensions: ["html"] }],
-    });
-    if (savePath) await exportHtml(content, title, savePath);
-  };
-
-  const handleExportPdf = () => {
-    setShowExportMenu(false);
-    exportPdf(content, title);
-  };
-
   return (
     <div className={styles.area}>
-      {/* Toolbar */}
-      <div className={styles.toolbar}>
-        <button
-          className={styles.panelToggleBtn}
-          onClick={toggleSidebar}
-          title={sidebarCollapsed ? t("editor.showSidebar") : t("editor.hideSidebar")}
-        >
-          {sidebarCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
-        </button>
-
-        {isDirty && <span className={styles.dirty} title={t("editor.unsavedChanges")} />}
-        <span className={styles.fileName}>{fileName}</span>
-
-        <div className={styles.viewToggle}>
-          {viewModes.map((m) => (
-            <button
-              key={m.id}
-              className={`${styles.viewBtn} ${viewMode === m.id ? styles.active : ""}`}
-              onClick={() => setViewMode(m.id)}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
-
-        {isDirty && (
-          <button className={styles.saveBtn} onClick={saveNow}>
-            {t("editor.save")}
-          </button>
-        )}
-
-        <div style={{ position: "relative" }}>
-          <button className={styles.saveBtn} onClick={() => setShowExportMenu((v) => !v)} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            {t("editor.export")} <ChevronDown size={12} />
-          </button>
-          {showExportMenu && (
-            <div className={styles.exportMenu} onMouseLeave={() => setShowExportMenu(false)}>
-              <button className={styles.exportItem} onClick={handleExportMd}>
-                {t("editor.exportMarkdown")}
-              </button>
-              <button className={styles.exportItem} onClick={handleExportHtml}>
-                {t("editor.exportHtml")}
-              </button>
-              <button className={styles.exportItem} onClick={handleExportPdf}>
-                {t("editor.exportPdf")}
-              </button>
-            </div>
-          )}
-        </div>
-
-        <button
-          className={styles.panelToggleBtn}
-          onClick={toggleRightPanel}
-          title={rightPanelCollapsed ? t("editor.showRightPanel") : t("editor.hideRightPanel")}
-        >
-          {rightPanelCollapsed ? <PanelRightOpen size={15} /> : <PanelRightClose size={15} />}
-        </button>
-      </div>
-
-      {/* Editor + Preview panes */}
       <div className={styles.panes}>
         {showEditor && (
           <div className={styles.editorPane}>
@@ -177,6 +94,7 @@ export function EditorArea() {
           </div>
         )}
       </div>
+      <EditorBottomStrip />
     </div>
   );
 }
