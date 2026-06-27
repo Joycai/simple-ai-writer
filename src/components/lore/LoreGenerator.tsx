@@ -5,7 +5,7 @@ import { FileText, Image, X, Bot, Sparkles, RotateCw, AlertTriangle, CheckCircle
 import { useProjectStore } from "../../stores/projectStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useLoreStore } from "../../stores/loreStore";
-import { LORE_CATEGORIES, type CategoryId } from "../../lib/lore";
+import { LORE_CATEGORIES, slugifyEntityId, uniqueEntityId, type CategoryId } from "../../lib/lore";
 import {
   scanProjectFiles,
   imageToDataUrl,
@@ -232,7 +232,8 @@ setAttached((prev) => [...prev, { kind: "text", file, content }]);
     if (!projectPath) return;
     setSaving(true);
     try {
-      const id = editName.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_-]/g, "") || "entity";
+      const baseId = slugifyEntityId(editName);
+      const id = await uniqueEntityId(projectPath, editCat, baseId);
       await createNewEntity(projectPath, editCat, id, editName);
       const { writeEntityFile } = await import("../../lib/lore");
       const aliasLines = editTags.map((a) => `  - "${a}"`).join("\n");

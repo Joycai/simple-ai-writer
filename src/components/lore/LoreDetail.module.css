@@ -145,3 +145,353 @@
   color: var(--color-text-muted);
   font-style: italic;
 }
+
+/* Rendered-markdown subtree inside the summary tab. Resets the body's
+   white-space: pre-wrap (which would expose raw text whitespace) and gives
+   typical block elements Manuscript-aligned typography. */
+.markdown {
+  white-space: normal;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.78;
+  color: var(--color-text-primary);
+}
+.markdown :first-child { margin-top: 0; }
+.markdown :last-child  { margin-bottom: 0; }
+.markdown h1, .markdown h2, .markdown h3, .markdown h4, .markdown h5, .markdown h6 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  color: var(--color-text-primary);
+  letter-spacing: -0.008em;
+  margin: 1.6em 0 0.5em;
+  line-height: 1.3;
+}
+.markdown h1 { font-size: 28px; font-weight: 300; }
+.markdown h2 { font-size: 22px; }
+.markdown h3 { font-size: 18px; }
+.markdown h4 { font-size: 16px; }
+.markdown h5, .markdown h6 { font-size: 14px; color: var(--color-text-secondary); }
+.markdown p { margin: 0 0 1em; }
+.markdown ul, .markdown ol { margin: 0 0 1em; padding-left: 1.6em; }
+.markdown li { margin: 0.25em 0; }
+.markdown li > p { margin: 0.25em 0; }
+.markdown blockquote {
+  margin: 0 0 1em;
+  padding: 4px 14px;
+  border-left: 2px solid var(--color-sienna);
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+.markdown code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--color-bg-surface);
+  padding: 1px 5px;
+  border: 1px solid var(--color-border-soft);
+}
+.markdown pre {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-soft);
+  padding: 10px 14px;
+  overflow-x: auto;
+  margin: 0 0 1em;
+  line-height: 1.55;
+}
+.markdown pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+}
+.markdown a {
+  color: var(--color-sienna);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.markdown a:hover { color: var(--color-text-primary); }
+.markdown hr {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 1.5em 0;
+}
+.markdown img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0.5em 0;
+}
+.markdown table {
+  border-collapse: collapse;
+  margin: 0 0 1em;
+  width: 100%;
+  font-size: 13px;
+}
+.markdown th, .markdown td {
+  border: 1px solid var(--color-border);
+  padding: 6px 10px;
+  text-align: left;
+}
+.markdown th {
+  background: var(--color-bg-surface);
+  font-weight: 500;
+}
+.markdown strong { font-weight: 600; color: var(--color-text-primary); }
+.markdown em     { font-style: italic; }
+
+.gallery {
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border-soft);
+}
+.galleryHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.galleryHead {
+  font: 500 11px/1 var(--font-sans);
+  letter-spacing: var(--letter-label);
+  color: var(--color-sienna);
+  text-transform: uppercase;
+}
+.galleryCount {
+  font: 500 11px/1 var(--font-mono);
+  color: var(--color-text-muted);
+}
+.galleryAddBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-sienna);
+  font: 500 11px/1 var(--font-sans);
+  cursor: pointer;
+}
+.galleryAddBtn:hover:not(:disabled) {
+  border-color: var(--color-sienna);
+  background: var(--color-tag-bg);
+}
+.galleryAddBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.galleryEmpty {
+  padding: 28px 20px;
+  border: 1px dashed var(--color-border);
+  text-align: center;
+  font: italic 400 13px/1.5 var(--font-serif);
+  color: var(--color-text-muted);
+}
+.galleryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 18px;
+}
+.galleryItem {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border-soft);
+  padding: 10px;
+}
+.galleryImg {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  display: block;
+  background: var(--color-bg-surface);
+  cursor: zoom-in;
+  transition: transform var(--transition-base);
+}
+.galleryImg:hover {
+  transform: scale(1.015);
+}
+.galleryCaption {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.galleryFileRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.galleryFile {
+  flex: 1;
+  font: 500 10px/1.3 var(--font-mono);
+  color: var(--color-text-muted);
+  word-break: break-all;
+}
+.galleryActions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.iconBtn:hover:not(:disabled) {
+  color: var(--color-sienna);
+  border-color: var(--color-border);
+}
+.iconBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.iconBtnCommit {
+  composes: iconBtn;
+  color: var(--color-success);
+}
+.iconBtnCommit:hover:not(:disabled) {
+  color: var(--color-success);
+  border-color: var(--color-success);
+}
+.galleryDesc {
+  font: italic 400 13px/1.5 var(--font-serif);
+  color: var(--color-text-secondary);
+}
+.galleryDescEmpty {
+  font: italic 400 12px/1.5 var(--font-serif);
+  color: var(--color-text-faint);
+  cursor: text;
+}
+.galleryDescEmpty:hover {
+  color: var(--color-sienna);
+}
+.editArea {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.editTextarea {
+  width: 100%;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  padding: 6px 8px;
+  font: 400 13px/1.5 var(--font-serif);
+  color: var(--color-text-primary);
+  resize: vertical;
+}
+.editTextarea:focus {
+  outline: none;
+  border-color: var(--color-sienna);
+}
+.editButtons {
+  display: flex;
+  gap: 2px;
+  justify-content: flex-end;
+}
+
+/* ── Lightbox ──────────────────────────────────────────────────────────── */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 16, 12, 0.88);
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 80px;
+  animation: fadeIn 120ms ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.lightboxStage {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  max-width: 100%;
+  max-height: 100%;
+  cursor: default;
+}
+.lightboxImg {
+  max-width: 100%;
+  max-height: calc(100vh - 180px);
+  object-fit: contain;
+  display: block;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+}
+.lightboxCaption {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  max-width: 640px;
+  text-align: center;
+}
+.lightboxFile {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  font: 500 11px/1.2 var(--font-mono);
+  color: rgba(255, 255, 255, 0.7);
+}
+.lightboxCounter {
+  font: 500 11px/1 var(--font-mono);
+  color: rgba(255, 255, 255, 0.45);
+}
+.lightboxDesc {
+  font: italic 400 14px/1.6 var(--font-serif);
+  color: rgba(255, 255, 255, 0.92);
+}
+.lightboxNav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  transition: background var(--transition-base), color var(--transition-base);
+}
+.lightboxNav:hover {
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+}
+.lightboxPrev { left: 18px; }
+.lightboxNext { right: 18px; }
+.lightboxClose {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  transition: background var(--transition-base), color var(--transition-base);
+}
+.lightboxClose:hover {
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+}

@@ -5,6 +5,7 @@ import { Key, ArrowRight, FolderOpen } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useProjectStore } from "../../stores/projectStore";
+import { MOD_KEY, MOD_K } from "../../lib/platform";
 import styles from "./Onboarding.module.css";
 
 const ONBOARDING_DONE_KEY = "manuscript:onboarding-done";
@@ -209,16 +210,16 @@ export function Onboarding() {
     // step 4
     return (
       <div className={styles.final}>
-        <div className={styles.finalTitle}>认识 ⌘ K</div>
+        <div className={styles.finalTitle}>认识 {MOD_KEY} K</div>
         <div className={styles.finalHint}>
-          任何时候按下 ⌘K，召唤 AI、跳转章节、检索设定 — 一切的开始。
+          任何时候按下 {MOD_K}，召唤 AI、跳转章节、检索设定 — 一切的开始。
         </div>
         <div className={styles.shortcutCard}>
-          <span className={styles.shortcutKey}>⌘ K</span>
+          <span className={styles.shortcutKey}>{MOD_KEY} K</span>
           <span className={styles.shortcutDesc}>命令面板 · 召唤 AI · 跳转</span>
         </div>
         <div className={styles.shortcutCard}>
-          <span className={styles.shortcutKey}>⌘ S</span>
+          <span className={styles.shortcutKey}>{MOD_KEY} S</span>
           <span className={styles.shortcutDesc}>保存（自动保存到本地）</span>
         </div>
         <div className={styles.shortcutCard}>
@@ -265,7 +266,7 @@ export function Onboarding() {
                   { n: 1, label: "接入 AI", hint: "大概 1 分钟" },
                   { n: 2, label: "建立或导入项目", hint: "" },
                   { n: 3, label: "导入已有设定（可选）", hint: "" },
-                  { n: 4, label: "认识 ⌘ K · 一切的开始", hint: "" },
+                  { n: 4, label: `认识 ${MOD_KEY} K · 一切的开始`, hint: "" },
                 ].map((s) => (
                   <div key={s.n} className={styles.stepRow}>
                     <span className={`${styles.stepNum} ${step >= s.n ? styles.stepNumActive : styles.stepNumIdle}`}>

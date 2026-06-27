@@ -140,6 +140,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           projectPath,
           loreIndex,
           tools: AGENT_TOOLS,
+          multimodal: model.type === "multimodal",
           signal: controller.signal,
           onToolStep: (step) => get().addToolStep(step),
           onOutputChunk: (text) => set((s) => ({ output: s.output + text })),

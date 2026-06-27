@@ -41,6 +41,8 @@ export interface AgentLoopOptions {
   projectPath: string;
   loreIndex: LoreIndex;
   tools: ToolDefinition[];
+  /** Whether the active model accepts image inputs (controls lore gallery payloads). */
+  multimodal: boolean;
   signal: AbortSignal;
   onToolStep: (step: ToolStep) => void;
   onOutputChunk: (text: string) => void;
@@ -126,7 +128,9 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<void> {
 
       let result: ToolResult;
       try {
-        result = await executeTool(toolCall, opts.projectPath, opts.loreIndex);
+        result = await executeTool(toolCall, opts.projectPath, opts.loreIndex, {
+          multimodal: opts.multimodal,
+        });
         opts.onToolStep({
           round,
           toolCallId: tc.id,

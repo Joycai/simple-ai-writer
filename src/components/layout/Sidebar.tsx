@@ -7,6 +7,7 @@ import { useEditorStore } from "../../stores/editorStore";
 import { FileTree } from "./FileTree";
 import { LorePanel } from "../lore/LorePanel";
 import { OutlinePanel } from "../editor/OutlinePanel";
+import { MOD_K_SPACED } from "../../lib/platform";
 import styles from "./Sidebar.module.css";
 
 function basename(p: string | null): string | null {
@@ -61,7 +62,7 @@ export function Sidebar() {
         >
           <SearchIcon size={11} strokeWidth={1.6} color="var(--color-text-muted)" />
           <span className={styles.searchPlaceholder}>{t("sidebar.projectSearch")}</span>
-          <span className={styles.searchKey}>⌘ K</span>
+          <span className={styles.searchKey}>{MOD_K_SPACED}</span>
         </button>
       )}
 

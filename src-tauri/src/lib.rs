@@ -36,6 +36,7 @@ pub fn run() {
             commands::fs_exists,
             commands::fs_read_dir,
             commands::fs_remove_dir,
+            commands::fs_remove_file,
         ]);
 
     protocol::register_asset_protocol(builder)

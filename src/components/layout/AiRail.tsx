@@ -13,7 +13,7 @@ export function AiRail() {
         onClick={() => setShowAiDrawer(true, "generate")}
         title={t("titleBar.summonAi")}
       >
-        AI 助手 · ⌘K
+        {t("titleBar.summonAi")}
       </button>
       <span className={styles.spacer} />
     </div>

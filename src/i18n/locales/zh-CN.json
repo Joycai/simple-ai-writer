@@ -21,12 +21,12 @@
     "modified": "已修改",
     "saved": "已保存",
     "saving": "保存中",
-    "summonAi": "AI · ⌘K",
+    "summonAi": "AI 助手",
     "noProject": "未命名项目",
     "noFile": "未命名"
   },
   "editorStrip": {
-    "summon": "⌘ K · 召唤 AI",
+    "summon": "{{mod}} K · 召唤 AI",
     "paragraph": "段落 {{p}} · 第 {{s}} 句",
     "cumulative": "累计 {{n}} 字",
     "refs": "引用 {{n}} 设定"
@@ -37,11 +37,11 @@
     "hint1": "第一句永远是最难的。可以从一个场景、一句对话、一个名字开始。",
     "hint2": "你不需要现在就完美。Manuscript 会一直在这里。",
     "dontKnow": "不知道从哪开始？",
-    "letAi": "让 AI 给你一个开头 · ⌘ K",
-    "tipCmdkLabel": "⌘ K",
+    "letAi": "让 AI 给你一个开头 · {{mod}} K",
+    "tipCmdkLabel": "{{mod}} K",
     "tipCmdk": "任何时候召唤 AI · 跳转、续写、问问题",
     "tipBrackets": "双方括号标设定 · 自动入设定库",
-    "tipSaveLabel": "⌘ S",
+    "tipSaveLabel": "{{mod}} S",
     "tipSave": "自动保存到本地",
     "chapterEyebrow": "章 一 · CHAPTER ONE"
   },
@@ -322,9 +322,26 @@
       "selectEntity": "选择一个设定条目查看详情",
       "showInBrowser": "在文件浏览器中显示",
       "aiImprove": "AI 优化",
+      "manageImages": "管理图片…",
       "deleteEntity": "删除",
       "deleteConfirm": "删除「{{name}}」？此操作不可撤销。",
       "deleteBtn": "删除"
+    },
+    "wall": {
+      "changeAvatar": "更换头像"
+    },
+    "detail": {
+      "gallery": "图集",
+      "addImage": "添加图片",
+      "editDesc": "编辑描述",
+      "removeImage": "删除图片",
+      "removeConfirm": "删除「{{file}}」？此操作不可撤销，文件也会从磁盘移除。",
+      "descPlaceholder": "一句话描述这张图片（多模态模型会看到图片，纯文本模型只会看到这段描述）…",
+      "noDesc": "（无描述 — 点击添加）",
+      "galleryEmpty": "暂无图片 — 点击「添加图片」选择本地图片，然后填写描述",
+      "previewImage": "点击放大预览",
+      "previewPrev": "上一张",
+      "previewNext": "下一张"
     },
     "improve": {
       "subtitle": "AI 优化",

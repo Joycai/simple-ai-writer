@@ -7,6 +7,7 @@ import { useProjectStore } from "../../stores/projectStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { LORE_CATEGORIES, type LoreEntity } from "../../lib/lore";
+import { MOD_KEY } from "../../lib/platform";
 import styles from "./CommandPalette.module.css";
 
 interface LoreHit { kind: "lore"; entity: LoreEntity; }
@@ -250,7 +251,7 @@ export function CommandPalette() {
                         <div className={styles.itemMain}>
                           <div className={styles.itemTitle}>{h.label}</div>
                         </div>
-                        <span className={styles.itemKey}>⌘ ⏎</span>
+                        <span className={styles.itemKey}>{MOD_KEY} ⏎</span>
                       </div>
                     );
                   })}
@@ -263,7 +264,7 @@ export function CommandPalette() {
         <div className={styles.footer}>
           <span><span className={styles.footerKey}>↑ ↓</span>导航</span>
           <span><span className={styles.footerKey}>↵</span>打开</span>
-          <span><span className={styles.footerKey}>⌘↵</span>问 AI</span>
+          <span><span className={styles.footerKey}>{MOD_KEY}↵</span>问 AI</span>
           <span style={{ flex: 1 }} />
           <span style={{ fontStyle: "italic" }}>
             前缀 <span style={{ color: "var(--color-sienna)", fontFamily: "var(--font-mono)" }}>/ ?</span> 限定范围

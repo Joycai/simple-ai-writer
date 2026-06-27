@@ -1,9 +1,14 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, Sparkles, Plus } from "lucide-react";
+import { Search, Sparkles, Plus, Camera } from "lucide-react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
 import { useLoreStore } from "../../stores/loreStore";
-import { LORE_CATEGORIES, type LoreEntity } from "../../lib/lore";
+import { useProjectStore } from "../../stores/projectStore";
+import { LORE_CATEGORIES, setEntityAvatar, type LoreEntity } from "../../lib/lore";
 import { useAppStore } from "../../stores/appStore";
+import { imageToDataUrl } from "../../lib/loreGenerator";
+import { MOD_K_SPACED } from "../../lib/platform";
 import { LoreGenerator } from "./LoreGenerator";
 import { LoreDetail } from "./LoreDetail";
 import styles from "./LoreWall.module.css";
@@ -29,13 +34,69 @@ function rotationFor(id: string): number {
 export function LoreWall() {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
-  const { index } = useLoreStore();
+  const { index, scanProject } = useLoreStore();
+  const { projectPath } = useProjectStore();
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
+  const pendingLoreNav = useAppStore((s) => s.pendingLoreNav);
 
   const [filter, setFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [showGenerator, setShowGenerator] = useState(false);
   const [detailEntity, setDetailEntity] = useState<LoreEntity | null>(null);
+
+  // Avatar rendering uses data URLs (see LoreDetail rationale: Webview2's strict
+  // URL parsing on Windows drive-letter paths makes the ai-writer-asset://
+  // protocol unreliable). Keyed by entity id so the lookup is stable across
+  // re-scans even if the entity object identity changes.
+  const [avatarDataUrls, setAvatarDataUrls] = useState<Record<string, string>>({});
+  const [avatarBusy, setAvatarBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const next: Record<string, string> = {};
+      for (const cat of LORE_CATEGORIES) {
+        for (const e of (index[cat.id] ?? [])) {
+          if (!e.avatarPath) continue;
+          try {
+            const { dataUrl } = await imageToDataUrl(e.avatarPath);
+            next[e.id] = dataUrl;
+          } catch {
+            // skip — fall back to letter placeholder
+          }
+        }
+      }
+      if (!cancelled) setAvatarDataUrls(next);
+    })();
+    return () => { cancelled = true; };
+  }, [index]);
+
+  const handleAvatarPick = async (entity: LoreEntity) => {
+    if (!projectPath || avatarBusy) return;
+    const picked = await openDialog({
+      multiple: false,
+      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] }],
+    });
+    if (typeof picked !== "string") return;
+    setAvatarBusy(entity.id);
+    try {
+      const bytes = await readBinaryFile(picked);
+      const ext = (picked.split(".").pop() ?? "png").toLowerCase();
+      await setEntityAvatar(entity.dirPath, bytes, ext);
+      await scanProject(projectPath);
+    } finally {
+      setAvatarBusy(null);
+    }
+  };
+
+  // Deep-link from outside (e.g. sidebar's "manage images" button): open the
+  // requested entity's detail page. We do NOT clear pendingLoreNav here so the
+  // anchor can be consumed downstream by LoreDetail.
+  useEffect(() => {
+    if (!pendingLoreNav) return;
+    const target = index[pendingLoreNav.category]?.find((e) => e.id === pendingLoreNav.entityId);
+    if (target) setDetailEntity(target);
+  }, [pendingLoreNav, index]);
 
   // Flatten + filter
   const allEntities = useMemo(() => {
@@ -96,7 +157,7 @@ export function LoreWall() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            <span className={styles.searchKey} onClick={() => setShowCommandPalette(true)} style={{ cursor: "pointer" }}>⌘ K</span>
+            <span className={styles.searchKey} onClick={() => setShowCommandPalette(true)} style={{ cursor: "pointer" }}>{MOD_K_SPACED}</span>
           </div>
 
           <button className={styles.btnSecondary} onClick={() => setShowGenerator(true)}>
@@ -158,10 +219,27 @@ export function LoreWall() {
                   </div>
                   <div className={styles.cardHeader}>
                     <div
-                      className={styles.cardAvatar}
-                      style={{ background: CAT_COLOR[e.category] }}
+                      className={styles.cardAvatarWrap}
+                      onClick={(ev) => { ev.stopPropagation(); handleAvatarPick(e); }}
+                      title={t("lore.wall.changeAvatar", { defaultValue: "更换头像" })}
                     >
-                      {e.name.charAt(0)}
+                      {avatarDataUrls[e.id] ? (
+                        <img
+                          src={avatarDataUrls[e.id]}
+                          alt={e.name}
+                          className={styles.cardAvatarImg}
+                        />
+                      ) : (
+                        <div
+                          className={styles.cardAvatar}
+                          style={{ background: CAT_COLOR[e.category] }}
+                        >
+                          {e.name.charAt(0)}
+                        </div>
+                      )}
+                      <div className={styles.cardAvatarOverlay}>
+                        <Camera size={14} strokeWidth={1.8} />
+                      </div>
                     </div>
                     <div>
                       <div className={styles.cardName}>{e.name}</div>

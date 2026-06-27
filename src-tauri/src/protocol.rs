@@ -18,7 +18,23 @@ fn handle_asset_request<R: Runtime>(
         .to_string();
 
     let decoded = percent_decode(&path_str);
-    let path = PathBuf::from(&decoded);
+    // Windows: JS-side `assetUrl` prepends a `/` to drive-lettered paths so the
+    // URL is well-formed (`ai-writer-asset://localhost/D:/foo`). Strip that
+    // synthetic leading slash before turning the string into a path, otherwise
+    // PathBuf interprets `/D:/foo` as an absolute root path and fails to open.
+    let cleaned: &str = {
+        let bytes = decoded.as_bytes();
+        if bytes.len() >= 3
+            && bytes[0] == b'/'
+            && bytes[1].is_ascii_alphabetic()
+            && bytes[2] == b':'
+        {
+            &decoded[1..]
+        } else {
+            &decoded
+        }
+    };
+    let path = PathBuf::from(cleaned);
 
     // This protocol only ever serves lore avatar images. Restrict it to known image
     // extensions so it can't be coerced (e.g. via a crafted markdown image URL) into

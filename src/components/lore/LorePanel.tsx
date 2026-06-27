@@ -2,12 +2,13 @@ import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import {
   User, Globe, Shield, Package, Zap, Grid2X2,
-  FileText, Bot, ChevronRight, Plus, Star, Sparkles, Trash2, FolderOpen,
+  FileText, Bot, ChevronRight, Plus, Star, Sparkles, Trash2, FolderOpen, Images,
 } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore } from "../../stores/projectStore";
-import { LORE_CATEGORIES, assetUrl, type CategoryId, type LoreEntity } from "../../lib/lore";
+import { useAppStore } from "../../stores/appStore";
+import { LORE_CATEGORIES, assetUrl, slugifyEntityId, uniqueEntityId, type CategoryId, type LoreEntity } from "../../lib/lore";
 import { LoreGenerator } from "./LoreGenerator";
 import { LoreImproveModal } from "./LoreImproveModal";
 import styles from "./LorePanel.module.css";
@@ -93,8 +94,8 @@ function NewEntityForm({ category, onClose }: { category: CategoryId; onClose: (
     if (!projectPath || !name.trim()) return;
     setSaving(true);
     try {
-      const id =
-        name.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_-]/g, "") || "entity";
+      const baseId = slugifyEntityId(name);
+      const id = await uniqueEntityId(projectPath, category, baseId);
       await createNewEntity(projectPath, category, id, name.trim());
       onClose();
     } finally {
@@ -158,6 +159,8 @@ function EntityCard({ entity }: { entity: LoreEntity }) {
   const { t } = useTranslation();
   const { activeFilePath, setActiveFilePath, projectPath } = useProjectStore();
   const { deleteEntity: doDelete } = useLoreStore();
+  const setMainView = useAppStore((s) => s.setMainView);
+  const setPendingLoreNav = useAppStore((s) => s.setPendingLoreNav);
   const [expanded, setExpanded] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const [showImprove, setShowImprove] = useState(false);
@@ -178,12 +181,28 @@ function EntityCard({ entity }: { entity: LoreEntity }) {
     try { await revealItemInDir(entity.dirPath); } catch { /* best-effort */ }
   };
 
+  // Jump to the entity's detail page and auto-scroll to the gallery section.
+  // The actual scroll is handled by LoreDetail once it observes pendingLoreNav.
+  const handleManageImages = () => {
+    setMainView("lore-wall");
+    setPendingLoreNav({
+      entityId: entity.id,
+      category: entity.category,
+      anchor: "gallery",
+    });
+  };
+
   const handleDelete = async () => {
     if (!projectPath) return;
     await doDelete(projectPath, entity);
   };
 
   const ctxItems = [
+    {
+      label: t("lore.panel.manageImages", { defaultValue: "管理图片…" }),
+      icon: <Images size={13} />,
+      onClick: handleManageImages,
+    },
     {
       label: t("lore.panel.showInBrowser"),
       icon: <FolderOpen size={13} />,
@@ -198,7 +217,10 @@ function EntityCard({ entity }: { entity: LoreEntity }) {
       label: t("lore.panel.deleteEntity"),
       icon: <Trash2 size={13} />,
       danger: true,
-      onClick: () => setShowDeleteConfirm(true),
+      // Auto-expand the card so the inline DeleteConfirm (which only renders
+      // inside the expanded body) actually mounts. Without this, the right-
+      // click delete appeared to do nothing on collapsed cards.
+      onClick: () => { setExpanded(true); setShowDeleteConfirm(true); },
     },
   ];
 
@@ -284,6 +306,18 @@ function EntityCard({ entity }: { entity: LoreEntity }) {
                 >
                   <Sparkles size={11} />
                   {t("lore.panel.aiImprove")}
+                </button>
+                <button
+                  className={styles.entityActionBtn}
+                  onClick={handleManageImages}
+                  title={t("lore.panel.manageImages", { defaultValue: "管理图片…" })}
+                >
+                  <Images size={11} />
+                  {entity.images.length > 0 && (
+                    <span style={{ marginLeft: 4, fontFamily: "var(--font-mono)", fontSize: 10, opacity: 0.75 }}>
+                      {entity.images.length}
+                    </span>
+                  )}
                 </button>
                 <button
                   className={styles.entityActionBtn}

@@ -24,6 +24,10 @@ export async function removeDir(path: string): Promise<void> {
   return invoke("fs_remove_dir", { path });
 }
 
+export async function removeFile(path: string): Promise<void> {
+  return invoke("fs_remove_file", { path });
+}
+
 export interface DirEntry { name: string; path: string; isDirectory: boolean; }
 
 export async function readDir(path: string): Promise<DirEntry[]> {
