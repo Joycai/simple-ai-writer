@@ -62,6 +62,31 @@ export interface StreamOptions {
   extraBody?: Record<string, unknown>;
   /** Gemini-only: per-request safety filter thresholds. Ignored for OpenAI. */
   safetySettings?: GeminiSafetySettings;
+  /** Optional model-scoped prefix prompt, prepended as the leading system instruction. */
+  prefix?: string;
+}
+
+/**
+ * Merge `prefix` into the head of `messages` as a leading system instruction.
+ * If the first message is already a system message, the prefix is prepended to
+ * its text content; otherwise a new system message is inserted at index 0.
+ * Returns a new array — never mutates the input (callers like the agent loop
+ * pass the same `history` array across rounds).
+ */
+function applyPrefix(messages: StreamMessage[], prefix?: string): StreamMessage[] {
+  if (!prefix || !prefix.trim()) return messages;
+  const head = messages[0];
+  if (head && head.role === "system") {
+    const merged: StreamMessage =
+      typeof head.content === "string"
+        ? { role: "system", content: `${prefix}\n\n${head.content}` }
+        : {
+            role: "system",
+            content: [{ type: "text", text: `${prefix}\n\n` }, ...head.content],
+          };
+    return [merged, ...messages.slice(1)];
+  }
+  return [{ role: "system", content: prefix }, ...messages];
 }
 
 // ─── OpenAI / compat ─────────────────────────────────────────────────────────
@@ -367,8 +392,9 @@ async function streamGemini(opts: StreamOptions): Promise<void> {
 // ─── Dispatch ─────────────────────────────────────────────────────────────────
 
 export async function streamCompletion(opts: StreamOptions): Promise<void> {
-  if (opts.standard === "gemini") {
-    return streamGemini(opts);
+  const merged: StreamOptions = { ...opts, messages: applyPrefix(opts.messages, opts.prefix) };
+  if (merged.standard === "gemini") {
+    return streamGemini(merged);
   }
-  return streamOpenAI(opts);
+  return streamOpenAI(merged);
 }

@@ -33,6 +33,8 @@ export interface AgentLoopOptions {
   modelId: string;
   /** Gemini-only: per-request safety filter thresholds. */
   safetySettings?: GeminiSafetySettings;
+  /** Optional model-scoped prefix prompt. */
+  prefix?: string;
   systemPrompt: string;
   /** The assembled user message content (from RAG) for the first turn */
   initialUserMessage: string;
@@ -76,6 +78,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<void> {
       apiKey: opts.apiKey,
       standard: opts.standard,
       modelId: opts.modelId,
+      prefix: opts.prefix,
       messages: history,
       safetySettings: opts.safetySettings,
       tools: isLastRound ? undefined : opts.tools,

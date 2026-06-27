@@ -330,7 +330,7 @@ function ModelsTab() {
   ];
 
   const { providers, models, addModel, updateModel, removeModel, fetchAndImportModels } = useAiStore();
-  const [form, setForm] = useState({ providerId: "", modelId: "", name: "", type: "text" as ModelType, priceIn: "", priceCachedIn: "", priceOut: "" });
+  const [form, setForm] = useState({ providerId: "", modelId: "", name: "", type: "text" as ModelType, priceIn: "", priceCachedIn: "", priceOut: "", prefix: "" });
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
@@ -339,7 +339,7 @@ function ModelsTab() {
   const [error, setError] = useState<string | null>(null);
 
   const resetForm = () => {
-    setForm({ providerId: "", modelId: "", name: "", type: "text", priceIn: "", priceCachedIn: "", priceOut: "" });
+    setForm({ providerId: "", modelId: "", name: "", type: "text", priceIn: "", priceCachedIn: "", priceOut: "", prefix: "" });
     setEditingId(null);
     setShowForm(false);
     setFetchedList([]);
@@ -357,6 +357,7 @@ function ModelsTab() {
       priceIn: m.priceIn ? String(m.priceIn) : "",
       priceCachedIn: m.priceCachedIn ? String(m.priceCachedIn) : "",
       priceOut: m.priceOut ? String(m.priceOut) : "",
+      prefix: m.prefix ?? "",
     });
     setEditingId(id);
     setShowForm(true);
@@ -394,6 +395,7 @@ function ModelsTab() {
           priceIn: parseFloat(form.priceIn) || 0,
           priceCachedIn: parseFloat(form.priceCachedIn) || 0,
           priceOut: parseFloat(form.priceOut) || 0,
+          prefix: form.prefix.trim() || undefined,
         });
       } else {
         await addModel({
@@ -405,6 +407,7 @@ function ModelsTab() {
           priceCachedIn: parseFloat(form.priceCachedIn) || 0,
           priceOut: parseFloat(form.priceOut) || 0,
           enabled: true,
+          prefix: form.prefix.trim() || undefined,
         });
       }
       resetForm();
@@ -502,6 +505,21 @@ function ModelsTab() {
                   onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
               </div>
             ))}
+          </div>
+
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>{t("aiConfig.models.prefixLabel")}</label>
+            <textarea
+              className={styles.input}
+              rows={4}
+              placeholder={t("aiConfig.models.prefixPlaceholder")}
+              value={form.prefix}
+              onChange={(e) => setForm({ ...form, prefix: e.target.value })}
+              style={{ resize: "vertical", fontFamily: "var(--font-mono)", fontSize: 12, lineHeight: 1.6 }}
+            />
+            <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 6, fontStyle: "italic" }}>
+              {t("aiConfig.models.prefixHint")}
+            </div>
           </div>
 
           <div className={styles.formActions}>
