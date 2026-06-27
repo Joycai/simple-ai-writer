@@ -1,25 +1,28 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import "./styles/global.css";
-import { SideTabBar } from "./components/layout/SideTabBar";
+import { TitleBar } from "./components/layout/TitleBar";
+import { IconRail } from "./components/layout/IconRail";
+import { AiRail } from "./components/layout/AiRail";
 import { Sidebar } from "./components/layout/Sidebar";
 import { EditorArea } from "./components/layout/EditorArea";
-import { RightPanel } from "./components/layout/RightPanel";
 import { ResizeHandle } from "./components/layout/ResizeHandle";
-import { StatusBar } from "./components/layout/StatusBar";
 import { SettingsModal } from "./components/settings/SettingsModal";
+import { AiDrawer } from "./components/ai/AiDrawer";
+import { InlineAiBubble } from "./components/ai/InlineAiBubble";
+import { LoreWall } from "./components/lore/LoreWall";
+import { OutlineFullView } from "./components/outline/OutlineFullView";
+import { CommandPalette } from "./components/command/CommandPalette";
+import { Onboarding } from "./components/onboarding/Onboarding";
 import { useAppStore } from "./stores/appStore";
 import { useAiStore } from "./stores/aiStore";
 
-// Auto-collapse panels when viewport is too narrow to show the editor
-const COLLAPSE_SIDEBAR_BELOW = 900;
-const COLLAPSE_RIGHT_BELOW = 700;
-
 export default function App() {
   const {
-    setSidebarCollapsed, setRightPanelCollapsed,
-    sidebarWidth, rightPanelWidth,
-    sidebarCollapsed, rightPanelCollapsed,
-    setSidebarWidth, setRightPanelWidth,
+    sidebarWidth, setSidebarWidth,
+    sidebarCollapsed,
+    mainView,
+    showCommandPalette, setShowCommandPalette,
+    setShowAiDrawer,
   } = useAppStore();
   const { loadConfig } = useAiStore();
   const [showSettings, setShowSettings] = useState(false);
@@ -29,27 +32,20 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const prevWidthRef = useRef(window.innerWidth);
+  // Global ⌘K / Ctrl+K to open command palette
   useEffect(() => {
-    // Apply the responsive default once on mount…
-    setSidebarCollapsed(window.innerWidth < COLLAPSE_SIDEBAR_BELOW);
-    setRightPanelCollapsed(window.innerWidth < COLLAPSE_RIGHT_BELOW);
-
-    // …then only force collapse/expand when the width *crosses* a breakpoint, so a
-    // manual toggle isn't clobbered on every resize tick.
-    const onResize = () => {
-      const w = window.innerWidth;
-      const prev = prevWidthRef.current;
-      if (prev >= COLLAPSE_SIDEBAR_BELOW && w < COLLAPSE_SIDEBAR_BELOW) setSidebarCollapsed(true);
-      else if (prev < COLLAPSE_SIDEBAR_BELOW && w >= COLLAPSE_SIDEBAR_BELOW) setSidebarCollapsed(false);
-      if (prev >= COLLAPSE_RIGHT_BELOW && w < COLLAPSE_RIGHT_BELOW) setRightPanelCollapsed(true);
-      else if (prev < COLLAPSE_RIGHT_BELOW && w >= COLLAPSE_RIGHT_BELOW) setRightPanelCollapsed(false);
-      prevWidthRef.current = w;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setShowCommandPalette(!showCommandPalette);
+      } else if (e.key === "Escape") {
+        setShowCommandPalette(false);
+        setShowAiDrawer(false);
+      }
     };
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showCommandPalette, setShowCommandPalette, setShowAiDrawer]);
 
   return (
     <div
@@ -61,28 +57,37 @@ export default function App() {
         background: "var(--color-bg-base)",
       }}
     >
+      <TitleBar onOpenSettings={() => setShowSettings(true)} />
+
       <div
         style={{
           display: "flex",
           flex: 1,
           overflow: "hidden",
-          "--sidebar-width": `${sidebarWidth}px`,
-          "--right-panel-width": `${rightPanelWidth}px`,
-        } as React.CSSProperties}
+          ["--sidebar-width" as any]: `${sidebarWidth}px`,
+        }}
       >
-        <SideTabBar />
-        <Sidebar />
-        {!sidebarCollapsed && (
+        <IconRail onOpenSettings={() => setShowSettings(true)} />
+        {!sidebarCollapsed && mainView === "editor" && <Sidebar />}
+        {!sidebarCollapsed && mainView === "editor" && (
           <ResizeHandle onDelta={(d) => setSidebarWidth((prev) => prev + d)} />
         )}
-        <EditorArea />
-        {!rightPanelCollapsed && (
-          <ResizeHandle onDelta={(d) => setRightPanelWidth((prev) => prev - d)} />
-        )}
-        <RightPanel />
+
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+          {mainView === "editor" && <EditorArea />}
+          {mainView === "lore-wall" && <LoreWall />}
+          {mainView === "outline-full" && <OutlineFullView />}
+        </div>
+
+        <AiRail />
       </div>
-      <StatusBar onOpenSettings={() => setShowSettings(true)} />
+
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      <AiDrawer />
+      <InlineAiBubble />
+      <CommandPalette />
+      <Onboarding />
     </div>
   );
 }
+

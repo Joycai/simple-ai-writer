@@ -12,7 +12,7 @@ html, body, #root {
 }
 
 body {
-  font-family: var(--font-sans);
+  font-family: var(--font-serif);
   font-size: var(--font-size-md);
   color: var(--color-text-primary);
   background: var(--color-bg-base);
@@ -20,31 +20,23 @@ body {
   user-select: none;
 }
 
-/* Scrollbars */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* Manuscript hides scrollbars to keep the paper surface clean */
+::-webkit-scrollbar { width: 0; height: 0; background: transparent; }
+* { scrollbar-width: none; }
+
+/* Utility — restore scrollbar where desired */
+.with-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
+.with-scrollbar::-webkit-scrollbar-thumb {
   background: var(--color-border-strong);
-  border-radius: 4px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-  transition: background var(--transition-fast);
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-muted);
-  background-clip: padding-box;
 }
 
 /* Unified focus ring (keyboard nav) */
 :focus-visible {
   outline: none;
   box-shadow: var(--shadow-focus);
-  border-radius: inherit;
 }
 
 /* Reusable entrance animations */
@@ -61,8 +53,16 @@ body {
   to   { opacity: 1; transform: translateY(0); }
 }
 @keyframes slideInRight {
-  from { opacity: 0; transform: translateX(8px); }
+  from { opacity: 0; transform: translateX(24px); }
   to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 /* Respect reduced-motion preference */
@@ -75,12 +75,32 @@ body {
   }
 }
 
-/* Gradient accent utility */
-.gradient-text {
-  background: linear-gradient(135deg, var(--color-accent-start), var(--color-accent-end));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+/* Type-role utilities */
+.ms-label {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: var(--font-size-xs);
+  letter-spacing: var(--letter-label);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  line-height: 1;
+}
+.ms-eyebrow {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: var(--font-size-xs);
+  letter-spacing: var(--letter-eyebrow);
+  text-transform: uppercase;
+  color: var(--color-sienna);
+}
+.ms-data {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: var(--font-size-sm);
+}
+.ms-italic {
+  font-family: var(--font-serif);
+  font-style: italic;
 }
 
 button {
@@ -93,6 +113,24 @@ button {
 }
 
 a {
-  color: var(--color-accent);
+  color: var(--color-sienna);
   text-decoration: none;
+}
+
+/* Cursor blink for inline editor accents */
+.cursor-blink {
+  display: inline-block;
+  width: 1.5px;
+  height: 1em;
+  background: var(--color-sienna);
+  vertical-align: text-bottom;
+  animation: blink 1s infinite;
+}
+
+/* Lore mention — sienna text + bottom highlight band */
+.lore-mention {
+  color: var(--color-sienna);
+  background: linear-gradient(to bottom, transparent 72%, var(--color-mention-bg) 72%);
+  padding: 0 1px;
+  cursor: pointer;
 }

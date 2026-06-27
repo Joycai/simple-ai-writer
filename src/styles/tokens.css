@@ -1,4 +1,4 @@
-/* Design tokens — all UI reads from these vars, never raw values */
+/* Design tokens — Manuscript theme. All UI reads from these vars, never raw values. */
 
 :root {
   /* Spacing */
@@ -6,26 +6,34 @@
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
+  --space-5: 20px;
   --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 56px;
 
   /* Typography */
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-serif: "Spectral", Georgia, "Songti SC", "Noto Serif CJK SC", serif;
+  --font-sans: "Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", Menlo, monospace;
-  --font-size-xs: 12px;
-  --font-size-sm: 14px;
-  --font-size-md: 16px;
-  --font-size-lg: 20px;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-md: 13px;
+  --font-size-lg: 17px;
+  --font-size-xl: 22px;
+  --font-size-2xl: 32px;
+  --font-size-3xl: 44px;
 
-  /* Radius — larger, continuous-curve feel */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
+  /* Manuscript is rectangular — radius zero everywhere */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
 
-  /* Easing — Apple-like curves */
-  --ease-out:    cubic-bezier(0.32, 0.72, 0, 1);     /* enter/expand, gentle overshoot settle */
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);  /* bouncy press/pop, sparingly */
-  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);     /* symmetric size/position */
+  /* Easing */
+  --ease-out:    cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 
   /* Transitions */
   --transition-fast: 120ms var(--ease-out);
@@ -33,90 +41,141 @@
   --transition-slow: 320ms var(--ease-out);
 
   /* Layout */
-  --sidebar-width: 240px;
-  --right-panel-width: 280px;
-  --status-bar-height: 32px;
-  --tab-bar-width: 60px;
-  --editor-max-width: 800px;
+  --titlebar-height: 48px;
+  --icon-rail-width: 56px;
+  --ai-rail-width: 48px;
+  --sidebar-width: 280px;
+  --right-panel-width: 280px;  /* legacy alias retained */
+  --tab-bar-width: 56px;       /* legacy alias retained */
+  --status-bar-height: 34px;   /* editor bottom strip */
+  --editor-max-width: 680px;
+
+  /* Letter spacing */
+  --letter-label: 0.22em;       /* uppercase Inter Tight labels */
+  --letter-eyebrow: 0.4em;      /* chapter eyebrow */
+  --letter-tracked: 0.34em;     /* dramatic centered serif lines */
 }
 
-/* Dark theme (default) */
-[data-theme="dark"] {
-  --color-bg-base:        #0D0F12;
-  --color-bg-surface:     #13161B;
-  --color-bg-elevated:    #1C2029;
-  --color-bg-overlay:     rgba(19, 22, 27, 0.85);
-
-  --color-text-primary:   #E2E8F0;
-  --color-text-secondary: #94A3B8;
-  --color-text-muted:     #4A5568;
-
-  /* Accent — refined single System Blue; gradient reserved for logo only */
-  --color-accent-start:   #3B82F6;
-  --color-accent-end:     #8B5CF6;
-  --color-accent:         #0A84FF;
-  --color-accent-hover:   #409CFF;
-  --color-accent-ring:    rgba(10, 132, 255, 0.35);
-  --color-accent-tint:    rgba(10, 132, 255, 0.14);
-  --color-accent-tint-strong: rgba(10, 132, 255, 0.26);
-
-  --color-border:         rgba(255, 255, 255, 0.08);
-  --color-border-strong:  rgba(255, 255, 255, 0.14);
-
-  --color-success:        #10B981;
-  --color-warning:        #F59E0B;
-  --color-error:          #EF4444;
-
-  /* Elevation — soft, layered shadows (dark: deeper) */
-  --shadow-sm:    0 1px 2px rgba(0, 0, 0, 0.24), 0 1px 1px rgba(0, 0, 0, 0.16);
-  --shadow-md:    0 4px 12px rgba(0, 0, 0, 0.32), 0 2px 4px rgba(0, 0, 0, 0.20);
-  --shadow-lg:    0 12px 32px rgba(0, 0, 0, 0.42), 0 4px 8px rgba(0, 0, 0, 0.26);
-  --shadow-xl:    0 24px 64px rgba(0, 0, 0, 0.55), 0 8px 16px rgba(0, 0, 0, 0.34);
-  --shadow-focus: 0 0 0 3px var(--color-accent-ring);
-
-  /* Glassmorphism */
-  --glass-bg:             rgba(19, 22, 27, 0.7);
-  --glass-bg-strong:      rgba(19, 22, 27, 0.55);
-  --glass-blur:           blur(16px);
-  --glass-border:         1px solid rgba(255, 255, 255, 0.08);
-}
-
-/* Light theme */
+/* ───────── LIGHT · Paper ───────── */
 [data-theme="light"] {
-  --color-bg-base:        #FAF9F6;
-  --color-bg-surface:     #F3F2EF;
-  --color-bg-elevated:    #ECEAE5;
-  --color-bg-overlay:     rgba(243, 242, 239, 0.88);
+  --color-bg-base:        #F7F2E8;   /* paper */
+  --color-bg-surface:     #FBF8F0;   /* card */
+  --color-bg-elevated:    #F1E8D5;   /* highlight */
+  --color-bg-tinted:      #F7F2E8;
+  --color-bg-overlay:     rgba(60, 40, 20, 0.30);
 
-  --color-text-primary:   #1F2937;
-  --color-text-secondary: #4B5563;
-  --color-text-muted:     #9CA3AF;
+  --color-text-primary:   #2A2520;   /* ink */
+  --color-text-secondary: #5C5346;
+  --color-text-muted:     #8B7E6A;
+  --color-text-faint:     #B5A99A;
+  --color-text-ghost:     #C0B49E;
 
-  /* Accent — refined single System Blue; gradient reserved for logo only */
-  --color-accent-start:   #2563EB;
-  --color-accent-end:     #7C3AED;
-  --color-accent:         #007AFF;
-  --color-accent-hover:   #0066D6;
-  --color-accent-ring:    rgba(0, 122, 255, 0.30);
-  --color-accent-tint:    rgba(0, 122, 255, 0.10);
-  --color-accent-tint-strong: rgba(0, 122, 255, 0.20);
+  /* Manuscript accents */
+  --color-sienna:         #A0522D;   /* primary */
+  --color-sienna-hover:   #8B4523;
+  --color-amber:          #C9966A;
+  --color-amber-soft:     #F1E0BD;
+  --color-ink:            #2A2520;
+  --color-paper:          #F7F2E8;
+  --color-card:           #FBF8F0;
 
-  --color-border:         rgba(0, 0, 0, 0.08);
-  --color-border-strong:  rgba(0, 0, 0, 0.14);
+  /* Accent aliases (legacy compat — kept so existing components keep rendering) */
+  --color-accent:         var(--color-sienna);
+  --color-accent-hover:   var(--color-sienna-hover);
+  --color-accent-start:   var(--color-sienna);
+  --color-accent-end:     var(--color-amber);
+  --color-accent-ring:    rgba(160, 82, 45, 0.30);
+  --color-accent-tint:    rgba(160, 82, 45, 0.10);
+  --color-accent-tint-strong: rgba(160, 82, 45, 0.20);
 
-  --color-success:        #059669;
-  --color-warning:        #D97706;
-  --color-error:          #DC2626;
+  --color-border:         #E5DCC9;
+  --color-border-soft:    #ECE2CE;
+  --color-border-strong:  #C9966A;
 
-  /* Elevation — soft, layered shadows (light: subtle) */
-  --shadow-sm:    0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 1px rgba(0, 0, 0, 0.04);
-  --shadow-md:    0 4px 12px rgba(0, 0, 0, 0.10), 0 2px 4px rgba(0, 0, 0, 0.06);
-  --shadow-lg:    0 12px 32px rgba(0, 0, 0, 0.16), 0 4px 8px rgba(0, 0, 0, 0.08);
-  --shadow-xl:    0 24px 64px rgba(0, 0, 0, 0.22), 0 8px 16px rgba(0, 0, 0, 0.10);
-  --shadow-focus: 0 0 0 3px var(--color-accent-ring);
+  --color-success:        #8DA876;
+  --color-warning:        #C9966A;
+  --color-warning-bg:     #F7EBD4;
+  --color-warning-text:   #8B6420;
+  --color-error:          #A85D44;
+  --color-error-bg:       #FDEAE2;
 
-  --glass-bg:             rgba(243, 242, 239, 0.75);
-  --glass-bg-strong:      rgba(243, 242, 239, 0.62);
+  /* Lore mention highlight (text bottom band) */
+  --color-mention-bg:     #F1E0BD;
+
+  /* Tag chips */
+  --color-tag-bg:         #F1E0BD;
+  --color-tag-text:       #5C4023;
+
+  /* Elevation — warm, subtle */
+  --shadow-sm:    0 1px 3px rgba(60, 40, 20, 0.06);
+  --shadow-md:    0 2px 16px rgba(60, 40, 20, 0.10);
+  --shadow-lg:    0 4px 24px rgba(60, 40, 20, 0.10);
+  --shadow-xl:    0 16px 56px rgba(60, 40, 20, 0.22);
+  --shadow-drawer: -28px 0 56px rgba(60, 40, 20, 0.16);
+  --shadow-focus: 0 0 0 2px var(--color-accent-ring);
+
+  /* Glass */
+  --glass-bg:             rgba(251, 248, 240, 0.85);
+  --glass-bg-strong:      rgba(251, 248, 240, 0.72);
   --glass-blur:           blur(16px);
-  --glass-border:         1px solid rgba(0, 0, 0, 0.07);
+  --glass-border:         1px solid rgba(60, 40, 20, 0.08);
+}
+
+/* ───────── DARK · Night ───────── */
+[data-theme="dark"] {
+  --color-bg-base:        #1F1B16;
+  --color-bg-surface:     #18140F;
+  --color-bg-elevated:    #28231D;
+  --color-bg-tinted:      #28231D;
+  --color-bg-overlay:     rgba(0, 0, 0, 0.55);
+
+  --color-text-primary:   #E8DFD0;
+  --color-text-secondary: #C0B49E;
+  --color-text-muted:     #9A8E7A;
+  --color-text-faint:     #5A4F3D;
+  --color-text-ghost:     #3A3128;
+
+  --color-sienna:         #D9925B;
+  --color-sienna-hover:   #F4C28A;
+  --color-amber:          #C9966A;
+  --color-amber-soft:     rgba(217, 146, 91, 0.32);
+  --color-ink:            #E8DFD0;
+  --color-paper:          #1F1B16;
+  --color-card:           #18140F;
+
+  --color-accent:         var(--color-sienna);
+  --color-accent-hover:   var(--color-sienna-hover);
+  --color-accent-start:   var(--color-sienna);
+  --color-accent-end:     var(--color-amber);
+  --color-accent-ring:    rgba(217, 146, 91, 0.35);
+  --color-accent-tint:    rgba(217, 146, 91, 0.14);
+  --color-accent-tint-strong: rgba(217, 146, 91, 0.26);
+
+  --color-border:         #2A241C;
+  --color-border-soft:    #2A241C;
+  --color-border-strong:  #5A4F3D;
+
+  --color-success:        #8DA876;
+  --color-warning:        #C9966A;
+  --color-warning-bg:     rgba(201, 150, 106, 0.18);
+  --color-warning-text:   #E0BC8A;
+  --color-error:          #C57158;
+  --color-error-bg:       rgba(168, 93, 68, 0.18);
+
+  --color-mention-bg:     rgba(217, 146, 91, 0.32);
+
+  --color-tag-bg:         rgba(217, 146, 91, 0.18);
+  --color-tag-text:       #E0BC8A;
+
+  --shadow-sm:    0 1px 3px rgba(0, 0, 0, 0.40);
+  --shadow-md:    0 4px 16px rgba(0, 0, 0, 0.36);
+  --shadow-lg:    0 8px 32px rgba(0, 0, 0, 0.50);
+  --shadow-xl:    0 16px 56px rgba(0, 0, 0, 0.60);
+  --shadow-drawer: -28px 0 56px rgba(0, 0, 0, 0.55);
+  --shadow-focus: 0 0 0 2px var(--color-accent-ring);
+
+  --glass-bg:             rgba(24, 20, 15, 0.80);
+  --glass-bg-strong:      rgba(24, 20, 15, 0.62);
+  --glass-blur:           blur(16px);
+  --glass-border:         1px solid rgba(255, 220, 180, 0.06);
 }

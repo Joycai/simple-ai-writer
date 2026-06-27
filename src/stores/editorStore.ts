@@ -13,10 +13,13 @@ interface EditorState {
   isDirty: boolean;
   saveTimer: ReturnType<typeof setTimeout> | null;
 
+  scrollToLine: ((line: number) => void) | null;
+
   loadFile: (path: string) => Promise<void>;
   setContent: (content: string) => void;
   saveNow: () => Promise<void>;
   setViewMode: (mode: ViewMode) => void;
+  setScrollToLine: (fn: ((line: number) => void) | null) => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -26,6 +29,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   viewMode: "split",
   isDirty: false,
   saveTimer: null,
+  scrollToLine: null,
 
   loadFile: async (path) => {
     // Flush any pending autosave for the previously open file before switching.
@@ -71,4 +75,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   setViewMode: (mode) => set({ viewMode: mode }),
+
+  setScrollToLine: (fn) => set({ scrollToLine: fn }),
 }));

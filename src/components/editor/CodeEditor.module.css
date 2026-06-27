@@ -5,33 +5,32 @@
   flex-direction: column;
 }
 
-/* Override CodeMirror defaults to match our theme */
+/* Manuscript editor — Spectral serif body */
 .wrap :global(.cm-editor) {
   height: 100%;
-  font-family: var(--font-mono);
-  font-size: 15px;
-  line-height: 1.7;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.78;
   background: transparent;
 }
 
 .wrap :global(.cm-scroller) {
   overflow: auto;
-  padding: 24px 0;
+  padding: 64px 0 32px;
 }
 
 .wrap :global(.cm-content) {
   max-width: var(--editor-max-width);
   margin: 0 auto;
-  padding: 0 40px;
-  caret-color: var(--color-accent);
+  padding: 0 24px;
+  caret-color: var(--color-sienna);
+  color: var(--color-text-primary);
 }
 
-.wrap :global(.cm-focused) {
-  outline: none;
-}
+.wrap :global(.cm-focused) { outline: none; }
 
 .wrap :global(.cm-cursor) {
-  border-left-color: var(--color-accent);
+  border-left-color: var(--color-sienna);
   border-left-width: 2px;
 }
 
@@ -40,55 +39,51 @@
   background: var(--color-accent-tint-strong) !important;
 }
 
-/* Markdown syntax colors */
 .wrap :global(.cm-line) {
   color: var(--color-text-primary);
 }
 
-/* Heading highlight */
+/* Markdown heading hierarchy in editor — keep readable while staying in tone */
 .wrap :global(.tok-heading1),
 .wrap :global(.tok-heading2),
 .wrap :global(.tok-heading3) {
   color: var(--color-text-primary);
-  font-weight: 600;
+  font-weight: 500;
+  font-family: var(--font-serif);
 }
-
-.wrap :global(.tok-heading1) { font-size: 1.3em; }
-.wrap :global(.tok-heading2) { font-size: 1.15em; }
+.wrap :global(.tok-heading1) {
+  font-size: 1.6em;
+  font-weight: 300;
+  letter-spacing: -0.012em;
+}
+.wrap :global(.tok-heading2) { font-size: 1.25em; }
 
 .wrap :global(.tok-emphasis) { font-style: italic; }
-.wrap :global(.tok-strong) { font-weight: 700; }
+.wrap :global(.tok-strong) { font-weight: 600; }
 
 .wrap :global(.tok-url),
-.wrap :global(.tok-link) { color: var(--color-accent); }
+.wrap :global(.tok-link) { color: var(--color-sienna); }
 
-.wrap :global(.tok-quote) { color: var(--color-text-muted); }
+.wrap :global(.tok-quote) {
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
 
 .wrap :global(.tok-monospace),
 .wrap :global(.tok-atom) {
   font-family: var(--font-mono);
-  color: #7dd3fc;
-  background: rgba(125, 211, 252, 0.08);
-  border-radius: 3px;
-  padding: 0 3px;
+  font-size: 0.92em;
+  color: var(--color-sienna);
+  background: var(--color-bg-elevated);
+  padding: 0 4px;
 }
 
-.wrap :global(.tok-processingInstruction) { color: #94a3b8; }
+.wrap :global(.tok-processingInstruction) { color: var(--color-text-muted); }
 
-/* Active line subtle highlight */
+/* Active line — barely-there warm tint, easy on the eyes */
 .wrap :global(.cm-activeLine) {
-  background: rgba(255, 255, 255, 0.025);
+  background: rgba(160, 82, 45, 0.04);
 }
-
 .wrap :global(.cm-activeLineGutter) {
   background: transparent;
-}
-
-/* Scrollbar inside editor */
-.wrap :global(.cm-scroller::-webkit-scrollbar) {
-  width: 6px;
-}
-.wrap :global(.cm-scroller::-webkit-scrollbar-thumb) {
-  background: var(--color-border-strong);
-  border-radius: 3px;
 }

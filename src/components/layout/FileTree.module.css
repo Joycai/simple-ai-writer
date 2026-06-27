@@ -5,39 +5,35 @@
   overflow: hidden;
 }
 
-/* ── Toolbar ─────────────────────────────────────────────────── */
-
+/* Toolbar — top thin strip with project actions (hidden, project name moved to Sidebar) */
 .toolbar {
   display: flex;
   align-items: center;
-  padding: 0 6px 0 10px;
+  padding: 0 22px;
   height: 30px;
   flex-shrink: 0;
   gap: 4px;
-  border-bottom: 1px solid var(--color-border);
+  font-family: var(--font-sans);
 }
 
 .rootLabel {
   flex: 1;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: var(--letter-label);
+  color: var(--color-sienna);
+  text-transform: uppercase;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: none; /* hidden — project name now in Sidebar header */
 }
 
 .toolbarActions {
   display: flex;
   align-items: center;
-  gap: 1px;
-  opacity: 0;
-  transition: opacity 120ms;
-}
-
-.toolbar:hover .toolbarActions {
-  opacity: 1;
+  gap: 2px;
+  margin-left: auto;
 }
 
 .toolbarBtn {
@@ -46,70 +42,75 @@
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: var(--radius-sm);
   color: var(--color-text-muted);
-  transition: background var(--transition-fast), color var(--transition-fast);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
 }
-
 .toolbarBtn:hover {
-  background: var(--color-bg-elevated);
-  color: var(--color-text-primary);
+  color: var(--color-sienna);
+  border-color: var(--color-border);
 }
 
-/* ── Tree ────────────────────────────────────────────────────── */
-
+/* Tree */
 .tree {
   flex: 1;
   overflow-y: auto;
-  padding: 3px 0;
+  padding: 0 14px 12px;
 }
 
-/* ── Node row ────────────────────────────────────────────────── */
-
+/* Node row */
 .node {
   display: flex;
   align-items: center;
-  height: 22px;
+  height: 28px;
   cursor: pointer;
   user-select: none;
-  border-radius: 3px;
-  margin: 0 4px;
+  margin: 0;
+  padding-right: 8px;
   position: relative;
-  gap: 0;
+  gap: 2px;
+  font-family: var(--font-serif);
 }
-
 .node:hover {
   background: var(--color-bg-elevated);
 }
-
 .node.active {
-  background: var(--color-accent-tint);
+  background: var(--color-bg-elevated);
+  position: relative;
 }
-
+.node.active::before {
+  content: "";
+  position: absolute;
+  left: -14px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-sienna);
+}
 .node.active .label {
-  color: var(--color-accent);
+  color: var(--color-text-primary);
+  font-weight: 500;
 }
 
-/* Chevron slot — always 16px wide to keep icons aligned */
 .chevron {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  color: var(--color-text-muted);
 }
-
 .chevronIcon {
   transition: transform 130ms ease;
-  opacity: 0.5;
+  opacity: 0.7;
 }
-
 .chevronIcon.open {
   transform: rotate(90deg);
 }
 
-/* File/folder icon */
 .nodeIcon {
   width: 16px;
   height: 16px;
@@ -117,28 +118,22 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  margin-right: 5px;
+  margin-right: 6px;
 }
 
-.folderIcon {
-  color: #60a5fa;
-}
-
-.fileIcon {
-  color: var(--color-text-muted);
-}
+.folderIcon { color: var(--color-amber); }
+.fileIcon { color: var(--color-text-muted); }
 
 .label {
   flex: 1;
-  font-size: var(--font-size-sm);
+  font: 400 13px/1.5 var(--font-serif);
   color: var(--color-text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  line-height: 22px;
 }
 
-/* Actions (new file / new folder) — appear on row hover */
+/* Action buttons appear on hover */
 .nodeActions {
   display: none;
   align-items: center;
@@ -146,90 +141,78 @@
   position: absolute;
   right: 4px;
   background: var(--color-bg-elevated);
+  padding: 0 2px;
 }
-
 .node:hover .nodeActions {
   display: flex;
 }
-
 .nodeActionBtn {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 18px;
   height: 18px;
-  border-radius: 3px;
   color: var(--color-text-muted);
-  transition: background var(--transition-fast), color var(--transition-fast);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color var(--transition-fast);
 }
-
 .nodeActionBtn:hover {
-  background: var(--color-bg-surface);
-  color: var(--color-text-primary);
+  color: var(--color-sienna);
 }
 
-/* ── Inline create input ─────────────────────────────────────── */
-
+/* Inline create input */
 .createInputRow {
   display: flex;
   align-items: center;
-  height: 22px;
-  margin: 0 4px;
+  height: 26px;
   gap: 0;
+  margin: 0;
 }
-
 .createInput {
   flex: 1;
-  height: 18px;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-accent);
-  border-radius: 2px;
+  height: 22px;
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-sienna);
   outline: none;
-  font-size: var(--font-size-sm);
+  font: 400 13px/1.5 var(--font-serif);
   color: var(--color-text-primary);
-  font-family: inherit;
-  padding: 0 4px;
+  padding: 0 6px;
   min-width: 0;
 }
-
 .createError {
-  font-size: var(--font-size-xs);
-  color: var(--color-error, #ef4444);
-  padding: 2px 8px 4px 36px;
+  font: 400 11px/1.4 var(--font-sans);
+  color: var(--color-error);
+  padding: 2px 14px 4px 30px;
   word-break: break-word;
-  line-height: 1.4;
 }
 
-/* ── Empty state ─────────────────────────────────────────────── */
-
+/* Empty state */
 .emptyState {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-6) var(--space-3);
+  gap: 12px;
+  padding: 32px 22px;
   text-align: center;
 }
-
 .emptyText {
-  font-size: var(--font-size-xs);
+  font: italic 400 12px/1.5 var(--font-serif);
   color: var(--color-text-muted);
-  line-height: 1.5;
 }
-
 .createBtn {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 12px;
-  font-size: var(--font-size-xs);
-  color: var(--color-accent);
-  background: var(--color-accent-tint);
-  border: 1px solid var(--color-accent-tint-strong);
-  border-radius: var(--radius-sm);
+  gap: 6px;
+  padding: 7px 14px;
+  font: 500 12px/1 var(--font-sans);
+  color: var(--color-sienna);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-strong);
+  cursor: pointer;
   transition: background var(--transition-fast);
 }
-
 .createBtn:hover {
-  background: var(--color-accent-tint-strong);
+  background: var(--color-bg-elevated);
 }

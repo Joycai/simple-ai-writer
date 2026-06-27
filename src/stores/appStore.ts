@@ -30,6 +30,10 @@ const storedRightPanelWidth = clamp(
   RIGHT_PANEL_MIN, RIGHT_PANEL_MAX,
 );
 
+export type MainView = "editor" | "lore-wall" | "outline-full";
+export type AiDrawerMode = "generate" | "consistency";
+export type SideTab = "files" | "lore" | "outline" | "search";
+
 interface AppState {
   theme: ThemeMode;
   language: Language;
@@ -37,8 +41,15 @@ interface AppState {
   rightPanelCollapsed: boolean;
   sidebarWidth: number;
   rightPanelWidth: number;
-  activeSideTab: "files" | "lore" | "search";
+  activeSideTab: SideTab;
   activeRightTab: "outline" | "ai";
+
+  // Manuscript additions
+  mainView: MainView;
+  showCommandPalette: boolean;
+  showAiDrawer: boolean;
+  aiDrawerMode: AiDrawerMode;
+  showOnboarding: boolean;
 
   setTheme: (theme: ThemeMode) => void;
   setLanguage: (lang: Language) => void;
@@ -48,8 +59,13 @@ interface AppState {
   setRightPanelCollapsed: (v: boolean) => void;
   setSidebarWidth: (w: number | ((prev: number) => number)) => void;
   setRightPanelWidth: (w: number | ((prev: number) => number)) => void;
-  setActiveSideTab: (tab: AppState["activeSideTab"]) => void;
+  setActiveSideTab: (tab: SideTab) => void;
   setActiveRightTab: (tab: AppState["activeRightTab"]) => void;
+
+  setMainView: (v: MainView) => void;
+  setShowCommandPalette: (v: boolean) => void;
+  setShowAiDrawer: (v: boolean, mode?: AiDrawerMode) => void;
+  setShowOnboarding: (v: boolean) => void;
 }
 
 function resolveTheme(mode: ThemeMode): "dark" | "light" {
@@ -76,6 +92,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   rightPanelWidth: storedRightPanelWidth,
   activeSideTab: "files",
   activeRightTab: "outline",
+
+  mainView: "editor",
+  showCommandPalette: false,
+  showAiDrawer: false,
+  aiDrawerMode: "generate",
+  showOnboarding: false,
 
   setTheme: (theme) => {
     localStorage.setItem(THEME_KEY, theme);
@@ -128,6 +150,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setActiveSideTab: (tab) => set({ activeSideTab: tab }),
   setActiveRightTab: (tab) => set({ activeRightTab: tab }),
+
+  setMainView: (v) => set({ mainView: v }),
+  setShowCommandPalette: (v) => set({ showCommandPalette: v }),
+  setShowAiDrawer: (v, mode) =>
+    set((s) => ({ showAiDrawer: v, aiDrawerMode: mode ?? s.aiDrawerMode })),
+  setShowOnboarding: (v) => set({ showOnboarding: v }),
 }));
 
 // Initialize theme on load using persisted value

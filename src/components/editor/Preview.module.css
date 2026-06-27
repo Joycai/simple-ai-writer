@@ -1,10 +1,17 @@
 .preview {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 40px;
+  padding: 64px 24px 32px;
   color: var(--color-text-primary);
-  line-height: 1.8;
-  font-size: 15px;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.78;
+}
+
+.preview > * {
+  max-width: var(--editor-max-width);
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .preview :global(h1),
@@ -13,36 +20,54 @@
 .preview :global(h4),
 .preview :global(h5),
 .preview :global(h6) {
-  font-weight: 600;
-  margin: 1.4em 0 0.5em;
+  font-family: var(--font-serif);
   color: var(--color-text-primary);
-  line-height: 1.3;
+  line-height: 1.18;
+  margin: 1.4em auto 0.5em;
+  text-align: center;
 }
-.preview :global(h1) { font-size: 1.8em; border-bottom: 1px solid var(--color-border); padding-bottom: 0.3em; }
-.preview :global(h2) { font-size: 1.4em; border-bottom: 1px solid var(--color-border); padding-bottom: 0.2em; }
-.preview :global(h3) { font-size: 1.2em; }
+.preview :global(h1) {
+  font-size: 44px;
+  font-weight: 300;
+  letter-spacing: -0.012em;
+  margin: 0.4em auto 0.8em;
+}
+.preview :global(h2) {
+  font-size: 28px;
+  font-weight: 400;
+  margin: 1.2em auto 0.6em;
+}
+.preview :global(h3) {
+  font-size: 20px;
+  font-weight: 500;
+  text-align: left;
+}
 
-.preview :global(p) { margin: 0.75em 0; }
+.preview :global(p) {
+  margin: 0 auto 1.1em;
+  text-indent: 2em;
+}
 
-.preview :global(a) { color: var(--color-accent); }
-.preview :global(a:hover) { text-decoration: underline; }
+.preview :global(a) {
+  color: var(--color-sienna);
+  border-bottom: 1px dotted var(--color-sienna);
+}
+.preview :global(a:hover) { color: var(--color-sienna-hover); }
 
 .preview :global(code) {
   font-family: var(--font-mono);
-  font-size: 0.88em;
-  background: rgba(125, 211, 252, 0.08);
-  color: #7dd3fc;
+  font-size: 0.92em;
+  background: var(--color-bg-elevated);
+  color: var(--color-sienna);
   padding: 2px 5px;
-  border-radius: 4px;
 }
 
 .preview :global(pre) {
   background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-soft);
   padding: 16px;
   overflow-x: auto;
-  margin: 1em 0;
+  margin: 1em auto;
 }
 
 .preview :global(pre code) {
@@ -52,54 +77,70 @@
 }
 
 .preview :global(blockquote) {
-  border-left: 3px solid var(--color-accent);
-  margin: 1em 0;
-  padding: 4px 16px;
+  border-left: 2px solid var(--color-sienna);
+  margin: 1em auto;
+  padding: 10px 16px;
   color: var(--color-text-secondary);
   font-style: italic;
+  background: var(--color-bg-elevated);
+  text-indent: 0;
+}
+.preview :global(blockquote p) {
+  text-indent: 0;
 }
 
 .preview :global(ul), .preview :global(ol) {
-  margin: 0.5em 0;
-  padding-left: 1.8em;
+  margin: 0.5em auto;
+  padding-left: 2.4em;
 }
-
 .preview :global(li) { margin: 0.25em 0; }
+.preview :global(li p) { text-indent: 0; }
 
 .preview :global(table) {
   border-collapse: collapse;
   width: 100%;
-  margin: 1em 0;
-  font-size: 0.9em;
+  margin: 1em auto;
+  font: 400 13px/1.6 var(--font-sans);
 }
 .preview :global(th), .preview :global(td) {
-  border: 1px solid var(--color-border);
-  padding: 6px 12px;
+  border: 1px solid var(--color-border-soft);
+  padding: 7px 12px;
   text-align: left;
 }
 .preview :global(th) {
   background: var(--color-bg-elevated);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .preview :global(hr) {
   border: none;
-  border-top: 1px solid var(--color-border);
-  margin: 2em 0;
+  text-align: center;
+  margin: 2em auto;
+  height: 1em;
+  position: relative;
+}
+.preview :global(hr::before) {
+  content: "— · —";
+  font: 400 15px/1 var(--font-serif);
+  color: var(--color-text-ghost);
+  letter-spacing: 0.7em;
 }
 
 .preview :global(img) {
   max-width: 100%;
-  border-radius: var(--radius-md);
+  display: block;
+  margin: 1em auto;
 }
 
-/* KaTeX */
-.preview :global(.katex-display) {
-  overflow-x: auto;
-}
-
-/* Mermaid diagrams */
+.preview :global(.katex-display) { overflow-x: auto; }
 .preview :global(.mermaid) {
   text-align: center;
-  margin: 1em 0;
+  margin: 1em auto;
+}
+
+/* Lore mention spans (when emitted by markdown renderer) */
+.preview :global(.lore-mention) {
+  color: var(--color-sienna);
+  background: linear-gradient(to bottom, transparent 72%, var(--color-mention-bg) 72%);
+  padding: 0 1px;
 }
