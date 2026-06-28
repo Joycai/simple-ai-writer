@@ -11,17 +11,6 @@
   font-size: var(--font-size-md);
 }
 
-.dots {
-  display: flex;
-  gap: 7px;
-}
-.dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--color-border);
-}
-
 .sep {
   width: 1px;
   height: 18px;

@@ -21,12 +21,12 @@
     "modified": "modified",
     "saved": "saved",
     "saving": "saving",
-    "summonAi": "AI · ⌘K",
+    "summonAi": "AI",
     "noProject": "Untitled project",
     "noFile": "Untitled"
   },
   "editorStrip": {
-    "summon": "⌘ K · summon AI",
+    "summon": "{{mod}} K · summon AI",
     "paragraph": "Paragraph {{p}} · sentence {{s}}",
     "cumulative": "Total {{n}} words",
     "refs": "{{n}} lore refs"
@@ -37,11 +37,11 @@
     "hint1": "The first sentence is always the hardest. Begin with a scene, a line of dialogue, a name.",
     "hint2": "You don't have to be perfect now. Manuscript will always be here.",
     "dontKnow": "Don't know where to begin?",
-    "letAi": "Let AI give you an opening · ⌘ K",
-    "tipCmdkLabel": "⌘ K",
+    "letAi": "Let AI give you an opening · {{mod}} K",
+    "tipCmdkLabel": "{{mod}} K",
     "tipCmdk": "Summon AI anytime — jump, continue, ask",
     "tipBrackets": "Tag lore with double brackets — auto-indexed",
-    "tipSaveLabel": "⌘ S",
+    "tipSaveLabel": "{{mod}} S",
     "tipSave": "Auto-saves to your local folder",
     "chapterEyebrow": "CHAPTER ONE"
   },
@@ -234,6 +234,9 @@
       "priceInput": "Input",
       "priceCachedInput": "Cached Input",
       "priceOutput": "Output",
+      "prefixLabel": "Prefix Prompt (optional)",
+      "prefixPlaceholder": "e.g. You are an experienced novel editor…",
+      "prefixHint": "Auto-injected as the leading system instruction on every request to this model. Leave blank to disable.",
       "cancel": "Cancel",
       "saving": "Saving…",
       "editTitle": "Edit Model",
@@ -319,9 +322,26 @@
       "selectEntity": "Select a lore entry to view details",
       "showInBrowser": "Show in File Browser",
       "aiImprove": "AI Improve",
+      "manageImages": "Manage Images…",
       "deleteEntity": "Delete",
       "deleteConfirm": "Delete \"{{name}}\"? This cannot be undone.",
       "deleteBtn": "Delete"
+    },
+    "wall": {
+      "changeAvatar": "Change avatar"
+    },
+    "detail": {
+      "gallery": "Gallery",
+      "addImage": "Add Image",
+      "editDesc": "Edit description",
+      "removeImage": "Remove image",
+      "removeConfirm": "Remove \"{{file}}\"? This cannot be undone — the file will also be deleted from disk.",
+      "descPlaceholder": "One-line description (multimodal models will see the image; text-only models only see this text)…",
+      "noDesc": "(no description — click to add)",
+      "galleryEmpty": "No images yet — click \"Add Image\" to pick local files, then fill in descriptions",
+      "previewImage": "Click to enlarge",
+      "previewPrev": "Previous",
+      "previewNext": "Next"
     },
     "improve": {
       "subtitle": "AI Improve",

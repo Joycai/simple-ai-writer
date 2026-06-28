@@ -33,12 +33,16 @@ export interface AgentLoopOptions {
   modelId: string;
   /** Gemini-only: per-request safety filter thresholds. */
   safetySettings?: GeminiSafetySettings;
+  /** Optional model-scoped prefix prompt. */
+  prefix?: string;
   systemPrompt: string;
   /** The assembled user message content (from RAG) for the first turn */
   initialUserMessage: string;
   projectPath: string;
   loreIndex: LoreIndex;
   tools: ToolDefinition[];
+  /** Whether the active model accepts image inputs (controls lore gallery payloads). */
+  multimodal: boolean;
   signal: AbortSignal;
   onToolStep: (step: ToolStep) => void;
   onOutputChunk: (text: string) => void;
@@ -76,6 +80,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<void> {
       apiKey: opts.apiKey,
       standard: opts.standard,
       modelId: opts.modelId,
+      prefix: opts.prefix,
       messages: history,
       safetySettings: opts.safetySettings,
       tools: isLastRound ? undefined : opts.tools,
@@ -123,7 +128,9 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<void> {
 
       let result: ToolResult;
       try {
-        result = await executeTool(toolCall, opts.projectPath, opts.loreIndex);
+        result = await executeTool(toolCall, opts.projectPath, opts.loreIndex, {
+          multimodal: opts.multimodal,
+        });
         opts.onToolStep({
           round,
           toolCallId: tc.id,

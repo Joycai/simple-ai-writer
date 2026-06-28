@@ -69,6 +69,8 @@ export interface Model {
   priceCachedIn: number;
   priceOut: number;     // USD per 1M output tokens
   enabled: boolean;
+  /** Optional model-scoped prefix prompt, prepended to every request as a leading system instruction. */
+  prefix?: string;
 }
 
 export interface Prompt {
@@ -106,9 +108,16 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
       price_in REAL NOT NULL DEFAULT 0,
       price_cached_in REAL NOT NULL DEFAULT 0,
       price_out REAL NOT NULL DEFAULT 0,
-      enabled INTEGER NOT NULL DEFAULT 1
+      enabled INTEGER NOT NULL DEFAULT 1,
+      prefix TEXT
     )
   `);
+
+  // Migration: add prefix column to models created before this column existed.
+  const modelCols = await db.select<{ name: string }[]>(`PRAGMA table_info(models)`);
+  if (!modelCols.some((c) => c.name === "prefix")) {
+    await db.execute(`ALTER TABLE models ADD COLUMN prefix TEXT`);
+  }
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS prompts (
@@ -220,9 +229,9 @@ export async function saveModel(
 ): Promise<void> {
   await db.execute(
     `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0]
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null]
   );
 }
 
@@ -346,5 +355,6 @@ function rowToModel(r: Record<string, unknown>): Model {
     priceCachedIn: r.price_cached_in as number,
     priceOut: r.price_out as number,
     enabled: (r.enabled as number) === 1,
+    prefix: (r.prefix as string | null) ?? undefined,
   };
 }

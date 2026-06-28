@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
+import { MOD_KEY } from "../../lib/platform";
 import styles from "./EditorBottomStrip.module.css";
 
 interface Props {
@@ -34,7 +35,7 @@ export function EditorBottomStrip({ paragraph, sentence, refsCount = 0 }: Props)
           {isZh ? " 设定" : " lore refs"}
         </span>
         <span className={styles.summon} onClick={() => setShowCommandPalette(true)}>
-          {t("editorStrip.summon")}
+          {t("editorStrip.summon", { mod: MOD_KEY })}
         </span>
       </span>
     </div>

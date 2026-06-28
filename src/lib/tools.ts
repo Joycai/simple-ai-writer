@@ -37,7 +37,7 @@ export const AGENT_TOOLS: ToolDefinition[] = [
     function: {
       name: "read_lore_entity",
       description:
-        "Read the full detail of a lore entity including its index.md and all supplementary .md files. If the entity has an avatar image it is also returned. Call list_lore_entities first to get the exact entity names.",
+        "Read the full detail of a lore entity including its index.md and all supplementary .md files. The entity may also have a gallery (avatar + images.md listing additional pictures with descriptions): for multimodal models the binary images are attached, for text-only models only the descriptions are returned. Call list_lore_entities first to get the exact entity names.",
       parameters: {
         type: "object",
         properties: {
@@ -88,10 +88,20 @@ export const AGENT_TOOLS: ToolDefinition[] = [
   },
 ];
 
+export interface ExecuteToolOptions {
+  /**
+   * Whether the active model can ingest images. When false, `read_lore_entity`
+   * still emits the text descriptions from `images.md` (and notes that an avatar
+   * exists) but skips the base64 image payload.
+   */
+  multimodal: boolean;
+}
+
 export async function executeTool(
   call: ToolCall,
   projectPath: string,
   loreIndex: LoreIndex,
+  opts: ExecuteToolOptions = { multimodal: false },
 ): Promise<ToolResult> {
   try {
     switch (call.name) {
@@ -101,7 +111,7 @@ export async function executeTool(
       case "read_lore_entity": {
         const args = JSON.parse(call.arguments || "{}") as { name?: string };
         if (!args.name) return { toolCallId: call.id, content: "Error: 'name' argument is required." };
-        return await readLoreEntity(call.id, args.name, loreIndex);
+        return await readLoreEntity(call.id, args.name, loreIndex, opts.multimodal);
       }
 
       case "list_files": {
@@ -141,6 +151,7 @@ async function readLoreEntity(
   toolCallId: string,
   name: string,
   loreIndex: LoreIndex,
+  multimodal: boolean,
 ): Promise<ToolResult> {
   const lower = name.toLowerCase();
   let found: LoreEntity | undefined;
@@ -167,6 +178,7 @@ async function readLoreEntity(
   const filenames = found.mdFiles?.length ? found.mdFiles : ["index.md"];
   const parts: string[] = [];
   for (const filename of filenames) {
+    if (filename === "images.md") continue; // surfaced separately as the gallery block
     try {
       const content = await readEntityFile(found.dirPath, filename);
       parts.push(`=== ${filename} ===\n${content}`);
@@ -175,18 +187,49 @@ async function readLoreEntity(
     }
   }
 
+  // Gallery: always emit textual descriptions (incl. the avatar). Text-only
+  // models still get a useful description; multimodal models additionally
+  // receive the binary payload below.
+  const galleryLines: string[] = [];
+  if (found.avatarPath) {
+    const fname = found.avatarPath.split(/[\\/]/).pop() ?? "avatar";
+    galleryLines.push(`- ${fname}: (avatar)`);
+  }
+  for (const img of found.images) {
+    galleryLines.push(`- ${img.file}: ${img.desc || "(no description)"}`);
+  }
+  if (galleryLines.length) {
+    const header = multimodal
+      ? "=== images === (descriptions; binary attached below)"
+      : "=== images === (text descriptions only — current model is text-only)";
+    parts.push(`${header}\n${galleryLines.join("\n")}`);
+  }
+
   const textContent = parts.join("\n\n") || "(no content)";
 
-  if (found.avatarPath) {
+  if (!multimodal) {
+    return { toolCallId, content: textContent };
+  }
+
+  // Multimodal: load avatar + all gallery images as data URLs. Failures per
+  // file are swallowed so one missing/corrupt image doesn't break the call.
+  const imageDataUrls: string[] = [];
+  const imagePaths = [
+    ...(found.avatarPath ? [found.avatarPath] : []),
+    ...found.images.map((i) => i.absPath),
+  ];
+  for (const p of imagePaths) {
     try {
-      const { dataUrl } = await imageToDataUrl(found.avatarPath);
-      return { toolCallId, content: textContent, imageDataUrls: [dataUrl] };
+      const { dataUrl } = await imageToDataUrl(p);
+      imageDataUrls.push(dataUrl);
     } catch {
-      // skip image on error, return text only
+      // skip unreadable image
     }
   }
 
-  return { toolCallId, content: textContent };
+  return imageDataUrls.length
+    ? { toolCallId, content: textContent, imageDataUrls }
+    : { toolCallId, content: textContent };
 }
 
 async function listWritingFiles(

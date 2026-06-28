@@ -7,6 +7,7 @@ import { useEditorStore } from "../../stores/editorStore";
 import { CodeEditor } from "../editor/CodeEditor";
 import { Preview } from "../editor/Preview";
 import { EditorBottomStrip } from "./EditorBottomStrip";
+import { MOD_KEY } from "../../lib/platform";
 import styles from "./EditorArea.module.css";
 
 export function EditorArea() {
@@ -52,13 +53,13 @@ export function EditorArea() {
                 onClick={() => setShowCommandPalette(true)}
               >
                 <Sparkles size={11} />
-                {t("empty.letAi")}
+                {t("empty.letAi", { mod: MOD_KEY })}
               </button>
             </div>
 
             <div className={styles.tipGrid}>
               <div className={styles.tipCard}>
-                <div className={styles.tipLabel}>{t("empty.tipCmdkLabel")}</div>
+                <div className={styles.tipLabel}>{t("empty.tipCmdkLabel", { mod: MOD_KEY })}</div>
                 <div className={styles.tipText}>{t("empty.tipCmdk")}</div>
               </div>
               <div className={styles.tipCard}>
@@ -66,7 +67,7 @@ export function EditorArea() {
                 <div className={styles.tipText}>{t("empty.tipBrackets")}</div>
               </div>
               <div className={styles.tipCard}>
-                <div className={styles.tipLabel}>{t("empty.tipSaveLabel")}</div>
+                <div className={styles.tipLabel}>{t("empty.tipSaveLabel", { mod: MOD_KEY })}</div>
                 <div className={styles.tipText}>{t("empty.tipSave")}</div>
               </div>
             </div>

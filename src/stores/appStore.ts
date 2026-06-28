@@ -51,6 +51,15 @@ interface AppState {
   aiDrawerMode: AiDrawerMode;
   showOnboarding: boolean;
 
+  /**
+   * Cross-component navigation request to the lore detail page.
+   * Set when something outside LoreWall (e.g. the sidebar's "manage images"
+   * button) wants to deep-link into a specific entity and optionally scroll
+   * to a named section. LoreWall consumes `entityId`/`category` to open the
+   * detail, then LoreDetail consumes `anchor` and clears it.
+   */
+  pendingLoreNav: { entityId: string; category: string; anchor?: "gallery" } | null;
+
   setTheme: (theme: ThemeMode) => void;
   setLanguage: (lang: Language) => void;
   toggleSidebar: () => void;
@@ -66,6 +75,7 @@ interface AppState {
   setShowCommandPalette: (v: boolean) => void;
   setShowAiDrawer: (v: boolean, mode?: AiDrawerMode) => void;
   setShowOnboarding: (v: boolean) => void;
+  setPendingLoreNav: (v: AppState["pendingLoreNav"]) => void;
 }
 
 function resolveTheme(mode: ThemeMode): "dark" | "light" {
@@ -98,6 +108,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   showAiDrawer: false,
   aiDrawerMode: "generate",
   showOnboarding: false,
+  pendingLoreNav: null,
 
   setTheme: (theme) => {
     localStorage.setItem(THEME_KEY, theme);
@@ -156,6 +167,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setShowAiDrawer: (v, mode) =>
     set((s) => ({ showAiDrawer: v, aiDrawerMode: mode ?? s.aiDrawerMode })),
   setShowOnboarding: (v) => set({ showOnboarding: v }),
+  setPendingLoreNav: (v) => set({ pendingLoreNav: v }),
 }));
 
 // Initialize theme on load using persisted value

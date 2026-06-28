@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { useAiTaskStore, type TaskKind } from "../../stores/aiTaskStore";
 import { useAppStore } from "../../stores/appStore";
+import { MOD_KEY } from "../../lib/platform";
 import styles from "./InlineAiBubble.module.css";
 
 interface Action {
@@ -58,10 +59,10 @@ export function InlineAiBubble() {
   if (!selection || dismissed || !pos) return null;
 
   const actions: Action[] = [
-    { id: "continue", icon: <ArrowRight size={13} strokeWidth={1.6} />, label: t("ai.tasks.continue"), key: "⌘ J" },
-    { id: "polish",   icon: <Wand2 size={13} strokeWidth={1.6} />,      label: t("ai.tasks.polish"),   key: "⌘ L" },
-    { id: "rewrite",  icon: <RefreshCw size={13} strokeWidth={1.6} />,  label: t("ai.tasks.rewrite"),  key: "⌘ R" },
-    { id: "ask",      icon: <MessageCircleQuestion size={13} strokeWidth={1.6} />, label: t("ai.inline.ask", { defaultValue: "问 AI" }), key: "⌘ /" },
+    { id: "continue", icon: <ArrowRight size={13} strokeWidth={1.6} />, label: t("ai.tasks.continue"), key: `${MOD_KEY} J` },
+    { id: "polish",   icon: <Wand2 size={13} strokeWidth={1.6} />,      label: t("ai.tasks.polish"),   key: `${MOD_KEY} L` },
+    { id: "rewrite",  icon: <RefreshCw size={13} strokeWidth={1.6} />,  label: t("ai.tasks.rewrite"),  key: `${MOD_KEY} R` },
+    { id: "ask",      icon: <MessageCircleQuestion size={13} strokeWidth={1.6} />, label: t("ai.inline.ask", { defaultValue: "问 AI" }), key: `${MOD_KEY} /` },
     { id: "extract",  icon: <BookmarkPlus size={13} strokeWidth={1.6} />, label: t("ai.inline.extract", { defaultValue: "提取为设定" }) },
     { id: "check",    icon: <CheckCircle2 size={13} strokeWidth={1.6} />, label: t("ai.inline.check", { defaultValue: "核对一致性" }) },
   ];
@@ -105,7 +106,7 @@ export function InlineAiBubble() {
         <span className={styles.headLabel}>
           AI · {t("ai.panel.selectedChars", { count: selection.length })}
         </span>
-        <span className={styles.headHint}>⌘ K · {t("ai.inline.drawer", { defaultValue: "抽屉" })}</span>
+        <span className={styles.headHint}>{MOD_KEY} K · {t("ai.inline.drawer", { defaultValue: "抽屉" })}</span>
       </div>
 
       <div className={styles.grid}>

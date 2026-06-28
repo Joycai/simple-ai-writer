@@ -76,6 +76,16 @@ pub fn fs_remove_dir(path: String) -> Result<(), String> {
     fs::remove_dir_all(&path).map_err(|e| e.to_string())
 }
 
+/// Remove a single file. Missing files are a no-op so callers can be tolerant.
+#[command]
+pub fn fs_remove_file(path: String) -> Result<(), String> {
+    let p = Path::new(&path);
+    if !p.exists() {
+        return Ok(());
+    }
+    fs::remove_file(p).map_err(|e| e.to_string())
+}
+
 /// List one level of a directory (name + is_dir). Returns [] if path doesn't exist.
 #[command]
 pub fn fs_read_dir(path: String) -> Result<Vec<FileNode>, String> {

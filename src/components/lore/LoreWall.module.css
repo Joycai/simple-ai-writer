@@ -185,22 +185,60 @@
 }
 .cardFeatured .cardHeader { gap: 14px; margin-bottom: 14px; }
 
-.cardAvatar {
+.cardAvatarWrap {
+  position: relative;
   width: 36px;
   height: 36px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.cardFeatured .cardAvatarWrap {
+  width: 60px;
+  height: 60px;
+}
+
+.cardAvatar {
+  width: 100%;
+  height: 100%;
   background: var(--color-sienna);
   color: var(--color-card);
   display: flex;
   align-items: center;
   justify-content: center;
   font: 300 17px/1 var(--font-serif);
-  flex-shrink: 0;
 }
 .cardFeatured .cardAvatar {
-  width: 60px;
-  height: 60px;
   border-radius: 50%;
   font-size: 30px;
+}
+
+.cardAvatarImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: var(--color-bg-surface);
+}
+.cardFeatured .cardAvatarImg {
+  border-radius: 50%;
+}
+
+.cardAvatarOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(42, 37, 32, 0.6);
+  color: #fff;
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+.cardFeatured .cardAvatarOverlay {
+  border-radius: 50%;
+}
+.cardAvatarWrap:hover .cardAvatarOverlay {
+  opacity: 1;
 }
 
 .cardName {

@@ -3,6 +3,7 @@ import { Moon, Sun, Monitor, Settings, Sparkles, Languages } from "lucide-react"
 import { useAppStore, type ThemeMode, type Language } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useEditorStore, type ViewMode } from "../../stores/editorStore";
+import { MOD_K } from "../../lib/platform";
 import styles from "./TitleBar.module.css";
 
 interface Props {
@@ -47,12 +48,6 @@ export function TitleBar({ onOpenSettings }: Props) {
 
   return (
     <div className={styles.bar}>
-      <div className={styles.dots}>
-        <span className={styles.dot} />
-        <span className={styles.dot} />
-        <span className={styles.dot} />
-      </div>
-      <div className={styles.sep} />
       <span className={styles.brandIcon}>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
           <path d="M12 2 L22 8 L12 14 L2 8 Z M2 16 L12 22 L22 16" />
@@ -124,9 +119,9 @@ export function TitleBar({ onOpenSettings }: Props) {
         <button
           className={styles.ctrl}
           onClick={() => setShowCommandPalette(true)}
-          title="⌘K"
+          title={MOD_K}
         >
-          ⌘K
+          {MOD_K}
         </button>
       </div>
     </div>
