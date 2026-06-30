@@ -1,0 +1,32 @@
+.grid {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 10px 14px;
+  align-items: start;
+}
+
+.gLabel {
+  font: 500 11px/1.8 var(--font-sans);
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  padding-top: 6px;
+}
+
+.gInput {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border);
+  font: 400 13px/1.4 var(--font-serif);
+  color: var(--color-text-primary);
+  outline: none;
+  box-sizing: border-box;
+}
+.gInput:focus { border-color: var(--color-accent); }
+
+.gTextarea {
+  resize: vertical;
+  min-height: 48px;
+  font-family: var(--font-serif);
+}

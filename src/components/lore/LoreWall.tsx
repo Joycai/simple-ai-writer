@@ -5,7 +5,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore } from "../../stores/projectStore";
-import { LORE_CATEGORIES, setEntityAvatar, type LoreEntity } from "../../lib/lore";
+import { LORE_CATEGORIES, setEntityAvatar, slugifyEntityId, uniqueEntityId, type CategoryId, type LoreEntity } from "../../lib/lore";
 import { useAppStore } from "../../stores/appStore";
 import { imageToDataUrl } from "../../lib/loreGenerator";
 import { MOD_K_SPACED } from "../../lib/platform";
@@ -34,7 +34,7 @@ function rotationFor(id: string): number {
 export function LoreWall() {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
-  const { index, scanProject } = useLoreStore();
+  const { index, scanProject, createNewEntity } = useLoreStore();
   const { projectPath } = useProjectStore();
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
   const pendingLoreNav = useAppStore((s) => s.pendingLoreNav);
@@ -42,6 +42,7 @@ export function LoreWall() {
   const [filter, setFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [showGenerator, setShowGenerator] = useState(false);
+  const [showNewEntry, setShowNewEntry] = useState(false);
   const [detailEntity, setDetailEntity] = useState<LoreEntity | null>(null);
 
   // Avatar rendering uses data URLs (see LoreDetail rationale: Webview2's strict
@@ -139,6 +140,21 @@ export function LoreWall() {
   return (
     <div className={styles.wall}>
       {showGenerator && <LoreGenerator onClose={() => setShowGenerator(false)} />}
+      {showNewEntry && (
+        <NewEntryModal
+          initialCategory={(filter !== "all" ? (filter as CategoryId) : "characters")}
+          onClose={() => setShowNewEntry(false)}
+          onCreate={async (category, name) => {
+            if (!projectPath) return;
+            const baseId = slugifyEntityId(name);
+            const id = await uniqueEntityId(projectPath, category, baseId);
+            await createNewEntity(projectPath, category, id, name.trim());
+            setShowNewEntry(false);
+            const created = useLoreStore.getState().index[category]?.find((e) => e.id === id);
+            if (created) setDetailEntity(created);
+          }}
+        />
+      )}
 
       <div className={styles.header}>
         <div className={styles.headerRow}>
@@ -164,7 +180,7 @@ export function LoreWall() {
             <Sparkles size={12} strokeWidth={1.6} />
             AI 提取
           </button>
-          <button className={styles.btnPrimary}>
+          <button className={styles.btnPrimary} onClick={() => setShowNewEntry(true)}>
             <Plus size={12} strokeWidth={2.5} />
             {t("lore.panel.newEntry")}
           </button>
@@ -268,6 +284,87 @@ export function LoreWall() {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function NewEntryModal({
+  initialCategory,
+  onClose,
+  onCreate,
+}: {
+  initialCategory: CategoryId;
+  onClose: () => void;
+  onCreate: (category: CategoryId, name: string) => Promise<void>;
+}) {
+  const { t, i18n } = useTranslation();
+  const isZh = i18n.language.startsWith("zh");
+  const [category, setCategory] = useState<CategoryId>(initialCategory);
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!name.trim() || saving) return;
+    setSaving(true);
+    try {
+      await onCreate(category, name);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className={styles.modalBackdrop} onClick={onClose}>
+      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+        <div className={styles.modalHeader}>
+          <div className={styles.modalEyebrow}>{isZh ? "新建条目" : "NEW ENTRY"}</div>
+          <div className={styles.modalTitle}>{t("lore.panel.newEntry")}</div>
+        </div>
+
+        <div className={styles.modalBody}>
+          <label className={styles.modalLabel}>{isZh ? "分类" : "Category"}</label>
+          <div className={styles.modalCats}>
+            {LORE_CATEGORIES.map((cat) => (
+              <span
+                key={cat.id}
+                className={`${styles.chip} ${category === cat.id ? styles.chipActive : ""}`}
+                onClick={() => setCategory(cat.id)}
+              >
+                <span className={styles.chipDot} style={{ background: CAT_COLOR[cat.id] }} />
+                {isZh ? cat.labelZh : cat.labelEn}
+              </span>
+            ))}
+          </div>
+
+          <label className={styles.modalLabel}>{isZh ? "名称" : "Name"}</label>
+          <input
+            className={styles.modalInput}
+            placeholder={t("lore.form.namePlaceholder", { defaultValue: isZh ? "条目名称" : "Entry name" })}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void handleSubmit();
+              if (e.key === "Escape") onClose();
+            }}
+            autoFocus
+          />
+        </div>
+
+        <div className={styles.modalActions}>
+          <button className={styles.btnSecondary} onClick={onClose}>
+            {t("lore.form.cancel", { defaultValue: isZh ? "取消" : "Cancel" })}
+          </button>
+          <button
+            className={styles.btnPrimary}
+            onClick={handleSubmit}
+            disabled={!name.trim() || saving}
+          >
+            {saving
+              ? t("lore.form.creating", { defaultValue: isZh ? "创建中…" : "Creating…" })
+              : t("lore.form.create", { defaultValue: isZh ? "创建" : "Create" })}
+          </button>
+        </div>
       </div>
     </div>
   );
