@@ -19,6 +19,7 @@ import { readFile } from "../../lib/fileio";
 import { imageToDataUrl } from "../../lib/loreGenerator";
 import { renderMarkdown } from "../../lib/markdown";
 import { LoreImproveModal } from "./LoreImproveModal";
+import { LoreMetaImproveModal } from "./LoreMetaImproveModal";
 import styles from "./LoreDetail.module.css";
 
 interface Props {
@@ -55,6 +56,7 @@ export function LoreDetail({ entity: initialEntity, onBack }: Props) {
   const [tab, setTab] = useState<Tab>("summary");
   const [content, setContent] = useState<string>("");
   const [showImprove, setShowImprove] = useState(false);
+  const [showMetaImprove, setShowMetaImprove] = useState(false);
 
   // Gallery edit state
   const [editingFile, setEditingFile] = useState<string | null>(null);
@@ -214,6 +216,9 @@ export function LoreDetail({ entity: initialEntity, onBack }: Props) {
       {showImprove && (
         <LoreImproveModal entity={entity} onClose={() => setShowImprove(false)} />
       )}
+      {showMetaImprove && (
+        <LoreMetaImproveModal entity={entity} onClose={() => setShowMetaImprove(false)} />
+      )}
 
       {previewImg && createPortal(
         <div
@@ -286,6 +291,9 @@ export function LoreDetail({ entity: initialEntity, onBack }: Props) {
           <span className={styles.crumbBold}>{entity.name}</span>
         </span>
         <span className={styles.spacer} />
+        <button className={styles.actionBtn} onClick={() => setShowMetaImprove(true)}>
+          <Sparkles size={11} /> {t("lore.panel.aiImproveMeta", { defaultValue: "AI 优化元数据" })}
+        </button>
         <button className={styles.actionBtn} onClick={() => setShowImprove(true)}>
           <Sparkles size={11} /> {t("lore.panel.aiImprove")}
         </button>
