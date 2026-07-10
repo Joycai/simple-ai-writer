@@ -10,6 +10,7 @@
  */
 
 import i18n from "../i18n";
+import { readFile } from "./fileio";
 import type { LoreIndex } from "./lore";
 
 const MAX_AUTO_LORE_CARDS = 3;
@@ -60,7 +61,6 @@ function matchEntities(text: string, lore: LoreIndex): string[] {
 /** Load an entity's index.md content (summary section only). */
 async function loadEntitySummary(dirPath: string): Promise<string> {
   try {
-    const { readFile } = await import("./fileio");
     const content = await readFile(`${dirPath}/index.md`);
     return content.slice(0, MAX_LORE_CHARS);
   } catch {
