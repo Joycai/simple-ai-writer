@@ -12,15 +12,7 @@
     "dialog:allow-save",
     "fs:default",
     "fs:allow-read-file",
-    "fs:allow-read-text-file",
-    "fs:allow-write-file",
-    "fs:allow-write-text-file",
     "fs:allow-read-dir",
-    "fs:allow-mkdir",
-    "fs:allow-remove",
-    "fs:allow-rename",
-    "fs:allow-exists",
-    "fs:allow-stat",
     {
       "identifier": "fs:scope",
       "allow": [
@@ -31,14 +23,6 @@
     "sql:default",
     "sql:allow-execute",
     "sql:allow-select",
-    "sql:allow-load",
-    "stronghold:default",
-    "stronghold:allow-initialize",
-    "stronghold:allow-create-client",
-    "stronghold:allow-load-client",
-    "stronghold:allow-get-store-record",
-    "stronghold:allow-save-store-record",
-    "stronghold:allow-remove-store-record",
-    "stronghold:allow-save"
+    "sql:allow-load"
   ]
 }

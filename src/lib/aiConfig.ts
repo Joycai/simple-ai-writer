@@ -128,26 +128,14 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
     )
   `);
 
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS api_keys (
-      provider_id TEXT PRIMARY KEY,
-      api_key TEXT NOT NULL DEFAULT ''
-    )
-  `);
 }
 
-export async function saveKeyToDb(
-  db: Awaited<ReturnType<typeof Database.load>>,
-  providerId: string,
-  apiKey: string,
-): Promise<void> {
-  await db.execute(
-    `INSERT OR REPLACE INTO api_keys (provider_id, api_key) VALUES (?, ?)`,
-    [providerId, apiKey],
-  );
-}
+// ─── Legacy plaintext key storage (migration only) ────────────────────────────
+// Keys used to be stored in plaintext in the `api_keys` table. They now live in
+// the OS keyring (see keyStore.ts). These helpers only exist so keyStore can
+// migrate old rows out of the DB; no code path writes new keys here.
 
-export async function loadKeyFromDb(
+export async function loadLegacyKeyFromDb(
   db: Awaited<ReturnType<typeof Database.load>>,
   providerId: string,
 ): Promise<string | null> {
@@ -158,7 +146,7 @@ export async function loadKeyFromDb(
   return rows[0]?.api_key ?? null;
 }
 
-export async function deleteKeyFromDb(
+export async function deleteLegacyKeyFromDb(
   db: Awaited<ReturnType<typeof Database.load>>,
   providerId: string,
 ): Promise<void> {

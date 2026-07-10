@@ -97,3 +97,36 @@ fn percent_decode(s: &str) -> String {
     }
     String::from_utf8_lossy(&bytes).into_owned()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mime_allowlist_accepts_known_image_extensions() {
+        assert_eq!(mime_for_path(Path::new("/a/b.png")), Some("image/png"));
+        assert_eq!(mime_for_path(Path::new("/a/b.JPEG")), Some("image/jpeg"));
+        assert_eq!(mime_for_path(Path::new("/a/b.webp")), Some("image/webp"));
+        assert_eq!(mime_for_path(Path::new("/a/b.svg")), Some("image/svg+xml"));
+    }
+
+    #[test]
+    fn mime_allowlist_rejects_non_image_paths() {
+        // The 403 guard depends on these returning None — arbitrary files must
+        // not be servable through the asset protocol.
+        assert_eq!(mime_for_path(Path::new("/etc/passwd")), None);
+        assert_eq!(mime_for_path(Path::new("/a/b.txt")), None);
+        assert_eq!(mime_for_path(Path::new("/a/config.db")), None);
+        assert_eq!(mime_for_path(Path::new("/a/noextension")), None);
+    }
+
+    #[test]
+    fn percent_decode_handles_encoded_and_plain_input() {
+        assert_eq!(percent_decode("/a%20b/c.png"), "/a b/c.png");
+        assert_eq!(percent_decode("/plain/path.png"), "/plain/path.png");
+        // Malformed escapes pass through instead of panicking.
+        assert_eq!(percent_decode("/a%zz.png"), "/a%zz.png");
+        // UTF-8 multibyte sequences survive decoding (e.g. CJK dir names).
+        assert_eq!(percent_decode("/%E8%A7%92%E8%89%B2.png"), "/角色.png");
+    }
+}

@@ -37,10 +37,11 @@ token_usage (id, model_id, task, prompt_tokens, cached_tokens, completion_tokens
 
 ### Secure Key Storage
 
-- **Library** — `tauri-plugin-stronghold` (v2.3.1)
-- **Location** — `src/lib/keyStore.ts`
-- **Setup** — `.setup()` hook in `src-tauri/src/lib.rs` with argon2 KDF (salt at `~/.config/simple-ai-writer/salt.txt`)
-- **API** — `saveApiKey(projectPath, providerId, key)`, `loadApiKey(projectPath, providerId)`
+- **Backend** — OS credential manager via the `keyring` crate (Windows Credential Manager / macOS Keychain / Linux Secret Service), service name `com.simple-ai-writer.app`
+- **Rust commands** — `secret_save` / `secret_load` / `secret_delete` in `src-tauri/src/secrets.rs`
+- **Frontend** — `src/lib/keyStore.ts`: `saveApiKey(providerId, key)`, `loadApiKey(providerId)`, `deleteApiKey(providerId)`; falls back to sessionStorage outside Tauri (browser dev)
+- **Migration** — keys stored by older builds in the plaintext SQLite `api_keys` table are moved into the keyring (and deleted from the DB) lazily on first access
+- **History** — stronghold was removed (its Rust actor deadlocked on some macOS setups); an interim plaintext-SQLite scheme was then replaced by the keyring
 
 ### Export
 
@@ -57,8 +58,10 @@ token_usage (id, model_id, task, prompt_tokens, cached_tokens, completion_tokens
 - `aiTaskStore` imports from `editorStore` lazily inside `runTask()` to avoid circular imports at module load
 
 ### Tauri IPC Commands
-- Implemented in `src-tauri/src/lib.rs` (minimal; most logic in TypeScript)
-- Commands exposed: `scaffold_project`, `read_dir_recursive`
+- Implemented in `src-tauri/src/` (minimal; most logic in TypeScript)
+- `commands.rs` — `scaffold_project`, `read_dir_recursive`, plus `fs_*` helpers (write text/binary, read text, create/read/remove dir, remove file, exists)
+- `secrets.rs` — `secret_save` / `secret_load` / `secret_delete` (OS keyring)
+- `protocol.rs` — custom `ai-writer-asset://` scheme for lore images (extension allowlist)
 - Plugin permissions in `src-tauri/capabilities/default.json`
 
 ### File I/O
@@ -72,7 +75,14 @@ token_usage (id, model_id, task, prompt_tokens, cached_tokens, completion_tokens
 
 ### Capabilities & Permissions
 - `src-tauri/capabilities/default.json` — Explicit permissions for all Tauri plugins
-- Must include: `stronghold:*`, `sql:*`, `fs:*`, `dialog:*`
+- Must include: `sql:*`, `dialog:*`, and read-only `fs` permissions (key storage uses custom `secret_*` commands, no plugin permission needed)
+- The fs plugin is granted **read-only** (`read-file`, `read-dir`) — all writes/deletes go through the audited custom `fs_*` Rust commands. The fs scope stays broad (`/**`) because projects can live anywhere on disk.
+
+### Content Security Policy
+- Production CSP is set in `tauri.conf.json` (`app.security.csp`); `devCsp` is `null` so Vite HMR keeps working in dev
+- `connect-src` allows `https:`/`http:` because users configure arbitrary AI endpoints (incl. local LLMs like Ollama); `script-src` is locked to `'self'`
+- `img-src` includes the `ai-writer-asset:` custom scheme (and its `http://ai-writer-asset.localhost` Windows form) for lore images
+- If a new subsystem breaks under CSP (e.g. a library injecting inline `<script>`), extend the directive minimally — don't set `csp` back to `null`
 
 ## Performance Considerations
 
