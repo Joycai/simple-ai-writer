@@ -1,5 +1,6 @@
 mod commands;
 mod protocol;
+mod secrets;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -10,13 +11,6 @@ pub fn run() {
         .plugin(tauri_plugin_sql::Builder::default().build())
         .setup(|app| {
             use tauri::Manager;
-            let salt_path = app
-                .path()
-                .app_local_data_dir()
-                .expect("could not resolve app local data path")
-                .join("salt.txt");
-            app.handle()
-                .plugin(tauri_plugin_stronghold::Builder::with_argon2(&salt_path).build())?;
 
             // Set the app icon explicitly at runtime on the window (helps show custom icon on macOS Dock / Windows taskbar during `tauri dev`)
             if let Some(window) = app.get_webview_window("main") {
@@ -37,6 +31,9 @@ pub fn run() {
             commands::fs_read_dir,
             commands::fs_remove_dir,
             commands::fs_remove_file,
+            secrets::secret_save,
+            secrets::secret_load,
+            secrets::secret_delete,
         ]);
 
     protocol::register_asset_protocol(builder)

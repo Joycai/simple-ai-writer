@@ -42,6 +42,9 @@ jobs:
       - name: Type check (tsc --noEmit)
         run: pnpm exec tsc --noEmit
 
+      - name: Test (vitest)
+        run: pnpm test
+
       - name: Build frontend
         run: pnpm build
 
@@ -58,6 +61,7 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libappindicator3-dev \
             librsvg2-dev \
+            libdbus-1-dev \
             patchelf
 
       - name: Install Rust toolchain

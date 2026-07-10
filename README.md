@@ -53,12 +53,12 @@ A modern, local-first desktop Markdown editor with AI writing assistance powered
 | Layer | Technology |
 |-------|-----------|
 | **Desktop** | Tauri v2 (Rust backend) |
-| **Frontend** | React 18 + TypeScript + Vite |
+| **Frontend** | React 19 + TypeScript + Vite |
 | **Editor** | CodeMirror 6 |
 | **Preview** | markdown-it + KaTeX |
 | **State** | Zustand |
 | **Database** | SQLite (tauri-plugin-sql) |
-| **Crypto** | tauri-plugin-stronghold (argon2) |
+| **Secrets** | OS credential manager via `keyring` crate |
 | **i18n** | react-i18next |
 | **Styling** | CSS Modules + CSS Variables (dark/light theme) |
 
@@ -142,7 +142,7 @@ simple-ai-writer/
 ├── src/
 │   ├── components/        # React components
 │   │   ├── editor/        # CodeMirror wrapper, Preview
-│   │   ├── layout/        # SideTabBar, Sidebar, EditorArea, RightPanel, StatusBar
+│   │   ├── layout/        # TitleBar, IconRail, Sidebar, EditorArea, AiRail
 │   │   ├── ai/            # AiPanel (task UI, streaming output)
 │   │   ├── lore/          # LorePanel (entity browser)
 │   │   └── settings/      # SettingsModal (provider/model/prompt config)
@@ -152,7 +152,7 @@ simple-ai-writer/
 │   │   ├── loreStore      # Lore entity index
 │   │   ├── aiStore        # Provider/model/prompt config
 │   │   ├── aiTaskStore    # Running AI task state
-│   │   └── keyStore       # Stronghold API key vault
+│   │   └── keyStore       # OS-keyring API key storage (lib/keyStore.ts)
 │   ├── lib/               # Business logic
 │   │   ├── project.ts     # File tree, scaffolding, DB init
 │   │   ├── markdown.ts    # Rendering (preview + export)
@@ -165,7 +165,7 @@ simple-ai-writer/
 │   └── App.tsx            # Root component
 ├── src-tauri/
 │   ├── src/
-│   │   └── lib.rs         # Tauri setup hooks, stronghold init
+│   │   └── lib.rs         # Tauri setup hooks, command registration
 │   └── capabilities/      # Permission scopes
 ├── pnpm-lock.yaml
 └── package.json
@@ -177,7 +177,7 @@ simple-ai-writer/
 
 ### API Keys & Providers
 
-Keys are stored securely in the Stronghold vault (`~/.config/simple-ai-writer` on Linux, platform-specific on macOS/Windows).
+Keys are stored in the operating system's credential manager (Windows Credential Manager, macOS Keychain, Linux Secret Service) — never in plaintext files or the database.
 
 **Adding a provider:**
 1. Open Settings ⚙ → Providers

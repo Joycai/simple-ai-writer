@@ -29,23 +29,23 @@ pnpm install            # Install dependencies (pnpm required)
 ## Architecture Overview
 
 ### Three-Layer Stack
-- **Frontend (React 18 + TypeScript + Vite)** — UI components, state management, markdown editor
-- **Tauri v2 (Rust)** — IPC bridge, file system, database, crypto operations
+- **Frontend (React 19 + TypeScript + Vite)** — UI components, state management, markdown editor
+- **Tauri v2 (Rust)** — IPC bridge, file system, database, OS-keyring secret storage
 - **Backend Services (External APIs)** — OpenAI, Google Gemini, or any OpenAI-compatible provider
 
-### 3-Pane Layout
+### Layout ("Manuscript" aesthetic)
 ```
 ┌─────────────────────────────────────────────────────┐
-│                   StatusBar (36px)                  │
+│                    TitleBar                         │
 ├──────┬──────────────┬──────────────────┬────────────┤
-│ Side │   Sidebar    │   EditorArea     │ RightPanel │
-│ Tab  │   (240px)    │   (flex: 1)      │  (280px)   │
-│ Bar  ├──────────────┼──────────────────┤            │
-│      │ Files/Lore   │ Editor | Preview │ Outline    │
-│      │ panels       │                  │ AI Panel   │
-│      │              │                  │ Lore Cards │
+│ Icon │   Sidebar    │   EditorArea     │   AiRail   │
+│ Rail │ (resizable)  │   (flex: 1)      │ (resizable)│
+│      ├──────────────┤ Editor | Preview │            │
+│      │ FileTree /   ├──────────────────┤ AI tasks,  │
+│      │ Lore panels  │ EditorBottomStrip│ streaming  │
 └──────┴──────────────┴──────────────────┴────────────┘
 ```
+Components in `src/components/layout/` (TitleBar, IconRail, Sidebar, FileTree, EditorArea, EditorBottomStrip, AiRail, ResizeHandle). Both side panels are resizable/collapsible.
 
 ### State Management (Zustand Stores)
 
@@ -53,8 +53,8 @@ All in `src/stores/`:
 - **appStore** — Theme, language (i18n), sidebar/panel collapse state, active tabs
 - **projectStore** — Current project path, file tree, active file, word/char count
 - **editorStore** — Editor content, dirty flag, view mode (editor/split/preview), save scheduling
-- **loreStore** — Indexed lore entities, alias mapping, entity summaries; auto-scans `lore/` folder on project open
-- **aiStore** — Providers (API config), models (available LLMs), prompts (templates); secure API key storage via stronghold
+- **loreStore** — Indexed lore entities, alias mapping, entity summaries; auto-scans `.ai-writer/lore/` on project open
+- **aiStore** — Providers (API config), models (available LLMs), prompts (templates); API keys live in the OS credential manager (keyring) via the Rust `secret_*` commands — see `src/lib/keyStore.ts`
 - **aiTaskStore** — Running AI task state, streaming output, token usage, abort signal
 
 ### Data Flow: AI Writing Task
@@ -66,6 +66,8 @@ All in `src/stores/`:
 4. **Persist** → Writes to `token_usage` table in SQLite
 5. **Insert** → User clicks "Insert to Document" → `editorStore.setContent()`
 
+Tasks can also run through an **agentic tool loop** (`src/lib/agentLoop.ts` + `src/lib/tools.ts`): up to 8 rounds of model-driven tool calls (`list_lore_entities`, `read_lore_entity`, `list_files`, `read_file`) with multimodal image support. AI-driven lore generation/improvement lives in `src/lib/loreGenerator.ts` + `src/components/lore/`.
+
 > Details: RAG context assembly, SSE parsing, and DB schema are in `docs/architecture.md`.
 
 ### Project Structure
@@ -73,15 +75,16 @@ All in `src/stores/`:
 **Filesystem**
 - `.ai-writer/project.db` — SQLite database (project-scoped)
 - `writing/` — User markdown files (organized tree)
-- `lore/[EntityName]/index.md` — Entity summary (rendered in preview)
-- `lore/[EntityName]/aliases.txt` — One alias per line (for RAG keyword matching)
+- `.ai-writer/lore/<category>/<entity>/index.md` — Entity summary with frontmatter (categories: characters, world, factions, items, skills, custom)
 
 **Code**
-- `src/components/layout/` — Main layout structure (SideTabBar, Sidebar, EditorArea, RightPanel, StatusBar)
+- `src/components/layout/` — Main layout structure (TitleBar, IconRail, Sidebar, FileTree, EditorArea, EditorBottomStrip, AiRail)
 - `src/components/editor/` — CodeMirror wrapper, preview renderer
-- `src/components/ai/` — AiPanel (task UI, streaming output)
+- `src/components/ai/` — AiPanel (task UI, streaming output), ConsistencyCheck
+- `src/components/lore/` — Lore browser, LoreGenerator, LoreImproveModal, LoreWall
 - `src/components/settings/` — SettingsModal (provider/model/prompt config)
-- `src/lib/` — Core logic (project, editor, RAG, AI client, export, file I/O)
+- `src/components/command/`, `onboarding/`, `outline/` — CommandPalette, onboarding flow, full outline view
+- `src/lib/` — Core logic (project, RAG, AI client, agent loop + tools, lore generation, export, file I/O, keyStore)
 - `src/stores/` — Zustand state managers
 - `src/styles/` — Design tokens (`tokens.css`) + global styles (`global.css`)
 - `src/i18n/locales/` — JSON translation files (en, zh-CN)
@@ -98,6 +101,7 @@ Load the relevant doc **before** working in that area — don't reconstruct it f
 ## Testing & Type Safety
 
 - TypeScript strict mode enabled (noUnusedLocals, noUnusedParameters, noFallthroughCasesInSwitch)
-- No test framework currently; tests welcome via PR
+- Frontend tests: Vitest (`pnpm test`) — smoke tests in `src/lib/__tests__/` cover RAG assembly and SSE stream parsing
+- Rust tests: `cargo test` (from `src-tauri/`) — unit tests live inline in `secrets.rs` and `protocol.rs`
 - Frontend type-checks via `pnpm tsc --noEmit`
-- CI gate on PRs to `main` runs frontend (type-check + build) and Rust (fmt/clippy/test/build) — see [`docs/ci.md`](docs/ci.md)
+- CI gate on PRs to `main` runs frontend (type-check + vitest + build) and Rust (fmt/clippy/test/build) — see [`docs/ci.md`](docs/ci.md)

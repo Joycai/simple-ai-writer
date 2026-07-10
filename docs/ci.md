@@ -10,13 +10,14 @@ The [`CI`](../.github/workflows/ci.yml) workflow runs on every pull request targ
 
 | Job | Steps | Purpose |
 | --- | --- | --- |
-| **Frontend** | `pnpm install --frozen-lockfile` → `tsc --noEmit` → `pnpm build` | Lockfile integrity, TypeScript type-check (the project's lint gate — strict mode, no unused locals/params), production bundle builds |
+| **Frontend** | `pnpm install --frozen-lockfile` → `tsc --noEmit` → `pnpm test` → `pnpm build` | Lockfile integrity, TypeScript type-check (the project's lint gate — strict mode, no unused locals/params), Vitest smoke tests, production bundle builds |
 | **Backend (Rust)** | `cargo fmt --check` → `cargo clippy -- -D warnings` → `cargo test` → `cargo build` | Formatting, lints (warnings fail the build), tests, backend compiles |
 | **CI Success** | aggregates the two jobs | Single status check to require in branch protection |
 
 Notes:
-- The frontend has no JS test framework yet, so `tsc --noEmit` + the build serve as its quality gate.
-- The Rust `cargo test` job has 0 tests today but is wired up so future tests run automatically.
+- Frontend tests run with Vitest (`src/**/*.test.ts`, config in `vitest.config.ts`) — currently smoke tests for RAG context assembly and OpenAI/Gemini SSE parsing.
+- Rust unit tests live inline in `src-tauri/src/secrets.rs` and `protocol.rs`.
+- The Rust job installs `libdbus-1-dev` — required by the `keyring` crate's Secret Service backend on Linux.
 - `clippy` is enforced with `-D warnings`: any new warning fails CI.
 
 ## Enforcing "must pass before merge"
@@ -48,6 +49,7 @@ Run the same checks before pushing:
 ```bash
 pnpm install --frozen-lockfile
 pnpm exec tsc --noEmit
+pnpm test
 pnpm build
 
 cd src-tauri
