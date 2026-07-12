@@ -8,6 +8,10 @@ export async function writeFile(path: string, content: string): Promise<void> {
   return invoke("fs_write_text_file", { path, content });
 }
 
+export async function appendFile(path: string, content: string): Promise<void> {
+  return invoke("fs_append_text_file", { path, content });
+}
+
 export async function writeBinaryFile(path: string, data: Uint8Array): Promise<void> {
   return invoke("fs_write_binary_file", { path, data: Array.from(data) });
 }

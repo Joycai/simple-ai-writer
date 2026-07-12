@@ -104,6 +104,7 @@ export async function generateLore(opts: {
   safetySettings?: GeminiSafetySettings;
   modelId: string;
   prefix?: string;
+  contextSize?: number;
   onProgress: (text: string) => void;
   signal?: AbortSignal;
   systemPrompt?: string;
@@ -166,6 +167,7 @@ export async function generateLore(opts: {
     safetySettings: opts.safetySettings,
     modelId: opts.modelId,
     prefix: opts.prefix,
+    contextSize: opts.contextSize,
     messages: [
       { role: "system", content: opts.systemPrompt ?? i18n.t("ai.instructions.lore") },
       { role: "user", content: userParts },

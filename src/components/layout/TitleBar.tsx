@@ -1,14 +1,10 @@
 import { useTranslation } from "react-i18next";
-import { Moon, Sun, Monitor, Settings, Sparkles, Languages } from "lucide-react";
+import { Moon, Sun, Monitor, Sparkles, Languages } from "lucide-react";
 import { useAppStore, type ThemeMode, type Language } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useEditorStore, type ViewMode } from "../../stores/editorStore";
 import { MOD_K } from "../../lib/platform";
 import styles from "./TitleBar.module.css";
-
-interface Props {
-  onOpenSettings: () => void;
-}
 
 const THEME_ORDER: ThemeMode[] = ["dark", "light", "system"];
 const LANG_ORDER: Language[] = ["zh-CN", "en"];
@@ -21,7 +17,7 @@ function basename(p: string | null): string | null {
   return tail ?? null;
 }
 
-export function TitleBar({ onOpenSettings }: Props) {
+export function TitleBar() {
   const { t } = useTranslation();
   const {
     theme, setTheme, language, setLanguage,
@@ -111,9 +107,6 @@ export function TitleBar({ onOpenSettings }: Props) {
         <button className={styles.ctrl} onClick={cycleLang} title={t("settings.language")}>
           <Languages size={12} />
           {language === "zh-CN" ? t("language.chinese") : t("language.english")}
-        </button>
-        <button className={styles.ctrl} onClick={onOpenSettings} title={t("settings.aiConfig")}>
-          <Settings size={12} />
         </button>
 
         <button

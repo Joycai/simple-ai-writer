@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { X, Pencil, Moon, Sun, Monitor, SlidersHorizontal, Server, Cpu, MessageSquare, Check, AlertCircle } from "lucide-react";
+import { X, Pencil, Moon, Sun, Monitor, SlidersHorizontal, Server, Cpu, MessageSquare, Check, AlertCircle, FolderOpen } from "lucide-react";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useAiStore } from "../../stores/aiStore";
 import { useAppStore, type ThemeMode, type Language } from "../../stores/appStore";
+import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../lib/apiLog";
 import type { ApiStandard, ModelType, GeminiSafetySettings, GeminiHarmCategory } from "../../lib/aiConfig";
-import { GEMINI_HARM_CATEGORIES, GEMINI_THRESHOLD_LEVELS, defaultSafetySettings, testProviderConnection } from "../../lib/aiConfig";
+import { GEMINI_HARM_CATEGORIES, GEMINI_THRESHOLD_LEVELS, MAX_CONTEXT_SIZE, defaultSafetySettings, testProviderConnection } from "../../lib/aiConfig";
 import styles from "./SettingsModal.module.css";
 
 const BUILTIN_PROMPTS_CONFIG = [
@@ -51,6 +53,18 @@ const LANGUAGES: { value: Language; label: string }[] = [
 function GeneralTab() {
   const { t } = useTranslation();
   const { theme, setTheme, language, setLanguage } = useAppStore();
+  const [apiLogOn, setApiLogOn] = useState(isApiLogEnabled());
+
+  const toggleApiLog = (enabled: boolean) => {
+    setApiLogEnabled(enabled);
+    setApiLogOn(enabled);
+  };
+
+  const openApiLogs = async () => {
+    try {
+      await revealItemInDir(await getApiLogRevealTarget());
+    } catch { /* best-effort */ }
+  };
 
   return (
     <div>
@@ -87,6 +101,33 @@ function GeneralTab() {
                 {lang.label}
               </button>
             ))}
+          </div>
+        </div>
+      </div>
+
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>{t("systemSettings.general.debugSection")}</div>
+        <div className={styles.fieldGroup}>
+          <label className={styles.label}>{t("systemSettings.general.apiLogLabel")}</label>
+          <div className={styles.safetyHint}>{t("systemSettings.general.apiLogHint")}</div>
+          <div className={styles.debugControls}>
+            <div className={styles.optionGroup}>
+              <button
+                className={`${styles.optionBtn} ${apiLogOn ? styles.optionBtnActive : ""}`}
+                onClick={() => toggleApiLog(true)}
+              >
+                {t("systemSettings.general.apiLogOn")}
+              </button>
+              <button
+                className={`${styles.optionBtn} ${!apiLogOn ? styles.optionBtnActive : ""}`}
+                onClick={() => toggleApiLog(false)}
+              >
+                {t("systemSettings.general.apiLogOff")}
+              </button>
+            </div>
+            <button className={`${styles.btnSecondary} ${styles.btnWithIcon}`} onClick={openApiLogs}>
+              <FolderOpen size={14} /> {t("systemSettings.general.openApiLogs")}
+            </button>
           </div>
         </div>
       </div>
@@ -330,7 +371,7 @@ function ModelsTab() {
   ];
 
   const { providers, models, addModel, updateModel, removeModel, fetchAndImportModels } = useAiStore();
-  const [form, setForm] = useState({ providerId: "", modelId: "", name: "", type: "text" as ModelType, priceIn: "", priceCachedIn: "", priceOut: "", prefix: "" });
+  const [form, setForm] = useState({ providerId: "", modelId: "", name: "", type: "text" as ModelType, priceIn: "", priceCachedIn: "", priceOut: "", prefix: "", contextSize: "" });
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
@@ -339,7 +380,7 @@ function ModelsTab() {
   const [error, setError] = useState<string | null>(null);
 
   const resetForm = () => {
-    setForm({ providerId: "", modelId: "", name: "", type: "text", priceIn: "", priceCachedIn: "", priceOut: "", prefix: "" });
+    setForm({ providerId: "", modelId: "", name: "", type: "text", priceIn: "", priceCachedIn: "", priceOut: "", prefix: "", contextSize: "" });
     setEditingId(null);
     setShowForm(false);
     setFetchedList([]);
@@ -358,6 +399,7 @@ function ModelsTab() {
       priceCachedIn: m.priceCachedIn ? String(m.priceCachedIn) : "",
       priceOut: m.priceOut ? String(m.priceOut) : "",
       prefix: m.prefix ?? "",
+      contextSize: m.contextSize ? String(m.contextSize) : "",
     });
     setEditingId(id);
     setShowForm(true);
@@ -384,6 +426,8 @@ function ModelsTab() {
     setSaving(true);
     setError(null);
     try {
+      const parsedCtx = Math.min(MAX_CONTEXT_SIZE, Math.max(0, Math.floor(parseInt(form.contextSize, 10) || 0)));
+      const contextSize = parsedCtx > 0 ? parsedCtx : undefined;
       if (editingId) {
         const existing = models.find((x) => x.id === editingId)!;
         await updateModel({
@@ -396,6 +440,7 @@ function ModelsTab() {
           priceCachedIn: parseFloat(form.priceCachedIn) || 0,
           priceOut: parseFloat(form.priceOut) || 0,
           prefix: form.prefix.trim() || undefined,
+          contextSize,
         });
       } else {
         await addModel({
@@ -408,6 +453,7 @@ function ModelsTab() {
           priceOut: parseFloat(form.priceOut) || 0,
           enabled: true,
           prefix: form.prefix.trim() || undefined,
+          contextSize,
         });
       }
       resetForm();
@@ -430,7 +476,10 @@ function ModelsTab() {
               <div key={m.id} className={styles.item}>
                 <div className={styles.itemInfo}>
                   <div className={styles.itemName}>{m.name}</div>
-                  <div className={styles.itemMeta}>{pname} · {m.modelId}</div>
+                  <div className={styles.itemMeta}>
+                    {pname} · {m.modelId}
+                    {m.contextSize ? ` · ${m.contextSize.toLocaleString()} ctx` : ""}
+                  </div>
                 </div>
                 <span className={styles.badge}>{m.type}</span>
                 <button className={styles.editBtn} onClick={() => handleEdit(m.id)}><Pencil size={13} /></button>
@@ -505,6 +554,16 @@ function ModelsTab() {
                   onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
               </div>
             ))}
+          </div>
+
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>{t("aiConfig.models.contextSizeLabel")}</label>
+            <input className={styles.input} type="number" min="0" max={MAX_CONTEXT_SIZE} step="1024" placeholder="8192"
+              value={form.contextSize}
+              onChange={(e) => setForm({ ...form, contextSize: e.target.value })} />
+            <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 6, fontStyle: "italic" }}>
+              {t("aiConfig.models.contextSizeHint")}
+            </div>
           </div>
 
           <div className={styles.fieldGroup}>

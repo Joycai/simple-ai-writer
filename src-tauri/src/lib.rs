@@ -26,6 +26,7 @@ pub fn run() {
             commands::fs_write_binary_file,
             commands::fs_write_text_file,
             commands::fs_read_text_file,
+            commands::fs_append_text_file,
             commands::fs_create_dir,
             commands::fs_exists,
             commands::fs_read_dir,

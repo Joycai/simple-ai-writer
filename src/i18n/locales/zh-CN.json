@@ -80,7 +80,13 @@
       "themeLabel": "主题",
       "themeHint": "选择应用的显示主题",
       "languageSection": "语言",
-      "languageLabel": "界面语言"
+      "languageLabel": "界面语言",
+      "debugSection": "调试",
+      "apiLogLabel": "API 调用日志",
+      "apiLogHint": "开启后，每次 AI 请求的内容、响应和错误都会记录到本地日志文件（不含 API Key），方便排查问题。",
+      "apiLogOn": "开启",
+      "apiLogOff": "关闭",
+      "openApiLogs": "打开日志目录"
     }
   },
   "project": {
@@ -171,7 +177,8 @@
       "noProject": "请先打开项目",
       "noModel": "请先在 AI 配置中选择模型",
       "modelNotFound": "找不到选中的模型",
-      "providerNotFound": "找不到供应商"
+      "providerNotFound": "找不到供应商",
+      "contextExceeded": "本次请求内容约 {{estimated}} tokens，超过了模型设置的上下文大小（{{limit}} tokens），已停止发送。请减少正文或引用内容，或在「设置 → 模型」中调大上下文大小；本地模型（如 Ollama）还需同时调大服务端的上下文限制（num_ctx），否则请求会被静默截断。"
     }
   },
   "aiConfig": {
@@ -234,6 +241,8 @@
       "priceInput": "输入",
       "priceCachedInput": "缓存输入",
       "priceOutput": "输出",
+      "contextSizeLabel": "上下文大小 (tokens，可选)",
+      "contextSizeHint": "模型的上下文窗口大小，最大 2,000,000。设置后，估算超出此大小的请求会在发送前提醒你，避免被服务端静默截断。留空则不检查。",
       "prefixLabel": "前置提示词 (可选)",
       "prefixPlaceholder": "如：你是一位经验丰富的小说编辑…",
       "prefixHint": "每次调用此模型时，自动作为最前面的系统指令注入。留空则不注入。",
