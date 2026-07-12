@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { X, Pencil, Moon, Sun, Monitor, SlidersHorizontal, Server, Cpu, MessageSquare, Check, AlertCircle, FolderOpen } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useAiStore } from "../../stores/aiStore";
-import { useAppStore, type ThemeMode, type Language } from "../../stores/appStore";
+import { useAppStore, type ThemeMode, type Language, type FontScheme } from "../../stores/appStore";
 import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../lib/ai/apiLog";
 import type { ApiStandard } from "../../lib/ai/types";
 import { MAX_CONTEXT_SIZE, type ModelType } from "../../lib/ai/configDb";
@@ -50,11 +50,20 @@ const LANGUAGES: { value: Language; label: string }[] = [
   { value: "en", label: "English" },
 ];
 
+// Preview stack per scheme mirrors the --font-serif override in tokens.css,
+// so each option renders in the body font it selects.
+const FONT_SCHEMES: { value: FontScheme; labelKey: string; sample: string; previewFont: string }[] = [
+  { value: "manuscript", labelKey: "systemSettings.general.fontManuscript", sample: "文字 Aa", previewFont: '"Spectral", Georgia, "Songti SC", "Noto Serif CJK SC", serif' },
+  { value: "song", labelKey: "systemSettings.general.fontSong", sample: "文字 Aa", previewFont: 'Georgia, Cambria, "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", STSong, SimSun, serif' },
+  { value: "hei", labelKey: "systemSettings.general.fontHei", sample: "文字 Aa", previewFont: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif' },
+  { value: "kai", labelKey: "systemSettings.general.fontKai", sample: "文字 Aa", previewFont: '"Iowan Old Style", Georgia, "Kaiti SC", STKaiti, KaiTi, "Noto Serif CJK SC", serif' },
+];
+
 // ─── General Tab ──────────────────────────────────────────────────────────────
 
 function GeneralTab() {
   const { t } = useTranslation();
-  const { theme, setTheme, language, setLanguage } = useAppStore();
+  const { theme, setTheme, language, setLanguage, fontScheme, setFontScheme } = useAppStore();
   const [apiLogOn, setApiLogOn] = useState(isApiLogEnabled());
 
   const toggleApiLog = (enabled: boolean) => {
@@ -83,6 +92,23 @@ function GeneralTab() {
               >
                 {th.icon}
                 {t(th.labelKey)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className={styles.fieldGroup}>
+          <label className={styles.label}>{t("systemSettings.general.fontLabel")}</label>
+          <div className={styles.safetyHint}>{t("systemSettings.general.fontHint")}</div>
+          <div className={styles.fontGrid}>
+            {FONT_SCHEMES.map((f) => (
+              <button
+                key={f.value}
+                className={`${styles.fontCard} ${fontScheme === f.value ? styles.fontCardActive : ""}`}
+                onClick={() => setFontScheme(f.value)}
+              >
+                <span className={styles.fontSample} style={{ fontFamily: f.previewFont }}>{f.sample}</span>
+                <span className={styles.fontName}>{t(f.labelKey)}</span>
               </button>
             ))}
           </div>

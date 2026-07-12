@@ -176,6 +176,54 @@
   background: var(--color-accent-tint-strong);
 }
 
+/* ─── Font scheme picker ──────────────────────────────────────────────────── */
+
+.fontGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.fontCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-2);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+.fontCard:hover {
+  background: var(--color-bg-base);
+  border-color: var(--color-border-strong);
+}
+.fontCardActive {
+  background: var(--color-accent-tint);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.fontCardActive:hover { background: var(--color-accent-tint-strong); }
+
+.fontSample {
+  font-size: var(--font-size-xl);
+  line-height: 1.1;
+  color: var(--color-text-primary);
+}
+.fontCardActive .fontSample { color: var(--color-accent); }
+
+.fontName {
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+}
+
+@media (max-width: 600px) {
+  .fontGrid { grid-template-columns: repeat(2, 1fr); }
+}
+
 /* ─── Form ────────────────────────────────────────────────────────────────── */
 
 .form {
