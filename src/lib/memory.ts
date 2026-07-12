@@ -226,6 +226,24 @@ export async function saveMemory(projectPath: string, mem: DocMemory): Promise<v
 
 // ─── Freshness ───────────────────────────────────────────────────────────────
 
+/**
+ * Coarse memory state for a document, for at-a-glance UI:
+ *   - "short"  — too short to bother summarizing (no memory needed)
+ *   - "none"   — long enough but no memory generated yet
+ *   - "stale"  — memory exists but the source changed / grew past coverage
+ *   - "fresh"  — memory covers the document up to its verbatim tail
+ */
+export type MemoryStatus = "short" | "none" | "stale" | "fresh";
+
+export function memoryStatus(content: string, mem: DocMemory | null): MemoryStatus {
+  if (!mem || mem.segments.length === 0) {
+    return content.length < MEMORY_MIN_DOC_CHARS ? "short" : "none";
+  }
+  if (checkFreshness(content, mem).firstStaleIndex >= 0) return "stale";
+  // Fresh prefix — flag as stale when meaningful new tail is now coverable.
+  return coverEndFor(content) - mem.coveredChars >= 500 ? "stale" : "fresh";
+}
+
 export function checkFreshness(doc: string, mem: DocMemory): MemoryFreshness {
   let firstStaleIndex = -1;
   for (let i = 0; i < mem.segments.length; i++) {

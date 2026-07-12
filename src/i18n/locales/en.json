@@ -2,6 +2,21 @@
   "app": {
     "name": "Simple AI Writer"
   },
+  "outline": {
+    "empty": "No volume/chapter structure found — create sub-folders under writing/ to organize volumes",
+    "reorderHint": "Reorder chapters with the row buttons or by dragging",
+    "moveTop": "Move to top",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "moveBottom": "Move to bottom",
+    "memoFresh": "Summary ready",
+    "memoStale": "Update needed",
+    "memoNone": "No summary",
+    "memoShort": "Too short",
+    "memoGenerate": "Generate summary",
+    "memoUpdate": "Update summary",
+    "memoCancel": "Cancel"
+  },
   "sidebar": {
     "files": "Files",
     "lore": "Lore",

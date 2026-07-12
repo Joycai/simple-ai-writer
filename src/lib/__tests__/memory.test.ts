@@ -9,6 +9,7 @@ import {
   selectMemoryForContext,
   projectRelativePath,
   segmentTargetChars,
+  memoryStatus,
   MEMORY_TAIL_KEEP_CHARS,
   type DocMemory,
 } from "../memory";
@@ -26,6 +27,41 @@ function makeMemory(overrides: Partial<DocMemory> = {}): DocMemory {
     ...overrides,
   };
 }
+
+describe("memoryStatus", () => {
+  const long = "a".repeat(8000); // > MEMORY_MIN_DOC_CHARS
+  const freshMem = (): DocMemory => {
+    const to = coverEndFor(long); // 6000 (no paragraph breaks)
+    return {
+      sourcePath: "x",
+      coveredChars: to,
+      updatedAt: "",
+      segments: [{ from: 0, to, hash: hashText(long.slice(0, to)), summary: "s" }],
+    };
+  };
+
+  it("reports 'short' for a too-short doc with no memory", () => {
+    expect(memoryStatus("tiny", null)).toBe("short");
+  });
+
+  it("reports 'none' for a long doc with no memory", () => {
+    expect(memoryStatus(long, null)).toBe("none");
+  });
+
+  it("reports 'fresh' when memory covers the doc up to its tail", () => {
+    expect(memoryStatus(long, freshMem())).toBe("fresh");
+  });
+
+  it("reports 'stale' when covered text changed", () => {
+    const changed = "b".repeat(8000);
+    expect(memoryStatus(changed, freshMem())).toBe("stale");
+  });
+
+  it("reports 'stale' when the doc grew past its coverage", () => {
+    const grown = long + "c".repeat(3000);
+    expect(memoryStatus(grown, freshMem())).toBe("stale");
+  });
+});
 
 describe("hashText", () => {
   it("is deterministic and change-sensitive", () => {

@@ -45,11 +45,27 @@ export interface TaskExtras {
    * when undefined (e.g. "continue").
    */
   contextChars?: number;
+  /**
+   * Book-level continuation memory (the "continue" task), resolved from the
+   * outline order: a recap of prior chapters plus the previous chapter's ending.
+   * See lib/outline.ts. Only consumed in appendMode.
+   */
+  bookContext?: {
+    priorSummary: string;
+    prevChapterTail: string;
+    prevChapterTitle: string;
+  };
 }
 
 export interface ContextBundle {
   systemPrompt: string;
   loreSnippets: string;
+  /** Cross-chapter recap of everything before the current chapter (continue). */
+  priorChaptersSummary: string;
+  /** Verbatim ending of the previous chapter (continue, near chapter start). */
+  prevChapterTail: string;
+  /** Title of the previous chapter, for labeling the tail block. */
+  prevChapterTitle: string;
   /** Compacted story-memory summary of text before the verbatim window. */
   storySummary: string;
   recentContext: string;
@@ -213,6 +229,14 @@ export async function assembleContext(
   const detailStart = endIdx >= 0 ? Math.max(0, endIdx - span) : -1;
   const storySummary = memory ? selectMemoryForContext(memory, detailStart) : "";
 
+  // Book-level continuation memory: a recap of prior chapters and the previous
+  // chapter's verbatim ending, resolved from the outline order upstream. Only
+  // meaningful when continuing (appendMode) — a mid-document edit stays local.
+  const book = appendMode ? extras?.bookContext : undefined;
+  const priorChaptersSummary = book?.priorSummary?.trim() || "";
+  const prevChapterTail = book?.prevChapterTail?.trim() || "";
+  const prevChapterTitle = book?.prevChapterTitle || "";
+
   const requirement = extras?.requirement?.trim();
   const outline = extras?.outline?.trim() || undefined;
   const additionalKnowledge = extras?.additionalKnowledge?.trim() || undefined;
@@ -233,11 +257,15 @@ export async function assembleContext(
 
   // Rough token estimate
   const total =
-    systemPrompt.length + loreSnippets.length + storySummary.length + recentContext.length +
+    systemPrompt.length + loreSnippets.length + priorChaptersSummary.length +
+    prevChapterTail.length + storySummary.length + recentContext.length +
     taskText.length + (outline?.length ?? 0) + (additionalKnowledge?.length ?? 0);
   const estimatedTokens = Math.ceil(total / APPROX_CHARS_PER_TOKEN);
 
-  return { systemPrompt, loreSnippets, storySummary, recentContext, taskText, outline, additionalKnowledge, estimatedTokens };
+  return {
+    systemPrompt, loreSnippets, priorChaptersSummary, prevChapterTail, prevChapterTitle,
+    storySummary, recentContext, taskText, outline, additionalKnowledge, estimatedTokens,
+  };
 }
 
 /** Format the assembled context into a messages array for OpenAI/Gemini APIs. */
@@ -255,8 +283,17 @@ export function bundleToMessages(
   if (bundle.outline) {
     parts.push(`【大纲/写作方向】\n${bundle.outline}`);
   }
+  if (bundle.priorChaptersSummary) {
+    parts.push(`【全书前情】\n${bundle.priorChaptersSummary}`);
+  }
   if (bundle.storySummary) {
     parts.push(`【前情提要】\n${bundle.storySummary}`);
+  }
+  if (bundle.prevChapterTail) {
+    const label = bundle.prevChapterTitle
+      ? `【上一章结尾·${bundle.prevChapterTitle}】`
+      : "【上一章结尾】";
+    parts.push(`${label}\n${bundle.prevChapterTail}`);
   }
   if (bundle.recentContext) {
     parts.push(`【近期内容】\n${bundle.recentContext}`);

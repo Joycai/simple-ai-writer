@@ -222,6 +222,29 @@ describe("assembleContext", () => {
     const bundle = await assembleContext("SYS", makeLoreIndex(), "short doc", "", "Go.");
     expect(bundle.estimatedTokens).toBeGreaterThan(0);
   });
+
+  it("threads book context (prior recap + prev-chapter tail) only in append mode", async () => {
+    const book = {
+      priorSummary: "第一章：主角进城。",
+      prevChapterTail: "他推开了门。",
+      prevChapterTitle: "第2章",
+    };
+    const cont = await assembleContext(
+      "SYS", makeLoreIndex(), "新章开头", "", "Continue.",
+      { appendMode: true, bookContext: book },
+    );
+    expect(cont.priorChaptersSummary).toBe("第一章：主角进城。");
+    expect(cont.prevChapterTail).toBe("他推开了门。");
+    expect(cont.prevChapterTitle).toBe("第2章");
+
+    // A non-append task (edit) must not pull in cross-chapter context.
+    const edit = await assembleContext(
+      "SYS", makeLoreIndex(), "doc", "sel", "Polish.",
+      { bookContext: book },
+    );
+    expect(edit.priorChaptersSummary).toBe("");
+    expect(edit.prevChapterTail).toBe("");
+  });
 });
 
 describe("bundleToMessages", () => {
@@ -250,5 +273,27 @@ describe("bundleToMessages", () => {
     expect(idxOutline).toBeGreaterThan(idxKnowledge);
     expect(idxRecent).toBeGreaterThan(idxOutline);
     expect(idxTask).toBeGreaterThan(idxRecent);
+  });
+
+  it("emits 【全书前情】 before 【近期内容】 and labels the previous chapter's ending", async () => {
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), "本章开头正文", "", "Continue.",
+      {
+        appendMode: true,
+        bookContext: {
+          priorSummary: "第一章梗概。",
+          prevChapterTail: "上一章的最后一句。",
+          prevChapterTitle: "第2章",
+        },
+      },
+    );
+    const user = bundleToMessages(bundle)[1].content;
+    const idxPrior = user.indexOf("【全书前情】");
+    const idxPrevTail = user.indexOf("【上一章结尾·第2章】");
+    const idxRecent = user.indexOf("【近期内容】");
+    expect(idxPrior).toBeGreaterThanOrEqual(0);
+    expect(idxPrevTail).toBeGreaterThan(idxPrior);
+    expect(idxRecent).toBeGreaterThan(idxPrevTail);
+    expect(user).toContain("上一章的最后一句。");
   });
 });

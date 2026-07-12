@@ -1,59 +1,150 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Sparkles } from "lucide-react";
+import { Sparkles, ChevronUp, ChevronDown, ChevronsUp, ChevronsDown, Loader2, X } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useEditorStore } from "../../stores/editorStore";
-import type { FileNode } from "../../lib/project";
+import { useMemoryStore } from "../../stores/memoryStore";
+import {
+  groupVolumes,
+  applySpine,
+  spineFromVolumes,
+  loadSpine,
+  saveSpine,
+  type BookSpine,
+  type Volume,
+  type Chapter,
+} from "../../lib/outline";
+import { loadMemory, memoryStatus, type MemoryStatus } from "../../lib/memory";
+import { readFile } from "../../lib/fileio";
 import styles from "./OutlineFullView.module.css";
 
-interface Volume {
-  name: string;
-  path: string;
-  chapters: { name: string; path: string; isDir: boolean }[];
+/** Per-chapter memory badge + inline generate/update trigger. */
+function MemoBadge({ chapter, status }: { chapter: Chapter; status?: MemoryStatus }) {
+  const { t } = useTranslation();
+  const chapterGen = useMemoryStore((s) => s.chapterGen);
+  const generateForFile = useMemoryStore((s) => s.generateForFile);
+  const abortChapterGen = useMemoryStore((s) => s.abortChapterGen);
+
+  if (chapterGen?.path === chapter.path) {
+    return (
+      <span className={styles.memoCell} onClick={(e) => e.stopPropagation()}>
+        <Loader2 size={12} className={styles.memoSpin} />
+        <span className={styles.memoGenText}>
+          {chapterGen.total > 0 ? `${chapterGen.done}/${chapterGen.total}` : t("ai.memory.generating")}
+        </span>
+        <button className={styles.memoCancel} title={t("outline.memoCancel")} onClick={abortChapterGen}>
+          <X size={11} />
+        </button>
+      </span>
+    );
+  }
+
+  if (!status || status === "short") {
+    return status === "short"
+      ? <span className={`${styles.memoChip} ${styles.memoShort}`}>{t("outline.memoShort")}</span>
+      : null;
+  }
+
+  const meta: Record<"fresh" | "stale" | "none", { cls: string; label: string }> = {
+    fresh: { cls: styles.memoFresh, label: t("outline.memoFresh") },
+    stale: { cls: styles.memoStale, label: t("outline.memoStale") },
+    none: { cls: styles.memoNone, label: t("outline.memoNone") },
+  };
+  const m = meta[status];
+  const actionLabel = status === "fresh" ? t("outline.memoUpdate") : t("outline.memoGenerate");
+  return (
+    <span className={styles.memoCell} onClick={(e) => e.stopPropagation()}>
+      <span className={`${styles.memoChip} ${m.cls}`}>{m.label}</span>
+      <button
+        className={styles.memoBtn}
+        title={actionLabel}
+        disabled={!!chapterGen}
+        onClick={() => void generateForFile(chapter.path)}
+      >
+        <Sparkles size={11} strokeWidth={1.9} />
+      </button>
+    </span>
+  );
 }
 
-/** Group manuscript files by top-level "volume" folder under writing/. */
-function groupByVolume(tree: FileNode[]): Volume[] {
-  // Find the writing/ folder
-  const writingNode = tree.find((n) => n.is_dir && n.name === "writing");
-  if (!writingNode || !writingNode.children) return [];
+/** Move an array item from one index to another (immutably). */
+function move<T>(arr: T[], from: number, to: number): T[] {
+  const next = [...arr];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
 
-  const volumes: Volume[] = [];
-  for (const child of writingNode.children) {
-    if (child.is_dir) {
-      volumes.push({
-        name: child.name,
-        path: child.path,
-        chapters: (child.children ?? [])
-          .filter((c) => !c.is_dir && c.name.endsWith(".md"))
-          .map((c) => ({ name: c.name, path: c.path, isDir: false })),
-      });
-    }
-  }
-
-  // If no volume folders, treat top-level writing files as one default volume
-  const topLevelFiles = writingNode.children.filter((c) => !c.is_dir && c.name.endsWith(".md"));
-  if (topLevelFiles.length > 0 && volumes.length === 0) {
-    volumes.push({
-      name: writingNode.name,
-      path: writingNode.path,
-      chapters: topLevelFiles.map((c) => ({ name: c.name, path: c.path, isDir: false })),
-    });
-  }
-
-  return volumes;
+interface DragState {
+  volRel: string;
+  from: number;
 }
 
 export function OutlineFullView() {
   const { t } = useTranslation();
-  const { fileTree, activeFilePath, setActiveFilePath, wordCount } = useProjectStore();
+  const { fileTree, projectPath, activeFilePath, setActiveFilePath, wordCount } = useProjectStore();
   const setMainView = useAppStore((s) => s.setMainView);
-  void useEditorStore; // reserved for future "AI suggest next chapter" integration
 
-  const volumes = useMemo(() => groupByVolume(fileTree as any), [fileTree]);
+  const [spine, setSpine] = useState<BookSpine | null>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const [dragOver, setDragOver] = useState<number | null>(null);
+  const [statuses, setStatuses] = useState<Record<string, MemoryStatus>>({});
+  const chapterGen = useMemoryStore((s) => s.chapterGen);
+
+  // Load the persisted order whenever the project changes.
+  useEffect(() => {
+    let cancelled = false;
+    if (!projectPath) { setSpine(null); return; }
+    loadSpine(projectPath).then((s) => { if (!cancelled) setSpine(s); });
+    return () => { cancelled = true; };
+  }, [projectPath]);
+
+  const volumesRaw = useMemo(
+    () => (projectPath ? groupVolumes(fileTree, projectPath) : []),
+    [fileTree, projectPath],
+  );
+  const volumes = useMemo(() => applySpine(volumesRaw, spine), [volumesRaw, spine]);
+
+  // Per-chapter memory status. Recomputed when the chapter set changes or a
+  // generation starts/finishes (chapterGen toggling picks up the fresh file).
+  useEffect(() => {
+    let cancelled = false;
+    if (!projectPath) { setStatuses({}); return; }
+    const chapters = volumes.flatMap((v) => v.chapters);
+    if (chapters.length === 0) { setStatuses({}); return; }
+    (async () => {
+      const activePath = useProjectStore.getState().activeFilePath;
+      const activeContent = useEditorStore.getState().content;
+      const entries = await Promise.all(
+        chapters.map(async (ch): Promise<[string, MemoryStatus]> => {
+          try {
+            const content = ch.path === activePath ? activeContent : await readFile(ch.path);
+            const mem = await loadMemory(projectPath, ch.path);
+            return [ch.path, memoryStatus(content, mem)];
+          } catch {
+            return [ch.path, "none"];
+          }
+        }),
+      );
+      if (!cancelled) setStatuses(Object.fromEntries(entries));
+    })();
+    return () => { cancelled = true; };
+  }, [volumes, projectPath, chapterGen]);
+
   const allChaptersCount = volumes.reduce((s, v) => s + v.chapters.length, 0);
   const activeVolumeIdx = volumes.findIndex((v) => v.chapters.some((c) => c.path === activeFilePath));
+
+  const reorder = (vol: Volume, from: number, to: number) => {
+    if (from === to || !projectPath) return;
+    const reordered = move(vol.chapters, from, to);
+    // Capture the whole book's current order, then override this one volume, so
+    // unrelated volumes stay put and future appends remain stable.
+    const next = spineFromVolumes(volumes);
+    next.order[vol.relPath] = reordered.map((c) => c.relPath);
+    setSpine(next);
+    void saveSpine(projectPath, next);
+  };
 
   if (volumes.length === 0) {
     return (
@@ -81,6 +172,7 @@ export function OutlineFullView() {
           <div className={styles.subtitle}>
             {allChaptersCount} 章 · {wordCount.toLocaleString()} 字
           </div>
+          <div className={styles.reorderHint}>{t("outline.reorderHint")}</div>
           <span className={styles.spacer} />
           <div className={styles.viewToggle}>
             <button className={`${styles.viewTab} ${styles.viewTabActive}`}>章节卡</button>
@@ -129,11 +221,33 @@ export function OutlineFullView() {
               <div className={styles.chapters}>
                 {vol.chapters.map((ch, ci) => {
                   const active = ch.path === activeFilePath;
-                  const title = ch.name.replace(/\.md$/i, "");
+                  const title = ch.name.replace(/\.(md|markdown|txt)$/i, "");
+                  const isDragging = drag?.volRel === vol.relPath && drag.from === ci;
+                  const isDropTarget =
+                    drag?.volRel === vol.relPath && dragOver === ci && drag.from !== ci;
+                  const last = vol.chapters.length - 1;
+                  const isFirst = ci === 0;
+                  const isLast = ci === last;
                   return (
                     <div
                       key={ch.path}
-                      className={`${styles.chapter} ${active ? styles.chapterActive : ""}`}
+                      className={`${styles.chapter} ${active ? styles.chapterActive : ""} ${
+                        isDragging ? styles.dragging : ""
+                      } ${isDropTarget ? styles.dropTarget : ""}`}
+                      draggable
+                      onDragStart={() => setDrag({ volRel: vol.relPath, from: ci })}
+                      onDragOver={(e) => {
+                        if (drag?.volRel !== vol.relPath) return;
+                        e.preventDefault();
+                        setDragOver(ci);
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        if (drag?.volRel === vol.relPath) reorder(vol, drag.from, ci);
+                        setDrag(null);
+                        setDragOver(null);
+                      }}
+                      onDragEnd={() => { setDrag(null); setDragOver(null); }}
                       onClick={() => {
                         setActiveFilePath(ch.path);
                         setMainView("editor");
@@ -143,6 +257,41 @@ export function OutlineFullView() {
                         <span className={styles.chapterNum}>{String(ci + 1).padStart(2, "0")}</span>
                         <span className={styles.chapterName}>{title}</span>
                         {active && <span className={styles.chapterStatus}>在写</span>}
+                        <MemoBadge chapter={ch} status={statuses[ch.path]} />
+                        <span className={styles.moveControls} onClick={(e) => e.stopPropagation()}>
+                          <button
+                            className={styles.moveBtn}
+                            title={t("outline.moveTop")}
+                            disabled={isFirst}
+                            onClick={() => reorder(vol, ci, 0)}
+                          >
+                            <ChevronsUp size={13} strokeWidth={1.8} />
+                          </button>
+                          <button
+                            className={styles.moveBtn}
+                            title={t("outline.moveUp")}
+                            disabled={isFirst}
+                            onClick={() => reorder(vol, ci, ci - 1)}
+                          >
+                            <ChevronUp size={13} strokeWidth={1.8} />
+                          </button>
+                          <button
+                            className={styles.moveBtn}
+                            title={t("outline.moveDown")}
+                            disabled={isLast}
+                            onClick={() => reorder(vol, ci, ci + 1)}
+                          >
+                            <ChevronDown size={13} strokeWidth={1.8} />
+                          </button>
+                          <button
+                            className={styles.moveBtn}
+                            title={t("outline.moveBottom")}
+                            disabled={isLast}
+                            onClick={() => reorder(vol, ci, last)}
+                          >
+                            <ChevronsDown size={13} strokeWidth={1.8} />
+                          </button>
+                        </span>
                       </div>
                     </div>
                   );

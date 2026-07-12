@@ -39,6 +39,20 @@ Per-document rolling summary so long manuscripts don't lose early plot in AI tas
 - **Context selection** — `selectMemoryForContext()` includes only segments starting before the verbatim window (a mid-document selection never sees later plot), newest-first under a ~1500-token budget
 - **Usage tracking** — summarization tokens land in `token_usage` with `task = "memory"`
 
+### Book Spine & cross-chapter memory (大纲书脊)
+
+Story Memory is *per-document*, so a chapter is its own file and knows nothing of its siblings. The book spine adds an explicit chapter *order* so continuing a fresh chapter can see what came before it.
+
+- **Location** — `src/lib/outline.ts` (order resolution, spine IO, book-context assembly); the outline view `src/components/outline/OutlineFullView.tsx` is the editor (drag-to-reorder)
+- **Storage** — `.ai-writer/outline.json`: `{ version, order: { <volume relPath>: [<chapter relPath>, …] } }`. A **volume** = a book: top-level chapter files under `writing/` form a default volume, each sub-folder is its own
+- **Order is an overlay, not a rigid list** — `applySpine()` applies the manifest order, drops entries whose file vanished, and appends un-listed files by **natural (numeric-aware) sort** (`naturalCompare` — so 第2章 < 第10章, 6-1 < 6-2 < 7). Creating/deleting files outside the outline UI never breaks ordering; the backend's byte-sort no longer decides chapter order
+- **Chapter files** — `.md` / `.markdown` / `.txt` (the outline view previously dropped `.txt`)
+- **Continuation memory** — `buildBookContext()` (called from `aiTaskStore` for the `continue` task) resolves the active chapter's position in its volume and returns two layers, emitted by `bundleToMessages`:
+  - `【全书前情】` — recap of prior chapters, from *their* memory files, newest-first under a ~1600-token budget (chapters without a memory file simply contribute nothing — generate per-chapter memory to enrich it)
+  - `【上一章结尾·<title>】` — the previous chapter's verbatim ending (a bridge), included only when the cursor is near this chapter's start; deeper in, the chapter's own `【近期内容】` carries continuity
+- **Scope** — resolution stays within the active chapter's volume; only the `continue` task consumes it (a mid-document edit stays local)
+- **Per-chapter memory in the outline** — each chapter card shows its Story-Memory state (`memoryStatus()` → 就绪 / 需更新 / 无摘要 / 过短) and can trigger generation *for that chapter* without opening it. The generation core is factored into `runMemoryGeneration()` (shared by `memoryStore.generate` for the active doc and `memoryStore.generateForFile(absPath)` for outline-triggered chapters); `generateForFile` reads the target's content from disk (or the live editor when it's the open file) and tracks progress under `chapterGen` so it doesn't collide with the AiPanel's active-doc strip
+
 ### Streaming (SSE)
 
 - **Location** — `src/lib/aiClient.ts`

@@ -105,6 +105,23 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const { loadMemory } = await import("../lib/memory");
     const memory = activeFilePath ? await loadMemory(projectPath, activeFilePath) : null;
 
+    // Book-level continuation memory: recap of prior chapters + the previous
+    // chapter's ending, resolved from the outline order (.ai-writer/outline.json).
+    // Only for "continue" — this is what lets a freshly-started chapter know what
+    // happened in the chapters before it.
+    let bookExtras: Partial<TaskExtras> = {};
+    if (kind === "continue" && activeFilePath) {
+      try {
+        const { fileTree } = useProjectStore.getState();
+        const { buildBookContext } = await import("../lib/outline");
+        const anchorOffset = get().selectionRange?.to ?? documentText.length;
+        const bookContext = await buildBookContext(projectPath, fileTree, activeFilePath, anchorOffset);
+        if (bookContext) bookExtras = { bookContext };
+      } catch {
+        // best-effort — continuation still works without book context
+      }
+    }
+
     // Task instruction: use scene-matched user prompt if one exists, else built-in default
     const scenePrompt = kind !== "custom"
       ? prompts.find((p) => p.scene === kind)
@@ -135,7 +152,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           documentText,
           get().selection,
           instruction,
-          { ...extras, appendMode: true },
+          { ...extras, ...bookExtras, appendMode: true },
           get().selectionRange,
           memory,
         );
