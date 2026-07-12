@@ -1,23 +1,41 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Sparkles, ChevronUp, ChevronDown, ChevronsUp, ChevronsDown, Loader2, X } from "lucide-react";
+import {
+  Sparkles, ChevronUp, ChevronDown, ChevronsUp, ChevronsDown,
+  Loader2, X, FolderPlus, Trash2, Check,
+} from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { useMemoryStore } from "../../stores/memoryStore";
+import { useAiStore } from "../../stores/aiStore";
 import {
   groupVolumes,
   applySpine,
   spineFromVolumes,
   loadSpine,
   saveSpine,
+  parentDir,
   type BookSpine,
   type Volume,
   type Chapter,
 } from "../../lib/outline";
-import { loadMemory, memoryStatus, type MemoryStatus } from "../../lib/memory";
-import { readFile } from "../../lib/fileio";
+import { loadMemory, memoryStatus, moveMemory, projectRelativePath, type MemoryStatus } from "../../lib/memory";
+import { readFile, makeDir, removeDir, renamePath } from "../../lib/fileio";
 import styles from "./OutlineFullView.module.css";
+
+/** Move an array item from one index to another (immutably). */
+function move<T>(arr: T[], from: number, to: number): T[] {
+  const next = [...arr];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
+interface DragState {
+  volRel: string;
+  from: number;
+}
 
 /** Per-chapter memory badge + inline generate/update trigger. */
 function MemoBadge({ chapter, status }: { chapter: Chapter; status?: MemoryStatus }) {
@@ -68,28 +86,24 @@ function MemoBadge({ chapter, status }: { chapter: Chapter; status?: MemoryStatu
   );
 }
 
-/** Move an array item from one index to another (immutably). */
-function move<T>(arr: T[], from: number, to: number): T[] {
-  const next = [...arr];
-  const [item] = next.splice(from, 1);
-  next.splice(to, 0, item);
-  return next;
-}
-
-interface DragState {
-  volRel: string;
-  from: number;
-}
-
 export function OutlineFullView() {
   const { t } = useTranslation();
-  const { fileTree, projectPath, activeFilePath, setActiveFilePath, wordCount } = useProjectStore();
+  const { fileTree, projectPath, activeFilePath, setActiveFilePath, wordCount, refreshFileTree } = useProjectStore();
   const setMainView = useAppStore((s) => s.setMainView);
+
+  const models = useAiStore((s) => s.models);
+  const activeModelId = useAiStore((s) => s.activeModelId);
+  const memoryModelId = useAiStore((s) => s.memoryModelId);
+  const setMemoryModel = useAiStore((s) => s.setMemoryModel);
 
   const [spine, setSpine] = useState<BookSpine | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
   const [statuses, setStatuses] = useState<Record<string, MemoryStatus>>({});
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [creatingVol, setCreatingVol] = useState(false);
+  const [newVolName, setNewVolName] = useState("");
+  const [busy, setBusy] = useState(false);
   const chapterGen = useMemoryStore((s) => s.chapterGen);
 
   // Load the persisted order whenever the project changes.
@@ -105,6 +119,15 @@ export function OutlineFullView() {
     [fileTree, projectPath],
   );
   const volumes = useMemo(() => applySpine(volumesRaw, spine), [volumesRaw, spine]);
+
+  // Drop selections that no longer point at an existing chapter (after moves/deletes).
+  useEffect(() => {
+    const live = new Set(volumes.flatMap((v) => v.chapters).map((c) => c.path));
+    setSelected((prev) => {
+      const next = new Set([...prev].filter((p) => live.has(p)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [volumes]);
 
   // Per-chapter memory status. Recomputed when the chapter set changes or a
   // generation starts/finishes (chapterGen toggling picks up the fresh file).
@@ -134,16 +157,81 @@ export function OutlineFullView() {
 
   const allChaptersCount = volumes.reduce((s, v) => s + v.chapters.length, 0);
   const activeVolumeIdx = volumes.findIndex((v) => v.chapters.some((c) => c.path === activeFilePath));
+  const enabledModels = models.filter((m) => m.enabled);
+  const memoModelValue = memoryModelId ?? activeModelId ?? "";
 
   const reorder = (vol: Volume, from: number, to: number) => {
     if (from === to || !projectPath) return;
     const reordered = move(vol.chapters, from, to);
-    // Capture the whole book's current order, then override this one volume, so
-    // unrelated volumes stay put and future appends remain stable.
     const next = spineFromVolumes(volumes);
     next.order[vol.relPath] = reordered.map((c) => c.relPath);
     setSpine(next);
     void saveSpine(projectPath, next);
+  };
+
+  const toggleSelect = (path: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path); else next.add(path);
+      return next;
+    });
+  };
+
+  const openChapter = (path: string) => {
+    setActiveFilePath(path);
+    setMainView("editor");
+  };
+
+  const createVolume = async () => {
+    const name = newVolName.trim();
+    if (!name || !projectPath) { setCreatingVol(false); setNewVolName(""); return; }
+    try {
+      await makeDir(`${projectPath}/writing/${name}`);
+      await refreshFileTree();
+    } catch (e) {
+      console.error("[outline] create volume failed:", e);
+    }
+    setCreatingVol(false);
+    setNewVolName("");
+  };
+
+  const deleteVolume = async (vol: Volume) => {
+    if (vol.chapters.length > 0 || vol.relPath === "writing") return;
+    if (!window.confirm(t("outline.deleteVolumeConfirm"))) return;
+    try {
+      await removeDir(vol.path);
+      await refreshFileTree();
+    } catch (e) {
+      console.error("[outline] delete volume failed:", e);
+    }
+  };
+
+  const moveSelectedTo = async (targetVol: Volume) => {
+    if (busy || !projectPath) return;
+    const chapters = volumes.flatMap((v) => v.chapters);
+    const toMove = chapters.filter((c) => selected.has(c.path) && parentDir(c.path) !== targetVol.path);
+    if (toMove.length === 0) { setSelected(new Set()); return; }
+    setBusy(true);
+    try {
+      // Flush the open document first if it's among those being moved.
+      const editor = useEditorStore.getState();
+      if (editor.isDirty && editor.filePath && toMove.some((c) => c.path === editor.filePath)) {
+        await editor.saveNow();
+      }
+      for (const ch of toMove) {
+        const newPath = `${targetVol.path}/${ch.name}`;
+        await renamePath(ch.path, newPath);
+        const newRel = projectRelativePath(projectPath, newPath);
+        if (newRel) await moveMemory(projectPath, ch.relPath, newRel);
+        if (activeFilePath === ch.path) setActiveFilePath(newPath);
+      }
+      await refreshFileTree();
+      setSelected(new Set());
+    } catch (e) {
+      console.error("[outline] move failed:", e);
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (volumes.length === 0) {
@@ -174,6 +262,41 @@ export function OutlineFullView() {
           </div>
           <div className={styles.reorderHint}>{t("outline.reorderHint")}</div>
           <span className={styles.spacer} />
+
+          <label className={styles.modelPicker} title={t("outline.summaryModelHint")}>
+            <span className={styles.modelLabel}>{t("outline.summaryModel")}</span>
+            <select
+              className={styles.modelSelect}
+              value={memoModelValue}
+              onChange={(e) => setMemoryModel(e.target.value || null)}
+            >
+              {enabledModels.length === 0 && <option value="">{t("outline.noModel")}</option>}
+              {enabledModels.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          </label>
+
+          {creatingVol ? (
+            <input
+              className={styles.volInput}
+              autoFocus
+              value={newVolName}
+              placeholder={t("outline.volumeNamePlaceholder")}
+              onChange={(e) => setNewVolName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void createVolume();
+                if (e.key === "Escape") { setCreatingVol(false); setNewVolName(""); }
+              }}
+              onBlur={() => void createVolume()}
+            />
+          ) : (
+            <button className={styles.headBtn} onClick={() => setCreatingVol(true)}>
+              <FolderPlus size={12} strokeWidth={1.8} />
+              {t("outline.newVolume")}
+            </button>
+          )}
+
           <div className={styles.viewToggle}>
             <button className={`${styles.viewTab} ${styles.viewTabActive}`}>章节卡</button>
             <button className={styles.viewTab}>时间线</button>
@@ -184,22 +307,50 @@ export function OutlineFullView() {
             AI 建议下一章
           </button>
         </div>
-        <div className={styles.stats}>
-          <span>
-            <span className={styles.statValue}>{wordCount.toLocaleString()}</span> 字
-          </span>
-          <span className={styles.statSep} />
-          <span><span className={styles.statDot} style={{ color: "var(--color-success)" }}>●</span> 完 {allChaptersCount}</span>
-          <span style={{ margin: "0 10px" }} />
-          <span><span className={styles.statDot} style={{ color: "var(--color-sienna)" }}>●</span> 在写 {activeFilePath ? 1 : 0}</span>
-          <span className={styles.spacer} />
-          <span>平均 <span className={styles.statValue}>{allChaptersCount > 0 ? Math.round(wordCount / allChaptersCount).toLocaleString() : 0}</span> 字 / 章</span>
-        </div>
+
+        {selected.size > 0 ? (
+          <div className={styles.selectionBar}>
+            <span className={styles.selectionInfo}>
+              <Check size={12} strokeWidth={2} />
+              {t("outline.selectedCount", { count: selected.size })}
+            </span>
+            <select
+              className={styles.moveSelect}
+              value=""
+              disabled={busy}
+              onChange={(e) => {
+                const vol = volumes.find((v) => v.relPath === e.target.value);
+                if (vol) void moveSelectedTo(vol);
+              }}
+            >
+              <option value="" disabled>{t("outline.moveToVolume")}</option>
+              {volumes.map((v) => (
+                <option key={v.relPath} value={v.relPath}>{v.name}</option>
+              ))}
+            </select>
+            <button className={styles.clearBtn} onClick={() => setSelected(new Set())}>
+              {t("outline.clearSelection")}
+            </button>
+          </div>
+        ) : (
+          <div className={styles.stats}>
+            <span>
+              <span className={styles.statValue}>{wordCount.toLocaleString()}</span> 字
+            </span>
+            <span className={styles.statSep} />
+            <span><span className={styles.statDot} style={{ color: "var(--color-success)" }}>●</span> 完 {allChaptersCount}</span>
+            <span style={{ margin: "0 10px" }} />
+            <span><span className={styles.statDot} style={{ color: "var(--color-sienna)" }}>●</span> 在写 {activeFilePath ? 1 : 0}</span>
+            <span className={styles.spacer} />
+            <span>平均 <span className={styles.statValue}>{allChaptersCount > 0 ? Math.round(wordCount / allChaptersCount).toLocaleString() : 0}</span> 字 / 章</span>
+          </div>
+        )}
       </div>
 
       <div className={styles.columns}>
         {volumes.map((vol, vi) => {
           const isCurrent = vi === activeVolumeIdx;
+          const canDelete = vol.chapters.length === 0 && vol.relPath !== "writing";
           return (
             <div key={vol.path} className={`${styles.column} ${isCurrent ? styles.columnCurrent : ""}`}>
               <div className={styles.colHead}>
@@ -211,16 +362,28 @@ export function OutlineFullView() {
                     {vol.name}
                   </div>
                 </div>
-                <span className={`${styles.colCount} ${
-                  isCurrent ? styles.colCountActive : styles.colCountDone
-                }`}>
-                  {vol.chapters.length} 章
+                <span className={styles.colHeadRight}>
+                  <span className={`${styles.colCount} ${
+                    isCurrent ? styles.colCountActive : styles.colCountDone
+                  }`}>
+                    {vol.chapters.length} 章
+                  </span>
+                  {canDelete && (
+                    <button
+                      className={styles.volDeleteBtn}
+                      title={t("outline.deleteVolume")}
+                      onClick={() => void deleteVolume(vol)}
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  )}
                 </span>
               </div>
 
               <div className={styles.chapters}>
                 {vol.chapters.map((ch, ci) => {
                   const active = ch.path === activeFilePath;
+                  const isSelected = selected.has(ch.path);
                   const title = ch.name.replace(/\.(md|markdown|txt)$/i, "");
                   const isDragging = drag?.volRel === vol.relPath && drag.from === ci;
                   const isDropTarget =
@@ -232,8 +395,8 @@ export function OutlineFullView() {
                     <div
                       key={ch.path}
                       className={`${styles.chapter} ${active ? styles.chapterActive : ""} ${
-                        isDragging ? styles.dragging : ""
-                      } ${isDropTarget ? styles.dropTarget : ""}`}
+                        isSelected ? styles.chapterSelected : ""
+                      } ${isDragging ? styles.dragging : ""} ${isDropTarget ? styles.dropTarget : ""}`}
                       draggable
                       onDragStart={() => setDrag({ volRel: vol.relPath, from: ci })}
                       onDragOver={(e) => {
@@ -248,13 +411,13 @@ export function OutlineFullView() {
                         setDragOver(null);
                       }}
                       onDragEnd={() => { setDrag(null); setDragOver(null); }}
-                      onClick={() => {
-                        setActiveFilePath(ch.path);
-                        setMainView("editor");
-                      }}
+                      onClick={() => toggleSelect(ch.path)}
+                      onDoubleClick={() => openChapter(ch.path)}
                     >
                       <div className={styles.chapterTop}>
-                        <span className={styles.chapterNum}>{String(ci + 1).padStart(2, "0")}</span>
+                        <span className={`${styles.selectDot} ${isSelected ? styles.selectDotOn : ""}`}>
+                          {isSelected ? <Check size={11} strokeWidth={2.5} /> : String(ci + 1).padStart(2, "0")}
+                        </span>
                         <span className={styles.chapterName}>{title}</span>
                         {active && <span className={styles.chapterStatus}>在写</span>}
                         <MemoBadge chapter={ch} status={statuses[ch.path]} />
@@ -299,23 +462,11 @@ export function OutlineFullView() {
 
                 {vol.chapters.length === 0 && (
                   <div className={styles.placeholderCard}>
-                    <div>+ 待规划</div>
-                    <div>AI 可基于现有伏笔生成大纲建议</div>
+                    <div>{t("outline.emptyVolume")}</div>
+                    <div>{t("outline.emptyVolumeHint")}</div>
                   </div>
                 )}
               </div>
-
-              {!isCurrent && vi === volumes.length - 1 && (
-                <div className={styles.aiCard}>
-                  <div className={styles.aiCardHead}>
-                    <Sparkles size={11} strokeWidth={1.8} />
-                    AI · 下一章建议
-                  </div>
-                  <div className={styles.aiCardBody}>
-                    点击上方"AI 建议下一章"获取基于现有伏笔的章节建议。
-                  </div>
-                </div>
-              )}
             </div>
           );
         })}

@@ -4,7 +4,7 @@
   },
   "outline": {
     "empty": "No volume/chapter structure found — create sub-folders under writing/ to organize volumes",
-    "reorderHint": "Reorder chapters with the row buttons or by dragging",
+    "reorderHint": "Click to select, double-click to open; reorder within a volume via buttons or drag",
     "moveTop": "Move to top",
     "moveUp": "Move up",
     "moveDown": "Move down",
@@ -15,7 +15,19 @@
     "memoShort": "Too short",
     "memoGenerate": "Generate summary",
     "memoUpdate": "Update summary",
-    "memoCancel": "Cancel"
+    "memoCancel": "Cancel",
+    "summaryModel": "Summary model",
+    "summaryModelHint": "Model used to generate story-memory summaries",
+    "noModel": "No model",
+    "newVolume": "New volume",
+    "volumeNamePlaceholder": "Volume name",
+    "deleteVolume": "Delete volume",
+    "deleteVolumeConfirm": "Delete this volume? Only empty volumes can be deleted.",
+    "selectedCount": "{{count}} selected",
+    "moveToVolume": "Move to volume…",
+    "clearSelection": "Clear",
+    "emptyVolume": "Empty volume",
+    "emptyVolumeHint": "Select chapters and move them here"
   },
   "sidebar": {
     "files": "Files",

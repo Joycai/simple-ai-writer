@@ -16,7 +16,7 @@
  * end (the common writing flow) only ever adds new segments.
  */
 
-import { readFile, writeFile, makeDir, fileExists } from "./fileio";
+import { readFile, writeFile, makeDir, fileExists, renamePath, removeFile } from "./fileio";
 
 export interface MemorySegment {
   /** Source char range [from, to) this summary covers. */
@@ -222,6 +222,35 @@ export async function saveMemory(projectPath: string, mem: DocMemory): Promise<v
   const dir = path.slice(0, path.lastIndexOf("/"));
   await makeDir(dir);
   await writeFile(path, serializeMemory(mem));
+}
+
+/**
+ * Relocate a document's memory file when the document moves (e.g. into another
+ * volume), rewriting its internal `sourcePath` so a later save round-trips to
+ * the new location. Best-effort: silently no-ops when there's no memory file.
+ */
+export async function moveMemory(
+  projectPath: string,
+  oldRel: string,
+  newRel: string
+): Promise<void> {
+  if (oldRel === newRel) return;
+  try {
+    const oldPath = memoryFilePath(projectPath, oldRel);
+    if (!(await fileExists(oldPath))) return;
+    const newPath = memoryFilePath(projectPath, newRel);
+    await makeDir(newPath.slice(0, newPath.lastIndexOf("/")));
+    const mem = parseMemory(await readFile(oldPath));
+    if (mem) {
+      // Rewrite with the corrected sourcePath, then drop the original.
+      await writeFile(newPath, serializeMemory({ ...mem, sourcePath: newRel }));
+      await removeFile(oldPath);
+    } else {
+      await renamePath(oldPath, newPath);
+    }
+  } catch {
+    /* best-effort — a failed memory move never blocks the document move */
+  }
 }
 
 // ─── Freshness ───────────────────────────────────────────────────────────────

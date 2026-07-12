@@ -4,7 +4,7 @@
   },
   "outline": {
     "empty": "未发现卷/章节结构 — 在 writing/ 下创建子文件夹来组织卷",
-    "reorderHint": "用条目右侧按钮或拖拽调整章节顺序",
+    "reorderHint": "单击选中章节，双击打开；用按钮或拖拽在卷内排序",
     "moveTop": "置顶",
     "moveUp": "上移",
     "moveDown": "下移",
@@ -15,7 +15,19 @@
     "memoShort": "过短",
     "memoGenerate": "生成前情摘要",
     "memoUpdate": "更新前情摘要",
-    "memoCancel": "取消"
+    "memoCancel": "取消",
+    "summaryModel": "摘要模型",
+    "summaryModelHint": "用于生成前情摘要的模型",
+    "noModel": "无可用模型",
+    "newVolume": "新建卷",
+    "volumeNamePlaceholder": "卷名称",
+    "deleteVolume": "删除卷",
+    "deleteVolumeConfirm": "确定删除该卷？仅空卷可删。",
+    "selectedCount": "已选 {{count}} 章",
+    "moveToVolume": "移动到卷…",
+    "clearSelection": "清除选择",
+    "emptyVolume": "空卷",
+    "emptyVolumeHint": "选中章节后移动到此卷"
   },
   "sidebar": {
     "files": "文件",

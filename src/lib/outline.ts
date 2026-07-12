@@ -88,18 +88,23 @@ export function groupVolumes(fileTree: FileNode[], projectPath: string): Volume[
     });
   }
 
-  // Each sub-folder → its own volume.
+  // Each sub-folder → its own volume (empty ones included, so freshly-created
+  // volumes show up as drop targets and can be deleted while empty).
   for (const child of writingNode.children) {
     if (!child.is_dir) continue;
     const chapters = (child.children ?? [])
       .filter((c) => !c.is_dir && isChapterFile(c.name))
       .map(toChapter);
-    if (chapters.length > 0) {
-      volumes.push({ name: child.name, path: child.path, relPath: rel(child.path), chapters });
-    }
+    volumes.push({ name: child.name, path: child.path, relPath: rel(child.path), chapters });
   }
 
   return volumes;
+}
+
+/** Directory portion of a path (handles both separator styles). */
+export function parentDir(path: string): string {
+  const i = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return i >= 0 ? path.slice(0, i) : path;
 }
 
 /**

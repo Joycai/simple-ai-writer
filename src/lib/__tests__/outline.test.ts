@@ -7,6 +7,7 @@ import {
   spineFromVolumes,
   findChapterContext,
   chapterTitle,
+  parentDir,
   type BookSpine,
 } from "../outline";
 import type { FileNode } from "../project";
@@ -71,6 +72,25 @@ describe("groupVolumes", () => {
     expect(vols.map((v) => v.name)).toEqual(["writing", "vol2"]);
     expect(vols[1].relPath).toBe("writing/vol2");
     expect(vols[1].chapters[0].relPath).toBe("writing/vol2/a.md");
+  });
+
+  it("includes empty sub-folders as volumes (so new volumes are usable)", () => {
+    const emptyVol: FileNode = {
+      name: "vol2",
+      path: `${PROJ}/writing/vol2`,
+      is_dir: true,
+      children: [],
+    };
+    const vols = groupVolumes(tree(["1.md"], [emptyVol]), PROJ);
+    expect(vols.map((v) => v.name)).toEqual(["writing", "vol2"]);
+    expect(vols[1].chapters).toEqual([]);
+  });
+});
+
+describe("parentDir", () => {
+  it("returns the directory of a path with either separator", () => {
+    expect(parentDir("D:/proj/writing/a.md")).toBe("D:/proj/writing");
+    expect(parentDir("D:\\proj\\writing\\a.md")).toBe("D:\\proj\\writing");
   });
 });
 

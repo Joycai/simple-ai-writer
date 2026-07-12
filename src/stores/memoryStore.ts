@@ -127,13 +127,17 @@ async function runMemoryGeneration(opts: {
   return { memory, usage: { in: totalIn, out: totalOut } };
 }
 
-/** Resolve the active model + its provider, or an error message. */
+/**
+ * Resolve the model for summarization + its provider, or an error message.
+ * Prefers the dedicated memory model, falling back to the active model.
+ */
 function resolveModel():
   | { model: Model; provider: Provider }
   | { error: string } {
-  const { activeModelId, models, providers } = useAiStore.getState();
-  if (!activeModelId) return { error: i18n.t("ai.errors.noModel") };
-  const model = models.find((m) => m.id === activeModelId);
+  const { activeModelId, memoryModelId, models, providers } = useAiStore.getState();
+  const modelId = memoryModelId ?? activeModelId;
+  if (!modelId) return { error: i18n.t("ai.errors.noModel") };
+  const model = models.find((m) => m.id === modelId);
   if (!model) return { error: i18n.t("ai.errors.modelNotFound") };
   const provider = providers.find((p) => p.id === model.providerId);
   if (!provider) return { error: i18n.t("ai.errors.providerNotFound") };

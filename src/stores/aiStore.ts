@@ -24,6 +24,8 @@ interface AiState {
   prompts: Prompt[];
   activeModelId: string | null;
   activePromptId: string | null;
+  /** Model used for Story-Memory summarization; falls back to activeModelId. */
+  memoryModelId: string | null;
   isLoading: boolean;
 
   loadConfig: () => Promise<void>;
@@ -43,6 +45,7 @@ interface AiState {
 
   setActiveModel: (id: string) => void;
   setActivePrompt: (id: string) => void;
+  setMemoryModel: (id: string | null) => void;
 }
 
 export const useAiStore = create<AiState>((set, get) => ({
@@ -51,6 +54,7 @@ export const useAiStore = create<AiState>((set, get) => ({
   prompts: [],
   activeModelId: null,
   activePromptId: null,
+  memoryModelId: null,
   isLoading: false,
 
   loadConfig: async () => {
@@ -161,4 +165,5 @@ export const useAiStore = create<AiState>((set, get) => ({
 
   setActiveModel: (id) => set({ activeModelId: id }),
   setActivePrompt: (id) => set({ activePromptId: id }),
+  setMemoryModel: (id) => set({ memoryModelId: id }),
 }));
