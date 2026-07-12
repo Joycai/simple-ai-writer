@@ -8,7 +8,7 @@ import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
 import { readFile as readTextFile, readDir } from "./fileio";
 import i18n from "../i18n";
 import type { ApiStandard, GeminiSafetySettings } from "./aiConfig";
-import type { CategoryId } from "./lore";
+import { LORE_CATEGORIES, type CategoryId } from "./lore";
 
 export type ProjectFileKind = "image" | "text";
 
@@ -31,6 +31,12 @@ export interface GeneratedLore {
 
 const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "webp", "gif"]);
 const TEXT_EXTS  = new Set(["md", "txt"]);
+
+/** True when the path points at an image we can render (by extension). */
+export function isImagePath(path: string): boolean {
+  const ext = path.split(".").pop()?.toLowerCase() ?? "";
+  return IMAGE_EXTS.has(ext);
+}
 
 const MIME: Record<string, string> = {
   png:  "image/png",
@@ -211,7 +217,7 @@ export async function generateLore(opts: {
 
   return {
     name:     typeof parsed.name     === "string" ? parsed.name     : "未命名",
-    category: (["characters","world","factions","items","skills","custom"].includes(parsed.category as string)
+    category: (LORE_CATEGORIES.some((c) => c.id === parsed.category)
                ? parsed.category as CategoryId : "custom"),
     aliases:  Array.isArray(parsed.aliases) ? parsed.aliases.filter((a): a is string => typeof a === "string") : [],
     summary:  typeof parsed.summary  === "string" ? parsed.summary  : "",

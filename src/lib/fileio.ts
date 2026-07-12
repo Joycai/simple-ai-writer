@@ -32,6 +32,10 @@ export async function removeFile(path: string): Promise<void> {
   return invoke("fs_remove_file", { path });
 }
 
+export async function renamePath(from: string, to: string): Promise<void> {
+  return invoke("fs_rename", { from, to });
+}
+
 export interface DirEntry { name: string; path: string; isDirectory: boolean; }
 
 export async function readDir(path: string): Promise<DirEntry[]> {

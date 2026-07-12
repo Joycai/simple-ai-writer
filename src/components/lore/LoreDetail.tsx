@@ -1,16 +1,19 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Sparkles, FolderOpen, ExternalLink, Plus, Pencil, Trash2, Check, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, Sparkles, FolderOpen, ExternalLink, FileText, Plus, Pencil, Trash2, Check, X, Camera, ChevronLeft, ChevronRight } from "lucide-react";
 import { createPortal } from "react-dom";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
 import {
   LORE_CATEGORIES,
+  type CategoryId,
   type LoreEntity,
   addLoreImage,
   updateLoreImageDesc,
   removeLoreImage,
+  saveEntityMetaAndBody,
+  setEntityAvatar,
 } from "../../lib/lore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
@@ -18,6 +21,7 @@ import { useAppStore } from "../../stores/appStore";
 import { readFile } from "../../lib/fileio";
 import { imageToDataUrl } from "../../lib/loreGenerator";
 import { renderMarkdown } from "../../lib/markdown";
+import { useImageDataUrl } from "./useImageDataUrl";
 import { LoreImproveModal } from "./LoreImproveModal";
 import { LoreMetaImproveModal } from "./LoreMetaImproveModal";
 import styles from "./LoreDetail.module.css";
@@ -25,6 +29,8 @@ import styles from "./LoreDetail.module.css";
 interface Props {
   entity: LoreEntity;
   onBack: () => void;
+  /** Open directly in edit mode (used by the wall's card context menu). */
+  initialEditing?: boolean;
 }
 
 const TABS = [
@@ -36,27 +42,46 @@ const TABS = [
 
 type Tab = (typeof TABS)[number]["id"];
 
-export function LoreDetail({ entity: initialEntity, onBack }: Props) {
-  const { t } = useTranslation();
+export function LoreDetail({ entity: initialEntity, onBack, initialEditing = false }: Props) {
+  const { t, i18n } = useTranslation();
+  const isZh = i18n.language.startsWith("zh");
   const { setActiveFilePath, projectPath } = useProjectStore();
   const loreIndex = useLoreStore((s) => s.index);
   const scanProject = useLoreStore((s) => s.scanProject);
-  const pendingLoreNav = useAppStore((s) => s.pendingLoreNav);
-  const setPendingLoreNav = useAppStore((s) => s.setPendingLoreNav);
-  const galleryRef = useRef<HTMLElement | null>(null);
+  const deleteEntity = useLoreStore((s) => s.deleteEntity);
+  const setMainView = useAppStore((s) => s.setMainView);
+
+  // Where the entity currently lives. Normally this is where it was opened
+  // from, but saving an edit with a changed category moves the folder — the
+  // scanner derives category from folder location — so we track it in state.
+  const [loc, setLoc] = useState({ category: initialEntity.category, id: initialEntity.id });
 
   // After any mutation we re-scan, which produces fresh LoreEntity objects.
   // Re-derive the entity from the store on every render so the gallery picks
   // up new/edited/removed images without the parent having to re-pass props.
   const entity = useMemo<LoreEntity>(() => {
-    const fresh = loreIndex[initialEntity.category]?.find((e) => e.id === initialEntity.id);
+    const fresh = loreIndex[loc.category]?.find((e) => e.id === loc.id);
     return fresh ?? initialEntity;
-  }, [loreIndex, initialEntity]);
+  }, [loreIndex, loc, initialEntity]);
+
+  // Bumped after replacing the avatar so the data URL re-reads even when the
+  // file path stayed identical (same extension overwrite).
+  const [avatarVersion, setAvatarVersion] = useState(0);
+  const avatarUrl = useImageDataUrl(entity.avatarPath, avatarVersion);
 
   const [tab, setTab] = useState<Tab>("summary");
   const [content, setContent] = useState<string>("");
   const [showImprove, setShowImprove] = useState(false);
   const [showMetaImprove, setShowMetaImprove] = useState(false);
+
+  // In-place edit mode: draft metadata + body, committed via saveEntityMetaAndBody.
+  const [editing, setEditing] = useState(false);
+  const [dName, setDName] = useState("");
+  const [dAliases, setDAliases] = useState<string[]>([]);
+  const [aliasInput, setAliasInput] = useState("");
+  const [dCategory, setDCategory] = useState<CategoryId>(initialEntity.category);
+  const [dSummary, setDSummary] = useState("");
+  const [dBody, setDBody] = useState("");
 
   // Gallery edit state
   const [editingFile, setEditingFile] = useState<string | null>(null);
@@ -114,40 +139,112 @@ export function LoreDetail({ entity: initialEntity, onBack }: Props) {
     return () => { cancelled = true; };
   }, [entity.images]);
 
+  const [contentLoaded, setContentLoaded] = useState(false);
   useEffect(() => {
     const indexPath = `${entity.dirPath}/index.md`;
+    setContentLoaded(false);
     readFile(indexPath)
       .then((raw) => {
         const m = raw.match(/^---\n[\s\S]*?\n---\n?/);
         setContent(m ? raw.slice(m[0].length) : raw);
       })
-      .catch(() => setContent(""));
+      .catch(() => setContent(""))
+      .finally(() => setContentLoaded(true));
   }, [entity.dirPath]);
-
-  // Honor a deep-link anchor (e.g. from the sidebar's "manage images" entry):
-  // jump to the gallery section after first paint and clear the nav so a later
-  // visit doesn't re-trigger it. Forcing the "summary" tab guarantees the
-  // gallery is actually mounted before we scroll.
-  useEffect(() => {
-    if (!pendingLoreNav || pendingLoreNav.entityId !== entity.id) return;
-    if (pendingLoreNav.anchor === "gallery") {
-      setTab("summary");
-      const raf = requestAnimationFrame(() => {
-        galleryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-        setPendingLoreNav(null);
-      });
-      return () => cancelAnimationFrame(raf);
-    }
-    setPendingLoreNav(null);
-  }, [pendingLoreNav, entity.id, setPendingLoreNav]);
 
   const cat = LORE_CATEGORIES.find((c) => c.id === entity.category);
 
-  const openInEditor = () => {
-    setActiveFilePath(`${entity.dirPath}/index.md`);
+  // Opening a file only sets the active path — the editor lives in the
+  // "editor" main view, so switch back to it or the open is invisible.
+  const openFileInEditor = (filename: string) => {
+    setActiveFilePath(`${entity.dirPath}/${filename}`);
+    setMainView("editor");
   };
+  const openInEditor = () => openFileInEditor("index.md");
   const reveal = async () => {
     try { await revealItemInDir(entity.dirPath); } catch { /* best-effort */ }
+  };
+
+  const handleDelete = async () => {
+    if (!projectPath || busy) return;
+    if (!window.confirm(t("lore.panel.deleteConfirm", { name: entity.name }))) return;
+    setBusy(true);
+    try {
+      await deleteEntity(projectPath, entity);
+      onBack();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Same flow as the wall cards: pick a local image, replace avatar.<ext>,
+  // re-scan, then bump the version so the unchanged path still re-reads.
+  const handleAvatarPick = async () => {
+    if (!projectPath || busy) return;
+    const picked = await openDialog({
+      multiple: false,
+      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] }],
+    });
+    if (typeof picked !== "string") return;
+    setBusy(true);
+    try {
+      const bytes = await readBinaryFile(picked);
+      const ext = (picked.split(".").pop() ?? "png").toLowerCase();
+      await setEntityAvatar(entity.dirPath, bytes, ext);
+      await scanProject(projectPath);
+      setAvatarVersion((v) => v + 1);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startEntityEdit = () => {
+    setDName(entity.name);
+    setDAliases(entity.aliases);
+    setAliasInput("");
+    setDCategory(entity.category);
+    setDSummary(entity.summary);
+    setDBody(content);
+    setEditing(true);
+  };
+
+  // When opened via the wall's "编辑" context-menu item, enter edit mode as
+  // soon as the body has loaded — drafting from unloaded content would save
+  // back an empty body.
+  const [autoEdit, setAutoEdit] = useState(initialEditing);
+  useEffect(() => {
+    if (autoEdit && contentLoaded) {
+      startEntityEdit();
+      setAutoEdit(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoEdit, contentLoaded]);
+
+  const addDraftAlias = () => {
+    const v = aliasInput.trim();
+    if (v && !dAliases.includes(v)) setDAliases([...dAliases, v]);
+    setAliasInput("");
+  };
+
+  const handleSaveEdit = async () => {
+    if (!projectPath || busy || !dName.trim()) return;
+    setBusy(true);
+    try {
+      const moved = await saveEntityMetaAndBody(projectPath, entity, {
+        name: dName.trim(),
+        aliases: dAliases.map((a) => a.trim()).filter(Boolean),
+        category: dCategory,
+        summary: dSummary.trim(),
+      }, dBody);
+      await scanProject(projectPath);
+      // Follow the entity to its (possibly new) folder, and refresh the local
+      // body copy — the read-back effect only reruns when dirPath changes.
+      setLoc({ category: moved.category, id: moved.id });
+      setContent(dBody.trimStart());
+      setEditing(false);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const refresh = async () => {
@@ -291,22 +388,148 @@ export function LoreDetail({ entity: initialEntity, onBack }: Props) {
           <span className={styles.crumbBold}>{entity.name}</span>
         </span>
         <span className={styles.spacer} />
-        <button className={styles.actionBtn} onClick={() => setShowMetaImprove(true)}>
-          <Sparkles size={11} /> {t("lore.panel.aiImproveMeta", { defaultValue: "AI 优化元数据" })}
-        </button>
-        <button className={styles.actionBtn} onClick={() => setShowImprove(true)}>
-          <Sparkles size={11} /> {t("lore.panel.aiImprove")}
-        </button>
-        <button className={styles.actionBtn} onClick={openInEditor}>
-          <ExternalLink size={11} /> {t("lore.form.save", { defaultValue: "在编辑器中打开" })}
-        </button>
-        <button className={styles.actionBtn} onClick={reveal}>
-          <FolderOpen size={11} /> {t("lore.panel.showInBrowser")}
-        </button>
+        {editing ? (
+          <>
+            <button className={styles.actionBtn} onClick={() => setEditing(false)} disabled={busy}>
+              <X size={11} /> {t("lore.detail.cancelEdit", { defaultValue: "取消" })}
+            </button>
+            <button
+              className={`${styles.actionBtn} ${styles.actionBtnPrimary}`}
+              onClick={handleSaveEdit}
+              disabled={busy || !dName.trim()}
+            >
+              <Check size={11} />
+              {busy
+                ? t("lore.detail.saving", { defaultValue: "保存中…" })
+                : t("lore.detail.saveEdit", { defaultValue: "保存" })}
+            </button>
+          </>
+        ) : (
+          <>
+            <button className={`${styles.actionBtn} ${styles.actionBtnPrimary}`} onClick={startEntityEdit}>
+              <Pencil size={11} /> {t("lore.detail.edit", { defaultValue: "编辑" })}
+            </button>
+            <button className={styles.actionBtn} onClick={() => setShowMetaImprove(true)}>
+              <Sparkles size={11} /> {t("lore.panel.aiImproveMeta", { defaultValue: "AI 优化元数据" })}
+            </button>
+            <button className={styles.actionBtn} onClick={() => setShowImprove(true)}>
+              <Sparkles size={11} /> {t("lore.panel.aiImprove")}
+            </button>
+            <button className={styles.actionBtn} onClick={openInEditor}>
+              <ExternalLink size={11} /> {t("lore.detail.openInEditor", { defaultValue: "在编辑器中打开" })}
+            </button>
+            <button className={styles.actionBtn} onClick={reveal}>
+              <FolderOpen size={11} /> {t("lore.panel.showInBrowser")}
+            </button>
+            <button
+              className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
+              onClick={handleDelete}
+              disabled={busy}
+            >
+              <Trash2 size={11} /> {t("lore.panel.deleteEntity")}
+            </button>
+          </>
+        )}
       </div>
 
+      {editing ? (
+        <div className={styles.body}>
+          <div className={styles.editForm}>
+            <div className={styles.editGrid}>
+              <label className={styles.eLabel}>
+                {t("lore.detail.fieldName", { defaultValue: isZh ? "名称" : "Name" })}
+              </label>
+              <input
+                className={styles.eInput}
+                value={dName}
+                onChange={(e) => setDName(e.target.value)}
+                autoFocus
+              />
+
+              <label className={styles.eLabel}>
+                {t("lore.detail.fieldCategory", { defaultValue: isZh ? "分类" : "Category" })}
+              </label>
+              <select
+                className={styles.eInput}
+                value={dCategory}
+                onChange={(e) => setDCategory(e.target.value as CategoryId)}
+              >
+                {LORE_CATEGORIES.map((c) => (
+                  <option key={c.id} value={c.id}>{isZh ? c.labelZh : c.labelEn}</option>
+                ))}
+              </select>
+
+              <label className={styles.eLabel}>
+                {t("lore.detail.fieldAliases", { defaultValue: isZh ? "别名" : "Aliases" })}
+              </label>
+              <div>
+                {dAliases.length > 0 && (
+                  <div className={styles.chips}>
+                    {dAliases.map((a, i) => (
+                      <span key={`${a}-${i}`} className={styles.chipTag}>
+                        {a}
+                        <button
+                          className={styles.chipRemove}
+                          onClick={() => setDAliases(dAliases.filter((_, x) => x !== i))}
+                          title={t("lore.detail.removeAlias", { defaultValue: isZh ? "移除" : "Remove" })}
+                        >
+                          <X size={10} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <input
+                  className={styles.eInput}
+                  value={aliasInput}
+                  onChange={(e) => setAliasInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") { e.preventDefault(); addDraftAlias(); }
+                  }}
+                  placeholder={t("lore.detail.aliasPlaceholder", { defaultValue: isZh ? "添加别名（回车确认）" : "Add alias (press Enter)" })}
+                />
+              </div>
+
+              <label className={styles.eLabel}>
+                {t("lore.detail.fieldSummary", { defaultValue: isZh ? "概要" : "Summary" })}
+              </label>
+              <textarea
+                className={`${styles.eInput} ${styles.eTextarea}`}
+                rows={2}
+                value={dSummary}
+                onChange={(e) => setDSummary(e.target.value)}
+              />
+            </div>
+
+            <div className={styles.editBodyBlock}>
+              <label className={styles.eLabel}>
+                {t("lore.detail.fieldBody", { defaultValue: isZh ? "正文 · Markdown" : "Content · Markdown" })}
+              </label>
+              <textarea
+                className={styles.bodyTextarea}
+                value={dBody}
+                onChange={(e) => setDBody(e.target.value)}
+                spellCheck={false}
+              />
+            </div>
+          </div>
+        </div>
+      ) : (<>
       <div className={styles.hero}>
-        <div className={styles.avatar}>{entity.name.charAt(0)}</div>
+        <div
+          className={styles.avatarWrap}
+          onClick={handleAvatarPick}
+          title={t("lore.wall.changeAvatar", { defaultValue: "更换头像" })}
+        >
+          {avatarUrl ? (
+            <img src={avatarUrl} alt={entity.name} className={styles.avatarImg} />
+          ) : (
+            <div className={styles.avatar}>{entity.name.charAt(0)}</div>
+          )}
+          <div className={styles.avatarOverlay}>
+            <Camera size={18} strokeWidth={1.8} />
+          </div>
+        </div>
         <div className={styles.heroText}>
           <div className={styles.eyebrow}>{cat?.labelEn ?? entity.category}</div>
           <div className={styles.heroName}>{entity.name}</div>
@@ -345,7 +568,31 @@ export function LoreDetail({ entity: initialEntity, onBack }: Props) {
               <div className={styles.notLoaded}>无内容</div>
             )}
 
-            <section className={styles.gallery} ref={galleryRef}>
+            {entity.mdFiles.filter((f) => f !== "index.md").length > 0 && (
+              <section className={styles.files}>
+                <div className={styles.filesHead}>
+                  {t("lore.detail.extraFiles", { defaultValue: "附加文件" })}
+                </div>
+                <div className={styles.fileList}>
+                  {entity.mdFiles
+                    .filter((f) => f !== "index.md")
+                    .sort((a, b) => a.localeCompare(b))
+                    .map((f) => (
+                      <button
+                        key={f}
+                        className={styles.fileItem}
+                        onClick={() => openFileInEditor(f)}
+                        title={t("lore.detail.openInEditor", { defaultValue: "在编辑器中打开" })}
+                      >
+                        <FileText size={11} strokeWidth={1.8} />
+                        <span className={styles.fileName}>{f}</span>
+                      </button>
+                    ))}
+                </div>
+              </section>
+            )}
+
+            <section className={styles.gallery}>
               <div className={styles.galleryHeader}>
                 <div className={styles.galleryHead}>{t("lore.detail.gallery", { defaultValue: "图集" })}</div>
                 <span className={styles.galleryCount}>{entity.images.length}</span>
@@ -448,6 +695,7 @@ export function LoreDetail({ entity: initialEntity, onBack }: Props) {
           </div>
         )}
       </div>
+      </>)}
     </div>
   );
 }

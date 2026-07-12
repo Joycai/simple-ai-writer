@@ -7,7 +7,8 @@ import {
 import { useAiStore } from "../../stores/aiStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
-import { readEntityFile, writeEntityFile, assetUrl, type LoreEntity } from "../../lib/lore";
+import { readEntityFile, writeEntityFile, type LoreEntity } from "../../lib/lore";
+import { useImageDataUrl } from "./useImageDataUrl";
 import {
   scanProjectFiles, imageToDataUrl, readTextFileContent, type ProjectFile,
 } from "../../lib/loreGenerator";
@@ -45,6 +46,15 @@ function PickerThumb({ file }: { file: ProjectFile }) {
   return <img src={url} className={styles.pickerThumb} alt="" />;
 }
 
+/** Avatar thumb for a lore entity in the @ picker (data URL, not assetUrl). */
+function EntityThumb({ avatarPath }: { avatarPath: string | null }) {
+  const url = useImageDataUrl(avatarPath);
+  if (!url) {
+    return <div className={styles.pickerThumbPlaceholder}><FileText size={12} /></div>;
+  }
+  return <img src={url} className={styles.pickerThumb} alt="" />;
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -57,6 +67,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
   const { projectPath } = useProjectStore();
   const { models, providers, activeModelId, setActiveModel } = useAiStore();
   const { index, scanProject } = useLoreStore();
+  const avatarUrl = useImageDataUrl(entity.avatarPath);
 
   const [currentContent, setCurrentContent] = useState("");
   const [showCurrent, setShowCurrent] = useState(false);
@@ -304,8 +315,8 @@ export function LoreImproveModal({ entity, onClose }: Props) {
         {/* ── Header ── */}
         <div className={styles.header}>
           <div className={styles.headerLeft}>
-            {entity.avatarPath
-              ? <img src={assetUrl(entity.avatarPath)} className={styles.headerAvatar} alt={entity.name} />
+            {avatarUrl
+              ? <img src={avatarUrl} className={styles.headerAvatar} alt={entity.name} />
               : <div className={styles.headerAvatarPlaceholder}><Bot size={16} strokeWidth={1.5} /></div>}
             <div>
               <div className={styles.headerName}>{entity.name}</div>
@@ -448,9 +459,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
                 onMouseDown={(e) => { e.preventDefault(); void handlePickItem(item); }}
               >
                 {item.type === "lore"
-                  ? item.entity.avatarPath
-                    ? <img src={assetUrl(item.entity.avatarPath)} className={styles.pickerThumb} alt="" />
-                    : <div className={styles.pickerThumbPlaceholder}><FileText size={12} /></div>
+                  ? <EntityThumb avatarPath={item.entity.avatarPath} />
                   : <PickerThumb file={item.file} />}
                 <span className={styles.pickerName}>
                   {item.type === "lore" ? item.entity.name : item.file.name}

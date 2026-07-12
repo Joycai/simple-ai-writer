@@ -73,6 +73,7 @@ export function CodeEditor({ value, onChange }: Props) {
     const view = new EditorView({ state, parent: containerRef.current });
     viewRef.current = view;
     externalValueRef.current = value;
+    useEditorStore.getState().setEditorView(view);
 
     useEditorStore.getState().setScrollToLine((line) => {
       const doc = view.state.doc;
@@ -87,6 +88,7 @@ export function CodeEditor({ value, onChange }: Props) {
 
     return () => {
       useEditorStore.getState().setScrollToLine(null);
+      useEditorStore.getState().setEditorView(null);
       view.destroy();
       viewRef.current = null;
     };
@@ -108,5 +110,5 @@ export function CodeEditor({ value, onChange }: Props) {
     }
   }, [value]);
 
-  return <div ref={containerRef} className={styles.wrap} />;
+  return <div ref={containerRef} className={styles.wrap} data-ai-selection />;
 }

@@ -43,6 +43,50 @@
   text-align: center;
 }
 
+/* ── Selected-text card (the edit target) ────────────────────────── */
+.selectionCard {
+  border: 1px solid var(--color-border);
+  border-left: 2px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-elevated);
+  overflow: hidden;
+}
+.selectionCardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--color-border-soft);
+}
+.selectionCardLabel {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: var(--letter-label);
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+.selectionCardCount {
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+.selectionCardBody {
+  padding: 8px 10px;
+  max-height: 120px;
+  overflow-y: auto;
+  font: 400 12px/1.6 var(--font-serif);
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.selectHint {
+  font-size: 11px;
+  color: var(--color-accent);
+  background: var(--color-accent-tint);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  text-align: center;
+}
+
 /* ── Task selection grid ─────────────────────────────────────────── */
 .taskGrid {
   display: grid;
@@ -513,3 +557,66 @@
   transition: background var(--transition-fast);
 }
 .btnSecondary:hover { background: var(--color-border); }
+
+/* ── Story memory (前情记忆) strip ────────────────────────────────── */
+.memorySection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border-soft);
+}
+.memoryRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.memoryLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: var(--letter-label);
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+.memoryStatus {
+  flex: 1;
+  font-size: 10px;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.memoryBtn {
+  padding: 2px 8px;
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  white-space: nowrap;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+.memoryBtn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+.memoryHint {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--color-accent);
+  background: var(--color-accent-tint);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+}
+.memoryNotice {
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+.memoryError {
+  font-size: 10px;
+  color: var(--color-error);
+  word-break: break-word;
+}

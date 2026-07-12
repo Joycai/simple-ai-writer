@@ -103,6 +103,107 @@ describe("assembleContext", () => {
     expect(bundle.recentContext.length).toBeLessThanOrEqual(800 * 3);
   });
 
+  it("slices recent context exactly before the selection when given source offsets", async () => {
+    const doc = "AAA before-text BBB target CCC after";
+    const from = doc.indexOf("target");
+    const to = from + "target".length;
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "target", "Rewrite.",
+      undefined,
+      { from, to },
+    );
+    expect(bundle.recentContext.endsWith("BBB")).toBe(true);
+    expect(bundle.recentContext).not.toContain("target");
+    expect(bundle.recentContext).not.toContain("after"); // never the doc tail
+  });
+
+  it("locates a preview-style selection (missing markdown markup) via normalized match", async () => {
+    // Source has bold markers + a list bullet the rendered selection lacks.
+    const doc = "开头的一段前文。\n\n- **目标段落的标题** 后面还有正文 BBB";
+    const rendered = "目标段落的标题"; // as copied from the preview pane
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, rendered, "Rewrite.",
+    );
+    expect(bundle.recentContext).toContain("开头的一段前文");
+    expect(bundle.recentContext).not.toContain("目标段落的标题");
+    expect(bundle.recentContext).not.toContain("BBB"); // still never the tail
+  });
+
+  it("does NOT fall back to the document tail when the selection can't be located", async () => {
+    // Rendered/preview selection that doesn't appear verbatim in the source.
+    const doc = `${"x".repeat(3000)}THE ACTUAL ENDING`;
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "rendered text not in source", "Rewrite.",
+    );
+    expect(bundle.recentContext).toBe("");
+    expect(bundle.recentContext).not.toContain("ENDING");
+    // The selection itself is still sent as the edit target.
+    expect(bundle.taskText).toContain("rendered text not in source");
+  });
+
+  it("append mode: selection is context, not a 【选中内容】 target", async () => {
+    const doc = "PREAMBLE ".repeat(50) + "THE SELECTED TAIL";
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "THE SELECTED TAIL", "Continue.",
+      { appendMode: true },
+      { from: doc.indexOf("THE SELECTED TAIL"), to: doc.length },
+    );
+    // No edit-target block; the instruction stands alone.
+    expect(bundle.taskText).not.toContain("【选中内容】");
+    // The selected text falls into the reference window (anchor = selection end).
+    expect(bundle.recentContext).toContain("THE SELECTED TAIL");
+  });
+
+  it("append mode with no selection continues from the document end", async () => {
+    const doc = "PREAMBLE ".repeat(100);
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "", "Continue.", { appendMode: true },
+    );
+    expect(bundle.recentContext.endsWith("PREAMBLE")).toBe(true);
+    expect(bundle.taskText).not.toContain("【选中内容】");
+  });
+
+  it("binds the model to the outline only when one is filled in", async () => {
+    const doc = "PREAMBLE ".repeat(100);
+    const withOutline = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "", "Continue.",
+      { appendMode: true, outline: "第一步：主角进城" },
+    );
+    expect(withOutline.outline).toBe("第一步：主角进城");
+    // The follow-outline directive is appended after the base instruction
+    // (i18n returns the raw key under the test config).
+    expect(withOutline.taskText).toContain("followOutline");
+    expect(withOutline.taskText.startsWith("Continue.")).toBe(true);
+    const withoutOutline = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "", "Continue.", { appendMode: true },
+    );
+    expect(withoutOutline.taskText).toBe("Continue.");
+  });
+
+  it("honours contextChars to bound the reference range (0 = none)", async () => {
+    const doc = "PREAMBLE ".repeat(100) + "SELECTED";
+    const none = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "SELECTED", "Polish.", { contextChars: 0 },
+    );
+    expect(none.recentContext).toBe("");
+    const some = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "SELECTED", "Polish.", { contextChars: 20 },
+    );
+    expect(some.recentContext.length).toBeLessThanOrEqual(20);
+    expect(some.recentContext.length).toBeGreaterThan(0);
+  });
+
+  it("ignores stale source offsets that no longer match the selection", async () => {
+    const doc = "AAA before-text BBB target CCC after";
+    // Offsets point somewhere whose text != selection → must fall back to search.
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "target", "Rewrite.",
+      undefined,
+      { from: 0, to: 3 },
+    );
+    expect(bundle.recentContext.endsWith("BBB")).toBe(true);
+  });
+
   it("builds task text from selection plus extra requirement", async () => {
     const bundle = await assembleContext(
       "SYS",
@@ -120,6 +221,29 @@ describe("assembleContext", () => {
   it("estimates tokens from total assembled characters", async () => {
     const bundle = await assembleContext("SYS", makeLoreIndex(), "short doc", "", "Go.");
     expect(bundle.estimatedTokens).toBeGreaterThan(0);
+  });
+
+  it("threads book context (prior recap + prev-chapter tail) only in append mode", async () => {
+    const book = {
+      priorSummary: "第一章：主角进城。",
+      prevChapterTail: "他推开了门。",
+      prevChapterTitle: "第2章",
+    };
+    const cont = await assembleContext(
+      "SYS", makeLoreIndex(), "新章开头", "", "Continue.",
+      { appendMode: true, bookContext: book },
+    );
+    expect(cont.priorChaptersSummary).toBe("第一章：主角进城。");
+    expect(cont.prevChapterTail).toBe("他推开了门。");
+    expect(cont.prevChapterTitle).toBe("第2章");
+
+    // A non-append task (edit) must not pull in cross-chapter context.
+    const edit = await assembleContext(
+      "SYS", makeLoreIndex(), "doc", "sel", "Polish.",
+      { bookContext: book },
+    );
+    expect(edit.priorChaptersSummary).toBe("");
+    expect(edit.prevChapterTail).toBe("");
   });
 });
 
@@ -149,5 +273,27 @@ describe("bundleToMessages", () => {
     expect(idxOutline).toBeGreaterThan(idxKnowledge);
     expect(idxRecent).toBeGreaterThan(idxOutline);
     expect(idxTask).toBeGreaterThan(idxRecent);
+  });
+
+  it("emits 【全书前情】 before 【近期内容】 and labels the previous chapter's ending", async () => {
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), "本章开头正文", "", "Continue.",
+      {
+        appendMode: true,
+        bookContext: {
+          priorSummary: "第一章梗概。",
+          prevChapterTail: "上一章的最后一句。",
+          prevChapterTitle: "第2章",
+        },
+      },
+    );
+    const user = bundleToMessages(bundle)[1].content;
+    const idxPrior = user.indexOf("【全书前情】");
+    const idxPrevTail = user.indexOf("【上一章结尾·第2章】");
+    const idxRecent = user.indexOf("【近期内容】");
+    expect(idxPrior).toBeGreaterThanOrEqual(0);
+    expect(idxPrevTail).toBeGreaterThan(idxPrior);
+    expect(idxRecent).toBeGreaterThan(idxPrevTail);
+    expect(user).toContain("上一章的最后一句。");
   });
 });

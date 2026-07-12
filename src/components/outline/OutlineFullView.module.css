@@ -29,6 +29,124 @@
 }
 .spacer { flex: 1; }
 
+.reorderHint {
+  font: 400 11px/1 var(--font-sans);
+  color: var(--color-text-faint);
+}
+
+/* Header: summary-model picker + new-volume control */
+.modelPicker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.modelLabel {
+  font: 500 9px/1 var(--font-sans);
+  letter-spacing: var(--letter-label);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+.modelSelect {
+  font: 400 12px/1 var(--font-sans);
+  padding: 4px 6px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  border-radius: 3px;
+  max-width: 160px;
+}
+.headBtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-secondary);
+  font: 500 11px/1 var(--font-sans);
+  cursor: pointer;
+}
+.headBtn:hover { color: var(--color-sienna); }
+.volInput {
+  padding: 5px 8px;
+  font: 400 12px/1 var(--font-sans);
+  background: var(--color-card);
+  border: 1px solid var(--color-sienna);
+  color: var(--color-text-primary);
+  width: 120px;
+}
+
+/* Selection action bar (replaces the stats row while chapters are selected) */
+.selectionBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  background: var(--color-bg-elevated);
+  border-left: 2px solid var(--color-sienna);
+}
+.selectionInfo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 500 12px/1 var(--font-sans);
+  color: var(--color-sienna);
+}
+.moveSelect {
+  font: 400 12px/1 var(--font-sans);
+  padding: 5px 8px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-primary);
+  border-radius: 3px;
+}
+.clearBtn {
+  font: 400 11px/1 var(--font-sans);
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.clearBtn:hover { color: var(--color-text-primary); }
+
+/* Volume header: delete control (empty volumes only) */
+.colHeadRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.volDeleteBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.volDeleteBtn:hover { color: var(--color-danger, #c0522d); background: var(--color-card); }
+
+/* Selection indicator (chapter number ↔ checkmark) */
+.selectDot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 16px;
+  font: 500 11px/1 var(--font-mono);
+  color: var(--color-sienna);
+}
+.selectDotOn {
+  background: var(--color-sienna);
+  color: var(--color-card);
+  border-radius: 3px;
+}
+
 .viewToggle {
   display: flex;
   border: 1px solid var(--color-border);
@@ -153,7 +271,12 @@
   transition: background var(--transition-fast);
 }
 .chapter:hover { background: var(--color-bg-elevated); }
+.chapter:active { cursor: grabbing; }
+.dragging { opacity: 0.4; }
+.dropTarget { box-shadow: inset 0 2px 0 var(--color-sienna); }
 .chapterActive { background: var(--color-card); border-left-width: 0; padding: 11px 13px; border: 1.5px solid var(--color-sienna); box-shadow: var(--shadow-sm); }
+.chapterSelected { box-shadow: inset 0 0 0 1.5px var(--color-sienna); background: color-mix(in srgb, var(--color-sienna) 8%, var(--color-card)); }
+.chapterSelected:hover { background: color-mix(in srgb, var(--color-sienna) 12%, var(--color-card)); }
 .chapterDraft { border-left-color: var(--color-warning); border-left-style: dashed; opacity: 0.7; }
 .chapterPlanned { border-left-color: var(--color-text-ghost); border-left-style: dashed; opacity: 0.55; }
 
@@ -190,6 +313,98 @@
   color: var(--color-sienna);
   padding: 2px 6px;
   background: var(--color-tag-bg);
+}
+
+/* Per-chapter memory status + inline generate trigger. */
+.memoCell {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.memoChip {
+  font: 500 10px/1 var(--font-sans);
+  padding: 2px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.memoFresh { color: var(--color-success); background: color-mix(in srgb, var(--color-success) 12%, transparent); }
+.memoStale { color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 14%, transparent); }
+.memoNone { color: var(--color-text-muted); background: var(--color-bg-elevated); }
+.memoShort { color: var(--color-text-faint); background: transparent; }
+.memoBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--color-sienna);
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity var(--transition-fast), background var(--transition-fast);
+}
+.chapter:hover .memoBtn { opacity: 1; }
+.memoBtn:hover:not(:disabled) { background: var(--color-bg-surface); }
+.memoBtn:disabled { opacity: 0.3; cursor: default; }
+.memoGenText {
+  font: 500 10px/1 var(--font-mono);
+  color: var(--color-sienna);
+}
+.memoSpin {
+  color: var(--color-sienna);
+  animation: memoSpin 0.9s linear infinite;
+}
+@keyframes memoSpin { to { transform: rotate(360deg); } }
+.memoCancel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.memoCancel:hover { color: var(--color-danger, var(--color-sienna)); }
+
+/* Reorder controls — faint until the row is hovered. */
+.moveControls {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: auto;
+  padding-left: 6px;
+  opacity: 0.35;
+  transition: opacity var(--transition-fast);
+}
+.chapter:hover .moveControls { opacity: 1; }
+.moveBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.moveBtn:hover:not(:disabled) {
+  background: var(--color-bg-surface);
+  color: var(--color-sienna);
+}
+.moveBtn:disabled {
+  opacity: 0.3;
+  cursor: default;
 }
 .chapterDesc {
   font: italic 400 10px/1.45 var(--font-serif);

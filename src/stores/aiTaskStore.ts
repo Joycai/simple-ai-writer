@@ -24,16 +24,24 @@ interface TokenUsage {
   cost: number; // USD
 }
 
+/** Source-document offsets for the committed selection, when known (editor
+ *  mode). Null in preview mode where only rendered text is available. */
+export interface SelectionRange { from: number; to: number; }
+
 interface AiTaskState {
   isRunning: boolean;
   output: string;
   error: string | null;
   usage: TokenUsage | null;
   selection: string;
+  selectionRange: SelectionRange | null;
+  /** Task the floating toolbar asked the panel to pre-select. Consumed + cleared by AiPanel. */
+  requestedTask: TaskKind | null;
   abortController: AbortController | null;
   toolSteps: ToolStep[];
 
-  setSelection: (s: string) => void;
+  setSelection: (s: string, range?: SelectionRange | null) => void;
+  setRequestedTask: (kind: TaskKind | null) => void;
   runTask: (kind: TaskKind, customInstruction?: string, continueLength?: number, extras?: TaskExtras) => Promise<void>;
   abort: () => void;
   clearOutput: () => void;
@@ -46,10 +54,13 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
   error: null,
   usage: null,
   selection: "",
+  selectionRange: null,
+  requestedTask: null,
   abortController: null,
   toolSteps: [],
 
-  setSelection: (s) => set({ selection: s }),
+  setSelection: (s, range = null) => set({ selection: s, selectionRange: range }),
+  setRequestedTask: (kind) => set({ requestedTask: kind }),
 
   addToolStep: (step) =>
     set((s) => {
@@ -88,6 +99,29 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const { useEditorStore } = await import("./editorStore");
     const { content: documentText } = useEditorStore.getState();
 
+    // Story memory for the active document (前情提要 layer). Read from disk so
+    // manual edits to the memory file are picked up; null when none exists.
+    const { activeFilePath } = useProjectStore.getState();
+    const { loadMemory } = await import("../lib/memory");
+    const memory = activeFilePath ? await loadMemory(projectPath, activeFilePath) : null;
+
+    // Book-level continuation memory: recap of prior chapters + the previous
+    // chapter's ending, resolved from the outline order (.ai-writer/outline.json).
+    // Only for "continue" — this is what lets a freshly-started chapter know what
+    // happened in the chapters before it.
+    let bookExtras: Partial<TaskExtras> = {};
+    if (kind === "continue" && activeFilePath) {
+      try {
+        const { fileTree } = useProjectStore.getState();
+        const { buildBookContext } = await import("../lib/outline");
+        const anchorOffset = get().selectionRange?.to ?? documentText.length;
+        const bookContext = await buildBookContext(projectPath, fileTree, activeFilePath, anchorOffset);
+        if (bookContext) bookExtras = { bookContext };
+      } catch {
+        // best-effort — continuation still works without book context
+      }
+    }
+
     // Task instruction: use scene-matched user prompt if one exists, else built-in default
     const scenePrompt = kind !== "custom"
       ? prompts.find((p) => p.scene === kind)
@@ -110,13 +144,17 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     try {
       if (kind === "continue") {
         // ── Agentic mode: AI reads context autonomously with tools ─────────
+        // Continue is append-mode: any selection is an anchor to write *after*,
+        // never an edit target — so no 【选中内容】 block is sent.
         const bundle = await assembleContext(
           systemPrompt,
           loreIndex,
           documentText,
           get().selection,
           instruction,
-          extras,
+          { ...extras, ...bookExtras, appendMode: true },
+          get().selectionRange,
+          memory,
         );
         const initialMessages = bundleToMessages(bundle);
         // Extract the user message content for the first agent turn
@@ -160,6 +198,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           get().selection,
           instruction,
           extras,
+          get().selectionRange,
+          memory,
         );
         const messages = bundleToMessages(bundle);
 

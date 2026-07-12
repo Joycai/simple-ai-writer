@@ -44,7 +44,7 @@
 .grid {
   padding: 8px 10px 6px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 2px;
 }
 
@@ -67,32 +67,4 @@
 .actionKey {
   font: 500 10px/1 var(--font-mono);
   color: var(--color-text-muted);
-}
-
-.prompt {
-  padding: 8px 12px 12px;
-  border-top: 1px dashed var(--color-border-soft);
-}
-.promptInputWrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-}
-.promptInput {
-  flex: 1;
-  border: none;
-  outline: none;
-  font: italic 400 12px/1 var(--font-serif);
-  color: var(--color-text-primary);
-  background: transparent;
-}
-.promptInput::placeholder {
-  color: var(--color-text-faint);
-}
-.promptKey {
-  font: 500 10px/1 var(--font-mono);
-  color: var(--color-text-faint);
 }
