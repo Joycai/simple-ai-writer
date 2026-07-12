@@ -103,6 +103,68 @@ describe("assembleContext", () => {
     expect(bundle.recentContext.length).toBeLessThanOrEqual(800 * 3);
   });
 
+  it("slices recent context exactly before the selection when given source offsets", async () => {
+    const doc = "AAA before-text BBB target CCC after";
+    const from = doc.indexOf("target");
+    const to = from + "target".length;
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "target", "Rewrite.",
+      undefined,
+      { from, to },
+    );
+    expect(bundle.recentContext.endsWith("BBB")).toBe(true);
+    expect(bundle.recentContext).not.toContain("target");
+    expect(bundle.recentContext).not.toContain("after"); // never the doc tail
+  });
+
+  it("locates a preview-style selection (missing markdown markup) via normalized match", async () => {
+    // Source has bold markers + a list bullet the rendered selection lacks.
+    const doc = "开头的一段前文。\n\n- **目标段落的标题** 后面还有正文 BBB";
+    const rendered = "目标段落的标题"; // as copied from the preview pane
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, rendered, "Rewrite.",
+    );
+    expect(bundle.recentContext).toContain("开头的一段前文");
+    expect(bundle.recentContext).not.toContain("目标段落的标题");
+    expect(bundle.recentContext).not.toContain("BBB"); // still never the tail
+  });
+
+  it("does NOT fall back to the document tail when the selection can't be located", async () => {
+    // Rendered/preview selection that doesn't appear verbatim in the source.
+    const doc = `${"x".repeat(3000)}THE ACTUAL ENDING`;
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "rendered text not in source", "Rewrite.",
+    );
+    expect(bundle.recentContext).toBe("");
+    expect(bundle.recentContext).not.toContain("ENDING");
+    // The selection itself is still sent as the edit target.
+    expect(bundle.taskText).toContain("rendered text not in source");
+  });
+
+  it("honours contextChars to bound the reference range (0 = none)", async () => {
+    const doc = "PREAMBLE ".repeat(100) + "SELECTED";
+    const none = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "SELECTED", "Polish.", { contextChars: 0 },
+    );
+    expect(none.recentContext).toBe("");
+    const some = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "SELECTED", "Polish.", { contextChars: 20 },
+    );
+    expect(some.recentContext.length).toBeLessThanOrEqual(20);
+    expect(some.recentContext.length).toBeGreaterThan(0);
+  });
+
+  it("ignores stale source offsets that no longer match the selection", async () => {
+    const doc = "AAA before-text BBB target CCC after";
+    // Offsets point somewhere whose text != selection → must fall back to search.
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "target", "Rewrite.",
+      undefined,
+      { from: 0, to: 3 },
+    );
+    expect(bundle.recentContext.endsWith("BBB")).toBe(true);
+  });
+
   it("builds task text from selection plus extra requirement", async () => {
     const bundle = await assembleContext(
       "SYS",

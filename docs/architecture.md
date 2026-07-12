@@ -28,6 +28,17 @@ token_usage (id, model_id, task, prompt_tokens, cached_tokens, completion_tokens
   4. Task instruction (continue/polish/rewrite/summary/custom)
 - **Output** → `ContextBundle` → formatted to messages via `bundleToMessages()`
 
+### Story Memory (前情记忆)
+
+Per-document rolling summary so long manuscripts don't lose early plot in AI tasks — the assembled context carries a `【前情提要】` layer (compacted summaries of everything before the verbatim window) ahead of `【近期内容】`.
+
+- **Location** — `src/lib/memory.ts` (pure logic + file IO), `src/stores/memoryStore.ts` (generation orchestration), UI strip in `AiPanel.tsx`
+- **Storage** — `.ai-writer/memory/<relative doc path>.md`: machine metadata (segment ranges + FNV-1a hashes) in a leading `<!-- ai-writer-memory {json} -->` comment; each segment's summary is a human-editable `## …` section paired by order
+- **Segmentation** — source split at paragraph boundaries into ~12k-char segments (scaled by `model.contextSize`); coverage stops `MEMORY_TAIL_KEEP_CHARS` (2000) before the end — the verbatim window handles the tail
+- **Updates are incremental** — appending only summarizes the new tail; editing early text invalidates that segment *and everything after it* (offsets shift), and an update re-summarizes from the first stale segment. Manual, never automatic: the AiPanel strip shows coverage/staleness and prompts the user to create/update when >10k pre-window chars are uncovered
+- **Context selection** — `selectMemoryForContext()` includes only segments starting before the verbatim window (a mid-document selection never sees later plot), newest-first under a ~1500-token budget
+- **Usage tracking** — summarization tokens land in `token_usage` with `task = "memory"`
+
 ### Streaming (SSE)
 
 - **Location** — `src/lib/aiClient.ts`

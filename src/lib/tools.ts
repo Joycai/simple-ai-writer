@@ -28,7 +28,7 @@ export const AGENT_TOOLS: ToolDefinition[] = [
     function: {
       name: "list_lore_entities",
       description:
-        "List all lore entities (characters, world, factions, items, skills, custom) in the project. Returns entity names, categories, and one-line summaries. Call this first to discover available lore before reading specific entries.",
+        "List all lore entities (characters, world, factions, items, skills, style, custom) in the project. Returns entity names, categories, and one-line summaries. Call this first to discover available lore before reading specific entries.",
       parameters: { type: "object", properties: {} },
     },
   },

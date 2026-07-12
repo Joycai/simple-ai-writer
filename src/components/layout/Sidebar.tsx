@@ -5,7 +5,6 @@ import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { FileTree } from "./FileTree";
-import { LorePanel } from "../lore/LorePanel";
 import { OutlinePanel } from "../editor/OutlinePanel";
 import { MOD_K_SPACED } from "../../lib/platform";
 import styles from "./Sidebar.module.css";
@@ -89,7 +88,6 @@ export function Sidebar() {
         ) : (
           <>
             {isTree && <FileTree />}
-            {activeSideTab === "lore" && <LorePanel />}
             {isOutline && (
               <OutlinePanel
                 headings={headings}

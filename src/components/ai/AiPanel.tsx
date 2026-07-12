@@ -1,11 +1,17 @@
 import { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight, Check, X, Square, Play } from "lucide-react";
+import { ChevronDown, ChevronRight, Check, X, Square, Play, BookMarked } from "lucide-react";
 import { useAiTaskStore, type TaskKind, type ToolStep } from "../../stores/aiTaskStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { useLoreStore } from "../../stores/loreStore";
+import { useMemoryStore } from "../../stores/memoryStore";
+import { useProjectStore } from "../../stores/projectStore";
 import type { TaskExtras } from "../../lib/rag";
+import {
+  MEMORY_MIN_DOC_CHARS,
+  MEMORY_SUGGEST_THRESHOLD_CHARS,
+} from "../../lib/memory";
 import { LORE_CATEGORIES } from "../../lib/lore";
 import styles from "./AiPanel.module.css";
 
@@ -17,6 +23,10 @@ const TASK_OPTIONS: { kind: TaskKind; labelKey: string; descKey: string }[] = [
 ];
 
 const CONTINUE_LENGTH_OPTIONS = [200, 500, 1000, 2000];
+const CONTEXT_CHARS_OPTIONS = [0, 500, 1000, 2000];
+/** Verbatim window size used by tasks without a contextChars picker
+ *  (continue/custom) — mirrors rag.ts MAX_CONTEXT_CHARS. */
+const DEFAULT_DETAIL_SPAN = 2400;
 
 function AgentStepsSection({ steps, isRunning }: { steps: ToolStep[]; isRunning: boolean }) {
   const { t } = useTranslation();
@@ -56,6 +66,83 @@ function AgentStepsSection({ steps, isRunning }: { steps: ToolStep[]; isRunning:
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/**
+ * Story-memory status strip shown above the task config: coverage / staleness,
+ * a create-update button, and — per the "checkpoint" UX — a warning banner when
+ * the user is about to run a task whose pre-window text is largely uncovered.
+ */
+function MemorySection({ detailSpan }: { detailSpan: number }) {
+  const { t } = useTranslation();
+  const { memory, freshness, isGenerating, progress, error, notice, generate, abort } =
+    useMemoryStore();
+  const content = useEditorStore((s) => s.content);
+  const selectionRange = useAiTaskStore((s) => s.selectionRange);
+
+  // Text that will NOT be sent verbatim: everything before the detail window.
+  const base = selectionRange?.from ?? content.length;
+  const preDetail = Math.max(0, base - detailSpan);
+
+  const staleCount =
+    memory && freshness && freshness.firstStaleIndex >= 0
+      ? memory.segments.length - freshness.firstStaleIndex
+      : 0;
+  const freshCovered = memory
+    ? staleCount > 0
+      ? freshness!.firstStaleIndex > 0
+        ? memory.segments[freshness!.firstStaleIndex - 1].to
+        : 0
+      : memory.coveredChars
+    : 0;
+  const gap = Math.max(0, preDetail - freshCovered);
+
+  const needsCreate = !memory && preDetail > MEMORY_SUGGEST_THRESHOLD_CHARS;
+  const needsUpdate = !!memory && (gap > MEMORY_SUGGEST_THRESHOLD_CHARS || staleCount > 0);
+
+  // Short docs without a memory need no strip at all.
+  if (!memory && content.length < MEMORY_MIN_DOC_CHARS) return null;
+
+  const status = memory
+    ? t("ai.memory.statusCovered", {
+        covered: freshCovered.toLocaleString(),
+        total: content.length.toLocaleString(),
+      }) + (staleCount > 0 ? t("ai.memory.statusStale", { count: staleCount }) : "")
+    : t("ai.memory.statusNone");
+
+  return (
+    <div className={styles.memorySection}>
+      <div className={styles.memoryRow}>
+        <span className={styles.memoryLabel}>
+          <BookMarked size={11} strokeWidth={1.8} />
+          {t("ai.memory.title")}
+        </span>
+        <span className={styles.memoryStatus}>
+          {isGenerating && progress
+            ? t("ai.memory.generating", { done: progress.done, total: progress.total })
+            : status}
+        </span>
+        {isGenerating ? (
+          <button className={styles.memoryBtn} onClick={abort}>
+            {t("ai.panel.stop")}
+          </button>
+        ) : (
+          <button className={styles.memoryBtn} onClick={() => void generate()}>
+            {memory ? t("ai.memory.btnUpdate") : t("ai.memory.btnCreate")}
+          </button>
+        )}
+      </div>
+      {(needsCreate || needsUpdate) && !isGenerating && (
+        <div className={styles.memoryHint}>
+          {needsCreate
+            ? t("ai.memory.hintCreate", { chars: preDetail.toLocaleString() })
+            : t("ai.memory.hintUpdate", { chars: gap.toLocaleString() })}
+        </div>
+      )}
+      {notice && !isGenerating && <div className={styles.memoryNotice}>{notice}</div>}
+      {error && <div className={styles.memoryError}>{error}</div>}
     </div>
   );
 }
@@ -133,14 +220,26 @@ export function AiPanel() {
   const { t, i18n } = useTranslation();
   const {
     isRunning, output, error, usage, toolSteps,
-    runTask, abort, clearOutput, selection, setSelection,
+    runTask, abort, clearOutput, selection, requestedTask, setRequestedTask,
   } = useAiTaskStore();
   const { models, providers, prompts, activeModelId, activePromptId, setActiveModel, setActivePrompt } = useAiStore();
   const { content } = useEditorStore();
   const { index: loreIndex } = useLoreStore();
+  const activeFilePath = useProjectStore((s) => s.activeFilePath);
+
+  // Story memory follows the active document; staleness re-checks are hashed
+  // over the whole doc, so debounce them behind typing.
+  useEffect(() => {
+    void useMemoryStore.getState().loadForActiveFile();
+  }, [activeFilePath]);
+  useEffect(() => {
+    const id = setTimeout(() => useMemoryStore.getState().refreshFreshness(), 800);
+    return () => clearTimeout(id);
+  }, [content]);
 
   const [selectedTask, setSelectedTask] = useState<TaskKind | null>(null);
   const [continueLength, setContinueLength] = useState(500);
+  const [contextChars, setContextChars] = useState(1000);
 
   // Lore picker state
   const [selectedLorePaths, setSelectedLorePaths] = useState<string[]>([]);
@@ -162,14 +261,14 @@ export function AiPanel() {
     }
   }, [output]);
 
+  // The floating toolbar opens the panel pre-selecting a task; consume + clear it.
   useEffect(() => {
-    const onSelectionChange = () => {
-      const sel = window.getSelection()?.toString() ?? "";
-      if (sel) setSelection(sel);
-    };
-    document.addEventListener("selectionchange", onSelectionChange);
-    return () => document.removeEventListener("selectionchange", onSelectionChange);
-  }, [setSelection]);
+    if (requestedTask) {
+      setSelectedTask(requestedTask);
+      clearOutput();
+      setRequestedTask(null);
+    }
+  }, [requestedTask, setRequestedTask, clearOutput]);
 
   const activeModel = models.find((m) => m.id === activeModelId);
   const activeProvider = activeModel ? providers.find((p) => p.id === activeModel.providerId) : null;
@@ -199,6 +298,7 @@ export function AiPanel() {
       extras = {
         manualLorePaths,
         requirement: requirement.trim() || undefined,
+        contextChars,
       };
     }
     runTask(
@@ -209,7 +309,11 @@ export function AiPanel() {
     );
   };
 
-  const canRun = !!selectedTask && !isRunning && (selectedTask !== "custom" || !!customInstr.trim());
+  // Polish / rewrite / summary operate on the selected text — require one.
+  const needsSelection = supportsExtras && !selection;
+  const canRun =
+    !!selectedTask && !isRunning && !needsSelection &&
+    (selectedTask !== "custom" || !!customInstr.trim());
 
   // Flatten lore index to searchable list
   const isZh = i18n.language.startsWith("zh");
@@ -279,10 +383,16 @@ export function AiPanel() {
         <div className={styles.emptyHint}>{t("ai.panel.noProvider")}</div>
       ) : (
         <>
-          {/* Selection indicator */}
+          {/* Selected text — the edit target, shown explicitly */}
           {selection && (
-            <div className={styles.selectionBadge}>
-              {t("ai.panel.selectedChars", { count: selection.length })}
+            <div className={styles.selectionCard}>
+              <div className={styles.selectionCardHead}>
+                <span className={styles.selectionCardLabel}>{t("ai.panel.selectedContent")}</span>
+                <span className={styles.selectionCardCount}>
+                  {t("ai.panel.selectedChars", { count: selection.length })}
+                </span>
+              </div>
+              <div className={styles.selectionCardBody}>{selection}</div>
             </div>
           )}
 
@@ -311,6 +421,11 @@ export function AiPanel() {
           {/* Config panel — appears when a task is selected */}
           {selectedTask && (
             <div className={styles.configPanel}>
+
+              {/* Story memory status + checkpoint prompt */}
+              <MemorySection
+                detailSpan={supportsExtras ? contextChars : DEFAULT_DETAIL_SPAN}
+              />
 
               {/* ── Continue options ── */}
               {selectedTask === "continue" && (
@@ -378,6 +493,27 @@ export function AiPanel() {
               {/* ── Polish / Rewrite / Summary options ── */}
               {supportsExtras && (
                 <>
+                  {needsSelection && (
+                    <div className={styles.selectHint}>{t("ai.panel.selectFirstHint")}</div>
+                  )}
+
+                  {/* Reference-context range (text before the selection) */}
+                  <div className={styles.continueLengthRow}>
+                    <span className={styles.continueLengthLabel}>{t("ai.panel.contextRange")}</span>
+                    <div className={styles.continueLengthOptions}>
+                      {CONTEXT_CHARS_OPTIONS.map((n) => (
+                        <button
+                          key={n}
+                          className={`${styles.lengthChip} ${contextChars === n ? styles.lengthChipActive : ""}`}
+                          onClick={() => setContextChars(n)}
+                          title={t("ai.panel.contextRangeHint")}
+                        >
+                          {n === 0 ? t("ai.panel.contextRangeNone") : n >= 1000 ? `${n / 1000}k` : n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Extra requirement */}
                   <ExtraSection
                     label={t("ai.panel.taskRequirement")}

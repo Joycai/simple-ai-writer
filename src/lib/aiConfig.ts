@@ -1,5 +1,7 @@
 import Database from "@tauri-apps/plugin-sql";
 
+import { fetch } from "./http";
+
 export type ApiStandard = "openai" | "openai_compat" | "gemini";
 export type ModelType = "text" | "multimodal" | "image" | "video";
 

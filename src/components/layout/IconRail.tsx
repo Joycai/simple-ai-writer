@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import {
-  FolderTree, BookOpen, ListTree, Search, LayoutGrid, GitBranch, Settings,
+  FolderTree, ListTree, Search, LayoutGrid, GitBranch, Settings,
 } from "lucide-react";
 import { useAppStore, type SideTab, type MainView } from "../../stores/appStore";
 
@@ -25,13 +25,12 @@ interface ViewItem {
 
 const SIDE_ITEMS: SideItem[] = [
   { kind: "side", id: "files", icon: <FolderTree size={17} strokeWidth={1.5} />, labelKey: "sidebar.files" },
-  { kind: "side", id: "lore", icon: <BookOpen size={17} strokeWidth={1.5} />, labelKey: "sidebar.lore" },
   { kind: "side", id: "outline", icon: <ListTree size={17} strokeWidth={1.5} />, labelKey: "sidebar.outline" },
   { kind: "side", id: "search", icon: <Search size={17} strokeWidth={1.5} />, labelKey: "sidebar.search" },
 ];
 
 const VIEW_ITEMS: ViewItem[] = [
-  { kind: "view", id: "lore-wall", icon: <LayoutGrid size={17} strokeWidth={1.5} />, labelKey: "sidebar.loreWall" },
+  { kind: "view", id: "lore-wall", icon: <LayoutGrid size={17} strokeWidth={1.5} />, labelKey: "sidebar.lore" },
   { kind: "view", id: "outline-full", icon: <GitBranch size={17} strokeWidth={1.5} />, labelKey: "sidebar.outlineFull" },
 ];
 

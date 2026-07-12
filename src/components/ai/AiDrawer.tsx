@@ -27,7 +27,7 @@ export function AiDrawer() {
   return (
     <>
       <div className={styles.backdrop} onClick={close} />
-      <aside className={styles.drawer} role="dialog" aria-modal>
+      <aside className={styles.drawer} role="dialog" aria-modal data-ai-surface>
         <div className={styles.header}>
           <div className={styles.avatar}>
             {aiDrawerMode === "consistency"

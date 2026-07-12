@@ -24,6 +24,7 @@ pub fn scaffold_project(project_path: String) -> Result<(), String> {
         root.join(".ai-writer").join("lore").join("factions"),
         root.join(".ai-writer").join("lore").join("items"),
         root.join(".ai-writer").join("lore").join("skills"),
+        root.join(".ai-writer").join("lore").join("style"),
         root.join(".ai-writer").join("lore").join("custom"),
     ];
 
@@ -90,6 +91,16 @@ pub fn fs_exists(path: String) -> Result<bool, String> {
 #[command]
 pub fn fs_remove_dir(path: String) -> Result<(), String> {
     fs::remove_dir_all(&path).map_err(|e| e.to_string())
+}
+
+/// Rename / move a file or directory. Missing parent dirs of the target are
+/// created so callers can move entities into not-yet-scaffolded folders.
+#[command]
+pub fn fs_rename(from: String, to: String) -> Result<(), String> {
+    if let Some(parent) = Path::new(&to).parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    fs::rename(&from, &to).map_err(|e| e.to_string())
 }
 
 /// Remove a single file. Missing files are a no-op so callers can be tolerant.

@@ -6,8 +6,10 @@ import { useProjectStore } from "../../stores/projectStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { CodeEditor } from "../editor/CodeEditor";
 import { Preview } from "../editor/Preview";
+import { ImagePreview } from "../editor/ImagePreview";
 import { EditorBottomStrip } from "./EditorBottomStrip";
 import { MOD_KEY } from "../../lib/platform";
+import { isImagePath } from "../../lib/loreGenerator";
 import styles from "./EditorArea.module.css";
 
 export function EditorArea() {
@@ -16,12 +18,16 @@ export function EditorArea() {
   const { content, filePath, viewMode, loadFile, setContent, saveNow } = useEditorStore();
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
 
-  // Load file when active path changes
+  const isImage = !!activeFilePath && isImagePath(activeFilePath);
+
+  // Load file when active path changes. Images are rendered directly (see below),
+  // so we must NOT read them as text — that would fill the editor with binary
+  // garbage and risk overwriting the image on autosave.
   useEffect(() => {
-    if (activeFilePath && activeFilePath !== filePath) {
+    if (activeFilePath && !isImage && activeFilePath !== filePath) {
       loadFile(activeFilePath);
     }
-  }, [activeFilePath, filePath, loadFile]);
+  }, [activeFilePath, isImage, filePath, loadFile]);
 
   // Ctrl/Cmd+S to save
   useEffect(() => {
@@ -78,6 +84,17 @@ export function EditorArea() {
     );
   }
 
+  if (isImage) {
+    return (
+      <div className={styles.area}>
+        <div className={styles.panes}>
+          <ImagePreview path={activeFilePath} />
+        </div>
+        <EditorBottomStrip />
+      </div>
+    );
+  }
+
   const showEditor = viewMode === "editor" || viewMode === "split";
   const showPreview = viewMode === "preview" || viewMode === "split";
 
@@ -91,7 +108,7 @@ export function EditorArea() {
         )}
         {showPreview && (
           <div className={styles.previewPane}>
-            <Preview source={content} />
+            <Preview source={content} basePath={filePath ? filePath.replace(/[/\\][^/\\]*$/, "") : null} />
           </div>
         )}
       </div>

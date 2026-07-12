@@ -8,6 +8,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
         .setup(|app| {
             use tauri::Manager;
@@ -32,6 +33,7 @@ pub fn run() {
             commands::fs_read_dir,
             commands::fs_remove_dir,
             commands::fs_remove_file,
+            commands::fs_rename,
             secrets::secret_save,
             secrets::secret_load,
             secrets::secret_delete,

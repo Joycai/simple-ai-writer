@@ -3,6 +3,7 @@
  * Uses fetch() with SSE / streaming JSON parsing.
  */
 
+import { fetch } from "./http";
 import type { ApiStandard, GeminiSafetySettings } from "./aiConfig";
 import { toSafetySettingsArray } from "./aiConfig";
 import { beginApiLog } from "./apiLog";

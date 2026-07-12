@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Search, Sparkles, Plus, Camera } from "lucide-react";
+import { Search, Sparkles, Plus, Camera, BookOpen, Pencil, FolderOpen, RotateCw, Trash2 } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { LORE_CATEGORIES, setEntityAvatar, slugifyEntityId, uniqueEntityId, type CategoryId, type LoreEntity } from "../../lib/lore";
@@ -11,6 +12,7 @@ import { imageToDataUrl } from "../../lib/loreGenerator";
 import { MOD_K_SPACED } from "../../lib/platform";
 import { LoreGenerator } from "./LoreGenerator";
 import { LoreDetail } from "./LoreDetail";
+import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
 import styles from "./LoreWall.module.css";
 
 // Per-category accent dot color
@@ -20,6 +22,7 @@ const CAT_COLOR: Record<string, string> = {
   items:      "var(--color-amber)",
   factions:   "var(--color-text-primary)",
   skills:     "#7BA8A6",
+  style:      "#A78BBA",
   custom:     "var(--color-text-muted)",
 };
 
@@ -34,16 +37,17 @@ function rotationFor(id: string): number {
 export function LoreWall() {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
-  const { index, scanProject, createNewEntity } = useLoreStore();
+  const { index, scanProject, createNewEntity, deleteEntity } = useLoreStore();
   const { projectPath } = useProjectStore();
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
-  const pendingLoreNav = useAppStore((s) => s.pendingLoreNav);
 
   const [filter, setFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [showGenerator, setShowGenerator] = useState(false);
   const [showNewEntry, setShowNewEntry] = useState(false);
   const [detailEntity, setDetailEntity] = useState<LoreEntity | null>(null);
+  const [detailEditing, setDetailEditing] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number; entity: LoreEntity | null } | null>(null);
 
   // Avatar rendering uses data URLs (see LoreDetail rationale: Webview2's strict
   // URL parsing on Windows drive-letter paths makes the ai-writer-asset://
@@ -90,15 +94,6 @@ export function LoreWall() {
     }
   };
 
-  // Deep-link from outside (e.g. sidebar's "manage images" button): open the
-  // requested entity's detail page. We do NOT clear pendingLoreNav here so the
-  // anchor can be consumed downstream by LoreDetail.
-  useEffect(() => {
-    if (!pendingLoreNav) return;
-    const target = index[pendingLoreNav.category]?.find((e) => e.id === pendingLoreNav.entityId);
-    if (target) setDetailEntity(target);
-  }, [pendingLoreNav, index]);
-
   // Flatten + filter
   const allEntities = useMemo(() => {
     const flat: LoreEntity[] = [];
@@ -133,8 +128,47 @@ export function LoreWall() {
 
   const totalRelations = 0; // future
 
+  const handleDeleteEntity = async (e: LoreEntity) => {
+    if (!projectPath) return;
+    if (!window.confirm(t("lore.panel.deleteConfirm", { name: e.name }))) return;
+    await deleteEntity(projectPath, e);
+  };
+
+  const buildMenuItems = (e: LoreEntity | null): ContextMenuEntry[] => {
+    if (!e) {
+      return [
+        { kind: "item", icon: <Plus size={13} />, label: t("lore.panel.newEntry"),
+          action: () => setShowNewEntry(true) },
+        { kind: "item", icon: <Sparkles size={13} />, label: "AI 提取",
+          action: () => setShowGenerator(true) },
+        { kind: "divider" },
+        { kind: "item", icon: <RotateCw size={13} />, label: t("fileTree.refresh"),
+          action: () => { if (projectPath) void scanProject(projectPath); } },
+      ];
+    }
+    return [
+      { kind: "item", icon: <BookOpen size={13} />, label: t("fileTree.open"),
+        action: () => setDetailEntity(e) },
+      { kind: "item", icon: <Pencil size={13} />, label: t("lore.detail.edit", { defaultValue: "编辑" }),
+        action: () => { setDetailEditing(true); setDetailEntity(e); } },
+      { kind: "item", icon: <Camera size={13} />, label: t("lore.wall.changeAvatar", { defaultValue: "更换头像" }),
+        action: () => void handleAvatarPick(e) },
+      { kind: "item", icon: <FolderOpen size={13} />, label: t("lore.panel.showInBrowser"),
+        action: () => { revealItemInDir(e.dirPath).catch(() => { /* best-effort */ }); } },
+      { kind: "divider" },
+      { kind: "item", icon: <Trash2 size={13} />, label: t("lore.panel.deleteEntity"), danger: true,
+        action: () => void handleDeleteEntity(e) },
+    ];
+  };
+
   if (detailEntity) {
-    return <LoreDetail entity={detailEntity} onBack={() => setDetailEntity(null)} />;
+    return (
+      <LoreDetail
+        entity={detailEntity}
+        initialEditing={detailEditing}
+        onBack={() => { setDetailEntity(null); setDetailEditing(false); }}
+      />
+    );
   }
 
   return (
@@ -208,7 +242,13 @@ export function LoreWall() {
         </div>
       </div>
 
-      <div className={styles.gridWrap}>
+      <div
+        className={styles.gridWrap}
+        onContextMenu={(ev) => {
+          ev.preventDefault();
+          setMenu({ x: ev.clientX, y: ev.clientY, entity: null });
+        }}
+      >
         {filtered.length === 0 ? (
           <div className={styles.empty}>
             {search.trim()
@@ -227,6 +267,11 @@ export function LoreWall() {
                   className={`${styles.card} ${featured ? styles.cardFeatured : ""}`}
                   style={{ transform: `rotate(${rot}deg)` }}
                   onClick={() => setDetailEntity(e)}
+                  onContextMenu={(ev) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    setMenu({ x: ev.clientX, y: ev.clientY, entity: e });
+                  }}
                 >
                   <div className={styles.cardTop}>
                     <span className={styles.cardLabel}>
@@ -285,6 +330,15 @@ export function LoreWall() {
           </div>
         )}
       </div>
+
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={buildMenuItems(menu.entity)}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </div>
   );
 }

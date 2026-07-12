@@ -5,9 +5,10 @@ import { useAiStore } from "../../stores/aiStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import {
-  readEntityFile, writeEntityFile, assetUrl,
+  readEntityFile, saveEntityMetaAndBody,
   LORE_CATEGORIES, type CategoryId, type LoreEntity,
 } from "../../lib/lore";
+import { useImageDataUrl } from "./useImageDataUrl";
 import { parseFrontmatter } from "../../lib/markdown";
 import { loadApiKey } from "../../lib/keyStore";
 import { imageToDataUrl } from "../../lib/loreGenerator";
@@ -27,28 +28,13 @@ interface MetaProposal {
   summary: string;
 }
 
-function serializeFrontmatter(meta: MetaProposal): string {
-  const aliasBlock = meta.aliases.length
-    ? `aliases:\n${meta.aliases.map((a) => `  - "${a.replace(/"/g, '\\"')}"`).join("\n")}`
-    : `aliases: []`;
-  const summaryQuoted = `"${meta.summary.replace(/"/g, '\\"')}"`;
-  return [
-    "---",
-    `name: ${meta.name}`,
-    aliasBlock,
-    `category: ${meta.category}`,
-    `summary: ${summaryQuoted}`,
-    "---",
-    "",
-  ].join("\n");
-}
-
 export function LoreMetaImproveModal({ entity, onClose }: Props) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
   const { projectPath } = useProjectStore();
   const { models, providers, activeModelId, setActiveModel } = useAiStore();
   const { scanProject } = useLoreStore();
+  const avatarUrl = useImageDataUrl(entity.avatarPath);
 
   const [body, setBody] = useState("");
   const [phase, setPhase] = useState<"input" | "generating" | "result">("input");
@@ -239,9 +225,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
         category: pCategory,
         summary: pSummary.trim(),
       };
-      const bodyText = body.trimStart();
-      const newContent = serializeFrontmatter(meta) + "\n" + bodyText;
-      await writeEntityFile(entity.dirPath, "index.md", newContent);
+      await saveEntityMetaAndBody(projectPath, entity, meta, body);
       await scanProject(projectPath);
       onClose();
     } catch (e) {
@@ -270,8 +254,8 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
         {/* Header */}
         <div className={styles.header}>
           <div className={styles.headerLeft}>
-            {entity.avatarPath
-              ? <img src={assetUrl(entity.avatarPath)} className={styles.headerAvatar} alt={entity.name} />
+            {avatarUrl
+              ? <img src={avatarUrl} className={styles.headerAvatar} alt={entity.name} />
               : <div className={styles.headerAvatarPlaceholder}><Bot size={16} strokeWidth={1.5} /></div>}
             <div>
               <div className={styles.headerName}>{entity.name}</div>

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { EditorView } from "@codemirror/view";
 import { extractHeadings, countWords, type HeadingNode } from "../lib/markdown";
 import { readFile, writeFile } from "../lib/fileio";
 import { useProjectStore } from "./projectStore";
@@ -14,12 +15,16 @@ interface EditorState {
   saveTimer: ReturnType<typeof setTimeout> | null;
 
   scrollToLine: ((line: number) => void) | null;
+  /** Live CodeMirror view — used to read precise selection offsets. Null when
+   *  no editor is mounted (e.g. preview-only mode). */
+  editorView: EditorView | null;
 
   loadFile: (path: string) => Promise<void>;
   setContent: (content: string) => void;
   saveNow: () => Promise<void>;
   setViewMode: (mode: ViewMode) => void;
   setScrollToLine: (fn: ((line: number) => void) | null) => void;
+  setEditorView: (view: EditorView | null) => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -30,6 +35,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   isDirty: false,
   saveTimer: null,
   scrollToLine: null,
+  editorView: null,
 
   loadFile: async (path) => {
     // Flush any pending autosave for the previously open file before switching.
@@ -77,4 +83,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setViewMode: (mode) => set({ viewMode: mode }),
 
   setScrollToLine: (fn) => set({ scrollToLine: fn }),
+
+  setEditorView: (view) => set({ editorView: view }),
 }));

@@ -1,4 +1,4 @@
-import { readFile, writeFile, makeDir, writeBinaryFile, readDir, fileExists, removeFile } from "./fileio";
+import { readFile, writeFile, makeDir, writeBinaryFile, readDir, fileExists, removeFile, renamePath } from "./fileio";
 import { parseFrontmatter } from "./markdown";
 
 export const LORE_CATEGORIES = [
@@ -7,6 +7,7 @@ export const LORE_CATEGORIES = [
   { id: "factions",   labelZh: "势力",   labelEn: "Factions",   icon: "shield" },
   { id: "items",      labelZh: "道具",   labelEn: "Items",      icon: "package" },
   { id: "skills",     labelZh: "技能",   labelEn: "Skills",     icon: "zap" },
+  { id: "style",      labelZh: "风格",   labelEn: "Style",      icon: "feather" },
   { id: "custom",     labelZh: "自定义", labelEn: "Custom",     icon: "grid" },
 ] as const;
 
@@ -192,6 +193,57 @@ export async function createEntityWithContent(
   return dirPath;
 }
 
+// ─── Entity metadata persistence ─────────────────────────────────────────────
+
+export interface EntityMeta {
+  name: string;
+  aliases: string[];
+  category: CategoryId;
+  summary: string;
+}
+
+/** Serialize entity metadata to the index.md YAML frontmatter block. */
+export function serializeEntityFrontmatter(meta: EntityMeta): string {
+  const aliasBlock = meta.aliases.length
+    ? `aliases:\n${meta.aliases.map((a) => `  - "${a.replace(/"/g, '\\"')}"`).join("\n")}`
+    : `aliases: []`;
+  const summaryQuoted = `"${meta.summary.replace(/"/g, '\\"')}"`;
+  return [
+    "---",
+    `name: ${meta.name}`,
+    aliasBlock,
+    `category: ${meta.category}`,
+    `summary: ${summaryQuoted}`,
+    "---",
+    "",
+  ].join("\n");
+}
+
+/**
+ * Persist metadata + body to the entity's index.md. When the category changed,
+ * the whole entity folder is moved into the new category directory — the
+ * scanner derives an entity's category from its folder location, so writing
+ * the frontmatter alone would silently revert on the next scan.
+ * Returns where the entity now lives (unchanged when the category stayed).
+ */
+export async function saveEntityMetaAndBody(
+  projectPath: string,
+  entity: LoreEntity,
+  meta: EntityMeta,
+  body: string,
+): Promise<{ dirPath: string; category: CategoryId; id: string }> {
+  const content = serializeEntityFrontmatter(meta) + "\n" + body.trimStart();
+  await writeFile(`${entity.dirPath}/index.md`, content);
+
+  if (meta.category === entity.category) {
+    return { dirPath: entity.dirPath, category: entity.category, id: entity.id };
+  }
+  const newId = await uniqueEntityId(projectPath, meta.category, entity.id);
+  const newDir = `${projectPath}/.ai-writer/lore/${meta.category}/${newId}`;
+  await renamePath(entity.dirPath, newDir);
+  return { dirPath: newDir, category: meta.category, id: newId };
+}
+
 /** Read a specific file inside an entity directory. */
 export async function readEntityFile(dirPath: string, filename: string): Promise<string> {
   return readFile(`${dirPath}/${filename}`);
@@ -206,19 +258,10 @@ export async function writeEntityFile(
   await writeFile(`${dirPath}/${filename}`, content);
 }
 
-/**
- * Build the ai-writer-asset:// URL for a local file path.
- *
- * Windows paths use `\` and lack a leading `/`, which produces a malformed URL
- * like `ai-writer-asset://localhostD:%5Cfoo`. We normalize backslashes to `/`
- * and ensure a leading `/` so the result parses as a proper scheme://host/path
- * URL. The Rust handler strips the extra slash before a drive letter.
- */
-export function assetUrl(absolutePath: string): string {
-  const normalized = absolutePath.replace(/\\/g, "/");
-  const withLeadingSlash = normalized.startsWith("/") ? normalized : `/${normalized}`;
-  return `ai-writer-asset://localhost${encodeURI(withLeadingSlash)}`;
-}
+// NOTE: image rendering used to go through the `ai-writer-asset://` custom
+// protocol (see the Rust handler), but Webview2's strict URL parsing on
+// Windows drive-letter paths made it unreliable. All avatar/gallery consumers
+// now load images as base64 data URLs (see useImageDataUrl / imageToDataUrl).
 
 // ─── Entity id helpers ───────────────────────────────────────────────────────
 
