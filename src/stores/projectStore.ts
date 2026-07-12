@@ -9,6 +9,7 @@ import {
 } from "../lib/project";
 import { useLoreStore } from "./loreStore";
 import { useEditorStore } from "./editorStore";
+import { useAppStore } from "./appStore";
 
 /** Persist any unsaved editor/lore edits and cancel their pending autosave timers. */
 async function flushDirtyDocuments(): Promise<void> {
@@ -35,7 +36,7 @@ interface ProjectState {
   charCount: number;
   isLoading: boolean;
 
-  openProject: () => Promise<void>;
+  openProject: (path?: string) => Promise<void>;
   closeProject: () => Promise<void>;
   refreshFileTree: () => Promise<void>;
   setActiveFilePath: (path: string | null) => void;
@@ -51,22 +52,28 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   charCount: 0,
   isLoading: false,
 
-  openProject: async () => {
-    const path = await openProjectFolder();
-    if (!path) return;
+  openProject: async (path) => {
+    // `path` is passed when reopening from the recent-projects list; otherwise prompt.
+    const target = typeof path === "string" ? path : await openProjectFolder();
+    if (!target) return;
 
     // Persist unsaved edits from the currently open project before switching away.
     await flushDirtyDocuments();
 
     set({ isLoading: true });
     try {
-      await scaffoldProject(path);
+      await scaffoldProject(target);
       resetDb();
       resetDocuments();
-      await getDb(path);
-      set({ projectPath: path, activeFilePath: null, fileTree: [], wordCount: 0, charCount: 0 });
+      await getDb(target);
+      set({ projectPath: target, activeFilePath: null, fileTree: [], wordCount: 0, charCount: 0 });
       await get().refreshFileTree();
-      await useLoreStore.getState().scanProject(path);
+      await useLoreStore.getState().scanProject(target);
+      useAppStore.getState().addRecentProject(target);
+    } catch (err) {
+      // A recent path that no longer opens (moved/deleted) should drop out of the list.
+      if (typeof path === "string") useAppStore.getState().removeRecentProject(path);
+      throw err;
     } finally {
       set({ isLoading: false });
     }

@@ -124,7 +124,10 @@
     "noProjectDesc": "系统将自动初始化项目结构",
     "emptyTree": "写作目录为空，创建 .md 文件开始吧",
     "closeProject": "关闭项目",
-    "switchProject": "切换项目"
+    "switchProject": "切换项目",
+    "recentTitle": "最近打开",
+    "clearRecent": "清空",
+    "removeRecent": "从列表移除"
   },
   "editor": {
     "placeholder": "开始写作…",

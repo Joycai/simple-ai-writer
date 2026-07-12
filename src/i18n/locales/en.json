@@ -124,7 +124,10 @@
     "noProjectDesc": "The project structure will be initialized automatically",
     "emptyTree": "Writing directory is empty, create a .md file to start",
     "closeProject": "Close Project",
-    "switchProject": "Open Another Folder"
+    "switchProject": "Open Another Folder",
+    "recentTitle": "Recent",
+    "clearRecent": "Clear",
+    "removeRecent": "Remove from list"
   },
   "editor": {
     "placeholder": "Start writing…",

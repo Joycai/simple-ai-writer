@@ -8,9 +8,24 @@ const THEME_KEY = "app:theme";
 const LANG_KEY = "app:language";
 const SIDEBAR_WIDTH_KEY = "app:sidebarWidth";
 const RIGHT_PANEL_WIDTH_KEY = "app:rightPanelWidth";
+const RECENT_PROJECTS_KEY = "app:recentProjects";
+
+const RECENT_PROJECTS_MAX = 10;
 
 const storedTheme = (localStorage.getItem(THEME_KEY) as ThemeMode | null) ?? "dark";
 const storedLang = (localStorage.getItem(LANG_KEY) as Language | null) ?? "zh-CN";
+
+function loadRecentProjects(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_PROJECTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((p): p is string => typeof p === "string").slice(0, RECENT_PROJECTS_MAX);
+  } catch {
+    return [];
+  }
+}
 
 const SIDEBAR_MIN = 160;
 const SIDEBAR_MAX = 500;
@@ -41,6 +56,7 @@ interface AppState {
   rightPanelCollapsed: boolean;
   sidebarWidth: number;
   rightPanelWidth: number;
+  recentProjects: string[];
   activeSideTab: SideTab;
   activeRightTab: "outline" | "ai";
 
@@ -59,6 +75,9 @@ interface AppState {
   setRightPanelCollapsed: (v: boolean) => void;
   setSidebarWidth: (w: number | ((prev: number) => number)) => void;
   setRightPanelWidth: (w: number | ((prev: number) => number)) => void;
+  addRecentProject: (path: string) => void;
+  removeRecentProject: (path: string) => void;
+  clearRecentProjects: () => void;
   setActiveSideTab: (tab: SideTab) => void;
   setActiveRightTab: (tab: AppState["activeRightTab"]) => void;
 
@@ -90,6 +109,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   rightPanelCollapsed: false,
   sidebarWidth: storedSidebarWidth,
   rightPanelWidth: storedRightPanelWidth,
+  recentProjects: loadRecentProjects(),
   activeSideTab: "files",
   activeRightTab: "outline",
 
@@ -146,6 +166,29 @@ export const useAppStore = create<AppState>((set, get) => ({
       localStorage.setItem(RIGHT_PANEL_WIDTH_KEY, String(clamped));
       return { rightPanelWidth: clamped };
     });
+  },
+
+  addRecentProject: (path) => {
+    set((state) => {
+      const next = [path, ...state.recentProjects.filter((p) => p !== path)].slice(
+        0, RECENT_PROJECTS_MAX,
+      );
+      localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(next));
+      return { recentProjects: next };
+    });
+  },
+
+  removeRecentProject: (path) => {
+    set((state) => {
+      const next = state.recentProjects.filter((p) => p !== path);
+      localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(next));
+      return { recentProjects: next };
+    });
+  },
+
+  clearRecentProjects: () => {
+    localStorage.removeItem(RECENT_PROJECTS_KEY);
+    set({ recentProjects: [] });
   },
 
   setActiveSideTab: (tab) => set({ activeSideTab: tab }),

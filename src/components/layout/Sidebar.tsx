@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Search as SearchIcon } from "lucide-react";
+import { Search as SearchIcon, X } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
@@ -26,7 +26,7 @@ function countChapters(tree: { is_dir?: boolean; children?: any[]; name?: string
 
 export function Sidebar() {
   const { t } = useTranslation();
-  const { sidebarCollapsed, activeSideTab, setShowCommandPalette } = useAppStore();
+  const { sidebarCollapsed, activeSideTab, setShowCommandPalette, recentProjects, removeRecentProject, clearRecentProjects } = useAppStore();
   const { projectPath, openProject, isLoading, fileTree, wordCount } = useProjectStore();
   const loreCount = useLoreStore((s) => Object.keys(s.index).length);
   const { headings } = useEditorStore();
@@ -79,11 +79,49 @@ export function Sidebar() {
             <div>{t("project.noProjectDesc")}</div>
             <button
               className={styles.openBtn}
-              onClick={openProject}
+              onClick={() => openProject()}
               disabled={isLoading}
             >
               {isLoading ? "…" : t("project.openFolder")}
             </button>
+
+            {recentProjects.length > 0 && (
+              <div className={styles.recent}>
+                <div className={styles.recentHead}>
+                  <span className={styles.recentLabel}>{t("project.recentTitle")}</span>
+                  <button
+                    className={styles.recentClear}
+                    onClick={clearRecentProjects}
+                    disabled={isLoading}
+                  >
+                    {t("project.clearRecent")}
+                  </button>
+                </div>
+                <ul className={styles.recentList}>
+                  {recentProjects.map((path) => (
+                    <li key={path} className={styles.recentItem}>
+                      <button
+                        className={styles.recentOpen}
+                        onClick={() => openProject(path)}
+                        disabled={isLoading}
+                        title={path}
+                      >
+                        <span className={styles.recentName}>{basename(path)}</span>
+                        <span className={styles.recentPath}>{path}</span>
+                      </button>
+                      <button
+                        className={styles.recentRemove}
+                        onClick={() => removeRecentProject(path)}
+                        title={t("project.removeRecent")}
+                        aria-label={t("project.removeRecent")}
+                      >
+                        <X size={12} strokeWidth={1.8} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         ) : (
           <>
