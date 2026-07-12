@@ -27,7 +27,10 @@
     "moveToVolume": "移动到卷…",
     "clearSelection": "清除选择",
     "emptyVolume": "空卷",
-    "emptyVolumeHint": "选中章节后移动到此卷"
+    "emptyVolumeHint": "选中章节后移动到此卷",
+    "openChapter": "打开章节",
+    "markWriting": "标记为在写",
+    "unmarkWriting": "取消在写标记"
   },
   "sidebar": {
     "files": "文件",

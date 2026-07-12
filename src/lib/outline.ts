@@ -37,10 +37,15 @@ export interface Volume {
   chapters: Chapter[];
 }
 
+/** Author-set chapter status (only "writing" for now; absence means done). */
+export type ChapterStatus = "writing";
+
 export interface BookSpine {
   version: 1;
   /** volume relPath → ordered chapter relPaths. */
   order: Record<string, string[]>;
+  /** chapter relPath → status; absent entries are treated as done. */
+  status?: Record<string, ChapterStatus>;
 }
 
 const CHAPTER_EXTS = ["md", "markdown", "txt"];
@@ -130,11 +135,16 @@ export function applySpine(volumes: Volume[], spine: BookSpine | null): Volume[]
   });
 }
 
-/** Capture the current order of resolved volumes as a spine (for persistence). */
-export function spineFromVolumes(volumes: Volume[]): BookSpine {
+/**
+ * Capture the current order of resolved volumes as a spine (for persistence),
+ * carrying over the previous spine's chapter status map when given.
+ */
+export function spineFromVolumes(volumes: Volume[], prev?: BookSpine | null): BookSpine {
   const order: Record<string, string[]> = {};
   for (const vol of volumes) order[vol.relPath] = vol.chapters.map((c) => c.relPath);
-  return { version: 1, order };
+  const spine: BookSpine = { version: 1, order };
+  if (prev?.status && Object.keys(prev.status).length > 0) spine.status = { ...prev.status };
+  return spine;
 }
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
@@ -150,7 +160,11 @@ export async function loadSpine(projectPath: string): Promise<BookSpine | null> 
     if (!(await fileExists(p))) return null;
     const parsed = JSON.parse(await readFile(p));
     if (!parsed || typeof parsed !== "object" || typeof parsed.order !== "object") return null;
-    return { version: 1, order: parsed.order as Record<string, string[]> };
+    const spine: BookSpine = { version: 1, order: parsed.order as Record<string, string[]> };
+    if (parsed.status && typeof parsed.status === "object") {
+      spine.status = parsed.status as Record<string, ChapterStatus>;
+    }
+    return spine;
   } catch {
     return null;
   }

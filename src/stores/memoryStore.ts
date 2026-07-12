@@ -49,11 +49,15 @@ async function runMemoryGeneration(opts: {
   apiKey: string;
   signal: AbortSignal;
   onProgress: (p: Progress) => void;
+  /** Summarize even a below-threshold doc, covering the whole chapter (no tail). */
+  force?: boolean;
 }): Promise<GenOutcome> {
-  const { projectPath, rel, content, existing, model, provider, apiKey, signal, onProgress } = opts;
+  const { projectPath, rel, content, existing, model, provider, apiKey, signal, onProgress, force } = opts;
 
-  if (content.length < MEMORY_MIN_DOC_CHARS) return { skipped: "short" };
-  const coverEnd = coverEndFor(content);
+  if (!force && content.length < MEMORY_MIN_DOC_CHARS) return { skipped: "short" };
+  // Forced (e.g. a short chapter summarized from the outline) covers everything;
+  // otherwise leave the verbatim tail for the doc's own continuation window.
+  const coverEnd = force ? content.length : coverEndFor(content);
 
   let keep: MemorySegment[] = [];
   if (existing) {
@@ -63,7 +67,7 @@ async function runMemoryGeneration(opts: {
     keep = fresh.filter((s) => s.to <= coverEnd);
   }
   const startFrom = keep.length > 0 ? keep[keep.length - 1].to : 0;
-  if (coverEnd - startFrom < 500) return { skipped: "upToDate" };
+  if (coverEnd - startFrom < (force ? 1 : 500)) return { skipped: "upToDate" };
 
   const ranges = splitRange(content, startFrom, coverEnd, segmentTargetChars(model.contextSize));
   const baseUrl = provider.baseUrl || "https://api.openai.com/v1";
@@ -166,8 +170,9 @@ interface MemoryState {
   /** Build or incrementally update the memory for the active document. */
   generate: () => Promise<void>;
   abort: () => void;
-  /** Generate memory for an arbitrary chapter (from the outline view). */
-  generateForFile: (absFilePath: string) => Promise<void>;
+  /** Generate memory for an arbitrary chapter (from the outline view).
+   *  `force` summarizes even a below-threshold (too-short) chapter. */
+  generateForFile: (absFilePath: string, force?: boolean) => Promise<void>;
   abortChapterGen: () => void;
 }
 
@@ -258,7 +263,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
     set({ isGenerating: false, progress: null, abortController: null });
   },
 
-  generateForFile: async (absFilePath) => {
+  generateForFile: async (absFilePath, force = false) => {
     if (get().isGenerating || get().chapterGen) return;
     const { projectPath, activeFilePath } = useProjectStore.getState();
     if (!projectPath) return;
@@ -279,7 +284,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
       set({ error: String(e) });
       return;
     }
-    if (content.length < MEMORY_MIN_DOC_CHARS) {
+    if (!force && content.length < MEMORY_MIN_DOC_CHARS) {
       set({ notice: i18n.t("ai.memory.docTooShort"), error: null });
       return;
     }
@@ -291,7 +296,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
 
     try {
       const outcome = await runMemoryGeneration({
-        projectPath, rel, content, existing, model, provider, apiKey,
+        projectPath, rel, content, existing, model, provider, apiKey, force,
         signal: controller.signal,
         onProgress: (p) => set({ chapterGen: { path: absFilePath, done: p.done, total: p.total } }),
       });

@@ -127,6 +127,20 @@ describe("spineFromVolumes", () => {
     const vols = applySpine(groupVolumes(tree(["a.md", "b.md"]), PROJ), null);
     const spine = spineFromVolumes(vols);
     expect(spine.order.writing).toEqual(["writing/a.md", "writing/b.md"]);
+    expect(spine.status).toBeUndefined();
+  });
+
+  it("carries over the previous chapter status map", () => {
+    const vols = applySpine(groupVolumes(tree(["a.md", "b.md"]), PROJ), null);
+    const prev: BookSpine = {
+      version: 1,
+      order: {},
+      status: { "writing/a.md": "writing" },
+    };
+    const spine = spineFromVolumes(vols, prev);
+    expect(spine.status).toEqual({ "writing/a.md": "writing" });
+    // Must be a copy, not the same reference.
+    expect(spine.status).not.toBe(prev.status);
   });
 });
 

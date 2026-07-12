@@ -27,7 +27,10 @@
     "moveToVolume": "Move to volume…",
     "clearSelection": "Clear",
     "emptyVolume": "Empty volume",
-    "emptyVolumeHint": "Select chapters and move them here"
+    "emptyVolumeHint": "Select chapters and move them here",
+    "openChapter": "Open chapter",
+    "markWriting": "Mark as in-progress",
+    "unmarkWriting": "Clear in-progress"
   },
   "sidebar": {
     "files": "Files",

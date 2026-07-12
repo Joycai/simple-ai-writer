@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Sparkles, ChevronUp, ChevronDown, ChevronsUp, ChevronsDown,
-  Loader2, X, FolderPlus, Trash2, Check,
+  Loader2, X, FolderPlus, Trash2, Check, PenLine, FileText,
 } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { useMemoryStore } from "../../stores/memoryStore";
 import { useAiStore } from "../../stores/aiStore";
+import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
 import {
   groupVolumes,
   applySpine,
@@ -58,18 +59,17 @@ function MemoBadge({ chapter, status }: { chapter: Chapter; status?: MemoryStatu
     );
   }
 
-  if (!status || status === "short") {
-    return status === "short"
-      ? <span className={`${styles.memoChip} ${styles.memoShort}`}>{t("outline.memoShort")}</span>
-      : null;
-  }
+  if (!status) return null;
 
-  const meta: Record<"fresh" | "stale" | "none", { cls: string; label: string }> = {
+  const meta: Record<MemoryStatus, { cls: string; label: string }> = {
     fresh: { cls: styles.memoFresh, label: t("outline.memoFresh") },
     stale: { cls: styles.memoStale, label: t("outline.memoStale") },
     none: { cls: styles.memoNone, label: t("outline.memoNone") },
+    short: { cls: styles.memoShort, label: t("outline.memoShort") },
   };
   const m = meta[status];
+  // "short" chapters can still be summarized here (forced whole-chapter recap).
+  const force = status === "short";
   const actionLabel = status === "fresh" ? t("outline.memoUpdate") : t("outline.memoGenerate");
   return (
     <span className={styles.memoCell} onClick={(e) => e.stopPropagation()}>
@@ -78,7 +78,7 @@ function MemoBadge({ chapter, status }: { chapter: Chapter; status?: MemoryStatu
         className={styles.memoBtn}
         title={actionLabel}
         disabled={!!chapterGen}
-        onClick={() => void generateForFile(chapter.path)}
+        onClick={() => void generateForFile(chapter.path, force)}
       >
         <Sparkles size={11} strokeWidth={1.9} />
       </button>
@@ -104,6 +104,7 @@ export function OutlineFullView() {
   const [creatingVol, setCreatingVol] = useState(false);
   const [newVolName, setNewVolName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number; chapter: Chapter } | null>(null);
   const chapterGen = useMemoryStore((s) => s.chapterGen);
 
   // Load the persisted order whenever the project changes.
@@ -159,12 +160,26 @@ export function OutlineFullView() {
   const activeVolumeIdx = volumes.findIndex((v) => v.chapters.some((c) => c.path === activeFilePath));
   const enabledModels = models.filter((m) => m.enabled);
   const memoModelValue = memoryModelId ?? activeModelId ?? "";
+  const isWriting = (ch: Chapter) => spine?.status?.[ch.relPath] === "writing";
+  const writingCount = volumes.reduce((n, v) => n + v.chapters.filter(isWriting).length, 0);
 
   const reorder = (vol: Volume, from: number, to: number) => {
     if (from === to || !projectPath) return;
     const reordered = move(vol.chapters, from, to);
-    const next = spineFromVolumes(volumes);
+    const next = spineFromVolumes(volumes, spine);
     next.order[vol.relPath] = reordered.map((c) => c.relPath);
+    setSpine(next);
+    void saveSpine(projectPath, next);
+  };
+
+  /** Mark a chapter as "在写" or clear it (persisted in the spine). */
+  const setChapterWriting = (ch: Chapter, writing: boolean) => {
+    if (!projectPath) return;
+    const next = spineFromVolumes(volumes, spine);
+    const status = { ...(next.status ?? {}) };
+    if (writing) status[ch.relPath] = "writing";
+    else delete status[ch.relPath];
+    next.status = status;
     setSpine(next);
     void saveSpine(projectPath, next);
   };
@@ -180,6 +195,25 @@ export function OutlineFullView() {
   const openChapter = (path: string) => {
     setActiveFilePath(path);
     setMainView("editor");
+  };
+
+  const openMenu = (e: MouseEvent, chapter: Chapter) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenu({ x: e.clientX, y: e.clientY, chapter });
+  };
+
+  const menuItems = (ch: Chapter): ContextMenuEntry[] => {
+    const writing = isWriting(ch);
+    return [
+      { kind: "item", icon: <FileText size={13} />, label: t("outline.openChapter"), action: () => openChapter(ch.path) },
+      {
+        kind: "item",
+        icon: <PenLine size={13} />,
+        label: writing ? t("outline.unmarkWriting") : t("outline.markWriting"),
+        action: () => setChapterWriting(ch, !writing),
+      },
+    ];
   };
 
   const createVolume = async () => {
@@ -338,9 +372,9 @@ export function OutlineFullView() {
               <span className={styles.statValue}>{wordCount.toLocaleString()}</span> 字
             </span>
             <span className={styles.statSep} />
-            <span><span className={styles.statDot} style={{ color: "var(--color-success)" }}>●</span> 完 {allChaptersCount}</span>
+            <span><span className={styles.statDot} style={{ color: "var(--color-success)" }}>●</span> 完 {allChaptersCount - writingCount}</span>
             <span style={{ margin: "0 10px" }} />
-            <span><span className={styles.statDot} style={{ color: "var(--color-sienna)" }}>●</span> 在写 {activeFilePath ? 1 : 0}</span>
+            <span><span className={styles.statDot} style={{ color: "var(--color-sienna)" }}>●</span> 在写 {writingCount}</span>
             <span className={styles.spacer} />
             <span>平均 <span className={styles.statValue}>{allChaptersCount > 0 ? Math.round(wordCount / allChaptersCount).toLocaleString() : 0}</span> 字 / 章</span>
           </div>
@@ -413,13 +447,14 @@ export function OutlineFullView() {
                       onDragEnd={() => { setDrag(null); setDragOver(null); }}
                       onClick={() => toggleSelect(ch.path)}
                       onDoubleClick={() => openChapter(ch.path)}
+                      onContextMenu={(e) => openMenu(e, ch)}
                     >
                       <div className={styles.chapterTop}>
                         <span className={`${styles.selectDot} ${isSelected ? styles.selectDotOn : ""}`}>
                           {isSelected ? <Check size={11} strokeWidth={2.5} /> : String(ci + 1).padStart(2, "0")}
                         </span>
                         <span className={styles.chapterName}>{title}</span>
-                        {active && <span className={styles.chapterStatus}>在写</span>}
+                        {isWriting(ch) && <span className={styles.chapterStatus}>在写</span>}
                         <MemoBadge chapter={ch} status={statuses[ch.path]} />
                         <span className={styles.moveControls} onClick={(e) => e.stopPropagation()}>
                           <button
@@ -471,6 +506,15 @@ export function OutlineFullView() {
           );
         })}
       </div>
+
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={menuItems(menu.chapter)}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </div>
   );
 }
