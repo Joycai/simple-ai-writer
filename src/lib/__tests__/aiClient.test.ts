@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { streamCompletion, ContextSizeError, type StreamChunk, type StreamMessage } from "../aiClient";
+import {
+  streamCompletion, ContextSizeError,
+  type StreamChunk, type StreamMessage, type ToolDefinition,
+} from "../aiClient";
 
 /** Build a fetch Response whose body streams the given raw chunks. */
 function sseResponse(chunks: string[]): Response {
@@ -189,5 +192,70 @@ describe("streamCompletion — Gemini SSE", () => {
         onChunk: () => {},
       })
     ).rejects.toThrow(/SAFETY/);
+  });
+});
+
+describe("streamCompletion — toolChoice", () => {
+  const TOOL: ToolDefinition = {
+    type: "function",
+    function: {
+      name: "update_lore_metadata",
+      description: "d",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  };
+
+  it("forwards a forced tool_choice into the OpenAI body", async () => {
+    const calls = mockFetch([`data: [DONE]\n`]);
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "k",
+      standard: "openai",
+      modelId: "m",
+      messages: [{ role: "user", content: "hi" }],
+      tools: [TOOL],
+      toolChoice: { type: "function", function: { name: "update_lore_metadata" } },
+      onChunk: () => {},
+    });
+    expect(calls[0].body.tools).toBeDefined();
+    expect(calls[0].body.tool_choice).toEqual({
+      type: "function",
+      function: { name: "update_lore_metadata" },
+    });
+  });
+
+  it("maps a forced tool_choice to Gemini's function_calling_config", async () => {
+    const calls = mockFetch([`data: {"candidates":[{"content":{"parts":[]}}]}\n`]);
+    await streamCompletion({
+      baseUrl: "",
+      apiKey: "k",
+      standard: "gemini",
+      modelId: "m",
+      messages: [{ role: "user", content: "hi" }],
+      tools: [TOOL],
+      toolChoice: { type: "function", function: { name: "update_lore_metadata" } },
+      onChunk: () => {},
+    });
+    expect(calls[0].body.tool_config).toEqual({
+      function_calling_config: {
+        mode: "ANY",
+        allowed_function_names: ["update_lore_metadata"],
+      },
+    });
+  });
+
+  it("omits Gemini tool_config when toolChoice is auto/unset", async () => {
+    const calls = mockFetch([`data: {"candidates":[{"content":{"parts":[]}}]}\n`]);
+    await streamCompletion({
+      baseUrl: "",
+      apiKey: "k",
+      standard: "gemini",
+      modelId: "m",
+      messages: [{ role: "user", content: "hi" }],
+      tools: [TOOL],
+      onChunk: () => {},
+    });
+    expect(calls[0].body.tools).toBeDefined();
+    expect(calls[0].body.tool_config).toBeUndefined();
   });
 });
