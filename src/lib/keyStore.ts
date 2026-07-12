@@ -11,7 +11,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import { loadLegacyKeyFromDb, deleteLegacyKeyFromDb } from "./aiConfig";
+import { loadLegacyKeyFromDb, deleteLegacyKeyFromDb } from "./ai/configDb";
 import { getGlobalDb } from "./project";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;

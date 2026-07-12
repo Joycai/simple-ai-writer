@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import type { HeadingNode } from "../../lib/markdown";
+import type { HeadingNode } from "../../lib/fs/markdown";
 import styles from "./OutlinePanel.module.css";
 
 const LEVEL_CLASS: Record<number, string> = {

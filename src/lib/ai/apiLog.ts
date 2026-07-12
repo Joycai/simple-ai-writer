@@ -6,8 +6,8 @@
  */
 
 import { appLogDir, join } from "@tauri-apps/api/path";
-import { appendFile, fileExists, makeDir } from "./fileio";
-import type { StreamChunk, StreamMessage, StreamOptions } from "./aiClient";
+import { appendFile, fileExists, makeDir } from "../fs/fileio";
+import type { StreamChunk, StreamMessage, StreamOptions } from "./types";
 
 const ENABLED_KEY = "app:apiLogEnabled";
 

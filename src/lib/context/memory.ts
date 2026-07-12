@@ -16,7 +16,7 @@
  * end (the common writing flow) only ever adds new segments.
  */
 
-import { readFile, writeFile, makeDir, fileExists, renamePath, removeFile } from "./fileio";
+import { readFile, writeFile, makeDir, fileExists, renamePath, removeFile } from "../fs/fileio";
 
 export interface MemorySegment {
   /** Source char range [from, to) this summary covers. */

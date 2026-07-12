@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   streamCompletion, ContextSizeError,
   type StreamChunk, type StreamMessage, type ToolDefinition,
-} from "../aiClient";
+} from "../ai";
 
 /** Build a fetch Response whose body streams the given raw chunks. */
 function sseResponse(chunks: string[]): Response {

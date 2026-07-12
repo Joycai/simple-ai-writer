@@ -7,7 +7,7 @@
 
 import { renderMarkdown } from "./markdown";
 import { writeFile } from "./fileio";
-import i18n from "../i18n";
+import i18n from "../../i18n";
 
 /** BCP-47 lang attribute for exported documents, following the active UI language. */
 function docLang(): string {

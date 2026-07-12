@@ -11,7 +11,7 @@ import { readEntityFile, writeEntityFile, type LoreEntity } from "../../lib/lore
 import { useImageDataUrl } from "./useImageDataUrl";
 import {
   scanProjectFiles, imageToDataUrl, readTextFileContent, type ProjectFile,
-} from "../../lib/loreGenerator";
+} from "../../lib/fs/images";
 import { loadApiKey } from "../../lib/keyStore";
 import styles from "./LoreImproveModal.module.css";
 
@@ -258,7 +258,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
             ]
           : textContent;
 
-      const { streamCompletion } = await import("../../lib/aiClient");
+      const { streamCompletion } = await import("../../lib/ai");
       let accumulated = "";
       await streamCompletion({
         baseUrl: provider.baseUrl,

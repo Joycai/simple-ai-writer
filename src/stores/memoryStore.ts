@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import i18n from "../i18n";
-import { streamCompletion } from "../lib/aiClient";
+import { streamCompletion } from "../lib/ai";
 import {
   type DocMemory,
   type MemoryFreshness,
@@ -14,9 +14,9 @@ import {
   splitRange,
   projectRelativePath,
   MEMORY_MIN_DOC_CHARS,
-} from "../lib/memory";
-import { readFile } from "../lib/fileio";
-import type { Model, Provider } from "../lib/aiConfig";
+} from "../lib/context/memory";
+import { readFile } from "../lib/fs/fileio";
+import type { Model, Provider } from "../lib/ai/configDb";
 import { loadApiKey } from "../lib/keyStore";
 import { getDb } from "../lib/project";
 import { useAiStore } from "./aiStore";

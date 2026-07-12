@@ -1,13 +1,13 @@
 import { create } from "zustand";
 import i18n from "../i18n";
-import { streamCompletion } from "../lib/aiClient";
-import { assembleContext, bundleToMessages, type TaskExtras } from "../lib/rag";
+import { streamCompletion } from "../lib/ai";
+import { assembleContext, bundleToMessages, type TaskExtras } from "../lib/context/rag";
 import { useAiStore } from "./aiStore";
 import { useLoreStore } from "./loreStore";
 import { useProjectStore } from "./projectStore";
 import { getDb } from "../lib/project";
 import { loadApiKey } from "../lib/keyStore";
-import type { ToolStep } from "../lib/agentLoop";
+import type { ToolStep } from "../lib/agent/loop";
 
 export type TaskKind = "continue" | "polish" | "rewrite" | "summary" | "custom";
 export type { ToolStep };
@@ -102,7 +102,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // Story memory for the active document (前情提要 layer). Read from disk so
     // manual edits to the memory file are picked up; null when none exists.
     const { activeFilePath } = useProjectStore.getState();
-    const { loadMemory } = await import("../lib/memory");
+    const { loadMemory } = await import("../lib/context/memory");
     const memory = activeFilePath ? await loadMemory(projectPath, activeFilePath) : null;
 
     // Book-level continuation memory: recap of prior chapters + the previous
@@ -113,7 +113,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     if (kind === "continue" && activeFilePath) {
       try {
         const { fileTree } = useProjectStore.getState();
-        const { buildBookContext } = await import("../lib/outline");
+        const { buildBookContext } = await import("../lib/context/bookContext");
         const anchorOffset = get().selectionRange?.to ?? documentText.length;
         const bookContext = await buildBookContext(projectPath, fileTree, activeFilePath, anchorOffset);
         if (bookContext) bookExtras = { bookContext };
@@ -163,8 +163,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             ? initialMessages[1].content
             : JSON.stringify(initialMessages[1]?.content ?? "");
 
-        const { runAgentLoop } = await import("../lib/agentLoop");
-        const { AGENT_TOOLS } = await import("../lib/tools");
+        const { runAgentLoop } = await import("../lib/agent/loop");
+        const { AGENT_TOOLS } = await import("../lib/agent/tools");
 
         await runAgentLoop({
           baseUrl,

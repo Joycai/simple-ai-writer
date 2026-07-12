@@ -9,7 +9,7 @@ import {
   chapterTitle,
   parentDir,
   type BookSpine,
-} from "../outline";
+} from "../context/outline";
 import type { FileNode } from "../project";
 
 const PROJ = "D:/proj";

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ImageOff } from "lucide-react";
-import { imageToDataUrl } from "../../lib/loreGenerator";
+import { imageToDataUrl } from "../../lib/fs/images";
 import styles from "./ImagePreview.module.css";
 
 interface Props {

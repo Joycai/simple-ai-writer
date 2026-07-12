@@ -10,10 +10,10 @@ import {
   scanProjectFiles,
   imageToDataUrl,
   readTextFileContent,
-  generateLore,
   type ProjectFile,
-} from "../../lib/loreGenerator";
-import { writeBinaryFile } from "../../lib/fileio";
+} from "../../lib/fs/images";
+import { generateLore } from "../../lib/lore/generator";
+import { writeBinaryFile } from "../../lib/fs/fileio";
 import { loadApiKey } from "../../lib/keyStore";
 import styles from "./LoreGenerator.module.css";
 

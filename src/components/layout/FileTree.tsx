@@ -8,8 +8,8 @@ import {
   FilePlus, FolderPlus, RotateCw, LogOut, Pencil, Trash2,
 } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { isImagePath } from "../../lib/loreGenerator";
-import { writeFile, makeDir, removeFile, removeDir, renamePath } from "../../lib/fileio";
+import { isImagePath } from "../../lib/fs/images";
+import { writeFile, makeDir, removeFile, removeDir, renamePath } from "../../lib/fs/fileio";
 import { useProjectStore } from "../../stores/projectStore";
 import { useEditorStore } from "../../stores/editorStore";
 import type { FileNode } from "../../lib/project";

@@ -20,9 +20,9 @@ import {
   type BookSpine,
   type Volume,
   type Chapter,
-} from "../../lib/outline";
-import { loadMemory, memoryStatus, moveMemory, projectRelativePath, type MemoryStatus } from "../../lib/memory";
-import { readFile, makeDir, removeDir, renamePath } from "../../lib/fileio";
+} from "../../lib/context/outline";
+import { loadMemory, memoryStatus, moveMemory, projectRelativePath, type MemoryStatus } from "../../lib/context/memory";
+import { readFile, makeDir, removeDir, renamePath } from "../../lib/fs/fileio";
 import styles from "./OutlineFullView.module.css";
 
 /** Move an array item from one index to another (immutably). */
