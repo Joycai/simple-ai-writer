@@ -6,11 +6,11 @@
  * where servers like ollama silently truncate the head of the prompt.
  */
 
-import type { StreamMessage } from "./aiClient";
+import type { StreamMessage } from "./types";
 
 // CJK ideographs, kana, hangul, CJK compatibility, and fullwidth forms
-// (⺀-鿿, ぀-ヿ via the ideograph range, 가-힯, 豈-﫿, ＀-￯).
-const CJK_RE = /[⺀-鿿぀-ヿ가-힯豈-﫿＀-￯]/g;
+// (⺀-鿿, ぀-ヿ via the ideograph range, 가-힯, 豈-﫿, ＀-￯).
+const CJK_RE = /[⺀-鿿぀-ヿ가-힯豈-﫿＀-￯]/g;
 
 /** Fixed cost assumed per attached image (vision token usage varies by model). */
 const IMAGE_TOKENS = 800;

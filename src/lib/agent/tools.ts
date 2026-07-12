@@ -4,11 +4,10 @@
  */
 
 import { readDir } from "@tauri-apps/plugin-fs";
-import type { ToolDefinition } from "./aiClient";
-import type { LoreIndex, LoreEntity } from "./lore";
-import { readEntityFile } from "./lore";
-import { readFile } from "./fileio";
-import { imageToDataUrl } from "./loreGenerator";
+import type { ToolDefinition } from "../ai/types";
+import { readFile } from "../fs/fileio";
+import { imageToDataUrl } from "../fs/images";
+import { readEntityFile, type LoreEntity, type LoreIndex } from "../lore";
 
 export interface ToolCall {
   id: string;

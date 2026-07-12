@@ -9,8 +9,8 @@
 4. Update i18n (en.json, zh-CN.json)
 
 ## Add a new provider/API
-1. Implement `StreamOptions` parsing in `aiClient.ts` (`streamOpenAI()` or new provider branch)
-2. Add `ApiStandard` enum value if needed
+1. Add a new adapter in `src/lib/ai/` (alongside `openai.ts` / `gemini.ts`) and wire it into the `streamCompletion()` dispatch in `src/lib/ai/index.ts`
+2. Add `ApiStandard` enum value in `src/lib/ai/types.ts` if needed
 3. UI already supports custom base URLs in SettingsModal
 
 ## Add a new language
@@ -20,6 +20,6 @@
 4. Restart dev server
 
 ## Modify lore entity format
-1. Edit expected folder structure in `src/lib/lore.ts` (filename patterns)
+1. Edit expected folder structure in `src/lib/lore/entity.ts` / `src/lib/lore/gallery.ts` (filename patterns)
 2. Update `loreStore.scanProject()` parsing logic
 3. Migration: rebuild lore index via store action

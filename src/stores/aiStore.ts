@@ -4,9 +4,10 @@ import {
   listProviders, saveProvider, deleteProvider,
   listModels, saveModel, deleteModel,
   listPrompts, savePrompt, deletePrompt,
-  fetchRemoteModels, ensureAiSchema,
+  ensureAiSchema,
   type Provider, type Model, type Prompt,
-} from "../lib/aiConfig";
+} from "../lib/ai/configDb";
+import { fetchRemoteModels } from "../lib/ai/providerProbe";
 import { saveApiKey, loadApiKey, deleteApiKey } from "../lib/keyStore";
 import { getGlobalDb } from "../lib/project";
 

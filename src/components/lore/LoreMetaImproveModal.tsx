@@ -9,10 +9,10 @@ import {
   LORE_CATEGORIES, type CategoryId, type LoreEntity,
 } from "../../lib/lore";
 import { useImageDataUrl } from "./useImageDataUrl";
-import { parseFrontmatter } from "../../lib/markdown";
+import { parseFrontmatter } from "../../lib/fs/markdown";
 import { loadApiKey } from "../../lib/keyStore";
-import { imageToDataUrl } from "../../lib/loreGenerator";
-import type { ToolDefinition } from "../../lib/aiClient";
+import { imageToDataUrl } from "../../lib/fs/images";
+import type { ToolDefinition } from "../../lib/ai";
 import styles from "./LoreImproveModal.module.css";
 import extra from "./LoreMetaImproveModal.module.css";
 
@@ -164,7 +164,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
         },
       };
 
-      const { streamCompletion } = await import("../../lib/aiClient");
+      const { streamCompletion } = await import("../../lib/ai");
       let acc = "";
       let toolArgs = "";
       await streamCompletion({

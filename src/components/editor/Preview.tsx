@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
-import { renderMarkdown } from "../../lib/markdown";
-import { imageToDataUrl } from "../../lib/loreGenerator";
+import { renderMarkdown } from "../../lib/fs/markdown";
+import { imageToDataUrl } from "../../lib/fs/images";
 import { resolveRelativePath } from "../../lib/paths";
 import styles from "./Preview.module.css";
 

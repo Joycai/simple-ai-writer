@@ -4,9 +4,11 @@ import { X, Pencil, Moon, Sun, Monitor, SlidersHorizontal, Server, Cpu, MessageS
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useAiStore } from "../../stores/aiStore";
 import { useAppStore, type ThemeMode, type Language } from "../../stores/appStore";
-import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../lib/apiLog";
-import type { ApiStandard, ModelType, GeminiSafetySettings, GeminiHarmCategory } from "../../lib/aiConfig";
-import { GEMINI_HARM_CATEGORIES, GEMINI_THRESHOLD_LEVELS, MAX_CONTEXT_SIZE, defaultSafetySettings, testProviderConnection } from "../../lib/aiConfig";
+import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../lib/ai/apiLog";
+import type { ApiStandard } from "../../lib/ai/types";
+import { MAX_CONTEXT_SIZE, type ModelType } from "../../lib/ai/configDb";
+import { GEMINI_HARM_CATEGORIES, GEMINI_THRESHOLD_LEVELS, defaultSafetySettings, type GeminiSafetySettings, type GeminiHarmCategory } from "../../lib/ai/safety";
+import { testProviderConnection } from "../../lib/ai/providerProbe";
 import styles from "./SettingsModal.module.css";
 
 const BUILTIN_PROMPTS_CONFIG = [

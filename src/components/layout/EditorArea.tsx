@@ -9,7 +9,7 @@ import { Preview } from "../editor/Preview";
 import { ImagePreview } from "../editor/ImagePreview";
 import { EditorBottomStrip } from "./EditorBottomStrip";
 import { MOD_KEY } from "../../lib/platform";
-import { isImagePath } from "../../lib/loreGenerator";
+import { isImagePath } from "../../lib/fs/images";
 import styles from "./EditorArea.module.css";
 
 export function EditorArea() {

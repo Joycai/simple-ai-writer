@@ -8,7 +8,7 @@ import {
   type LoreEntity,
   type CategoryId,
 } from "../lib/lore";
-import { removeDir } from "../lib/fileio";
+import { removeDir } from "../lib/fs/fileio";
 
 interface LoreState {
   index: LoreIndex;

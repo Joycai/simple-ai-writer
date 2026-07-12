@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { imageToDataUrl } from "../../lib/loreGenerator";
+import { imageToDataUrl } from "../../lib/fs/images";
 
 /**
  * Load a local image file as a base64 data URL for <img> rendering.

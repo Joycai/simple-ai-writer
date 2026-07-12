@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { assembleContext, bundleToMessages } from "../rag";
+import { assembleContext, bundleToMessages } from "../context/rag";
 import type { LoreIndex } from "../lore";
 
 // The real i18n module touches localStorage at import time (browser-only).
@@ -7,7 +7,7 @@ vi.mock("../../i18n", () => ({ default: { t: (key: string) => key } }));
 
 // Mock file I/O so entity summaries load without a Tauri backend.
 const files = new Map<string, string>();
-vi.mock("../fileio", () => ({
+vi.mock("../fs/fileio", () => ({
   readFile: async (path: string) => {
     const content = files.get(path);
     if (content == null) throw new Error(`no such file: ${path}`);

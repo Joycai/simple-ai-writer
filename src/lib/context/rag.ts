@@ -6,14 +6,14 @@
  *   Layer 2 – Matched lore entity summaries (auto + manually pinned)
  *   Layer 3 – Optional extras: additional knowledge, outline/direction
  *   Layer 4 – Story memory (compacted summary of everything before the
- *             verbatim window — see lib/memory.ts) + recent chapter context
+ *             verbatim window — see ./memory) + recent chapter context
  *             (≤800 tokens before cursor)
  *   Layer 5 – Current selection / task instruction
  */
 
-import i18n from "../i18n";
-import { readFile } from "./fileio";
-import type { LoreIndex } from "./lore";
+import i18n from "../../i18n";
+import { readFile } from "../fs/fileio";
+import type { LoreIndex } from "../lore";
 import { selectMemoryForContext, type DocMemory } from "./memory";
 
 const MAX_AUTO_LORE_CARDS = 3;
@@ -48,7 +48,7 @@ export interface TaskExtras {
   /**
    * Book-level continuation memory (the "continue" task), resolved from the
    * outline order: a recap of prior chapters plus the previous chapter's ending.
-   * See lib/outline.ts. Only consumed in appendMode.
+   * See ./bookContext. Only consumed in appendMode.
    */
   bookContext?: {
     priorSummary: string;

@@ -4,12 +4,11 @@
  * MAX_ROUNDS caps the loop to prevent unbounded tool calls.
  */
 
-import type { ApiStandard, GeminiSafetySettings } from "./aiConfig";
-import type { ToolDefinition, StreamMessage, AccumulatedToolCall, ContentPart } from "./aiClient";
-import { streamCompletion } from "./aiClient";
-import type { ToolCall, ToolResult } from "./tools";
-import { executeTool } from "./tools";
-import type { LoreIndex } from "./lore";
+import { streamCompletion } from "../ai";
+import type { GeminiSafetySettings } from "../ai/safety";
+import type { AccumulatedToolCall, ApiStandard, ContentPart, StreamMessage, ToolDefinition } from "../ai/types";
+import type { LoreIndex } from "../lore";
+import { executeTool, type ToolCall, type ToolResult } from "./tools";
 
 const MAX_ROUNDS = 8;
 

@@ -6,7 +6,7 @@
 
 ### Database Schema (SQLite)
 
-Initialized in `src/lib/project.ts` and extended in `src/lib/aiConfig.ts`:
+Initialized in `src/lib/project.ts` and extended in `src/lib/ai/configDb.ts`:
 
 ```
 settings (id → str, value → str)
@@ -19,7 +19,7 @@ token_usage (id, model_id, task, prompt_tokens, cached_tokens, completion_tokens
 
 ### RAG (Retrieval-Augmented Generation)
 
-- **Location** — `src/lib/rag.ts`
+- **Location** — `src/lib/context/rag.ts`
 - **Method** — Alias-based keyword matching (no embeddings, fast)
 - **Context Assembly** (4 layers in `assembleContext()`):
   1. System prompt (from active template or default)
@@ -32,7 +32,7 @@ token_usage (id, model_id, task, prompt_tokens, cached_tokens, completion_tokens
 
 Per-document rolling summary so long manuscripts don't lose early plot in AI tasks — the assembled context carries a `【前情提要】` layer (compacted summaries of everything before the verbatim window) ahead of `【近期内容】`.
 
-- **Location** — `src/lib/memory.ts` (pure logic + file IO), `src/stores/memoryStore.ts` (generation orchestration), UI strip in `AiPanel.tsx`
+- **Location** — `src/lib/context/memory.ts` (pure logic + file IO), `src/stores/memoryStore.ts` (generation orchestration), UI strip in `AiPanel.tsx`
 - **Storage** — `.ai-writer/memory/<relative doc path>.md`: machine metadata (segment ranges + FNV-1a hashes) in a leading `<!-- ai-writer-memory {json} -->` comment; each segment's summary is a human-editable `## …` section paired by order
 - **Segmentation** — source split at paragraph boundaries into ~12k-char segments (scaled by `model.contextSize`); coverage stops `MEMORY_TAIL_KEEP_CHARS` (2000) before the end — the verbatim window handles the tail
 - **Updates are incremental** — appending only summarizes the new tail; editing early text invalidates that segment *and everything after it* (offsets shift), and an update re-summarizes from the first stale segment. Manual, never automatic: the AiPanel strip shows coverage/staleness and prompts the user to create/update when >10k pre-window chars are uncovered
@@ -43,7 +43,7 @@ Per-document rolling summary so long manuscripts don't lose early plot in AI tas
 
 Story Memory is *per-document*, so a chapter is its own file and knows nothing of its siblings. The book spine adds an explicit chapter *order* so continuing a fresh chapter can see what came before it.
 
-- **Location** — `src/lib/outline.ts` (order resolution, spine IO, book-context assembly); the outline view `src/components/outline/OutlineFullView.tsx` is the editor (drag-to-reorder)
+- **Location** — `src/lib/context/outline.ts` (order resolution, spine IO) + `src/lib/context/bookContext.ts` (book-context assembly); the outline view `src/components/outline/OutlineFullView.tsx` is the editor (drag-to-reorder)
 - **Storage** — `.ai-writer/outline.json`: `{ version, order: { <volume relPath>: [<chapter relPath>, …] } }`. A **volume** = a book: top-level chapter files under `writing/` form a default volume, each sub-folder is its own
 - **Order is an overlay, not a rigid list** — `applySpine()` applies the manifest order, drops entries whose file vanished, and appends un-listed files by **natural (numeric-aware) sort** (`naturalCompare` — so 第2章 < 第10章, 6-1 < 6-2 < 7). Creating/deleting files outside the outline UI never breaks ordering; the backend's byte-sort no longer decides chapter order
 - **Chapter files** — `.md` / `.markdown` / `.txt` (the outline view previously dropped `.txt`)
@@ -59,7 +59,7 @@ Story Memory is *per-document*, so a chapter is its own file and knows nothing o
 
 ### Streaming (SSE)
 
-- **Location** — `src/lib/aiClient.ts`
+- **Location** — `src/lib/ai/` (`index.ts` dispatch + pre-flight checks, `openai.ts` / `gemini.ts` adapters, `types.ts` shared protocol types)
 - **Providers** — OpenAI + compatible APIs (SSE `data: {...}` lines), Google Gemini (alt=sse format)
 - **Parsing** — Fetch + ReadableStream, line-by-line JSON parsing
 - **Token Tracking** — OpenAI sends `include_usage: true` in stream_options; Gemini in final `usageMetadata`
@@ -74,7 +74,7 @@ Story Memory is *per-document*, so a chapter is its own file and knows nothing o
 
 ### Export
 
-- **Location** — `src/lib/export.ts`
+- **Location** — `src/lib/fs/export.ts`
 - **Markdown** — Copy to clipboard
 - **HTML** — Self-contained file (inline CSS, no external assets)
 - **PDF** — Create hidden iframe, render HTML, call `window.print()`, remove iframe after 2s
@@ -94,7 +94,7 @@ Story Memory is *per-document*, so a chapter is its own file and knows nothing o
 - Plugin permissions in `src-tauri/capabilities/default.json`
 
 ### File I/O
-- `src/lib/fileio.ts` wraps Tauri fs plugin commands (read, write, metadata, etc.)
+- `src/lib/fs/fileio.ts` wraps Tauri fs plugin commands (read, write, metadata, etc.)
 - All paths resolved via Tauri plugin (no raw fs access)
 
 ### CodeMirror 6 Setup

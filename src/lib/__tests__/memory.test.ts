@@ -12,7 +12,7 @@ import {
   memoryStatus,
   MEMORY_TAIL_KEEP_CHARS,
   type DocMemory,
-} from "../memory";
+} from "../context/memory";
 
 function makeMemory(overrides: Partial<DocMemory> = {}): DocMemory {
   return {

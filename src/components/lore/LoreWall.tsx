@@ -8,7 +8,7 @@ import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { LORE_CATEGORIES, setEntityAvatar, slugifyEntityId, uniqueEntityId, type CategoryId, type LoreEntity } from "../../lib/lore";
 import { useAppStore } from "../../stores/appStore";
-import { imageToDataUrl } from "../../lib/loreGenerator";
+import { imageToDataUrl } from "../../lib/fs/images";
 import { MOD_K_SPACED } from "../../lib/platform";
 import { LoreGenerator } from "./LoreGenerator";
 import { LoreDetail } from "./LoreDetail";

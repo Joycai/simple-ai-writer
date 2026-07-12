@@ -7,11 +7,11 @@ import { useEditorStore } from "../../stores/editorStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useMemoryStore } from "../../stores/memoryStore";
 import { useProjectStore } from "../../stores/projectStore";
-import type { TaskExtras } from "../../lib/rag";
+import type { TaskExtras } from "../../lib/context/rag";
 import {
   MEMORY_MIN_DOC_CHARS,
   MEMORY_SUGGEST_THRESHOLD_CHARS,
-} from "../../lib/memory";
+} from "../../lib/context/memory";
 import { LORE_CATEGORIES } from "../../lib/lore";
 import styles from "./AiPanel.module.css";
 

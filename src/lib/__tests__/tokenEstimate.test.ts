@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { estimateTextTokens, estimateMessagesTokens } from "../tokenEstimate";
-import type { StreamMessage } from "../aiClient";
+import { estimateTextTokens, estimateMessagesTokens } from "../ai/tokenEstimate";
+import type { StreamMessage } from "../ai/types";
 
 describe("estimateTextTokens", () => {
   it("counts CJK characters as ~1 token each", () => {

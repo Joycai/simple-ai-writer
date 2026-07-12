@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { EditorView } from "@codemirror/view";
-import { extractHeadings, countWords, type HeadingNode } from "../lib/markdown";
-import { readFile, writeFile } from "../lib/fileio";
+import { extractHeadings, countWords, type HeadingNode } from "../lib/fs/markdown";
+import { readFile, writeFile } from "../lib/fs/fileio";
 import { useProjectStore } from "./projectStore";
 
 export type ViewMode = "split" | "editor" | "preview";

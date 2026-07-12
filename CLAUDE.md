@@ -66,7 +66,7 @@ All in `src/stores/`:
 4. **Persist** → Writes to `token_usage` table in SQLite
 5. **Insert** → User clicks "Insert to Document" → `editorStore.setContent()`
 
-Tasks can also run through an **agentic tool loop** (`src/lib/agentLoop.ts` + `src/lib/tools.ts`): up to 8 rounds of model-driven tool calls (`list_lore_entities`, `read_lore_entity`, `list_files`, `read_file`) with multimodal image support. AI-driven lore generation/improvement lives in `src/lib/loreGenerator.ts` + `src/components/lore/`.
+Tasks can also run through an **agentic tool loop** (`src/lib/agent/loop.ts` + `src/lib/agent/tools.ts`): up to 8 rounds of model-driven tool calls (`list_lore_entities`, `read_lore_entity`, `list_files`, `read_file`) with multimodal image support. AI-driven lore generation/improvement lives in `src/lib/lore/generator.ts` + `src/components/lore/`.
 
 > Details: RAG context assembly, SSE parsing, and DB schema are in `docs/architecture.md`.
 
@@ -84,7 +84,13 @@ Tasks can also run through an **agentic tool loop** (`src/lib/agentLoop.ts` + `s
 - `src/components/lore/` — Lore browser, LoreGenerator, LoreImproveModal, LoreWall
 - `src/components/settings/` — SettingsModal (provider/model/prompt config)
 - `src/components/command/`, `onboarding/`, `outline/` — CommandPalette, onboarding flow, full outline view
-- `src/lib/` — Core logic (project, RAG, AI client, agent loop + tools, lore generation, export, file I/O, keyStore)
+- `src/lib/` — Core logic, grouped by domain:
+  - `src/lib/ai/` — streaming client (`index.ts` dispatch, `openai.ts`/`gemini.ts` adapters, `types.ts`), provider config storage (`configDb.ts`), Gemini safety settings (`safety.ts`), remote probing (`providerProbe.ts`), `apiLog.ts`, `tokenEstimate.ts`
+  - `src/lib/agent/` — agentic tool loop (`loop.ts`) + tool definitions/executor (`tools.ts`)
+  - `src/lib/lore/` — lore domain model (`model.ts`), entity scan/CRUD (`entity.ts`), gallery/avatar (`gallery.ts`), AI generation (`generator.ts`); import via `lib/lore` (index re-exports all but generator)
+  - `src/lib/context/` — RAG assembly (`rag.ts`), story memory (`memory.ts`), book spine (`outline.ts`), book-level continuation context (`bookContext.ts`)
+  - `src/lib/fs/` — Tauri file I/O wrappers (`fileio.ts`), markdown render/frontmatter (`markdown.ts`), image/text file utils (`images.ts`), export (`export.ts`)
+  - root: `project.ts`, `keyStore.ts`, `http.ts`, `paths.ts`, `platform.ts`
 - `src/stores/` — Zustand state managers
 - `src/styles/` — Design tokens (`tokens.css`) + global styles (`global.css`)
 - `src/i18n/locales/` — JSON translation files (en, zh-CN)
