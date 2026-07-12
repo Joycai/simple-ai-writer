@@ -56,6 +56,36 @@
   --letter-tracked: 0.34em;     /* dramatic centered serif lines */
 }
 
+/* ───────── Font schemes (CJK × Western pairings) ─────────
+   Selected via `<html data-font="…">`. Each overrides the serif
+   (body/editor) and sans (UI) stacks. System fonts only — nothing
+   is bundled, so every stack degrades gracefully across OSes. These
+   blocks follow :root, so equal-specificity rules win by source order. */
+
+/* 1 · Manuscript (default) — Spectral serif + Inter Tight UI */
+[data-font="manuscript"] {
+  --font-serif: "Spectral", Georgia, "Songti SC", "Noto Serif CJK SC", serif;
+  --font-sans: "Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* 2 · Song / book — classic Western serif + CJK Song/Ming for the body */
+[data-font="song"] {
+  --font-serif: Georgia, Cambria, "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", STSong, SimSun, serif;
+  --font-sans: "Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* 3 · Hei / modern — whole app in sans; editor body uses CJK Hei + Western sans */
+[data-font="hei"] {
+  --font-serif: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
+}
+
+/* 4 · Kai / manuscript hand — old-style Western serif + CJK Kai */
+[data-font="kai"] {
+  --font-serif: "Iowan Old Style", Georgia, "Kaiti SC", STKaiti, KaiTi, "Noto Serif CJK SC", serif;
+  --font-sans: "Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
 /* ───────── LIGHT · Paper ───────── */
 [data-theme="light"] {
   --color-bg-base:        #F7F2E8;   /* paper */

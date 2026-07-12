@@ -3,9 +3,13 @@ import i18n from "../i18n";
 
 export type ThemeMode = "dark" | "light" | "system";
 export type Language = "zh-CN" | "en";
+export type FontScheme = "manuscript" | "song" | "hei" | "kai";
+
+const FONT_SCHEMES: FontScheme[] = ["manuscript", "song", "hei", "kai"];
 
 const THEME_KEY = "app:theme";
 const LANG_KEY = "app:language";
+const FONT_KEY = "app:fontScheme";
 const SIDEBAR_WIDTH_KEY = "app:sidebarWidth";
 const RIGHT_PANEL_WIDTH_KEY = "app:rightPanelWidth";
 const RECENT_PROJECTS_KEY = "app:recentProjects";
@@ -14,6 +18,10 @@ const RECENT_PROJECTS_MAX = 10;
 
 const storedTheme = (localStorage.getItem(THEME_KEY) as ThemeMode | null) ?? "dark";
 const storedLang = (localStorage.getItem(LANG_KEY) as Language | null) ?? "zh-CN";
+const storedFontScheme = ((): FontScheme => {
+  const raw = localStorage.getItem(FONT_KEY) as FontScheme | null;
+  return raw && FONT_SCHEMES.includes(raw) ? raw : "manuscript";
+})();
 
 function loadRecentProjects(): string[] {
   try {
@@ -52,6 +60,7 @@ export type SideTab = "files" | "outline" | "search";
 interface AppState {
   theme: ThemeMode;
   language: Language;
+  fontScheme: FontScheme;
   sidebarCollapsed: boolean;
   rightPanelCollapsed: boolean;
   sidebarWidth: number;
@@ -69,6 +78,7 @@ interface AppState {
 
   setTheme: (theme: ThemeMode) => void;
   setLanguage: (lang: Language) => void;
+  setFontScheme: (scheme: FontScheme) => void;
   toggleSidebar: () => void;
   toggleRightPanel: () => void;
   setSidebarCollapsed: (v: boolean) => void;
@@ -100,11 +110,16 @@ function applyTheme(mode: ThemeMode) {
   document.documentElement.setAttribute("data-theme", resolveTheme(mode));
 }
 
+function applyFontScheme(scheme: FontScheme) {
+  document.documentElement.setAttribute("data-font", scheme);
+}
+
 let systemThemeListener: (() => void) | null = null;
 
 export const useAppStore = create<AppState>((set, get) => ({
   theme: storedTheme,
   language: storedLang,
+  fontScheme: storedFontScheme,
   sidebarCollapsed: false,
   rightPanelCollapsed: false,
   sidebarWidth: storedSidebarWidth,
@@ -139,6 +154,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     localStorage.setItem(LANG_KEY, language);
     set({ language });
     i18n.changeLanguage(language);
+  },
+
+  setFontScheme: (fontScheme) => {
+    localStorage.setItem(FONT_KEY, fontScheme);
+    set({ fontScheme });
+    applyFontScheme(fontScheme);
   },
 
   toggleSidebar: () =>
@@ -201,5 +222,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   setShowOnboarding: (v) => set({ showOnboarding: v }),
 }));
 
-// Initialize theme on load using persisted value
+// Initialize theme + font scheme on load using persisted values
 applyTheme(storedTheme);
+applyFontScheme(storedFontScheme);

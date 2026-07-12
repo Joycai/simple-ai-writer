@@ -28,6 +28,20 @@ The UI targets a restrained, modern **Apple-like aesthetic**. These rules are th
 - **Shadow (elevation)**: `--shadow-sm` (resting cards/inputs) → `--shadow-md` (raised) → `--shadow-lg` (popovers/menus/dropdowns) → `--shadow-xl` (modals). `--shadow-focus` for focus rings. Each theme defines its own set (dark deeper, light subtle).
 - **Accent**: `--color-accent`, `--color-accent-hover`, `--color-accent-ring`, `--color-accent-tint`, `--color-accent-tint-strong`.
 - **Glass**: `--glass-bg` (modals), `--glass-bg-strong` (large chrome), `--glass-blur`, `--glass-border`.
+- **Typography**: `--font-serif` (body/editor), `--font-sans` (UI chrome/labels), `--font-mono` (code, numeric, prefix editor). Size scale `--font-size-xs` 11 → `--font-size-3xl` 44. Serif/sans are **swapped per font scheme** (see below); mono is fixed.
+
+### 字体方案 (Font schemes — `data-font`)
+
+User-switchable CJK × Western pairings, selected in Settings → 通用 → 外观. Chosen like themes: `<html data-font="…">` + override blocks in `tokens.css` that follow `:root` (equal specificity → later block wins). State + persistence live in `appStore` (`fontScheme` / `setFontScheme`, `localStorage["app:fontScheme"]`, re-applied on load). **System fonts only — nothing is bundled**, so every scheme ships a full Win/Mac/Linux fallback stack.
+
+| `data-font` | 名称 | 西文 | 中文正文 | 观感 |
+|-------------|------|------|----------|------|
+| `manuscript` (default) | 手稿 | Spectral → Georgia | 宋体回退 | Current look, unchanged |
+| `song` | 宋体书卷 | Georgia / Cambria | 思源宋 → 苹方宋 → SimSun | Printed-book serif |
+| `hei` | 黑体清晰 | 系统无衬线 | 苹方 → 微软雅黑 → 思源黑 | All-sans, modern screen |
+| `kai` | 楷体临帖 | Iowan / Georgia | 楷体 → STKaiti | Handwritten manuscript |
+
+Each scheme overrides **both** `--font-serif` (editor body) and `--font-sans` (UI); `hei` points serif at a sans stack to make the whole app sans. To **add a scheme**: append a `[data-font="…"]` block in `tokens.css`, extend the `FontScheme` union + `FONT_SCHEMES` array in `appStore.ts`, add an entry (with a `previewFont` mirroring the serif stack) to `FONT_SCHEMES` in `SettingsModal.tsx`, and add `systemSettings.general.font*` labels to both locales.
 
 ### 组件模式 (Required patterns)
 - **Primary button**: solid `--color-accent`; hover → `--color-accent-hover` + `translateY(-1px)` + `--shadow-sm`; active → `translateY(0) scale(0.98)`; disabled → reduced opacity. Never opacity-only hover.
