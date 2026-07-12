@@ -66,39 +66,95 @@ A modern, local-first desktop Markdown editor with AI writing assistance powered
 
 ## Installation
 
-### Prerequisites
-- **Node.js** 18+ & pnpm
-- **Rust** 1.70+ (for Tauri)
+### Prerequisites (all platforms)
+- **Node.js** 18+ & **pnpm** 9+
+- **Rust** 1.70+ with the platform's native toolchain (see per-platform guides below)
 - macOS 11+, Windows 10+, or modern Linux
 
-### Development Setup
+### Windows Setup
+
+1. **Install Microsoft C++ Build Tools** — required by the Rust MSVC toolchain and Tauri.
+   - Install [Visual Studio 2022](https://visualstudio.microsoft.com/downloads/) (Community is fine) or the standalone [Build Tools for Visual Studio](https://visualstudio.microsoft.com/visual-cpp-build-tools/), and select the **"Desktop development with C++"** workload.
+
+2. **WebView2 Runtime** — Tauri's rendering engine.
+   - Preinstalled on Windows 11 and up-to-date Windows 10. If missing, download the [Evergreen Bootstrapper](https://developer.microsoft.com/en-us/microsoft-edge/webview2/).
+
+3. **Install Rust** (MSVC toolchain):
+   ```powershell
+   winget install Rustlang.Rustup
+   ```
+   Rustup installs the `stable-x86_64-pc-windows-msvc` toolchain by default. **Restart your terminal afterwards** so `cargo` is on `PATH` (or run `$env:PATH = "$env:USERPROFILE\.cargo\bin;$env:PATH"` in the current session).
+
+4. **Install Node.js and pnpm**:
+   ```powershell
+   winget install OpenJS.NodeJS.LTS
+   npm install -g pnpm
+   ```
+
+5. **Clone, install, and run**:
+   ```powershell
+   git clone https://github.com/yourusername/simple-ai-writer.git
+   cd simple-ai-writer
+   pnpm install
+   pnpm tauri dev      # dev app with hot reload
+   pnpm tauri build    # release build: .msi + NSIS setup.exe
+   ```
+
+   > **Note:** the first `pnpm tauri build` automatically downloads WiX and NSIS (with hash verification) into `%LOCALAPPDATA%\tauri`; later builds reuse the cache. Installers land in `src-tauri\target\release\bundle\{msi,nsis}\`.
+
+**Troubleshooting (Windows)**
+- `cargo: command not found` / "not recognized" → Rust isn't installed or the terminal was opened before installation; see step 3.
+- `link.exe not found` → the C++ workload from step 1 is missing.
+- A blank app window → WebView2 runtime is missing; see step 2.
+
+### macOS Setup
+
+1. **Install Xcode Command Line Tools** — provides `clang` and the system linker:
+   ```bash
+   xcode-select --install
+   ```
+
+2. **Install Rust**:
+   ```bash
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   source "$HOME/.cargo/env"
+   ```
+
+3. **Install Node.js and pnpm** (via [Homebrew](https://brew.sh), or any Node version manager):
+   ```bash
+   brew install node pnpm
+   ```
+
+4. **Clone, install, and run**:
+   ```bash
+   git clone https://github.com/yourusername/simple-ai-writer.git
+   cd simple-ai-writer
+   pnpm install
+   pnpm tauri dev      # dev app with hot reload
+   pnpm tauri build    # release build: .app + .dmg
+   ```
+
+   Bundles land in `src-tauri/target/release/bundle/{macos,dmg}/`.
+
+5. **(Optional) Universal binary** — one artifact for both Apple Silicon and Intel:
+   ```bash
+   rustup target add aarch64-apple-darwin x86_64-apple-darwin
+   pnpm tauri build -- --target universal-apple-darwin
+   ```
+
+**Troubleshooting (macOS)**
+- `xcrun: error: invalid active developer path` → rerun `xcode-select --install`.
+- Unsigned-app warning when opening the built `.app` → right-click → **Open** the first time, or configure [code signing](https://tauri.app/distribute/sign/macos/) for distribution.
+
+### Linux Build
+
+Install your distro's WebKitGTK dev packages (see the [Tauri Linux prerequisites](https://tauri.app/start/prerequisites/#linux)), then:
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/simple-ai-writer.git
-cd simple-ai-writer
-
-# Install dependencies
-pnpm install
-
-# Start dev server with hot reload
-pnpm tauri dev
+pnpm tauri build -- --target x86_64-unknown-linux-gnu   # appimage/deb
 ```
 
-### Build for Release
-
-```bash
-# macOS (dmg)
-pnpm tauri build -- --target universal-apple-darwin
-
-# Windows (msi)
-pnpm tauri build -- --target x86_64-pc-windows-msvc
-
-# Linux (appimage)
-pnpm tauri build -- --target x86_64-unknown-linux-gnu
-```
-
-Binaries will be in `src-tauri/target/release/bundle/`.
+Binaries for all platforms end up under `src-tauri/target/release/bundle/`.
 
 ---
 
