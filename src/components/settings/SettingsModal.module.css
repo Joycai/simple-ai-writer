@@ -327,6 +327,23 @@
 }
 .btnSecondary:hover { background: var(--color-border); }
 
+.btnWithIcon {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+}
+
+/* ─── Debug section (API log toggle + open-folder action) ──────────────────── */
+
+.debugControls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
 .fetchBtn {
   padding: var(--space-2) var(--space-3);
   background: var(--color-accent-tint);

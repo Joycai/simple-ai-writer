@@ -139,6 +139,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
         safetySettings: provider.safetySettings,
         modelId: model.modelId,
         prefix: model.prefix,
+        contextSize: model.contextSize,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userText },

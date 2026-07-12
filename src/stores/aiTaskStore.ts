@@ -135,6 +135,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           safetySettings: provider.safetySettings,
           modelId: model.modelId,
           prefix: model.prefix,
+          contextSize: model.contextSize,
           systemPrompt,
           initialUserMessage,
           projectPath,
@@ -169,6 +170,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           safetySettings: provider.safetySettings,
           modelId: model.modelId,
           prefix: model.prefix,
+          contextSize: model.contextSize,
           messages,
           signal: controller.signal,
           onChunk: (chunk) => {

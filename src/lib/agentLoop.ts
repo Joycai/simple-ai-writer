@@ -35,6 +35,8 @@ export interface AgentLoopOptions {
   safetySettings?: GeminiSafetySettings;
   /** Optional model-scoped prefix prompt. */
   prefix?: string;
+  /** Optional model context window (tokens); checked before each round's request. */
+  contextSize?: number;
   systemPrompt: string;
   /** The assembled user message content (from RAG) for the first turn */
   initialUserMessage: string;
@@ -81,6 +83,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<void> {
       standard: opts.standard,
       modelId: opts.modelId,
       prefix: opts.prefix,
+      contextSize: opts.contextSize,
       messages: history,
       safetySettings: opts.safetySettings,
       tools: isLastRound ? undefined : opts.tools,

@@ -71,7 +71,16 @@ export interface Model {
   enabled: boolean;
   /** Optional model-scoped prefix prompt, prepended to every request as a leading system instruction. */
   prefix?: string;
+  /**
+   * Optional context window size in tokens (max 2,000,000). When set, requests
+   * whose estimated prompt size exceeds it are blocked with a user-facing
+   * notice before sending, instead of being silently truncated by the server.
+   */
+  contextSize?: number;
 }
+
+/** Upper bound for the per-model context size setting (tokens). */
+export const MAX_CONTEXT_SIZE = 2_000_000;
 
 export interface Prompt {
   id: string;
@@ -117,6 +126,9 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   const modelCols = await db.select<{ name: string }[]>(`PRAGMA table_info(models)`);
   if (!modelCols.some((c) => c.name === "prefix")) {
     await db.execute(`ALTER TABLE models ADD COLUMN prefix TEXT`);
+  }
+  if (!modelCols.some((c) => c.name === "context_size")) {
+    await db.execute(`ALTER TABLE models ADD COLUMN context_size INTEGER`);
   }
 
   await db.execute(`
@@ -217,9 +229,9 @@ export async function saveModel(
 ): Promise<void> {
   await db.execute(
     `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null]
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null]
   );
 }
 
@@ -344,5 +356,6 @@ function rowToModel(r: Record<string, unknown>): Model {
     priceOut: r.price_out as number,
     enabled: (r.enabled as number) === 1,
     prefix: (r.prefix as string | null) ?? undefined,
+    contextSize: (r.context_size as number | null) ?? undefined,
   };
 }

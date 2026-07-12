@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { streamCompletion, type StreamChunk, type StreamMessage } from "../aiClient";
+import { streamCompletion, ContextSizeError, type StreamChunk, type StreamMessage } from "../aiClient";
 
 /** Build a fetch Response whose body streams the given raw chunks. */
 function sseResponse(chunks: string[]): Response {
@@ -53,6 +53,38 @@ const text = (received: StreamChunk[]) =>
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe("streamCompletion — context size guard", () => {
+  it("rejects before sending when the estimated prompt exceeds contextSize", async () => {
+    const calls = mockFetch([]);
+    await expect(
+      streamCompletion({
+        baseUrl: "https://api.example.com/v1",
+        apiKey: "test-key",
+        standard: "openai",
+        modelId: "test-model",
+        contextSize: 500,
+        messages: [{ role: "user", content: "x".repeat(4000) }], // ~1000 tokens
+        onChunk: () => {},
+      }),
+    ).rejects.toBeInstanceOf(ContextSizeError);
+    expect(calls.length).toBe(0); // nothing was sent
+  });
+
+  it("sends normally when the prompt fits within contextSize", async () => {
+    const calls = mockFetch([`data: [DONE]\n`]);
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "test-key",
+      standard: "openai",
+      modelId: "test-model",
+      contextSize: 10_000,
+      messages: [{ role: "user", content: "hi" }],
+      onChunk: () => {},
+    });
+    expect(calls.length).toBe(1);
+  });
 });
 
 describe("streamCompletion — OpenAI SSE", () => {

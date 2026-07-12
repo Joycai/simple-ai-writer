@@ -58,6 +58,22 @@ pub fn fs_read_text_file(path: String) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
+/// Append UTF-8 text to a file, creating it (and parent dirs) if missing.
+#[command]
+pub fn fs_append_text_file(path: String, content: String) -> Result<(), String> {
+    use std::io::Write;
+    if let Some(parent) = Path::new(&path).parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|e| e.to_string())?;
+    file.write_all(content.as_bytes())
+        .map_err(|e| e.to_string())
+}
+
 /// Create a directory and all missing parent directories.
 #[command]
 pub fn fs_create_dir(path: String) -> Result<(), String> {

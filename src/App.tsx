@@ -57,7 +57,7 @@ export default function App() {
         background: "var(--color-bg-base)",
       }}
     >
-      <TitleBar onOpenSettings={() => setShowSettings(true)} />
+      <TitleBar />
 
       <div
         style={{

@@ -80,7 +80,13 @@
       "themeLabel": "Theme",
       "themeHint": "Choose how the app looks",
       "languageSection": "Language",
-      "languageLabel": "Interface Language"
+      "languageLabel": "Interface Language",
+      "debugSection": "Debugging",
+      "apiLogLabel": "API Call Logging",
+      "apiLogHint": "When enabled, every AI request, response and error is written to a local log file (API keys excluded) to help troubleshoot issues.",
+      "apiLogOn": "On",
+      "apiLogOff": "Off",
+      "openApiLogs": "Open Log Folder"
     }
   },
   "project": {
@@ -171,7 +177,8 @@
       "noProject": "Please open a project first",
       "noModel": "Please select a model in AI Config first",
       "modelNotFound": "Selected model not found",
-      "providerNotFound": "Provider not found"
+      "providerNotFound": "Provider not found",
+      "contextExceeded": "This request is roughly {{estimated}} tokens, exceeding the model's configured context size ({{limit}} tokens), so it was not sent. Trim the document or referenced content, or raise the context size in Settings → Models; for local models (e.g. Ollama) also raise the server-side context limit (num_ctx), otherwise the request gets silently truncated."
     }
   },
   "aiConfig": {
@@ -234,6 +241,8 @@
       "priceInput": "Input",
       "priceCachedInput": "Cached Input",
       "priceOutput": "Output",
+      "contextSizeLabel": "Context Size (tokens, optional)",
+      "contextSizeHint": "The model's context window, up to 2,000,000. When set, requests estimated to exceed it are blocked with a notice before sending, so the server can't silently truncate them. Leave blank to skip the check.",
       "prefixLabel": "Prefix Prompt (optional)",
       "prefixPlaceholder": "e.g. You are an experienced novel editor…",
       "prefixHint": "Auto-injected as the leading system instruction on every request to this model. Leave blank to disable.",

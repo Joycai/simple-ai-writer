@@ -5,6 +5,9 @@
 
 import type { ApiStandard, GeminiSafetySettings } from "./aiConfig";
 import { toSafetySettingsArray } from "./aiConfig";
+import { beginApiLog } from "./apiLog";
+import { estimateMessagesTokens } from "./tokenEstimate";
+import i18n from "../i18n";
 
 /** A single part inside a multimodal user message. */
 export type ContentPart =
@@ -64,6 +67,27 @@ export interface StreamOptions {
   safetySettings?: GeminiSafetySettings;
   /** Optional model-scoped prefix prompt, prepended as the leading system instruction. */
   prefix?: string;
+  /**
+   * Optional model context window (tokens). When set, a request whose
+   * estimated prompt size exceeds it is rejected with ContextSizeError
+   * before anything is sent — servers like ollama would otherwise silently
+   * truncate the head of the prompt (dropping the system instructions).
+   */
+  contextSize?: number;
+}
+
+/** Thrown before sending when the estimated prompt exceeds the model's configured context size. */
+export class ContextSizeError extends Error {
+  constructor(
+    public readonly estimatedTokens: number,
+    public readonly contextSize: number,
+  ) {
+    super(i18n.t("ai.errors.contextExceeded", {
+      estimated: estimatedTokens.toLocaleString(),
+      limit: contextSize.toLocaleString(),
+    }));
+    this.name = "ContextSizeError";
+  }
 }
 
 /**
@@ -393,8 +417,31 @@ async function streamGemini(opts: StreamOptions): Promise<void> {
 
 export async function streamCompletion(opts: StreamOptions): Promise<void> {
   const merged: StreamOptions = { ...opts, messages: applyPrefix(opts.messages, opts.prefix) };
-  if (merged.standard === "gemini") {
-    return streamGemini(merged);
+  const log = beginApiLog(merged);
+  if (merged.contextSize && merged.contextSize > 0) {
+    const estimated = estimateMessagesTokens(merged.messages);
+    if (estimated > merged.contextSize) {
+      const err = new ContextSizeError(estimated, merged.contextSize);
+      log.error(err);
+      throw err;
+    }
   }
-  return streamOpenAI(merged);
+  const wrapped: StreamOptions = {
+    ...merged,
+    onChunk: (chunk) => {
+      log.chunk(chunk);
+      merged.onChunk(chunk);
+    },
+  };
+  try {
+    if (wrapped.standard === "gemini") {
+      await streamGemini(wrapped);
+    } else {
+      await streamOpenAI(wrapped);
+    }
+    log.success();
+  } catch (e) {
+    log.error(e);
+    throw e;
+  }
 }

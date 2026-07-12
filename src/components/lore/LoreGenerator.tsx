@@ -206,6 +206,7 @@ setAttached((prev) => [...prev, { kind: "text", file, content }]);
         safetySettings: provider.safetySettings,
         modelId: model.modelId,
         prefix: model.prefix,
+        contextSize: model.contextSize,
         onProgress: () => {}, // we show spinner, not raw text
         signal: ctrl.signal,
         systemPrompt: loreScenePrompt?.content,
