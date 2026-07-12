@@ -10,6 +10,8 @@ import {
 } from "../../lib/lore";
 import { parseFrontmatter } from "../../lib/markdown";
 import { loadApiKey } from "../../lib/keyStore";
+import { imageToDataUrl } from "../../lib/loreGenerator";
+import type { ToolDefinition } from "../../lib/aiClient";
 import styles from "./LoreImproveModal.module.css";
 import extra from "./LoreMetaImproveModal.module.css";
 
@@ -39,18 +41,6 @@ function serializeFrontmatter(meta: MetaProposal): string {
     "---",
     "",
   ].join("\n");
-}
-
-function extractJson(raw: string): string {
-  let s = raw.trim();
-  // Strip ```json fences if present
-  const fence = s.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
-  if (fence) s = fence[1].trim();
-  // Find the first balanced {...} block, in case the model added prose
-  const first = s.indexOf("{");
-  const last = s.lastIndexOf("}");
-  if (first !== -1 && last > first) return s.slice(first, last + 1);
-  return s;
 }
 
 export function LoreMetaImproveModal({ entity, onClose }: Props) {
@@ -102,18 +92,42 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
 
     try {
       const catIds = LORE_CATEGORIES.map((c) => c.id);
+
+      // Multimodal models additionally receive the entity's avatar + gallery
+      // images as binary payloads. Text-only models still get the textual
+      // gallery descriptions embedded in the prompt below.
+      const supportsImages = model.type === "multimodal";
+      const galleryLines: string[] = [];
+      if (entity.avatarPath) {
+        const fname = entity.avatarPath.split(/[\\/]/).pop() ?? "avatar";
+        galleryLines.push(`- ${fname}: (avatar)`);
+      }
+      for (const img of entity.images) {
+        galleryLines.push(`- ${img.file}: ${img.desc || "(no description)"}`);
+      }
+
+      const imageDataUrls: string[] = [];
+      if (supportsImages) {
+        const paths = [
+          ...(entity.avatarPath ? [entity.avatarPath] : []),
+          ...entity.images.map((i) => i.absPath),
+        ];
+        for (const p of paths) {
+          try {
+            const { dataUrl } = await imageToDataUrl(p);
+            imageDataUrls.push(dataUrl);
+          } catch { /* skip unreadable image */ }
+        }
+      }
+
       const systemPrompt = [
         "You are a lore entity metadata curator for a fiction writing app.",
-        "Given an entity's current metadata and the body content of its index.md,",
-        "produce REFINED metadata fields.",
-        "Output ONLY a valid JSON object — no code fences, no explanation — with EXACTLY these keys:",
-        '  "name": string (canonical display name)',
-        '  "aliases": string[] (alternative names / nicknames / honorifics used in the prose, for RAG keyword matching)',
-        `  "category": one of ${JSON.stringify(catIds)}`,
-        '  "summary": string (one concise sentence, ≤ 60 chars when possible)',
+        "Given an entity's current metadata, the body content of its index.md, and",
+        "optionally its images, produce REFINED metadata fields — WITHOUT changing the body.",
+        "Call the update_lore_metadata tool exactly once with the refined fields.",
         "Rules:",
         "- Preserve user intent. If a field is already good, return it unchanged.",
-        "- Infer missing aliases from the body (e.g. honorifics, titles, short forms).",
+        "- Infer missing aliases from the body and images (e.g. honorifics, titles, short forms).",
         "- The category should match the entity's nature; only change it if clearly wrong.",
         "- Respond in the same language as the body (Chinese body → Chinese summary).",
       ].join("\n");
@@ -127,11 +141,46 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
         "",
         "BODY (index.md content after frontmatter):",
         body.trim() || "(empty)",
+        galleryLines.length ? `\nIMAGES:\n${galleryLines.join("\n")}` : "",
         instruction.trim() ? `\nADDITIONAL USER INSTRUCTION:\n${instruction.trim()}` : "",
       ].filter(Boolean).join("\n");
 
+      const userContent = imageDataUrls.length
+        ? [
+            { type: "text" as const, text: userText },
+            ...imageDataUrls.map((url) => ({
+              type: "image_url" as const,
+              image_url: { url },
+            })),
+          ]
+        : userText;
+
+      const metadataTool: ToolDefinition = {
+        type: "function",
+        function: {
+          name: "update_lore_metadata",
+          description:
+            "Persist refined metadata (name, aliases, category, summary) for the lore entity. Does not touch the entity body.",
+          parameters: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "Canonical display name" },
+              aliases: {
+                type: "array",
+                items: { type: "string" },
+                description: "Alternative names / nicknames / honorifics for RAG keyword matching",
+              },
+              category: { type: "string", enum: catIds, description: "Entity category" },
+              summary: { type: "string", description: "One concise sentence, ≤ 60 chars when possible" },
+            },
+            required: ["name", "aliases", "category", "summary"],
+          },
+        },
+      };
+
       const { streamCompletion } = await import("../../lib/aiClient");
       let acc = "";
+      let toolArgs = "";
       await streamCompletion({
         baseUrl: provider.baseUrl,
         apiKey,
@@ -142,16 +191,25 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
         contextSize: model.contextSize,
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: userText },
+          { role: "user", content: userContent },
         ],
+        tools: [metadataTool],
+        toolChoice: { type: "function", function: { name: "update_lore_metadata" } },
         onChunk: (chunk) => {
           if ("text" in chunk) { acc += chunk.text; setRawOutput(acc); }
+          else if ("toolCalls" in chunk) {
+            const call =
+              chunk.toolCalls.find((c) => c.name === "update_lore_metadata") ?? chunk.toolCalls[0];
+            if (call) toolArgs = call.arguments;
+          }
         },
         signal: ctrl.signal,
       });
 
-      const jsonStr = extractJson(acc);
-      const parsed = JSON.parse(jsonStr) as Partial<MetaProposal>;
+      if (!toolArgs.trim()) {
+        throw new Error(isZh ? "模型未返回元数据（tool call 为空）。" : "Model returned no metadata (empty tool call).");
+      }
+      const parsed = JSON.parse(toolArgs) as Partial<MetaProposal>;
       const cat = LORE_CATEGORIES.find((c) => c.id === parsed.category);
       setPName(typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim() : entity.name);
       setPAliases(Array.isArray(parsed.aliases)
@@ -202,6 +260,10 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
   const removeAlias = (i: number) =>
     setPAliases(pAliases.filter((_, x) => x !== i));
 
+  const activeModel = models.find((m) => m.id === activeModelId);
+  const imageCount = (entity.avatarPath ? 1 : 0) + entity.images.length;
+  const willSendImages = activeModel?.type === "multimodal" && imageCount > 0;
+
   return (
     <div className={styles.overlay} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className={styles.panel}>
@@ -232,6 +294,13 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
 
         {/* Body */}
         <div className={styles.body}>
+          {willSendImages && (
+            <div className={styles.section} style={{ opacity: 0.75, fontSize: 12 }}>
+              {isZh
+                ? `将随词条设定一并发送 ${imageCount} 张图片（头像 + 图库）供多模态模型参考。`
+                : `Sending ${imageCount} image(s) (avatar + gallery) to the multimodal model.`}
+            </div>
+          )}
           {/* Current snapshot */}
           <div className={styles.section}>
             <label className={styles.label}>{isZh ? "当前元数据" : "Current metadata"}</label>

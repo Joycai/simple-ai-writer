@@ -59,8 +59,14 @@ export interface StreamOptions {
   messages: StreamMessage[];
   onChunk: (chunk: StreamChunk) => void;
   signal?: AbortSignal;
-  /** Tool definitions for OpenAI function calling. Ignored for Gemini. */
+  /** Tool definitions for function calling. Honored by both OpenAI and Gemini. */
   tools?: ToolDefinition[];
+  /**
+   * Tool-choice strategy. Defaults to "auto" when tools are present. Pass
+   * "required" to force *some* tool, or a specific function object to force
+   * exactly that tool. Mapped to Gemini's tool_config.function_calling_config.
+   */
+  toolChoice?: "auto" | "none" | "required" | { type: "function"; function: { name: string } };
   /** Extra top-level fields merged into the OpenAI request body (e.g. response_format). */
   extraBody?: Record<string, unknown>;
   /** Gemini-only: per-request safety filter thresholds. Ignored for OpenAI. */
@@ -128,7 +134,7 @@ async function streamOpenAI(opts: StreamOptions): Promise<void> {
       messages: opts.messages,
       stream: true,
       stream_options: { include_usage: true },
-      ...(opts.tools ? { tools: opts.tools, tool_choice: "auto" } : {}),
+      ...(opts.tools ? { tools: opts.tools, tool_choice: opts.toolChoice ?? "auto" } : {}),
       ...opts.extraBody,
     }),
     signal: opts.signal,
@@ -314,6 +320,20 @@ async function streamGemini(opts: StreamOptions): Promise<void> {
         parameters: t.function.parameters,
       })),
     }];
+    // Translate toolChoice → Gemini's function_calling_config. "auto"/undefined
+    // leaves the default (AUTO). "required"/a specific function force a call
+    // (ANY), optionally restricted to one allowed function name.
+    const tc = opts.toolChoice;
+    if (tc && tc !== "auto") {
+      const mode = tc === "none" ? "NONE" : "ANY";
+      const allowed = typeof tc === "object" ? [tc.function.name] : undefined;
+      body.tool_config = {
+        function_calling_config: {
+          mode,
+          ...(allowed ? { allowed_function_names: allowed } : {}),
+        },
+      };
+    }
   }
   const safetySettings = toSafetySettingsArray(opts.safetySettings);
   if (safetySettings.length) {
