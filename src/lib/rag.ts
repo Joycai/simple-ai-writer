@@ -32,6 +32,14 @@ export interface TaskExtras {
   /** Extra requirement appended to the task instruction (polish/rewrite/summary). */
   requirement?: string;
   /**
+   * Append/continuation mode (the "continue" task). The selection, if any, is
+   * an *anchor* — text to write after — not an edit target: no 【选中内容】 block
+   * is emitted, and the reference window ends at the selection's END (so the
+   * selected text becomes part of 【近期内容】). Falls back to the document end
+   * when there is no selection.
+   */
+  appendMode?: boolean;
+  /**
    * How many characters of text *before* the selection to include as reference
    * context (polish/rewrite/summary). 0 = none. Falls back to MAX_CONTEXT_CHARS
    * when undefined (e.g. "continue").
@@ -169,12 +177,24 @@ export async function assembleContext(
   // rendered text that doesn't match the markdown source), we DO NOT fall back
   // to the document tail — that used to make edits silently target the ending.
   const span = extras?.contextChars ?? MAX_CONTEXT_CHARS;
+  const appendMode = extras?.appendMode ?? false;
   let endIdx: number;
-  if (
+  const rangeMatches =
     selectionRange &&
-    documentText.slice(selectionRange.from, selectionRange.to) === selection
-  ) {
-    endIdx = selectionRange.from;
+    documentText.slice(selectionRange.from, selectionRange.to) === selection;
+  if (appendMode) {
+    // Continue: anchor after the selection so the selected text is context, not
+    // a target. No selection → continue from the document end.
+    if (rangeMatches) {
+      endIdx = selectionRange!.to;
+    } else if (selection) {
+      const off = locateSelectionOffset(documentText, selection);
+      endIdx = off >= 0 ? off + selection.length : documentText.length;
+    } else {
+      endIdx = documentText.length;
+    }
+  } else if (rangeMatches) {
+    endIdx = selectionRange!.from;
   } else if (selection) {
     endIdx = locateSelectionOffset(documentText, selection); // -1 when not found → no context
   } else {
@@ -193,17 +213,23 @@ export async function assembleContext(
   const detailStart = endIdx >= 0 ? Math.max(0, endIdx - span) : -1;
   const storySummary = memory ? selectMemoryForContext(memory, detailStart) : "";
 
-  // Layer 5: task text — base instruction plus any extra requirement
-  const baseTask = selection
-    ? `【选中内容】\n${selection}\n\n${taskInstruction}`
-    : taskInstruction;
   const requirement = extras?.requirement?.trim();
-  const taskText = requirement
-    ? `${baseTask}\n\n【额外要求】\n${requirement}`
-    : baseTask;
-
   const outline = extras?.outline?.trim() || undefined;
   const additionalKnowledge = extras?.additionalKnowledge?.trim() || undefined;
+
+  // Layer 5: task text — base instruction plus any extra requirement. In
+  // append mode the selection is an anchor (already folded into 【近期内容】),
+  // so it is never echoed back as a 【选中内容】 edit target.
+  const baseTask = selection && !appendMode
+    ? `【选中内容】\n${selection}\n\n${taskInstruction}`
+    : taskInstruction;
+  const taskParts = [baseTask];
+  if (requirement) taskParts.push(`【额外要求】\n${requirement}`);
+  // When an outline was actually filled in, explicitly bind the model to it:
+  // the 【大纲/写作方向】 data block alone is easy for smaller local models to
+  // treat as background. Empty outline → no directive → free continuation.
+  if (outline) taskParts.push(i18n.t("ai.instructions.followOutline"));
+  const taskText = taskParts.join("\n\n");
 
   // Rough token estimate
   const total =

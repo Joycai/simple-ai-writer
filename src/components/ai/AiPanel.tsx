@@ -28,6 +28,28 @@ const CONTEXT_CHARS_OPTIONS = [0, 500, 1000, 2000];
  *  (continue/custom) — mirrors rag.ts MAX_CONTEXT_CHARS. */
 const DEFAULT_DETAIL_SPAN = 2400;
 
+// Pinned-lore selection is persisted per project (keyed by project path) so the
+// user doesn't have to re-check the same entities on every reload / task.
+const PINNED_LORE_KEY = "ai:pinnedLore";
+function loadPinnedLore(projectPath: string | null): string[] {
+  if (!projectPath) return [];
+  try {
+    const raw = localStorage.getItem(`${PINNED_LORE_KEY}:${projectPath}`);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+function savePinnedLore(projectPath: string | null, paths: string[]): void {
+  if (!projectPath) return;
+  try {
+    localStorage.setItem(`${PINNED_LORE_KEY}:${projectPath}`, JSON.stringify(paths));
+  } catch {
+    // storage may be unavailable/full — non-critical, pins just won't persist
+  }
+}
+
 function AgentStepsSection({ steps, isRunning }: { steps: ToolStep[]; isRunning: boolean }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(true);
@@ -75,7 +97,7 @@ function AgentStepsSection({ steps, isRunning }: { steps: ToolStep[]; isRunning:
  * a create-update button, and — per the "checkpoint" UX — a warning banner when
  * the user is about to run a task whose pre-window text is largely uncovered.
  */
-function MemorySection({ detailSpan }: { detailSpan: number }) {
+function MemorySection({ detailSpan, appendMode }: { detailSpan: number; appendMode: boolean }) {
   const { t } = useTranslation();
   const { memory, freshness, isGenerating, progress, error, notice, generate, abort } =
     useMemoryStore();
@@ -83,8 +105,12 @@ function MemorySection({ detailSpan }: { detailSpan: number }) {
   const selectionRange = useAiTaskStore((s) => s.selectionRange);
 
   // Text that will NOT be sent verbatim: everything before the detail window.
-  const base = selectionRange?.from ?? content.length;
-  const preDetail = Math.max(0, base - detailSpan);
+  // Its anchor differs by task — edit tasks reference text before the selection
+  // (its start); continue writes after the selection (its end) or the doc end.
+  const anchor = appendMode
+    ? (selectionRange?.to ?? content.length)
+    : (selectionRange?.from ?? content.length);
+  const preDetail = Math.max(0, anchor - detailSpan);
 
   const staleCount =
     memory && freshness && freshness.firstStaleIndex >= 0
@@ -226,6 +252,7 @@ export function AiPanel() {
   const { content } = useEditorStore();
   const { index: loreIndex } = useLoreStore();
   const activeFilePath = useProjectStore((s) => s.activeFilePath);
+  const projectPath = useProjectStore((s) => s.projectPath);
 
   // Story memory follows the active document; staleness re-checks are hashed
   // over the whole doc, so debounce them behind typing.
@@ -241,9 +268,15 @@ export function AiPanel() {
   const [continueLength, setContinueLength] = useState(500);
   const [contextChars, setContextChars] = useState(1000);
 
-  // Lore picker state
-  const [selectedLorePaths, setSelectedLorePaths] = useState<string[]>([]);
+  // Lore picker state — initialized from persisted pins, reloaded on project switch.
+  const [selectedLorePaths, setSelectedLorePaths] = useState<string[]>(() =>
+    loadPinnedLore(useProjectStore.getState().projectPath)
+  );
   const [loreSearch, setLoreSearch] = useState("");
+
+  useEffect(() => {
+    setSelectedLorePaths(loadPinnedLore(projectPath));
+  }, [projectPath]);
 
   // Outline + extra knowledge state (continue)
   const [outline, setOutline] = useState("");
@@ -335,10 +368,21 @@ export function AiPanel() {
     : allLoreEntities;
 
   const toggleLorePath = (dirPath: string) => {
-    setSelectedLorePaths((prev) =>
-      prev.includes(dirPath) ? prev.filter((p) => p !== dirPath) : [...prev, dirPath]
-    );
+    setSelectedLorePaths((prev) => {
+      const next = prev.includes(dirPath)
+        ? prev.filter((p) => p !== dirPath)
+        : [...prev, dirPath];
+      savePinnedLore(projectPath, next);
+      return next;
+    });
   };
+
+  // Only count/label pins that still resolve to an existing entity — a deleted
+  // lore entry can leave a stale path in storage, harmless but shouldn't inflate
+  // the badge (it is also ignored downstream when assembling context).
+  const pinnedCount = selectedLorePaths.filter((p) =>
+    allLoreEntities.some((e) => e.dirPath === p)
+  ).length;
 
   return (
     <div className={styles.panel}>
@@ -383,8 +427,10 @@ export function AiPanel() {
         <div className={styles.emptyHint}>{t("ai.panel.noProvider")}</div>
       ) : (
         <>
-          {/* Selected text — the edit target, shown explicitly */}
-          {selection && (
+          {/* Selected text — the edit target, shown explicitly. Hidden for
+              continue, which appends after the cursor rather than editing a
+              selection, so there is no "selected content" to act on. */}
+          {selection && selectedTask !== "continue" && (
             <div className={styles.selectionCard}>
               <div className={styles.selectionCardHead}>
                 <span className={styles.selectionCardLabel}>{t("ai.panel.selectedContent")}</span>
@@ -425,6 +471,7 @@ export function AiPanel() {
               {/* Story memory status + checkpoint prompt */}
               <MemorySection
                 detailSpan={supportsExtras ? contextChars : DEFAULT_DETAIL_SPAN}
+                appendMode={selectedTask === "continue"}
               />
 
               {/* ── Continue options ── */}
@@ -449,7 +496,7 @@ export function AiPanel() {
                   {/* Lore picker */}
                   <ExtraSection
                     label={t("ai.panel.continueLorePicker")}
-                    badge={selectedLorePaths.length > 0 ? String(selectedLorePaths.length) : undefined}
+                    badge={pinnedCount > 0 ? String(pinnedCount) : undefined}
                   >
                     <LorePicker
                       entities={filteredLoreEntities}
@@ -531,7 +578,7 @@ export function AiPanel() {
                   {/* Lore reference */}
                   <ExtraSection
                     label={t("ai.panel.continueLorePicker")}
-                    badge={selectedLorePaths.length > 0 ? String(selectedLorePaths.length) : undefined}
+                    badge={pinnedCount > 0 ? String(pinnedCount) : undefined}
                   >
                     <LorePicker
                       entities={filteredLoreEntities}

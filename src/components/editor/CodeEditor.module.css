@@ -17,6 +17,25 @@
 .wrap :global(.cm-scroller) {
   overflow: auto;
   padding: 64px 0 32px;
+  /* Restore a slim scrollbar (global CSS hides all of them) so the reader can
+     see position and drag to the end of long chapters. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
+}
+.wrap :global(.cm-scroller)::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.wrap :global(.cm-scroller)::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: 6px;
+}
+.wrap :global(.cm-scroller)::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+  background-clip: content-box;
+  border: 3px solid transparent;
 }
 
 .wrap :global(.cm-content) {

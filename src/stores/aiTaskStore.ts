@@ -127,13 +127,15 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     try {
       if (kind === "continue") {
         // ── Agentic mode: AI reads context autonomously with tools ─────────
+        // Continue is append-mode: any selection is an anchor to write *after*,
+        // never an edit target — so no 【选中内容】 block is sent.
         const bundle = await assembleContext(
           systemPrompt,
           loreIndex,
           documentText,
           get().selection,
           instruction,
-          extras,
+          { ...extras, appendMode: true },
           get().selectionRange,
           memory,
         );

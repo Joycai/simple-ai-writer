@@ -141,6 +141,45 @@ describe("assembleContext", () => {
     expect(bundle.taskText).toContain("rendered text not in source");
   });
 
+  it("append mode: selection is context, not a 【选中内容】 target", async () => {
+    const doc = "PREAMBLE ".repeat(50) + "THE SELECTED TAIL";
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "THE SELECTED TAIL", "Continue.",
+      { appendMode: true },
+      { from: doc.indexOf("THE SELECTED TAIL"), to: doc.length },
+    );
+    // No edit-target block; the instruction stands alone.
+    expect(bundle.taskText).not.toContain("【选中内容】");
+    // The selected text falls into the reference window (anchor = selection end).
+    expect(bundle.recentContext).toContain("THE SELECTED TAIL");
+  });
+
+  it("append mode with no selection continues from the document end", async () => {
+    const doc = "PREAMBLE ".repeat(100);
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "", "Continue.", { appendMode: true },
+    );
+    expect(bundle.recentContext.endsWith("PREAMBLE")).toBe(true);
+    expect(bundle.taskText).not.toContain("【选中内容】");
+  });
+
+  it("binds the model to the outline only when one is filled in", async () => {
+    const doc = "PREAMBLE ".repeat(100);
+    const withOutline = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "", "Continue.",
+      { appendMode: true, outline: "第一步：主角进城" },
+    );
+    expect(withOutline.outline).toBe("第一步：主角进城");
+    // The follow-outline directive is appended after the base instruction
+    // (i18n returns the raw key under the test config).
+    expect(withOutline.taskText).toContain("followOutline");
+    expect(withOutline.taskText.startsWith("Continue.")).toBe(true);
+    const withoutOutline = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "", "Continue.", { appendMode: true },
+    );
+    expect(withoutOutline.taskText).toBe("Continue.");
+  });
+
   it("honours contextChars to bound the reference range (0 = none)", async () => {
     const doc = "PREAMBLE ".repeat(100) + "SELECTED";
     const none = await assembleContext(
