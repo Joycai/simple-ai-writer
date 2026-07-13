@@ -33,12 +33,35 @@
   flex-shrink: 0;
   transition: color var(--transition-fast);
 }
+.label {
+  flex: 1;
+  white-space: nowrap;
+}
+.shortcut {
+  flex-shrink: 0;
+  margin-left: 18px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  letter-spacing: 0.02em;
+}
 .item:hover {
   background: var(--color-bg-elevated);
   color: var(--color-text-primary);
 }
 .item:hover svg {
   color: var(--color-sienna);
+}
+.item:disabled {
+  color: var(--color-text-muted);
+  opacity: 0.45;
+  cursor: default;
+}
+.item:disabled:hover {
+  background: transparent;
+  color: var(--color-text-muted);
+}
+.item:disabled:hover svg {
+  color: var(--color-text-muted);
 }
 
 .itemDanger,

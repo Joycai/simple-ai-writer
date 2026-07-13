@@ -29,7 +29,7 @@ export async function fetchRemoteModels(
   // OpenAI / compatible
   const url = `${baseUrl.replace(/\/$/, "")}/models`;
   const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${apiKey}` },
+    headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
   });
   if (!res.ok) throw new Error(`Models fetch failed: ${res.status}`);
   const data = await res.json();
@@ -59,7 +59,7 @@ export async function testProviderConnection(
     if (standard === "openai_compat" || standard === "openai") {
       const url = `${baseUrl.replace(/\/$/, "")}/models`;
       const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${apiKey}` },
+        headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
       });
       if (!res.ok) {
         const error = await res.text();

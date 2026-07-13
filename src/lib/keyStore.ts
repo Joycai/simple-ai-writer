@@ -40,6 +40,13 @@ async function migrateLegacyKey(providerId: string): Promise<string | null> {
 }
 
 export async function saveApiKey(providerId: string, apiKey: string): Promise<void> {
+  // Keyless providers (e.g. a local Ollama server) store no secret. Persisting an
+  // empty string is rejected by some OS keyrings (macOS Keychain), so treat an
+  // empty key as "remove any existing key" instead.
+  if (!apiKey) {
+    await deleteApiKey(providerId);
+    return;
+  }
   if (!isTauri) {
     sessionStorage.setItem(sessionKey(providerId), apiKey);
     return;

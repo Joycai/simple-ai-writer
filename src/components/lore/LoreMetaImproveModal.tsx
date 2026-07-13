@@ -9,7 +9,9 @@ import {
   LORE_CATEGORIES, type CategoryId, type LoreEntity,
 } from "../../lib/lore";
 import { useImageDataUrl } from "./useImageDataUrl";
+import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { parseFrontmatter } from "../../lib/fs/markdown";
+import { extractJsonObject } from "../../lib/ai/json";
 import { loadApiKey } from "../../lib/keyStore";
 import { imageToDataUrl } from "../../lib/fs/images";
 import type { ToolDefinition } from "../../lib/ai";
@@ -106,17 +108,21 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
         }
       }
 
-      const systemPrompt = [
+      const systemBase = [
         "You are a lore entity metadata curator for a fiction writing app.",
         "Given an entity's current metadata, the body content of its index.md, and",
         "optionally its images, produce REFINED metadata fields — WITHOUT changing the body.",
-        "Call the update_lore_metadata tool exactly once with the refined fields.",
         "Rules:",
         "- Preserve user intent. If a field is already good, return it unchanged.",
         "- Infer missing aliases from the body and images (e.g. honorifics, titles, short forms).",
         "- The category should match the entity's nature; only change it if clearly wrong.",
         "- Respond in the same language as the body (Chinese body → Chinese summary).",
       ].join("\n");
+      // Tool-forced path (structured, preferred). The JSON path is a fallback for
+      // reasoning/"thinking" models (e.g. DeepSeek reasoner) that reject a forced
+      // tool_choice — see the try/catch around the request below.
+      const toolPrompt = `${systemBase}\nCall the update_lore_metadata tool exactly once with the refined fields.`;
+      const jsonPrompt = `${systemBase}\nRespond with ONLY a JSON object — no markdown fences, no prose — with exactly these keys: {"name": string, "aliases": string[], "category": one of [${catIds.join(", ")}], "summary": string}.`;
 
       const userText = [
         "CURRENT METADATA:",
@@ -165,9 +171,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
       };
 
       const { streamCompletion } = await import("../../lib/ai");
-      let acc = "";
-      let toolArgs = "";
-      await streamCompletion({
+      const commonOpts = {
         baseUrl: provider.baseUrl,
         apiKey,
         standard: provider.apiStandard,
@@ -175,26 +179,64 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
         modelId: model.modelId,
         prefix: model.prefix,
         contextSize: model.contextSize,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userContent },
-        ],
-        tools: [metadataTool],
-        toolChoice: { type: "function", function: { name: "update_lore_metadata" } },
-        onChunk: (chunk) => {
-          if ("text" in chunk) { acc += chunk.text; setRawOutput(acc); }
-          else if ("toolCalls" in chunk) {
-            const call =
-              chunk.toolCalls.find((c) => c.name === "update_lore_metadata") ?? chunk.toolCalls[0];
-            if (call) toolArgs = call.arguments;
-          }
-        },
         signal: ctrl.signal,
-      });
+      };
 
-      if (!toolArgs.trim()) {
-        throw new Error(isZh ? "模型未返回元数据（tool call 为空）。" : "Model returned no metadata (empty tool call).");
+      // Forced tool call — structured and reliable on models that support it.
+      const runTool = async (): Promise<string> => {
+        let acc = "";
+        let toolArgs = "";
+        await streamCompletion({
+          ...commonOpts,
+          messages: [
+            { role: "system", content: toolPrompt },
+            { role: "user", content: userContent },
+          ],
+          tools: [metadataTool],
+          toolChoice: { type: "function", function: { name: "update_lore_metadata" } },
+          onChunk: (chunk) => {
+            if ("text" in chunk) { acc += chunk.text; setRawOutput(acc); }
+            else if ("toolCalls" in chunk) {
+              const call =
+                chunk.toolCalls.find((c) => c.name === "update_lore_metadata") ?? chunk.toolCalls[0];
+              if (call) toolArgs = call.arguments;
+            }
+          },
+        });
+        if (!toolArgs.trim()) throw new Error("EMPTY_TOOL_CALL");
+        return toolArgs;
+      };
+
+      // Fallback: ask for plain JSON, no tools. Used when the model rejects a
+      // forced tool_choice (reasoning/"thinking" models) or returns no tool call.
+      const runJson = async (): Promise<string> => {
+        let acc = "";
+        setRawOutput("");
+        await streamCompletion({
+          ...commonOpts,
+          messages: [
+            { role: "system", content: jsonPrompt },
+            { role: "user", content: userContent },
+          ],
+          onChunk: (chunk) => { if ("text" in chunk) { acc += chunk.text; setRawOutput(acc); } },
+        });
+        return extractJsonObject(acc);
+      };
+
+      let toolArgs: string;
+      try {
+        toolArgs = await runTool();
+      } catch (err) {
+        const name = (err as Error)?.name;
+        if (name === "AbortError") throw err;
+        const msg = err instanceof Error ? err.message : String(err);
+        // Only fall back for tool-capability failures; surface real errors as-is.
+        if (!/tool[_ ]?choice|thinking mode|does not support|function call|EMPTY_TOOL_CALL/i.test(msg)) {
+          throw err;
+        }
+        toolArgs = await runJson();
       }
+
       const parsed = JSON.parse(toolArgs) as Partial<MetaProposal>;
       const cat = LORE_CATEGORIES.find((c) => c.id === parsed.category);
       setPName(typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim() : entity.name);
@@ -304,7 +346,8 @@ summary: ${entity.summary}
               {isZh ? "额外指令" : "Extra instruction"}
               <span className={styles.hint}> · {isZh ? "可选" : "optional"}</span>
             </label>
-            <textarea
+            <MarkdownTextarea
+              format={false}
               className={styles.textarea}
               rows={2}
               placeholder={isZh
@@ -385,7 +428,7 @@ summary: ${entity.summary}
                 </div>
 
                 <label className={extra.gLabel}>{isZh ? "概要" : "summary"}</label>
-                <textarea
+                <MarkdownTextarea
                   className={`${extra.gInput} ${extra.gTextarea}`}
                   value={pSummary}
                   onChange={(e) => setPSummary(e.target.value)}

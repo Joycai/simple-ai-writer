@@ -22,6 +22,7 @@ import { readFile } from "../../lib/fs/fileio";
 import { imageToDataUrl } from "../../lib/fs/images";
 import { renderMarkdown } from "../../lib/fs/markdown";
 import { useImageDataUrl } from "./useImageDataUrl";
+import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { LoreImproveModal } from "./LoreImproveModal";
 import { LoreMetaImproveModal } from "./LoreMetaImproveModal";
 import styles from "./LoreDetail.module.css";
@@ -493,7 +494,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
               <label className={styles.eLabel}>
                 {t("lore.detail.fieldSummary", { defaultValue: isZh ? "概要" : "Summary" })}
               </label>
-              <textarea
+              <MarkdownTextarea
                 className={`${styles.eInput} ${styles.eTextarea}`}
                 rows={2}
                 value={dSummary}
@@ -505,7 +506,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
               <label className={styles.eLabel}>
                 {t("lore.detail.fieldBody", { defaultValue: isZh ? "正文 · Markdown" : "Content · Markdown" })}
               </label>
-              <textarea
+              <MarkdownTextarea
                 className={styles.bodyTextarea}
                 value={dBody}
                 onChange={(e) => setDBody(e.target.value)}
@@ -652,7 +653,8 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                           </div>
                           {isEditing ? (
                             <div className={styles.editArea}>
-                              <textarea
+                              <MarkdownTextarea
+                                format={false}
                                 className={styles.editTextarea}
                                 value={editingDraft}
                                 onChange={(e) => setEditingDraft(e.target.value)}

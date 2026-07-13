@@ -154,7 +154,23 @@
     "showSidebar": "展开左侧栏",
     "hideSidebar": "收起左侧栏",
     "showRightPanel": "展开右侧栏",
-    "hideRightPanel": "收起右侧栏"
+    "hideRightPanel": "收起右侧栏",
+    "menu": {
+      "cut": "剪切",
+      "copy": "复制",
+      "paste": "粘贴",
+      "selectAll": "全选",
+      "bold": "加粗",
+      "italic": "斜体",
+      "strikethrough": "删除线",
+      "code": "行内代码",
+      "link": "链接",
+      "heading1": "一级标题",
+      "heading2": "二级标题",
+      "heading3": "三级标题",
+      "quote": "引用",
+      "bulletList": "无序列表"
+    }
   },
   "ai": {
     "tasks": {
@@ -259,6 +275,8 @@
       "apiStandardLabel": "API 标准",
       "baseUrlLabel": "Base URL (留空使用默认)",
       "apiKeyLabel": "API Key",
+      "apiKeyOptional": "本地服务可留空",
+      "apiKeyLocalPlaceholder": "本地服务留空即可",
       "presetsLabel": "快速选择",
       "testConnection": "测试连接",
       "testing": "测试中…",

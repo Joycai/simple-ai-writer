@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EditorState } from "@codemirror/state";
 import {
   EditorView,
@@ -15,7 +15,33 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
 import { useEditorStore } from "../../stores/editorStore";
+import { EditorContextMenu } from "./EditorContextMenu";
+import {
+  toggleBold,
+  toggleItalic,
+  toggleStrikethrough,
+  toggleInlineCode,
+  toggleHeading,
+  toggleQuote,
+  toggleBulletList,
+  insertLink,
+} from "../../lib/editor/format";
 import styles from "./CodeEditor.module.css";
+
+/** Markdown formatting shortcuts. Kept clear of app globals: Mod-S (save),
+ *  Mod-K (command palette) and Mod-Shift-E/L/M (AI actions). */
+const formatKeymap = [
+  { key: "Mod-b", run: toggleBold },
+  { key: "Mod-i", run: toggleItalic },
+  { key: "Mod-Shift-x", run: toggleStrikethrough },
+  { key: "Mod-e", run: toggleInlineCode },
+  { key: "Mod-Shift-k", run: insertLink },
+  { key: "Mod-Alt-1", run: (v: EditorView) => toggleHeading(v, 1) },
+  { key: "Mod-Alt-2", run: (v: EditorView) => toggleHeading(v, 2) },
+  { key: "Mod-Alt-3", run: (v: EditorView) => toggleHeading(v, 3) },
+  { key: "Mod-Shift-.", run: toggleQuote },
+  { key: "Mod-Shift-8", run: toggleBulletList },
+];
 
 interface Props {
   value: string;
@@ -27,6 +53,8 @@ export function CodeEditor({ value, onChange }: Props) {
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
 
   // Update content when external value changes (e.g. file switch)
   const externalValueRef = useRef(value);
@@ -55,7 +83,7 @@ export function CodeEditor({ value, onChange }: Props) {
         crosshairCursor(),
         highlightActiveLine(),
         highlightSelectionMatches(),
-        keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+        keymap.of([...formatKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap]),
         markdown({
           base: markdownLanguage,
           codeLanguages: languages,
@@ -110,5 +138,26 @@ export function CodeEditor({ value, onChange }: Props) {
     }
   }, [value]);
 
-  return <div ref={containerRef} className={styles.wrap} data-ai-selection />;
+  return (
+    <div
+      ref={containerRef}
+      className={styles.wrap}
+      data-ai-selection
+      onContextMenu={(e) => {
+        // Replace the webview's native menu with our own markdown/edit menu.
+        e.preventDefault();
+        viewRef.current?.focus();
+        setMenu({ x: e.clientX, y: e.clientY });
+      }}
+    >
+      {menu && viewRef.current && (
+        <EditorContextMenu
+          x={menu.x}
+          y={menu.y}
+          view={viewRef.current}
+          onClose={() => setMenu(null)}
+        />
+      )}
+    </div>
+  );
 }

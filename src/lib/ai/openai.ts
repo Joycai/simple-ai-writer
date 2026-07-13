@@ -11,7 +11,9 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${opts.apiKey}`,
+      // Keyless local servers (Ollama, LM Studio) need no auth; omit the header
+      // rather than sending an empty bearer token.
+      ...(opts.apiKey ? { Authorization: `Bearer ${opts.apiKey}` } : {}),
     },
     body: JSON.stringify({
       model: opts.modelId,

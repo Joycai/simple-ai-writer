@@ -154,7 +154,23 @@
     "showSidebar": "Show sidebar",
     "hideSidebar": "Hide sidebar",
     "showRightPanel": "Show right panel",
-    "hideRightPanel": "Hide right panel"
+    "hideRightPanel": "Hide right panel",
+    "menu": {
+      "cut": "Cut",
+      "copy": "Copy",
+      "paste": "Paste",
+      "selectAll": "Select All",
+      "bold": "Bold",
+      "italic": "Italic",
+      "strikethrough": "Strikethrough",
+      "code": "Inline Code",
+      "link": "Link",
+      "heading1": "Heading 1",
+      "heading2": "Heading 2",
+      "heading3": "Heading 3",
+      "quote": "Quote",
+      "bulletList": "Bullet List"
+    }
   },
   "ai": {
     "tasks": {
@@ -259,6 +275,8 @@
       "apiStandardLabel": "API Standard",
       "baseUrlLabel": "Base URL (leave empty to use default)",
       "apiKeyLabel": "API Key",
+      "apiKeyOptional": "optional for local servers",
+      "apiKeyLocalPlaceholder": "Leave empty for a local server",
       "presetsLabel": "Quick Select",
       "testConnection": "Test Connection",
       "testing": "Testing…",

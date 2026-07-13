@@ -9,6 +9,7 @@ import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { readEntityFile, writeEntityFile, type LoreEntity } from "../../lib/lore";
 import { useImageDataUrl } from "./useImageDataUrl";
+import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import {
   scanProjectFiles, imageToDataUrl, readTextFileContent, type ProjectFile,
 } from "../../lib/fs/images";
@@ -359,7 +360,8 @@ export function LoreImproveModal({ entity, onClose }: Props) {
               <span className={styles.hint}> · {t("lore.improve.atHint")}</span>
             </label>
             <div ref={textareaWrapRef}>
-              <textarea
+              <MarkdownTextarea
+                format={false}
                 ref={textareaRef}
                 className={styles.textarea}
                 rows={4}
@@ -405,7 +407,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
               <label className={styles.label}>
                 {phase === "generating" ? t("lore.improve.generating") : t("lore.improve.resultLabel")}
               </label>
-              <textarea
+              <MarkdownTextarea
                 className={`${styles.textarea} ${styles.outputArea}`}
                 value={output}
                 onChange={(e) => setOutput(e.target.value)}
