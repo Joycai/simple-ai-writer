@@ -41,7 +41,10 @@ export function Preview({ source, basePath }: Props) {
     import("mermaid").then(({ default: mermaid }) => {
       // Follow the app theme so diagrams aren't dark-on-white in light mode.
       const isLight = document.documentElement.getAttribute("data-theme") === "light";
-      mermaid.initialize({ startOnLoad: false, theme: isLight ? "default" : "dark", securityLevel: "loose" });
+      // securityLevel must stay "strict": "loose" permits raw HTML/click
+      // handlers inside diagram labels, letting a malicious markdown file
+      // inject script into the app webview.
+      mermaid.initialize({ startOnLoad: false, theme: isLight ? "default" : "dark", securityLevel: "strict" });
       mermaidBlocks.forEach((block, i) => {
         const pre = block.parentElement;
         if (!pre) return;

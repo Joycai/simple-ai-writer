@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
 import Database from "@tauri-apps/plugin-sql";
 
 export interface FileNode {
@@ -9,9 +8,20 @@ export interface FileNode {
   children?: FileNode[];
 }
 
+/**
+ * Folder picking happens on the Rust side (project_open_dialog) so the picked
+ * directory can be registered as an allowed root for the scoped fs_* commands.
+ */
 export async function openProjectFolder(): Promise<string | null> {
-  const selected = await open({ directory: true, multiple: false });
-  return typeof selected === "string" ? selected : null;
+  return invoke<string | null>("project_open_dialog");
+}
+
+/**
+ * Register an existing project (from the recents list) as an allowed fs root.
+ * Rejects directories without an on-disk `.ai-writer` marker.
+ */
+export async function registerProjectRoot(path: string): Promise<void> {
+  await invoke("project_register_root", { path });
 }
 
 export async function scaffoldProject(projectPath: string): Promise<void> {

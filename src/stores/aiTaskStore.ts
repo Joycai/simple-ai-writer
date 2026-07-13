@@ -76,6 +76,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     }),
 
   runTask: async (kind, customInstruction, continueLength, extras) => {
+    if (get().isRunning) return; // one task at a time — UI disables triggers, this guards races
     const { activeModelId, activePromptId, models, providers, prompts } = useAiStore.getState();
     const { projectPath } = useProjectStore.getState();
     const { index: loreIndex } = useLoreStore.getState();
@@ -227,11 +228,17 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         });
       }
     } catch (e) {
-      if ((e as Error).name !== "AbortError") {
+      // Only surface errors while this task is still the current one — after
+      // abort() + a quick re-run, this stale rejection must not clobber the
+      // new task's state.
+      if ((e as Error).name !== "AbortError" && get().abortController === controller) {
         set({ error: String(e) });
       }
     } finally {
-      set({ isRunning: false, abortController: null });
+      // Same guard: abort() already cleared state, and a newer task may own it now.
+      if (get().abortController === controller) {
+        set({ isRunning: false, abortController: null });
+      }
     }
   },
 

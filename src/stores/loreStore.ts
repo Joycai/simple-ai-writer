@@ -75,7 +75,7 @@ export const useLoreStore = create<LoreState>((set, get) => ({
     if (saveTimer) clearTimeout(saveTimer);
 
     const timer = selectedEntity && selectedFile
-      ? setTimeout(() => get().saveNow(), 2000)
+      ? setTimeout(() => void get().saveNow().catch(() => {}), 2000) // saveNow logs; retried on next edit/flush
       : null;
 
     set({ fileContent: content, isDirty: true, saveTimer: timer });
@@ -84,8 +84,16 @@ export const useLoreStore = create<LoreState>((set, get) => ({
   saveNow: async () => {
     const { selectedEntity, selectedFile, fileContent } = get();
     if (!selectedEntity || !selectedFile) return;
-    await writeEntityFile(selectedEntity.dirPath, selectedFile, fileContent);
-    set({ isDirty: false, saveTimer: null });
+    try {
+      await writeEntityFile(selectedEntity.dirPath, selectedFile, fileContent);
+      set({ isDirty: false, saveTimer: null });
+    } catch (e) {
+      // Keep isDirty true so the unsaved indicator stays truthful and the next
+      // edit/flush retries the write — clearing it would silently drop the draft.
+      console.error("[loreStore] save failed:", selectedEntity.dirPath, selectedFile, e);
+      set({ saveTimer: null });
+      throw e;
+    }
   },
 
   createNewEntity: async (projectPath, category, id, name) => {
