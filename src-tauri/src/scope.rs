@@ -107,10 +107,7 @@ pub async fn project_open_dialog(
 /// Requires the on-disk `.ai-writer` marker: the webview cannot fabricate it
 /// outside an already-allowed root, so arbitrary directories stay off-limits.
 #[command]
-pub fn project_register_root(
-    path: String,
-    scope: tauri::State<'_, FsScope>,
-) -> Result<(), String> {
+pub fn project_register_root(path: String, scope: tauri::State<'_, FsScope>) -> Result<(), String> {
     let root = Path::new(&path);
     if !root.is_absolute() || !root.join(".ai-writer").is_dir() {
         return Err("Not an existing project folder (missing .ai-writer)".into());

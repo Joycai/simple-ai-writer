@@ -166,7 +166,10 @@ pub fn fs_read_dir(path: String, scope: State<'_, FsScope>) -> Result<Vec<FileNo
 
 /// Recursively list files under a directory (max depth 5).
 #[command]
-pub fn read_dir_recursive(dir_path: String, scope: State<'_, FsScope>) -> Result<Vec<FileNode>, String> {
+pub fn read_dir_recursive(
+    dir_path: String,
+    scope: State<'_, FsScope>,
+) -> Result<Vec<FileNode>, String> {
     scope.check(&dir_path)?;
     read_dir_inner(Path::new(&dir_path), 0)
 }
