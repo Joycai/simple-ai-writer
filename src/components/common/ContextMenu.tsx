@@ -3,7 +3,15 @@ import { createPortal } from "react-dom";
 import styles from "./ContextMenu.module.css";
 
 export type ContextMenuEntry =
-  | { kind: "item"; icon?: ReactNode; label: string; danger?: boolean; action: () => void }
+  | {
+      kind: "item";
+      icon?: ReactNode;
+      label: string;
+      shortcut?: string;
+      danger?: boolean;
+      disabled?: boolean;
+      action: () => void;
+    }
   | { kind: "divider" };
 
 /**
@@ -50,10 +58,12 @@ export function ContextMenu({
             <button
               key={i}
               className={`${styles.item} ${it.danger ? styles.itemDanger : ""}`}
+              disabled={it.disabled}
               onClick={() => { onClose(); it.action(); }}
             >
               {it.icon}
-              <span>{it.label}</span>
+              <span className={styles.label}>{it.label}</span>
+              {it.shortcut && <span className={styles.shortcut}>{it.shortcut}</span>}
             </button>
           ),
         )}
