@@ -67,7 +67,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     useProjectStore.getState().setCharCount(content.length);
 
     const timer = filePath
-      ? setTimeout(() => get().saveNow(), 2000)
+      ? setTimeout(() => void get().saveNow().catch(() => {}), 2000) // saveNow logs; retried on next edit/flush
       : null;
 
     set({ content, headings, isDirty: true, saveTimer: timer });
@@ -76,8 +76,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   saveNow: async () => {
     const { content, filePath } = get();
     if (!filePath) return;
-    await writeFile(filePath, content);
-    set({ isDirty: false, saveTimer: null });
+    try {
+      await writeFile(filePath, content);
+      set({ isDirty: false, saveTimer: null });
+    } catch (e) {
+      // Keep isDirty true so the unsaved indicator stays truthful and the next
+      // edit/flush retries the write — clearing it would silently drop the draft.
+      console.error("[editorStore] save failed:", filePath, e);
+      set({ saveTimer: null });
+      throw e;
+    }
   },
 
   setViewMode: (mode) => set({ viewMode: mode }),

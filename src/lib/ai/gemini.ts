@@ -85,7 +85,9 @@ const DEFAULT_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
 export async function streamGemini(opts: StreamOptions): Promise<void> {
   const base = (opts.baseUrl || DEFAULT_GEMINI_BASE).replace(/\/$/, "");
-  const url = `${base}/models/${opts.modelId}:streamGenerateContent?key=${opts.apiKey}&alt=sse`;
+  // Key goes in the x-goog-api-key header, never the URL — query strings leak
+  // into proxy/server logs and error messages.
+  const url = `${base}/models/${opts.modelId}:streamGenerateContent?alt=sse`;
 
   const systemMsg = opts.messages.find((m) => m.role === "system");
   const nonSystemMsgs = opts.messages.filter((m) => m.role !== "system");
@@ -132,7 +134,7 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
 
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-goog-api-key": opts.apiKey },
     body: JSON.stringify(body),
     signal: opts.signal,
   });

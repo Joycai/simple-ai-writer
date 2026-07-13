@@ -1,5 +1,6 @@
 mod commands;
 mod protocol;
+mod scope;
 mod secrets;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -12,6 +13,18 @@ pub fn run() {
         .plugin(tauri_plugin_sql::Builder::default().build())
         .setup(|app| {
             use tauri::Manager;
+
+            // Path scope for the custom fs_* commands: seed with the app's own
+            // data/log dirs; project roots are added via the project_open_dialog
+            // / project_register_root commands (see scope.rs).
+            let fs_scope = scope::FsScope::new();
+            if let Ok(dir) = app.path().app_data_dir() {
+                fs_scope.allow(&dir);
+            }
+            if let Ok(dir) = app.path().app_log_dir() {
+                fs_scope.allow(&dir);
+            }
+            app.manage(fs_scope);
 
             // Set the app icon explicitly at runtime on the window (helps show custom icon on macOS Dock / Windows taskbar during `tauri dev`)
             if let Some(window) = app.get_webview_window("main") {
@@ -34,6 +47,8 @@ pub fn run() {
             commands::fs_remove_dir,
             commands::fs_remove_file,
             commands::fs_rename,
+            scope::project_open_dialog,
+            scope::project_register_root,
             secrets::secret_save,
             secrets::secret_load,
             secrets::secret_delete,

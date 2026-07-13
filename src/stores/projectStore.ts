@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import {
   openProjectFolder,
+  registerProjectRoot,
   scaffoldProject,
   readDirRecursive,
   getDb,
@@ -62,6 +63,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     set({ isLoading: true });
     try {
+      // Paths from the recents list weren't registered by the dialog — the
+      // scoped fs commands reject them until the Rust side verifies the
+      // on-disk .ai-writer marker and allows the root.
+      if (typeof path === "string") await registerProjectRoot(target);
       await scaffoldProject(target);
       resetDb();
       resetDocuments();

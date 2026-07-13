@@ -1,7 +1,8 @@
+use crate::scope::FsScope;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
-use tauri::command;
+use tauri::{command, State};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct FileNode {
@@ -13,7 +14,8 @@ pub struct FileNode {
 
 /// Scaffold the .ai-writer directory structure inside a project folder.
 #[command]
-pub fn scaffold_project(project_path: String) -> Result<(), String> {
+pub fn scaffold_project(project_path: String, scope: State<'_, FsScope>) -> Result<(), String> {
+    scope.check(&project_path)?;
     let root = Path::new(&project_path);
 
     let dirs = [
@@ -37,7 +39,12 @@ pub fn scaffold_project(project_path: String) -> Result<(), String> {
 
 /// Write raw bytes to a file, creating it if it does not exist.
 #[command]
-pub fn fs_write_binary_file(path: String, data: Vec<u8>) -> Result<(), String> {
+pub fn fs_write_binary_file(
+    path: String,
+    data: Vec<u8>,
+    scope: State<'_, FsScope>,
+) -> Result<(), String> {
+    scope.check(&path)?;
     if let Some(parent) = Path::new(&path).parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -46,7 +53,12 @@ pub fn fs_write_binary_file(path: String, data: Vec<u8>) -> Result<(), String> {
 
 /// Write UTF-8 text to a file, creating it if it does not exist.
 #[command]
-pub fn fs_write_text_file(path: String, content: String) -> Result<(), String> {
+pub fn fs_write_text_file(
+    path: String,
+    content: String,
+    scope: State<'_, FsScope>,
+) -> Result<(), String> {
+    scope.check(&path)?;
     if let Some(parent) = Path::new(&path).parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -55,14 +67,20 @@ pub fn fs_write_text_file(path: String, content: String) -> Result<(), String> {
 
 /// Read UTF-8 text from a file.
 #[command]
-pub fn fs_read_text_file(path: String) -> Result<String, String> {
+pub fn fs_read_text_file(path: String, scope: State<'_, FsScope>) -> Result<String, String> {
+    scope.check(&path)?;
     fs::read_to_string(&path).map_err(|e| e.to_string())
 }
 
 /// Append UTF-8 text to a file, creating it (and parent dirs) if missing.
 #[command]
-pub fn fs_append_text_file(path: String, content: String) -> Result<(), String> {
+pub fn fs_append_text_file(
+    path: String,
+    content: String,
+    scope: State<'_, FsScope>,
+) -> Result<(), String> {
     use std::io::Write;
+    scope.check(&path)?;
     if let Some(parent) = Path::new(&path).parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -77,26 +95,31 @@ pub fn fs_append_text_file(path: String, content: String) -> Result<(), String> 
 
 /// Create a directory and all missing parent directories.
 #[command]
-pub fn fs_create_dir(path: String) -> Result<(), String> {
+pub fn fs_create_dir(path: String, scope: State<'_, FsScope>) -> Result<(), String> {
+    scope.check(&path)?;
     fs::create_dir_all(&path).map_err(|e| e.to_string())
 }
 
 /// Check whether a path exists.
 #[command]
-pub fn fs_exists(path: String) -> Result<bool, String> {
+pub fn fs_exists(path: String, scope: State<'_, FsScope>) -> Result<bool, String> {
+    scope.check(&path)?;
     Ok(Path::new(&path).exists())
 }
 
 /// Remove a directory and all its contents.
 #[command]
-pub fn fs_remove_dir(path: String) -> Result<(), String> {
+pub fn fs_remove_dir(path: String, scope: State<'_, FsScope>) -> Result<(), String> {
+    scope.check(&path)?;
     fs::remove_dir_all(&path).map_err(|e| e.to_string())
 }
 
 /// Rename / move a file or directory. Missing parent dirs of the target are
 /// created so callers can move entities into not-yet-scaffolded folders.
 #[command]
-pub fn fs_rename(from: String, to: String) -> Result<(), String> {
+pub fn fs_rename(from: String, to: String, scope: State<'_, FsScope>) -> Result<(), String> {
+    scope.check(&from)?;
+    scope.check(&to)?;
     if let Some(parent) = Path::new(&to).parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -105,7 +128,8 @@ pub fn fs_rename(from: String, to: String) -> Result<(), String> {
 
 /// Remove a single file. Missing files are a no-op so callers can be tolerant.
 #[command]
-pub fn fs_remove_file(path: String) -> Result<(), String> {
+pub fn fs_remove_file(path: String, scope: State<'_, FsScope>) -> Result<(), String> {
+    scope.check(&path)?;
     let p = Path::new(&path);
     if !p.exists() {
         return Ok(());
@@ -115,7 +139,8 @@ pub fn fs_remove_file(path: String) -> Result<(), String> {
 
 /// List one level of a directory (name + is_dir). Returns [] if path doesn't exist.
 #[command]
-pub fn fs_read_dir(path: String) -> Result<Vec<FileNode>, String> {
+pub fn fs_read_dir(path: String, scope: State<'_, FsScope>) -> Result<Vec<FileNode>, String> {
+    scope.check(&path)?;
     let p = Path::new(&path);
     if !p.exists() {
         return Ok(vec![]);
@@ -141,7 +166,8 @@ pub fn fs_read_dir(path: String) -> Result<Vec<FileNode>, String> {
 
 /// Recursively list files under a directory (max depth 5).
 #[command]
-pub fn read_dir_recursive(dir_path: String) -> Result<Vec<FileNode>, String> {
+pub fn read_dir_recursive(dir_path: String, scope: State<'_, FsScope>) -> Result<Vec<FileNode>, String> {
+    scope.check(&dir_path)?;
     read_dir_inner(Path::new(&dir_path), 0)
 }
 

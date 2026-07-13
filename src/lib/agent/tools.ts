@@ -132,6 +132,34 @@ export async function executeTool(
   }
 }
 
+// ─── Path containment ────────────────────────────────────────────────────────
+
+/** Lexically resolve `.`/`..` segments (both `/` and `\` separators). */
+export function normalizePathSegments(p: string): string {
+  const isAbsolute = /^[/\\]/.test(p);
+  const out: string[] = [];
+  for (const part of p.split(/[/\\]+/)) {
+    if (part === "" || part === ".") continue;
+    if (part === "..") {
+      out.pop(); // no-op at root — `..` cannot climb above it
+      continue;
+    }
+    out.push(part);
+  }
+  return (isAbsolute ? "/" : "") + out.join("/");
+}
+
+/**
+ * True when `target` equals `base` or lives inside it, comparing normalized
+ * paths on whole component boundaries (so `/project-evil` is NOT within
+ * `/project`, and `/project/../etc` is rejected).
+ */
+export function isPathWithin(base: string, target: string): boolean {
+  const b = normalizePathSegments(base);
+  const t = normalizePathSegments(target);
+  return t === b || t.startsWith(b + "/");
+}
+
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 function formatLoreIndex(loreIndex: LoreIndex): string {
@@ -238,6 +266,10 @@ async function listWritingFiles(
 ): Promise<ToolResult> {
   const base = `${projectPath}/writing`;
   const target = folder ? `${base}/${folder}` : base;
+  // The folder argument is model-controlled — reject `../` escapes.
+  if (!isPathWithin(base, target)) {
+    return { toolCallId, content: "Error: Folder is outside the project writing directory." };
+  }
   try {
     const entries = await readDir(target);
     const paths = entries
@@ -259,7 +291,11 @@ async function readWritingFile(
   path: string,
   projectPath: string,
 ): Promise<ToolResult> {
-  if (!path.startsWith(projectPath)) {
+  // The path argument is model-controlled. A plain startsWith check would
+  // accept `../` traversal (`/project/../etc/x`) and prefix siblings
+  // (`/project-evil/x`), so compare lexically normalized paths on whole
+  // component boundaries.
+  if (!isPathWithin(projectPath, path)) {
     return { toolCallId, content: "Error: Path is outside the project directory." };
   }
   try {
