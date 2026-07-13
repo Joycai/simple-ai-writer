@@ -37,7 +37,13 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
   { name: "Google Gemini", apiStandard: "gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta" },
   { name: "DeepSeek", apiStandard: "openai_compat", baseUrl: "https://api.deepseek.com" },
   { name: "Anthropic", apiStandard: "openai_compat", baseUrl: "https://api.anthropic.com/v1" },
+  { name: "Ollama", apiStandard: "openai_compat", baseUrl: "http://localhost:11434/v1" },
 ];
+
+/** A server on the local machine (Ollama, LM Studio) — these need no API key. */
+function isLocalEndpoint(url: string): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:|\/|$)/i.test(url.trim());
+}
 
 const THEMES: { value: ThemeMode; icon: React.ReactNode; labelKey: string }[] = [
   { value: "dark", icon: <Moon size={14} />, labelKey: "settings.dark" },
@@ -233,8 +239,12 @@ function ProvidersTab() {
     setTestResult(null);
   };
 
+  // Local servers (Ollama, LM Studio) authenticate no requests, so the API key
+  // is optional for them but required for everything else.
+  const keyRequired = !isLocalEndpoint(form.baseUrl);
+
   const handleTest = async () => {
-    if (!form.baseUrl || !form.apiKey) {
+    if (!form.baseUrl || (keyRequired && !form.apiKey)) {
       setTestResult({ ok: false, message: t("aiConfig.providers.testMissingFields") });
       return;
     }
@@ -261,7 +271,7 @@ function ProvidersTab() {
   };
 
   const handleSave = async () => {
-    if (!form.name || !form.apiKey) return;
+    if (!form.name || (keyRequired && !form.apiKey)) return;
     setSaving(true);
     setError(null);
     try {
@@ -349,12 +359,17 @@ function ProvidersTab() {
               onChange={(e) => setForm({ ...form, baseUrl: e.target.value })} />
           </div>
           <div className={styles.fieldGroup}>
-            <label className={styles.label}>{t("aiConfig.providers.apiKeyLabel")}</label>
-            <input className={styles.input} type="password" placeholder="sk-…" value={form.apiKey}
+            <label className={styles.label}>
+              {t("aiConfig.providers.apiKeyLabel")}
+              {!keyRequired && <span className={styles.hint}> · {t("aiConfig.providers.apiKeyOptional")}</span>}
+            </label>
+            <input className={styles.input} type="password"
+              placeholder={keyRequired ? "sk-…" : t("aiConfig.providers.apiKeyLocalPlaceholder")}
+              value={form.apiKey}
               onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
           </div>
           <div className={styles.testRow}>
-            <button className={styles.btnSecondary} onClick={handleTest} disabled={!form.baseUrl || !form.apiKey || testing}>
+            <button className={styles.btnSecondary} onClick={handleTest} disabled={!form.baseUrl || (keyRequired && !form.apiKey) || testing}>
               {testing ? t("aiConfig.providers.testing") : t("aiConfig.providers.testConnection")}
             </button>
             {testResult && (
@@ -373,7 +388,7 @@ function ProvidersTab() {
           <div className={styles.formActions}>
             <button className={styles.btnSecondary} onClick={resetForm}>{t("aiConfig.providers.cancel")}</button>
             <button className={styles.btnPrimary} onClick={handleSave}
-              disabled={!form.name || !form.apiKey || saving}>
+              disabled={!form.name || (keyRequired && !form.apiKey) || saving}>
               {saving
                 ? (editingId ? t("aiConfig.providers.editing") : t("aiConfig.providers.saving"))
                 : (editingId ? t("aiConfig.providers.edit") : t("aiConfig.providers.save"))}

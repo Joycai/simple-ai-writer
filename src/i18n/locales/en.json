@@ -275,6 +275,8 @@
       "apiStandardLabel": "API Standard",
       "baseUrlLabel": "Base URL (leave empty to use default)",
       "apiKeyLabel": "API Key",
+      "apiKeyOptional": "optional for local servers",
+      "apiKeyLocalPlaceholder": "Leave empty for a local server",
       "presetsLabel": "Quick Select",
       "testConnection": "Test Connection",
       "testing": "Testing…",

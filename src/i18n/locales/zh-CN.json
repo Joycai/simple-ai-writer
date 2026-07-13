@@ -275,6 +275,8 @@
       "apiStandardLabel": "API 标准",
       "baseUrlLabel": "Base URL (留空使用默认)",
       "apiKeyLabel": "API Key",
+      "apiKeyOptional": "本地服务可留空",
+      "apiKeyLocalPlaceholder": "本地服务留空即可",
       "presetsLabel": "快速选择",
       "testConnection": "测试连接",
       "testing": "测试中…",

@@ -259,3 +259,44 @@ describe("streamCompletion — toolChoice", () => {
     expect(calls[0].body.tool_config).toBeUndefined();
   });
 });
+
+describe("streamCompletion — auth header", () => {
+  /** Capture the outgoing request headers. */
+  function mockFetchHeaders() {
+    const calls: { headers: Headers }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        calls.push({ headers: new Headers(init.headers) });
+        return sseResponse([`data: [DONE]\n`]);
+      }),
+    );
+    return calls;
+  }
+
+  it("sends a bearer token when an API key is set", async () => {
+    const calls = mockFetchHeaders();
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "test-key",
+      standard: "openai",
+      modelId: "m",
+      messages: [{ role: "user", content: "hi" }],
+      onChunk: () => {},
+    });
+    expect(calls[0].headers.get("Authorization")).toBe("Bearer test-key");
+  });
+
+  it("omits Authorization for keyless local servers (Ollama)", async () => {
+    const calls = mockFetchHeaders();
+    await streamCompletion({
+      baseUrl: "http://localhost:11434/v1",
+      apiKey: "",
+      standard: "openai_compat",
+      modelId: "llama3",
+      messages: [{ role: "user", content: "hi" }],
+      onChunk: () => {},
+    });
+    expect(calls[0].headers.has("Authorization")).toBe(false);
+  });
+});
