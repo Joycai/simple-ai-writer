@@ -13,6 +13,7 @@ import {
   type ProjectFile,
 } from "../../lib/fs/images";
 import { generateLore } from "../../lib/lore/generator";
+import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { writeBinaryFile } from "../../lib/fs/fileio";
 import { loadApiKey } from "../../lib/keyStore";
 import styles from "./LoreGenerator.module.css";
@@ -327,7 +328,8 @@ setAttached((prev) => [...prev, { kind: "text", file, content }]);
                 {t("lore.generator.descriptionText")} <span className={styles.hint}>· {t("lore.generator.descriptionHint")}</span>
               </label>
               <div ref={textareaWrapRef}>
-                <textarea
+                <MarkdownTextarea
+                  format={false}
                   ref={textareaRef}
                   className={styles.textarea}
                   rows={6}
@@ -447,7 +449,7 @@ setAttached((prev) => [...prev, { kind: "text", file, content }]);
                 {/* Content */}
                 <div className={styles.fieldGroup}>
                   <label className={styles.label}>{t("lore.generator.contentLabel")} <span className={styles.hint}>· {t("lore.generator.contentHint")}</span></label>
-                  <textarea className={styles.textarea} rows={10} value={editContent}
+                  <MarkdownTextarea className={styles.textarea} rows={10} value={editContent}
                     onChange={(e) => setEditContent(e.target.value)}
                     style={{ resize: "vertical" }} />
                 </div>

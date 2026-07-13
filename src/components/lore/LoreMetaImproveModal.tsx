@@ -9,6 +9,7 @@ import {
   LORE_CATEGORIES, type CategoryId, type LoreEntity,
 } from "../../lib/lore";
 import { useImageDataUrl } from "./useImageDataUrl";
+import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { parseFrontmatter } from "../../lib/fs/markdown";
 import { loadApiKey } from "../../lib/keyStore";
 import { imageToDataUrl } from "../../lib/fs/images";
@@ -304,7 +305,8 @@ summary: ${entity.summary}
               {isZh ? "额外指令" : "Extra instruction"}
               <span className={styles.hint}> · {isZh ? "可选" : "optional"}</span>
             </label>
-            <textarea
+            <MarkdownTextarea
+              format={false}
               className={styles.textarea}
               rows={2}
               placeholder={isZh
@@ -385,7 +387,7 @@ summary: ${entity.summary}
                 </div>
 
                 <label className={extra.gLabel}>{isZh ? "概要" : "summary"}</label>
-                <textarea
+                <MarkdownTextarea
                   className={`${extra.gInput} ${extra.gTextarea}`}
                   value={pSummary}
                   onChange={(e) => setPSummary(e.target.value)}
