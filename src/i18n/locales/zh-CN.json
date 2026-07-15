@@ -223,7 +223,9 @@
       "clear": "清除",
       "insertToDoc": "插入文档",
       "inputTokens": "输入 {{tokens}} tokens",
-      "outputTokens": "输出 {{tokens}} tokens"
+      "outputTokens": "输出 {{tokens}} tokens",
+      "resultsPlaceholder": "选择左侧任务并执行，结果与 Agent 日志将显示在这里",
+      "thinking": "思考中…"
     },
     "memory": {
       "title": "前情记忆",

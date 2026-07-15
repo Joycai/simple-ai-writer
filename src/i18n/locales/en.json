@@ -223,7 +223,9 @@
       "clear": "Clear",
       "insertToDoc": "Insert to Document",
       "inputTokens": "Input {{tokens}} tokens",
-      "outputTokens": "Output {{tokens}} tokens"
+      "outputTokens": "Output {{tokens}} tokens",
+      "resultsPlaceholder": "Pick a task on the left and run it — results and the agent log appear here",
+      "thinking": "Thinking…"
     },
     "memory": {
       "title": "Story Memory",

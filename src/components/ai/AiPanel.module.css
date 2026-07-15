@@ -1,10 +1,93 @@
+/* ── Two-column workspace ─────────────────────────────────────────
+   Left: scrollable config with a sticky run/stop footer.
+   Right: dedicated results pane (agent log + streaming output) that
+   is always visible and never squeezed by the config above it. */
 .panel {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.configCol {
+  display: flex;
+  flex-direction: column;
+  width: 300px;
+  flex-shrink: 0;
+  min-height: 0;
+  border-right: 1px solid var(--color-border-soft);
+}
+.configScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-3);
-  height: 100%;
+}
+.configFooter {
+  flex-shrink: 0;
+  padding: var(--space-3);
+  border-top: 1px solid var(--color-border-soft);
+  background: var(--color-bg-elevated);
+}
+
+.resultCol {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.resultScroll {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+
+/* Empty results placeholder */
+.resultEmpty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  text-align: center;
+  padding: var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+}
+.resultEmpty span { max-width: 220px; }
+
+/* Waiting-for-first-token indicator */
+.thinking {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* Stack to a single column when the drawer is narrow (small viewports). */
+@media (max-width: 640px) {
+  .panel { flex-direction: column; overflow-y: auto; }
+  .configCol {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border-soft);
+  }
+  .configScroll { overflow: visible; }
+  .resultCol { overflow: visible; }
+  .resultScroll { overflow: visible; }
 }
 
 .configRow {
@@ -95,7 +178,7 @@
 }
 
 .taskOption {
-  padding: var(--space-2) var(--space-3);
+  padding: 6px var(--space-2);
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -129,7 +212,7 @@
 
 .taskOptionFull {
   grid-column: 1 / -1;
-  padding: var(--space-2) var(--space-3);
+  padding: 6px var(--space-2);
   background: var(--color-bg-elevated);
   border: 1px dashed var(--color-border);
   border-radius: var(--radius-md);
@@ -490,6 +573,8 @@
   margin: 0;
   padding: var(--space-1) 0;
   background: var(--color-bg-surface);
+  max-height: 260px;
+  overflow-y: auto;
 }
 
 .agentStepItem {
