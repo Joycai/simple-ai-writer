@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight, Check, X, Square, Play, BookMarked } from "lucide-react";
+import { ChevronDown, ChevronRight, Check, X, Square, Play, BookMarked, Sparkles } from "lucide-react";
 import { useAiTaskStore, type TaskKind, type ToolStep } from "../../stores/aiTaskStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useEditorStore } from "../../stores/editorStore";
@@ -384,288 +384,315 @@ export function AiPanel() {
     allLoreEntities.some((e) => e.dirPath === p)
   ).length;
 
+  // Results pane shows something whenever a run is in flight or has produced output.
+  const hasResults = isRunning || !!output || !!error || toolSteps.length > 0 || !!usage;
+
   return (
     <div className={styles.panel}>
-      {/* Model selector */}
-      <div className={styles.configRow}>
-        <select
-          className={styles.select}
-          value={activeModelId ?? ""}
-          onChange={(e) => setActiveModel(e.target.value)}
-        >
-          <option value="">{t("ai.panel.selectModel")}</option>
-          {models.map((m) => {
-            const pname = providers.find((p) => p.id === m.providerId)?.name ?? "";
-            return (
-              <option key={m.id} value={m.id}>
-                {pname} / {m.name}
-              </option>
-            );
-          })}
-        </select>
-      </div>
+      {/* ══════════ Config column ══════════ */}
+      <div className={styles.configCol}>
+        <div className={styles.configScroll}>
+          {/* Model selector */}
+          <div className={styles.configRow}>
+            <select
+              className={styles.select}
+              value={activeModelId ?? ""}
+              onChange={(e) => setActiveModel(e.target.value)}
+            >
+              <option value="">{t("ai.panel.selectModel")}</option>
+              {models.map((m) => {
+                const pname = providers.find((p) => p.id === m.providerId)?.name ?? "";
+                return (
+                  <option key={m.id} value={m.id}>
+                    {pname} / {m.name}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
 
-      {/* Prompt selector */}
-      {prompts.length > 0 && (
-        <div className={styles.configRow}>
-          <select
-            className={styles.select}
-            value={activePromptId ?? ""}
-            onChange={(e) => setActivePrompt(e.target.value)}
-          >
-            <option value="">{t("ai.panel.defaultSystemPrompt")}</option>
-            {prompts
-              .filter((p) => p.scene === "system")
-              .map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-          </select>
-        </div>
-      )}
-
-      {!hasConfig ? (
-        <div className={styles.emptyHint}>{t("ai.panel.noProvider")}</div>
-      ) : (
-        <>
-          {/* Selected text — the edit target, shown explicitly. Hidden for
-              continue, which appends after the cursor rather than editing a
-              selection, so there is no "selected content" to act on. */}
-          {selection && selectedTask !== "continue" && (
-            <div className={styles.selectionCard}>
-              <div className={styles.selectionCardHead}>
-                <span className={styles.selectionCardLabel}>{t("ai.panel.selectedContent")}</span>
-                <span className={styles.selectionCardCount}>
-                  {t("ai.panel.selectedChars", { count: selection.length })}
-                </span>
-              </div>
-              <div className={styles.selectionCardBody}>{selection}</div>
+          {/* Prompt selector */}
+          {prompts.length > 0 && (
+            <div className={styles.configRow}>
+              <select
+                className={styles.select}
+                value={activePromptId ?? ""}
+                onChange={(e) => setActivePrompt(e.target.value)}
+              >
+                <option value="">{t("ai.panel.defaultSystemPrompt")}</option>
+                {prompts
+                  .filter((p) => p.scene === "system")
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+              </select>
             </div>
           )}
 
-          {/* Task selection grid */}
-          <div className={styles.taskGrid}>
-            {TASK_OPTIONS.map((opt) => (
-              <button
-                key={opt.kind}
-                className={`${styles.taskOption} ${selectedTask === opt.kind ? styles.taskOptionActive : ""}`}
-                onClick={() => setSelectedTask(opt.kind)}
-                disabled={isRunning}
-                title={t(opt.descKey)}
-              >
-                {t(opt.labelKey)}
-              </button>
-            ))}
-            <button
-              className={`${styles.taskOptionFull} ${selectedTask === "custom" ? styles.taskOptionActive : ""}`}
-              onClick={() => setSelectedTask("custom")}
-              disabled={isRunning}
-            >
-              {t("ai.tasks.custom")}
-            </button>
-          </div>
-
-          {/* Config panel — appears when a task is selected */}
-          {selectedTask && (
-            <div className={styles.configPanel}>
-
-              {/* Story memory status + checkpoint prompt */}
-              <MemorySection
-                detailSpan={supportsExtras ? contextChars : DEFAULT_DETAIL_SPAN}
-                appendMode={selectedTask === "continue"}
-              />
-
-              {/* ── Continue options ── */}
-              {selectedTask === "continue" && (
-                <>
-                  {/* Length picker */}
-                  <div className={styles.continueLengthRow}>
-                    <span className={styles.continueLengthLabel}>{t("ai.panel.continueLength")}</span>
-                    <div className={styles.continueLengthOptions}>
-                      {CONTINUE_LENGTH_OPTIONS.map((len) => (
-                        <button
-                          key={len}
-                          className={`${styles.lengthChip} ${continueLength === len ? styles.lengthChipActive : ""}`}
-                          onClick={() => setContinueLength(len)}
-                        >
-                          {len >= 1000 ? `${len / 1000}k` : len}
-                        </button>
-                      ))}
-                    </div>
+          {!hasConfig ? (
+            <div className={styles.emptyHint}>{t("ai.panel.noProvider")}</div>
+          ) : (
+            <>
+              {/* Selected text — the edit target, shown explicitly. Hidden for
+                  continue, which appends after the cursor rather than editing a
+                  selection, so there is no "selected content" to act on. */}
+              {selection && selectedTask !== "continue" && (
+                <div className={styles.selectionCard}>
+                  <div className={styles.selectionCardHead}>
+                    <span className={styles.selectionCardLabel}>{t("ai.panel.selectedContent")}</span>
+                    <span className={styles.selectionCardCount}>
+                      {t("ai.panel.selectedChars", { count: selection.length })}
+                    </span>
                   </div>
-
-                  {/* Lore picker */}
-                  <ExtraSection
-                    label={t("ai.panel.continueLorePicker")}
-                    badge={pinnedCount > 0 ? String(pinnedCount) : undefined}
-                  >
-                    <LorePicker
-                      entities={filteredLoreEntities}
-                      search={loreSearch}
-                      setSearch={setLoreSearch}
-                      selectedPaths={selectedLorePaths}
-                      toggle={toggleLorePath}
-                    />
-                  </ExtraSection>
-
-                  {/* Outline */}
-                  <ExtraSection
-                    label={t("ai.panel.continueOutline")}
-                    badge={outline.trim() ? "✓" : undefined}
-                  >
-                    <textarea
-                      className={styles.extraTextarea}
-                      rows={4}
-                      placeholder={t("ai.panel.continueOutlinePlaceholder")}
-                      value={outline}
-                      onChange={(e) => setOutline(e.target.value)}
-                    />
-                  </ExtraSection>
-
-                  {/* Additional knowledge */}
-                  <ExtraSection
-                    label={t("ai.panel.continueExtraKnowledge")}
-                    badge={additionalKnowledge.trim() ? "✓" : undefined}
-                  >
-                    <textarea
-                      className={styles.extraTextarea}
-                      rows={4}
-                      placeholder={t("ai.panel.continueExtraKnowledgePlaceholder")}
-                      value={additionalKnowledge}
-                      onChange={(e) => setAdditionalKnowledge(e.target.value)}
-                    />
-                  </ExtraSection>
-                </>
+                  <div className={styles.selectionCardBody}>{selection}</div>
+                </div>
               )}
 
-              {/* ── Polish / Rewrite / Summary options ── */}
-              {supportsExtras && (
-                <>
-                  {needsSelection && (
-                    <div className={styles.selectHint}>{t("ai.panel.selectFirstHint")}</div>
+              {/* Task selector — compact pill row */}
+              <div className={styles.taskGrid}>
+                {TASK_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.kind}
+                    className={`${styles.taskOption} ${selectedTask === opt.kind ? styles.taskOptionActive : ""}`}
+                    onClick={() => setSelectedTask(opt.kind)}
+                    disabled={isRunning}
+                    title={t(opt.descKey)}
+                  >
+                    {t(opt.labelKey)}
+                  </button>
+                ))}
+                <button
+                  className={`${styles.taskOptionFull} ${selectedTask === "custom" ? styles.taskOptionActive : ""}`}
+                  onClick={() => setSelectedTask("custom")}
+                  disabled={isRunning}
+                >
+                  {t("ai.tasks.custom")}
+                </button>
+              </div>
+
+              {/* Config panel — appears when a task is selected */}
+              {selectedTask && (
+                <div className={styles.configPanel}>
+
+                  {/* Story memory status + checkpoint prompt */}
+                  <MemorySection
+                    detailSpan={supportsExtras ? contextChars : DEFAULT_DETAIL_SPAN}
+                    appendMode={selectedTask === "continue"}
+                  />
+
+                  {/* ── Continue options ── */}
+                  {selectedTask === "continue" && (
+                    <>
+                      {/* Length picker */}
+                      <div className={styles.continueLengthRow}>
+                        <span className={styles.continueLengthLabel}>{t("ai.panel.continueLength")}</span>
+                        <div className={styles.continueLengthOptions}>
+                          {CONTINUE_LENGTH_OPTIONS.map((len) => (
+                            <button
+                              key={len}
+                              className={`${styles.lengthChip} ${continueLength === len ? styles.lengthChipActive : ""}`}
+                              onClick={() => setContinueLength(len)}
+                            >
+                              {len >= 1000 ? `${len / 1000}k` : len}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Lore picker */}
+                      <ExtraSection
+                        label={t("ai.panel.continueLorePicker")}
+                        badge={pinnedCount > 0 ? String(pinnedCount) : undefined}
+                      >
+                        <LorePicker
+                          entities={filteredLoreEntities}
+                          search={loreSearch}
+                          setSearch={setLoreSearch}
+                          selectedPaths={selectedLorePaths}
+                          toggle={toggleLorePath}
+                        />
+                      </ExtraSection>
+
+                      {/* Outline */}
+                      <ExtraSection
+                        label={t("ai.panel.continueOutline")}
+                        badge={outline.trim() ? "✓" : undefined}
+                      >
+                        <textarea
+                          className={styles.extraTextarea}
+                          rows={4}
+                          placeholder={t("ai.panel.continueOutlinePlaceholder")}
+                          value={outline}
+                          onChange={(e) => setOutline(e.target.value)}
+                        />
+                      </ExtraSection>
+
+                      {/* Additional knowledge */}
+                      <ExtraSection
+                        label={t("ai.panel.continueExtraKnowledge")}
+                        badge={additionalKnowledge.trim() ? "✓" : undefined}
+                      >
+                        <textarea
+                          className={styles.extraTextarea}
+                          rows={4}
+                          placeholder={t("ai.panel.continueExtraKnowledgePlaceholder")}
+                          value={additionalKnowledge}
+                          onChange={(e) => setAdditionalKnowledge(e.target.value)}
+                        />
+                      </ExtraSection>
+                    </>
                   )}
 
-                  {/* Reference-context range (text before the selection) */}
-                  <div className={styles.continueLengthRow}>
-                    <span className={styles.continueLengthLabel}>{t("ai.panel.contextRange")}</span>
-                    <div className={styles.continueLengthOptions}>
-                      {CONTEXT_CHARS_OPTIONS.map((n) => (
-                        <button
-                          key={n}
-                          className={`${styles.lengthChip} ${contextChars === n ? styles.lengthChipActive : ""}`}
-                          onClick={() => setContextChars(n)}
-                          title={t("ai.panel.contextRangeHint")}
-                        >
-                          {n === 0 ? t("ai.panel.contextRangeNone") : n >= 1000 ? `${n / 1000}k` : n}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  {/* ── Polish / Rewrite / Summary options ── */}
+                  {supportsExtras && (
+                    <>
+                      {needsSelection && (
+                        <div className={styles.selectHint}>{t("ai.panel.selectFirstHint")}</div>
+                      )}
 
-                  {/* Extra requirement */}
-                  <ExtraSection
-                    label={t("ai.panel.taskRequirement")}
-                    badge={requirement.trim() ? "✓" : undefined}
-                  >
+                      {/* Reference-context range (text before the selection) */}
+                      <div className={styles.continueLengthRow}>
+                        <span className={styles.continueLengthLabel}>{t("ai.panel.contextRange")}</span>
+                        <div className={styles.continueLengthOptions}>
+                          {CONTEXT_CHARS_OPTIONS.map((n) => (
+                            <button
+                              key={n}
+                              className={`${styles.lengthChip} ${contextChars === n ? styles.lengthChipActive : ""}`}
+                              onClick={() => setContextChars(n)}
+                              title={t("ai.panel.contextRangeHint")}
+                            >
+                              {n === 0 ? t("ai.panel.contextRangeNone") : n >= 1000 ? `${n / 1000}k` : n}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Extra requirement */}
+                      <ExtraSection
+                        label={t("ai.panel.taskRequirement")}
+                        badge={requirement.trim() ? "✓" : undefined}
+                      >
+                        <textarea
+                          className={styles.extraTextarea}
+                          rows={3}
+                          placeholder={t("ai.panel.taskRequirementPlaceholder")}
+                          value={requirement}
+                          onChange={(e) => setRequirement(e.target.value)}
+                        />
+                      </ExtraSection>
+
+                      {/* Lore reference */}
+                      <ExtraSection
+                        label={t("ai.panel.continueLorePicker")}
+                        badge={pinnedCount > 0 ? String(pinnedCount) : undefined}
+                      >
+                        <LorePicker
+                          entities={filteredLoreEntities}
+                          search={loreSearch}
+                          setSearch={setLoreSearch}
+                          selectedPaths={selectedLorePaths}
+                          toggle={toggleLorePath}
+                        />
+                      </ExtraSection>
+                    </>
+                  )}
+
+                  {/* ── Custom instruction textarea ── */}
+                  {selectedTask === "custom" && (
                     <textarea
-                      className={styles.extraTextarea}
+                      className={styles.textarea}
                       rows={3}
-                      placeholder={t("ai.panel.taskRequirementPlaceholder")}
-                      value={requirement}
-                      onChange={(e) => setRequirement(e.target.value)}
+                      placeholder={t("ai.panel.customInstruction")}
+                      value={customInstr}
+                      onChange={(e) => setCustomInstr(e.target.value)}
                     />
-                  </ExtraSection>
-
-                  {/* Lore reference */}
-                  <ExtraSection
-                    label={t("ai.panel.continueLorePicker")}
-                    badge={pinnedCount > 0 ? String(pinnedCount) : undefined}
-                  >
-                    <LorePicker
-                      entities={filteredLoreEntities}
-                      search={loreSearch}
-                      setSearch={setLoreSearch}
-                      selectedPaths={selectedLorePaths}
-                      toggle={toggleLorePath}
-                    />
-                  </ExtraSection>
-                </>
+                  )}
+                </div>
               )}
+            </>
+          )}
+        </div>
 
-              {/* ── Custom instruction textarea ── */}
-              {selectedTask === "custom" && (
-                <textarea
-                  className={styles.textarea}
-                  rows={3}
-                  placeholder={t("ai.panel.customInstruction")}
-                  value={customInstr}
-                  onChange={(e) => setCustomInstr(e.target.value)}
-                />
-              )}
-
-              {/* Execute button */}
-              <button
-                className={styles.runBtn}
-                disabled={!canRun}
-                onClick={handleRun}
-              >
+        {/* Sticky action footer — Run / Stop always reachable without scrolling */}
+        {hasConfig && selectedTask && (
+          <div className={styles.configFooter}>
+            {isRunning ? (
+              <button className={styles.abortBtn} onClick={abort}>
+                <Square size={11} fill="currentColor" />
+                {t("ai.panel.stop")}
+              </button>
+            ) : (
+              <button className={styles.runBtn} disabled={!canRun} onClick={handleRun}>
                 <Play size={12} fill="currentColor" />
                 {t("ai.panel.run")}
               </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ══════════ Results column ══════════ */}
+      <div className={styles.resultCol}>
+        <div className={styles.resultScroll}>
+          {!hasResults ? (
+            <div className={styles.resultEmpty}>
+              <Sparkles size={22} strokeWidth={1.4} />
+              <span>{t("ai.panel.resultsPlaceholder")}</span>
             </div>
-          )}
+          ) : (
+            <>
+              {/* Agent steps (agentic "continue" runs) */}
+              {toolSteps.length > 0 && (
+                <AgentStepsSection steps={toolSteps} isRunning={isRunning} />
+              )}
 
-          {/* Abort button */}
-          {isRunning && (
-            <button className={styles.abortBtn} onClick={abort}>
-              <Square size={11} fill="currentColor" />
-              {t("ai.panel.stop")}
-            </button>
-          )}
-
-          {/* Agent steps (agentic "continue" runs) */}
-          {toolSteps.length > 0 && (
-            <AgentStepsSection steps={toolSteps} isRunning={isRunning} />
-          )}
-
-          {/* Error */}
-          {error && (
-            <div className={styles.error}>{error}</div>
-          )}
-
-          {/* Output */}
-          {output && (
-            <div className={styles.outputSection}>
-              <div className={styles.outputHeader}>
-                <span className={styles.outputLabel}>{t("ai.panel.generatedOutput")}</span>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button className={styles.btnSecondary} onClick={clearOutput}>{t("ai.panel.clear")}</button>
-                  <button className={styles.btnPrimary} onClick={handleInsert}>{t("ai.panel.insertToDoc")}</button>
+              {/* Waiting for the first token */}
+              {isRunning && !output && toolSteps.length === 0 && (
+                <div className={styles.thinking}>
+                  <span className={styles.agentSpinner} />
+                  {t("ai.panel.thinking")}
                 </div>
-              </div>
-              <div className={styles.output} ref={outputRef}>
-                {output}
-                {isRunning && <span className={styles.cursor}>▌</span>}
-              </div>
-            </div>
-          )}
+              )}
 
-          {/* Token usage */}
-          {usage && (
-            <div className={styles.usageBar}>
-              <span>{t("ai.panel.inputTokens", { tokens: usage.inputTokens.toLocaleString() })}</span>
-              <span>{t("ai.panel.outputTokens", { tokens: usage.outputTokens.toLocaleString() })}</span>
-              <span>≈ ${usage.cost.toFixed(5)}</span>
-            </div>
-          )}
-        </>
-      )}
+              {/* Error */}
+              {error && <div className={styles.error}>{error}</div>}
 
-      {/* Active model info */}
-      {activeModel && activeProvider && (
-        <div className={styles.modelInfo}>
-          {activeProvider.name} · {activeModel.name}
+              {/* Output */}
+              {output && (
+                <div className={styles.outputSection}>
+                  <div className={styles.outputHeader}>
+                    <span className={styles.outputLabel}>{t("ai.panel.generatedOutput")}</span>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button className={styles.btnSecondary} onClick={clearOutput}>{t("ai.panel.clear")}</button>
+                      <button className={styles.btnPrimary} onClick={handleInsert}>{t("ai.panel.insertToDoc")}</button>
+                    </div>
+                  </div>
+                  <div className={styles.output} ref={outputRef}>
+                    {output}
+                    {isRunning && <span className={styles.cursor}>▌</span>}
+                  </div>
+                </div>
+              )}
+
+              {/* Token usage */}
+              {usage && (
+                <div className={styles.usageBar}>
+                  <span>{t("ai.panel.inputTokens", { tokens: usage.inputTokens.toLocaleString() })}</span>
+                  <span>{t("ai.panel.outputTokens", { tokens: usage.outputTokens.toLocaleString() })}</span>
+                  <span>≈ ${usage.cost.toFixed(5)}</span>
+                </div>
+              )}
+            </>
+          )}
         </div>
-      )}
+
+        {/* Active model info */}
+        {activeModel && activeProvider && (
+          <div className={styles.modelInfo}>
+            {activeProvider.name} · {activeModel.name}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
