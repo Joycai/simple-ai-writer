@@ -19,14 +19,24 @@ token_usage (id, model_id, task, prompt_tokens, cached_tokens, completion_tokens
 
 ### RAG (Retrieval-Augmented Generation)
 
-- **Location** — `src/lib/context/rag.ts`
-- **Method** — Alias-based keyword matching (no embeddings, fast)
+- **Location** — `src/lib/context/rag.ts` (assembly) + `src/lib/context/loreSelect.ts` (lore selection)
+- **Method** — Alias-based keyword matching (no embeddings, fast); facet-level secondary-key matching within matched entities
 - **Context Assembly** (4 layers in `assembleContext()`):
   1. System prompt (from active template or default)
-  2. Lore snippets (up to 3 matching entity summaries, max 1800 chars each)
+  2. Lore (facet-aware layered selection, see below)
   3. Recent document context (last 2400 chars before selection)
   4. Task instruction (continue/polish/rewrite/summary/custom)
-- **Output** → `ContextBundle` → formatted to messages via `bundleToMessages()`
+- **Output** → `ContextBundle` → formatted to messages via `bundleToMessages()`; carries a `loreReport` (what was injected/dropped and why) rendered in `AiPanel`
+
+#### Facet-aware lore selection (`loreSelect.ts`)
+
+An entity is a folder; any sibling `.md` with a `facet` frontmatter field (title, `keys`, `group`, `priority`, `mode: auto|always|manual`) is an independently-activatable **facet** — an outfit, a backstory arc, etc. Selection layers under one char budget (user setting, default 600 tk × 3, in `appStore.loreBudgetTokens`):
+
+1. **Summary** (frontmatter one-liner) — every matched entity, guaranteed
+2. **Core** (`index.md` body) — paragraph-boundary truncated to fit
+3. **Facets** — `auto` fires on entity match AND any key in the match target; same-`group` facets are mutually exclusive (highest priority wins; pins override); a facet that doesn't fit whole is dropped, never truncated
+
+Pins come from `AiPanel` as `dirPath` (whole entity) or `dirPath#file` (single facet; implies its entity). Facet/core content is re-read from disk each call so hand edits are never stale. AI-assisted splitting of an oversized `index.md` into facets lives in `src/lib/lore/splitter.ts` + `LoreSplitModal` (backs up to `.ai-writer/backups/` before applying). See `docs/lore-facet-plan.md` for the full design.
 
 ### Story Memory (前情记忆)
 
