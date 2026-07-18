@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Sparkles, FolderOpen, ExternalLink, FileText, Plus, Pencil, Trash2, Check, X, Camera, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, Sparkles, FolderOpen, ExternalLink, FileText, Plus, Pencil, Trash2, Check, X, Camera, ChevronLeft, ChevronRight, Layers, Zap, Pin, Hand } from "lucide-react";
 import { createPortal } from "react-dom";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -18,13 +18,14 @@ import {
 import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useAppStore } from "../../stores/appStore";
-import { readFile } from "../../lib/fs/fileio";
+import { readFile, removeFile } from "../../lib/fs/fileio";
 import { imageToDataUrl } from "../../lib/fs/images";
 import { renderMarkdown } from "../../lib/fs/markdown";
 import { useImageDataUrl } from "./useImageDataUrl";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { LoreImproveModal } from "./LoreImproveModal";
 import { LoreMetaImproveModal } from "./LoreMetaImproveModal";
+import { FacetEditModal } from "./FacetEditModal";
 import styles from "./LoreDetail.module.css";
 
 interface Props {
@@ -74,6 +75,8 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   const [content, setContent] = useState<string>("");
   const [showImprove, setShowImprove] = useState(false);
   const [showMetaImprove, setShowMetaImprove] = useState(false);
+  // Facet form modal: { file: null } → create, { file } → edit/convert.
+  const [facetModal, setFacetModal] = useState<{ file: string | null } | null>(null);
 
   // In-place edit mode: draft metadata + body, committed via saveEntityMetaAndBody.
   const [editing, setEditing] = useState(false);
@@ -307,6 +310,36 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     }
   };
 
+  const handleDeleteFacet = async (file: string, title: string) => {
+    if (busy) return;
+    if (!window.confirm(t("lore.facet.deleteConfirm", { title, defaultValue: `删除侧面「${title}」？文件将从磁盘移除。` }))) return;
+    setBusy(true);
+    try {
+      await removeFile(`${entity.dirPath}/${file}`);
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Facet cards + leftover plain attachments (non-facet, non-reserved mds).
+  const facetFileSet = new Set(entity.facets.map((f) => f.file));
+  const attachments = entity.mdFiles
+    .filter((f) => f !== "index.md" && f !== "images.md" && !facetFileSet.has(f))
+    .sort((a, b) => a.localeCompare(b));
+
+  const MODE_ICONS = {
+    auto: <Zap size={10} strokeWidth={1.8} />,
+    always: <Pin size={10} strokeWidth={1.8} />,
+    manual: <Hand size={10} strokeWidth={1.8} />,
+  } as const;
+  const modeTitle = (mode: "auto" | "always" | "manual") =>
+    mode === "auto"
+      ? t("lore.facet.modeAuto", { defaultValue: "自动 — 实体命中且关键词命中时注入" })
+      : mode === "always"
+        ? t("lore.facet.modeAlways", { defaultValue: "总是 — 实体命中即注入" })
+        : t("lore.facet.modeManual", { defaultValue: "仅手动 — 只在被固定（pin）时注入" });
+
   const previewImg = previewIndex !== null ? entity.images[previewIndex] : null;
 
   return (
@@ -316,6 +349,9 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
       )}
       {showMetaImprove && (
         <LoreMetaImproveModal entity={entity} onClose={() => setShowMetaImprove(false)} />
+      )}
+      {facetModal && (
+        <FacetEditModal entity={entity} file={facetModal.file} onClose={() => setFacetModal(null)} />
       )}
 
       {previewImg && createPortal(
@@ -569,29 +605,113 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
               <div className={styles.notLoaded}>无内容</div>
             )}
 
-            {entity.mdFiles.filter((f) => f !== "index.md").length > 0 && (
-              <section className={styles.files}>
-                <div className={styles.filesHead}>
-                  {t("lore.detail.extraFiles", { defaultValue: "附加文件" })}
+            <section className={styles.facets}>
+              <div className={styles.facetsHeader}>
+                <Layers size={12} strokeWidth={1.8} />
+                <span className={styles.facetsHead}>
+                  {t("lore.facet.section", { defaultValue: "侧面" })}
+                </span>
+                <span className={styles.facetsCount}>{entity.facets.length}</span>
+                <span className={styles.spacer} />
+                <button
+                  className={styles.galleryAddBtn}
+                  onClick={() => setFacetModal({ file: null })}
+                  disabled={busy}
+                >
+                  <Plus size={12} strokeWidth={2} />
+                  {t("lore.facet.new", { defaultValue: "新建侧面" })}
+                </button>
+              </div>
+
+              {entity.facets.length === 0 ? (
+                <div className={styles.facetsEmpty}>
+                  {t("lore.facet.empty", { defaultValue: "暂无侧面 — 把服装、背景故事等拆成独立侧面，写作时按需注入，避免整条设定挤占上下文" })}
                 </div>
-                <div className={styles.fileList}>
-                  {entity.mdFiles
-                    .filter((f) => f !== "index.md")
-                    .sort((a, b) => a.localeCompare(b))
-                    .map((f) => (
-                      <button
-                        key={f}
-                        className={styles.fileItem}
-                        onClick={() => openFileInEditor(f)}
-                        title={t("lore.detail.openInEditor", { defaultValue: "在编辑器中打开" })}
-                      >
-                        <FileText size={11} strokeWidth={1.8} />
-                        <span className={styles.fileName}>{f}</span>
-                      </button>
+              ) : (
+                <div className={styles.facetGrid}>
+                  {entity.facets.map((f) => (
+                    <div
+                      key={f.file}
+                      className={styles.facetCard}
+                      onClick={() => setFacetModal({ file: f.file })}
+                      title={t("lore.facet.editTitle", { defaultValue: "编辑侧面" })}
+                    >
+                      <div className={styles.facetCardHead}>
+                        <span className={styles.facetMode} title={modeTitle(f.mode)}>
+                          {MODE_ICONS[f.mode]}
+                        </span>
+                        <span className={styles.facetTitle}>{f.title}</span>
+                        {f.group && <span className={styles.facetGroup}>{f.group}</span>}
+                        <span className={styles.spacer} />
+                        <span className={styles.facetTokens}>
+                          ~{Math.ceil(f.charCount / 3)} tk
+                        </span>
+                      </div>
+                      {f.keys.length > 0 ? (
+                        <div className={styles.facetKeys}>
+                          {f.keys.map((k) => (
+                            <span key={k} className={styles.facetKey}>{k}</span>
+                          ))}
+                        </div>
+                      ) : f.mode === "auto" ? (
+                        <div className={styles.facetWarn}>
+                          {t("lore.facet.keysEmptyWarn", { defaultValue: "自动模式下没有关键词，此侧面永远不会被自动注入" })}
+                        </div>
+                      ) : null}
+                      <div className={styles.facetActions} onClick={(ev) => ev.stopPropagation()}>
+                        <button
+                          className={styles.iconBtn}
+                          onClick={() => openFileInEditor(f.file)}
+                          disabled={busy}
+                          title={t("lore.detail.openInEditor", { defaultValue: "在编辑器中打开" })}
+                        >
+                          <ExternalLink size={11} strokeWidth={1.8} />
+                        </button>
+                        <button
+                          className={styles.iconBtn}
+                          onClick={() => handleDeleteFacet(f.file, f.title)}
+                          disabled={busy}
+                          title={t("lore.facet.delete", { defaultValue: "删除侧面" })}
+                        >
+                          <Trash2 size={11} strokeWidth={1.8} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {attachments.length > 0 && (
+                <>
+                  <div className={styles.filesHead}>
+                    {t("lore.facet.attachments", { defaultValue: "附件（不参与注入）" })}
+                  </div>
+                  <div className={styles.fileList}>
+                    {attachments.map((f) => (
+                      <div key={f} className={styles.attachmentRow}>
+                        <button
+                          className={styles.fileItem}
+                          onClick={() => openFileInEditor(f)}
+                          title={t("lore.detail.openInEditor", { defaultValue: "在编辑器中打开" })}
+                        >
+                          <FileText size={11} strokeWidth={1.8} />
+                          <span className={styles.fileName}>{f}</span>
+                        </button>
+                        <button
+                          className={styles.convertBtn}
+                          onClick={() => setFacetModal({ file: f })}
+                          disabled={busy}
+                          title={t("lore.facet.convertHint", { defaultValue: "补全触发关键词等信息，使其可被按需注入" })}
+                        >
+                          <Layers size={10} strokeWidth={1.8} />
+                          {t("lore.facet.convert", { defaultValue: "转为侧面" })}
+                        </button>
+                      </div>
                     ))}
-                </div>
-              </section>
-            )}
+                  </div>
+                </>
+              )}
+            </section>
 
             <section className={styles.gallery}>
               <div className={styles.galleryHeader}>

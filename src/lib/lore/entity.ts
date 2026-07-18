@@ -11,6 +11,7 @@ import {
   RESERVED_ENTITY_FILES,
   type CategoryId,
   type EntityMeta,
+  type FacetMeta,
   type LoreEntity,
   type LoreFacet,
   type LoreImage,
@@ -142,6 +143,54 @@ export function parseFacetMeta(raw: string, file: string): LoreFacet | null {
     mode,
     charCount: content.length,
   };
+}
+
+/**
+ * Serialize facet metadata to a YAML frontmatter block. Keys are written as
+ * a JSON-quoted inline array so the lightweight parser round-trips them
+ * exactly (including CJK and items containing commas).
+ */
+export function serializeFacetFrontmatter(meta: FacetMeta): string {
+  const lines = ["---", `facet: ${meta.title}`];
+  lines.push(`keys: [${meta.keys.map((k) => JSON.stringify(k)).join(", ")}]`);
+  if (meta.group) lines.push(`group: ${meta.group}`);
+  if (meta.priority !== 0) lines.push(`priority: ${meta.priority}`);
+  if (meta.mode !== "auto") lines.push(`mode: ${meta.mode}`);
+  lines.push("---", "");
+  return lines.join("\n");
+}
+
+/**
+ * Write facet metadata + body to an existing file in the entity dir.
+ * Any previous frontmatter is replaced wholesale (facet files own their
+ * frontmatter — there is nothing else to preserve).
+ */
+export async function saveFacetFile(
+  dirPath: string,
+  file: string,
+  meta: FacetMeta,
+  body: string,
+): Promise<void> {
+  await writeFile(`${dirPath}/${file}`, serializeFacetFrontmatter(meta) + "\n" + body.trimStart());
+}
+
+/**
+ * Create a new facet file named after the title (slugified, collision-safe,
+ * never a reserved name). Returns the filename actually used.
+ */
+export async function createFacetFile(
+  dirPath: string,
+  meta: FacetMeta,
+  body: string,
+): Promise<string> {
+  let base = slugifyEntityId(meta.title);
+  if (RESERVED_ENTITY_FILES.includes(`${base}.md`)) base = `facet-${base}`;
+  let file = `${base}.md`;
+  for (let i = 2; await fileExists(`${dirPath}/${file}`); i++) {
+    file = `${base}-${i}.md`;
+  }
+  await saveFacetFile(dirPath, file, meta, body);
+  return file;
 }
 
 /**

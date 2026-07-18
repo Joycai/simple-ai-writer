@@ -4,7 +4,7 @@ import {
   parsePins,
   DEFAULT_LORE_BUDGET_CHARS,
 } from "../context/loreSelect";
-import { parseFacetMeta } from "../lore/entity";
+import { parseFacetMeta, serializeFacetFrontmatter } from "../lore/entity";
 import type { LoreEntity, LoreFacet, LoreIndex } from "../lore";
 
 // Mock file I/O so entity/facet bodies load without a Tauri backend.
@@ -211,6 +211,24 @@ describe("parseFacetMeta", () => {
       mode: "manual",
       charCount: "Body text.".length,
     });
+  });
+
+  it("round-trips through serializeFacetFrontmatter (CJK keys, commas, quotes)", () => {
+    const meta = {
+      title: "战甲形象",
+      keys: ["战甲", "plate, armor", '带"引号"的'],
+      group: "outfit",
+      priority: 2,
+      mode: "manual" as const,
+    };
+    const raw = serializeFacetFrontmatter(meta) + "\nBody.";
+    const parsed = parseFacetMeta(raw, "f.md")!;
+    expect(parsed.title).toBe(meta.title);
+    expect(parsed.keys).toEqual(meta.keys);
+    expect(parsed.group).toBe("outfit");
+    expect(parsed.priority).toBe(2);
+    expect(parsed.mode).toBe("manual");
+    expect(parsed.charCount).toBe("Body.".length);
   });
 
   it("returns null for non-facet files and defaults partial frontmatter", () => {

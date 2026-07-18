@@ -55,6 +55,15 @@ export interface LoreFacet {
 /** Entity-dir filenames that can never be facets. */
 export const RESERVED_ENTITY_FILES = ["index.md", "images.md"];
 
+/** Editable facet metadata — what the facet form reads and writes. */
+export interface FacetMeta {
+  title: string;
+  keys: string[];
+  group: string | null;
+  priority: number;
+  mode: "auto" | "always" | "manual";
+}
+
 export interface LoreEntity {
   id: string;          // dir name, e.g. "elden"
   category: CategoryId;
