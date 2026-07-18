@@ -3,7 +3,8 @@
  * Scans lore entity aliases and names against selected text / recent content,
  * then assembles a 4-layer context string:
  *   Layer 1 – System prompt (from active prompt)
- *   Layer 2 – Matched lore entity summaries (auto + manually pinned)
+ *   Layer 2 – Matched lore (auto + manually pinned), selected per-facet under
+ *             a shared budget — see ./loreSelect
  *   Layer 3 – Optional extras: additional knowledge, outline/direction
  *   Layer 4 – Story memory (compacted summary of everything before the
  *             verbatim window — see ./memory) + recent chapter context
@@ -12,13 +13,11 @@
  */
 
 import i18n from "../../i18n";
-import { readFile } from "../fs/fileio";
 import type { LoreIndex } from "../lore";
+import { selectLore, type LoreActivationReport } from "./loreSelect";
 import { selectMemoryForContext, type DocMemory } from "./memory";
 
-const MAX_AUTO_LORE_CARDS = 3;
 const APPROX_CHARS_PER_TOKEN = 3; // rough CJK-aware estimate
-const MAX_LORE_CHARS = 600 * APPROX_CHARS_PER_TOKEN;
 const MAX_CONTEXT_CHARS = 800 * APPROX_CHARS_PER_TOKEN;
 
 /** Extra options available for AI tasks (continue / polish / rewrite / summary). */
@@ -60,6 +59,8 @@ export interface TaskExtras {
 export interface ContextBundle {
   systemPrompt: string;
   loreSnippets: string;
+  /** Why each entity/facet was (or wasn't) injected — surfaced in the UI. */
+  loreReport: LoreActivationReport;
   /** Cross-chapter recap of everything before the current chapter (continue). */
   priorChaptersSummary: string;
   /** Verbatim ending of the previous chapter (continue, near chapter start). */
@@ -119,33 +120,6 @@ export function locateSelectionOffset(documentText: string, selection: string): 
   return ni >= 0 ? map[ni] : -1;
 }
 
-/** Return lore entities whose name or aliases appear in the target text. */
-function matchEntities(text: string, lore: LoreIndex): string[] {
-  const lower = text.toLowerCase();
-  const matched: string[] = [];
-
-  for (const [, entities] of Object.entries(lore)) {
-    for (const entity of entities) {
-      const terms = [entity.name, ...(entity.aliases ?? [])];
-      if (terms.some((t) => t && lower.includes(t.toLowerCase()))) {
-        matched.push(entity.dirPath);
-        if (matched.length >= MAX_AUTO_LORE_CARDS) return matched;
-      }
-    }
-  }
-  return matched;
-}
-
-/** Load an entity's index.md content (summary section only). */
-async function loadEntitySummary(dirPath: string): Promise<string> {
-  try {
-    const content = await readFile(`${dirPath}/index.md`);
-    return content.slice(0, MAX_LORE_CHARS);
-  } catch {
-    return "";
-  }
-}
-
 /**
  * Build the context bundle for an AI task.
  *
@@ -171,17 +145,15 @@ export async function assembleContext(
   selectionRange?: { from: number; to: number } | null,
   memory?: DocMemory | null
 ): Promise<ContextBundle> {
-  // Layer 2: auto-match entities, then prepend any manually pinned ones (deduped)
+  // Layer 2: facet-aware layered selection (summary → core → facets under a
+  // shared budget) — pins go first, auto-matched entities follow. See
+  // ./loreSelect for the algorithm and the activation report it returns.
   const matchTarget = selection + documentText.slice(-500);
-  const autoEntityPaths = matchEntities(matchTarget, loreIndex);
-  const manualPaths = extras?.manualLorePaths ?? [];
-  const allEntityPaths = [...new Set([...manualPaths, ...autoEntityPaths])];
-
-  const loreSnippets = (
-    await Promise.all(allEntityPaths.map(loadEntitySummary))
-  )
-    .filter(Boolean)
-    .join("\n\n---\n\n");
+  const { text: loreSnippets, report: loreReport } = await selectLore(
+    matchTarget,
+    loreIndex,
+    extras?.manualLorePaths ?? [],
+  );
 
   // Layer 4: recent context — the text immediately *before* the selection, used
   // only to keep the model's continuation/edit coherent (it is NOT the edit
@@ -263,8 +235,9 @@ export async function assembleContext(
   const estimatedTokens = Math.ceil(total / APPROX_CHARS_PER_TOKEN);
 
   return {
-    systemPrompt, loreSnippets, priorChaptersSummary, prevChapterTail, prevChapterTitle,
-    storySummary, recentContext, taskText, outline, additionalKnowledge, estimatedTokens,
+    systemPrompt, loreSnippets, loreReport, priorChaptersSummary, prevChapterTail,
+    prevChapterTitle, storySummary, recentContext, taskText, outline,
+    additionalKnowledge, estimatedTokens,
   };
 }
 
