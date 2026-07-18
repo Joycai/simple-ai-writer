@@ -13,8 +13,14 @@ const FONT_KEY = "app:fontScheme";
 const SIDEBAR_WIDTH_KEY = "app:sidebarWidth";
 const RIGHT_PANEL_WIDTH_KEY = "app:rightPanelWidth";
 const RECENT_PROJECTS_KEY = "app:recentProjects";
+const LORE_BUDGET_KEY = "app:loreBudgetTokens";
 
 const RECENT_PROJECTS_MAX = 10;
+
+/** Token budget bounds for the 【设定资料】 block (see lib/context/loreSelect). */
+export const LORE_BUDGET_MIN = 200;
+export const LORE_BUDGET_MAX = 2000;
+export const LORE_BUDGET_DEFAULT = 600;
 
 const storedTheme = (localStorage.getItem(THEME_KEY) as ThemeMode | null) ?? "dark";
 const storedLang = (localStorage.getItem(LANG_KEY) as Language | null) ?? "zh-CN";
@@ -52,6 +58,10 @@ const storedRightPanelWidth = clamp(
   parseInt(localStorage.getItem(RIGHT_PANEL_WIDTH_KEY) ?? "280", 10),
   RIGHT_PANEL_MIN, RIGHT_PANEL_MAX,
 );
+const storedLoreBudget = clamp(
+  parseInt(localStorage.getItem(LORE_BUDGET_KEY) ?? String(LORE_BUDGET_DEFAULT), 10) || LORE_BUDGET_DEFAULT,
+  LORE_BUDGET_MIN, LORE_BUDGET_MAX,
+);
 
 export type MainView = "editor" | "lore-wall" | "outline-full";
 export type AiDrawerMode = "generate" | "consistency";
@@ -66,6 +76,8 @@ interface AppState {
   sidebarWidth: number;
   rightPanelWidth: number;
   recentProjects: string[];
+  /** Token budget for lore injection (【设定资料】 block). */
+  loreBudgetTokens: number;
   activeSideTab: SideTab;
   activeRightTab: "outline" | "ai";
 
@@ -85,6 +97,7 @@ interface AppState {
   setRightPanelCollapsed: (v: boolean) => void;
   setSidebarWidth: (w: number | ((prev: number) => number)) => void;
   setRightPanelWidth: (w: number | ((prev: number) => number)) => void;
+  setLoreBudgetTokens: (tokens: number) => void;
   addRecentProject: (path: string) => void;
   removeRecentProject: (path: string) => void;
   clearRecentProjects: () => void;
@@ -125,6 +138,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   sidebarWidth: storedSidebarWidth,
   rightPanelWidth: storedRightPanelWidth,
   recentProjects: loadRecentProjects(),
+  loreBudgetTokens: storedLoreBudget,
   activeSideTab: "files",
   activeRightTab: "outline",
 
@@ -187,6 +201,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       localStorage.setItem(RIGHT_PANEL_WIDTH_KEY, String(clamped));
       return { rightPanelWidth: clamped };
     });
+  },
+
+  setLoreBudgetTokens: (tokens) => {
+    const clamped = clamp(Math.round(tokens), LORE_BUDGET_MIN, LORE_BUDGET_MAX);
+    localStorage.setItem(LORE_BUDGET_KEY, String(clamped));
+    set({ loreBudgetTokens: clamped });
   },
 
   addRecentProject: (path) => {

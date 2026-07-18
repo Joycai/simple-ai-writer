@@ -226,7 +226,18 @@
       "inputTokens": "Input {{tokens}} tokens",
       "outputTokens": "Output {{tokens}} tokens",
       "resultsPlaceholder": "Pick a task on the left and run it — results and the agent log appear here",
-      "thinking": "Thinking…"
+      "thinking": "Thinking…",
+      "loreFacets": "Facets",
+      "loreBudget": "Lore budget",
+      "loreBudgetHint": "Max tokens the lore block may use",
+      "loreReportTitle": "Injected lore",
+      "loreReportEmpty": "none",
+      "loreCore": "core",
+      "loreMatchedKeys": "matched: {{keys}}",
+      "loreDropNoKey": "no key matched",
+      "loreDropGroupLost": "lost group exclusion",
+      "loreDropBudget": "over budget",
+      "loreDropManual": "manual-only"
     },
     "memory": {
       "title": "Story Memory",

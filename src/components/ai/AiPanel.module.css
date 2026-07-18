@@ -705,3 +705,109 @@
   color: var(--color-error);
   word-break: break-word;
 }
+
+/* ── Facet-level lore pinning ─────────────────────────────────────────────── */
+
+.lorePickerExpand {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  padding: 1px 5px;
+  font: 500 10px/1 var(--font-mono);
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.lorePickerExpand:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.lorePickerFacet {
+  margin-left: 22px;
+}
+
+.lorePickerGroup {
+  flex-shrink: 0;
+  padding: 0 5px;
+  font: 500 10px/1.5 var(--font-mono);
+  color: var(--color-tag-text);
+  background: var(--color-tag-bg);
+  border-radius: var(--radius-sm);
+}
+
+.loreBudgetRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border-soft);
+}
+
+.loreBudgetLabel {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+/* ── Lore injection transparency report ───────────────────────────────────── */
+
+.loreReport {
+  margin-bottom: var(--space-2);
+  border: 1px solid var(--color-border-soft);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  overflow: hidden;
+}
+
+.loreReportBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+}
+
+.loreReportEntity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.loreReportName {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font: 600 11px/1.4 var(--font-sans);
+  color: var(--color-text-primary);
+  margin-right: var(--space-1);
+}
+
+.loreReportChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  font: 500 10px/1.5 var(--font-sans);
+  color: var(--color-accent);
+  background: var(--color-accent-tint);
+  border-radius: var(--radius-sm);
+}
+
+.loreReportTk {
+  font-family: var(--font-mono);
+  opacity: 0.75;
+}
+
+.loreReportDropped {
+  color: var(--color-text-muted);
+  background: var(--color-bg-elevated);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}

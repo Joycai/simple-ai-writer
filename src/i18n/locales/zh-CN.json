@@ -226,7 +226,18 @@
       "inputTokens": "输入 {{tokens}} tokens",
       "outputTokens": "输出 {{tokens}} tokens",
       "resultsPlaceholder": "选择左侧任务并执行，结果与 Agent 日志将显示在这里",
-      "thinking": "思考中…"
+      "thinking": "思考中…",
+      "loreFacets": "侧面",
+      "loreBudget": "设定预算",
+      "loreBudgetHint": "【设定资料】最多占用的 token 数",
+      "loreReportTitle": "本次注入设定",
+      "loreReportEmpty": "无",
+      "loreCore": "核心",
+      "loreMatchedKeys": "命中：{{keys}}",
+      "loreDropNoKey": "未命中关键词",
+      "loreDropGroupLost": "互斥组落选",
+      "loreDropBudget": "超出预算",
+      "loreDropManual": "仅手动"
     },
     "memory": {
       "title": "前情记忆",

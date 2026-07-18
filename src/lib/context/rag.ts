@@ -134,6 +134,8 @@ export function locateSelectionOffset(documentText: string, selection: string): 
  *                         before it instead of relying on string matching.
  * @param memory           Story memory for the current document, if one exists;
  *                         its segment summaries feed the 【前情提要】 layer.
+ * @param loreBudgetChars  Char budget for the lore block (user setting × 3);
+ *                         falls back to loreSelect's default when omitted.
  */
 export async function assembleContext(
   systemPrompt: string,
@@ -143,7 +145,8 @@ export async function assembleContext(
   taskInstruction: string,
   extras?: TaskExtras,
   selectionRange?: { from: number; to: number } | null,
-  memory?: DocMemory | null
+  memory?: DocMemory | null,
+  loreBudgetChars?: number
 ): Promise<ContextBundle> {
   // Layer 2: facet-aware layered selection (summary → core → facets under a
   // shared budget) — pins go first, auto-matched entities follow. See
@@ -153,6 +156,7 @@ export async function assembleContext(
     matchTarget,
     loreIndex,
     extras?.manualLorePaths ?? [],
+    loreBudgetChars,
   );
 
   // Layer 4: recent context — the text immediately *before* the selection, used
