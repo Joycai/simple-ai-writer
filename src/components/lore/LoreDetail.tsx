@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Sparkles, FolderOpen, ExternalLink, FileText, Plus, Pencil, Trash2, Check, X, Camera, ChevronLeft, ChevronRight, Layers, Zap, Pin, Hand } from "lucide-react";
+import { ArrowLeft, Sparkles, FolderOpen, ExternalLink, FileText, Plus, Pencil, Trash2, Check, X, Camera, ChevronLeft, ChevronRight, Layers, Zap, Pin, Hand, Scissors } from "lucide-react";
 import { createPortal } from "react-dom";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -26,6 +26,7 @@ import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { LoreImproveModal } from "./LoreImproveModal";
 import { LoreMetaImproveModal } from "./LoreMetaImproveModal";
 import { FacetEditModal } from "./FacetEditModal";
+import { LoreSplitModal } from "./LoreSplitModal";
 import styles from "./LoreDetail.module.css";
 
 interface Props {
@@ -77,6 +78,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   const [showMetaImprove, setShowMetaImprove] = useState(false);
   // Facet form modal: { file: null } → create, { file } → edit/convert.
   const [facetModal, setFacetModal] = useState<{ file: string | null } | null>(null);
+  const [showSplit, setShowSplit] = useState(false);
 
   // In-place edit mode: draft metadata + body, committed via saveEntityMetaAndBody.
   const [editing, setEditing] = useState(false);
@@ -353,6 +355,9 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
       {facetModal && (
         <FacetEditModal entity={entity} file={facetModal.file} onClose={() => setFacetModal(null)} />
       )}
+      {showSplit && (
+        <LoreSplitModal entity={entity} onClose={() => setShowSplit(false)} />
+      )}
 
       {previewImg && createPortal(
         <div
@@ -451,6 +456,9 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
             </button>
             <button className={styles.actionBtn} onClick={() => setShowImprove(true)}>
               <Sparkles size={11} /> {t("lore.panel.aiImprove")}
+            </button>
+            <button className={styles.actionBtn} onClick={() => setShowSplit(true)}>
+              <Scissors size={11} /> {t("lore.split.title", { defaultValue: "拆分侧面" })}
             </button>
             <button className={styles.actionBtn} onClick={openInEditor}>
               <ExternalLink size={11} /> {t("lore.detail.openInEditor", { defaultValue: "在编辑器中打开" })}
