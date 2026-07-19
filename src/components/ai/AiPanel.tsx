@@ -522,10 +522,14 @@ export function AiPanel() {
   // a deleted lore entry can leave a stale path in storage, harmless but
   // shouldn't inflate the badge (it is also ignored downstream when assembling
   // context). Facet pins use the "dirPath#file" form (see loreSelect).
-  const pinnedCount = parsePins(selectedLorePaths).filter((pin) => {
+  const pinnedCount = selectedLorePaths.filter((p) => {
+    // Whole string matching an entity dirPath = entity pin, even if the path
+    // itself contains '#' — mirror loreSelect's index-aware resolution.
+    if (allLoreEntities.some((e) => e.dirPath === p)) return true;
+    const [pin] = parsePins([p]);
+    if (!pin.facetFile) return false;
     const entity = allLoreEntities.find((e) => e.dirPath === pin.dirPath);
-    if (!entity) return false;
-    return !pin.facetFile || (entity.facets ?? []).some((f) => f.file === pin.facetFile);
+    return !!entity && (entity.facets ?? []).some((f) => f.file === pin.facetFile);
   }).length;
 
   // Results pane shows something whenever a run is in flight or has produced output.

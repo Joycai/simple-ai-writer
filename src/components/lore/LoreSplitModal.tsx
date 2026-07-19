@@ -29,6 +29,8 @@ import styles from "./LoreSplitModal.module.css";
 interface Props {
   entity: LoreEntity;
   onClose: () => void;
+  /** Fired after a successful Apply so the parent can re-read index.md. */
+  onApplied?: () => void;
 }
 
 interface EditableDraft {
@@ -72,7 +74,7 @@ function KeysEditor({ keys, onChange }: { keys: string[]; onChange: (keys: strin
   );
 }
 
-export function LoreSplitModal({ entity, onClose }: Props) {
+export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
   const { t } = useTranslation();
   const { projectPath } = useProjectStore();
   const { models, providers, activeModelId, setActiveModel } = useAiStore();
@@ -90,8 +92,10 @@ export function LoreSplitModal({ entity, onClose }: Props) {
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
+    // Normalize CRLF up front: the frontmatter regex below assumes \n, and a
+    // Windows-edited file would otherwise lose its frontmatter on Apply.
     readEntityFile(entity.dirPath, "index.md")
-      .then(setIndexRaw)
+      .then((raw) => setIndexRaw(raw.replace(/\r\n/g, "\n")))
       .catch(() => setIndexRaw(""));
   }, [entity.dirPath]);
 
@@ -185,6 +189,7 @@ export function LoreSplitModal({ entity, onClose }: Props) {
       await writeEntityFile(entity.dirPath, "index.md", fm + core.trim() + "\n");
 
       await scanProject(projectPath);
+      onApplied?.();
       onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

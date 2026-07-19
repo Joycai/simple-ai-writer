@@ -151,9 +151,11 @@ export function parseFacetMeta(raw: string, file: string): LoreFacet | null {
  * exactly (including CJK and items containing commas).
  */
 export function serializeFacetFrontmatter(meta: FacetMeta): string {
-  const lines = ["---", `facet: ${meta.title}`];
+  // Title/group are quoted so values that would otherwise parse as JSON
+  // (e.g. a title of "[1]") still round-trip as strings.
+  const lines = ["---", `facet: ${JSON.stringify(meta.title)}`];
   lines.push(`keys: [${meta.keys.map((k) => JSON.stringify(k)).join(", ")}]`);
-  if (meta.group) lines.push(`group: ${meta.group}`);
+  if (meta.group) lines.push(`group: ${JSON.stringify(meta.group)}`);
   if (meta.priority !== 0) lines.push(`priority: ${meta.priority}`);
   if (meta.mode !== "auto") lines.push(`mode: ${meta.mode}`);
   lines.push("---", "");
@@ -183,8 +185,9 @@ export async function createFacetFile(
   meta: FacetMeta,
   body: string,
 ): Promise<string> {
-  let base = slugifyEntityId(meta.title);
-  if (RESERVED_ENTITY_FILES.includes(`${base}.md`)) base = `facet-${base}`;
+  // '#' is stripped because facet pins are stored as "dirPath#file" strings.
+  let base = slugifyEntityId(meta.title).replace(/#/g, "");
+  if (!base || RESERVED_ENTITY_FILES.includes(`${base}.md`)) base = `facet-${base}`;
   let file = `${base}.md`;
   for (let i = 2; await fileExists(`${dirPath}/${file}`); i++) {
     file = `${base}-${i}.md`;

@@ -146,17 +146,22 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   }, [entity.images]);
 
   const [contentLoaded, setContentLoaded] = useState(false);
+  // Bumped when something outside the edit form rewrites index.md in place
+  // (e.g. LoreSplitModal Apply) — the body must be re-read, or a later Edit →
+  // Save would write the stale pre-split body back and undo the split.
+  const [contentVersion, setContentVersion] = useState(0);
   useEffect(() => {
     const indexPath = `${entity.dirPath}/index.md`;
     setContentLoaded(false);
     readFile(indexPath)
-      .then((raw) => {
+      .then((rawFile) => {
+        const raw = rawFile.replace(/\r\n/g, "\n"); // CRLF-safe frontmatter match
         const m = raw.match(/^---\n[\s\S]*?\n---\n?/);
         setContent(m ? raw.slice(m[0].length) : raw);
       })
       .catch(() => setContent(""))
       .finally(() => setContentLoaded(true));
-  }, [entity.dirPath]);
+  }, [entity.dirPath, contentVersion]);
 
   const cat = LORE_CATEGORIES.find((c) => c.id === entity.category);
 
@@ -319,6 +324,10 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     try {
       await removeFile(`${entity.dirPath}/${file}`);
       await refresh();
+    } catch (e) {
+      // Surface instead of leaving an unhandled rejection — the card staying
+      // put after a confirmed delete needs an explanation.
+      window.alert(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
@@ -347,7 +356,12 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   return (
     <div className={styles.detail}>
       {showImprove && (
-        <LoreImproveModal entity={entity} onClose={() => setShowImprove(false)} />
+        <LoreImproveModal
+          entity={entity}
+          // Re-read on close: the modal may have rewritten index.md (Apply);
+          // re-reading on cancel is a harmless no-op.
+          onClose={() => { setShowImprove(false); setContentVersion((v) => v + 1); }}
+        />
       )}
       {showMetaImprove && (
         <LoreMetaImproveModal entity={entity} onClose={() => setShowMetaImprove(false)} />
@@ -356,7 +370,11 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         <FacetEditModal entity={entity} file={facetModal.file} onClose={() => setFacetModal(null)} />
       )}
       {showSplit && (
-        <LoreSplitModal entity={entity} onClose={() => setShowSplit(false)} />
+        <LoreSplitModal
+          entity={entity}
+          onClose={() => setShowSplit(false)}
+          onApplied={() => setContentVersion((v) => v + 1)}
+        />
       )}
 
       {previewImg && createPortal(

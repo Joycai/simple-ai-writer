@@ -130,18 +130,33 @@ export async function selectLore(
     for (const e of entities ?? []) byDir.set(e.dirPath, e);
   }
 
-  // Resolve pins: order-preserving, deduped; stale dirPaths are skipped
-  // (matches the old behavior where a missing index.md read yielded "").
-  const pins = parsePins(pinPaths);
+  // Resolve pins: order-preserving, deduped. Resolution is index-aware:
+  // a raw string that matches an existing entity dirPath verbatim is a bare
+  // entity pin even if it contains '#' (paths may legally contain '#'); only
+  // otherwise is it split as "dirPath#facetFile". Stale pins are skipped
+  // entirely — including facet pins whose facet file no longer exists, which
+  // must NOT degrade into an invisible whole-entity pin.
   const pinnedFacetsByDir = new Map<string, Set<string>>();
   const pinnedDirs: string[] = [];
-  for (const pin of pins) {
-    if (!byDir.has(pin.dirPath)) continue;
-    if (!pinnedFacetsByDir.has(pin.dirPath)) {
-      pinnedFacetsByDir.set(pin.dirPath, new Set());
-      pinnedDirs.push(pin.dirPath);
+  const registerDir = (dirPath: string) => {
+    if (!pinnedFacetsByDir.has(dirPath)) {
+      pinnedFacetsByDir.set(dirPath, new Set());
+      pinnedDirs.push(dirPath);
     }
-    if (pin.facetFile) pinnedFacetsByDir.get(pin.dirPath)!.add(pin.facetFile);
+  };
+  for (const raw of pinPaths) {
+    if (byDir.has(raw)) {
+      registerDir(raw);
+      continue;
+    }
+    const [pin] = parsePins([raw]);
+    if (!pin.facetFile) continue; // bare pin to a deleted entity — stale
+    const entity = byDir.get(pin.dirPath);
+    if (!entity || !(entity.facets ?? []).some((f) => f.file === pin.facetFile)) {
+      continue; // facet pin whose entity or facet is gone — stale
+    }
+    registerDir(pin.dirPath);
+    pinnedFacetsByDir.get(pin.dirPath)!.add(pin.facetFile);
   }
 
   // Auto-match entities by name/alias substring (CJK-friendly), capped.

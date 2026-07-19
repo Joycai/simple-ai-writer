@@ -84,12 +84,18 @@ export function parseFrontmatter(source: string): { data: Record<string, unknown
 
       blockKey = null;
       if (val.startsWith("[")) {
+        // Strict JSON first — the app's own serializers emit valid JSON, and
+        // the naive quote rewrite would corrupt items containing apostrophes
+        // (e.g. ["a, b", "Zoe's"]). Only fall back to the single-quote rewrite
+        // for hand-written 'single quoted' lists, then to the raw string.
         try {
-          data[key] = (JSON.parse(val.replace(/'/g, '"')) as unknown[]).map((v) =>
-            typeof v === "string" ? unquote(v) : v
-          );
+          data[key] = parseInlineList(val);
         } catch {
-          data[key] = val;
+          try {
+            data[key] = parseInlineList(val.replace(/'/g, '"'));
+          } catch {
+            data[key] = val;
+          }
         }
       } else {
         data[key] = unquote(val);
@@ -102,6 +108,13 @@ export function parseFrontmatter(source: string): { data: Record<string, unknown
 }
 
 /** Strip a single layer of matching surrounding quotes and unescape inner quotes. */
+/** JSON-parse an inline list; strings already carry their quotes in JSON. */
+function parseInlineList(val: string): unknown[] {
+  const parsed = JSON.parse(val) as unknown[];
+  if (!Array.isArray(parsed)) throw new Error("not a list");
+  return parsed;
+}
+
 function unquote(s: string): string {
   if (
     (s.startsWith('"') && s.endsWith('"') && s.length >= 2) ||

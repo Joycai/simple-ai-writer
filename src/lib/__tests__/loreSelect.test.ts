@@ -148,6 +148,25 @@ describe("selectLore — layered activation", () => {
     expect(report.entities).toHaveLength(0);
   });
 
+  it("skips a facet pin whose facet file was deleted — no invisible entity pin", async () => {
+    const { text, report } = await selectLore("Nothing here.", makeIndex(), [
+      `${ARIA}#deleted-facet.md`,
+    ]);
+    expect(text).toBe("");
+    expect(report.entities).toHaveLength(0);
+  });
+
+  it("treats a raw pin matching an entity dirPath verbatim as an entity pin even with '#' in the path", async () => {
+    const dir = "/proj/.ai-writer/lore/characters/route_#7";
+    const index: LoreIndex = {
+      characters: [entity({ dirPath: dir, name: "Route Seven" })],
+    };
+    files.set(`${dir}/index.md`, "A haunted road.");
+    const { text, report } = await selectLore("Nothing here.", index, [dir]);
+    expect(text).toContain("A haunted road.");
+    expect(report.entities[0].reason).toBe("pinned");
+  });
+
   it("drops a facet whole when it exceeds the remaining budget (never truncates)", async () => {
     files.set(`${ARIA}/outfit-armor.md`, `---\nfacet: 战甲形象\n---\n${"甲".repeat(5000)}`);
     const budget = 200 + "Aria is a bard.".length + 60;
@@ -211,6 +230,20 @@ describe("parseFacetMeta", () => {
       mode: "manual",
       charCount: "Body text.".length,
     });
+  });
+
+  it("round-trips a title/group that would otherwise parse as JSON, and apostrophe keys", () => {
+    const meta = {
+      title: "[1]",
+      keys: ["a, b", "Zoe's"],
+      group: "[x]",
+      priority: 0,
+      mode: "auto" as const,
+    };
+    const parsed = parseFacetMeta(serializeFacetFrontmatter(meta) + "\nB.", "f.md")!;
+    expect(parsed.title).toBe("[1]");
+    expect(parsed.keys).toEqual(["a, b", "Zoe's"]);
+    expect(parsed.group).toBe("[x]");
   });
 
   it("round-trips through serializeFacetFrontmatter (CJK keys, commas, quotes)", () => {
