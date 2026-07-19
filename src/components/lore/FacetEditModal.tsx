@@ -110,8 +110,8 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
   };
 
   const heading = file === null
-    ? t("lore.facet.createTitle", { defaultValue: "新建侧面" })
-    : t("lore.facet.editTitle", { defaultValue: "编辑侧面" });
+    ? t("lore.facet.createTitle", { defaultValue: "新建特征" })
+    : t("lore.facet.editTitle", { defaultValue: "编辑特征" });
 
   return createPortal(
     <div className={styles.overlay} onClick={onClose}>
@@ -172,7 +172,7 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
               />
               {mode === "auto" && keys.length === 0 && (
                 <div className={styles.hintWarn}>
-                  {t("lore.facet.keysEmptyWarn", { defaultValue: "自动模式下没有关键词，此侧面永远不会被自动注入" })}
+                  {t("lore.facet.keysEmptyWarn", { defaultValue: "自动模式下没有关键词，此特征永远不会被自动注入" })}
                 </div>
               )}
             </div>
@@ -222,7 +222,7 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
               value={body}
               onChange={(e) => setBody(e.target.value)}
               spellCheck={false}
-              placeholder={t("lore.facet.bodyPlaceholder", { defaultValue: "这一侧面的具体设定内容…" })}
+              placeholder={t("lore.facet.bodyPlaceholder", { defaultValue: "这一特征的具体设定内容…" })}
             />
           </div>
 

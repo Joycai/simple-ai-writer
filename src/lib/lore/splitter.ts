@@ -123,7 +123,7 @@ export function parseSplitResponse(fullText: string): SplitResult {
     .filter((f): f is Record<string, unknown> => typeof f === "object" && f !== null)
     .map((f) => ({
       meta: {
-        title: typeof f.title === "string" && f.title.trim() ? f.title.trim() : "未命名侧面",
+        title: typeof f.title === "string" && f.title.trim() ? f.title.trim() : "未命名特征",
         keys: Array.isArray(f.keys)
           ? f.keys.filter((k): k is string => typeof k === "string").map((k) => k.trim()).filter(Boolean)
           : [],

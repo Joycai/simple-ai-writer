@@ -444,6 +444,8 @@
       "gallery": "Gallery",
       "addImage": "Add Image",
       "editDesc": "Edit description",
+      "aiDesc": "Describe with AI",
+      "aiDescNeedMultimodal": "Requires a multimodal model — pick an image-capable model in Settings",
       "removeImage": "Remove image",
       "removeConfirm": "Remove \"{{file}}\"? This cannot be undone — the file will also be deleted from disk.",
       "descPlaceholder": "One-line description (multimodal models will see the image; text-only models only see this text)…",

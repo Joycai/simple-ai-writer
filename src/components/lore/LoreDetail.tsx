@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, Sparkles, FolderOpen, ExternalLink, FileText, Plus, Pencil, Trash2, Check, X, Camera, ChevronLeft, ChevronRight, Layers, Zap, Pin, Hand, Scissors } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -9,6 +9,7 @@ import {
   LORE_CATEGORIES,
   type CategoryId,
   type LoreEntity,
+  type LoreImage,
   addLoreImage,
   updateLoreImageDesc,
   removeLoreImage,
@@ -18,6 +19,9 @@ import {
 import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useAppStore } from "../../stores/appStore";
+import { useAiStore } from "../../stores/aiStore";
+import { loadApiKey } from "../../lib/keyStore";
+import { describeLoreImage } from "../../lib/lore/vision";
 import { readFile, removeFile } from "../../lib/fs/fileio";
 import { imageToDataUrl } from "../../lib/fs/images";
 import { renderMarkdown } from "../../lib/fs/markdown";
@@ -93,6 +97,16 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   const [editingFile, setEditingFile] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // AI image description: which gallery file is being generated for (null =
+  // idle). The output streams into the open edit area so the user reviews and
+  // commits it through the normal save flow — nothing touches disk until then.
+  const [aiDescFile, setAiDescFile] = useState<string | null>(null);
+  const aiDescAbort = useRef<AbortController | null>(null);
+  const models = useAiStore((s) => s.models);
+  const providers = useAiStore((s) => s.providers);
+  const activeModelId = useAiStore((s) => s.activeModelId);
+  const visionReady = models.find((m) => m.id === activeModelId)?.type === "multimodal";
 
   // Lightbox state: which gallery image to show at full size (index into
   // entity.images), or null when the lightbox is closed.
@@ -289,11 +303,12 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     setEditingDraft(desc);
   };
   const cancelEdit = () => {
+    aiDescAbort.current?.abort(); // also stops an in-flight AI description
     setEditingFile(null);
     setEditingDraft("");
   };
   const commitEdit = async () => {
-    if (!editingFile || busy) return;
+    if (!editingFile || busy || aiDescFile) return;
     setBusy(true);
     try {
       await updateLoreImageDesc(entity.dirPath, editingFile, editingDraft);
@@ -301,6 +316,51 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
       cancelEdit();
     } finally {
       setBusy(false);
+    }
+  };
+
+  // Generate a textual description of one gallery image with the active
+  // multimodal model. Streams into the edit area; the user commits via the
+  // regular ✓ button, so a bad generation is just an X away from discarded.
+  const handleAiDesc = async (img: LoreImage) => {
+    if (busy || aiDescFile) return;
+    const model = models.find((m) => m.id === activeModelId);
+    const provider = model ? providers.find((p) => p.id === model.providerId) : null;
+    if (!model || !provider || model.type !== "multimodal") return;
+
+    const ctrl = new AbortController();
+    aiDescAbort.current = ctrl;
+    setAiDescFile(img.file);
+    startEdit(img.file, img.desc);
+    try {
+      const apiKey = (await loadApiKey(provider.id)) ?? "";
+      // Reuse the already-loaded gallery data URL; fall back to a fresh read
+      // if that load failed (broken thumbnail but readable file).
+      const dataUrl = imageDataUrls[img.absPath] ?? (await imageToDataUrl(img.absPath)).dataUrl;
+      const text = await describeLoreImage({
+        dataUrl,
+        entityName: entity.name,
+        entitySummary: entity.summary,
+        existingDesc: img.desc,
+        language: i18n.language,
+        baseUrl: provider.baseUrl,
+        apiKey,
+        standard: provider.apiStandard,
+        safetySettings: provider.safetySettings,
+        modelId: model.modelId,
+        prefix: model.prefix,
+        contextSize: model.contextSize,
+        signal: ctrl.signal,
+        onProgress: (acc) => setEditingDraft(acc),
+      });
+      setEditingDraft(text);
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") {
+        window.alert(e instanceof Error ? e.message : String(e));
+      }
+    } finally {
+      aiDescAbort.current = null;
+      setAiDescFile(null);
     }
   };
 
@@ -319,7 +379,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
 
   const handleDeleteFacet = async (file: string, title: string) => {
     if (busy) return;
-    if (!window.confirm(t("lore.facet.deleteConfirm", { title, defaultValue: `删除侧面「${title}」？文件将从磁盘移除。` }))) return;
+    if (!window.confirm(t("lore.facet.deleteConfirm", { title, defaultValue: `删除特征「${title}」？文件将从磁盘移除。` }))) return;
     setBusy(true);
     try {
       await removeFile(`${entity.dirPath}/${file}`);
@@ -476,7 +536,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
               <Sparkles size={11} /> {t("lore.panel.aiImprove")}
             </button>
             <button className={styles.actionBtn} onClick={() => setShowSplit(true)}>
-              <Scissors size={11} /> {t("lore.split.title", { defaultValue: "拆分侧面" })}
+              <Scissors size={11} /> {t("lore.split.title", { defaultValue: "拆分特征" })}
             </button>
             <button className={styles.actionBtn} onClick={openInEditor}>
               <ExternalLink size={11} /> {t("lore.detail.openInEditor", { defaultValue: "在编辑器中打开" })}
@@ -635,7 +695,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
               <div className={styles.facetsHeader}>
                 <Layers size={12} strokeWidth={1.8} />
                 <span className={styles.facetsHead}>
-                  {t("lore.facet.section", { defaultValue: "侧面" })}
+                  {t("lore.facet.section", { defaultValue: "特征" })}
                 </span>
                 <span className={styles.facetsCount}>{entity.facets.length}</span>
                 <span className={styles.spacer} />
@@ -645,13 +705,13 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                   disabled={busy}
                 >
                   <Plus size={12} strokeWidth={2} />
-                  {t("lore.facet.new", { defaultValue: "新建侧面" })}
+                  {t("lore.facet.new", { defaultValue: "新建特征" })}
                 </button>
               </div>
 
               {entity.facets.length === 0 ? (
                 <div className={styles.facetsEmpty}>
-                  {t("lore.facet.empty", { defaultValue: "暂无侧面 — 把服装、背景故事等拆成独立侧面，写作时按需注入，避免整条设定挤占上下文" })}
+                  {t("lore.facet.empty", { defaultValue: "暂无特征 — 把服装、背景故事等拆成独立特征，写作时按需注入，避免整条设定挤占上下文" })}
                 </div>
               ) : (
                 <div className={styles.facetGrid}>
@@ -660,7 +720,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                       key={f.file}
                       className={styles.facetCard}
                       onClick={() => setFacetModal({ file: f.file })}
-                      title={t("lore.facet.editTitle", { defaultValue: "编辑侧面" })}
+                      title={t("lore.facet.editTitle", { defaultValue: "编辑特征" })}
                     >
                       <div className={styles.facetCardHead}>
                         <span className={styles.facetMode} title={modeTitle(f.mode)}>
@@ -681,7 +741,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                         </div>
                       ) : f.mode === "auto" ? (
                         <div className={styles.facetWarn}>
-                          {t("lore.facet.keysEmptyWarn", { defaultValue: "自动模式下没有关键词，此侧面永远不会被自动注入" })}
+                          {t("lore.facet.keysEmptyWarn", { defaultValue: "自动模式下没有关键词，此特征永远不会被自动注入" })}
                         </div>
                       ) : null}
                       <div className={styles.facetActions} onClick={(ev) => ev.stopPropagation()}>
@@ -697,7 +757,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                           className={styles.iconBtn}
                           onClick={() => handleDeleteFacet(f.file, f.title)}
                           disabled={busy}
-                          title={t("lore.facet.delete", { defaultValue: "删除侧面" })}
+                          title={t("lore.facet.delete", { defaultValue: "删除特征" })}
                         >
                           <Trash2 size={11} strokeWidth={1.8} />
                         </button>
@@ -730,7 +790,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                           title={t("lore.facet.convertHint", { defaultValue: "补全触发关键词等信息，使其可被按需注入" })}
                         >
                           <Layers size={10} strokeWidth={1.8} />
-                          {t("lore.facet.convert", { defaultValue: "转为侧面" })}
+                          {t("lore.facet.convert", { defaultValue: "转为特征" })}
                         </button>
                       </div>
                     ))}
@@ -777,6 +837,16 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                           <div className={styles.galleryFileRow}>
                             <span className={styles.galleryFile}>{img.file}</span>
                             <div className={styles.galleryActions}>
+                              <button
+                                className={styles.iconBtn}
+                                onClick={() => handleAiDesc(img)}
+                                disabled={busy || !visionReady || aiDescFile !== null}
+                                title={visionReady
+                                  ? t("lore.detail.aiDesc", { defaultValue: "AI 生成描述" })
+                                  : t("lore.detail.aiDescNeedMultimodal", { defaultValue: "需要多模态模型 — 请在设置中选择支持图片输入的模型" })}
+                              >
+                                <Sparkles size={11} strokeWidth={1.8} />
+                              </button>
                               {!isEditing && (
                                 <button
                                   className={styles.iconBtn}
@@ -809,7 +879,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                                 rows={3}
                               />
                               <div className={styles.editButtons}>
-                                <button className={styles.iconBtnCommit} onClick={commitEdit} disabled={busy} title="保存">
+                                <button className={styles.iconBtnCommit} onClick={commitEdit} disabled={busy || aiDescFile !== null} title="保存">
                                   <Check size={12} strokeWidth={2} />
                                 </button>
                                 <button className={styles.iconBtn} onClick={cancelEdit} disabled={busy} title="取消">

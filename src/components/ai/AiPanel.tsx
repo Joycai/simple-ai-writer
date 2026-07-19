@@ -266,7 +266,7 @@ function LorePicker({
                     <button
                       className={styles.lorePickerExpand}
                       onClick={(ev) => { ev.preventDefault(); toggleExpanded(entity.dirPath); }}
-                      title={t("ai.panel.loreFacets", { defaultValue: "侧面" })}
+                      title={t("ai.panel.loreFacets", { defaultValue: "特征" })}
                     >
                       <Layers size={10} strokeWidth={1.8} />
                       {pinnedFacetCount > 0 ? `${pinnedFacetCount}/${facets.length}` : facets.length}

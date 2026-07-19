@@ -267,7 +267,7 @@ describe("parseFacetMeta", () => {
   it("returns null for non-facet files and defaults partial frontmatter", () => {
     expect(parseFacetMeta("just an attachment", "notes.md")).toBeNull();
     expect(parseFacetMeta("---\nname: x\n---\nbody", "notes.md")).toBeNull();
-    const minimal = parseFacetMeta("---\nfacet: 侧面\n---\nb", "f.md")!;
+    const minimal = parseFacetMeta("---\nfacet: 特征\n---\nb", "f.md")!;
     expect(minimal).toMatchObject({ keys: [], group: null, priority: 0, mode: "auto" });
   });
 });
