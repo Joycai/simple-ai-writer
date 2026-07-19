@@ -24,6 +24,46 @@ export interface LoreImage {
   absPath: string;
 }
 
+/**
+ * A facet is an independently-activatable slice of an entity — an outfit, a
+ * backstory arc, a relationship — stored as a plain `.md` file inside the
+ * entity directory whose frontmatter carries a `facet` field. Files without
+ * that field remain inert attachments (backwards compatible).
+ *
+ * Activation model (see src/lib/context/loreSelect.ts):
+ *   auto   — injected when the entity matches AND any of `keys` appears in
+ *            the match target (secondary-key AND logic)
+ *   always — injected whenever the entity matches
+ *   manual — only injected when explicitly pinned
+ */
+export interface LoreFacet {
+  /** Filename within the entity dir, e.g. "outfit-armor.md". */
+  file: string;
+  /** Display name from frontmatter `facet`. */
+  title: string;
+  /** Secondary activation keywords. Empty + mode "auto" ⇒ never auto-fires. */
+  keys: string[];
+  /** Mutual-exclusion group (scoped to the entity); null = ungrouped. */
+  group: string | null;
+  /** Higher wins within a group and fills budget earlier. Default 0. */
+  priority: number;
+  mode: "auto" | "always" | "manual";
+  /** Body length in chars (frontmatter excluded), for UI token estimates. */
+  charCount: number;
+}
+
+/** Entity-dir filenames that can never be facets. */
+export const RESERVED_ENTITY_FILES = ["index.md", "images.md"];
+
+/** Editable facet metadata — what the facet form reads and writes. */
+export interface FacetMeta {
+  title: string;
+  keys: string[];
+  group: string | null;
+  priority: number;
+  mode: "auto" | "always" | "manual";
+}
+
 export interface LoreEntity {
   id: string;          // dir name, e.g. "elden"
   category: CategoryId;
@@ -35,6 +75,8 @@ export interface LoreEntity {
   mdFiles: string[];   // list of *.md filenames in the folder
   /** Parsed from images.md (each `## filename` heading + following paragraph). */
   images: LoreImage[];
+  /** Facet metadata parsed from sibling md frontmatter (content loads lazily). */
+  facets: LoreFacet[];
 }
 
 export interface LoreIndex {

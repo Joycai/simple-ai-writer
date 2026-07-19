@@ -6,7 +6,17 @@
 import { fileExists, makeDir, readDir, readFile, renamePath, writeBinaryFile, writeFile } from "../fs/fileio";
 import { parseFrontmatter } from "../fs/markdown";
 import { parseImagesMd } from "./gallery";
-import { LORE_CATEGORIES, type CategoryId, type EntityMeta, type LoreEntity, type LoreImage, type LoreIndex } from "./model";
+import {
+  LORE_CATEGORIES,
+  RESERVED_ENTITY_FILES,
+  type CategoryId,
+  type EntityMeta,
+  type FacetMeta,
+  type LoreEntity,
+  type LoreFacet,
+  type LoreImage,
+  type LoreIndex,
+} from "./model";
 
 /** Scan the entire lore directory and return all entities grouped by category. */
 export async function scanLore(projectPath: string): Promise<LoreIndex> {
@@ -88,7 +98,124 @@ async function readEntity(
     // images.md missing — entity has no gallery, leave images empty
   }
 
-  return { id, category, dirPath, name, aliases, summary, avatarPath, mdFiles, images };
+  // Parse facet metadata from every non-reserved md. Files whose frontmatter
+  // lacks a `facet` field are inert attachments and simply yield null here.
+  // Content is NOT kept in memory — the injection engine re-reads facet files
+  // at assembly time so hand edits are never served stale (see loreSelect.ts).
+  const facets: LoreFacet[] = [];
+  for (const file of mdFiles) {
+    if (RESERVED_ENTITY_FILES.includes(file)) continue;
+    try {
+      const raw = await readFile(`${dirPath}/${file}`);
+      const facet = parseFacetMeta(raw, file);
+      if (facet) facets.push(facet);
+    } catch {
+      // unreadable file — treat as inert attachment
+    }
+  }
+
+  return { id, category, dirPath, name, aliases, summary, avatarPath, mdFiles, images, facets };
+}
+
+/**
+ * Parse a facet definition from a raw md file (frontmatter + body).
+ * Returns null when the file is not a facet (no `facet` frontmatter field).
+ * Tolerant of partial frontmatter: missing keys/group/priority/mode fall back
+ * to safe defaults so a half-written facet never breaks the scan.
+ */
+export function parseFacetMeta(raw: string, file: string): LoreFacet | null {
+  const { data, content } = parseFrontmatter(raw);
+  if (typeof data.facet !== "string" || !data.facet.trim()) return null;
+
+  const keys = coerceStringList(data.keys);
+  const group =
+    typeof data.group === "string" && data.group.trim() ? data.group.trim() : null;
+  const priority = Number(data.priority);
+  const mode =
+    data.mode === "always" || data.mode === "manual" ? data.mode : "auto";
+
+  return {
+    file,
+    title: data.facet.trim(),
+    keys,
+    group,
+    priority: Number.isFinite(priority) ? priority : 0,
+    mode,
+    charCount: content.length,
+  };
+}
+
+/**
+ * Serialize facet metadata to a YAML frontmatter block. Keys are written as
+ * a JSON-quoted inline array so the lightweight parser round-trips them
+ * exactly (including CJK and items containing commas).
+ */
+export function serializeFacetFrontmatter(meta: FacetMeta): string {
+  // Title/group are quoted so values that would otherwise parse as JSON
+  // (e.g. a title of "[1]") still round-trip as strings.
+  const lines = ["---", `facet: ${JSON.stringify(meta.title)}`];
+  lines.push(`keys: [${meta.keys.map((k) => JSON.stringify(k)).join(", ")}]`);
+  if (meta.group) lines.push(`group: ${JSON.stringify(meta.group)}`);
+  if (meta.priority !== 0) lines.push(`priority: ${meta.priority}`);
+  if (meta.mode !== "auto") lines.push(`mode: ${meta.mode}`);
+  lines.push("---", "");
+  return lines.join("\n");
+}
+
+/**
+ * Write facet metadata + body to an existing file in the entity dir.
+ * Any previous frontmatter is replaced wholesale (facet files own their
+ * frontmatter — there is nothing else to preserve).
+ */
+export async function saveFacetFile(
+  dirPath: string,
+  file: string,
+  meta: FacetMeta,
+  body: string,
+): Promise<void> {
+  await writeFile(`${dirPath}/${file}`, serializeFacetFrontmatter(meta) + "\n" + body.trimStart());
+}
+
+/**
+ * Create a new facet file named after the title (slugified, collision-safe,
+ * never a reserved name). Returns the filename actually used.
+ */
+export async function createFacetFile(
+  dirPath: string,
+  meta: FacetMeta,
+  body: string,
+): Promise<string> {
+  // '#' is stripped because facet pins are stored as "dirPath#file" strings.
+  let base = slugifyEntityId(meta.title).replace(/#/g, "");
+  if (!base || RESERVED_ENTITY_FILES.includes(`${base}.md`)) base = `facet-${base}`;
+  let file = `${base}.md`;
+  for (let i = 2; await fileExists(`${dirPath}/${file}`); i++) {
+    file = `${base}-${i}.md`;
+  }
+  await saveFacetFile(dirPath, file, meta, body);
+  return file;
+}
+
+/**
+ * Coerce a frontmatter value into a string list. Handles proper YAML arrays,
+ * but also the hand-written inline form with unquoted CJK items
+ * (`keys: [战甲, 板甲]`) which the lightweight frontmatter parser can't
+ * JSON.parse and therefore hands back as a raw string.
+ */
+function coerceStringList(v: unknown): string[] {
+  if (Array.isArray(v)) {
+    return v.map((x) => String(x).trim()).filter(Boolean);
+  }
+  if (typeof v === "string") {
+    return v
+      .trim()
+      .replace(/^\[/, "")
+      .replace(/\]$/, "")
+      .split(/[,，]/)
+      .map((s) => s.trim().replace(/^["']|["']$/g, "").trim())
+      .filter(Boolean);
+  }
+  return [];
 }
 
 /** Create a new entity directory with a template index.md. */

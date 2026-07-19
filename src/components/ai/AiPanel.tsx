@@ -1,13 +1,16 @@
 import { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight, Check, X, Square, Play, BookMarked, Sparkles } from "lucide-react";
+import { ChevronDown, ChevronRight, Check, X, Square, Play, BookMarked, Sparkles, Layers, Pin } from "lucide-react";
 import { useAiTaskStore, type TaskKind, type ToolStep } from "../../stores/aiTaskStore";
 import { useAiStore } from "../../stores/aiStore";
+import { useAppStore } from "../../stores/appStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useMemoryStore } from "../../stores/memoryStore";
 import { useProjectStore } from "../../stores/projectStore";
 import type { TaskExtras } from "../../lib/context/rag";
+import { parsePins, type LoreActivationReport } from "../../lib/context/loreSelect";
+import type { LoreFacet } from "../../lib/lore";
 import {
   MEMORY_MIN_DOC_CHARS,
   MEMORY_SUGGEST_THRESHOLD_CHARS,
@@ -198,7 +201,14 @@ function ExtraSection({
   );
 }
 
-/** Reusable lore reference picker (search + checkbox list). */
+/** Lore injection token-budget presets (see loreSelect / appStore). */
+const LORE_BUDGET_OPTIONS = [300, 600, 1000, 2000];
+
+/**
+ * Reusable lore reference picker — two-level tree: pin whole entities, or
+ * expand one and pin individual facets ("dirPath#file"). Facet pins imply the
+ * entity core, and pinning two same-group facets overrides their exclusion.
+ */
 function LorePicker({
   entities,
   search,
@@ -206,13 +216,24 @@ function LorePicker({
   selectedPaths,
   toggle,
 }: {
-  entities: { dirPath: string; name: string; categoryLabel: string }[];
+  entities: { dirPath: string; name: string; categoryLabel: string; facets: LoreFacet[] }[];
   search: string;
   setSearch: (v: string) => void;
   selectedPaths: string[];
-  toggle: (dirPath: string) => void;
+  toggle: (path: string) => void;
 }) {
   const { t } = useTranslation();
+  const loreBudgetTokens = useAppStore((s) => s.loreBudgetTokens);
+  const setLoreBudgetTokens = useAppStore((s) => s.setLoreBudgetTokens);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (dirPath: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(dirPath)) next.delete(dirPath); else next.add(dirPath);
+      return next;
+    });
+
   return (
     <>
       <input
@@ -225,27 +246,147 @@ function LorePicker({
         {entities.length === 0 ? (
           <span className={styles.lorePickerEmpty}>{t("ai.panel.continueLoreEmpty")}</span>
         ) : (
-          entities.map((entity) => (
-            <label key={entity.dirPath} className={styles.lorePickerItem}>
-              <input
-                type="checkbox"
-                checked={selectedPaths.includes(entity.dirPath)}
-                onChange={() => toggle(entity.dirPath)}
-              />
-              <span className={styles.lorePickerName}>{entity.name}</span>
-              <span className={styles.lorePickerCat}>{entity.categoryLabel}</span>
-            </label>
-          ))
+          entities.map((entity) => {
+            const facets = entity.facets ?? [];
+            const isExpanded = expanded.has(entity.dirPath);
+            const pinnedFacetCount = facets.filter((f) =>
+              selectedPaths.includes(`${entity.dirPath}#${f.file}`)
+            ).length;
+            return (
+              <div key={entity.dirPath}>
+                <label className={styles.lorePickerItem}>
+                  <input
+                    type="checkbox"
+                    checked={selectedPaths.includes(entity.dirPath)}
+                    onChange={() => toggle(entity.dirPath)}
+                  />
+                  <span className={styles.lorePickerName}>{entity.name}</span>
+                  <span className={styles.lorePickerCat}>{entity.categoryLabel}</span>
+                  {facets.length > 0 && (
+                    <button
+                      className={styles.lorePickerExpand}
+                      onClick={(ev) => { ev.preventDefault(); toggleExpanded(entity.dirPath); }}
+                      title={t("ai.panel.loreFacets", { defaultValue: "侧面" })}
+                    >
+                      <Layers size={10} strokeWidth={1.8} />
+                      {pinnedFacetCount > 0 ? `${pinnedFacetCount}/${facets.length}` : facets.length}
+                      {isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                    </button>
+                  )}
+                </label>
+                {isExpanded && facets.map((f) => {
+                  const pinPath = `${entity.dirPath}#${f.file}`;
+                  return (
+                    <label key={pinPath} className={`${styles.lorePickerItem} ${styles.lorePickerFacet}`}>
+                      <input
+                        type="checkbox"
+                        checked={selectedPaths.includes(pinPath)}
+                        onChange={() => toggle(pinPath)}
+                      />
+                      <span className={styles.lorePickerName}>{f.title}</span>
+                      {f.group && <span className={styles.lorePickerGroup}>{f.group}</span>}
+                      <span className={styles.lorePickerCat}>~{Math.ceil(f.charCount / 3)} tk</span>
+                    </label>
+                  );
+                })}
+              </div>
+            );
+          })
         )}
       </div>
+      {/* Injection budget — how many tokens the 【设定资料】 block may use. */}
+      <div className={styles.loreBudgetRow}>
+        <span className={styles.loreBudgetLabel}>
+          {t("ai.panel.loreBudget", { defaultValue: "设定预算" })}
+        </span>
+        <div className={styles.continueLengthOptions}>
+          {LORE_BUDGET_OPTIONS.map((n) => (
+            <button
+              key={n}
+              className={`${styles.lengthChip} ${loreBudgetTokens === n ? styles.lengthChipActive : ""}`}
+              onClick={() => setLoreBudgetTokens(n)}
+              title={t("ai.panel.loreBudgetHint", { defaultValue: "【设定资料】最多占用的 token 数" })}
+            >
+              {n >= 1000 ? `${n / 1000}k` : n}
+            </button>
+          ))}
+        </div>
+      </div>
     </>
+  );
+}
+
+/** Post-assembly transparency: what got injected, what was dropped and why. */
+function LoreReportSection({ report }: { report: LoreActivationReport }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(true);
+  const estTk = (chars: number) => Math.ceil(chars / 3);
+
+  const dropReason = (reason: string) =>
+    reason === "no-key" ? t("ai.panel.loreDropNoKey", { defaultValue: "未命中关键词" })
+    : reason === "group-lost" ? t("ai.panel.loreDropGroupLost", { defaultValue: "互斥组落选" })
+    : reason === "budget" ? t("ai.panel.loreDropBudget", { defaultValue: "超出预算" })
+    : t("ai.panel.loreDropManual", { defaultValue: "仅手动" });
+
+  return (
+    <div className={styles.loreReport}>
+      <button className={styles.agentStepsHeader} onClick={() => setOpen((v) => !v)}>
+        <span className={styles.agentStepsChevron}>
+          {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+        </span>
+        <span className={styles.agentStepsTitle}>
+          {t("ai.panel.loreReportTitle", { defaultValue: "本次注入设定" })}
+        </span>
+        <span className={styles.agentStepsCount}>
+          ({report.entities.length > 0
+            ? `~${estTk(report.usedChars)}/${estTk(report.budgetChars)} tk`
+            : t("ai.panel.loreReportEmpty", { defaultValue: "无" })})
+        </span>
+      </button>
+      {open && report.entities.length > 0 && (
+        <div className={styles.loreReportBody}>
+          {report.entities.map((e) => (
+            <div key={e.dirPath} className={styles.loreReportEntity}>
+              <span className={styles.loreReportName}>
+                {e.reason === "pinned" && <Pin size={9} strokeWidth={1.8} />}
+                {e.name}
+              </span>
+              {e.layers.filter((l) => l.kind !== "summary").map((l, i) => (
+                <span
+                  key={`${l.kind}-${l.file ?? i}`}
+                  className={styles.loreReportChip}
+                  title={l.matchedKeys?.length
+                    ? t("ai.panel.loreMatchedKeys", { keys: l.matchedKeys.join(", "), defaultValue: `命中：${l.matchedKeys.join(", ")}` })
+                    : undefined}
+                >
+                  {l.pinned && <Pin size={8} strokeWidth={1.8} />}
+                  {l.kind === "core"
+                    ? t("ai.panel.loreCore", { defaultValue: "核心" }) + (l.truncated ? "✂" : "")
+                    : l.title}
+                  <span className={styles.loreReportTk}>{estTk(l.chars)}tk</span>
+                </span>
+              ))}
+              {e.droppedFacets.map((d) => (
+                <span
+                  key={`drop-${d.file}`}
+                  className={`${styles.loreReportChip} ${styles.loreReportDropped}`}
+                  title={dropReason(d.reason)}
+                >
+                  {d.title}
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
 export function AiPanel() {
   const { t, i18n } = useTranslation();
   const {
-    isRunning, output, error, usage, toolSteps,
+    isRunning, output, error, usage, toolSteps, loreReport,
     runTask, abort, clearOutput, selection, requestedTask, setRequestedTask,
   } = useAiTaskStore();
   const { models, providers, prompts, activeModelId, activePromptId, setActiveModel, setActivePrompt } = useAiStore();
@@ -377,12 +518,19 @@ export function AiPanel() {
     });
   };
 
-  // Only count/label pins that still resolve to an existing entity — a deleted
-  // lore entry can leave a stale path in storage, harmless but shouldn't inflate
-  // the badge (it is also ignored downstream when assembling context).
-  const pinnedCount = selectedLorePaths.filter((p) =>
-    allLoreEntities.some((e) => e.dirPath === p)
-  ).length;
+  // Only count/label pins that still resolve to an existing entity or facet —
+  // a deleted lore entry can leave a stale path in storage, harmless but
+  // shouldn't inflate the badge (it is also ignored downstream when assembling
+  // context). Facet pins use the "dirPath#file" form (see loreSelect).
+  const pinnedCount = selectedLorePaths.filter((p) => {
+    // Whole string matching an entity dirPath = entity pin, even if the path
+    // itself contains '#' — mirror loreSelect's index-aware resolution.
+    if (allLoreEntities.some((e) => e.dirPath === p)) return true;
+    const [pin] = parsePins([p]);
+    if (!pin.facetFile) return false;
+    const entity = allLoreEntities.find((e) => e.dirPath === pin.dirPath);
+    return !!entity && (entity.facets ?? []).some((f) => f.file === pin.facetFile);
+  }).length;
 
   // Results pane shows something whenever a run is in flight or has produced output.
   const hasResults = isRunning || !!output || !!error || toolSteps.length > 0 || !!usage;
@@ -641,6 +789,9 @@ export function AiPanel() {
             </div>
           ) : (
             <>
+              {/* Injection transparency: what lore went into this run and why */}
+              {loreReport && <LoreReportSection report={loreReport} />}
+
               {/* Agent steps (agentic "continue" runs) */}
               {toolSteps.length > 0 && (
                 <AgentStepsSection steps={toolSteps} isRunning={isRunning} />

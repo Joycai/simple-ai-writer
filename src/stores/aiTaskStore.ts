@@ -2,7 +2,9 @@ import { create } from "zustand";
 import i18n from "../i18n";
 import { streamCompletion } from "../lib/ai";
 import { assembleContext, bundleToMessages, type TaskExtras } from "../lib/context/rag";
+import type { LoreActivationReport } from "../lib/context/loreSelect";
 import { useAiStore } from "./aiStore";
+import { useAppStore } from "./appStore";
 import { useLoreStore } from "./loreStore";
 import { useProjectStore } from "./projectStore";
 import { getDb } from "../lib/project";
@@ -39,6 +41,8 @@ interface AiTaskState {
   requestedTask: TaskKind | null;
   abortController: AbortController | null;
   toolSteps: ToolStep[];
+  /** Which lore entities/facets were injected (and why) for the current run. */
+  loreReport: LoreActivationReport | null;
 
   setSelection: (s: string, range?: SelectionRange | null) => void;
   setRequestedTask: (kind: TaskKind | null) => void;
@@ -58,6 +62,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
   requestedTask: null,
   abortController: null,
   toolSteps: [],
+  loreReport: null,
 
   setSelection: (s, range = null) => set({ selection: s, selectionRange: range }),
   setRequestedTask: (kind) => set({ requestedTask: kind }),
@@ -138,9 +143,11 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     }
 
     const controller = new AbortController();
-    set({ isRunning: true, output: "", error: null, usage: null, toolSteps: [], abortController: controller });
+    set({ isRunning: true, output: "", error: null, usage: null, toolSteps: [], loreReport: null, abortController: controller });
 
     const baseUrl = provider.baseUrl || defaultBaseUrl(provider.apiStandard);
+    // Lore token budget (user setting) → char budget for the selection engine.
+    const loreBudgetChars = useAppStore.getState().loreBudgetTokens * 3;
 
     try {
       if (kind === "continue") {
@@ -156,7 +163,9 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           { ...extras, ...bookExtras, appendMode: true },
           get().selectionRange,
           memory,
+          loreBudgetChars,
         );
+        set({ loreReport: bundle.loreReport });
         const initialMessages = bundleToMessages(bundle);
         // Extract the user message content for the first agent turn
         const initialUserMessage =
@@ -201,7 +210,9 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           extras,
           get().selectionRange,
           memory,
+          loreBudgetChars,
         );
+        set({ loreReport: bundle.loreReport });
         const messages = bundleToMessages(bundle);
 
         await streamCompletion({
@@ -247,7 +258,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     set({ isRunning: false, abortController: null });
   },
 
-  clearOutput: () => set({ output: "", error: null, usage: null, toolSteps: [] }),
+  clearOutput: () => set({ output: "", error: null, usage: null, toolSteps: [], loreReport: null }),
 }));
 
 function defaultBaseUrl(standard: string): string {
