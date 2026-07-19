@@ -25,7 +25,7 @@
 3. Migration: rebuild lore index via store action
 
 ## Add or split lore facets
-1. Manual: LoreDetail → 侧面 section → 新建侧面 / 转为侧面 (form writes the `facet` frontmatter)
-2. AI split: LoreDetail top bar → 拆分侧面 → review drafts → Apply (original index.md backed up to `.ai-writer/backups/`)
+1. Manual: LoreDetail → 特征 section → 新建特征 / 转为特征 (form writes the `facet` frontmatter)
+2. AI split: LoreDetail top bar → 拆分特征 → review drafts → Apply (original index.md backed up to `.ai-writer/backups/`)
 3. Activation semantics live in `src/lib/context/loreSelect.ts`; facet parsing in `src/lib/lore/entity.ts` (`parseFacetMeta`)
 4. Tests: `src/lib/__tests__/loreSelect.test.ts`, `splitter.test.ts`

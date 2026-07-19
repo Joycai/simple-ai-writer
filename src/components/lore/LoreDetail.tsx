@@ -319,7 +319,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
 
   const handleDeleteFacet = async (file: string, title: string) => {
     if (busy) return;
-    if (!window.confirm(t("lore.facet.deleteConfirm", { title, defaultValue: `删除侧面「${title}」？文件将从磁盘移除。` }))) return;
+    if (!window.confirm(t("lore.facet.deleteConfirm", { title, defaultValue: `删除特征「${title}」？文件将从磁盘移除。` }))) return;
     setBusy(true);
     try {
       await removeFile(`${entity.dirPath}/${file}`);
@@ -476,7 +476,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
               <Sparkles size={11} /> {t("lore.panel.aiImprove")}
             </button>
             <button className={styles.actionBtn} onClick={() => setShowSplit(true)}>
-              <Scissors size={11} /> {t("lore.split.title", { defaultValue: "拆分侧面" })}
+              <Scissors size={11} /> {t("lore.split.title", { defaultValue: "拆分特征" })}
             </button>
             <button className={styles.actionBtn} onClick={openInEditor}>
               <ExternalLink size={11} /> {t("lore.detail.openInEditor", { defaultValue: "在编辑器中打开" })}
@@ -635,7 +635,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
               <div className={styles.facetsHeader}>
                 <Layers size={12} strokeWidth={1.8} />
                 <span className={styles.facetsHead}>
-                  {t("lore.facet.section", { defaultValue: "侧面" })}
+                  {t("lore.facet.section", { defaultValue: "特征" })}
                 </span>
                 <span className={styles.facetsCount}>{entity.facets.length}</span>
                 <span className={styles.spacer} />
@@ -645,13 +645,13 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                   disabled={busy}
                 >
                   <Plus size={12} strokeWidth={2} />
-                  {t("lore.facet.new", { defaultValue: "新建侧面" })}
+                  {t("lore.facet.new", { defaultValue: "新建特征" })}
                 </button>
               </div>
 
               {entity.facets.length === 0 ? (
                 <div className={styles.facetsEmpty}>
-                  {t("lore.facet.empty", { defaultValue: "暂无侧面 — 把服装、背景故事等拆成独立侧面，写作时按需注入，避免整条设定挤占上下文" })}
+                  {t("lore.facet.empty", { defaultValue: "暂无特征 — 把服装、背景故事等拆成独立特征，写作时按需注入，避免整条设定挤占上下文" })}
                 </div>
               ) : (
                 <div className={styles.facetGrid}>
@@ -660,7 +660,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                       key={f.file}
                       className={styles.facetCard}
                       onClick={() => setFacetModal({ file: f.file })}
-                      title={t("lore.facet.editTitle", { defaultValue: "编辑侧面" })}
+                      title={t("lore.facet.editTitle", { defaultValue: "编辑特征" })}
                     >
                       <div className={styles.facetCardHead}>
                         <span className={styles.facetMode} title={modeTitle(f.mode)}>
@@ -681,7 +681,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                         </div>
                       ) : f.mode === "auto" ? (
                         <div className={styles.facetWarn}>
-                          {t("lore.facet.keysEmptyWarn", { defaultValue: "自动模式下没有关键词，此侧面永远不会被自动注入" })}
+                          {t("lore.facet.keysEmptyWarn", { defaultValue: "自动模式下没有关键词，此特征永远不会被自动注入" })}
                         </div>
                       ) : null}
                       <div className={styles.facetActions} onClick={(ev) => ev.stopPropagation()}>
@@ -697,7 +697,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                           className={styles.iconBtn}
                           onClick={() => handleDeleteFacet(f.file, f.title)}
                           disabled={busy}
-                          title={t("lore.facet.delete", { defaultValue: "删除侧面" })}
+                          title={t("lore.facet.delete", { defaultValue: "删除特征" })}
                         >
                           <Trash2 size={11} strokeWidth={1.8} />
                         </button>
@@ -730,7 +730,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                           title={t("lore.facet.convertHint", { defaultValue: "补全触发关键词等信息，使其可被按需注入" })}
                         >
                           <Layers size={10} strokeWidth={1.8} />
-                          {t("lore.facet.convert", { defaultValue: "转为侧面" })}
+                          {t("lore.facet.convert", { defaultValue: "转为特征" })}
                         </button>
                       </div>
                     ))}

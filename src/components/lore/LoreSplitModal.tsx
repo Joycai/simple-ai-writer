@@ -179,7 +179,7 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
       for (const d of included) {
         await createFacetFile(entity.dirPath, {
           ...d.meta,
-          title: d.meta.title.trim() || "未命名侧面",
+          title: d.meta.title.trim() || "未命名特征",
           keys: d.meta.keys.map((k) => k.trim()).filter(Boolean),
         }, d.content);
       }
@@ -205,7 +205,7 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
           <div className={styles.headerLeft}>
             <Scissors size={15} strokeWidth={1.8} />
             <span className={styles.headerTitle}>
-              {t("lore.split.title", { defaultValue: "拆分侧面" })}
+              {t("lore.split.title", { defaultValue: "拆分特征" })}
             </span>
             <span className={styles.headerEntity}>{entity.name}</span>
           </div>
@@ -277,7 +277,7 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
               />
 
               <div className={styles.sectionLabel}>
-                {t("lore.split.facetsLabel", { defaultValue: "拆出的侧面（按需注入）" })}
+                {t("lore.split.facetsLabel", { defaultValue: "拆出的特征（按需注入）" })}
                 <span className={styles.tokenTag}>{included.length}/{drafts.length}</span>
               </div>
               <div className={styles.draftList}>
@@ -321,7 +321,7 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
                         {d.meta.keys.length === 0 && (
                           <div className={styles.draftWarn}>
                             <AlertTriangle size={11} />
-                            {t("lore.facet.keysEmptyWarn", { defaultValue: "自动模式下没有关键词，此侧面永远不会被自动注入" })}
+                            {t("lore.facet.keysEmptyWarn", { defaultValue: "自动模式下没有关键词，此特征永远不会被自动注入" })}
                           </div>
                         )}
                         <MarkdownTextarea
