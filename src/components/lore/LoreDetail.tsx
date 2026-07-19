@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, Sparkles, FolderOpen, ExternalLink, FileText, Plus, Pencil, Trash2, Check, X, Camera, ChevronLeft, ChevronRight, Layers, Zap, Pin, Hand, Scissors } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -9,6 +9,7 @@ import {
   LORE_CATEGORIES,
   type CategoryId,
   type LoreEntity,
+  type LoreImage,
   addLoreImage,
   updateLoreImageDesc,
   removeLoreImage,
@@ -18,6 +19,9 @@ import {
 import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useAppStore } from "../../stores/appStore";
+import { useAiStore } from "../../stores/aiStore";
+import { loadApiKey } from "../../lib/keyStore";
+import { describeLoreImage } from "../../lib/lore/vision";
 import { readFile, removeFile } from "../../lib/fs/fileio";
 import { imageToDataUrl } from "../../lib/fs/images";
 import { renderMarkdown } from "../../lib/fs/markdown";
@@ -93,6 +97,16 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   const [editingFile, setEditingFile] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // AI image description: which gallery file is being generated for (null =
+  // idle). The output streams into the open edit area so the user reviews and
+  // commits it through the normal save flow — nothing touches disk until then.
+  const [aiDescFile, setAiDescFile] = useState<string | null>(null);
+  const aiDescAbort = useRef<AbortController | null>(null);
+  const models = useAiStore((s) => s.models);
+  const providers = useAiStore((s) => s.providers);
+  const activeModelId = useAiStore((s) => s.activeModelId);
+  const visionReady = models.find((m) => m.id === activeModelId)?.type === "multimodal";
 
   // Lightbox state: which gallery image to show at full size (index into
   // entity.images), or null when the lightbox is closed.
@@ -289,11 +303,12 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     setEditingDraft(desc);
   };
   const cancelEdit = () => {
+    aiDescAbort.current?.abort(); // also stops an in-flight AI description
     setEditingFile(null);
     setEditingDraft("");
   };
   const commitEdit = async () => {
-    if (!editingFile || busy) return;
+    if (!editingFile || busy || aiDescFile) return;
     setBusy(true);
     try {
       await updateLoreImageDesc(entity.dirPath, editingFile, editingDraft);
@@ -301,6 +316,51 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
       cancelEdit();
     } finally {
       setBusy(false);
+    }
+  };
+
+  // Generate a textual description of one gallery image with the active
+  // multimodal model. Streams into the edit area; the user commits via the
+  // regular ✓ button, so a bad generation is just an X away from discarded.
+  const handleAiDesc = async (img: LoreImage) => {
+    if (busy || aiDescFile) return;
+    const model = models.find((m) => m.id === activeModelId);
+    const provider = model ? providers.find((p) => p.id === model.providerId) : null;
+    if (!model || !provider || model.type !== "multimodal") return;
+
+    const ctrl = new AbortController();
+    aiDescAbort.current = ctrl;
+    setAiDescFile(img.file);
+    startEdit(img.file, img.desc);
+    try {
+      const apiKey = (await loadApiKey(provider.id)) ?? "";
+      // Reuse the already-loaded gallery data URL; fall back to a fresh read
+      // if that load failed (broken thumbnail but readable file).
+      const dataUrl = imageDataUrls[img.absPath] ?? (await imageToDataUrl(img.absPath)).dataUrl;
+      const text = await describeLoreImage({
+        dataUrl,
+        entityName: entity.name,
+        entitySummary: entity.summary,
+        existingDesc: img.desc,
+        language: i18n.language,
+        baseUrl: provider.baseUrl,
+        apiKey,
+        standard: provider.apiStandard,
+        safetySettings: provider.safetySettings,
+        modelId: model.modelId,
+        prefix: model.prefix,
+        contextSize: model.contextSize,
+        signal: ctrl.signal,
+        onProgress: (acc) => setEditingDraft(acc),
+      });
+      setEditingDraft(text);
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") {
+        window.alert(e instanceof Error ? e.message : String(e));
+      }
+    } finally {
+      aiDescAbort.current = null;
+      setAiDescFile(null);
     }
   };
 
@@ -777,6 +837,16 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                           <div className={styles.galleryFileRow}>
                             <span className={styles.galleryFile}>{img.file}</span>
                             <div className={styles.galleryActions}>
+                              <button
+                                className={styles.iconBtn}
+                                onClick={() => handleAiDesc(img)}
+                                disabled={busy || !visionReady || aiDescFile !== null}
+                                title={visionReady
+                                  ? t("lore.detail.aiDesc", { defaultValue: "AI 生成描述" })
+                                  : t("lore.detail.aiDescNeedMultimodal", { defaultValue: "需要多模态模型 — 请在设置中选择支持图片输入的模型" })}
+                              >
+                                <Sparkles size={11} strokeWidth={1.8} />
+                              </button>
                               {!isEditing && (
                                 <button
                                   className={styles.iconBtn}
@@ -809,7 +879,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                                 rows={3}
                               />
                               <div className={styles.editButtons}>
-                                <button className={styles.iconBtnCommit} onClick={commitEdit} disabled={busy} title="保存">
+                                <button className={styles.iconBtnCommit} onClick={commitEdit} disabled={busy || aiDescFile !== null} title="保存">
                                   <Check size={12} strokeWidth={2} />
                                 </button>
                                 <button className={styles.iconBtn} onClick={cancelEdit} disabled={busy} title="取消">

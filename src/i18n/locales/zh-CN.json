@@ -444,6 +444,8 @@
       "gallery": "图集",
       "addImage": "添加图片",
       "editDesc": "编辑描述",
+      "aiDesc": "AI 生成描述",
+      "aiDescNeedMultimodal": "需要多模态模型 — 请在设置中选择支持图片输入的模型",
       "removeImage": "删除图片",
       "removeConfirm": "删除「{{file}}」？此操作不可撤销，文件也会从磁盘移除。",
       "descPlaceholder": "一句话描述这张图片（多模态模型会看到图片，纯文本模型只会看到这段描述）…",
