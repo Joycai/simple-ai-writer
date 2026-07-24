@@ -107,7 +107,15 @@
       "aiGroup": "AI Config",
       "providers": "Providers",
       "models": "Models",
-      "prompts": "Prompts"
+      "prompts": "Prompts",
+      "about": "About"
+    },
+    "about": {
+      "appName": "Simple AI Writer",
+      "tagline": "A distraction-free AI writing companion for long-form fiction.",
+      "versionLabel": "Version",
+      "githubLabel": "GitHub Repository",
+      "copyright": "© 2026 joycai. Released under the MIT License."
     },
     "general": {
       "appearance": "Appearance",

@@ -1,5 +1,18 @@
 # Simple AI Writer
 
+[![CI](https://github.com/Joycai/simple-ai-writer/actions/workflows/ci.yml/badge.svg)](https://github.com/Joycai/simple-ai-writer/actions/workflows/ci.yml)
+[![Release](https://github.com/Joycai/simple-ai-writer/actions/workflows/release.yml/badge.svg)](https://github.com/Joycai/simple-ai-writer/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/Joycai/simple-ai-writer?sort=semver)](https://github.com/Joycai/simple-ai-writer/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](#installation)
+
+[![Tauri](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)](https://tauri.app)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Rust](https://img.shields.io/badge/Rust-stable-000000?logo=rust&logoColor=white)](https://www.rust-lang.org)
+[![Vite](https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white)](https://vite.dev)
+[![GitHub stars](https://img.shields.io/github/stars/Joycai/simple-ai-writer?style=social)](https://github.com/Joycai/simple-ai-writer/stargazers)
+
 A modern, local-first desktop Markdown editor with AI writing assistance powered by your own knowledge base. Write smarter with contextual AI suggestions based on custom lore entities.
 
 **Available on:** macOS • Windows • Linux
