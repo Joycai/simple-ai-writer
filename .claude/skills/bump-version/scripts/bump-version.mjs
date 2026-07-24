@@ -9,6 +9,14 @@
  *   - src-tauri/Cargo.toml         ([package] section only)
  *   - src-tauri/Cargo.lock         (the simple-ai-writer entry)
  *
+ * Two user-facing surfaces also show the version — the in-app "About" tab and the
+ * README badges — but both read it DYNAMICALLY (About via getVersion() off the
+ * bundle, README via a shields.io release badge), so they need no edit here. To
+ * keep it that way, after bumping the manifests we SWEEP those surfaces for a
+ * stray *hardcoded* copy of the old version and heal it, warning if one is found
+ * (a hardcoded version there is a bug — it silently goes stale). Today the sweep
+ * finds nothing, which is the point.
+ *
  * Usage:
  *   node bump-version.mjs <patch|minor|major|X.Y.Z> [--dry-run] [--allow-drift]
  *                         [--repo-root <path>]
@@ -111,7 +119,9 @@ function cargoTomlTarget(path) {
 /** Cargo.lock: the version line belonging to our crate's [[package]] block. */
 function cargoLockTarget(path) {
   const label = "src-tauri/Cargo.lock";
-  const entryRe = new RegExp(`(name = "${CRATE_NAME}"\\nversion = ")([^"]*)(")`);
+  // Tolerate CRLF: Cargo.lock is checked out with \r\n on Windows, so anchoring
+  // to a bare \n between the name and version lines would never match there.
+  const entryRe = new RegExp(`(name = "${CRATE_NAME}"\\r?\\nversion = ")([^"]*)(")`);
   return {
     label,
     path,
@@ -135,6 +145,48 @@ function buildTargets(root) {
     cargoTomlTarget(join(root, "src-tauri", "Cargo.toml")),
     cargoLockTarget(join(root, "src-tauri", "Cargo.lock")),
   ];
+}
+
+// ── Secondary surfaces: the About tab + README ─────────────────────────
+// These show the version but read it dynamically, so they normally carry NO
+// literal version. The sweep exists to catch the day someone hardcodes one:
+// it rewrites any standalone occurrence of the old version to the new one and
+// reports the hit so a human can look. Files are optional (a missing one is
+// skipped, not an error) — the skill shouldn't break if the UI is refactored.
+function secondarySurfaces(root) {
+  return [
+    { label: "README.md", path: join(root, "README.md") },
+    { label: "src/i18n/locales/en.json", path: join(root, "src", "i18n", "locales", "en.json") },
+    { label: "src/i18n/locales/zh-CN.json", path: join(root, "src", "i18n", "locales", "zh-CN.json") },
+  ];
+}
+
+/**
+ * Rewrite standalone occurrences of `current` to `next` in each secondary
+ * surface. The version is matched as a whole token — not as a substring of a
+ * longer number — so a `0.1.0` bump never mangles a `10.1.0` dependency pin or
+ * a bare year. Returns per-file hit counts for reporting.
+ */
+function sweepSecondary(root, current, next, { dryRun }) {
+  const escaped = current.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Reject only digit/dot neighbours, so `10.1.0` (longer number) and `0.1.00`
+  // are left alone, while `v0.1.0`, `"0.1.0"`, and `version-0.1.0` still match —
+  // a leading `v` is the common README/badge form and must be caught.
+  const re = new RegExp(`(?<![\\d.])${escaped}(?![\\d.])`, "g");
+  const results = [];
+  for (const { label, path } of secondarySurfaces(root)) {
+    let src;
+    try {
+      src = readFileSync(path, "utf8");
+    } catch {
+      continue; // surface doesn't exist in this checkout — fine
+    }
+    const hits = src.match(re);
+    const count = hits ? hits.length : 0;
+    if (count > 0 && !dryRun) writeFileSync(path, src.replace(re, next));
+    results.push({ label, count });
+  }
+  return results;
 }
 
 function bump(current, kind) {
@@ -240,6 +292,29 @@ function main() {
       process.exit(1);
     }
     console.log(`\nAll four manifests verified at ${next}.`);
+  }
+
+  // Sweep the About tab + README for a stray hardcoded version. `current` is the
+  // pre-bump value; under drift we only reach here with an explicit target, so
+  // there's no single "old" version to sweep for — skip it then and let the diff
+  // speak. Otherwise report: silence (0 hits) is the healthy state; any hit is a
+  // hardcoded version that should be made dynamic instead.
+  if (distinct.length === 1) {
+    const swept = sweepSecondary(root, current, next, { dryRun });
+    const touched = swept.filter((s) => s.count > 0);
+    console.log("");
+    if (touched.length === 0) {
+      console.log("About tab + README carry no hardcoded version (read dynamically) — nothing to sweep.");
+    } else {
+      for (const { label, count } of touched) {
+        console.log(`  ${dryRun ? "would rewrite" : "rewrote"} ${count} hardcoded ${current} → ${next}  ${label}`);
+      }
+      console.warn(
+        "\n⚠ A hardcoded version was found in a surface that should read it dynamically.\n" +
+          "  Swept it for now, but consider wiring that surface to getVersion() / the\n" +
+          "  release badge so it can't drift again. Review the diff before committing."
+      );
+    }
   }
 }
 

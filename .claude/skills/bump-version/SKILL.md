@@ -1,6 +1,6 @@
 ---
 name: bump-version
-description: Bump this app's version across all four Tauri manifests (package.json, src-tauri/tauri.conf.json, src-tauri/Cargo.toml, src-tauri/Cargo.lock) and commit the result on a branch. Use this whenever the user wants to raise, set, or check the app version — "bump the version", "bump patch/minor/major", "cut 0.2.0", "prep a release", "update the version number", "are the version files in sync?" — even if they never name the files. The four manifests must move in lockstep or the running app reports a different version than the installer that shipped it, so prefer this skill over hand-editing any version string.
+description: Bump this app's version across all four Tauri manifests (package.json, src-tauri/tauri.conf.json, src-tauri/Cargo.toml, src-tauri/Cargo.lock), sweep the About tab + README for any stray hardcoded version, and commit the result on a branch. Use this whenever the user wants to raise, set, or check the app version — "bump the version", "bump patch/minor/major", "cut 0.2.0", "prep a release", "update the version number", "are the version files in sync?" — even if they never name the files. The four manifests must move in lockstep or the running app reports a different version than the installer that shipped it, so prefer this skill over hand-editing any version string.
 ---
 
 # Bump the app version
@@ -18,6 +18,34 @@ This skill moves all four together and verifies the result.
 | `src-tauri/tauri.conf.json` | **What the bundled app actually reports** and what names the installer |
 | `src-tauri/Cargo.toml` | The Rust crate version (`[package]` section only) |
 | `src-tauri/Cargo.lock` | The `simple-ai-writer` entry; cargo rewrites it on build if it disagrees with Cargo.toml, producing a surprise diff |
+
+## Where else the version shows (About tab + README)
+
+Two user-facing surfaces display the version, and **both read it dynamically —
+neither carries a literal version string to edit:**
+
+| Surface | How it gets the version |
+| --- | --- |
+| In-app **About** tab (`src/components/settings/SettingsModal.tsx`) | `getVersion()` from `@tauri-apps/api/app`, read off the bundle at runtime — so it reflects `tauri.conf.json` automatically once the manifests are bumped |
+| **README** badges | A shields.io release badge that tracks the latest **GitHub Release** (`img.shields.io/github/v/release/...`) — it updates when you cut the release, not from a repo edit |
+
+So bumping the four manifests is enough for About, and cutting the release is
+enough for the README badge. **Do not hardcode the version into either** — that
+just recreates the drift this skill exists to prevent.
+
+To enforce that, the script **sweeps** those surfaces after the manifest bump:
+`README.md` and `src/i18n/locales/{en,zh-CN}.json` are scanned for a standalone
+copy of the *old* version. Normally there are zero hits (the healthy state, which
+the script prints). If one is found it's rewritten to the new version **and a
+warning fires** — treat that as a signal to make the surface dynamic, not as a
+routine edit. The sweep only runs when the manifests agree (under drift there's
+no single "old" version to sweep for).
+
+> **Not version, so not swept:** the About tab's copyright line lives in those
+> same locale files (`systemSettings.about.copyright`) but carries a **year**, not
+> a version. It's calendar-based — update it at a year boundary, never as part of
+> a version bump. The sweep deliberately ignores years (a `0.1.0` bump can't match
+> `2026`).
 
 ## Scheme
 
@@ -70,12 +98,23 @@ change, so you'll see fewer than four.)
 The script re-reads all four files afterward and fails loudly if they disagree,
 so a successful run is its own verification — no need to re-grep.
 
-**4. Commit those four files only.**
+The run ends with a sweep line for the About tab + README (see [above](#where-else-the-version-shows-about-tab--readme)).
+The healthy output is `carry no hardcoded version … nothing to sweep` and **no
+change in `git diff` for those files**. If instead it warns that it rewrote a
+hardcoded version, the diff will show that extra edit — include it in the commit,
+but flag to the user that the surface should be made dynamic so it can't drift
+again.
+
+**4. Commit the bumped files.** Normally that's exactly the four manifests:
 
 ```bash
 git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
 git commit -m "chore: bump version to <new-version>"
 ```
+
+If the sweep in step 3 also rewrote a hardcoded version, `git add` those files
+too (e.g. `README.md`, `src/i18n/locales/*.json`) so the commit is self-contained
+— and mention in the commit or PR that the surface should be made dynamic.
 
 If the tree had unrelated edits, leave them out — a version bump tangled into a
 feature diff is hard to revert.
