@@ -3,7 +3,7 @@
   inset: 0;
   background: var(--color-bg-overlay);
   z-index: 90;
-  animation: fadeIn 200ms var(--ease-out);
+  /* enter/exit handled by Motion (AnimatePresence) — see AiDrawer.tsx */
 }
 
 .drawer {
@@ -19,7 +19,7 @@
   display: flex;
   flex-direction: column;
   z-index: 100;
-  animation: slideInRight 240ms var(--ease-out);
+  /* enter/exit handled by Motion (AnimatePresence) — see AiDrawer.tsx */
 }
 
 /* Header */

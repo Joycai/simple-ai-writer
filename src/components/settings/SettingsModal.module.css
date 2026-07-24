@@ -8,7 +8,7 @@
   z-index: 100;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  animation: fadeIn 200ms var(--ease-out);
+  /* enter/exit handled by Motion (AnimatePresence) — see App.tsx / SettingsModal.tsx */
 }
 
 .modal {
@@ -23,7 +23,7 @@
   flex-direction: column;
   overflow: hidden;
   box-shadow: var(--shadow-xl);
-  animation: scaleIn 240ms var(--ease-out);
+  /* enter/exit handled by Motion (AnimatePresence) — see App.tsx / SettingsModal.tsx */
 }
 
 .header {

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { X, Pencil, Moon, Sun, Monitor, SlidersHorizontal, Server, Cpu, MessageSquare, Check, AlertCircle, FolderOpen, Info, GitBranch, ExternalLink } from "lucide-react";
 import { revealItemInDir, openUrl } from "@tauri-apps/plugin-opener";
@@ -10,6 +11,7 @@ import type { ApiStandard } from "../../lib/ai/types";
 import { MAX_CONTEXT_SIZE, type ModelType } from "../../lib/ai/configDb";
 import { GEMINI_HARM_CATEGORIES, GEMINI_THRESHOLD_LEVELS, defaultSafetySettings, type GeminiSafetySettings, type GeminiHarmCategory } from "../../lib/ai/safety";
 import { testProviderConnection } from "../../lib/ai/providerProbe";
+import { modalPop, overlayFade, overlayFadeTransition, springPanel } from "../../lib/motion";
 import styles from "./SettingsModal.module.css";
 
 const BUILTIN_PROMPTS_CONFIG = [
@@ -824,8 +826,23 @@ export function SettingsModal({ onClose }: Props) {
   );
 
   return (
-    <div className={styles.overlay} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className={styles.modal}>
+    <motion.div
+      className={styles.overlay}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      variants={overlayFade}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+      transition={overlayFadeTransition}
+    >
+      <motion.div
+        className={styles.modal}
+        variants={modalPop}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        transition={springPanel}
+      >
         <div className={styles.header}>
           <span className={styles.title}>{t("systemSettings.title")}</span>
           <button className={styles.closeBtn} onClick={onClose}><X size={16} /></button>
@@ -850,7 +867,7 @@ export function SettingsModal({ onClose }: Props) {
             {activeTab === "about" && <AboutTab />}
           </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

@@ -7,7 +7,7 @@
   align-items: flex-start;
   justify-content: center;
   padding-top: 14vh;
-  animation: fadeIn 160ms var(--ease-out);
+  /* enter/exit handled by Motion (AnimatePresence) — see CommandPalette.tsx */
 }
 
 .palette {
@@ -19,7 +19,7 @@
   box-shadow: var(--shadow-xl);
   display: flex;
   flex-direction: column;
-  animation: scaleIn 200ms var(--ease-out);
+  /* enter/exit handled by Motion (AnimatePresence) — see CommandPalette.tsx */
 }
 
 /* Input row */

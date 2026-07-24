@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { AnimatePresence, motion } from "motion/react";
 import { Search as SearchIcon, X } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
@@ -7,6 +8,7 @@ import { useEditorStore } from "../../stores/editorStore";
 import { FileTree } from "./FileTree";
 import { OutlinePanel } from "../editor/OutlinePanel";
 import { MOD_K_SPACED } from "../../lib/platform";
+import { panelFade, springPanel } from "../../lib/motion";
 import styles from "./Sidebar.module.css";
 
 function basename(p: string | null): string | null {
@@ -72,7 +74,16 @@ export function Sidebar() {
         </div>
       )}
 
-      <div className={isTree ? styles.contentFlush : styles.content}>
+      <AnimatePresence mode="wait" initial={false}>
+      <motion.div
+        key={projectPath ? activeSideTab : "empty"}
+        className={isTree ? styles.contentFlush : styles.content}
+        variants={panelFade}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        transition={springPanel}
+      >
         {!projectPath ? (
           <div className={styles.emptyState}>
             <div>{t("project.noProjectTitle")}</div>
@@ -143,7 +154,8 @@ export function Sidebar() {
             )}
           </>
         )}
-      </div>
+      </motion.div>
+      </AnimatePresence>
     </div>
   );
 }
