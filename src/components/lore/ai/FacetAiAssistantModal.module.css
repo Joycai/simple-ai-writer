@@ -1,0 +1,41 @@
+/* Task selector for the facet AI assistant. Rest of the chrome is reused from
+   LoreImproveModal.module.css. */
+
+.tasks {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.taskBtn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+  text-align: left;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.taskBtn:hover { border-color: var(--color-border-strong); }
+
+.taskBtnActive {
+  border-color: var(--color-accent);
+  background: var(--color-accent-tint);
+}
+
+.taskName {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.taskDesc {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}

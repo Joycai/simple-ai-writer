@@ -7,7 +7,6 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { X, Scissors, RotateCw, ArrowLeft, AlertTriangle } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
@@ -21,9 +20,11 @@ import {
   type LoreEntity,
 } from "../../lib/lore";
 import { splitLore, type SplitResult } from "../../lib/lore/splitter";
-import { makeDir, writeFile } from "../../lib/fs/fileio";
+import { parseFrontmatter } from "../../lib/fs/markdown";
+import { makeDir, writeFile, removeFile } from "../../lib/fs/fileio";
 import { loadApiKey } from "../../lib/keyStore";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
+import { ModalShell } from "../common/ModalShell";
 import styles from "./LoreSplitModal.module.css";
 
 interface Props {
@@ -113,7 +114,7 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
     const model = models.find((m) => m.id === activeModelId);
     const provider = model ? providers.find((p) => p.id === model.providerId) : null;
     if (!model || !provider) { setError(t("ai.errors.noModel")); return; }
-    if (!indexBody) { setError(t("lore.split.emptyEntry", { defaultValue: "当前条目没有正文，无需拆分" })); return; }
+    if (!indexBody && entity.facets.length === 0) { setError(t("lore.split.emptyEntry", { defaultValue: "当前条目没有正文，无需拆分" })); return; }
 
     const apiKey = (await loadApiKey(provider.id)) ?? "";
     const ctrl = new AbortController();
@@ -123,9 +124,23 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
     setPhase("generating");
 
     try {
+      // Fold existing facets back in so the model reorganizes the whole entity,
+      // not just the core body. Their files are replaced on Apply.
+      const existingFacets = await Promise.all(
+        entity.facets.map(async (f) => {
+          try {
+            const raw = await readEntityFile(entity.dirPath, f.file);
+            return { title: f.title, keys: f.keys, body: parseFrontmatter(raw).content };
+          } catch {
+            return { title: f.title, keys: f.keys, body: "" };
+          }
+        }),
+      );
+
       const result: SplitResult = await splitLore({
         entityName: entity.name,
         indexBody,
+        existingFacets,
         instruction,
         baseUrl: provider.baseUrl,
         apiKey,
@@ -169,12 +184,25 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
     setSaving(true);
     setError(null);
     try {
-      // 1. Snapshot the original index.md — the author's text is irreplaceable.
+      // 1. Snapshot the original index.md AND every existing facet — the split
+      //    replaces the whole facet set, so the author's text must be recoverable.
       const backupDir = `${projectPath}/.ai-writer/backups`;
       await makeDir(backupDir);
-      await writeFile(`${backupDir}/${entity.category}-${entity.id}-index-${Date.now()}.md`, indexRaw);
+      const stamp = Date.now();
+      await writeFile(`${backupDir}/${entity.category}-${entity.id}-index-${stamp}.md`, indexRaw);
+      for (const f of entity.facets) {
+        try {
+          const raw = await readEntityFile(entity.dirPath, f.file);
+          await writeFile(`${backupDir}/${entity.category}-${entity.id}-${f.file}-${stamp}.md`, raw);
+        } catch { /* best-effort backup */ }
+      }
 
-      // 2. Facet files first: if anything fails mid-way the worst case is a
+      // 2. Remove the old facet files — the drafts below are the complete new set.
+      for (const f of entity.facets) {
+        try { await removeFile(`${entity.dirPath}/${f.file}`); } catch { /* already gone */ }
+      }
+
+      // 3. Facet files next: if anything fails mid-way the worst case is a
       //    few extra files — index.md is only rewritten once they all exist.
       for (const d of included) {
         await createFacetFile(entity.dirPath, {
@@ -184,7 +212,7 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
         }, d.content);
       }
 
-      // 3. Rewrite index.md, preserving its frontmatter verbatim.
+      // 4. Rewrite index.md, preserving its frontmatter verbatim.
       const fm = indexRaw.match(/^---\n[\s\S]*?\n---\n?/)?.[0] ?? "";
       await writeEntityFile(entity.dirPath, "index.md", fm + core.trim() + "\n");
 
@@ -197,8 +225,19 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
     }
   };
 
-  return createPortal(
-    <div className={styles.overlay} onClick={(e) => { if (e.target === e.currentTarget && phase !== "generating") onClose(); }}>
+  // Block dismissal entirely while generating (matches the disabled close button);
+  // otherwise prompt once there's a draft under review or typed guidance.
+  const generating = phase === "generating";
+  const dirty = phase === "review" || instruction.trim().length > 0;
+
+  return (
+    <ModalShell
+      overlayClassName={styles.overlay}
+      onClose={onClose}
+      isDirty={dirty}
+      closeOnBackdrop={false}
+      closeOnEscape={!generating}
+    >
       <div className={styles.panel}>
         {/* Header */}
         <div className={styles.header}>
@@ -262,6 +301,15 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
           {phase === "review" && (
             <>
               {notes && <div className={styles.notes}>{notes}</div>}
+              {entity.facets.length > 0 && (
+                <div className={styles.error}>
+                  <AlertTriangle size={12} />
+                  {t("lore.split.replaceWarn", {
+                    count: entity.facets.length,
+                    defaultValue: `应用后将用下面的特征替换现有的 ${entity.facets.length} 个特征（原文件会先自动备份）`,
+                  })}
+                </div>
+              )}
               <div className={styles.sectionLabel}>
                 {t("lore.split.coreLabel", { defaultValue: "核心卡（保留在 index.md）" })}
                 <span className={styles.tokenTag}>
@@ -391,7 +439,6 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
           )}
         </div>
       </div>
-    </div>,
-    document.body,
+    </ModalShell>
   );
 }

@@ -1,62 +1,25 @@
 import { useState, useRef, useEffect } from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import {
-  X, Sparkles, RotateCw, ChevronDown, AlertTriangle, FileText, Image, Bot,
-} from "lucide-react";
+import { X, Sparkles, RotateCw, ChevronDown, AlertTriangle, Bot } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
-import { readEntityFile, writeEntityFile, type LoreEntity } from "../../lib/lore";
+import {
+  readEntityFile, writeEntityFile, saveFacetFile, parseFacetMeta,
+  type LoreEntity, type FacetMeta,
+} from "../../lib/lore";
+import { parseFrontmatter } from "../../lib/fs/markdown";
+import {
+  resolveModel, collectAttachmentContext, buildUserContent, stripCodeFence, streamLoreTask,
+  type AttachedItem,
+} from "../../lib/lore/aiTask";
 import { useImageDataUrl } from "./useImageDataUrl";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
-import {
-  scanProjectFiles, imageToDataUrl, readTextFileContent, type ProjectFile,
-} from "../../lib/fs/images";
+import { ModalShell } from "../common/ModalShell";
+import { AttachmentTextarea } from "./ai/AttachmentTextarea";
+import { scanProjectFiles, type ProjectFile } from "../../lib/fs/images";
 import { loadApiKey } from "../../lib/keyStore";
 import styles from "./LoreImproveModal.module.css";
-
-// ── Attachment types ──────────────────────────────────────────────────────────
-
-type AttachedLore  = { kind: "lore";  entity: LoreEntity };
-type AttachedImage = { kind: "image"; file: ProjectFile; dataUrl: string };
-type AttachedText  = { kind: "text";  file: ProjectFile; content: string };
-type AttachedItem  = AttachedLore | AttachedImage | AttachedText;
-
-type PickerItem =
-  | { type: "lore"; entity: LoreEntity }
-  | { type: "file"; file: ProjectFile };
-
-// ── Lazy image thumbnail for the @ picker ─────────────────────────────────────
-
-function PickerThumb({ file }: { file: ProjectFile }) {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    if (file.kind === "image") {
-      imageToDataUrl(file.path).then(({ dataUrl }) => setUrl(dataUrl)).catch(() => {});
-    }
-  }, [file.path, file.kind]);
-
-  if (file.kind === "text" || !url) {
-    return (
-      <div className={styles.pickerThumbPlaceholder}>
-        {file.kind === "image" ? <Image size={12} /> : <FileText size={12} />}
-      </div>
-    );
-  }
-  return <img src={url} className={styles.pickerThumb} alt="" />;
-}
-
-/** Avatar thumb for a lore entity in the @ picker (data URL, not assetUrl). */
-function EntityThumb({ avatarPath }: { avatarPath: string | null }) {
-  const url = useImageDataUrl(avatarPath);
-  if (!url) {
-    return <div className={styles.pickerThumbPlaceholder}><FileText size={12} /></div>;
-  }
-  return <img src={url} className={styles.pickerThumb} alt="" />;
-}
-
-// ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
   entity: LoreEntity;
@@ -70,6 +33,12 @@ export function LoreImproveModal({ entity, onClose }: Props) {
   const { index, scanProject } = useLoreStore();
   const avatarUrl = useImageDataUrl(entity.avatarPath);
 
+  // Write target: "__index__" = the whole entity index.md, else a facet filename.
+  const INDEX = "__index__";
+  const [target, setTarget] = useState<string>(INDEX);
+  const isFacet = target !== INDEX;
+  const facetMetaRef = useRef<FacetMeta | null>(null);
+
   const [currentContent, setCurrentContent] = useState("");
   const [showCurrent, setShowCurrent] = useState(false);
   const [instruction, setInstruction] = useState("");
@@ -79,124 +48,39 @@ export function LoreImproveModal({ entity, onClose }: Props) {
   const [output, setOutput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-
-  // @ picker
-  const [showPicker, setShowPicker] = useState(false);
-  const [atQuery, setAtQuery] = useState("");
-  const [atIndex, setAtIndex] = useState(0);
-  const [pickerStyle, setPickerStyle] = useState<React.CSSProperties>({});
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const textareaWrapRef = useRef<HTMLDivElement>(null);
-  const pickerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    readEntityFile(entity.dirPath, "index.md")
-      .then(setCurrentContent)
-      .catch(() => setCurrentContent(""));
     if (projectPath) {
       scanProjectFiles(projectPath).then(setProjectFiles).catch(() => {});
     }
-  }, [entity.dirPath, projectPath]);
+  }, [projectPath]);
 
-  // Recompute picker position whenever it opens
+  // Load the current target's content: the whole index.md, or a facet's body
+  // (frontmatter stripped) with its meta stashed for a later frontmatter-safe save.
   useEffect(() => {
-    if (showPicker && textareaWrapRef.current) {
-      const r = textareaWrapRef.current.getBoundingClientRect();
-      // Try to open below; if not enough room, open above
-      const spaceBelow = window.innerHeight - r.bottom - 8;
-      const pickerH = Math.min(240, window.innerHeight * 0.4);
-      if (spaceBelow >= pickerH) {
-        setPickerStyle({ top: r.bottom + 4, left: r.left, width: r.width });
-      } else {
-        setPickerStyle({ bottom: window.innerHeight - r.top + 4, left: r.left, width: r.width });
-      }
-    }
-  }, [showPicker]);
-
-  // Close picker on outside click — but NOT when clicking inside the picker portal
-  useEffect(() => {
-    if (!showPicker) return;
-    const handler = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (textareaWrapRef.current?.contains(t) || pickerRef.current?.contains(t)) return;
-      setShowPicker(false);
-    };
-    document.addEventListener("mousedown", handler, true);
-    return () => document.removeEventListener("mousedown", handler, true);
-  }, [showPicker]);
-
-  const otherEntities = Object.values(index).flat().filter((e) => e.id !== entity.id);
-
-  const pickerItems: PickerItem[] = [
-    ...otherEntities
-      .filter((e) => !atQuery || e.name.toLowerCase().includes(atQuery))
-      .map((e): PickerItem => ({ type: "lore", entity: e })),
-    ...projectFiles
-      .filter((f) => !atQuery || f.name.toLowerCase().includes(atQuery))
-      .map((f): PickerItem => ({ type: "file", file: f })),
-  ].slice(0, 10);
-
-  const itemKey = (item: PickerItem) =>
-    item.type === "lore" ? `lore:${item.entity.id}` : `file:${item.file.path}`;
-
-  const attachedKeys = new Set(
-    attached.map((a) => (a.kind === "lore" ? `lore:${a.entity.id}` : `file:${a.file.path}`)),
-  );
-
-  // ── @ detection ────────────────────────────────────────────────────────────
-  const handleInstructionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    setInstruction(val);
-    const pos = e.target.selectionStart ?? val.length;
-    const before = val.slice(0, pos);
-    const match = before.match(/@(\w*)$/);
-    if (match) {
-      setAtIndex(pos - match[0].length);
-      setAtQuery(match[1].toLowerCase());
-      setShowPicker(true);
-    } else {
-      setShowPicker(false);
-    }
-  };
-
-  const insertAtLabel = (label: string) => {
-    const before = instruction.slice(0, atIndex);
-    const after = instruction.slice(atIndex + 1 + atQuery.length);
-    setInstruction(`${before}@[${label}]${after}`);
-    setShowPicker(false);
-    textareaRef.current?.focus();
-  };
-
-  const handlePickItem = async (item: PickerItem) => {
-    if (attachedKeys.has(itemKey(item))) { setShowPicker(false); return; }
-    if (item.type === "lore") {
-      setAttached((prev) => [...prev, { kind: "lore", entity: item.entity }]);
-      insertAtLabel(item.entity.name);
-    } else {
-      try {
-        if (item.file.kind === "image") {
-          const { dataUrl } = await imageToDataUrl(item.file.path);
-          setAttached((prev) => [...prev, { kind: "image", file: item.file, dataUrl }]);
+    const file = isFacet ? target : "index.md";
+    readEntityFile(entity.dirPath, file)
+      .then((raw) => {
+        if (isFacet) {
+          facetMetaRef.current = parseFacetMeta(raw, file);
+          setCurrentContent(parseFrontmatter(raw).content);
         } else {
-          const content = await readTextFileContent(item.file.path);
-          setAttached((prev) => [...prev, { kind: "text", file: item.file, content }]);
+          facetMetaRef.current = null;
+          setCurrentContent(raw);
         }
-        insertAtLabel(item.file.name);
-      } catch { /* skip unreadable */ }
-    }
-  };
+      })
+      .catch(() => setCurrentContent(""));
+  }, [entity.dirPath, target, isFacet]);
 
-  const removeAttached = (key: string) =>
-    setAttached((prev) =>
-      prev.filter((a) => (a.kind === "lore" ? `lore:${a.entity.id}` : `file:${a.file.path}`) !== key),
-    );
+  const facetTitle = entity.facets.find((f) => f.file === target)?.title ?? target;
+  const otherEntities = Object.values(index).flat().filter((e) => e.id !== entity.id);
 
   // ── Generate ───────────────────────────────────────────────────────────────
   const handleGenerate = async () => {
-    const model = models.find((m) => m.id === activeModelId);
-    const provider = model ? providers.find((p) => p.id === model.providerId) : null;
-    if (!model || !provider) { setError(t("ai.errors.noModel")); return; }
+    const resolved = resolveModel(models, providers, activeModelId);
+    if (!resolved) { setError(t("ai.errors.noModel")); return; }
+    const { model, provider } = resolved;
 
     const apiKey = (await loadApiKey(provider.id)) ?? "";
     const ctrl = new AbortController();
@@ -206,77 +90,40 @@ export function LoreImproveModal({ entity, onClose }: Props) {
     setPhase("generating");
 
     try {
-      const loreRefs = await Promise.all(
-        attached
-          .filter((a): a is AttachedLore => a.kind === "lore")
-          .map(async (a) => {
-            try {
-              const c = await readEntityFile(a.entity.dirPath, "index.md");
-              return `## ${a.entity.name}\n${c}`;
-            } catch { return `## ${a.entity.name}\n(unavailable)`; }
-          }),
-      );
-
-      const textRefs = attached
-        .filter((a): a is AttachedText => a.kind === "text")
-        .map((a) => `--- ${a.file.name} ---\n${a.content}`);
-
-      // Only multimodal models can consume images; sending them to a text model
-      // either errors or is silently dropped, so omit them here.
       const supportsImages = model.type === "multimodal";
-      const imageAttachments = supportsImages
-        ? attached.filter((a): a is AttachedImage => a.kind === "image")
-        : [];
+      const { loreRefs, textRefs, images } = await collectAttachmentContext(attached, supportsImages);
 
-      const systemPrompt = [
-        "You are a lore writing assistant improving an existing lore entity document.",
-        "Return the COMPLETE updated index.md file content, starting with a YAML frontmatter block (---) containing: name, aliases (as YAML list), category, and summary.",
-        "The body after the frontmatter should be rich markdown prose using ## headers.",
-        "Output ONLY the raw file content — no explanation, no code fences, no prefix text.",
-      ].join("\n");
+      const systemPrompt = isFacet
+        ? [
+            "You are a lore writing assistant improving ONE facet of a lore entity.",
+            "Return the COMPLETE updated facet body as rich markdown prose.",
+            "Output ONLY the body — no YAML frontmatter, no code fences, no explanation.",
+          ].join("\n")
+        : [
+            "You are a lore writing assistant improving an existing lore entity document.",
+            "Return the COMPLETE updated index.md file content, starting with a YAML frontmatter block (---) containing: name, aliases (as YAML list), category, and summary.",
+            "The body after the frontmatter should be rich markdown prose using ## headers.",
+            "Output ONLY the raw file content — no explanation, no code fences, no prefix text.",
+          ].join("\n");
 
       const textContent = [
-        `CURRENT ENTITY (${entity.name}/index.md):`,
+        isFacet
+          ? `CURRENT FACET (${facetTitle}) of entity ${entity.name}:`
+          : `CURRENT ENTITY (${entity.name}/index.md):`,
         currentContent || "(empty)",
         loreRefs.length > 0 ? "\nREFERENCED LORE ENTRIES:\n" + loreRefs.join("\n\n") : "",
         textRefs.length > 0 ? "\nREFERENCED FILES:\n" + textRefs.join("\n\n") : "",
         `\nUSER INSTRUCTION:\n${instruction.trim() || "Improve and expand this lore entry with more detail."}`,
       ].filter(Boolean).join("\n");
 
-      // Text/md attachments are already embedded in textContent above.
-      // Only use a multipart array when there are actual image attachments;
-      // otherwise pass a plain string so Gemini doesn't see a spurious parts array.
-      type TextPart = { type: "text"; text: string };
-      type ImagePart = { type: "image_url"; image_url: { url: string } };
-      const userContent: string | Array<TextPart | ImagePart> =
-        imageAttachments.length > 0
-          ? [
-              { type: "text", text: textContent },
-              ...imageAttachments.map((a) => ({
-                type: "image_url" as const,
-                image_url: { url: a.dataUrl },
-              })),
-            ]
-          : textContent;
-
-      const { streamCompletion } = await import("../../lib/ai");
-      let accumulated = "";
-      await streamCompletion({
-        baseUrl: provider.baseUrl,
+      await streamLoreTask({
+        model,
+        provider,
         apiKey,
-        standard: provider.apiStandard,
-        safetySettings: provider.safetySettings,
-        modelId: model.modelId,
-        prefix: model.prefix,
-        contextSize: model.contextSize,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userContent },
-        ],
-        onChunk: (chunk) => {
-          if ("text" in chunk) { accumulated += chunk.text; setOutput(accumulated); }
-        },
+        systemPrompt,
+        userContent: buildUserContent(textContent, images),
         signal: ctrl.signal,
+        onText: setOutput,
       });
       setPhase("result");
     } catch (e) {
@@ -294,10 +141,18 @@ export function LoreImproveModal({ entity, onClose }: Props) {
     if (!projectPath || !output.trim()) return;
     setSaving(true);
     try {
-      let content = output.trim();
-      const fence = content.match(/^```(?:markdown|md)?\s*([\s\S]*?)\s*```$/);
-      if (fence) content = fence[1];
-      await writeEntityFile(entity.dirPath, "index.md", content);
+      const body = stripCodeFence(output);
+      if (isFacet) {
+        // Preserve the facet's frontmatter; only its body is regenerated.
+        const meta = facetMetaRef.current ?? (() => {
+          const f = entity.facets.find((x) => x.file === target);
+          return f ? { title: f.title, keys: f.keys, group: f.group, priority: f.priority, mode: f.mode } : null;
+        })();
+        if (!meta) { setError(t("lore.improve.facetMetaError", { defaultValue: "无法读取该特征的元数据" })); setSaving(false); return; }
+        await saveFacetFile(entity.dirPath, target, meta, body);
+      } else {
+        await writeEntityFile(entity.dirPath, "index.md", body);
+      }
       await scanProject(projectPath);
       onClose();
     } catch (e) {
@@ -309,8 +164,11 @@ export function LoreImproveModal({ entity, onClose }: Props) {
 
   const multimodalModels = models.filter((m) => m.type === "multimodal" || m.type === "text");
 
+  // Unsaved once the user has typed an instruction, attached refs, or generated.
+  const dirty = phase !== "input" || instruction.trim().length > 0 || attached.length > 0;
+
   return (
-    <div className={styles.overlay} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <ModalShell overlayClassName={styles.overlay} onClose={onClose} isDirty={dirty} closeOnBackdrop={false}>
       <div className={styles.panel}>
 
         {/* ── Header ── */}
@@ -341,6 +199,27 @@ export function LoreImproveModal({ entity, onClose }: Props) {
         {/* ── Body (scrollable) ── */}
         <div className={styles.body}>
 
+          {/* Write target — only meaningful once the entity has facets */}
+          {entity.facets.length > 0 && (
+            <div className={styles.section}>
+              <label className={styles.label}>{t("lore.improve.targetLabel", { defaultValue: "写入目标" })}</label>
+              <select
+                className={styles.modelSelect}
+                style={{ maxWidth: "none", width: "100%" }}
+                value={target}
+                disabled={phase === "generating"}
+                onChange={(e) => { setTarget(e.target.value); setOutput(""); setPhase("input"); }}
+              >
+                <option value={INDEX}>{t("lore.improve.targetIndex", { defaultValue: "整体条目（index.md）" })}</option>
+                {entity.facets.map((f) => (
+                  <option key={f.file} value={f.file}>
+                    {t("lore.improve.targetFacetPrefix", { defaultValue: "特征" })}：{f.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Current content collapsible */}
           <div className={styles.currentSection}>
             <button className={styles.currentToggle} onClick={() => setShowCurrent((v) => !v)}>
@@ -359,38 +238,18 @@ export function LoreImproveModal({ entity, onClose }: Props) {
               {t("lore.improve.instructionLabel")}
               <span className={styles.hint}> · {t("lore.improve.atHint")}</span>
             </label>
-            <div ref={textareaWrapRef}>
-              <MarkdownTextarea
-                format={false}
-                ref={textareaRef}
-                className={styles.textarea}
-                rows={4}
-                placeholder={t("lore.improve.instructionPlaceholder")}
-                value={instruction}
-                onChange={handleInstructionChange}
-                onKeyDown={(e) => { if (e.key === "Escape") setShowPicker(false); }}
-                disabled={phase === "generating"}
-              />
-            </div>
-
-            {/* Attached chips (always in flow, never overlap) */}
-            {attached.length > 0 && (
-              <div className={styles.chips}>
-                {attached.map((a) => {
-                  const key = a.kind === "lore" ? `lore:${a.entity.id}` : `file:${a.file.path}`;
-                  const label = a.kind === "lore" ? a.entity.name : a.file.name;
-                  return (
-                    <span key={key} className={`${styles.chip} ${a.kind === "image" ? styles.chipImage : ""}`}>
-                      {a.kind === "image" && <Image size={10} />}
-                      @{label}
-                      <button className={styles.chipRemove} onClick={() => removeAttached(key)}>
-                        <X size={10} />
-                      </button>
-                    </span>
-                  );
-                })}
-              </div>
-            )}
+            <AttachmentTextarea
+              instruction={instruction}
+              onInstructionChange={setInstruction}
+              attached={attached}
+              onAttachedChange={setAttached}
+              entities={otherEntities}
+              projectFiles={projectFiles}
+              disabled={phase === "generating"}
+              rows={4}
+              placeholder={t("lore.improve.instructionPlaceholder")}
+              textareaClassName={styles.textarea}
+            />
           </div>
 
           {/* Error */}
@@ -447,34 +306,6 @@ export function LoreImproveModal({ entity, onClose }: Props) {
           </div>
         </div>
       </div>
-
-      {/* @ picker rendered via portal — escapes overflow context entirely */}
-      {showPicker && pickerItems.length > 0 && createPortal(
-        <div ref={pickerRef} className={styles.picker} style={{ position: "fixed", zIndex: 500, ...pickerStyle }}>
-          {pickerItems.map((item) => {
-            const key = itemKey(item);
-            const used = attachedKeys.has(key);
-            return (
-              <button
-                key={key}
-                className={`${styles.pickerItem} ${used ? styles.pickerItemUsed : ""}`}
-                onMouseDown={(e) => { e.preventDefault(); void handlePickItem(item); }}
-              >
-                {item.type === "lore"
-                  ? <EntityThumb avatarPath={item.entity.avatarPath} />
-                  : <PickerThumb file={item.file} />}
-                <span className={styles.pickerName}>
-                  {item.type === "lore" ? item.entity.name : item.file.name}
-                </span>
-                <span className={styles.pickerBadge}>
-                  {item.type === "lore" ? item.entity.category : item.file.kind}
-                </span>
-              </button>
-            );
-          })}
-        </div>,
-        document.body,
-      )}
-    </div>
+    </ModalShell>
   );
 }

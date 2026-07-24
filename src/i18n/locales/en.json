@@ -2,6 +2,11 @@
   "app": {
     "name": "Simple AI Writer"
   },
+  "common": {
+    "close": "Close",
+    "cancel": "Cancel",
+    "unsavedConfirm": "You have unsaved changes that will be lost. Close anyway?"
+  },
   "outline": {
     "empty": "No volume/chapter structure found — create sub-folders under writing/ to organize volumes",
     "reorderHint": "Click to select, double-click to open; reorder within a volume via buttons or drag",
@@ -483,7 +488,27 @@
       "bodyPlaceholder": "The content of this facet…",
       "save": "Save",
       "saving": "Saving…",
-      "loadError": "Failed to read file"
+      "loadError": "Failed to read file",
+      "ai": {
+        "open": "AI Assistant",
+        "title": "AI Assistant",
+        "untitled": "Untitled facet",
+        "appendName": "Append content",
+        "appendDesc": "Expand this facet with extra material / images",
+        "tidyName": "Tidy structure",
+        "tidyDesc": "Adjust formatting and order only, no fact changes",
+        "keysName": "Update trigger keys",
+        "keysDesc": "Re-suggest trigger keys from the body",
+        "intentLabel": "Notes / intent",
+        "intentPlaceholder": "e.g. add outfit details from the image; separate material and color…",
+        "keysResultLabel": "Suggested keys (comma-separated, editable)",
+        "appendResultLabel": "Content to append to the body (editable)",
+        "bodyResultLabel": "Result (editable before applying)",
+        "generate": "Generate",
+        "applyKeys": "Apply keys",
+        "applyAppend": "Append to body",
+        "applyBody": "Apply to body"
+      }
     },
     "split": {
       "title": "Split into facets",
@@ -503,7 +528,8 @@
       "apply": "Apply split",
       "applying": "Applying…",
       "backupHint": "The original entry is backed up before applying",
-      "emptyEntry": "This entry has no body — nothing to split"
+      "emptyEntry": "This entry has no body — nothing to split",
+      "replaceWarn": "Applying will replace the existing {{count}} facet(s) with the ones below (the originals are backed up first)"
     },
     "improve": {
       "subtitle": "AI Improve",
@@ -519,7 +545,24 @@
       "stop": "Stop",
       "regenerate": "Regenerate",
       "apply": "Apply to index.md",
-      "applying": "Applying…"
+      "applying": "Applying…",
+      "targetLabel": "Write target",
+      "targetIndex": "Whole entry (index.md)",
+      "targetFacetPrefix": "Facet",
+      "facetMetaError": "Could not read this facet's metadata"
+    },
+    "aiHub": {
+      "title": "AI Edit Assistant",
+      "metaName": "Improve metadata",
+      "metaDesc": "Rewrite name, aliases, category and summary",
+      "improveName": "Update entry",
+      "improveDesc": "Update content with material / images; write to the whole entry or a chosen facet",
+      "splitName": "Split & organize",
+      "splitDesc": "Reorganize the entry content and split it into facets"
+    },
+    "newEntry": {
+      "manual": "Manual",
+      "ai": "AI Extract"
     },
     "form": {
       "title": "Create New Entry",

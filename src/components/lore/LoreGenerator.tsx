@@ -14,6 +14,8 @@ import {
 } from "../../lib/fs/images";
 import { generateLore } from "../../lib/lore/generator";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
+import { ModalShell } from "../common/ModalShell";
+import { NewEntryTabs, type NewEntryMode } from "./ai/NewEntryTabs";
 import { writeBinaryFile } from "../../lib/fs/fileio";
 import { loadApiKey } from "../../lib/keyStore";
 import styles from "./LoreGenerator.module.css";
@@ -42,9 +44,11 @@ function PickerThumb({ file }: { file: ProjectFile }) {
 
 interface Props {
   onClose: () => void;
+  /** When set, a mode toggle is shown so the user can switch to manual create. */
+  onModeChange?: (mode: NewEntryMode) => void;
 }
 
-export function LoreGenerator({ onClose }: Props) {
+export function LoreGenerator({ onClose, onModeChange }: Props) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
   const { projectPath } = useProjectStore();
@@ -271,10 +275,13 @@ setAttached((prev) => [...prev, { kind: "text", file, content }]);
   );
   const multimodalModels = models.filter((m) => m.type === "multimodal" || m.type === "text");
 
+  // Unsaved once the user has typed a description, attached refs, or generated.
+  const dirty = phase !== "input" || description.trim().length > 0 || attached.length > 0;
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
-    <div className={styles.overlay} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <ModalShell overlayClassName={styles.overlay} onClose={onClose} isDirty={dirty} closeOnBackdrop={false}>
       <div className={styles.panel}>
 
         {/* Header */}
@@ -291,6 +298,12 @@ setAttached((prev) => [...prev, { kind: "text", file, content }]);
 
         {/* Scrollable body */}
         <div className={styles.body}>
+
+          {onModeChange && (
+            <div style={{ marginBottom: "var(--space-3)" }}>
+              <NewEntryTabs value="ai" onChange={onModeChange} />
+            </div>
+          )}
 
           {/* ── Input card ── */}
           <div className={styles.card}>
@@ -336,7 +349,11 @@ setAttached((prev) => [...prev, { kind: "text", file, content }]);
                   placeholder={t("lore.generator.descriptionPlaceholder")}
                   value={description}
                   onChange={handleDescChange}
-                  onKeyDown={(e) => { if (e.key === "Escape") setShowPicker(false); }}
+                  onKeyDown={(e) => {
+                    // Consume Escape here so it closes the picker without also
+                    // dismissing the whole modal via ModalShell's Escape handler.
+                    if (e.key === "Escape" && showPicker) { e.preventDefault(); setShowPicker(false); }
+                  }}
                   disabled={phase === "generating"}
                 />
               </div>
@@ -492,7 +509,7 @@ setAttached((prev) => [...prev, { kind: "text", file, content }]);
           )}
         </div>
       </div>
-    </div>
+    </ModalShell>
 
       {/* @ picker via portal — escapes overflow context */}
       {showPicker && createPortal(

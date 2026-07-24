@@ -1,0 +1,111 @@
+/* Shared @-mention composer: instruction textarea + picker + attachment chips.
+   Extracted from LoreImproveModal so every lore AI task shares one look.
+   Global keyframes (slideUp) come from styles/global.css. */
+
+/* Column wrapper so the textarea and chips share the host's field spacing. */
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* ── @ picker (position:fixed set inline via portal) ── */
+
+.picker {
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  overflow-y: auto;
+  animation: slideUp 160ms var(--ease-out);
+  max-height: 240px;
+}
+
+.pickerItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 8px var(--space-3);
+  text-align: left;
+  transition: background var(--transition-fast);
+  border-bottom: 1px solid var(--color-border);
+}
+.pickerItem:last-child { border-bottom: none; }
+.pickerItem:hover { background: var(--color-bg-elevated); }
+
+.pickerThumb {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.pickerThumbPlaceholder {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.pickerName {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  font-weight: 500;
+}
+
+.pickerBadge {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.pickerItemUsed {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* ── Attached chips ── */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--color-accent-tint);
+  color: var(--color-accent);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.chipImage {
+  background: rgba(168, 85, 247, 0.12);
+  color: #c084fc;
+}
+
+.chipRemove {
+  display: flex;
+  align-items: center;
+  color: var(--color-accent);
+  opacity: 0.7;
+  transition: opacity var(--transition-fast);
+}
+.chipRemove:hover { opacity: 1; }

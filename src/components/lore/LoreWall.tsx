@@ -11,8 +11,10 @@ import { useAppStore } from "../../stores/appStore";
 import { imageToDataUrl } from "../../lib/fs/images";
 import { MOD_K_SPACED } from "../../lib/platform";
 import { LoreGenerator } from "./LoreGenerator";
+import { NewEntryTabs, type NewEntryMode } from "./ai/NewEntryTabs";
 import { LoreDetail } from "./LoreDetail";
 import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
+import { ModalShell } from "../common/ModalShell";
 import styles from "./LoreWall.module.css";
 
 // Per-category accent dot color
@@ -43,8 +45,8 @@ export function LoreWall() {
 
   const [filter, setFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
-  const [showGenerator, setShowGenerator] = useState(false);
-  const [showNewEntry, setShowNewEntry] = useState(false);
+  // Unified new-entry flow: null = closed, else which mode the modal opens in.
+  const [newMode, setNewMode] = useState<NewEntryMode | null>(null);
   const [detailEntity, setDetailEntity] = useState<LoreEntity | null>(null);
   const [detailEditing, setDetailEditing] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; entity: LoreEntity | null } | null>(null);
@@ -138,9 +140,9 @@ export function LoreWall() {
     if (!e) {
       return [
         { kind: "item", icon: <Plus size={13} />, label: t("lore.panel.newEntry"),
-          action: () => setShowNewEntry(true) },
-        { kind: "item", icon: <Sparkles size={13} />, label: "AI 提取",
-          action: () => setShowGenerator(true) },
+          action: () => setNewMode("manual") },
+        { kind: "item", icon: <Sparkles size={13} />, label: t("lore.newEntry.ai", { defaultValue: "AI 提取" }),
+          action: () => setNewMode("ai") },
         { kind: "divider" },
         { kind: "item", icon: <RotateCw size={13} />, label: t("fileTree.refresh"),
           action: () => { if (projectPath) void scanProject(projectPath); } },
@@ -173,17 +175,20 @@ export function LoreWall() {
 
   return (
     <div className={styles.wall}>
-      {showGenerator && <LoreGenerator onClose={() => setShowGenerator(false)} />}
-      {showNewEntry && (
+      {newMode === "ai" && (
+        <LoreGenerator onClose={() => setNewMode(null)} onModeChange={setNewMode} />
+      )}
+      {newMode === "manual" && (
         <NewEntryModal
           initialCategory={(filter !== "all" ? (filter as CategoryId) : "characters")}
-          onClose={() => setShowNewEntry(false)}
+          onClose={() => setNewMode(null)}
+          onModeChange={setNewMode}
           onCreate={async (category, name) => {
             if (!projectPath) return;
             const baseId = slugifyEntityId(name);
             const id = await uniqueEntityId(projectPath, category, baseId);
             await createNewEntity(projectPath, category, id, name.trim());
-            setShowNewEntry(false);
+            setNewMode(null);
             const created = useLoreStore.getState().index[category]?.find((e) => e.id === id);
             if (created) setDetailEntity(created);
           }}
@@ -210,11 +215,7 @@ export function LoreWall() {
             <span className={styles.searchKey} onClick={() => setShowCommandPalette(true)} style={{ cursor: "pointer" }}>{MOD_K_SPACED}</span>
           </div>
 
-          <button className={styles.btnSecondary} onClick={() => setShowGenerator(true)}>
-            <Sparkles size={12} strokeWidth={1.6} />
-            AI 提取
-          </button>
-          <button className={styles.btnPrimary} onClick={() => setShowNewEntry(true)}>
+          <button className={styles.btnPrimary} onClick={() => setNewMode("manual")}>
             <Plus size={12} strokeWidth={2.5} />
             {t("lore.panel.newEntry")}
           </button>
@@ -322,10 +323,10 @@ export function LoreWall() {
             })}
 
             {/* + new card */}
-            <div className={styles.newCard} onClick={() => setShowGenerator(true)}>
+            <div className={styles.newCard} onClick={() => setNewMode("manual")}>
               <Plus size={22} color="var(--color-sienna)" strokeWidth={1.6} />
-              <div className={styles.newCardLabel}>新设定</div>
-              <div className={styles.newCardHint}>手填或从手稿提取</div>
+              <div className={styles.newCardLabel}>{t("lore.panel.newEntry")}</div>
+              <div className={styles.newCardHint}>{isZh ? "手动或 AI 提取" : "Manual or AI extract"}</div>
             </div>
           </div>
         )}
@@ -346,10 +347,12 @@ export function LoreWall() {
 function NewEntryModal({
   initialCategory,
   onClose,
+  onModeChange,
   onCreate,
 }: {
   initialCategory: CategoryId;
   onClose: () => void;
+  onModeChange: (mode: NewEntryMode) => void;
   onCreate: (category: CategoryId, name: string) => Promise<void>;
 }) {
   const { t, i18n } = useTranslation();
@@ -369,14 +372,15 @@ function NewEntryModal({
   };
 
   return (
-    <div className={styles.modalBackdrop} onClick={onClose}>
-      <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
+    <ModalShell overlayClassName={styles.modalBackdrop} onClose={onClose} isDirty={name.trim().length > 0} closeOnBackdrop={false}>
+      <div className={styles.modal}>
         <div className={styles.modalHeader}>
           <div className={styles.modalEyebrow}>{isZh ? "新建条目" : "NEW ENTRY"}</div>
           <div className={styles.modalTitle}>{t("lore.panel.newEntry")}</div>
         </div>
 
         <div className={styles.modalBody}>
+          <NewEntryTabs value="manual" onChange={onModeChange} />
           <label className={styles.modalLabel}>{isZh ? "分类" : "Category"}</label>
           <div className={styles.modalCats}>
             {LORE_CATEGORIES.map((cat) => (
@@ -398,8 +402,8 @@ function NewEntryModal({
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => {
+              // Escape is handled by ModalShell (with an unsaved-changes guard).
               if (e.key === "Enter") void handleSubmit();
-              if (e.key === "Escape") onClose();
             }}
             autoFocus
           />
@@ -420,6 +424,6 @@ function NewEntryModal({
           </button>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }
