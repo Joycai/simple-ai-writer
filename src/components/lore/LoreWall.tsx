@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { Search, Sparkles, Plus, Camera, BookOpen, Pencil, FolderOpen, RotateCw, Trash2 } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -15,6 +16,7 @@ import { NewEntryTabs, type NewEntryMode } from "./ai/NewEntryTabs";
 import { LoreDetail } from "./LoreDetail";
 import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
 import { ModalShell } from "../common/ModalShell";
+import { fillLayer, pushBackdrop, pushForward, springScreen } from "../../lib/motion";
 import styles from "./LoreWall.module.css";
 
 // Per-category accent dot color
@@ -163,18 +165,36 @@ export function LoreWall() {
     ];
   };
 
-  if (detailEntity) {
-    return (
-      <LoreDetail
-        entity={detailEntity}
-        initialEditing={detailEditing}
-        onBack={() => { setDetailEntity(null); setDetailEditing(false); }}
-      />
-    );
-  }
-
   return (
-    <div className={styles.wall}>
+    <div style={{ position: "relative", flex: 1, minWidth: 0, height: "100%", display: "flex", overflow: "hidden" }}>
+      <AnimatePresence initial={false}>
+        {detailEntity ? (
+          <motion.div
+            key="detail"
+            variants={pushForward}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={springScreen}
+            style={fillLayer}
+          >
+            <LoreDetail
+              entity={detailEntity}
+              initialEditing={detailEditing}
+              onBack={() => { setDetailEntity(null); setDetailEditing(false); }}
+            />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="grid"
+            variants={pushBackdrop}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={springScreen}
+            style={fillLayer}
+          >
+            <div className={styles.wall}>
       {newMode === "ai" && (
         <LoreGenerator onClose={() => setNewMode(null)} onModeChange={setNewMode} />
       )}
@@ -340,6 +360,10 @@ export function LoreWall() {
           onClose={() => setMenu(null)}
         />
       )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

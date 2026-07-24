@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, Check, X, Square, Play, BookMarked, Sparkles, Layers, Pin } from "lucide-react";
 import { useAiTaskStore, type TaskKind, type ToolStep } from "../../stores/aiTaskStore";
@@ -16,6 +17,7 @@ import {
   MEMORY_SUGGEST_THRESHOLD_CHARS,
 } from "../../lib/context/memory";
 import { LORE_CATEGORIES } from "../../lib/lore";
+import { panelFade, springPanel } from "../../lib/motion";
 import styles from "./AiPanel.module.css";
 
 const TASK_OPTIONS: { kind: TaskKind; labelKey: string; descKey: string }[] = [
@@ -628,6 +630,16 @@ export function AiPanel() {
                     appendMode={selectedTask === "continue"}
                   />
 
+                  {/* Task-specific config — crossfades when the instruction changes */}
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.div
+                      key={selectedTask}
+                      variants={panelFade}
+                      initial="initial"
+                      animate="animate"
+                      exit="exit"
+                      transition={springPanel}
+                    >
                   {/* ── Continue options ── */}
                   {selectedTask === "continue" && (
                     <>
@@ -755,6 +767,8 @@ export function AiPanel() {
                       onChange={(e) => setCustomInstr(e.target.value)}
                     />
                   )}
+                    </motion.div>
+                  </AnimatePresence>
                 </div>
               )}
             </>

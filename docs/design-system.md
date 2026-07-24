@@ -57,4 +57,13 @@ Each scheme overrides **both** `--font-serif` (editor body) and `--font-sans` (U
 - Hardcode `rgba(…)` accent tints or `box-shadow: 0 …` — use tokens.
 - Use gradient backgrounds on buttons/badges/active states.
 - Add focus styles that only change `border-color` (use `:focus-visible` ring).
-- Introduce a JS animation library — motion is pure CSS to stay lightweight.
+- Reach for a JS animation library for element-level motion — hover/press/enter accents stay **pure CSS** (tokens + keyframes) to stay lightweight.
+
+### 例外 · 转场与浮层 (Exception — transitions & overlays)
+**Motion** (`motion`, ex-`framer-motion`) is the one sanctioned JS animation library, used **solely** where a surface must animate *out* while another animates *in* — something CSS mount-only animations can't do. Two uses only:
+- **Screen / content switches** — `App.tsx` (main view crossfade/slide), `Sidebar.tsx` (tab crossfade), `LoreWall.tsx` (grid↔detail push), `AiPanel.tsx` (task/instruction config crossfade, `mode="wait"` keyed by selected task).
+- **Overlay enter *and* exit** — `AiDrawer.tsx` (drawer slide-over), `CommandPalette.tsx` (search palette), `SettingsModal.tsx` (settings). Each pairs with `<AnimatePresence>` so dismissal animates instead of snapping; the old mount-only CSS `animation:` on those `.backdrop`/`.overlay`/`.drawer`/`.palette`/`.modal` classes was removed in favor of these.
+
+Presets live in `src/lib/motion.ts` (`springScreen`/`springPanel`/`springDrawer`, `viewSlide`, `pushForward`/`pushBackdrop`, `panelFade`, `overlayFade`, `drawerSlide`, `modalPop`, `fillLayer`). `<MotionConfig reducedMotion="user">` at the app root keeps every transition honoring `prefers-reduced-motion` — keep it there. Do **not** spread Motion into buttons, hovers, list items, or other element-level motion; those remain pure CSS keyframes. New modals that don't need a custom exit can still use the plain `scaleIn`/`fadeIn` keyframes.
+
+**Theme (light/dark) crossfade** is *not* Motion — it uses the native **View Transitions API** (`document.startViewTransition`) in `appStore.applyThemeAnimated`, so the whole UI cross-dissolves on a theme flip (CSS vars change instantly, so only a full-page snapshot can crossfade everything). Timing is tuned via `::view-transition-old/new(root)` in `global.css`; it no-ops on webviews without the API and is skipped under `prefers-reduced-motion`.

@@ -123,6 +123,26 @@ function applyTheme(mode: ThemeMode) {
   document.documentElement.setAttribute("data-theme", resolveTheme(mode));
 }
 
+/**
+ * Apply the theme inside a View Transition so the whole UI cross-dissolves
+ * between light/dark instead of snapping (colors come from CSS vars that flip
+ * instantly, so a per-property CSS transition can't cover everything — a
+ * full-page snapshot crossfade can). Falls back to an instant swap where the
+ * API is unavailable (older webviews) or the user prefers reduced motion.
+ * Used for user/system-driven changes only; the initial load stays instant.
+ */
+function applyThemeAnimated(mode: ThemeMode) {
+  const doc = document as Document & {
+    startViewTransition?: (cb: () => void) => unknown;
+  };
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (typeof doc.startViewTransition === "function" && !reduced) {
+    doc.startViewTransition(() => applyTheme(mode));
+  } else {
+    applyTheme(mode);
+  }
+}
+
 function applyFontScheme(scheme: FontScheme) {
   document.documentElement.setAttribute("data-font", scheme);
 }
@@ -151,7 +171,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setTheme: (theme) => {
     localStorage.setItem(THEME_KEY, theme);
     set({ theme });
-    applyTheme(theme);
+    applyThemeAnimated(theme);
 
     if (systemThemeListener) {
       window.matchMedia("(prefers-color-scheme: dark)").removeEventListener("change", systemThemeListener);
@@ -159,7 +179,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     if (theme === "system") {
       const mq = window.matchMedia("(prefers-color-scheme: dark)");
-      systemThemeListener = () => applyTheme(get().theme);
+      systemThemeListener = () => applyThemeAnimated(get().theme);
       mq.addEventListener("change", systemThemeListener);
     }
   },

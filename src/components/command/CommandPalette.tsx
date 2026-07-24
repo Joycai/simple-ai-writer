@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { Search, Sparkles, CheckCircle2, BookOpen } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
@@ -8,6 +9,7 @@ import { useEditorStore } from "../../stores/editorStore";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { LORE_CATEGORIES, type LoreEntity } from "../../lib/lore";
 import { MOD_KEY } from "../../lib/platform";
+import { modalPop, overlayFade, overlayFadeTransition, springPanel } from "../../lib/motion";
 import styles from "./CommandPalette.module.css";
 
 interface LoreHit { kind: "lore"; entity: LoreEntity; }
@@ -141,15 +143,32 @@ export function CommandPalette() {
     }
   };
 
-  if (!showCommandPalette) return null;
-
   const loreHits = hits.filter((h): h is LoreHit => h.kind === "lore");
   const textHits = hits.filter((h): h is TextHit => h.kind === "text");
   const actionHits = hits.filter((h): h is ActionHit => h.kind === "action");
 
   return (
-    <div className={styles.backdrop} onClick={() => setShowCommandPalette(false)}>
-      <div className={styles.palette} onClick={(e) => e.stopPropagation()}>
+    <AnimatePresence>
+      {showCommandPalette && (
+      <motion.div
+        key="cmd-backdrop"
+        className={styles.backdrop}
+        onClick={() => setShowCommandPalette(false)}
+        variants={overlayFade}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        transition={overlayFadeTransition}
+      >
+        <motion.div
+          className={styles.palette}
+          onClick={(e) => e.stopPropagation()}
+          variants={modalPop}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          transition={springPanel}
+        >
         <div className={styles.inputRow}>
           <Search size={16} color="var(--color-sienna)" strokeWidth={1.6} />
           <input
@@ -270,7 +289,9 @@ export function CommandPalette() {
             前缀 <span style={{ color: "var(--color-sienna)", fontFamily: "var(--font-mono)" }}>/ ?</span> 限定范围
           </span>
         </div>
-      </div>
-    </div>
+        </motion.div>
+      </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

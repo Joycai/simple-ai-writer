@@ -1,17 +1,17 @@
 import { useTranslation } from "react-i18next";
+import { AnimatePresence, motion } from "motion/react";
 import { Sparkles, CheckCircle2 } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useAiStore } from "../../stores/aiStore";
 import { AiPanel } from "./AiPanel";
 import { ConsistencyCheck } from "./ConsistencyCheck";
+import { drawerSlide, overlayFade, overlayFadeTransition, springDrawer } from "../../lib/motion";
 import styles from "./AiDrawer.module.css";
 
 export function AiDrawer() {
   const { t } = useTranslation();
   const { showAiDrawer, aiDrawerMode, setShowAiDrawer } = useAppStore();
   const { models, providers, activeModelId } = useAiStore();
-
-  if (!showAiDrawer) return null;
 
   const close = () => setShowAiDrawer(false);
   const setMode = (m: "generate" | "consistency") => setShowAiDrawer(true, m);
@@ -25,9 +25,32 @@ export function AiDrawer() {
       : t("ai.drawer.generateTitle", { defaultValue: "AI 助手" });
 
   return (
-    <>
-      <div className={styles.backdrop} onClick={close} />
-      <aside className={styles.drawer} role="dialog" aria-modal data-ai-surface>
+    <AnimatePresence>
+      {showAiDrawer && (
+        <motion.div
+          key="ai-backdrop"
+          className={styles.backdrop}
+          onClick={close}
+          variants={overlayFade}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          transition={overlayFadeTransition}
+        />
+      )}
+      {showAiDrawer && (
+      <motion.aside
+        key="ai-drawer"
+        className={styles.drawer}
+        role="dialog"
+        aria-modal
+        data-ai-surface
+        variants={drawerSlide}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        transition={springDrawer}
+      >
         <div className={styles.header}>
           <div className={styles.avatar}>
             {aiDrawerMode === "consistency"
@@ -70,7 +93,8 @@ export function AiDrawer() {
         <div className={styles.body}>
           {aiDrawerMode === "generate" ? <AiPanel /> : <ConsistencyCheck />}
         </div>
-      </aside>
-    </>
+      </motion.aside>
+      )}
+    </AnimatePresence>
   );
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import "./styles/global.css";
 import { TitleBar } from "./components/layout/TitleBar";
 import { IconRail } from "./components/layout/IconRail";
@@ -15,6 +16,7 @@ import { CommandPalette } from "./components/command/CommandPalette";
 import { Onboarding } from "./components/onboarding/Onboarding";
 import { useAppStore } from "./stores/appStore";
 import { useAiStore } from "./stores/aiStore";
+import { fillLayer, springScreen, viewSlide } from "./lib/motion";
 
 export default function App() {
   const {
@@ -48,6 +50,7 @@ export default function App() {
   }, [showCommandPalette, setShowCommandPalette, setShowAiDrawer]);
 
   return (
+    <MotionConfig reducedMotion="user">
     <div
       style={{
         display: "flex",
@@ -73,21 +76,36 @@ export default function App() {
           <ResizeHandle onDelta={(d) => setSidebarWidth((prev) => prev + d)} />
         )}
 
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-          {mainView === "editor" && <EditorArea />}
-          {mainView === "lore-wall" && <LoreWall />}
-          {mainView === "outline-full" && <OutlineFullView />}
+        <div style={{ flex: 1, position: "relative", minWidth: 0, overflow: "hidden" }}>
+          <AnimatePresence initial={false}>
+            <motion.div
+              key={mainView}
+              variants={viewSlide}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              transition={springScreen}
+              style={fillLayer}
+            >
+              {mainView === "editor" && <EditorArea />}
+              {mainView === "lore-wall" && <LoreWall />}
+              {mainView === "outline-full" && <OutlineFullView />}
+            </motion.div>
+          </AnimatePresence>
         </div>
 
         <AiRail />
       </div>
 
-      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      <AnimatePresence>
+        {showSettings && <SettingsModal key="settings" onClose={() => setShowSettings(false)} />}
+      </AnimatePresence>
       <AiDrawer />
       <InlineAiBubble />
       <CommandPalette />
       <Onboarding />
     </div>
+    </MotionConfig>
   );
 }
 

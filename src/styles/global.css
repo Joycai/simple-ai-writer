@@ -65,6 +65,16 @@ body {
   50% { opacity: 0.5; }
 }
 
+/* Theme (light/dark) cross-dissolve via the View Transitions API — see
+   appStore.applyThemeAnimated. The default `root` snapshot crossfades the whole
+   UI (editor included); we only tune the timing. No-op where unsupported, and
+   skipped in JS under prefers-reduced-motion. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 320ms;
+  animation-timing-function: var(--ease-in-out);
+}
+
 /* Respect reduced-motion preference */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
