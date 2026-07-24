@@ -28,6 +28,12 @@ export async function splitLore(opts: {
   entityName: string;
   /** index.md body (frontmatter stripped). */
   indexBody: string;
+  /**
+   * Existing facets to fold back into the reorganization. When present, the
+   * model treats their text as part of the source and returns the COMPLETE
+   * new facet set (the caller replaces the old files with it).
+   */
+  existingFacets?: { title: string; keys: string[]; body: string }[];
   /** Optional author guidance, e.g. "服装单独拆组". */
   instruction?: string;
   baseUrl: string;
@@ -43,10 +49,23 @@ export async function splitLore(opts: {
 }): Promise<SplitResult> {
   const { streamCompletion } = await import("../ai");
 
+  const existing = opts.existingFacets?.filter((f) => f.body.trim()) ?? [];
+  const existingBlock = existing.length > 0
+    ? [
+        "",
+        "EXISTING FACETS (already split out — treat their text as part of the source material;",
+        "reorganize, merge, rename, or re-split them together with the core, and RETURN THE COMPLETE new facet set):",
+        ...existing.map((f) =>
+          `### ${f.title}${f.keys.length ? ` (keys: ${f.keys.join(", ")})` : ""}\n${f.body.trim()}`,
+        ),
+      ].join("\n")
+    : "";
+
   const promptText = [
     `ENTITY NAME: ${opts.entityName}`,
     `CURRENT ENTRY (index.md body):`,
     opts.indexBody,
+    existingBlock,
     opts.instruction?.trim() ? `\nAUTHOR GUIDANCE:\n${opts.instruction.trim()}` : "",
   ].filter(Boolean).join("\n");
 

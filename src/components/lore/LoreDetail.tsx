@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Sparkles, FolderOpen, ExternalLink, FileText, Plus, Pencil, Trash2, Check, X, Camera, ChevronLeft, ChevronRight, Layers, Zap, Pin, Hand, Scissors } from "lucide-react";
+import { ArrowLeft, Sparkles, FolderOpen, ExternalLink, FileText, Plus, Pencil, Trash2, Check, X, Camera, ChevronLeft, ChevronRight, Layers, Zap, Pin, Hand } from "lucide-react";
 import { createPortal } from "react-dom";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -31,6 +31,7 @@ import { LoreImproveModal } from "./LoreImproveModal";
 import { LoreMetaImproveModal } from "./LoreMetaImproveModal";
 import { FacetEditModal } from "./FacetEditModal";
 import { LoreSplitModal } from "./LoreSplitModal";
+import { EntityAiHubModal } from "./ai/EntityAiHubModal";
 import styles from "./LoreDetail.module.css";
 
 interface Props {
@@ -78,6 +79,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
 
   const [tab, setTab] = useState<Tab>("summary");
   const [content, setContent] = useState<string>("");
+  const [showAiHub, setShowAiHub] = useState(false);
   const [showImprove, setShowImprove] = useState(false);
   const [showMetaImprove, setShowMetaImprove] = useState(false);
   // Facet form modal: { file: null } → create, { file } → edit/convert.
@@ -415,6 +417,18 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
 
   return (
     <div className={styles.detail}>
+      {showAiHub && (
+        <EntityAiHubModal
+          entityName={entity.name}
+          onClose={() => setShowAiHub(false)}
+          onPick={(task) => {
+            setShowAiHub(false);
+            if (task === "meta") setShowMetaImprove(true);
+            else if (task === "improve") setShowImprove(true);
+            else setShowSplit(true);
+          }}
+        />
+      )}
       {showImprove && (
         <LoreImproveModal
           entity={entity}
@@ -529,14 +543,8 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
             <button className={`${styles.actionBtn} ${styles.actionBtnPrimary}`} onClick={startEntityEdit}>
               <Pencil size={11} /> {t("lore.detail.edit", { defaultValue: "编辑" })}
             </button>
-            <button className={styles.actionBtn} onClick={() => setShowMetaImprove(true)}>
-              <Sparkles size={11} /> {t("lore.panel.aiImproveMeta", { defaultValue: "AI 优化元数据" })}
-            </button>
-            <button className={styles.actionBtn} onClick={() => setShowImprove(true)}>
-              <Sparkles size={11} /> {t("lore.panel.aiImprove")}
-            </button>
-            <button className={styles.actionBtn} onClick={() => setShowSplit(true)}>
-              <Scissors size={11} /> {t("lore.split.title", { defaultValue: "拆分特征" })}
+            <button className={styles.actionBtn} onClick={() => setShowAiHub(true)}>
+              <Sparkles size={11} /> {t("lore.aiHub.title", { defaultValue: "AI 编辑助手" })}
             </button>
             <button className={styles.actionBtn} onClick={openInEditor}>
               <ExternalLink size={11} /> {t("lore.detail.openInEditor", { defaultValue: "在编辑器中打开" })}

@@ -10,6 +10,7 @@ import {
 } from "../../lib/lore";
 import { useImageDataUrl } from "./useImageDataUrl";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
+import { ModalShell } from "../common/ModalShell";
 import { parseFrontmatter } from "../../lib/fs/markdown";
 import { extractJsonObject } from "../../lib/ai/json";
 import { loadApiKey } from "../../lib/keyStore";
@@ -290,8 +291,11 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
   const imageCount = (entity.avatarPath ? 1 : 0) + entity.images.length;
   const willSendImages = activeModel?.type === "multimodal" && imageCount > 0;
 
+  // Unsaved once the user has typed an instruction or a proposal was generated.
+  const dirty = phase !== "input" || instruction.trim().length > 0;
+
   return (
-    <div className={styles.overlay} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <ModalShell overlayClassName={styles.overlay} onClose={onClose} isDirty={dirty} closeOnBackdrop={false}>
       <div className={styles.panel}>
         {/* Header */}
         <div className={styles.header}>
@@ -483,6 +487,6 @@ summary: ${entity.summary}
           </div>
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }

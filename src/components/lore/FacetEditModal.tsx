@@ -8,10 +8,9 @@
  * ever hand-writing YAML.
  */
 
-import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { X, Layers } from "lucide-react";
+import { X, Layers, Sparkles } from "lucide-react";
 import {
   createFacetFile,
   parseFacetMeta,
@@ -24,6 +23,8 @@ import { parseFrontmatter } from "../../lib/fs/markdown";
 import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
+import { ModalShell } from "../common/ModalShell";
+import { FacetAiAssistantModal } from "./ai/FacetAiAssistantModal";
 import styles from "./FacetEditModal.module.css";
 
 interface Props {
@@ -48,6 +49,7 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
   const [loaded, setLoaded] = useState(file === null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAi, setShowAi] = useState(false);
 
   // Group suggestions: every group already used on this entity.
   const knownGroups = useMemo(
@@ -82,6 +84,15 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
     setKeyInput("");
   };
 
+  // Dirty tracking: snapshot the form once it's loaded, then compare. A close
+  // gesture only prompts when the current form differs from that baseline.
+  const snapshot = JSON.stringify({ title, keys, group, priority, mode, body });
+  const initialSnapshot = useRef<string | null>(null);
+  useEffect(() => {
+    if (loaded && initialSnapshot.current === null) initialSnapshot.current = snapshot;
+  }, [loaded, snapshot]);
+  const dirty = loaded && initialSnapshot.current !== null && initialSnapshot.current !== snapshot;
+
   const canSave = loaded && !busy && title.trim().length > 0;
 
   const handleSave = async () => {
@@ -113,18 +124,30 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
     ? t("lore.facet.createTitle", { defaultValue: "新建特征" })
     : t("lore.facet.editTitle", { defaultValue: "编辑特征" });
 
-  return createPortal(
-    <div className={styles.overlay} onClick={onClose}>
-      <div className={styles.panel} onClick={(e) => e.stopPropagation()}>
+  return (
+    <>
+    <ModalShell overlayClassName={styles.overlay} onClose={onClose} isDirty={dirty} closeOnBackdrop={false}>
+      <div className={styles.panel}>
         <div className={styles.header}>
           <div className={styles.headerLeft}>
             <Layers size={15} strokeWidth={1.8} />
             <span className={styles.headerTitle}>{heading}</span>
             <span className={styles.headerEntity}>{entity.name}{file ? ` · ${file}` : ""}</span>
           </div>
-          <button className={styles.closeBtn} onClick={onClose} title={t("common.close", { defaultValue: "关闭" })}>
-            <X size={16} />
-          </button>
+          <div className={styles.headerActions}>
+            <button
+              className={styles.aiBtn}
+              onClick={() => setShowAi(true)}
+              disabled={!loaded}
+              title={t("lore.facet.ai.open", { defaultValue: "AI 助手" })}
+            >
+              <Sparkles size={13} strokeWidth={1.8} />
+              {t("lore.facet.ai.title", { defaultValue: "AI 助手" })}
+            </button>
+            <button className={styles.closeBtn} onClick={onClose} title={t("common.close", { defaultValue: "关闭" })}>
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
         <div className={styles.formBody}>
@@ -240,7 +263,21 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
           </button>
         </div>
       </div>
-    </div>,
-    document.body,
+    </ModalShell>
+
+    {showAi && (
+      <FacetAiAssistantModal
+        entity={entity}
+        facetTitle={title}
+        facetKeys={keys}
+        facetBody={body}
+        onApply={(patch) => {
+          if (patch.body !== undefined) setBody(patch.body);
+          if (patch.keys) setKeys(patch.keys);
+        }}
+        onClose={() => setShowAi(false)}
+      />
+    )}
+    </>
   );
 }

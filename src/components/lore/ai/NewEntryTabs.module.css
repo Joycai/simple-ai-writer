@@ -1,0 +1,34 @@
+/* Segmented toggle shared by the two new-entry modes (manual form / AI extract).
+   Sits at the top of each modal so switching modes feels like one flow. */
+
+.tabs {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+}
+
+.tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.tab:hover { color: var(--color-text-primary); }
+
+.tabActive {
+  background: var(--color-bg-base);
+  color: var(--color-accent);
+  box-shadow: var(--shadow-sm);
+}

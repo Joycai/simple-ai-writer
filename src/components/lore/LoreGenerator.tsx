@@ -1,70 +1,40 @@
 import { useState, useEffect, useRef, KeyboardEvent } from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { FileText, Image, X, Bot, Sparkles, RotateCw, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { X, Bot, Sparkles, RotateCw, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useProjectStore } from "../../stores/projectStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useLoreStore } from "../../stores/loreStore";
-import { LORE_CATEGORIES, slugifyEntityId, uniqueEntityId, type CategoryId } from "../../lib/lore";
-import {
-  scanProjectFiles,
-  imageToDataUrl,
-  readTextFileContent,
-  type ProjectFile,
-} from "../../lib/fs/images";
+import { LORE_CATEGORIES, slugifyEntityId, uniqueEntityId, readEntityFile, type CategoryId } from "../../lib/lore";
+import { scanProjectFiles, imageToDataUrl, type ProjectFile } from "../../lib/fs/images";
 import { generateLore } from "../../lib/lore/generator";
+import { type AttachedImage, type AttachedText, type AttachedLore, type AttachedItem } from "../../lib/lore/aiTask";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
+import { ModalShell } from "../common/ModalShell";
+import { AttachmentTextarea } from "./ai/AttachmentTextarea";
+import { NewEntryTabs, type NewEntryMode } from "./ai/NewEntryTabs";
 import { writeBinaryFile } from "../../lib/fs/fileio";
 import { loadApiKey } from "../../lib/keyStore";
 import styles from "./LoreGenerator.module.css";
 
-type AttachedImage = { kind: "image"; file: ProjectFile; dataUrl: string };
-type AttachedText  = { kind: "text";  file: ProjectFile; content: string };
-type AttachedItem  = AttachedImage | AttachedText;
-
-function PickerThumb({ file }: { file: ProjectFile }) {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    if (file.kind === "image") {
-      imageToDataUrl(file.path).then(({ dataUrl }) => setUrl(dataUrl)).catch(() => {});
-    }
-  }, [file.path, file.kind]);
-  if (file.kind === "text") {
-    return (
-      <div className={styles.atPickerThumbPlaceholder}>
-        <FileText size={18} strokeWidth={1.5} />
-      </div>
-    );
-  }
-  if (!url) return <div className={styles.atPickerThumbPlaceholder}><Image size={18} strokeWidth={1.5} /></div>;
-  return <img src={url} alt="" className={styles.atPickerThumb} />;
-}
-
 interface Props {
   onClose: () => void;
+  /** When set, a mode toggle is shown so the user can switch to manual create. */
+  onModeChange?: (mode: NewEntryMode) => void;
 }
 
-export function LoreGenerator({ onClose }: Props) {
+export function LoreGenerator({ onClose, onModeChange }: Props) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
   const { projectPath } = useProjectStore();
   const { models, providers, activeModelId, setActiveModel, prompts } = useAiStore();
   const { createNewEntity, scanProject } = useLoreStore();
+  const loreIndex = useLoreStore((s) => s.index);
 
   // ── Input state ──────────────────────────────────────────────────────────
   const [description, setDescription] = useState("");
   const [attached, setAttached] = useState<AttachedItem[]>([]);
   const [category, setCategory] = useState<CategoryId>("characters");
-
-  // ── @ picker state ───────────────────────────────────────────────────────
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
-  const [showPicker, setShowPicker] = useState(false);
-  const [atIndex, setAtIndex] = useState(0);
-  const [atQuery, setAtQuery] = useState("");
-  const [pickerStyle, setPickerStyle] = useState<React.CSSProperties>({});
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const textareaWrapRef = useRef<HTMLDivElement>(null);
-  const pickerRef = useRef<HTMLDivElement>(null);
 
   // ── Generation state ─────────────────────────────────────────────────────
   const [phase, setPhase] = useState<"input" | "generating" | "result">("input");
@@ -95,71 +65,8 @@ export function LoreGenerator({ onClose }: Props) {
     }
   }, [projectPath]);
 
-  // Recompute picker position whenever it opens
-  useEffect(() => {
-    if (showPicker && textareaWrapRef.current) {
-      const r = textareaWrapRef.current.getBoundingClientRect();
-      const spaceBelow = window.innerHeight - r.bottom - 8;
-      const pickerH = Math.min(280, window.innerHeight * 0.4);
-      if (spaceBelow >= pickerH) {
-        setPickerStyle({ top: r.bottom + 4, left: r.left, width: r.width });
-      } else {
-        setPickerStyle({ bottom: window.innerHeight - r.top + 4, left: r.left, width: r.width });
-      }
-    }
-  }, [showPicker]);
-
-  // Close picker on outside click — but NOT when clicking inside the picker portal
-  useEffect(() => {
-    if (!showPicker) return;
-    const handler = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (textareaWrapRef.current?.contains(t) || pickerRef.current?.contains(t)) return;
-      setShowPicker(false);
-    };
-    document.addEventListener("mousedown", handler, true);
-    return () => document.removeEventListener("mousedown", handler, true);
-  }, [showPicker]);
-
-  // ── @ detection ──────────────────────────────────────────────────────────
-  const handleDescChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    const pos = e.target.selectionStart ?? val.length;
-    setDescription(val);
-    const before = val.slice(0, pos);
-    const match = before.match(/@(\w*)$/);
-    if (match) {
-      setAtIndex(pos - match[0].length);
-      setAtQuery(match[1]);
-      setShowPicker(true);
-    } else {
-      setShowPicker(false);
-    }
-  };
-
-  const handlePickFile = async (file: ProjectFile) => {
-    if (attached.find((a) => a.file.path === file.path)) {
-      setShowPicker(false);
-      return;
-    }
-    try {
-      if (file.kind === "image") {
-        const { dataUrl } = await imageToDataUrl(file.path);
-        setAttached((prev) => [...prev, { kind: "image", file, dataUrl }]);
-      } else {
-        const content = await readTextFileContent(file.path);
-setAttached((prev) => [...prev, { kind: "text", file, content }]);
-      }
-      const before = description.slice(0, atIndex);
-      const after = description.slice(atIndex + 1 + atQuery.length);
-      setDescription(`${before}@[${file.name}]${after}`);
-    } catch { /* unreadable — skip */ }
-    setShowPicker(false);
-    textareaRef.current?.focus();
-  };
-
-  const removeAttached = (path: string) =>
-    setAttached((prev) => prev.filter((a) => a.file.path !== path));
+  // Candidates for @-mention: every existing entity (this is a brand-new one).
+  const allEntities = Object.values(loreIndex).flat();
 
   // ── Tag input helpers ────────────────────────────────────────────────────
   const commitTag = () => {
@@ -195,12 +102,26 @@ setAttached((prev) => [...prev, { kind: "text", file, content }]);
       // Only multimodal models can consume images; sending them to a text model
       // either errors or is silently dropped, so omit them here.
       const supportsImages = model.type === "multimodal";
+
+      // Referenced lore entities + text files both become reference material.
+      const loreRefs = await Promise.all(
+        attached
+          .filter((a): a is AttachedLore => a.kind === "lore")
+          .map(async (a) => ({
+            name: a.entity.name,
+            content: await readEntityFile(a.entity.dirPath, "index.md").catch(() => "(unavailable)"),
+          })),
+      );
+      const fileRefs = attached
+        .filter((a): a is AttachedText => a.kind === "text")
+        .map((a) => ({ name: a.file.name, content: a.content }));
+
       const result = await generateLore({
         description,
         images: supportsImages
           ? attached.filter((a): a is AttachedImage => a.kind === "image").map((a) => ({ dataUrl: a.dataUrl }))
           : [],
-        textAttachments: attached.filter((a): a is AttachedText => a.kind === "text").map((a) => ({ name: a.file.name, content: a.content })),
+        textAttachments: [...loreRefs, ...fileRefs],
         baseUrl: provider.baseUrl,
         apiKey,
         standard: provider.apiStandard,
@@ -266,15 +187,14 @@ setAttached((prev) => [...prev, { kind: "text", file, content }]);
     }
   };
 
-  const filteredFiles = projectFiles.filter(
-    (f) => !atQuery || f.name.toLowerCase().includes(atQuery.toLowerCase()),
-  );
   const multimodalModels = models.filter((m) => m.type === "multimodal" || m.type === "text");
+
+  // Unsaved once the user has typed a description, attached refs, or generated.
+  const dirty = phase !== "input" || description.trim().length > 0 || attached.length > 0;
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <>
-    <div className={styles.overlay} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <ModalShell overlayClassName={styles.overlay} onClose={onClose} isDirty={dirty} closeOnBackdrop={false}>
       <div className={styles.panel}>
 
         {/* Header */}
@@ -291,6 +211,12 @@ setAttached((prev) => [...prev, { kind: "text", file, content }]);
 
         {/* Scrollable body */}
         <div className={styles.body}>
+
+          {onModeChange && (
+            <div style={{ marginBottom: "var(--space-3)" }}>
+              <NewEntryTabs value="ai" onChange={onModeChange} />
+            </div>
+          )}
 
           {/* ── Input card ── */}
           <div className={styles.card}>
@@ -322,47 +248,24 @@ setAttached((prev) => [...prev, { kind: "text", file, content }]);
               </div>
             </div>
 
-            {/* Description textarea */}
+            {/* Description + @-mention composer (entities / files / images) */}
             <div className={styles.fieldGroup}>
               <label className={styles.label}>
                 {t("lore.generator.descriptionText")} <span className={styles.hint}>· {t("lore.generator.descriptionHint")}</span>
               </label>
-              <div ref={textareaWrapRef}>
-                <MarkdownTextarea
-                  format={false}
-                  ref={textareaRef}
-                  className={styles.textarea}
-                  rows={6}
-                  placeholder={t("lore.generator.descriptionPlaceholder")}
-                  value={description}
-                  onChange={handleDescChange}
-                  onKeyDown={(e) => { if (e.key === "Escape") setShowPicker(false); }}
-                  disabled={phase === "generating"}
-                />
-              </div>
+              <AttachmentTextarea
+                instruction={description}
+                onInstructionChange={setDescription}
+                attached={attached}
+                onAttachedChange={setAttached}
+                entities={allEntities}
+                projectFiles={projectFiles}
+                disabled={phase === "generating"}
+                rows={6}
+                placeholder={t("lore.generator.descriptionPlaceholder")}
+                textareaClassName={styles.textarea}
+              />
             </div>
-
-            {/* Attached files */}
-            {attached.length > 0 && (
-              <div className={styles.attachedSection}>
-                <div className={styles.attachedLabel}>{t("lore.generator.attachedFiles")} ({attached.length})</div>
-                <div className={styles.attachedGrid}>
-                  {attached.map((a) => (
-                    <div key={a.file.path} className={styles.attachedChip}>
-                      {a.kind === "image"
-                        ? <img src={a.dataUrl} alt={a.file.name} className={styles.chipThumb} />
-                        : <span className={styles.chipThumb} style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <FileText size={16} strokeWidth={1.5} />
-                          </span>
-                      }
-                      <span className={styles.chipLabel}>{a.file.name}</span>
-                      <button className={styles.chipRemove}
-                        onClick={() => removeAttached(a.file.path)}><X size={11} /></button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Error */}
@@ -492,38 +395,6 @@ setAttached((prev) => [...prev, { kind: "text", file, content }]);
           )}
         </div>
       </div>
-    </div>
-
-      {/* @ picker via portal — escapes overflow context */}
-      {showPicker && createPortal(
-        <div ref={pickerRef} className={styles.atPicker} style={{ position: "fixed", zIndex: 500, ...pickerStyle }}>
-          <div className={styles.atPickerHeader}>
-            <span className={styles.atPickerLabel}>{t("lore.generator.selectReferenceImage")}</span>
-            <kbd className={styles.atPickerEsc}>{t("lore.generator.closeEsc")}</kbd>
-          </div>
-          <div className={styles.atPickerList}>
-            {filteredFiles.length === 0
-              ? <div className={styles.atPickerEmpty}>{t("lore.generator.noFiles")}</div>
-              : filteredFiles.slice(0, 12).map((file) => (
-                <button
-                  key={file.path}
-                  className={styles.atPickerItem}
-                  onMouseDown={(e) => { e.preventDefault(); void handlePickFile(file); }}
-                >
-                  <PickerThumb file={file} />
-                  <div className={styles.atPickerInfo}>
-                    <div className={styles.atPickerName}>{file.name}</div>
-                    <div className={styles.atPickerPath}>
-                      {file.path.replace(projectPath ?? "", "").slice(1)}
-                    </div>
-                  </div>
-                </button>
-              ))
-            }
-          </div>
-        </div>,
-        document.body,
-      )}
-    </>
+    </ModalShell>
   );
 }

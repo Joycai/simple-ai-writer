@@ -2,6 +2,11 @@
   "app": {
     "name": "Simple AI Writer"
   },
+  "common": {
+    "close": "关闭",
+    "cancel": "取消",
+    "unsavedConfirm": "有尚未保存的更改，关闭后将丢失。确定关闭吗？"
+  },
   "outline": {
     "empty": "未发现卷/章节结构 — 在 writing/ 下创建子文件夹来组织卷",
     "reorderHint": "单击选中章节，双击打开；用按钮或拖拽在卷内排序",
@@ -390,8 +395,8 @@
       "modelLabel": "AI 模型",
       "selectModel": "选择模型…",
       "descriptionText": "描述文本",
-      "descriptionHint": "· 输入 @ 可从项目中选择参考图片",
-      "descriptionPlaceholder": "粘贴角色设定、背景描述、世界观文档…\n输入 @ 引用项目中的图片作为视觉参考。",
+      "descriptionHint": "· 输入 @ 可引用其他条目、文件或图片",
+      "descriptionPlaceholder": "粘贴角色设定、背景描述、世界观文档…\n输入 @ 引用其他条目、文件或图片作为参考。",
       "attachedFiles": "已附加文件",
       "selectReferenceImage": "选择参考文件",
       "closeEsc": "Esc 关闭",
@@ -483,7 +488,27 @@
       "bodyPlaceholder": "这一特征的具体设定内容…",
       "save": "保存",
       "saving": "保存中…",
-      "loadError": "读取文件失败"
+      "loadError": "读取文件失败",
+      "ai": {
+        "open": "AI 助手",
+        "title": "AI 助手",
+        "untitled": "未命名特征",
+        "appendName": "追加内容",
+        "appendDesc": "结合额外资料/图片补充这个特征",
+        "tidyName": "整理结构",
+        "tidyDesc": "只调整格式与顺序，不改事实",
+        "keysName": "更新触发词",
+        "keysDesc": "根据正文重新建议触发关键词",
+        "intentLabel": "补充说明 / 意图",
+        "intentPlaceholder": "例如：根据附图补充服装细节；把材质和颜色分开写…",
+        "keysResultLabel": "建议关键词（逗号分隔，可编辑）",
+        "appendResultLabel": "将追加到正文的内容（可编辑）",
+        "bodyResultLabel": "结果（应用前可编辑）",
+        "generate": "生成",
+        "applyKeys": "应用关键词",
+        "applyAppend": "追加到正文",
+        "applyBody": "应用到正文"
+      }
     },
     "split": {
       "title": "拆分特征",
@@ -503,7 +528,8 @@
       "apply": "应用拆分",
       "applying": "应用中…",
       "backupHint": "应用前会自动备份原条目",
-      "emptyEntry": "当前条目没有正文，无需拆分"
+      "emptyEntry": "当前条目没有正文，无需拆分",
+      "replaceWarn": "应用后将用下面的特征替换现有的 {{count}} 个特征（原文件会先自动备份）"
     },
     "improve": {
       "subtitle": "AI 优化",
@@ -519,7 +545,24 @@
       "stop": "停止",
       "regenerate": "重新生成",
       "apply": "应用到 index.md",
-      "applying": "应用中…"
+      "applying": "应用中…",
+      "targetLabel": "写入目标",
+      "targetIndex": "整体条目（index.md）",
+      "targetFacetPrefix": "特征",
+      "facetMetaError": "无法读取该特征的元数据"
+    },
+    "aiHub": {
+      "title": "AI 编辑助手",
+      "metaName": "优化元数据",
+      "metaDesc": "重写名称、别名、分类与概要",
+      "improveName": "更新条目",
+      "improveDesc": "结合资料/图片更新内容，可写入整体或指定特征",
+      "splitName": "拆分整理",
+      "splitDesc": "把条目内容重新整理并拆分为特征"
+    },
+    "newEntry": {
+      "manual": "手动创建",
+      "ai": "AI 提取"
     },
     "form": {
       "title": "新建设定条目",
