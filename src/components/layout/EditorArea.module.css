@@ -119,6 +119,7 @@
   flex-direction: column;
   min-width: 0;
   background: var(--color-bg-surface);
+  position: relative;
 }
 
 .previewPane {
