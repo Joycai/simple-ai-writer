@@ -65,6 +65,10 @@
     "cumulative": "累计 {{n}} 字",
     "refs": "引用 {{n}} 设定"
   },
+  "editorNav": {
+    "toTop": "回到开头",
+    "toEnd": "跳到结尾"
+  },
   "empty": {
     "firstLine": "在这里写下你的第一行",
     "ornament": "— · —",

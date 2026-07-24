@@ -65,6 +65,10 @@
     "cumulative": "Total {{n}} words",
     "refs": "{{n}} lore refs"
   },
+  "editorNav": {
+    "toTop": "Jump to top",
+    "toEnd": "Jump to end"
+  },
   "empty": {
     "firstLine": "Write your first line here",
     "ornament": "— · —",

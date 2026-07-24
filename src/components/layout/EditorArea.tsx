@@ -5,6 +5,7 @@ import { useAppStore } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { CodeEditor } from "../editor/CodeEditor";
+import { EditorScrollNav } from "../editor/EditorScrollNav";
 import { Preview } from "../editor/Preview";
 import { ImagePreview } from "../editor/ImagePreview";
 import { EditorBottomStrip } from "./EditorBottomStrip";
@@ -141,6 +142,7 @@ export function EditorArea() {
         {showEditor && (
           <div className={styles.editorPane} ref={editorPaneRef}>
             <CodeEditor value={content} onChange={setContent} />
+            <EditorScrollNav />
           </div>
         )}
         {showPreview && (
