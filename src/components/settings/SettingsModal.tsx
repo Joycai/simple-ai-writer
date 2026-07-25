@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { X, Pencil, Moon, Sun, Monitor, SlidersHorizontal, Server, Cpu, MessageSquare, Check, AlertCircle, FolderOpen, Info, GitBranch, ExternalLink } from "lucide-react";
@@ -9,6 +9,7 @@ import { useAppStore, type ThemeMode, type Language, type FontScheme } from "../
 import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../lib/ai/apiLog";
 import type { ApiStandard } from "../../lib/ai/types";
 import { MAX_CONTEXT_SIZE, type ModelType } from "../../lib/ai/configDb";
+import { CONTEXT_SIZE_STOPS, contextStopIndex, formatContextSize } from "../../lib/ai/contextSize";
 import { GEMINI_HARM_CATEGORIES, GEMINI_THRESHOLD_LEVELS, defaultSafetySettings, type GeminiSafetySettings, type GeminiHarmCategory } from "../../lib/ai/safety";
 import { testProviderConnection } from "../../lib/ai/providerProbe";
 import { modalPop, overlayFade, overlayFadeTransition, springPanel } from "../../lib/motion";
@@ -197,7 +198,7 @@ function GeminiSafetyEditor({
               <span className={styles.safetyCategory}>{t(`aiConfig.providers.harmCategories.${category}`)}</span>
               <input
                 type="range"
-                className={styles.safetySlider}
+                className={styles.rangeSlider}
                 min={0}
                 max={maxIdx}
                 step={1}
@@ -602,11 +603,47 @@ function ModelsTab() {
             ))}
           </div>
 
-          <div className={styles.fieldGroup}>
+          <div className={`${styles.fieldGroup} ${styles.ctxSizeField}`}>
             <label className={styles.label}>{t("aiConfig.models.contextSizeLabel")}</label>
-            <input className={styles.input} type="number" min="0" max={MAX_CONTEXT_SIZE} step="1024" placeholder="8192"
-              value={form.contextSize}
-              onChange={(e) => setForm({ ...form, contextSize: e.target.value })} />
+            <div className={styles.ctxSizeRow}>
+              {/* Slider snaps to the common window sizes; the field beside it
+                  still takes exact values (200k Claude, 64k local builds…). */}
+              <input
+                className={styles.rangeSlider}
+                type="range"
+                min={0}
+                max={CONTEXT_SIZE_STOPS.length}
+                step={1}
+                value={contextStopIndex(form.contextSize)}
+                onChange={(e) => {
+                  const i = parseInt(e.target.value, 10);
+                  setForm({ ...form, contextSize: i === 0 ? "" : String(CONTEXT_SIZE_STOPS[i - 1]) });
+                }}
+                aria-label={t("aiConfig.models.contextSizeLabel")}
+              />
+              <input
+                className={`${styles.input} ${styles.ctxSizeValue}`}
+                type="number" min="0" max={MAX_CONTEXT_SIZE} step="1024"
+                placeholder={t("aiConfig.models.contextSizeUnset", { defaultValue: "未设置" })}
+                value={form.contextSize}
+                onChange={(e) => setForm({ ...form, contextSize: e.target.value })} />
+            </div>
+            <div className={styles.ctxSizeStops}>
+              {[0, ...CONTEXT_SIZE_STOPS].map((n, i, all) => (
+                <span
+                  key={n}
+                  className={`${styles.ctxSizeStop} ${contextStopIndex(form.contextSize) === i ? styles.ctxSizeStopActive : ""}`}
+                  // Sit on the thumb's centre at this stop: it starts half a
+                  // thumb in and travels (track − thumb), not the full track.
+                  style={{
+                    left: `calc(var(--ctx-thumb) / 2 + (100% - var(--ctx-thumb)) * ${i / (all.length - 1)})`,
+                  }}
+                  onClick={() => setForm({ ...form, contextSize: n === 0 ? "" : String(n) })}
+                >
+                  {n === 0 ? t("aiConfig.models.contextSizeUnset", { defaultValue: "未设置" }) : formatContextSize(n)}
+                </span>
+              ))}
+            </div>
             <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 6, fontStyle: "italic" }}>
               {t("aiConfig.models.contextSizeHint")}
             </div>

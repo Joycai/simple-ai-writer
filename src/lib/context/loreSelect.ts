@@ -29,8 +29,12 @@ import type { LoreEntity, LoreFacet, LoreIndex } from "../lore";
 /** Default total budget for the 【设定资料】 block: ~600 tokens ≈ 1800 chars. */
 export const DEFAULT_LORE_BUDGET_CHARS = 600 * 3;
 
-/** Max auto-matched entities (manual pins don't count against this). */
-export const MAX_AUTO_LORE_ENTITIES = 5;
+/**
+ * Max auto-matched entities (manual pins don't count against this). A loose cap:
+ * the char budget is the real limiter, this only stops a pathological match
+ * (a common alias hitting half the index) from flooding the L0 floor.
+ */
+export const MAX_AUTO_LORE_ENTITIES = 20;
 
 // ─── Pin format ───────────────────────────────────────────────────────────────
 

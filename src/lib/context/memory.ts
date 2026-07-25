@@ -304,7 +304,9 @@ export function selectMemoryForContext(
   detailStart: number,
   budgetChars: number = MEMORY_BUDGET_CHARS
 ): string {
-  if (!mem || detailStart <= 0) return "";
+  // A zero budget is the planner reporting no room left — honor it literally
+  // instead of falling through to the "always keep the newest one" guarantee.
+  if (!mem || detailStart <= 0 || budgetChars <= 0) return "";
   const eligible = mem.segments.filter((s) => s.from < detailStart && s.summary.trim());
   if (eligible.length === 0) return "";
 

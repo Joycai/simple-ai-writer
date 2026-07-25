@@ -1,5 +1,10 @@
 import { create } from "zustand";
 import i18n from "../i18n";
+import {
+  CONTEXT_UTILIZATION_DEFAULT,
+  CONTEXT_UTILIZATION_MAX,
+  CONTEXT_UTILIZATION_MIN,
+} from "../lib/context/budget";
 
 export type ThemeMode = "dark" | "light" | "system";
 export type Language = "zh-CN" | "en";
@@ -14,12 +19,18 @@ const SIDEBAR_WIDTH_KEY = "app:sidebarWidth";
 const RIGHT_PANEL_WIDTH_KEY = "app:rightPanelWidth";
 const RECENT_PROJECTS_KEY = "app:recentProjects";
 const LORE_BUDGET_KEY = "app:loreBudgetTokens";
+const CONTEXT_UTILIZATION_KEY = "app:contextUtilization";
 
 const RECENT_PROJECTS_MAX = 10;
 
-/** Token budget bounds for the 【设定资料】 block (see lib/context/loreSelect). */
+/**
+ * Token budget bounds for the 【设定资料】 block (see lib/context/loreSelect).
+ * The ceiling is sized for large-context models (128k-class) — the block still
+ * has to share the window with the document, memory and the model's reply, so
+ * spending the whole budget on lore is the author's call, not the default.
+ */
 export const LORE_BUDGET_MIN = 200;
-export const LORE_BUDGET_MAX = 2000;
+export const LORE_BUDGET_MAX = 128_000;
 export const LORE_BUDGET_DEFAULT = 600;
 
 const storedTheme = (localStorage.getItem(THEME_KEY) as ThemeMode | null) ?? "dark";
@@ -62,6 +73,10 @@ const storedLoreBudget = clamp(
   parseInt(localStorage.getItem(LORE_BUDGET_KEY) ?? String(LORE_BUDGET_DEFAULT), 10) || LORE_BUDGET_DEFAULT,
   LORE_BUDGET_MIN, LORE_BUDGET_MAX,
 );
+const storedContextUtilization = clamp(
+  parseFloat(localStorage.getItem(CONTEXT_UTILIZATION_KEY) ?? "") || CONTEXT_UTILIZATION_DEFAULT,
+  CONTEXT_UTILIZATION_MIN, CONTEXT_UTILIZATION_MAX,
+);
 
 export type MainView = "editor" | "lore-wall" | "outline-full";
 export type AiDrawerMode = "generate" | "consistency";
@@ -78,6 +93,8 @@ interface AppState {
   recentProjects: string[];
   /** Token budget for lore injection (【设定资料】 block). */
   loreBudgetTokens: number;
+  /** Share of the model's context window one request may occupy (0–1). */
+  contextUtilization: number;
   activeSideTab: SideTab;
   activeRightTab: "outline" | "ai";
 
@@ -98,6 +115,7 @@ interface AppState {
   setSidebarWidth: (w: number | ((prev: number) => number)) => void;
   setRightPanelWidth: (w: number | ((prev: number) => number)) => void;
   setLoreBudgetTokens: (tokens: number) => void;
+  setContextUtilization: (ratio: number) => void;
   addRecentProject: (path: string) => void;
   removeRecentProject: (path: string) => void;
   clearRecentProjects: () => void;
@@ -159,6 +177,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   rightPanelWidth: storedRightPanelWidth,
   recentProjects: loadRecentProjects(),
   loreBudgetTokens: storedLoreBudget,
+  contextUtilization: storedContextUtilization,
   activeSideTab: "files",
   activeRightTab: "outline",
 
@@ -227,6 +246,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     const clamped = clamp(Math.round(tokens), LORE_BUDGET_MIN, LORE_BUDGET_MAX);
     localStorage.setItem(LORE_BUDGET_KEY, String(clamped));
     set({ loreBudgetTokens: clamped });
+  },
+
+  setContextUtilization: (ratio) => {
+    const clamped = clamp(ratio, CONTEXT_UTILIZATION_MIN, CONTEXT_UTILIZATION_MAX);
+    localStorage.setItem(CONTEXT_UTILIZATION_KEY, String(clamped));
+    set({ contextUtilization: clamped });
   },
 
   addRecentProject: (path) => {

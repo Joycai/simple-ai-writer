@@ -5,6 +5,7 @@
  */
 
 import { readFile } from "../fs/fileio";
+import { BOOK_PRIOR_BUDGET_CHARS } from "./budget";
 import { loadMemory, projectRelativePath, type DocMemory } from "./memory";
 import { chapterTitle, findChapterContext, resolveVolumes, type Chapter } from "./outline";
 import type { FileNode } from "../project";
@@ -18,10 +19,8 @@ export interface BookContext {
   prevChapterTitle: string;
 }
 
-/** Char budget for the 【全书前情】 layer (~1600 tokens). */
-const BOOK_PRIOR_BUDGET_CHARS = 5000;
 /** How much of the previous chapter's ending to bring in as a bridge. */
-const BOOK_PREV_TAIL_CHARS = 2500;
+export const BOOK_PREV_TAIL_CHARS = 2500;
 /** Only bridge with the previous chapter's ending when near this chapter's start. */
 const BOOK_PREV_TAIL_NEAR_START_CHARS = 4000;
 
@@ -41,12 +40,17 @@ function chapterRecap(mem: DocMemory | null): string {
  *
  * Returns null when there is nothing useful (no prior chapters, or no memory and
  * not near a chapter boundary).
+ *
+ * @param priorBudgetChars Char budget for `priorSummary`, from the context budget
+ *   planner (see ./budget). Defaults to the static constant when the caller has
+ *   no plan — e.g. a model with no declared context size.
  */
 export async function buildBookContext(
   projectPath: string,
   fileTree: FileNode[],
   activeFilePath: string,
   anchorOffset: number,
+  priorBudgetChars: number = BOOK_PRIOR_BUDGET_CHARS,
 ): Promise<BookContext | null> {
   const activeRel = projectRelativePath(projectPath, activeFilePath);
   if (!activeRel) return null;
@@ -59,13 +63,15 @@ export async function buildBookContext(
   const recaps = await Promise.all(
     ctx.prior.map(async (ch) => ({ ch, recap: chapterRecap(await loadMemory(projectPath, ch.path)) })),
   );
-  const withRecap = recaps.filter((r) => r.recap);
+  // A zero budget means the planner found no room at all — honor it literally
+  // rather than falling through to the "always keep the newest one" guarantee.
+  const withRecap = priorBudgetChars > 0 ? recaps.filter((r) => r.recap) : [];
   const picked: { ch: Chapter; recap: string }[] = [];
   let used = 0;
   for (let i = withRecap.length - 1; i >= 0; i--) {
     const block = withRecap[i];
     const cost = block.recap.length + block.ch.name.length + 8;
-    if (picked.length > 0 && used + cost > BOOK_PRIOR_BUDGET_CHARS) break;
+    if (picked.length > 0 && used + cost > priorBudgetChars) break;
     picked.unshift(block);
     used += cost;
   }

@@ -1,4 +1,4 @@
-.overlay {
+﻿.overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.6);
@@ -447,7 +447,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-.safetySlider {
+/* Shared range-input look (safety thresholds, model context size). */
+.rangeSlider {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
@@ -457,7 +458,7 @@
   outline: none;
   cursor: pointer;
 }
-.safetySlider::-webkit-slider-thumb {
+.rangeSlider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 14px;
@@ -468,8 +469,8 @@
   box-shadow: var(--shadow-sm);
   transition: transform var(--transition-fast);
 }
-.safetySlider::-webkit-slider-thumb:hover { transform: scale(1.15); }
-.safetySlider::-moz-range-thumb {
+.rangeSlider::-webkit-slider-thumb:hover { transform: scale(1.15); }
+.rangeSlider::-moz-range-thumb {
   width: 14px;
   height: 14px;
   border-radius: 50%;
@@ -477,6 +478,59 @@
   border: 2px solid var(--color-bg-elevated);
   cursor: pointer;
 }
+
+/* ─── Context-size stepper (slider + exact value) ────────────────────────── */
+
+/* Shared geometry: the stop labels have to know the value field's width (to
+   trim themselves to the slider) and the thumb's (to sit on its travel). */
+.ctxSizeField {
+  --ctx-value-w: 110px;
+  --ctx-thumb: 14px;
+}
+
+.ctxSizeRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ctxSizeRow .rangeSlider { flex: 1; min-width: 0; }
+
+.ctxSizeValue {
+  width: var(--ctx-value-w);
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  text-align: right;
+}
+
+/* Stop labels. Not `space-between`: the thumb travels only (track − thumb) px,
+   so evenly-spread labels drift off their stops. Each is absolutely placed on
+   its thumb centre instead; the right margin trims this row from the full field
+   width down to the slider's. */
+.ctxSizeStops {
+  position: relative;
+  height: 1.4em;
+  margin-top: var(--space-1);
+  margin-right: calc(var(--ctx-value-w) + var(--space-3));
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+  user-select: none;
+}
+
+.ctxSizeStop {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+/* The outermost two anchor inward so they can't overflow the field. */
+.ctxSizeStop:first-child { transform: none; }
+.ctxSizeStop:last-child { transform: translateX(-100%); }
+.ctxSizeStop:hover { color: var(--color-accent); }
+.ctxSizeStopActive { color: var(--color-accent); font-weight: 600; }
 
 /* ─── Preset grid ────────────────────────────────────────────────────────── */
 
