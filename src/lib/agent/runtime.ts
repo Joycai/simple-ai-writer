@@ -80,6 +80,12 @@ export interface AgentRuntimeOptions {
    * instead of dying on a ContextSizeError several rounds in. Omit to disable.
    */
   inputCeilingTokens?: number;
+  /**
+   * Extra top-level request fields (e.g. response_format for JSON mode).
+   * JSON mode conflicts with tool calling on several providers, so presets
+   * that use it should keep `tools: []`.
+   */
+  extraBody?: Record<string, unknown>;
 
   // ── Task ───────────────────────────────────────────────────────────────────
   preset: TaskPreset;
@@ -146,6 +152,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       contextSize: opts.contextSize,
       messages: history,
       safetySettings: opts.safetySettings,
+      extraBody: opts.extraBody,
       tools: withholdTools ? undefined : toolDefinitions,
       signal: opts.signal,
       onChunk: (chunk) => {

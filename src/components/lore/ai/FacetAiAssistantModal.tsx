@@ -20,9 +20,13 @@ import { useProjectStore } from "../../../stores/projectStore";
 import { useLoreStore } from "../../../stores/loreStore";
 import type { LoreEntity } from "../../../lib/lore";
 import {
-  resolveModel, collectAttachmentContext, buildUserContent, stripCodeFence, streamLoreTask,
+  resolveModel, collectAttachmentContext, buildUserContent, stripCodeFence,
   type AttachedItem,
 } from "../../../lib/lore/aiTask";
+import { runLoreAgentTask } from "../../../lib/agent/run";
+import { FACET_ASSIST_PRESET } from "../../../lib/agent/presets";
+import { appendAgentEventTo, type AgentEvent } from "../../../lib/agent/events";
+import { AgentLog } from "../../ai/AgentLog";
 import { scanProjectFiles, type ProjectFile } from "../../../lib/fs/images";
 import { loadApiKey } from "../../../lib/keyStore";
 import { MarkdownTextarea } from "../../common/MarkdownTextarea";
@@ -44,9 +48,13 @@ interface Props {
   onClose: () => void;
 }
 
+const TOOL_HINT =
+  "You may call list_lore_entities / read_lore_entity first to consult related lore for consistency.";
+
 const SYSTEM_PROMPTS: Record<TaskKind, string> = {
   append: [
     "You are a lore assistant expanding ONE facet of a lore entity.",
+    TOOL_HINT,
     "Write ONLY the NEW markdown content to append to the facet body, based on the user's additional material (text and any attached images). Do NOT repeat or restate existing content.",
     "Return ONLY that new markdown — no YAML frontmatter, no code fences, no explanation.",
   ].join("\n"),
@@ -57,6 +65,7 @@ const SYSTEM_PROMPTS: Record<TaskKind, string> = {
   ].join("\n"),
   keys: [
     "You are a lore assistant choosing trigger keywords for ONE facet of a lore entity.",
+    TOOL_HINT,
     "Trigger keywords are concise terms likely to appear in story prose when this facet becomes relevant (names, objects, concepts, places).",
     "Return ONLY a comma-separated list of 3–10 keywords — no numbering, no explanation, no other text.",
   ].join("\n"),
@@ -87,6 +96,7 @@ export function FacetAiAssistantModal({
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const [phase, setPhase] = useState<"input" | "generating" | "result">("input");
   const [output, setOutput] = useState("");
+  const [agentLog, setAgentLog] = useState<AgentEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -121,6 +131,7 @@ export function FacetAiAssistantModal({
     abortRef.current = ctrl;
     setError(null);
     setOutput("");
+    setAgentLog([]);
     setPhase("generating");
 
     try {
@@ -144,14 +155,18 @@ export function FacetAiAssistantModal({
         `\nUSER INSTRUCTION:\n${instruction.trim() || defaultInstruction}`,
       ].filter(Boolean).join("\n");
 
-      await streamLoreTask({
+      await runLoreAgentTask({
         model,
         provider,
         apiKey,
+        preset: FACET_ASSIST_PRESET,
         systemPrompt: SYSTEM_PROMPTS[kind],
         userContent: buildUserContent(textContent, images),
+        projectPath: projectPath ?? "",
+        loreIndex: index,
         signal: ctrl.signal,
         onText: setOutput,
+        onEvent: (e) => setAgentLog((prev) => appendAgentEventTo(prev, e)),
       });
       setPhase("result");
     } catch (e) {
@@ -251,6 +266,13 @@ export function FacetAiAssistantModal({
             <div className={styles.error}>
               <AlertTriangle size={13} style={{ flexShrink: 0 }} />
               {error}
+            </div>
+          )}
+
+          {/* Execution log (tool consultations, rounds) */}
+          {agentLog.length > 0 && (phase === "generating" || phase === "result") && (
+            <div className={styles.section}>
+              <AgentLog log={agentLog} isRunning={phase === "generating"} />
             </div>
           )}
 

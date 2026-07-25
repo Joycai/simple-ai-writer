@@ -35,3 +35,39 @@ export const CONTINUE_PRESET: TaskPreset = {
   maxRounds: 8,
   finishPolicy: "force-text",
 };
+
+/** 设定改进 — improve an entity's index.md/facet; may consult other lore first. */
+export const LORE_IMPROVE_PRESET: TaskPreset = {
+  id: "lore-improve",
+  tools: ["list_lore_entities", "read_lore_entity"],
+  maxRounds: 4,
+  finishPolicy: "force-text",
+};
+
+/** 特征助手 — expand/restructure/key a single facet; may consult other lore. */
+export const FACET_ASSIST_PRESET: TaskPreset = {
+  id: "facet-assist",
+  tools: ["list_lore_entities", "read_lore_entity"],
+  maxRounds: 4,
+  finishPolicy: "force-text",
+};
+
+/**
+ * 设定提取 — structured-JSON extraction of a new entity. JSON response mode
+ * conflicts with tool calling on several providers, so this stays single-shot;
+ * tool-based structured output is the PR4/PR5 upgrade path.
+ */
+export const LORE_GENERATE_PRESET: TaskPreset = {
+  id: "lore-generate",
+  tools: [],
+  maxRounds: 1,
+  finishPolicy: "force-text",
+};
+
+/** 特征拆解 — verbatim facet split, structured JSON, single-shot (same JSON-mode constraint). */
+export const LORE_SPLIT_PRESET: TaskPreset = {
+  id: "lore-split",
+  tools: [],
+  maxRounds: 1,
+  finishPolicy: "force-text",
+};

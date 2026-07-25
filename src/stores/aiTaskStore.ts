@@ -13,7 +13,7 @@ import { useLoreStore } from "./loreStore";
 import { useProjectStore } from "./projectStore";
 import { getDb } from "../lib/project";
 import { loadApiKey } from "../lib/keyStore";
-import type { AgentEvent, ToolStep } from "../lib/agent/events";
+import { appendAgentEventTo, type AgentEvent, type ToolStep } from "../lib/agent/events";
 
 export type TaskKind = "continue" | "polish" | "rewrite" | "summary" | "custom";
 export type { AgentEvent, ToolStep };
@@ -76,24 +76,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
   setRequestedTask: (kind) => set({ requestedTask: kind }),
 
   appendAgentEvent: (event) =>
-    set((s) => {
-      // A tool step is emitted twice (running → done/error); update in place so
-      // the log shows one line per call rather than duplicates.
-      if (event.kind === "tool-step") {
-        const idx = s.agentLog.findIndex(
-          (e) =>
-            e.kind === "tool-step" &&
-            e.step.toolCallId === event.step.toolCallId &&
-            e.step.name === event.step.name,
-        );
-        if (idx >= 0) {
-          const updated = [...s.agentLog];
-          updated[idx] = event;
-          return { agentLog: updated };
-        }
-      }
-      return { agentLog: [...s.agentLog, event] };
-    }),
+    set((s) => ({ agentLog: appendAgentEventTo(s.agentLog, event) })),
 
   runTask: async (kind, customInstruction, continueLength, extras) => {
     if (get().isRunning) return; // one task at a time — UI disables triggers, this guards races

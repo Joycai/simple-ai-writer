@@ -47,7 +47,8 @@ export async function splitLore(opts: {
   signal?: AbortSignal;
   systemPrompt?: string;
 }): Promise<SplitResult> {
-  const { streamCompletion } = await import("../ai");
+  const { runAgent } = await import("../agent/runtime");
+  const { LORE_SPLIT_PRESET } = await import("../agent/presets");
 
   const existing = opts.existingFacets?.filter((f) => f.body.trim()) ?? [];
   const existingBlock = existing.length > 0
@@ -84,7 +85,7 @@ export async function splitLore(opts: {
   }
 
   let fullText = "";
-  await streamCompletion({
+  await runAgent({
     baseUrl: opts.baseUrl,
     apiKey: opts.apiKey,
     standard: opts.standard,
@@ -92,18 +93,20 @@ export async function splitLore(opts: {
     modelId: opts.modelId,
     prefix: opts.prefix,
     contextSize: opts.contextSize,
+    extraBody,
+    preset: LORE_SPLIT_PRESET,
     messages: [
       { role: "system", content: opts.systemPrompt ?? i18n.t("ai.instructions.loreSplit") },
       { role: "user", content: userParts },
     ],
-    extraBody,
-    onChunk: (chunk) => {
-      if ("text" in chunk) {
-        fullText += chunk.text;
-        opts.onProgress(chunk.text);
-      }
+    // Single-shot preset — tools are empty, so the context is never consulted.
+    toolContext: { projectPath: "", loreIndex: {}, multimodal: false },
+    signal: opts.signal ?? new AbortController().signal,
+    onEvent: () => {},
+    onOutputChunk: (text) => {
+      fullText += text;
+      opts.onProgress(text);
     },
-    signal: opts.signal,
   });
 
   return parseSplitResponse(fullText);

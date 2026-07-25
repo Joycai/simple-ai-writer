@@ -54,3 +54,26 @@ export type AgentEvent =
     }
   | { kind: "run-done"; inputTokens: number; outputTokens: number; at: number }
   | { kind: "run-error"; message: string; at: number };
+
+/**
+ * Append an event to a log immutably. A tool step is emitted twice
+ * (running → done/error); the second emission replaces the first in place so
+ * the log shows one line per call rather than duplicates. Shared by
+ * aiTaskStore and the modal-local logs.
+ */
+export function appendAgentEventTo(log: AgentEvent[], event: AgentEvent): AgentEvent[] {
+  if (event.kind === "tool-step") {
+    const idx = log.findIndex(
+      (e) =>
+        e.kind === "tool-step" &&
+        e.step.toolCallId === event.step.toolCallId &&
+        e.step.name === event.step.name,
+    );
+    if (idx >= 0) {
+      const updated = [...log];
+      updated[idx] = event;
+      return updated;
+    }
+  }
+  return [...log, event];
+}

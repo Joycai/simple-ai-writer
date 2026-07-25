@@ -2,6 +2,9 @@
  * AI-assisted Lore entity generation.
  * Takes a text description + optional reference images/text files, calls the
  * selected model, and returns a structured GeneratedLore ready to save.
+ *
+ * Runs through the unified agent runtime (single-shot preset — JSON response
+ * mode conflicts with tool calling on several providers, so no tools here).
  */
 
 import i18n from "../../i18n";
@@ -32,7 +35,8 @@ export async function generateLore(opts: {
   signal?: AbortSignal;
   systemPrompt?: string;
 }): Promise<GeneratedLore> {
-  const { streamCompletion } = await import("../ai");
+  const { runAgent } = await import("../agent/runtime");
+  const { LORE_GENERATE_PRESET } = await import("../agent/presets");
 
   // Strip @[filename] visual placeholders from the user description — they're UI labels only.
   const cleanDesc = opts.description.replace(/@\[[^\]]*\]/g, "").trim();
@@ -83,7 +87,7 @@ export async function generateLore(opts: {
   }
 
   let fullText = "";
-  await streamCompletion({
+  await runAgent({
     baseUrl: opts.baseUrl,
     apiKey: opts.apiKey,
     standard: opts.standard,
@@ -91,18 +95,20 @@ export async function generateLore(opts: {
     modelId: opts.modelId,
     prefix: opts.prefix,
     contextSize: opts.contextSize,
+    extraBody,
+    preset: LORE_GENERATE_PRESET,
     messages: [
       { role: "system", content: opts.systemPrompt ?? i18n.t("ai.instructions.lore") },
       { role: "user", content: userParts },
     ],
-    extraBody,
-    onChunk: (chunk) => {
-      if ("text" in chunk) {
-        fullText += chunk.text;
-        opts.onProgress(chunk.text);
-      }
+    // Single-shot preset — tools are empty, so the context is never consulted.
+    toolContext: { projectPath: "", loreIndex: {}, multimodal: true },
+    signal: opts.signal ?? new AbortController().signal,
+    onEvent: () => {},
+    onOutputChunk: (text) => {
+      fullText += text;
+      opts.onProgress(text);
     },
-    signal: opts.signal,
   });
 
   // Extract JSON: try clean parse first, then markdown fences, then first-{-to-last-}

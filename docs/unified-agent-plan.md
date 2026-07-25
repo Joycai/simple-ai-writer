@@ -168,3 +168,18 @@ PR1–PR2 合并前不动任何用户可见行为，随时可发版；0.3.0 在 
   刷新钩子（aiTaskStore 已接 loreStore.scanProject / memoryStore.loadForActiveFile）。
   注意：尚无 preset 引用写工具——它们在 PR3 的 lore 入口迁移中获得第一个 UI 触发点；
   独立的 agentStore 推迟到需要审批队列/多轮会话时（PR4/PR5）再立。
+- **PR3 完成（范围有两处有意收窄）**：
+  - `run.ts` 新增 `runLoreAgentTask`（Model/Provider → runAgent 的 UI 入口），
+    `streamLoreTask` 从 aiTask.ts 删除；执行日志抽成共享组件
+    `components/ai/AgentLog.tsx`（AiPanel 与 lore modal 共用）。
+  - **LoreImproveModal / FacetAiAssistantModal**：迁到 LORE_IMPROVE / FACET_ASSIST
+    preset（带 list/read lore 只读工具，maxRounds 4），modal 内嵌执行日志——AI 改设定
+    前可以自己查阅其它条目了。审阅后保存的 UX 不变（modal 落盘），未直接用
+    update_lore_file 自动写：审阅式 modal 里静默改盘反而降低可控性。
+  - **generator.ts / splitter.ts**：等价迁到 runtime 单发 preset（runtime 新增
+    extraBody 透传支持 JSON mode）。JSON mode 与 tool 调用在多家 provider 上互斥，
+    故这两个暂不带工具；升级路径是 PR4/PR5 的「强制 tool 调用做结构化输出」。
+  - **LoreMetaImproveModal 未迁**：它自有「强制 tool_choice + JSON 回退」结构化输出
+    流程，等 runtime 原生支持结构化输出（同上）再收编。
+  - 写工具（create_lore_entity 等）的 UI 触发点顺延至 PR5 对话式助手——那才是
+    「agent 自主改 lore」的自然场景；modal 场景保留人审。
