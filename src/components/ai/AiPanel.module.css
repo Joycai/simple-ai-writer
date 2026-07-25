@@ -805,3 +805,23 @@
   text-decoration: line-through;
   text-decoration-thickness: 1px;
 }
+
+/* Agent 模式 toggle under the custom-instruction textarea */
+.agentModeToggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.agentModeToggle input { accent-color: var(--color-accent); }
+.agentModeLabel { font-weight: 500; }
+.agentModeHint {
+  margin-top: 4px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}

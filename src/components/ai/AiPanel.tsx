@@ -3,7 +3,9 @@ import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, Square, Play, BookMarked, Sparkles, Layers, Pin } from "lucide-react";
 import { useAiTaskStore, type TaskKind } from "../../stores/aiTaskStore";
+import { useAgentStore } from "../../stores/agentStore";
 import { AgentLog } from "./AgentLog";
+import { ApprovalCard } from "./ApprovalCard";
 import { useAiStore } from "../../stores/aiStore";
 import { useAppStore, LORE_BUDGET_MIN, LORE_BUDGET_MAX } from "../../stores/appStore";
 import { useEditorStore } from "../../stores/editorStore";
@@ -500,6 +502,8 @@ export function AiPanel() {
   const [requirement, setRequirement] = useState("");
 
   const [customInstr, setCustomInstr] = useState("");
+  const [agentMode, setAgentMode] = useState(false);
+  const pendingApprovals = useAgentStore((s) => s.pending);
   const outputRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -576,8 +580,10 @@ export function AiPanel() {
         contextChars,
       };
     }
+    // "custom" + Agent 模式 → the full-toolset agent task.
+    const kind: TaskKind = selectedTask === "custom" && agentMode ? "agent" : selectedTask;
     runTask(
-      selectedTask,
+      kind,
       selectedTask === "custom" ? customInstr : undefined,
       selectedTask === "continue" ? continueLength : undefined,
       extras,
@@ -860,15 +866,28 @@ export function AiPanel() {
                     </>
                   )}
 
-                  {/* ── Custom instruction textarea ── */}
+                  {/* ── Custom instruction textarea + Agent 模式 ── */}
                   {selectedTask === "custom" && (
-                    <textarea
-                      className={styles.textarea}
-                      rows={3}
-                      placeholder={t("ai.panel.customInstruction")}
-                      value={customInstr}
-                      onChange={(e) => setCustomInstr(e.target.value)}
-                    />
+                    <>
+                      <textarea
+                        className={styles.textarea}
+                        rows={3}
+                        placeholder={t(agentMode ? "ai.panel.agentInstruction" : "ai.panel.customInstruction")}
+                        value={customInstr}
+                        onChange={(e) => setCustomInstr(e.target.value)}
+                      />
+                      <label className={styles.agentModeToggle}>
+                        <input
+                          type="checkbox"
+                          checked={agentMode}
+                          onChange={(e) => setAgentMode(e.target.checked)}
+                        />
+                        <span className={styles.agentModeLabel}>{t("ai.panel.agentModeLabel")}</span>
+                      </label>
+                      {agentMode && (
+                        <div className={styles.agentModeHint}>{t("ai.panel.agentModeHint")}</div>
+                      )}
+                    </>
                   )}
                     </motion.div>
                   </AnimatePresence>
@@ -908,6 +927,11 @@ export function AiPanel() {
             <>
               {/* Injection transparency: what lore went into this run and why */}
               {loreReport && <LoreReportSection report={loreReport} />}
+
+              {/* Pending manuscript-edit approvals — the loop is blocked on these */}
+              {pendingApprovals.map((p) => (
+                <ApprovalCard key={p.proposal.id} proposal={p.proposal} />
+              ))}
 
               {/* Execution log: run lifecycle, rounds, tool calls */}
               {agentLog.length > 0 && (

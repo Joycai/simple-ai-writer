@@ -183,3 +183,16 @@ PR1–PR2 合并前不动任何用户可见行为，随时可发版；0.3.0 在 
     流程，等 runtime 原生支持结构化输出（同上）再收编。
   - 写工具（create_lore_entity 等）的 UI 触发点顺延至 PR5 对话式助手——那才是
     「agent 自主改 lore」的自然场景；modal 场景保留人审。
+- **PR4 完成**：L2 正文审批闭环 + Agent 模式首个完整入口。
+  - `propose_edit` 工具（write-approval）：只产生提案不落盘；find 必须在文件中
+    唯一；工具循环**同步阻塞**在审批 Promise 上——批准即应用（先备份；活动文档走
+    editorStore 保住未保存内容并即时可见，其余走磁盘；应用时重新定位 find，文档
+    已变则以拒绝形式回给模型），拒绝则把作者理由原样反馈给模型调整。
+  - `stores/agentStore.ts`（按计划此刻建立）：审批队列 + approve/reject/rejectAll；
+    abort 与任务收尾都会 drain 队列，防止挂起的 Promise 卡死后续运行。
+  - AiPanel：`ApprovalCard`（原文/替换为 对照块 + 可选拒绝理由输入）；自定义任务
+    新增「Agent 模式」开关 → `AGENT_ASSIST_PRESET`（全部 9 个工具、12 轮）——
+    这是 L1 写工具与 propose_edit 的第一个真实 UI 触发点，也是 PR5 对话助手的
+    前身。ai.instructions.agent 引导模型「先调查后动手、正文必走 propose_edit」。
+  - 仍未做（顺延 PR5）：runtime 原生结构化输出（收编 MetaImprove 与
+    generator/splitter 的 JSON mode）；agentLog 迁入 agentStore（等会话化）。

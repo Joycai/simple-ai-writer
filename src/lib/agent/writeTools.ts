@@ -35,6 +35,7 @@ import {
   rewriteMemorySegment,
 } from "../context/memory";
 import { parseFrontmatter } from "../fs/markdown";
+import { readFile } from "../fs/fileio";
 import { backupFile } from "./backup";
 import type { ToolContext } from "./registry";
 import { allEntityNames, findEntityByName, isPathWithin, type ToolResult } from "./tools";
@@ -237,5 +238,80 @@ export async function updateMemoryTool(
     content:
       `Updated memory segment ${args.segment_index} (chars ${seg.from}–${seg.to}).` +
       (backupPath ? ` Previous version backed up to ${backupPath}.` : ""),
+  };
+}
+
+// ─── propose_edit (L2 — approval required) ───────────────────────────────────
+
+let proposalCounter = 0;
+
+/** Count non-overlapping occurrences of `find` in `text`. */
+function countOccurrences(text: string, find: string): number {
+  if (!find) return 0;
+  let count = 0;
+  for (let i = text.indexOf(find); i !== -1; i = text.indexOf(find, i + find.length)) count++;
+  return count;
+}
+
+export async function proposeEditTool(
+  toolCallId: string,
+  args: { path?: string; find?: string; replace?: string; reason?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const path = args.path?.trim();
+  if (!path) return { toolCallId, content: "Error: 'path' argument is required." };
+  // Manuscript edits only — lore/memory have their own (L1) tools.
+  if (!isPathWithin(`${ctx.projectPath}/writing`, path)) {
+    return { toolCallId, content: "Error: propose_edit only works on files under the project's writing/ directory." };
+  }
+  if (typeof args.find !== "string" || !args.find) {
+    return { toolCallId, content: "Error: 'find' argument is required (the exact text to replace)." };
+  }
+  if (typeof args.replace !== "string") {
+    return { toolCallId, content: "Error: 'replace' argument is required." };
+  }
+  if (!ctx.requestApproval) {
+    return { toolCallId, content: "Error: this surface cannot review manuscript edits — do not call propose_edit here." };
+  }
+
+  let content: string;
+  try {
+    content = await readFile(path);
+  } catch (e) {
+    return { toolCallId, content: `Error reading file: ${String(e)}` };
+  }
+  const occurrences = countOccurrences(content, args.find);
+  if (occurrences === 0) {
+    return {
+      toolCallId,
+      content: "Error: 'find' text not found in the file. Re-read the file and copy the target text exactly.",
+    };
+  }
+  if (occurrences > 1) {
+    return {
+      toolCallId,
+      content: `Error: 'find' text occurs ${occurrences} times — include more surrounding text so it is unique.`,
+    };
+  }
+
+  const decision = await ctx.requestApproval({
+    id: `edit-${++proposalCounter}`,
+    path,
+    find: args.find,
+    replace: args.replace,
+    reason: args.reason?.trim() || undefined,
+  });
+
+  if (!decision.approved) {
+    return {
+      toolCallId,
+      content: `The user REJECTED this edit${decision.reason ? ` — reason: ${decision.reason}` : "."} Do not retry the same change; adjust per the reason or move on.`,
+    };
+  }
+  return {
+    toolCallId,
+    content:
+      `Edit approved and applied.` +
+      (decision.backupPath ? ` Previous version backed up to ${decision.backupPath}.` : ""),
   };
 }

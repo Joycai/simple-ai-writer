@@ -33,7 +33,7 @@ import { executeRegisteredTool, type ToolContext, type ToolId } from "../agent/r
 
 const PROJECT = "/proj";
 const ALL_TOOLS: ToolId[] = [
-  "read_memory", "create_lore_entity", "update_lore_file", "update_memory",
+  "read_memory", "create_lore_entity", "update_lore_file", "update_memory", "propose_edit",
 ];
 
 const INDEX_MD = `---\nname: Ava\naliases: []\ncategory: characters\nsummary: "the protagonist"\n---\n\n# Ava\n`;
@@ -262,5 +262,61 @@ describe("read_memory / update_memory", () => {
   it("rejects paths outside the project", async () => {
     const res = await run("read_memory", { path: "/elsewhere/ch1.md" }, makeCtx());
     expect(res.content).toContain("outside the project");
+  });
+});
+
+// ─── propose_edit ────────────────────────────────────────────────────────────
+
+describe("propose_edit", () => {
+  const DOC = `${PROJECT}/writing/ch1.md`;
+
+  beforeEach(() => {
+    fs.set(DOC, "Ava walked into the hall. The hall was dark. She waited.");
+  });
+
+  it("blocks on approval; approved → success message (approver applies, not the tool)", async () => {
+    const approvals: object[] = [];
+    const ctx = makeCtx({
+      requestApproval: async (p) => {
+        approvals.push(p);
+        return { approved: true, backupPath: "/proj/.ai-writer/backups/x" };
+      },
+    });
+    const res = await run("propose_edit", {
+      path: DOC, find: "She waited.", replace: "She ran.", reason: "pacing",
+    }, ctx);
+
+    expect(approvals).toHaveLength(1);
+    expect(res.content).toContain("approved and applied");
+    expect(res.content).toContain("/proj/.ai-writer/backups/x");
+    // The tool itself never writes — that's the approver's job.
+    expect(fs.get(DOC)).toContain("She waited.");
+  });
+
+  it("feeds the user's rejection reason back to the model", async () => {
+    const ctx = makeCtx({
+      requestApproval: async () => ({ approved: false, reason: "keep the slow pacing" }),
+    });
+    const res = await run("propose_edit", { path: DOC, find: "She waited.", replace: "She ran." }, ctx);
+    expect(res.content).toContain("REJECTED");
+    expect(res.content).toContain("keep the slow pacing");
+  });
+
+  it("validates path containment, find uniqueness, and the approval channel", async () => {
+    const ctxOk = makeCtx({ requestApproval: async () => ({ approved: true }) });
+
+    const outside = await run("propose_edit", {
+      path: `${PROJECT}/.ai-writer/lore/characters/ava/index.md`, find: "x", replace: "y",
+    }, ctxOk);
+    expect(outside.content).toContain("writing/");
+
+    const missing = await run("propose_edit", { path: DOC, find: "no such text", replace: "y" }, ctxOk);
+    expect(missing.content).toContain("not found");
+
+    const ambiguous = await run("propose_edit", { path: DOC, find: "hall", replace: "cave" }, ctxOk);
+    expect(ambiguous.content).toContain("2 times");
+
+    const noChannel = await run("propose_edit", { path: DOC, find: "She waited.", replace: "y" }, makeCtx());
+    expect(noChannel.content).toContain("cannot review");
   });
 });

@@ -71,3 +71,26 @@ export const LORE_SPLIT_PRESET: TaskPreset = {
   maxRounds: 1,
   finishPolicy: "force-text",
 };
+
+/**
+ * Agent 模式（自定义任务） — the full toolset: read lore/chapters/memory,
+ * maintain lore + memory (L1, auto+backup), and propose manuscript edits
+ * (L2, blocks on the user's approval card). The stepping stone to the
+ * stage-two conversational assistant.
+ */
+export const AGENT_ASSIST_PRESET: TaskPreset = {
+  id: "agent-assist",
+  tools: [
+    "list_lore_entities",
+    "read_lore_entity",
+    "list_files",
+    "read_file",
+    "read_memory",
+    "create_lore_entity",
+    "update_lore_file",
+    "update_memory",
+    "propose_edit",
+  ],
+  maxRounds: 12,
+  finishPolicy: "force-text",
+};

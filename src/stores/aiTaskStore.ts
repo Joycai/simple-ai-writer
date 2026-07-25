@@ -7,6 +7,7 @@ import {
   type ContextAllocation,
 } from "../lib/context/budget";
 import type { LoreActivationReport } from "../lib/context/loreSelect";
+import { useAgentStore } from "./agentStore";
 import { useAiStore } from "./aiStore";
 import { useAppStore } from "./appStore";
 import { useLoreStore } from "./loreStore";
@@ -15,12 +16,12 @@ import { getDb } from "../lib/project";
 import { loadApiKey } from "../lib/keyStore";
 import { appendAgentEventTo, type AgentEvent, type ToolStep } from "../lib/agent/events";
 
-export type TaskKind = "continue" | "polish" | "rewrite" | "summary" | "custom";
+export type TaskKind = "continue" | "polish" | "rewrite" | "summary" | "custom" | "agent";
 export type { AgentEvent, ToolStep };
 
 // Resolve the built-in instruction at call time so it follows the active
 // language — module-load lookups would freeze to the initial locale.
-function taskInstruction(kind: Exclude<TaskKind, "custom" | "continue">): string {
+function taskInstruction(kind: Exclude<TaskKind, "custom" | "continue" | "agent">): string {
   return i18n.t(`ai.instructions.${kind}`);
 }
 
@@ -110,12 +111,15 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const memory = activeFilePath ? await loadMemory(projectPath, activeFilePath) : null;
 
     // Task instruction: use scene-matched user prompt if one exists, else built-in default
-    const scenePrompt = kind !== "custom"
+    const scenePrompt = kind !== "custom" && kind !== "agent"
       ? prompts.find((p) => p.scene === kind)
       : undefined;
     let instruction: string;
     if (kind === "custom") {
       instruction = customInstruction ?? "";
+    } else if (kind === "agent") {
+      // Agent mode: workflow guidance for the full toolset + the user's ask.
+      instruction = `${i18n.t("ai.instructions.agent")}\n\n${customInstruction ?? ""}`;
     } else if (kind === "continue") {
       instruction = scenePrompt?.content
         ?? i18n.t("ai.instructions.continue", { length: continueLength ?? 500 });
@@ -201,26 +205,30 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const baseUrl = provider.baseUrl || defaultBaseUrl(provider.apiStandard);
     const loreBudgetChars = plan.loreChars;
 
+    const isAgentic = isContinue || kind === "agent";
     get().appendAgentEvent({
       kind: "run-start",
       task: kind,
       modelName: model.name || model.modelId,
-      agentic: isContinue,
+      agentic: isAgentic,
       at: Date.now(),
     });
 
     try {
-      if (kind === "continue") {
-        // ── Agentic mode: AI reads context autonomously with tools ─────────
+      if (isAgentic) {
+        // ── Agentic mode: AI reads (and, in agent mode, writes) via tools ──
         // Continue is append-mode: any selection is an anchor to write *after*,
-        // never an edit target — so no 【选中内容】 block is sent.
+        // never an edit target — so no 【选中内容】 block is sent. Agent mode
+        // keeps the selection as context for the user's instruction.
         const bundle = await assembleContext(
           systemPrompt,
           loreIndex,
           documentText,
           get().selection,
           instruction,
-          { ...extras, ...bookExtras, appendMode: true, contextChars: plan.recentWindowChars },
+          isContinue
+            ? { ...extras, ...bookExtras, appendMode: true, contextChars: plan.recentWindowChars }
+            : { ...extras, contextChars: plan.recentWindowChars },
           get().selectionRange,
           memory,
           loreBudgetChars,
@@ -229,7 +237,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         set({ loreReport: bundle.loreReport });
 
         const { runAgent } = await import("../lib/agent/runtime");
-        const { CONTINUE_PRESET } = await import("../lib/agent/presets");
+        const { CONTINUE_PRESET, AGENT_ASSIST_PRESET } = await import("../lib/agent/presets");
 
         const { inputTokens, outputTokens } = await runAgent({
           baseUrl,
@@ -240,7 +248,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           prefix: model.prefix,
           contextSize: model.contextSize,
           inputCeilingTokens: plan.inputCeilingTokens,
-          preset: CONTINUE_PRESET,
+          preset: isContinue ? CONTINUE_PRESET : AGENT_ASSIST_PRESET,
           messages: bundleToMessages(bundle),
           toolContext: {
             projectPath,
@@ -256,6 +264,9 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
                 m.useMemoryStore.getState().loadForActiveFile(),
               );
             },
+            // L2 approvals: the AiPanel card resolves these (agent mode only —
+            // continue's preset has no propose_edit).
+            requestApproval: (p) => useAgentStore.getState().requestApproval(p),
           },
           signal: controller.signal,
           onEvent: (event) => get().appendAgentEvent(event),
@@ -315,6 +326,9 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         get().appendAgentEvent({ kind: "run-error", message: String(e), at: Date.now() });
       }
     } finally {
+      // Drain any approval still blocking the loop — a dangling Promise here
+      // would wedge the next run's tool executor.
+      useAgentStore.getState().rejectAll("task ended");
       // Same guard: abort() already cleared state, and a newer task may own it now.
       if (get().abortController === controller) {
         set({ isRunning: false, abortController: null });
@@ -324,6 +338,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
 
   abort: () => {
     get().abortController?.abort();
+    // Unblock a loop waiting on an approval card so the abort takes effect.
+    useAgentStore.getState().rejectAll("aborted by user");
     set({ isRunning: false, abortController: null });
   },
 

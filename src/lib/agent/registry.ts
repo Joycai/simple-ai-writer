@@ -29,12 +29,29 @@ import {
 } from "./tools";
 import {
   createLoreEntityTool,
+  proposeEditTool,
   readMemoryTool,
   updateLoreFileTool,
   updateMemoryTool,
 } from "./writeTools";
 
 export type ToolAccess = "read" | "write-auto" | "write-approval";
+
+/** A manuscript edit the model proposed — nothing is written until approved. */
+export interface EditProposal {
+  id: string;
+  /** Absolute path of the writing file. */
+  path: string;
+  /** Exact text to replace — must occur exactly once in the file. */
+  find: string;
+  replace: string;
+  /** Model's one-line justification, shown on the approval card. */
+  reason?: string;
+}
+
+export type ApprovalDecision =
+  | { approved: true; backupPath?: string | null }
+  | { approved: false; reason?: string };
 
 /** Everything an executor may need about the running project. */
 export interface ToolContext {
@@ -51,6 +68,12 @@ export interface ToolContext {
   onLoreChanged?: () => void;
   /** Same, for story-memory writes (memoryStore refresh). */
   onMemoryChanged?: () => void;
+  /**
+   * L2 approval channel: propose_edit blocks on this until the user approves
+   * (the resolver applies the edit before resolving) or rejects. Absent when
+   * the surface can't render an approval card — the tool then errors.
+   */
+  requestApproval?: (proposal: EditProposal) => Promise<ApprovalDecision>;
 }
 
 export interface RegisteredTool {
@@ -67,7 +90,8 @@ export type ToolId =
   | "read_memory"
   | "create_lore_entity"
   | "update_lore_file"
-  | "update_memory";
+  | "update_memory"
+  | "propose_edit";
 
 function parseArgs<T>(raw: string): T {
   return JSON.parse(raw || "{}") as T;
@@ -283,6 +307,38 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => updateMemoryTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  propose_edit: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "propose_edit",
+        description:
+          "Propose a change to a manuscript file under writing/. NOTHING is written until the user approves the proposal on a review card; the call blocks until they decide, and a rejection (with their reason) comes back so you can adjust. 'find' must be the EXACT text currently in the file and must occur exactly once — include enough surrounding text to make it unique. Propose one focused edit per call.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Absolute path of the writing file, as returned by list_files",
+            },
+            find: {
+              type: "string",
+              description: "Exact existing text to replace (unique in the file)",
+            },
+            replace: { type: "string", description: "The replacement text" },
+            reason: {
+              type: "string",
+              description: "One-line justification shown to the user on the review card",
+            },
+          },
+          required: ["path", "find", "replace"],
+        },
+      },
+    },
+    execute: (call, ctx) => proposeEditTool(call.id, parseArgs(call.arguments), ctx),
   },
 };
 
