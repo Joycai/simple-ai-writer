@@ -1,0 +1,14 @@
+# This repository stores text as LF. Without this file a Windows checkout
+# writes CRLF into the working tree and *every* tracked text file shows as
+# modified — 170 files of pure line-ending noise that buries any real diff and
+# makes review impractical. Normalize on the way in, check out LF everywhere.
+* text=auto eol=lf
+
+# Binary assets — never convert.
+*.png  binary
+*.ico  binary
+*.icns binary
+*.woff  binary
+*.woff2 binary
+*.ttf  binary
+*.otf  binary
