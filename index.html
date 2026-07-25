@@ -5,28 +5,8 @@
     <link rel="icon" type="image/png" href="/logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Simple AI Writer</title>
-    <!--
-      Web fonts load ASYNCHRONOUSLY (media="print" swaps to "all" onload).
-      A plain stylesheet <link> is render-blocking: when fonts.googleapis.com
-      is unreachable (offline, or blocked in some regions), the window stays
-      blank white for the full connection timeout — which users experience as
-      "the app doesn't start". The UI now paints immediately with system
-      fallback fonts and upgrades in place if/when the fonts arrive.
-    -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,200;0,300;0,400;0,500;0,600;1,400&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
-      media="print"
-      onload="this.media='all'"
-    />
-    <noscript>
-      <link
-        href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,200;0,300;0,400;0,500;0,600;1,400&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-        rel="stylesheet"
-      />
-    </noscript>
+    <!-- Fonts are self-hosted and bundled (src/styles/fonts.ts, Fontsource) —
+         no network request, no render blocking, works fully offline. -->
     <!-- Minimal splash shown until React mounts (createRoot().render replaces
          #root's children). Mainly visible during vite dev's first compile. -->
     <style>
