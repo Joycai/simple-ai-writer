@@ -33,6 +33,13 @@ interface ProjectState {
   projectPath: string | null;
   activeFilePath: string | null;
   fileTree: FileNode[];
+  /**
+   * Which sidebar folders the author has explicitly opened or closed, keyed by
+   * path. Lives here rather than in FileTree's nodes because the sidebar's tab
+   * transition remounts the tree — local state would collapse every folder on
+   * each visit to another tab. Absent key = the node's default (see FileTree).
+   */
+  expandedDirs: Record<string, boolean>;
   wordCount: number;
   charCount: number;
   isLoading: boolean;
@@ -41,6 +48,7 @@ interface ProjectState {
   closeProject: () => Promise<void>;
   refreshFileTree: () => Promise<void>;
   setActiveFilePath: (path: string | null) => void;
+  setDirExpanded: (path: string, open: boolean) => void;
   setWordCount: (n: number) => void;
   setCharCount: (n: number) => void;
 }
@@ -49,6 +57,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   projectPath: null,
   activeFilePath: null,
   fileTree: [],
+  expandedDirs: {},
   wordCount: 0,
   charCount: 0,
   isLoading: false,
@@ -71,7 +80,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       resetDb();
       resetDocuments();
       await getDb(target);
-      set({ projectPath: target, activeFilePath: null, fileTree: [], wordCount: 0, charCount: 0 });
+      set({ projectPath: target, activeFilePath: null, fileTree: [], expandedDirs: {}, wordCount: 0, charCount: 0 });
       await get().refreshFileTree();
       await useLoreStore.getState().scanProject(target);
       useAppStore.getState().addRecentProject(target);
@@ -88,7 +97,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     await flushDirtyDocuments();
     resetDocuments();
     resetDb();
-    set({ projectPath: null, activeFilePath: null, fileTree: [], wordCount: 0, charCount: 0 });
+    set({ projectPath: null, activeFilePath: null, fileTree: [], expandedDirs: {}, wordCount: 0, charCount: 0 });
   },
 
   refreshFileTree: async () => {
@@ -103,6 +112,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   setActiveFilePath: (path) => set({ activeFilePath: path }),
+  setDirExpanded: (path, open) =>
+    set((s) => ({ expandedDirs: { ...s.expandedDirs, [path]: open } })),
   setWordCount: (n) => set({ wordCount: n }),
   setCharCount: (n) => set({ charCount: n }),
 }));

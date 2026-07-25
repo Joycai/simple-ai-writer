@@ -152,19 +152,28 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
     activeFilePath, setActiveFilePath, creatingIn, startCreate,
     renamingPath, renameError, openMenu,
   } = useContext(TreeCtx);
-  const [open, setOpen] = useState(depth === 0 || node.name === "writing");
+  // Expansion is stored per project (projectStore.expandedDirs), not per node:
+  // the sidebar's tab transition remounts this tree, so local state would
+  // collapse every folder the author opened whenever they looked at another tab.
+  // No entry yet = never touched = the default below.
+  const stored = useProjectStore((s) => s.expandedDirs[node.path]);
+  const open = stored ?? (depth === 0 || node.name === "writing");
+  const setOpen = (next: boolean) =>
+    useProjectStore.getState().setDirExpanded(node.path, next);
   const isActive = !node.is_dir && activeFilePath === node.path;
   const isRenaming = renamingPath === node.path;
 
   // Auto-expand when this folder becomes the target of an inline create
   // (context menu can trigger creates on collapsed folders).
   useEffect(() => {
-    if (creatingIn === node.path) setOpen(true);
+    if (creatingIn === node.path) {
+      useProjectStore.getState().setDirExpanded(node.path, true);
+    }
   }, [creatingIn, node.path]);
 
   const handleClick = () => {
     if (isRenaming) return;
-    if (node.is_dir) setOpen((o) => !o);
+    if (node.is_dir) setOpen(!open);
     else setActiveFilePath(node.path);
   };
 

@@ -39,8 +39,15 @@ export function EditorScrollNav() {
 
     update();
     scroller.addEventListener("scroll", update, { passive: true });
-    // Content edits change scrollHeight without firing a scroll event.
+    // Two different things move the edges, and they need two observations:
+    //   • contentDOM — editing changes the document's height. The scroller
+    //     itself is `height:100%` with `overflow:auto`, so its own box never
+    //     resizes when text is added or deleted and observing it would miss
+    //     every content edit (which is exactly the case with no scroll event).
+    //   • scrollDOM — the pane resizes (split toggled, window resized, sidebar
+    //     dragged), which changes clientHeight and therefore the max scroll.
     const ro = new ResizeObserver(update);
+    ro.observe(view.contentDOM);
     ro.observe(scroller);
     return () => {
       scroller.removeEventListener("scroll", update);

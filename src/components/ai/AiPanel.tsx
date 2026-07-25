@@ -556,10 +556,17 @@ export function AiPanel() {
       return selectionRange;
     }
     // Offsets went stale (edits above it, or a preview-mode selection with no
-    // range at all) — fall back to a verbatim search. Only an exact hit counts;
-    // guessing here would overwrite the wrong passage.
-    const at = content.lastIndexOf(selection);
-    return at >= 0 ? { from: at, to: at + selection.length } : null;
+    // range at all) — fall back to a verbatim search. Two guards, because unlike
+    // every other selection lookup in the app this one *overwrites* prose:
+    //   • only an exact match counts. rag.ts's locateSelectionOffset has a
+    //     normalized fallback, but the span it reports isn't `selection.length`
+    //     long, so it can't be turned into a replace range;
+    //   • the match must be unique. Repeated lines are ordinary in a draft, and
+    //     silently rewriting the *last* one would destroy a passage the author
+    //     never selected. Ambiguous → fall through to append, which is lossless.
+    const first = content.indexOf(selection);
+    if (first < 0 || first !== content.lastIndexOf(selection)) return null;
+    return { from: first, to: first + selection.length };
   })();
 
   const handleApply = () => {
@@ -746,7 +753,11 @@ export function AiPanel() {
                     appendMode={selectedTask === "continue"}
                   />
 
-                  {/* Task-specific config — crossfades when the instruction changes */}
+                  {/* Task-specific config — crossfades when the instruction changes.
+                      NOTE: keying on `selectedTask` unmounts the outgoing block, so
+                      anything in here must keep its state in AiPanel or a store —
+                      a local useState inside these branches would be wiped on every
+                      task switch. */}
                   <AnimatePresence mode="wait" initial={false}>
                     <motion.div
                       key={selectedTask}

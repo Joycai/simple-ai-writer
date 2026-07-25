@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { X, Pencil, Moon, Sun, Monitor, SlidersHorizontal, Server, Cpu, MessageSquare, Check, AlertCircle, FolderOpen, Info, GitBranch, ExternalLink } from "lucide-react";
@@ -9,7 +9,7 @@ import { useAppStore, type ThemeMode, type Language, type FontScheme } from "../
 import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../lib/ai/apiLog";
 import type { ApiStandard } from "../../lib/ai/types";
 import { MAX_CONTEXT_SIZE, type ModelType } from "../../lib/ai/configDb";
-import { CONTEXT_SIZE_STOPS, contextStopIndex, formatContextSize } from "../../lib/ai/contextSize";
+import { CONTEXT_SIZE_STOPS, contextStopIndex, exactStopIndex, formatContextSize } from "../../lib/ai/contextSize";
 import { GEMINI_HARM_CATEGORIES, GEMINI_THRESHOLD_LEVELS, defaultSafetySettings, type GeminiSafetySettings, type GeminiHarmCategory } from "../../lib/ai/safety";
 import { testProviderConnection } from "../../lib/ai/providerProbe";
 import { modalPop, overlayFade, overlayFadeTransition, springPanel } from "../../lib/motion";
@@ -632,7 +632,7 @@ function ModelsTab() {
               {[0, ...CONTEXT_SIZE_STOPS].map((n, i, all) => (
                 <span
                   key={n}
-                  className={`${styles.ctxSizeStop} ${contextStopIndex(form.contextSize) === i ? styles.ctxSizeStopActive : ""}`}
+                  className={`${styles.ctxSizeStop} ${exactStopIndex(form.contextSize) === i ? styles.ctxSizeStopActive : ""}`}
                   // Sit on the thumb's centre at this stop: it starts half a
                   // thumb in and travels (track − thumb), not the full track.
                   style={{
