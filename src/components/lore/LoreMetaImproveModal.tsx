@@ -12,7 +12,6 @@ import { useImageDataUrl } from "./useImageDataUrl";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { ModalShell } from "../common/ModalShell";
 import { parseFrontmatter } from "../../lib/fs/markdown";
-import { extractJsonObject } from "../../lib/ai/json";
 import { loadApiKey } from "../../lib/keyStore";
 import { imageToDataUrl } from "../../lib/fs/images";
 import type { ToolDefinition } from "../../lib/ai";
@@ -119,12 +118,6 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
         "- The category should match the entity's nature; only change it if clearly wrong.",
         "- Respond in the same language as the body (Chinese body → Chinese summary).",
       ].join("\n");
-      // Tool-forced path (structured, preferred). The JSON path is a fallback for
-      // reasoning/"thinking" models (e.g. DeepSeek reasoner) that reject a forced
-      // tool_choice — see the try/catch around the request below.
-      const toolPrompt = `${systemBase}\nCall the update_lore_metadata tool exactly once with the refined fields.`;
-      const jsonPrompt = `${systemBase}\nRespond with ONLY a JSON object — no markdown fences, no prose — with exactly these keys: {"name": string, "aliases": string[], "category": one of [${catIds.join(", ")}], "summary": string}.`;
-
       const userText = [
         "CURRENT METADATA:",
         `  name: ${entity.name}`,
@@ -171,8 +164,10 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
         },
       };
 
-      const { streamCompletion } = await import("../../lib/ai");
-      const commonOpts = {
+      // Unified structured-output path: forced tool_choice with JSON fallback
+      // for models that reject it — see lib/agent/structured.ts.
+      const { runStructuredTask } = await import("../../lib/agent/structured");
+      const toolArgs = await runStructuredTask({
         baseUrl: provider.baseUrl,
         apiKey,
         standard: provider.apiStandard,
@@ -180,63 +175,14 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
         modelId: model.modelId,
         prefix: model.prefix,
         contextSize: model.contextSize,
+        systemPrompt: systemBase,
+        toolInstruction: "Call the update_lore_metadata tool exactly once with the refined fields.",
+        jsonInstruction: `Respond with ONLY a JSON object — no markdown fences, no prose — with exactly these keys: {"name": string, "aliases": string[], "category": one of [${catIds.join(", ")}], "summary": string}.`,
+        outputTool: metadataTool,
+        userContent,
         signal: ctrl.signal,
-      };
-
-      // Forced tool call — structured and reliable on models that support it.
-      const runTool = async (): Promise<string> => {
-        let acc = "";
-        let toolArgs = "";
-        await streamCompletion({
-          ...commonOpts,
-          messages: [
-            { role: "system", content: toolPrompt },
-            { role: "user", content: userContent },
-          ],
-          tools: [metadataTool],
-          toolChoice: { type: "function", function: { name: "update_lore_metadata" } },
-          onChunk: (chunk) => {
-            if ("text" in chunk) { acc += chunk.text; setRawOutput(acc); }
-            else if ("toolCalls" in chunk) {
-              const call =
-                chunk.toolCalls.find((c) => c.name === "update_lore_metadata") ?? chunk.toolCalls[0];
-              if (call) toolArgs = call.arguments;
-            }
-          },
-        });
-        if (!toolArgs.trim()) throw new Error("EMPTY_TOOL_CALL");
-        return toolArgs;
-      };
-
-      // Fallback: ask for plain JSON, no tools. Used when the model rejects a
-      // forced tool_choice (reasoning/"thinking" models) or returns no tool call.
-      const runJson = async (): Promise<string> => {
-        let acc = "";
-        setRawOutput("");
-        await streamCompletion({
-          ...commonOpts,
-          messages: [
-            { role: "system", content: jsonPrompt },
-            { role: "user", content: userContent },
-          ],
-          onChunk: (chunk) => { if ("text" in chunk) { acc += chunk.text; setRawOutput(acc); } },
-        });
-        return extractJsonObject(acc);
-      };
-
-      let toolArgs: string;
-      try {
-        toolArgs = await runTool();
-      } catch (err) {
-        const name = (err as Error)?.name;
-        if (name === "AbortError") throw err;
-        const msg = err instanceof Error ? err.message : String(err);
-        // Only fall back for tool-capability failures; surface real errors as-is.
-        if (!/tool[_ ]?choice|thinking mode|does not support|function call|EMPTY_TOOL_CALL/i.test(msg)) {
-          throw err;
-        }
-        toolArgs = await runJson();
-      }
+        onText: setRawOutput,
+      });
 
       const parsed = JSON.parse(toolArgs) as Partial<MetaProposal>;
       const cat = LORE_CATEGORIES.find((c) => c.id === parsed.category);

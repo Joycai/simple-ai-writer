@@ -196,3 +196,28 @@ PR1–PR2 合并前不动任何用户可见行为，随时可发版；0.3.0 在 
     前身。ai.instructions.agent 引导模型「先调查后动手、正文必走 propose_edit」。
   - 仍未做（顺延 PR5）：runtime 原生结构化输出（收编 MetaImprove 与
     generator/splitter 的 JSON mode）；agentLog 迁入 agentStore（等会话化）。
+- **PR5 完成 —— 第二阶段交付，本需求收官**：
+  - **对话助手**：AiDrawer 新增「助手」标签（generate / chat / consistency 三模式），
+    `components/ai/AgentChat.tsx`。会话状态入 agentStore：`chatHistory` 就是 runtime
+    原地追加的 wire 协议数组——前一轮的工具调用与结果留在上下文里，后续轮次可以指代
+    （「把刚才那条也改了」）；展示层 turns 单独维护（每个 assistant 轮内嵌自己的
+    AgentLog）。首轮经 assembleContext 注入设定/记忆/正文窗口，后续轮只追加 user
+    消息；inputCeiling 由 contextSize×utilization 直接给出，超限靠 runtime 的
+    trimHistory 淘汰旧工具结果。走 AGENT_ASSIST_PRESET 全工具集，审批卡片渲染在
+    输入框上方；停止/新会话/会话累计用量齐备；usage 以 task="chat" 记账。
+    toolContext 每轮重建（取 loreStore 最新 index，第 N 轮写入的 lore 第 N+1 轮可见）。
+  - **结构化输出统一**：`lib/agent/structured.ts` runStructuredTask（强制
+    tool_choice + JSON 回退，抽取自 MetaImprove 的成熟实现并泛化）；
+    LoreMetaImproveModal 迁移完成——至此 9 个 AI 入口全部运行在 lib/agent 之上。
+    有意保持单发：JSON mode / 强制 tool_choice 与自由工具循环互斥，需要
+    「调查→结构化产出」时先跑 agent loop 再喂 structured 调用。
+  - generator/splitter 维持 extraBody JSON mode（经 runtime）：迁去 runStructuredTask
+    属可选优化，留作后续小 PR。
+
+## 8. 收官状态（2026-07-25）
+
+统一目标达成：所有 AI 功能（续写/润色/改写/总结/自定义/Agent 模式/对话助手/
+记忆摘要外的 lore 全家桶）共享同一 runtime、注册表、事件流与安全分级。
+剩余已知优化（无阻塞，按需开小 PR）：memoryStore 摘要生成迁 preset、
+generator/splitter 换 runStructuredTask、对话会话持久化（重启后恢复）、
+向量检索兜底召回（见 lore-facet-plan 后续方向）。

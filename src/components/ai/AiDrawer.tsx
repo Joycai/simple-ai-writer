@@ -1,8 +1,9 @@
 import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "motion/react";
-import { Sparkles, CheckCircle2 } from "lucide-react";
+import { Sparkles, CheckCircle2, Bot } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useAiStore } from "../../stores/aiStore";
+import { AgentChat } from "./AgentChat";
 import { AiPanel } from "./AiPanel";
 import { ConsistencyCheck } from "./ConsistencyCheck";
 import { drawerSlide, overlayFade, overlayFadeTransition, springDrawer } from "../../lib/motion";
@@ -14,7 +15,7 @@ export function AiDrawer() {
   const { models, providers, activeModelId } = useAiStore();
 
   const close = () => setShowAiDrawer(false);
-  const setMode = (m: "generate" | "consistency") => setShowAiDrawer(true, m);
+  const setMode = (m: "generate" | "chat" | "consistency") => setShowAiDrawer(true, m);
 
   const activeModel = models.find((m) => m.id === activeModelId);
   const activeProvider = activeModel ? providers.find((p) => p.id === activeModel.providerId) : null;
@@ -22,7 +23,9 @@ export function AiDrawer() {
   const headerTitle =
     aiDrawerMode === "consistency"
       ? t("ai.drawer.consistencyTitle", { defaultValue: "一致性检查" })
-      : t("ai.drawer.generateTitle", { defaultValue: "AI 助手" });
+      : aiDrawerMode === "chat"
+        ? t("ai.chat.title")
+        : t("ai.drawer.generateTitle", { defaultValue: "AI 助手" });
 
   return (
     <AnimatePresence>
@@ -55,7 +58,9 @@ export function AiDrawer() {
           <div className={styles.avatar}>
             {aiDrawerMode === "consistency"
               ? <CheckCircle2 size={16} strokeWidth={1.6} />
-              : <Sparkles size={16} strokeWidth={1.6} />}
+              : aiDrawerMode === "chat"
+                ? <Bot size={16} strokeWidth={1.6} />
+                : <Sparkles size={16} strokeWidth={1.6} />}
           </div>
           <div className={styles.titleBlock}>
             <div className={styles.title}>{headerTitle}</div>
@@ -78,6 +83,12 @@ export function AiDrawer() {
               {t("ai.tasks.continue")}
             </button>
             <button
+              className={`${styles.modeTab} ${aiDrawerMode === "chat" ? styles.modeTabActive : ""}`}
+              onClick={() => setMode("chat")}
+            >
+              {t("ai.chat.tab")}
+            </button>
+            <button
               className={`${styles.modeTab} ${aiDrawerMode === "consistency" ? styles.modeTabActive : ""}`}
               onClick={() => setMode("consistency")}
             >
@@ -91,7 +102,11 @@ export function AiDrawer() {
         </div>
 
         <div className={styles.body}>
-          {aiDrawerMode === "generate" ? <AiPanel /> : <ConsistencyCheck />}
+          {aiDrawerMode === "generate"
+            ? <AiPanel />
+            : aiDrawerMode === "chat"
+              ? <AgentChat />
+              : <ConsistencyCheck />}
         </div>
       </motion.aside>
       )}

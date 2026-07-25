@@ -79,7 +79,7 @@ const storedContextUtilization = clamp(
 );
 
 export type MainView = "editor" | "lore-wall" | "outline-full";
-export type AiDrawerMode = "generate" | "consistency";
+export type AiDrawerMode = "generate" | "chat" | "consistency";
 export type SideTab = "files" | "outline" | "search";
 
 interface AppState {

@@ -319,6 +319,18 @@
       "approve": "Apply edit",
       "reject": "Reject",
       "rejectPlaceholder": "Reason (optional, fed back to the AI)"
+    },
+    "chat": {
+      "tab": "Assistant",
+      "title": "Assistant",
+      "sessionTitle": "Session",
+      "sessionUsage": "{{input}} in / {{output}} out tokens",
+      "newSession": "New session",
+      "emptyHint": "Talk to your writing agent: it consults lore and chapters, maintains lore & story memory automatically (backed up first), and asks for approval before touching the manuscript. Try: \"check this chapter against the lore\" or \"fold recent plot facts into the character entries\".",
+      "placeholder": "Ask the agent to do something… (Enter to send, Shift+Enter for newline)",
+      "send": "Send",
+      "stop": "Stop",
+      "thinking": "Thinking…"
     }
   },
   "aiConfig": {

@@ -319,6 +319,18 @@
       "approve": "应用修改",
       "reject": "拒绝",
       "rejectPlaceholder": "拒绝原因（可选，会反馈给 AI）"
+    },
+    "chat": {
+      "tab": "助手",
+      "title": "对话助手",
+      "sessionTitle": "会话",
+      "sessionUsage": "输入 {{input}} / 输出 {{output}} tokens",
+      "newSession": "新会话",
+      "emptyHint": "跟你的写作 Agent 对话：它可以查阅设定与章节、自动维护设定和前情记忆（写前备份），修改正文前会先出确认卡片。试试：「检查本章和设定有没有矛盾」「把最近剧情里的新信息补进人物条目」。",
+      "placeholder": "让 Agent 做点什么…（Enter 发送，Shift+Enter 换行）",
+      "send": "发送",
+      "stop": "停止",
+      "thinking": "思考中…"
     }
   },
   "aiConfig": {
