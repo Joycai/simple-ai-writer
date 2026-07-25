@@ -17,6 +17,7 @@ import {
   MEMORY_SUGGEST_THRESHOLD_CHARS,
 } from "../../lib/context/memory";
 import { LORE_CATEGORIES } from "../../lib/lore";
+import { RECENT_WINDOW_MIN_CHARS, STATIC_LORE_BUDGET_MAX_TOKENS } from "../../lib/context/budget";
 import { panelFade, springPanel } from "../../lib/motion";
 import styles from "./AiPanel.module.css";
 
@@ -30,8 +31,8 @@ const TASK_OPTIONS: { kind: TaskKind; labelKey: string; descKey: string }[] = [
 const CONTINUE_LENGTH_OPTIONS = [200, 500, 1000, 2000];
 const CONTEXT_CHARS_OPTIONS = [0, 500, 1000, 2000];
 /** Verbatim window size used by tasks without a contextChars picker
- *  (continue/custom) — mirrors rag.ts MAX_CONTEXT_CHARS. */
-const DEFAULT_DETAIL_SPAN = 2400;
+ *  (continue/custom). Owned by lib/context/budget so it can't drift. */
+const DEFAULT_DETAIL_SPAN = RECENT_WINDOW_MIN_CHARS;
 
 // Pinned-lore selection is persisted per project (keyed by project path) so the
 // user doesn't have to re-check the same entities on every reload / task.
@@ -252,7 +253,11 @@ function LorePicker({
   // fall back to fixed constants and the utilization control does nothing.
   const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId));
   const contextSize = activeModel?.contextSize ?? 0;
-  const contextPlan = useAiTaskStore((s) => s.contextPlan);
+  const contextAlloc = useAiTaskStore((s) => s.contextAlloc);
+  // Without a declared window there is no dynamic plan *and* no pre-flight
+  // check, so the planner hard-caps lore. Say so rather than silently ignoring
+  // a bigger setting the author just typed in.
+  const loreCapped = contextSize <= 0 && loreBudgetTokens > STATIC_LORE_BUDGET_MAX_TOKENS;
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   // Uncommitted text in the budget field. Held separately so typing "12000"
   // isn't clamped digit-by-digit; committed (and clamped by the store) on
@@ -399,13 +404,22 @@ function LorePicker({
           ))}
         </div>
       </div>
-      {contextPlan?.dynamic && (
+      {loreCapped && (
+        <div className={styles.contextPlanLine}>
+          {t("ai.panel.loreBudgetStaticCap", {
+            defaultValue: "模型未设置「上下文大小」，本次仅注入 {{cap}} tokens 设定",
+            cap: STATIC_LORE_BUDGET_MAX_TOKENS.toLocaleString(),
+          })}
+        </div>
+      )}
+      {contextAlloc?.dynamic && (
         <div className={styles.contextPlanLine}>
           {t("ai.panel.contextPlan", {
-            defaultValue: "上次分配：设定 {{lore}} · 前情 {{memory}} · 全书 {{book}}",
-            lore: `${formatBudget(toTokens(contextPlan.loreChars, contextPlan.charsPerToken))} tk`,
-            memory: `${formatBudget(toTokens(contextPlan.memoryChars, contextPlan.charsPerToken))} tk`,
-            book: `${formatBudget(toTokens(contextPlan.bookPriorChars, contextPlan.charsPerToken))} tk`,
+            defaultValue: "上次分配：近期 {{recent}} · 设定 {{lore}} · 前情 {{memory}} · 全书 {{book}}",
+            recent: `${formatBudget(toTokens(contextAlloc.recentWindowChars, contextAlloc.charsPerToken))} tk`,
+            lore: `${formatBudget(toTokens(contextAlloc.loreChars, contextAlloc.charsPerToken))} tk`,
+            memory: `${formatBudget(toTokens(contextAlloc.memoryChars, contextAlloc.charsPerToken))} tk`,
+            book: `${formatBudget(toTokens(contextAlloc.bookPriorChars, contextAlloc.charsPerToken))} tk`,
           })}
         </div>
       )}

@@ -6,11 +6,41 @@
 
 import { streamCompletion } from "../ai";
 import type { GeminiSafetySettings } from "../ai/safety";
+import { estimateMessagesTokens } from "../ai/tokenEstimate";
 import type { AccumulatedToolCall, ApiStandard, ContentPart, StreamMessage, ToolDefinition } from "../ai/types";
 import type { LoreIndex } from "../lore";
 import { executeTool, type ToolCall, type ToolResult } from "./tools";
 
 const MAX_ROUNDS = 8;
+
+/** Stand-in left behind when an old tool result is dropped to reclaim room. */
+const ELIDED_TOOL_RESULT =
+  "[earlier tool result dropped to stay within the model's context window]";
+
+/**
+ * Keep the growing history inside the planned input ceiling.
+ *
+ * The first turn is budgeted to fill the window up to the author's utilization
+ * setting, which leaves the rest for whatever the tools drag in. Without this,
+ * a long tool-using run trips the pre-flight check on round 5 or 6 — i.e. it
+ * fails *after* the author has already waited through the whole loop.
+ *
+ * Oldest tool results go first: they are both the bulk of the growth and the
+ * least likely to still matter. Their *messages* stay — an assistant tool_call
+ * with no matching tool reply is a protocol error at both OpenAI and Gemini —
+ * only the payload is replaced. The system prompt and the assembled first turn
+ * are never touched; if those alone overflow, that is a planning bug and the
+ * pre-flight check should say so rather than this quietly hiding it.
+ */
+function trimHistory(history: StreamMessage[], ceilingTokens?: number): void {
+  if (!ceilingTokens || ceilingTokens <= 0) return;
+  if (estimateMessagesTokens(history) <= ceilingTokens) return;
+  for (const m of history) {
+    if (m.role !== "tool" || m.content === ELIDED_TOOL_RESULT) continue;
+    m.content = ELIDED_TOOL_RESULT;
+    if (estimateMessagesTokens(history) <= ceilingTokens) return;
+  }
+}
 
 export type ToolStepStatus = "running" | "done" | "error";
 
@@ -36,6 +66,12 @@ export interface AgentLoopOptions {
   prefix?: string;
   /** Optional model context window (tokens); checked before each round's request. */
   contextSize?: number;
+  /**
+   * Input-token ceiling from the context budget planner (lib/context/budget).
+   * Older tool results are elided to stay under it, so a long loop degrades
+   * instead of dying on a ContextSizeError several rounds in. Omit to disable.
+   */
+  inputCeilingTokens?: number;
   systemPrompt: string;
   /** The assembled user message content (from RAG) for the first turn */
   initialUserMessage: string;
@@ -75,6 +111,8 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<void> {
 
     let roundToolCalls: AccumulatedToolCall[] = [];
     let roundGeminiModelParts: unknown[] | undefined;
+
+    trimHistory(history, opts.inputCeilingTokens);
 
     await streamCompletion({
       baseUrl: opts.baseUrl,

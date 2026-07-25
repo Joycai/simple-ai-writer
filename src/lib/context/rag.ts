@@ -14,12 +14,17 @@
 
 import i18n from "../../i18n";
 import type { LoreIndex } from "../lore";
+import { RECENT_WINDOW_MIN_CHARS } from "./budget";
 import { selectLore, type LoreActivationReport } from "./loreSelect";
 import { selectMemoryForContext, type DocMemory } from "./memory";
 
 const APPROX_CHARS_PER_TOKEN = 3; // rough CJK-aware estimate
-/** Default verbatim recent-content window when a task declares no contextChars. */
-export const MAX_CONTEXT_CHARS = 800 * APPROX_CHARS_PER_TOKEN;
+/**
+ * Default verbatim recent-content window when a task declares no contextChars.
+ * Re-exported from the budget planner, which owns the constant so the planner,
+ * this assembler and the AI panel can't drift apart.
+ */
+export const MAX_CONTEXT_CHARS = RECENT_WINDOW_MIN_CHARS;
 
 /** Extra options available for AI tasks (continue / polish / rewrite / summary). */
 export interface TaskExtras {

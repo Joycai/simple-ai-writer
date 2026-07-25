@@ -1,10 +1,10 @@
 import { create } from "zustand";
 import i18n from "../i18n";
 import { streamCompletion } from "../lib/ai";
-import { assembleContext, bundleToMessages, MAX_CONTEXT_CHARS, type TaskExtras } from "../lib/context/rag";
+import { assembleContext, bundleToMessages, type TaskExtras } from "../lib/context/rag";
 import {
   fixedContextChars, measureCharsPerToken, planContextBudget, reflowMemoryBudget,
-  type ContextBudgetPlan,
+  type ContextAllocation,
 } from "../lib/context/budget";
 import type { LoreActivationReport } from "../lib/context/loreSelect";
 import { useAiStore } from "./aiStore";
@@ -47,8 +47,8 @@ interface AiTaskState {
   toolSteps: ToolStep[];
   /** Which lore entities/facets were injected (and why) for the current run. */
   loreReport: LoreActivationReport | null;
-  /** How the context window was divided for the current run (see lib/context/budget). */
-  contextPlan: (ContextBudgetPlan & { memoryChars: number }) | null;
+  /** Final per-layer allocation for the current run (see lib/context/budget). */
+  contextAlloc: ContextAllocation | null;
 
   setSelection: (s: string, range?: SelectionRange | null) => void;
   setRequestedTask: (kind: TaskKind | null) => void;
@@ -69,7 +69,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
   abortController: null,
   toolSteps: [],
   loreReport: null,
-  contextPlan: null,
+  contextAlloc: null,
 
   setSelection: (s, range = null) => set({ selection: s, selectionRange: range }),
   setRequestedTask: (kind) => set({ requestedTask: kind }),
@@ -140,19 +140,26 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const { loreBudgetTokens, contextUtilization } = useAppStore.getState();
     const isContinue = kind === "continue";
     const { BOOK_PREV_TAIL_CHARS } = await import("../lib/context/bookContext");
+    // Where this request is anchored in the document — both the book-context
+    // build and the recent-window budget measure backwards from here.
+    const anchorOffset = get().selectionRange?.to ?? documentText.length;
     const plan = planContextBudget({
       contextSize: model.contextSize,
       utilization: contextUtilization,
       loreBudgetTokens,
       fixedChars: fixedContextChars({
         systemPromptChars: systemPrompt.length,
-        recentWindowChars: extras?.contextChars ?? MAX_CONTEXT_CHARS,
         taskInstructionChars: instruction.length,
         selectionChars: get().selection.length,
         outlineChars: extras?.outline?.length,
         knowledgeChars: extras?.additionalKnowledge?.length,
         prevChapterTailChars: isContinue ? BOOK_PREV_TAIL_CHARS : 0,
       }),
+      // Undefined for continue/custom (no picker) → the planner grows the
+      // verbatim window with the model. Polish/rewrite/summary pass the author's
+      // explicit 「参考上下文范围」 choice, which is honored as-is.
+      recentWindowChars: extras?.contextChars,
+      availableRecentChars: Math.max(0, anchorOffset),
       hasMemory: !!memory && memory.segments.length > 0,
       includeBookContext: isContinue,
       replyChars: isContinue ? continueLength : undefined,
@@ -171,7 +178,6 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       try {
         const { fileTree } = useProjectStore.getState();
         const { buildBookContext } = await import("../lib/context/bookContext");
-        const anchorOffset = get().selectionRange?.to ?? documentText.length;
         const bookContext = await buildBookContext(
           projectPath, fileTree, activeFilePath, anchorOffset, plan.bookPriorChars,
         );
@@ -189,7 +195,15 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const controller = new AbortController();
     set({
       isRunning: true, output: "", error: null, usage: null, toolSteps: [], loreReport: null,
-      contextPlan: { ...plan, bookPriorChars: bookUsedChars, memoryChars: memoryBudgetChars },
+      contextAlloc: {
+        loreChars: plan.loreChars,
+        memoryChars: memoryBudgetChars,
+        // Realized, not planned — its unspent share is already inside memoryChars.
+        bookPriorChars: bookUsedChars,
+        recentWindowChars: plan.recentWindowChars,
+        charsPerToken: plan.charsPerToken,
+        dynamic: plan.dynamic,
+      },
       abortController: controller,
     });
 
@@ -207,7 +221,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           documentText,
           get().selection,
           instruction,
-          { ...extras, ...bookExtras, appendMode: true },
+          { ...extras, ...bookExtras, appendMode: true, contextChars: plan.recentWindowChars },
           get().selectionRange,
           memory,
           loreBudgetChars,
@@ -232,6 +246,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           modelId: model.modelId,
           prefix: model.prefix,
           contextSize: model.contextSize,
+          inputCeilingTokens: plan.inputCeilingTokens,
           systemPrompt,
           initialUserMessage,
           projectPath,
@@ -255,7 +270,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           documentText,
           get().selection,
           instruction,
-          extras,
+          { ...extras, contextChars: plan.recentWindowChars },
           get().selectionRange,
           memory,
           loreBudgetChars,
