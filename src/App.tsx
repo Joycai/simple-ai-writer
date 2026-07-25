@@ -24,7 +24,7 @@ export default function App() {
     sidebarCollapsed,
     mainView,
     showCommandPalette, setShowCommandPalette,
-    setShowAiDrawer,
+    showAiDrawer, aiDrawerMode, setShowAiDrawer,
   } = useAppStore();
   const { loadConfig } = useAiStore();
   const [showSettings, setShowSettings] = useState(false);
@@ -34,12 +34,24 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Global ⌘K / Ctrl+K to open command palette
+  // Global shortcuts: ⌘K command palette · ⌘L chat assistant · ⌘J task panel
   useEffect(() => {
+    // Toggle the AI drawer for one mode: open (or switch to that mode) on
+    // first press, close on a second press in the same mode.
+    const toggleDrawer = (mode: "generate" | "chat") => {
+      if (showAiDrawer && aiDrawerMode === mode) setShowAiDrawer(false);
+      else setShowAiDrawer(true, mode);
+    };
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setShowCommandPalette(!showCommandPalette);
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "l") {
+        e.preventDefault();
+        toggleDrawer("chat");
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "j") {
+        e.preventDefault();
+        toggleDrawer("generate");
       } else if (e.key === "Escape") {
         setShowCommandPalette(false);
         setShowAiDrawer(false);
@@ -47,7 +59,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [showCommandPalette, setShowCommandPalette, setShowAiDrawer]);
+  }, [showCommandPalette, setShowCommandPalette, showAiDrawer, aiDrawerMode, setShowAiDrawer]);
 
   return (
     <MotionConfig reducedMotion="user">

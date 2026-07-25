@@ -1,8 +1,11 @@
 import { useState, useRef, useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight, Check, X, Square, Play, BookMarked, Sparkles, Layers, Pin } from "lucide-react";
-import { useAiTaskStore, type TaskKind, type ToolStep } from "../../stores/aiTaskStore";
+import { ChevronDown, ChevronRight, Square, Play, BookMarked, Sparkles, Layers, Pin } from "lucide-react";
+import { useAiTaskStore, type TaskKind } from "../../stores/aiTaskStore";
+import { useAgentStore } from "../../stores/agentStore";
+import { AgentLog } from "./AgentLog";
+import { ApprovalCard } from "./ApprovalCard";
 import { useAiStore } from "../../stores/aiStore";
 import { useAppStore, LORE_BUDGET_MIN, LORE_BUDGET_MAX } from "../../stores/appStore";
 import { useEditorStore } from "../../stores/editorStore";
@@ -56,47 +59,8 @@ function savePinnedLore(projectPath: string | null, paths: string[]): void {
   }
 }
 
-function AgentStepsSection({ steps, isRunning }: { steps: ToolStep[]; isRunning: boolean }) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(true);
-
-  return (
-    <div className={styles.agentSteps}>
-      <button className={styles.agentStepsHeader} onClick={() => setOpen((v) => !v)}>
-        <span className={styles.agentStepsChevron}>
-          {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-        </span>
-        <span className={styles.agentStepsTitle}>{t("ai.agent.stepsTitle")}</span>
-        <span className={styles.agentStepsCount}>({steps.length})</span>
-        {isRunning && <span className={styles.agentSpinner} />}
-      </button>
-      {open && (
-        <ul className={styles.agentStepsList}>
-          {steps.map((step) => (
-            <li key={`${step.toolCallId}-${step.status}`} className={styles.agentStepItem}>
-              <span className={`${styles.agentStepIcon} ${step.status === "error" ? styles.agentStepIconError : ""}`}>
-                {step.status === "running"
-                  ? <span className={styles.agentStepSpinner} />
-                  : step.status === "done"
-                  ? <Check size={11} />
-                  : <X size={11} />}
-              </span>
-              <span className={styles.agentStepName}>
-                {t(`ai.agent.tool.${step.name}`, { defaultValue: step.name })}
-              </span>
-              {step.argumentSummary && step.argumentSummary !== "{}" && (
-                <span className={styles.agentStepArgs}>{step.argumentSummary}</span>
-              )}
-              {step.resultSummary && step.status !== "running" && (
-                <span className={styles.agentStepResult}>{step.resultSummary}</span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
+// Execution log rendering lives in the shared <AgentLog> component
+// (components/ai/AgentLog.tsx), also used by the lore AI modals.
 
 /**
  * Story-memory status strip shown above the task config: coverage / staleness,
@@ -497,7 +461,7 @@ function LoreReportSection({ report }: { report: LoreActivationReport }) {
 export function AiPanel() {
   const { t, i18n } = useTranslation();
   const {
-    isRunning, output, error, usage, toolSteps, loreReport,
+    isRunning, output, error, usage, agentLog, loreReport,
     runTask, abort, clearOutput, selection, selectionRange, requestedTask, setRequestedTask,
   } = useAiTaskStore();
   const { models, providers, prompts, activeModelId, activePromptId, setActiveModel, setActivePrompt } = useAiStore();
@@ -538,6 +502,8 @@ export function AiPanel() {
   const [requirement, setRequirement] = useState("");
 
   const [customInstr, setCustomInstr] = useState("");
+  const [agentMode, setAgentMode] = useState(false);
+  const pendingApprovals = useAgentStore((s) => s.pending);
   const outputRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -614,8 +580,10 @@ export function AiPanel() {
         contextChars,
       };
     }
+    // "custom" + Agent 模式 → the full-toolset agent task.
+    const kind: TaskKind = selectedTask === "custom" && agentMode ? "agent" : selectedTask;
     runTask(
-      selectedTask,
+      kind,
       selectedTask === "custom" ? customInstr : undefined,
       selectedTask === "continue" ? continueLength : undefined,
       extras,
@@ -672,7 +640,7 @@ export function AiPanel() {
   }).length;
 
   // Results pane shows something whenever a run is in flight or has produced output.
-  const hasResults = isRunning || !!output || !!error || toolSteps.length > 0 || !!usage;
+  const hasResults = isRunning || !!output || !!error || agentLog.length > 0 || !!usage;
 
   return (
     <div className={styles.panel}>
@@ -898,15 +866,28 @@ export function AiPanel() {
                     </>
                   )}
 
-                  {/* ── Custom instruction textarea ── */}
+                  {/* ── Custom instruction textarea + Agent 模式 ── */}
                   {selectedTask === "custom" && (
-                    <textarea
-                      className={styles.textarea}
-                      rows={3}
-                      placeholder={t("ai.panel.customInstruction")}
-                      value={customInstr}
-                      onChange={(e) => setCustomInstr(e.target.value)}
-                    />
+                    <>
+                      <textarea
+                        className={styles.textarea}
+                        rows={3}
+                        placeholder={t(agentMode ? "ai.panel.agentInstruction" : "ai.panel.customInstruction")}
+                        value={customInstr}
+                        onChange={(e) => setCustomInstr(e.target.value)}
+                      />
+                      <label className={styles.agentModeToggle}>
+                        <input
+                          type="checkbox"
+                          checked={agentMode}
+                          onChange={(e) => setAgentMode(e.target.checked)}
+                        />
+                        <span className={styles.agentModeLabel}>{t("ai.panel.agentModeLabel")}</span>
+                      </label>
+                      {agentMode && (
+                        <div className={styles.agentModeHint}>{t("ai.panel.agentModeHint")}</div>
+                      )}
+                    </>
                   )}
                     </motion.div>
                   </AnimatePresence>
@@ -947,13 +928,18 @@ export function AiPanel() {
               {/* Injection transparency: what lore went into this run and why */}
               {loreReport && <LoreReportSection report={loreReport} />}
 
-              {/* Agent steps (agentic "continue" runs) */}
-              {toolSteps.length > 0 && (
-                <AgentStepsSection steps={toolSteps} isRunning={isRunning} />
+              {/* Pending manuscript-edit approvals — the loop is blocked on these */}
+              {pendingApprovals.map((p) => (
+                <ApprovalCard key={p.proposal.id} proposal={p.proposal} />
+              ))}
+
+              {/* Execution log: run lifecycle, rounds, tool calls */}
+              {agentLog.length > 0 && (
+                <AgentLog log={agentLog} isRunning={isRunning} />
               )}
 
               {/* Waiting for the first token */}
-              {isRunning && !output && toolSteps.length === 0 && (
+              {isRunning && !output && !agentLog.some((e) => e.kind === "tool-step") && (
                 <div className={styles.thinking}>
                   <span className={styles.agentSpinner} />
                   {t("ai.panel.thinking")}

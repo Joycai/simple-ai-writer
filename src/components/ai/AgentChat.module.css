@@ -1,0 +1,170 @@
+/* Conversational unified assistant (对话助手). */
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+.toolbarTitle {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+.toolbarUsage {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.newSessionBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--color-text-secondary);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+.newSessionBtn:hover { background: var(--color-bg-elevated); }
+
+.messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.emptyHint {
+  margin: auto;
+  max-width: 34ch;
+  text-align: center;
+  font-size: var(--font-size-xs);
+  line-height: 1.7;
+  color: var(--color-text-muted);
+}
+
+.userTurn {
+  align-self: flex-end;
+  max-width: 85%;
+  background: var(--color-accent);
+  color: #fff;
+  border-radius: var(--radius-md, 10px);
+  border-bottom-right-radius: 3px;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.assistantTurn {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.assistantBody {
+  font-size: var(--font-size-xs);
+  line-height: 1.7;
+  color: var(--color-text-primary);
+  word-break: break-word;
+}
+.assistantBody :is(p, ul, ol) { margin: 0 0 var(--space-2); }
+.assistantBody :is(h1, h2, h3, h4) { font-size: 1em; margin: var(--space-2) 0 var(--space-1); }
+.assistantBody pre {
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  overflow-x: auto;
+  font-size: 11px;
+}
+.assistantBody code { font-family: var(--font-mono, monospace); font-size: 0.95em; }
+
+.thinking {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+.thinkingSpinner {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--color-accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: chatSpin 0.8s linear infinite;
+}
+@keyframes chatSpin { to { transform: rotate(360deg); } }
+
+.error {
+  font-size: 11px;
+  color: var(--color-error);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--color-border);
+  word-break: break-all;
+}
+
+.approvals {
+  padding: 0 var(--space-3) var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.inputRow {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  max-height: 120px;
+}
+.input::placeholder { color: var(--color-text-muted); }
+.input:focus { outline: none; border-color: var(--color-accent); }
+
+.sendBtn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: #fff;
+  transition: background var(--transition-fast), opacity var(--transition-fast);
+}
+.sendBtn:hover:not(:disabled) { background: var(--color-accent-hover); }
+.sendBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+.stopBtn { background: var(--color-error); }
+.stopBtn:hover:not(:disabled) { background: var(--color-error); opacity: 0.85; }

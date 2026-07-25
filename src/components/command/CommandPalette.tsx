@@ -14,7 +14,7 @@ import styles from "./CommandPalette.module.css";
 
 interface LoreHit { kind: "lore"; entity: LoreEntity; }
 interface TextHit { kind: "text"; filePath: string; lineNum: number; preview: string; chapterTitle: string; }
-interface ActionHit { kind: "action"; id: "ask" | "check"; label: string; }
+interface ActionHit { kind: "action"; id: "ask" | "chat" | "check"; label: string; }
 
 type Hit = LoreHit | TextHit | ActionHit;
 
@@ -104,6 +104,7 @@ export function CommandPalette() {
 
     // AI actions
     out.push({ kind: "action", id: "ask", label: `问 AI："${q}"` });
+    out.push({ kind: "action", id: "chat", label: "打开对话助手（⌘L / Ctrl+L）" });
     out.push({ kind: "action", id: "check", label: `核对一致性 · 关于 ${q}` });
 
     return out;
@@ -122,6 +123,8 @@ export function CommandPalette() {
     } else if (h.kind === "action") {
       if (h.id === "check") {
         setShowAiDrawer(true, "consistency");
+      } else if (h.id === "chat") {
+        setShowAiDrawer(true, "chat");
       } else {
         setSelection(query);
         setShowAiDrawer(true, "generate");

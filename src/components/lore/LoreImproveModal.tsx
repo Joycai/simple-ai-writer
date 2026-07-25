@@ -10,9 +10,13 @@ import {
 } from "../../lib/lore";
 import { parseFrontmatter } from "../../lib/fs/markdown";
 import {
-  resolveModel, collectAttachmentContext, buildUserContent, stripCodeFence, streamLoreTask,
+  resolveModel, collectAttachmentContext, buildUserContent, stripCodeFence,
   type AttachedItem,
 } from "../../lib/lore/aiTask";
+import { runLoreAgentTask } from "../../lib/agent/run";
+import { LORE_IMPROVE_PRESET } from "../../lib/agent/presets";
+import { appendAgentEventTo, type AgentEvent } from "../../lib/agent/events";
+import { AgentLog } from "../ai/AgentLog";
 import { useImageDataUrl } from "./useImageDataUrl";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { ModalShell } from "../common/ModalShell";
@@ -46,6 +50,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const [phase, setPhase] = useState<"input" | "generating" | "result">("input");
   const [output, setOutput] = useState("");
+  const [agentLog, setAgentLog] = useState<AgentEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -87,20 +92,25 @@ export function LoreImproveModal({ entity, onClose }: Props) {
     abortRef.current = ctrl;
     setError(null);
     setOutput("");
+    setAgentLog([]);
     setPhase("generating");
 
     try {
       const supportsImages = model.type === "multimodal";
       const { loreRefs, textRefs, images } = await collectAttachmentContext(attached, supportsImages);
 
+      const toolHint =
+        "You may call list_lore_entities / read_lore_entity first to consult related lore for consistency.";
       const systemPrompt = isFacet
         ? [
             "You are a lore writing assistant improving ONE facet of a lore entity.",
+            toolHint,
             "Return the COMPLETE updated facet body as rich markdown prose.",
             "Output ONLY the body — no YAML frontmatter, no code fences, no explanation.",
           ].join("\n")
         : [
             "You are a lore writing assistant improving an existing lore entity document.",
+            toolHint,
             "Return the COMPLETE updated index.md file content, starting with a YAML frontmatter block (---) containing: name, aliases (as YAML list), category, and summary.",
             "The body after the frontmatter should be rich markdown prose using ## headers.",
             "Output ONLY the raw file content — no explanation, no code fences, no prefix text.",
@@ -116,14 +126,18 @@ export function LoreImproveModal({ entity, onClose }: Props) {
         `\nUSER INSTRUCTION:\n${instruction.trim() || "Improve and expand this lore entry with more detail."}`,
       ].filter(Boolean).join("\n");
 
-      await streamLoreTask({
+      await runLoreAgentTask({
         model,
         provider,
         apiKey,
+        preset: LORE_IMPROVE_PRESET,
         systemPrompt,
         userContent: buildUserContent(textContent, images),
+        projectPath: projectPath ?? "",
+        loreIndex: index,
         signal: ctrl.signal,
         onText: setOutput,
+        onEvent: (e) => setAgentLog((prev) => appendAgentEventTo(prev, e)),
       });
       setPhase("result");
     } catch (e) {
@@ -257,6 +271,13 @@ export function LoreImproveModal({ entity, onClose }: Props) {
             <div className={styles.error}>
               <AlertTriangle size={13} style={{ flexShrink: 0 }} />
               {error}
+            </div>
+          )}
+
+          {/* Execution log (tool consultations, rounds) */}
+          {agentLog.length > 0 && (phase === "generating" || phase === "result") && (
+            <div className={styles.section}>
+              <AgentLog log={agentLog} isRunning={phase === "generating"} />
             </div>
           )}
 

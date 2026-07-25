@@ -1,21 +1,19 @@
 /**
- * Shared engine for lore AI-assist tasks.
+ * Shared helpers for lore AI-assist tasks: model resolution, @-attachment
+ * gathering (images / text / other lore), user-content assembly, and fence
+ * stripping. The UI half (the @-picker + chips) lives in
+ * `components/lore/ai/AttachmentTextarea`.
  *
- * Every AI flow that touches a lore file — improve an entity's index.md, write
- * a facet, extract a new entity from text/images — is the same shape:
- *   pick model → gather @-attachments (images / text / other lore) → build a
- *   multimodal request → stream → strip fences → write the result back.
- *
- * These helpers own that mechanical middle so each surface only supplies a
- * system prompt, the context text, and where to write the output. The UI half
- * (the @-picker + chips) lives in `components/lore/ai/AttachmentTextarea`.
+ * The streaming half moved to the unified agent runtime — surfaces call
+ * `runLoreAgentTask` (lib/agent/run) with a task preset instead of the old
+ * `streamLoreTask`, gaining tool use and execution-log events.
  */
 
 import { readEntityFile } from "./entity";
 import type { LoreEntity } from "./model";
 import type { ProjectFile } from "../fs/images";
 import type { Model, Provider } from "../ai/configDb";
-import type { ContentPart, StreamMessage } from "../ai/types";
+import type { ContentPart } from "../ai/types";
 
 // ── Attachments ──────────────────────────────────────────────────────────────
 
@@ -98,44 +96,3 @@ export function stripCodeFence(raw: string): string {
   return fence ? fence[1] : content;
 }
 
-// ── Streaming ────────────────────────────────────────────────────────────────
-
-export interface StreamLoreTaskArgs {
-  model: Model;
-  provider: Provider;
-  apiKey: string;
-  systemPrompt: string;
-  userContent: string | ContentPart[];
-  signal?: AbortSignal;
-  /** Called on every chunk with the full accumulated text so far. */
-  onText: (accumulated: string) => void;
-}
-
-/** Run one streaming completion and resolve with the full accumulated text. */
-export async function streamLoreTask(args: StreamLoreTaskArgs): Promise<string> {
-  const { model, provider, apiKey, systemPrompt, userContent, signal, onText } = args;
-  const { streamCompletion } = await import("../ai");
-  let accumulated = "";
-  const messages: StreamMessage[] = [
-    { role: "system", content: systemPrompt },
-    { role: "user", content: userContent },
-  ];
-  await streamCompletion({
-    baseUrl: provider.baseUrl,
-    apiKey,
-    standard: provider.apiStandard,
-    safetySettings: provider.safetySettings,
-    modelId: model.modelId,
-    prefix: model.prefix,
-    contextSize: model.contextSize,
-    messages,
-    onChunk: (chunk) => {
-      if ("text" in chunk) {
-        accumulated += chunk.text;
-        onText(accumulated);
-      }
-    },
-    signal,
-  });
-  return accumulated;
-}

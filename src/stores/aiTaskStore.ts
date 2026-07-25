@@ -7,20 +7,21 @@ import {
   type ContextAllocation,
 } from "../lib/context/budget";
 import type { LoreActivationReport } from "../lib/context/loreSelect";
+import { useAgentStore } from "./agentStore";
 import { useAiStore } from "./aiStore";
 import { useAppStore } from "./appStore";
 import { useLoreStore } from "./loreStore";
 import { useProjectStore } from "./projectStore";
 import { getDb } from "../lib/project";
 import { loadApiKey } from "../lib/keyStore";
-import type { ToolStep } from "../lib/agent/loop";
+import { appendAgentEventTo, type AgentEvent, type ToolStep } from "../lib/agent/events";
 
-export type TaskKind = "continue" | "polish" | "rewrite" | "summary" | "custom";
-export type { ToolStep };
+export type TaskKind = "continue" | "polish" | "rewrite" | "summary" | "custom" | "agent";
+export type { AgentEvent, ToolStep };
 
 // Resolve the built-in instruction at call time so it follows the active
 // language — module-load lookups would freeze to the initial locale.
-function taskInstruction(kind: Exclude<TaskKind, "custom" | "continue">): string {
+function taskInstruction(kind: Exclude<TaskKind, "custom" | "continue" | "agent">): string {
   return i18n.t(`ai.instructions.${kind}`);
 }
 
@@ -44,7 +45,8 @@ interface AiTaskState {
   /** Task the floating toolbar asked the panel to pre-select. Consumed + cleared by AiPanel. */
   requestedTask: TaskKind | null;
   abortController: AbortController | null;
-  toolSteps: ToolStep[];
+  /** Execution log for the current/last run — rounds, tool calls, outcome. */
+  agentLog: AgentEvent[];
   /** Which lore entities/facets were injected (and why) for the current run. */
   loreReport: LoreActivationReport | null;
   /** Final per-layer allocation for the current run (see lib/context/budget). */
@@ -55,7 +57,7 @@ interface AiTaskState {
   runTask: (kind: TaskKind, customInstruction?: string, continueLength?: number, extras?: TaskExtras) => Promise<void>;
   abort: () => void;
   clearOutput: () => void;
-  addToolStep: (step: ToolStep) => void;
+  appendAgentEvent: (event: AgentEvent) => void;
 }
 
 export const useAiTaskStore = create<AiTaskState>((set, get) => ({
@@ -67,25 +69,15 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
   selectionRange: null,
   requestedTask: null,
   abortController: null,
-  toolSteps: [],
+  agentLog: [],
   loreReport: null,
   contextAlloc: null,
 
   setSelection: (s, range = null) => set({ selection: s, selectionRange: range }),
   setRequestedTask: (kind) => set({ requestedTask: kind }),
 
-  addToolStep: (step) =>
-    set((s) => {
-      const idx = s.toolSteps.findIndex(
-        (t) => t.toolCallId === step.toolCallId && t.name === step.name,
-      );
-      if (idx >= 0) {
-        const updated = [...s.toolSteps];
-        updated[idx] = step;
-        return { toolSteps: updated };
-      }
-      return { toolSteps: [...s.toolSteps, step] };
-    }),
+  appendAgentEvent: (event) =>
+    set((s) => ({ agentLog: appendAgentEventTo(s.agentLog, event) })),
 
   runTask: async (kind, customInstruction, continueLength, extras) => {
     if (get().isRunning) return; // one task at a time — UI disables triggers, this guards races
@@ -119,12 +111,15 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const memory = activeFilePath ? await loadMemory(projectPath, activeFilePath) : null;
 
     // Task instruction: use scene-matched user prompt if one exists, else built-in default
-    const scenePrompt = kind !== "custom"
+    const scenePrompt = kind !== "custom" && kind !== "agent"
       ? prompts.find((p) => p.scene === kind)
       : undefined;
     let instruction: string;
     if (kind === "custom") {
       instruction = customInstruction ?? "";
+    } else if (kind === "agent") {
+      // Agent mode: workflow guidance for the full toolset + the user's ask.
+      instruction = `${i18n.t("ai.instructions.agent")}\n\n${customInstruction ?? ""}`;
     } else if (kind === "continue") {
       instruction = scenePrompt?.content
         ?? i18n.t("ai.instructions.continue", { length: continueLength ?? 500 });
@@ -194,7 +189,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
 
     const controller = new AbortController();
     set({
-      isRunning: true, output: "", error: null, usage: null, toolSteps: [], loreReport: null,
+      isRunning: true, output: "", error: null, usage: null, agentLog: [], loreReport: null,
       contextAlloc: {
         loreChars: plan.loreChars,
         memoryChars: memoryBudgetChars,
@@ -210,35 +205,41 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const baseUrl = provider.baseUrl || defaultBaseUrl(provider.apiStandard);
     const loreBudgetChars = plan.loreChars;
 
+    const isAgentic = isContinue || kind === "agent";
+    get().appendAgentEvent({
+      kind: "run-start",
+      task: kind,
+      modelName: model.name || model.modelId,
+      agentic: isAgentic,
+      at: Date.now(),
+    });
+
     try {
-      if (kind === "continue") {
-        // ── Agentic mode: AI reads context autonomously with tools ─────────
+      if (isAgentic) {
+        // ── Agentic mode: AI reads (and, in agent mode, writes) via tools ──
         // Continue is append-mode: any selection is an anchor to write *after*,
-        // never an edit target — so no 【选中内容】 block is sent.
+        // never an edit target — so no 【选中内容】 block is sent. Agent mode
+        // keeps the selection as context for the user's instruction.
         const bundle = await assembleContext(
           systemPrompt,
           loreIndex,
           documentText,
           get().selection,
           instruction,
-          { ...extras, ...bookExtras, appendMode: true, contextChars: plan.recentWindowChars },
+          isContinue
+            ? { ...extras, ...bookExtras, appendMode: true, contextChars: plan.recentWindowChars }
+            : { ...extras, contextChars: plan.recentWindowChars },
           get().selectionRange,
           memory,
           loreBudgetChars,
           memoryBudgetChars,
         );
         set({ loreReport: bundle.loreReport });
-        const initialMessages = bundleToMessages(bundle);
-        // Extract the user message content for the first agent turn
-        const initialUserMessage =
-          typeof initialMessages[1]?.content === "string"
-            ? initialMessages[1].content
-            : JSON.stringify(initialMessages[1]?.content ?? "");
 
-        const { runAgentLoop } = await import("../lib/agent/loop");
-        const { AGENT_TOOLS } = await import("../lib/agent/tools");
+        const { runAgent } = await import("../lib/agent/runtime");
+        const { CONTINUE_PRESET, AGENT_ASSIST_PRESET } = await import("../lib/agent/presets");
 
-        await runAgentLoop({
+        const { inputTokens, outputTokens } = await runAgent({
           baseUrl,
           apiKey,
           standard: provider.apiStandard,
@@ -247,21 +248,34 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           prefix: model.prefix,
           contextSize: model.contextSize,
           inputCeilingTokens: plan.inputCeilingTokens,
-          systemPrompt,
-          initialUserMessage,
-          projectPath,
-          loreIndex,
-          tools: AGENT_TOOLS,
-          multimodal: model.type === "multimodal",
-          signal: controller.signal,
-          onToolStep: (step) => get().addToolStep(step),
-          onOutputChunk: (text) => set((s) => ({ output: s.output + text })),
-          onDone: ({ inputTokens, outputTokens }) => {
-            const cost = (inputTokens * model.priceIn + outputTokens * model.priceOut) / 1_000_000;
-            set({ usage: { inputTokens, outputTokens, cost } });
-            void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind);
+          preset: isContinue ? CONTINUE_PRESET : AGENT_ASSIST_PRESET,
+          messages: bundleToMessages(bundle),
+          toolContext: {
+            projectPath,
+            loreIndex,
+            multimodal: model.type === "multimodal",
+            // Write-auto tools call these after touching disk so the panels
+            // reflect agent edits immediately (no-ops for read-only presets).
+            onLoreChanged: () => {
+              void useLoreStore.getState().scanProject(projectPath);
+            },
+            onMemoryChanged: () => {
+              void import("./memoryStore").then((m) =>
+                m.useMemoryStore.getState().loadForActiveFile(),
+              );
+            },
+            // L2 approvals: the AiPanel card resolves these (agent mode only —
+            // continue's preset has no propose_edit).
+            requestApproval: (p) => useAgentStore.getState().requestApproval(p),
           },
+          signal: controller.signal,
+          onEvent: (event) => get().appendAgentEvent(event),
+          onOutputChunk: (text) => set((s) => ({ output: s.output + text })),
         });
+        const cost = (inputTokens * model.priceIn + outputTokens * model.priceOut) / 1_000_000;
+        set({ usage: { inputTokens, outputTokens, cost } });
+        get().appendAgentEvent({ kind: "run-done", inputTokens, outputTokens, at: Date.now() });
+        void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind);
       } else {
         // ── Simple streaming: polish / rewrite / summary / custom / Gemini ─
         const bundle = await assembleContext(
@@ -295,6 +309,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
               const cost =
                 (inputTokens * model.priceIn + outputTokens * model.priceOut) / 1_000_000;
               set({ usage: { inputTokens, outputTokens, cost } });
+              get().appendAgentEvent({ kind: "run-done", inputTokens, outputTokens, at: Date.now() });
               void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind);
             } else if ("text" in chunk) {
               set((s) => ({ output: s.output + chunk.text }));
@@ -308,8 +323,12 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       // new task's state.
       if ((e as Error).name !== "AbortError" && get().abortController === controller) {
         set({ error: String(e) });
+        get().appendAgentEvent({ kind: "run-error", message: String(e), at: Date.now() });
       }
     } finally {
+      // Drain any approval still blocking the loop — a dangling Promise here
+      // would wedge the next run's tool executor.
+      useAgentStore.getState().rejectAll("task ended");
       // Same guard: abort() already cleared state, and a newer task may own it now.
       if (get().abortController === controller) {
         set({ isRunning: false, abortController: null });
@@ -319,10 +338,12 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
 
   abort: () => {
     get().abortController?.abort();
+    // Unblock a loop waiting on an approval card so the abort takes effect.
+    useAgentStore.getState().rejectAll("aborted by user");
     set({ isRunning: false, abortController: null });
   },
 
-  clearOutput: () => set({ output: "", error: null, usage: null, toolSteps: [], loreReport: null }),
+  clearOutput: () => set({ output: "", error: null, usage: null, agentLog: [], loreReport: null }),
 }));
 
 function defaultBaseUrl(standard: string): string {

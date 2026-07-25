@@ -66,7 +66,7 @@ All in `src/stores/`:
 4. **Persist** → Writes to `token_usage` table in SQLite
 5. **Insert** → User clicks "Insert to Document" → `editorStore.setContent()`
 
-Tasks can also run through an **agentic tool loop** (`src/lib/agent/loop.ts` + `src/lib/agent/tools.ts`): up to 8 rounds of model-driven tool calls (`list_lore_entities`, `read_lore_entity`, `list_files`, `read_file`) with multimodal image support. AI-driven lore generation/improvement lives in `src/lib/lore/generator.ts` + `src/components/lore/`.
+All AI features run on the **unified agent runtime** (`src/lib/agent/runtime.ts`): a per-preset tool loop dispatched via the tool registry (`registry.ts` — read tools, L1 auto+backup write tools for lore/memory, and the L2 `propose_edit` that blocks on user approval). Runs emit structured `AgentEvent`s (`events.ts`) feeding the shared execution-log component (`components/ai/AgentLog.tsx`). The conversational assistant (AiDrawer "chat" mode → `components/ai/AgentChat.tsx`, session state in `stores/agentStore.ts`) and the AiPanel Agent mode both use the full-toolset `AGENT_ASSIST_PRESET`; structured JSON outputs go through `lib/agent/structured.ts` (forced tool_choice + JSON fallback). Design & history: `docs/unified-agent-plan.md`. AI-driven lore generation/improvement lives in `src/lib/lore/generator.ts` + `src/components/lore/`.
 
 > Details: RAG context assembly, SSE parsing, and DB schema are in `docs/architecture.md`.
 
@@ -86,7 +86,7 @@ Tasks can also run through an **agentic tool loop** (`src/lib/agent/loop.ts` + `
 - `src/components/command/`, `onboarding/`, `outline/` — CommandPalette, onboarding flow, full outline view
 - `src/lib/` — Core logic, grouped by domain:
   - `src/lib/ai/` — streaming client (`index.ts` dispatch, `openai.ts`/`gemini.ts` adapters, `types.ts`), provider config storage (`configDb.ts`), Gemini safety settings (`safety.ts`), remote probing (`providerProbe.ts`), `apiLog.ts`, `tokenEstimate.ts`
-  - `src/lib/agent/` — agentic tool loop (`loop.ts`) + tool definitions/executor (`tools.ts`)
+  - `src/lib/agent/` — unified agent runtime (`runtime.ts` loop, `registry.ts` tool registry, `presets.ts` per-task config, `events.ts` execution-log events, `tools.ts` handlers + path containment)
   - `src/lib/lore/` — lore domain model (`model.ts`), entity scan/CRUD (`entity.ts`), gallery/avatar (`gallery.ts`), AI generation (`generator.ts`); import via `lib/lore` (index re-exports all but generator)
   - `src/lib/context/` — RAG assembly (`rag.ts`), story memory (`memory.ts`), book spine (`outline.ts`), book-level continuation context (`bookContext.ts`)
   - `src/lib/fs/` — Tauri file I/O wrappers (`fileio.ts`), markdown render/frontmatter (`markdown.ts`), image/text file utils (`images.ts`), export (`export.ts`)
