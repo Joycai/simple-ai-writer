@@ -27,7 +27,12 @@ export default defineConfig(async () => ({
   server: {
     port: 1420,
     strictPort: true,
-    host: host || false,
+    // Pin to IPv4 loopback: with `false`/"localhost", newer Node on macOS
+    // resolves localhost to ::1 and vite binds ONLY IPv6 — the Tauri window
+    // then shows blank because http://127.0.0.1:1420 refuses connections
+    // (and system proxies make `localhost` flaky in WKWebView). devUrl in
+    // tauri.conf.json points at 127.0.0.1 to match.
+    host: host || "127.0.0.1",
     hmr: host
       ? {
           protocol: "ws",
