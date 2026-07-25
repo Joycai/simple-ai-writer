@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, Check, X, Square, Play, BookMarked, Sparkles, Layers, Pin } from "lucide-react";
-import { useAiTaskStore, type TaskKind, type ToolStep } from "../../stores/aiTaskStore";
+import { useAiTaskStore, type AgentEvent, type TaskKind, type ToolStep } from "../../stores/aiTaskStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useAppStore, LORE_BUDGET_MIN, LORE_BUDGET_MAX } from "../../stores/appStore";
 import { useEditorStore } from "../../stores/editorStore";
@@ -56,9 +56,123 @@ function savePinnedLore(projectPath: string | null, paths: string[]): void {
   }
 }
 
-function AgentStepsSection({ steps, isRunning }: { steps: ToolStep[]; isRunning: boolean }) {
+function formatLogTime(at: number): string {
+  const d = new Date(at);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function ToolStepRow({ step }: { step: ToolStep }) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <span className={`${styles.agentStepIcon} ${step.status === "error" ? styles.agentStepIconError : ""}`}>
+        {step.status === "running"
+          ? <span className={styles.agentStepSpinner} />
+          : step.status === "done"
+          ? <Check size={11} />
+          : <X size={11} />}
+      </span>
+      <span className={styles.agentStepName}>
+        {t(`ai.agent.tool.${step.name}`, { defaultValue: step.name })}
+      </span>
+      {step.argumentSummary && step.argumentSummary !== "{}" && (
+        <span className={styles.agentStepArgs}>{step.argumentSummary}</span>
+      )}
+      {step.resultSummary && step.status !== "running" && (
+        <span className={styles.agentStepResult}>{step.resultSummary}</span>
+      )}
+    </>
+  );
+}
+
+/** One execution-log entry. Tool steps keep the icon treatment; lifecycle and
+ *  round markers render as quieter meta lines so the tool activity stays the
+ *  visual focus. */
+function AgentLogRow({ event }: { event: AgentEvent }) {
+  const { t } = useTranslation();
+
+  switch (event.kind) {
+    case "run-start":
+      return (
+        <li className={styles.agentStepItem}>
+          <span className={styles.agentStepIcon}><Play size={11} /></span>
+          <span className={styles.agentStepName}>
+            {t("ai.agent.log.start", {
+              task: t(`ai.tasks.${event.task}`, { defaultValue: event.task }),
+              model: event.modelName,
+            })}
+          </span>
+          <span className={styles.agentLogTime}>{formatLogTime(event.at)}</span>
+        </li>
+      );
+    case "round-start":
+      return (
+        <li className={`${styles.agentStepItem} ${styles.agentLogMeta}`}>
+          <span className={styles.agentLogMetaText}>
+            {t("ai.agent.log.round", {
+              round: event.round,
+              max: event.maxRounds,
+              tokens: event.estInputTokens.toLocaleString(),
+            })}
+          </span>
+          <span className={styles.agentLogTime}>{formatLogTime(event.at)}</span>
+        </li>
+      );
+    case "tool-step":
+      return (
+        <li className={styles.agentStepItem}>
+          <ToolStepRow step={event.step} />
+        </li>
+      );
+    case "context-trimmed":
+      return (
+        <li className={`${styles.agentStepItem} ${styles.agentLogMeta}`}>
+          <span className={styles.agentLogMetaText}>
+            {t("ai.agent.log.trimmed", { count: event.count })}
+          </span>
+        </li>
+      );
+    case "run-done":
+      return (
+        <li className={styles.agentStepItem}>
+          <span className={styles.agentStepIcon}><Check size={11} /></span>
+          <span className={styles.agentStepName}>
+            {t("ai.agent.log.done", {
+              input: event.inputTokens.toLocaleString(),
+              output: event.outputTokens.toLocaleString(),
+            })}
+          </span>
+          <span className={styles.agentLogTime}>{formatLogTime(event.at)}</span>
+        </li>
+      );
+    case "run-error":
+      return (
+        <li className={styles.agentStepItem}>
+          <span className={`${styles.agentStepIcon} ${styles.agentStepIconError}`}><X size={11} /></span>
+          <span className={styles.agentLogError}>
+            {event.message.length > 160 ? event.message.slice(0, 160) + "…" : event.message}
+          </span>
+          <span className={styles.agentLogTime}>{formatLogTime(event.at)}</span>
+        </li>
+      );
+  }
+}
+
+function AgentLogSection({ log, isRunning }: { log: AgentEvent[]; isRunning: boolean }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(true);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  // Follow the newest entry while the run is live; leave scroll alone afterwards
+  // so the user can inspect the log without it jumping.
+  useEffect(() => {
+    if (isRunning && open && listRef.current) {
+      listRef.current.scrollTop = listRef.current.scrollHeight;
+    }
+  }, [log, isRunning, open]);
+
+  const toolCount = log.filter((e) => e.kind === "tool-step").length;
 
   return (
     <div className={styles.agentSteps}>
@@ -66,31 +180,16 @@ function AgentStepsSection({ steps, isRunning }: { steps: ToolStep[]; isRunning:
         <span className={styles.agentStepsChevron}>
           {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
         </span>
-        <span className={styles.agentStepsTitle}>{t("ai.agent.stepsTitle")}</span>
-        <span className={styles.agentStepsCount}>({steps.length})</span>
+        <span className={styles.agentStepsTitle}>{t("ai.agent.log.title")}</span>
+        <span className={styles.agentStepsCount}>
+          ({toolCount > 0 ? t("ai.agent.log.countTools", { count: toolCount }) : log.length})
+        </span>
         {isRunning && <span className={styles.agentSpinner} />}
       </button>
       {open && (
-        <ul className={styles.agentStepsList}>
-          {steps.map((step) => (
-            <li key={`${step.toolCallId}-${step.status}`} className={styles.agentStepItem}>
-              <span className={`${styles.agentStepIcon} ${step.status === "error" ? styles.agentStepIconError : ""}`}>
-                {step.status === "running"
-                  ? <span className={styles.agentStepSpinner} />
-                  : step.status === "done"
-                  ? <Check size={11} />
-                  : <X size={11} />}
-              </span>
-              <span className={styles.agentStepName}>
-                {t(`ai.agent.tool.${step.name}`, { defaultValue: step.name })}
-              </span>
-              {step.argumentSummary && step.argumentSummary !== "{}" && (
-                <span className={styles.agentStepArgs}>{step.argumentSummary}</span>
-              )}
-              {step.resultSummary && step.status !== "running" && (
-                <span className={styles.agentStepResult}>{step.resultSummary}</span>
-              )}
-            </li>
+        <ul ref={listRef} className={styles.agentStepsList}>
+          {log.map((event, i) => (
+            <AgentLogRow key={`${i}-${event.kind}`} event={event} />
           ))}
         </ul>
       )}
@@ -497,7 +596,7 @@ function LoreReportSection({ report }: { report: LoreActivationReport }) {
 export function AiPanel() {
   const { t, i18n } = useTranslation();
   const {
-    isRunning, output, error, usage, toolSteps, loreReport,
+    isRunning, output, error, usage, agentLog, loreReport,
     runTask, abort, clearOutput, selection, selectionRange, requestedTask, setRequestedTask,
   } = useAiTaskStore();
   const { models, providers, prompts, activeModelId, activePromptId, setActiveModel, setActivePrompt } = useAiStore();
@@ -672,7 +771,7 @@ export function AiPanel() {
   }).length;
 
   // Results pane shows something whenever a run is in flight or has produced output.
-  const hasResults = isRunning || !!output || !!error || toolSteps.length > 0 || !!usage;
+  const hasResults = isRunning || !!output || !!error || agentLog.length > 0 || !!usage;
 
   return (
     <div className={styles.panel}>
@@ -947,13 +1046,13 @@ export function AiPanel() {
               {/* Injection transparency: what lore went into this run and why */}
               {loreReport && <LoreReportSection report={loreReport} />}
 
-              {/* Agent steps (agentic "continue" runs) */}
-              {toolSteps.length > 0 && (
-                <AgentStepsSection steps={toolSteps} isRunning={isRunning} />
+              {/* Execution log: run lifecycle, rounds, tool calls */}
+              {agentLog.length > 0 && (
+                <AgentLogSection log={agentLog} isRunning={isRunning} />
               )}
 
               {/* Waiting for the first token */}
-              {isRunning && !output && toolSteps.length === 0 && (
+              {isRunning && !output && !agentLog.some((e) => e.kind === "tool-step") && (
                 <div className={styles.thinking}>
                   <span className={styles.agentSpinner} />
                   {t("ai.panel.thinking")}

@@ -1,17 +1,25 @@
 /**
- * Agentic tool-use loop for the "continue" task.
- * The AI calls tools to read history chapters and lore entities before writing.
- * MAX_ROUNDS caps the loop to prevent unbounded tool calls.
+ * Unified agent runtime — the tool loop every AI task runs on.
+ *
+ * Generalized from the original "continue"-only loop (formerly loop.ts): the
+ * task-specific parts — which tools, how many rounds, how the run must end —
+ * now come from a TaskPreset, and tool calls dispatch through the registry
+ * instead of a hardcoded switch. Progress is reported as structured AgentEvents
+ * (events.ts) so the UI can render a live execution log.
+ *
+ * The runtime takes a seeded message history rather than a single user turn,
+ * which is what stage-two conversational use builds on: append another user
+ * message to the same history and call runAgent again.
  */
 
 import { streamCompletion } from "../ai";
 import type { GeminiSafetySettings } from "../ai/safety";
 import { estimateMessagesTokens } from "../ai/tokenEstimate";
-import type { AccumulatedToolCall, ApiStandard, ContentPart, StreamMessage, ToolDefinition } from "../ai/types";
-import type { LoreIndex } from "../lore";
-import { executeTool, type ToolCall, type ToolResult } from "./tools";
-
-const MAX_ROUNDS = 8;
+import type { AccumulatedToolCall, ApiStandard, ContentPart, StreamMessage } from "../ai/types";
+import type { AgentEvent } from "./events";
+import type { TaskPreset } from "./presets";
+import { executeRegisteredTool, getToolDefinitions, type ToolContext } from "./registry";
+import type { ToolCall, ToolResult } from "./tools";
 
 /** Stand-in left behind when an old tool result is dropped to reclaim room. */
 const ELIDED_TOOL_RESULT =
@@ -31,31 +39,31 @@ const ELIDED_TOOL_RESULT =
  * only the payload is replaced. The system prompt and the assembled first turn
  * are never touched; if those alone overflow, that is a planning bug and the
  * pre-flight check should say so rather than this quietly hiding it.
+ *
+ * Returns how many results were elided so the caller can log it.
  */
-function trimHistory(history: StreamMessage[], ceilingTokens?: number): void {
-  if (!ceilingTokens || ceilingTokens <= 0) return;
-  if (estimateMessagesTokens(history) <= ceilingTokens) return;
+function trimHistory(history: StreamMessage[], ceilingTokens?: number): number {
+  if (!ceilingTokens || ceilingTokens <= 0) return 0;
+  if (estimateMessagesTokens(history) <= ceilingTokens) return 0;
+  let dropped = 0;
   for (const m of history) {
     if (m.role !== "tool" || m.content === ELIDED_TOOL_RESULT) continue;
     m.content = ELIDED_TOOL_RESULT;
-    if (estimateMessagesTokens(history) <= ceilingTokens) return;
+    dropped++;
+    if (estimateMessagesTokens(history) <= ceilingTokens) break;
   }
+  return dropped;
 }
 
-export type ToolStepStatus = "running" | "done" | "error";
-
-export interface ToolStep {
-  round: number;
-  toolCallId: string;
-  name: string;
-  /** Truncated argument JSON for display */
-  argumentSummary: string;
-  status: ToolStepStatus;
-  /** First 80 chars of result content, set on done/error */
-  resultSummary?: string;
+export interface AgentRunResult {
+  /** Rounds actually consumed (≥1). */
+  rounds: number;
+  inputTokens: number;
+  outputTokens: number;
 }
 
-export interface AgentLoopOptions {
+export interface AgentRuntimeOptions {
+  // ── Transport ──────────────────────────────────────────────────────────────
   baseUrl: string;
   apiKey: string;
   standard: ApiStandard;
@@ -72,36 +80,40 @@ export interface AgentLoopOptions {
    * instead of dying on a ContextSizeError several rounds in. Omit to disable.
    */
   inputCeilingTokens?: number;
-  systemPrompt: string;
-  /** The assembled user message content (from RAG) for the first turn */
-  initialUserMessage: string;
-  projectPath: string;
-  loreIndex: LoreIndex;
-  tools: ToolDefinition[];
-  /** Whether the active model accepts image inputs (controls lore gallery payloads). */
-  multimodal: boolean;
+
+  // ── Task ───────────────────────────────────────────────────────────────────
+  preset: TaskPreset;
+  /**
+   * Seeded conversation history: system prompt + assembled first user turn.
+   * Mutated in place as the loop appends assistant/tool messages, so a caller
+   * holding the array sees the full transcript afterwards.
+   */
+  messages: StreamMessage[];
+  toolContext: ToolContext;
+
+  // ── Control & reporting ────────────────────────────────────────────────────
   signal: AbortSignal;
-  onToolStep: (step: ToolStep) => void;
+  onEvent: (event: AgentEvent) => void;
   onOutputChunk: (text: string) => void;
-  onDone: (usage: { inputTokens: number; outputTokens: number }) => void;
 }
 
-export async function runAgentLoop(opts: AgentLoopOptions): Promise<void> {
-  const history: StreamMessage[] = [
-    { role: "system", content: opts.systemPrompt },
-    { role: "user", content: opts.initialUserMessage },
-  ];
+export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResult> {
+  const { preset } = opts;
+  const history = opts.messages;
+  const toolDefinitions = getToolDefinitions(preset.tools);
 
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
 
-  for (let round = 1; round <= MAX_ROUNDS; round++) {
+  for (let round = 1; round <= preset.maxRounds; round++) {
     if (opts.signal.aborted) throw new DOMException("Aborted", "AbortError");
 
-    // On the final round: inject a "write now" instruction and omit tools
-    // so the model is forced to produce text without further tool calls.
-    const isLastRound = round === MAX_ROUNDS;
-    if (isLastRound) {
+    // On the final round of a force-text task: inject a "write now" instruction
+    // and omit tools so the model must produce text without further tool calls.
+    const isLastRound = round === preset.maxRounds;
+    const withholdTools =
+      preset.tools.length === 0 || (isLastRound && preset.finishPolicy === "force-text");
+    if (isLastRound && preset.finishPolicy === "force-text" && preset.tools.length > 0) {
       history.push({
         role: "user",
         content:
@@ -112,7 +124,18 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<void> {
     let roundToolCalls: AccumulatedToolCall[] = [];
     let roundGeminiModelParts: unknown[] | undefined;
 
-    trimHistory(history, opts.inputCeilingTokens);
+    const dropped = trimHistory(history, opts.inputCeilingTokens);
+    if (dropped > 0) {
+      opts.onEvent({ kind: "context-trimmed", count: dropped, at: Date.now() });
+    }
+
+    opts.onEvent({
+      kind: "round-start",
+      round,
+      maxRounds: preset.maxRounds,
+      estInputTokens: estimateMessagesTokens(history),
+      at: Date.now(),
+    });
 
     await streamCompletion({
       baseUrl: opts.baseUrl,
@@ -123,7 +146,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<void> {
       contextSize: opts.contextSize,
       messages: history,
       safetySettings: opts.safetySettings,
-      tools: isLastRound ? undefined : opts.tools,
+      tools: withholdTools ? undefined : toolDefinitions,
       signal: opts.signal,
       onChunk: (chunk) => {
         if ("text" in chunk) {
@@ -140,8 +163,7 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<void> {
 
     // No tool calls → model produced text → we're done
     if (roundToolCalls.length === 0) {
-      opts.onDone({ inputTokens: totalInputTokens, outputTokens: totalOutputTokens });
-      return;
+      return { rounds: round, inputTokens: totalInputTokens, outputTokens: totalOutputTokens };
     }
 
     // Append the assistant's tool-call message to history.
@@ -164,33 +186,32 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<void> {
         ? tc.arguments.slice(0, 60) + "…"
         : tc.arguments;
 
-      opts.onToolStep({ round, toolCallId: tc.id, name: tc.name, argumentSummary, status: "running" });
+      opts.onEvent({
+        kind: "tool-step",
+        step: { round, toolCallId: tc.id, name: tc.name, argumentSummary, status: "running" },
+        at: Date.now(),
+      });
 
-      let result: ToolResult;
-      try {
-        result = await executeTool(toolCall, opts.projectPath, opts.loreIndex, {
-          multimodal: opts.multimodal,
-        });
-        opts.onToolStep({
+      // Executor never throws — bad calls come back as error-text results the
+      // model can read and correct on the next round.
+      const result: ToolResult = await executeRegisteredTool(
+        toolCall,
+        preset.tools,
+        opts.toolContext,
+      );
+      const isError = result.content.startsWith("Error") || result.content.startsWith("Unknown tool");
+      opts.onEvent({
+        kind: "tool-step",
+        step: {
           round,
           toolCallId: tc.id,
           name: tc.name,
           argumentSummary,
-          status: "done",
+          status: isError ? "error" : "done",
           resultSummary: result.content.slice(0, 80),
-        });
-      } catch (e) {
-        const errMsg = `Error: ${String(e)}`;
-        opts.onToolStep({
-          round,
-          toolCallId: tc.id,
-          name: tc.name,
-          argumentSummary,
-          status: "error",
-          resultSummary: errMsg.slice(0, 80),
-        });
-        result = { toolCallId: tc.id, content: errMsg };
-      }
+        },
+        at: Date.now(),
+      });
 
       // Text result: role "tool" satisfies the tool_call_id protocol
       history.push({ role: "tool", tool_call_id: tc.id, content: result.content });
@@ -208,7 +229,12 @@ export async function runAgentLoop(opts: AgentLoopOptions): Promise<void> {
     }
   }
 
-  // Fell through MAX_ROUNDS without the model producing text — shouldn't happen
-  // because the last round forces text output, but emit done defensively.
-  opts.onDone({ inputTokens: totalInputTokens, outputTokens: totalOutputTokens });
+  // Fell through maxRounds without the model producing text — shouldn't happen
+  // for force-text presets (the last round withholds tools), but return usage
+  // defensively rather than throwing away a completed run's accounting.
+  return {
+    rounds: preset.maxRounds,
+    inputTokens: totalInputTokens,
+    outputTokens: totalOutputTokens,
+  };
 }

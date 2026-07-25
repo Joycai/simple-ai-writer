@@ -13,10 +13,10 @@ import { useLoreStore } from "./loreStore";
 import { useProjectStore } from "./projectStore";
 import { getDb } from "../lib/project";
 import { loadApiKey } from "../lib/keyStore";
-import type { ToolStep } from "../lib/agent/loop";
+import type { AgentEvent, ToolStep } from "../lib/agent/events";
 
 export type TaskKind = "continue" | "polish" | "rewrite" | "summary" | "custom";
-export type { ToolStep };
+export type { AgentEvent, ToolStep };
 
 // Resolve the built-in instruction at call time so it follows the active
 // language — module-load lookups would freeze to the initial locale.
@@ -44,7 +44,8 @@ interface AiTaskState {
   /** Task the floating toolbar asked the panel to pre-select. Consumed + cleared by AiPanel. */
   requestedTask: TaskKind | null;
   abortController: AbortController | null;
-  toolSteps: ToolStep[];
+  /** Execution log for the current/last run — rounds, tool calls, outcome. */
+  agentLog: AgentEvent[];
   /** Which lore entities/facets were injected (and why) for the current run. */
   loreReport: LoreActivationReport | null;
   /** Final per-layer allocation for the current run (see lib/context/budget). */
@@ -55,7 +56,7 @@ interface AiTaskState {
   runTask: (kind: TaskKind, customInstruction?: string, continueLength?: number, extras?: TaskExtras) => Promise<void>;
   abort: () => void;
   clearOutput: () => void;
-  addToolStep: (step: ToolStep) => void;
+  appendAgentEvent: (event: AgentEvent) => void;
 }
 
 export const useAiTaskStore = create<AiTaskState>((set, get) => ({
@@ -67,24 +68,31 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
   selectionRange: null,
   requestedTask: null,
   abortController: null,
-  toolSteps: [],
+  agentLog: [],
   loreReport: null,
   contextAlloc: null,
 
   setSelection: (s, range = null) => set({ selection: s, selectionRange: range }),
   setRequestedTask: (kind) => set({ requestedTask: kind }),
 
-  addToolStep: (step) =>
+  appendAgentEvent: (event) =>
     set((s) => {
-      const idx = s.toolSteps.findIndex(
-        (t) => t.toolCallId === step.toolCallId && t.name === step.name,
-      );
-      if (idx >= 0) {
-        const updated = [...s.toolSteps];
-        updated[idx] = step;
-        return { toolSteps: updated };
+      // A tool step is emitted twice (running → done/error); update in place so
+      // the log shows one line per call rather than duplicates.
+      if (event.kind === "tool-step") {
+        const idx = s.agentLog.findIndex(
+          (e) =>
+            e.kind === "tool-step" &&
+            e.step.toolCallId === event.step.toolCallId &&
+            e.step.name === event.step.name,
+        );
+        if (idx >= 0) {
+          const updated = [...s.agentLog];
+          updated[idx] = event;
+          return { agentLog: updated };
+        }
       }
-      return { toolSteps: [...s.toolSteps, step] };
+      return { agentLog: [...s.agentLog, event] };
     }),
 
   runTask: async (kind, customInstruction, continueLength, extras) => {
@@ -194,7 +202,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
 
     const controller = new AbortController();
     set({
-      isRunning: true, output: "", error: null, usage: null, toolSteps: [], loreReport: null,
+      isRunning: true, output: "", error: null, usage: null, agentLog: [], loreReport: null,
       contextAlloc: {
         loreChars: plan.loreChars,
         memoryChars: memoryBudgetChars,
@@ -209,6 +217,14 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
 
     const baseUrl = provider.baseUrl || defaultBaseUrl(provider.apiStandard);
     const loreBudgetChars = plan.loreChars;
+
+    get().appendAgentEvent({
+      kind: "run-start",
+      task: kind,
+      modelName: model.name || model.modelId,
+      agentic: isContinue,
+      at: Date.now(),
+    });
 
     try {
       if (kind === "continue") {
@@ -228,17 +244,11 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           memoryBudgetChars,
         );
         set({ loreReport: bundle.loreReport });
-        const initialMessages = bundleToMessages(bundle);
-        // Extract the user message content for the first agent turn
-        const initialUserMessage =
-          typeof initialMessages[1]?.content === "string"
-            ? initialMessages[1].content
-            : JSON.stringify(initialMessages[1]?.content ?? "");
 
-        const { runAgentLoop } = await import("../lib/agent/loop");
-        const { AGENT_TOOLS } = await import("../lib/agent/tools");
+        const { runAgent } = await import("../lib/agent/runtime");
+        const { CONTINUE_PRESET } = await import("../lib/agent/presets");
 
-        await runAgentLoop({
+        const { inputTokens, outputTokens } = await runAgent({
           baseUrl,
           apiKey,
           standard: provider.apiStandard,
@@ -247,21 +257,17 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           prefix: model.prefix,
           contextSize: model.contextSize,
           inputCeilingTokens: plan.inputCeilingTokens,
-          systemPrompt,
-          initialUserMessage,
-          projectPath,
-          loreIndex,
-          tools: AGENT_TOOLS,
-          multimodal: model.type === "multimodal",
+          preset: CONTINUE_PRESET,
+          messages: bundleToMessages(bundle),
+          toolContext: { projectPath, loreIndex, multimodal: model.type === "multimodal" },
           signal: controller.signal,
-          onToolStep: (step) => get().addToolStep(step),
+          onEvent: (event) => get().appendAgentEvent(event),
           onOutputChunk: (text) => set((s) => ({ output: s.output + text })),
-          onDone: ({ inputTokens, outputTokens }) => {
-            const cost = (inputTokens * model.priceIn + outputTokens * model.priceOut) / 1_000_000;
-            set({ usage: { inputTokens, outputTokens, cost } });
-            void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind);
-          },
         });
+        const cost = (inputTokens * model.priceIn + outputTokens * model.priceOut) / 1_000_000;
+        set({ usage: { inputTokens, outputTokens, cost } });
+        get().appendAgentEvent({ kind: "run-done", inputTokens, outputTokens, at: Date.now() });
+        void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind);
       } else {
         // ── Simple streaming: polish / rewrite / summary / custom / Gemini ─
         const bundle = await assembleContext(
@@ -295,6 +301,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
               const cost =
                 (inputTokens * model.priceIn + outputTokens * model.priceOut) / 1_000_000;
               set({ usage: { inputTokens, outputTokens, cost } });
+              get().appendAgentEvent({ kind: "run-done", inputTokens, outputTokens, at: Date.now() });
               void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind);
             } else if ("text" in chunk) {
               set((s) => ({ output: s.output + chunk.text }));
@@ -308,6 +315,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       // new task's state.
       if ((e as Error).name !== "AbortError" && get().abortController === controller) {
         set({ error: String(e) });
+        get().appendAgentEvent({ kind: "run-error", message: String(e), at: Date.now() });
       }
     } finally {
       // Same guard: abort() already cleared state, and a newer task may own it now.
@@ -322,7 +330,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     set({ isRunning: false, abortController: null });
   },
 
-  clearOutput: () => set({ output: "", error: null, usage: null, toolSteps: [], loreReport: null }),
+  clearOutput: () => set({ output: "", error: null, usage: null, agentLog: [], loreReport: null }),
 }));
 
 function defaultBaseUrl(standard: string): string {

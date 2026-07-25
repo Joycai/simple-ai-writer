@@ -146,8 +146,16 @@ PR1–PR2 合并前不动任何用户可见行为，随时可发版；0.3.0 在 
 | 模型写坏 lore 文件（frontmatter / 分段协议） | 写工具走结构化参数 + 落盘前 schema 校验，坏输出直接以错误回给模型重试；L1 自动备份可回滚 |
 | 大重构回归 | 分 5 个 PR，PR1/PR3 是行为等价迁移，CI（tsc + vitest + build）逐个把关 |
 
-## 7. 本分支已完成
+## 7. 本分支进度
 
 - 基于 main@69e5a13 建分支 `feat/unified-agent`；
 - 四份版本清单同步升至 0.3.0（bump-version 脚本）；
-- 本方案文档。
+- 本方案文档；
+- **PR1 完成**：`loop.ts` → `runtime.ts`（按 preset 驱动的通用 tool loop）+
+  `registry.ts`（工具注册表，含 access 分级字段）+ `presets.ts`（CONTINUE_PRESET）+
+  `events.ts`（结构化执行事件）。`aiTaskStore` 改为薄壳调用 runtime。
+- **执行日志（提前自 §4 计划）**：所有任务（含单次流式）发 run-start / round-start /
+  tool-step / context-trimmed / run-done / run-error 事件，AiPanel 的
+  AgentLogSection 实时渲染为可折叠日志（工具调用、轮次、token 估算、时间戳）。
+  注意：preset 的 systemPrompt/seedContext 收拢仍属 PR2/PR3 范围，当前仍在
+  aiTaskStore 内组装。

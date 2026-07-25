@@ -280,7 +280,14 @@
       "instruction": "请输出这段正文的前情提要，长度控制在 300 字以内。"
     },
     "agent": {
-      "stepsTitle": "Agent 步骤",
+      "log": {
+        "title": "执行日志",
+        "countTools": "{{count}} 次工具调用",
+        "start": "开始「{{task}}」 · {{model}}",
+        "round": "第 {{round}}/{{max}} 轮 · 输入约 {{tokens}} tokens",
+        "trimmed": "为控制上下文长度，省略了 {{count}} 条较早的工具结果",
+        "done": "完成 · 输入 {{input}} / 输出 {{output}} tokens"
+      },
       "tool": {
         "list_lore_entities": "列举设定",
         "read_lore_entity": "读取设定",

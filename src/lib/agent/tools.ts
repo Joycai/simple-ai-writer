@@ -1,10 +1,13 @@
 /**
- * Tool definitions and executor for the agentic "continue" loop.
- * Tools let the AI read history chapters and lore before writing.
+ * Tool implementations for the agent runtime.
+ *
+ * This module owns the *handlers* — reading lore, listing/reading writing
+ * files — plus the path-containment helpers that keep model-controlled path
+ * arguments inside the project. Wire definitions and dispatch live in
+ * registry.ts; the loop that drives calls lives in runtime.ts.
  */
 
 import { readDir } from "@tauri-apps/plugin-fs";
-import type { ToolDefinition } from "../ai/types";
 import { readFile } from "../fs/fileio";
 import { imageToDataUrl } from "../fs/images";
 import { readEntityFile, type LoreEntity, type LoreIndex } from "../lore";
@@ -19,117 +22,6 @@ export interface ToolResult {
   toolCallId: string;
   content: string;
   imageDataUrls?: string[];
-}
-
-export const AGENT_TOOLS: ToolDefinition[] = [
-  {
-    type: "function",
-    function: {
-      name: "list_lore_entities",
-      description:
-        "List all lore entities (characters, world, factions, items, skills, style, custom) in the project. Returns entity names, categories, and one-line summaries. Call this first to discover available lore before reading specific entries.",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "read_lore_entity",
-      description:
-        "Read the full detail of a lore entity including its index.md and all supplementary .md files. The entity may also have a gallery (avatar + images.md listing additional pictures with descriptions): for multimodal models the binary images are attached, for text-only models only the descriptions are returned. Call list_lore_entities first to get the exact entity names.",
-      parameters: {
-        type: "object",
-        properties: {
-          name: {
-            type: "string",
-            description: "The entity name exactly as returned by list_lore_entities",
-          },
-        },
-        required: ["name"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "list_files",
-      description:
-        "List files in the project's writing directory (or a subfolder). Returns absolute file paths. Use this to discover chapter files before reading them.",
-      parameters: {
-        type: "object",
-        properties: {
-          folder: {
-            type: "string",
-            description:
-              "Subfolder relative to the project writing/ directory. Omit to list the top-level writing/ directory.",
-          },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "read_file",
-      description:
-        "Read the text content of a writing file. Use the path exactly as returned by list_files. Content is truncated to 4000 characters if the file is large.",
-      parameters: {
-        type: "object",
-        properties: {
-          path: {
-            type: "string",
-            description: "Absolute path as returned by list_files",
-          },
-        },
-        required: ["path"],
-      },
-    },
-  },
-];
-
-export interface ExecuteToolOptions {
-  /**
-   * Whether the active model can ingest images. When false, `read_lore_entity`
-   * still emits the text descriptions from `images.md` (and notes that an avatar
-   * exists) but skips the base64 image payload.
-   */
-  multimodal: boolean;
-}
-
-export async function executeTool(
-  call: ToolCall,
-  projectPath: string,
-  loreIndex: LoreIndex,
-  opts: ExecuteToolOptions = { multimodal: false },
-): Promise<ToolResult> {
-  try {
-    switch (call.name) {
-      case "list_lore_entities":
-        return { toolCallId: call.id, content: formatLoreIndex(loreIndex) };
-
-      case "read_lore_entity": {
-        const args = JSON.parse(call.arguments || "{}") as { name?: string };
-        if (!args.name) return { toolCallId: call.id, content: "Error: 'name' argument is required." };
-        return await readLoreEntity(call.id, args.name, loreIndex, opts.multimodal);
-      }
-
-      case "list_files": {
-        const args = JSON.parse(call.arguments || "{}") as { folder?: string };
-        return await listWritingFiles(call.id, projectPath, args.folder);
-      }
-
-      case "read_file": {
-        const args = JSON.parse(call.arguments || "{}") as { path?: string };
-        if (!args.path) return { toolCallId: call.id, content: "Error: 'path' argument is required." };
-        return await readWritingFile(call.id, args.path, projectPath);
-      }
-
-      default:
-        return { toolCallId: call.id, content: `Unknown tool: ${call.name}` };
-    }
-  } catch (e) {
-    return { toolCallId: call.id, content: `Error: ${String(e)}` };
-  }
 }
 
 // ─── Path containment ────────────────────────────────────────────────────────
@@ -162,7 +54,7 @@ export function isPathWithin(base: string, target: string): boolean {
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
-function formatLoreIndex(loreIndex: LoreIndex): string {
+export function formatLoreIndex(loreIndex: LoreIndex): string {
   const lines: string[] = [];
   for (const [category, entities] of Object.entries(loreIndex)) {
     if (!entities.length) continue;
@@ -174,7 +66,7 @@ function formatLoreIndex(loreIndex: LoreIndex): string {
   return lines.length > 0 ? lines.join("\n") : "No lore entities found in this project.";
 }
 
-async function readLoreEntity(
+export async function readLoreEntity(
   toolCallId: string,
   name: string,
   loreIndex: LoreIndex,
@@ -259,7 +151,7 @@ async function readLoreEntity(
     : { toolCallId, content: textContent };
 }
 
-async function listWritingFiles(
+export async function listWritingFiles(
   toolCallId: string,
   projectPath: string,
   folder?: string,
@@ -286,7 +178,7 @@ async function listWritingFiles(
   }
 }
 
-async function readWritingFile(
+export async function readWritingFile(
   toolCallId: string,
   path: string,
   projectPath: string,

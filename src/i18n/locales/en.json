@@ -280,7 +280,14 @@
       "instruction": "Output the recap of this passage, within 300 characters."
     },
     "agent": {
-      "stepsTitle": "Agent Steps",
+      "log": {
+        "title": "Execution Log",
+        "countTools": "{{count}} tool calls",
+        "start": "Started {{task}} · {{model}}",
+        "round": "Round {{round}}/{{max}} · ~{{tokens}} input tokens",
+        "trimmed": "Elided {{count}} earlier tool results to fit the context window",
+        "done": "Done · {{input}} in / {{output}} out tokens"
+      },
       "tool": {
         "list_lore_entities": "List Lore",
         "read_lore_entity": "Read Lore",
