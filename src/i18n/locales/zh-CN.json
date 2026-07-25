@@ -292,7 +292,11 @@
         "list_lore_entities": "列举设定",
         "read_lore_entity": "读取设定",
         "list_files": "列举文件",
-        "read_file": "读取文件"
+        "read_file": "读取文件",
+        "read_memory": "读取记忆",
+        "create_lore_entity": "新建设定",
+        "update_lore_file": "更新设定",
+        "update_memory": "更新记忆"
       }
     },
     "errors": {

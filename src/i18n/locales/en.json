@@ -292,7 +292,11 @@
         "list_lore_entities": "List Lore",
         "read_lore_entity": "Read Lore",
         "list_files": "List Files",
-        "read_file": "Read File"
+        "read_file": "Read File",
+        "read_memory": "Read Memory",
+        "create_lore_entity": "Create Lore",
+        "update_lore_file": "Update Lore",
+        "update_memory": "Update Memory"
       }
     },
     "errors": {

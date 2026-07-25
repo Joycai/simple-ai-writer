@@ -259,7 +259,21 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           inputCeilingTokens: plan.inputCeilingTokens,
           preset: CONTINUE_PRESET,
           messages: bundleToMessages(bundle),
-          toolContext: { projectPath, loreIndex, multimodal: model.type === "multimodal" },
+          toolContext: {
+            projectPath,
+            loreIndex,
+            multimodal: model.type === "multimodal",
+            // Write-auto tools call these after touching disk so the panels
+            // reflect agent edits immediately (no-ops for read-only presets).
+            onLoreChanged: () => {
+              void useLoreStore.getState().scanProject(projectPath);
+            },
+            onMemoryChanged: () => {
+              void import("./memoryStore").then((m) =>
+                m.useMemoryStore.getState().loadForActiveFile(),
+              );
+            },
+          },
           signal: controller.signal,
           onEvent: (event) => get().appendAgentEvent(event),
           onOutputChunk: (text) => set((s) => ({ output: s.output + text })),

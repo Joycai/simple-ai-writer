@@ -66,31 +66,40 @@ export function formatLoreIndex(loreIndex: LoreIndex): string {
   return lines.length > 0 ? lines.join("\n") : "No lore entities found in this project.";
 }
 
+/** Case-insensitive entity lookup by name or alias across all categories. */
+export function findEntityByName(loreIndex: LoreIndex, name: string): LoreEntity | undefined {
+  const lower = name.toLowerCase();
+  for (const entities of Object.values(loreIndex)) {
+    const found = entities.find(
+      (e) =>
+        e.name.toLowerCase() === lower ||
+        e.aliases?.some((a) => a.toLowerCase() === lower),
+    );
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/** Flat "Name, Name, …" list for not-found error messages. */
+export function allEntityNames(loreIndex: LoreIndex): string {
+  return Object.values(loreIndex)
+    .flat()
+    .map((e) => e.name)
+    .join(", ");
+}
+
 export async function readLoreEntity(
   toolCallId: string,
   name: string,
   loreIndex: LoreIndex,
   multimodal: boolean,
 ): Promise<ToolResult> {
-  const lower = name.toLowerCase();
-  let found: LoreEntity | undefined;
-  for (const entities of Object.values(loreIndex)) {
-    found = entities.find(
-      (e) =>
-        e.name.toLowerCase() === lower ||
-        e.aliases?.some((a) => a.toLowerCase() === lower),
-    );
-    if (found) break;
-  }
+  const found = findEntityByName(loreIndex, name);
 
   if (!found) {
-    const allNames = Object.values(loreIndex)
-      .flat()
-      .map((e) => e.name)
-      .join(", ");
     return {
       toolCallId,
-      content: `Entity "${name}" not found. Available: ${allNames || "none"}`,
+      content: `Entity "${name}" not found. Available: ${allEntityNames(loreIndex) || "none"}`,
     };
   }
 

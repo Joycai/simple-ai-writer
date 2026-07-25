@@ -159,3 +159,12 @@ PR1–PR2 合并前不动任何用户可见行为，随时可发版；0.3.0 在 
   AgentLogSection 实时渲染为可折叠日志（工具调用、轮次、token 估算、时间戳）。
   注意：preset 的 systemPrompt/seedContext 收拢仍属 PR2/PR3 范围，当前仍在
   aiTaskStore 内组装。
+- **PR2 完成**：`backup.ts`（写前自动快照进 `.ai-writer/backups/`，backup 失败即写入
+  失败）+ `writeTools.ts` 四个新工具：`read_memory`（读段落索引）与三个 L1 写工具
+  `create_lore_entity` / `update_lore_file` / `update_memory`（access: write-auto）。
+  结构校验先于落盘：index.md 必须保住 frontmatter 且禁改 category、facet 文件必须
+  仍是合法 facet、images.md 拒写、记忆只能走 `rewriteMemorySegment`（memory.ts 新
+  API，段范围/哈希协议不可破坏）。ToolContext 增加 onLoreChanged/onMemoryChanged
+  刷新钩子（aiTaskStore 已接 loreStore.scanProject / memoryStore.loadForActiveFile）。
+  注意：尚无 preset 引用写工具——它们在 PR3 的 lore 入口迁移中获得第一个 UI 触发点；
+  独立的 agentStore 推迟到需要审批队列/多轮会话时（PR4/PR5）再立。
