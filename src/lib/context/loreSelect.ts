@@ -22,12 +22,19 @@
  * refreshes on the next rescan.
  */
 
+import { FALLBACK_CHARS_PER_TOKEN } from "./budget";
 import { readFile } from "../fs/fileio";
 import { parseFrontmatter } from "../fs/markdown";
 import type { LoreEntity, LoreFacet, LoreIndex } from "../lore";
 
-/** Default total budget for the 【设定资料】 block: ~600 tokens ≈ 1800 chars. */
-export const DEFAULT_LORE_BUDGET_CHARS = 600 * 3;
+/**
+ * Default total budget for the 【设定资料】 block, used only when no caller
+ * passes a planned budget. Converted with the *same* conservative ratio the
+ * budget planner falls back to, so the codebase has exactly one token↔char rule
+ * — an optimistic local constant here would silently plan a block the pre-flight
+ * check then rejects. See lib/context/budget.
+ */
+export const DEFAULT_LORE_BUDGET_CHARS = 600 * FALLBACK_CHARS_PER_TOKEN;
 
 /**
  * Max auto-matched entities (manual pins don't count against this). A loose cap:

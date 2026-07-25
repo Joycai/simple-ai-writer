@@ -5,14 +5,18 @@
  * The window is spent in a fixed priority order:
  *   1. **Output reserve** — room for the model's reply. Never handed to a layer;
  *      without it a "full" prompt leaves nowhere to write.
- *   2. **Fixed costs** — system prompt, the verbatim recent window, task text,
- *      outline/knowledge extras. Non-negotiable: they *are* the request.
- *   3. **Lore** (`【设定资料】`) — the author's explicit setting, honored as-is
+ *   2. **Fixed costs** — system prompt, task text, outline/knowledge extras.
+ *      Non-negotiable: they *are* the request.
+ *   3. **Recent-window floor** — the verbatim text immediately before the anchor.
+ *      Prose the model can actually quote outranks any summary of it, so this
+ *      layer keeps its historical size before a recap layer gets anything.
+ *   4. **Lore** (`【设定资料】`) — the author's explicit setting, honored as-is
  *      and only trimmed if the window physically can't hold it.
- *   4. **Leftover** — split by weight between `【前情提要】` (this document's
+ *   5. **Leftover** — first *grows* the recent window (again: verbatim beats
+ *      summary), then splits by weight between `【前情提要】` (this document's
  *      story memory) and `【全书前情】` (prior-chapter recaps), with reflow.
  *
- * Only steps 3–4 are plannable. A model with no declared `contextSize` has no
+ * Only steps 3–5 are plannable. A model with no declared `contextSize` has no
  * basis for any of this, so the planner falls back to the historical fixed
  * constants — behavior is unchanged for anyone who never filled the field in.
  *
@@ -64,8 +68,28 @@ export const CONTEXT_UTILIZATION_DEFAULT = 0.5;
 /** Static fallback for 【全书前情】 when the model declares no context size. */
 export const BOOK_PRIOR_BUDGET_CHARS = 5000;
 
+/**
+ * Default size of the verbatim recent-content window, and its floor once the
+ * window is being planned dynamically. Owned here (rather than in rag.ts) so the
+ * planner, the assembler and the UI all read the same number.
+ */
+export const RECENT_WINDOW_MIN_CHARS = 800 * 3;
+
+/**
+ * Ceiling on the lore block when the model declares **no** context size.
+ *
+ * Without a declared window there is no dynamic plan *and* no pre-flight check
+ * (lib/ai/index.ts only gates when contextSize > 0), so nothing else downstream
+ * would stop a 128k-token lore setting from building a prompt no endpoint will
+ * accept. This is that missing gate — the historical LORE_BUDGET_MAX.
+ */
+export const STATIC_LORE_BUDGET_MAX_TOKENS = 2_000;
+
 /** Floor for the reply reserve, in tokens. */
 const OUTPUT_RESERVE_MIN_TOKENS = 2_000;
+
+/** Share of the leftover that grows the verbatim window before recaps are fed. */
+const RECENT_WEIGHT = 0.5;
 
 /** Leftover split: this document's own recent plot outranks the book-level recap. */
 const MEMORY_WEIGHT = 0.6;
@@ -102,6 +126,20 @@ export interface ContextBudgetInput {
   /** Requested reply length in chars, when the task declares one. */
   replyChars?: number;
   /**
+   * Verbatim-window size the task explicitly asked for (the 「参考上下文范围」
+   * picker on polish/rewrite/summary, including an explicit 0). When present it
+   * is an author decision and is honored exactly — never grown, never trimmed
+   * except by a window that physically can't hold it. Omit for tasks with no
+   * picker (continue/custom): the window then becomes a plannable layer that
+   * grows with the model, floored at RECENT_WINDOW_MIN_CHARS.
+   */
+  recentWindowChars?: number;
+  /**
+   * How much text actually precedes the anchor. Caps the recent window's growth
+   * so a short chapter doesn't reserve space it can never fill.
+   */
+  availableRecentChars?: number;
+  /**
    * Chars per token for this manuscript, from measureCharsPerToken(). Governs
    * every token↔char conversion in the plan. Defaults to the CJK worst case.
    */
@@ -112,6 +150,8 @@ export interface ContextBudgetPlan {
   loreChars: number;
   memoryChars: number;
   bookPriorChars: number;
+  /** Verbatim recent-content window this request should slice. */
+  recentWindowChars: number;
   /** False when the model declared no context size and constants were used. */
   dynamic: boolean;
   /** Input-token ceiling this plan targeted (0 when static). */
@@ -126,13 +166,22 @@ export function planContextBudget(input: ContextBudgetInput): ContextBudgetPlan 
   const charsPerToken = input.charsPerToken && input.charsPerToken > 0
     ? input.charsPerToken
     : FALLBACK_CHARS_PER_TOKEN;
-  const loreRequested = Math.floor(Math.max(0, input.loreBudgetTokens) * charsPerToken);
+  // `?? ` not `||`: an explicit 0 means "send no recent context", not "unset".
+  const explicitRecent = input.recentWindowChars;
+  const recentFloor = Math.max(0, explicitRecent ?? RECENT_WINDOW_MIN_CHARS);
 
   if (!input.contextSize || input.contextSize <= 0) {
+    // No declared window → no dynamic plan and no pre-flight gate downstream, so
+    // the lore setting has to be capped here or nothing caps it at all.
+    const staticLoreTokens = Math.min(
+      Math.max(0, input.loreBudgetTokens),
+      STATIC_LORE_BUDGET_MAX_TOKENS,
+    );
     return {
-      loreChars: loreRequested,
+      loreChars: Math.floor(staticLoreTokens * charsPerToken),
       memoryChars: MEMORY_BUDGET_CHARS,
       bookPriorChars: input.includeBookContext ? BOOK_PRIOR_BUDGET_CHARS : 0,
+      recentWindowChars: recentFloor,
       dynamic: false,
       inputCeilingTokens: 0,
       reservedOutputTokens: 0,
@@ -140,6 +189,7 @@ export function planContextBudget(input: ContextBudgetInput): ContextBudgetPlan 
     };
   }
 
+  const loreRequested = Math.floor(Math.max(0, input.loreBudgetTokens) * charsPerToken);
   const util = clamp(input.utilization, CONTEXT_UTILIZATION_MIN, CONTEXT_UTILIZATION_MAX);
   const reservedOutputTokens = outputReserveTokens(input.replyChars ?? 0, charsPerToken);
   const inputCeilingTokens = Math.max(
@@ -149,10 +199,25 @@ export function planContextBudget(input: ContextBudgetInput): ContextBudgetPlan 
 
   const ceilingChars = Math.floor(inputCeilingTokens * charsPerToken);
   const afterFixed = Math.max(0, ceilingChars - Math.max(0, input.fixedChars));
+
+  // The verbatim window keeps its floor first: a summary of the last page is
+  // never worth more than the page itself.
+  let recentWindowChars = Math.min(recentFloor, afterFixed);
+  let rest = afterFixed - recentWindowChars;
+
   // Lore is an explicit author decision, so it outranks the recap layers — but
   // it can't exceed what physically remains.
-  const loreChars = Math.min(loreRequested, afterFixed);
-  const leftover = afterFixed - loreChars;
+  const loreChars = Math.min(loreRequested, rest);
+  rest -= loreChars;
+
+  // Grow the verbatim window with half of what's left — but only when the task
+  // has no explicit picker, and never past the text that actually exists.
+  if (explicitRecent === undefined) {
+    const room = Math.max(0, (input.availableRecentChars ?? Infinity) - recentWindowChars);
+    const grow = Math.min(room, Math.floor(rest * RECENT_WEIGHT));
+    recentWindowChars += grow;
+    rest -= grow;
+  }
 
   // A layer that cannot contribute yields its whole share up front. The other
   // direction — the book layer underspending its share — can only be known once
@@ -160,20 +225,21 @@ export function planContextBudget(input: ContextBudgetInput): ContextBudgetPlan 
   let memoryChars: number;
   let bookPriorChars: number;
   if (!input.includeBookContext) {
-    memoryChars = leftover;
+    memoryChars = rest;
     bookPriorChars = 0;
   } else if (!input.hasMemory) {
     memoryChars = 0;
-    bookPriorChars = leftover;
+    bookPriorChars = rest;
   } else {
-    bookPriorChars = Math.floor(leftover * BOOK_WEIGHT);
-    memoryChars = leftover - bookPriorChars;
+    bookPriorChars = Math.floor(rest * BOOK_WEIGHT);
+    memoryChars = rest - bookPriorChars;
   }
 
   return {
     loreChars,
     memoryChars,
     bookPriorChars,
+    recentWindowChars,
     dynamic: true,
     inputCeilingTokens,
     reservedOutputTokens,
@@ -194,14 +260,36 @@ export function reflowMemoryBudget(plan: ContextBudgetPlan, bookUsedChars: numbe
 }
 
 /**
+ * Final per-layer allocation for one run, for the AI panel's transparency line.
+ *
+ * All four numbers are "how much of the window this layer holds", but they are
+ * not all measured at the same moment, and the difference is deliberate:
+ * `bookPriorChars` is the size the 【全书前情】 layer *realized* (it is built
+ * before the rest, and whatever it left over has already been reflowed into
+ * `memoryChars`), while the other three are the final budgets handed to their
+ * layers. Reporting the book layer's planned share instead would double-count
+ * the reflowed remainder.
+ */
+export interface ContextAllocation {
+  loreChars: number;
+  memoryChars: number;
+  bookPriorChars: number;
+  recentWindowChars: number;
+  charsPerToken: number;
+  /** False when constants were used — the panel hides the line in that case. */
+  dynamic: boolean;
+}
+
+/**
  * Sum the request's non-plannable cost, so the planner knows what's actually
  * left. Overestimating here is safe (layers just get less); underestimating
  * risks the pre-flight context check rejecting the request outright.
+ *
+ * The verbatim recent window is deliberately *not* here — it is a plannable
+ * layer (see ContextBudgetInput.recentWindowChars).
  */
 export function fixedContextChars(parts: {
   systemPromptChars: number;
-  /** The verbatim recent-content window (extras.contextChars or the default). */
-  recentWindowChars: number;
   taskInstructionChars: number;
   selectionChars: number;
   outlineChars?: number;
@@ -211,7 +299,6 @@ export function fixedContextChars(parts: {
 }): number {
   return (
     parts.systemPromptChars +
-    parts.recentWindowChars +
     parts.taskInstructionChars +
     parts.selectionChars +
     (parts.outlineChars ?? 0) +

@@ -25,9 +25,24 @@ export function formatContextSize(tokens: number): string {
 }
 
 /**
+ * Index of the stop a value *exactly* equals: 0 for unset, 1..N for a stop, and
+ * -1 for anything in between. Use this to decide which stop label reads as
+ * selected — snapping is right for the slider thumb but wrong for a highlight,
+ * which asserts "this is your value" (Claude's 200,000 would light up "256k"
+ * while the field next to it plainly says 200,000).
+ */
+export function exactStopIndex(value: string | number | undefined): number {
+  const n = typeof value === "number" ? value : parseInt(value ?? "", 10);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  const i = CONTEXT_SIZE_STOPS.indexOf(n);
+  return i >= 0 ? i + 1 : -1;
+}
+
+/**
  * Slider position for a raw field value: 0 means "unset", 1..N select a stop.
- * A value between stops (or above the top one) snaps to the nearest stop for
- * display only — the stored value is untouched until the user moves the slider.
+ * A value between stops (or above the top one) snaps to the nearest stop so the
+ * thumb has somewhere to sit — the stored value is untouched until the user
+ * actually moves the slider.
  */
 export function contextStopIndex(value: string | number | undefined): number {
   const n = typeof value === "number" ? value : parseInt(value ?? "", 10);

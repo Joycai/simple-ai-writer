@@ -7,6 +7,8 @@ import {
   measureCharsPerToken,
   FALLBACK_CHARS_PER_TOKEN,
   BOOK_PRIOR_BUDGET_CHARS,
+  RECENT_WINDOW_MIN_CHARS,
+  STATIC_LORE_BUDGET_MAX_TOKENS,
   CONTEXT_UTILIZATION_MAX,
   type ContextBudgetInput,
 } from "../context/budget";
@@ -26,6 +28,13 @@ function input(overrides: Partial<ContextBudgetInput> = {}): ContextBudgetInput 
     ...overrides,
   };
 }
+
+// 128k × 0.5 = 64k, minus a 2k reply reserve = 62k input tokens = 62k chars at
+// ratio 1; minus 3k fixed = 59k to divide, minus the 2.4k verbatim floor and the
+// 600-char lore setting = 56k of true leftover, half of which grows the window.
+const CEILING = 62_000;
+const LEFTOVER = CEILING - 3_000 - RECENT_WINDOW_MIN_CHARS - 600;
+const RECAP_POOL = LEFTOVER - Math.floor(LEFTOVER * 0.5);
 
 describe("measureCharsPerToken", () => {
   it("returns the safe fallback when there's too little text to measure", () => {
@@ -76,6 +85,7 @@ describe("planContextBudget — static fallback", () => {
     expect(plan.dynamic).toBe(false);
     expect(plan.memoryChars).toBe(MEMORY_BUDGET_CHARS);
     expect(plan.bookPriorChars).toBe(BOOK_PRIOR_BUDGET_CHARS);
+    expect(plan.recentWindowChars).toBe(RECENT_WINDOW_MIN_CHARS);
     // The author's lore setting still applies — it never depended on the window.
     expect(plan.loreChars).toBe(600);
   });
@@ -85,21 +95,35 @@ describe("planContextBudget — static fallback", () => {
     expect(plan.bookPriorChars).toBe(0);
     expect(plan.memoryChars).toBe(MEMORY_BUDGET_CHARS);
   });
+
+  it("caps lore hard — nothing downstream gates a request with no declared window", () => {
+    // lib/ai/index.ts only pre-flights when contextSize > 0, so an uncapped
+    // 32k-token lore setting here would build a prompt no endpoint accepts.
+    const plan = planContextBudget(input({ contextSize: undefined, loreBudgetTokens: 32_000 }));
+    expect(plan.loreChars).toBe(STATIC_LORE_BUDGET_MAX_TOKENS);
+  });
+
+  it("still honors a setting below the static cap", () => {
+    const plan = planContextBudget(input({ contextSize: undefined, loreBudgetTokens: 900 }));
+    expect(plan.loreChars).toBe(900);
+  });
+
+  it("honors an explicit verbatim-window choice", () => {
+    const plan = planContextBudget(input({ contextSize: undefined, recentWindowChars: 500 }));
+    expect(plan.recentWindowChars).toBe(500);
+  });
 });
 
 describe("planContextBudget — dynamic", () => {
-  it("honors the lore setting and splits the leftover 60/40", () => {
+  it("honors the lore setting and splits the recap pool 60/40", () => {
     const plan = planContextBudget(input());
     expect(plan.dynamic).toBe(true);
     expect(plan.loreChars).toBe(600);
-
-    // 128k × 0.5 = 64k, minus a 2k reply reserve = 62k input tokens.
-    expect(plan.inputCeilingTokens).toBe(62_000);
+    expect(plan.inputCeilingTokens).toBe(CEILING);
     expect(plan.reservedOutputTokens).toBe(2_000);
 
-    const leftover = 62_000 - 3_000 - 600;
-    expect(plan.bookPriorChars).toBe(Math.floor(leftover * 0.4));
-    expect(plan.memoryChars).toBe(leftover - Math.floor(leftover * 0.4));
+    expect(plan.bookPriorChars).toBe(Math.floor(RECAP_POOL * 0.4));
+    expect(plan.memoryChars).toBe(RECAP_POOL - Math.floor(RECAP_POOL * 0.4));
   });
 
   it("gives a Latin manuscript proportionally more chars for the same window", () => {
@@ -130,27 +154,40 @@ describe("planContextBudget — dynamic", () => {
     );
   });
 
-  it("gives the whole leftover to memory when there is no book context", () => {
+  it("gives the whole recap pool to memory when there is no book context", () => {
     const plan = planContextBudget(input({ includeBookContext: false }));
     expect(plan.bookPriorChars).toBe(0);
-    expect(plan.memoryChars).toBe(62_000 - 3_000 - 600);
+    expect(plan.memoryChars).toBe(RECAP_POOL);
   });
 
-  it("gives the whole leftover to the book layer when the document has no memory", () => {
+  it("gives the whole recap pool to the book layer when the document has no memory", () => {
     const plan = planContextBudget(input({ hasMemory: false }));
     expect(plan.memoryChars).toBe(0);
-    expect(plan.bookPriorChars).toBe(62_000 - 3_000 - 600);
+    expect(plan.bookPriorChars).toBe(RECAP_POOL);
   });
 
   it("trims lore rather than overflowing when the window can't hold it", () => {
-    // 16k × 0.25 = 4096, minus the 2k reserve = 2096 tokens of room, of which
-    // 1000 is fixed cost — far less than the 32k-token lore request.
+    // 16k × 0.95 = 15564, minus the 2k reserve = 13564 tokens of room; 1000 is
+    // fixed and 2400 is the verbatim floor, leaving far less than the 32k-token
+    // lore request — so lore is cut to fit instead of blowing the window.
+    const plan = planContextBudget(
+      input({ contextSize: 16_384, utilization: 0.95, loreBudgetTokens: 32_000, fixedChars: 1_000 }),
+    );
+    const room = Math.floor(16_384 * 0.95) - 2_000 - 1_000 - RECENT_WINDOW_MIN_CHARS;
+    expect(plan.loreChars).toBe(room);
+    expect(plan.memoryChars).toBe(0);
+    expect(plan.bookPriorChars).toBe(0);
+  });
+
+  it("keeps the verbatim window ahead of lore when the window is tiny", () => {
+    // Continuing without the text you're continuing *from* is useless, so the
+    // recent-window floor outranks the lore block — and is itself trimmed to fit.
     const plan = planContextBudget(
       input({ contextSize: 16_384, utilization: 0.25, loreBudgetTokens: 32_000, fixedChars: 1_000 }),
     );
-    expect(plan.loreChars).toBe(1_096);
+    expect(plan.recentWindowChars).toBe(1_096);
+    expect(plan.loreChars).toBe(0);
     expect(plan.memoryChars).toBe(0);
-    expect(plan.bookPriorChars).toBe(0);
   });
 
   it("never returns negative budgets when fixed costs alone exceed the window", () => {
@@ -158,6 +195,40 @@ describe("planContextBudget — dynamic", () => {
     expect(plan.loreChars).toBe(0);
     expect(plan.memoryChars).toBe(0);
     expect(plan.bookPriorChars).toBe(0);
+    expect(plan.recentWindowChars).toBe(0);
+  });
+});
+
+describe("planContextBudget — the verbatim recent window", () => {
+  it("grows with the window when the task has no picker", () => {
+    const plan = planContextBudget(input());
+    expect(plan.recentWindowChars).toBeGreaterThan(RECENT_WINDOW_MIN_CHARS);
+    expect(plan.recentWindowChars).toBe(RECENT_WINDOW_MIN_CHARS + Math.floor(LEFTOVER * 0.5));
+  });
+
+  it("prefers verbatim prose over a summary of it", () => {
+    const plan = planContextBudget(input());
+    expect(plan.recentWindowChars).toBeGreaterThan(plan.memoryChars);
+  });
+
+  it("honors an explicit picker value exactly and never grows it", () => {
+    const plan = planContextBudget(input({ recentWindowChars: 500 }));
+    expect(plan.recentWindowChars).toBe(500);
+    // The space it declined goes to the recaps, not back to the window.
+    expect(plan.memoryChars + plan.bookPriorChars).toBe(CEILING - 3_000 - 500 - 600);
+  });
+
+  it("treats an explicit 0 as 'send no recent context', not as unset", () => {
+    const plan = planContextBudget(input({ recentWindowChars: 0 }));
+    expect(plan.recentWindowChars).toBe(0);
+  });
+
+  it("never reserves more of the window than the document can fill", () => {
+    const plan = planContextBudget(input({ availableRecentChars: 3_000 }));
+    expect(plan.recentWindowChars).toBe(3_000);
+    // …and the space it couldn't use is still spent, not lost.
+    const pool = LEFTOVER - (3_000 - RECENT_WINDOW_MIN_CHARS);
+    expect(plan.memoryChars + plan.bookPriorChars).toBe(pool);
   });
 });
 
@@ -189,22 +260,20 @@ describe("fixedContextChars", () => {
     expect(
       fixedContextChars({
         systemPromptChars: 100,
-        recentWindowChars: 2_400,
         taskInstructionChars: 50,
         selectionChars: 10,
       }),
-    ).toBe(2_560);
+    ).toBe(160);
 
     expect(
       fixedContextChars({
         systemPromptChars: 100,
-        recentWindowChars: 2_400,
         taskInstructionChars: 50,
         selectionChars: 10,
         outlineChars: 200,
         knowledgeChars: 300,
         prevChapterTailChars: 2_500,
       }),
-    ).toBe(5_560);
+    ).toBe(3_160);
   });
 });
