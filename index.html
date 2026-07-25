@@ -5,15 +5,65 @@
     <link rel="icon" type="image/png" href="/logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Simple AI Writer</title>
+    <!--
+      Web fonts load ASYNCHRONOUSLY (media="print" swaps to "all" onload).
+      A plain stylesheet <link> is render-blocking: when fonts.googleapis.com
+      is unreachable (offline, or blocked in some regions), the window stays
+      blank white for the full connection timeout — which users experience as
+      "the app doesn't start". The UI now paints immediately with system
+      fallback fonts and upgrades in place if/when the fonts arrive.
+    -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,200;0,300;0,400;0,500;0,600;1,400&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
     />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,200;0,300;0,400;0,500;0,600;1,400&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
+    <!-- Minimal splash shown until React mounts (createRoot().render replaces
+         #root's children). Mainly visible during vite dev's first compile. -->
+    <style>
+      .boot-splash {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        background: #f7f5f0;
+        color: #8a8577;
+        font: 13px/1.4 -apple-system, "Segoe UI", system-ui, sans-serif;
+        letter-spacing: 0.08em;
+      }
+      @media (prefers-color-scheme: dark) {
+        .boot-splash { background: #191713; color: #7d776a; }
+      }
+      .boot-splash-spinner {
+        width: 18px;
+        height: 18px;
+        border: 2px solid currentColor;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: boot-spin 0.9s linear infinite;
+      }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot-splash">
+        <div class="boot-splash-spinner"></div>
+        <div>Simple AI Writer</div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

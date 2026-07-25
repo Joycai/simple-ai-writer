@@ -8,6 +8,45 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [react()],
 
+  // Pre-bundle every heavy dependency up front — including the LAZILY imported
+  // ones (mermaid, the agent/lore modules pull several of these dynamically).
+  // Without this, vite discovers them mid-session, logs "new dependencies
+  // optimized: reloading page" and force-reloads — which on a cold transform
+  // cache looks like the window suddenly going blank for ~20s.
+  optimizeDeps: {
+    include: [
+      "react",
+      "react-dom/client",
+      "zustand",
+      "i18next",
+      "react-i18next",
+      "motion/react",
+      "lucide-react",
+      "nanoid",
+      "gray-matter",
+      "markdown-it",
+      "markdown-it-katex",
+      "mermaid",
+      "codemirror",
+      "@codemirror/commands",
+      "@codemirror/lang-markdown",
+      "@codemirror/language",
+      "@codemirror/language-data",
+      "@codemirror/search",
+      "@codemirror/state",
+      "@codemirror/view",
+      "@lezer/highlight",
+      "@tauri-apps/api/app",
+      "@tauri-apps/api/core",
+      "@tauri-apps/api/path",
+      "@tauri-apps/plugin-dialog",
+      "@tauri-apps/plugin-fs",
+      "@tauri-apps/plugin-http",
+      "@tauri-apps/plugin-opener",
+      "@tauri-apps/plugin-sql",
+    ],
+  },
+
   build: {
     // This app is packaged and served from local disk by Tauri, not downloaded
     // over a network, so Vite's web-oriented 500 kB chunk warning doesn't apply.
@@ -33,6 +72,9 @@ export default defineConfig(async () => ({
     // (and system proxies make `localhost` flaky in WKWebView). devUrl in
     // tauri.conf.json points at 127.0.0.1 to match.
     host: host || "127.0.0.1",
+    // Transform the whole entry graph as soon as the server starts instead of
+    // waiting for the webview's first request wave — cuts the cold-start blank.
+    warmup: { clientFiles: ["./src/main.tsx"] },
     hmr: host
       ? {
           protocol: "ws",
