@@ -1,7 +1,11 @@
 import { create } from "zustand";
 import i18n from "../i18n";
 import { streamCompletion } from "../lib/ai";
-import { assembleContext, bundleToMessages, type TaskExtras } from "../lib/context/rag";
+import { assembleContext, bundleToMessages, MAX_CONTEXT_CHARS, type TaskExtras } from "../lib/context/rag";
+import {
+  fixedContextChars, measureCharsPerToken, planContextBudget, reflowMemoryBudget,
+  type ContextBudgetPlan,
+} from "../lib/context/budget";
 import type { LoreActivationReport } from "../lib/context/loreSelect";
 import { useAiStore } from "./aiStore";
 import { useAppStore } from "./appStore";
@@ -43,6 +47,8 @@ interface AiTaskState {
   toolSteps: ToolStep[];
   /** Which lore entities/facets were injected (and why) for the current run. */
   loreReport: LoreActivationReport | null;
+  /** How the context window was divided for the current run (see lib/context/budget). */
+  contextPlan: (ContextBudgetPlan & { memoryChars: number }) | null;
 
   setSelection: (s: string, range?: SelectionRange | null) => void;
   setRequestedTask: (kind: TaskKind | null) => void;
@@ -63,6 +69,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
   abortController: null,
   toolSteps: [],
   loreReport: null,
+  contextPlan: null,
 
   setSelection: (s, range = null) => set({ selection: s, selectionRange: range }),
   setRequestedTask: (kind) => set({ requestedTask: kind }),
@@ -111,23 +118,6 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const { loadMemory } = await import("../lib/context/memory");
     const memory = activeFilePath ? await loadMemory(projectPath, activeFilePath) : null;
 
-    // Book-level continuation memory: recap of prior chapters + the previous
-    // chapter's ending, resolved from the outline order (.ai-writer/outline.json).
-    // Only for "continue" — this is what lets a freshly-started chapter know what
-    // happened in the chapters before it.
-    let bookExtras: Partial<TaskExtras> = {};
-    if (kind === "continue" && activeFilePath) {
-      try {
-        const { fileTree } = useProjectStore.getState();
-        const { buildBookContext } = await import("../lib/context/bookContext");
-        const anchorOffset = get().selectionRange?.to ?? documentText.length;
-        const bookContext = await buildBookContext(projectPath, fileTree, activeFilePath, anchorOffset);
-        if (bookContext) bookExtras = { bookContext };
-      } catch {
-        // best-effort — continuation still works without book context
-      }
-    }
-
     // Task instruction: use scene-matched user prompt if one exists, else built-in default
     const scenePrompt = kind !== "custom"
       ? prompts.find((p) => p.scene === kind)
@@ -142,12 +132,69 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       instruction = scenePrompt?.content ?? taskInstruction(kind);
     }
 
+    // ── Context budget ──────────────────────────────────────────────────────
+    // Divide the model's window between the layers we can size: lore (the
+    // author's explicit setting) and the two recap layers (whatever is left).
+    // Must be planned *before* the book context is built — that build spends its
+    // own budget. See lib/context/budget.ts.
+    const { loreBudgetTokens, contextUtilization } = useAppStore.getState();
+    const isContinue = kind === "continue";
+    const { BOOK_PREV_TAIL_CHARS } = await import("../lib/context/bookContext");
+    const plan = planContextBudget({
+      contextSize: model.contextSize,
+      utilization: contextUtilization,
+      loreBudgetTokens,
+      fixedChars: fixedContextChars({
+        systemPromptChars: systemPrompt.length,
+        recentWindowChars: extras?.contextChars ?? MAX_CONTEXT_CHARS,
+        taskInstructionChars: instruction.length,
+        selectionChars: get().selection.length,
+        outlineChars: extras?.outline?.length,
+        knowledgeChars: extras?.additionalKnowledge?.length,
+        prevChapterTailChars: isContinue ? BOOK_PREV_TAIL_CHARS : 0,
+      }),
+      hasMemory: !!memory && memory.segments.length > 0,
+      includeBookContext: isContinue,
+      replyChars: isContinue ? continueLength : undefined,
+      // Measured from this manuscript, so a Chinese and an English project each
+      // get budgets their own tokenizer cost agrees with.
+      charsPerToken: measureCharsPerToken(documentText),
+    });
+
+    // Book-level continuation memory: recap of prior chapters + the previous
+    // chapter's ending, resolved from the outline order (.ai-writer/outline.json).
+    // Only for "continue" — this is what lets a freshly-started chapter know what
+    // happened in the chapters before it.
+    let bookExtras: Partial<TaskExtras> = {};
+    let bookUsedChars = 0;
+    if (isContinue && activeFilePath) {
+      try {
+        const { fileTree } = useProjectStore.getState();
+        const { buildBookContext } = await import("../lib/context/bookContext");
+        const anchorOffset = get().selectionRange?.to ?? documentText.length;
+        const bookContext = await buildBookContext(
+          projectPath, fileTree, activeFilePath, anchorOffset, plan.bookPriorChars,
+        );
+        if (bookContext) {
+          bookExtras = { bookContext };
+          bookUsedChars = bookContext.priorSummary.length;
+        }
+      } catch {
+        // best-effort — continuation still works without book context
+      }
+    }
+    // Whatever 【全书前情】 didn't spend goes to 【前情提要】.
+    const memoryBudgetChars = reflowMemoryBudget(plan, bookUsedChars);
+
     const controller = new AbortController();
-    set({ isRunning: true, output: "", error: null, usage: null, toolSteps: [], loreReport: null, abortController: controller });
+    set({
+      isRunning: true, output: "", error: null, usage: null, toolSteps: [], loreReport: null,
+      contextPlan: { ...plan, bookPriorChars: bookUsedChars, memoryChars: memoryBudgetChars },
+      abortController: controller,
+    });
 
     const baseUrl = provider.baseUrl || defaultBaseUrl(provider.apiStandard);
-    // Lore token budget (user setting) → char budget for the selection engine.
-    const loreBudgetChars = useAppStore.getState().loreBudgetTokens * 3;
+    const loreBudgetChars = plan.loreChars;
 
     try {
       if (kind === "continue") {
@@ -164,6 +211,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           get().selectionRange,
           memory,
           loreBudgetChars,
+          memoryBudgetChars,
         );
         set({ loreReport: bundle.loreReport });
         const initialMessages = bundleToMessages(bundle);
@@ -211,6 +259,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           get().selectionRange,
           memory,
           loreBudgetChars,
+          memoryBudgetChars,
         );
         set({ loreReport: bundle.loreReport });
         const messages = bundleToMessages(bundle);

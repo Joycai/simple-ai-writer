@@ -18,7 +18,8 @@ import { selectLore, type LoreActivationReport } from "./loreSelect";
 import { selectMemoryForContext, type DocMemory } from "./memory";
 
 const APPROX_CHARS_PER_TOKEN = 3; // rough CJK-aware estimate
-const MAX_CONTEXT_CHARS = 800 * APPROX_CHARS_PER_TOKEN;
+/** Default verbatim recent-content window when a task declares no contextChars. */
+export const MAX_CONTEXT_CHARS = 800 * APPROX_CHARS_PER_TOKEN;
 
 /** Extra options available for AI tasks (continue / polish / rewrite / summary). */
 export interface TaskExtras {
@@ -136,6 +137,9 @@ export function locateSelectionOffset(documentText: string, selection: string): 
  *                         its segment summaries feed the 【前情提要】 layer.
  * @param loreBudgetChars  Char budget for the lore block (user setting × 3);
  *                         falls back to loreSelect's default when omitted.
+ * @param memoryBudgetChars Char budget for the 【前情提要】 layer, from the context
+ *                         budget planner (see ./budget); falls back to memory.ts's
+ *                         static constant when omitted.
  */
 export async function assembleContext(
   systemPrompt: string,
@@ -146,7 +150,8 @@ export async function assembleContext(
   extras?: TaskExtras,
   selectionRange?: { from: number; to: number } | null,
   memory?: DocMemory | null,
-  loreBudgetChars?: number
+  loreBudgetChars?: number,
+  memoryBudgetChars?: number
 ): Promise<ContextBundle> {
   // Layer 2: facet-aware layered selection (summary → core → facets under a
   // shared budget) — pins go first, auto-matched entities follow. See
@@ -203,7 +208,9 @@ export async function assembleContext(
   // When the selection can't be located (endIdx = -1) we skip memory too for
   // the same reason we skip recent context: we don't know where we are.
   const detailStart = endIdx >= 0 ? Math.max(0, endIdx - span) : -1;
-  const storySummary = memory ? selectMemoryForContext(memory, detailStart) : "";
+  const storySummary = memory
+    ? selectMemoryForContext(memory, detailStart, memoryBudgetChars)
+    : "";
 
   // Book-level continuation memory: a recap of prior chapters and the previous
   // chapter's verbatim ending, resolved from the outline order upstream. Only

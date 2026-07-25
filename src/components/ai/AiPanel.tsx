@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, Check, X, Square, Play, BookMarked, Sparkles, Layers, Pin } from "lucide-react";
 import { useAiTaskStore, type TaskKind, type ToolStep } from "../../stores/aiTaskStore";
 import { useAiStore } from "../../stores/aiStore";
-import { useAppStore } from "../../stores/appStore";
+import { useAppStore, LORE_BUDGET_MIN, LORE_BUDGET_MAX } from "../../stores/appStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useMemoryStore } from "../../stores/memoryStore";
@@ -203,8 +203,27 @@ function ExtraSection({
   );
 }
 
-/** Lore injection token-budget presets (see loreSelect / appStore). */
-const LORE_BUDGET_OPTIONS = [300, 600, 1000, 2000];
+/**
+ * Lore injection token-budget presets (see loreSelect / appStore). Presets cover
+ * the common tiers; the adjacent number field takes any value in
+ * [LORE_BUDGET_MIN, LORE_BUDGET_MAX] for large-context models.
+ */
+const LORE_BUDGET_OPTIONS = [600, 2000, 8000, 32000];
+
+/** Context-window utilization presets (see lib/context/budget). */
+const UTILIZATION_OPTIONS = [0.25, 0.5, 0.75, 0.9];
+
+/** Convert a planned char budget back to tokens for display. */
+function toTokens(chars: number, charsPerToken: number): number {
+  return Math.round(chars / (charsPerToken > 0 ? charsPerToken : 1));
+}
+
+/** Compact token count: 32000 → "32k", 1500 → "1.5k", 600 → "600". */
+function formatBudget(n: number): string {
+  if (n < 1000) return String(n);
+  const k = n / 1000;
+  return `${Number.isInteger(k) ? k : k.toFixed(1)}k`;
+}
 
 /**
  * Reusable lore reference picker — two-level tree: pin whole entities, or
@@ -227,7 +246,25 @@ function LorePicker({
   const { t } = useTranslation();
   const loreBudgetTokens = useAppStore((s) => s.loreBudgetTokens);
   const setLoreBudgetTokens = useAppStore((s) => s.setLoreBudgetTokens);
+  const contextUtilization = useAppStore((s) => s.contextUtilization);
+  const setContextUtilization = useAppStore((s) => s.setContextUtilization);
+  // Dynamic allocation needs a declared window; without one the recap layers
+  // fall back to fixed constants and the utilization control does nothing.
+  const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId));
+  const contextSize = activeModel?.contextSize ?? 0;
+  const contextPlan = useAiTaskStore((s) => s.contextPlan);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  // Uncommitted text in the budget field. Held separately so typing "12000"
+  // isn't clamped digit-by-digit; committed (and clamped by the store) on
+  // blur/Enter, and dropped whenever a preset chip takes over.
+  const [budgetDraft, setBudgetDraft] = useState<string | null>(null);
+
+  const commitBudgetDraft = () => {
+    if (budgetDraft === null) return;
+    const parsed = parseInt(budgetDraft, 10);
+    if (Number.isFinite(parsed)) setLoreBudgetTokens(parsed);
+    setBudgetDraft(null); // revert to the stored (clamped) value either way
+  };
 
   const toggleExpanded = (dirPath: string) =>
     setExpanded((prev) => {
@@ -306,14 +343,72 @@ function LorePicker({
             <button
               key={n}
               className={`${styles.lengthChip} ${loreBudgetTokens === n ? styles.lengthChipActive : ""}`}
-              onClick={() => setLoreBudgetTokens(n)}
-              title={t("ai.panel.loreBudgetHint", { defaultValue: "【设定资料】最多占用的 token 数" })}
+              onClick={() => { setBudgetDraft(null); setLoreBudgetTokens(n); }}
+              title={t("ai.panel.loreBudgetHint", {
+                defaultValue: "【设定资料】最多占用的 token 数",
+                min: LORE_BUDGET_MIN,
+                max: LORE_BUDGET_MAX.toLocaleString(),
+              })}
             >
-              {n >= 1000 ? `${n / 1000}k` : n}
+              {formatBudget(n)}
+            </button>
+          ))}
+        </div>
+        <input
+          className={styles.loreBudgetInput}
+          type="number"
+          min={LORE_BUDGET_MIN}
+          max={LORE_BUDGET_MAX}
+          step={100}
+          value={budgetDraft ?? String(loreBudgetTokens)}
+          onChange={(e) => setBudgetDraft(e.target.value)}
+          onBlur={commitBudgetDraft}
+          onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+          title={t("ai.panel.loreBudgetHint", {
+            defaultValue: "【设定资料】最多占用的 token 数",
+            min: LORE_BUDGET_MIN,
+            max: LORE_BUDGET_MAX.toLocaleString(),
+          })}
+          aria-label={t("ai.panel.loreBudget", { defaultValue: "设定预算" })}
+        />
+      </div>
+      {/* Utilization — the share of the window one request may occupy. Caps how
+          much 【前情提要】/【全书前情】 may grow on a large-context model. */}
+      <div className={styles.loreBudgetRow}>
+        <span className={styles.loreBudgetLabel}>
+          {t("ai.panel.contextUtilization", { defaultValue: "上下文利用率" })}
+        </span>
+        <div className={styles.continueLengthOptions}>
+          {UTILIZATION_OPTIONS.map((r) => (
+            <button
+              key={r}
+              className={`${styles.lengthChip} ${Math.abs(contextUtilization - r) < 0.001 ? styles.lengthChipActive : ""}`}
+              onClick={() => setContextUtilization(r)}
+              disabled={contextSize <= 0}
+              title={contextSize > 0
+                ? t("ai.panel.contextUtilizationHint", {
+                    defaultValue: "单次请求最多占用模型上下文窗口的比例",
+                    tokens: Math.floor(contextSize * r).toLocaleString(),
+                  })
+                : t("ai.panel.contextUtilizationUnset", {
+                    defaultValue: "当前模型未设置「上下文大小」，前情层使用固定预算",
+                  })}
+            >
+              {Math.round(r * 100)}%
             </button>
           ))}
         </div>
       </div>
+      {contextPlan?.dynamic && (
+        <div className={styles.contextPlanLine}>
+          {t("ai.panel.contextPlan", {
+            defaultValue: "上次分配：设定 {{lore}} · 前情 {{memory}} · 全书 {{book}}",
+            lore: `${formatBudget(toTokens(contextPlan.loreChars, contextPlan.charsPerToken))} tk`,
+            memory: `${formatBudget(toTokens(contextPlan.memoryChars, contextPlan.charsPerToken))} tk`,
+            book: `${formatBudget(toTokens(contextPlan.bookPriorChars, contextPlan.charsPerToken))} tk`,
+          })}
+        </div>
+      )}
     </>
   );
 }
@@ -389,7 +484,7 @@ export function AiPanel() {
   const { t, i18n } = useTranslation();
   const {
     isRunning, output, error, usage, toolSteps, loreReport,
-    runTask, abort, clearOutput, selection, requestedTask, setRequestedTask,
+    runTask, abort, clearOutput, selection, selectionRange, requestedTask, setRequestedTask,
   } = useAiTaskStore();
   const { models, providers, prompts, activeModelId, activePromptId, setActiveModel, setActivePrompt } = useAiStore();
   const { content } = useEditorStore();
@@ -450,9 +545,30 @@ export function AiPanel() {
   const activeProvider = activeModel ? providers.find((p) => p.id === activeModel.providerId) : null;
   const hasConfig = !!activeModel;
 
-  const handleInsert = () => {
+  // Polish/rewrite edit a passage in place, so their result belongs *where the
+  // selection was* — appending it to the end of the document (the only thing
+  // this panel used to do) silently duplicated the passage instead. Resolved at
+  // apply time, not run time: the author may have kept typing while it streamed.
+  const replaceRange = (() => {
+    if (selectedTask !== "polish" && selectedTask !== "rewrite") return null;
+    if (!selection) return null;
+    if (selectionRange && content.slice(selectionRange.from, selectionRange.to) === selection) {
+      return selectionRange;
+    }
+    // Offsets went stale (edits above it, or a preview-mode selection with no
+    // range at all) — fall back to a verbatim search. Only an exact hit counts;
+    // guessing here would overwrite the wrong passage.
+    const at = content.lastIndexOf(selection);
+    return at >= 0 ? { from: at, to: at + selection.length } : null;
+  })();
+
+  const handleApply = () => {
     const { setContent } = useEditorStore.getState();
-    setContent(content + "\n\n" + output);
+    if (replaceRange) {
+      setContent(content.slice(0, replaceRange.from) + output + content.slice(replaceRange.to));
+    } else {
+      setContent(content + "\n\n" + output);
+    }
     clearOutput();
   };
 
@@ -829,7 +945,11 @@ export function AiPanel() {
                     <span className={styles.outputLabel}>{t("ai.panel.generatedOutput")}</span>
                     <div style={{ display: "flex", gap: 6 }}>
                       <button className={styles.btnSecondary} onClick={clearOutput}>{t("ai.panel.clear")}</button>
-                      <button className={styles.btnPrimary} onClick={handleInsert}>{t("ai.panel.insertToDoc")}</button>
+                      <button className={styles.btnPrimary} onClick={handleApply}>
+                        {replaceRange
+                          ? t("ai.panel.replaceSelection", { defaultValue: "替换选中内容" })
+                          : t("ai.panel.insertToDoc")}
+                      </button>
                     </div>
                   </div>
                   <div className={styles.output} ref={outputRef}>
