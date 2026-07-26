@@ -11,52 +11,38 @@ import { ImagePreview } from "../editor/ImagePreview";
 import { EditorBottomStrip } from "./EditorBottomStrip";
 import { MOD_KEY } from "../../lib/platform";
 import { isImagePath } from "../../lib/fs/images";
+import { linkScrollers } from "../../lib/editor/scrollSync";
 import styles from "./EditorArea.module.css";
 
 export function EditorArea() {
   const { t } = useTranslation();
   const { projectPath, activeFilePath } = useProjectStore();
-  const { content, filePath, viewMode, loadFile, setContent, saveNow } = useEditorStore();
+  const { content, filePath, viewMode, editorView, loadFile, setContent, saveNow } = useEditorStore();
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
 
   const isImage = !!activeFilePath && isImagePath(activeFilePath);
 
-  const editorPaneRef = useRef<HTMLDivElement>(null);
   const previewPaneRef = useRef<HTMLDivElement>(null);
 
   // Split view: keep editor and preview scrolled to the same relative position.
-  // Both actually scroll on an inner element (CodeMirror's .cm-scroller and the
-  // preview root), so we bind to those. A short lock prevents the programmatic
-  // scroll of one side from echoing back and fighting the user's drag.
+  // Neither pane is the scrolling element — CodeMirror scrolls on .cm-scroller
+  // inside it, and the preview scrolls on its own root — so the link binds to
+  // those two.
+  //
+  // The editor's scroller comes from `editorView.scrollDOM` rather than a
+  // querySelector, and editorView is a dependency, because CodeEditor builds
+  // the view in its own effect. Reaching into the DOM at one instant meant that
+  // if the scroller wasn't there yet (or was later replaced) the effect hit its
+  // early return, gave up silently, and never retried — nothing in the old
+  // dependency list changes when a view appears. Keying on the view instead
+  // makes the link rebuild exactly when its target does.
   useEffect(() => {
     if (viewMode !== "split" || !activeFilePath || isImage) return;
-    const editor = editorPaneRef.current?.querySelector<HTMLElement>(".cm-scroller");
-    const preview = previewPaneRef.current?.firstElementChild as HTMLElement | null;
+    const editor = editorView?.scrollDOM;
+    const preview = previewPaneRef.current?.querySelector<HTMLElement>("[data-preview-scroller]");
     if (!editor || !preview) return;
-
-    let lock: HTMLElement | null = null;
-    let release = 0;
-    const link = (from: HTMLElement, to: HTMLElement) => () => {
-      if (lock && lock !== from) return;
-      lock = from;
-      const fromMax = from.scrollHeight - from.clientHeight;
-      const toMax = to.scrollHeight - to.clientHeight;
-      if (fromMax > 0 && toMax > 0) {
-        to.scrollTop = (from.scrollTop / fromMax) * toMax;
-      }
-      clearTimeout(release);
-      release = window.setTimeout(() => { lock = null; }, 80);
-    };
-    const onEditor = link(editor, preview);
-    const onPreview = link(preview, editor);
-    editor.addEventListener("scroll", onEditor, { passive: true });
-    preview.addEventListener("scroll", onPreview, { passive: true });
-    return () => {
-      editor.removeEventListener("scroll", onEditor);
-      preview.removeEventListener("scroll", onPreview);
-      clearTimeout(release);
-    };
-  }, [viewMode, activeFilePath, isImage]);
+    return linkScrollers(editor, preview);
+  }, [viewMode, activeFilePath, isImage, editorView]);
 
   // Load file when active path changes. Images are rendered directly (see below),
   // so we must NOT read them as text — that would fill the editor with binary
@@ -140,7 +126,7 @@ export function EditorArea() {
     <div className={styles.area}>
       <div className={styles.panes}>
         {showEditor && (
-          <div className={styles.editorPane} ref={editorPaneRef}>
+          <div className={styles.editorPane}>
             <CodeEditor value={content} onChange={setContent} />
             <EditorScrollNav />
           </div>
