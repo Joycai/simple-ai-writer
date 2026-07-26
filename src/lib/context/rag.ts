@@ -37,6 +37,12 @@ export interface TaskExtras {
   /** Extra requirement appended to the task instruction (polish/rewrite/summary). */
   requirement?: string;
   /**
+   * Which chapter's ending bridges into this one ("continue" only).
+   * `undefined` = decide automatically, `null` = independent opening, a path =
+   * that chapter. Consumed by aiTaskStore before assembly — see ./bookContext.
+   */
+  bridgeChapter?: string | null;
+  /**
    * Append/continuation mode (the "continue" task). The selection, if any, is
    * an *anchor* — text to write after — not an edit target: no 【选中内容】 block
    * is emitted, and the reference window ends at the selection's END (so the

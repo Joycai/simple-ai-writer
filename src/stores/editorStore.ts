@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { EditorView } from "@codemirror/view";
 import { extractHeadings, countWords, type HeadingNode } from "../lib/fs/markdown";
 import { readFile, writeFile } from "../lib/fs/fileio";
+import { isImagePath } from "../lib/fs/images";
 import { useProjectStore } from "./projectStore";
 
 export type ViewMode = "split" | "editor" | "preview";
@@ -94,3 +95,64 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   setEditorView: (view) => set({ editorView: view }),
 }));
+
+// ─── Writing focus ────────────────────────────────────────────────────────────
+
+/**
+ * The document every AI action targets.
+ *
+ * `filePath` and `text` are read as a pair from this store on purpose: they are
+ * written in a single `set()` inside loadFile, so they can never name two
+ * different documents. Composing a focus out of `projectStore.activeFilePath`
+ * (set synchronously on click) plus `editorStore.content` (set by an async
+ * effect, after flushing the previous file's autosave) *could* — and that window
+ * is exactly how a task ends up running the previous chapter's prose against the
+ * new chapter's memory and book position.
+ */
+export interface WritingFocus {
+  /** Absolute path of the focused document, or null when none is loaded. */
+  filePath: string | null;
+  /** That document's current text — always the same document as `filePath`. */
+  text: string;
+  /**
+   * False while the editor has not caught up to the file the author just opened
+   * (or is showing something the editor never loads, like an image). AI actions
+   * stay disabled until it settles rather than silently using the old document.
+   */
+  settled: boolean;
+  /** The file the author opened, when it differs from the focus. */
+  pendingPath: string | null;
+}
+
+function deriveFocus(
+  filePath: string | null,
+  text: string,
+  activeFilePath: string | null,
+): WritingFocus {
+  const settled = !!filePath && activeFilePath === filePath;
+  return {
+    filePath,
+    text,
+    settled,
+    pendingPath: settled ? null : activeFilePath,
+  };
+}
+
+/** Non-reactive read, for stores and run-time snapshots. */
+export function getWritingFocus(): WritingFocus {
+  const { filePath, content } = useEditorStore.getState();
+  return deriveFocus(filePath, content, useProjectStore.getState().activeFilePath);
+}
+
+/** Reactive read, for components. */
+export function useWritingFocus(): WritingFocus {
+  const filePath = useEditorStore((s) => s.filePath);
+  const text = useEditorStore((s) => s.content);
+  const activeFilePath = useProjectStore((s) => s.activeFilePath);
+  return deriveFocus(filePath, text, activeFilePath);
+}
+
+/** True when the author has opened something the editor will never load as text. */
+export function focusBlockedByImage(focus: WritingFocus): boolean {
+  return !focus.settled && !!focus.pendingPath && isImagePath(focus.pendingPath);
+}

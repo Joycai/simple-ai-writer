@@ -845,11 +845,14 @@ type TabId = "general" | "providers" | "models" | "prompts" | "about";
 
 interface Props {
   onClose: () => void;
+  /** Pane to open on. Callers that mean a specific setting (e.g. the model
+   *  picker's 管理供应商) pass it so the author lands where they were headed. */
+  initialTab?: TabId;
 }
 
-export function SettingsModal({ onClose }: Props) {
+export function SettingsModal({ onClose, initialTab = "general" }: Props) {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<TabId>("general");
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab);
 
   const navBtn = (id: TabId, icon: React.ReactNode, labelKey: string) => (
     <button

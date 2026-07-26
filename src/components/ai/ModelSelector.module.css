@@ -1,0 +1,307 @@
+/* Model picker — closed trigger in the assistant header + grouped popover. */
+
+.root {
+  position: relative;
+  min-width: 0;
+  display: flex;
+}
+
+/* ── Closed state ────────────────────────────────────────────────────────── */
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 560px;
+  padding: 3px 8px 3px 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.trigger:hover { border-color: var(--color-border); background: var(--color-bg-surface); }
+.trigger:focus-visible { border-color: var(--color-sienna); outline: none; }
+
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-text-faint);
+  flex-shrink: 0;
+}
+.dotOn { background: var(--color-success); }
+
+/* The provider is context, not the subject — it stays quiet and yields space. */
+.triggerProvider {
+  font: 400 11px/1.5 var(--font-sans);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.triggerSep {
+  font: 400 11px/1.5 var(--font-sans);
+  color: var(--color-text-ghost);
+  flex-shrink: 0;
+}
+.triggerModel {
+  font: 500 13px/1.4 var(--font-sans);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.triggerEmpty {
+  font: 400 12px/1.5 var(--font-sans);
+  color: var(--color-text-muted);
+}
+
+/* Context window rides along permanently — it is the number that decides
+   whether a task will even fit. */
+.ctxBadge {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-sienna);
+  font: 500 10px/1.6 var(--font-mono);
+}
+
+.triggerRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  padding-left: var(--space-3);
+  flex-shrink: 0;
+  color: var(--color-text-faint);
+}
+.shortcut {
+  font: 400 10px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+/* ── Popover ─────────────────────────────────────────────────────────────── */
+.popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  width: 560px;
+  max-width: min(560px, calc(100vw - 64px));
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-strong);
+  box-shadow: var(--shadow-lg);
+  animation: modelPickerIn 140ms var(--ease-out);
+}
+@keyframes modelPickerIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 11px var(--space-4);
+  border-bottom: 1px solid var(--color-border-soft);
+}
+.searchIcon { color: var(--color-text-faint); flex-shrink: 0; }
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  color: var(--color-text-primary);
+  font: 400 14px/1.5 var(--font-sans);
+}
+.searchInput::placeholder { color: var(--color-text-ghost); }
+.searchCount {
+  flex-shrink: 0;
+  font: 400 11px/1.5 var(--font-mono);
+  color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.filterRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border-soft);
+}
+.filterChip {
+  padding: 4px 13px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font: 400 12px/1.5 var(--font-sans);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.filterChip:hover { color: var(--color-sienna); border-color: var(--color-sienna); }
+.filterChipActive {
+  border-color: var(--color-sienna);
+  color: var(--color-sienna);
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: var(--space-2) 0;
+}
+
+.empty {
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  font: 400 12px/1.7 var(--font-sans);
+  color: var(--color-text-muted);
+}
+
+/* ── Provider group ──────────────────────────────────────────────────────── */
+.group { display: flex; flex-direction: column; }
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) 6px;
+}
+.groupName {
+  font: 500 10px/1.4 var(--font-sans);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.groupTag {
+  margin-left: 5px;
+  letter-spacing: 0.1em;
+  color: var(--color-text-faint);
+}
+.groupRule {
+  flex: 1;
+  height: 1px;
+  background: var(--color-border-soft);
+}
+.groupCount {
+  font: 400 10px/1.4 var(--font-mono);
+  color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Row ─────────────────────────────────────────────────────────────────── */
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: 9px var(--space-4) 9px calc(var(--space-4) - 2px);
+  /* Space for the selection rule, so selecting a row never shifts its text. */
+  border: none;
+  border-left: 2px solid transparent;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.itemActive { background: var(--color-bg-surface); }
+/* Selection reads as a margin mark, not a filled band — the list stays calm. */
+.itemSelected { border-left-color: var(--color-sienna); }
+
+.itemMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.itemTitleRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+/* Long names wrap rather than truncate — the identity is the whole point. */
+.itemTitle {
+  font: 400 14px/1.4 var(--font-sans);
+  color: var(--color-text-secondary);
+  word-break: break-word;
+}
+.itemSelected .itemTitle,
+.itemActive .itemTitle { color: var(--color-text-primary); }
+
+.itemBadge {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-muted);
+  font: 400 10px/1.6 var(--font-sans);
+  white-space: nowrap;
+}
+.itemSelected .itemBadge { border-color: var(--color-sienna); color: var(--color-sienna); }
+
+.itemSubtitle {
+  font: 400 10px/1.5 var(--font-mono);
+  color: var(--color-text-faint);
+  word-break: break-all;
+}
+
+.itemWarn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  font: 400 10px/1.5 var(--font-sans);
+  color: var(--color-sienna);
+  white-space: nowrap;
+}
+
+.itemCtx {
+  flex-shrink: 0;
+  font: 400 11px/1.5 var(--font-mono);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.itemCheck {
+  width: 13px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-sienna);
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+.footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 9px var(--space-4);
+  border-top: 1px solid var(--color-border-soft);
+}
+.hint {
+  font: 400 10px/1.5 var(--font-sans);
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+.manageBtn {
+  margin-left: auto;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--color-sienna);
+  font: 500 11px/1.5 var(--font-sans);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--transition-fast);
+}
+.manageBtn:hover { color: var(--color-sienna-hover); }

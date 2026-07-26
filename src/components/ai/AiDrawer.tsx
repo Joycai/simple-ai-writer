@@ -1,24 +1,34 @@
 import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "motion/react";
-import { Sparkles, CheckCircle2, Bot } from "lucide-react";
+import { Bot, CheckCircle2, RotateCw, Sparkles, X } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
-import { useAiStore } from "../../stores/aiStore";
+import { useAgentStore } from "../../stores/agentStore";
 import { AgentChat } from "./AgentChat";
+import { ModelSelector } from "./ModelSelector";
 import { AiPanel } from "./AiPanel";
 import { ConsistencyCheck } from "./ConsistencyCheck";
+import { MOD_KEY } from "../../lib/platform";
 import { drawerSlide, overlayFade, overlayFadeTransition, springDrawer } from "../../lib/motion";
 import styles from "./AiDrawer.module.css";
+
+type Mode = "generate" | "chat" | "consistency";
+
+/** Global binding that opens each mode (see App.tsx). Shown in the header so the
+ *  shortcut is discoverable from the surface it opens. */
+const MODE_SHORTCUT: Record<Mode, string | null> = {
+  generate: "J",
+  chat: "L",
+  consistency: null,
+};
 
 export function AiDrawer() {
   const { t } = useTranslation();
   const { showAiDrawer, aiDrawerMode, setShowAiDrawer } = useAppStore();
-  const { models, providers, activeModelId } = useAiStore();
+
+  const { turns, chatError, resetChat } = useAgentStore();
 
   const close = () => setShowAiDrawer(false);
-  const setMode = (m: "generate" | "chat" | "consistency") => setShowAiDrawer(true, m);
-
-  const activeModel = models.find((m) => m.id === activeModelId);
-  const activeProvider = activeModel ? providers.find((p) => p.id === activeModel.providerId) : null;
+  const setMode = (m: Mode) => setShowAiDrawer(true, m);
 
   const headerTitle =
     aiDrawerMode === "consistency"
@@ -26,6 +36,8 @@ export function AiDrawer() {
       : aiDrawerMode === "chat"
         ? t("ai.chat.title")
         : t("ai.drawer.generateTitle", { defaultValue: "AI 助手" });
+
+  const shortcut = MODE_SHORTCUT[aiDrawerMode];
 
   return (
     <AnimatePresence>
@@ -62,42 +74,54 @@ export function AiDrawer() {
                 ? <Bot size={16} strokeWidth={1.6} />
                 : <Sparkles size={16} strokeWidth={1.6} />}
           </div>
+
           <div className={styles.titleBlock}>
             <div className={styles.title}>{headerTitle}</div>
             <div className={styles.subtitle}>
-              {activeProvider && activeModel ? (
-                <span className={styles.modelChip}>
-                  {activeProvider.name} <strong>/</strong> {activeModel.name}
-                </span>
-              ) : (
-                <span className={styles.modelChip}>{t("ai.panel.selectModel")}</span>
-              )}
+              <ModelSelector />
             </div>
           </div>
 
-          <div className={styles.modeTabs}>
-            <button
-              className={`${styles.modeTab} ${aiDrawerMode === "generate" ? styles.modeTabActive : ""}`}
-              onClick={() => setMode("generate")}
-            >
-              {t("ai.tasks.continue")}
-            </button>
-            <button
-              className={`${styles.modeTab} ${aiDrawerMode === "chat" ? styles.modeTabActive : ""}`}
-              onClick={() => setMode("chat")}
-            >
-              {t("ai.chat.tab")}
-            </button>
-            <button
-              className={`${styles.modeTab} ${aiDrawerMode === "consistency" ? styles.modeTabActive : ""}`}
-              onClick={() => setMode("consistency")}
-            >
-              {t("ai.drawer.consistency", { defaultValue: "一致性" })}
+          <div className={styles.headerActions}>
+            {aiDrawerMode === "chat" && (
+              <button
+                className={`${styles.headerBtn} ${styles.headerBtnAccent}`}
+                onClick={resetChat}
+                disabled={turns.length === 0 && !chatError}
+              >
+                <RotateCw size={10} strokeWidth={1.8} style={{ marginRight: 4, verticalAlign: -1 }} />
+                {t("ai.chat.newSession")}
+              </button>
+            )}
+            {shortcut && (
+              <span className={styles.shortcutHint}>
+                {MOD_KEY === "⌘" ? `⌘${shortcut}` : `Ctrl ${shortcut}`}
+              </span>
+            )}
+            <button className={styles.closeBtn} onClick={close} aria-label="Close">
+              <X size={15} strokeWidth={1.6} />
             </button>
           </div>
+        </div>
 
-          <button className={styles.closeBtn} onClick={close} aria-label="Close">
-            ✕
+        <div className={styles.modeTabs}>
+          <button
+            className={`${styles.modeTab} ${aiDrawerMode === "generate" ? styles.modeTabActive : ""}`}
+            onClick={() => setMode("generate")}
+          >
+            {t("ai.drawer.tabGenerate", { defaultValue: "生成" })}
+          </button>
+          <button
+            className={`${styles.modeTab} ${aiDrawerMode === "chat" ? styles.modeTabActive : ""}`}
+            onClick={() => setMode("chat")}
+          >
+            {t("ai.chat.title")}
+          </button>
+          <button
+            className={`${styles.modeTab} ${aiDrawerMode === "consistency" ? styles.modeTabActive : ""}`}
+            onClick={() => setMode("consistency")}
+          >
+            {t("ai.drawer.consistencyTitle", { defaultValue: "一致性检查" })}
           </button>
         </div>
 

@@ -80,6 +80,7 @@ const storedContextUtilization = clamp(
 
 export type MainView = "editor" | "lore-wall" | "outline-full";
 export type AiDrawerMode = "generate" | "chat" | "consistency";
+export type SettingsTab = "general" | "providers" | "models" | "prompts" | "about";
 export type SideTab = "files" | "outline" | "search";
 
 interface AppState {
@@ -104,6 +105,10 @@ interface AppState {
   showAiDrawer: boolean;
   aiDrawerMode: AiDrawerMode;
   showOnboarding: boolean;
+  /** Settings modal visibility + which pane it opens on. Lives here rather than
+   *  in App so any surface (e.g. the model picker's 管理供应商) can reach it. */
+  showSettings: boolean;
+  settingsTab: SettingsTab;
 
   setTheme: (theme: ThemeMode) => void;
   setLanguage: (lang: Language) => void;
@@ -126,6 +131,8 @@ interface AppState {
   setShowCommandPalette: (v: boolean) => void;
   setShowAiDrawer: (v: boolean, mode?: AiDrawerMode) => void;
   setShowOnboarding: (v: boolean) => void;
+  openSettings: (tab?: SettingsTab) => void;
+  closeSettings: () => void;
 }
 
 function resolveTheme(mode: ThemeMode): "dark" | "light" {
@@ -186,6 +193,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   showAiDrawer: false,
   aiDrawerMode: "generate",
   showOnboarding: false,
+  showSettings: false,
+  settingsTab: "general",
 
   setTheme: (theme) => {
     localStorage.setItem(THEME_KEY, theme);
@@ -285,6 +294,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setShowAiDrawer: (v, mode) =>
     set((s) => ({ showAiDrawer: v, aiDrawerMode: mode ?? s.aiDrawerMode })),
   setShowOnboarding: (v) => set({ showOnboarding: v }),
+  openSettings: (tab) => set({ showSettings: true, settingsTab: tab ?? "general" }),
+  closeSettings: () => set({ showSettings: false }),
 }));
 
 // Initialize theme + font scheme on load using persisted values

@@ -7,164 +7,277 @@
   min-height: 0;
 }
 
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--color-border);
-}
-.toolbarTitle {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--color-text-muted);
-}
-.toolbarUsage {
-  margin-left: auto;
-  font-size: 10px;
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-.newSessionBtn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  color: var(--color-text-secondary);
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-sm);
-  transition: background var(--transition-fast);
-}
-.newSessionBtn:hover { background: var(--color-bg-elevated); }
-
 .messages {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--space-3);
+  padding: var(--space-5) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.emptyHint {
+  margin: auto;
+  max-width: 46ch;
+  text-align: center;
+  font: 400 12px/1.9 var(--font-sans);
+  color: var(--color-text-muted);
+}
+
+/* ── User turn ───────────────────────────────────────────────────── */
+.userBlock {
+  align-self: flex-end;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 78%;
+}
+
+/* The passage the message is about, shown above it so the referent is visible
+   in the transcript rather than only inside the prompt. */
+.quote {
+  align-self: stretch;
+  border-left: 2px solid var(--color-sienna);
+  background: var(--color-bg-surface);
+  padding: 7px 11px;
+}
+.quoteLabel {
+  font: 500 10px/1.4 var(--font-sans);
+  letter-spacing: 0.14em;
+  color: var(--color-text-faint);
+  margin-bottom: 3px;
+}
+.quoteBody {
+  font: 400 12px/1.7 var(--font-serif);
+  color: var(--color-text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 92px;
+  overflow-y: auto;
+}
+
+.userTurn {
+  align-self: stretch;
+  background: var(--color-accent-tint);
+  border: 1px solid var(--color-accent-tint-strong);
+  color: var(--color-text-primary);
+  padding: 10px 14px;
+  font: 400 13px/1.8 var(--font-sans);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.turnTime {
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-ghost);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Assistant turn ──────────────────────────────────────────────── */
+/* A status gutter plus a single content track. Everything the turn renders —
+   execution log, prose, suggestion cards — is a child of `.turnContent`, which
+   is what keeps their left and right edges identical. */
+.assistantTurn {
+  align-self: stretch;
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  column-gap: var(--space-3);
+  align-items: start;
+}
+
+.turnMarker {
+  width: 8px;
+  height: 8px;
+  margin-top: 9px;
+  background: var(--color-text-ghost);
+}
+.turnMarkerLive { background: var(--color-sienna); }
+
+.turnContent {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
 }
 
-.emptyHint {
-  margin: auto;
-  max-width: 34ch;
-  text-align: center;
-  font-size: var(--font-size-xs);
-  line-height: 1.7;
-  color: var(--color-text-muted);
-}
-
-.userTurn {
-  align-self: flex-end;
-  max-width: 85%;
-  background: var(--color-accent);
-  color: #fff;
-  border-radius: var(--radius-md, 10px);
-  border-bottom-right-radius: 3px;
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--font-size-xs);
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.assistantTurn {
-  align-self: stretch;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
 .assistantBody {
-  font-size: var(--font-size-xs);
-  line-height: 1.7;
+  font: 400 13px/1.9 var(--font-sans);
   color: var(--color-text-primary);
   word-break: break-word;
 }
-.assistantBody :is(p, ul, ol) { margin: 0 0 var(--space-2); }
-.assistantBody :is(h1, h2, h3, h4) { font-size: 1em; margin: var(--space-2) 0 var(--space-1); }
+.assistantBody :is(p, ul, ol) { margin: 0 0 var(--space-3); }
+.assistantBody :is(p, ul, ol):last-child { margin-bottom: 0; }
+.assistantBody :is(h1, h2, h3, h4) { font-size: 1em; margin: var(--space-4) 0 var(--space-2); }
+.assistantBody hr {
+  /* UA styles give <hr> its own inline margins, which is exactly the drift the
+     grid above is meant to prevent — pin it to the content track. */
+  margin: var(--space-3) 0;
+  border: none;
+  border-top: 1px solid var(--color-border-soft);
+}
+.assistantBody :is(ul, ol) { padding-left: 1.4em; }
+.assistantBody li { margin-bottom: var(--space-1); }
 .assistantBody pre {
-  background: var(--color-bg-elevated);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  padding: var(--space-3);
   overflow-x: auto;
   font-size: 11px;
+  max-width: 100%;
 }
-.assistantBody code { font-family: var(--font-mono, monospace); font-size: 0.95em; }
+.assistantBody code { font-family: var(--font-mono); font-size: 0.95em; }
+.assistantBody :is(table, img) { max-width: 100%; }
 
 .thinking {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: 11px;
+  font: 400 11px/1.5 var(--font-sans);
   color: var(--color-text-muted);
 }
 .thinkingSpinner {
-  width: 10px;
-  height: 10px;
-  border: 1.5px solid var(--color-accent);
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--color-sienna);
   border-top-color: transparent;
   border-radius: 50%;
   animation: chatSpin 0.8s linear infinite;
 }
 @keyframes chatSpin { to { transform: rotate(360deg); } }
-
-.error {
-  font-size: 11px;
-  color: var(--color-error);
-  padding: var(--space-2) var(--space-3);
-  border-top: 1px solid var(--color-border);
-  word-break: break-all;
+.thinkingRound {
+  margin-left: auto;
+  font: 400 10px/1.5 var(--font-mono);
+  color: var(--color-text-faint);
 }
 
+.error {
+  font: 400 11px/1.7 var(--font-sans);
+  color: var(--color-error);
+  background: var(--color-error-bg);
+  border-left: 2px solid var(--color-error);
+  padding: var(--space-2) var(--space-3);
+  margin: 0 var(--space-6) var(--space-2);
+  word-break: break-word;
+}
+
+/* Docked above the composer (the loop is blocked on these, so they must stay put
+   while the transcript scrolls) but indented onto the assistant content track,
+   so a proposal still reads as coming from the turn above it. */
 .approvals {
-  padding: 0 var(--space-3) var(--space-2);
+  padding: 0 var(--space-6) var(--space-3) calc(var(--space-6) + 8px + var(--space-3));
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
 
-.inputRow {
+/* ── Composer ────────────────────────────────────────────────────── */
+.composer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--color-border-soft);
+  padding: var(--space-3) var(--space-6) var(--space-4);
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3) var(--space-3);
-  border-top: 1px solid var(--color-border);
 }
 
-.input {
-  flex: 1;
-  min-width: 0;
-  resize: none;
-  font-size: var(--font-size-xs);
-  line-height: 1.6;
-  padding: var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-surface);
-  color: var(--color-text-primary);
-  max-height: 120px;
+.attachRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 22px;
 }
-.input::placeholder { color: var(--color-text-muted); }
-.input:focus { outline: none; border-color: var(--color-accent); }
+
+.attachChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  background: var(--color-accent-tint);
+  border: 1px solid var(--color-sienna);
+  color: var(--color-sienna);
+  font: 500 11px/1.5 var(--font-sans);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.attachChip:hover { background: var(--color-accent-tint-strong); }
+
+.attachChipGhost {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  background: transparent;
+  border: 1px dashed var(--color-border-strong);
+  color: var(--color-text-muted);
+  font: 500 11px/1.5 var(--font-sans);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.attachChipGhost:hover { color: var(--color-sienna); border-color: var(--color-sienna); }
+
+.attachEmpty {
+  font: 400 11px/1.5 var(--font-sans);
+  color: var(--color-text-ghost);
+}
+
+.contextMeter {
+  margin-left: auto;
+  font: 400 10px/1.5 var(--font-mono);
+  color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.inputRow {
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+  display: flex;
+  flex-direction: column;
+  transition: border-color var(--transition-fast);
+}
+.inputRow:focus-within { border-color: var(--color-sienna); }
+
+.input {
+  width: 100%;
+  resize: none;
+  border: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: 400 13px/1.8 var(--font-sans);
+  padding: 11px 13px 4px;
+  outline: none;
+  box-sizing: border-box;
+  max-height: 180px;
+}
+.input::placeholder { color: var(--color-text-faint); }
+
+.inputFooter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 8px 8px 13px;
+}
+.inputHint {
+  margin-right: auto;
+  font: 400 10px/1.5 var(--font-mono);
+  color: var(--color-text-ghost);
+}
 
 .sendBtn {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: var(--radius-sm);
-  background: var(--color-accent);
-  color: #fff;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: var(--color-sienna);
+  color: var(--color-card);
+  cursor: pointer;
   transition: background var(--transition-fast), opacity var(--transition-fast);
 }
-.sendBtn:hover:not(:disabled) { background: var(--color-accent-hover); }
-.sendBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+.sendBtn:hover:not(:disabled) { background: var(--color-sienna-hover); }
+.sendBtn:disabled { opacity: 0.35; cursor: not-allowed; }
 .stopBtn { background: var(--color-error); }
 .stopBtn:hover:not(:disabled) { background: var(--color-error); opacity: 0.85; }

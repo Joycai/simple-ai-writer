@@ -33,7 +33,7 @@ function highlight(text: string, q: string): React.ReactNode {
 
 export function CommandPalette() {
   const { t } = useTranslation();
-  const { showCommandPalette, setShowCommandPalette, setShowAiDrawer } = useAppStore();
+  const { showCommandPalette, setShowCommandPalette, setShowAiDrawer, setMainView } = useAppStore();
   const { index: loreIndex } = useLoreStore();
   const { fileTree, setActiveFilePath } = useProjectStore();
   const { content } = useEditorStore();
@@ -115,7 +115,11 @@ export function CommandPalette() {
 
   const runHit = (h: Hit) => {
     if (h.kind === "lore") {
+      // The editor only loads files while it is the visible view, so opening one
+      // without switching back leaves the writing focus pointing at the previous
+      // document (see editorStore.WritingFocus).
       setActiveFilePath(`${h.entity.dirPath}/index.md`);
+      setMainView("editor");
       setShowCommandPalette(false);
     } else if (h.kind === "text") {
       // Just close — line jump would require editor API

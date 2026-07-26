@@ -47,6 +47,30 @@ export type AgentEvent =
     }
   | { kind: "tool-step"; step: ToolStep; at: number }
   | {
+      /**
+       * Context the assembler injected *before* the loop started — the RAG
+       * layers the model never had to ask for.
+       *
+       * Emitted by the conversational assistant, where this happens once (the
+       * first turn seeds the wire history; later turns inherit it and must use
+       * tools for anything more). Without it the log looks as though the run
+       * began knowing nothing, and a lore miss — the single most useful thing
+       * to notice — is invisible. The task panel has its own richer
+       * 「本次注入设定」 report and does not emit this.
+       */
+      kind: "context-seeded";
+      /** Document the verbatim window was taken from, if one is open. */
+      documentName: string | null;
+      /** Verbatim manuscript chars injected. */
+      recentChars: number;
+      /** Story-memory recap chars; 0 when the document has no memory. */
+      memoryChars: number;
+      /** Lore entities activated, and the chars they occupied. */
+      loreEntities: number;
+      loreChars: number;
+      at: number;
+    }
+  | {
       /** Older tool results were elided to stay inside the input ceiling. */
       kind: "context-trimmed";
       count: number;

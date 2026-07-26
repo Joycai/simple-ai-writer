@@ -1,106 +1,162 @@
-/* Execution log — shared by AiPanel and the lore AI modals. */
+/* Execution log — shared by AiPanel (flat), AgentChat (boxed) and the lore AI modals. */
 
-.agentSteps {
+/* ── Boxed presentation ──────────────────────────────────────────── */
+.box {
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
   overflow: hidden;
 }
 
-.agentStepsHeader {
+/* Header-less variant: the toggle floats at the top-right of the card so the
+   first row reads as the log's own first line (see AgentLog.tsx). */
+.boxCompact { position: relative; }
+.compactToggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 var(--space-3);
+  background: transparent;
+  border: none;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.compactToggle:hover { color: var(--color-sienna); }
+/* Keep the first row's meta clear of the floating toggle. */
+.boxCompact .list > .row:first-child { padding-right: 52px; }
+
+.boxHeader {
   width: 100%;
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: 5px var(--space-3);
-  background: var(--color-bg-elevated);
-  font-size: var(--font-size-xs);
+  background: transparent;
+  border: none;
+  font: 500 11px/1.5 var(--font-sans);
   color: var(--color-text-secondary);
   text-align: left;
+  cursor: pointer;
   transition: background var(--transition-fast);
 }
-.agentStepsHeader:hover { background: var(--color-border); }
+.boxHeader:hover { background: var(--color-bg-elevated); }
 
-.agentStepsChevron { font-size: 10px; flex-shrink: 0; }
-.agentStepsTitle { font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; font-size: 10px; }
-.agentStepsCount { color: var(--color-text-muted); font-size: 10px; }
+.boxChevron { flex-shrink: 0; display: flex; color: var(--color-text-muted); }
+.boxTitle { letter-spacing: 0.12em; font-size: 10px; }
+.boxCount {
+  color: var(--color-text-muted);
+  font: 400 10px/1.4 var(--font-mono);
+}
 
-.agentSpinner {
+.boxSpinner {
   margin-left: auto;
   width: 8px;
   height: 8px;
-  border: 1.5px solid var(--color-accent);
+  border: 1.5px solid var(--color-sienna);
   border-top-color: transparent;
   border-radius: 50%;
   animation: agentLogSpin 0.8s linear infinite;
 }
 @keyframes agentLogSpin { to { transform: rotate(360deg); } }
 
-.agentStepsList {
+/* ── Rows ────────────────────────────────────────────────────────── */
+.list {
   list-style: none;
   margin: 0;
   padding: var(--space-1) 0;
-  background: var(--color-bg-surface);
-  max-height: 260px;
+  max-height: 280px;
   overflow-y: auto;
 }
+.box > .list { border-top: 1px solid var(--color-border); }
+/* Flat rows sit directly on the results column — no inner padding frame. */
+.listFlat { padding: 0; max-height: none; overflow: visible; }
 
-.agentStepItem {
+.row {
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
-  padding: 3px var(--space-3);
-  font-size: 11px;
-  line-height: 1.5;
-  flex-wrap: wrap;
+  padding: 4px var(--space-3);
+  font: 400 11px/1.6 var(--font-sans);
 }
+.listFlat .row { padding: 4px 0; }
 
-.agentStepIcon { flex-shrink: 0; color: var(--color-accent); display: flex; align-items: center; }
-.agentStepIconError { color: var(--color-error); }
-
-.agentStepSpinner {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border: 1.5px solid currentColor;
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: agentLogSpin 0.7s linear infinite;
+.rowName {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-text-primary);
+  word-break: break-word;
 }
-.agentStepName { font-weight: 500; color: var(--color-text-primary); }
-.agentStepArgs {
+.rowArgs {
   color: var(--color-text-muted);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   font-size: 10px;
-  background: var(--color-bg-elevated);
-  padding: 1px 4px;
-  border-radius: 2px;
-  word-break: break-all;
 }
-.agentStepResult {
+.rowMetaRight {
+  flex-shrink: 0;
   color: var(--color-text-muted);
-  font-size: 10px;
-  white-space: nowrap;
+  font: 400 10px/1.6 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  max-width: 40%;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 160px;
+  white-space: nowrap;
+}
+.rowTime {
+  flex-shrink: 0;
+  color: var(--color-text-faint);
+  font: 400 10px/1.6 var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
-/* Quiet meta rows (run/round markers) + timestamps */
-.agentLogMeta { padding-top: 4px; }
-.agentLogMetaText {
+/* Round progress, folded in from the round marker it replaces. */
+.rowRound {
+  flex-shrink: 0;
+  color: var(--color-text-faint);
+  font: 400 10px/1.6 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Quiet meta rows (round markers, trim notices) align under the row names. */
+.rowMeta { padding-top: 2px; padding-bottom: 2px; }
+.rowIndent { width: 8px; flex-shrink: 0; }
+.rowMetaText {
+  flex: 1;
+  min-width: 0;
   color: var(--color-text-muted);
   font-size: 10px;
   letter-spacing: 0.02em;
 }
-.agentLogTime {
-  margin-left: auto;
-  color: var(--color-text-muted);
-  font-size: 9px;
-  font-variant-numeric: tabular-nums;
+
+.rowError .rowName { color: var(--color-error); }
+
+/* A retrieval that matched nothing — still reported, but it shouldn't read as
+   an accomplishment. */
+.rowMuted .rowName { color: var(--color-text-muted); }
+
+/* ── Status markers ──────────────────────────────────────────────── */
+.marker {
+  width: 8px;
+  height: 8px;
   flex-shrink: 0;
+  align-self: center;
 }
-.agentLogError {
-  color: var(--color-error);
-  font-size: 10px;
-  word-break: break-all;
+.marker_pending { box-shadow: inset 0 0 0 1px var(--color-sienna); }
+.marker_done { background: var(--color-sienna); }
+.marker_error { background: var(--color-error); }
+
+.markerSpinner {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  align-self: center;
+  border: 1.5px solid var(--color-sienna);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: agentLogSpin 0.7s linear infinite;
 }
