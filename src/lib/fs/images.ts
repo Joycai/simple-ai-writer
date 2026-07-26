@@ -63,8 +63,12 @@ export async function scanProjectFiles(projectPath: string): Promise<ProjectFile
 
 /** Read an image file and return a base64 data URL. */
 export async function imageToDataUrl(imagePath: string): Promise<{ dataUrl: string; ext: string; bytes: Uint8Array }> {
-  const bytes = await readBinaryFile(imagePath);
-  const u8 = new Uint8Array(bytes as ArrayBuffer);
+  // plugin-fs `readFile` already hands back a Uint8Array<ArrayBuffer>. The old
+  // `new Uint8Array(bytes as ArrayBuffer)` round-trip was a no-op that copied
+  // the whole image: the cast silenced the mismatch (TS 6 rejects it outright,
+  // since Uint8Array and ArrayBuffer don't overlap) while the constructor
+  // treated the view as array-like and duplicated it element by element.
+  const u8 = await readBinaryFile(imagePath);
   const ext = imagePath.split(".").pop()?.toLowerCase() ?? "png";
   const mime = MIME[ext] ?? "image/png";
 
