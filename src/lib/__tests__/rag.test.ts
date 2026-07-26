@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   assembleContext,
   bundleToMessages,
+  locateAppendAnchor,
   resolveAppendAnchor,
   resolveEditRange,
   spliceContinuation,
@@ -403,5 +404,50 @@ describe("resolveEditRange", () => {
 
   it("has nowhere to act with no selection at all", () => {
     expect(resolveEditRange(doc, "", null, null)).toBeNull();
+  });
+});
+
+// The panel names a continuation's position on the card and then writes there.
+// Both facts come from one offset, so a mode that resolves to the wrong number
+// is a promise the panel breaks silently.
+describe("locateAppendAnchor", () => {
+  const doc = "第一段。\n\n第二段。\n\n第三段。";
+  const from = doc.indexOf("第二段。");
+
+  it("anchors after a selection that still matches", () => {
+    expect(locateAppendAnchor(doc, "第二段。", { from, to: from + 4 })).toBe(from + 4);
+  });
+
+  it("gives the document end when nothing is selected", () => {
+    expect(locateAppendAnchor(doc, "", null)).toBe(doc.length);
+  });
+
+  it("refuses (null) when a selection exists but cannot be located", () => {
+    // resolveAppendAnchor answers "the document end" here, which is right for a
+    // caller with no author choice to honour and wrong for expand mode, whose
+    // entire premise is that the author pointed somewhere.
+    expect(locateAppendAnchor(doc, "根本不在文中的一段话", null)).toBeNull();
+    expect(resolveAppendAnchor(doc, "根本不在文中的一段话", null)).toBe(doc.length);
+  });
+});
+
+describe("assembleContext — explicit append anchor", () => {
+  it("slices the reference window from the given anchor, not from the selection", async () => {
+    // Opening mode: offset 0 even though a passage further down is selected.
+    const doc = "开头段。\n\n" + "中间内容。".repeat(80) + "结尾段。";
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "结尾段。", "Continue.",
+      { appendMode: true, appendAnchor: 0 },
+      { from: doc.indexOf("结尾段。"), to: doc.length },
+    );
+    expect(bundle.recentContext).toBe("");
+  });
+
+  it("still derives the anchor when none is given", async () => {
+    const doc = "PREAMBLE ".repeat(60) + "TAIL";
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, "", "Continue.", { appendMode: true },
+    );
+    expect(bundle.recentContext.endsWith("TAIL")).toBe(true);
   });
 });

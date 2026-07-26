@@ -188,7 +188,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // and the book-context bridge measure from the very offset assembleContext
     // will slice from — and that the panel has already named for the author.
     const anchorOffset = isContinue
-      ? resolveAppendAnchor(documentText, get().selection, anchorRange)
+      ? extras?.appendAnchor ?? resolveAppendAnchor(documentText, get().selection, anchorRange)
       : anchorValid ? anchorRange!.to : documentText.length;
     const plan = planContextBudget({
       contextSize: model.contextSize,
