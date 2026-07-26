@@ -60,5 +60,9 @@ export function Preview({ source, basePath }: Props) {
     });
   }, [source]);
 
-  return <div ref={ref} className={styles.preview} data-ai-selection />;
+  // data-preview-scroller marks the element that actually scrolls (this root is
+  // the one carrying `overflow-y: auto`). EditorArea's split-view sync finds it
+  // by this attribute rather than by firstElementChild, so adding a sibling or
+  // a wrapper in here can't silently break scroll linking.
+  return <div ref={ref} className={styles.preview} data-ai-selection data-preview-scroller />;
 }
