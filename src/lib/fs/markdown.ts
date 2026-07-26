@@ -1,12 +1,40 @@
 import MarkdownIt from "markdown-it";
-// @ts-ignore — no types for markdown-it-katex
-import mk from "markdown-it-katex";
+import katex from "katex";
+import katexImport from "@vscode/markdown-it-katex";
+// KaTeX emits `<span class="katex">` markup that is meaningless without this
+// stylesheet: it is what visually hides the `.katex-mathml` accessibility copy
+// (so the formula doesn't render twice) and supplies the fraction rules, radical
+// bars and font metrics. Bundled rather than linked from a CDN — the KaTeX woff2
+// faces become local assets, matching the self-hosted font strategy in
+// styles/fonts.ts, so math renders correctly with no network.
+import "katex/dist/katex.min.css";
 
+/**
+ * @vscode/markdown-it-katex ships as a UMD bundle that sets `exports.default`.
+ * esbuild can't see through the UMD wrapper when Vite pre-bundles it for dev,
+ * so there the default import arrives as `{ default: fn, __esModule: true }`,
+ * while the Rolldown production build and Vitest's SSR interop hand back the
+ * function itself. Unwrap once here so every path agrees — calling `md.use()`
+ * with the wrapper object throws "plugin.apply is not a function", and that
+ * would only ever show up at runtime in `tauri dev`, never in a type-check.
+ */
+const katexPlugin =
+  typeof katexImport === "function"
+    ? katexImport
+    : (katexImport as { default: typeof katexImport }).default;
+
+// The `{ katex }` option hands the plugin our own KaTeX instance instead of
+// letting it `require("katex")` itself. The plugin is CommonJS, so that require
+// resolves KaTeX's UMD dist — a second, separately-bundled copy whose symbol
+// tables don't survive being re-bundled, leaving every command (\frac, \alpha,
+// \sum …) failing with "Undefined control sequence" while bare `x^2` still
+// rendered. Injecting the ESM build we already import above fixes the rendering
+// and drops the duplicate KaTeX from the bundle.
 const md = new MarkdownIt({
   html: false,
   linkify: true,
   typographer: true,
-}).use(mk);
+}).use(katexPlugin, { katex });
 
 export function renderMarkdown(source: string): string {
   return md.render(source);

@@ -8,6 +8,17 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [react()],
 
+  resolve: {
+    // KaTeX's package exports map the `require` condition to its UMD build and
+    // `import` to the ESM one. @vscode/markdown-it-katex is CommonJS, so it
+    // pulls in the UMD copy — a second ~250 kB KaTeX that is dead weight now
+    // that lib/fs/markdown.ts injects its own instance, and that silently
+    // fails on every backslash command when re-bundled. Pin the bare specifier
+    // to the ESM build so the app, the plugin and mermaid all share one copy.
+    // The anchored regex leaves subpaths like `katex/dist/katex.min.css` alone.
+    alias: [{ find: /^katex$/, replacement: "katex/dist/katex.mjs" }],
+  },
+
   // Pre-bundle every heavy dependency up front — including the LAZILY imported
   // ones (mermaid, the agent/lore modules pull several of these dynamically).
   // Without this, vite discovers them mid-session, logs "new dependencies
@@ -25,7 +36,8 @@ export default defineConfig(async () => ({
       "nanoid",
       "gray-matter",
       "markdown-it",
-      "markdown-it-katex",
+      "@vscode/markdown-it-katex",
+      "katex",
       "mermaid",
       "codemirror",
       "@codemirror/commands",
