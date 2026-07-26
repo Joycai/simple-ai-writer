@@ -133,6 +133,57 @@ export function locateSelectionOffset(documentText: string, selection: string): 
 }
 
 /**
+ * Where a continuation attaches to the document.
+ *
+ * The single source of truth for "continue": the prompt slices its 【近期内容】
+ * backwards from here, the panel labels this spot for the author, and the
+ * generated passage is inserted here. Keep those three reading from this
+ * function — a continuation that is written from one place and lands in
+ * another is the one failure mode none of them can detect on their own.
+ *
+ * A committed selection anchors the continuation just after it; anything that
+ * can no longer be found in the live text falls back to the document end,
+ * which is where a continuation belongs anyway.
+ */
+export function resolveAppendAnchor(
+  documentText: string,
+  selection: string,
+  selectionRange?: { from: number; to: number } | null,
+): number {
+  if (
+    selectionRange &&
+    documentText.slice(selectionRange.from, selectionRange.to) === selection
+  ) {
+    return selectionRange.to;
+  }
+  if (selection) {
+    const off = locateSelectionOffset(documentText, selection);
+    if (off >= 0) return off + selection.length;
+  }
+  return documentText.length;
+}
+
+/**
+ * Splice a generated continuation into the document at `at`.
+ *
+ * The mirror of resolveAppendAnchor. It spaces the passage into the prose
+ * instead of assuming a blank line is already there: mid-document the
+ * following paragraph supplies its own separator, and an empty chapter wants
+ * no leading gap at all.
+ */
+export function spliceContinuation(
+  documentText: string,
+  at: number,
+  passage: string,
+): string {
+  const before = documentText.slice(0, at);
+  const after = documentText.slice(at);
+  const lead = !before || before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
+  const trail = !after || after.startsWith("\n\n") ? "" : after.startsWith("\n") ? "\n" : "\n\n";
+  return before + lead + passage + trail + after;
+}
+
+/**
  * Build the context bundle for an AI task.
  *
  * @param systemPrompt     Active system prompt content
@@ -191,16 +242,7 @@ export async function assembleContext(
     selectionRange &&
     documentText.slice(selectionRange.from, selectionRange.to) === selection;
   if (appendMode) {
-    // Continue: anchor after the selection so the selected text is context, not
-    // a target. No selection → continue from the document end.
-    if (rangeMatches) {
-      endIdx = selectionRange!.to;
-    } else if (selection) {
-      const off = locateSelectionOffset(documentText, selection);
-      endIdx = off >= 0 ? off + selection.length : documentText.length;
-    } else {
-      endIdx = documentText.length;
-    }
+    endIdx = resolveAppendAnchor(documentText, selection, selectionRange);
   } else if (rangeMatches) {
     endIdx = selectionRange!.from;
   } else if (selection) {
