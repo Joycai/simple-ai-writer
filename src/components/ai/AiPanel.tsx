@@ -19,7 +19,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import {
-  ChevronDown, ChevronRight, Copy, Crosshair, Layers, Pin, Play, RotateCw, Square,
+  ChevronDown, ChevronRight, Copy, Crosshair, Layers, Pin, Play, RotateCw, Square, X,
 } from "lucide-react";
 import { useAiTaskStore, type TaskKind } from "../../stores/aiTaskStore";
 import { useAgentStore } from "../../stores/agentStore";
@@ -31,7 +31,13 @@ import { focusBlockedByImage, useEditorStore, useWritingFocus } from "../../stor
 import { useLoreStore } from "../../stores/loreStore";
 import { useMemoryStore } from "../../stores/memoryStore";
 import { useProjectStore } from "../../stores/projectStore";
-import { resolveAppendAnchor, spliceContinuation, type TaskExtras } from "../../lib/context/rag";
+import {
+  resolveAppendAnchor,
+  resolveEditRange,
+  spliceContinuation,
+  type TaskExtras,
+} from "../../lib/context/rag";
+import { clearTarget } from "../../lib/editor/aiTarget";
 import { parsePins, type LoreActivationReport } from "../../lib/context/loreSelect";
 import type { LoreFacet } from "../../lib/lore";
 import {
@@ -722,7 +728,8 @@ export function AiPanel() {
   const { t, i18n } = useTranslation();
   const {
     isRunning, output, error, usage, agentLog, loreReport,
-    runTask, abort, clearOutput, selection, selectionRange, requestedTask, setRequestedTask,
+    runTask, abort, clearOutput, selection, selectionRange, selectionSource,
+    clearSelectionFrom, requestedTask, setRequestedTask,
   } = useAiTaskStore();
   const { models, providers, prompts, activeModelId, activePromptId, setActivePrompt } = useAiStore();
   // The focused document — one atomic read of "which file" + "its text", so the
@@ -850,25 +857,10 @@ export function AiPanel() {
   // selection was* — appending it to the end of the document (the only thing
   // this panel used to do) silently duplicated the passage instead. Resolved at
   // apply time, not run time: the author may have kept typing while it streamed.
-  const replaceRange = (() => {
-    if (selectedTask !== "polish" && selectedTask !== "rewrite") return null;
-    if (!selection) return null;
-    if (selectionRange && content.slice(selectionRange.from, selectionRange.to) === selection) {
-      return selectionRange;
-    }
-    // Offsets went stale (edits above it, or a preview-mode selection with no
-    // range at all) — fall back to a verbatim search. Two guards, because unlike
-    // every other selection lookup in the app this one *overwrites* prose:
-    //   • only an exact match counts. rag.ts's locateSelectionOffset has a
-    //     normalized fallback, but the span it reports isn't `selection.length`
-    //     long, so it can't be turned into a replace range;
-    //   • the match must be unique. Repeated lines are ordinary in a draft, and
-    //     silently rewriting the *last* one would destroy a passage the author
-    //     never selected. Ambiguous → fall through to append, which is lossless.
-    const first = content.indexOf(selection);
-    if (first < 0 || first !== content.lastIndexOf(selection)) return null;
-    return { from: first, to: first + selection.length };
-  })();
+  const replaceRange =
+    selectedTask === "polish" || selectedTask === "rewrite"
+      ? resolveEditRange(content, selection, selectionRange, selectionSource)
+      : null;
 
   // Where a continuation attaches. Same resolver assembleContext anchors the
   // prompt to, so the passage lands exactly where it was written from — this
@@ -898,6 +890,20 @@ export function AiPanel() {
     const pos = Math.min(continueAnchor, view.state.doc.length);
     view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
     view.focus();
+  };
+
+  /**
+   * Drop the current edit target.
+   *
+   * A committed selection previously had no way out except switching files: it
+   * kept the task armed against a passage the author may have moved on from.
+   * Marked ranges clear through the editor (which also unpaints them); dragged
+   * ones clear in the store.
+   */
+  const dismissTarget = () => {
+    const view = useEditorStore.getState().editorView;
+    if (selectionSource === "marker" && view) clearTarget(view);
+    else clearSelectionFrom("commit");
   };
 
   /** Put the caret back on the passage this task will edit. */
@@ -1134,7 +1140,11 @@ export function AiPanel() {
                   {!isContinue && selection && (
                     <div className={styles.targetCard}>
                       <span className={styles.targetLabel}>
-                        {t("ai.panel.targetSummary", {
+                        {/* Naming the source ties the card to the band painted
+                            in the document, so a highlight is never unexplained. */}
+                        {t(selectionSource === "marker"
+                          ? "ai.panel.targetSummaryMarked"
+                          : "ai.panel.targetSummary", {
                           defaultValue: "{{task}}选区 · 第 {{para}} 段, {{chars}} 字",
                           task: taskLabel,
                           para: paragraphIndexAt(content, selectionRange?.from ?? 0),
@@ -1147,6 +1157,10 @@ export function AiPanel() {
                           {t("ai.panel.locateSelection", { defaultValue: "在正文中定位" })}
                         </button>
                       )}
+                      <button className={styles.linkBtn} onClick={dismissTarget}>
+                        <X size={10} strokeWidth={1.8} />
+                        {t("ai.panel.clearTarget", { defaultValue: "取消目标" })}
+                      </button>
                     </div>
                   )}
                   {needsSelection && (

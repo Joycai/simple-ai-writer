@@ -3,6 +3,7 @@ import {
   assembleContext,
   bundleToMessages,
   resolveAppendAnchor,
+  resolveEditRange,
   spliceContinuation,
 } from "../context/rag";
 import type { LoreIndex } from "../lore";
@@ -357,5 +358,50 @@ describe("spliceContinuation", () => {
   it("splits a paragraph cleanly when the anchor lands mid-sentence", () => {
     const doc = "前半后半";
     expect(spliceContinuation(doc, 2, "插入。")).toBe("前半\n\n插入。\n\n后半");
+  });
+});
+
+// Polish/rewrite overwrite prose, so "where" has to be right or not answered
+// at all — null means the caller appends, which is lossless.
+describe("resolveEditRange", () => {
+  const doc = "第一段。\n\n第二段。\n\n第三段。";
+  const from = doc.indexOf("第二段。");
+  const range = { from, to: from + "第二段。".length };
+
+  it("trusts offsets that still describe the document", () => {
+    expect(resolveEditRange(doc, "第二段。", range, "commit")).toEqual(range);
+    expect(resolveEditRange(doc, "第二段。", range, "marker")).toEqual(range);
+  });
+
+  it("relocates a dragged selection whose offsets went stale", () => {
+    const edited = "新开头。\n\n" + doc;
+    expect(resolveEditRange(edited, "第二段。", range, "commit")).toEqual({
+      from: edited.indexOf("第二段。"),
+      to: edited.indexOf("第二段。") + 4,
+    });
+  });
+
+  it("refuses to relocate a MARKED range whose offsets went stale", () => {
+    // A marked range is maintained by the editor. If its offsets have stopped
+    // describing the document, searching for the text and overwriting whatever
+    // turns up is not a recovery — it is a different bug with worse blast radius.
+    const edited = "新开头。\n\n" + doc;
+    expect(resolveEditRange(edited, "第二段。", range, "marker")).toBeNull();
+  });
+
+  it("refuses an ambiguous match rather than overwriting the wrong copy", () => {
+    const repeated = "他说。\n\n中间。\n\n他说。";
+    expect(resolveEditRange(repeated, "他说。", null, "commit")).toBeNull();
+  });
+
+  it("locates a preview-origin selection that carries no offsets", () => {
+    expect(resolveEditRange(doc, "第三段。", null, "commit")).toEqual({
+      from: doc.indexOf("第三段。"),
+      to: doc.length,
+    });
+  });
+
+  it("has nowhere to act with no selection at all", () => {
+    expect(resolveEditRange(doc, "", null, null)).toBeNull();
   });
 });
