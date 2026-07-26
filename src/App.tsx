@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import "./styles/global.css";
 import { TitleBar } from "./components/layout/TitleBar";
@@ -25,9 +25,9 @@ export default function App() {
     mainView,
     showCommandPalette, setShowCommandPalette,
     showAiDrawer, aiDrawerMode, setShowAiDrawer,
+    showSettings, settingsTab, openSettings, closeSettings,
   } = useAppStore();
   const { loadConfig } = useAiStore();
-  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     loadConfig();
@@ -82,7 +82,7 @@ export default function App() {
           ["--sidebar-width" as any]: `${sidebarWidth}px`,
         }}
       >
-        <IconRail onOpenSettings={() => setShowSettings(true)} />
+        <IconRail onOpenSettings={() => openSettings()} />
         {!sidebarCollapsed && mainView === "editor" && <Sidebar />}
         {!sidebarCollapsed && mainView === "editor" && (
           <ResizeHandle onDelta={(d) => setSidebarWidth((prev) => prev + d)} />
@@ -110,7 +110,9 @@ export default function App() {
       </div>
 
       <AnimatePresence>
-        {showSettings && <SettingsModal key="settings" onClose={() => setShowSettings(false)} />}
+        {showSettings && (
+          <SettingsModal key="settings" initialTab={settingsTab} onClose={closeSettings} />
+        )}
       </AnimatePresence>
       <AiDrawer />
       <InlineAiBubble />

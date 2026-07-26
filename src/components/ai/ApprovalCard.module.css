@@ -1,108 +1,128 @@
 /* Pending manuscript-edit approval card (L2 write review). */
 
 .card {
-  border: 1px solid var(--color-accent);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  border-left: 2px solid var(--color-sienna);
   background: var(--color-bg-surface);
-  overflow: hidden;
 }
 
 .header {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--space-2);
-  padding: 6px var(--space-3);
-  background: var(--color-bg-elevated);
-  font-size: var(--font-size-xs);
-  color: var(--color-text-primary);
-  font-weight: 600;
+  padding: 7px var(--space-3);
+  border-bottom: 1px solid var(--color-border-soft);
 }
-.headerIcon { color: var(--color-accent); display: flex; flex-shrink: 0; }
+.headerTitle {
+  font: 500 11px/1.5 var(--font-sans);
+  letter-spacing: 0.12em;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
 .headerFile {
-  margin-left: auto;
-  color: var(--color-text-muted);
-  font-weight: 400;
-  font-size: 10px;
+  min-width: 0;
+  font: 400 10px/1.5 var(--font-mono);
+  color: var(--color-text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 45%;
+}
+.headerDelta {
+  margin-left: auto;
+  flex-shrink: 0;
+  font: 400 10px/1.5 var(--font-mono);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .body {
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-3);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
 
 .reason {
-  font-size: 11px;
-  color: var(--color-text-secondary);
-  font-style: italic;
-}
-
-.blockLabel {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  font: 400 11px/1.7 var(--font-sans);
   color: var(--color-text-muted);
-  margin-bottom: 2px;
 }
 
-.textBlock {
-  font-size: 11px;
-  line-height: 1.6;
+.replaceBlock,
+.findBlock {
+  margin: 0;
+  font: 400 13px/1.9 var(--font-serif);
   white-space: pre-wrap;
   word-break: break-word;
   background: var(--color-bg-elevated);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2);
-  max-height: 140px;
+  padding: 10px 12px;
+  max-height: 180px;
   overflow-y: auto;
-  margin: 0;
+  color: var(--color-text-primary);
 }
-.findBlock { border-left: 2px solid var(--color-error); }
-.replaceBlock { border-left: 2px solid var(--color-accent); }
+.findBlock {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  border-left: 2px solid var(--color-error);
+}
+
+.originalToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font: 400 10px/1.5 var(--font-sans);
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.originalToggle:hover { color: var(--color-sienna); }
 
 .footer {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-border-soft);
 }
 
 .rejectInput {
   flex: 1;
   min-width: 0;
-  font-size: 11px;
-  padding: 3px var(--space-2);
+  font: 400 11px/1.6 var(--font-sans);
+  padding: 4px var(--space-2);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-surface);
+  background: transparent;
   color: var(--color-text-primary);
+  outline: none;
+  transition: border-color var(--transition-fast);
 }
-.rejectInput::placeholder { color: var(--color-text-muted); }
+.rejectInput::placeholder { color: var(--color-text-ghost); }
+.rejectInput:focus { border-color: var(--color-sienna); }
 
 .btnReject {
-  padding: var(--space-1) var(--space-3);
-  background: var(--color-bg-elevated);
+  padding: 4px 12px;
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
   color: var(--color-text-secondary);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
-  transition: background var(--transition-fast);
+  font: 500 11px/1.6 var(--font-sans);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
 }
-.btnReject:hover { background: var(--color-border); }
+.btnReject:hover:not(:disabled) { color: var(--color-error); border-color: var(--color-error); }
+.btnReject:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .btnApprove {
-  padding: var(--space-1) var(--space-3);
-  background: var(--color-accent);
-  color: #fff;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-xs);
-  font-weight: 500;
+  padding: 4px 14px;
+  background: var(--color-sienna);
+  border: none;
+  color: var(--color-card);
+  font: 500 11px/1.6 var(--font-sans);
+  cursor: pointer;
   transition: background var(--transition-fast);
 }
-.btnApprove:hover { background: var(--color-accent-hover); }
+.btnApprove:hover:not(:disabled) { background: var(--color-sienna-hover); }
+.btnApprove:disabled { opacity: 0.4; cursor: not-allowed; }

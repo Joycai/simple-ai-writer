@@ -21,7 +21,7 @@ import { loadApiKey } from "../lib/keyStore";
 import { getDb } from "../lib/project";
 import { useAiStore } from "./aiStore";
 import { useProjectStore } from "./projectStore";
-import { useEditorStore } from "./editorStore";
+import { getWritingFocus, useEditorStore } from "./editorStore";
 
 /** Tail of the previous summary handed to the next segment for continuity. */
 const PREV_TAIL_CHARS = 400;
@@ -189,13 +189,16 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
   chapterGenController: null,
 
   loadForActiveFile: async () => {
-    const { projectPath, activeFilePath } = useProjectStore.getState();
+    const { projectPath } = useProjectStore.getState();
+    // Focus, not activeFilePath: the memory must describe the same document the
+    // editor is actually holding, or a mid-switch load pairs one chapter's
+    // memory with another chapter's text (see editorStore.WritingFocus).
+    const { filePath: activeFilePath, text: doc } = getWritingFocus();
     if (!projectPath || !activeFilePath) {
       set({ docPath: null, memory: null, freshness: null, error: null, notice: null });
       return;
     }
     const memory = await loadMemory(projectPath, activeFilePath);
-    const doc = useEditorStore.getState().content;
     set({
       docPath: activeFilePath,
       memory,

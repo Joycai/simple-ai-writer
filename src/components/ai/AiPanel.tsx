@@ -1,14 +1,33 @@
-import { useState, useRef, useEffect } from "react";
-import { AnimatePresence, motion } from "motion/react";
+/**
+ * 生成面板 — the task-driven half of the AI assistant (续写 / 重写 / 润色 /
+ * 总结 / 自定义).
+ *
+ * Two columns:
+ *   left  — everything that shapes the request, in the order the author thinks
+ *           about it: what task, on what text, inside what context budget, with
+ *           which lore. A sticky footer carries the cost forecast + run button.
+ *   right — what the run produced: which lore was actually injected, the
+ *           execution log, and the streamed result.
+ *
+ * The context-allocation bar is the panel's centrepiece: it forecasts, live,
+ * how the model's window will be divided *before* anything is sent, so the
+ * author can trade recap for lore (or the reverse) with the chips right under
+ * it instead of guessing.
+ */
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight, Square, Play, BookMarked, Sparkles, Layers, Pin } from "lucide-react";
+import {
+  ChevronDown, ChevronRight, Copy, Crosshair, Layers, Pin, Play, RotateCw, Square,
+} from "lucide-react";
 import { useAiTaskStore, type TaskKind } from "../../stores/aiTaskStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { AgentLog } from "./AgentLog";
 import { ApprovalCard } from "./ApprovalCard";
 import { useAiStore } from "../../stores/aiStore";
 import { useAppStore, LORE_BUDGET_MIN, LORE_BUDGET_MAX } from "../../stores/appStore";
-import { useEditorStore } from "../../stores/editorStore";
+import { focusBlockedByImage, useEditorStore, useWritingFocus } from "../../stores/editorStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useMemoryStore } from "../../stores/memoryStore";
 import { useProjectStore } from "../../stores/projectStore";
@@ -20,14 +39,22 @@ import {
   MEMORY_SUGGEST_THRESHOLD_CHARS,
 } from "../../lib/context/memory";
 import { LORE_CATEGORIES } from "../../lib/lore";
-import { RECENT_WINDOW_MIN_CHARS, STATIC_LORE_BUDGET_MAX_TOKENS } from "../../lib/context/budget";
+import {
+  BOOK_PREV_TAIL_CHARS, BOOK_PREV_TAIL_NEAR_START_CHARS,
+} from "../../lib/context/bookContext";
+import {
+  fixedContextChars, measureCharsPerToken, planContextBudget,
+  RECENT_WINDOW_MIN_CHARS, STATIC_LORE_BUDGET_MAX_TOKENS,
+} from "../../lib/context/budget";
+import { contextLabel } from "../../lib/ai/modelLabel";
+import { MOD_KEY } from "../../lib/platform";
 import { panelFade, springPanel } from "../../lib/motion";
 import styles from "./AiPanel.module.css";
 
 const TASK_OPTIONS: { kind: TaskKind; labelKey: string; descKey: string }[] = [
   { kind: "continue", labelKey: "ai.tasks.continue", descKey: "ai.tasks.continueDesc" },
-  { kind: "polish",   labelKey: "ai.tasks.polish",   descKey: "ai.tasks.polishDesc" },
   { kind: "rewrite",  labelKey: "ai.tasks.rewrite",  descKey: "ai.tasks.rewriteDesc" },
+  { kind: "polish",   labelKey: "ai.tasks.polish",   descKey: "ai.tasks.polishDesc" },
   { kind: "summary",  labelKey: "ai.tasks.summary",  descKey: "ai.tasks.summaryDesc" },
 ];
 
@@ -36,6 +63,16 @@ const CONTEXT_CHARS_OPTIONS = [0, 500, 1000, 2000];
 /** Verbatim window size used by tasks without a contextChars picker
  *  (continue/custom). Owned by lib/context/budget so it can't drift. */
 const DEFAULT_DETAIL_SPAN = RECENT_WINDOW_MIN_CHARS;
+
+/**
+ * Lore injection token-budget presets (see loreSelect / appStore). Presets cover
+ * the common tiers; the adjacent number field takes any value in
+ * [LORE_BUDGET_MIN, LORE_BUDGET_MAX] for large-context models.
+ */
+const LORE_BUDGET_OPTIONS = [600, 2000, 8000, 32000];
+
+/** Context-window utilization presets (see lib/context/budget). */
+const UTILIZATION_OPTIONS = [0.25, 0.5, 0.75, 0.9];
 
 // Pinned-lore selection is persisted per project (keyed by project path) so the
 // user doesn't have to re-check the same entities on every reload / task.
@@ -59,13 +96,232 @@ function savePinnedLore(projectPath: string | null, paths: string[]): void {
   }
 }
 
-// Execution log rendering lives in the shared <AgentLog> component
-// (components/ai/AgentLog.tsx), also used by the lore AI modals.
+/** Compact token count: 1000000 → "1M", 32000 → "32k", 600 → "600".
+ *  Shares contextLabel's scale so a window reads the same here and in the
+ *  model picker's badge. */
+function formatBudget(n: number): string {
+  return contextLabel(n) ?? String(n);
+}
+
+/** File name without its directory or `.md` extension. */
+function basename(path: string): string {
+  return (path.split(/[\\/]/).pop() ?? path).replace(/\.md$/i, "");
+}
+
+/** Which paragraph (1-based, blank-line separated) an offset falls in. */
+function paragraphIndexAt(text: string, offset: number): number {
+  if (offset <= 0) return 1;
+  return text.slice(0, offset).split(/\n{2,}/).length;
+}
+
+/** Small uppercase section heading with an optional right-aligned meta slot. */
+function SectionHead({
+  label, meta, action,
+}: { label: string; meta?: React.ReactNode; action?: React.ReactNode }) {
+  return (
+    <div className={styles.sectionHead}>
+      <span className={styles.sectionLabel}>{label}</span>
+      {(meta || action) && (
+        <span className={styles.sectionRight}>
+          {meta && <span className={styles.sectionMeta}>{meta}</span>}
+          {action}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ─── Context allocation forecast ──────────────────────────────────────────────
+
+interface ContextForecast {
+  /** Ordered bar segments; `chars` sum to the request's whole input ceiling. */
+  segments: { key: "recent" | "lore" | "memory" | "free"; chars: number }[];
+  charsPerToken: number;
+  /** Ceiling this request may spend on input (tokens). */
+  ceilingTokens: number;
+  /** Estimated tokens the request will actually spend. */
+  usedTokens: number;
+  /** Tokens held back for the reply. */
+  reservedOutputTokens: number;
+}
 
 /**
- * Story-memory status strip shown above the task config: coverage / staleness,
- * a create-update button, and — per the "checkpoint" UX — a warning banner when
- * the user is about to run a task whose pre-window text is largely uncovered.
+ * Live pre-flight forecast of how the model's window gets divided.
+ *
+ * Mirrors the planning `aiTaskStore.runTask` performs for real, minus what
+ * needs disk I/O (the book-context build, the actual lore selection). It is a
+ * forecast, not a record: the realized split is what the run reports afterwards.
+ * Returns null when the model declares no context size — there is no plan to
+ * show in that case, only the static-fallback notice.
+ */
+function useContextForecast(opts: {
+  contextSize: number;
+  utilization: number;
+  loreBudgetTokens: number;
+  systemPromptChars: number;
+  instructionChars: number;
+  selectionChars: number;
+  outlineChars: number;
+  knowledgeChars: number;
+  documentText: string;
+  anchorOffset: number;
+  /** Explicit 参考上文 choice; undefined for tasks without the picker. */
+  recentWindowChars: number | undefined;
+  isContinue: boolean;
+  replyChars: number | undefined;
+  memoryChars: number;
+}): ContextForecast | null {
+  const {
+    contextSize, utilization, loreBudgetTokens, systemPromptChars, instructionChars,
+    selectionChars, outlineChars, knowledgeChars, documentText, anchorOffset,
+    recentWindowChars, isContinue, replyChars, memoryChars,
+  } = opts;
+
+  return useMemo(() => {
+    if (contextSize <= 0) return null;
+    const charsPerToken = measureCharsPerToken(documentText);
+    const fixedChars = fixedContextChars({
+      systemPromptChars,
+      taskInstructionChars: instructionChars,
+      selectionChars,
+      outlineChars,
+      knowledgeChars,
+      prevChapterTailChars: isContinue ? BOOK_PREV_TAIL_CHARS : 0,
+    });
+    const plan = planContextBudget({
+      contextSize,
+      utilization,
+      loreBudgetTokens,
+      fixedChars,
+      recentWindowChars,
+      availableRecentChars: Math.max(0, anchorOffset),
+      hasMemory: memoryChars > 0,
+      includeBookContext: isContinue,
+      replyChars,
+      charsPerToken,
+    });
+
+    // Clip each layer to what actually exists — a budget the manuscript can't
+    // fill is headroom, not usage, and showing it as usage would make the bar
+    // lie about how much room is left for lore.
+    const recent = Math.min(plan.recentWindowChars, Math.max(0, anchorOffset));
+    const lore = plan.loreChars;
+    const memory = Math.min(plan.memoryChars, memoryChars) + plan.bookPriorChars;
+
+    const ceilingChars = Math.floor(plan.inputCeilingTokens * charsPerToken);
+    const free = Math.max(0, ceilingChars - fixedChars - recent - lore - memory);
+    const toTokens = (chars: number) => Math.round(chars / charsPerToken);
+
+    return {
+      segments: [
+        { key: "recent", chars: recent },
+        { key: "lore", chars: lore },
+        { key: "memory", chars: memory },
+        { key: "free", chars: free },
+      ],
+      charsPerToken,
+      ceilingTokens: plan.inputCeilingTokens,
+      usedTokens: toTokens(fixedChars + recent + lore + memory),
+      reservedOutputTokens: plan.reservedOutputTokens,
+    };
+  }, [
+    contextSize, utilization, loreBudgetTokens, systemPromptChars, instructionChars,
+    selectionChars, outlineChars, knowledgeChars, documentText, anchorOffset,
+    recentWindowChars, isContinue, replyChars, memoryChars,
+  ]);
+}
+
+/** Stacked bar + legend + the 窗口占用 control that resizes the whole budget. */
+function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
+  const { t } = useTranslation();
+  const contextUtilization = useAppStore((s) => s.contextUtilization);
+  const setContextUtilization = useAppStore((s) => s.setContextUtilization);
+  const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId));
+  const contextSize = activeModel?.contextSize ?? 0;
+
+  const LEGEND: Record<string, { labelKey: string; fallback: string }> = {
+    recent: { labelKey: "ai.panel.allocRecent", fallback: "近期" },
+    lore:   { labelKey: "ai.panel.allocLore",   fallback: "设定" },
+    memory: { labelKey: "ai.panel.allocMemory", fallback: "前情" },
+    free:   { labelKey: "ai.panel.allocFree",   fallback: "余量" },
+  };
+
+  const total = forecast ? forecast.segments.reduce((n, s) => n + s.chars, 0) : 0;
+
+  return (
+    <div className={styles.section}>
+      <SectionHead
+        label={t("ai.panel.contextAllocation", { defaultValue: "上下文分配" })}
+        meta={
+          forecast
+            ? `${formatBudget(forecast.ceilingTokens)} / ${formatBudget(contextSize)} tk`
+            : undefined
+        }
+      />
+
+      {forecast && total > 0 ? (
+        <>
+          <div className={styles.allocBar}>
+            {forecast.segments.map((seg) => (
+              seg.chars > 0 && (
+                <span
+                  key={seg.key}
+                  className={`${styles.allocSeg} ${styles[`allocSeg_${seg.key}`]}`}
+                  style={{ flexGrow: seg.chars }}
+                  title={`${t(LEGEND[seg.key].labelKey, { defaultValue: LEGEND[seg.key].fallback })} ≈ ${formatBudget(Math.round(seg.chars / forecast.charsPerToken))} tk`}
+                />
+              )
+            ))}
+          </div>
+          <div className={styles.allocLegend}>
+            {forecast.segments.map((seg) => (
+              <span key={seg.key} className={styles.allocLegendItem}>
+                <span className={`${styles.allocSwatch} ${styles[`allocSeg_${seg.key}`]}`} />
+                {t(LEGEND[seg.key].labelKey, { defaultValue: LEGEND[seg.key].fallback })}
+                <span className={styles.allocLegendValue}>
+                  {formatBudget(Math.round(seg.chars / forecast.charsPerToken))}
+                </span>
+              </span>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className={styles.hintLine}>
+          {t("ai.panel.contextUtilizationUnset")}
+        </div>
+      )}
+
+      <div className={styles.controlRow}>
+        <span className={styles.controlLabel}>
+          {t("ai.panel.contextUtilization", { defaultValue: "上下文利用率" })}
+        </span>
+        <div className={styles.chipGroup}>
+          {UTILIZATION_OPTIONS.map((r) => (
+            <button
+              key={r}
+              className={`${styles.chip} ${Math.abs(contextUtilization - r) < 0.001 ? styles.chipActive : ""}`}
+              onClick={() => setContextUtilization(r)}
+              disabled={contextSize <= 0}
+              title={contextSize > 0
+                ? t("ai.panel.contextUtilizationHint", {
+                    tokens: Math.floor(contextSize * r).toLocaleString(),
+                  })
+                : t("ai.panel.contextUtilizationUnset")}
+            >
+              {Math.round(r * 100)}%
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Story memory ─────────────────────────────────────────────────────────────
+
+/**
+ * 前情摘要 strip: coverage as a progress bar, plus the checkpoint warning when
+ * the request is about to skip a large uncovered stretch of the document.
  */
 function MemorySection({ detailSpan, appendMode }: { detailSpan: number; appendMode: boolean }) {
   const { t } = useTranslation();
@@ -101,58 +357,75 @@ function MemorySection({ detailSpan, appendMode }: { detailSpan: number; appendM
   // Short docs without a memory need no strip at all.
   if (!memory && content.length < MEMORY_MIN_DOC_CHARS) return null;
 
-  const status = memory
-    ? t("ai.memory.statusCovered", {
-        covered: freshCovered.toLocaleString(),
-        total: content.length.toLocaleString(),
-      }) + (staleCount > 0 ? t("ai.memory.statusStale", { count: staleCount }) : "")
-    : t("ai.memory.statusNone");
+  const pct = content.length > 0 ? Math.min(100, Math.round((freshCovered / content.length) * 100)) : 0;
+  const tail = Math.max(0, content.length - freshCovered);
 
   return (
-    <div className={styles.memorySection}>
-      <div className={styles.memoryRow}>
-        <span className={styles.memoryLabel}>
-          <BookMarked size={11} strokeWidth={1.8} />
-          {t("ai.memory.title")}
-        </span>
-        <span className={styles.memoryStatus}>
-          {isGenerating && progress
+    <div className={styles.section}>
+      <SectionHead
+        label={t("ai.memory.title")}
+        meta={
+          isGenerating && progress
             ? t("ai.memory.generating", { done: progress.done, total: progress.total })
-            : status}
-        </span>
-        {isGenerating ? (
-          <button className={styles.memoryBtn} onClick={abort}>
-            {t("ai.panel.stop")}
-          </button>
-        ) : (
-          <button className={styles.memoryBtn} onClick={() => void generate()}>
-            {memory ? t("ai.memory.btnUpdate") : t("ai.memory.btnCreate")}
-          </button>
-        )}
+            : memory
+              ? t("ai.memory.coverage", {
+                  defaultValue: "{{covered}} / {{total}} 字已摘要 {{pct}}%",
+                  covered: freshCovered.toLocaleString(),
+                  total: content.length.toLocaleString(),
+                  pct,
+                })
+              : t("ai.memory.statusNone")
+        }
+        action={
+          isGenerating ? (
+            <button className={styles.linkBtn} onClick={abort}>{t("ai.panel.stop")}</button>
+          ) : (
+            <button className={styles.linkBtn} onClick={() => void generate()}>
+              {memory ? t("ai.memory.btnUpdate") : t("ai.memory.btnCreate")}
+            </button>
+          )
+        }
+      />
+
+      <div className={styles.progressTrack}>
+        <span
+          className={`${styles.progressFill} ${staleCount > 0 ? styles.progressFillStale : ""}`}
+          style={{ width: `${pct}%` }}
+        />
       </div>
+
+      {memory && tail > 0 && (
+        <div className={styles.hintLine}>
+          {t("ai.memory.tailNote", {
+            defaultValue: "剩余 {{chars}} 字为最近段落，将以原文进入提示。",
+            chars: tail.toLocaleString(),
+          })}
+        </div>
+      )}
+      {staleCount > 0 && (
+        <div className={styles.hintLine}>
+          {t("ai.memory.statusStale", { count: staleCount }).replace(/^[，,]\s*/, "")}
+        </div>
+      )}
       {(needsCreate || needsUpdate) && !isGenerating && (
-        <div className={styles.memoryHint}>
+        <div className={styles.warnLine}>
           {needsCreate
             ? t("ai.memory.hintCreate", { chars: preDetail.toLocaleString() })
             : t("ai.memory.hintUpdate", { chars: gap.toLocaleString() })}
         </div>
       )}
-      {notice && !isGenerating && <div className={styles.memoryNotice}>{notice}</div>}
-      {error && <div className={styles.memoryError}>{error}</div>}
+      {notice && !isGenerating && <div className={styles.hintLine}>{notice}</div>}
+      {error && <div className={styles.errorLine}>{error}</div>}
     </div>
   );
 }
 
-/** Collapsible extra-options section used inside the "continue" config panel. */
+// ─── Lore picker ──────────────────────────────────────────────────────────────
+
+/** Collapsible extra-options section (outline / additional knowledge). */
 function ExtraSection({
-  label,
-  badge,
-  children,
-}: {
-  label: string;
-  badge?: string;
-  children: React.ReactNode;
-}) {
+  label, badge, children,
+}: { label: string; badge?: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
     <div className={styles.extraSection}>
@@ -169,55 +442,25 @@ function ExtraSection({
 }
 
 /**
- * Lore injection token-budget presets (see loreSelect / appStore). Presets cover
- * the common tiers; the adjacent number field takes any value in
- * [LORE_BUDGET_MIN, LORE_BUDGET_MAX] for large-context models.
+ * 指定设定 — two-level tree: pin whole entities, or expand one and pin
+ * individual facets ("dirPath#file"). Facet pins imply the entity core, and
+ * pinning two same-group facets overrides their exclusion.
  */
-const LORE_BUDGET_OPTIONS = [600, 2000, 8000, 32000];
-
-/** Context-window utilization presets (see lib/context/budget). */
-const UTILIZATION_OPTIONS = [0.25, 0.5, 0.75, 0.9];
-
-/** Convert a planned char budget back to tokens for display. */
-function toTokens(chars: number, charsPerToken: number): number {
-  return Math.round(chars / (charsPerToken > 0 ? charsPerToken : 1));
-}
-
-/** Compact token count: 32000 → "32k", 1500 → "1.5k", 600 → "600". */
-function formatBudget(n: number): string {
-  if (n < 1000) return String(n);
-  const k = n / 1000;
-  return `${Number.isInteger(k) ? k : k.toFixed(1)}k`;
-}
-
-/**
- * Reusable lore reference picker — two-level tree: pin whole entities, or
- * expand one and pin individual facets ("dirPath#file"). Facet pins imply the
- * entity core, and pinning two same-group facets overrides their exclusion.
- */
-function LorePicker({
-  entities,
-  search,
-  setSearch,
-  selectedPaths,
-  toggle,
+function LoreSection({
+  entities, search, setSearch, selectedPaths, toggle, charsPerToken,
 }: {
   entities: { dirPath: string; name: string; categoryLabel: string; facets: LoreFacet[] }[];
   search: string;
   setSearch: (v: string) => void;
   selectedPaths: string[];
   toggle: (path: string) => void;
+  charsPerToken: number;
 }) {
   const { t } = useTranslation();
   const loreBudgetTokens = useAppStore((s) => s.loreBudgetTokens);
   const setLoreBudgetTokens = useAppStore((s) => s.setLoreBudgetTokens);
-  const contextUtilization = useAppStore((s) => s.contextUtilization);
-  const setContextUtilization = useAppStore((s) => s.setContextUtilization);
-  // Dynamic allocation needs a declared window; without one the recap layers
-  // fall back to fixed constants and the utilization control does nothing.
   const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId));
   const contextSize = activeModel?.contextSize ?? 0;
-  const contextAlloc = useAiTaskStore((s) => s.contextAlloc);
   // Without a declared window there is no dynamic plan *and* no pre-flight
   // check, so the planner hard-caps lore. Say so rather than silently ignoring
   // a bigger setting the author just typed in.
@@ -242,58 +485,111 @@ function LorePicker({
       return next;
     });
 
+  const estTk = (chars: number) => Math.ceil(chars / charsPerToken);
+
   return (
-    <>
+    <div className={styles.section}>
+      <SectionHead
+        label={t("ai.panel.continueLorePicker")}
+        action={
+          <div className={styles.chipGroup}>
+            {LORE_BUDGET_OPTIONS.map((n) => (
+              <button
+                key={n}
+                className={`${styles.chip} ${loreBudgetTokens === n ? styles.chipActive : ""}`}
+                onClick={() => { setBudgetDraft(null); setLoreBudgetTokens(n); }}
+                title={t("ai.panel.loreBudgetHint", {
+                  min: LORE_BUDGET_MIN,
+                  max: LORE_BUDGET_MAX.toLocaleString(),
+                })}
+              >
+                {formatBudget(n)}
+              </button>
+            ))}
+            <input
+              className={styles.budgetInput}
+              type="number"
+              min={LORE_BUDGET_MIN}
+              max={LORE_BUDGET_MAX}
+              step={100}
+              value={budgetDraft ?? String(loreBudgetTokens)}
+              onChange={(e) => setBudgetDraft(e.target.value)}
+              onBlur={commitBudgetDraft}
+              onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+              title={t("ai.panel.loreBudgetHint", {
+                min: LORE_BUDGET_MIN,
+                max: LORE_BUDGET_MAX.toLocaleString(),
+              })}
+              aria-label={t("ai.panel.loreBudget")}
+            />
+          </div>
+        }
+      />
+
       <input
-        className={styles.extraSearchInput}
+        className={styles.searchInput}
         placeholder={t("ai.panel.continueLoreSearch")}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
-      <div className={styles.lorePickerList}>
+
+      <div className={styles.loreList}>
         {entities.length === 0 ? (
-          <span className={styles.lorePickerEmpty}>{t("ai.panel.continueLoreEmpty")}</span>
+          <span className={styles.loreEmpty}>{t("ai.panel.continueLoreEmpty")}</span>
         ) : (
           entities.map((entity) => {
             const facets = entity.facets ?? [];
             const isExpanded = expanded.has(entity.dirPath);
+            const isPinned = selectedPaths.includes(entity.dirPath);
             const pinnedFacetCount = facets.filter((f) =>
               selectedPaths.includes(`${entity.dirPath}#${f.file}`)
             ).length;
+            const entityChars = facets.reduce((n, f) => n + f.charCount, 0);
             return (
               <div key={entity.dirPath}>
-                <label className={styles.lorePickerItem}>
+                <label className={`${styles.loreItem} ${isPinned ? styles.loreItemPinned : ""}`}>
                   <input
                     type="checkbox"
-                    checked={selectedPaths.includes(entity.dirPath)}
+                    checked={isPinned}
                     onChange={() => toggle(entity.dirPath)}
                   />
-                  <span className={styles.lorePickerName}>{entity.name}</span>
-                  <span className={styles.lorePickerCat}>{entity.categoryLabel}</span>
+                  <span className={styles.loreName}>{entity.name}</span>
+                  <span className={styles.loreCat}>{entity.categoryLabel}</span>
                   {facets.length > 0 && (
-                    <button
-                      className={styles.lorePickerExpand}
-                      onClick={(ev) => { ev.preventDefault(); toggleExpanded(entity.dirPath); }}
-                      title={t("ai.panel.loreFacets", { defaultValue: "特征" })}
-                    >
-                      <Layers size={10} strokeWidth={1.8} />
-                      {pinnedFacetCount > 0 ? `${pinnedFacetCount}/${facets.length}` : facets.length}
-                      {isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-                    </button>
+                    <>
+                      <span className={styles.loreCount}>
+                        {t("ai.panel.loreFacetCount", {
+                          defaultValue: "{{n}} 条",
+                          n: facets.length,
+                        })}
+                      </span>
+                      {(isPinned || pinnedFacetCount > 0) && entityChars > 0 && (
+                        <span className={styles.loreTk}>· {estTk(entityChars)}tk</span>
+                      )}
+                      <button
+                        className={styles.loreExpand}
+                        onClick={(ev) => { ev.preventDefault(); toggleExpanded(entity.dirPath); }}
+                        title={t("ai.panel.loreFacets")}
+                      >
+                        <Layers size={10} strokeWidth={1.8} />
+                        {pinnedFacetCount > 0 ? `${pinnedFacetCount}/${facets.length}` : ""}
+                        {isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+                      </button>
+                    </>
                   )}
                 </label>
                 {isExpanded && facets.map((f) => {
                   const pinPath = `${entity.dirPath}#${f.file}`;
                   return (
-                    <label key={pinPath} className={`${styles.lorePickerItem} ${styles.lorePickerFacet}`}>
+                    <label key={pinPath} className={`${styles.loreItem} ${styles.loreItemFacet}`}>
                       <input
                         type="checkbox"
                         checked={selectedPaths.includes(pinPath)}
                         onChange={() => toggle(pinPath)}
                       />
-                      <span className={styles.lorePickerName}>{f.title}</span>
-                      {f.group && <span className={styles.lorePickerGroup}>{f.group}</span>}
-                      <span className={styles.lorePickerCat}>~{Math.ceil(f.charCount / 3)} tk</span>
+                      <span className={styles.loreName}>{f.title}</span>
+                      {f.group && <span className={styles.loreGroup}>{f.group}</span>}
+                      <span className={styles.loreTk}>~{estTk(f.charCount)} tk</span>
                     </label>
                   );
                 })}
@@ -302,161 +598,125 @@ function LorePicker({
           })
         )}
       </div>
-      {/* Injection budget — how many tokens the 【设定资料】 block may use. */}
-      <div className={styles.loreBudgetRow}>
-        <span className={styles.loreBudgetLabel}>
-          {t("ai.panel.loreBudget", { defaultValue: "设定预算" })}
-        </span>
-        <div className={styles.continueLengthOptions}>
-          {LORE_BUDGET_OPTIONS.map((n) => (
-            <button
-              key={n}
-              className={`${styles.lengthChip} ${loreBudgetTokens === n ? styles.lengthChipActive : ""}`}
-              onClick={() => { setBudgetDraft(null); setLoreBudgetTokens(n); }}
-              title={t("ai.panel.loreBudgetHint", {
-                defaultValue: "【设定资料】最多占用的 token 数",
-                min: LORE_BUDGET_MIN,
-                max: LORE_BUDGET_MAX.toLocaleString(),
-              })}
-            >
-              {formatBudget(n)}
-            </button>
-          ))}
-        </div>
-        <input
-          className={styles.loreBudgetInput}
-          type="number"
-          min={LORE_BUDGET_MIN}
-          max={LORE_BUDGET_MAX}
-          step={100}
-          value={budgetDraft ?? String(loreBudgetTokens)}
-          onChange={(e) => setBudgetDraft(e.target.value)}
-          onBlur={commitBudgetDraft}
-          onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
-          title={t("ai.panel.loreBudgetHint", {
-            defaultValue: "【设定资料】最多占用的 token 数",
-            min: LORE_BUDGET_MIN,
-            max: LORE_BUDGET_MAX.toLocaleString(),
-          })}
-          aria-label={t("ai.panel.loreBudget", { defaultValue: "设定预算" })}
-        />
-      </div>
-      {/* Utilization — the share of the window one request may occupy. Caps how
-          much 【前情提要】/【全书前情】 may grow on a large-context model. */}
-      <div className={styles.loreBudgetRow}>
-        <span className={styles.loreBudgetLabel}>
-          {t("ai.panel.contextUtilization", { defaultValue: "上下文利用率" })}
-        </span>
-        <div className={styles.continueLengthOptions}>
-          {UTILIZATION_OPTIONS.map((r) => (
-            <button
-              key={r}
-              className={`${styles.lengthChip} ${Math.abs(contextUtilization - r) < 0.001 ? styles.lengthChipActive : ""}`}
-              onClick={() => setContextUtilization(r)}
-              disabled={contextSize <= 0}
-              title={contextSize > 0
-                ? t("ai.panel.contextUtilizationHint", {
-                    defaultValue: "单次请求最多占用模型上下文窗口的比例",
-                    tokens: Math.floor(contextSize * r).toLocaleString(),
-                  })
-                : t("ai.panel.contextUtilizationUnset", {
-                    defaultValue: "当前模型未设置「上下文大小」，前情层使用固定预算",
-                  })}
-            >
-              {Math.round(r * 100)}%
-            </button>
-          ))}
-        </div>
-      </div>
+
       {loreCapped && (
-        <div className={styles.contextPlanLine}>
-          {t("ai.panel.loreBudgetStaticCap", {
-            defaultValue: "模型未设置「上下文大小」，本次仅注入 {{cap}} tokens 设定",
-            cap: STATIC_LORE_BUDGET_MAX_TOKENS.toLocaleString(),
-          })}
-        </div>
-      )}
-      {contextAlloc?.dynamic && (
-        <div className={styles.contextPlanLine}>
-          {t("ai.panel.contextPlan", {
-            defaultValue: "上次分配：近期 {{recent}} · 设定 {{lore}} · 前情 {{memory}} · 全书 {{book}}",
-            recent: `${formatBudget(toTokens(contextAlloc.recentWindowChars, contextAlloc.charsPerToken))} tk`,
-            lore: `${formatBudget(toTokens(contextAlloc.loreChars, contextAlloc.charsPerToken))} tk`,
-            memory: `${formatBudget(toTokens(contextAlloc.memoryChars, contextAlloc.charsPerToken))} tk`,
-            book: `${formatBudget(toTokens(contextAlloc.bookPriorChars, contextAlloc.charsPerToken))} tk`,
-          })}
-        </div>
-      )}
-    </>
-  );
-}
-
-/** Post-assembly transparency: what got injected, what was dropped and why. */
-function LoreReportSection({ report }: { report: LoreActivationReport }) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(true);
-  const estTk = (chars: number) => Math.ceil(chars / 3);
-
-  const dropReason = (reason: string) =>
-    reason === "no-key" ? t("ai.panel.loreDropNoKey", { defaultValue: "未命中关键词" })
-    : reason === "group-lost" ? t("ai.panel.loreDropGroupLost", { defaultValue: "互斥组落选" })
-    : reason === "budget" ? t("ai.panel.loreDropBudget", { defaultValue: "超出预算" })
-    : t("ai.panel.loreDropManual", { defaultValue: "仅手动" });
-
-  return (
-    <div className={styles.loreReport}>
-      <button className={styles.agentStepsHeader} onClick={() => setOpen((v) => !v)}>
-        <span className={styles.agentStepsChevron}>
-          {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-        </span>
-        <span className={styles.agentStepsTitle}>
-          {t("ai.panel.loreReportTitle", { defaultValue: "本次注入设定" })}
-        </span>
-        <span className={styles.agentStepsCount}>
-          ({report.entities.length > 0
-            ? `~${estTk(report.usedChars)}/${estTk(report.budgetChars)} tk`
-            : t("ai.panel.loreReportEmpty", { defaultValue: "无" })})
-        </span>
-      </button>
-      {open && report.entities.length > 0 && (
-        <div className={styles.loreReportBody}>
-          {report.entities.map((e) => (
-            <div key={e.dirPath} className={styles.loreReportEntity}>
-              <span className={styles.loreReportName}>
-                {e.reason === "pinned" && <Pin size={9} strokeWidth={1.8} />}
-                {e.name}
-              </span>
-              {e.layers.filter((l) => l.kind !== "summary").map((l, i) => (
-                <span
-                  key={`${l.kind}-${l.file ?? i}`}
-                  className={styles.loreReportChip}
-                  title={l.matchedKeys?.length
-                    ? t("ai.panel.loreMatchedKeys", { keys: l.matchedKeys.join(", "), defaultValue: `命中：${l.matchedKeys.join(", ")}` })
-                    : undefined}
-                >
-                  {l.pinned && <Pin size={8} strokeWidth={1.8} />}
-                  {l.kind === "core"
-                    ? t("ai.panel.loreCore", { defaultValue: "核心" }) + (l.truncated ? "✂" : "")
-                    : l.title}
-                  <span className={styles.loreReportTk}>{estTk(l.chars)}tk</span>
-                </span>
-              ))}
-              {e.droppedFacets.map((d) => (
-                <span
-                  key={`drop-${d.file}`}
-                  className={`${styles.loreReportChip} ${styles.loreReportDropped}`}
-                  title={dropReason(d.reason)}
-                >
-                  {d.title}
-                </span>
-              ))}
-            </div>
-          ))}
+        <div className={styles.warnLine}>
+          {t("ai.panel.loreBudgetStaticCap", { cap: STATIC_LORE_BUDGET_MAX_TOKENS.toLocaleString() })}
         </div>
       )}
     </div>
   );
 }
+
+// ─── Results column ───────────────────────────────────────────────────────────
+
+/** Post-assembly transparency: what got injected, what was dropped and why. */
+function LoreReportSection({
+  report, charsPerToken, onRaiseBudget,
+}: { report: LoreActivationReport; charsPerToken: number; onRaiseBudget: () => void }) {
+  const { t } = useTranslation();
+  const estTk = (chars: number) => Math.ceil(chars / charsPerToken);
+
+  const dropReason = (reason: string) =>
+    reason === "no-key" ? t("ai.panel.loreDropNoKey")
+    : reason === "group-lost" ? t("ai.panel.loreDropGroupLost")
+    : reason === "budget" ? t("ai.panel.loreDropBudget")
+    : t("ai.panel.loreDropManual");
+
+  const overBudget = report.entities.some((e) =>
+    e.droppedFacets.some((d) => d.reason === "budget"));
+
+  return (
+    <div className={styles.resultSection}>
+      <SectionHead
+        label={t("ai.panel.loreReportTitle")}
+        meta={`${estTk(report.usedChars)} / ${estTk(report.budgetChars)} tk`}
+      />
+      {report.entities.length === 0 ? (
+        <div className={styles.hintLine}>{t("ai.panel.loreReportEmpty")}</div>
+      ) : (
+        report.entities.map((e) => (
+          <div key={e.dirPath} className={styles.injectedEntity}>
+            <div className={styles.injectedName}>
+              {e.reason === "pinned" && <Pin size={10} strokeWidth={1.8} />}
+              {e.name}
+            </div>
+            <div className={styles.chipRow}>
+              {e.layers.filter((l) => l.kind !== "summary").map((l, i) => (
+                <span
+                  key={`${l.kind}-${l.file ?? i}`}
+                  className={styles.injectedChip}
+                  title={l.matchedKeys?.length
+                    ? t("ai.panel.loreMatchedKeys", { keys: l.matchedKeys.join(", ") })
+                    : undefined}
+                >
+                  {l.pinned && <Pin size={8} strokeWidth={1.8} />}
+                  {l.kind === "core" ? t("ai.panel.loreCore") + (l.truncated ? "✂" : "") : l.title}
+                  <span className={styles.injectedTk}>{estTk(l.chars)}</span>
+                </span>
+              ))}
+            </div>
+            {e.droppedFacets.length > 0 && (
+              <div className={styles.chipRow}>
+                <span className={styles.droppedLabel}>
+                  {t("ai.panel.loreDroppedTitle", { defaultValue: "超出预算未注入" })}
+                </span>
+                {e.droppedFacets.map((d) => (
+                  <span
+                    key={`drop-${d.file}`}
+                    className={styles.droppedChip}
+                    title={dropReason(d.reason)}
+                  >
+                    {d.title}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ))
+      )}
+      {overBudget && (
+        <button className={styles.linkBtn} onClick={onRaiseBudget}>
+          {t("ai.panel.loreRaiseBudget", { defaultValue: "提高预算" })} →
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Error block with the two recoveries that are actually actionable here. */
+function ErrorBlock({ message, onRetry }: { message: string; onRetry: (() => void) | null }) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+
+  const copy = () => {
+    void navigator.clipboard.writeText(message).then(
+      () => { setCopied(true); setTimeout(() => setCopied(false), 1600); },
+      () => { /* clipboard may be blocked — the text is on screen either way */ },
+    );
+  };
+
+  return (
+    <div className={styles.errorBlock}>
+      <div className={styles.errorBody}>{message}</div>
+      <div className={styles.errorActions}>
+        {onRetry && (
+          <button className={styles.btnSecondary} onClick={onRetry}>
+            <RotateCw size={10} strokeWidth={1.8} /> {t("ai.panel.retry", { defaultValue: "重试" })}
+          </button>
+        )}
+        <button className={styles.btnSecondary} onClick={copy}>
+          <Copy size={10} strokeWidth={1.8} />
+          {copied
+            ? t("ai.panel.copied", { defaultValue: "已复制" })
+            : t("ai.panel.copyError", { defaultValue: "复制错误" })}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Panel ────────────────────────────────────────────────────────────────────
 
 export function AiPanel() {
   const { t, i18n } = useTranslation();
@@ -464,11 +724,19 @@ export function AiPanel() {
     isRunning, output, error, usage, agentLog, loreReport,
     runTask, abort, clearOutput, selection, selectionRange, requestedTask, setRequestedTask,
   } = useAiTaskStore();
-  const { models, providers, prompts, activeModelId, activePromptId, setActiveModel, setActivePrompt } = useAiStore();
-  const { content } = useEditorStore();
+  const { models, providers, prompts, activeModelId, activePromptId, setActivePrompt } = useAiStore();
+  // The focused document — one atomic read of "which file" + "its text", so the
+  // panel can never describe one document while the run targets another.
+  const focus = useWritingFocus();
+  const content = focus.text;
+  const activeFilePath = focus.filePath;
   const { index: loreIndex } = useLoreStore();
-  const activeFilePath = useProjectStore((s) => s.activeFilePath);
   const projectPath = useProjectStore((s) => s.projectPath);
+  const fileTree = useProjectStore((s) => s.fileTree);
+  const memory = useMemoryStore((s) => s.memory);
+  const loreBudgetTokens = useAppStore((s) => s.loreBudgetTokens);
+  const setLoreBudgetTokens = useAppStore((s) => s.setLoreBudgetTokens);
+  const contextUtilization = useAppStore((s) => s.contextUtilization);
 
   // Story memory follows the active document; staleness re-checks are hashed
   // over the whole doc, so debounce them behind typing.
@@ -480,9 +748,58 @@ export function AiPanel() {
     return () => clearTimeout(id);
   }, [content]);
 
-  const [selectedTask, setSelectedTask] = useState<TaskKind | null>(null);
+  // Continue is the default: the panel should open on a usable request, not on
+  // an empty shell that needs a click before it shows anything.
+  const [selectedTask, setSelectedTask] = useState<TaskKind>("continue");
   const [continueLength, setContinueLength] = useState(500);
   const [contextChars, setContextChars] = useState(1000);
+
+  // ── Opening mode ──────────────────────────────────────────────────────────
+  // A chapter with nothing in it has no 【近期内容】, so whatever bridge gets
+  // injected is the only prose in the prompt and "continue from the end" means
+  // "continue the previous chapter". Below the threshold the author decides
+  // explicitly instead of discovering it in the output.
+  const [openingMode, setOpeningMode] = useState<"bridge" | "standalone">("bridge");
+  const [bridgePath, setBridgePath] = useState<string | null>(null);
+  const [volumes, setVolumes] = useState<
+    { name: string; chapters: { path: string; title: string }[] }[]
+  >([]);
+
+  const wantsOpeningChoice =
+    selectedTask === "continue" && content.trim().length < BOOK_PREV_TAIL_NEAR_START_CHARS;
+
+  // The book's chapter spine, for the bridge picker. Loaded only when the
+  // control can actually appear — resolveVolumes reads the outline off disk.
+  useEffect(() => {
+    if (!wantsOpeningChoice || !projectPath) { setVolumes([]); return; }
+    let cancelled = false;
+    void (async () => {
+      const { resolveVolumes, chapterTitle } = await import("../../lib/context/outline");
+      const resolved = await resolveVolumes(projectPath, fileTree);
+      if (cancelled) return;
+      setVolumes(resolved.map((v) => ({
+        name: v.name,
+        chapters: v.chapters.map((c) => ({ path: c.path, title: chapterTitle(c) })),
+      })));
+    })();
+    return () => { cancelled = true; };
+  }, [wantsOpeningChoice, projectPath, fileTree]);
+
+  // Everything before this chapter in book order — bridging forward would be
+  // narratively backwards, so the picker only offers what precedes it. Spans
+  // volumes, which the automatic pick (same-volume only) cannot.
+  const bridgeCandidates = (() => {
+    const flat = volumes.flatMap((v) => v.chapters.map((c) => ({ ...c, volume: v.name })));
+    const idx = flat.findIndex((c) => c.path === activeFilePath);
+    return idx < 0 ? [] : flat.slice(0, idx);
+  })();
+
+  // Default to the chapter immediately before this one; re-evaluated whenever
+  // the spine or the focused document changes.
+  useEffect(() => {
+    setBridgePath(bridgeCandidates.length > 0 ? bridgeCandidates[bridgeCandidates.length - 1].path : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [volumes, activeFilePath]);
 
   // Lore picker state — initialized from persisted pins, reloaded on project switch.
   const [selectedLorePaths, setSelectedLorePaths] = useState<string[]>(() =>
@@ -525,6 +842,10 @@ export function AiPanel() {
   const activeProvider = activeModel ? providers.find((p) => p.id === activeModel.providerId) : null;
   const hasConfig = !!activeModel;
 
+  const isContinue = selectedTask === "continue";
+  const supportsExtras =
+    selectedTask === "polish" || selectedTask === "rewrite" || selectedTask === "summary";
+
   // Polish/rewrite edit a passage in place, so their result belongs *where the
   // selection was* — appending it to the end of the document (the only thing
   // this panel used to do) silently duplicated the passage instead. Resolved at
@@ -559,19 +880,30 @@ export function AiPanel() {
     clearOutput();
   };
 
-  const supportsExtras =
-    selectedTask === "polish" || selectedTask === "rewrite" || selectedTask === "summary";
+  /** Put the caret back on the passage this task will edit. */
+  const locateSelection = () => {
+    const view = useEditorStore.getState().editorView;
+    if (!view || !selectionRange) return;
+    const to = Math.min(selectionRange.to, view.state.doc.length);
+    const from = Math.min(selectionRange.from, to);
+    view.dispatch({ selection: { anchor: from, head: to }, scrollIntoView: true });
+    view.focus();
+  };
 
   const handleRun = () => {
-    if (!selectedTask) return;
     clearOutput();
     const manualLorePaths = selectedLorePaths.length > 0 ? selectedLorePaths : undefined;
     let extras: TaskExtras | undefined;
-    if (selectedTask === "continue") {
+    if (isContinue) {
       extras = {
         manualLorePaths,
         outline: outline.trim() || undefined,
         additionalKnowledge: additionalKnowledge.trim() || undefined,
+        // Only an explicit answer is sent. Above the threshold there is no
+        // question to answer and `undefined` leaves the automatic rule in place.
+        bridgeChapter: wantsOpeningChoice
+          ? (openingMode === "standalone" ? null : bridgePath)
+          : undefined,
       };
     } else if (supportsExtras) {
       extras = {
@@ -585,16 +917,26 @@ export function AiPanel() {
     runTask(
       kind,
       selectedTask === "custom" ? customInstr : undefined,
-      selectedTask === "continue" ? continueLength : undefined,
+      isContinue ? continueLength : undefined,
       extras,
     );
   };
 
   // Polish / rewrite / summary operate on the selected text — require one.
   const needsSelection = supportsExtras && !selection;
+  // An unsettled focus means the editor still holds the *previous* document.
+  // Blocking here turns a silent wrong-document run into a visible short wait.
   const canRun =
-    !!selectedTask && !isRunning && !needsSelection &&
+    hasConfig && !isRunning && !needsSelection && focus.settled &&
     (selectedTask !== "custom" || !!customInstr.trim());
+
+  // ⌘/Ctrl+Enter runs from anywhere in the panel, including the textareas.
+  const handlePanelKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && canRun) {
+      e.preventDefault();
+      handleRun();
+    }
+  };
 
   // Flatten lore index to searchable list
   const isZh = i18n.language.startsWith("zh");
@@ -639,150 +981,221 @@ export function AiPanel() {
     return !!entity && (entity.facets ?? []).some((f) => f.file === pin.facetFile);
   }).length;
 
+  // ── Context forecast ────────────────────────────────────────────────────────
+  const systemPrompt = prompts.find((p) => p.id === activePromptId)?.content
+    ?? t("ai.instructions.system");
+  const instructionText =
+    selectedTask === "custom" ? customInstr
+    : isContinue ? t("ai.instructions.continue", { length: continueLength })
+    : t(`ai.instructions.${selectedTask}`);
+  const memoryChars = memory?.segments.reduce((n, s) => n + s.summary.length, 0) ?? 0;
+
+  const forecast = useContextForecast({
+    contextSize: activeModel?.contextSize ?? 0,
+    utilization: contextUtilization,
+    loreBudgetTokens,
+    systemPromptChars: systemPrompt.length,
+    instructionChars: instructionText.length,
+    selectionChars: isContinue ? 0 : selection.length,
+    outlineChars: isContinue ? outline.length : 0,
+    knowledgeChars: isContinue ? additionalKnowledge.length : 0,
+    documentText: content,
+    // Same verification runTask applies — the forecast must describe the request
+    // that will actually be sent, not one built on an offset from another file.
+    anchorOffset:
+      selectionRange && content.slice(selectionRange.from, selectionRange.to) === selection
+        ? selectionRange.to
+        : content.length,
+    recentWindowChars: supportsExtras ? contextChars : undefined,
+    isContinue,
+    replyChars: isContinue ? continueLength : undefined,
+    memoryChars,
+  });
+  // Report/estimate conversions share the forecast's measured ratio when there
+  // is one, so the panel never shows two different token counts for one block.
+  const charsPerToken = forecast?.charsPerToken ?? 3;
+
+  /** 提高预算 → step the lore budget up to the next preset tier. */
+  const raiseLoreBudget = () => {
+    const next = LORE_BUDGET_OPTIONS.find((n) => n > loreBudgetTokens);
+    setLoreBudgetTokens(next ?? Math.min(LORE_BUDGET_MAX, loreBudgetTokens * 2));
+  };
+
+  const taskLabel = t(
+    selectedTask === "custom" ? "ai.tasks.custom" : `ai.tasks.${selectedTask}`,
+  );
+
   // Results pane shows something whenever a run is in flight or has produced output.
   const hasResults = isRunning || !!output || !!error || agentLog.length > 0 || !!usage;
 
   return (
-    <div className={styles.panel}>
+    <div className={styles.panel} onKeyDown={handlePanelKeyDown}>
       {/* ══════════ Config column ══════════ */}
       <div className={styles.configCol}>
         <div className={styles.configScroll}>
-          {/* Model selector */}
-          <div className={styles.configRow}>
-            <select
-              className={styles.select}
-              value={activeModelId ?? ""}
-              onChange={(e) => setActiveModel(e.target.value)}
-            >
-              <option value="">{t("ai.panel.selectModel")}</option>
-              {models.map((m) => {
-                const pname = providers.find((p) => p.id === m.providerId)?.name ?? "";
-                return (
-                  <option key={m.id} value={m.id}>
-                    {pname} / {m.name}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
-
-          {/* Prompt selector */}
-          {prompts.length > 0 && (
-            <div className={styles.configRow}>
-              <select
-                className={styles.select}
-                value={activePromptId ?? ""}
-                onChange={(e) => setActivePrompt(e.target.value)}
-              >
-                <option value="">{t("ai.panel.defaultSystemPrompt")}</option>
-                {prompts
-                  .filter((p) => p.scene === "system")
-                  .map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-              </select>
-            </div>
-          )}
-
           {!hasConfig ? (
             <div className={styles.emptyHint}>{t("ai.panel.noProvider")}</div>
           ) : (
             <>
-              {/* Selected text — the edit target, shown explicitly. Hidden for
-                  continue, which appends after the cursor rather than editing a
-                  selection, so there is no "selected content" to act on. */}
-              {selection && selectedTask !== "continue" && (
-                <div className={styles.selectionCard}>
-                  <div className={styles.selectionCardHead}>
-                    <span className={styles.selectionCardLabel}>{t("ai.panel.selectedContent")}</span>
-                    <span className={styles.selectionCardCount}>
-                      {t("ai.panel.selectedChars", { count: selection.length })}
-                    </span>
-                  </div>
-                  <div className={styles.selectionCardBody}>{selection}</div>
-                </div>
-              )}
-
-              {/* Task selector — compact pill row */}
-              <div className={styles.taskGrid}>
-                {TASK_OPTIONS.map((opt) => (
+              {/* ── Task ── */}
+              <div className={styles.section}>
+                <SectionHead label={t("ai.panel.taskLabel", { defaultValue: "任务" })} />
+                <div className={styles.taskSegmented}>
+                  {TASK_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.kind}
+                      className={`${styles.taskSegment} ${selectedTask === opt.kind ? styles.taskSegmentActive : ""}`}
+                      onClick={() => setSelectedTask(opt.kind)}
+                      disabled={isRunning}
+                      title={t(opt.descKey)}
+                    >
+                      {t(opt.labelKey)}
+                    </button>
+                  ))}
                   <button
-                    key={opt.kind}
-                    className={`${styles.taskOption} ${selectedTask === opt.kind ? styles.taskOptionActive : ""}`}
-                    onClick={() => setSelectedTask(opt.kind)}
+                    className={`${styles.taskSegment} ${selectedTask === "custom" ? styles.taskSegmentActive : ""}`}
+                    onClick={() => setSelectedTask("custom")}
                     disabled={isRunning}
-                    title={t(opt.descKey)}
                   >
-                    {t(opt.labelKey)}
+                    {t("ai.tasks.customShort", { defaultValue: "自定义" })}
                   </button>
-                ))}
-                <button
-                  className={`${styles.taskOptionFull} ${selectedTask === "custom" ? styles.taskOptionActive : ""}`}
-                  onClick={() => setSelectedTask("custom")}
-                  disabled={isRunning}
-                >
-                  {t("ai.tasks.custom")}
-                </button>
+                </div>
               </div>
 
-              {/* Config panel — appears when a task is selected */}
-              {selectedTask && (
-                <div className={styles.configPanel}>
+              {/* ── Target + instruction ──
+                  Enter-only animation, deliberately: an AnimatePresence
+                  `mode="wait"` crossfade would hold the outgoing branch on
+                  screen for the length of its exit before the new one appears,
+                  and a task switch is a direct manipulation that should land
+                  under the cursor immediately. `key` still resets the subtree,
+                  so anything in here must keep its state in AiPanel or a store —
+                  a local useState inside these branches would be wiped on every
+                  task switch. */}
+              <motion.div
+                key={selectedTask}
+                className={styles.section}
+                variants={panelFade}
+                initial="initial"
+                animate="animate"
+                transition={springPanel}
+              >
+                  {/* Selected text — the edit target, shown explicitly. Hidden for
+                      continue, which appends after the cursor rather than editing
+                      a selection. */}
+                  {!isContinue && selection && (
+                    <div className={styles.targetCard}>
+                      <span className={styles.targetLabel}>
+                        {t("ai.panel.targetSummary", {
+                          defaultValue: "{{task}}选区 · 第 {{para}} 段, {{chars}} 字",
+                          task: taskLabel,
+                          para: paragraphIndexAt(content, selectionRange?.from ?? 0),
+                          chars: selection.length,
+                        })}
+                      </span>
+                      {selectionRange && (
+                        <button className={styles.linkBtn} onClick={locateSelection}>
+                          <Crosshair size={10} strokeWidth={1.8} />
+                          {t("ai.panel.locateSelection", { defaultValue: "在正文中定位" })}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {needsSelection && (
+                    <div className={styles.warnLine}>{t("ai.panel.selectFirstHint")}</div>
+                  )}
 
-                  {/* Story memory status + checkpoint prompt */}
-                  <MemorySection
-                    detailSpan={supportsExtras ? contextChars : DEFAULT_DETAIL_SPAN}
-                    appendMode={selectedTask === "continue"}
-                  />
-
-                  {/* Task-specific config — crossfades when the instruction changes.
-                      NOTE: keying on `selectedTask` unmounts the outgoing block, so
-                      anything in here must keep its state in AiPanel or a store —
-                      a local useState inside these branches would be wiped on every
-                      task switch. */}
-                  <AnimatePresence mode="wait" initial={false}>
-                    <motion.div
-                      key={selectedTask}
-                      variants={panelFade}
-                      initial="initial"
-                      animate="animate"
-                      exit="exit"
-                      transition={springPanel}
-                    >
-                  {/* ── Continue options ── */}
-                  {selectedTask === "continue" && (
+                  {/* Custom instruction (+ Agent 模式) */}
+                  {selectedTask === "custom" ? (
                     <>
-                      {/* Length picker */}
-                      <div className={styles.continueLengthRow}>
-                        <span className={styles.continueLengthLabel}>{t("ai.panel.continueLength")}</span>
-                        <div className={styles.continueLengthOptions}>
+                      <textarea
+                        className={styles.textarea}
+                        rows={4}
+                        placeholder={t(agentMode ? "ai.panel.agentInstruction" : "ai.panel.customInstruction")}
+                        value={customInstr}
+                        onChange={(e) => setCustomInstr(e.target.value)}
+                      />
+                      <label className={styles.toggleRow}>
+                        <input
+                          type="checkbox"
+                          checked={agentMode}
+                          onChange={(e) => setAgentMode(e.target.checked)}
+                        />
+                        <span>{t("ai.panel.agentModeLabel")}</span>
+                      </label>
+                      {agentMode && <div className={styles.hintLine}>{t("ai.panel.agentModeHint")}</div>}
+                    </>
+                  ) : isContinue ? (
+                    <>
+                      <div className={styles.controlRow}>
+                        <span className={styles.controlLabel}>{t("ai.panel.continueLength")}</span>
+                        <div className={styles.chipGroup}>
                           {CONTINUE_LENGTH_OPTIONS.map((len) => (
                             <button
                               key={len}
-                              className={`${styles.lengthChip} ${continueLength === len ? styles.lengthChipActive : ""}`}
+                              className={`${styles.chip} ${continueLength === len ? styles.chipActive : ""}`}
                               onClick={() => setContinueLength(len)}
                             >
                               {len >= 1000 ? `${len / 1000}k` : len}
                             </button>
                           ))}
                         </div>
+                        <span className={styles.controlUnit}>
+                          {t("ai.panel.unitChars", { defaultValue: "字" })}
+                        </span>
                       </div>
 
-                      {/* Lore picker */}
-                      <ExtraSection
-                        label={t("ai.panel.continueLorePicker")}
-                        badge={pinnedCount > 0 ? String(pinnedCount) : undefined}
-                      >
-                        <LorePicker
-                          entities={filteredLoreEntities}
-                          search={loreSearch}
-                          setSearch={setLoreSearch}
-                          selectedPaths={selectedLorePaths}
-                          toggle={toggleLorePath}
-                        />
-                      </ExtraSection>
+                      {/* How this chapter opens — only a question while it is
+                          still (nearly) empty, and only when something precedes
+                          it in the book. */}
+                      {wantsOpeningChoice && bridgeCandidates.length > 0 && (
+                        <div className={styles.controlRow}>
+                          <span className={styles.controlLabel}>
+                            {t("ai.panel.openingMode", { defaultValue: "开篇方式" })}
+                          </span>
+                          <div className={styles.chipGroup}>
+                            <button
+                              className={`${styles.chip} ${openingMode === "standalone" ? styles.chipActive : ""}`}
+                              onClick={() => setOpeningMode("standalone")}
+                              title={t("ai.panel.openingStandaloneHint", {
+                                defaultValue: "不注入上一章原文，本章独立开头（全书前情与前情提要照常提供）",
+                              })}
+                            >
+                              {t("ai.panel.openingStandalone", { defaultValue: "独立开篇" })}
+                            </button>
+                            <button
+                              className={`${styles.chip} ${openingMode === "bridge" ? styles.chipActive : ""}`}
+                              onClick={() => setOpeningMode("bridge")}
+                              title={t("ai.panel.openingBridgeHint", {
+                                defaultValue: "注入所选章节的结尾原文，用来衔接文风与情节",
+                              })}
+                            >
+                              {t("ai.panel.openingBridge", { defaultValue: "承接前一章" })}
+                            </button>
+                          </div>
+                          {openingMode === "bridge" && (
+                            <select
+                              className={styles.select}
+                              value={bridgePath ?? ""}
+                              onChange={(e) => setBridgePath(e.target.value || null)}
+                              aria-label={t("ai.panel.openingBridge", { defaultValue: "承接前一章" })}
+                            >
+                              {volumes.map((v) => {
+                                const options = v.chapters.filter((c) =>
+                                  bridgeCandidates.some((b) => b.path === c.path));
+                                if (options.length === 0) return null;
+                                return (
+                                  <optgroup key={v.name} label={v.name}>
+                                    {options.map((c) => (
+                                      <option key={c.path} value={c.path}>{c.title}</option>
+                                    ))}
+                                  </optgroup>
+                                );
+                              })}
+                            </select>
+                          )}
+                        </div>
+                      )}
 
-                      {/* Outline */}
                       <ExtraSection
                         label={t("ai.panel.continueOutline")}
                         badge={outline.trim() ? "✓" : undefined}
@@ -795,8 +1208,6 @@ export function AiPanel() {
                           onChange={(e) => setOutline(e.target.value)}
                         />
                       </ExtraSection>
-
-                      {/* Additional knowledge */}
                       <ExtraSection
                         label={t("ai.panel.continueExtraKnowledge")}
                         badge={additionalKnowledge.trim() ? "✓" : undefined}
@@ -810,96 +1221,117 @@ export function AiPanel() {
                         />
                       </ExtraSection>
                     </>
+                  ) : (
+                    <textarea
+                      className={styles.textarea}
+                      rows={3}
+                      placeholder={t("ai.panel.taskRequirementPlaceholder")}
+                      value={requirement}
+                      onChange={(e) => setRequirement(e.target.value)}
+                    />
                   )}
+              </motion.div>
 
-                  {/* ── Polish / Rewrite / Summary options ── */}
-                  {supportsExtras && (
-                    <>
-                      {needsSelection && (
-                        <div className={styles.selectHint}>{t("ai.panel.selectFirstHint")}</div>
-                      )}
+              <hr className={styles.divider} />
 
-                      {/* Reference-context range (text before the selection) */}
-                      <div className={styles.continueLengthRow}>
-                        <span className={styles.continueLengthLabel}>{t("ai.panel.contextRange")}</span>
-                        <div className={styles.continueLengthOptions}>
-                          {CONTEXT_CHARS_OPTIONS.map((n) => (
-                            <button
-                              key={n}
-                              className={`${styles.lengthChip} ${contextChars === n ? styles.lengthChipActive : ""}`}
-                              onClick={() => setContextChars(n)}
-                              title={t("ai.panel.contextRangeHint")}
-                            >
-                              {n === 0 ? t("ai.panel.contextRangeNone") : n >= 1000 ? `${n / 1000}k` : n}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+              {/* ── Context allocation ── */}
+              <ContextAllocation forecast={forecast} />
 
-                      {/* Extra requirement */}
-                      <ExtraSection
-                        label={t("ai.panel.taskRequirement")}
-                        badge={requirement.trim() ? "✓" : undefined}
+              <hr className={styles.divider} />
+
+              {/* ── Reference window (edit tasks only — continue has no picker) ── */}
+              {supportsExtras && (
+                <div className={styles.controlRow}>
+                  <span className={styles.controlLabel}>{t("ai.panel.contextRange")}</span>
+                  <div className={styles.chipGroup}>
+                    {CONTEXT_CHARS_OPTIONS.map((n) => (
+                      <button
+                        key={n}
+                        className={`${styles.chip} ${contextChars === n ? styles.chipActive : ""}`}
+                        onClick={() => setContextChars(n)}
+                        title={t("ai.panel.contextRangeHint")}
                       >
-                        <textarea
-                          className={styles.extraTextarea}
-                          rows={3}
-                          placeholder={t("ai.panel.taskRequirementPlaceholder")}
-                          value={requirement}
-                          onChange={(e) => setRequirement(e.target.value)}
-                        />
-                      </ExtraSection>
+                        {n === 0 ? t("ai.panel.contextRangeNone") : n >= 1000 ? `${n / 1000}k` : n}
+                      </button>
+                    ))}
+                  </div>
+                  <span className={styles.controlUnit}>
+                    {t("ai.panel.unitChars", { defaultValue: "字" })}
+                  </span>
+                </div>
+              )}
 
-                      {/* Lore reference */}
-                      <ExtraSection
-                        label={t("ai.panel.continueLorePicker")}
-                        badge={pinnedCount > 0 ? String(pinnedCount) : undefined}
-                      >
-                        <LorePicker
-                          entities={filteredLoreEntities}
-                          search={loreSearch}
-                          setSearch={setLoreSearch}
-                          selectedPaths={selectedLorePaths}
-                          toggle={toggleLorePath}
-                        />
-                      </ExtraSection>
-                    </>
-                  )}
+              {/* ── Story memory ── */}
+              <MemorySection
+                detailSpan={supportsExtras ? contextChars : DEFAULT_DETAIL_SPAN}
+                appendMode={isContinue}
+              />
 
-                  {/* ── Custom instruction textarea + Agent 模式 ── */}
-                  {selectedTask === "custom" && (
-                    <>
-                      <textarea
-                        className={styles.textarea}
-                        rows={3}
-                        placeholder={t(agentMode ? "ai.panel.agentInstruction" : "ai.panel.customInstruction")}
-                        value={customInstr}
-                        onChange={(e) => setCustomInstr(e.target.value)}
-                      />
-                      <label className={styles.agentModeToggle}>
-                        <input
-                          type="checkbox"
-                          checked={agentMode}
-                          onChange={(e) => setAgentMode(e.target.checked)}
-                        />
-                        <span className={styles.agentModeLabel}>{t("ai.panel.agentModeLabel")}</span>
-                      </label>
-                      {agentMode && (
-                        <div className={styles.agentModeHint}>{t("ai.panel.agentModeHint")}</div>
-                      )}
-                    </>
-                  )}
-                    </motion.div>
-                  </AnimatePresence>
+              <hr className={styles.divider} />
+
+              {/* ── Lore ── */}
+              <LoreSection
+                entities={filteredLoreEntities}
+                search={loreSearch}
+                setSearch={setLoreSearch}
+                selectedPaths={selectedLorePaths}
+                toggle={toggleLorePath}
+                charsPerToken={charsPerToken}
+              />
+
+              {/* System-prompt override lives at the bottom: set once, rarely touched. */}
+              {prompts.some((p) => p.scene === "system") && (
+                <div className={styles.controlRow}>
+                  <span className={styles.controlLabel}>
+                    {t("ai.panel.systemPromptLabel", { defaultValue: "系统提示" })}
+                  </span>
+                  <select
+                    className={styles.select}
+                    value={activePromptId ?? ""}
+                    onChange={(e) => setActivePrompt(e.target.value)}
+                  >
+                    <option value="">{t("ai.panel.defaultSystemPrompt")}</option>
+                    {prompts.filter((p) => p.scene === "system").map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
                 </div>
               )}
             </>
           )}
         </div>
 
-        {/* Sticky action footer — Run / Stop always reachable without scrolling */}
-        {hasConfig && selectedTask && (
+        {/* Focus not settled: the editor still holds the previous document, so
+            say what is being waited on rather than silently disabling Run. */}
+        {hasConfig && !focus.settled && (
+          <div className={styles.focusNotice}>
+            {focusBlockedByImage(focus)
+              ? t("ai.panel.focusImage", { defaultValue: "当前打开的是图片，请先打开一个文档" })
+              : focus.pendingPath
+                ? t("ai.panel.focusLoading", {
+                    defaultValue: "正在载入 {{name}}…",
+                    name: basename(focus.pendingPath),
+                  })
+                : t("ai.panel.focusNone", { defaultValue: "未打开文档" })}
+          </div>
+        )}
+
+        {/* Sticky action footer — cost forecast + Run/Stop, always reachable */}
+        {hasConfig && (
           <div className={styles.configFooter}>
+            <div className={styles.estimate}>
+              <span>
+                {t("ai.panel.estInput", { defaultValue: "预计输入" })}{" "}
+                <strong>{forecast ? `${formatBudget(forecast.usedTokens)} tk` : "—"}</strong>
+              </span>
+              <span>
+                {t("ai.panel.estOutput", { defaultValue: "输出上限" })}{" "}
+                <strong>
+                  {forecast ? forecast.reservedOutputTokens.toLocaleString() : "—"}
+                  {forecast ? " tk" : ""}
+                </strong>
+              </span>
+            </div>
             {isRunning ? (
               <button className={styles.abortBtn} onClick={abort}>
                 <Square size={11} fill="currentColor" />
@@ -908,7 +1340,8 @@ export function AiPanel() {
             ) : (
               <button className={styles.runBtn} disabled={!canRun} onClick={handleRun}>
                 <Play size={12} fill="currentColor" />
-                {t("ai.panel.run")}
+                {t("ai.panel.runTask", { defaultValue: "执行{{task}}", task: taskLabel })}
+                <kbd className={styles.runKbd}>{MOD_KEY === "⌘" ? "⌘↵" : "Ctrl ↵"}</kbd>
               </button>
             )}
           </div>
@@ -918,76 +1351,112 @@ export function AiPanel() {
       {/* ══════════ Results column ══════════ */}
       <div className={styles.resultCol}>
         <div className={styles.resultScroll}>
-          {!hasResults ? (
-            <div className={styles.resultEmpty}>
-              <Sparkles size={22} strokeWidth={1.4} />
-              <span>{t("ai.panel.resultsPlaceholder")}</span>
+          {/* Injection transparency: what lore went into this run and why */}
+          {loreReport && (
+            <LoreReportSection
+              report={loreReport}
+              charsPerToken={charsPerToken}
+              onRaiseBudget={raiseLoreBudget}
+            />
+          )}
+
+          {/* Pending manuscript-edit approvals — the loop is blocked on these */}
+          {pendingApprovals.map((p) => (
+            <ApprovalCard key={p.proposal.id} proposal={p.proposal} />
+          ))}
+
+          {/* Execution log: run lifecycle, rounds, tool calls */}
+          {(agentLog.length > 0 || error) && (
+            <div className={styles.resultSection}>
+              <SectionHead
+                label={t("ai.panel.runSection", { defaultValue: "运行" })}
+                meta={t("ai.panel.runCount", { defaultValue: "{{n}} 条", n: agentLog.length })}
+              />
+              {agentLog.length > 0 && <AgentLog log={agentLog} isRunning={isRunning} flat />}
+              {error && <ErrorBlock message={error} onRetry={canRun ? handleRun : null} />}
             </div>
-          ) : (
-            <>
-              {/* Injection transparency: what lore went into this run and why */}
-              {loreReport && <LoreReportSection report={loreReport} />}
+          )}
 
-              {/* Pending manuscript-edit approvals — the loop is blocked on these */}
-              {pendingApprovals.map((p) => (
-                <ApprovalCard key={p.proposal.id} proposal={p.proposal} />
-              ))}
+          {/* Waiting for the first token */}
+          {isRunning && !output && !agentLog.some((e) => e.kind === "tool-step") && (
+            <div className={styles.thinking}>
+              <span className={styles.spinner} />
+              {t("ai.panel.thinking")}
+            </div>
+          )}
 
-              {/* Execution log: run lifecycle, rounds, tool calls */}
-              {agentLog.length > 0 && (
-                <AgentLog log={agentLog} isRunning={isRunning} />
-              )}
+          {/* Result */}
+          <div className={`${styles.resultSection} ${styles.resultSectionGrow}`}>
+            <SectionHead
+              label={t("ai.panel.resultSection", { defaultValue: "结果" })}
+              action={output ? (
+                <span className={styles.resultActions}>
+                  <button className={styles.btnSecondary} onClick={clearOutput}>
+                    {t("ai.panel.clear")}
+                  </button>
+                  <button className={styles.btnPrimary} onClick={handleApply}>
+                    {replaceRange ? t("ai.panel.replaceSelection") : t("ai.panel.insertToDoc")}
+                  </button>
+                </span>
+              ) : undefined}
+            />
+            {output ? (
+              <div className={styles.output} ref={outputRef}>
+                {output}
+                {isRunning && <span className={styles.cursor}>▌</span>}
+              </div>
+            ) : (
+              <div className={styles.resultEmpty}>
+                <span>{t("ai.panel.resultsPlaceholder")}</span>
+                <span className={styles.resultEmptySub}>
+                  {t("ai.panel.resultsPlaceholderSub", {
+                    defaultValue: "可对比、替换或插入到文档",
+                  })}
+                </span>
+              </div>
+            )}
+          </div>
 
-              {/* Waiting for the first token */}
-              {isRunning && !output && !agentLog.some((e) => e.kind === "tool-step") && (
-                <div className={styles.thinking}>
-                  <span className={styles.agentSpinner} />
-                  {t("ai.panel.thinking")}
-                </div>
-              )}
-
-              {/* Error */}
-              {error && <div className={styles.error}>{error}</div>}
-
-              {/* Output */}
-              {output && (
-                <div className={styles.outputSection}>
-                  <div className={styles.outputHeader}>
-                    <span className={styles.outputLabel}>{t("ai.panel.generatedOutput")}</span>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      <button className={styles.btnSecondary} onClick={clearOutput}>{t("ai.panel.clear")}</button>
-                      <button className={styles.btnPrimary} onClick={handleApply}>
-                        {replaceRange
-                          ? t("ai.panel.replaceSelection", { defaultValue: "替换选中内容" })
-                          : t("ai.panel.insertToDoc")}
-                      </button>
-                    </div>
-                  </div>
-                  <div className={styles.output} ref={outputRef}>
-                    {output}
-                    {isRunning && <span className={styles.cursor}>▌</span>}
-                  </div>
-                </div>
-              )}
-
-              {/* Token usage */}
-              {usage && (
-                <div className={styles.usageBar}>
-                  <span>{t("ai.panel.inputTokens", { tokens: usage.inputTokens.toLocaleString() })}</span>
-                  <span>{t("ai.panel.outputTokens", { tokens: usage.outputTokens.toLocaleString() })}</span>
-                  <span>≈ ${usage.cost.toFixed(5)}</span>
-                </div>
-              )}
-            </>
+          {/* Token usage for the finished run */}
+          {usage && hasResults && (
+            <div className={styles.usageBar}>
+              <span>{t("ai.panel.inputTokens", { tokens: usage.inputTokens.toLocaleString() })}</span>
+              <span>{t("ai.panel.outputTokens", { tokens: usage.outputTokens.toLocaleString() })}</span>
+              <span>≈ ${usage.cost.toFixed(5)}</span>
+            </div>
           )}
         </div>
 
-        {/* Active model info */}
-        {activeModel && activeProvider && (
-          <div className={styles.modelInfo}>
-            {activeProvider.name} · {activeModel.name}
-          </div>
-        )}
+        {/* Status bar — names the focused document, so which file the assistant
+            is working on is never something you have to infer. */}
+        <div className={styles.statusBar}>
+          <span className={styles.statusFocus} title={focus.filePath ?? undefined}>
+            {focus.filePath ? basename(focus.filePath) : t("ai.panel.focusNone", { defaultValue: "未打开文档" })}
+          </span>
+          <span className={styles.statusSep}>|</span>
+          <span>
+            {t("ai.panel.chapterChars", {
+              defaultValue: "本章 {{chars}} 字",
+              chars: content.length.toLocaleString(),
+            })}
+          </span>
+          {pinnedCount > 0 && (
+            <>
+              <span className={styles.statusSep}>|</span>
+              <span>
+                {t("ai.panel.pinnedLoreCount", {
+                  defaultValue: "引用 {{n}} 设定",
+                  n: pinnedCount,
+                })}
+              </span>
+            </>
+          )}
+          {activeModel && activeProvider && (
+            <span className={styles.statusModel}>
+              {activeProvider.name} · {activeModel.name}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -39,6 +39,7 @@ import type { StreamMessage } from "../lib/ai/types";
 import { readFile, writeFile } from "../lib/fs/fileio";
 import { getDb } from "../lib/project";
 import { loadApiKey } from "../lib/keyStore";
+import { recordRunOutcome } from "../lib/ai/modelHealth";
 
 interface PendingApproval {
   proposal: EditProposal;
@@ -51,6 +52,10 @@ export interface ChatTurn {
   text: string;
   /** Assistant turns: this turn's execution log (rounds, tool calls, outcome). */
   log: AgentEvent[];
+  /** Wall-clock time the turn was created, for the transcript's time column. */
+  at: number;
+  /** User turns: manuscript passage the message was asked *about*. */
+  quote?: string;
 }
 
 interface ChatUsage {
@@ -81,7 +86,10 @@ interface AgentState {
   /** Drain the queue (task aborted / finished) — resolves everything as rejected. */
   rejectAll: (reason: string) => void;
 
-  sendChat: (text: string) => Promise<void>;
+  /** @param quote Manuscript passage attached to the message, if the author
+   *               pinned their selection to it (shown above the turn, and sent
+   *               to the model as a 【选中内容】 block). */
+  sendChat: (text: string, quote?: string) => Promise<void>;
   stopChat: () => void;
   resetChat: () => void;
 }
@@ -177,9 +185,15 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   // ── Chat session ──────────────────────────────────────────────────────────
 
-  sendChat: async (text) => {
+  sendChat: async (text, quote) => {
     const message = text.trim();
     if (!message || get().chatRunning) return;
+    // What the model receives: the quoted passage first, so "把这一段重写得更
+    // 克制一些" has an unambiguous referent even mid-conversation.
+    const quoted = quote?.trim();
+    const wireMessage = quoted
+      ? `${i18n.t("ai.chat.quoteBlockLabel", { defaultValue: "【选中内容】" })}\n${quoted}\n\n${message}`
+      : message;
 
     const { useAiStore } = await import("./aiStore");
     const { useProjectStore } = await import("./projectStore");
@@ -187,17 +201,27 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     const { useAppStore } = await import("./appStore");
     const { resolveModel } = await import("../lib/lore/aiTask");
 
+    const { getWritingFocus } = await import("./editorStore");
+
     const { models, providers, activeModelId } = useAiStore.getState();
     const resolved = resolveModel(models, providers, activeModelId);
-    const { projectPath, activeFilePath } = useProjectStore.getState();
+    const { projectPath } = useProjectStore.getState();
+    // One atomic read of the focused document, held for the whole turn — see
+    // editorStore.WritingFocus for why this must not be recomposed per use.
+    const focus = getWritingFocus();
+    const activeFilePath = focus.filePath;
     if (!projectPath) { set({ chatError: i18n.t("ai.errors.noProject") }); return; }
     if (!resolved) { set({ chatError: i18n.t("ai.errors.noModel") }); return; }
     const { model, provider } = resolved;
     const apiKey = (await loadApiKey(provider.id)) ?? "";
 
     const controller = new AbortController();
-    const userTurn: ChatTurn = { id: `t${++turnCounter}`, role: "user", text: message, log: [] };
-    const assistantTurn: ChatTurn = { id: `t${++turnCounter}`, role: "assistant", text: "", log: [] };
+    const userTurn: ChatTurn = {
+      id: `t${++turnCounter}`, role: "user", text: message, log: [], at: Date.now(), quote: quoted,
+    };
+    const assistantTurn: ChatTurn = {
+      id: `t${++turnCounter}`, role: "assistant", text: "", log: [], at: Date.now(),
+    };
     set((s) => ({
       turns: [...s.turns, userTurn, assistantTurn],
       chatRunning: true,
@@ -218,12 +242,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         const { measureCharsPerToken, RECENT_WINDOW_MIN_CHARS } = await import("../lib/context/budget");
         const { MEMORY_BUDGET_CHARS, loadMemory } = await import("../lib/context/memory");
         const { useAiStore: aiStore2 } = await import("./aiStore");
-        const { useEditorStore } = await import("./editorStore");
 
         const { prompts, activePromptId } = aiStore2.getState();
         const systemPrompt =
           prompts.find((p) => p.id === activePromptId)?.content ?? i18n.t("ai.instructions.system");
-        const { content: documentText } = useEditorStore.getState();
+        const documentText = focus.text;
         const memory = activeFilePath ? await loadMemory(projectPath, activeFilePath) : null;
         const { loreBudgetTokens } = useAppStore.getState();
         const charsPerToken = measureCharsPerToken(documentText);
@@ -233,7 +256,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           useLoreStore.getState().index,
           documentText,
           "",
-          `${i18n.t("ai.instructions.agent")}\n\n${message}`,
+          `${i18n.t("ai.instructions.agent")}\n\n${wireMessage}`,
           { contextChars: RECENT_WINDOW_MIN_CHARS },
           null,
           memory,
@@ -242,8 +265,27 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         );
         history = bundleToMessages(bundle);
         set({ chatHistory: history });
+
+        // Report the seeded layers into this turn's log. This is the only turn
+        // that gets automatic RAG — from here on the history is inherited and
+        // the agent must reach for tools — so if nothing matched, the author
+        // needs to see that now rather than infer it from a vague answer.
+        patchAssistant((tn) => ({
+          ...tn,
+          log: appendAgentEventTo(tn.log, {
+            kind: "context-seeded",
+            documentName: activeFilePath
+              ? (activeFilePath.split(/[\\/]/).pop() ?? "").replace(/\.md$/i, "")
+              : null,
+            recentChars: bundle.recentContext.length,
+            memoryChars: bundle.storySummary.length,
+            loreEntities: bundle.loreReport.entities.length,
+            loreChars: bundle.loreReport.usedChars,
+            at: Date.now(),
+          }),
+        }));
       } else {
-        history.push({ role: "user", content: message });
+        history.push({ role: "user", content: wireMessage });
       }
 
       const { runAgent } = await import("../lib/agent/runtime");
@@ -296,11 +338,13 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         ...tn,
         log: appendAgentEventTo(tn.log, { kind: "run-done", inputTokens, outputTokens, at: Date.now() }),
       }));
+      recordRunOutcome(model.id, null);
       void recordChatUsage(projectPath, model.id, inputTokens, outputTokens, cost);
     } catch (e) {
       if ((e as Error).name !== "AbortError" && get().chatAbort === controller) {
         const msg = String(e);
         set({ chatError: msg });
+        recordRunOutcome(model.id, msg);
         patchAssistant((tn) => ({
           ...tn,
           log: appendAgentEventTo(tn.log, { kind: "run-error", message: msg, at: Date.now() }),

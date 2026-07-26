@@ -6,13 +6,16 @@
   /* enter/exit handled by Motion (AnimatePresence) — see AiDrawer.tsx */
 }
 
+/* The redesigned panel is a two-column workspace (config | results), so it needs
+   far more room than the old single-column drawer. Still capped against the
+   viewport so it never becomes a full-bleed modal on a laptop screen. */
 .drawer {
   position: fixed;
   top: 0;
   right: 0;
   bottom: 0;
-  width: 680px;
-  max-width: 90vw;
+  width: 1180px;
+  max-width: 94vw;
   background: var(--color-bg-elevated);
   border-left: 1px solid var(--color-border);
   box-shadow: var(--shadow-drawer);
@@ -22,19 +25,19 @@
   /* enter/exit handled by Motion (AnimatePresence) — see AiDrawer.tsx */
 }
 
-/* Header */
+/* ── Header ──────────────────────────────────────────────────────────────── */
 .header {
-  padding: 18px 24px 14px;
-  border-bottom: 1px solid var(--color-border-soft);
+  padding: 18px 24px 0;
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: flex-start;
+  gap: 14px;
   flex-shrink: 0;
 }
+
+/* Square, not round — the manuscript theme is rectangular throughout. */
 .avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
+  width: 36px;
+  height: 36px;
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-strong);
   display: flex;
@@ -43,72 +46,105 @@
   color: var(--color-sienna);
   flex-shrink: 0;
 }
+
 .titleBlock { flex: 1; min-width: 0; }
+
 .title {
-  font: 400 16px/1 var(--font-serif);
+  font: 400 19px/1.1 var(--font-serif);
   color: var(--color-text-primary);
 }
+
+/* Holds the model picker (see ModelSelector). Pulled left by the trigger's own
+   padding so the model name lines up with the title above it. */
 .subtitle {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-  font: 400 11px/1 var(--font-sans);
-  color: var(--color-text-muted);
-}
-.modelChip {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 8px;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
-  font: 500 10px/1.4 var(--font-sans);
-  color: var(--color-text-secondary);
-}
-.modelChip strong {
-  color: var(--color-sienna);
-  font-weight: 500;
-  margin: 0 2px;
+  margin: 3px 0 0 -6px;
+  min-width: 0;
 }
 
-.modeTabs {
+/* Right-hand header actions */
+.headerActions {
   display: flex;
   align-items: center;
-  gap: 0;
-  border: 1px solid var(--color-border);
+  gap: var(--space-3);
+  flex-shrink: 0;
 }
-.modeTab {
-  padding: 5px 11px;
-  font: 500 11px/1 var(--font-sans);
-  color: var(--color-text-muted);
+
+.shortcutHint {
+  font: 400 10px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+
+.headerBtn {
+  padding: 3px 9px;
+  border: 1px solid transparent;
   background: transparent;
-  border: none;
+  color: var(--color-text-muted);
+  font: 500 11px/1.5 var(--font-sans);
   cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
 }
-.modeTabActive {
-  background: var(--color-sienna);
-  color: var(--color-card);
-}
+.headerBtn:hover:not(:disabled) { color: var(--color-sienna); border-color: var(--color-border); }
+.headerBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+.headerBtnAccent { color: var(--color-sienna); }
 
 .closeBtn {
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-surface);
+  width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--color-text-muted);
-  font: 400 13px/1 var(--font-serif);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
 }
-.closeBtn:hover { color: var(--color-sienna); }
+.closeBtn:hover { color: var(--color-sienna); border-color: var(--color-border); }
 
-/* Body container — scrollable */
+/* ── Mode tabs (underline) ───────────────────────────────────────────────── */
+.modeTabs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: 0 24px;
+  margin-top: 14px;
+  border-bottom: 1px solid var(--color-border-soft);
+  flex-shrink: 0;
+}
+
+.modeTab {
+  position: relative;
+  padding: 0 0 9px;
+  font: 500 13px/1.4 var(--font-sans);
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.modeTab:hover { color: var(--color-text-secondary); }
+
+.modeTabActive { color: var(--color-sienna); }
+.modeTabActive::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--color-sienna);
+}
+
+/* Body container — each mode owns its own scrolling. */
 .body {
   flex: 1;
-  overflow-y: auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }

@@ -14,6 +14,7 @@ import { useLoreStore } from "./loreStore";
 import { useProjectStore } from "./projectStore";
 import { getDb } from "../lib/project";
 import { loadApiKey } from "../lib/keyStore";
+import { recordRunOutcome } from "../lib/ai/modelHealth";
 import { appendAgentEventTo, type AgentEvent, type ToolStep } from "../lib/agent/events";
 
 export type TaskKind = "continue" | "polish" | "rewrite" | "summary" | "custom" | "agent";
@@ -100,13 +101,18 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
 
     const apiKey = await loadApiKey(provider.id) ?? "";
 
-    // Gather current document text from editorStore lazily (avoid circular import)
-    const { useEditorStore } = await import("./editorStore");
-    const { content: documentText } = useEditorStore.getState();
+    // Snapshot the writing focus once, here, and use nothing else for the rest
+    // of the run: file identity and text come from the same atomic read, and the
+    // author switching chapters mid-stream can no longer redirect a request that
+    // is already in flight. (Lazy import — avoids a store cycle.)
+    const { getWritingFocus } = await import("./editorStore");
+    const focus = getWritingFocus();
+    const documentText = focus.text;
+    const activeFilePath = focus.filePath;
+    if (!focus.settled) { set({ error: i18n.t("ai.errors.focusNotReady") }); return; }
 
-    // Story memory for the active document (前情提要 layer). Read from disk so
+    // Story memory for the focused document (前情提要 layer). Read from disk so
     // manual edits to the memory file are picked up; null when none exists.
-    const { activeFilePath } = useProjectStore.getState();
     const { loadMemory } = await import("../lib/context/memory");
     const memory = activeFilePath ? await loadMemory(projectPath, activeFilePath) : null;
 
@@ -123,6 +129,13 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     } else if (kind === "continue") {
       instruction = scenePrompt?.content
         ?? i18n.t("ai.instructions.continue", { length: continueLength ?? 500 });
+      // An empty chapter has no 【近期内容】 for the model to continue, so the
+      // last prose in the prompt is whatever bridge got injected — and "continue
+      // from where the text ends" then means "continue the previous chapter".
+      // Nothing in the prompt otherwise says a new chapter is starting.
+      if (documentText.trim() === "") {
+        instruction += `\n\n${i18n.t("ai.instructions.continueNewChapter")}`;
+      }
     } else {
       instruction = scenePrompt?.content ?? taskInstruction(kind);
     }
@@ -137,7 +150,19 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const { BOOK_PREV_TAIL_CHARS } = await import("../lib/context/bookContext");
     // Where this request is anchored in the document — both the book-context
     // build and the recent-window budget measure backwards from here.
-    const anchorOffset = get().selectionRange?.to ?? documentText.length;
+    //
+    // The range is verified against the live text before it is trusted, the same
+    // way assembleContext does: an offset only means something in the document it
+    // was recorded in, and an anchor pointing past the end of *this* one makes
+    // the book-context bridge decide "we're deep into the chapter" for a file the
+    // author just opened. Anything that doesn't check out falls back to the end
+    // of the document, which is where a continuation belongs anyway.
+    const anchorRange = get().selectionRange;
+    const anchorValid =
+      !!anchorRange &&
+      anchorRange.to <= documentText.length &&
+      documentText.slice(anchorRange.from, anchorRange.to) === get().selection;
+    const anchorOffset = anchorValid ? anchorRange!.to : documentText.length;
     const plan = planContextBudget({
       contextSize: model.contextSize,
       utilization: contextUtilization,
@@ -175,6 +200,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         const { buildBookContext } = await import("../lib/context/bookContext");
         const bookContext = await buildBookContext(
           projectPath, fileTree, activeFilePath, anchorOffset, plan.bookPriorChars,
+          extras?.bridgeChapter,
         );
         if (bookContext) {
           bookExtras = { bookContext };
@@ -324,8 +350,12 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       if ((e as Error).name !== "AbortError" && get().abortController === controller) {
         set({ error: String(e) });
         get().appendAgentEvent({ kind: "run-error", message: String(e), at: Date.now() });
+        // Remember a safety refusal against this model — the picker surfaces it
+        // so "switch models" is an informed choice next time.
+        recordRunOutcome(model.id, String(e));
       }
     } finally {
+      if (!get().error) recordRunOutcome(model.id, null);
       // Drain any approval still blocking the loop — a dangling Promise here
       // would wedge the next run's tool executor.
       useAgentStore.getState().rejectAll("task ended");
@@ -345,6 +375,25 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
 
   clearOutput: () => set({ output: "", error: null, usage: null, agentLog: [], loreReport: null }),
 }));
+
+/**
+ * A committed selection belongs to the document it was made in.
+ *
+ * Nothing else drops it — not a run, not a file switch — so opening another
+ * chapter used to leave the previous chapter's passage as the live edit target:
+ * the panel kept showing its selection card, polish/rewrite would run against
+ * text that isn't in the open file (and, failing to locate it, append the result
+ * to the end of the *new* chapter), and runTask's anchor pointed at an offset in
+ * a document that is no longer loaded. Clearing on switch is the one place that
+ * fixes all of those at once.
+ */
+useProjectStore.subscribe((state, prev) => {
+  if (state.activeFilePath === prev.activeFilePath) return;
+  const { selection, selectionRange } = useAiTaskStore.getState();
+  if (selection || selectionRange) {
+    useAiTaskStore.setState({ selection: "", selectionRange: null });
+  }
+});
 
 function defaultBaseUrl(standard: string): string {
   if (standard === "gemini") return ""; // handled separately in aiClient

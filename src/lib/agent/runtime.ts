@@ -189,8 +189,11 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     // Execute each tool call and append results
     for (const tc of roundToolCalls) {
       const toolCall: ToolCall = { id: tc.id, name: tc.name, arguments: tc.arguments };
-      const argumentSummary = tc.arguments.length > 60
-        ? tc.arguments.slice(0, 60) + "…"
+      // Kept as valid JSON rather than pre-truncated: the log formats these for
+      // display (lib/agent/logFormat), and it can only pull out the identifying
+      // argument if the object still parses. Bounded by what the model emits.
+      const argumentSummary = tc.arguments.length > 400
+        ? tc.arguments.slice(0, 400)
         : tc.arguments;
 
       opts.onEvent({
@@ -215,7 +218,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
           name: tc.name,
           argumentSummary,
           status: isError ? "error" : "done",
-          resultSummary: result.content.slice(0, 80),
+          resultSummary: result.content.slice(0, 200),
         },
         at: Date.now(),
       });
