@@ -197,7 +197,12 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       fixedChars: fixedContextChars({
         systemPromptChars: systemPrompt.length,
         taskInstructionChars: instruction.length,
-        selectionChars: get().selection.length,
+        // Continue never sends the selection as its own 【选中内容】 block (see
+        // assembleContext's append mode) — it is an anchor, and its characters
+        // reach the model only as part of 【近期内容】, which is a *plannable*
+        // layer with its own budget. Billing them here as a fixed cost too
+        // charges the same text twice and shrinks every other layer for it.
+        selectionChars: isContinue ? 0 : get().selection.length,
         outlineChars: extras?.outline?.length,
         knowledgeChars: extras?.additionalKnowledge?.length,
         prevChapterTailChars: isContinue ? BOOK_PREV_TAIL_CHARS : 0,
