@@ -10,10 +10,22 @@ use tauri::command;
 /// Service name under which all provider keys are registered.
 const SERVICE: &str = "com.simple-ai-writer.app";
 
-fn entry(provider_id: &str) -> Result<Entry, String> {
+/// Reject provider ids that can't name a credential, before any platform call.
+///
+/// Split out from [`entry`] so it stays unit-testable: as of keyring 4,
+/// `Entry::new` lazily initialises the platform credential store on first use,
+/// which on a headless Linux CI runner means dialling a Secret Service that
+/// isn't running. Argument validation is ours to test; reachability of the
+/// user's keychain is not.
+fn validate_provider_id(provider_id: &str) -> Result<(), String> {
     if provider_id.is_empty() {
         return Err("provider_id must not be empty".into());
     }
+    Ok(())
+}
+
+fn entry(provider_id: &str) -> Result<Entry, String> {
+    validate_provider_id(provider_id)?;
     Entry::new(SERVICE, provider_id).map_err(|e| e.to_string())
 }
 
@@ -50,11 +62,23 @@ mod tests {
 
     #[test]
     fn rejects_empty_provider_id() {
-        assert!(entry("").is_err());
+        assert!(validate_provider_id("").is_err());
     }
 
     #[test]
-    fn builds_entry_for_valid_provider_id() {
-        assert!(entry("openai-default").is_ok());
+    fn accepts_valid_provider_id() {
+        assert!(validate_provider_id("openai-default").is_ok());
+    }
+
+    /// `entry` must reject an empty id on its own, without reaching the platform
+    /// store — otherwise the guard could be bypassed and the error the frontend
+    /// sees would depend on whether a keychain happens to be available.
+    /// Matched rather than unwrapped because keyring 4's `Entry` isn't `Debug`.
+    #[test]
+    fn entry_short_circuits_on_empty_id_before_touching_the_platform() {
+        match entry("") {
+            Err(message) => assert_eq!(message, "provider_id must not be empty"),
+            Ok(_) => panic!("empty provider_id should not produce an entry"),
+        }
     }
 }
