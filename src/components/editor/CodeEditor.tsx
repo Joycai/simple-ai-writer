@@ -15,7 +15,16 @@ import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
 import { useEditorStore } from "../../stores/editorStore";
+import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { EditorContextMenu } from "./EditorContextMenu";
+import {
+  aiTargetExtension,
+  aiTargetField,
+  clearAiTarget,
+  clearTarget,
+  markTargetEnd,
+  markTargetStart,
+} from "../../lib/editor/aiTarget";
 import {
   toggleBold,
   toggleItalic,
@@ -41,6 +50,14 @@ const formatKeymap = [
   { key: "Mod-Alt-3", run: (v: EditorView) => toggleHeading(v, 3) },
   { key: "Mod-Shift-.", run: toggleQuote },
   { key: "Mod-Shift-8", run: toggleBulletList },
+];
+
+/** Marking the AI target range. Bracket keys sit next to CodeMirror's own
+ *  Mod-[ / Mod-] indent pair, and the shifted forms are otherwise unbound. */
+const aiTargetKeymap = [
+  { key: "Mod-Shift-[", run: markTargetStart },
+  { key: "Mod-Shift-]", run: markTargetEnd },
+  { key: "Mod-Shift-\\", run: clearTarget },
 ];
 
 interface Props {
@@ -71,6 +88,22 @@ export function CodeEditor({ value, onChange }: Props) {
         const newValue = update.state.doc.toString();
         onChangeRef.current(newValue);
       }
+      // Mirror the marked range into the AI store. Driven by the field rather
+      // than by the mark commands so that edits which *move* the range keep the
+      // store in step — that mapping is the whole reason the range lives in
+      // editor state, and a stale mirror would throw it away.
+      const before = update.startState.field(aiTargetField, false) ?? null;
+      const after = update.state.field(aiTargetField, false) ?? null;
+      if (before === after) return;
+      useEditorStore.getState().setAiTarget(after);
+      const { setSelection, clearSelectionFrom } = useAiTaskStore.getState();
+      if (after && after.to !== null && after.to > after.from) {
+        const range = { from: after.from, to: after.to };
+        setSelection(update.state.sliceDoc(range.from, range.to), range, "marker");
+      } else {
+        // Dropped, or only half-marked — either way there is no usable target.
+        clearSelectionFrom("marker");
+      }
     });
 
     const state = EditorState.create({
@@ -83,7 +116,8 @@ export function CodeEditor({ value, onChange }: Props) {
         crosshairCursor(),
         highlightActiveLine(),
         highlightSelectionMatches(),
-        keymap.of([...formatKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+        keymap.of([...aiTargetKeymap, ...formatKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+        aiTargetExtension(styles.aiTarget),
         markdown({
           base: markdownLanguage,
           codeLanguages: languages,
@@ -117,6 +151,8 @@ export function CodeEditor({ value, onChange }: Props) {
     return () => {
       useEditorStore.getState().setScrollToLine(null);
       useEditorStore.getState().setEditorView(null);
+      useEditorStore.getState().setAiTarget(null);
+      useAiTaskStore.getState().clearSelectionFrom("marker");
       view.destroy();
       viewRef.current = null;
     };
@@ -133,6 +169,10 @@ export function CodeEditor({ value, onChange }: Props) {
       isSyncingRef.current = true;
       view.dispatch({
         changes: { from: 0, to: current.length, insert: value },
+        // This replaces the whole document (a file switch, or an AI insert), so
+        // there is nothing meaningful to map the marked range onto — offsets
+        // would survive as numbers pointing at unrelated prose. Drop it.
+        effects: clearAiTarget.of(null),
       });
       isSyncingRef.current = false;
     }

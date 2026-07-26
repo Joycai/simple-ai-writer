@@ -1,6 +1,9 @@
 import { useTranslation } from "react-i18next";
+import { Brackets, X } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
+import { useEditorStore } from "../../stores/editorStore";
+import { clearTarget, markTargetEnd, markTargetStart } from "../../lib/editor/aiTarget";
 import { MOD_KEY } from "../../lib/platform";
 import styles from "./EditorBottomStrip.module.css";
 
@@ -14,11 +17,66 @@ export function EditorBottomStrip({ paragraph, sentence, refsCount = 0 }: Props)
   const { t, i18n } = useTranslation();
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
   const { wordCount } = useProjectStore();
+  const editorView = useEditorStore((s) => s.editorView);
+  const aiTarget = useEditorStore((s) => s.aiTarget);
   const isZh = i18n.language === "zh-CN";
+
+  // Marking is the durable alternative to dragging: the range lives in editor
+  // state, survives clicking into the AI panel, and is mapped through edits.
+  const marked = aiTarget && aiTarget.to !== null ? aiTarget.to - aiTarget.from : null;
+  const pending = !!aiTarget && aiTarget.to === null;
 
   return (
     <div className={styles.strip}>
-      <span>
+      <span className={styles.markGroup}>
+        {editorView && (
+          <>
+            <button
+              className={styles.markBtn}
+              onClick={() => markTargetStart(editorView)}
+              title={t("editorStrip.markStartHint", {
+                defaultValue: "在光标处标记 AI 选区的开头（{{mod}}+Shift+[）",
+                mod: MOD_KEY,
+              })}
+            >
+              <Brackets size={11} strokeWidth={1.8} />
+              {t("editorStrip.markStart", { defaultValue: "标记开头" })}
+            </button>
+            <button
+              className={styles.markBtn}
+              onClick={() => markTargetEnd(editorView)}
+              title={t("editorStrip.markEndHint", {
+                defaultValue: "在光标处标记 AI 选区的结尾（{{mod}}+Shift+]）",
+                mod: MOD_KEY,
+              })}
+            >
+              {t("editorStrip.markEnd", { defaultValue: "标记结尾" })}
+            </button>
+            {marked !== null && (
+              <span className={styles.markState}>
+                {t("editorStrip.markCount", { defaultValue: "已选 {{chars}} 字", chars: marked })}
+              </span>
+            )}
+            {pending && (
+              <span className={`${styles.markState} ${styles.markStatePending}`}>
+                {t("editorStrip.markPending", { defaultValue: "待标记结尾" })}
+              </span>
+            )}
+            {aiTarget && (
+              <button
+                className={styles.markBtn}
+                onClick={() => clearTarget(editorView)}
+                title={t("editorStrip.markClearHint", {
+                  defaultValue: "清除 AI 选区（{{mod}}+Shift+\\）",
+                  mod: MOD_KEY,
+                })}
+              >
+                <X size={11} strokeWidth={1.8} />
+                {t("editorStrip.markClear", { defaultValue: "清除" })}
+              </button>
+            )}
+          </>
+        )}
         {paragraph !== undefined && sentence !== undefined
           ? t("editorStrip.paragraph", { p: paragraph, s: sentence })
           : ""}

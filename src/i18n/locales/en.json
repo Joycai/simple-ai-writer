@@ -61,6 +61,14 @@
   },
   "editorStrip": {
     "summon": "{{mod}} K · summon AI",
+    "markStart": "Mark start",
+    "markStartHint": "Mark the AI range's start at the cursor ({{mod}}+Shift+[)",
+    "markEnd": "Mark end",
+    "markEndHint": "Mark the AI range's end at the cursor ({{mod}}+Shift+])",
+    "markCount": "{{chars}} chars marked",
+    "markPending": "end not marked yet",
+    "markClear": "Clear",
+    "markClearHint": "Clear the AI range ({{mod}}+Shift+\\)",
     "paragraph": "Paragraph {{p}} · sentence {{s}}",
     "cumulative": "Total {{n}} words",
     "refs": "{{n}} lore refs"

@@ -61,6 +61,14 @@
   },
   "editorStrip": {
     "summon": "{{mod}} K · 召唤 AI",
+    "markStart": "标记开头",
+    "markStartHint": "在光标处标记 AI 选区的开头（{{mod}}+Shift+[）",
+    "markEnd": "标记结尾",
+    "markEndHint": "在光标处标记 AI 选区的结尾（{{mod}}+Shift+]）",
+    "markCount": "已选 {{chars}} 字",
+    "markPending": "待标记结尾",
+    "markClear": "清除",
+    "markClearHint": "清除 AI 选区（{{mod}}+Shift+\\）",
     "paragraph": "段落 {{p}} · 第 {{s}} 句",
     "cumulative": "累计 {{n}} 字",
     "refs": "引用 {{n}} 设定"
