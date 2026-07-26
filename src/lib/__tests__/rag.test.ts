@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { assembleContext, bundleToMessages } from "../context/rag";
+import {
+  assembleContext,
+  bundleToMessages,
+  resolveAppendAnchor,
+  spliceContinuation,
+} from "../context/rag";
 import type { LoreIndex } from "../lore";
 
 // The real i18n module touches localStorage at import time (browser-only).
@@ -295,5 +300,62 @@ describe("bundleToMessages", () => {
     expect(idxPrevTail).toBeGreaterThan(idxPrior);
     expect(idxRecent).toBeGreaterThan(idxPrevTail);
     expect(user).toContain("上一章的最后一句。");
+  });
+});
+
+// The continue task reads from one offset and writes to it. The AiPanel labels
+// that same offset for the author ("第 N 段之后" / "文末"), so a drift between
+// these two functions is a drift between what the panel promises and what the
+// document gets.
+describe("resolveAppendAnchor", () => {
+  const doc = "第一段。\n\n第二段。\n\n第三段。";
+
+  it("anchors just after a selection whose offsets still match the text", () => {
+    const from = doc.indexOf("第二段。");
+    const range = { from, to: from + "第二段。".length };
+    expect(resolveAppendAnchor(doc, "第二段。", range)).toBe(range.to);
+  });
+
+  it("falls back to the document end with no selection", () => {
+    expect(resolveAppendAnchor(doc, "", null)).toBe(doc.length);
+  });
+
+  it("relocates a selection whose offsets went stale after an edit above it", () => {
+    const edited = "新开头。\n\n" + doc;
+    const stale = { from: 0, to: 4 };
+    expect(resolveAppendAnchor(edited, "第二段。", stale)).toBe(
+      edited.indexOf("第二段。") + "第二段。".length,
+    );
+  });
+
+  it("falls back to the document end when the selection is nowhere in the text", () => {
+    // The command palette commits the user's query as a "selection" that was
+    // never part of the document — it must not drag the anchor somewhere odd.
+    expect(resolveAppendAnchor(doc, "写一段打斗戏", null)).toBe(doc.length);
+  });
+});
+
+describe("spliceContinuation", () => {
+  it("appends with a blank line at the document end", () => {
+    expect(spliceContinuation("第一段。", 4, "续写。")).toBe("第一段。\n\n续写。");
+  });
+
+  it("adds no leading gap in an empty chapter", () => {
+    expect(spliceContinuation("", 0, "开篇。")).toBe("开篇。");
+  });
+
+  it("separates on both sides when inserting mid-document", () => {
+    const doc = "第一段。\n\n第二段。";
+    const at = "第一段。".length;
+    expect(spliceContinuation(doc, at, "插入。")).toBe("第一段。\n\n插入。\n\n第二段。");
+  });
+
+  it("does not stack blank lines that are already there", () => {
+    expect(spliceContinuation("第一段。\n\n", 6, "续写。")).toBe("第一段。\n\n续写。");
+  });
+
+  it("splits a paragraph cleanly when the anchor lands mid-sentence", () => {
+    const doc = "前半后半";
+    expect(spliceContinuation(doc, 2, "插入。")).toBe("前半\n\n插入。\n\n后半");
   });
 });

@@ -31,7 +31,7 @@ import { focusBlockedByImage, useEditorStore, useWritingFocus } from "../../stor
 import { useLoreStore } from "../../stores/loreStore";
 import { useMemoryStore } from "../../stores/memoryStore";
 import { useProjectStore } from "../../stores/projectStore";
-import type { TaskExtras } from "../../lib/context/rag";
+import { resolveAppendAnchor, spliceContinuation, type TaskExtras } from "../../lib/context/rag";
 import { parsePins, type LoreActivationReport } from "../../lib/context/loreSelect";
 import type { LoreFacet } from "../../lib/lore";
 import {
@@ -870,14 +870,34 @@ export function AiPanel() {
     return { from: first, to: first + selection.length };
   })();
 
+  // Where a continuation attaches. Same resolver assembleContext anchors the
+  // prompt to, so the passage lands exactly where it was written from — this
+  // used to read from the selection but always append at the document end,
+  // which turned a mid-chapter bridge into a tail. Recomputed every render:
+  // the author keeps typing while the panel is open.
+  const continueAnchor = isContinue
+    ? resolveAppendAnchor(content, selection, selectionRange)
+    : null;
+  const anchorAtEnd = continueAnchor === null || continueAnchor >= content.length;
+
   const handleApply = () => {
     const { setContent } = useEditorStore.getState();
     if (replaceRange) {
       setContent(content.slice(0, replaceRange.from) + output + content.slice(replaceRange.to));
-    } else {
-      setContent(content + "\n\n" + output);
+      clearOutput();
+      return;
     }
+    setContent(spliceContinuation(content, continueAnchor ?? content.length, output));
     clearOutput();
+  };
+
+  /** Put the caret where the continuation will be inserted. */
+  const locateAnchor = () => {
+    const view = useEditorStore.getState().editorView;
+    if (!view || continueAnchor === null) return;
+    const pos = Math.min(continueAnchor, view.state.doc.length);
+    view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+    view.focus();
   };
 
   /** Put the caret back on the passage this task will edit. */
@@ -1000,12 +1020,13 @@ export function AiPanel() {
     outlineChars: isContinue ? outline.length : 0,
     knowledgeChars: isContinue ? additionalKnowledge.length : 0,
     documentText: content,
-    // Same verification runTask applies — the forecast must describe the request
-    // that will actually be sent, not one built on an offset from another file.
+    // Same anchor runTask applies — the forecast must describe the request that
+    // will actually be sent, not one built on an offset from another file.
     anchorOffset:
-      selectionRange && content.slice(selectionRange.from, selectionRange.to) === selection
+      continueAnchor ??
+      (selectionRange && content.slice(selectionRange.from, selectionRange.to) === selection
         ? selectionRange.to
-        : content.length,
+        : content.length),
     recentWindowChars: supportsExtras ? contextChars : undefined,
     isContinue,
     replyChars: isContinue ? continueLength : undefined,
@@ -1079,9 +1100,37 @@ export function AiPanel() {
                 animate="animate"
                 transition={springPanel}
               >
+                  {/* Continue has a target too — it just isn't a selection. Name
+                      the file and the spot the passage will be written from and
+                      inserted at, so "where does this land?" is never a guess. */}
+                  {isContinue && focus.filePath && (
+                    <div className={styles.targetCard}>
+                      <span className={styles.targetLabel}>
+                        {content.trim() === ""
+                          ? t("ai.panel.continueTargetEmpty", {
+                              defaultValue: "续写目标 · 从开头写起 · {{file}}",
+                              file: basename(focus.filePath),
+                            })
+                          : anchorAtEnd
+                          ? t("ai.panel.continueTargetEnd", {
+                              defaultValue: "续写目标 · 文末 · {{file}}",
+                              file: basename(focus.filePath),
+                            })
+                          : t("ai.panel.continueTargetPara", {
+                              defaultValue: "续写目标 · 第 {{para}} 段之后 · {{file}}",
+                              para: paragraphIndexAt(content, continueAnchor ?? 0),
+                              file: basename(focus.filePath),
+                            })}
+                      </span>
+                      <button className={styles.linkBtn} onClick={locateAnchor}>
+                        <Crosshair size={10} strokeWidth={1.8} />
+                        {t("ai.panel.locateAnchor", { defaultValue: "定位插入点" })}
+                      </button>
+                    </div>
+                  )}
+
                   {/* Selected text — the edit target, shown explicitly. Hidden for
-                      continue, which appends after the cursor rather than editing
-                      a selection. */}
+                      continue, which has its own target card above. */}
                   {!isContinue && selection && (
                     <div className={styles.targetCard}>
                       <span className={styles.targetLabel}>

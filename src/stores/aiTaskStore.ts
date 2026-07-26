@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import i18n from "../i18n";
 import { streamCompletion } from "../lib/ai";
-import { assembleContext, bundleToMessages, type TaskExtras } from "../lib/context/rag";
+import { assembleContext, bundleToMessages, resolveAppendAnchor, type TaskExtras } from "../lib/context/rag";
 import {
   fixedContextChars, measureCharsPerToken, planContextBudget, reflowMemoryBudget,
   type ContextAllocation,
@@ -162,7 +162,12 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       !!anchorRange &&
       anchorRange.to <= documentText.length &&
       documentText.slice(anchorRange.from, anchorRange.to) === get().selection;
-    const anchorOffset = anchorValid ? anchorRange!.to : documentText.length;
+    // Continue resolves through the shared anchor instead, so the budget window
+    // and the book-context bridge measure from the very offset assembleContext
+    // will slice from — and that the panel has already named for the author.
+    const anchorOffset = isContinue
+      ? resolveAppendAnchor(documentText, get().selection, anchorRange)
+      : anchorValid ? anchorRange!.to : documentText.length;
     const plan = planContextBudget({
       contextSize: model.contextSize,
       utilization: contextUtilization,
