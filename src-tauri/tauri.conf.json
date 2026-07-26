@@ -31,7 +31,8 @@
         "worker-src": "'self' blob:",
         "object-src": "'none'"
       },
-      "devCsp": null
+      "devCsp": null,
+      "dangerousDisableAssetCspModification": ["style-src"]
     }
   },
   "bundle": {
