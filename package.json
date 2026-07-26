@@ -38,7 +38,7 @@
     "markdown-it": "^14.3.0",
     "mermaid": "^11.16.0",
     "motion": "^12.42.2",
-    "nanoid": "^5.1.16",
+    "nanoid": "^6.0.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-i18next": "^17.0.11",
