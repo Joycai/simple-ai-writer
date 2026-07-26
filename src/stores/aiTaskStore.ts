@@ -43,6 +43,17 @@ interface AiTaskState {
   usage: TokenUsage | null;
   selection: string;
   selectionRange: SelectionRange | null;
+  /**
+   * Where the committed target came from.
+   *   - `marker` — explicitly marked in the editor. Offsets are maintained by
+   *     CodeMirror and can be trusted verbatim, including for in-place replace.
+   *   - `commit`  — captured from a drag selection at the moment the author
+   *     acted on it. Editor-origin ones carry offsets; preview-origin ones are
+   *     rendered text with none, and still need locating before use.
+   * Null when nothing is committed. Only the owning source may clear the slot,
+   * so a marker being dropped can't wipe a selection the toolbar just made.
+   */
+  selectionSource: "marker" | "commit" | null;
   /** Task the floating toolbar asked the panel to pre-select. Consumed + cleared by AiPanel. */
   requestedTask: TaskKind | null;
   abortController: AbortController | null;
@@ -53,7 +64,9 @@ interface AiTaskState {
   /** Final per-layer allocation for the current run (see lib/context/budget). */
   contextAlloc: ContextAllocation | null;
 
-  setSelection: (s: string, range?: SelectionRange | null) => void;
+  setSelection: (s: string, range?: SelectionRange | null, source?: "marker" | "commit") => void;
+  /** Drop the committed target, but only if `source` is the one that set it. */
+  clearSelectionFrom: (source: "marker" | "commit") => void;
   setRequestedTask: (kind: TaskKind | null) => void;
   runTask: (kind: TaskKind, customInstruction?: string, continueLength?: number, extras?: TaskExtras) => Promise<void>;
   abort: () => void;
@@ -68,13 +81,22 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
   usage: null,
   selection: "",
   selectionRange: null,
+  selectionSource: null,
   requestedTask: null,
   abortController: null,
   agentLog: [],
   loreReport: null,
   contextAlloc: null,
 
-  setSelection: (s, range = null) => set({ selection: s, selectionRange: range }),
+  setSelection: (s, range = null, source = "commit") =>
+    set({ selection: s, selectionRange: range, selectionSource: s ? source : null }),
+
+  clearSelectionFrom: (source) =>
+    set((state) =>
+      state.selectionSource === source
+        ? { selection: "", selectionRange: null, selectionSource: null }
+        : state,
+    ),
   setRequestedTask: (kind) => set({ requestedTask: kind }),
 
   appendAgentEvent: (event) =>
@@ -166,7 +188,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // and the book-context bridge measure from the very offset assembleContext
     // will slice from — and that the panel has already named for the author.
     const anchorOffset = isContinue
-      ? resolveAppendAnchor(documentText, get().selection, anchorRange)
+      ? extras?.appendAnchor ?? resolveAppendAnchor(documentText, get().selection, anchorRange)
       : anchorValid ? anchorRange!.to : documentText.length;
     const plan = planContextBudget({
       contextSize: model.contextSize,
@@ -396,7 +418,7 @@ useProjectStore.subscribe((state, prev) => {
   if (state.activeFilePath === prev.activeFilePath) return;
   const { selection, selectionRange } = useAiTaskStore.getState();
   if (selection || selectionRange) {
-    useAiTaskStore.setState({ selection: "", selectionRange: null });
+    useAiTaskStore.setState({ selection: "", selectionRange: null, selectionSource: null });
   }
 });
 

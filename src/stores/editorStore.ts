@@ -3,6 +3,7 @@ import type { EditorView } from "@codemirror/view";
 import { extractHeadings, countWords, type HeadingNode } from "../lib/fs/markdown";
 import { readFile, writeFile } from "../lib/fs/fileio";
 import { isImagePath } from "../lib/fs/images";
+import type { AiTargetRange } from "../lib/editor/aiTarget";
 import { useProjectStore } from "./projectStore";
 
 export type ViewMode = "split" | "editor" | "preview";
@@ -19,6 +20,14 @@ interface EditorState {
   /** Live CodeMirror view — used to read precise selection offsets. Null when
    *  no editor is mounted (e.g. preview-only mode). */
   editorView: EditorView | null;
+  /**
+   * Mirror of the editor's marked AI target range, for UI that must show the
+   * half-marked state too (`to: null` — start placed, end not yet). The usable
+   * form is committed separately to `aiTaskStore.selection`; a half-marked
+   * range is deliberately not a target, and must not look like one.
+   * Authoritative copy lives in editor state — see lib/editor/aiTarget.
+   */
+  aiTarget: AiTargetRange | null;
 
   loadFile: (path: string) => Promise<void>;
   setContent: (content: string) => void;
@@ -26,6 +35,7 @@ interface EditorState {
   setViewMode: (mode: ViewMode) => void;
   setScrollToLine: (fn: ((line: number) => void) | null) => void;
   setEditorView: (view: EditorView | null) => void;
+  setAiTarget: (range: AiTargetRange | null) => void;
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -37,6 +47,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   saveTimer: null,
   scrollToLine: null,
   editorView: null,
+  aiTarget: null,
 
   loadFile: async (path) => {
     // Flush any pending autosave for the previously open file before switching.
@@ -94,6 +105,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setScrollToLine: (fn) => set({ scrollToLine: fn }),
 
   setEditorView: (view) => set({ editorView: view }),
+
+  setAiTarget: (range) => set({ aiTarget: range }),
 }));
 
 // ─── Writing focus ────────────────────────────────────────────────────────────

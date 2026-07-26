@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { RefreshCw, Wand2, AlignLeft, Sparkles } from "lucide-react";
 import { useAiTaskStore, type TaskKind, type SelectionRange } from "../../stores/aiTaskStore";
 import { useEditorStore } from "../../stores/editorStore";
+import { clearTarget } from "../../lib/editor/aiTarget";
 import { useAppStore } from "../../stores/appStore";
 import { IS_MAC } from "../../lib/platform";
 import styles from "./InlineAiBubble.module.css";
@@ -46,6 +47,19 @@ function insideSelectableSurface(node: Node | null): boolean {
 
 /** Resolve precise source offsets for the current selection, if it lives in the
  *  focused CodeMirror editor. Returns rendered-text fallback (no offsets) otherwise. */
+/**
+ * Drop any explicitly marked range before committing a dragged one.
+ *
+ * Both write the same target slot and the last action wins, but the marker also
+ * paints the document — left behind, it would highlight one passage while the
+ * assistant works on another. Clearing runs first so the marker's own store
+ * sync (which fires inside the dispatch) can't wipe the commit that follows.
+ */
+function dropEditorMarker() {
+  const view = useEditorStore.getState().editorView;
+  if (view) clearTarget(view);
+}
+
 function resolveCommit(liveText: string): { text: string; range: SelectionRange | null } {
   const view = useEditorStore.getState().editorView;
   if (view && view.hasFocus) {
@@ -115,6 +129,7 @@ export function InlineAiBubble() {
       ) return;
       e.preventDefault();
       const { text: committed, range } = resolveCommit(text);
+      dropEditorMarker();
       setSelection(committed, range);
       setRequestedTask(task);
       setShowAiDrawer(true, "generate");
@@ -134,6 +149,7 @@ export function InlineAiBubble() {
 
   const commit = (): { text: string; range: SelectionRange | null } => {
     const { text, range } = resolveCommit(live.text);
+    dropEditorMarker();
     setSelection(text, range);
     return { text, range };
   };

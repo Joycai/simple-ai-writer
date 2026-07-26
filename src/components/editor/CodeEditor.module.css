@@ -99,6 +99,16 @@
 
 .wrap :global(.tok-processingInstruction) { color: var(--color-text-muted); }
 
+/* AI target range — the passage marked for the assistant to act on.
+   A bottom band, not a fill: .cm-selectionBackground above is already a sienna
+   wash, and two fills would blur "what I have selected" into "what the AI will
+   touch". Same treatment as .lore-mention, so marked prose reads as annotated
+   rather than selected. */
+.aiTarget {
+  background: linear-gradient(to bottom, transparent 76%, var(--color-accent-tint-strong) 76%);
+  box-shadow: inset 0 -2px 0 var(--color-sienna);
+}
+
 /* Active line — barely-there warm tint, easy on the eyes */
 .wrap :global(.cm-activeLine) {
   background: rgba(160, 82, 45, 0.04);

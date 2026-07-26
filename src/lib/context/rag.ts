@@ -51,6 +51,18 @@ export interface TaskExtras {
    */
   appendMode?: boolean;
   /**
+   * Exact offset a continuation attaches at, when the caller has already
+   * decided ("continue" only, with appendMode).
+   *
+   * The AiPanel offers an explicit position — chapter opening, chapter end, or
+   * after the marked passage — and that choice cannot be re-derived downstream
+   * from the selection alone: an opening is offset 0 whether or not anything is
+   * selected. Passing the resolved offset keeps the prompt's reference window,
+   * the budget, the book-context bridge and the eventual insert all measuring
+   * from the one place the author was shown. Omitted → derived as before.
+   */
+  appendAnchor?: number;
+  /**
    * How many characters of text *before* the selection to include as reference
    * context (polish/rewrite/summary). 0 = none. Falls back to MAX_CONTEXT_CHARS
    * when undefined (e.g. "continue").
@@ -150,6 +162,23 @@ export function resolveAppendAnchor(
   selection: string,
   selectionRange?: { from: number; to: number } | null,
 ): number {
+  return locateAppendAnchor(documentText, selection, selectionRange) ?? documentText.length;
+}
+
+/**
+ * The same anchor, but null instead of the document end when a non-empty
+ * selection cannot be found at all.
+ *
+ * The difference matters wherever "continue from this passage" was an explicit
+ * choice: silently relocating that to the end of the chapter puts prose
+ * somewhere the author did not ask for. Callers with no such choice to honour
+ * want `resolveAppendAnchor`, where the document end is the right default.
+ */
+export function locateAppendAnchor(
+  documentText: string,
+  selection: string,
+  selectionRange?: { from: number; to: number } | null,
+): number | null {
   if (
     selectionRange &&
     documentText.slice(selectionRange.from, selectionRange.to) === selection
@@ -158,9 +187,51 @@ export function resolveAppendAnchor(
   }
   if (selection) {
     const off = locateSelectionOffset(documentText, selection);
-    if (off >= 0) return off + selection.length;
+    return off >= 0 ? off + selection.length : null;
   }
   return documentText.length;
+}
+
+/**
+ * Where an in-place edit (polish / rewrite) will overwrite the document.
+ *
+ * Null means "nowhere reliable" — the caller appends instead, which is
+ * lossless. That is always the right answer when we cannot be certain, because
+ * this range *replaces prose*: guessing wrong destroys a passage the author
+ * never pointed at.
+ *
+ * @param source Which mechanism committed the target; see aiTaskStore.
+ *   A marked range's offsets are maintained by CodeMirror itself, so if they
+ *   have stopped describing the document then something is wrong that a text
+ *   search cannot repair — and overwriting whatever else happens to match the
+ *   text would be far worse than appending. Only a dragged selection, whose
+ *   offsets are a snapshot (or absent entirely, in the preview pane), earns the
+ *   verbatim-search fallback.
+ */
+export function resolveEditRange(
+  documentText: string,
+  selection: string,
+  selectionRange: { from: number; to: number } | null,
+  source: "marker" | "commit" | null,
+): { from: number; to: number } | null {
+  if (!selection) return null;
+  if (
+    selectionRange &&
+    documentText.slice(selectionRange.from, selectionRange.to) === selection
+  ) {
+    return selectionRange;
+  }
+  if (source === "marker") return null;
+  // Two guards, because unlike every other selection lookup this one overwrites:
+  //   • only an exact match counts. locateSelectionOffset has a normalized
+  //     fallback, but the span it reports isn't `selection.length` long, so it
+  //     cannot be turned into a replace range;
+  //   • the match must be unique. Repeated lines are ordinary in a draft, and
+  //     silently rewriting the *last* one would destroy prose the author never
+  //     selected. Ambiguous → append.
+  const first = documentText.indexOf(selection);
+  if (first < 0 || first !== documentText.lastIndexOf(selection)) return null;
+  return { from: first, to: first + selection.length };
 }
 
 /**
@@ -242,7 +313,7 @@ export async function assembleContext(
     selectionRange &&
     documentText.slice(selectionRange.from, selectionRange.to) === selection;
   if (appendMode) {
-    endIdx = resolveAppendAnchor(documentText, selection, selectionRange);
+    endIdx = extras?.appendAnchor ?? resolveAppendAnchor(documentText, selection, selectionRange);
   } else if (rangeMatches) {
     endIdx = selectionRange!.from;
   } else if (selection) {

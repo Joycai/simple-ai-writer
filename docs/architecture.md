@@ -17,6 +17,53 @@ prompts (id, name, content, taskHints, category)
 token_usage (id, model_id, task, prompt_tokens, cached_tokens, completion_tokens, cost_usd, created_at)
 ```
 
+### The AI target (选区) and where a task acts
+
+Every AI task acts *somewhere*, and getting that spot wrong is the failure mode
+with the worst blast radius — polish/rewrite overwrite prose. Two mechanisms
+commit a target, both writing one slot (`aiTaskStore.selection` +
+`selectionRange` + `selectionSource`), last action wins:
+
+- **Marked range** (`src/lib/editor/aiTarget.ts`) — ⌘⇧[ / ⌘⇧] / ⌘⇧\, or the
+  buttons in `EditorBottomStrip`. Lives in a CodeMirror `StateField` and is
+  **mapped through every change**, so the offsets stay exact across arbitrary
+  edits, including edits inside the range. `to: null` is the half-marked state:
+  surfaced in the UI, never treated as a target. Painted with a bottom band —
+  not a fill, which `.cm-selectionBackground` already is. Dropped on any
+  full-document replace (file switch, AI insert), since mapping across one
+  leaves offsets pointing at unrelated prose. `CodeEditor`'s `updateListener`
+  mirrors it to the stores; it is driven by the *field*, not by the mark
+  commands, so edits that move the range keep the mirror in step.
+- **Dragged selection** (`InlineAiBubble`) — committed at the moment the author
+  acts on it (the bubble `preventDefault`s mousedown to keep the DOM selection
+  alive). Required for the preview pane, which has no source offsets at all.
+  Committing one drops any marker, so the document is never painted for a
+  passage the assistant isn't working on.
+
+Consumers ask `lib/context/rag.ts`, never re-derive:
+
+| Question | Function | Not-sure answer |
+|---|---|---|
+| Where does polish/rewrite overwrite? | `resolveEditRange()` | `null` → append (lossless) |
+| Where does a continuation attach? | `resolveAppendAnchor()` / `locateAppendAnchor()` | document end / `null` |
+| How does it get spliced in? | `spliceContinuation()` | — |
+
+`resolveEditRange` will relocate a *dragged* selection by verbatim search
+(unique match only), but never a *marked* one: the editor maintains those
+offsets, so if they've stopped describing the document, searching for the text
+and overwriting whatever turns up is a bigger bug than appending.
+
+**Continue positions.** `AiPanel` offers 开篇 / 文末 / 扩写选区 explicitly —
+the three are not inferable from document state (an opening is offset 0 whether
+or not something is selected). The chosen offset is passed down as
+`TaskExtras.appendAnchor`, so the card's label, the prompt's reference window,
+the budget and the insert all measure from the one place the author was shown.
+Expand refuses to run when its passage can't be located rather than silently
+relocating to the chapter end. This is separate from 承接/独立, which is a
+question about the chapter's *age* (gated on its length, not on the anchor) —
+fusing them is why expanding early in a long chapter used to drag in the
+previous chapter's ending.
+
 ### RAG (Retrieval-Augmented Generation)
 
 - **Location** — `src/lib/context/rag.ts` (assembly) + `src/lib/context/loreSelect.ts` (lore selection)

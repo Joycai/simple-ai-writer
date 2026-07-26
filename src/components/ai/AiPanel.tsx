@@ -19,7 +19,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import {
-  ChevronDown, ChevronRight, Copy, Crosshair, Layers, Pin, Play, RotateCw, Square,
+  ChevronDown, ChevronRight, Copy, Crosshair, Layers, Pin, Play, RotateCw, Square, X,
 } from "lucide-react";
 import { useAiTaskStore, type TaskKind } from "../../stores/aiTaskStore";
 import { useAgentStore } from "../../stores/agentStore";
@@ -31,7 +31,13 @@ import { focusBlockedByImage, useEditorStore, useWritingFocus } from "../../stor
 import { useLoreStore } from "../../stores/loreStore";
 import { useMemoryStore } from "../../stores/memoryStore";
 import { useProjectStore } from "../../stores/projectStore";
-import { resolveAppendAnchor, spliceContinuation, type TaskExtras } from "../../lib/context/rag";
+import {
+  locateAppendAnchor,
+  resolveEditRange,
+  spliceContinuation,
+  type TaskExtras,
+} from "../../lib/context/rag";
+import { clearTarget } from "../../lib/editor/aiTarget";
 import { parsePins, type LoreActivationReport } from "../../lib/context/loreSelect";
 import type { LoreFacet } from "../../lib/lore";
 import {
@@ -112,6 +118,24 @@ function basename(path: string): string {
 function paragraphIndexAt(text: string, offset: number): number {
   if (offset <= 0) return 1;
   return text.slice(0, offset).split(/\n{2,}/).length;
+}
+
+/**
+ * Where a continuation goes. Named by the author rather than inferred, because
+ * the three answers are not distinguishable from document state alone: an
+ * opening is offset 0 whether or not anything happens to be selected.
+ */
+export type ContinueMode = "opening" | "end" | "expand";
+
+/**
+ * The mode to start from, when the author has not said.
+ *
+ * An empty chapter can only be opened; a marked passage is almost always
+ * marked *in order to* write from it; anything else is the traditional append.
+ */
+function defaultContinueMode(content: string, hasTarget: boolean): ContinueMode {
+  if (content.trim() === "") return "opening";
+  return hasTarget ? "expand" : "end";
 }
 
 /** Small uppercase section heading with an optional right-aligned meta slot. */
@@ -722,7 +746,8 @@ export function AiPanel() {
   const { t, i18n } = useTranslation();
   const {
     isRunning, output, error, usage, agentLog, loreReport,
-    runTask, abort, clearOutput, selection, selectionRange, requestedTask, setRequestedTask,
+    runTask, abort, clearOutput, selection, selectionRange, selectionSource,
+    clearSelectionFrom, requestedTask, setRequestedTask,
   } = useAiTaskStore();
   const { models, providers, prompts, activeModelId, activePromptId, setActivePrompt } = useAiStore();
   // The focused document — one atomic read of "which file" + "its text", so the
@@ -761,12 +786,22 @@ export function AiPanel() {
   // explicitly instead of discovering it in the output.
   const [openingMode, setOpeningMode] = useState<"bridge" | "standalone">("bridge");
   const [bridgePath, setBridgePath] = useState<string | null>(null);
+  // Where the continuation attaches. Null means "still following the default" —
+  // the author has not overridden it for this file yet.
+  const [pickedMode, setPickedMode] = useState<ContinueMode | null>(null);
   const [volumes, setVolumes] = useState<
     { name: string; chapters: { path: string; title: string }[] }[]
   >([]);
 
+  // Whether to bridge is a question about the chapter's *age*, not about where
+  // this particular continuation goes — a chapter with barely anything in it
+  // has no continuity of its own yet, whichever spot you write at.
   const wantsOpeningChoice =
     selectedTask === "continue" && content.trim().length < BOOK_PREV_TAIL_NEAR_START_CHARS;
+
+  // The chosen position belongs to the chapter it was chosen in; a new file
+  // starts from the default again.
+  useEffect(() => { setPickedMode(null); }, [focus.filePath]);
 
   // The book's chapter spine, for the bridge picker. Loaded only when the
   // control can actually appear — resolveVolumes reads the outline off disk.
@@ -850,35 +885,27 @@ export function AiPanel() {
   // selection was* — appending it to the end of the document (the only thing
   // this panel used to do) silently duplicated the passage instead. Resolved at
   // apply time, not run time: the author may have kept typing while it streamed.
-  const replaceRange = (() => {
-    if (selectedTask !== "polish" && selectedTask !== "rewrite") return null;
-    if (!selection) return null;
-    if (selectionRange && content.slice(selectionRange.from, selectionRange.to) === selection) {
-      return selectionRange;
-    }
-    // Offsets went stale (edits above it, or a preview-mode selection with no
-    // range at all) — fall back to a verbatim search. Two guards, because unlike
-    // every other selection lookup in the app this one *overwrites* prose:
-    //   • only an exact match counts. rag.ts's locateSelectionOffset has a
-    //     normalized fallback, but the span it reports isn't `selection.length`
-    //     long, so it can't be turned into a replace range;
-    //   • the match must be unique. Repeated lines are ordinary in a draft, and
-    //     silently rewriting the *last* one would destroy a passage the author
-    //     never selected. Ambiguous → fall through to append, which is lossless.
-    const first = content.indexOf(selection);
-    if (first < 0 || first !== content.lastIndexOf(selection)) return null;
-    return { from: first, to: first + selection.length };
-  })();
+  const replaceRange =
+    selectedTask === "polish" || selectedTask === "rewrite"
+      ? resolveEditRange(content, selection, selectionRange, selectionSource)
+      : null;
 
-  // Where a continuation attaches. Same resolver assembleContext anchors the
-  // prompt to, so the passage lands exactly where it was written from — this
-  // used to read from the selection but always append at the document end,
-  // which turned a mid-chapter bridge into a tail. Recomputed every render:
-  // the author keeps typing while the panel is open.
-  const continueAnchor = isContinue
-    ? resolveAppendAnchor(content, selection, selectionRange)
-    : null;
-  const anchorAtEnd = continueAnchor === null || continueAnchor >= content.length;
+  // Where a continuation attaches — the author's chosen mode, resolved to one
+  // offset that the label, the prompt's reference window, the budget and the
+  // insert all share. Recomputed every render: the author keeps typing while
+  // the panel is open, and an expand target moves with the text.
+  //
+  // Expand deliberately yields null rather than the document end when its
+  // passage can't be located: this mode exists because the author pointed at a
+  // spot, and quietly writing somewhere else is worse than refusing to run.
+  const continueMode = pickedMode ?? defaultContinueMode(content, !!selection);
+  const continueAnchor = !isContinue
+    ? null
+    : continueMode === "opening"
+    ? 0
+    : continueMode === "expand"
+    ? (selection ? locateAppendAnchor(content, selection, selectionRange) : null)
+    : content.length;
 
   const handleApply = () => {
     const { setContent } = useEditorStore.getState();
@@ -900,6 +927,20 @@ export function AiPanel() {
     view.focus();
   };
 
+  /**
+   * Drop the current edit target.
+   *
+   * A committed selection previously had no way out except switching files: it
+   * kept the task armed against a passage the author may have moved on from.
+   * Marked ranges clear through the editor (which also unpaints them); dragged
+   * ones clear in the store.
+   */
+  const dismissTarget = () => {
+    const view = useEditorStore.getState().editorView;
+    if (selectionSource === "marker" && view) clearTarget(view);
+    else clearSelectionFrom("commit");
+  };
+
   /** Put the caret back on the passage this task will edit. */
   const locateSelection = () => {
     const view = useEditorStore.getState().editorView;
@@ -919,11 +960,17 @@ export function AiPanel() {
         manualLorePaths,
         outline: outline.trim() || undefined,
         additionalKnowledge: additionalKnowledge.trim() || undefined,
-        // Only an explicit answer is sent. Above the threshold there is no
-        // question to answer and `undefined` leaves the automatic rule in place.
+        // Always explicit now. The automatic rule ("bridge when the anchor sits
+        // near the chapter start") reads the anchor, so expanding a marked
+        // passage early in a long chapter used to pull in the previous
+        // chapter's ending — the chapter has thousands of words of its own
+        // continuity by then. Whether to bridge is a question about the
+        // chapter's age, which is what the control below is gated on; where to
+        // write is a separate question, answered by the mode.
         bridgeChapter: wantsOpeningChoice
           ? (openingMode === "standalone" ? null : bridgePath)
-          : undefined,
+          : null,
+        appendAnchor: continueAnchor ?? undefined,
       };
     } else if (supportsExtras) {
       extras = {
@@ -944,10 +991,14 @@ export function AiPanel() {
 
   // Polish / rewrite / summary operate on the selected text — require one.
   const needsSelection = supportsExtras && !selection;
+  // Expand was chosen because the author pointed at a passage. If that passage
+  // is gone (or can no longer be found), refuse rather than quietly relocating
+  // the continuation to the end of the chapter.
+  const needsAnchor = isContinue && continueMode === "expand" && continueAnchor === null;
   // An unsettled focus means the editor still holds the *previous* document.
   // Blocking here turns a silent wrong-document run into a visible short wait.
   const canRun =
-    hasConfig && !isRunning && !needsSelection && focus.settled &&
+    hasConfig && !isRunning && !needsSelection && !needsAnchor && focus.settled &&
     (selectedTask !== "custom" || !!customInstr.trim());
 
   // ⌘/Ctrl+Enter runs from anywhere in the panel, including the textareas.
@@ -1106,19 +1157,23 @@ export function AiPanel() {
                   {isContinue && focus.filePath && (
                     <div className={styles.targetCard}>
                       <span className={styles.targetLabel}>
-                        {content.trim() === ""
-                          ? t("ai.panel.continueTargetEmpty", {
+                        {continueMode === "opening"
+                          ? t("ai.panel.continueTargetOpening", {
                               defaultValue: "续写目标 · 从开头写起 · {{file}}",
                               file: basename(focus.filePath),
                             })
-                          : anchorAtEnd
+                          : continueMode === "end"
                           ? t("ai.panel.continueTargetEnd", {
                               defaultValue: "续写目标 · 文末 · {{file}}",
                               file: basename(focus.filePath),
                             })
+                          : continueAnchor === null
+                          ? t("ai.panel.continueTargetLost", {
+                              defaultValue: "续写目标 · 选区已失效，请重新标记",
+                            })
                           : t("ai.panel.continueTargetPara", {
                               defaultValue: "续写目标 · 第 {{para}} 段之后 · {{file}}",
-                              para: paragraphIndexAt(content, continueAnchor ?? 0),
+                              para: paragraphIndexAt(content, continueAnchor),
                               file: basename(focus.filePath),
                             })}
                       </span>
@@ -1134,7 +1189,11 @@ export function AiPanel() {
                   {!isContinue && selection && (
                     <div className={styles.targetCard}>
                       <span className={styles.targetLabel}>
-                        {t("ai.panel.targetSummary", {
+                        {/* Naming the source ties the card to the band painted
+                            in the document, so a highlight is never unexplained. */}
+                        {t(selectionSource === "marker"
+                          ? "ai.panel.targetSummaryMarked"
+                          : "ai.panel.targetSummary", {
                           defaultValue: "{{task}}选区 · 第 {{para}} 段, {{chars}} 字",
                           task: taskLabel,
                           para: paragraphIndexAt(content, selectionRange?.from ?? 0),
@@ -1147,6 +1206,17 @@ export function AiPanel() {
                           {t("ai.panel.locateSelection", { defaultValue: "在正文中定位" })}
                         </button>
                       )}
+                      <button className={styles.linkBtn} onClick={dismissTarget}>
+                        <X size={10} strokeWidth={1.8} />
+                        {t("ai.panel.clearTarget", { defaultValue: "取消目标" })}
+                      </button>
+                    </div>
+                  )}
+                  {needsAnchor && (
+                    <div className={styles.warnLine}>
+                      {t("ai.panel.expandNeedsTarget", {
+                        defaultValue: "「扩写选区」需要一段可定位的选区 —— 请标记，或改用文末续写",
+                      })}
                     </div>
                   )}
                   {needsSelection && (
@@ -1193,9 +1263,37 @@ export function AiPanel() {
                         </span>
                       </div>
 
+                      {/* Where the continuation attaches. Explicit, because the
+                          three answers are not inferable from document state —
+                          and because the panel promises this spot on the card
+                          above and then writes there. */}
+                      <div className={styles.controlRow}>
+                        <span className={styles.controlLabel}>
+                          {t("ai.panel.continuePosition", { defaultValue: "续写位置" })}
+                        </span>
+                        <div className={styles.chipGroup}>
+                          {([
+                            ["opening", "modeOpening", "开篇", "从本章开头写起，插在现有正文之前"],
+                            ["end", "modeEnd", "文末", "接在本章结尾，传统续写"],
+                            ["expand", "modeExpand", "扩写选区", "从选区末尾往下写，插在该段之后"],
+                          ] as const).map(([mode, key, label, hint]) => (
+                            <button
+                              key={mode}
+                              className={`${styles.chip} ${continueMode === mode ? styles.chipActive : ""}`}
+                              onClick={() => setPickedMode(mode)}
+                              title={t(`ai.panel.${key}Hint`, { defaultValue: hint })}
+                            >
+                              {t(`ai.panel.${key}`, { defaultValue: label })}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       {/* How this chapter opens — only a question while it is
                           still (nearly) empty, and only when something precedes
-                          it in the book. */}
+                          it in the book. Independent of the position above: a
+                          chapter with nothing in it lacks continuity of its own
+                          wherever you write. */}
                       {wantsOpeningChoice && bridgeCandidates.length > 0 && (
                         <div className={styles.controlRow}>
                           <span className={styles.controlLabel}>
