@@ -142,6 +142,7 @@ Story Memory is *per-document*, so a chapter is its own file and knows nothing o
 - `connect-src` allows `https:`/`http:` because users configure arbitrary AI endpoints (incl. local LLMs like Ollama); `script-src` is locked to `'self'`
 - `img-src` includes the `ai-writer-asset:` custom scheme (and its `http://ai-writer-asset.localhost` Windows form) for lore images
 - If a new subsystem breaks under CSP (e.g. a library injecting inline `<script>`), extend the directive minimally — don't set `csp` back to `null`
+- `dangerousDisableAssetCspModification: ["style-src"]` is **load-bearing — do not remove.** At build time Tauri stamps a nonce onto every inline `<style>` in `index.html` (we have one: the boot splash) and appends `'nonce-…'` to `style-src` at runtime. Per CSP2+, a nonce in a directive makes `'unsafe-inline'` **ignored**, so every `<style>` injected later by JS gets blocked — CodeMirror's base theme (style-mod injects a plain `<style>`, losing `.cm-scroller { height: 100% }` → the editor renders but cannot scroll), plus KaTeX/mermaid inline `style="…"` attributes. Only ever visible in `tauri build`, never in `tauri dev`, since `devCsp` is `null`. The flag just tells Tauri to leave `style-src` alone; we already declare `'unsafe-inline'` ourselves, so the effective policy is unchanged.
 
 ## Performance Considerations
 
