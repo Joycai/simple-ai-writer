@@ -6,9 +6,21 @@
   font-family: var(--font-serif);
   font-size: 17px;
   line-height: 1.78;
+  /* The rendered manuscript — opt back in to selection (see the body rule in
+     global.css). Quoting your own prose out of the preview is table stakes in
+     a writing app, and the editor pane next to it has always allowed it. */
+  -webkit-user-select: text;
+  user-select: text;
   /* Restore a slim scrollbar (global CSS hides all of them). */
   scrollbar-width: thin;
   scrollbar-color: var(--color-border-strong) transparent;
+}
+/* Matches the editor's own selection tint so switching panes doesn't change
+   what a highlight looks like. */
+.preview::selection,
+.preview ::selection {
+  background: var(--color-accent-tint-strong);
+  color: var(--color-text-primary);
 }
 .preview::-webkit-scrollbar {
   width: 10px;

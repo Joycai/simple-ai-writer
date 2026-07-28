@@ -15,6 +15,20 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
+  /* The transcript is content, not chrome — opt back in to selection (see the
+     body rule in global.css). Scoped to the transcript, so the surrounding
+     chrome stays undraggable-to-select; the composer is a textarea and was
+     never affected. */
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Default browser blue would read as foreign against the paper surface, so the
+   highlight uses the same accent tint as the app's other selected states. */
+.messages::selection,
+.messages ::selection {
+  background: var(--color-accent-tint-strong);
+  color: var(--color-text-primary);
 }
 
 .emptyHint {
