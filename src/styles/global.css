@@ -17,6 +17,14 @@ body {
   color: var(--color-text-primary);
   background: var(--color-bg-base);
   -webkit-font-smoothing: antialiased;
+  /* Desktop-app default: dragging across the UI must not select it like a web
+     page. This inherits everywhere, so every surface whose text is *content*
+     rather than chrome has to opt back in with `user-select: text` — see
+     Preview `.preview`, AgentChat `.messages`, AiPanel `.output`. Form controls
+     and CodeMirror (which draws its own selection layer) are unaffected.
+     Opting in is per-surface rather than a global override because the
+     selection highlight has to be styled alongside it, and a global
+     `::selection` would reach inside the editor. */
   user-select: none;
 }
 

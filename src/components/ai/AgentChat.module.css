@@ -15,12 +15,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  /* The transcript is content, not chrome. global.css sets `user-select: none`
-     on body so dragging across the app doesn't select the UI like a web page —
-     but that inherits everywhere, which left the assistant's answers
-     uncopyable. Selection is restored for the transcript only; the composer
-     (a textarea) and the editor (CodeMirror draws its own) were never
-     affected. */
+  /* The transcript is content, not chrome — opt back in to selection (see the
+     body rule in global.css). Scoped to the transcript, so the surrounding
+     chrome stays undraggable-to-select; the composer is a textarea and was
+     never affected. */
   -webkit-user-select: text;
   user-select: text;
 }

@@ -631,6 +631,16 @@
   white-space: pre-wrap;
   overflow-y: auto;
   max-height: 420px;
+  /* Generated prose — opt back in to selection (see the body rule in
+     global.css). "Insert to document" takes the whole result; lifting one
+     paragraph out of it needs the mouse. */
+  -webkit-user-select: text;
+  user-select: text;
+}
+.output::selection,
+.output ::selection {
+  background: var(--color-accent-tint-strong);
+  color: var(--color-text-primary);
 }
 .cursor {
   display: inline-block;
