@@ -45,7 +45,8 @@ import { executeRegisteredTool, type ToolContext, type ToolId } from "../agent/r
 const PROJECT = "/proj";
 const ALL_TOOLS: ToolId[] = [
   "read_memory", "propose_lore_plan", "create_lore_entity", "update_lore_file",
-  "move_lore_entity", "delete_lore_entity", "update_memory", "propose_edit",
+  "update_facet_meta", "delete_lore_file", "move_lore_entity", "delete_lore_entity",
+  "update_memory", "propose_edit",
 ];
 
 /**
@@ -57,6 +58,7 @@ const OPEN_PLAN: LorePlanStep[] = [
   { action: "update", entity: "Ava", detail: "revise the entry" },
   { action: "move", entity: "Ava", detail: "recategorize" },
   { action: "delete", entity: "Ava", detail: "remove the duplicate" },
+  { action: "delete", entity: "Ava", file: "armor.md", detail: "retire the armor facet" },
 ];
 
 const INDEX_MD = `---\nname: Ava\naliases: []\ncategory: characters\nsummary: "the protagonist"\n---\n\n# Ava\n`;
@@ -235,6 +237,109 @@ describe("update_lore_file", () => {
   });
 });
 
+// ─── update_facet_meta ───────────────────────────────────────────────────────
+
+describe("update_facet_meta", () => {
+  const ARMOR = `${PROJECT}/.ai-writer/lore/characters/ava/armor.md`;
+
+  it("rewrites only the frontmatter, carrying the body through verbatim", async () => {
+    const ctx = makeCtx();
+    const res = await run("update_facet_meta", {
+      entity: "Ava", file: "armor.md",
+      keys: ["战甲", "板甲", "银甲"], group: "outfit", priority: 2, mode: "always",
+    }, ctx);
+
+    expect(res.content).toContain("keys=[战甲, 板甲, 银甲]");
+    expect(res.content).toContain("group=outfit");
+    expect(res.content).toContain("mode=always");
+    const written = fs.get(ARMOR)!;
+    expect(written).toContain('facet: "战甲"');       // untouched field kept
+    expect(written).toContain('group: "outfit"');
+    expect(written).toContain("priority: 2");
+    expect(written).toContain("mode: always");
+    expect(written).toContain("她的战甲是黑色的。");   // body survived byte-for-byte
+    expect(fs.get(backupsOf()[0])).toBe(FACET_MD);
+    expect(ctx.loreChanged).toBe(1);
+  });
+
+  it("leaves omitted fields alone and can clear a group", async () => {
+    const ctx = makeCtx();
+    await run("update_facet_meta", { entity: "Ava", file: "armor.md", group: "outfit" }, ctx);
+    await run("update_facet_meta", { entity: "Ava", file: "armor.md", title: "银甲" }, ctx);
+
+    const written = fs.get(ARMOR)!;
+    expect(written).toContain('facet: "银甲"');
+    expect(written).toContain('group: "outfit"'); // survived the second call
+    expect(written).toContain('keys: ["战甲", "板甲"]');
+
+    const cleared = await run("update_facet_meta", { entity: "Ava", file: "armor.md", group: "" }, ctx);
+    expect(cleared.content).toContain("group=none");
+    expect(fs.get(ARMOR)).not.toContain("group:");
+  });
+
+  it("warns when the new metadata makes the facet unreachable", async () => {
+    const res = await run("update_facet_meta", { entity: "Ava", file: "armor.md", keys: [] }, makeCtx());
+    expect(res.content).toContain("will never be injected");
+  });
+
+  it("refuses index.md, non-facet files, unknown files and empty edits", async () => {
+    const ctx = makeCtx();
+    fs.set(`${PROJECT}/.ai-writer/lore/characters/ava/notes.md`, "just an attachment");
+
+    const reserved = await run("update_facet_meta", { entity: "Ava", file: "index.md", title: "x" }, ctx);
+    expect(reserved.content).toContain("app-managed");
+
+    const inert = await run("update_facet_meta", { entity: "Ava", file: "notes.md", title: "x" }, ctx);
+    expect(inert.content).toContain("is not a facet");
+
+    const missing = await run("update_facet_meta", { entity: "Ava", file: "ghost.md", title: "x" }, ctx);
+    expect(missing.content).toContain("does not exist");
+
+    const noop = await run("update_facet_meta", { entity: "Ava", file: "armor.md" }, ctx);
+    expect(noop.content).toContain("at least one of");
+
+    const escape = await run("update_facet_meta", { entity: "Ava", file: "../evil.md", title: "x" }, ctx);
+    expect(escape.content).toContain("plain .md filename");
+
+    expect(fs.get(ARMOR)).toBe(FACET_MD);
+    expect(ctx.loreChanged).toBe(0);
+  });
+});
+
+// ─── delete_lore_file ────────────────────────────────────────────────────────
+
+describe("delete_lore_file", () => {
+  const ARMOR = `${PROJECT}/.ai-writer/lore/characters/ava/armor.md`;
+
+  it("backs up then removes one facet, leaving the entity intact", async () => {
+    const ctx = makeCtx();
+    const res = await run("delete_lore_file", {
+      entity: "Ava", file: "armor.md", reason: "merged into index",
+    }, ctx);
+
+    expect(res.content).toContain("Deleted armor.md");
+    expect(fs.has(ARMOR)).toBe(false);
+    expect(fs.get(`${PROJECT}/.ai-writer/lore/characters/ava/index.md`)).toBe(INDEX_MD);
+    expect(fs.get(backupsOf()[0])).toBe(FACET_MD); // recoverable
+    // The run snapshot forgets it, so a later call in the same run sees reality.
+    expect(ctx.loreIndex.characters[0].facets).toHaveLength(0);
+    expect(ctx.loreIndex.characters[0].mdFiles).toEqual(["index.md"]);
+    expect(ctx.loreChanged).toBe(1);
+  });
+
+  it("refuses index.md / images.md and reports a file that is not there", async () => {
+    const ctx = makeCtx();
+    for (const file of ["index.md", "images.md"]) {
+      const res = await run("delete_lore_file", { entity: "Ava", file }, ctx);
+      expect(res.content).toContain("app-managed");
+    }
+    const ghost = await run("delete_lore_file", { entity: "Ava", file: "ghost.md" }, ctx);
+    expect(ghost.content).toContain("does not exist");
+    expect(fs.get(ARMOR)).toBe(FACET_MD);
+    expect(ctx.loreChanged).toBe(0);
+  });
+});
+
 // ─── propose_lore_plan + the gate on every lore write ────────────────────────
 
 const dirOf = (cat: string, id: string) => `${PROJECT}/.ai-writer/lore/${cat}/${id}`;
@@ -306,6 +411,21 @@ describe("lore plan gate", () => {
     }, ctx);
     expect(otherFile.content).toContain("does not cover");
     expect(fs.get(`${dirOf("characters", "ava")}/armor.md`)).toBe(FACET_MD);
+  });
+
+  it("does not let a file-scoped step authorise a whole-entity action", async () => {
+    const ctx = unplanned();
+    await run("propose_lore_plan", {
+      steps: [{ action: "delete", entity: "Ava", file: "armor.md", detail: "退役战甲特征" }],
+    }, ctx);
+
+    // Approving "drop this one facet" must never green-light "drop Ava".
+    const entity = await run("delete_lore_entity", { entity: "Ava" }, ctx);
+    expect(entity.content).toContain("does not cover");
+    expect(fs.get(AVA_INDEX)).toBe(INDEX_MD);
+
+    const facet = await run("delete_lore_file", { entity: "Ava", file: "armor.md" }, ctx);
+    expect(facet.content).toContain("Deleted armor.md");
   });
 
   it("hands a rejection back verbatim and keeps the gate shut", async () => {

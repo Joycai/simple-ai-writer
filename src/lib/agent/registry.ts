@@ -31,7 +31,9 @@ import { LORE_PLAN_ACTIONS, type LorePlan, type PlanDecision, type PlanGate } fr
 import {
   createLoreEntityTool,
   deleteLoreEntityTool,
+  deleteLoreFileTool,
   moveLoreEntityTool,
+  updateFacetMetaTool,
   proposeEditTool,
   proposeLorePlanTool,
   readMemoryTool,
@@ -103,6 +105,8 @@ export type ToolId =
   | "propose_lore_plan"
   | "create_lore_entity"
   | "update_lore_file"
+  | "update_facet_meta"
+  | "delete_lore_file"
   | "move_lore_entity"
   | "delete_lore_entity"
   | "update_memory"
@@ -346,6 +350,82 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => updateLoreFileTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  update_facet_meta: {
+    access: "write-auto",
+    definition: {
+      type: "function",
+      function: {
+        name: "update_facet_meta",
+        description:
+          "Retune ONE facet's activation metadata — its title, keys, group, priority or mode — without touching its body text. This is the right tool for 'this facet never fires' or 'these two outfits should exclude each other': update_lore_file would make you resend the whole file, risking silent edits to the prose. `keys` are the trigger words the injector matches against the manuscript; facets sharing a `group` compete so only the highest `priority` one is injected; `mode` auto = key-matched, always = every time, manual = pinned only. Read the file with read_lore_entity first — the fields you omit keep their current values.",
+        parameters: {
+          type: "object",
+          properties: {
+            entity: {
+              type: "string",
+              description: "Entity name exactly as returned by list_lore_entities",
+            },
+            file: {
+              type: "string",
+              description: "The facet's .md filename inside the entity directory (not index.md)",
+            },
+            title: { type: "string", description: "Facet display title" },
+            keys: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "Trigger words, replacing the current list entirely — distinctive nouns the text would actually use, not generic words",
+            },
+            group: {
+              type: "string",
+              description:
+                "Mutual-exclusion group (e.g. \"outfit\"); pass an empty string to clear it",
+            },
+            priority: {
+              type: "number",
+              description: "Higher wins within a group; default 0",
+            },
+            mode: {
+              type: "string",
+              enum: ["auto", "always", "manual"],
+              description: "auto = key-matched, always = always injected, manual = pin-only",
+            },
+          },
+          required: ["entity", "file"],
+        },
+      },
+    },
+    execute: (call, ctx) => updateFacetMetaTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  delete_lore_file: {
+    access: "write-auto",
+    definition: {
+      type: "function",
+      function: {
+        name: "delete_lore_file",
+        description:
+          "Delete ONE facet or attachment .md file from an entity, backing it up first. Use this to retire a facet that has been merged elsewhere or is no longer canon — delete_lore_entity would remove the entire character. index.md and images.md cannot be deleted this way.",
+        parameters: {
+          type: "object",
+          properties: {
+            entity: {
+              type: "string",
+              description: "Entity name exactly as returned by list_lore_entities",
+            },
+            file: { type: "string", description: "The .md filename inside the entity directory" },
+            reason: {
+              type: "string",
+              description: "One line on why it is being removed, shown to the author in the log",
+            },
+          },
+          required: ["entity", "file"],
+        },
+      },
+    },
+    execute: (call, ctx) => deleteLoreFileTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   move_lore_entity: {
