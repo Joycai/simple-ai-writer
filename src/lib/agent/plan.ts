@@ -125,9 +125,11 @@ export function checkPlan(
     (s) =>
       s.action === action &&
       sameEntity(loreIndex, s.entity, entity) &&
-      // A step that names a file pins the write to it; a step that doesn't
-      // covers any file in that entity.
-      (!s.file || !file || s.file.trim().toLowerCase() === file.trim().toLowerCase()),
+      // A step that names a file pins the write to exactly that file; a step
+      // that doesn't covers any file in that entity. A file-scoped step must
+      // NOT satisfy a call with no file — "delete Ava / armor.md" authorises
+      // dropping one facet, never the whole entity.
+      (!s.file || (!!file && s.file.trim().toLowerCase() === file.trim().toLowerCase())),
   );
   if (at < 0) {
     return {
