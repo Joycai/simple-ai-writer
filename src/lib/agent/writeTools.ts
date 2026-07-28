@@ -23,10 +23,14 @@ import {
   LORE_CATEGORIES,
   createEntityWithContent,
   parseFacetMeta,
+  readEntityFile,
+  saveEntityMetaAndBody,
   slugifyEntityId,
   uniqueEntityId,
   writeEntityFile,
   type CategoryId,
+  type LoreEntity,
+  type LoreIndex,
 } from "../lore";
 import {
   loadMemory,
@@ -35,10 +39,116 @@ import {
   rewriteMemorySegment,
 } from "../context/memory";
 import { parseFrontmatter } from "../fs/markdown";
-import { readFile } from "../fs/fileio";
+import { makeDir, readFile, renamePath } from "../fs/fileio";
 import { backupFile } from "./backup";
+import {
+  LORE_PLAN_ACTIONS,
+  checkPlan,
+  describeStep,
+  outstandingSteps,
+  type LorePlanAction,
+  type LorePlanStep,
+} from "./plan";
 import type { ToolContext } from "./registry";
 import { allEntityNames, findEntityByName, isPathWithin, type ToolResult } from "./tools";
+
+// ─── propose_lore_plan (the gate every lore write goes through) ──────────────
+
+let planCounter = 0;
+
+export async function proposeLorePlanTool(
+  toolCallId: string,
+  args: { summary?: string; steps?: unknown },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  if (!ctx.requestPlanApproval || !ctx.lorePlan) {
+    return {
+      toolCallId,
+      content: "Error: this surface cannot review lore plans — do not call propose_lore_plan here.",
+    };
+  }
+
+  const raw = Array.isArray(args.steps) ? args.steps : [];
+  if (raw.length === 0) {
+    return {
+      toolCallId,
+      content: "Error: 'steps' must list at least one change (action + entity + detail).",
+    };
+  }
+
+  const steps: LorePlanStep[] = [];
+  for (const [i, item] of raw.entries()) {
+    const s = (item ?? {}) as Record<string, unknown>;
+    const action = String(s.action ?? "").trim() as LorePlanAction;
+    const entity = String(s.entity ?? "").trim();
+    const detail = String(s.detail ?? "").trim();
+    if (!LORE_PLAN_ACTIONS.includes(action)) {
+      return {
+        toolCallId,
+        content: `Error: step ${i + 1} has action "${s.action}" — must be one of: ${LORE_PLAN_ACTIONS.join(", ")}.`,
+      };
+    }
+    if (!entity) return { toolCallId, content: `Error: step ${i + 1} is missing 'entity'.` };
+    if (!detail) {
+      return {
+        toolCallId,
+        content: `Error: step ${i + 1} is missing 'detail' — the author decides on this text, so say concretely what changes.`,
+      };
+    }
+    const file = typeof s.file === "string" && s.file.trim() ? s.file.trim() : undefined;
+    steps.push({ action, entity, file, detail });
+  }
+
+  ctx.lorePlan.asked = true;
+  const decision = await ctx.requestPlanApproval({
+    id: `plan-${++planCounter}`,
+    summary: args.summary?.trim() || undefined,
+    steps,
+  });
+
+  if (!decision.approved) {
+    return {
+      toolCallId,
+      content:
+        `The author REJECTED this plan${decision.reason ? ` — reason: ${decision.reason}` : "."} ` +
+        "Nothing has been changed. Revise the plan per the reason and propose again, or ask what they want instead — do not write any lore in the meantime.",
+    };
+  }
+
+  // Append rather than replace: a revised or additional plan mid-run must not
+  // silently revoke steps the author already signed off on. Carrying the
+  // earlier leftovers into the message keeps them from being forgotten now that
+  // a fresh list is the most recent thing in context.
+  const leftover = outstandingSteps(ctx.lorePlan);
+  const offset = ctx.lorePlan.steps.length;
+  ctx.lorePlan.steps.push(...steps);
+  return {
+    toolCallId,
+    content:
+      `Plan approved. Carry out exactly these steps, nothing more:\n` +
+      steps.map((s, i) => `  ${offset + i + 1}. ${describeStep(s)}`).join("\n") +
+      (leftover.length
+        ? `\nStill outstanding from earlier:\n${leftover.map((s) => `  - ${describeStep(s)}`).join("\n")}`
+        : "") +
+      "\nAnything outside this list will be refused. Propose again if the plan needs to change.",
+  };
+}
+
+/**
+ * Gate helper for the write tools: returns the refusal result to hand straight
+ * back, or the covering step whose `detail` gets echoed into the success
+ * message (so the log shows intent and outcome together).
+ */
+function gate(
+  toolCallId: string,
+  ctx: ToolContext,
+  action: LorePlanAction,
+  entity: string,
+  file?: string,
+): { refusal: ToolResult } | { step: LorePlanStep } {
+  const check = checkPlan(ctx.lorePlan, ctx.loreIndex, action, entity, file);
+  return check.ok ? { step: check.step } : { refusal: { toolCallId, content: check.message } };
+}
 
 // ─── create_lore_entity ──────────────────────────────────────────────────────
 
@@ -76,6 +186,9 @@ export async function createLoreEntityTool(
     };
   }
 
+  const gated = gate(toolCallId, ctx, "create", name);
+  if ("refusal" in gated) return gated.refusal;
+
   const aliases = (args.aliases ?? []).map((a) => String(a).trim()).filter(Boolean);
   const summary = args.summary?.trim() ?? "";
   const entityId = await uniqueEntityId(ctx.projectPath, category, slugifyEntityId(name));
@@ -86,7 +199,9 @@ export async function createLoreEntityTool(
   ctx.onLoreChanged?.();
   return {
     toolCallId,
-    content: `Created lore entity "${name}" (category: ${category}) at ${dirPath}. The lore index has been refreshed.`,
+    content:
+      `Created lore entity "${name}" (category: ${category}) at ${dirPath}. ` +
+      `Plan step: ${gated.step.detail}. The lore index has been refreshed.`,
   };
 }
 
@@ -158,6 +273,10 @@ export async function updateLoreFileTool(
     }
   }
 
+  // Gated last, so a step only counts as fulfilled once a write really happens.
+  const gated = gate(toolCallId, ctx, "update", entity.name, file);
+  if ("refusal" in gated) return gated.refusal;
+
   const targetPath = `${entity.dirPath}/${file}`;
   const backupPath = await backupFile(ctx.projectPath, targetPath);
   await writeEntityFile(entity.dirPath, file, content);
@@ -168,7 +287,180 @@ export async function updateLoreFileTool(
     : "This is a new file (no backup needed).";
   return {
     toolCallId,
-    content: `Wrote ${file} of entity "${entity.name}". ${suffix} The lore index has been refreshed.`,
+    content:
+      `Wrote ${file} of entity "${entity.name}". ${suffix} ` +
+      `Plan step: ${gated.step.detail}. The lore index has been refreshed.`,
+  };
+}
+
+// ─── move_lore_entity / delete_lore_entity ───────────────────────────────────
+
+/**
+ * Keep the run's lore snapshot honest after a folder-level change.
+ *
+ * ctx.loreIndex is captured at run start (see registry.ToolContext) — the
+ * app-side rescan that onLoreChanged fires never reaches it. Without this, the
+ * next call in the same run resolves the entity to a directory that no longer
+ * exists, and the model gets a baffling ENOENT for the move it just made
+ * successfully. Pass `next: null` to drop the entity entirely.
+ */
+function relocateInSnapshot(
+  loreIndex: LoreIndex,
+  entity: LoreEntity,
+  next: { category: CategoryId; id: string; dirPath: string } | null,
+): void {
+  if (next && next.category === entity.category) {
+    entity.id = next.id;
+    entity.dirPath = next.dirPath;
+    return;
+  }
+  const from = loreIndex[entity.category];
+  const at = from ? from.indexOf(entity) : -1;
+  if (at >= 0) from.splice(at, 1);
+  if (!next) return;
+  entity.category = next.category;
+  entity.id = next.id;
+  entity.dirPath = next.dirPath;
+  (loreIndex[next.category] ??= []).push(entity);
+}
+
+/** Case-insensitive de-duplicating alias append. */
+function withAlias(aliases: string[], extra: string): string[] {
+  const lower = extra.toLowerCase();
+  return aliases.some((a) => a.toLowerCase() === lower) ? aliases : [...aliases, extra];
+}
+
+export async function moveLoreEntityTool(
+  toolCallId: string,
+  args: {
+    entity?: string;
+    new_name?: string;
+    new_category?: string;
+    keep_old_name_as_alias?: boolean;
+  },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const entityName = args.entity?.trim();
+  if (!entityName) return { toolCallId, content: "Error: 'entity' argument is required." };
+  const entity = findEntityByName(ctx.loreIndex, entityName);
+  if (!entity) {
+    return {
+      toolCallId,
+      content: `Error: entity "${entityName}" not found. Available: ${allEntityNames(ctx.loreIndex) || "none"}`,
+    };
+  }
+
+  const newName = args.new_name?.trim();
+  const newCategory = args.new_category?.trim() as CategoryId | undefined;
+  if (!newName && !newCategory) {
+    return {
+      toolCallId,
+      content: "Error: pass 'new_name', 'new_category', or both — otherwise there is nothing to move.",
+    };
+  }
+
+  const categoryIds = LORE_CATEGORIES.map((c) => c.id);
+  if (newCategory && !categoryIds.includes(newCategory)) {
+    return { toolCallId, content: `Error: 'new_category' must be one of: ${categoryIds.join(", ")}.` };
+  }
+  if (newName) {
+    // A rename onto a name/alias another entity already answers to would make
+    // both unresolvable by name — refuse rather than create the ambiguity.
+    const clash = findEntityByName(ctx.loreIndex, newName);
+    if (clash && clash !== entity) {
+      return {
+        toolCallId,
+        content: `Error: "${newName}" already resolves to entity "${clash.name}" (category: ${clash.category}). Merge them with update_lore_file instead, or pick another name.`,
+      };
+    }
+  }
+
+  const gated = gate(toolCallId, ctx, "move", entity.name);
+  if ("refusal" in gated) return gated.refusal;
+
+  // Frontmatter is the source of truth for summary/aliases; the scanned entity
+  // is the fallback when index.md is missing or unparseable.
+  let body = `# ${newName ?? entity.name}\n`;
+  let summary = entity.summary;
+  let aliases = entity.aliases;
+  try {
+    const raw = await readEntityFile(entity.dirPath, "index.md");
+    const parsed = parseFrontmatter(raw);
+    body = parsed.content;
+    if (typeof parsed.data.summary === "string") summary = parsed.data.summary;
+  } catch {
+    // no index.md — the rewrite below creates one from the scanned metadata
+  }
+
+  // The old name keeps matching in already-written chapters unless the author
+  // explicitly opts out (a typo fix should not preserve the typo).
+  if (newName && newName !== entity.name && args.keep_old_name_as_alias !== false) {
+    aliases = withAlias(aliases, entity.name);
+  }
+
+  const previousCategory = entity.category;
+  const backupPath = await backupFile(ctx.projectPath, `${entity.dirPath}/index.md`);
+  const moved = await saveEntityMetaAndBody(
+    ctx.projectPath,
+    entity,
+    { name: newName ?? entity.name, aliases, category: newCategory ?? entity.category, summary },
+    body,
+  );
+  relocateInSnapshot(ctx.loreIndex, entity, moved);
+  entity.name = newName ?? entity.name;
+  entity.aliases = aliases;
+
+  ctx.onLoreChanged?.();
+  const changes = [
+    newName && newName !== entityName ? `renamed to "${newName}"` : null,
+    newCategory && newCategory !== previousCategory
+      ? `moved ${previousCategory} → ${newCategory} (now at ${moved.dirPath})`
+      : null,
+  ].filter(Boolean);
+  return {
+    toolCallId,
+    content:
+      `Entity "${entityName}" ${changes.join(" and ")}.` +
+      (backupPath ? ` Previous index.md backed up to ${backupPath}.` : "") +
+      ` Plan step: ${gated.step.detail}. The lore index has been refreshed.`,
+  };
+}
+
+export async function deleteLoreEntityTool(
+  toolCallId: string,
+  args: { entity?: string; reason?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const entityName = args.entity?.trim();
+  if (!entityName) return { toolCallId, content: "Error: 'entity' argument is required." };
+  const entity = findEntityByName(ctx.loreIndex, entityName);
+  if (!entity) {
+    return {
+      toolCallId,
+      content: `Error: entity "${entityName}" not found. Available: ${allEntityNames(ctx.loreIndex) || "none"}`,
+    };
+  }
+
+  const gated = gate(toolCallId, ctx, "delete", entity.name);
+  if ("refusal" in gated) return gated.refusal;
+
+  // Not an unlink: the folder is *moved* into .ai-writer/backups, which keeps
+  // the L1 "auto-apply, always recoverable" bargain intact even for the binary
+  // gallery assets that backupFile (text-only) could never snapshot. One rename
+  // also means there is no half-deleted state to land in.
+  const backupRoot = `${ctx.projectPath}/.ai-writer/backups`;
+  await makeDir(backupRoot);
+  const trashPath = `${backupRoot}/deleted-${Date.now()}-${entity.category}-${entity.id}`;
+  await renamePath(entity.dirPath, trashPath);
+
+  relocateInSnapshot(ctx.loreIndex, entity, null);
+  ctx.onLoreChanged?.();
+  return {
+    toolCallId,
+    content:
+      `Deleted lore entity "${entity.name}" (category: ${entity.category}). ` +
+      `Its folder was moved to ${trashPath} and can be restored by moving it back. ` +
+      `Plan step: ${gated.step.detail}. The lore index has been refreshed.`,
   };
 }
 

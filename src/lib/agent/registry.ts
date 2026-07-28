@@ -27,9 +27,13 @@ import {
   type ToolCall,
   type ToolResult,
 } from "./tools";
+import { LORE_PLAN_ACTIONS, type LorePlan, type PlanDecision, type PlanGate } from "./plan";
 import {
   createLoreEntityTool,
+  deleteLoreEntityTool,
+  moveLoreEntityTool,
   proposeEditTool,
+  proposeLorePlanTool,
   readMemoryTool,
   updateLoreFileTool,
   updateMemoryTool,
@@ -74,6 +78,14 @@ export interface ToolContext {
    * the surface can't render an approval card — the tool then errors.
    */
   requestApproval?: (proposal: EditProposal) => Promise<ApprovalDecision>;
+  /**
+   * Plan-approval channel, same blocking contract, for propose_lore_plan.
+   * Absent (or `lorePlan` absent) means the surface can't gate lore changes,
+   * and the lore write tools refuse rather than write ungated.
+   */
+  requestPlanApproval?: (plan: LorePlan) => Promise<PlanDecision>;
+  /** This run's approved-plan record — see lib/agent/plan.ts. */
+  lorePlan?: PlanGate;
 }
 
 export interface RegisteredTool {
@@ -88,8 +100,11 @@ export type ToolId =
   | "list_files"
   | "read_file"
   | "read_memory"
+  | "propose_lore_plan"
   | "create_lore_entity"
   | "update_lore_file"
+  | "move_lore_entity"
+  | "delete_lore_entity"
   | "update_memory"
   | "propose_edit";
 
@@ -218,6 +233,58 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
     execute: (call, ctx) => readMemoryTool(call.id, parseArgs(call.arguments), ctx),
   },
 
+  propose_lore_plan: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "propose_lore_plan",
+        description:
+          "Submit your intended lore changes to the author for approval. REQUIRED before any create/update/move/delete of lore — those tools refuse anything this plan does not cover. Investigate first, then send ONE plan covering every entity you mean to touch; the author approves or rejects the whole card, and the call blocks until they decide. Do not write the plan out as a chat message — it only reaches the author as this tool call. If the plan needs to change later, call this again with the revised steps.",
+        parameters: {
+          type: "object",
+          properties: {
+            summary: {
+              type: "string",
+              description: "One line on what this pass is for, shown above the steps",
+            },
+            steps: {
+              type: "array",
+              description: "Every change you intend to make, one entry each",
+              items: {
+                type: "object",
+                properties: {
+                  action: {
+                    type: "string",
+                    enum: LORE_PLAN_ACTIONS,
+                    description: "Which lore tool this step will use",
+                  },
+                  entity: {
+                    type: "string",
+                    description: "Entity name — for 'create', the name you will give the new entry",
+                  },
+                  file: {
+                    type: "string",
+                    description:
+                      "'update' only: the .md file inside the entity dir. Omit to leave the file open.",
+                  },
+                  detail: {
+                    type: "string",
+                    description:
+                      "Concretely what changes, in the author's language — this is the text they decide on",
+                  },
+                },
+                required: ["action", "entity", "detail"],
+              },
+            },
+          },
+          required: ["steps"],
+        },
+      },
+    },
+    execute: (call, ctx) => proposeLorePlanTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
   create_lore_entity: {
     access: "write-auto",
     definition: {
@@ -279,6 +346,66 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => updateLoreFileTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  move_lore_entity: {
+    access: "write-auto",
+    definition: {
+      type: "function",
+      function: {
+        name: "move_lore_entity",
+        description:
+          "Rename a lore entity and/or move it to a different category. This is the ONLY way to change an entity's category — update_lore_file refuses category changes because the folder location is what the scanner trusts. On a rename the old name is kept as an alias by default so it still matches in already-written chapters; pass keep_old_name_as_alias=false when the old name was simply wrong. The previous index.md is backed up automatically.",
+        parameters: {
+          type: "object",
+          properties: {
+            entity: {
+              type: "string",
+              description: "Entity name exactly as returned by list_lore_entities",
+            },
+            new_name: { type: "string", description: "New display name (omit to keep the current one)" },
+            new_category: {
+              type: "string",
+              enum: LORE_CATEGORIES.map((c) => c.id),
+              description: "Category to move the entity into (omit to keep the current one)",
+            },
+            keep_old_name_as_alias: {
+              type: "boolean",
+              description: "Default true — set false to drop the old name instead of aliasing it",
+            },
+          },
+          required: ["entity"],
+        },
+      },
+    },
+    execute: (call, ctx) => moveLoreEntityTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  delete_lore_entity: {
+    access: "write-auto",
+    definition: {
+      type: "function",
+      function: {
+        name: "delete_lore_entity",
+        description:
+          "Remove a lore entity from the project. The entity's whole folder (including its images) is moved into .ai-writer/backups/ rather than erased, so the author can restore it. Use this for duplicates and abandoned entries — when merging, copy anything worth keeping into the surviving entity with update_lore_file FIRST, then delete the loser.",
+        parameters: {
+          type: "object",
+          properties: {
+            entity: {
+              type: "string",
+              description: "Entity name exactly as returned by list_lore_entities",
+            },
+            reason: {
+              type: "string",
+              description: "One line on why it is being removed, shown to the author in the execution log",
+            },
+          },
+          required: ["entity"],
+        },
+      },
+    },
+    execute: (call, ctx) => deleteLoreEntityTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   update_memory: {

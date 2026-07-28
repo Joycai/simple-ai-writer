@@ -34,6 +34,7 @@ import { create } from "zustand";
 import i18n from "../i18n";
 import { backupFile } from "../lib/agent/backup";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
+import { createPlanGate, type LorePlan, type PlanDecision } from "../lib/agent/plan";
 import type { ApprovalDecision, EditProposal } from "../lib/agent/registry";
 import type { StreamMessage } from "../lib/ai/types";
 import { readFile, writeFile } from "../lib/fs/fileio";
@@ -44,6 +45,11 @@ import { recordRunOutcome } from "../lib/ai/modelHealth";
 interface PendingApproval {
   proposal: EditProposal;
   resolve: (decision: ApprovalDecision) => void;
+}
+
+interface PendingPlan {
+  plan: LorePlan;
+  resolve: (decision: PlanDecision) => void;
 }
 
 export interface ChatTurn {
@@ -66,6 +72,8 @@ interface ChatUsage {
 
 interface AgentState {
   pending: PendingApproval[];
+  /** Lore plans awaiting the author's decision — the loop is blocked on each. */
+  pendingPlans: PendingPlan[];
 
   // ── Chat session ──
   turns: ChatTurn[];
@@ -83,8 +91,15 @@ interface AgentState {
   approve: (id: string) => Promise<void>;
   /** User rejected: resolve with their optional reason. */
   reject: (id: string, reason?: string) => void;
-  /** Drain the queue (task aborted / finished) — resolves everything as rejected. */
+  /** Drain both queues (task aborted / finished) — resolves everything as rejected. */
   rejectAll: (reason: string) => void;
+
+  /** Called by propose_lore_plan (via ToolContext.requestPlanApproval). */
+  requestPlanApproval: (plan: LorePlan) => Promise<PlanDecision>;
+  /** User approved the plan — the gate records its steps and the loop resumes. */
+  approvePlan: (id: string) => void;
+  /** User rejected the plan: their reason goes back to the model verbatim. */
+  rejectPlan: (id: string, reason?: string) => void;
 
   /** @param quote Manuscript passage attached to the message, if the author
    *               pinned their selection to it (shown above the turn, and sent
@@ -118,6 +133,7 @@ async function recordChatUsage(
 
 export const useAgentStore = create<AgentState>((set, get) => ({
   pending: [],
+  pendingPlans: [],
 
   turns: [],
   chatRunning: false,
@@ -177,10 +193,30 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   },
 
   rejectAll: (reason) => {
-    const items = get().pending;
-    if (items.length === 0) return;
-    set({ pending: [] });
-    for (const item of items) item.resolve({ approved: false, reason });
+    const { pending, pendingPlans } = get();
+    if (pending.length === 0 && pendingPlans.length === 0) return;
+    set({ pending: [], pendingPlans: [] });
+    for (const item of pending) item.resolve({ approved: false, reason });
+    for (const item of pendingPlans) item.resolve({ approved: false, reason });
+  },
+
+  requestPlanApproval: (plan) =>
+    new Promise<PlanDecision>((resolve) => {
+      set((s) => ({ pendingPlans: [...s.pendingPlans, { plan, resolve }] }));
+    }),
+
+  approvePlan: (id) => {
+    const item = get().pendingPlans.find((p) => p.plan.id === id);
+    if (!item) return;
+    set((s) => ({ pendingPlans: s.pendingPlans.filter((p) => p.plan.id !== id) }));
+    item.resolve({ approved: true });
+  },
+
+  rejectPlan: (id, reason) => {
+    const item = get().pendingPlans.find((p) => p.plan.id === id);
+    if (!item) return;
+    set((s) => ({ pendingPlans: s.pendingPlans.filter((p) => p.plan.id !== id) }));
+    item.resolve({ approved: false, reason });
   },
 
   // ── Chat session ──────────────────────────────────────────────────────────
@@ -244,8 +280,14 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         const { useAiStore: aiStore2 } = await import("./aiStore");
 
         const { prompts, activePromptId } = aiStore2.getState();
-        const systemPrompt =
+        const writingPrompt =
           prompts.find((p) => p.id === activePromptId)?.content ?? i18n.t("ai.instructions.system");
+        // The agent briefing belongs in the SYSTEM layer, not in the first user
+        // turn: only the system message survives every later turn intact. Seeded
+        // as a task-layer instruction it decayed after turn one — the author's
+        // "去执行" then landed in a context whose only standing instruction was a
+        // prose-writing prompt, and the assistant kept answering with plans.
+        const systemPrompt = `${writingPrompt}\n\n${i18n.t("ai.instructions.agent")}`;
         const documentText = focus.text;
         const memory = activeFilePath ? await loadMemory(projectPath, activeFilePath) : null;
         const { loreBudgetTokens } = useAppStore.getState();
@@ -256,7 +298,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           useLoreStore.getState().index,
           documentText,
           "",
-          `${i18n.t("ai.instructions.agent")}\n\n${wireMessage}`,
+          wireMessage,
           { contextChars: RECENT_WINDOW_MIN_CHARS },
           null,
           memory,
@@ -319,6 +361,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             );
           },
           requestApproval: (p) => get().requestApproval(p),
+          requestPlanApproval: (p) => get().requestPlanApproval(p),
+          // One gate per turn: a plan the author approved for *this* request
+          // does not silently authorise the next one.
+          lorePlan: createPlanGate(),
         },
         signal: controller.signal,
         onEvent: (event) =>
