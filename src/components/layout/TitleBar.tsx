@@ -91,9 +91,11 @@ export function TitleBar() {
           </>
         )}
 
+        {/* No mode passed: the generic summon button reopens the drawer on
+            whatever tab was last used. */}
         <button
           className={styles.aiBtn}
-          onClick={() => setShowAiDrawer(true, "generate")}
+          onClick={() => setShowAiDrawer(true)}
           title={t("titleBar.summonAi")}
         >
           <Sparkles size={11} />

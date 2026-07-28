@@ -12,7 +12,7 @@
  * relying on the agent to guess which passage 这一段 means.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Send, Square, X } from "lucide-react";
 import { renderMarkdown } from "../../lib/fs/markdown";
@@ -57,6 +57,17 @@ export function AgentChat() {
 
   // A fresh selection is a fresh intent — undo any earlier detach.
   useEffect(() => { setDetached(false); }, [selection]);
+
+  // Land on the newest turn when the tab is opened. AiDrawer renders one mode
+  // at a time, so switching away unmounts this and switching back remounts it
+  // at scrollTop 0 — i.e. at the top of the transcript, which for a chat log is
+  // the least useful end of it. Layout effect so the jump happens before paint
+  // rather than as a visible scroll from the top.
+  useLayoutEffect(() => {
+    if (messagesRef.current) {
+      messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+    }
+  }, []);
 
   // Follow the newest content while a turn is streaming.
   useEffect(() => {
