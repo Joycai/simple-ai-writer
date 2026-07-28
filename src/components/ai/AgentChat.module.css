@@ -15,6 +15,22 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
+  /* The transcript is content, not chrome. global.css sets `user-select: none`
+     on body so dragging across the app doesn't select the UI like a web page —
+     but that inherits everywhere, which left the assistant's answers
+     uncopyable. Selection is restored for the transcript only; the composer
+     (a textarea) and the editor (CodeMirror draws its own) were never
+     affected. */
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Default browser blue would read as foreign against the paper surface, so the
+   highlight uses the same accent tint as the app's other selected states. */
+.messages::selection,
+.messages ::selection {
+  background: var(--color-accent-tint-strong);
+  color: var(--color-text-primary);
 }
 
 .emptyHint {
