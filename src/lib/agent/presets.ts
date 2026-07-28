@@ -97,6 +97,8 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "propose_lore_plan",
     "create_lore_entity",
     "update_lore_file",
+    "update_facet_meta",
+    "delete_lore_file",
     "move_lore_entity",
     "delete_lore_entity",
     "update_memory",

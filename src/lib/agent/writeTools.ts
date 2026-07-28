@@ -21,14 +21,17 @@
 
 import {
   LORE_CATEGORIES,
+  RESERVED_ENTITY_FILES,
   createEntityWithContent,
   parseFacetMeta,
   readEntityFile,
   saveEntityMetaAndBody,
+  saveFacetFile,
   slugifyEntityId,
   uniqueEntityId,
   writeEntityFile,
   type CategoryId,
+  type FacetMeta,
   type LoreEntity,
   type LoreIndex,
 } from "../lore";
@@ -39,7 +42,7 @@ import {
   rewriteMemorySegment,
 } from "../context/memory";
 import { parseFrontmatter } from "../fs/markdown";
-import { makeDir, readFile, renamePath } from "../fs/fileio";
+import { makeDir, readFile, removeFile, renamePath } from "../fs/fileio";
 import { backupFile } from "./backup";
 import {
   LORE_PLAN_ACTIONS,
@@ -290,6 +293,196 @@ export async function updateLoreFileTool(
     content:
       `Wrote ${file} of entity "${entity.name}". ${suffix} ` +
       `Plan step: ${gated.step.detail}. The lore index has been refreshed.`,
+  };
+}
+
+// ─── update_facet_meta / delete_lore_file (facet-level surgery) ──────────────
+
+/**
+ * Validate a model-supplied filename as a facet/attachment inside the entity
+ * dir. The argument is model-controlled, so anything that could navigate out
+ * ('/', '\', '..') is refused, as are the two app-managed reserved names.
+ */
+function checkFacetFilename(toolCallId: string, file: string | undefined): ToolResult | string {
+  const f = file?.trim();
+  if (!f) {
+    return { toolCallId, content: "Error: 'file' argument is required (the facet's .md filename inside the entity directory)." };
+  }
+  if (!/^[^/\\]+\.md$/.test(f) || f.includes("..")) {
+    return { toolCallId, content: "Error: 'file' must be a plain .md filename inside the entity directory (no paths)." };
+  }
+  if (RESERVED_ENTITY_FILES.includes(f)) {
+    return {
+      toolCallId,
+      content: `Error: ${f} is app-managed and not a facet — use update_lore_file for index.md, and the gallery UI for images.md.`,
+    };
+  }
+  return f;
+}
+
+/** Drop a file from the run's entity snapshot (see relocateInSnapshot). */
+function forgetFileInSnapshot(entity: LoreEntity, file: string): void {
+  entity.mdFiles = (entity.mdFiles ?? []).filter((f) => f !== file);
+  entity.facets = (entity.facets ?? []).filter((f) => f.file !== file);
+}
+
+export async function updateFacetMetaTool(
+  toolCallId: string,
+  args: {
+    entity?: string;
+    file?: string;
+    title?: string;
+    keys?: string[];
+    group?: string | null;
+    priority?: number;
+    mode?: string;
+  },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const entityName = args.entity?.trim();
+  if (!entityName) return { toolCallId, content: "Error: 'entity' argument is required." };
+  const entity = findEntityByName(ctx.loreIndex, entityName);
+  if (!entity) {
+    return {
+      toolCallId,
+      content: `Error: entity "${entityName}" not found. Available: ${allEntityNames(ctx.loreIndex) || "none"}`,
+    };
+  }
+
+  const checked = checkFacetFilename(toolCallId, args.file);
+  if (typeof checked !== "string") return checked;
+  const file = checked;
+
+  // Read from disk rather than trusting the run snapshot: a facet this run
+  // just created through update_lore_file is on disk but not in the snapshot.
+  let raw: string;
+  try {
+    raw = await readEntityFile(entity.dirPath, file);
+  } catch {
+    const known = (entity.mdFiles ?? []).filter((f) => !RESERVED_ENTITY_FILES.includes(f));
+    return {
+      toolCallId,
+      content: `Error: "${file}" does not exist in entity "${entity.name}". Its facet files are: ${known.join(", ") || "none"}. Create one with update_lore_file.`,
+    };
+  }
+
+  const current = parseFacetMeta(raw, file);
+  if (!current) {
+    return {
+      toolCallId,
+      content: `Error: "${file}" is not a facet — it has no \`facet\` field in its frontmatter, so it is an inert attachment. Use update_lore_file to rewrite it wholesale.`,
+    };
+  }
+
+  const touches = ["title", "keys", "group", "priority", "mode"].filter((k) => k in args);
+  if (touches.length === 0) {
+    return {
+      toolCallId,
+      content: "Error: pass at least one of title / keys / group / priority / mode — this tool only edits facet metadata, not the body (use update_lore_file for the text).",
+    };
+  }
+
+  const next: FacetMeta = {
+    title: args.title?.trim() || current.title,
+    keys: current.keys,
+    group: current.group,
+    priority: current.priority,
+    mode: current.mode,
+  };
+  if ("keys" in args) {
+    if (!Array.isArray(args.keys)) {
+      return { toolCallId, content: "Error: 'keys' must be an array of strings." };
+    }
+    next.keys = args.keys.map((k) => String(k).trim()).filter(Boolean);
+  }
+  if ("group" in args) {
+    const g = typeof args.group === "string" ? args.group.trim() : "";
+    next.group = g || null;
+  }
+  if ("priority" in args) {
+    const p = Number(args.priority);
+    if (!Number.isFinite(p)) return { toolCallId, content: "Error: 'priority' must be a number." };
+    next.priority = p;
+  }
+  if ("mode" in args) {
+    if (args.mode !== "auto" && args.mode !== "always" && args.mode !== "manual") {
+      return { toolCallId, content: "Error: 'mode' must be one of: auto, always, manual." };
+    }
+    next.mode = args.mode;
+  }
+
+  const gated = gate(toolCallId, ctx, "update", entity.name, file);
+  if ("refusal" in gated) return gated.refusal;
+
+  // Only the frontmatter is rewritten — the body is carried through verbatim,
+  // which is the whole point: retuning keys must not risk the model quietly
+  // paraphrasing the prose on its way past.
+  const body = parseFrontmatter(raw).content;
+  const backupPath = await backupFile(ctx.projectPath, `${entity.dirPath}/${file}`);
+  await saveFacetFile(entity.dirPath, file, next, body);
+
+  const at = (entity.facets ?? []).findIndex((f) => f.file === file);
+  const snapshot = { file, ...next, charCount: body.length };
+  if (at >= 0) entity.facets[at] = snapshot;
+  else (entity.facets ??= []).push(snapshot);
+
+  ctx.onLoreChanged?.();
+  const inert = next.mode === "auto" && next.keys.length === 0;
+  return {
+    toolCallId,
+    content:
+      `Updated facet metadata of ${file} ("${next.title}") on entity "${entity.name}": ` +
+      `keys=[${next.keys.join(", ")}], group=${next.group ?? "none"}, priority=${next.priority}, mode=${next.mode}. ` +
+      `The body was left untouched.` +
+      (inert ? " NOTE: with mode=auto and no keys this facet will never be injected." : "") +
+      (backupPath ? ` Previous version backed up to ${backupPath}.` : "") +
+      ` Plan step: ${gated.step.detail}.`,
+  };
+}
+
+export async function deleteLoreFileTool(
+  toolCallId: string,
+  args: { entity?: string; file?: string; reason?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const entityName = args.entity?.trim();
+  if (!entityName) return { toolCallId, content: "Error: 'entity' argument is required." };
+  const entity = findEntityByName(ctx.loreIndex, entityName);
+  if (!entity) {
+    return {
+      toolCallId,
+      content: `Error: entity "${entityName}" not found. Available: ${allEntityNames(ctx.loreIndex) || "none"}`,
+    };
+  }
+
+  const checked = checkFacetFilename(toolCallId, args.file);
+  if (typeof checked !== "string") return checked;
+  const file = checked;
+
+  const gated = gate(toolCallId, ctx, "delete", entity.name, file);
+  if ("refusal" in gated) return gated.refusal;
+
+  // The backup IS the recovery path here, so a missing source is an error
+  // rather than a no-op — silently "succeeding" would let the model report a
+  // deletion the author can never inspect.
+  const targetPath = `${entity.dirPath}/${file}`;
+  const backupPath = await backupFile(ctx.projectPath, targetPath);
+  if (!backupPath) {
+    const known = (entity.mdFiles ?? []).filter((f) => !RESERVED_ENTITY_FILES.includes(f));
+    return {
+      toolCallId,
+      content: `Error: "${file}" does not exist in entity "${entity.name}". Its facet files are: ${known.join(", ") || "none"}.`,
+    };
+  }
+  await removeFile(targetPath);
+  forgetFileInSnapshot(entity, file);
+
+  ctx.onLoreChanged?.();
+  return {
+    toolCallId,
+    content:
+      `Deleted ${file} from entity "${entity.name}". Backed up to ${backupPath} first, so it can be restored. ` +
+      `Plan step: ${gated.step.detail}.`,
   };
 }
 

@@ -75,6 +75,8 @@ lib/ai/*（streamCompletion 等，不动） · lib/context/*（预算化注入�
 | `propose_lore_plan` | 写·审批 | 提交设定改动方案（步骤 = action + entity + detail），阻塞等作者批准；**四个 lore 写工具的准入门槛** |
 | `create_lore_entity` | 写·L1 | 新建实体（name/category/summary/content），落盘前校验 frontmatter |
 | `update_lore_file` | 写·L1 | 改写实体的 index.md 或特征 md（整文件替换，沿用 splitter 的逐字校验思路） |
+| `update_facet_meta` | 写·L1 | 只改某个特征的 keys/group/priority/mode/title，正文原样保留（走 saveFacetFile 序列化，模型不用手写 YAML） |
+| `delete_lore_file` | 写·L1 | 删掉实体下的单个特征/附件 md（先备份；index.md 与 images.md 拒绝） |
 | `move_lore_entity` | 写·L1 | 改名 / 换分类。换分类只能走它——扫描器认的是文件夹位置，只改 frontmatter 会在下次重扫时被还原 |
 | `delete_lore_entity` | 写·L1 | 删除实体：整个文件夹 rename 进 `.ai-writer/backups/deleted-…`，图库等二进制资产一并保住，可整目录搬回还原 |
 | `update_memory` | 写·L1 | 更新前情记忆段落（走 memory.ts 的分段协议，不允许破坏元数据注释） |
@@ -268,3 +270,28 @@ generator/splitter 换 runStructuredTask、对话会话持久化（重启后恢�
   的输入框上方；队列 `pendingPlans` 在 agentStore，abort/收尾同样走 `rejectAll`。
 - `ai.instructions.agent` 里写死这套流程，并强调「方案只能通过工具提交，写在回复里
   作者看不到批准按钮」——否则模型会退回上一节那个只在聊天里空谈方案的老毛病。
+
+### 8.3 特征级工具（2026-07-28）
+
+8.1 补的两个工具都是**实体级**的，作者随即发现「只能整个删掉条目，没有调特征的手段」。
+盘下来实际缺口有两处，都补了（见 3.2）：
+
+- **删单个特征：以前做不到。** `update_lore_file` 要求 content 非空，没有删除路径；
+  能删的只有 `delete_lore_entity`（整个角色）。→ `delete_lore_file`，先备份再
+  removeFile，index.md / images.md 拒绝。
+- **只调特征元数据：以前要整篇重发。** 改几个 keys 也得通过 `update_lore_file`
+  把正文原样吐一遍——既费 token，又有「说好只改关键词，顺手把正文改写了」的漂移风险，
+  而且 YAML 得模型手写（`serializeFacetFrontmatter` 会把 keys JSON 引号化以保证 CJK
+  与逗号能原样往返，手写容易走样）。→ `update_facet_meta` 只重写 frontmatter，
+  body 经 parseFrontmatter 原样带过；未传的字段保持原值；`mode=auto` 且 keys 为空时
+  在结果里明确警告「这条特征永远不会被注入」。
+- 特征**新建**没有单独开工具：`update_lore_file` 传一个新文件名即可，够用。
+- 两个新工具都从磁盘读当前状态（而非运行快照），因为同一次运行里刚由
+  `update_lore_file` 建出来的特征还不在快照里；写完再回填/剔除快照条目。
+
+**顺带修掉一个门控漏洞：** `checkPlan` 原来的文件匹配是
+`!s.file || !file || 同名`——步骤带 file、调用不带 file 时会命中。于是一条
+「delete Ava / armor.md」的方案步骤能授权 `delete_lore_entity` 删掉整个 Ava。
+改成「步骤声明了 file，调用就必须给出同一个 file」。删单个特征与删整个条目现在
+是两条互不越权的步骤，`PlanCard` 上也分别显示为 `DELETE Ava / armor.md` 与
+`DELETE Ava`。
