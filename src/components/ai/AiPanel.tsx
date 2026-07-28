@@ -25,6 +25,7 @@ import { useAiTaskStore, type TaskKind } from "../../stores/aiTaskStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { AgentLog } from "./AgentLog";
 import { ApprovalCard } from "./ApprovalCard";
+import { PlanCard } from "./PlanCard";
 import { useAiStore } from "../../stores/aiStore";
 import { useAppStore, LORE_BUDGET_MIN, LORE_BUDGET_MAX } from "../../stores/appStore";
 import { focusBlockedByImage, useEditorStore, useWritingFocus } from "../../stores/editorStore";
@@ -856,6 +857,7 @@ export function AiPanel() {
   const [customInstr, setCustomInstr] = useState("");
   const [agentMode, setAgentMode] = useState(false);
   const pendingApprovals = useAgentStore((s) => s.pending);
+  const pendingPlans = useAgentStore((s) => s.pendingPlans);
   const outputRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -1507,7 +1509,10 @@ export function AiPanel() {
             />
           )}
 
-          {/* Pending manuscript-edit approvals — the loop is blocked on these */}
+          {/* Pending lore plans + manuscript edits — the loop is blocked on these */}
+          {pendingPlans.map((p) => (
+            <PlanCard key={p.plan.id} plan={p.plan} />
+          ))}
           {pendingApprovals.map((p) => (
             <ApprovalCard key={p.proposal.id} proposal={p.proposal} />
           ))}

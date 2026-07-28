@@ -21,6 +21,7 @@ import { useAiStore } from "../../stores/aiStore";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { AgentLog } from "./AgentLog";
 import { ApprovalCard } from "./ApprovalCard";
+import { PlanCard } from "./PlanCard";
 import type { AgentEvent } from "../../lib/agent/events";
 import styles from "./AgentChat.module.css";
 
@@ -40,7 +41,7 @@ function formatTokens(n: number): string {
 export function AgentChat() {
   const { t } = useTranslation();
   const {
-    turns, chatRunning, chatError, chatUsage, pending,
+    turns, chatRunning, chatError, chatUsage, pending, pendingPlans,
     sendChat, stopChat,
   } = useAgentStore();
   const activeModelId = useAiStore((s) => s.activeModelId);
@@ -117,9 +118,12 @@ export function AgentChat() {
 
       {chatError && <div className={styles.error}>{chatError}</div>}
 
-      {/* Manuscript-edit approvals — the loop is blocked on these */}
-      {pending.length > 0 && (
+      {/* Lore plans + manuscript edits — the loop is blocked on these */}
+      {(pendingPlans.length > 0 || pending.length > 0) && (
         <div className={styles.approvals}>
+          {pendingPlans.map((p) => (
+            <PlanCard key={p.plan.id} plan={p.plan} />
+          ))}
           {pending.map((p) => (
             <ApprovalCard key={p.proposal.id} proposal={p.proposal} />
           ))}

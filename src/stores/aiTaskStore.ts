@@ -16,6 +16,7 @@ import { getDb } from "../lib/project";
 import { loadApiKey } from "../lib/keyStore";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
 import { appendAgentEventTo, type AgentEvent, type ToolStep } from "../lib/agent/events";
+import { createPlanGate } from "../lib/agent/plan";
 
 export type TaskKind = "continue" | "polish" | "rewrite" | "summary" | "custom" | "agent";
 export type { AgentEvent, ToolStep };
@@ -325,6 +326,10 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             // L2 approvals: the AiPanel card resolves these (agent mode only —
             // continue's preset has no propose_edit).
             requestApproval: (p) => useAgentStore.getState().requestApproval(p),
+            // Lore changes are gated on an approved plan; the gate is per-run,
+            // so each task starts with a clean slate.
+            requestPlanApproval: (p) => useAgentStore.getState().requestPlanApproval(p),
+            lorePlan: createPlanGate(),
           },
           signal: controller.signal,
           onEvent: (event) => get().appendAgentEvent(event),

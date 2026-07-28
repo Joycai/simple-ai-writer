@@ -73,10 +73,18 @@ export const LORE_SPLIT_PRESET: TaskPreset = {
 };
 
 /**
- * Agent 模式（自定义任务） — the full toolset: read lore/chapters/memory,
- * maintain lore + memory (L1, auto+backup), and propose manuscript edits
- * (L2, blocks on the user's approval card). The stepping stone to the
- * stage-two conversational assistant.
+ * Agent 模式（自定义任务）+ 对话助手 — the full toolset: read lore/chapters/
+ * memory, maintain lore + memory (L1, auto+backup), and propose manuscript
+ * edits (L2, blocks on the user's approval card).
+ *
+ * Lore writes are additionally gated on propose_lore_plan (lib/agent/plan.ts):
+ * the author approves one card of steps, and the write tools refuse anything
+ * outside it.
+ *
+ * maxRounds is generous because the headline job here is housekeeping over the
+ * *whole* lore folder ("整理一下设定"), which costs one list + one read per
+ * entity, then a plan round, before a single write happens. A cap that runs out
+ * mid-sweep reads to the author as the agent refusing to act.
  */
 export const AGENT_ASSIST_PRESET: TaskPreset = {
   id: "agent-assist",
@@ -86,11 +94,14 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "list_files",
     "read_file",
     "read_memory",
+    "propose_lore_plan",
     "create_lore_entity",
     "update_lore_file",
+    "move_lore_entity",
+    "delete_lore_entity",
     "update_memory",
     "propose_edit",
   ],
-  maxRounds: 12,
+  maxRounds: 20,
   finishPolicy: "force-text",
 };

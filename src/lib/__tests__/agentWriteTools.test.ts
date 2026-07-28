@@ -19,9 +19,19 @@ vi.mock("../fs/fileio", () => ({
   fileExists: vi.fn(async (p: string) => fs.has(p)),
   removeDir: vi.fn(async () => {}),
   removeFile: vi.fn(async (p: string) => void fs.delete(p)),
+  // Handles both files and directories — the lore move/delete tools rename
+  // whole entity folders, so every key under the prefix has to travel.
   renamePath: vi.fn(async (a: string, b: string) => {
-    fs.set(b, fs.get(a) ?? "");
-    fs.delete(a);
+    if (fs.has(a)) {
+      fs.set(b, fs.get(a)!);
+      fs.delete(a);
+      return;
+    }
+    for (const key of [...fs.keys()]) {
+      if (!key.startsWith(a + "/")) continue;
+      fs.set(b + key.slice(a.length), fs.get(key)!);
+      fs.delete(key);
+    }
   }),
   readDir: vi.fn(async () => []),
 }));
@@ -29,11 +39,24 @@ vi.mock("../fs/fileio", () => ({
 import { serializeMemory, type DocMemory } from "../context/memory";
 import type { LoreIndex } from "../lore";
 import { backupFile } from "../agent/backup";
+import { createPlanGate, type LorePlan, type LorePlanStep } from "../agent/plan";
 import { executeRegisteredTool, type ToolContext, type ToolId } from "../agent/registry";
 
 const PROJECT = "/proj";
 const ALL_TOOLS: ToolId[] = [
-  "read_memory", "create_lore_entity", "update_lore_file", "update_memory", "propose_edit",
+  "read_memory", "propose_lore_plan", "create_lore_entity", "update_lore_file",
+  "move_lore_entity", "delete_lore_entity", "update_memory", "propose_edit",
+];
+
+/**
+ * Standing approval broad enough that the write-tool tests exercise the tools
+ * rather than the gate — the gate's own refusals are tested separately.
+ */
+const OPEN_PLAN: LorePlanStep[] = [
+  { action: "create", entity: "Kael", detail: "add the rival" },
+  { action: "update", entity: "Ava", detail: "revise the entry" },
+  { action: "move", entity: "Ava", detail: "recategorize" },
+  { action: "delete", entity: "Ava", detail: "remove the duplicate" },
 ];
 
 const INDEX_MD = `---\nname: Ava\naliases: []\ncategory: characters\nsummary: "the protagonist"\n---\n\n# Ava\n`;
@@ -65,10 +88,14 @@ function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext & {
   memoryChanged: number;
 } {
   const counters = { loreChanged: 0, memoryChanged: 0 };
+  const gate = createPlanGate();
+  gate.steps.push(...OPEN_PLAN);
   return {
     projectPath: PROJECT,
     loreIndex: makeLoreIndex(),
     multimodal: false,
+    lorePlan: gate,
+    requestPlanApproval: async () => ({ approved: true }),
     onLoreChanged: () => void counters.loreChanged++,
     onMemoryChanged: () => void counters.memoryChanged++,
     get loreChanged() { return counters.loreChanged; },
@@ -205,6 +232,225 @@ describe("update_lore_file", () => {
     }, makeCtx());
     expect(res.content).toContain("new file");
     expect(fs.get(`${PROJECT}/.ai-writer/lore/characters/ava/history.md`)).toBe("Her early years…");
+  });
+});
+
+// ─── propose_lore_plan + the gate on every lore write ────────────────────────
+
+const dirOf = (cat: string, id: string) => `${PROJECT}/.ai-writer/lore/${cat}/${id}`;
+const AVA_INDEX = `${dirOf("characters", "ava")}/index.md`;
+const NEW_INDEX = `---\nname: Ava\naliases: []\ncategory: characters\nsummary: "now a queen"\n---\n\n# Ava\n`;
+
+describe("lore plan gate", () => {
+  /** A context whose author has approved nothing yet. */
+  const unplanned = (overrides: Partial<ToolContext> = {}) =>
+    makeCtx({ lorePlan: createPlanGate(), ...overrides });
+
+  it("refuses every lore write until a plan is approved", async () => {
+    const ctx = unplanned();
+    const calls: [ToolId, object][] = [
+      ["create_lore_entity", { name: "Kael", category: "characters", summary: "x", content: "y" }],
+      ["update_lore_file", { entity: "Ava", content: NEW_INDEX }],
+      ["move_lore_entity", { entity: "Ava", new_category: "factions" }],
+      ["delete_lore_entity", { entity: "Ava" }],
+    ];
+    for (const [tool, args] of calls) {
+      const res = await run(tool, args, ctx);
+      expect(res.content).toContain("need an approved plan");
+    }
+    expect(fs.get(AVA_INDEX)).toBe(INDEX_MD);
+    expect(backupsOf()).toHaveLength(0);
+    expect(ctx.loreChanged).toBe(0);
+  });
+
+  it("lets exactly the approved steps through and refuses the rest", async () => {
+    const seen: LorePlan[] = [];
+    const ctx = unplanned({
+      requestPlanApproval: async (p) => { seen.push(p); return { approved: true }; },
+    });
+
+    const plan = await run("propose_lore_plan", {
+      summary: "整理重复条目",
+      steps: [{ action: "update", entity: "Ava", file: "index.md", detail: "把 summary 改成 queen" }],
+    }, ctx);
+    expect(seen).toHaveLength(1);
+    expect(seen[0].steps[0]).toMatchObject({ action: "update", entity: "Ava", file: "index.md" });
+    expect(plan.content).toContain("Plan approved");
+
+    // Covered: goes through, and the step's detail rides back with the result
+    // so the log shows intent and outcome together.
+    const ok = await run("update_lore_file", { entity: "Ava", content: NEW_INDEX }, ctx);
+    expect(ok.content).toContain("Plan step: 把 summary 改成 queen");
+    expect(fs.get(AVA_INDEX)).toBe(NEW_INDEX);
+
+    // Same entity, action nobody approved.
+    const off = await run("delete_lore_entity", { entity: "Ava" }, ctx);
+    expect(off.content).toContain('does not cover "delete"');
+    expect(off.content).toContain("update Ava / index.md — 把 summary 改成 queen");
+    expect(fs.has(AVA_INDEX)).toBe(true);
+  });
+
+  it("matches through aliases but holds the file the step pinned", async () => {
+    const ctx = unplanned();
+    await run("propose_lore_plan", {
+      steps: [{ action: "update", entity: "Ava", file: "index.md", detail: "改 summary" }],
+    }, ctx);
+
+    // "阿瓦" is Ava's alias — the same entity, so the gate must not refuse it.
+    const alias = await run("update_lore_file", { entity: "阿瓦", content: NEW_INDEX }, ctx);
+    expect(alias.content).toContain("Wrote index.md");
+
+    const otherFile = await run("update_lore_file", {
+      entity: "Ava", file: "armor.md",
+      content: `---\nfacet: "战甲"\nkeys: ["战甲"]\n---\n\n换成银色。`,
+    }, ctx);
+    expect(otherFile.content).toContain("does not cover");
+    expect(fs.get(`${dirOf("characters", "ava")}/armor.md`)).toBe(FACET_MD);
+  });
+
+  it("hands a rejection back verbatim and keeps the gate shut", async () => {
+    const ctx = unplanned({
+      requestPlanApproval: async () => ({ approved: false, reason: "别删阿瓦" }),
+    });
+    const res = await run("propose_lore_plan", {
+      steps: [{ action: "delete", entity: "Ava", detail: "重复条目" }],
+    }, ctx);
+
+    expect(res.content).toContain("REJECTED");
+    expect(res.content).toContain("别删阿瓦");
+    const blocked = await run("delete_lore_entity", { entity: "Ava" }, ctx);
+    expect(blocked.content).toContain("was not approved");
+    expect(fs.get(AVA_INDEX)).toBe(INDEX_MD);
+  });
+
+  it("appends a second approved plan instead of revoking the first", async () => {
+    const ctx = unplanned();
+    await run("propose_lore_plan", {
+      steps: [{ action: "update", entity: "Ava", detail: "改 summary" }],
+    }, ctx);
+    const second = await run("propose_lore_plan", {
+      steps: [{ action: "create", entity: "Kael", detail: "新增对手" }],
+    }, ctx);
+    // The unfinished step rides along so the fresh list doesn't bury it.
+    expect(second.content).toContain("Still outstanding from earlier");
+    expect(second.content).toContain("update Ava — 改 summary");
+
+    expect((await run("create_lore_entity", {
+      name: "Kael", category: "characters", summary: "the rival", content: "# Kael",
+    }, ctx)).content).toContain("Created lore entity");
+    expect((await run("update_lore_file", { entity: "Ava", content: NEW_INDEX }, ctx)).content)
+      .toContain("Wrote index.md");
+  });
+
+  it("validates the steps payload before troubling the author", async () => {
+    let asked = 0;
+    const ctx = unplanned({
+      requestPlanApproval: async () => { asked++; return { approved: true }; },
+    });
+
+    expect((await run("propose_lore_plan", { steps: [] }, ctx)).content)
+      .toContain("at least one change");
+    expect((await run("propose_lore_plan", {
+      steps: [{ action: "rewrite", entity: "Ava", detail: "x" }],
+    }, ctx)).content).toContain("must be one of");
+    expect((await run("propose_lore_plan", {
+      steps: [{ action: "update", entity: "Ava" }],
+    }, ctx)).content).toContain("missing 'detail'");
+    expect(asked).toBe(0);
+  });
+});
+
+// ─── move_lore_entity ────────────────────────────────────────────────────────
+
+describe("move_lore_entity", () => {
+  it("renames in place, keeps the old name as an alias, and backs up index.md", async () => {
+    const ctx = makeCtx();
+    const res = await run("move_lore_entity", { entity: "Ava", new_name: "Ava Reyne" }, ctx);
+
+    expect(res.content).toContain('renamed to "Ava Reyne"');
+    const written = fs.get(`${dirOf("characters", "ava")}/index.md`)!;
+    expect(written).toContain("name: Ava Reyne");
+    expect(written).toContain('"Ava"'); // old name still matches earlier chapters
+    expect(written).toContain('"阿瓦"'); // pre-existing alias survived
+    expect(fs.get(backupsOf()[0])).toBe(INDEX_MD);
+    expect(ctx.loreChanged).toBe(1);
+  });
+
+  it("drops the old name when the author is fixing a mistake", async () => {
+    const ctx = makeCtx();
+    await run("move_lore_entity", {
+      entity: "Ava", new_name: "Ada", keep_old_name_as_alias: false,
+    }, ctx);
+    expect(fs.get(`${dirOf("characters", "ava")}/index.md`)).not.toContain('"Ava"');
+  });
+
+  it("moves the whole folder on a category change and keeps the run's snapshot usable", async () => {
+    const ctx = makeCtx();
+    const res = await run("move_lore_entity", { entity: "Ava", new_category: "factions" }, ctx);
+
+    expect(res.content).toContain("characters → factions");
+    expect(fs.has(`${dirOf("characters", "ava")}/index.md`)).toBe(false);
+    expect(fs.get(`${dirOf("factions", "ava")}/index.md`)).toContain("category: factions");
+    expect(fs.get(`${dirOf("factions", "ava")}/armor.md`)).toBe(FACET_MD); // siblings travelled
+    expect(ctx.loreIndex.characters).toHaveLength(0);
+    expect(ctx.loreIndex.factions[0].dirPath).toBe(dirOf("factions", "ava"));
+
+    // The next call in the same run must still land — the snapshot moved too.
+    const next = await run("update_lore_file", {
+      entity: "Ava", file: "armor.md",
+      content: `---\nfacet: "战甲"\nkeys: ["战甲"]\n---\n\n换成银色。`,
+    }, ctx);
+    expect(next.content).toContain("Wrote armor.md");
+    expect(fs.get(`${dirOf("factions", "ava")}/armor.md`)).toContain("银色");
+  });
+
+  it("rejects an empty move, an unknown category, and a name another entity answers to", async () => {
+    const ctx = makeCtx();
+    ctx.loreIndex.characters.push({
+      ...ctx.loreIndex.characters[0], id: "kael", name: "Kael", aliases: ["凯尔"],
+      dirPath: dirOf("characters", "kael"),
+    });
+
+    const noop = await run("move_lore_entity", { entity: "Ava" }, ctx);
+    expect(noop.content).toContain("nothing to move");
+
+    const badCat = await run("move_lore_entity", { entity: "Ava", new_category: "nope" }, ctx);
+    expect(badCat.content).toContain("'new_category' must be one of");
+
+    const clash = await run("move_lore_entity", { entity: "Ava", new_name: "凯尔" }, ctx);
+    expect(clash.content).toContain('already resolves to entity "Kael"');
+
+    expect(fs.get(`${dirOf("characters", "ava")}/index.md`)).toBe(INDEX_MD);
+    expect(ctx.loreChanged).toBe(0);
+  });
+});
+
+// ─── delete_lore_entity ──────────────────────────────────────────────────────
+
+describe("delete_lore_entity", () => {
+  const trashed = () => [...fs.keys()].filter((p) => p.includes("/backups/deleted-"));
+
+  it("moves the folder into backups (not an unlink) and drops it from the snapshot", async () => {
+    const ctx = makeCtx();
+    const res = await run("delete_lore_entity", { entity: "Ava", reason: "duplicate of Kael" }, ctx);
+
+    expect(res.content).toContain('Deleted lore entity "Ava"');
+    expect(res.content).toContain("can be restored");
+    expect(fs.has(`${dirOf("characters", "ava")}/index.md`)).toBe(false);
+    // Both files came along, so nothing about the entity is unrecoverable.
+    expect(trashed()).toHaveLength(2);
+    expect(trashed().some((p) => fs.get(p) === INDEX_MD)).toBe(true);
+    expect(ctx.loreIndex.characters).toHaveLength(0);
+    expect(ctx.loreChanged).toBe(1);
+  });
+
+  it("errors on an unknown entity without touching the project", async () => {
+    const ctx = makeCtx();
+    const res = await run("delete_lore_entity", { entity: "Nobody" }, ctx);
+    expect(res.content).toContain("not found");
+    expect(fs.get(`${dirOf("characters", "ava")}/index.md`)).toBe(INDEX_MD);
+    expect(trashed()).toHaveLength(0);
+    expect(ctx.loreChanged).toBe(0);
   });
 });
 

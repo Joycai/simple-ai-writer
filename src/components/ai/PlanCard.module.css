@@ -1,0 +1,141 @@
+/* Pending lore-plan approval card — the gate on every lore write. */
+
+.card {
+  border: 1px solid var(--color-border);
+  border-left: 2px solid var(--color-sienna);
+  background: var(--color-bg-surface);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 7px var(--space-3);
+  border-bottom: 1px solid var(--color-border-soft);
+}
+.headerTitle {
+  font: 500 11px/1.5 var(--font-sans);
+  letter-spacing: 0.12em;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+.headerCount {
+  margin-left: auto;
+  flex-shrink: 0;
+  font: 400 10px/1.5 var(--font-mono);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.body {
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.summary {
+  font: 400 11px/1.7 var(--font-sans);
+  color: var(--color-text-muted);
+}
+
+.steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Verb first, then target, then the sentence being decided on — a delete has
+   to be legible without reading the detail. */
+.step {
+  display: grid;
+  grid-template-columns: auto minmax(0, auto) minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 6px 10px;
+  background: var(--color-bg-elevated);
+}
+
+.action {
+  font: 500 9px/1.5 var(--font-sans);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  white-space: nowrap;
+  border: 1px solid currentColor;
+}
+.actionCreate { color: var(--color-success); }
+.actionUpdate { color: var(--color-sienna); }
+.actionMove   { color: var(--color-warning-text); }
+.actionDelete { color: var(--color-error); }
+
+.entity {
+  min-width: 0;
+  font: 500 12px/1.6 var(--font-sans);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file {
+  font: 400 10px/1.6 var(--font-mono);
+  color: var(--color-text-faint);
+}
+
+.detail {
+  min-width: 0;
+  font: 400 11px/1.7 var(--font-sans);
+  color: var(--color-text-muted);
+  word-break: break-word;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--color-border-soft);
+}
+
+.rejectInput {
+  flex: 1;
+  min-width: 0;
+  font: 400 11px/1.6 var(--font-sans);
+  padding: 4px var(--space-2);
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-primary);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+.rejectInput::placeholder { color: var(--color-text-ghost); }
+.rejectInput:focus { border-color: var(--color-sienna); }
+
+.btnReject {
+  padding: 4px 12px;
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-secondary);
+  font: 500 11px/1.6 var(--font-sans);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.btnReject:hover:not(:disabled) { color: var(--color-error); border-color: var(--color-error); }
+.btnReject:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btnApprove {
+  padding: 4px 14px;
+  background: var(--color-sienna);
+  border: none;
+  color: var(--color-card);
+  font: 500 11px/1.6 var(--font-sans);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.btnApprove:hover:not(:disabled) { background: var(--color-sienna-hover); }
+.btnApprove:disabled { opacity: 0.4; cursor: not-allowed; }

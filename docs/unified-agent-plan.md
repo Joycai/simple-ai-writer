@@ -72,8 +72,11 @@ lib/ai/*（streamCompletion 等，不动） · lib/context/*（预算化注入�
 | `list_lore_entities` / `read_lore_entity` / `list_files` / `read_file` | 读 | 现有四件套，原样迁入 |
 | `search_text` | 读 | 在 writing/ 内全文检索（lore 提取、一致性检查都需要） |
 | `read_memory` | 读 | 读当前文档的前情记忆 |
+| `propose_lore_plan` | 写·审批 | 提交设定改动方案（步骤 = action + entity + detail），阻塞等作者批准；**四个 lore 写工具的准入门槛** |
 | `create_lore_entity` | 写·L1 | 新建实体（name/category/summary/content），落盘前校验 frontmatter |
 | `update_lore_file` | 写·L1 | 改写实体的 index.md 或特征 md（整文件替换，沿用 splitter 的逐字校验思路） |
+| `move_lore_entity` | 写·L1 | 改名 / 换分类。换分类只能走它——扫描器认的是文件夹位置，只改 frontmatter 会在下次重扫时被还原 |
+| `delete_lore_entity` | 写·L1 | 删除实体：整个文件夹 rename 进 `.ai-writer/backups/deleted-…`，图库等二进制资产一并保住，可整目录搬回还原 |
 | `update_memory` | 写·L1 | 更新前情记忆段落（走 memory.ts 的分段协议，不允许破坏元数据注释） |
 | `propose_edit` | 写·L2 | 对 writing/ 正文提出修改（range + 新文本），**只产生提案不落盘** |
 
@@ -82,6 +85,10 @@ lib/ai/*（streamCompletion 等，不动） · lib/context/*（预算化注入�
 - **L1（lore / 记忆）：自动应用 + 自动备份。** 每次写入前把原文件备份到
   `.ai-writer/backups/<时间戳>/…`（复用 LoreSplitModal 的备份模式），
   写入后触发 loreStore 重扫 / memoryStore 刷新。
+- **lore 写入额外受方案门控（2026-07-28 补充，见 8.2）：** 四个 lore 写工具
+  在 L1 之上再叠一层——必须先有作者批准的 `propose_lore_plan` 步骤覆盖
+  「这个动作 + 这个实体（+ 这个文件）」，否则工具直接拒绝。一张卡片管一整轮
+  整理，写入不再逐个弹窗，但落盘的必然是卡片上那几条。记忆写入不设门控。
 - **L2（正文）：必须审批。** `propose_edit` 只把 diff 放进 agentStore 的
   待审批队列，UI 渲染 diff，用户确认后才写入 editorStore/磁盘；拒绝则把
   「用户拒绝+理由」作为 tool result 回给模型。
@@ -221,3 +228,43 @@ PR1–PR2 合并前不动任何用户可见行为，随时可发版；0.3.0 在 
 剩余已知优化（无阻塞，按需开小 PR）：memoryStore 摘要生成迁 preset、
 generator/splitter 换 runStructuredTask、对话会话持久化（重启后恢复）、
 向量检索兜底召回（见 lore-facet-plan 后续方向）。
+
+### 8.1 后续修正（2026-07-28）：对话助手「只给方案不动手」
+
+作者要求对话助手整理设定，它反复输出方案、明确命令也不执行。两个原因叠加：
+
+1. **Agent 指令活不过第一轮。** `ai.instructions.agent` 被拼进首轮 task 层，
+   而第二轮起 agentStore 只往 history 追加裸 user 消息。全程唯一常驻的
+   system 消息是写作提示词，里面还写着「零附加评论／只输出所请求的写作内容」——
+   于是「去执行」落进了一个唯一稳定指令是「写散文」的上下文里。
+   **修正**：agent 指令改由 system 层承载（写作提示词 + agent 指令拼接），
+   并在指令里显式声明其优先于「只输出写作内容」这一条。
+2. **「整理」所需的工具不存在。** 合并重复、改分类、删废弃条目都没有对应工具
+   （`update_lore_file` 还明确拒绝改 category），模型调查完也无从下手。
+   **修正**：补 `move_lore_entity` / `delete_lore_entity`（见 3.2），
+   `AGENT_ASSIST_PRESET` 轮数 12 → 20（整理全量 lore 是 list + 逐个 read 才
+   开始写，轮数用尽在作者看来同样是「不肯动手」）。
+
+### 8.2 方案门控（`lib/agent/plan.ts`）
+
+上一节让 agent 肯动手之后，作者提的第二个要求是「改设定必须先出方案、经我同意，
+且落盘的必须就是方案里那几条」。做法不是把 lore 写工具升到 L2（逐次弹 diff 卡片，
+整理十个条目要点十次），而是把审批提前到**方案**这一层：
+
+- `propose_lore_plan` 阻塞在作者的决定上，一张卡片列出全部步骤
+  （action + entity + 可选 file + detail）。批准即把步骤记进本次运行的 `PlanGate`。
+- 四个 lore 写工具落盘前过 `checkPlan`：没有覆盖当前「动作 + 实体（+ 文件）」的
+  已批准步骤就直接返回错误，错误文案里附上已批准步骤清单和「要改就重新提方案」的
+  指引（光拒绝会让模型原样重试）。
+- 实体匹配走 `findEntityByName` 解析后比对，方案写「Ava」而写入用别名「阿瓦」
+  不会被误拒；`create` 没有落盘实体，退回字符串比对。
+- 步骤声明了 `file` 就把写入钉死在那个文件，没声明则该实体下任意文件都放行。
+- 门控**按运行**存活：批准只对这一次请求有效，下一轮重新问。同一次运行里再批一份
+  方案是**追加**（不撤销先前步骤），返回值里带上前一份尚未兑现的步骤。
+- 能保证的是「改了哪个实体的哪个文件、做了什么动作」，保证不了正文措辞——所以命中的
+  步骤 `detail` 会回写进工具结果，作者在执行日志里能把「说要改什么」和「实际改了什么」
+  并排看。
+- UI：`components/ai/PlanCard.tsx`，与 ApprovalCard 并列渲染在 AgentChat 与 AiPanel
+  的输入框上方；队列 `pendingPlans` 在 agentStore，abort/收尾同样走 `rejectAll`。
+- `ai.instructions.agent` 里写死这套流程，并强调「方案只能通过工具提交，写在回复里
+  作者看不到批准按钮」——否则模型会退回上一节那个只在聊天里空谈方案的老毛病。
