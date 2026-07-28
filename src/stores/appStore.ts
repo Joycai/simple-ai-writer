@@ -20,6 +20,7 @@ const RIGHT_PANEL_WIDTH_KEY = "app:rightPanelWidth";
 const RECENT_PROJECTS_KEY = "app:recentProjects";
 const LORE_BUDGET_KEY = "app:loreBudgetTokens";
 const CONTEXT_UTILIZATION_KEY = "app:contextUtilization";
+const AI_DRAWER_MODE_KEY = "app:aiDrawerMode";
 
 const RECENT_PROJECTS_MAX = 10;
 
@@ -77,6 +78,12 @@ const storedContextUtilization = clamp(
   parseFloat(localStorage.getItem(CONTEXT_UTILIZATION_KEY) ?? "") || CONTEXT_UTILIZATION_DEFAULT,
   CONTEXT_UTILIZATION_MIN, CONTEXT_UTILIZATION_MAX,
 );
+
+/** Which assistant tab the drawer reopens on — persisted like the panel widths. */
+const storedAiDrawerMode = ((): AiDrawerMode => {
+  const raw = localStorage.getItem(AI_DRAWER_MODE_KEY);
+  return raw === "chat" || raw === "consistency" || raw === "generate" ? raw : "generate";
+})();
 
 export type MainView = "editor" | "lore-wall" | "outline-full";
 export type AiDrawerMode = "generate" | "chat" | "consistency";
@@ -191,7 +198,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   mainView: "editor",
   showCommandPalette: false,
   showAiDrawer: false,
-  aiDrawerMode: "generate",
+  aiDrawerMode: storedAiDrawerMode,
   showOnboarding: false,
   showSettings: false,
   settingsTab: "general",
@@ -291,8 +298,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setMainView: (v) => set({ mainView: v }),
   setShowCommandPalette: (v) => set({ showCommandPalette: v }),
+  // Omitting `mode` means "just open it" — the drawer comes back on whichever
+  // tab was last used. Only the mode-specific entry points (Ctrl+J/Ctrl+L, the
+  // command palette, the inline bubble) name a tab, and naming one remembers it.
   setShowAiDrawer: (v, mode) =>
-    set((s) => ({ showAiDrawer: v, aiDrawerMode: mode ?? s.aiDrawerMode })),
+    set((s) => {
+      if (mode && mode !== s.aiDrawerMode) localStorage.setItem(AI_DRAWER_MODE_KEY, mode);
+      return { showAiDrawer: v, aiDrawerMode: mode ?? s.aiDrawerMode };
+    }),
   setShowOnboarding: (v) => set({ showOnboarding: v }),
   openSettings: (tab) => set({ showSettings: true, settingsTab: tab ?? "general" }),
   closeSettings: () => set({ showSettings: false }),
