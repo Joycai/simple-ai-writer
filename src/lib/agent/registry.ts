@@ -44,17 +44,33 @@ import {
 
 export type ToolAccess = "read" | "write-auto" | "write-approval";
 
-/** A manuscript edit the model proposed — nothing is written until approved. */
-export interface EditProposal {
+/** What every proposal carries, whatever it wants done. */
+interface ProposalBase {
   id: string;
-  /** Absolute path of the writing file. */
+  /** Absolute path under writing/ that the proposal acts on. */
   path: string;
-  /** Exact text to replace — must occur exactly once in the file. */
-  find: string;
-  replace: string;
   /** Model's one-line justification, shown on the approval card. */
   reason?: string;
 }
+
+/** Rewrite a passage in place. */
+export interface EditProposal extends ProposalBase {
+  kind: "edit";
+  /** Exact text to replace — must occur exactly once in the file. */
+  find: string;
+  replace: string;
+}
+
+/**
+ * Something the agent wants done to the manuscript that only the author may
+ * authorise. Nothing is written until the card is approved, and the tool call
+ * stays blocked until it is decided either way.
+ *
+ * A discriminated union rather than one wide shape: each kind carries only the
+ * fields it needs, so the approval card and the apply step both narrow instead
+ * of guessing which optional fields are meaningful.
+ */
+export type Proposal = EditProposal;
 
 export type ApprovalDecision =
   | { approved: true; backupPath?: string | null }
@@ -80,7 +96,7 @@ export interface ToolContext {
    * (the resolver applies the edit before resolving) or rejects. Absent when
    * the surface can't render an approval card — the tool then errors.
    */
-  requestApproval?: (proposal: EditProposal) => Promise<ApprovalDecision>;
+  requestApproval?: (proposal: Proposal) => Promise<ApprovalDecision>;
   /**
    * Plan-approval channel, same blocking contract, for propose_lore_plan.
    * Absent (or `lorePlan` absent) means the surface can't gate lore changes,

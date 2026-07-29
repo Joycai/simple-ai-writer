@@ -781,6 +781,7 @@ export async function proposeEditTool(
   }
 
   const decision = await ctx.requestApproval({
+    kind: "edit",
     id: `edit-${++proposalCounter}`,
     path,
     find: args.find,

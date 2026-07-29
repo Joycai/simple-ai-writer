@@ -35,7 +35,7 @@ import i18n from "../i18n";
 import { backupFile } from "../lib/agent/backup";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import { createPlanGate, type LorePlan, type PlanDecision } from "../lib/agent/plan";
-import type { ApprovalDecision, EditProposal } from "../lib/agent/registry";
+import type { ApprovalDecision, EditProposal, Proposal } from "../lib/agent/registry";
 import type { StreamMessage } from "../lib/ai/types";
 import { readFile, writeFile } from "../lib/fs/fileio";
 import { getDb } from "../lib/project";
@@ -43,7 +43,7 @@ import { loadApiKey } from "../lib/keyStore";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
 
 interface PendingApproval {
-  proposal: EditProposal;
+  proposal: Proposal;
   resolve: (decision: ApprovalDecision) => void;
 }
 
@@ -86,7 +86,7 @@ interface AgentState {
   chatHistory: StreamMessage[] | null;
 
   /** Called by the tool executor (via ToolContext.requestApproval). */
-  requestApproval: (proposal: EditProposal) => Promise<ApprovalDecision>;
+  requestApproval: (proposal: Proposal) => Promise<ApprovalDecision>;
   /** User approved: backup, apply, resolve. */
   approve: (id: string) => Promise<void>;
   /** User rejected: resolve with their optional reason. */
@@ -131,6 +131,52 @@ async function recordChatUsage(
   }
 }
 
+// ─── Applying an approved proposal ───────────────────────────────────────────
+
+/**
+ * Apply an approved edit. Returns the pre-write backup path.
+ *
+ * The find text is re-located at apply time rather than trusting the offset the
+ * proposal was built from: the author may have kept typing while the card sat
+ * there, and silently writing at a stale position would corrupt the passage.
+ */
+async function applyEdit(proposal: EditProposal): Promise<string | null> {
+  const { useProjectStore } = await import("./projectStore");
+  const { projectPath, activeFilePath } = useProjectStore.getState();
+  const backupPath = projectPath ? await backupFile(projectPath, proposal.path) : null;
+
+  if (activeFilePath === proposal.path) {
+    // The file is open — go through the editor so unsaved edits are kept
+    // and the change is visible (and autosaved) immediately.
+    const { useEditorStore } = await import("./editorStore");
+    const { content, setContent } = useEditorStore.getState();
+    const idx = content.indexOf(proposal.find);
+    if (idx < 0) throw new Error("Document changed — the target text no longer matches.");
+    setContent(content.slice(0, idx) + proposal.replace + content.slice(idx + proposal.find.length));
+  } else {
+    const raw = await readFile(proposal.path);
+    const idx = raw.indexOf(proposal.find);
+    if (idx < 0) throw new Error("Document changed — the target text no longer matches.");
+    await writeFile(
+      proposal.path,
+      raw.slice(0, idx) + proposal.replace + raw.slice(idx + proposal.find.length),
+    );
+  }
+  return backupPath;
+}
+
+/**
+ * Carry out what an approved proposal asked for, returning the backup path to
+ * report back to the model. Throwing here is how a failure reaches the model as
+ * a rejection — never swallow one and report success.
+ */
+async function applyProposal(proposal: Proposal): Promise<string | null> {
+  switch (proposal.kind) {
+    case "edit":
+      return applyEdit(proposal);
+  }
+}
+
 export const useAgentStore = create<AgentState>((set, get) => ({
   pending: [],
   pendingPlans: [],
@@ -152,32 +198,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     if (!item) return;
     set((s) => ({ pending: s.pending.filter((p) => p.proposal.id !== id) }));
 
-    const { proposal } = item;
     try {
-      const { useProjectStore } = await import("./projectStore");
-      const { projectPath, activeFilePath } = useProjectStore.getState();
-      const backupPath = projectPath ? await backupFile(projectPath, proposal.path) : null;
-
-      if (activeFilePath === proposal.path) {
-        // The file is open — go through the editor so unsaved edits are kept
-        // and the change is visible (and autosaved) immediately.
-        const { useEditorStore } = await import("./editorStore");
-        const { content, setContent } = useEditorStore.getState();
-        const idx = content.indexOf(proposal.find);
-        if (idx < 0) throw new Error("Document changed — the target text no longer matches.");
-        setContent(
-          content.slice(0, idx) + proposal.replace + content.slice(idx + proposal.find.length),
-        );
-      } else {
-        const raw = await readFile(proposal.path);
-        const idx = raw.indexOf(proposal.find);
-        if (idx < 0) throw new Error("Document changed — the target text no longer matches.");
-        await writeFile(
-          proposal.path,
-          raw.slice(0, idx) + proposal.replace + raw.slice(idx + proposal.find.length),
-        );
-      }
-      item.resolve({ approved: true, backupPath });
+      item.resolve({ approved: true, backupPath: await applyProposal(item.proposal) });
     } catch (e) {
       // Approval failed to apply — report as a rejection so the model knows
       // the manuscript is untouched.
