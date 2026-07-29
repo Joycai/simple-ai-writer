@@ -6,8 +6,8 @@
 import { fileExists, makeDir, readDir, readFile, renamePath, writeBinaryFile, writeFile } from "../fs/fileio";
 import { parseFrontmatter } from "../fs/markdown";
 import { parseImagesMd } from "./gallery";
+import { loreCategories } from "../profile/active";
 import {
-  LORE_CATEGORIES,
   RESERVED_ENTITY_FILES,
   type CategoryId,
   type EntityMeta,
@@ -18,12 +18,18 @@ import {
   type LoreIndex,
 } from "./model";
 
-/** Scan the entire lore directory and return all entities grouped by category. */
+/**
+ * Scan the entire lore directory and return all entities grouped by category.
+ *
+ * Only the *active profile's* categories are scanned, so switching a project's
+ * profile hides the old categories' entities rather than deleting them — the
+ * folders stay on disk and come back if the profile is switched back.
+ */
 export async function scanLore(projectPath: string): Promise<LoreIndex> {
   const loreRoot = `${projectPath}/.ai-writer/lore`;
   const index: LoreIndex = {};
 
-  for (const cat of LORE_CATEGORIES) {
+  for (const cat of loreCategories()) {
     const catPath = `${loreRoot}/${cat.id}`;
     index[cat.id] = [];
 

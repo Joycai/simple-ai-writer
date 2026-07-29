@@ -6,8 +6,9 @@ import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import {
   readEntityFile, saveEntityMetaAndBody,
-  LORE_CATEGORIES, type CategoryId, type LoreEntity,
+  type CategoryId, type LoreEntity,
 } from "../../lib/lore";
+import { categoryLabel, findCategory, loreCategories, loreCategoryIds } from "../../lib/profile";
 import { useImageDataUrl } from "./useImageDataUrl";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { ModalShell } from "../common/ModalShell";
@@ -79,7 +80,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
     setPhase("generating");
 
     try {
-      const catIds = LORE_CATEGORIES.map((c) => c.id);
+      const catIds = loreCategoryIds();
 
       // Multimodal models additionally receive the entity's avatar + gallery
       // images as binary payloads. Text-only models still get the textual
@@ -185,7 +186,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
       });
 
       const parsed = JSON.parse(toolArgs) as Partial<MetaProposal>;
-      const cat = LORE_CATEGORIES.find((c) => c.id === parsed.category);
+      const cat = typeof parsed.category === "string" ? findCategory(parsed.category) : null;
       setPName(typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim() : entity.name);
       setPAliases(Array.isArray(parsed.aliases)
         ? parsed.aliases.filter((a): a is string => typeof a === "string" && a.trim().length > 0).map((a) => a.trim())
@@ -345,9 +346,9 @@ summary: ${entity.summary}
                   value={pCategory}
                   onChange={(e) => setPCategory(e.target.value as CategoryId)}
                 >
-                  {LORE_CATEGORIES.map((c) => (
+                  {loreCategories().map((c) => (
                     <option key={c.id} value={c.id}>
-                      {isZh ? c.labelZh : c.labelEn}
+                      {categoryLabel(c, isZh)}
                     </option>
                   ))}
                 </select>

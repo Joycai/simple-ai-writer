@@ -45,7 +45,7 @@ import {
   MEMORY_MIN_DOC_CHARS,
   MEMORY_SUGGEST_THRESHOLD_CHARS,
 } from "../../lib/context/memory";
-import { LORE_CATEGORIES } from "../../lib/lore";
+import { categoryLabel, loreCategories } from "../../lib/profile";
 import {
   BOOK_PREV_TAIL_CHARS, BOOK_PREV_TAIL_NEAR_START_CHARS,
 } from "../../lib/context/bookContext";
@@ -1013,10 +1013,10 @@ export function AiPanel() {
 
   // Flatten lore index to searchable list
   const isZh = i18n.language.startsWith("zh");
-  const allLoreEntities = LORE_CATEGORIES.flatMap((cat) =>
+  const allLoreEntities = loreCategories().flatMap((cat) =>
     (loreIndex[cat.id] ?? []).map((entity) => ({
       ...entity,
-      categoryLabel: isZh ? cat.labelZh : cat.labelEn,
+      categoryLabel: categoryLabel(cat, isZh),
     }))
   );
   const filteredLoreEntities = loreSearch.trim()

@@ -24,8 +24,19 @@ export async function registerProjectRoot(path: string): Promise<void> {
   await invoke("project_register_root", { path });
 }
 
-export async function scaffoldProject(projectPath: string): Promise<void> {
-  await invoke("scaffold_project", { projectPath });
+/**
+ * Create the project's directory skeleton.
+ *
+ * `categories` decides the `.ai-writer/lore/<category>` folders and comes from
+ * the project's workspace profile (see lib/profile) — so the active profile must
+ * be resolved *before* this runs. Additive: re-scaffolding after a profile
+ * switch adds the new folders and leaves the previous ones in place.
+ */
+export async function scaffoldProject(
+  projectPath: string,
+  categories: string[],
+): Promise<void> {
+  await invoke("scaffold_project", { projectPath, categories });
 }
 
 export async function readDirRecursive(dirPath: string): Promise<FileNode[]> {

@@ -1,19 +1,23 @@
 /**
- * Lore domain model: category catalogue and the entity/index types shared by
- * the scanner, gallery helpers, generator, and UI.
+ * Lore domain model: the entity/index types shared by the scanner, gallery
+ * helpers, generator, and UI.
+ *
+ * The category *catalogue* is not here — it belongs to the active workspace
+ * profile (`lib/profile`), because which categories exist depends on what the
+ * project is (a novel has 人物/世界观, a TTRPG module has NPC/地点/规则).
+ * Call `loreCategories()` to enumerate them and `isKnownCategory()` to validate
+ * one.
  */
 
-export const LORE_CATEGORIES = [
-  { id: "characters", labelZh: "人物",   labelEn: "Characters", icon: "user" },
-  { id: "world",      labelZh: "世界观", labelEn: "World",      icon: "globe" },
-  { id: "factions",   labelZh: "势力",   labelEn: "Factions",   icon: "shield" },
-  { id: "items",      labelZh: "道具",   labelEn: "Items",      icon: "package" },
-  { id: "skills",     labelZh: "技能",   labelEn: "Skills",     icon: "zap" },
-  { id: "style",      labelZh: "风格",   labelEn: "Style",      icon: "feather" },
-  { id: "custom",     labelZh: "自定义", labelEn: "Custom",     icon: "grid" },
-] as const;
-
-export type CategoryId = (typeof LORE_CATEGORIES)[number]["id"];
+/**
+ * A category id, which is also the folder name under `.ai-writer/lore/`.
+ *
+ * Deliberately a plain string rather than a union of the built-in ids: the set
+ * is profile-defined and therefore only knowable at runtime. Anything that
+ * turns an id from disk, the author, or the model into a path must validate it
+ * with `isKnownCategory()` — the type can no longer do that job.
+ */
+export type CategoryId = string;
 
 export interface LoreImage {
   /** File name relative to the entity directory. */

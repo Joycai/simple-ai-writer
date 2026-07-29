@@ -18,7 +18,8 @@
  */
 
 import type { ToolDefinition } from "../ai/types";
-import { LORE_CATEGORIES, type LoreIndex } from "../lore";
+import { type LoreIndex } from "../lore";
+import { loreCategoryIds } from "../profile/active";
 import {
   formatLoreIndex,
   listWritingFiles,
@@ -140,6 +141,17 @@ export interface RegisteredTool {
   definition: ToolDefinition;
   access: ToolAccess;
   execute: (call: ToolCall, ctx: ToolContext) => Promise<ToolResult>;
+  /**
+   * Parameter names whose `enum` must be filled in from the *active profile's*
+   * lore categories when the definition is handed to the model.
+   *
+   * The categories are profile-defined (lib/profile), but this registry is a
+   * module-level constant evaluated once at import — baking the list in here
+   * would freeze it to whichever profile loaded first and then offer a TTRPG
+   * author "characters"/"world". `getToolDefinitions` patches it per call
+   * instead. See `withProfileCategories`.
+   */
+  profileCategoryParams?: readonly string[];
 }
 
 export type ToolId =
@@ -390,7 +402,8 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             name: { type: "string", description: "Entity display name" },
             category: {
               type: "string",
-              enum: LORE_CATEGORIES.map((c) => c.id),
+              // Filled from the active profile — see profileCategoryParams below.
+              enum: [],
               description: "Entity category",
             },
             summary: { type: "string", description: "One-line summary shown in listings and used for activation" },
@@ -408,6 +421,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
         },
       },
     },
+    profileCategoryParams: ["category"],
     execute: (call, ctx) => createLoreEntityTool(call.id, parseArgs(call.arguments), ctx),
   },
 
@@ -533,7 +547,8 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             new_name: { type: "string", description: "New display name (omit to keep the current one)" },
             new_category: {
               type: "string",
-              enum: LORE_CATEGORIES.map((c) => c.id),
+              // Filled from the active profile — see profileCategoryParams below.
+              enum: [],
               description: "Category to move the entity into (omit to keep the current one)",
             },
             keep_old_name_as_alias: {
@@ -545,6 +560,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
         },
       },
     },
+    profileCategoryParams: ["new_category"],
     execute: (call, ctx) => moveLoreEntityTool(call.id, parseArgs(call.arguments), ctx),
   },
 
@@ -725,9 +741,49 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
   },
 };
 
+/**
+ * Copy a tool definition with the named parameters' `enum` set to the active
+ * profile's lore categories.
+ *
+ * Copies rather than mutates: REGISTRY is shared across every run, and writing
+ * the enum into it would leave one project's categories in place after the
+ * author switched profiles. Only the objects on the path being changed are
+ * cloned — the untouched parameter schemas are shared, which is safe because
+ * nothing else writes to them.
+ */
+function withProfileCategories(
+  definition: ToolDefinition,
+  params: readonly string[],
+): ToolDefinition {
+  const parameters = definition.function.parameters;
+  const properties = parameters.properties;
+  if (!properties || typeof properties !== "object") return definition;
+
+  const ids = loreCategoryIds();
+  const nextProperties: Record<string, unknown> = { ...(properties as Record<string, unknown>) };
+  for (const name of params) {
+    const schema = nextProperties[name];
+    if (!schema || typeof schema !== "object") continue;
+    nextProperties[name] = { ...(schema as Record<string, unknown>), enum: ids };
+  }
+
+  return {
+    ...definition,
+    function: {
+      ...definition.function,
+      parameters: { ...parameters, properties: nextProperties },
+    },
+  };
+}
+
 /** Resolve wire definitions for a preset's toolset, preserving order. */
 export function getToolDefinitions(ids: readonly ToolId[]): ToolDefinition[] {
-  return ids.map((id) => REGISTRY[id].definition);
+  return ids.map((id) => {
+    const tool = REGISTRY[id];
+    return tool.profileCategoryParams
+      ? withProfileCategories(tool.definition, tool.profileCategoryParams)
+      : tool.definition;
+  });
 }
 
 /**

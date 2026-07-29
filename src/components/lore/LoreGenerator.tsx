@@ -4,7 +4,8 @@ import { X, Bot, Sparkles, RotateCw, AlertTriangle, CheckCircle2 } from "lucide-
 import { useProjectStore } from "../../stores/projectStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useLoreStore } from "../../stores/loreStore";
-import { LORE_CATEGORIES, slugifyEntityId, uniqueEntityId, readEntityFile, type CategoryId } from "../../lib/lore";
+import { slugifyEntityId, uniqueEntityId, readEntityFile, type CategoryId } from "../../lib/lore";
+import { categoryLabel, defaultCategoryId, loreCategories } from "../../lib/profile";
 import { scanProjectFiles, imageToDataUrl, type ProjectFile } from "../../lib/fs/images";
 import { generateLore } from "../../lib/lore/generator";
 import { type AttachedImage, type AttachedText, type AttachedLore, type AttachedItem } from "../../lib/lore/aiTask";
@@ -33,7 +34,7 @@ export function LoreGenerator({ onClose, onModeChange }: Props) {
   // ── Input state ──────────────────────────────────────────────────────────
   const [description, setDescription] = useState("");
   const [attached, setAttached] = useState<AttachedItem[]>([]);
-  const [category, setCategory] = useState<CategoryId>("characters");
+  const [category, setCategory] = useState<CategoryId>(defaultCategoryId);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
 
   // ── Generation state ─────────────────────────────────────────────────────
@@ -44,7 +45,7 @@ export function LoreGenerator({ onClose, onModeChange }: Props) {
 
   // ── Editable result fields ───────────────────────────────────────────────
   const [editName, setEditName] = useState("");
-  const [editCat, setEditCat] = useState<CategoryId>("characters");
+  const [editCat, setEditCat] = useState<CategoryId>(defaultCategoryId);
   const [editTags, setEditTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [editSummary, setEditSummary] = useState("");
@@ -230,8 +231,8 @@ export function LoreGenerator({ onClose, onModeChange }: Props) {
                 <label className={styles.label}>{t("lore.generator.categoryLabel")}</label>
                 <select className={styles.select} value={category}
                   onChange={(e) => setCategory(e.target.value as CategoryId)}>
-                  {LORE_CATEGORIES.map((c) => (
-                    <option key={c.id} value={c.id}>{isZh ? c.labelZh : c.labelEn}</option>
+                  {loreCategories().map((c) => (
+                    <option key={c.id} value={c.id}>{categoryLabel(c, isZh)}</option>
                   ))}
                 </select>
               </div>
@@ -307,8 +308,8 @@ export function LoreGenerator({ onClose, onModeChange }: Props) {
                     <label className={styles.label}>{t("lore.generator.categoryLabel2")}</label>
                     <select className={styles.select} value={editCat}
                       onChange={(e) => setEditCat(e.target.value as CategoryId)}>
-                      {LORE_CATEGORIES.map((c) => (
-                        <option key={c.id} value={c.id}>{isZh ? c.labelZh : c.labelEn}</option>
+                      {loreCategories().map((c) => (
+                        <option key={c.id} value={c.id}>{categoryLabel(c, isZh)}</option>
                       ))}
                     </select>
                   </div>
