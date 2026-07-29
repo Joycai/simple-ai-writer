@@ -30,9 +30,12 @@ import {
 } from "./tools";
 import { LORE_PLAN_ACTIONS, type LorePlan, type PlanDecision, type PlanGate } from "./plan";
 import {
+  createChapterTool,
   createLoreEntityTool,
+  deleteChapterTool,
   deleteLoreEntityTool,
   deleteLoreFileTool,
+  moveChapterTool,
   moveLoreEntityTool,
   updateFacetMetaTool,
   proposeEditTool,
@@ -61,6 +64,32 @@ export interface EditProposal extends ProposalBase {
   replace: string;
 }
 
+/** Add a chapter that does not exist yet, with its opening text. */
+export interface CreateProposal extends ProposalBase {
+  kind: "create";
+  /** Body the new file starts with; may be empty. */
+  content: string;
+}
+
+/** Rename a chapter, or move it into another volume. */
+export interface MoveProposal extends ProposalBase {
+  kind: "move";
+  newPath: string;
+  /** True when `path` is a volume folder — the move carries every chapter in it. */
+  isDir: boolean;
+}
+
+/**
+ * Remove a chapter file. Volume folders are deliberately not proposable: the
+ * blast radius (every chapter inside) is the author's call to make in the
+ * sidebar, not something to approve from a card mid-run.
+ */
+export interface DeleteProposal extends ProposalBase {
+  kind: "delete";
+  /** Size at proposal time, so the card can say what is at stake. */
+  chars: number;
+}
+
 /**
  * Something the agent wants done to the manuscript that only the author may
  * authorise. Nothing is written until the card is approved, and the tool call
@@ -70,7 +99,7 @@ export interface EditProposal extends ProposalBase {
  * fields it needs, so the approval card and the apply step both narrow instead
  * of guessing which optional fields are meaningful.
  */
-export type Proposal = EditProposal;
+export type Proposal = EditProposal | CreateProposal | MoveProposal | DeleteProposal;
 
 export type ApprovalDecision =
   | { approved: true; backupPath?: string | null }
@@ -128,7 +157,10 @@ export type ToolId =
   | "move_lore_entity"
   | "delete_lore_entity"
   | "update_memory"
-  | "propose_edit";
+  | "propose_edit"
+  | "create_chapter"
+  | "move_chapter"
+  | "delete_chapter";
 
 function parseArgs<T>(raw: string): T {
   return JSON.parse(raw || "{}") as T;
@@ -601,6 +633,95 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => proposeEditTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  create_chapter: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "create_chapter",
+        description:
+          "Propose a NEW chapter file under writing/, with its opening text. NOTHING is written until the user approves the card; the call blocks until they decide. Give the full destination path — a subfolder that does not exist yet is created with it, which is how a new volume comes into being. Fails if something is already at that path: use propose_edit to change an existing chapter. A chapter created here lands at the end of its volume's order, which the author can rearrange in the outline view.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description:
+                "Full path of the new file, e.g. <writing folder>/卷二/第31章.md. A missing extension becomes .md.",
+            },
+            content: {
+              type: "string",
+              description: "The chapter's starting text. Pass an empty string for a blank chapter.",
+            },
+            reason: {
+              type: "string",
+              description: "One-line justification shown to the user on the review card",
+            },
+          },
+          required: ["path", "content"],
+        },
+      },
+    },
+    execute: (call, ctx) => createChapterTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  move_chapter: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "move_chapter",
+        description:
+          "Propose renaming a chapter, or moving it into a different volume folder — both are the same operation, expressed as a new full path. Works on a volume folder too, which renames the volume and carries its chapters along. NOTHING is moved until the user approves the card. Fails if the destination already exists, so a rename can never overwrite another chapter. Propose one move per call.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Current full path of the chapter (or volume folder) to move",
+            },
+            new_path: {
+              type: "string",
+              description:
+                "Full destination path, including the filename — not just the target folder",
+            },
+            reason: {
+              type: "string",
+              description: "One-line justification shown to the user on the review card",
+            },
+          },
+          required: ["path", "new_path"],
+        },
+      },
+    },
+    execute: (call, ctx) => moveChapterTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  delete_chapter: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "delete_chapter",
+        description:
+          "Propose deleting ONE chapter file. NOTHING is removed until the user approves the card, and on approval the file is moved into .ai-writer/backups rather than erased, so it stays recoverable. Volume folders are refused — deleting a whole volume is the author's own call; describe what you would remove and let them do it. When merging two chapters, propose_edit the surviving one FIRST, then delete the other.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "Full path of the chapter file to delete" },
+            reason: {
+              type: "string",
+              description:
+                "Why it should go, in the author's language — they decide from this line alone",
+            },
+          },
+          required: ["path", "reason"],
+        },
+      },
+    },
+    execute: (call, ctx) => deleteChapterTool(call.id, parseArgs(call.arguments), ctx),
   },
 };
 

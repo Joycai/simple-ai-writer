@@ -82,7 +82,14 @@ lib/ai/*（streamCompletion 等，不动） · lib/context/*（预算化注入�
 | `move_lore_entity` | 写·L1 | 改名 / 换分类。换分类只能走它——扫描器认的是文件夹位置，只改 frontmatter 会在下次重扫时被还原 |
 | `delete_lore_entity` | 写·L1 | 删除实体：整个文件夹 rename 进 `.ai-writer/backups/deleted-…`，图库等二进制资产一并保住，可整目录搬回还原 |
 | `update_memory` | 写·L1 | 更新前情记忆段落（走 memory.ts 的分段协议，不允许破坏元数据注释） |
-| `propose_edit` | 写·L2 | 对 writing/ 正文提出修改（range + 新文本），**只产生提案不落盘** |
+| `propose_edit` | 写·L2 | 对 writing/ 正文提出修改（唯一 find + 新文本），**只产生提案不落盘** |
+| `create_chapter` | 写·L2 | 新建章节（完整路径 + 开篇正文）。路径里不存在的文件夹一并创建——新开一卷就是这么来的。审批卡用 `renderMarkdown` 渲染正文预览 |
+| `move_chapter` | 写·L2 | 改名 / 移到别的卷（同一个操作，表达为新的完整路径），也可作用于分卷文件夹。目标已存在则拒绝，移进自己的子树则拒绝 |
+| `delete_chapter` | 写·L2 | 删**单个**章节文件，批准后移入 `.ai-writer/backups` 可恢复。**分卷文件夹一律拒绝**——删整卷的爆炸半径是作者自己的决定，不该在运行中间用一张卡片批掉 |
+
+> 结构类操作全部走 L2 而非 lore 那样的 L1 自动应用：正文的所有权感比设定强得多，删一章的破坏性也远大于改一个设定文件。也**没有**对应的 `propose_chapter_plan` 前置门——每个操作各自一张卡，大改结构就是好几张，换来的是每一步都看得见、可单独拒绝。真觉得烦了再加门比反过来容易。
+>
+> 提案类型是按 `kind` 打标签的判别联合（`Proposal`），审批卡和落盘步骤都靠它收窄。TypeScript 会验证两处 switch 穷尽，所以加 kind 时漏了卡片 body 或落盘分支是编译错误。
 
 **安全分级（已定）：**
 

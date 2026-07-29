@@ -41,8 +41,9 @@ import {
   projectRelativePath,
   rewriteMemorySegment,
 } from "../context/memory";
+import { isChapterFile, normalizeChapterFileName, parentDir } from "../context/outline";
 import { parseFrontmatter } from "../fs/markdown";
-import { makeDir, readFile, removeFile, renamePath } from "../fs/fileio";
+import { makeDir, readDir, readFile, removeFile, renamePath } from "../fs/fileio";
 import { backupFile } from "./backup";
 import {
   LORE_PLAN_ACTIONS,
@@ -52,8 +53,8 @@ import {
   type LorePlanAction,
   type LorePlanStep,
 } from "./plan";
-import type { ToolContext } from "./registry";
-import { isPathWithin } from "../paths";
+import type { ApprovalDecision, ToolContext } from "./registry";
+import { isPathWithin, isStrictDescendant } from "../paths";
 import { allEntityNames, findEntityByName, type ToolResult } from "./tools";
 
 // ─── propose_lore_plan (the gate every lore write goes through) ──────────────
@@ -727,9 +728,222 @@ export async function updateMemoryTool(
   };
 }
 
-// ─── propose_edit (L2 — approval required) ───────────────────────────────────
+// ─── Manuscript proposals (L2 — approval required) ───────────────────────────
 
 let proposalCounter = 0;
+
+/**
+ * Shared preamble for every manuscript proposal: a trimmed path that is really
+ * inside `writing/`, and a live approval channel to block on. Returns the error
+ * result to hand straight back to the model when either is missing.
+ */
+function manuscriptTarget(
+  toolCallId: string,
+  tool: string,
+  rawPath: string | undefined,
+  ctx: ToolContext,
+): { path: string } | { refusal: ToolResult } {
+  const path = rawPath?.trim();
+  if (!path) {
+    return { refusal: { toolCallId, content: "Error: 'path' argument is required." } };
+  }
+  // Manuscript only — lore/memory have their own (L1) tools.
+  if (!isPathWithin(`${ctx.projectPath}/writing`, path)) {
+    return {
+      refusal: {
+        toolCallId,
+        content: `Error: ${tool} only works on files under the project's writing/ directory.`,
+      },
+    };
+  }
+  if (!ctx.requestApproval) {
+    return {
+      refusal: {
+        toolCallId,
+        content: `Error: this surface cannot review manuscript changes — do not call ${tool} here.`,
+      },
+    };
+  }
+  return { path };
+}
+
+/**
+ * Whether `path` exists, and whether it is a directory — read from the parent's
+ * listing, since fs_exists cannot tell the two apart and `delete_chapter` must
+ * refuse folders.
+ */
+async function statEntry(path: string): Promise<{ isDir: boolean } | null> {
+  const clean = path.replace(/\\/g, "/").replace(/\/+$/, "");
+  const cut = clean.lastIndexOf("/");
+  if (cut < 0) return null;
+  try {
+    const entries = await readDir(clean.slice(0, cut));
+    const name = clean.slice(cut + 1);
+    const hit = entries.find((e) => e.name === name);
+    return hit ? { isDir: hit.isDirectory } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Turn an approval decision into the result text the model reads. */
+function reportDecision(
+  toolCallId: string,
+  decision: ApprovalDecision,
+  done: string,
+): ToolResult {
+  if (!decision.approved) {
+    return {
+      toolCallId,
+      content:
+        `The user REJECTED this change${decision.reason ? ` — reason: ${decision.reason}` : "."} ` +
+        "Do not retry the same change; adjust per the reason or move on.",
+    };
+  }
+  return {
+    toolCallId,
+    content:
+      `${done}` +
+      (decision.backupPath ? ` The previous state was backed up to ${decision.backupPath}.` : ""),
+  };
+}
+
+export async function createChapterTool(
+  toolCallId: string,
+  args: { path?: string; content?: string; reason?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const target = manuscriptTarget(toolCallId, "create_chapter", args.path, ctx);
+  if ("refusal" in target) return target.refusal;
+  if (typeof args.content !== "string") {
+    return { toolCallId, content: "Error: 'content' argument is required (may be an empty string)." };
+  }
+
+  // A path the model wrote without an extension would land as a file the
+  // outline does not recognise as a chapter, so normalise it up front and tell
+  // the model what the file will actually be called.
+  const dir = parentDir(target.path);
+  const name = normalizeChapterFileName(target.path.slice(dir.length + 1));
+  if (!isChapterFile(name)) {
+    return {
+      toolCallId,
+      content: `Error: "${name}" is not a manuscript file — chapters must end in .md, .markdown or .txt.`,
+    };
+  }
+  const path = `${dir}/${name}`;
+
+  if (await statEntry(path)) {
+    return {
+      toolCallId,
+      content: `Error: "${name}" already exists. Use propose_edit to change it, or pick another name.`,
+    };
+  }
+
+  const decision = await ctx.requestApproval!({
+    kind: "create",
+    id: `create-${++proposalCounter}`,
+    path,
+    content: args.content,
+    reason: args.reason?.trim() || undefined,
+  });
+  return reportDecision(toolCallId, decision, `Created ${path}.`);
+}
+
+export async function moveChapterTool(
+  toolCallId: string,
+  args: { path?: string; new_path?: string; reason?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const target = manuscriptTarget(toolCallId, "move_chapter", args.path, ctx);
+  if ("refusal" in target) return target.refusal;
+
+  const rawDest = args.new_path?.trim();
+  if (!rawDest) {
+    return { toolCallId, content: "Error: 'new_path' argument is required (the full destination path)." };
+  }
+  if (!isPathWithin(`${ctx.projectPath}/writing`, rawDest)) {
+    return { toolCallId, content: "Error: the destination must also be under the project's writing/ directory." };
+  }
+
+  const source = await statEntry(target.path);
+  if (!source) {
+    return { toolCallId, content: `Error: "${target.path}" does not exist. Check the path with list_files.` };
+  }
+
+  // Files get their extension normalised; a volume folder keeps its bare name.
+  const destDir = parentDir(rawDest);
+  const destName = rawDest.slice(destDir.length + 1);
+  const newPath = source.isDir ? rawDest : `${destDir}/${normalizeChapterFileName(destName)}`;
+
+  if (newPath === target.path) {
+    return { toolCallId, content: "Error: the destination is the same as the source." };
+  }
+  if (await statEntry(newPath)) {
+    return { toolCallId, content: `Error: "${newPath}" already exists — moving there would overwrite it.` };
+  }
+  if (isStrictDescendant(target.path, newPath)) {
+    return { toolCallId, content: "Error: cannot move a folder into itself." };
+  }
+
+  const decision = await ctx.requestApproval!({
+    kind: "move",
+    id: `move-${++proposalCounter}`,
+    path: target.path,
+    newPath,
+    isDir: source.isDir,
+    reason: args.reason?.trim() || undefined,
+  });
+  return reportDecision(toolCallId, decision, `Moved ${target.path} to ${newPath}.`);
+}
+
+export async function deleteChapterTool(
+  toolCallId: string,
+  args: { path?: string; reason?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const target = manuscriptTarget(toolCallId, "delete_chapter", args.path, ctx);
+  if ("refusal" in target) return target.refusal;
+
+  const reason = args.reason?.trim();
+  if (!reason) {
+    return { toolCallId, content: "Error: 'reason' argument is required — the author decides on the card, and needs to know why." };
+  }
+
+  const stat = await statEntry(target.path);
+  if (!stat) {
+    return { toolCallId, content: `Error: "${target.path}" does not exist. Check the path with list_files.` };
+  }
+  if (stat.isDir) {
+    return {
+      toolCallId,
+      content:
+        "Error: delete_chapter removes a single chapter file, not a volume folder — deleting a whole volume is the author's own call. " +
+        "Say what you would remove and let them do it in the sidebar.",
+    };
+  }
+
+  let chars = 0;
+  try {
+    chars = (await readFile(target.path)).length;
+  } catch {
+    // Unreadable but listed — still proposable; the card just cannot size it.
+  }
+
+  const decision = await ctx.requestApproval!({
+    kind: "delete",
+    id: `delete-${++proposalCounter}`,
+    path: target.path,
+    chars,
+    reason,
+  });
+  return reportDecision(
+    toolCallId,
+    decision,
+    `Deleted ${target.path}. It was moved to .ai-writer/backups and can be restored.`,
+  );
+}
+
+// ─── propose_edit ────────────────────────────────────────────────────────────
 
 /** Count non-overlapping occurrences of `find` in `text`. */
 function countOccurrences(text: string, find: string): number {

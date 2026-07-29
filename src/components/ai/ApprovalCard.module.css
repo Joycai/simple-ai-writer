@@ -65,6 +65,70 @@
   border-left: 2px solid var(--color-error);
 }
 
+/* New-chapter preview: rendered prose, not source — the author is reading what
+   would enter the book, so it gets the manuscript serif rather than a code block. */
+.previewBlock,
+.previewBlockClipped {
+  font: 400 13px/1.9 var(--font-serif);
+  color: var(--color-text-primary);
+  background: var(--color-bg-elevated);
+  padding: 10px 12px;
+  word-break: break-word;
+  overflow-y: auto;
+  max-height: 320px;
+}
+/* Clipped: a short window with the text fading out, so a long opening reads as
+   "there is more" instead of as a scrollbar to fight with. */
+.previewBlockClipped {
+  max-height: 150px;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 65%, transparent 100%);
+}
+.previewBlock :is(p, ul, ol),
+.previewBlockClipped :is(p, ul, ol) { margin: 0 0 var(--space-2); }
+.previewBlock :is(p, ul, ol):last-child,
+.previewBlockClipped :is(p, ul, ol):last-child { margin-bottom: 0; }
+.previewBlock :is(h1, h2, h3, h4),
+.previewBlockClipped :is(h1, h2, h3, h4) {
+  font-size: 1em;
+  margin: var(--space-3) 0 var(--space-1);
+}
+.previewBlock :is(ul, ol),
+.previewBlockClipped :is(ul, ol) { padding-left: 1.4em; }
+.previewBlock :is(table, img),
+.previewBlockClipped :is(table, img) { max-width: 100%; }
+
+/* Move: from → to, on one line when it fits, wrapping rather than truncating —
+   the tail of a path is the part that changed. */
+.moveBlock {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  background: var(--color-bg-elevated);
+  padding: 10px 12px;
+}
+.movePath {
+  font: 400 11px/1.6 var(--font-mono);
+  color: var(--color-text-primary);
+  word-break: break-all;
+}
+.moveArrow { flex-shrink: 0; color: var(--color-text-faint); }
+
+.deleteBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  background: var(--color-bg-elevated);
+  border-left: 2px solid var(--color-error);
+  padding: 10px 12px;
+}
+
+.emptyNote {
+  font: 400 11px/1.7 var(--font-sans);
+  color: var(--color-text-faint);
+}
+
 .originalToggle {
   display: inline-flex;
   align-items: center;
