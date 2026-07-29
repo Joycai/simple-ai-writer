@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isPathWithin, normalizePathSegments } from "../agent/tools";
+import { isPathWithin, isStrictDescendant, normalizePathSegments } from "../paths";
 
 describe("normalizePathSegments", () => {
   it("resolves . and .. lexically", () => {
@@ -39,5 +39,25 @@ describe("isPathWithin", () => {
 
   it("rejects unrelated absolute paths", () => {
     expect(isPathWithin(base, "/etc/passwd")).toBe(false);
+  });
+});
+
+describe("isStrictDescendant", () => {
+  const dir = "/home/user/project/writing/卷一";
+
+  it("is false for the path itself — a move onto itself is not a nesting", () => {
+    expect(isStrictDescendant(dir, dir)).toBe(false);
+    expect(isStrictDescendant(dir, `${dir}/`)).toBe(false);
+  });
+
+  it("catches a folder being moved into its own subtree", () => {
+    expect(isStrictDescendant(dir, `${dir}/第1章.md`)).toBe(true);
+    expect(isStrictDescendant(dir, `${dir}/子卷/深处`)).toBe(true);
+  });
+
+  it("allows siblings and ancestors", () => {
+    expect(isStrictDescendant(dir, "/home/user/project/writing/卷二")).toBe(false);
+    expect(isStrictDescendant(dir, "/home/user/project/writing")).toBe(false);
+    expect(isStrictDescendant(dir, `${dir}-备份/第1章.md`)).toBe(false);
   });
 });

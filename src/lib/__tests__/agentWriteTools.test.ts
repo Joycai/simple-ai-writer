@@ -653,6 +653,10 @@ describe("propose_edit", () => {
     }, ctx);
 
     expect(approvals).toHaveLength(1);
+    // The approver dispatches on `kind`; an untagged proposal would never apply.
+    expect(approvals[0]).toMatchObject({
+      kind: "edit", path: DOC, find: "She waited.", replace: "She ran.", reason: "pacing",
+    });
     expect(res.content).toContain("approved and applied");
     expect(res.content).toContain("/proj/.ai-writer/backups/x");
     // The tool itself never writes — that's the approver's job.

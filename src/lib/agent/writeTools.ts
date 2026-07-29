@@ -53,7 +53,8 @@ import {
   type LorePlanStep,
 } from "./plan";
 import type { ToolContext } from "./registry";
-import { allEntityNames, findEntityByName, isPathWithin, type ToolResult } from "./tools";
+import { isPathWithin } from "../paths";
+import { allEntityNames, findEntityByName, type ToolResult } from "./tools";
 
 // ─── propose_lore_plan (the gate every lore write goes through) ──────────────
 
@@ -780,6 +781,7 @@ export async function proposeEditTool(
   }
 
   const decision = await ctx.requestApproval({
+    kind: "edit",
     id: `edit-${++proposalCounter}`,
     path,
     find: args.find,
