@@ -31,7 +31,7 @@ export interface TaskPreset {
 /** 续写 — the agentic continuation task (reads lore + prior chapters, then writes). */
 export const CONTINUE_PRESET: TaskPreset = {
   id: "continue",
-  tools: ["list_lore_entities", "read_lore_entity", "list_files", "read_file"],
+  tools: ["list_lore_entities", "read_lore_entity", "list_files", "read_file", "search_text"],
   maxRounds: 8,
   finishPolicy: "force-text",
 };
@@ -93,6 +93,7 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "read_lore_entity",
     "list_files",
     "read_file",
+    "search_text",
     "read_memory",
     "propose_lore_plan",
     "create_lore_entity",

@@ -19,7 +19,7 @@ const IDENTITY_KEYS = [
 ];
 
 /** Keys that are worth showing as a qualifier after the identity. */
-const DETAIL_KEYS = ["facet", "group", "limit", "count"];
+const DETAIL_KEYS = ["facet", "group", "start_line", "limit", "count"];
 
 const MAX_ARG_CHARS = 44;
 const MAX_RESULT_CHARS = 38;

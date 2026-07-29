@@ -24,6 +24,7 @@ import {
   listWritingFiles,
   readLoreEntity,
   readWritingFile,
+  searchWritingFiles,
   type ToolCall,
   type ToolResult,
 } from "./tools";
@@ -101,6 +102,7 @@ export type ToolId =
   | "read_lore_entity"
   | "list_files"
   | "read_file"
+  | "search_text"
   | "read_memory"
   | "propose_lore_plan"
   | "create_lore_entity"
@@ -168,14 +170,14 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "list_files",
         description:
-          "List files in the project's writing directory (or a subfolder). Returns absolute file paths. Use this to discover chapter files before reading them.",
+          "List the manuscript tree under the project's writing/ directory, recursively — every volume subfolder included. Output is grouped like `ls -R`: an absolute folder path on its own line, then that folder's filenames indented under it. A file's full path, as read_file wants it, is the folder line + \"/\" + the filename. Use this to see what chapters exist; to find where something is written, use search_text instead.",
         parameters: {
           type: "object",
           properties: {
             folder: {
               type: "string",
               description:
-                "Subfolder relative to the project writing/ directory. Omit to list the top-level writing/ directory.",
+                "Subfolder of writing/ to list (e.g. one volume). Omit to list the whole manuscript.",
             },
           },
         },
@@ -194,13 +196,18 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "read_file",
         description:
-          "Read the text content of a writing file. Use the path exactly as returned by list_files. Content is truncated to 4000 characters if the file is large.",
+          "Read the text content of a writing file. Up to 4000 characters come back per call, cut on a line boundary; if the file is longer the result ends with the line range shown and the start_line to pass next, so a long chapter can be read in order. To jump straight to a passage search_text found, pass its line number as start_line.",
         parameters: {
           type: "object",
           properties: {
             path: {
               type: "string",
-              description: "Absolute path as returned by list_files",
+              description: "Absolute path, built from a list_files folder line + \"/\" + filename",
+            },
+            start_line: {
+              type: "number",
+              description:
+                "1-based line to start reading at — a search_text hit's line number, or the start_line the previous call handed back. Omit to read from the top.",
             },
           },
           required: ["path"],
@@ -208,9 +215,41 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: async (call, ctx) => {
-      const args = JSON.parse(call.arguments || "{}") as { path?: string };
+      const args = JSON.parse(call.arguments || "{}") as { path?: string; start_line?: number };
       if (!args.path) return { toolCallId: call.id, content: "Error: 'path' argument is required." };
-      return readWritingFile(call.id, args.path, ctx.projectPath);
+      return readWritingFile(call.id, args.path, ctx.projectPath, args.start_line);
+    },
+  },
+
+  search_text: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "search_text",
+        description:
+          "Full-text search across the manuscript. Scans every chapter file under writing/ (recursively, including volume subfolders) and returns each hit as file path + line number + a snippet of the surrounding line. This is the way to locate a scene, a name, or a piece of foreshadowing — use it instead of reading chapters one by one with read_file, then read_file only the chapter the hits point at. Matching is literal and case-insensitive; regular expressions are NOT supported. Search a distinctive name or phrase: a common word returns capped, unhelpful results.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description:
+                "The exact text to look for. Distinctive proper nouns or phrases work; common words get truncated away.",
+            },
+            folder: {
+              type: "string",
+              description:
+                "Subfolder of writing/ to limit the search to (e.g. one volume). Omit to search the whole manuscript.",
+            },
+          },
+          required: ["query"],
+        },
+      },
+    },
+    execute: async (call, ctx) => {
+      const args = JSON.parse(call.arguments || "{}") as { query?: string; folder?: string };
+      return searchWritingFiles(call.id, ctx.projectPath, args.query ?? "", args.folder);
     },
   },
 
