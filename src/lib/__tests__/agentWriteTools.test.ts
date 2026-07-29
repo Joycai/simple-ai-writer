@@ -33,7 +33,24 @@ vi.mock("../fs/fileio", () => ({
       fs.delete(key);
     }
   }),
-  readDir: vi.fn(async () => []),
+  // One level of listing, derived from the flat path map — the chapter tools
+  // use it to tell "missing" from "exists" from "is a folder".
+  readDir: vi.fn(async (dir: string) => {
+    const prefix = dir.replace(/\/+$/, "") + "/";
+    const seen = new Map<string, boolean>(); // name → isDirectory
+    for (const path of fs.keys()) {
+      if (!path.startsWith(prefix)) continue;
+      const rest = path.slice(prefix.length);
+      const cut = rest.indexOf("/");
+      if (cut < 0) seen.set(rest, false);
+      else seen.set(rest.slice(0, cut), true);
+    }
+    return [...seen].map(([name, isDirectory]) => ({
+      name,
+      path: prefix + name,
+      isDirectory,
+    }));
+  }),
 }));
 
 import { serializeMemory, type DocMemory } from "../context/memory";
@@ -47,6 +64,7 @@ const ALL_TOOLS: ToolId[] = [
   "read_memory", "propose_lore_plan", "create_lore_entity", "update_lore_file",
   "update_facet_meta", "delete_lore_file", "move_lore_entity", "delete_lore_entity",
   "update_memory", "propose_edit",
+  "create_chapter", "move_chapter", "delete_chapter",
 ];
 
 /**
@@ -688,5 +706,206 @@ describe("propose_edit", () => {
 
     const noChannel = await run("propose_edit", { path: DOC, find: "She waited.", replace: "y" }, makeCtx());
     expect(noChannel.content).toContain("cannot review");
+  });
+});
+
+// ─── create_chapter / move_chapter / delete_chapter ──────────────────────────
+//
+// These tools only *propose*; the approver applies. So the assertions are about
+// what reaches the card (and what is refused before it ever gets there), never
+// about the filesystem changing.
+
+describe("chapter structure tools", () => {
+  const CH1 = `${PROJECT}/writing/卷一/第1章.md`;
+  const proposals: Record<string, unknown>[] = [];
+
+  /** Approves everything, recording what it was asked to approve. */
+  const approving = () =>
+    makeCtx({
+      requestApproval: async (p) => {
+        proposals.push(p as unknown as Record<string, unknown>);
+        return { approved: true, backupPath: null };
+      },
+    });
+
+  beforeEach(() => {
+    proposals.length = 0;
+    fs.set(CH1, "第一章的正文。");
+    fs.set(`${PROJECT}/writing/卷一/第2章.md`, "第二章的正文。");
+  });
+
+  describe("create_chapter", () => {
+    it("proposes a new chapter with its content, normalising a missing extension", async () => {
+      const res = await run(
+        "create_chapter",
+        { path: `${PROJECT}/writing/卷一/第3章`, content: "第三章开篇。", reason: "接上一章" },
+        approving(),
+      );
+
+      expect(proposals[0]).toMatchObject({
+        kind: "create",
+        path: `${PROJECT}/writing/卷一/第3章.md`,
+        content: "第三章开篇。",
+        reason: "接上一章",
+      });
+      expect(res.content).toContain("Created");
+      // The tool never writes — that is the approver's job.
+      expect(fs.has(`${PROJECT}/writing/卷一/第3章.md`)).toBe(false);
+    });
+
+    it("accepts an empty chapter but requires the argument", async () => {
+      await run("create_chapter", { path: `${PROJECT}/writing/新章.md`, content: "" }, approving());
+      expect(proposals).toHaveLength(1);
+
+      const missing = await run("create_chapter", { path: `${PROJECT}/writing/新章2.md` }, approving());
+      expect(missing.content).toContain("'content' argument is required");
+    });
+
+    it("refuses to overwrite an existing chapter", async () => {
+      const res = await run("create_chapter", { path: CH1, content: "x" }, approving());
+      expect(res.content).toContain("already exists");
+      expect(proposals).toHaveLength(0);
+    });
+
+    it("refuses a non-manuscript extension", async () => {
+      const res = await run(
+        "create_chapter",
+        { path: `${PROJECT}/writing/cover.png`, content: "x" },
+        approving(),
+      );
+      expect(res.content).toContain("not a manuscript file");
+    });
+
+    it("refuses paths outside writing/ and surfaces a missing approval channel", async () => {
+      const outside = await run(
+        "create_chapter",
+        { path: `${PROJECT}/.ai-writer/lore/x.md`, content: "x" },
+        approving(),
+      );
+      expect(outside.content).toContain("writing/");
+
+      const noChannel = await run(
+        "create_chapter",
+        { path: `${PROJECT}/writing/新章.md`, content: "x" },
+        makeCtx(),
+      );
+      expect(noChannel.content).toContain("cannot review");
+    });
+  });
+
+  describe("move_chapter", () => {
+    it("proposes a move with both paths and whether the source is a folder", async () => {
+      const res = await run(
+        "move_chapter",
+        { path: CH1, new_path: `${PROJECT}/writing/卷二/第1章.md`, reason: "归卷" },
+        approving(),
+      );
+
+      expect(proposals[0]).toMatchObject({
+        kind: "move",
+        path: CH1,
+        newPath: `${PROJECT}/writing/卷二/第1章.md`,
+        isDir: false,
+      });
+      expect(res.content).toContain("Moved");
+    });
+
+    it("recognises a volume folder as the source", async () => {
+      await run(
+        "move_chapter",
+        { path: `${PROJECT}/writing/卷一`, new_path: `${PROJECT}/writing/第一卷` },
+        approving(),
+      );
+      expect(proposals[0]).toMatchObject({ kind: "move", isDir: true });
+    });
+
+    it("refuses a destination that already exists, so a move cannot overwrite", async () => {
+      const res = await run(
+        "move_chapter",
+        { path: CH1, new_path: `${PROJECT}/writing/卷一/第2章.md` },
+        approving(),
+      );
+      expect(res.content).toContain("already exists");
+      expect(proposals).toHaveLength(0);
+    });
+
+    it("refuses moving a folder into its own subtree", async () => {
+      const res = await run(
+        "move_chapter",
+        { path: `${PROJECT}/writing/卷一`, new_path: `${PROJECT}/writing/卷一/子卷` },
+        approving(),
+      );
+      expect(res.content).toContain("into itself");
+    });
+
+    it("refuses a missing source, a same-path move, and a destination outside writing/", async () => {
+      const missing = await run(
+        "move_chapter",
+        { path: `${PROJECT}/writing/无.md`, new_path: `${PROJECT}/writing/有.md` },
+        approving(),
+      );
+      expect(missing.content).toContain("does not exist");
+
+      const same = await run("move_chapter", { path: CH1, new_path: CH1 }, approving());
+      expect(same.content).toContain("same as the source");
+
+      const outside = await run(
+        "move_chapter",
+        { path: CH1, new_path: `${PROJECT}/.ai-writer/第1章.md` },
+        approving(),
+      );
+      expect(outside.content).toContain("writing/");
+    });
+  });
+
+  describe("delete_chapter", () => {
+    it("proposes a deletion carrying the file's size", async () => {
+      const res = await run("delete_chapter", { path: CH1, reason: "与第2章重复" }, approving());
+
+      expect(proposals[0]).toMatchObject({
+        kind: "delete",
+        path: CH1,
+        chars: "第一章的正文。".length,
+        reason: "与第2章重复",
+      });
+      expect(res.content).toContain("backups");
+      expect(fs.has(CH1)).toBe(true); // the approver deletes, not the tool
+    });
+
+    it("refuses a volume folder — that is the author's own call", async () => {
+      const res = await run(
+        "delete_chapter",
+        { path: `${PROJECT}/writing/卷一`, reason: "整卷废弃" },
+        approving(),
+      );
+      expect(res.content).toContain("not a volume folder");
+      expect(proposals).toHaveLength(0);
+    });
+
+    it("requires a reason — the author decides from that line alone", async () => {
+      const res = await run("delete_chapter", { path: CH1 }, approving());
+      expect(res.content).toContain("'reason' argument is required");
+    });
+
+    it("refuses a path that does not exist", async () => {
+      const res = await run("delete_chapter", { path: `${PROJECT}/writing/无.md`, reason: "x" }, approving());
+      expect(res.content).toContain("does not exist");
+    });
+  });
+
+  it("feeds a rejection reason back to the model for every kind", async () => {
+    const rejecting = makeCtx({
+      requestApproval: async () => ({ approved: false, reason: "先别动结构" }),
+    });
+
+    for (const [tool, args] of [
+      ["create_chapter", { path: `${PROJECT}/writing/新.md`, content: "x" }],
+      ["move_chapter", { path: CH1, new_path: `${PROJECT}/writing/别处.md` }],
+      ["delete_chapter", { path: CH1, reason: "重复" }],
+    ] as const) {
+      const res = await run(tool, args, rejecting);
+      expect(res.content).toContain("REJECTED");
+      expect(res.content).toContain("先别动结构");
+    }
   });
 });

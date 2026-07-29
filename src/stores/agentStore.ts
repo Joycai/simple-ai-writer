@@ -35,6 +35,7 @@ import i18n from "../i18n";
 import { backupFile } from "../lib/agent/backup";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import { createPlanGate, type LorePlan, type PlanDecision } from "../lib/agent/plan";
+import { parentDir } from "../lib/context/outline";
 import type { ApprovalDecision, EditProposal, Proposal } from "../lib/agent/registry";
 import type { StreamMessage } from "../lib/ai/types";
 import { readFile, writeFile } from "../lib/fs/fileio";
@@ -171,9 +172,27 @@ async function applyEdit(proposal: EditProposal): Promise<string | null> {
  * a rejection — never swallow one and report success.
  */
 async function applyProposal(proposal: Proposal): Promise<string | null> {
+  const { useProjectStore } = await import("./projectStore");
+  const { createEntry, moveEntry, deleteEntry } = useProjectStore.getState();
+
   switch (proposal.kind) {
     case "edit":
       return applyEdit(proposal);
+
+    case "create": {
+      const dir = parentDir(proposal.path);
+      await createEntry(dir, proposal.path.slice(dir.length + 1), "file", proposal.content);
+      return null; // nothing existed to back up
+    }
+
+    case "move":
+      await moveEntry(proposal.path, proposal.newPath);
+      return null; // the file still exists, at its new path
+
+    case "delete":
+      // Folders never reach here (delete_chapter refuses them), but the backup
+      // is what makes an approved deletion recoverable, so it is not optional.
+      return deleteEntry(proposal.path, false, { backup: true });
   }
 }
 
