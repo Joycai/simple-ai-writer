@@ -120,50 +120,81 @@ pub fn project_register_root(path: String, scope: tauri::State<'_, FsScope>) -> 
 mod tests {
     use super::*;
 
-    fn scope_with(root: &str) -> FsScope {
+    // `is_allowed` rejects anything non-absolute, and absoluteness is
+    // platform-specific: on Windows `/home/user/project` has no drive letter
+    // and is *not* absolute, so the fixtures below are chosen per platform.
+    // Suffixes use `/`, which both platforms parse as a separator.
+    #[cfg(windows)]
+    const ROOT: &str = r"C:\Users\dev\project";
+    #[cfg(unix)]
+    const ROOT: &str = "/home/user/project";
+
+    /// An absolute path that is nowhere near `ROOT`.
+    #[cfg(windows)]
+    const UNRELATED: &str = r"C:\Windows\System32\config";
+    #[cfg(unix)]
+    const UNRELATED: &str = "/etc/passwd";
+
+    fn scope_at_root() -> FsScope {
         let s = FsScope::new();
-        s.allow(Path::new(root));
+        s.allow(Path::new(ROOT));
         s
+    }
+
+    /// `ROOT/<suffix>` — the separator is added for you.
+    fn under(suffix: &str) -> PathBuf {
+        Path::new(ROOT).join(suffix)
+    }
+
+    /// A path next to `ROOT` under the same parent, e.g. `other`.
+    fn sibling(name: &str) -> PathBuf {
+        Path::new(ROOT).parent().unwrap().join(name)
     }
 
     #[test]
     fn allows_paths_inside_a_registered_root() {
-        let s = scope_with("/home/user/project");
-        assert!(s.is_allowed(Path::new("/home/user/project/writing/ch1.md")));
-        assert!(s.is_allowed(Path::new("/home/user/project")));
+        let s = scope_at_root();
+        assert!(s.is_allowed(&under("writing/ch1.md")));
+        assert!(s.is_allowed(Path::new(ROOT)));
     }
 
     #[test]
     fn rejects_paths_outside_any_root() {
-        let s = scope_with("/home/user/project");
-        assert!(!s.is_allowed(Path::new("/etc/passwd")));
-        assert!(!s.is_allowed(Path::new("/home/user/other")));
+        let s = scope_at_root();
+        assert!(!s.is_allowed(Path::new(UNRELATED)));
+        assert!(!s.is_allowed(&sibling("other")));
     }
 
     #[test]
     fn rejects_sibling_directories_sharing_the_root_as_prefix() {
-        let s = scope_with("/home/user/project");
-        assert!(!s.is_allowed(Path::new("/home/user/project-evil/x.md")));
+        let s = scope_at_root();
+        assert!(!s.is_allowed(&PathBuf::from(format!("{ROOT}-evil")).join("x.md")));
     }
 
     #[test]
     fn rejects_dotdot_traversal_out_of_a_root() {
-        let s = scope_with("/home/user/project");
-        assert!(!s.is_allowed(Path::new("/home/user/project/../../../etc/passwd")));
-        assert!(!s.is_allowed(Path::new("/home/user/project/../other/file.md")));
+        let s = scope_at_root();
+        assert!(!s.is_allowed(&under("../../../etc/passwd")));
+        assert!(!s.is_allowed(&under("../other/file.md")));
         // Traversal that stays inside the root is fine.
-        assert!(s.is_allowed(Path::new("/home/user/project/writing/../lore/a.md")));
+        assert!(s.is_allowed(&under("writing/../lore/a.md")));
     }
 
     #[test]
     fn rejects_relative_paths() {
-        let s = scope_with("/home/user/project");
+        let s = scope_at_root();
         assert!(!s.is_allowed(Path::new("writing/ch1.md")));
         assert!(!s.is_allowed(Path::new("./project")));
     }
 
     #[test]
     fn normalize_cannot_climb_above_filesystem_root() {
+        #[cfg(windows)]
+        assert_eq!(
+            normalize(Path::new(r"C:\..\..\Windows")),
+            PathBuf::from(r"C:\Windows")
+        );
+        #[cfg(unix)]
         assert_eq!(normalize(Path::new("/../../etc")), PathBuf::from("/etc"));
     }
 }
