@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   isChapterFile,
+  normalizeChapterFileName,
   naturalCompare,
   groupVolumes,
   applySpine,
@@ -35,6 +36,22 @@ describe("isChapterFile", () => {
     expect(isChapterFile("a.txt")).toBe(true);
     expect(isChapterFile("a.png")).toBe(false);
     expect(isChapterFile("a")).toBe(false);
+  });
+});
+
+describe("normalizeChapterFileName", () => {
+  it("appends .md to a bare name so it stays a recognised chapter", () => {
+    expect(normalizeChapterFileName("第1章")).toBe("第1章.md");
+    expect(isChapterFile(normalizeChapterFileName("第1章"))).toBe(true);
+  });
+
+  it("leaves an explicit extension alone", () => {
+    expect(normalizeChapterFileName("第1章.txt")).toBe("第1章.txt");
+    expect(normalizeChapterFileName("notes.json")).toBe("notes.json");
+  });
+
+  it("trims surrounding whitespace", () => {
+    expect(normalizeChapterFileName("  第1章  ")).toBe("第1章.md");
   });
 });
 

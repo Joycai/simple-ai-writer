@@ -56,6 +56,17 @@ export function isChapterFile(name: string): boolean {
   return CHAPTER_EXTS.includes(ext);
 }
 
+/**
+ * A chapter filename as it should land on disk. A name the author (or the
+ * agent) typed without an extension gets `.md` — an extensionless file would
+ * not be recognised as a chapter by `isChapterFile` and would silently vanish
+ * from the outline.
+ */
+export function normalizeChapterFileName(name: string): string {
+  const trimmed = name.trim();
+  return trimmed.includes(".") ? trimmed : `${trimmed}.md`;
+}
+
 /** Strip a chapter file's extension for display / labeling. */
 export function chapterTitle(ch: Chapter): string {
   return ch.name.replace(/\.(md|markdown|txt)$/i, "");

@@ -2,15 +2,17 @@
  * Tool implementations for the agent runtime.
  *
  * This module owns the *handlers* — reading lore, listing/reading writing
- * files — plus the path-containment helpers that keep model-controlled path
- * arguments inside the project. Wire definitions and dispatch live in
- * registry.ts; the loop that drives calls lives in runtime.ts.
+ * files. Wire definitions and dispatch live in registry.ts; the loop that
+ * drives calls lives in runtime.ts; the path-containment helpers that keep
+ * model-controlled path arguments inside the project live in lib/paths.ts,
+ * shared with the file-mutation actions in stores/projectStore.
  */
 
 import { isChapterFile, naturalCompare } from "../context/outline";
 import { readFile } from "../fs/fileio";
 import { imageToDataUrl } from "../fs/images";
 import { readEntityFile, type LoreEntity, type LoreIndex } from "../lore";
+import { isPathWithin } from "../paths";
 import { readDirRecursive, type FileNode } from "../project";
 
 export interface ToolCall {
@@ -23,34 +25,6 @@ export interface ToolResult {
   toolCallId: string;
   content: string;
   imageDataUrls?: string[];
-}
-
-// ─── Path containment ────────────────────────────────────────────────────────
-
-/** Lexically resolve `.`/`..` segments (both `/` and `\` separators). */
-export function normalizePathSegments(p: string): string {
-  const isAbsolute = /^[/\\]/.test(p);
-  const out: string[] = [];
-  for (const part of p.split(/[/\\]+/)) {
-    if (part === "" || part === ".") continue;
-    if (part === "..") {
-      out.pop(); // no-op at root — `..` cannot climb above it
-      continue;
-    }
-    out.push(part);
-  }
-  return (isAbsolute ? "/" : "") + out.join("/");
-}
-
-/**
- * True when `target` equals `base` or lives inside it, comparing normalized
- * paths on whole component boundaries (so `/project-evil` is NOT within
- * `/project`, and `/project/../etc` is rejected).
- */
-export function isPathWithin(base: string, target: string): boolean {
-  const b = normalizePathSegments(base);
-  const t = normalizePathSegments(target);
-  return t === b || t.startsWith(b + "/");
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────────────

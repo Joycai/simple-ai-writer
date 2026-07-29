@@ -9,9 +9,7 @@ import {
 } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { isImagePath } from "../../lib/fs/images";
-import { writeFile, makeDir, removeFile, removeDir, renamePath } from "../../lib/fs/fileio";
 import { useProjectStore } from "../../stores/projectStore";
-import { useEditorStore } from "../../stores/editorStore";
 import type { FileNode } from "../../lib/project";
 import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
 import styles from "./FileTree.module.css";
@@ -256,7 +254,7 @@ function parentDir(path: string): string {
 export function FileTree() {
   const { t } = useTranslation();
   const { fileTree, projectPath, refreshFileTree, activeFilePath, setActiveFilePath,
-          openProject, closeProject } =
+          openProject, closeProject, createEntry, moveEntry, deleteEntry } =
     useProjectStore();
 
   const [creatingIn, setCreatingIn] = useState<string | null>(null);
@@ -280,15 +278,8 @@ export function FileTree() {
   const confirmCreate = async (name: string) => {
     if (!creatingIn) return;
     try {
-      if (creatingType === "folder") {
-        await makeDir(`${creatingIn}/${name}`);
-      } else {
-        const finalName = name.includes(".") ? name : `${name}.md`;
-        const path = `${creatingIn}/${finalName}`;
-        await writeFile(path, "");
-        setActiveFilePath(path);
-      }
-      await refreshFileTree();
+      const path = await createEntry(creatingIn, name, creatingType);
+      if (creatingType === "file") setActiveFilePath(path);
       cancelCreate();
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : String(err));
@@ -309,23 +300,8 @@ export function FileTree() {
   const confirmRename = async (node: FileNode, rawName: string) => {
     const name = rawName.trim();
     if (!name || name === node.name) { cancelRename(); return; }
-    const newPath = `${parentDir(node.path)}/${name}`;
     try {
-      // Flush unsaved editor content living at/under the old path before moving it.
-      const editor = useEditorStore.getState();
-      const editorAffected = editor.filePath === node.path
-        || (node.is_dir && !!editor.filePath?.startsWith(node.path + "/"));
-      if (editorAffected && editor.isDirty) await editor.saveNow();
-
-      await renamePath(node.path, newPath);
-
-      // Keep the open document pointed at its new location.
-      if (activeFilePath === node.path) {
-        setActiveFilePath(newPath);
-      } else if (node.is_dir && activeFilePath?.startsWith(node.path + "/")) {
-        setActiveFilePath(newPath + activeFilePath.slice(node.path.length));
-      }
-      await refreshFileTree();
+      await moveEntry(node.path, `${parentDir(node.path)}/${name}`);
       cancelRename();
     } catch (err) {
       setRenameError(err instanceof Error ? err.message : String(err));
@@ -339,21 +315,10 @@ export function FileTree() {
     );
     if (!ok) return;
     try {
-      const affected = activeFilePath === node.path
-        || (node.is_dir && !!activeFilePath?.startsWith(node.path + "/"));
-      if (affected) {
-        // Drop editor state first so a pending autosave can't resurrect the file.
-        const editor = useEditorStore.getState();
-        if (editor.saveTimer) clearTimeout(editor.saveTimer);
-        useEditorStore.setState({ content: "", filePath: null, headings: [], isDirty: false, saveTimer: null });
-        useProjectStore.getState().setActiveFilePath(null);
-      }
-      if (node.is_dir) await removeDir(node.path);
-      else await removeFile(node.path);
+      await deleteEntry(node.path, node.is_dir);
     } catch (err) {
       console.error("[fileTree] delete failed:", err);
     }
-    await refreshFileTree();
   };
 
   const openMenu = (e: MouseEvent, node: FileNode | null) => {
