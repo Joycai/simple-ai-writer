@@ -69,8 +69,10 @@ lib/ai/*（streamCompletion 等，不动） · lib/context/*（预算化注入�
 
 | 工具 | 读/写 | 说明 |
 | --- | --- | --- |
-| `list_lore_entities` / `read_lore_entity` / `list_files` / `read_file` | 读 | 现有四件套，原样迁入 |
-| `search_text` | 读 | 在 writing/ 内全文检索（lore 提取、一致性检查都需要） |
+| `list_lore_entities` / `read_lore_entity` | 读 | 设定侧只读，原样迁入 |
+| `list_files` | 读 | 递归列出 writing/ 全树（含分卷子目录），按 `ls -R` 分组输出：绝对目录路径一行，其下文件名缩进。不逐行重复项目前缀是为了省 context——几百章各带一遍长前缀，光目录就能吃掉几千 token |
+| `read_file` | 读 | 单次上限 4000 字符，**按行边界切**；截断时回报 `lines a-b of N` 与下一个 `start_line`，长章节可顺序翻页。分页坐标用行号而非字符偏移，因为 `search_text` 给的就是行号（`L34`），「从第 34 行读」是直接的后续动作 |
+| `search_text` | 读 | 在 writing/ 内全文检索：递归扫所有章节文件，返回 `路径 + 行号 + 片段`。字面匹配、大小写不敏感，**不支持正则**（模型给的病态正则会卡死 UI 线程且无法中断）。结果有上限（全局 40 行 / 单文件 8 行），长段落按命中位置开窗截断——否则一个常用词就能吃光整个上下文 |
 | `read_memory` | 读 | 读当前文档的前情记忆 |
 | `propose_lore_plan` | 写·审批 | 提交设定改动方案（步骤 = action + entity + detail），阻塞等作者批准；**四个 lore 写工具的准入门槛** |
 | `create_lore_entity` | 写·L1 | 新建实体（name/category/summary/content），落盘前校验 frontmatter |
