@@ -1,7 +1,11 @@
 import { create } from "zustand";
 import i18n from "../i18n";
 import { streamCompletion } from "../lib/ai";
-import { assembleContext, bundleToMessages, resolveAppendAnchor, type TaskExtras } from "../lib/context/rag";
+import {
+  assembleContext, bundleToMessages, profileSystemPrompt, resolveAppendAnchor,
+  type TaskExtras,
+} from "../lib/context/rag";
+import { docModel } from "../lib/profile/active";
 import {
   fixedContextChars, measureCharsPerToken, planContextBudget, reflowMemoryBudget,
   type ContextAllocation,
@@ -120,7 +124,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
 
     // System prompt: user-selected prompt (scene === "system"), else default
     const prompt = prompts.find((p) => p.id === activePromptId);
-    const systemPrompt = prompt?.content ?? i18n.t("ai.instructions.system");
+    const systemPrompt = prompt?.content ?? profileSystemPrompt();
 
     const apiKey = await loadApiKey(provider.id) ?? "";
 
@@ -136,8 +140,15 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
 
     // Story memory for the focused document (前情提要 layer). Read from disk so
     // manual edits to the memory file are picked up; null when none exists.
+    //
+    // Skipped entirely when the profile's documents don't use rolling memory —
+    // a null here is what makes every downstream layer (the budget's hasMemory,
+    // assembleContext's 前情提要) drop out on its own.
+    const docs = docModel();
     const { loadMemory } = await import("../lib/context/memory");
-    const memory = activeFilePath ? await loadMemory(projectPath, activeFilePath) : null;
+    const memory = docs.memory && activeFilePath
+      ? await loadMemory(projectPath, activeFilePath)
+      : null;
 
     // Task instruction: use scene-matched user prompt if one exists, else built-in default
     const scenePrompt = kind !== "custom" && kind !== "agent"
@@ -170,6 +181,9 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // own budget. See lib/context/budget.ts.
     const { loreBudgetTokens, contextUtilization } = useAppStore.getState();
     const isContinue = kind === "continue";
+    // A continuation only gets the preceding documents when this project's
+    // documents actually have a "preceding" — see DocModel.priorContext.
+    const useBookContext = isContinue && docs.priorContext;
     const { BOOK_PREV_TAIL_CHARS } = await import("../lib/context/bookContext");
     // Where this request is anchored in the document — both the book-context
     // build and the recent-window budget measure backwards from here.
@@ -206,7 +220,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         selectionChars: isContinue ? 0 : get().selection.length,
         outlineChars: extras?.outline?.length,
         knowledgeChars: extras?.additionalKnowledge?.length,
-        prevChapterTailChars: isContinue ? BOOK_PREV_TAIL_CHARS : 0,
+        prevChapterTailChars: useBookContext ? BOOK_PREV_TAIL_CHARS : 0,
       }),
       // Undefined for continue/custom (no picker) → the planner grows the
       // verbatim window with the model. Polish/rewrite/summary pass the author's
@@ -214,7 +228,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       recentWindowChars: extras?.contextChars,
       availableRecentChars: Math.max(0, anchorOffset),
       hasMemory: !!memory && memory.segments.length > 0,
-      includeBookContext: isContinue,
+      includeBookContext: useBookContext,
       replyChars: isContinue ? continueLength : undefined,
       // Measured from this manuscript, so a Chinese and an English project each
       // get budgets their own tokenizer cost agrees with.
@@ -227,7 +241,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // happened in the chapters before it.
     let bookExtras: Partial<TaskExtras> = {};
     let bookUsedChars = 0;
-    if (isContinue && activeFilePath) {
+    if (useBookContext && activeFilePath) {
       try {
         const { fileTree } = useProjectStore.getState();
         const { buildBookContext } = await import("../lib/context/bookContext");

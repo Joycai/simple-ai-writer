@@ -75,14 +75,32 @@ A profile declares what kind of writing a project is, so a new domain is data ra
 | --- | --- |
 | `categories` | The `.ai-writer/lore/<category>` folders — the knowledge-base layout, the lore scan, the category pickers, and the `category` enum in the agent's lore tools |
 | `sections` | The 【…】 block labels in the assembled prompt (`bundleToMessages`), e.g. 【上一场景结尾】 instead of 【上一章结尾】 |
+| `docModel` | Which novel-shaped document machinery applies — see below |
 | `systemPromptKey` | Which i18n system prompt is the fallback when no prompt template is active |
 
-Built-ins: `novel` (the default) and `ttrpg` (跑团模组). Switching is Settings → 工作台, which calls `projectStore.setProfile()`: persist → scaffold the new folders → rescan. **Non-destructive** — the previous categories' folders and entities stay on disk and reappear on switching back; they are simply not scanned while another profile is active.
+Built-ins: `novel` (the default), `ttrpg` (跑团模组) and `copy` (文案). Switching is Settings → 工作台, which calls `projectStore.setProfile()`: persist → scaffold the new folders → rescan. **Non-destructive** — the previous categories' folders and entities stay on disk and reappear on switching back; they are simply not scanned while another profile is active.
+
+#### The document model (`docModel`)
+
+Three flags, all defaulting to `true` so a profile that says nothing keeps the original feature set:
+
+| Flag | On | Off |
+| --- | --- | --- |
+| `ordered` | Volume/chapter spine (`.ai-writer/outline.json`), the full outline view | The rail drops the outline view; `App.tsx` falls back to the editor if the persisted `mainView` pointed at it |
+| `priorContext` | A continuation gets 【全书前情】 + 【上一章结尾】; the 承接/独立 picker appears | `buildBookContext` is skipped and the layer is dropped from the budget |
+| `memory` | Per-document rolling summary (`.ai-writer/memory/`, 【前情提要】) | `loadMemory` is skipped and the AiPanel memory section is hidden |
+
+`priorContext` requires `ordered` — "the previous document" needs an order — and `parseProfile` disables it if a file asks for one without the other.
+
+Turning a flag off removes **both** the context it injects and the UI that configures it. The pairing is the point: a hidden memory section whose memory still loads would keep feeding `memoryChars` into the context forecast, showing the author a layer `runTask` never sends. Note `ordered` gates the *full outline view* (the book spine) but **not** the `outline` side tab — despite the shared name, that one lists headings inside the current document, which any long piece has.
+
+Components read the flags through `useDocModel()` (in `projectStore`), never `docModel()` from `lib/profile/active`: the singleton isn't reactive, so a component with no other relevant subscription would keep rendering the previous profile's UI after a switch. Non-React callers (`aiTaskStore`, `agentStore`) use the singleton — they read once per run.
 
 Two details that are easy to get wrong:
 
 - **`active.ts` is a module singleton, not a store.** The lore scanner, the agent's tool-schema builder, and the prompt assembler all need it synchronously from non-React code (mirrors how `i18n` is consumed). `projectStore` mirrors it as `profile` state *purely so components re-render*, and is the **only** writer of both — syncing them anywhere else lets the UI and the prompt disagree about which profile is in force.
-- **Anything module-level must resolve categories per call.** `registry.ts` is a `const` evaluated once at import, so its lore-tool `enum`s are patched in `getToolDefinitions()` (via `profileCategoryParams`, returning a copy) rather than baked in. The same hazard applies to any future top-level constant: use `loreCategories()` at call time, never at module scope.
+- **Anything module-level must resolve categories per call.** `registry.ts` is a `const` evaluated once at import, so its lore-tool `enum`s (via `profileCategoryParams`) and the `{{categories}}` placeholder in tool descriptions are both substituted in `getToolDefinitions()`, returning a copy. The same hazard applies to any future top-level constant: use `loreCategories()` at call time, never at module scope.
+- **Never resolve a system prompt with `ai.instructions.system`.** That key is the *novel* prompt; filling the slot with it defeats the profile before `bundleToMessages` can fall back. Call `profileSystemPrompt()` (`lib/context/rag`). This was a real regression — a TTRPG project was prompted as a novel while the unit test passed, because it exercised the fallback in isolation rather than the path `aiTaskStore` actually takes. `profileSystemPrompt.test.ts` now scans the source for that key.
 
 `profile.json` is hand-editable, and its category ids become **directory names** — so it is parsed defensively (`parseProfile` drops bad entries, rejects case-insensitive duplicates, caps the count) and re-validated in Rust (`valid_category` in `commands.rs`, which is the actual boundary). A file is read as a *patch on the built-in it names*: `{"id":"ttrpg"}` resolves back to that profile exactly.
 

@@ -31,9 +31,10 @@ import { useAppStore, LORE_BUDGET_MIN, LORE_BUDGET_MAX } from "../../stores/appS
 import { focusBlockedByImage, useEditorStore, useWritingFocus } from "../../stores/editorStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useMemoryStore } from "../../stores/memoryStore";
-import { useProjectStore } from "../../stores/projectStore";
+import { useDocModel, useProjectStore } from "../../stores/projectStore";
 import {
   locateAppendAnchor,
+  profileSystemPrompt,
   resolveEditRange,
   spliceContinuation,
   type TaskExtras,
@@ -760,19 +761,25 @@ export function AiPanel() {
   const projectPath = useProjectStore((s) => s.projectPath);
   const fileTree = useProjectStore((s) => s.fileTree);
   const memory = useMemoryStore((s) => s.memory);
+  const docs = useDocModel();
   const loreBudgetTokens = useAppStore((s) => s.loreBudgetTokens);
   const setLoreBudgetTokens = useAppStore((s) => s.setLoreBudgetTokens);
   const contextUtilization = useAppStore((s) => s.contextUtilization);
 
   // Story memory follows the active document; staleness re-checks are hashed
-  // over the whole doc, so debounce them behind typing.
+  // over the whole doc, so debounce them behind typing. Both are skipped when the
+  // profile's documents don't use memory — see `memoryChars` below, which must
+  // also be zeroed because the store keeps what it already loaded.
+  const usesMemory = docs.memory;
   useEffect(() => {
+    if (!usesMemory) return;
     void useMemoryStore.getState().loadForActiveFile();
-  }, [activeFilePath]);
+  }, [activeFilePath, usesMemory]);
   useEffect(() => {
+    if (!usesMemory) return;
     const id = setTimeout(() => useMemoryStore.getState().refreshFreshness(), 800);
     return () => clearTimeout(id);
-  }, [content]);
+  }, [content, usesMemory]);
 
   // Continue is the default: the panel should open on a usable request, not on
   // an empty shell that needs a click before it shows anything.
@@ -797,7 +804,13 @@ export function AiPanel() {
   // Whether to bridge is a question about the chapter's *age*, not about where
   // this particular continuation goes — a chapter with barely anything in it
   // has no continuity of its own yet, whichever spot you write at.
+  //
+  // Gated on the profile too: with no prior-document context there is nothing to
+  // bridge *from*, so the control would offer a choice that changes nothing. This
+  // also suppresses the spine read below, which would be a disk hit for an
+  // ordering the project doesn't have.
   const wantsOpeningChoice =
+    docs.priorContext &&
     selectedTask === "continue" && content.trim().length < BOOK_PREV_TAIL_NEAR_START_CHARS;
 
   // The chosen position belongs to the chapter it was chosen in; a new file
@@ -1055,13 +1068,21 @@ export function AiPanel() {
   }).length;
 
   // ── Context forecast ────────────────────────────────────────────────────────
+  // Must resolve the same way runTask does, or the forecast sizes a prompt the
+  // author is not actually going to send.
   const systemPrompt = prompts.find((p) => p.id === activePromptId)?.content
-    ?? t("ai.instructions.system");
+    ?? profileSystemPrompt();
   const instructionText =
     selectedTask === "custom" ? customInstr
     : isContinue ? t("ai.instructions.continue", { length: continueLength })
     : t(`ai.instructions.${selectedTask}`);
-  const memoryChars = memory?.segments.reduce((n, s) => n + s.summary.length, 0) ?? 0;
+  // Zero when the profile doesn't use memory, and not only because the load is
+  // skipped: switching profiles mid-session leaves whatever memoryStore already
+  // held for this document, and counting it here would forecast a layer runTask
+  // no longer sends.
+  const memoryChars = usesMemory
+    ? memory?.segments.reduce((n, s) => n + s.summary.length, 0) ?? 0
+    : 0;
 
   const forecast = useContextForecast({
     contextSize: activeModel?.contextSize ?? 0,
@@ -1410,13 +1431,16 @@ export function AiPanel() {
                 </div>
               )}
 
-              {/* ── Story memory ── */}
-              <MemorySection
-                detailSpan={supportsExtras ? contextChars : DEFAULT_DETAIL_SPAN}
-                appendMode={isContinue}
-              />
-
-              <hr className={styles.divider} />
+              {/* ── Story memory (only where the profile's documents use it) ── */}
+              {usesMemory && (
+                <>
+                  <MemorySection
+                    detailSpan={supportsExtras ? contextChars : DEFAULT_DETAIL_SPAN}
+                    appendMode={isContinue}
+                  />
+                  <hr className={styles.divider} />
+                </>
+              )}
 
               {/* ── Lore ── */}
               <LoreSection

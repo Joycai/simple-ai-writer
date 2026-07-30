@@ -36,6 +36,7 @@ import { backupFile } from "../lib/agent/backup";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import { createPlanGate, type LorePlan, type PlanDecision } from "../lib/agent/plan";
 import { parentDir } from "../lib/context/outline";
+import { docModel } from "../lib/profile/active";
 import type { ApprovalDecision, EditProposal, Proposal } from "../lib/agent/registry";
 import type { StreamMessage } from "../lib/ai/types";
 import { readFile, writeFile } from "../lib/fs/fileio";
@@ -315,14 +316,14 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       // ── History: seed on first turn, append afterwards ──
       let history = get().chatHistory;
       if (!history) {
-        const { assembleContext, bundleToMessages } = await import("../lib/context/rag");
+        const { assembleContext, bundleToMessages, profileSystemPrompt } = await import("../lib/context/rag");
         const { measureCharsPerToken, RECENT_WINDOW_MIN_CHARS } = await import("../lib/context/budget");
         const { MEMORY_BUDGET_CHARS, loadMemory } = await import("../lib/context/memory");
         const { useAiStore: aiStore2 } = await import("./aiStore");
 
         const { prompts, activePromptId } = aiStore2.getState();
         const writingPrompt =
-          prompts.find((p) => p.id === activePromptId)?.content ?? i18n.t("ai.instructions.system");
+          prompts.find((p) => p.id === activePromptId)?.content ?? profileSystemPrompt();
         // The agent briefing belongs in the SYSTEM layer, not in the first user
         // turn: only the system message survives every later turn intact. Seeded
         // as a task-layer instruction it decayed after turn one — the author's
@@ -330,7 +331,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // prose-writing prompt, and the assistant kept answering with plans.
         const systemPrompt = `${writingPrompt}\n\n${i18n.t("ai.instructions.agent")}`;
         const documentText = focus.text;
-        const memory = activeFilePath ? await loadMemory(projectPath, activeFilePath) : null;
+        // Follows the profile, like the panel's tasks do: a project whose
+        // documents don't use rolling memory has none to inject.
+        const memory = docModel().memory && activeFilePath
+          ? await loadMemory(projectPath, activeFilePath)
+          : null;
         const { loreBudgetTokens } = useAppStore.getState();
         const charsPerToken = measureCharsPerToken(documentText);
 

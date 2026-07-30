@@ -28,7 +28,7 @@ vi.mock("../../i18n", () => ({ default: { t: (key: string) => key } }));
 
 import { getToolDefinitions } from "../agent/registry";
 import { resetActiveProfile, setActiveProfile } from "../profile/active";
-import { NOVEL_PROFILE, TTRPG_PROFILE } from "../profile/model";
+import { BUILTIN_PROFILES, NOVEL_PROFILE, TTRPG_PROFILE } from "../profile/model";
 
 afterEach(() => resetActiveProfile());
 
@@ -79,5 +79,28 @@ describe("lore-category enums in tool definitions", () => {
   it("passes through tools that have no category parameter", () => {
     const [def] = getToolDefinitions(["read_file"]);
     expect(def.function.name).toBe("read_file");
+    expect(def.function.description).not.toContain("{{");
+  });
+});
+
+describe("lore categories named in a tool description", () => {
+  const describeOf = (id: "list_lore_entities") =>
+    getToolDefinitions([id])[0].function.description;
+
+  it("substitutes the active profile's categories", () => {
+    setActiveProfile(TTRPG_PROFILE);
+    const text = describeOf("list_lore_entities");
+    expect(text).toContain("npcs, locations");
+    // Prose listing the wrong categories misleads the model exactly as much as a
+    // wrong enum would — it asks for lore the project doesn't have.
+    expect(text).not.toContain("characters");
+    expect(text).not.toContain("skills");
+  });
+
+  it("leaves no placeholder behind for any builtin profile", () => {
+    for (const profile of BUILTIN_PROFILES) {
+      setActiveProfile(profile);
+      expect(describeOf("list_lore_entities")).not.toContain("{{");
+    }
   });
 });

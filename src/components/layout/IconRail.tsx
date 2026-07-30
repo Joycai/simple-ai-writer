@@ -3,6 +3,7 @@ import {
   FolderTree, ListTree, Search, LayoutGrid, GitBranch, Settings,
 } from "lucide-react";
 import { useAppStore, type SideTab, type MainView } from "../../stores/appStore";
+import { useDocModel, useMainView } from "../../stores/projectStore";
 
 import styles from "./IconRail.module.css";
 
@@ -34,14 +35,31 @@ const VIEW_ITEMS: ViewItem[] = [
   { kind: "view", id: "outline-full", icon: <GitBranch size={17} strokeWidth={1.5} />, labelKey: "sidebar.outlineFull" },
 ];
 
+/**
+ * The full outline view arranges the book spine (volumes and chapter order), so
+ * it only means anything where the documents *have* an order — see
+ * DocModel.ordered.
+ *
+ * The `outline` side tab is deliberately NOT gated: despite the shared name it
+ * lists the headings inside the current document, which a standalone piece of
+ * copy has just as much as a chapter does.
+ */
+function visibleViewItems(ordered: boolean): ViewItem[] {
+  return ordered ? VIEW_ITEMS : VIEW_ITEMS.filter((it) => it.id !== "outline-full");
+}
+
 export function IconRail({ onOpenSettings }: Props) {
   const { t } = useTranslation();
+  const { ordered } = useDocModel();
   const {
     activeSideTab, setActiveSideTab,
-    mainView, setMainView,
+    setMainView,
     sidebarCollapsed, setSidebarCollapsed,
     setShowCommandPalette,
   } = useAppStore();
+  // The *effective* view, matching what App renders — highlighting off the raw
+  // stored value would leave the sidebar showing with no rail icon lit.
+  const mainView = useMainView();
 
   const handleSideClick = (id: SideTab) => {
     if (id === "search") {
@@ -79,7 +97,7 @@ export function IconRail({ onOpenSettings }: Props) {
 
       <span className={styles.spacer} />
 
-      {VIEW_ITEMS.map((it) => {
+      {visibleViewItems(ordered).map((it) => {
         const active = mainView === it.id;
         return (
           <button

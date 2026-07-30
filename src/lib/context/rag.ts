@@ -378,6 +378,18 @@ export async function assembleContext(
 }
 
 /**
+ * The system prompt to use when the author has no prompt template selected.
+ *
+ * Every caller that resolves a system prompt must go through here rather than
+ * reaching for `ai.instructions.system`: that key is the *novel* prompt, and
+ * hardcoding it silently defeats the profile — the caller fills the slot with
+ * novel instructions before `bundleToMessages` ever gets a chance to fall back.
+ */
+export function profileSystemPrompt(): string {
+  return i18n.t(activeProfile().systemPromptKey);
+}
+
+/**
  * Format the assembled context into a messages array for OpenAI/Gemini APIs.
  *
  * Block labels come from the active workspace profile, so a TTRPG module gets
@@ -418,7 +430,7 @@ export function bundleToMessages(
   parts.push(bundle.taskText);
 
   return [
-    { role: "system", content: bundle.systemPrompt || i18n.t(activeProfile().systemPromptKey) },
+    { role: "system", content: bundle.systemPrompt || profileSystemPrompt() },
     { role: "user", content: parts.join("\n\n") },
   ];
 }

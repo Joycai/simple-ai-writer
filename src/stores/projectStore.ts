@@ -14,6 +14,7 @@ import {
   saveProfile,
   setActiveProfile,
   NOVEL_PROFILE,
+  type DocModel,
   type WorkspaceProfile,
 } from "../lib/profile";
 import { backupFile } from "../lib/agent/backup";
@@ -22,7 +23,7 @@ import { fileExists, makeDir, removeDir, removeFile, renamePath, writeFile } fro
 import { isStrictDescendant } from "../lib/paths";
 import { useLoreStore } from "./loreStore";
 import { useEditorStore } from "./editorStore";
-import { useAppStore } from "./appStore";
+import { useAppStore, type MainView } from "./appStore";
 
 /** Persist any unsaved editor/lore edits and cancel their pending autosave timers. */
 async function flushDirtyDocuments(): Promise<void> {
@@ -275,8 +276,42 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   setActiveFilePath: (path) => set({ activeFilePath: path }),
+
   setDirExpanded: (path, open) =>
     set((s) => ({ expandedDirs: { ...s.expandedDirs, [path]: open } })),
   setWordCount: (n) => set({ wordCount: n }),
   setCharCount: (n) => set({ charCount: n }),
 }));
+
+/**
+ * The active profile's document model, **subscribed** — for components.
+ *
+ * Components must not read `docModel()` from `lib/profile/active` directly: that
+ * singleton is not reactive, so a component whose only other subscriptions are
+ * unrelated would keep rendering the previous profile's UI after a switch. Going
+ * through the store is what the mirrored `profile` state is for. Non-React code
+ * (aiTaskStore, agentStore) still uses the singleton — it reads once per run.
+ *
+ * The reference is stable while the profile is, so this triggers no extra renders.
+ */
+export function useDocModel(): DocModel {
+  return useProjectStore((s) => s.profile.docModel);
+}
+
+/**
+ * The main view to actually render, which is not always the stored one.
+ *
+ * `mainView` is persisted, so it can point at the full outline view after the
+ * author switches a project to a profile with no ordered spine — and the rail no
+ * longer offers a button to leave it. This falls back instead of rewriting the
+ * stored value, so switching back restores where they were.
+ *
+ * Every consumer must go through here, not `appStore.mainView`: App renders the
+ * sidebar off the effective view while IconRail highlights off it, and the two
+ * disagreeing shows up as a rendered panel whose rail icon isn't lit.
+ */
+export function useMainView(): MainView {
+  const mainView = useAppStore((s) => s.mainView);
+  const { ordered } = useDocModel();
+  return mainView === "outline-full" && !ordered ? "editor" : mainView;
+}

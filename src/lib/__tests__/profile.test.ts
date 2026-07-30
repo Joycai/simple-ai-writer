@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   BUILTIN_PROFILES,
   CATEGORY_ID_RE,
+  COPY_PROFILE,
+  DEFAULT_DOC_MODEL,
   DEFAULT_SECTION_LABELS,
   NOVEL_PROFILE,
   TTRPG_PROFILE,
@@ -236,6 +238,61 @@ describe("parseProfile", () => {
     );
     expect(profile.systemPromptKey).toBe(NOVEL_PROFILE.systemPromptKey);
     expect(issues.join(" ")).toContain("systemPromptKey");
+  });
+
+  it("layers docModel over the fallback's", () => {
+    // Turning one flag off must not silently re-enable the other two.
+    const { profile, issues } = parseProfile(
+      { id: "copy", docModel: { memory: false } },
+      COPY_PROFILE,
+    );
+    expect(profile.docModel).toEqual({ ordered: false, priorContext: false, memory: false });
+    expect(issues).toEqual([]);
+
+    const partial = parseProfile({ id: "novel", docModel: { memory: false } }, NOVEL_PROFILE);
+    expect(partial.profile.docModel).toEqual({ ordered: true, priorContext: true, memory: false });
+  });
+
+  it("defaults docModel to novel behaviour and rejects non-booleans", () => {
+    const { profile: inherited } = parseProfile(
+      { id: "x", categories: [{ id: "a", labelZh: "A", labelEn: "A" }] },
+      NOVEL_PROFILE,
+    );
+    expect(inherited.docModel).toEqual(DEFAULT_DOC_MODEL);
+
+    // A hand-edited JSON file is exactly where `"false"` shows up, and a truthy
+    // string flipping a feature on is worse than being told it's invalid.
+    const { profile, issues } = parseProfile(
+      {
+        id: "x",
+        categories: [{ id: "a", labelZh: "A", labelEn: "A" }],
+        docModel: { memory: "false", nonsense: true },
+      },
+      NOVEL_PROFILE,
+    );
+    expect(profile.docModel).toEqual(DEFAULT_DOC_MODEL);
+    expect(issues.join(" ")).toContain("docModel.memory");
+    expect(issues.join(" ")).toContain("nonsense");
+  });
+
+  it("refuses priorContext without ordered", () => {
+    // "The previous document" is meaningless with no order to read it from.
+    const { profile, issues } = parseProfile(
+      {
+        id: "x",
+        categories: [{ id: "a", labelZh: "A", labelEn: "A" }],
+        docModel: { ordered: false, priorContext: true },
+      },
+      NOVEL_PROFILE,
+    );
+    expect(profile.docModel.priorContext).toBe(false);
+    expect(issues.join(" ")).toContain("priorContext");
+  });
+
+  it("keeps every builtin's docModel self-consistent", () => {
+    for (const p of BUILTIN_PROFILES) {
+      if (p.docModel.priorContext) expect(p.docModel.ordered).toBe(true);
+    }
   });
 
   it("caps the category count", () => {

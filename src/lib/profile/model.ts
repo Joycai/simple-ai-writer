@@ -39,6 +39,36 @@ export type SectionId =
   | "selection"
   | "requirement";
 
+/**
+ * What shape this project's documents have — the machinery built for a novel
+ * that only makes sense when the documents really are a book.
+ *
+ * Every flag defaults to `true`, i.e. novel behaviour, so a profile that says
+ * nothing keeps the original feature set. Turning one off removes both the
+ * context it injects and the UI that configures it: a half-hidden feature that
+ * still spends context budget is worse than either.
+ */
+export interface DocModel {
+  /**
+   * Documents form an ordered spine of volumes and chapters
+   * (`.ai-writer/outline.json`) — the outline panel and full outline view.
+   * False for collections of independent pieces, where an "order" is noise.
+   */
+  ordered: boolean;
+  /**
+   * A continuation is given the preceding documents: a recap of everything
+   * before (【全书前情】) plus the previous document's ending (【上一章结尾】).
+   * Requires `ordered` to mean anything — "previous" needs an order.
+   */
+  priorContext: boolean;
+  /**
+   * Per-document rolling summary memory (`.ai-writer/memory/`, 【前情提要】),
+   * which compacts a long document so its own earlier parts stay in context.
+   * Pointless for short pieces that fit whole.
+   */
+  memory: boolean;
+}
+
 export interface WorkspaceProfile {
   /** Stable identifier; also the lookup key for built-in profiles. */
   id: string;
@@ -52,9 +82,18 @@ export interface WorkspaceProfile {
    * produces a complete prompt.
    */
   sections: Partial<Record<SectionId, string>>;
+  /** Which novel-shaped document machinery applies — see `DocModel`. */
+  docModel: DocModel;
   /** i18n key of the system prompt used when no prompt is explicitly active. */
   systemPromptKey: string;
 }
+
+/** Novel behaviour: everything on. What a profile gets by saying nothing. */
+export const DEFAULT_DOC_MODEL: DocModel = {
+  ordered: true,
+  priorContext: true,
+  memory: true,
+};
 
 /**
  * Fallback wording for every context block.
@@ -90,6 +129,7 @@ export const NOVEL_PROFILE: WorkspaceProfile = {
     { id: "custom", labelZh: "自定义", labelEn: "Custom" },
   ],
   sections: {},
+  docModel: DEFAULT_DOC_MODEL,
   systemPromptKey: "ai.instructions.system",
 };
 
@@ -123,13 +163,51 @@ export const TTRPG_PROFILE: WorkspaceProfile = {
     priorAll: "全模组前情",
     prevTail: "上一场景结尾",
   },
+  // Scenes run in order and earlier ones are context for later ones, so the
+  // whole spine/memory machinery carries over unchanged.
+  docModel: DEFAULT_DOC_MODEL,
   systemPromptKey: "ai.instructions.systemTtrpg",
+};
+
+/**
+ * 文案 — marketing / product copy.
+ *
+ * The first profile that is *not* book-shaped, and the reason `docModel` exists.
+ * A landing page headline and a product description are independent pieces: they
+ * have no order, nothing "precedes" one, and each fits in context whole. Leaving
+ * the novel machinery on would spend budget recapping unrelated documents and
+ * offer an outline view over a folder that has no sequence.
+ *
+ * The knowledge base carries over almost unchanged in shape — brand, product,
+ * audience, competitors are exactly the kind of thing the lore/facet system is
+ * good at, which is why this profile is mostly subtraction.
+ */
+export const COPY_PROFILE: WorkspaceProfile = {
+  id: "copy",
+  labelZh: "文案",
+  labelEn: "Copywriting",
+  categories: [
+    { id: "brand", labelZh: "品牌", labelEn: "Brand" },
+    { id: "products", labelZh: "产品", labelEn: "Products" },
+    { id: "audience", labelZh: "受众", labelEn: "Audience" },
+    { id: "competitors", labelZh: "竞品", labelEn: "Competitors" },
+    { id: "style", labelZh: "调性", labelEn: "Voice" },
+    { id: "custom", labelZh: "自定义", labelEn: "Custom" },
+  ],
+  sections: {
+    knowledge: "品牌资料",
+    outline: "写作要求",
+    recent: "当前文案",
+  },
+  docModel: { ordered: false, priorContext: false, memory: false },
+  systemPromptKey: "ai.instructions.systemCopy",
 };
 
 /** Every built-in profile, in the order a picker should show them. */
 export const BUILTIN_PROFILES: readonly WorkspaceProfile[] = [
   NOVEL_PROFILE,
   TTRPG_PROFILE,
+  COPY_PROFILE,
 ];
 
 /** Look up a built-in profile by id, or null when the id isn't one. */
@@ -171,6 +249,7 @@ const MAX_LABEL_CHARS = 40;
 const MAX_SECTION_LABEL_CHARS = 20;
 
 const SECTION_IDS = Object.keys(DEFAULT_SECTION_LABELS) as SectionId[];
+const DOC_MODEL_KEYS = Object.keys(DEFAULT_DOC_MODEL) as (keyof DocModel)[];
 
 function cleanLabel(value: unknown, max: number): string | null {
   if (typeof value !== "string") return null;
@@ -292,6 +371,35 @@ export function parseProfile(data: unknown, fallback: WorkspaceProfile): ParsedP
     issues.push("`sections` is not an object");
   }
 
+  // docModel layers over the fallback's for the same reason sections do: a file
+  // turning one flag off must keep that profile's answer for the other two.
+  // Only real booleans count — a truthy string like "false" flipping a feature on
+  // is the kind of thing a hand-edited JSON file produces.
+  const docModel: DocModel = { ...fallback.docModel };
+  if (rec.docModel && typeof rec.docModel === "object" && !Array.isArray(rec.docModel)) {
+    const rawDoc = rec.docModel as Record<string, unknown>;
+    for (const key of Object.keys(rawDoc)) {
+      if (!DOC_MODEL_KEYS.includes(key as keyof DocModel)) {
+        issues.push(`unknown docModel flag "${key}"`);
+        continue;
+      }
+      const value = rawDoc[key];
+      if (typeof value !== "boolean") {
+        issues.push(`docModel.${key} must be true or false`);
+        continue;
+      }
+      docModel[key as keyof DocModel] = value;
+    }
+  } else if (rec.docModel !== undefined) {
+    issues.push("`docModel` is not an object");
+  }
+  // "Previous document" has no meaning without an order, and a profile asking
+  // for one without the other would inject a bridge the outline can't resolve.
+  if (docModel.priorContext && !docModel.ordered) {
+    issues.push("docModel.priorContext needs ordered — disabling it");
+    docModel.priorContext = false;
+  }
+
   let systemPromptKey = fallback.systemPromptKey;
   if (typeof rec.systemPromptKey === "string") {
     const key = rec.systemPromptKey.trim();
@@ -311,6 +419,7 @@ export function parseProfile(data: unknown, fallback: WorkspaceProfile): ParsedP
       labelEn: cleanLabel(rec.labelEn, MAX_LABEL_CHARS) ?? (inherits ? fallback.labelEn : id),
       categories,
       sections,
+      docModel,
       systemPromptKey,
     },
     issues,

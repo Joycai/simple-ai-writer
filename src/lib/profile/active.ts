@@ -14,7 +14,7 @@
  * every project created before profiles existed — behaves as it always did.
  */
 
-import { NOVEL_PROFILE, type ProfileCategory, type SectionId, type WorkspaceProfile, DEFAULT_SECTION_LABELS } from "./model";
+import { NOVEL_PROFILE, type DocModel, type ProfileCategory, type SectionId, type WorkspaceProfile, DEFAULT_SECTION_LABELS } from "./model";
 
 let active: WorkspaceProfile = NOVEL_PROFILE;
 
@@ -87,4 +87,12 @@ export function defaultCategoryId(): string {
 /** Author-facing label for a prompt context block, per the active profile. */
 export function sectionLabel(id: SectionId): string {
   return active.sections[id] ?? DEFAULT_SECTION_LABELS[id];
+}
+
+/**
+ * Which novel-shaped document machinery applies — the ordered spine, the
+ * prior-document bridge, the rolling memory. See `DocModel`.
+ */
+export function docModel(): DocModel {
+  return active.docModel;
 }
