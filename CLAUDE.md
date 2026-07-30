@@ -70,12 +70,17 @@ All AI features run on the **unified agent runtime** (`src/lib/agent/runtime.ts`
 
 > Details: RAG context assembly, SSE parsing, and DB schema are in `docs/architecture.md`.
 
+### Workspace Profiles
+
+The project is not hardcoded to novels. A per-project **profile** (`.ai-writer/profile.json`, absent = the built-in `novel` one) declares the knowledge-base categories, the 【…】 block labels used in the assembled prompt, and the fallback system prompt — so supporting another kind of writing (跑团模组, 周报, 文案…) is a data addition, not new branches. Built-ins live in `src/lib/profile/model.ts`; the author switches via Settings → 工作台. Recipe: `docs/workflows.md` → Add a new workspace profile.
+
 ### Project Structure
 
 **Filesystem**
 - `.ai-writer/project.db` — SQLite database (project-scoped)
+- `.ai-writer/profile.json` — Workspace profile (what kind of writing this project is; absent = novel)
 - `writing/` — User markdown files (organized tree)
-- `.ai-writer/lore/<category>/<entity>/index.md` — Entity summary with frontmatter (categories: characters, world, factions, items, skills, custom)
+- `.ai-writer/lore/<category>/<entity>/index.md` — Entity summary with frontmatter (categories come from the active profile — novel: characters, world, factions, items, skills, style, custom)
 
 **Code**
 - `src/components/layout/` — Main layout structure (TitleBar, IconRail, Sidebar, FileTree, EditorArea, EditorBottomStrip, AiRail)
@@ -88,6 +93,7 @@ All AI features run on the **unified agent runtime** (`src/lib/agent/runtime.ts`
   - `src/lib/ai/` — streaming client (`index.ts` dispatch, `openai.ts`/`gemini.ts` adapters, `types.ts`), provider config storage (`configDb.ts`), Gemini safety settings (`safety.ts`), remote probing (`providerProbe.ts`), `apiLog.ts`, `tokenEstimate.ts`
   - `src/lib/agent/` — unified agent runtime (`runtime.ts` loop, `registry.ts` tool registry, `presets.ts` per-task config, `events.ts` execution-log events, `tools.ts` handlers + path containment, `plan.ts` lore-plan gate, `writeTools.ts` L1/L2 write handlers)
   - `src/lib/lore/` — lore domain model (`model.ts`), entity scan/CRUD (`entity.ts`), gallery/avatar (`gallery.ts`), AI generation (`generator.ts`); import via `lib/lore` (index re-exports all but generator)
+  - `src/lib/profile/` — workspace profiles: what kind of writing a project is (`model.ts` types/built-ins/validation, `active.ts` module singleton, `store.ts` `.ai-writer/profile.json`). Drives the lore category layout, the prompt's 【…】 block labels, and the fallback system prompt. **Read `loreCategories()` at call time, never at module scope** — see `docs/architecture.md` → Workspace profiles
   - `src/lib/context/` — RAG assembly (`rag.ts`), story memory (`memory.ts`), book spine (`outline.ts`), book-level continuation context (`bookContext.ts`)
   - `src/lib/fs/` — Tauri file I/O wrappers (`fileio.ts`), markdown render/frontmatter (`markdown.ts`), image/text file utils (`images.ts`), export (`export.ts`)
   - root: `project.ts`, `keyStore.ts`, `http.ts`, `paths.ts`, `platform.ts`

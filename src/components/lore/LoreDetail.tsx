@@ -6,7 +6,6 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
 import {
-  LORE_CATEGORIES,
   type CategoryId,
   type LoreEntity,
   type LoreImage,
@@ -16,6 +15,7 @@ import {
   saveEntityMetaAndBody,
   setEntityAvatar,
 } from "../../lib/lore";
+import { categoryLabel, findCategory, loreCategories } from "../../lib/profile";
 import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useAppStore } from "../../stores/appStore";
@@ -179,7 +179,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
       .finally(() => setContentLoaded(true));
   }, [entity.dirPath, contentVersion]);
 
-  const cat = LORE_CATEGORIES.find((c) => c.id === entity.category);
+  const cat = findCategory(entity.category);
 
   // Opening a file only sets the active path — the editor lives in the
   // "editor" main view, so switch back to it or the open is invisible.
@@ -585,8 +585,8 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                 value={dCategory}
                 onChange={(e) => setDCategory(e.target.value as CategoryId)}
               >
-                {LORE_CATEGORIES.map((c) => (
-                  <option key={c.id} value={c.id}>{isZh ? c.labelZh : c.labelEn}</option>
+                {loreCategories().map((c) => (
+                  <option key={c.id} value={c.id}>{categoryLabel(c, isZh)}</option>
                 ))}
               </select>
 

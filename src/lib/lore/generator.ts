@@ -10,7 +10,8 @@
 import i18n from "../../i18n";
 import type { GeminiSafetySettings } from "../ai/safety";
 import type { ApiStandard } from "../ai/types";
-import { LORE_CATEGORIES, type CategoryId } from "./model";
+import { fallbackCategoryId, isKnownCategory, loreCategoryIds } from "../profile/active";
+import { type CategoryId } from "./model";
 
 export interface GeneratedLore {
   name: string;
@@ -86,6 +87,17 @@ export async function generateLore(opts: {
     });
   }
 
+  // The extraction prompt — built-in or author-overridden — enumerates the
+  // categories in its own prose, and under a non-novel profile that list is
+  // simply wrong (it would offer a TTRPG author "characters"/"skills"). Append
+  // the authoritative list so the last word the model reads is the set that
+  // actually exists on disk; anything else it invents lands in the fallback
+  // bucket, silently mis-filing the entity.
+  const baseSystemPrompt = opts.systemPrompt ?? i18n.t("ai.instructions.lore");
+  const systemPrompt =
+    `${baseSystemPrompt}\n\n## Valid categories (authoritative)\n` +
+    `The "category" field MUST be exactly one of: ${loreCategoryIds().join(", ")}.`;
+
   let fullText = "";
   await runAgent({
     baseUrl: opts.baseUrl,
@@ -98,7 +110,7 @@ export async function generateLore(opts: {
     extraBody,
     preset: LORE_GENERATE_PRESET,
     messages: [
-      { role: "system", content: opts.systemPrompt ?? i18n.t("ai.instructions.lore") },
+      { role: "system", content: systemPrompt },
       { role: "user", content: userParts },
     ],
     // Single-shot preset — tools are empty, so the context is never consulted.
@@ -140,8 +152,10 @@ export async function generateLore(opts: {
 
   return {
     name:     typeof parsed.name     === "string" ? parsed.name     : "未命名",
-    category: (LORE_CATEGORIES.some((c) => c.id === parsed.category)
-               ? parsed.category as CategoryId : "custom"),
+    // The model is told the profile's categories but can still invent one; an
+    // unknown id would become a stray directory, so it lands in the fallback.
+    category: (typeof parsed.category === "string" && isKnownCategory(parsed.category)
+               ? parsed.category as CategoryId : fallbackCategoryId()),
     aliases:  Array.isArray(parsed.aliases) ? parsed.aliases.filter((a): a is string => typeof a === "string") : [],
     summary:  typeof parsed.summary  === "string" ? parsed.summary  : "",
     content:  typeof parsed.content  === "string" ? parsed.content  : "",

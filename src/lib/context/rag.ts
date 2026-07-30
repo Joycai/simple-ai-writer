@@ -14,6 +14,7 @@
 
 import i18n from "../../i18n";
 import type { LoreIndex } from "../lore";
+import { activeProfile, sectionLabel } from "../profile/active";
 import { RECENT_WINDOW_MIN_CHARS } from "./budget";
 import { selectLore, type LoreActivationReport } from "./loreSelect";
 import { selectMemoryForContext, type DocMemory } from "./memory";
@@ -352,10 +353,10 @@ export async function assembleContext(
   // append mode the selection is an anchor (already folded into 【近期内容】),
   // so it is never echoed back as a 【选中内容】 edit target.
   const baseTask = selection && !appendMode
-    ? `【选中内容】\n${selection}\n\n${taskInstruction}`
+    ? `【${sectionLabel("selection")}】\n${selection}\n\n${taskInstruction}`
     : taskInstruction;
   const taskParts = [baseTask];
-  if (requirement) taskParts.push(`【额外要求】\n${requirement}`);
+  if (requirement) taskParts.push(`【${sectionLabel("requirement")}】\n${requirement}`);
   // When an outline was actually filled in, explicitly bind the model to it:
   // the 【大纲/写作方向】 data block alone is easy for smaller local models to
   // treat as background. Empty outline → no directive → free continuation.
@@ -376,40 +377,48 @@ export async function assembleContext(
   };
 }
 
-/** Format the assembled context into a messages array for OpenAI/Gemini APIs. */
+/**
+ * Format the assembled context into a messages array for OpenAI/Gemini APIs.
+ *
+ * Block labels come from the active workspace profile, so a TTRPG module gets
+ * 【上一场景结尾】where a novel gets 【上一章结尾】. The wording is not cosmetic:
+ * these headings are the only thing telling the model what each block *is*, and
+ * a novel-flavoured label on a non-novel project actively misleads it.
+ */
 export function bundleToMessages(
   bundle: ContextBundle
 ): { role: "system" | "user"; content: string }[] {
   const parts: string[] = [];
 
   if (bundle.loreSnippets) {
-    parts.push(`【设定资料】\n${bundle.loreSnippets}`);
+    parts.push(`【${sectionLabel("knowledge")}】\n${bundle.loreSnippets}`);
   }
   if (bundle.additionalKnowledge) {
-    parts.push(`【附加知识】\n${bundle.additionalKnowledge}`);
+    parts.push(`【${sectionLabel("additionalKnowledge")}】\n${bundle.additionalKnowledge}`);
   }
   if (bundle.outline) {
-    parts.push(`【大纲/写作方向】\n${bundle.outline}`);
+    parts.push(`【${sectionLabel("outline")}】\n${bundle.outline}`);
   }
   if (bundle.priorChaptersSummary) {
-    parts.push(`【全书前情】\n${bundle.priorChaptersSummary}`);
+    parts.push(`【${sectionLabel("priorAll")}】\n${bundle.priorChaptersSummary}`);
   }
   if (bundle.storySummary) {
-    parts.push(`【前情提要】\n${bundle.storySummary}`);
+    parts.push(`【${sectionLabel("priorRecap")}】\n${bundle.storySummary}`);
   }
   if (bundle.prevChapterTail) {
+    const prevTail = sectionLabel("prevTail");
     const label = bundle.prevChapterTitle
-      ? `【上一章结尾·${bundle.prevChapterTitle}】`
-      : "【上一章结尾】";
+      ? `【${prevTail}·${bundle.prevChapterTitle}】`
+      : `【${prevTail}】`;
     parts.push(`${label}\n${bundle.prevChapterTail}`);
   }
   if (bundle.recentContext) {
-    parts.push(`【近期内容】\n${bundle.recentContext}`);
+    parts.push(`【${sectionLabel("recent")}】\n${bundle.recentContext}`);
   }
   parts.push(bundle.taskText);
 
   return [
-    { role: "system", content: bundle.systemPrompt || i18n.t("ai.instructions.system") },
+    { role: "system", content: bundle.systemPrompt || i18n.t(activeProfile().systemPromptKey) },
     { role: "user", content: parts.join("\n\n") },
   ];
 }

@@ -1,10 +1,17 @@
 import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { X, Pencil, Moon, Sun, Monitor, SlidersHorizontal, Server, Cpu, MessageSquare, Check, AlertCircle, FolderOpen, Info, GitBranch, ExternalLink } from "lucide-react";
+import { X, Pencil, Moon, Sun, Monitor, SlidersHorizontal, Server, Cpu, MessageSquare, Check, AlertCircle, FolderOpen, Info, GitBranch, ExternalLink, BookOpen } from "lucide-react";
 import { revealItemInDir, openUrl } from "@tauri-apps/plugin-opener";
 import { getVersion } from "@tauri-apps/api/app";
 import { useAiStore } from "../../stores/aiStore";
+import { useProjectStore } from "../../stores/projectStore";
+import {
+  BUILTIN_PROFILES,
+  categoryLabel,
+  profileLabel,
+  type WorkspaceProfile,
+} from "../../lib/profile";
 import { useAppStore, type ThemeMode, type Language, type FontScheme } from "../../stores/appStore";
 import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../lib/ai/apiLog";
 import type { ApiStandard } from "../../lib/ai/types";
@@ -168,6 +175,70 @@ function GeneralTab() {
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Workspace tab (per-project profile) ─────────────────────────────────────
+
+/**
+ * Picks the open project's workspace profile — see lib/profile.
+ *
+ * Project-scoped, unlike every other tab here, which is why it lives on its own
+ * and shows an explicit "open a project first" state rather than rendering
+ * controls that would have nothing to act on.
+ */
+function WorkspaceTab() {
+  const { t, i18n: i18nInst } = useTranslation();
+  const isZh = i18nInst.language.startsWith("zh");
+  const projectPath = useProjectStore((s) => s.projectPath);
+  const profile = useProjectStore((s) => s.profile);
+  const setProfile = useProjectStore((s) => s.setProfile);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const choose = async (next: WorkspaceProfile) => {
+    if (busy || next.id === profile.id) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await setProfile(next);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>{t("systemSettings.workspace.profileSection")}</div>
+        {!projectPath ? (
+          <div className={styles.emptyNote}>{t("systemSettings.workspace.noProject")}</div>
+        ) : (
+          <div className={styles.fieldGroup}>
+            <div className={styles.safetyHint}>{t("systemSettings.workspace.profileHint")}</div>
+            <div className={styles.profileGrid}>
+              {BUILTIN_PROFILES.map((p) => (
+                <button
+                  key={p.id}
+                  className={`${styles.profileCard} ${p.id === profile.id ? styles.profileCardActive : ""}`}
+                  onClick={() => choose(p)}
+                  disabled={busy}
+                >
+                  <span className={styles.profileName}>{profileLabel(p, isZh)}</span>
+                  <span className={styles.profileCats}>
+                    {p.categories.map((c) => categoryLabel(c, isZh)).join(" · ")}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className={styles.safetyHint}>{t("systemSettings.workspace.switchHint")}</div>
+            {error && <div className={styles.errorNote}>{error}</div>}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -841,7 +912,7 @@ function AboutTab() {
 
 // ─── Main modal ───────────────────────────────────────────────────────────────
 
-type TabId = "general" | "providers" | "models" | "prompts" | "about";
+type TabId = "general" | "workspace" | "providers" | "models" | "prompts" | "about";
 
 interface Props {
   onClose: () => void;
@@ -891,6 +962,7 @@ export function SettingsModal({ onClose, initialTab = "general" }: Props) {
         <div className={styles.modalBody}>
           <nav className={styles.nav}>
             {navBtn("general", <SlidersHorizontal size={15} />, "systemSettings.tabs.general")}
+            {navBtn("workspace", <BookOpen size={15} />, "systemSettings.tabs.workspace")}
             <div className={styles.navGroupLabel}>{t("systemSettings.tabs.aiGroup")}</div>
             {navBtn("providers", <Server size={15} />, "systemSettings.tabs.providers")}
             {navBtn("models", <Cpu size={15} />, "systemSettings.tabs.models")}
@@ -901,6 +973,7 @@ export function SettingsModal({ onClose, initialTab = "general" }: Props) {
 
           <div className={styles.content}>
             {activeTab === "general" && <GeneralTab />}
+            {activeTab === "workspace" && <WorkspaceTab />}
             {activeTab === "providers" && <ProvidersTab />}
             {activeTab === "models" && <ModelsTab />}
             {activeTab === "prompts" && <PromptsTab />}

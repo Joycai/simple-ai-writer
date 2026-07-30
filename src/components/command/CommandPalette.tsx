@@ -7,7 +7,8 @@ import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
-import { LORE_CATEGORIES, type LoreEntity } from "../../lib/lore";
+import { type LoreEntity } from "../../lib/lore";
+import { loreCategories } from "../../lib/profile";
 import { MOD_KEY } from "../../lib/platform";
 import { modalPop, overlayFade, overlayFadeTransition, springPanel } from "../../lib/motion";
 import styles from "./CommandPalette.module.css";
@@ -55,7 +56,7 @@ export function CommandPalette() {
   // Flatten lore for searching
   const allLore = useMemo(() => {
     const out: LoreEntity[] = [];
-    for (const cat of LORE_CATEGORIES) {
+    for (const cat of loreCategories()) {
       for (const e of (loreIndex[cat.id] ?? [])) out.push(e);
     }
     return out;

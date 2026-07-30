@@ -1,4 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { resetActiveProfile, setActiveProfile } from "../profile/active";
+import { TTRPG_PROFILE } from "../profile/model";
 import {
   assembleContext,
   bundleToMessages,
@@ -302,6 +304,44 @@ describe("bundleToMessages", () => {
     expect(idxPrevTail).toBeGreaterThan(idxPrior);
     expect(idxRecent).toBeGreaterThan(idxPrevTail);
     expect(user).toContain("上一章的最后一句。");
+  });
+
+  // The block headings are the only thing telling the model what each block is,
+  // so they have to follow the project's workspace profile: a TTRPG module
+  // labelled 【上一章结尾】 is actively misleading.
+  describe("with a non-novel workspace profile", () => {
+    afterEach(() => resetActiveProfile());
+
+    it("labels blocks with the active profile's wording", async () => {
+      setActiveProfile(TTRPG_PROFILE);
+      const bundle = await assembleContext(
+        "SYS", makeLoreIndex(), "Aria sang in Ironhold.", "", "Continue.",
+        {
+          appendMode: true,
+          additionalKnowledge: "Magic is rare.",
+          bookContext: {
+            priorSummary: "前面发生的事。",
+            prevChapterTail: "上一场景的收尾。",
+            prevChapterTitle: "序场",
+          },
+        },
+      );
+      const user = bundleToMessages(bundle)[1].content;
+      expect(user).toContain("【模组资料】");
+      expect(user).toContain("【全模组前情】");
+      expect(user).toContain("【上一场景结尾·序场】");
+      expect(user).not.toContain("【设定资料】");
+      expect(user).not.toContain("【上一章结尾");
+      // A section the profile does not override keeps the shared default.
+      expect(user).toContain("【附加知识】");
+    });
+
+    it("falls back to the profile's system prompt when none is active", async () => {
+      setActiveProfile(TTRPG_PROFILE);
+      const bundle = await assembleContext("", makeLoreIndex(), "x", "", "Continue.");
+      // i18n is mocked to echo the key, so this asserts *which* key is used.
+      expect(bundleToMessages(bundle)[0].content).toBe("ai.instructions.systemTtrpg");
+    });
   });
 });
 
