@@ -6,6 +6,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   BUILTIN_PROFILES,
+  CATEGORY_ID_RE,
   DEFAULT_SECTION_LABELS,
   NOVEL_PROFILE,
   TTRPG_PROFILE,
@@ -42,8 +43,10 @@ describe("builtin profiles", () => {
     expect(new Set(ids).size).toBe(ids.length);
     for (const p of BUILTIN_PROFILES) {
       expect(p.categories.length).toBeGreaterThan(0);
-      // Category ids are folder names — the same rule the Rust side enforces.
-      for (const c of p.categories) expect(c.id).toMatch(/^[a-z0-9][a-z0-9_-]*$/i);
+      // Category ids are folder names. Asserted against the exported rule
+      // itself (which `valid_category` in Rust mirrors) rather than a copy of
+      // it here, so the check cannot drift from what parseProfile enforces.
+      for (const c of p.categories) expect(c.id).toMatch(CATEGORY_ID_RE);
       expect(new Set(p.categories.map((c) => c.id)).size).toBe(p.categories.length);
     }
   });
@@ -152,7 +155,13 @@ describe("parseProfile", () => {
       NOVEL_PROFILE,
     );
     expect(profile.categories.map((c) => c.id)).toEqual(["good"]);
-    expect(issues.length).toBe(5);
+    // Each rejection is reported, and named — asserting *which* entries were
+    // complained about rather than how many diagnostics the parser happens to
+    // emit, so adding a new message elsewhere doesn't break this test.
+    const reported = issues.join(" | ");
+    for (const bad of ["../escape", "a/b", ".."]) expect(reported).toContain(bad);
+    expect(reported).toContain('category id "" is not a valid folder name');
+    expect(reported).toContain("category entry is not an object");
   });
 
   it("rejects case-insensitive duplicate ids", () => {
@@ -209,7 +218,11 @@ describe("parseProfile", () => {
       NOVEL_PROFILE,
     );
     expect(profile.sections).toEqual({ knowledge: "资料" });
-    expect(issues.length).toBe(3);
+    const reported = issues.join(" | ");
+    expect(reported).toContain('unknown section "nonsense"');
+    // Empty, and over the 20-char label cap.
+    expect(reported).toContain('section "recent" has an unusable label');
+    expect(reported).toContain('section "outline" has an unusable label');
   });
 
   it("refuses a systemPromptKey that is not an i18n key", () => {

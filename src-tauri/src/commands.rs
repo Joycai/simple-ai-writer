@@ -27,19 +27,25 @@ const DEFAULT_LORE_CATEGORIES: [&str; 7] = [
 ];
 
 /// A lore category id is a single directory name, so it must be one path
-/// component of `[A-Za-z0-9_-]`.
+/// component of `[A-Za-z0-9][A-Za-z0-9_-]*`, at most 40 characters.
 ///
 /// The frontend validates this too (`parseProfile`), but that check is
 /// convenience: `profile.json` is hand-editable and reaches us through the
 /// webview, so a name like `..` or `a/b` would otherwise let a crafted profile
 /// create directories outside `.ai-writer/lore`. Validate here as well — this
 /// side is the boundary that has to hold.
+///
+/// The rule is deliberately identical to `CATEGORY_ID_RE` in
+/// `src/lib/profile/model.ts`, down to requiring an alphanumeric first
+/// character. Being *looser* here is not a safety hole, but it does create a
+/// folder the frontend then silently drops from the profile — so a category the
+/// author wrote by hand would exist on disk and never appear in the app.
 fn valid_category(name: &str) -> bool {
-    !name.is_empty()
-        && name.len() <= 40
-        && name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    let mut chars = name.chars();
+    if !chars.next().is_some_and(|c| c.is_ascii_alphanumeric()) {
+        return false;
+    }
+    name.len() <= 40 && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
 /// Scaffold the .ai-writer directory structure inside a project folder.
@@ -280,5 +286,17 @@ mod tests {
     fn rejects_absurdly_long_names() {
         assert!(!valid_category(&"a".repeat(41)));
         assert!(valid_category(&"a".repeat(40)));
+    }
+
+    #[test]
+    fn requires_an_alphanumeric_first_character() {
+        // Matches CATEGORY_ID_RE on the frontend. Accepting these would create a
+        // folder that `parseProfile` then drops, leaving a category on disk that
+        // the app never shows.
+        for name in ["_scratch", "-npcs", "__", "-"] {
+            assert!(!valid_category(name), "{name:?} should be rejected");
+        }
+        assert!(valid_category("npcs_2"));
+        assert!(valid_category("side-quests"));
     }
 }

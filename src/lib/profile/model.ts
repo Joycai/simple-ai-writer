@@ -154,8 +154,15 @@ export function profileLabel(profile: WorkspaceProfile, isZh: boolean): string {
 // The Rust side re-validates before creating anything (scaffold_project) — this
 // layer is convenience, not the security boundary.
 
-/** Category ids become folder names, so keep them to a portable slug. */
-const CATEGORY_ID_RE = /^[a-z0-9][a-z0-9_-]{0,39}$/i;
+/**
+ * Category ids become folder names, so keep them to a portable slug.
+ *
+ * Exported so tests can assert against the rule itself rather than a copy that
+ * could drift from it. `valid_category` in `src-tauri/src/commands.rs` mirrors
+ * this deliberately — that side is the boundary, and the two must agree or a
+ * category is created on disk and then dropped from the profile.
+ */
+export const CATEGORY_ID_RE = /^[a-z0-9][a-z0-9_-]{0,39}$/i;
 /** i18n keys are dotted identifiers; anything else is a typo or worse. */
 const PROMPT_KEY_RE = /^[A-Za-z0-9_][A-Za-z0-9_.]{0,79}$/;
 const MAX_CATEGORIES = 24;
@@ -256,12 +263,17 @@ export function parseProfile(data: unknown, fallback: WorkspaceProfile): ParsedP
     categories.push(...fallback.categories);
   }
 
-  // Absent `sections` inherits, for the same reason as `categories`: without
-  // this, `{"id":"ttrpg"}` would silently lose that profile's 模组资料 /
-  // 上一场景结尾 wording and prompt novel labels at a TTRPG author. A *present*
-  // object replaces rather than merges — an author editing this block is
-  // stating the full set they want.
-  const sections: Partial<Record<SectionId, string>> = {};
+  // Sections layer *over* the fallback's rather than replacing them, so a file
+  // overriding one label keeps that profile's wording for the rest.
+  //
+  // Replacing wholesale looked defensible ("an author editing this block states
+  // the full set they want") but wasn't: an unnamed section does not come out
+  // blank, it falls through `sectionLabel` to `DEFAULT_SECTION_LABELS` — which
+  // *are* the novel labels. So `{"id":"ttrpg","sections":{"outline":"…"}}`
+  // prompted a TTRPG author with 【上一章结尾】/【设定资料】, exactly the
+  // mislabelling profiles exist to prevent. An author who does want the shared
+  // default for one section can still say so by setting it explicitly.
+  const sections: Partial<Record<SectionId, string>> = { ...fallback.sections };
   if (rec.sections && typeof rec.sections === "object" && !Array.isArray(rec.sections)) {
     const rawSections = rec.sections as Record<string, unknown>;
     for (const key of Object.keys(rawSections)) {
@@ -276,9 +288,8 @@ export function parseProfile(data: unknown, fallback: WorkspaceProfile): ParsedP
       }
       sections[key as SectionId] = label;
     }
-  } else {
-    if (rec.sections !== undefined) issues.push("`sections` is not an object");
-    Object.assign(sections, fallback.sections);
+  } else if (rec.sections !== undefined) {
+    issues.push("`sections` is not an object");
   }
 
   let systemPromptKey = fallback.systemPromptKey;
