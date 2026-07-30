@@ -23,7 +23,15 @@ A profile is data — reach for this instead of adding branches for a new kind o
 
 For a **project-specific** layout with no code change, hand-write `.ai-writer/profile.json`; a file naming a built-in patches it (`{"id":"ttrpg","sections":{"prevTail":"上一幕结尾"}}`) — `categories` and `sections` both layer over that built-in's, so overriding one label keeps the rest of its wording.
 
-**Not yet profile-driven:** the `TaskKind` list (续写 / 润色 / 改写 / 总结) is the same for every profile. A profile wanting its own tasks — 「生成遭遇表」 for TTRPG, 「三版标题」 for copy — needs that made data-driven first, along with an output model that can hold several drafts side by side.
+**Not yet profile-driven:** the `TaskKind` list (续写 / 润色 / 改写 / 总结) is the same for every profile. A profile wanting its own tasks — 「生成遭遇表」 for TTRPG, 「三版标题」 for copy — needs that made data-driven. The multi-draft output it depends on is in place (see `docs/architecture.md` → Multi-draft output); what remains is a per-profile task registry.
+
+## Change how many drafts a task produces
+
+Draft count is a user setting (`appStore.draftCount`, chip row in the AI panel), not something a task declares. To make a *task* fan out or stop fanning out, edit `draftCountFor` in `src/stores/aiTaskStore.ts` — the single place that rule lives, so the panel's control and the run agree.
+
+Before lifting the clamp on `agent` or `continue`, read the table in `docs/architecture.md` → Multi-draft output: `agent` is a correctness limit (concurrent disk writes + racing approval cards), and `continue` needs per-draft `agentLog`s first or the execution log becomes unreadable.
+
+Tests: `src/lib/__tests__/aiTaskDrafts.test.ts` covers the clamp, the fan-out count, per-draft failure isolation, shared-abort, and one usage row per draft.
 
 ## Add a new provider/API
 1. Add a new adapter in `src/lib/ai/` (alongside `openai.ts` / `gemini.ts`) and wire it into the `streamCompletion()` dispatch in `src/lib/ai/index.ts`

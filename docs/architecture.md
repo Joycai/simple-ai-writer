@@ -64,6 +64,29 @@ question about the chapter's *age* (gated on its length, not on the anchor) —
 fusing them is why expanding early in a long chapter used to drag in the
 previous chapter's ending.
 
+### Multi-draft output (生成版本)
+
+- **Location** — `src/lib/ai/drafts.ts` (the `Draft` shape, `MAX_DRAFTS`, `totalUsage`), fan-out in `aiTaskStore.runTask`, `draftCountFor` alongside it, UI in `AiPanel`
+- **Setting** — `appStore.draftCount` (1–5, persisted), chosen per run in the panel
+
+A run produces a **list** of drafts, not one string: `drafts: Draft[]` + `activeDraftId`, where an ordinary task is simply a run with one draft. Modelling the single case as a degenerate multi-draft run — rather than as a separate field — is what stops the two paths drifting.
+
+Asking for N assembles the context **once** and then fires N independent `streamCompletion` calls sharing one `AbortController`. The drafts differ only by the model's own sampling, which is the point: N takes on the same brief. Consequences worth knowing:
+
+- `Promise.allSettled`, not `all` — one draft being refused or filtered records an error **on that draft** and leaves the others' text alone. The run only fails if every draft did.
+- One `token_usage` row **per draft**, since each is a separately billed call; the panel footer shows `totalUsage(drafts)`.
+- Drafts are patched **by id, not index**: N streams land out of order and a run can be replaced mid-flight, so an index could write into the next run's array. A stale id is a no-op, which is the right outcome.
+- Ids carry a monotonic run counter, so React can't mistake a new run's first draft for the previous one re-rendering.
+
+**`draftCountFor` pins two kinds to a single draft, and neither limit is cosmetic:**
+
+| Kind | Why |
+| --- | --- |
+| `agent` | Its preset holds the L1 write tools and `propose_edit`. N agents would write to one lore folder concurrently and race N approval cards against one resolver — a correctness limit. |
+| `continue` | Runs the agent loop too (read-only, so parallelism would be *safe*) but every round reports into one shared `agentLog`. N interleaved tool logs are unreadable, so multi-draft 续写 waits on per-draft logs. |
+
+`MAX_DRAFTS` and the draft types live in `lib/ai/drafts` rather than in either store because both ends need them — `appStore` owns the setting, `aiTaskStore` owns the run — and importing across would close a cycle. It also keeps the pure parts testable without a store that touches `localStorage`/`document` at module load.
+
 ### Workspace profiles (工作台档案)
 
 - **Location** — `src/lib/profile/` (`model.ts` types + built-ins + validation, `active.ts` singleton, `store.ts` persistence)

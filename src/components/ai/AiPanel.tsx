@@ -21,13 +21,14 @@ import { useTranslation } from "react-i18next";
 import {
   ChevronDown, ChevronRight, Copy, Crosshair, Layers, Pin, Play, RotateCw, Square, X,
 } from "lucide-react";
-import { useAiTaskStore, type TaskKind } from "../../stores/aiTaskStore";
+import { draftCountFor, totalUsage, useAiTaskStore, type TaskKind } from "../../stores/aiTaskStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { AgentLog } from "./AgentLog";
 import { ApprovalCard } from "./ApprovalCard";
 import { PlanCard } from "./PlanCard";
 import { useAiStore } from "../../stores/aiStore";
 import { useAppStore, LORE_BUDGET_MIN, LORE_BUDGET_MAX } from "../../stores/appStore";
+import { MAX_DRAFTS } from "../../lib/ai/drafts";
 import { focusBlockedByImage, useEditorStore, useWritingFocus } from "../../stores/editorStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useMemoryStore } from "../../stores/memoryStore";
@@ -68,6 +69,7 @@ const TASK_OPTIONS: { kind: TaskKind; labelKey: string; descKey: string }[] = [
 
 const CONTINUE_LENGTH_OPTIONS = [200, 500, 1000, 2000];
 const CONTEXT_CHARS_OPTIONS = [0, 500, 1000, 2000];
+const DRAFT_COUNT_OPTIONS = Array.from({ length: MAX_DRAFTS }, (_, i) => i + 1);
 /** Verbatim window size used by tasks without a contextChars picker
  *  (continue/custom). Owned by lib/context/budget so it can't drift. */
 const DEFAULT_DETAIL_SPAN = RECENT_WINDOW_MIN_CHARS;
@@ -747,10 +749,15 @@ function ErrorBlock({ message, onRetry }: { message: string; onRetry: (() => voi
 export function AiPanel() {
   const { t, i18n } = useTranslation();
   const {
-    isRunning, output, error, usage, agentLog, loreReport,
-    runTask, abort, clearOutput, selection, selectionRange, selectionSource,
+    isRunning, drafts, activeDraftId, error, agentLog, loreReport,
+    runTask, abort, clearOutput, setActiveDraft, selection, selectionRange, selectionSource,
     clearSelectionFrom, requestedTask, setRequestedTask,
   } = useAiTaskStore();
+  // The draft the pane shows and the insert actions target. A run always seeds
+  // one, so `output` is empty only before the first run or after a clear.
+  const activeDraft = drafts.find((d) => d.id === activeDraftId) ?? drafts[0] ?? null;
+  const output = activeDraft?.text ?? "";
+  const usage = totalUsage(drafts);
   const { models, providers, prompts, activeModelId, activePromptId, setActivePrompt } = useAiStore();
   // The focused document — one atomic read of "which file" + "its text", so the
   // panel can never describe one document while the run targets another.
@@ -762,6 +769,8 @@ export function AiPanel() {
   const fileTree = useProjectStore((s) => s.fileTree);
   const memory = useMemoryStore((s) => s.memory);
   const docs = useDocModel();
+  const draftCount = useAppStore((s) => s.draftCount);
+  const setDraftCount = useAppStore((s) => s.setDraftCount);
   const loreBudgetTokens = useAppStore((s) => s.loreBudgetTokens);
   const setLoreBudgetTokens = useAppStore((s) => s.setLoreBudgetTokens);
   const contextUtilization = useAppStore((s) => s.contextUtilization);
@@ -896,6 +905,12 @@ export function AiPanel() {
   const supportsExtras =
     selectedTask === "polish" || selectedTask === "rewrite" || selectedTask === "summary";
 
+  // Ask the store's own rule what this task can do, rather than re-listing the
+  // exempt kinds here — one of them is a correctness limit, and two copies of it
+  // would eventually disagree.
+  const runKind: TaskKind = selectedTask === "custom" && agentMode ? "agent" : selectedTask;
+  const maxDrafts = draftCountFor(runKind, MAX_DRAFTS);
+
   // Polish/rewrite edit a passage in place, so their result belongs *where the
   // selection was* — appending it to the end of the document (the only thing
   // this panel used to do) silently duplicated the passage instead. Resolved at
@@ -994,10 +1009,9 @@ export function AiPanel() {
         contextChars,
       };
     }
-    // "custom" + Agent 模式 → the full-toolset agent task.
-    const kind: TaskKind = selectedTask === "custom" && agentMode ? "agent" : selectedTask;
     runTask(
-      kind,
+      // "custom" + Agent 模式 → the full-toolset agent task (see runKind).
+      runKind,
       selectedTask === "custom" ? customInstr : undefined,
       isContinue ? continueLength : undefined,
       extras,
@@ -1409,6 +1423,35 @@ export function AiPanel() {
 
               <hr className={styles.divider} />
 
+              {/* ── Draft count ──
+                  Hidden for the tasks that can't fan out (agent writes to disk;
+                  continue shares one execution log) rather than shown disabled —
+                  a control that never applies is just noise. See draftCountFor. */}
+              {maxDrafts > 1 && (
+                <div className={styles.controlRow}>
+                  <span className={styles.controlLabel}>
+                    {t("ai.panel.draftCount", { defaultValue: "生成版本" })}
+                  </span>
+                  <div className={styles.chipGroup}>
+                    {DRAFT_COUNT_OPTIONS.map((n) => (
+                      <button
+                        key={n}
+                        className={`${styles.chip} ${draftCount === n ? styles.chipActive : ""}`}
+                        onClick={() => setDraftCount(n)}
+                        title={t("ai.panel.draftCountHint", {
+                          defaultValue: "并行生成多个版本，每个都是一次独立请求（费用相应增加）",
+                        })}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                  <span className={styles.controlUnit}>
+                    {t("ai.panel.unitDrafts", { defaultValue: "版" })}
+                  </span>
+                </div>
+              )}
+
               {/* ── Reference window (edit tasks only — continue has no picker) ── */}
               {supportsExtras && (
                 <div className={styles.controlRow}>
@@ -1576,10 +1619,37 @@ export function AiPanel() {
                 </span>
               ) : undefined}
             />
-            {output ? (
+            {/* Draft tabs — only when there is a choice to make. A single-draft
+                run keeps the pane exactly as it was. */}
+            {drafts.length > 1 && (
+              <div className={styles.draftTabs} role="tablist">
+                {drafts.map((d) => (
+                  <button
+                    key={d.id}
+                    role="tab"
+                    aria-selected={d.id === activeDraft?.id}
+                    className={`${styles.draftTab} ${d.id === activeDraft?.id ? styles.draftTabActive : ""} ${d.error ? styles.draftTabFailed : ""}`}
+                    onClick={() => setActiveDraft(d.id)}
+                    title={d.error ?? undefined}
+                  >
+                    {t("ai.panel.draftLabel", { n: d.index, defaultValue: `版本 ${d.index}` })}
+                    {/* Per-draft state, because they finish at different times and
+                        an empty tab is otherwise indistinguishable from a failed one. */}
+                    {d.error ? (
+                      <span className={styles.draftTabMark}>!</span>
+                    ) : !d.done ? (
+                      <span className={styles.draftSpinner} />
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            )}
+            {activeDraft?.error ? (
+              <ErrorBlock message={activeDraft.error} onRetry={canRun ? handleRun : null} />
+            ) : output ? (
               <div className={styles.output} ref={outputRef}>
                 {output}
-                {isRunning && <span className={styles.cursor}>▌</span>}
+                {isRunning && !activeDraft?.done && <span className={styles.cursor}>▌</span>}
               </div>
             ) : (
               <div className={styles.resultEmpty}>
