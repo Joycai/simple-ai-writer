@@ -47,7 +47,9 @@ import {
   MEMORY_MIN_DOC_CHARS,
   MEMORY_SUGGEST_THRESHOLD_CHARS,
 } from "../../lib/context/memory";
-import { categoryLabel, loreCategories } from "../../lib/profile";
+import {
+  categoryLabel, defaultTask, findTask, loreCategories, taskDesc, taskLabel, visibleTasks,
+} from "../../lib/profile";
 import {
   BOOK_PREV_TAIL_CHARS, BOOK_PREV_TAIL_NEAR_START_CHARS,
 } from "../../lib/context/bookContext";
@@ -59,13 +61,6 @@ import { contextLabel } from "../../lib/ai/modelLabel";
 import { MOD_KEY } from "../../lib/platform";
 import { panelFade, springPanel } from "../../lib/motion";
 import styles from "./AiPanel.module.css";
-
-const TASK_OPTIONS: { kind: TaskKind; labelKey: string; descKey: string }[] = [
-  { kind: "continue", labelKey: "ai.tasks.continue", descKey: "ai.tasks.continueDesc" },
-  { kind: "rewrite",  labelKey: "ai.tasks.rewrite",  descKey: "ai.tasks.rewriteDesc" },
-  { kind: "polish",   labelKey: "ai.tasks.polish",   descKey: "ai.tasks.polishDesc" },
-  { kind: "summary",  labelKey: "ai.tasks.summary",  descKey: "ai.tasks.summaryDesc" },
-];
 
 const CONTINUE_LENGTH_OPTIONS = [200, 500, 1000, 2000];
 const CONTEXT_CHARS_OPTIONS = [0, 500, 1000, 2000];
@@ -790,9 +785,16 @@ export function AiPanel() {
     return () => clearTimeout(id);
   }, [content, usesMemory]);
 
-  // Continue is the default: the panel should open on a usable request, not on
-  // an empty shell that needs a click before it shows anything.
-  const [selectedTask, setSelectedTask] = useState<TaskKind>("continue");
+  // The profile's first task is the default: the panel should open on a usable
+  // request, not on an empty shell that needs a click before it shows anything.
+  const tasks = visibleTasks();
+  const [selectedTask, setSelectedTask] = useState<TaskKind>(() => defaultTask().id);
+  // A profile switch can remove the selected task. Fall back rather than render
+  // controls for a task that no longer exists (and can no longer be run).
+  const task = findTask(selectedTask) ?? defaultTask();
+  useEffect(() => {
+    if (task.id !== selectedTask) setSelectedTask(task.id);
+  }, [task.id, selectedTask]);
   const [continueLength, setContinueLength] = useState(500);
   const [contextChars, setContextChars] = useState(1000);
 
@@ -820,7 +822,10 @@ export function AiPanel() {
   // ordering the project doesn't have.
   const wantsOpeningChoice =
     docs.priorContext &&
-    selectedTask === "continue" && content.trim().length < BOOK_PREV_TAIL_NEAR_START_CHARS;
+    // `task.continuation` rather than the `isContinue` alias declared further
+    // down — this block runs before it, and duplicating the read is cheaper than
+    // hoisting the whole task-derived section above the state hooks.
+    !!task.continuation && content.trim().length < BOOK_PREV_TAIL_NEAR_START_CHARS;
 
   // The chosen position belongs to the chapter it was chosen in; a new file
   // starts from the default again.
@@ -901,22 +906,24 @@ export function AiPanel() {
   const activeProvider = activeModel ? providers.find((p) => p.id === activeModel.providerId) : null;
   const hasConfig = !!activeModel;
 
-  const isContinue = selectedTask === "continue";
-  const supportsExtras =
-    selectedTask === "polish" || selectedTask === "rewrite" || selectedTask === "summary";
+  const isContinue = !!task.continuation;
+  const supportsExtras = !!task.referenceWindow;
 
-  // Ask the store's own rule what this task can do, rather than re-listing the
-  // exempt kinds here — one of them is a correctness limit, and two copies of it
-  // would eventually disagree.
-  const runKind: TaskKind = selectedTask === "custom" && agentMode ? "agent" : selectedTask;
-  const maxDrafts = draftCountFor(runKind, MAX_DRAFTS);
+  // The Agent 模式 toggle switches to a *different* task (its own prompt and
+  // toolset), so resolve that before asking anything about what will run.
+  const agentTask = task.agentTaskId ? findTask(task.agentTaskId) : null;
+  const runTaskDef = agentMode && agentTask ? agentTask : task;
+  const runKind: TaskKind = runTaskDef.id;
+  // Ask the store's own rule what this task can do rather than re-deriving it —
+  // part of that rule is a correctness limit, and two copies would drift.
+  const maxDrafts = draftCountFor(runTaskDef, MAX_DRAFTS);
 
   // Polish/rewrite edit a passage in place, so their result belongs *where the
   // selection was* — appending it to the end of the document (the only thing
   // this panel used to do) silently duplicated the passage instead. Resolved at
   // apply time, not run time: the author may have kept typing while it streamed.
   const replaceRange =
-    selectedTask === "polish" || selectedTask === "rewrite"
+    task.target === "replace"
       ? resolveEditRange(content, selection, selectionRange, selectionSource)
       : null;
 
@@ -1012,7 +1019,7 @@ export function AiPanel() {
     runTask(
       // "custom" + Agent 模式 → the full-toolset agent task (see runKind).
       runKind,
-      selectedTask === "custom" ? customInstr : undefined,
+      runTaskDef.freeform ? customInstr : undefined,
       isContinue ? continueLength : undefined,
       extras,
     );
@@ -1086,10 +1093,13 @@ export function AiPanel() {
   // author is not actually going to send.
   const systemPrompt = prompts.find((p) => p.id === activePromptId)?.content
     ?? profileSystemPrompt();
-  const instructionText =
-    selectedTask === "custom" ? customInstr
-    : isContinue ? t("ai.instructions.continue", { length: continueLength })
-    : t(`ai.instructions.${selectedTask}`);
+  // Mirrors how runTask builds the instruction, so the forecast sizes the prompt
+  // that is actually going to be sent.
+  const instructionText = runTaskDef.freeform
+    ? customInstr
+    : runTaskDef.instructionKey
+      ? t(runTaskDef.instructionKey, { length: continueLength })
+      : "";
   // Zero when the profile doesn't use memory, and not only because the load is
   // skipped: switching profiles mid-session leaves whatever memoryStore already
   // held for this document, and counting it here would forecast a layer runTask
@@ -1130,9 +1140,9 @@ export function AiPanel() {
     setLoreBudgetTokens(next ?? Math.min(LORE_BUDGET_MAX, loreBudgetTokens * 2));
   };
 
-  const taskLabel = t(
-    selectedTask === "custom" ? "ai.tasks.custom" : `ai.tasks.${selectedTask}`,
-  );
+  // The label of the task that will actually run — Agent 模式 swaps the task, so
+  // the run button should name what the click is going to do.
+  const currentTaskLabel = taskLabel(runTaskDef, isZh, t);
 
   // Results pane shows something whenever a run is in flight or has produced output.
   const hasResults = isRunning || !!output || !!error || agentLog.length > 0 || !!usage;
@@ -1149,25 +1159,20 @@ export function AiPanel() {
               {/* ── Task ── */}
               <div className={styles.section}>
                 <SectionHead label={t("ai.panel.taskLabel", { defaultValue: "任务" })} />
+                {/* Whatever the profile offers, however many — 自定义 is an
+                    ordinary entry in that list, not a hardcoded extra button. */}
                 <div className={styles.taskSegmented}>
-                  {TASK_OPTIONS.map((opt) => (
+                  {tasks.map((opt) => (
                     <button
-                      key={opt.kind}
-                      className={`${styles.taskSegment} ${selectedTask === opt.kind ? styles.taskSegmentActive : ""}`}
-                      onClick={() => setSelectedTask(opt.kind)}
+                      key={opt.id}
+                      className={`${styles.taskSegment} ${task.id === opt.id ? styles.taskSegmentActive : ""}`}
+                      onClick={() => setSelectedTask(opt.id)}
                       disabled={isRunning}
-                      title={t(opt.descKey)}
+                      title={taskDesc(opt, isZh, t) || undefined}
                     >
-                      {t(opt.labelKey)}
+                      {taskLabel(opt, isZh, t)}
                     </button>
                   ))}
-                  <button
-                    className={`${styles.taskSegment} ${selectedTask === "custom" ? styles.taskSegmentActive : ""}`}
-                    onClick={() => setSelectedTask("custom")}
-                    disabled={isRunning}
-                  >
-                    {t("ai.tasks.customShort", { defaultValue: "自定义" })}
-                  </button>
                 </div>
               </div>
 
@@ -1232,7 +1237,7 @@ export function AiPanel() {
                           ? "ai.panel.targetSummaryMarked"
                           : "ai.panel.targetSummary", {
                           defaultValue: "{{task}}选区 · 第 {{para}} 段, {{chars}} 字",
-                          task: taskLabel,
+                          task: currentTaskLabel,
                           para: paragraphIndexAt(content, selectionRange?.from ?? 0),
                           chars: selection.length,
                         })}
@@ -1261,7 +1266,7 @@ export function AiPanel() {
                   )}
 
                   {/* Custom instruction (+ Agent 模式) */}
-                  {selectedTask === "custom" ? (
+                  {task.freeform ? (
                     <>
                       <textarea
                         className={styles.textarea}
@@ -1270,15 +1275,21 @@ export function AiPanel() {
                         value={customInstr}
                         onChange={(e) => setCustomInstr(e.target.value)}
                       />
-                      <label className={styles.toggleRow}>
-                        <input
-                          type="checkbox"
-                          checked={agentMode}
-                          onChange={(e) => setAgentMode(e.target.checked)}
-                        />
-                        <span>{t("ai.panel.agentModeLabel")}</span>
-                      </label>
-                      {agentMode && <div className={styles.hintLine}>{t("ai.panel.agentModeHint")}</div>}
+                      {/* Only where the task names one to switch to — a profile
+                          can offer a freeform task with no agent counterpart. */}
+                      {agentTask && (
+                        <label className={styles.toggleRow}>
+                          <input
+                            type="checkbox"
+                            checked={agentMode}
+                            onChange={(e) => setAgentMode(e.target.checked)}
+                          />
+                          <span>{t("ai.panel.agentModeLabel")}</span>
+                        </label>
+                      )}
+                      {agentMode && agentTask && (
+                        <div className={styles.hintLine}>{t("ai.panel.agentModeHint")}</div>
+                      )}
                     </>
                   ) : isContinue ? (
                     <>
@@ -1556,7 +1567,7 @@ export function AiPanel() {
             ) : (
               <button className={styles.runBtn} disabled={!canRun} onClick={handleRun}>
                 <Play size={12} fill="currentColor" />
-                {t("ai.panel.runTask", { defaultValue: "执行{{task}}", task: taskLabel })}
+                {t("ai.panel.runTask", { defaultValue: "执行{{task}}", task: currentTaskLabel })}
                 <kbd className={styles.runKbd}>{MOD_KEY === "⌘" ? "⌘↵" : "Ctrl ↵"}</kbd>
               </button>
             )}

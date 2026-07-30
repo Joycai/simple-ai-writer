@@ -130,6 +130,10 @@ describe("saveProfile", () => {
       // Reports are chronological and the previous one is context, but a single
       // report is short enough that rolling memory buys nothing.
       docModel: { ordered: true, priorContext: true, memory: false },
+      // A single freeform task, to prove the round-trip carries a task list that
+      // isn't the built-in one.
+      tasks: [{ id: "draft", labelZh: "起草", labelEn: "Draft", tools: "none",
+                target: "detached", freeform: true }],
       systemPromptKey: "ai.instructions.system",
     };
     await saveProfile(ROOT, custom);

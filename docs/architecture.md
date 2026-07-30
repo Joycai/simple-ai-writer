@@ -98,10 +98,32 @@ A profile declares what kind of writing a project is, so a new domain is data ra
 | --- | --- |
 | `categories` | The `.ai-writer/lore/<category>` folders — the knowledge-base layout, the lore scan, the category pickers, and the `category` enum in the agent's lore tools |
 | `sections` | The 【…】 block labels in the assembled prompt (`bundleToMessages`), e.g. 【上一场景结尾】 instead of 【上一章结尾】 |
+| `tasks` | What the author can ask for — see below |
 | `docModel` | Which novel-shaped document machinery applies — see below |
 | `systemPromptKey` | Which i18n system prompt is the fallback when no prompt template is active |
 
 Built-ins: `novel` (the default), `ttrpg` (跑团模组) and `copy` (文案). Switching is Settings → 工作台, which calls `projectStore.setProfile()`: persist → scaffold the new folders → rescan. **Non-destructive** — the previous categories' folders and entities stay on disk and reappear on switching back; they are simply not scanned while another profile is active.
+
+#### Tasks (`tasks`)
+
+A task is **a prompt plus a tool set**. The panel renders one segment per entry, so a profile carries however many it needs — 「生成遭遇表」 for a module, 「三版标题」 for copy — instead of the four a hardcoded union allowed.
+
+| Field | Effect |
+| --- | --- |
+| `instructionKey` | The built-in instruction. A prompt template whose `scene` equals the task `id` overrides it; for a `freeform` task it is a *prefix* the author's ask follows (that is how Agent mode gets its briefing) |
+| `tools` | `none` / `read` / `full`, resolved by `presetForTools` (lib/agent/presets). **Having tools is what makes a run agentic** — `none` maps to null, which is the signal to stream directly |
+| `target` | `append` (splice at the continuation anchor) / `replace` (overwrite the selection) / `detached` (author inserts it if they want it) |
+| `continuation` | Append at an anchor, prior-document context, and the length + 承接/独立 + outline/knowledge controls. One switch because they are one feature; only valid with `target: "append"` |
+| `needsSelection`, `referenceWindow`, `freeform`, `hidden` | The remaining flags the old `TaskKind` branches encoded |
+| `agentTaskId` | Which task the "Agent 模式" toggle switches to. A pointer, so the agent task stays an ordinary entry with its own prompt and toolset |
+
+The task `id` is load-bearing in three places, so renaming one is a breaking change: the `scene` of an overriding prompt template, the `task` column in `token_usage`, and the execution log's label.
+
+`draftCountFor` derives its rule from `tools`, not from a list of task names: **any tool-using task produces a single draft.** Every round of the loop reports into one shared `agentLog`, so parallel runs would interleave into an unreadable log; a `full` toolset additionally can't have concurrent runs touching one lore folder or racing approval cards. Stating it this way covers tasks nobody has written yet.
+
+`DEFAULT_TASKS` is the shared starting set (续写/改写/润色/总结/自定义/agent) — domain-neutral, so profiles spread it and add or filter. `COPY_PROFILE` drops 续写: a headline has nothing to continue from.
+
+**Ids can outlive the profile that defined them** (persisted panel selection, a log entry, a prompt template's `scene`), so `findTask()` returns null rather than throwing and every caller decides what to do — the panel falls back to `defaultTask()`, the log shows the raw id, `runTask` reports `ai.errors.taskNotFound`.
 
 #### The document model (`docModel`)
 

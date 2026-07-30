@@ -60,7 +60,8 @@ All in `src/stores/`:
 ### Data Flow: AI Writing Task
 
 1. **User selection** → `aiTaskStore.setSelection()`
-2. **Task trigger** → `aiTaskStore.runTask(kind, customInstruction?)`
+2. **Task trigger** → `aiTaskStore.runTask(taskId, customInstruction?)`
+   - Resolves the task against the active profile (`findTask`) and branches on its declared `tools` / `target` / `continuation`, never on its id
    - Loads system prompt, calls `assembleContext()` (4-layer: system → lore → document → task), formats via `bundleToMessages()`
 3. **Streaming** → `streamCompletion()` (SSE) — parses chunks into a `Draft`, extracts token counts/cost on final chunk. A run holds a **list** of drafts (`drafts` + `activeDraftId`); asking for several fans out into N parallel calls over the one assembled context — see `docs/architecture.md` → Multi-draft output
 4. **Persist** → Writes one `token_usage` row per draft in SQLite
@@ -72,9 +73,9 @@ All AI features run on the **unified agent runtime** (`src/lib/agent/runtime.ts`
 
 ### Workspace Profiles
 
-The project is not hardcoded to novels. A per-project **profile** (`.ai-writer/profile.json`, absent = the built-in `novel` one) declares the knowledge-base categories, the 【…】 block labels used in the assembled prompt, the fallback system prompt, and a **`docModel`** — whether the documents form an ordered spine, carry prior-document context, or use rolling memory. Turning those off removes the injected context *and* the UI that configures it, so supporting another kind of writing (跑团模组, 文案, 周报…) is a data addition, not new branches. Built-ins (`novel`, `ttrpg`, `copy`) live in `src/lib/profile/model.ts`; the author switches via Settings → 工作台.
+The project is not hardcoded to novels. A per-project **profile** (`.ai-writer/profile.json`, absent = the built-in `novel` one) declares the knowledge-base categories, its **task list** (each task = a prompt + a tool set, so a profile can offer any number of them), the 【…】 block labels used in the assembled prompt, the fallback system prompt, and a **`docModel`** — whether the documents form an ordered spine, carry prior-document context, or use rolling memory. Turning those off removes the injected context *and* the UI that configures it, so supporting another kind of writing (跑团模组, 文案, 周报…) is a data addition, not new branches. Built-ins (`novel`, `ttrpg`, `copy`) live in `src/lib/profile/model.ts`; the author switches via Settings → 工作台.
 
-Two rules when touching this: components read flags via `useDocModel()` (the singleton isn't reactive), and **never** resolve a system prompt with `ai.instructions.system` — call `profileSystemPrompt()`, or a non-novel project gets novel instructions. Recipe: `docs/workflows.md` → Add a new workspace profile.
+Three rules when touching this: components read flags via `useDocModel()` (the singleton isn't reactive); **never** resolve a system prompt with `ai.instructions.system` — call `profileSystemPrompt()`, or a non-novel project gets novel instructions; and resolve a task with `findTask()` and handle the null, because a task id can outlive the profile that defined it. Recipe: `docs/workflows.md` → Add a new workspace profile.
 
 ### Project Structure
 

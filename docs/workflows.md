@@ -3,10 +3,20 @@
 > Step-by-step recipes for recurring changes.
 
 ## Add a new AI task type
-1. Add to `TaskKind` union in `aiTaskStore.ts`
-2. Add default instruction to `TASK_INSTRUCTIONS` map
-3. Update `AiPanel.tsx` UI button grid
-4. Update i18n (en.json, zh-CN.json)
+
+Tasks are profile data (`docs/architecture.md` → Tasks), so this is an edit to one profile — not to a union, the panel, or the run loop.
+
+1. Add a `TaskDef` to the profile's `tasks` in `src/lib/profile/model.ts`:
+   - `instructionKey` — an `ai.instructions.*` key holding the prompt (or `freeform: true` to let the author type it)
+   - `tools` — `none` for a plain completion, `read` to let it consult lore/chapters first, `full` for the write-capable toolset. Anything but `none` runs the agent loop and produces a single draft
+   - `target` — `append` / `replace` / `detached`, i.e. where an accepted result goes
+   - flags as needed: `needsSelection`, `referenceWindow`, `continuation` (append-only), `hidden`
+2. Add the instruction to **both** locales under `ai.instructions`, plus a `labelKey`/`descKey` under `ai.tasks` (or literal `labelZh`/`labelEn` for a hand-written `profile.json`, where new i18n keys aren't possible).
+3. Nothing else — the panel renders a segment per task, the preset comes from `tools`, and a prompt template with `scene` = the task id overrides the instruction.
+
+Task ids are used as prompt `scene` keys and as the `token_usage.task` value, so pick one and keep it.
+
+**Still app-global:** the built-in prompt list in Settings → Prompt (`BUILTIN_PROMPTS_CONFIG` in `SettingsModal.tsx`) is a static set of scenes. A profile-specific task can still be overridden by a template whose `scene` matches its id, but it won't be pre-listed there yet.
 
 ## Add a new workspace profile (新的写作类型)
 
@@ -23,7 +33,7 @@ A profile is data — reach for this instead of adding branches for a new kind o
 
 For a **project-specific** layout with no code change, hand-write `.ai-writer/profile.json`; a file naming a built-in patches it (`{"id":"ttrpg","sections":{"prevTail":"上一幕结尾"}}`) — `categories` and `sections` both layer over that built-in's, so overriding one label keeps the rest of its wording.
 
-**Not yet profile-driven:** the `TaskKind` list (续写 / 润色 / 改写 / 总结) is the same for every profile. A profile wanting its own tasks — 「生成遭遇表」 for TTRPG, 「三版标题」 for copy — needs that made data-driven. The multi-draft output it depends on is in place (see `docs/architecture.md` → Multi-draft output); what remains is a per-profile task registry.
+Tasks are profile data too — see **Add a new AI task type** above.
 
 ## Change how many drafts a task produces
 

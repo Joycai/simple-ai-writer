@@ -5,7 +5,9 @@ import {
   assembleContext, bundleToMessages, profileSystemPrompt, resolveAppendAnchor,
   type TaskExtras,
 } from "../lib/context/rag";
-import { docModel } from "../lib/profile/active";
+import { docModel, findTask } from "../lib/profile/active";
+import { presetForTools } from "../lib/agent/presets";
+import type { TaskDef } from "../lib/profile/model";
 import {
   fixedContextChars, measureCharsPerToken, planContextBudget, reflowMemoryBudget,
   type ContextAllocation,
@@ -23,18 +25,21 @@ import { recordRunOutcome } from "../lib/ai/modelHealth";
 import { appendAgentEventTo, type AgentEvent, type ToolStep } from "../lib/agent/events";
 import { createPlanGate } from "../lib/agent/plan";
 
-export type TaskKind = "continue" | "polish" | "rewrite" | "summary" | "custom" | "agent";
+/**
+ * A task id, as declared by the active profile's `tasks` (see lib/profile).
+ *
+ * Deliberately a plain string rather than a union of the built-in ids: which
+ * tasks exist is profile data and only knowable at runtime. Resolve one with
+ * `findTask()` — and handle the null, because an id can outlive the profile that
+ * defined it (persisted panel state, an execution-log entry, a prompt template's
+ * `scene`).
+ */
+export type TaskKind = string;
 export type { AgentEvent, ToolStep };
 // The draft vocabulary lives in lib/ai/drafts (it has to be reachable from both
 // stores without a cycle); re-exported here so callers of the store don't have
 // to know about the split.
 export { MAX_DRAFTS, totalUsage, type Draft, type TokenUsage } from "../lib/ai/drafts";
-
-// Resolve the built-in instruction at call time so it follows the active
-// language — module-load lookups would freeze to the initial locale.
-function taskInstruction(kind: Exclude<TaskKind, "custom" | "continue" | "agent">): string {
-  return i18n.t(`ai.instructions.${kind}`);
-}
 
 /**
  * Monotonic run counter, so draft ids are unique across runs.
@@ -73,21 +78,20 @@ function appendDraftText(set: SetState, id: string, text: string): void {
 /**
  * How many drafts a task may actually produce, given what the author asked for.
  *
- * Two kinds are pinned to a single draft, and neither is a limitation to lift
- * casually:
+ * **A tool-using task always produces one.** The rule is stated in terms of
+ * tools rather than by naming tasks, because that is what actually causes the
+ * problem, and it holds for tasks nobody has written yet:
  *
- *   - **agent** — its preset carries the L1 write tools and `propose_edit`.
- *     Running it N times over would have N agents writing to the same lore
- *     folder at once and N approval cards racing for one resolver. This is a
- *     correctness limit, not a UI one.
- *   - **continue** — runs the agent loop too (read-only, so it would be safe to
- *     parallelise) but every round reports into one shared `agentLog`. N
- *     interleaved tool logs are unreadable, so this waits on per-draft logs.
+ *   - every round of the tool loop reports into one shared `agentLog`, so N
+ *     parallel runs would interleave into an unreadable execution log;
+ *   - a write-capable set (`full`) additionally would have N runs touching one
+ *     lore folder at once and N approval cards racing for a single resolver —
+ *     that half is a correctness limit, not a presentation one.
  *
- * Everything else is a single stateless completion and fans out freely.
+ * A task without tools is a single stateless completion and fans out freely.
  */
-export function draftCountFor(kind: TaskKind, requested: number): number {
-  if (kind === "agent" || kind === "continue") return 1;
+export function draftCountFor(task: TaskDef, requested: number): number {
+  if (task.tools !== "none") return 1;
   if (!Number.isFinite(requested)) return 1;
   return Math.min(MAX_DRAFTS, Math.max(1, Math.floor(requested)));
 }
@@ -182,6 +186,13 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const provider = providers.find((p) => p.id === model.providerId);
     if (!provider) { set({ error: i18n.t("ai.errors.providerNotFound") }); return; }
 
+    // Everything below reads the task's *definition* rather than testing its id,
+    // so a profile can offer any number of tasks. An id the active profile
+    // doesn't define is a real case (persisted panel state surviving a profile
+    // switch), not a defensive branch.
+    const task = findTask(kind);
+    if (!task) { set({ error: i18n.t("ai.errors.taskNotFound", { task: kind }) }); return; }
+
     // System prompt: user-selected prompt (scene === "system"), else default
     const prompt = prompts.find((p) => p.id === activePromptId);
     const systemPrompt = prompt?.content ?? profileSystemPrompt();
@@ -210,28 +221,31 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       ? await loadMemory(projectPath, activeFilePath)
       : null;
 
-    // Task instruction: use scene-matched user prompt if one exists, else built-in default
-    const scenePrompt = kind !== "custom" && kind !== "agent"
-      ? prompts.find((p) => p.scene === kind)
-      : undefined;
+    // ── Instruction ─────────────────────────────────────────────────────────
+    // Built-in text comes from the task's `instructionKey`, and a user prompt
+    // template whose `scene` matches the task id replaces it. A freeform task
+    // treats the built-in text as a *prefix* the author's own ask follows —
+    // that's how Agent mode gets its briefing without losing the request.
+    const scenePrompt = task.freeform
+      ? undefined
+      : prompts.find((p) => p.scene === task.id);
+    const builtIn = task.instructionKey
+      // `length` is only consumed by the continuation prompt; harmless elsewhere.
+      ? i18n.t(task.instructionKey, { length: continueLength ?? 500 })
+      : "";
     let instruction: string;
-    if (kind === "custom") {
-      instruction = customInstruction ?? "";
-    } else if (kind === "agent") {
-      // Agent mode: workflow guidance for the full toolset + the user's ask.
-      instruction = `${i18n.t("ai.instructions.agent")}\n\n${customInstruction ?? ""}`;
-    } else if (kind === "continue") {
-      instruction = scenePrompt?.content
-        ?? i18n.t("ai.instructions.continue", { length: continueLength ?? 500 });
-      // An empty chapter has no 【近期内容】 for the model to continue, so the
-      // last prose in the prompt is whatever bridge got injected — and "continue
-      // from where the text ends" then means "continue the previous chapter".
-      // Nothing in the prompt otherwise says a new chapter is starting.
-      if (documentText.trim() === "") {
-        instruction += `\n\n${i18n.t("ai.instructions.continueNewChapter")}`;
-      }
+    if (task.freeform) {
+      const ask = customInstruction ?? "";
+      instruction = builtIn ? `${builtIn}\n\n${ask}` : ask;
     } else {
-      instruction = scenePrompt?.content ?? taskInstruction(kind);
+      instruction = scenePrompt?.content ?? builtIn;
+    }
+    // An empty document has no 【近期内容】 for the model to continue, so the last
+    // prose in the prompt is whatever bridge got injected — and "continue from
+    // where the text ends" then means "continue the previous chapter". Nothing in
+    // the prompt otherwise says a new one is starting.
+    if (task.continuation && documentText.trim() === "") {
+      instruction += `\n\n${i18n.t("ai.instructions.continueNewChapter")}`;
     }
 
     // ── Context budget ──────────────────────────────────────────────────────
@@ -240,7 +254,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // Must be planned *before* the book context is built — that build spends its
     // own budget. See lib/context/budget.ts.
     const { loreBudgetTokens, contextUtilization } = useAppStore.getState();
-    const isContinue = kind === "continue";
+    const isContinue = !!task.continuation;
     // A continuation only gets the preceding documents when this project's
     // documents actually have a "preceding" — see DocModel.priorContext.
     const useBookContext = isContinue && docs.priorContext;
@@ -322,7 +336,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
 
     // How many independent completions to produce. Assembled context is shared,
     // so this only multiplies the sampling, not the context work.
-    const draftCount = draftCountFor(kind, useAppStore.getState().draftCount);
+    const draftCount = draftCountFor(task, useAppStore.getState().draftCount);
     const drafts: Draft[] = Array.from({ length: draftCount }, (_, i) => ({
       id: `${runSeq++}-${i}`,
       index: i + 1,
@@ -351,7 +365,9 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const baseUrl = provider.baseUrl || defaultBaseUrl(provider.apiStandard);
     const loreBudgetChars = plan.loreChars;
 
-    const isAgentic = isContinue || kind === "agent";
+    // Having tools *is* what makes a run agentic — see presetForTools.
+    const preset = presetForTools(task.tools);
+    const isAgentic = preset !== null;
     get().appendAgentEvent({
       kind: "run-start",
       task: kind,
@@ -383,7 +399,6 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         set({ loreReport: bundle.loreReport });
 
         const { runAgent } = await import("../lib/agent/runtime");
-        const { CONTINUE_PRESET, AGENT_ASSIST_PRESET } = await import("../lib/agent/presets");
 
         const { inputTokens, outputTokens } = await runAgent({
           baseUrl,
@@ -394,7 +409,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           prefix: model.prefix,
           contextSize: model.contextSize,
           inputCeilingTokens: plan.inputCeilingTokens,
-          preset: isContinue ? CONTINUE_PRESET : AGENT_ASSIST_PRESET,
+          // Non-null on this branch — isAgentic is exactly `preset !== null`.
+          preset: preset!,
           messages: bundleToMessages(bundle),
           toolContext: {
             projectPath,

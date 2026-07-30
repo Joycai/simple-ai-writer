@@ -69,6 +69,91 @@ export interface DocModel {
   memory: boolean;
 }
 
+/**
+ * Which tool set a task runs on. Resolved to a concrete preset by
+ * `lib/agent/presets`; kept as a small enum here so a profile never has to
+ * name a preset object.
+ *
+ *   - `none` — a single stateless completion. Fans out into several drafts.
+ *   - `read` — may read lore, chapters and memory before writing (续写).
+ *   - `full` — the whole toolset, including L1 writes and `propose_edit`.
+ *
+ * Anything other than `none` runs the agent loop, and therefore produces a
+ * single draft: every round reports into one shared execution log, and the
+ * write-capable set additionally can't have concurrent runs touching one lore
+ * folder. See `draftCountFor`.
+ */
+export type TaskTools = "none" | "read" | "full";
+
+/**
+ * Where a task's result belongs once the author accepts it.
+ *
+ *   - `append`   — spliced in at the continuation anchor (续写)
+ *   - `replace`  — overwrites the selected passage (润色 / 改写)
+ *   - `detached` — nothing implied; the author inserts it if they want it
+ */
+export type TaskTarget = "append" | "replace" | "detached";
+
+/**
+ * One thing the author can ask for.
+ *
+ * A task is a **prompt plus a tool set**, and the rest of these fields are the
+ * behaviour that used to be inferred from a hardcoded `TaskKind` union: how the
+ * result lands, whether a selection is required, which controls the panel shows.
+ * Expressing them as data is what lets a profile carry a different *number* and
+ * *kind* of tasks — 「生成遭遇表」 for a module, 「三版标题」 for copy.
+ */
+export interface TaskDef {
+  /**
+   * Stable id. Three things key off it, so renaming one is a breaking change:
+   * the `scene` of a user prompt template that overrides its instruction, the
+   * `task` column in `token_usage`, and the execution log's label.
+   */
+  id: string;
+  /**
+   * i18n key for the label — preferred, and what the built-ins use so their
+   * existing translations keep working. A profile written by hand (in
+   * `profile.json`, where new i18n keys can't be added) uses `labelZh`/`labelEn`
+   * instead. `taskLabel()` is the single place that resolves the two.
+   */
+  labelKey?: string;
+  labelZh?: string;
+  labelEn?: string;
+  /** Same arrangement for the one-line description shown on the segment. */
+  descKey?: string;
+  descZh?: string;
+  descEn?: string;
+  /**
+   * i18n key of the built-in instruction. A user prompt template whose `scene`
+   * equals this task's id overrides it. For a `freeform` task this is a briefing
+   * *prefix* the author's own text is appended to (empty = no prefix).
+   */
+  instructionKey?: string;
+  tools: TaskTools;
+  target: TaskTarget;
+  /** Won't run without a committed selection (润色 / 改写 / 总结). */
+  needsSelection?: boolean;
+  /**
+   * Continuation semantics, as one switch because they are one feature: the
+   * result appends at an anchor rather than replacing, prior-document context is
+   * offered, and the panel shows the length, 承接/独立 and outline/knowledge
+   * controls. Only meaningful with `target: "append"`.
+   */
+  continuation?: boolean;
+  /** Shows the reference-window + extra-requirement controls (edit tasks). */
+  referenceWindow?: boolean;
+  /** The author types the instruction themselves (自定义). */
+  freeform?: boolean;
+  /**
+   * Id of the task the panel's "Agent 模式" toggle switches to. Modelled as a
+   * pointer rather than a boolean so the agent task stays an ordinary entry with
+   * its own prompt and tool set, instead of a second meaning for this one.
+   */
+  agentTaskId?: string;
+  /** Reachable programmatically but not offered as a segment (the agent task). */
+  hidden?: boolean;
+}
+
 export interface WorkspaceProfile {
   /** Stable identifier; also the lookup key for built-in profiles. */
   id: string;
@@ -76,6 +161,11 @@ export interface WorkspaceProfile {
   labelEn: string;
   /** Knowledge-base categories, in display order. Never empty. */
   categories: ProfileCategory[];
+  /**
+   * What the author can ask for, in display order. Never empty — a profile with
+   * no tasks would render a panel that can't do anything.
+   */
+  tasks: TaskDef[];
   /**
    * Section-label overrides. Anything absent falls back to
    * `DEFAULT_SECTION_LABELS`, so a partial or hand-written profile still
@@ -94,6 +184,81 @@ export const DEFAULT_DOC_MODEL: DocModel = {
   priorContext: true,
   memory: true,
 };
+
+/**
+ * The tasks every profile starts from — the four the app has always offered plus
+ * the two freeform ones.
+ *
+ * These are shared rather than copied per profile because they are domain-neutral:
+ * 续写/润色/改写/总结 mean the same thing for a chapter, a scene and a landing
+ * page. A profile adds its own on top (see `COPY_PROFILE`) and can reorder or
+ * drop them by declaring its own list.
+ *
+ * `continuation` implies `target: "append"`; `referenceWindow` goes with editing
+ * an existing passage. Both mirror exactly what the hardcoded `TaskKind` branches
+ * did, so the built-ins behave as they did before tasks became data.
+ */
+export const DEFAULT_TASKS: readonly TaskDef[] = [
+  {
+    id: "continue",
+    labelKey: "ai.tasks.continue",
+    descKey: "ai.tasks.continueDesc",
+    instructionKey: "ai.instructions.continue",
+    tools: "read",
+    target: "append",
+    continuation: true,
+  },
+  {
+    id: "rewrite",
+    labelKey: "ai.tasks.rewrite",
+    descKey: "ai.tasks.rewriteDesc",
+    instructionKey: "ai.instructions.rewrite",
+    tools: "none",
+    target: "replace",
+    needsSelection: true,
+    referenceWindow: true,
+  },
+  {
+    id: "polish",
+    labelKey: "ai.tasks.polish",
+    descKey: "ai.tasks.polishDesc",
+    instructionKey: "ai.instructions.polish",
+    tools: "none",
+    target: "replace",
+    needsSelection: true,
+    referenceWindow: true,
+  },
+  {
+    id: "summary",
+    labelKey: "ai.tasks.summary",
+    descKey: "ai.tasks.summaryDesc",
+    instructionKey: "ai.instructions.summary",
+    tools: "none",
+    // A summary is *about* the passage, so it must not overwrite it.
+    target: "detached",
+    needsSelection: true,
+    referenceWindow: true,
+  },
+  {
+    id: "custom",
+    labelKey: "ai.tasks.customShort",
+    tools: "none",
+    target: "detached",
+    freeform: true,
+    agentTaskId: "agent",
+  },
+  {
+    id: "agent",
+    labelKey: "ai.tasks.agent",
+    // A briefing prefix for the full toolset; the author's ask follows it.
+    instructionKey: "ai.instructions.agent",
+    tools: "full",
+    target: "detached",
+    freeform: true,
+    // Reached through 自定义's Agent 模式 toggle, not as a segment of its own.
+    hidden: true,
+  },
+];
 
 /**
  * Fallback wording for every context block.
@@ -130,6 +295,7 @@ export const NOVEL_PROFILE: WorkspaceProfile = {
   ],
   sections: {},
   docModel: DEFAULT_DOC_MODEL,
+  tasks: [...DEFAULT_TASKS],
   systemPromptKey: "ai.instructions.system",
 };
 
@@ -166,6 +332,7 @@ export const TTRPG_PROFILE: WorkspaceProfile = {
   // Scenes run in order and earlier ones are context for later ones, so the
   // whole spine/memory machinery carries over unchanged.
   docModel: DEFAULT_DOC_MODEL,
+  tasks: [...DEFAULT_TASKS],
   systemPromptKey: "ai.instructions.systemTtrpg",
 };
 
@@ -200,6 +367,9 @@ export const COPY_PROFILE: WorkspaceProfile = {
     recent: "当前文案",
   },
   docModel: { ordered: false, priorContext: false, memory: false },
+  // 续写 is dropped: a headline has nothing to continue from. The rest of the
+  // shared set still applies to a piece of copy being edited.
+  tasks: DEFAULT_TASKS.filter((t) => t.id !== "continue"),
   systemPromptKey: "ai.instructions.systemCopy",
 };
 
@@ -223,6 +393,32 @@ export function categoryLabel(cat: ProfileCategory, isZh: boolean): string {
 /** Profile label in the active UI language. */
 export function profileLabel(profile: WorkspaceProfile, isZh: boolean): string {
   return isZh ? profile.labelZh : profile.labelEn;
+}
+
+/**
+ * A task's label: its i18n key when it has one, else its literal, else the id.
+ *
+ * `t` is passed in rather than imported so this module stays dependency-free —
+ * it is also imported by the Rust-facing validation path and by tests that mock
+ * i18n away. Every caller already has a translator to hand.
+ */
+export function taskLabel(
+  task: TaskDef,
+  isZh: boolean,
+  t: (key: string) => string,
+): string {
+  if (task.labelKey) return t(task.labelKey);
+  return (isZh ? task.labelZh : task.labelEn) || task.id;
+}
+
+/** Same resolution for the one-line description; empty when the task has none. */
+export function taskDesc(
+  task: TaskDef,
+  isZh: boolean,
+  t: (key: string) => string,
+): string {
+  if (task.descKey) return t(task.descKey);
+  return (isZh ? task.descZh : task.descEn) ?? "";
 }
 
 // ─── Validation ──────────────────────────────────────────────────────────────
@@ -279,6 +475,99 @@ function parseCategory(raw: unknown, issues: string[]): ProfileCategory | null {
     labelZh: cleanLabel(rec.labelZh, MAX_LABEL_CHARS) ?? id,
     labelEn: cleanLabel(rec.labelEn, MAX_LABEL_CHARS) ?? id,
   };
+}
+
+/**
+ * Task ids are used as prompt-template `scene` keys and as the `task` column in
+ * `token_usage`, so keep them to the same portable slug as categories.
+ */
+export const TASK_ID_RE = CATEGORY_ID_RE;
+const MAX_TASKS = 16;
+const TASK_TOOLS: TaskTools[] = ["none", "read", "full"];
+const TASK_TARGETS: TaskTarget[] = ["append", "replace", "detached"];
+
+function optionalFlag(value: unknown, name: string, issues: string[]): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === "boolean") return value || undefined;
+  issues.push(`task ${name} must be true or false`);
+  return undefined;
+}
+
+/**
+ * Validate one task. Null when it can't be used at all.
+ *
+ * `tools` is the field to be strict about: it decides whether a task can reach
+ * the write tools, so an unrecognised value must not quietly widen access. It
+ * has no safe default either — guessing `none` would silently break a task the
+ * author meant to be agentic, and guessing `full` would hand it disk writes. So
+ * the whole task is dropped.
+ */
+function parseTask(raw: unknown, issues: string[]): TaskDef | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    issues.push("task entry is not an object");
+    return null;
+  }
+  const rec = raw as Record<string, unknown>;
+  const id = typeof rec.id === "string" ? rec.id.trim() : "";
+  if (!TASK_ID_RE.test(id)) {
+    issues.push(`task id ${JSON.stringify(rec.id)} is not a valid identifier`);
+    return null;
+  }
+  const tools = rec.tools;
+  if (!TASK_TOOLS.includes(tools as TaskTools)) {
+    issues.push(`task "${id}" has an unknown tools value ${JSON.stringify(tools)}`);
+    return null;
+  }
+  const target = rec.target;
+  if (!TASK_TARGETS.includes(target as TaskTarget)) {
+    issues.push(`task "${id}" has an unknown target ${JSON.stringify(target)}`);
+    return null;
+  }
+
+  const task: TaskDef = { id, tools: tools as TaskTools, target: target as TaskTarget };
+
+  for (const key of ["labelKey", "descKey", "instructionKey"] as const) {
+    const value = rec[key];
+    if (value === undefined) continue;
+    if (typeof value === "string" && PROMPT_KEY_RE.test(value.trim())) task[key] = value.trim();
+    else issues.push(`task "${id}" has an invalid ${key}`);
+  }
+  for (const key of ["labelZh", "labelEn", "descZh", "descEn"] as const) {
+    const label = cleanLabel(rec[key], MAX_LABEL_CHARS);
+    if (label) task[key] = label;
+  }
+
+  const continuation = optionalFlag(rec.continuation, "continuation", issues);
+  if (continuation && task.target !== "append") {
+    // Continuation *is* appending at an anchor; with any other target the panel
+    // would offer bridge/length controls for a result that overwrites or floats.
+    issues.push(`task "${id}" is a continuation but its target is "${task.target}" — ignoring`);
+  } else if (continuation) {
+    task.continuation = true;
+  }
+
+  const needsSelection = optionalFlag(rec.needsSelection, "needsSelection", issues);
+  if (needsSelection) task.needsSelection = true;
+  const referenceWindow = optionalFlag(rec.referenceWindow, "referenceWindow", issues);
+  if (referenceWindow) task.referenceWindow = true;
+  const freeform = optionalFlag(rec.freeform, "freeform", issues);
+  if (freeform) task.freeform = true;
+  const hidden = optionalFlag(rec.hidden, "hidden", issues);
+  if (hidden) task.hidden = true;
+
+  if (typeof rec.agentTaskId === "string" && TASK_ID_RE.test(rec.agentTaskId.trim())) {
+    task.agentTaskId = rec.agentTaskId.trim();
+  } else if (rec.agentTaskId !== undefined) {
+    issues.push(`task "${id}" has an invalid agentTaskId`);
+  }
+
+  // A task with no instruction key and no freeform input has nothing to say to
+  // the model — it would send context and an empty ask.
+  if (!task.instructionKey && !task.freeform) {
+    issues.push(`task "${id}" has neither an instructionKey nor freeform input`);
+    return null;
+  }
+  return task;
 }
 
 export interface ParsedProfile {
@@ -340,6 +629,45 @@ export function parseProfile(data: unknown, fallback: WorkspaceProfile): ParsedP
     // Inherit the fallback's categories but keep this file's other fields, so a
     // profile can override just the section labels and leave the layout alone.
     categories.push(...fallback.categories);
+  }
+
+  // Tasks: same contract as categories — a declared-but-unusable list warns and
+  // inherits, an omitted one inherits silently. Replacing rather than layering,
+  // because a task list is an *ordered menu*: merging one entry into the
+  // fallback's would put it in an arbitrary place, and there would be no way to
+  // remove a task you don't want.
+  const tasks: TaskDef[] = [];
+  const seenTasks = new Set<string>();
+  const declaresTasks = rec.tasks !== undefined;
+  const rawTasks = Array.isArray(rec.tasks) ? rec.tasks : [];
+  if (declaresTasks && !Array.isArray(rec.tasks)) issues.push("`tasks` is not an array");
+  for (const raw of rawTasks) {
+    if (tasks.length >= MAX_TASKS) {
+      issues.push(`more than ${MAX_TASKS} tasks — the rest were ignored`);
+      break;
+    }
+    const task = parseTask(raw, issues);
+    if (!task) continue;
+    if (seenTasks.has(task.id)) {
+      issues.push(`duplicate task id "${task.id}"`);
+      continue;
+    }
+    seenTasks.add(task.id);
+    tasks.push(task);
+  }
+  // An `agentTaskId` pointing at a task this profile doesn't have would give the
+  // panel a toggle that can't resolve — drop the pointer, keep the task.
+  for (const task of tasks) {
+    if (task.agentTaskId && !seenTasks.has(task.agentTaskId)) {
+      issues.push(`task "${task.id}" points at unknown agentTaskId "${task.agentTaskId}"`);
+      delete task.agentTaskId;
+    }
+  }
+  if (tasks.length === 0) {
+    if (declaresTasks) {
+      issues.push(`no usable tasks — inheriting the "${fallback.id}" profile's`);
+    }
+    tasks.push(...fallback.tasks);
   }
 
   // Sections layer *over* the fallback's rather than replacing them, so a file
@@ -418,6 +746,7 @@ export function parseProfile(data: unknown, fallback: WorkspaceProfile): ParsedP
       labelZh: cleanLabel(rec.labelZh, MAX_LABEL_CHARS) ?? (inherits ? fallback.labelZh : id),
       labelEn: cleanLabel(rec.labelEn, MAX_LABEL_CHARS) ?? (inherits ? fallback.labelEn : id),
       categories,
+      tasks,
       sections,
       docModel,
       systemPromptKey,
