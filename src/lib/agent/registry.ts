@@ -178,6 +178,14 @@ function parseArgs<T>(raw: string): T {
   return JSON.parse(raw || "{}") as T;
 }
 
+/**
+ * Stands in for the active profile's category ids inside a tool *description*,
+ * substituted by `getToolDefinitions`. Same reason the enums are patched there:
+ * this registry is a module-level constant, so anything baked in freezes to
+ * whichever profile happened to load first.
+ */
+const CATEGORY_PLACEHOLDER = "{{categories}}";
+
 const REGISTRY: Record<ToolId, RegisteredTool> = {
   list_lore_entities: {
     access: "read",
@@ -186,7 +194,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "list_lore_entities",
         description:
-          "List all lore entities (characters, world, factions, items, skills, style, custom) in the project. Returns entity names, categories, and one-line summaries. Call this first to discover available lore before reading specific entries.",
+          `List all lore entities (${CATEGORY_PLACEHOLDER}) in the project. Returns entity names, categories, and one-line summaries. Call this first to discover available lore before reading specific entries.`,
         parameters: { type: "object", properties: {} },
       },
     },
@@ -742,47 +750,52 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
 };
 
 /**
- * Copy a tool definition with the named parameters' `enum` set to the active
- * profile's lore categories.
+ * Copy a tool definition with everything category-dependent resolved from the
+ * active profile: the `enum` of each parameter named in `profileCategoryParams`,
+ * and any `{{categories}}` placeholder in the description.
  *
  * Copies rather than mutates: REGISTRY is shared across every run, and writing
- * the enum into it would leave one project's categories in place after the
- * author switched profiles. Only the objects on the path being changed are
- * cloned — the untouched parameter schemas are shared, which is safe because
- * nothing else writes to them.
+ * into it would leave one project's categories in place after the author
+ * switched profiles. Only the objects on the path being changed are cloned —
+ * the untouched parameter schemas are shared, which is safe because nothing
+ * else writes to them.
  */
 function withProfileCategories(
   definition: ToolDefinition,
-  params: readonly string[],
+  params: readonly string[] | undefined,
 ): ToolDefinition {
-  const parameters = definition.function.parameters;
-  const properties = parameters.properties;
-  if (!properties || typeof properties !== "object") return definition;
+  const describesCategories = definition.function.description.includes(CATEGORY_PLACEHOLDER);
+  if (!describesCategories && !params?.length) return definition;
 
   const ids = loreCategoryIds();
-  const nextProperties: Record<string, unknown> = { ...(properties as Record<string, unknown>) };
-  for (const name of params) {
-    const schema = nextProperties[name];
-    if (!schema || typeof schema !== "object") continue;
-    nextProperties[name] = { ...(schema as Record<string, unknown>), enum: ids };
+  const fn = { ...definition.function };
+
+  // A tool that names the categories in prose is as misleading as a wrong enum:
+  // told "characters, world, …", a model asks for lore that doesn't exist here.
+  if (describesCategories) {
+    // split/join rather than replaceAll — the project's TS target predates it.
+    fn.description = fn.description.split(CATEGORY_PLACEHOLDER).join(ids.join(", "));
   }
 
-  return {
-    ...definition,
-    function: {
-      ...definition.function,
-      parameters: { ...parameters, properties: nextProperties },
-    },
-  };
+  const properties = definition.function.parameters.properties;
+  if (params?.length && properties && typeof properties === "object") {
+    const nextProperties: Record<string, unknown> = { ...(properties as Record<string, unknown>) };
+    for (const name of params) {
+      const schema = nextProperties[name];
+      if (!schema || typeof schema !== "object") continue;
+      nextProperties[name] = { ...(schema as Record<string, unknown>), enum: ids };
+    }
+    fn.parameters = { ...definition.function.parameters, properties: nextProperties };
+  }
+
+  return { ...definition, function: fn };
 }
 
 /** Resolve wire definitions for a preset's toolset, preserving order. */
 export function getToolDefinitions(ids: readonly ToolId[]): ToolDefinition[] {
   return ids.map((id) => {
     const tool = REGISTRY[id];
-    return tool.profileCategoryParams
-      ? withProfileCategories(tool.definition, tool.profileCategoryParams)
-      : tool.definition;
+    return withProfileCategories(tool.definition, tool.profileCategoryParams);
   });
 }
 

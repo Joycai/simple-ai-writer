@@ -127,6 +127,9 @@ describe("saveProfile", () => {
       labelEn: "Weekly",
       categories: [{ id: "projects", labelZh: "项目", labelEn: "Projects" }],
       sections: { knowledge: "背景资料" },
+      // Reports are chronological and the previous one is context, but a single
+      // report is short enough that rolling memory buys nothing.
+      docModel: { ordered: true, priorContext: true, memory: false },
       systemPromptKey: "ai.instructions.system",
     };
     await saveProfile(ROOT, custom);

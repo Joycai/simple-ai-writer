@@ -72,7 +72,9 @@ All AI features run on the **unified agent runtime** (`src/lib/agent/runtime.ts`
 
 ### Workspace Profiles
 
-The project is not hardcoded to novels. A per-project **profile** (`.ai-writer/profile.json`, absent = the built-in `novel` one) declares the knowledge-base categories, the 【…】 block labels used in the assembled prompt, and the fallback system prompt — so supporting another kind of writing (跑团模组, 周报, 文案…) is a data addition, not new branches. Built-ins live in `src/lib/profile/model.ts`; the author switches via Settings → 工作台. Recipe: `docs/workflows.md` → Add a new workspace profile.
+The project is not hardcoded to novels. A per-project **profile** (`.ai-writer/profile.json`, absent = the built-in `novel` one) declares the knowledge-base categories, the 【…】 block labels used in the assembled prompt, the fallback system prompt, and a **`docModel`** — whether the documents form an ordered spine, carry prior-document context, or use rolling memory. Turning those off removes the injected context *and* the UI that configures it, so supporting another kind of writing (跑团模组, 文案, 周报…) is a data addition, not new branches. Built-ins (`novel`, `ttrpg`, `copy`) live in `src/lib/profile/model.ts`; the author switches via Settings → 工作台.
+
+Two rules when touching this: components read flags via `useDocModel()` (the singleton isn't reactive), and **never** resolve a system prompt with `ai.instructions.system` — call `profileSystemPrompt()`, or a non-novel project gets novel instructions. Recipe: `docs/workflows.md` → Add a new workspace profile.
 
 ### Project Structure
 
