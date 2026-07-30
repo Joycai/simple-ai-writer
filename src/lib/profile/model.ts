@@ -154,8 +154,15 @@ export function profileLabel(profile: WorkspaceProfile, isZh: boolean): string {
 // The Rust side re-validates before creating anything (scaffold_project) — this
 // layer is convenience, not the security boundary.
 
-/** Category ids become folder names, so keep them to a portable slug. */
-const CATEGORY_ID_RE = /^[a-z0-9][a-z0-9_-]{0,39}$/i;
+/**
+ * Category ids become folder names, so keep them to a portable slug.
+ *
+ * Exported so tests can assert against the rule itself rather than a copy that
+ * could drift from it. `valid_category` in `src-tauri/src/commands.rs` mirrors
+ * this deliberately — that side is the boundary, and the two must agree or a
+ * category is created on disk and then dropped from the profile.
+ */
+export const CATEGORY_ID_RE = /^[a-z0-9][a-z0-9_-]{0,39}$/i;
 /** i18n keys are dotted identifiers; anything else is a typo or worse. */
 const PROMPT_KEY_RE = /^[A-Za-z0-9_][A-Za-z0-9_.]{0,79}$/;
 const MAX_CATEGORIES = 24;
