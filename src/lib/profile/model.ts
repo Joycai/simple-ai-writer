@@ -332,7 +332,35 @@ export const TTRPG_PROFILE: WorkspaceProfile = {
   // Scenes run in order and earlier ones are context for later ones, so the
   // whole spine/memory machinery carries over unchanged.
   docModel: DEFAULT_DOC_MODEL,
-  tasks: [...DEFAULT_TASKS],
+  tasks: [
+    ...DEFAULT_TASKS,
+    {
+      id: "encounter",
+      labelKey: "ai.tasks.encounter",
+      descKey: "ai.tasks.encounterDesc",
+      instructionKey: "ai.instructions.ttrpgEncounter",
+      // Reads the module's own NPCs, locations and factions before writing —
+      // an encounter that invents a rival when the module already has one is
+      // worse than useless at the table. Costs the single-draft limit.
+      tools: "read",
+      target: "detached",
+      // The author says what the encounter is *about* ("下水道，被跟踪"); the
+      // built-in text is the briefing on what a usable encounter contains.
+      freeform: true,
+    },
+    {
+      id: "randomtable",
+      labelKey: "ai.tasks.randomTable",
+      descKey: "ai.tasks.randomTableDesc",
+      instructionKey: "ai.instructions.ttrpgRandomTable",
+      // Self-contained: a table of rumours or complications needs the brief and
+      // the tone, not a lore sweep. Keeping it toolless is also what lets it fan
+      // out — three tables to choose between is the normal way to use this.
+      tools: "none",
+      target: "detached",
+      freeform: true,
+    },
+  ],
   systemPromptKey: "ai.instructions.systemTtrpg",
 };
 

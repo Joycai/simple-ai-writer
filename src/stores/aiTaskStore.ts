@@ -7,7 +7,6 @@ import {
 } from "../lib/context/rag";
 import { docModel, findTask } from "../lib/profile/active";
 import { presetForTools } from "../lib/agent/presets";
-import type { TaskDef } from "../lib/profile/model";
 import {
   fixedContextChars, measureCharsPerToken, planContextBudget, reflowMemoryBudget,
   type ContextAllocation,
@@ -15,7 +14,7 @@ import {
 import type { LoreActivationReport } from "../lib/context/loreSelect";
 import { useAgentStore } from "./agentStore";
 import { useAiStore } from "./aiStore";
-import { MAX_DRAFTS, totalUsage, type Draft } from "../lib/ai/drafts";
+import { draftCountFor, totalUsage, type Draft } from "../lib/ai/drafts";
 import { useAppStore } from "./appStore";
 import { useLoreStore } from "./loreStore";
 import { useProjectStore } from "./projectStore";
@@ -39,7 +38,7 @@ export type { AgentEvent, ToolStep };
 // The draft vocabulary lives in lib/ai/drafts (it has to be reachable from both
 // stores without a cycle); re-exported here so callers of the store don't have
 // to know about the split.
-export { MAX_DRAFTS, totalUsage, type Draft, type TokenUsage } from "../lib/ai/drafts";
+export { MAX_DRAFTS, draftCountFor, totalUsage, type Draft, type TokenUsage } from "../lib/ai/drafts";
 
 /**
  * Monotonic run counter, so draft ids are unique across runs.
@@ -73,27 +72,6 @@ function appendDraftText(set: SetState, id: string, text: string): void {
   set((s) => ({
     drafts: s.drafts.map((d) => (d.id === id ? { ...d, text: d.text + text } : d)),
   }));
-}
-
-/**
- * How many drafts a task may actually produce, given what the author asked for.
- *
- * **A tool-using task always produces one.** The rule is stated in terms of
- * tools rather than by naming tasks, because that is what actually causes the
- * problem, and it holds for tasks nobody has written yet:
- *
- *   - every round of the tool loop reports into one shared `agentLog`, so N
- *     parallel runs would interleave into an unreadable execution log;
- *   - a write-capable set (`full`) additionally would have N runs touching one
- *     lore folder at once and N approval cards racing for a single resolver —
- *     that half is a correctness limit, not a presentation one.
- *
- * A task without tools is a single stateless completion and fans out freely.
- */
-export function draftCountFor(task: TaskDef, requested: number): number {
-  if (task.tools !== "none") return 1;
-  if (!Number.isFinite(requested)) return 1;
-  return Math.min(MAX_DRAFTS, Math.max(1, Math.floor(requested)));
 }
 
 /** Source-document offsets for the committed selection, when known (editor
@@ -222,23 +200,28 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       : null;
 
     // ── Instruction ─────────────────────────────────────────────────────────
-    // Built-in text comes from the task's `instructionKey`, and a user prompt
-    // template whose `scene` matches the task id replaces it. A freeform task
-    // treats the built-in text as a *prefix* the author's own ask follows —
-    // that's how Agent mode gets its briefing without losing the request.
-    const scenePrompt = task.freeform
-      ? undefined
-      : prompts.find((p) => p.scene === task.id);
-    const builtIn = task.instructionKey
-      // `length` is only consumed by the continuation prompt; harmless elsewhere.
-      ? i18n.t(task.instructionKey, { length: continueLength ?? 500 })
-      : "";
+    // A user prompt template whose `scene` matches the task id replaces the
+    // built-in text — for **every** task, freeform included. A domain task's
+    // prompt (生成遭遇, 随机表) is exactly the thing an experienced author wants
+    // to tune, and it used to be the one kind that couldn't be: freeform tasks
+    // skipped the lookup entirely.
+    //
+    // What "replaces" means still depends on the task: a freeform task's text is
+    // a *prefix* that the author's own ask follows, which is how Agent mode gets
+    // its briefing without losing the request. So an override swaps the briefing,
+    // not the request.
+    const scenePrompt = prompts.find((p) => p.scene === task.id);
+    const builtIn = scenePrompt?.content
+      ?? (task.instructionKey
+        // `length` is only consumed by the continuation prompt; harmless elsewhere.
+        ? i18n.t(task.instructionKey, { length: continueLength ?? 500 })
+        : "");
     let instruction: string;
     if (task.freeform) {
       const ask = customInstruction ?? "";
       instruction = builtIn ? `${builtIn}\n\n${ask}` : ask;
     } else {
-      instruction = scenePrompt?.content ?? builtIn;
+      instruction = builtIn;
     }
     // An empty document has no 【近期内容】 for the model to continue, so the last
     // prose in the prompt is whatever bridge got injected — and "continue from

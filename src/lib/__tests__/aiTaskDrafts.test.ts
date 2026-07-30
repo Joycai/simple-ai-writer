@@ -1,11 +1,12 @@
 /**
- * aiTaskStore's multi-draft output.
+ * `aiTaskStore.runTask` — its multi-draft output and its instruction assembly.
  *
  * A run produces one or more drafts by firing one completion per draft over a
  * shared, once-assembled context. The behaviour worth pinning is what inspection
  * can't confirm: that N really means N requests, that the drafts are isolated
- * from each other's failures, that one abort stops all of them, and that the
- * kinds which must not fan out can't be made to.
+ * from each other's failures, that one abort stops all of them, that the tasks
+ * which must not fan out can't be made to, and that a task's prompt is built
+ * from its definition (plus any prompt template overriding it).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -79,6 +80,11 @@ vi.mock("../context/bookContext", () => ({
   buildBookContext: vi.fn(async () => null),
 }));
 
+// Echoing translator, so the instruction assertions below can name the *key* a
+// task resolved rather than restating a prompt's prose (which would make every
+// prompt edit a test failure).
+vi.mock("../../i18n", () => ({ default: { t: (key: string) => key } }));
+
 vi.mock("../keyStore", () => ({ loadApiKey: vi.fn(async () => "key") }));
 vi.mock("../ai/modelHealth", () => ({ recordRunOutcome: vi.fn() }));
 vi.mock("../project", () => ({
@@ -127,8 +133,8 @@ vi.mock("../../stores/appStore", () => ({
   },
 }));
 
-import { draftCountFor, useAiTaskStore } from "../../stores/aiTaskStore";
-import { MAX_DRAFTS, totalUsage, type Draft } from "../ai/drafts";
+import { useAiTaskStore } from "../../stores/aiTaskStore";
+import { MAX_DRAFTS, draftCountFor, totalUsage, type Draft } from "../ai/drafts";
 import { DEFAULT_TASKS, type TaskDef } from "../profile/model";
 import { useAiStore } from "../../stores/aiStore";
 
@@ -297,5 +303,49 @@ describe("runTask — multiple drafts", () => {
     expect(h.persisted).toHaveLength(3);
     expect(h.persisted.every((r) => r.inTokens === 10 && r.outTokens === 5)).toBe(true);
     expect(totalUsage(drafts())).toMatchObject({ inputTokens: 30, outputTokens: 15 });
+  });
+});
+
+// ── Instruction assembly ─────────────────────────────────────────────────────
+
+/** The `taskInstruction` argument the run passed to assembleContext. */
+async function instructionOf(taskId: string, ask?: string): Promise<string> {
+  const rag = await import("../context/rag");
+  const assemble = vi.mocked(rag.assembleContext);
+  assemble.mockClear();
+  await useAiTaskStore.getState().runTask(taskId, ask);
+  expect(assemble).toHaveBeenCalled();
+  return assemble.mock.calls[0][4];
+}
+
+describe("runTask — instruction", () => {
+  it("uses the task's built-in instruction key", async () => {
+    // i18n is mocked to echo keys, so this asserts *which* key was resolved.
+    expect(await instructionOf("polish")).toBe("ai.instructions.polish");
+  });
+
+  it("treats a freeform task's built-in text as a prefix to the author's ask", async () => {
+    // This is how a domain task gets its briefing without losing the request.
+    expect(await instructionOf("agent", "整理设定")).toBe("ai.instructions.agent\n\n整理设定");
+  });
+
+  it("sends only the ask when a freeform task has no built-in text", async () => {
+    expect(await instructionOf("custom", "写点什么")).toBe("写点什么");
+  });
+
+  it("lets a prompt template override a non-freeform task's instruction", async () => {
+    useAiStore.setState({
+      prompts: [{ id: "p", name: "mine", scene: "polish", content: "MY POLISH PROMPT" }] as never,
+    });
+    expect(await instructionOf("polish")).toBe("MY POLISH PROMPT");
+  });
+
+  it("lets a prompt template override a freeform task's briefing, keeping the ask", async () => {
+    // Freeform tasks used to skip the scene lookup entirely, which made a domain
+    // task's prompt the one kind an author couldn't tune.
+    useAiStore.setState({
+      prompts: [{ id: "p", name: "mine", scene: "agent", content: "MY BRIEFING" }] as never,
+    });
+    expect(await instructionOf("agent", "整理设定")).toBe("MY BRIEFING\n\n整理设定");
   });
 });

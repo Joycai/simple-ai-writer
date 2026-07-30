@@ -16,6 +16,8 @@ Tasks are profile data (`docs/architecture.md` → Tasks), so this is an edit to
 
 Task ids are used as prompt `scene` keys and as the `token_usage.task` value, so pick one and keep it.
 
+**Worked example** — the ttrpg profile's 遭遇 and 随机表 (`src/lib/profile/model.ts`). Both are `freeform` so the author supplies the situation and the built-in text is the briefing; they differ only in `tools`, and that one field decides whether the task can consult the module's lore (`read`) or can instead produce several results at once (`none`). Pick `read` when being consistent with existing entities matters more than having options to compare.
+
 **Still app-global:** the built-in prompt list in Settings → Prompt (`BUILTIN_PROMPTS_CONFIG` in `SettingsModal.tsx`) is a static set of scenes. A profile-specific task can still be overridden by a template whose `scene` matches its id, but it won't be pre-listed there yet.
 
 ## Add a new workspace profile (新的写作类型)
