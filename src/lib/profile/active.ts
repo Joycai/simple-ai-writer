@@ -14,7 +14,7 @@
  * every project created before profiles existed — behaves as it always did.
  */
 
-import { NOVEL_PROFILE, type DocModel, type ProfileCategory, type SectionId, type WorkspaceProfile, DEFAULT_SECTION_LABELS } from "./model";
+import { NOVEL_PROFILE, type DocModel, type ProfileCategory, type SectionId, type TaskDef, type WorkspaceProfile, DEFAULT_SECTION_LABELS } from "./model";
 
 let active: WorkspaceProfile = NOVEL_PROFILE;
 
@@ -95,4 +95,38 @@ export function sectionLabel(id: SectionId): string {
  */
 export function docModel(): DocModel {
   return active.docModel;
+}
+
+/** Every task this profile offers, in display order (including hidden ones). */
+export function profileTasks(): readonly TaskDef[] {
+  return active.tasks;
+}
+
+/** The tasks the panel shows as pickable segments. */
+export function visibleTasks(): TaskDef[] {
+  return active.tasks.filter((task) => !task.hidden);
+}
+
+/**
+ * Resolve a task id against the active profile, or null when this profile has no
+ * such task.
+ *
+ * Null is a real case, not a defensive branch: a task id can outlive the profile
+ * that defined it — persisted UI state, an execution-log entry, a prompt
+ * template's `scene` — so every caller has to decide what to do without it
+ * rather than assume the lookup succeeds.
+ */
+export function findTask(id: string): TaskDef | null {
+  return active.tasks.find((task) => task.id === id) ?? null;
+}
+
+/**
+ * The task a panel should start on: the first visible one.
+ *
+ * Safe to index — `parseProfile` refuses to produce an empty task list, and a
+ * profile whose every task is hidden would have no usable UI anyway, so the
+ * fallback to the first task at all is deliberate.
+ */
+export function defaultTask(): TaskDef {
+  return visibleTasks()[0] ?? active.tasks[0];
 }

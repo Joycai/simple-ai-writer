@@ -18,6 +18,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { findTask, taskLabel } from "../../lib/profile";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { AgentEvent, ToolStep } from "../../lib/agent/events";
 import { formatToolArgs, formatToolResult } from "../../lib/agent/logFormat";
@@ -88,7 +89,8 @@ function ToolStepRow({ step }: { step: ToolStep }) {
 }
 
 function AgentLogRow({ row, showTime }: { row: Row; showTime: boolean }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isZh = i18n.language.startsWith("zh");
   const { event, round } = row;
 
   const roundChip = round ? (
@@ -119,7 +121,12 @@ function AgentLogRow({ row, showTime }: { row: Row; showTime: boolean }) {
           <Marker state="pending" />
           <span className={styles.rowName}>
             {t("ai.agent.log.start", {
-              task: t(`ai.tasks.${event.task}`, { defaultValue: event.task }),
+              // The active profile's wording for the task; falls back to the
+              // raw id, which is what a log line from another profile has.
+              task: (() => {
+                const def = findTask(event.task);
+                return def ? taskLabel(def, isZh, t) : event.task;
+              })(),
               model: event.modelName,
             })}
           </span>

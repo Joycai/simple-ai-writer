@@ -48,10 +48,9 @@ vi.mock("../agent/runtime", () => ({
     return h.runAgent(opts);
   },
 }));
-vi.mock("../agent/presets", () => ({
-  CONTINUE_PRESET: { id: "continue", tools: [], maxRounds: 1, finishPolicy: "force-text" },
-  AGENT_ASSIST_PRESET: { id: "agent", tools: [], maxRounds: 1, finishPolicy: "force-text" },
-}));
+// presets is deliberately NOT mocked: it is pure data plus `presetForTools`'s
+// switch, and the mapping from a task's declared tools to a preset is part of
+// what these tests are checking.
 vi.mock("../agent/plan", () => ({ createPlanGate: () => ({}) }));
 
 // Context assembly is someone else's test; here it just has to be cheap and
@@ -108,7 +107,10 @@ vi.mock("../../stores/projectStore", () => ({
     subscribe: () => () => {},
   },
 }));
-vi.mock("../profile/active", () => ({
+// Real task definitions, since runTask now resolves the task through the profile
+// and branches on its `tools`/`continuation` rather than on its id.
+vi.mock("../profile/active", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../profile/active")>()),
   docModel: () => ({ ordered: true, priorContext: true, memory: true }),
 }));
 // Mocked wholesale rather than stubbed around: appStore reads `localStorage` and
@@ -127,6 +129,7 @@ vi.mock("../../stores/appStore", () => ({
 
 import { draftCountFor, useAiTaskStore } from "../../stores/aiTaskStore";
 import { MAX_DRAFTS, totalUsage, type Draft } from "../ai/drafts";
+import { DEFAULT_TASKS, type TaskDef } from "../profile/model";
 import { useAiStore } from "../../stores/aiStore";
 
 const MODEL = {
@@ -153,24 +156,35 @@ beforeEach(() => {
 
 const drafts = (): Draft[] => useAiTaskStore.getState().drafts;
 
+const taskById = (id: string): TaskDef => {
+  const found = DEFAULT_TASKS.find((t) => t.id === id);
+  if (!found) throw new Error(`no built-in task "${id}"`);
+  return found;
+};
+
 describe("draftCountFor", () => {
   it("clamps to the supported range", () => {
-    expect(draftCountFor("polish", 1)).toBe(1);
-    expect(draftCountFor("polish", 3)).toBe(3);
-    expect(draftCountFor("polish", 99)).toBe(MAX_DRAFTS);
-    expect(draftCountFor("polish", 0)).toBe(1);
-    expect(draftCountFor("polish", -2)).toBe(1);
-    expect(draftCountFor("polish", 2.7)).toBe(2);
-    expect(draftCountFor("polish", NaN)).toBe(1);
+    const polish = taskById("polish");
+    expect(draftCountFor(polish, 1)).toBe(1);
+    expect(draftCountFor(polish, 3)).toBe(3);
+    expect(draftCountFor(polish, 99)).toBe(MAX_DRAFTS);
+    expect(draftCountFor(polish, 0)).toBe(1);
+    expect(draftCountFor(polish, -2)).toBe(1);
+    expect(draftCountFor(polish, 2.7)).toBe(2);
+    expect(draftCountFor(polish, NaN)).toBe(1);
   });
 
-  it("pins the kinds that must not fan out", () => {
-    // agent writes to disk and blocks on approval cards; continue shares one
-    // execution log. Both are correctness limits, not preferences.
+  it("pins any tool-using task to a single draft", () => {
+    // The rule is about tools, not about which tasks happen to have them: a
+    // shared execution log can't hold N interleaved runs, and a write-capable
+    // toolset additionally can't have N runs touching one lore folder.
     for (const n of [1, 3, MAX_DRAFTS]) {
-      expect(draftCountFor("agent", n)).toBe(1);
-      expect(draftCountFor("continue", n)).toBe(1);
+      expect(draftCountFor(taskById("agent"), n)).toBe(1);
+      expect(draftCountFor(taskById("continue"), n)).toBe(1);
     }
+    // ...and a hypothetical read-tool task nobody has written yet.
+    const custom: TaskDef = { id: "encounter", tools: "read", target: "detached", instructionKey: "x" };
+    expect(draftCountFor(custom, MAX_DRAFTS)).toBe(1);
   });
 });
 

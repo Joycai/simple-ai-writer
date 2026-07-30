@@ -397,6 +397,7 @@
     },
     "errors": {
       "noProject": "Please open a project first",
+      "taskNotFound": "This workspace profile has no task called \"{{task}}\".",
       "noModel": "Please select a model in AI Config first",
       "modelNotFound": "Selected model not found",
       "providerNotFound": "Provider not found",

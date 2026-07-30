@@ -397,6 +397,7 @@
     },
     "errors": {
       "noProject": "请先打开项目",
+      "taskNotFound": "当前工作台没有「{{task}}」这个任务。",
       "noModel": "请先在 AI 配置中选择模型",
       "modelNotFound": "找不到选中的模型",
       "providerNotFound": "找不到供应商",

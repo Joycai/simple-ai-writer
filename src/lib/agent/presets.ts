@@ -8,6 +8,7 @@
  * seedContext in here as the lore-side entry points migrate (PR2/PR3).
  */
 
+import type { TaskTools } from "../profile/model";
 import type { ToolId } from "./registry";
 
 /**
@@ -111,3 +112,25 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
   maxRounds: 20,
   finishPolicy: "force-text",
 };
+
+/**
+ * Resolve a profile task's declared tool set to the preset that implements it.
+ *
+ * This indirection is what lets a profile say `tools: "read"` without naming a
+ * preset object: `lib/profile` stays free of any dependency on the agent layer,
+ * and a preset can be retuned here without touching a single profile.
+ *
+ * `none` maps to null rather than to an empty-toolset preset, because a task
+ * without tools is a plain completion that never enters the tool loop at all —
+ * the null is the caller's signal to take the simple streaming path.
+ */
+export function presetForTools(tools: TaskTools): TaskPreset | null {
+  switch (tools) {
+    case "none":
+      return null;
+    case "read":
+      return CONTINUE_PRESET;
+    case "full":
+      return AGENT_ASSIST_PRESET;
+  }
+}
