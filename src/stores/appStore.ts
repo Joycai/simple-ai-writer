@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import i18n from "../i18n";
+import { MAX_DRAFTS } from "../lib/ai/drafts";
 import {
   CONTEXT_UTILIZATION_DEFAULT,
   CONTEXT_UTILIZATION_MAX,
@@ -21,6 +22,7 @@ const RECENT_PROJECTS_KEY = "app:recentProjects";
 const LORE_BUDGET_KEY = "app:loreBudgetTokens";
 const CONTEXT_UTILIZATION_KEY = "app:contextUtilization";
 const AI_DRAWER_MODE_KEY = "app:aiDrawerMode";
+const DRAFT_COUNT_KEY = "app:draftCount";
 
 const RECENT_PROJECTS_MAX = 10;
 
@@ -33,6 +35,7 @@ const RECENT_PROJECTS_MAX = 10;
 export const LORE_BUDGET_MIN = 200;
 export const LORE_BUDGET_MAX = 128_000;
 export const LORE_BUDGET_DEFAULT = 600;
+
 
 const storedTheme = (localStorage.getItem(THEME_KEY) as ThemeMode | null) ?? "dark";
 const storedLang = (localStorage.getItem(LANG_KEY) as Language | null) ?? "zh-CN";
@@ -78,6 +81,10 @@ const storedContextUtilization = clamp(
   parseFloat(localStorage.getItem(CONTEXT_UTILIZATION_KEY) ?? "") || CONTEXT_UTILIZATION_DEFAULT,
   CONTEXT_UTILIZATION_MIN, CONTEXT_UTILIZATION_MAX,
 );
+const storedDraftCount = clamp(
+  parseInt(localStorage.getItem(DRAFT_COUNT_KEY) ?? "1", 10) || 1,
+  1, MAX_DRAFTS,
+);
 
 /** Which assistant tab the drawer reopens on — persisted like the panel widths. */
 const storedAiDrawerMode = ((): AiDrawerMode => {
@@ -103,6 +110,14 @@ interface AppState {
   loreBudgetTokens: number;
   /** Share of the model's context window one request may occupy (0–1). */
   contextUtilization: number;
+  /**
+   * How many drafts a generative task should produce (1–`MAX_DRAFTS`).
+   *
+   * A user preference rather than per-run state, so "always give me three
+   * options" survives restarts. Tasks that can't fan out clamp it themselves —
+   * see `draftCountFor` in aiTaskStore, which owns that rule.
+   */
+  draftCount: number;
   activeSideTab: SideTab;
   activeRightTab: "outline" | "ai";
 
@@ -128,6 +143,7 @@ interface AppState {
   setRightPanelWidth: (w: number | ((prev: number) => number)) => void;
   setLoreBudgetTokens: (tokens: number) => void;
   setContextUtilization: (ratio: number) => void;
+  setDraftCount: (n: number) => void;
   addRecentProject: (path: string) => void;
   removeRecentProject: (path: string) => void;
   clearRecentProjects: () => void;
@@ -192,6 +208,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   recentProjects: loadRecentProjects(),
   loreBudgetTokens: storedLoreBudget,
   contextUtilization: storedContextUtilization,
+  draftCount: storedDraftCount,
   activeSideTab: "files",
   activeRightTab: "outline",
 
@@ -268,6 +285,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     const clamped = clamp(ratio, CONTEXT_UTILIZATION_MIN, CONTEXT_UTILIZATION_MAX);
     localStorage.setItem(CONTEXT_UTILIZATION_KEY, String(clamped));
     set({ contextUtilization: clamped });
+  },
+
+  setDraftCount: (n) => {
+    const clamped = clamp(Math.round(n), 1, MAX_DRAFTS);
+    localStorage.setItem(DRAFT_COUNT_KEY, String(clamped));
+    set({ draftCount: clamped });
   },
 
   addRecentProject: (path) => {

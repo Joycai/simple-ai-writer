@@ -62,9 +62,9 @@ All in `src/stores/`:
 1. **User selection** → `aiTaskStore.setSelection()`
 2. **Task trigger** → `aiTaskStore.runTask(kind, customInstruction?)`
    - Loads system prompt, calls `assembleContext()` (4-layer: system → lore → document → task), formats via `bundleToMessages()`
-3. **Streaming** → `streamCompletion()` (SSE) — parses chunks into `output`, extracts token counts/cost on final chunk
-4. **Persist** → Writes to `token_usage` table in SQLite
-5. **Insert** → User clicks "Insert to Document" → `editorStore.setContent()`
+3. **Streaming** → `streamCompletion()` (SSE) — parses chunks into a `Draft`, extracts token counts/cost on final chunk. A run holds a **list** of drafts (`drafts` + `activeDraftId`); asking for several fans out into N parallel calls over the one assembled context — see `docs/architecture.md` → Multi-draft output
+4. **Persist** → Writes one `token_usage` row per draft in SQLite
+5. **Insert** → User clicks "Insert to Document" → `editorStore.setContent()` with the active draft
 
 All AI features run on the **unified agent runtime** (`src/lib/agent/runtime.ts`): a per-preset tool loop dispatched via the tool registry (`registry.ts` — read tools, L1 auto+backup write tools for lore/memory, and the L2 `propose_edit` that blocks on user approval). Lore writes are additionally gated on an author-approved plan (`plan.ts` + `propose_lore_plan` → `components/ai/PlanCard.tsx`): one card of steps per pass, and the write tools refuse any entity/action it doesn't cover. Runs emit structured `AgentEvent`s (`events.ts`) feeding the shared execution-log component (`components/ai/AgentLog.tsx`). The conversational assistant (AiDrawer "chat" mode → `components/ai/AgentChat.tsx`, session state in `stores/agentStore.ts`) and the AiPanel Agent mode both use the full-toolset `AGENT_ASSIST_PRESET`; structured JSON outputs go through `lib/agent/structured.ts` (forced tool_choice + JSON fallback). Design & history: `docs/unified-agent-plan.md`. AI-driven lore generation/improvement lives in `src/lib/lore/generator.ts` + `src/components/lore/`.
 
@@ -92,7 +92,7 @@ Two rules when touching this: components read flags via `useDocModel()` (the sin
 - `src/components/settings/` — SettingsModal (provider/model/prompt config)
 - `src/components/command/`, `onboarding/`, `outline/` — CommandPalette, onboarding flow, full outline view
 - `src/lib/` — Core logic, grouped by domain:
-  - `src/lib/ai/` — streaming client (`index.ts` dispatch, `openai.ts`/`gemini.ts` adapters, `types.ts`), provider config storage (`configDb.ts`), Gemini safety settings (`safety.ts`), remote probing (`providerProbe.ts`), `apiLog.ts`, `tokenEstimate.ts`
+  - `src/lib/ai/` — streaming client (`index.ts` dispatch, `openai.ts`/`gemini.ts` adapters, `types.ts`), provider config storage (`configDb.ts`), Gemini safety settings (`safety.ts`), remote probing (`providerProbe.ts`), multi-draft output vocabulary (`drafts.ts`), `apiLog.ts`, `tokenEstimate.ts`
   - `src/lib/agent/` — unified agent runtime (`runtime.ts` loop, `registry.ts` tool registry, `presets.ts` per-task config, `events.ts` execution-log events, `tools.ts` handlers + path containment, `plan.ts` lore-plan gate, `writeTools.ts` L1/L2 write handlers)
   - `src/lib/lore/` — lore domain model (`model.ts`), entity scan/CRUD (`entity.ts`), gallery/avatar (`gallery.ts`), AI generation (`generator.ts`); import via `lib/lore` (index re-exports all but generator)
   - `src/lib/profile/` — workspace profiles: what kind of writing a project is (`model.ts` types/built-ins/validation, `active.ts` module singleton, `store.ts` `.ai-writer/profile.json`). Drives the lore category layout, the prompt's 【…】 block labels, and the fallback system prompt. **Read `loreCategories()` at call time, never at module scope** — see `docs/architecture.md` → Workspace profiles

@@ -621,6 +621,59 @@
 /* Output */
 .resultActions { display: flex; gap: var(--space-2); }
 
+/* Draft tabs — shown only when a run produced more than one draft. Sits directly
+   on top of .output, so the two read as one surface. */
+.draftTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-bottom: -1px;
+}
+
+.draftTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 11px;
+  font: 500 11px/1.6 var(--font-mono);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-bottom-color: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast),
+    background var(--transition-fast);
+}
+.draftTab:hover:not(.draftTabActive) {
+  border-color: var(--color-sienna);
+  border-bottom-color: transparent;
+  color: var(--color-sienna);
+}
+.draftTab:active { transform: scale(0.96); }
+
+.draftTabActive {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-border);
+  border-bottom-color: var(--color-bg-elevated);
+  color: var(--color-sienna);
+}
+
+/* A failed draft stays selectable — the author should be able to read why. */
+.draftTabFailed { color: var(--color-error); }
+.draftTabFailed:hover:not(.draftTabActive) { border-color: var(--color-error); color: var(--color-error); }
+.draftTabMark { font-weight: 700; }
+
+/* Same idea as .spinner but sized to sit inside a tab. */
+.draftSpinner {
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--color-border-strong);
+  border-top-color: var(--color-sienna);
+  border-radius: 50%;
+  animation: aiPanelDraftSpin 0.7s linear infinite;
+}
+@keyframes aiPanelDraftSpin { to { transform: rotate(360deg); } }
+
 .output {
   flex: 1;
   background: var(--color-bg-elevated);

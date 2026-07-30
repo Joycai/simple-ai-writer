@@ -13,6 +13,7 @@ import {
 import type { LoreActivationReport } from "../lib/context/loreSelect";
 import { useAgentStore } from "./agentStore";
 import { useAiStore } from "./aiStore";
+import { MAX_DRAFTS, totalUsage, type Draft } from "../lib/ai/drafts";
 import { useAppStore } from "./appStore";
 import { useLoreStore } from "./loreStore";
 import { useProjectStore } from "./projectStore";
@@ -24,6 +25,10 @@ import { createPlanGate } from "../lib/agent/plan";
 
 export type TaskKind = "continue" | "polish" | "rewrite" | "summary" | "custom" | "agent";
 export type { AgentEvent, ToolStep };
+// The draft vocabulary lives in lib/ai/drafts (it has to be reachable from both
+// stores without a cycle); re-exported here so callers of the store don't have
+// to know about the split.
+export { MAX_DRAFTS, totalUsage, type Draft, type TokenUsage } from "../lib/ai/drafts";
 
 // Resolve the built-in instruction at call time so it follows the active
 // language — module-load lookups would freeze to the initial locale.
@@ -31,10 +36,60 @@ function taskInstruction(kind: Exclude<TaskKind, "custom" | "continue" | "agent"
   return i18n.t(`ai.instructions.${kind}`);
 }
 
-interface TokenUsage {
-  inputTokens: number;
-  outputTokens: number;
-  cost: number; // USD
+/**
+ * Monotonic run counter, so draft ids are unique across runs.
+ *
+ * A React key reused between runs would let the framework treat the new run's
+ * first draft as the old one re-rendered, keeping the previous scroll position
+ * and any per-draft UI state.
+ */
+let runSeq = 0;
+
+/** Zustand's setter, narrowed to what the draft helpers below need. */
+type SetState = (fn: (state: AiTaskState) => Partial<AiTaskState>) => void;
+
+/**
+ * Apply a patch to one draft by id.
+ *
+ * By id rather than index because N streams land out of order and a run can be
+ * replaced mid-flight: an index into a `drafts` array that has since been
+ * swapped for the next run's would write into the wrong draft. An id that is no
+ * longer present is a no-op, which is exactly right for a stale stream.
+ */
+function patchDraft(set: SetState, id: string, patch: Partial<Draft>): void {
+  set((s) => ({
+    drafts: s.drafts.map((d) => (d.id === id ? { ...d, ...patch } : d)),
+  }));
+}
+
+/** Append streamed text to one draft. Separate from `patchDraft` because it has
+ *  to read the previous text inside the same atomic update. */
+function appendDraftText(set: SetState, id: string, text: string): void {
+  set((s) => ({
+    drafts: s.drafts.map((d) => (d.id === id ? { ...d, text: d.text + text } : d)),
+  }));
+}
+
+/**
+ * How many drafts a task may actually produce, given what the author asked for.
+ *
+ * Two kinds are pinned to a single draft, and neither is a limitation to lift
+ * casually:
+ *
+ *   - **agent** — its preset carries the L1 write tools and `propose_edit`.
+ *     Running it N times over would have N agents writing to the same lore
+ *     folder at once and N approval cards racing for one resolver. This is a
+ *     correctness limit, not a UI one.
+ *   - **continue** — runs the agent loop too (read-only, so it would be safe to
+ *     parallelise) but every round reports into one shared `agentLog`. N
+ *     interleaved tool logs are unreadable, so this waits on per-draft logs.
+ *
+ * Everything else is a single stateless completion and fans out freely.
+ */
+export function draftCountFor(kind: TaskKind, requested: number): number {
+  if (kind === "agent" || kind === "continue") return 1;
+  if (!Number.isFinite(requested)) return 1;
+  return Math.min(MAX_DRAFTS, Math.max(1, Math.floor(requested)));
 }
 
 /** Source-document offsets for the committed selection, when known (editor
@@ -43,9 +98,13 @@ export interface SelectionRange { from: number; to: number; }
 
 interface AiTaskState {
   isRunning: boolean;
-  output: string;
+  /** This run's results, in request order. Empty before the first run. */
+  drafts: Draft[];
+  /** Which draft the output pane shows and the insert actions act on. */
+  activeDraftId: string | null;
+  /** Run-level failure (context assembly, aborted setup) — see `Draft.error`
+   *  for one draft failing on its own. */
   error: string | null;
-  usage: TokenUsage | null;
   selection: string;
   selectionRange: SelectionRange | null;
   /**
@@ -76,14 +135,15 @@ interface AiTaskState {
   runTask: (kind: TaskKind, customInstruction?: string, continueLength?: number, extras?: TaskExtras) => Promise<void>;
   abort: () => void;
   clearOutput: () => void;
+  setActiveDraft: (id: string) => void;
   appendAgentEvent: (event: AgentEvent) => void;
 }
 
 export const useAiTaskStore = create<AiTaskState>((set, get) => ({
   isRunning: false,
-  output: "",
+  drafts: [],
+  activeDraftId: null,
   error: null,
-  usage: null,
   selection: "",
   selectionRange: null,
   selectionSource: null,
@@ -260,9 +320,22 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // Whatever 【全书前情】 didn't spend goes to 【前情提要】.
     const memoryBudgetChars = reflowMemoryBudget(plan, bookUsedChars);
 
+    // How many independent completions to produce. Assembled context is shared,
+    // so this only multiplies the sampling, not the context work.
+    const draftCount = draftCountFor(kind, useAppStore.getState().draftCount);
+    const drafts: Draft[] = Array.from({ length: draftCount }, (_, i) => ({
+      id: `${runSeq++}-${i}`,
+      index: i + 1,
+      text: "",
+      usage: null,
+      error: null,
+      done: false,
+    }));
+
     const controller = new AbortController();
     set({
-      isRunning: true, output: "", error: null, usage: null, agentLog: [], loreReport: null,
+      isRunning: true, drafts, activeDraftId: drafts[0].id,
+      error: null, agentLog: [], loreReport: null,
       contextAlloc: {
         loreChars: plan.loreChars,
         memoryChars: memoryBudgetChars,
@@ -347,10 +420,11 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           },
           signal: controller.signal,
           onEvent: (event) => get().appendAgentEvent(event),
-          onOutputChunk: (text) => set((s) => ({ output: s.output + text })),
+          // Always the single draft — draftCountFor pins the agentic kinds to 1.
+          onOutputChunk: (text) => appendDraftText(set, drafts[0].id, text),
         });
         const cost = (inputTokens * model.priceIn + outputTokens * model.priceOut) / 1_000_000;
-        set({ usage: { inputTokens, outputTokens, cost } });
+        patchDraft(set, drafts[0].id, { usage: { inputTokens, outputTokens, cost }, done: true });
         get().appendAgentEvent({ kind: "run-done", inputTokens, outputTokens, at: Date.now() });
         void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind);
       } else {
@@ -370,29 +444,67 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         set({ loreReport: bundle.loreReport });
         const messages = bundleToMessages(bundle);
 
-        await streamCompletion({
-          baseUrl,
-          apiKey,
-          standard: provider.apiStandard,
-          safetySettings: provider.safetySettings,
-          modelId: model.modelId,
-          prefix: model.prefix,
-          contextSize: model.contextSize,
-          messages,
-          signal: controller.signal,
-          onChunk: (chunk) => {
-            if ("done" in chunk) {
-              const { inputTokens, outputTokens } = chunk;
-              const cost =
-                (inputTokens * model.priceIn + outputTokens * model.priceOut) / 1_000_000;
-              set({ usage: { inputTokens, outputTokens, cost } });
-              get().appendAgentEvent({ kind: "run-done", inputTokens, outputTokens, at: Date.now() });
-              void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind);
-            } else if ("text" in chunk) {
-              set((s) => ({ output: s.output + chunk.text }));
-            }
-          },
+        // One request per draft, all sharing this run's AbortController so a
+        // single abort() stops every stream. The context above was assembled
+        // once: the drafts differ only by the model's own sampling, which is the
+        // point — N takes on the *same* brief.
+        const results = await Promise.allSettled(
+          drafts.map((draft) =>
+            streamCompletion({
+              baseUrl,
+              apiKey,
+              standard: provider.apiStandard,
+              safetySettings: provider.safetySettings,
+              modelId: model.modelId,
+              prefix: model.prefix,
+              contextSize: model.contextSize,
+              messages,
+              signal: controller.signal,
+              onChunk: (chunk) => {
+                if ("done" in chunk) {
+                  const { inputTokens, outputTokens } = chunk;
+                  const cost =
+                    (inputTokens * model.priceIn + outputTokens * model.priceOut) / 1_000_000;
+                  patchDraft(set, draft.id, { usage: { inputTokens, outputTokens, cost }, done: true });
+                  // One row per draft: each is a separate billed call, and a
+                  // single summed row would misreport the run's shape.
+                  void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind);
+                } else if ("text" in chunk) {
+                  appendDraftText(set, draft.id, chunk.text);
+                }
+              },
+            }),
+          ),
+        );
+
+        // allSettled, not all: one draft being refused or filtered must not
+        // discard the text the others already produced. Each failure is recorded
+        // on its own draft; the run only counts as failed if every draft did,
+        // which is re-raised below so the existing error handling applies.
+        const failures: string[] = [];
+        results.forEach((result, i) => {
+          if (result.status !== "rejected") return;
+          const reason = result.reason as Error;
+          if (reason?.name === "AbortError") return;
+          failures.push(String(reason));
+          patchDraft(set, drafts[i].id, { error: String(reason), done: true });
         });
+        // Surface the run total once, for the execution log's closing line.
+        const total = totalUsage(get().drafts);
+        if (total) {
+          get().appendAgentEvent({
+            kind: "run-done",
+            inputTokens: total.inputTokens,
+            outputTokens: total.outputTokens,
+            at: Date.now(),
+          });
+        }
+        if (failures.length === drafts.length && failures.length > 0) {
+          throw new Error(failures[0]);
+        }
+        // Land on a draft that actually has something to show.
+        const firstUsable = get().drafts.find((d) => !d.error);
+        if (firstUsable) set({ activeDraftId: firstUsable.id });
       }
     } catch (e) {
       // Only surface errors while this task is still the current one — after
@@ -424,7 +536,10 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     set({ isRunning: false, abortController: null });
   },
 
-  clearOutput: () => set({ output: "", error: null, usage: null, agentLog: [], loreReport: null }),
+  clearOutput: () =>
+    set({ drafts: [], activeDraftId: null, error: null, agentLog: [], loreReport: null }),
+
+  setActiveDraft: (id) => set({ activeDraftId: id }),
 }));
 
 /**
