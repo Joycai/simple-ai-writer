@@ -12,23 +12,65 @@ pub struct FileNode {
     pub children: Option<Vec<FileNode>>,
 }
 
+/// Categories a project is scaffolded with when the frontend passes none —
+/// the built-in "novel" profile, kept in sync with `NOVEL_PROFILE` in
+/// `src/lib/profile/model.ts`. Only reached by an older frontend calling
+/// without the argument; the app always sends the active profile's list.
+const DEFAULT_LORE_CATEGORIES: [&str; 7] = [
+    "characters",
+    "world",
+    "factions",
+    "items",
+    "skills",
+    "style",
+    "custom",
+];
+
+/// A lore category id is a single directory name, so it must be one path
+/// component of `[A-Za-z0-9_-]`.
+///
+/// The frontend validates this too (`parseProfile`), but that check is
+/// convenience: `profile.json` is hand-editable and reaches us through the
+/// webview, so a name like `..` or `a/b` would otherwise let a crafted profile
+/// create directories outside `.ai-writer/lore`. Validate here as well — this
+/// side is the boundary that has to hold.
+fn valid_category(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 40
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
 /// Scaffold the .ai-writer directory structure inside a project folder.
+///
+/// `categories` comes from the project's workspace profile (see
+/// `src/lib/profile`) and decides the `.ai-writer/lore/<category>` folders. It
+/// is additive: switching a project's profile creates the new profile's folders
+/// and leaves the old ones (and the entities in them) untouched on disk.
 #[command]
-pub fn scaffold_project(project_path: String, scope: State<'_, FsScope>) -> Result<(), String> {
+pub fn scaffold_project(
+    project_path: String,
+    categories: Option<Vec<String>>,
+    scope: State<'_, FsScope>,
+) -> Result<(), String> {
     scope.check(&project_path)?;
     let root = Path::new(&project_path);
 
-    let dirs = [
-        root.join("writing"),
-        root.join("output"),
-        root.join(".ai-writer").join("lore").join("characters"),
-        root.join(".ai-writer").join("lore").join("world"),
-        root.join(".ai-writer").join("lore").join("factions"),
-        root.join(".ai-writer").join("lore").join("items"),
-        root.join(".ai-writer").join("lore").join("skills"),
-        root.join(".ai-writer").join("lore").join("style"),
-        root.join(".ai-writer").join("lore").join("custom"),
-    ];
+    let categories = categories.filter(|c| !c.is_empty()).unwrap_or_else(|| {
+        DEFAULT_LORE_CATEGORIES
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    });
+
+    if let Some(bad) = categories.iter().find(|c| !valid_category(c)) {
+        return Err(format!("Invalid lore category name: {bad}"));
+    }
+
+    let lore_root = root.join(".ai-writer").join("lore");
+    let mut dirs = vec![root.join("writing"), root.join("output")];
+    dirs.extend(categories.iter().map(|c| lore_root.join(c)));
 
     for dir in &dirs {
         fs::create_dir_all(dir).map_err(|e| e.to_string())?;
@@ -212,4 +254,31 @@ fn read_dir_inner(path: &Path, depth: u8) -> Result<Vec<FileNode>, String> {
     });
 
     Ok(entries)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::valid_category;
+
+    #[test]
+    fn accepts_plain_category_names() {
+        for name in ["characters", "npcs", "world_2", "side-quests", "a"] {
+            assert!(valid_category(name), "{name} should be accepted");
+        }
+    }
+
+    #[test]
+    fn rejects_names_that_are_not_a_single_path_component() {
+        // The whole point of the check: a crafted profile.json must not be able
+        // to steer directory creation out of .ai-writer/lore.
+        for name in ["", "..", ".", "a/b", r"a\b", "../../etc", "C:", "a b", "él"] {
+            assert!(!valid_category(name), "{name:?} should be rejected");
+        }
+    }
+
+    #[test]
+    fn rejects_absurdly_long_names() {
+        assert!(!valid_category(&"a".repeat(41)));
+        assert!(valid_category(&"a".repeat(40)));
+    }
 }

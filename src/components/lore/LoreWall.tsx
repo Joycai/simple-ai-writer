@@ -7,7 +7,8 @@ import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore } from "../../stores/projectStore";
-import { LORE_CATEGORIES, setEntityAvatar, slugifyEntityId, uniqueEntityId, type CategoryId, type LoreEntity } from "../../lib/lore";
+import { setEntityAvatar, slugifyEntityId, uniqueEntityId, type CategoryId, type LoreEntity } from "../../lib/lore";
+import { categoryLabel, defaultCategoryId, findCategory, loreCategories } from "../../lib/profile";
 import { useAppStore } from "../../stores/appStore";
 import { imageToDataUrl } from "../../lib/fs/images";
 import { MOD_K_SPACED } from "../../lib/platform";
@@ -64,7 +65,7 @@ export function LoreWall() {
     let cancelled = false;
     (async () => {
       const next: Record<string, string> = {};
-      for (const cat of LORE_CATEGORIES) {
+      for (const cat of loreCategories()) {
         for (const e of (index[cat.id] ?? [])) {
           if (!e.avatarPath) continue;
           try {
@@ -101,7 +102,7 @@ export function LoreWall() {
   // Flatten + filter
   const allEntities = useMemo(() => {
     const flat: LoreEntity[] = [];
-    for (const cat of LORE_CATEGORIES) {
+    for (const cat of loreCategories()) {
       for (const e of (index[cat.id] ?? [])) flat.push(e);
     }
     return flat;
@@ -109,7 +110,7 @@ export function LoreWall() {
 
   const counts = useMemo(() => {
     const out: Record<string, number> = { all: allEntities.length };
-    for (const cat of LORE_CATEGORIES) {
+    for (const cat of loreCategories()) {
       out[cat.id] = (index[cat.id] ?? []).length;
     }
     return out;
@@ -200,7 +201,7 @@ export function LoreWall() {
       )}
       {newMode === "manual" && (
         <NewEntryModal
-          initialCategory={(filter !== "all" ? (filter as CategoryId) : "characters")}
+          initialCategory={filter !== "all" ? (filter as CategoryId) : defaultCategoryId()}
           onClose={() => setNewMode(null)}
           onModeChange={setNewMode}
           onCreate={async (category, name) => {
@@ -249,14 +250,14 @@ export function LoreWall() {
             {isZh ? "全部" : "All"}
             <span className={styles.chipCount}>{counts.all}</span>
           </span>
-          {LORE_CATEGORIES.map((cat) => (
+          {loreCategories().map((cat) => (
             <span
               key={cat.id}
               className={`${styles.chip} ${filter === cat.id ? styles.chipActive : ""}`}
               onClick={() => setFilter(cat.id)}
             >
               <span className={styles.chipDot} style={{ background: CAT_COLOR[cat.id] }} />
-              {isZh ? cat.labelZh : cat.labelEn}
+              {categoryLabel(cat, isZh)}
               <span className={styles.chipCount}>{counts[cat.id] ?? 0}</span>
             </span>
           ))}
@@ -281,7 +282,7 @@ export function LoreWall() {
             {filtered.map((e, idx) => {
               const featured = idx === 0 && filter === "all";
               const rot = rotationFor(e.id);
-              const cat = LORE_CATEGORIES.find((c) => c.id === e.category);
+              const cat = findCategory(e.category);
               return (
                 <div
                   key={e.id}
@@ -296,7 +297,7 @@ export function LoreWall() {
                 >
                   <div className={styles.cardTop}>
                     <span className={styles.cardLabel}>
-                      {(isZh ? cat?.labelZh : cat?.labelEn) ?? e.category}
+                      {cat ? categoryLabel(cat, isZh) : e.category}
                     </span>
                   </div>
                   <div className={styles.cardHeader}>
@@ -407,14 +408,14 @@ function NewEntryModal({
           <NewEntryTabs value="manual" onChange={onModeChange} />
           <label className={styles.modalLabel}>{isZh ? "分类" : "Category"}</label>
           <div className={styles.modalCats}>
-            {LORE_CATEGORIES.map((cat) => (
+            {loreCategories().map((cat) => (
               <span
                 key={cat.id}
                 className={`${styles.chip} ${category === cat.id ? styles.chipActive : ""}`}
                 onClick={() => setCategory(cat.id)}
               >
                 <span className={styles.chipDot} style={{ background: CAT_COLOR[cat.id] }} />
-                {isZh ? cat.labelZh : cat.labelEn}
+                {categoryLabel(cat, isZh)}
               </span>
             ))}
           </div>

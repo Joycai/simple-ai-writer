@@ -8,6 +8,14 @@ import {
   resetDb,
   type FileNode,
 } from "../lib/project";
+import {
+  loadProfile,
+  resetActiveProfile,
+  saveProfile,
+  setActiveProfile,
+  NOVEL_PROFILE,
+  type WorkspaceProfile,
+} from "../lib/profile";
 import { backupFile } from "../lib/agent/backup";
 import { normalizeChapterFileName } from "../lib/context/outline";
 import { fileExists, makeDir, removeDir, removeFile, renamePath, writeFile } from "../lib/fs/fileio";
@@ -35,6 +43,15 @@ function resetDocuments(): void {
 
 interface ProjectState {
   projectPath: string | null;
+  /**
+   * The open project's workspace profile — what kind of writing this is (see
+   * lib/profile). Mirrors the `lib/profile/active` singleton, which is what
+   * non-React code reads; this copy exists so components re-render when the
+   * profile changes. **This store is the only writer of both**: keeping them in
+   * sync anywhere else would let the UI and the prompt disagree about which
+   * profile is in force.
+   */
+  profile: WorkspaceProfile;
   activeFilePath: string | null;
   fileTree: FileNode[];
   /**
@@ -51,6 +68,13 @@ interface ProjectState {
   openProject: (path?: string) => Promise<void>;
   closeProject: () => Promise<void>;
   refreshFileTree: () => Promise<void>;
+  /**
+   * Switch the open project to another profile: persist it, scaffold the new
+   * category folders, and rescan. Non-destructive — the previous profile's
+   * folders and the entities in them stay on disk, so switching back restores
+   * them (they are simply not scanned while another profile is active).
+   */
+  setProfile: (profile: WorkspaceProfile) => Promise<void>;
 
   /**
    * Create a file (or folder) under `parentDir` and return its absolute path.
@@ -83,6 +107,7 @@ interface ProjectState {
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
   projectPath: null,
+  profile: NOVEL_PROFILE,
   activeFilePath: null,
   fileTree: [],
   expandedDirs: {},
@@ -104,11 +129,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       // scoped fs commands reject them until the Rust side verifies the
       // on-disk .ai-writer marker and allows the root.
       if (typeof path === "string") await registerProjectRoot(target);
-      await scaffoldProject(target);
+      // Resolve the profile before the scaffold, which creates the folders it
+      // names — but don't *activate* it until the open can no longer fail.
+      // Activating early would leave the still-open previous project reading
+      // the failed project's categories.
+      const profile = (await loadProfile(target)) ?? NOVEL_PROFILE;
+      await scaffoldProject(target, profile.categories.map((c) => c.id));
       resetDb();
       resetDocuments();
       await getDb(target);
-      set({ projectPath: target, activeFilePath: null, fileTree: [], expandedDirs: {}, wordCount: 0, charCount: 0 });
+      setActiveProfile(profile);
+      set({ projectPath: target, profile, activeFilePath: null, fileTree: [], expandedDirs: {}, wordCount: 0, charCount: 0 });
       await get().refreshFileTree();
       await useLoreStore.getState().scanProject(target);
       useAppStore.getState().addRecentProject(target);
@@ -125,7 +156,26 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     await flushDirtyDocuments();
     resetDocuments();
     resetDb();
-    set({ projectPath: null, activeFilePath: null, fileTree: [], expandedDirs: {}, wordCount: 0, charCount: 0 });
+    // Back to the default profile: with no project open, anything that reads
+    // the active profile must not still see the closed project's categories.
+    resetActiveProfile();
+    set({ projectPath: null, profile: NOVEL_PROFILE, activeFilePath: null, fileTree: [], expandedDirs: {}, wordCount: 0, charCount: 0 });
+  },
+
+  setProfile: async (profile) => {
+    const { projectPath } = get();
+    if (!projectPath) throw new Error("Open a project before changing its profile.");
+    if (profile.id === get().profile.id) return;
+
+    // Persist first: if writing profile.json fails, nothing else has moved and
+    // the next open still resolves the previous profile.
+    await saveProfile(projectPath, profile);
+    setActiveProfile(profile);
+    set({ profile });
+    await scaffoldProject(projectPath, profile.categories.map((c) => c.id));
+    await get().refreshFileTree();
+    // The lore index is keyed by category, so it is entirely stale now.
+    await useLoreStore.getState().scanProject(projectPath);
   },
 
   refreshFileTree: async () => {

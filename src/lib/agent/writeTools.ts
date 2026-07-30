@@ -19,8 +19,8 @@
  * through the propose→diff→approve flow (PR4).
  */
 
+import { loreCategoryIds } from "../profile/active";
 import {
-  LORE_CATEGORIES,
   RESERVED_ENTITY_FILES,
   createEntityWithContent,
   parseFacetMeta,
@@ -165,7 +165,7 @@ export async function createLoreEntityTool(
   const name = args.name?.trim();
   if (!name) return { toolCallId, content: "Error: 'name' argument is required." };
 
-  const categoryIds = LORE_CATEGORIES.map((c) => c.id);
+  const categoryIds = loreCategoryIds();
   const category = args.category as CategoryId;
   if (!category || !categoryIds.includes(category)) {
     return {
@@ -554,7 +554,7 @@ export async function moveLoreEntityTool(
     };
   }
 
-  const categoryIds = LORE_CATEGORIES.map((c) => c.id);
+  const categoryIds = loreCategoryIds();
   if (newCategory && !categoryIds.includes(newCategory)) {
     return { toolCallId, content: `Error: 'new_category' must be one of: ${categoryIds.join(", ")}.` };
   }

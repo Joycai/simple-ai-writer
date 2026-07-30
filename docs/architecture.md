@@ -64,6 +64,28 @@ question about the chapter's *age* (gated on its length, not on the anchor) —
 fusing them is why expanding early in a long chapter used to drag in the
 previous chapter's ending.
 
+### Workspace profiles (工作台档案)
+
+- **Location** — `src/lib/profile/` (`model.ts` types + built-ins + validation, `active.ts` singleton, `store.ts` persistence)
+- **Stored at** — `.ai-writer/profile.json`, per project. **Absent means the novel profile**, so every project created before profiles existed keeps behaving identically.
+
+A profile declares what kind of writing a project is, so a new domain is data rather than new branches in `TaskKind`:
+
+| Field | Drives |
+| --- | --- |
+| `categories` | The `.ai-writer/lore/<category>` folders — the knowledge-base layout, the lore scan, the category pickers, and the `category` enum in the agent's lore tools |
+| `sections` | The 【…】 block labels in the assembled prompt (`bundleToMessages`), e.g. 【上一场景结尾】 instead of 【上一章结尾】 |
+| `systemPromptKey` | Which i18n system prompt is the fallback when no prompt template is active |
+
+Built-ins: `novel` (the default) and `ttrpg` (跑团模组). Switching is Settings → 工作台, which calls `projectStore.setProfile()`: persist → scaffold the new folders → rescan. **Non-destructive** — the previous categories' folders and entities stay on disk and reappear on switching back; they are simply not scanned while another profile is active.
+
+Two details that are easy to get wrong:
+
+- **`active.ts` is a module singleton, not a store.** The lore scanner, the agent's tool-schema builder, and the prompt assembler all need it synchronously from non-React code (mirrors how `i18n` is consumed). `projectStore` mirrors it as `profile` state *purely so components re-render*, and is the **only** writer of both — syncing them anywhere else lets the UI and the prompt disagree about which profile is in force.
+- **Anything module-level must resolve categories per call.** `registry.ts` is a `const` evaluated once at import, so its lore-tool `enum`s are patched in `getToolDefinitions()` (via `profileCategoryParams`, returning a copy) rather than baked in. The same hazard applies to any future top-level constant: use `loreCategories()` at call time, never at module scope.
+
+`profile.json` is hand-editable, and its category ids become **directory names** — so it is parsed defensively (`parseProfile` drops bad entries, rejects case-insensitive duplicates, caps the count) and re-validated in Rust (`valid_category` in `commands.rs`, which is the actual boundary). A file is read as a *patch on the built-in it names*: `{"id":"ttrpg"}` resolves back to that profile exactly.
+
 ### RAG (Retrieval-Augmented Generation)
 
 - **Location** — `src/lib/context/rag.ts` (assembly) + `src/lib/context/loreSelect.ts` (lore selection)
