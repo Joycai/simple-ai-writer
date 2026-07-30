@@ -20,7 +20,9 @@ import { ModalShell } from "../common/ModalShell";
 import { fillLayer, pushBackdrop, pushForward, springScreen } from "../../lib/motion";
 import styles from "./LoreWall.module.css";
 
-// Per-category accent dot color
+// Per-category accent dot color, for the built-in novel categories. Kept as
+// explicit overrides rather than folded into the palette below so the novel
+// wall keeps exactly the colors it has always had.
 const CAT_COLOR: Record<string, string> = {
   characters: "var(--color-sienna)",
   world:      "var(--color-success)",
@@ -30,6 +32,33 @@ const CAT_COLOR: Record<string, string> = {
   style:      "#A78BBA",
   custom:     "var(--color-text-muted)",
 };
+
+/**
+ * Fallback dot colors — the same set as above, since those are the tones proven
+ * to read in both themes.
+ */
+const CAT_PALETTE = Object.values(CAT_COLOR);
+
+/**
+ * Accent dot color for a category id.
+ *
+ * Categories are profile-defined (lib/profile), so this component cannot know
+ * every id it will be asked to render: a TTRPG module has npcs/locations/rules/
+ * hooks, none of which `CAT_COLOR` names. Those used to resolve to `undefined`,
+ * and `.chipDot` sets no background of its own, so the dot rendered invisible.
+ *
+ * Unknown ids hash into the palette instead, which keeps a category the same
+ * color across renders and sessions without a per-profile table. Two categories
+ * can land on one color — acceptable for a 6px dot that always sits next to its
+ * text label.
+ */
+function categoryColor(id: string): string {
+  const override = CAT_COLOR[id];
+  if (override) return override;
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return CAT_PALETTE[Math.abs(h) % CAT_PALETTE.length];
+}
 
 // Stable, deterministic small rotation per entity id
 function rotationFor(id: string): number {
@@ -256,7 +285,7 @@ export function LoreWall() {
               className={`${styles.chip} ${filter === cat.id ? styles.chipActive : ""}`}
               onClick={() => setFilter(cat.id)}
             >
-              <span className={styles.chipDot} style={{ background: CAT_COLOR[cat.id] }} />
+              <span className={styles.chipDot} style={{ background: categoryColor(cat.id) }} />
               {categoryLabel(cat, isZh)}
               <span className={styles.chipCount}>{counts[cat.id] ?? 0}</span>
             </span>
@@ -315,7 +344,7 @@ export function LoreWall() {
                       ) : (
                         <div
                           className={styles.cardAvatar}
-                          style={{ background: CAT_COLOR[e.category] }}
+                          style={{ background: categoryColor(e.category) }}
                         >
                           {e.name.charAt(0)}
                         </div>
@@ -414,7 +443,7 @@ function NewEntryModal({
                 className={`${styles.chip} ${category === cat.id ? styles.chipActive : ""}`}
                 onClick={() => setCategory(cat.id)}
               >
-                <span className={styles.chipDot} style={{ background: CAT_COLOR[cat.id] }} />
+                <span className={styles.chipDot} style={{ background: categoryColor(cat.id) }} />
                 {categoryLabel(cat, isZh)}
               </span>
             ))}
