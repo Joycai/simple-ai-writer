@@ -28,3 +28,6 @@ serde_json = "1"
 # macOS Keychain, Windows Credential Manager and Secret Service automatically
 # on first Entry::new, which is all secrets.rs needs.
 keyring = "4"
+# Lore bundle export/import. Default features pull in bzip2/zstd/aes backends
+# we never produce or accept — deflate is the only method our bundles use.
+zip = { version = "2", default-features = false, features = ["deflate"] }

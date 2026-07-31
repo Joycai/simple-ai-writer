@@ -279,12 +279,17 @@ Story Memory is *per-document*, so a chapter is its own file and knows nothing o
 - Implemented in `src-tauri/src/` (minimal; most logic in TypeScript)
 - `commands.rs` — `scaffold_project`, `read_dir_recursive`, plus `fs_*` helpers (write text/binary, read text, create/read/remove dir, remove file, exists)
 - `secrets.rs` — `secret_save` / `secret_load` / `secret_delete` (OS keyring)
+- `transfer.rs` — export/import: `zip_export_dialog` / `zip_import_dialog` (lore bundles) and `save_text_file_dialog` / `open_text_file_dialog` (config backup JSON). Dialogs run Rust-side (same trust rationale as `project_open_dialog`); zip extraction is zip-slip-guarded via `enclosed_name()`
 - `protocol.rs` — custom `ai-writer-asset://` scheme for lore images (extension allowlist)
 - Plugin permissions in `src-tauri/capabilities/default.json`
 
 ### File I/O
 - `src/lib/fs/fileio.ts` wraps Tauri fs plugin commands (read, write, metadata, etc.)
 - All paths resolved via Tauri plugin (no raw fs access)
+
+### Export / Import (lore bundles & config backup)
+- **Lore bundle** (`src/lib/lore/transfer.ts`, UI in `LoreWall`): a zip with root `manifest.json` + the whole on-disk `.ai-writer/lore/` tree under `lore/…` — *all* categories on disk, not just the active profile's, so bundles survive profile switches. Import is two-phase: `stageLoreImport` extracts into `.ai-writer/lore-import-tmp` and reports conflicts; `applyLoreImport` moves entity dirs in under a user-chosen strategy (skip / overwrite / keep-both via `uniqueEntityId`), then deletes the staging dir. Categories that fail `CATEGORY_ID_RE` are ignored.
+- **Config backup** (`src/lib/ai/configTransfer.ts`, UI in Settings → General): providers/models/prompts as one JSON file. API keys (OS keyring) are **excluded unless the user opts in** — then embedded in plaintext and re-saved to the keyring on import. Restore merges by id (`INSERT OR REPLACE`); models whose provider is neither in the backup nor already configured are dropped during validation.
 
 ### CodeMirror 6 Setup
 - Extensions: GFM, Markdown language, history, search, Vim bindings optional

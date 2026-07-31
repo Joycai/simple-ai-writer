@@ -2,6 +2,7 @@ mod commands;
 mod protocol;
 mod scope;
 mod secrets;
+mod transfer;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -52,6 +53,10 @@ pub fn run() {
             secrets::secret_save,
             secrets::secret_load,
             secrets::secret_delete,
+            transfer::zip_export_dialog,
+            transfer::zip_import_dialog,
+            transfer::save_text_file_dialog,
+            transfer::open_text_file_dialog,
         ]);
 
     protocol::register_asset_protocol(builder)

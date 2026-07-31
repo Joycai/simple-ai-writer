@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { X, Pencil, Moon, Sun, Monitor, SlidersHorizontal, Server, Cpu, MessageSquare, Check, AlertCircle, FolderOpen, Info, GitBranch, ExternalLink, BookOpen } from "lucide-react";
+import { X, Pencil, Moon, Sun, Monitor, SlidersHorizontal, Server, Cpu, MessageSquare, Check, AlertCircle, FolderOpen, Info, GitBranch, ExternalLink, BookOpen, FileDown, FileUp } from "lucide-react";
 import { revealItemInDir, openUrl } from "@tauri-apps/plugin-opener";
 import { getVersion } from "@tauri-apps/api/app";
 import { useAiStore } from "../../stores/aiStore";
@@ -14,6 +14,7 @@ import {
 } from "../../lib/profile";
 import { useAppStore, type ThemeMode, type Language, type FontScheme } from "../../stores/appStore";
 import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../lib/ai/apiLog";
+import { applyConfigImport, exportAiConfig, stageConfigImport } from "../../lib/ai/configTransfer";
 import type { ApiStandard } from "../../lib/ai/types";
 import { MAX_CONTEXT_SIZE, type ModelType } from "../../lib/ai/configDb";
 import { CONTEXT_SIZE_STOPS, contextStopIndex, exactStopIndex, formatContextSize } from "../../lib/ai/contextSize";
@@ -82,6 +83,11 @@ function GeneralTab() {
   const { t } = useTranslation();
   const { theme, setTheme, language, setLanguage, fontScheme, setFontScheme } = useAppStore();
   const [apiLogOn, setApiLogOn] = useState(isApiLogEnabled());
+  const providers = useAiStore((s) => s.providers);
+  const loadConfig = useAiStore((s) => s.loadConfig);
+  const [includeKeys, setIncludeKeys] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupStatus, setBackupStatus] = useState<{ ok: boolean; text: string } | null>(null);
 
   const toggleApiLog = (enabled: boolean) => {
     setApiLogEnabled(enabled);
@@ -92,6 +98,50 @@ function GeneralTab() {
     try {
       await revealItemInDir(await getApiLogRevealTarget());
     } catch { /* best-effort */ }
+  };
+
+  const handleExportConfig = async () => {
+    if (backupBusy) return;
+    setBackupBusy(true);
+    setBackupStatus(null);
+    try {
+      const saved = await exportAiConfig(includeKeys);
+      if (saved) setBackupStatus({ ok: true, text: t("systemSettings.backup.exported", { path: saved }) });
+    } catch (e) {
+      setBackupStatus({ ok: false, text: `${t("systemSettings.backup.exportFailed")} ${e}` });
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const handleImportConfig = async () => {
+    if (backupBusy) return;
+    setBackupBusy(true);
+    setBackupStatus(null);
+    try {
+      const staged = await stageConfigImport(providers.map((p) => p.id));
+      if (!staged) return;
+      let confirmMsg = t("systemSettings.backup.importConfirm", {
+        providers: staged.providers.length,
+        models: staged.models.length,
+        prompts: staged.prompts.length,
+      });
+      if (staged.keyCount > 0) {
+        confirmMsg += `\n${t("systemSettings.backup.importKeysNote", { count: staged.keyCount })}`;
+      }
+      if (!window.confirm(confirmMsg)) return;
+      await applyConfigImport(staged);
+      await loadConfig();
+      setBackupStatus({ ok: true, text: t("systemSettings.backup.imported") });
+    } catch (e) {
+      const invalid = e instanceof Error && e.message === "invalid-backup";
+      setBackupStatus({
+        ok: false,
+        text: invalid ? t("systemSettings.backup.invalidFile") : `${t("systemSettings.backup.importFailed")} ${e}`,
+      });
+    } finally {
+      setBackupBusy(false);
+    }
   };
 
   return (
@@ -175,6 +225,52 @@ function GeneralTab() {
             </button>
           </div>
         </div>
+      </div>
+
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>{t("systemSettings.backup.section")}</div>
+        <div className={styles.fieldGroup}>
+          <div className={styles.safetyHint}>{t("systemSettings.backup.hint")}</div>
+          <div className={styles.debugControls}>
+            <button
+              className={`${styles.btnSecondary} ${styles.btnWithIcon}`}
+              onClick={handleExportConfig}
+              disabled={backupBusy}
+            >
+              <FileDown size={14} /> {t("systemSettings.backup.export")}
+            </button>
+            <button
+              className={`${styles.btnSecondary} ${styles.btnWithIcon}`}
+              onClick={handleImportConfig}
+              disabled={backupBusy}
+            >
+              <FileUp size={14} /> {t("systemSettings.backup.import")}
+            </button>
+          </div>
+        </div>
+        <div className={styles.fieldGroup}>
+          <label className={styles.label}>{t("systemSettings.backup.keysLabel")}</label>
+          <div className={styles.safetyHint}>{t("systemSettings.backup.keysHint")}</div>
+          <div className={styles.optionGroup}>
+            <button
+              className={`${styles.optionBtn} ${!includeKeys ? styles.optionBtnActive : ""}`}
+              onClick={() => setIncludeKeys(false)}
+            >
+              {t("systemSettings.backup.keysOff")}
+            </button>
+            <button
+              className={`${styles.optionBtn} ${includeKeys ? styles.optionBtnActive : ""}`}
+              onClick={() => setIncludeKeys(true)}
+            >
+              {t("systemSettings.backup.keysOn")}
+            </button>
+          </div>
+        </div>
+        {backupStatus && (
+          <div className={backupStatus.ok ? styles.safetyHint : styles.errorNote}>
+            {backupStatus.text}
+          </div>
+        )}
       </div>
     </div>
   );

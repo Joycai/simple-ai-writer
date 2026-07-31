@@ -154,6 +154,23 @@
       "apiLogOn": "开启",
       "apiLogOff": "关闭",
       "openApiLogs": "打开日志目录"
+    },
+    "backup": {
+      "section": "配置备份",
+      "hint": "将供应商、模型和 Prompt 配置导出为 JSON 文件，或从备份文件恢复（按 ID 合并，已有配置不会被清空）。",
+      "export": "导出配置…",
+      "import": "导入配置…",
+      "keysLabel": "API Key",
+      "keysHint": "API Key 保存在系统凭据管理器中，默认不随备份导出。选择「包含」会把 Key 以明文写入备份文件，请妥善保管。",
+      "keysOff": "不包含",
+      "keysOn": "包含（明文）",
+      "exported": "已导出到 {{path}}",
+      "exportFailed": "导出失败：",
+      "importConfirm": "从备份导入 {{providers}} 个供应商、{{models}} 个模型、{{prompts}} 个 Prompt？相同 ID 的配置将被覆盖。",
+      "importKeysNote": "备份中包含 {{count}} 个 API Key，导入后将写入系统凭据管理器。",
+      "imported": "导入完成。",
+      "importFailed": "导入失败：",
+      "invalidFile": "这不是有效的配置备份文件。"
     }
   },
   "project": {
@@ -653,6 +670,26 @@
     },
     "wall": {
       "changeAvatar": "更换头像"
+    },
+    "transfer": {
+      "export": "导出",
+      "import": "导入",
+      "exportHint": "把整个设定库打包为 zip 文件",
+      "importHint": "从 zip 包导入设定条目",
+      "exportFailed": "导出设定库失败：",
+      "importFailed": "导入设定库失败：",
+      "emptyBundle": "所选文件不是有效的设定库包（没有找到任何条目）。",
+      "stagedSummary": "包内共 {{count}} 个条目",
+      "sourceProfile": "来源工作台：{{profile}}",
+      "conflictCount": "{{count}} 个条目与现有条目重名",
+      "strategyLabel": "重名条目处理方式",
+      "strategySkip": "跳过",
+      "strategyOverwrite": "覆盖",
+      "strategyKeepBoth": "保留两者",
+      "importConfirm": "导入",
+      "importing": "导入中…",
+      "importDone": "导入完成：新增 {{imported}} 个条目，跳过 {{skipped}} 个。",
+      "hiddenCategories": "其中分类 {{categories}} 不属于当前工作台，已导入到磁盘但暂不显示。"
     },
     "detail": {
       "openInEditor": "在编辑器中打开",

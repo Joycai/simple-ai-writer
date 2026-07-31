@@ -7,3 +7,4 @@
 export * from "./model";
 export * from "./entity";
 export * from "./gallery";
+export * from "./transfer";
