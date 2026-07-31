@@ -397,7 +397,38 @@ export const COPY_PROFILE: WorkspaceProfile = {
   docModel: { ordered: false, priorContext: false, memory: false },
   // 续写 is dropped: a headline has nothing to continue from. The rest of the
   // shared set still applies to a piece of copy being edited.
-  tasks: DEFAULT_TASKS.filter((t) => t.id !== "continue"),
+  tasks: [
+    ...DEFAULT_TASKS.filter((t) => t.id !== "continue"),
+    {
+      id: "headlines",
+      labelKey: "ai.tasks.headlines",
+      descKey: "ai.tasks.headlinesDesc",
+      instructionKey: "ai.instructions.copyHeadlines",
+      // Toolless, so it can fan out: the point of this task is having options,
+      // and the drafts give *sets* of angles to compare, on top of the several
+      // angles each response already contains.
+      tools: "none",
+      target: "detached",
+      // Generates from a brief ("春季新品，主打通勤"); needs no existing text.
+      freeform: true,
+    },
+    {
+      id: "channel",
+      labelKey: "ai.tasks.channel",
+      descKey: "ai.tasks.channelDesc",
+      instructionKey: "ai.instructions.copyChannel",
+      tools: "none",
+      // Detached rather than replace: adapting copy for another channel produces
+      // an additional piece, and overwriting the original would lose the source
+      // the author is adapting *from*.
+      target: "detached",
+      // Transforms a passage, so it needs one — and it is the first task to need
+      // a selection without wanting the reference-window controls: the channel
+      // comes from the author's own line, not from surrounding context.
+      needsSelection: true,
+      freeform: true,
+    },
+  ],
   systemPromptKey: "ai.instructions.systemCopy",
 };
 

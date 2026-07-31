@@ -1025,17 +1025,28 @@ export function AiPanel() {
     );
   };
 
-  // Polish / rewrite / summary operate on the selected text — require one.
-  const needsSelection = supportsExtras && !selection;
+  // A task that acts *on* a passage can't run without one.
+  //
+  // Read from the task's own flag, not from `referenceWindow`: the two happen to
+  // coincide on the built-ins, which is why deriving one from the other went
+  // unnoticed, but they answer different questions. A profile task can need a
+  // selection without wanting a reference-window picker (adapting a passage to
+  // another channel, say), and deriving the gate would have let it run on
+  // nothing.
+  const needsSelection = !!task.needsSelection && !selection;
   // Expand was chosen because the author pointed at a passage. If that passage
   // is gone (or can no longer be found), refuse rather than quietly relocating
   // the continuation to the end of the chapter.
   const needsAnchor = isContinue && continueMode === "expand" && continueAnchor === null;
   // An unsettled focus means the editor still holds the *previous* document.
   // Blocking here turns a silent wrong-document run into a visible short wait.
+  // A freeform task is nothing but the author's ask (plus a briefing), so an
+  // empty box means there is no request to send. Keyed off the flag rather than
+  // the "custom" id: every freeform task has this problem, and 遭遇/随机表 would
+  // otherwise run on their briefing alone, with no situation to work from.
+  const needsAsk = !!runTaskDef.freeform && !customInstr.trim();
   const canRun =
-    hasConfig && !isRunning && !needsSelection && !needsAnchor && focus.settled &&
-    (selectedTask !== "custom" || !!customInstr.trim());
+    hasConfig && !isRunning && !needsSelection && !needsAnchor && !needsAsk && focus.settled;
 
   // ⌘/Ctrl+Enter runs from anywhere in the panel, including the textareas.
   const handlePanelKeyDown = (e: React.KeyboardEvent) => {

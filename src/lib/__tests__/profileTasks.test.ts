@@ -148,6 +148,47 @@ describe("the ttrpg profile's domain tasks", () => {
   });
 });
 
+describe("the copy profile's domain tasks", () => {
+  const copyTask = (id: string) => COPY_PROFILE.tasks.find((task) => task.id === id);
+
+  it("adds 标题 and 渠道改写", () => {
+    const ids = COPY_PROFILE.tasks.map((task) => task.id);
+    expect(ids).toContain("headlines");
+    expect(ids).toContain("channel");
+  });
+
+  it("keeps them off the other profiles", () => {
+    for (const profile of [NOVEL_PROFILE, TTRPG_PROFILE]) {
+      const ids = profile.tasks.map((task) => task.id);
+      expect(ids).not.toContain("headlines");
+      expect(ids).not.toContain("channel");
+    }
+  });
+
+  it("leaves 标题 toolless so it can fan out into sets of options", () => {
+    const task = copyTask("headlines")!;
+    expect(task.tools).toBe("none");
+    expect(draftCountFor(task, 3)).toBe(3);
+    // Generated from a brief, so no selection is required.
+    expect(task.freeform).toBe(true);
+    expect(task.needsSelection).toBeUndefined();
+    expect(task.target).toBe("detached");
+  });
+
+  it("makes 渠道改写 need a selection but not a reference window", () => {
+    const task = copyTask("channel")!;
+    // The combination the panel used to be unable to express: it derived the
+    // selection gate from `referenceWindow`, so a task like this would have run
+    // on an empty selection.
+    expect(task.needsSelection).toBe(true);
+    expect(task.referenceWindow).toBeUndefined();
+    // Detached, not replace: the adaptation is an additional piece, and
+    // overwriting would lose the source being adapted from.
+    expect(task.target).toBe("detached");
+    expect(task.freeform).toBe(true);
+  });
+});
+
 describe("profile task lists", () => {
   it("drops 续写 from the copy profile", () => {
     // A headline has nothing to continue from; the rest of the shared set does
@@ -319,5 +360,54 @@ describe("parseProfile — tasks", () => {
     const { profile, issues } = parseProfile({ ...base, tasks: many }, NOVEL_PROFILE);
     expect(profile.tasks.length).toBe(16);
     expect(issues.join(" ")).toContain("16");
+  });
+});
+
+// ── Every declared flag is consumed somewhere ────────────────────────────────
+
+/**
+ * Source text, keyed by repo-relative path (Vite's glob — the project's tsconfig
+ * has no `@types/node`, so a `node:fs` walk would fail `tsc --noEmit`).
+ */
+const SOURCES = import.meta.glob("/src/**/*.{ts,tsx}", {
+  query: "?raw",
+  eager: true,
+  import: "default",
+}) as Record<string, string>;
+
+/**
+ * A `TaskDef` field that nothing outside the model reads is a feature that looks
+ * declared, is validated, is covered by the built-in assertions above — and does
+ * nothing. That is exactly how `needsSelection` shipped inert: the panel derived
+ * the gate from `referenceWindow` instead, which happened to coincide on every
+ * built-in, so no behavioural test could see the difference.
+ *
+ * This proves only that *something* reads each flag, not that it reads it
+ * correctly. That is a weaker guarantee than a behavioural test — but it is
+ * precisely the one that was missing, and it costs nothing to keep.
+ */
+describe("TaskDef flags", () => {
+  const OPTIONAL_FLAGS = [
+    "needsSelection", "continuation", "referenceWindow", "freeform",
+    "agentTaskId", "hidden", "instructionKey", "tools", "target",
+  ];
+
+  it("has a consumer outside the model for every flag", () => {
+    const consumers = Object.entries(SOURCES).filter(
+      ([path]) =>
+        !path.includes("/__tests__/") &&
+        !path.endsWith("/lib/profile/model.ts"), // declaration + validation
+    );
+    // Guard the guard: a broken glob would make every flag look consumed.
+    expect(consumers.length).toBeGreaterThan(20);
+
+    const unread = OPTIONAL_FLAGS.filter(
+      (flag) => !consumers.some(([, text]) => text.includes(`.${flag}`)),
+    );
+    expect(
+      unread,
+      "These TaskDef fields are declared but nothing reads them — either wire " +
+        "them up or drop them from the model.",
+    ).toEqual([]);
   });
 });
