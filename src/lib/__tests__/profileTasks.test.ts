@@ -29,6 +29,7 @@ import {
   visibleTasks,
 } from "../profile/active";
 import { presetForTools, AGENT_ASSIST_PRESET, CONTINUE_PRESET } from "../agent/presets";
+import { draftCountFor } from "../ai/drafts";
 
 afterEach(() => resetActiveProfile());
 
@@ -99,6 +100,51 @@ describe("built-in tasks preserve the pre-refactor behaviour", () => {
         if (task.agentTaskId) expect(ids).toContain(task.agentTaskId);
       }
     }
+  });
+});
+
+describe("the ttrpg profile's domain tasks", () => {
+  const ttrpgTask = (id: string) => TTRPG_PROFILE.tasks.find((task) => task.id === id);
+
+  it("adds 遭遇 and 随机表 on top of the shared set", () => {
+    const ids = TTRPG_PROFILE.tasks.map((task) => task.id);
+    expect(ids).toContain("encounter");
+    expect(ids).toContain("randomtable");
+    // ...without losing the domain-neutral ones.
+    expect(ids).toContain("continue");
+    expect(ids).toContain("polish");
+  });
+
+  it("keeps them off the other profiles", () => {
+    for (const profile of [NOVEL_PROFILE, COPY_PROFILE]) {
+      const ids = profile.tasks.map((task) => task.id);
+      expect(ids).not.toContain("encounter");
+      expect(ids).not.toContain("randomtable");
+    }
+  });
+
+  it("gives 遭遇 read tools, and therefore a single draft", () => {
+    const task = ttrpgTask("encounter")!;
+    // It has to consult the module's own NPCs/locations — an encounter that
+    // invents a rival the module already has is worse than useless at the table.
+    expect(task.tools).toBe("read");
+    expect(presetForTools(task.tools)).toBe(CONTINUE_PRESET);
+    expect(draftCountFor(task, 3)).toBe(1);
+    // The author supplies the situation; the built-in text is the briefing.
+    expect(task.freeform).toBe(true);
+    expect(task.instructionKey).toBe("ai.instructions.ttrpgEncounter");
+    // Detached: a generated encounter must not overwrite the open document.
+    expect(task.target).toBe("detached");
+    expect(task.needsSelection).toBeUndefined();
+  });
+
+  it("leaves 随机表 toolless, so it can fan out into several tables", () => {
+    const task = ttrpgTask("randomtable")!;
+    expect(task.tools).toBe("none");
+    // Three tables to choose between is the normal way to use this.
+    expect(draftCountFor(task, 3)).toBe(3);
+    expect(task.freeform).toBe(true);
+    expect(task.target).toBe("detached");
   });
 });
 

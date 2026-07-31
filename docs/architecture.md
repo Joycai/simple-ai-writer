@@ -121,7 +121,14 @@ The task `id` is load-bearing in three places, so renaming one is a breaking cha
 
 `draftCountFor` derives its rule from `tools`, not from a list of task names: **any tool-using task produces a single draft.** Every round of the loop reports into one shared `agentLog`, so parallel runs would interleave into an unreadable log; a `full` toolset additionally can't have concurrent runs touching one lore folder or racing approval cards. Stating it this way covers tasks nobody has written yet.
 
-`DEFAULT_TASKS` is the shared starting set (续写/改写/润色/总结/自定义/agent) — domain-neutral, so profiles spread it and add or filter. `COPY_PROFILE` drops 续写: a headline has nothing to continue from.
+`DEFAULT_TASKS` is the shared starting set (续写/改写/润色/总结/自定义/agent) — domain-neutral, so profiles spread it and add or filter. `COPY_PROFILE` drops 续写: a headline has nothing to continue from. `TTRPG_PROFILE` adds two, and the pair shows how `tools` is the load-bearing choice:
+
+| Task | Shape | Why |
+| --- | --- | --- |
+| 遭遇 (`encounter`) | `tools: "read"`, freeform, detached | Must consult the module's own NPCs/locations first — an encounter that invents a rival the module already has is worse than useless at the table. Costs the single-draft limit. |
+| 随机表 (`randomtable`) | `tools: "none"`, freeform, detached | A table of rumours needs the brief and the tone, not a lore sweep — and staying toolless is what lets it fan out, since three tables to choose between is how this gets used. |
+
+Both are `freeform`: the author supplies the situation ("下水道，被跟踪") and the built-in text is the briefing on what a usable result contains. **A prompt template whose `scene` matches the task id replaces that briefing while keeping the author's ask** — freeform tasks used to skip the scene lookup entirely, which made a carefully-written domain prompt the one kind nobody could tune.
 
 **Ids can outlive the profile that defined them** (persisted panel selection, a log entry, a prompt template's `scene`), so `findTask()` returns null rather than throwing and every caller decides what to do — the panel falls back to `defaultTask()`, the log shows the raw id, `runTask` reports `ai.errors.taskNotFound`.
 
