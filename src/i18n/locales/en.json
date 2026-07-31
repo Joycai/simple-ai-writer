@@ -121,6 +121,7 @@
       "providers": "Providers",
       "models": "Models",
       "prompts": "Prompts",
+      "shortcuts": "Shortcuts",
       "about": "About"
     },
     "workspace": {
@@ -128,6 +129,45 @@
       "profileHint": "Decides this project's knowledge-base categories and what the prompt calls each context block (e.g. 【上一章结尾】 vs 【上一场景结尾】).",
       "noProject": "Open a project to choose its workspace profile.",
       "switchHint": "Switching deletes nothing: the previous categories' folders and entities stay on disk and reappear if you switch back."
+    },
+    "shortcuts": {
+      "categories": {
+        "global": "Global",
+        "file": "File",
+        "ai": "AI",
+        "editor": "Editor",
+        "contextual": "Contextual conventions"
+      },
+      "items": {
+        "commandPalette": "Open/close the command palette",
+        "aiChatDrawer": "Toggle the AI chat drawer",
+        "aiGenerateDrawer": "Toggle the AI generate-task panel",
+        "closeOverlays": "Close the command palette / AI drawer",
+        "saveFile": "Save the current file",
+        "aiRewrite": "Run \"Rewrite\" on the selected text",
+        "aiPolish": "Run \"Polish\" on the selected text",
+        "aiSummary": "Run \"Summary\" on the selected text",
+        "aiBubbleDismiss": "Dismiss the selection toolbar",
+        "editorBold": "Bold",
+        "editorItalic": "Italic",
+        "editorInlineCode": "Inline code",
+        "editorStrikethrough": "Strikethrough",
+        "editorLink": "Insert link",
+        "editorHeading1": "Heading 1",
+        "editorHeading2": "Heading 2",
+        "editorHeading3": "Heading 3",
+        "editorQuote": "Quote block",
+        "editorBulletList": "Bullet list",
+        "editorAiTargetStart": "Mark AI target start",
+        "editorAiTargetEnd": "Mark AI target end",
+        "editorAiTargetClear": "Clear the AI target mark",
+        "editorUndo": "Undo",
+        "editorRedo": "Redo",
+        "editorFind": "Find",
+        "contextualCloseOverlay": "Close a context menu / dialog",
+        "contextualConfirmInput": "Confirm an input (rename, new entry, etc.)",
+        "contextualPaletteNav": "Move between command palette results"
+      }
     },
     "about": {
       "appName": "Simple AI Writer",

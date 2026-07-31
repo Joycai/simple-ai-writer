@@ -17,14 +17,13 @@ import { Onboarding } from "./components/onboarding/Onboarding";
 import { useAppStore } from "./stores/appStore";
 import { useAiStore } from "./stores/aiStore";
 import { useMainView } from "./stores/projectStore";
+import { useGlobalShortcuts } from "./useGlobalShortcuts";
 import { fillLayer, springScreen, viewSlide } from "./lib/motion";
 
 export default function App() {
   const {
     sidebarWidth, setSidebarWidth,
     sidebarCollapsed,
-    showCommandPalette, setShowCommandPalette,
-    showAiDrawer, aiDrawerMode, setShowAiDrawer,
     showSettings, settingsTab, openSettings, closeSettings,
   } = useAppStore();
   const { loadConfig } = useAiStore();
@@ -37,32 +36,7 @@ export default function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Global shortcuts: ⌘K command palette · ⌘L chat assistant · ⌘J task panel
-  useEffect(() => {
-    // Toggle the AI drawer for one mode: open (or switch to that mode) on
-    // first press, close on a second press in the same mode.
-    const toggleDrawer = (mode: "generate" | "chat") => {
-      if (showAiDrawer && aiDrawerMode === mode) setShowAiDrawer(false);
-      else setShowAiDrawer(true, mode);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setShowCommandPalette(!showCommandPalette);
-      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "l") {
-        e.preventDefault();
-        toggleDrawer("chat");
-      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "j") {
-        e.preventDefault();
-        toggleDrawer("generate");
-      } else if (e.key === "Escape") {
-        setShowCommandPalette(false);
-        setShowAiDrawer(false);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [showCommandPalette, setShowCommandPalette, showAiDrawer, aiDrawerMode, setShowAiDrawer]);
+  useGlobalShortcuts();
 
   return (
     <MotionConfig reducedMotion="user">

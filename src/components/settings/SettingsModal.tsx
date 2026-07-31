@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { X, Pencil, Moon, Sun, Monitor, SlidersHorizontal, Server, Cpu, MessageSquare, Check, AlertCircle, FolderOpen, Info, GitBranch, ExternalLink, BookOpen, FileDown, FileUp } from "lucide-react";
+import { X, Pencil, Moon, Sun, Monitor, SlidersHorizontal, Server, Cpu, MessageSquare, Check, AlertCircle, FolderOpen, Info, GitBranch, ExternalLink, BookOpen, FileDown, FileUp, Keyboard } from "lucide-react";
 import { revealItemInDir, openUrl } from "@tauri-apps/plugin-opener";
 import { getVersion } from "@tauri-apps/api/app";
 import { useAiStore } from "../../stores/aiStore";
@@ -20,6 +20,7 @@ import { MAX_CONTEXT_SIZE, type ModelType } from "../../lib/ai/configDb";
 import { CONTEXT_SIZE_STOPS, contextStopIndex, exactStopIndex, formatContextSize } from "../../lib/ai/contextSize";
 import { GEMINI_HARM_CATEGORIES, GEMINI_THRESHOLD_LEVELS, defaultSafetySettings, type GeminiSafetySettings, type GeminiHarmCategory } from "../../lib/ai/safety";
 import { testProviderConnection } from "../../lib/ai/providerProbe";
+import { SHORTCUTS, comboLabel, type ShortcutCategory } from "../../lib/shortcuts";
 import { modalPop, overlayFade, overlayFadeTransition, springPanel } from "../../lib/motion";
 import styles from "./SettingsModal.module.css";
 
@@ -1006,9 +1007,40 @@ function AboutTab() {
   );
 }
 
+// ─── Shortcuts Tab ────────────────────────────────────────────────────────────
+
+const SHORTCUT_CATEGORY_ORDER: ShortcutCategory[] = ["global", "file", "ai", "editor", "contextual"];
+
+function ShortcutsTab() {
+  const { t } = useTranslation();
+  return (
+    <div>
+      {SHORTCUT_CATEGORY_ORDER.map((cat) => {
+        const items = SHORTCUTS.filter((s) => s.category === cat);
+        if (items.length === 0) return null;
+        return (
+          <div className={styles.section} key={cat}>
+            <div className={styles.sectionTitle}>{t(`systemSettings.shortcuts.categories.${cat}`)}</div>
+            <div className={styles.itemList}>
+              {items.map((s) => (
+                <div className={styles.item} key={s.id}>
+                  <div className={styles.itemInfo}>
+                    <div className={styles.itemName}>{t(`systemSettings.shortcuts.items.${s.labelKey}`)}</div>
+                  </div>
+                  <span className={styles.badge}>{s.combo ? comboLabel(s.combo) : s.keysLabel}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Main modal ───────────────────────────────────────────────────────────────
 
-type TabId = "general" | "workspace" | "providers" | "models" | "prompts" | "about";
+type TabId = "general" | "workspace" | "providers" | "models" | "prompts" | "shortcuts" | "about";
 
 interface Props {
   onClose: () => void;
@@ -1064,6 +1096,7 @@ export function SettingsModal({ onClose, initialTab = "general" }: Props) {
             {navBtn("models", <Cpu size={15} />, "systemSettings.tabs.models")}
             {navBtn("prompts", <MessageSquare size={15} />, "systemSettings.tabs.prompts")}
             <div className={styles.navDivider} />
+            {navBtn("shortcuts", <Keyboard size={15} />, "systemSettings.tabs.shortcuts")}
             {navBtn("about", <Info size={15} />, "systemSettings.tabs.about")}
           </nav>
 
@@ -1073,6 +1106,7 @@ export function SettingsModal({ onClose, initialTab = "general" }: Props) {
             {activeTab === "providers" && <ProvidersTab />}
             {activeTab === "models" && <ModelsTab />}
             {activeTab === "prompts" && <PromptsTab />}
+            {activeTab === "shortcuts" && <ShortcutsTab />}
             {activeTab === "about" && <AboutTab />}
           </div>
         </div>

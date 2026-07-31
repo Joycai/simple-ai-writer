@@ -121,6 +121,7 @@
       "providers": "供应商",
       "models": "模型",
       "prompts": "Prompt",
+      "shortcuts": "快捷键",
       "about": "关于"
     },
     "workspace": {
@@ -128,6 +129,45 @@
       "profileHint": "决定这个项目的知识库分类，以及提示词里各个上下文区块的称谓（例如「上一章结尾」还是「上一场景结尾」）。",
       "noProject": "打开一个项目后可以设置工作台类型。",
       "switchHint": "切换不会删除任何内容：旧分类的文件夹和条目仍保留在磁盘上，切回即可看到。"
+    },
+    "shortcuts": {
+      "categories": {
+        "global": "全局",
+        "file": "文件",
+        "ai": "AI",
+        "editor": "编辑器",
+        "contextual": "局部约定"
+      },
+      "items": {
+        "commandPalette": "打开/关闭命令面板",
+        "aiChatDrawer": "切换 AI 对话抽屉",
+        "aiGenerateDrawer": "切换 AI 生成任务面板",
+        "closeOverlays": "关闭命令面板 / AI 抽屉",
+        "saveFile": "保存当前文件",
+        "aiRewrite": "对选中文字执行「改写」",
+        "aiPolish": "对选中文字执行「润色」",
+        "aiSummary": "对选中文字执行「摘要」",
+        "aiBubbleDismiss": "关闭选区悬浮工具条",
+        "editorBold": "加粗",
+        "editorItalic": "斜体",
+        "editorInlineCode": "行内代码",
+        "editorStrikethrough": "删除线",
+        "editorLink": "插入链接",
+        "editorHeading1": "一级标题",
+        "editorHeading2": "二级标题",
+        "editorHeading3": "三级标题",
+        "editorQuote": "引用块",
+        "editorBulletList": "无序列表",
+        "editorAiTargetStart": "标记 AI 目标起点",
+        "editorAiTargetEnd": "标记 AI 目标终点",
+        "editorAiTargetClear": "清除 AI 目标标记",
+        "editorUndo": "撤销",
+        "editorRedo": "重做",
+        "editorFind": "查找",
+        "contextualCloseOverlay": "关闭右键菜单 / 弹窗",
+        "contextualConfirmInput": "确认输入(重命名、新建条目等)",
+        "contextualPaletteNav": "在命令面板结果间移动"
+      }
     },
     "about": {
       "appName": "Simple AI Writer",
