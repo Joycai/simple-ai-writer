@@ -104,7 +104,7 @@ export async function readLoreEntity(
   if (galleryLines.length) {
     const header = multimodal
       ? "=== images === (descriptions; binary attached below)"
-      : "=== images === (text descriptions only — current model is text-only)";
+      : "=== images === (text descriptions only)";
     parts.push(`${header}\n${galleryLines.join("\n")}`);
   }
 
@@ -114,26 +114,46 @@ export async function readLoreEntity(
     return { toolCallId, content: textContent };
   }
 
-  // Multimodal: load avatar + all gallery images as data URLs. Failures per
-  // file are swallowed so one missing/corrupt image doesn't break the call.
+  // Multimodal: load avatar + gallery images as data URLs, up to a combined
+  // byte budget — an entity with a large gallery would otherwise balloon this
+  // one tool result past what an upstream proxy/timeout can handle (see the
+  // 2026-07-31 trigger-keywords hang: 5 images, ~35MB, 76s then a 502).
+  // Failures per file are swallowed so one missing/corrupt image doesn't
+  // break the call.
   const imageDataUrls: string[] = [];
   const imagePaths = [
     ...(found.avatarPath ? [found.avatarPath] : []),
     ...found.images.map((i) => i.absPath),
   ];
+  let attachedBytes = 0;
+  let omittedCount = 0;
   for (const p of imagePaths) {
+    if (attachedBytes >= MAX_GALLERY_IMAGE_BYTES) {
+      omittedCount++;
+      continue;
+    }
     try {
-      const { dataUrl } = await imageToDataUrl(p);
+      const { dataUrl, bytes } = await imageToDataUrl(p);
       imageDataUrls.push(dataUrl);
+      attachedBytes += bytes.length;
     } catch {
       // skip unreadable image
     }
   }
 
+  const omittedNote = omittedCount
+    ? `\n\n(${omittedCount} image${omittedCount > 1 ? "s" : ""} omitted — gallery exceeds the per-call size limit; the descriptions above still apply.)`
+    : "";
+
   return imageDataUrls.length
-    ? { toolCallId, content: textContent, imageDataUrls }
-    : { toolCallId, content: textContent };
+    ? { toolCallId, content: textContent + omittedNote, imageDataUrls }
+    : { toolCallId, content: textContent + omittedNote };
 }
+
+/** Ceiling on how much gallery image data one read_lore_entity call attaches,
+ *  so a large gallery can't balloon the request past what an upstream
+ *  proxy/timeout can handle. */
+const MAX_GALLERY_IMAGE_BYTES = 8 * 1024 * 1024; // ~8MB combined, before base64 inflation
 
 /** Ceiling on how many files one listing reports, before it starts omitting. */
 const LIST_MAX_FILES = 300;
