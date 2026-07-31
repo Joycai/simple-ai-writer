@@ -154,6 +154,23 @@
       "apiLogOn": "On",
       "apiLogOff": "Off",
       "openApiLogs": "Open Log Folder"
+    },
+    "backup": {
+      "section": "Config Backup",
+      "hint": "Export providers, models and prompt templates as a JSON file, or restore from a backup (merged by ID — existing config is never wiped).",
+      "export": "Export config…",
+      "import": "Import config…",
+      "keysLabel": "API keys",
+      "keysHint": "API keys live in the OS credential manager and are excluded by default. \"Include\" writes them into the backup file in plaintext — keep that file safe.",
+      "keysOff": "Exclude",
+      "keysOn": "Include (plaintext)",
+      "exported": "Exported to {{path}}",
+      "exportFailed": "Export failed:",
+      "importConfirm": "Import {{providers}} providers, {{models}} models and {{prompts}} prompts from this backup? Entries with the same ID will be replaced.",
+      "importKeysNote": "The backup contains {{count}} API key(s); they will be saved to the OS credential manager.",
+      "imported": "Import complete.",
+      "importFailed": "Import failed:",
+      "invalidFile": "This is not a valid config backup file."
     }
   },
   "project": {
@@ -654,6 +671,26 @@
     },
     "wall": {
       "changeAvatar": "Change avatar"
+    },
+    "transfer": {
+      "export": "Export",
+      "import": "Import",
+      "exportHint": "Pack the whole lore library into a zip bundle",
+      "importHint": "Import lore entries from a zip bundle",
+      "exportFailed": "Failed to export lore bundle:",
+      "importFailed": "Failed to import lore bundle:",
+      "emptyBundle": "The selected file is not a valid lore bundle (no entries found).",
+      "stagedSummary": "{{count}} entries in this bundle",
+      "sourceProfile": "source workspace: {{profile}}",
+      "conflictCount": "{{count}} entries clash with existing ones",
+      "strategyLabel": "For clashing entries",
+      "strategySkip": "Skip",
+      "strategyOverwrite": "Overwrite",
+      "strategyKeepBoth": "Keep both",
+      "importConfirm": "Import",
+      "importing": "Importing…",
+      "importDone": "Import complete: {{imported}} entries added, {{skipped}} skipped.",
+      "hiddenCategories": "Categories {{categories}} are not part of the current workspace — imported to disk but hidden for now."
     },
     "detail": {
       "openInEditor": "Open in Editor",
