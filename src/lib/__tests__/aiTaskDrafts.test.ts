@@ -44,8 +44,9 @@ vi.mock("../ai", () => ({
 
 // The agentic path is only here to prove it stays single-draft.
 vi.mock("../agent/runtime", () => ({
-  runAgent: async (opts: { onOutputChunk: (t: string) => void }) => {
-    opts.onOutputChunk(h.agentOutput);
+  runAgent: async (opts: { onOutputText: (t: string) => void }) => {
+    // Cumulative snapshot, as the real runtime sends.
+    opts.onOutputText(h.agentOutput);
     return h.runAgent(opts);
   },
 }));
@@ -74,7 +75,12 @@ vi.mock("../context/budget", async (importOriginal) => ({
     charsPerToken: 3, dynamic: false, inputCeilingTokens: 1000,
   }),
 }));
-vi.mock("../context/memory", () => ({ loadMemory: vi.fn(async () => null) }));
+// Partial: runTask also pulls projectRelativePath from here to name the current
+// file for tool-using tasks, and that helper is pure.
+vi.mock("../context/memory", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../context/memory")>()),
+  loadMemory: vi.fn(async () => null),
+}));
 vi.mock("../context/bookContext", () => ({
   BOOK_PREV_TAIL_CHARS: 0,
   buildBookContext: vi.fn(async () => null),
@@ -317,6 +323,30 @@ async function instructionOf(taskId: string, ask?: string): Promise<string> {
   expect(assemble).toHaveBeenCalled();
   return assemble.mock.calls[0][4];
 }
+
+/** The `extras` object the run passed to assembleContext. */
+async function extrasOf(taskId: string, ask?: string) {
+  const rag = await import("../context/rag");
+  const assemble = vi.mocked(rag.assembleContext);
+  assemble.mockClear();
+  await useAiTaskStore.getState().runTask(taskId, ask);
+  return assemble.mock.calls[0][5];
+}
+
+describe("runTask — current file", () => {
+  it("names the current file for a tool-using task", async () => {
+    // Without it, a task that browses the project can't tell which of the files
+    // it lists is the one it was invoked on.
+    expect(await extrasOf("continue")).toMatchObject({
+      currentFilePath: "writing/a.md",
+    });
+  });
+
+  it("omits it for a toolless task", async () => {
+    // Such a task can't look at anything else, so the block is dead weight.
+    expect((await extrasOf("polish"))?.currentFilePath).toBeUndefined();
+  });
+});
 
 describe("runTask — instruction", () => {
   it("uses the task's built-in instruction key", async () => {

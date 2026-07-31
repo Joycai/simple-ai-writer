@@ -30,6 +30,7 @@ const PRESET: TaskPreset = {
 
 function makeOptions(overrides: Partial<AgentRuntimeOptions> = {}): AgentRuntimeOptions & {
   events: AgentEvent[];
+  /** Every snapshot the runtime pushed; the last one is the run's output. */
   output: string[];
 } {
   const events: AgentEvent[] = [];
@@ -47,7 +48,7 @@ function makeOptions(overrides: Partial<AgentRuntimeOptions> = {}): AgentRuntime
     toolContext: { projectPath: "/p", loreIndex: LORE_INDEX, multimodal: false },
     signal: new AbortController().signal,
     onEvent: (e: AgentEvent) => void events.push(e),
-    onOutputChunk: (t: string) => void output.push(t),
+    onOutputText: (t: string) => void output.push(t),
     events,
     output,
     ...overrides,
@@ -65,6 +66,9 @@ beforeEach(() => {
   mockStream.mockReset();
 });
 
+/** The run's output: the final snapshot. (`Array.at` postdates the TS target.) */
+const last = (snapshots: string[]) => snapshots[snapshots.length - 1];
+
 describe("runAgent", () => {
   it("finishes on a text-only round and reports usage", async () => {
     queueRound([{ text: "hello " }, { text: "world" }, { done: true, inputTokens: 10, outputTokens: 5 }]);
@@ -73,13 +77,53 @@ describe("runAgent", () => {
     const result = await runAgent(opts);
 
     expect(result).toEqual({ rounds: 1, inputTokens: 10, outputTokens: 5 });
-    expect(opts.output.join("")).toBe("hello world");
+    expect(last(opts.output)).toBe("hello world");
+    // Streamed, not delivered in one lump.
+    expect(opts.output).toEqual(["hello ", "hello world"]);
     // Exactly one round-start, no tool steps
     expect(opts.events.map((e) => e.kind)).toEqual(["round-start"]);
     const round = opts.events[0] as Extract<AgentEvent, { kind: "round-start" }>;
     expect(round.round).toBe(1);
     expect(round.maxRounds).toBe(8);
     expect(round.estInputTokens).toBeGreaterThan(0);
+  });
+
+  it("discards what the model said before calling a tool", async () => {
+    // Round 1 narrates ("我先去找文件列表。") and then calls a tool. That text is
+    // the model thinking out loud, not output — it used to be spliced into the
+    // result the author then inserted into their document.
+    queueRound([
+      { text: "我先去找文件列表。" },
+      { toolCalls: [{ index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" }] },
+      { done: true, inputTokens: 8, outputTokens: 2 },
+    ]);
+    queueRound([{ text: "**未提及**\n- 权限接口" }, { done: true, inputTokens: 20, outputTokens: 7 }]);
+    const opts = makeOptions();
+
+    await runAgent(opts);
+
+    expect(last(opts.output)).toBe("**未提及**\n- 权限接口");
+    // It was shown while it streamed, then retracted — the flash is the price of
+    // not stalling the real answer behind a round-completion check.
+    expect(opts.output).toContain("我先去找文件列表。");
+    expect(opts.output).toContain("");
+  });
+
+  it("keeps text from every round that ends in prose", async () => {
+    // Only *tool* rounds are discarded. A run whose rounds each end in text
+    // accumulates all of it.
+    queueRound([
+      { text: "part one. " },
+      { toolCalls: [{ index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" }] },
+      { done: true, inputTokens: 1, outputTokens: 1 },
+    ]);
+    queueRound([{ text: "the answer" }, { done: true, inputTokens: 1, outputTokens: 1 }]);
+    const opts = makeOptions();
+
+    await runAgent(opts);
+
+    // "part one. " preceded a tool call, so it goes; only the final prose stays.
+    expect(last(opts.output)).toBe("the answer");
   });
 
   it("executes a tool round, appends protocol messages, then finishes", async () => {

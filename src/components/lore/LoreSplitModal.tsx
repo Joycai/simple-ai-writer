@@ -149,7 +149,8 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
         modelId: model.modelId,
         prefix: model.prefix,
         contextSize: model.contextSize,
-        onProgress: (text) => setRawOutput((prev) => prev + text),
+        // Whole output each time, not a delta — see splitter.onProgress.
+        onProgress: setRawOutput,
         signal: ctrl.signal,
       });
       // Empty core would wipe the entry on Apply — fall back to the original.

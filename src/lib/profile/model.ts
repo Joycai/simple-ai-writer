@@ -37,7 +37,8 @@ export type SectionId =
   | "prevTail"
   | "recent"
   | "selection"
-  | "requirement";
+  | "requirement"
+  | "currentFile";
 
 /**
  * What shape this project's documents have — the machinery built for a novel
@@ -277,6 +278,7 @@ export const DEFAULT_SECTION_LABELS: Record<SectionId, string> = {
   recent: "近期内容",
   selection: "选中内容",
   requirement: "额外要求",
+  currentFile: "当前文件",
 };
 
 /** 小说 — the original (and default) profile. */

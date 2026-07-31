@@ -43,7 +43,8 @@ export async function splitLore(opts: {
   modelId: string;
   prefix?: string;
   contextSize?: number;
-  onProgress: (text: string) => void;
+  /** The response so far, in full — a snapshot, not a delta. */
+  onProgress: (fullText: string) => void;
   signal?: AbortSignal;
   systemPrompt?: string;
 }): Promise<SplitResult> {
@@ -103,8 +104,8 @@ export async function splitLore(opts: {
     toolContext: { projectPath: "", loreIndex: {}, multimodal: false },
     signal: opts.signal ?? new AbortController().signal,
     onEvent: () => {},
-    onOutputChunk: (text) => {
-      fullText += text;
+    onOutputText: (text) => {
+      fullText = text;
       opts.onProgress(text);
     },
   });

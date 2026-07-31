@@ -63,8 +63,8 @@ export async function runLoreAgentTask(args: LoreAgentTaskArgs): Promise<string>
     toolContext,
     signal: args.signal ?? new AbortController().signal,
     onEvent: args.onEvent ?? (() => {}),
-    onOutputChunk: (text) => {
-      accumulated += text;
+    onOutputText: (text) => {
+      accumulated = text;
       args.onText(accumulated);
     },
   });

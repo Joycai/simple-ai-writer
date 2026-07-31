@@ -194,7 +194,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // a null here is what makes every downstream layer (the budget's hasMemory,
     // assembleContext's 前情提要) drop out on its own.
     const docs = docModel();
-    const { loadMemory } = await import("../lib/context/memory");
+    const { loadMemory, projectRelativePath } = await import("../lib/context/memory");
     const memory = docs.memory && activeFilePath
       ? await loadMemory(projectPath, activeFilePath)
       : null;
@@ -351,6 +351,12 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // Having tools *is* what makes a run agentic — see presetForTools.
     const preset = presetForTools(task.tools);
     const isAgentic = preset !== null;
+    // Only a task that can browse the project needs to know which file it is
+    // looking at; for a toolless one the block is dead weight. Project-relative,
+    // because that is the shape the read tools report and accept.
+    const currentFilePath = isAgentic && activeFilePath
+      ? projectRelativePath(projectPath, activeFilePath) ?? undefined
+      : undefined;
     get().appendAgentEvent({
       kind: "run-start",
       task: kind,
@@ -372,8 +378,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           get().selection,
           instruction,
           isContinue
-            ? { ...extras, ...bookExtras, appendMode: true, contextChars: plan.recentWindowChars }
-            : { ...extras, contextChars: plan.recentWindowChars },
+            ? { ...extras, ...bookExtras, appendMode: true, contextChars: plan.recentWindowChars, currentFilePath }
+            : { ...extras, contextChars: plan.recentWindowChars, currentFilePath },
           get().selectionRange,
           memory,
           loreBudgetChars,
@@ -419,8 +425,10 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           },
           signal: controller.signal,
           onEvent: (event) => get().appendAgentEvent(event),
-          // Always the single draft — draftCountFor pins the agentic kinds to 1.
-          onOutputChunk: (text) => appendDraftText(set, drafts[0].id, text),
+          // Always the single draft — draftCountFor pins tool-using tasks to 1.
+          // Assigned rather than appended: the runtime sends the whole output
+          // each time so it can drop a tool round's narration.
+          onOutputText: (text) => patchDraft(set, drafts[0].id, { text }),
         });
         const cost = (inputTokens * model.priceIn + outputTokens * model.priceOut) / 1_000_000;
         patchDraft(set, drafts[0].id, { usage: { inputTokens, outputTokens, cost }, done: true });
