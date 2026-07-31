@@ -162,9 +162,6 @@ export function FacetAiAssistantModal({
         preset: FACET_ASSIST_PRESET,
         systemPrompt: SYSTEM_PROMPTS[kind],
         userContent: buildUserContent(textContent, images),
-        // keys never references images in its prompt — don't make it pay to
-        // encode/transmit a gallery it can't use (see run.ts wantsLoreImages).
-        wantsLoreImages: kind !== "keys",
         projectPath: projectPath ?? "",
         loreIndex: index,
         signal: ctrl.signal,

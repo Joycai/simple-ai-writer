@@ -63,6 +63,15 @@ export function allEntityNames(loreIndex: LoreIndex): string {
     .join(", ");
 }
 
+/**
+ * Read an entity's text content (index.md + facets) plus a gallery listing of
+ * its avatar/images by filename and description — never the binary images
+ * themselves. A task that actually needs to see a specific picture calls
+ * `read_lore_image` for it by name (see below); this keeps a routine lore
+ * lookup from unconditionally paying to encode and transmit an entity's whole
+ * gallery (previously: 5 images / ~35MB on one call, timing out — see the
+ * 2026-07-31 trigger-keywords hang).
+ */
 export async function readLoreEntity(
   toolCallId: string,
   name: string,
@@ -90,9 +99,6 @@ export async function readLoreEntity(
     }
   }
 
-  // Gallery: always emit textual descriptions (incl. the avatar). Text-only
-  // models still get a useful description; multimodal models additionally
-  // receive the binary payload below.
   const galleryLines: string[] = [];
   if (found.avatarPath) {
     const fname = found.avatarPath.split(/[\\/]/).pop() ?? "avatar";
@@ -103,57 +109,67 @@ export async function readLoreEntity(
   }
   if (galleryLines.length) {
     const header = multimodal
-      ? "=== images === (descriptions; binary attached below)"
-      : "=== images === (text descriptions only)";
+      ? `=== images === (descriptions; call read_lore_image(name: "${name}", file: ...) to view one)`
+      : "=== images === (text descriptions only — current model is text-only)";
     parts.push(`${header}\n${galleryLines.join("\n")}`);
   }
 
-  const textContent = parts.join("\n\n") || "(no content)";
-
-  if (!multimodal) {
-    return { toolCallId, content: textContent };
-  }
-
-  // Multimodal: load avatar + gallery images as data URLs, up to a combined
-  // byte budget — an entity with a large gallery would otherwise balloon this
-  // one tool result past what an upstream proxy/timeout can handle (see the
-  // 2026-07-31 trigger-keywords hang: 5 images, ~35MB, 76s then a 502).
-  // Failures per file are swallowed so one missing/corrupt image doesn't
-  // break the call.
-  const imageDataUrls: string[] = [];
-  const imagePaths = [
-    ...(found.avatarPath ? [found.avatarPath] : []),
-    ...found.images.map((i) => i.absPath),
-  ];
-  let attachedBytes = 0;
-  let omittedCount = 0;
-  for (const p of imagePaths) {
-    if (attachedBytes >= MAX_GALLERY_IMAGE_BYTES) {
-      omittedCount++;
-      continue;
-    }
-    try {
-      const { dataUrl, bytes } = await imageToDataUrl(p);
-      imageDataUrls.push(dataUrl);
-      attachedBytes += bytes.length;
-    } catch {
-      // skip unreadable image
-    }
-  }
-
-  const omittedNote = omittedCount
-    ? `\n\n(${omittedCount} image${omittedCount > 1 ? "s" : ""} omitted — gallery exceeds the per-call size limit; the descriptions above still apply.)`
-    : "";
-
-  return imageDataUrls.length
-    ? { toolCallId, content: textContent + omittedNote, imageDataUrls }
-    : { toolCallId, content: textContent + omittedNote };
+  return { toolCallId, content: parts.join("\n\n") || "(no content)" };
 }
 
-/** Ceiling on how much gallery image data one read_lore_entity call attaches,
- *  so a large gallery can't balloon the request past what an upstream
- *  proxy/timeout can handle. */
-const MAX_GALLERY_IMAGE_BYTES = 8 * 1024 * 1024; // ~8MB combined, before base64 inflation
+/** Ceiling on one attached image's size, so a single oversized file can't
+ *  reproduce the same timeout this tool exists to avoid. */
+const MAX_SINGLE_IMAGE_BYTES = 12 * 1024 * 1024; // ~12MB, before base64 inflation
+
+/** Fetch one specific image from an entity's gallery (or its avatar) as
+ *  visual input — the on-demand counterpart to read_lore_entity's
+ *  text-only gallery listing. */
+export async function readLoreImage(
+  toolCallId: string,
+  name: string,
+  file: string,
+  loreIndex: LoreIndex,
+  multimodal: boolean,
+): Promise<ToolResult> {
+  if (!multimodal) {
+    return { toolCallId, content: "Error: the active model is text-only and cannot accept images." };
+  }
+
+  const found = findEntityByName(loreIndex, name);
+  if (!found) {
+    return {
+      toolCallId,
+      content: `Entity "${name}" not found. Available: ${allEntityNames(loreIndex) || "none"}`,
+    };
+  }
+
+  const avatarName = found.avatarPath?.split(/[\\/]/).pop();
+  const wantLower = file.trim().toLowerCase();
+  const path = avatarName && avatarName.toLowerCase() === wantLower
+    ? found.avatarPath
+    : found.images.find((i) => i.file.toLowerCase() === wantLower)?.absPath;
+
+  if (!path) {
+    const available = [
+      ...(avatarName ? [avatarName] : []),
+      ...found.images.map((i) => i.file),
+    ].join(", ") || "none";
+    return { toolCallId, content: `Image "${file}" not found on "${name}". Available: ${available}` };
+  }
+
+  try {
+    const { dataUrl, bytes } = await imageToDataUrl(path);
+    if (bytes.length > MAX_SINGLE_IMAGE_BYTES) {
+      return {
+        toolCallId,
+        content: `Error: "${file}" is too large to attach (${(bytes.length / 1024 / 1024).toFixed(1)}MB, limit ${MAX_SINGLE_IMAGE_BYTES / 1024 / 1024}MB).`,
+      };
+    }
+    return { toolCallId, content: `Image "${file}" from ${name}.`, imageDataUrls: [dataUrl] };
+  } catch (e) {
+    return { toolCallId, content: `Error reading "${file}": ${String(e)}` };
+  }
+}
 
 /** Ceiling on how many files one listing reports, before it starts omitting. */
 const LIST_MAX_FILES = 300;

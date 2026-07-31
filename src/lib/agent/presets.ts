@@ -32,7 +32,7 @@ export interface TaskPreset {
 /** 续写 — the agentic continuation task (reads lore + prior chapters, then writes). */
 export const CONTINUE_PRESET: TaskPreset = {
   id: "continue",
-  tools: ["list_lore_entities", "read_lore_entity", "list_files", "read_file", "search_text"],
+  tools: ["list_lore_entities", "read_lore_entity", "read_lore_image", "list_files", "read_file", "search_text"],
   maxRounds: 8,
   finishPolicy: "force-text",
 };
@@ -40,7 +40,7 @@ export const CONTINUE_PRESET: TaskPreset = {
 /** 设定改进 — improve an entity's index.md/facet; may consult other lore first. */
 export const LORE_IMPROVE_PRESET: TaskPreset = {
   id: "lore-improve",
-  tools: ["list_lore_entities", "read_lore_entity"],
+  tools: ["list_lore_entities", "read_lore_entity", "read_lore_image"],
   maxRounds: 4,
   finishPolicy: "force-text",
 };
@@ -48,7 +48,7 @@ export const LORE_IMPROVE_PRESET: TaskPreset = {
 /** 特征助手 — expand/restructure/key a single facet; may consult other lore. */
 export const FACET_ASSIST_PRESET: TaskPreset = {
   id: "facet-assist",
-  tools: ["list_lore_entities", "read_lore_entity"],
+  tools: ["list_lore_entities", "read_lore_entity", "read_lore_image"],
   maxRounds: 4,
   finishPolicy: "force-text",
 };
@@ -92,6 +92,7 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
   tools: [
     "list_lore_entities",
     "read_lore_entity",
+    "read_lore_image",
     "list_files",
     "read_file",
     "search_text",

@@ -24,6 +24,7 @@ import {
   formatLoreIndex,
   listWritingFiles,
   readLoreEntity,
+  readLoreImage,
   readWritingFile,
   searchWritingFiles,
   type ToolCall,
@@ -157,6 +158,7 @@ export interface RegisteredTool {
 export type ToolId =
   | "list_lore_entities"
   | "read_lore_entity"
+  | "read_lore_image"
   | "list_files"
   | "read_file"
   | "search_text"
@@ -211,7 +213,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "read_lore_entity",
         description:
-          "Read the full detail of a lore entity including its index.md and all supplementary .md files. The entity may also have a gallery (avatar + images.md listing additional pictures with descriptions): for multimodal models the binary images are attached, for text-only models only the descriptions are returned. Call list_lore_entities first to get the exact entity names.",
+          "Read the full detail of a lore entity including its index.md and all supplementary .md files. The entity may also have a gallery (avatar + images.md listing additional pictures with descriptions) — this only returns filenames and text descriptions, never the images themselves. Call read_lore_image afterwards for any specific picture you actually need to see. Call list_lore_entities first to get the exact entity names.",
         parameters: {
           type: "object",
           properties: {
@@ -228,6 +230,39 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       const args = JSON.parse(call.arguments || "{}") as { name?: string };
       if (!args.name) return { toolCallId: call.id, content: "Error: 'name' argument is required." };
       return readLoreEntity(call.id, args.name, ctx.loreIndex, ctx.multimodal);
+    },
+  },
+
+  read_lore_image: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "read_lore_image",
+        description:
+          "Fetch ONE specific image from a lore entity's gallery (or its avatar) as visual input. Call read_lore_entity first to see which filenames and descriptions are available, then call this only for the picture(s) actually relevant to the current task — not the whole gallery.",
+        parameters: {
+          type: "object",
+          properties: {
+            name: {
+              type: "string",
+              description: "The entity name exactly as returned by list_lore_entities",
+            },
+            file: {
+              type: "string",
+              description: "The image filename exactly as listed in read_lore_entity's gallery block",
+            },
+          },
+          required: ["name", "file"],
+        },
+      },
+    },
+    execute: async (call, ctx) => {
+      const args = JSON.parse(call.arguments || "{}") as { name?: string; file?: string };
+      if (!args.name || !args.file) {
+        return { toolCallId: call.id, content: "Error: 'name' and 'file' arguments are required." };
+      }
+      return readLoreImage(call.id, args.name, args.file, ctx.loreIndex, ctx.multimodal);
     },
   },
 

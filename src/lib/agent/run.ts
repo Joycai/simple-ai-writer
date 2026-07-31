@@ -29,13 +29,6 @@ export interface LoreAgentTaskArgs {
   loreIndex: LoreIndex;
   /** Extra top-level request fields (JSON mode etc.) — single-shot presets only. */
   extraBody?: Record<string, unknown>;
-  /**
-   * Whether this task wants read_lore_entity to attach gallery images (on a
-   * multimodal model). Default true. Set false for tasks whose prompt never
-   * references images (e.g. suggesting trigger keywords) so they don't pay
-   * for encoding/transmitting a gallery they can't use.
-   */
-  wantsLoreImages?: boolean;
   signal?: AbortSignal;
   /** Called on every text chunk with the full accumulated text so far. */
   onText: (accumulated: string) => void;
@@ -52,7 +45,7 @@ export async function runLoreAgentTask(args: LoreAgentTaskArgs): Promise<string>
   const toolContext: ToolContext = {
     projectPath: args.projectPath,
     loreIndex: args.loreIndex,
-    multimodal: args.model.type === "multimodal" && (args.wantsLoreImages ?? true),
+    multimodal: args.model.type === "multimodal",
   };
 
   let accumulated = "";
