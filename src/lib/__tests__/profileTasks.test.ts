@@ -12,9 +12,11 @@ import {
   BUILTIN_PROFILES,
   COPY_PROFILE,
   DEFAULT_TASKS,
+  FEEDBACK_PROFILE,
   NOVEL_PROFILE,
   TASK_ID_RE,
   TTRPG_PROFILE,
+  WEEKLY_PROFILE,
   parseProfile,
   taskDesc,
   taskLabel,
@@ -186,6 +188,68 @@ describe("the copy profile's domain tasks", () => {
     // overwriting would lose the source being adapted from.
     expect(task.target).toBe("detached");
     expect(task.freeform).toBe(true);
+  });
+});
+
+describe("the 周报 profile", () => {
+  const task = (id: string) => WEEKLY_PROFILE.tasks.find((t) => t.id === id);
+
+  it("is chronological without rolling memory", () => {
+    // Reports sit in date order and last week's is genuinely the context, but a
+    // single report is far too short to need compacting.
+    expect(WEEKLY_PROFILE.docModel).toEqual({
+      ordered: true, priorContext: true, memory: false,
+    });
+  });
+
+  it("leaves 汇总 toolless — the author brings the material", () => {
+    const digest = task("digest")!;
+    expect(digest.tools).toBe("none");
+    expect(digest.freeform).toBe(true);
+    expect(draftCountFor(digest, 3)).toBe(3);
+  });
+
+  it("gives 对照上期 read tools and no freeform input", () => {
+    const carryover = task("carryover")!;
+    // Read tools because prior-document context only reaches *continuation*
+    // tasks, and this one appends nothing — it has to find the file itself.
+    expect(carryover.tools).toBe("read");
+    expect(carryover.continuation).toBeUndefined();
+    // Not freeform on purpose: it is useful with no input, and a freeform task
+    // can't run on an empty box.
+    expect(carryover.freeform).toBeUndefined();
+    expect(carryover.instructionKey).toBe("ai.instructions.weeklyCarryover");
+  });
+});
+
+describe("the 反馈报告 profile", () => {
+  const task = (id: string) => FEEDBACK_PROFILE.tasks.find((t) => t.id === id);
+
+  it("treats each report as independent", () => {
+    expect(FEEDBACK_PROFILE.docModel).toEqual({
+      ordered: false, priorContext: false, memory: false,
+    });
+  });
+
+  it("gives both domain tasks read tools", () => {
+    // Both have to consult the corpus: a synthesis of feedback the model never
+    // read is the failure this profile is shaped against.
+    for (const id of ["themes", "verify"]) {
+      expect(task(id)!.tools).toBe("read");
+      expect(draftCountFor(task(id)!, 3)).toBe(1);
+    }
+  });
+
+  it("splits the pair on generate vs verify", () => {
+    // 归纳 works from a brief over the whole corpus...
+    expect(task("themes")!.freeform).toBe(true);
+    expect(task("themes")!.needsSelection).toBeUndefined();
+    // ...溯源 checks one claim, so it needs that claim selected — and takes no
+    // reference window, since what it needs is the sources, not the paragraphs
+    // around the claim.
+    expect(task("verify")!.needsSelection).toBe(true);
+    expect(task("verify")!.referenceWindow).toBeUndefined();
+    expect(task("verify")!.freeform).toBeUndefined();
   });
 });
 

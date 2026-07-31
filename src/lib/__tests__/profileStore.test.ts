@@ -67,10 +67,10 @@ describe("loadProfile", () => {
   it("falls back to novel for what an unrecognised id leaves out", async () => {
     files.set(
       PROFILE_PATH,
-      JSON.stringify({ id: "weekly", categories: [{ id: "projects", labelZh: "项目", labelEn: "Projects" }] }),
+      JSON.stringify({ id: "nosuchprofile", categories: [{ id: "projects", labelZh: "项目", labelEn: "Projects" }] }),
     );
     const profile = await loadProfile(ROOT);
-    expect(profile?.id).toBe("weekly");
+    expect(profile?.id).toBe("nosuchprofile");
     expect(profile?.categories.map((c) => c.id)).toEqual(["projects"]);
     expect(profile?.systemPromptKey).toBe(NOVEL_PROFILE.systemPromptKey);
   });
@@ -122,9 +122,9 @@ describe("saveProfile", () => {
 
   it("round-trips through loadProfile", async () => {
     const custom: WorkspaceProfile = {
-      id: "weekly",
-      labelZh: "周报",
-      labelEn: "Weekly",
+      id: "customdomain",
+      labelZh: "自定领域",
+      labelEn: "Custom Domain",
       categories: [{ id: "projects", labelZh: "项目", labelEn: "Projects" }],
       sections: { knowledge: "背景资料" },
       // Reports are chronological and the previous one is context, but a single

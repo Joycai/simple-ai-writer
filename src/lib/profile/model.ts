@@ -432,11 +432,132 @@ export const COPY_PROFILE: WorkspaceProfile = {
   systemPromptKey: "ai.instructions.systemCopy",
 };
 
+/**
+ * 周报 — a recurring status report.
+ *
+ * Chronological rather than book-shaped, which is a real distinction the doc
+ * model already draws: reports sit in date order and **last week's is the
+ * context** (what did I say I would do?), but a single report is far too short
+ * for rolling memory.
+ */
+export const WEEKLY_PROFILE: WorkspaceProfile = {
+  id: "weekly",
+  labelZh: "周报",
+  labelEn: "Weekly Report",
+  categories: [
+    { id: "projects", labelZh: "项目", labelEn: "Projects" },
+    { id: "people", labelZh: "相关方", labelEn: "Stakeholders" },
+    { id: "metrics", labelZh: "指标", labelEn: "Metrics" },
+    { id: "style", labelZh: "风格", labelEn: "Voice" },
+    { id: "custom", labelZh: "自定义", labelEn: "Custom" },
+  ],
+  sections: {
+    knowledge: "背景资料",
+    outline: "本期要点",
+    priorAll: "往期回顾",
+    prevTail: "上期周报",
+    recent: "当前草稿",
+  },
+  docModel: { ordered: true, priorContext: true, memory: false },
+  tasks: [
+    ...DEFAULT_TASKS.filter((t) => t.id !== "continue"),
+    {
+      id: "digest",
+      labelKey: "ai.tasks.digest",
+      descKey: "ai.tasks.digestDesc",
+      instructionKey: "ai.instructions.weeklyDigest",
+      // Toolless: the author supplies the week's raw material, so there is
+      // nothing to go and find. Fans out, which is useful — two takes on the
+      // same week differ mostly in what they choose to lead with.
+      tools: "none",
+      target: "detached",
+      freeform: true,
+    },
+    {
+      id: "carryover",
+      labelKey: "ai.tasks.carryover",
+      descKey: "ai.tasks.carryoverDesc",
+      instructionKey: "ai.instructions.weeklyCarryover",
+      // Read tools because it has to *find* the previous report: the
+      // prior-document context only reaches continuation tasks, and this one
+      // appends nothing. It locates the file itself via list_files/read_file.
+      tools: "read",
+      target: "detached",
+      // Deliberately not freeform: it is useful with no input at all, and a
+      // freeform task can't run on an empty box.
+    },
+  ],
+  systemPromptKey: "ai.instructions.systemWeekly",
+};
+
+/**
+ * 反馈报告 — synthesising raw user feedback into a report.
+ *
+ * The one domain whose main failure mode is not dullness but **overclaiming**:
+ * "most users complain about X" when three of two hundred did is actively
+ * harmful, and it reads exactly like a good finding. Both tasks and the system
+ * prompt are built around that.
+ *
+ * Source material lives in a folder under `writing/` — that is the only tree
+ * `list_files`/`search_text` can discover (`read_file` reaches the whole
+ * project, but the model has to know a path first).
+ */
+export const FEEDBACK_PROFILE: WorkspaceProfile = {
+  id: "feedback",
+  labelZh: "反馈报告",
+  labelEn: "Feedback Report",
+  categories: [
+    { id: "sources", labelZh: "来源", labelEn: "Sources" },
+    { id: "segments", labelZh: "分群", labelEn: "Segments" },
+    { id: "products", labelZh: "产品", labelEn: "Products" },
+    { id: "metrics", labelZh: "指标", labelEn: "Metrics" },
+    { id: "style", labelZh: "风格", labelEn: "Voice" },
+    { id: "custom", labelZh: "自定义", labelEn: "Custom" },
+  ],
+  sections: {
+    knowledge: "背景资料",
+    outline: "报告要求",
+    recent: "当前报告",
+  },
+  // Each report is independent: no order, nothing precedes one, and a report is
+  // short enough to hold whole.
+  docModel: { ordered: false, priorContext: false, memory: false },
+  tasks: [
+    ...DEFAULT_TASKS.filter((t) => t.id !== "continue"),
+    {
+      id: "themes",
+      labelKey: "ai.tasks.themes",
+      descKey: "ai.tasks.themesDesc",
+      instructionKey: "ai.instructions.feedbackThemes",
+      // Must actually read the corpus — a synthesis of feedback the model never
+      // saw is the failure this whole profile is shaped against.
+      tools: "read",
+      target: "detached",
+      freeform: true,
+    },
+    {
+      id: "verify",
+      labelKey: "ai.tasks.verify",
+      descKey: "ai.tasks.verifyDesc",
+      instructionKey: "ai.instructions.feedbackVerify",
+      tools: "read",
+      target: "detached",
+      // Checks one claim in the draft, so it needs that claim selected. No
+      // reference window: what it needs is the *sources*, not the surrounding
+      // paragraphs.
+      needsSelection: true,
+    },
+  ],
+  systemPromptKey: "ai.instructions.systemFeedback",
+};
+
 /** Every built-in profile, in the order a picker should show them. */
 export const BUILTIN_PROFILES: readonly WorkspaceProfile[] = [
   NOVEL_PROFILE,
   TTRPG_PROFILE,
   COPY_PROFILE,
+  WEEKLY_PROFILE,
+  FEEDBACK_PROFILE,
 ];
 
 /** Look up a built-in profile by id, or null when the id isn't one. */
