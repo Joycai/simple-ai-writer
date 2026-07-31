@@ -102,7 +102,7 @@ A profile declares what kind of writing a project is, so a new domain is data ra
 | `docModel` | Which novel-shaped document machinery applies — see below |
 | `systemPromptKey` | Which i18n system prompt is the fallback when no prompt template is active |
 
-Built-ins: `novel` (the default), `ttrpg` (跑团模组) and `copy` (文案). Switching is Settings → 工作台, which calls `projectStore.setProfile()`: persist → scaffold the new folders → rescan. **Non-destructive** — the previous categories' folders and entities stay on disk and reappear on switching back; they are simply not scanned while another profile is active.
+Built-ins: `novel` (the default), `ttrpg` (跑团模组), `copy` (文案), `weekly` (周报) and `feedback` (反馈报告). Switching is Settings → 工作台, which calls `projectStore.setProfile()`: persist → scaffold the new folders → rescan. **Non-destructive** — the previous categories' folders and entities stay on disk and reappear on switching back; they are simply not scanned while another profile is active.
 
 #### Tasks (`tasks`)
 
@@ -129,6 +129,12 @@ The task `id` is load-bearing in three places, so renaming one is a breaking cha
 | 随机表 (`randomtable`) | `tools: "none"`, freeform, detached | A table of rumours needs the brief and the tone, not a lore sweep — and staying toolless is what lets it fan out, since three tables to choose between is how this gets used. |
 | 标题 (`headlines`, copy) | `tools: "none"`, freeform, detached | Generated from a brief, so no selection. Toolless so it fans out: the drafts give *sets* of angles to compare. |
 | 渠道改写 (`channel`, copy) | `needsSelection`, freeform, detached | Transforms an existing passage, so it needs one — but takes no `referenceWindow`, since the target channel comes from the author's line, not from surrounding text. Detached, because overwriting would lose the source being adapted from. |
+| 汇总 (`digest`, weekly) | `tools: "none"`, freeform | The author brings the week's raw material, so there is nothing to go and find. |
+| 对照上期 (`carryover`, weekly) | `tools: "read"`, **not** freeform | Has to *find* the previous report: prior-document context only reaches `continuation` tasks, and this one appends nothing. Not freeform because it is useful with no input, and a freeform task can't run on an empty box. |
+| 归纳主题 (`themes`, feedback) | `tools: "read"`, freeform | Must actually read the corpus — themes inferred from product intuition are the failure this profile is shaped against. |
+| 溯源核对 (`verify`, feedback) | `tools: "read"`, `needsSelection` | Checks one claim in the draft against the sources. No reference window: what it needs is the material, not the surrounding paragraphs. |
+
+**The feedback corpus has to live under `writing/`.** `list_files` and `search_text` are scoped to that tree (`read_file` reaches the whole project, but the model has to know a path before it can read one), so source material in a sibling `input/` folder would be unreachable — the model could not discover it. Widening the read tools is a separate change with its own containment questions.
 
 `needsSelection` and `referenceWindow` are separate flags answering different questions, and 渠道改写 is the first task to want one without the other. They coincide on every built-in, which is how the panel deriving the selection gate from `referenceWindow` went unnoticed — see the `TaskDef flags` guard in `profileTasks.test.ts`, which fails when a declared field has no consumer.
 
