@@ -134,6 +134,8 @@ The task `id` is load-bearing in three places, so renaming one is a breaking cha
 | 归纳主题 (`themes`, feedback) | `tools: "read"`, freeform | Must actually read the corpus — themes inferred from product intuition are the failure this profile is shaped against. |
 | 溯源核对 (`verify`, feedback) | `tools: "read"`, `needsSelection` | Checks one claim in the draft against the sources. No reference window: what it needs is the material, not the surrounding paragraphs. |
 
+**Tool-using tasks are told which file they are on.** `TaskExtras.currentFilePath` becomes a 【当前文件】 block, emitted first. Without it a task that browses the project cannot tell which of the files it lists is the one it was invoked on — 对照上期's "find the report before this one" has no anchor. In testing it happened to work because the draft's own heading said 「第 31 周」; a document that doesn't name its period would have left the model guessing, and picking the wrong file produces output that looks entirely normal. Toolless tasks omit it: they can't look at anything else, so it would only spend tokens.
+
 **The feedback corpus has to live under `writing/`.** `list_files` and `search_text` are scoped to that tree (`read_file` reaches the whole project, but the model has to know a path before it can read one), so source material in a sibling `input/` folder would be unreachable — the model could not discover it. Widening the read tools is a separate change with its own containment questions.
 
 `needsSelection` and `referenceWindow` are separate flags answering different questions, and 渠道改写 is the first task to want one without the other. They coincide on every built-in, which is how the panel deriving the selection gate from `referenceWindow` went unnoticed — see the `TaskDef flags` guard in `profileTasks.test.ts`, which fails when a declared field has no consumer.
@@ -165,6 +167,14 @@ Two details that are easy to get wrong:
 - **Never resolve a system prompt with `ai.instructions.system`.** That key is the *novel* prompt; filling the slot with it defeats the profile before `bundleToMessages` can fall back. Call `profileSystemPrompt()` (`lib/context/rag`). This was a real regression — a TTRPG project was prompted as a novel while the unit test passed, because it exercised the fallback in isolation rather than the path `aiTaskStore` actually takes. `profileSystemPrompt.test.ts` now scans the source for that key.
 
 `profile.json` is hand-editable, and its category ids become **directory names** — so it is parsed defensively (`parseProfile` drops bad entries, rejects case-insensitive duplicates, caps the count) and re-validated in Rust (`valid_category` in `commands.rs`, which is the actual boundary). A file is read as a *patch on the built-in it names*: `{"id":"ttrpg"}` resolves back to that profile exactly.
+
+### Agent output: snapshots, not deltas
+
+`runAgent`'s `onOutputText` hands over **the run's whole output each time**, so callers assign rather than append. Cumulative because the runtime is the only place that knows a round's text turned out not to be output at all: anything the model says before calling a tool ("我先去找文件列表。") is it thinking out loud, and it used to be spliced into the result the author then inserted into their document.
+
+Text still streams as it arrives, so a tool round's narration appears and is then retracted when the round resolves. Buffering each round until its nature is known would instead stall the final answer — the part actually worth watching. The execution log records what the discarded round did, so nothing is lost.
+
+This also settled a pre-existing inconsistency: `run.ts`'s `onText` was already cumulative while `splitter`'s `onProgress` was a delta, and `LoreSplitModal` appended accordingly.
 
 ### RAG (Retrieval-Augmented Generation)
 

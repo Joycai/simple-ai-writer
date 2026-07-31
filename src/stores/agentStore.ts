@@ -415,7 +415,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         signal: controller.signal,
         onEvent: (event) =>
           patchAssistant((tn) => ({ ...tn, log: appendAgentEventTo(tn.log, event) })),
-        onOutputChunk: (chunk) => patchAssistant((tn) => ({ ...tn, text: tn.text + chunk })),
+        // Assign, not append — the runtime hands over the whole output each
+        // time so it can retract a tool round's narration.
+        onOutputText: (text) => patchAssistant((tn) => ({ ...tn, text })),
       });
 
       const cost = (inputTokens * model.priceIn + outputTokens * model.priceOut) / 1_000_000;

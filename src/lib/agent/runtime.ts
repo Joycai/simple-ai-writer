@@ -100,7 +100,23 @@ export interface AgentRuntimeOptions {
   // ── Control & reporting ────────────────────────────────────────────────────
   signal: AbortSignal;
   onEvent: (event: AgentEvent) => void;
-  onOutputChunk: (text: string) => void;
+  /**
+   * The run's output **so far, in full** — a snapshot, not a delta, so callers
+   * assign rather than append.
+   *
+   * Cumulative because the runtime is the only place that knows a round's text
+   * turned out not to be output at all: anything the model says before calling a
+   * tool ("我先去找文件列表。") is it thinking out loud, and used to be spliced
+   * into the result the author then inserted into their document. Discarding
+   * that is only expressible if the runtime owns the buffer.
+   *
+   * Text still streams as it arrives, so a tool round's narration appears and
+   * then disappears when the round resolves. The alternative — buffering each
+   * round until its nature is known — would stall the final answer, which is the
+   * part worth watching. The execution log records what the discarded round did,
+   * so nothing is actually lost.
+   */
+  onOutputText: (fullText: string) => void;
 }
 
 export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResult> {
@@ -110,6 +126,8 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
 
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
+  /** Text from rounds that ended in prose — the run's output as it stands. */
+  let committedText = "";
 
   for (let round = 1; round <= preset.maxRounds; round++) {
     if (opts.signal.aborted) throw new DOMException("Aborted", "AbortError");
@@ -129,6 +147,8 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
 
     let roundToolCalls: AccumulatedToolCall[] = [];
     let roundGeminiModelParts: unknown[] | undefined;
+    /** This round's text, still provisional — kept only if it ends in prose. */
+    let roundText = "";
 
     const dropped = trimHistory(history, opts.inputCeilingTokens);
     if (dropped > 0) {
@@ -157,7 +177,11 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       signal: opts.signal,
       onChunk: (chunk) => {
         if ("text" in chunk) {
-          opts.onOutputChunk(chunk.text);
+          // Streamed live, but on top of `committedText` rather than into it —
+          // if this round turns out to be a tool round, the whole of `roundText`
+          // is dropped below and the display reverts.
+          roundText += chunk.text;
+          opts.onOutputText(committedText + roundText);
         } else if ("toolCalls" in chunk) {
           roundToolCalls = chunk.toolCalls;
           roundGeminiModelParts = chunk._geminiModelParts;
@@ -168,10 +192,16 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       },
     });
 
-    // No tool calls → model produced text → we're done
+    // No tool calls → the model produced prose → that prose is the answer.
     if (roundToolCalls.length === 0) {
+      committedText += roundText;
       return { rounds: round, inputTokens: totalInputTokens, outputTokens: totalOutputTokens };
     }
+
+    // A tool round: whatever the model said before calling the tool was it
+    // narrating its own plan, not writing. Roll the display back to what has
+    // actually been committed so the narration can't end up in the document.
+    if (roundText) opts.onOutputText(committedText);
 
     // Append the assistant's tool-call message to history.
     // _geminiModelParts preserves thought signatures for Gemini thinking models.

@@ -79,6 +79,21 @@ export interface TaskExtras {
     prevChapterTail: string;
     prevChapterTitle: string;
   };
+  /**
+   * Project-relative path of the document being worked on, emitted as its own
+   * block for **tool-using tasks only**.
+   *
+   * Without it a task that browses the project can't tell which of the files it
+   * lists is the one it was invoked on — 「找到本文档之前最近的一份周报」 has no
+   * anchor. 对照上期 happened to work in testing because the draft's own heading
+   * said 「第 31 周」; a document that doesn't name its period would have left the
+   * model guessing, and picking the wrong file produces output that looks
+   * entirely normal.
+   *
+   * Omitted for toolless tasks: they can't look at anything else, so naming the
+   * file only spends tokens.
+   */
+  currentFilePath?: string;
 }
 
 export interface ContextBundle {
@@ -95,6 +110,8 @@ export interface ContextBundle {
   /** Compacted story-memory summary of text before the verbatim window. */
   storySummary: string;
   recentContext: string;
+  /** Project-relative path of the current document (tool-using tasks only). */
+  currentFilePath?: string;
   taskText: string;
   outline?: string;
   additionalKnowledge?: string;
@@ -373,7 +390,7 @@ export async function assembleContext(
   return {
     systemPrompt, loreSnippets, loreReport, priorChaptersSummary, prevChapterTail,
     prevChapterTitle, storySummary, recentContext, taskText, outline,
-    additionalKnowledge, estimatedTokens,
+    additionalKnowledge, estimatedTokens, currentFilePath: extras?.currentFilePath,
   };
 }
 
@@ -402,6 +419,12 @@ export function bundleToMessages(
 ): { role: "system" | "user"; content: string }[] {
   const parts: string[] = [];
 
+  // First, because it tells a tool-using task which of the files it is about to
+  // list is the one it was invoked on.
+  if (bundle.currentFilePath) {
+    parts.push(`【${sectionLabel("currentFile")}】
+${bundle.currentFilePath}`);
+  }
   if (bundle.loreSnippets) {
     parts.push(`【${sectionLabel("knowledge")}】\n${bundle.loreSnippets}`);
   }
