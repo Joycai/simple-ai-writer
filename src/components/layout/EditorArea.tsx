@@ -17,7 +17,7 @@ import styles from "./EditorArea.module.css";
 export function EditorArea() {
   const { t } = useTranslation();
   const { projectPath, activeFilePath } = useProjectStore();
-  const { content, filePath, viewMode, editorView, loadFile, setContent, saveNow } = useEditorStore();
+  const { content, filePath, viewMode, editorView, loadFile, setContent } = useEditorStore();
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
 
   const isImage = !!activeFilePath && isImagePath(activeFilePath);
@@ -52,18 +52,6 @@ export function EditorArea() {
       loadFile(activeFilePath);
     }
   }, [activeFilePath, isImage, filePath, loadFile]);
-
-  // Ctrl/Cmd+S to save
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
-        e.preventDefault();
-        saveNow();
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [saveNow]);
 
   if (!projectPath || !activeFilePath) {
     return (
