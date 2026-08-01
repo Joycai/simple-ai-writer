@@ -63,6 +63,15 @@ export function allEntityNames(loreIndex: LoreIndex): string {
     .join(", ");
 }
 
+/**
+ * Read an entity's text content (index.md + facets) plus a gallery listing of
+ * its avatar/images by filename and description — never the binary images
+ * themselves. A task that actually needs to see a specific picture calls
+ * `read_lore_image` for it by name (see below); this keeps a routine lore
+ * lookup from unconditionally paying to encode and transmit an entity's whole
+ * gallery (previously: 5 images / ~35MB on one call, timing out — see the
+ * 2026-07-31 trigger-keywords hang).
+ */
 export async function readLoreEntity(
   toolCallId: string,
   name: string,
@@ -90,9 +99,6 @@ export async function readLoreEntity(
     }
   }
 
-  // Gallery: always emit textual descriptions (incl. the avatar). Text-only
-  // models still get a useful description; multimodal models additionally
-  // receive the binary payload below.
   const galleryLines: string[] = [];
   if (found.avatarPath) {
     const fname = found.avatarPath.split(/[\\/]/).pop() ?? "avatar";
@@ -103,36 +109,66 @@ export async function readLoreEntity(
   }
   if (galleryLines.length) {
     const header = multimodal
-      ? "=== images === (descriptions; binary attached below)"
+      ? `=== images === (descriptions; call read_lore_image(name: "${name}", file: ...) to view one)`
       : "=== images === (text descriptions only — current model is text-only)";
     parts.push(`${header}\n${galleryLines.join("\n")}`);
   }
 
-  const textContent = parts.join("\n\n") || "(no content)";
+  return { toolCallId, content: parts.join("\n\n") || "(no content)" };
+}
 
+/** Ceiling on one attached image's size, so a single oversized file can't
+ *  reproduce the same timeout this tool exists to avoid. */
+const MAX_SINGLE_IMAGE_BYTES = 12 * 1024 * 1024; // ~12MB, before base64 inflation
+
+/** Fetch one specific image from an entity's gallery (or its avatar) as
+ *  visual input — the on-demand counterpart to read_lore_entity's
+ *  text-only gallery listing. */
+export async function readLoreImage(
+  toolCallId: string,
+  name: string,
+  file: string,
+  loreIndex: LoreIndex,
+  multimodal: boolean,
+): Promise<ToolResult> {
   if (!multimodal) {
-    return { toolCallId, content: textContent };
+    return { toolCallId, content: "Error: the active model is text-only and cannot accept images." };
   }
 
-  // Multimodal: load avatar + all gallery images as data URLs. Failures per
-  // file are swallowed so one missing/corrupt image doesn't break the call.
-  const imageDataUrls: string[] = [];
-  const imagePaths = [
-    ...(found.avatarPath ? [found.avatarPath] : []),
-    ...found.images.map((i) => i.absPath),
-  ];
-  for (const p of imagePaths) {
-    try {
-      const { dataUrl } = await imageToDataUrl(p);
-      imageDataUrls.push(dataUrl);
-    } catch {
-      // skip unreadable image
+  const found = findEntityByName(loreIndex, name);
+  if (!found) {
+    return {
+      toolCallId,
+      content: `Entity "${name}" not found. Available: ${allEntityNames(loreIndex) || "none"}`,
+    };
+  }
+
+  const avatarName = found.avatarPath?.split(/[\\/]/).pop();
+  const wantLower = file.trim().toLowerCase();
+  const path = avatarName && avatarName.toLowerCase() === wantLower
+    ? found.avatarPath
+    : found.images.find((i) => i.file.toLowerCase() === wantLower)?.absPath;
+
+  if (!path) {
+    const available = [
+      ...(avatarName ? [avatarName] : []),
+      ...found.images.map((i) => i.file),
+    ].join(", ") || "none";
+    return { toolCallId, content: `Image "${file}" not found on "${name}". Available: ${available}` };
+  }
+
+  try {
+    const { dataUrl, bytes } = await imageToDataUrl(path);
+    if (bytes.length > MAX_SINGLE_IMAGE_BYTES) {
+      return {
+        toolCallId,
+        content: `Error: "${file}" is too large to attach (${(bytes.length / 1024 / 1024).toFixed(1)}MB, limit ${MAX_SINGLE_IMAGE_BYTES / 1024 / 1024}MB).`,
+      };
     }
+    return { toolCallId, content: `Image "${file}" from ${name}.`, imageDataUrls: [dataUrl] };
+  } catch (e) {
+    return { toolCallId, content: `Error reading "${file}": ${String(e)}` };
   }
-
-  return imageDataUrls.length
-    ? { toolCallId, content: textContent, imageDataUrls }
-    : { toolCallId, content: textContent };
 }
 
 /** Ceiling on how many files one listing reports, before it starts omitting. */
