@@ -66,7 +66,15 @@ export function IconRail({ onOpenSettings }: Props) {
       setShowCommandPalette(true);
       return;
     }
-    if (mainView !== "editor") setMainView("editor");
+    // Returning from a non-editor main view (lore wall, full outline) should
+    // just bring the editor back with whatever sidebar state was left behind
+    // — not fold it into the toggle below, which would collapse a panel the
+    // user never asked to close.
+    if (mainView !== "editor") {
+      setMainView("editor");
+      setActiveSideTab(id);
+      return;
+    }
     if (activeSideTab === id && !sidebarCollapsed) {
       setSidebarCollapsed(true);
     } else {
