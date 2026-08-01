@@ -3,10 +3,9 @@ import { useTranslation } from "react-i18next";
 import { RefreshCw, Wand2, AlignLeft, Sparkles } from "lucide-react";
 import { useAiTaskStore, type SelectionRange } from "../../stores/aiTaskStore";
 import { findTask, taskLabel } from "../../lib/profile";
-import { useEditorStore } from "../../stores/editorStore";
-import { clearTarget } from "../../lib/editor/aiTarget";
+import { insideAiSurface, insideSelectableSurface, dropEditorMarker, resolveCommit } from "../../lib/editor/aiSelection";
 import { useAppStore } from "../../stores/appStore";
-import { IS_MAC } from "../../lib/platform";
+import { comboLabel } from "../../lib/shortcuts";
 import styles from "./InlineAiBubble.module.css";
 
 /**
@@ -27,7 +26,7 @@ const SHORTCUTS: { task: ToolbarTask; letter: string }[] = [
   { task: "summary", letter: "M" },
 ];
 
-const shortcutLabel = (letter: string) => (IS_MAC ? `⌘⇧${letter}` : `Ctrl+Shift+${letter}`);
+const shortcutLabel = (letter: string) => comboLabel({ mod: true, shift: true, key: letter });
 
 interface LiveSelection {
   text: string;
@@ -36,49 +35,6 @@ interface LiveSelection {
 
 /** Height budget used to decide whether the bubble fits above the selection. */
 const BUBBLE_H = 150;
-
-/** True when the node lives inside an AI surface (the drawer or this bubble),
- *  so selecting text there shouldn't re-trigger the toolbar. */
-function insideAiSurface(node: Node | null): boolean {
-  const el = node instanceof Element ? node : node?.parentElement ?? null;
-  return !!el?.closest("[data-ai-surface]");
-}
-
-/** True only for selections inside surfaces that support selection AI tasks
- *  (the manuscript CodeMirror editor and the preview pane, tagged
- *  `data-ai-selection`). Selections elsewhere — lore edit textareas, settings
- *  inputs, etc. — must not trigger the toolbar: textarea selections don't even
- *  produce a DOM range, so the bubble would render at the viewport origin. */
-function insideSelectableSurface(node: Node | null): boolean {
-  const el = node instanceof Element ? node : node?.parentElement ?? null;
-  return !!el?.closest("[data-ai-selection]");
-}
-
-/** Resolve precise source offsets for the current selection, if it lives in the
- *  focused CodeMirror editor. Returns rendered-text fallback (no offsets) otherwise. */
-/**
- * Drop any explicitly marked range before committing a dragged one.
- *
- * Both write the same target slot and the last action wins, but the marker also
- * paints the document — left behind, it would highlight one passage while the
- * assistant works on another. Clearing runs first so the marker's own store
- * sync (which fires inside the dispatch) can't wipe the commit that follows.
- */
-function dropEditorMarker() {
-  const view = useEditorStore.getState().editorView;
-  if (view) clearTarget(view);
-}
-
-function resolveCommit(liveText: string): { text: string; range: SelectionRange | null } {
-  const view = useEditorStore.getState().editorView;
-  if (view && view.hasFocus) {
-    const sel = view.state.selection.main;
-    if (!sel.empty) {
-      return { text: view.state.sliceDoc(sel.from, sel.to), range: { from: sel.from, to: sel.to } };
-    }
-  }
-  return { text: liveText, range: null };
-}
 
 export function InlineAiBubble() {
   const { t, i18n } = useTranslation();
@@ -121,34 +77,6 @@ export function InlineAiBubble() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-
-  // Global action shortcuts — Mod+Shift+E/L/M run on the current selection even
-  // when the toolbar is dismissed, as long as text is selected in the document.
-  useEffect(() => {
-    const map: Record<string, ToolbarTask> = { e: "rewrite", l: "polish", m: "summary" };
-    const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || !e.shiftKey || e.altKey) return;
-      const task = map[e.key.toLowerCase()];
-      // Unbound letter, or a task this project's profile doesn't offer.
-      if (!task || !findTask(task)) return;
-      const sel = window.getSelection();
-      const text = sel?.toString() ?? "";
-      if (
-        !text.trim() ||
-        insideAiSurface(sel?.anchorNode ?? null) ||
-        !insideSelectableSurface(sel?.anchorNode ?? null)
-      ) return;
-      e.preventDefault();
-      const { text: committed, range } = resolveCommit(text);
-      dropEditorMarker();
-      setSelection(committed, range);
-      setRequestedTask(task);
-      setShowAiDrawer(true, "generate");
-      setDismissed(true);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [setSelection, setRequestedTask, setShowAiDrawer]);
 
   if (!live || dismissed) return null;
 
