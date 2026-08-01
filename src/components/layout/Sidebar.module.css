@@ -7,11 +7,12 @@
   flex-direction: column;
   overflow: hidden;
   flex-shrink: 0;
+  transition: width var(--transition-slow), border-right-width var(--transition-slow);
 }
 
 .sidebar.collapsed {
   width: 0;
-  border-right: none;
+  border-right-width: 0;
 }
 
 /* Project header — Spectral name + count chips */

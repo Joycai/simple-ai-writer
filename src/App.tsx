@@ -60,7 +60,7 @@ export default function App() {
         }}
       >
         <IconRail onOpenSettings={() => openSettings()} />
-        {!sidebarCollapsed && view === "editor" && <Sidebar />}
+        {view === "editor" && <Sidebar />}
         {!sidebarCollapsed && view === "editor" && (
           <ResizeHandle onDelta={(d) => setSidebarWidth((prev) => prev + d)} />
         )}
