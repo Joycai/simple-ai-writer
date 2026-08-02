@@ -185,6 +185,8 @@ export async function stageConfigImport(
       enabled: r.enabled !== false,
       prefix: str(r.prefix) ?? undefined,
       contextSize: typeof r.contextSize === "number" ? r.contextSize : undefined,
+      maxOutput: typeof r.maxOutput === "number" ? r.maxOutput : undefined,
+      probedAt: typeof r.probedAt === "number" ? r.probedAt : undefined,
     });
   }
 

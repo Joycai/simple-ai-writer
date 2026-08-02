@@ -77,6 +77,37 @@ describe("outputReserveTokens", () => {
   it("charges a Latin manuscript less for the same reply length", () => {
     expect(outputReserveTokens(6_000, 4)).toBe(3_000);
   });
+
+  it("never reserves more than the model can actually emit", () => {
+    // A 128k-window model capped at 4k output gains nothing from a 12k reserve;
+    // the surplus is window the prompt could have used.
+    expect(outputReserveTokens(6_000, 1, 4_096)).toBe(4_096);
+  });
+
+  it("lets the cap win over the floor for a very short-output model", () => {
+    expect(outputReserveTokens(0, 1, 1_000)).toBe(1_000);
+  });
+
+  it("ignores an unset or nonsensical cap", () => {
+    expect(outputReserveTokens(0, 1, undefined)).toBe(2_000);
+    expect(outputReserveTokens(0, 1, 0)).toBe(2_000);
+  });
+
+  it("does not inflate a reserve that is already below the cap", () => {
+    expect(outputReserveTokens(0, 1, 65_536)).toBe(2_000);
+  });
+});
+
+describe("planContextBudget — max-output cap", () => {
+  it("hands the unreservable surplus back to the prompt", () => {
+    const uncapped = planContextBudget(input({ contextSize: 100_000, replyChars: 20_000 }));
+    const capped = planContextBudget(
+      input({ contextSize: 100_000, replyChars: 20_000, maxOutputTokens: 4_096 }),
+    );
+    expect(uncapped.reservedOutputTokens).toBe(40_000);
+    expect(capped.reservedOutputTokens).toBe(4_096);
+    expect(capped.inputCeilingTokens).toBe(uncapped.inputCeilingTokens + 35_904);
+  });
 });
 
 describe("planContextBudget — static fallback", () => {

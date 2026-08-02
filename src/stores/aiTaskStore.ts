@@ -264,6 +264,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       : anchorValid ? anchorRange!.to : documentText.length;
     const plan = planContextBudget({
       contextSize: model.contextSize,
+      maxOutputTokens: model.maxOutput,
       utilization: contextUtilization,
       loreBudgetTokens,
       fixedChars: fixedContextChars({
