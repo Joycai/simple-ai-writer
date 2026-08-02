@@ -16,7 +16,8 @@ import { useAppStore, type ThemeMode, type Language, type FontScheme } from "../
 import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../lib/ai/apiLog";
 import { applyConfigImport, exportAiConfig, stageConfigImport } from "../../lib/ai/configTransfer";
 import type { ApiStandard } from "../../lib/ai/types";
-import { MAX_CONTEXT_SIZE, type ModelType } from "../../lib/ai/configDb";
+import { MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, type ModelType } from "../../lib/ai/configDb";
+import { ModelProbePanel } from "./ModelProbePanel";
 import { CONTEXT_SIZE_STOPS, contextStopIndex, exactStopIndex, formatContextSize } from "../../lib/ai/contextSize";
 import { GEMINI_HARM_CATEGORIES, GEMINI_THRESHOLD_LEVELS, defaultSafetySettings, type GeminiSafetySettings, type GeminiHarmCategory } from "../../lib/ai/safety";
 import { testProviderConnection } from "../../lib/ai/providerProbe";
@@ -586,7 +587,10 @@ function ModelsTab() {
   ];
 
   const { providers, models, addModel, updateModel, removeModel, fetchAndImportModels } = useAiStore();
-  const [form, setForm] = useState({ providerId: "", modelId: "", name: "", type: "text" as ModelType, priceIn: "", priceCachedIn: "", priceOut: "", prefix: "", contextSize: "" });
+  const [form, setForm] = useState({ providerId: "", modelId: "", name: "", type: "text" as ModelType, priceIn: "", priceCachedIn: "", priceOut: "", prefix: "", contextSize: "", maxOutput: "" });
+  // When the two limits came from a probe rather than the keyboard — kept out
+  // of `form` because it is provenance, not something the author edits.
+  const [probedAt, setProbedAt] = useState<number | undefined>(undefined);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
@@ -595,7 +599,8 @@ function ModelsTab() {
   const [error, setError] = useState<string | null>(null);
 
   const resetForm = () => {
-    setForm({ providerId: "", modelId: "", name: "", type: "text", priceIn: "", priceCachedIn: "", priceOut: "", prefix: "", contextSize: "" });
+    setForm({ providerId: "", modelId: "", name: "", type: "text", priceIn: "", priceCachedIn: "", priceOut: "", prefix: "", contextSize: "", maxOutput: "" });
+    setProbedAt(undefined);
     setEditingId(null);
     setShowForm(false);
     setFetchedList([]);
@@ -615,7 +620,9 @@ function ModelsTab() {
       priceOut: m.priceOut ? String(m.priceOut) : "",
       prefix: m.prefix ?? "",
       contextSize: m.contextSize ? String(m.contextSize) : "",
+      maxOutput: m.maxOutput ? String(m.maxOutput) : "",
     });
+    setProbedAt(m.probedAt);
     setEditingId(id);
     setShowForm(true);
     setFetchedList([]);
@@ -643,6 +650,8 @@ function ModelsTab() {
     try {
       const parsedCtx = Math.min(MAX_CONTEXT_SIZE, Math.max(0, Math.floor(parseInt(form.contextSize, 10) || 0)));
       const contextSize = parsedCtx > 0 ? parsedCtx : undefined;
+      const parsedOut = Math.min(MAX_OUTPUT_SIZE, Math.max(0, Math.floor(parseInt(form.maxOutput, 10) || 0)));
+      const maxOutput = parsedOut > 0 ? parsedOut : undefined;
       if (editingId) {
         const existing = models.find((x) => x.id === editingId)!;
         await updateModel({
@@ -656,6 +665,8 @@ function ModelsTab() {
           priceOut: parseFloat(form.priceOut) || 0,
           prefix: form.prefix.trim() || undefined,
           contextSize,
+          maxOutput,
+          probedAt,
         });
       } else {
         await addModel({
@@ -669,6 +680,8 @@ function ModelsTab() {
           enabled: true,
           prefix: form.prefix.trim() || undefined,
           contextSize,
+          maxOutput,
+          probedAt,
         });
       }
       resetForm();
@@ -694,6 +707,7 @@ function ModelsTab() {
                   <div className={styles.itemMeta}>
                     {pname} · {m.modelId}
                     {m.contextSize ? ` · ${m.contextSize.toLocaleString()} ctx` : ""}
+                    {m.maxOutput ? ` · ${m.maxOutput.toLocaleString()} out` : ""}
                   </div>
                 </div>
                 <span className={styles.badge}>{m.type}</span>
@@ -816,6 +830,43 @@ function ModelsTab() {
               {t("aiConfig.models.contextSizeHint")}
             </div>
           </div>
+
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>{t("aiConfig.models.maxOutputLabel")}</label>
+            <input
+              className={styles.input}
+              type="number" min="0" max={MAX_OUTPUT_SIZE} step="512"
+              placeholder={t("aiConfig.models.contextSizeUnset", { defaultValue: "未设置" })}
+              value={form.maxOutput}
+              onChange={(e) => setForm({ ...form, maxOutput: e.target.value })} />
+            <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 6, fontStyle: "italic" }}>
+              {t("aiConfig.models.maxOutputHint")}
+            </div>
+          </div>
+
+          <ModelProbePanel
+            providerId={form.providerId}
+            modelId={form.modelId}
+            contextSize={form.contextSize}
+            maxOutput={form.maxOutput}
+            priceIn={form.priceIn}
+            priceOut={form.priceOut}
+            onApply={(v) => {
+              // Only overwrite a field the probe actually resolved — a run that
+              // learned nothing about output length must leave that value alone.
+              setForm((f) => ({
+                ...f,
+                contextSize: v.contextSize !== undefined ? String(v.contextSize) : f.contextSize,
+                maxOutput: v.maxOutput !== undefined ? String(v.maxOutput) : f.maxOutput,
+              }));
+              setProbedAt(v.probedAt);
+            }}
+          />
+          {probedAt && (
+            <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: -4 }}>
+              {t("aiConfig.probe.probedAt", { date: new Date(probedAt).toLocaleString() })}
+            </div>
+          )}
 
           <div className={styles.fieldGroup}>
             <label className={styles.label}>{t("aiConfig.models.prefixLabel")}</label>

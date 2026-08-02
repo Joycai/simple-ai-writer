@@ -104,15 +104,28 @@ function clamp(v: number, lo: number, hi: number): number {
  * (×2, since the estimate is rough and models overshoot) with a hard floor —
  * tasks like polish/summary declare no length but still need room.
  */
-export function outputReserveTokens(replyChars: number, charsPerToken: number): number {
+export function outputReserveTokens(
+  replyChars: number,
+  charsPerToken: number,
+  maxOutputTokens?: number,
+): number {
   const ratio = charsPerToken > 0 ? charsPerToken : FALLBACK_CHARS_PER_TOKEN;
   const scaled = Math.ceil(Math.max(0, replyChars) / ratio) * 2;
-  return Math.max(OUTPUT_RESERVE_MIN_TOKENS, scaled);
+  const reserve = Math.max(OUTPUT_RESERVE_MIN_TOKENS, scaled);
+  // A model that physically cannot emit more than N tokens gains nothing from
+  // holding back more than N — the surplus is window the prompt could have had.
+  // The cap applies *after* the floor, so a 1k-output model reserves 1k.
+  return maxOutputTokens && maxOutputTokens > 0 ? Math.min(reserve, maxOutputTokens) : reserve;
 }
 
 export interface ContextBudgetInput {
   /** Model context window in tokens. Undefined/0 → static fallback plan. */
   contextSize?: number;
+  /**
+   * Most tokens this model can emit in one reply, when known. Caps the output
+   * reserve so the plan stops holding back window the model can't use.
+   */
+  maxOutputTokens?: number;
   /** Share of the window one request may use (see CONTEXT_UTILIZATION_*). */
   utilization: number;
   /** The author's 【设定资料】 setting, in tokens. */
@@ -191,7 +204,11 @@ export function planContextBudget(input: ContextBudgetInput): ContextBudgetPlan 
 
   const loreRequested = Math.floor(Math.max(0, input.loreBudgetTokens) * charsPerToken);
   const util = clamp(input.utilization, CONTEXT_UTILIZATION_MIN, CONTEXT_UTILIZATION_MAX);
-  const reservedOutputTokens = outputReserveTokens(input.replyChars ?? 0, charsPerToken);
+  const reservedOutputTokens = outputReserveTokens(
+    input.replyChars ?? 0,
+    charsPerToken,
+    input.maxOutputTokens,
+  );
   const inputCeilingTokens = Math.max(
     0,
     Math.floor(input.contextSize * util) - reservedOutputTokens,

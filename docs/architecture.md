@@ -203,7 +203,7 @@ Pins come from `AiPanel` as `dirPath` (whole entity) or `dirPath#file` (single f
 
 Spend order (each step takes from what the last left):
 
-1. **Output reserve** — `outputReserveTokens()`: 2× the requested reply length, floor 2000 tokens
+1. **Output reserve** — `outputReserveTokens()`: 2× the requested reply length, floor 2000 tokens, then capped by `model.maxOutput` when it is known (a model that cannot emit more than 4k gains nothing from a 12k reserve — the surplus goes back to the prompt)
 2. **Fixed costs** — `fixedContextChars()`: system prompt, task text, outline/knowledge, prev-chapter tail. Non-negotiable, they *are* the request
 3. **Verbatim window floor** — `RECENT_WINDOW_MIN_CHARS` (2400) for `【近期内容】`. Prose the model can quote outranks any summary of it, so this comes before the recap layers get anything
 4. **Lore** — the author's `appStore.loreBudgetTokens`, honored as-is; only trimmed if the window physically can't hold it
@@ -215,7 +215,34 @@ The verbatim window is only plannable for tasks with no picker (continue / custo
 - **No declared `contextSize` → static fallback.** The plan returns the historical constants (`MEMORY_BUDGET_CHARS`, `BOOK_PRIOR_BUDGET_CHARS`, `RECENT_WINDOW_MIN_CHARS`) and `dynamic: false`; nothing changes for users who never filled the field in. Lore is additionally hard-capped at `STATIC_LORE_BUDGET_MAX_TOKENS` (2000) on this path — `lib/ai/index.ts` only pre-flights when `contextSize > 0`, so without that cap nothing at all would stop a 128k-token lore setting from building a prompt no endpoint accepts
 - **Agentic runs keep planning after turn 1.** `plan.inputCeilingTokens` is handed to `runAgentLoop`, which elides the oldest tool-result payloads (leaving the messages themselves in place — an unanswered `tool_call` is a protocol error) rather than letting round 6 die on a `ContextSizeError` the author waited five rounds for
 - **chars/token is measured, never assumed.** `measureCharsPerToken(documentText)` samples the manuscript through `lib/ai/tokenEstimate` — the *same* estimator the pre-flight context gate uses. The rest of the context layer assumes ~3 chars/token while that gate counts CJK at ~1 token/char; planning with the optimistic ratio would build prompts the client then refuses to send. Measuring keeps plan and gate in agreement and adapts to Chinese (~1) vs Latin-script (~4) projects on its own
-- **Model context size** — slider (`CONTEXT_SIZE_STOPS`: 16k/32k/128k/256k/512k/1M) plus an exact number field in the model editor, since real windows sit between stops (Claude's 200k, 64k local builds). See `src/lib/ai/contextSize.ts`
+- **Model context size** — slider (`CONTEXT_SIZE_STOPS`: 16k/32k/128k/256k/512k/1M) plus an exact number field in the model editor, since real windows sit between stops (Claude's 200k, 64k local builds). See `src/lib/ai/contextSize.ts`. The 「探测真实上限」 panel below those fields fills both of them by measurement — see below
+
+### Endpoint probing (探测真实上限)
+
+Everything above trusts `model.contextSize` / `model.maxOutput`, and hand-typed values are wrong often enough — and wrong in *different ways per backend* — that the planner needs a way to check. `src/lib/ai/probeAnalysis.ts` (pure, unit-tested) + `src/lib/ai/endpointProbe.ts` (HTTP) + `src/components/settings/ModelProbePanel.tsx` (UI, under the context-size field) do that.
+
+Three quantities that "context size" conflates, kept apart on purpose:
+
+| Quantity | Question | Who lies about it |
+|---|---|---|
+| **Accepted limit** | how large a prompt survives without a 4xx | relays (a gateway caps below its upstream) |
+| **Untruncated limit** | how much the server actually *forwards* | local backends — ollama's `num_ctx` drops the head and still answers 200 OK |
+| **Effective limit** | how deep the model still attends | everyone; not measured here |
+
+Run order, cheapest first — most endpoints are resolved before a token is spent:
+
+1. **Free metadata (0 tokens)** — `readEntryLimits()` walks any provider JSON for a candidate key rather than hardcoding one per backend: vLLM `max_model_len`, OpenRouter `context_length` + `top_provider.max_completion_tokens`, LM Studio `max_context_length` / `loaded_context_length`, Gemini `inputTokenLimit` / `outputTokenLimit`. For local targets it also reads ollama's `POST /api/show` (both the model's `<arch>.context_length` *and* the `num_ctx` actually in force — they routinely differ by 30×) and llama.cpp's `GET /props` (`default_generation_settings.n_ctx`, the server's real `-c`)
+2. **Error probe (~0 tokens)** — one streaming request with a two-word prompt and an absurd `max_tokens`; servers that enforce a limit write the number into the 4xx body, which is exact and free. An *accepted* probe is aborted at the first byte. Handles the `max_tokens` → `max_completion_tokens` rename with a single retry
+3. **Calibration + truncation check (a few k tokens)** — two paddings of different sizes; the *difference* in reported `prompt_tokens` cancels the chat-template overhead and yields this endpoint's real chars/token. Then one prompt of known size is compared against the server's own count. Quick mode bounds this at `QUICK_TRUNCATION_TOKENS` (8192) so a probe on a 1M model still costs cents — enough to catch the ollama default, not enough to catch a cap above 8k
+4. **Deep pass (opt-in, cost shown, second press required)** — binary search for the accepted ceiling (starts at the declared value; a pass ends the search in one request) and a real generation with a task the model can't finish naturally, so `finish_reason` disambiguates "the ceiling" from "it was done talking"
+
+Rules the implementation is built around:
+
+- **Error classification is the whole ballgame.** Reading a 429 or a 502 as "that's the ceiling" would record a rate-limited 128k model as whatever size tripped the quota. Only messages that actually name a context/output limit are `conclusive`; 413 is a gateway *body-size* cap and is reported separately; transient kinds are retried with backoff and never become evidence
+- **Smallest credible value wins.** `suggestSettings()` takes the minimum across findings and reports the disagreement — the effective ceiling is whatever link is tightest, and too-low costs unused window while too-high returns to silent truncation
+- **Detection is proof; non-detection is not.** A server may report the pre-truncation count, omit usage, or (via a relay) invent it. Both the report and the UI string say so explicitly
+- **Nothing is written automatically.** The probe fills the form only when the author presses 应用, and the form still has to be saved. `model.probedAt` dates the measurement, because a relay can re-route the same model name tomorrow
+- **Padding is a seeded word sequence**, not `"aaa…"` or a repeated paragraph — prefix caching and some tokenizers collapse long repeats, which would make the measured count a fiction
 
 ### Story Memory (前情记忆)
 

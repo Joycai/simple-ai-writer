@@ -38,10 +38,27 @@ export interface Model {
    * notice before sending, instead of being silently truncated by the server.
    */
   contextSize?: number;
+  /**
+   * Optional cap on how many tokens this model can emit in one reply. Purely a
+   * planning input: the context budget stops reserving window the model could
+   * never fill (see context/budget.ts), which hands that space back to the
+   * prompt. Nothing is sent to the provider.
+   */
+  maxOutput?: number;
+  /**
+   * When the endpoint was last probed (ms epoch), or undefined for values the
+   * author typed in. Measurements age — a relay can re-route the same model
+   * name to a different upstream tomorrow — so the UI dates them rather than
+   * presenting them as permanent facts.
+   */
+  probedAt?: number;
 }
 
 /** Upper bound for the per-model context size setting (tokens). */
 export const MAX_CONTEXT_SIZE = 2_000_000;
+
+/** Upper bound for the per-model max-output setting (tokens). */
+export const MAX_OUTPUT_SIZE = 262_144;
 
 export interface Prompt {
   id: string;
@@ -90,6 +107,12 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   }
   if (!modelCols.some((c) => c.name === "context_size")) {
     await db.execute(`ALTER TABLE models ADD COLUMN context_size INTEGER`);
+  }
+  if (!modelCols.some((c) => c.name === "max_output")) {
+    await db.execute(`ALTER TABLE models ADD COLUMN max_output INTEGER`);
+  }
+  if (!modelCols.some((c) => c.name === "probed_at")) {
+    await db.execute(`ALTER TABLE models ADD COLUMN probed_at INTEGER`);
   }
 
   await db.execute(`
@@ -190,9 +213,9 @@ export async function saveModel(
 ): Promise<void> {
   await db.execute(
     `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null]
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null]
   );
 }
 
@@ -247,5 +270,7 @@ function rowToModel(r: Record<string, unknown>): Model {
     enabled: (r.enabled as number) === 1,
     prefix: (r.prefix as string | null) ?? undefined,
     contextSize: (r.context_size as number | null) ?? undefined,
+    maxOutput: (r.max_output as number | null) ?? undefined,
+    probedAt: (r.probed_at as number | null) ?? undefined,
   };
 }

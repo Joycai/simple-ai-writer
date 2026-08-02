@@ -179,6 +179,7 @@ interface ContextForecast {
  */
 function useContextForecast(opts: {
   contextSize: number;
+  maxOutputTokens: number | undefined;
   utilization: number;
   loreBudgetTokens: number;
   systemPromptChars: number;
@@ -195,9 +196,9 @@ function useContextForecast(opts: {
   memoryChars: number;
 }): ContextForecast | null {
   const {
-    contextSize, utilization, loreBudgetTokens, systemPromptChars, instructionChars,
-    selectionChars, outlineChars, knowledgeChars, documentText, anchorOffset,
-    recentWindowChars, isContinue, replyChars, memoryChars,
+    contextSize, maxOutputTokens, utilization, loreBudgetTokens, systemPromptChars,
+    instructionChars, selectionChars, outlineChars, knowledgeChars, documentText,
+    anchorOffset, recentWindowChars, isContinue, replyChars, memoryChars,
   } = opts;
 
   return useMemo(() => {
@@ -213,6 +214,7 @@ function useContextForecast(opts: {
     });
     const plan = planContextBudget({
       contextSize,
+      maxOutputTokens,
       utilization,
       loreBudgetTokens,
       fixedChars,
@@ -248,9 +250,9 @@ function useContextForecast(opts: {
       reservedOutputTokens: plan.reservedOutputTokens,
     };
   }, [
-    contextSize, utilization, loreBudgetTokens, systemPromptChars, instructionChars,
-    selectionChars, outlineChars, knowledgeChars, documentText, anchorOffset,
-    recentWindowChars, isContinue, replyChars, memoryChars,
+    contextSize, maxOutputTokens, utilization, loreBudgetTokens, systemPromptChars,
+    instructionChars, selectionChars, outlineChars, knowledgeChars, documentText,
+    anchorOffset, recentWindowChars, isContinue, replyChars, memoryChars,
   ]);
 }
 
@@ -1121,6 +1123,7 @@ export function AiPanel() {
 
   const forecast = useContextForecast({
     contextSize: activeModel?.contextSize ?? 0,
+    maxOutputTokens: activeModel?.maxOutput,
     utilization: contextUtilization,
     loreBudgetTokens,
     systemPromptChars: systemPrompt.length,
