@@ -35,6 +35,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   const decoder = new TextDecoder();
   let inputTokens = 0;
   let outputTokens = 0;
+  let truncated = false;
   // Index-keyed map for accumulating streamed tool_calls across SSE chunks
   const toolCallMap = new Map<number, { id: string; name: string; args: string }>();
   // Carry an incomplete trailing line across reads: a single SSE line can be split
@@ -70,7 +71,8 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       inputTokens = json.usage.prompt_tokens ?? 0;
       outputTokens = json.usage.completion_tokens ?? 0;
     }
-    const delta = json.choices?.[0]?.delta;
+    const choice = json.choices?.[0];
+    const delta = choice?.delta;
     if (delta?.content) opts.onChunk({ text: delta.content });
     // Accumulate tool_calls across partial SSE chunks
     if (delta?.tool_calls && Array.isArray(delta.tool_calls)) {
@@ -86,6 +88,14 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
         if (partial.function?.arguments) entry.args += partial.function.arguments;
       }
     }
+    // content_filter fires with little or no text — Azure OpenAI and several
+    // compat gateways signal it this way instead of an error status. Throw so
+    // it's treated as the safety refusal it is (modelHealth.isSafetyBlockMessage
+    // matches "content_filter") rather than a normal empty completion.
+    if (choice?.finish_reason === "content_filter") {
+      throw new Error("OpenAI: response was blocked (finish_reason: content_filter)");
+    }
+    if (choice?.finish_reason === "length") truncated = true;
   };
 
   while (true) {
@@ -100,7 +110,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       const data = trimmed.slice(5).trim();
       if (data === "[DONE]") {
         emitToolCalls();
-        opts.onChunk({ done: true, inputTokens, outputTokens });
+        opts.onChunk({ done: true, inputTokens, outputTokens, ...(truncated ? { truncated } : {}) });
         return;
       }
       parseData(data);
@@ -114,5 +124,5 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     if (data !== "[DONE]") parseData(data);
   }
   emitToolCalls();
-  opts.onChunk({ done: true, inputTokens, outputTokens });
+  opts.onChunk({ done: true, inputTokens, outputTokens, ...(truncated ? { truncated } : {}) });
 }

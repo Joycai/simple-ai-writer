@@ -170,6 +170,38 @@ describe("streamCompletion — OpenAI SSE", () => {
       }),
     ).rejects.toThrow(/upstream provider is overloaded/);
   });
+
+  it("rejects on a content_filter finish_reason instead of completing as an empty success", async () => {
+    // Azure OpenAI and several compat gateways signal a filtered response
+    // this way (no error status), often with little or no text.
+    mockFetch([
+      `data: {"choices":[{"delta":{},"finish_reason":"content_filter"}]}\n`,
+      `data: [DONE]\n`,
+    ]);
+    await expect(
+      streamCompletion({
+        baseUrl: "https://api.example.com/v1",
+        apiKey: "k",
+        standard: "openai",
+        modelId: "m",
+        messages: [{ role: "user", content: "hi" }],
+        onChunk: () => {},
+      }),
+    ).rejects.toThrow(/content_filter/);
+  });
+
+  it("flags a length finish_reason as truncated rather than a plain success", async () => {
+    const { received } = await collect({
+      chunks: [
+        `data: {"choices":[{"delta":{"content":"cut off"}}]}\n`,
+        `data: {"choices":[{"delta":{},"finish_reason":"length"}],"usage":{"prompt_tokens":1,"completion_tokens":2}}\n`,
+        `data: [DONE]\n`,
+      ],
+    });
+    expect(received[received.length - 1]).toEqual({
+      done: true, inputTokens: 1, outputTokens: 2, truncated: true,
+    });
+  });
 });
 
 describe("streamCompletion — Gemini SSE", () => {
@@ -212,6 +244,36 @@ describe("streamCompletion — Gemini SSE", () => {
         onChunk: () => {},
       })
     ).rejects.toThrow(/SAFETY/);
+  });
+
+  it("throws when the response (not just the prompt) is safety-blocked mid-generation", async () => {
+    // No promptFeedback.blockReason here — the filter trips after some text
+    // already streamed, signaled only via candidates[0].finishReason.
+    mockFetch([
+      `data: {"candidates":[{"content":{"parts":[{"text":"partial"}]},"finishReason":"SAFETY"}]}\n`,
+    ]);
+    await expect(
+      streamCompletion({
+        baseUrl: "",
+        apiKey: "k",
+        standard: "gemini",
+        modelId: "m",
+        messages: [{ role: "user", content: "hi" }],
+        onChunk: () => {},
+      })
+    ).rejects.toThrow(/SAFETY/);
+  });
+
+  it("flags a MAX_TOKENS finishReason as truncated rather than a plain success", async () => {
+    const { received } = await collect({
+      standard: "gemini",
+      chunks: [
+        `data: {"candidates":[{"content":{"parts":[{"text":"cut off"}]},"finishReason":"MAX_TOKENS"}],"usageMetadata":{"promptTokenCount":4,"candidatesTokenCount":8}}\n`,
+      ],
+    });
+    expect(received[received.length - 1]).toEqual({
+      done: true, inputTokens: 4, outputTokens: 8, truncated: true,
+    });
   });
 });
 

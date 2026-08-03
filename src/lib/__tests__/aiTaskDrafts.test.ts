@@ -202,7 +202,7 @@ describe("draftCountFor", () => {
 
 describe("totalUsage", () => {
   const withUsage = (inTokens: number, outTokens: number, cost: number): Draft => ({
-    id: "x", index: 1, text: "", error: null, done: true,
+    id: "x", index: 1, text: "", error: null, done: true, truncated: false,
     usage: { inputTokens: inTokens, outputTokens: outTokens, cost },
   });
 

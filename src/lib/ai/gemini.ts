@@ -83,6 +83,22 @@ function convertToGeminiContents(messages: StreamMessage[]): GeminiContent[] {
 /** Gemini API base used when a provider hasn't configured a custom endpoint. */
 const DEFAULT_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
+/**
+ * `candidates[0].finishReason` values that mean the response was refused or
+ * filtered rather than completed — as opposed to `STOP` (normal) or
+ * `MAX_TOKENS` (truncated, but real output). Unlike `promptFeedback.blockReason`
+ * (checked before generation starts), these can arrive after partial text has
+ * already streamed — e.g. the safety filter tripping mid-response.
+ */
+const GEMINI_BLOCKED_FINISH_REASONS = new Set([
+  "SAFETY",
+  "PROHIBITED_CONTENT",
+  "BLOCKLIST",
+  "RECITATION",
+  "SPII",
+  "IMAGE_SAFETY",
+]);
+
 export async function streamGemini(opts: StreamOptions): Promise<void> {
   const base = (opts.baseUrl || DEFAULT_GEMINI_BASE).replace(/\/$/, "");
   // Key goes in the x-goog-api-key header, never the URL — query strings leak
@@ -148,6 +164,7 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   const decoder = new TextDecoder();
   let inputTokens = 0;
   let outputTokens = 0;
+  let truncated = false;
   const geminiToolCalls: AccumulatedToolCall[] = [];
   // Accumulate ALL model parts across chunks (including thought/thoughtSignature parts)
   // so they can be echoed back verbatim in subsequent turns — required by thinking models.
@@ -174,8 +191,8 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
     if (blockReason) {
       throw new Error(`Gemini blocked this request (${blockReason}). The content may have triggered a safety filter — try a different model or provider.`);
     }
-    const rawParts: unknown[] =
-      (json.candidates as Array<{ content?: { parts?: unknown[] } }> | undefined)?.[0]?.content?.parts ?? [];
+    const candidate = (json.candidates as Array<{ content?: { parts?: unknown[] }; finishReason?: string }> | undefined)?.[0];
+    const rawParts: unknown[] = candidate?.content?.parts ?? [];
     const parts = rawParts as Array<{
       text?: string;
       thought?: boolean;
@@ -201,6 +218,14 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
       inputTokens = usage.promptTokenCount ?? 0;
       outputTokens = usage.candidatesTokenCount ?? 0;
     }
+    // Response-level block/filter — distinct from promptFeedback.blockReason
+    // above, which only covers the request being refused before generation
+    // starts. Left unhandled, a mid-generation filter trip ends the stream
+    // with whatever text streamed so far, reported as a normal completion.
+    if (candidate?.finishReason && GEMINI_BLOCKED_FINISH_REASONS.has(candidate.finishReason)) {
+      throw new Error(`Gemini blocked this response (${candidate.finishReason}). The content may have triggered a safety filter — try a different model or provider.`);
+    }
+    if (candidate?.finishReason === "MAX_TOKENS") truncated = true;
   };
 
   while (true) {
@@ -217,5 +242,5 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   if (geminiToolCalls.length > 0) {
     opts.onChunk({ toolCalls: geminiToolCalls, _geminiModelParts: geminiAllModelParts });
   }
-  opts.onChunk({ done: true, inputTokens, outputTokens });
+  opts.onChunk({ done: true, inputTokens, outputTokens, ...(truncated ? { truncated } : {}) });
 }

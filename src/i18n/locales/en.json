@@ -346,6 +346,7 @@
       "insertToDoc": "Insert to Document",
       "inputTokens": "Input {{tokens}} tokens",
       "outputTokens": "Output {{tokens}} tokens",
+      "truncatedNotice": "Cut off at the model's max output length — the text above may be incomplete.",
       "resultsPlaceholder": "Generated text appears here",
       "thinking": "Thinking…",
       "loreFacets": "Facets",

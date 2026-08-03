@@ -1688,6 +1688,12 @@ export function AiPanel() {
             )}
           </div>
 
+          {/* The model hit its max-output length rather than finishing on its
+              own — the text above is real, but may stop mid-thought. */}
+          {activeDraft?.truncated && !activeDraft.error && (
+            <div className={styles.truncatedNotice}>{t("ai.panel.truncatedNotice")}</div>
+          )}
+
           {/* Token usage for the finished run */}
           {usage && hasResults && (
             <div className={styles.usageBar}>

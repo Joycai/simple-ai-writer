@@ -43,7 +43,15 @@ export interface AccumulatedToolCall {
 
 export type StreamChunk =
   | { text: string }
-  | { done: true; inputTokens: number; outputTokens: number }
+  | {
+      done: true;
+      inputTokens: number;
+      outputTokens: number;
+      /** True when the provider cut the response short on max-tokens (OpenAI
+       *  finish_reason "length" / Gemini finishReason "MAX_TOKENS") rather than
+       *  the model finishing on its own. */
+      truncated?: boolean;
+    }
   | { toolCalls: AccumulatedToolCall[]; _geminiModelParts?: unknown[] };
 
 /** All message variants accepted by the streaming API. */

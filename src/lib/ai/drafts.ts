@@ -43,6 +43,9 @@ export interface Draft {
   error: string | null;
   /** False while still streaming. */
   done: boolean;
+  /** True when the provider cut the response short on max-tokens rather than
+   *  the model finishing on its own — the text is real, just possibly incomplete. */
+  truncated: boolean;
 }
 
 /**

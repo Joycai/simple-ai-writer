@@ -346,6 +346,7 @@
       "insertToDoc": "插入文档",
       "inputTokens": "输入 {{tokens}} tokens",
       "outputTokens": "输出 {{tokens}} tokens",
+      "truncatedNotice": "已达到模型最大输出长度而截断，以上内容可能不完整。",
       "resultsPlaceholder": "生成的文本会出现在这里",
       "thinking": "思考中…",
       "loreFacets": "特征",

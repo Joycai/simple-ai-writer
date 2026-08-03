@@ -328,6 +328,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       usage: null,
       error: null,
       done: false,
+      truncated: false,
     }));
 
     const controller = new AbortController();
@@ -470,10 +471,14 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
               signal: controller.signal,
               onChunk: (chunk) => {
                 if ("done" in chunk) {
-                  const { inputTokens, outputTokens } = chunk;
+                  const { inputTokens, outputTokens, truncated } = chunk;
                   const cost =
                     (inputTokens * model.priceIn + outputTokens * model.priceOut) / 1_000_000;
-                  patchDraft(set, draft.id, { usage: { inputTokens, outputTokens, cost }, done: true });
+                  patchDraft(set, draft.id, {
+                    usage: { inputTokens, outputTokens, cost },
+                    done: true,
+                    truncated: truncated ?? false,
+                  });
                   // One row per draft: each is a separate billed call, and a
                   // single summed row would misreport the run's shape.
                   void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind);
