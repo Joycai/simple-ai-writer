@@ -17,7 +17,10 @@
  * that explanation instead of clobbering the author's newer text.
  *
  * rejectAll() drains the queue on task abort/end so a dangling Promise can
- * never wedge a future run.
+ * never wedge a future run. Scoped per run (see `runId` below) — the panel
+ * task and a chat turn can legitimately run at once, each with its own
+ * pending approvals, so one finishing must not silently auto-reject the
+ * other's still-open card.
  *
  * ── Chat session ──
  * One conversation at a time. The protocol history (chatHistory) is the same
@@ -45,14 +48,24 @@ import { loadApiKey } from "../lib/keyStore";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
 import { costFor } from "../lib/ai/configDb";
 
+/**
+ * Identifies which run created a queued approval — in practice each run's own
+ * AbortController, since every caller already has one and object identity is
+ * exactly the comparison rejectAll needs. Opaque to this store: it never does
+ * anything with a runId but `===` it.
+ */
+type RunId = unknown;
+
 interface PendingApproval {
   proposal: Proposal;
   resolve: (decision: ApprovalDecision) => void;
+  runId: RunId;
 }
 
 interface PendingPlan {
   plan: LorePlan;
   resolve: (decision: PlanDecision) => void;
+  runId: RunId;
 }
 
 export interface ChatTurn {
@@ -89,16 +102,17 @@ interface AgentState {
   chatHistory: StreamMessage[] | null;
 
   /** Called by the tool executor (via ToolContext.requestApproval). */
-  requestApproval: (proposal: Proposal) => Promise<ApprovalDecision>;
+  requestApproval: (proposal: Proposal, runId: RunId) => Promise<ApprovalDecision>;
   /** User approved: backup, apply, resolve. */
   approve: (id: string) => Promise<void>;
   /** User rejected: resolve with their optional reason. */
   reject: (id: string, reason?: string) => void;
-  /** Drain both queues (task aborted / finished) — resolves everything as rejected. */
-  rejectAll: (reason: string) => void;
+  /** Drain both queues for one run (task aborted / finished) — resolves that
+   *  run's own entries as rejected, leaving any other run's untouched. */
+  rejectAll: (reason: string, runId: RunId) => void;
 
   /** Called by propose_lore_plan (via ToolContext.requestPlanApproval). */
-  requestPlanApproval: (plan: LorePlan) => Promise<PlanDecision>;
+  requestPlanApproval: (plan: LorePlan, runId: RunId) => Promise<PlanDecision>;
   /** User approved the plan — the gate records its steps and the loop resumes. */
   approvePlan: (id: string) => void;
   /** User rejected the plan: their reason goes back to the model verbatim. */
@@ -210,9 +224,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   chatAbort: null,
   chatHistory: null,
 
-  requestApproval: (proposal) =>
+  requestApproval: (proposal, runId) =>
     new Promise<ApprovalDecision>((resolve) => {
-      set((s) => ({ pending: [...s.pending, { proposal, resolve }] }));
+      set((s) => ({ pending: [...s.pending, { proposal, resolve, runId }] }));
     }),
 
   approve: async (id) => {
@@ -236,17 +250,22 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     item.resolve({ approved: false, reason });
   },
 
-  rejectAll: (reason) => {
+  rejectAll: (reason, runId) => {
     const { pending, pendingPlans } = get();
-    if (pending.length === 0 && pendingPlans.length === 0) return;
-    set({ pending: [], pendingPlans: [] });
-    for (const item of pending) item.resolve({ approved: false, reason });
-    for (const item of pendingPlans) item.resolve({ approved: false, reason });
+    const drainP = pending.filter((p) => p.runId === runId);
+    const drainL = pendingPlans.filter((p) => p.runId === runId);
+    if (drainP.length === 0 && drainL.length === 0) return;
+    set({
+      pending: pending.filter((p) => p.runId !== runId),
+      pendingPlans: pendingPlans.filter((p) => p.runId !== runId),
+    });
+    for (const item of drainP) item.resolve({ approved: false, reason });
+    for (const item of drainL) item.resolve({ approved: false, reason });
   },
 
-  requestPlanApproval: (plan) =>
+  requestPlanApproval: (plan, runId) =>
     new Promise<PlanDecision>((resolve) => {
-      set((s) => ({ pendingPlans: [...s.pendingPlans, { plan, resolve }] }));
+      set((s) => ({ pendingPlans: [...s.pendingPlans, { plan, resolve, runId }] }));
     }),
 
   approvePlan: (id) => {
@@ -408,8 +427,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
               m.useMemoryStore.getState().loadForActiveFile(),
             );
           },
-          requestApproval: (p) => get().requestApproval(p),
-          requestPlanApproval: (p) => get().requestPlanApproval(p),
+          requestApproval: (p) => get().requestApproval(p, controller),
+          requestPlanApproval: (p) => get().requestPlanApproval(p, controller),
           // One gate per turn: a plan the author approved for *this* request
           // does not silently authorise the next one.
           lorePlan: createPlanGate(),
@@ -447,8 +466,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         }));
       }
     } finally {
-      // Drain any approval still blocking the loop.
-      get().rejectAll("task ended");
+      // Drain this turn's own approvals — never another run's.
+      get().rejectAll("task ended", controller);
       if (get().chatAbort === controller) {
         set({ chatRunning: false, chatAbort: null });
       }
@@ -456,8 +475,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   },
 
   stopChat: () => {
-    get().chatAbort?.abort();
-    get().rejectAll("aborted by user");
+    const controller = get().chatAbort;
+    controller?.abort();
+    get().rejectAll("aborted by user", controller);
     set({ chatRunning: false, chatAbort: null });
   },
 

@@ -419,11 +419,12 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
               );
             },
             // L2 approvals: the AiPanel card resolves these (agent mode only —
-            // continue's preset has no propose_edit).
-            requestApproval: (p) => useAgentStore.getState().requestApproval(p),
+            // continue's preset has no propose_edit). Scoped to this run's own
+            // controller so an unrelated chat turn ending doesn't drain them.
+            requestApproval: (p) => useAgentStore.getState().requestApproval(p, controller),
             // Lore changes are gated on an approved plan; the gate is per-run,
             // so each task starts with a clean slate.
-            requestPlanApproval: (p) => useAgentStore.getState().requestPlanApproval(p),
+            requestPlanApproval: (p) => useAgentStore.getState().requestPlanApproval(p, controller),
             lorePlan: createPlanGate(),
           },
           signal: controller.signal,
@@ -532,9 +533,10 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       }
     } finally {
       if (!get().error) recordRunOutcome(model.id, null);
-      // Drain any approval still blocking the loop — a dangling Promise here
-      // would wedge the next run's tool executor.
-      useAgentStore.getState().rejectAll("task ended");
+      // Drain this run's own approvals — a dangling Promise here would wedge
+      // the next run's tool executor, but an unrelated chat turn's pending
+      // card must not be touched.
+      useAgentStore.getState().rejectAll("task ended", controller);
       // Same guard: abort() already cleared state, and a newer task may own it now.
       if (get().abortController === controller) {
         set({ isRunning: false, abortController: null });
@@ -543,9 +545,10 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
   },
 
   abort: () => {
-    get().abortController?.abort();
+    const controller = get().abortController;
+    controller?.abort();
     // Unblock a loop waiting on an approval card so the abort takes effect.
-    useAgentStore.getState().rejectAll("aborted by user");
+    useAgentStore.getState().rejectAll("aborted by user", controller);
     set({ isRunning: false, abortController: null });
   },
 
