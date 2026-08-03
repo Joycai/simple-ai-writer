@@ -18,6 +18,7 @@ import { useAppStore } from "./stores/appStore";
 import { useAiStore } from "./stores/aiStore";
 import { useMainView } from "./stores/projectStore";
 import { useGlobalShortcuts } from "./useGlobalShortcuts";
+import { useWindowCloseFlush } from "./useWindowCloseFlush";
 import { fillLayer, springScreen, viewSlide } from "./lib/motion";
 
 export default function App() {
@@ -37,6 +38,7 @@ export default function App() {
   }, []);
 
   useGlobalShortcuts();
+  useWindowCloseFlush();
 
   return (
     <MotionConfig reducedMotion="user">
