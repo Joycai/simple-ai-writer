@@ -241,6 +241,21 @@ describe("runTask — single draft", () => {
   });
 });
 
+describe("runTask — sourceFilePath", () => {
+  it("records the file the run's context was assembled from", async () => {
+    await useAiTaskStore.getState().runTask("polish");
+    // The mocked getWritingFocus() always names this file — see the
+    // ../../stores/editorStore mock above.
+    expect(useAiTaskStore.getState().sourceFilePath).toBe("/proj/writing/a.md");
+  });
+
+  it("clears on clearOutput, so a later mismatch check can't compare against a stale run", () => {
+    useAiTaskStore.setState({ sourceFilePath: "/proj/writing/a.md" });
+    useAiTaskStore.getState().clearOutput();
+    expect(useAiTaskStore.getState().sourceFilePath).toBeNull();
+  });
+});
+
 describe("runTask — multiple drafts", () => {
   beforeEach(() => { h.draftCount = 3; });
 
@@ -336,6 +351,30 @@ async function extrasOf(taskId: string, ask?: string) {
   await useAiTaskStore.getState().runTask(taskId, ask);
   return assemble.mock.calls[0][5];
 }
+
+describe("runTask — selection snapshot", () => {
+  it("uses the selection committed before setup started, not one changed mid-setup", async () => {
+    // Setup awaits a keyring read, a memory load, and (for continue) a
+    // book-context build before ever touching assembleContext — each is a
+    // window where the author could commit a different selection (or clear
+    // it) before the request they originally asked for actually goes out.
+    useAiTaskStore.setState({ selection: "original", selectionRange: null });
+
+    const keyStore = await import("../keyStore");
+    vi.mocked(keyStore.loadApiKey).mockImplementationOnce(async () => {
+      useAiTaskStore.setState({ selection: "changed mid-setup", selectionRange: null });
+      return "key";
+    });
+
+    const rag = await import("../context/rag");
+    const assemble = vi.mocked(rag.assembleContext);
+    assemble.mockClear();
+    await useAiTaskStore.getState().runTask("polish");
+
+    expect(assemble).toHaveBeenCalled();
+    expect(assemble.mock.calls[0][3]).toBe("original");
+  });
+});
 
 describe("runTask — current file", () => {
   it("names the current file for a tool-using task", async () => {

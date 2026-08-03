@@ -219,8 +219,16 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
   },
 
   generate: async () => {
-    if (get().isGenerating) return;
-    const { projectPath, activeFilePath } = useProjectStore.getState();
+    // Also chapterGen: without it, this could race generateForFile — both
+    // resolve `existing` from the same starting file, then both save,
+    // silently discarding whichever finishes first (and billing for both).
+    if (get().isGenerating || get().chapterGen) return;
+    const { projectPath } = useProjectStore.getState();
+    // Focus, not activeFilePath: composing projectStore.activeFilePath (set
+    // synchronously on click) with editorStore.content (set by an async
+    // effect) can pair one chapter's text with another's path — see
+    // loadForActiveFile above and editorStore.WritingFocus.
+    const { filePath: activeFilePath, text: content } = getWritingFocus();
     if (!projectPath || !activeFilePath) return;
     const resolved = resolveModel();
     if ("error" in resolved) { set({ error: resolved.error }); return; }
@@ -229,7 +237,6 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
     const rel = projectRelativePath(projectPath, activeFilePath);
     if (!rel) return;
 
-    const content = useEditorStore.getState().content;
     if (content.length < MEMORY_MIN_DOC_CHARS) {
       set({ notice: i18n.t("ai.memory.docTooShort"), error: null });
       return;

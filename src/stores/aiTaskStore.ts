@@ -110,6 +110,14 @@ interface AiTaskState {
   loreReport: LoreActivationReport | null;
   /** Final per-layer allocation for the current run (see lib/context/budget). */
   contextAlloc: ContextAllocation | null;
+  /**
+   * The document this run's context was assembled from — null if none was
+   * open. The current draft's text was generated for *this* file; if the
+   * author has since switched to a different one, applying it there would
+   * silently splice one document's output into another. Set once, from the
+   * same focus snapshot as the run itself, and never touched afterwards.
+   */
+  sourceFilePath: string | null;
 
   setSelection: (s: string, range?: SelectionRange | null, source?: "marker" | "commit") => void;
   /** Drop the committed target, but only if `source` is the one that set it. */
@@ -135,6 +143,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
   agentLog: [],
   loreReport: null,
   contextAlloc: null,
+  sourceFilePath: null,
 
   setSelection: (s, range = null, source = "commit") =>
     set({ selection: s, selectionRange: range, selectionSource: s ? source : null }),
@@ -176,17 +185,21 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const prompt = prompts.find((p) => p.id === activePromptId);
     const systemPrompt = prompt?.content ?? profileSystemPrompt();
 
-    const apiKey = await loadApiKey(provider.id) ?? "";
-
-    // Snapshot the writing focus once, here, and use nothing else for the rest
-    // of the run: file identity and text come from the same atomic read, and the
-    // author switching chapters mid-stream can no longer redirect a request that
-    // is already in flight. (Lazy import — avoids a store cycle.)
+    // Snapshot the writing focus and the committed selection together, here —
+    // before the keyring read below and every other await further down (memory
+    // load, book-context build) gives the author a window to switch files or
+    // change the selection mid-setup. Use nothing else for the rest of the
+    // run: file identity, text, and selection all come from this one atomic
+    // read, never re-fetched via get(). (Lazy import — avoids a store cycle.)
     const { getWritingFocus } = await import("./editorStore");
     const focus = getWritingFocus();
     const documentText = focus.text;
     const activeFilePath = focus.filePath;
+    const selection = get().selection;
+    const selectionRange = get().selectionRange;
     if (!focus.settled) { set({ error: i18n.t("ai.errors.focusNotReady") }); return; }
+
+    const apiKey = await loadApiKey(provider.id) ?? "";
 
     // Story memory for the focused document (前情提要 layer). Read from disk so
     // manual edits to the memory file are picked up; null when none exists.
@@ -252,16 +265,16 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // the book-context bridge decide "we're deep into the chapter" for a file the
     // author just opened. Anything that doesn't check out falls back to the end
     // of the document, which is where a continuation belongs anyway.
-    const anchorRange = get().selectionRange;
+    const anchorRange = selectionRange;
     const anchorValid =
       !!anchorRange &&
       anchorRange.to <= documentText.length &&
-      documentText.slice(anchorRange.from, anchorRange.to) === get().selection;
+      documentText.slice(anchorRange.from, anchorRange.to) === selection;
     // Continue resolves through the shared anchor instead, so the budget window
     // and the book-context bridge measure from the very offset assembleContext
     // will slice from — and that the panel has already named for the author.
     const anchorOffset = isContinue
-      ? extras?.appendAnchor ?? resolveAppendAnchor(documentText, get().selection, anchorRange)
+      ? extras?.appendAnchor ?? resolveAppendAnchor(documentText, selection, anchorRange)
       : anchorValid ? anchorRange!.to : documentText.length;
     const plan = planContextBudget({
       contextSize: model.contextSize,
@@ -276,7 +289,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         // reach the model only as part of 【近期内容】, which is a *plannable*
         // layer with its own budget. Billing them here as a fixed cost too
         // charges the same text twice and shrinks every other layer for it.
-        selectionChars: isContinue ? 0 : get().selection.length,
+        selectionChars: isContinue ? 0 : selection.length,
         outlineChars: extras?.outline?.length,
         knowledgeChars: extras?.additionalKnowledge?.length,
         prevChapterTailChars: useBookContext ? BOOK_PREV_TAIL_CHARS : 0,
@@ -336,6 +349,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     set({
       isRunning: true, drafts, activeDraftId: drafts[0].id,
       error: null, agentLog: [], loreReport: null,
+      sourceFilePath: activeFilePath,
       contextAlloc: {
         loreChars: plan.loreChars,
         memoryChars: memoryBudgetChars,
@@ -378,12 +392,12 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           systemPrompt,
           loreIndex,
           documentText,
-          get().selection,
+          selection,
           instruction,
           isContinue
             ? { ...extras, ...bookExtras, appendMode: true, contextChars: plan.recentWindowChars, currentFilePath }
             : { ...extras, contextChars: plan.recentWindowChars, currentFilePath },
-          get().selectionRange,
+          selectionRange,
           memory,
           loreBudgetChars,
           memoryBudgetChars,
@@ -444,10 +458,10 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           systemPrompt,
           loreIndex,
           documentText,
-          get().selection,
+          selection,
           instruction,
           { ...extras, contextChars: plan.recentWindowChars },
-          get().selectionRange,
+          selectionRange,
           memory,
           loreBudgetChars,
           memoryBudgetChars,
@@ -553,7 +567,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
   },
 
   clearOutput: () =>
-    set({ drafts: [], activeDraftId: null, error: null, agentLog: [], loreReport: null }),
+    set({ drafts: [], activeDraftId: null, error: null, agentLog: [], loreReport: null, sourceFilePath: null }),
 
   setActiveDraft: (id) => set({ activeDraftId: id }),
 }));

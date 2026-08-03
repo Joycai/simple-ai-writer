@@ -347,6 +347,8 @@
       "inputTokens": "Input {{tokens}} tokens",
       "outputTokens": "Output {{tokens}} tokens",
       "truncatedNotice": "Cut off at the model's max output length — the text above may be incomplete.",
+      "outputMismatched": "This result was generated for \"{{file}}\" — switch back to that document to insert it.",
+      "outputMismatchedTitle": "Generated for a different document — switch back to insert it.",
       "resultsPlaceholder": "Generated text appears here",
       "thinking": "Thinking…",
       "loreFacets": "Facets",

@@ -347,6 +347,8 @@
       "inputTokens": "输入 {{tokens}} tokens",
       "outputTokens": "输出 {{tokens}} tokens",
       "truncatedNotice": "已达到模型最大输出长度而截断，以上内容可能不完整。",
+      "outputMismatched": "此结果是针对《{{file}}》生成的 — 切换回该文档后即可插入。",
+      "outputMismatchedTitle": "该结果针对另一文档生成 — 切换回去后再插入。",
       "resultsPlaceholder": "生成的文本会出现在这里",
       "thinking": "思考中…",
       "loreFacets": "特征",
