@@ -402,7 +402,11 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           loreBudgetChars,
           memoryBudgetChars,
         );
-        set({ loreReport: bundle.loreReport });
+        // Guarded like the catch/finally below: assembleContext's per-facet
+        // disk reads can resolve after the author has already aborted and
+        // re-run, and an unguarded set() here would overwrite the new run's
+        // lore report with the aborted one's.
+        if (get().abortController === controller) set({ loreReport: bundle.loreReport });
 
         const { runAgent } = await import("../lib/agent/runtime");
 
@@ -442,15 +446,27 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             lorePlan: createPlanGate(),
           },
           signal: controller.signal,
-          onEvent: (event) => get().appendAgentEvent(event),
+          // Guarded: abort() resets isRunning/abortController synchronously,
+          // without waiting for this run's in-flight promise to actually
+          // unwind, so the author can already be a round or two into a new
+          // run by the time an aborted run's tool loop notices the signal.
+          // Unguarded, this event stream would keep appending the old run's
+          // rounds/tool-steps into the new run's fresh agentLog.
+          onEvent: (event) => {
+            if (get().abortController === controller) get().appendAgentEvent(event);
+          },
           // Always the single draft — draftCountFor pins tool-using tasks to 1.
           // Assigned rather than appended: the runtime sends the whole output
-          // each time so it can drop a tool round's narration.
+          // each time so it can drop a tool round's narration. patchDraft is
+          // id-keyed and already a no-op once this run's draft id is gone, so
+          // it needs no separate guard.
           onOutputText: (text) => patchDraft(set, drafts[0].id, { text }),
         });
         const cost = costFor(model, inputTokens, outputTokens, cachedTokens);
         patchDraft(set, drafts[0].id, { usage: { inputTokens, outputTokens, cost }, done: true });
-        get().appendAgentEvent({ kind: "run-done", inputTokens, outputTokens, at: Date.now() });
+        if (get().abortController === controller) {
+          get().appendAgentEvent({ kind: "run-done", inputTokens, outputTokens, at: Date.now() });
+        }
         void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind, cachedTokens);
       } else {
         // ── Simple streaming: polish / rewrite / summary / custom / Gemini ─
@@ -466,7 +482,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           loreBudgetChars,
           memoryBudgetChars,
         );
-        set({ loreReport: bundle.loreReport });
+        if (get().abortController === controller) set({ loreReport: bundle.loreReport });
         const messages = bundleToMessages(bundle);
 
         // One request per draft, all sharing this run's AbortController so a
@@ -518,21 +534,29 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           patchDraft(set, drafts[i].id, { error: String(reason), done: true });
         });
         // Surface the run total once, for the execution log's closing line.
-        const total = totalUsage(get().drafts);
-        if (total) {
-          get().appendAgentEvent({
-            kind: "run-done",
-            inputTokens: total.inputTokens,
-            outputTokens: total.outputTokens,
-            at: Date.now(),
-          });
+        // Guarded: a superseded run's allSettled can resolve after a new run
+        // has already replaced `drafts` and started its own agentLog.
+        if (get().abortController === controller) {
+          const total = totalUsage(get().drafts);
+          if (total) {
+            get().appendAgentEvent({
+              kind: "run-done",
+              inputTokens: total.inputTokens,
+              outputTokens: total.outputTokens,
+              at: Date.now(),
+            });
+          }
         }
         if (failures.length === drafts.length && failures.length > 0) {
           throw new Error(failures[0]);
         }
-        // Land on a draft that actually has something to show.
-        const firstUsable = get().drafts.find((d) => !d.error);
-        if (firstUsable) set({ activeDraftId: firstUsable.id });
+        // Land on a draft that actually has something to show. Guarded for
+        // the same reason as above — get().drafts could already belong to a
+        // newer run by the time this resolves.
+        if (get().abortController === controller) {
+          const firstUsable = get().drafts.find((d) => !d.error);
+          if (firstUsable) set({ activeDraftId: firstUsable.id });
+        }
       }
     } catch (e) {
       // Only surface errors while this task is still the current one — after

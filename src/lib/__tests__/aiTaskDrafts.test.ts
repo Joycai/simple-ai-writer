@@ -256,6 +256,53 @@ describe("runTask — sourceFilePath", () => {
   });
 });
 
+describe("runTask — stale run guards", () => {
+  it("a superseded run's late event and completion don't corrupt the new run's state", async () => {
+    // abort() resets isRunning/abortController synchronously without waiting
+    // for the aborted run's own promise to unwind — so a new run can start,
+    // and finish, before the old one's tool loop even notices the signal.
+    let resolveStaleRun: (v: { inputTokens: number; outputTokens: number; cachedTokens: number }) => void =
+      () => {};
+    let staleOnEvent: ((event: unknown) => void) | undefined;
+    let markStarted: () => void = () => {};
+    // Resolves once run A has actually reached runAgent — by then its own
+    // isRunning/abortController are already set, so abort() below is a real
+    // abort of an in-flight run rather than firing before it even started.
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    h.runAgent.mockImplementationOnce((opts: unknown) => {
+      staleOnEvent = (opts as { onEvent: (e: unknown) => void }).onEvent;
+      markStarted();
+      return new Promise((resolve) => { resolveStaleRun = resolve; });
+    });
+
+    const staleRun = useAiTaskStore.getState().runTask("continue"); // agentic — run A
+    await started;
+
+    useAiTaskStore.getState().abort();
+    expect(useAiTaskStore.getState().isRunning).toBe(false);
+
+    // Run B: a different (toolless) task, unrelated to run A.
+    await useAiTaskStore.getState().runTask("polish");
+    const logAfterB = useAiTaskStore.getState().agentLog;
+    const draftIdAfterB = useAiTaskStore.getState().activeDraftId;
+    expect(logAfterB.length).toBeGreaterThan(0);
+
+    // Run A's tool loop only now notices the abort and reports a late event,
+    // then finally resolves — well after run B has already finished.
+    staleOnEvent?.({
+      kind: "tool-step",
+      step: { round: 1, toolCallId: "stale", name: "x", argumentSummary: "{}", status: "done" },
+      at: Date.now(),
+    });
+    resolveStaleRun({ inputTokens: 99, outputTokens: 99, cachedTokens: 0 });
+    await staleRun;
+
+    // Run B's log and active draft must be untouched by run A's late arrival.
+    expect(useAiTaskStore.getState().agentLog).toEqual(logAfterB);
+    expect(useAiTaskStore.getState().activeDraftId).toBe(draftIdAfterB);
+  });
+});
+
 describe("runTask — multiple drafts", () => {
   beforeEach(() => { h.draftCount = 3; });
 
