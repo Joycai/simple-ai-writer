@@ -60,6 +60,8 @@ export interface AgentRunResult {
   rounds: number;
   inputTokens: number;
   outputTokens: number;
+  /** Subset of inputTokens served from the provider's prompt cache. */
+  cachedTokens: number;
 }
 
 export interface AgentRuntimeOptions {
@@ -126,6 +128,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
 
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
+  let totalCachedTokens = 0;
   /** Text from rounds that ended in prose — the run's output as it stands. */
   let committedText = "";
 
@@ -188,6 +191,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         } else if ("done" in chunk) {
           totalInputTokens += chunk.inputTokens;
           totalOutputTokens += chunk.outputTokens;
+          totalCachedTokens += chunk.cachedTokens ?? 0;
         }
       },
     });
@@ -195,7 +199,12 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     // No tool calls → the model produced prose → that prose is the answer.
     if (roundToolCalls.length === 0) {
       committedText += roundText;
-      return { rounds: round, inputTokens: totalInputTokens, outputTokens: totalOutputTokens };
+      return {
+        rounds: round,
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+        cachedTokens: totalCachedTokens,
+      };
     }
 
     // A tool round: whatever the model said before calling the tool was it
@@ -276,5 +285,6 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     rounds: preset.maxRounds,
     inputTokens: totalInputTokens,
     outputTokens: totalOutputTokens,
+    cachedTokens: totalCachedTokens,
   };
 }

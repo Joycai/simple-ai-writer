@@ -15,6 +15,7 @@ import type { LoreActivationReport } from "../lib/context/loreSelect";
 import { useAgentStore } from "./agentStore";
 import { useAiStore } from "./aiStore";
 import { draftCountFor, totalUsage, type Draft } from "../lib/ai/drafts";
+import { costFor } from "../lib/ai/configDb";
 import { useAppStore } from "./appStore";
 import { useLoreStore } from "./loreStore";
 import { useProjectStore } from "./projectStore";
@@ -391,7 +392,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
 
         const { runAgent } = await import("../lib/agent/runtime");
 
-        const { inputTokens, outputTokens } = await runAgent({
+        const { inputTokens, outputTokens, cachedTokens } = await runAgent({
           baseUrl,
           apiKey,
           standard: provider.apiStandard,
@@ -432,10 +433,10 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           // each time so it can drop a tool round's narration.
           onOutputText: (text) => patchDraft(set, drafts[0].id, { text }),
         });
-        const cost = (inputTokens * model.priceIn + outputTokens * model.priceOut) / 1_000_000;
+        const cost = costFor(model, inputTokens, outputTokens, cachedTokens);
         patchDraft(set, drafts[0].id, { usage: { inputTokens, outputTokens, cost }, done: true });
         get().appendAgentEvent({ kind: "run-done", inputTokens, outputTokens, at: Date.now() });
-        void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind);
+        void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind, cachedTokens);
       } else {
         // ── Simple streaming: polish / rewrite / summary / custom / Gemini ─
         const bundle = await assembleContext(
@@ -471,9 +472,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
               signal: controller.signal,
               onChunk: (chunk) => {
                 if ("done" in chunk) {
-                  const { inputTokens, outputTokens, truncated } = chunk;
-                  const cost =
-                    (inputTokens * model.priceIn + outputTokens * model.priceOut) / 1_000_000;
+                  const { inputTokens, outputTokens, truncated, cachedTokens } = chunk;
+                  const cost = costFor(model, inputTokens, outputTokens, cachedTokens);
                   patchDraft(set, draft.id, {
                     usage: { inputTokens, outputTokens, cost },
                     done: true,
@@ -481,7 +481,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
                   });
                   // One row per draft: each is a separate billed call, and a
                   // single summed row would misreport the run's shape.
-                  void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind);
+                  void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind, cachedTokens);
                 } else if ("text" in chunk) {
                   appendDraftText(set, draft.id, chunk.text);
                 }
@@ -585,14 +585,15 @@ async function persistUsage(
   inputTokens: number,
   outputTokens: number,
   cost: number,
-  task: string
+  task: string,
+  cachedTokens = 0,
 ): Promise<void> {
   try {
     const db = await getDb(projectPath);
     await db.execute(
-      `INSERT INTO token_usage (model_id, task, prompt_tokens, completion_tokens, cost_usd, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [modelId, task, inputTokens, outputTokens, cost, Math.floor(Date.now() / 1000)]
+      `INSERT INTO token_usage (model_id, task, prompt_tokens, cached_tokens, completion_tokens, cost_usd, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [modelId, task, inputTokens, cachedTokens, outputTokens, cost, Math.floor(Date.now() / 1000)]
     );
   } catch {
     // non-critical — don't surface DB errors to the user

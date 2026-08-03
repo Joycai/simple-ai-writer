@@ -51,6 +51,13 @@ export type StreamChunk =
        *  finish_reason "length" / Gemini finishReason "MAX_TOKENS") rather than
        *  the model finishing on its own. */
       truncated?: boolean;
+      /**
+       * Portion of `inputTokens` served from the provider's prompt cache
+       * (OpenAI `usage.prompt_tokens_details.cached_tokens` / Gemini
+       * `usageMetadata.cachedContentTokenCount`) — a subset of `inputTokens`,
+       * not additional to it, and billed at the model's cheaper cached rate.
+       */
+      cachedTokens?: number;
     }
   | { toolCalls: AccumulatedToolCall[]; _geminiModelParts?: unknown[] };
 

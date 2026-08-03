@@ -16,7 +16,7 @@ import {
   MEMORY_MIN_DOC_CHARS,
 } from "../lib/context/memory";
 import { readFile } from "../lib/fs/fileio";
-import type { Model, Provider } from "../lib/ai/configDb";
+import { costFor, type Model, type Provider } from "../lib/ai/configDb";
 import { loadApiKey } from "../lib/keyStore";
 import { getDb } from "../lib/project";
 import { useAiStore } from "./aiStore";
@@ -30,7 +30,7 @@ const PREV_TAIL_CHARS = 400;
 type Progress = { done: number; total: number };
 
 type GenOutcome =
-  | { memory: DocMemory; usage: { in: number; out: number } }
+  | { memory: DocMemory; usage: { in: number; out: number; cached: number } }
   | { skipped: "short" | "upToDate" };
 
 /**
@@ -75,6 +75,7 @@ async function runMemoryGeneration(opts: {
 
   let totalIn = 0;
   let totalOut = 0;
+  let totalCached = 0;
   const fresh: MemorySegment[] = [];
   for (let i = 0; i < ranges.length; i++) {
     const { from, to } = ranges[i];
@@ -111,6 +112,7 @@ async function runMemoryGeneration(opts: {
         if ("done" in chunk) {
           totalIn += chunk.inputTokens;
           totalOut += chunk.outputTokens;
+          totalCached += chunk.cachedTokens ?? 0;
         } else if ("text" in chunk) {
           summary += chunk.text;
         }
@@ -128,7 +130,7 @@ async function runMemoryGeneration(opts: {
     segments: [...keep, ...fresh],
   };
   await saveMemory(projectPath, memory);
-  return { memory, usage: { in: totalIn, out: totalOut } };
+  return { memory, usage: { in: totalIn, out: totalOut, cached: totalCached } };
 }
 
 /**
@@ -330,10 +332,10 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
 }));
 
 /** Persist summarization token usage (best-effort). */
-function recordUsage(projectPath: string, model: Model, usage: { in: number; out: number }): void {
+function recordUsage(projectPath: string, model: Model, usage: { in: number; out: number; cached: number }): void {
   if (usage.in <= 0 && usage.out <= 0) return;
-  const cost = (usage.in * model.priceIn + usage.out * model.priceOut) / 1_000_000;
-  void persistUsage(projectPath, model.id, usage.in, usage.out, cost);
+  const cost = costFor(model, usage.in, usage.out, usage.cached);
+  void persistUsage(projectPath, model.id, usage.in, usage.out, cost, usage.cached);
 }
 
 async function persistUsage(
@@ -341,14 +343,15 @@ async function persistUsage(
   modelId: string,
   inputTokens: number,
   outputTokens: number,
-  cost: number
+  cost: number,
+  cachedTokens = 0,
 ): Promise<void> {
   try {
     const db = await getDb(projectPath);
     await db.execute(
-      `INSERT INTO token_usage (model_id, task, prompt_tokens, completion_tokens, cost_usd, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [modelId, "memory", inputTokens, outputTokens, cost, Math.floor(Date.now() / 1000)]
+      `INSERT INTO token_usage (model_id, task, prompt_tokens, cached_tokens, completion_tokens, cost_usd, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [modelId, "memory", inputTokens, cachedTokens, outputTokens, cost, Math.floor(Date.now() / 1000)]
     );
   } catch {
     // non-critical

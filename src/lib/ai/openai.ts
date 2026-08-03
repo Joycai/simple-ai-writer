@@ -35,6 +35,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   const decoder = new TextDecoder();
   let inputTokens = 0;
   let outputTokens = 0;
+  let cachedTokens = 0;
   let truncated = false;
   // Index-keyed map for accumulating streamed tool_calls across SSE chunks
   const toolCallMap = new Map<number, { id: string; name: string; args: string }>();
@@ -70,6 +71,9 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     if (json.usage) {
       inputTokens = json.usage.prompt_tokens ?? 0;
       outputTokens = json.usage.completion_tokens ?? 0;
+      // A subset of prompt_tokens, not additional to it — only the uncached
+      // remainder bills at the full input rate.
+      cachedTokens = json.usage.prompt_tokens_details?.cached_tokens ?? 0;
     }
     const choice = json.choices?.[0];
     const delta = choice?.delta;
@@ -110,7 +114,11 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       const data = trimmed.slice(5).trim();
       if (data === "[DONE]") {
         emitToolCalls();
-        opts.onChunk({ done: true, inputTokens, outputTokens, ...(truncated ? { truncated } : {}) });
+        opts.onChunk({
+          done: true, inputTokens, outputTokens,
+          ...(truncated ? { truncated } : {}),
+          ...(cachedTokens ? { cachedTokens } : {}),
+        });
         return;
       }
       parseData(data);
@@ -124,5 +132,9 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     if (data !== "[DONE]") parseData(data);
   }
   emitToolCalls();
-  opts.onChunk({ done: true, inputTokens, outputTokens, ...(truncated ? { truncated } : {}) });
+  opts.onChunk({
+    done: true, inputTokens, outputTokens,
+    ...(truncated ? { truncated } : {}),
+    ...(cachedTokens ? { cachedTokens } : {}),
+  });
 }

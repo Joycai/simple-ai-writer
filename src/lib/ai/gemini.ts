@@ -164,6 +164,7 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   const decoder = new TextDecoder();
   let inputTokens = 0;
   let outputTokens = 0;
+  let cachedTokens = 0;
   let truncated = false;
   const geminiToolCalls: AccumulatedToolCall[] = [];
   // Accumulate ALL model parts across chunks (including thought/thoughtSignature parts)
@@ -213,10 +214,20 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
         });
       }
     }
-    const usage = json.usageMetadata as { promptTokenCount?: number; candidatesTokenCount?: number } | undefined;
+    const usage = json.usageMetadata as {
+      promptTokenCount?: number;
+      candidatesTokenCount?: number;
+      thoughtsTokenCount?: number;
+      cachedContentTokenCount?: number;
+    } | undefined;
     if (usage) {
       inputTokens = usage.promptTokenCount ?? 0;
-      outputTokens = usage.candidatesTokenCount ?? 0;
+      // Thinking models bill reasoning tokens as output, but candidatesTokenCount
+      // excludes them — without this, a run that thinks for 5k tokens and
+      // answers in 500 would record only 500 output tokens.
+      outputTokens = (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0);
+      // A subset of promptTokenCount, not additional to it.
+      cachedTokens = usage.cachedContentTokenCount ?? 0;
     }
     // Response-level block/filter — distinct from promptFeedback.blockReason
     // above, which only covers the request being refused before generation
@@ -242,5 +253,9 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   if (geminiToolCalls.length > 0) {
     opts.onChunk({ toolCalls: geminiToolCalls, _geminiModelParts: geminiAllModelParts });
   }
-  opts.onChunk({ done: true, inputTokens, outputTokens, ...(truncated ? { truncated } : {}) });
+  opts.onChunk({
+    done: true, inputTokens, outputTokens,
+    ...(truncated ? { truncated } : {}),
+    ...(cachedTokens ? { cachedTokens } : {}),
+  });
 }

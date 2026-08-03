@@ -202,6 +202,25 @@ describe("streamCompletion — OpenAI SSE", () => {
       done: true, inputTokens: 1, outputTokens: 2, truncated: true,
     });
   });
+
+  it("reports cached tokens as a subset of input tokens", async () => {
+    const { received } = await collect({
+      chunks: [
+        `data: {"choices":[{"delta":{"content":"hi"}}],"usage":{"prompt_tokens":100,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":80}}}\n`,
+        `data: [DONE]\n`,
+      ],
+    });
+    expect(received[received.length - 1]).toEqual({
+      done: true, inputTokens: 100, outputTokens: 5, cachedTokens: 80,
+    });
+  });
+
+  it("omits cachedTokens when the provider reports none", async () => {
+    const { received } = await collect({
+      chunks: [`data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5}}\n`, `data: [DONE]\n`],
+    });
+    expect(received[received.length - 1]).toEqual({ done: true, inputTokens: 10, outputTokens: 5 });
+  });
 });
 
 describe("streamCompletion — Gemini SSE", () => {
@@ -273,6 +292,30 @@ describe("streamCompletion — Gemini SSE", () => {
     });
     expect(received[received.length - 1]).toEqual({
       done: true, inputTokens: 4, outputTokens: 8, truncated: true,
+    });
+  });
+
+  it("folds thinking tokens into output tokens", async () => {
+    // candidatesTokenCount alone would undercount a thinking model's real
+    // output — thoughtsTokenCount is billed as output too.
+    const { received } = await collect({
+      standard: "gemini",
+      chunks: [
+        `data: {"candidates":[{"content":{"parts":[{"text":"answer"}]}}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":50,"thoughtsTokenCount":500}}\n`,
+      ],
+    });
+    expect(received[received.length - 1]).toEqual({ done: true, inputTokens: 10, outputTokens: 550 });
+  });
+
+  it("reports cached tokens as a subset of input tokens", async () => {
+    const { received } = await collect({
+      standard: "gemini",
+      chunks: [
+        `data: {"candidates":[{"content":{"parts":[{"text":"hi"}]}}],"usageMetadata":{"promptTokenCount":100,"candidatesTokenCount":5,"cachedContentTokenCount":80}}\n`,
+      ],
+    });
+    expect(received[received.length - 1]).toEqual({
+      done: true, inputTokens: 100, outputTokens: 5, cachedTokens: 80,
     });
   });
 });

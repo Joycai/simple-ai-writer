@@ -27,8 +27,8 @@ const h = vi.hoisted(() => ({
   streams: [] as { signal: AbortSignal }[],
   /** Per-call-index behaviour; default is "emit some text and finish". */
   behaviour: null as null | ((index: number, args: StreamArgs) => Promise<void>),
-  persisted: [] as { inTokens: number; outTokens: number }[],
-  runAgent: vi.fn(async (_opts: unknown) => ({ inputTokens: 7, outputTokens: 3 })),
+  persisted: [] as { inTokens: number; cachedTokens: number; outTokens: number }[],
+  runAgent: vi.fn(async (_opts: unknown) => ({ inputTokens: 7, outputTokens: 3, cachedTokens: 0 })),
   agentOutput: "agent text",
 }));
 
@@ -96,7 +96,11 @@ vi.mock("../ai/modelHealth", () => ({ recordRunOutcome: vi.fn() }));
 vi.mock("../project", () => ({
   getDb: vi.fn(async () => ({
     execute: vi.fn(async (_sql: string, params: unknown[]) => {
-      h.persisted.push({ inTokens: params[2] as number, outTokens: params[3] as number });
+      h.persisted.push({
+        inTokens: params[2] as number,
+        cachedTokens: params[3] as number,
+        outTokens: params[4] as number,
+      });
     }),
   })),
 }));
@@ -146,7 +150,7 @@ import { useAiStore } from "../../stores/aiStore";
 
 const MODEL = {
   id: "m1", providerId: "p1", modelId: "gpt-x", name: "GPT-X",
-  contextSize: 8000, priceIn: 1, priceOut: 2, type: "text", prefix: "",
+  contextSize: 8000, priceIn: 1, priceCachedIn: 0, priceOut: 2, type: "text", prefix: "",
 };
 const PROVIDER = { id: "p1", name: "P", baseUrl: "https://api.test/v1", apiStandard: "openai" };
 

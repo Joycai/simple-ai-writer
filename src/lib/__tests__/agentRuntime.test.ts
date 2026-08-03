@@ -76,7 +76,7 @@ describe("runAgent", () => {
 
     const result = await runAgent(opts);
 
-    expect(result).toEqual({ rounds: 1, inputTokens: 10, outputTokens: 5 });
+    expect(result).toEqual({ rounds: 1, inputTokens: 10, outputTokens: 5, cachedTokens: 0 });
     expect(last(opts.output)).toBe("hello world");
     // Streamed, not delivered in one lump.
     expect(opts.output).toEqual(["hello ", "hello world"]);
@@ -136,7 +136,7 @@ describe("runAgent", () => {
 
     const result = await runAgent(opts);
 
-    expect(result).toEqual({ rounds: 2, inputTokens: 28, outputTokens: 9 });
+    expect(result).toEqual({ rounds: 2, inputTokens: 28, outputTokens: 9, cachedTokens: 0 });
 
     // Event order: round 1, tool running, tool done, round 2
     expect(opts.events.map((e) => e.kind)).toEqual([
@@ -160,6 +160,19 @@ describe("runAgent", () => {
     const secondCall = mockStream.mock.calls[1][0];
     expect(secondCall.messages).toBe(history);
     expect(secondCall.tools).toHaveLength(4);
+  });
+
+  it("accumulates cachedTokens across rounds", async () => {
+    queueRound([
+      { toolCalls: [{ index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" }] },
+      { done: true, inputTokens: 8, outputTokens: 2, cachedTokens: 5 },
+    ]);
+    queueRound([{ text: "done" }, { done: true, inputTokens: 20, outputTokens: 7, cachedTokens: 15 }]);
+    const opts = makeOptions();
+
+    const result = await runAgent(opts);
+
+    expect(result).toEqual({ rounds: 2, inputTokens: 28, outputTokens: 9, cachedTokens: 20 });
   });
 
   it("reports a tool-step error for unknown tools and lets the model retry", async () => {

@@ -43,6 +43,7 @@ import { readFile, writeFile } from "../lib/fs/fileio";
 import { getDb } from "../lib/project";
 import { loadApiKey } from "../lib/keyStore";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
+import { costFor } from "../lib/ai/configDb";
 
 interface PendingApproval {
   proposal: Proposal;
@@ -120,13 +121,14 @@ async function recordChatUsage(
   inputTokens: number,
   outputTokens: number,
   cost: number,
+  cachedTokens = 0,
 ): Promise<void> {
   try {
     const db = await getDb(projectPath);
     await db.execute(
-      `INSERT INTO token_usage (model_id, task, prompt_tokens, completion_tokens, cost_usd, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [modelId, "chat", inputTokens, outputTokens, cost, Math.floor(Date.now() / 1000)],
+      `INSERT INTO token_usage (model_id, task, prompt_tokens, cached_tokens, completion_tokens, cost_usd, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [modelId, "chat", inputTokens, cachedTokens, outputTokens, cost, Math.floor(Date.now() / 1000)],
     );
   } catch {
     // non-critical
@@ -380,7 +382,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       const { AGENT_ASSIST_PRESET } = await import("../lib/agent/presets");
       const { contextUtilization } = useAppStore.getState();
 
-      const { inputTokens, outputTokens } = await runAgent({
+      const { inputTokens, outputTokens, cachedTokens } = await runAgent({
         baseUrl: provider.baseUrl,
         apiKey,
         standard: provider.apiStandard,
@@ -420,7 +422,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         onOutputText: (text) => patchAssistant((tn) => ({ ...tn, text })),
       });
 
-      const cost = (inputTokens * model.priceIn + outputTokens * model.priceOut) / 1_000_000;
+      const cost = costFor(model, inputTokens, outputTokens, cachedTokens);
       set((s) => ({
         chatUsage: {
           inputTokens: (s.chatUsage?.inputTokens ?? 0) + inputTokens,
@@ -433,7 +435,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         log: appendAgentEventTo(tn.log, { kind: "run-done", inputTokens, outputTokens, at: Date.now() }),
       }));
       recordRunOutcome(model.id, null);
-      void recordChatUsage(projectPath, model.id, inputTokens, outputTokens, cost);
+      void recordChatUsage(projectPath, model.id, inputTokens, outputTokens, cost, cachedTokens);
     } catch (e) {
       if ((e as Error).name !== "AbortError" && get().chatAbort === controller) {
         const msg = String(e);
