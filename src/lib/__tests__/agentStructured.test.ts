@@ -92,4 +92,49 @@ describe("runStructuredTask", () => {
     await expect(runStructuredTask(makeArgs())).rejects.toThrow("401");
     expect(mockStream).toHaveBeenCalledTimes(1);
   });
+
+  it("falls back on assorted real-world capability-error phrasings", async () => {
+    const phrasings = [
+      "This model does not support function calling",
+      "Tool calls not supported",
+      "Function calling is not supported for this model",
+      "Invalid value for 'tool_choice': tool_choice is not supported for this model",
+    ];
+    for (const message of phrasings) {
+      mockStream.mockReset();
+      mockStream.mockImplementationOnce(async () => {
+        throw new Error(message);
+      });
+      mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
+        opts.onChunk({ text: '{"name":"Ava"}' });
+        opts.onChunk({ done: true, inputTokens: 1, outputTokens: 1 });
+      });
+
+      const result = await runStructuredTask(makeArgs());
+
+      expect(JSON.parse(result)).toEqual({ name: "Ava" });
+      expect(mockStream).toHaveBeenCalledTimes(2);
+    }
+  });
+
+  it("does not fall back on a generic 'does not support' error unrelated to tool calling", async () => {
+    // e.g. "This model does not support streaming for your region" — a real,
+    // unrelated failure that used to be misread as a capability error and
+    // silently retried as a different-shaped request instead of surfaced.
+    mockStream.mockImplementationOnce(async () => {
+      throw new Error("This model does not support streaming for your region");
+    });
+
+    await expect(runStructuredTask(makeArgs())).rejects.toThrow("does not support streaming");
+    expect(mockStream).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not fall back on a genuine malformed-call error that happens to contain \"function call\"", async () => {
+    mockStream.mockImplementationOnce(async () => {
+      throw new Error("Invalid function call: missing required argument 'name'");
+    });
+
+    await expect(runStructuredTask(makeArgs())).rejects.toThrow("Invalid function call");
+    expect(mockStream).toHaveBeenCalledTimes(1);
+  });
 });
