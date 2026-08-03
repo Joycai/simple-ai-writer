@@ -23,7 +23,7 @@
  * without a network. This file is the plumbing.
  */
 
-import { fetch } from "../http";
+import { fetch, isLocalUrl } from "../http";
 import {
   calibrate, classifyProbeError, estimateProbeCost, expectedPromptTokens,
   isTransient, judgeTruncation, makePadding, parseOllamaParameters, readEntryLimits,
@@ -271,7 +271,7 @@ function serverOrigin(baseUrl: string): string {
  * are one, so a remote gateway never sees requests for paths it doesn't serve.
  */
 function looksLocal(baseUrl: string): boolean {
-  if (/^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:|\/|$)/i.test(baseUrl.trim())) return true;
+  if (isLocalUrl(baseUrl)) return true;
   return /:(11434|1234|8080|8000)(\/|$)/.test(trimUrl(baseUrl));
 }
 
