@@ -35,7 +35,14 @@ export function useWindowCloseFlush() {
       // destroy(), not close(): close() re-emits closeRequested, which would
       // just run this handler again — harmlessly (isDirty is now false), but
       // destroy() skips the round-trip and actually closes.
-      await win.destroy();
+      // Never let this reject silently: we already preventDefault()ed, so a
+      // failure here (a missing `core:window:allow-destroy` capability, say)
+      // leaves the author with a window that ignores its own close button.
+      try {
+        await win.destroy();
+      } catch (e) {
+        console.error("[closeFlush] window.destroy() failed; window stays open", e);
+      }
     });
     return () => { void unlistenPromise.then((unlisten) => unlisten()); };
   }, []);
