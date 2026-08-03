@@ -20,7 +20,7 @@ interface LoreState {
   saveTimer: ReturnType<typeof setTimeout> | null;
 
   scanProject: (projectPath: string) => Promise<void>;
-  selectEntity: (entity: LoreEntity) => void;
+  selectEntity: (entity: LoreEntity) => Promise<void>;
   selectFile: (filename: string) => Promise<void>;
   setFileContent: (content: string) => void;
   saveNow: () => Promise<void>;
@@ -47,11 +47,19 @@ export const useLoreStore = create<LoreState>((set, get) => ({
     }
   },
 
-  selectEntity: (entity) => {
+  selectEntity: async (entity) => {
+    // Flush any pending edit on the previously selected file before
+    // switching away — otherwise it's silently discarded, the way
+    // selectFile and editorStore.loadFile both already guard against.
+    const { saveTimer } = get();
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      await get().saveNow();
+    }
     set({ selectedEntity: entity, selectedFile: null, fileContent: "", isDirty: false });
     // Auto-open index.md if it exists
     if (entity.mdFiles.includes("index.md")) {
-      get().selectFile("index.md");
+      await get().selectFile("index.md");
     }
   },
 
@@ -66,7 +74,11 @@ export const useLoreStore = create<LoreState>((set, get) => ({
       const content = await readEntityFile(selectedEntity.dirPath, filename);
       set({ selectedFile: filename, fileContent: content, isDirty: false });
     } catch {
-      set({ selectedFile: filename, fileContent: "", isDirty: false });
+      // selectedFile stays null (not `filename`) — setFileContent's autosave
+      // gate is `selectedEntity && selectedFile`, so leaving it null prevents
+      // a later edit from autosaving near-empty content over a file that
+      // actually failed to read. Mirrors editorStore.loadFile's fix.
+      set({ selectedFile: null, fileContent: "", isDirty: false });
     }
   },
 

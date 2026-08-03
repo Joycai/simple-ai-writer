@@ -162,6 +162,12 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   }, [entity.images]);
 
   const [contentLoaded, setContentLoaded] = useState(false);
+  // True when the read above failed (permissions, non-UTF-8, a transient I/O
+  // fault) rather than the entity genuinely having no body yet. Distinct from
+  // `!content`, which is also true for a real empty entity — conflating the
+  // two would let editing/saving proceed from a blank draft that overwrites
+  // whatever is actually on disk.
+  const [contentLoadFailed, setContentLoadFailed] = useState(false);
   // Bumped when something outside the edit form rewrites index.md in place
   // (e.g. LoreSplitModal Apply) — the body must be re-read, or a later Edit →
   // Save would write the stale pre-split body back and undo the split.
@@ -169,13 +175,17 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   useEffect(() => {
     const indexPath = `${entity.dirPath}/index.md`;
     setContentLoaded(false);
+    setContentLoadFailed(false);
     readFile(indexPath)
       .then((rawFile) => {
         const raw = rawFile.replace(/\r\n/g, "\n"); // CRLF-safe frontmatter match
         const m = raw.match(/^---\n[\s\S]*?\n---\n?/);
         setContent(m ? raw.slice(m[0].length) : raw);
       })
-      .catch(() => setContent(""))
+      .catch(() => {
+        setContent("");
+        setContentLoadFailed(true);
+      })
       .finally(() => setContentLoaded(true));
   }, [entity.dirPath, contentVersion]);
 
@@ -226,6 +236,10 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   };
 
   const startEntityEdit = () => {
+    // The button that calls this is disabled in the same state (see the
+    // render below), but startEntityEdit is also called from the autoEdit
+    // effect right below, so the refusal has to live here too.
+    if (contentLoadFailed) return;
     setDName(entity.name);
     setDAliases(entity.aliases);
     setAliasInput("");
@@ -237,10 +251,13 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
 
   // When opened via the wall's "编辑" context-menu item, enter edit mode as
   // soon as the body has loaded — drafting from unloaded content would save
-  // back an empty body.
+  // back an empty body. Also holds off (rather than consuming autoEdit) when
+  // the load itself failed: retrying startEntityEdit here would be a no-op
+  // per the guard above, so autoEdit would never get cleared and the author
+  // would be stuck unable to enter edit mode even after a successful retry.
   const [autoEdit, setAutoEdit] = useState(initialEditing);
   useEffect(() => {
-    if (autoEdit && contentLoaded) {
+    if (autoEdit && contentLoaded && !contentLoadFailed) {
       startEntityEdit();
       setAutoEdit(false);
     }
@@ -540,7 +557,12 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
           </>
         ) : (
           <>
-            <button className={`${styles.actionBtn} ${styles.actionBtnPrimary}`} onClick={startEntityEdit}>
+            <button
+              className={`${styles.actionBtn} ${styles.actionBtnPrimary}`}
+              onClick={startEntityEdit}
+              disabled={contentLoadFailed}
+              title={contentLoadFailed ? t("lore.detail.loadErrorEditTitle", { defaultValue: "内容未能读取，暂不能编辑" }) : undefined}
+            >
               <Pencil size={11} /> {t("lore.detail.edit", { defaultValue: "编辑" })}
             </button>
             <button className={styles.actionBtn} onClick={() => setShowAiHub(true)}>
@@ -695,6 +717,10 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                 className={styles.markdown}
                 dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }}
               />
+            ) : contentLoadFailed ? (
+              <div className={styles.notLoaded}>
+                {t("lore.detail.loadError", { defaultValue: "内容读取失败，磁盘上的文件未被改动" })}
+              </div>
             ) : (
               <div className={styles.notLoaded}>无内容</div>
             )}
