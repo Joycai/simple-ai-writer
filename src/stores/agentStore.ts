@@ -324,7 +324,6 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     if (!projectPath) { set({ chatError: i18n.t("ai.errors.noProject") }); return; }
     if (!resolved) { set({ chatError: i18n.t("ai.errors.noModel") }); return; }
     const { model, provider } = resolved;
-    const apiKey = (await loadApiKey(provider.id)) ?? "";
 
     const controller = new AbortController();
     const userTurn: ChatTurn = {
@@ -346,6 +345,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       }));
 
     try {
+      const apiKey = (await loadApiKey(provider.id)) ?? "";
+
       // ── History: seed on first turn, append afterwards ──
       let history = get().chatHistory;
       if (!history) {

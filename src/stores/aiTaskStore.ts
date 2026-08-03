@@ -199,8 +199,6 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const selectionRange = get().selectionRange;
     if (!focus.settled) { set({ error: i18n.t("ai.errors.focusNotReady") }); return; }
 
-    const apiKey = await loadApiKey(provider.id) ?? "";
-
     // Story memory for the focused document (前情提要 layer). Read from disk so
     // manual edits to the memory file are picked up; null when none exists.
     //
@@ -383,6 +381,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     });
 
     try {
+      const apiKey = await loadApiKey(provider.id) ?? "";
+
       if (isAgentic) {
         // ── Agentic mode: AI reads (and, in agent mode, writes) via tools ──
         // Continue is append-mode: any selection is an anchor to write *after*,

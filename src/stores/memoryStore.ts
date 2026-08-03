@@ -243,11 +243,11 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
     }
 
     const existing = get().docPath === activeFilePath ? get().memory : null;
-    const apiKey = (await loadApiKey(provider.id)) ?? "";
     const controller = new AbortController();
     set({ isGenerating: true, progress: { done: 0, total: 0 }, error: null, notice: null, abortController: controller });
 
     try {
+      const apiKey = (await loadApiKey(provider.id)) ?? "";
       const outcome = await runMemoryGeneration({
         projectPath, rel, content, existing, model, provider, apiKey,
         signal: controller.signal,
@@ -316,11 +316,11 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
     }
 
     const existing = await loadMemory(projectPath, absFilePath);
-    const apiKey = (await loadApiKey(provider.id)) ?? "";
     const controller = new AbortController();
     set({ chapterGen: { path: absFilePath, done: 0, total: 0 }, chapterGenController: controller, error: null, notice: null });
 
     try {
+      const apiKey = (await loadApiKey(provider.id)) ?? "";
       const outcome = await runMemoryGeneration({
         projectPath, rel, content, existing, model, provider, apiKey, force,
         signal: controller.signal,
