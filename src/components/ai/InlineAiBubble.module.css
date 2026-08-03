@@ -61,7 +61,8 @@
   cursor: pointer;
   transition: background var(--transition-fast);
 }
-.action:hover { background: var(--color-bg-elevated); }
+.action:hover:not(:disabled) { background: var(--color-bg-elevated); }
+.action:disabled { opacity: 0.4; cursor: not-allowed; }
 .actionIcon { color: var(--color-sienna); display: flex; flex-shrink: 0; }
 .actionLabel { flex: 1; }
 .actionKey {

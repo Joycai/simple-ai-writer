@@ -320,6 +320,7 @@
       "defaultSystemPrompt": "Default system prompt…",
       "noProvider": "Please add providers and models in AI Config first",
       "selectedChars": "Selected {{count}} characters",
+      "busyTitle": "A task is already running",
       "selectedContent": "Selected text",
       "contextRange": "Reference context",
       "contextRangeNone": "None",

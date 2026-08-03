@@ -895,14 +895,22 @@ export function AiPanel() {
     }
   }, [output]);
 
-  // The floating toolbar opens the panel pre-selecting a task; consume + clear it.
+  // The floating toolbar opens the panel pre-selecting a task; consume + clear
+  // it. Held while a run is in flight rather than consumed immediately: the
+  // bubble/shortcut that set it are themselves disabled while isRunning (see
+  // InlineAiBubble, useGlobalShortcuts), but this guard is the actual
+  // backstop — without it, a request landing here mid-stream would clearOutput()
+  // the live run's drafts out from under it, discarding whatever had streamed
+  // so far while the request kept running (and billing) invisibly in the
+  // background. isRunning is a dependency specifically so the request is
+  // honored the moment the current run finishes, instead of being dropped.
   useEffect(() => {
-    if (requestedTask) {
+    if (requestedTask && !isRunning) {
       setSelectedTask(requestedTask);
       clearOutput();
       setRequestedTask(null);
     }
-  }, [requestedTask, setRequestedTask, clearOutput]);
+  }, [requestedTask, isRunning, setRequestedTask, clearOutput]);
 
   const activeModel = models.find((m) => m.id === activeModelId);
   const activeProvider = activeModel ? providers.find((p) => p.id === activeModel.providerId) : null;

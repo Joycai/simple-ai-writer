@@ -52,6 +52,12 @@ export function useGlobalShortcuts() {
         if (!matchesCombo(e, { mod: true, shift: true, key: letter })) continue;
         // A task this project's profile doesn't offer.
         if (!findTask(task)) return;
+        // A run already in flight — same protection as InlineAiBubble's
+        // disabled buttons: triggering another task here would set
+        // requestedTask while isRunning, and the point of that guard (see
+        // AiPanel's requestedTask effect) is to queue the request rather
+        // than let this shortcut silently interrupt the live run.
+        if (useAiTaskStore.getState().isRunning) return;
         const sel = window.getSelection();
         const text = sel?.toString() ?? "";
         if (

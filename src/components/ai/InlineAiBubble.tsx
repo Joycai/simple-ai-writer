@@ -41,6 +41,7 @@ export function InlineAiBubble() {
   const isZh = i18n.language.startsWith("zh");
   const setSelection = useAiTaskStore((s) => s.setSelection);
   const setRequestedTask = useAiTaskStore((s) => s.setRequestedTask);
+  const isRunning = useAiTaskStore((s) => s.isRunning);
   const setShowAiDrawer = useAppStore((s) => s.setShowAiDrawer);
 
   const [live, setLive] = useState<LiveSelection | null>(null);
@@ -94,6 +95,7 @@ export function InlineAiBubble() {
   };
 
   const openWithTask = (task: ToolbarTask) => {
+    if (isRunning) return; // buttons are disabled for this too — see below
     commit();
     setRequestedTask(task);
     setShowAiDrawer(true, "generate");
@@ -136,7 +138,13 @@ export function InlineAiBubble() {
 
       <div className={styles.grid}>
         {actions.map((a) => (
-          <button key={a.id} className={styles.action} onClick={() => openWithTask(a.id)}>
+          <button
+            key={a.id}
+            className={styles.action}
+            onClick={() => openWithTask(a.id)}
+            disabled={isRunning}
+            title={isRunning ? t("ai.panel.busyTitle") : undefined}
+          >
             <span className={styles.actionIcon}>{a.icon}</span>
             <span className={styles.actionLabel}>{a.label}</span>
             <span className={styles.actionKey}>{a.key}</span>

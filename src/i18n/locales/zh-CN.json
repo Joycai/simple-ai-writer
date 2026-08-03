@@ -320,6 +320,7 @@
       "defaultSystemPrompt": "默认系统提示…",
       "noProvider": "请先在 AI 配置中添加供应商和模型",
       "selectedChars": "已选中 {{count}} 字",
+      "busyTitle": "有任务正在执行",
       "selectedContent": "选中内容",
       "contextRange": "参考上文",
       "contextRangeNone": "不带",
