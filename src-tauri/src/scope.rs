@@ -1,7 +1,6 @@
 //! Runtime path scoping for the custom `fs_*` / project commands.
 //!
-//! The plugin-level `fs:scope` in capabilities only covers `tauri-plugin-fs`;
-//! the custom commands in `commands.rs` would otherwise accept any absolute
+//! The custom commands in `commands.rs` would otherwise accept any absolute
 //! path, so a compromised webview could read/write/delete arbitrary files.
 //! Roots are registered only from trusted sources:
 //!   - the native folder picker (`project_open_dialog`),
@@ -9,6 +8,14 @@
 //!     (`project_register_root`, which requires an `.ai-writer` marker on disk
 //!     that the webview cannot create outside an already-allowed root),
 //!   - the app's own data/log directories, seeded at startup in `lib.rs`.
+//!
+//! `capabilities/default.json` grants no static `fs:scope` — `tauri-plugin-fs`
+//! (used directly by the frontend for a handful of binary image reads; see
+//! `src/lib/fs/images.ts`) starts with an empty scope of its own. Freshly
+//! dialog-picked paths (lore avatar/gallery imports) are auto-scoped by the
+//! dialog plugin for that session; `allow_for_plugin_fs` below additionally
+//! extends the plugin's scope to a registered project root, so images already
+//! imported into the project keep loading after it's reopened.
 
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
@@ -33,6 +40,17 @@ impl FsScope {
         if !roots.iter().any(|r| r == &normalized) {
             roots.push(normalized);
         }
+    }
+
+    /// `allow`, plus extending `tauri-plugin-fs`'s own runtime scope to cover
+    /// `root` — see the module doc comment for why that's needed alongside
+    /// this scope. Best-effort: a failure here would only affect the plugin's
+    /// `readFile` (image previews), never the custom `fs_*` commands this
+    /// scope actually guards.
+    pub fn allow_for_plugin_fs(&self, app: &tauri::AppHandle, root: &Path) {
+        self.allow(root);
+        use tauri_plugin_fs::FsExt;
+        let _ = app.fs_scope().allow_directory(root, true);
     }
 
     /// True when `path` is absolute and inside one of the allowed roots.
@@ -96,7 +114,7 @@ pub async fn project_open_dialog(
     match picked {
         Some(file_path) => {
             let path = file_path.into_path().map_err(|e| e.to_string())?;
-            scope.allow(&path);
+            scope.allow_for_plugin_fs(&app, &path);
             Ok(Some(path.to_string_lossy().into_owned()))
         }
         None => Ok(None),
@@ -107,12 +125,16 @@ pub async fn project_open_dialog(
 /// Requires the on-disk `.ai-writer` marker: the webview cannot fabricate it
 /// outside an already-allowed root, so arbitrary directories stay off-limits.
 #[command]
-pub fn project_register_root(path: String, scope: tauri::State<'_, FsScope>) -> Result<(), String> {
+pub fn project_register_root(
+    path: String,
+    app: tauri::AppHandle,
+    scope: tauri::State<'_, FsScope>,
+) -> Result<(), String> {
     let root = Path::new(&path);
     if !root.is_absolute() || !root.join(".ai-writer").is_dir() {
         return Err("Not an existing project folder (missing .ai-writer)".into());
     }
-    scope.allow(root);
+    scope.allow_for_plugin_fs(&app, root);
     Ok(())
 }
 
