@@ -304,20 +304,12 @@ export async function assembleContext(
   loreBudgetChars?: number,
   memoryBudgetChars?: number
 ): Promise<ContextBundle> {
-  // Layer 2: facet-aware layered selection (summary → core → facets under a
-  // shared budget) — pins go first, auto-matched entities follow. See
-  // ./loreSelect for the algorithm and the activation report it returns.
-  const matchTarget = selection + documentText.slice(-500);
-  const { text: loreSnippets, report: loreReport } = await selectLore(
-    matchTarget,
-    loreIndex,
-    extras?.manualLorePaths ?? [],
-    loreBudgetChars,
-  );
-
-  // Layer 4: recent context — the text immediately *before* the selection, used
-  // only to keep the model's continuation/edit coherent (it is NOT the edit
-  // target). Resolve where the selection ends so we can slice what precedes it:
+  // Resolve where the selection/anchor sits *before* building the lore-match
+  // target and the recent-context window below — both need to look at text
+  // near the edit, not always the document's end. "Continue" can anchor
+  // mid-document (an append-mode selection anchor), and an edit's selection
+  // is wherever the author put it, so keying off the tail unconditionally
+  // checks the wrong neighborhood whenever the anchor isn't already there.
   //   1. Precise source offsets (editor mode) — trust them if they still match.
   //   2. Otherwise locate the selection verbatim in the source.
   //   3. No selection at all ("continue") — use the end of the document.
@@ -339,6 +331,27 @@ export async function assembleContext(
   } else {
     endIdx = documentText.length;
   }
+
+  // Layer 2: facet-aware layered selection (summary → core → facets under a
+  // shared budget) — pins go first, auto-matched entities follow. See
+  // ./loreSelect for the algorithm and the activation report it returns.
+  // The tail window is anchor-relative, same reasoning as recentContext below
+  // (and the same "don't guess when the anchor is lost" rule: endIdx < 0
+  // contributes no tail at all rather than falling back to the document end).
+  const MATCH_TAIL_CHARS = 500;
+  const matchTarget = selection + (
+    endIdx >= 0 ? documentText.slice(Math.max(0, endIdx - MATCH_TAIL_CHARS), endIdx) : ""
+  );
+  const { text: loreSnippets, report: loreReport } = await selectLore(
+    matchTarget,
+    loreIndex,
+    extras?.manualLorePaths ?? [],
+    loreBudgetChars,
+  );
+
+  // Layer 4: recent context — the text immediately *before* the selection, used
+  // only to keep the model's continuation/edit coherent (it is NOT the edit
+  // target).
   const recentContext =
     endIdx >= 0 && span > 0
       ? documentText.slice(Math.max(0, endIdx - span), endIdx).trim()

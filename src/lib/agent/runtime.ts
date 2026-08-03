@@ -24,6 +24,22 @@ import type { ToolCall, ToolResult } from "./tools";
 /** Stand-in left behind when an old tool result is dropped to reclaim room. */
 const ELIDED_TOOL_RESULT =
   "[earlier tool result dropped to stay within the model's context window]";
+/** Stand-in left behind when an old image tool result is dropped to reclaim room. */
+const ELIDED_IMAGE_RESULT =
+  "[earlier tool result image dropped to stay within the model's context window]";
+
+/**
+ * True for a history entry appended by the tool loop's own image-result
+ * branch (`role: "user"` with `image_url` parts) — never the seeded first
+ * turn, which `bundleToMessages` always hands over as a plain string.
+ */
+function isImageResultMessage(m: StreamMessage): boolean {
+  return (
+    m.role === "user" &&
+    Array.isArray(m.content) &&
+    m.content.some((p) => p.type === "image_url")
+  );
+}
 
 /**
  * Keep the growing history inside the planned input ceiling.
@@ -36,20 +52,31 @@ const ELIDED_TOOL_RESULT =
  * Oldest tool results go first: they are both the bulk of the growth and the
  * least likely to still matter. Their *messages* stay — an assistant tool_call
  * with no matching tool reply is a protocol error at both OpenAI and Gemini —
- * only the payload is replaced. The system prompt and the assembled first turn
- * are never touched; if those alone overflow, that is a planning bug and the
- * pre-flight check should say so rather than this quietly hiding it.
+ * only the payload is replaced. Image tool results (appended as a follow-up
+ * `role: "user"` message — see the loop below) are elided the same way: their
+ * base64 data URLs are usually the single largest thing in history, so
+ * leaving them out of this pass would mean the ceiling keeps getting hit again
+ * every round without ever reclaiming the room that actually matters. The
+ * system prompt and the assembled first turn are never touched; if those
+ * alone overflow, that is a planning bug and the pre-flight check should say
+ * so rather than this quietly hiding it.
  *
  * Returns how many results were elided so the caller can log it.
  */
-function trimHistory(history: StreamMessage[], ceilingTokens?: number): number {
+export function trimHistory(history: StreamMessage[], ceilingTokens?: number): number {
   if (!ceilingTokens || ceilingTokens <= 0) return 0;
   if (estimateMessagesTokens(history) <= ceilingTokens) return 0;
   let dropped = 0;
   for (const m of history) {
-    if (m.role !== "tool" || m.content === ELIDED_TOOL_RESULT) continue;
-    m.content = ELIDED_TOOL_RESULT;
-    dropped++;
+    if (m.role === "tool" && m.content !== ELIDED_TOOL_RESULT) {
+      m.content = ELIDED_TOOL_RESULT;
+      dropped++;
+    } else if (isImageResultMessage(m)) {
+      m.content = ELIDED_IMAGE_RESULT;
+      dropped++;
+    } else {
+      continue;
+    }
     if (estimateMessagesTokens(history) <= ceilingTokens) break;
   }
   return dropped;
@@ -60,6 +87,8 @@ export interface AgentRunResult {
   rounds: number;
   inputTokens: number;
   outputTokens: number;
+  /** Subset of inputTokens served from the provider's prompt cache. */
+  cachedTokens: number;
 }
 
 export interface AgentRuntimeOptions {
@@ -126,6 +155,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
 
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
+  let totalCachedTokens = 0;
   /** Text from rounds that ended in prose — the run's output as it stands. */
   let committedText = "";
 
@@ -188,6 +218,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         } else if ("done" in chunk) {
           totalInputTokens += chunk.inputTokens;
           totalOutputTokens += chunk.outputTokens;
+          totalCachedTokens += chunk.cachedTokens ?? 0;
         }
       },
     });
@@ -195,7 +226,12 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     // No tool calls → the model produced prose → that prose is the answer.
     if (roundToolCalls.length === 0) {
       committedText += roundText;
-      return { rounds: round, inputTokens: totalInputTokens, outputTokens: totalOutputTokens };
+      return {
+        rounds: round,
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+        cachedTokens: totalCachedTokens,
+      };
     }
 
     // A tool round: whatever the model said before calling the tool was it
@@ -216,8 +252,14 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       _geminiModelParts: roundGeminiModelParts,
     });
 
-    // Execute each tool call and append results
+    // Execute each tool call and append results. Re-checked per call, not just
+    // per round: the model can emit several tool calls in one round (e.g. a
+    // propose_edit followed by write-auto lore calls), and an abort mid-round
+    // — including one that arrives *as* rejectAll() resolves a blocked
+    // approval — must stop the remaining calls in this same array rather than
+    // only taking effect at the next round's top-of-loop check.
     for (const tc of roundToolCalls) {
+      if (opts.signal.aborted) throw new DOMException("Aborted", "AbortError");
       const toolCall: ToolCall = { id: tc.id, name: tc.name, arguments: tc.arguments };
       // Kept as valid JSON rather than pre-truncated: the log formats these for
       // display (lib/agent/logFormat), and it can only pull out the identifying
@@ -276,5 +318,6 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     rounds: preset.maxRounds,
     inputTokens: totalInputTokens,
     outputTokens: totalOutputTokens,
+    cachedTokens: totalCachedTokens,
   };
 }

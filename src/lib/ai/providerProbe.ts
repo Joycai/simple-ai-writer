@@ -17,8 +17,10 @@ export async function fetchRemoteModels(
 ): Promise<{ id: string; name: string }[]> {
   if (standard === "gemini") {
     const base = (baseUrl || GEMINI_API_BASE).replace(/\/$/, "");
-    const url = `${base}/models?key=${apiKey}`;
-    const res = await fetch(url);
+    // Key goes in the x-goog-api-key header, never the URL — query strings
+    // leak into proxy/server logs and error messages. Matches streamGemini.
+    const url = `${base}/models`;
+    const res = await fetch(url, { headers: { "x-goog-api-key": apiKey } });
     if (!res.ok) throw new Error(`Gemini models fetch failed: ${res.status}`);
     const data = await res.json();
     return (data.models ?? []).map((m: Record<string, string>) => ({
@@ -47,8 +49,8 @@ export async function testProviderConnection(
   try {
     if (standard === "gemini") {
       const base = (baseUrl || GEMINI_API_BASE).replace(/\/$/, "");
-      const url = `${base}/models?key=${apiKey}&pageSize=1`;
-      const res = await fetch(url);
+      const url = `${base}/models?pageSize=1`;
+      const res = await fetch(url, { headers: { "x-goog-api-key": apiKey } });
       if (!res.ok) {
         const error = await res.text();
         return { ok: false, error: `Gemini API error ${res.status}: ${error}` };

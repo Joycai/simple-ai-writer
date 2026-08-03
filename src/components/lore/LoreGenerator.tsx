@@ -87,7 +87,6 @@ export function LoreGenerator({ onClose, onModeChange }: Props) {
     const provider = model ? providers.find((p) => p.id === model.providerId) : null;
     if (!model || !provider) { setError(t("ai.errors.noModel")); return; }
 
-    const apiKey = await loadApiKey(provider.id) ?? "";
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setError(null);
@@ -99,6 +98,7 @@ export function LoreGenerator({ onClose, onModeChange }: Props) {
     const tick = setInterval(() => { si = (si + 1) % statusMessages.length; setGenStatus(statusMessages[si]); }, 1800);
 
     try {
+      const apiKey = await loadApiKey(provider.id) ?? "";
       const loreScenePrompt = prompts.find((p) => p.scene === "lore");
       // Only multimodal models can consume images; sending them to a text model
       // either errors or is silently dropped, so omit them here.

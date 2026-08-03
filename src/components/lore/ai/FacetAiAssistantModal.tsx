@@ -126,7 +126,6 @@ export function FacetAiAssistantModal({
     if (!resolved) { setError(t("ai.errors.noModel")); return; }
     const { model, provider } = resolved;
 
-    const apiKey = (await loadApiKey(provider.id)) ?? "";
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setError(null);
@@ -135,6 +134,7 @@ export function FacetAiAssistantModal({
     setPhase("generating");
 
     try {
+      const apiKey = (await loadApiKey(provider.id)) ?? "";
       const supportsImages = model.type === "multimodal";
       const { loreRefs, textRefs, images } = await collectAttachmentContext(attached, supportsImages);
 

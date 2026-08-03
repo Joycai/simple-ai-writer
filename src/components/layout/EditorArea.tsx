@@ -17,7 +17,7 @@ import styles from "./EditorArea.module.css";
 export function EditorArea() {
   const { t } = useTranslation();
   const { projectPath, activeFilePath } = useProjectStore();
-  const { content, filePath, viewMode, editorView, loadFile, setContent } = useEditorStore();
+  const { content, filePath, loadError, viewMode, editorView, loadFile, setContent } = useEditorStore();
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
 
   const isImage = !!activeFilePath && isImagePath(activeFilePath);
@@ -101,6 +101,30 @@ export function EditorArea() {
       <div className={styles.area}>
         <div className={styles.panes}>
           <ImagePreview path={activeFilePath} />
+        </div>
+        <EditorBottomStrip />
+      </div>
+    );
+  }
+
+  // The file couldn't be read (non-UTF-8, permissions, a transient I/O
+  // fault). Render a non-editable notice instead of the CodeEditor — showing
+  // it with empty content would let the very next keystroke autosave over
+  // whatever is actually on disk.
+  if (loadError && loadError.path === activeFilePath) {
+    return (
+      <div className={styles.area}>
+        <div className={styles.empty}>
+          <div className={styles.emptyInner}>
+            <div className={styles.emptyEyebrow}>{t("editor.loadErrorEyebrow")}</div>
+            <h1 className={styles.emptyTitle}>{t("editor.loadErrorTitle")}</h1>
+            <p className={styles.emptyHint}>{t("editor.loadErrorHint", { message: loadError.message })}</p>
+            <div className={styles.emptyCta}>
+              <button className={styles.emptyCtaBtn} onClick={() => loadFile(activeFilePath)}>
+                {t("editor.loadErrorRetry")}
+              </button>
+            </div>
+          </div>
         </div>
         <EditorBottomStrip />
       </div>

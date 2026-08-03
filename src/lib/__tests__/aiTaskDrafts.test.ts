@@ -27,8 +27,8 @@ const h = vi.hoisted(() => ({
   streams: [] as { signal: AbortSignal }[],
   /** Per-call-index behaviour; default is "emit some text and finish". */
   behaviour: null as null | ((index: number, args: StreamArgs) => Promise<void>),
-  persisted: [] as { inTokens: number; outTokens: number }[],
-  runAgent: vi.fn(async (_opts: unknown) => ({ inputTokens: 7, outputTokens: 3 })),
+  persisted: [] as { inTokens: number; cachedTokens: number; outTokens: number }[],
+  runAgent: vi.fn(async (_opts: unknown) => ({ inputTokens: 7, outputTokens: 3, cachedTokens: 0 })),
   agentOutput: "agent text",
 }));
 
@@ -96,7 +96,11 @@ vi.mock("../ai/modelHealth", () => ({ recordRunOutcome: vi.fn() }));
 vi.mock("../project", () => ({
   getDb: vi.fn(async () => ({
     execute: vi.fn(async (_sql: string, params: unknown[]) => {
-      h.persisted.push({ inTokens: params[2] as number, outTokens: params[3] as number });
+      h.persisted.push({
+        inTokens: params[2] as number,
+        cachedTokens: params[3] as number,
+        outTokens: params[4] as number,
+      });
     }),
   })),
 }));
@@ -146,7 +150,7 @@ import { useAiStore } from "../../stores/aiStore";
 
 const MODEL = {
   id: "m1", providerId: "p1", modelId: "gpt-x", name: "GPT-X",
-  contextSize: 8000, priceIn: 1, priceOut: 2, type: "text", prefix: "",
+  contextSize: 8000, priceIn: 1, priceCachedIn: 0, priceOut: 2, type: "text", prefix: "",
 };
 const PROVIDER = { id: "p1", name: "P", baseUrl: "https://api.test/v1", apiStandard: "openai" };
 
@@ -202,7 +206,7 @@ describe("draftCountFor", () => {
 
 describe("totalUsage", () => {
   const withUsage = (inTokens: number, outTokens: number, cost: number): Draft => ({
-    id: "x", index: 1, text: "", error: null, done: true,
+    id: "x", index: 1, text: "", error: null, done: true, truncated: false,
     usage: { inputTokens: inTokens, outputTokens: outTokens, cost },
   });
 
@@ -234,6 +238,68 @@ describe("runTask — single draft", () => {
     expect(h.runAgent).toHaveBeenCalledTimes(1);
     expect(drafts()).toHaveLength(1);
     expect(drafts()[0].text).toBe("agent text");
+  });
+});
+
+describe("runTask — sourceFilePath", () => {
+  it("records the file the run's context was assembled from", async () => {
+    await useAiTaskStore.getState().runTask("polish");
+    // The mocked getWritingFocus() always names this file — see the
+    // ../../stores/editorStore mock above.
+    expect(useAiTaskStore.getState().sourceFilePath).toBe("/proj/writing/a.md");
+  });
+
+  it("clears on clearOutput, so a later mismatch check can't compare against a stale run", () => {
+    useAiTaskStore.setState({ sourceFilePath: "/proj/writing/a.md" });
+    useAiTaskStore.getState().clearOutput();
+    expect(useAiTaskStore.getState().sourceFilePath).toBeNull();
+  });
+});
+
+describe("runTask — stale run guards", () => {
+  it("a superseded run's late event and completion don't corrupt the new run's state", async () => {
+    // abort() resets isRunning/abortController synchronously without waiting
+    // for the aborted run's own promise to unwind — so a new run can start,
+    // and finish, before the old one's tool loop even notices the signal.
+    let resolveStaleRun: (v: { inputTokens: number; outputTokens: number; cachedTokens: number }) => void =
+      () => {};
+    let staleOnEvent: ((event: unknown) => void) | undefined;
+    let markStarted: () => void = () => {};
+    // Resolves once run A has actually reached runAgent — by then its own
+    // isRunning/abortController are already set, so abort() below is a real
+    // abort of an in-flight run rather than firing before it even started.
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    h.runAgent.mockImplementationOnce((opts: unknown) => {
+      staleOnEvent = (opts as { onEvent: (e: unknown) => void }).onEvent;
+      markStarted();
+      return new Promise((resolve) => { resolveStaleRun = resolve; });
+    });
+
+    const staleRun = useAiTaskStore.getState().runTask("continue"); // agentic — run A
+    await started;
+
+    useAiTaskStore.getState().abort();
+    expect(useAiTaskStore.getState().isRunning).toBe(false);
+
+    // Run B: a different (toolless) task, unrelated to run A.
+    await useAiTaskStore.getState().runTask("polish");
+    const logAfterB = useAiTaskStore.getState().agentLog;
+    const draftIdAfterB = useAiTaskStore.getState().activeDraftId;
+    expect(logAfterB.length).toBeGreaterThan(0);
+
+    // Run A's tool loop only now notices the abort and reports a late event,
+    // then finally resolves — well after run B has already finished.
+    staleOnEvent?.({
+      kind: "tool-step",
+      step: { round: 1, toolCallId: "stale", name: "x", argumentSummary: "{}", status: "done" },
+      at: Date.now(),
+    });
+    resolveStaleRun({ inputTokens: 99, outputTokens: 99, cachedTokens: 0 });
+    await staleRun;
+
+    // Run B's log and active draft must be untouched by run A's late arrival.
+    expect(useAiTaskStore.getState().agentLog).toEqual(logAfterB);
+    expect(useAiTaskStore.getState().activeDraftId).toBe(draftIdAfterB);
   });
 });
 
@@ -332,6 +398,30 @@ async function extrasOf(taskId: string, ask?: string) {
   await useAiTaskStore.getState().runTask(taskId, ask);
   return assemble.mock.calls[0][5];
 }
+
+describe("runTask — selection snapshot", () => {
+  it("uses the selection committed before setup started, not one changed mid-setup", async () => {
+    // Setup awaits a keyring read, a memory load, and (for continue) a
+    // book-context build before ever touching assembleContext — each is a
+    // window where the author could commit a different selection (or clear
+    // it) before the request they originally asked for actually goes out.
+    useAiTaskStore.setState({ selection: "original", selectionRange: null });
+
+    const keyStore = await import("../keyStore");
+    vi.mocked(keyStore.loadApiKey).mockImplementationOnce(async () => {
+      useAiTaskStore.setState({ selection: "changed mid-setup", selectionRange: null });
+      return "key";
+    });
+
+    const rag = await import("../context/rag");
+    const assemble = vi.mocked(rag.assembleContext);
+    assemble.mockClear();
+    await useAiTaskStore.getState().runTask("polish");
+
+    expect(assemble).toHaveBeenCalled();
+    expect(assemble.mock.calls[0][3]).toBe("original");
+  });
+});
 
 describe("runTask — current file", () => {
   it("names the current file for a tool-using task", async () => {

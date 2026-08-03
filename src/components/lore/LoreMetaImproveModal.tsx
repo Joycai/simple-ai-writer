@@ -72,7 +72,6 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
       return;
     }
 
-    const apiKey = (await loadApiKey(provider.id)) ?? "";
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setError(null);
@@ -80,6 +79,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
     setPhase("generating");
 
     try {
+      const apiKey = (await loadApiKey(provider.id)) ?? "";
       const catIds = loreCategoryIds();
 
       // Multimodal models additionally receive the entity's avatar + gallery

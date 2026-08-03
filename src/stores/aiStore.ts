@@ -103,10 +103,17 @@ export const useAiStore = create<AiState>((set, get) => ({
       await deleteProvider(d, id);
       await deleteApiKey(id);
     }
-    set((s) => ({
-      providers: s.providers.filter((p) => p.id !== id),
-      models: s.models.filter((m) => m.providerId !== id),
-    }));
+    set((s) => {
+      const removedIds = new Set(
+        s.models.filter((m) => m.providerId === id).map((m) => m.id),
+      );
+      return {
+        providers: s.providers.filter((p) => p.id !== id),
+        models: s.models.filter((m) => m.providerId !== id),
+        activeModelId: s.activeModelId && removedIds.has(s.activeModelId) ? null : s.activeModelId,
+        memoryModelId: s.memoryModelId && removedIds.has(s.memoryModelId) ? null : s.memoryModelId,
+      };
+    });
   },
 
   getApiKey: (providerId) => loadApiKey(providerId),
@@ -137,6 +144,7 @@ export const useAiStore = create<AiState>((set, get) => ({
     set((s) => ({
       models: s.models.filter((m) => m.id !== id),
       activeModelId: s.activeModelId === id ? null : s.activeModelId,
+      memoryModelId: s.memoryModelId === id ? null : s.memoryModelId,
     }));
   },
 

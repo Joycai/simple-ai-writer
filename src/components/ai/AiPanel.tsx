@@ -746,7 +746,7 @@ function ErrorBlock({ message, onRetry }: { message: string; onRetry: (() => voi
 export function AiPanel() {
   const { t, i18n } = useTranslation();
   const {
-    isRunning, drafts, activeDraftId, error, agentLog, loreReport,
+    isRunning, drafts, activeDraftId, error, agentLog, loreReport, sourceFilePath,
     runTask, abort, clearOutput, setActiveDraft, selection, selectionRange, selectionSource,
     clearSelectionFrom, requestedTask, setRequestedTask,
   } = useAiTaskStore();
@@ -895,14 +895,22 @@ export function AiPanel() {
     }
   }, [output]);
 
-  // The floating toolbar opens the panel pre-selecting a task; consume + clear it.
+  // The floating toolbar opens the panel pre-selecting a task; consume + clear
+  // it. Held while a run is in flight rather than consumed immediately: the
+  // bubble/shortcut that set it are themselves disabled while isRunning (see
+  // InlineAiBubble, useGlobalShortcuts), but this guard is the actual
+  // backstop — without it, a request landing here mid-stream would clearOutput()
+  // the live run's drafts out from under it, discarding whatever had streamed
+  // so far while the request kept running (and billing) invisibly in the
+  // background. isRunning is a dependency specifically so the request is
+  // honored the moment the current run finishes, instead of being dropped.
   useEffect(() => {
-    if (requestedTask) {
+    if (requestedTask && !isRunning) {
       setSelectedTask(requestedTask);
       clearOutput();
       setRequestedTask(null);
     }
-  }, [requestedTask, setRequestedTask, clearOutput]);
+  }, [requestedTask, isRunning, setRequestedTask, clearOutput]);
 
   const activeModel = models.find((m) => m.id === activeModelId);
   const activeProvider = activeModel ? providers.find((p) => p.id === activeModel.providerId) : null;
@@ -946,7 +954,17 @@ export function AiPanel() {
     ? (selection ? locateAppendAnchor(content, selection, selectionRange) : null)
     : content.length;
 
+  // The active draft's text was generated from *this* file's context — if the
+  // author has switched documents since the run started, `content`/`selection`
+  // above already describe the new one, and applying against them would
+  // splice one document's output into another. Null on either side means "no
+  // file to compare" (nothing to apply into, or the run wasn't file-scoped),
+  // so only a genuine, known mismatch blocks the apply actions.
+  const outputMismatched =
+    !!sourceFilePath && !!activeFilePath && sourceFilePath !== activeFilePath;
+
   const handleApply = () => {
+    if (outputMismatched) return;
     const { setContent } = useEditorStore.getState();
     if (replaceRange) {
       setContent(content.slice(0, replaceRange.from) + output + content.slice(replaceRange.to));
@@ -1638,7 +1656,12 @@ export function AiPanel() {
                   <button className={styles.btnSecondary} onClick={clearOutput}>
                     {t("ai.panel.clear")}
                   </button>
-                  <button className={styles.btnPrimary} onClick={handleApply}>
+                  <button
+                    className={styles.btnPrimary}
+                    onClick={handleApply}
+                    disabled={outputMismatched}
+                    title={outputMismatched ? t("ai.panel.outputMismatchedTitle") : undefined}
+                  >
                     {replaceRange ? t("ai.panel.replaceSelection") : t("ai.panel.insertToDoc")}
                   </button>
                 </span>
@@ -1687,6 +1710,21 @@ export function AiPanel() {
               </div>
             )}
           </div>
+
+          {/* The model hit its max-output length rather than finishing on its
+              own — the text above is real, but may stop mid-thought. */}
+          {activeDraft?.truncated && !activeDraft.error && (
+            <div className={styles.truncatedNotice}>{t("ai.panel.truncatedNotice")}</div>
+          )}
+
+          {/* This result was generated against a different document than the
+              one now open — applying it here would splice one chapter's
+              output into another. Switch back to insert it. */}
+          {outputMismatched && sourceFilePath && (
+            <div className={styles.truncatedNotice}>
+              {t("ai.panel.outputMismatched", { file: basename(sourceFilePath) })}
+            </div>
+          )}
 
           {/* Token usage for the finished run */}
           {usage && hasResults && (

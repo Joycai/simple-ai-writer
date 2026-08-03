@@ -15,6 +15,15 @@ interface EditorState {
   viewMode: ViewMode;
   isDirty: boolean;
   saveTimer: ReturnType<typeof setTimeout> | null;
+  /**
+   * Set when `loadFile` couldn't read the path it was given — a non-UTF-8
+   * file, a permissions error, a transient I/O failure. `filePath` stays null
+   * in that case (see loadFile), specifically so `setContent`'s autosave
+   * timer can never schedule a write: without this, the failed read left
+   * `content: ""` paired with the real path attached, and the very next
+   * keystroke would autosave that near-empty draft over the original file.
+   */
+  loadError: { path: string; message: string } | null;
 
   scrollToLine: ((line: number) => void) | null;
   /** Live CodeMirror view — used to read precise selection offsets. Null when
@@ -48,6 +57,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   scrollToLine: null,
   editorView: null,
   aiTarget: null,
+  loadError: null,
 
   loadFile: async (path) => {
     // Flush any pending autosave for the previously open file before switching.
@@ -60,12 +70,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     try {
       const content = await readFile(path);
       const headings = extractHeadings(content);
-      set({ content, filePath: path, headings, isDirty: false, saveTimer: null });
+      set({ content, filePath: path, headings, isDirty: false, saveTimer: null, loadError: null });
       const words = countWords(content);
       useProjectStore.getState().setWordCount(words);
       useProjectStore.getState().setCharCount(content.length);
-    } catch {
-      set({ content: "", filePath: path, headings: [], isDirty: false, saveTimer: null });
+    } catch (e) {
+      // filePath stays null (not `path`) — see loadError's doc comment above.
+      set({
+        content: "", filePath: null, headings: [], isDirty: false, saveTimer: null,
+        loadError: { path, message: String(e) },
+      });
     }
   },
 
@@ -86,8 +100,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   saveNow: async () => {
-    const { content, filePath } = get();
-    if (!filePath) return;
+    const { content, filePath, saveTimer } = get();
+    // Cancel the real timer here, not just the state field it's mirrored
+    // into — a caller that flushes without clearing it first (moveEntry did)
+    // leaves it armed in the event loop, and it fires later regardless of
+    // what `saveTimer` in state says, writing stale content to wherever
+    // `filePath` has drifted to by then (e.g. recreating a just-moved file
+    // at its old location).
+    if (saveTimer) clearTimeout(saveTimer);
+    if (!filePath) { set({ saveTimer: null }); return; }
     try {
       await writeFile(filePath, content);
       set({ isDirty: false, saveTimer: null });

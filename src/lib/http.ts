@@ -17,9 +17,19 @@ import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
 const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-/** True for requests targeting a server on the local machine. */
-function isLocalUrl(url: string): boolean {
-  return /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/i.test(url);
+/**
+ * True for requests targeting a server on the local machine. Exported so
+ * ai/endpointProbe.ts's looksLocal can share this exact hostname check
+ * rather than drifting from it — endpointProbe additionally treats a few
+ * well-known local-model-server ports as a signal on their own, which is a
+ * fine heuristic for its own low-stakes decision (try a couple of extra
+ * probe requests against what might not even be a local server), but not
+ * one this module should adopt: rewriting Origin here on that same
+ * heuristic could break a legitimate CORS-sensitive request to an actually
+ * remote host reachable on one of those ports, instead of fixing one.
+ */
+export function isLocalUrl(url: string): boolean {
+  return /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:|\/|$)/i.test(url.trim());
 }
 
 function urlOf(input: RequestInfo | URL): string {

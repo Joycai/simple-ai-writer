@@ -436,11 +436,17 @@ function ProvidersTab() {
   const handleEdit = async (id: string) => {
     const p = providers.find((x) => x.id === id);
     if (!p) return;
-    const key = await getApiKey(id) ?? "";
+    setError(null);
+    let key: string;
+    try {
+      key = await getApiKey(id) ?? "";
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      return;
+    }
     setForm({ name: p.name, baseUrl: p.baseUrl, apiStandard: p.apiStandard, apiKey: key, safetySettings: p.safetySettings ?? defaultSafetySettings() });
     setEditingId(id);
     setShowForm(true);
-    setError(null);
   };
 
   const handleSave = async () => {

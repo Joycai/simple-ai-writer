@@ -35,6 +35,8 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   const decoder = new TextDecoder();
   let inputTokens = 0;
   let outputTokens = 0;
+  let cachedTokens = 0;
+  let truncated = false;
   // Index-keyed map for accumulating streamed tool_calls across SSE chunks
   const toolCallMap = new Map<number, { id: string; name: string; args: string }>();
   // Carry an incomplete trailing line across reads: a single SSE line can be split
@@ -50,31 +52,54 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   };
 
   const parseData = (data: string) => {
+    let json: any; // JSON.parse's return type — matches the rest of this file's untyped access
     try {
-      const json = JSON.parse(data);
-      if (json.usage) {
-        inputTokens = json.usage.prompt_tokens ?? 0;
-        outputTokens = json.usage.completion_tokens ?? 0;
-      }
-      const delta = json.choices?.[0]?.delta;
-      if (delta?.content) opts.onChunk({ text: delta.content });
-      // Accumulate tool_calls across partial SSE chunks
-      if (delta?.tool_calls && Array.isArray(delta.tool_calls)) {
-        for (const partial of delta.tool_calls as Array<{
-          index?: number; id?: string;
-          function?: { name?: string; arguments?: string };
-        }>) {
-          const idx = partial.index ?? 0;
-          if (!toolCallMap.has(idx)) toolCallMap.set(idx, { id: "", name: "", args: "" });
-          const entry = toolCallMap.get(idx)!;
-          if (partial.id) entry.id += partial.id;
-          if (partial.function?.name) entry.name += partial.function.name;
-          if (partial.function?.arguments) entry.args += partial.function.arguments;
-        }
-      }
+      json = JSON.parse(data);
     } catch {
-      // ignore malformed SSE lines
+      return; // ignore malformed SSE lines
     }
+    // A relay can return HTTP 200 and then deliver a failure (moderation
+    // block, upstream outage, credit exhaustion) as an SSE data event rather
+    // than an error status — OpenRouter does this routinely. Left unhandled,
+    // the stream would just end with whatever partial usage/text arrived
+    // before the failure, reported as a normal success.
+    if (json.error) {
+      const err = json.error as { message?: string } | string | undefined;
+      const msg = typeof err === "string" ? err : err?.message ?? JSON.stringify(json.error);
+      throw new Error(`OpenAI: ${msg}`);
+    }
+    if (json.usage) {
+      inputTokens = json.usage.prompt_tokens ?? 0;
+      outputTokens = json.usage.completion_tokens ?? 0;
+      // A subset of prompt_tokens, not additional to it — only the uncached
+      // remainder bills at the full input rate.
+      cachedTokens = json.usage.prompt_tokens_details?.cached_tokens ?? 0;
+    }
+    const choice = json.choices?.[0];
+    const delta = choice?.delta;
+    if (delta?.content) opts.onChunk({ text: delta.content });
+    // Accumulate tool_calls across partial SSE chunks
+    if (delta?.tool_calls && Array.isArray(delta.tool_calls)) {
+      for (const partial of delta.tool_calls as Array<{
+        index?: number; id?: string;
+        function?: { name?: string; arguments?: string };
+      }>) {
+        const idx = partial.index ?? 0;
+        if (!toolCallMap.has(idx)) toolCallMap.set(idx, { id: "", name: "", args: "" });
+        const entry = toolCallMap.get(idx)!;
+        if (partial.id) entry.id += partial.id;
+        if (partial.function?.name) entry.name += partial.function.name;
+        if (partial.function?.arguments) entry.args += partial.function.arguments;
+      }
+    }
+    // content_filter fires with little or no text — Azure OpenAI and several
+    // compat gateways signal it this way instead of an error status. Throw so
+    // it's treated as the safety refusal it is (modelHealth.isSafetyBlockMessage
+    // matches "content_filter") rather than a normal empty completion.
+    if (choice?.finish_reason === "content_filter") {
+      throw new Error("OpenAI: response was blocked (finish_reason: content_filter)");
+    }
+    if (choice?.finish_reason === "length") truncated = true;
   };
 
   while (true) {
@@ -89,7 +114,11 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       const data = trimmed.slice(5).trim();
       if (data === "[DONE]") {
         emitToolCalls();
-        opts.onChunk({ done: true, inputTokens, outputTokens });
+        opts.onChunk({
+          done: true, inputTokens, outputTokens,
+          ...(truncated ? { truncated } : {}),
+          ...(cachedTokens ? { cachedTokens } : {}),
+        });
         return;
       }
       parseData(data);
@@ -103,5 +132,9 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     if (data !== "[DONE]") parseData(data);
   }
   emitToolCalls();
-  opts.onChunk({ done: true, inputTokens, outputTokens });
+  opts.onChunk({
+    done: true, inputTokens, outputTokens,
+    ...(truncated ? { truncated } : {}),
+    ...(cachedTokens ? { cachedTokens } : {}),
+  });
 }

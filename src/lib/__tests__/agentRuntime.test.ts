@@ -7,8 +7,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { StreamOptions } from "../ai/types";
 import type { AgentEvent } from "../agent/events";
 import type { TaskPreset } from "../agent/presets";
-import { runAgent, type AgentRuntimeOptions } from "../agent/runtime";
+import { runAgent, trimHistory, type AgentRuntimeOptions } from "../agent/runtime";
 import type { LoreIndex } from "../lore";
+import type { StreamMessage } from "../ai/types";
 
 vi.mock("../ai", () => ({ streamCompletion: vi.fn() }));
 import { streamCompletion } from "../ai";
@@ -76,7 +77,7 @@ describe("runAgent", () => {
 
     const result = await runAgent(opts);
 
-    expect(result).toEqual({ rounds: 1, inputTokens: 10, outputTokens: 5 });
+    expect(result).toEqual({ rounds: 1, inputTokens: 10, outputTokens: 5, cachedTokens: 0 });
     expect(last(opts.output)).toBe("hello world");
     // Streamed, not delivered in one lump.
     expect(opts.output).toEqual(["hello ", "hello world"]);
@@ -136,7 +137,7 @@ describe("runAgent", () => {
 
     const result = await runAgent(opts);
 
-    expect(result).toEqual({ rounds: 2, inputTokens: 28, outputTokens: 9 });
+    expect(result).toEqual({ rounds: 2, inputTokens: 28, outputTokens: 9, cachedTokens: 0 });
 
     // Event order: round 1, tool running, tool done, round 2
     expect(opts.events.map((e) => e.kind)).toEqual([
@@ -160,6 +161,19 @@ describe("runAgent", () => {
     const secondCall = mockStream.mock.calls[1][0];
     expect(secondCall.messages).toBe(history);
     expect(secondCall.tools).toHaveLength(4);
+  });
+
+  it("accumulates cachedTokens across rounds", async () => {
+    queueRound([
+      { toolCalls: [{ index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" }] },
+      { done: true, inputTokens: 8, outputTokens: 2, cachedTokens: 5 },
+    ]);
+    queueRound([{ text: "done" }, { done: true, inputTokens: 20, outputTokens: 7, cachedTokens: 15 }]);
+    const opts = makeOptions();
+
+    const result = await runAgent(opts);
+
+    expect(result).toEqual({ rounds: 2, inputTokens: 28, outputTokens: 9, cachedTokens: 20 });
   });
 
   it("reports a tool-step error for unknown tools and lets the model retry", async () => {
@@ -231,5 +245,102 @@ describe("runAgent", () => {
 
     await expect(runAgent(opts)).rejects.toMatchObject({ name: "AbortError" });
     expect(mockStream).not.toHaveBeenCalled();
+  });
+
+  it("stops executing a round's remaining tool calls once aborted mid-round", async () => {
+    // A round that narrates before calling two tools: onOutputText fires once
+    // per streamed chunk, then once more to roll the display back to
+    // committedText right before the tool-call loop starts — the exact window
+    // between "tool calls decided" and "tools begin executing" where an abort
+    // (e.g. one that just resolved a blocked approval via rejectAll) used to
+    // go unnoticed until the *next* round.
+    queueRound([
+      { text: "我先去找文件列表。" },
+      {
+        toolCalls: [
+          { index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" },
+          { index: 1, id: "c2", name: "list_lore_entities", arguments: "{}" },
+        ],
+      },
+      { done: true, inputTokens: 1, outputTokens: 1 },
+    ]);
+    const controller = new AbortController();
+    let rollbackSeen = false;
+    const opts = makeOptions({
+      signal: controller.signal,
+      onOutputText: (t) => {
+        // The rollback call passes exactly committedText ("" — nothing
+        // committed yet); the streaming call passed the narration text.
+        if (t === "" && !rollbackSeen) {
+          rollbackSeen = true;
+          controller.abort();
+        }
+      },
+    });
+
+    await expect(runAgent(opts)).rejects.toMatchObject({ name: "AbortError" });
+
+    expect(rollbackSeen).toBe(true);
+    // Neither tool call reached the executor — no tool-step events at all.
+    expect(opts.events.some((e) => e.kind === "tool-step")).toBe(false);
+  });
+});
+
+describe("trimHistory", () => {
+  // read_lore_image (and any other vision tool) hands its result back as a
+  // follow-up `role: "user"` message carrying an image_url part — OpenAI's
+  // role:"tool" only allows string content. Those base64 payloads are
+  // typically the single largest thing in a long run's history, so eliding
+  // needs to reach them too, not just role:"tool" text results.
+  function imageMessage(): StreamMessage {
+    return {
+      role: "user",
+      content: [
+        { type: "text", text: "Visual reference for read_lore_image:\nAva" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
+      ],
+    };
+  }
+
+  it("elides an old image tool-result, not just role:\"tool\" text results", () => {
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      { role: "user", content: "go" }, // seeded first turn — must never be touched
+      imageMessage(),
+    ];
+
+    const dropped = trimHistory(history, 50);
+
+    expect(dropped).toBe(1);
+    expect(history[1].content).toBe("go"); // untouched
+    expect(typeof history[2].content).toBe("string");
+    expect(String(history[2].content)).not.toContain("data:image");
+  });
+
+  it("drops in oldest-first order across tool and image messages alike", () => {
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      { role: "user", content: "go" },
+      { role: "tool", tool_call_id: "c1", content: "y".repeat(800) }, // ~200 tokens
+      imageMessage(), // ~800 tokens fixed
+    ];
+
+    // Over budget, but dropping just the older tool result is enough.
+    const dropped = trimHistory(history, 850);
+
+    expect(dropped).toBe(1);
+    expect(history[2].content).not.toBe("y".repeat(800));
+    expect(Array.isArray(history[3].content)).toBe(true); // image untouched
+  });
+
+  it("does nothing when already within the ceiling", () => {
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      { role: "user", content: "go" },
+      imageMessage(),
+    ];
+
+    expect(trimHistory(history, 100_000)).toBe(0);
+    expect(Array.isArray(history[2].content)).toBe(true);
   });
 });

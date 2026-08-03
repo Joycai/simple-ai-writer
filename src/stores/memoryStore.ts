@@ -16,7 +16,7 @@ import {
   MEMORY_MIN_DOC_CHARS,
 } from "../lib/context/memory";
 import { readFile } from "../lib/fs/fileio";
-import type { Model, Provider } from "../lib/ai/configDb";
+import { costFor, type Model, type Provider } from "../lib/ai/configDb";
 import { loadApiKey } from "../lib/keyStore";
 import { getDb } from "../lib/project";
 import { useAiStore } from "./aiStore";
@@ -30,7 +30,7 @@ const PREV_TAIL_CHARS = 400;
 type Progress = { done: number; total: number };
 
 type GenOutcome =
-  | { memory: DocMemory; usage: { in: number; out: number } }
+  | { memory: DocMemory; usage: { in: number; out: number; cached: number } }
   | { skipped: "short" | "upToDate" };
 
 /**
@@ -75,6 +75,7 @@ async function runMemoryGeneration(opts: {
 
   let totalIn = 0;
   let totalOut = 0;
+  let totalCached = 0;
   const fresh: MemorySegment[] = [];
   for (let i = 0; i < ranges.length; i++) {
     const { from, to } = ranges[i];
@@ -111,6 +112,7 @@ async function runMemoryGeneration(opts: {
         if ("done" in chunk) {
           totalIn += chunk.inputTokens;
           totalOut += chunk.outputTokens;
+          totalCached += chunk.cachedTokens ?? 0;
         } else if ("text" in chunk) {
           summary += chunk.text;
         }
@@ -128,7 +130,7 @@ async function runMemoryGeneration(opts: {
     segments: [...keep, ...fresh],
   };
   await saveMemory(projectPath, memory);
-  return { memory, usage: { in: totalIn, out: totalOut } };
+  return { memory, usage: { in: totalIn, out: totalOut, cached: totalCached } };
 }
 
 /**
@@ -217,8 +219,16 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
   },
 
   generate: async () => {
-    if (get().isGenerating) return;
-    const { projectPath, activeFilePath } = useProjectStore.getState();
+    // Also chapterGen: without it, this could race generateForFile — both
+    // resolve `existing` from the same starting file, then both save,
+    // silently discarding whichever finishes first (and billing for both).
+    if (get().isGenerating || get().chapterGen) return;
+    const { projectPath } = useProjectStore.getState();
+    // Focus, not activeFilePath: composing projectStore.activeFilePath (set
+    // synchronously on click) with editorStore.content (set by an async
+    // effect) can pair one chapter's text with another's path — see
+    // loadForActiveFile above and editorStore.WritingFocus.
+    const { filePath: activeFilePath, text: content } = getWritingFocus();
     if (!projectPath || !activeFilePath) return;
     const resolved = resolveModel();
     if ("error" in resolved) { set({ error: resolved.error }); return; }
@@ -227,37 +237,50 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
     const rel = projectRelativePath(projectPath, activeFilePath);
     if (!rel) return;
 
-    const content = useEditorStore.getState().content;
     if (content.length < MEMORY_MIN_DOC_CHARS) {
       set({ notice: i18n.t("ai.memory.docTooShort"), error: null });
       return;
     }
 
     const existing = get().docPath === activeFilePath ? get().memory : null;
-    const apiKey = (await loadApiKey(provider.id)) ?? "";
     const controller = new AbortController();
     set({ isGenerating: true, progress: { done: 0, total: 0 }, error: null, notice: null, abortController: controller });
 
     try {
+      const apiKey = (await loadApiKey(provider.id)) ?? "";
       const outcome = await runMemoryGeneration({
         projectPath, rel, content, existing, model, provider, apiKey,
         signal: controller.signal,
-        onProgress: (p) => set({ progress: p }),
+        // Guarded like every set() below: abort() resets isGenerating/
+        // abortController synchronously without waiting for this promise to
+        // unwind, so a stale run can still be mid-generation when a new one
+        // starts — its progress/result must not land on top of the new run's.
+        onProgress: (p) => { if (get().abortController === controller) set({ progress: p }); },
       });
       if ("skipped" in outcome) {
-        set({ notice: i18n.t(outcome.skipped === "short" ? "ai.memory.docTooShort" : "ai.memory.upToDate") });
+        if (get().abortController === controller) {
+          set({ notice: i18n.t(outcome.skipped === "short" ? "ai.memory.docTooShort" : "ai.memory.upToDate") });
+        }
       } else {
+        // Always recorded — billing reflects what was actually generated,
+        // regardless of whether this run is still the live one.
         recordUsage(projectPath, model, outcome.usage);
-        set({
-          docPath: activeFilePath,
-          memory: outcome.memory,
-          freshness: checkFreshness(useEditorStore.getState().content, outcome.memory),
-        });
+        if (get().abortController === controller) {
+          set({
+            docPath: activeFilePath,
+            memory: outcome.memory,
+            freshness: checkFreshness(useEditorStore.getState().content, outcome.memory),
+          });
+        }
       }
     } catch (e) {
-      if ((e as Error).name !== "AbortError") set({ error: String(e) });
+      if ((e as Error).name !== "AbortError" && get().abortController === controller) {
+        set({ error: String(e) });
+      }
     } finally {
-      set({ isGenerating: false, progress: null, abortController: null });
+      if (get().abortController === controller) {
+        set({ isGenerating: false, progress: null, abortController: null });
+      }
     }
   },
 
@@ -293,22 +316,36 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
     }
 
     const existing = await loadMemory(projectPath, absFilePath);
-    const apiKey = (await loadApiKey(provider.id)) ?? "";
     const controller = new AbortController();
     set({ chapterGen: { path: absFilePath, done: 0, total: 0 }, chapterGenController: controller, error: null, notice: null });
 
     try {
+      const apiKey = (await loadApiKey(provider.id)) ?? "";
       const outcome = await runMemoryGeneration({
         projectPath, rel, content, existing, model, provider, apiKey, force,
         signal: controller.signal,
-        onProgress: (p) => set({ chapterGen: { path: absFilePath, done: p.done, total: p.total } }),
+        // Guarded like every set() below — see the matching comment in
+        // generate(); the abortChapterGen() counterpart resets state the
+        // same way, without waiting for this promise to unwind.
+        onProgress: (p) => {
+          if (get().chapterGenController === controller) {
+            set({ chapterGen: { path: absFilePath, done: p.done, total: p.total } });
+          }
+        },
       });
       if ("skipped" in outcome) {
-        set({ notice: i18n.t(outcome.skipped === "short" ? "ai.memory.docTooShort" : "ai.memory.upToDate") });
+        if (get().chapterGenController === controller) {
+          set({ notice: i18n.t(outcome.skipped === "short" ? "ai.memory.docTooShort" : "ai.memory.upToDate") });
+        }
       } else {
+        // Always recorded — billing reflects what was actually generated,
+        // regardless of whether this run is still the live one.
         recordUsage(projectPath, model, outcome.usage);
         // Keep the active-doc memory view in sync when we just regenerated it.
-        if (absFilePath === activeFilePath || get().docPath === absFilePath) {
+        if (
+          (absFilePath === activeFilePath || get().docPath === absFilePath) &&
+          get().chapterGenController === controller
+        ) {
           set({
             docPath: absFilePath,
             memory: outcome.memory,
@@ -317,9 +354,13 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
         }
       }
     } catch (e) {
-      if ((e as Error).name !== "AbortError") set({ error: String(e) });
+      if ((e as Error).name !== "AbortError" && get().chapterGenController === controller) {
+        set({ error: String(e) });
+      }
     } finally {
-      set({ chapterGen: null, chapterGenController: null });
+      if (get().chapterGenController === controller) {
+        set({ chapterGen: null, chapterGenController: null });
+      }
     }
   },
 
@@ -330,10 +371,10 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
 }));
 
 /** Persist summarization token usage (best-effort). */
-function recordUsage(projectPath: string, model: Model, usage: { in: number; out: number }): void {
+function recordUsage(projectPath: string, model: Model, usage: { in: number; out: number; cached: number }): void {
   if (usage.in <= 0 && usage.out <= 0) return;
-  const cost = (usage.in * model.priceIn + usage.out * model.priceOut) / 1_000_000;
-  void persistUsage(projectPath, model.id, usage.in, usage.out, cost);
+  const cost = costFor(model, usage.in, usage.out, usage.cached);
+  void persistUsage(projectPath, model.id, usage.in, usage.out, cost, usage.cached);
 }
 
 async function persistUsage(
@@ -341,14 +382,15 @@ async function persistUsage(
   modelId: string,
   inputTokens: number,
   outputTokens: number,
-  cost: number
+  cost: number,
+  cachedTokens = 0,
 ): Promise<void> {
   try {
     const db = await getDb(projectPath);
     await db.execute(
-      `INSERT INTO token_usage (model_id, task, prompt_tokens, completion_tokens, cost_usd, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [modelId, "memory", inputTokens, outputTokens, cost, Math.floor(Date.now() / 1000)]
+      `INSERT INTO token_usage (model_id, task, prompt_tokens, cached_tokens, completion_tokens, cost_usd, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [modelId, "memory", inputTokens, cachedTokens, outputTokens, cost, Math.floor(Date.now() / 1000)]
     );
   } catch {
     // non-critical

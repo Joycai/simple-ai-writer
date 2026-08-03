@@ -15,6 +15,7 @@ import type { LoreActivationReport } from "../lib/context/loreSelect";
 import { useAgentStore } from "./agentStore";
 import { useAiStore } from "./aiStore";
 import { draftCountFor, totalUsage, type Draft } from "../lib/ai/drafts";
+import { costFor } from "../lib/ai/configDb";
 import { useAppStore } from "./appStore";
 import { useLoreStore } from "./loreStore";
 import { useProjectStore } from "./projectStore";
@@ -109,6 +110,14 @@ interface AiTaskState {
   loreReport: LoreActivationReport | null;
   /** Final per-layer allocation for the current run (see lib/context/budget). */
   contextAlloc: ContextAllocation | null;
+  /**
+   * The document this run's context was assembled from — null if none was
+   * open. The current draft's text was generated for *this* file; if the
+   * author has since switched to a different one, applying it there would
+   * silently splice one document's output into another. Set once, from the
+   * same focus snapshot as the run itself, and never touched afterwards.
+   */
+  sourceFilePath: string | null;
 
   setSelection: (s: string, range?: SelectionRange | null, source?: "marker" | "commit") => void;
   /** Drop the committed target, but only if `source` is the one that set it. */
@@ -134,6 +143,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
   agentLog: [],
   loreReport: null,
   contextAlloc: null,
+  sourceFilePath: null,
 
   setSelection: (s, range = null, source = "commit") =>
     set({ selection: s, selectionRange: range, selectionSource: s ? source : null }),
@@ -175,16 +185,18 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const prompt = prompts.find((p) => p.id === activePromptId);
     const systemPrompt = prompt?.content ?? profileSystemPrompt();
 
-    const apiKey = await loadApiKey(provider.id) ?? "";
-
-    // Snapshot the writing focus once, here, and use nothing else for the rest
-    // of the run: file identity and text come from the same atomic read, and the
-    // author switching chapters mid-stream can no longer redirect a request that
-    // is already in flight. (Lazy import — avoids a store cycle.)
+    // Snapshot the writing focus and the committed selection together, here —
+    // before the keyring read below and every other await further down (memory
+    // load, book-context build) gives the author a window to switch files or
+    // change the selection mid-setup. Use nothing else for the rest of the
+    // run: file identity, text, and selection all come from this one atomic
+    // read, never re-fetched via get(). (Lazy import — avoids a store cycle.)
     const { getWritingFocus } = await import("./editorStore");
     const focus = getWritingFocus();
     const documentText = focus.text;
     const activeFilePath = focus.filePath;
+    const selection = get().selection;
+    const selectionRange = get().selectionRange;
     if (!focus.settled) { set({ error: i18n.t("ai.errors.focusNotReady") }); return; }
 
     // Story memory for the focused document (前情提要 layer). Read from disk so
@@ -251,16 +263,16 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // the book-context bridge decide "we're deep into the chapter" for a file the
     // author just opened. Anything that doesn't check out falls back to the end
     // of the document, which is where a continuation belongs anyway.
-    const anchorRange = get().selectionRange;
+    const anchorRange = selectionRange;
     const anchorValid =
       !!anchorRange &&
       anchorRange.to <= documentText.length &&
-      documentText.slice(anchorRange.from, anchorRange.to) === get().selection;
+      documentText.slice(anchorRange.from, anchorRange.to) === selection;
     // Continue resolves through the shared anchor instead, so the budget window
     // and the book-context bridge measure from the very offset assembleContext
     // will slice from — and that the panel has already named for the author.
     const anchorOffset = isContinue
-      ? extras?.appendAnchor ?? resolveAppendAnchor(documentText, get().selection, anchorRange)
+      ? extras?.appendAnchor ?? resolveAppendAnchor(documentText, selection, anchorRange)
       : anchorValid ? anchorRange!.to : documentText.length;
     const plan = planContextBudget({
       contextSize: model.contextSize,
@@ -275,7 +287,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         // reach the model only as part of 【近期内容】, which is a *plannable*
         // layer with its own budget. Billing them here as a fixed cost too
         // charges the same text twice and shrinks every other layer for it.
-        selectionChars: isContinue ? 0 : get().selection.length,
+        selectionChars: isContinue ? 0 : selection.length,
         outlineChars: extras?.outline?.length,
         knowledgeChars: extras?.additionalKnowledge?.length,
         prevChapterTailChars: useBookContext ? BOOK_PREV_TAIL_CHARS : 0,
@@ -328,12 +340,14 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       usage: null,
       error: null,
       done: false,
+      truncated: false,
     }));
 
     const controller = new AbortController();
     set({
       isRunning: true, drafts, activeDraftId: drafts[0].id,
       error: null, agentLog: [], loreReport: null,
+      sourceFilePath: activeFilePath,
       contextAlloc: {
         loreChars: plan.loreChars,
         memoryChars: memoryBudgetChars,
@@ -367,6 +381,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     });
 
     try {
+      const apiKey = await loadApiKey(provider.id) ?? "";
+
       if (isAgentic) {
         // ── Agentic mode: AI reads (and, in agent mode, writes) via tools ──
         // Continue is append-mode: any selection is an anchor to write *after*,
@@ -376,21 +392,25 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           systemPrompt,
           loreIndex,
           documentText,
-          get().selection,
+          selection,
           instruction,
           isContinue
             ? { ...extras, ...bookExtras, appendMode: true, contextChars: plan.recentWindowChars, currentFilePath }
             : { ...extras, contextChars: plan.recentWindowChars, currentFilePath },
-          get().selectionRange,
+          selectionRange,
           memory,
           loreBudgetChars,
           memoryBudgetChars,
         );
-        set({ loreReport: bundle.loreReport });
+        // Guarded like the catch/finally below: assembleContext's per-facet
+        // disk reads can resolve after the author has already aborted and
+        // re-run, and an unguarded set() here would overwrite the new run's
+        // lore report with the aborted one's.
+        if (get().abortController === controller) set({ loreReport: bundle.loreReport });
 
         const { runAgent } = await import("../lib/agent/runtime");
 
-        const { inputTokens, outputTokens } = await runAgent({
+        const { inputTokens, outputTokens, cachedTokens } = await runAgent({
           baseUrl,
           apiKey,
           standard: provider.apiStandard,
@@ -417,39 +437,52 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
               );
             },
             // L2 approvals: the AiPanel card resolves these (agent mode only —
-            // continue's preset has no propose_edit).
-            requestApproval: (p) => useAgentStore.getState().requestApproval(p),
+            // continue's preset has no propose_edit). Scoped to this run's own
+            // controller so an unrelated chat turn ending doesn't drain them.
+            requestApproval: (p) => useAgentStore.getState().requestApproval(p, controller),
             // Lore changes are gated on an approved plan; the gate is per-run,
             // so each task starts with a clean slate.
-            requestPlanApproval: (p) => useAgentStore.getState().requestPlanApproval(p),
+            requestPlanApproval: (p) => useAgentStore.getState().requestPlanApproval(p, controller),
             lorePlan: createPlanGate(),
           },
           signal: controller.signal,
-          onEvent: (event) => get().appendAgentEvent(event),
+          // Guarded: abort() resets isRunning/abortController synchronously,
+          // without waiting for this run's in-flight promise to actually
+          // unwind, so the author can already be a round or two into a new
+          // run by the time an aborted run's tool loop notices the signal.
+          // Unguarded, this event stream would keep appending the old run's
+          // rounds/tool-steps into the new run's fresh agentLog.
+          onEvent: (event) => {
+            if (get().abortController === controller) get().appendAgentEvent(event);
+          },
           // Always the single draft — draftCountFor pins tool-using tasks to 1.
           // Assigned rather than appended: the runtime sends the whole output
-          // each time so it can drop a tool round's narration.
+          // each time so it can drop a tool round's narration. patchDraft is
+          // id-keyed and already a no-op once this run's draft id is gone, so
+          // it needs no separate guard.
           onOutputText: (text) => patchDraft(set, drafts[0].id, { text }),
         });
-        const cost = (inputTokens * model.priceIn + outputTokens * model.priceOut) / 1_000_000;
+        const cost = costFor(model, inputTokens, outputTokens, cachedTokens);
         patchDraft(set, drafts[0].id, { usage: { inputTokens, outputTokens, cost }, done: true });
-        get().appendAgentEvent({ kind: "run-done", inputTokens, outputTokens, at: Date.now() });
-        void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind);
+        if (get().abortController === controller) {
+          get().appendAgentEvent({ kind: "run-done", inputTokens, outputTokens, at: Date.now() });
+        }
+        void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind, cachedTokens);
       } else {
         // ── Simple streaming: polish / rewrite / summary / custom / Gemini ─
         const bundle = await assembleContext(
           systemPrompt,
           loreIndex,
           documentText,
-          get().selection,
+          selection,
           instruction,
           { ...extras, contextChars: plan.recentWindowChars },
-          get().selectionRange,
+          selectionRange,
           memory,
           loreBudgetChars,
           memoryBudgetChars,
         );
-        set({ loreReport: bundle.loreReport });
+        if (get().abortController === controller) set({ loreReport: bundle.loreReport });
         const messages = bundleToMessages(bundle);
 
         // One request per draft, all sharing this run's AbortController so a
@@ -470,13 +503,16 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
               signal: controller.signal,
               onChunk: (chunk) => {
                 if ("done" in chunk) {
-                  const { inputTokens, outputTokens } = chunk;
-                  const cost =
-                    (inputTokens * model.priceIn + outputTokens * model.priceOut) / 1_000_000;
-                  patchDraft(set, draft.id, { usage: { inputTokens, outputTokens, cost }, done: true });
+                  const { inputTokens, outputTokens, truncated, cachedTokens } = chunk;
+                  const cost = costFor(model, inputTokens, outputTokens, cachedTokens);
+                  patchDraft(set, draft.id, {
+                    usage: { inputTokens, outputTokens, cost },
+                    done: true,
+                    truncated: truncated ?? false,
+                  });
                   // One row per draft: each is a separate billed call, and a
                   // single summed row would misreport the run's shape.
-                  void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind);
+                  void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind, cachedTokens);
                 } else if ("text" in chunk) {
                   appendDraftText(set, draft.id, chunk.text);
                 }
@@ -498,21 +534,29 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           patchDraft(set, drafts[i].id, { error: String(reason), done: true });
         });
         // Surface the run total once, for the execution log's closing line.
-        const total = totalUsage(get().drafts);
-        if (total) {
-          get().appendAgentEvent({
-            kind: "run-done",
-            inputTokens: total.inputTokens,
-            outputTokens: total.outputTokens,
-            at: Date.now(),
-          });
+        // Guarded: a superseded run's allSettled can resolve after a new run
+        // has already replaced `drafts` and started its own agentLog.
+        if (get().abortController === controller) {
+          const total = totalUsage(get().drafts);
+          if (total) {
+            get().appendAgentEvent({
+              kind: "run-done",
+              inputTokens: total.inputTokens,
+              outputTokens: total.outputTokens,
+              at: Date.now(),
+            });
+          }
         }
         if (failures.length === drafts.length && failures.length > 0) {
           throw new Error(failures[0]);
         }
-        // Land on a draft that actually has something to show.
-        const firstUsable = get().drafts.find((d) => !d.error);
-        if (firstUsable) set({ activeDraftId: firstUsable.id });
+        // Land on a draft that actually has something to show. Guarded for
+        // the same reason as above — get().drafts could already belong to a
+        // newer run by the time this resolves.
+        if (get().abortController === controller) {
+          const firstUsable = get().drafts.find((d) => !d.error);
+          if (firstUsable) set({ activeDraftId: firstUsable.id });
+        }
       }
     } catch (e) {
       // Only surface errors while this task is still the current one — after
@@ -527,9 +571,10 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       }
     } finally {
       if (!get().error) recordRunOutcome(model.id, null);
-      // Drain any approval still blocking the loop — a dangling Promise here
-      // would wedge the next run's tool executor.
-      useAgentStore.getState().rejectAll("task ended");
+      // Drain this run's own approvals — a dangling Promise here would wedge
+      // the next run's tool executor, but an unrelated chat turn's pending
+      // card must not be touched.
+      useAgentStore.getState().rejectAll("task ended", controller);
       // Same guard: abort() already cleared state, and a newer task may own it now.
       if (get().abortController === controller) {
         set({ isRunning: false, abortController: null });
@@ -538,14 +583,15 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
   },
 
   abort: () => {
-    get().abortController?.abort();
+    const controller = get().abortController;
+    controller?.abort();
     // Unblock a loop waiting on an approval card so the abort takes effect.
-    useAgentStore.getState().rejectAll("aborted by user");
+    useAgentStore.getState().rejectAll("aborted by user", controller);
     set({ isRunning: false, abortController: null });
   },
 
   clearOutput: () =>
-    set({ drafts: [], activeDraftId: null, error: null, agentLog: [], loreReport: null }),
+    set({ drafts: [], activeDraftId: null, error: null, agentLog: [], loreReport: null, sourceFilePath: null }),
 
   setActiveDraft: (id) => set({ activeDraftId: id }),
 }));
@@ -580,14 +626,15 @@ async function persistUsage(
   inputTokens: number,
   outputTokens: number,
   cost: number,
-  task: string
+  task: string,
+  cachedTokens = 0,
 ): Promise<void> {
   try {
     const db = await getDb(projectPath);
     await db.execute(
-      `INSERT INTO token_usage (model_id, task, prompt_tokens, completion_tokens, cost_usd, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [modelId, task, inputTokens, outputTokens, cost, Math.floor(Date.now() / 1000)]
+      `INSERT INTO token_usage (model_id, task, prompt_tokens, cached_tokens, completion_tokens, cost_usd, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [modelId, task, inputTokens, cachedTokens, outputTokens, cost, Math.floor(Date.now() / 1000)]
     );
   } catch {
     // non-critical — don't surface DB errors to the user

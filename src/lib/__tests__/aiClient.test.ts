@@ -88,6 +88,37 @@ describe("streamCompletion — context size guard", () => {
     });
     expect(calls.length).toBe(1);
   });
+
+  it("counts tool schemas toward the estimate, not just message content", async () => {
+    // A short message alone fits comfortably, but the agent runtime's tool
+    // schemas (name + description + JSON-schema parameters) ride along on
+    // every request too and can be several KB for the full toolset — large
+    // enough on their own to trip a small model's real context window even
+    // when the messages array looks tiny.
+    const bigTool: ToolDefinition = {
+      type: "function",
+      function: {
+        name: "read_file",
+        description: "x".repeat(2000),
+        parameters: { type: "object", properties: {} },
+      },
+    };
+    const calls = mockFetch([]);
+
+    await expect(
+      streamCompletion({
+        baseUrl: "https://api.example.com/v1",
+        apiKey: "test-key",
+        standard: "openai",
+        modelId: "test-model",
+        contextSize: 500,
+        messages: [{ role: "user", content: "hi" }], // trivially small alone
+        tools: [bigTool],
+        onChunk: () => {},
+      }),
+    ).rejects.toBeInstanceOf(ContextSizeError);
+    expect(calls.length).toBe(0);
+  });
 });
 
 describe("streamCompletion — OpenAI SSE", () => {
@@ -150,6 +181,77 @@ describe("streamCompletion — OpenAI SSE", () => {
     expect(sent[0].content).toBe("PREFIX\n\nbase system");
     expect(sent).toHaveLength(2);
   });
+
+  it("rejects on a mid-stream error event instead of completing silently", async () => {
+    // OpenRouter and similar relays return HTTP 200, then deliver a failure
+    // (moderation block, upstream outage) as an SSE data event.
+    mockFetch([
+      `data: {"choices":[{"delta":{"content":"partial"}}]}\n`,
+      `data: {"error":{"message":"upstream provider is overloaded"}}\n`,
+      `data: [DONE]\n`,
+    ]);
+    await expect(
+      streamCompletion({
+        baseUrl: "https://api.example.com/v1",
+        apiKey: "k",
+        standard: "openai",
+        modelId: "m",
+        messages: [{ role: "user", content: "hi" }],
+        onChunk: () => {},
+      }),
+    ).rejects.toThrow(/upstream provider is overloaded/);
+  });
+
+  it("rejects on a content_filter finish_reason instead of completing as an empty success", async () => {
+    // Azure OpenAI and several compat gateways signal a filtered response
+    // this way (no error status), often with little or no text.
+    mockFetch([
+      `data: {"choices":[{"delta":{},"finish_reason":"content_filter"}]}\n`,
+      `data: [DONE]\n`,
+    ]);
+    await expect(
+      streamCompletion({
+        baseUrl: "https://api.example.com/v1",
+        apiKey: "k",
+        standard: "openai",
+        modelId: "m",
+        messages: [{ role: "user", content: "hi" }],
+        onChunk: () => {},
+      }),
+    ).rejects.toThrow(/content_filter/);
+  });
+
+  it("flags a length finish_reason as truncated rather than a plain success", async () => {
+    const { received } = await collect({
+      chunks: [
+        `data: {"choices":[{"delta":{"content":"cut off"}}]}\n`,
+        `data: {"choices":[{"delta":{},"finish_reason":"length"}],"usage":{"prompt_tokens":1,"completion_tokens":2}}\n`,
+        `data: [DONE]\n`,
+      ],
+    });
+    expect(received[received.length - 1]).toEqual({
+      done: true, inputTokens: 1, outputTokens: 2, truncated: true,
+    });
+  });
+
+  it("reports cached tokens as a subset of input tokens", async () => {
+    const { received } = await collect({
+      chunks: [
+        `data: {"choices":[{"delta":{"content":"hi"}}],"usage":{"prompt_tokens":100,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":80}}}\n`,
+        `data: [DONE]\n`,
+      ],
+    });
+    expect(received[received.length - 1]).toEqual({
+      done: true, inputTokens: 100, outputTokens: 5, cachedTokens: 80,
+    });
+  });
+
+  it("omits cachedTokens when the provider reports none", async () => {
+    const { received } = await collect({
+      chunks: [`data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5}}\n`, `data: [DONE]\n`],
+    });
+    expect(received[received.length - 1]).toEqual({ done: true, inputTokens: 10, outputTokens: 5 });
+  });
 });
 
 describe("streamCompletion — Gemini SSE", () => {
@@ -192,6 +294,60 @@ describe("streamCompletion — Gemini SSE", () => {
         onChunk: () => {},
       })
     ).rejects.toThrow(/SAFETY/);
+  });
+
+  it("throws when the response (not just the prompt) is safety-blocked mid-generation", async () => {
+    // No promptFeedback.blockReason here — the filter trips after some text
+    // already streamed, signaled only via candidates[0].finishReason.
+    mockFetch([
+      `data: {"candidates":[{"content":{"parts":[{"text":"partial"}]},"finishReason":"SAFETY"}]}\n`,
+    ]);
+    await expect(
+      streamCompletion({
+        baseUrl: "",
+        apiKey: "k",
+        standard: "gemini",
+        modelId: "m",
+        messages: [{ role: "user", content: "hi" }],
+        onChunk: () => {},
+      })
+    ).rejects.toThrow(/SAFETY/);
+  });
+
+  it("flags a MAX_TOKENS finishReason as truncated rather than a plain success", async () => {
+    const { received } = await collect({
+      standard: "gemini",
+      chunks: [
+        `data: {"candidates":[{"content":{"parts":[{"text":"cut off"}]},"finishReason":"MAX_TOKENS"}],"usageMetadata":{"promptTokenCount":4,"candidatesTokenCount":8}}\n`,
+      ],
+    });
+    expect(received[received.length - 1]).toEqual({
+      done: true, inputTokens: 4, outputTokens: 8, truncated: true,
+    });
+  });
+
+  it("folds thinking tokens into output tokens", async () => {
+    // candidatesTokenCount alone would undercount a thinking model's real
+    // output — thoughtsTokenCount is billed as output too.
+    const { received } = await collect({
+      standard: "gemini",
+      chunks: [
+        `data: {"candidates":[{"content":{"parts":[{"text":"answer"}]}}],"usageMetadata":{"promptTokenCount":10,"candidatesTokenCount":50,"thoughtsTokenCount":500}}\n`,
+      ],
+    });
+    expect(received[received.length - 1]).toEqual({ done: true, inputTokens: 10, outputTokens: 550 });
+  });
+
+  it("reports cached tokens as a subset of input tokens", async () => {
+    const { received } = await collect({
+      standard: "gemini",
+      chunks: [
+        `data: {"candidates":[{"content":{"parts":[{"text":"hi"}]}}],"usageMetadata":{"promptTokenCount":100,"candidatesTokenCount":5,"cachedContentTokenCount":80}}\n`,
+      ],
+    });
+    expect(received[received.length - 1]).toEqual({
+      done: true, inputTokens: 100, outputTokens: 5, cachedTokens: 80,
+    });
   });
 });
 

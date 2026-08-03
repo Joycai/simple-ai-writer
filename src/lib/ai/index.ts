@@ -7,7 +7,7 @@
 import { beginApiLog } from "./apiLog";
 import { streamGemini } from "./gemini";
 import { streamOpenAI } from "./openai";
-import { estimateMessagesTokens } from "./tokenEstimate";
+import { estimateMessagesTokens, estimateToolsTokens } from "./tokenEstimate";
 import { applyPrefix, ContextSizeError, type StreamOptions } from "./types";
 
 export * from "./types";
@@ -16,7 +16,7 @@ export async function streamCompletion(opts: StreamOptions): Promise<void> {
   const merged: StreamOptions = { ...opts, messages: applyPrefix(opts.messages, opts.prefix) };
   const log = beginApiLog(merged);
   if (merged.contextSize && merged.contextSize > 0) {
-    const estimated = estimateMessagesTokens(merged.messages);
+    const estimated = estimateMessagesTokens(merged.messages) + estimateToolsTokens(merged.tools);
     if (estimated > merged.contextSize) {
       const err = new ContextSizeError(estimated, merged.contextSize);
       log.error(err);

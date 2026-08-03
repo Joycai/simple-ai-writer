@@ -54,6 +54,25 @@ export interface Model {
   probedAt?: number;
 }
 
+/**
+ * USD cost of one completion, accounting for the model's cheaper cached-input
+ * rate. `cachedTokens` is a subset of `inputTokens` — both OpenAI's and
+ * Gemini's usage reporting count it that way — so only the uncached
+ * remainder bills at the full input rate.
+ */
+export function costFor(
+  model: Model,
+  inputTokens: number,
+  outputTokens: number,
+  cachedTokens = 0,
+): number {
+  const uncachedInput = Math.max(0, inputTokens - cachedTokens);
+  return (
+    (uncachedInput * model.priceIn + cachedTokens * model.priceCachedIn + outputTokens * model.priceOut) /
+    1_000_000
+  );
+}
+
 /** Upper bound for the per-model context size setting (tokens). */
 export const MAX_CONTEXT_SIZE = 2_000_000;
 

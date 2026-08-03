@@ -42,9 +42,31 @@ export interface StructuredTaskArgs {
   onText?: (accumulated: string) => void;
 }
 
-/** Errors that mean "this model can't do forced tool calls" → fall back to JSON. */
-const TOOL_CAPABILITY_ERROR =
-  /tool[_ ]?choice|thinking mode|does not support|function call|EMPTY_TOOL_CALL/i;
+/**
+ * Errors that mean "this model can't do forced tool calls" → fall back to JSON.
+ *
+ * Bare substrings like "does not support" or "function call" used to be
+ * enough to trigger the fallback — but those also show up in genuine,
+ * unrelated upstream errors ("does not support streaming for this region",
+ * "invalid function call: missing required argument"), which would silently
+ * retry the whole request as a second, different-shaped call instead of
+ * surfacing the real problem — doubling cost and hiding the actual error.
+ * Require the capability word (function/tool call[s][ing]) to appear
+ * *together with* an explicit "not supported" phrasing, not just anywhere in
+ * the message.
+ */
+const CAPABILITY_WORD = "(?:function|tool)s?[ _-]?calls?(?:ing)?";
+const TOOL_CAPABILITY_ERROR = new RegExp(
+  [
+    "tool[_ ]?choice",
+    "thinking mode",
+    `does not support ${CAPABILITY_WORD}`,
+    `${CAPABILITY_WORD}(?: is| are)? not supported`,
+    `no support for ${CAPABILITY_WORD}`,
+    "EMPTY_TOOL_CALL",
+  ].join("|"),
+  "i",
+);
 
 /**
  * Run one structured task and resolve with the raw JSON string of the result

@@ -116,7 +116,6 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
     if (!model || !provider) { setError(t("ai.errors.noModel")); return; }
     if (!indexBody && entity.facets.length === 0) { setError(t("lore.split.emptyEntry", { defaultValue: "当前条目没有正文，无需拆分" })); return; }
 
-    const apiKey = (await loadApiKey(provider.id)) ?? "";
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setError(null);
@@ -124,6 +123,7 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
     setPhase("generating");
 
     try {
+      const apiKey = (await loadApiKey(provider.id)) ?? "";
       // Fold existing facets back in so the model reorganizes the whole entity,
       // not just the core body. Their files are replaced on Apply.
       const existingFacets = await Promise.all(

@@ -16,6 +16,22 @@ import { getGlobalDb } from "./project";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+/**
+ * Thrown by loadApiKey when the OS keyring itself is unreachable or errors —
+ * a locked/missing Secret Service on Linux, a denied Keychain prompt, etc.
+ * Kept distinct from "no key stored" (which resolves to `null`, not a
+ * rejection): collapsing both into `null` used to make a broken keyring look
+ * exactly like an unconfigured provider, so the request went out with an
+ * empty key and failed downstream as an unexplained 401 instead of a message
+ * that points at the actual cause.
+ */
+export class KeyringError extends Error {
+  constructor(cause: unknown) {
+    super(`Could not read the API key from the OS keyring: ${String(cause)}`);
+    this.name = "KeyringError";
+  }
+}
+
 function sessionKey(providerId: string) {
   return `apikey:${providerId}`;
 }
@@ -59,17 +75,24 @@ export async function saveApiKey(providerId: string, apiKey: string): Promise<vo
   } catch {}
 }
 
+/**
+ * Resolves to the stored key, or `null` when the provider genuinely has none
+ * configured. Throws `KeyringError` when the keyring itself couldn't be
+ * reached — callers should let that surface as a real error rather than
+ * treating it the same as "no key".
+ */
 export async function loadApiKey(providerId: string): Promise<string | null> {
   if (!isTauri) {
     return sessionStorage.getItem(sessionKey(providerId));
   }
+  let key: string | null;
   try {
-    const key = await invoke<string | null>("secret_load", { providerId });
-    if (key != null) return key;
-    return await migrateLegacyKey(providerId);
-  } catch {
-    return null;
+    key = await invoke<string | null>("secret_load", { providerId });
+  } catch (e) {
+    throw new KeyringError(e);
   }
+  if (key != null) return key;
+  return await migrateLegacyKey(providerId);
 }
 
 export async function deleteApiKey(providerId: string): Promise<void> {

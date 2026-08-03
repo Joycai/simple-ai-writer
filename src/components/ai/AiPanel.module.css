@@ -734,6 +734,11 @@
   color: var(--color-text-muted);
 }
 
+.truncatedNotice {
+  font: 400 10px/1.5 var(--font-sans);
+  color: var(--color-warning);
+}
+
 /* Status bar */
 .statusBar {
   flex-shrink: 0;

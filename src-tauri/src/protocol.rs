@@ -1,14 +1,15 @@
+use crate::scope::FsScope;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::http::{Request, Response};
-use tauri::{Runtime, UriSchemeContext};
+use tauri::{Manager, Runtime, UriSchemeContext};
 
 pub fn register_asset_protocol<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     builder.register_uri_scheme_protocol("ai-writer-asset", handle_asset_request)
 }
 
 fn handle_asset_request<R: Runtime>(
-    _ctx: UriSchemeContext<'_, R>,
+    ctx: UriSchemeContext<'_, R>,
     request: Request<Vec<u8>>,
 ) -> Response<Vec<u8>> {
     let uri = request.uri().to_string();
@@ -48,6 +49,25 @@ fn handle_asset_request<R: Runtime>(
                 .unwrap();
         }
     };
+
+    // The frontend now inlines images as data URLs (see `imageToDataUrl`) and
+    // no longer emits `ai-writer-asset://` links itself; this protocol only
+    // remains to keep rendering such links in documents saved by older
+    // versions of the app. Those links only ever pointed at project-relative
+    // paths, so require the same project-root containment as every other
+    // path a webview-controlled string can name — otherwise a crafted
+    // `![](ai-writer-asset://localhost/etc/passwd)` in imported/shared
+    // markdown could read arbitrary files with an image extension.
+    let in_scope = ctx
+        .app_handle()
+        .try_state::<FsScope>()
+        .is_some_and(|scope| scope.is_allowed(&path));
+    if !in_scope {
+        return Response::builder()
+            .status(403)
+            .body(b"Forbidden".to_vec())
+            .unwrap();
+    }
 
     match fs::read(&path) {
         Ok(bytes) => Response::builder()
