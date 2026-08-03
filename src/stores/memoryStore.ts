@@ -251,22 +251,36 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
       const outcome = await runMemoryGeneration({
         projectPath, rel, content, existing, model, provider, apiKey,
         signal: controller.signal,
-        onProgress: (p) => set({ progress: p }),
+        // Guarded like every set() below: abort() resets isGenerating/
+        // abortController synchronously without waiting for this promise to
+        // unwind, so a stale run can still be mid-generation when a new one
+        // starts — its progress/result must not land on top of the new run's.
+        onProgress: (p) => { if (get().abortController === controller) set({ progress: p }); },
       });
       if ("skipped" in outcome) {
-        set({ notice: i18n.t(outcome.skipped === "short" ? "ai.memory.docTooShort" : "ai.memory.upToDate") });
+        if (get().abortController === controller) {
+          set({ notice: i18n.t(outcome.skipped === "short" ? "ai.memory.docTooShort" : "ai.memory.upToDate") });
+        }
       } else {
+        // Always recorded — billing reflects what was actually generated,
+        // regardless of whether this run is still the live one.
         recordUsage(projectPath, model, outcome.usage);
-        set({
-          docPath: activeFilePath,
-          memory: outcome.memory,
-          freshness: checkFreshness(useEditorStore.getState().content, outcome.memory),
-        });
+        if (get().abortController === controller) {
+          set({
+            docPath: activeFilePath,
+            memory: outcome.memory,
+            freshness: checkFreshness(useEditorStore.getState().content, outcome.memory),
+          });
+        }
       }
     } catch (e) {
-      if ((e as Error).name !== "AbortError") set({ error: String(e) });
+      if ((e as Error).name !== "AbortError" && get().abortController === controller) {
+        set({ error: String(e) });
+      }
     } finally {
-      set({ isGenerating: false, progress: null, abortController: null });
+      if (get().abortController === controller) {
+        set({ isGenerating: false, progress: null, abortController: null });
+      }
     }
   },
 
@@ -310,14 +324,28 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
       const outcome = await runMemoryGeneration({
         projectPath, rel, content, existing, model, provider, apiKey, force,
         signal: controller.signal,
-        onProgress: (p) => set({ chapterGen: { path: absFilePath, done: p.done, total: p.total } }),
+        // Guarded like every set() below — see the matching comment in
+        // generate(); the abortChapterGen() counterpart resets state the
+        // same way, without waiting for this promise to unwind.
+        onProgress: (p) => {
+          if (get().chapterGenController === controller) {
+            set({ chapterGen: { path: absFilePath, done: p.done, total: p.total } });
+          }
+        },
       });
       if ("skipped" in outcome) {
-        set({ notice: i18n.t(outcome.skipped === "short" ? "ai.memory.docTooShort" : "ai.memory.upToDate") });
+        if (get().chapterGenController === controller) {
+          set({ notice: i18n.t(outcome.skipped === "short" ? "ai.memory.docTooShort" : "ai.memory.upToDate") });
+        }
       } else {
+        // Always recorded — billing reflects what was actually generated,
+        // regardless of whether this run is still the live one.
         recordUsage(projectPath, model, outcome.usage);
         // Keep the active-doc memory view in sync when we just regenerated it.
-        if (absFilePath === activeFilePath || get().docPath === absFilePath) {
+        if (
+          (absFilePath === activeFilePath || get().docPath === absFilePath) &&
+          get().chapterGenController === controller
+        ) {
           set({
             docPath: absFilePath,
             memory: outcome.memory,
@@ -326,9 +354,13 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
         }
       }
     } catch (e) {
-      if ((e as Error).name !== "AbortError") set({ error: String(e) });
+      if ((e as Error).name !== "AbortError" && get().chapterGenController === controller) {
+        set({ error: String(e) });
+      }
     } finally {
-      set({ chapterGen: null, chapterGenController: null });
+      if (get().chapterGenController === controller) {
+        set({ chapterGen: null, chapterGenController: null });
+      }
     }
   },
 
