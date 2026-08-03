@@ -35,7 +35,7 @@ impl FsScope {
 
     /// Register a directory as an allowed root.
     pub fn allow(&self, root: &Path) {
-        let normalized = normalize(root);
+        let normalized = resolve_symlinks(root);
         let mut roots = self.roots.lock().unwrap();
         if !roots.iter().any(|r| r == &normalized) {
             roots.push(normalized);
@@ -55,13 +55,15 @@ impl FsScope {
 
     /// True when `path` is absolute and inside one of the allowed roots.
     /// `..`/`.` components are resolved lexically first so traversal cannot
-    /// escape a root, and `Path::starts_with` compares whole components so a
-    /// sibling like `/project-evil` never matches the root `/project`.
+    /// escape a root, real symlinks along the way are resolved too (so a
+    /// symlink planted inside a root can't point back out of it), and
+    /// `Path::starts_with` compares whole components so a sibling like
+    /// `/project-evil` never matches the root `/project`.
     pub fn is_allowed(&self, path: &Path) -> bool {
         if !path.is_absolute() {
             return false;
         }
-        let normalized = normalize(path);
+        let normalized = resolve_symlinks(path);
         let roots = self.roots.lock().unwrap();
         roots.iter().any(|root| normalized.starts_with(root))
     }
@@ -90,6 +92,45 @@ fn normalize(path: &Path) -> PathBuf {
         }
     }
     out
+}
+
+/// Resolve real symlinks along `path`, in addition to the lexical `.`/`..`
+/// resolution `normalize` already does. `normalize` alone lets a symlink that
+/// lives *inside* an allowed root but points outside it defeat the
+/// containment check: the lexical form still reads as "inside," while the OS
+/// follows the link out when the file is actually opened.
+///
+/// `fs::canonicalize` needs the whole path to exist, which a to-be-created
+/// file doesn't — the common case for a write. So this walks up from `path`
+/// (after lexical normalization, so no `.`/`..` component ever reaches
+/// `canonicalize`) to the nearest ancestor that does exist, resolves *that*
+/// through the filesystem, and re-appends the not-yet-existing tail
+/// unchanged. `path`'s absoluteness guarantees the walk terminates: the
+/// filesystem root always exists and canonicalizes successfully.
+fn resolve_symlinks(path: &Path) -> PathBuf {
+    let normalized = normalize(path);
+    let mut tail: Vec<&std::ffi::OsStr> = Vec::new();
+    let mut existing: &Path = &normalized;
+    loop {
+        match existing.canonicalize() {
+            Ok(mut real) => {
+                for component in tail.iter().rev() {
+                    real.push(component);
+                }
+                return real;
+            }
+            Err(_) => match (existing.parent(), existing.file_name()) {
+                (Some(parent), Some(name)) => {
+                    tail.push(name);
+                    existing = parent;
+                }
+                // Nothing on the path exists (not even the filesystem root —
+                // unreachable in practice). Fall back to the lexical form
+                // rather than granting access on a resolution failure.
+                _ => return normalized,
+            },
+        }
+    }
 }
 
 /// Open the native folder picker and register the selection as an allowed
@@ -141,6 +182,7 @@ pub fn project_register_root(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     // `is_allowed` rejects anything non-absolute, and absoluteness is
     // platform-specific: on Windows `/home/user/project` has no drive letter
@@ -218,5 +260,60 @@ mod tests {
         );
         #[cfg(unix)]
         assert_eq!(normalize(Path::new("/../../etc")), PathBuf::from("/etc"));
+    }
+
+    /// Unique scratch dir under the OS temp dir, for the symlink tests below
+    /// (which need real filesystem entries — `canonicalize` requires it).
+    /// Mirrors `transfer::tests::scratch`.
+    #[cfg(unix)]
+    fn scratch(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("saw-scope-test-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    // Symlink APIs (and CI) are Unix-only today — see docs/ci.md, the Rust CI
+    // job runs on ubuntu-latest — so these are gated rather than also reached
+    // for on Windows via `std::os::windows::fs::symlink_dir`, which needs
+    // elevated privileges to create.
+    #[cfg(unix)]
+    #[test]
+    fn rejects_a_symlink_planted_inside_a_root_that_points_outside_it() {
+        use std::os::unix::fs::symlink;
+
+        let root = scratch("escape-root");
+        let outside = scratch("escape-outside");
+        fs::create_dir_all(root.join("writing")).unwrap();
+
+        // e.g. a maliciously crafted imported bundle, or an attacker with
+        // some existing foothold inside the project folder.
+        symlink(&outside, root.join("writing/escape")).unwrap();
+
+        let s = FsScope::new();
+        s.allow(&root);
+
+        assert!(s.is_allowed(&root.join("writing/normal.md")));
+        assert!(!s.is_allowed(&root.join("writing/escape/secret.md")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn allows_a_registered_root_that_is_itself_a_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let real = scratch("root-real");
+        let link = scratch("root-link-parent").join("project");
+        symlink(&real, &link).unwrap();
+
+        let s = FsScope::new();
+        s.allow(&link);
+
+        // Queried through the symlink or the resolved real path, both must
+        // agree — otherwise a project whose picked folder sits behind a
+        // symlink (common on macOS: /tmp -> /private/tmp) would have every
+        // one of its own files rejected as "outside scope".
+        assert!(s.is_allowed(&link.join("writing/ch1.md")));
+        assert!(s.is_allowed(&real.join("writing/ch1.md")));
     }
 }
