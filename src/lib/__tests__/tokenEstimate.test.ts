@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { estimateTextTokens, estimateMessagesTokens } from "../ai/tokenEstimate";
-import type { StreamMessage } from "../ai/types";
+import { estimateTextTokens, estimateMessagesTokens, estimateToolsTokens } from "../ai/tokenEstimate";
+import type { StreamMessage, ToolDefinition } from "../ai/types";
 
 describe("estimateTextTokens", () => {
   it("counts CJK characters as ~1 token each", () => {
@@ -51,5 +51,23 @@ describe("estimateMessagesTokens", () => {
     ];
     // overhead 4 + ceil(("read" + "{\"path\":1}").length / 4) = 4 + ceil(14/4) = 8
     expect(estimateMessagesTokens(messages)).toBe(8);
+  });
+});
+
+describe("estimateToolsTokens", () => {
+  it("is zero for no tools", () => {
+    expect(estimateToolsTokens(undefined)).toBe(0);
+    expect(estimateToolsTokens([])).toBe(0);
+  });
+
+  it("scales with a tool schema's stringified size", () => {
+    const tools: ToolDefinition[] = [
+      {
+        type: "function",
+        function: { name: "read", description: "x".repeat(400), parameters: { type: "object", properties: {} } },
+      },
+    ];
+    expect(estimateToolsTokens(tools)).toBe(estimateTextTokens(JSON.stringify(tools)));
+    expect(estimateToolsTokens(tools)).toBeGreaterThan(90); // ~400 chars of description alone
   });
 });

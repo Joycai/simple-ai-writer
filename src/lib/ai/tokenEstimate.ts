@@ -6,7 +6,7 @@
  * where servers like ollama silently truncate the head of the prompt.
  */
 
-import type { StreamMessage } from "./types";
+import type { StreamMessage, ToolDefinition } from "./types";
 
 // CJK ideographs, kana, hangul, CJK compatibility, and fullwidth forms
 // (⺀-鿿, ぀-ヿ via the ideograph range, 가-힯, 豈-﫿, ＀-￯).
@@ -22,6 +22,19 @@ export function estimateTextTokens(text: string): number {
   const cjk = text.match(CJK_RE)?.length ?? 0;
   const other = text.length - cjk;
   return Math.ceil(cjk + other / 4);
+}
+
+/**
+ * The agent runtime's tool schemas (name + description + JSON-schema
+ * parameters) ride along on every request the same as any message, and for
+ * the full toolset (lore/memory/edit/plan tools) that's several KB — enough
+ * on its own to matter for the pre-flight context-window check. JSON-stringify
+ * is a rough proxy for a schema's real size, same spirit as the message
+ * estimate this sits next to.
+ */
+export function estimateToolsTokens(tools?: ToolDefinition[]): number {
+  if (!tools?.length) return 0;
+  return estimateTextTokens(JSON.stringify(tools));
 }
 
 export function estimateMessagesTokens(messages: StreamMessage[]): number {

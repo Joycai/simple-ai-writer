@@ -88,6 +88,37 @@ describe("streamCompletion — context size guard", () => {
     });
     expect(calls.length).toBe(1);
   });
+
+  it("counts tool schemas toward the estimate, not just message content", async () => {
+    // A short message alone fits comfortably, but the agent runtime's tool
+    // schemas (name + description + JSON-schema parameters) ride along on
+    // every request too and can be several KB for the full toolset — large
+    // enough on their own to trip a small model's real context window even
+    // when the messages array looks tiny.
+    const bigTool: ToolDefinition = {
+      type: "function",
+      function: {
+        name: "read_file",
+        description: "x".repeat(2000),
+        parameters: { type: "object", properties: {} },
+      },
+    };
+    const calls = mockFetch([]);
+
+    await expect(
+      streamCompletion({
+        baseUrl: "https://api.example.com/v1",
+        apiKey: "test-key",
+        standard: "openai",
+        modelId: "test-model",
+        contextSize: 500,
+        messages: [{ role: "user", content: "hi" }], // trivially small alone
+        tools: [bigTool],
+        onChunk: () => {},
+      }),
+    ).rejects.toBeInstanceOf(ContextSizeError);
+    expect(calls.length).toBe(0);
+  });
 });
 
 describe("streamCompletion — OpenAI SSE", () => {
