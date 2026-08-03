@@ -185,7 +185,15 @@ describe("read_file", () => {
 
   it("rejects a path outside the project", async () => {
     expect(await read({ path: "/etc/passwd" })).toContain(
-      "Error: Path is outside the project directory.",
+      "Error: Path is outside the project writing directory.",
+    );
+  });
+
+  it("rejects a path inside the project but outside writing/", async () => {
+    fs.set(`${PROJECT}/.ai-writer/profile.json`, "{}");
+
+    expect(await read({ path: `${PROJECT}/.ai-writer/profile.json` })).toContain(
+      "Error: Path is outside the project writing directory.",
     );
   });
 });

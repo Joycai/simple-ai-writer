@@ -399,9 +399,12 @@ export async function readWritingFile(
   // The path argument is model-controlled. A plain startsWith check would
   // accept `../` traversal (`/project/../etc/x`) and prefix siblings
   // (`/project-evil/x`), so compare lexically normalized paths on whole
-  // component boundaries.
-  if (!isPathWithin(projectPath, path)) {
-    return { toolCallId, content: "Error: Path is outside the project directory." };
+  // component boundaries. Scoped to writing/ like list_files/search_text —
+  // the tool is documented (and its `path` built) as manuscript-only, so a
+  // prompt-injected model can't use it to read profile.json, memory, or lore.
+  const base = `${projectPath}/writing`;
+  if (!isPathWithin(base, path)) {
+    return { toolCallId, content: "Error: Path is outside the project writing directory." };
   }
 
   let raw: string;
