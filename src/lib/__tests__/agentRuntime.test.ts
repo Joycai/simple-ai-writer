@@ -7,8 +7,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { StreamOptions } from "../ai/types";
 import type { AgentEvent } from "../agent/events";
 import type { TaskPreset } from "../agent/presets";
-import { runAgent, type AgentRuntimeOptions } from "../agent/runtime";
+import { runAgent, trimHistory, type AgentRuntimeOptions } from "../agent/runtime";
 import type { LoreIndex } from "../lore";
+import type { StreamMessage } from "../ai/types";
 
 vi.mock("../ai", () => ({ streamCompletion: vi.fn() }));
 import { streamCompletion } from "../ai";
@@ -282,5 +283,64 @@ describe("runAgent", () => {
     expect(rollbackSeen).toBe(true);
     // Neither tool call reached the executor — no tool-step events at all.
     expect(opts.events.some((e) => e.kind === "tool-step")).toBe(false);
+  });
+});
+
+describe("trimHistory", () => {
+  // read_lore_image (and any other vision tool) hands its result back as a
+  // follow-up `role: "user"` message carrying an image_url part — OpenAI's
+  // role:"tool" only allows string content. Those base64 payloads are
+  // typically the single largest thing in a long run's history, so eliding
+  // needs to reach them too, not just role:"tool" text results.
+  function imageMessage(): StreamMessage {
+    return {
+      role: "user",
+      content: [
+        { type: "text", text: "Visual reference for read_lore_image:\nAva" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
+      ],
+    };
+  }
+
+  it("elides an old image tool-result, not just role:\"tool\" text results", () => {
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      { role: "user", content: "go" }, // seeded first turn — must never be touched
+      imageMessage(),
+    ];
+
+    const dropped = trimHistory(history, 50);
+
+    expect(dropped).toBe(1);
+    expect(history[1].content).toBe("go"); // untouched
+    expect(typeof history[2].content).toBe("string");
+    expect(String(history[2].content)).not.toContain("data:image");
+  });
+
+  it("drops in oldest-first order across tool and image messages alike", () => {
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      { role: "user", content: "go" },
+      { role: "tool", tool_call_id: "c1", content: "y".repeat(800) }, // ~200 tokens
+      imageMessage(), // ~800 tokens fixed
+    ];
+
+    // Over budget, but dropping just the older tool result is enough.
+    const dropped = trimHistory(history, 850);
+
+    expect(dropped).toBe(1);
+    expect(history[2].content).not.toBe("y".repeat(800));
+    expect(Array.isArray(history[3].content)).toBe(true); // image untouched
+  });
+
+  it("does nothing when already within the ceiling", () => {
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      { role: "user", content: "go" },
+      imageMessage(),
+    ];
+
+    expect(trimHistory(history, 100_000)).toBe(0);
+    expect(Array.isArray(history[2].content)).toBe(true);
   });
 });

@@ -24,6 +24,22 @@ import type { ToolCall, ToolResult } from "./tools";
 /** Stand-in left behind when an old tool result is dropped to reclaim room. */
 const ELIDED_TOOL_RESULT =
   "[earlier tool result dropped to stay within the model's context window]";
+/** Stand-in left behind when an old image tool result is dropped to reclaim room. */
+const ELIDED_IMAGE_RESULT =
+  "[earlier tool result image dropped to stay within the model's context window]";
+
+/**
+ * True for a history entry appended by the tool loop's own image-result
+ * branch (`role: "user"` with `image_url` parts) — never the seeded first
+ * turn, which `bundleToMessages` always hands over as a plain string.
+ */
+function isImageResultMessage(m: StreamMessage): boolean {
+  return (
+    m.role === "user" &&
+    Array.isArray(m.content) &&
+    m.content.some((p) => p.type === "image_url")
+  );
+}
 
 /**
  * Keep the growing history inside the planned input ceiling.
@@ -36,20 +52,31 @@ const ELIDED_TOOL_RESULT =
  * Oldest tool results go first: they are both the bulk of the growth and the
  * least likely to still matter. Their *messages* stay — an assistant tool_call
  * with no matching tool reply is a protocol error at both OpenAI and Gemini —
- * only the payload is replaced. The system prompt and the assembled first turn
- * are never touched; if those alone overflow, that is a planning bug and the
- * pre-flight check should say so rather than this quietly hiding it.
+ * only the payload is replaced. Image tool results (appended as a follow-up
+ * `role: "user"` message — see the loop below) are elided the same way: their
+ * base64 data URLs are usually the single largest thing in history, so
+ * leaving them out of this pass would mean the ceiling keeps getting hit again
+ * every round without ever reclaiming the room that actually matters. The
+ * system prompt and the assembled first turn are never touched; if those
+ * alone overflow, that is a planning bug and the pre-flight check should say
+ * so rather than this quietly hiding it.
  *
  * Returns how many results were elided so the caller can log it.
  */
-function trimHistory(history: StreamMessage[], ceilingTokens?: number): number {
+export function trimHistory(history: StreamMessage[], ceilingTokens?: number): number {
   if (!ceilingTokens || ceilingTokens <= 0) return 0;
   if (estimateMessagesTokens(history) <= ceilingTokens) return 0;
   let dropped = 0;
   for (const m of history) {
-    if (m.role !== "tool" || m.content === ELIDED_TOOL_RESULT) continue;
-    m.content = ELIDED_TOOL_RESULT;
-    dropped++;
+    if (m.role === "tool" && m.content !== ELIDED_TOOL_RESULT) {
+      m.content = ELIDED_TOOL_RESULT;
+      dropped++;
+    } else if (isImageResultMessage(m)) {
+      m.content = ELIDED_IMAGE_RESULT;
+      dropped++;
+    } else {
+      continue;
+    }
     if (estimateMessagesTokens(history) <= ceilingTokens) break;
   }
   return dropped;
