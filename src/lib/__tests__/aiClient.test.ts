@@ -150,6 +150,26 @@ describe("streamCompletion — OpenAI SSE", () => {
     expect(sent[0].content).toBe("PREFIX\n\nbase system");
     expect(sent).toHaveLength(2);
   });
+
+  it("rejects on a mid-stream error event instead of completing silently", async () => {
+    // OpenRouter and similar relays return HTTP 200, then deliver a failure
+    // (moderation block, upstream outage) as an SSE data event.
+    mockFetch([
+      `data: {"choices":[{"delta":{"content":"partial"}}]}\n`,
+      `data: {"error":{"message":"upstream provider is overloaded"}}\n`,
+      `data: [DONE]\n`,
+    ]);
+    await expect(
+      streamCompletion({
+        baseUrl: "https://api.example.com/v1",
+        apiKey: "k",
+        standard: "openai",
+        modelId: "m",
+        messages: [{ role: "user", content: "hi" }],
+        onChunk: () => {},
+      }),
+    ).rejects.toThrow(/upstream provider is overloaded/);
+  });
 });
 
 describe("streamCompletion — Gemini SSE", () => {

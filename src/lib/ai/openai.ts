@@ -50,30 +50,41 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   };
 
   const parseData = (data: string) => {
+    let json: any; // JSON.parse's return type — matches the rest of this file's untyped access
     try {
-      const json = JSON.parse(data);
-      if (json.usage) {
-        inputTokens = json.usage.prompt_tokens ?? 0;
-        outputTokens = json.usage.completion_tokens ?? 0;
-      }
-      const delta = json.choices?.[0]?.delta;
-      if (delta?.content) opts.onChunk({ text: delta.content });
-      // Accumulate tool_calls across partial SSE chunks
-      if (delta?.tool_calls && Array.isArray(delta.tool_calls)) {
-        for (const partial of delta.tool_calls as Array<{
-          index?: number; id?: string;
-          function?: { name?: string; arguments?: string };
-        }>) {
-          const idx = partial.index ?? 0;
-          if (!toolCallMap.has(idx)) toolCallMap.set(idx, { id: "", name: "", args: "" });
-          const entry = toolCallMap.get(idx)!;
-          if (partial.id) entry.id += partial.id;
-          if (partial.function?.name) entry.name += partial.function.name;
-          if (partial.function?.arguments) entry.args += partial.function.arguments;
-        }
-      }
+      json = JSON.parse(data);
     } catch {
-      // ignore malformed SSE lines
+      return; // ignore malformed SSE lines
+    }
+    // A relay can return HTTP 200 and then deliver a failure (moderation
+    // block, upstream outage, credit exhaustion) as an SSE data event rather
+    // than an error status — OpenRouter does this routinely. Left unhandled,
+    // the stream would just end with whatever partial usage/text arrived
+    // before the failure, reported as a normal success.
+    if (json.error) {
+      const err = json.error as { message?: string } | string | undefined;
+      const msg = typeof err === "string" ? err : err?.message ?? JSON.stringify(json.error);
+      throw new Error(`OpenAI: ${msg}`);
+    }
+    if (json.usage) {
+      inputTokens = json.usage.prompt_tokens ?? 0;
+      outputTokens = json.usage.completion_tokens ?? 0;
+    }
+    const delta = json.choices?.[0]?.delta;
+    if (delta?.content) opts.onChunk({ text: delta.content });
+    // Accumulate tool_calls across partial SSE chunks
+    if (delta?.tool_calls && Array.isArray(delta.tool_calls)) {
+      for (const partial of delta.tool_calls as Array<{
+        index?: number; id?: string;
+        function?: { name?: string; arguments?: string };
+      }>) {
+        const idx = partial.index ?? 0;
+        if (!toolCallMap.has(idx)) toolCallMap.set(idx, { id: "", name: "", args: "" });
+        const entry = toolCallMap.get(idx)!;
+        if (partial.id) entry.id += partial.id;
+        if (partial.function?.name) entry.name += partial.function.name;
+        if (partial.function?.arguments) entry.args += partial.function.arguments;
+      }
     }
   };
 
