@@ -45,18 +45,40 @@ export async function readDirRecursive(dirPath: string): Promise<FileNode[]> {
 
 // ── Per-project DB (lore, token usage, project settings) ─────────────────────
 
-let _db: Awaited<ReturnType<typeof Database.load>> | null = null;
+// Keyed by project path rather than a single shared handle: openProject calls
+// resetDb() then awaits getDb(newPath), but that await can lose a race with a
+// still-in-flight getDb(oldPath) from whatever the previous project's call
+// site was doing. With one unkeyed slot, the older load resolving later would
+// silently overwrite the cache with the wrong project's handle — and every
+// caller trusts whatever getDb(projectPath) hands back without rechecking the
+// path. Caching the in-flight promise per path means a stale load for
+// oldPath can never land in newPath's slot, and concurrent callers asking for
+// the same path share one load instead of racing separate Database.load calls.
+const dbCache = new Map<string, Promise<Awaited<ReturnType<typeof Database.load>>>>();
 
 export async function getDb(projectPath: string) {
-  if (_db) return _db;
-  const dbPath = `${projectPath}/.ai-writer/project.db`;
-  _db = await Database.load(`sqlite:${dbPath}`);
-  await initSchema(_db);
-  return _db;
+  let dbPromise = dbCache.get(projectPath);
+  if (!dbPromise) {
+    dbPromise = (async () => {
+      const dbPath = `${projectPath}/.ai-writer/project.db`;
+      const db = await Database.load(`sqlite:${dbPath}`);
+      await initSchema(db);
+      return db;
+    })();
+    dbCache.set(projectPath, dbPromise);
+  }
+  try {
+    return await dbPromise;
+  } catch (e) {
+    // Don't leave a failed load cached — the next call should retry, not
+    // keep rethrowing the same stale rejection forever.
+    if (dbCache.get(projectPath) === dbPromise) dbCache.delete(projectPath);
+    throw e;
+  }
 }
 
 export function resetDb() {
-  _db = null;
+  dbCache.clear();
 }
 
 // ── Global app-level DB (AI providers, models, prompts) ──────────────────────
