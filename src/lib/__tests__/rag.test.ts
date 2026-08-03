@@ -69,6 +69,41 @@ describe("assembleContext", () => {
     expect(bundle.loreSnippets).not.toContain("Bran is a smith.");
   });
 
+  it("matches lore near the selection anchor, not the unrelated document tail", async () => {
+    // Ironhold is mentioned right before a mid-document selection; Bran is
+    // mentioned only in the document's actual tail, far past it. Lore
+    // matching should key off the anchor's neighborhood — where the edit
+    // actually is — not blindly the document's end.
+    const before = "y".repeat(3000);
+    const nearAnchor = "Ironhold loomed on the horizon. ";
+    const selection = "selected-text";
+    const after = "z".repeat(3000) + " Bran waved from the docks.";
+    const doc = before + nearAnchor + selection + after;
+
+    const bundle = await assembleContext("SYS", makeLoreIndex(), doc, selection, "Rewrite.");
+
+    expect(bundle.loreSnippets).toContain("Ironhold is a fortress city.");
+    expect(bundle.loreSnippets).not.toContain("Bran is a smith.");
+  });
+
+  it("matches lore near a mid-document append anchor, not the document tail", async () => {
+    // Same anchor-relative requirement, but for "continue" (append mode)
+    // anchored mid-document via a selection, rather than an in-place edit.
+    const before = "y".repeat(3000);
+    const nearAnchor = "Ironhold loomed on the horizon. ";
+    const selection = "selected-text";
+    const after = "z".repeat(3000) + " Bran waved from the docks.";
+    const doc = before + nearAnchor + selection + after;
+
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), doc, selection, "Continue.",
+      { appendMode: true },
+    );
+
+    expect(bundle.loreSnippets).toContain("Ironhold is a fortress city.");
+    expect(bundle.loreSnippets).not.toContain("Bran is a smith.");
+  });
+
   it("merges manually pinned entities ahead of auto-matched ones, deduped", async () => {
     const bundle = await assembleContext(
       "SYS",
