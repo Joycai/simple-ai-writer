@@ -240,6 +240,19 @@ export async function createEntity(
   return dirPath;
 }
 
+/**
+ * Escape a string for a YAML double-quoted scalar. Backslash first, so the
+ * backslashes this introduces for the other two escapes aren't themselves
+ * re-escaped; newline last. The newline escape is what actually matters here:
+ * `summary` comes from a multi-line textarea, and parseFrontmatter's parser
+ * is line-based — a raw newline inside the quotes would end up read as a
+ * separate, unrelated frontmatter line instead of part of the value, both
+ * truncating the summary and corrupting whatever line followed it.
+ */
+function yamlQuote(s: string): string {
+  return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")}"`;
+}
+
 /** Create an entity with full content and optional avatar image bytes. */
 export async function createEntityWithContent(
   projectPath: string,
@@ -254,14 +267,14 @@ export async function createEntityWithContent(
   const dirPath = `${projectPath}/.ai-writer/lore/${category}/${entityId}`;
   await makeDir(dirPath);
 
-  const aliasLines = aliases.map((a) => `  - "${a}"`).join("\n");
+  const aliasLines = aliases.map((a) => `  - ${yamlQuote(a)}`).join("\n");
   const frontmatter = [
     "---",
     `name: ${name}`,
     `aliases:`,
     aliasLines,
     `category: ${category}`,
-    `summary: "${summary.replace(/"/g, '\\"')}"`,
+    `summary: ${yamlQuote(summary)}`,
     "---",
     "",
   ].join("\n");
@@ -279,15 +292,14 @@ export async function createEntityWithContent(
 /** Serialize entity metadata to the index.md YAML frontmatter block. */
 export function serializeEntityFrontmatter(meta: EntityMeta): string {
   const aliasBlock = meta.aliases.length
-    ? `aliases:\n${meta.aliases.map((a) => `  - "${a.replace(/"/g, '\\"')}"`).join("\n")}`
+    ? `aliases:\n${meta.aliases.map((a) => `  - ${yamlQuote(a)}`).join("\n")}`
     : `aliases: []`;
-  const summaryQuoted = `"${meta.summary.replace(/"/g, '\\"')}"`;
   return [
     "---",
     `name: ${meta.name}`,
     aliasBlock,
     `category: ${meta.category}`,
-    `summary: ${summaryQuoted}`,
+    `summary: ${yamlQuote(meta.summary)}`,
     "---",
     "",
   ].join("\n");

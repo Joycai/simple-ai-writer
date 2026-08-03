@@ -135,7 +135,6 @@ export function parseFrontmatter(source: string): { data: Record<string, unknown
   }
 }
 
-/** Strip a single layer of matching surrounding quotes and unescape inner quotes. */
 /** JSON-parse an inline list; strings already carry their quotes in JSON. */
 function parseInlineList(val: string): unknown[] {
   const parsed = JSON.parse(val) as unknown[];
@@ -143,11 +142,35 @@ function parseInlineList(val: string): unknown[] {
   return parsed;
 }
 
+/**
+ * Undo entity.ts's yamlQuote escaping (backslash, quote, newline) in one
+ * left-to-right pass. Three chained global replaces — unescape newline, then
+ * quote, then backslash — looks like the obvious mirror of yamlQuote's three
+ * escaping passes, but it isn't: it re-scans its own prior output, so an
+ * escaped backslash sitting right before a literal "n" (e.g. the source text
+ * `C:\new`, escaped to `\\new`) gets misread as a `\n` newline escape,
+ * splitting "new" into a stray newline plus "ew". Track position explicitly
+ * instead, so each escape sequence is decoded exactly once from the input.
+ */
+function unescapeDoubleQuoted(inner: string): string {
+  let out = "";
+  for (let i = 0; i < inner.length; i++) {
+    if (inner[i] === "\\" && i + 1 < inner.length) {
+      const next = inner[i + 1];
+      if (next === "\\" || next === '"') { out += next; i++; continue; }
+      if (next === "n") { out += "\n"; i++; continue; }
+    }
+    out += inner[i];
+  }
+  return out;
+}
+
+/** Strip a single layer of matching surrounding quotes and unescape inner quotes. */
 function unquote(s: string): string {
-  if (
-    (s.startsWith('"') && s.endsWith('"') && s.length >= 2) ||
-    (s.startsWith("'") && s.endsWith("'") && s.length >= 2)
-  ) {
+  if (s.startsWith('"') && s.endsWith('"') && s.length >= 2) {
+    return unescapeDoubleQuoted(s.slice(1, -1));
+  }
+  if (s.startsWith("'") && s.endsWith("'") && s.length >= 2) {
     return s.slice(1, -1).replace(/\\"/g, '"');
   }
   return s;
