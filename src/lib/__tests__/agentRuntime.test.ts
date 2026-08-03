@@ -245,4 +245,42 @@ describe("runAgent", () => {
     await expect(runAgent(opts)).rejects.toMatchObject({ name: "AbortError" });
     expect(mockStream).not.toHaveBeenCalled();
   });
+
+  it("stops executing a round's remaining tool calls once aborted mid-round", async () => {
+    // A round that narrates before calling two tools: onOutputText fires once
+    // per streamed chunk, then once more to roll the display back to
+    // committedText right before the tool-call loop starts — the exact window
+    // between "tool calls decided" and "tools begin executing" where an abort
+    // (e.g. one that just resolved a blocked approval via rejectAll) used to
+    // go unnoticed until the *next* round.
+    queueRound([
+      { text: "我先去找文件列表。" },
+      {
+        toolCalls: [
+          { index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" },
+          { index: 1, id: "c2", name: "list_lore_entities", arguments: "{}" },
+        ],
+      },
+      { done: true, inputTokens: 1, outputTokens: 1 },
+    ]);
+    const controller = new AbortController();
+    let rollbackSeen = false;
+    const opts = makeOptions({
+      signal: controller.signal,
+      onOutputText: (t) => {
+        // The rollback call passes exactly committedText ("" — nothing
+        // committed yet); the streaming call passed the narration text.
+        if (t === "" && !rollbackSeen) {
+          rollbackSeen = true;
+          controller.abort();
+        }
+      },
+    });
+
+    await expect(runAgent(opts)).rejects.toMatchObject({ name: "AbortError" });
+
+    expect(rollbackSeen).toBe(true);
+    // Neither tool call reached the executor — no tool-step events at all.
+    expect(opts.events.some((e) => e.kind === "tool-step")).toBe(false);
+  });
 });

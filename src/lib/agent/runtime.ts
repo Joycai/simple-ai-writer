@@ -225,8 +225,14 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       _geminiModelParts: roundGeminiModelParts,
     });
 
-    // Execute each tool call and append results
+    // Execute each tool call and append results. Re-checked per call, not just
+    // per round: the model can emit several tool calls in one round (e.g. a
+    // propose_edit followed by write-auto lore calls), and an abort mid-round
+    // — including one that arrives *as* rejectAll() resolves a blocked
+    // approval — must stop the remaining calls in this same array rather than
+    // only taking effect at the next round's top-of-loop check.
     for (const tc of roundToolCalls) {
+      if (opts.signal.aborted) throw new DOMException("Aborted", "AbortError");
       const toolCall: ToolCall = { id: tc.id, name: tc.name, arguments: tc.arguments };
       // Kept as valid JSON rather than pre-truncated: the log formats these for
       // display (lib/agent/logFormat), and it can only pull out the identifying
