@@ -100,8 +100,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   saveNow: async () => {
-    const { content, filePath } = get();
-    if (!filePath) return;
+    const { content, filePath, saveTimer } = get();
+    // Cancel the real timer here, not just the state field it's mirrored
+    // into — a caller that flushes without clearing it first (moveEntry did)
+    // leaves it armed in the event loop, and it fires later regardless of
+    // what `saveTimer` in state says, writing stale content to wherever
+    // `filePath` has drifted to by then (e.g. recreating a just-moved file
+    // at its old location).
+    if (saveTimer) clearTimeout(saveTimer);
+    if (!filePath) { set({ saveTimer: null }); return; }
     try {
       await writeFile(filePath, content);
       set({ isDirty: false, saveTimer: null });

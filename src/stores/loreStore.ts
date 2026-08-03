@@ -94,8 +94,11 @@ export const useLoreStore = create<LoreState>((set, get) => ({
   },
 
   saveNow: async () => {
-    const { selectedEntity, selectedFile, fileContent } = get();
-    if (!selectedEntity || !selectedFile) return;
+    const { selectedEntity, selectedFile, fileContent, saveTimer } = get();
+    // Cancel the real timer, not just the state field — see editorStore's
+    // saveNow for why a caller that flushes without pre-clearing it matters.
+    if (saveTimer) clearTimeout(saveTimer);
+    if (!selectedEntity || !selectedFile) { set({ saveTimer: null }); return; }
     try {
       await writeEntityFile(selectedEntity.dirPath, selectedFile, fileContent);
       set({ isDirty: false, saveTimer: null });
