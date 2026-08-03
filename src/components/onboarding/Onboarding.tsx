@@ -55,7 +55,12 @@ export function Onboarding() {
 
   const handleSaveProvider = async () => {
     const info = PROVIDERS.find((p) => p.id === selected)!;
-    if (!apiKey.trim()) { setStep(2); return; }
+    // Matches the "继续" button's own disabled check below: Ollama needs no
+    // key, so an empty one there isn't "skip setup" the way it is for every
+    // other provider — it must still create the provider, or a first-run
+    // author who picks 本地·Ollama finishes onboarding with zero providers
+    // configured and every AI action silently has nothing to run against.
+    if (selected !== "ollama" && !apiKey.trim()) { setStep(2); return; }
     setSaving(true);
     try {
       await addProvider(
