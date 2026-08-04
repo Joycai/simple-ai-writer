@@ -553,6 +553,92 @@ export const FEEDBACK_PROFILE: WorkspaceProfile = {
   systemPromptKey: "ai.instructions.systemFeedback",
 };
 
+/**
+ * 标书应答 — a point-by-point bid/tender response for SaaS or software.
+ *
+ * Like 反馈报告, the domain's failure mode is overclaiming — but here a
+ * fabricated capability doesn't just mislead, it goes into a contract and
+ * becomes an acceptance criterion. So both domain tasks and the system prompt
+ * are built around grounding: every response states its deviation verdict
+ * (正/负偏差), cites the knowledge-base entries it rests on, and marks what the
+ * knowledge base cannot support instead of writing it as compliant.
+ *
+ * The knowledge base is also the *product* of the work, not just its input:
+ * 提取入库 runs the full write-capable toolset (plan-gated) to fold what a bid
+ * taught us — requirements, confirmed capability wording, boundaries — back
+ * into lore for the next bid.
+ */
+export const BID_PROFILE: WorkspaceProfile = {
+  id: "bid",
+  labelZh: "标书应答",
+  labelEn: "Bid Response",
+  categories: [
+    { id: "capabilities", labelZh: "业务能力", labelEn: "Capabilities" },
+    { id: "implementation", labelZh: "技术实现", labelEn: "Implementation" },
+    { id: "architecture", labelZh: "架构说明", labelEn: "Architecture" },
+    { id: "boundaries", labelZh: "技术边界", labelEn: "Boundaries" },
+    { id: "cases", labelZh: "项目案例", labelEn: "Cases" },
+    { id: "qualifications", labelZh: "资质证书", labelEn: "Qualifications" },
+    { id: "style", labelZh: "措辞风格", labelEn: "Voice" },
+    { id: "custom", labelZh: "自定义", labelEn: "Custom" },
+  ],
+  sections: {
+    knowledge: "企业知识库",
+    outline: "应答大纲",
+    recent: "当前应答",
+  },
+  // A response document mirrors the tender's numbered structure, so the spine
+  // is real — but each item stands alone: nothing "precedes" one, and a single
+  // item is far too short for rolling memory.
+  docModel: { ordered: true, priorContext: false, memory: false },
+  tasks: [
+    // The full shared set stays: the narrative sections of a 技术方案书 are
+    // long-form prose where 续写/润色/改写 all apply as-is.
+    ...DEFAULT_TASKS,
+    {
+      id: "respond",
+      labelKey: "ai.tasks.respond",
+      descKey: "ai.tasks.respondDesc",
+      instructionKey: "ai.instructions.bidRespond",
+      // Must actually look the capability up — a response written from industry
+      // intuition is the failure this whole profile is shaped against.
+      tools: "read",
+      target: "detached",
+      // The selection is the tender clause being answered; the reference window
+      // brings the surrounding clauses plus the extra-requirement box for
+      // format/length constraints from the tender's response rules.
+      needsSelection: true,
+      referenceWindow: true,
+    },
+    {
+      id: "deviation",
+      labelKey: "ai.tasks.deviation",
+      descKey: "ai.tasks.deviationDesc",
+      instructionKey: "ai.instructions.bidDeviation",
+      tools: "read",
+      target: "detached",
+      // Audits one response passage against the knowledge base, so it needs
+      // that passage selected. No reference window: what it needs is the
+      // *entries*, not the surrounding paragraphs.
+      needsSelection: true,
+    },
+    {
+      id: "extract",
+      labelKey: "ai.tasks.extract",
+      descKey: "ai.tasks.extractDesc",
+      instructionKey: "ai.instructions.bidExtract",
+      // The knowledge-base write path: reads the material, then goes through
+      // propose_lore_plan before any entry is touched.
+      tools: "full",
+      target: "detached",
+      // The author scopes the sweep ("把标书第3章的技术要求提炼入库") — with no
+      // scope the agent would have to guess which file is the material.
+      freeform: true,
+    },
+  ],
+  systemPromptKey: "ai.instructions.systemBid",
+};
+
 /** Every built-in profile, in the order a picker should show them. */
 export const BUILTIN_PROFILES: readonly WorkspaceProfile[] = [
   NOVEL_PROFILE,
@@ -560,6 +646,7 @@ export const BUILTIN_PROFILES: readonly WorkspaceProfile[] = [
   COPY_PROFILE,
   WEEKLY_PROFILE,
   FEEDBACK_PROFILE,
+  BID_PROFILE,
 ];
 
 /** Look up a built-in profile by id, or null when the id isn't one. */
