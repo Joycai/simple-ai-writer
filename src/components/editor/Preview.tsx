@@ -2,6 +2,8 @@ import { useEffect, useRef } from "react";
 import { renderMarkdown } from "../../lib/fs/markdown";
 import { imageToDataUrl } from "../../lib/fs/images";
 import { resolveRelativePath } from "../../lib/paths";
+import { annotateCitations } from "../../lib/lore/citations";
+import { useLoreStore } from "../../stores/loreStore";
 import styles from "./Preview.module.css";
 
 interface Props {
@@ -16,6 +18,10 @@ export function Preview({ source, basePath }: Props) {
   useEffect(() => {
     if (!ref.current) return;
     ref.current.innerHTML = renderMarkdown(source);
+
+    // Mark lore citations that don't resolve against the current index — the
+    // visible half of the grounding audit (click navigation is app-global).
+    annotateCitations(ref.current, useLoreStore.getState().index);
 
     // Resolve local image links into inline data URLs. The webview can't load
     // file paths directly (CSP + the base URL isn't the document's folder), so

@@ -152,3 +152,27 @@ a {
   padding: 0 1px;
   cursor: pointer;
 }
+
+/* Lore citation ([[lore:…]] in rendered markdown) — same mention language,
+   but accent-colored: it is a navigable reference into the knowledge base,
+   not an in-prose name. Click handling is app-global (lib/lore/citations). */
+.lore-cite {
+  color: var(--color-accent);
+  background: var(--color-accent-tint);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.lore-cite:hover {
+  background: var(--color-accent-tint-strong);
+}
+/* A citation the knowledge base can't resolve — the visible half of the
+   grounding audit. Marked by annotateCitations, never by the renderer. */
+.lore-cite[data-missing] {
+  color: var(--color-text-muted);
+  background: transparent;
+  text-decoration: underline wavy var(--color-error) 1px;
+  text-underline-offset: 3px;
+  cursor: help;
+}

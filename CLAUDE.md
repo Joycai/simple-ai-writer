@@ -56,6 +56,7 @@ All in `src/stores/`:
 - **loreStore** — Indexed lore entities, alias mapping, entity summaries; auto-scans `.ai-writer/lore/` on project open
 - **aiStore** — Providers (API config), models (available LLMs), prompts (templates); API keys live in the OS credential manager (keyring) via the Rust `secret_*` commands — see `src/lib/keyStore.ts`
 - **aiTaskStore** — Running AI task state, streaming output, token usage, abort signal
+- **batchStore** — Batch clause runs (tasks with `batch: true`): sequential loop over `runTask`, one clause per run, results appended to an output file
 
 ### Data Flow: AI Writing Task
 
@@ -95,7 +96,8 @@ Three rules when touching this: components read flags via `useDocModel()` (the s
 - `src/lib/` — Core logic, grouped by domain:
   - `src/lib/ai/` — streaming client (`index.ts` dispatch, `openai.ts`/`gemini.ts` adapters, `types.ts`), provider config storage (`configDb.ts`), Gemini safety settings (`safety.ts`), remote probing (`providerProbe.ts`), endpoint limit probing (`endpointProbe.ts` HTTP + `probeAnalysis.ts` pure judgement — measures a model's real context window / output cap; see `docs/architecture.md` → Endpoint probing), multi-draft output vocabulary (`drafts.ts`), `apiLog.ts`, `tokenEstimate.ts`
   - `src/lib/agent/` — unified agent runtime (`runtime.ts` loop, `registry.ts` tool registry, `presets.ts` per-task config, `events.ts` execution-log events, `tools.ts` handlers + path containment, `plan.ts` lore-plan gate, `writeTools.ts` L1/L2 write handlers)
-  - `src/lib/lore/` — lore domain model (`model.ts`), entity scan/CRUD (`entity.ts`), gallery/avatar (`gallery.ts`), AI generation (`generator.ts`); import via `lib/lore` (index re-exports all but generator)
+  - `src/lib/lore/` — lore domain model (`model.ts`), entity scan/CRUD (`entity.ts`), gallery/avatar (`gallery.ts`), AI generation (`generator.ts`), `[[lore:…]]` citation resolution/navigation (`citations.ts`); import via `lib/lore` (index re-exports all but generator)
+  - `src/lib/batch/` — clause splitting for batch runs (`clauses.ts`: heading/numbered mode detection)
   - `src/lib/profile/` — workspace profiles: what kind of writing a project is (`model.ts` types/built-ins/validation, `active.ts` module singleton, `store.ts` `.ai-writer/profile.json`). Drives the lore category layout, the prompt's 【…】 block labels, and the fallback system prompt. **Read `loreCategories()` at call time, never at module scope** — see `docs/architecture.md` → Workspace profiles
   - `src/lib/context/` — RAG assembly (`rag.ts`), story memory (`memory.ts`), book spine (`outline.ts`), book-level continuation context (`bookContext.ts`)
   - `src/lib/fs/` — Tauri file I/O wrappers (`fileio.ts`), markdown render/frontmatter (`markdown.ts`), image/text file utils (`images.ts`), export (`export.ts`)

@@ -36,6 +36,39 @@ const md = new MarkdownIt({
   typographer: true,
 }).use(katexPlugin, { katex });
 
+// ── Lore citations ────────────────────────────────────────────────────────────
+// `[[lore:目标]]` / `[[lore:目标|显示文字]]` → a clickable .lore-cite span.
+// Rendering is index-free (this module stays pure): the span carries the raw
+// target in CITE_ATTR; resolution, missing-marking and click navigation live
+// in lib/lore/citations and the surfaces that have a project.
+import { CITE_ATTR, parseCiteBody } from "../lore/citations";
+
+const CITE_OPEN = "[[lore:";
+
+md.inline.ruler.before("link", "lore_cite", (state, silent) => {
+  const { src, pos } = state;
+  if (!src.startsWith(CITE_OPEN, pos)) return false;
+  const close = src.indexOf("]]", pos + CITE_OPEN.length);
+  if (close < 0) return false;
+  const body = src.slice(pos + CITE_OPEN.length, close);
+  // A citation is one inline reference; a newline means an unclosed opener.
+  if (body.includes("\n")) return false;
+  const parsed = parseCiteBody(body);
+  if (!parsed) return false;
+  if (!silent) {
+    const token = state.push("lore_cite", "", 0);
+    token.meta = parsed;
+  }
+  state.pos = close + 2;
+  return true;
+});
+
+md.renderer.rules.lore_cite = (tokens, idx) => {
+  const { target, label } = tokens[idx].meta as { target: string; label: string };
+  const esc = md.utils.escapeHtml;
+  return `<span class="lore-cite" ${CITE_ATTR}="${esc(target)}" role="link" tabindex="0">${esc(label)}</span>`;
+};
+
 export function renderMarkdown(source: string): string {
   return md.render(source);
 }

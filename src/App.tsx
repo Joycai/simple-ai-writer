@@ -19,6 +19,7 @@ import { useAiStore } from "./stores/aiStore";
 import { useMainView } from "./stores/projectStore";
 import { useGlobalShortcuts } from "./useGlobalShortcuts";
 import { useWindowCloseFlush } from "./useWindowCloseFlush";
+import { installCitationNavigation } from "./lib/lore/citations";
 import { fillLayer, springScreen, viewSlide } from "./lib/motion";
 
 export default function App() {
@@ -36,6 +37,10 @@ export default function App() {
     loadConfig();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Lore-citation clicks navigate from any markdown surface (preview, chat,
+  // cards) — one document-level delegate instead of per-component wiring.
+  useEffect(() => installCitationNavigation(), []);
 
   useGlobalShortcuts();
   useWindowCloseFlush();
