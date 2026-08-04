@@ -146,6 +146,13 @@ export interface TaskDef {
   /** The author types the instruction themselves (自定义). */
   freeform?: boolean;
   /**
+   * Offers a batch mode: run this task once per clause of the open document
+   * (split by headings/numbering), assembling results into an output file.
+   * Only meaningful for selection-driven tasks — the batch runner feeds each
+   * clause through the selection slot. See stores/batchStore.
+   */
+  batch?: boolean;
+  /**
    * Id of the task the panel's "Agent 模式" toggle switches to. Modelled as a
    * pointer rather than a boolean so the agent task stays an ordinary entry with
    * its own prompt and tool set, instead of a second meaning for this one.
@@ -609,6 +616,9 @@ export const BID_PROFILE: WorkspaceProfile = {
       // format/length constraints from the tender's response rules.
       needsSelection: true,
       referenceWindow: true,
+      // A tender has dozens of clauses; batch mode answers them all in one
+      // sweep (one full pipeline run per clause) into an output document.
+      batch: true,
     },
     {
       id: "deviation",
@@ -823,6 +833,8 @@ function parseTask(raw: unknown, issues: string[]): TaskDef | null {
   if (freeform) task.freeform = true;
   const hidden = optionalFlag(rec.hidden, "hidden", issues);
   if (hidden) task.hidden = true;
+  const batch = optionalFlag(rec.batch, "batch", issues);
+  if (batch) task.batch = true;
 
   if (typeof rec.agentTaskId === "string" && TASK_ID_RE.test(rec.agentTaskId.trim())) {
     task.agentTaskId = rec.agentTaskId.trim();

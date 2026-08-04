@@ -149,6 +149,24 @@
 }
 .linkBtn:hover { color: var(--color-sienna-hover); }
 
+/* Batch clause run entry (tasks declaring `batch`) — tinted secondary button */
+.batchBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  padding: 5px 10px;
+  background: var(--color-accent-tint);
+  color: var(--color-accent);
+  border-radius: var(--radius-md);
+  font: 500 11px/1.4 var(--font-sans);
+  cursor: pointer;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+.batchBtn:hover:not(:disabled) { background: var(--color-accent-tint-strong); }
+.batchBtn:active:not(:disabled) { transform: scale(0.97); }
+.batchBtn:disabled { opacity: 0.45; cursor: default; }
+
 /* ── Task segmented control ──────────────────────────────────────── */
 /* The number of segments is profile data (a module adds 生成遭遇 / 随机表), so
    this wraps instead of dividing the rail's width by however many there are.

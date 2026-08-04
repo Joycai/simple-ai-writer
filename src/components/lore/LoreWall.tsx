@@ -83,7 +83,7 @@ function rotationFor(id: string): number {
 export function LoreWall() {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
-  const { index, scanProject, createNewEntity, deleteEntity } = useLoreStore();
+  const { index, scanProject, createNewEntity, deleteEntity, requestedDetailPath } = useLoreStore();
   const { projectPath } = useProjectStore();
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
 
@@ -104,6 +104,20 @@ export function LoreWall() {
   // re-scans even if the entity object identity changes.
   const [avatarDataUrls, setAvatarDataUrls] = useState<Record<string, string>>({});
   const [avatarBusy, setAvatarBusy] = useState<string | null>(null);
+
+  // Another surface (a citation click) asked for an entity's detail view.
+  // Consume the request once the index can resolve it; leaving it un-cleared
+  // on a miss is deliberate — a scan may still be in flight, and the next
+  // index update gets another chance before the author notices.
+  useEffect(() => {
+    if (!requestedDetailPath) return;
+    const entity = Object.values(index).flat()
+      .find((e) => e.dirPath === requestedDetailPath);
+    if (!entity) return;
+    setDetailEntity(entity);
+    setDetailEditing(false);
+    useLoreStore.setState({ requestedDetailPath: null });
+  }, [requestedDetailPath, index]);
 
   useEffect(() => {
     let cancelled = false;

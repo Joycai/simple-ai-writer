@@ -19,8 +19,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import {
-  ChevronDown, ChevronRight, Copy, Crosshair, Layers, Pin, Play, RotateCw, Square, X,
+  ChevronDown, ChevronRight, Copy, Crosshair, Layers, ListChecks, Pin, Play, RotateCw, Square, X,
 } from "lucide-react";
+import { BatchRunModal } from "./BatchRunModal";
+import { useBatchStore } from "../../stores/batchStore";
 import { draftCountFor, totalUsage, useAiTaskStore, type TaskKind } from "../../stores/aiTaskStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { AgentLog } from "./AgentLog";
@@ -799,6 +801,10 @@ export function AiPanel() {
   }, [task.id, selectedTask]);
   const [continueLength, setContinueLength] = useState(500);
   const [contextChars, setContextChars] = useState(1000);
+  // Batch clause run (tasks declaring `batch`) — modal state only; the run
+  // itself lives in batchStore and survives the modal being closed.
+  const [showBatch, setShowBatch] = useState(false);
+  const batchRunning = useBatchStore((s) => s.running);
 
   // ── Opening mode ──────────────────────────────────────────────────────────
   // A chapter with nothing in it has no 【近期内容】, so whatever bridge gets
@@ -1296,6 +1302,18 @@ export function AiPanel() {
                   {needsSelection && (
                     <div className={styles.warnLine}>{t("ai.panel.selectFirstHint")}</div>
                   )}
+                  {task.batch && (
+                    <button
+                      className={styles.batchBtn}
+                      disabled={!hasConfig || isRunning || batchRunning}
+                      onClick={() => setShowBatch(true)}
+                    >
+                      <ListChecks size={12} strokeWidth={1.8} />
+                      {batchRunning
+                        ? t("ai.batch.runningShort")
+                        : t("ai.batch.open", { task: currentTaskLabel })}
+                    </button>
+                  )}
 
                   {/* Custom instruction (+ Agent 模式) */}
                   {task.freeform ? (
@@ -1767,6 +1785,14 @@ export function AiPanel() {
           )}
         </div>
       </div>
+
+      {showBatch && (
+        <BatchRunModal
+          taskId={task.id}
+          taskLabel={currentTaskLabel}
+          onClose={() => setShowBatch(false)}
+        />
+      )}
     </div>
   );
 }

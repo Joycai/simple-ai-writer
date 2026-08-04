@@ -18,8 +18,15 @@ interface LoreState {
   isDirty: boolean;
   isLoading: boolean;
   saveTimer: ReturnType<typeof setTimeout> | null;
+  /**
+   * dirPath of an entity another surface asked to open in the wall's detail
+   * view (citation clicks). Consumed + cleared by LoreWall — the detail state
+   * itself is local to the wall, this is just the knock on its door.
+   */
+  requestedDetailPath: string | null;
 
   scanProject: (projectPath: string) => Promise<void>;
+  requestDetail: (dirPath: string) => void;
   selectEntity: (entity: LoreEntity) => Promise<void>;
   selectFile: (filename: string) => Promise<void>;
   setFileContent: (content: string) => void;
@@ -36,6 +43,9 @@ export const useLoreStore = create<LoreState>((set, get) => ({
   isDirty: false,
   isLoading: false,
   saveTimer: null,
+  requestedDetailPath: null,
+
+  requestDetail: (dirPath) => set({ requestedDetailPath: dirPath }),
 
   scanProject: async (projectPath) => {
     set({ isLoading: true });

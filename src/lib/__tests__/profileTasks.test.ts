@@ -293,6 +293,14 @@ describe("the 标书应答 profile", () => {
     // surrounding clauses plus the extra-requirement box.
     expect(respond.needsSelection).toBe(true);
     expect(respond.referenceWindow).toBe(true);
+    // A tender has dozens of clauses — respond offers the batch sweep, and is
+    // the only built-in task that does.
+    expect(respond.batch).toBe(true);
+    for (const profile of BUILTIN_PROFILES) {
+      for (const other of profile.tasks) {
+        if (other.id !== "respond") expect(other.batch).toBeUndefined();
+      }
+    }
     // Detached: a response must never overwrite the clause it answers.
     expect(respond.target).toBe("detached");
     expect(respond.freeform).toBeUndefined();
