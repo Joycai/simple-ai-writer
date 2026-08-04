@@ -37,6 +37,7 @@ describe("builtin profiles", () => {
   it("defaults to novel and exposes the ttrpg profile", () => {
     expect(activeProfile()).toBe(NOVEL_PROFILE);
     expect(builtinProfile("ttrpg")).toBe(TTRPG_PROFILE);
+    expect(builtinProfile("bid")?.labelZh).toBe("标书应答");
     expect(builtinProfile("nope")).toBeNull();
   });
 

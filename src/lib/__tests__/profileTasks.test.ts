@@ -9,6 +9,7 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  BID_PROFILE,
   BUILTIN_PROFILES,
   COPY_PROFILE,
   DEFAULT_TASKS,
@@ -250,6 +251,74 @@ describe("the 反馈报告 profile", () => {
     expect(task("verify")!.needsSelection).toBe(true);
     expect(task("verify")!.referenceWindow).toBeUndefined();
     expect(task("verify")!.freeform).toBeUndefined();
+  });
+});
+
+describe("the 标书应答 profile", () => {
+  const task = (id: string) => BID_PROFILE.tasks.find((t) => t.id === id);
+
+  it("has an ordered spine but no prior-context or memory", () => {
+    // A response document mirrors the tender's numbered structure, but each
+    // item stands alone — nothing "precedes" one.
+    expect(BID_PROFILE.docModel).toEqual({
+      ordered: true, priorContext: false, memory: false,
+    });
+  });
+
+  it("keeps the full shared set, including 续写", () => {
+    // Unlike copy: the narrative sections of a 技术方案书 are long-form prose.
+    const ids = BID_PROFILE.tasks.map((t) => t.id);
+    for (const id of ["continue", "polish", "rewrite", "summary"]) {
+      expect(ids).toContain(id);
+    }
+  });
+
+  it("keeps its domain tasks off the other profiles", () => {
+    for (const profile of BUILTIN_PROFILES.filter((p) => p !== BID_PROFILE)) {
+      const ids = profile.tasks.map((t) => t.id);
+      for (const id of ["respond", "deviation", "extract"]) {
+        expect(ids).not.toContain(id);
+      }
+    }
+  });
+
+  it("makes 应答撰写 a grounded read task over the selected clause", () => {
+    const respond = task("respond")!;
+    // Must look the capability up — a response written from industry intuition
+    // is the failure this profile is shaped against. Costs the single draft.
+    expect(respond.tools).toBe("read");
+    expect(presetForTools(respond.tools)).toBe(CONTINUE_PRESET);
+    expect(draftCountFor(respond, 3)).toBe(1);
+    // The selection is the tender clause; the reference window brings the
+    // surrounding clauses plus the extra-requirement box.
+    expect(respond.needsSelection).toBe(true);
+    expect(respond.referenceWindow).toBe(true);
+    // Detached: a response must never overwrite the clause it answers.
+    expect(respond.target).toBe("detached");
+    expect(respond.freeform).toBeUndefined();
+  });
+
+  it("makes 应答核查 audit the selection without a reference window", () => {
+    const deviation = task("deviation")!;
+    expect(deviation.tools).toBe("read");
+    // What it needs is the *entries*, not the paragraphs around the response.
+    expect(deviation.needsSelection).toBe(true);
+    expect(deviation.referenceWindow).toBeUndefined();
+    expect(deviation.freeform).toBeUndefined();
+    expect(deviation.target).toBe("detached");
+  });
+
+  it("gives 提取入库 the write-capable toolset behind the plan gate", () => {
+    const extract = task("extract")!;
+    expect(extract.tools).toBe("full");
+    // Full tools resolve to the plan-gated preset: no lore write happens
+    // without an approved propose_lore_plan card.
+    expect(presetForTools(extract.tools)).toBe(AGENT_ASSIST_PRESET);
+    expect(AGENT_ASSIST_PRESET.tools).toContain("propose_lore_plan");
+    expect(draftCountFor(extract, 3)).toBe(1);
+    // The author scopes the sweep; the built-in text is the briefing.
+    expect(extract.freeform).toBe(true);
+    expect(extract.needsSelection).toBeUndefined();
   });
 });
 
