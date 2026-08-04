@@ -5,10 +5,11 @@ import {
 import { useTranslation } from "react-i18next";
 import {
   Folder, FolderOpen, FolderInput, FileText, File, FileImage, ChevronRight,
-  FilePlus, FolderPlus, RotateCw, LogOut, Pencil, Trash2,
+  FilePlus, FolderPlus, FileInput, RotateCw, LogOut, Pencil, Trash2,
 } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { isImagePath } from "../../lib/fs/images";
+import { baseName, importDocumentsDialog } from "../../lib/import";
 import { useProjectStore } from "../../stores/projectStore";
 import type { FileNode } from "../../lib/project";
 import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
@@ -263,6 +264,29 @@ export function FileTree() {
   const [menu, setMenu] = useState<CtxMenuState | null>(null);
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  // Convert picked documents (docx/pdf/txt/md) into markdown files in destDir.
+  // Single-flight: a pdf conversion can take seconds, and a second dialog over
+  // a running batch would interleave two writes into the same folder.
+  const handleImport = async (destDir: string) => {
+    if (importing) return;
+    setImporting(true);
+    try {
+      const outcome = await importDocumentsDialog(destDir, t("fileTree.importFilter"));
+      if (!outcome) return;
+      if (outcome.imported.length > 0) {
+        await refreshFileTree();
+        setActiveFilePath(outcome.imported[0].path);
+      }
+      if (outcome.failures.length > 0) {
+        const lines = outcome.failures.map((f) => `${baseName(f.source)}: ${f.error}`);
+        window.alert(`${t("fileTree.importFailed")}\n${lines.join("\n")}`);
+      }
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const startCreate = (parentPath: string, type: "file" | "folder") => {
     setCreatingIn(parentPath);
@@ -337,6 +361,8 @@ export function FileTree() {
           action: () => { if (projectPath) startCreate(`${projectPath}/writing`, "file"); } },
         { kind: "item", icon: <FolderPlus size={13} />, label: t("fileTree.newFolder"),
           action: () => { if (projectPath) startCreate(`${projectPath}/writing`, "folder"); } },
+        { kind: "item", icon: <FileInput size={13} />, label: t("fileTree.importDoc"),
+          action: () => { if (projectPath) void handleImport(`${projectPath}/writing`); } },
         { kind: "divider" },
         { kind: "item", icon: <FolderOpen size={13} />, label: t("fileTree.reveal"),
           action: () => { if (projectPath) reveal(projectPath); } },
@@ -351,6 +377,8 @@ export function FileTree() {
           action: () => startCreate(node.path, "file") },
         { kind: "item", icon: <FolderPlus size={13} />, label: t("fileTree.newFolder"),
           action: () => startCreate(node.path, "folder") },
+        { kind: "item", icon: <FileInput size={13} />, label: t("fileTree.importDoc"),
+          action: () => void handleImport(node.path) },
       );
     } else {
       items.push(
@@ -415,6 +443,14 @@ export function FileTree() {
               onClick={() => projectPath && startCreate(`${projectPath}/writing`, "file")}
             >
               <FilePlus size={14} />
+            </button>
+            <button
+              className={styles.toolbarBtn}
+              title={t("fileTree.importDoc")}
+              disabled={importing}
+              onClick={() => projectPath && void handleImport(`${projectPath}/writing`)}
+            >
+              <FileInput size={14} />
             </button>
             <button
               className={styles.toolbarBtn}

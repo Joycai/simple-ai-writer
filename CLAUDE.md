@@ -99,6 +99,7 @@ Three rules when touching this: components read flags via `useDocModel()` (the s
   - `src/lib/profile/` — workspace profiles: what kind of writing a project is (`model.ts` types/built-ins/validation, `active.ts` module singleton, `store.ts` `.ai-writer/profile.json`). Drives the lore category layout, the prompt's 【…】 block labels, and the fallback system prompt. **Read `loreCategories()` at call time, never at module scope** — see `docs/architecture.md` → Workspace profiles
   - `src/lib/context/` — RAG assembly (`rag.ts`), story memory (`memory.ts`), book spine (`outline.ts`), book-level continuation context (`bookContext.ts`)
   - `src/lib/fs/` — Tauri file I/O wrappers (`fileio.ts`), markdown render/frontmatter (`markdown.ts`), image/text file utils (`images.ts`), export (`export.ts`)
+  - `src/lib/import/` — document import into `writing/`: docx via mammoth+turndown (`docx.ts`/`markdown.ts`), PDF text extraction via lazy pdfjs (`pdf.ts`), GBK-aware text decode (`text.ts`), dialog orchestration + naming (`index.ts`)
   - root: `project.ts`, `keyStore.ts`, `http.ts`, `paths.ts`, `platform.ts`
 - `src/stores/` — Zustand state managers
 - `src/styles/` — Design tokens (`tokens.css`) + global styles (`global.css`)
