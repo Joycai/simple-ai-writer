@@ -966,7 +966,10 @@
     "newFolder": "新建文件夹",
     "refresh": "刷新",
     "fileNamePlaceholder": "文件名.md",
-    "folderNamePlaceholder": "文件夹名称"
+    "folderNamePlaceholder": "文件夹名称",
+    "importDoc": "导入文档",
+    "importFilter": "文档",
+    "importFailed": "以下文件导入失败："
   },
   "language": {
     "chinese": "中文",

@@ -968,7 +968,10 @@
     "newFolder": "New Folder",
     "refresh": "Refresh",
     "fileNamePlaceholder": "filename.md",
-    "folderNamePlaceholder": "folder name"
+    "folderNamePlaceholder": "folder name",
+    "importDoc": "Import Documents",
+    "importFilter": "Documents",
+    "importFailed": "These files failed to import:"
   },
   "language": {
     "chinese": "中文",
