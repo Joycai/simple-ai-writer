@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Search, Sparkles, CheckCircle2, BookOpen } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useLoreStore } from "../../stores/loreStore";
-import { useProjectStore } from "../../stores/projectStore";
+import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { type LoreEntity } from "../../lib/lore";
@@ -39,6 +39,7 @@ export function CommandPalette() {
   const { fileTree, setActiveFilePath } = useProjectStore();
   const { content } = useEditorStore();
   const setSelection = useAiTaskStore((s) => s.setSelection);
+  const terms = useTerms();
 
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -185,21 +186,23 @@ export function CommandPalette() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={t("sidebar.projectSearch")}
+            placeholder={t("sidebar.projectSearch", { entries: terms.entries })}
           />
-          <span className={styles.scopeChip}>/ 设定</span>
+          <span className={styles.scopeChip}>/ {terms.entry}</span>
           <span className={styles.scopeChip}>? AI</span>
           <span className={styles.escKey}>esc</span>
         </div>
 
         <div className={styles.results}>
           {hits.length === 0 ? (
-            <div className={styles.empty}>无匹配结果</div>
+            <div className={styles.empty}>{t("command.noResults", { defaultValue: "无匹配结果" })}</div>
           ) : (
             <>
               {loreHits.length > 0 && (
                 <div className={styles.group}>
-                  <div className={styles.groupLabel}>设定 · {loreHits.length} 项</div>
+                  <div className={styles.groupLabel}>
+                    {t("command.loreGroup", { entries: terms.entries, n: loreHits.length })}
+                  </div>
                   {loreHits.map((h, i) => {
                     const idx = hits.indexOf(h);
                     return (
@@ -218,7 +221,7 @@ export function CommandPalette() {
                         </div>
                         {i === 0 && idx === active && (
                           <>
-                            <span className={styles.itemAction}>↗ 打开</span>
+                            <span className={styles.itemAction}>↗ {t("command.open", { defaultValue: "打开" })}</span>
                             <span className={styles.itemKey}>↵</span>
                           </>
                         )}

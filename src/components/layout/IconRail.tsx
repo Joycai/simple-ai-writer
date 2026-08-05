@@ -3,7 +3,7 @@ import {
   FolderTree, ListTree, Search, LayoutGrid, GitBranch, Settings,
 } from "lucide-react";
 import { useAppStore, type SideTab, type MainView } from "../../stores/appStore";
-import { useDocModel, useMainView } from "../../stores/projectStore";
+import { useDocModel, useMainView, useTerms } from "../../stores/projectStore";
 
 import styles from "./IconRail.module.css";
 
@@ -51,6 +51,7 @@ function visibleViewItems(ordered: boolean): ViewItem[] {
 export function IconRail({ onOpenSettings }: Props) {
   const { t } = useTranslation();
   const { ordered } = useDocModel();
+  const terms = useTerms();
   const {
     activeSideTab, setActiveSideTab,
     setMainView,
@@ -112,7 +113,7 @@ export function IconRail({ onOpenSettings }: Props) {
             key={it.id}
             className={`${styles.item} ${active ? styles.itemActive : ""}`}
             onClick={() => handleViewClick(it.id)}
-            title={t(it.labelKey)}
+            title={it.id === "lore-wall" ? terms.kb : t(it.labelKey)}
           >
             {it.icon}
           </button>

@@ -6,7 +6,7 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useLoreStore } from "../../stores/loreStore";
-import { useProjectStore } from "../../stores/projectStore";
+import { useProjectStore, useTerms } from "../../stores/projectStore";
 import {
   applyLoreImport,
   cancelLoreImport,
@@ -20,7 +20,7 @@ import {
   type LoreEntity,
   type StagedLoreImport,
 } from "../../lib/lore";
-import { categoryLabel, defaultCategoryId, findCategory, loreCategories } from "../../lib/profile";
+import { categoryLabel, defaultCategoryId, findCategory, loreCategories, profileTerms } from "../../lib/profile";
 import { useAppStore } from "../../stores/appStore";
 import { imageToDataUrl } from "../../lib/fs/images";
 import { MOD_K_SPACED } from "../../lib/platform";
@@ -85,6 +85,11 @@ export function LoreWall() {
   const isZh = i18n.language.startsWith("zh");
   const { index, scanProject, createNewEntity, deleteEntity, requestedDetailPath } = useLoreStore();
   const { projectPath } = useProjectStore();
+  const terms = useTerms();
+  // The eyebrow is decorative English regardless of UI language (matching
+  // "MANUSCRIPT · 正文"), so it resolves the en term explicitly.
+  const profile = useProjectStore((s) => s.profile);
+  const kbEyebrow = profileTerms(profile, false).kb.toUpperCase();
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
 
   const [filter, setFilter] = useState<string>("all");
@@ -326,10 +331,15 @@ export function LoreWall() {
 
       <div className={styles.header}>
         <div className={styles.headerRow}>
-          <div className={styles.eyebrow}>LORE LIBRARY</div>
-          <div className={styles.title}>{t("sidebar.lore")}</div>
+          <div className={styles.eyebrow}>{kbEyebrow}</div>
+          <div className={styles.title}>{terms.kb}</div>
           <div className={styles.subtitle}>
-            {counts.all} 条 · {totalRelations} 关系
+            {t("lore.wallStats", {
+              defaultValue: "{{n}} 条 · {{r}} 关系",
+              n: counts.all,
+              r: totalRelations,
+              entries: terms.entries,
+            })}
           </div>
           <span className={styles.spacer} />
 
@@ -337,7 +347,7 @@ export function LoreWall() {
             <Search size={12} color="var(--color-text-muted)" strokeWidth={1.6} />
             <input
               className={styles.searchInput}
-              placeholder={t("sidebar.projectSearch")}
+              placeholder={t("sidebar.projectSearch", { entries: terms.entries })}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />

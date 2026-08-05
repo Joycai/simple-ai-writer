@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Brackets, X } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
-import { useProjectStore } from "../../stores/projectStore";
+import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { clearTarget, markTargetEnd, markTargetStart } from "../../lib/editor/aiTarget";
 import { MOD_KEY } from "../../lib/platform";
@@ -19,6 +19,7 @@ export function EditorBottomStrip({ paragraph, sentence, refsCount = 0 }: Props)
   const { wordCount } = useProjectStore();
   const editorView = useEditorStore((s) => s.editorView);
   const aiTarget = useEditorStore((s) => s.aiTarget);
+  const terms = useTerms();
   const isZh = i18n.language === "zh-CN";
 
   // Marking is the durable alternative to dragging: the range lives in editor
@@ -90,7 +91,7 @@ export function EditorBottomStrip({ paragraph, sentence, refsCount = 0 }: Props)
         <span>
           {isZh ? "引用 " : ""}
           <span className={styles.value}>{refsCount}</span>
-          {isZh ? " 设定" : " lore refs"}
+          {" "}{isZh ? terms.entry : terms.entries}
         </span>
         <span className={styles.summon} onClick={() => setShowCommandPalette(true)}>
           {t("editorStrip.summon", { mod: MOD_KEY })}

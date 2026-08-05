@@ -5,15 +5,18 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  BID_PROFILE,
   BUILTIN_PROFILES,
   CATEGORY_ID_RE,
   COPY_PROFILE,
   DEFAULT_DOC_MODEL,
   DEFAULT_SECTION_LABELS,
+  DEFAULT_TERMS,
   NOVEL_PROFILE,
   TTRPG_PROFILE,
   builtinProfile,
   parseProfile,
+  profileTerms,
   type WorkspaceProfile,
 } from "../profile/model";
 import {
@@ -294,6 +297,59 @@ describe("parseProfile", () => {
     for (const p of BUILTIN_PROFILES) {
       if (p.docModel.priorContext) expect(p.docModel.ordered).toBe(true);
     }
+  });
+
+  it("layers terms over the fallback's and validates their shape", () => {
+    // Overriding one term keeps the fallback profile's wording for the rest —
+    // wholesale replacement would fall through to the novel words.
+    const { profile, issues } = parseProfile(
+      { id: "bid", terms: { doc: { zh: "条款", en: "clause" } } },
+      BID_PROFILE,
+    );
+    expect(issues).toEqual([]);
+    expect(profile.terms.doc).toEqual({ zh: "条款", en: "clause" });
+    expect(profile.terms.kb).toEqual(BID_PROFILE.terms.kb);
+
+    const bad = parseProfile(
+      {
+        id: "x",
+        categories: [{ id: "a", labelZh: "A", labelEn: "A" }],
+        terms: {
+          nonsense: { zh: "x", en: "x" },
+          doc: "not-an-object",
+          group: { zh: "组" },
+          entry: { zh: "条", en: "item", enPlural: 42 },
+        },
+      },
+      NOVEL_PROFILE,
+    );
+    const reported = bad.issues.join(" | ");
+    expect(reported).toContain('unknown term "nonsense"');
+    expect(reported).toContain('term "doc" is not an object');
+    expect(reported).toContain('term "group" needs both zh and en labels');
+    expect(reported).toContain('term "entry" has an unusable enPlural');
+    // The half-valid entries fall back rather than half-apply.
+    expect(bad.profile.terms.doc).toBeUndefined();
+    expect(bad.profile.terms.group).toBeUndefined();
+    // entry itself was usable — only its enPlural was dropped.
+    expect(bad.profile.terms.entry).toEqual({ zh: "条", en: "item" });
+  });
+
+  it("resolves terms per language with plural fallbacks", () => {
+    // Novel overrides nothing, so the defaults must already be the novel words.
+    expect(NOVEL_PROFILE.terms).toEqual({});
+    const zh = profileTerms(NOVEL_PROFILE, true);
+    expect(zh.doc).toBe(DEFAULT_TERMS.doc.zh);
+    expect(zh.docs).toBe(zh.doc); // Chinese has no plural form
+    expect(zh.entries).toBe("设定");
+
+    const en = profileTerms(NOVEL_PROFILE, false);
+    expect(en.docs).toBe("chapters"); // default en + "s"
+    expect(en.entries).toBe("lore entries"); // explicit enPlural wins
+
+    const bid = profileTerms(BID_PROFILE, true);
+    expect(bid.kb).toBe("企业知识库");
+    expect(bid.doc).toBe("文档");
   });
 
   it("caps the category count", () => {

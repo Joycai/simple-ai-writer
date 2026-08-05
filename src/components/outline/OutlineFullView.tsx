@@ -5,7 +5,8 @@ import {
   Loader2, X, FolderPlus, Trash2, Check, PenLine, FileText,
 } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
-import { useProjectStore } from "../../stores/projectStore";
+import { useDocModel, useProjectStore, useTerms } from "../../stores/projectStore";
+import { profileTerms } from "../../lib/profile";
 import { useEditorStore } from "../../stores/editorStore";
 import { useMemoryStore } from "../../stores/memoryStore";
 import { useAiStore } from "../../stores/aiStore";
@@ -90,6 +91,16 @@ export function OutlineFullView() {
   const { t } = useTranslation();
   const { fileTree, projectPath, activeFilePath, setActiveFilePath, wordCount, refreshFileTree } = useProjectStore();
   const setMainView = useAppStore((s) => s.setMainView);
+  const terms = useTerms();
+  const docs = useDocModel();
+  // Column eyebrows are decorative English regardless of UI language.
+  const profile = useProjectStore((s) => s.profile);
+  const groupEyebrow = profileTerms(profile, false).group.toUpperCase();
+  // The per-chapter recaps generated here feed the prior-context and rolling
+  // memory layers. When the profile injects neither, a generated summary has no
+  // consumer — offering the button would just burn tokens — so the whole memo
+  // column and its model picker disappear.
+  const showMemo = docs.priorContext || docs.memory;
 
   const models = useAiStore((s) => s.models);
   const activeModelId = useAiStore((s) => s.activeModelId);
@@ -206,7 +217,7 @@ export function OutlineFullView() {
   const menuItems = (ch: Chapter): ContextMenuEntry[] => {
     const writing = isWriting(ch);
     return [
-      { kind: "item", icon: <FileText size={13} />, label: t("outline.openChapter"), action: () => openChapter(ch.path) },
+      { kind: "item", icon: <FileText size={13} />, label: t("outline.openChapter", { doc: terms.doc }), action: () => openChapter(ch.path) },
       {
         kind: "item",
         icon: <PenLine size={13} />,
@@ -231,7 +242,7 @@ export function OutlineFullView() {
 
   const deleteVolume = async (vol: Volume) => {
     if (vol.chapters.length > 0 || vol.relPath === "writing") return;
-    if (!window.confirm(t("outline.deleteVolumeConfirm"))) return;
+    if (!window.confirm(t("outline.deleteVolumeConfirm", { group: terms.group }))) return;
     try {
       await removeDir(vol.path);
       await refreshFileTree();
@@ -279,7 +290,9 @@ export function OutlineFullView() {
         </div>
         <div className={styles.empty}>
           {t("outline.empty", {
-            defaultValue: "未发现卷/章节结构 — 在 writing/ 下创建子文件夹来组织卷",
+            defaultValue: "未发现{{group}}/{{doc}}结构 — 在 writing/ 下创建子文件夹来组织{{group}}",
+            group: terms.group,
+            doc: terms.doc,
           })}
         </div>
       </div>
@@ -292,31 +305,40 @@ export function OutlineFullView() {
         <div className={styles.headRow}>
           <div className={styles.title}>{t("sidebar.outline")}</div>
           <div className={styles.subtitle}>
-            {allChaptersCount} 章 · {wordCount.toLocaleString()} 字
+            {t("outline.subtitle", {
+              defaultValue: "{{count}} {{docs}} · {{words}} 字",
+              count: allChaptersCount,
+              docs: terms.docs,
+              words: wordCount.toLocaleString(),
+            })}
           </div>
-          <div className={styles.reorderHint}>{t("outline.reorderHint")}</div>
+          <div className={styles.reorderHint}>
+            {t("outline.reorderHint", { doc: terms.doc, group: terms.group })}
+          </div>
           <span className={styles.spacer} />
 
-          <label className={styles.modelPicker} title={t("outline.summaryModelHint")}>
-            <span className={styles.modelLabel}>{t("outline.summaryModel")}</span>
-            <select
-              className={styles.modelSelect}
-              value={memoModelValue}
-              onChange={(e) => setMemoryModel(e.target.value || null)}
-            >
-              {enabledModels.length === 0 && <option value="">{t("outline.noModel")}</option>}
-              {enabledModels.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-          </label>
+          {showMemo && (
+            <label className={styles.modelPicker} title={t("outline.summaryModelHint")}>
+              <span className={styles.modelLabel}>{t("outline.summaryModel")}</span>
+              <select
+                className={styles.modelSelect}
+                value={memoModelValue}
+                onChange={(e) => setMemoryModel(e.target.value || null)}
+              >
+                {enabledModels.length === 0 && <option value="">{t("outline.noModel")}</option>}
+                {enabledModels.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
 
           {creatingVol ? (
             <input
               className={styles.volInput}
               autoFocus
               value={newVolName}
-              placeholder={t("outline.volumeNamePlaceholder")}
+              placeholder={t("outline.volumeNamePlaceholder", { group: terms.group })}
               onChange={(e) => setNewVolName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") void createVolume();
@@ -327,18 +349,20 @@ export function OutlineFullView() {
           ) : (
             <button className={styles.headBtn} onClick={() => setCreatingVol(true)}>
               <FolderPlus size={12} strokeWidth={1.8} />
-              {t("outline.newVolume")}
+              {t("outline.newVolume", { group: terms.group })}
             </button>
           )}
 
           <div className={styles.viewToggle}>
-            <button className={`${styles.viewTab} ${styles.viewTabActive}`}>章节卡</button>
-            <button className={styles.viewTab}>时间线</button>
-            <button className={styles.viewTab}>看板</button>
+            <button className={`${styles.viewTab} ${styles.viewTabActive}`}>
+              {t("outline.tabCards", { defaultValue: "{{doc}}卡", doc: terms.doc })}
+            </button>
+            <button className={styles.viewTab}>{t("outline.tabTimeline", { defaultValue: "时间线" })}</button>
+            <button className={styles.viewTab}>{t("outline.tabBoard", { defaultValue: "看板" })}</button>
           </div>
           <button className={styles.aiSuggestBtn}>
             <Sparkles size={10} strokeWidth={1.8} />
-            AI 建议下一章
+            {t("outline.aiSuggestNext", { defaultValue: "AI 建议下一{{doc}}", doc: terms.doc })}
           </button>
         </div>
 
@@ -346,7 +370,7 @@ export function OutlineFullView() {
           <div className={styles.selectionBar}>
             <span className={styles.selectionInfo}>
               <Check size={12} strokeWidth={2} />
-              {t("outline.selectedCount", { count: selected.size })}
+              {t("outline.selectedCount", { count: selected.size, doc: terms.doc })}
             </span>
             <select
               className={styles.moveSelect}
@@ -357,7 +381,7 @@ export function OutlineFullView() {
                 if (vol) void moveSelectedTo(vol);
               }}
             >
-              <option value="" disabled>{t("outline.moveToVolume")}</option>
+              <option value="" disabled>{t("outline.moveToVolume", { group: terms.group })}</option>
               {volumes.map((v) => (
                 <option key={v.relPath} value={v.relPath}>{v.name}</option>
               ))}
@@ -369,14 +393,27 @@ export function OutlineFullView() {
         ) : (
           <div className={styles.stats}>
             <span>
-              <span className={styles.statValue}>{wordCount.toLocaleString()}</span> 字
+              <span className={styles.statValue}>{wordCount.toLocaleString()}</span>{" "}
+              {t("outline.wordsUnit", { defaultValue: "字" })}
             </span>
             <span className={styles.statSep} />
-            <span><span className={styles.statDot} style={{ color: "var(--color-success)" }}>●</span> 完 {allChaptersCount - writingCount}</span>
+            <span>
+              <span className={styles.statDot} style={{ color: "var(--color-success)" }}>●</span>{" "}
+              {t("outline.statDone", { defaultValue: "完 {{n}}", n: allChaptersCount - writingCount })}
+            </span>
             <span style={{ margin: "0 10px" }} />
-            <span><span className={styles.statDot} style={{ color: "var(--color-sienna)" }}>●</span> 在写 {writingCount}</span>
+            <span>
+              <span className={styles.statDot} style={{ color: "var(--color-sienna)" }}>●</span>{" "}
+              {t("outline.statWriting", { defaultValue: "在写 {{n}}", n: writingCount })}
+            </span>
             <span className={styles.spacer} />
-            <span>平均 <span className={styles.statValue}>{allChaptersCount > 0 ? Math.round(wordCount / allChaptersCount).toLocaleString() : 0}</span> 字 / 章</span>
+            <span>
+              {t("outline.avgPrefix", { defaultValue: "平均" })}{" "}
+              <span className={styles.statValue}>
+                {allChaptersCount > 0 ? Math.round(wordCount / allChaptersCount).toLocaleString() : 0}
+              </span>{" "}
+              {t("outline.avgSuffix", { defaultValue: "字 / {{doc}}", doc: terms.doc })}
+            </span>
           </div>
         )}
       </div>
@@ -390,7 +427,7 @@ export function OutlineFullView() {
               <div className={styles.colHead}>
                 <div>
                   <div className={isCurrent ? styles.colEyebrow : styles.colEyebrowMuted}>
-                    VOL {vi + 1}{isCurrent ? " · CURRENT" : ""}
+                    {groupEyebrow} {vi + 1}{isCurrent ? " · CURRENT" : ""}
                   </div>
                   <div className={isCurrent ? styles.colTitle : styles.colTitleMuted}>
                     {vol.name}
@@ -400,12 +437,12 @@ export function OutlineFullView() {
                   <span className={`${styles.colCount} ${
                     isCurrent ? styles.colCountActive : styles.colCountDone
                   }`}>
-                    {vol.chapters.length} 章
+                    {vol.chapters.length} {terms.docs}
                   </span>
                   {canDelete && (
                     <button
                       className={styles.volDeleteBtn}
-                      title={t("outline.deleteVolume")}
+                      title={t("outline.deleteVolume", { group: terms.group })}
                       onClick={() => void deleteVolume(vol)}
                     >
                       <Trash2 size={12} />
@@ -454,8 +491,12 @@ export function OutlineFullView() {
                           {isSelected ? <Check size={11} strokeWidth={2.5} /> : String(ci + 1).padStart(2, "0")}
                         </span>
                         <span className={styles.chapterName}>{title}</span>
-                        {isWriting(ch) && <span className={styles.chapterStatus}>在写</span>}
-                        <MemoBadge chapter={ch} status={statuses[ch.path]} />
+                        {isWriting(ch) && (
+                          <span className={styles.chapterStatus}>
+                            {t("outline.writingBadge", { defaultValue: "在写" })}
+                          </span>
+                        )}
+                        {showMemo && <MemoBadge chapter={ch} status={statuses[ch.path]} />}
                         <span className={styles.moveControls} onClick={(e) => e.stopPropagation()}>
                           <button
                             className={styles.moveBtn}
@@ -497,8 +538,8 @@ export function OutlineFullView() {
 
                 {vol.chapters.length === 0 && (
                   <div className={styles.placeholderCard}>
-                    <div>{t("outline.emptyVolume")}</div>
-                    <div>{t("outline.emptyVolumeHint")}</div>
+                    <div>{t("outline.emptyVolume", { group: terms.group })}</div>
+                    <div>{t("outline.emptyVolumeHint", { doc: terms.doc, group: terms.group })}</div>
                   </div>
                 )}
               </div>
