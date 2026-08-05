@@ -85,6 +85,21 @@
     "toTop": "回到开头",
     "toEnd": "跳到结尾"
   },
+  "command": {
+    "noResults": "无匹配结果",
+    "loreGroup": "{{entries}} · {{n}} 项",
+    "textGroup": "正文 · {{n}} 处",
+    "line": "第 {{n}} 行",
+    "aiGroup": "AI · 操作",
+    "askAi": "问 AI：“{{q}}”",
+    "openChat": "打开对话助手（⌘L / Ctrl+L）",
+    "checkConsistency": "核对一致性 · 关于 {{q}}",
+    "navigate": "导航",
+    "open": "打开",
+    "askAiShort": "问 AI",
+    "prefixBefore": "前缀",
+    "prefixAfter": "限定范围"
+  },
   "empty": {
     "firstLine": "在这里写下你的第一行",
     "ornament": "— · —",
@@ -992,11 +1007,6 @@
       "save": "保存",
       "selectFile": "选择一个文件查看"
     }
-  },
-  "command": {
-    "loreGroup": "{{entries}} · {{n}} 项",
-    "noResults": "无匹配结果",
-    "open": "打开"
   },
   "fileTree": {
     "newFile": "新建文件",

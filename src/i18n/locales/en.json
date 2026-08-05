@@ -85,6 +85,21 @@
     "toTop": "Jump to top",
     "toEnd": "Jump to end"
   },
+  "command": {
+    "noResults": "No results",
+    "loreGroup": "{{entries}} · {{n}}",
+    "textGroup": "Manuscript · {{n}} matches",
+    "line": "Line {{n}}",
+    "aiGroup": "AI · Actions",
+    "askAi": "Ask AI: “{{q}}”",
+    "openChat": "Open the chat assistant (⌘L / Ctrl+L)",
+    "checkConsistency": "Check consistency · about {{q}}",
+    "navigate": "Navigate",
+    "open": "Open",
+    "askAiShort": "Ask AI",
+    "prefixBefore": "Prefix with",
+    "prefixAfter": "to narrow the scope"
+  },
   "empty": {
     "firstLine": "Write your first line here",
     "ornament": "— · —",
@@ -994,11 +1009,6 @@
       "save": "Save",
       "selectFile": "Select a file to view"
     }
-  },
-  "command": {
-    "loreGroup": "{{entries}} · {{n}}",
-    "noResults": "No results",
-    "open": "Open"
   },
   "fileTree": {
     "newFile": "New File",
