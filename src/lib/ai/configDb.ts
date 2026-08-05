@@ -83,8 +83,20 @@ export interface Prompt {
   id: string;
   name: string;
   content: string;
-  scene: string; // 'system' | 'continue' | 'polish' | 'rewrite' | 'summary'
+  /**
+   * 'system' (selectable system prompt), a task id (overrides that task's
+   * built-in instruction), or SNIPPET_SCENE (a reusable snippet the input
+   * boxes offer for quick insertion — never auto-applied to anything).
+   */
+  scene: string;
 }
+
+/**
+ * Scene value for quick-insert snippets. Deliberately not a task id — a
+ * prompt with this scene overrides nothing; the input surfaces (自定义 task
+ * box, chat) list it in their snippet picker instead.
+ */
+export const SNIPPET_SCENE = "snippet";
 
 export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load>>) {
   await db.execute(`

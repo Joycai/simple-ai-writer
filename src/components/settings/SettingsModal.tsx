@@ -989,7 +989,9 @@ function PromptsTab() {
               <label className={styles.label}>{t("aiConfig.prompts.sceneLabel")}</label>
               <select className={styles.select} value={form.scene}
                 onChange={(e) => setForm({ ...form, scene: e.target.value })}>
-                {["system", "continue", "polish", "rewrite", "summary", "lore"].map((s) => (
+                {/* "snippet" is not an override target: it feeds the quick-insert
+                    picker on the 自定义/chat input boxes (see SnippetPicker). */}
+                {["system", "continue", "polish", "rewrite", "summary", "lore", "snippet"].map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>

@@ -22,6 +22,7 @@ import {
   ChevronDown, ChevronRight, Copy, Crosshair, Layers, ListChecks, Pin, Play, RotateCw, Square, X,
 } from "lucide-react";
 import { BatchRunModal } from "./BatchRunModal";
+import { SnippetPicker } from "./SnippetPicker";
 import { useBatchStore } from "../../stores/batchStore";
 import { draftCountFor, totalUsage, useAiTaskStore, type TaskKind } from "../../stores/aiTaskStore";
 import { useAgentStore } from "../../stores/agentStore";
@@ -1324,6 +1325,11 @@ export function AiPanel() {
                         placeholder={t(agentMode ? "ai.panel.agentInstruction" : "ai.panel.customInstruction")}
                         value={customInstr}
                         onChange={(e) => setCustomInstr(e.target.value)}
+                      />
+                      {/* Insert (not send): a snippet is a starting point the
+                          author completes before running. */}
+                      <SnippetPicker
+                        onPick={(c) => setCustomInstr((prev) => (prev.trim() ? `${prev}\n${c}` : c))}
                       />
                       {/* Only where the task names one to switch to — a profile
                           can offer a freeform task with no agent counterpart. */}

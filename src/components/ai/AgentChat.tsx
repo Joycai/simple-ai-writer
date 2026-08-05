@@ -15,6 +15,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Send, Square, X } from "lucide-react";
+import { SnippetPicker } from "./SnippetPicker";
 import { renderMarkdown } from "../../lib/fs/markdown";
 import { useAgentStore } from "../../stores/agentStore";
 import { useAiStore } from "../../stores/aiStore";
@@ -186,6 +187,11 @@ export function AgentChat() {
             disabled={!activeModelId}
           />
           <div className={styles.inputFooter}>
+            {/* Insert (not send): a snippet is a starting point the author
+                completes before sending. */}
+            <SnippetPicker
+              onPick={(c) => setDraft((prev) => (prev.trim() ? `${prev}\n${c}` : c))}
+            />
             <span className={styles.inputHint}>
               {t("ai.chat.sendHint", { defaultValue: "Enter 发送 · Shift+Enter 换行" })}
             </span>
