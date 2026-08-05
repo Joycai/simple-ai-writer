@@ -11,6 +11,7 @@ import {
 } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { searchKeymap, highlightSelectionMatches } from "@codemirror/search";
+import { themedSearch } from "./searchPanel";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { languages } from "@codemirror/language-data";
 import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language";
@@ -116,6 +117,9 @@ export function CodeEditor({ value, onChange }: Props) {
         crosshairCursor(),
         highlightActiveLine(),
         highlightSelectionMatches(),
+        // Must be configured here (not left to openSearchPanel's lazy default)
+        // or Mod-F builds CodeMirror's own unstyled panel instead of ours.
+        themedSearch(),
         keymap.of([...aiTargetKeymap, ...formatKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap]),
         aiTargetExtension(styles.aiTarget),
         markdown({

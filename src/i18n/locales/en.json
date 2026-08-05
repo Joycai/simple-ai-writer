@@ -310,6 +310,21 @@
     "hideSidebar": "Hide sidebar",
     "showRightPanel": "Show right panel",
     "hideRightPanel": "Hide right panel",
+    "search": {
+      "find": "Find",
+      "replace": "Replace with",
+      "next": "Next match",
+      "previous": "Previous match",
+      "selectAll": "Select all",
+      "replaceOne": "Replace",
+      "replaceAll": "Replace all",
+      "matchCase": "Match case",
+      "wholeWord": "Whole word",
+      "regexp": "Regular expression",
+      "toggleReplace": "Show / hide replace",
+      "close": "Close",
+      "noResults": "No results"
+    },
     "menu": {
       "cut": "Cut",
       "copy": "Copy",
