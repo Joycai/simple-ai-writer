@@ -215,6 +215,29 @@
   text-transform: uppercase;
 }
 
+/* Workspace-type chips — same family as the AI panel's option chips. */
+.wsChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.wsChip {
+  padding: 5px 11px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font: 400 12px/1 var(--font-serif);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+.wsChip:hover { border-color: var(--color-border-strong); }
+.wsChipActive {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-sienna);
+  color: var(--color-sienna);
+}
+
 .inputBlock { margin-bottom: 18px; }
 .inputLabel {
   font: 500 10px/1 var(--font-sans);

@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { useTranslation } from "react-i18next";
 import { Key, ArrowRight, FolderOpen } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useProjectStore } from "../../stores/projectStore";
+import { BUILTIN_PROFILES, NOVEL_PROFILE, profileLabel } from "../../lib/profile";
 import { MOD_KEY, MOD_K } from "../../lib/platform";
 import styles from "./Onboarding.module.css";
 
@@ -15,20 +15,22 @@ type Provider = "anthropic" | "openai" | "ollama";
 interface ProviderInfo {
   id: Provider;
   name: string;
-  hint: string;
-  badge?: string;
+  /** i18n key for the one-line hint under the name. */
+  hintKey: string;
+  recommended?: boolean;
   baseUrl: string;
   apiStandard: "openai" | "openai_compat" | "gemini";
 }
 
 const PROVIDERS: ProviderInfo[] = [
-  { id: "anthropic", name: "Anthropic · Claude", hint: "推荐 · 长上下文 · 善中文", badge: "推荐", baseUrl: "https://api.anthropic.com/v1", apiStandard: "openai_compat" },
-  { id: "openai",    name: "OpenAI · GPT",      hint: "通用 · 知名",              baseUrl: "https://api.openai.com/v1", apiStandard: "openai" },
-  { id: "ollama",    name: "本地 · Ollama",     hint: "完全离线 · 适合敏感内容",   baseUrl: "http://localhost:11434/v1", apiStandard: "openai_compat" },
+  { id: "anthropic", name: "Anthropic · Claude", hintKey: "onboarding.providerAnthropicHint", recommended: true, baseUrl: "https://api.anthropic.com/v1", apiStandard: "openai_compat" },
+  { id: "openai",    name: "OpenAI · GPT",       hintKey: "onboarding.providerOpenaiHint",    baseUrl: "https://api.openai.com/v1", apiStandard: "openai" },
+  { id: "ollama",    name: "Ollama",              hintKey: "onboarding.providerOllamaHint",    baseUrl: "http://localhost:11434/v1", apiStandard: "openai_compat" },
 ];
 
 export function Onboarding() {
-  useTranslation(); // ensure language updates trigger re-render
+  const { t, i18n } = useTranslation();
+  const isZh = i18n.language === "zh-CN";
   const { showOnboarding, setShowOnboarding } = useAppStore();
   const { providers, addProvider } = useAiStore();
   const { openProject } = useProjectStore();
@@ -37,6 +39,10 @@ export function Onboarding() {
   const [selected, setSelected] = useState<Provider>("anthropic");
   const [apiKey, setApiKey] = useState("");
   const [saving, setSaving] = useState(false);
+  // The workspace type the project will be created as (Settings → 工作台 can
+  // change it later). Novel is the historical default.
+  const [workspaceId, setWorkspaceId] = useState(NOVEL_PROFILE.id);
+  const [opening, setOpening] = useState(false);
 
   // Auto-show on first run if no provider configured
   useEffect(() => {
@@ -58,7 +64,7 @@ export function Onboarding() {
     // Matches the "继续" button's own disabled check below: Ollama needs no
     // key, so an empty one there isn't "skip setup" the way it is for every
     // other provider — it must still create the provider, or a first-run
-    // author who picks 本地·Ollama finishes onboarding with zero providers
+    // author who picks Ollama finishes onboarding with zero providers
     // configured and every AI action silently has nothing to run against.
     if (selected !== "ollama" && !apiKey.trim()) { setStep(2); return; }
     setSaving(true);
@@ -79,12 +85,55 @@ export function Onboarding() {
     }
   };
 
+  const handlePickFolder = async () => {
+    if (opening) return;
+    setOpening(true);
+    try {
+      await openProject();
+      const store = useProjectStore.getState();
+      // Dialog cancelled — nothing opened, stay on this step.
+      if (!store.projectPath) return;
+      // Apply the chosen workspace type, but never clobber a folder that
+      // already declares one: an existing non-novel project keeps its own
+      // profile.json regardless of what the chip row says.
+      const picked = BUILTIN_PROFILES.find((p) => p.id === workspaceId);
+      if (picked && picked.id !== store.profile.id && store.profile.id === NOVEL_PROFILE.id) {
+        await store.setProfile(picked);
+      }
+      setStep(3);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setOpening(false);
+    }
+  };
+
+  const stepNav = (back: number | null, onNext: () => void, nextLabel?: string) => (
+    <div className={styles.stepNav}>
+      <div className={styles.dots}>
+        {[1, 2, 3, 4].map((n) => (
+          <span key={n} className={`${styles.dot} ${n <= step ? styles.dotActive : ""}`} />
+        ))}
+      </div>
+      <span className={styles.dotCount}>{step} / 4</span>
+      <span className={styles.spacer} />
+      {back !== null && (
+        <button className={styles.backBtn} onClick={() => setStep(back)}>
+          {t("onboarding.back")}
+        </button>
+      )}
+      <button className={styles.nextBtn} onClick={onNext} disabled={saving || opening}>
+        {nextLabel ?? t("onboarding.next")} <ArrowRight size={12} />
+      </button>
+    </div>
+  );
+
   const renderStep = () => {
     if (step === 1) {
       return (
         <>
-          <div className={styles.formEyebrow}>STEP 1 · 接入 AI</div>
-          <h2 className={styles.formTitle}>选一个提供方</h2>
+          <div className={styles.formEyebrow}>{t("onboarding.step1Eyebrow")}</div>
+          <h2 className={styles.formTitle}>{t("onboarding.step1Title")}</h2>
 
           <div className={styles.providerList}>
             {PROVIDERS.map((p) => (
@@ -98,9 +147,11 @@ export function Onboarding() {
                 </span>
                 <div className={styles.providerInfo}>
                   <div className={styles.providerName}>{p.name}</div>
-                  <div className={styles.providerHint}>{p.hint}</div>
+                  <div className={styles.providerHint}>{t(p.hintKey)}</div>
                 </div>
-                {p.badge && <span className={styles.providerBadge}>{p.badge}</span>}
+                {p.recommended && (
+                  <span className={styles.providerBadge}>{t("onboarding.providerRecommended")}</span>
+                )}
               </div>
             ))}
           </div>
@@ -117,9 +168,7 @@ export function Onboarding() {
                 onChange={(e) => setApiKey(e.target.value)}
               />
             </div>
-            <div className={styles.inputHint}>
-              你的密钥不会离开本机 · 存储在系统密钥库
-            </div>
+            <div className={styles.inputHint}>{t("onboarding.apiKeyHint")}</div>
           </div>
 
           <span className={styles.spacer} />
@@ -137,7 +186,7 @@ export function Onboarding() {
               onClick={handleSaveProvider}
               disabled={saving || (selected !== "ollama" && !apiKey.trim())}
             >
-              {saving ? "保存…" : "继续"} <ArrowRight size={12} />
+              {saving ? t("onboarding.saving") : t("onboarding.next")} <ArrowRight size={12} />
             </button>
           </div>
         </>
@@ -146,94 +195,86 @@ export function Onboarding() {
     if (step === 2) {
       return (
         <>
-          <div className={styles.formEyebrow}>STEP 2 · 项目</div>
-          <h2 className={styles.formTitle}>建立或导入项目</h2>
+          <div className={styles.formEyebrow}>{t("onboarding.step2Eyebrow")}</div>
+          <h2 className={styles.formTitle}>{t("onboarding.step2Title")}</h2>
+
+          {/* What kind of writing this project is — drives the knowledge-base
+              layout, the AI tasks, and the UI vocabulary. */}
+          <div className={styles.inputBlock}>
+            <div className={styles.inputLabel}>{t("onboarding.workspaceLabel")}</div>
+            <div className={styles.wsChips}>
+              {BUILTIN_PROFILES.map((p) => (
+                <button
+                  key={p.id}
+                  className={`${styles.wsChip} ${workspaceId === p.id ? styles.wsChipActive : ""}`}
+                  onClick={() => setWorkspaceId(p.id)}
+                >
+                  {profileLabel(p, isZh)}
+                </button>
+              ))}
+            </div>
+            <div className={styles.inputHint}>{t("onboarding.workspaceHint")}</div>
+          </div>
 
           <div className={styles.providerList}>
-            <div className={styles.providerCard} onClick={() => { openProject(); setStep(3); }}>
+            <div className={styles.providerCard} onClick={() => void handlePickFolder()}>
               <FolderOpen size={18} color="var(--color-sienna)" />
               <div className={styles.providerInfo}>
-                <div className={styles.providerName}>选择本地文件夹</div>
-                <div className={styles.providerHint}>系统将创建 writing/ 与 .ai-writer/ 子目录</div>
+                <div className={styles.providerName}>
+                  {opening ? t("onboarding.opening") : t("onboarding.pickFolder")}
+                </div>
+                <div className={styles.providerHint}>{t("onboarding.pickFolderHint")}</div>
               </div>
             </div>
             <div className={styles.providerCard} onClick={() => setStep(3)}>
               <ArrowRight size={18} color="var(--color-text-muted)" />
               <div className={styles.providerInfo}>
-                <div className={styles.providerName}>稍后再说</div>
-                <div className={styles.providerHint}>之后可在左下角图标栏打开</div>
+                <div className={styles.providerName}>{t("onboarding.later")}</div>
+                <div className={styles.providerHint}>{t("onboarding.laterHint")}</div>
               </div>
             </div>
           </div>
 
           <span className={styles.spacer} />
-
-          <div className={styles.stepNav}>
-            <div className={styles.dots}>
-              {[1, 2, 3, 4].map((n) => (
-                <span key={n} className={`${styles.dot} ${n <= step ? styles.dotActive : ""}`} />
-              ))}
-            </div>
-            <span className={styles.dotCount}>{step} / 4</span>
-            <span className={styles.spacer} />
-            <button className={styles.backBtn} onClick={() => setStep(1)}>返回</button>
-            <button className={styles.nextBtn} onClick={() => setStep(3)}>
-              继续 <ArrowRight size={12} />
-            </button>
-          </div>
+          {stepNav(1, () => setStep(3))}
         </>
       );
     }
     if (step === 3) {
       return (
         <>
-          <div className={styles.formEyebrow}>STEP 3 · 设定库</div>
-          <h2 className={styles.formTitle}>导入已有设定（可选）</h2>
+          <div className={styles.formEyebrow}>{t("onboarding.step3Eyebrow")}</div>
+          <h2 className={styles.formTitle}>{t("onboarding.step3Title")}</h2>
 
           <p style={{ font: "400 14px/1.7 var(--font-serif)", color: "var(--color-text-secondary)", maxWidth: 380, marginBottom: 32 }}>
-            如果你已有人物表、世界观笔记，可以拖入项目的 lore/ 目录，或稍后在设定库中创建。
+            {t("onboarding.step3Text")}
           </p>
 
           <span className={styles.spacer} />
-
-          <div className={styles.stepNav}>
-            <div className={styles.dots}>
-              {[1, 2, 3, 4].map((n) => (
-                <span key={n} className={`${styles.dot} ${n <= step ? styles.dotActive : ""}`} />
-              ))}
-            </div>
-            <span className={styles.dotCount}>{step} / 4</span>
-            <span className={styles.spacer} />
-            <button className={styles.backBtn} onClick={() => setStep(2)}>返回</button>
-            <button className={styles.nextBtn} onClick={() => setStep(4)}>
-              继续 <ArrowRight size={12} />
-            </button>
-          </div>
+          {stepNav(2, () => setStep(4))}
         </>
       );
     }
     // step 4
     return (
       <div className={styles.final}>
-        <div className={styles.finalTitle}>认识 {MOD_KEY} K</div>
-        <div className={styles.finalHint}>
-          任何时候按下 {MOD_K}，召唤 AI、跳转章节、检索设定 — 一切的开始。
-        </div>
+        <div className={styles.finalTitle}>{t("onboarding.step4Title", { mod: MOD_KEY })}</div>
+        <div className={styles.finalHint}>{t("onboarding.step4Hint", { mod: MOD_K })}</div>
         <div className={styles.shortcutCard}>
           <span className={styles.shortcutKey}>{MOD_KEY} K</span>
-          <span className={styles.shortcutDesc}>命令面板 · 召唤 AI · 跳转</span>
+          <span className={styles.shortcutDesc}>{t("onboarding.shortcutCmdk")}</span>
         </div>
         <div className={styles.shortcutCard}>
           <span className={styles.shortcutKey}>{MOD_KEY} S</span>
-          <span className={styles.shortcutDesc}>保存（自动保存到本地）</span>
+          <span className={styles.shortcutDesc}>{t("onboarding.shortcutSave")}</span>
         </div>
         <div className={styles.shortcutCard}>
           <span className={styles.shortcutKey}>[[ ]]</span>
-          <span className={styles.shortcutDesc}>双方括号标设定 · 自动入设定库</span>
+          <span className={styles.shortcutDesc}>{t("onboarding.shortcutBrackets")}</span>
         </div>
         <span className={styles.spacer} />
         <button className={styles.nextBtn} onClick={dismiss} style={{ marginTop: 24 }}>
-          开始写作 <ArrowRight size={12} />
+          {t("onboarding.start")} <ArrowRight size={12} />
         </button>
       </div>
     );
@@ -249,10 +290,10 @@ export function Onboarding() {
             </svg>
           </span>
           <span className={styles.brandName}>Manuscript</span>
-          <span className={styles.brandVer}>· 本地 · v 2.0</span>
+          <span className={styles.brandVer}>{t("onboarding.brandLocal")}</span>
           <span className={styles.brandSpacer} />
           <button className={styles.brandSkip} onClick={dismiss}>
-            跳过设置
+            {t("onboarding.skip")}
           </button>
         </div>
 
@@ -262,16 +303,16 @@ export function Onboarding() {
               <div className={styles.welcomeOrn1}>手</div>
               <div className={styles.welcomeOrn2}>稿</div>
               <div className={styles.eyebrow}>WELCOME</div>
-              <h1 className={styles.welcomeTitle}>先把 AI 接进来<br />然后我们开始写。</h1>
-              <p className={styles.welcomeText}>
-                Manuscript 是本地写作工具。你的文稿、设定、密钥都只存在你这台机器上，永不上传。
-              </p>
+              <h1 className={styles.welcomeTitle}>
+                {t("onboarding.welcomeTitle1")}<br />{t("onboarding.welcomeTitle2")}
+              </h1>
+              <p className={styles.welcomeText}>{t("onboarding.welcomeText")}</p>
               <div className={styles.steps}>
                 {[
-                  { n: 1, label: "接入 AI", hint: "大概 1 分钟" },
-                  { n: 2, label: "建立或导入项目", hint: "" },
-                  { n: 3, label: "导入已有设定（可选）", hint: "" },
-                  { n: 4, label: `认识 ${MOD_KEY} K · 一切的开始`, hint: "" },
+                  { n: 1, label: t("onboarding.stepConnect"), hint: t("onboarding.stepConnectHint") },
+                  { n: 2, label: t("onboarding.stepProject"), hint: "" },
+                  { n: 3, label: t("onboarding.stepImport"), hint: "" },
+                  { n: 4, label: t("onboarding.stepCmdk", { mod: MOD_KEY }), hint: "" },
                 ].map((s) => (
                   <div key={s.n} className={styles.stepRow}>
                     <span className={`${styles.stepNum} ${step >= s.n ? styles.stepNumActive : styles.stepNumIdle}`}>
