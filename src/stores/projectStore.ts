@@ -24,7 +24,8 @@ import {
 } from "../lib/profile";
 import { backupFile } from "../lib/agent/backup";
 import { normalizeChapterFileName } from "../lib/context/outline";
-import { fileExists, makeDir, removeDir, removeFile, renamePath, writeFile } from "../lib/fs/fileio";
+import { copyPath, fileExists, makeDir, removeDir, removeFile, renamePath, writeFile } from "../lib/fs/fileio";
+import { baseNameOf, resolveCopyTarget, type TransferMode } from "../lib/fs/moveCopy";
 import { isStrictDescendant } from "../lib/paths";
 import { useLoreStore } from "./loreStore";
 import { useEditorStore } from "./editorStore";
@@ -67,6 +68,13 @@ interface ProjectState {
    * each visit to another tab. Absent key = the node's default (see FileTree).
    */
   expandedDirs: Record<string, boolean>;
+  /**
+   * The entry the author cut or copied from the sidebar, waiting for a paste.
+   * Lives here for the same reason `expandedDirs` does — the sidebar's tab
+   * transition remounts the tree, and a clipboard that emptied itself whenever
+   * the author looked at the lore tab would be worse than not having one.
+   */
+  clipboard: { path: string; isDir: boolean; mode: TransferMode } | null;
   wordCount: number;
   charCount: number;
   isLoading: boolean;
@@ -95,6 +103,12 @@ interface ProjectState {
   /** Move or rename a file/folder, keeping the open document pointed at it. */
   moveEntry: (from: string, to: string) => Promise<void>;
   /**
+   * Copy a file/folder into `destDir` and return the new path. Unlike a move,
+   * a name collision is not an error — the copy is numbered (`稿 (1).md`), so
+   * duplicating an entry into its own folder works.
+   */
+  copyEntry: (from: string, destDir: string, isDir: boolean) => Promise<string>;
+  /**
    * Delete a file or folder. With `backup`, the entry is snapshotted into
    * `.ai-writer/backups/` first; returns the backup path, or null when none
    * was taken. Callers that offer no undo of their own should pass it.
@@ -106,6 +120,7 @@ interface ProjectState {
   ) => Promise<string | null>;
 
   setActiveFilePath: (path: string | null) => void;
+  setClipboard: (entry: { path: string; isDir: boolean; mode: TransferMode } | null) => void;
   setDirExpanded: (path: string, open: boolean) => void;
   setWordCount: (n: number) => void;
   setCharCount: (n: number) => void;
@@ -117,6 +132,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   activeFilePath: null,
   fileTree: [],
   expandedDirs: {},
+  clipboard: null,
   wordCount: 0,
   charCount: 0,
   isLoading: false,
@@ -145,7 +161,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       resetDocuments();
       await getDb(target);
       setActiveProfile(profile);
-      set({ projectPath: target, profile, activeFilePath: null, fileTree: [], expandedDirs: {}, wordCount: 0, charCount: 0 });
+      set({ projectPath: target, profile, activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null, wordCount: 0, charCount: 0 });
       await get().refreshFileTree();
       await useLoreStore.getState().scanProject(target);
       useAppStore.getState().addRecentProject(target);
@@ -165,7 +181,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // Back to the default profile: with no project open, anything that reads
     // the active profile must not still see the closed project's categories.
     resetActiveProfile();
-    set({ projectPath: null, profile: NOVEL_PROFILE, activeFilePath: null, fileTree: [], expandedDirs: {}, wordCount: 0, charCount: 0 });
+    set({ projectPath: null, profile: NOVEL_PROFILE, activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null, wordCount: 0, charCount: 0 });
   },
 
   setProfile: async (profile) => {
@@ -242,6 +258,24 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     await get().refreshFileTree();
   },
 
+  copyEntry: async (from, destDir, isDir) => {
+    if (isStrictDescendant(from, destDir) || from === destDir) {
+      throw new Error("Cannot copy a folder into itself.");
+    }
+    // Flush before copying, or the copy captures the last-saved text rather
+    // than what is on screen — silently, since nothing else about the copy
+    // looks wrong.
+    const editor = useEditorStore.getState();
+    const editorAffected =
+      editor.filePath === from || (!!editor.filePath && isStrictDescendant(from, editor.filePath));
+    if (editorAffected && editor.isDirty) await editor.saveNow();
+
+    const to = await resolveCopyTarget(destDir, baseNameOf(from), isDir, fileExists);
+    await copyPath(from, to);
+    await get().refreshFileTree();
+    return to;
+  },
+
   deleteEntry: async (path, isDir, opts) => {
     const { projectPath, activeFilePath } = get();
     const affected =
@@ -281,6 +315,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   setActiveFilePath: (path) => set({ activeFilePath: path }),
+
+  setClipboard: (entry) => set({ clipboard: entry }),
 
   setDirExpanded: (path, open) =>
     set((s) => ({ expandedDirs: { ...s.expandedDirs, [path]: open } })),

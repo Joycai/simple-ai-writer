@@ -1073,7 +1073,12 @@
     "folderNamePlaceholder": "folder name",
     "importDoc": "Import Documents",
     "importFilter": "Documents",
-    "importFailed": "These files failed to import:"
+    "importFailed": "These files failed to import:",
+    "cut": "Cut",
+    "copy": "Copy",
+    "pasteEntry": "Paste \"{{name}}\"",
+    "moveExists": "\"{{name}}\" already exists there.",
+    "moveIntoSelf": "A folder cannot be moved inside itself."
   },
   "language": {
     "chinese": "中文",

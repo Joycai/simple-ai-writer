@@ -174,6 +174,63 @@ pub fn fs_rename(from: String, to: String, scope: State<'_, FsScope>) -> Result<
     fs::rename(&from, &to).map_err(|e| e.to_string())
 }
 
+/// True when `target` is `base` itself or lives inside it, compared on whole
+/// path components after normalization.
+///
+/// Copying a directory into its own subtree would otherwise recurse forever,
+/// writing until the disk fills. The frontend refuses such a drop too, but this
+/// is the side that has to hold: `fs_copy` takes two arbitrary paths.
+fn is_within(base: &Path, target: &Path) -> bool {
+    let b: Vec<_> = base.components().collect();
+    let t: Vec<_> = target.components().collect();
+    t.len() >= b.len() && t[..b.len()] == b[..]
+}
+
+/// Copy a file, or a directory with everything under it. The destination must
+/// not already exist — the caller picks a free name (see `resolveCopyTarget` in
+/// `src/lib/fs/moveCopy.ts`), so silently merging into or overwriting an
+/// existing entry is never what was meant.
+#[command]
+pub fn fs_copy(from: String, to: String, scope: State<'_, FsScope>) -> Result<(), String> {
+    scope.check(&from)?;
+    scope.check(&to)?;
+    let src = Path::new(&from);
+    let dst = Path::new(&to);
+
+    if !src.exists() {
+        return Err(format!("Source does not exist: {from}"));
+    }
+    if dst.exists() {
+        return Err(format!("Destination already exists: {to}"));
+    }
+    if src.is_dir() && is_within(src, dst) {
+        return Err("Cannot copy a folder into itself.".to_string());
+    }
+
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    if src.is_dir() {
+        copy_dir_all(src, dst)
+    } else {
+        fs::copy(src, dst).map(|_| ()).map_err(|e| e.to_string())
+    }
+}
+
+fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
+    fs::create_dir_all(dst).map_err(|e| e.to_string())?;
+    for entry in fs::read_dir(src).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let target = dst.join(entry.file_name());
+        if entry.path().is_dir() {
+            copy_dir_all(&entry.path(), &target)?;
+        } else {
+            fs::copy(entry.path(), &target).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
 /// Remove a single file. Missing files are a no-op so callers can be tolerant.
 #[command]
 pub fn fs_remove_file(path: String, scope: State<'_, FsScope>) -> Result<(), String> {
@@ -264,7 +321,23 @@ fn read_dir_inner(path: &Path, depth: u8) -> Result<Vec<FileNode>, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::valid_category;
+    use super::{is_within, valid_category};
+    use std::path::Path;
+
+    #[test]
+    fn is_within_matches_on_whole_components() {
+        let base = Path::new("/project/writing/卷一");
+        assert!(is_within(base, base), "a path contains itself");
+        assert!(is_within(base, Path::new("/project/writing/卷一/第1章.md")));
+        assert!(is_within(
+            base,
+            Path::new("/project/writing/卷一/子卷/深处")
+        ));
+        // The prefix-string trap: a sibling that merely starts with the name.
+        assert!(!is_within(base, Path::new("/project/writing/卷一-备份")));
+        assert!(!is_within(base, Path::new("/project/writing/卷二")));
+        assert!(!is_within(base, Path::new("/project/writing")));
+    }
 
     #[test]
     fn accepts_plain_category_names() {

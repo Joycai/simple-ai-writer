@@ -314,6 +314,14 @@ Story Memory is *per-document*, so a chapter is its own file and knows nothing o
 - `src/lib/fs/fileio.ts` wraps Tauri fs plugin commands (read, write, metadata, etc.)
 - All paths resolved via Tauri plugin (no raw fs access)
 
+### Moving & copying files (sidebar)
+
+The sidebar's file tree supports drag-and-drop and a cut/copy/paste menu. Three things make it work and are easy to break:
+
+- **`dragDropEnabled: false`** in `tauri.conf.json`. On Windows the webview's native OS drag-drop handler swallows HTML5 drag events, so the flag is what makes any in-app dragging work at all (the outline's chapter reordering depends on it too). Turning it back on would silently kill both. Nothing listens for Tauri's OS file-drop events, so the flag costs nothing.
+- **`src/lib/fs/moveCopy.ts`** holds the pure decisions: `dropRejection(source, targetDir, mode)` — which both lights up the drop target and decides the outcome, so the highlight can't promise something the drop refuses — and `resolveCopyTarget`, which numbers a colliding copy as `名字 (1).md` (existing ` (n)` suffixes are replaced, not stacked).
+- **Move vs copy.** A move is `fs_rename` via `projectStore.moveEntry`, which refuses an occupied destination and keeps the open document pointed at the moved file. A copy is the `fs_copy` Rust command (recursive for folders) via `copyEntry`; it refuses a destination that already exists and a folder copied into its own subtree — that last check is duplicated in Rust because a recursive self-copy writes until the disk fills. Hold Ctrl/Alt while dropping to copy.
+
 ### Export / Import (lore bundles & config backup)
 - **Lore bundle** (`src/lib/lore/transfer.ts`, UI in `LoreWall`): a zip with root `manifest.json` + the whole on-disk `.ai-writer/lore/` tree under `lore/…` — *all* categories on disk, not just the active profile's, so bundles survive profile switches. Import is two-phase: `stageLoreImport` extracts into `.ai-writer/lore-import-tmp` and reports conflicts; `applyLoreImport` moves entity dirs in under a user-chosen strategy (skip / overwrite / keep-both via `uniqueEntityId`), then deletes the staging dir. Categories that fail `CATEGORY_ID_RE` are ignored.
 - **Config backup** (`src/lib/ai/configTransfer.ts`, UI in Settings → General): providers/models/prompts as one JSON file. API keys (OS keyring) are **excluded unless the user opts in** — then embedded in plaintext and re-saved to the keyring on import. Restore merges by id (`INSERT OR REPLACE`); models whose provider is neither in the backup nor already configured are dropped during validation.
