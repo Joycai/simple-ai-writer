@@ -14,7 +14,7 @@
 
 import i18n from "../../i18n";
 import type { LoreIndex } from "../lore";
-import { activeProfile, sectionLabel } from "../profile/active";
+import { activeProfile, promptParams, sectionLabel } from "../profile/active";
 import { RECENT_WINDOW_MIN_CHARS } from "./budget";
 import { selectLore, type LoreActivationReport } from "./loreSelect";
 import { selectMemoryForContext, type DocMemory } from "./memory";
@@ -390,7 +390,7 @@ export async function assembleContext(
   // When an outline was actually filled in, explicitly bind the model to it:
   // the 【大纲/写作方向】 data block alone is easy for smaller local models to
   // treat as background. Empty outline → no directive → free continuation.
-  if (outline) taskParts.push(i18n.t("ai.instructions.followOutline"));
+  if (outline) taskParts.push(i18n.t("ai.instructions.followOutline", promptParams(i18n.language === "zh-CN")));
   const taskText = taskParts.join("\n\n");
 
   // Rough token estimate

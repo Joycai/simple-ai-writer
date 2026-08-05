@@ -19,6 +19,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { findTask, taskLabel } from "../../lib/profile";
+import { useTerms } from "../../stores/projectStore";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { AgentEvent, ToolStep } from "../../lib/agent/events";
 import { formatToolArgs, formatToolResult } from "../../lib/agent/logFormat";
@@ -72,13 +73,14 @@ function toRows(log: AgentEvent[]): Row[] {
 
 function ToolStepRow({ step }: { step: ToolStep }) {
   const { t } = useTranslation();
+  const terms = useTerms();
   const args = formatToolArgs(step.argumentSummary);
   const result = step.status === "running" ? "" : formatToolResult(step.resultSummary);
   return (
     <>
       <Marker state={step.status === "running" ? "running" : step.status === "done" ? "done" : "error"} />
       <span className={styles.rowName}>
-        {t(`ai.agent.tool.${step.name}`, { defaultValue: step.name })}
+        {t(`ai.agent.tool.${step.name}`, { defaultValue: step.name, doc: terms.doc, entry: terms.entry })}
         {args && <span className={styles.rowArgs} title={step.argumentSummary}> · {args}</span>}
       </span>
       {result && (
@@ -90,6 +92,7 @@ function ToolStepRow({ step }: { step: ToolStep }) {
 
 function AgentLogRow({ row, showTime }: { row: Row; showTime: boolean }) {
   const { t, i18n } = useTranslation();
+  const terms = useTerms();
   const isZh = i18n.language.startsWith("zh");
   const { event, round } = row;
 
@@ -184,7 +187,7 @@ function AgentLogRow({ row, showTime }: { row: Row; showTime: boolean }) {
           <li className={`${styles.row} ${event.loreEntities === 0 ? styles.rowMuted : ""}`}>
             <Marker state="done" />
             <span className={styles.rowName}>
-              {t("ai.agent.log.seededLore", { defaultValue: "检索设定" })}
+              {t("ai.agent.log.seededLore", { defaultValue: "检索{{entry}}", entry: terms.entry })}
               <span className={styles.rowArgs}>
                 {" · "}
                 {event.loreEntities > 0

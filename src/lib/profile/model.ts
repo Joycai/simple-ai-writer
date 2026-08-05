@@ -386,7 +386,16 @@ export const NOVEL_PROFILE: WorkspaceProfile = {
   sections: {},
   terms: {},
   docModel: DEFAULT_DOC_MODEL,
-  tasks: [...DEFAULT_TASKS],
+  // The shared instructions are deliberately domain-neutral (they serve six
+  // profiles); the novel ones keep the original fiction wording — 情节、人物、
+  // 世界规则 — via these overrides, so novel behaviour is unchanged by the
+  // neutralisation.
+  tasks: DEFAULT_TASKS.map((t) =>
+    t.id === "continue" ? { ...t, instructionKey: "ai.instructions.continueNovel" }
+    : t.id === "rewrite" ? { ...t, instructionKey: "ai.instructions.rewriteNovel" }
+    : t.id === "summary" ? { ...t, instructionKey: "ai.instructions.summaryNovel" }
+    : t,
+  ),
   systemPromptKey: "ai.instructions.system",
 };
 

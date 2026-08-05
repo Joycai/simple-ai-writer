@@ -15,9 +15,11 @@ import {
   resetActiveProfile,
   saveProfile,
   setActiveProfile,
+  DEFAULT_SECTION_LABELS,
   NOVEL_PROFILE,
   type DocModel,
   type ResolvedTerms,
+  type SectionId,
   type WorkspaceProfile,
 } from "../lib/profile";
 import { backupFile } from "../lib/agent/backup";
@@ -312,6 +314,15 @@ export function useTerms(): ResolvedTerms {
   const profile = useProjectStore((s) => s.profile);
   const language = useAppStore((s) => s.language);
   return useMemo(() => profileTerms(profile, language === "zh-CN"), [profile, language]);
+}
+
+/**
+ * The active profile's 【…】 label for one prompt block — the reactive
+ * counterpart of `sectionLabel()` for UI copy that *mentions* a block
+ * (e.g. "【设定资料】最多占用…" must say 【企业知识库】 in a bid project).
+ */
+export function useSectionLabel(id: SectionId): string {
+  return useProjectStore((s) => s.profile.sections[id] ?? DEFAULT_SECTION_LABELS[id]);
 }
 
 /**

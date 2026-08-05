@@ -210,7 +210,7 @@ export function LoreWall() {
       // Show the bundle where it landed instead of an alert.
       if (saved) revealItemInDir(saved).catch(() => { /* best-effort */ });
     } catch (err) {
-      window.alert(`${t("lore.transfer.exportFailed")}\n${err}`);
+      window.alert(`${t("lore.transfer.exportFailed", { kb: terms.kb })}\n${err}`);
     } finally {
       setTransferBusy(false);
     }
@@ -224,7 +224,9 @@ export function LoreWall() {
       if (staged) setImportStaged(staged);
     } catch (err) {
       const empty = err instanceof Error && err.message === "empty-bundle";
-      window.alert(empty ? t("lore.transfer.emptyBundle") : `${t("lore.transfer.importFailed")}\n${err}`);
+      window.alert(empty
+        ? t("lore.transfer.emptyBundle", { kb: terms.kb })
+        : `${t("lore.transfer.importFailed", { kb: terms.kb })}\n${err}`);
     } finally {
       setTransferBusy(false);
     }
@@ -243,7 +245,7 @@ export function LoreWall() {
       window.alert(msg);
     } catch (err) {
       setImportStaged(null);
-      window.alert(`${t("lore.transfer.importFailed")}\n${err}`);
+      window.alert(`${t("lore.transfer.importFailed", { kb: terms.kb })}\n${err}`);
     }
   };
 
@@ -358,7 +360,7 @@ export function LoreWall() {
             className={styles.btnSecondary}
             onClick={handleExport}
             disabled={transferBusy}
-            title={t("lore.transfer.exportHint")}
+            title={t("lore.transfer.exportHint", { kb: terms.kb })}
           >
             <FileDown size={12} strokeWidth={2} />
             {t("lore.transfer.export")}
@@ -367,7 +369,7 @@ export function LoreWall() {
             className={styles.btnSecondary}
             onClick={handleImport}
             disabled={transferBusy}
-            title={t("lore.transfer.importHint")}
+            title={t("lore.transfer.importHint", { entry: terms.entry })}
           >
             <FileUp size={12} strokeWidth={2} />
             {t("lore.transfer.import")}
@@ -410,8 +412,11 @@ export function LoreWall() {
         {filtered.length === 0 ? (
           <div className={styles.empty}>
             {search.trim()
-              ? "未找到匹配的设定"
-              : "设定库为空 — 用 AI 提取或新建条目开始构建你的世界观"}
+              ? t("lore.wallNoMatch", { defaultValue: "未找到匹配的{{entry}}", entry: terms.entry })
+              : t("lore.wallEmpty", {
+                  defaultValue: "{{kb}}为空 — 用 AI 提取或新建条目开始积累",
+                  kb: terms.kb,
+                })}
           </div>
         ) : (
           <div className={styles.grid}>
@@ -616,6 +621,7 @@ function LoreImportModal({
 }) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
+  const terms = useTerms();
   const [strategy, setStrategy] = useState<ConflictStrategy>("skip");
   const [applying, setApplying] = useState(false);
 
@@ -640,7 +646,7 @@ function LoreImportModal({
     <ModalShell overlayClassName={styles.modalBackdrop} onClose={onCancel} closeOnBackdrop={false}>
       <div className={styles.modal}>
         <div className={styles.modalHeader}>
-          <div className={styles.modalEyebrow}>{isZh ? "导入设定库" : "IMPORT LORE"}</div>
+          <div className={styles.modalEyebrow}>{isZh ? `导入${terms.kb}` : "IMPORT"}</div>
           <div className={styles.modalTitle}>{t("lore.transfer.import")}</div>
         </div>
 

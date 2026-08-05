@@ -8,8 +8,11 @@ import { useAiStore } from "../../stores/aiStore";
 import { useProjectStore } from "../../stores/projectStore";
 import {
   BUILTIN_PROFILES,
+  activeProfile,
   categoryLabel,
+  findTask,
   profileLabel,
+  promptParams,
   type WorkspaceProfile,
 } from "../../lib/profile";
 import { useAppStore, type ThemeMode, type Language, type FontScheme } from "../../stores/appStore";
@@ -908,18 +911,24 @@ function ModelsTab() {
 // ─── Prompts Tab ──────────────────────────────────────────────────────────────
 
 function PromptsTab() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { prompts, addPrompt, removePrompt } = useAiStore();
   const [form, setForm] = useState({ name: "", content: "", scene: "system" });
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const builtinPrompts = BUILTIN_PROMPTS_CONFIG.map((b) => ({
-    ...b,
-    label: t(`ai.tasks.${b.scene}`),
-    content: t(b.instructionKey),
-  }));
+  // Resolve against the active profile: a scene that is a task id shows the
+  // instruction that task actually uses (novel overrides continue/rewrite/
+  // summary with its own wording), and "system" shows this profile's system
+  // prompt — otherwise the editor would display a text no run ever sends.
+  const isZh = i18n.language === "zh-CN";
+  const builtinPrompts = BUILTIN_PROMPTS_CONFIG.map((b) => {
+    const key = b.scene === "system"
+      ? activeProfile().systemPromptKey
+      : findTask(b.scene)?.instructionKey ?? b.instructionKey;
+    return { ...b, label: t(`ai.tasks.${b.scene}`), content: t(key, promptParams(isZh)) };
+  });
 
   const handleAdd = async () => {
     if (!form.name || !form.content) return;

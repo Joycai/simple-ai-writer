@@ -27,6 +27,7 @@ import {
   isKnownCategory,
   loreCategories,
   loreCategoryIds,
+  promptParams,
   resetActiveProfile,
   sectionLabel,
   setActiveProfile,
@@ -95,6 +96,19 @@ describe("active profile accessors", () => {
     // With no "custom" bucket both must still name a category that exists.
     expect(fallbackCategoryId()).toBe("scenes");
     expect(defaultCategoryId()).toBe("scenes");
+  });
+
+  it("builds prompt interpolation params from the active profile", () => {
+    setActiveProfile(BID_PROFILE);
+    const params = promptParams(true);
+    expect(params.kb).toBe("企业知识库");
+    expect(params.doc).toBe("文档");
+    expect(params.knowledge).toBe("企业知识库"); // bid's sections.knowledge
+    // A section bid doesn't override falls through to the shared default.
+    expect(params.prevTail).toBe(DEFAULT_SECTION_LABELS.prevTail);
+
+    const en = promptParams(false);
+    expect(en.kb).toBe("Knowledge Base");
   });
 
   it("restores the novel profile on reset", () => {

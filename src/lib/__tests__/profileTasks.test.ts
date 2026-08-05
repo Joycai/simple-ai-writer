@@ -87,6 +87,22 @@ describe("built-in tasks preserve the pre-refactor behaviour", () => {
     expect(agent.instructionKey).toBe("ai.instructions.agent");
   });
 
+  it("keeps the fiction wording in novel via instruction-key overrides", () => {
+    // The shared continue/rewrite/summary instructions are domain-neutral; the
+    // novel profile must still send its original fiction wording, and ttrpg
+    // deliberately uses the neutral set (its knowledge block is 模组资料, which
+    // the old novel text mislabelled as 设定资料).
+    const keyIn = (profile: { tasks: readonly TaskDef[] }, id: string) =>
+      profile.tasks.find((task) => task.id === id)?.instructionKey;
+    expect(keyIn(NOVEL_PROFILE, "continue")).toBe("ai.instructions.continueNovel");
+    expect(keyIn(NOVEL_PROFILE, "rewrite")).toBe("ai.instructions.rewriteNovel");
+    expect(keyIn(NOVEL_PROFILE, "summary")).toBe("ai.instructions.summaryNovel");
+    // polish is genuinely neutral, so novel stays on the shared key.
+    expect(keyIn(NOVEL_PROFILE, "polish")).toBe("ai.instructions.polish");
+    expect(keyIn(TTRPG_PROFILE, "continue")).toBe("ai.instructions.continue");
+    expect(keyIn(BID_PROFILE, "continue")).toBe("ai.instructions.continue");
+  });
+
   it("gives every built-in task a valid id and a resolvable label", () => {
     for (const profile of BUILTIN_PROFILES) {
       expect(profile.tasks.length).toBeGreaterThan(0);

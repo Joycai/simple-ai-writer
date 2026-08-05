@@ -5,7 +5,7 @@ import {
   assembleContext, bundleToMessages, profileSystemPrompt, resolveAppendAnchor,
   type TaskExtras,
 } from "../lib/context/rag";
-import { docModel, findTask } from "../lib/profile/active";
+import { docModel, findTask, promptParams } from "../lib/profile/active";
 import { presetForTools } from "../lib/agent/presets";
 import {
   fixedContextChars, measureCharsPerToken, planContextBudget, reflowMemoryBudget,
@@ -225,8 +225,13 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const scenePrompt = prompts.find((p) => p.scene === task.id);
     const builtIn = scenePrompt?.content
       ?? (task.instructionKey
-        // `length` is only consumed by the continuation prompt; harmless elsewhere.
-        ? i18n.t(task.instructionKey, { length: continueLength ?? 500 })
+        // `length` is only consumed by the continuation prompt; the profile's
+        // terms/section labels serve any template mentioning 【{{knowledge}}】
+        // or {{doc}}. Unused params are harmless.
+        ? i18n.t(task.instructionKey, {
+            length: continueLength ?? 500,
+            ...promptParams(i18n.language === "zh-CN"),
+          })
         : "");
     let instruction: string;
     if (task.freeform) {
@@ -240,7 +245,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // where the text ends" then means "continue the previous chapter". Nothing in
     // the prompt otherwise says a new one is starting.
     if (task.continuation && documentText.trim() === "") {
-      instruction += `\n\n${i18n.t("ai.instructions.continueNewChapter")}`;
+      instruction += `\n\n${i18n.t("ai.instructions.continueNewChapter", promptParams(i18n.language === "zh-CN"))}`;
     }
 
     // ── Context budget ──────────────────────────────────────────────────────
