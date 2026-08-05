@@ -127,6 +127,8 @@ describe("saveProfile", () => {
       labelEn: "Custom Domain",
       categories: [{ id: "projects", labelZh: "项目", labelEn: "Projects" }],
       sections: { knowledge: "背景资料" },
+      // A UI-term override, to prove the round-trip carries terms too.
+      terms: { doc: { zh: "记录", en: "note" } },
       // Reports are chronological and the previous one is context, but a single
       // report is short enough that rolling memory buys nothing.
       docModel: { ordered: true, priorContext: true, memory: false },

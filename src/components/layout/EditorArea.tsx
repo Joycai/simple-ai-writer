@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Sparkles } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
-import { useProjectStore } from "../../stores/projectStore";
+import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { CodeEditor } from "../editor/CodeEditor";
 import { EditorScrollNav } from "../editor/EditorScrollNav";
@@ -19,6 +19,7 @@ export function EditorArea() {
   const { projectPath, activeFilePath } = useProjectStore();
   const { content, filePath, loadError, viewMode, editorView, loadFile, setContent } = useEditorStore();
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
+  const terms = useTerms();
 
   const isImage = !!activeFilePath && isImagePath(activeFilePath);
 
@@ -58,7 +59,7 @@ export function EditorArea() {
       <div className={styles.area}>
         <div className={styles.empty}>
           <div className={styles.emptyInner}>
-            <div className={styles.emptyEyebrow}>{t("empty.chapterEyebrow")}</div>
+            <div className={styles.emptyEyebrow}>{terms.emptyEyebrow}</div>
             <h1 className={styles.emptyTitle}>{t("empty.firstLine")}</h1>
             <div className={styles.emptyOrnament}>{t("empty.ornament")}</div>
             <p className={styles.emptyHint}>{t("empty.hint1")}</p>
@@ -82,7 +83,9 @@ export function EditorArea() {
               </div>
               <div className={styles.tipCard}>
                 <div className={styles.tipLabel}>[[ 名 ]]</div>
-                <div className={styles.tipText}>{t("empty.tipBrackets")}</div>
+                <div className={styles.tipText}>
+                  {t("empty.tipBrackets", { entry: terms.entry, entries: terms.entries, kb: terms.kb })}
+                </div>
               </div>
               <div className={styles.tipCard}>
                 <div className={styles.tipLabel}>{t("empty.tipSaveLabel", { mod: MOD_KEY })}</div>

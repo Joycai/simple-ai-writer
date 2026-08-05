@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "motion/react";
 import { Search as SearchIcon, X } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
-import { useProjectStore } from "../../stores/projectStore";
+import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { FileTree } from "./FileTree";
@@ -17,11 +17,11 @@ function basename(p: string | null): string | null {
   return norm.split("/").filter(Boolean).pop() ?? null;
 }
 
-function countChapters(tree: { is_dir?: boolean; children?: any[]; name?: string }[]): number {
+function countDocs(tree: { is_dir?: boolean; children?: any[]; name?: string }[]): number {
   let count = 0;
   for (const node of tree) {
     if (!node.is_dir && node.name?.endsWith(".md")) count++;
-    if (node.children) count += countChapters(node.children);
+    if (node.children) count += countDocs(node.children);
   }
   return count;
 }
@@ -32,9 +32,10 @@ export function Sidebar() {
   const { projectPath, openProject, isLoading, fileTree, wordCount } = useProjectStore();
   const loreCount = useLoreStore((s) => Object.keys(s.index).length);
   const { headings } = useEditorStore();
+  const terms = useTerms();
 
   const projectName = basename(projectPath);
-  const chapterCount = countChapters(fileTree as any);
+  const docCount = countDocs(fileTree as any);
 
   const isTree = activeSideTab === "files";
   const isOutline = activeSideTab === "outline";
@@ -48,8 +49,8 @@ export function Sidebar() {
           <div className={styles.projectName}>{projectName ?? t("titleBar.noProject")}</div>
           <div className={styles.projectStats}>
             <span><strong>{wordCount.toLocaleString()}</strong>{t("statusBar.words")}</span>
-            <span><strong>{chapterCount}</strong>章</span>
-            <span><strong>{loreCount}</strong>设定</span>
+            <span><strong>{docCount}</strong>{terms.docs}</span>
+            <span><strong>{loreCount}</strong>{terms.entries}</span>
           </div>
         </div>
       )}
@@ -62,7 +63,9 @@ export function Sidebar() {
           style={{ all: "unset", margin: "16px 22px 0", display: "flex", alignItems: "center", gap: 8, padding: "8px 11px", background: "var(--color-bg-base)", border: "1px solid var(--color-border)", cursor: "pointer" }}
         >
           <SearchIcon size={11} strokeWidth={1.6} color="var(--color-text-muted)" />
-          <span className={styles.searchPlaceholder}>{t("sidebar.projectSearch")}</span>
+          <span className={styles.searchPlaceholder}>
+            {t("sidebar.projectSearch", { entries: terms.entries })}
+          </span>
           <span className={styles.searchKey}>{MOD_K_SPACED}</span>
         </button>
       )}
@@ -70,7 +73,7 @@ export function Sidebar() {
       {/* Section header label */}
       {projectPath && (
         <div className={styles.headerLabel}>
-          {t(`sidebar.${activeSideTab === "files" ? "manuscript" : activeSideTab}`)}
+          {activeSideTab === "files" ? terms.filesHeader : t(`sidebar.${activeSideTab}`)}
         </div>
       )}
 
