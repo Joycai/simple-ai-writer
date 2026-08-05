@@ -104,9 +104,9 @@ export function CommandPalette() {
     }
 
     // AI actions
-    out.push({ kind: "action", id: "ask", label: `问 AI："${q}"` });
-    out.push({ kind: "action", id: "chat", label: "打开对话助手（⌘L / Ctrl+L）" });
-    out.push({ kind: "action", id: "check", label: `核对一致性 · 关于 ${q}` });
+    out.push({ kind: "action", id: "ask", label: t("command.askAi", { q }) });
+    out.push({ kind: "action", id: "chat", label: t("command.openChat") });
+    out.push({ kind: "action", id: "check", label: t("command.checkConsistency", { q }) });
 
     return out;
   }, [query, allLore, content, t]);
@@ -187,19 +187,19 @@ export function CommandPalette() {
             onKeyDown={onKeyDown}
             placeholder={t("sidebar.projectSearch")}
           />
-          <span className={styles.scopeChip}>/ 设定</span>
+          <span className={styles.scopeChip}>{t("command.scopeLore")}</span>
           <span className={styles.scopeChip}>? AI</span>
           <span className={styles.escKey}>esc</span>
         </div>
 
         <div className={styles.results}>
           {hits.length === 0 ? (
-            <div className={styles.empty}>无匹配结果</div>
+            <div className={styles.empty}>{t("command.noResults")}</div>
           ) : (
             <>
               {loreHits.length > 0 && (
                 <div className={styles.group}>
-                  <div className={styles.groupLabel}>设定 · {loreHits.length} 项</div>
+                  <div className={styles.groupLabel}>{t("command.loreGroup", { n: loreHits.length })}</div>
                   {loreHits.map((h, i) => {
                     const idx = hits.indexOf(h);
                     return (
@@ -218,7 +218,7 @@ export function CommandPalette() {
                         </div>
                         {i === 0 && idx === active && (
                           <>
-                            <span className={styles.itemAction}>↗ 打开</span>
+                            <span className={styles.itemAction}>{t("command.openHint")}</span>
                             <span className={styles.itemKey}>↵</span>
                           </>
                         )}
@@ -230,7 +230,7 @@ export function CommandPalette() {
 
               {textHits.length > 0 && (
                 <div className={styles.group}>
-                  <div className={styles.groupLabel}>正文 · {textHits.length} 处</div>
+                  <div className={styles.groupLabel}>{t("command.textGroup", { n: textHits.length })}</div>
                   {textHits.map((h) => {
                     const idx = hits.indexOf(h);
                     return (
@@ -242,7 +242,7 @@ export function CommandPalette() {
                       >
                         <span className={styles.itemIconLine}>{String(h.lineNum).padStart(2, "0")}</span>
                         <div className={styles.itemMain}>
-                          <div className={styles.itemTitle}>第 {h.lineNum} 行</div>
+                          <div className={styles.itemTitle}>{t("command.line", { n: h.lineNum })}</div>
                           <div className={styles.itemSub}>"{highlight(h.preview, query)}"</div>
                         </div>
                       </div>
@@ -253,7 +253,7 @@ export function CommandPalette() {
 
               {actionHits.length > 0 && (
                 <div className={styles.group}>
-                  <div className={styles.groupLabel}>AI · 操作</div>
+                  <div className={styles.groupLabel}>{t("command.aiGroup")}</div>
                   {actionHits.map((h) => {
                     const idx = hits.indexOf(h);
                     return (
@@ -289,12 +289,12 @@ export function CommandPalette() {
         </div>
 
         <div className={styles.footer}>
-          <span><span className={styles.footerKey}>↑ ↓</span>导航</span>
-          <span><span className={styles.footerKey}>↵</span>打开</span>
-          <span><span className={styles.footerKey}>{MOD_KEY}↵</span>问 AI</span>
+          <span><span className={styles.footerKey}>↑ ↓</span>{t("command.navigate")}</span>
+          <span><span className={styles.footerKey}>↵</span>{t("command.open")}</span>
+          <span><span className={styles.footerKey}>{MOD_KEY}↵</span>{t("command.askAiShort")}</span>
           <span style={{ flex: 1 }} />
           <span style={{ fontStyle: "italic" }}>
-            前缀 <span style={{ color: "var(--color-sienna)", fontFamily: "var(--font-mono)" }}>/ ?</span> 限定范围
+            {t("command.prefixBefore")} <span style={{ color: "var(--color-sienna)", fontFamily: "var(--font-mono)" }}>/ ?</span> {t("command.prefixAfter")}
           </span>
         </div>
         </motion.div>

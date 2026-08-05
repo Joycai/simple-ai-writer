@@ -77,6 +77,23 @@
     "toTop": "Jump to top",
     "toEnd": "Jump to end"
   },
+  "command": {
+    "scopeLore": "/ Lore",
+    "noResults": "No matches",
+    "loreGroup": "Lore · {{n}} items",
+    "openHint": "↗ Open",
+    "textGroup": "Manuscript · {{n}} matches",
+    "line": "Line {{n}}",
+    "aiGroup": "AI · Actions",
+    "askAi": "Ask AI: “{{q}}”",
+    "openChat": "Open the chat assistant (⌘L / Ctrl+L)",
+    "checkConsistency": "Check consistency · about {{q}}",
+    "navigate": "Navigate",
+    "open": "Open",
+    "askAiShort": "Ask AI",
+    "prefixBefore": "Prefix with",
+    "prefixAfter": "to narrow the scope"
+  },
   "empty": {
     "firstLine": "Write your first line here",
     "ornament": "— · —",
