@@ -76,6 +76,17 @@ export type AgentEvent =
       count: number;
       at: number;
     }
+  | {
+      /**
+       * The round cap was reached with the model still calling tools, and the
+       * author was asked whether to keep going. `granted` is the extra rounds
+       * they allowed — 0 means they chose to let the run wrap up.
+       */
+      kind: "round-limit";
+      roundsUsed: number;
+      granted: number;
+      at: number;
+    }
   | { kind: "run-done"; inputTokens: number; outputTokens: number; at: number }
   | { kind: "run-error"; message: string; at: number };
 
