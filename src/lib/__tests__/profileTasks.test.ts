@@ -17,6 +17,7 @@ import {
   NOVEL_PROFILE,
   TASK_ID_RE,
   TTRPG_PROFILE,
+  WECHAT_PROFILE,
   WEEKLY_PROFILE,
   parseProfile,
   taskDesc,
@@ -343,6 +344,74 @@ describe("the 标书应答 profile", () => {
     // The author scopes the sweep; the built-in text is the briefing.
     expect(extract.freeform).toBe(true);
     expect(extract.needsSelection).toBeUndefined();
+  });
+});
+
+describe("the 微信公众号 profile", () => {
+  const task = (id: string) => WECHAT_PROFILE.tasks.find((t) => t.id === id);
+
+  it("treats articles as independent pieces", () => {
+    // Long-form prose, but published standalone: no spine, nothing precedes an
+    // article, and one fits in context whole.
+    expect(WECHAT_PROFILE.docModel).toEqual({
+      ordered: false, priorContext: false, memory: false,
+    });
+  });
+
+  it("keeps the full shared set, including 续写", () => {
+    // Unlike 文案: an article *is* long-form prose, so 续写 has something to
+    // continue from. With priorContext off it just continues the open article.
+    const ids = WECHAT_PROFILE.tasks.map((t) => t.id);
+    for (const id of ["continue", "polish", "rewrite", "summary"]) {
+      expect(ids).toContain(id);
+    }
+    expect(task("continue")!.continuation).toBe(true);
+  });
+
+  it("keeps its domain tasks off the other profiles", () => {
+    for (const profile of BUILTIN_PROFILES.filter((p) => p !== WECHAT_PROFILE)) {
+      const ids = profile.tasks.map((t) => t.id);
+      for (const id of ["topic", "titles", "hook", "compliance"]) {
+        expect(ids).not.toContain(id);
+      }
+    }
+  });
+
+  it("makes 选题 a read task the author scopes", () => {
+    const topic = task("topic")!;
+    // Has to list what the account already published — colliding with a
+    // published angle is the failure this task is shaped against.
+    expect(topic.tools).toBe("read");
+    expect(presetForTools(topic.tools)).toBe(CONTINUE_PRESET);
+    expect(draftCountFor(topic, 3)).toBe(1);
+    expect(topic.freeform).toBe(true);
+    expect(topic.target).toBe("detached");
+  });
+
+  it("lets 标题 and 开头 fan out with no ask", () => {
+    for (const id of ["titles", "hook"]) {
+      const t = task(id)!;
+      // Toolless so the drafts give sets of options to compare.
+      expect(t.tools).toBe("none");
+      expect(draftCountFor(t, 3)).toBe(3);
+      // Not freeform on purpose: the article is already in 【当前文章】, and a
+      // freeform task can't run on an empty box.
+      expect(t.freeform).toBeUndefined();
+      expect(t.needsSelection).toBeUndefined();
+      expect(t.instructionKey).toBeTruthy();
+      // Detached: the author picks one rather than having it overwrite.
+      expect(t.target).toBe("detached");
+    }
+  });
+
+  it("audits the whole article rather than a selection", () => {
+    const compliance = task("compliance")!;
+    // Reads the account's own 合规红线 entries, not general impressions.
+    expect(compliance.tools).toBe("read");
+    // A red line in the paragraph you didn't select is exactly as fatal.
+    expect(compliance.needsSelection).toBeUndefined();
+    expect(compliance.freeform).toBeUndefined();
+    expect(compliance.target).toBe("detached");
   });
 });
 

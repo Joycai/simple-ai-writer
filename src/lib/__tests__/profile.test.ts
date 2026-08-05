@@ -42,6 +42,7 @@ describe("builtin profiles", () => {
     expect(activeProfile()).toBe(NOVEL_PROFILE);
     expect(builtinProfile("ttrpg")).toBe(TTRPG_PROFILE);
     expect(builtinProfile("bid")?.labelZh).toBe("标书应答");
+    expect(builtinProfile("wechat")?.labelZh).toBe("微信公众号");
     expect(builtinProfile("nope")).toBeNull();
   });
 

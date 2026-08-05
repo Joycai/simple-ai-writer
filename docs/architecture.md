@@ -102,7 +102,7 @@ A profile declares what kind of writing a project is, so a new domain is data ra
 | `docModel` | Which novel-shaped document machinery applies — see below |
 | `systemPromptKey` | Which i18n system prompt is the fallback when no prompt template is active |
 
-Built-ins: `novel` (the default), `ttrpg` (跑团模组), `copy` (文案), `weekly` (周报) and `feedback` (反馈报告). Switching is Settings → 工作台, which calls `projectStore.setProfile()`: persist → scaffold the new folders → rescan. **Non-destructive** — the previous categories' folders and entities stay on disk and reappear on switching back; they are simply not scanned while another profile is active.
+Built-ins: `novel` (the default), `ttrpg` (跑团模组), `copy` (文案), `wechat` (微信公众号), `weekly` (周报), `feedback` (反馈报告) and `bid` (标书应答). Switching is Settings → 工作台, which calls `projectStore.setProfile()`: persist → scaffold the new folders → rescan. **Non-destructive** — the previous categories' folders and entities stay on disk and reappear on switching back; they are simply not scanned while another profile is active.
 
 #### Tasks (`tasks`)
 
@@ -133,6 +133,9 @@ The task `id` is load-bearing in three places, so renaming one is a breaking cha
 | 对照上期 (`carryover`, weekly) | `tools: "read"`, **not** freeform | Has to *find* the previous report: prior-document context only reaches `continuation` tasks, and this one appends nothing. Not freeform because it is useful with no input, and a freeform task can't run on an empty box. |
 | 归纳主题 (`themes`, feedback) | `tools: "read"`, freeform | Must actually read the corpus — themes inferred from product intuition are the failure this profile is shaped against. |
 | 溯源核对 (`verify`, feedback) | `tools: "read"`, `needsSelection` | Checks one claim in the draft against the sources. No reference window: what it needs is the material, not the surrounding paragraphs. |
+| 选题 (`topic`, wechat) | `tools: "read"`, freeform, detached | Has to list what the account already published — colliding with a published angle is the failure it exists to avoid. One run already returns a spread, so the lost fan-out costs little. |
+| 标题 / 开头 (`titles`, `hook`, wechat) | `tools: "none"`, **not** freeform | The article is already in 【当前文章】 by the time you need either, and a freeform task can't run on an empty box — it would force the author to retype the gist. Toolless so the drafts give sets of options to compare. |
+| 合规审查 (`compliance`, wechat) | `tools: "read"`, no selection | Reads the account's own 合规红线 entries rather than general impressions of 广告法, and audits the whole article: a red line in the paragraph you didn't select is exactly as fatal. |
 
 **Tool-using tasks are told which file they are on.** `TaskExtras.currentFilePath` becomes a 【当前文件】 block, emitted first. Without it a task that browses the project cannot tell which of the files it lists is the one it was invoked on — 对照上期's "find the report before this one" has no anchor. In testing it happened to work because the draft's own heading said 「第 31 周」; a document that doesn't name its period would have left the model guessing, and picking the wrong file produces output that looks entirely normal. Toolless tasks omit it: they can't look at anything else, so it would only spend tokens.
 
