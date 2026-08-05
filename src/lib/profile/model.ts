@@ -780,11 +780,123 @@ export const BID_PROFILE: WorkspaceProfile = {
   systemPromptKey: "ai.instructions.systemBid",
 };
 
+/**
+ * 微信公众号 — articles for a WeChat Official Account.
+ *
+ * Long-form prose like a novel chapter, but published as independent pieces:
+ * each article stands alone, nothing "precedes" one, and a 2–4k word article
+ * fits in context whole. So the whole shared task set applies (续写/润色/改写/
+ * 总结 all mean what they always meant on a paragraph of prose) while the
+ * spine, prior-document context and rolling memory all come off.
+ *
+ * What is genuinely different is that the *packaging* is half the work. A WeChat
+ * article lives or dies on two numbers the author can actually move — 打开率
+ * (the title) and 完读率 (the opening) — so those get tasks of their own rather
+ * than being left to 自定义. And 合规 is not optional decoration: 广告法 absolute
+ * superlatives, medical/financial claims and 诱导分享 get articles deleted or the
+ * account restricted, which is why 合规红线 is a knowledge-base category and the
+ * audit is a task that reads it.
+ */
+export const WECHAT_PROFILE: WorkspaceProfile = {
+  id: "wechat",
+  labelZh: "微信公众号",
+  labelEn: "WeChat Article",
+  categories: [
+    { id: "account", labelZh: "账号定位", labelEn: "Account" },
+    { id: "audience", labelZh: "读者画像", labelEn: "Audience" },
+    { id: "topics", labelZh: "选题库", labelEn: "Topics" },
+    { id: "products", labelZh: "产品服务", labelEn: "Products" },
+    { id: "references", labelZh: "对标爆款", labelEn: "References" },
+    { id: "style", labelZh: "文风", labelEn: "Voice" },
+    // Not a nicety: an article that trips 广告法 or 诱导分享 gets deleted, so
+    // the red lines are material the audit task has to be able to look up.
+    { id: "compliance", labelZh: "合规红线", labelEn: "Compliance" },
+    { id: "custom", labelZh: "自定义", labelEn: "Custom" },
+  ],
+  sections: {
+    knowledge: "公众号资料",
+    outline: "写作要求",
+    recent: "当前文章",
+  },
+  terms: {
+    doc: { zh: "文章", en: "article" },
+    group: { zh: "专栏", en: "column" },
+    kb: { zh: "公众号资料库", en: "Account Library" },
+    entry: { zh: "资料", en: "entry", enPlural: "entries" },
+    filesHeader: { zh: "ARTICLES · 文章", en: "ARTICLES" },
+    emptyEyebrow: { zh: "新篇 · NEW ARTICLE", en: "NEW ARTICLE" },
+  },
+  // Independent pieces: no order, nothing precedes one, and one article is far
+  // short enough to hold whole.
+  docModel: { ordered: false, priorContext: false, memory: false },
+  tasks: [
+    // The full shared set stays — unlike 文案, an article *is* long-form prose,
+    // so 续写 has something to continue from. With `priorContext` off it simply
+    // continues the open article, with no cross-document bridge.
+    ...DEFAULT_TASKS,
+    {
+      id: "topic",
+      labelKey: "ai.tasks.topic",
+      descKey: "ai.tasks.topicDesc",
+      instructionKey: "ai.instructions.wechatTopic",
+      // Read tools because the failure mode is proposing an angle the account
+      // already published: it has to list the existing articles and the 选题库
+      // itself, which no amount of injected context can substitute for. Costs
+      // the fan-out, but one run already returns a spread of angles.
+      tools: "read",
+      target: "detached",
+      // The author gives the direction ("聊远程办公，偏职场向"); with no scope
+      // the task would have to guess what the account is about this week.
+      freeform: true,
+    },
+    {
+      id: "titles",
+      labelKey: "ai.tasks.titles",
+      descKey: "ai.tasks.titlesDesc",
+      instructionKey: "ai.instructions.wechatTitles",
+      // Toolless, so it fans out: the point is having options, and the drafts
+      // give *sets* of angles to compare on top of the several in each response.
+      tools: "none",
+      target: "detached",
+      // Deliberately not freeform: by the time you need titles the article is
+      // written and sits in 【当前文章】, and a freeform task can't run on an
+      // empty box — it would force the author to retype the gist.
+    },
+    {
+      id: "hook",
+      labelKey: "ai.tasks.hook",
+      descKey: "ai.tasks.hookDesc",
+      instructionKey: "ai.instructions.wechatHook",
+      tools: "none",
+      // Detached rather than replace: the author compares openings and inserts
+      // one, so overwriting the existing opening would lose what it's competing
+      // against.
+      target: "detached",
+    },
+    {
+      id: "compliance",
+      labelKey: "ai.tasks.compliance",
+      descKey: "ai.tasks.complianceDesc",
+      instructionKey: "ai.instructions.wechatCompliance",
+      // Must actually read the 合规红线 entries — a check run from general
+      // memory of 广告法 flags the wrong words and misses the account's own
+      // accumulated rules.
+      tools: "read",
+      target: "detached",
+      // Not freeform and no selection: it audits the whole open article, which
+      // is the only useful scope for this — a red line missed in the paragraph
+      // you didn't select is exactly as fatal.
+    },
+  ],
+  systemPromptKey: "ai.instructions.systemWechat",
+};
+
 /** Every built-in profile, in the order a picker should show them. */
 export const BUILTIN_PROFILES: readonly WorkspaceProfile[] = [
   NOVEL_PROFILE,
   TTRPG_PROFILE,
   COPY_PROFILE,
+  WECHAT_PROFILE,
   WEEKLY_PROFILE,
   FEEDBACK_PROFILE,
   BID_PROFILE,
