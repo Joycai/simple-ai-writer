@@ -109,6 +109,88 @@
   box-shadow: inset 0 -2px 0 var(--color-sienna);
 }
 
+/* Panels (find/replace bar, go-to-line dialog) — CodeMirror's base theme paints
+   these light grey with a silver rule; hand the surface back to the panel's own
+   styling so the themed search bar isn't sitting on foreign chrome. */
+.wrap :global(.cm-panels) {
+  background: transparent;
+  color: inherit;
+  z-index: 5;
+}
+.wrap :global(.cm-panels-top) { border-bottom: none; }
+.wrap :global(.cm-panels-bottom) { border-top: none; }
+
+/* Go-to-line (Mod-Alt-G) still uses CodeMirror's own dialog markup. */
+.wrap :global(.cm-panel.cm-dialog) {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-md);
+  color: var(--color-text-primary);
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.wrap :global(.cm-textfield) {
+  height: 28px;
+  padding: 0 var(--space-2);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-md);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+.wrap :global(.cm-textfield):focus {
+  outline: none;
+  border-color: var(--color-sienna);
+  box-shadow: var(--shadow-focus);
+}
+
+.wrap :global(.cm-button) {
+  height: 26px;
+  padding: 0 var(--space-3);
+  background: transparent;
+  background-image: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast),
+    border-color var(--transition-fast);
+}
+.wrap :global(.cm-button):hover {
+  color: var(--color-sienna);
+  border-color: var(--color-sienna);
+  background: var(--color-bg-elevated);
+}
+.wrap :global(.cm-button):active { transform: scale(0.96); }
+
+/* Match highlighting — CodeMirror defaults to highlighter-yellow / lime, which
+   fights the warm palette. Same accent wash the AI target uses, with the active
+   hit carrying the sienna underline. */
+.wrap :global(.cm-searchMatch) {
+  background: var(--color-accent-tint);
+}
+.wrap :global(.cm-searchMatch.cm-searchMatch-selected) {
+  background: var(--color-accent-tint-strong);
+  box-shadow: inset 0 -2px 0 var(--color-sienna);
+}
+.wrap :global(.cm-selectionMatch) {
+  background: var(--color-accent-tint);
+}
+
 /* Active line — barely-there warm tint, easy on the eyes */
 .wrap :global(.cm-activeLine) {
   background: rgba(160, 82, 45, 0.04);

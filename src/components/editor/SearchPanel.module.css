@@ -1,0 +1,186 @@
+/* Find / replace bar — a themed replacement for CodeMirror's native search panel.
+   Built as plain DOM (see searchPanel.ts) because CodeMirror owns the panel
+   mount point; the class names below are handed to that builder. */
+
+.panel {
+  font-family: var(--font-sans);
+  font-size: var(--font-size-md);
+  color: var(--color-text-primary);
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--color-border);
+  animation: fadeIn 160ms var(--ease-out);
+}
+
+.inner {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+}
+
+.rows {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.rowHidden { display: none; }
+
+/* ── Text fields ───────────────────────────────────────────── */
+
+.field {
+  flex: 1;
+  min-width: 0;
+  max-width: 320px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.field:focus-within {
+  border-color: var(--color-sienna);
+  box-shadow: var(--shadow-focus);
+}
+
+.fieldIcon {
+  flex-shrink: 0;
+  color: var(--color-text-faint);
+  display: flex;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-md);
+  line-height: 1;
+}
+
+.input::placeholder { color: var(--color-text-faint); }
+
+.count {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.countEmpty { color: var(--color-error); }
+
+/* ── Buttons ───────────────────────────────────────────────── */
+
+.iconBtn,
+.opt,
+.textBtn,
+.toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.iconBtn:hover,
+.opt:hover,
+.textBtn:hover,
+.toggle:hover {
+  color: var(--color-sienna);
+  background: var(--color-bg-elevated);
+}
+
+.iconBtn:active,
+.opt:active,
+.textBtn:active,
+.toggle:active { transform: scale(0.94); }
+
+.iconBtn {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.opt {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  letter-spacing: -0.02em;
+}
+
+.optActive {
+  background: var(--color-accent-tint);
+  color: var(--color-sienna);
+  border-color: var(--color-accent-ring);
+}
+
+.optActive:hover { background: var(--color-accent-tint-strong); }
+
+.textBtn {
+  height: 26px;
+  padding: 0 var(--space-3);
+  flex-shrink: 0;
+  border-color: var(--color-border);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+.textBtn:hover { border-color: var(--color-sienna); }
+
+.textBtn:disabled,
+.iconBtn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* Replace disclosure — spans both rows, so it stays vertically centred. */
+.toggle {
+  width: 22px;
+  flex-shrink: 0;
+  align-self: stretch;
+}
+
+.toggleIcon { transition: transform var(--transition-fast); }
+.toggleOpen .toggleIcon { transform: rotate(90deg); }
+
+.sep {
+  width: 1px;
+  height: 18px;
+  flex-shrink: 0;
+  margin: 0 var(--space-1);
+  background: var(--color-border);
+}
+
+.spacer { flex: 1; }
