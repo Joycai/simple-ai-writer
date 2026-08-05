@@ -1071,7 +1071,12 @@
     "folderNamePlaceholder": "文件夹名称",
     "importDoc": "导入文档",
     "importFilter": "文档",
-    "importFailed": "以下文件导入失败："
+    "importFailed": "以下文件导入失败：",
+    "cut": "剪切",
+    "copy": "复制",
+    "pasteEntry": "粘贴「{{name}}」",
+    "moveExists": "目标位置已有同名的「{{name}}」。",
+    "moveIntoSelf": "不能把文件夹移到它自己里面。"
   },
   "language": {
     "chinese": "中文",

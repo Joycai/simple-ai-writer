@@ -36,6 +36,11 @@ export async function renamePath(from: string, to: string): Promise<void> {
   return invoke("fs_rename", { from, to });
 }
 
+/** Copy a file, or a directory with everything under it. `to` must not exist. */
+export async function copyPath(from: string, to: string): Promise<void> {
+  return invoke("fs_copy", { from, to });
+}
+
 export interface DirEntry { name: string; path: string; isDirectory: boolean; }
 
 export async function readDir(path: string): Promise<DirEntry[]> {

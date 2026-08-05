@@ -1,19 +1,37 @@
 import {
   useState, useRef, useEffect, createContext, useContext,
-  type KeyboardEvent, type MouseEvent,
+  type DragEvent, type KeyboardEvent, type MouseEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Folder, FolderOpen, FolderInput, FileText, File, FileImage, ChevronRight,
   FilePlus, FolderPlus, FileInput, RotateCw, LogOut, Pencil, Trash2,
+  Scissors, Copy, ClipboardPaste,
 } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { isImagePath } from "../../lib/fs/images";
+import { fileExists } from "../../lib/fs/fileio";
+import { baseNameOf, dropRejection, parentDirOf, type TransferMode } from "../../lib/fs/moveCopy";
 import { baseName, importDocumentsDialog } from "../../lib/import";
 import { useProjectStore } from "../../stores/projectStore";
 import type { FileNode } from "../../lib/project";
 import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
 import styles from "./FileTree.module.css";
+
+/** A dragged or clipboarded entry — the pair every transfer needs. */
+interface TransferSource { path: string; isDir: boolean }
+
+/**
+ * Hold Ctrl (or Alt, the macOS convention) while dropping to copy instead of
+ * move. Accepting either means the gesture works whichever OS the author's
+ * fingers come from.
+ */
+function isCopyDrag(e: DragEvent): boolean {
+  return e.ctrlKey || e.altKey;
+}
+
+/** How long a folder must be hovered mid-drag before it springs open. */
+const SPRING_OPEN_MS = 700;
 
 // ── Context ───────────────────────────────────────────────────────────────────
 
@@ -31,6 +49,17 @@ interface TreeCtx {
   confirmRename: (node: FileNode, name: string) => Promise<void>;
   cancelRename: () => void;
   openMenu: (e: MouseEvent, node: FileNode | null) => void;
+  /** Path of the row being dragged right now, so it can dim itself. */
+  draggingPath: string | null;
+  /** Path of the folder row currently lit up as the drop target. */
+  dragOverDir: string | null;
+  /** Path of the entry waiting to be pasted by a cut, dimmed until then. */
+  cutPath: string | null;
+  onDragStart: (e: DragEvent, node: FileNode) => void;
+  onDragEnd: () => void;
+  onDragOverDir: (e: DragEvent, node: FileNode) => void;
+  onDragLeaveDir: (e: DragEvent, node: FileNode) => void;
+  onDropInDir: (e: DragEvent, node: FileNode) => void;
 }
 
 const TreeCtx = createContext<TreeCtx>(null!);
@@ -150,6 +179,8 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
   const {
     activeFilePath, setActiveFilePath, creatingIn, startCreate,
     renamingPath, renameError, openMenu,
+    draggingPath, dragOverDir, cutPath,
+    onDragStart, onDragEnd, onDragOverDir, onDragLeaveDir, onDropInDir,
   } = useContext(TreeCtx);
   // Expansion is stored per project (projectStore.expandedDirs), not per node:
   // the sidebar's tab transition remounts this tree, so local state would
@@ -176,13 +207,29 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
     else setActiveFilePath(node.path);
   };
 
+  const classes = [
+    styles.node,
+    isActive ? styles.active : "",
+    draggingPath === node.path ? styles.dragging : "",
+    dragOverDir === node.path ? styles.dropTarget : "",
+    cutPath === node.path ? styles.cut : "",
+  ].filter(Boolean).join(" ");
+
   return (
     <div>
       <div
-        className={`${styles.node} ${isActive ? styles.active : ""}`}
+        className={classes}
         style={{ paddingLeft: `${4 + depth * 12}px` }}
         onClick={handleClick}
         onContextMenu={(e) => openMenu(e, node)}
+        // Renaming turns the label into a text input; a draggable ancestor
+        // would steal the pointer before a selection could be made.
+        draggable={!isRenaming}
+        onDragStart={(e) => onDragStart(e, node)}
+        onDragEnd={onDragEnd}
+        onDragOver={(e) => onDragOverDir(e, node)}
+        onDragLeave={(e) => onDragLeaveDir(e, node)}
+        onDrop={(e) => onDropInDir(e, node)}
         role="button"
         tabIndex={-1}
       >
@@ -244,18 +291,13 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
 
 interface CtxMenuState { x: number; y: number; node: FileNode | null }
 
-/** Return the parent directory of a path (handles both separator styles). */
-function parentDir(path: string): string {
-  const sep = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
-  return path.slice(0, sep);
-}
-
 // ── Main FileTree ─────────────────────────────────────────────────────────────
 
 export function FileTree() {
   const { t } = useTranslation();
   const { fileTree, projectPath, refreshFileTree, activeFilePath, setActiveFilePath,
-          openProject, closeProject, createEntry, moveEntry, deleteEntry } =
+          openProject, closeProject, createEntry, moveEntry, copyEntry, deleteEntry,
+          clipboard, setClipboard } =
     useProjectStore();
 
   const [creatingIn, setCreatingIn] = useState<string | null>(null);
@@ -265,6 +307,130 @@ export function FileTree() {
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [transferError, setTransferError] = useState<string | null>(null);
+  const [draggingPath, setDraggingPath] = useState<string | null>(null);
+  const [dragOverDir, setDragOverDir] = useState<string | null>(null);
+  // The dragged entry also lives in a ref: `dragover` fires dozens of times a
+  // second and cannot read dataTransfer (browsers withhold it until the drop),
+  // so the validity check has to consult something synchronous.
+  const dragRef = useRef<TransferSource | null>(null);
+  const springTimer = useRef<{ path: string; id: number } | null>(null);
+
+  const cancelSpring = () => {
+    if (springTimer.current) clearTimeout(springTimer.current.id);
+    springTimer.current = null;
+  };
+
+  /** Open a collapsed folder that has been hovered long enough mid-drag. */
+  const scheduleSpring = (path: string) => {
+    if (springTimer.current?.path === path) return;
+    cancelSpring();
+    const id = window.setTimeout(() => {
+      useProjectStore.getState().setDirExpanded(path, true);
+      springTimer.current = null;
+    }, SPRING_OPEN_MS);
+    springTimer.current = { path, id };
+  };
+
+  const endDrag = () => {
+    cancelSpring();
+    dragRef.current = null;
+    setDraggingPath(null);
+    setDragOverDir(null);
+  };
+
+  useEffect(() => cancelSpring, []);
+
+  /**
+   * Move or copy an entry into `destDir` — the one path behind both the drop
+   * gesture and the paste menu item, so the two cannot drift apart.
+   */
+  const transfer = async (src: TransferSource, destDir: string, mode: TransferMode) => {
+    const rejection = dropRejection(src.path, destDir, mode);
+    if (rejection) {
+      // "same-parent" means the author dropped an entry back where it already
+      // is — an accident, not a failure, so it passes silently.
+      setTransferError(rejection === "into-self" ? t("fileTree.moveIntoSelf") : null);
+      return;
+    }
+    setTransferError(null);
+    const name = baseNameOf(src.path);
+    try {
+      if (mode === "copy") {
+        await copyEntry(src.path, destDir, src.isDir);
+      } else {
+        // moveEntry refuses an occupied destination too; checking here is what
+        // turns that into a sentence naming the file, in the author's language.
+        const dest = `${destDir}/${name}`;
+        if (await fileExists(dest)) {
+          setTransferError(t("fileTree.moveExists", { name }));
+          return;
+        }
+        await moveEntry(src.path, dest);
+      }
+      useProjectStore.getState().setDirExpanded(destDir, true);
+    } catch (err) {
+      setTransferError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const onDragStart = (e: DragEvent, node: FileNode) => {
+    const src = { path: node.path, isDir: node.is_dir };
+    dragRef.current = src;
+    setDraggingPath(node.path);
+    setTransferError(null);
+    e.dataTransfer.effectAllowed = "copyMove";
+    // Some engines abort a drag that carries no payload at all.
+    e.dataTransfer.setData("text/plain", node.path);
+  };
+
+  const onDragOverDir = (e: DragEvent, node: FileNode) => {
+    const src = dragRef.current;
+    // Only folders take drops, and only from a drag that started in this tree
+    // (an OS file drag has no ref and must fall through untouched).
+    if (!src || !node.is_dir) return;
+    if (dropRejection(src.path, node.path, isCopyDrag(e) ? "copy" : "move")) {
+      cancelSpring();
+      setDragOverDir(null);
+      return; // no preventDefault → the row shows "no drop" and fires no drop
+    }
+    e.preventDefault();
+    e.dataTransfer.dropEffect = isCopyDrag(e) ? "copy" : "move";
+    setDragOverDir(node.path);
+    scheduleSpring(node.path);
+  };
+
+  const onDragLeaveDir = (e: DragEvent, node: FileNode) => {
+    // The row's own icon and label are children: moving onto them fires
+    // dragleave, and reacting to that would cancel the spring-open timer on
+    // every pixel of travel.
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+    if (springTimer.current?.path === node.path) cancelSpring();
+    setDragOverDir((cur) => (cur === node.path ? null : cur));
+  };
+
+  const onDropInDir = (e: DragEvent, node: FileNode) => {
+    e.preventDefault();
+    const src = dragRef.current;
+    const mode: TransferMode = isCopyDrag(e) ? "copy" : "move";
+    endDrag();
+    if (src && node.is_dir) void transfer(src, node.path, mode);
+  };
+
+  /** Where a paste aimed at this row lands: a folder itself, else its parent. */
+  const pasteTargetOf = (node: FileNode | null): string | null => {
+    if (!node) return projectPath ? `${projectPath}/writing` : null;
+    return node.is_dir ? node.path : parentDirOf(node.path);
+  };
+
+  const handlePaste = async (node: FileNode | null) => {
+    const dest = pasteTargetOf(node);
+    if (!clipboard || !dest) return;
+    const { path, isDir, mode } = clipboard;
+    await transfer({ path, isDir }, dest, mode);
+    // A cut is spent once pasted; a copy stays, so it can be pasted again.
+    if (mode === "move") setClipboard(null);
+  };
 
   // Convert picked documents (docx/pdf/txt/md) into markdown files in destDir.
   // Single-flight: a pdf conversion can take seconds, and a second dialog over
@@ -325,7 +491,7 @@ export function FileTree() {
     const name = rawName.trim();
     if (!name || name === node.name) { cancelRename(); return; }
     try {
-      await moveEntry(node.path, `${parentDir(node.path)}/${name}`);
+      await moveEntry(node.path, `${parentDirOf(node.path)}/${name}`);
       cancelRename();
     } catch (err) {
       setRenameError(err instanceof Error ? err.message : String(err));
@@ -355,6 +521,24 @@ export function FileTree() {
     const reveal = (path: string) => {
       revealItemInDir(path).catch(() => { /* best-effort */ });
     };
+
+    /**
+     * The paste entry, or nothing when the clipboard is empty — an item that is
+     * always there but usually greyed out is noise in a menu this short.
+     */
+    const pasteItem = (): ContextMenuEntry[] => {
+      if (!clipboard) return [];
+      const dest = pasteTargetOf(node);
+      const blocked = !dest || !!dropRejection(clipboard.path, dest, clipboard.mode);
+      return [{
+        kind: "item",
+        icon: <ClipboardPaste size={13} />,
+        label: t("fileTree.pasteEntry", { name: baseNameOf(clipboard.path) }),
+        disabled: blocked,
+        action: () => void handlePaste(node),
+      }];
+    };
+
     if (!node) {
       return [
         { kind: "item", icon: <FilePlus size={13} />, label: t("fileTree.newFile"),
@@ -363,6 +547,7 @@ export function FileTree() {
           action: () => { if (projectPath) startCreate(`${projectPath}/writing`, "folder"); } },
         { kind: "item", icon: <FileInput size={13} />, label: t("fileTree.importDoc"),
           action: () => { if (projectPath) void handleImport(`${projectPath}/writing`); } },
+        ...pasteItem(),
         { kind: "divider" },
         { kind: "item", icon: <FolderOpen size={13} />, label: t("fileTree.reveal"),
           action: () => { if (projectPath) reveal(projectPath); } },
@@ -386,7 +571,15 @@ export function FileTree() {
           action: () => setActiveFilePath(node.path) },
       );
     }
+    const source: TransferSource = { path: node.path, isDir: node.is_dir };
     items.push(
+      { kind: "divider" },
+      { kind: "item", icon: <Scissors size={13} />, label: t("fileTree.cut"),
+        action: () => setClipboard({ ...source, mode: "move" }) },
+      { kind: "item", icon: <Copy size={13} />, label: t("fileTree.copy"),
+        action: () => setClipboard({ ...source, mode: "copy" }) },
+      ...pasteItem(),
+      { kind: "divider" },
       { kind: "item", icon: <Pencil size={13} />, label: t("fileTree.rename"),
         action: () => startRename(node) },
       { kind: "item", icon: <FolderOpen size={13} />, label: t("fileTree.reveal"),
@@ -414,6 +607,14 @@ export function FileTree() {
     confirmRename,
     cancelRename,
     openMenu,
+    draggingPath,
+    dragOverDir,
+    cutPath: clipboard?.mode === "move" ? clipboard.path : null,
+    onDragStart,
+    onDragEnd: endDrag,
+    onDragOverDir,
+    onDragLeaveDir,
+    onDropInDir,
   };
 
   return (
@@ -461,6 +662,17 @@ export function FileTree() {
             </button>
           </span>
         </div>
+
+        {/* Why the last move/copy could not happen. Click to dismiss. */}
+        {transferError && (
+          <div
+            className={styles.transferError}
+            role="alert"
+            onClick={() => setTransferError(null)}
+          >
+            {transferError}
+          </div>
+        )}
 
         {/* Tree or empty state */}
         <div className={styles.tree} onContextMenu={(e) => openMenu(e, null)}>
