@@ -210,6 +210,25 @@ function AgentLogRow({ row, showTime }: { row: Row; showTime: boolean }) {
           </li>
         </>
       );
+    case "round-limit":
+      return (
+        <li className={`${styles.row} ${styles.rowMeta}`}>
+          <span className={styles.rowIndent} />
+          <span className={styles.rowMetaText}>
+            {event.granted > 0
+              ? t("ai.agent.log.roundLimitGranted", {
+                  defaultValue: "已达 {{n}} 轮上限 — 批准继续 {{extra}} 轮",
+                  n: event.roundsUsed,
+                  extra: event.granted,
+                })
+              : t("ai.agent.log.roundLimitStopped", {
+                  defaultValue: "已达 {{n}} 轮上限 — 就此收尾",
+                  n: event.roundsUsed,
+                })}
+          </span>
+          {time}
+        </li>
+      );
     case "context-trimmed":
       return (
         <li className={`${styles.row} ${styles.rowMeta}`}>

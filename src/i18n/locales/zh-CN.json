@@ -563,7 +563,9 @@
         "seededMemory": "前情 {{chars}} 字",
         "seededLore": "检索{{entry}}",
         "seededLoreHits": "命中 {{n}} 条",
-        "seededLoreNone": "未命中"
+        "seededLoreNone": "未命中",
+        "roundLimitGranted": "已达 {{n}} 轮上限 — 批准继续 {{extra}} 轮",
+        "roundLimitStopped": "已达 {{n}} 轮上限 — 就此收尾"
       },
       "tool": {
         "list_lore_entities": "列举{{entry}}",
@@ -610,6 +612,13 @@
       "approve": "批准",
       "reject": "拒绝",
       "rejectPlaceholder": "拒绝原因（可选，会反馈给 AI）"
+    },
+    "roundLimit": {
+      "title": "已达轮数上限",
+      "rounds": "{{n}} 轮",
+      "body": "Agent 已连续调用 {{n}} 轮工具，仍未完成。继续会再给它 {{extra}} 轮；就此收尾则让它用已有的信息直接给出结果。",
+      "finish": "就此收尾",
+      "continue": "继续（再 {{n}} 轮）"
     },
     "plan": {
       "title": "待批准的{{entry}}方案",

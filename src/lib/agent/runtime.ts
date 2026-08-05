@@ -130,6 +130,19 @@ export interface AgentRuntimeOptions {
   signal: AbortSignal;
   onEvent: (event: AgentEvent) => void;
   /**
+   * Called when the round cap is about to end the run while the model is still
+   * mid-work — i.e. on entering the final round of a force-text preset after
+   * every earlier round was a tool round. Blocks the loop (like a
+   * `propose_edit` approval) until it resolves with how many extra rounds the
+   * author grants; 0 keeps today's behaviour (tools withheld, the model is
+   * told to write its answer now).
+   *
+   * Optional because not every surface can render the question: the lore
+   * modals don't show the approvals area, and a run that blocks on a card
+   * nobody can see would simply hang.
+   */
+  onRoundLimit?: (roundsUsed: number) => Promise<number>;
+  /**
    * The run's output **so far, in full** — a snapshot, not a delta, so callers
    * assign rather than append.
    *
@@ -159,12 +172,38 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
   /** Text from rounds that ended in prose — the run's output as it stands. */
   let committedText = "";
 
-  for (let round = 1; round <= preset.maxRounds; round++) {
+  // Mutable: the author can extend it at the cap via onRoundLimit.
+  let maxRounds = preset.maxRounds;
+
+  for (let round = 1; round <= maxRounds; round++) {
     if (opts.signal.aborted) throw new DOMException("Aborted", "AbortError");
 
     // On the final round of a force-text task: inject a "write now" instruction
     // and omit tools so the model must produce text without further tool calls.
-    const isLastRound = round === preset.maxRounds;
+    let isLastRound = round === maxRounds;
+
+    // Reaching the final round of a tool-using run means every earlier round
+    // ended in a tool call — the model is mid-work, and forcing text now cuts
+    // it off. Ask the author before doing that. Asking here (not after the
+    // forced round) is the only spot that can still resume: once tools are
+    // withheld and the model writes, the run has ended. `round > 1` keeps
+    // single-round presets out — their one round *is* the whole run.
+    if (
+      isLastRound &&
+      round > 1 &&
+      preset.finishPolicy === "force-text" &&
+      preset.tools.length > 0 &&
+      opts.onRoundLimit
+    ) {
+      const granted = await opts.onRoundLimit(round - 1);
+      if (opts.signal.aborted) throw new DOMException("Aborted", "AbortError");
+      opts.onEvent({ kind: "round-limit", roundsUsed: round - 1, granted, at: Date.now() });
+      if (granted > 0) {
+        maxRounds += granted;
+        isLastRound = false;
+      }
+    }
+
     const withholdTools =
       preset.tools.length === 0 || (isLastRound && preset.finishPolicy === "force-text");
     if (isLastRound && preset.finishPolicy === "force-text" && preset.tools.length > 0) {
@@ -188,7 +227,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     opts.onEvent({
       kind: "round-start",
       round,
-      maxRounds: preset.maxRounds,
+      maxRounds,
       estInputTokens: estimateMessagesTokens(history),
       at: Date.now(),
     });
@@ -315,7 +354,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
   // for force-text presets (the last round withholds tools), but return usage
   // defensively rather than throwing away a completed run's accounting.
   return {
-    rounds: preset.maxRounds,
+    rounds: maxRounds,
     inputTokens: totalInputTokens,
     outputTokens: totalOutputTokens,
     cachedTokens: totalCachedTokens,

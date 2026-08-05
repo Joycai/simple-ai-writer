@@ -284,6 +284,95 @@ describe("runAgent", () => {
     // Neither tool call reached the executor — no tool-step events at all.
     expect(opts.events.some((e) => e.kind === "tool-step")).toBe(false);
   });
+
+  it("asks onRoundLimit at the cap and continues with the granted rounds", async () => {
+    // maxRounds 2: round 1 is a tool round, so entering round 2 (the would-be
+    // forced wrap-up) triggers the question. Granting 2 raises the cap to 4;
+    // round 2 keeps its tools and the model finishes on its own in round 3.
+    queueRound([
+      { toolCalls: [{ index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" }] },
+      { done: true, inputTokens: 1, outputTokens: 1 },
+    ]);
+    queueRound([
+      { toolCalls: [{ index: 0, id: "c2", name: "list_lore_entities", arguments: "{}" }] },
+      { done: true, inputTokens: 1, outputTokens: 1 },
+    ]);
+    queueRound([{ text: "done" }, { done: true, inputTokens: 1, outputTokens: 1 }]);
+    const asks: number[] = [];
+    const opts = makeOptions({
+      preset: { ...PRESET, maxRounds: 2 },
+      onRoundLimit: async (roundsUsed) => {
+        asks.push(roundsUsed);
+        return 2;
+      },
+    });
+
+    const result = await runAgent(opts);
+
+    expect(asks).toEqual([1]);
+    expect(result.rounds).toBe(3);
+    expect(last(opts.output)).toBe("done");
+    // Round 2 kept its tools — the forced-write instruction was never injected.
+    expect(
+      opts.messages.some((m) => String(m.content).includes("without calling any more tools")),
+    ).toBe(false);
+    expect(opts.events.filter((e) => e.kind === "round-limit")).toEqual([
+      expect.objectContaining({ roundsUsed: 1, granted: 2 }),
+    ]);
+    // The raised cap is visible in the log from round 2 onwards.
+    const starts = opts.events.filter(
+      (e): e is Extract<AgentEvent, { kind: "round-start" }> => e.kind === "round-start",
+    );
+    expect(starts.map((e) => e.maxRounds)).toEqual([2, 4, 4]);
+  });
+
+  it("keeps the forced wrap-up when onRoundLimit declines", async () => {
+    queueRound([
+      { toolCalls: [{ index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" }] },
+      { done: true, inputTokens: 1, outputTokens: 1 },
+    ]);
+    queueRound([{ text: "forced" }, { done: true, inputTokens: 2, outputTokens: 2 }]);
+    const opts = makeOptions({
+      preset: { ...PRESET, maxRounds: 2 },
+      onRoundLimit: async () => 0,
+    });
+
+    const result = await runAgent(opts);
+
+    expect(result.rounds).toBe(2);
+    expect(last(opts.output)).toBe("forced");
+    // The declined final round is exactly today's behaviour: tools withheld,
+    // write-now instruction injected.
+    expect(mockStream.mock.calls[1][0].tools).toBeUndefined();
+    expect(
+      opts.messages.some((m) => String(m.content).includes("without calling any more tools")),
+    ).toBe(true);
+    expect(opts.events.filter((e) => e.kind === "round-limit")).toEqual([
+      expect.objectContaining({ roundsUsed: 1, granted: 0 }),
+    ]);
+  });
+
+  it("aborts cleanly when the run is stopped while the round-limit question is open", async () => {
+    queueRound([
+      { toolCalls: [{ index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" }] },
+      { done: true, inputTokens: 1, outputTokens: 1 },
+    ]);
+    const controller = new AbortController();
+    const opts = makeOptions({
+      signal: controller.signal,
+      preset: { ...PRESET, maxRounds: 2 },
+      // rejectAll drains a pending question by resolving 0 as the run aborts —
+      // this models that: the abort lands before the "decision" resolves.
+      onRoundLimit: async () => {
+        controller.abort();
+        return 0;
+      },
+    });
+
+    await expect(runAgent(opts)).rejects.toMatchObject({ name: "AbortError" });
+    // No round-limit event: the run aborted rather than the author deciding.
+    expect(opts.events.some((e) => e.kind === "round-limit")).toBe(false);
+  });
 });
 
 describe("trimHistory", () => {

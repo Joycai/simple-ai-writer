@@ -1,0 +1,65 @@
+/* Round-cap decision card — the run is blocked on this choice. */
+
+.card {
+  border: 1px solid var(--color-border);
+  border-left: 2px solid var(--color-warning-text);
+  background: var(--color-bg-surface);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 7px var(--space-3);
+  border-bottom: 1px solid var(--color-border-soft);
+}
+.headerTitle {
+  font: 500 11px/1.5 var(--font-sans);
+  letter-spacing: 0.12em;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+.headerRounds {
+  margin-left: auto;
+  flex-shrink: 0;
+  font: 400 10px/1.5 var(--font-mono);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.body {
+  padding: var(--space-3);
+  font: 400 11px/1.7 var(--font-sans);
+  color: var(--color-text-muted);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--color-border-soft);
+}
+
+.btnFinish {
+  padding: 4px 12px;
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-secondary);
+  font: 500 11px/1.6 var(--font-sans);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.btnFinish:hover { color: var(--color-text-primary); border-color: var(--color-text-secondary); }
+
+.btnContinue {
+  padding: 4px 14px;
+  background: var(--color-sienna);
+  border: none;
+  color: var(--color-card);
+  font: 500 11px/1.6 var(--font-sans);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.btnContinue:hover { background: var(--color-sienna-hover); }

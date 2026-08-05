@@ -563,7 +563,9 @@
         "seededMemory": "recap {{chars}} chars",
         "seededLore": "{{entry}} retrieval",
         "seededLoreHits": "{{n}} matched",
-        "seededLoreNone": "no match"
+        "seededLoreNone": "no match",
+        "roundLimitGranted": "Round cap ({{n}}) reached — {{extra}} more granted",
+        "roundLimitStopped": "Round cap ({{n}}) reached — wrapping up"
       },
       "tool": {
         "list_lore_entities": "List {{entry}}",
@@ -610,6 +612,13 @@
       "approve": "Approve",
       "reject": "Reject",
       "rejectPlaceholder": "Reason (optional, fed back to the AI)"
+    },
+    "roundLimit": {
+      "title": "Round cap reached",
+      "rounds": "{{n}} rounds",
+      "body": "The agent has used {{n}} consecutive tool rounds and is not finished. Continue grants {{extra}} more; Wrap up makes it answer with what it has.",
+      "finish": "Wrap up",
+      "continue": "Continue (+{{n}} rounds)"
     },
     "plan": {
       "title": "{{entry}} plan awaiting approval",

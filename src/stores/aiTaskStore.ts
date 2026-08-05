@@ -451,6 +451,16 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             lorePlan: createPlanGate(),
           },
           signal: controller.signal,
+          // At the round cap, block on the AiPanel's 继续/收尾 card instead of
+          // force-ending. Skipped during a batch run: the batch modal covers
+          // the panel, and a card nobody can see would hang the whole sweep.
+          onRoundLimit: async (roundsUsed) => {
+            const { useBatchStore } = await import("./batchStore");
+            if (useBatchStore.getState().running) return 0;
+            return useAgentStore
+              .getState()
+              .requestRoundExtension(roundsUsed, preset!.maxRounds, controller);
+          },
           // Guarded: abort() resets isRunning/abortController synchronously,
           // without waiting for this run's in-flight promise to actually
           // unwind, so the author can already be a round or two into a new

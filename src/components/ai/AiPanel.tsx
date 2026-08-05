@@ -29,6 +29,7 @@ import { useAgentStore } from "../../stores/agentStore";
 import { AgentLog } from "./AgentLog";
 import { ApprovalCard } from "./ApprovalCard";
 import { PlanCard } from "./PlanCard";
+import { RoundLimitCard } from "./RoundLimitCard";
 import { useAiStore } from "../../stores/aiStore";
 import { useAppStore, LORE_BUDGET_MIN, LORE_BUDGET_MAX } from "../../stores/appStore";
 import { MAX_DRAFTS } from "../../lib/ai/drafts";
@@ -906,6 +907,7 @@ export function AiPanel() {
   const [agentMode, setAgentMode] = useState(false);
   const pendingApprovals = useAgentStore((s) => s.pending);
   const pendingPlans = useAgentStore((s) => s.pendingPlans);
+  const pendingRoundLimits = useAgentStore((s) => s.pendingRoundLimits);
   const outputRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -1664,12 +1666,16 @@ export function AiPanel() {
             />
           )}
 
-          {/* Pending lore plans + manuscript edits — the loop is blocked on these */}
+          {/* Pending lore plans + manuscript edits + round-cap questions — the
+              loop is blocked on these */}
           {pendingPlans.map((p) => (
             <PlanCard key={p.plan.id} plan={p.plan} />
           ))}
           {pendingApprovals.map((p) => (
             <ApprovalCard key={p.proposal.id} proposal={p.proposal} />
+          ))}
+          {pendingRoundLimits.map((p, i) => (
+            <RoundLimitCard key={i} item={p} />
           ))}
 
           {/* Execution log: run lifecycle, rounds, tool calls */}

@@ -68,6 +68,20 @@ interface PendingPlan {
   runId: RunId;
 }
 
+/**
+ * A run that hit its round cap mid-work, waiting for the author to choose:
+ * grant `extension` more rounds, or let it wrap up now. At most one per run —
+ * the runtime blocks on the answer, so a second can't queue behind the first.
+ */
+export interface PendingRoundLimit {
+  /** Tool rounds consumed so far. */
+  roundsUsed: number;
+  /** Extra rounds a 继续 grants (the preset's own cap again). */
+  extension: number;
+  resolve: (granted: number) => void;
+  runId: RunId;
+}
+
 export interface ChatTurn {
   id: string;
   role: "user" | "assistant";
@@ -90,6 +104,8 @@ interface AgentState {
   pending: PendingApproval[];
   /** Lore plans awaiting the author's decision — the loop is blocked on each. */
   pendingPlans: PendingPlan[];
+  /** Round-cap questions awaiting the author's decision — one per blocked run. */
+  pendingRoundLimits: PendingRoundLimit[];
 
   // ── Chat session ──
   turns: ChatTurn[];
@@ -110,6 +126,11 @@ interface AgentState {
   /** Drain both queues for one run (task aborted / finished) — resolves that
    *  run's own entries as rejected, leaving any other run's untouched. */
   rejectAll: (reason: string, runId: RunId) => void;
+
+  /** Called by the runtime's onRoundLimit when a run reaches its round cap. */
+  requestRoundExtension: (roundsUsed: number, extension: number, runId: RunId) => Promise<number>;
+  /** Resolve a blocked run's round-cap question: `granted` extra rounds (0 = wrap up). */
+  resolveRoundLimit: (runId: RunId, granted: number) => void;
 
   /** Called by propose_lore_plan (via ToolContext.requestPlanApproval). */
   requestPlanApproval: (plan: LorePlan, runId: RunId) => Promise<PlanDecision>;
@@ -228,6 +249,7 @@ async function applyProposal(proposal: Proposal): Promise<string | null> {
 export const useAgentStore = create<AgentState>((set, get) => ({
   pending: [],
   pendingPlans: [],
+  pendingRoundLimits: [],
 
   turns: [],
   chatRunning: false,
@@ -262,17 +284,34 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     item.resolve({ approved: false, reason });
   },
 
+  requestRoundExtension: (roundsUsed, extension, runId) =>
+    new Promise<number>((resolve) => {
+      set((s) => ({
+        pendingRoundLimits: [...s.pendingRoundLimits, { roundsUsed, extension, resolve, runId }],
+      }));
+    }),
+  resolveRoundLimit: (runId, granted) => {
+    const item = get().pendingRoundLimits.find((p) => p.runId === runId);
+    if (!item) return;
+    set((s) => ({ pendingRoundLimits: s.pendingRoundLimits.filter((p) => p.runId !== runId) }));
+    item.resolve(granted);
+  },
+
   rejectAll: (reason, runId) => {
-    const { pending, pendingPlans } = get();
+    const { pending, pendingPlans, pendingRoundLimits } = get();
     const drainP = pending.filter((p) => p.runId === runId);
     const drainL = pendingPlans.filter((p) => p.runId === runId);
-    if (drainP.length === 0 && drainL.length === 0) return;
+    const drainR = pendingRoundLimits.filter((p) => p.runId === runId);
+    if (drainP.length === 0 && drainL.length === 0 && drainR.length === 0) return;
     set({
       pending: pending.filter((p) => p.runId !== runId),
       pendingPlans: pendingPlans.filter((p) => p.runId !== runId),
+      pendingRoundLimits: pendingRoundLimits.filter((p) => p.runId !== runId),
     });
     for (const item of drainP) item.resolve({ approved: false, reason });
     for (const item of drainL) item.resolve({ approved: false, reason });
+    // 0 extra rounds = wrap up; the aborted signal is re-checked right after.
+    for (const item of drainR) item.resolve(0);
   },
 
   requestPlanApproval: (plan, runId) =>
@@ -447,6 +486,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           lorePlan: createPlanGate(),
         },
         signal: controller.signal,
+        // At the round cap, block on the author's 继续/收尾 card instead of
+        // force-ending. Each 继续 grants the preset's own cap again.
+        onRoundLimit: (roundsUsed) =>
+          get().requestRoundExtension(roundsUsed, AGENT_ASSIST_PRESET.maxRounds, controller),
         onEvent: (event) =>
           patchAssistant((tn) => ({ ...tn, log: appendAgentEventTo(tn.log, event) })),
         // Assign, not append — the runtime hands over the whole output each
