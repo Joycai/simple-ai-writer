@@ -110,7 +110,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
       }
 
       const systemBase = [
-        "You are a lore entity metadata curator for a fiction writing app.",
+        "You are a metadata curator for a writing workspace's knowledge base.",
         "Given an entity's current metadata, the body content of its index.md, and",
         "optionally its images, produce REFINED metadata fields — WITHOUT changing the body.",
         "Rules:",

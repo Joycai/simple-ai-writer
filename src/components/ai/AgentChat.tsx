@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { Send, Square, X } from "lucide-react";
 import { SnippetPicker } from "./SnippetPicker";
 import { renderMarkdown } from "../../lib/fs/markdown";
+import { useTerms } from "../../stores/projectStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
@@ -48,6 +49,7 @@ export function AgentChat() {
   const activeModelId = useAiStore((s) => s.activeModelId);
   const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId));
   const selection = useAiTaskStore((s) => s.selection);
+  const terms = useTerms();
 
   const [draft, setDraft] = useState("");
   // The selection is attached by default when one exists — that is nearly always
@@ -101,7 +103,9 @@ export function AgentChat() {
     <div className={styles.chat}>
       <div ref={messagesRef} className={styles.messages}>
         {turns.length === 0 && (
-          <div className={styles.emptyHint}>{t("ai.chat.emptyHint")}</div>
+          <div className={styles.emptyHint}>
+            {t("ai.chat.emptyHint", { doc: terms.doc, docs: terms.docs, kb: terms.kb })}
+          </div>
         )}
         {turns.map((turn) =>
           turn.role === "user" ? (

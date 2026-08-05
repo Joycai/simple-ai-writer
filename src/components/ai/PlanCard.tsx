@@ -16,6 +16,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { LorePlan, LorePlanAction } from "../../lib/agent/plan";
 import { useAgentStore } from "../../stores/agentStore";
+import { useTerms } from "../../stores/projectStore";
 import styles from "./PlanCard.module.css";
 
 const ACTION_STYLE: Record<LorePlanAction, string> = {
@@ -27,6 +28,7 @@ const ACTION_STYLE: Record<LorePlanAction, string> = {
 
 export function PlanCard({ plan }: { plan: LorePlan }) {
   const { t } = useTranslation();
+  const terms = useTerms();
   const { approvePlan, rejectPlan } = useAgentStore();
   const [rejectReason, setRejectReason] = useState("");
   const [deciding, setDeciding] = useState(false);
@@ -34,7 +36,7 @@ export function PlanCard({ plan }: { plan: LorePlan }) {
   return (
     <div className={styles.card}>
       <div className={styles.header}>
-        <span className={styles.headerTitle}>{t("ai.plan.title")}</span>
+        <span className={styles.headerTitle}>{t("ai.plan.title", { entry: terms.entry })}</span>
         <span className={styles.headerCount}>
           {t("ai.plan.stepCount", { count: plan.steps.length })}
         </span>

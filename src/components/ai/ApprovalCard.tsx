@@ -23,7 +23,8 @@ import type {
   Proposal,
 } from "../../lib/agent/registry";
 import { useAgentStore } from "../../stores/agentStore";
-import { useProjectStore } from "../../stores/projectStore";
+import { useProjectStore, useTerms } from "../../stores/projectStore";
+import type { ResolvedTerms } from "../../lib/profile";
 import styles from "./ApprovalCard.module.css";
 
 /** Above this, a new chapter's preview is clipped behind a toggle. */
@@ -39,16 +40,17 @@ function projectRelative(path: string): string {
 }
 
 /** Card title — what the author is being asked to authorise. */
-function headerTitle(proposal: Proposal, t: TFunction): string {
+function headerTitle(proposal: Proposal, t: TFunction, terms: ResolvedTerms): string {
+  const words = { doc: terms.doc, group: terms.group };
   switch (proposal.kind) {
     case "edit":
-      return t("ai.approval.title");
+      return t("ai.approval.title", words);
     case "create":
-      return t("ai.approval.titleCreate");
+      return t("ai.approval.titleCreate", words);
     case "move":
-      return proposal.isDir ? t("ai.approval.titleMoveVolume") : t("ai.approval.titleMove");
+      return proposal.isDir ? t("ai.approval.titleMoveVolume", words) : t("ai.approval.titleMove", words);
     case "delete":
-      return t("ai.approval.titleDelete");
+      return t("ai.approval.titleDelete", words);
   }
 }
 
@@ -95,10 +97,11 @@ function EditBody({ proposal }: { proposal: EditProposal }) {
  */
 function CreateBody({ proposal }: { proposal: CreateProposal }) {
   const { t } = useTranslation();
+  const terms = useTerms();
   const [expanded, setExpanded] = useState(false);
 
   if (!proposal.content.trim()) {
-    return <div className={styles.emptyNote}>{t("ai.approval.emptyChapter")}</div>;
+    return <div className={styles.emptyNote}>{t("ai.approval.emptyChapter", { doc: terms.doc })}</div>;
   }
   return (
     <>
@@ -154,6 +157,7 @@ function ProposalBody({ proposal }: { proposal: Proposal }) {
 
 export function ApprovalCard({ proposal }: { proposal: Proposal }) {
   const { t } = useTranslation();
+  const terms = useTerms();
   const { approve, reject } = useAgentStore();
   const [rejectReason, setRejectReason] = useState("");
   const [deciding, setDeciding] = useState(false);
@@ -163,7 +167,7 @@ export function ApprovalCard({ proposal }: { proposal: Proposal }) {
   return (
     <div className={styles.card}>
       <div className={styles.header}>
-        <span className={styles.headerTitle}>{headerTitle(proposal, t)}</span>
+        <span className={styles.headerTitle}>{headerTitle(proposal, t, terms)}</span>
         <span className={styles.headerFile} title={proposal.path}>{fileName}</span>
         <span className={styles.headerDelta}>{headerMeta(proposal, t)}</span>
       </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Bot, Sparkles, RotateCw, AlertTriangle, CheckCircle2 } from "lucide-react";
-import { useProjectStore } from "../../stores/projectStore";
+import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { slugifyEntityId, uniqueEntityId, readEntityFile, type CategoryId } from "../../lib/lore";
@@ -27,6 +27,7 @@ export function LoreGenerator({ onClose, onModeChange }: Props) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
   const { projectPath } = useProjectStore();
+  const terms = useTerms();
   const { models, providers, activeModelId, setActiveModel, prompts } = useAiStore();
   const { createNewEntity, scanProject } = useLoreStore();
   const loreIndex = useLoreStore((s) => s.index);
@@ -203,7 +204,7 @@ export function LoreGenerator({ onClose, onModeChange }: Props) {
           <div className={styles.headerLeft}>
             <div className={styles.headerIcon}><Bot size={20} strokeWidth={1.5} /></div>
             <div className={styles.headerText}>
-              <div className={styles.title}>{t("lore.generator.title")}</div>
+              <div className={styles.title}>{t("lore.generator.title", { entry: terms.entry })}</div>
               <div className={styles.subtitle}>{t("lore.generator.subtitle")}</div>
             </div>
           </div>
@@ -370,7 +371,7 @@ export function LoreGenerator({ onClose, onModeChange }: Props) {
               <button className={styles.btnPrimary} onClick={handleGenerate}
                 disabled={!activeModelId || !description.trim()}
                 style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <Sparkles size={14} /> {t("lore.generator.submitBtn")}
+                <Sparkles size={14} /> {t("lore.generator.submitBtn", { entry: terms.entry })}
               </button>
             </>
           )}

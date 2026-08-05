@@ -35,7 +35,7 @@ import { MAX_DRAFTS } from "../../lib/ai/drafts";
 import { focusBlockedByImage, useEditorStore, useWritingFocus } from "../../stores/editorStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useMemoryStore } from "../../stores/memoryStore";
-import { useDocModel, useProjectStore } from "../../stores/projectStore";
+import { useDocModel, useProjectStore, useSectionLabel, useTerms } from "../../stores/projectStore";
 import {
   locateAppendAnchor,
   profileSystemPrompt,
@@ -262,6 +262,7 @@ function useContextForecast(opts: {
 /** Stacked bar + legend + the 窗口占用 control that resizes the whole budget. */
 function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
   const { t } = useTranslation();
+  const terms = useTerms();
   const contextUtilization = useAppStore((s) => s.contextUtilization);
   const setContextUtilization = useAppStore((s) => s.setContextUtilization);
   const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId));
@@ -296,7 +297,7 @@ function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
                   key={seg.key}
                   className={`${styles.allocSeg} ${styles[`allocSeg_${seg.key}`]}`}
                   style={{ flexGrow: seg.chars }}
-                  title={`${t(LEGEND[seg.key].labelKey, { defaultValue: LEGEND[seg.key].fallback })} ≈ ${formatBudget(Math.round(seg.chars / forecast.charsPerToken))} tk`}
+                  title={`${t(LEGEND[seg.key].labelKey, { defaultValue: LEGEND[seg.key].fallback, entry: terms.entry })} ≈ ${formatBudget(Math.round(seg.chars / forecast.charsPerToken))} tk`}
                 />
               )
             ))}
@@ -305,7 +306,7 @@ function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
             {forecast.segments.map((seg) => (
               <span key={seg.key} className={styles.allocLegendItem}>
                 <span className={`${styles.allocSwatch} ${styles[`allocSeg_${seg.key}`]}`} />
-                {t(LEGEND[seg.key].labelKey, { defaultValue: LEGEND[seg.key].fallback })}
+                {t(LEGEND[seg.key].labelKey, { defaultValue: LEGEND[seg.key].fallback, entry: terms.entry })}
                 <span className={styles.allocLegendValue}>
                   {formatBudget(Math.round(seg.chars / forecast.charsPerToken))}
                 </span>
@@ -485,6 +486,8 @@ function LoreSection({
   charsPerToken: number;
 }) {
   const { t } = useTranslation();
+  const terms = useTerms();
+  const knowledgeLabel = useSectionLabel("knowledge");
   const loreBudgetTokens = useAppStore((s) => s.loreBudgetTokens);
   const setLoreBudgetTokens = useAppStore((s) => s.setLoreBudgetTokens);
   const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId));
@@ -518,7 +521,7 @@ function LoreSection({
   return (
     <div className={styles.section}>
       <SectionHead
-        label={t("ai.panel.continueLorePicker")}
+        label={t("ai.panel.continueLorePicker", { entry: terms.entry })}
         action={
           <div className={styles.chipGroup}>
             {LORE_BUDGET_OPTIONS.map((n) => (
@@ -529,6 +532,7 @@ function LoreSection({
                 title={t("ai.panel.loreBudgetHint", {
                   min: LORE_BUDGET_MIN,
                   max: LORE_BUDGET_MAX.toLocaleString(),
+                  knowledge: knowledgeLabel,
                 })}
               >
                 {formatBudget(n)}
@@ -547,8 +551,9 @@ function LoreSection({
               title={t("ai.panel.loreBudgetHint", {
                 min: LORE_BUDGET_MIN,
                 max: LORE_BUDGET_MAX.toLocaleString(),
+                knowledge: knowledgeLabel,
               })}
-              aria-label={t("ai.panel.loreBudget")}
+              aria-label={t("ai.panel.loreBudget", { entry: terms.entry })}
             />
           </div>
         }
@@ -556,14 +561,14 @@ function LoreSection({
 
       <input
         className={styles.searchInput}
-        placeholder={t("ai.panel.continueLoreSearch")}
+        placeholder={t("ai.panel.continueLoreSearch", { entry: terms.entry })}
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
 
       <div className={styles.loreList}>
         {entities.length === 0 ? (
-          <span className={styles.loreEmpty}>{t("ai.panel.continueLoreEmpty")}</span>
+          <span className={styles.loreEmpty}>{t("ai.panel.continueLoreEmpty", { entry: terms.entry })}</span>
         ) : (
           entities.map((entity) => {
             const facets = entity.facets ?? [];
@@ -629,7 +634,10 @@ function LoreSection({
 
       {loreCapped && (
         <div className={styles.warnLine}>
-          {t("ai.panel.loreBudgetStaticCap", { cap: STATIC_LORE_BUDGET_MAX_TOKENS.toLocaleString() })}
+          {t("ai.panel.loreBudgetStaticCap", {
+            cap: STATIC_LORE_BUDGET_MAX_TOKENS.toLocaleString(),
+            entry: terms.entry,
+          })}
         </div>
       )}
     </div>
@@ -643,6 +651,7 @@ function LoreReportSection({
   report, charsPerToken, onRaiseBudget,
 }: { report: LoreActivationReport; charsPerToken: number; onRaiseBudget: () => void }) {
   const { t } = useTranslation();
+  const terms = useTerms();
   const estTk = (chars: number) => Math.ceil(chars / charsPerToken);
 
   const dropReason = (reason: string) =>
@@ -657,7 +666,7 @@ function LoreReportSection({
   return (
     <div className={styles.resultSection}>
       <SectionHead
-        label={t("ai.panel.loreReportTitle")}
+        label={t("ai.panel.loreReportTitle", { entry: terms.entry })}
         meta={`${estTk(report.usedChars)} / ${estTk(report.budgetChars)} tk`}
       />
       {report.entities.length === 0 ? (
@@ -769,6 +778,9 @@ export function AiPanel() {
   const fileTree = useProjectStore((s) => s.fileTree);
   const memory = useMemoryStore((s) => s.memory);
   const docs = useDocModel();
+  const terms = useTerms();
+  const priorAllLabel = useSectionLabel("priorAll");
+  const priorRecapLabel = useSectionLabel("priorRecap");
   const draftCount = useAppStore((s) => s.draftCount);
   const setDraftCount = useAppStore((s) => s.setDraftCount);
   const loreBudgetTokens = useAppStore((s) => s.loreBudgetTokens);
@@ -1322,7 +1334,10 @@ export function AiPanel() {
                       <textarea
                         className={styles.textarea}
                         rows={4}
-                        placeholder={t(agentMode ? "ai.panel.agentInstruction" : "ai.panel.customInstruction")}
+                        placeholder={t(
+                          agentMode ? "ai.panel.agentInstruction" : "ai.panel.customInstruction",
+                          { doc: terms.doc, kb: terms.kb },
+                        )}
                         value={customInstr}
                         onChange={(e) => setCustomInstr(e.target.value)}
                       />
@@ -1340,11 +1355,13 @@ export function AiPanel() {
                             checked={agentMode}
                             onChange={(e) => setAgentMode(e.target.checked)}
                           />
-                          <span>{t("ai.panel.agentModeLabel")}</span>
+                          <span>{t("ai.panel.agentModeLabel", { kb: terms.kb })}</span>
                         </label>
                       )}
                       {agentMode && agentTask && (
-                        <div className={styles.hintLine}>{t("ai.panel.agentModeHint")}</div>
+                        <div className={styles.hintLine}>
+                          {t("ai.panel.agentModeHint", { kb: terms.kb, docs: terms.docs })}
+                        </div>
                       )}
                     </>
                   ) : isContinue ? (
@@ -1377,15 +1394,15 @@ export function AiPanel() {
                         </span>
                         <div className={styles.chipGroup}>
                           {([
-                            ["opening", "modeOpening", "开篇", "从本章开头写起，插在现有正文之前"],
-                            ["end", "modeEnd", "文末", "接在本章结尾，传统续写"],
+                            ["opening", "modeOpening", "开篇", "从本{{doc}}开头写起，插在现有正文之前"],
+                            ["end", "modeEnd", "文末", "接在本{{doc}}结尾，传统续写"],
                             ["expand", "modeExpand", "扩写选区", "从选区末尾往下写，插在该段之后"],
                           ] as const).map(([mode, key, label, hint]) => (
                             <button
                               key={mode}
                               className={`${styles.chip} ${continueMode === mode ? styles.chipActive : ""}`}
                               onClick={() => setPickedMode(mode)}
-                              title={t(`ai.panel.${key}Hint`, { defaultValue: hint })}
+                              title={t(`ai.panel.${key}Hint`, { defaultValue: hint, doc: terms.doc })}
                             >
                               {t(`ai.panel.${key}`, { defaultValue: label })}
                             </button>
@@ -1408,7 +1425,10 @@ export function AiPanel() {
                               className={`${styles.chip} ${openingMode === "standalone" ? styles.chipActive : ""}`}
                               onClick={() => setOpeningMode("standalone")}
                               title={t("ai.panel.openingStandaloneHint", {
-                                defaultValue: "不注入上一章原文，本章独立开头（全书前情与前情提要照常提供）",
+                                defaultValue: "不注入上一{{doc}}原文，本{{doc}}独立开头（{{priorAll}}与{{priorRecap}}照常提供）",
+                                doc: terms.doc,
+                                priorAll: priorAllLabel,
+                                priorRecap: priorRecapLabel,
                               })}
                             >
                               {t("ai.panel.openingStandalone", { defaultValue: "独立开篇" })}
@@ -1417,10 +1437,11 @@ export function AiPanel() {
                               className={`${styles.chip} ${openingMode === "bridge" ? styles.chipActive : ""}`}
                               onClick={() => setOpeningMode("bridge")}
                               title={t("ai.panel.openingBridgeHint", {
-                                defaultValue: "注入所选章节的结尾原文，用来衔接文风与情节",
+                                defaultValue: "注入所选{{doc}}的结尾原文，用来衔接文风与内容",
+                                doc: terms.doc,
                               })}
                             >
-                              {t("ai.panel.openingBridge", { defaultValue: "承接前一章" })}
+                              {t("ai.panel.openingBridge", { defaultValue: "承接前一{{doc}}", doc: terms.doc })}
                             </button>
                           </div>
                           {openingMode === "bridge" && (
@@ -1428,7 +1449,7 @@ export function AiPanel() {
                               className={styles.select}
                               value={bridgePath ?? ""}
                               onChange={(e) => setBridgePath(e.target.value || null)}
-                              aria-label={t("ai.panel.openingBridge", { defaultValue: "承接前一章" })}
+                              aria-label={t("ai.panel.openingBridge", { defaultValue: "承接前一{{doc}}", doc: terms.doc })}
                             >
                               {volumes.map((v) => {
                                 const options = v.chapters.filter((c) =>
@@ -1454,7 +1475,7 @@ export function AiPanel() {
                         <textarea
                           className={styles.extraTextarea}
                           rows={4}
-                          placeholder={t("ai.panel.continueOutlinePlaceholder")}
+                          placeholder={t("ai.panel.continueOutlinePlaceholder", { doc: terms.doc })}
                           value={outline}
                           onChange={(e) => setOutline(e.target.value)}
                         />
@@ -1466,7 +1487,7 @@ export function AiPanel() {
                         <textarea
                           className={styles.extraTextarea}
                           rows={4}
-                          placeholder={t("ai.panel.continueExtraKnowledgePlaceholder")}
+                          placeholder={t("ai.panel.continueExtraKnowledgePlaceholder", { kb: terms.kb })}
                           value={additionalKnowledge}
                           onChange={(e) => setAdditionalKnowledge(e.target.value)}
                         />
@@ -1769,7 +1790,8 @@ export function AiPanel() {
           <span className={styles.statusSep}>|</span>
           <span>
             {t("ai.panel.chapterChars", {
-              defaultValue: "本章 {{chars}} 字",
+              defaultValue: "本{{doc}} {{chars}} 字",
+              doc: terms.doc,
               chars: content.length.toLocaleString(),
             })}
           </span>
@@ -1778,8 +1800,9 @@ export function AiPanel() {
               <span className={styles.statusSep}>|</span>
               <span>
                 {t("ai.panel.pinnedLoreCount", {
-                  defaultValue: "引用 {{n}} 设定",
+                  defaultValue: "引用 {{n}} {{entry}}",
                   n: pinnedCount,
+                  entry: terms.entry,
                 })}
               </span>
             </>

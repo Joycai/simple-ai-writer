@@ -103,13 +103,13 @@ export function LoreImproveModal({ entity, onClose }: Props) {
         "You may call list_lore_entities / read_lore_entity first to consult related lore for consistency.";
       const systemPrompt = isFacet
         ? [
-            "You are a lore writing assistant improving ONE facet of a lore entity.",
+            "You are a knowledge-base writing assistant improving ONE facet of a knowledge-base entry.",
             toolHint,
             "Return the COMPLETE updated facet body as rich markdown prose.",
             "Output ONLY the body — no YAML frontmatter, no code fences, no explanation.",
           ].join("\n")
         : [
-            "You are a lore writing assistant improving an existing lore entity document.",
+            "You are a knowledge-base writing assistant improving an existing entry document.",
             toolHint,
             "Return the COMPLETE updated index.md file content, starting with a YAML frontmatter block (---) containing: name, aliases (as YAML list), category, and summary.",
             "The body after the frontmatter should be rich markdown prose using ## headers.",

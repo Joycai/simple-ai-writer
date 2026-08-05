@@ -14,7 +14,7 @@
  * every project created before profiles existed — behaves as it always did.
  */
 
-import { NOVEL_PROFILE, type DocModel, type ProfileCategory, type SectionId, type TaskDef, type WorkspaceProfile, DEFAULT_SECTION_LABELS } from "./model";
+import { NOVEL_PROFILE, profileTerms, type DocModel, type ProfileCategory, type SectionId, type TaskDef, type WorkspaceProfile, DEFAULT_SECTION_LABELS } from "./model";
 
 let active: WorkspaceProfile = NOVEL_PROFILE;
 
@@ -87,6 +87,33 @@ export function defaultCategoryId(): string {
 /** Author-facing label for a prompt context block, per the active profile. */
 export function sectionLabel(id: SectionId): string {
   return active.sections[id] ?? DEFAULT_SECTION_LABELS[id];
+}
+
+/**
+ * Interpolation params for the built-in instruction templates: the active
+ * profile's UI terms plus its 【…】 block labels. Passed wherever an
+ * `ai.instructions.*` key is resolved, so a template can say
+ * "【{{knowledge}}】中出现的名称" and read 【企业知识库】 in a bid project.
+ * `isZh` comes from the caller because this module deliberately doesn't import
+ * i18n (see the header comment).
+ */
+export function promptParams(isZh: boolean): Record<string, string> {
+  const terms = profileTerms(active, isZh);
+  return {
+    doc: terms.doc,
+    docs: terms.docs,
+    group: terms.group,
+    kb: terms.kb,
+    entry: terms.entry,
+    entries: terms.entries,
+    knowledge: sectionLabel("knowledge"),
+    outlineSection: sectionLabel("outline"),
+    prevTail: sectionLabel("prevTail"),
+    priorAll: sectionLabel("priorAll"),
+    priorRecap: sectionLabel("priorRecap"),
+    recent: sectionLabel("recent"),
+    selection: sectionLabel("selection"),
+  };
 }
 
 /**

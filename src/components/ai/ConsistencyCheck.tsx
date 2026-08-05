@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Wand2, CheckCircle2 } from "lucide-react";
+import { useTerms } from "../../stores/projectStore";
 import styles from "./ConsistencyCheck.module.css";
 
 type Severity = "conflict" | "warning" | "pass";
@@ -22,6 +23,7 @@ interface Issue {
  */
 export function ConsistencyCheck() {
   const { t } = useTranslation();
+  const terms = useTerms();
   const [filter, setFilter] = useState<"all" | "character" | "place" | "item" | "time">("all");
   const [issues] = useState<Issue[]>([]); // populated by future scan action
 
@@ -64,7 +66,9 @@ export function ConsistencyCheck() {
             </div>
             <div className={styles.emptyText}>
               {t("ai.consistency.emptyText", {
-                defaultValue: "AI 会对照设定库核对本章的人物、地点、物品、时序，列出冲突与提醒。",
+                defaultValue: "AI 会对照{{kb}}核对本{{doc}}的名称、事实与时序，列出冲突与提醒。",
+                kb: terms.kb,
+                doc: terms.doc,
               })}
             </div>
             <button className={styles.emptyBtn}>

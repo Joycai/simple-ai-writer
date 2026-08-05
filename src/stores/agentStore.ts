@@ -39,7 +39,7 @@ import { backupFile } from "../lib/agent/backup";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import { createPlanGate, type LorePlan, type PlanDecision } from "../lib/agent/plan";
 import { parentDir } from "../lib/context/outline";
-import { docModel } from "../lib/profile/active";
+import { docModel, promptParams } from "../lib/profile/active";
 import type { ApprovalDecision, EditProposal, Proposal } from "../lib/agent/registry";
 import type { StreamMessage } from "../lib/ai/types";
 import { readFile, writeFile } from "../lib/fs/fileio";
@@ -363,7 +363,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // as a task-layer instruction it decayed after turn one — the author's
         // "去执行" then landed in a context whose only standing instruction was a
         // prose-writing prompt, and the assistant kept answering with plans.
-        const systemPrompt = `${writingPrompt}\n\n${i18n.t("ai.instructions.agent")}`;
+        const systemPrompt = `${writingPrompt}\n\n${i18n.t("ai.instructions.agent", promptParams(i18n.language === "zh-CN"))}`;
         const documentText = focus.text;
         // Follows the profile, like the panel's tasks do: a project whose
         // documents don't use rolling memory has none to inject.
