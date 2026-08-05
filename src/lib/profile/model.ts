@@ -71,6 +71,31 @@ export interface DocModel {
 }
 
 /**
+ * The UI-side domain vocabulary. `sections` names the 【…】 blocks inside the
+ * prompt; this names the same concepts *on screen* — the sidebar stats, the
+ * outline view, the knowledge-base title. Without it every profile is narrated
+ * in novel words (章/卷/设定库) no matter what the author is writing.
+ *
+ *   - `doc`         what one document is called: 章节 / 场景 / 周报 / 文档…
+ *   - `group`       what a folder of them is called: 卷 / 章 / 分组
+ *   - `kb`          the knowledge base's display name: 设定库 / 企业知识库…
+ *   - `entry`       one knowledge-base entry, in counts and chips: 设定 / 条目
+ *   - `filesHeader` the sidebar file-panel header: "MANUSCRIPT · 正文"…
+ *   - `emptyEyebrow` the decorative eyebrow on an empty document: "章 一 · CHAPTER ONE"…
+ */
+export type TermId = "doc" | "group" | "kb" | "entry" | "filesHeader" | "emptyEyebrow";
+
+/**
+ * One term, per language. English needs a plural for count contexts
+ * ("3 chapters"); `enPlural` defaults to `en + "s"`. Chinese has no plural.
+ */
+export interface TermLabel {
+  zh: string;
+  en: string;
+  enPlural?: string;
+}
+
+/**
  * Which tool set a task runs on. Resolved to a concrete preset by
  * `lib/agent/presets`; kept as a small enum here so a profile never has to
  * name a preset object.
@@ -180,6 +205,11 @@ export interface WorkspaceProfile {
    * produces a complete prompt.
    */
   sections: Partial<Record<SectionId, string>>;
+  /**
+   * UI-vocabulary overrides. Same contract as `sections`: anything absent falls
+   * back to `DEFAULT_TERMS` (the novel wording) via `profileTerms`.
+   */
+  terms: Partial<Record<TermId, TermLabel>>;
   /** Which novel-shaped document machinery applies — see `DocModel`. */
   docModel: DocModel;
   /** i18n key of the system prompt used when no prompt is explicitly active. */
@@ -288,6 +318,57 @@ export const DEFAULT_SECTION_LABELS: Record<SectionId, string> = {
   currentFile: "当前文件",
 };
 
+/**
+ * Fallback wording for every UI term — the novel vocabulary, for the same
+ * reason `DEFAULT_SECTION_LABELS` is: `NOVEL_PROFILE.terms` stays empty and a
+ * malformed profile.json still renders a coherent UI.
+ */
+export const DEFAULT_TERMS: Record<TermId, TermLabel> = {
+  doc: { zh: "章节", en: "chapter" },
+  group: { zh: "卷", en: "volume" },
+  kb: { zh: "设定库", en: "Lore" },
+  entry: { zh: "设定", en: "lore entry", enPlural: "lore entries" },
+  filesHeader: { zh: "MANUSCRIPT · 正文", en: "MANUSCRIPT" },
+  emptyEyebrow: { zh: "章 一 · CHAPTER ONE", en: "CHAPTER ONE" },
+};
+
+/**
+ * The terms in one UI language, plurals included. What components consume —
+ * see `useTerms()` in stores/projectStore.
+ */
+export interface ResolvedTerms {
+  doc: string;
+  docs: string;
+  group: string;
+  groups: string;
+  kb: string;
+  entry: string;
+  entries: string;
+  filesHeader: string;
+  emptyEyebrow: string;
+}
+
+/** Resolve a profile's terms for one language, falling back to `DEFAULT_TERMS`. */
+export function profileTerms(profile: WorkspaceProfile, isZh: boolean): ResolvedTerms {
+  const get = (id: TermId): TermLabel => profile.terms[id] ?? DEFAULT_TERMS[id];
+  const one = (id: TermId): string => (isZh ? get(id).zh : get(id).en);
+  const many = (id: TermId): string => {
+    const term = get(id);
+    return isZh ? term.zh : term.enPlural ?? `${term.en}s`;
+  };
+  return {
+    doc: one("doc"),
+    docs: many("doc"),
+    group: one("group"),
+    groups: many("group"),
+    kb: one("kb"),
+    entry: one("entry"),
+    entries: many("entry"),
+    filesHeader: one("filesHeader"),
+    emptyEyebrow: one("emptyEyebrow"),
+  };
+}
+
 /** 小说 — the original (and default) profile. */
 export const NOVEL_PROFILE: WorkspaceProfile = {
   id: "novel",
@@ -303,6 +384,7 @@ export const NOVEL_PROFILE: WorkspaceProfile = {
     { id: "custom", labelZh: "自定义", labelEn: "Custom" },
   ],
   sections: {},
+  terms: {},
   docModel: DEFAULT_DOC_MODEL,
   tasks: [...DEFAULT_TASKS],
   systemPromptKey: "ai.instructions.system",
@@ -337,6 +419,14 @@ export const TTRPG_PROFILE: WorkspaceProfile = {
     outline: "大纲/推进方向",
     priorAll: "全模组前情",
     prevTail: "上一场景结尾",
+  },
+  terms: {
+    doc: { zh: "场景", en: "scene" },
+    group: { zh: "章", en: "chapter" },
+    kb: { zh: "模组资料", en: "Module Library" },
+    entry: { zh: "资料", en: "entry", enPlural: "entries" },
+    filesHeader: { zh: "MODULE · 模组", en: "MODULE" },
+    emptyEyebrow: { zh: "场景 一 · SCENE ONE", en: "SCENE ONE" },
   },
   // Scenes run in order and earlier ones are context for later ones, so the
   // whole spine/memory machinery carries over unchanged.
@@ -403,6 +493,14 @@ export const COPY_PROFILE: WorkspaceProfile = {
     outline: "写作要求",
     recent: "当前文案",
   },
+  terms: {
+    doc: { zh: "文案", en: "piece" },
+    group: { zh: "分组", en: "group" },
+    kb: { zh: "品牌库", en: "Brand Library" },
+    entry: { zh: "资料", en: "entry", enPlural: "entries" },
+    filesHeader: { zh: "COPY · 文案", en: "COPY" },
+    emptyEyebrow: { zh: "新篇 · NEW PIECE", en: "NEW PIECE" },
+  },
   docModel: { ordered: false, priorContext: false, memory: false },
   // 续写 is dropped: a headline has nothing to continue from. The rest of the
   // shared set still applies to a piece of copy being edited.
@@ -467,6 +565,14 @@ export const WEEKLY_PROFILE: WorkspaceProfile = {
     prevTail: "上期周报",
     recent: "当前草稿",
   },
+  terms: {
+    doc: { zh: "周报", en: "report" },
+    group: { zh: "分组", en: "group" },
+    kb: { zh: "背景库", en: "Context Library" },
+    entry: { zh: "资料", en: "entry", enPlural: "entries" },
+    filesHeader: { zh: "REPORTS · 周报", en: "REPORTS" },
+    emptyEyebrow: { zh: "本期 · THIS WEEK", en: "THIS WEEK" },
+  },
   docModel: { ordered: true, priorContext: true, memory: false },
   tasks: [
     ...DEFAULT_TASKS.filter((t) => t.id !== "continue"),
@@ -527,6 +633,14 @@ export const FEEDBACK_PROFILE: WorkspaceProfile = {
     knowledge: "背景资料",
     outline: "报告要求",
     recent: "当前报告",
+  },
+  terms: {
+    doc: { zh: "报告", en: "report" },
+    group: { zh: "分组", en: "group" },
+    kb: { zh: "背景库", en: "Context Library" },
+    entry: { zh: "资料", en: "entry", enPlural: "entries" },
+    filesHeader: { zh: "REPORTS · 报告", en: "REPORTS" },
+    emptyEyebrow: { zh: "报告 · REPORT", en: "REPORT" },
   },
   // Each report is independent: no order, nothing precedes one, and a report is
   // short enough to hold whole.
@@ -593,6 +707,14 @@ export const BID_PROFILE: WorkspaceProfile = {
     knowledge: "企业知识库",
     outline: "应答大纲",
     recent: "当前应答",
+  },
+  terms: {
+    doc: { zh: "文档", en: "document" },
+    group: { zh: "分组", en: "group" },
+    kb: { zh: "企业知识库", en: "Knowledge Base" },
+    entry: { zh: "条目", en: "entry", enPlural: "entries" },
+    filesHeader: { zh: "DOCUMENTS · 应答", en: "DOCUMENTS" },
+    emptyEyebrow: { zh: "应答 · RESPONSE", en: "RESPONSE" },
   },
   // A response document mirrors the tender's numbered structure, so the spine
   // is real — but each item stands alone: nothing "precedes" one, and a single
@@ -725,6 +847,7 @@ const MAX_SECTION_LABEL_CHARS = 20;
 
 const SECTION_IDS = Object.keys(DEFAULT_SECTION_LABELS) as SectionId[];
 const DOC_MODEL_KEYS = Object.keys(DEFAULT_DOC_MODEL) as (keyof DocModel)[];
+const TERM_IDS = Object.keys(DEFAULT_TERMS) as TermId[];
 
 function cleanLabel(value: unknown, max: number): string | null {
   if (typeof value !== "string") return null;
@@ -980,6 +1103,41 @@ export function parseProfile(data: unknown, fallback: WorkspaceProfile): ParsedP
     issues.push("`sections` is not an object");
   }
 
+  // Terms layer over the fallback's for the same reason sections do — an
+  // unnamed term falls through `profileTerms` to `DEFAULT_TERMS`, which are the
+  // novel words, so replacing wholesale would re-introduce the mislabelling.
+  // A term needs both languages to be usable: half a term would show the novel
+  // word in one language and the profile's in the other.
+  const terms: Partial<Record<TermId, TermLabel>> = { ...fallback.terms };
+  if (rec.terms && typeof rec.terms === "object" && !Array.isArray(rec.terms)) {
+    const rawTerms = rec.terms as Record<string, unknown>;
+    for (const key of Object.keys(rawTerms)) {
+      if (!TERM_IDS.includes(key as TermId)) {
+        issues.push(`unknown term "${key}"`);
+        continue;
+      }
+      const raw = rawTerms[key];
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+        issues.push(`term "${key}" is not an object`);
+        continue;
+      }
+      const termRec = raw as Record<string, unknown>;
+      const zh = cleanLabel(termRec.zh, MAX_LABEL_CHARS);
+      const en = cleanLabel(termRec.en, MAX_LABEL_CHARS);
+      if (!zh || !en) {
+        issues.push(`term "${key}" needs both zh and en labels`);
+        continue;
+      }
+      const term: TermLabel = { zh, en };
+      const enPlural = cleanLabel(termRec.enPlural, MAX_LABEL_CHARS);
+      if (enPlural) term.enPlural = enPlural;
+      else if (termRec.enPlural !== undefined) issues.push(`term "${key}" has an unusable enPlural`);
+      terms[key as TermId] = term;
+    }
+  } else if (rec.terms !== undefined) {
+    issues.push("`terms` is not an object");
+  }
+
   // docModel layers over the fallback's for the same reason sections do: a file
   // turning one flag off must keep that profile's answer for the other two.
   // Only real booleans count — a truthy string like "false" flipping a feature on
@@ -1029,6 +1187,7 @@ export function parseProfile(data: unknown, fallback: WorkspaceProfile): ParsedP
       categories,
       tasks,
       sections,
+      terms,
       docModel,
       systemPromptKey,
     },

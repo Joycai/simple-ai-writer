@@ -8,13 +8,16 @@ import {
   resetDb,
   type FileNode,
 } from "../lib/project";
+import { useMemo } from "react";
 import {
   loadProfile,
+  profileTerms,
   resetActiveProfile,
   saveProfile,
   setActiveProfile,
   NOVEL_PROFILE,
   type DocModel,
+  type ResolvedTerms,
   type WorkspaceProfile,
 } from "../lib/profile";
 import { backupFile } from "../lib/agent/backup";
@@ -296,6 +299,19 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
  */
 export function useDocModel(): DocModel {
   return useProjectStore((s) => s.profile.docModel);
+}
+
+/**
+ * The active profile's UI vocabulary in the active language — what a component
+ * calls a document, a folder of them, the knowledge base. Same reactivity
+ * contract as `useDocModel`; non-React code resolves `profileTerms` against the
+ * singleton itself. Memoised so consumers can use the object in dependency
+ * arrays without re-firing every render.
+ */
+export function useTerms(): ResolvedTerms {
+  const profile = useProjectStore((s) => s.profile);
+  const language = useAppStore((s) => s.language);
+  return useMemo(() => profileTerms(profile, language === "zh-CN"), [profile, language]);
 }
 
 /**

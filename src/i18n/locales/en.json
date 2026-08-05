@@ -8,8 +8,9 @@
     "unsavedConfirm": "You have unsaved changes that will be lost. Close anyway?"
   },
   "outline": {
-    "empty": "No volume/chapter structure found — create sub-folders under writing/ to organize volumes",
-    "reorderHint": "Click to select, double-click to open; reorder within a volume via buttons or drag",
+    "empty": "No {{group}}/{{doc}} structure found — create sub-folders under writing/ to organize {{group}}s",
+    "reorderHint": "Click to select a {{doc}}, double-click to open; reorder within a {{group}} via buttons or drag",
+    "subtitle": "{{count}} {{docs}} · {{words}} words",
     "moveTop": "Move to top",
     "moveUp": "Move up",
     "moveDown": "Move down",
@@ -24,18 +25,28 @@
     "summaryModel": "Summary model",
     "summaryModelHint": "Model used to generate story-memory summaries",
     "noModel": "No model",
-    "newVolume": "New volume",
-    "volumeNamePlaceholder": "Volume name",
-    "deleteVolume": "Delete volume",
-    "deleteVolumeConfirm": "Delete this volume? Only empty volumes can be deleted.",
+    "newVolume": "New {{group}}",
+    "volumeNamePlaceholder": "{{group}} name",
+    "deleteVolume": "Delete {{group}}",
+    "deleteVolumeConfirm": "Delete this {{group}}? Only an empty {{group}} can be deleted.",
     "selectedCount": "{{count}} selected",
-    "moveToVolume": "Move to volume…",
+    "moveToVolume": "Move to {{group}}…",
     "clearSelection": "Clear",
-    "emptyVolume": "Empty volume",
-    "emptyVolumeHint": "Select chapters and move them here",
-    "openChapter": "Open chapter",
+    "emptyVolume": "Empty {{group}}",
+    "emptyVolumeHint": "Select a {{doc}} and move it here",
+    "openChapter": "Open {{doc}}",
     "markWriting": "Mark as in-progress",
-    "unmarkWriting": "Clear in-progress"
+    "unmarkWriting": "Clear in-progress",
+    "writingBadge": "WIP",
+    "tabCards": "{{doc}} cards",
+    "tabTimeline": "Timeline",
+    "tabBoard": "Board",
+    "aiSuggestNext": "AI: next {{doc}}",
+    "wordsUnit": "words",
+    "statDone": "Done {{n}}",
+    "statWriting": "Writing {{n}}",
+    "avgPrefix": "avg",
+    "avgSuffix": "words / {{doc}}"
   },
   "sidebar": {
     "files": "Files",
@@ -46,10 +57,7 @@
     "outlineFull": "Outline Full",
     "settings": "Settings",
     "project": "PROJECT",
-    "manuscript": "MANUSCRIPT",
-    "drafts": "DRAFTS",
-    "notes": "NOTES",
-    "projectSearch": "Search manuscript & lore"
+    "projectSearch": "Search documents & {{entries}}"
   },
   "titleBar": {
     "modified": "modified",
@@ -78,10 +86,8 @@
     "toEnd": "Jump to end"
   },
   "command": {
-    "scopeLore": "/ Lore",
-    "noResults": "No matches",
-    "loreGroup": "Lore · {{n}} items",
-    "openHint": "↗ Open",
+    "noResults": "No results",
+    "loreGroup": "{{entries}} · {{n}}",
     "textGroup": "Manuscript · {{n}} matches",
     "line": "Line {{n}}",
     "aiGroup": "AI · Actions",
@@ -97,16 +103,15 @@
   "empty": {
     "firstLine": "Write your first line here",
     "ornament": "— · —",
-    "hint1": "The first sentence is always the hardest. Begin with a scene, a line of dialogue, a name.",
+    "hint1": "The first sentence is always the hardest. Start with the part you already know.",
     "hint2": "You don't have to be perfect now. Manuscript will always be here.",
     "dontKnow": "Don't know where to begin?",
     "letAi": "Let AI give you an opening · {{mod}} K",
     "tipCmdkLabel": "{{mod}} K",
     "tipCmdk": "Summon AI anytime — jump, continue, ask",
-    "tipBrackets": "Tag lore with double brackets — auto-indexed",
+    "tipBrackets": "Tag {{entries}} with double brackets — auto-added to {{kb}}",
     "tipSaveLabel": "{{mod}} S",
-    "tipSave": "Auto-saves to your local folder",
-    "chapterEyebrow": "CHAPTER ONE"
+    "tipSave": "Auto-saves to your local folder"
   },
   "rightPanel": {
     "outline": "Outline",
@@ -783,6 +788,7 @@
     }
   },
   "lore": {
+    "wallStats": "{{n}} {{entries}} · {{r}} links",
     "generator": {
       "title": "AI Generate Lore Entry",
       "subtitle": "Paste description document, reference images, let AI automatically build lore entries",

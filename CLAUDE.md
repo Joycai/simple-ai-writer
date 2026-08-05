@@ -76,7 +76,9 @@ All AI features run on the **unified agent runtime** (`src/lib/agent/runtime.ts`
 
 The project is not hardcoded to novels. A per-project **profile** (`.ai-writer/profile.json`, absent = the built-in `novel` one) declares the knowledge-base categories, its **task list** (each task = a prompt + a tool set, so a profile can offer any number of them), the 【…】 block labels used in the assembled prompt, the fallback system prompt, and a **`docModel`** — whether the documents form an ordered spine, carry prior-document context, or use rolling memory. Turning those off removes the injected context *and* the UI that configures it, so supporting another kind of writing (跑团模组, 文案, 周报…) is a data addition, not new branches. Built-ins (`novel`, `ttrpg`, `copy`, `weekly`, `feedback`, `bid`) live in `src/lib/profile/model.ts`; the author switches via Settings → 工作台.
 
-Three rules when touching this: components read flags via `useDocModel()` (the singleton isn't reactive); **never** resolve a system prompt with `ai.instructions.system` — call `profileSystemPrompt()`, or a non-novel project gets novel instructions; and resolve a task with `findTask()` and handle the null, because a task id can outlive the profile that defined it. Recipe: `docs/workflows.md` → Add a new workspace profile.
+Profiles also declare a UI **`terms`** vocabulary (what a document/group/knowledge base is *called* on screen: 章节/卷/设定库 vs 文档/分组/企业知识库) — components read it via `useTerms()` and pass the words into parametrized i18n strings, so never hardcode 章/卷/设定 in a component or an i18n value.
+
+Four rules when touching this: components read flags via `useDocModel()` and wording via `useTerms()` (the singleton isn't reactive); **never** resolve a system prompt with `ai.instructions.system` — call `profileSystemPrompt()`, or a non-novel project gets novel instructions; and resolve a task with `findTask()` and handle the null, because a task id can outlive the profile that defined it. Recipe: `docs/workflows.md` → Add a new workspace profile.
 
 ### Project Structure
 

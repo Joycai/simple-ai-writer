@@ -8,8 +8,9 @@
     "unsavedConfirm": "有尚未保存的更改，关闭后将丢失。确定关闭吗？"
   },
   "outline": {
-    "empty": "未发现卷/章节结构 — 在 writing/ 下创建子文件夹来组织卷",
-    "reorderHint": "单击选中章节，双击打开；用按钮或拖拽在卷内排序",
+    "empty": "未发现{{group}}/{{doc}}结构 — 在 writing/ 下创建子文件夹来组织{{group}}",
+    "reorderHint": "单击选中{{doc}}，双击打开；用按钮或拖拽在{{group}}内排序",
+    "subtitle": "{{count}} {{docs}} · {{words}} 字",
     "moveTop": "置顶",
     "moveUp": "上移",
     "moveDown": "下移",
@@ -24,18 +25,28 @@
     "summaryModel": "摘要模型",
     "summaryModelHint": "用于生成前情摘要的模型",
     "noModel": "无可用模型",
-    "newVolume": "新建卷",
-    "volumeNamePlaceholder": "卷名称",
-    "deleteVolume": "删除卷",
-    "deleteVolumeConfirm": "确定删除该卷？仅空卷可删。",
-    "selectedCount": "已选 {{count}} 章",
-    "moveToVolume": "移动到卷…",
+    "newVolume": "新建{{group}}",
+    "volumeNamePlaceholder": "{{group}}名称",
+    "deleteVolume": "删除{{group}}",
+    "deleteVolumeConfirm": "确定删除该{{group}}？仅空{{group}}可删。",
+    "selectedCount": "已选 {{count}} 个{{doc}}",
+    "moveToVolume": "移动到{{group}}…",
     "clearSelection": "清除选择",
-    "emptyVolume": "空卷",
-    "emptyVolumeHint": "选中章节后移动到此卷",
-    "openChapter": "打开章节",
+    "emptyVolume": "空{{group}}",
+    "emptyVolumeHint": "选中{{doc}}后移动到此{{group}}",
+    "openChapter": "打开{{doc}}",
     "markWriting": "标记为在写",
-    "unmarkWriting": "取消在写标记"
+    "unmarkWriting": "取消在写标记",
+    "writingBadge": "在写",
+    "tabCards": "{{doc}}卡",
+    "tabTimeline": "时间线",
+    "tabBoard": "看板",
+    "aiSuggestNext": "AI 建议下一{{doc}}",
+    "wordsUnit": "字",
+    "statDone": "完 {{n}}",
+    "statWriting": "在写 {{n}}",
+    "avgPrefix": "平均",
+    "avgSuffix": "字 / {{doc}}"
   },
   "sidebar": {
     "files": "文件",
@@ -46,10 +57,7 @@
     "outlineFull": "大纲 · 全图",
     "settings": "设置",
     "project": "PROJECT",
-    "manuscript": "MANUSCRIPT · 正文",
-    "drafts": "DRAFTS · 草稿",
-    "notes": "NOTES · 笔记",
-    "projectSearch": "搜索文稿与设定"
+    "projectSearch": "搜索文稿与{{entries}}"
   },
   "titleBar": {
     "modified": "已修改",
@@ -78,10 +86,8 @@
     "toEnd": "跳到结尾"
   },
   "command": {
-    "scopeLore": "/ 设定",
     "noResults": "无匹配结果",
-    "loreGroup": "设定 · {{n}} 项",
-    "openHint": "↗ 打开",
+    "loreGroup": "{{entries}} · {{n}} 项",
     "textGroup": "正文 · {{n}} 处",
     "line": "第 {{n}} 行",
     "aiGroup": "AI · 操作",
@@ -97,16 +103,15 @@
   "empty": {
     "firstLine": "在这里写下你的第一行",
     "ornament": "— · —",
-    "hint1": "第一句永远是最难的。可以从一个场景、一句对话、一个名字开始。",
+    "hint1": "第一句永远是最难的。从你已经想清楚的那部分写起。",
     "hint2": "你不需要现在就完美。Manuscript 会一直在这里。",
     "dontKnow": "不知道从哪开始？",
     "letAi": "让 AI 给你一个开头 · {{mod}} K",
     "tipCmdkLabel": "{{mod}} K",
     "tipCmdk": "任何时候召唤 AI · 跳转、续写、问问题",
-    "tipBrackets": "双方括号标设定 · 自动入设定库",
+    "tipBrackets": "双方括号标{{entry}} · 自动入{{kb}}",
     "tipSaveLabel": "{{mod}} S",
-    "tipSave": "自动保存到本地",
-    "chapterEyebrow": "章 一 · CHAPTER ONE"
+    "tipSave": "自动保存到本地"
   },
   "rightPanel": {
     "outline": "大纲",
@@ -781,6 +786,7 @@
     }
   },
   "lore": {
+    "wallStats": "{{n}} 条 · {{r}} 关系",
     "generator": {
       "title": "AI 生成设定条目",
       "subtitle": "粘贴描述文档，引用参考图片，让 AI 自动构建世界观条目",
