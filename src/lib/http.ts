@@ -3,12 +3,27 @@
  *
  * Inside the Tauri app this is `@tauri-apps/plugin-http`'s fetch: the request is
  * sent from the Rust side (reqwest) so it is not subject to webview CORS. The
- * plugin does, however, forward the webview's Origin header — `tauri.localhost`
- * in the packaged app, `localhost:1420` under `pnpm tauri dev`. Local servers
- * like Ollama gate on this: their default OLLAMA_ORIGINS allowlist accepts
- * `localhost` but not `tauri.localhost`, so the built exe gets a 403 while dev
- * works. For local targets we override Origin with one these servers accept, so
- * users don't have to set OLLAMA_ORIGINS themselves.
+ * plugin does, however, attach the webview's own Origin when the caller supplies
+ * none — and what that origin is depends on the platform (tauri's
+ * `tauri_protocol_url`): `http://tauri.localhost` on Windows/Android,
+ * `tauri://localhost` on macOS/Linux, and the devUrl `http://127.0.0.1:1420`
+ * under `pnpm tauri dev`.
+ *
+ * Local servers gate on that value. Ollama's default allowlist takes
+ * localhost/127.0.0.1/0.0.0.0 on any port and `tauri://*`, but NOT
+ * `http://tauri.localhost` — it answers 403. So the failure is specific to
+ * packaged **Windows** builds: dev works (devUrl origin) and packaged
+ * macOS/Linux works (`tauri://*`). For local targets we override Origin with one
+ * these servers accept, so users don't have to set OLLAMA_ORIGINS themselves.
+ *
+ * That override only actually leaves the process because src-tauri/Cargo.toml
+ * enables tauri-plugin-http's `unsafe-headers` feature. Without it the plugin
+ * treats Origin as a forbidden header per the fetch spec, drops it, and appends
+ * the webview origin regardless — the override becomes a silent no-op and
+ * Windows users get the 403 anyway. Don't drop that feature flag without
+ * re-testing a real `tauri build` binary against a default-configured Ollama;
+ * `tauri dev` cannot reproduce it, and neither can a machine with
+ * OLLAMA_ORIGINS=* set.
  *
  * Outside Tauri (vitest / plain browser) it falls back to the global fetch at
  * call time, so tests can keep stubbing `globalThis.fetch`.
