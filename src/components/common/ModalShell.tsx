@@ -17,6 +17,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { ModalErrorBoundary } from "./ErrorBoundary";
 
 /**
  * Stack of mounted modals (topmost last). A global Escape listener would
@@ -102,9 +103,12 @@ export function ModalShell({
     return () => window.removeEventListener("keydown", onKey);
   }, [closeOnEscape]);
 
+  // Every modal that routes through this shell gets the narrow boundary for
+  // free: a crash inside the panel leaves the overlay (and the whole app behind
+  // it) intact, and the recovery card's only action is this modal's `onClose`.
   return createPortal(
     <div className={overlayClassName} onMouseDown={onMouseDown} onMouseUp={onMouseUp}>
-      {children}
+      <ModalErrorBoundary onClose={onClose}>{children}</ModalErrorBoundary>
     </div>,
     document.body,
   );

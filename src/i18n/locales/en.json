@@ -7,6 +7,19 @@
     "cancel": "Cancel",
     "unsavedConfirm": "You have unsaved changes that will be lost. Close anyway?"
   },
+  "errorBoundary": {
+    "appTitle": "Something went wrong",
+    "appBody": "A component threw an error while rendering. Your writing is still on disk — reloading should bring the app back.",
+    "modalTitle": "This dialog crashed",
+    "modalBody": "The dialog threw an error while rendering. Close it to keep writing — the rest of the app is unaffected.",
+    "retry": "Try again",
+    "reload": "Reload app",
+    "closeDialog": "Close dialog",
+    "details": "Technical details",
+    "stackLabel": "Component stack",
+    "copy": "Copy",
+    "copied": "Copied"
+  },
   "outline": {
     "empty": "No {{group}}/{{doc}} structure found — create sub-folders under writing/ to organize {{group}}s",
     "reorderHint": "Click to select a {{doc}}, double-click to open; reorder within a {{group}} via buttons or drag",
@@ -806,7 +819,6 @@
       "ratioLabel": "Tokenizer",
       "ratioValue": "{{ratio}} chars/token",
       "unknown": "not determined",
-      "unit": "tokens",
       "truncated": "Silent truncation detected: ~{{sent}} tokens sent, server counted only {{got}}. The rest was dropped without an error.",
       "truncationNotDetected": "No truncation at {{size}} tokens. Note: this is not proof of absence — a server can report the pre-truncation count, and a relay can make the number up.",
       "truncationUnknown": "This endpoint returned no usage, so truncation could not be verified.",
