@@ -24,6 +24,7 @@ import {
 } from "../../lib/context/outline";
 import { loadMemory, memoryStatus, moveMemory, projectRelativePath, type MemoryStatus } from "../../lib/context/memory";
 import { readFile, makeDir, removeDir, renamePath } from "../../lib/fs/fileio";
+import { useImeGuard } from "../../lib/ime";
 import styles from "./OutlineFullView.module.css";
 
 /** Move an array item from one index to another (immutably). */
@@ -227,6 +228,7 @@ export function OutlineFullView() {
     ];
   };
 
+  const volIme = useImeGuard();
   const createVolume = async () => {
     const name = newVolName.trim();
     if (!name || !projectPath) { setCreatingVol(false); setNewVolName(""); return; }
@@ -340,7 +342,9 @@ export function OutlineFullView() {
               value={newVolName}
               placeholder={t("outline.volumeNamePlaceholder", { group: terms.group })}
               onChange={(e) => setNewVolName(e.target.value)}
+              {...volIme.imeProps}
               onKeyDown={(e) => {
+                if (volIme.isComposing(e)) return;
                 if (e.key === "Enter") void createVolume();
                 if (e.key === "Escape") { setCreatingVol(false); setNewVolName(""); }
               }}

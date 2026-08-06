@@ -25,6 +25,7 @@ import { AgentLog } from "./AgentLog";
 import { ApprovalCard } from "./ApprovalCard";
 import { PlanCard } from "./PlanCard";
 import { RoundLimitCard } from "./RoundLimitCard";
+import { useImeGuard } from "../../lib/ime";
 import type { AgentEvent } from "../../lib/agent/events";
 import styles from "./AgentChat.module.css";
 
@@ -90,8 +91,11 @@ export function AgentChat() {
     void sendChat(text, attachedQuote);
   };
 
+  // Enter sends — unless a CJK IME is mid-word, where Enter commits the typed
+  // letters and must not also fire off the message. See lib/ime.
+  const ime = useImeGuard();
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+    if (e.key === "Enter" && !e.shiftKey && !ime.isComposing(e)) {
       e.preventDefault();
       handleSend();
     }
@@ -191,6 +195,7 @@ export function AgentChat() {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={handleKeyDown}
+            {...ime.imeProps}
             placeholder={activeModelId ? t("ai.chat.placeholder") : t("ai.errors.noModel")}
             disabled={!activeModelId}
           />

@@ -25,6 +25,7 @@ import { useLoreStore } from "../../stores/loreStore";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { MarkdownPreview } from "../common/MarkdownPreview";
 import { ModalShell } from "../common/ModalShell";
+import { useImeGuard } from "../../lib/ime";
 import { FacetAiAssistantModal } from "./ai/FacetAiAssistantModal";
 import styles from "./FacetEditModal.module.css";
 
@@ -80,6 +81,7 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
       .finally(() => setLoaded(true));
   }, [entity.dirPath, file, t]);
 
+  const keyIme = useImeGuard();
   const addKey = () => {
     const v = keyInput.trim();
     if (v && !keys.includes(v)) setKeys([...keys, v]);
@@ -189,7 +191,9 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
                 className={styles.input}
                 value={keyInput}
                 onChange={(e) => setKeyInput(e.target.value)}
+                {...keyIme.imeProps}
                 onKeyDown={(e) => {
+                  if (keyIme.isComposing(e)) return;
                   if (e.key === "Enter") { e.preventDefault(); addKey(); }
                 }}
                 onBlur={addKey}

@@ -15,6 +15,7 @@ import { ModalShell } from "../common/ModalShell";
 import { parseFrontmatter } from "../../lib/fs/markdown";
 import { loadApiKey } from "../../lib/keyStore";
 import { imageToDataUrl } from "../../lib/fs/images";
+import { useImeGuard } from "../../lib/ime";
 import type { ToolDefinition } from "../../lib/ai";
 import styles from "./LoreImproveModal.module.css";
 import extra from "./LoreMetaImproveModal.module.css";
@@ -225,6 +226,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
     }
   };
 
+  const aliasIme = useImeGuard();
   const addAlias = () => {
     const v = aliasInput.trim();
     if (!v || pAliases.includes(v)) { setAliasInput(""); return; }
@@ -371,7 +373,9 @@ summary: ${entity.summary}
                     className={extra.gInput}
                     value={aliasInput}
                     onChange={(e) => setAliasInput(e.target.value)}
+                    {...aliasIme.imeProps}
                     onKeyDown={(e) => {
+                      if (aliasIme.isComposing(e)) return;
                       if (e.key === "Enter") { e.preventDefault(); addAlias(); }
                     }}
                     placeholder={isZh ? "添加别名（回车确认）" : "Add alias (press Enter)"}

@@ -13,6 +13,7 @@ import { isImagePath } from "../../lib/fs/images";
 import { fileExists } from "../../lib/fs/fileio";
 import { baseNameOf, dropRejection, parentDirOf, type TransferMode } from "../../lib/fs/moveCopy";
 import { baseName, importDocumentsDialog } from "../../lib/import";
+import { useImeGuard } from "../../lib/ime";
 import { useProjectStore } from "../../stores/projectStore";
 import type { FileNode } from "../../lib/project";
 import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
@@ -83,7 +84,10 @@ function CreateInput({ depth }: { depth: number }) {
     submittingRef.current = false;
   };
 
+  // A Chinese name is committed with Enter too — that Enter belongs to the IME.
+  const ime = useImeGuard();
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (ime.isComposing(e)) return;
     if (e.key === "Enter") { e.preventDefault(); void handleSubmit(); }
     if (e.key === "Escape") cancelCreate();
   };
@@ -110,6 +114,7 @@ function CreateInput({ depth }: { depth: number }) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={handleKeyDown}
+          {...ime.imeProps}
           onBlur={handleBlur}
           placeholder={creatingType === "folder" ? t("fileTree.folderNamePlaceholder") : t("fileTree.fileNamePlaceholder")}
         />
@@ -142,7 +147,9 @@ function RenameInput({ node }: { node: FileNode }) {
     submittingRef.current = false;
   };
 
+  const ime = useImeGuard();
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (ime.isComposing(e)) return;
     if (e.key === "Enter") { e.preventDefault(); void handleSubmit(); }
     if (e.key === "Escape") cancelRename();
   };
@@ -154,6 +161,7 @@ function RenameInput({ node }: { node: FileNode }) {
       value={name}
       onChange={(e) => setName(e.target.value)}
       onKeyDown={handleKeyDown}
+      {...ime.imeProps}
       onBlur={() => { if (!submittingRef.current) cancelRename(); }}
       onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}

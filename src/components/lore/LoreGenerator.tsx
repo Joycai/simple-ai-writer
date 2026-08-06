@@ -15,6 +15,7 @@ import { AttachmentTextarea } from "./ai/AttachmentTextarea";
 import { NewEntryTabs, type NewEntryMode } from "./ai/NewEntryTabs";
 import { writeBinaryFile } from "../../lib/fs/fileio";
 import { loadApiKey } from "../../lib/keyStore";
+import { useImeGuard } from "../../lib/ime";
 import styles from "./LoreGenerator.module.css";
 
 interface Props {
@@ -77,7 +78,11 @@ export function LoreGenerator({ onClose, onModeChange }: Props) {
     setTagInput("");
   };
 
+  const tagIme = useImeGuard();
   const handleTagKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    // Mid-composition the IME owns both keys: Enter commits the pinyin and ，is
+    // just a character being typed.
+    if (tagIme.isComposing(e)) return;
     if (e.key === "Enter" || e.key === ",") { e.preventDefault(); commitTag(); }
     if (e.key === "Backspace" && !tagInput) setEditTags((prev) => prev.slice(0, -1));
   };
@@ -337,6 +342,7 @@ export function LoreGenerator({ onClose, onModeChange }: Props) {
                       value={tagInput}
                       onChange={(e) => setTagInput(e.target.value)}
                       onKeyDown={handleTagKey}
+                      {...tagIme.imeProps}
                       onBlur={commitTag}
                       placeholder={editTags.length === 0 ? t("lore.generator.aliasPlaceholder") : ""}
                     />

@@ -25,6 +25,7 @@ import { makeDir, writeFile, removeFile } from "../../lib/fs/fileio";
 import { loadApiKey } from "../../lib/keyStore";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { ModalShell } from "../common/ModalShell";
+import { useImeGuard } from "../../lib/ime";
 import styles from "./LoreSplitModal.module.css";
 
 interface Props {
@@ -44,6 +45,7 @@ interface EditableDraft {
 function KeysEditor({ keys, onChange }: { keys: string[]; onChange: (keys: string[]) => void }) {
   const { t } = useTranslation();
   const [input, setInput] = useState("");
+  const ime = useImeGuard();
   const add = () => {
     const v = input.trim();
     if (v && !keys.includes(v)) onChange([...keys, v]);
@@ -67,7 +69,10 @@ function KeysEditor({ keys, onChange }: { keys: string[]; onChange: (keys: strin
         className={styles.keyInput}
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+        {...ime.imeProps}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !ime.isComposing(e)) { e.preventDefault(); add(); }
+        }}
         onBlur={add}
         placeholder={t("lore.split.addKey", { defaultValue: "+ 关键词" })}
       />
