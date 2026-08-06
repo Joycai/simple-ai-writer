@@ -3,6 +3,7 @@ mod protocol;
 mod scope;
 mod secrets;
 mod transfer;
+mod xlsx;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -58,6 +59,7 @@ pub fn run() {
             transfer::zip_import_dialog,
             transfer::save_text_file_dialog,
             transfer::open_text_file_dialog,
+            xlsx::xlsx_to_markdown,
         ]);
 
     protocol::register_asset_protocol(builder)

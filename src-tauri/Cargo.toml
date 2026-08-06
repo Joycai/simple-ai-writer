@@ -31,3 +31,14 @@ keyring = "4"
 # Lore bundle export/import. Default features pull in bzip2/zstd/aes backends
 # we never produce or accept — deflate is the only method our bundles use.
 zip = { version = "2", default-features = false, features = ["deflate"] }
+# .xlsx import (see xlsx.rs). `chrono` is what turns a date cell into a real
+# date instead of the raw serial number Excel stores it as — without it every
+# date in an imported sheet reads as "45678".
+calamine = { version = "0.36", features = ["chrono"] }
+
+[dev-dependencies]
+# Builds the workbooks the xlsx.rs round-trip tests read back. Checking a
+# binary .xlsx fixture into the repo would make those tests unreadable and
+# unmaintainable — generating one in the test states the input in the same
+# place as the expectation.
+rust_xlsxwriter = "0.97"

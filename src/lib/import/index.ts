@@ -1,8 +1,14 @@
 /**
- * Document import: pick tender/source documents (docx, pdf, txt, md), convert
- * each to markdown and write it into a folder under `writing/`, where the
- * read-tool agents can reach it (`list_files`/`search_text` only discover the
- * writing tree).
+ * Document import: pick tender/source documents (docx, xlsx, pdf, txt, md),
+ * convert each to markdown and write it into a folder under `writing/`, where
+ * the read-tool agents can reach it (`list_files`/`search_text` only discover
+ * the writing tree).
+ *
+ * Landing as markdown in the tree is the whole design: no mainstream model API
+ * accepts a .docx or .xlsx as binary input (they are zip archives — the bytes
+ * are meaningless to the model), so *something* has to convert, and doing it
+ * here means the author can read and edit the result instead of trusting an
+ * opaque server-side extraction.
  *
  * The dialog + fs flow follows the lore avatar/gallery pattern: paths picked
  * in the native dialog are auto-scoped for `tauri-plugin-fs` by the dialog
@@ -16,13 +22,16 @@ import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
 import { fileExists, writeFile } from "../fs/fileio";
 import { decodeText } from "./text";
 import { tidyMarkdown } from "./markdown";
+import { xlsxToMarkdown } from "./xlsx";
 
 /**
  * What the picker offers. Legacy .doc/.xls are left out on purpose: no
  * converter here can read them faithfully, and a half-garbled import looks
- * exactly like a successful one.
+ * exactly like a successful one. (The xlsx parser could in fact read .xls, but
+ * offering it would drag the same judgement call back in for .doc, which has
+ * no comparable reader — so both legacy formats stay out together.)
  */
-export const IMPORT_EXTENSIONS = ["docx", "pdf", "txt", "md"] as const;
+export const IMPORT_EXTENSIONS = ["docx", "xlsx", "pdf", "txt", "md"] as const;
 export type ImportableExt = (typeof IMPORT_EXTENSIONS)[number];
 
 /**
@@ -76,7 +85,8 @@ export async function uniqueMarkdownPath(
 
 /**
  * Convert one document's bytes to markdown. The docx/pdf converters are
- * lazy-imported modules of their own; txt/md is a decode + tidy.
+ * lazy-imported modules of their own (both carry a heavy parser); xlsx parses
+ * in Rust so there is nothing to defer; txt/md is a decode + tidy.
  */
 export async function convertToMarkdown(
   ext: ImportableExt,
@@ -87,6 +97,8 @@ export async function convertToMarkdown(
       const { docxToMarkdown } = await import("./docx");
       return docxToMarkdown(data);
     }
+    case "xlsx":
+      return tidyMarkdown(await xlsxToMarkdown(data));
     case "pdf": {
       const { pdfToMarkdown } = await import("./pdf");
       return pdfToMarkdown(data);
