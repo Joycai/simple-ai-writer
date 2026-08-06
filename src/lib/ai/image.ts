@@ -42,12 +42,14 @@ export function resolveImageRoute(standard: ApiStandard, declared?: ImageRoute):
 
 export interface ImageRequest {
   prompt: string;
-  /**
-   * Input images as base64 data URLs. Non-empty turns the call into an edit.
-   * PR1 generates only — the field exists so adapters can be extended without
-   * reshaping the interface, and `generateImage` rejects it for now.
-   */
+  /** Input images as base64 data URLs. Non-empty turns the call into an edit. */
   images?: string[];
+  /**
+   * Edit mask as a base64 data URL — transparent where the model may repaint.
+   * OpenAI's edits endpoint only; the other routes have no equivalent field
+   * and ignore it rather than failing.
+   */
+  mask?: string;
   /** How many images to return. Providers cap this; the caller should too. */
   n?: number;
   /** e.g. "1024x1024". Omitted when the model declares no supported sizes. */
@@ -89,26 +91,70 @@ export class NoImageError extends Error {
  * `streamCompletion` makes.
  */
 export async function generateImage(conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
-  if (req.images?.length) {
-    // Guard rather than silently dropping the images and returning an
-    // unrelated fresh generation, which would read as the model ignoring the
-    // edit. Lifted in PR2 when the edit paths land.
-    throw new Error("Image editing is not implemented yet (PR2).");
-  }
   switch (resolveImageRoute(conn.standard, conn.route)) {
     case "gemini":
+      // One endpoint for both: the input images simply become extra parts.
       return geminiImage(conn, req);
     case "chat":
+      // Likewise — an edit is a multimodal user message.
       return chatImage(conn, req);
     default:
-      return openaiImage(conn, req);
+      // The OpenAI protocol is the odd one out: editing is a different URL
+      // with a different encoding (multipart), not the same call with extra
+      // fields.
+      return req.images?.length ? openaiEdit(conn, req) : openaiImage(conn, req);
   }
+}
+
+/**
+ * True for errors that mean "this endpoint can't edit", as opposed to a
+ * request that was understood and refused.
+ *
+ * Drives the visible fallback to regeneration (see the image session store):
+ * getting this wrong in the permissive direction would silently paper over a
+ * real refusal, so it matches only shapes that indicate the *route* is absent
+ * — a missing endpoint, a rejected model, an unsupported operation.
+ */
+export function isEditUnsupportedError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /\b(404|405|501)\b/.test(msg)
+    || /not\s+found/i.test(msg)
+    || /(does\s+not|doesn't|no)\s+support/i.test(msg)
+    || /not\s+supported/i.test(msg)
+    || /unsupported/i.test(msg)
+    || /only\s+imagen\s+models/i.test(msg);
 }
 
 // ─── Shared helpers ──────────────────────────────────────────────────────────
 
 function dataUrlOf(mime: string, base64: string): string {
   return `data:${mime};base64,${base64}`;
+}
+
+/**
+ * Decode a data URL into bytes for multipart upload.
+ *
+ * Deliberately not `lib/fs/images.ts`'s `dataUrlToBytes`: that module imports
+ * plugin-fs at module scope, and the wire adapters have no business pulling
+ * the filesystem in behind them.
+ */
+// The Uint8Array<ArrayBuffer> annotation is load-bearing: Blob rejects the
+// default Uint8Array<ArrayBufferLike>, whose buffer could be a SharedArrayBuffer.
+function decodeDataUrl(dataUrl: string): { bytes: Uint8Array<ArrayBuffer>; mime: string } {
+  const comma = dataUrl.indexOf(",");
+  if (!dataUrl.startsWith("data:") || comma === -1) throw new Error("Input image is not a data URL");
+  const mime = dataUrl.slice(5, comma).replace(";base64", "").trim() || "image/png";
+  const binary = atob(dataUrl.slice(comma + 1));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return { bytes, mime };
+}
+
+/** File extension to send with an uploaded part; the API validates on it. */
+function extForMime(mime: string): string {
+  if (mime.includes("webp")) return "webp";
+  if (mime.includes("jpeg") || mime.includes("jpg")) return "jpg";
+  return "png";
 }
 
 /**
@@ -158,8 +204,12 @@ async function openaiImage(conn: ImageConn, req: ImageRequest): Promise<ImageRes
   });
 
   if (!res.ok) throw new Error(`Image API error ${res.status}: ${await res.text()}`);
+  return parseOpenAiImagePayload(await res.json(), req.signal);
+}
 
-  const json = (await res.json()) as {
+/** The `{ data: [...] }` body, shared by the generations and edits endpoints. */
+async function parseOpenAiImagePayload(raw: unknown, signal?: AbortSignal): Promise<ImageResult> {
+  const json = raw as {
     data?: { b64_json?: string; url?: string; revised_prompt?: string }[];
     usage?: { input_tokens?: number; output_tokens?: number };
     error?: { message?: string } | string;
@@ -174,10 +224,10 @@ async function openaiImage(conn: ImageConn, req: ImageRequest): Promise<ImageRes
   for (const entry of entries) {
     if (entry.b64_json) {
       // The wire format carries no mime; these endpoints return PNG unless
-      // asked otherwise, and the caller never asks in PR1.
+      // asked otherwise, and the app never asks.
       images.push({ dataUrl: dataUrlOf("image/png", entry.b64_json), mime: "image/png" });
     } else if (entry.url) {
-      images.push(await urlToDataUrl(entry.url, req.signal));
+      images.push(await urlToDataUrl(entry.url, signal));
     }
   }
   if (!images.length) throw new NoImageError(entries.length ? "no image data in response" : undefined);
@@ -191,6 +241,48 @@ async function openaiImage(conn: ImageConn, req: ImageRequest): Promise<ImageRes
   // doesn't account for.
   const revised = entries.map((e) => e.revised_prompt).filter(Boolean).join("\n\n");
   return { images, usage, ...(revised ? { text: revised } : {}) };
+}
+
+/**
+ * `POST /images/edits` — multipart, the only place in the app that uploads a
+ * file body.
+ *
+ * **`Content-Type` must not be set here.** The header is generated by the
+ * webview when it serializes the FormData, boundary included, and
+ * plugin-http's fetch only copies browser-generated headers the caller did not
+ * declare. Setting it by hand replaces a value containing the boundary with
+ * one that doesn't, and every such request fails to parse server-side.
+ * (Transport verified in docs/image-generation-plan.md §2.3.)
+ */
+async function openaiEdit(conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
+  const url = `${conn.baseUrl.replace(/\/$/, "")}/images/edits`;
+  const form = new FormData();
+  form.append("model", conn.modelId);
+  form.append("prompt", req.prompt);
+
+  const images = req.images ?? [];
+  // Single vs plural field name: the API takes `image` for one and `image[]`
+  // for several, and older endpoints only understand the singular form.
+  const field = images.length > 1 ? "image[]" : "image";
+  images.forEach((dataUrl, i) => {
+    const { bytes, mime } = decodeDataUrl(dataUrl);
+    form.append(field, new Blob([bytes], { type: mime }), `image-${i}.${extForMime(mime)}`);
+  });
+  if (req.mask) {
+    const { bytes, mime } = decodeDataUrl(req.mask);
+    form.append("mask", new Blob([bytes], { type: mime }), `mask.${extForMime(mime)}`);
+  }
+  if (req.size) form.append("size", req.size);
+  if (req.n && req.n > 1) form.append("n", String(req.n));
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { ...(conn.apiKey ? { Authorization: `Bearer ${conn.apiKey}` } : {}) },
+    body: form,
+    signal: req.signal,
+  });
+  if (!res.ok) throw new Error(`Image edit error ${res.status}: ${await res.text()}`);
+  return parseOpenAiImagePayload(await res.json(), req.signal);
 }
 
 // ─── Chat completions (relay-hosted image models) ────────────────────────────
@@ -218,7 +310,17 @@ async function chatImage(conn: ImageConn, req: ImageRequest): Promise<ImageResul
     },
     body: JSON.stringify({
       model: conn.modelId,
-      messages: [{ role: "user", content: req.prompt }],
+      messages: [{
+        role: "user",
+        // An edit is just a multimodal message here — the same `image_url`
+        // parts a vision request uses, which is why relays accept it.
+        content: req.images?.length
+          ? [
+              { type: "text", text: req.prompt },
+              ...req.images.map((url) => ({ type: "image_url", image_url: { url } })),
+            ]
+          : req.prompt,
+      }],
       stream: false,
       ...req.extraBody,
     }),

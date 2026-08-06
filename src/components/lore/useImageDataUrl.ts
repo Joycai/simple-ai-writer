@@ -24,3 +24,30 @@ export function useImageDataUrl(path: string | null | undefined, refreshKey?: un
   }, [path, refreshKey]);
   return url;
 }
+
+/**
+ * The same, for a set of paths — returns a path → data URL map, filling in as
+ * each read lands so a slow file doesn't hold up the others.
+ *
+ * Keyed by path rather than index so a re-render with a reordered list keeps
+ * showing the right picture for each entry.
+ */
+export function useImageDataUrls(paths: string[]): Record<string, string> {
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  // Effects compare dependencies by identity, and callers build this array
+  // inline on every render — join it so the reads re-run on real changes only.
+  const key = paths.join("|");
+  useEffect(() => {
+    let cancelled = false;
+    for (const path of paths) {
+      imageToDataUrl(path)
+        .then(({ dataUrl }) => {
+          if (!cancelled) setUrls((prev) => (prev[path] ? prev : { ...prev, [path]: dataUrl }));
+        })
+        .catch(() => { /* leave it out; the caller renders a placeholder */ });
+    }
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return urls;
+}

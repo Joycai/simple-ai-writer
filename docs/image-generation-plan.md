@@ -292,10 +292,25 @@ PR1 刻意留给 PR2 的：`ImageRequest.images`（占位，调用即报错）�
 `ImageCaps.edit`（已可配置、已有默认值，但还没有消费方）、
 `.ai-writer/imagegen.json` 生成记录、`imageStore` 会话。
 
-### PR2 · 改图
-- `ImageRequest.images` 与三家的编辑路径 + 不支持时的降级
-- `imageStore` 会话与改图链（含 `.ai-writer/imagegen.json`）
-- 模态框加对话输入框与结果树导航
+### PR2 · 改图 — ✅ 已实现
+
+- `ImageRequest.images` / `mask` 与三条路径的编辑实现：Gemini 与对话接口是
+  「同一端点 + 附带输入图」，OpenAI 协议是**换 URL 换编码**
+  （`/images/edits` + multipart，单图 `image`、多图 `image[]`）
+- 降级分两层：`caps.edit === false` 时**不浪费一次调用**直接重新生成；
+  运行期失败经 `isEditUnsupportedError()` 归类后再降级。两种情况都在轮次上
+  标记 `degraded` 并在界面明说，否则作者会以为模型没听懂
+- 降级用的提示词是**原始 brief + 历次全部指令**，不是最后一条 —— 只带最后
+  一条会丢掉前面几轮攒下来的方向
+- `stores/imageStore.ts` 会话：改图链是**树不是线**（作者常回退两轮换个方向
+  再分叉），每个轮次记 `parentId` 与起始候选图
+- `lib/image/session.ts`：候选图即时落 `.ai-writer/tmp/imagegen/<session>/`，
+  store 只存路径（§4.2 的内存约束）；`.ai-writer/imagegen.json` 记录留下来的
+  图是怎么来的；开新会话时清扫上次崩溃遗留的临时目录
+- 模态框：候选图网格 + 对话输入框 + 轮次历史（点回早先轮次即分叉）
+
+**PR1 的占位全部兑现**：`ImageRequest.images` 从「调用即报错」变成三条真实
+路径，`ImageCaps.edit` 从「可配置但无消费方」变成降级开关。
 
 ### PR3 · 正文插图
 - `writing/assets/` 落盘 + 光标处插入 `![]()`
