@@ -312,12 +312,27 @@ PR1 刻意留给 PR2 的：`ImageRequest.images`（占位，调用即报错）�
 **PR1 的占位全部兑现**：`ImageRequest.images` 从「调用即报错」变成三条真实
 路径，`ImageCaps.edit` 从「可配置但无消费方」变成降级开关。
 
-### PR3 · 正文插图
-- `writing/assets/` 落盘 + 光标处插入 `![]()`
-- 编辑器选区右键 / `InlineAiBubble` 入口
-- **补 `lib/fs/export.ts` 的图片内联** —— 目前导出 HTML/PDF 会丢图（预览有，
-  导出没有），这是 PR3 的必做项而非可选项
-- `wechat`/`copy`/`bid` profile 的配图措辞
+### PR3 · 正文插图 — ✅ 已实现
+
+- **弹窗抽成 target 驱动**（`lib/image/target.ts` + `components/ai/ImageGenModal.tsx`）：
+  素材从哪来、参考哪些已有图、存到哪去，由 `ImageGenTarget` 描述。
+  `LoreImageGenModal` 与 `DocImageGenModal` 各自只组装一个 target，弹窗本身
+  不知道 lore 实体或文档存在 —— 这正是「靠数据而非分支扩展」在 UI 层的落法
+- `lib/image/assets.ts`：图存到文档旁的 `assets/<文档名>/`，**返回相对路径**
+  （绝对路径一换机器就全断），文件名过滤掉能创建目录的字符；插入的 markdown
+  自成一段（贴着正文会渲染成行内图）
+- 编辑器右键菜单加「AI 配图…」，紧挨 `insertLink`（同为「在光标处插入新东西」，
+  而非「重排已有内容」）。没有配置生图模型时不显示该项
+- 素材取选区；没有选区就取光标前后各一段，而不是整篇 —— 用两万字生成的
+  brief 描述的是整本书，不是此刻这一幕
+- **`export.ts` 图片内联**：把相对 `<img src>` 换成 data URL。判断逻辑
+  （`needsInlining` / `assetPathFor`）抽成纯函数以便测试，DOM 遍历本身留在
+  浏览器环境
+- 「插入{{doc}}」走 `useTerms()`，标书项目不会被告知图片插进了「章节」
+
+**遗留发现**：`lib/fs/export.ts` 与 `editor.export*` 文案俱在，但**全项目没有
+任何 UI 调用它** —— 导出功能尚未接线。图片内联因此是「接线那天就正确」，
+而不是修好了一个用户当下能碰到的 bug。
 
 ### PR4 · 接进统一 agent
 - `generate_image` / `edit_image` 注册进 registry，挂 `AGENT_ASSIST_PRESET`

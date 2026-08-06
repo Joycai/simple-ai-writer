@@ -14,6 +14,7 @@ import {
   Heading3,
   Quote,
   List,
+  ImagePlus,
 } from "lucide-react";
 import { selectAll } from "@codemirror/commands";
 import type { EditorView } from "@codemirror/view";
@@ -50,12 +51,14 @@ function sc(...keys: string[]): string {
  * `ContextMenu` so it matches the FileTree / Lore menus.
  */
 export function EditorContextMenu({
-  x, y, view, onClose,
+  x, y, view, onClose, onIllustrate,
 }: {
   x: number;
   y: number;
   view: EditorView;
   onClose: () => void;
+  /** Open the illustration flow. Absent when no image model is configured. */
+  onIllustrate?: () => void;
 }) {
   const { t } = useTranslation();
   const sel = hasSelection(view);
@@ -80,6 +83,12 @@ export function EditorContextMenu({
       shortcut: sc("Mod", "E"), action: () => toggleInlineCode(view) },
     { kind: "item", icon: <LinkIcon size={13} />, label: t("editor.menu.link"),
       shortcut: sc("Mod", "Shift", "K"), action: () => insertLink(view) },
+    // Sits with insertLink rather than the formatting block below: both put
+    // something new at the cursor instead of restyling what is already there.
+    ...(onIllustrate
+      ? [{ kind: "item" as const, icon: <ImagePlus size={13} />, label: t("editor.menu.illustrate"),
+           action: onIllustrate }]
+      : []),
     { kind: "divider" },
     { kind: "item", icon: <Heading1 size={13} />, label: t("editor.menu.heading1"),
       shortcut: sc("Mod", "Alt", "1"), action: () => toggleHeading(view, 1) },
