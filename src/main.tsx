@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import "./styles/fonts";
 import "./i18n";
 import App from "./App";
+import { AppErrorBoundary } from "./components/common/ErrorBoundary";
 import { installMarkdownThemeStyles } from "./lib/theme/markdownThemes";
 
 // Markdown typography themes are generated (the same generator feeds exported
@@ -21,6 +22,10 @@ window.addEventListener("contextmenu", (e) => {
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    {/* Outermost boundary: a render error anywhere below here shows a recovery
+        panel instead of unmounting the tree to a blank window. */}
+    <AppErrorBoundary>
+      <App />
+    </AppErrorBoundary>
   </React.StrictMode>,
 );
