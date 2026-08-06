@@ -182,7 +182,6 @@ pub fn project_register_root(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
 
     // `is_allowed` rejects anything non-absolute, and absoluteness is
     // platform-specific: on Windows `/home/user/project` has no drive letter
@@ -284,7 +283,7 @@ mod tests {
 
         let root = scratch("escape-root");
         let outside = scratch("escape-outside");
-        fs::create_dir_all(root.join("writing")).unwrap();
+        std::fs::create_dir_all(root.join("writing")).unwrap();
 
         // e.g. a maliciously crafted imported bundle, or an attacker with
         // some existing foothold inside the project folder.
