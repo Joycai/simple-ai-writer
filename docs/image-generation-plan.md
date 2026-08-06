@@ -334,10 +334,28 @@ PR1 刻意留给 PR2 的：`ImageRequest.images`（占位，调用即报错）�
 任何 UI 调用它** —— 导出功能尚未接线。图片内联因此是「接线那天就正确」，
 而不是修好了一个用户当下能碰到的 bug。
 
-### PR4 · 接进统一 agent
-- `generate_image` / `edit_image` 注册进 registry，挂 `AGENT_ASSIST_PRESET`
-- `ApprovalCard` 支持图像提案（展示提示词 + 预估费用）
-- 对话消息流里的图片卡片
+### PR4 · 接进统一 agent — ✅ 已实现
+
+- `generate_image` / `edit_image` 注册为 **L2（write-approval）** 工具，挂进
+  `AGENT_ASSIST_PRESET`（对话助手 + AiPanel Agent 模式；lore 模态框与批量运行
+  没有审批通道，工具在那里直接拒绝而不是无人看管地花钱）
+- **批准即出图，而不是先出图再问要不要留**。`IllustrateProposal` 带着提示词、
+  目的地、模型与预估价进审批队列，`applyProposal` 才真正调用 provider ——
+  被拒的提案花费为零。这是本 PR 与其他几种提案最大的不同：别的只是搬文字，
+  这个一按就是钱
+- `ApprovalCard` 的 illustrate 分支：提示词占主位（它才是被批准的东西），
+  头部指标显示预估费用，改图时**显示原图**——「把头发改成银白」这句话，
+  看不到是谁的头发就没法审
+- `edit_image` 结果**另存为新图**，绝不覆盖原图（原图可能已被别处引用）
+- 降级逻辑与交互式会话共用：声明不支持编辑就不浪费调用，运行期失败经
+  `isEditUnsupportedError()` 归类后重新生成，并在回给模型的结果里明说，
+  让它转告作者
+- `ai.instructions.agent` 增补配图段落：提示词只写画面里看得见的东西、
+  不要写人物名字、动笔前先读条目
+
+**未做**：对话消息流里的图片缩略图。执行日志目前是每步一行 80 字摘要，
+塞进缩略图要给事件加字段并特判渲染，价值不足以在本刀里做——图存进图集/
+assets 后立刻可见，日志里也有文件名。
 
 ---
 

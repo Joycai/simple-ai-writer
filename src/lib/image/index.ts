@@ -17,7 +17,12 @@ export * from "./promptGen";
  * omit the parameter entirely, which several endpoints (xAI, some relays)
  * require: they reject `size` outright rather than ignoring it.
  */
-export function sizeForAspect(aspect: ImageAspect, sizes: string[] | undefined): string | undefined {
+export function sizeForAspect(
+  /** "3:4" and friends. Typed loosely because it also arrives from a proposal,
+   *  where it survived a round-trip through JSON as a plain string. */
+  aspect: ImageAspect | string,
+  sizes: string[] | undefined,
+): string | undefined {
   if (!sizes?.length) return undefined;
   const [aw, ah] = aspect.split(":").map(Number);
   const target = aw / ah;
