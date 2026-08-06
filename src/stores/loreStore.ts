@@ -19,14 +19,19 @@ interface LoreState {
   isLoading: boolean;
   saveTimer: ReturnType<typeof setTimeout> | null;
   /**
-   * dirPath of an entity another surface asked to open in the wall's detail
-   * view (citation clicks). Consumed + cleared by LoreWall — the detail state
-   * itself is local to the wall, this is just the knock on its door.
+   * dirPath of the entity open in the wall's detail view; null = the grid.
+   * Store-owned rather than local to LoreWall for two reasons: other surfaces
+   * open a detail directly (citation clicks), and navigation history has to be
+   * able to read *and* restore it (see stores/navStore). An unresolvable path
+   * simply renders the grid, so a request made while a scan is still in flight
+   * resolves itself when the index lands.
    */
-  requestedDetailPath: string | null;
+  detailPath: string | null;
+  /** Whether that detail view opens straight into edit mode. */
+  detailEditing: boolean;
 
   scanProject: (projectPath: string) => Promise<void>;
-  requestDetail: (dirPath: string) => void;
+  openDetail: (dirPath: string | null, editing?: boolean) => void;
   selectEntity: (entity: LoreEntity) => Promise<void>;
   selectFile: (filename: string) => Promise<void>;
   setFileContent: (content: string) => void;
@@ -43,9 +48,10 @@ export const useLoreStore = create<LoreState>((set, get) => ({
   isDirty: false,
   isLoading: false,
   saveTimer: null,
-  requestedDetailPath: null,
+  detailPath: null,
+  detailEditing: false,
 
-  requestDetail: (dirPath) => set({ requestedDetailPath: dirPath }),
+  openDetail: (dirPath, editing = false) => set({ detailPath: dirPath, detailEditing: editing }),
 
   scanProject: async (projectPath) => {
     set({ isLoading: true });

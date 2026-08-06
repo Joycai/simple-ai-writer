@@ -20,6 +20,7 @@ import { useMainView } from "./stores/projectStore";
 import { useGlobalShortcuts } from "./useGlobalShortcuts";
 import { useWindowCloseFlush } from "./useWindowCloseFlush";
 import { installCitationNavigation } from "./lib/lore/citations";
+import { installNavigationHistory } from "./stores/navStore";
 import { fillLayer, springScreen, viewSlide } from "./lib/motion";
 
 export default function App() {
@@ -41,6 +42,10 @@ export default function App() {
   // Lore-citation clicks navigate from any markdown surface (preview, chat,
   // cards) — one document-level delegate instead of per-component wiring.
   useEffect(() => installCitationNavigation(), []);
+
+  // Back / forward: records where the author has been (whatever moved them
+  // there) and binds the mouse's side buttons. Keys live in useGlobalShortcuts.
+  useEffect(() => installNavigationHistory(), []);
 
   useGlobalShortcuts();
   useWindowCloseFlush();

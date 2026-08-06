@@ -6,6 +6,12 @@ import {
   CONTEXT_UTILIZATION_MAX,
   CONTEXT_UTILIZATION_MIN,
 } from "../lib/context/budget";
+import {
+  DEFAULT_MARKDOWN_THEME,
+  MARKDOWN_THEME_IDS,
+  MD_THEME_ATTR,
+  type MarkdownThemeId,
+} from "../lib/theme/markdownThemes";
 
 export type ThemeMode = "dark" | "light" | "system";
 export type Language = "zh-CN" | "en";
@@ -16,6 +22,7 @@ const FONT_SCHEMES: FontScheme[] = ["manuscript", "song", "hei", "kai"];
 const THEME_KEY = "app:theme";
 const LANG_KEY = "app:language";
 const FONT_KEY = "app:fontScheme";
+const MD_THEME_KEY = "app:markdownTheme";
 const SIDEBAR_WIDTH_KEY = "app:sidebarWidth";
 const RIGHT_PANEL_WIDTH_KEY = "app:rightPanelWidth";
 const RECENT_PROJECTS_KEY = "app:recentProjects";
@@ -42,6 +49,10 @@ const storedLang = (localStorage.getItem(LANG_KEY) as Language | null) ?? "zh-CN
 const storedFontScheme = ((): FontScheme => {
   const raw = localStorage.getItem(FONT_KEY) as FontScheme | null;
   return raw && FONT_SCHEMES.includes(raw) ? raw : "manuscript";
+})();
+const storedMarkdownTheme = ((): MarkdownThemeId => {
+  const raw = localStorage.getItem(MD_THEME_KEY) as MarkdownThemeId | null;
+  return raw && MARKDOWN_THEME_IDS.includes(raw) ? raw : DEFAULT_MARKDOWN_THEME;
 })();
 
 function loadRecentProjects(): string[] {
@@ -101,6 +112,7 @@ interface AppState {
   theme: ThemeMode;
   language: Language;
   fontScheme: FontScheme;
+  markdownTheme: MarkdownThemeId;
   sidebarCollapsed: boolean;
   rightPanelCollapsed: boolean;
   sidebarWidth: number;
@@ -135,6 +147,7 @@ interface AppState {
   setTheme: (theme: ThemeMode) => void;
   setLanguage: (lang: Language) => void;
   setFontScheme: (scheme: FontScheme) => void;
+  setMarkdownTheme: (id: MarkdownThemeId) => void;
   toggleSidebar: () => void;
   toggleRightPanel: () => void;
   setSidebarCollapsed: (v: boolean) => void;
@@ -195,12 +208,18 @@ function applyFontScheme(scheme: FontScheme) {
   document.documentElement.setAttribute("data-font", scheme);
 }
 
+/** Every `.md-body` container reads its look off this attribute. */
+function applyMarkdownTheme(id: MarkdownThemeId) {
+  document.documentElement.setAttribute(MD_THEME_ATTR, id);
+}
+
 let systemThemeListener: (() => void) | null = null;
 
 export const useAppStore = create<AppState>((set, get) => ({
   theme: storedTheme,
   language: storedLang,
   fontScheme: storedFontScheme,
+  markdownTheme: storedMarkdownTheme,
   sidebarCollapsed: false,
   rightPanelCollapsed: false,
   sidebarWidth: storedSidebarWidth,
@@ -246,6 +265,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     localStorage.setItem(FONT_KEY, fontScheme);
     set({ fontScheme });
     applyFontScheme(fontScheme);
+  },
+
+  setMarkdownTheme: (markdownTheme) => {
+    localStorage.setItem(MD_THEME_KEY, markdownTheme);
+    set({ markdownTheme });
+    applyMarkdownTheme(markdownTheme);
   },
 
   toggleSidebar: () =>
@@ -334,6 +359,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   closeSettings: () => set({ showSettings: false }),
 }));
 
-// Initialize theme + font scheme on load using persisted values
+// Initialize theme + font scheme + markdown theme on load using persisted values
 applyTheme(storedTheme);
 applyFontScheme(storedFontScheme);
+applyMarkdownTheme(storedMarkdownTheme);

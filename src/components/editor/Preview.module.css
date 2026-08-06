@@ -1,11 +1,16 @@
+/* The editor's preview pane — page frame only.
+   Typography (headings, paragraphs, quotes, rules…) comes from the active
+   markdown theme via the `.md-body` class this element also carries, so the
+   pane, the lore previews and exported documents can't drift apart.
+   See lib/theme/markdownThemes.ts. */
+
 .preview {
   flex: 1;
   overflow-y: auto;
   padding: 64px 24px 32px;
-  color: var(--color-text-primary);
-  font-family: var(--font-serif);
-  font-size: 17px;
-  line-height: 1.78;
+  /* The pane is the roomiest markdown surface in the app — give the theme its
+     full size here; compact surfaces scale it down with --md-size. */
+  --md-size: 17px;
   /* The rendered manuscript — opt back in to selection (see the body rule in
      global.css). Quoting your own prose out of the preview is table stakes in
      a writing app, and the editor pane next to it has always allowed it. */
@@ -37,134 +42,10 @@
   border: 3px solid transparent;
 }
 
-.preview > * {
+/* The measure. Themes set type; the pane sets how wide a line may run. */
+.page {
   max-width: var(--editor-max-width);
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.preview :global(h1),
-.preview :global(h2),
-.preview :global(h3),
-.preview :global(h4),
-.preview :global(h5),
-.preview :global(h6) {
-  font-family: var(--font-serif);
-  color: var(--color-text-primary);
-  line-height: 1.18;
-  margin: 1.4em auto 0.5em;
-  text-align: center;
-}
-.preview :global(h1) {
-  font-size: 44px;
-  font-weight: 300;
-  letter-spacing: -0.012em;
-  margin: 0.4em auto 0.8em;
-}
-.preview :global(h2) {
-  font-size: 28px;
-  font-weight: 400;
-  margin: 1.2em auto 0.6em;
-}
-.preview :global(h3) {
-  font-size: 20px;
-  font-weight: 500;
-  text-align: left;
-}
-
-.preview :global(p) {
-  margin: 0 auto 1.1em;
-  text-indent: 2em;
-}
-
-.preview :global(a) {
-  color: var(--color-sienna);
-  border-bottom: 1px dotted var(--color-sienna);
-}
-.preview :global(a:hover) { color: var(--color-sienna-hover); }
-
-.preview :global(code) {
-  font-family: var(--font-mono);
-  font-size: 0.92em;
-  background: var(--color-bg-elevated);
-  color: var(--color-sienna);
-  padding: 2px 5px;
-}
-
-.preview :global(pre) {
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border-soft);
-  padding: 16px;
-  overflow-x: auto;
-  margin: 1em auto;
-}
-
-.preview :global(pre code) {
-  background: none;
-  padding: 0;
-  color: var(--color-text-primary);
-}
-
-.preview :global(blockquote) {
-  border-left: 2px solid var(--color-sienna);
-  margin: 1em auto;
-  padding: 10px 16px;
-  color: var(--color-text-secondary);
-  font-style: italic;
-  background: var(--color-bg-elevated);
-  text-indent: 0;
-}
-.preview :global(blockquote p) {
-  text-indent: 0;
-}
-
-.preview :global(ul), .preview :global(ol) {
-  margin: 0.5em auto;
-  padding-left: 2.4em;
-}
-.preview :global(li) { margin: 0.25em 0; }
-.preview :global(li p) { text-indent: 0; }
-
-.preview :global(table) {
-  border-collapse: collapse;
-  width: 100%;
-  margin: 1em auto;
-  font: 400 13px/1.6 var(--font-sans);
-}
-.preview :global(th), .preview :global(td) {
-  border: 1px solid var(--color-border-soft);
-  padding: 7px 12px;
-  text-align: left;
-}
-.preview :global(th) {
-  background: var(--color-bg-elevated);
-  font-weight: 500;
-}
-
-.preview :global(hr) {
-  border: none;
-  text-align: center;
-  margin: 2em auto;
-  height: 1em;
-  position: relative;
-}
-.preview :global(hr::before) {
-  content: "— · —";
-  font: 400 15px/1 var(--font-serif);
-  color: var(--color-text-ghost);
-  letter-spacing: 0.7em;
-}
-
-.preview :global(img) {
-  max-width: 100%;
-  display: block;
-  margin: 1em auto;
-}
-
-.preview :global(.katex-display) { overflow-x: auto; }
-.preview :global(.mermaid) {
-  text-align: center;
-  margin: 1em auto;
+  margin: 0 auto;
 }
 
 /* Lore mention spans (when emitted by markdown renderer) */

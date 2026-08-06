@@ -3,10 +3,20 @@
  *   - Markdown: copy raw source to clipboard
  *   - HTML: self-contained HTML file (inline CSS, no external assets)
  *   - PDF: open system print dialog via window.print() on a hidden iframe
+ *
+ * Typography follows the markdown theme the author is reading in the app — the
+ * same generator feeds the preview pane, so what they exported is what they
+ * saw. The palette is re-declared here because the exported file has no
+ * tokens.css around it.
  */
 
 import { renderMarkdown } from "./markdown";
 import { writeFile } from "./fileio";
+import {
+  EXPORT_TOKEN_CSS,
+  currentMarkdownThemeId,
+  markdownThemeCss,
+} from "../theme/markdownThemes";
 import i18n from "../../i18n";
 
 /** BCP-47 lang attribute for exported documents, following the active UI language. */
@@ -22,32 +32,17 @@ export async function exportMarkdown(source: string): Promise<void> {
 
 // ─── HTML ─────────────────────────────────────────────────────────────────────
 
-const HTML_CSS = `
-  body {
-    font-family: -apple-system, "Segoe UI", sans-serif;
-    font-size: 16px;
-    line-height: 1.8;
-    color: #1f2937;
-    background: #faf9f6;
-    max-width: 800px;
-    margin: 40px auto;
-    padding: 0 24px 80px;
-  }
-  h1,h2,h3,h4,h5,h6 { line-height: 1.3; margin-top: 1.6em; }
-  h1 { font-size: 2em; border-bottom: 2px solid #e5e7eb; padding-bottom: 0.3em; }
-  h2 { font-size: 1.5em; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.2em; }
-  p { margin: 0.8em 0; }
-  blockquote { border-left: 4px solid #3b82f6; margin: 0; padding: 0.5em 1em; background: #eff6ff; border-radius: 4px; }
-  code { background: #f3f4f6; border-radius: 4px; padding: 2px 5px; font-family: "SF Mono", Consolas, monospace; font-size: 0.9em; }
-  pre { background: #1e1e2e; color: #cdd6f4; border-radius: 8px; padding: 1em 1.2em; overflow-x: auto; }
-  pre code { background: none; padding: 0; font-size: 0.875em; }
-  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
-  th, td { border: 1px solid #e5e7eb; padding: 8px 12px; text-align: left; }
-  th { background: #f9fafb; font-weight: 600; }
-  img { max-width: 100%; height: auto; border-radius: 4px; }
-  a { color: #3b82f6; }
-  hr { border: none; border-top: 1px solid #e5e7eb; margin: 2em 0; }
-`.trim();
+/** Page frame + the active markdown theme, resolved against the light palette. */
+function documentCss(): string {
+  return `${EXPORT_TOKEN_CSS}
+body {
+  background: var(--color-bg-base);
+  max-width: 760px;
+  margin: 48px auto;
+  padding: 0 24px 80px;
+}
+${markdownThemeCss(currentMarkdownThemeId(), "body")}`;
+}
 
 export async function exportHtml(source: string, title: string, savePath: string): Promise<void> {
   const body = renderMarkdown(source);
@@ -57,7 +52,7 @@ export async function exportHtml(source: string, title: string, savePath: string
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
-<style>${HTML_CSS}</style>
+<style>${documentCss()}</style>
 </head>
 <body>
 ${body}
@@ -76,9 +71,15 @@ export function exportPdf(source: string, title: string): void {
 <meta charset="utf-8">
 <title>${escapeHtml(title)}</title>
 <style>
-  @media print { body { margin: 0; } }
-  ${HTML_CSS}
-  body { background: #fff; }
+${documentCss()}
+/* Print sheet: white paper, no page margin of our own. */
+body { background: #fff; }
+@media print {
+  body { margin: 0; max-width: none; }
+  a { text-decoration: none; }
+  pre, blockquote, table, img { break-inside: avoid; }
+  h1, h2, h3 { break-after: avoid; }
+}
 </style>
 </head>
 <body>${body}</body>

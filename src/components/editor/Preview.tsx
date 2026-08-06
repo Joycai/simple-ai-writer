@@ -4,6 +4,7 @@ import { imageToDataUrl } from "../../lib/fs/images";
 import { resolveRelativePath } from "../../lib/paths";
 import { annotateCitations } from "../../lib/lore/citations";
 import { useLoreStore } from "../../stores/loreStore";
+import { MD_BODY_CLASS } from "../../lib/theme/markdownThemes";
 import styles from "./Preview.module.css";
 
 interface Props {
@@ -66,9 +67,17 @@ export function Preview({ source, basePath }: Props) {
     });
   }, [source]);
 
-  // data-preview-scroller marks the element that actually scrolls (this root is
+  // data-preview-scroller marks the element that actually scrolls (the root is
   // the one carrying `overflow-y: auto`). EditorArea's split-view sync finds it
   // by this attribute rather than by firstElementChild, so adding a sibling or
   // a wrapper in here can't silently break scroll linking.
-  return <div ref={ref} className={styles.preview} data-ai-selection data-preview-scroller />;
+  //
+  // The inner element holds the measure (max-width + auto margins) and the
+  // markdown theme: themes set element margins outright, so centring each
+  // rendered child individually would be a specificity fight the theme wins.
+  return (
+    <div className={styles.preview} data-preview-scroller>
+      <div ref={ref} className={`${styles.page} ${MD_BODY_CLASS}`} data-ai-selection />
+    </div>
+  );
 }

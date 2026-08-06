@@ -224,6 +224,68 @@
   .fontGrid { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* ─── Markdown theme picker ───────────────────────────────────────────────── */
+
+.mdThemeGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.mdThemeCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  text-align: left;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.mdThemeCard:hover {
+  background: var(--color-bg-base);
+  border-color: var(--color-border-strong);
+}
+.mdThemeCardActive,
+.mdThemeCardActive:hover {
+  background: var(--color-accent-tint);
+  border-color: var(--color-accent);
+}
+
+/* Live sample: a real .md-body pinned to this card's theme, so what the author
+   picks is what the preview pane will look like. */
+.mdThemeSample {
+  --md-size: 10px;
+  height: 74px;
+  overflow: hidden;
+  padding: var(--space-2);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-soft);
+  pointer-events: none;
+}
+.mdThemeSample > :first-child { margin-top: 0; }
+
+.mdThemeName {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.mdThemeCardActive .mdThemeName { color: var(--color-accent); }
+
+.mdThemeDesc {
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 600px) {
+  .mdThemeGrid { grid-template-columns: repeat(2, 1fr); }
+}
+
 /* ─── Form ────────────────────────────────────────────────────────────────── */
 
 .form {

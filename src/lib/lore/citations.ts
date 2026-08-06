@@ -90,7 +90,7 @@ export function installCitationNavigation(): () => void {
     const entity = resolveCitation(target, useLoreStore.getState().index);
     if (!entity) return; // rendered as data-missing; nothing to navigate to
     const { useAppStore } = await import("../../stores/appStore");
-    useLoreStore.getState().requestDetail(entity.dirPath);
+    useLoreStore.getState().openDetail(entity.dirPath);
     useAppStore.getState().setMainView("lore-wall");
   };
   document.addEventListener("click", onClick);
