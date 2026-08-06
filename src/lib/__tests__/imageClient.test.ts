@@ -129,6 +129,69 @@ describe("generateImage · Gemini shape", () => {
   });
 });
 
+describe("generateImage · chat route", () => {
+  // newAPI-style relays serve non-Imagen image models here; their
+  // /images/generations answers "only imagen models are supported".
+  const RELAY = { ...OPENAI, standard: "openai_compat" as const, route: "chat" as const };
+
+  it("posts to /chat/completions instead of the images endpoint", async () => {
+    const calls = mockJson({
+      choices: [{ message: { images: [{ image_url: { url: "data:image/png;base64,aGk=" } }] } }],
+    });
+    const res = await generateImage(RELAY, { prompt: "a cat" });
+    expect(calls[0].url).toBe("https://api.example.com/v1/chat/completions");
+    expect(calls[0].body.model).toBe("img-1");
+    expect(res.images[0].dataUrl).toBe("data:image/png;base64,aGk=");
+  });
+
+  it("pulls the image out of markdown in the message text", async () => {
+    mockJson({
+      choices: [{ message: { content: "画好了：\n![img](data:image/webp;base64,aGk=)" } }],
+    });
+    const res = await generateImage(RELAY, { prompt: "a cat" });
+    expect(res.images[0].mime).toBe("image/webp");
+    // The prose around the image survives as commentary, without the markdown.
+    expect(res.text).toBe("画好了：");
+  });
+
+  it("reads a multimodal content array", async () => {
+    mockJson({
+      choices: [{ message: { content: [
+        { type: "text", text: "done" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,aGk=" } },
+      ] } }],
+    });
+    const res = await generateImage(RELAY, { prompt: "a cat" });
+    expect(res.images).toHaveLength(1);
+    expect(res.text).toBe("done");
+  });
+
+  it("quotes the model's own words when it replied in text only", async () => {
+    // The usual symptom of a text model configured as an image model.
+    mockJson({ choices: [{ message: { content: "I cannot generate images." } }] });
+    await expect(generateImage(RELAY, { prompt: "x" }))
+      .rejects.toThrow(/I cannot generate images/);
+  });
+
+  it("is only taken when declared — openai_compat defaults to the images API", async () => {
+    const calls = mockJson({ data: [{ b64_json: "aGk=" }] });
+    await generateImage({ ...OPENAI, standard: "openai_compat" }, { prompt: "x" });
+    expect(calls[0].url).toBe("https://api.example.com/v1/images/generations");
+  });
+});
+
+describe("generateImage · aspect ratio", () => {
+  it("sends the ratio to Gemini, which has no size parameter", async () => {
+    const calls = mockJson({
+      candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: "aGk=" } }] } }],
+    });
+    await generateImage(GEMINI, { prompt: "x", aspect: "9:16", size: "1024x1024" });
+    const cfg = calls[0].body.generationConfig as Record<string, unknown>;
+    expect(cfg.imageConfig).toEqual({ aspectRatio: "9:16" });
+    expect(calls[0].body).not.toHaveProperty("size");
+  });
+});
+
 describe("generateImage · editing", () => {
   it("refuses input images instead of silently generating something unrelated", async () => {
     mockJson({ data: [{ b64_json: "aGk=" }] });

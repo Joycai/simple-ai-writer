@@ -25,7 +25,7 @@ import {
   IMAGE_ASPECTS,
   type ImageAspect,
 } from "../../../lib/image";
-import { addLoreImage, setEntityAvatar, updateLoreImageDesc, type LoreEntity } from "../../../lib/lore";
+import { addLoreImage, readEntityFile, setEntityAvatar, updateLoreImageDesc, type LoreEntity } from "../../../lib/lore";
 import { resolveModel } from "../../../lib/lore/aiTask";
 import { describeLoreImage } from "../../../lib/lore/vision";
 import { categoryLabel, findCategory } from "../../../lib/profile";
@@ -46,6 +46,9 @@ interface Props {
 /** Cap on images per run — the spend ceiling the author can't fat-finger past. */
 const MAX_COUNT = 4;
 
+/** Suggestions for the size box when the model declares no sizes of its own. */
+const COMMON_SIZES = ["1024x1024", "1024x1536", "1536x1024", "2048x2048"];
+
 export function LoreImageGenModal({ entity, onClose, onSaved }: Props) {
   const { t } = useTranslation();
   const projectPath = useProjectStore((s) => s.projectPath);
@@ -58,12 +61,31 @@ export function LoreImageGenModal({ entity, onClose, onSaved }: Props) {
   const effectiveImageModelId = imageModelId ?? imageModels[0]?.id ?? "";
   const imageModel = imageModels.find((m) => m.id === effectiveImageModelId) ?? null;
 
+  // Which model drafts the prompt. Separate from the image model and from the
+  // app-wide active model: the author may want a strong writer here without
+  // changing what the rest of the app uses, so this stays local to the run.
+  const textModels = useMemo(
+    () => models.filter((m) => m.type === "text" || m.type === "multimodal"),
+    [models],
+  );
+  const [promptModelId, setPromptModelId] = useState(
+    () => activeModelId ?? textModels[0]?.id ?? "",
+  );
+
   const [direction, setDirection] = useState("");
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState("");
   const [negative, setNegative] = useState("");
   const [aspect, setAspect] = useState<ImageAspect>("3:4");
   const [count, setCount] = useState(1);
+  /**
+   * Explicit pixel size. Empty means "let the model's declared sizes decide",
+   * which is also the only correct request for endpoints that reject the
+   * parameter (xAI) or take a ratio instead (Gemini).
+   */
+  const [size, setSize] = useState("");
+  /** Facet files to feed the prompt writer, keyed by filename. */
+  const [pickedFacets, setPickedFacets] = useState<Set<string>>(new Set());
 
   const [material, setMaterial] = useState("");
   const [building, setBuilding] = useState(false);
@@ -103,8 +125,30 @@ export function LoreImageGenModal({ entity, onClose, onSaved }: Props) {
   const busy = building || generating || saving;
   const estimatedCost = imageModel ? imageCostFor(imageModel, count) : 0;
 
+  /**
+   * The chosen facets' bodies, appended to the entity's own text. Facets are
+   * where the visual detail actually lives — an outfit, a form, a scar — so a
+   * prompt drafted from index.md alone describes a generic version of the
+   * subject. Read at build time rather than up front: the author picks a
+   * couple out of what can be dozens.
+   */
+  const collectFacetText = async (): Promise<string> => {
+    const chosen = entity.facets.filter((f) => pickedFacets.has(f.file));
+    const parts = await Promise.all(
+      chosen.map(async (f) => {
+        try {
+          const raw = await readEntityFile(entity.dirPath, f.file);
+          return `## ${f.title}\n${parseFrontmatter(raw).content.trim()}`;
+        } catch {
+          return "";
+        }
+      }),
+    );
+    return parts.filter(Boolean).join("\n\n");
+  };
+
   const handleBuildPrompt = async () => {
-    const resolved = resolveModel(models, providers, activeModelId);
+    const resolved = resolveModel(models, providers, promptModelId);
     if (!resolved) { setError(t("ai.errors.noModel")); return; }
     const ctrl = new AbortController();
     abort.current = ctrl;
@@ -112,10 +156,11 @@ export function LoreImageGenModal({ entity, onClose, onSaved }: Props) {
     setError(null);
     try {
       const apiKey = (await loadApiKey(resolved.provider.id)) ?? "";
+      const facetText = await collectFacetText();
       const spec = await generateImagePrompt({
         subject: entity.name,
         subjectKind: subjectKind(),
-        material: [entity.summary, material].filter(Boolean).join("\n\n"),
+        material: [entity.summary, material, facetText].filter(Boolean).join("\n\n"),
         instruction: direction,
         references,
         // Prompts go out in the UI language: every current backend handles
@@ -162,11 +207,15 @@ export function LoreImageGenModal({ entity, onClose, onSaved }: Props) {
           standard: provider.apiStandard,
           modelId: imageModel.modelId,
           safetySettings: provider.safetySettings,
+          route: imageModel.caps?.route,
         },
         {
           prompt: specToPrompt({ prompt, style, negative, aspect, note: "" }),
           n: count,
-          size: sizeForAspect(aspect, imageModel.caps?.sizes),
+          // A size typed here wins; otherwise fall back to whatever the model
+          // declared as supported, and to nothing at all if it declared none.
+          size: size.trim() || sizeForAspect(aspect, imageModel.caps?.sizes),
+          aspect,
           signal: ctrl.signal,
         },
       );
@@ -196,7 +245,7 @@ export function LoreImageGenModal({ entity, onClose, onSaved }: Props) {
 
       // Describe it now rather than leaving that to the author: until this runs
       // the picture is invisible to every text-only model in the app.
-      const vision = resolveModel(models, providers, activeModelId);
+      const vision = resolveModel(models, providers, promptModelId);
       if (vision && vision.model.type === "multimodal") {
         setDescribing(true);
         try {
@@ -244,15 +293,33 @@ export function LoreImageGenModal({ entity, onClose, onSaved }: Props) {
               <div className={styles.headerSub}>{entity.name}</div>
             </div>
           </div>
-          <select
-            className={styles.modelSelect}
-            value={effectiveImageModelId}
-            onChange={(e) => setImageModel(e.target.value)}
-            disabled={busy || imageModels.length === 0}
-            title={t("lore.imageGen.modelLabel")}
-          >
-            {imageModels.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
+          {/* Both models this run uses, each labelled: which one drafts the
+              prompt is not guessable from a bare dropdown, and it was
+              previously invisible — silently the app-wide active model. */}
+          <div className={gen.modelPickers}>
+            <label className={gen.modelPicker}>
+              <span className={gen.modelPickerLabel}>{t("lore.imageGen.promptModelLabel")}</span>
+              <select
+                className={styles.modelSelect}
+                value={promptModelId}
+                onChange={(e) => setPromptModelId(e.target.value)}
+                disabled={busy || textModels.length === 0}
+              >
+                {textModels.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </label>
+            <label className={gen.modelPicker}>
+              <span className={gen.modelPickerLabel}>{t("lore.imageGen.modelLabel")}</span>
+              <select
+                className={styles.modelSelect}
+                value={effectiveImageModelId}
+                onChange={(e) => setImageModel(e.target.value)}
+                disabled={busy || imageModels.length === 0}
+              >
+                {imageModels.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </label>
+          </div>
           <button className={styles.closeBtn} onClick={onClose}><X size={16} /></button>
         </div>
 
@@ -275,6 +342,35 @@ export function LoreImageGenModal({ entity, onClose, onSaved }: Props) {
                   <div className={gen.hint}>{t("lore.imageGen.referenceHint", { count: references.length })}</div>
                 )}
               </div>
+
+              {/* Facets carry the visual specifics — an outfit, a form, a
+                  transformation — that index.md deliberately leaves out. */}
+              {entity.facets.length > 0 && (
+                <div className={styles.section}>
+                  <label className={styles.label}>{t("lore.imageGen.facetsLabel")}</label>
+                  <div className={gen.facets}>
+                    {entity.facets.map((f) => {
+                      const on = pickedFacets.has(f.file);
+                      return (
+                        <button
+                          key={f.file}
+                          className={`${gen.facetChip} ${on ? gen.facetChipOn : ""}`}
+                          onClick={() => setPickedFacets((prev) => {
+                            const next = new Set(prev);
+                            if (on) next.delete(f.file); else next.add(f.file);
+                            return next;
+                          })}
+                          disabled={busy}
+                          title={f.group ? `${f.title} · ${f.group}` : f.title}
+                        >
+                          {f.title}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className={gen.hint}>{t("lore.imageGen.facetsHint")}</div>
+                </div>
+              )}
 
               <div className={styles.section}>
                 <div className={gen.labelRow}>
@@ -321,6 +417,23 @@ export function LoreImageGenModal({ entity, onClose, onSaved }: Props) {
                       <option key={n} value={n}>{n}</option>
                     ))}
                   </select>
+                </div>
+                <div className={gen.field}>
+                  <label className={styles.label}>{t("lore.imageGen.sizeLabel")}</label>
+                  <input
+                    className={gen.input}
+                    list="image-size-options"
+                    placeholder={t("lore.imageGen.sizePlaceholder")}
+                    value={size}
+                    onChange={(e) => setSize(e.target.value)}
+                    disabled={busy}
+                  />
+                  {/* A datalist, not a select: the accepted sizes differ per
+                      model and per relay, so the common ones are suggestions
+                      rather than the only options. */}
+                  <datalist id="image-size-options">
+                    {(imageModel?.caps?.sizes ?? COMMON_SIZES).map((s) => <option key={s} value={s} />)}
+                  </datalist>
                 </div>
                 {estimatedCost > 0 && (
                   <div className={gen.costHint}>{t("lore.imageGen.costHint", { cost: estimatedCost.toFixed(3) })}</div>

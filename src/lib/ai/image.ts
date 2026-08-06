@@ -17,7 +17,7 @@ import { fetch } from "../http";
 import { convertToGeminiContents, DEFAULT_GEMINI_BASE } from "./gemini";
 import { toSafetySettingsArray } from "./safety";
 import type { GeminiSafetySettings } from "./safety";
-import type { ApiStandard } from "./types";
+import type { ApiStandard, ImageRoute } from "./types";
 
 /** The provider coordinates every image call needs. */
 export interface ImageConn {
@@ -26,6 +26,18 @@ export interface ImageConn {
   standard: ApiStandard;
   modelId: string;
   safetySettings?: GeminiSafetySettings;
+  /** Overrides the endpoint choice derived from `standard`. See ImageRoute. */
+  route?: ImageRoute;
+}
+
+/**
+ * Which endpoint to call. The protocol picks the default, but a relay can
+ * serve a model the protocol's usual endpoint rejects, so an explicit route
+ * always wins.
+ */
+export function resolveImageRoute(standard: ApiStandard, declared?: ImageRoute): ImageRoute {
+  if (declared) return declared;
+  return standard === "gemini" ? "gemini" : "images-api";
 }
 
 export interface ImageRequest {
@@ -40,6 +52,11 @@ export interface ImageRequest {
   n?: number;
   /** e.g. "1024x1024". Omitted when the model declares no supported sizes. */
   size?: string;
+  /**
+   * e.g. "9:16". Gemini's image models take the framing this way rather than
+   * as pixel dimensions; the OpenAI-shaped routes ignore it and use `size`.
+   */
+  aspect?: string;
   /** Extra top-level request fields, mirroring StreamOptions.extraBody. */
   extraBody?: Record<string, unknown>;
   signal?: AbortSignal;
@@ -78,7 +95,14 @@ export async function generateImage(conn: ImageConn, req: ImageRequest): Promise
     // edit. Lifted in PR2 when the edit paths land.
     throw new Error("Image editing is not implemented yet (PR2).");
   }
-  return conn.standard === "gemini" ? geminiImage(conn, req) : openaiImage(conn, req);
+  switch (resolveImageRoute(conn.standard, conn.route)) {
+    case "gemini":
+      return geminiImage(conn, req);
+    case "chat":
+      return chatImage(conn, req);
+    default:
+      return openaiImage(conn, req);
+  }
 }
 
 // ─── Shared helpers ──────────────────────────────────────────────────────────
@@ -169,6 +193,94 @@ async function openaiImage(conn: ImageConn, req: ImageRequest): Promise<ImageRes
   return { images, usage, ...(revised ? { text: revised } : {}) };
 }
 
+// ─── Chat completions (relay-hosted image models) ────────────────────────────
+
+/**
+ * `POST /chat/completions` — the route newAPI-style relays use for image models
+ * that are not Imagen. The picture comes back inside the assistant message, and
+ * every relay puts it somewhere slightly different, so all the known shapes are
+ * accepted rather than betting on one:
+ *
+ *   - `message.images[]`      — OpenRouter's shape, adopted by newAPI
+ *   - `message.content` parts — the multimodal-content array
+ *   - markdown in the text    — `![img](data:…)` or `![img](https://…)`
+ *
+ * Anything that arrives as an http URL is downloaded, same as on the images
+ * route: relays hand out expiring links.
+ */
+async function chatImage(conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
+  const url = `${conn.baseUrl.replace(/\/$/, "")}/chat/completions`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(conn.apiKey ? { Authorization: `Bearer ${conn.apiKey}` } : {}),
+    },
+    body: JSON.stringify({
+      model: conn.modelId,
+      messages: [{ role: "user", content: req.prompt }],
+      stream: false,
+      ...req.extraBody,
+    }),
+    signal: req.signal,
+  });
+
+  if (!res.ok) throw new Error(`Image API error ${res.status}: ${await res.text()}`);
+
+  const json = (await res.json()) as {
+    choices?: { message?: {
+      content?: string | { type?: string; text?: string; image_url?: { url?: string } }[];
+      images?: ({ image_url?: { url?: string }; url?: string } | string)[];
+    } }[];
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+    error?: { message?: string } | string;
+  };
+  if (json.error) {
+    const msg = typeof json.error === "string" ? json.error : json.error.message;
+    throw new Error(`Image API: ${msg ?? JSON.stringify(json.error)}`);
+  }
+
+  const message = json.choices?.[0]?.message;
+  const urls: string[] = [];
+  const texts: string[] = [];
+
+  for (const entry of message?.images ?? []) {
+    const u = typeof entry === "string" ? entry : entry.image_url?.url ?? entry.url;
+    if (u) urls.push(u);
+  }
+  if (typeof message?.content === "string") {
+    for (const m of message.content.matchAll(/!\[[^\]]*\]\(([^)\s]+)\)/g)) urls.push(m[1]);
+    // Strip the markdown images so the leftover prose reads as commentary.
+    const prose = message.content.replace(/!\[[^\]]*\]\([^)\s]+\)/g, "").trim();
+    if (prose) texts.push(prose);
+  } else if (Array.isArray(message?.content)) {
+    for (const part of message.content) {
+      if (part.image_url?.url) urls.push(part.image_url.url);
+      else if (part.text) texts.push(part.text);
+    }
+  }
+
+  const images: GeneratedImage[] = [];
+  for (const u of urls) {
+    if (u.startsWith("data:")) {
+      const mime = u.slice(5, u.indexOf(";")) || "image/png";
+      images.push({ dataUrl: u, mime });
+    } else {
+      images.push(await urlToDataUrl(u, req.signal));
+    }
+  }
+  if (!images.length) {
+    // The model replying in words is the usual symptom of a text model being
+    // configured as an image one — say so with its own words attached.
+    throw new NoImageError(texts.join(" ").slice(0, 200) || "the reply contained no image");
+  }
+
+  const usage = json.usage
+    ? { inputTokens: json.usage.prompt_tokens ?? 0, outputTokens: json.usage.completion_tokens ?? 0 }
+    : undefined;
+  return { images, usage, ...(texts.length ? { text: texts.join("\n\n") } : {}) };
+}
+
 // ─── Gemini ──────────────────────────────────────────────────────────────────
 
 /**
@@ -206,6 +318,9 @@ async function geminiImage(conn: ImageConn, req: ImageRequest): Promise<ImageRes
         // TEXT stays in the list: the image models refuse an IMAGE-only
         // modality set on some revisions, and the text part is useful anyway.
         responseModalities: ["TEXT", "IMAGE"],
+        // Gemini takes framing as a ratio, not pixel dimensions — `size` is
+        // meaningless here and `aspect` is the only control that lands.
+        ...(req.aspect ? { imageConfig: { aspectRatio: req.aspect } } : {}),
         ...(req.n && req.n > 1 ? { candidateCount: req.n } : {}),
       },
       ...(safetySettings.length ? { safetySettings } : {}),

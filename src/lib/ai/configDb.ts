@@ -6,7 +6,7 @@
 import Database from "@tauri-apps/plugin-sql";
 
 import type { GeminiSafetySettings } from "./safety";
-import type { ApiStandard } from "./types";
+import type { ApiStandard, ImageRoute } from "./types";
 
 export type ModelType = "text" | "multimodal" | "image" | "video";
 
@@ -23,6 +23,12 @@ export interface ImageCaps {
   sizes?: string[];
   /** How many reference images one edit request may carry. */
   maxRefs?: number;
+  /**
+   * Which endpoint serves this model's images. Unset ⇒ derived from the
+   * provider's API standard, which is right for first-party endpoints and
+   * wrong for relays hosting a Gemini image model behind an OpenAI protocol.
+   */
+  route?: ImageRoute;
 }
 
 /**

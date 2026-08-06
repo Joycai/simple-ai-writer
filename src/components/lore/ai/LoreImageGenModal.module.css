@@ -35,6 +35,57 @@
   line-height: 1.5;
 }
 
+/* Header model pickers: two selects that must read as distinct roles, not as
+   one setting duplicated. */
+.modelPickers {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-left: auto;
+}
+
+.modelPicker {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.modelPickerLabel {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* Facet chips — multi-select, so they toggle in place rather than behaving
+   like the single-choice pickers elsewhere in the modal. */
+.facets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.facetChip {
+  padding: 3px var(--space-3);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full, 999px);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+.facetChip:hover:not(:disabled) { border-color: var(--color-accent); color: var(--color-text-primary); }
+.facetChip:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.facetChipOn {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg-base, #fff);
+}
+
 .fieldRow {
   display: flex;
   align-items: flex-end;

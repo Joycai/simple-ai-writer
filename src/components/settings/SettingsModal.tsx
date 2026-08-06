@@ -19,7 +19,7 @@ import { useAppStore, type ThemeMode, type Language, type FontScheme } from "../
 import { MARKDOWN_THEMES } from "../../lib/theme/markdownThemes";
 import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../lib/ai/apiLog";
 import { applyConfigImport, exportAiConfig, stageConfigImport } from "../../lib/ai/configTransfer";
-import type { ApiStandard } from "../../lib/ai/types";
+import type { ApiStandard, ImageRoute } from "../../lib/ai/types";
 import { defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, type ModelType } from "../../lib/ai/configDb";
 import { ModelProbePanel } from "./ModelProbePanel";
 import { ModalErrorBoundary } from "../common/ErrorBoundary";
@@ -624,7 +624,7 @@ function ModelsTab() {
   ];
 
   const { providers, models, addModel, updateModel, removeModel, fetchAndImportModels } = useAiStore();
-  const [form, setForm] = useState({ providerId: "", modelId: "", name: "", type: "text" as ModelType, priceIn: "", priceCachedIn: "", priceOut: "", prefix: "", contextSize: "", maxOutput: "", pricePerImage: "", capsSizes: "" });
+  const [form, setForm] = useState({ providerId: "", modelId: "", name: "", type: "text" as ModelType, priceIn: "", priceCachedIn: "", priceOut: "", prefix: "", contextSize: "", maxOutput: "", pricePerImage: "", capsSizes: "", capsRoute: "" });
   // When the two limits came from a probe rather than the keyboard — kept out
   // of `form` because it is provenance, not something the author edits.
   const [probedAt, setProbedAt] = useState<number | undefined>(undefined);
@@ -639,7 +639,7 @@ function ModelsTab() {
   const [error, setError] = useState<string | null>(null);
 
   const resetForm = () => {
-    setForm({ providerId: "", modelId: "", name: "", type: "text", priceIn: "", priceCachedIn: "", priceOut: "", prefix: "", contextSize: "", maxOutput: "", pricePerImage: "", capsSizes: "" });
+    setForm({ providerId: "", modelId: "", name: "", type: "text", priceIn: "", priceCachedIn: "", priceOut: "", prefix: "", contextSize: "", maxOutput: "", pricePerImage: "", capsSizes: "", capsRoute: "" });
     setProbedAt(undefined);
     setCapsEdit(false);
     setEditingId(null);
@@ -664,6 +664,7 @@ function ModelsTab() {
       maxOutput: m.maxOutput ? String(m.maxOutput) : "",
       pricePerImage: m.pricePerImage ? String(m.pricePerImage) : "",
       capsSizes: (m.caps?.sizes ?? []).join(", "),
+      capsRoute: m.caps?.route ?? "",
     });
     setProbedAt(m.probedAt);
     setCapsEdit(m.caps?.edit ?? false);
@@ -703,7 +704,11 @@ function ModelsTab() {
       const pricePerImage = isImageModel && parsedPerImage > 0 ? parsedPerImage : undefined;
       const sizes = form.capsSizes.split(",").map((s) => s.trim()).filter(Boolean);
       const caps = isImageModel
-        ? { edit: capsEdit, ...(sizes.length ? { sizes } : {}) }
+        ? {
+            edit: capsEdit,
+            ...(sizes.length ? { sizes } : {}),
+            ...(form.capsRoute ? { route: form.capsRoute as ImageRoute } : {}),
+          }
         : undefined;
       if (editingId) {
         const existing = models.find((x) => x.id === editingId)!;
@@ -872,6 +877,19 @@ function ModelsTab() {
                   <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 6, fontStyle: "italic" }}>
                     {t("aiConfig.models.capsSizesHint")}
                   </div>
+                </div>
+              </div>
+              <div className={styles.fieldGroup}>
+                <label className={styles.label}>{t("aiConfig.models.capsRouteLabel")}</label>
+                <select className={styles.select} value={form.capsRoute}
+                  onChange={(e) => setForm({ ...form, capsRoute: e.target.value })}>
+                  <option value="">{t("aiConfig.models.capsRouteAuto")}</option>
+                  <option value="images-api">{t("aiConfig.models.capsRouteImages")}</option>
+                  <option value="chat">{t("aiConfig.models.capsRouteChat")}</option>
+                  <option value="gemini">{t("aiConfig.models.capsRouteGemini")}</option>
+                </select>
+                <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 6, fontStyle: "italic" }}>
+                  {t("aiConfig.models.capsRouteHint")}
                 </div>
               </div>
               <div className={styles.fieldGroup}>
