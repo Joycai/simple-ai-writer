@@ -83,7 +83,7 @@ function rotationFor(id: string): number {
 export function LoreWall() {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
-  const { index, scanProject, createNewEntity, deleteEntity, requestedDetailPath } = useLoreStore();
+  const { index, scanProject, createNewEntity, deleteEntity, detailPath, detailEditing, openDetail } = useLoreStore();
   const { projectPath } = useProjectStore();
   const terms = useTerms();
   // The eyebrow is decorative English regardless of UI language (matching
@@ -96,8 +96,6 @@ export function LoreWall() {
   const [search, setSearch] = useState("");
   // Unified new-entry flow: null = closed, else which mode the modal opens in.
   const [newMode, setNewMode] = useState<NewEntryMode | null>(null);
-  const [detailEntity, setDetailEntity] = useState<LoreEntity | null>(null);
-  const [detailEditing, setDetailEditing] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; entity: LoreEntity | null } | null>(null);
   // Lore bundle transfer: staged import awaiting the user's conflict decision.
   const [importStaged, setImportStaged] = useState<StagedLoreImport | null>(null);
@@ -110,19 +108,14 @@ export function LoreWall() {
   const [avatarDataUrls, setAvatarDataUrls] = useState<Record<string, string>>({});
   const [avatarBusy, setAvatarBusy] = useState<string | null>(null);
 
-  // Another surface (a citation click) asked for an entity's detail view.
-  // Consume the request once the index can resolve it; leaving it un-cleared
-  // on a miss is deliberate — a scan may still be in flight, and the next
-  // index update gets another chance before the author notices.
-  useEffect(() => {
-    if (!requestedDetailPath) return;
-    const entity = Object.values(index).flat()
-      .find((e) => e.dirPath === requestedDetailPath);
-    if (!entity) return;
-    setDetailEntity(entity);
-    setDetailEditing(false);
-    useLoreStore.setState({ requestedDetailPath: null });
-  }, [requestedDetailPath, index]);
+  // Which entity the detail view is showing. Resolved from the index on every
+  // render rather than held as an object: the open entity survives a re-scan,
+  // and a path opened before the index was ready (a citation click during a
+  // scan) starts rendering the moment it resolves.
+  const detailEntity = useMemo<LoreEntity | null>(() => {
+    if (!detailPath) return null;
+    return Object.values(index).flat().find((e) => e.dirPath === detailPath) ?? null;
+  }, [detailPath, index]);
 
   useEffect(() => {
     let cancelled = false;
@@ -268,9 +261,9 @@ export function LoreWall() {
     }
     return [
       { kind: "item", icon: <BookOpen size={13} />, label: t("fileTree.open"),
-        action: () => setDetailEntity(e) },
+        action: () => openDetail(e.dirPath) },
       { kind: "item", icon: <Pencil size={13} />, label: t("lore.detail.edit", { defaultValue: "编辑" }),
-        action: () => { setDetailEditing(true); setDetailEntity(e); } },
+        action: () => openDetail(e.dirPath, true) },
       { kind: "item", icon: <Camera size={13} />, label: t("lore.wall.changeAvatar", { defaultValue: "更换头像" }),
         action: () => void handleAvatarPick(e) },
       { kind: "item", icon: <FolderOpen size={13} />, label: t("lore.panel.showInBrowser"),
@@ -284,9 +277,12 @@ export function LoreWall() {
   return (
     <div style={{ position: "relative", flex: 1, minWidth: 0, height: "100%", display: "flex", overflow: "hidden" }}>
       <AnimatePresence initial={false}>
+        {/* Keyed by entity: LoreDetail seeds internal state from the entity it
+            mounted with, so going straight from one entry to another (a
+            citation click, a history step) has to remount it. */}
         {detailEntity ? (
           <motion.div
-            key="detail"
+            key={`detail:${detailEntity.dirPath}`}
             variants={pushForward}
             initial="initial"
             animate="animate"
@@ -297,7 +293,7 @@ export function LoreWall() {
             <LoreDetail
               entity={detailEntity}
               initialEditing={detailEditing}
-              onBack={() => { setDetailEntity(null); setDetailEditing(false); }}
+              onBack={() => openDetail(null)}
             />
           </motion.div>
         ) : (
@@ -326,7 +322,7 @@ export function LoreWall() {
             await createNewEntity(projectPath, category, id, name.trim());
             setNewMode(null);
             const created = useLoreStore.getState().index[category]?.find((e) => e.id === id);
-            if (created) setDetailEntity(created);
+            if (created) openDetail(created.dirPath);
           }}
         />
       )}
@@ -429,7 +425,7 @@ export function LoreWall() {
                   key={e.id}
                   className={`${styles.card} ${featured ? styles.cardFeatured : ""}`}
                   style={{ transform: `rotate(${rot}deg)` }}
-                  onClick={() => setDetailEntity(e)}
+                  onClick={() => openDetail(e.dirPath)}
                   onContextMenu={(ev) => {
                     ev.preventDefault();
                     ev.stopPropagation();

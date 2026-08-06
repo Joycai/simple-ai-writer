@@ -19,14 +19,15 @@ import { categoryLabel, findCategory, loreCategories } from "../../lib/profile";
 import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useAppStore } from "../../stores/appStore";
+import { replaceLocation } from "../../stores/navStore";
 import { useAiStore } from "../../stores/aiStore";
 import { loadApiKey } from "../../lib/keyStore";
 import { describeLoreImage } from "../../lib/lore/vision";
 import { readFile, removeFile } from "../../lib/fs/fileio";
 import { imageToDataUrl } from "../../lib/fs/images";
-import { renderMarkdown } from "../../lib/fs/markdown";
 import { useImageDataUrl } from "./useImageDataUrl";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
+import { MarkdownPreview } from "../common/MarkdownPreview";
 import { LoreImproveModal } from "./LoreImproveModal";
 import { LoreMetaImproveModal } from "./LoreMetaImproveModal";
 import { FacetEditModal } from "./FacetEditModal";
@@ -284,6 +285,10 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
       // Follow the entity to its (possibly new) folder, and refresh the local
       // body copy — the read-back effect only reruns when dirPath changes.
       setLoc({ category: moved.category, id: moved.id });
+      // The wall resolves its detail view by dirPath, so it has to follow too.
+      // replaceLocation, not a plain call: the author is still looking at the
+      // same entry, so this must not become a step in the history.
+      replaceLocation(() => useLoreStore.getState().openDetail(moved.dirPath));
       setContent(dBody.trimStart());
       setEditing(false);
     } finally {
@@ -713,9 +718,10 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         {tab === "summary" ? (
           <>
             {content ? (
-              <div
+              <MarkdownPreview
+                source={content}
+                basePath={entity.dirPath}
                 className={styles.markdown}
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }}
               />
             ) : contentLoadFailed ? (
               <div className={styles.notLoaded}>

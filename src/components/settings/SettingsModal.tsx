@@ -16,6 +16,7 @@ import {
   type WorkspaceProfile,
 } from "../../lib/profile";
 import { useAppStore, type ThemeMode, type Language, type FontScheme } from "../../stores/appStore";
+import { MARKDOWN_THEMES } from "../../lib/theme/markdownThemes";
 import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../lib/ai/apiLog";
 import { applyConfigImport, exportAiConfig, stageConfigImport } from "../../lib/ai/configTransfer";
 import type { ApiStandard } from "../../lib/ai/types";
@@ -85,8 +86,11 @@ const FONT_SCHEMES: { value: FontScheme; labelKey: string; sample: string; previ
 // ─── General Tab ──────────────────────────────────────────────────────────────
 
 function GeneralTab() {
-  const { t } = useTranslation();
+  const { t, i18n: i18nInst } = useTranslation();
+  const isZh = i18nInst.language.startsWith("zh");
   const { theme, setTheme, language, setLanguage, fontScheme, setFontScheme } = useAppStore();
+  const markdownTheme = useAppStore((s) => s.markdownTheme);
+  const setMarkdownTheme = useAppStore((s) => s.setMarkdownTheme);
   const [apiLogOn, setApiLogOn] = useState(isApiLogEnabled());
   const providers = useAiStore((s) => s.providers);
   const loadConfig = useAiStore((s) => s.loadConfig);
@@ -181,6 +185,29 @@ function GeneralTab() {
               >
                 <span className={styles.fontSample} style={{ fontFamily: f.previewFont }}>{f.sample}</span>
                 <span className={styles.fontName}>{t(f.labelKey)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className={styles.fieldGroup}>
+          <label className={styles.label}>{t("systemSettings.general.mdThemeLabel")}</label>
+          <div className={styles.safetyHint}>{t("systemSettings.general.mdThemeHint")}</div>
+          <div className={styles.mdThemeGrid}>
+            {MARKDOWN_THEMES.map((mt) => (
+              <button
+                key={mt.id}
+                className={`${styles.mdThemeCard} ${markdownTheme === mt.id ? styles.mdThemeCardActive : ""}`}
+                onClick={() => setMarkdownTheme(mt.id)}
+              >
+                {/* data-md-theme pins the sample to this card's theme, whatever
+                    the app-wide setting currently is. */}
+                <div className={`${styles.mdThemeSample} md-body`} data-md-theme={mt.id} aria-hidden>
+                  <h2>{isZh ? "标题" : "Heading"}</h2>
+                  <p>{isZh ? "正文示例，字体与间距如此。" : "Body text, set in this theme."}</p>
+                </div>
+                <div className={styles.mdThemeName}>{isZh ? mt.label.zh : mt.label.en}</div>
+                <div className={styles.mdThemeDesc}>{isZh ? mt.desc.zh : mt.desc.en}</div>
               </button>
             ))}
           </div>

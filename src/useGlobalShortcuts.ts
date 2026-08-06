@@ -5,7 +5,15 @@
  * InlineAiBubble.tsx), each with its own hand-rolled modifier check.
  */
 import { useEffect } from "react";
-import { matchesCombo } from "./lib/shortcuts";
+import {
+  comboNeedsIdleCaret,
+  inTextEntry,
+  matchesCombo,
+  NAV_BACK_COMBOS,
+  NAV_FORWARD_COMBOS,
+  type Combo,
+} from "./lib/shortcuts";
+import { navBack, navForward } from "./stores/navStore";
 import { useAppStore } from "./stores/appStore";
 import { useEditorStore } from "./stores/editorStore";
 import { useAiTaskStore, type TaskKind } from "./stores/aiTaskStore";
@@ -13,6 +21,13 @@ import { findTask } from "./lib/profile";
 import { insideAiSurface, insideSelectableSurface, dropEditorMarker, resolveCommit } from "./lib/editor/aiSelection";
 
 const AI_SHORTCUT_TASKS: Record<string, TaskKind> = { e: "rewrite", l: "polish", m: "summary" };
+
+/** Any of an action's bindings, minus the ones a caret has first claim on. */
+function matchesAny(e: KeyboardEvent, combos: Combo[]): boolean {
+  return combos.some(
+    (c) => matchesCombo(e, c) && !(comboNeedsIdleCaret(c) && inTextEntry(e.target)),
+  );
+}
 
 export function useGlobalShortcuts() {
   useEffect(() => {
@@ -45,6 +60,16 @@ export function useGlobalShortcuts() {
       if (matchesCombo(e, { mod: true, key: "s" })) {
         e.preventDefault();
         useEditorStore.getState().saveNow();
+        return;
+      }
+      if (matchesAny(e, NAV_BACK_COMBOS)) {
+        e.preventDefault();
+        navBack();
+        return;
+      }
+      if (matchesAny(e, NAV_FORWARD_COMBOS)) {
+        e.preventDefault();
+        navForward();
         return;
       }
 

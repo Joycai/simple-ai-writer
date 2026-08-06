@@ -23,6 +23,7 @@ import { parseFrontmatter } from "../../lib/fs/markdown";
 import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
+import { MarkdownPreview } from "../common/MarkdownPreview";
 import { ModalShell } from "../common/ModalShell";
 import { FacetAiAssistantModal } from "./ai/FacetAiAssistantModal";
 import styles from "./FacetEditModal.module.css";
@@ -46,6 +47,7 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
   const [priority, setPriority] = useState(0);
   const [mode, setMode] = useState<FacetMeta["mode"]>("auto");
   const [body, setBody] = useState("");
+  const [bodyView, setBodyView] = useState<"editor" | "preview">("editor");
   const [loaded, setLoaded] = useState(file === null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -237,16 +239,39 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
           </div>
 
           <div className={styles.bodyBlock}>
-            <label className={styles.label}>
-              {t("lore.facet.fieldBody", { defaultValue: "内容 · Markdown" })}
-            </label>
-            <MarkdownTextarea
-              className={styles.bodyTextarea}
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              spellCheck={false}
-              placeholder={t("lore.facet.bodyPlaceholder", { defaultValue: "这一特征的具体设定内容…" })}
-            />
+            <div className={styles.bodyHead}>
+              <label className={styles.label}>
+                {t("lore.facet.fieldBody", { defaultValue: "内容 · Markdown" })}
+              </label>
+              <div className={styles.viewToggle}>
+                {(["editor", "preview"] as const).map((v) => (
+                  <button
+                    key={v}
+                    className={`${styles.viewBtn} ${bodyView === v ? styles.viewBtnActive : ""}`}
+                    onClick={() => setBodyView(v)}
+                  >
+                    {t(`editor.viewMode.${v}`)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {bodyView === "editor" ? (
+              <MarkdownTextarea
+                className={styles.bodyTextarea}
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                spellCheck={false}
+                placeholder={t("lore.facet.bodyPlaceholder", { defaultValue: "这一特征的具体设定内容…" })}
+              />
+            ) : body.trim() ? (
+              // basePath: facet files live in the entity folder, so relative
+              // image links resolve against it.
+              <MarkdownPreview source={body} basePath={entity.dirPath} className={styles.bodyPreview} />
+            ) : (
+              <div className={`${styles.bodyPreview} ${styles.bodyPreviewEmpty}`}>
+                {t("lore.facet.previewEmpty", { defaultValue: "暂无内容" })}
+              </div>
+            )}
           </div>
 
           {error && <div className={styles.error}>{error}</div>}

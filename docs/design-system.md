@@ -43,6 +43,27 @@ User-switchable CJK × Western pairings, selected in Settings → 通用 → 外
 
 Each scheme overrides **both** `--font-serif` (editor body) and `--font-sans` (UI); `hei` points serif at a sans stack to make the whole app sans. To **add a scheme**: append a `[data-font="…"]` block in `tokens.css`, extend the `FontScheme` union + `FONT_SCHEMES` array in `appStore.ts`, add an entry (with a `previewFont` mirroring the serif stack) to `FONT_SCHEMES` in `SettingsModal.tsx`, and add `systemSettings.general.font*` labels to both locales.
 
+### Markdown 排版主题 (Markdown themes — `data-md-theme`)
+
+Every rendered-markdown surface — the editor preview pane, lore entry/facet previews, exported HTML and print/PDF — shares one look, picked in Settings → 通用 → 外观. Implementation: `src/lib/theme/markdownThemes.ts`.
+
+Why CSS-in-TS instead of a `.module.css`: exported HTML is self-contained, so the same rules must be serialised into a `<style>` tag with no build step and no `tokens.css` around them (`EXPORT_TOKEN_CSS` re-declares the light palette there). One generator means the printed file matches what the author read; a stylesheet plus a hand-kept export copy would drift on the first tweak. This is the **only** sanctioned CSS-in-TS in the app.
+
+| `data-md-theme` | 名称 | 观感 |
+|-----------------|------|------|
+| `manuscript` (default) | 手稿 | Serif, centred headings, 2em paragraph indent — fiction |
+| `clean` | 素雅 | Sans, left-aligned, airy — reports, weeklies, docs |
+| `magazine` | 杂志 | Display headings, section rules, drop cap — long-form |
+| `wechat` | 公众号 | Centred headings with accent bars, compact body |
+| `typewriter` | 打字机 | Monospace, visible `#` markers |
+
+Rules of the road:
+
+- A theme is a bag of `--md-*` custom properties consumed by shared base rules, plus an optional `rules` string (`&` = container selector) for signature touches. **Colours stay in design tokens** — that's what makes every theme follow dark/light for free.
+- Containers carry the global `md-body` class (`MD_BODY_CLASS`); the theme comes from `data-md-theme` on `<html>` (state in `appStore.markdownTheme`, persisted as `localStorage["app:markdownTheme"]`). A container may set the attribute on *itself* to pin one theme regardless of the app setting — the settings picker's live samples do this, which is why the generator emits pinned blocks after inherited ones.
+- **Size belongs to the surface, not the theme.** Surfaces set `--md-size` (preview pane 17px, lore entry 15px, facet field 14px, picker sample 10px); themes may only nudge it via `--md-scale`. The base defaults sit in `:where()` (zero specificity) because the stylesheet is injected *after* the app's CSS modules and would otherwise beat a plain surface class.
+- To **add a theme**: append an entry to `MARKDOWN_THEMES` (id, zh/en label + desc, vars, optional rules) and extend the `MarkdownThemeId` union + `MARKDOWN_THEME_IDS`. The settings picker, persistence and export pick it up with no further wiring.
+
 ### 组件模式 (Required patterns)
 - **Primary button**: solid `--color-accent`; hover → `--color-accent-hover` + `translateY(-1px)` + `--shadow-sm`; active → `translateY(0) scale(0.98)`; disabled → reduced opacity. Never opacity-only hover.
 - **Tinted/secondary button**: `--color-accent-tint` bg + `--color-accent` text; hover → `--color-accent-tint-strong` (or solid accent + white text); active → `scale(0.96–0.98)`.

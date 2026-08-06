@@ -42,8 +42,43 @@ export function comboLabel(combo: Combo): string {
 
 function displayKey(key: string): string {
   if (key === "Escape") return "Esc";
+  if (key === "ArrowLeft") return "←";
+  if (key === "ArrowRight") return "→";
   if (key.length === 1) return key.toUpperCase();
   return key;
+}
+
+/**
+ * Back / forward, bound the way each platform binds them.
+ *
+ * Mac gets ⌘[ / ⌘] as the primary pair (Finder, Safari, Xcode) plus ⌘←/⌘→ as
+ * the alternates — but the arrow pair only fires outside text entry, because
+ * there ⌘← means "jump to line start" and stealing it would break typing.
+ * Elsewhere Alt+←/→ is the universal binding and CodeMirror leaves it free, so
+ * it works while the cursor is in the manuscript.
+ */
+export const NAV_BACK_COMBOS: Combo[] = IS_MAC
+  ? [{ mod: true, key: "[" }, { mod: true, key: "ArrowLeft" }]
+  : [{ alt: true, key: "ArrowLeft" }];
+
+export const NAV_FORWARD_COMBOS: Combo[] = IS_MAC
+  ? [{ mod: true, key: "]" }, { mod: true, key: "ArrowRight" }]
+  : [{ alt: true, key: "ArrowRight" }];
+
+/** Combos that must yield to a caret — see NAV_BACK_COMBOS. */
+export function comboNeedsIdleCaret(combo: Combo): boolean {
+  return IS_MAC && (combo.key === "ArrowLeft" || combo.key === "ArrowRight");
+}
+
+/** Is the event headed for somewhere the author is typing? */
+export function inTextEntry(target: EventTarget | null): boolean {
+  const el = target instanceof Element ? target : null;
+  return !!el?.closest("input, textarea, [contenteditable='true'], [contenteditable='']");
+}
+
+/** "⌘[ / ⌘←" — every binding for one action, for the shortcuts list. */
+export function combosLabel(combos: Combo[]): string {
+  return combos.map(comboLabel).join(" / ");
 }
 
 /** "dispatch" = wired into useGlobalShortcuts; "info" = implemented locally
@@ -72,6 +107,8 @@ export const SHORTCUTS: ShortcutDef[] = [
   { id: "aiChatDrawer", category: "global", combo: { mod: true, key: "l" }, labelKey: "aiChatDrawer", scope: "dispatch" },
   { id: "aiGenerateDrawer", category: "global", combo: { mod: true, key: "j" }, labelKey: "aiGenerateDrawer", scope: "dispatch" },
   { id: "closeOverlays", category: "global", combo: { key: "Escape" }, labelKey: "closeOverlays", scope: "dispatch" },
+  { id: "navBack", category: "global", keysLabel: combosLabel(NAV_BACK_COMBOS), labelKey: "navBack", scope: "dispatch" },
+  { id: "navForward", category: "global", keysLabel: combosLabel(NAV_FORWARD_COMBOS), labelKey: "navForward", scope: "dispatch" },
 
   // ─── File ─────────────────────────────────────────────────────────────
   { id: "saveFile", category: "file", combo: { mod: true, key: "s" }, labelKey: "saveFile", scope: "dispatch" },

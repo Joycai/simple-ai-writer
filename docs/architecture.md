@@ -291,6 +291,16 @@ Story Memory is *per-document*, so a chapter is its own file and knows nothing o
 - **Migration** — keys stored by older builds in the plaintext SQLite `api_keys` table are moved into the keyring (and deleted from the DB) lazily on first access
 - **History** — stronghold was removed (its Rust actor deadlocked on some macOS setups); an interim plaintext-SQLite scheme was then replaced by the keyring
 
+### Navigation history (后退 / 前进)
+
+- **Location** — `src/stores/navStore.ts`; keys dispatched from `useGlobalShortcuts`, installed once from `App`
+- **A location** = `{ mainView, activeFilePath, lore detailPath }` — the three things the author moves *between*. Drawers, modals, sidebar tabs and scroll position are chrome, not places, and are deliberately not restored.
+- **Recorded by observation, not interception.** The store subscribes to `appStore` / `projectStore` / `loreStore` and notices when the location changed. Every navigation path — file tree, command palette, outline rows, citation clicks, "open in editor" — lands in the history without knowing the store exists, and one added later can't forget to register. The cost is a location comparison per store update, which short-circuits on the first field.
+- **`applying` flag** — set while back()/forward() restores a location. zustand notifies subscribers synchronously inside `set`, so a replayed step is fully observed before the flag clears and never re-enters the stacks. `replaceLocation()` reuses the flag for `history.replaceState` semantics: same place, new address (moving a lore entry to another category renames its folder while the author is looking at it).
+- **Bindings** — Mac `⌘[` / `⌘]` always, plus `⌘←` / `⌘→` outside text entry (there the caret owns them). Elsewhere `Alt+←` / `Alt+→`, which CodeMirror leaves free so it works mid-manuscript. Mouse buttons 3/4 with `preventDefault` on the press, so the webview doesn't attempt a page-history navigation of its own. Combos live in `lib/shortcuts.ts` (`NAV_BACK_COMBOS` / `NAV_FORWARD_COMBOS`) and are listed in Settings → 快捷键.
+- **Boundaries** — a blocking overlay (settings, palette, onboarding) suspends both directions; opening another project clears the history, since another project's files aren't places in this one. Depth caps at 100.
+- **Prerequisite** — the wall's open lore entry lives in `loreStore.detailPath` (not LoreWall local state) precisely so history can read and restore it; an unresolvable path just renders the grid, which also covers "entry deleted since you visited it".
+
 ### Export
 
 - **Location** — `src/lib/fs/export.ts`
