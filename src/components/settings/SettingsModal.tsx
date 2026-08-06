@@ -20,7 +20,7 @@ import { MARKDOWN_THEMES } from "../../lib/theme/markdownThemes";
 import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../lib/ai/apiLog";
 import { applyConfigImport, exportAiConfig, stageConfigImport } from "../../lib/ai/configTransfer";
 import type { ApiStandard } from "../../lib/ai/types";
-import { MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, type ModelType } from "../../lib/ai/configDb";
+import { defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, type ModelType } from "../../lib/ai/configDb";
 import { ModelProbePanel } from "./ModelProbePanel";
 import { CONTEXT_SIZE_STOPS, contextStopIndex, exactStopIndex, formatContextSize } from "../../lib/ai/contextSize";
 import { GEMINI_HARM_CATEGORIES, GEMINI_THRESHOLD_LEVELS, defaultSafetySettings, type GeminiSafetySettings, type GeminiHarmCategory } from "../../lib/ai/safety";
@@ -623,10 +623,13 @@ function ModelsTab() {
   ];
 
   const { providers, models, addModel, updateModel, removeModel, fetchAndImportModels } = useAiStore();
-  const [form, setForm] = useState({ providerId: "", modelId: "", name: "", type: "text" as ModelType, priceIn: "", priceCachedIn: "", priceOut: "", prefix: "", contextSize: "", maxOutput: "" });
+  const [form, setForm] = useState({ providerId: "", modelId: "", name: "", type: "text" as ModelType, priceIn: "", priceCachedIn: "", priceOut: "", prefix: "", contextSize: "", maxOutput: "", pricePerImage: "", capsSizes: "" });
   // When the two limits came from a probe rather than the keyboard — kept out
   // of `form` because it is provenance, not something the author edits.
   const [probedAt, setProbedAt] = useState<number | undefined>(undefined);
+  // Out of `form` for a different reason: the price row below casts `form` to
+  // Record<string, string> to index its fields, which a boolean would break.
+  const [capsEdit, setCapsEdit] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [fetching, setFetching] = useState(false);
@@ -635,8 +638,9 @@ function ModelsTab() {
   const [error, setError] = useState<string | null>(null);
 
   const resetForm = () => {
-    setForm({ providerId: "", modelId: "", name: "", type: "text", priceIn: "", priceCachedIn: "", priceOut: "", prefix: "", contextSize: "", maxOutput: "" });
+    setForm({ providerId: "", modelId: "", name: "", type: "text", priceIn: "", priceCachedIn: "", priceOut: "", prefix: "", contextSize: "", maxOutput: "", pricePerImage: "", capsSizes: "" });
     setProbedAt(undefined);
+    setCapsEdit(false);
     setEditingId(null);
     setShowForm(false);
     setFetchedList([]);
@@ -657,8 +661,11 @@ function ModelsTab() {
       prefix: m.prefix ?? "",
       contextSize: m.contextSize ? String(m.contextSize) : "",
       maxOutput: m.maxOutput ? String(m.maxOutput) : "",
+      pricePerImage: m.pricePerImage ? String(m.pricePerImage) : "",
+      capsSizes: (m.caps?.sizes ?? []).join(", "),
     });
     setProbedAt(m.probedAt);
+    setCapsEdit(m.caps?.edit ?? false);
     setEditingId(id);
     setShowForm(true);
     setFetchedList([]);
@@ -688,6 +695,15 @@ function ModelsTab() {
       const contextSize = parsedCtx > 0 ? parsedCtx : undefined;
       const parsedOut = Math.min(MAX_OUTPUT_SIZE, Math.max(0, Math.floor(parseInt(form.maxOutput, 10) || 0)));
       const maxOutput = parsedOut > 0 ? parsedOut : undefined;
+      // Image-only settings. Cleared for other types so a model that used to be
+      // an image model doesn't keep billing per image after being switched.
+      const isImageModel = form.type === "image";
+      const parsedPerImage = parseFloat(form.pricePerImage);
+      const pricePerImage = isImageModel && parsedPerImage > 0 ? parsedPerImage : undefined;
+      const sizes = form.capsSizes.split(",").map((s) => s.trim()).filter(Boolean);
+      const caps = isImageModel
+        ? { edit: capsEdit, ...(sizes.length ? { sizes } : {}) }
+        : undefined;
       if (editingId) {
         const existing = models.find((x) => x.id === editingId)!;
         await updateModel({
@@ -703,6 +719,8 @@ function ModelsTab() {
           contextSize,
           maxOutput,
           probedAt,
+          pricePerImage,
+          caps,
         });
       } else {
         await addModel({
@@ -718,6 +736,8 @@ function ModelsTab() {
           contextSize,
           maxOutput,
           probedAt,
+          pricePerImage,
+          caps,
         });
       }
       resetForm();
@@ -771,7 +791,17 @@ function ModelsTab() {
             <div className={styles.fieldGroup}>
               <label className={styles.label}>{t("aiConfig.models.typeLabel")}</label>
               <select className={styles.select} value={form.type}
-                onChange={(e) => setForm({ ...form, type: e.target.value as ModelType })}>
+                onChange={(e) => {
+                  const type = e.target.value as ModelType;
+                  setForm({ ...form, type });
+                  // Seed the edit capability from the provider's protocol the
+                  // first time this becomes an image model, so the common case
+                  // needs no thought and the odd one is still overridable.
+                  if (type === "image" && !editingId) {
+                    const std = providers.find((p) => p.id === form.providerId)?.apiStandard;
+                    setCapsEdit(std ? (defaultImageCaps(std).edit ?? false) : false);
+                  }
+                }}>
                 {modelTypeOptions.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
@@ -821,6 +851,44 @@ function ModelsTab() {
             ))}
           </div>
 
+          {form.type === "image" && (
+            <>
+              <div className={styles.formRow}>
+                <div className={styles.fieldGroup}>
+                  <label className={styles.label}>{t("aiConfig.models.pricePerImageLabel")}</label>
+                  <input className={styles.input} type="number" min="0" step="0.001" placeholder="0.00"
+                    value={form.pricePerImage}
+                    onChange={(e) => setForm({ ...form, pricePerImage: e.target.value })} />
+                  <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 6, fontStyle: "italic" }}>
+                    {t("aiConfig.models.pricePerImageHint")}
+                  </div>
+                </div>
+                <div className={styles.fieldGroup}>
+                  <label className={styles.label}>{t("aiConfig.models.capsSizesLabel")}</label>
+                  <input className={styles.input} placeholder="1024x1024, 1536x1024"
+                    value={form.capsSizes}
+                    onChange={(e) => setForm({ ...form, capsSizes: e.target.value })} />
+                  <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 6, fontStyle: "italic" }}>
+                    {t("aiConfig.models.capsSizesHint")}
+                  </div>
+                </div>
+              </div>
+              <div className={styles.fieldGroup}>
+                <label className={styles.label} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                  <input type="checkbox" checked={capsEdit} onChange={(e) => setCapsEdit(e.target.checked)} />
+                  {t("aiConfig.models.capsEditLabel")}
+                </label>
+                <div style={{ fontSize: 11, color: "var(--color-text-muted)", marginTop: 6, fontStyle: "italic" }}>
+                  {t("aiConfig.models.capsEditHint")}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Context window, output cap, probing and the prefix prompt are all
+              token-shaped concepts an image endpoint has no notion of. */}
+          {form.type !== "image" && (
+          <>
           <div className={`${styles.fieldGroup} ${styles.ctxSizeField}`}>
             <label className={styles.label}>{t("aiConfig.models.contextSizeLabel")}</label>
             <div className={styles.ctxSizeRow}>
@@ -918,6 +986,8 @@ function ModelsTab() {
               {t("aiConfig.models.prefixHint")}
             </div>
           </div>
+          </>
+          )}
 
           <div className={styles.formActions}>
             <button className={styles.btnSecondary} onClick={resetForm}>{t("aiConfig.models.cancel")}</button>

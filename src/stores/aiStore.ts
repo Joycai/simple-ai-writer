@@ -27,6 +27,12 @@ interface AiState {
   activePromptId: string | null;
   /** Model used for Story-Memory summarization; falls back to activeModelId. */
   memoryModelId: string | null;
+  /**
+   * Model used to generate pictures. Unlike memoryModelId there is no fallback:
+   * activeModelId is a text model and would only produce a confusing error, so
+   * the image UI stays disabled until an `image`-type model is picked.
+   */
+  imageModelId: string | null;
   isLoading: boolean;
 
   loadConfig: () => Promise<void>;
@@ -47,6 +53,7 @@ interface AiState {
   setActiveModel: (id: string) => void;
   setActivePrompt: (id: string) => void;
   setMemoryModel: (id: string | null) => void;
+  setImageModel: (id: string | null) => void;
 }
 
 export const useAiStore = create<AiState>((set, get) => ({
@@ -56,6 +63,7 @@ export const useAiStore = create<AiState>((set, get) => ({
   activeModelId: null,
   activePromptId: null,
   memoryModelId: null,
+  imageModelId: null,
   isLoading: false,
 
   loadConfig: async () => {
@@ -112,6 +120,7 @@ export const useAiStore = create<AiState>((set, get) => ({
         models: s.models.filter((m) => m.providerId !== id),
         activeModelId: s.activeModelId && removedIds.has(s.activeModelId) ? null : s.activeModelId,
         memoryModelId: s.memoryModelId && removedIds.has(s.memoryModelId) ? null : s.memoryModelId,
+        imageModelId: s.imageModelId && removedIds.has(s.imageModelId) ? null : s.imageModelId,
       };
     });
   },
@@ -145,6 +154,7 @@ export const useAiStore = create<AiState>((set, get) => ({
       models: s.models.filter((m) => m.id !== id),
       activeModelId: s.activeModelId === id ? null : s.activeModelId,
       memoryModelId: s.memoryModelId === id ? null : s.memoryModelId,
+      imageModelId: s.imageModelId === id ? null : s.imageModelId,
     }));
   },
 
@@ -175,4 +185,5 @@ export const useAiStore = create<AiState>((set, get) => ({
   setActiveModel: (id) => set({ activeModelId: id }),
   setActivePrompt: (id) => set({ activePromptId: id }),
   setMemoryModel: (id) => set({ memoryModelId: id }),
+  setImageModel: (id) => set({ imageModelId: id }),
 }));

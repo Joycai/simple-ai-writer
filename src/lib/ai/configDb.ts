@@ -10,6 +10,38 @@ import type { ApiStandard } from "./types";
 
 export type ModelType = "text" | "multimodal" | "image" | "video";
 
+/**
+ * What an image model's endpoint can actually do. Declared rather than probed:
+ * a capability probe against an image endpoint costs a real generation, so the
+ * author states it once (defaults guessed from the API standard) and the
+ * runtime degrades visibly when a request proves the declaration wrong.
+ */
+export interface ImageCaps {
+  /** Accepts input images — editing / img2img. False for generate-only endpoints. */
+  edit?: boolean;
+  /** Sizes the endpoint accepts (e.g. ["1024x1024"]). Empty ⇒ send no size at all. */
+  sizes?: string[];
+  /** How many reference images one edit request may carry. */
+  maxRefs?: number;
+}
+
+/**
+ * Default capabilities for a newly added image model, by wire protocol.
+ * `openai_compat` is the conservative case: relays and xAI commonly expose
+ * /images/generations but no /images/edits, and guessing "yes" there would
+ * promise the author an edit button that always errors.
+ */
+export function defaultImageCaps(standard: ApiStandard): ImageCaps {
+  switch (standard) {
+    case "openai":
+      return { edit: true, maxRefs: 16 };
+    case "gemini":
+      return { edit: true, maxRefs: 3 };
+    case "openai_compat":
+      return { edit: false };
+  }
+}
+
 export interface Provider {
   id: string;
   name: string;
@@ -52,6 +84,14 @@ export interface Model {
    * presenting them as permanent facts.
    */
   probedAt?: number;
+  /**
+   * USD per generated image. The billing shape image endpoints usually use;
+   * token pricing (priceIn/priceOut) still applies on top for the providers
+   * that bill image generation as tokens. See `imageCostFor`.
+   */
+  pricePerImage?: number;
+  /** Image-model capabilities. Meaningless (and unset) for text models. */
+  caps?: ImageCaps;
 }
 
 /**
@@ -71,6 +111,29 @@ export function costFor(
     (uncachedInput * model.priceIn + cachedTokens * model.priceCachedIn + outputTokens * model.priceOut) /
     1_000_000
   );
+}
+
+/**
+ * USD cost of one image run. Two billing shapes exist and a model may use
+ * either, so both are summed rather than switched between: `pricePerImage`
+ * covers the per-image endpoints (xAI, Imagen), and the token terms cover the
+ * providers that meter image generation as tokens (OpenAI's image models) and
+ * report usage on the response. A model configures whichever applies; the
+ * unset side contributes zero.
+ *
+ * Deliberately separate from `costFor` — folding two billing units into one
+ * function makes both call sites read as if they know something they don't.
+ */
+export function imageCostFor(
+  model: Model,
+  images: number,
+  usage?: { inputTokens: number; outputTokens: number },
+): number {
+  const perImage = (model.pricePerImage ?? 0) * Math.max(0, images);
+  const perToken = usage
+    ? (usage.inputTokens * model.priceIn + usage.outputTokens * model.priceOut) / 1_000_000
+    : 0;
+  return perImage + perToken;
 }
 
 /** Upper bound for the per-model context size setting (tokens). */
@@ -144,6 +207,12 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   }
   if (!modelCols.some((c) => c.name === "probed_at")) {
     await db.execute(`ALTER TABLE models ADD COLUMN probed_at INTEGER`);
+  }
+  if (!modelCols.some((c) => c.name === "price_per_image")) {
+    await db.execute(`ALTER TABLE models ADD COLUMN price_per_image REAL`);
+  }
+  if (!modelCols.some((c) => c.name === "caps")) {
+    await db.execute(`ALTER TABLE models ADD COLUMN caps TEXT`);
   }
 
   await db.execute(`
@@ -244,9 +313,9 @@ export async function saveModel(
 ): Promise<void> {
   await db.execute(
     `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null]
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null]
   );
 }
 
@@ -303,5 +372,17 @@ function rowToModel(r: Record<string, unknown>): Model {
     contextSize: (r.context_size as number | null) ?? undefined,
     maxOutput: (r.max_output as number | null) ?? undefined,
     probedAt: (r.probed_at as number | null) ?? undefined,
+    pricePerImage: (r.price_per_image as number | null) ?? undefined,
+    caps: parseImageCaps(r.caps),
   };
+}
+
+function parseImageCaps(raw: unknown): ImageCaps | undefined {
+  if (typeof raw !== "string" || !raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as ImageCaps) : undefined;
+  } catch {
+    return undefined;
+  }
 }

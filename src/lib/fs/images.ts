@@ -82,6 +82,22 @@ export async function imageToDataUrl(imagePath: string): Promise<{ dataUrl: stri
   return { dataUrl: `data:${mime};base64,${base64}`, ext, bytes: u8 };
 }
 
+/**
+ * Inverse of `imageToDataUrl`: decode a base64 data URL into the bytes to
+ * write, plus the file extension implied by its mime type. Used for images the
+ * app received over the wire (AI generation) rather than read from disk.
+ */
+export function dataUrlToBytes(dataUrl: string): { bytes: Uint8Array; ext: string } {
+  const comma = dataUrl.indexOf(",");
+  if (!dataUrl.startsWith("data:") || comma === -1) throw new Error("Not a data URL");
+  const mime = dataUrl.slice(5, comma).replace(";base64", "").trim();
+  const binary = atob(dataUrl.slice(comma + 1));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const ext = Object.entries(MIME).find(([, m]) => m === mime)?.[0] ?? "png";
+  return { bytes, ext };
+}
+
 /** Read a text file (.md / .txt) and return its content string. */
 export async function readTextFileContent(filePath: string): Promise<string> {
   return readTextFile(filePath);

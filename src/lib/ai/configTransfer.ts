@@ -187,6 +187,8 @@ export async function stageConfigImport(
       contextSize: typeof r.contextSize === "number" ? r.contextSize : undefined,
       maxOutput: typeof r.maxOutput === "number" ? r.maxOutput : undefined,
       probedAt: typeof r.probedAt === "number" ? r.probedAt : undefined,
+      pricePerImage: typeof r.pricePerImage === "number" ? r.pricePerImage : undefined,
+      caps: r.caps && typeof r.caps === "object" ? (r.caps as Model["caps"]) : undefined,
     });
   }
 
