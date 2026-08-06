@@ -12,6 +12,8 @@
 
 import { renderMarkdown } from "./markdown";
 import { writeFile } from "./fileio";
+import { imageToDataUrl } from "./images";
+import { resolveRelativePath } from "../paths";
 import {
   EXPORT_TOKEN_CSS,
   currentMarkdownThemeId,
@@ -22,6 +24,56 @@ import i18n from "../../i18n";
 /** BCP-47 lang attribute for exported documents, following the active UI language. */
 function docLang(): string {
   return i18n.language?.startsWith("zh") ? "zh" : "en";
+}
+
+/**
+ * Replace relative `<img src>` with inline data URLs.
+ *
+ * An exported file has no relation to the project folder: the HTML lands
+ * wherever the author saved it, and the PDF is printed from an in-memory
+ * iframe with no base URL at all. A relative `assets/…` link therefore
+ * resolves against nothing and the picture is simply missing — the document
+ * looks fine on screen and arrives at its reader with holes in it.
+ *
+ * `baseDir` is the exported document's own folder, since that is what the
+ * links in it are relative to. Absent (or unreadable images) leaves the tags
+ * untouched rather than failing the export.
+ */
+async function inlineImages(html: string, baseDir?: string): Promise<string> {
+  if (!baseDir) return html;
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const imgs = [...doc.querySelectorAll("img")]
+    .filter((img) => needsInlining(img.getAttribute("src")));
+  await Promise.all(imgs.map(async (img) => {
+    try {
+      const { dataUrl } = await imageToDataUrl(assetPathFor(baseDir, img.getAttribute("src")!));
+      img.setAttribute("src", dataUrl);
+    } catch {
+      // A missing file shouldn't sink the whole export; it exports as a
+      // broken image, exactly as it renders in the app.
+    }
+  }));
+  return doc.body.innerHTML;
+}
+
+/**
+ * Whether an `<img src>` points at a local file this export has to embed.
+ *
+ * Everything already self-contained or remote is left alone: a `data:` URL is
+ * embedded by definition, and rewriting an `http(s):` image would turn a link
+ * that works anywhere into bytes in the file.
+ */
+export function needsInlining(src: string | null): boolean {
+  return !!src && !/^(https?:|data:|blob:|ai-writer-asset:)/i.test(src);
+}
+
+/** Resolve one relative `src` against the document's folder. */
+export function assetPathFor(baseDir: string, src: string): string {
+  let rel = src;
+  // Markdown links are percent-encoded (see lib/image/assets.ts); the
+  // filesystem wants the real characters back.
+  try { rel = decodeURI(src); } catch { /* keep raw on a malformed escape */ }
+  return resolveRelativePath(baseDir, rel);
 }
 
 // ─── Markdown ─────────────────────────────────────────────────────────────────
@@ -44,8 +96,14 @@ body {
 ${markdownThemeCss(currentMarkdownThemeId(), "body")}`;
 }
 
-export async function exportHtml(source: string, title: string, savePath: string): Promise<void> {
-  const body = renderMarkdown(source);
+export async function exportHtml(
+  source: string,
+  title: string,
+  savePath: string,
+  /** Folder the document's relative image links resolve against. */
+  baseDir?: string,
+): Promise<void> {
+  const body = await inlineImages(renderMarkdown(source), baseDir);
   const html = `<!DOCTYPE html>
 <html lang="${docLang()}">
 <head>
@@ -63,8 +121,8 @@ ${body}
 
 // ─── PDF (system print) ───────────────────────────────────────────────────────
 
-export function exportPdf(source: string, title: string): void {
-  const body = renderMarkdown(source);
+export async function exportPdf(source: string, title: string, baseDir?: string): Promise<void> {
+  const body = await inlineImages(renderMarkdown(source), baseDir);
   const html = `<!DOCTYPE html>
 <html lang="${docLang()}">
 <head>

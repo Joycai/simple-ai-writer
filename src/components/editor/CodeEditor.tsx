@@ -18,6 +18,8 @@ import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language"
 import { useEditorStore } from "../../stores/editorStore";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { EditorContextMenu } from "./EditorContextMenu";
+import { DocImageGenModal } from "./DocImageGenModal";
+import { useAiStore } from "../../stores/aiStore";
 import {
   aiTargetExtension,
   aiTargetField,
@@ -73,6 +75,8 @@ export function CodeEditor({ value, onChange }: Props) {
   onChangeRef.current = onChange;
 
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [illustrating, setIllustrating] = useState(false);
+  const hasImageModel = useAiStore((s) => s.models.some((m) => m.type === "image"));
 
   // Update content when external value changes (e.g. file switch)
   const externalValueRef = useRef(value);
@@ -200,8 +204,12 @@ export function CodeEditor({ value, onChange }: Props) {
           y={menu.y}
           view={viewRef.current}
           onClose={() => setMenu(null)}
+          // Offered only when an image model exists — a menu entry that can
+          // only ever open an empty modal is worse than no entry.
+          onIllustrate={hasImageModel ? () => { setMenu(null); setIllustrating(true); } : undefined}
         />
       )}
+      {illustrating && <DocImageGenModal onClose={() => setIllustrating(false)} />}
     </div>
   );
 }
