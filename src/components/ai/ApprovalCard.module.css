@@ -190,3 +190,28 @@
 }
 .btnApprove:hover:not(:disabled) { background: var(--color-sienna-hover); }
 .btnApprove:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Illustration proposal ──────────────────────────────────────────────── */
+
+.illustrateBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* The picture an edit would change, beside its label rather than above the
+   prompt: it is context for the prompt, not the subject of the card. */
+.illustrateSource {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.illustrateSource img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  flex: none;
+}

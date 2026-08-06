@@ -109,6 +109,8 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "create_chapter",
     "move_chapter",
     "delete_chapter",
+    "generate_image",
+    "edit_image",
   ],
   maxRounds: 20,
   finishPolicy: "force-text",

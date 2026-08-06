@@ -243,6 +243,32 @@ async function applyProposal(proposal: Proposal): Promise<string | null> {
       // Folders never reach here (delete_chapter refuses them), but the backup
       // is what makes an approved deletion recoverable, so it is not optional.
       return deleteEntry(proposal.path, false, { backup: true });
+
+    case "illustrate": {
+      // The only kind whose "apply" spends money and calls out to a provider.
+      // Approving is the author paying, so it happens here rather than at
+      // proposal time — a rejected card costs nothing.
+      const { runIllustration } = await import("../lib/image/illustrate");
+      const { projectPath: root } = useProjectStore.getState();
+      const outcome = await runIllustration(proposal, root ?? "");
+      if (proposal.dest.kind === "lore") {
+        // The gallery grew — rescan so the entity view shows it at once.
+        const { useLoreStore } = await import("./loreStore");
+        if (root) void useLoreStore.getState().scanProject(root);
+      }
+      // Reported back to the model through backupPath (see the shared apply
+      // contract): the document case needs the markdown to place next, and
+      // every case needs to know whether an edit was silently regenerated.
+      return [
+        `Saved to ${outcome.path}.`,
+        outcome.markdown
+          ? `Place it with propose_edit using exactly:\n${outcome.markdown.trim()}`
+          : "",
+        outcome.degraded
+          ? "NOTE: this model cannot edit an existing picture, so it was regenerated from the instruction — it will not resemble the original. Tell the author."
+          : "",
+      ].filter(Boolean).join("\n");
+    }
   }
 }
 

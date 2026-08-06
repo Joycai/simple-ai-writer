@@ -19,9 +19,11 @@ import type {
   CreateProposal,
   DeleteProposal,
   EditProposal,
+  IllustrateProposal,
   MoveProposal,
   Proposal,
 } from "../../lib/agent/registry";
+import { useImageDataUrl } from "../lore/useImageDataUrl";
 import { useAgentStore } from "../../stores/agentStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import type { ResolvedTerms } from "../../lib/profile";
@@ -51,6 +53,10 @@ function headerTitle(proposal: Proposal, t: TFunction, terms: ResolvedTerms): st
       return proposal.isDir ? t("ai.approval.titleMoveVolume", words) : t("ai.approval.titleMove", words);
     case "delete":
       return t("ai.approval.titleDelete", words);
+    case "illustrate":
+      return proposal.sourcePath
+        ? t("ai.approval.titleEditImage")
+        : t("ai.approval.titleIllustrate");
   }
 }
 
@@ -66,6 +72,10 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
       return "";
     case "delete":
       return `${proposal.chars} ${chars}`;
+    case "illustrate":
+      // The price is the metric here — it is what makes this decision
+      // different from every other card.
+      return proposal.costUsd > 0 ? `≈ $${proposal.costUsd.toFixed(3)}` : "";
   }
 }
 
@@ -142,6 +152,35 @@ function DeleteBody({ proposal }: { proposal: DeleteProposal }) {
   );
 }
 
+/**
+ * The prompt leads, because it is the thing being approved — everything else
+ * on this card is context for judging it. An edit additionally shows the
+ * picture it would change: "make her hair silver" is not reviewable without
+ * seeing whose hair.
+ */
+function IllustrateBody({ proposal }: { proposal: IllustrateProposal }) {
+  const { t } = useTranslation();
+  const sourceUrl = useImageDataUrl(proposal.sourcePath);
+
+  return (
+    <div className={styles.illustrateBlock}>
+      {proposal.sourcePath && (
+        <div className={styles.illustrateSource}>
+          {sourceUrl && <img src={sourceUrl} alt="" />}
+          <span className={styles.emptyNote}>{t("ai.approval.imageSource")}</span>
+        </div>
+      )}
+      <pre className={styles.replaceBlock}>{proposal.prompt}</pre>
+      <div className={styles.emptyNote}>
+        {t("ai.approval.imageMeta", {
+          destination: proposal.destination,
+          model: proposal.modelName,
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ProposalBody({ proposal }: { proposal: Proposal }) {
   switch (proposal.kind) {
     case "edit":
@@ -152,6 +191,8 @@ function ProposalBody({ proposal }: { proposal: Proposal }) {
       return <MoveBody proposal={proposal} />;
     case "delete":
       return <DeleteBody proposal={proposal} />;
+    case "illustrate":
+      return <IllustrateBody proposal={proposal} />;
   }
 }
 

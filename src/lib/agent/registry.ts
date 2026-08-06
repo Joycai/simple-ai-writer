@@ -31,6 +31,7 @@ import {
   type ToolResult,
 } from "./tools";
 import { LORE_PLAN_ACTIONS, type LorePlan, type PlanDecision, type PlanGate } from "./plan";
+import { editImageTool, generateImageTool } from "./imageTools";
 import {
   createChapterTool,
   createLoreEntityTool,
@@ -52,7 +53,10 @@ export type ToolAccess = "read" | "write-auto" | "write-approval";
 /** What every proposal carries, whatever it wants done. */
 interface ProposalBase {
   id: string;
-  /** Absolute path under writing/ that the proposal acts on. */
+  /**
+   * Absolute path the proposal acts on — under writing/ for the manuscript
+   * kinds, the destination folder or file for an illustration.
+   */
   path: string;
   /** Model's one-line justification, shown on the approval card. */
   reason?: string;
@@ -93,15 +97,56 @@ export interface DeleteProposal extends ProposalBase {
 }
 
 /**
- * Something the agent wants done to the manuscript that only the author may
- * authorise. Nothing is written until the card is approved, and the tool call
- * stays blocked until it is decided either way.
+ * Draw a picture and file it.
+ *
+ * The odd one out: approving this **spends money**, where the other kinds only
+ * move text around. That is precisely why generation happens on approval
+ * rather than before it — the author reviews the prompt and the price, and a
+ * rejected proposal costs nothing. Everything the run needs is carried here so
+ * the card can show it and `applyProposal` can act on it without re-deriving.
+ */
+export interface IllustrateProposal extends ProposalBase {
+  kind: "illustrate";
+  /** The prompt exactly as it will be sent. The thing being approved. */
+  prompt: string;
+  /** Where the picture lands, in words the author recognises. */
+  destination: string;
+  dest:
+    | { kind: "lore"; entityName: string; entityDir: string }
+    | { kind: "document"; docPath: string };
+  /** One line describing the picture — alt text / gallery description. */
+  note: string;
+  /** Config-row id of the image model, resolved at apply time. */
+  modelId: string;
+  /** Display name, so the card can say what is about to be paid for. */
+  modelName: string;
+  /** Estimated USD for this run. Zero when the model has no price configured. */
+  costUsd: number;
+  aspect?: string;
+  size?: string;
+  /**
+   * Existing picture this one edits, as an absolute path. Present makes the
+   * run an edit; the card shows it, since "change this picture" is only
+   * reviewable when you can see the picture.
+   */
+  sourcePath?: string;
+}
+
+/**
+ * Something the agent wants done that only the author may authorise. Nothing
+ * happens until the card is approved, and the tool call stays blocked until it
+ * is decided either way.
  *
  * A discriminated union rather than one wide shape: each kind carries only the
  * fields it needs, so the approval card and the apply step both narrow instead
  * of guessing which optional fields are meaningful.
  */
-export type Proposal = EditProposal | CreateProposal | MoveProposal | DeleteProposal;
+export type Proposal =
+  | EditProposal
+  | CreateProposal
+  | MoveProposal
+  | DeleteProposal
+  | IllustrateProposal;
 
 export type ApprovalDecision =
   | { approved: true; backupPath?: string | null }
@@ -174,7 +219,9 @@ export type ToolId =
   | "propose_edit"
   | "create_chapter"
   | "move_chapter"
-  | "delete_chapter";
+  | "delete_chapter"
+  | "generate_image"
+  | "edit_image";
 
 function parseArgs<T>(raw: string): T {
   return JSON.parse(raw || "{}") as T;
@@ -756,6 +803,91 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => moveChapterTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  generate_image: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "generate_image",
+        description:
+          "Draw a NEW picture and file it. Give either `entity` (goes into that lore entity's gallery) or `path` (a document under writing/ — the image is saved beside it and the markdown to place it comes back in the result, which you then position with propose_edit). The author reviews the prompt and its cost on a card before anything is generated, so write the prompt you actually want. Write prompts in concrete visual nouns — appearance, clothing, pose, setting, lighting, framing — never the subject's name, which the image model does not know. Read the entity or the passage first so the picture matches what is written.",
+        parameters: {
+          type: "object",
+          properties: {
+            prompt: {
+              type: "string",
+              description: "The image prompt: what is visible. No names, no narrative.",
+            },
+            entity: {
+              type: "string",
+              description: "Lore entity whose gallery this belongs in, exactly as listed by list_lore_entities.",
+            },
+            path: {
+              type: "string",
+              description: "Full path of a document under writing/, when the picture illustrates the text rather than an entity.",
+            },
+            note: {
+              type: "string",
+              description: "One line saying what the picture shows, in the author's language. Becomes the alt text / gallery description — this is all a text-only model will ever see of it.",
+            },
+            aspect: {
+              type: "string",
+              enum: ["1:1", "3:4", "4:3", "16:9", "9:16"],
+              description: "Framing. Portraits lean vertical, scenes and banners horizontal.",
+            },
+            reason: {
+              type: "string",
+              description: "One line for the approval card: why this picture, now.",
+            },
+          },
+          required: ["prompt"],
+        },
+      },
+    },
+    execute: async (call, ctx) =>
+      generateImageTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  edit_image: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "edit_image",
+        description:
+          "Redraw one of a lore entity's existing gallery pictures with a change applied — 'silver hair', 'three-quarter view'. Call read_lore_entity first for the exact filename. The result is saved as a NEW gallery image; the original is never overwritten. Blocks on the author's approval, and costs money once approved. If the image model cannot edit, the result is regenerated from the instruction instead and the author is told — so prefer generate_image when you want a genuinely new picture rather than a variation.",
+        parameters: {
+          type: "object",
+          properties: {
+            entity: {
+              type: "string",
+              description: "The entity that owns the picture, exactly as listed by list_lore_entities.",
+            },
+            file: {
+              type: "string",
+              description: "Gallery filename, exactly as listed by read_lore_entity.",
+            },
+            instruction: {
+              type: "string",
+              description: "What to change about the picture.",
+            },
+            note: {
+              type: "string",
+              description: "One line describing the new picture, for its gallery description.",
+            },
+            reason: {
+              type: "string",
+              description: "One line for the approval card: why this change.",
+            },
+          },
+          required: ["entity", "file", "instruction"],
+        },
+      },
+    },
+    execute: async (call, ctx) =>
+      editImageTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   delete_chapter: {
