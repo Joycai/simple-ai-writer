@@ -702,6 +702,7 @@
       "selectionChip": "选区 {{n}} 字",
       "detachSelection": "不附带选区",
       "removeRef": "移除引用",
+      "revealImage": "在文件夹中显示",
       "refBlockLabel": "【引用资料】",
       "noSelection": "未选中正文",
       "contextMeter": "上下文",

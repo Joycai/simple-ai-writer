@@ -15,6 +15,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Send, Square, X } from "lucide-react";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { SnippetPicker } from "./SnippetPicker";
 import {
   MentionPicker,
@@ -27,6 +28,7 @@ import {
 import { renderMarkdown } from "../../lib/fs/markdown";
 import { scanProjectFiles, readTextFileContent, type ProjectFile } from "../../lib/fs/images";
 import { attachedKey, type AttachedItem } from "../../lib/lore/aiTask";
+import { useImageDataUrls } from "../lore/useImageDataUrl";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { useAgentStore } from "../../stores/agentStore";
@@ -202,6 +204,7 @@ export function AgentChat() {
               key={turn.id}
               text={turn.text}
               log={turn.log}
+              images={turn.images}
               isLive={chatRunning && turn.id === turns[turns.length - 1]?.id}
             />
           ),
@@ -326,8 +329,14 @@ export function AgentChat() {
   );
 }
 
-function AssistantTurn({ text, log, isLive }: { text: string; log: AgentEvent[]; isLive: boolean }) {
+function AssistantTurn({ text, log, images, isLive }: {
+  text: string;
+  log: AgentEvent[];
+  images?: string[];
+  isLive: boolean;
+}) {
   const { t } = useTranslation();
+  const imageUrls = useImageDataUrls(images ?? []);
   // Markdown render is cheap at chat sizes; memo keeps streaming smooth anyway.
   const html = useMemo(() => renderMarkdown(text), [text]);
 
@@ -351,6 +360,25 @@ function AssistantTurn({ text, log, isLive }: { text: string; log: AgentEvent[];
       <span className={`${styles.turnMarker} ${isLive ? styles.turnMarkerLive : ""}`} />
       <div className={styles.turnContent}>
         {log.length > 0 && <AgentLog log={log} isRunning={isLive} compact />}
+        {/* Pictures this turn produced, above the prose: the assistant's text
+            is a caption for them, and reading the caption first is backwards.
+            Click opens the file, the way the gallery does. */}
+        {images && images.length > 0 && (
+          <div className={styles.turnImages}>
+            {images.map((path) => (
+              <button
+                key={path}
+                className={styles.turnImage}
+                onClick={() => void revealItemInDir(path)}
+                title={t("ai.chat.revealImage")}
+              >
+                {imageUrls[path]
+                  ? <img src={imageUrls[path]} alt="" />
+                  : <span className={styles.turnImageLoading} />}
+              </button>
+            ))}
+          </div>
+        )}
         {text ? (
           <div className={styles.assistantBody} dangerouslySetInnerHTML={{ __html: html }} />
         ) : (

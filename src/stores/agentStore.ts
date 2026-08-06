@@ -93,6 +93,14 @@ export interface ChatTurn {
   at: number;
   /** User turns: manuscript passage the message was asked *about*. */
   quote?: string;
+  /**
+   * Assistant turns: absolute paths of pictures this turn produced.
+   *
+   * Filled by the approval, not by the model — the app knows exactly what was
+   * drawn, and relying on the assistant to mention it produced turns that
+   * apologised for being unable to show the image it had just saved.
+   */
+  images?: string[];
 }
 
 interface ChatUsage {
@@ -218,32 +226,44 @@ async function applyEdit(proposal: EditProposal): Promise<string | null> {
 }
 
 /**
- * Carry out what an approved proposal asked for, returning the backup path to
- * report back to the model. Throwing here is how a failure reaches the model as
- * a rejection — never swallow one and report success.
+ * What an applied proposal reports.
+ *
+ * `report` is what the model is told (historically just a backup path, hence
+ * the field it travels back in). `imagePath` is carried separately rather than
+ * scraped out of that prose — the wording is for a reader, and parsing it
+ * would silently break the transcript the next time it is reworded.
  */
-async function applyProposal(proposal: Proposal): Promise<string | null> {
+interface ApplyOutcome {
+  report: string | null;
+  imagePath?: string;
+}
+
+/**
+ * Carry out what an approved proposal asked for. Throwing here is how a failure
+ * reaches the model as a rejection — never swallow one and report success.
+ */
+async function applyProposal(proposal: Proposal): Promise<ApplyOutcome> {
   const { useProjectStore } = await import("./projectStore");
   const { createEntry, moveEntry, deleteEntry } = useProjectStore.getState();
 
   switch (proposal.kind) {
     case "edit":
-      return applyEdit(proposal);
+      return { report: await applyEdit(proposal) };
 
     case "create": {
       const dir = parentDir(proposal.path);
       await createEntry(dir, proposal.path.slice(dir.length + 1), "file", proposal.content);
-      return null; // nothing existed to back up
+      return { report: null }; // nothing existed to back up
     }
 
     case "move":
       await moveEntry(proposal.path, proposal.newPath);
-      return null; // the file still exists, at its new path
+      return { report: null }; // the file still exists, at its new path
 
     case "delete":
       // Folders never reach here (delete_chapter refuses them), but the backup
       // is what makes an approved deletion recoverable, so it is not optional.
-      return deleteEntry(proposal.path, false, { backup: true });
+      return { report: await deleteEntry(proposal.path, false, { backup: true }) };
 
     case "illustrate": {
       // The only kind whose "apply" spends money and calls out to a provider.
@@ -260,15 +280,22 @@ async function applyProposal(proposal: Proposal): Promise<string | null> {
       // Reported back to the model through backupPath (see the shared apply
       // contract): the document case needs the markdown to place next, and
       // every case needs to know whether an edit was silently regenerated.
-      return [
-        `Saved to ${outcome.path}.`,
-        outcome.markdown
-          ? `Place it with propose_edit using exactly:\n${outcome.markdown.trim()}`
-          : "",
-        outcome.degraded
-          ? "NOTE: this model cannot edit an existing picture, so it was regenerated from the instruction — it will not resemble the original. Tell the author."
-          : "",
-      ].filter(Boolean).join("\n");
+      return {
+        imagePath: outcome.path,
+        report: [
+          `Saved to ${outcome.path}.`,
+          // Without this the assistant apologises for being unable to show the
+          // picture it just made — it has no other way to know the app has
+          // already put it in the transcript.
+          "This picture is shown to the author in the conversation, so do not say you cannot display it — just say what you made and offer the next step.",
+          outcome.markdown
+            ? `Place it with propose_edit using exactly:\n${outcome.markdown.trim()}`
+            : "",
+          outcome.degraded
+            ? "NOTE: this model cannot edit an existing picture, so it was regenerated from the instruction — it will not resemble the original. Tell the author."
+            : "",
+        ].filter(Boolean).join("\n"),
+      };
     }
   }
 }
@@ -296,7 +323,21 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     set((s) => ({ pending: s.pending.filter((p) => p.proposal.id !== id) }));
 
     try {
-      item.resolve({ approved: true, backupPath: await applyProposal(item.proposal) });
+      const { report, imagePath } = await applyProposal(item.proposal);
+      // A picture goes into the transcript as well as onto disk. Scoped to the
+      // run that asked for it: the task panel shares this queue and has no
+      // chat turn to attach to.
+      if (imagePath && item.runId === get().chatAbort) {
+        set((s) => {
+          const last = [...s.turns].reverse().find((tn) => tn.role === "assistant");
+          if (!last) return {};
+          return {
+            turns: s.turns.map((tn) =>
+              tn.id === last.id ? { ...tn, images: [...(tn.images ?? []), imagePath] } : tn),
+          };
+        });
+      }
+      item.resolve({ approved: true, backupPath: report });
     } catch (e) {
       // Approval failed to apply — report as a rejection so the model knows
       // the manuscript is untouched.
