@@ -4,7 +4,8 @@
  * a generated data URL back into the bytes that go to disk.
  */
 import { describe, it, expect, vi } from "vitest";
-import { imageCostFor, type Model } from "../ai/configDb";
+import { defaultImageCaps, imageCostFor, type Model } from "../ai/configDb";
+import type { ApiStandard } from "../ai/types";
 
 // index.ts reaches for the project DB to record usage; the pure helpers under
 // test never touch it.
@@ -38,6 +39,21 @@ describe("sizeForAspect", () => {
 
   it("falls back to the first declared size when none parse", () => {
     expect(sizeForAspect("1:1", ["auto", "large"])).toBe("auto");
+  });
+});
+
+describe("defaultImageCaps", () => {
+  it("assumes editing works on the two first-party protocols, not on relays", () => {
+    expect(defaultImageCaps("openai").edit).toBe(true);
+    expect(defaultImageCaps("gemini").edit).toBe(true);
+    expect(defaultImageCaps("openai_compat").edit).toBe(false);
+  });
+
+  it("still returns caps for a standard outside the union", () => {
+    // `apiStandard` arrives from a free-text DB column, so an unrecognised
+    // value is reachable at runtime. Falling out of the switch as undefined
+    // used to crash the settings form the moment a model was set to "image".
+    expect(defaultImageCaps("anthropic" as ApiStandard)).toEqual({ edit: false });
   });
 });
 

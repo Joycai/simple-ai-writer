@@ -39,6 +39,12 @@ export function defaultImageCaps(standard: ApiStandard): ImageCaps {
       return { edit: true, maxRefs: 3 };
     case "openai_compat":
       return { edit: false };
+    default:
+      // Not dead code, despite the union being exhaustive: `standard` reaches
+      // here from a DB row, and a value the type system never anticipated
+      // would otherwise fall out of the switch as `undefined` — crashing every
+      // caller that trusts the return type.
+      return { edit: false };
   }
 }
 
@@ -257,10 +263,26 @@ export async function listProviders(db: Awaited<ReturnType<typeof Database.load>
     id: r.id as string,
     name: r.name as string,
     baseUrl: r.base_url as string,
-    apiStandard: r.api_standard as ApiStandard,
+    apiStandard: parseApiStandard(r.api_standard),
     safetySettings: parseSafetySettings(r.safety_settings),
     createdAt: r.created_at as number,
   }));
+}
+
+const API_STANDARDS: ApiStandard[] = ["openai", "openai_compat", "gemini"];
+
+/**
+ * Narrow a stored `api_standard` to the union instead of asserting it.
+ *
+ * The column is free text: rows predate the current names, backups and hand
+ * edits land here unchecked, and a bare `as ApiStandard` hands the rest of the
+ * app a value no `switch` covers. Anything unrecognised becomes
+ * `openai_compat`, which is where the dispatch sent it anyway (everything
+ * that is not `gemini` takes the OpenAI adapter) — so this narrows the type
+ * without changing which adapter a provider talks to.
+ */
+function parseApiStandard(raw: unknown): ApiStandard {
+  return API_STANDARDS.includes(raw as ApiStandard) ? (raw as ApiStandard) : "openai_compat";
 }
 
 function parseSafetySettings(raw: unknown): GeminiSafetySettings | undefined {
