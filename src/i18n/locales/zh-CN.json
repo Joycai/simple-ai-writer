@@ -7,6 +7,19 @@
     "cancel": "取消",
     "unsavedConfirm": "有尚未保存的更改，关闭后将丢失。确定关闭吗？"
   },
+  "errorBoundary": {
+    "appTitle": "界面出错了",
+    "appBody": "某个组件在渲染时抛出了错误。你的文稿仍保存在磁盘上，重新加载即可恢复。",
+    "modalTitle": "这个窗口出错了",
+    "modalBody": "该对话框在渲染时抛出了错误。关闭它即可继续写作，应用本身未受影响。",
+    "retry": "重试",
+    "reload": "重新加载",
+    "closeDialog": "关闭窗口",
+    "details": "技术详情",
+    "stackLabel": "组件栈",
+    "copy": "复制",
+    "copied": "已复制"
+  },
   "outline": {
     "empty": "未发现{{group}}/{{doc}}结构 — 在 writing/ 下创建子文件夹来组织{{group}}",
     "reorderHint": "单击选中{{doc}}，双击打开；用按钮或拖拽在{{group}}内排序",

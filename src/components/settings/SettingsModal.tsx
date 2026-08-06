@@ -22,6 +22,7 @@ import { applyConfigImport, exportAiConfig, stageConfigImport } from "../../lib/
 import type { ApiStandard } from "../../lib/ai/types";
 import { defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, type ModelType } from "../../lib/ai/configDb";
 import { ModelProbePanel } from "./ModelProbePanel";
+import { ModalErrorBoundary } from "../common/ErrorBoundary";
 import { CONTEXT_SIZE_STOPS, contextStopIndex, exactStopIndex, formatContextSize } from "../../lib/ai/contextSize";
 import { GEMINI_HARM_CATEGORIES, GEMINI_THRESHOLD_LEVELS, defaultSafetySettings, type GeminiSafetySettings, type GeminiHarmCategory } from "../../lib/ai/safety";
 import { testProviderConnection } from "../../lib/ai/providerProbe";
@@ -1239,6 +1240,10 @@ export function SettingsModal({ onClose, initialTab = "general" }: Props) {
       exit="exit"
       transition={overlayFadeTransition}
     >
+      {/* This modal has its own Motion overlay rather than ModalShell, so it
+          wires up the narrow boundary itself. Placed inside the overlay: a
+          crashed tab replaces the modal box, backdrop and app stay alive. */}
+      <ModalErrorBoundary onClose={onClose}>
       <motion.div
         className={styles.modal}
         variants={modalPop}
@@ -1276,6 +1281,7 @@ export function SettingsModal({ onClose, initialTab = "general" }: Props) {
           </div>
         </div>
       </motion.div>
+      </ModalErrorBoundary>
     </motion.div>
   );
 }

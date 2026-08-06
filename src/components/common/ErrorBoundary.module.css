@@ -1,0 +1,198 @@
+/* Recovery panels for AppErrorBoundary / ModalErrorBoundary.
+   Tokens only — this surface has to render correctly in both themes at the exact
+   moment the rest of the app has stopped rendering, so it takes no dependency on
+   anything but tokens.css + the shared keyframes in global.css. */
+
+/* ─── Full-screen shell (app boundary) ───────────────────────────────────── */
+
+.appOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999; /* above every modal — the app boundary is the outermost surface */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background: var(--color-bg-base);
+  animation: fadeIn 200ms var(--ease-out);
+}
+
+/* ─── Panel (shared) ─────────────────────────────────────────────────────── */
+
+.panel {
+  width: 560px;
+  max-width: 100%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  font-family: var(--font-sans);
+  animation: scaleIn 240ms var(--ease-out);
+}
+
+/* Inside a modal the overlay is already the dialog's own — the panel only needs
+   to sit where the dialog's body would have been. */
+.modalPanel {
+  width: 520px;
+  max-height: 70vh;
+}
+
+.headline {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-error-bg);
+  color: var(--color-error);
+}
+
+.title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.subtitle {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-md);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.dismiss {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.dismiss:hover {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+}
+.dismiss:active { transform: scale(0.92); }
+
+/* ─── Error message + component stack ────────────────────────────────────── */
+
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+}
+
+.message {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-error-bg);
+  color: var(--color-error);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.detailsBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.disclosure,
+.copyBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.disclosure:hover,
+.copyBtn:hover {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+}
+.disclosure:active,
+.copyBtn:active { transform: scale(0.96); }
+
+.copyBtn { margin-left: auto; }
+
+.stack {
+  margin: 0;
+  padding: var(--space-3);
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  max-height: 260px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+/* ─── Actions ────────────────────────────────────────────────────────────── */
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.btnPrimary,
+.btnSecondary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-md);
+  font-weight: 500;
+  transition: background var(--transition-fast), color var(--transition-fast),
+              transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.btnPrimary {
+  background: var(--color-accent);
+  color: #fff;
+}
+.btnPrimary:hover {
+  background: var(--color-accent-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+.btnPrimary:active { transform: translateY(0) scale(0.98); }
+
+.btnSecondary {
+  background: var(--color-accent-tint);
+  color: var(--color-accent);
+}
+.btnSecondary:hover { background: var(--color-accent-tint-strong); }
+.btnSecondary:active { transform: scale(0.98); }
