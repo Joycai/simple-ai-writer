@@ -8,7 +8,7 @@
  * xAI rejects the field outright.
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { generateImage, NoImageError } from "../ai/image";
+import { generateImage, isEditUnsupportedError, NoImageError } from "../ai/image";
 
 const OPENAI = {
   baseUrl: "https://api.example.com/v1",
@@ -193,10 +193,108 @@ describe("generateImage · aspect ratio", () => {
 });
 
 describe("generateImage · editing", () => {
-  it("refuses input images instead of silently generating something unrelated", async () => {
-    mockJson({ data: [{ b64_json: "aGk=" }] });
-    await expect(
-      generateImage(OPENAI, { prompt: "make it blue", images: ["data:image/png;base64,aGk="] }),
-    ).rejects.toThrow(/not implemented/i);
+  const SOURCE = "data:image/png;base64,aGk=";
+
+  /** Stub fetch for a multipart request, capturing the parsed form. */
+  function mockMultipart(payload: unknown) {
+    const calls: { url: string; form: FormData; contentType: string | null }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        calls.push({
+          url: String(url),
+          form: init.body as FormData,
+          contentType: new Headers(init.headers).get("content-type"),
+        });
+        return new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }),
+    );
+    return calls;
+  }
+
+  it("uploads to /images/edits as multipart, without setting Content-Type", async () => {
+    // The header must come from the webview's FormData serialization, boundary
+    // included — declaring it by hand breaks every such request. See
+    // docs/image-generation-plan.md §2.3.
+    const calls = mockMultipart({ data: [{ b64_json: "aGk=" }] });
+    await generateImage(OPENAI, { prompt: "make it blue", images: [SOURCE] });
+
+    expect(calls[0].url).toBe("https://api.example.com/v1/images/edits");
+    expect(calls[0].contentType).toBeNull();
+    const form = calls[0].form;
+    expect(form.get("prompt")).toBe("make it blue");
+    expect(form.get("model")).toBe("img-1");
+    expect(form.get("image")).toBeInstanceOf(Blob);
+  });
+
+  it("switches to the plural field name for several inputs", async () => {
+    // `image` for one, `image[]` for many — older endpoints only know the
+    // singular form, so sending the plural always would break them.
+    const calls = mockMultipart({ data: [{ b64_json: "aGk=" }] });
+    await generateImage(OPENAI, { prompt: "blend", images: [SOURCE, SOURCE] });
+    expect(calls[0].form.getAll("image[]")).toHaveLength(2);
+    expect(calls[0].form.get("image")).toBeNull();
+  });
+
+  it("sends the mask when one is given", async () => {
+    const calls = mockMultipart({ data: [{ b64_json: "aGk=" }] });
+    await generateImage(OPENAI, { prompt: "repaint", images: [SOURCE], mask: SOURCE });
+    expect(calls[0].form.get("mask")).toBeInstanceOf(Blob);
+  });
+
+  it("keeps Gemini on one endpoint, with the source image inline", async () => {
+    const calls = mockJson({
+      candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: "aGk=" } }] } }],
+    });
+    await generateImage(GEMINI, { prompt: "make it blue", images: [SOURCE] });
+    expect(calls[0].url).toContain(":generateContent");
+    const parts = (calls[0].body.contents as { parts: Record<string, unknown>[] }[])[0].parts;
+    expect(parts).toHaveLength(2);
+    expect(parts[1]).toHaveProperty("inline_data");
+  });
+
+  it("sends a chat-route edit as a multimodal message", async () => {
+    const calls = mockJson({
+      choices: [{ message: { images: [{ image_url: { url: SOURCE } }] } }],
+    });
+    await generateImage(
+      { ...OPENAI, standard: "openai_compat", route: "chat" },
+      { prompt: "make it blue", images: [SOURCE] },
+    );
+    const content = (calls[0].body.messages as { content: Record<string, unknown>[] }[])[0].content;
+    expect(Array.isArray(content)).toBe(true);
+    expect(content[0]).toEqual({ type: "text", text: "make it blue" });
+    expect(content[1]).toEqual({ type: "image_url", image_url: { url: SOURCE } });
+  });
+});
+
+describe("isEditUnsupportedError", () => {
+  // Drives the visible fallback to regeneration, so it must fire on a missing
+  // route and stay quiet on a refusal the model actually understood.
+  it("recognises a missing or rejecting endpoint", () => {
+    for (const msg of [
+      "Image edit error 404: Not Found",
+      "Image API error 405: method not allowed",
+      "this model does not support image editing",
+      "editing is not supported for this model",
+      "unsupported operation",
+      "only imagen models are supported",
+    ]) {
+      expect(isEditUnsupportedError(new Error(msg))).toBe(true);
+    }
+  });
+
+  it("leaves a genuine refusal alone", () => {
+    for (const msg of [
+      "Image API error 400: your prompt was rejected by the safety system",
+      "Image edit error 429: rate limit exceeded",
+      "Gemini blocked this response (IMAGE_SAFETY)",
+      "Image API error 401: invalid api key",
+    ]) {
+      expect(isEditUnsupportedError(new Error(msg))).toBe(false);
+    }
   });
 });
