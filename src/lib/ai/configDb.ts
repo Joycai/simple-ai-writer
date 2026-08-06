@@ -6,9 +6,53 @@
 import Database from "@tauri-apps/plugin-sql";
 
 import type { GeminiSafetySettings } from "./safety";
-import type { ApiStandard } from "./types";
+import type { ApiStandard, ImageRoute } from "./types";
 
 export type ModelType = "text" | "multimodal" | "image" | "video";
+
+/**
+ * What an image model's endpoint can actually do. Declared rather than probed:
+ * a capability probe against an image endpoint costs a real generation, so the
+ * author states it once (defaults guessed from the API standard) and the
+ * runtime degrades visibly when a request proves the declaration wrong.
+ */
+export interface ImageCaps {
+  /** Accepts input images — editing / img2img. False for generate-only endpoints. */
+  edit?: boolean;
+  /** Sizes the endpoint accepts (e.g. ["1024x1024"]). Empty ⇒ send no size at all. */
+  sizes?: string[];
+  /** How many reference images one edit request may carry. */
+  maxRefs?: number;
+  /**
+   * Which endpoint serves this model's images. Unset ⇒ derived from the
+   * provider's API standard, which is right for first-party endpoints and
+   * wrong for relays hosting a Gemini image model behind an OpenAI protocol.
+   */
+  route?: ImageRoute;
+}
+
+/**
+ * Default capabilities for a newly added image model, by wire protocol.
+ * `openai_compat` is the conservative case: relays and xAI commonly expose
+ * /images/generations but no /images/edits, and guessing "yes" there would
+ * promise the author an edit button that always errors.
+ */
+export function defaultImageCaps(standard: ApiStandard): ImageCaps {
+  switch (standard) {
+    case "openai":
+      return { edit: true, maxRefs: 16 };
+    case "gemini":
+      return { edit: true, maxRefs: 3 };
+    case "openai_compat":
+      return { edit: false };
+    default:
+      // Not dead code, despite the union being exhaustive: `standard` reaches
+      // here from a DB row, and a value the type system never anticipated
+      // would otherwise fall out of the switch as `undefined` — crashing every
+      // caller that trusts the return type.
+      return { edit: false };
+  }
+}
 
 export interface Provider {
   id: string;
@@ -52,6 +96,14 @@ export interface Model {
    * presenting them as permanent facts.
    */
   probedAt?: number;
+  /**
+   * USD per generated image. The billing shape image endpoints usually use;
+   * token pricing (priceIn/priceOut) still applies on top for the providers
+   * that bill image generation as tokens. See `imageCostFor`.
+   */
+  pricePerImage?: number;
+  /** Image-model capabilities. Meaningless (and unset) for text models. */
+  caps?: ImageCaps;
 }
 
 /**
@@ -71,6 +123,29 @@ export function costFor(
     (uncachedInput * model.priceIn + cachedTokens * model.priceCachedIn + outputTokens * model.priceOut) /
     1_000_000
   );
+}
+
+/**
+ * USD cost of one image run. Two billing shapes exist and a model may use
+ * either, so both are summed rather than switched between: `pricePerImage`
+ * covers the per-image endpoints (xAI, Imagen), and the token terms cover the
+ * providers that meter image generation as tokens (OpenAI's image models) and
+ * report usage on the response. A model configures whichever applies; the
+ * unset side contributes zero.
+ *
+ * Deliberately separate from `costFor` — folding two billing units into one
+ * function makes both call sites read as if they know something they don't.
+ */
+export function imageCostFor(
+  model: Model,
+  images: number,
+  usage?: { inputTokens: number; outputTokens: number },
+): number {
+  const perImage = (model.pricePerImage ?? 0) * Math.max(0, images);
+  const perToken = usage
+    ? (usage.inputTokens * model.priceIn + usage.outputTokens * model.priceOut) / 1_000_000
+    : 0;
+  return perImage + perToken;
 }
 
 /** Upper bound for the per-model context size setting (tokens). */
@@ -145,6 +220,12 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   if (!modelCols.some((c) => c.name === "probed_at")) {
     await db.execute(`ALTER TABLE models ADD COLUMN probed_at INTEGER`);
   }
+  if (!modelCols.some((c) => c.name === "price_per_image")) {
+    await db.execute(`ALTER TABLE models ADD COLUMN price_per_image REAL`);
+  }
+  if (!modelCols.some((c) => c.name === "caps")) {
+    await db.execute(`ALTER TABLE models ADD COLUMN caps TEXT`);
+  }
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS prompts (
@@ -188,10 +269,26 @@ export async function listProviders(db: Awaited<ReturnType<typeof Database.load>
     id: r.id as string,
     name: r.name as string,
     baseUrl: r.base_url as string,
-    apiStandard: r.api_standard as ApiStandard,
+    apiStandard: parseApiStandard(r.api_standard),
     safetySettings: parseSafetySettings(r.safety_settings),
     createdAt: r.created_at as number,
   }));
+}
+
+const API_STANDARDS: ApiStandard[] = ["openai", "openai_compat", "gemini"];
+
+/**
+ * Narrow a stored `api_standard` to the union instead of asserting it.
+ *
+ * The column is free text: rows predate the current names, backups and hand
+ * edits land here unchecked, and a bare `as ApiStandard` hands the rest of the
+ * app a value no `switch` covers. Anything unrecognised becomes
+ * `openai_compat`, which is where the dispatch sent it anyway (everything
+ * that is not `gemini` takes the OpenAI adapter) — so this narrows the type
+ * without changing which adapter a provider talks to.
+ */
+function parseApiStandard(raw: unknown): ApiStandard {
+  return API_STANDARDS.includes(raw as ApiStandard) ? (raw as ApiStandard) : "openai_compat";
 }
 
 function parseSafetySettings(raw: unknown): GeminiSafetySettings | undefined {
@@ -244,9 +341,9 @@ export async function saveModel(
 ): Promise<void> {
   await db.execute(
     `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null]
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null]
   );
 }
 
@@ -303,5 +400,17 @@ function rowToModel(r: Record<string, unknown>): Model {
     contextSize: (r.context_size as number | null) ?? undefined,
     maxOutput: (r.max_output as number | null) ?? undefined,
     probedAt: (r.probed_at as number | null) ?? undefined,
+    pricePerImage: (r.price_per_image as number | null) ?? undefined,
+    caps: parseImageCaps(r.caps),
   };
+}
+
+function parseImageCaps(raw: unknown): ImageCaps | undefined {
+  if (typeof raw !== "string" || !raw) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" ? (parsed as ImageCaps) : undefined;
+  } catch {
+    return undefined;
+  }
 }

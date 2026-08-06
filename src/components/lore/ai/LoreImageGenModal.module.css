@@ -1,0 +1,180 @@
+/* Image generation modal — the fields and result grid. The shell (overlay,
+   panel, header, footer, buttons) is shared with LoreImproveModal.module.css. */
+
+.labelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.draftBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 3px var(--space-2);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+.draftBtn:hover:not(:disabled) {
+  background: var(--color-bg-elevated);
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+}
+.draftBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+/* Header model pickers: two selects that must read as distinct roles, not as
+   one setting duplicated. */
+.modelPickers {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-left: auto;
+}
+
+.modelPicker {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.modelPickerLabel {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* Facet chips — multi-select, so they toggle in place rather than behaving
+   like the single-choice pickers elsewhere in the modal. */
+.facets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.facetChip {
+  padding: 3px var(--space-3);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full, 999px);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+.facetChip:hover:not(:disabled) { border-color: var(--color-accent); color: var(--color-text-primary); }
+.facetChip:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.facetChipOn {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg-base, #fff);
+}
+
+.fieldRow {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.fieldNarrow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 96px;
+  flex: none;
+}
+
+.input {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  outline: none;
+  transition: border-color var(--transition-fast);
+  box-sizing: border-box;
+}
+.input:focus { border-color: var(--color-accent); }
+.input:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.costHint {
+  margin-left: auto;
+  padding-bottom: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Results: a fixed-height strip so a 4-image run doesn't push the footer off
+   screen, with each candidate letterboxed rather than cropped — the framing is
+   part of what the author is judging. */
+.grid {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.thumb {
+  width: 132px;
+  height: 132px;
+  padding: 0;
+  background: var(--color-bg-surface);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
+}
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.thumb:hover:not(:disabled) { transform: translateY(-1px); }
+.thumbActive { border-color: var(--color-accent); }
+.thumb:disabled { cursor: not-allowed; }
+
+.revised {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  line-height: 1.6;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-elevated);
+  border-radius: var(--radius-sm);
+}
+
+.revisedLabel {
+  display: block;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: 2px;
+}

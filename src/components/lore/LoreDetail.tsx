@@ -33,6 +33,7 @@ import { LoreMetaImproveModal } from "./LoreMetaImproveModal";
 import { FacetEditModal } from "./FacetEditModal";
 import { LoreSplitModal } from "./LoreSplitModal";
 import { EntityAiHubModal } from "./ai/EntityAiHubModal";
+import { LoreImageGenModal } from "./ai/LoreImageGenModal";
 import styles from "./LoreDetail.module.css";
 
 interface Props {
@@ -110,6 +111,10 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   const providers = useAiStore((s) => s.providers);
   const activeModelId = useAiStore((s) => s.activeModelId);
   const visionReady = models.find((m) => m.id === activeModelId)?.type === "multimodal";
+  // AI image generation needs a model of its own — the active text model can't
+  // stand in for it, so the entry point stays disabled until one is configured.
+  const imageGenReady = models.some((m) => m.type === "image");
+  const [showImageGen, setShowImageGen] = useState(false);
 
   // Lightbox state: which gallery image to show at full size (index into
   // entity.images), or null when the lightbox is closed.
@@ -470,6 +475,14 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
           entity={entity}
           onClose={() => setShowSplit(false)}
           onApplied={() => setContentVersion((v) => v + 1)}
+        />
+      )}
+
+      {showImageGen && (
+        <LoreImageGenModal
+          entity={entity}
+          onClose={() => setShowImageGen(false)}
+          onSaved={() => { void refresh(); }}
         />
       )}
 
@@ -844,6 +857,17 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                 <div className={styles.galleryHead}>{t("lore.detail.gallery", { defaultValue: "图集" })}</div>
                 <span className={styles.galleryCount}>{entity.images.length}</span>
                 <span className={styles.spacer} />
+                <button
+                  className={styles.galleryAddBtn}
+                  onClick={() => setShowImageGen(true)}
+                  disabled={busy || !imageGenReady}
+                  title={imageGenReady
+                    ? t("lore.detail.aiGenImage")
+                    : t("lore.detail.aiGenImageNeedModel")}
+                >
+                  <Sparkles size={12} strokeWidth={2} />
+                  {t("lore.detail.aiGenImage")}
+                </button>
                 <button
                   className={styles.galleryAddBtn}
                   onClick={handleAddImages}

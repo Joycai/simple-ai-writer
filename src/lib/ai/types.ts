@@ -10,6 +10,20 @@ import i18n from "../../i18n";
 /** Wire protocol spoken by a provider endpoint. */
 export type ApiStandard = "openai" | "openai_compat" | "gemini";
 
+/**
+ * Which endpoint an image model's pictures come out of. Not derivable from
+ * `ApiStandard`: newAPI-style relays speak the OpenAI protocol but serve
+ * Gemini/Flux image models through `/chat/completions`, while their
+ * `/images/generations` accepts only Imagen ("not supported model for image
+ * generation, only imagen models are supported"). Same provider, same
+ * protocol, two different endpoints depending on the model.
+ *
+ *   - "images-api" — POST /images/generations (OpenAI, xAI, Imagen on relays)
+ *   - "chat"       — POST /chat/completions, image comes back in the message
+ *   - "gemini"     — POST /models/{id}:generateContent (Gemini native)
+ */
+export type ImageRoute = "images-api" | "chat" | "gemini";
+
 /** A single part inside a multimodal user message. */
 export type ContentPart =
   | { type: "text"; text: string }

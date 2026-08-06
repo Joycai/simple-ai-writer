@@ -19,7 +19,12 @@ function parseJsonArgs(argsStr: string): Record<string, unknown> {
   try { return JSON.parse(argsStr) as Record<string, unknown>; } catch { return {}; }
 }
 
-function convertToGeminiContents(messages: StreamMessage[]): GeminiContent[] {
+/**
+ * Exported for the image client (./image.ts), which speaks to the same
+ * `generateContent` endpoint and must build `contents` identically — including
+ * the data-URL → inline_data conversion below.
+ */
+export function convertToGeminiContents(messages: StreamMessage[]): GeminiContent[] {
   // Build tool_call_id → function name map so functionResponse can include the name
   const toolCallIdToName = new Map<string, string>();
   for (const m of messages) {
@@ -81,7 +86,7 @@ function convertToGeminiContents(messages: StreamMessage[]): GeminiContent[] {
 }
 
 /** Gemini API base used when a provider hasn't configured a custom endpoint. */
-const DEFAULT_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
+export const DEFAULT_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
 /**
  * `candidates[0].finishReason` values that mean the response was refused or
