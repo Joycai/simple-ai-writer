@@ -16,8 +16,19 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Send, Square, X } from "lucide-react";
 import { SnippetPicker } from "./SnippetPicker";
+import {
+  MentionPicker,
+  filterMentions,
+  mentionKey,
+  mentionLabel,
+  useMentionState,
+  type MentionItem,
+} from "../common/MentionPicker";
 import { renderMarkdown } from "../../lib/fs/markdown";
-import { useTerms } from "../../stores/projectStore";
+import { scanProjectFiles, readTextFileContent, type ProjectFile } from "../../lib/fs/images";
+import { attachedKey, type AttachedItem } from "../../lib/lore/aiTask";
+import { useLoreStore } from "../../stores/loreStore";
+import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
@@ -60,6 +71,54 @@ export function AgentChat() {
   const [detached, setDetached] = useState(false);
   const messagesRef = useRef<HTMLDivElement>(null);
 
+  // ── @ references ──
+  const projectPath = useProjectStore((s) => s.projectPath);
+  const loreIndex = useLoreStore((s) => s.index);
+  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
+  const [refs, setRefs] = useState<AttachedItem[]>([]);
+  const mention = useMentionState();
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!projectPath) { setProjectFiles([]); return; }
+    scanProjectFiles(projectPath).then(setProjectFiles).catch(() => {});
+  }, [projectPath]);
+
+  const candidates: MentionItem[] = useMemo(() => [
+    ...Object.values(loreIndex).flat().map((entity): MentionItem => ({ type: "lore", entity })),
+    // Text only: this turn goes out as a string, and a chat message that
+    // becomes a multimodal parts array breaks the shape every later turn is
+    // appended to. Pictures belong in the lore modals, which build a fresh
+    // request each time.
+    ...projectFiles
+      .filter((f) => f.kind === "text")
+      .map((file): MentionItem => ({ type: "file", file })),
+  ], [loreIndex, projectFiles]);
+
+  const mentionItems = filterMentions(candidates, mention.query);
+  const refKeys = new Set(refs.map(attachedKey));
+
+  const handleDraftChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setDraft(e.target.value);
+    mention.sync(e.target.value, e.target.selectionStart ?? e.target.value.length);
+  };
+
+  const handlePickMention = async (item: MentionItem) => {
+    if (refKeys.has(mentionKey(item))) { mention.close(); return; }
+    if (item.type === "lore") {
+      setRefs((prev) => [...prev, { kind: "lore", entity: item.entity }]);
+    } else {
+      try {
+        const content = await readTextFileContent(item.file.path);
+        setRefs((prev) => [...prev, { kind: "text", file: item.file, content }]);
+      } catch {
+        return; // unreadable — leave the draft alone
+      }
+    }
+    setDraft((prev) => mention.accept(prev, mentionLabel(item)));
+    inputRef.current?.focus();
+  };
+
   // A fresh selection is a fresh intent — undo any earlier detach.
   useEffect(() => { setDetached(false); }, [selection]);
 
@@ -87,14 +146,26 @@ export function AgentChat() {
   const handleSend = () => {
     if (!canSend) return;
     const text = draft;
+    const sending = refs;
     setDraft("");
-    void sendChat(text, attachedQuote);
+    // References are per-message, like the typed text: the next question is
+    // rarely about the same files, and the material stays in the conversation
+    // history anyway.
+    setRefs([]);
+    void sendChat(text, attachedQuote, sending);
   };
 
   // Enter sends — unless a CJK IME is mid-word, where Enter commits the typed
   // letters and must not also fire off the message. See lib/ime.
   const ime = useImeGuard();
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // While the picker is open, Escape closes it and Enter must not send: the
+    // author is mid-mention, and firing the message would drop the reference
+    // they were in the middle of choosing.
+    if (mention.open) {
+      if (e.key === "Escape") { e.preventDefault(); mention.close(); return; }
+      if (e.key === "Enter" && !e.shiftKey && !ime.isComposing(e)) { e.preventDefault(); return; }
+    }
     if (e.key === "Enter" && !e.shiftKey && !ime.isComposing(e)) {
       e.preventDefault();
       handleSend();
@@ -180,6 +251,24 @@ export function AgentChat() {
               {t("ai.chat.noSelection", { defaultValue: "未选中正文" })}
             </span>
           )}
+          {/* @ references, beside the selection chip: both are "material this
+              message carries", and splitting them across two rows would read
+              as two unrelated mechanisms. */}
+          {refs.map((r) => {
+            const key = attachedKey(r);
+            const label = r.kind === "lore" ? r.entity.name : r.file.name;
+            return (
+              <button
+                key={key}
+                className={styles.attachChip}
+                onClick={() => setRefs((prev) => prev.filter((x) => attachedKey(x) !== key))}
+                title={t("ai.chat.removeRef")}
+              >
+                @{label}
+                <X size={10} strokeWidth={2} />
+              </button>
+            );
+          })}
           {contextWindow > 0 && (
             <span className={styles.contextMeter}>
               {t("ai.chat.contextMeter", { defaultValue: "上下文" })}{" "}
@@ -190,15 +279,28 @@ export function AgentChat() {
 
         <div className={styles.inputRow}>
           <textarea
+            ref={inputRef}
             className={styles.input}
             rows={3}
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={handleDraftChange}
             onKeyDown={handleKeyDown}
             {...ime.imeProps}
-            placeholder={activeModelId ? t("ai.chat.placeholder") : t("ai.errors.noModel")}
+            placeholder={activeModelId ? t("ai.chat.placeholder", { kb: terms.kb }) : t("ai.errors.noModel")}
             disabled={!activeModelId}
           />
+          {mention.open && (
+            // Anchored to the textarea itself rather than a wrapper: the
+            // composer is a flex column, and an extra box in it would change
+            // how the input sizes.
+            <MentionPicker
+              anchorRef={inputRef}
+              items={mentionItems}
+              usedKeys={refKeys}
+              onPick={(item) => void handlePickMention(item)}
+              onDismiss={mention.close}
+            />
+          )}
           <div className={styles.inputFooter}>
             {/* Insert (not send): a snippet is a starting point the author
                 completes before sending. */}

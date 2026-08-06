@@ -1,0 +1,77 @@
+/* The @ mention list. Positioned inline via a portal (see MentionPicker.tsx),
+   so this owns the look and not the placement. */
+
+.picker {
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  overflow-y: auto;
+  animation: slideUp 160ms var(--ease-out);
+  max-height: 240px;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.pickerItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 8px var(--space-3);
+  text-align: left;
+  transition: background var(--transition-fast);
+  border-bottom: 1px solid var(--color-border);
+}
+.pickerItem:last-child { border-bottom: none; }
+.pickerItem:hover { background: var(--color-bg-elevated); }
+
+.pickerThumb {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.pickerThumbPlaceholder {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.pickerName {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pickerBadge {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* Already attached: visible so the author sees it is there, inert so a second
+   pick can't duplicate it. */
+.pickerItemUsed {
+  opacity: 0.4;
+  pointer-events: none;
+}

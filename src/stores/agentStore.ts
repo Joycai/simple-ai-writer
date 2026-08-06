@@ -41,6 +41,7 @@ import { createPlanGate, type LorePlan, type PlanDecision } from "../lib/agent/p
 import { parentDir } from "../lib/context/outline";
 import { docModel, promptParams } from "../lib/profile/active";
 import type { ApprovalDecision, EditProposal, Proposal } from "../lib/agent/registry";
+import type { AttachedItem } from "../lib/lore/aiTask";
 import type { StreamMessage } from "../lib/ai/types";
 import { readFile, writeFile } from "../lib/fs/fileio";
 import { getDb } from "../lib/project";
@@ -142,7 +143,7 @@ interface AgentState {
   /** @param quote Manuscript passage attached to the message, if the author
    *               pinned their selection to it (shown above the turn, and sent
    *               to the model as a 【选中内容】 block). */
-  sendChat: (text: string, quote?: string) => Promise<void>;
+  sendChat: (text: string, quote?: string, refs?: AttachedItem[]) => Promise<void>;
   stopChat: () => void;
   resetChat: () => void;
 }
@@ -361,15 +362,15 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   // ── Chat session ──────────────────────────────────────────────────────────
 
-  sendChat: async (text, quote) => {
+  sendChat: async (text, quote, refs = []) => {
     const message = text.trim();
     if (!message || get().chatRunning) return;
-    // What the model receives: the quoted passage first, so "把这一段重写得更
-    // 克制一些" has an unambiguous referent even mid-conversation.
+    // What the model receives: the quoted passage and any @-referenced material
+    // first, so "把这一段重写得更克制一些" has an unambiguous referent even
+    // mid-conversation. Composition lives in lib/agent/chatRefs.
     const quoted = quote?.trim();
-    const wireMessage = quoted
-      ? `${i18n.t("ai.chat.quoteBlockLabel", { defaultValue: "【选中内容】" })}\n${quoted}\n\n${message}`
-      : message;
+    const { buildChatMessage } = await import("../lib/agent/chatRefs");
+    const wireMessage = await buildChatMessage(message, quoted, refs);
 
     const { useAiStore } = await import("./aiStore");
     const { useProjectStore } = await import("./projectStore");
