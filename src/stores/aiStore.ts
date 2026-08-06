@@ -13,6 +13,40 @@ import { getGlobalDb } from "../lib/project";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+/**
+ * Which model is selected for what is a UI preference, not configuration, so
+ * it lives in localStorage beside the rest of the app's preferences (see
+ * appStore) rather than in the config DB.
+ */
+const SELECTION_KEYS = {
+  activeModelId: "ai:activeModelId",
+  activePromptId: "ai:activePromptId",
+  memoryModelId: "ai:memoryModelId",
+  imageModelId: "ai:imageModelId",
+} as const;
+
+type SelectionField = keyof typeof SELECTION_KEYS;
+
+// Guarded: vitest runs this module under a node environment with no
+// localStorage, and a browser in private mode can throw on write.
+function readSelection(field: SelectionField): string | null {
+  try {
+    return typeof localStorage !== "undefined" ? localStorage.getItem(SELECTION_KEYS[field]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSelection(field: SelectionField, value: string | null): void {
+  try {
+    if (typeof localStorage === "undefined") return;
+    if (value) localStorage.setItem(SELECTION_KEYS[field], value);
+    else localStorage.removeItem(SELECTION_KEYS[field]);
+  } catch {
+    // A preference that fails to persist is not worth failing a save over.
+  }
+}
+
 async function db() {
   const globalDb = await getGlobalDb();
   await ensureAiSchema(globalDb);
@@ -60,10 +94,10 @@ export const useAiStore = create<AiState>((set, get) => ({
   providers: [],
   models: [],
   prompts: [],
-  activeModelId: null,
-  activePromptId: null,
-  memoryModelId: null,
-  imageModelId: null,
+  activeModelId: readSelection("activeModelId"),
+  activePromptId: readSelection("activePromptId"),
+  memoryModelId: readSelection("memoryModelId"),
+  imageModelId: readSelection("imageModelId"),
   isLoading: false,
 
   loadConfig: async () => {
@@ -77,9 +111,20 @@ export const useAiStore = create<AiState>((set, get) => ({
         listPrompts(d),
       ]);
       set({ providers, models, prompts });
-      if (!get().activeModelId && models.length > 0) {
-        set({ activeModelId: models[0].id });
-      }
+      // A restored selection can outlive what it pointed at: the model may
+      // have been deleted on another launch, or the config replaced by an
+      // import from a different machine, where the ids are all different.
+      // Verify each one against what actually loaded before trusting it.
+      const modelIds = new Set(models.map((m) => m.id));
+      const promptIds = new Set(prompts.map((p) => p.id));
+      const s = get();
+      const liveModel = (id: string | null) => (id && modelIds.has(id) ? id : null);
+      set({
+        activeModelId: liveModel(s.activeModelId) ?? models[0]?.id ?? null,
+        memoryModelId: liveModel(s.memoryModelId),
+        imageModelId: liveModel(s.imageModelId),
+        activePromptId: s.activePromptId && promptIds.has(s.activePromptId) ? s.activePromptId : null,
+      });
     } finally {
       set({ isLoading: false });
     }
@@ -187,3 +232,16 @@ export const useAiStore = create<AiState>((set, get) => ({
   setMemoryModel: (id) => set({ memoryModelId: id }),
   setImageModel: (id) => set({ imageModelId: id }),
 }));
+
+/**
+ * Persist the selections by observing the store rather than writing at each
+ * call site. They change from the setters, from removeModel/removeProvider
+ * clearing a deleted pointer, and from loadConfig's stale-id sweep — and a
+ * missed site is a preference that silently fails to stick, which is exactly
+ * the bug this replaced.
+ */
+useAiStore.subscribe((state, prev) => {
+  for (const field of Object.keys(SELECTION_KEYS) as SelectionField[]) {
+    if (state[field] !== prev[field]) writeSelection(field, state[field]);
+  }
+});
