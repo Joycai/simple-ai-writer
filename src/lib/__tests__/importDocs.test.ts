@@ -131,11 +131,15 @@ describe("decodeText", () => {
 describe("naming and dispatch", () => {
   it("recognises exactly the supported extensions", () => {
     expect(importExtension("标书.docx")).toBe("docx");
+    expect(importExtension("报价表.xlsx")).toBe("xlsx");
     expect(importExtension("C:\\bids\\招标文件.PDF")).toBe("pdf");
     expect(importExtension("notes.txt")).toBe("txt");
     expect(importExtension("readme.md")).toBe("md");
-    // Legacy .doc is out on purpose — no converter reads it faithfully.
+    // Legacy .doc/.xls are out on purpose — see IMPORT_EXTENSIONS. The xlsx
+    // parser would in fact read .xls, so this assertion is what keeps it from
+    // drifting into the picker on its own.
     expect(importExtension("old.doc")).toBeNull();
+    expect(importExtension("old.xls")).toBeNull();
     expect(importExtension("noext")).toBeNull();
   });
 

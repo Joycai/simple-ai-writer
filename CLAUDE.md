@@ -105,7 +105,7 @@ Four rules when touching this: components read flags via `useDocModel()` and wor
   - `src/lib/context/` — RAG assembly (`rag.ts`), story memory (`memory.ts`), book spine (`outline.ts`), book-level continuation context (`bookContext.ts`)
   - `src/lib/fs/` — Tauri file I/O wrappers (`fileio.ts`), markdown render/frontmatter (`markdown.ts`), image/text file utils (`images.ts`), export (`export.ts`)
   - `src/lib/theme/` — Markdown typography themes (`markdownThemes.ts`): the `--md-*` CSS generated once and shared by the preview pane, lore previews and exported HTML/PDF. See `docs/design-system.md` → Markdown 排版主题
-  - `src/lib/import/` — document import into `writing/`: docx via mammoth+turndown (`docx.ts`/`markdown.ts`), PDF text extraction via lazy pdfjs (`pdf.ts`), GBK-aware text decode (`text.ts`), dialog orchestration + naming (`index.ts`)
+  - `src/lib/import/` — document import into `writing/`: docx via mammoth+turndown (`docx.ts`/`markdown.ts`), xlsx via the Rust `xlsx_to_markdown` command (`xlsx.ts` → `src-tauri/src/xlsx.rs`, the only converter not in the webview — calamine reads cached formula results, real dates and merged ranges), PDF text extraction via lazy pdfjs (`pdf.ts`), GBK-aware text decode (`text.ts`), dialog orchestration + naming (`index.ts`). Everything lands as markdown because **no model API accepts docx/xlsx binaries** — they are zip archives; converting is not a shortcut, it is the only option
   - root: `project.ts`, `keyStore.ts`, `http.ts`, `paths.ts`, `platform.ts`
 - `src/stores/` — Zustand state managers
 - `src/styles/` — Design tokens (`tokens.css`) + global styles (`global.css`)
