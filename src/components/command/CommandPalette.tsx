@@ -10,6 +10,7 @@ import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { type LoreEntity } from "../../lib/lore";
 import { loreCategories } from "../../lib/profile";
 import { MOD_KEY } from "../../lib/platform";
+import { useImeGuard } from "../../lib/ime";
 import { modalPop, overlayFade, overlayFadeTransition, springPanel } from "../../lib/motion";
 import styles from "./CommandPalette.module.css";
 
@@ -139,7 +140,10 @@ export function CommandPalette() {
     }
   };
 
+  // A pinyin Enter commits the word being typed; it must not also open a hit.
+  const ime = useImeGuard();
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (ime.isComposing(e)) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setActive((a) => Math.min(a + 1, hits.length - 1));
@@ -186,6 +190,7 @@ export function CommandPalette() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
+            {...ime.imeProps}
             placeholder={t("sidebar.projectSearch", { entries: terms.entries })}
           />
           <span className={styles.scopeChip}>/ {terms.entry}</span>

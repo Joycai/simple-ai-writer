@@ -26,6 +26,7 @@ import { describeLoreImage } from "../../lib/lore/vision";
 import { readFile, removeFile } from "../../lib/fs/fileio";
 import { imageToDataUrl } from "../../lib/fs/images";
 import { useImageDataUrl } from "./useImageDataUrl";
+import { useImeGuard } from "../../lib/ime";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { MarkdownPreview } from "../common/MarkdownPreview";
 import { LoreImproveModal } from "./LoreImproveModal";
@@ -270,6 +271,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoEdit, contentLoaded]);
 
+  const aliasIme = useImeGuard();
   const addDraftAlias = () => {
     const v = aliasInput.trim();
     if (v && !dAliases.includes(v)) setDAliases([...dAliases, v]);
@@ -654,7 +656,9 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                   className={styles.eInput}
                   value={aliasInput}
                   onChange={(e) => setAliasInput(e.target.value)}
+                  {...aliasIme.imeProps}
                   onKeyDown={(e) => {
+                    if (aliasIme.isComposing(e)) return;
                     if (e.key === "Enter") { e.preventDefault(); addDraftAlias(); }
                   }}
                   placeholder={t("lore.detail.aliasPlaceholder", { defaultValue: isZh ? "添加别名（回车确认）" : "Add alias (press Enter)" })}

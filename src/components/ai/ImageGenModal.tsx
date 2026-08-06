@@ -33,6 +33,7 @@ import { useAiStore } from "../../stores/aiStore";
 import { useImageStore, type RunContext } from "../../stores/imageStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useImageDataUrls } from "../lore/useImageDataUrl";
+import { useImeGuard } from "../../lib/ime";
 import i18n from "../../i18n";
 import styles from "../lore/LoreImproveModal.module.css";
 import gen from "./ImageGenModal.module.css";
@@ -203,6 +204,7 @@ export function ImageGenModal({ target, onClose }: Props) {
     }
   };
 
+  const editIme = useImeGuard();
   /** Send one edit instruction against the candidate currently on screen. */
   const handleEdit = async () => {
     if (!imageModel || !editDraft.trim() || !currentTurn) return;
@@ -435,7 +437,8 @@ export function ImageGenModal({ target, onClose }: Props) {
                       placeholder={t("lore.imageGen.editPlaceholder")}
                       value={editDraft}
                       onChange={(e) => setEditDraft(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) void handleEdit(); }}
+                      {...editIme.imeProps}
+                      onKeyDown={(e) => { if (e.key === "Enter" && !editIme.isComposing(e)) void handleEdit(); }}
                       disabled={busy}
                     />
                     <button

@@ -24,6 +24,7 @@ import { categoryLabel, defaultCategoryId, findCategory, loreCategories, profile
 import { useAppStore } from "../../stores/appStore";
 import { imageToDataUrl } from "../../lib/fs/images";
 import { MOD_K_SPACED } from "../../lib/platform";
+import { useImeGuard } from "../../lib/ime";
 import { LoreGenerator } from "./LoreGenerator";
 import { NewEntryTabs, type NewEntryMode } from "./ai/NewEntryTabs";
 import { LoreDetail } from "./LoreDetail";
@@ -533,6 +534,7 @@ function NewEntryModal({
   const [category, setCategory] = useState<CategoryId>(initialCategory);
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
+  const ime = useImeGuard();
 
   const handleSubmit = async () => {
     if (!name.trim() || saving) return;
@@ -574,9 +576,11 @@ function NewEntryModal({
             placeholder={t("lore.form.namePlaceholder", { defaultValue: isZh ? "条目名称" : "Entry name" })}
             value={name}
             onChange={(e) => setName(e.target.value)}
+            {...ime.imeProps}
             onKeyDown={(e) => {
               // Escape is handled by ModalShell (with an unsaved-changes guard).
-              if (e.key === "Enter") void handleSubmit();
+              // An Enter that ends a pinyin word belongs to the IME, not to us.
+              if (e.key === "Enter" && !ime.isComposing(e)) void handleSubmit();
             }}
             autoFocus
           />
