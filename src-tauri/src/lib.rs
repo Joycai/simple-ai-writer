@@ -1,4 +1,5 @@
 mod commands;
+mod print;
 mod protocol;
 mod scope;
 mod secrets;
@@ -27,6 +28,9 @@ pub fn run() {
                 fs_scope.allow(&dir);
             }
             app.manage(fs_scope);
+
+            // Holds the document handed to the print window (see print.rs).
+            app.manage(print::PendingPrint::default());
 
             // Set the app icon explicitly at runtime on the window (helps show custom icon on macOS Dock / Windows taskbar during `tauri dev`)
             if let Some(window) = app.get_webview_window("main") {
@@ -60,9 +64,11 @@ pub fn run() {
             transfer::save_text_file_dialog,
             transfer::open_text_file_dialog,
             xlsx::xlsx_to_markdown,
+            print::print_document,
         ]);
 
-    protocol::register_asset_protocol(builder)
+    let builder = protocol::register_asset_protocol(builder);
+    print::register_print_protocol(builder)
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
