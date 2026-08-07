@@ -703,6 +703,7 @@
       "selectionChip": "Selection · {{n}} chars",
       "detachSelection": "Don't attach the selection",
       "removeRef": "Remove reference",
+      "revealImage": "Show in folder",
       "refBlockLabel": "【Referenced material】",
       "noSelection": "No selection",
       "contextMeter": "Context",
