@@ -72,6 +72,26 @@ export default defineConfig(async () => ({
     // renders a diagram (see components/editor/Preview.tsx). Raise the limit so
     // the false alarm doesn't clutter the build log.
     chunkSizeWarningLimit: 1600,
+    rollupOptions: {
+      // Stores break their import cycles with `await import()`: aiTaskStore
+      // statically imports agentStore and batchStore statically imports
+      // aiTaskStore, so the reverse direction can only be reached lazily.
+      // The bundler flags each one INEFFECTIVE_DYNAMIC_IMPORT — "this dynamic
+      // import did not move the module into its own chunk". That is fine:
+      // splitting a chunk was never the point, deferring *evaluation* to call
+      // time was, and that still holds inside one chunk. This app is loaded
+      // from local disk by Tauri, so chunking buys nothing anyway.
+      //
+      // Only silenced when the target is a store. A dynamic import of a
+      // src/lib/** module that something else imports statically is just a
+      // pointless await — those keep warning, on purpose. Same if `id` is ever
+      // absent: fail open and let the warning through.
+      onwarn(warning, defaultHandler) {
+        const target = warning.id?.replace(/\\/g, "/");
+        if (warning.code === "INEFFECTIVE_DYNAMIC_IMPORT" && target?.includes("/src/stores/")) return;
+        defaultHandler(warning);
+      },
+    },
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

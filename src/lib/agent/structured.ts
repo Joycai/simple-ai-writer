@@ -16,6 +16,7 @@
  * findings into a structured call.
  */
 
+import { streamCompletion } from "../ai";
 import type { GeminiSafetySettings } from "../ai/safety";
 import type { ApiStandard, ContentPart, StreamMessage, ToolDefinition } from "../ai/types";
 import { extractJsonObject } from "../ai/json";
@@ -73,8 +74,6 @@ const TOOL_CAPABILITY_ERROR = new RegExp(
  * (already extracted, not yet parsed — callers own their schema validation).
  */
 export async function runStructuredTask(args: StructuredTaskArgs): Promise<string> {
-  const { streamCompletion } = await import("../ai");
-
   const common = {
     baseUrl: args.baseUrl,
     apiKey: args.apiKey,

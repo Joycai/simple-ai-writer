@@ -5,6 +5,7 @@
  * a text-only model reads the entity — so it must be concrete and visual.
  */
 
+import { streamCompletion } from "../ai";
 import type { GeminiSafetySettings } from "../ai/safety";
 import type { ApiStandard, StreamMessage } from "../ai/types";
 
@@ -37,8 +38,6 @@ export interface DescribeLoreImageOptions {
  * decides how to surface them.
  */
 export async function describeLoreImage(opts: DescribeLoreImageOptions): Promise<string> {
-  const { streamCompletion } = await import("../ai");
-
   const lang = opts.language.startsWith("zh") ? "简体中文" : "English";
   const system = [
     "You are a visual reference describer for a fiction-writing app's lore gallery.",

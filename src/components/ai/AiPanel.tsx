@@ -61,6 +61,7 @@ import {
   fixedContextChars, measureCharsPerToken, planContextBudget,
   RECENT_WINDOW_MIN_CHARS, STATIC_LORE_BUDGET_MAX_TOKENS,
 } from "../../lib/context/budget";
+import { chapterTitle, resolveVolumes } from "../../lib/context/outline";
 import { contextLabel } from "../../lib/ai/modelLabel";
 import { MOD_KEY } from "../../lib/platform";
 import { panelFade, springPanel } from "../../lib/motion";
@@ -859,7 +860,6 @@ export function AiPanel() {
     if (!wantsOpeningChoice || !projectPath) { setVolumes([]); return; }
     let cancelled = false;
     void (async () => {
-      const { resolveVolumes, chapterTitle } = await import("../../lib/context/outline");
       const resolved = await resolveVolumes(projectPath, fileTree);
       if (cancelled) return;
       setVolumes(resolved.map((v) => ({

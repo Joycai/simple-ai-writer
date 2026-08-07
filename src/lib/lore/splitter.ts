@@ -7,6 +7,8 @@
  */
 
 import i18n from "../../i18n";
+import { LORE_SPLIT_PRESET } from "../agent/presets";
+import { runAgent } from "../agent/runtime";
 import type { GeminiSafetySettings } from "../ai/safety";
 import type { ApiStandard } from "../ai/types";
 import type { FacetMeta } from "./model";
@@ -48,9 +50,6 @@ export async function splitLore(opts: {
   signal?: AbortSignal;
   systemPrompt?: string;
 }): Promise<SplitResult> {
-  const { runAgent } = await import("../agent/runtime");
-  const { LORE_SPLIT_PRESET } = await import("../agent/presets");
-
   const existing = opts.existingFacets?.filter((f) => f.body.trim()) ?? [];
   const existingBlock = existing.length > 0
     ? [

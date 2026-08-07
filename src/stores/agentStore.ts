@@ -31,6 +31,13 @@
  * later turns just append a user message. Display state (turns) is kept
  * separately — the history holds wire messages, the turns hold what the user
  * sees (text + per-turn execution log).
+ *
+ * ── Why every store is reached through `await import()` ──
+ * aiTaskStore imports THIS module at the top level. A static import back would
+ * close the cycle, so every store this file touches — aiStore, projectStore,
+ * loreStore, appStore, editorStore, memoryStore — is loaded lazily at the call
+ * site. Plain `src/lib/**` modules carry no such constraint and are imported
+ * normally above. See docs/architecture.md → Circular Dependencies.
  */
 
 import { create } from "zustand";
@@ -38,10 +45,17 @@ import i18n from "../i18n";
 import { backupFile } from "../lib/agent/backup";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import { createPlanGate, type LorePlan, type PlanDecision } from "../lib/agent/plan";
+import { AGENT_ASSIST_PRESET } from "../lib/agent/presets";
+import { repairToolCallPairing, runAgent } from "../lib/agent/runtime";
+import {
+  inputCeilingFor, measureCharsPerToken, RECENT_WINDOW_MIN_CHARS,
+} from "../lib/context/budget";
+import { loadMemory, MEMORY_BUDGET_CHARS } from "../lib/context/memory";
 import { parentDir } from "../lib/context/outline";
+import { assembleContext, bundleToMessages, profileSystemPrompt } from "../lib/context/rag";
 import { docModel, promptParams } from "../lib/profile/active";
 import type { ApprovalDecision, EditProposal, Proposal } from "../lib/agent/registry";
-import type { AttachedItem } from "../lib/lore/aiTask";
+import { resolveModel, type AttachedItem } from "../lib/lore/aiTask";
 import type { StreamMessage } from "../lib/ai/types";
 import { readFile, writeFile } from "../lib/fs/fileio";
 import { getDb } from "../lib/project";
@@ -430,12 +444,13 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     const { buildChatMessage } = await import("../lib/agent/chatRefs");
     const wireMessage = await buildChatMessage(message, quoted, refs);
 
+    // Stores are reached lazily throughout this module: aiTaskStore imports
+    // *this* one at the top level, so agentStore must stay free of static store
+    // imports or the cycle closes. See docs/architecture.md → Circular deps.
     const { useAiStore } = await import("./aiStore");
     const { useProjectStore } = await import("./projectStore");
     const { useLoreStore } = await import("./loreStore");
     const { useAppStore } = await import("./appStore");
-    const { resolveModel } = await import("../lib/lore/aiTask");
-
     const { getWritingFocus } = await import("./editorStore");
 
     const { models, providers, activeModelId } = useAiStore.getState();
@@ -474,9 +489,6 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       // ── History: seed on first turn, append afterwards ──
       let history = get().chatHistory;
       if (!history) {
-        const { assembleContext, bundleToMessages, profileSystemPrompt } = await import("../lib/context/rag");
-        const { measureCharsPerToken, RECENT_WINDOW_MIN_CHARS } = await import("../lib/context/budget");
-        const { MEMORY_BUDGET_CHARS, loadMemory } = await import("../lib/context/memory");
         const { useAiStore: aiStore2 } = await import("./aiStore");
 
         const { prompts, activePromptId } = aiStore2.getState();
@@ -535,14 +547,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // leave an assistant tool_calls message without every reply it needs —
         // and appending onto that makes the provider reject not just this turn
         // but every turn after it. Repair before adding to it.
-        const { repairToolCallPairing } = await import("../lib/agent/runtime");
         repairToolCallPairing(history);
         history.push({ role: "user", content: wireMessage });
       }
 
-      const { runAgent } = await import("../lib/agent/runtime");
-      const { AGENT_ASSIST_PRESET } = await import("../lib/agent/presets");
-      const { inputCeilingFor } = await import("../lib/context/budget");
       const { contextUtilization } = useAppStore.getState();
 
       const { inputTokens, outputTokens, cachedTokens } = await runAgent({

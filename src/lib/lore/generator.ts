@@ -8,6 +8,8 @@
  */
 
 import i18n from "../../i18n";
+import { LORE_GENERATE_PRESET } from "../agent/presets";
+import { runAgent } from "../agent/runtime";
 import type { GeminiSafetySettings } from "../ai/safety";
 import type { ApiStandard } from "../ai/types";
 import { fallbackCategoryId, isKnownCategory, loreCategoryIds } from "../profile/active";
@@ -37,9 +39,6 @@ export async function generateLore(opts: {
   signal?: AbortSignal;
   systemPrompt?: string;
 }): Promise<GeneratedLore> {
-  const { runAgent } = await import("../agent/runtime");
-  const { LORE_GENERATE_PRESET } = await import("../agent/presets");
-
   // Strip @[filename] visual placeholders from the user description — they're UI labels only.
   const cleanDesc = opts.description.replace(/@\[[^\]]*\]/g, "").trim();
 
