@@ -6,7 +6,7 @@
  * otherwise import each other: `appStore` owns the author's draft-count setting
  * and needs the ceiling, while `aiTaskStore` owns the run and reads the setting.
  * Keeping these here also means the pure parts are testable without dragging in
- * a store that touches `localStorage` and `document` at module load.
+ * a store that reads a preference and touches `document` at module load.
  */
 
 import type { TaskDef } from "../profile/model";

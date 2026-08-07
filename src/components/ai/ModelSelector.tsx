@@ -66,7 +66,7 @@ export function ModelSelector() {
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Read once per opening: both are localStorage-backed and must not change
+  // Read once per opening: both are preference-backed and must not change
   // under the author mid-scroll (a pick would reorder 常用 beneath the cursor).
   const [recent, setRecent] = useState<string[]>([]);
   const [blocked, setBlocked] = useState<Set<string>>(() => new Set());

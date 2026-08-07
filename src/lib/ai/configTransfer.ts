@@ -6,6 +6,12 @@
  * them unless the user explicitly opts in (`includeKeys`), in which case they
  * are embedded in the JSON in plaintext and re-saved to the keyring on import.
  *
+ * Preferences (lib/prefs) ride along too — they were the other half of "my
+ * setup didn't come with me": theme, fonts, panel widths, the lore budget.
+ * Only the portable subset travels; a recent-projects list or a per-project
+ * pin would carry paths that mean nothing on the other machine, and `lib/prefs`
+ * filters those on both the way out and the way in.
+ *
  * Restore is a merge: entries with a known id are replaced, everything else in
  * the local config is left alone.
  */
@@ -26,6 +32,7 @@ import {
 } from "./configDb";
 import type { ApiStandard } from "./types";
 import { loadApiKey, saveApiKey } from "../keyStore";
+import { applyPrefEntries, portablePrefEntries } from "../prefs";
 import { getGlobalDb } from "../project";
 import { openTextFileDialog, saveTextFileDialog } from "../fs/transfer";
 
@@ -45,6 +52,8 @@ export interface ConfigBackup {
   providers: ProviderBackup[];
   models: Model[];
   prompts: Prompt[];
+  /** Portable preferences as `[key, value]` pairs. Absent in v1 backups written before they were included. */
+  prefs?: [string, string][];
 }
 
 async function configDb() {
@@ -88,6 +97,7 @@ export async function exportAiConfig(includeKeys: boolean): Promise<string | nul
     providers: providerBackups,
     models,
     prompts,
+    prefs: portablePrefEntries(),
   };
 
   const date = new Date().toISOString().slice(0, 10);
@@ -104,6 +114,7 @@ export interface StagedConfigImport {
   providers: ProviderBackup[];
   models: Model[];
   prompts: Prompt[];
+  prefs: [string, string][];
   /** How many imported providers carry an embedded API key. */
   keyCount: number;
 }
@@ -202,7 +213,15 @@ export async function stageConfigImport(
     prompts.push({ id, name, content: r.content, scene });
   }
 
-  if (providers.length === 0 && models.length === 0 && prompts.length === 0) {
+  // Shape-checked here; which keys are actually allowed through is `lib/prefs`'
+  // call, made again at apply time so a hand-edited file can't slip one past.
+  const prefs: [string, string][] = (Array.isArray(root.prefs) ? root.prefs : [])
+    .filter(
+      (e): e is [string, string] =>
+        Array.isArray(e) && e.length === 2 && typeof e[0] === "string" && typeof e[1] === "string",
+    );
+
+  if (providers.length === 0 && models.length === 0 && prompts.length === 0 && prefs.length === 0) {
     throw new Error("invalid-backup");
   }
 
@@ -211,6 +230,7 @@ export async function stageConfigImport(
     providers,
     models,
     prompts,
+    prefs,
     keyCount: providers.filter((p) => p.apiKey).length,
   };
 }
@@ -239,6 +259,11 @@ export async function applyConfigImport(staged: StagedConfigImport): Promise<voi
     await db.execute("ROLLBACK").catch(() => { /* the failure below is the one that matters */ });
     throw e;
   }
+
+  // Preferences are not part of the transaction and deliberately land after
+  // it: they are the cosmetic half of the restore, and a failure here must not
+  // roll back the configuration that already succeeded.
+  applyPrefEntries(staged.prefs);
 
   const failed: string[] = [];
   for (const { id, name, apiKey } of staged.providers) {

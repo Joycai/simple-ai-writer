@@ -14,6 +14,7 @@ config.db    providers   (id, name, base_url, api_standard, safety_settings, cre
 config.db    models      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out,
                           enabled, prefix, context_size, max_output, probed_at, price_per_image, caps)
 config.db    prompts     (id, name, content, scene)
+config.db    prefs       (key, value)          -- see Preferences below
 ```
 
 Two databases, and the split is what each thing *belongs to*: `project.db`
@@ -44,6 +45,44 @@ queried separately, so the headline can never disagree with the rows under it.
 — left alone it propagates as `NaN` through every later addition. Sorting is
 cost-descending with an output-token tiebreak, so models the author never
 priced still order usefully instead of collapsing to the bottom.
+
+### Preferences (`src/lib/prefs.ts`)
+
+Everything that is a *setting* rather than configuration or project data —
+theme, language, fonts, panel widths, the lore budget, model selections,
+model-picker recall, the onboarding flag, per-project pinned lore. They lived
+in scattered `localStorage` calls, which meant clearing the webview's data (or
+moving machines) silently reset all of them, and nothing could enumerate the
+set to back it up. They are now rows in `config.db`'s `prefs (key, value)`.
+
+The awkward part is that the store is async and the two biggest readers are
+not: i18n takes its language as it initializes, and `appStore` computes its
+whole initial state at module scope. So the module keeps an in-memory `Map` as
+the synchronous read path and `main.tsx` calls `hydratePrefs()` **before
+importing anything that reads a preference** — `./i18n`, `./App` and the error
+boundary are dynamic imports for exactly that reason. Until hydration (vitest,
+browser dev, or a database that will not open) every call falls through to
+`localStorage` as before: a preference store that cannot reach its database
+should cost the author their preferences syncing, not their app starting.
+
+- **Migration** — `hydratePrefs` moves leftovers out of `localStorage` one key
+  at a time, database-write first and `removeItem` second, because the reverse
+  order turns a failed write into a lost preference. A key already in the
+  database wins; a key the app does not own (`isPrefKey`) is never touched.
+- **Collection** — `ai:pinnedLore:<absolute path>` accrued one row per project
+  ever opened and nothing removed one, so renaming a folder orphaned its row
+  permanently. `appStore` now prunes on `removeRecentProject` /
+  `clearRecentProjects`, and `hydratePrefs` sweeps against the recents list at
+  startup as a backstop.
+- **Backup** — `portablePrefEntries()` is the subset a config backup carries;
+  `MACHINE_LOCAL_PREF_KEYS` and the per-project families are filtered out on
+  the way out *and* on the way back in, so a hand-edited backup cannot plant
+  another machine's project paths. After an import, `appStore.reloadFromPrefs()`
+  re-derives the pref-backed slice and repaints — without it the values are
+  right in the store and the screen still shows what it computed at startup.
+- **Writes** — serialized on one chain, so two `writePref` calls for the same
+  key (a slider being dragged) land in call order rather than in whichever
+  order the driver finishes them.
 
 ### The AI target (选区) and where a task acts
 
@@ -372,9 +411,9 @@ The sidebar's file tree supports drag-and-drop and a cut/copy/paste menu. Three 
 - **Move vs copy.** A move is `fs_rename` via `projectStore.moveEntry`, which refuses an occupied destination and keeps the open document pointed at the moved file. A copy is the `fs_copy` Rust command (recursive for folders) via `copyEntry`; it refuses a destination that already exists and a folder copied into its own subtree — that last check is duplicated in Rust because a recursive self-copy writes until the disk fills. Hold Ctrl/Alt while dropping to copy.
 
 ### Export / Import (lore bundles & config backup)
-- **Lore bundle** (`src/lib/lore/transfer.ts`, UI in `LoreWall`): a zip with root `manifest.json` + the whole on-disk `.ai-writer/lore/` tree under `lore/…` — *all* categories on disk, not just the active profile's, so bundles survive profile switches. Import is two-phase: `stageLoreImport` extracts into `.ai-writer/lore-import-tmp` and reports conflicts; `applyLoreImport` moves entity dirs in under a user-chosen strategy (skip / overwrite / keep-both via `uniqueEntityId`), then deletes the staging dir. Categories that fail `CATEGORY_ID_RE` are ignored.
+- **Lore bundle** (`src/lib/lore/transfer.ts`, UI in `LoreWall`): a zip with root `manifest.json` + the whole on-disk `.ai-writer/lore/` tree under `lore/…` — *all* categories on disk, not just the active profile's, so bundles survive profile switches. Import is two-phase: `stageLoreImport` extracts into `.ai-writer/lore-import-tmp` and reports conflicts; `applyLoreImport` moves entity dirs in under a user-chosen strategy (skip / overwrite / keep-both via `uniqueEntityId`), then deletes the staging dir. **Overwrite displaces rather than deletes**: the entity being replaced is renamed into `.ai-writer/backups/replaced-<ts>-<category>-<id>` (the same directory `delete_lore_entity` uses), and if the move-in then fails it is renamed back. The previous `removeDir`-then-`rename` both destroyed an entry — gallery images included — with no undo, and left a window where a failed rename lost the folder from both places. Categories that fail `CATEGORY_ID_RE` are ignored.
 - **Project backup** (`src/lib/fs/projectBackup.ts`, UI in Settings → 工作台): the whole project folder as one zip under `project/…` + root `manifest.json` (`kind: "ai-writer-project-bundle"`). Scope is deliberately wider than the lore bundle — `profile.json`, `outline.json`, `.ai-writer/memory/`, `imagegen.json` and each document's `assets/` are all things *the model sees*, so a project missing them behaves differently with nothing on screen saying why. `PROJECT_BACKUP_EXCLUDES` drops `.ai-writer/backups`, the scratch/staging dirs, the SQLite `-wal`/`-shm` sidecars, `.git` and `node_modules`; `project.db` is WAL-checkpointed first (`PRAGMA wal_checkpoint(TRUNCATE)` via `select`, best-effort) so the single archived file is complete. Restore takes an **empty** folder picked through `project_open_dialog` (which is also what allows it as an fs root), and `zip_import_dialog` is given `requireManifestKind` so a wrong zip is refused before a single file is written. Not included: `config.db` and the keyring — those belong to the installation, and the UI says so.
-- **Config backup** (`src/lib/ai/configTransfer.ts`, UI in Settings → General): providers/models/prompts as one JSON file. API keys (OS keyring) are **excluded unless the user opts in** — then embedded in plaintext and re-saved to the keyring on import. Restore merges by id (`INSERT OR REPLACE`); models whose provider is neither in the backup nor already configured are dropped during validation.
+- **Config backup** (`src/lib/ai/configTransfer.ts`, UI in Settings → General): providers/models/prompts **plus the portable preferences** (see Preferences) as one JSON file — the `prefs` field is optional, so a backup written before they were included still restores. API keys (OS keyring) are **excluded unless the user opts in** — then embedded in plaintext and re-saved to the keyring on import. Restore merges by id (`INSERT OR REPLACE`); models whose provider is neither in the backup nor already configured are dropped during validation.
 
 ### CodeMirror 6 Setup
 - Extensions: GFM, Markdown language, history, search, Vim bindings optional

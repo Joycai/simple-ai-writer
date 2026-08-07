@@ -317,6 +317,7 @@ Installation (`config.db`):
 - `providers` — API provider configs (name, base_url, api_standard, safety_settings)
 - `models` — Configured models (prices, context size, max output, image caps)
 - `prompts` — Custom prompt templates (id, name, content, scene)
+- `prefs` — Every app preference (theme, language, panel widths, model selections…). Migrated out of the webview's localStorage on first launch; see `src/lib/prefs.ts`.
 
 API keys are **not** in either database — they live in the OS credential
 manager (see Secure Key Storage). The legacy plaintext `api_keys` table is

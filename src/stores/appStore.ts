@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import i18n from "../i18n";
+import { deletePref, PINNED_LORE_PREFIX, prunePrefsWithPrefix, readPref, writePref } from "../lib/prefs";
 import { MAX_DRAFTS } from "../lib/ai/drafts";
 import {
   CONTEXT_UTILIZATION_DEFAULT,
@@ -44,20 +45,30 @@ export const LORE_BUDGET_MAX = 128_000;
 export const LORE_BUDGET_DEFAULT = 600;
 
 
-const storedTheme = (localStorage.getItem(THEME_KEY) as ThemeMode | null) ?? "dark";
-const storedLang = (localStorage.getItem(LANG_KEY) as Language | null) ?? "zh-CN";
-const storedFontScheme = ((): FontScheme => {
-  const raw = localStorage.getItem(FONT_KEY) as FontScheme | null;
+/**
+ * Read as functions rather than computed once into consts: the same values
+ * have to be re-derived when a config backup replaces the stored preferences
+ * (see `reloadFromPrefs`), and a second copy of "how a font scheme is
+ * validated" is how the two ends drift apart.
+ */
+function storedTheme(): ThemeMode {
+  return (readPref(THEME_KEY) as ThemeMode | null) ?? "dark";
+}
+function storedLang(): Language {
+  return (readPref(LANG_KEY) as Language | null) ?? "zh-CN";
+}
+function storedFontScheme(): FontScheme {
+  const raw = readPref(FONT_KEY) as FontScheme | null;
   return raw && FONT_SCHEMES.includes(raw) ? raw : "manuscript";
-})();
-const storedMarkdownTheme = ((): MarkdownThemeId => {
-  const raw = localStorage.getItem(MD_THEME_KEY) as MarkdownThemeId | null;
+}
+function storedMarkdownTheme(): MarkdownThemeId {
+  const raw = readPref(MD_THEME_KEY) as MarkdownThemeId | null;
   return raw && MARKDOWN_THEME_IDS.includes(raw) ? raw : DEFAULT_MARKDOWN_THEME;
-})();
+}
 
 function loadRecentProjects(): string[] {
   try {
-    const raw = localStorage.getItem(RECENT_PROJECTS_KEY);
+    const raw = readPref(RECENT_PROJECTS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -76,32 +87,44 @@ function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v));
 }
 
-const storedSidebarWidth = clamp(
-  parseInt(localStorage.getItem(SIDEBAR_WIDTH_KEY) ?? "240", 10),
-  SIDEBAR_MIN, SIDEBAR_MAX,
-);
-const storedRightPanelWidth = clamp(
-  parseInt(localStorage.getItem(RIGHT_PANEL_WIDTH_KEY) ?? "280", 10),
-  RIGHT_PANEL_MIN, RIGHT_PANEL_MAX,
-);
-const storedLoreBudget = clamp(
-  parseInt(localStorage.getItem(LORE_BUDGET_KEY) ?? String(LORE_BUDGET_DEFAULT), 10) || LORE_BUDGET_DEFAULT,
-  LORE_BUDGET_MIN, LORE_BUDGET_MAX,
-);
-const storedContextUtilization = clamp(
-  parseFloat(localStorage.getItem(CONTEXT_UTILIZATION_KEY) ?? "") || CONTEXT_UTILIZATION_DEFAULT,
-  CONTEXT_UTILIZATION_MIN, CONTEXT_UTILIZATION_MAX,
-);
-const storedDraftCount = clamp(
-  parseInt(localStorage.getItem(DRAFT_COUNT_KEY) ?? "1", 10) || 1,
-  1, MAX_DRAFTS,
-);
+const storedSidebarWidth = () =>
+  clamp(parseInt(readPref(SIDEBAR_WIDTH_KEY) ?? "240", 10), SIDEBAR_MIN, SIDEBAR_MAX);
+const storedRightPanelWidth = () =>
+  clamp(parseInt(readPref(RIGHT_PANEL_WIDTH_KEY) ?? "280", 10), RIGHT_PANEL_MIN, RIGHT_PANEL_MAX);
+const storedLoreBudget = () =>
+  clamp(
+    parseInt(readPref(LORE_BUDGET_KEY) ?? String(LORE_BUDGET_DEFAULT), 10) || LORE_BUDGET_DEFAULT,
+    LORE_BUDGET_MIN, LORE_BUDGET_MAX,
+  );
+const storedContextUtilization = () =>
+  clamp(
+    parseFloat(readPref(CONTEXT_UTILIZATION_KEY) ?? "") || CONTEXT_UTILIZATION_DEFAULT,
+    CONTEXT_UTILIZATION_MIN, CONTEXT_UTILIZATION_MAX,
+  );
+const storedDraftCount = () => clamp(parseInt(readPref(DRAFT_COUNT_KEY) ?? "1", 10) || 1, 1, MAX_DRAFTS);
 
 /** Which assistant tab the drawer reopens on — persisted like the panel widths. */
-const storedAiDrawerMode = ((): AiDrawerMode => {
-  const raw = localStorage.getItem(AI_DRAWER_MODE_KEY);
+const storedAiDrawerMode = (): AiDrawerMode => {
+  const raw = readPref(AI_DRAWER_MODE_KEY);
   return raw === "chat" || raw === "consistency" || raw === "generate" ? raw : "generate";
-})();
+};
+
+/** The pref-backed slice, re-derivable in one call. */
+function prefBackedState() {
+  return {
+    theme: storedTheme(),
+    language: storedLang(),
+    fontScheme: storedFontScheme(),
+    markdownTheme: storedMarkdownTheme(),
+    sidebarWidth: storedSidebarWidth(),
+    rightPanelWidth: storedRightPanelWidth(),
+    recentProjects: loadRecentProjects(),
+    loreBudgetTokens: storedLoreBudget(),
+    contextUtilization: storedContextUtilization(),
+    draftCount: storedDraftCount(),
+    aiDrawerMode: storedAiDrawerMode(),
+  };
+}
 
 export type MainView = "editor" | "lore-wall" | "outline-full";
 export type AiDrawerMode = "generate" | "chat" | "consistency";
@@ -163,6 +186,15 @@ interface AppState {
   setActiveSideTab: (tab: SideTab) => void;
   setActiveRightTab: (tab: AppState["activeRightTab"]) => void;
 
+  /**
+   * Re-read every preference-backed field and re-apply the ones that paint
+   * (theme, fonts, language). Called after a config backup replaces the stored
+   * preferences — without it the values are correct in the store and the
+   * screen keeps showing what it computed at startup, which reads as "the
+   * import didn't work".
+   */
+  reloadFromPrefs: () => void;
+
   setMainView: (v: MainView) => void;
   setShowCommandPalette: (v: boolean) => void;
   setShowAiDrawer: (v: boolean, mode?: AiDrawerMode) => void;
@@ -216,31 +248,21 @@ function applyMarkdownTheme(id: MarkdownThemeId) {
 let systemThemeListener: (() => void) | null = null;
 
 export const useAppStore = create<AppState>((set, get) => ({
-  theme: storedTheme,
-  language: storedLang,
-  fontScheme: storedFontScheme,
-  markdownTheme: storedMarkdownTheme,
+  ...prefBackedState(),
   sidebarCollapsed: false,
   rightPanelCollapsed: false,
-  sidebarWidth: storedSidebarWidth,
-  rightPanelWidth: storedRightPanelWidth,
-  recentProjects: loadRecentProjects(),
-  loreBudgetTokens: storedLoreBudget,
-  contextUtilization: storedContextUtilization,
-  draftCount: storedDraftCount,
   activeSideTab: "files",
   activeRightTab: "outline",
 
   mainView: "editor",
   showCommandPalette: false,
   showAiDrawer: false,
-  aiDrawerMode: storedAiDrawerMode,
   showOnboarding: false,
   showSettings: false,
   settingsTab: "general",
 
   setTheme: (theme) => {
-    localStorage.setItem(THEME_KEY, theme);
+    writePref(THEME_KEY, theme);
     set({ theme });
     applyThemeAnimated(theme);
 
@@ -256,19 +278,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setLanguage: (language) => {
-    localStorage.setItem(LANG_KEY, language);
+    writePref(LANG_KEY, language);
     set({ language });
     i18n.changeLanguage(language);
   },
 
   setFontScheme: (fontScheme) => {
-    localStorage.setItem(FONT_KEY, fontScheme);
+    writePref(FONT_KEY, fontScheme);
     set({ fontScheme });
     applyFontScheme(fontScheme);
   },
 
   setMarkdownTheme: (markdownTheme) => {
-    localStorage.setItem(MD_THEME_KEY, markdownTheme);
+    writePref(MD_THEME_KEY, markdownTheme);
     set({ markdownTheme });
     applyMarkdownTheme(markdownTheme);
   },
@@ -286,7 +308,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => {
       const w = typeof wOrFn === "function" ? wOrFn(state.sidebarWidth) : wOrFn;
       const clamped = clamp(w, SIDEBAR_MIN, SIDEBAR_MAX);
-      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(clamped));
+      writePref(SIDEBAR_WIDTH_KEY, String(clamped));
       return { sidebarWidth: clamped };
     });
   },
@@ -295,26 +317,26 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => {
       const w = typeof wOrFn === "function" ? wOrFn(state.rightPanelWidth) : wOrFn;
       const clamped = clamp(w, RIGHT_PANEL_MIN, RIGHT_PANEL_MAX);
-      localStorage.setItem(RIGHT_PANEL_WIDTH_KEY, String(clamped));
+      writePref(RIGHT_PANEL_WIDTH_KEY, String(clamped));
       return { rightPanelWidth: clamped };
     });
   },
 
   setLoreBudgetTokens: (tokens) => {
     const clamped = clamp(Math.round(tokens), LORE_BUDGET_MIN, LORE_BUDGET_MAX);
-    localStorage.setItem(LORE_BUDGET_KEY, String(clamped));
+    writePref(LORE_BUDGET_KEY, String(clamped));
     set({ loreBudgetTokens: clamped });
   },
 
   setContextUtilization: (ratio) => {
     const clamped = clamp(ratio, CONTEXT_UTILIZATION_MIN, CONTEXT_UTILIZATION_MAX);
-    localStorage.setItem(CONTEXT_UTILIZATION_KEY, String(clamped));
+    writePref(CONTEXT_UTILIZATION_KEY, String(clamped));
     set({ contextUtilization: clamped });
   },
 
   setDraftCount: (n) => {
     const clamped = clamp(Math.round(n), 1, MAX_DRAFTS);
-    localStorage.setItem(DRAFT_COUNT_KEY, String(clamped));
+    writePref(DRAFT_COUNT_KEY, String(clamped));
     set({ draftCount: clamped });
   },
 
@@ -323,22 +345,39 @@ export const useAppStore = create<AppState>((set, get) => ({
       const next = [path, ...state.recentProjects.filter((p) => p !== path)].slice(
         0, RECENT_PROJECTS_MAX,
       );
-      localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(next));
+      writePref(RECENT_PROJECTS_KEY, JSON.stringify(next));
       return { recentProjects: next };
     });
   },
 
+  // Dropping a project from the list also releases the preferences keyed to
+  // its path. Nothing used to: `ai:pinnedLore:<path>` accumulated a row per
+  // project ever opened, and even "clear the list" left every one of them
+  // behind. `lib/prefs` sweeps the leftovers at startup as a backstop, but
+  // collecting here is what keeps them from accruing in the first place —
+  // this is the moment the app learns a project is gone.
   removeRecentProject: (path) => {
     set((state) => {
       const next = state.recentProjects.filter((p) => p !== path);
-      localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(next));
+      writePref(RECENT_PROJECTS_KEY, JSON.stringify(next));
+      prunePrefsWithPrefix(PINNED_LORE_PREFIX, (p) => p !== path);
       return { recentProjects: next };
     });
   },
 
   clearRecentProjects: () => {
-    localStorage.removeItem(RECENT_PROJECTS_KEY);
+    deletePref(RECENT_PROJECTS_KEY);
+    prunePrefsWithPrefix(PINNED_LORE_PREFIX, () => false);
     set({ recentProjects: [] });
+  },
+
+  reloadFromPrefs: () => {
+    const next = prefBackedState();
+    set(next);
+    applyThemeAnimated(next.theme);
+    applyFontScheme(next.fontScheme);
+    applyMarkdownTheme(next.markdownTheme);
+    if (next.language !== i18n.language) i18n.changeLanguage(next.language);
   },
 
   setActiveSideTab: (tab) => set({ activeSideTab: tab }),
@@ -351,7 +390,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // command palette, the inline bubble) name a tab, and naming one remembers it.
   setShowAiDrawer: (v, mode) =>
     set((s) => {
-      if (mode && mode !== s.aiDrawerMode) localStorage.setItem(AI_DRAWER_MODE_KEY, mode);
+      if (mode && mode !== s.aiDrawerMode) writePref(AI_DRAWER_MODE_KEY, mode);
       return { showAiDrawer: v, aiDrawerMode: mode ?? s.aiDrawerMode };
     }),
   setShowOnboarding: (v) => set({ showOnboarding: v }),
@@ -359,7 +398,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   closeSettings: () => set({ showSettings: false }),
 }));
 
-// Initialize theme + font scheme + markdown theme on load using persisted values
-applyTheme(storedTheme);
-applyFontScheme(storedFontScheme);
-applyMarkdownTheme(storedMarkdownTheme);
+// Initialize theme + font scheme + markdown theme on load using persisted
+// values. Read off the store rather than the preferences again: the store is
+// what the UI will render, so painting from anything else invites the two to
+// disagree.
+{
+  const s = useAppStore.getState();
+  applyTheme(s.theme);
+  applyFontScheme(s.fontScheme);
+  applyMarkdownTheme(s.markdownTheme);
+}

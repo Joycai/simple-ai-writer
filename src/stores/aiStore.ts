@@ -10,13 +10,14 @@ import {
 import { fetchRemoteModels } from "../lib/ai/providerProbe";
 import { saveApiKey, loadApiKey, deleteApiKey, migrateLegacyKeys } from "../lib/keyStore";
 import { getGlobalDb } from "../lib/project";
+import { deletePref, readPref, writePref } from "../lib/prefs";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 /**
- * Which model is selected for what is a UI preference, not configuration, so
- * it lives in localStorage beside the rest of the app's preferences (see
- * appStore) rather than in the config DB.
+ * Which model is selected for what is a preference, not configuration, so it
+ * goes through `lib/prefs` beside the rest of them rather than into the
+ * providers/models tables next to the thing it points at.
  */
 const SELECTION_KEYS = {
   activeModelId: "ai:activeModelId",
@@ -27,24 +28,13 @@ const SELECTION_KEYS = {
 
 type SelectionField = keyof typeof SELECTION_KEYS;
 
-// Guarded: vitest runs this module under a node environment with no
-// localStorage, and a browser in private mode can throw on write.
 function readSelection(field: SelectionField): string | null {
-  try {
-    return typeof localStorage !== "undefined" ? localStorage.getItem(SELECTION_KEYS[field]) : null;
-  } catch {
-    return null;
-  }
+  return readPref(SELECTION_KEYS[field]);
 }
 
 function writeSelection(field: SelectionField, value: string | null): void {
-  try {
-    if (typeof localStorage === "undefined") return;
-    if (value) localStorage.setItem(SELECTION_KEYS[field], value);
-    else localStorage.removeItem(SELECTION_KEYS[field]);
-  } catch {
-    // A preference that fails to persist is not worth failing a save over.
-  }
+  if (value) writePref(SELECTION_KEYS[field], value);
+  else deletePref(SELECTION_KEYS[field]);
 }
 
 /**

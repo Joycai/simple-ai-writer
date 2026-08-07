@@ -65,6 +65,7 @@ import { chapterTitle, resolveVolumes } from "../../lib/context/outline";
 import { contextLabel } from "../../lib/ai/modelLabel";
 import { MOD_KEY } from "../../lib/platform";
 import { panelFade, springPanel } from "../../lib/motion";
+import { PINNED_LORE_PREFIX, readPref, writePref } from "../../lib/prefs";
 import styles from "./AiPanel.module.css";
 
 const CONTINUE_LENGTH_OPTIONS = [200, 500, 1000, 2000];
@@ -85,12 +86,13 @@ const LORE_BUDGET_OPTIONS = [600, 2000, 8000, 32000];
 const UTILIZATION_OPTIONS = [0.25, 0.5, 0.75, 0.9];
 
 // Pinned-lore selection is persisted per project (keyed by project path) so the
-// user doesn't have to re-check the same entities on every reload / task.
-const PINNED_LORE_KEY = "ai:pinnedLore";
+// user doesn't have to re-check the same entities on every reload / task. The
+// key carries an absolute path, so it stops matching the moment the author
+// moves the folder — `lib/prefs` collects the leftovers (PINNED_LORE_PREFIX).
 function loadPinnedLore(projectPath: string | null): string[] {
   if (!projectPath) return [];
   try {
-    const raw = localStorage.getItem(`${PINNED_LORE_KEY}:${projectPath}`);
+    const raw = readPref(`${PINNED_LORE_PREFIX}${projectPath}`);
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
   } catch {
@@ -99,11 +101,7 @@ function loadPinnedLore(projectPath: string | null): string[] {
 }
 function savePinnedLore(projectPath: string | null, paths: string[]): void {
   if (!projectPath) return;
-  try {
-    localStorage.setItem(`${PINNED_LORE_KEY}:${projectPath}`, JSON.stringify(paths));
-  } catch {
-    // storage may be unavailable/full — non-critical, pins just won't persist
-  }
+  writePref(`${PINNED_LORE_PREFIX}${projectPath}`, JSON.stringify(paths));
 }
 
 /** Compact token count: 1000000 → "1M", 32000 → "32k", 600 → "600".

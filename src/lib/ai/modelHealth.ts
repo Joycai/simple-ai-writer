@@ -2,10 +2,12 @@
  * Per-model recall used by the model picker: which models the author actually
  * reaches for, and which one just refused the work.
  *
- * Both live in localStorage rather than the project DB — they describe the
- * author's machine and habits, not the manuscript, and must be readable
- * synchronously while the picker renders.
+ * Both are preferences rather than project data — they describe the author's
+ * habits, not the manuscript — so they go through `lib/prefs`, which is also
+ * what keeps them readable synchronously while the picker renders.
  */
+
+import { readPref, writePref } from "../prefs";
 
 const RECENT_KEY = "ai:recentModels";
 const BLOCKED_KEY = "ai:blockedModels";
@@ -13,7 +15,7 @@ const RECENT_MAX = 8;
 
 function readList(key: string): string[] {
   try {
-    const parsed = JSON.parse(localStorage.getItem(key) ?? "[]");
+    const parsed = JSON.parse(readPref(key) ?? "[]");
     return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
   } catch {
     return [];
@@ -21,11 +23,7 @@ function readList(key: string): string[] {
 }
 
 function writeList(key: string, value: string[]): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // storage full/unavailable — the picker just loses this hint
-  }
+  writePref(key, JSON.stringify(value));
 }
 
 /** Model ids the author picked recently, most recent first. */
