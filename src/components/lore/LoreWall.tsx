@@ -684,6 +684,11 @@ function LoreImportModal({
                   </span>
                 ))}
               </div>
+              {strategy === "overwrite" && (
+                <div style={{ font: "400 12px/1.6 var(--font-sans)", color: "var(--color-text-muted)", marginTop: 6 }}>
+                  {t("lore.transfer.strategyOverwriteHint")}
+                </div>
+              )}
             </>
           )}
         </div>

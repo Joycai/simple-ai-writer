@@ -203,6 +203,7 @@ export async function applyLoreImport(
   for (const e of staged.entities) {
     const from = `${staged.tempDir}/${e.category}/${e.id}`;
     let targetId = e.id;
+    let displaced: string | null = null;
 
     if (e.conflicts) {
       if (strategy === "skip") {
@@ -210,19 +211,62 @@ export async function applyLoreImport(
         continue;
       }
       if (strategy === "overwrite") {
-        await removeDir(`${root}/${e.category}/${e.id}`);
+        displaced = await displaceEntity(projectPath, e.category, e.id);
       } else {
         targetId = await uniqueEntityId(projectPath, e.category, e.id);
       }
     }
 
-    await renamePath(from, `${root}/${e.category}/${targetId}`);
+    const to = `${root}/${e.category}/${targetId}`;
+    try {
+      await renamePath(from, to);
+    } catch (err) {
+      // The move in failed with the author's entity already out of the way.
+      // Put it back before reporting, or "overwrite" would mean "delete" for
+      // an import that then didn't happen — a folder gone from both places.
+      if (displaced) {
+        try {
+          await renamePath(displaced, to);
+        } catch (restoreErr) {
+          throw new Error(
+            `Could not import "${e.name}", and the entity it was replacing could not be ` +
+              `restored either. It is at ${displaced} — move it back to ${to} by hand. ` +
+              `(${String(err)}; ${String(restoreErr)})`,
+          );
+        }
+      }
+      throw err;
+    }
+
     imported++;
     if (!activeIds.has(e.category)) hidden.add(e.category);
   }
 
   await cancelLoreImport(staged.tempDir);
   return { imported, skipped, hiddenCategories: [...hidden] };
+}
+
+/**
+ * Move the entity an "overwrite" is about to replace into `.ai-writer/backups`
+ * and return where it went.
+ *
+ * This used to be `removeDir` — an unlink, and an unrecoverable one. Two
+ * separate problems with that. The obvious one: "overwrite" silently destroyed
+ * an entry the author may have spent hours on, including gallery images, with
+ * no undo anywhere in the app. The subtler one: delete-then-rename has a window
+ * where the entity exists in neither place, so a rename that fails (a locked
+ * file, a cross-volume move, a full disk) leaves *nothing*.
+ *
+ * Moving instead of deleting fixes both, and matches what the agent's
+ * `delete_lore_entity` already does — one flat backups directory holds
+ * everything recoverable, so there is one place to look.
+ */
+async function displaceEntity(projectPath: string, category: string, id: string): Promise<string> {
+  const backupRoot = `${projectPath}/.ai-writer/backups`;
+  await makeDir(backupRoot);
+  const dest = `${backupRoot}/replaced-${Date.now()}-${category}-${id}`;
+  await renamePath(`${loreRoot(projectPath)}/${category}/${id}`, dest);
+  return dest;
 }
 
 /** Drop the staging dir (import cancelled or finished). */

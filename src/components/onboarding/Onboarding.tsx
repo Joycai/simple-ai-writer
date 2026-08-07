@@ -6,6 +6,7 @@ import { useAiStore } from "../../stores/aiStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { BUILTIN_PROFILES, NOVEL_PROFILE, profileLabel } from "../../lib/profile";
 import { MOD_KEY, MOD_K } from "../../lib/platform";
+import { readPref, writePref } from "../../lib/prefs";
 import styles from "./Onboarding.module.css";
 
 const ONBOARDING_DONE_KEY = "manuscript:onboarding-done";
@@ -46,7 +47,7 @@ export function Onboarding() {
 
   // Auto-show on first run if no provider configured
   useEffect(() => {
-    const done = localStorage.getItem(ONBOARDING_DONE_KEY) === "true";
+    const done = readPref(ONBOARDING_DONE_KEY) === "true";
     if (!done && providers.length === 0) {
       setShowOnboarding(true);
     }
@@ -55,7 +56,7 @@ export function Onboarding() {
   if (!showOnboarding) return null;
 
   const dismiss = () => {
-    localStorage.setItem(ONBOARDING_DONE_KEY, "true");
+    writePref(ONBOARDING_DONE_KEY, "true");
     setShowOnboarding(false);
   };
 

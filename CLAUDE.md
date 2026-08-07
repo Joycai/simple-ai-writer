@@ -50,7 +50,7 @@ Components in `src/components/layout/` (TitleBar, IconRail, Sidebar, FileTree, E
 ### State Management (Zustand Stores)
 
 All in `src/stores/`:
-- **appStore** — Theme, language (i18n), sidebar/panel collapse state, active tabs
+- **appStore** — Theme, language (i18n), sidebar/panel collapse state, active tabs. The persisted fields come from `lib/prefs` via `prefBackedState()`; `reloadFromPrefs()` re-derives and repaints them after a config import
 - **projectStore** — Current project path, file tree, active file, word/char count
 - **editorStore** — Editor content, dirty flag, view mode (editor/split/preview), save scheduling
 - **loreStore** — Indexed lore entities, alias mapping, entity summaries; auto-scans `.ai-writer/lore/` on project open
@@ -106,7 +106,7 @@ Four rules when touching this: components read flags via `useDocModel()` and wor
   - `src/lib/fs/` — Tauri file I/O wrappers (`fileio.ts`), markdown render/frontmatter (`markdown.ts`), image/text file utils (`images.ts`), export (`export.ts`), whole-project backup/restore (`projectBackup.ts` — wider scope than the lore bundle on purpose; see `docs/architecture.md` → Export / Import)
   - `src/lib/theme/` — Markdown typography themes (`markdownThemes.ts`): the `--md-*` CSS generated once and shared by the preview pane, lore previews and exported HTML/PDF. See `docs/design-system.md` → Markdown 排版主题
   - `src/lib/import/` — document import into `writing/`: docx via mammoth+turndown (`docx.ts`/`markdown.ts`), xlsx via the Rust `xlsx_to_markdown` command (`xlsx.ts` → `src-tauri/src/xlsx.rs`, the only converter not in the webview — calamine reads cached formula results, real dates and merged ranges), PDF text extraction via lazy pdfjs (`pdf.ts`), GBK-aware text decode (`text.ts`), dialog orchestration + naming (`index.ts`). Everything lands as markdown because **no model API accepts docx/xlsx binaries** — they are zip archives; converting is not a shortcut, it is the only option
-  - root: `project.ts`, `keyStore.ts`, `http.ts`, `paths.ts`, `platform.ts`
+  - root: `project.ts`, `keyStore.ts`, `prefs.ts` (**every** app preference — theme, language, panel widths, model selections; backed by `config.db`, read synchronously from an in-memory cache that `main.tsx` hydrates *before* importing anything that reads one. Never add a `localStorage` call: add a key to `PREF_KEYS` instead — see `docs/architecture.md` → Preferences), `http.ts`, `paths.ts`, `platform.ts`
 - `src/stores/` — Zustand state managers
 - `src/styles/` — Design tokens (`tokens.css`) + global styles (`global.css`)
 - `src/i18n/locales/` — JSON translation files (en, zh-CN)

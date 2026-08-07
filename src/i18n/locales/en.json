@@ -291,7 +291,8 @@
       "importKeysNote": "The backup contains {{count}} API key(s); they will be saved to the OS credential manager.",
       "imported": "Import complete.",
       "importFailed": "Import failed:",
-      "invalidFile": "This is not a valid config backup file."
+      "invalidFile": "This is not a valid config backup file.",
+      "importPrefsNote": "The backup also carries {{count}} preferences (theme, fonts, panel widths…), applied immediately. Recent projects and project-scoped settings do not travel with a backup."
     },
     "usage": {
       "section": "Usage",
@@ -1041,7 +1042,8 @@
       "importConfirm": "Import",
       "importing": "Importing…",
       "importDone": "Import complete: {{imported}} entries added, {{skipped}} skipped.",
-      "hiddenCategories": "Categories {{categories}} are not part of the current workspace — imported to disk but hidden for now."
+      "hiddenCategories": "Categories {{categories}} are not part of the current workspace — imported to disk but hidden for now.",
+      "strategyOverwriteHint": "The entries being replaced are moved into .ai-writer/backups rather than deleted — move one back if you need it."
     },
     "detail": {
       "openInEditor": "Open in Editor",

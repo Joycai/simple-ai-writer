@@ -291,7 +291,8 @@
       "importKeysNote": "备份中包含 {{count}} 个 API Key，导入后将写入系统凭据管理器。",
       "imported": "导入完成。",
       "importFailed": "导入失败：",
-      "invalidFile": "这不是有效的配置备份文件。"
+      "invalidFile": "这不是有效的配置备份文件。",
+      "importPrefsNote": "备份中还包含 {{count}} 项界面偏好(主题、字体、面板宽度等),导入后立即生效。最近项目列表与项目级设置不随备份迁移。"
     },
     "usage": {
       "section": "用量统计",
@@ -1040,7 +1041,8 @@
       "importConfirm": "导入",
       "importing": "导入中…",
       "importDone": "导入完成：新增 {{imported}} 个条目，跳过 {{skipped}} 个。",
-      "hiddenCategories": "其中分类 {{categories}} 不属于当前工作台，已导入到磁盘但暂不显示。"
+      "hiddenCategories": "其中分类 {{categories}} 不属于当前工作台，已导入到磁盘但暂不显示。",
+      "strategyOverwriteHint": "被替换的条目会移入 .ai-writer/backups,不会真的删掉——需要时可以移回来。"
     },
     "detail": {
       "openInEditor": "在编辑器中打开",

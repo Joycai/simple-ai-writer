@@ -150,9 +150,14 @@ function GeneralTab() {
       if (staged.keyCount > 0) {
         confirmMsg += `\n${t("systemSettings.backup.importKeysNote", { count: staged.keyCount })}`;
       }
+      if (staged.prefs.length > 0) {
+        confirmMsg += `\n${t("systemSettings.backup.importPrefsNote", { count: staged.prefs.length })}`;
+      }
       if (!window.confirm(confirmMsg)) return;
       await applyConfigImport(staged);
       await loadConfig();
+      // Imported preferences are in the store but not yet on screen.
+      useAppStore.getState().reloadFromPrefs();
       setBackupStatus({ ok: true, text: t("systemSettings.backup.imported") });
     } catch (e) {
       const invalid = e instanceof Error && e.message === "invalid-backup";

@@ -7,17 +7,17 @@
 
 import { appLogDir, join } from "@tauri-apps/api/path";
 import { appendFile, fileExists, makeDir } from "../fs/fileio";
+import { readPref, writePref } from "../prefs";
 import type { StreamChunk, StreamMessage, StreamOptions } from "./types";
 
 const ENABLED_KEY = "app:apiLogEnabled";
 
 export function isApiLogEnabled(): boolean {
-  // localStorage is absent under vitest's node environment — treat as disabled
-  return typeof localStorage !== "undefined" && localStorage.getItem(ENABLED_KEY) === "1";
+  return readPref(ENABLED_KEY) === "1";
 }
 
 export function setApiLogEnabled(enabled: boolean): void {
-  localStorage.setItem(ENABLED_KEY, enabled ? "1" : "0");
+  writePref(ENABLED_KEY, enabled ? "1" : "0");
 }
 
 export async function getApiLogDir(): Promise<string> {
