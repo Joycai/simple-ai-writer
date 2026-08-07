@@ -2,7 +2,8 @@
  * Export helpers for V1:
  *   - Markdown: copy raw source to clipboard
  *   - HTML: self-contained HTML file (inline CSS, no external assets)
- *   - PDF: open system print dialog via window.print() on a hidden iframe
+ *   - PDF: open the system print dialog (macOS goes through Rust — see
+ *     `exportPdf` and src-tauri/src/print.rs; elsewhere a hidden iframe)
  *
  * Typography follows the markdown theme the author is reading in the app — the
  * same generator feeds the preview pane, so what they exported is what they
@@ -10,10 +11,12 @@
  * tokens.css around it.
  */
 
+import { invoke } from "@tauri-apps/api/core";
 import { renderMarkdown } from "./markdown";
 import { saveTextFileDialog } from "./transfer";
 import { imageToDataUrl } from "./images";
 import { resolveRelativePath } from "../paths";
+import { IS_MAC } from "../platform";
 import {
   EXPORT_TOKEN_CSS,
   currentMarkdownThemeId,
@@ -159,6 +162,18 @@ body { background: #fff; }
 <body>${body}</body>
 </html>`;
 
+  // macOS has no `window.print()`. WebKit forwards a JS print request to the
+  // host app through the WKUIDelegate print callback, and wry doesn't implement
+  // it — the call returns silently having done nothing, which is what made this
+  // menu item look broken. Rust owns the only working path there
+  // (`Webview::print()` on a window of its own); see src-tauri/src/print.rs.
+  if (IS_MAC) {
+    await invoke("print_document", { html, title: title || "document" });
+    return;
+  }
+
+  // Elsewhere the webview is Chromium (WebView2) or WebKitGTK, where printing a
+  // detached iframe works and needs no window of its own.
   const iframe = document.createElement("iframe");
   iframe.style.cssText = "position:fixed;width:0;height:0;opacity:0;border:none;";
   document.body.appendChild(iframe);

@@ -16,6 +16,7 @@ import { parseFrontmatter } from "../../lib/fs/markdown";
 import { loadApiKey } from "../../lib/keyStore";
 import { imageToDataUrl } from "../../lib/fs/images";
 import { useImeGuard } from "../../lib/ime";
+import { runStructuredTask } from "../../lib/agent/structured";
 import type { ToolDefinition } from "../../lib/ai";
 import styles from "./LoreImproveModal.module.css";
 import extra from "./LoreMetaImproveModal.module.css";
@@ -168,7 +169,6 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
 
       // Unified structured-output path: forced tool_choice with JSON fallback
       // for models that reject it — see lib/agent/structured.ts.
-      const { runStructuredTask } = await import("../../lib/agent/structured");
       const toolArgs = await runStructuredTask({
         baseUrl: provider.baseUrl,
         apiKey,

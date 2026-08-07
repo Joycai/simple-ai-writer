@@ -313,7 +313,15 @@ Story Memory is *per-document*, so a chapter is its own file and knows nothing o
 ## Important Notes
 
 ### Circular Dependencies
-- `aiTaskStore` imports from `editorStore` lazily inside `runTask()` to avoid circular imports at module load
+
+Two rules keep the module graph acyclic, and one build warning follows from them:
+
+- **`src/lib/**` never imports a store statically.** The lib layer is store-free; when a lib module genuinely needs one (`agent/imageTools` → `aiStore`, `image/illustrate` → `aiStore`, `lore/citations` → `loreStore`/`appStore`) it reaches for it with `await import()`. This is also what keeps those modules unit-testable without booting the store graph.
+- **Store-to-store back-edges are lazy.** `aiTaskStore` statically imports `agentStore`, so `agentStore` holds *no* static store imports and pulls `aiStore`/`projectStore`/`loreStore`/`appStore`/`editorStore`/`memoryStore` lazily inside `sendChat()`. Likewise `batchStore` statically imports `aiTaskStore`, so `aiTaskStore` can only reach `batchStore` through `await import()`.
+
+Because those targets are also imported statically elsewhere (components), the bundler reports `INEFFECTIVE_DYNAMIC_IMPORT` for each — "this dynamic import did not move the module into its own chunk". That is expected and harmless: the goal was deferring *evaluation* to call time, which still holds within one chunk, and this app is loaded from local disk by Tauri so chunking buys nothing. `vite.config.ts` filters exactly those warnings, keyed on the target living under `src/stores/`.
+
+**The same warning pointing at a `src/lib/**` target is a real defect** — it means someone wrote `await import()` for a module that is statically imported anyway, which buys nothing and only obscures the call site. Those are deliberately left unfiltered; convert them back to a top-level import.
 
 ### Tauri IPC Commands
 - Implemented in `src-tauri/src/` (minimal; most logic in TypeScript)

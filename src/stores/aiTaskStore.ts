@@ -7,10 +7,13 @@ import {
 } from "../lib/context/rag";
 import { docModel, findTask, promptParams } from "../lib/profile/active";
 import { presetForTools } from "../lib/agent/presets";
+import { runAgent } from "../lib/agent/runtime";
 import {
   ASSUMED_INPUT_CEILING_TOKENS, fixedContextChars, measureCharsPerToken, planContextBudget,
   reflowMemoryBudget, type ContextAllocation,
 } from "../lib/context/budget";
+import { BOOK_PREV_TAIL_CHARS, buildBookContext } from "../lib/context/bookContext";
+import { loadMemory, projectRelativePath } from "../lib/context/memory";
 import type { LoreActivationReport } from "../lib/context/loreSelect";
 import { useAgentStore } from "./agentStore";
 import { useAiStore } from "./aiStore";
@@ -206,7 +209,6 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // a null here is what makes every downstream layer (the budget's hasMemory,
     // assembleContext's 前情提要) drop out on its own.
     const docs = docModel();
-    const { loadMemory, projectRelativePath } = await import("../lib/context/memory");
     const memory = docs.memory && activeFilePath
       ? await loadMemory(projectPath, activeFilePath)
       : null;
@@ -258,7 +260,6 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // A continuation only gets the preceding documents when this project's
     // documents actually have a "preceding" — see DocModel.priorContext.
     const useBookContext = isContinue && docs.priorContext;
-    const { BOOK_PREV_TAIL_CHARS } = await import("../lib/context/bookContext");
     // Where this request is anchored in the document — both the book-context
     // build and the recent-window budget measure backwards from here.
     //
@@ -319,7 +320,6 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     if (useBookContext && activeFilePath) {
       try {
         const { fileTree } = useProjectStore.getState();
-        const { buildBookContext } = await import("../lib/context/bookContext");
         const bookContext = await buildBookContext(
           projectPath, fileTree, activeFilePath, anchorOffset, plan.bookPriorChars,
           extras?.bridgeChapter,
@@ -413,8 +413,6 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         // lore report with the aborted one's.
         if (get().abortController === controller) set({ loreReport: bundle.loreReport });
 
-        const { runAgent } = await import("../lib/agent/runtime");
-
         const { inputTokens, outputTokens, cachedTokens } = await runAgent({
           baseUrl,
           apiKey,
@@ -459,6 +457,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           // force-ending. Skipped during a batch run: the batch modal covers
           // the panel, and a card nobody can see would hang the whole sweep.
           onRoundLimit: async (roundsUsed) => {
+            // Must stay dynamic: batchStore imports this module at the top
+            // level, so a static import back would close the cycle.
             const { useBatchStore } = await import("./batchStore");
             if (useBatchStore.getState().running) return 0;
             return useAgentStore
