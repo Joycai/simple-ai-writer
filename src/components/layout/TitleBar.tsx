@@ -4,6 +4,7 @@ import { useAppStore, type ThemeMode, type Language } from "../../stores/appStor
 import { useProjectStore } from "../../stores/projectStore";
 import { useEditorStore, type ViewMode } from "../../stores/editorStore";
 import { MOD_K } from "../../lib/platform";
+import { ExportMenu } from "./ExportMenu";
 import styles from "./TitleBar.module.css";
 
 const THEME_ORDER: ThemeMode[] = ["dark", "light", "system"];
@@ -101,6 +102,10 @@ export function TitleBar() {
           <Sparkles size={11} />
           {t("titleBar.summonAi")}
         </button>
+
+        {/* Document-scoped, so it sits with the view toggle's audience rather
+            than the app-wide controls — and hides itself when nothing is open. */}
+        <ExportMenu />
 
         <button className={styles.ctrl} onClick={cycleTheme} title={t("settings.theme")}>
           {themeIcon}

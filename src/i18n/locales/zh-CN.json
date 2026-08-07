@@ -311,6 +311,9 @@
     "exportMarkdown": "复制 Markdown",
     "exportHtml": "导出 HTML…",
     "exportPdf": "打印 / PDF…",
+    "exportCopied": "已复制",
+    "exportSaved": "已导出",
+    "exportFailed": "导出失败：{{message}}",
     "viewMode": {
       "editor": "编辑",
       "split": "分栏",

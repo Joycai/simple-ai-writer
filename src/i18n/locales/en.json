@@ -311,6 +311,9 @@
     "exportMarkdown": "Copy Markdown",
     "exportHtml": "Export HTML…",
     "exportPdf": "Print / PDF…",
+    "exportCopied": "Copied",
+    "exportSaved": "Exported",
+    "exportFailed": "Export failed: {{message}}",
     "viewMode": {
       "editor": "Editor",
       "split": "Split",
