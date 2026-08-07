@@ -58,6 +58,11 @@ export function AttachmentTextarea({
   const mention = useMentionState();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  // `attached` and `instruction` are props captured at render. Reading a large
+  // image as base64 takes long enough for the author to keep typing, and for a
+  // second pick to start — both of which the pre-await values would undo.
+  const latest = useRef({ attached, instruction });
+  latest.current = { attached, instruction };
 
   const candidates: MentionItem[] = [
     ...entities.map((entity): MentionItem => ({ type: "lore", entity })),
@@ -74,21 +79,25 @@ export function AttachmentTextarea({
   const handlePick = async (item: MentionItem) => {
     if (attachedKeys.has(mentionKey(item))) { mention.close(); return; }
     if (item.type === "lore") {
-      onAttachedChange([...attached, { kind: "lore", entity: item.entity }]);
+      onAttachedChange([...latest.current.attached, { kind: "lore", entity: item.entity }]);
     } else {
       try {
-        if (item.file.kind === "image") {
-          const { dataUrl } = await imageToDataUrl(item.file.path);
-          onAttachedChange([...attached, { kind: "image", file: item.file, dataUrl }]);
-        } else {
-          const content = await readTextFileContent(item.file.path);
-          onAttachedChange([...attached, { kind: "text", file: item.file, content }]);
+        // Resolve first, then append to whatever the list is *now*: appending
+        // to the array this closure captured would drop a chip attached while
+        // the read was in flight.
+        const attachment: AttachedItem = item.file.kind === "image"
+          ? { kind: "image", file: item.file, dataUrl: (await imageToDataUrl(item.file.path)).dataUrl }
+          : { kind: "text", file: item.file, content: await readTextFileContent(item.file.path) };
+        if (latest.current.attached.some((a) => attachedKey(a) === mentionKey(item))) {
+          mention.close();
+          return; // picked twice while the read was running
         }
+        onAttachedChange([...latest.current.attached, attachment]);
       } catch {
         return; // skip unreadable
       }
     }
-    onInstructionChange(mention.accept(instruction, mentionLabel(item)));
+    onInstructionChange(mention.accept(latest.current.instruction, mentionLabel(item)));
     textareaRef.current?.focus();
   };
 
@@ -107,9 +116,18 @@ export function AttachmentTextarea({
           value={instruction}
           onChange={handleChange}
           onKeyDown={(e) => {
-            // Consume Escape while the picker is open so it closes the picker
-            // without also dismissing the surrounding modal (ModalShell).
-            if (e.key === "Escape" && mention.open) { e.preventDefault(); mention.close(); }
+            // Only while the picker is actually on screen — it renders nothing
+            // when nothing matches, and keys must fall through to the textarea.
+            if (!mention.open || items.length === 0) return;
+            // Consume Escape here so it closes the picker without also
+            // dismissing the surrounding modal (ModalShell).
+            if (e.key === "Escape") { e.preventDefault(); mention.close(); return; }
+            if (e.key === "ArrowDown") { e.preventDefault(); mention.move(1, items.length); return; }
+            if (e.key === "ArrowUp") { e.preventDefault(); mention.move(-1, items.length); return; }
+            if (e.key === "Enter" || e.key === "Tab") {
+              e.preventDefault();
+              void handlePick(items[mention.active] ?? items[0]);
+            }
           }}
           disabled={disabled}
           autoFocus={autoFocus}
@@ -139,6 +157,7 @@ export function AttachmentTextarea({
           anchorRef={wrapRef}
           items={items}
           usedKeys={attachedKeys}
+          activeIndex={mention.active}
           onPick={(item) => void handlePick(item)}
           onDismiss={mention.close}
         />

@@ -26,6 +26,7 @@ import { backupFile } from "../lib/agent/backup";
 import { normalizeChapterFileName } from "../lib/context/outline";
 import { copyPath, fileExists, makeDir, removeDir, removeFile, renamePath, writeFile } from "../lib/fs/fileio";
 import { baseNameOf, resolveCopyTarget, type TransferMode } from "../lib/fs/moveCopy";
+import { discardDocumentAssets, moveDocumentAssets } from "../lib/image/assets";
 import { isStrictDescendant } from "../lib/paths";
 import { useLoreStore } from "./loreStore";
 import { useEditorStore } from "./editorStore";
@@ -248,6 +249,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (editorAffected && editor.isDirty) await editor.saveNow();
 
     await renamePath(from, to);
+    // The illustration folder is named after the document and the links in it
+    // are relative, so it has to travel too. Before `activeFilePath` changes:
+    // that is what makes the editor reload the file, and it should reload the
+    // rewritten text rather than the version pointing at the old folder.
+    await moveDocumentAssets(from, to);
 
     const { activeFilePath } = get();
     if (activeFilePath === from) {
@@ -306,8 +312,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         // A failed backup must abort the delete, never delete anyway.
         backupPath = await backupFile(projectPath, path);
       }
-      if (isDir) await removeDir(path);
-      else await removeFile(path);
+      if (isDir) {
+        await removeDir(path);
+      } else {
+        await removeFile(path);
+        // Otherwise the document's pictures stay on disk attached to nothing,
+        // still visible in the tree. With a backup they go beside it, so a
+        // restore brings back a document whose image links still resolve.
+        await discardDocumentAssets(path, backupPath);
+      }
     } finally {
       await get().refreshFileTree();
     }

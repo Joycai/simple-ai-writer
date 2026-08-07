@@ -12,6 +12,7 @@
  * message to the same history and call runAgent again.
  */
 
+import i18n from "../../i18n";
 import { streamCompletion } from "../ai";
 import type { GeminiSafetySettings } from "../ai/safety";
 import { estimateMessagesTokens } from "../ai/tokenEstimate";
@@ -24,6 +25,8 @@ import type { ToolCall, ToolResult } from "./tools";
 /** Stand-in left behind when an old tool result is dropped to reclaim room. */
 const ELIDED_TOOL_RESULT =
   "[earlier tool result dropped to stay within the model's context window]";
+/** Stand-in for a tool call that never ran, because the run was stopped. */
+const ABORTED_TOOL_RESULT = "[not run — the user stopped the task]";
 /** Stand-in left behind when an old image tool result is dropped to reclaim room. */
 const ELIDED_IMAGE_RESULT =
   "[earlier tool result image dropped to stay within the model's context window]";
@@ -39,6 +42,25 @@ function isImageResultMessage(m: StreamMessage): boolean {
     Array.isArray(m.content) &&
     m.content.some((p) => p.type === "image_url")
   );
+}
+
+/**
+ * How many tool-supplied pictures stay in history verbatim. Enough to compare
+ * a couple of gallery images against each other; few enough that the request
+ * body stays in the low megabytes however long the conversation runs.
+ */
+const MAX_IMAGE_RESULTS = 3;
+
+/** Replace all but the newest {@link MAX_IMAGE_RESULTS} image results. */
+function elideOldImageResults(history: StreamMessage[]): number {
+  const live: number[] = [];
+  history.forEach((m, i) => { if (isImageResultMessage(m)) live.push(i); });
+  let dropped = 0;
+  for (const i of live.slice(0, Math.max(0, live.length - MAX_IMAGE_RESULTS))) {
+    history[i].content = ELIDED_IMAGE_RESULT;
+    dropped++;
+  }
+  return dropped;
 }
 
 /**
@@ -64,9 +86,15 @@ function isImageResultMessage(m: StreamMessage): boolean {
  * Returns how many results were elided so the caller can log it.
  */
 export function trimHistory(history: StreamMessage[], ceilingTokens?: number): number {
-  if (!ceilingTokens || ceilingTokens <= 0) return 0;
-  if (estimateMessagesTokens(history) <= ceilingTokens) return 0;
-  let dropped = 0;
+  // Images first, and unconditionally. The token estimate charges a flat rate
+  // per picture (see ai/tokenEstimate) because that is what a provider bills —
+  // but the *payload* is base64, megabytes of it, and a chat history persists
+  // across turns. Left to the token check alone, a session that reads pictures
+  // grows a request body no endpoint will accept while the estimate still
+  // reads as comfortably under the ceiling.
+  let dropped = elideOldImageResults(history);
+  if (!ceilingTokens || ceilingTokens <= 0) return dropped;
+  if (estimateMessagesTokens(history) <= ceilingTokens) return dropped;
   for (const m of history) {
     if (m.role === "tool" && m.content !== ELIDED_TOOL_RESULT) {
       m.content = ELIDED_TOOL_RESULT;
@@ -80,6 +108,43 @@ export function trimHistory(history: StreamMessage[], ceilingTokens?: number): n
     if (estimateMessagesTokens(history) <= ceilingTokens) break;
   }
   return dropped;
+}
+
+/**
+ * Give every assistant `tool_calls` entry in `history` a matching tool reply.
+ *
+ * The pairing is a hard protocol requirement — OpenAI answers "An assistant
+ * message with 'tool_calls' must be followed by tool messages responding to
+ * each tool_call_id", Gemini refuses likewise — and a broken history is
+ * permanent, since it *is* the session's history: every later turn is appended
+ * to it, so one gap ends the conversation for good and the only recovery the
+ * author has is 新建对话.
+ *
+ * The loop below keeps its own history paired even on abort. This is the belt
+ * to that pair of braces: a second run sharing the same array, a crash between
+ * the two pushes, or a history restored from anywhere else. Returns how many
+ * stubs it had to add.
+ */
+export function repairToolCallPairing(history: StreamMessage[]): number {
+  const answered = new Set<string>();
+  for (const m of history) {
+    if (m.role === "tool" && m.tool_call_id) answered.add(m.tool_call_id);
+  }
+  let inserted = 0;
+  // Backwards, so each splice leaves the earlier indices untouched.
+  for (let i = history.length - 1; i >= 0; i--) {
+    const m = history[i];
+    if (m.role !== "assistant" || !("tool_calls" in m) || !m.tool_calls.length) continue;
+    const missing = m.tool_calls.filter((tc) => !answered.has(tc.id));
+    if (!missing.length) continue;
+    history.splice(i + 1, 0, ...missing.map((tc): StreamMessage => ({
+      role: "tool",
+      tool_call_id: tc.id,
+      content: ABORTED_TOOL_RESULT,
+    })));
+    inserted += missing.length;
+  }
+  return inserted;
 }
 
 export interface AgentRunResult {
@@ -206,12 +271,21 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
 
     const withholdTools =
       preset.tools.length === 0 || (isLastRound && preset.finishPolicy === "force-text");
+    /**
+     * The "stop calling tools" nudge, retracted after this round's request.
+     *
+     * It is an instruction about *this* round, but for chat the history is
+     * persistent — left in, every later turn carried a standing order not to
+     * use tools, and the assistant simply stopped reading files and drawing
+     * pictures with nothing on screen to explain why.
+     */
+    let forcedTextNotice: StreamMessage | null = null;
     if (isLastRound && preset.finishPolicy === "force-text" && preset.tools.length > 0) {
-      history.push({
+      forcedTextNotice = {
         role: "user",
-        content:
-          "You have reached the maximum number of tool calls. Please now write the continuation directly without calling any more tools.",
-      });
+        content: i18n.t("ai.instructions.roundCapReached"),
+      };
+      history.push(forcedTextNotice);
     }
 
     let roundToolCalls: AccumulatedToolCall[] = [];
@@ -232,35 +306,45 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       at: Date.now(),
     });
 
-    await streamCompletion({
-      baseUrl: opts.baseUrl,
-      apiKey: opts.apiKey,
-      standard: opts.standard,
-      modelId: opts.modelId,
-      prefix: opts.prefix,
-      contextSize: opts.contextSize,
-      messages: history,
-      safetySettings: opts.safetySettings,
-      extraBody: opts.extraBody,
-      tools: withholdTools ? undefined : toolDefinitions,
-      signal: opts.signal,
-      onChunk: (chunk) => {
-        if ("text" in chunk) {
-          // Streamed live, but on top of `committedText` rather than into it —
-          // if this round turns out to be a tool round, the whole of `roundText`
-          // is dropped below and the display reverts.
-          roundText += chunk.text;
-          opts.onOutputText(committedText + roundText);
-        } else if ("toolCalls" in chunk) {
-          roundToolCalls = chunk.toolCalls;
-          roundGeminiModelParts = chunk._geminiModelParts;
-        } else if ("done" in chunk) {
-          totalInputTokens += chunk.inputTokens;
-          totalOutputTokens += chunk.outputTokens;
-          totalCachedTokens += chunk.cachedTokens ?? 0;
-        }
-      },
-    });
+    try {
+      await streamCompletion({
+        baseUrl: opts.baseUrl,
+        apiKey: opts.apiKey,
+        standard: opts.standard,
+        modelId: opts.modelId,
+        prefix: opts.prefix,
+        contextSize: opts.contextSize,
+        messages: history,
+        safetySettings: opts.safetySettings,
+        extraBody: opts.extraBody,
+        tools: withholdTools ? undefined : toolDefinitions,
+        signal: opts.signal,
+        onChunk: (chunk) => {
+          if ("text" in chunk) {
+            // Streamed live, but on top of `committedText` rather than into it —
+            // if this round turns out to be a tool round, the whole of `roundText`
+            // is dropped below and the display reverts.
+            roundText += chunk.text;
+            opts.onOutputText(committedText + roundText);
+          } else if ("toolCalls" in chunk) {
+            roundToolCalls = chunk.toolCalls;
+            roundGeminiModelParts = chunk._geminiModelParts;
+          } else if ("done" in chunk) {
+            totalInputTokens += chunk.inputTokens;
+            totalOutputTokens += chunk.outputTokens;
+            totalCachedTokens += chunk.cachedTokens ?? 0;
+          }
+        },
+      });
+    } finally {
+      // The request has been sent, so the nudge has done its job. Retracting
+      // it here (rather than never adding it) keeps it out of a persistent
+      // history without changing what this round asked for.
+      if (forcedTextNotice) {
+        const at = history.indexOf(forcedTextNotice);
+        if (at >= 0) history.splice(at, 1);
+      }
+    }
 
     // No tool calls → the model produced prose → that prose is the answer.
     if (roundToolCalls.length === 0) {
@@ -297,8 +381,18 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     // — including one that arrives *as* rejectAll() resolves a blocked
     // approval — must stop the remaining calls in this same array rather than
     // only taking effect at the next round's top-of-loop check.
+    // An abort part-way through must still leave every tool_call answered —
+    // the assistant message naming N of them is already in `history`, and
+    // `history` IS the chat session's history. Stopping with k < N replies
+    // used to wedge the conversation permanently: the next turn appended a
+    // user message onto a malformed transcript and every provider rejected it.
+    let abortedMidRound = false;
     for (const tc of roundToolCalls) {
-      if (opts.signal.aborted) throw new DOMException("Aborted", "AbortError");
+      if (abortedMidRound || opts.signal.aborted) {
+        abortedMidRound = true;
+        history.push({ role: "tool", tool_call_id: tc.id, content: ABORTED_TOOL_RESULT });
+        continue;
+      }
       const toolCall: ToolCall = { id: tc.id, name: tc.name, arguments: tc.arguments };
       // Kept as valid JSON rather than pre-truncated: the log formats these for
       // display (lib/agent/logFormat), and it can only pull out the identifying
@@ -348,6 +442,9 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         history.push({ role: "user", content: imageParts });
       }
     }
+    // Thrown only once the round's history is complete, so what the caller
+    // keeps is a transcript the next turn can be appended to.
+    if (abortedMidRound) throw new DOMException("Aborted", "AbortError");
   }
 
   // Fell through maxRounds without the model producing text — shouldn't happen

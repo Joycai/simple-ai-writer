@@ -23,25 +23,42 @@ import type { AttachedItem, AttachedLore, AttachedText } from "../lore/aiTask";
  */
 export const REF_CHAR_CAP = 6000;
 
-/** One reference, rendered for the prompt. */
-async function renderRef(item: AttachedLore | AttachedText): Promise<string> {
+/**
+ * Budget across *all* of one message's references.
+ *
+ * The per-file cap alone bounds nothing that matters: ten `@`s is 60k
+ * characters, and because chat history persists it stays in the window for the
+ * rest of the session. Past this, references are named rather than inlined —
+ * the assistant still knows they exist and can read them on demand.
+ */
+export const REF_TOTAL_CHAR_BUDGET = 18_000;
+
+/** One reference, rendered for the prompt. `budget` is what is left for it. */
+async function renderRef(item: AttachedLore | AttachedText, budget: number): Promise<string> {
   if (item.kind === "lore") {
     try {
       const body = await readEntityFile(item.entity.dirPath, "index.md");
-      return `## ${item.entity.name}\n${body.trim()}`;
+      return clip(`## ${item.entity.name}`, body.trim(), budget, item.entity.dirPath);
     } catch {
       return `## ${item.entity.name}\n(读取失败 / unavailable)`;
     }
   }
+  return clip(`--- ${item.file.name} ---`, item.content.trim(), budget, item.file.path);
+}
 
-  const content = item.content.trim();
-  if (content.length <= REF_CHAR_CAP) return `--- ${item.file.name} ---\n${content}`;
-  // Say where the rest is rather than truncating silently: the assistant can
-  // read the whole file, but only if it knows this one was clipped.
+/** Inline what fits under both caps; say where the rest is rather than truncating silently. */
+function clip(header: string, content: string, budget: number, path: string): string {
+  const cap = Math.min(REF_CHAR_CAP, Math.max(0, budget));
+  if (cap === 0) {
+    // Out of budget entirely: naming it still tells the assistant it was
+    // asked for, and read_file is one round-trip away.
+    return `${header}\n[not inlined — this message already carries several references. Read it from ${path} if you need it.]`;
+  }
+  if (content.length <= cap) return `${header}\n${content}`;
   return [
-    `--- ${item.file.name} ---`,
-    content.slice(0, REF_CHAR_CAP),
-    `…[truncated — ${content.length - REF_CHAR_CAP} more chars. Use read_file on ${item.file.path} for the full text.]`,
+    header,
+    content.slice(0, cap),
+    `…[truncated — ${content.length - cap} more chars. Use read_file on ${path} for the full text.]`,
   ].join("\n");
 }
 
@@ -71,7 +88,16 @@ export async function buildChatMessage(
     (r): r is AttachedLore | AttachedText => r.kind === "lore" || r.kind === "text",
   );
   if (referable.length) {
-    const rendered = await Promise.all(referable.map(renderRef));
+    // Sequential, not Promise.all: each reference's allowance depends on what
+    // the ones before it used, so the first few arrive whole and the tail
+    // degrades to pointers instead of every one being clipped to a stub.
+    let spent = 0;
+    const rendered: string[] = [];
+    for (const item of referable) {
+      const text = await renderRef(item, REF_TOTAL_CHAR_BUDGET - spent);
+      spent += text.length;
+      rendered.push(text);
+    }
     parts.push(
       `${i18n.t("ai.chat.refBlockLabel", { defaultValue: "【引用资料】" })}\n${rendered.join("\n\n")}`,
     );

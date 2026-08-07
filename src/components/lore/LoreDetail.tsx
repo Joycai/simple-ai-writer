@@ -555,7 +555,10 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         </button>
         <span className={styles.crumb}>
           LORE <span className={styles.crumbBold}>/</span>
-          {cat?.labelZh ?? entity.category} <span className={styles.crumbBold}>/</span>
+          {/* Through `categoryLabel`, like every other category label in this
+              file — reading `labelZh` directly showed an English UI the
+              Chinese name. */}
+          {cat ? categoryLabel(cat, isZh) : entity.category} <span className={styles.crumbBold}>/</span>
           <span className={styles.crumbBold}>{entity.name}</span>
         </span>
         <span className={styles.spacer} />
@@ -745,7 +748,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                 {t("lore.detail.loadError", { defaultValue: "内容读取失败，磁盘上的文件未被改动" })}
               </div>
             ) : (
-              <div className={styles.notLoaded}>无内容</div>
+              <div className={styles.notLoaded}>{t("lore.detail.noContent")}</div>
             )}
 
             <section className={styles.facets}>

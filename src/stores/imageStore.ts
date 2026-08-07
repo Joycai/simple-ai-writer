@@ -61,6 +61,16 @@ interface ImageSessionState {
   currentId: string | null;
   running: boolean;
   error: string | null;
+  /**
+   * Identity of the run that owns the current state.
+   *
+   * Closing the modal is `abort(); void end(...)` — neither awaited — so a
+   * request that resolves in that window used to write its candidates back
+   * into the scratch directory `end` had just deleted (recreating it), then
+   * `set` a turn belonging to a destroyed session into state. Every write-back
+   * below is gated on this still matching.
+   */
+  runToken: number;
 
   /** Start a fresh session, discarding whatever the last one left behind. */
   begin: (projectPath: string) => Promise<string>;
@@ -83,18 +93,25 @@ interface ImageSessionState {
   instructionChain: (turnId: string | null) => { prompt: string; edits: string[] };
 }
 
+/** Monotonic run identity — see ImageSessionState.runToken. */
+let runSeq = 0;
+
 export const useImageStore = create<ImageSessionState>((set, get) => ({
   sessionId: null,
   turns: [],
   currentId: null,
   running: false,
   error: null,
+  runToken: 0,
 
   begin: async (projectPath) => {
     const existing = get().sessionId;
     if (existing && projectPath) await discardSession(projectPath, existing);
     const sessionId = nanoid(8);
-    set({ sessionId, turns: [], currentId: null, error: null, running: false });
+    // Bumping the token orphans anything still in flight from the old session:
+    // there is no controller to abort here, so this is what stops its result
+    // from landing in the new one.
+    set({ sessionId, turns: [], currentId: null, error: null, running: false, runToken: ++runSeq });
     // Clear anything a crashed or force-closed run left in the scratch root.
     if (projectPath) void sweepScratch(projectPath, sessionId);
     return sessionId;
@@ -102,19 +119,22 @@ export const useImageStore = create<ImageSessionState>((set, get) => ({
 
   generate: async (ctx, prompt) => {
     const sessionId = get().sessionId ?? (await get().begin(ctx.projectPath));
-    set({ running: true, error: null });
+    const token = ++runSeq;
+    set({ runToken: token, running: true, error: null });
     try {
       const result = await callModel(ctx, prompt, []);
+      if (get().runToken !== token) return void bill(ctx, "image-gen", result);
       const turn = await materialize(ctx, sessionId, {
         parentId: null,
         instruction: prompt,
         degraded: false,
       }, result);
+      if (get().runToken !== token) return;
       set({ turns: [turn], currentId: turn.id });
     } catch (e) {
-      if ((e as Error).name !== "AbortError") set({ error: messageOf(e) });
+      if ((e as Error).name !== "AbortError" && get().runToken === token) set({ error: messageOf(e) });
     } finally {
-      set({ running: false });
+      if (get().runToken === token) set({ running: false });
     }
   },
 
@@ -122,7 +142,8 @@ export const useImageStore = create<ImageSessionState>((set, get) => ({
     const { sessionId, currentId } = get();
     const parent = get().currentTurn();
     if (!sessionId || !parent) return;
-    set({ running: true, error: null });
+    const token = ++runSeq;
+    set({ runToken: token, running: true, error: null });
     try {
       const sourcePath = get().currentImagePath();
       const source = sourcePath ? (await imageToDataUrl(sourcePath)).dataUrl : null;
@@ -148,16 +169,18 @@ export const useImageStore = create<ImageSessionState>((set, get) => ({
         }
       }
 
+      if (get().runToken !== token) return void bill(ctx, "image-edit", result);
       const turn = await materialize(ctx, sessionId, {
         parentId: parent.id,
         instruction,
         degraded,
       }, result);
+      if (get().runToken !== token) return;
       set((s) => ({ turns: [...s.turns, turn], currentId: turn.id }));
     } catch (e) {
-      if ((e as Error).name !== "AbortError") set({ error: messageOf(e) });
+      if ((e as Error).name !== "AbortError" && get().runToken === token) set({ error: messageOf(e) });
     } finally {
-      set({ running: false });
+      if (get().runToken === token) set({ running: false });
     }
   },
 
@@ -170,8 +193,11 @@ export const useImageStore = create<ImageSessionState>((set, get) => ({
 
   end: async (projectPath) => {
     const { sessionId } = get();
+    // Retire the token *first*: `end` is called without being awaited while a
+    // request may still be in flight, and the discard below is what that
+    // request would otherwise undo by recreating the directory.
+    set({ sessionId: null, turns: [], currentId: null, error: null, running: false, runToken: ++runSeq });
     if (sessionId && projectPath) await discardSession(projectPath, sessionId);
-    set({ sessionId: null, turns: [], currentId: null, error: null, running: false });
   },
 
   currentTurn: () => {
@@ -222,6 +248,17 @@ function callModel(ctx: RunContext, prompt: string, images: string[]): Promise<I
       signal: ctx.signal,
     },
   );
+}
+
+/**
+ * Record what a run cost when its result arrives too late to keep.
+ *
+ * The provider has already charged for it, so dropping the result must not
+ * also drop the accounting — the spend report would otherwise understate what
+ * the author actually paid.
+ */
+function bill(ctx: RunContext, task: "image-gen" | "image-edit", result: ImageResult): void {
+  void recordImageUsage(ctx.projectPath, ctx.model, task, result.images.length, result.usage);
 }
 
 /** Write a result's candidates to scratch and bill the run. */

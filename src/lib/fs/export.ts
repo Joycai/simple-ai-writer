@@ -45,12 +45,17 @@ async function inlineImages(html: string, baseDir?: string): Promise<string> {
   const imgs = [...doc.querySelectorAll("img")]
     .filter((img) => needsInlining(img.getAttribute("src")));
   await Promise.all(imgs.map(async (img) => {
+    const src = img.getAttribute("src")!;
     try {
-      const { dataUrl } = await imageToDataUrl(assetPathFor(baseDir, img.getAttribute("src")!));
+      const { dataUrl } = await imageToDataUrl(assetPathFor(baseDir, src));
       img.setAttribute("src", dataUrl);
-    } catch {
+    } catch (e) {
       // A missing file shouldn't sink the whole export; it exports as a
-      // broken image, exactly as it renders in the app.
+      // broken image, exactly as it renders in the app. Logged rather than
+      // swallowed outright: a silent catch here is how an encode/decode
+      // mismatch went unnoticed while every illustration vanished from the
+      // exported file.
+      console.warn(`[export] could not inline image ${src}:`, e);
     }
   }));
   return doc.body.innerHTML;
@@ -70,9 +75,14 @@ export function needsInlining(src: string | null): boolean {
 /** Resolve one relative `src` against the document's folder. */
 export function assetPathFor(baseDir: string, src: string): string {
   let rel = src;
-  // Markdown links are percent-encoded (see lib/image/assets.ts); the
-  // filesystem wants the real characters back.
-  try { rel = decodeURI(src); } catch { /* keep raw on a malformed escape */ }
+  // Markdown links are percent-encoded per path segment (see
+  // lib/image/assets.ts `imageMarkdown`), so decode the same way. NOT
+  // `decodeURI`: by definition it leaves the escapes of reserved characters
+  // alone, so a document titled "第1章 & 终局" came back as "第1章 %26 终局"
+  // and every one of its illustrations failed to load.
+  try {
+    rel = src.split("/").map(decodeURIComponent).join("/");
+  } catch { /* keep raw on a malformed escape */ }
   return resolveRelativePath(baseDir, rel);
 }
 

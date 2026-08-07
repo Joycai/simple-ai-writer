@@ -51,6 +51,28 @@ describe("assetPathFor", () => {
       .toBe("/proj/writing/assets/第三章/图 1.png");
   });
 
+  it("decodes reserved characters too", () => {
+    // The regression this guards: `decodeURI` leaves reserved characters
+    // escaped, so a document called "第1章 & 终局" resolved to a path with a
+    // literal "%26" in it — every illustration in the export silently vanished.
+    expect(assetPathFor("/proj/writing", "assets/%E7%AC%AC1%E7%AB%A0%20%26%20%E7%BB%88%E5%B1%80/img-1.png"))
+      .toBe("/proj/writing/assets/第1章 & 终局/img-1.png");
+    expect(assetPathFor("/proj/writing", "assets/A%2BB%2C%20C%3BD%3DE%40F/img-2.png"))
+      .toBe("/proj/writing/assets/A+B, C;D=E@F/img-2.png");
+  });
+
+  it("round-trips what imageMarkdown encodes", async () => {
+    const { imageMarkdown } = await import("../image/assets");
+    for (const rel of [
+      "assets/第1章 & 终局/img-1.png",
+      "assets/A+B, C;D=E@F/img-2.png",
+      "assets/第一章 序/img-3.png",
+    ]) {
+      const src = imageMarkdown(rel, "alt").match(/\]\(([^)]+)\)/)![1];
+      expect(assetPathFor("/proj/writing", src)).toBe(`/proj/writing/${rel}`);
+    }
+  });
+
   it("keeps a malformed escape as-is instead of throwing", () => {
     expect(assetPathFor("/proj", "assets/100%.png")).toBe("/proj/assets/100%.png");
   });

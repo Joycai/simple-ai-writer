@@ -8,7 +8,7 @@
  * xAI rejects the field outright.
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { generateImage, isEditUnsupportedError, NoImageError } from "../ai/image";
+import { generateImage, ImageHttpError, isEditUnsupportedError, NoImageError } from "../ai/image";
 
 const OPENAI = {
   baseUrl: "https://api.example.com/v1",
@@ -63,6 +63,96 @@ describe("generateImage · OpenAI shape", () => {
     const sized = mockJson({ data: [{ b64_json: "aGk=" }] });
     await generateImage(OPENAI, { prompt: "a cat", size: "1024x1024" });
     expect(sized[0].body.size).toBe("1024x1024");
+  });
+
+  it("asks for the bytes, not a link", async () => {
+    // A signed-URL response costs a second network round-trip that can fail
+    // after the generation is already billed. `extraBody` can still drop the
+    // field for relays that reject it.
+    const calls = mockJson({ data: [{ b64_json: "aGk=" }] });
+    await generateImage(OPENAI, { prompt: "a cat" });
+    expect(calls[0].body.response_format).toBe("b64_json");
+
+    vi.unstubAllGlobals();
+    const overridden = mockJson({ data: [{ b64_json: "aGk=" }] });
+    await generateImage(OPENAI, { prompt: "a cat", extraBody: { response_format: undefined } });
+    expect(overridden[0].body.response_format).toBeUndefined();
+  });
+
+  it("retries without response_format when the endpoint rejects the field", async () => {
+    // gpt-image-1 always returns base64 and refuses the parameter. Failing
+    // here would mean the app could not use it at all without the author
+    // discovering `extraBody`.
+    const bodies: Record<string, unknown>[] = [];
+    let call = 0;
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      call++;
+      return call === 1
+        ? new Response(JSON.stringify({
+            error: { message: "Unknown parameter: 'response_format'.", param: "response_format" },
+          }), { status: 400, headers: { "content-type": "application/json" } })
+        : new Response(JSON.stringify({ data: [{ b64_json: "aGk=" }] }), {
+            status: 200, headers: { "content-type": "application/json" },
+          });
+    }));
+
+    const res = await generateImage(OPENAI, { prompt: "a cat" });
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0].response_format).toBe("b64_json");
+    expect(bodies[1]).not.toHaveProperty("response_format");
+    expect(res.images).toHaveLength(1);
+    // And it is not read as "this endpoint cannot edit" — that would bill a
+    // second full generation on the edit path.
+    expect(isEditUnsupportedError(new ImageHttpError("Image edit error", 400,
+      JSON.stringify({ error: { message: "Unknown parameter: 'response_format'.", param: "response_format" } })))).toBe(false);
+  });
+
+  it("sends `n` only when it isn't the default", async () => {
+    // dall-e-3 rejects any n but 1, and omitting it means 1 everywhere — the
+    // same rule the edit and Gemini routes already followed.
+    const one = mockJson({ data: [{ b64_json: "aGk=" }] });
+    await generateImage(OPENAI, { prompt: "x", n: 1 });
+    expect(one[0].body).not.toHaveProperty("n");
+
+    vi.unstubAllGlobals();
+    const many = mockJson({ data: [{ b64_json: "aGk=" }, { b64_json: "aGk=" }] });
+    await generateImage(OPENAI, { prompt: "x", n: 2 });
+    expect(many[0].body.n).toBe(2);
+  });
+
+  it("reads the format off the bytes instead of assuming PNG", async () => {
+    // gpt-image-1 takes an output_format, and relays return whatever their
+    // upstream produced — a JPEG saved as `.png` opens nowhere.
+    const jpeg = btoa("\xff\xd8\xff\xe0\x00\x10JFIF");
+    mockJson({ data: [{ b64_json: jpeg }] });
+    const res = await generateImage(OPENAI, { prompt: "x" });
+    expect(res.images[0].mime).toBe("image/jpeg");
+  });
+
+  it("accepts base64 delivered in the `url` field", async () => {
+    // A common relay habit. Fetching it as a link happens to work in a browser
+    // and does not in Tauri's reqwest transport.
+    mockJson({ data: [{ url: "data:image/webp;base64,aGk=" }] });
+    const res = await generateImage(OPENAI, { prompt: "x" });
+    expect(res.images[0]).toEqual({ dataUrl: "data:image/webp;base64,aGk=", mime: "image/webp" });
+  });
+
+  it("refuses a download that isn't an image", async () => {
+    // A relay answering 200 with an HTML error page otherwise lands in the
+    // gallery as an unopenable `.png` while the UI reports success.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) =>
+        init?.method === "POST"
+          ? new Response(JSON.stringify({ data: [{ url: "https://cdn.example.com/x" }] }), {
+              status: 200, headers: { "content-type": "application/json" },
+            })
+          : new Response("<html>gateway error</html>", {
+              status: 200, headers: { "content-type": "text/html" },
+            })),
+    );
+    await expect(generateImage(OPENAI, { prompt: "x" })).rejects.toThrow(/rather than an image/);
   });
 
   it("downloads a URL response into bytes rather than storing the link", async () => {
@@ -272,29 +362,54 @@ describe("generateImage · editing", () => {
 });
 
 describe("isEditUnsupportedError", () => {
-  // Drives the visible fallback to regeneration, so it must fire on a missing
-  // route and stay quiet on a refusal the model actually understood.
+  // Drives the visible fallback to regeneration — a second, separately billed
+  // call — so it must fire on a missing route and stay quiet on anything the
+  // endpoint actually understood.
+  const http = (status: number, body: string) => new ImageHttpError("Image edit error", status, body);
+
   it("recognises a missing or rejecting endpoint", () => {
-    for (const msg of [
-      "Image edit error 404: Not Found",
-      "Image API error 405: method not allowed",
-      "this model does not support image editing",
-      "editing is not supported for this model",
-      "unsupported operation",
-      "only imagen models are supported",
-    ]) {
-      expect(isEditUnsupportedError(new Error(msg))).toBe(true);
-    }
+    expect(isEditUnsupportedError(http(404, "Not Found"))).toBe(true);
+    expect(isEditUnsupportedError(http(405, "method not allowed"))).toBe(true);
+    expect(isEditUnsupportedError(http(501, "not implemented"))).toBe(true);
+    // Structured, naming the model rather than a field.
+    expect(isEditUnsupportedError(http(400, JSON.stringify({
+      error: { message: "The model `x` does not exist", code: "model_not_found" },
+    })))).toBe(true);
+    expect(isEditUnsupportedError(http(400, JSON.stringify({
+      error: { message: "unsupported model for this endpoint", param: "model" },
+    })))).toBe(true);
+    // Unstructured relay text, explicitly about editing.
+    expect(isEditUnsupportedError(http(400, "this model does not support image editing"))).toBe(true);
+    expect(isEditUnsupportedError(http(400, "editing is not supported for this model"))).toBe(true);
+    expect(isEditUnsupportedError(http(400, "only imagen models are supported"))).toBe(true);
   });
 
   it("leaves a genuine refusal alone", () => {
-    for (const msg of [
-      "Image API error 400: your prompt was rejected by the safety system",
-      "Image edit error 429: rate limit exceeded",
-      "Gemini blocked this response (IMAGE_SAFETY)",
-      "Image API error 401: invalid api key",
-    ]) {
-      expect(isEditUnsupportedError(new Error(msg))).toBe(false);
-    }
+    expect(isEditUnsupportedError(http(400, "your prompt was rejected by the safety system"))).toBe(false);
+    expect(isEditUnsupportedError(http(429, "rate limit exceeded"))).toBe(false);
+    expect(isEditUnsupportedError(http(401, "invalid api key"))).toBe(false);
+  });
+
+  it("does not read an ordinary parameter error as a missing route", () => {
+    // OpenAI's standard wording hits three of the old regexes at once, so a
+    // fixable request error triggered a second full-price generation and the
+    // author was handed a picture marked "degraded" instead of an explanation.
+    expect(isEditUnsupportedError(http(400, JSON.stringify({
+      error: {
+        message: "Unsupported parameter: 'response_format' is not supported with this model.",
+        type: "invalid_request_error",
+        param: "response_format",
+        code: "unsupported_parameter",
+      },
+    })))).toBe(false);
+    // …and the same in plain text, from a relay that returns no error object.
+    expect(isEditUnsupportedError(http(400, "Unsupported parameter: 'mask' is not supported."))).toBe(false);
+  });
+
+  it("never treats the model's own words as evidence about the route", () => {
+    // NoImageError embeds up to 200 characters of whatever the model said.
+    expect(isEditUnsupportedError(new NoImageError("I don't support image editing"))).toBe(false);
+    // Nor does an error from somewhere else entirely.
+    expect(isEditUnsupportedError(new Error("editing is not supported"))).toBe(false);
   });
 });

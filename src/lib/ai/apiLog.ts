@@ -74,6 +74,69 @@ function redactMessage(m: StreamMessage): unknown {
   return m;
 }
 
+/** Logging for one image call — the same file, so a debug session sees both. */
+export interface ImageCallLogger {
+  success(result: { images: number; usage?: { inputTokens: number; outputTokens: number }; text?: string }): void;
+  error(e: unknown): void;
+}
+
+const noopImageLogger: ImageCallLogger = { success() {}, error() {} };
+
+/**
+ * Start logging one `generateImage` call.
+ *
+ * Image requests used to be the one kind of provider traffic the debug log
+ * couldn't see, which is exactly backwards: they cost real money per attempt
+ * and their failures are the hardest to reproduce. Prompts are written in
+ * full (they are the author's own text); input images are counted, not
+ * embedded.
+ */
+export function beginImageApiLog(req: {
+  standard: string;
+  route: string;
+  baseUrl: string;
+  modelId: string;
+  prompt: string;
+  n?: number;
+  size?: string;
+  aspect?: string;
+  inputImages: number;
+  extraBody?: Record<string, unknown>;
+}): ImageCallLogger {
+  if (!isApiLogEnabled()) return noopImageLogger;
+
+  const id = `img-${Date.now()}-${++seq}`;
+  const start = performance.now();
+  const { prompt, ...rest } = req;
+
+  writeEntry({ type: "image-request", id, time: new Date().toISOString(), ...rest, prompt });
+
+  return {
+    success(result) {
+      writeEntry({
+        type: "image-response",
+        id,
+        time: new Date().toISOString(),
+        durationMs: Math.round(performance.now() - start),
+        model: req.modelId,
+        images: result.images,
+        usage: result.usage,
+        text: result.text,
+      });
+    },
+    error(e) {
+      writeEntry({
+        type: "image-error",
+        id,
+        time: new Date().toISOString(),
+        durationMs: Math.round(performance.now() - start),
+        model: req.modelId,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    },
+  };
+}
+
 export interface ApiCallLogger {
   chunk(chunk: StreamChunk): void;
   success(): void;

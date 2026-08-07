@@ -31,8 +31,6 @@ export function DocImageGenModal({ onClose }: Props) {
   const { t } = useTranslation();
   const terms = useTerms();
   const filePath = useEditorStore((s) => s.filePath);
-  const content = useEditorStore((s) => s.content);
-  const view = useEditorStore((s) => s.editorView);
 
   const target: ImageGenTarget = useMemo(() => {
     const docName = filePath?.split(/[\\/]/).pop()?.replace(/\.md$/i, "") ?? terms.doc;
@@ -42,12 +40,17 @@ export function DocImageGenModal({ onClose }: Props) {
       subject: docName,
       subjectKind: terms.doc,
       material: async () => {
-        // The selection is the author saying "illustrate this". Without one,
-        // fall back to the text around the cursor.
-        const sel = view?.state.selection.main;
-        if (sel && !sel.empty) return view!.state.sliceDoc(sel.from, sel.to);
-        const at = sel?.head ?? content.length;
-        return content.slice(Math.max(0, at - CONTEXT_CHARS), at + CONTEXT_CHARS / 2);
+        // Read from the live editor, never from a captured `content`: this
+        // runs when the author asks for a prompt, and the document is a
+        // dependency that changes on every keystroke — depending on it would
+        // rebuild the whole target (and everything memoised from it) per
+        // character typed, for a value that is read fresh here anyway.
+        const state = useEditorStore.getState().editorView?.state;
+        const doc = state?.doc.toString() ?? useEditorStore.getState().content;
+        const sel = state?.selection.main;
+        if (sel && !sel.empty) return doc.slice(sel.from, sel.to);
+        const at = sel?.head ?? doc.length;
+        return doc.slice(Math.max(0, at - CONTEXT_CHARS), at + CONTEXT_CHARS / 2);
       },
       // A document has no gallery of earlier pictures to stay consistent with.
       references: [],
@@ -63,7 +66,7 @@ export function DocImageGenModal({ onClose }: Props) {
         },
       },
     };
-  }, [filePath, content, view, terms, t]);
+  }, [filePath, terms, t]);
 
   /**
    * Splice the link in through CodeMirror rather than the store's content:

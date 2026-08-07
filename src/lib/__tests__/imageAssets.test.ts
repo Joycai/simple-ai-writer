@@ -11,17 +11,35 @@ const written: { path: string; bytes: Uint8Array }[] = [];
 const dirs: string[] = [];
 let existing = new Set<string>();
 
+const renames: { from: string; to: string }[] = [];
+const removed: string[] = [];
+const texts = new Map<string, string>();
+
 vi.mock("../fs/fileio", () => ({
   makeDir: vi.fn(async (p: string) => void dirs.push(p)),
   writeBinaryFile: vi.fn(async (path: string, bytes: Uint8Array) => void written.push({ path, bytes })),
   fileExists: vi.fn(async (p: string) => existing.has(p)),
+  renamePath: vi.fn(async (from: string, to: string) => {
+    renames.push({ from, to });
+    existing.delete(from);
+    existing.add(to);
+  }),
+  removeDir: vi.fn(async (p: string) => void removed.push(p)),
+  readFile: vi.fn(async (p: string) => texts.get(p) ?? ""),
+  writeFile: vi.fn(async (p: string, c: string) => void texts.set(p, c)),
 }));
 
-const { saveDocumentAsset, imageMarkdown } = await import("../image/assets");
+const {
+  saveDocumentAsset, imageMarkdown, assetDirFor, safeAssetName,
+  moveDocumentAssets, discardDocumentAssets,
+} = await import("../image/assets");
 
 beforeEach(() => {
   written.length = 0;
   dirs.length = 0;
+  renames.length = 0;
+  removed.length = 0;
+  texts.clear();
   existing = new Set();
 });
 
@@ -42,10 +60,13 @@ describe("saveDocumentAsset", () => {
   });
 
   it("strips characters a filename cannot hold", async () => {
-    // "第三章：审判/终局" would otherwise create a nested directory.
-    const res = await saveDocumentAsset("/proj/writing/第三章：审判 or 终局.md", new Uint8Array([1]), "png");
+    // "第三章：审判/终局" would otherwise create a nested directory. The `/`
+    // really is in the input here — the old test replaced it with " or " and
+    // so never exercised the branch it was named after.
+    const res = await saveDocumentAsset("/proj/writing/第三章：审判 终局.md", new Uint8Array([1]), "png");
     expect(res.relPath).not.toMatch(/[:*?"<>|]/);
     expect(res.relPath.split("/")).toHaveLength(3); // assets / group / file
+    expect(safeAssetName("第三章:审判/终局")).toBe("第三章_审判_终局");
   });
 
   it("picks another name rather than overwriting an existing file", async () => {
@@ -53,6 +74,88 @@ describe("saveDocumentAsset", () => {
     existing.add(first.absPath);
     const second = await saveDocumentAsset("/proj/writing/ch1.md", new Uint8Array([2]), "png");
     expect(second.absPath).not.toBe(first.absPath);
+  });
+});
+
+describe("safeAssetName", () => {
+  it("refuses names Windows cannot create", () => {
+    // "第一章..md" → stem "第一章." → a directory Windows will not make, and
+    // makeDir threw with nothing to catch it.
+    expect(safeAssetName("第一章.")).toBe("第一章");
+    expect(safeAssetName("trailing ")).toBe("trailing");
+    expect(safeAssetName("..")).toBe("doc");
+    expect(safeAssetName("..", "image")).toBe("image");
+    expect(safeAssetName(".hidden")).toBe("hidden");
+  });
+
+  it("keeps two long titles that share a prefix apart", () => {
+    // Routine for 公众号 / 标书 documents, which start with the same boilerplate
+    // — truncation alone dropped both documents' pictures in one folder.
+    const a = "关于进一步加强本年度市场推广工作的通知（第一批）——面向华东地区";
+    const b = "关于进一步加强本年度市场推广工作的通知（第二批）——面向华南地区";
+    expect(safeAssetName(a)).not.toBe(safeAssetName(b));
+    expect(safeAssetName(a).startsWith("关于进一步加强")).toBe(true);
+  });
+});
+
+describe("moveDocumentAssets", () => {
+  it("brings the folder along and rewrites the links", async () => {
+    existing.add("/proj/writing/ch1/assets/ch1");
+    texts.set("/proj/writing/ch1/序章.md", "前文\n\n![图](assets/ch1/img-1.png)\n\n后文");
+
+    await moveDocumentAssets("/proj/writing/ch1/ch1.md", "/proj/writing/ch1/序章.md");
+
+    expect(renames).toEqual([{
+      from: "/proj/writing/ch1/assets/ch1",
+      to: "/proj/writing/ch1/assets/序章",
+    }]);
+    expect(texts.get("/proj/writing/ch1/序章.md")).toContain("assets/%E5%BA%8F%E7%AB%A0/img-1.png");
+  });
+
+  it("moves the folder unchanged when only the directory changed", async () => {
+    // Same document name in a new folder: the relative links still read
+    // `assets/ch1/…`, so nothing in the text needs touching.
+    existing.add("/proj/writing/assets/ch1");
+    await moveDocumentAssets("/proj/writing/ch1.md", "/proj/writing/vol1/ch1.md");
+    expect(renames).toEqual([{
+      from: "/proj/writing/assets/ch1",
+      to: "/proj/writing/vol1/assets/ch1",
+    }]);
+  });
+
+  it("leaves both galleries alone rather than merging them", async () => {
+    existing.add("/proj/writing/assets/a");
+    existing.add("/proj/writing/assets/b");
+    await moveDocumentAssets("/proj/writing/a.md", "/proj/writing/b.md");
+    expect(renames).toEqual([]);
+  });
+
+  it("does nothing when the document has no illustrations", async () => {
+    await moveDocumentAssets("/proj/writing/a.md", "/proj/writing/b.md");
+    expect(renames).toEqual([]);
+  });
+});
+
+describe("discardDocumentAssets", () => {
+  it("files the pictures beside the backup so a restore is complete", async () => {
+    existing.add(assetDirFor("/proj/writing/ch1.md"));
+    await discardDocumentAssets("/proj/writing/ch1.md", "/proj/.ai-writer/backups/x-ch1.md");
+    expect(renames).toEqual([{
+      from: "/proj/writing/assets/ch1",
+      to: "/proj/.ai-writer/backups/x-ch1.md.assets",
+    }]);
+    expect(removed).toEqual([]);
+  });
+
+  it("removes them outright when the delete was not backed up", async () => {
+    existing.add(assetDirFor("/proj/writing/ch1.md"));
+    await discardDocumentAssets("/proj/writing/ch1.md", null);
+    expect(removed).toEqual(["/proj/writing/assets/ch1"]);
+  });
+
+  it("does nothing for a document that never had any", async () => {
+    await discardDocumentAssets("/proj/writing/ch1.md", null);
+    expect(removed).toEqual([]);
   });
 });
 

@@ -85,6 +85,31 @@ export const RECENT_WINDOW_MIN_CHARS = 800 * 3;
  */
 export const STATIC_LORE_BUDGET_MAX_TOKENS = 2_000;
 
+/**
+ * Assumed input ceiling for a model that declares no context size.
+ *
+ * `Model.contextSize` is optional — a hand-added model routinely has none —
+ * and the tool loop's `trimHistory` is a no-op without a ceiling. That was
+ * survivable while tool results were text; it stopped being survivable once
+ * `read_lore_image` began pushing base64 data URLs into a chat history that
+ * persists across turns, with no degradation path but a provider 400 several
+ * pictures in.
+ *
+ * Deliberately small: the point is to bound growth, and guessing low only
+ * elides old tool results, whereas guessing high fails the request outright.
+ */
+export const ASSUMED_INPUT_CEILING_TOKENS = 32_000;
+
+/**
+ * The input ceiling to plan a tool loop against — the model's declared window
+ * scaled by the author's utilization setting, or the assumed ceiling above.
+ */
+export function inputCeilingFor(contextSize: number | undefined, utilization: number): number {
+  return contextSize && contextSize > 0
+    ? Math.floor(contextSize * utilization)
+    : ASSUMED_INPUT_CEILING_TOKENS;
+}
+
 /** Floor for the reply reserve, in tokens. */
 const OUTPUT_RESERVE_MIN_TOKENS = 2_000;
 

@@ -39,6 +39,16 @@ export function useImageDataUrls(paths: string[]): Record<string, string> {
   const key = paths.join("|");
   useEffect(() => {
     let cancelled = false;
+    // Drop paths that are no longer asked for. Without this the map only ever
+    // grew: four 2048×2048 candidates per round is tens of megabytes of base64
+    // sitting in React state for as long as the component lives, copied whole
+    // on every arrival.
+    setUrls((prev) => {
+      const wanted = new Set(paths);
+      const kept = Object.keys(prev).filter((p) => wanted.has(p));
+      if (kept.length === Object.keys(prev).length) return prev;
+      return Object.fromEntries(kept.map((p) => [p, prev[p]]));
+    });
     for (const path of paths) {
       imageToDataUrl(path)
         .then(({ dataUrl }) => {

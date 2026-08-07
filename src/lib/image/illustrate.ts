@@ -10,7 +10,7 @@
 import { generateImage, isEditUnsupportedError } from "../ai/image";
 import { imageCostFor } from "../ai/configDb";
 import type { IllustrateProposal } from "../agent/registry";
-import { imageToDataUrl } from "../fs/images";
+import { dataUrlToBytes, imageToDataUrl } from "../fs/images";
 import { loadApiKey } from "../keyStore";
 import { addLoreImage } from "../lore";
 import { imageMarkdown, saveDocumentAsset } from "./assets";
@@ -37,6 +37,13 @@ export interface IllustrationOutcome {
 export async function runIllustration(
   proposal: IllustrateProposal,
   projectPath: string,
+  /**
+   * The approving run's abort signal. Approval removes the card from the
+   * pending queue, so `rejectAll` can no longer cancel this — without the
+   * signal, pressing 停止 still leaves a paid-for request running to
+   * completion.
+   */
+  signal?: AbortSignal,
 ): Promise<IllustrationOutcome> {
   const { useAiStore } = await import("../../stores/aiStore");
   const { models, providers } = useAiStore.getState();
@@ -58,8 +65,9 @@ export async function runIllustration(
   const req = {
     prompt: proposal.prompt,
     n: 1,
-    size: proposal.size || sizeForAspect(proposal.aspect ?? "1:1", model.caps?.sizes),
+    size: sizeForAspect(proposal.aspect ?? "1:1", model.caps?.sizes),
     aspect: proposal.aspect,
+    signal,
   };
 
   // Same two-layer fallback the interactive session uses: a model that
@@ -83,7 +91,7 @@ export async function runIllustration(
 
   const image = result.images[0];
   if (!image) throw new Error("The model returned no image.");
-  const { bytes, ext } = decode(image.dataUrl);
+  const { bytes, ext } = dataUrlToBytes(image.dataUrl);
 
   let path: string;
   let markdown = "";
@@ -97,7 +105,9 @@ export async function runIllustration(
   }
 
   await recordImageUsage(projectPath, model, proposal.sourcePath ? "image-edit" : "image-gen", 1, result.usage);
-  void recordGeneration(projectPath, {
+  // Awaited: the record file is a read-modify-write, and an agent approving two
+  // illustrations in a row would otherwise lose one of the two entries.
+  await recordGeneration(projectPath, {
     path,
     prompt: proposal.prompt,
     edits: [],
@@ -110,19 +120,4 @@ export async function runIllustration(
   });
 
   return { path, markdown, degraded };
-}
-
-/**
- * Local data-URL decode, for the same reason lib/ai/image.ts has one: this
- * module is reached from the agent layer, and pulling the fs helpers'
- * plugin-fs import along would widen that dependency for four lines of base64.
- */
-function decode(dataUrl: string): { bytes: Uint8Array; ext: string } {
-  const comma = dataUrl.indexOf(",");
-  const mime = dataUrl.slice(5, comma).replace(";base64", "").trim();
-  const binary = atob(dataUrl.slice(comma + 1));
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  const ext = mime.includes("webp") ? "webp" : mime.includes("jpeg") ? "jpg" : "png";
-  return { bytes, ext };
 }

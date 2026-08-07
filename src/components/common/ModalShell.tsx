@@ -17,6 +17,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { imeOwnsKey, type CompositionState } from "../../lib/ime";
 import { ModalErrorBoundary } from "./ErrorBoundary";
 
 /**
@@ -91,10 +92,32 @@ export function ModalShell({
     if (wasBackdropGesture && closeOnBackdrop) requestCloseRef.current();
   };
 
+  // A CJK IME owns Escape while its candidate window is up — there it means
+  // "drop the candidates", not "close the dialog". Without this, pressing it
+  // half-way through a pinyin word closed the modal and took the draft with
+  // it. Tracked at the window level (rather than per input, as `useImeGuard`
+  // does) because this listener is global and any field beneath it may be
+  // composing.
+  const composition = useRef<CompositionState>({ composing: false, endedAt: -Infinity });
+  useEffect(() => {
+    const start = () => { composition.current.composing = true; };
+    const end = () => {
+      composition.current.composing = false;
+      composition.current.endedAt = performance.now();
+    };
+    window.addEventListener("compositionstart", start, true);
+    window.addEventListener("compositionend", end, true);
+    return () => {
+      window.removeEventListener("compositionstart", start, true);
+      window.removeEventListener("compositionend", end, true);
+    };
+  }, []);
+
   useEffect(() => {
     if (!closeOnEscape) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (imeOwnsKey(e, composition.current, performance.now())) return;
       // Only the topmost modal reacts, so a nested modal doesn't also close its parent.
       if (modalStack[modalStack.length - 1] !== idRef.current) return;
       requestCloseRef.current();

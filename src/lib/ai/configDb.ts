@@ -173,6 +173,31 @@ export interface Prompt {
  */
 export const SNIPPET_SCENE = "snippet";
 
+/**
+ * `ALTER TABLE … ADD COLUMN`, skipped when the column is already there and
+ * tolerant of losing the race to add it.
+ *
+ * "Read the columns, then add the missing ones" is not atomic, and this schema
+ * check has historically run from more than one place. A second process (or a
+ * second window) that added the column between the read and the write makes
+ * SQLite answer `duplicate column name`, which is the outcome this function
+ * was trying to produce anyway — so it is success, not failure.
+ */
+async function addColumn(
+  db: Awaited<ReturnType<typeof Database.load>>,
+  existing: { name: string }[],
+  table: string,
+  column: string,
+  type: string,
+): Promise<void> {
+  if (existing.some((c) => c.name === column)) return;
+  try {
+    await db.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  } catch (e) {
+    if (!/duplicate column name/i.test(String(e))) throw e;
+  }
+}
+
 export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load>>) {
   await db.execute(`
     CREATE TABLE IF NOT EXISTS providers (
@@ -187,9 +212,7 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
 
   // Migration: add safety_settings to providers created before this column existed.
   const providerCols = await db.select<{ name: string }[]>(`PRAGMA table_info(providers)`);
-  if (!providerCols.some((c) => c.name === "safety_settings")) {
-    await db.execute(`ALTER TABLE providers ADD COLUMN safety_settings TEXT`);
-  }
+  await addColumn(db, providerCols, "providers", "safety_settings", "TEXT");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS models (
@@ -206,26 +229,14 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
     )
   `);
 
-  // Migration: add prefix column to models created before this column existed.
+  // Migration: columns added to models after the table's first shipped shape.
   const modelCols = await db.select<{ name: string }[]>(`PRAGMA table_info(models)`);
-  if (!modelCols.some((c) => c.name === "prefix")) {
-    await db.execute(`ALTER TABLE models ADD COLUMN prefix TEXT`);
-  }
-  if (!modelCols.some((c) => c.name === "context_size")) {
-    await db.execute(`ALTER TABLE models ADD COLUMN context_size INTEGER`);
-  }
-  if (!modelCols.some((c) => c.name === "max_output")) {
-    await db.execute(`ALTER TABLE models ADD COLUMN max_output INTEGER`);
-  }
-  if (!modelCols.some((c) => c.name === "probed_at")) {
-    await db.execute(`ALTER TABLE models ADD COLUMN probed_at INTEGER`);
-  }
-  if (!modelCols.some((c) => c.name === "price_per_image")) {
-    await db.execute(`ALTER TABLE models ADD COLUMN price_per_image REAL`);
-  }
-  if (!modelCols.some((c) => c.name === "caps")) {
-    await db.execute(`ALTER TABLE models ADD COLUMN caps TEXT`);
-  }
+  await addColumn(db, modelCols, "models", "prefix", "TEXT");
+  await addColumn(db, modelCols, "models", "context_size", "INTEGER");
+  await addColumn(db, modelCols, "models", "max_output", "INTEGER");
+  await addColumn(db, modelCols, "models", "probed_at", "INTEGER");
+  await addColumn(db, modelCols, "models", "price_per_image", "REAL");
+  await addColumn(db, modelCols, "models", "caps", "TEXT");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS prompts (
@@ -304,9 +315,20 @@ export async function saveProvider(
   db: Awaited<ReturnType<typeof Database.load>>,
   p: Provider
 ): Promise<void> {
+  // A real upsert, NOT `INSERT OR REPLACE`: that is a DELETE followed by an
+  // INSERT, and `models.provider_id` declares `ON DELETE CASCADE`. sqlx (which
+  // backs tauri-plugin-sql) connects with `foreign_keys = ON` by default, so
+  // renaming a provider — or importing a config over an existing one — would
+  // take every model configured under it with it. `created_at` is deliberately
+  // left out of the update: editing a provider must not re-date it.
   await db.execute(
-    `INSERT OR REPLACE INTO providers (id, name, base_url, api_standard, safety_settings, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO providers (id, name, base_url, api_standard, safety_settings, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       name = excluded.name,
+       base_url = excluded.base_url,
+       api_standard = excluded.api_standard,
+       safety_settings = excluded.safety_settings`,
     [p.id, p.name, p.baseUrl, p.apiStandard, p.safetySettings ? JSON.stringify(p.safetySettings) : null, p.createdAt]
   );
 }
@@ -315,10 +337,12 @@ export async function deleteProvider(
   db: Awaited<ReturnType<typeof Database.load>>,
   id: string
 ): Promise<void> {
-  // SQLite does not enforce the models.provider_id FK cascade unless
-  // `PRAGMA foreign_keys = ON` is set per connection (it isn't), so delete the
-  // dependent model rows explicitly — otherwise they survive as orphans that
-  // reappear on the next launch.
+  // Delete the dependent model rows explicitly rather than relying on the
+  // declared `ON DELETE CASCADE`: whether SQLite enforces it depends on a
+  // per-connection `PRAGMA foreign_keys`, which nothing in this app sets — it
+  // is whatever the driver happens to default to. Doing it here makes the
+  // outcome the same either way, instead of leaving orphan rows that reappear
+  // on the next launch if the default ever changes.
   await db.execute("DELETE FROM models WHERE provider_id = ?", [id]);
   await db.execute("DELETE FROM providers WHERE id = ?", [id]);
 }
@@ -391,7 +415,7 @@ function rowToModel(r: Record<string, unknown>): Model {
     providerId: r.provider_id as string,
     modelId: r.model_id as string,
     name: r.name as string,
-    type: r.type as ModelType,
+    type: parseModelType(r.type),
     priceIn: r.price_in as number,
     priceCachedIn: r.price_cached_in as number,
     priceOut: r.price_out as number,
@@ -403,6 +427,19 @@ function rowToModel(r: Record<string, unknown>): Model {
     pricePerImage: (r.price_per_image as number | null) ?? undefined,
     caps: parseImageCaps(r.caps),
   };
+}
+
+const MODEL_TYPES: ModelType[] = ["text", "multimodal", "image", "video"];
+
+/**
+ * Narrow a stored `type` to the union instead of asserting it, for the same
+ * reason `parseApiStandard` exists next door: the column is free text, and an
+ * unrecognised value made the model vanish from *both* the text and the image
+ * pickers with nothing on screen to say why. "text" is where a model with no
+ * declared type belonged before the column existed.
+ */
+function parseModelType(raw: unknown): ModelType {
+  return MODEL_TYPES.includes(raw as ModelType) ? (raw as ModelType) : "text";
 }
 
 function parseImageCaps(raw: unknown): ImageCaps | undefined {

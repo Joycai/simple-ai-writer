@@ -57,7 +57,24 @@ import { costFor } from "../lib/ai/configDb";
  */
 type RunId = unknown;
 
-interface PendingApproval {
+/**
+ * What an approval carries beyond the proposal itself — supplied by the caller
+ * that owns the run, because the store cannot derive either of these.
+ */
+export interface ApprovalBinding {
+  /**
+   * The chat turn a produced picture belongs to. An explicit binding, not
+   * "whichever turn is last when the apply finishes": the apply can outlive
+   * the run (approving is instantaneous, drawing is not), and 停止 clears
+   * `chatAbort` — so an identity test against it dropped pictures the author
+   * had already paid for.
+   */
+  turnId?: string;
+  /** The run's abort signal, so an approved-but-slow apply can be cancelled. */
+  signal?: AbortSignal;
+}
+
+interface PendingApproval extends ApprovalBinding {
   proposal: Proposal;
   resolve: (decision: ApprovalDecision) => void;
   runId: RunId;
@@ -75,6 +92,8 @@ interface PendingPlan {
  * the runtime blocks on the answer, so a second can't queue behind the first.
  */
 export interface PendingRoundLimit {
+  /** Stable identity for React keys — `runId` is an opaque object. */
+  id: string;
   /** Tool rounds consumed so far. */
   roundsUsed: number;
   /** Extra rounds a 继续 grants (the preset's own cap again). */
@@ -127,7 +146,7 @@ interface AgentState {
   chatHistory: StreamMessage[] | null;
 
   /** Called by the tool executor (via ToolContext.requestApproval). */
-  requestApproval: (proposal: Proposal, runId: RunId) => Promise<ApprovalDecision>;
+  requestApproval: (proposal: Proposal, runId: RunId, binding?: ApprovalBinding) => Promise<ApprovalDecision>;
   /** User approved: backup, apply, resolve. */
   approve: (id: string) => Promise<void>;
   /** User rejected: resolve with their optional reason. */
@@ -157,6 +176,7 @@ interface AgentState {
 }
 
 let turnCounter = 0;
+let roundLimitCounter = 0;
 
 /** Chat's own usage recorder (aiTaskStore has an equivalent; kept local to avoid a store cycle). */
 async function recordChatUsage(
@@ -242,7 +262,7 @@ interface ApplyOutcome {
  * Carry out what an approved proposal asked for. Throwing here is how a failure
  * reaches the model as a rejection — never swallow one and report success.
  */
-async function applyProposal(proposal: Proposal): Promise<ApplyOutcome> {
+async function applyProposal(proposal: Proposal, signal?: AbortSignal): Promise<ApplyOutcome> {
   const { useProjectStore } = await import("./projectStore");
   const { createEntry, moveEntry, deleteEntry } = useProjectStore.getState();
 
@@ -271,7 +291,7 @@ async function applyProposal(proposal: Proposal): Promise<ApplyOutcome> {
       // proposal time — a rejected card costs nothing.
       const { runIllustration } = await import("../lib/image/illustrate");
       const { projectPath: root } = useProjectStore.getState();
-      const outcome = await runIllustration(proposal, root ?? "");
+      const outcome = await runIllustration(proposal, root ?? "", signal);
       if (proposal.dest.kind === "lore") {
         // The gallery grew — rescan so the entity view shows it at once.
         const { useLoreStore } = await import("./loreStore");
@@ -312,9 +332,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   chatAbort: null,
   chatHistory: null,
 
-  requestApproval: (proposal, runId) =>
+  requestApproval: (proposal, runId, binding) =>
     new Promise<ApprovalDecision>((resolve) => {
-      set((s) => ({ pending: [...s.pending, { proposal, resolve, runId }] }));
+      set((s) => ({ pending: [...s.pending, { proposal, resolve, runId, ...binding }] }));
     }),
 
   approve: async (id) => {
@@ -323,19 +343,15 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     set((s) => ({ pending: s.pending.filter((p) => p.proposal.id !== id) }));
 
     try {
-      const { report, imagePath } = await applyProposal(item.proposal);
-      // A picture goes into the transcript as well as onto disk. Scoped to the
-      // run that asked for it: the task panel shares this queue and has no
-      // chat turn to attach to.
-      if (imagePath && item.runId === get().chatAbort) {
-        set((s) => {
-          const last = [...s.turns].reverse().find((tn) => tn.role === "assistant");
-          if (!last) return {};
-          return {
-            turns: s.turns.map((tn) =>
-              tn.id === last.id ? { ...tn, images: [...(tn.images ?? []), imagePath] } : tn),
-          };
-        });
+      const { report, imagePath } = await applyProposal(item.proposal, item.signal);
+      // A picture goes into the transcript as well as onto disk — into the turn
+      // the request came from, named at request time. The task panel shares
+      // this queue and binds no turn, so its images stay out of the chat.
+      if (imagePath && item.turnId) {
+        set((s) => ({
+          turns: s.turns.map((tn) =>
+            tn.id === item.turnId ? { ...tn, images: [...(tn.images ?? []), imagePath] } : tn),
+        }));
       }
       item.resolve({ approved: true, backupPath: report });
     } catch (e) {
@@ -354,8 +370,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   requestRoundExtension: (roundsUsed, extension, runId) =>
     new Promise<number>((resolve) => {
+      const id = `round-limit-${++roundLimitCounter}`;
       set((s) => ({
-        pendingRoundLimits: [...s.pendingRoundLimits, { roundsUsed, extension, resolve, runId }],
+        pendingRoundLimits: [...s.pendingRoundLimits, { id, roundsUsed, extension, resolve, runId }],
       }));
     }),
   resolveRoundLimit: (runId, granted) => {
@@ -514,11 +531,18 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           }),
         }));
       } else {
+        // A previous turn that was stopped, or crashed between two pushes, can
+        // leave an assistant tool_calls message without every reply it needs —
+        // and appending onto that makes the provider reject not just this turn
+        // but every turn after it. Repair before adding to it.
+        const { repairToolCallPairing } = await import("../lib/agent/runtime");
+        repairToolCallPairing(history);
         history.push({ role: "user", content: wireMessage });
       }
 
       const { runAgent } = await import("../lib/agent/runtime");
       const { AGENT_ASSIST_PRESET } = await import("../lib/agent/presets");
+      const { inputCeilingFor } = await import("../lib/context/budget");
       const { contextUtilization } = useAppStore.getState();
 
       const { inputTokens, outputTokens, cachedTokens } = await runAgent({
@@ -529,9 +553,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         modelId: model.modelId,
         prefix: model.prefix,
         contextSize: model.contextSize,
-        inputCeilingTokens: model.contextSize
-          ? Math.floor(model.contextSize * contextUtilization)
-          : undefined,
+        // Never undefined: without a ceiling the tool loop's history trimming
+        // is a no-op, and a chat that reads pictures accumulates base64 in a
+        // history that persists across turns until the provider rejects it.
+        inputCeilingTokens: inputCeilingFor(model.contextSize, contextUtilization),
         preset: AGENT_ASSIST_PRESET,
         messages: history,
         toolContext: {
@@ -547,7 +572,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
               m.useMemoryStore.getState().loadForActiveFile(),
             );
           },
-          requestApproval: (p) => get().requestApproval(p, controller),
+          requestApproval: (p) =>
+            get().requestApproval(p, controller, {
+              turnId: assistantTurn.id,
+              signal: controller.signal,
+            }),
           requestPlanApproval: (p) => get().requestPlanApproval(p, controller),
           // One gate per turn: a plan the author approved for *this* request
           // does not silently authorise the next one.

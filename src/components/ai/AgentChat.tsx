@@ -58,7 +58,7 @@ function formatTokens(n: number): string {
 export function AgentChat() {
   const { t } = useTranslation();
   const {
-    turns, chatRunning, chatError, chatUsage, pending, pendingPlans, pendingRoundLimits,
+    turns, chatRunning, chatError, pending, pendingPlans, pendingRoundLimits,
     sendChat, stopChat,
   } = useAgentStore();
   const activeModelId = useAiStore((s) => s.activeModelId);
@@ -67,6 +67,10 @@ export function AgentChat() {
   const terms = useTerms();
 
   const [draft, setDraft] = useState("");
+  // Mirrors `draft` for the handlers that read it after an await — reading a
+  // large file takes long enough for the author to have kept typing.
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   // The selection is attached by default when one exists — that is nearly always
   // why the author opened the assistant with text highlighted. Detaching is one
   // click; re-selecting in the editor re-attaches.
@@ -117,7 +121,10 @@ export function AgentChat() {
         return; // unreadable — leave the draft alone
       }
     }
-    setDraft((prev) => mention.accept(prev, mentionLabel(item)));
+    // Not inside a state updater: `accept` calls setState itself, and React
+    // runs an updater twice under StrictMode. The ref supplies the live value
+    // the updater was being used for.
+    setDraft(mention.accept(draftRef.current, mentionLabel(item)));
     inputRef.current?.focus();
   };
 
@@ -161,12 +168,19 @@ export function AgentChat() {
   // letters and must not also fire off the message. See lib/ime.
   const ime = useImeGuard();
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // While the picker is open, Escape closes it and Enter must not send: the
-    // author is mid-mention, and firing the message would drop the reference
-    // they were in the middle of choosing.
-    if (mention.open) {
+    // Only while the picker is actually on screen. It renders nothing with no
+    // matches, and Chinese prose has no space to end a mention — so an `@`
+    // typed mid-sentence used to leave this branch swallowing Enter for the
+    // rest of the message: no send, no newline, no feedback.
+    if (mention.open && mentionItems.length > 0) {
       if (e.key === "Escape") { e.preventDefault(); mention.close(); return; }
-      if (e.key === "Enter" && !e.shiftKey && !ime.isComposing(e)) { e.preventDefault(); return; }
+      if (e.key === "ArrowDown") { e.preventDefault(); mention.move(1, mentionItems.length); return; }
+      if (e.key === "ArrowUp") { e.preventDefault(); mention.move(-1, mentionItems.length); return; }
+      if ((e.key === "Enter" || e.key === "Tab") && !e.shiftKey && !ime.isComposing(e)) {
+        e.preventDefault();
+        void handlePickMention(mentionItems[mention.active] ?? mentionItems[0]);
+        return;
+      }
     }
     if (e.key === "Enter" && !e.shiftKey && !ime.isComposing(e)) {
       e.preventDefault();
@@ -174,7 +188,21 @@ export function AgentChat() {
     }
   };
 
-  const contextTokens = chatUsage?.inputTokens ?? 0;
+  // What the *next* request will carry, not what the session has been billed.
+  // `chatUsage.inputTokens` accumulates across turns and across every tool
+  // round inside them, so after a few turns it read `400k / 128k` — the one
+  // question this indicator answers is "how much room is left", and the
+  // cumulative figure answers it backwards. The runtime already measures the
+  // real thing at the top of each round.
+  const contextTokens = useMemo(() => {
+    for (let i = turns.length - 1; i >= 0; i--) {
+      for (let j = turns[i].log.length - 1; j >= 0; j--) {
+        const e = turns[i].log[j];
+        if (e.kind === "round-start") return e.estInputTokens;
+      }
+    }
+    return 0;
+  }, [turns]);
   const contextWindow = activeModel?.contextSize ?? 0;
 
   return (
@@ -222,8 +250,11 @@ export function AgentChat() {
           {pending.map((p) => (
             <ApprovalCard key={p.proposal.id} proposal={p.proposal} />
           ))}
-          {pendingRoundLimits.map((p, i) => (
-            <RoundLimitCard key={i} item={p} />
+          {pendingRoundLimits.map((p) => (
+            // Keyed by the run, like the other two lists are keyed by their
+            // subject — an array index makes React reuse one blocked run's
+            // card for another's the moment an earlier one resolves.
+            <RoundLimitCard key={p.id} item={p} />
           ))}
         </div>
       )}
@@ -300,6 +331,7 @@ export function AgentChat() {
               anchorRef={inputRef}
               items={mentionItems}
               usedKeys={refKeys}
+              activeIndex={mention.active}
               onPick={(item) => void handlePickMention(item)}
               onDismiss={mention.close}
             />

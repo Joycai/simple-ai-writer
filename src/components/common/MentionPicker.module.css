@@ -69,6 +69,13 @@
   flex-shrink: 0;
 }
 
+/* The ↑/↓ highlight. A left bar rather than only a fill, so it stays legible
+   over the hover state and reads as "this is what Enter will take". */
+.pickerItemActive {
+  background: var(--color-bg-elevated);
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+
 /* Already attached: visible so the author sees it is there, inert so a second
    pick can't duplicate it. */
 .pickerItemUsed {

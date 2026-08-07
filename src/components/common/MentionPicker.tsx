@@ -49,31 +49,53 @@ export function filterMentions(items: MentionItem[], query: string): MentionItem
 }
 
 /**
+ * Longest run after `@` still read as a query.
+ *
+ * A space is the natural terminator, and Chinese prose does not have one — so
+ * without a cap, a single `@` typed mid-sentence left the mention "open" for
+ * the rest of the message. Nothing was on screen (the picker renders nothing
+ * with no matches) while the composer kept treating every keystroke as part of
+ * a mention. Longer than any entity or chapter name worth recognising.
+ */
+const MAX_QUERY_LEN = 24;
+
+/** What ends a mention besides ASCII whitespace: full-width space and CJK punctuation. */
+const CJK_TERMINATORS = /[　、。，；：？！（）【】「」“”]/;
+
+/**
  * Where an `@` mention begins, given the text and the caret.
  *
  * Returns null unless the caret sits in a live mention — one whose `@` is at a
- * word boundary and which has no whitespace since. `foo@bar` is an email, not
+ * word boundary and which has no terminator since. `foo@bar` is an email, not
  * a mention; `@第三` mid-word is one.
  */
 export function findMention(text: string, caret: number): { start: number; query: string } | null {
   const before = text.slice(0, caret);
   const at = before.lastIndexOf("@");
   if (at === -1) return null;
-  // Preceded by a word character ⇒ part of something else (an address, a handle).
+  // Preceded by an ASCII word character ⇒ part of something else (an address,
+  // a handle). Deliberately ASCII: a Chinese sentence runs straight into the
+  // `@` with no space, so treating CJK as a word character here would stop
+  // the picker from ever opening in the language it matters most in.
   if (at > 0 && /[\w@]/.test(before[at - 1])) return null;
   const query = before.slice(at + 1);
-  // A space ends the mention: the author moved on and is writing prose again.
-  if (/\s/.test(query)) return null;
+  // The author moved on and is writing prose again.
+  if (/\s/.test(query) || CJK_TERMINATORS.test(query)) return null;
+  if (query.length > MAX_QUERY_LEN) return null;
   return { start: at, query };
 }
 
-interface MentionState {
+export interface MentionState {
   open: boolean;
   query: string;
+  /** Highlighted row — hosts drive it with ↑/↓ and confirm with Enter. */
+  active: number;
   /** Call from the textarea's onChange, after the value is committed. */
   sync: (value: string, caret: number) => void;
   /** Replace the in-progress mention with `@[label]`, returning the new text. */
   accept: (value: string, label: string) => string;
+  /** Move the highlight within a list of `count` items, wrapping at both ends. */
+  move: (delta: number, count: number) => void;
   close: () => void;
 }
 
@@ -81,25 +103,43 @@ interface MentionState {
 export function useMentionState(): MentionState {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [active, setActive] = useState(0);
   const startRef = useRef(0);
+  // Mirrors `query` so the splice length and the "did it change" test read the
+  // committed value rather than the one this render closed over.
+  const queryRef = useRef("");
 
   return {
     open,
     query,
+    active,
     sync: (value, caret) => {
       const hit = findMention(value, caret);
       if (!hit) { setOpen(false); return; }
       startRef.current = hit.start;
+      // A changed query is a different list, so the old highlight index means
+      // nothing — start from the top rather than pointing at whatever happens
+      // to occupy that slot now.
+      if (queryRef.current !== hit.query) {
+        queryRef.current = hit.query;
+        setActive(0);
+      }
       setQuery(hit.query);
       setOpen(true);
     },
     accept: (value, label) => {
       const start = startRef.current;
-      const after = value.slice(start + 1 + query.length);
+      const after = value.slice(start + 1 + queryRef.current.length);
+      queryRef.current = "";
       setOpen(false);
+      setActive(0);
       return `${value.slice(0, start)}@[${label}]${after}`;
     },
-    close: () => setOpen(false),
+    move: (delta, count) => {
+      if (count <= 0) return;
+      setActive((i) => (((i + delta) % count) + count) % count);
+    },
+    close: () => { setOpen(false); setActive(0); },
   };
 }
 
@@ -108,9 +148,14 @@ export function useMentionState(): MentionState {
 function FileThumb({ file }: { file: ProjectFile }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
-    if (file.kind === "image") {
-      imageToDataUrl(file.path).then(({ dataUrl }) => setUrl(dataUrl)).catch(() => {});
-    }
+    if (file.kind !== "image") return;
+    // Cancellation flag, same as useImageDataUrl: the picker unmounts the
+    // moment an item is chosen, and a large image can still be decoding.
+    let cancelled = false;
+    imageToDataUrl(file.path)
+      .then(({ dataUrl }) => { if (!cancelled) setUrl(dataUrl); })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, [file.path, file.kind]);
 
   if (file.kind === "text" || !url) {
@@ -137,13 +182,23 @@ interface MentionPickerProps {
   items: MentionItem[];
   /** Keys already attached; shown dimmed and inert. */
   usedKeys: Set<string>;
+  /** Row the host's ↑/↓ has highlighted, and what Enter will pick. */
+  activeIndex?: number;
   onPick: (item: MentionItem) => void;
   onDismiss: () => void;
 }
 
-export function MentionPicker({ anchorRef, items, usedKeys, onPick, onDismiss }: MentionPickerProps) {
+export function MentionPicker({
+  anchorRef, items, usedKeys, activeIndex = 0, onPick, onDismiss,
+}: MentionPickerProps) {
   const [style, setStyle] = useState<React.CSSProperties>({});
   const listRef = useRef<HTMLDivElement>(null);
+  const activeRef = useRef<HTMLButtonElement>(null);
+
+  // Keep the keyboard highlight in view — the list scrolls at 10 items.
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex]);
 
   // Below the anchor, flipping above when the viewport is short on room.
   useEffect(() => {
@@ -172,13 +227,15 @@ export function MentionPicker({ anchorRef, items, usedKeys, onPick, onDismiss }:
 
   return createPortal(
     <div ref={listRef} className={styles.picker} style={{ position: "fixed", zIndex: 500, ...style }}>
-      {items.map((item) => {
+      {items.map((item, i) => {
         const key = mentionKey(item);
         const used = usedKeys.has(key);
+        const isActive = i === activeIndex;
         return (
           <button
             key={key}
-            className={`${styles.pickerItem} ${used ? styles.pickerItemUsed : ""}`}
+            ref={isActive ? activeRef : undefined}
+            className={`${styles.pickerItem} ${used ? styles.pickerItemUsed : ""} ${isActive ? styles.pickerItemActive : ""}`}
             // mousedown, not click: the textarea must not lose focus (and with
             // it the caret) before the mention is spliced in.
             onMouseDown={(e) => { e.preventDefault(); onPick(item); }}

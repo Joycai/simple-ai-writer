@@ -47,9 +47,27 @@ function writeSelection(field: SelectionField, value: string | null): void {
   }
 }
 
+/**
+ * The schema migration, shared by every caller instead of re-run per operation.
+ *
+ * `ensureAiSchema` is a "PRAGMA table_info → ALTER TABLE if missing" sequence
+ * with no transaction around it, and this ran on every add/update/remove. Two
+ * overlapping calls on a first launch after an upgrade both saw the column
+ * missing and the second `ALTER` failed with `duplicate column name`, taking
+ * the operation that triggered it down with it. Cleared on failure so a
+ * genuine error can be retried.
+ */
+let schemaReady: Promise<void> | null = null;
+
 async function db() {
   const globalDb = await getGlobalDb();
-  await ensureAiSchema(globalDb);
+  if (!schemaReady) {
+    schemaReady = ensureAiSchema(globalDb).catch((e) => {
+      schemaReady = null;
+      throw e;
+    });
+  }
+  await schemaReady;
   return globalDb;
 }
 

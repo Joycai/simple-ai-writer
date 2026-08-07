@@ -64,4 +64,41 @@ describe("locale parity", () => {
     expect(zhPaths.filter((k) => enBranches.has(k))).toEqual([]);
     expect(enPaths.filter((k) => zhBranches.has(k))).toEqual([]);
   });
+
+  /**
+   * Comparing the two files against each other cannot see a key that is
+   * missing from *both* — and that is the case with a visible symptom, because
+   * `defaultValue` then supplies the string. Every such default in this
+   * codebase happens to be written in Chinese, so an English-speaking author
+   * got Chinese UI with nothing anywhere reporting a problem.
+   */
+  it("defines every key the source actually asks for", () => {
+    const missing = sourceKeys().filter((k) => !zhSet.has(k) || !enSet.has(k));
+    expect(missing).toEqual([]);
+  });
 });
+
+/**
+ * Literal `t("some.key")` paths used anywhere under src/.
+ *
+ * Deliberately only literals containing a dot: several call sites build a key
+ * from a prefix plus a variable (`editor.search.${key}`, the category filters),
+ * which no static scan can resolve — and their bare tails have no dot, so this
+ * filter drops exactly those rather than reporting them as gaps.
+ */
+function sourceKeys(): string[] {
+  // Vite reads the tree for us — no node:fs, which this project has no types for.
+  const sources = import.meta.glob("../../**/*.{ts,tsx}", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  }) as Record<string, string>;
+
+  const keys = new Set<string>();
+  const pattern = /\bt\(\s*["'`]([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)+)["'`]/g;
+  for (const [path, source] of Object.entries(sources)) {
+    if (path.includes("__tests__")) continue;
+    for (const m of source.matchAll(pattern)) keys.add(m[1]);
+  }
+  return [...keys].sort();
+}
