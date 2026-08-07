@@ -11,7 +11,12 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import { loadLegacyKeyFromDb, deleteLegacyKeyFromDb } from "./ai/configDb";
+import {
+  deleteLegacyKeyFromDb,
+  dropLegacyKeyTable,
+  listLegacyKeyRows,
+  loadLegacyKeyFromDb,
+} from "./ai/configDb";
 import { getGlobalDb } from "./project";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -52,6 +57,69 @@ async function migrateLegacyKey(providerId: string): Promise<string | null> {
   } catch {
     // Legacy table may not exist (fresh installs) — nothing to migrate.
     return null;
+  }
+}
+
+export interface LegacyKeyMigration {
+  /** Keys moved into the keyring by this run. */
+  migrated: number;
+  /** Keys the keyring refused; their rows are left in place for the next run. */
+  failed: number;
+  /** Whether the legacy table is now gone. */
+  dropped: boolean;
+}
+
+/**
+ * Move *every* remaining plaintext key into the OS keyring and drop the table.
+ *
+ * `migrateLegacyKey` below is lazy — it runs when someone asks for one
+ * particular provider's key — which means a provider the author stopped using
+ * (or deleted from the UI, which only removes the row for the id it still
+ * lists) keeps its key in plaintext in `config.db` forever. Since the keyring
+ * became the store, "eventually" was never going to arrive for those rows.
+ *
+ * Run once per app launch, before the config loads. Ordering per row is
+ * save-then-delete, so an interruption at worst duplicates a key into the
+ * keyring rather than destroying it; the table is only dropped when nothing is
+ * left to lose. A keyring that rejects a write (locked Secret Service, denied
+ * Keychain prompt) leaves that row for the next launch instead of failing the
+ * launch — the migration is cleanup, and cleanup must not stop the app from
+ * starting.
+ */
+export async function migrateLegacyKeys(): Promise<LegacyKeyMigration> {
+  const idle: LegacyKeyMigration = { migrated: 0, failed: 0, dropped: false };
+  if (!isTauri) return idle;
+
+  let db: Awaited<ReturnType<typeof getGlobalDb>>;
+  let rows: { providerId: string; apiKey: string }[];
+  try {
+    db = await getGlobalDb();
+    rows = await listLegacyKeyRows(db);
+  } catch {
+    // No legacy table (a fresh install) — the normal case, and nothing to do.
+    return idle;
+  }
+
+  let migrated = 0;
+  let failed = 0;
+  for (const { providerId, apiKey } of rows) {
+    try {
+      await invoke("secret_save", { providerId, apiKey });
+      await deleteLegacyKeyFromDb(db, providerId);
+      migrated++;
+    } catch (e) {
+      failed++;
+      console.warn(`[keyStore] could not migrate the stored key for ${providerId}:`, e);
+    }
+  }
+
+  if (failed > 0) return { migrated, failed, dropped: false };
+  try {
+    await dropLegacyKeyTable(db);
+    return { migrated, failed, dropped: true };
+  } catch (e) {
+    console.warn("[keyStore] migrated every legacy key but could not drop the table:", e);
+    return { migrated, failed, dropped: false };
   }
 }
 

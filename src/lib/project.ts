@@ -94,27 +94,40 @@ export async function getGlobalDb() {
   return _globalDb;
 }
 
+/**
+ * Tables this schema used to create and nothing ever read.
+ *
+ * `settings` never had a single reader or writer. `lore_entities` is the
+ * remains of an earlier design where the knowledge base was indexed in SQLite
+ * (hence `embedding_status`); the lore tree under `.ai-writer/lore/` has been
+ * the sole source of truth since, and `loreStore` rebuilds its index by
+ * scanning that tree on every project open. Neither table has ever been read
+ * back by any shipped code path, so dropping them loses nothing — while
+ * leaving them in place makes the schema describe a design the app no longer
+ * has, which is what sent the last reader looking for the code that maintains
+ * them.
+ */
+export const DEAD_PROJECT_TABLES = ["settings", "lore_entities"] as const;
+
+/**
+ * Best-effort drop of the dead tables.
+ *
+ * Deliberately non-fatal: this runs inside the project-open path, and a
+ * cleanup that can't complete (a locked database, a second window holding the
+ * file) must not stop the author from opening their project. The next open
+ * tries again.
+ */
+async function dropDeadTables(db: Awaited<ReturnType<typeof Database.load>>) {
+  for (const table of DEAD_PROJECT_TABLES) {
+    try {
+      await db.execute(`DROP TABLE IF EXISTS ${table}`);
+    } catch (e) {
+      console.warn(`[project] could not drop the unused '${table}' table:`, e);
+    }
+  }
+}
+
 async function initSchema(db: Awaited<ReturnType<typeof Database.load>>) {
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    )
-  `);
-
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS lore_entities (
-      id TEXT PRIMARY KEY,
-      category TEXT NOT NULL,
-      dir_path TEXT NOT NULL,
-      name TEXT NOT NULL,
-      aliases_json TEXT NOT NULL DEFAULT '[]',
-      summary TEXT NOT NULL DEFAULT '',
-      embedding_status TEXT NOT NULL DEFAULT 'pending',
-      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
-    )
-  `);
-
   await db.execute(`
     CREATE TABLE IF NOT EXISTS token_usage (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -127,4 +140,6 @@ async function initSchema(db: Awaited<ReturnType<typeof Database.load>>) {
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     )
   `);
+
+  await dropDeadTables(db);
 }

@@ -32,8 +32,15 @@ import { useLoreStore } from "./loreStore";
 import { useEditorStore } from "./editorStore";
 import { useAppStore, type MainView } from "./appStore";
 
-/** Persist any unsaved editor/lore edits and cancel their pending autosave timers. */
-async function flushDirtyDocuments(): Promise<void> {
+/**
+ * Persist any unsaved editor/lore edits and cancel their pending autosave timers.
+ *
+ * Exported because anything that reads the project *off disk* — closing it,
+ * switching projects, taking a backup — needs the in-memory edits down first,
+ * and each caller re-deriving "which stores might be dirty" is how one of them
+ * ends up missing the lore panel.
+ */
+export async function flushDirtyDocuments(): Promise<void> {
   const editor = useEditorStore.getState();
   if (editor.saveTimer) clearTimeout(editor.saveTimer);
   if (editor.isDirty && editor.filePath) await editor.saveNow();

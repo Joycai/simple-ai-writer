@@ -8,7 +8,7 @@ import {
   type Provider, type Model, type Prompt,
 } from "../lib/ai/configDb";
 import { fetchRemoteModels } from "../lib/ai/providerProbe";
-import { saveApiKey, loadApiKey, deleteApiKey } from "../lib/keyStore";
+import { saveApiKey, loadApiKey, deleteApiKey, migrateLegacyKeys } from "../lib/keyStore";
 import { getGlobalDb } from "../lib/project";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -59,6 +59,17 @@ function writeSelection(field: SelectionField, value: string | null): void {
  */
 let schemaReady: Promise<void> | null = null;
 
+/**
+ * The one-shot sweep of the legacy plaintext key table, run alongside the
+ * schema migration so it happens before anything reads the provider list.
+ *
+ * Never reset on failure and never rethrown: `migrateLegacyKeys` already
+ * reports its own shortfalls and leaves un-migrated rows for the next launch,
+ * and a cleanup pass has no business failing the config load that triggered
+ * it.
+ */
+let legacyKeysSwept: Promise<void> | null = null;
+
 async function db() {
   const globalDb = await getGlobalDb();
   if (!schemaReady) {
@@ -68,6 +79,16 @@ async function db() {
     });
   }
   await schemaReady;
+  if (!legacyKeysSwept) {
+    legacyKeysSwept = migrateLegacyKeys()
+      .then((r) => {
+        if (r.migrated > 0) {
+          console.info(`[aiStore] moved ${r.migrated} stored API key(s) out of the config database.`);
+        }
+      })
+      .catch((e) => console.warn("[aiStore] legacy key sweep failed:", e));
+  }
+  await legacyKeysSwept;
   return globalDb;
 }
 

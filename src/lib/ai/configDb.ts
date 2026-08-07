@@ -272,6 +272,48 @@ export async function deleteLegacyKeyFromDb(
   await db.execute(`DELETE FROM api_keys WHERE provider_id = ?`, [providerId]);
 }
 
+/**
+ * Every remaining plaintext key row.
+ *
+ * The per-provider lookup above only migrates a key when something asks for
+ * that provider, so a provider the author stopped using keeps its key in
+ * plaintext indefinitely — including after they deleted the provider from the
+ * UI, since that path deletes the row it knows about and not one for an id it
+ * no longer lists. Reading the whole table is what lets the migration finish
+ * instead of trailing off (see `migrateLegacyKeys` in keyStore).
+ */
+export async function listLegacyKeyRows(
+  db: Awaited<ReturnType<typeof Database.load>>,
+): Promise<{ providerId: string; apiKey: string }[]> {
+  const rows = await db.select<{ provider_id: string; api_key: string }[]>(
+    `SELECT provider_id, api_key FROM api_keys`,
+  );
+  return rows
+    .filter((r) => typeof r.provider_id === "string" && typeof r.api_key === "string" && r.api_key)
+    .map((r) => ({ providerId: r.provider_id, apiKey: r.api_key }));
+}
+
+/**
+ * Remove the legacy table itself.
+ *
+ * Emptying it is not enough: a deleted SQLite row leaves its bytes in the page
+ * until something overwrites them, so the keys stay recoverable from the file
+ * with a hex editor. Dropping the table and vacuuming rewrites the database
+ * without them. VACUUM cannot run inside a transaction and may fail on a
+ * database another window holds open — that is a cleanup shortfall, not a
+ * migration failure, so it is tolerated separately.
+ */
+export async function dropLegacyKeyTable(
+  db: Awaited<ReturnType<typeof Database.load>>,
+): Promise<void> {
+  await db.execute(`DROP TABLE IF EXISTS api_keys`);
+  try {
+    await db.execute("VACUUM");
+  } catch (e) {
+    console.warn("[configDb] dropped api_keys but could not VACUUM:", e);
+  }
+}
+
 export async function listProviders(db: Awaited<ReturnType<typeof Database.load>>): Promise<Provider[]> {
   const rows = await db.select<Record<string, unknown>[]>(
     "SELECT id, name, base_url, api_standard, safety_settings, created_at FROM providers ORDER BY created_at ASC"

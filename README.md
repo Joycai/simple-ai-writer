@@ -306,13 +306,21 @@ pnpm tauri build   # Build release binaries
 
 ### Database Schema
 
-Initialized in `src/lib/db.ts`:
-- `settings` — App configuration
-- `lore_entities` — Indexed entity folders and aliases
-- `providers` — API provider configs (name, baseUrl, standard)
-- `models` — Available models (id, name, provider_id)
-- `prompts` — Custom writing templates (id, name, template, task)
-- `token_usage` — Tracking API calls (model_id, task, prompt_tokens, completion_tokens, cost_usd, created_at)
+Two databases. `.ai-writer/project.db` travels with the project folder
+(`src/lib/project.ts`); `config.db` in the app data dir belongs to the
+installation (`src/lib/ai/configDb.ts`).
+
+Project (`project.db`):
+- `token_usage` — one row per model call (model_id, task, prompt_tokens, cached_tokens, completion_tokens, cost_usd, created_at). Read back in Settings → 用量.
+
+Installation (`config.db`):
+- `providers` — API provider configs (name, base_url, api_standard, safety_settings)
+- `models` — Configured models (prices, context size, max output, image caps)
+- `prompts` — Custom prompt templates (id, name, content, scene)
+
+API keys are **not** in either database — they live in the OS credential
+manager (see Secure Key Storage). The legacy plaintext `api_keys` table is
+migrated into the keyring and dropped on first launch.
 
 ### Adding a New Language
 

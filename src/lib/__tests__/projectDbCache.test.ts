@@ -12,9 +12,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const h = vi.hoisted(() => ({
+  // `execute` declares its `sql` parameter so a test can assert on the
+  // statements initSchema issues (see the initSchema block below).
   load: vi.fn(async (path: string) => ({
     path,
-    execute: vi.fn(async () => {}),
+    execute: vi.fn(async (_sql: string) => {}),
   })),
 }));
 
@@ -23,7 +25,7 @@ vi.mock("@tauri-apps/plugin-sql", () => ({
 }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
-import { getDb, resetDb } from "../project";
+import { DEAD_PROJECT_TABLES, getDb, resetDb } from "../project";
 
 beforeEach(() => {
   h.load.mockClear();
@@ -84,5 +86,51 @@ describe("getDb", () => {
 
     await getDb("/proj-a");
     expect(h.load).toHaveBeenCalledTimes(3);
+  });
+});
+
+/**
+ * `settings` and `lore_entities` were created on every project open and never
+ * read or written by anything. `lore_entities` in particular (with its
+ * `embedding_status` column) described a SQLite-indexed knowledge base the app
+ * stopped having — the lore tree on disk is the source of truth — so the schema
+ * was pointing later readers at code that does not exist.
+ */
+describe("initSchema", () => {
+  const statements = async (path: string): Promise<string[]> => {
+    const db = (await getDb(path)) as unknown as { execute: { mock: { calls: unknown[][] } } };
+    return db.execute.mock.calls.map((c) => String(c[0]));
+  };
+
+  it("still creates the one table that is actually used", async () => {
+    const sql = await statements("/proj-a");
+    expect(sql.some((s) => /CREATE TABLE IF NOT EXISTS token_usage/.test(s))).toBe(true);
+  });
+
+  it("no longer creates the tables nothing reads", async () => {
+    const sql = (await statements("/proj-a")).join("\n");
+    for (const table of DEAD_PROJECT_TABLES) {
+      expect(sql).not.toMatch(new RegExp(`CREATE TABLE IF NOT EXISTS ${table}\\b`));
+    }
+  });
+
+  it("drops them from projects that already have them", async () => {
+    const sql = await statements("/proj-a");
+    for (const table of DEAD_PROJECT_TABLES) {
+      expect(sql).toContain(`DROP TABLE IF EXISTS ${table}`);
+    }
+  });
+
+  it("opens the project anyway when a drop fails", async () => {
+    // A locked database must not stop the author getting into their project;
+    // the next open retries the cleanup.
+    h.load.mockImplementationOnce(async (path: string) => ({
+      path,
+      execute: vi.fn(async (sql: string) => {
+        if (sql.startsWith("DROP TABLE")) throw new Error("database is locked");
+      }),
+    }));
+
+    await expect(getDb("/proj-locked")).resolves.toBeTruthy();
   });
 });

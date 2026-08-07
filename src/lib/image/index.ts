@@ -62,7 +62,13 @@ export async function recordImageUsage(
       `INSERT INTO token_usage (model_id, task, prompt_tokens, cached_tokens, completion_tokens, cost_usd, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
       [
-        model.modelId,
+        // `model.id`, not `model.modelId`: every other writer records the
+        // configured model's internal id, and this site recording the
+        // provider's model string instead put two different identifier spaces
+        // in one column — so the usage rollup could not name the model an
+        // image run was billed to. Rows written before this fix still carry
+        // the old shape; the reader matches both.
+        model.id,
         task,
         usage?.inputTokens ?? 0,
         0,

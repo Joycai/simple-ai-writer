@@ -1,11 +1,21 @@
 import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { X, Pencil, Moon, Sun, Monitor, SlidersHorizontal, Server, Cpu, MessageSquare, Check, AlertCircle, FolderOpen, Info, GitBranch, ExternalLink, BookOpen, FileDown, FileUp, Keyboard } from "lucide-react";
+import { X, Pencil, Moon, Sun, Monitor, SlidersHorizontal, Server, Cpu, MessageSquare, Check, AlertCircle, FolderOpen, Info, GitBranch, ExternalLink, BookOpen, FileDown, FileUp, Keyboard, BarChart3, Archive, ArchiveRestore, Trash2 } from "lucide-react";
 import { revealItemInDir, openUrl } from "@tauri-apps/plugin-opener";
 import { getVersion } from "@tauri-apps/api/app";
 import { useAiStore } from "../../stores/aiStore";
-import { useProjectStore } from "../../stores/projectStore";
+import { flushDirtyDocuments, useProjectStore } from "../../stores/projectStore";
+import { exportProjectBundle, restoreProjectBundle } from "../../lib/fs/projectBackup";
+import {
+  clearUsage,
+  formatTokenCount,
+  formatUsd,
+  loadUsage,
+  USAGE_WINDOWS,
+  type UsageSummary,
+  type UsageWindow,
+} from "../../lib/ai/usage";
 import {
   BUILTIN_PROFILES,
   activeProfile,
@@ -13,6 +23,7 @@ import {
   findTask,
   profileLabel,
   promptParams,
+  taskLabel,
   type WorkspaceProfile,
 } from "../../lib/profile";
 import { useAppStore, type ThemeMode, type Language, type FontScheme } from "../../stores/appStore";
@@ -368,6 +379,274 @@ function WorkspaceTab() {
             {error && <div className={styles.errorNote}>{error}</div>}
           </div>
         )}
+      </div>
+      <ProjectBackupSection />
+    </div>
+  );
+}
+
+// ─── Whole-project backup / restore ──────────────────────────────────────────
+
+/**
+ * Restore is offered even with no project open — that is the state a fresh
+ * install is in, and it is the state this feature exists for.
+ */
+function ProjectBackupSection() {
+  const { t } = useTranslation();
+  const projectPath = useProjectStore((s) => s.projectPath);
+  const openProject = useProjectStore((s) => s.openProject);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const handleExport = async () => {
+    if (busy || !projectPath) return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      // The archive is built from disk, so whatever is still only in the
+      // editor has to land first or the backup is a version behind.
+      await flushDirtyDocuments();
+      const saved = await exportProjectBundle(projectPath);
+      if (saved) setStatus({ ok: true, text: t("systemSettings.projectBackup.exported", { path: saved }) });
+    } catch (e) {
+      setStatus({ ok: false, text: `${t("systemSettings.projectBackup.exportFailed")} ${e}` });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (busy) return;
+    setBusy(true);
+    setStatus(null);
+    try {
+      const restored = await restoreProjectBundle();
+      if (!restored) return;
+      setStatus({
+        ok: true,
+        text: t("systemSettings.projectBackup.restored", {
+          count: restored.fileCount,
+          path: restored.path,
+        }),
+      });
+      await openProject(restored.path);
+    } catch (e) {
+      const code = e instanceof Error ? e.message : "";
+      const known =
+        code === "dest-not-empty"
+          ? t("systemSettings.projectBackup.destNotEmpty")
+          : code === "empty-bundle"
+            ? t("systemSettings.projectBackup.emptyBundle")
+            : null;
+      setStatus({ ok: false, text: known ?? `${t("systemSettings.projectBackup.restoreFailed")} ${e}` });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className={styles.section}>
+      <div className={styles.sectionTitle}>{t("systemSettings.projectBackup.section")}</div>
+      <div className={styles.fieldGroup}>
+        <div className={styles.safetyHint}>{t("systemSettings.projectBackup.hint")}</div>
+        <div className={styles.safetyHint}>{t("systemSettings.projectBackup.scopeHint")}</div>
+        <div className={styles.debugControls}>
+          <button
+            className={`${styles.btnSecondary} ${styles.btnWithIcon}`}
+            onClick={handleExport}
+            disabled={busy || !projectPath}
+            title={projectPath ? undefined : t("systemSettings.workspace.noProject")}
+          >
+            <Archive size={14} /> {t("systemSettings.projectBackup.export")}
+          </button>
+          <button
+            className={`${styles.btnSecondary} ${styles.btnWithIcon}`}
+            onClick={handleRestore}
+            disabled={busy}
+          >
+            <ArchiveRestore size={14} /> {t("systemSettings.projectBackup.restore")}
+          </button>
+        </div>
+        <div className={styles.safetyHint}>{t("systemSettings.projectBackup.restoreHint")}</div>
+      </div>
+      {status && (
+        <div className={status.ok ? styles.safetyHint : styles.errorNote}>{status.text}</div>
+      )}
+    </div>
+  );
+}
+
+// ─── Usage Tab ────────────────────────────────────────────────────────────────
+
+/**
+ * What the `token_usage` rows add up to. Project-scoped, like the workspace
+ * tab, because that is where the table lives.
+ */
+function UsageTab() {
+  const { t, i18n: i18nInst } = useTranslation();
+  const isZh = i18nInst.language.startsWith("zh");
+  const projectPath = useProjectStore((s) => s.projectPath);
+  const models = useAiStore((s) => s.models);
+  const [window, setWindow] = useState<UsageWindow>("30d");
+  const [summary, setSummary] = useState<UsageSummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!projectPath) {
+      setSummary(null);
+      return;
+    }
+    let cancelled = false;
+    setBusy(true);
+    setError(null);
+    loadUsage(projectPath, window)
+      .then((s) => { if (!cancelled) setSummary(s); })
+      .catch((e) => { if (!cancelled) setError(String(e)); })
+      .finally(() => { if (!cancelled) setBusy(false); });
+    return () => { cancelled = true; };
+  }, [projectPath, window]);
+
+  const handleClear = async () => {
+    if (!projectPath || busy) return;
+    if (!globalThis.confirm(t("systemSettings.usage.clearConfirm"))) return;
+    setBusy(true);
+    try {
+      await clearUsage(projectPath);
+      setSummary(await loadUsage(projectPath, window));
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * `model_id` holds two different things historically: every text call
+   * records the configured model's internal id, while image runs recorded the
+   * provider's own model string (see `recordImageUsage`, since corrected).
+   * Both are matched so old rows keep a name, and an id matching neither —
+   * a model deleted since, or a config imported from another machine — falls
+   * back to the raw value rather than an empty cell.
+   */
+  const modelLabel = (id: string) =>
+    models.find((m) => m.id === id)?.name ?? models.find((m) => m.modelId === id)?.name ?? id;
+
+  /**
+   * A task id resolves through the active profile, so a run shows the same
+   * words the panel that launched it used. The rest are the kinds that are not
+   * profile tasks at all (chat, memory summarisation, image runs); anything
+   * left — a task id belonging to a profile the project has since switched
+   * away from — keeps its raw id, which is still the truth about that row.
+   */
+  const taskDisplay = (id: string) => {
+    const task = findTask(id);
+    if (task) return taskLabel(task, isZh, t);
+    return t(`systemSettings.usage.kinds.${id}`, { defaultValue: id });
+  };
+
+  if (!projectPath) {
+    return (
+      <div>
+        <div className={styles.section}>
+          <div className={styles.emptyNote}>{t("systemSettings.workspace.noProject")}</div>
+        </div>
+      </div>
+    );
+  }
+
+  const bucketRows = (
+    buckets: UsageSummary["byModel"],
+    label: (key: string) => string,
+  ) =>
+    buckets.map((b) => (
+      <div className={styles.item} key={b.key}>
+        <div className={styles.itemInfo}>
+          <div className={styles.itemName}>{label(b.key)}</div>
+          <div className={styles.itemMeta}>
+            {t("systemSettings.usage.rowMeta", {
+              calls: b.calls,
+              input: formatTokenCount(b.promptTokens),
+              output: formatTokenCount(b.completionTokens),
+            })}
+          </div>
+        </div>
+        <span className={styles.badge}>{formatUsd(b.costUsd)}</span>
+      </div>
+    ));
+
+  return (
+    <div>
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>{t("systemSettings.usage.section")}</div>
+        <div className={styles.fieldGroup}>
+          <div className={styles.safetyHint}>{t("systemSettings.usage.hint")}</div>
+          <div className={styles.optionGroup}>
+            {USAGE_WINDOWS.map((w) => (
+              <button
+                key={w}
+                className={`${styles.optionBtn} ${window === w ? styles.optionBtnActive : ""}`}
+                onClick={() => setWindow(w)}
+              >
+                {t(`systemSettings.usage.windows.${w}`)}
+              </button>
+            ))}
+          </div>
+        </div>
+        {error && <div className={styles.errorNote}>{error}</div>}
+        {summary && (
+          <div className={styles.itemList}>
+            <div className={styles.item}>
+              <div className={styles.itemInfo}>
+                <div className={styles.itemName}>{t("systemSettings.usage.totalLabel")}</div>
+                <div className={styles.itemMeta}>
+                  {t("systemSettings.usage.totalMeta", {
+                    calls: summary.total.calls,
+                    input: formatTokenCount(summary.total.promptTokens),
+                    cached: formatTokenCount(summary.total.cachedTokens),
+                    output: formatTokenCount(summary.total.completionTokens),
+                  })}
+                </div>
+              </div>
+              <span className={styles.badge}>{formatUsd(summary.total.costUsd)}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {summary && summary.total.calls === 0 && (
+        <div className={styles.section}>
+          <div className={styles.emptyNote}>{t("systemSettings.usage.empty")}</div>
+        </div>
+      )}
+
+      {summary && summary.byModel.length > 0 && (
+        <div className={styles.section}>
+          <div className={styles.sectionTitle}>{t("systemSettings.usage.byModel")}</div>
+          <div className={styles.itemList}>{bucketRows(summary.byModel, modelLabel)}</div>
+        </div>
+      )}
+
+      {summary && summary.byTask.length > 0 && (
+        <div className={styles.section}>
+          <div className={styles.sectionTitle}>{t("systemSettings.usage.byTask")}</div>
+          <div className={styles.itemList}>{bucketRows(summary.byTask, taskDisplay)}</div>
+        </div>
+      )}
+
+      <div className={styles.section}>
+        <div className={styles.fieldGroup}>
+          <div className={styles.safetyHint}>{t("systemSettings.usage.clearHint")}</div>
+          <div className={styles.debugControls}>
+            <button
+              className={`${styles.btnSecondary} ${styles.btnWithIcon}`}
+              onClick={handleClear}
+              disabled={busy || !summary || summary.total.calls === 0}
+            >
+              <Trash2 size={14} /> {t("systemSettings.usage.clear")}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1224,7 +1503,7 @@ function ShortcutsTab() {
 
 // ─── Main modal ───────────────────────────────────────────────────────────────
 
-type TabId = "general" | "workspace" | "providers" | "models" | "prompts" | "shortcuts" | "about";
+type TabId = "general" | "workspace" | "usage" | "providers" | "models" | "prompts" | "shortcuts" | "about";
 
 interface Props {
   onClose: () => void;
@@ -1283,6 +1562,7 @@ export function SettingsModal({ onClose, initialTab = "general" }: Props) {
             {navBtn("providers", <Server size={15} />, "systemSettings.tabs.providers")}
             {navBtn("models", <Cpu size={15} />, "systemSettings.tabs.models")}
             {navBtn("prompts", <MessageSquare size={15} />, "systemSettings.tabs.prompts")}
+            {navBtn("usage", <BarChart3 size={15} />, "systemSettings.tabs.usage")}
             <div className={styles.navDivider} />
             {navBtn("shortcuts", <Keyboard size={15} />, "systemSettings.tabs.shortcuts")}
             {navBtn("about", <Info size={15} />, "systemSettings.tabs.about")}
@@ -1294,6 +1574,7 @@ export function SettingsModal({ onClose, initialTab = "general" }: Props) {
             {activeTab === "providers" && <ProvidersTab />}
             {activeTab === "models" && <ModelsTab />}
             {activeTab === "prompts" && <PromptsTab />}
+            {activeTab === "usage" && <UsageTab />}
             {activeTab === "shortcuts" && <ShortcutsTab />}
             {activeTab === "about" && <AboutTab />}
           </div>
