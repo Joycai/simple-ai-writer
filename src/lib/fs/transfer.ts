@@ -6,14 +6,19 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
-/** Zip `srcDir` (stored under `<prefix>/` + optional root manifest.json) to a user-picked path. */
+/**
+ * Zip `srcDir` (stored under `<prefix>/` + optional root manifest.json) to a
+ * user-picked path. `excludes` are paths relative to `srcDir`; each skips that
+ * entry and everything under it, matched on whole path components.
+ */
 export async function zipExportDialog(
   srcDir: string,
   prefix: string,
   manifest: string | null,
   defaultFileName: string,
+  excludes: string[] = [],
 ): Promise<string | null> {
-  return invoke("zip_export_dialog", { srcDir, prefix, manifest, defaultFileName });
+  return invoke("zip_export_dialog", { srcDir, prefix, manifest, defaultFileName, excludes });
 }
 
 export interface ZipImportResult {
@@ -22,12 +27,20 @@ export interface ZipImportResult {
   file_count: number;
 }
 
-/** Pick a zip and extract its `<prefix>/` subtree into `destDir` (a staging dir inside the project). */
+/**
+ * Pick a zip and extract its `<prefix>/` subtree into `destDir`.
+ *
+ * `requireManifestKind` makes the Rust side check the manifest's `kind` and
+ * refuse the archive *before writing anything* — pass it whenever `destDir` is
+ * somewhere the user would have to clean up by hand, and leave it unset for a
+ * disposable staging dir that gets deleted either way.
+ */
 export async function zipImportDialog(
   destDir: string,
   prefix: string,
+  requireManifestKind?: string,
 ): Promise<ZipImportResult | null> {
-  return invoke("zip_import_dialog", { destDir, prefix });
+  return invoke("zip_import_dialog", { destDir, prefix, requireManifestKind: requireManifestKind ?? null });
 }
 
 /** Save text content to a user-picked path. */

@@ -9,13 +9,41 @@
 Initialized in `src/lib/project.ts` and extended in `src/lib/ai/configDb.ts`:
 
 ```
-settings (id → str, value → str)
-lore_entities (id, category, dir_path, name, aliases_json, summary, embedding_status, updated_at)
-providers (id, name, baseUrl, apiStandard, createdAt)
-models (id, name, modelId, providerId, priceIn, priceOut)
-prompts (id, name, content, taskHints, category)
-token_usage (id, model_id, task, prompt_tokens, cached_tokens, completion_tokens, cost_usd, created_at)
+project.db   token_usage (id, model_id, task, prompt_tokens, cached_tokens, completion_tokens, cost_usd, created_at)
+config.db    providers   (id, name, base_url, api_standard, safety_settings, created_at)
+config.db    models      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out,
+                          enabled, prefix, context_size, max_output, probed_at, price_per_image, caps)
+config.db    prompts     (id, name, content, scene)
 ```
+
+Two databases, and the split is what each thing *belongs to*: `project.db`
+travels with the project folder, `config.db` (in `appDataDir`) belongs to the
+installation. That is also the line the two backup features draw — see
+Export / Import below.
+
+`token_usage` is the only project-scoped table. Its `model_id` holds the
+configured model's internal id; rows written by image runs before that was
+corrected hold the provider's own model string instead, so `lib/ai/usage.ts`
+matches both when naming a model.
+
+**Removed:** `settings` and `lore_entities` were created on every project open
+and never read or written by anything — `lore_entities` (note
+`embedding_status`) was the remains of a SQLite-indexed knowledge base the app
+no longer has; the tree under `.ai-writer/lore/` is the source of truth and
+`loreStore` rescans it on open. `initSchema` now drops both
+(`DEAD_PROJECT_TABLES`), best-effort, so a failed cleanup can't stop a project
+opening.
+
+### Usage accounting (Settings → 用量)
+
+`src/lib/ai/usage.ts` is the read side of `token_usage`: two `GROUP BY`
+rollups (by model, by task) over a 7d / 30d / all window, plus the delete
+behind 清空统计. `total` is summed from the by-model buckets rather than
+queried separately, so the headline can never disagree with the rows under it.
+`SUM()` over an empty group returns NULL, which is coerced at the row boundary
+— left alone it propagates as `NaN` through every later addition. Sorting is
+cost-descending with an output-token tiebreak, so models the author never
+priced still order usefully instead of collapsing to the bottom.
 
 ### The AI target (选区) and where a task acts
 
@@ -288,7 +316,7 @@ Story Memory is *per-document*, so a chapter is its own file and knows nothing o
 - **Backend** — OS credential manager via the `keyring` crate (Windows Credential Manager / macOS Keychain / Linux Secret Service), service name `com.simple-ai-writer.app`
 - **Rust commands** — `secret_save` / `secret_load` / `secret_delete` in `src-tauri/src/secrets.rs`
 - **Frontend** — `src/lib/keyStore.ts`: `saveApiKey(providerId, key)`, `loadApiKey(providerId)`, `deleteApiKey(providerId)`; falls back to sessionStorage outside Tauri (browser dev)
-- **Migration** — keys stored by older builds in the plaintext SQLite `api_keys` table are moved into the keyring (and deleted from the DB) lazily on first access
+- **Migration** — keys stored by older builds in the plaintext SQLite `api_keys` table are moved into the keyring and deleted from the DB. `migrateLegacyKeys()` sweeps the *whole* table once per launch (from `aiStore`'s lazily-initialized `db()`, alongside `ensureAiSchema`) and then `DROP`s it + `VACUUM`s — the lazy per-provider path only ever ran for a provider something asked about, so a key belonging to a provider the author stopped using (or deleted from the UI) stayed in plaintext indefinitely. Per row the order is save-then-delete, so an interruption at worst duplicates a key into the keyring; the table is dropped only when nothing failed, leaving the rest for the next launch. Cleanup never fails the config load that triggered it
 - **History** — stronghold was removed (its Rust actor deadlocked on some macOS setups); an interim plaintext-SQLite scheme was then replaced by the keyring
 
 ### Navigation history (后退 / 前进)
@@ -327,7 +355,7 @@ Because those targets are also imported statically elsewhere (components), the b
 - Implemented in `src-tauri/src/` (minimal; most logic in TypeScript)
 - `commands.rs` — `scaffold_project`, `read_dir_recursive`, plus `fs_*` helpers (write text/binary, read text, create/read/remove dir, remove file, exists)
 - `secrets.rs` — `secret_save` / `secret_load` / `secret_delete` (OS keyring)
-- `transfer.rs` — export/import: `zip_export_dialog` / `zip_import_dialog` (lore bundles) and `save_text_file_dialog` / `open_text_file_dialog` (config backup JSON). Dialogs run Rust-side (same trust rationale as `project_open_dialog`); zip extraction is zip-slip-guarded via `enclosed_name()`
+- `transfer.rs` — export/import: `zip_export_dialog` / `zip_import_dialog` (lore + project bundles) and `save_text_file_dialog` / `open_text_file_dialog` (config backup JSON). Dialogs run Rust-side (same trust rationale as `project_open_dialog`); zip extraction is zip-slip-guarded via `enclosed_name()`. `excludes` prunes whole subtrees at the directory during the walk, matched on **whole path components** (so `.ai-writer/tmp` never swallows `.ai-writer/tmpl`). `require_manifest_kind` reads the manifest in a first pass and returns before extracting anything, which is what lets a restore into a user-picked folder promise "wrong file, nothing happened"
 - `protocol.rs` — custom `ai-writer-asset://` scheme for lore images (extension allowlist)
 - Plugin permissions in `src-tauri/capabilities/default.json`
 
@@ -345,6 +373,7 @@ The sidebar's file tree supports drag-and-drop and a cut/copy/paste menu. Three 
 
 ### Export / Import (lore bundles & config backup)
 - **Lore bundle** (`src/lib/lore/transfer.ts`, UI in `LoreWall`): a zip with root `manifest.json` + the whole on-disk `.ai-writer/lore/` tree under `lore/…` — *all* categories on disk, not just the active profile's, so bundles survive profile switches. Import is two-phase: `stageLoreImport` extracts into `.ai-writer/lore-import-tmp` and reports conflicts; `applyLoreImport` moves entity dirs in under a user-chosen strategy (skip / overwrite / keep-both via `uniqueEntityId`), then deletes the staging dir. Categories that fail `CATEGORY_ID_RE` are ignored.
+- **Project backup** (`src/lib/fs/projectBackup.ts`, UI in Settings → 工作台): the whole project folder as one zip under `project/…` + root `manifest.json` (`kind: "ai-writer-project-bundle"`). Scope is deliberately wider than the lore bundle — `profile.json`, `outline.json`, `.ai-writer/memory/`, `imagegen.json` and each document's `assets/` are all things *the model sees*, so a project missing them behaves differently with nothing on screen saying why. `PROJECT_BACKUP_EXCLUDES` drops `.ai-writer/backups`, the scratch/staging dirs, the SQLite `-wal`/`-shm` sidecars, `.git` and `node_modules`; `project.db` is WAL-checkpointed first (`PRAGMA wal_checkpoint(TRUNCATE)` via `select`, best-effort) so the single archived file is complete. Restore takes an **empty** folder picked through `project_open_dialog` (which is also what allows it as an fs root), and `zip_import_dialog` is given `requireManifestKind` so a wrong zip is refused before a single file is written. Not included: `config.db` and the keyring — those belong to the installation, and the UI says so.
 - **Config backup** (`src/lib/ai/configTransfer.ts`, UI in Settings → General): providers/models/prompts as one JSON file. API keys (OS keyring) are **excluded unless the user opts in** — then embedded in plaintext and re-saved to the keyring on import. Restore merges by id (`INSERT OR REPLACE`); models whose provider is neither in the backup nor already configured are dropped during validation.
 
 ### CodeMirror 6 Setup

@@ -198,7 +198,8 @@
       "models": "模型",
       "prompts": "Prompt",
       "shortcuts": "快捷键",
-      "about": "关于"
+      "about": "关于",
+      "usage": "用量"
     },
     "workspace": {
       "profileSection": "工作台类型",
@@ -291,6 +292,45 @@
       "imported": "导入完成。",
       "importFailed": "导入失败：",
       "invalidFile": "这不是有效的配置备份文件。"
+    },
+    "usage": {
+      "section": "用量统计",
+      "hint": "本项目每次调用模型时记录的 token 与费用。费用按你为模型填写的价格换算，价格没填的模型只统计 token。",
+      "windows": {
+        "7d": "近 7 天",
+        "30d": "近 30 天",
+        "all": "全部"
+      },
+      "totalLabel": "合计",
+      "totalMeta": "{{calls}} 次调用 · 输入 {{input}}（缓存 {{cached}}）· 输出 {{output}}",
+      "rowMeta": "{{calls}} 次 · 输入 {{input}} · 输出 {{output}}",
+      "byModel": "按模型",
+      "byTask": "按任务",
+      "empty": "这个时间段内还没有记录。",
+      "clear": "清空统计…",
+      "clearHint": "只删除用量记录，不影响正文、知识库和任何配置。",
+      "clearConfirm": "清空本项目的全部用量记录？此操作不可撤销。",
+      "kinds": {
+        "chat": "对话",
+        "memory": "前情提要",
+        "image-gen": "生成插图",
+        "image-edit": "修改插图",
+        "consistency": "一致性检查"
+      }
+    },
+    "projectBackup": {
+      "section": "项目备份",
+      "hint": "把整个项目打包成一个 zip：正文、配图、知识库、工作台类型、大纲顺序、前情提要、生图记录和项目数据库。",
+      "scopeHint": "不含供应商 / 模型 / Prompt 配置和 API Key——那些属于这台机器，在「通用 → 配置备份」里单独导出。备份也不包含 .ai-writer/backups 与临时文件。",
+      "export": "导出项目备份…",
+      "restore": "从备份恢复…",
+      "restoreHint": "恢复时需要先选择一个空文件夹，再选择备份文件；恢复完成后会自动打开该项目。不会覆盖当前项目。",
+      "exported": "已导出到 {{path}}",
+      "exportFailed": "导出失败：",
+      "restored": "已恢复 {{count}} 个文件到 {{path}}",
+      "restoreFailed": "恢复失败：",
+      "destNotEmpty": "所选文件夹不是空的。请新建一个空文件夹再恢复，避免和已有内容混在一起。",
+      "emptyBundle": "这个备份文件里没有任何项目内容。"
     }
   },
   "project": {

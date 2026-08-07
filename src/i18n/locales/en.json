@@ -198,7 +198,8 @@
       "models": "Models",
       "prompts": "Prompts",
       "shortcuts": "Shortcuts",
-      "about": "About"
+      "about": "About",
+      "usage": "Usage"
     },
     "workspace": {
       "profileSection": "Workspace profile",
@@ -291,6 +292,45 @@
       "imported": "Import complete.",
       "importFailed": "Import failed:",
       "invalidFile": "This is not a valid config backup file."
+    },
+    "usage": {
+      "section": "Usage",
+      "hint": "Tokens and cost recorded for every model call in this project. Cost is derived from the prices you entered for each model; models with no price contribute tokens only.",
+      "windows": {
+        "7d": "Last 7 days",
+        "30d": "Last 30 days",
+        "all": "All time"
+      },
+      "totalLabel": "Total",
+      "totalMeta": "{{calls}} calls · {{input}} in ({{cached}} cached) · {{output}} out",
+      "rowMeta": "{{calls}} runs · {{input}} in · {{output}} out",
+      "byModel": "By model",
+      "byTask": "By task",
+      "empty": "Nothing recorded in this period yet.",
+      "clear": "Clear usage…",
+      "clearHint": "Deletes the usage rows only — documents, knowledge base and configuration are untouched.",
+      "clearConfirm": "Delete every usage record for this project? This cannot be undone.",
+      "kinds": {
+        "chat": "Chat",
+        "memory": "Story memory",
+        "image-gen": "Image generation",
+        "image-edit": "Image edit",
+        "consistency": "Consistency check"
+      }
+    },
+    "projectBackup": {
+      "section": "Project backup",
+      "hint": "Packs the whole project into one zip: documents, illustrations, knowledge base, workspace profile, outline order, story memory, image history and the project database.",
+      "scopeHint": "Provider / model / prompt configuration and API keys are not included — those belong to this installation and export separately under General → Configuration backup. Backups also skip .ai-writer/backups and scratch files.",
+      "export": "Export project backup…",
+      "restore": "Restore from backup…",
+      "restoreHint": "Restoring asks for an empty folder first, then the backup file, and opens the restored project when it finishes. Your current project is never overwritten.",
+      "exported": "Exported to {{path}}",
+      "exportFailed": "Export failed:",
+      "restored": "Restored {{count}} files to {{path}}",
+      "restoreFailed": "Restore failed:",
+      "destNotEmpty": "That folder is not empty. Create a new empty folder to restore into, so the backup can't mix with what is already there.",
+      "emptyBundle": "That backup file contains no project content."
     }
   },
   "project": {
