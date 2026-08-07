@@ -11,7 +11,7 @@
  */
 
 import { renderMarkdown } from "./markdown";
-import { writeFile } from "./fileio";
+import { saveTextFileDialog } from "./transfer";
 import { imageToDataUrl } from "./images";
 import { resolveRelativePath } from "../paths";
 import {
@@ -96,13 +96,19 @@ body {
 ${markdownThemeCss(currentMarkdownThemeId(), "body")}`;
 }
 
+/**
+ * Export to a self-contained HTML file through the native save dialog.
+ * Returns the saved path, or null when the author cancelled.
+ *
+ * The dialog both picks the path and writes the file (see fs/transfer), so
+ * this builds the document and hands it over rather than taking a path.
+ */
 export async function exportHtml(
   source: string,
   title: string,
-  savePath: string,
   /** Folder the document's relative image links resolve against. */
   baseDir?: string,
-): Promise<void> {
+): Promise<string | null> {
   const body = await inlineImages(renderMarkdown(source), baseDir);
   const html = `<!DOCTYPE html>
 <html lang="${docLang()}">
@@ -116,7 +122,7 @@ export async function exportHtml(
 ${body}
 </body>
 </html>`;
-  await writeFile(savePath, html);
+  return saveTextFileDialog(html, `${title || "document"}.html`, "HTML", ["html"]);
 }
 
 // ─── PDF (system print) ───────────────────────────────────────────────────────
