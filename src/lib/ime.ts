@@ -22,7 +22,7 @@ import type { KeyboardEvent } from "react";
  */
 const COMMIT_GRACE_MS = 100;
 
-/** What {@link imeOwnsEnter} needs to know; the hook keeps it in refs. */
+/** What {@link imeOwnsKey} needs to know; the hook keeps it in refs. */
 export interface CompositionState {
   /** Between `compositionstart` and `compositionend`. */
   composing: boolean;
@@ -37,10 +37,14 @@ export interface KeyLike {
 }
 
 /**
- * True when the key belongs to the IME rather than to the app — the submit
- * handler must bail out.
+ * True when the key belongs to the IME rather than to the app — the handler
+ * must bail out.
+ *
+ * Not only about Enter: while the candidate window is up the IME also owns
+ * Escape, where it means "drop these candidates" rather than "close the
+ * dialog" (see components/common/ModalShell).
  */
-export function imeOwnsEnter(e: KeyLike, state: CompositionState, now: number): boolean {
+export function imeOwnsKey(e: KeyLike, state: CompositionState, now: number): boolean {
   return (
     state.composing ||
     e.isComposing === true ||
@@ -76,7 +80,7 @@ export function useImeGuard(): ImeGuard {
   }, []);
 
   const isComposing = useCallback(
-    (e: KeyboardEvent) => imeOwnsEnter(e.nativeEvent, state.current, performance.now()),
+    (e: KeyboardEvent) => imeOwnsKey(e.nativeEvent, state.current, performance.now()),
     [],
   );
 

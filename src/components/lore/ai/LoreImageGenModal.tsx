@@ -41,7 +41,11 @@ export function LoreImageGenModal({ entity, onClose, onSaved }: Props) {
    * index.md deliberately leaves out, so a prompt drafted without them
    * describes a generic version of the subject.
    */
-  const extras = entity.facets.length > 0 && (
+  // Memoised because it goes into `target`, which is itself memoised: freshly
+  // built JSX is a new object every render, so as a plain value it defeated
+  // the target memo entirely — and with it the `describe` callback and every
+  // consumer downstream.
+  const extras = useMemo(() => entity.facets.length > 0 && (
     <div className={styles.section}>
       <label className={styles.label}>{t("lore.imageGen.facetsLabel")}</label>
       <div className={gen.facets}>
@@ -65,7 +69,7 @@ export function LoreImageGenModal({ entity, onClose, onSaved }: Props) {
       </div>
       <div className={gen.hint}>{t("lore.imageGen.facetsHint")}</div>
     </div>
-  );
+  ), [entity.facets, pickedFacets, t]);
 
   /**
    * Describe a freshly saved picture with the active multimodal model. Until

@@ -12,6 +12,7 @@
  */
 
 import { imageCostFor } from "../ai/configDb";
+import { fileExists } from "../fs/fileio";
 import { isPathWithin } from "../paths";
 import type { IllustrateProposal, ToolContext } from "./registry";
 import type { ToolResult } from "./tools";
@@ -100,9 +101,9 @@ export async function generateImageTool(
   const note = args.note?.trim() || prompt.slice(0, 80);
 
   if (args.entity) {
-    const entity = findEntity(ctx, args.entity);
+    const { entity, categories } = findEntity(ctx, args.entity);
     if (!entity) {
-      return { toolCallId, content: `Error: no lore entity named "${args.entity}". Call list_lore_entities first.` };
+      return { toolCallId, content: entityLookupError(args.entity, categories) };
     }
     return proposeIllustration(toolCallId, ctx, {
       prompt, note, aspect: args.aspect, reason: args.reason,
@@ -116,8 +117,15 @@ export async function generateImageTool(
   if (!path) {
     return { toolCallId, content: "Error: give either 'entity' (file it in that entity's gallery) or 'path' (a document under writing/)." };
   }
-  if (!isPathWithin(`${ctx.projectPath}/writing`, path)) {
-    return { toolCallId, content: "Error: 'path' must be a document under the project's writing/ directory." };
+  // `isPathWithin(base, base)` is true, so the prefix check alone accepts the
+  // writing/ directory itself — and `saveDocumentAsset` would then compute a
+  // group from its name and write the picture to `<proj>/assets/writing/`,
+  // outside writing/ entirely. Require an actual document.
+  if (!isPathWithin(`${ctx.projectPath}/writing`, path) || !/\.md$/i.test(path)) {
+    return { toolCallId, content: "Error: 'path' must be a .md document under the project's writing/ directory." };
+  }
+  if (!(await fileExists(path))) {
+    return { toolCallId, content: `Error: no document at "${path}". Call list_chapters to see the real paths.` };
   }
   return proposeIllustration(toolCallId, ctx, {
     prompt, note, aspect: args.aspect, reason: args.reason,
@@ -138,9 +146,9 @@ export async function editImageTool(
   if (!args.entity || !args.file) {
     return { toolCallId, content: "Error: 'entity' and 'file' are required. Call read_lore_entity to see the gallery." };
   }
-  const entity = findEntity(ctx, args.entity);
+  const { entity, categories } = findEntity(ctx, args.entity);
   if (!entity) {
-    return { toolCallId, content: `Error: no lore entity named "${args.entity}". Call list_lore_entities first.` };
+    return { toolCallId, content: entityLookupError(args.entity, categories) };
   }
   const image = entity.images.find((i) => i.file === args.file);
   if (!image) {
@@ -163,11 +171,26 @@ export async function editImageTool(
   });
 }
 
+/**
+ * Look one entity up by name across every category.
+ *
+ * Returns the ambiguity rather than resolving it: two entities can share a
+ * name across categories (a character and the place named after them is the
+ * everyday case), and taking whichever came first files the picture in the
+ * wrong gallery with nothing to indicate it happened.
+ */
 function findEntity(ctx: ToolContext, name: string) {
   const wanted = name.trim().toLowerCase();
-  for (const entities of Object.values(ctx.loreIndex)) {
-    const hit = entities.find((e) => e.name.toLowerCase() === wanted);
-    if (hit) return hit;
+  const hits = Object.values(ctx.loreIndex)
+    .flat()
+    .filter((e) => e.name.toLowerCase() === wanted);
+  return { entity: hits.length === 1 ? hits[0] : null, categories: hits.map((e) => e.category) };
+}
+
+/** The error text for a name that matched nothing, or matched too much. */
+function entityLookupError(name: string, categories: string[]): string {
+  if (categories.length > 1) {
+    return `Error: "${name}" exists in more than one category (${categories.join(", ")}). Say which one you mean.`;
   }
-  return null;
+  return `Error: no lore entity named "${name}". Call list_lore_entities first.`;
 }

@@ -9,7 +9,7 @@
  * the existing `useImageDataUrl` hook renders exactly like a gallery image.
  */
 
-import { fileExists, makeDir, readDir, readFile, removeDir, writeBinaryFile, writeFile } from "../fs/fileio";
+import { fileExists, makeDir, readDir, readFile, removeDir, renamePath, writeBinaryFile, writeFile } from "../fs/fileio";
 import { dataUrlToBytes } from "../fs/images";
 
 /** Scratch root. Under `.ai-writer/` so it travels with the project and is scoped. */
@@ -94,14 +94,35 @@ export interface ImageRecord {
 const RECORD_FILE = ".ai-writer/imagegen.json";
 
 /**
+ * Serializes every `recordGeneration` in the process onto one chain.
+ *
+ * The append is a read-modify-write of a whole JSON file, and the callers are
+ * genuinely concurrent — an agent approving two illustrations back to back has
+ * both in flight at once. Interleaved, the second read sees the pre-first
+ * contents and the second write erases the first record.
+ */
+let recordQueue: Promise<void> = Promise.resolve();
+
+/**
  * Append one kept image to the project's generation record.
  *
  * A side-log, deliberately not part of `images.md`: the gallery format stays
  * exactly as it was, while an author can still ask "how did this picture come
  * about" and an edit chain can be resumed after the app restarts.
+ *
+ * Callers should await this. Failures are swallowed (bookkeeping must never
+ * fail a save that already landed on disk), so awaiting costs nothing but the
+ * ordering guarantee it buys.
  */
 export async function recordGeneration(projectPath: string, record: ImageRecord): Promise<void> {
   if (!projectPath) return;
+  const run = recordQueue.then(() => appendRecord(projectPath, record));
+  // The chain must survive a failed link, or one error wedges every later append.
+  recordQueue = run.catch(() => {});
+  return recordQueue;
+}
+
+async function appendRecord(projectPath: string, record: ImageRecord): Promise<void> {
   try {
     const path = `${projectPath}/${RECORD_FILE}`;
     let list: ImageRecord[] = [];
@@ -114,7 +135,12 @@ export async function recordGeneration(projectPath: string, record: ImageRecord)
       }
     }
     list.push(record);
-    await writeFile(path, JSON.stringify(list, null, 2));
+    // Written beside the target and renamed over it: `writeFile` truncates
+    // first, so a crash mid-write would leave the whole generation history
+    // empty rather than one entry short.
+    const tmp = `${path}.tmp`;
+    await writeFile(tmp, JSON.stringify(list, null, 2));
+    await renamePath(tmp, path);
   } catch {
     // Bookkeeping must never fail a save that already landed on disk.
   }

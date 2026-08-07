@@ -8,8 +8,8 @@ import {
 import { docModel, findTask, promptParams } from "../lib/profile/active";
 import { presetForTools } from "../lib/agent/presets";
 import {
-  fixedContextChars, measureCharsPerToken, planContextBudget, reflowMemoryBudget,
-  type ContextAllocation,
+  ASSUMED_INPUT_CEILING_TOKENS, fixedContextChars, measureCharsPerToken, planContextBudget,
+  reflowMemoryBudget, type ContextAllocation,
 } from "../lib/context/budget";
 import type { LoreActivationReport } from "../lib/context/loreSelect";
 import { useAgentStore } from "./agentStore";
@@ -423,7 +423,9 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           modelId: model.modelId,
           prefix: model.prefix,
           contextSize: model.contextSize,
-          inputCeilingTokens: plan.inputCeilingTokens,
+          // `plan.inputCeilingTokens` is 0 on a static plan (model declared no
+          // context size), and a 0 ceiling disables history trimming entirely.
+          inputCeilingTokens: plan.inputCeilingTokens || ASSUMED_INPUT_CEILING_TOKENS,
           // Non-null on this branch — isAgentic is exactly `preset !== null`.
           preset: preset!,
           messages: bundleToMessages(bundle),
@@ -444,7 +446,9 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             // L2 approvals: the AiPanel card resolves these (agent mode only —
             // continue's preset has no propose_edit). Scoped to this run's own
             // controller so an unrelated chat turn ending doesn't drain them.
-            requestApproval: (p) => useAgentStore.getState().requestApproval(p, controller),
+            // No turnId: the panel has no transcript to attach a picture to.
+            requestApproval: (p) =>
+              useAgentStore.getState().requestApproval(p, controller, { signal: controller.signal }),
             // Lore changes are gated on an approved plan; the gate is per-run,
             // so each task starts with a clean slate.
             requestPlanApproval: (p) => useAgentStore.getState().requestPlanApproval(p, controller),

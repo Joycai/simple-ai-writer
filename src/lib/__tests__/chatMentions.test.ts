@@ -43,6 +43,26 @@ describe("findMention", () => {
   it("finds nothing when there is no @ before the caret", () => {
     expect(findMention("普通的一句话", 5)).toBeNull();
   });
+
+  it("gives up on a run too long to be a name", () => {
+    // Chinese prose has no space to end a mention. Without this the picker
+    // stayed "open" for the rest of the message — invisible (nothing matched)
+    // while the composer swallowed every Enter.
+    const long = "@" + "字".repeat(40);
+    expect(findMention(long, long.length)).toBeNull();
+    const short = "@" + "字".repeat(10);
+    expect(findMention(short, short.length)).toEqual({ start: 0, query: "字".repeat(10) });
+  });
+
+  it("closes on CJK punctuation, which ends a clause like a space does", () => {
+    expect(findMention("参考@第三章，然后", 9)).toBeNull();
+    expect(findMention("参考@第三章。", 7)).toBeNull();
+  });
+
+  it("still opens on an @ that runs straight out of Chinese prose", () => {
+    // The everyday case: nobody types a space before `@` in Chinese.
+    expect(findMention("参考@第三", 5)).toEqual({ start: 2, query: "第三" });
+  });
 });
 
 describe("filterMentions", () => {
@@ -111,6 +131,21 @@ describe("buildChatMessage", () => {
     expect(out).toMatch(/truncated — 500 more chars/);
     expect(out).toContain("/p/writing/第三章.md");
     expect(out.length).toBeLessThan(long.length);
+  });
+
+  it("stops inlining once the message's whole budget is spent", async () => {
+    // The per-file cap bounds one reference, not ten of them — and chat
+    // history persists, so what goes in stays in for the rest of the session.
+    const refs = Array.from({ length: 8 }, (_, i) => ({
+      kind: "text" as const,
+      file: { name: `第${i}章.md`, path: `/p/writing/${i}.md`, kind: "text" as const },
+      content: "字".repeat(REF_CHAR_CAP),
+    }));
+    const out = await buildChatMessage("看看", undefined, refs);
+    expect(out.length).toBeLessThan(REF_CHAR_CAP * 8);
+    // The ones that didn't fit are still named, with a way to get them.
+    expect(out).toMatch(/not inlined/);
+    expect(out).toContain("/p/writing/7.md");
   });
 
   it("carries no reference block when there are none", async () => {

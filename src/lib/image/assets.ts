@@ -8,7 +8,9 @@
  * doesn't break every image in the book.
  */
 
-import { fileExists, makeDir, writeBinaryFile } from "../fs/fileio";
+import {
+  fileExists, makeDir, readFile, removeDir, renamePath, writeBinaryFile, writeFile,
+} from "../fs/fileio";
 
 /** Folder name for a document's illustrations, beside the document itself. */
 const ASSETS_DIR = "assets";
@@ -27,19 +29,55 @@ function stemOf(filePath: string): string {
   return dot > 0 ? name.slice(0, dot) : name;
 }
 
+/** Longest readable prefix kept when a title is used as a name. */
+const MAX_NAME_LEN = 60;
+
 /**
  * Strip what a filename may not contain, and cap the length.
  *
  * Document titles become folder names here, and a chapter called
  * "第三章：审判/终局" would otherwise create a nested directory or fail
- * outright depending on the platform.
+ * outright depending on the platform. Shared with the lore gallery, which
+ * takes names straight from files the author picked on disk — a macOS file
+ * called `a:b?.png` is unwriteable on Windows and would make the whole project
+ * uncheckoutable there.
  */
-function safeName(raw: string): string {
+export function safeAssetName(raw: string, fallback = "doc"): string {
   const cleaned = raw
     .replace(/[\\/:*?"<>|\x00-\x1f]/g, "_")
     .replace(/\s+/g, " ")
-    .trim();
-  return (cleaned || "doc").slice(0, 60);
+    .trim()
+    // Windows refuses to create a name ending in a dot or a space, so
+    // "第一章..md" produced a group Windows could not make and `makeDir` threw.
+    // Leading dots go too: they would hide the folder, and ".." would escape.
+    .replace(/[. ]+$/, "")
+    .replace(/^\.+/, "");
+  if (!cleaned) return fallback;
+  if (cleaned.length <= MAX_NAME_LEN) return cleaned;
+  // Truncating alone merges two long titles that share a prefix — routine for
+  // 公众号 and 标书 documents — into one folder. A digest of the full name
+  // keeps them apart while the readable prefix survives.
+  return `${cleaned.slice(0, MAX_NAME_LEN)}-${shortHash(raw)}`;
+}
+
+/** FNV-1a, base36 — a stable few characters, not a security property. */
+function shortHash(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(36).padStart(6, "0").slice(0, 6);
+}
+
+/**
+ * The folder holding one document's illustrations.
+ *
+ * Derived from the document's *name*, which is why moving or renaming a
+ * document has to bring this along — see `moveDocumentAssets`.
+ */
+export function assetDirFor(docPath: string): string {
+  return `${dirOf(docPath)}/${ASSETS_DIR}/${safeAssetName(stemOf(docPath))}`;
 }
 
 export interface SavedAsset {
@@ -62,7 +100,7 @@ export async function saveDocumentAsset(
   bytes: Uint8Array,
   ext: string,
 ): Promise<SavedAsset> {
-  const group = safeName(stemOf(docPath));
+  const group = safeAssetName(stemOf(docPath));
   const dir = `${dirOf(docPath)}/${ASSETS_DIR}/${group}`;
   await makeDir(dir);
 
@@ -95,4 +133,93 @@ async function uniqueAssetName(dir: string, ext: string): Promise<string> {
 export function imageMarkdown(relPath: string, alt: string): string {
   const encoded = relPath.split("/").map(encodeURIComponent).join("/");
   return `\n\n![${alt.replace(/[[\]]/g, "")}](${encoded})\n\n`;
+}
+
+// ─── Following the document ──────────────────────────────────────────────────
+
+/** True for a path this module keeps illustrations for. */
+export function ownsAssets(path: string): boolean {
+  return /\.md$/i.test(path);
+}
+
+/**
+ * Move a document's illustration folder to follow the document, and rewrite the
+ * links inside it.
+ *
+ * The folder is named after the document and the links are relative, so
+ * without this a move breaks every picture in the file (the links resolve
+ * under the new folder, where nothing is) and a rename quietly splits the
+ * document's illustrations across two directories — the old ones still render,
+ * new ones land elsewhere.
+ *
+ * Call **after** the document itself has moved. Best-effort: pictures are not
+ * worth failing a move over, and the alternative to a partial migration is no
+ * migration at all.
+ */
+export async function moveDocumentAssets(from: string, to: string): Promise<void> {
+  if (from === to || !ownsAssets(from) || !ownsAssets(to)) return;
+  const fromDir = assetDirFor(from);
+  const toDir = assetDirFor(to);
+  if (fromDir === toDir) return;
+
+  try {
+    if (!(await fileExists(fromDir))) return;
+    if (await fileExists(toDir)) {
+      // Merging two galleries would need per-file collision handling and could
+      // overwrite the destination document's own pictures. Leave both alone and
+      // say so rather than guessing.
+      console.warn(`[assets] ${toDir} already exists; left ${fromDir} in place`);
+      return;
+    }
+    await makeDir(dirOf(toDir));
+    await renamePath(fromDir, toDir);
+    await rewriteAssetLinks(to, stemOf(from), stemOf(to));
+  } catch (e) {
+    console.warn(`[assets] could not move illustrations for ${from}:`, e);
+  }
+}
+
+/**
+ * Retire a deleted document's illustration folder.
+ *
+ * Without this the pictures stay on disk forever, visible in the file tree and
+ * attached to nothing. When the delete was backed up, they move next to that
+ * backup instead of being removed — a text-only backup restores the document
+ * with every image link pointing at a folder that no longer exists.
+ */
+export async function discardDocumentAssets(
+  docPath: string,
+  backupPath: string | null,
+): Promise<void> {
+  if (!ownsAssets(docPath)) return;
+  try {
+    const dir = assetDirFor(docPath);
+    if (!(await fileExists(dir))) return;
+    if (backupPath) {
+      const dest = `${backupPath}.assets`;
+      if (!(await fileExists(dest))) {
+        await renamePath(dir, dest);
+        return;
+      }
+    }
+    await removeDir(dir);
+  } catch (e) {
+    console.warn(`[assets] could not clean up illustrations for ${docPath}:`, e);
+  }
+}
+
+/** Point a moved document's `assets/<old>/…` links at their new folder. */
+async function rewriteAssetLinks(docPath: string, fromStem: string, toStem: string): Promise<void> {
+  const oldGroup = safeAssetName(fromStem);
+  const newGroup = safeAssetName(toStem);
+  if (oldGroup === newGroup) return;
+  const raw = await readFile(docPath);
+  // Both spellings: `imageMarkdown` percent-encodes each segment, but a link
+  // typed by hand (or by a model) carries the characters as they are.
+  const rewritten = raw
+    .split(`${ASSETS_DIR}/${encodeURIComponent(oldGroup)}/`)
+    .join(`${ASSETS_DIR}/${encodeURIComponent(newGroup)}/`)
+    .split(`${ASSETS_DIR}/${oldGroup}/`)
+    .join(`${ASSETS_DIR}/${newGroup}/`);
+  if (rewritten !== raw) await writeFile(docPath, rewritten);
 }

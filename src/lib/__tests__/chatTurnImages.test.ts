@@ -9,12 +9,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { IllustrateProposal } from "../agent/registry";
 
-const runIllustration = vi.fn(async () => ({
+const runIllustration = vi.fn(async (_p?: unknown, _root?: string, _signal?: AbortSignal) => ({
   path: "/proj/.ai-writer/lore/characters/elden/ai-1.png",
   markdown: "",
   degraded: false,
 }));
-vi.mock("../image/illustrate", () => ({ runIllustration: () => runIllustration() }));
+vi.mock("../image/illustrate", () => ({
+  runIllustration: (p: unknown, root: string, signal?: AbortSignal) => runIllustration(p, root, signal),
+}));
 // applyProposal reaches for both stores; neither is loadable under vitest's
 // node environment, and the illustrate path only needs projectPath from them.
 vi.mock("../../stores/projectStore", () => ({
@@ -49,6 +51,9 @@ function seedChat(runId: unknown) {
   });
 }
 
+/** What sendChat passes: the picture belongs to *this* turn, whatever happens later. */
+const toTurn = (turnId: string) => ({ turnId });
+
 beforeEach(() => {
   runIllustration.mockClear();
   useAgentStore.setState({ turns: [], pending: [], chatAbort: null });
@@ -58,7 +63,7 @@ describe("approved illustrations in the transcript", () => {
   it("attaches the saved picture to the live assistant turn", async () => {
     const run = {};
     seedChat(run);
-    const decision = useAgentStore.getState().requestApproval(illustrate("i1"), run);
+    const decision = useAgentStore.getState().requestApproval(illustrate("i1"), run, toTurn("a1"));
     await useAgentStore.getState().approve("i1");
 
     await expect(decision).resolves.toMatchObject({ approved: true });
@@ -66,11 +71,44 @@ describe("approved illustrations in the transcript", () => {
     expect(turn?.images).toEqual(["/proj/.ai-writer/lore/characters/elden/ai-1.png"]);
   });
 
+  it("still attaches the picture after the author pressed 停止", async () => {
+    // stopChat clears chatAbort, and approve() has already left the pending
+    // queue — so the run was over by every measure the store used to check
+    // while the (paid-for) generation was still in flight. The picture landed
+    // on disk and never appeared in the conversation.
+    const run = {};
+    seedChat(run);
+    const decision = useAgentStore.getState().requestApproval(illustrate("i1"), run, toTurn("a1"));
+    const applied = useAgentStore.getState().approve("i1");
+    useAgentStore.setState({ chatAbort: null, chatRunning: false });
+    await applied;
+    await decision;
+
+    expect(useAgentStore.getState().turns.find((t) => t.id === "a1")?.images)
+      .toEqual(["/proj/.ai-writer/lore/characters/elden/ai-1.png"]);
+  });
+
+  it("hands the run's abort signal to the generation", async () => {
+    // Approval removes the card from the queue, so rejectAll can no longer
+    // cancel it — the signal is the only remaining way 停止 reaches the
+    // request that is spending the author's money.
+    const controller = new AbortController();
+    seedChat(controller);
+    useAgentStore.getState().requestApproval(illustrate("i1"), controller, {
+      turnId: "a1", signal: controller.signal,
+    });
+    await useAgentStore.getState().approve("i1");
+
+    expect(runIllustration).toHaveBeenCalledWith(
+      expect.anything(), "/proj", controller.signal,
+    );
+  });
+
   it("tells the model the picture is already on screen", async () => {
     // Otherwise it apologises for being unable to show what it just drew.
     const run = {};
     seedChat(run);
-    const decision = useAgentStore.getState().requestApproval(illustrate("i1"), run);
+    const decision = useAgentStore.getState().requestApproval(illustrate("i1"), run, toTurn("a1"));
     await useAgentStore.getState().approve("i1");
     const result = await decision;
     expect(result.approved).toBe(true);
@@ -80,10 +118,10 @@ describe("approved illustrations in the transcript", () => {
   it("collects several pictures on one turn", async () => {
     const run = {};
     seedChat(run);
-    const first = useAgentStore.getState().requestApproval(illustrate("i1"), run);
+    const first = useAgentStore.getState().requestApproval(illustrate("i1"), run, toTurn("a1"));
     await useAgentStore.getState().approve("i1");
     runIllustration.mockResolvedValueOnce({ path: "/proj/b.png", markdown: "", degraded: false });
-    const second = useAgentStore.getState().requestApproval(illustrate("i2"), run);
+    const second = useAgentStore.getState().requestApproval(illustrate("i2"), run, toTurn("a1"));
     await useAgentStore.getState().approve("i2");
     await Promise.all([first, second]);
 
@@ -106,7 +144,7 @@ describe("approved illustrations in the transcript", () => {
     const run = {};
     seedChat(run);
     runIllustration.mockRejectedValueOnce(new Error("provider exploded"));
-    const decision = useAgentStore.getState().requestApproval(illustrate("i1"), run);
+    const decision = useAgentStore.getState().requestApproval(illustrate("i1"), run, toTurn("a1"));
     await useAgentStore.getState().approve("i1");
 
     // A failed apply reports as a rejection, so the model knows nothing exists.

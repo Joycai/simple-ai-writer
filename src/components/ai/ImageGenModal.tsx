@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { X, Sparkles, Image as ImageIcon, Wand2, UserRound } from "lucide-react";
 import { ModalShell } from "../common/ModalShell";
 import { imageCostFor } from "../../lib/ai/configDb";
+import { resolveImageRoute } from "../../lib/ai/image";
 import { imageToDataUrl } from "../../lib/fs/images";
 import {
   generateImagePrompt,
@@ -60,6 +61,15 @@ export function ImageGenModal({ target, onClose }: Props) {
   // should never have to choose it.
   const effectiveImageModelId = imageModelId ?? imageModels[0]?.id ?? "";
   const imageModel = imageModels.find((m) => m.id === effectiveImageModelId) ?? null;
+  const imageProvider = imageModel ? providers.find((p) => p.id === imageModel.providerId) ?? null : null;
+  /**
+   * The chat-completions route carries no n/size/aspect fields (see
+   * lib/ai/image.ts). Saying so beats offering controls that quietly do
+   * nothing — the count select in particular, where picking 4 used to bill
+   * for one picture and explain nothing.
+   */
+  const chatRoute = !!imageModel && !!imageProvider
+    && resolveImageRoute(imageProvider.apiStandard, imageModel.caps?.route) === "chat";
 
   // Which model drafts the prompt. Separate from the image model and from the
   // app-wide active model: the author may want a strong writer here without
@@ -125,7 +135,9 @@ export function ImageGenModal({ target, onClose }: Props) {
   };
 
   const busy = building || generating || saving;
-  const estimatedCost = imageModel ? imageCostFor(imageModel, count) : 0;
+  /** What this run will actually ask for — the chat route only ever returns one. */
+  const effectiveCount = chatRoute ? 1 : count;
+  const estimatedCost = imageModel ? imageCostFor(imageModel, effectiveCount) : 0;
 
   const handleBuildPrompt = async () => {
     const resolved = resolveModel(models, providers, promptModelId);
@@ -173,15 +185,14 @@ export function ImageGenModal({ target, onClose }: Props) {
 
   /** Everything a store run needs from the current form + model selection. */
   const runContext = async (ctrl: AbortController): Promise<RunContext | null> => {
-    if (!imageModel) return null;
-    const provider = providers.find((p) => p.id === imageModel.providerId);
-    if (!provider) return null;
+    if (!imageModel || !imageProvider) return null;
+    const provider = imageProvider;
     return {
       projectPath: projectPath ?? "",
       model: imageModel,
       provider,
       apiKey: (await loadApiKey(provider.id)) ?? "",
-      n: count,
+      n: effectiveCount,
       // A size typed here wins; otherwise fall back to whatever the model
       // declared as supported, and to nothing at all if it declared none.
       size: size.trim() || sizeForAspect(aspect, imageModel.caps?.sizes),
@@ -199,6 +210,11 @@ export function ImageGenModal({ target, onClose }: Props) {
       const ctx = await runContext(ctrl);
       if (!ctx) { setError(t("ai.errors.noModel")); return; }
       await generate(ctx, specToPrompt({ prompt, style, negative, aspect, note: "" }));
+    } catch (e) {
+      // `runContext` awaits the keyring, which can reject before the store is
+      // ever reached — without this the button looks dead and the only trace
+      // is an unhandled rejection in the console.
+      if ((e as Error).name !== "AbortError") setError(e instanceof Error ? e.message : String(e));
     } finally {
       abort.current = null;
     }
@@ -217,6 +233,9 @@ export function ImageGenModal({ target, onClose }: Props) {
       if (!ctx) { setError(t("ai.errors.noModel")); return; }
       setEditDraft("");
       await edit(ctx, instruction);
+    } catch (e) {
+      // Same as handleGenerate: everything before `edit()` can still throw.
+      if ((e as Error).name !== "AbortError") setError(e instanceof Error ? e.message : String(e));
     } finally {
       abort.current = null;
     }
@@ -236,7 +255,9 @@ export function ImageGenModal({ target, onClose }: Props) {
 
       // Log how this picture came about, so the chain survives the session.
       const chain = instructionChain(currentTurn.id);
-      void recordGeneration(projectPath ?? "", {
+      // Awaited, not fire-and-forget: the record file is a read-modify-write,
+      // and two overlapping saves would otherwise lose one of the entries.
+      await recordGeneration(projectPath ?? "", {
         path: savedPath,
         prompt: chain.prompt,
         edits: chain.edits,
@@ -261,7 +282,17 @@ export function ImageGenModal({ target, onClose }: Props) {
   };
 
   return (
-    <ModalShell overlayClassName={styles.overlay} onClose={handleClose}>
+    // Closing throws away the whole round — the scratch files AND the money
+    // already spent on them — so a stray backdrop click must not do it. Every
+    // other editing modal in the app already guards this way; this is the one
+    // where an accidental close has a price tag.
+    <ModalShell
+      overlayClassName={styles.overlay}
+      onClose={handleClose}
+      isDirty={turns.length > 0 || busy}
+      confirmMessage={t("lore.imageGen.discardConfirm")}
+      closeOnBackdrop={false}
+    >
       <div className={styles.panel} style={{ maxWidth: 720 }}>
         <div className={styles.header}>
           <div className={styles.headerLeft}>
@@ -367,7 +398,7 @@ export function ImageGenModal({ target, onClose }: Props) {
                 </div>
                 <div className={gen.fieldNarrow}>
                   <label className={styles.label}>{t("lore.imageGen.countLabel")}</label>
-                  <select className={gen.input} value={count} disabled={busy}
+                  <select className={gen.input} value={effectiveCount} disabled={busy || chatRoute}
                     onChange={(e) => setCount(parseInt(e.target.value, 10))}>
                     {Array.from({ length: MAX_COUNT }, (_, i) => i + 1).map((n) => (
                       <option key={n} value={n}>{n}</option>
@@ -395,6 +426,8 @@ export function ImageGenModal({ target, onClose }: Props) {
                   <div className={gen.costHint}>{t("lore.imageGen.costHint", { cost: estimatedCost.toFixed(3) })}</div>
                 )}
               </div>
+
+              {chatRoute && <div className={gen.hint}>{t("lore.imageGen.chatRouteLimits")}</div>}
 
               {(error || storeError) && <div className={styles.error}>{error ?? storeError}</div>}
 

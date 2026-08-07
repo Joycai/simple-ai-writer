@@ -215,13 +215,43 @@ export async function stageConfigImport(
   };
 }
 
-/** Phase 2: merge the staged backup into the config DB (and keyring for embedded keys). */
+/**
+ * Phase 2: merge the staged backup into the config DB (and keyring for
+ * embedded keys).
+ *
+ * The DB rows go in one transaction: row-by-row, a failure part-way (a
+ * rejected model row, a locked database) left providers configured with none
+ * of their models and nothing on screen distinguishing that from a clean
+ * import. Keyring writes cannot join the transaction — a different store
+ * entirely — so they happen after the rows are committed, and a failure there
+ * is reported as exactly what it is: the configuration landed, the keys did
+ * not.
+ */
 export async function applyConfigImport(staged: StagedConfigImport): Promise<void> {
   const db = await configDb();
-  for (const { apiKey, ...provider } of staged.providers) {
-    await saveProvider(db, provider);
-    if (apiKey) await saveApiKey(provider.id, apiKey);
+  await db.execute("BEGIN");
+  try {
+    for (const { apiKey: _apiKey, ...provider } of staged.providers) await saveProvider(db, provider);
+    for (const m of staged.models) await saveModel(db, m);
+    for (const p of staged.prompts) await savePrompt(db, p);
+    await db.execute("COMMIT");
+  } catch (e) {
+    await db.execute("ROLLBACK").catch(() => { /* the failure below is the one that matters */ });
+    throw e;
   }
-  for (const m of staged.models) await saveModel(db, m);
-  for (const p of staged.prompts) await savePrompt(db, p);
+
+  const failed: string[] = [];
+  for (const { id, name, apiKey } of staged.providers) {
+    if (!apiKey) continue;
+    try {
+      await saveApiKey(id, apiKey);
+    } catch {
+      failed.push(name);
+    }
+  }
+  if (failed.length) {
+    throw new Error(
+      `Imported the configuration, but could not store the API key for: ${failed.join(", ")}. Enter those keys by hand.`,
+    );
+  }
 }

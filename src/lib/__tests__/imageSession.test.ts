@@ -31,6 +31,7 @@ vi.mock("../fs/images", () => ({
 }));
 
 const { useImageStore } = await import("../../stores/imageStore");
+const { ImageHttpError } = await import("../ai/image");
 
 const PROVIDER = { id: "p1", baseUrl: "https://x/v1", apiStandard: "openai" } as unknown as Provider;
 function model(caps?: Model["caps"]): Model {
@@ -48,6 +49,7 @@ function oneImage() {
 beforeEach(async () => {
   generateImage.mockReset();
   generateImage.mockResolvedValue(oneImage());
+  writeCandidates.mockClear();
   await useImageStore.getState().begin("/proj");
 });
 
@@ -84,7 +86,7 @@ describe("edit chain", () => {
   it("falls back after the endpoint rejects the edit at runtime", async () => {
     const m = model({ edit: true });
     await useImageStore.getState().generate(ctx(m), "a knight");
-    generateImage.mockRejectedValueOnce(new Error("Image edit error 404: Not Found"));
+    generateImage.mockRejectedValueOnce(new ImageHttpError("Image edit error", 404, "Not Found"));
     await useImageStore.getState().edit(ctx(m), "silver hair");
 
     expect(generateImage).toHaveBeenCalledTimes(3); // generate, failed edit, retry
@@ -95,7 +97,8 @@ describe("edit chain", () => {
   it("surfaces a genuine refusal instead of quietly regenerating", async () => {
     const m = model({ edit: true });
     await useImageStore.getState().generate(ctx(m), "a knight");
-    generateImage.mockRejectedValueOnce(new Error("Image edit error 400: prompt rejected by safety system"));
+    generateImage.mockRejectedValueOnce(
+      new ImageHttpError("Image edit error", 400, "prompt rejected by safety system"));
     await useImageStore.getState().edit(ctx(m), "silver hair");
 
     expect(generateImage).toHaveBeenCalledTimes(2); // no retry
@@ -139,6 +142,28 @@ describe("edit chain", () => {
       prompt: "a knight",
       edits: ["silver hair"],
     });
+  });
+
+  it("drops a result that lands after the session ended", async () => {
+    // Closing the modal is `abort(); void end(...)`, neither awaited. A
+    // request that resolves in that window used to recreate the scratch
+    // directory `end` had just deleted and revive a turn belonging to a
+    // session nobody is looking at.
+    const m = model({ edit: true });
+    let release: (v: unknown) => void = () => {};
+    generateImage.mockReturnValueOnce(new Promise((r) => { release = r; }));
+
+    const inFlight = useImageStore.getState().generate(ctx(m), "a knight");
+    await useImageStore.getState().end("/proj");
+    release(oneImage());
+    await inFlight;
+
+    expect(useImageStore.getState().turns).toHaveLength(0);
+    expect(useImageStore.getState().sessionId).toBeNull();
+    expect(writeCandidates).not.toHaveBeenCalled();
+    // The money was still spent, so it is still on the books.
+    const { recordImageUsage } = await import("../image");
+    expect(recordImageUsage).toHaveBeenCalled();
   });
 
   it("edits the candidate the author picked, not always the first", async () => {

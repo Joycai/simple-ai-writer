@@ -1,4 +1,6 @@
 use crate::scope::FsScope;
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -86,17 +88,27 @@ pub fn scaffold_project(
 }
 
 /// Write raw bytes to a file, creating it if it does not exist.
+///
+/// `data` is **base64**, not a JSON array of numbers. The IPC payload is JSON
+/// either way, and a 4 MB PNG as `[137,80,78,71,...]` is roughly 15 million
+/// characters for serde to parse element by element; the same image as base64
+/// is about 5.5 million and decodes in one pass. A session of conversational
+/// image editing writes every candidate of every round, so this is the hot
+/// path it looks like it isn't.
 #[command]
 pub fn fs_write_binary_file(
     path: String,
-    data: Vec<u8>,
+    data: String,
     scope: State<'_, FsScope>,
 ) -> Result<(), String> {
     scope.check(&path)?;
+    let bytes = BASE64
+        .decode(data.as_bytes())
+        .map_err(|e| format!("not valid base64: {e}"))?;
     if let Some(parent) = Path::new(&path).parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    fs::write(&path, data).map_err(|e| e.to_string())
+    fs::write(&path, bytes).map_err(|e| e.to_string())
 }
 
 /// Write UTF-8 text to a file, creating it if it does not exist.

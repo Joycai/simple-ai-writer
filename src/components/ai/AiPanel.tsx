@@ -1674,8 +1674,8 @@ export function AiPanel() {
           {pendingApprovals.map((p) => (
             <ApprovalCard key={p.proposal.id} proposal={p.proposal} />
           ))}
-          {pendingRoundLimits.map((p, i) => (
-            <RoundLimitCard key={i} item={p} />
+          {pendingRoundLimits.map((p) => (
+            <RoundLimitCard key={p.id} item={p} />
           ))}
 
           {/* Execution log: run lifecycle, rounds, tool calls */}

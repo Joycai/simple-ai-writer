@@ -123,7 +123,6 @@ export interface IllustrateProposal extends ProposalBase {
   /** Estimated USD for this run. Zero when the model has no price configured. */
   costUsd: number;
   aspect?: string;
-  size?: string;
   /**
    * Existing picture this one edits, as an absolute path. Present makes the
    * run an edit; the card shows it, since "change this picture" is only
@@ -976,9 +975,12 @@ export async function executeRegisteredTool(
   allowed: readonly ToolId[],
   ctx: ToolContext,
 ): Promise<ToolResult> {
-  const tool = (allowed as readonly string[]).includes(call.name)
-    ? REGISTRY[call.name as ToolId]
-    : undefined;
+  // Narrowed rather than asserted: `call.name` is whatever the model emitted,
+  // so a double cast here would hand a `RegisteredTool` shape to something
+  // that may be undefined.
+  const isAllowed = (name: string): name is ToolId =>
+    (allowed as readonly string[]).includes(name);
+  const tool = isAllowed(call.name) ? REGISTRY[call.name] : undefined;
   if (!tool) return { toolCallId: call.id, content: `Unknown tool: ${call.name}` };
   try {
     return await tool.execute(call, ctx);

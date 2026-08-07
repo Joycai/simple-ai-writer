@@ -12,8 +12,26 @@ export async function appendFile(path: string, content: string): Promise<void> {
   return invoke("fs_append_text_file", { path, content });
 }
 
+/**
+ * Write raw bytes.
+ *
+ * Sent as base64, not `Array.from(data)`. The IPC payload is JSON either way,
+ * and a 4 MB PNG as a JSON array of numbers is ~15 million characters to
+ * serialize here and parse element-by-element on the Rust side; base64 is
+ * ~5.5 million and decodes in one pass. A round of conversational image
+ * editing writes four candidates, so this runs far more often than it looks.
+ */
 export async function writeBinaryFile(path: string, data: Uint8Array): Promise<void> {
-  return invoke("fs_write_binary_file", { path, data: Array.from(data) });
+  return invoke("fs_write_binary_file", { path, data: toBase64(data) });
+}
+
+/** Chunked: one `String.fromCharCode(...bytes)` over a whole image overflows the stack. */
+function toBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
 }
 
 export async function makeDir(path: string): Promise<void> {

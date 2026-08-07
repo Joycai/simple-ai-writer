@@ -22,7 +22,7 @@
  * the blank-window failure mode this file exists for is fully covered.
  */
 
-import { Component, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, useEffect, useRef, useState, type ErrorInfo, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, ChevronDown, ChevronRight, Copy, RotateCcw, X } from "lucide-react";
 import styles from "./ErrorBoundary.module.css";
@@ -86,9 +86,19 @@ function ErrorDetails({ error, componentStack }: { error: Error; componentStack:
     componentStack ? `\n${t("errorBoundary.stackLabel")}:${componentStack}` : "",
   ].filter(Boolean).join("\n");
 
+  // The "copied" flash outlives the click, and the dialog this lives in is
+  // usually closed right after — clear the timer rather than setting state on
+  // an unmounted component.
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
+
   const copy = () => {
     void navigator.clipboard.writeText(report).then(
-      () => { setCopied(true); setTimeout(() => setCopied(false), 1600); },
+      () => {
+        setCopied(true);
+        if (copiedTimer.current) clearTimeout(copiedTimer.current);
+        copiedTimer.current = setTimeout(() => setCopied(false), 1600);
+      },
       () => { /* clipboard may be blocked — the text is on screen either way */ },
     );
   };

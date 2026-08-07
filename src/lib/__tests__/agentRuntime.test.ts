@@ -4,10 +4,11 @@
  * protocol, per-preset round caps, and the force-text final round.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import i18n from "../../i18n";
 import type { StreamOptions } from "../ai/types";
 import type { AgentEvent } from "../agent/events";
 import type { TaskPreset } from "../agent/presets";
-import { runAgent, trimHistory, type AgentRuntimeOptions } from "../agent/runtime";
+import { repairToolCallPairing, runAgent, trimHistory, type AgentRuntimeOptions } from "../agent/runtime";
 import type { LoreIndex } from "../lore";
 import type { StreamMessage } from "../ai/types";
 
@@ -56,15 +57,27 @@ function makeOptions(overrides: Partial<AgentRuntimeOptions> = {}): AgentRuntime
   };
 }
 
+/**
+ * What each round actually sent. The runtime mutates one history array in
+ * place, so anything read after the run is the *final* state — which is a
+ * different question from "what did round N ask for".
+ */
+const sent: StreamMessage[][] = [];
+
 /** Queue one streamCompletion round: emits the given chunks, resolves. */
 function queueRound(chunks: Array<Record<string, unknown>>): void {
   mockStream.mockImplementationOnce(async (opts: StreamOptions) => {
+    sent.push([...opts.messages]);
     for (const c of chunks) opts.onChunk(c as never);
   });
 }
 
+/** The round-cap nudge, resolved through i18n like the runtime resolves it. */
+const CAP_NUDGE = i18n.t("ai.instructions.roundCapReached");
+
 beforeEach(() => {
   mockStream.mockReset();
+  sent.length = 0;
 });
 
 /** The run's output: the final snapshot. (`Array.at` postdates the TS target.) */
@@ -205,10 +218,13 @@ describe("runAgent", () => {
 
     const call = mockStream.mock.calls[0][0];
     expect(call.tools).toBeUndefined();
-    const last = opts.messages[opts.messages.length - 1] as { role: string; content: string };
-    // The "write now" instruction was injected before the request
-    expect(last.role).toBe("user");
-    expect(String(last.content)).toContain("without calling any more tools");
+    // The "write now" instruction was injected before the request…
+    const asked = sent[0][sent[0].length - 1];
+    expect(asked.role).toBe("user");
+    expect(String(asked.content)).toBe(CAP_NUDGE);
+    // …and retracted after it. Chat reuses this array for every later turn, so
+    // leaving it in is a standing "never use tools again" the author cannot see.
+    expect(opts.messages.some((m) => String(m.content) === CAP_NUDGE)).toBe(false);
   });
 
   it("sends no tool definitions for an empty (single-shot) toolset", async () => {
@@ -313,9 +329,7 @@ describe("runAgent", () => {
     expect(result.rounds).toBe(3);
     expect(last(opts.output)).toBe("done");
     // Round 2 kept its tools — the forced-write instruction was never injected.
-    expect(
-      opts.messages.some((m) => String(m.content).includes("without calling any more tools")),
-    ).toBe(false);
+    expect(sent.some((round) => round.some((m) => String(m.content) === CAP_NUDGE))).toBe(false);
     expect(opts.events.filter((e) => e.kind === "round-limit")).toEqual([
       expect.objectContaining({ roundsUsed: 1, granted: 2 }),
     ]);
@@ -344,12 +358,43 @@ describe("runAgent", () => {
     // The declined final round is exactly today's behaviour: tools withheld,
     // write-now instruction injected.
     expect(mockStream.mock.calls[1][0].tools).toBeUndefined();
-    expect(
-      opts.messages.some((m) => String(m.content).includes("without calling any more tools")),
-    ).toBe(true);
+    expect(sent[1].some((m) => String(m.content) === CAP_NUDGE)).toBe(true);
+    // But not left behind for the next turn to inherit.
+    expect(opts.messages.some((m) => String(m.content) === CAP_NUDGE)).toBe(false);
     expect(opts.events.filter((e) => e.kind === "round-limit")).toEqual([
       expect.objectContaining({ roundsUsed: 1, granted: 0 }),
     ]);
+  });
+
+  it("answers every tool_call even when stopped part-way through a round", async () => {
+    // `history` IS the chat session's history. Stopping after k of N tool
+    // calls left an assistant tool_calls message missing replies, and every
+    // provider rejects that — so one press of 停止 killed the conversation
+    // permanently, with 新建对话 the only way out.
+    const ctrl = new AbortController();
+    queueRound([
+      { toolCalls: [
+        { index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" },
+        { index: 1, id: "c2", name: "list_lore_entities", arguments: "{}" },
+        { index: 2, id: "c3", name: "list_lore_entities", arguments: "{}" },
+      ] },
+      { done: true, inputTokens: 1, outputTokens: 1 },
+    ]);
+    const opts = makeOptions({ signal: ctrl.signal });
+    // Abort as soon as the first tool result lands.
+    const originalEvent = opts.onEvent;
+    opts.onEvent = (e) => {
+      originalEvent(e);
+      if (e.kind === "tool-step" && e.step.status === "done") ctrl.abort();
+    };
+
+    await expect(runAgent(opts)).rejects.toMatchObject({ name: "AbortError" });
+
+    const calls = opts.messages.flatMap((m) =>
+      m.role === "assistant" && "tool_calls" in m ? m.tool_calls.map((tc) => tc.id) : []);
+    const replies = opts.messages.flatMap((m) => (m.role === "tool" ? [m.tool_call_id] : []));
+    expect(calls).toEqual(["c1", "c2", "c3"]);
+    expect(replies.sort()).toEqual(["c1", "c2", "c3"]);
   });
 
   it("aborts cleanly when the run is stopped while the round-limit question is open", async () => {
@@ -431,5 +476,68 @@ describe("trimHistory", () => {
 
     expect(trimHistory(history, 100_000)).toBe(0);
     expect(Array.isArray(history[2].content)).toBe(true);
+  });
+
+  it("caps how many pictures stay in history however big the ceiling is", () => {
+    // The token estimate charges a flat rate per image, because that is what a
+    // provider bills — but the payload is base64, and chat history persists
+    // across turns. Under the token check alone the estimate stayed
+    // comfortably under the ceiling while the request body grew without bound.
+    const history: StreamMessage[] = [
+      { role: "system", content: "sys" },
+      { role: "user", content: "go" },
+      ...Array.from({ length: 6 }, imageMessage),
+    ];
+
+    const dropped = trimHistory(history, 100_000);
+
+    expect(dropped).toBe(3);
+    const kept = history.filter((m) => Array.isArray(m.content));
+    expect(kept).toHaveLength(3);
+    // The newest three survive — the ones the model is most likely to mean.
+    expect(history.slice(-3).every((m) => Array.isArray(m.content))).toBe(true);
+  });
+
+  it("trims nothing but images when no ceiling is configured", () => {
+    // `Model.contextSize` is optional, and a 0/undefined ceiling used to make
+    // this a complete no-op.
+    const history: StreamMessage[] = [
+      { role: "tool", tool_call_id: "c1", content: "y".repeat(4000) },
+      ...Array.from({ length: 5 }, imageMessage),
+    ];
+
+    expect(trimHistory(history, undefined)).toBe(2);
+    expect(history[0].content).toBe("y".repeat(4000));
+  });
+});
+
+describe("repairToolCallPairing", () => {
+  it("fills in the replies a stopped run never produced", () => {
+    const history: StreamMessage[] = [
+      { role: "user", content: "go" },
+      { role: "assistant", content: null, tool_calls: [
+        { id: "c1", type: "function", function: { name: "list_files", arguments: "{}" } },
+        { id: "c2", type: "function", function: { name: "read_file", arguments: "{}" } },
+      ] },
+      { role: "tool", tool_call_id: "c1", content: "ok" },
+    ];
+
+    expect(repairToolCallPairing(history)).toBe(1);
+    const replies = history.filter((m) => m.role === "tool").map((m) => m.tool_call_id);
+    expect(replies.sort()).toEqual(["c1", "c2"]);
+  });
+
+  it("leaves a well-formed history alone", () => {
+    const history: StreamMessage[] = [
+      { role: "user", content: "go" },
+      { role: "assistant", content: null, tool_calls: [
+        { id: "c1", type: "function", function: { name: "list_files", arguments: "{}" } },
+      ] },
+      { role: "tool", tool_call_id: "c1", content: "ok" },
+    ];
+    const before = history.length;
+
+    expect(repairToolCallPairing(history)).toBe(0);
+    expect(history).toHaveLength(before);
   });
 });

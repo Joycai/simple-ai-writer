@@ -4,6 +4,7 @@
  */
 
 import { fileExists, readFile, removeFile, writeBinaryFile, writeFile } from "../fs/fileio";
+import { safeAssetName } from "../image/assets";
 
 /**
  * Parse an `images.md` body where each `## <filename>` heading marks an image
@@ -67,10 +68,14 @@ async function readImagesMdAsList(dirPath: string): Promise<{ file: string; desc
 
 /**
  * Pick a filename that doesn't collide with anything already in the entity dir.
- * Sanitizes path separators and control chars, then dedupes by appending -2/-3.
+ *
+ * Sanitised by the same rule as document assets rather than a local one: the
+ * requested name is often the basename of a file the author picked on disk, so
+ * on macOS it can legitimately contain `: * ? " < > |`. Written into the
+ * project as-is, that repository cannot be checked out on Windows at all.
  */
 async function uniqueImageName(dirPath: string, requested: string): Promise<string> {
-  const safe = requested.replace(/[\\/\x00-\x1f]/g, "_").trim() || "image";
+  const safe = safeAssetName(requested, "image");
   if (!(await fileExists(`${dirPath}/${safe}`))) return safe;
   const dot = safe.lastIndexOf(".");
   const stem = dot > 0 ? safe.slice(0, dot) : safe;
