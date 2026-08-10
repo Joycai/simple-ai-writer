@@ -21,6 +21,7 @@
 
 import { estimateMessagesTokens, estimateTextTokens } from "../ai/tokenEstimate";
 import type { StreamMessage } from "../ai/types";
+import type { LoreEntity, LoreIndex } from "../lore/model";
 
 // ── Budget constants (docs/chat-memory-plan.md §6) ──────────────────
 
@@ -51,6 +52,18 @@ export const FOLD_TEXT_CLIP = 2000;
  * Per-session records the flat `chatHistory` array cannot carry itself.
  * Mutable alongside the history it describes; reset with it (`resetChat`).
  */
+/** One lore entity's entry in the injection ledger. */
+export interface InjectionRecord {
+  /** Fingerprint of the entity as injected — {@link entityVersion}. */
+  version: string;
+  /**
+   * The message that carried it into the conversation. When that message
+   * leaves the history (its turn folded, or the seed block dropped), the
+   * entry is evicted — mention the entity again and it re-injects.
+   */
+  carrier: StreamMessage;
+}
+
 export interface ChatSessionMeta {
   /** The seeded-context message (dropped at first compaction). Null once gone. */
   seedContext: StreamMessage | null;
@@ -64,10 +77,73 @@ export interface ChatSessionMeta {
   summaryText: string | null;
   /** The user-question messages, in order — each one starts a turn. */
   turnStarts: StreamMessage[];
+  /**
+   * What lore is currently in the conversation *because we put it there*,
+   * keyed by entity dirPath. What the model reads through its own tools is
+   * deliberately not tracked: that is its working memory — folded is
+   * forgotten, and it can always read again.
+   */
+  injected: Map<string, InjectionRecord>;
+  /** Document the last injected window belongs to — a switch re-injects. */
+  lastDocPath: string | null;
 }
 
 export function createSessionMeta(): ChatSessionMeta {
-  return { seedContext: null, summary: null, summaryText: null, turnStarts: [] };
+  return {
+    seedContext: null,
+    summary: null,
+    summaryText: null,
+    turnStarts: [],
+    injected: new Map(),
+    lastDocPath: null,
+  };
+}
+
+/**
+ * Content fingerprint of an entity, from the index alone (no file reads):
+ * name/aliases/summary plus the facet metadata. An edit that touches any of
+ * those re-injects the entity; a body-only edit that leaves the summary
+ * untouched slips through — acceptable, the model can still read the file.
+ */
+export function entityVersion(entity: LoreEntity): string {
+  return JSON.stringify([
+    entity.name,
+    entity.aliases,
+    entity.summary,
+    (entity.facets ?? []).map((f) => [f.file, f.title, f.keys, f.mode, f.priority, f.group]),
+  ]);
+}
+
+/** Record entities carried into the conversation by `carrier`. */
+export function recordInjections(
+  meta: ChatSessionMeta,
+  entities: LoreEntity[],
+  carrier: StreamMessage,
+): void {
+  for (const e of entities) {
+    meta.injected.set(e.dirPath, { version: entityVersion(e), carrier });
+  }
+}
+
+/**
+ * The dirs the per-turn retrieval should skip: ledger entries whose entity is
+ * unchanged since injection. A changed entity is *not* excluded — it matches
+ * again, re-injects, and its ledger entry is overwritten with the new version.
+ */
+export function excludeDirsFor(meta: ChatSessionMeta, loreIndex: LoreIndex): Set<string> {
+  const out = new Set<string>();
+  for (const entities of Object.values(loreIndex)) {
+    for (const e of entities ?? []) {
+      const rec = meta.injected.get(e.dirPath);
+      if (rec && rec.version === entityVersion(e)) out.add(e.dirPath);
+    }
+  }
+  return out;
+}
+
+/** The messages currently carrying injections — for the summary render skip. */
+export function injectionCarriers(meta: ChatSessionMeta): Set<StreamMessage> {
+  return new Set([...meta.injected.values()].map((r) => r.carrier));
 }
 
 /** Record `msg` as the start of a new turn. Call right before pushing it. */
@@ -194,11 +270,20 @@ function clip(text: string, max: number): string {
  * markers — the i18n'd summarize instruction (PR2) carries the language; this
  * is data. Tool traffic keeps only "what was asked, what came back, briefly":
  * the summary is *of the conversation*, not of the documents it read.
+ *
+ * `skip` — messages to leave out entirely, in practice the injection carriers
+ * ({@link injectionCarriers}): retrieval blocks are reproducible data, and
+ * summarizing them would spend the summary's budget on what the lore index
+ * already knows.
  */
-export function renderTurnsForSummary(turns: WireTurn[]): string {
+export function renderTurnsForSummary(
+  turns: WireTurn[],
+  skip?: ReadonlySet<StreamMessage>,
+): string {
   const lines: string[] = [];
   for (const turn of turns) {
     for (const msg of turn.messages) {
+      if (skip?.has(msg)) continue;
       if (msg.role === "tool") {
         lines.push(`[tool result] ${clip(msg.content, FOLD_RESULT_CLIP)}`);
       } else if (msg.role === "assistant" && "tool_calls" in msg && msg.tool_calls) {
@@ -256,5 +341,11 @@ export function buildCompactedHistory(
   meta.seedContext = null;
   meta.summary = summaryMsg;
   meta.turnStarts = plan.keep.map((t) => t.start);
+  // Evict ledger entries whose carrier just left the history — those entities
+  // are no longer in the conversation, so a later mention must re-inject.
+  const live = new Set(next);
+  for (const [dir, rec] of meta.injected) {
+    if (!live.has(rec.carrier)) meta.injected.delete(dir);
+  }
   return next;
 }

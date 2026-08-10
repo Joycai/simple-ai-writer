@@ -19,6 +19,7 @@ import { estimateMessagesTokens } from "../ai/tokenEstimate";
 import type { ApiStandard, StreamMessage } from "../ai/types";
 import {
   buildCompactedHistory,
+  injectionCarriers,
   planFold,
   renderTurnsForSummary,
   type ChatSessionMeta,
@@ -60,7 +61,9 @@ export async function compactChatHistory(opts: {
     summaryText = (
       await opts.summarize({
         prevSummary: meta.summaryText,
-        rendered: renderTurnsForSummary(plan.fold),
+        // Injection carriers are skipped: retrieval blocks are reproducible
+        // and would spend summarizer input on what the lore index already has.
+        rendered: renderTurnsForSummary(plan.fold, injectionCarriers(meta)),
       })
     ).trim();
   } catch (e) {

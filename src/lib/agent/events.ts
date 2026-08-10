@@ -51,12 +51,13 @@ export type AgentEvent =
        * Context the assembler injected *before* the loop started — the RAG
        * layers the model never had to ask for.
        *
-       * Emitted by the conversational assistant, where this happens once (the
-       * first turn seeds the wire history; later turns inherit it and must use
-       * tools for anything more). Without it the log looks as though the run
-       * began knowing nothing, and a lore miss — the single most useful thing
-       * to notice — is invisible. The task panel has its own richer
-       * 「本次注入设定」 report and does not emit this.
+       * Emitted by the conversational assistant: once for the first turn's
+       * seed, and again on any later turn whose per-turn retrieval found
+       * something net-new (lib/context/rag assembleTurnInjection — new lore
+       * mentions, or a document switch). Without it the log looks as though
+       * the run began knowing nothing, and a lore miss — the single most
+       * useful thing to notice — is invisible. The task panel has its own
+       * richer 「本次注入设定」 report and does not emit this.
        */
       kind: "context-seeded";
       /** Document the verbatim window was taken from, if one is open. */

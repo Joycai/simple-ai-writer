@@ -13,7 +13,7 @@
  */
 
 import i18n from "../../i18n";
-import type { LoreIndex } from "../lore";
+import type { LoreEntity, LoreIndex } from "../lore";
 import { activeProfile, promptParams, sectionLabel } from "../profile/active";
 import { RECENT_WINDOW_MIN_CHARS } from "./budget";
 import { selectLore, type LoreActivationReport } from "./loreSelect";
@@ -473,6 +473,98 @@ export function bundleToMessages(
     { role: "system", content: bundle.systemPrompt || profileSystemPrompt() },
     { role: "user", content: parts.join("\n\n") },
   ];
+}
+
+/** What one turn's automatic retrieval produced (docs/chat-memory-plan.md §5). */
+export interface TurnInjection {
+  /** The 【…】 blocks to append as one user message; "" when nothing net-new. */
+  text: string;
+  /** Lore activation, for the context-seeded log event. */
+  loreReport: LoreActivationReport;
+  /** The activated entities resolved back to index objects, for the ledger. */
+  matchedEntities: LoreEntity[];
+  /** Recent-window chars injected; 0 when the document didn't change. */
+  docChars: number;
+  memoryChars: number;
+}
+
+/**
+ * Per-turn retrieval for the chat: what the seed did once, re-run against the
+ * *current* question — minus everything the injection ledger says is already
+ * in the conversation. Returns text only for the net increase, so an
+ * unchanged context appends nothing and the wire history stays append-only
+ * (replacing an old block would invalidate the prompt-cache prefix).
+ *
+ * `doc` is passed only when the focused document changed since the last
+ * injection: the seeded window belongs to the old document, and the model
+ * otherwise has no idea the author is now somewhere else.
+ */
+export async function assembleTurnInjection(opts: {
+  loreIndex: LoreIndex;
+  /** Question + quote + current document tail — same targets the seed used. */
+  matchTarget: string;
+  excludeDirs: ReadonlySet<string>;
+  loreBudgetChars?: number;
+  doc?: {
+    filePath: string;
+    documentText: string;
+    memory: DocMemory | null;
+    contextChars?: number;
+    memoryBudgetChars?: number;
+  } | null;
+}): Promise<TurnInjection> {
+  const { text: loreSnippets, report } = await selectLore(
+    opts.matchTarget,
+    opts.loreIndex,
+    [],
+    opts.loreBudgetChars,
+    { excludeDirs: opts.excludeDirs },
+  );
+
+  // Same section order as the seed (bundleContextSections): file → lore →
+  // recap → recent. The model has already learned that shape once.
+  const parts: string[] = [];
+  let docChars = 0;
+  let memoryChars = 0;
+  if (opts.doc) {
+    parts.push(`【${sectionLabel("currentFile")}】\n${opts.doc.filePath}`);
+  }
+  if (loreSnippets) {
+    parts.push(`【${sectionLabel("knowledge")}】\n${loreSnippets}`);
+  }
+  if (opts.doc) {
+    const span = opts.doc.contextChars ?? MAX_CONTEXT_CHARS;
+    const len = opts.doc.documentText.length;
+    const detailStart = Math.max(0, len - span);
+    const storySummary = opts.doc.memory
+      ? selectMemoryForContext(opts.doc.memory, detailStart, opts.doc.memoryBudgetChars)
+      : "";
+    if (storySummary) {
+      parts.push(`【${sectionLabel("priorRecap")}】\n${storySummary}`);
+      memoryChars = storySummary.length;
+    }
+    const recent = opts.doc.documentText.slice(detailStart).trim();
+    if (recent) {
+      parts.push(`【${sectionLabel("recent")}】\n${recent}`);
+      docChars = recent.length;
+    }
+  }
+
+  const byDir = new Map<string, LoreEntity>();
+  for (const entities of Object.values(opts.loreIndex)) {
+    for (const e of entities ?? []) byDir.set(e.dirPath, e);
+  }
+  return {
+    text: parts.length
+      ? `${i18n.t("ai.instructions.chatInjection")}\n\n${parts.join("\n\n")}`
+      : "",
+    loreReport: report,
+    matchedEntities: report.entities
+      .map((r) => byDir.get(r.dirPath))
+      .filter((e): e is LoreEntity => !!e),
+    docChars,
+    memoryChars,
+  };
 }
 
 /** The chat seed, with the two user messages identified for session bookkeeping. */

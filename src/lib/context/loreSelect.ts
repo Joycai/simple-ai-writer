@@ -126,12 +126,17 @@ interface Selected {
  * @param loreIndex    Full lore index from loreStore
  * @param pinPaths     Persisted pin strings (dirPath or dirPath#facetFile)
  * @param budgetChars  Total char budget for the assembled block
+ * @param opts.excludeDirs  Entity dirs to skip during *auto*-matching — used by
+ *                     the chat's per-turn injection to not re-send entities
+ *                     already in the conversation (lib/agent/compact ledger).
+ *                     Pins are exempt: an explicit pin is the author insisting.
  */
 export async function selectLore(
   matchTarget: string,
   loreIndex: LoreIndex,
   pinPaths: string[],
   budgetChars: number = DEFAULT_LORE_BUDGET_CHARS,
+  opts?: { excludeDirs?: ReadonlySet<string> },
 ): Promise<LoreSelection> {
   const lower = matchTarget.toLowerCase();
 
@@ -175,6 +180,7 @@ export async function selectLore(
   outer: for (const entities of Object.values(loreIndex)) {
     for (const entity of entities ?? []) {
       if (pinnedFacetsByDir.has(entity.dirPath)) continue; // already pinned
+      if (opts?.excludeDirs?.has(entity.dirPath)) continue; // already in context
       const terms = [entity.name, ...(entity.aliases ?? [])];
       if (terms.some((t) => t && lower.includes(t.toLowerCase()))) {
         autoDirs.push(entity.dirPath);

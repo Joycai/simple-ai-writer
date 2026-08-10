@@ -132,8 +132,14 @@ wire 历史本就分离，聊天记录的显示不受压缩影响。
   专用归纳模型）；sendChat 在 push 用户消息前接线；`context-compacted` 事件 +
   AgentLog 可展开行（详情=摘要全文）；`ai.instructions.chatCompact*` 双语文案；
   `trimHistory` 注释改写为第二道保险。
-- **PR3 — 每轮注入**：注入账本、`selectLore` 复跑、文档切换补注、
-  `context-seeded` 每轮化。
+- **PR3 — 每轮注入**（已完成）：注入账本进 `ChatSessionMeta`
+  （`injected: Map<dirPath, {version, carrier}>` + `entityVersion` 指纹 +
+  `excludeDirsFor` / `recordInjections`，折叠时按 carrier 存活性驱逐）；
+  `selectLore` 增加 `excludeDirs`（只影响自动匹配，pin 豁免）；
+  `assembleTurnInjection`（`lib/context/rag.ts`）产出净增量块，文档切换补注
+  窗口+前情；播种的设定在首轮就入账本；归纳输入跳过注入块；实际注入时复用
+  `context-seeded` 事件进当轮日志。指纹来自索引（name/aliases/summary/facets
+  元数据），只改正文不改摘要的编辑不触发重注——模型仍可用工具读到最新内容。
 - 顺序即依赖序；PR2/PR3 互不依赖，可并行。
 
 **测试**（`src/lib/__tests__/chatCompact.test.ts`）：折叠绝不切开

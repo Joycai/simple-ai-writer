@@ -44,7 +44,8 @@ import { create } from "zustand";
 import i18n from "../i18n";
 import { backupFile } from "../lib/agent/backup";
 import {
-  createSessionMeta, noteTurnStart, type ChatSessionMeta,
+  createSessionMeta, excludeDirsFor, noteTurnStart, recordInjections,
+  type ChatSessionMeta,
 } from "../lib/agent/compact";
 import { compactChatHistory, summarizeForCompaction } from "../lib/agent/compactRun";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
@@ -56,7 +57,9 @@ import {
 } from "../lib/context/budget";
 import { loadMemory, MEMORY_BUDGET_CHARS } from "../lib/context/memory";
 import { parentDir } from "../lib/context/outline";
-import { assembleContext, bundleToChatMessages, profileSystemPrompt } from "../lib/context/rag";
+import {
+  assembleContext, assembleTurnInjection, bundleToChatMessages, profileSystemPrompt,
+} from "../lib/context/rag";
 import { docModel, promptParams } from "../lib/profile/active";
 import type { ApprovalDecision, EditProposal, Proposal } from "../lib/agent/registry";
 import { resolveModel, type AttachedItem } from "../lib/lore/aiTask";
@@ -542,7 +545,21 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         history = seed.messages;
         const meta = createSessionMeta();
         meta.seedContext = seed.seedContext;
+        meta.lastDocPath = activeFilePath ?? null;
         noteTurnStart(meta, seed.question);
+        // The seeded lore goes in the injection ledger, carried by the seed
+        // block — otherwise turn 2's retrieval would re-inject everything the
+        // model was just given.
+        if (seed.seedContext) {
+          const byDir = new Map(
+            Object.values(useLoreStore.getState().index).flat().map((e) => [e.dirPath, e]),
+          );
+          recordInjections(
+            meta,
+            bundle.loreReport.entities.flatMap((r) => byDir.get(r.dirPath) ?? []),
+            seed.seedContext,
+          );
+        }
         set({ chatHistory: history, chatMeta: meta });
 
         // Report the seeded layers into this turn's log. This is the only turn
@@ -602,6 +619,58 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             history = compacted.history;
             set({ chatHistory: history });
             patchAssistant((tn) => ({ ...tn, log: appendAgentEventTo(tn.log, compacted.event) }));
+          }
+        }
+
+        // ── Per-turn injection (docs/chat-memory-plan.md §5) ──
+        // The seed's retrieval, re-run against *this* question, minus what the
+        // ledger says is already in the conversation. A document switch also
+        // re-injects the window + recap — the seeded ones belong to the old
+        // document. Nothing net-new appends nothing: the history stays
+        // append-only, so the prompt-cache prefix survives.
+        if (meta) {
+          const docSwitched = !!activeFilePath && activeFilePath !== meta.lastDocPath;
+          const memory = docSwitched && docModel().memory && activeFilePath
+            ? await loadMemory(projectPath, activeFilePath)
+            : null;
+          const loreIdx = useLoreStore.getState().index;
+          const { loreBudgetTokens } = useAppStore.getState();
+          const inj = await assembleTurnInjection({
+            loreIndex: loreIdx,
+            // Same match targets as the seed: the question (with its quote and
+            // @refs inlined) plus the document's tail neighborhood.
+            matchTarget: wireMessage + focus.text.slice(-500),
+            excludeDirs: excludeDirsFor(meta, loreIdx),
+            loreBudgetChars: loreBudgetTokens * measureCharsPerToken(focus.text),
+            doc: docSwitched && activeFilePath
+              ? {
+                  filePath: activeFilePath,
+                  documentText: focus.text,
+                  memory,
+                  contextChars: RECENT_WINDOW_MIN_CHARS,
+                  memoryBudgetChars: MEMORY_BUDGET_CHARS,
+                }
+              : null,
+          });
+          if (inj.text) {
+            const injMsg: StreamMessage = { role: "user", content: inj.text };
+            history.push(injMsg);
+            recordInjections(meta, inj.matchedEntities, injMsg);
+            if (docSwitched) meta.lastDocPath = activeFilePath;
+            patchAssistant((tn) => ({
+              ...tn,
+              log: appendAgentEventTo(tn.log, {
+                kind: "context-seeded",
+                documentName: docSwitched && activeFilePath
+                  ? (activeFilePath.split(/[\\/]/).pop() ?? "").replace(/\.md$/i, "")
+                  : null,
+                recentChars: inj.docChars,
+                memoryChars: inj.memoryChars,
+                loreEntities: inj.loreReport.entities.length,
+                loreChars: inj.loreReport.usedChars,
+                at: Date.now(),
+              }),
+            }));
           }
         }
 
