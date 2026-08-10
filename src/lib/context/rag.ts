@@ -427,9 +427,8 @@ export function profileSystemPrompt(): string {
  * these headings are the only thing telling the model what each block *is*, and
  * a novel-flavoured label on a non-novel project actively misleads it.
  */
-export function bundleToMessages(
-  bundle: ContextBundle
-): { role: "system" | "user"; content: string }[] {
+/** The 【…】 context sections shared by both message shapes — task text excluded. */
+function bundleContextSections(bundle: ContextBundle): string[] {
   const parts: string[] = [];
 
   // First, because it tells a tool-using task which of the files it is about to
@@ -463,10 +462,56 @@ ${bundle.currentFilePath}`);
   if (bundle.recentContext) {
     parts.push(`【${sectionLabel("recent")}】\n${bundle.recentContext}`);
   }
-  parts.push(bundle.taskText);
+  return parts;
+}
 
+export function bundleToMessages(
+  bundle: ContextBundle
+): { role: "system" | "user"; content: string }[] {
+  const parts = [...bundleContextSections(bundle), bundle.taskText];
   return [
     { role: "system", content: bundle.systemPrompt || profileSystemPrompt() },
     { role: "user", content: parts.join("\n\n") },
   ];
+}
+
+/** The chat seed, with the two user messages identified for session bookkeeping. */
+export interface ChatSeedMessages {
+  /** What actually goes on the wire, in order. */
+  messages: { role: "system" | "user"; content: string }[];
+  /**
+   * The seeded-context message inside `messages` — identified by reference so
+   * the session can drop it at compaction time. Null when nothing was seeded
+   * (no document open, no lore matched): then there is no message at all,
+   * rather than an empty one taking up a slot in every later request.
+   */
+  seedContext: { role: "user"; content: string } | null;
+  /** The author's question message inside `messages`. */
+  question: { role: "user"; content: string };
+}
+
+/**
+ * Chat variant of {@link bundleToMessages}: same layers, but the seeded context
+ * and the author's question are **separate messages**. Merged, the injected
+ * lore/memory/window is welded to the first question for the life of the
+ * session — it can never be dropped without also dropping what the author
+ * asked. Split, the context block is an independent unit the compaction pass
+ * (docs/chat-memory-plan.md §4) can discard, because it is retrieval output
+ * and reproducible; the question is conversation and is not.
+ */
+export function bundleToChatMessages(bundle: ContextBundle): ChatSeedMessages {
+  const sections = bundleContextSections(bundle);
+  const seedContext = sections.length > 0
+    ? { role: "user" as const, content: sections.join("\n\n") }
+    : null;
+  const question = { role: "user" as const, content: bundle.taskText };
+  return {
+    messages: [
+      { role: "system", content: bundle.systemPrompt || profileSystemPrompt() },
+      ...(seedContext ? [seedContext] : []),
+      question,
+    ],
+    seedContext,
+    question,
+  };
 }

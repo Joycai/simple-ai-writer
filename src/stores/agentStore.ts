@@ -43,6 +43,9 @@
 import { create } from "zustand";
 import i18n from "../i18n";
 import { backupFile } from "../lib/agent/backup";
+import {
+  createSessionMeta, noteTurnStart, type ChatSessionMeta,
+} from "../lib/agent/compact";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import { createPlanGate, type LorePlan, type PlanDecision } from "../lib/agent/plan";
 import { AGENT_ASSIST_PRESET } from "../lib/agent/presets";
@@ -52,7 +55,7 @@ import {
 } from "../lib/context/budget";
 import { loadMemory, MEMORY_BUDGET_CHARS } from "../lib/context/memory";
 import { parentDir } from "../lib/context/outline";
-import { assembleContext, bundleToMessages, profileSystemPrompt } from "../lib/context/rag";
+import { assembleContext, bundleToChatMessages, profileSystemPrompt } from "../lib/context/rag";
 import { docModel, promptParams } from "../lib/profile/active";
 import type { ApprovalDecision, EditProposal, Proposal } from "../lib/agent/registry";
 import { resolveModel, type AttachedItem } from "../lib/lore/aiTask";
@@ -158,6 +161,12 @@ interface AgentState {
   chatAbort: AbortController | null;
   /** Wire-protocol history the runtime appends to; null until the first turn. */
   chatHistory: StreamMessage[] | null;
+  /**
+   * Turn boundaries + seed/summary identities for chatHistory — what the flat
+   * array can't say about itself. Mutated in place alongside the history it
+   * describes (lib/agent/compact); null exactly when chatHistory is.
+   */
+  chatMeta: ChatSessionMeta | null;
 
   /** Called by the tool executor (via ToolContext.requestApproval). */
   requestApproval: (proposal: Proposal, runId: RunId, binding?: ApprovalBinding) => Promise<ApprovalDecision>;
@@ -345,6 +354,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   chatUsage: null,
   chatAbort: null,
   chatHistory: null,
+  chatMeta: null,
 
   requestApproval: (proposal, runId, binding) =>
     new Promise<ApprovalDecision>((resolve) => {
@@ -521,8 +531,17 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           loreBudgetTokens * charsPerToken,
           MEMORY_BUDGET_CHARS,
         );
-        history = bundleToMessages(bundle);
-        set({ chatHistory: history });
+        // Three messages, not two: the seeded context and the question are
+        // separate so the compaction pass can later drop the former without
+        // the latter (docs/chat-memory-plan.md §3). The meta records which
+        // message is which — by identity, because indices don't survive
+        // repairToolCallPairing's splices.
+        const seed = bundleToChatMessages(bundle);
+        history = seed.messages;
+        const meta = createSessionMeta();
+        meta.seedContext = seed.seedContext;
+        noteTurnStart(meta, seed.question);
+        set({ chatHistory: history, chatMeta: meta });
 
         // Report the seeded layers into this turn's log. This is the only turn
         // that gets automatic RAG — from here on the history is inherited and
@@ -548,7 +567,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // and appending onto that makes the provider reject not just this turn
         // but every turn after it. Repair before adding to it.
         repairToolCallPairing(history);
-        history.push({ role: "user", content: wireMessage });
+        const questionMsg: StreamMessage = { role: "user", content: wireMessage };
+        const meta = get().chatMeta;
+        if (meta) noteTurnStart(meta, questionMsg);
+        history.push(questionMsg);
       }
 
       const { contextUtilization } = useAppStore.getState();
@@ -644,6 +666,6 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   resetChat: () => {
     get().stopChat();
-    set({ turns: [], chatHistory: null, chatError: null, chatUsage: null });
+    set({ turns: [], chatHistory: null, chatMeta: null, chatError: null, chatUsage: null });
   },
 }));
