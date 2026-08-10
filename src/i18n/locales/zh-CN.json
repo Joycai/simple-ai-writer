@@ -770,7 +770,9 @@
       "refBlockLabel": "【引用资料】",
       "noSelection": "未选中正文",
       "contextMeter": "上下文",
-      "sendHint": "Enter 发送 · Shift+Enter 换行"
+      "sendHint": "Enter 发送 · Shift+Enter 换行",
+      "showEarlier": "更早的 {{n}} 轮对话",
+      "collapseEarlier": "收起早前对话"
     },
     "drawer": {
       "tabGenerate": "生成",
