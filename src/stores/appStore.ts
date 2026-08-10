@@ -128,7 +128,16 @@ function prefBackedState() {
 
 export type MainView = "editor" | "lore-wall" | "outline-full";
 export type AiDrawerMode = "generate" | "chat" | "consistency";
-export type SettingsTab = "general" | "providers" | "models" | "prompts" | "about";
+/** Every pane the settings page renders — `openSettings(tab)` can reach all of
+ *  them, so this union and SettingsPage's nav must stay in step. */
+export type SettingsTab =
+  | "general"
+  | "workspace"
+  | "providers-models"
+  | "prompts"
+  | "usage"
+  | "shortcuts"
+  | "about";
 export type SideTab = "files" | "outline" | "search";
 
 interface AppState {
@@ -162,8 +171,10 @@ interface AppState {
   showAiDrawer: boolean;
   aiDrawerMode: AiDrawerMode;
   showOnboarding: boolean;
-  /** Settings modal visibility + which pane it opens on. Lives here rather than
-   *  in App so any surface (e.g. the model picker's 管理供应商) can reach it. */
+  /** Settings page visibility + which pane it opens on. Lives here rather than
+   *  in App so any surface (e.g. the model picker's 管理供应商) can reach it.
+   *  Deliberately not a `MainView`: `navStore.navigationBlocked()` reads this
+   *  flag to keep settings out of the back/forward history. */
   showSettings: boolean;
   settingsTab: SettingsTab;
 

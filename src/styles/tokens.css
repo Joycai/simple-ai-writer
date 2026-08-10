@@ -19,6 +19,9 @@
   --font-size-xs: 11px;
   --font-size-sm: 12px;
   --font-size-md: 13px;
+  /* Settings rows, nav items — the reading size between chrome (13) and a
+     heading (17). Added for the settings page; reuse it, don't inline 14px. */
+  --font-size-base: 14px;
   --font-size-lg: 17px;
   --font-size-xl: 22px;
   --font-size-2xl: 32px;

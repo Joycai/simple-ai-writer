@@ -7,7 +7,7 @@ import { AiRail } from "./components/layout/AiRail";
 import { Sidebar } from "./components/layout/Sidebar";
 import { EditorArea } from "./components/layout/EditorArea";
 import { ResizeHandle } from "./components/layout/ResizeHandle";
-import { SettingsModal } from "./components/settings/SettingsModal";
+import { SettingsPage } from "./components/settings/SettingsPage";
 import { AiDrawer } from "./components/ai/AiDrawer";
 import { InlineAiBubble } from "./components/ai/InlineAiBubble";
 import { LoreWall } from "./components/lore/LoreWall";
@@ -63,10 +63,13 @@ export default function App() {
     >
       <TitleBar />
 
+      {/* `position: relative` so the settings page can fill exactly this band —
+          everything below the TitleBar, which stays put as the drag region. */}
       <div
         style={{
           display: "flex",
           flex: 1,
+          position: "relative",
           overflow: "hidden",
           ["--sidebar-width" as any]: `${sidebarWidth}px`,
         }}
@@ -96,13 +99,14 @@ export default function App() {
         </div>
 
         <AiRail />
+
+        <AnimatePresence>
+          {showSettings && (
+            <SettingsPage key="settings" initialTab={settingsTab} onClose={closeSettings} />
+          )}
+        </AnimatePresence>
       </div>
 
-      <AnimatePresence>
-        {showSettings && (
-          <SettingsModal key="settings" initialTab={settingsTab} onClose={closeSettings} />
-        )}
-      </AnimatePresence>
       <AiDrawer />
       <InlineAiBubble />
       <CommandPalette />
