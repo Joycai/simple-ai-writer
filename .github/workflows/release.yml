@@ -143,8 +143,11 @@ jobs:
         run: |
           mkdir -p release-files
 
-          # Copy all bundle files from artifacts
-          find dist-artifacts -type f \( -name "*.dmg" -o -name "*.msi" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.tar.gz" \) -exec cp {} release-files/ \;
+          # Copy only distributable installers. Match *.app.tar.gz (macOS updater
+          # bundle) rather than *.tar.gz, which would also sweep up control.tar.gz
+          # and data.tar.gz — internal members of the .deb that the Linux bundler
+          # leaves in bundle/deb/.
+          find dist-artifacts -type f \( -name "*.dmg" -o -name "*.msi" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.app.tar.gz" \) -exec cp {} release-files/ \;
 
           # List all collected files
           echo "=== Release Files ==="
