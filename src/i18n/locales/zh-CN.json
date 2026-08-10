@@ -772,7 +772,9 @@
       "contextMeter": "上下文",
       "sendHint": "Enter 发送 · Shift+Enter 换行",
       "showEarlier": "更早的 {{n}} 轮对话",
-      "collapseEarlier": "收起早前对话"
+      "collapseEarlier": "收起早前对话",
+      "history": "历史会话",
+      "untitledSession": "（空会话）"
     },
     "drawer": {
       "tabGenerate": "生成",

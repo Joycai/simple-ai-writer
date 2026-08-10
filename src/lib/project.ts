@@ -141,5 +141,17 @@ async function initSchema(db: Awaited<ReturnType<typeof Database.load>>) {
     )
   `);
 
+  // Persisted 对话助手 sessions — one JSON blob per session, newest few kept
+  // (lib/agent/sessionDb owns the cap and all reads/writes).
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS chat_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      preview TEXT NOT NULL DEFAULT '',
+      data TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    )
+  `);
+
   await dropDeadTables(db);
 }

@@ -1,6 +1,7 @@
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "motion/react";
-import { Bot, CheckCircle2, RotateCw, Sparkles, X } from "lucide-react";
+import { Bot, CheckCircle2, History, RotateCw, Sparkles, X } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { AgentChat } from "./AgentChat";
@@ -25,10 +26,31 @@ export function AiDrawer() {
   const { t } = useTranslation();
   const { showAiDrawer, aiDrawerMode, setShowAiDrawer } = useAppStore();
 
-  const { turns, chatError, resetChat } = useAgentStore();
+  const {
+    turns, chatError, chatRunning, chatSessionId, chatSessions,
+    resetChat, switchChatSession,
+  } = useAgentStore();
 
   const close = () => setShowAiDrawer(false);
   const setMode = (m: Mode) => setShowAiDrawer(true, m);
+
+  // ── Session history menu ──
+  const [showSessions, setShowSessions] = useState(false);
+  const sessionsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!showSessions) return;
+    const onDown = (e: MouseEvent) => {
+      if (!sessionsRef.current?.contains(e.target as Node)) setShowSessions(false);
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [showSessions]);
+
+  const formatSessionTime = (unixSeconds: number) => {
+    const d = new Date(unixSeconds * 1000);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
 
   const headerTitle =
     aiDrawerMode === "consistency"
@@ -83,6 +105,38 @@ export function AiDrawer() {
           </div>
 
           <div className={styles.headerActions}>
+            {aiDrawerMode === "chat" && chatSessions.length > 0 && (
+              <div className={styles.sessionMenuWrap} ref={sessionsRef}>
+                <button
+                  className={styles.headerBtn}
+                  onClick={() => setShowSessions((v) => !v)}
+                  disabled={chatRunning}
+                  aria-expanded={showSessions}
+                  title={t("ai.chat.history", { defaultValue: "历史会话" })}
+                >
+                  <History size={11} strokeWidth={1.8} style={{ verticalAlign: -1.5 }} />
+                </button>
+                {showSessions && (
+                  <div className={styles.sessionMenu}>
+                    {chatSessions.map((s) => (
+                      <button
+                        key={s.id}
+                        className={`${styles.sessionItem} ${s.id === chatSessionId ? styles.sessionItemActive : ""}`}
+                        onClick={() => {
+                          setShowSessions(false);
+                          void switchChatSession(s.id);
+                        }}
+                      >
+                        <span className={styles.sessionPreview}>
+                          {s.preview || t("ai.chat.untitledSession", { defaultValue: "（空会话）" })}
+                        </span>
+                        <span className={styles.sessionTime}>{formatSessionTime(s.updatedAt)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {aiDrawerMode === "chat" && (
               <button
                 className={`${styles.headerBtn} ${styles.headerBtnAccent}`}

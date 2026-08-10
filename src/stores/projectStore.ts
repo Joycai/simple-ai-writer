@@ -173,6 +173,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       await get().refreshFileTree();
       await useLoreStore.getState().scanProject(target);
       useAppStore.getState().addRecentProject(target);
+      // Chat sessions are project-scoped: drop the previous project's from
+      // view and restore this one's newest. Lazy import — agentStore reaches
+      // back into this store (see its module doc on circular deps).
+      const { useAgentStore } = await import("./agentStore");
+      await useAgentStore.getState().resetChatForProject(target);
     } catch (err) {
       // A recent path that no longer opens (moved/deleted) should drop out of the list.
       if (typeof path === "string") useAppStore.getState().removeRecentProject(path);
@@ -185,6 +190,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   closeProject: async () => {
     await flushDirtyDocuments();
     resetDocuments();
+    const { useAgentStore } = await import("./agentStore");
+    await useAgentStore.getState().resetChatForProject(null);
     resetDb();
     // Back to the default profile: with no project open, anything that reads
     // the active profile must not still see the closed project's categories.

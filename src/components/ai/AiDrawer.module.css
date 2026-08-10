@@ -92,6 +92,56 @@
 .headerBtn:disabled { opacity: 0.4; cursor: not-allowed; }
 .headerBtnAccent { color: var(--color-sienna); }
 
+/* ── Session history menu ────────────────────────────────────────── */
+.sessionMenuWrap { position: relative; }
+
+.sessionMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 10;
+  min-width: 240px;
+  max-width: 320px;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-1) 0;
+  animation: slideUp 160ms var(--ease-out);
+}
+
+.sessionItem {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: 6px var(--space-3);
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.sessionItem:hover { background: var(--color-bg-elevated); }
+.sessionItemActive { background: var(--color-accent-tint); }
+
+.sessionPreview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 400 11px/1.6 var(--font-sans);
+  color: var(--color-text-primary);
+}
+.sessionItemActive .sessionPreview { color: var(--color-sienna); }
+
+.sessionTime {
+  flex-shrink: 0;
+  font: 400 10px/1.6 var(--font-mono);
+  color: var(--color-text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
 .closeBtn {
   width: 26px;
   height: 26px;

@@ -48,6 +48,12 @@ import {
   type ChatSessionMeta,
 } from "../lib/agent/compact";
 import { compactChatHistory, summarizeForCompaction } from "../lib/agent/compactRun";
+import {
+  deserializeChatSession, maxTurnId, serializeChatSession, sessionPreview,
+} from "../lib/agent/chatSession";
+import {
+  listChatSessions, loadChatSession, upsertChatSession, type ChatSessionRow,
+} from "../lib/agent/sessionDb";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import { createPlanGate, type LorePlan, type PlanDecision } from "../lib/agent/plan";
 import { AGENT_ASSIST_PRESET } from "../lib/agent/presets";
@@ -171,6 +177,10 @@ interface AgentState {
    * describes (lib/agent/compact); null exactly when chatHistory is.
    */
   chatMeta: ChatSessionMeta | null;
+  /** DB row this session saves into; null until the first persist. */
+  chatSessionId: number | null;
+  /** Recent sessions (newest first, ≤ MAX_CHAT_SESSIONS) for the history menu. */
+  chatSessions: ChatSessionRow[];
 
   /** Called by the tool executor (via ToolContext.requestApproval). */
   requestApproval: (proposal: Proposal, runId: RunId, binding?: ApprovalBinding) => Promise<ApprovalDecision>;
@@ -200,6 +210,16 @@ interface AgentState {
   sendChat: (text: string, quote?: string, refs?: AttachedItem[]) => Promise<void>;
   stopChat: () => void;
   resetChat: () => void;
+
+  /** Save the live session to the project DB (best-effort, never throws). */
+  persistChat: () => Promise<void>;
+  /** Load a session from the history menu, persisting the current one first. */
+  switchChatSession: (id: number) => Promise<void>;
+  /**
+   * Project open/close hook (projectStore calls this): drop the previous
+   * project's session from view, then restore the new project's newest one.
+   */
+  resetChatForProject: (projectPath: string | null) => Promise<void>;
 }
 
 let turnCounter = 0;
@@ -359,6 +379,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   chatAbort: null,
   chatHistory: null,
   chatMeta: null,
+  chatSessionId: null,
+  chatSessions: [],
 
   requestApproval: (proposal, runId, binding) =>
     new Promise<ApprovalDecision>((resolve) => {
@@ -758,6 +780,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       if (get().chatAbort === controller) {
         set({ chatRunning: false, chatAbort: null });
       }
+      // Save after every turn, success or failure — the crash that loses a
+      // session never announces itself first.
+      void get().persistChat();
     }
   },
 
@@ -770,6 +795,88 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   resetChat: () => {
     get().stopChat();
-    set({ turns: [], chatHistory: null, chatMeta: null, chatError: null, chatUsage: null });
+    // The old session stays in the history menu (it was persisted at its last
+    // turn); clearing the id makes the next turn open a fresh row.
+    set({ turns: [], chatHistory: null, chatMeta: null, chatSessionId: null, chatError: null, chatUsage: null });
+  },
+
+  persistChat: async () => {
+    const { turns, chatHistory, chatMeta, chatUsage, chatSessionId } = get();
+    if (!chatHistory || !chatMeta || turns.length === 0) return;
+    const { useProjectStore } = await import("./projectStore");
+    const { projectPath } = useProjectStore.getState();
+    if (!projectPath) return;
+    try {
+      const data = serializeChatSession({
+        turns, history: chatHistory, meta: chatMeta, usage: chatUsage,
+      });
+      const id = await upsertChatSession(
+        projectPath, chatSessionId, data, sessionPreview(turns),
+      );
+      // Another persist may have raced ahead (approve() lands mid-run) — only
+      // adopt the id if nothing changed the session underneath.
+      if (get().chatHistory === chatHistory) set({ chatSessionId: id });
+      set({ chatSessions: await listChatSessions(projectPath) });
+    } catch (e) {
+      // Persistence is best-effort: the chat itself must keep working.
+      console.warn("chat session persist failed:", e);
+    }
+  },
+
+  switchChatSession: async (id) => {
+    if (get().chatRunning || id === get().chatSessionId) return;
+    const { useProjectStore } = await import("./projectStore");
+    const { projectPath } = useProjectStore.getState();
+    if (!projectPath) return;
+    await get().persistChat();
+    try {
+      const raw = await loadChatSession(projectPath, id);
+      const snap = raw ? deserializeChatSession(raw) : null;
+      if (!snap) {
+        // Unreadable row — refresh the list so it stops being offered.
+        set({ chatSessions: await listChatSessions(projectPath) });
+        return;
+      }
+      turnCounter = Math.max(turnCounter, maxTurnId(snap.turns));
+      set({
+        turns: snap.turns,
+        chatHistory: snap.history,
+        chatMeta: snap.meta,
+        chatUsage: snap.usage,
+        chatSessionId: id,
+        chatError: null,
+      });
+    } catch (e) {
+      console.warn("chat session load failed:", e);
+    }
+  },
+
+  resetChatForProject: async (projectPath) => {
+    // No persist here: the outgoing session was saved at its last turn, and
+    // by the time projectStore calls this the active project has already
+    // changed — saving now would write it into the wrong DB.
+    get().resetChat();
+    set({ chatSessions: [] });
+    if (!projectPath) return;
+    try {
+      const sessions = await listChatSessions(projectPath);
+      set({ chatSessions: sessions });
+      if (sessions.length > 0) {
+        const raw = await loadChatSession(projectPath, sessions[0].id);
+        const snap = raw ? deserializeChatSession(raw) : null;
+        if (snap) {
+          turnCounter = Math.max(turnCounter, maxTurnId(snap.turns));
+          set({
+            turns: snap.turns,
+            chatHistory: snap.history,
+            chatMeta: snap.meta,
+            chatUsage: snap.usage,
+            chatSessionId: sessions[0].id,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn("chat session restore failed:", e);
+    }
   },
 }));

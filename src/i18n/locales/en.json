@@ -773,7 +773,9 @@
       "contextMeter": "Context",
       "sendHint": "Enter to send · Shift+Enter for newline",
       "showEarlier": "{{n}} earlier exchanges",
-      "collapseEarlier": "Collapse earlier turns"
+      "collapseEarlier": "Collapse earlier turns",
+      "history": "Session history",
+      "untitledSession": "(empty session)"
     },
     "drawer": {
       "tabGenerate": "Generate",
