@@ -148,8 +148,10 @@ assistant/tool 配对；`MIN_KEEP_TURNS` 恒成立;插桩后边界仍然正确�
 
 ## 8. 非目标
 
-- **会话持久化**：`chatHistory` 仍是内存态，随应用退出消失。摘要落盘、
-  跨启动恢复是独立议题（届时摘要消息①正好是天然的存档格式）。
+- ~~**会话持久化**~~（已另行完成 — 项目库 `chat_sessions` 表保最近 5 个会话：
+  `lib/agent/chatSession.ts` 序列化（meta 的对象身份引用 ↔ 历史下标互转，
+  解析失败宁可返 null 起新会话）+ `sessionDb.ts` 存取与上限裁剪；每轮结束
+  自动落盘，`openProject` 恢复最新会话，AiDrawer 历史菜单可切换）。
 - **panel 任务与 lore modal**：单次运行，生命周期短，无长会话问题，不接入。
 - ~~**展示层 `turns` 的折叠 UI**~~（已另行完成 — `lib/agent/transcriptFold.ts`
   + AgentChat 的「更早的 N 轮对话」条：纯展示，边界永不切开一问一答，
