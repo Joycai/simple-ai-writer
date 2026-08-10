@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatToolArgs, formatToolResult } from "../agent/logFormat";
+import { formatToolArgs, formatToolArgsDetail, formatToolResult } from "../agent/logFormat";
 
 describe("formatToolArgs", () => {
   it("reduces a Windows path argument to its chapter name", () => {
@@ -44,6 +44,24 @@ describe("formatToolArgs", () => {
 
   it("counts array arguments rather than dumping them", () => {
     expect(formatToolArgs('{"paths":["a","b","c"]}')).toBe("3");
+  });
+});
+
+describe("formatToolArgsDetail", () => {
+  it("indents the arguments the expanded row shows", () => {
+    expect(formatToolArgsDetail('{"name":"苍蓝宝石","facet":"变身形态"}')).toBe(
+      '{\n  "name": "苍蓝宝石",\n  "facet": "变身形态"\n}',
+    );
+  });
+
+  it("shows a summary truncated mid-JSON verbatim rather than nothing", () => {
+    const raw = '{"path": "C:\\\\Users\\\\reine\\\\Synology';
+    expect(formatToolArgsDetail(raw)).toBe(raw);
+  });
+
+  it("returns empty for a no-argument call", () => {
+    expect(formatToolArgsDetail("{}")).toBe("");
+    expect(formatToolArgsDetail("")).toBe("");
   });
 });
 

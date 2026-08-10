@@ -9,8 +9,17 @@
  *
  * So the log formats at render time: the argument collapses to the identifying
  * value (a filename, an entity, a query), the result collapses to a single
- * short line. Nothing is lost — the full values stay on the element's title.
+ * short line. Nothing is lost — the row expands to the kept detail
+ * (`formatToolArgsDetail` / the raw result summary), bounded by the caps below.
  */
+
+/**
+ * How much of a call the runtime keeps for the expanded row. Defined here, next
+ * to the code that renders them, so the log can tell an at-the-cap value from a
+ * complete one and say so instead of implying the tool returned that much.
+ */
+export const TOOL_ARGS_DETAIL_CHARS = 400;
+export const TOOL_RESULT_DETAIL_CHARS = 600;
 
 /** Keys whose value identifies *what* a call acted on, in preference order. */
 const IDENTITY_KEYS = [
@@ -88,6 +97,21 @@ export function formatToolArgs(raw: string): string {
   }
 
   return clip(parts.join(" · "), MAX_ARG_CHARS);
+}
+
+/**
+ * The expanded view of a call's arguments: the same JSON, indented so a
+ * multi-key call reads as a list instead of one long line. A summary truncated
+ * mid-string no longer parses — it comes back verbatim rather than not at all.
+ */
+export function formatToolArgsDetail(raw: string): string {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed || trimmed === "{}") return "";
+  try {
+    return JSON.stringify(JSON.parse(trimmed), null, 2);
+  } catch {
+    return trimmed;
+  }
 }
 
 /**

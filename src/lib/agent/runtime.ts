@@ -18,6 +18,7 @@ import type { GeminiSafetySettings } from "../ai/safety";
 import { estimateMessagesTokens } from "../ai/tokenEstimate";
 import type { AccumulatedToolCall, ApiStandard, ContentPart, StreamMessage } from "../ai/types";
 import type { AgentEvent } from "./events";
+import { TOOL_ARGS_DETAIL_CHARS, TOOL_RESULT_DETAIL_CHARS } from "./logFormat";
 import type { TaskPreset } from "./presets";
 import { executeRegisteredTool, getToolDefinitions, type ToolContext } from "./registry";
 import type { ToolCall, ToolResult } from "./tools";
@@ -397,8 +398,8 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       // Kept as valid JSON rather than pre-truncated: the log formats these for
       // display (lib/agent/logFormat), and it can only pull out the identifying
       // argument if the object still parses. Bounded by what the model emits.
-      const argumentSummary = tc.arguments.length > 400
-        ? tc.arguments.slice(0, 400)
+      const argumentSummary = tc.arguments.length > TOOL_ARGS_DETAIL_CHARS
+        ? tc.arguments.slice(0, TOOL_ARGS_DETAIL_CHARS)
         : tc.arguments;
 
       opts.onEvent({
@@ -423,7 +424,9 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
           name: tc.name,
           argumentSummary,
           status: isError ? "error" : "done",
-          resultSummary: result.content.slice(0, 200),
+          // Enough for the expanded row to be worth opening — a 200-char slice
+          // stopped inside the first paragraph of a chapter read.
+          resultSummary: result.content.slice(0, TOOL_RESULT_DETAIL_CHARS),
         },
         at: Date.now(),
       });

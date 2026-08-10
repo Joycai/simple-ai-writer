@@ -662,7 +662,14 @@
         "seededLoreHits": "{{n}} matched",
         "seededLoreNone": "no match",
         "roundLimitGranted": "Round cap ({{n}}) reached — {{extra}} more granted",
-        "roundLimitStopped": "Round cap ({{n}}) reached — wrapping up"
+        "roundLimitStopped": "Round cap ({{n}}) reached — wrapping up",
+        "detailToggle": "Show details",
+        "detailArgs": "Arguments",
+        "detailResult": "Result",
+        "detailError": "Error",
+        "detailNoArgs": "(no arguments)",
+        "detailNoResult": "(no result content)",
+        "detailClipped": "truncated"
       },
       "tool": {
         "list_lore_entities": "List {{entry}}",
@@ -757,8 +764,7 @@
       "refBlockLabel": "【Referenced material】",
       "noSelection": "No selection",
       "contextMeter": "Context",
-      "sendHint": "Enter to send · Shift+Enter for newline",
-      "roundProgress": "Round {{round}}/{{max}}"
+      "sendHint": "Enter to send · Shift+Enter for newline"
     },
     "drawer": {
       "tabGenerate": "Generate",

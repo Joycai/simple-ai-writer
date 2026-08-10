@@ -662,7 +662,14 @@
         "seededLoreHits": "命中 {{n}} 条",
         "seededLoreNone": "未命中",
         "roundLimitGranted": "已达 {{n}} 轮上限 — 批准继续 {{extra}} 轮",
-        "roundLimitStopped": "已达 {{n}} 轮上限 — 就此收尾"
+        "roundLimitStopped": "已达 {{n}} 轮上限 — 就此收尾",
+        "detailToggle": "展开详情",
+        "detailArgs": "调用参数",
+        "detailResult": "返回结果",
+        "detailError": "错误",
+        "detailNoArgs": "（无参数）",
+        "detailNoResult": "（无返回内容）",
+        "detailClipped": "已截断"
       },
       "tool": {
         "list_lore_entities": "列举{{entry}}",
@@ -756,8 +763,7 @@
       "refBlockLabel": "【引用资料】",
       "noSelection": "未选中正文",
       "contextMeter": "上下文",
-      "sendHint": "Enter 发送 · Shift+Enter 换行",
-      "roundProgress": "第 {{round}}/{{max}} 轮"
+      "sendHint": "Enter 发送 · Shift+Enter 换行"
     },
     "drawer": {
       "tabGenerate": "生成",

@@ -14,15 +14,26 @@
  *                      appears without surrounding context (the lore modals).
  *   compact (`compact`) — card with no header; the toggle rides the first row.
  *   flat (`flat`)    — bare rows, for surfaces that already label the section.
+ *
+ * Rows that stand for a call the author may want to audit — a tool step, a run
+ * error — open in place onto the detail the runtime kept (full arguments, the
+ * head of the result). The one-line form stays the default: the log is read
+ * while a run is live, and a wall of JSON there answers no question.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { findTask, taskLabel } from "../../lib/profile";
 import { useTerms } from "../../stores/projectStore";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { AgentEvent, ToolStep } from "../../lib/agent/events";
-import { formatToolArgs, formatToolResult } from "../../lib/agent/logFormat";
+import {
+  TOOL_ARGS_DETAIL_CHARS,
+  TOOL_RESULT_DETAIL_CHARS,
+  formatToolArgs,
+  formatToolArgsDetail,
+  formatToolResult,
+} from "../../lib/agent/logFormat";
 import styles from "./AgentLog.module.css";
 
 function formatLogTime(at: number): string {
@@ -69,6 +80,83 @@ function toRows(log: AgentEvent[]): Row[] {
     rows.push({ event: { kind: "round-start", ...pending }, round: pending });
   }
   return rows;
+}
+
+/**
+ * One labelled block of the expanded detail. `cap` is the number of chars the
+ * runtime keeps for this field: a body sitting exactly on it was cut, and the
+ * block says so rather than passing the slice off as the whole thing.
+ */
+function DetailBlock({ label, body, cap }: { label: string; body: string; cap?: number }) {
+  const { t } = useTranslation();
+  return (
+    <div className={styles.detailBlock}>
+      <div className={styles.detailLabel}>
+        {label}
+        {cap !== undefined && body.length >= cap && (
+          <span className={styles.detailClipped}>
+            {t("ai.agent.log.detailClipped", { defaultValue: "已截断" })}
+          </span>
+        )}
+      </div>
+      <pre className={styles.detailBody}>{body}</pre>
+    </div>
+  );
+}
+
+/**
+ * A row that hides a detail block. The header is a button so the whole line is
+ * the hit target and the keyboard reaches it — one row, one disclosure.
+ */
+function ExpandableRow({ className = "", header, detail }: {
+  className?: string;
+  header: ReactNode;
+  detail: ReactNode;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  return (
+    <li className={styles.rowGroup}>
+      <button
+        type="button"
+        className={`${styles.row} ${styles.rowExpandable} ${className}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        title={t("ai.agent.log.detailToggle", { defaultValue: "展开详情" })}
+      >
+        {header}
+        <span className={styles.rowChevron}>
+          {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+        </span>
+      </button>
+      {open && <div className={styles.detail}>{detail}</div>}
+    </li>
+  );
+}
+
+function ToolStepDetail({ step }: { step: ToolStep }) {
+  const { t } = useTranslation();
+  const args = formatToolArgsDetail(step.argumentSummary);
+  return (
+    <>
+      <DetailBlock
+        label={t("ai.agent.log.detailArgs", { defaultValue: "调用参数" })}
+        body={args || t("ai.agent.log.detailNoArgs", { defaultValue: "（无参数）" })}
+        cap={args ? TOOL_ARGS_DETAIL_CHARS : undefined}
+      />
+      {step.status !== "running" && (
+        <DetailBlock
+          label={
+            step.status === "error"
+              ? t("ai.agent.log.detailError", { defaultValue: "错误" })
+              : t("ai.agent.log.detailResult", { defaultValue: "返回结果" })
+          }
+          body={step.resultSummary || t("ai.agent.log.detailNoResult", { defaultValue: "（无返回内容）" })}
+          cap={step.resultSummary ? TOOL_RESULT_DETAIL_CHARS : undefined}
+        />
+      )}
+    </>
+  );
 }
 
 function ToolStepRow({ step }: { step: ToolStep }) {
@@ -148,11 +236,16 @@ function AgentLogRow({ row, showTime }: { row: Row; showTime: boolean }) {
       );
     case "tool-step":
       return (
-        <li className={styles.row}>
-          <ToolStepRow step={event.step} />
-          {roundChip}
-          {time}
-        </li>
+        <ExpandableRow
+          header={
+            <>
+              <ToolStepRow step={event.step} />
+              {roundChip}
+              {time}
+            </>
+          }
+          detail={<ToolStepDetail step={event.step} />}
+        />
       );
     case "context-seeded":
       // Two facts, two rows — the manuscript that came along, and what the lore
@@ -253,13 +346,24 @@ function AgentLogRow({ row, showTime }: { row: Row; showTime: boolean }) {
       );
     case "run-error":
       return (
-        <li className={`${styles.row} ${styles.rowError}`}>
-          <Marker state="error" />
-          <span className={styles.rowName}>
-            {event.message.length > 160 ? event.message.slice(0, 160) + "…" : event.message}
-          </span>
-          {time}
-        </li>
+        <ExpandableRow
+          className={styles.rowError}
+          header={
+            <>
+              <Marker state="error" />
+              <span className={styles.rowName}>
+                {event.message.length > 160 ? event.message.slice(0, 160) + "…" : event.message}
+              </span>
+              {time}
+            </>
+          }
+          detail={
+            <DetailBlock
+              label={t("ai.agent.log.detailError", { defaultValue: "错误" })}
+              body={event.message}
+            />
+          }
+        />
       );
   }
 }

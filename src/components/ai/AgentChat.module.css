@@ -160,11 +160,6 @@
   animation: chatSpin 0.8s linear infinite;
 }
 @keyframes chatSpin { to { transform: rotate(360deg); } }
-.thinkingRound {
-  margin-left: auto;
-  font: 400 10px/1.5 var(--font-mono);
-  color: var(--color-text-faint);
-}
 
 .error {
   font: 400 11px/1.7 var(--font-sans);

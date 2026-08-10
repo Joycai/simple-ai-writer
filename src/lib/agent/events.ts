@@ -22,7 +22,7 @@ export interface ToolStep {
   /** Truncated argument JSON for display */
   argumentSummary: string;
   status: ToolStepStatus;
-  /** First 80 chars of result content, set on done/error */
+  /** Head of the result content (TOOL_RESULT_DETAIL_CHARS), set on done/error */
   resultSummary?: string;
 }
 
