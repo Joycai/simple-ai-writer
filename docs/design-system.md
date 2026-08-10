@@ -41,7 +41,7 @@ User-switchable CJK × Western pairings, selected in Settings → 通用 → 外
 | `hei` | 黑体清晰 | 系统无衬线 | 苹方 → 微软雅黑 → 思源黑 | All-sans, modern screen |
 | `kai` | 楷体临帖 | Iowan / Georgia | 楷体 → STKaiti | Handwritten manuscript |
 
-Each scheme overrides **both** `--font-serif` (editor body) and `--font-sans` (UI); `hei` points serif at a sans stack to make the whole app sans. To **add a scheme**: append a `[data-font="…"]` block in `tokens.css`, extend the `FontScheme` union + `FONT_SCHEMES` array in `appStore.ts`, add an entry (with a `previewFont` mirroring the serif stack) to `FONT_SCHEMES` in `SettingsModal.tsx`, and add `systemSettings.general.font*` labels to both locales.
+Each scheme overrides **both** `--font-serif` (editor body) and `--font-sans` (UI); `hei` points serif at a sans stack to make the whole app sans. To **add a scheme**: append a `[data-font="…"]` block in `tokens.css`, extend the `FontScheme` union + `FONT_SCHEMES` array in `appStore.ts`, add an entry (with a `previewFont` mirroring the serif stack) to `FONT_SCHEMES` in `settings/panes/GeneralPane.tsx`, and add `systemSettings.general.font*` labels to both locales.
 
 ### Markdown 排版主题 (Markdown themes — `data-md-theme`)
 
@@ -83,7 +83,7 @@ Rules of the road:
 ### 例外 · 转场与浮层 (Exception — transitions & overlays)
 **Motion** (`motion`, ex-`framer-motion`) is the one sanctioned JS animation library, used **solely** where a surface must animate *out* while another animates *in* — something CSS mount-only animations can't do. Two uses only:
 - **Screen / content switches** — `App.tsx` (main view crossfade/slide), `Sidebar.tsx` (tab crossfade), `LoreWall.tsx` (grid↔detail push), `AiPanel.tsx` (task/instruction config crossfade, `mode="wait"` keyed by selected task).
-- **Overlay enter *and* exit** — `AiDrawer.tsx` (drawer slide-over), `CommandPalette.tsx` (search palette), `SettingsModal.tsx` (settings). Each pairs with `<AnimatePresence>` so dismissal animates instead of snapping; the old mount-only CSS `animation:` on those `.backdrop`/`.overlay`/`.drawer`/`.palette`/`.modal` classes was removed in favor of these.
+- **Overlay enter *and* exit** — `AiDrawer.tsx` (drawer slide-over), `CommandPalette.tsx` (search palette), `SettingsPage.tsx` (settings). Each pairs with `<AnimatePresence>` so dismissal animates instead of snapping; the old mount-only CSS `animation:` on those `.backdrop`/`.overlay`/`.drawer`/`.palette`/`.modal` classes was removed in favor of these.
 
 **Watch the containing block.** While a `motion` element is animating it carries a `transform`, and a transform makes the element a containing block for `position: fixed` descendants — a context menu or modal rendered inside a transitioning subtree will sit in the wrong place for the length of the transition. Motion resets `transform` to `none` at rest, so this is transient, but don't add an overlay that must stay usable *during* a transition without checking it.
 

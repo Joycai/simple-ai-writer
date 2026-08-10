@@ -1,0 +1,405 @@
+/* 供应商与模型 — one pane holding the grouped list plus its edit drawer.
+   Owns its own scrolling, so the page host renders it flush (`.paneFlush`). */
+
+.hub {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ─── Head + toolbar (sticky above the scrolling list) ────────────────────── */
+
+.head {
+  flex-shrink: 0;
+  padding: var(--space-5) var(--space-7) 0;
+}
+
+.headRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.headTitle {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: 1.2;
+}
+
+.headSummary {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.headSpacer { flex: 1; }
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.searchWrap {
+  position: relative;
+  flex: 0 1 300px;
+  min-width: 160px;
+}
+
+.searchIcon {
+  position: absolute;
+  left: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.searchInput {
+  width: 100%;
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-8);
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+.searchInput:focus { border-color: var(--color-accent); }
+
+/* ─── Chips (type filter, model type, context size) ───────────────────────── */
+
+.chip {
+  flex: none;
+  white-space: nowrap;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-elevated);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  transition: background var(--transition-fast), color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+.chip:hover {
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-strong);
+}
+.chip:active { transform: scale(0.96); }
+
+.chipActive {
+  background: var(--color-accent-tint);
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.chipActive:hover { background: var(--color-accent-tint-strong); color: var(--color-accent); }
+
+.chipRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ─── Grouped list ────────────────────────────────────────────────────────── */
+
+.list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-7) var(--space-8);
+}
+
+.group {
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+  margin-bottom: var(--space-3);
+  overflow: hidden;
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg-elevated);
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition-fast);
+}
+.groupHead:hover { background: var(--color-accent-tint); }
+
+.chevron {
+  flex: none;
+  display: flex;
+  color: var(--color-text-muted);
+  transition: transform var(--transition-fast);
+}
+.chevronOpen { transform: rotate(90deg); }
+
+.groupName {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.groupStd {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 2px var(--space-2);
+  background: var(--color-tag-bg);
+  color: var(--color-tag-text);
+}
+
+.groupUrl {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.groupSpacer { flex: 1; }
+
+.groupCount {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.groupBtn {
+  flex: none;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.groupBtn:hover { color: var(--color-accent); border-color: var(--color-accent); }
+.groupBtn:active { transform: scale(0.96); }
+
+.iconBtn {
+  flex: none;
+  display: flex;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.iconBtn:hover { color: var(--color-accent); background: var(--color-accent-tint); }
+.iconBtn:active { transform: scale(0.92); }
+
+.iconBtnDanger:hover { color: var(--color-error); background: var(--color-error-bg); }
+
+/* ─── Model rows ──────────────────────────────────────────────────────────── */
+
+.modelRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-8);
+  border-top: 1px solid var(--color-border-soft);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.modelRow:hover { background: var(--color-bg-elevated); }
+
+.modelName {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.modelId {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.modelCtx {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+
+.modelType {
+  flex: none;
+  font-size: var(--font-size-xs);
+  padding: 2px var(--space-2);
+  background: var(--color-tag-bg);
+  color: var(--color-tag-text);
+}
+
+.groupEmpty {
+  padding: var(--space-3) var(--space-4) var(--space-3) var(--space-8);
+  border-top: 1px solid var(--color-border-soft);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.linkBtn {
+  color: var(--color-accent);
+  text-decoration: underline;
+  font-size: inherit;
+}
+
+.noResults {
+  text-align: center;
+  padding: var(--space-9) 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+.noResults .btnRow { margin-top: var(--space-4); }
+
+/* ─── Drawer ──────────────────────────────────────────────────────────────── */
+
+/* Absolute, not fixed: the drawer belongs to this pane, and the settings page
+   sits inside a Motion-animated subtree whose transform would otherwise become
+   the containing block for a fixed child (see docs/design-system.md). */
+.scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: var(--color-bg-overlay);
+  animation: fadeIn 180ms var(--ease-out);
+}
+
+.drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 480px;
+  max-width: 82%;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-surface);
+  border-left: 1px solid var(--color-border);
+  box-shadow: var(--shadow-drawer);
+  animation: slideInRight 220ms var(--ease-out);
+}
+
+.drawerHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.drawerTitle {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.drawerSub {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawerBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* The shared `.fieldGroup` carries `flex: 1` for the side-by-side rows it was
+   written for; in this column that would stretch every field to fill the
+   drawer. Rows keep their own sizing — this only pins the top level. */
+.drawerBody > * {
+  flex: 0 0 auto;
+}
+
+.drawerFoot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  flex-shrink: 0;
+}
+
+.escHint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.footSpacer { flex: 1; }
+
+/* ─── Drawer field helpers ────────────────────────────────────────────────── */
+
+.mono { font-family: var(--font-mono); }
+
+.fieldHint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  line-height: 1.6;
+  font-style: italic;
+}
+
+.ctxExact {
+  width: 100px;
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+.ctxExact:focus { border-color: var(--color-accent); }
+
+.checkLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .head { padding: var(--space-4) var(--space-4) 0; }
+  .list { padding: var(--space-4) var(--space-4) var(--space-8); }
+  .groupUrl { display: none; }
+}

@@ -94,7 +94,7 @@ Four rules when touching this: components read flags via `useDocModel()` and wor
 - `src/components/editor/` — CodeMirror wrapper, preview renderer
 - `src/components/ai/` — AiPanel (task UI, streaming output), ConsistencyCheck
 - `src/components/lore/` — Lore browser, LoreGenerator, LoreImproveModal, LoreWall
-- `src/components/settings/` — SettingsModal (provider/model/prompt config)
+- `src/components/settings/` — SettingsPage: the full-window settings surface (shell + left nav) with one file per pane under `panes/`; 供应商与模型 is a single merged pane (grouped list + right-hand edit drawer)
 - `src/components/command/`, `onboarding/`, `outline/` — CommandPalette, onboarding flow, full outline view
 - `src/lib/` — Core logic, grouped by domain:
   - `src/lib/ai/` — streaming client (`index.ts` dispatch, `openai.ts`/`gemini.ts` adapters, `types.ts`), provider config storage (`configDb.ts`), Gemini safety settings (`safety.ts`), remote probing (`providerProbe.ts`), endpoint limit probing (`endpointProbe.ts` HTTP + `probeAnalysis.ts` pure judgement — measures a model's real context window / output cap; see `docs/architecture.md` → Endpoint probing), multi-draft output vocabulary (`drafts.ts`), token/cost accounting read side (`usage.ts` — the `token_usage` rollups behind Settings → 用量), `apiLog.ts`, `tokenEstimate.ts`
