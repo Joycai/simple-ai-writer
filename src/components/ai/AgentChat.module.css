@@ -31,6 +31,24 @@
   color: var(--color-text-primary);
 }
 
+/* "Show earlier turns" bar — quiet, ghost-chip styling like .attachChipGhost:
+   it stands for absent content, not an action the author is urged toward. */
+.foldBar {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 11px;
+  background: transparent;
+  border: 1px dashed var(--color-border-strong);
+  color: var(--color-text-muted);
+  font: 500 11px/1.5 var(--font-sans);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.foldBar:hover { color: var(--color-sienna); border-color: var(--color-sienna); }
+.foldBar:active { transform: scale(0.96); }
+
 .emptyHint {
   margin: auto;
   max-width: 46ch;

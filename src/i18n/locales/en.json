@@ -771,7 +771,9 @@
       "refBlockLabel": "【Referenced material】",
       "noSelection": "No selection",
       "contextMeter": "Context",
-      "sendHint": "Enter to send · Shift+Enter for newline"
+      "sendHint": "Enter to send · Shift+Enter for newline",
+      "showEarlier": "{{n}} earlier exchanges",
+      "collapseEarlier": "Collapse earlier turns"
     },
     "drawer": {
       "tabGenerate": "Generate",

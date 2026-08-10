@@ -14,7 +14,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Send, Square, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Send, Square, X } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { SnippetPicker } from "./SnippetPicker";
 import {
@@ -40,6 +40,7 @@ import { PlanCard } from "./PlanCard";
 import { RoundLimitCard } from "./RoundLimitCard";
 import { useImeGuard } from "../../lib/ime";
 import type { AgentEvent } from "../../lib/agent/events";
+import { foldBoundary } from "../../lib/agent/transcriptFold";
 import styles from "./AgentChat.module.css";
 
 function formatTime(at: number): string {
@@ -131,6 +132,34 @@ export function AgentChat() {
   // A fresh selection is a fresh intent — undo any earlier detach.
   useEffect(() => { setDetached(false); }, [selection]);
 
+  // ── Transcript folding (display only — the wire history is untouched) ──
+  // Older turns collapse behind a bar once the session is long; the boundary
+  // tracks the conversation, so with the fold closed new turns keep pushing
+  // old ones behind it. `showAll` is per-mount, like scroll position.
+  const [showAll, setShowAll] = useState(false);
+  const foldableAt = useMemo(() => foldBoundary(turns.map((t) => t.role)), [turns]);
+  const foldAt = showAll ? 0 : foldableAt;
+  const hiddenExchanges = useMemo(
+    () => turns.slice(0, foldAt).filter((t) => t.role === "user").length,
+    [turns, foldAt],
+  );
+  // Toggling the fold adds or removes content *above* the viewport, which
+  // would visually teleport the transcript. Compensate by the height delta —
+  // before paint, so the reader never sees the jump.
+  const foldAdjust = useRef<{ height: number; top: number } | null>(null);
+  const toggleFold = () => {
+    const el = messagesRef.current;
+    if (el) foldAdjust.current = { height: el.scrollHeight, top: el.scrollTop };
+    setShowAll((v) => !v);
+  };
+  useLayoutEffect(() => {
+    const el = messagesRef.current;
+    const prev = foldAdjust.current;
+    if (!el || !prev) return;
+    foldAdjust.current = null;
+    el.scrollTop = Math.max(0, prev.top + (el.scrollHeight - prev.height));
+  }, [showAll]);
+
   // Land on the newest turn when the tab is opened. AiDrawer renders one mode
   // at a time, so switching away unmounts this and switching back remounts it
   // at scrollTop 0 — i.e. at the top of the transcript, which for a chat log is
@@ -213,7 +242,18 @@ export function AgentChat() {
             {t("ai.chat.emptyHint", { doc: terms.doc, docs: terms.docs, kb: terms.kb })}
           </div>
         )}
-        {turns.map((turn) =>
+        {foldableAt > 0 && (
+          <button className={styles.foldBar} onClick={toggleFold} aria-expanded={showAll}>
+            {showAll ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+            {showAll
+              ? t("ai.chat.collapseEarlier", { defaultValue: "收起早前对话" })
+              : t("ai.chat.showEarlier", {
+                  defaultValue: "更早的 {{n}} 轮对话",
+                  n: hiddenExchanges,
+                })}
+          </button>
+        )}
+        {turns.slice(foldAt).map((turn) =>
           turn.role === "user" ? (
             <div key={turn.id} className={styles.userBlock}>
               {turn.quote && (
