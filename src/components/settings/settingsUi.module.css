@@ -1,0 +1,714 @@
+/* Page-level vocabulary shared by every settings pane.
+   Form controls that live *inside* the edit drawers are in settingsCommon. */
+
+/* ─── Pane frame ──────────────────────────────────────────────────────────── */
+
+/* The pane owns its scrolling so an edit drawer can be absolutely positioned
+   against the full pane rather than scrolling away with the content. */
+.pane {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.scroll {
+  flex: 1;
+  overflow-y: auto;
+}
+
+/* Content column. A settings pane reads badly stretched across a wide desktop
+   window, so each one caps at the width its densest row actually needs. */
+.inner {
+  padding: var(--space-6) var(--space-8) var(--space-9);
+  margin: 0 auto;
+  box-sizing: border-box;
+  max-width: 960px;
+}
+.innerNarrow { max-width: 560px; }
+.innerCompact { max-width: 860px; }
+.innerWide { max-width: 1080px; }
+.innerHub { max-width: 1160px; }
+
+/* ─── Pane header ─────────────────────────────────────────────────────────── */
+
+.paneHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.paneTitle {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--color-text-primary);
+}
+
+.paneSub {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.spacer { flex: 1; }
+
+/* ─── Section: an eyebrow label over a rule ───────────────────────────────── */
+
+.section {
+  margin-top: var(--space-7);
+}
+
+.sectionLabel {
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.16em;
+  color: var(--color-text-muted);
+}
+
+.sectionRule {
+  height: 1px;
+  margin-top: var(--space-2);
+  background: var(--color-border);
+}
+
+/* Section head with a control on the right (用量 → 明细). */
+.sectionHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+/* ─── Setting row: label block left, control right ───────────────────────── */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--color-border-soft);
+}
+.rowLast { border-bottom: none; }
+
+/* A row whose control sits under the label rather than beside it. */
+.rowStacked {
+  display: block;
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--color-border-soft);
+}
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.rowTitle {
+  font-size: var(--font-size-base);
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.rowDesc {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-sm);
+  line-height: 1.7;
+  color: var(--color-text-muted);
+}
+
+/* A caution the row only shows in one state (plaintext key export). */
+.rowWarn {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-accent);
+}
+
+.rowActions {
+  display: flex;
+  flex: none;
+  gap: var(--space-2);
+}
+
+/* ─── Chips (filters, segmented choices) ─────────────────────────────────── */
+
+.chip {
+  flex: none;
+  white-space: nowrap;
+  padding: var(--space-1) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  transition: background var(--transition-fast), color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+.chip:hover {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+  border-color: var(--color-border-strong);
+}
+.chip:active { transform: scale(0.96); }
+
+.chipActive,
+.chipActive:hover {
+  background: var(--color-accent);
+  color: var(--color-bg-base);
+  border-color: var(--color-accent);
+}
+
+.chipRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ─── Toggle switch ──────────────────────────────────────────────────────── */
+
+.toggle {
+  flex: none;
+  position: relative;
+  width: 40px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-border-strong);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.toggleOn { background: var(--color-accent); }
+
+.toggleKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-bg-surface);
+  box-shadow: var(--shadow-sm);
+  transition: left var(--transition-fast);
+}
+.toggleOn .toggleKnob { left: 20px; }
+
+/* ─── Selectable cards (font scheme, markdown theme, workspace profile) ──── */
+
+.cardGrid {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+.cardGridFont { grid-template-columns: repeat(4, 1fr); }
+.cardGridWide { grid-template-columns: repeat(auto-fill, minmax(236px, 1fr)); }
+.cardGridProfile { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+
+.card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-3);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.card:hover:not(:disabled) { border-color: var(--color-border-strong); }
+.card:active:not(:disabled) { transform: scale(0.99); }
+.card:disabled { opacity: 0.5; cursor: default; }
+
+.cardActive,
+.cardActive:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  background: var(--color-accent-tint);
+}
+
+/* Font-scheme card: big sample over its name */
+.fontCard {
+  text-align: center;
+  padding: var(--space-5) var(--space-3) var(--space-3);
+}
+
+.fontSample {
+  display: block;
+  font-size: var(--font-size-xl);
+  line-height: 1;
+  color: var(--color-text-primary);
+}
+
+.cardName {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+.cardActive .cardName { color: var(--color-accent); }
+
+.cardDesc {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  color: var(--color-text-muted);
+}
+
+/* Markdown-theme card: a live md-body sample pinned to that theme */
+.mdSample {
+  --md-size: 10px;
+  height: 72px;
+  overflow: hidden;
+  padding: var(--space-3);
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border-soft);
+  pointer-events: none;
+}
+.mdSample > :first-child { margin-top: 0; }
+
+/* Workspace-profile card: name + 「current」 + category tags */
+.profileHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.profileName {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.cardActive .profileName { color: var(--color-accent); }
+
+.profileCurrent {
+  font-size: var(--font-size-xs);
+  color: var(--color-accent);
+}
+
+.tagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.tag {
+  flex: none;
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-tag-bg);
+  color: var(--color-tag-text);
+  font-size: var(--font-size-xs);
+}
+
+/* ─── Mono badge (prompt scene, API standard, version pill) ──────────────── */
+
+.badge {
+  flex: none;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-tag-bg);
+  color: var(--color-tag-text);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* ─── Buttons that sit in a row's right-hand slot ────────────────────────── */
+
+.rowBtn {
+  flex: none;
+  white-space: nowrap;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.rowBtn:hover:not(:disabled) { color: var(--color-accent); border-color: var(--color-accent); }
+.rowBtn:active:not(:disabled) { transform: scale(0.97); }
+.rowBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.primaryBtn {
+  flex: none;
+  white-space: nowrap;
+  padding: var(--space-2) var(--space-5);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-bg-base);
+  font-size: var(--font-size-md);
+  letter-spacing: 0.02em;
+  transition: background var(--transition-fast), transform var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+.primaryBtn:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+.primaryBtn:active:not(:disabled) { transform: translateY(0) scale(0.98); box-shadow: none; }
+.primaryBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ─── Status line under an action row ────────────────────────────────────── */
+
+.statusOk {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-sm);
+  line-height: 1.7;
+  color: var(--color-text-muted);
+}
+
+.statusError {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-sm);
+  line-height: 1.7;
+  color: var(--color-error);
+}
+
+/* ─── Empty states ───────────────────────────────────────────────────────── */
+
+.emptyDashed {
+  margin-top: var(--space-3);
+  padding: var(--space-6);
+  border: 1.5px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  text-align: center;
+  font-size: var(--font-size-md);
+  color: var(--color-text-muted);
+}
+
+.emptyNote {
+  padding: var(--space-6) 0;
+  text-align: center;
+  font-size: var(--font-size-md);
+  color: var(--color-text-muted);
+}
+
+/* ─── Keyboard shortcut rows ─────────────────────────────────────────────── */
+
+.kbdRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 2px;
+  border-bottom: 1px solid var(--color-border-soft);
+}
+
+.kbdLabel {
+  font-size: var(--font-size-md);
+  color: var(--color-text-primary);
+}
+
+.kbd {
+  flex: none;
+  padding: 5px var(--space-2);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  line-height: 1;
+  color: var(--color-text-secondary);
+}
+
+/* ─── Usage: stat cards + detail table ───────────────────────────────────── */
+
+.statGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.statCard {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-elevated);
+}
+
+.statLabel {
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+
+.statValue {
+  margin-top: var(--space-2);
+  font-family: var(--font-serif);
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+  line-height: 1;
+  color: var(--color-text-primary);
+}
+
+.statSub {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* Seven columns: name grows, the six figures are fixed and right-aligned. */
+.usageGrid {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 60px 70px 78px 70px 58px 76px;
+  gap: 0 var(--space-2);
+  align-items: center;
+}
+
+.usageHead {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+.usageHead > span + span { text-align: right; }
+
+.usageRow {
+  padding: var(--space-3);
+  border-top: 1px solid var(--color-border-soft);
+  transition: background var(--transition-fast);
+}
+.usageRow:hover { background: var(--color-bg-elevated); }
+
+.usageName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-md);
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.usageSub {
+  margin-left: var(--space-3);
+  font-size: var(--font-size-xs);
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+/* Share-of-calls bar — the one thing that makes the table scannable. */
+.usageBar {
+  margin-top: var(--space-2);
+  width: 100%;
+  max-width: 150px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--color-border);
+}
+.usageBarFill {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--color-accent);
+}
+
+.usageNum {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+}
+.usageNumMuted { color: var(--color-text-muted); }
+.usageNumCost { font-weight: 500; color: var(--color-accent); }
+
+.usageFootRule { height: 1px; background: var(--color-border); }
+
+.usageFoot {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-xs);
+  line-height: 1.7;
+  color: var(--color-text-muted);
+}
+
+/* ─── Collapsible list rows (Prompt pane) ────────────────────────────────── */
+
+.listCard {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  margin-bottom: var(--space-2);
+  overflow: hidden;
+}
+
+.listHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition-fast);
+}
+.listHead:hover { background: var(--color-bg-elevated); }
+
+.chevron {
+  flex: none;
+  display: flex;
+  color: var(--color-text-muted);
+  transition: transform var(--transition-fast);
+}
+.chevronOpen { transform: rotate(90deg); }
+
+.listTitle {
+  flex: none;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.listPreview {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.listBody { border-top: 1px solid var(--color-border-soft); }
+
+.promptText {
+  padding: var(--space-4);
+  background: var(--color-bg-base);
+  font-size: var(--font-size-md);
+  line-height: 1.9;
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+}
+
+.listActions {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border-soft);
+}
+
+.overrideBtn {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-surface);
+  color: var(--color-accent);
+  font-size: var(--font-size-sm);
+  transition: background var(--transition-fast);
+}
+.overrideBtn:hover { background: var(--color-accent-tint); }
+.overrideBtn:active { transform: scale(0.97); }
+
+/* A custom-prompt row: badge, preview, "overriding" note, delete */
+.customRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.customRow:hover { background: var(--color-bg-elevated); }
+
+.customName {
+  flex: none;
+  font-size: var(--font-size-md);
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.overriding {
+  flex: none;
+  font-size: var(--font-size-xs);
+  color: var(--color-accent);
+}
+
+.iconBtn {
+  flex: none;
+  display: flex;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+.iconBtn:hover { color: var(--color-error); background: var(--color-error-bg); }
+.iconBtn:active { transform: scale(0.92); }
+
+/* ─── About ──────────────────────────────────────────────────────────────── */
+
+.aboutHero {
+  padding-top: var(--space-9);
+  text-align: center;
+}
+
+.aboutName {
+  font-family: var(--font-serif);
+  font-size: var(--font-size-2xl);
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--color-text-primary);
+}
+
+.aboutVersion {
+  display: inline-block;
+  margin-top: var(--space-3);
+}
+
+.aboutTagline {
+  margin-top: var(--space-4);
+  font-size: var(--font-size-base);
+  color: var(--color-text-secondary);
+}
+
+.aboutRows { margin-top: var(--space-8); }
+
+.aboutRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border-soft);
+}
+
+.aboutKey {
+  flex: 1;
+  font-size: var(--font-size-md);
+  color: var(--color-text-secondary);
+}
+
+.aboutVal {
+  font-size: var(--font-size-md);
+  color: var(--color-text-primary);
+}
+
+.aboutLink {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-md);
+  color: var(--color-accent);
+  text-decoration: none;
+}
+.aboutLink:hover { text-decoration: underline; }
+
+.aboutCopyright {
+  margin-top: var(--space-8);
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 900px) {
+  .cardGridFont { grid-template-columns: repeat(2, 1fr); }
+  .statGrid { grid-template-columns: repeat(2, 1fr); }
+  .usageGrid { grid-template-columns: minmax(120px, 1fr) 52px 60px 66px 60px 76px; }
+  .usageGrid > .hideNarrow { display: none; }
+}

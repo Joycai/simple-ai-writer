@@ -324,7 +324,7 @@ export function ModelSelector() {
             </span>
             <button
               className={styles.manageBtn}
-              onClick={() => { setOpen(false); openSettings("providers"); }}
+              onClick={() => { setOpen(false); openSettings("providers-models"); }}
             >
               {t("ai.modelPicker.manageProviders", { defaultValue: "管理供应商" })}
             </button>

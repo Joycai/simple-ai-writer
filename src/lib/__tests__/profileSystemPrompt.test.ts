@@ -51,11 +51,11 @@ describe("profileSystemPrompt", () => {
 /**
  * Files allowed to mention the novel prompt key directly, with the reason:
  *   - profile/model.ts   — it *is* the novel profile's declared key
- *   - SettingsModal.tsx  — lists the built-in prompt templates by scene for the
+ *   - PromptsPane.tsx    — lists the built-in prompt templates by scene for the
  *                          editor; app-level config, not a per-run fallback
  * Anything else resolving a system prompt must call `profileSystemPrompt()`.
  */
-const ALLOWED = ["src/lib/profile/model.ts", "src/components/settings/SettingsModal.tsx"];
+const ALLOWED = ["src/lib/profile/model.ts", "src/components/settings/panes/PromptsPane.tsx"];
 
 /**
  * Every source file's text, keyed by repo-relative path.

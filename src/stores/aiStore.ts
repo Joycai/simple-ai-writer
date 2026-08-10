@@ -111,6 +111,7 @@ interface AiState {
   fetchAndImportModels: (providerId: string) => Promise<{ id: string; name: string }[]>;
 
   addPrompt: (p: Omit<Prompt, "id">) => Promise<void>;
+  updatePrompt: (p: Prompt) => Promise<void>;
   removePrompt: (id: string) => Promise<void>;
 
   setActiveModel: (id: string) => void;
@@ -246,6 +247,16 @@ export const useAiStore = create<AiState>((set, get) => ({
       await savePrompt(d, prompt);
     }
     set((s) => ({ prompts: [...s.prompts, prompt] }));
+  },
+
+  // `savePrompt` is an INSERT OR REPLACE, so an edit is the same write as an
+  // add — only the id differs in where it comes from.
+  updatePrompt: async (prompt) => {
+    if (isTauri) {
+      const d = await db();
+      await savePrompt(d, prompt);
+    }
+    set((s) => ({ prompts: s.prompts.map((p) => (p.id === prompt.id ? prompt : p)) }));
   },
 
   removePrompt: async (id) => {

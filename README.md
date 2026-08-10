@@ -214,7 +214,7 @@ simple-ai-writer/
 │   │   ├── layout/        # TitleBar, IconRail, Sidebar, EditorArea, AiRail
 │   │   ├── ai/            # AiPanel (task UI, streaming output)
 │   │   ├── lore/          # LorePanel (entity browser)
-│   │   └── settings/      # SettingsModal (provider/model/prompt config)
+│   │   └── settings/      # SettingsPage + panes/ (provider+model, prompt, usage…)
 │   ├── stores/            # Zustand stores
 │   │   ├── projectStore   # Project & file tree state
 │   │   ├── editorStore    # Editor content, selection, save state
