@@ -3,6 +3,7 @@ import { resetActiveProfile, setActiveProfile } from "../profile/active";
 import { TTRPG_PROFILE } from "../profile/model";
 import {
   assembleContext,
+  bundleToChatMessages,
   bundleToMessages,
   locateAppendAnchor,
   resolveAppendAnchor,
@@ -377,6 +378,39 @@ describe("bundleToMessages", () => {
       // i18n is mocked to echo the key, so this asserts *which* key is used.
       expect(bundleToMessages(bundle)[0].content).toBe("ai.instructions.systemTtrpg");
     });
+  });
+});
+
+describe("bundleToChatMessages", () => {
+  it("splits the same layers into system / seeded context / question", async () => {
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), "Aria sang in Ironhold.", "", "第一个问题",
+      { outline: "Chapter 2 outline" },
+    );
+    const seed = bundleToChatMessages(bundle);
+    expect(seed.messages).toHaveLength(3);
+    expect(seed.messages[0]).toEqual({ role: "system", content: "SYS" });
+    // Identity, not equality: the session records *these objects* as the
+    // droppable seed block and the first turn's start.
+    expect(seed.messages[1]).toBe(seed.seedContext);
+    expect(seed.messages[2]).toBe(seed.question);
+    expect(seed.seedContext!.content).toContain("【设定资料】");
+    expect(seed.seedContext!.content).toContain("【近期内容】");
+    expect(seed.question.content).toContain("第一个问题");
+    // The question is conversation, the seed is retrieval — no bleed-through.
+    expect(seed.seedContext!.content).not.toContain("第一个问题");
+
+    // Same content as the merged shape, only the packaging differs.
+    const merged = bundleToMessages(bundle)[1].content;
+    expect(`${seed.seedContext!.content}\n\n${seed.question.content}`).toBe(merged);
+  });
+
+  it("omits the seed message entirely when nothing was seeded", async () => {
+    const bundle = await assembleContext("SYS", {}, "", "", "只有问题");
+    const seed = bundleToChatMessages(bundle);
+    expect(seed.seedContext).toBeNull();
+    expect(seed.messages).toHaveLength(2);
+    expect(seed.messages[1]).toBe(seed.question);
   });
 });
 

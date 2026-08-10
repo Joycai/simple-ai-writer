@@ -27,8 +27,10 @@
   transition: color var(--transition-fast);
 }
 .compactToggle:hover { color: var(--color-sienna); }
-/* Keep the first row's meta clear of the floating toggle. */
-.boxCompact .list > .row:first-child { padding-right: 52px; }
+/* Keep the first row's meta clear of the floating toggle — whether that row is
+   a plain one or an expandable row's header. */
+.boxCompact .list > .row:first-child,
+.boxCompact .list > .rowGroup:first-child > .row { padding-right: 52px; }
 
 .boxHeader {
   width: 100%;
@@ -84,6 +86,67 @@
   font: 400 11px/1.6 var(--font-sans);
 }
 .listFlat .row { padding: 4px 0; }
+
+/* ── Expandable rows ─────────────────────────────────────────────── */
+/* The <li> holds a header row plus its detail, so it stacks instead of
+   inheriting the row's own flex layout. */
+.rowGroup { display: block; }
+
+/* The header is a <button>, so it has to be un-styled back into a row before
+   the shared `.row` rules read the same as on a plain <li>. No `font:` here —
+   this block follows `.row` in the file, so resetting it would win over the
+   row's own type and the line would come out in the UA button font. */
+.rowExpandable {
+  width: 100%;
+  margin: 0;
+  background: transparent;
+  border: none;
+  color: var(--color-text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.rowExpandable:hover { background: var(--color-bg-elevated); }
+.rowChevron {
+  flex-shrink: 0;
+  align-self: center;
+  display: flex;
+  color: var(--color-text-faint);
+  transition: color var(--transition-fast);
+}
+.rowExpandable:hover .rowChevron { color: var(--color-sienna); }
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* Aligned under the row name: marker width + the row's own gap. */
+  padding: 2px var(--space-3) 8px calc(var(--space-3) + 8px + var(--space-2));
+}
+.listFlat .detail { padding-left: calc(8px + var(--space-2)); padding-right: 0; }
+
+.detailLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-faint);
+  font: 500 9px/1.4 var(--font-sans);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.detailClipped { color: var(--color-text-muted); letter-spacing: 0.04em; }
+
+.detailBody {
+  margin: 0;
+  padding: 6px 8px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  font: 400 10px/1.6 var(--font-mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 .rowName {
   flex: 1;

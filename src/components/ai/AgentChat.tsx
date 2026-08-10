@@ -372,18 +372,6 @@ function AssistantTurn({ text, log, images, isLive }: {
   // Markdown render is cheap at chat sizes; memo keeps streaming smooth anyway.
   const html = useMemo(() => renderMarkdown(text), [text]);
 
-  // Round progress is the honest "how long will this take" signal while a
-  // multi-tool turn is in flight — surfaced next to the thinking indicator.
-  const lastRound = [...log].reverse().find((e) => e.kind === "round-start");
-  const roundLabel =
-    lastRound && lastRound.kind === "round-start"
-      ? t("ai.chat.roundProgress", {
-          defaultValue: "第 {{round}}/{{max}} 轮",
-          round: lastRound.round,
-          max: lastRound.maxRounds,
-        })
-      : null;
-
   return (
     // Marker gutter + one content column: the execution log, the prose and any
     // cards are siblings in the same grid track, so they cannot drift out of
@@ -414,11 +402,13 @@ function AssistantTurn({ text, log, images, isLive }: {
         {text ? (
           <div className={styles.assistantBody} dangerouslySetInnerHTML={{ __html: html }} />
         ) : (
-          isLive && (
+          // Only until the log exists. Once it does, its in-flight round is
+          // already a 思考中 line carrying the round count — a second one right
+          // below it says nothing more and reads as two things happening.
+          isLive && log.length === 0 && (
             <div className={styles.thinking}>
               <span className={styles.thinkingSpinner} />
               {t("ai.chat.thinking")}
-              {roundLabel && <span className={styles.thinkingRound}>{roundLabel}</span>}
             </div>
           )
         )}

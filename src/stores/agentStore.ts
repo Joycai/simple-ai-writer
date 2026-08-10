@@ -43,6 +43,11 @@
 import { create } from "zustand";
 import i18n from "../i18n";
 import { backupFile } from "../lib/agent/backup";
+import {
+  createSessionMeta, excludeDirsFor, noteTurnStart, recordInjections,
+  type ChatSessionMeta,
+} from "../lib/agent/compact";
+import { compactChatHistory, summarizeForCompaction } from "../lib/agent/compactRun";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import { createPlanGate, type LorePlan, type PlanDecision } from "../lib/agent/plan";
 import { AGENT_ASSIST_PRESET } from "../lib/agent/presets";
@@ -52,7 +57,9 @@ import {
 } from "../lib/context/budget";
 import { loadMemory, MEMORY_BUDGET_CHARS } from "../lib/context/memory";
 import { parentDir } from "../lib/context/outline";
-import { assembleContext, bundleToMessages, profileSystemPrompt } from "../lib/context/rag";
+import {
+  assembleContext, assembleTurnInjection, bundleToChatMessages, profileSystemPrompt,
+} from "../lib/context/rag";
 import { docModel, promptParams } from "../lib/profile/active";
 import type { ApprovalDecision, EditProposal, Proposal } from "../lib/agent/registry";
 import { resolveModel, type AttachedItem } from "../lib/lore/aiTask";
@@ -158,6 +165,12 @@ interface AgentState {
   chatAbort: AbortController | null;
   /** Wire-protocol history the runtime appends to; null until the first turn. */
   chatHistory: StreamMessage[] | null;
+  /**
+   * Turn boundaries + seed/summary identities for chatHistory — what the flat
+   * array can't say about itself. Mutated in place alongside the history it
+   * describes (lib/agent/compact); null exactly when chatHistory is.
+   */
+  chatMeta: ChatSessionMeta | null;
 
   /** Called by the tool executor (via ToolContext.requestApproval). */
   requestApproval: (proposal: Proposal, runId: RunId, binding?: ApprovalBinding) => Promise<ApprovalDecision>;
@@ -345,6 +358,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   chatUsage: null,
   chatAbort: null,
   chatHistory: null,
+  chatMeta: null,
 
   requestApproval: (proposal, runId, binding) =>
     new Promise<ApprovalDecision>((resolve) => {
@@ -487,6 +501,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       const apiKey = (await loadApiKey(provider.id)) ?? "";
 
       // ── History: seed on first turn, append afterwards ──
+      const { contextUtilization } = useAppStore.getState();
       let history = get().chatHistory;
       if (!history) {
         const { useAiStore: aiStore2 } = await import("./aiStore");
@@ -521,8 +536,31 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           loreBudgetTokens * charsPerToken,
           MEMORY_BUDGET_CHARS,
         );
-        history = bundleToMessages(bundle);
-        set({ chatHistory: history });
+        // Three messages, not two: the seeded context and the question are
+        // separate so the compaction pass can later drop the former without
+        // the latter (docs/chat-memory-plan.md §3). The meta records which
+        // message is which — by identity, because indices don't survive
+        // repairToolCallPairing's splices.
+        const seed = bundleToChatMessages(bundle);
+        history = seed.messages;
+        const meta = createSessionMeta();
+        meta.seedContext = seed.seedContext;
+        meta.lastDocPath = activeFilePath ?? null;
+        noteTurnStart(meta, seed.question);
+        // The seeded lore goes in the injection ledger, carried by the seed
+        // block — otherwise turn 2's retrieval would re-inject everything the
+        // model was just given.
+        if (seed.seedContext) {
+          const byDir = new Map(
+            Object.values(useLoreStore.getState().index).flat().map((e) => [e.dirPath, e]),
+          );
+          recordInjections(
+            meta,
+            bundle.loreReport.entities.flatMap((r) => byDir.get(r.dirPath) ?? []),
+            seed.seedContext,
+          );
+        }
+        set({ chatHistory: history, chatMeta: meta });
 
         // Report the seeded layers into this turn's log. This is the only turn
         // that gets automatic RAG — from here on the history is inherited and
@@ -548,10 +586,98 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // and appending onto that makes the provider reject not just this turn
         // but every turn after it. Repair before adding to it.
         repairToolCallPairing(history);
-        history.push({ role: "user", content: wireMessage });
-      }
 
-      const { contextUtilization } = useAppStore.getState();
+        // ── Compaction (docs/chat-memory-plan.md §4) ──
+        // Between turns, before this turn's question goes in: if the history
+        // has outgrown the trigger, fold the oldest turns into the rolling
+        // summary. Best-effort — a failed summarize returns null and the turn
+        // proceeds on the uncompacted history (trimHistory still backstops
+        // mid-turn); only an abort propagates. The event lands in this turn's
+        // log so the author sees what was folded and can read the summary.
+        const meta = get().chatMeta;
+        if (meta) {
+          const compacted = await compactChatHistory({
+            history,
+            meta,
+            ceilingTokens: inputCeilingFor(model.contextSize, contextUtilization),
+            summarize: (input) =>
+              summarizeForCompaction(
+                {
+                  baseUrl: provider.baseUrl,
+                  apiKey,
+                  standard: provider.apiStandard,
+                  modelId: model.modelId,
+                  prefix: model.prefix,
+                  contextSize: model.contextSize,
+                  safetySettings: provider.safetySettings,
+                },
+                input,
+                controller.signal,
+              ),
+          });
+          if (compacted) {
+            history = compacted.history;
+            set({ chatHistory: history });
+            patchAssistant((tn) => ({ ...tn, log: appendAgentEventTo(tn.log, compacted.event) }));
+          }
+        }
+
+        // ── Per-turn injection (docs/chat-memory-plan.md §5) ──
+        // The seed's retrieval, re-run against *this* question, minus what the
+        // ledger says is already in the conversation. A document switch also
+        // re-injects the window + recap — the seeded ones belong to the old
+        // document. Nothing net-new appends nothing: the history stays
+        // append-only, so the prompt-cache prefix survives.
+        if (meta) {
+          const docSwitched = !!activeFilePath && activeFilePath !== meta.lastDocPath;
+          const memory = docSwitched && docModel().memory && activeFilePath
+            ? await loadMemory(projectPath, activeFilePath)
+            : null;
+          const loreIdx = useLoreStore.getState().index;
+          const { loreBudgetTokens } = useAppStore.getState();
+          const inj = await assembleTurnInjection({
+            loreIndex: loreIdx,
+            // Same match targets as the seed: the question (with its quote and
+            // @refs inlined) plus the document's tail neighborhood.
+            matchTarget: wireMessage + focus.text.slice(-500),
+            excludeDirs: excludeDirsFor(meta, loreIdx),
+            loreBudgetChars: loreBudgetTokens * measureCharsPerToken(focus.text),
+            doc: docSwitched && activeFilePath
+              ? {
+                  filePath: activeFilePath,
+                  documentText: focus.text,
+                  memory,
+                  contextChars: RECENT_WINDOW_MIN_CHARS,
+                  memoryBudgetChars: MEMORY_BUDGET_CHARS,
+                }
+              : null,
+          });
+          if (inj.text) {
+            const injMsg: StreamMessage = { role: "user", content: inj.text };
+            history.push(injMsg);
+            recordInjections(meta, inj.matchedEntities, injMsg);
+            if (docSwitched) meta.lastDocPath = activeFilePath;
+            patchAssistant((tn) => ({
+              ...tn,
+              log: appendAgentEventTo(tn.log, {
+                kind: "context-seeded",
+                documentName: docSwitched && activeFilePath
+                  ? (activeFilePath.split(/[\\/]/).pop() ?? "").replace(/\.md$/i, "")
+                  : null,
+                recentChars: inj.docChars,
+                memoryChars: inj.memoryChars,
+                loreEntities: inj.loreReport.entities.length,
+                loreChars: inj.loreReport.usedChars,
+                at: Date.now(),
+              }),
+            }));
+          }
+        }
+
+        const questionMsg: StreamMessage = { role: "user", content: wireMessage };
+        if (meta) noteTurnStart(meta, questionMsg);
+        history.push(questionMsg);
+      }
 
       const { inputTokens, outputTokens, cachedTokens } = await runAgent({
         baseUrl: provider.baseUrl,
@@ -644,6 +770,6 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   resetChat: () => {
     get().stopChat();
-    set({ turns: [], chatHistory: null, chatError: null, chatUsage: null });
+    set({ turns: [], chatHistory: null, chatMeta: null, chatError: null, chatUsage: null });
   },
 }));

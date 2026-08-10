@@ -18,6 +18,7 @@ import type { GeminiSafetySettings } from "../ai/safety";
 import { estimateMessagesTokens } from "../ai/tokenEstimate";
 import type { AccumulatedToolCall, ApiStandard, ContentPart, StreamMessage } from "../ai/types";
 import type { AgentEvent } from "./events";
+import { TOOL_ARGS_DETAIL_CHARS, TOOL_RESULT_DETAIL_CHARS } from "./logFormat";
 import type { TaskPreset } from "./presets";
 import { executeRegisteredTool, getToolDefinitions, type ToolContext } from "./registry";
 import type { ToolCall, ToolResult } from "./tools";
@@ -70,6 +71,12 @@ function elideOldImageResults(history: StreamMessage[]): number {
  * setting, which leaves the rest for whatever the tools drag in. Without this,
  * a long tool-using run trips the pre-flight check on round 5 or 6 — i.e. it
  * fails *after* the author has already waited through the whole loop.
+ *
+ * For chat this is the SECOND line of defense: between turns, compaction
+ * (lib/agent/compactRun) folds whole old turns into a rolling summary the
+ * model can still use. This pass handles what compaction cannot — growth
+ * *inside* a turn, where the fold unit (a complete turn) doesn't exist yet —
+ * and one-shot agent runs, which have no between-turns moment at all.
  *
  * Oldest tool results go first: they are both the bulk of the growth and the
  * least likely to still matter. Their *messages* stay — an assistant tool_call
@@ -397,8 +404,8 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       // Kept as valid JSON rather than pre-truncated: the log formats these for
       // display (lib/agent/logFormat), and it can only pull out the identifying
       // argument if the object still parses. Bounded by what the model emits.
-      const argumentSummary = tc.arguments.length > 400
-        ? tc.arguments.slice(0, 400)
+      const argumentSummary = tc.arguments.length > TOOL_ARGS_DETAIL_CHARS
+        ? tc.arguments.slice(0, TOOL_ARGS_DETAIL_CHARS)
         : tc.arguments;
 
       opts.onEvent({
@@ -423,7 +430,9 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
           name: tc.name,
           argumentSummary,
           status: isError ? "error" : "done",
-          resultSummary: result.content.slice(0, 200),
+          // Enough for the expanded row to be worth opening — a 200-char slice
+          // stopped inside the first paragraph of a chapter read.
+          resultSummary: result.content.slice(0, TOOL_RESULT_DETAIL_CHARS),
         },
         at: Date.now(),
       });

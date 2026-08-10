@@ -22,7 +22,7 @@ export interface ToolStep {
   /** Truncated argument JSON for display */
   argumentSummary: string;
   status: ToolStepStatus;
-  /** First 80 chars of result content, set on done/error */
+  /** Head of the result content (TOOL_RESULT_DETAIL_CHARS), set on done/error */
   resultSummary?: string;
 }
 
@@ -51,12 +51,13 @@ export type AgentEvent =
        * Context the assembler injected *before* the loop started — the RAG
        * layers the model never had to ask for.
        *
-       * Emitted by the conversational assistant, where this happens once (the
-       * first turn seeds the wire history; later turns inherit it and must use
-       * tools for anything more). Without it the log looks as though the run
-       * began knowing nothing, and a lore miss — the single most useful thing
-       * to notice — is invisible. The task panel has its own richer
-       * 「本次注入设定」 report and does not emit this.
+       * Emitted by the conversational assistant: once for the first turn's
+       * seed, and again on any later turn whose per-turn retrieval found
+       * something net-new (lib/context/rag assembleTurnInjection — new lore
+       * mentions, or a document switch). Without it the log looks as though
+       * the run began knowing nothing, and a lore miss — the single most
+       * useful thing to notice — is invisible. The task panel has its own
+       * richer 「本次注入设定」 report and does not emit this.
        */
       kind: "context-seeded";
       /** Document the verbatim window was taken from, if one is open. */
@@ -74,6 +75,22 @@ export type AgentEvent =
       /** Older tool results were elided to stay inside the input ceiling. */
       kind: "context-trimmed";
       count: number;
+      at: number;
+    }
+  | {
+      /**
+       * The oldest turns were folded into the rolling summary between turns
+       * (lib/agent/compactRun). Distinct from context-trimmed: trimming blanks
+       * individual tool results mid-run as a backstop; compaction replaces
+       * whole turns with prose the model can still use.
+       */
+      kind: "context-compacted";
+      foldedTurns: number;
+      /** Estimated history tokens before / after the fold. */
+      fromTokens: number;
+      toTokens: number;
+      /** The new rolling summary — shown by the log row's expanded detail. */
+      summary: string;
       at: number;
     }
   | {
