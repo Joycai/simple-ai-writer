@@ -1,9 +1,14 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { X } from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
 import { useAiStore } from "../../../stores/aiStore";
-import { activeProfile, findTask, promptParams } from "../../../lib/profile";
-import styles from "../settingsCommon.module.css";
+import { useProjectStore } from "../../../stores/projectStore";
+import type { Prompt } from "../../../lib/ai/configDb";
+import { activeProfile, findTask, profileLabel, promptParams } from "../../../lib/profile";
+import { PromptDrawer, SNIPPET_SCENE } from "./PromptDrawer";
+import { Pane, PaneHeader, Section } from "./bits";
+import ui from "../settingsUi.module.css";
+import hub from "./ProvidersModels.module.css";
 
 const BUILTIN_PROMPTS_CONFIG = [
   { scene: "system", instructionKey: "ai.instructions.system" },
@@ -14,117 +19,149 @@ const BUILTIN_PROMPTS_CONFIG = [
   { scene: "lore", instructionKey: "ai.instructions.lore" },
 ];
 
-export function PromptsPane() {
+/** Collapsed rows show the opening of the instruction, on one line. */
+function preview(text: string, max: number): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > max ? `${flat.slice(0, max)}…` : flat;
+}
+
+interface Props {
+  onEscapeInterceptChange: (handler: (() => void) | null) => void;
+}
+
+export function PromptsPane({ onEscapeInterceptChange }: Props) {
   const { t, i18n } = useTranslation();
-  const { prompts, addPrompt, removePrompt } = useAiStore();
-  const [form, setForm] = useState({ name: "", content: "", scene: "system" });
-  const [showForm, setShowForm] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const isZh = i18n.language.startsWith("zh");
+  const { prompts, removePrompt } = useAiStore();
+  const profile = useProjectStore((s) => s.profile);
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [draft, setDraft] = useState<Partial<Prompt> | null>(null);
 
   // Resolve against the active profile: a scene that is a task id shows the
   // instruction that task actually uses (novel overrides continue/rewrite/
   // summary with its own wording), and "system" shows this profile's system
   // prompt — otherwise the editor would display a text no run ever sends.
-  const isZh = i18n.language === "zh-CN";
-  const builtinPrompts = BUILTIN_PROMPTS_CONFIG.map((b) => {
+  const builtins = BUILTIN_PROMPTS_CONFIG.map((b) => {
     const key = b.scene === "system"
       ? activeProfile().systemPromptKey
       : findTask(b.scene)?.instructionKey ?? b.instructionKey;
-    return { ...b, label: t(`ai.tasks.${b.scene}`), content: t(key, promptParams(isZh)) };
+    return { ...b, label: t(`ai.tasks.${b.scene}`), text: t(key, promptParams(isZh)) };
   });
 
-  const handleAdd = async () => {
-    if (!form.name || !form.content) return;
-    setSaving(true);
-    setError(null);
-    try {
-      await addPrompt(form);
-      setForm({ name: "", content: "", scene: "system" });
-      setShowForm(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSaving(false);
-    }
+  const closeDrawer = () => { setDraft(null); onEscapeInterceptChange(null); };
+  const openDrawer = (d: Partial<Prompt>) => {
+    setDraft(d);
+    onEscapeInterceptChange(() => closeDrawer());
   };
 
   return (
-    <div>
-      <div className={styles.section}>
-        <div className={styles.sectionTitle}>{t("aiConfig.prompts.builtinTitle")}</div>
-        <div className={styles.itemList}>
-          {builtinPrompts.map((b) => {
-            const overridden = prompts.some((p) => p.scene === b.scene);
-            return (
-              <div key={b.scene} className={`${styles.item} ${styles.builtinItem}`}>
-                <div className={styles.itemInfo}>
-                  <div className={`${styles.itemName} ${overridden ? styles.itemNameDimmed : ""}`}>
-                    {b.content}
-                    {overridden && <span className={styles.overriddenTag}>{t("aiConfig.prompts.overridden")}</span>}
+    <Pane
+      drawer={draft && (
+        <>
+          <div className={hub.scrim} onClick={closeDrawer} />
+          <PromptDrawer key={draft.id ?? "new"} draft={draft} onClose={closeDrawer} />
+        </>
+      )}
+    >
+      <PaneHeader
+        title={t("systemSettings.tabs.prompts")}
+        sub={t("aiConfig.prompts.paneSub")}
+        action={
+          <button className={ui.primaryBtn} onClick={() => openDrawer({ name: "", content: "", scene: "continue" })}>
+            + {t("aiConfig.prompts.addCta")}
+          </button>
+        }
+      />
+
+      <Section label={t("aiConfig.prompts.customTitle")}>
+        {prompts.length === 0 ? (
+          <div className={ui.emptyDashed}>{t("aiConfig.prompts.emptyHint")}</div>
+        ) : (
+          <div style={{ marginTop: "var(--space-3)" }}>
+            {prompts.map((p) => (
+              <div
+                key={p.id}
+                className={ui.customRow}
+                role="button"
+                tabIndex={0}
+                onClick={() => openDrawer(p)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openDrawer(p); }
+                }}
+              >
+                <span className={ui.badge}>{p.scene}</span>
+                <span className={ui.customName}>{p.name}</span>
+                <span className={ui.listPreview}>{preview(p.content, 60)}</span>
+                <span className={ui.spacer} />
+                {/* A snippet is offered for insertion; it overrides nothing. */}
+                {p.scene !== SNIPPET_SCENE && (
+                  <span className={ui.overriding}>{t("aiConfig.prompts.overriding")}</span>
+                )}
+                <button
+                  className={ui.iconBtn}
+                  title={t("aiConfig.prompts.delete")}
+                  onClick={(e) => { e.stopPropagation(); removePrompt(p.id); }}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      <Section label={t("aiConfig.prompts.builtinTitle")}>
+        <div className={ui.rowDesc} style={{ marginBottom: "var(--space-3)" }}>
+          {t("aiConfig.prompts.builtinHint", { profile: profileLabel(profile, isZh) })}
+        </div>
+        {builtins.map((b) => {
+          const expanded = !!open[b.scene];
+          const overridden = prompts.some((p) => p.scene === b.scene);
+          return (
+            <div className={ui.listCard} key={b.scene}>
+              <div
+                className={ui.listHead}
+                role="button"
+                tabIndex={0}
+                onClick={() => setOpen((o) => ({ ...o, [b.scene]: !expanded }))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setOpen((o) => ({ ...o, [b.scene]: !expanded }));
+                  }
+                }}
+              >
+                <span className={`${ui.chevron} ${expanded ? ui.chevronOpen : ""}`}>
+                  <ChevronRight size={14} />
+                </span>
+                <span className={ui.badge}>{b.scene}</span>
+                <span className={ui.listTitle}>{b.label}</span>
+                {!expanded && <span className={ui.listPreview}>{preview(b.text, 46)}</span>}
+                {overridden && (
+                  <>
+                    <span className={ui.spacer} />
+                    <span className={ui.overriding}>{t("aiConfig.prompts.overridden")}</span>
+                  </>
+                )}
+              </div>
+              {expanded && (
+                <div className={ui.listBody}>
+                  <div className={ui.promptText}>{b.text}</div>
+                  <div className={ui.listActions}>
+                    <button
+                      className={ui.overrideBtn}
+                      onClick={() => openDrawer({ name: b.label, content: b.text, scene: b.scene })}
+                    >
+                      {t("aiConfig.prompts.useAsDraft")}
+                    </button>
                   </div>
                 </div>
-                <span className={styles.badge}>{b.scene}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+              )}
+            </div>
+          );
+        })}
+      </Section>
 
-      <div className={styles.section}>
-        <div className={styles.sectionTitle}>{t("aiConfig.prompts.customTitle")}</div>
-        {prompts.length === 0 && <div className={styles.emptyNote}>{t("aiConfig.prompts.empty")}</div>}
-        <div className={styles.itemList}>
-          {prompts.map((p) => (
-            <div key={p.id} className={styles.item}>
-              <div className={styles.itemInfo}>
-                <div className={styles.itemName}>{p.name}</div>
-                <div className={styles.itemMetaTruncated}>{p.content}</div>
-              </div>
-              <span className={styles.badge}>{p.scene}</span>
-              <button className={styles.deleteBtn} onClick={() => removePrompt(p.id)}><X size={13} /></button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {showForm ? (
-        <div className={styles.form}>
-          <div className={styles.sectionTitle}>{t("aiConfig.prompts.addTitle")}</div>
-          {error && <div className={styles.errorNote}>{error}</div>}
-          <div className={styles.formRow}>
-            <div className={styles.fieldGroup}>
-              <label className={styles.label}>{t("aiConfig.prompts.nameLabel")}</label>
-              <input className={styles.input} placeholder={t("aiConfig.prompts.namePlaceholder")} value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            </div>
-            <div className={styles.fieldGroup}>
-              <label className={styles.label}>{t("aiConfig.prompts.sceneLabel")}</label>
-              <select className={styles.select} value={form.scene}
-                onChange={(e) => setForm({ ...form, scene: e.target.value })}>
-                {/* "snippet" is not an override target: it feeds the quick-insert
-                    picker on the 自定义/chat input boxes (see SnippetPicker). */}
-                {["system", "continue", "polish", "rewrite", "summary", "lore", "snippet"].map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div className={styles.fieldGroup}>
-            <label className={styles.label}>{t("aiConfig.prompts.contentLabel")}</label>
-            <textarea className={`${styles.input} ${styles.textarea}`} rows={4} placeholder={t("ai.panel.customInstruction")}
-              value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} />
-          </div>
-          <div className={styles.formActions}>
-            <button className={styles.btnSecondary} onClick={() => { setShowForm(false); setError(null); }}>{t("aiConfig.prompts.cancel")}</button>
-            <button className={styles.btnPrimary} onClick={handleAdd} disabled={!form.name || !form.content || saving}>
-              {saving ? t("aiConfig.prompts.saving") : t("aiConfig.prompts.add")}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <button className={styles.btnPrimary} onClick={() => setShowForm(true)}>+ {t("aiConfig.prompts.add")}</button>
-      )}
-    </div>
+    </Pane>
   );
 }

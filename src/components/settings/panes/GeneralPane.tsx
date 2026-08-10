@@ -1,18 +1,18 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Moon, Sun, Monitor, FolderOpen, FileDown, FileUp } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useAiStore } from "../../../stores/aiStore";
 import { useAppStore, type ThemeMode, type Language, type FontScheme } from "../../../stores/appStore";
 import { MARKDOWN_THEMES } from "../../../lib/theme/markdownThemes";
 import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../../lib/ai/apiLog";
 import { applyConfigImport, exportAiConfig, stageConfigImport } from "../../../lib/ai/configTransfer";
-import styles from "../settingsCommon.module.css";
+import { Pane, PaneHeader, Section, Row, Chip, ChipRow, Toggle } from "./bits";
+import ui from "../settingsUi.module.css";
 
-const THEMES: { value: ThemeMode; icon: React.ReactNode; labelKey: string }[] = [
-  { value: "dark", icon: <Moon size={14} />, labelKey: "settings.dark" },
-  { value: "light", icon: <Sun size={14} />, labelKey: "settings.light" },
-  { value: "system", icon: <Monitor size={14} />, labelKey: "settings.system" },
+const THEMES: { value: ThemeMode; labelKey: string }[] = [
+  { value: "dark", labelKey: "settings.dark" },
+  { value: "light", labelKey: "settings.light" },
+  { value: "system", labelKey: "settings.system" },
 ];
 
 const LANGUAGES: { value: Language; label: string }[] = [
@@ -103,156 +103,111 @@ export function GeneralPane() {
   };
 
   return (
-    <div>
-      <div className={styles.section}>
-        <div className={styles.sectionTitle}>{t("systemSettings.general.appearance")}</div>
-        <div className={styles.fieldGroup}>
-          <label className={styles.label}>{t("systemSettings.general.themeLabel")}</label>
-          <div className={styles.optionGroup}>
-            {THEMES.map((th) => (
-              <button
-                key={th.value}
-                className={`${styles.optionBtn} ${theme === th.value ? styles.optionBtnActive : ""}`}
-                onClick={() => setTheme(th.value)}
-              >
-                {th.icon}
-                {t(th.labelKey)}
-              </button>
-            ))}
-          </div>
-        </div>
+    <Pane>
+      <PaneHeader title={t("systemSettings.tabs.general")} sub={t("systemSettings.general.paneSub")} />
 
-        <div className={styles.fieldGroup}>
-          <label className={styles.label}>{t("systemSettings.general.fontLabel")}</label>
-          <div className={styles.safetyHint}>{t("systemSettings.general.fontHint")}</div>
-          <div className={styles.fontGrid}>
+      <Section label={t("systemSettings.general.appearance")}>
+        <Row title={t("systemSettings.general.themeLabel")}>
+          <ChipRow>
+            {THEMES.map((th) => (
+              <Chip key={th.value} label={t(th.labelKey)} active={theme === th.value} onClick={() => setTheme(th.value)} />
+            ))}
+          </ChipRow>
+        </Row>
+
+        <div className={ui.rowStacked}>
+          <div className={ui.rowTitle}>{t("systemSettings.general.fontLabel")}</div>
+          <div className={ui.rowDesc}>{t("systemSettings.general.fontHint")}</div>
+          <div className={`${ui.cardGrid} ${ui.cardGridFont}`}>
             {FONT_SCHEMES.map((f) => (
               <button
                 key={f.value}
-                className={`${styles.fontCard} ${fontScheme === f.value ? styles.fontCardActive : ""}`}
+                className={`${ui.card} ${ui.fontCard} ${fontScheme === f.value ? ui.cardActive : ""}`}
                 onClick={() => setFontScheme(f.value)}
               >
-                <span className={styles.fontSample} style={{ fontFamily: f.previewFont }}>{f.sample}</span>
-                <span className={styles.fontName}>{t(f.labelKey)}</span>
+                <span className={ui.fontSample} style={{ fontFamily: f.previewFont }}>{f.sample}</span>
+                <span className={ui.cardName}>{t(f.labelKey)}</span>
               </button>
             ))}
           </div>
         </div>
 
-        <div className={styles.fieldGroup}>
-          <label className={styles.label}>{t("systemSettings.general.mdThemeLabel")}</label>
-          <div className={styles.safetyHint}>{t("systemSettings.general.mdThemeHint")}</div>
-          <div className={styles.mdThemeGrid}>
+        <div className={`${ui.rowStacked} ${ui.rowLast}`}>
+          <div className={ui.rowTitle}>{t("systemSettings.general.mdThemeLabel")}</div>
+          <div className={ui.rowDesc}>{t("systemSettings.general.mdThemeHint")}</div>
+          <div className={`${ui.cardGrid} ${ui.cardGridWide}`}>
             {MARKDOWN_THEMES.map((mt) => (
               <button
                 key={mt.id}
-                className={`${styles.mdThemeCard} ${markdownTheme === mt.id ? styles.mdThemeCardActive : ""}`}
+                className={`${ui.card} ${markdownTheme === mt.id ? ui.cardActive : ""}`}
                 onClick={() => setMarkdownTheme(mt.id)}
               >
-                {/* data-md-theme pins the sample to this card's theme, whatever
-                    the app-wide setting currently is. */}
-                <div className={`${styles.mdThemeSample} md-body`} data-md-theme={mt.id} aria-hidden>
+                {/* A real md-body sample, pinned by data-md-theme to this card's
+                    theme whatever the app-wide setting currently is. */}
+                <div className={`${ui.mdSample} md-body`} data-md-theme={mt.id} aria-hidden>
                   <h2>{isZh ? "标题" : "Heading"}</h2>
                   <p>{isZh ? "正文示例，字体与间距如此。" : "Body text, set in this theme."}</p>
                 </div>
-                <div className={styles.mdThemeName}>{isZh ? mt.label.zh : mt.label.en}</div>
-                <div className={styles.mdThemeDesc}>{isZh ? mt.desc.zh : mt.desc.en}</div>
+                <div className={ui.cardName}>{isZh ? mt.label.zh : mt.label.en}</div>
+                <div className={ui.cardDesc}>{isZh ? mt.desc.zh : mt.desc.en}</div>
               </button>
             ))}
           </div>
         </div>
-      </div>
+      </Section>
 
-      <div className={styles.section}>
-        <div className={styles.sectionTitle}>{t("systemSettings.general.languageSection")}</div>
-        <div className={styles.fieldGroup}>
-          <label className={styles.label}>{t("systemSettings.general.languageLabel")}</label>
-          <div className={styles.optionGroup}>
+      <Section label={t("systemSettings.general.languageSection")}>
+        <Row title={t("systemSettings.general.languageLabel")} last>
+          <ChipRow>
             {LANGUAGES.map((lang) => (
-              <button
-                key={lang.value}
-                className={`${styles.optionBtn} ${language === lang.value ? styles.optionBtnActive : ""}`}
-                onClick={() => setLanguage(lang.value)}
-              >
-                {lang.label}
-              </button>
+              <Chip key={lang.value} label={lang.label} active={language === lang.value} onClick={() => setLanguage(lang.value)} />
             ))}
-          </div>
-        </div>
-      </div>
+          </ChipRow>
+        </Row>
+      </Section>
 
-      <div className={styles.section}>
-        <div className={styles.sectionTitle}>{t("systemSettings.general.debugSection")}</div>
-        <div className={styles.fieldGroup}>
-          <label className={styles.label}>{t("systemSettings.general.apiLogLabel")}</label>
-          <div className={styles.safetyHint}>{t("systemSettings.general.apiLogHint")}</div>
-          <div className={styles.debugControls}>
-            <div className={styles.optionGroup}>
-              <button
-                className={`${styles.optionBtn} ${apiLogOn ? styles.optionBtnActive : ""}`}
-                onClick={() => toggleApiLog(true)}
-              >
-                {t("systemSettings.general.apiLogOn")}
-              </button>
-              <button
-                className={`${styles.optionBtn} ${!apiLogOn ? styles.optionBtnActive : ""}`}
-                onClick={() => toggleApiLog(false)}
-              >
-                {t("systemSettings.general.apiLogOff")}
-              </button>
-            </div>
-            <button className={`${styles.btnSecondary} ${styles.btnWithIcon}`} onClick={openApiLogs}>
-              <FolderOpen size={14} /> {t("systemSettings.general.openApiLogs")}
+      <Section label={t("systemSettings.general.debugSection")}>
+        <Row
+          title={t("systemSettings.general.apiLogLabel")}
+          desc={t("systemSettings.general.apiLogHint")}
+          last={!apiLogOn}
+        >
+          <Toggle on={apiLogOn} onChange={toggleApiLog} label={t("systemSettings.general.apiLogLabel")} />
+        </Row>
+        {/* Only worth offering once there is something in that folder. */}
+        {apiLogOn && (
+          <Row desc={t("systemSettings.general.apiLogLocation")} last>
+            <button className={ui.rowBtn} onClick={openApiLogs}>
+              {t("systemSettings.general.openApiLogs")}
             </button>
-          </div>
-        </div>
-      </div>
-
-      <div className={styles.section}>
-        <div className={styles.sectionTitle}>{t("systemSettings.backup.section")}</div>
-        <div className={styles.fieldGroup}>
-          <div className={styles.safetyHint}>{t("systemSettings.backup.hint")}</div>
-          <div className={styles.debugControls}>
-            <button
-              className={`${styles.btnSecondary} ${styles.btnWithIcon}`}
-              onClick={handleExportConfig}
-              disabled={backupBusy}
-            >
-              <FileDown size={14} /> {t("systemSettings.backup.export")}
-            </button>
-            <button
-              className={`${styles.btnSecondary} ${styles.btnWithIcon}`}
-              onClick={handleImportConfig}
-              disabled={backupBusy}
-            >
-              <FileUp size={14} /> {t("systemSettings.backup.import")}
-            </button>
-          </div>
-        </div>
-        <div className={styles.fieldGroup}>
-          <label className={styles.label}>{t("systemSettings.backup.keysLabel")}</label>
-          <div className={styles.safetyHint}>{t("systemSettings.backup.keysHint")}</div>
-          <div className={styles.optionGroup}>
-            <button
-              className={`${styles.optionBtn} ${!includeKeys ? styles.optionBtnActive : ""}`}
-              onClick={() => setIncludeKeys(false)}
-            >
-              {t("systemSettings.backup.keysOff")}
-            </button>
-            <button
-              className={`${styles.optionBtn} ${includeKeys ? styles.optionBtnActive : ""}`}
-              onClick={() => setIncludeKeys(true)}
-            >
-              {t("systemSettings.backup.keysOn")}
-            </button>
-          </div>
-        </div>
-        {backupStatus && (
-          <div className={backupStatus.ok ? styles.safetyHint : styles.errorNote}>
-            {backupStatus.text}
-          </div>
+          </Row>
         )}
-      </div>
-    </div>
+      </Section>
+
+      <Section label={t("systemSettings.backup.section")}>
+        <Row title={t("systemSettings.backup.transferLabel")} desc={t("systemSettings.backup.hint")}>
+          <button className={ui.rowBtn} onClick={handleExportConfig} disabled={backupBusy}>
+            {t("systemSettings.backup.export")}
+          </button>
+          <button className={ui.rowBtn} onClick={handleImportConfig} disabled={backupBusy}>
+            {t("systemSettings.backup.import")}
+          </button>
+        </Row>
+        <Row
+          title={t("systemSettings.backup.keysLabel")}
+          desc={t("systemSettings.backup.keysHint")}
+          warn={includeKeys ? t("systemSettings.backup.keysWarn") : undefined}
+          last
+        >
+          <ChipRow>
+            <Chip label={t("systemSettings.backup.keysOff")} active={!includeKeys} onClick={() => setIncludeKeys(false)} />
+            <Chip label={t("systemSettings.backup.keysOn")} active={includeKeys} onClick={() => setIncludeKeys(true)} />
+          </ChipRow>
+        </Row>
+        {backupStatus && (
+          <div className={backupStatus.ok ? ui.statusOk : ui.statusError}>{backupStatus.text}</div>
+        )}
+      </Section>
+    </Pane>
   );
 }

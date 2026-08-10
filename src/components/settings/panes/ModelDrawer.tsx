@@ -7,6 +7,7 @@ import { defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, type ModelType } f
 import { CONTEXT_SIZE_STOPS, formatContextSize } from "../../../lib/ai/contextSize";
 import { ModelProbePanel } from "../ModelProbePanel";
 import styles from "../settingsCommon.module.css";
+import ui from "../settingsUi.module.css";
 import hub from "./ProvidersModels.module.css";
 
 const MODEL_TYPES: ModelType[] = ["text", "multimodal", "image", "video"];
@@ -115,7 +116,7 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
   const chip = (label: string, active: boolean, onClick: () => void, key: string) => (
     <button
       key={key}
-      className={`${hub.chip} ${active ? hub.chipActive : ""}`}
+      className={`${ui.chip} ${active ? ui.chipActive : ""}`}
       onClick={onClick}
     >
       {label}
@@ -175,7 +176,7 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
 
         <div className={styles.fieldGroup}>
           <label className={styles.label}>{t("aiConfig.models.typeLabel")}</label>
-          <div className={hub.chipRow}>
+          <div className={ui.chipRow}>
             {MODEL_TYPES.map((type) =>
               chip(t(`aiConfig.modelTypes.${type}`), form.type === type, () => {
                 setForm({ ...form, type });
@@ -255,7 +256,7 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
               <label className={styles.label}>{t("aiConfig.models.contextSizeLabel")}</label>
               {/* Chips for the windows models actually ship with, plus a field
                   for the odd exact value (200k Claude, 64k local builds…). */}
-              <div className={hub.chipRow}>
+              <div className={ui.chipRow}>
                 {chip(
                   t("aiConfig.models.contextSizeUnset", { defaultValue: "未设置" }),
                   form.contextSize === "",

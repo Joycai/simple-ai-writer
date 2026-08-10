@@ -63,10 +63,6 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
     </button>
   );
 
-  // 供应商与模型 scrolls and positions its own drawer, so it gets the pane box
-  // undecorated; every other pane rides the page's padding and column width.
-  const isFlushPane = activeTab === "providers-models";
-
   return (
     <motion.div
       className={styles.page}
@@ -101,22 +97,15 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
         {/* Narrow boundary: a crashed pane replaces only the pane, leaving the
             nav and the close button alive so the author can get out. */}
         <ModalErrorBoundary onClose={onClose}>
-          {isFlushPane ? (
-            <div className={styles.paneFlush}>
-              <ProvidersModelsPane onEscapeInterceptChange={setEscIntercept} />
-            </div>
-          ) : (
-            <div className={styles.pane}>
-              <div className={styles.paneInner}>
-                {activeTab === "general" && <GeneralPane />}
-                {activeTab === "workspace" && <WorkspacePane />}
-                {activeTab === "prompts" && <PromptsPane />}
-                {activeTab === "usage" && <UsagePane />}
-                {activeTab === "shortcuts" && <ShortcutsPane />}
-                {activeTab === "about" && <AboutPane />}
-              </div>
-            </div>
-          )}
+          <div className={styles.paneHost}>
+            {activeTab === "general" && <GeneralPane />}
+            {activeTab === "workspace" && <WorkspacePane />}
+            {activeTab === "providers-models" && <ProvidersModelsPane onEscapeInterceptChange={setEscIntercept} />}
+            {activeTab === "prompts" && <PromptsPane onEscapeInterceptChange={setEscIntercept} />}
+            {activeTab === "usage" && <UsagePane />}
+            {activeTab === "shortcuts" && <ShortcutsPane />}
+            {activeTab === "about" && <AboutPane />}
+          </div>
         </ModalErrorBoundary>
       </div>
     </motion.div>

@@ -19,7 +19,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-4) var(--space-6);
+  padding: var(--space-5) var(--space-7);
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
 }
@@ -57,10 +57,10 @@
 }
 
 .nav {
-  width: 232px;
+  width: 246px;
   flex-shrink: 0;
   border-right: 1px solid var(--color-border);
-  padding: var(--space-5) var(--space-3);
+  padding: var(--space-6) var(--space-4);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -71,10 +71,10 @@
   font-size: var(--font-size-xs);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.14em;
   color: var(--color-text-muted);
-  padding: var(--space-2) var(--space-2) var(--space-1);
-  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  margin-top: var(--space-4);
 }
 
 .navDivider {
@@ -89,7 +89,7 @@
   gap: var(--space-3);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-base);
   color: var(--color-text-secondary);
   width: 100%;
   text-align: left;
@@ -113,26 +113,14 @@
 
 .navIcon { flex-shrink: 0; }
 
-/* The pane host. Panes that own their own scrolling and full-height layout
-   (供应商与模型) opt out of this padding via `.paneFlush`. */
-.pane {
-  flex: 1;
-  min-width: 0;
-  overflow-y: auto;
-  padding: var(--space-5) var(--space-7);
-}
-
-.paneFlush {
+/* Every pane owns its own scrolling and content width (see settingsUi `.pane`),
+   so the host only has to give them the box and a positioning context. */
+.paneHost {
   flex: 1;
   min-width: 0;
   display: flex;
   overflow: hidden;
   position: relative;
-}
-
-/* Ordinary panes read better as a column than stretched across a wide window. */
-.paneInner {
-  max-width: 860px;
 }
 
 @media (max-width: 720px) {

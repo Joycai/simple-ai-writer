@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Archive, ArchiveRestore } from "lucide-react";
 import { flushDirtyDocuments, useProjectStore } from "../../../stores/projectStore";
 import { exportProjectBundle, restoreProjectBundle } from "../../../lib/fs/projectBackup";
 import {
@@ -9,7 +8,8 @@ import {
   profileLabel,
   type WorkspaceProfile,
 } from "../../../lib/profile";
-import styles from "../settingsCommon.module.css";
+import { Pane, PaneHeader, Section, Row } from "./bits";
+import ui from "../settingsUi.module.css";
 
 /**
  * Picks the open project's workspace profile — see lib/profile.
@@ -41,36 +41,49 @@ export function WorkspacePane() {
   };
 
   return (
-    <div>
-      <div className={styles.section}>
-        <div className={styles.sectionTitle}>{t("systemSettings.workspace.profileSection")}</div>
+    <Pane>
+      <PaneHeader title={t("systemSettings.tabs.workspace")} sub={t("systemSettings.workspace.paneSub")} />
+
+      <Section label={t("systemSettings.workspace.profileSection")}>
         {!projectPath ? (
-          <div className={styles.emptyNote}>{t("systemSettings.workspace.noProject")}</div>
+          <div className={ui.emptyNote}>{t("systemSettings.workspace.noProject")}</div>
         ) : (
-          <div className={styles.fieldGroup}>
-            <div className={styles.safetyHint}>{t("systemSettings.workspace.profileHint")}</div>
-            <div className={styles.profileGrid}>
-              {BUILTIN_PROFILES.map((p) => (
-                <button
-                  key={p.id}
-                  className={`${styles.profileCard} ${p.id === profile.id ? styles.profileCardActive : ""}`}
-                  onClick={() => choose(p)}
-                  disabled={busy}
-                >
-                  <span className={styles.profileName}>{profileLabel(p, isZh)}</span>
-                  <span className={styles.profileCats}>
-                    {p.categories.map((c) => categoryLabel(c, isZh)).join(" · ")}
-                  </span>
-                </button>
-              ))}
+          <div className={`${ui.rowStacked} ${ui.rowLast}`}>
+            <div className={ui.rowDesc}>
+              {t("systemSettings.workspace.profileHint")} {t("systemSettings.workspace.switchHint")}
             </div>
-            <div className={styles.safetyHint}>{t("systemSettings.workspace.switchHint")}</div>
-            {error && <div className={styles.errorNote}>{error}</div>}
+            <div className={`${ui.cardGrid} ${ui.cardGridProfile}`}>
+              {BUILTIN_PROFILES.map((p) => {
+                const active = p.id === profile.id;
+                return (
+                  <button
+                    key={p.id}
+                    className={`${ui.card} ${active ? ui.cardActive : ""}`}
+                    onClick={() => choose(p)}
+                    disabled={busy}
+                  >
+                    <div className={ui.profileHead}>
+                      <span className={ui.profileName}>{profileLabel(p, isZh)}</span>
+                      {active && <span className={ui.profileCurrent}>{t("systemSettings.workspace.current")}</span>}
+                    </div>
+                    {/* The category list is the substance of the choice — it is
+                        what actually changes on disk. */}
+                    <div className={ui.tagRow}>
+                      {p.categories.map((c) => (
+                        <span key={c.id} className={ui.tag}>{categoryLabel(c, isZh)}</span>
+                      ))}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            {error && <div className={ui.statusError}>{error}</div>}
           </div>
         )}
-      </div>
+      </Section>
+
       <ProjectBackupSection />
-    </div>
+    </Pane>
   );
 }
 
@@ -134,33 +147,30 @@ function ProjectBackupSection() {
   };
 
   return (
-    <div className={styles.section}>
-      <div className={styles.sectionTitle}>{t("systemSettings.projectBackup.section")}</div>
-      <div className={styles.fieldGroup}>
-        <div className={styles.safetyHint}>{t("systemSettings.projectBackup.hint")}</div>
-        <div className={styles.safetyHint}>{t("systemSettings.projectBackup.scopeHint")}</div>
-        <div className={styles.debugControls}>
-          <button
-            className={`${styles.btnSecondary} ${styles.btnWithIcon}`}
-            onClick={handleExport}
-            disabled={busy || !projectPath}
-            title={projectPath ? undefined : t("systemSettings.workspace.noProject")}
-          >
-            <Archive size={14} /> {t("systemSettings.projectBackup.export")}
-          </button>
-          <button
-            className={`${styles.btnSecondary} ${styles.btnWithIcon}`}
-            onClick={handleRestore}
-            disabled={busy}
-          >
-            <ArchiveRestore size={14} /> {t("systemSettings.projectBackup.restore")}
-          </button>
-        </div>
-        <div className={styles.safetyHint}>{t("systemSettings.projectBackup.restoreHint")}</div>
-      </div>
-      {status && (
-        <div className={status.ok ? styles.safetyHint : styles.errorNote}>{status.text}</div>
-      )}
-    </div>
+    <Section label={t("systemSettings.projectBackup.section")}>
+      <Row
+        title={t("systemSettings.projectBackup.export")}
+        desc={`${t("systemSettings.projectBackup.hint")} ${t("systemSettings.projectBackup.scopeHint")}`}
+      >
+        <button
+          className={ui.rowBtn}
+          onClick={handleExport}
+          disabled={busy || !projectPath}
+          title={projectPath ? undefined : t("systemSettings.workspace.noProject")}
+        >
+          {t("systemSettings.projectBackup.export")}
+        </button>
+      </Row>
+      <Row
+        title={t("systemSettings.projectBackup.restore")}
+        desc={t("systemSettings.projectBackup.restoreHint")}
+        last
+      >
+        <button className={ui.rowBtn} onClick={handleRestore} disabled={busy}>
+          {t("systemSettings.projectBackup.restore")}
+        </button>
+      </Row>
+      {status && <div className={status.ok ? ui.statusOk : ui.statusError}>{status.text}</div>}
+    </Section>
   );
 }

@@ -11,9 +11,15 @@
 
 /* ─── Head + toolbar (sticky above the scrolling list) ────────────────────── */
 
+/* Head and list are separate scroll regions but share one content column, so
+   both cap at the same width and centre the same way. */
 .head {
   flex-shrink: 0;
-  padding: var(--space-5) var(--space-7) 0;
+  width: 100%;
+  max-width: 1160px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding: var(--space-6) var(--space-8) 0;
 }
 
 .headRow {
@@ -76,47 +82,18 @@
 }
 .searchInput:focus { border-color: var(--color-accent); }
 
-/* ─── Chips (type filter, model type, context size) ───────────────────────── */
-
-.chip {
-  flex: none;
-  white-space: nowrap;
-  padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg-elevated);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-  transition: background var(--transition-fast), color var(--transition-fast),
-    border-color var(--transition-fast);
-}
-.chip:hover {
-  background: var(--color-bg-base);
-  color: var(--color-text-primary);
-  border-color: var(--color-border-strong);
-}
-.chip:active { transform: scale(0.96); }
-
-.chipActive {
-  background: var(--color-accent-tint);
-  color: var(--color-accent);
-  border-color: var(--color-accent);
-}
-.chipActive:hover { background: var(--color-accent-tint-strong); color: var(--color-accent); }
-
-.chipRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
 /* ─── Grouped list ────────────────────────────────────────────────────────── */
 
 .list {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-4) var(--space-7) var(--space-8);
+}
+
+.listInner {
+  max-width: 1160px;
+  margin: 0 auto;
+  box-sizing: border-box;
+  padding: var(--space-5) var(--space-8) var(--space-9);
 }
 
 .group {
@@ -388,6 +365,12 @@
   transition: border-color var(--transition-fast);
 }
 .ctxExact:focus { border-color: var(--color-accent); }
+
+/* A prompt body is long — give it real room and a monospace-free reading size. */
+.promptArea {
+  line-height: 1.8;
+  min-height: 280px;
+}
 
 .checkLabel {
   display: flex;

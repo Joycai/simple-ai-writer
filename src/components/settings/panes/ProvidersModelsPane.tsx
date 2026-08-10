@@ -6,6 +6,7 @@ import type { Model, ModelType } from "../../../lib/ai/configDb";
 import { ProviderDrawer } from "./ProviderDrawer";
 import { ModelDrawer } from "./ModelDrawer";
 import styles from "../settingsCommon.module.css";
+import ui from "../settingsUi.module.css";
 import hub from "./ProvidersModels.module.css";
 
 const TYPE_FILTERS: (ModelType | "all")[] = ["all", "text", "multimodal", "image", "video"];
@@ -98,7 +99,7 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
   };
 
   const chip = (label: string, active: boolean, onClick: () => void, key: string) => (
-    <button key={key} className={`${hub.chip} ${active ? hub.chipActive : ""}`} onClick={onClick}>
+    <button key={key} className={`${ui.chip} ${active ? ui.chipActive : ""}`} onClick={onClick}>
       {label}
     </button>
   );
@@ -114,7 +115,7 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
             </div>
           </div>
           <span className={hub.headSpacer} />
-          <button className={styles.btnPrimary} onClick={() => openProviderDrawer(null)}>
+          <button className={ui.primaryBtn} onClick={() => openProviderDrawer(null)}>
             + {t("aiConfig.providers.add")}
           </button>
         </div>
@@ -141,6 +142,7 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
       </div>
 
       <div className={hub.list}>
+        <div className={hub.listInner}>
         {error && <div className={styles.errorNote}>{error}</div>}
 
         {providers.length === 0 && groups.length === 0 && !q && (
@@ -263,6 +265,7 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
             </div>
           </div>
         )}
+        </div>
       </div>
 
       {drawer && (

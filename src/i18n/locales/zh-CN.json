@@ -204,7 +204,9 @@
       "profileSection": "工作台类型",
       "profileHint": "决定这个项目的知识库分类，以及提示词里各个上下文区块的称谓（例如「上一章结尾」还是「上一场景结尾」）。",
       "noProject": "打开一个项目后可以设置工作台类型。",
-      "switchHint": "切换不会删除任何内容：旧分类的文件夹和条目仍保留在磁盘上，切回即可看到。"
+      "switchHint": "切换不会删除任何内容：旧分类的文件夹和条目仍保留在磁盘上，切回即可看到。",
+      "paneSub": "当前项目的类型与备份",
+      "current": "当前"
     },
     "shortcuts": {
       "categories": {
@@ -245,14 +247,16 @@
         "contextualCloseOverlay": "关闭右键菜单 / 弹窗",
         "contextualConfirmInput": "确认输入(重命名、新建条目等)",
         "contextualPaletteNav": "在命令面板结果间移动"
-      }
+      },
+      "paneSub": "所有操作也可以在命令面板（⌘K）中搜索执行。"
     },
     "about": {
       "appName": "Simple AI Writer",
       "tagline": "专注长篇创作的沉浸式 AI 写作助手。",
       "versionLabel": "版本",
       "githubLabel": "GitHub 仓库",
-      "copyright": "© 2026 joycai。基于 MIT 许可证发布。"
+      "copyright": "© 2026 joycai。基于 MIT 许可证发布。",
+      "licenseLabel": "许可证"
     },
     "general": {
       "appearance": "外观",
@@ -273,7 +277,9 @@
       "apiLogHint": "开启后，每次 AI 请求的内容、响应和错误都会记录到本地日志文件（不含 API Key），方便排查问题。",
       "apiLogOn": "开启",
       "apiLogOff": "关闭",
-      "openApiLogs": "打开日志目录"
+      "openApiLogs": "打开日志目录",
+      "paneSub": "外观、语言与本地数据",
+      "apiLogLocation": "日志保存在本地目录"
     },
     "backup": {
       "section": "配置备份",
@@ -281,7 +287,7 @@
       "export": "导出配置…",
       "import": "导入配置…",
       "keysLabel": "API Key",
-      "keysHint": "API Key 保存在系统凭据管理器中，默认不随备份导出。选择「包含」会把 Key 以明文写入备份文件，请妥善保管。",
+      "keysHint": "API Key 保存在系统凭据管理器中，默认不随备份导出。",
       "keysOff": "不包含",
       "keysOn": "包含（明文）",
       "exported": "已导出到 {{path}}",
@@ -291,7 +297,9 @@
       "imported": "导入完成。",
       "importFailed": "导入失败：",
       "invalidFile": "这不是有效的配置备份文件。",
-      "importPrefsNote": "备份中还包含 {{count}} 项界面偏好(主题、字体、面板宽度等),导入后立即生效。最近项目列表与项目级设置不随备份迁移。"
+      "importPrefsNote": "备份中还包含 {{count}} 项界面偏好(主题、字体、面板宽度等),导入后立即生效。最近项目列表与项目级设置不随备份迁移。",
+      "transferLabel": "导出 / 导入配置",
+      "keysWarn": "注意：Key 将以明文写入备份文件，请妥善保管。"
     },
     "usage": {
       "section": "用量统计",
@@ -316,7 +324,31 @@
         "image-gen": "生成插图",
         "image-edit": "修改插图",
         "consistency": "一致性检查"
-      }
+      },
+      "paneSub": "本项目记录的 AI 调用统计",
+      "detail": "明细",
+      "maintenance": "维护",
+      "unknownModel": "已删除的模型",
+      "footnote": "成本按「供应商与模型」页填写的单价估算；未填写价格的模型显示 — 且不计入合计。缓存命中率 = 缓存输入 ÷ 全部输入。",
+      "colName": "名称",
+      "colCalls": "调用",
+      "colInput": "输入",
+      "colCached": "缓存输入",
+      "colOutput": "输出",
+      "colHitRate": "命中率",
+      "colCost": "成本",
+      "cards": {
+        "calls": "调用次数",
+        "input": "输入 TOKENS",
+        "inputSub": "其中缓存 {{cached}}",
+        "output": "输出 TOKENS",
+        "outputSub": "模型回复产出",
+        "hitRate": "缓存命中率",
+        "hitRateSub": "缓存输入 ÷ 全部输入",
+        "cost": "估算成本",
+        "costSub": "未定价模型不计入"
+      },
+      "noProject": "打开一个项目后可以查看它的用量统计。"
     },
     "projectBackup": {
       "section": "项目备份",
@@ -446,7 +478,9 @@
       "hook": "开头",
       "hookDesc": "为当前文章写多个不同写法的开头",
       "compliance": "合规审查",
-      "complianceDesc": "逐句检查当前文章的合规与平台风险"
+      "complianceDesc": "逐句检查当前文章的合规与平台风险",
+      "system": "系统身份",
+      "lore": "设定提取"
     },
     "instructions": {
       "continue": "请从当前文本结尾处继续写作。\n- 资料忠实：【{{knowledge}}】中出现的名称、事实与既定规则，必须严格遵循，不得凭空捏造矛盾细节。\n- 风格匹配：保持前文的句式节奏、用词层次与叙述方式。\n- 长度：约{{length}}字（根据作者自然段落长度适当调整）。\n- 只输出续写内容，不加标题或任何说明。",
@@ -976,9 +1010,8 @@
       }
     },
     "prompts": {
-      "builtinTitle": "内置默认指令 (只读)",
-      "customTitle": "自定义 Prompt (覆盖同场景默认)",
-      "empty": "暂无自定义 Prompt",
+      "builtinTitle": "内置默认指令（只读）",
+      "customTitle": "自定义 Prompt",
       "overridden": " 已被覆盖",
       "add": "添加",
       "addTitle": "新建 Prompt",
@@ -987,7 +1020,21 @@
       "sceneLabel": "场景",
       "contentLabel": "内容",
       "cancel": "取消",
-      "saving": "保存中…"
+      "saving": "保存中…",
+      "paneSub": "内置指令按场景折叠展示；自定义 Prompt 覆盖同场景默认。",
+      "emptyHint": "暂无自定义 Prompt。展开下方任一内置指令，可「以此为底稿」创建覆盖版本。",
+      "overriding": "覆盖生效中",
+      "delete": "删除",
+      "builtinHint": "系统身份随工作台类型变化，当前为「{{profile}}」。",
+      "useAsDraft": "以此为底稿覆盖",
+      "editTitle": "编辑自定义 Prompt",
+      "drawerSub": "覆盖同场景的内置默认指令",
+      "sceneHint": "保存后将在该场景下覆盖内置默认指令。",
+      "sceneSnippet": "快捷片段",
+      "sceneSnippetHint": "片段不覆盖任何指令，只出现在输入框的快捷插入列表里。",
+      "contentPlaceholder": "写下要覆盖的完整指令…",
+      "save": "保存修改",
+      "addCta": "自定义 Prompt"
     },
     "modelTypes": {
       "text": "文本",

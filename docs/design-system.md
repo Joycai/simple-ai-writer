@@ -28,7 +28,7 @@ The UI targets a restrained, modern **Apple-like aesthetic**. These rules are th
 - **Shadow (elevation)**: `--shadow-sm` (resting cards/inputs) → `--shadow-md` (raised) → `--shadow-lg` (popovers/menus/dropdowns) → `--shadow-xl` (modals). `--shadow-focus` for focus rings. Each theme defines its own set (dark deeper, light subtle).
 - **Accent**: `--color-accent`, `--color-accent-hover`, `--color-accent-ring`, `--color-accent-tint`, `--color-accent-tint-strong`.
 - **Glass**: `--glass-bg` (modals), `--glass-bg-strong` (large chrome), `--glass-blur`, `--glass-border`.
-- **Typography**: `--font-serif` (body/editor), `--font-sans` (UI chrome/labels), `--font-mono` (code, numeric, prefix editor). Size scale `--font-size-xs` 11 → `--font-size-3xl` 44. Serif/sans are **swapped per font scheme** (see below); mono is fixed.
+- **Typography**: `--font-serif` (body/editor), `--font-sans` (UI chrome/labels), `--font-mono` (code, numeric, prefix editor). Size scale `--font-size-xs` 11 → `--font-size-3xl` 44, with `--font-size-base` 14 sitting between `md` (13) and `lg` (17) for settings rows and nav items. Serif/sans are **swapped per font scheme** (see below); mono is fixed.
 
 ### 字体方案 (Font schemes — `data-font`)
 
