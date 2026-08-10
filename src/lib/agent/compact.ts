@@ -56,12 +56,18 @@ export interface ChatSessionMeta {
   seedContext: StreamMessage | null;
   /** The rolling-summary message. Null until the first compaction writes one. */
   summary: StreamMessage | null;
+  /**
+   * The summary's bare text, without the 【历史摘要】 block header the wire
+   * message carries. The next compaction feeds this back to the summarizer —
+   * from the message content it would have to strip the header first.
+   */
+  summaryText: string | null;
   /** The user-question messages, in order — each one starts a turn. */
   turnStarts: StreamMessage[];
 }
 
 export function createSessionMeta(): ChatSessionMeta {
-  return { seedContext: null, summary: null, turnStarts: [] };
+  return { seedContext: null, summary: null, summaryText: null, turnStarts: [] };
 }
 
 /** Record `msg` as the start of a new turn. Call right before pushing it. */

@@ -46,6 +46,7 @@ import { backupFile } from "../lib/agent/backup";
 import {
   createSessionMeta, noteTurnStart, type ChatSessionMeta,
 } from "../lib/agent/compact";
+import { compactChatHistory, summarizeForCompaction } from "../lib/agent/compactRun";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import { createPlanGate, type LorePlan, type PlanDecision } from "../lib/agent/plan";
 import { AGENT_ASSIST_PRESET } from "../lib/agent/presets";
@@ -497,6 +498,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       const apiKey = (await loadApiKey(provider.id)) ?? "";
 
       // ── History: seed on first turn, append afterwards ──
+      const { contextUtilization } = useAppStore.getState();
       let history = get().chatHistory;
       if (!history) {
         const { useAiStore: aiStore2 } = await import("./aiStore");
@@ -567,13 +569,46 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // and appending onto that makes the provider reject not just this turn
         // but every turn after it. Repair before adding to it.
         repairToolCallPairing(history);
-        const questionMsg: StreamMessage = { role: "user", content: wireMessage };
+
+        // ── Compaction (docs/chat-memory-plan.md §4) ──
+        // Between turns, before this turn's question goes in: if the history
+        // has outgrown the trigger, fold the oldest turns into the rolling
+        // summary. Best-effort — a failed summarize returns null and the turn
+        // proceeds on the uncompacted history (trimHistory still backstops
+        // mid-turn); only an abort propagates. The event lands in this turn's
+        // log so the author sees what was folded and can read the summary.
         const meta = get().chatMeta;
+        if (meta) {
+          const compacted = await compactChatHistory({
+            history,
+            meta,
+            ceilingTokens: inputCeilingFor(model.contextSize, contextUtilization),
+            summarize: (input) =>
+              summarizeForCompaction(
+                {
+                  baseUrl: provider.baseUrl,
+                  apiKey,
+                  standard: provider.apiStandard,
+                  modelId: model.modelId,
+                  prefix: model.prefix,
+                  contextSize: model.contextSize,
+                  safetySettings: provider.safetySettings,
+                },
+                input,
+                controller.signal,
+              ),
+          });
+          if (compacted) {
+            history = compacted.history;
+            set({ chatHistory: history });
+            patchAssistant((tn) => ({ ...tn, log: appendAgentEventTo(tn.log, compacted.event) }));
+          }
+        }
+
+        const questionMsg: StreamMessage = { role: "user", content: wireMessage };
         if (meta) noteTurnStart(meta, questionMsg);
         history.push(questionMsg);
       }
-
-      const { contextUtilization } = useAppStore.getState();
 
       const { inputTokens, outputTokens, cachedTokens } = await runAgent({
         baseUrl: provider.baseUrl,

@@ -114,6 +114,13 @@ export function formatToolArgsDetail(raw: string): string {
   }
 }
 
+/** Compact token count for log meta: 38400 → "38k", 3244 → "3.2k". */
+export function formatTokenCount(n: number): string {
+  if (n < 1000) return String(n);
+  const k = n / 1000;
+  return `${k >= 100 || Number.isInteger(k) ? Math.round(k) : k.toFixed(1)}k`;
+}
+
 /**
  * Single-line result summary: newlines collapsed, clipped. Markdown headings
  * lose their `#` so a chapter's first line reads as a title, not as syntax.

@@ -78,6 +78,22 @@ export type AgentEvent =
     }
   | {
       /**
+       * The oldest turns were folded into the rolling summary between turns
+       * (lib/agent/compactRun). Distinct from context-trimmed: trimming blanks
+       * individual tool results mid-run as a backstop; compaction replaces
+       * whole turns with prose the model can still use.
+       */
+      kind: "context-compacted";
+      foldedTurns: number;
+      /** Estimated history tokens before / after the fold. */
+      fromTokens: number;
+      toTokens: number;
+      /** The new rolling summary — shown by the log row's expanded detail. */
+      summary: string;
+      at: number;
+    }
+  | {
+      /**
        * The round cap was reached with the model still calling tools, and the
        * author was asked whether to keep going. `granted` is the extra rounds
        * they allowed — 0 means they chose to let the run wrap up.

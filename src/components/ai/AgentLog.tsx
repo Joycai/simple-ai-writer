@@ -30,6 +30,7 @@ import type { AgentEvent, ToolStep } from "../../lib/agent/events";
 import {
   TOOL_ARGS_DETAIL_CHARS,
   TOOL_RESULT_DETAIL_CHARS,
+  formatTokenCount,
   formatToolArgs,
   formatToolArgsDetail,
   formatToolResult,
@@ -330,6 +331,32 @@ function AgentLogRow({ row, showTime }: { row: Row; showTime: boolean }) {
             {t("ai.agent.log.trimmed", { count: event.count })}
           </span>
         </li>
+      );
+    case "context-compacted":
+      return (
+        <ExpandableRow
+          header={
+            <>
+              <Marker state="done" />
+              <span className={styles.rowName}>
+                {t("ai.agent.log.compacted", {
+                  defaultValue: "已归纳前 {{n}} 轮对话",
+                  n: event.foldedTurns,
+                })}
+              </span>
+              <span className={styles.rowMetaRight}>
+                {formatTokenCount(event.fromTokens)} → {formatTokenCount(event.toTokens)} tk
+              </span>
+              {time}
+            </>
+          }
+          detail={
+            <DetailBlock
+              label={t("ai.agent.log.detailSummary", { defaultValue: "历史摘要" })}
+              body={event.summary}
+            />
+          }
+        />
       );
     case "run-done":
       return (

@@ -72,6 +72,12 @@ function elideOldImageResults(history: StreamMessage[]): number {
  * a long tool-using run trips the pre-flight check on round 5 or 6 — i.e. it
  * fails *after* the author has already waited through the whole loop.
  *
+ * For chat this is the SECOND line of defense: between turns, compaction
+ * (lib/agent/compactRun) folds whole old turns into a rolling summary the
+ * model can still use. This pass handles what compaction cannot — growth
+ * *inside* a turn, where the fold unit (a complete turn) doesn't exist yet —
+ * and one-shot agent runs, which have no between-turns moment at all.
+ *
  * Oldest tool results go first: they are both the bulk of the growth and the
  * least likely to still matter. Their *messages* stay — an assistant tool_call
  * with no matching tool reply is a protocol error at both OpenAI and Gemini —

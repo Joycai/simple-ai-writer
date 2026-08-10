@@ -127,8 +127,11 @@ wire 历史本就分离，聊天记录的显示不受压缩影响。
   `chatHistory` 同生命周期）；`lib/agent/compact.ts` 纯逻辑（`segmentHistory` /
   `planFold` / `renderTurnsForSummary` / `buildCompactedHistory` + 常量）+
   `chatCompact.test.ts`。行为对用户无感。
-- **PR2 — 压缩**：归纳请求 + sendChat 接线 + `context-compacted` 事件 +
-  AgentLog 行 + 双语文案；`trimHistory` 注释改写为第二道保险。
+- **PR2 — 压缩**（已完成）：`lib/agent/compactRun.ts`（`compactChatHistory`
+  编排 + `summarizeForCompaction` 真实归纳请求，注入式分离以便测试与将来的
+  专用归纳模型）；sendChat 在 push 用户消息前接线；`context-compacted` 事件 +
+  AgentLog 可展开行（详情=摘要全文）；`ai.instructions.chatCompact*` 双语文案；
+  `trimHistory` 注释改写为第二道保险。
 - **PR3 — 每轮注入**：注入账本、`selectLore` 复跑、文档切换补注、
   `context-seeded` 每轮化。
 - 顺序即依赖序；PR2/PR3 互不依赖，可并行。
