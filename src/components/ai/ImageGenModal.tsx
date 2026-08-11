@@ -166,6 +166,7 @@ export function ImageGenModal({ target, onClose }: Props) {
         modelId: resolved.model.modelId,
         prefix: resolved.model.prefix,
         contextSize: resolved.model.contextSize,
+        maxOutput: resolved.model.maxOutput,
         signal: ctrl.signal,
       });
       setPrompt(spec.prompt);

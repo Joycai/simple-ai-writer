@@ -175,6 +175,8 @@ export interface AgentRuntimeOptions {
   prefix?: string;
   /** Optional model context window (tokens); checked before each round's request. */
   contextSize?: number;
+  /** Sent as `max_tokens` on the Anthropic path; planning-only elsewhere. */
+  maxOutput?: number;
   /**
    * Input-token ceiling from the context budget planner (lib/context/budget).
    * Older tool results are elided to stay under it, so a long loop degrades
@@ -321,6 +323,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         modelId: opts.modelId,
         prefix: opts.prefix,
         contextSize: opts.contextSize,
+        maxOutput: opts.maxOutput,
         messages: history,
         safetySettings: opts.safetySettings,
         extraBody: opts.extraBody,

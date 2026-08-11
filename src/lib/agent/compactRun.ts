@@ -98,6 +98,8 @@ export interface SummarizeRequestConfig {
   modelId: string;
   prefix?: string;
   contextSize?: number;
+  /** Sent as `max_tokens` on the Anthropic path; planning-only elsewhere. */
+  maxOutput?: number;
   safetySettings?: GeminiSafetySettings;
 }
 
@@ -125,6 +127,7 @@ export async function summarizeForCompaction(
     modelId: config.modelId,
     prefix: config.prefix,
     contextSize: config.contextSize,
+    maxOutput: config.maxOutput,
     safetySettings: config.safetySettings,
     messages: [
       { role: "system", content: i18n.t("ai.instructions.chatCompact") },

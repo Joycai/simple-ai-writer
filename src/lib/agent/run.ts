@@ -57,6 +57,7 @@ export async function runLoreAgentTask(args: LoreAgentTaskArgs): Promise<string>
     modelId: args.model.modelId,
     prefix: args.model.prefix,
     contextSize: args.model.contextSize,
+    maxOutput: args.model.maxOutput,
     extraBody: args.extraBody,
     preset: args.preset,
     messages,

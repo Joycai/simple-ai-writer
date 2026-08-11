@@ -10,6 +10,7 @@
 import i18n from "../../i18n";
 import { LORE_GENERATE_PRESET } from "../agent/presets";
 import { runAgent } from "../agent/runtime";
+import { JSON_ONLY_CUE, jsonModeExtraBody, needsJsonTextCue } from "../ai/jsonMode";
 import type { GeminiSafetySettings } from "../ai/safety";
 import type { ApiStandard } from "../ai/types";
 import { fallbackCategoryId, isKnownCategory, loreCategoryIds } from "../profile/active";
@@ -34,6 +35,8 @@ export async function generateLore(opts: {
   modelId: string;
   prefix?: string;
   contextSize?: number;
+  /** Sent as `max_tokens` on the Anthropic path; planning-only elsewhere. */
+  maxOutput?: number;
   /** The response so far, in full — a snapshot, not a delta. */
   onProgress: (fullText: string) => void;
   signal?: AbortSignal;
@@ -73,18 +76,11 @@ export async function generateLore(opts: {
     })),
   ];
 
-  // JSON mode: use native API enforcement where available.
-  // For Gemini, also append a text reminder as belt-and-suspenders (some older models
-  // silently ignore responseMimeType and need the text cue too).
-  const extraBody = opts.standard === "gemini"
-    ? { generationConfig: { responseMimeType: "application/json" } }
-    : { response_format: { type: "json_object" } };
-
-  if (opts.standard === "gemini") {
-    userParts.push({
-      type: "text",
-      text: "Output ONLY valid JSON matching the schema in the system instructions. No markdown fences, no explanation.",
-    });
+  // JSON mode: native API enforcement where the protocol has it, plus a text
+  // cue where it doesn't (or where it can't be trusted alone). See ai/jsonMode.
+  const extraBody = jsonModeExtraBody(opts.standard);
+  if (needsJsonTextCue(opts.standard)) {
+    userParts.push({ type: "text", text: JSON_ONLY_CUE });
   }
 
   // The extraction prompt — built-in or author-overridden — enumerates the
@@ -107,6 +103,7 @@ export async function generateLore(opts: {
     modelId: opts.modelId,
     prefix: opts.prefix,
     contextSize: opts.contextSize,
+    maxOutput: opts.maxOutput,
     extraBody,
     preset: LORE_GENERATE_PRESET,
     messages: [

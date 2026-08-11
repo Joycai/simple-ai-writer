@@ -7,6 +7,7 @@ import { useProjectStore } from "../../stores/projectStore";
 import { BUILTIN_PROFILES, NOVEL_PROFILE, profileLabel } from "../../lib/profile";
 import { MOD_KEY, MOD_K } from "../../lib/platform";
 import { readPref, writePref } from "../../lib/prefs";
+import type { ApiStandard } from "../../lib/ai/types";
 import styles from "./Onboarding.module.css";
 
 const ONBOARDING_DONE_KEY = "manuscript:onboarding-done";
@@ -20,11 +21,16 @@ interface ProviderInfo {
   hintKey: string;
   recommended?: boolean;
   baseUrl: string;
-  apiStandard: "openai" | "openai_compat" | "gemini";
+  /**
+   * Imported, not re-spelled: this used to be an inline copy of the union, so
+   * adding a wire protocol left this list silently stale (and the `as any` on
+   * the DB write below meant nothing caught it).
+   */
+  apiStandard: ApiStandard;
 }
 
 const PROVIDERS: ProviderInfo[] = [
-  { id: "anthropic", name: "Anthropic · Claude", hintKey: "onboarding.providerAnthropicHint", recommended: true, baseUrl: "https://api.anthropic.com/v1", apiStandard: "openai_compat" },
+  { id: "anthropic", name: "Anthropic · Claude", hintKey: "onboarding.providerAnthropicHint", recommended: true, baseUrl: "https://api.anthropic.com/v1", apiStandard: "anthropic" },
   { id: "openai",    name: "OpenAI · GPT",       hintKey: "onboarding.providerOpenaiHint",    baseUrl: "https://api.openai.com/v1", apiStandard: "openai" },
   { id: "ollama",    name: "Ollama",              hintKey: "onboarding.providerOllamaHint",    baseUrl: "http://localhost:11434/v1", apiStandard: "openai_compat" },
 ];

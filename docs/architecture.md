@@ -345,10 +345,15 @@ Story Memory is *per-document*, so a chapter is its own file and knows nothing o
 
 ### Streaming (SSE)
 
-- **Location** — `src/lib/ai/` (`index.ts` dispatch + pre-flight checks, `openai.ts` / `gemini.ts` adapters, `types.ts` shared protocol types)
-- **Providers** — OpenAI + compatible APIs (SSE `data: {...}` lines), Google Gemini (alt=sse format)
+- **Location** — `src/lib/ai/` (`index.ts` dispatch + pre-flight checks, `openai.ts` / `gemini.ts` / `anthropic.ts` adapters, `types.ts` shared protocol types)
+- **Providers** — OpenAI + compatible APIs (SSE `data: {...}` lines), Google Gemini (alt=sse format), Anthropic Messages API (typed SSE events: `message_start` → `content_block_delta` → `message_delta` → `message_stop`)
 - **Parsing** — Fetch + ReadableStream, line-by-line JSON parsing
-- **Token Tracking** — OpenAI sends `include_usage: true` in stream_options; Gemini in final `usageMetadata`
+- **Internal message shape is OpenAI's** (`StreamMessage`, tool calls with a JSON-string `arguments`). The Gemini and Anthropic adapters each own a converter — `convertToGeminiContents` / `convertToAnthropicMessages` — including the tool-call round trip and the data-URL → base64 image conversion. Anthropic additionally enforces two structural rules the others don't: the first message must be `user`, and adjacent same-role turns must be merged
+- **Token Tracking** — OpenAI sends `include_usage: true` in stream_options; Gemini in final `usageMetadata`; Anthropic in `message_start.message.usage` (prompt) plus `message_delta.usage` (output)
+- **Anthropic usage is normalized on the way in.** The app's `cachedTokens` is a *subset* of `inputTokens` (what OpenAI and Gemini report, and what `costFor` bills against). Anthropic instead reports three disjoint buckets, so the adapter sums them: `inputTokens = input_tokens + cache_read_input_tokens + cache_creation_input_tokens`, `cachedTokens = cache_read_input_tokens`. Reading `input_tokens` alone would under-report a cached prompt by however much was cached. Cache *writes* bill above the base input rate and `Model` has no field for it, so they land in the full-price bucket — over-stating rather than under-stating cost
+- **`max_tokens` is required by Anthropic**, with no server-side default to fall back on, so `Model.maxOutput` is threaded into `StreamOptions` and sent on that path (a constant when unset). It stays planning-only for the other two
+- **Thinking vs forced tools (Anthropic)** — current Claude models think by default when `thinking` is omitted, but extended thinking is incompatible with a forced `tool_choice`, and `agent/structured.ts` forces a named tool for every structured task. The adapter therefore sends `thinking: {type: "disabled"}` *only* on the forced-tool path; see `thinkingFor` in `anthropic.ts` before changing it
+- **JSON mode** — `ai/jsonMode.ts` owns the per-protocol decision: `response_format` for OpenAI, `responseMimeType` for Gemini, and **nothing** for Anthropic (unknown top-level fields are a 400 there) plus a text cue in the user turn. Callers needing schema enforcement rather than "valid JSON" use `agent/structured.ts`, whose forced pseudo-tool call works on all three
 
 ### Secure Key Storage
 

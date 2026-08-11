@@ -119,7 +119,7 @@ export interface StagedConfigImport {
   keyCount: number;
 }
 
-const API_STANDARDS: ApiStandard[] = ["openai", "gemini", "openai_compat"];
+const API_STANDARDS: ApiStandard[] = ["openai", "gemini", "openai_compat", "anthropic"];
 const MODEL_TYPES: ModelType[] = ["text", "multimodal", "image", "video"];
 
 function str(v: unknown): string | null {

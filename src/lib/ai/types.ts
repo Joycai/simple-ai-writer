@@ -8,7 +8,7 @@ import type { GeminiSafetySettings } from "./safety";
 import i18n from "../../i18n";
 
 /** Wire protocol spoken by a provider endpoint. */
-export type ApiStandard = "openai" | "openai_compat" | "gemini";
+export type ApiStandard = "openai" | "openai_compat" | "gemini" | "anthropic";
 
 /**
  * Which endpoint an image model's pictures come out of. Not derivable from
@@ -110,6 +110,16 @@ export interface StreamOptions {
    * truncate the head of the prompt (dropping the system instructions).
    */
   contextSize?: number;
+  /**
+   * Optional cap on how many tokens the model may emit in one reply.
+   *
+   * Only the Anthropic path sends it: the Messages API requires `max_tokens` on
+   * every request, so an unset value there falls back to a constant rather than
+   * to the server's own default (there isn't one). On the OpenAI and Gemini
+   * paths this stays a planning-only input, used by context/budget.ts to stop
+   * reserving window the model could never fill.
+   */
+  maxOutput?: number;
 }
 
 /** Thrown before sending when the estimated prompt exceeds the model's configured context size. */

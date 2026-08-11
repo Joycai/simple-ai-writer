@@ -142,6 +142,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
         modelId: model.modelId,
         prefix: model.prefix,
         contextSize: model.contextSize,
+        maxOutput: model.maxOutput,
         onProgress: () => {}, // we show spinner, not raw text
         signal: ctrl.signal,
         systemPrompt: loreScenePrompt?.content,

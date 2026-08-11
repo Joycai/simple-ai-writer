@@ -17,6 +17,7 @@ import hub from "./ProvidersModels.module.css";
 const STANDARD_ENDPOINTS: Record<ApiStandard, string> = {
   openai: "https://api.openai.com/v1",
   gemini: "https://generativelanguage.googleapis.com/v1beta",
+  anthropic: "https://api.anthropic.com/v1",
   openai_compat: "",
 };
 
@@ -30,7 +31,7 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
   { name: "OpenAI", apiStandard: "openai", baseUrl: "https://api.openai.com/v1" },
   { name: "Google Gemini", apiStandard: "gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta" },
   { name: "DeepSeek", apiStandard: "openai_compat", baseUrl: "https://api.deepseek.com" },
-  { name: "Anthropic", apiStandard: "openai_compat", baseUrl: "https://api.anthropic.com/v1" },
+  { name: "Anthropic", apiStandard: "anthropic", baseUrl: "https://api.anthropic.com/v1" },
   { name: "Ollama", apiStandard: "openai_compat", baseUrl: "http://localhost:11434/v1" },
 ];
 
@@ -69,6 +70,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
     { value: "openai" as ApiStandard, label: t("aiConfig.apiStandards.openai") },
     { value: "openai_compat" as ApiStandard, label: t("aiConfig.apiStandards.openai_compat") },
     { value: "gemini" as ApiStandard, label: t("aiConfig.apiStandards.gemini") },
+    { value: "anthropic" as ApiStandard, label: t("aiConfig.apiStandards.anthropic") },
   ];
 
   // Local servers (Ollama, LM Studio) authenticate no requests, so the API key

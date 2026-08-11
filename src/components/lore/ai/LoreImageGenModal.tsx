@@ -93,6 +93,7 @@ export function LoreImageGenModal({ entity, onClose, onSaved }: Props) {
         modelId: vision.model.modelId,
         prefix: vision.model.prefix,
         contextSize: vision.model.contextSize,
+        maxOutput: vision.model.maxOutput,
       });
       await updateLoreImageDesc(entity.dirPath, file, desc);
       onSaved();

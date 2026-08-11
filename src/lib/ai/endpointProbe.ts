@@ -31,6 +31,7 @@ import {
   type Calibration, type FindingConfidence, type ProbeCost, type ProbeFinding,
   type ProbeSuggestion, type TruncationResult,
 } from "./probeAnalysis";
+import { anthropicHeaders, DEFAULT_ANTHROPIC_BASE } from "./anthropic";
 import type { ApiStandard } from "./types";
 
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
@@ -279,6 +280,9 @@ function authHeaders(t: ProbeTarget): Record<string, string> {
   if (t.standard === "gemini") {
     return { "Content-Type": "application/json", "x-goog-api-key": t.apiKey };
   }
+  if (t.standard === "anthropic") {
+    return anthropicHeaders(t.apiKey);
+  }
   return {
     "Content-Type": "application/json",
     ...(t.apiKey ? { Authorization: `Bearer ${t.apiKey}` } : {}),
@@ -287,6 +291,10 @@ function authHeaders(t: ProbeTarget): Record<string, string> {
 
 function geminiBase(t: ProbeTarget): string {
   return trimUrl(t.baseUrl || GEMINI_API_BASE);
+}
+
+function anthropicBase(t: ProbeTarget): string {
+  return trimUrl(t.baseUrl || DEFAULT_ANTHROPIC_BASE);
 }
 
 async function readJson(res: Response): Promise<unknown | undefined> {
@@ -328,6 +336,36 @@ async function chatRequest(
         promptTokens: asCount(usage?.promptTokenCount),
         completionTokens: asCount(usage?.candidatesTokenCount),
         finishReason: asText(firstChoice(json?.candidates)?.finishReason),
+      };
+    }
+
+    if (t.standard === "anthropic") {
+      const res = await fetch(`${anthropicBase(t)}/messages`, {
+        method: "POST",
+        headers: authHeaders(t),
+        body: JSON.stringify({
+          model: t.modelId,
+          max_tokens: maxTokens,
+          messages: [{ role: "user", content: prompt }],
+        }),
+        signal,
+      });
+      if (!res.ok) return { ok: false, status: res.status, body: await res.text() };
+      const json = asObject(await readJson(res));
+      const usage = asObject(json?.usage);
+      return {
+        ok: true,
+        status: res.status,
+        body: "",
+        // Anthropic splits the prompt across three disjoint buckets, so the
+        // total is the sum — `input_tokens` alone under-reports a cached prompt
+        // (same normalization as ai/anthropic.ts readUsage).
+        promptTokens:
+          (asCount(usage?.input_tokens) ?? 0) +
+          (asCount(usage?.cache_read_input_tokens) ?? 0) +
+          (asCount(usage?.cache_creation_input_tokens) ?? 0),
+        completionTokens: asCount(usage?.output_tokens),
+        finishReason: asText(json?.stop_reason),
       };
     }
 
@@ -471,6 +509,19 @@ async function discoverFromModelsEndpoint(s: Session): Promise<void> {
       return;
     }
 
+    if (t.standard === "anthropic") {
+      // Same deal as Gemini: the per-model endpoint names both limits outright
+      // (`max_input_tokens` / `max_tokens`), and both keys are already in
+      // probeAnalysis's candidate lists, so readEntryLimits picks them up as-is.
+      const res = await fetch(`${anthropicBase(t)}/models/${t.modelId}`, {
+        headers: authHeaders(t),
+        signal,
+      });
+      if (!res.ok) return warn(s, "models-endpoint-failed", `${res.status}`);
+      s.findings.push(...findingsFrom("models-endpoint", readEntryLimits(await readJson(res))));
+      return;
+    }
+
     const res = await fetch(`${trimUrl(t.baseUrl)}/models`, { headers: authHeaders(t), signal });
     if (!res.ok) return warn(s, "models-endpoint-failed", `${res.status}`);
     const json = (await readJson(res)) as { data?: unknown[] } | undefined;
@@ -550,7 +601,9 @@ async function discoverLlamaCpp(s: Session): Promise<void> {
  * enforce it accept the request, and we hang up before they generate anything.
  */
 async function errorProbe(s: Session): Promise<void> {
-  if (s.target.standard === "gemini") return; // limits already came free from Step 0
+  // Both already got exact limits free from Step 0, and neither serves
+  // /chat/completions — the endpoint this probe posts to.
+  if (s.target.standard === "gemini" || s.target.standard === "anthropic") return;
 
   const ABSURD = 10_000_000;
   let paramSwitched = false;

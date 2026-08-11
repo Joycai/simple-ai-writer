@@ -381,6 +381,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         modelId: model.modelId,
         prefix: model.prefix,
         contextSize: model.contextSize,
+        maxOutput: model.maxOutput,
         signal: ctrl.signal,
         onProgress: (acc) => setEditingDraft(acc),
       });

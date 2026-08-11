@@ -45,6 +45,11 @@ export function defaultImageCaps(standard: ApiStandard): ImageCaps {
       return { edit: true, maxRefs: 3 };
     case "openai_compat":
       return { edit: false };
+    case "anthropic":
+      // Claude generates no images at all, so an image model configured under
+      // an Anthropic provider is already a mistake — but the switch still has
+      // to answer, and "no editing" is the honest answer.
+      return { edit: false };
     default:
       // Not dead code, despite the union being exhaustive: `standard` reaches
       // here from a DB row, and a value the type system never anticipated
@@ -83,10 +88,13 @@ export interface Model {
    */
   contextSize?: number;
   /**
-   * Optional cap on how many tokens this model can emit in one reply. Purely a
-   * planning input: the context budget stops reserving window the model could
-   * never fill (see context/budget.ts), which hands that space back to the
-   * prompt. Nothing is sent to the provider.
+   * Optional cap on how many tokens this model can emit in one reply.
+   *
+   * Mostly a planning input: the context budget stops reserving window the model
+   * could never fill (see context/budget.ts), which hands that space back to the
+   * prompt. It *is* sent to the provider on the Anthropic path, where the
+   * Messages API requires `max_tokens` on every request and has no server-side
+   * default to fall back on (see ai/anthropic.ts).
    */
   maxOutput?: number;
   /**
@@ -328,7 +336,7 @@ export async function listProviders(db: Awaited<ReturnType<typeof Database.load>
   }));
 }
 
-const API_STANDARDS: ApiStandard[] = ["openai", "openai_compat", "gemini"];
+const API_STANDARDS: ApiStandard[] = ["openai", "openai_compat", "gemini", "anthropic"];
 
 /**
  * Narrow a stored `api_standard` to the union instead of asserting it.

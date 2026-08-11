@@ -29,6 +29,8 @@ export interface StructuredTaskArgs {
   modelId: string;
   prefix?: string;
   contextSize?: number;
+  /** Sent as `max_tokens` on the Anthropic path; planning-only elsewhere. */
+  maxOutput?: number;
   /** Base system prompt (no output-format instructions — added per path). */
   systemPrompt: string;
   /** Appended to the system prompt on the forced-tool path. */
@@ -82,6 +84,7 @@ export async function runStructuredTask(args: StructuredTaskArgs): Promise<strin
     modelId: args.modelId,
     prefix: args.prefix,
     contextSize: args.contextSize,
+    maxOutput: args.maxOutput,
     signal: args.signal,
   };
   const toolName = args.outputTool.function.name;

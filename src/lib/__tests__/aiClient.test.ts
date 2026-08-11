@@ -30,7 +30,10 @@ function mockFetch(chunks: string[]) {
 
 async function collect(opts: {
   chunks: string[];
-  standard?: "openai" | "gemini";
+  standard?: "openai" | "openai_compat" | "gemini" | "anthropic";
+  maxOutput?: number;
+  tools?: ToolDefinition[];
+  toolChoice?: "auto" | "none" | "required" | { type: "function"; function: { name: string } };
   messages?: StreamMessage[];
   prefix?: string;
 }): Promise<{ received: StreamChunk[]; calls: { url: string; body: Record<string, unknown> }[] }> {
@@ -43,6 +46,9 @@ async function collect(opts: {
     modelId: "test-model",
     messages: opts.messages ?? [{ role: "user", content: "hi" }],
     prefix: opts.prefix,
+    maxOutput: opts.maxOutput,
+    tools: opts.tools,
+    toolChoice: opts.toolChoice,
     onChunk: (c) => received.push(c),
   });
   return { received, calls };
@@ -413,6 +419,324 @@ describe("streamCompletion — toolChoice", () => {
     });
     expect(calls[0].body.tools).toBeDefined();
     expect(calls[0].body.tool_config).toBeUndefined();
+  });
+});
+
+describe("streamCompletion — Anthropic SSE", () => {
+  const ANTHROPIC = { standard: "anthropic" as const };
+
+  const TOOL: ToolDefinition = {
+    type: "function",
+    function: {
+      name: "get_weather",
+      description: "Get the weather",
+      parameters: { type: "object", properties: { city: { type: "string" } }, required: ["city"] },
+    },
+  };
+
+  it("parses text deltas and reports usage from message_start + message_delta", async () => {
+    const { received } = await collect({
+      ...ANTHROPIC,
+      chunks: [
+        `event: message_start\ndata: {"type":"message_start","message":{"usage":{"input_tokens":10,"output_tokens":1}}}\n\n`,
+        `data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n`,
+        `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hel"}}\n\n`,
+        `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"lo"}}\n\n`,
+        `data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}\n\n`,
+        `data: {"type":"message_stop"}\n\n`,
+      ],
+    });
+    expect(text(received)).toBe("Hello");
+    expect(received[received.length - 1]).toEqual({ done: true, inputTokens: 10, outputTokens: 5 });
+  });
+
+  it("sums the three disjoint prompt buckets and reports cache reads as cachedTokens", async () => {
+    // input_tokens is the UNCACHED remainder here, unlike OpenAI/Gemini where
+    // the cached count is a subset of it. Reading input_tokens alone would
+    // report 10 for a 910-token prompt.
+    const { received } = await collect({
+      ...ANTHROPIC,
+      chunks: [
+        `data: {"type":"message_start","message":{"usage":{"input_tokens":10,"cache_read_input_tokens":800,"cache_creation_input_tokens":100}}}\n\n`,
+        `data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":7}}\n\n`,
+        `data: {"type":"message_stop"}\n\n`,
+      ],
+    });
+    expect(received[received.length - 1]).toEqual({
+      done: true,
+      inputTokens: 910,
+      outputTokens: 7,
+      cachedTokens: 800,
+    });
+  });
+
+  it("flags truncation on stop_reason max_tokens", async () => {
+    const { received } = await collect({
+      ...ANTHROPIC,
+      chunks: [
+        `data: {"type":"message_start","message":{"usage":{"input_tokens":4}}}\n\n`,
+        `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"cut"}}\n\n`,
+        `data: {"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":2}}\n\n`,
+        `data: {"type":"message_stop"}\n\n`,
+      ],
+    });
+    expect(received[received.length - 1]).toMatchObject({ done: true, truncated: true });
+  });
+
+  it("reassembles a streamed tool_use from input_json_delta fragments", async () => {
+    const { received } = await collect({
+      ...ANTHROPIC,
+      tools: [TOOL],
+      chunks: [
+        `data: {"type":"message_start","message":{"usage":{"input_tokens":5}}}\n\n`,
+        `data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"get_weather"}}\n\n`,
+        `data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"city\\":"}}\n\n`,
+        `data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"\\"Paris\\"}"}}\n\n`,
+        `data: {"type":"content_block_stop","index":0}\n\n`,
+        `data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":9}}\n\n`,
+        `data: {"type":"message_stop"}\n\n`,
+      ],
+    });
+    const toolChunk = received.find((c) => "toolCalls" in c) as { toolCalls: unknown[] };
+    expect(toolChunk.toolCalls).toEqual([
+      { index: 0, id: "toolu_1", name: "get_weather", arguments: `{"city":"Paris"}` },
+    ]);
+  });
+
+  it("emits {} for a tool call that streams no arguments at all", async () => {
+    const { received } = await collect({
+      ...ANTHROPIC,
+      tools: [TOOL],
+      chunks: [
+        `data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_2","name":"get_weather"}}\n\n`,
+        `data: {"type":"message_stop"}\n\n`,
+      ],
+    });
+    const toolChunk = received.find((c) => "toolCalls" in c) as { toolCalls: { arguments: string }[] };
+    // The agent runtime JSON.parses this; "" would be a parse error.
+    expect(toolChunk.toolCalls[0].arguments).toBe("{}");
+  });
+
+  it("throws on an in-band error event delivered under HTTP 200", async () => {
+    await expect(
+      collect({
+        ...ANTHROPIC,
+        chunks: [
+          `data: {"type":"message_start","message":{"usage":{"input_tokens":3}}}\n\n`,
+          `data: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}\n\n`,
+        ],
+      }),
+    ).rejects.toThrow(/Overloaded/);
+  });
+
+  it("throws rather than reporting a refusal as a short answer", async () => {
+    await expect(
+      collect({
+        ...ANTHROPIC,
+        chunks: [
+          `data: {"type":"message_delta","delta":{"stop_reason":"refusal"},"usage":{"output_tokens":1}}\n\n`,
+        ],
+      }),
+    ).rejects.toThrow(/declined this response/);
+  });
+
+  it("emits done even when the stream ends without message_stop", async () => {
+    const { received } = await collect({
+      ...ANTHROPIC,
+      chunks: [
+        `data: {"type":"message_start","message":{"usage":{"input_tokens":6}}}\n\n`,
+        `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hi"}}\n`,
+      ],
+    });
+    expect(text(received)).toBe("hi");
+    expect(received[received.length - 1]).toMatchObject({ done: true, inputTokens: 6 });
+  });
+
+  it("hoists system messages into the top-level system field", async () => {
+    const { calls } = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      messages: [
+        { role: "system", content: "be terse" },
+        { role: "user", content: "hi" },
+      ],
+    });
+    expect(calls[0].url).toBe("https://api.example.com/v1/messages");
+    expect(calls[0].body.system).toBe("be terse");
+    expect(calls[0].body.messages).toEqual([
+      { role: "user", content: [{ type: "text", text: "hi" }] },
+    ]);
+  });
+
+  it("merges adjacent same-role turns, which Anthropic rejects", async () => {
+    const { calls } = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      messages: [
+        { role: "user", content: "one" },
+        { role: "user", content: "two" },
+        { role: "assistant", content: "ok" },
+      ],
+    });
+    expect(calls[0].body.messages).toEqual([
+      { role: "user", content: [{ type: "text", text: "one" }, { type: "text", text: "two" }] },
+      { role: "assistant", content: [{ type: "text", text: "ok" }] },
+    ]);
+  });
+
+  it("round-trips a tool call and its result into tool_use / tool_result blocks", async () => {
+    const { calls } = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      messages: [
+        { role: "user", content: "weather?" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            { id: "toolu_9", type: "function", function: { name: "get_weather", arguments: `{"city":"Paris"}` } },
+          ],
+        },
+        { role: "tool", tool_call_id: "toolu_9", content: "sunny" },
+        { role: "tool", tool_call_id: "toolu_9b", content: "warm" },
+      ],
+    });
+    expect(calls[0].body.messages).toEqual([
+      { role: "user", content: [{ type: "text", text: "weather?" }] },
+      {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "toolu_9", name: "get_weather", input: { city: "Paris" } }],
+      },
+      // Both results in ONE user message — Anthropic requires a turn's
+      // tool_results to arrive together.
+      {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: "toolu_9", content: "sunny" },
+          { type: "tool_result", tool_use_id: "toolu_9b", content: "warm" },
+        ],
+      },
+    ]);
+  });
+
+  it("converts a data-URL image part into a base64 image block", async () => {
+    const { calls } = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "what is this" },
+            { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
+          ],
+        },
+      ],
+    });
+    expect(calls[0].body.messages).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "what is this" },
+          { type: "image", source: { type: "base64", media_type: "image/png", data: "AAAA" } },
+        ],
+      },
+    ]);
+  });
+
+  it("sends max_tokens from maxOutput, falling back to a constant", async () => {
+    const withCap = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      maxOutput: 1234,
+    });
+    expect(withCap.calls[0].body.max_tokens).toBe(1234);
+
+    const without = await collect({ ...ANTHROPIC, chunks: [`data: {"type":"message_stop"}\n\n`] });
+    // Required by the Messages API — there is no server-side default to omit to.
+    expect(without.calls[0].body.max_tokens).toBe(8192);
+  });
+
+  it("maps toolChoice and disables thinking only when a tool is forced", async () => {
+    const auto = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      tools: [TOOL],
+    });
+    expect(auto.calls[0].body.tool_choice).toEqual({ type: "auto" });
+    // Adaptive thinking left alone — that's what the agent loop wants.
+    expect(auto.calls[0].body.thinking).toBeUndefined();
+
+    const forced = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      tools: [TOOL],
+      toolChoice: { type: "function", function: { name: "get_weather" } },
+    });
+    expect(forced.calls[0].body.tool_choice).toEqual({ type: "tool", name: "get_weather" });
+    // Extended thinking is incompatible with a forced tool choice, and every
+    // structured task forces one — see thinkingFor in ai/anthropic.ts.
+    expect(forced.calls[0].body.thinking).toEqual({ type: "disabled" });
+
+    const required = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      tools: [TOOL],
+      toolChoice: "required",
+    });
+    expect(required.calls[0].body.tool_choice).toEqual({ type: "any" });
+  });
+
+  it("sends tool definitions in Anthropic's input_schema shape", async () => {
+    const { calls } = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      tools: [TOOL],
+    });
+    expect(calls[0].body.tools).toEqual([
+      {
+        name: TOOL.function.name,
+        description: TOOL.function.description,
+        input_schema: TOOL.function.parameters,
+      },
+    ]);
+  });
+
+  it("authenticates with x-api-key and a pinned anthropic-version, never a query param", async () => {
+    const calls: { url: string; headers: Headers }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        calls.push({ url: String(url), headers: new Headers(init.headers) });
+        return sseResponse([`data: {"type":"message_stop"}\n\n`]);
+      }),
+    );
+    await streamCompletion({
+      baseUrl: "https://api.anthropic.com/v1",
+      apiKey: "sk-ant-secret",
+      standard: "anthropic",
+      modelId: "claude-sonnet-5",
+      messages: [{ role: "user", content: "hi" }],
+      onChunk: () => {},
+    });
+    expect(calls[0].headers.get("x-api-key")).toBe("sk-ant-secret");
+    expect(calls[0].headers.get("anthropic-version")).toBe("2023-06-01");
+    expect(calls[0].url).not.toContain("sk-ant-secret");
+  });
+
+  it("does not forward extraBody, which carries OpenAI-shaped fields", async () => {
+    const calls = mockFetch([`data: {"type":"message_stop"}\n\n`]);
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "k",
+      standard: "anthropic",
+      modelId: "m",
+      messages: [{ role: "user", content: "hi" }],
+      // The Messages API 400s on unknown top-level fields.
+      extraBody: { response_format: { type: "json_object" } },
+      onChunk: () => {},
+    });
+    expect(calls[0].body.response_format).toBeUndefined();
   });
 });
 

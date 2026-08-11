@@ -27,6 +27,8 @@ export interface DescribeLoreImageOptions {
   modelId: string;
   prefix?: string;
   contextSize?: number;
+  /** Sent as `max_tokens` on the Anthropic path; planning-only elsewhere. */
+  maxOutput?: number;
   signal?: AbortSignal;
   /** Called with the accumulated text on every streamed chunk. */
   onProgress?: (text: string) => void;
@@ -87,6 +89,7 @@ export async function describeLoreImage(opts: DescribeLoreImageOptions): Promise
     modelId: opts.modelId,
     prefix: opts.prefix,
     contextSize: opts.contextSize,
+    maxOutput: opts.maxOutput,
     signal: opts.signal,
     messages,
     onChunk: (chunk) => {

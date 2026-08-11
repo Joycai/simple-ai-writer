@@ -46,9 +46,22 @@ Before lifting the clamp on `agent` or `continue`, read the table in `docs/archi
 Tests: `src/lib/__tests__/aiTaskDrafts.test.ts` covers the clamp, the fan-out count, per-draft failure isolation, shared-abort, and one usage row per draft.
 
 ## Add a new provider/API
-1. Add a new adapter in `src/lib/ai/` (alongside `openai.ts` / `gemini.ts`) and wire it into the `streamCompletion()` dispatch in `src/lib/ai/index.ts`
-2. Add `ApiStandard` enum value in `src/lib/ai/types.ts` if needed
-3. UI already supports custom base URLs in the 供应商与模型 pane
+
+`ApiStandard` is a *wire protocol*, not a vendor — add a value only when the endpoint speaks a shape the existing adapters can't. A provider that serves `/chat/completions` is `openai_compat` and needs no code.
+
+**Only one of the sites below is type-enforced** (`STANDARD_ENDPOINTS`, step 5). Every other list is hand-maintained and will silently stay incomplete — most damagingly the two allowlists in step 3, which rewrite an unrecognised value to `openai_compat`, i.e. the provider quietly talks the wrong protocol.
+
+1. **Adapter** — new file in `src/lib/ai/` alongside `openai.ts` / `gemini.ts` / `anthropic.ts`, exporting `stream<Name>(opts: StreamOptions): Promise<void>`. Copy the SSE read loop (the `buffer` carry across reads and the trailing-line flush are load-bearing) and honour the chunk contract: incremental `{ text }`, at most one `{ toolCalls }` *before* exactly one `{ done, … }`. Throw on a non-2xx *and* on an in-band error delivered under HTTP 200 — relays do that routinely.
+2. **Union + dispatch** — add the value to `ApiStandard` in `src/lib/ai/types.ts`, then a branch in `streamCompletion()` in `src/lib/ai/index.ts` (inside the existing log/context-guard wrapper, so both come for free).
+3. **Both allowlists** — `API_STANDARDS` in `src/lib/ai/configDb.ts` (`parseApiStandard`, guards DB reads) **and** in `src/lib/ai/configTransfer.ts` (guards config import). They are separate arrays in different orders; missing either loses the provider on next launch.
+4. **`defaultImageCaps`** in `src/lib/ai/configDb.ts` — add a `case`, even if the answer is "generates no images".
+5. **Settings** — `src/components/settings/panes/ProviderDrawer.tsx`: `STANDARD_ENDPOINTS` (a `Record<ApiStandard, string>`, so this is the compile error that tells you the union moved), the `apiStandardOptions` picker array, and a `PROVIDER_PRESETS` entry if it's a named service.
+6. **i18n** — `aiConfig.apiStandards.<value>` in **both** `en.json` and `zh-CN.json`; `localeParity.test.ts` fails on a one-sided key.
+7. **Onboarding** — `PROVIDERS` in `src/components/onboarding/Onboarding.tsx`, if it belongs in the first-run list.
+8. **Default base URL** — `defaultBaseUrl()` in `src/stores/aiTaskStore.ts`, used when the author leaves the field blank.
+9. **Probes** — `src/lib/ai/providerProbe.ts` (both functions; `testProviderConnection` otherwise falls through to "Unknown API standard" and reports failure on a working provider) and `src/lib/ai/endpointProbe.ts` (`authHeaders`, the Step-0 models endpoint, and either a `chatRequest` branch or an early return from the chat-based steps).
+10. **JSON mode** — `jsonModeExtraBody` / `needsJsonTextCue` in `src/lib/ai/jsonMode.ts`, if the protocol enforces JSON differently (or not at all — sending a foreign field is a 400 on Anthropic).
+11. **Tests** — a `describe` block in `src/lib/__tests__/aiClient.test.ts` covering deltas, usage, truncation, a streamed tool call, and an in-band error; plus `providerProbe.test.ts`.
 
 ## Add a new language
 1. Copy `src/i18n/locales/en.json` → `src/i18n/locales/[lang].json`

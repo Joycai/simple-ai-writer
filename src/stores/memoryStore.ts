@@ -103,6 +103,7 @@ async function runMemoryGeneration(opts: {
       modelId: model.modelId,
       prefix: model.prefix,
       contextSize: model.contextSize,
+      maxOutput: model.maxOutput,
       messages: [
         { role: "system", content: i18n.t("ai.memory.systemPrompt") },
         { role: "user", content: parts.join("\n\n") },
