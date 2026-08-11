@@ -926,6 +926,13 @@
       "baseUrlLabel": "Base URL (留空使用默认)",
       "baseUrlOfficialHint": "官方端点地址固定。要接中转 / 网关，请在上方选择对应的「兼容」标准。",
       "apiKeyLabel": "API Key",
+      "authModeLabel": "鉴权方式",
+      "authModes": {
+        "default": "x-api-key（默认）",
+        "bearer": "Authorization: Bearer",
+        "both": "两个都发"
+      },
+      "authModeHint": "Anthropic 有两套约定：文档让你设 ANTHROPIC_AUTH_TOKEN 的网关要 Bearer，设 ANTHROPIC_API_KEY 的要 x-api-key。遇到 401 就换另一个试试。",
       "apiKeyOptional": "本地服务可留空",
       "apiKeyLocalPlaceholder": "本地服务留空即可",
       "presetsLabel": "快速选择",

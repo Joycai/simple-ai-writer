@@ -6,7 +6,7 @@
 import Database from "@tauri-apps/plugin-sql";
 
 import type { GeminiSafetySettings } from "./safety";
-import type { ApiStandard, ImageRoute } from "./types";
+import { authModesFor, type ApiStandard, type AuthMode, type ImageRoute } from "./types";
 import { migrateLegacyStandard } from "./urls";
 
 export type ModelType = "text" | "multimodal" | "image" | "video";
@@ -67,6 +67,12 @@ export interface Provider {
   apiStandard: ApiStandard;
   /** Gemini-only: per-request safety filter thresholds. */
   safetySettings?: GeminiSafetySettings;
+  /**
+   * Anthropic-compat only: which header carries the key. Undefined — every
+   * provider configured before this setting existed — means the protocol's own
+   * scheme, so an upgrade never changes how an existing provider authenticates.
+   */
+  authMode?: AuthMode;
   createdAt: number;
 }
 
@@ -215,13 +221,15 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
       base_url TEXT NOT NULL,
       api_standard TEXT NOT NULL DEFAULT 'openai',
       safety_settings TEXT,
+      auth_mode TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch())
     )
   `);
 
-  // Migration: add safety_settings to providers created before this column existed.
+  // Migrations: columns added to providers after the table shipped.
   const providerCols = await db.select<{ name: string }[]>(`PRAGMA table_info(providers)`);
   await addColumn(db, providerCols, "providers", "safety_settings", "TEXT");
+  await addColumn(db, providerCols, "providers", "auth_mode", "TEXT");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS models (
@@ -325,18 +333,20 @@ export async function dropLegacyKeyTable(
 
 export async function listProviders(db: Awaited<ReturnType<typeof Database.load>>): Promise<Provider[]> {
   const rows = await db.select<Record<string, unknown>[]>(
-    "SELECT id, name, base_url, api_standard, safety_settings, created_at FROM providers ORDER BY created_at ASC"
+    "SELECT id, name, base_url, api_standard, safety_settings, auth_mode, created_at FROM providers ORDER BY created_at ASC"
   );
   return rows.map((r) => {
     const baseUrl = r.base_url as string;
+    const apiStandard = migrateLegacyStandard(parseApiStandard(r.api_standard), baseUrl);
     return {
       id: r.id as string,
       name: r.name as string,
       baseUrl,
       // Re-labels pre-split rows (see migrateLegacyStandard); the row itself is
       // rewritten only when the author next saves the provider.
-      apiStandard: migrateLegacyStandard(parseApiStandard(r.api_standard), baseUrl),
+      apiStandard,
       safetySettings: parseSafetySettings(r.safety_settings),
+      authMode: parseAuthMode(r.auth_mode, apiStandard),
       createdAt: r.created_at as number,
     };
   });
@@ -365,6 +375,19 @@ function parseApiStandard(raw: unknown): ApiStandard {
   return API_STANDARDS.includes(raw as ApiStandard) ? (raw as ApiStandard) : "openai_compat";
 }
 
+/**
+ * Narrow a stored `auth_mode`, and drop one the standard can't use.
+ *
+ * The second half matters when a provider is switched from compat back to
+ * official: the row keeps its old `bearer`, and honouring that on
+ * api.anthropic.com sends a credential it rejects. Reading it against the
+ * standard means the stale value is inert rather than breaking the request.
+ */
+function parseAuthMode(raw: unknown, standard: ApiStandard): AuthMode | undefined {
+  const allowed = authModesFor(standard);
+  return allowed.includes(raw as AuthMode) ? (raw as AuthMode) : undefined;
+}
+
 function parseSafetySettings(raw: unknown): GeminiSafetySettings | undefined {
   if (typeof raw !== "string" || !raw) return undefined;
   try {
@@ -385,14 +408,23 @@ export async function saveProvider(
   // take every model configured under it with it. `created_at` is deliberately
   // left out of the update: editing a provider must not re-date it.
   await db.execute(
-    `INSERT INTO providers (id, name, base_url, api_standard, safety_settings, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO providers (id, name, base_url, api_standard, safety_settings, auth_mode, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name = excluded.name,
        base_url = excluded.base_url,
        api_standard = excluded.api_standard,
-       safety_settings = excluded.safety_settings`,
-    [p.id, p.name, p.baseUrl, p.apiStandard, p.safetySettings ? JSON.stringify(p.safetySettings) : null, p.createdAt]
+       safety_settings = excluded.safety_settings,
+       auth_mode = excluded.auth_mode`,
+    [
+      p.id,
+      p.name,
+      p.baseUrl,
+      p.apiStandard,
+      p.safetySettings ? JSON.stringify(p.safetySettings) : null,
+      p.authMode ?? null,
+      p.createdAt,
+    ]
   );
 }
 

@@ -163,6 +163,7 @@ export function ImageGenModal({ target, onClose }: Props) {
         apiKey,
         standard: resolved.provider.apiStandard,
         safetySettings: resolved.provider.safetySettings,
+        authMode: resolved.provider.authMode,
         modelId: resolved.model.modelId,
         prefix: resolved.model.prefix,
         contextSize: resolved.model.contextSize,

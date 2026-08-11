@@ -32,7 +32,7 @@ import {
   type ProbeSuggestion, type TruncationResult,
 } from "./probeAnalysis";
 import { anthropicHeaders } from "./anthropic";
-import { familyOf, type ApiStandard } from "./types";
+import { familyOf, type ApiStandard, type AuthMode } from "./types";
 import { anthropicUrl, geminiUrl, modelsUrl, openaiUrl, trimBase } from "./urls";
 
 /** Padding sizes for the two-point tokenizer calibration. */
@@ -83,6 +83,8 @@ export interface ProbeTarget {
   baseUrl: string;
   apiKey: string;
   standard: ApiStandard;
+  /** Anthropic-compat auth scheme; ignored by every other protocol. */
+  authMode?: AuthMode;
   modelId: string;
 }
 
@@ -276,7 +278,7 @@ function authHeaders(t: ProbeTarget): Record<string, string> {
     case "gemini":
       return { "Content-Type": "application/json", "x-goog-api-key": t.apiKey };
     case "anthropic":
-      return anthropicHeaders(t.apiKey);
+      return anthropicHeaders(t.apiKey, t.authMode);
     default:
       return {
         "Content-Type": "application/json",

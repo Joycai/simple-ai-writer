@@ -13,7 +13,7 @@
 import i18n from "../../i18n";
 import { runStructuredTask } from "../agent/structured";
 import type { GeminiSafetySettings } from "../ai/safety";
-import type { ApiStandard, ToolDefinition } from "../ai/types";
+import type { ApiStandard, AuthMode, ToolDefinition } from "../ai/types";
 import { promptParams } from "../profile/active";
 
 /** Aspect ratios offered to the model. Kept small — every backend supports these. */
@@ -55,6 +55,8 @@ export interface ImagePromptOptions {
   apiKey: string;
   standard: ApiStandard;
   safetySettings?: GeminiSafetySettings;
+  /** Anthropic-compat auth scheme; ignored by every other protocol. */
+  authMode?: AuthMode;
   modelId: string;
   prefix?: string;
   contextSize?: number;
@@ -153,6 +155,7 @@ export async function generateImagePrompt(opts: ImagePromptOptions): Promise<Ima
     apiKey: opts.apiKey,
     standard: opts.standard,
     safetySettings: opts.safetySettings,
+    authMode: opts.authMode,
     modelId: opts.modelId,
     prefix: opts.prefix,
     contextSize: opts.contextSize,

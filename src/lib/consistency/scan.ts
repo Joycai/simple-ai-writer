@@ -17,7 +17,7 @@ import { selectLore } from "../context/loreSelect";
 import type { LoreIndex } from "../lore";
 import type { DocMemory } from "../context/memory";
 import type { GeminiSafetySettings } from "../ai/safety";
-import type { ApiStandard, ToolDefinition } from "../ai/types";
+import type { ApiStandard, AuthMode, ToolDefinition } from "../ai/types";
 import type { ConsistencyIssue, ConsistencyReport, IssueSeverity } from "./model";
 
 /** Lore budget for a scan, in characters. Generous: the whole point is breadth. */
@@ -121,6 +121,8 @@ export interface ScanArgs {
   apiKey: string;
   standard: ApiStandard;
   safetySettings?: GeminiSafetySettings;
+  /** Anthropic-compat auth scheme; ignored by every other protocol. */
+  authMode?: AuthMode;
   modelId: string;
   prefix?: string;
   contextSize?: number;
@@ -184,6 +186,7 @@ export async function runConsistencyScan(args: ScanArgs): Promise<ConsistencyRep
     apiKey: args.apiKey,
     standard: args.standard,
     safetySettings: args.safetySettings,
+    authMode: args.authMode,
     modelId: args.modelId,
     prefix: args.prefix,
     contextSize: args.contextSize,

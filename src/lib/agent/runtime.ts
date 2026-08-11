@@ -16,7 +16,7 @@ import i18n from "../../i18n";
 import { streamCompletion } from "../ai";
 import type { GeminiSafetySettings } from "../ai/safety";
 import { estimateMessagesTokens } from "../ai/tokenEstimate";
-import type { AccumulatedToolCall, ApiStandard, ContentPart, StreamMessage } from "../ai/types";
+import type { AccumulatedToolCall, ApiStandard, AuthMode, ContentPart, StreamMessage } from "../ai/types";
 import type { AgentEvent } from "./events";
 import { TOOL_ARGS_DETAIL_CHARS, TOOL_RESULT_DETAIL_CHARS } from "./logFormat";
 import type { TaskPreset } from "./presets";
@@ -171,6 +171,8 @@ export interface AgentRuntimeOptions {
   modelId: string;
   /** Gemini-only: per-request safety filter thresholds. */
   safetySettings?: GeminiSafetySettings;
+  /** Anthropic-compat auth scheme; ignored by every other protocol. */
+  authMode?: AuthMode;
   /** Optional model-scoped prefix prompt. */
   prefix?: string;
   /** Optional model context window (tokens); checked before each round's request. */
@@ -326,6 +328,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         maxOutput: opts.maxOutput,
         messages: history,
         safetySettings: opts.safetySettings,
+        authMode: opts.authMode,
         extraBody: opts.extraBody,
         tools: withholdTools ? undefined : toolDefinitions,
         signal: opts.signal,

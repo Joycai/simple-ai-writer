@@ -18,6 +18,7 @@ import { fetch } from "../http";
 import { anthropicUrl } from "./urls";
 import type {
   AccumulatedToolCall,
+  AuthMode,
   MessageContent,
   StreamMessage,
   StreamOptions,
@@ -40,16 +41,28 @@ export const DEFAULT_MAX_TOKENS = 8_192;
 /**
  * Request headers.
  *
+ * Two ways to present the key, both first-class in the Anthropic ecosystem:
+ * `ANTHROPIC_API_KEY` rides `x-api-key` (what api.anthropic.com wants), and
+ * `ANTHROPIC_AUTH_TOKEN` rides `Authorization: Bearer` (what a large share of
+ * third-party gateways want — their docs typically name only that one). A
+ * gateway that reads the wrong header sees an unauthenticated request and 401s,
+ * which is why the mode is configurable per provider rather than guessed.
+ *
+ * `both` exists for gateways whose docs say neither. It is only reachable from
+ * a compat provider: api.anthropic.com rejects a request carrying two
+ * credentials, so sending both there would break a working configuration.
+ *
  * `anthropic-dangerous-direct-browser-access` is a no-op for the packaged app —
  * requests leave from Rust reqwest (see lib/http.ts), which never does a CORS
  * preflight. It is here so `pnpm dev` in a plain browser, which falls back to
  * the global fetch, can reach the API too; without it Anthropic refuses
  * browser-origin requests outright.
  */
-function authHeaders(apiKey: string): Record<string, string> {
+function authHeaders(apiKey: string, mode: AuthMode = "default"): Record<string, string> {
   return {
     "Content-Type": "application/json",
-    "x-api-key": apiKey,
+    ...(mode === "bearer" ? {} : { "x-api-key": apiKey }),
+    ...(mode === "default" ? {} : { Authorization: `Bearer ${apiKey}` }),
     "anthropic-version": ANTHROPIC_VERSION,
     "anthropic-dangerous-direct-browser-access": "true",
   };
@@ -327,7 +340,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
 
   const res = await fetch(url, {
     method: "POST",
-    headers: authHeaders(opts.apiKey),
+    headers: authHeaders(opts.apiKey, opts.authMode),
     body: JSON.stringify(body),
     signal: opts.signal,
   });

@@ -237,7 +237,7 @@ export const useAiStore = create<AiState>((set, get) => ({
     const provider = get().providers.find((p) => p.id === providerId);
     if (!provider) throw new Error("Provider not found");
     const apiKey = await loadApiKey(providerId) ?? "";
-    return fetchRemoteModels(provider.baseUrl, apiKey, provider.apiStandard);
+    return fetchRemoteModels(provider.baseUrl, apiKey, provider.apiStandard, provider.authMode);
   },
 
   addPrompt: async (p) => {

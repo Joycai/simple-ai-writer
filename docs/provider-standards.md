@@ -206,19 +206,25 @@ Gemini 原生协议的路径前缀没有统一惯例，猜错的代价高于收�
 `Provider` 新增可选字段：
 
 ```ts
-/** compat 端点的鉴权方式；official 恒为 undefined（= 该协议的官方方式）。 */
-authMode?: "default" | "bearer" | "x_api_key" | "both";
+/** compat 端点的鉴权方式；official 与未配置过的供应商恒为 undefined。 */
+authMode?: "default" | "bearer" | "both";
 ```
 
-存储：`providers` 表新增 `auth_mode TEXT` 列，复用现有的 `addColumn` 幂等迁移助手
-（`configDb.ts:185-207`，`safety_settings` 就是这么加的）。读取时按 §6 的白名单收窄，
-未知值 → `"default"`。
+`default` = 该协议自己的方式（Anthropic 即 `x-api-key`）。**实现时去掉了原计划里
+的 `x_api_key`**：它和 `default` 在 Anthropic 下完全同义，两个值表示同一件事只会
+让"存了哪个"变成一个需要回答的问题。
 
-各 standard 的合法取值：
+存储：`providers` 表新增 `auth_mode TEXT` 列，复用现有的 `addColumn` 幂等迁移助手
+（`configDb.ts`，`safety_settings` 就是这么加的）。`default` **存 NULL 而非字符串**，
+所以没碰过这个设置的供应商读回来和这个字段存在之前逐字节一致。
+
+读取时按下表收窄，且**用 standard 校验**：一个供应商从 compat 改回 official 时，
+旧的 `bearer` 会留在行里，照发就会给 api.anthropic.com 送去它不接受的凭证 ——
+按 standard 读使这种陈旧值失效而不是失败。
 
 | standard | 合法 authMode |
 | --- | --- |
-| `anthropic_compat` | `default`(=x_api_key) / `bearer` / `both` |
+| `anthropic_compat` | `default` / `bearer` / `both` |
 | 其余全部 | 仅 `default` |
 
 ## 5. 探测与模型列表降级
@@ -302,6 +308,13 @@ authMode?: "default" | "bearer" | "x_api_key" | "both";
 **PR2 — Anthropic compat 鉴权方式**
 - `auth_mode` 列 + `AuthMode` + compat 鉴权下拉 + `authHeaders` 分支
 - 验收：用只认 `Authorization: Bearer` 的第三方端点跑通一次续写
+
+> `authMode` 是继 `safetySettings` 之后第二个"每供应商连接附加字段"，同样要在
+> ~10 个 options 类型和 ~14 个调用点各写一遍。第三个字段出现前，应该把
+> `baseUrl/apiKey/standard/safetySettings/authMode` 收成一个 `ProviderConn`
+> 类型 + 一个 `connFor(provider)` 构造函数，让调用点 spread 而不是逐字段抄 ——
+> 漏抄一处的症状是"某个功能忽略该设置"，编译器抓不到。本片没做，因为它会把
+> PR2 的改动面从"鉴权"扩散到全部 AI 入口，真机回归时无法归因。
 
 **PR3 — 探测降级**
 - `/models` 缺失时的最小正文探测 + 错误类型判定；确认模型 id 可手填

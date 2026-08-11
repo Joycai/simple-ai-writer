@@ -12,7 +12,7 @@ import { LORE_GENERATE_PRESET } from "../agent/presets";
 import { runAgent } from "../agent/runtime";
 import { JSON_ONLY_CUE, jsonModeExtraBody, needsJsonTextCue } from "../ai/jsonMode";
 import type { GeminiSafetySettings } from "../ai/safety";
-import type { ApiStandard } from "../ai/types";
+import type { ApiStandard, AuthMode } from "../ai/types";
 import { fallbackCategoryId, isKnownCategory, loreCategoryIds } from "../profile/active";
 import { type CategoryId } from "./model";
 
@@ -32,6 +32,8 @@ export async function generateLore(opts: {
   apiKey: string;
   standard: ApiStandard;
   safetySettings?: GeminiSafetySettings;
+  /** Anthropic-compat auth scheme; ignored by every other protocol. */
+  authMode?: AuthMode;
   modelId: string;
   prefix?: string;
   contextSize?: number;
@@ -100,6 +102,7 @@ export async function generateLore(opts: {
     apiKey: opts.apiKey,
     standard: opts.standard,
     safetySettings: opts.safetySettings,
+    authMode: opts.authMode,
     modelId: opts.modelId,
     prefix: opts.prefix,
     contextSize: opts.contextSize,

@@ -931,6 +931,13 @@
       "baseUrlLabel": "Base URL (leave empty to use default)",
       "baseUrlOfficialHint": "Fixed for an official endpoint. To use a relay or gateway, pick the matching \"compatible\" standard above.",
       "apiKeyLabel": "API Key",
+      "authModeLabel": "Auth header",
+      "authModeHint": "Anthropic has two conventions. Gateways that document ANTHROPIC_AUTH_TOKEN want Bearer; those that document ANTHROPIC_API_KEY want x-api-key. Try the other one on a 401.",
+      "authModes": {
+        "default": "x-api-key (default)",
+        "bearer": "Authorization: Bearer",
+        "both": "Send both"
+      },
       "apiKeyOptional": "optional for local servers",
       "apiKeyLocalPlaceholder": "Leave empty for a local server",
       "presetsLabel": "Quick Select",

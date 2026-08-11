@@ -8,7 +8,7 @@ import {
   modelsUrl,
   openaiUrl,
 } from "../ai/urls";
-import { familyOf, isCompatStandard } from "../ai/types";
+import { authModesFor, familyOf, isCompatStandard } from "../ai/types";
 
 describe("anthropic base normalization", () => {
   // Every third-party gateway documents ANTHROPIC_BASE_URL as a bare root, so
@@ -117,5 +117,22 @@ describe("familyOf / isCompatStandard", () => {
   it("identifies the compat half", () => {
     expect(isCompatStandard("gemini_compat")).toBe(true);
     expect(isCompatStandard("gemini")).toBe(false);
+  });
+});
+
+describe("authModesFor", () => {
+  // Only Anthropic has two first-class conventions. OpenAI's second one is
+  // Azure's, which needs a different URL shape too; Gemini's is a query-string
+  // key, deliberately unimplemented because it leaks into logs.
+  it("offers a choice only where the protocol has one", () => {
+    expect(authModesFor("anthropic_compat")).toEqual(["default", "bearer", "both"]);
+    for (const s of ["anthropic", "openai", "openai_compat", "gemini", "gemini_compat"] as const) {
+      expect(authModesFor(s)).toEqual(["default"]);
+    }
+  });
+
+  // "both" on api.anthropic.com is a 401 — two credentials on one request.
+  it("never offers `both` on an official standard", () => {
+    expect(authModesFor("anthropic")).not.toContain("both");
   });
 });

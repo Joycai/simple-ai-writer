@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Check, AlertCircle } from "lucide-react";
 import { useAiStore } from "../../../stores/aiStore";
-import { familyOf, isCompatStandard, type ApiStandard } from "../../../lib/ai/types";
+import { authModesFor, familyOf, isCompatStandard, type ApiStandard, type AuthMode } from "../../../lib/ai/types";
 import { DEFAULT_ANTHROPIC_BASE, DEFAULT_GEMINI_BASE, DEFAULT_OPENAI_BASE } from "../../../lib/ai/urls";
 import {
   GEMINI_HARM_CATEGORIES,
@@ -74,6 +74,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
     name: existing?.name ?? "",
     apiStandard: existing?.apiStandard ?? ("openai" as ApiStandard),
     apiKey: initialApiKey,
+    authMode: existing?.authMode ?? ("default" as AuthMode),
     safetySettings: existing?.safetySettings ?? defaultSafetySettings(),
   });
   const [saving, setSaving] = useState(false);
@@ -89,6 +90,9 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
   // is optional for them but required for everything else.
   const keyRequired = !isLocalEndpoint(form.baseUrl);
   const endpointLocked = !isCompatStandard(form.apiStandard);
+  // One entry means the protocol has no choice to offer — don't render a
+  // dropdown whose only option is "the way it already works".
+  const authModes = authModesFor(form.apiStandard);
 
   const handleTest = async () => {
     if (!form.baseUrl || (keyRequired && !form.apiKey)) {
@@ -98,7 +102,12 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
     setTesting(true);
     setTestResult(null);
     try {
-      const result = await testProviderConnection(form.baseUrl, form.apiKey, form.apiStandard);
+      const result = await testProviderConnection(
+        form.baseUrl,
+        form.apiKey,
+        form.apiStandard,
+        form.authMode,
+      );
       setTestResult({ ok: result.ok, message: result.ok ? result.message : result.error });
     } catch (e) {
       setTestResult({ ok: false, message: e instanceof Error ? e.message : String(e) });
@@ -117,14 +126,17 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
       // vendor's, and keeping it out of the database makes a vendor domain
       // change a code edit rather than a data migration.
       const baseUrl = endpointLocked ? "" : form.baseUrl.trim();
+      // Store nothing for the protocol's own scheme, so a provider that never
+      // touched this setting reads back exactly as it did before it existed.
+      const authMode = form.authMode === "default" ? undefined : form.authMode;
       if (existing) {
         await updateProvider(
-          { ...existing, name: form.name, baseUrl, apiStandard: form.apiStandard, safetySettings },
+          { ...existing, name: form.name, baseUrl, apiStandard: form.apiStandard, safetySettings, authMode },
           form.apiKey,
         );
       } else {
         await addProvider(
-          { name: form.name, baseUrl, apiStandard: form.apiStandard, safetySettings },
+          { name: form.name, baseUrl, apiStandard: form.apiStandard, safetySettings, authMode },
           form.apiKey,
         );
       }
@@ -186,7 +198,15 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
             <select className={styles.select} value={form.apiStandard}
               onChange={(e) => {
                 const standard = e.target.value as ApiStandard;
-                setForm({ ...form, apiStandard: standard, baseUrl: STANDARD_ENDPOINTS[standard] });
+                setForm({
+                  ...form,
+                  apiStandard: standard,
+                  baseUrl: STANDARD_ENDPOINTS[standard],
+                  // Switching away from anthropic_compat would otherwise keep a
+                  // mode the new standard can't use — including onto the
+                  // official endpoint, which rejects two credentials.
+                  authMode: authModesFor(standard).includes(form.authMode) ? form.authMode : "default",
+                });
               }}>
               {apiStandardOptions.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </select>
@@ -214,6 +234,19 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
             value={form.apiKey}
             onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
         </div>
+
+        {authModes.length > 1 && (
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>{t("aiConfig.providers.authModeLabel")}</label>
+            <select className={styles.select} value={form.authMode}
+              onChange={(e) => setForm({ ...form, authMode: e.target.value as AuthMode })}>
+              {authModes.map((mode) => (
+                <option key={mode} value={mode}>{t(`aiConfig.providers.authModes.${mode}`)}</option>
+              ))}
+            </select>
+            <div className={styles.hint}>{t("aiConfig.providers.authModeHint")}</div>
+          </div>
+        )}
 
         <div className={styles.testRow}>
           <button className={styles.btnSecondary} onClick={handleTest}

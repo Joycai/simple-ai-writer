@@ -90,6 +90,7 @@ export function LoreImageGenModal({ entity, onClose, onSaved }: Props) {
         apiKey,
         standard: vision.provider.apiStandard,
         safetySettings: vision.provider.safetySettings,
+        authMode: vision.provider.authMode,
         modelId: vision.model.modelId,
         prefix: vision.model.prefix,
         contextSize: vision.model.contextSize,

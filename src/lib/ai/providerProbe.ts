@@ -5,14 +5,15 @@
 
 import { anthropicHeaders } from "./anthropic";
 import { fetch } from "../http";
-import { familyOf, type ApiStandard } from "./types";
+import { familyOf, type ApiStandard, type AuthMode } from "./types";
 import { modelsUrl } from "./urls";
 
 /** Fetch the available model list from a provider's /models endpoint (OpenAI-style). */
 export async function fetchRemoteModels(
   baseUrl: string,
   apiKey: string,
-  standard: ApiStandard
+  standard: ApiStandard,
+  authMode?: AuthMode
 ): Promise<{ id: string; name: string }[]> {
   const family = familyOf(standard);
   if (family === "gemini") {
@@ -31,7 +32,9 @@ export async function fetchRemoteModels(
     // Same `{ data: [...] }` envelope as OpenAI, but keyed auth headers and a
     // human label of its own (`display_name` — "Claude Sonnet 5" rather than
     // the bare id).
-    const res = await fetch(modelsUrl(standard, baseUrl), { headers: anthropicHeaders(apiKey) });
+    const res = await fetch(modelsUrl(standard, baseUrl), {
+      headers: anthropicHeaders(apiKey, authMode),
+    });
     if (!res.ok) throw new Error(`Anthropic models fetch failed: ${res.status}`);
     const data = await res.json();
     return (data.data ?? []).map((m: Record<string, string>) => ({
@@ -54,7 +57,8 @@ export async function fetchRemoteModels(
 export async function testProviderConnection(
   baseUrl: string,
   apiKey: string,
-  standard: ApiStandard
+  standard: ApiStandard,
+  authMode?: AuthMode
 ): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
   try {
     if (familyOf(standard) === "gemini") {
@@ -69,7 +73,7 @@ export async function testProviderConnection(
 
     if (familyOf(standard) === "anthropic") {
       const url = modelsUrl(standard, baseUrl, "?limit=1");
-      const res = await fetch(url, { headers: anthropicHeaders(apiKey) });
+      const res = await fetch(url, { headers: anthropicHeaders(apiKey, authMode) });
       if (!res.ok) {
         const error = await res.text();
         return { ok: false, error: `Anthropic API error ${res.status} (${url}): ${error}` };

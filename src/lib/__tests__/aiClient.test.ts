@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   streamCompletion, ContextSizeError,
-  type ApiStandard, type StreamChunk, type StreamMessage, type ToolDefinition,
+  type ApiStandard, type AuthMode, type StreamChunk, type StreamMessage, type ToolDefinition,
 } from "../ai";
 
 /** Build a fetch Response whose body streams the given raw chunks. */
@@ -837,5 +837,54 @@ describe("streamCompletion — endpoint URLs", () => {
         onChunk: () => {},
       }),
     ).rejects.toThrow("https://relay.example.com/anthropic/v1/messages");
+  });
+});
+
+describe("streamCompletion — Anthropic auth modes", () => {
+  function headersOf(authMode?: AuthMode): Promise<Headers> {
+    const calls: Headers[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        calls.push(new Headers(init.headers));
+        return sseResponse([`data: {"type":"message_stop"}\n\n`]);
+      }),
+    );
+    return streamCompletion({
+      baseUrl: "https://relay.example.com",
+      apiKey: "k-123",
+      standard: "anthropic_compat",
+      authMode,
+      modelId: "claude",
+      messages: [{ role: "user", content: "hi" }],
+      onChunk: () => {},
+    }).then(() => calls[0]);
+  }
+
+  // The two conventions are ANTHROPIC_API_KEY -> x-api-key and
+  // ANTHROPIC_AUTH_TOKEN -> Authorization: Bearer. A gateway reading the header
+  // this app doesn't send sees an unauthenticated request and 401s.
+  it("sends x-api-key by default, so an existing provider keeps working", async () => {
+    for (const mode of [undefined, "default" as const]) {
+      const headers = await headersOf(mode);
+      expect(headers.get("x-api-key")).toBe("k-123");
+      expect(headers.has("Authorization")).toBe(false);
+    }
+  });
+
+  it("swaps to a bearer token when the endpoint wants ANTHROPIC_AUTH_TOKEN", async () => {
+    const headers = await headersOf("bearer");
+    expect(headers.get("Authorization")).toBe("Bearer k-123");
+    expect(headers.has("x-api-key")).toBe(false);
+  });
+
+  it("can send both for a gateway whose docs name neither", async () => {
+    const headers = await headersOf("both");
+    expect(headers.get("x-api-key")).toBe("k-123");
+    expect(headers.get("Authorization")).toBe("Bearer k-123");
+  });
+
+  it("keeps the pinned API version whichever mode is used", async () => {
+    expect((await headersOf("bearer")).get("anthropic-version")).toBe("2023-06-01");
   });
 });
