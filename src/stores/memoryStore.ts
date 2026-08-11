@@ -70,7 +70,10 @@ async function runMemoryGeneration(opts: {
   if (coverEnd - startFrom < (force ? 1 : 500)) return { skipped: "upToDate" };
 
   const ranges = splitRange(content, startFrom, coverEnd, segmentTargetChars(model.contextSize));
-  const baseUrl = provider.baseUrl || "https://api.openai.com/v1";
+  // No OpenAI fallback here: an empty base means "use this protocol's default",
+  // and only the adapter knows which one that is (lib/ai/urls.ts). Substituting
+  // api.openai.com would have pointed a Gemini or Anthropic provider at it.
+  const baseUrl = provider.baseUrl;
   onProgress({ done: 0, total: ranges.length });
 
   let totalIn = 0;

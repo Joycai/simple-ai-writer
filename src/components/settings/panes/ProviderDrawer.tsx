@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Check, AlertCircle } from "lucide-react";
 import { useAiStore } from "../../../stores/aiStore";
-import type { ApiStandard } from "../../../lib/ai/types";
+import { familyOf, isCompatStandard, type ApiStandard } from "../../../lib/ai/types";
+import { DEFAULT_ANTHROPIC_BASE, DEFAULT_GEMINI_BASE, DEFAULT_OPENAI_BASE } from "../../../lib/ai/urls";
 import {
   GEMINI_HARM_CATEGORIES,
   GEMINI_THRESHOLD_LEVELS,
@@ -14,11 +15,20 @@ import { testProviderConnection } from "../../../lib/ai/providerProbe";
 import styles from "../settingsCommon.module.css";
 import hub from "./ProvidersModels.module.css";
 
+/**
+ * What the Base URL field shows for each standard. The official ones are shown
+ * read-only rather than hidden — an author staring at a 404 needs to see which
+ * address the app is using before they can tell it is the wrong *standard* they
+ * picked, not the wrong key. Compat starts empty because there is nothing to
+ * guess. Only the compat value is ever stored (see handleSave).
+ */
 const STANDARD_ENDPOINTS: Record<ApiStandard, string> = {
-  openai: "https://api.openai.com/v1",
-  gemini: "https://generativelanguage.googleapis.com/v1beta",
-  anthropic: "https://api.anthropic.com/v1",
+  openai: DEFAULT_OPENAI_BASE,
   openai_compat: "",
+  gemini: DEFAULT_GEMINI_BASE,
+  gemini_compat: "",
+  anthropic: DEFAULT_ANTHROPIC_BASE,
+  anthropic_compat: "",
 };
 
 interface ProviderPreset {
@@ -28,10 +38,10 @@ interface ProviderPreset {
 }
 
 const PROVIDER_PRESETS: ProviderPreset[] = [
-  { name: "OpenAI", apiStandard: "openai", baseUrl: "https://api.openai.com/v1" },
-  { name: "Google Gemini", apiStandard: "gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta" },
+  { name: "OpenAI", apiStandard: "openai", baseUrl: STANDARD_ENDPOINTS.openai },
+  { name: "Google Gemini", apiStandard: "gemini", baseUrl: STANDARD_ENDPOINTS.gemini },
   { name: "DeepSeek", apiStandard: "openai_compat", baseUrl: "https://api.deepseek.com" },
-  { name: "Anthropic", apiStandard: "anthropic", baseUrl: "https://api.anthropic.com/v1" },
+  { name: "Anthropic", apiStandard: "anthropic", baseUrl: STANDARD_ENDPOINTS.anthropic },
   { name: "Ollama", apiStandard: "openai_compat", baseUrl: "http://localhost:11434/v1" },
 ];
 
@@ -55,8 +65,13 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
   const existing = providerId ? providers.find((p) => p.id === providerId) : undefined;
 
   const [form, setForm] = useState({
+    // An official provider stores no base URL, so fill the field from the
+    // constant instead of leaving it blank.
+    baseUrl:
+      existing && !isCompatStandard(existing.apiStandard)
+        ? STANDARD_ENDPOINTS[existing.apiStandard]
+        : existing?.baseUrl ?? STANDARD_ENDPOINTS.openai,
     name: existing?.name ?? "",
-    baseUrl: existing?.baseUrl ?? STANDARD_ENDPOINTS.openai,
     apiStandard: existing?.apiStandard ?? ("openai" as ApiStandard),
     apiKey: initialApiKey,
     safetySettings: existing?.safetySettings ?? defaultSafetySettings(),
@@ -66,16 +81,14 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
-  const apiStandardOptions = [
-    { value: "openai" as ApiStandard, label: t("aiConfig.apiStandards.openai") },
-    { value: "openai_compat" as ApiStandard, label: t("aiConfig.apiStandards.openai_compat") },
-    { value: "gemini" as ApiStandard, label: t("aiConfig.apiStandards.gemini") },
-    { value: "anthropic" as ApiStandard, label: t("aiConfig.apiStandards.anthropic") },
-  ];
+  const apiStandardOptions = (
+    ["openai", "openai_compat", "gemini", "gemini_compat", "anthropic", "anthropic_compat"] as const
+  ).map((value) => ({ value: value as ApiStandard, label: t(`aiConfig.apiStandards.${value}`) }));
 
   // Local servers (Ollama, LM Studio) authenticate no requests, so the API key
   // is optional for them but required for everything else.
   const keyRequired = !isLocalEndpoint(form.baseUrl);
+  const endpointLocked = !isCompatStandard(form.apiStandard);
 
   const handleTest = async () => {
     if (!form.baseUrl || (keyRequired && !form.apiKey)) {
@@ -99,15 +112,19 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
     setSaving(true);
     setError(null);
     try {
-      const safetySettings = form.apiStandard === "gemini" ? form.safetySettings : undefined;
+      const safetySettings = familyOf(form.apiStandard) === "gemini" ? form.safetySettings : undefined;
+      // Official providers store nothing: the address is a constant of the
+      // vendor's, and keeping it out of the database makes a vendor domain
+      // change a code edit rather than a data migration.
+      const baseUrl = endpointLocked ? "" : form.baseUrl.trim();
       if (existing) {
         await updateProvider(
-          { ...existing, name: form.name, baseUrl: form.baseUrl, apiStandard: form.apiStandard, safetySettings },
+          { ...existing, name: form.name, baseUrl, apiStandard: form.apiStandard, safetySettings },
           form.apiKey,
         );
       } else {
         await addProvider(
-          { name: form.name, baseUrl: form.baseUrl, apiStandard: form.apiStandard, safetySettings },
+          { name: form.name, baseUrl, apiStandard: form.apiStandard, safetySettings },
           form.apiKey,
         );
       }
@@ -179,7 +196,12 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
         <div className={styles.fieldGroup}>
           <label className={styles.label}>{t("aiConfig.providers.baseUrlLabel")}</label>
           <input className={`${styles.input} ${hub.mono}`} placeholder="https://api.openai.com/v1" value={form.baseUrl}
+            readOnly={endpointLocked}
+            aria-readonly={endpointLocked}
             onChange={(e) => setForm({ ...form, baseUrl: e.target.value })} />
+          {endpointLocked && (
+            <div className={styles.hint}>{t("aiConfig.providers.baseUrlOfficialHint")}</div>
+          )}
         </div>
 
         <div className={styles.fieldGroup}>
@@ -206,7 +228,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
           )}
         </div>
 
-        {form.apiStandard === "gemini" && (
+        {familyOf(form.apiStandard) === "gemini" && (
           <GeminiSafetyEditor
             value={form.safetySettings}
             onChange={(safetySettings) => setForm({ ...form, safetySettings })}

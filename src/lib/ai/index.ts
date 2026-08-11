@@ -9,7 +9,7 @@ import { beginApiLog } from "./apiLog";
 import { streamGemini } from "./gemini";
 import { streamOpenAI } from "./openai";
 import { estimateMessagesTokens, estimateToolsTokens } from "./tokenEstimate";
-import { applyPrefix, ContextSizeError, type StreamOptions } from "./types";
+import { applyPrefix, ContextSizeError, familyOf, type StreamOptions } from "./types";
 
 export * from "./types";
 
@@ -32,12 +32,18 @@ export async function streamCompletion(opts: StreamOptions): Promise<void> {
     },
   };
   try {
-    if (wrapped.standard === "gemini") {
-      await streamGemini(wrapped);
-    } else if (wrapped.standard === "anthropic") {
-      await streamAnthropic(wrapped);
-    } else {
-      await streamOpenAI(wrapped);
+    // Dispatch on the protocol family, not the standard: the official and
+    // compat halves of a family share an adapter, and branching on the standard
+    // would drop every new `_compat` value into the OpenAI branch.
+    switch (familyOf(wrapped.standard)) {
+      case "gemini":
+        await streamGemini(wrapped);
+        break;
+      case "anthropic":
+        await streamAnthropic(wrapped);
+        break;
+      default:
+        await streamOpenAI(wrapped);
     }
     log.success();
   } catch (e) {

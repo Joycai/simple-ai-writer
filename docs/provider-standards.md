@@ -1,0 +1,322 @@
+# Provider 协议标准重构方案（3 协议 × official/compat）
+
+> 目标：把 `ApiStandard` 从今天的 4 个值（其中一对是空壳）重构成
+> **3 个协议族 × official/compat = 6 个值**，让 official 有明确契约（地址锁定、
+> 鉴权锁定、能力默认值乐观），compat 承载"接第三方兼容端点"的全部弹性
+> （地址自填、鉴权可选、探测可降级、默认值保守）。
+>
+> 直接动机：第三方 Anthropic 兼容端点**当前接不通**（§1.3），而修复所需的
+> 行为差异没有地方安放 —— 官方端点不能跟着一起改。
+
+## 1. 现状盘点
+
+### 1.1 枚举与分发
+
+`ApiStandard = "openai" | "openai_compat" | "gemini" | "anthropic"`（`lib/ai/types.ts:11`）。
+
+分发只有三条（`lib/ai/index.ts:35-41`）：`gemini` → `streamGemini`，
+`anthropic` → `streamAnthropic`，**其余全部（含未知值）** → `streamOpenAI`。
+
+### 1.2 三个协议族的实际差异
+
+| | 鉴权 | 流式请求 URL | 模型列表 |
+| --- | --- | --- | --- |
+| OpenAI 系 | `Authorization: Bearer`（无 key 时整个头省略，`openai.ts:16`） | `base` + `/chat/completions` | `base` + `/models` |
+| Gemini | `x-goog-api-key` 头（`gemini.ts:158`；注释明确拒绝 `?key=`，避免泄进日志） | `base` + `/models/{id}:streamGenerateContent?alt=sse` | `base` + `/models` |
+| Anthropic | `x-api-key` + `anthropic-version` + `anthropic-dangerous-direct-browser-access`（`anthropic.ts:51-58`） | `base` + `/messages` | `base` + `/models` |
+
+各族默认 base：`DEFAULT_GEMINI_BASE`（`gemini.ts:89`）、`DEFAULT_ANTHROPIC_BASE`
+（`anthropic.ts:26`）；OpenAI **没有**默认常量，靠 `aiTaskStore.ts:663-669` 兜底。
+Gemini 的默认值还在 `providerProbe.ts:11` 和 `endpointProbe.ts:37` 各抄了一份。
+
+### 1.3 为什么第三方 Anthropic 端点接不通
+
+三个独立原因，都不在报文层（报文构造本身符合 Messages API 规范）：
+
+1. **baseUrl 语义与生态相反。** `anthropic.ts:304-305` 拼的是 `base + /messages`，
+   因此 base 必须自带 `/v1`。而生态里的 `ANTHROPIC_BASE_URL`（官方 SDK、
+   Claude Code、所有第三方文档）是**根地址**，由客户端补 `/v1/messages`。用户
+   照文档粘贴 `https://xxx/anthropic`，实际打到 `.../anthropic/messages` → 404。
+2. **只发 `x-api-key`。** 生态有两套约定：`ANTHROPIC_API_KEY` → `x-api-key`，
+   `ANTHROPIC_AUTH_TOKEN` → `Authorization: Bearer`。大量第三方网关只认后者 → 401。
+3. **连接测试与模型列表都打 `/models`**（`providerProbe.ts:32-43,75-83`）。很多兼容
+   端点只实现 `/v1/messages`，没有 `/v1/models` → 即使正文可用，"测试连接"也失败、
+   模型下拉框为空。
+
+### 1.4 `openai` 与 `openai_compat` 今天几乎没有差异
+
+全仓库两者被区别对待的地方只有 **一处**：`configDb.ts:40-60` 的图像能力默认值
+（official `{edit:true,maxRefs:16}` / compat `{edit:false}`）。此外仅有 UI 预设地址
+（`ProviderDrawer.tsx:17-22`）和"未知值兜底成 compat"（`configDb.ts:352`）。
+`providerProbe.ts:85` 把两者写在同一个 if 里，`streamOpenAI` 完全不区分。
+
+**结论：直接扩成 6 个值而不定义 official 契约，只会得到 6 个值 + 3 种行为。**
+
+### 1.5 按 standard 分叉的全部位置
+
+重构时必须逐一覆盖：
+
+| 位置 | 作用 |
+| --- | --- |
+| `lib/ai/index.ts:35-41` | 适配器分发 |
+| `lib/ai/types.ts:11` | 枚举定义 |
+| `lib/ai/jsonMode.ts:22-51` | JSON 模式：OpenAI 系 `response_format` / Gemini `responseMimeType` / Anthropic 无参数（发了 400），并决定是否追加文本提示 |
+| `lib/ai/configDb.ts:40-60` | 图像能力默认值 |
+| `lib/ai/configDb.ts:339,352` | 读取白名单 + 未知值兜底 |
+| `lib/ai/configTransfer.ts:122` | 导入白名单 |
+| `lib/ai/providerProbe.ts:19,32,64,75,85` | 模型列表 + 连接测试 |
+| `lib/ai/endpointProbe.ts:280-298,318-370,500+,606` | 端点能力探测的鉴权头/base/请求体/跳过规则 |
+| `lib/ai/image.ts:39-42,212` | 图像路由默认值 |
+| `stores/aiTaskStore.ts:663-669` | 默认 baseUrl |
+| `components/settings/panes/ProviderDrawer.tsx:17-22,30-36,69-74,102,209` | 端点预设、供应商预设、下拉选项、safetySettings 归属 |
+| `components/onboarding/Onboarding.tsx:33-35` | 引导页预设 |
+| `i18n/locales/{en,zh-CN}.json` → `aiConfig.apiStandards` | 显示名 |
+
+### 1.6 本地服务（Ollama / LM Studio）不是枚举
+
+它的全部特殊行为都由 **"URL 指向本机"** 推导：
+
+- `ProviderDrawer.tsx:38-41,78` —— 本地则 API key 变可选
+- `lib/http.ts:46-63` —— 本地则覆盖 `Origin` 头（打包版 Windows 下 Ollama 403 的修复）
+- `lib/ai/endpointProbe.ts` 的 `looksLocal` —— 额外用常见本地端口做启发
+- `ProviderDrawer.tsx:35`、`Onboarding.tsx:35` —— 只是一条 `openai_compat` 预设
+
+## 2. 目标模型
+
+### 2.1 六个枚举值
+
+```ts
+export type ApiStandard =
+  | "openai"  | "openai_compat"
+  | "gemini"  | "gemini_compat"
+  | "anthropic" | "anthropic_compat";
+```
+
+### 2.2 official / compat 契约
+
+| | official | compat |
+| --- | --- | --- |
+| baseUrl | **锁定**：UI 只读展示常量，存储写空串，由适配器 fallback | 用户自填，按 §3 归一化 |
+| 鉴权 | **锁定**为该协议的官方方式 | 下拉可选（选项集见 §4） |
+| 能力默认值 | 乐观（如 OpenAI 图像 `{edit:true,maxRefs:16}`） | 保守（`{edit:false}`） |
+| `/models` 缺失 | 视为错误 | 降级探测（§5） |
+| 额外请求头 | 官方需要的全带（如 `anthropic-dangerous-direct-browser-access`） | 只带协议必需的 |
+
+official 的 baseUrl **存空串而非常量**：域名变更时不需要数据迁移，且和
+`aiTaskStore.ts:663-669` 现有的"空串 = 让适配器用自己的默认值"约定一致。
+读取端两种都接受（存量行存着完整 URL，照常工作）。
+
+> 待办：`streamOpenAI` 目前没有默认 base 常量，需补 `DEFAULT_OPENAI_BASE`
+> （`https://api.openai.com/v1`）并在 `openai.ts:9` 做同样的 fallback。
+> 同时把 Gemini 默认值的三份拷贝（`gemini.ts:89`、`providerProbe.ts:11`、
+> `endpointProbe.ts:37`）收敛成一处 import。
+
+### 2.3 Ollama：保持 preset，不升为枚举
+
+**本方案不新增 `ollama` 枚举值**，理由：
+
+1. 它的特殊行为全部由"URL 是本机"推导，而 `lib/http.ts` 的 Origin 覆盖位于
+   更底层，拿不到 provider 的枚举值 —— 只能按 URL 判断。做成枚举会出现两套
+   判断，且允许"选了 Ollama 却填远程地址"的矛盾状态。
+2. 协议上它就是 OpenAI 兼容层（`/v1/chat/completions`），没有第四种报文。
+
+**唯一值得推翻这个决定的场景**：想要读 Ollama 的**原生** API（`/api/tags` 列出本机
+已下载模型、`/api/pull` 下载进度）。那是另一套端点，届时应新增 `ollama` 枚举，
+而不是继续挂在 compat 下。此项列为未决问题（§9）。
+
+## 3. URL 归一化规则
+
+三个协议族的生态约定**不同**，所以归一化规则不对称 —— 这是有依据的差异，不是随意：
+
+- OpenAI 生态的 base 惯例**含版本段**（`OPENAI_BASE_URL=https://api.openai.com/v1`）
+- Gemini 同理（`.../v1beta`）
+- Anthropic 生态的 base 惯例是**根地址**（`ANTHROPIC_BASE_URL`，由客户端补 `/v1`）
+
+### 3.1 official 锁定值
+
+| 协议 | 锁定 base |
+| --- | --- |
+| openai | `https://api.openai.com/v1` |
+| gemini | `https://generativelanguage.googleapis.com/v1beta` |
+| anthropic | `https://api.anthropic.com/v1`（内部仍按 §3.2 拼成 `/v1/messages`） |
+
+### 3.2 anthropic_compat（重点，本次修复的核心）
+
+归一到"根"，再由适配器拼版本段：
+
+```
+root = input.trim()
+     去尾部 "/"
+     若以 "/messages" 结尾 → 去掉
+     若以 "/v1" 结尾       → 去掉
+请求 URL = root + "/v1/messages"
+模型列表 = root + "/v1/models"
+```
+
+覆盖用户可能粘贴的三种写法：
+
+| 用户填入 | 实际请求 |
+| --- | --- |
+| `https://xxx.com/anthropic` | `https://xxx.com/anthropic/v1/messages` |
+| `https://xxx.com/v1` | `https://xxx.com/v1/messages` |
+| `https://xxx.com/v1/messages` | `https://xxx.com/v1/messages` |
+
+代价：若某个中转真的把接口放在根下的 `/messages`（无 `/v1`），本规则会打错。
+这不符合 Anthropic 规范，且错误信息里会带上实际 URL（§3.5），可诊断。
+
+### 3.3 openai_compat
+
+**保持现状**（仅去尾斜杠，拼 `/chat/completions`）。不自动补 `/v1`：OpenAI 生态的
+base 惯例本就含版本段，自动补会破坏存量配置（如 `https://api.deepseek.com`
+这类两种写法都支持的端点）。
+
+### 3.4 gemini_compat
+
+仅去尾斜杠；若以 `/models` 结尾则去掉。**不自动补 `/v1beta`** —— 中转对
+Gemini 原生协议的路径前缀没有统一惯例，猜错的代价高于收益。
+
+### 3.5 错误信息带上 URL
+
+三个适配器的 `throw new Error(...)`（`anthropic.ts:340`、`openai.ts:31`、gemini 同位置）
+都改为带上实际请求的 URL。§1.3 的 1 号问题只要错误里出现
+`.../anthropic/messages` 就能一眼诊断，现在用户只看到 404 和一段 HTML。
+
+## 4. 鉴权矩阵
+
+三家的"第二种方式"性质完全不同，**不做统一抽象**，每个 compat 的下拉选项集独立：
+
+| 协议 | 方式 A（官方 / 默认） | 方式 B | 本版是否给 UI |
+| --- | --- | --- | --- |
+| Anthropic | `x-api-key: <key>` | `Authorization: Bearer <token>`（`ANTHROPIC_AUTH_TOKEN`） | **给**：A / B / 两者都发 |
+| OpenAI | `Authorization: Bearer` | `api-key: <key>`（Azure） | 不给（见下） |
+| Gemini | `x-goog-api-key` 头 | `?key=<key>` 查询串 | 不给（见下） |
+
+- **Anthropic 必须做**：方式 B 是生态一等公民，大量第三方只认它。允许"两者都发"
+  是因为部分网关行为不明；但**官方端点绝不能双发**（同时出现两种凭证会 401），
+  所以这个选项只在 `anthropic_compat` 下存在。
+- **OpenAI 暂不做**：方式 B 只对 Azure 有意义，而 Azure 的 URL 结构也完全不同
+  （`/openai/deployments/{id}/chat/completions?api-version=`），只加一个头救不了它。
+  要支持应当单独做 Azure，不在本方案范围内。
+- **Gemini 暂不做**：方式 B 是**故意**不实现的（`gemini.ts:109-110`、
+  `providerProbe.ts:21-22` 都写了原因：查询串会进代理日志和报错信息）。若将来要给，
+  必须标注风险且不得设为默认。
+
+### 4.1 数据模型
+
+`Provider` 新增可选字段：
+
+```ts
+/** compat 端点的鉴权方式；official 恒为 undefined（= 该协议的官方方式）。 */
+authMode?: "default" | "bearer" | "x_api_key" | "both";
+```
+
+存储：`providers` 表新增 `auth_mode TEXT` 列，复用现有的 `addColumn` 幂等迁移助手
+（`configDb.ts:185-207`，`safety_settings` 就是这么加的）。读取时按 §6 的白名单收窄，
+未知值 → `"default"`。
+
+各 standard 的合法取值：
+
+| standard | 合法 authMode |
+| --- | --- |
+| `anthropic_compat` | `default`(=x_api_key) / `bearer` / `both` |
+| 其余全部 | 仅 `default` |
+
+## 5. 探测与模型列表降级
+
+仅 compat 生效。`/models` 返回 404 / 405 / 501 时，改用一次**最小正文请求**判定连通性：
+
+| 协议 | 降级请求 |
+| --- | --- |
+| anthropic_compat | `POST {root}/v1/messages`，`max_tokens: 1`，一条极短 user 消息 |
+| gemini_compat | `POST {base}/models/{id}:generateContent`，`maxOutputTokens: 1` |
+| openai_compat | `POST {base}/chat/completions`，`max_tokens: 1` |
+
+**判定规则**：连接测试可能发生在用户还没填模型 id 之前，所以用**错误类型**而非成功与否来判定：
+
+- `401` / `403` → 鉴权失败（提示换鉴权方式或检查 key）
+- `400` / `404` 且错误体提到 model 不存在 → **视为连通成功**（地址与鉴权都对）
+- 其它 → 原样报错
+
+模型列表拿不到时，UI 必须允许**手填 model id**（验收项，见 §8）。
+
+## 6. 存量迁移
+
+### 6.1 读取时映射（幂等，放在 `configDb.parseApiStandard` 相邻处）
+
+```
+若 apiStandard === "anthropic" 且 baseUrl 非空 且 归一化后 ≠ 官方  → "anthropic_compat"
+若 apiStandard === "gemini"    且 baseUrl 非空 且 归一化后 ≠ 官方  → "gemini_compat"
+若 apiStandard === "openai"    且 baseUrl 非空 且 归一化后 ≠ 官方  → "openai_compat"
+```
+
+`baseUrl` 为空串 = 使用默认值 → 判为 official。反向映射（compat → official）不做：
+用户显式选了 compat 就尊重它。
+
+**不做一次性 DB migration**，只在读取层映射；保存时按新值写回，自然收敛。
+
+### 6.2 导入路径
+
+`configTransfer.ts:122` 的白名单加入三个新值，并调用**同一个**映射函数 —— 否则从
+旧版导出的配置在新版导入后仍是 `anthropic` + 自定义地址，等于绕过迁移。
+
+### 6.3 向下不兼容（记录，不修复）
+
+新版导出的配置在**旧版** app 导入时，`anthropic_compat` 会被
+`parseApiStandard`（`configDb.ts:352`）兜底成 `openai_compat` —— 结果是用 OpenAI
+报文打 Anthropic 端点。旧版代码无法改，属于已知单向兼容性损失，在 release note 提示。
+
+## 7. 改动清单
+
+按文件，逐条对应 §1.5：
+
+| 文件 | 改动 |
+| --- | --- |
+| `lib/ai/types.ts` | 枚举扩到 6 值；新增 `AuthMode` |
+| `lib/ai/urls.ts`（**新增**） | 三族的 base 常量 + 归一化函数 + 各端点拼装，供适配器/两个 probe 共用 |
+| `lib/ai/index.ts` | 分发加 `*_compat` 分支（走同一适配器） |
+| `lib/ai/anthropic.ts` | 用 `urls.ts` 拼 `/v1/messages`；`authHeaders` 接受 `authMode` + 是否官方；错误带 URL |
+| `lib/ai/openai.ts` | 补 `DEFAULT_OPENAI_BASE` fallback；错误带 URL |
+| `lib/ai/gemini.ts` | base 常量迁到 `urls.ts`；错误带 URL |
+| `lib/ai/jsonMode.ts` | 两个 switch 各加三个 compat 分支（与对应 official 同行为） |
+| `lib/ai/configDb.ts` | `defaultImageCaps` 加分支；`API_STANDARDS` 扩容；新增 `auth_mode` 列 + `addColumn`；`listProviders`/`upsertProvider` 读写该列；§6.1 映射 |
+| `lib/ai/configTransfer.ts` | 白名单扩容 + 复用映射 |
+| `lib/ai/providerProbe.ts` | 用 `urls.ts`；compat 降级探测；传 `authMode` |
+| `lib/ai/endpointProbe.ts` | 同上；`:606` 的跳过条件改为按协议族判断 |
+| `lib/ai/image.ts` | `resolveImageRoute` 改为 `族 === "gemini" ? "gemini" : "images-api"` |
+| `stores/aiTaskStore.ts` | `defaultBaseUrl` 改为按族返回空串 |
+| `components/settings/panes/ProviderDrawer.tsx` | 下拉 6 项；official 的 URL 输入框**只读展示**（不隐藏，用户要看得见地址才知道该不该换 compat）；compat 显示鉴权下拉；预设整理 |
+| `components/onboarding/Onboarding.tsx` | 预设沿用 official |
+| `i18n/locales/{en,zh-CN}.json` | `aiConfig.apiStandards` 六项 + 鉴权方式文案 + compat 的 baseUrl 占位提示 |
+| `lib/__tests__/aiClient.test.ts` | 新增 URL 归一化用例（§3.2 三种写法）、鉴权头用例 |
+| `lib/__tests__/providerProbe.test.ts` | 新增 `/models` 404 降级用例 |
+
+## 8. PR 切片
+
+每片独立可测、可回滚；作者在每片后用真实第三方端点验证再进入下一片。
+
+**PR1 — 枚举 + URL 归一化 + 迁移**（无用户可见新功能，行为等价）
+- 新增 3 个枚举值、`lib/ai/urls.ts`、§6.1 读取映射、白名单扩容、分发分支
+- 下拉出现 6 项；official 的 URL 只读
+- 验收：现有全部 provider（OpenAI / Gemini / Anthropic 官方 / DeepSeek / Ollama）配置不变、照常出字；`anthropic` + 自定义地址的存量行在 UI 上自动显示为 anthropic_compat
+
+**PR2 — Anthropic compat 鉴权方式**
+- `auth_mode` 列 + `AuthMode` + compat 鉴权下拉 + `authHeaders` 分支
+- 验收：用只认 `Authorization: Bearer` 的第三方端点跑通一次续写
+
+**PR3 — 探测降级**
+- `/models` 缺失时的最小正文探测 + 错误类型判定；确认模型 id 可手填
+- 验收：没有 `/v1/models` 的端点，"测试连接"通过、能手填模型出字
+
+**PR4 — Gemini compat + 收尾**
+- `gemini_compat` 全链路、Gemini 默认值三份拷贝收敛、错误信息带 URL、i18n、测试补全
+- 验收：`pnpm tsc --noEmit` + `pnpm test` + 一次 `pnpm tauri build` 冒烟
+
+PR1 与 PR4 的"错误信息带 URL"若想提前，可并入 PR1（成本极低，对诊断帮助最大）。
+
+## 9. 未决问题
+
+1. **Ollama 是否需要原生 API 支持？** 本方案按"保持 preset"推进（§2.3）。若要
+   本机模型列表 / 下载状态，则需新增 `ollama` 枚举并接 `/api/tags`，届时另开方案。
+2. **Azure OpenAI** 是否单独立项（URL 结构 + `api-key` 头 + `api-version` 查询串）。
+3. **`gemini_compat` 是否给 `?key=` 选项** —— 本方案不给；若第三方确实只支持查询串，
+   再评估并加显著风险提示。

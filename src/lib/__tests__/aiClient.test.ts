@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   streamCompletion, ContextSizeError,
-  type StreamChunk, type StreamMessage, type ToolDefinition,
+  type ApiStandard, type StreamChunk, type StreamMessage, type ToolDefinition,
 } from "../ai";
 
 /** Build a fetch Response whose body streams the given raw chunks. */
@@ -30,7 +30,8 @@ function mockFetch(chunks: string[]) {
 
 async function collect(opts: {
   chunks: string[];
-  standard?: "openai" | "openai_compat" | "gemini" | "anthropic";
+  standard?: ApiStandard;
+  baseUrl?: string;
   maxOutput?: number;
   tools?: ToolDefinition[];
   toolChoice?: "auto" | "none" | "required" | { type: "function"; function: { name: string } };
@@ -40,7 +41,7 @@ async function collect(opts: {
   const calls = mockFetch(opts.chunks);
   const received: StreamChunk[] = [];
   await streamCompletion({
-    baseUrl: "https://api.example.com/v1",
+    baseUrl: opts.baseUrl ?? "https://api.example.com/v1",
     apiKey: "test-key",
     standard: opts.standard ?? "openai",
     modelId: "test-model",
@@ -778,5 +779,63 @@ describe("streamCompletion — auth header", () => {
       onChunk: () => {},
     });
     expect(calls[0].headers.has("Authorization")).toBe(false);
+  });
+});
+
+describe("streamCompletion — endpoint URLs", () => {
+  const DONE = [`data: {"type":"message_stop"}\n\n`];
+
+  // The Anthropic ecosystem's ANTHROPIC_BASE_URL is a bare root and the client
+  // appends /v1/messages, so all three of these are the same endpoint written
+  // three ways — and the first is what every third-party gateway's docs give.
+  it.each([
+    ["root", "https://relay.example.com/anthropic"],
+    ["root + /v1", "https://relay.example.com/anthropic/v1"],
+    ["full endpoint URL", "https://relay.example.com/anthropic/v1/messages"],
+    ["trailing slash", "https://relay.example.com/anthropic/"],
+  ])("normalizes an Anthropic base given as %s", async (_label, baseUrl) => {
+    const { calls } = await collect({ standard: "anthropic_compat", baseUrl, chunks: DONE });
+    expect(calls[0].url).toBe("https://relay.example.com/anthropic/v1/messages");
+  });
+
+  it("falls back to the vendor endpoint when a base URL is empty", async () => {
+    const { calls } = await collect({ standard: "anthropic", baseUrl: "", chunks: DONE });
+    expect(calls[0].url).toBe("https://api.anthropic.com/v1/messages");
+
+    const openai = await collect({
+      standard: "openai",
+      baseUrl: "",
+      chunks: [`data: [DONE]\n\n`],
+    });
+    expect(openai.calls[0].url).toBe("https://api.openai.com/v1/chat/completions");
+  });
+
+  it("routes a compat standard to its family's adapter, not the OpenAI one", async () => {
+    const { calls } = await collect({
+      standard: "anthropic_compat",
+      baseUrl: "https://relay.example.com/v1",
+      chunks: DONE,
+    });
+    // The Anthropic adapter hoists nothing into `messages` and requires
+    // max_tokens; the OpenAI one would have sent `stream_options` instead.
+    expect(calls[0].body.max_tokens).toBeDefined();
+    expect(calls[0].body.stream_options).toBeUndefined();
+  });
+
+  it("names the URL it called in the error, so a wrong base is diagnosable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("<html>404</html>", { status: 404 })),
+    );
+    await expect(
+      streamCompletion({
+        baseUrl: "https://relay.example.com/anthropic",
+        apiKey: "k",
+        standard: "anthropic_compat",
+        modelId: "claude",
+        messages: [{ role: "user", content: "hi" }],
+        onChunk: () => {},
+      }),
+    ).rejects.toThrow("https://relay.example.com/anthropic/v1/messages");
   });
 });

@@ -7,8 +7,57 @@
 import type { GeminiSafetySettings } from "./safety";
 import i18n from "../../i18n";
 
-/** Wire protocol spoken by a provider endpoint. */
-export type ApiStandard = "openai" | "openai_compat" | "gemini" | "anthropic";
+/**
+ * Which endpoint a provider is, as configured by the author.
+ *
+ * Two axes in one string: the **protocol family** (what the wire messages look
+ * like) and whether it is the vendor's own endpoint or a third-party one that
+ * merely speaks the same protocol.
+ *
+ * The `_compat` half is not cosmetic. A first-party endpoint is a fixed address
+ * with one documented auth scheme, so the app can hard-code both and assume the
+ * optional parts of the protocol exist (`/models`, image editing). A compatible
+ * endpoint is an address the author types, and relays vary in which halves of
+ * the protocol they implement — so everything the official branch may assume,
+ * the compat branch has to ask about or degrade around. Keeping them apart is
+ * what lets the compat branch loosen without loosening the official one too:
+ * see `lib/ai/urls.ts` for the base-URL half.
+ */
+export type ApiStandard =
+  | "openai"
+  | "openai_compat"
+  | "gemini"
+  | "gemini_compat"
+  | "anthropic"
+  | "anthropic_compat";
+
+/** The wire protocol itself — official and compat of a family speak the same one. */
+export type ProtocolFamily = "openai" | "gemini" | "anthropic";
+
+const PROTOCOL_FAMILY: Record<ApiStandard, ProtocolFamily> = {
+  openai: "openai",
+  openai_compat: "openai",
+  gemini: "gemini",
+  gemini_compat: "gemini",
+  anthropic: "anthropic",
+  anthropic_compat: "anthropic",
+};
+
+/**
+ * The protocol behind a standard. Branch on this, never on the standard itself,
+ * wherever the question is "what do the messages look like" — otherwise every
+ * new `_compat` value silently falls into the OpenAI branch.
+ */
+export function familyOf(standard: ApiStandard): ProtocolFamily {
+  // Defensive default for the same reason parseApiStandard exists: this value
+  // reaches here from a DB row that predates the current union.
+  return PROTOCOL_FAMILY[standard] ?? "openai";
+}
+
+/** True for the third-party half of a family — the one whose endpoint is author-typed. */
+export function isCompatStandard(standard: ApiStandard): boolean {
+  return standard.endsWith("_compat");
+}
 
 /**
  * Which endpoint an image model's pictures come out of. Not derivable from

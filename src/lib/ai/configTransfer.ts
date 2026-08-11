@@ -31,6 +31,7 @@ import {
   type Provider,
 } from "./configDb";
 import type { ApiStandard } from "./types";
+import { migrateLegacyStandard } from "./urls";
 import { loadApiKey, saveApiKey } from "../keyStore";
 import { applyPrefEntries, portablePrefEntries } from "../prefs";
 import { getGlobalDb } from "../project";
@@ -119,7 +120,14 @@ export interface StagedConfigImport {
   keyCount: number;
 }
 
-const API_STANDARDS: ApiStandard[] = ["openai", "gemini", "openai_compat", "anthropic"];
+const API_STANDARDS: ApiStandard[] = [
+  "openai",
+  "openai_compat",
+  "gemini",
+  "gemini_compat",
+  "anthropic",
+  "anthropic_compat",
+];
 const MODEL_TYPES: ModelType[] = ["text", "multimodal", "image", "video"];
 
 function str(v: unknown): string | null {
@@ -165,7 +173,9 @@ export async function stageConfigImport(
       id,
       name,
       baseUrl: r.baseUrl,
-      apiStandard,
+      // A backup written before the official/compat split names the family
+      // only — same re-labelling as reading a pre-split DB row.
+      apiStandard: migrateLegacyStandard(apiStandard, r.baseUrl),
       safetySettings:
         r.safetySettings && typeof r.safetySettings === "object"
           ? (r.safetySettings as Provider["safetySettings"])

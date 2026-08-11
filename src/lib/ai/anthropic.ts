@@ -15,15 +15,13 @@
  */
 
 import { fetch } from "../http";
+import { anthropicUrl } from "./urls";
 import type {
   AccumulatedToolCall,
   MessageContent,
   StreamMessage,
   StreamOptions,
 } from "./types";
-
-/** Anthropic API base used when a provider hasn't configured a custom endpoint. */
-export const DEFAULT_ANTHROPIC_BASE = "https://api.anthropic.com/v1";
 
 /** Messages API version. Pinned, not "latest" — the wire shape is versioned by it. */
 const ANTHROPIC_VERSION = "2023-06-01";
@@ -301,8 +299,7 @@ const ANTHROPIC_REFUSAL_STOP_REASONS = new Set(["refusal"]);
 // ─── The adapter ─────────────────────────────────────────────────────────────
 
 export async function streamAnthropic(opts: StreamOptions): Promise<void> {
-  const base = (opts.baseUrl || DEFAULT_ANTHROPIC_BASE).replace(/\/$/, "");
-  const url = `${base}/messages`;
+  const url = anthropicUrl(opts.baseUrl, "/messages");
 
   const system = extractSystem(opts.messages);
   const thinking = thinkingFor(opts);
@@ -337,7 +334,11 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`Anthropic API error ${res.status}: ${err}`);
+    // The URL is part of the message on purpose: the most common failure on a
+    // third-party endpoint is a base URL that resolves somewhere unintended,
+    // and a bare "404: <html>" gives the author nothing to compare against the
+    // address they pasted.
+    throw new Error(`Anthropic API error ${res.status} (${url}): ${err}`);
   }
 
   const reader = res.body!.getReader();
