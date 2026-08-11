@@ -1,5 +1,9 @@
 # Provider 协议标准重构方案（3 协议 × official/compat）
 
+> **状态：已全部实现**（PR #119 / #120 / #121 / #122，见 §8）。本文保留为设计
+> 依据 —— 那些"为什么是这样而不是那样"的取舍不在代码注释里就没有别处可查。
+> 与实现不一致的地方以代码为准，并请顺手改这里。
+
 > 目标：把 `ApiStandard` 从今天的 4 个值（其中一对是空壳）重构成
 > **3 个协议族 × official/compat = 6 个值**，让 official 有明确契约（地址锁定、
 > 鉴权锁定、能力默认值乐观），compat 承载"接第三方兼容端点"的全部弹性
@@ -98,9 +102,15 @@ export type ApiStandard =
 | --- | --- | --- |
 | baseUrl | **锁定**：UI 只读展示常量，存储写空串，由适配器 fallback | 用户自填，按 §3 归一化 |
 | 鉴权 | **锁定**为该协议的官方方式 | 下拉可选（选项集见 §4） |
-| 能力默认值 | 乐观（如 OpenAI 图像 `{edit:true,maxRefs:16}`） | 保守（`{edit:false}`） |
+| 能力默认值 | 乐观（如 OpenAI 图像 `{edit:true,maxRefs:16}`） | 保守（`{edit:false}`），**除非该能力是协议本身的性质** |
 | `/models` 缺失 | 视为错误 | 降级探测（§5） |
 | 额外请求头 | 官方需要的全带（如 `anthropic-dangerous-direct-browser-access`） | 只带协议必需的 |
+
+那条"除非"是有分量的，不是措辞留白。`openai_compat` 的 `{edit:false}` 之所以对，
+是因为 OpenAI 把编辑放在**另一个端点**（`/images/edits`，multipart），中转常常
+只实现 `/images/generations`；而 Gemini 的编辑就是同一次 `:generateContent` 调用
+多挂几个 part —— **没有第二个端点可缺**，所以 `gemini_compat` 跟着 official 取
+乐观值。判断依据是"这个能力有没有独立的东西可缺失"，不是"是不是 compat"。
 
 official 的 baseUrl **存空串而非常量**：域名变更时不需要数据迁移，且和
 `aiTaskStore.ts:663-669` 现有的"空串 = 让适配器用自己的默认值"约定一致。
@@ -327,10 +337,51 @@ authMode?: "default" | "bearer" | "both";
 
 PR1 与 PR4 的"错误信息带 URL"若想提前，可并入 PR1（成本极低，对诊断帮助最大）。
 
-## 9. 未决问题
+### 实际落地情况
 
-1. **Ollama 是否需要原生 API 支持？** 本方案按"保持 preset"推进（§2.3）。若要
-   本机模型列表 / 下载状态，则需新增 `ollama` 枚举并接 `/api/tags`，届时另开方案。
-2. **Azure OpenAI** 是否单独立项（URL 结构 + `api-key` 头 + `api-version` 查询串）。
-3. **`gemini_compat` 是否给 `?key=` 选项** —— 本方案不给；若第三方确实只支持查询串，
-   再评估并加显著风险提示。
+| 切片 | PR | 与计划的出入 |
+| --- | --- | --- |
+| PR1 | #119 | "错误信息带 URL" 按上面那句提前并入；顺带修掉 `aiTaskStore` / `memoryStore` 两处会把非 OpenAI 供应商指向 `api.openai.com` 的兜底；Gemini 默认值三份拷贝也在这里收敛完了（PR4 无事可做） |
+| PR2 | #120 | `AuthMode` 去掉了计划里的 `x_api_key`（与 `default` 同义）；`default` 存 NULL 而非字符串 |
+| PR3 | #121 | 判定规则从"看状态码"细化成"看回话的形状"（§5），因为"没有 /models"和"地址指错地方"都是 404 |
+| PR4 | #122 | `gemini_compat` 的图像能力默认值取乐观而非保守（§2.2）；`gemini_compat` 端到端用例补齐 |
+
+**真机验收状态**：PR1 已用 MiniMax 的 Anthropic 兼容端点验过。PR2 的 Bearer
+路径、PR3 的"端点无 `/models`"路径、PR4 的 `gemini_compat` 都只有单测覆盖 ——
+它们各自需要一个具备该特征的真实端点，遇到时补验。
+
+## 9. 未决问题（本轮的结论与触发条件）
+
+三项都**明确不做**，但各自记下什么信号出现时该重新考虑 —— 否则下次遇到只会
+把同一场讨论再走一遍。
+
+**1. Ollama 原生 API —— 不做，保持 preset。**
+它的特殊行为全部由"URL 指向本机"推导，而 `lib/http.ts` 的 Origin 覆盖位于更底层，
+拿不到枚举值，只能按 URL 判断；做成枚举会有两套判断，还允许"选了 Ollama 却填
+远程地址"的矛盾态。协议上它就是 OpenAI 兼容层，没有第四种报文。
+**重新考虑的信号**：想要列出本机已下载的模型或看下载进度 —— 那要打 `/api/tags`
+`/api/pull`，是另一套端点，届时新增 `ollama` 枚举并另开方案。
+
+**2. Azure OpenAI —— 不做，需要独立立项。**
+它不只是换个鉴权头：URL 是 `/openai/deployments/{deployment}/chat/completions`，
+带 `api-version` 查询串，且 deployment 名与模型名解耦（同一个模型可以有多个部署名）。
+把它塞进 `openai_compat` 会让 base URL 语义和模型 id 语义同时变形。
+**重新考虑的信号**：确实要用 Azure。届时它是第四个协议族（`azure`），不是 compat 的
+一个选项。
+
+**3. `gemini_compat` 的 `?key=` —— 不做。**
+现有代码在两处明确注释了拒绝理由（`gemini.ts`、`providerProbe.ts`）：查询串会进
+代理日志、浏览器历史和报错信息，而 API key 一旦进日志就等于泄漏。
+**重新考虑的信号**：出现一个只支持查询串、不支持 `x-goog-api-key` 的真实中转。
+届时按 compat 的鉴权下拉加一个选项（`authModesFor` 已经是按 standard 给选项集的），
+并在 UI 上标注泄漏风险 —— 但不得设为默认。
+
+## 10. 已知的后续清理
+
+**连接字段的重复铺设。** `safetySettings` 与 `authMode` 都是"每供应商连接附加
+字段"，各自要在 ~10 个 options 类型和 ~14 个调用点抄一遍（见 §8 PR2 下的说明）。
+第三个这类字段出现时，先把 `baseUrl/apiKey/standard/safetySettings/authMode`
+收成 `ProviderConn` + `connFor(provider)`，让调用点 spread 而不是逐字段抄。
+漏抄一处的症状是"某个功能忽略该设置"，类型系统抓不到 —— 本轮是靠 grep 对拍
+（`safetySettings` 出现的每个文件对 `authMode`）验证覆盖的，那是一次性手段，
+不是可持续的保障。
