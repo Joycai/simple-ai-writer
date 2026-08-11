@@ -41,11 +41,46 @@
   color: var(--color-text-muted);
 }
 
+/* Two columns: seven actions in one stack would make the bubble taller than the
+   paragraph it points at. */
 .grid {
   padding: 8px 10px 6px;
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 2px;
+}
+/* The hand-off group — same rows, a hairline to say the outcome differs. */
+.gridHandoff {
+  padding-top: 6px;
+  border-top: 1px solid var(--color-border-soft);
+}
+
+.customRow { padding: 6px 10px 10px; border-top: 1px dashed var(--color-border-soft); }
+.customField {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  transition: border-color var(--transition-fast);
+}
+.customField:focus-within { border-color: var(--color-sienna); }
+.customIcon { color: var(--color-sienna); flex-shrink: 0; }
+.customInput {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font: italic 400 12px/1.4 var(--font-serif);
+  color: var(--color-text-primary);
+}
+.customInput::placeholder { color: var(--color-text-faint); }
+.customInput:disabled { cursor: not-allowed; }
+.customKbd {
+  font: 500 10px/1 var(--font-mono);
+  color: var(--color-text-faint);
 }
 
 .action {

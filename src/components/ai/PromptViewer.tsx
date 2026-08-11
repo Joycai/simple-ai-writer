@@ -1,0 +1,122 @@
+/**
+ * 查看完整提示 — a read-only look at the messages a run actually sent.
+ *
+ * The panel's allocation bar forecasts how the window *will* be divided; this
+ * is the only surface that shows what the four layers (system → 设定 → 前情 →
+ * 任务) resolved to in the end. That is normally the answer to "why did it
+ * refuse / why did it ignore my brief", so it sits on the failure card rather
+ * than behind a debug setting.
+ *
+ * Nothing here is editable: the request has already gone out.
+ */
+
+import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { createPortal } from "react-dom";
+import { Copy, X } from "lucide-react";
+import type { StreamMessage } from "../../lib/ai/types";
+import styles from "./PromptViewer.module.css";
+
+/** One message as plain text — image parts are counted, never inlined. */
+function messageText(m: StreamMessage): string {
+  if ("tool_calls" in m && m.tool_calls) {
+    return m.tool_calls
+      .map((c) => `${c.function.name}(${c.function.arguments})`)
+      .join("\n");
+  }
+  const { content } = m;
+  if (content == null) return "";
+  if (typeof content === "string") return content;
+  return content
+    .map((p) =>
+      p.type === "text"
+        ? p.text
+        : `<image ${p.image_url.url.length.toLocaleString()} chars>`,
+    )
+    .join("\n");
+}
+
+function asPlainText(messages: StreamMessage[]): string {
+  return messages.map((m) => `### ${m.role}\n${messageText(m)}`).join("\n\n");
+}
+
+export function PromptViewer({
+  messages, onClose,
+}: { messages: StreamMessage[]; onClose: () => void }) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      // The drawer behind this listens for Escape too — the topmost surface
+      // is the one the key belongs to.
+      e.preventDefault();
+      e.stopPropagation();
+      onClose();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onClose]);
+
+  const copyAll = () => {
+    void navigator.clipboard.writeText(asPlainText(messages)).then(
+      () => { setCopied(true); setTimeout(() => setCopied(false), 1600); },
+      () => { /* clipboard may be blocked — the text is on screen either way */ },
+    );
+  };
+
+  const totalChars = messages.reduce((n, m) => n + messageText(m).length, 0);
+
+  return createPortal(
+    <div className={styles.overlay} onMouseDown={onClose}>
+      <div
+        className={styles.modal}
+        role="dialog"
+        aria-modal
+        data-ai-surface
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        <div className={styles.header}>
+          <span className={styles.title}>
+            {t("ai.panel.promptViewerTitle", { defaultValue: "完整提示" })}
+          </span>
+          <span className={styles.meta}>
+            {t("ai.panel.promptViewerMeta", {
+              defaultValue: "{{n}} 条消息 · {{chars}} 字",
+              n: messages.length,
+              chars: totalChars.toLocaleString(),
+            })}
+          </span>
+          <span className={styles.spacer} />
+          <button className={styles.headerBtn} onClick={copyAll}>
+            <Copy size={11} strokeWidth={1.8} />
+            {copied
+              ? t("ai.panel.copied", { defaultValue: "已复制" })
+              : t("ai.panel.promptViewerCopy", { defaultValue: "复制全部" })}
+          </button>
+          <button className={styles.closeBtn} onClick={onClose} aria-label="Close">
+            <X size={14} strokeWidth={1.6} />
+          </button>
+        </div>
+
+        <div className={styles.body}>
+          {messages.map((m, i) => {
+            const text = messageText(m);
+            return (
+              <div key={i} className={styles.message}>
+                <div className={styles.roleRow}>
+                  <span className={styles.role}>{m.role}</span>
+                  <span className={styles.roleRule} />
+                  <span className={styles.roleChars}>{text.length.toLocaleString()}</span>
+                </div>
+                <pre className={styles.content}>{text}</pre>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}

@@ -212,9 +212,13 @@
 .attachRow {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-2);
   min-height: 22px;
 }
+/* Pushes the standing `+ …` chips to the trailing edge, so what this message
+   carries and what could be added to it stay visually separate. */
+.attachSpacer { flex: 1; }
 
 .attachChip {
   display: inline-flex;

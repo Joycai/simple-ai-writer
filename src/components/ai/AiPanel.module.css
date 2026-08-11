@@ -570,10 +570,20 @@
 }
 .injectedName {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   gap: 5px;
+  min-width: 0;
   font: 400 15px/1.3 var(--font-serif);
   color: var(--color-text-primary);
+}
+/* Aliases trail the name in the quiet UI face — they identify, they don't title. */
+.injectedAlias {
+  min-width: 0;
+  font: 400 var(--font-size-sm)/1.3 var(--font-sans);
+  color: var(--color-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .chipRow {
   display: flex;

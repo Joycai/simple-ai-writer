@@ -19,8 +19,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import {
-  ChevronDown, ChevronRight, Copy, Crosshair, Layers, ListChecks, Pin, Play, RotateCw, Square, X,
+  ChevronDown, ChevronRight, Copy, Crosshair, FileSearch, Layers, ListChecks, Pin, Play,
+  Repeat, RotateCw, Square, X,
 } from "lucide-react";
+import { PromptViewer } from "./PromptViewer";
+import type { StreamMessage } from "../../lib/ai/types";
 import { BatchRunModal } from "./BatchRunModal";
 import { SnippetPicker } from "./SnippetPicker";
 import { useBatchStore } from "../../stores/batchStore";
@@ -322,7 +325,7 @@ function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
 
       <div className={styles.controlRow}>
         <span className={styles.controlLabel}>
-          {t("ai.panel.contextUtilization", { defaultValue: "上下文利用率" })}
+          {t("ai.panel.contextUtilization", { defaultValue: "窗口占用" })}
         </span>
         <div className={styles.chipGroup}>
           {UTILIZATION_OPTIONS.map((r) => (
@@ -677,6 +680,7 @@ function LoreReportSection({
             <div className={styles.injectedName}>
               {e.reason === "pinned" && <Pin size={10} strokeWidth={1.8} />}
               {e.name}
+              {e.aliases && <span className={styles.injectedAlias}>{e.aliases}</span>}
             </div>
             <div className={styles.chipRow}>
               {e.layers.filter((l) => l.kind !== "summary").map((l, i) => (
@@ -721,10 +725,28 @@ function LoreReportSection({
   );
 }
 
-/** Error block with the two recoveries that are actually actionable here. */
-function ErrorBlock({ message, onRetry }: { message: string; onRetry: (() => void) | null }) {
+/**
+ * Error block with the recoveries that are actually actionable here.
+ *
+ * The order is the order they get reached for. A failure the author can fix by
+ * re-running is already fixed by 重试; the ones that aren't — a safety filter, a
+ * context overflow, a provider that rejects a tool schema — are answered either
+ * by a different model or by reading what was really sent. Copying the message
+ * is last because it is for asking someone else.
+ */
+function ErrorBlock({
+  message, onRetry, onSwitchModel, messages,
+}: {
+  message: string;
+  onRetry: (() => void) | null;
+  /** Opens the header's model picker; the retry fires once a model is chosen. */
+  onSwitchModel?: () => void;
+  /** What this run sent — enables 查看完整提示 when the run got that far. */
+  messages?: StreamMessage[] | null;
+}) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  const [showPrompt, setShowPrompt] = useState(false);
 
   const copy = () => {
     void navigator.clipboard.writeText(message).then(
@@ -742,6 +764,24 @@ function ErrorBlock({ message, onRetry }: { message: string; onRetry: (() => voi
             <RotateCw size={10} strokeWidth={1.8} /> {t("ai.panel.retry", { defaultValue: "重试" })}
           </button>
         )}
+        {onRetry && onSwitchModel && (
+          <button
+            className={styles.btnSecondary}
+            onClick={onSwitchModel}
+            title={t("ai.panel.switchModelRetryHint", {
+              defaultValue: "打开模型选择器；选定后自动重跑本次请求",
+            })}
+          >
+            <Repeat size={10} strokeWidth={1.8} />
+            {t("ai.panel.switchModelRetry", { defaultValue: "换模型重试" })}
+          </button>
+        )}
+        {messages && messages.length > 0 && (
+          <button className={styles.btnSecondary} onClick={() => setShowPrompt(true)}>
+            <FileSearch size={10} strokeWidth={1.8} />
+            {t("ai.panel.viewPrompt", { defaultValue: "查看完整提示" })}
+          </button>
+        )}
         <button className={styles.btnSecondary} onClick={copy}>
           <Copy size={10} strokeWidth={1.8} />
           {copied
@@ -749,6 +789,9 @@ function ErrorBlock({ message, onRetry }: { message: string; onRetry: (() => voi
             : t("ai.panel.copyError", { defaultValue: "复制错误" })}
         </button>
       </div>
+      {showPrompt && messages && (
+        <PromptViewer messages={messages} onClose={() => setShowPrompt(false)} />
+      )}
     </div>
   );
 }
@@ -758,9 +801,9 @@ function ErrorBlock({ message, onRetry }: { message: string; onRetry: (() => voi
 export function AiPanel() {
   const { t, i18n } = useTranslation();
   const {
-    isRunning, drafts, activeDraftId, error, agentLog, loreReport, sourceFilePath,
+    isRunning, drafts, activeDraftId, error, agentLog, loreReport, sourceFilePath, lastMessages,
     runTask, abort, clearOutput, setActiveDraft, selection, selectionRange, selectionSource,
-    clearSelectionFrom, requestedTask, setRequestedTask,
+    clearSelectionFrom, requestedTask, requestedInstruction, setRequestedTask,
   } = useAiTaskStore();
   // The draft the pane shows and the insert actions target. A run always seeds
   // one, so `output` is empty only before the first run or after a clear.
@@ -786,6 +829,7 @@ export function AiPanel() {
   const loreBudgetTokens = useAppStore((s) => s.loreBudgetTokens);
   const setLoreBudgetTokens = useAppStore((s) => s.setLoreBudgetTokens);
   const contextUtilization = useAppStore((s) => s.contextUtilization);
+  const openModelPicker = useAppStore((s) => s.openModelPicker);
 
   // Story memory follows the active document; staleness re-checks are hashed
   // over the whole doc, so debounce them behind typing. Both are skipped when the
@@ -926,10 +970,14 @@ export function AiPanel() {
   useEffect(() => {
     if (requestedTask && !isRunning) {
       setSelectedTask(requestedTask);
+      // The toolbar's 自定义指令 box types straight into the panel's own field,
+      // so what runs is still whatever is on screen here — reviewable, and
+      // editable before ⌘↵.
+      if (requestedInstruction !== null) setCustomInstr(requestedInstruction);
       clearOutput();
       setRequestedTask(null);
     }
-  }, [requestedTask, isRunning, setRequestedTask, clearOutput]);
+  }, [requestedTask, requestedInstruction, isRunning, setRequestedTask, clearOutput]);
 
   const activeModel = models.find((m) => m.id === activeModelId);
   const activeProvider = activeModel ? providers.find((p) => p.id === activeModel.providerId) : null;
@@ -1086,6 +1134,31 @@ export function AiPanel() {
   const needsAsk = !!runTaskDef.freeform && !customInstr.trim();
   const canRun =
     hasConfig && !isRunning && !needsSelection && !needsAnchor && !needsAsk && focus.settled;
+
+  // ── 换模型重试 ──
+  // A safety refusal or a context overflow is not fixed by pressing 重试 again;
+  // it is fixed by a different model. One click therefore has to mean both
+  // "let me pick one" and "then run it": asking the author to re-find the run
+  // button afterwards is the part that makes the recovery feel like work.
+  //
+  // Armed only for as long as this failure is on screen. An author who changes
+  // model for their own reasons a minute later gets no phantom run, because
+  // clearing the error disarms it — and while the card *is* up, a model change
+  // is what the button just asked for.
+  const [retryArmed, setRetryArmed] = useState(false);
+  const failed = !!error || !!activeDraft?.error;
+  useEffect(() => { if (!failed) setRetryArmed(false); }, [failed]);
+  useEffect(() => {
+    if (!retryArmed) return;
+    setRetryArmed(false);
+    if (canRun) handleRun();
+    // Fires on the model change only — arming it must not run anything.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeModelId]);
+  const switchModelAndRetry = () => {
+    setRetryArmed(true);
+    openModelPicker();
+  };
 
   // ⌘/Ctrl+Enter runs from anywhere in the panel, including the textareas.
   const handlePanelKeyDown = (e: React.KeyboardEvent) => {
@@ -1684,7 +1757,14 @@ export function AiPanel() {
                 meta={t("ai.panel.runCount", { defaultValue: "{{n}} 条", n: agentLog.length })}
               />
               {agentLog.length > 0 && <AgentLog log={agentLog} isRunning={isRunning} flat />}
-              {error && <ErrorBlock message={error} onRetry={canRun ? handleRun : null} />}
+              {error && (
+                <ErrorBlock
+                  message={error}
+                  onRetry={canRun ? handleRun : null}
+                  onSwitchModel={switchModelAndRetry}
+                  messages={lastMessages}
+                />
+              )}
             </div>
           )}
 
@@ -1742,7 +1822,12 @@ export function AiPanel() {
               </div>
             )}
             {activeDraft?.error ? (
-              <ErrorBlock message={activeDraft.error} onRetry={canRun ? handleRun : null} />
+              <ErrorBlock
+                message={activeDraft.error}
+                onRetry={canRun ? handleRun : null}
+                onSwitchModel={switchModelAndRetry}
+                messages={lastMessages}
+              />
             ) : output ? (
               <div className={styles.output} ref={outputRef}>
                 {output}

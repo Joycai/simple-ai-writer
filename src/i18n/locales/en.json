@@ -596,7 +596,7 @@
       "loreBudget": "{{entry}} budget",
       "loreBudgetHint": "Max tokens the 【{{knowledge}}】 block may use ({{min}}–{{max}})",
       "replaceSelection": "Replace selection",
-      "contextUtilization": "Context usage",
+      "contextUtilization": "Window usage",
       "contextUtilizationHint": "Share of the model's context window one request may occupy (~{{tokens}} tokens)",
       "contextUtilizationUnset": "This model has no declared context size — recap layers use fixed budgets",
       "loreBudgetStaticCap": "This model declares no context size — only {{cap}} tokens of {{entry}} content are injected",
@@ -644,6 +644,12 @@
       "loreRaiseBudget": "Raise budget",
       "retry": "Retry",
       "copyError": "Copy error",
+      "switchModelRetry": "Retry on another model",
+      "switchModelRetryHint": "Opens the model picker; the request re-runs once you choose one",
+      "viewPrompt": "View full prompt",
+      "promptViewerTitle": "Full prompt",
+      "promptViewerMeta": "{{n}} messages · {{chars}} chars",
+      "promptViewerCopy": "Copy all",
       "copied": "Copied",
       "runSection": "Run",
       "runCount": "{{n}} entries",
@@ -663,6 +669,13 @@
       "focusNone": "No document open",
       "focusLoading": "Loading {{name}}…",
       "focusImage": "An image is open — open a document first"
+    },
+    "bubble": {
+      "drawer": "Drawer",
+      "ask": "Ask AI",
+      "extractLore": "Extract as lore",
+      "checkConsistency": "Check consistency",
+      "customPlaceholder": "Custom instruction…"
     },
     "memory": {
       "title": "Story Memory",
@@ -800,6 +813,7 @@
       "selectionChip": "Selection · {{n}} chars",
       "detachSelection": "Don't attach the selection",
       "removeRef": "Remove reference",
+      "addRefHint": "Insert a reference (same as typing @)",
       "revealImage": "Show in folder",
       "refBlockLabel": "【Referenced material】",
       "noSelection": "No selection",
@@ -841,13 +855,39 @@
       "manageProviders": "Manage providers"
     },
     "consistency": {
+      "filter": {
+        "all": "All",
+        "time": "Timeline"
+      },
       "rerun": "Re-check",
-      "emptyTitle": "No consistency check has run yet",
-      "emptyText": "The AI cross-checks this {{doc}} against the {{kb}} — names, facts and chronology — and lists the conflicts it finds.",
-      "run": "Run check",
-      "footerHint": "Best to settle the conflicts before writing on",
+      "emptyTitle": "No consistency check run yet",
+      "emptyText": "The AI reads this {{doc}} against your {{kb}} — names, facts and ordering — and lists conflicts and cautions.",
+      "run": "Start check",
+      "scanning": "Checking this {{doc}} against your {{kb}}…",
+      "checked": "{{n}} checked",
+      "conflictCount": "{{n}} conflicts",
+      "warningCount": "{{n}} cautions",
+      "passCount": "{{n}} consistent",
+      "sevConflict": "Conflict",
+      "sevWarning": "Caution",
+      "rowCurrent": "Here",
+      "rowSuggested": "Suggested",
+      "jumpToText": "Jump to text",
+      "applyOne": "Apply suggestion",
+      "ignoreOne": "Ignore · intentional",
+      "updateLore": "Update {{entry}}",
+      "quoteGone": "That passage can no longer be found (rewritten, or it now occurs more than once) — check it by hand",
+      "passedTitle": "{{n}} passed",
+      "allClear": "No conflicts found",
+      "noneInFilter": "Nothing in this category",
+      "errorEmptyDoc": "This document has no text to check",
+      "untitledDoc": "this document",
+      "otherDocument": "This check was run on “{{file}}”. Switch back to that {{doc}} to apply or jump to anything.",
+      "footerHint": "Worth clearing the conflicts before writing on",
+      "footerDone": "Everything in this run has been dealt with",
       "ignoreAll": "Ignore all",
-      "applyAll": "Apply suggestions"
+      "applyAll": "Apply {{n}} suggestions",
+      "applyAllHint": "Writes every suggested fix back into the text at once; anything that can't be located is skipped"
     }
   },
   "aiConfig": {

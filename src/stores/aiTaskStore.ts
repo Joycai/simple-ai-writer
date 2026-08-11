@@ -15,6 +15,7 @@ import {
 import { BOOK_PREV_TAIL_CHARS, buildBookContext } from "../lib/context/bookContext";
 import { loadMemory, projectRelativePath } from "../lib/context/memory";
 import type { LoreActivationReport } from "../lib/context/loreSelect";
+import type { StreamMessage } from "../lib/ai/types";
 import { useAgentStore } from "./agentStore";
 import { useAiStore } from "./aiStore";
 import { draftCountFor, totalUsage, type Draft } from "../lib/ai/drafts";
@@ -106,6 +107,8 @@ interface AiTaskState {
   selectionSource: "marker" | "commit" | null;
   /** Task the floating toolbar asked the panel to pre-select. Consumed + cleared by AiPanel. */
   requestedTask: TaskKind | null;
+  /** Instruction to pre-fill alongside it — the toolbar's 自定义指令 box. */
+  requestedInstruction: string | null;
   abortController: AbortController | null;
   /** Execution log for the current/last run — rounds, tool calls, outcome. */
   agentLog: AgentEvent[];
@@ -113,6 +116,16 @@ interface AiTaskState {
   loreReport: LoreActivationReport | null;
   /** Final per-layer allocation for the current run (see lib/context/budget). */
   contextAlloc: ContextAllocation | null;
+  /**
+   * The messages this run actually sent — what 查看完整提示 shows.
+   *
+   * The forecast bar says how the window *will* be divided; this is the only
+   * place the author can read what the four layers resolved to, which is what
+   * a refusal or an off-brief answer is usually explained by. Kept in memory
+   * for the current run only: it is a debugging view of one request, not a
+   * history, and a long context is megabytes.
+   */
+  lastMessages: StreamMessage[] | null;
   /**
    * The document this run's context was assembled from — null if none was
    * open. The current draft's text was generated for *this* file; if the
@@ -125,7 +138,7 @@ interface AiTaskState {
   setSelection: (s: string, range?: SelectionRange | null, source?: "marker" | "commit") => void;
   /** Drop the committed target, but only if `source` is the one that set it. */
   clearSelectionFrom: (source: "marker" | "commit") => void;
-  setRequestedTask: (kind: TaskKind | null) => void;
+  setRequestedTask: (kind: TaskKind | null, instruction?: string) => void;
   runTask: (kind: TaskKind, customInstruction?: string, continueLength?: number, extras?: TaskExtras) => Promise<void>;
   abort: () => void;
   clearOutput: () => void;
@@ -142,10 +155,12 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
   selectionRange: null,
   selectionSource: null,
   requestedTask: null,
+  requestedInstruction: null,
   abortController: null,
   agentLog: [],
   loreReport: null,
   contextAlloc: null,
+  lastMessages: null,
   sourceFilePath: null,
 
   setSelection: (s, range = null, source = "commit") =>
@@ -157,7 +172,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         ? { selection: "", selectionRange: null, selectionSource: null }
         : state,
     ),
-  setRequestedTask: (kind) => set({ requestedTask: kind }),
+  setRequestedTask: (kind, instruction) =>
+    set({ requestedTask: kind, requestedInstruction: kind ? instruction ?? null : null }),
 
   appendAgentEvent: (event) =>
     set((s) => ({ agentLog: appendAgentEventTo(s.agentLog, event) })),
@@ -351,7 +367,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const controller = new AbortController();
     set({
       isRunning: true, drafts, activeDraftId: drafts[0].id,
-      error: null, agentLog: [], loreReport: null,
+      error: null, agentLog: [], loreReport: null, lastMessages: null,
       sourceFilePath: activeFilePath,
       contextAlloc: {
         loreChars: plan.loreChars,
@@ -411,7 +427,10 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         // disk reads can resolve after the author has already aborted and
         // re-run, and an unguarded set() here would overwrite the new run's
         // lore report with the aborted one's.
-        if (get().abortController === controller) set({ loreReport: bundle.loreReport });
+        const agentMessages = bundleToMessages(bundle);
+        if (get().abortController === controller) {
+          set({ loreReport: bundle.loreReport, lastMessages: agentMessages });
+        }
 
         const { inputTokens, outputTokens, cachedTokens } = await runAgent({
           baseUrl,
@@ -426,7 +445,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           inputCeilingTokens: plan.inputCeilingTokens || ASSUMED_INPUT_CEILING_TOKENS,
           // Non-null on this branch — isAgentic is exactly `preset !== null`.
           preset: preset!,
-          messages: bundleToMessages(bundle),
+          messages: agentMessages,
           toolContext: {
             projectPath,
             loreIndex,
@@ -501,8 +520,10 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           loreBudgetChars,
           memoryBudgetChars,
         );
-        if (get().abortController === controller) set({ loreReport: bundle.loreReport });
         const messages = bundleToMessages(bundle);
+        if (get().abortController === controller) {
+          set({ loreReport: bundle.loreReport, lastMessages: messages });
+        }
 
         // One request per draft, all sharing this run's AbortController so a
         // single abort() stops every stream. The context above was assembled
@@ -610,7 +631,10 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
   },
 
   clearOutput: () =>
-    set({ drafts: [], activeDraftId: null, error: null, agentLog: [], loreReport: null, sourceFilePath: null }),
+    set({
+      drafts: [], activeDraftId: null, error: null, agentLog: [],
+      loreReport: null, lastMessages: null, sourceFilePath: null,
+    }),
 
   setActiveDraft: (id) => set({ activeDraftId: id }),
 }));
