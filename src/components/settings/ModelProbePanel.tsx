@@ -97,6 +97,7 @@ export function ModelProbePanel(props: Props) {
         baseUrl: provider.baseUrl,
         apiKey,
         standard: provider.apiStandard,
+        authMode: provider.authMode,
         modelId: props.modelId,
         claimedContext: intOr(props.contextSize, 0) || undefined,
         claimedMaxOutput: intOr(props.maxOutput, 0) || undefined,

@@ -60,6 +60,32 @@ export function isCompatStandard(standard: ApiStandard): boolean {
 }
 
 /**
+ * How a compat endpoint wants the API key presented.
+ *
+ * `default` is each protocol's own scheme and is what an official endpoint
+ * always uses. The other two exist because the Anthropic ecosystem has *two*
+ * first-class conventions — `ANTHROPIC_API_KEY` → `x-api-key` and
+ * `ANTHROPIC_AUTH_TOKEN` → `Authorization: Bearer` — and a third-party gateway
+ * may implement either one, with its docs naming only the one it wants.
+ *
+ * `both` is for gateways whose docs don't say. It is deliberately unavailable
+ * on the official standard: api.anthropic.com rejects a request carrying two
+ * credentials, so offering it there would hand the author a setting that can
+ * only break things.
+ */
+export type AuthMode = "default" | "bearer" | "both";
+
+/** The modes a standard may be configured with. Officials are locked to one. */
+export function authModesFor(standard: ApiStandard): AuthMode[] {
+  // OpenAI's second convention (Azure's `api-key` header) comes with a
+  // different URL shape and an api-version query string, so a header toggle
+  // alone would not reach it; Gemini's (`?key=`) is deliberately unimplemented
+  // — a key in the query string leaks into proxy logs and error messages.
+  // Neither gets a choice until those are addressed on their own terms.
+  return standard === "anthropic_compat" ? ["default", "bearer", "both"] : ["default"];
+}
+
+/**
  * Which endpoint an image model's pictures come out of. Not derivable from
  * `ApiStandard`: newAPI-style relays speak the OpenAI protocol but serve
  * Gemini/Flux image models through `/chat/completions`, while their
@@ -134,6 +160,12 @@ export interface StreamOptions {
   baseUrl: string;
   apiKey: string;
   standard: ApiStandard;
+  /**
+   * How to present `apiKey`. Anthropic-compat only; every other protocol
+   * ignores it. Absent means `default`, which is what an official endpoint and
+   * every provider configured before this setting existed use.
+   */
+  authMode?: AuthMode;
   modelId: string;
   messages: StreamMessage[];
   onChunk: (chunk: StreamChunk) => void;

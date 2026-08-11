@@ -30,7 +30,7 @@ import {
   type Prompt,
   type Provider,
 } from "./configDb";
-import type { ApiStandard } from "./types";
+import { authModesFor, type ApiStandard, type AuthMode } from "./types";
 import { migrateLegacyStandard } from "./urls";
 import { loadApiKey, saveApiKey } from "../keyStore";
 import { applyPrefEntries, portablePrefEntries } from "../prefs";
@@ -169,17 +169,21 @@ export async function stageConfigImport(
       ? (r.apiStandard as ApiStandard)
       : null;
     if (!id || !name || !apiStandard || typeof r.baseUrl !== "string") continue;
+    // A backup written before the official/compat split names the family only
+    // — same re-labelling as reading a pre-split DB row.
+    const migrated = migrateLegacyStandard(apiStandard, r.baseUrl);
     providers.push({
       id,
       name,
       baseUrl: r.baseUrl,
-      // A backup written before the official/compat split names the family
-      // only — same re-labelling as reading a pre-split DB row.
-      apiStandard: migrateLegacyStandard(apiStandard, r.baseUrl),
+      apiStandard: migrated,
       safetySettings:
         r.safetySettings && typeof r.safetySettings === "object"
           ? (r.safetySettings as Provider["safetySettings"])
           : undefined,
+      authMode: authModesFor(migrated).includes(r.authMode as AuthMode)
+        ? (r.authMode as AuthMode)
+        : undefined,
       createdAt: num(r.createdAt, Date.now()),
       ...(str(r.apiKey) ? { apiKey: r.apiKey as string } : {}),
     });

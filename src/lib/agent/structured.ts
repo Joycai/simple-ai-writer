@@ -18,7 +18,7 @@
 
 import { streamCompletion } from "../ai";
 import type { GeminiSafetySettings } from "../ai/safety";
-import type { ApiStandard, ContentPart, StreamMessage, ToolDefinition } from "../ai/types";
+import type { ApiStandard, AuthMode, ContentPart, StreamMessage, ToolDefinition } from "../ai/types";
 import { extractJsonObject } from "../ai/json";
 
 export interface StructuredTaskArgs {
@@ -26,6 +26,8 @@ export interface StructuredTaskArgs {
   apiKey: string;
   standard: ApiStandard;
   safetySettings?: GeminiSafetySettings;
+  /** Anthropic-compat auth scheme; ignored by every other protocol. */
+  authMode?: AuthMode;
   modelId: string;
   prefix?: string;
   contextSize?: number;
@@ -81,6 +83,7 @@ export async function runStructuredTask(args: StructuredTaskArgs): Promise<strin
     apiKey: args.apiKey,
     standard: args.standard,
     safetySettings: args.safetySettings,
+    authMode: args.authMode,
     modelId: args.modelId,
     prefix: args.prefix,
     contextSize: args.contextSize,

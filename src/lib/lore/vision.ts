@@ -7,7 +7,7 @@
 
 import { streamCompletion } from "../ai";
 import type { GeminiSafetySettings } from "../ai/safety";
-import type { ApiStandard, StreamMessage } from "../ai/types";
+import type { ApiStandard, AuthMode, StreamMessage } from "../ai/types";
 
 export interface DescribeLoreImageOptions {
   /** base64 data URL of the image to describe. */
@@ -24,6 +24,8 @@ export interface DescribeLoreImageOptions {
   apiKey: string;
   standard: ApiStandard;
   safetySettings?: GeminiSafetySettings;
+  /** Anthropic-compat auth scheme; ignored by every other protocol. */
+  authMode?: AuthMode;
   modelId: string;
   prefix?: string;
   contextSize?: number;
@@ -86,6 +88,7 @@ export async function describeLoreImage(opts: DescribeLoreImageOptions): Promise
     apiKey: opts.apiKey,
     standard: opts.standard,
     safetySettings: opts.safetySettings,
+    authMode: opts.authMode,
     modelId: opts.modelId,
     prefix: opts.prefix,
     contextSize: opts.contextSize,

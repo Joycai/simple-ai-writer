@@ -16,7 +16,7 @@ import i18n from "../../i18n";
 import { streamCompletion } from "../ai";
 import type { GeminiSafetySettings } from "../ai/safety";
 import { estimateMessagesTokens } from "../ai/tokenEstimate";
-import type { ApiStandard, StreamMessage } from "../ai/types";
+import type { ApiStandard, AuthMode, StreamMessage } from "../ai/types";
 import {
   buildCompactedHistory,
   injectionCarriers,
@@ -101,6 +101,8 @@ export interface SummarizeRequestConfig {
   /** Sent as `max_tokens` on the Anthropic path; planning-only elsewhere. */
   maxOutput?: number;
   safetySettings?: GeminiSafetySettings;
+  /** Anthropic-compat auth scheme; ignored by every other protocol. */
+  authMode?: AuthMode;
 }
 
 /**
@@ -129,6 +131,7 @@ export async function summarizeForCompaction(
     contextSize: config.contextSize,
     maxOutput: config.maxOutput,
     safetySettings: config.safetySettings,
+    authMode: config.authMode,
     messages: [
       { role: "system", content: i18n.t("ai.instructions.chatCompact") },
       { role: "user", content: parts.join("\n\n") },

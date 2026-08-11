@@ -11,7 +11,7 @@ import { LORE_SPLIT_PRESET } from "../agent/presets";
 import { runAgent } from "../agent/runtime";
 import { JSON_ONLY_CUE, jsonModeExtraBody, needsJsonTextCue } from "../ai/jsonMode";
 import type { GeminiSafetySettings } from "../ai/safety";
-import type { ApiStandard } from "../ai/types";
+import type { ApiStandard, AuthMode } from "../ai/types";
 import type { FacetMeta } from "./model";
 
 export interface SplitFacetDraft {
@@ -43,6 +43,8 @@ export async function splitLore(opts: {
   apiKey: string;
   standard: ApiStandard;
   safetySettings?: GeminiSafetySettings;
+  /** Anthropic-compat auth scheme; ignored by every other protocol. */
+  authMode?: AuthMode;
   modelId: string;
   prefix?: string;
   contextSize?: number;
@@ -90,6 +92,7 @@ export async function splitLore(opts: {
     apiKey: opts.apiKey,
     standard: opts.standard,
     safetySettings: opts.safetySettings,
+    authMode: opts.authMode,
     modelId: opts.modelId,
     prefix: opts.prefix,
     contextSize: opts.contextSize,

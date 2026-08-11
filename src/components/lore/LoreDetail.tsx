@@ -378,6 +378,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         apiKey,
         standard: provider.apiStandard,
         safetySettings: provider.safetySettings,
+        authMode: provider.authMode,
         modelId: model.modelId,
         prefix: model.prefix,
         contextSize: model.contextSize,

@@ -114,6 +114,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
         apiKey,
         standard: provider.apiStandard,
         safetySettings: provider.safetySettings,
+        authMode: provider.authMode,
         modelId: model.modelId,
         prefix: model.prefix,
         contextSize: model.contextSize,

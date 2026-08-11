@@ -167,6 +167,7 @@ export function beginApiLog(opts: StreamOptions): ApiCallLogger {
     tools: opts.tools?.map((t) => t.function.name),
     extraBody: opts.extraBody,
     safetySettings: opts.safetySettings,
+    authMode: opts.authMode,
     messages: opts.messages.map(redactMessage),
   });
 
