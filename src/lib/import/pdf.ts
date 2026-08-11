@@ -11,6 +11,17 @@
  * `pdfToMarkdown` touches pdfjs, lazily (the library + worker are ~2 MB).
  */
 
+/**
+ * The slice of a pdfjs text-content chunk this module consumes. Declared here
+ * rather than imported: pdfjs does not re-export `TextContent` from its package
+ * root, and the reconstruction only ever touches `items`.
+ */
+interface TextContentChunk {
+  items: ReadonlyArray<
+    { str: string; transform: number[]; hasEOL: boolean } | { type: string }
+  >;
+}
+
 /** The slice of a pdfjs TextItem the reconstruction needs. */
 export interface PdfTextItem {
   str: string;
@@ -97,16 +108,28 @@ export async function pdfToMarkdown(data: Uint8Array): Promise<string> {
     const pages: string[] = [];
     for (let i = 1; i <= doc.numPages; i++) {
       const page = await doc.getPage(i);
-      const content = await page.getTextContent();
       const items: PdfTextItem[] = [];
-      for (const raw of content.items) {
-        if (!("str" in raw)) continue; // TextMarkedContent — no text payload
-        items.push({
-          str: raw.str,
-          x: raw.transform[4],
-          y: raw.transform[5],
-          hasEOL: raw.hasEOL,
-        });
+      // Drained through an explicit reader, not pdfjs's own `getTextContent()`.
+      // That convenience wrapper is written as `for await (… of stream)`, and
+      // WKWebView — the engine behind every macOS/iOS Tauri build — still ships
+      // no `ReadableStream[Symbol.asyncIterator]`, so it throws "undefined is
+      // not a function" before a single page is read. `streamTextContent` is
+      // the same public API one layer down, and a reader loop works everywhere.
+      const reader = (
+        page.streamTextContent() as ReadableStream<TextContentChunk>
+      ).getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        for (const raw of value.items) {
+          if (!("str" in raw)) continue; // TextMarkedContent — no text payload
+          items.push({
+            str: raw.str,
+            x: raw.transform[4],
+            y: raw.transform[5],
+            hasEOL: raw.hasEOL,
+          });
+        }
       }
       const text = linesToMarkdown(itemsToLines(items));
       // Page markers as HTML comments: invisible in the preview, but they give
