@@ -170,6 +170,15 @@ interface AppState {
   showCommandPalette: boolean;
   showAiDrawer: boolean;
   aiDrawerMode: AiDrawerMode;
+  /**
+   * Bumped to ask the assistant header's model picker to open itself.
+   *
+   * A nonce rather than a boolean: the picker owns its own open/closed state
+   * (it also answers ⌘M and outside clicks), and this only has to carry
+   * "someone asked, again" — a boolean would need a reset handshake and would
+   * silently no-op on a second request.
+   */
+  modelPickerNonce: number;
   showOnboarding: boolean;
   /** Settings page visibility + which pane it opens on. Lives here rather than
    *  in App so any surface (e.g. the model picker's 管理供应商) can reach it.
@@ -209,6 +218,8 @@ interface AppState {
   setMainView: (v: MainView) => void;
   setShowCommandPalette: (v: boolean) => void;
   setShowAiDrawer: (v: boolean, mode?: AiDrawerMode) => void;
+  /** Open the assistant header's model picker (see `modelPickerNonce`). */
+  openModelPicker: () => void;
   setShowOnboarding: (v: boolean) => void;
   openSettings: (tab?: SettingsTab) => void;
   closeSettings: () => void;
@@ -268,6 +279,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   mainView: "editor",
   showCommandPalette: false,
   showAiDrawer: false,
+  modelPickerNonce: 0,
   showOnboarding: false,
   showSettings: false,
   settingsTab: "general",
@@ -404,6 +416,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (mode && mode !== s.aiDrawerMode) writePref(AI_DRAWER_MODE_KEY, mode);
       return { showAiDrawer: v, aiDrawerMode: mode ?? s.aiDrawerMode };
     }),
+  openModelPicker: () => set((s) => ({ modelPickerNonce: s.modelPickerNonce + 1 })),
   setShowOnboarding: (v) => set({ showOnboarding: v }),
   openSettings: (tab) => set({ showSettings: true, settingsTab: tab ?? "general" }),
   closeSettings: () => set({ showSettings: false }),

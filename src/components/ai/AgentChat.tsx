@@ -96,6 +96,12 @@ export function AgentChat() {
   const [refs, setRefs] = useState<AttachedItem[]>([]);
   const mention = useMentionState();
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // Set only when the picker was opened from a `+ 设定` / `+ 章节` chip: the
+  // author has already said which kind they want, so the list shouldn't make
+  // them re-narrow it by typing. Cleared the moment the mention closes, so a
+  // hand-typed `@` always searches everything.
+  const [pickKind, setPickKind] = useState<MentionItem["type"] | null>(null);
+  useEffect(() => { if (!mention.open) setPickKind(null); }, [mention.open]);
 
   useEffect(() => {
     if (!projectPath) { setProjectFiles([]); return; }
@@ -113,8 +119,40 @@ export function AgentChat() {
       .map((file): MentionItem => ({ type: "file", file })),
   ], [loreIndex, projectFiles]);
 
-  const mentionItems = filterMentions(candidates, mention.query);
+  const mentionItems = filterMentions(
+    pickKind ? candidates.filter((c) => c.type === pickKind) : candidates,
+    mention.query,
+  );
   const refKeys = new Set(refs.map(attachedKey));
+
+  /**
+   * `@` is the whole mechanism — the chips just type it for you.
+   *
+   * Routing them through the same splice keeps one code path: the chosen item
+   * lands as `@[name]` in the sentence the author is writing, exactly where a
+   * typed mention would, instead of becoming a second kind of attachment the
+   * message has to carry separately.
+   */
+  const openMentionFor = (kind: MentionItem["type"]) => {
+    const el = inputRef.current;
+    const caret = el?.selectionStart ?? draftRef.current.length;
+    const before = draftRef.current.slice(0, caret);
+    // `foo@bar` is an address, not a mention — findMention refuses an `@` that
+    // follows an ASCII word character, so give it the boundary it needs rather
+    // than dropping a stray `@` that opens nothing. CJK needs no such space.
+    const pad = /[\w@]$/.test(before) ? " " : "";
+    const at = caret + pad.length;
+    const next = `${before}${pad}@${draftRef.current.slice(caret)}`;
+    setPickKind(kind);
+    setDraft(next);
+    draftRef.current = next;
+    mention.sync(next, at + 1);
+    // After the value lands, or the browser puts the caret back at the end.
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(at + 1, at + 1);
+    });
+  };
 
   const handleDraftChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setDraft(e.target.value);
@@ -375,6 +413,26 @@ export function AgentChat() {
               </button>
             );
           })}
+          {/* Standing affordances for the two things worth referencing. `@`
+              still works and is faster once known — these exist so the author
+              finds out that it does. */}
+          <span className={styles.attachSpacer} />
+          <button
+            className={styles.attachChipGhost}
+            onClick={() => openMentionFor("lore")}
+            disabled={!candidates.some((c) => c.type === "lore")}
+            title={t("ai.chat.addRefHint", { defaultValue: "插入引用（等同于输入 @）" })}
+          >
+            + {terms.entry}
+          </button>
+          <button
+            className={styles.attachChipGhost}
+            onClick={() => openMentionFor("file")}
+            disabled={!candidates.some((c) => c.type === "file")}
+            title={t("ai.chat.addRefHint", { defaultValue: "插入引用（等同于输入 @）" })}
+          >
+            + {terms.doc}
+          </button>
         </div>
 
         <div className={styles.inputRow}>

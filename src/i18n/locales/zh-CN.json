@@ -596,7 +596,7 @@
       "loreBudget": "{{entry}}预算",
       "loreBudgetHint": "【{{knowledge}}】最多占用的 token 数（{{min}}–{{max}}）",
       "replaceSelection": "替换选中内容",
-      "contextUtilization": "上下文利用率",
+      "contextUtilization": "窗口占用",
       "contextUtilizationHint": "单次请求最多占用模型上下文窗口的比例（约 {{tokens}} tokens）",
       "contextUtilizationUnset": "当前模型未设置「上下文大小」，前情层使用固定预算",
       "loreBudgetStaticCap": "模型未设置「上下文大小」，本次仅注入 {{cap}} tokens {{entry}}",
@@ -644,6 +644,12 @@
       "loreRaiseBudget": "提高预算",
       "retry": "重试",
       "copyError": "复制错误",
+      "switchModelRetry": "换模型重试",
+      "switchModelRetryHint": "打开模型选择器；选定后自动重跑本次请求",
+      "viewPrompt": "查看完整提示",
+      "promptViewerTitle": "完整提示",
+      "promptViewerMeta": "{{n}} 条消息 · {{chars}} 字",
+      "promptViewerCopy": "复制全部",
       "copied": "已复制",
       "runSection": "运行",
       "runCount": "{{n}} 条",
@@ -663,6 +669,13 @@
       "focusNone": "未打开文档",
       "focusLoading": "正在载入 {{name}}…",
       "focusImage": "当前打开的是图片，请先打开一个文档"
+    },
+    "bubble": {
+      "drawer": "抽屉",
+      "ask": "问 AI",
+      "extractLore": "提取为设定",
+      "checkConsistency": "核对一致性",
+      "customPlaceholder": "自定义指令…"
     },
     "memory": {
       "title": "前情记忆",
@@ -799,6 +812,7 @@
       "selectionChip": "选区 {{n}} 字",
       "detachSelection": "不附带选区",
       "removeRef": "移除引用",
+      "addRefHint": "插入引用（等同于输入 @）",
       "revealImage": "在文件夹中显示",
       "refBlockLabel": "【引用资料】",
       "noSelection": "未选中正文",
@@ -840,13 +854,39 @@
       "manageProviders": "管理供应商"
     },
     "consistency": {
+      "filter": {
+        "all": "全部",
+        "time": "时序"
+      },
       "rerun": "重新检查",
       "emptyTitle": "尚未运行一致性检查",
       "emptyText": "AI 会对照{{kb}}核对本{{doc}}的名称、事实与时序，列出冲突与提醒。",
       "run": "开始检查",
+      "scanning": "正在对照{{kb}}核对本{{doc}}…",
+      "checked": "{{n}} 项核对",
+      "conflictCount": "{{n}} 冲突",
+      "warningCount": "{{n}} 提醒",
+      "passCount": "{{n}} 一致",
+      "sevConflict": "冲突",
+      "sevWarning": "提醒",
+      "rowCurrent": "本文",
+      "rowSuggested": "建议",
+      "jumpToText": "跳到原文",
+      "applyOne": "应用建议",
+      "ignoreOne": "忽略 · 这是有意为之",
+      "updateLore": "更新{{entry}}",
+      "quoteGone": "这段原文已找不到（可能已被改写或出现多次），只能手动核对",
+      "passedTitle": "已通过 {{n}} 项",
+      "allClear": "没有发现冲突",
+      "noneInFilter": "该分类下没有条目",
+      "errorEmptyDoc": "当前文档没有正文可检查",
+      "untitledDoc": "当前文档",
+      "otherDocument": "这份检查针对的是《{{file}}》。切回该{{doc}}才能应用或跳转。",
       "footerHint": "建议先解决冲突，再继续写作",
+      "footerDone": "本轮的条目都已处理",
       "ignoreAll": "全部忽略",
-      "applyAll": "应用建议"
+      "applyAll": "应用 {{n}} 项建议",
+      "applyAllHint": "把所有带建议的条目一次写回正文；找不到原文的会跳过"
     }
   },
   "aiConfig": {

@@ -56,6 +56,7 @@ export function ModelSelector() {
   const { t } = useTranslation();
   const { models, providers, activeModelId, setActiveModel } = useAiStore();
   const openSettings = useAppStore((s) => s.openSettings);
+  const modelPickerNonce = useAppStore((s) => s.modelPickerNonce);
 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -78,6 +79,15 @@ export function ModelSelector() {
     setFilter("all");
     inputRef.current?.focus();
   }, [open]);
+
+  // Someone elsewhere in the assistant asked for the picker — e.g. the failed
+  // run's 换模型重试. Skips the initial render, whose nonce is the seed value.
+  const seenNonce = useRef(modelPickerNonce);
+  useEffect(() => {
+    if (modelPickerNonce === seenNonce.current) return;
+    seenNonce.current = modelPickerNonce;
+    setOpen(true);
+  }, [modelPickerNonce]);
 
   const activeModel = models.find((m) => m.id === activeModelId);
   const activeProvider = activeModel

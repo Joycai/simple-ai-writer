@@ -22,9 +22,15 @@ interface Props {
   onClose: () => void;
   /** When set, a mode toggle is shown so the user can switch to manual create. */
   onModeChange?: (mode: NewEntryMode) => void;
+  /**
+   * Description to open with — the manuscript passage behind 提取为设定.
+   * A starting point, not a commitment: it lands in the ordinary input the
+   * author was going to type into, and they can trim or annotate it first.
+   */
+  initialDescription?: string;
 }
 
-export function LoreGenerator({ onClose, onModeChange }: Props) {
+export function LoreGenerator({ onClose, onModeChange, initialDescription }: Props) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
   const { projectPath } = useProjectStore();
@@ -34,7 +40,7 @@ export function LoreGenerator({ onClose, onModeChange }: Props) {
   const loreIndex = useLoreStore((s) => s.index);
 
   // ── Input state ──────────────────────────────────────────────────────────
-  const [description, setDescription] = useState("");
+  const [description, setDescription] = useState(initialDescription ?? "");
   const [attached, setAttached] = useState<AttachedItem[]>([]);
   const [category, setCategory] = useState<CategoryId>(defaultCategoryId);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);

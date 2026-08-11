@@ -88,6 +88,10 @@ export type FacetDropReason = "no-key" | "group-lost" | "budget" | "manual-only"
 
 export interface LoreEntityReport {
   name: string;
+  /** Frontmatter aliases, joined — the other names this entity answers to.
+   *  Shown beside the name so an entry indexed under a translation or a
+   *  nickname is recognisable in the injection report. "" when it has none. */
+  aliases: string;
   dirPath: string;
   reason: "auto" | "pinned";
   layers: LoreLayerReport[];
@@ -200,7 +204,14 @@ export async function selectLore(
       coreText: "",
       coreTruncated: false,
       facetBlocks: [],
-      report: { name: entity.name, dirPath: dir, reason, layers: [], droppedFacets: [] },
+      report: {
+        name: entity.name,
+        aliases: (entity.aliases ?? []).join(" · "),
+        dirPath: dir,
+        reason,
+        layers: [],
+        droppedFacets: [],
+      },
     };
   });
 

@@ -1,0 +1,113 @@
+/* 完整提示 viewer — a reading surface over the assistant, not a form. */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 600;
+  background: var(--color-bg-overlay);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-7);
+  animation: fadeIn 200ms var(--ease-out);
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: min(860px, 100%);
+  max-height: 100%;
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-xl);
+  animation: scaleIn 240ms var(--ease-out);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-bg-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+.title {
+  font: 400 17px/1 var(--font-serif);
+  color: var(--color-text-primary);
+}
+.meta {
+  font: 400 var(--font-size-xs)/1 var(--font-mono);
+  color: var(--color-text-muted);
+}
+.spacer { flex: 1; }
+
+.headerBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text-secondary);
+  font: 500 var(--font-size-xs)/1.5 var(--font-sans);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.headerBtn:hover { color: var(--color-sienna); border-color: var(--color-sienna); }
+.headerBtn:active { transform: scale(0.96); }
+
+.closeBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.closeBtn:hover { color: var(--color-text-primary); }
+.closeBtn:active { transform: scale(0.92); }
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.message { display: flex; flex-direction: column; gap: var(--space-2); }
+
+.roleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.role {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: var(--letter-label);
+  text-transform: uppercase;
+  color: var(--color-sienna);
+}
+.roleRule { flex: 1; height: 1px; background: var(--color-border); }
+.roleChars {
+  font: 400 var(--font-size-xs)/1 var(--font-mono);
+  color: var(--color-text-faint);
+}
+
+/* Whitespace is the content here — the 【…】 blocks are read by their shape. */
+.content {
+  margin: 0;
+  font: 400 var(--font-size-sm)/1.7 var(--font-mono);
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}

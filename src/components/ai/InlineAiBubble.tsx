@@ -1,28 +1,30 @@
 import { useEffect, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { RefreshCw, Wand2, AlignLeft, Sparkles } from "lucide-react";
+import {
+  ArrowRight, AlignLeft, BookmarkPlus, CircleCheck, MessageSquare, RefreshCw, Send, Sparkles, Wand2,
+} from "lucide-react";
 import { useAiTaskStore, type SelectionRange } from "../../stores/aiTaskStore";
+import { useLoreStore } from "../../stores/loreStore";
 import { findTask, taskLabel } from "../../lib/profile";
 import { insideAiSurface, insideSelectableSurface, dropEditorMarker, resolveCommit } from "../../lib/editor/aiSelection";
 import { useAppStore } from "../../stores/appStore";
 import { comboLabel } from "../../lib/shortcuts";
+import { MOD_KEY } from "../../lib/platform";
+import { useImeGuard } from "../../lib/ime";
 import styles from "./InlineAiBubble.module.css";
 
 /**
- * The quick actions the floating toolbar can offer.
- *
- * A deliberately curated subset rather than the active profile's whole task
- * list: each one is bound to a keyboard shortcut, and the bubble has room for
- * three. Ids the profile doesn't define are filtered out below, so a profile
- * without 润色 doesn't advertise a shortcut that can't run.
+ * Generation tasks the toolbar can start, in the order the design lays them
+ * out. Each is filtered against the active profile, so a profile that doesn't
+ * define 润色 doesn't advertise it — and `letter` is only set where the global
+ * keymap actually binds one (see useGlobalShortcuts's AI_SHORTCUT_TASKS).
  */
-type ToolbarTask = "rewrite" | "polish" | "summary";
+type ToolbarTask = "continue" | "polish" | "rewrite" | "summary";
 
-/** Keyboard shortcut letter per action. Chosen to avoid browser-reserved
- *  Ctrl/Cmd+Shift combos (R=reload, J=downloads, etc.). */
-const SHORTCUTS: { task: ToolbarTask; letter: string }[] = [
-  { task: "rewrite", letter: "E" },
+const TASK_ACTIONS: { task: ToolbarTask; letter?: string }[] = [
+  { task: "continue" },
   { task: "polish",  letter: "L" },
+  { task: "rewrite", letter: "E" },
   { task: "summary", letter: "M" },
 ];
 
@@ -34,7 +36,7 @@ interface LiveSelection {
 }
 
 /** Height budget used to decide whether the bubble fits above the selection. */
-const BUBBLE_H = 150;
+const BUBBLE_H = 300;
 
 export function InlineAiBubble() {
   const { t, i18n } = useTranslation();
@@ -43,14 +45,26 @@ export function InlineAiBubble() {
   const setRequestedTask = useAiTaskStore((s) => s.setRequestedTask);
   const isRunning = useAiTaskStore((s) => s.isRunning);
   const setShowAiDrawer = useAppStore((s) => s.setShowAiDrawer);
+  const setMainView = useAppStore((s) => s.setMainView);
+  const requestExtract = useLoreStore((s) => s.requestExtract);
 
   const [live, setLive] = useState<LiveSelection | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  const [instruction, setInstruction] = useState("");
   const lastTextRef = useRef("");
+  // Typing in the bubble's own instruction box moves focus into the bubble,
+  // which collapses the document selection — and the listener below would read
+  // that as "the author deselected" and close the toolbar out from under the
+  // sentence they were mid-way through writing. While the box has focus, the
+  // captured selection is held as-is; `resolveCommit` works from the stored
+  // text, so the action still lands on the right passage.
+  const editingRef = useRef(false);
+  const ime = useImeGuard();
 
   // Track the live DOM selection (independent of the committed task selection).
   useEffect(() => {
     const onChange = () => {
+      if (editingRef.current) return;
       const sel = window.getSelection();
       const text = sel?.toString() ?? "";
       if (
@@ -65,6 +79,9 @@ export function InlineAiBubble() {
       setLive({ text, rect: { left: rect.left, top: rect.top, bottom: rect.bottom, width: rect.width } });
       if (text !== lastTextRef.current) {
         setDismissed(false);
+        // A different passage is a different question — an instruction typed
+        // for the last one would silently apply to this one.
+        setInstruction("");
         lastTextRef.current = text;
       }
     };
@@ -72,9 +89,21 @@ export function InlineAiBubble() {
     return () => document.removeEventListener("selectionchange", onChange);
   }, []);
 
+  // Close the toolbar and stop holding the selection open. Every exit goes
+  // through here: leaving `editingRef` armed would make the listener above
+  // ignore selections for the rest of the session.
+  const dismiss = () => {
+    editingRef.current = false;
+    setDismissed(true);
+  };
+
   // Dismiss on Escape
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setDismissed(true); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      editingRef.current = false;
+      setDismissed(true);
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
@@ -94,20 +123,36 @@ export function InlineAiBubble() {
     return { text, range };
   };
 
-  const openWithTask = (task: ToolbarTask) => {
+  /** Hand the passage to the 生成 drawer, optionally with a typed brief. */
+  const openWithTask = (task: string, brief?: string) => {
     if (isRunning) return; // buttons are disabled for this too — see below
     commit();
-    setRequestedTask(task);
+    setRequestedTask(task, brief);
     setShowAiDrawer(true, "generate");
-    setDismissed(true);
+    dismiss();
+  };
+
+  /** Hand it to a different surface instead — the drawer's other two tabs. */
+  const openDrawer = (mode: "chat" | "consistency") => {
+    commit();
+    setShowAiDrawer(true, mode);
+    dismiss();
+  };
+
+  const extractToLore = () => {
+    const { text } = commit();
+    requestExtract(text);
+    setMainView("lore-wall");
+    dismiss();
   };
 
   const icons: Record<ToolbarTask, React.ReactNode> = {
-    rewrite: <RefreshCw size={13} strokeWidth={1.6} />,
+    continue: <ArrowRight size={13} strokeWidth={1.6} />,
     polish: <Wand2 size={13} strokeWidth={1.6} />,
+    rewrite: <RefreshCw size={13} strokeWidth={1.6} />,
     summary: <AlignLeft size={13} strokeWidth={1.6} />,
   };
-  const actions = SHORTCUTS.flatMap(({ task, letter }) => {
+  const actions = TASK_ACTIONS.flatMap(({ task, letter }) => {
     const def = findTask(task);
     if (!def) return [];
     return [{
@@ -115,9 +160,20 @@ export function InlineAiBubble() {
       icon: icons[task],
       // The profile's own wording for the task, not a hardcoded i18n key.
       label: taskLabel(def, isZh, t),
-      key: shortcutLabel(letter),
+      key: letter ? shortcutLabel(letter) : "",
     }];
   });
+
+  // The freeform task the 自定义指令 box runs. Resolved from the profile rather
+  // than hardcoded to "custom": a profile renames and re-scopes its tasks, and
+  // one that offers no freeform task simply doesn't get the box.
+  const freeformTask = ["custom", "ask"].map(findTask).find((d) => d?.freeform) ?? null;
+
+  const submitInstruction = () => {
+    const brief = instruction.trim();
+    if (!brief || !freeformTask) return;
+    openWithTask(freeformTask.id, brief);
+  };
 
   return (
     <div
@@ -133,6 +189,11 @@ export function InlineAiBubble() {
         <Sparkles size={13} color="var(--color-sienna)" strokeWidth={1.6} />
         <span className={styles.headLabel}>
           AI · {t("ai.panel.selectedChars", { count: live.text.length })}
+        </span>
+        {/* Names the escape hatch: everything here is the short version, and
+            the drawer is where the same passage gets the full controls. */}
+        <span className={styles.headHint}>
+          {MOD_KEY === "⌘" ? "⌘J" : "Ctrl J"} · {t("ai.bubble.drawer", { defaultValue: "抽屉" })}
         </span>
       </div>
 
@@ -151,6 +212,53 @@ export function InlineAiBubble() {
           </button>
         ))}
       </div>
+
+      {/* Second group: these don't generate anything here, they carry the
+          passage to another surface. Separated so the two kinds of outcome
+          aren't read as one list. */}
+      <div className={`${styles.grid} ${styles.gridHandoff}`}>
+        <button className={styles.action} onClick={() => openDrawer("chat")}>
+          <span className={styles.actionIcon}><MessageSquare size={13} strokeWidth={1.6} /></span>
+          <span className={styles.actionLabel}>{t("ai.bubble.ask", { defaultValue: "问 AI" })}</span>
+          <span className={styles.actionKey}>{MOD_KEY === "⌘" ? "⌘L" : "Ctrl L"}</span>
+        </button>
+        <button className={styles.action} onClick={extractToLore}>
+          <span className={styles.actionIcon}><BookmarkPlus size={13} strokeWidth={1.6} /></span>
+          <span className={styles.actionLabel}>{t("ai.bubble.extractLore", { defaultValue: "提取为设定" })}</span>
+        </button>
+        <button className={styles.action} onClick={() => openDrawer("consistency")}>
+          <span className={styles.actionIcon}><CircleCheck size={13} strokeWidth={1.6} /></span>
+          <span className={styles.actionLabel}>{t("ai.bubble.checkConsistency", { defaultValue: "核对一致性" })}</span>
+        </button>
+      </div>
+
+      {freeformTask && (
+        <div className={styles.customRow}>
+          <div className={styles.customField}>
+            <Send size={11} strokeWidth={1.8} className={styles.customIcon} />
+            <input
+              className={styles.customInput}
+              value={instruction}
+              placeholder={t("ai.bubble.customPlaceholder", { defaultValue: "自定义指令…" })}
+              disabled={isRunning}
+              onChange={(e) => setInstruction(e.target.value)}
+              // The bubble swallows mousedown to protect the selection; the
+              // input needs it to place its own caret.
+              onMouseDown={(e) => e.stopPropagation()}
+              onFocus={() => { editingRef.current = true; }}
+              onBlur={() => { editingRef.current = false; }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && !ime.isComposing(e)) {
+                  e.preventDefault();
+                  submitInstruction();
+                }
+              }}
+              {...ime.imeProps}
+            />
+            <span className={styles.customKbd}>⏎</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

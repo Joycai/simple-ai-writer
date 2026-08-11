@@ -29,8 +29,21 @@ interface LoreState {
   detailPath: string | null;
   /** Whether that detail view opens straight into edit mode. */
   detailEditing: boolean;
+  /**
+   * A passage handed to the wall's AI-extract modal, waiting for it to mount.
+   *
+   * 提取为设定 is invoked from the editor's floating toolbar, which is a
+   * different screen from the one that owns the modal — so the text travels
+   * through the store rather than through props. Consumed (and cleared) by
+   * LoreWall the moment it opens the generator; null the rest of the time.
+   */
+  pendingExtract: string | null;
 
   scanProject: (projectPath: string) => Promise<void>;
+  /** Ask the lore wall to open AI-extract seeded with this passage. */
+  requestExtract: (text: string) => void;
+  /** Read the staged passage exactly once. */
+  takePendingExtract: () => string | null;
   openDetail: (dirPath: string | null, editing?: boolean) => void;
   selectEntity: (entity: LoreEntity) => Promise<void>;
   selectFile: (filename: string) => Promise<void>;
@@ -50,6 +63,14 @@ export const useLoreStore = create<LoreState>((set, get) => ({
   saveTimer: null,
   detailPath: null,
   detailEditing: false,
+  pendingExtract: null,
+
+  requestExtract: (text) => set({ pendingExtract: text }),
+  takePendingExtract: () => {
+    const text = get().pendingExtract;
+    if (text !== null) set({ pendingExtract: null });
+    return text;
+  },
 
   openDetail: (dirPath, editing = false) => set({ detailPath: dirPath, detailEditing: editing }),
 

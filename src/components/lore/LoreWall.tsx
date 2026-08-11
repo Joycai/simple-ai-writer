@@ -97,6 +97,17 @@ export function LoreWall() {
   const [search, setSearch] = useState("");
   // Unified new-entry flow: null = closed, else which mode the modal opens in.
   const [newMode, setNewMode] = useState<NewEntryMode | null>(null);
+  // A passage the editor's 提取为设定 handed over. Read once, and held here for
+  // the life of the modal so re-renders don't re-seed a description the author
+  // has since edited.
+  const pendingExtract = useLoreStore((s) => s.pendingExtract);
+  const takePendingExtract = useLoreStore((s) => s.takePendingExtract);
+  const [extractSeed, setExtractSeed] = useState<string | null>(null);
+  useEffect(() => {
+    if (pendingExtract === null) return;
+    setExtractSeed(takePendingExtract());
+    setNewMode("ai");
+  }, [pendingExtract, takePendingExtract]);
   const [menu, setMenu] = useState<{ x: number; y: number; entity: LoreEntity | null } | null>(null);
   // Lore bundle transfer: staged import awaiting the user's conflict decision.
   const [importStaged, setImportStaged] = useState<StagedLoreImport | null>(null);
@@ -309,7 +320,11 @@ export function LoreWall() {
           >
             <div className={styles.wall}>
       {newMode === "ai" && (
-        <LoreGenerator onClose={() => setNewMode(null)} onModeChange={setNewMode} />
+        <LoreGenerator
+          initialDescription={extractSeed ?? undefined}
+          onClose={() => { setNewMode(null); setExtractSeed(null); }}
+          onModeChange={setNewMode}
+        />
       )}
       {newMode === "manual" && (
         <NewEntryModal
