@@ -888,3 +888,52 @@ describe("streamCompletion — Anthropic auth modes", () => {
     expect((await headersOf("bearer")).get("anthropic-version")).toBe("2023-06-01");
   });
 });
+
+describe("streamCompletion — compat standards reach their own adapter", () => {
+  // The failure this guards against is silent: an unhandled standard falls into
+  // the OpenAI branch, which posts a shape the endpoint answers with a 400 that
+  // looks like a config error rather than a routing bug.
+  it("sends a gemini_compat request in the Gemini shape, to the given base", async () => {
+    const { calls } = await collect({
+      standard: "gemini_compat",
+      baseUrl: "https://relay.example.com/v1beta",
+      chunks: [`data: {"candidates":[{"content":{"parts":[{"text":"hi"}]}}]}\n\n`],
+    });
+    expect(calls[0].url).toBe(
+      "https://relay.example.com/v1beta/models/test-model:streamGenerateContent?alt=sse",
+    );
+    expect(calls[0].body.contents).toBeDefined();
+    expect(calls[0].body.messages).toBeUndefined();
+  });
+
+  it("sends an openai_compat request in the OpenAI shape", async () => {
+    const { calls } = await collect({
+      standard: "openai_compat",
+      baseUrl: "https://relay.example.com/v1",
+      chunks: [`data: [DONE]\n\n`],
+    });
+    expect(calls[0].url).toBe("https://relay.example.com/v1/chat/completions");
+    expect(calls[0].body.messages).toBeDefined();
+  });
+
+  it("keys a gemini_compat request off the header, never the URL", async () => {
+    const calls: Headers[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        expect(String(url)).not.toContain("secret");
+        calls.push(new Headers(init.headers));
+        return sseResponse([`data: {"candidates":[]}\n\n`]);
+      }),
+    );
+    await streamCompletion({
+      baseUrl: "https://relay.example.com/v1beta",
+      apiKey: "secret",
+      standard: "gemini_compat",
+      modelId: "m",
+      messages: [{ role: "user", content: "hi" }],
+      onChunk: () => {},
+    });
+    expect(calls[0].get("x-goog-api-key")).toBe("secret");
+  });
+});

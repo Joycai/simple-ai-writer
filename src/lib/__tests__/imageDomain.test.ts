@@ -49,6 +49,16 @@ describe("defaultImageCaps", () => {
     expect(defaultImageCaps("openai_compat").edit).toBe(false);
     // Claude generates no images at all.
     expect(defaultImageCaps("anthropic").edit).toBe(false);
+    expect(defaultImageCaps("anthropic_compat").edit).toBe(false);
+  });
+
+  it("keeps the optimistic default for a Gemini relay, unlike an OpenAI one", () => {
+    // Not an inconsistency: OpenAI hides editing behind a second endpoint
+    // (`/images/edits`) that relays often skip, while Gemini expresses an edit
+    // as extra parts on the generation call itself. Nothing separate exists for
+    // a Gemini relay to be missing.
+    expect(defaultImageCaps("gemini_compat")).toEqual(defaultImageCaps("gemini"));
+    expect(defaultImageCaps("openai_compat").edit).toBe(false);
   });
 
   it("still returns caps for a standard outside the union", () => {

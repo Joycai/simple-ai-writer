@@ -43,6 +43,12 @@ export function defaultImageCaps(standard: ApiStandard): ImageCaps {
     case "openai":
       return { edit: true, maxRefs: 16 };
     case "gemini":
+    case "gemini_compat":
+      // Compat gets the optimistic default here, unlike the OpenAI side,
+      // because of *how* Gemini expresses an edit: input images are extra parts
+      // on the same `:generateContent` call. There is no second endpoint for a
+      // relay to be missing — anything that can serve generation can serve an
+      // edit, so assuming otherwise would hide a button that works.
       return { edit: true, maxRefs: 3 };
     case "anthropic":
       // Claude generates no images at all, so an image model configured under
@@ -50,12 +56,13 @@ export function defaultImageCaps(standard: ApiStandard): ImageCaps {
       // to answer, and "no editing" is the honest answer.
       return { edit: false };
     default:
-      // Every `_compat` value lands here, and that is the point of the split:
-      // a relay may serve the same model without the endpoint the official
-      // vendor pairs it with, so promising an edit button would promise one
-      // that errors. Also covers a DB row carrying a value the union never
-      // anticipated, which would otherwise fall out of the switch as
-      // `undefined` and crash every caller that trusts the return type.
+      // `openai_compat` lands here on purpose: OpenAI puts editing behind a
+      // *separate* endpoint (`/images/edits`, multipart), and relays and xAI
+      // commonly expose `/images/generations` without it — so promising an edit
+      // button there would promise one that errors. Also covers a DB row
+      // carrying a value the union never anticipated, which would otherwise
+      // fall out of the switch as `undefined` and crash every caller that
+      // trusts the return type.
       return { edit: false };
   }
 }
