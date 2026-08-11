@@ -177,6 +177,14 @@ interface AgentState {
    * describes (lib/agent/compact); null exactly when chatHistory is.
    */
   chatMeta: ChatSessionMeta | null;
+  /**
+   * Bumped whenever the wire history's *composition* changes, so the composer's
+   * context bar can recompute. `chatHistory` can't do that job: the runtime and
+   * the injection pass push into it in place, leaving the array reference — and
+   * therefore any selector on it — untouched. Deliberately not bumped for
+   * streamed text, which arrives per chunk and never touches the history.
+   */
+  chatContextVersion: number;
   /** DB row this session saves into; null until the first persist. */
   chatSessionId: number | null;
   /** Recent sessions (newest first, ≤ MAX_CHAT_SESSIONS) for the history menu. */
@@ -379,6 +387,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   chatAbort: null,
   chatHistory: null,
   chatMeta: null,
+  chatContextVersion: 0,
   chatSessionId: null,
   chatSessions: [],
 
@@ -519,6 +528,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         turns: s.turns.map((tn) => (tn.id === assistantTurn.id ? patch(tn) : tn)),
       }));
 
+    /** Tell the context bar the history changed under it (see chatContextVersion). */
+    const bumpContext = () => set((s) => ({ chatContextVersion: s.chatContextVersion + 1 }));
+
     try {
       const apiKey = (await loadApiKey(provider.id)) ?? "";
 
@@ -583,6 +595,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           );
         }
         set({ chatHistory: history, chatMeta: meta });
+        bumpContext();
 
         // Report the seeded layers into this turn's log. This is the only turn
         // that gets automatic RAG — from here on the history is inherited and
@@ -640,6 +653,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           if (compacted) {
             history = compacted.history;
             set({ chatHistory: history });
+            bumpContext();
             patchAssistant((tn) => ({ ...tn, log: appendAgentEventTo(tn.log, compacted.event) }));
           }
         }
@@ -699,6 +713,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         const questionMsg: StreamMessage = { role: "user", content: wireMessage };
         if (meta) noteTurnStart(meta, questionMsg);
         history.push(questionMsg);
+        bumpContext();
       }
 
       const { inputTokens, outputTokens, cachedTokens } = await runAgent({
@@ -743,8 +758,13 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // force-ending. Each 继续 grants the preset's own cap again.
         onRoundLimit: (roundsUsed) =>
           get().requestRoundExtension(roundsUsed, AGENT_ASSIST_PRESET.maxRounds, controller),
-        onEvent: (event) =>
-          patchAssistant((tn) => ({ ...tn, log: appendAgentEventTo(tn.log, event) })),
+        // Every runtime event marks a point where the history just grew (a
+        // round's messages, a tool reply) or shrank (trimHistory) — which is
+        // exactly the cadence the context bar wants to redraw at.
+        onEvent: (event) => {
+          patchAssistant((tn) => ({ ...tn, log: appendAgentEventTo(tn.log, event) }));
+          bumpContext();
+        },
         // Assign, not append — the runtime hands over the whole output each
         // time so it can retract a tool round's narration.
         onOutputText: (text) => patchAssistant((tn) => ({ ...tn, text })),
@@ -762,6 +782,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         ...tn,
         log: appendAgentEventTo(tn.log, { kind: "run-done", inputTokens, outputTokens, at: Date.now() }),
       }));
+      // The run's last assistant message landed in the history after the final
+      // event fired, so the bar would otherwise sit one message behind until
+      // the next turn.
+      bumpContext();
       recordRunOutcome(model.id, null);
       void recordChatUsage(projectPath, model.id, inputTokens, outputTokens, cost, cachedTokens);
     } catch (e) {
