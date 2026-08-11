@@ -31,10 +31,9 @@ import {
   type Calibration, type FindingConfidence, type ProbeCost, type ProbeFinding,
   type ProbeSuggestion, type TruncationResult,
 } from "./probeAnalysis";
-import { anthropicHeaders, DEFAULT_ANTHROPIC_BASE } from "./anthropic";
-import type { ApiStandard } from "./types";
-
-const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
+import { anthropicHeaders } from "./anthropic";
+import { familyOf, type ApiStandard } from "./types";
+import { anthropicUrl, geminiUrl, modelsUrl, openaiUrl, trimBase } from "./urls";
 
 /** Padding sizes for the two-point tokenizer calibration. */
 const CAL_SMALL_CHARS = 600;
@@ -254,17 +253,13 @@ function firstChoice(v: unknown): Record<string, unknown> | undefined {
   return Array.isArray(v) ? asObject(v[0]) : undefined;
 }
 
-function trimUrl(url: string): string {
-  return url.replace(/\/+$/, "");
-}
-
 /**
  * The bare server root behind an OpenAI-compatible base URL. ollama and
  * llama.cpp expose their own richer endpoints as siblings of `/v1`, and those
  * are the most accurate sources available for local models.
  */
 function serverOrigin(baseUrl: string): string {
-  return trimUrl(baseUrl).replace(/\/v\d+(?:beta)?$/i, "");
+  return trimBase(baseUrl).replace(/\/v\d+(?:beta)?$/i, "");
 }
 
 /**
@@ -273,28 +268,21 @@ function serverOrigin(baseUrl: string): string {
  */
 function looksLocal(baseUrl: string): boolean {
   if (isLocalUrl(baseUrl)) return true;
-  return /:(11434|1234|8080|8000)(\/|$)/.test(trimUrl(baseUrl));
+  return /:(11434|1234|8080|8000)(\/|$)/.test(trimBase(baseUrl));
 }
 
 function authHeaders(t: ProbeTarget): Record<string, string> {
-  if (t.standard === "gemini") {
-    return { "Content-Type": "application/json", "x-goog-api-key": t.apiKey };
+  switch (familyOf(t.standard)) {
+    case "gemini":
+      return { "Content-Type": "application/json", "x-goog-api-key": t.apiKey };
+    case "anthropic":
+      return anthropicHeaders(t.apiKey);
+    default:
+      return {
+        "Content-Type": "application/json",
+        ...(t.apiKey ? { Authorization: `Bearer ${t.apiKey}` } : {}),
+      };
   }
-  if (t.standard === "anthropic") {
-    return anthropicHeaders(t.apiKey);
-  }
-  return {
-    "Content-Type": "application/json",
-    ...(t.apiKey ? { Authorization: `Bearer ${t.apiKey}` } : {}),
-  };
-}
-
-function geminiBase(t: ProbeTarget): string {
-  return trimUrl(t.baseUrl || GEMINI_API_BASE);
-}
-
-function anthropicBase(t: ProbeTarget): string {
-  return trimUrl(t.baseUrl || DEFAULT_ANTHROPIC_BASE);
 }
 
 async function readJson(res: Response): Promise<unknown | undefined> {
@@ -315,8 +303,8 @@ async function chatRequest(
 ): Promise<RawResult> {
   const { signal, done } = requestSignal(outer, REQUEST_TIMEOUT_MS);
   try {
-    if (t.standard === "gemini") {
-      const url = `${geminiBase(t)}/models/${t.modelId}:generateContent`;
+    if (familyOf(t.standard) === "gemini") {
+      const url = geminiUrl(t.baseUrl, `/models/${t.modelId}:generateContent`);
       const res = await fetch(url, {
         method: "POST",
         headers: authHeaders(t),
@@ -339,8 +327,8 @@ async function chatRequest(
       };
     }
 
-    if (t.standard === "anthropic") {
-      const res = await fetch(`${anthropicBase(t)}/messages`, {
+    if (familyOf(t.standard) === "anthropic") {
+      const res = await fetch(anthropicUrl(t.baseUrl, "/messages"), {
         method: "POST",
         headers: authHeaders(t),
         body: JSON.stringify({
@@ -369,7 +357,7 @@ async function chatRequest(
       };
     }
 
-    const url = `${trimUrl(t.baseUrl)}/chat/completions`;
+    const url = openaiUrl(t.baseUrl, "/chat/completions");
     const res = await fetch(url, {
       method: "POST",
       headers: authHeaders(t),
@@ -497,10 +485,10 @@ async function discoverFromModelsEndpoint(s: Session): Promise<void> {
   const t = s.target;
   const { signal, done } = requestSignal(s.signal, 30_000);
   try {
-    if (t.standard === "gemini") {
+    if (familyOf(t.standard) === "gemini") {
       // Gemini names both limits outright (`inputTokenLimit` /
       // `outputTokenLimit`), which makes every later step optional for it.
-      const res = await fetch(`${geminiBase(t)}/models/${t.modelId}`, {
+      const res = await fetch(geminiUrl(t.baseUrl, `/models/${t.modelId}`), {
         headers: authHeaders(t),
         signal,
       });
@@ -509,11 +497,11 @@ async function discoverFromModelsEndpoint(s: Session): Promise<void> {
       return;
     }
 
-    if (t.standard === "anthropic") {
+    if (familyOf(t.standard) === "anthropic") {
       // Same deal as Gemini: the per-model endpoint names both limits outright
       // (`max_input_tokens` / `max_tokens`), and both keys are already in
       // probeAnalysis's candidate lists, so readEntryLimits picks them up as-is.
-      const res = await fetch(`${anthropicBase(t)}/models/${t.modelId}`, {
+      const res = await fetch(anthropicUrl(t.baseUrl, `/models/${t.modelId}`), {
         headers: authHeaders(t),
         signal,
       });
@@ -522,7 +510,7 @@ async function discoverFromModelsEndpoint(s: Session): Promise<void> {
       return;
     }
 
-    const res = await fetch(`${trimUrl(t.baseUrl)}/models`, { headers: authHeaders(t), signal });
+    const res = await fetch(modelsUrl(t.standard, t.baseUrl), { headers: authHeaders(t), signal });
     if (!res.ok) return warn(s, "models-endpoint-failed", `${res.status}`);
     const json = (await readJson(res)) as { data?: unknown[] } | undefined;
     const list = Array.isArray(json?.data) ? json!.data : [];
@@ -603,7 +591,8 @@ async function discoverLlamaCpp(s: Session): Promise<void> {
 async function errorProbe(s: Session): Promise<void> {
   // Both already got exact limits free from Step 0, and neither serves
   // /chat/completions — the endpoint this probe posts to.
-  if (s.target.standard === "gemini" || s.target.standard === "anthropic") return;
+  const family = familyOf(s.target.standard);
+  if (family === "gemini" || family === "anthropic") return;
 
   const ABSURD = 10_000_000;
   let paramSwitched = false;
@@ -612,7 +601,7 @@ async function errorProbe(s: Session): Promise<void> {
     throwIfAborted(s.signal);
     const { ctrl, done } = requestSignal(s.signal, 60_000);
     try {
-      const res = await fetch(`${trimUrl(s.target.baseUrl)}/chat/completions`, {
+      const res = await fetch(openaiUrl(s.target.baseUrl, "/chat/completions"), {
         method: "POST",
         headers: authHeaders(s.target),
         body: JSON.stringify({

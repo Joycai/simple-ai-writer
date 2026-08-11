@@ -15,10 +15,11 @@
 
 import { fetch } from "../http";
 import { beginImageApiLog } from "./apiLog";
-import { convertToGeminiContents, DEFAULT_GEMINI_BASE } from "./gemini";
+import { convertToGeminiContents } from "./gemini";
 import { toSafetySettingsArray } from "./safety";
 import type { GeminiSafetySettings } from "./safety";
-import type { ApiStandard, ImageRoute } from "./types";
+import { familyOf, type ApiStandard, type ImageRoute } from "./types";
+import { geminiUrl, openaiUrl } from "./urls";
 
 /** The provider coordinates every image call needs. */
 export interface ImageConn {
@@ -38,7 +39,7 @@ export interface ImageConn {
  */
 export function resolveImageRoute(standard: ApiStandard, declared?: ImageRoute): ImageRoute {
   if (declared) return declared;
-  return standard === "gemini" ? "gemini" : "images-api";
+  return familyOf(standard) === "gemini" ? "gemini" : "images-api";
 }
 
 export interface ImageRequest {
@@ -397,7 +398,7 @@ async function openaiImage(
    */
   askB64 = !("response_format" in (req.extraBody ?? {})),
 ): Promise<ImageResult> {
-  const url = `${conn.baseUrl.replace(/\/$/, "")}/images/generations`;
+  const url = openaiUrl(conn.baseUrl, "/images/generations");
   const deadline = withDeadline(req.signal, GENERATE_TIMEOUT_MS);
   let res: Response;
   try {
@@ -493,7 +494,7 @@ async function parseOpenAiImagePayload(raw: unknown, signal?: AbortSignal): Prom
  * (Transport verified in docs/image-generation-plan.md §2.3.)
  */
 async function openaiEdit(conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
-  const url = `${conn.baseUrl.replace(/\/$/, "")}/images/edits`;
+  const url = openaiUrl(conn.baseUrl, "/images/edits");
   const form = new FormData();
   form.append("model", conn.modelId);
   form.append("prompt", req.prompt);
@@ -551,7 +552,7 @@ async function openaiEdit(conn: ImageConn, req: ImageRequest): Promise<ImageResu
  * route: relays hand out expiring links.
  */
 async function chatImage(conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
-  const url = `${conn.baseUrl.replace(/\/$/, "")}/chat/completions`;
+  const url = openaiUrl(conn.baseUrl, "/chat/completions");
   // The chat protocol has no size/aspect fields, so the only channel this
   // route has for the author's framing choice is the prompt itself. Saying it
   // there is imperfect; dropping it silently — which is what happened before —
@@ -660,8 +661,7 @@ async function chatImage(conn: ImageConn, req: ImageRequest): Promise<ImageResul
  * would buy nothing but a second SSE parser.
  */
 async function geminiImage(conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
-  const base = (conn.baseUrl || DEFAULT_GEMINI_BASE).replace(/\/$/, "");
-  const url = `${base}/models/${conn.modelId}:generateContent`;
+  const url = geminiUrl(conn.baseUrl, `/models/${conn.modelId}:generateContent`);
 
   const contents = convertToGeminiContents([
     {

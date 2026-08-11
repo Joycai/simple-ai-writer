@@ -381,7 +381,10 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       abortController: controller,
     });
 
-    const baseUrl = provider.baseUrl || defaultBaseUrl(provider.apiStandard);
+    // Empty is passed through on purpose: each adapter substitutes its own
+    // vendor default (lib/ai/urls.ts), which is the only layer that knows which
+    // one this provider's protocol wants.
+    const baseUrl = provider.baseUrl;
     const loreBudgetChars = plan.loreChars;
 
     // Having tools *is* what makes a run agentic — see presetForTools.
@@ -659,14 +662,6 @@ useProjectStore.subscribe((state, prev) => {
     useAiTaskStore.setState({ selection: "", selectionRange: null, selectionSource: null });
   }
 });
-
-function defaultBaseUrl(standard: string): string {
-  // Both of these fall back to their own default inside the adapter, so an
-  // empty string here is the signal to let it do that — handing them
-  // api.openai.com would be worse than handing them nothing.
-  if (standard === "gemini" || standard === "anthropic") return "";
-  return "https://api.openai.com/v1";
-}
 
 async function persistUsage(
   projectPath: string,

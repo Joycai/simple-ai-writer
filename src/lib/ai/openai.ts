@@ -3,10 +3,11 @@
  */
 
 import { fetch } from "../http";
+import { openaiUrl } from "./urls";
 import type { AccumulatedToolCall, StreamOptions } from "./types";
 
 export async function streamOpenAI(opts: StreamOptions): Promise<void> {
-  const url = `${opts.baseUrl.replace(/\/$/, "")}/chat/completions`;
+  const url = openaiUrl(opts.baseUrl, "/chat/completions");
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -28,7 +29,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`OpenAI API error ${res.status}: ${err}`);
+    throw new Error(`OpenAI API error ${res.status} (${url}): ${err}`);
   }
 
   const reader = res.body!.getReader();

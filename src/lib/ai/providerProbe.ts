@@ -3,12 +3,10 @@
  * Pure HTTP — no local storage involved (that's ./configDb).
  */
 
-import { anthropicHeaders, DEFAULT_ANTHROPIC_BASE } from "./anthropic";
+import { anthropicHeaders } from "./anthropic";
 import { fetch } from "../http";
-import type { ApiStandard } from "./types";
-
-/** Gemini API base used when a provider hasn't configured a custom endpoint. */
-const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
+import { familyOf, type ApiStandard } from "./types";
+import { modelsUrl } from "./urls";
 
 /** Fetch the available model list from a provider's /models endpoint (OpenAI-style). */
 export async function fetchRemoteModels(
@@ -16,11 +14,11 @@ export async function fetchRemoteModels(
   apiKey: string,
   standard: ApiStandard
 ): Promise<{ id: string; name: string }[]> {
-  if (standard === "gemini") {
-    const base = (baseUrl || GEMINI_API_BASE).replace(/\/$/, "");
+  const family = familyOf(standard);
+  if (family === "gemini") {
     // Key goes in the x-goog-api-key header, never the URL — query strings
     // leak into proxy/server logs and error messages. Matches streamGemini.
-    const url = `${base}/models`;
+    const url = modelsUrl(standard, baseUrl);
     const res = await fetch(url, { headers: { "x-goog-api-key": apiKey } });
     if (!res.ok) throw new Error(`Gemini models fetch failed: ${res.status}`);
     const data = await res.json();
@@ -29,12 +27,11 @@ export async function fetchRemoteModels(
       name: m.displayName ?? m.name,
     }));
   }
-  if (standard === "anthropic") {
+  if (family === "anthropic") {
     // Same `{ data: [...] }` envelope as OpenAI, but keyed auth headers and a
     // human label of its own (`display_name` — "Claude Sonnet 5" rather than
     // the bare id).
-    const base = (baseUrl || DEFAULT_ANTHROPIC_BASE).replace(/\/$/, "");
-    const res = await fetch(`${base}/models`, { headers: anthropicHeaders(apiKey) });
+    const res = await fetch(modelsUrl(standard, baseUrl), { headers: anthropicHeaders(apiKey) });
     if (!res.ok) throw new Error(`Anthropic models fetch failed: ${res.status}`);
     const data = await res.json();
     return (data.data ?? []).map((m: Record<string, string>) => ({
@@ -43,8 +40,7 @@ export async function fetchRemoteModels(
     }));
   }
   // OpenAI / compatible
-  const url = `${baseUrl.replace(/\/$/, "")}/models`;
-  const res = await fetch(url, {
+  const res = await fetch(modelsUrl(standard, baseUrl), {
     headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
   });
   if (!res.ok) throw new Error(`Models fetch failed: ${res.status}`);
@@ -61,45 +57,40 @@ export async function testProviderConnection(
   standard: ApiStandard
 ): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
   try {
-    if (standard === "gemini") {
-      const base = (baseUrl || GEMINI_API_BASE).replace(/\/$/, "");
-      const url = `${base}/models?pageSize=1`;
+    if (familyOf(standard) === "gemini") {
+      const url = modelsUrl(standard, baseUrl, "?pageSize=1");
       const res = await fetch(url, { headers: { "x-goog-api-key": apiKey } });
       if (!res.ok) {
         const error = await res.text();
-        return { ok: false, error: `Gemini API error ${res.status}: ${error}` };
+        return { ok: false, error: `Gemini API error ${res.status} (${url}): ${error}` };
       }
       return { ok: true, message: "Gemini connection successful" };
     }
 
-    if (standard === "anthropic") {
-      const base = (baseUrl || DEFAULT_ANTHROPIC_BASE).replace(/\/$/, "");
-      const res = await fetch(`${base}/models?limit=1`, { headers: anthropicHeaders(apiKey) });
+    if (familyOf(standard) === "anthropic") {
+      const url = modelsUrl(standard, baseUrl, "?limit=1");
+      const res = await fetch(url, { headers: anthropicHeaders(apiKey) });
       if (!res.ok) {
         const error = await res.text();
-        return { ok: false, error: `Anthropic API error ${res.status}: ${error}` };
+        return { ok: false, error: `Anthropic API error ${res.status} (${url}): ${error}` };
       }
       return { ok: true, message: "Anthropic connection successful" };
     }
 
-    if (standard === "openai_compat" || standard === "openai") {
-      const url = `${baseUrl.replace(/\/$/, "")}/models`;
-      const res = await fetch(url, {
-        headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
-      });
-      if (!res.ok) {
-        const error = await res.text();
-        return { ok: false, error: `API error ${res.status}: ${error}` };
-      }
-      const data = await res.json();
-      const models = (data.data ?? []) as Array<{ id?: string }>;
-      return {
-        ok: true,
-        message: `Connection successful. Found ${models.length} model(s).`,
-      };
+    const url = modelsUrl(standard, baseUrl);
+    const res = await fetch(url, {
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
+    });
+    if (!res.ok) {
+      const error = await res.text();
+      return { ok: false, error: `API error ${res.status} (${url}): ${error}` };
     }
-
-    return { ok: false, error: "Unknown API standard" };
+    const data = await res.json();
+    const models = (data.data ?? []) as Array<{ id?: string }>;
+    return {
+      ok: true,
+      message: `Connection successful. Found ${models.length} model(s).`,
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return { ok: false, error: `Connection failed: ${msg}` };

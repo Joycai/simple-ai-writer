@@ -7,6 +7,7 @@ import Database from "@tauri-apps/plugin-sql";
 
 import type { GeminiSafetySettings } from "./safety";
 import type { ApiStandard, ImageRoute } from "./types";
+import { migrateLegacyStandard } from "./urls";
 
 export type ModelType = "text" | "multimodal" | "image" | "video";
 
@@ -43,18 +44,18 @@ export function defaultImageCaps(standard: ApiStandard): ImageCaps {
       return { edit: true, maxRefs: 16 };
     case "gemini":
       return { edit: true, maxRefs: 3 };
-    case "openai_compat":
-      return { edit: false };
     case "anthropic":
       // Claude generates no images at all, so an image model configured under
       // an Anthropic provider is already a mistake — but the switch still has
       // to answer, and "no editing" is the honest answer.
       return { edit: false };
     default:
-      // Not dead code, despite the union being exhaustive: `standard` reaches
-      // here from a DB row, and a value the type system never anticipated
-      // would otherwise fall out of the switch as `undefined` — crashing every
-      // caller that trusts the return type.
+      // Every `_compat` value lands here, and that is the point of the split:
+      // a relay may serve the same model without the endpoint the official
+      // vendor pairs it with, so promising an edit button would promise one
+      // that errors. Also covers a DB row carrying a value the union never
+      // anticipated, which would otherwise fall out of the switch as
+      // `undefined` and crash every caller that trusts the return type.
       return { edit: false };
   }
 }
@@ -326,17 +327,29 @@ export async function listProviders(db: Awaited<ReturnType<typeof Database.load>
   const rows = await db.select<Record<string, unknown>[]>(
     "SELECT id, name, base_url, api_standard, safety_settings, created_at FROM providers ORDER BY created_at ASC"
   );
-  return rows.map((r) => ({
-    id: r.id as string,
-    name: r.name as string,
-    baseUrl: r.base_url as string,
-    apiStandard: parseApiStandard(r.api_standard),
-    safetySettings: parseSafetySettings(r.safety_settings),
-    createdAt: r.created_at as number,
-  }));
+  return rows.map((r) => {
+    const baseUrl = r.base_url as string;
+    return {
+      id: r.id as string,
+      name: r.name as string,
+      baseUrl,
+      // Re-labels pre-split rows (see migrateLegacyStandard); the row itself is
+      // rewritten only when the author next saves the provider.
+      apiStandard: migrateLegacyStandard(parseApiStandard(r.api_standard), baseUrl),
+      safetySettings: parseSafetySettings(r.safety_settings),
+      createdAt: r.created_at as number,
+    };
+  });
 }
 
-const API_STANDARDS: ApiStandard[] = ["openai", "openai_compat", "gemini", "anthropic"];
+const API_STANDARDS: ApiStandard[] = [
+  "openai",
+  "openai_compat",
+  "gemini",
+  "gemini_compat",
+  "anthropic",
+  "anthropic_compat",
+];
 
 /**
  * Narrow a stored `api_standard` to the union instead of asserting it.

@@ -13,26 +13,23 @@
  * pseudo-tool call, which every protocol here supports natively.
  */
 
-import type { ApiStandard } from "./types";
+import { familyOf, type ApiStandard } from "./types";
 
 /**
  * Extra top-level request fields that put the endpoint in JSON mode, or
  * undefined when the protocol has no such field.
  */
 export function jsonModeExtraBody(standard: ApiStandard): Record<string, unknown> | undefined {
-  switch (standard) {
+  switch (familyOf(standard)) {
     case "gemini":
       return { generationConfig: { responseMimeType: "application/json" } };
     case "anthropic":
       // No equivalent parameter, and sending an unrecognized one is a 400.
       // The text cue below is the whole mechanism here.
       return undefined;
-    case "openai":
-    case "openai_compat":
-      return { response_format: { type: "json_object" } };
     default:
-      // Reached from a DB row carrying a value the union never anticipated;
-      // the OpenAI shape is what the dispatch would fall back to anyway.
+      // Includes the unrecognised-DB-value case, which familyOf maps to the
+      // OpenAI family — the same place the dispatch would send it.
       return { response_format: { type: "json_object" } };
   }
 }
@@ -47,7 +44,8 @@ export function jsonModeExtraBody(standard: ApiStandard): Record<string, unknown
  * to skip the prose and the fences.
  */
 export function needsJsonTextCue(standard: ApiStandard): boolean {
-  return standard === "gemini" || standard === "anthropic";
+  const family = familyOf(standard);
+  return family === "gemini" || family === "anthropic";
 }
 
 /** The cue itself, so the two call sites can't drift in wording. */

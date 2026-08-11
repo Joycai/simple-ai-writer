@@ -924,6 +924,7 @@
       "nameLabel": "名称",
       "apiStandardLabel": "API 标准",
       "baseUrlLabel": "Base URL (留空使用默认)",
+      "baseUrlOfficialHint": "官方端点地址固定。要接中转 / 网关，请在上方选择对应的「兼容」标准。",
       "apiKeyLabel": "API Key",
       "apiKeyOptional": "本地服务可留空",
       "apiKeyLocalPlaceholder": "本地服务留空即可",
@@ -1092,10 +1093,12 @@
       "video": "视频"
     },
     "apiStandards": {
-      "openai": "OpenAI",
-      "openai_compat": "OpenAI Compatible",
-      "gemini": "Google Gemini",
-      "anthropic": "Anthropic Claude"
+      "openai": "OpenAI 官方",
+      "openai_compat": "OpenAI 兼容",
+      "gemini": "Google Gemini 官方",
+      "gemini_compat": "Gemini 兼容",
+      "anthropic": "Anthropic Claude 官方",
+      "anthropic_compat": "Anthropic 兼容"
     }
   },
   "lore": {

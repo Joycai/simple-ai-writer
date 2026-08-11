@@ -5,6 +5,7 @@
 
 import { fetch } from "../http";
 import { toSafetySettingsArray } from "./safety";
+import { geminiUrl } from "./urls";
 import type { AccumulatedToolCall, MessageContent, StreamMessage, StreamOptions } from "./types";
 
 type GeminiPart =
@@ -85,9 +86,6 @@ export function convertToGeminiContents(messages: StreamMessage[]): GeminiConten
   return contents;
 }
 
-/** Gemini API base used when a provider hasn't configured a custom endpoint. */
-export const DEFAULT_GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
-
 /**
  * `candidates[0].finishReason` values that mean the response was refused or
  * filtered rather than completed — as opposed to `STOP` (normal) or
@@ -105,10 +103,9 @@ const GEMINI_BLOCKED_FINISH_REASONS = new Set([
 ]);
 
 export async function streamGemini(opts: StreamOptions): Promise<void> {
-  const base = (opts.baseUrl || DEFAULT_GEMINI_BASE).replace(/\/$/, "");
   // Key goes in the x-goog-api-key header, never the URL — query strings leak
   // into proxy/server logs and error messages.
-  const url = `${base}/models/${opts.modelId}:streamGenerateContent?alt=sse`;
+  const url = geminiUrl(opts.baseUrl, `/models/${opts.modelId}:streamGenerateContent?alt=sse`);
 
   const systemMsg = opts.messages.find((m) => m.role === "system");
   const nonSystemMsgs = opts.messages.filter((m) => m.role !== "system");
@@ -162,7 +159,7 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`Gemini API error ${res.status}: ${err}`);
+    throw new Error(`Gemini API error ${res.status} (${url}): ${err}`);
   }
 
   const reader = res.body!.getReader();

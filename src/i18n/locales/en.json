@@ -929,6 +929,7 @@
       "nameLabel": "Name",
       "apiStandardLabel": "API Standard",
       "baseUrlLabel": "Base URL (leave empty to use default)",
+      "baseUrlOfficialHint": "Fixed for an official endpoint. To use a relay or gateway, pick the matching \"compatible\" standard above.",
       "apiKeyLabel": "API Key",
       "apiKeyOptional": "optional for local servers",
       "apiKeyLocalPlaceholder": "Leave empty for a local server",
@@ -1097,10 +1098,12 @@
       "video": "Video"
     },
     "apiStandards": {
-      "openai": "OpenAI",
-      "openai_compat": "OpenAI Compatible",
-      "gemini": "Google Gemini",
-      "anthropic": "Anthropic Claude"
+      "openai": "OpenAI (official)",
+      "openai_compat": "OpenAI compatible",
+      "gemini": "Google Gemini (official)",
+      "gemini_compat": "Gemini compatible",
+      "anthropic": "Anthropic Claude (official)",
+      "anthropic_compat": "Anthropic compatible"
     }
   },
   "lore": {

@@ -20,6 +20,7 @@ interface ProviderInfo {
   /** i18n key for the one-line hint under the name. */
   hintKey: string;
   recommended?: boolean;
+  /** Empty for an official standard — the adapter substitutes the vendor's own. */
   baseUrl: string;
   /**
    * Imported, not re-spelled: this used to be an inline copy of the union, so
@@ -30,8 +31,8 @@ interface ProviderInfo {
 }
 
 const PROVIDERS: ProviderInfo[] = [
-  { id: "anthropic", name: "Anthropic · Claude", hintKey: "onboarding.providerAnthropicHint", recommended: true, baseUrl: "https://api.anthropic.com/v1", apiStandard: "anthropic" },
-  { id: "openai",    name: "OpenAI · GPT",       hintKey: "onboarding.providerOpenaiHint",    baseUrl: "https://api.openai.com/v1", apiStandard: "openai" },
+  { id: "anthropic", name: "Anthropic · Claude", hintKey: "onboarding.providerAnthropicHint", recommended: true, baseUrl: "", apiStandard: "anthropic" },
+  { id: "openai",    name: "OpenAI · GPT",       hintKey: "onboarding.providerOpenaiHint",    baseUrl: "", apiStandard: "openai" },
   { id: "ollama",    name: "Ollama",              hintKey: "onboarding.providerOllamaHint",    baseUrl: "http://localhost:11434/v1", apiStandard: "openai_compat" },
 ];
 
