@@ -35,7 +35,7 @@ A modern, local-first desktop Markdown editor with AI writing assistance powered
 🧠 **AI Writing Assistance**
 - **Task-based workflows**: Continue • Polish • Rewrite • Summarize • Custom
 - **RAG-powered context**: Automatically surfaces relevant lore entities
-- **Multi-provider support**: OpenAI • Google Gemini (or any OpenAI-compatible API)
+- **Multi-provider support**: OpenAI • Google Gemini • Anthropic Claude (or any OpenAI-compatible API)
 - **Token tracking**: Monitor API usage and costs per session
 
 📚 **Lore Knowledge Base**
@@ -183,7 +183,7 @@ Binaries for all platforms end up under `src-tauri/target/release/bundle/`.
 
 3. **Set up AI (optional)**
    - Click ⚙ (Settings) → **Providers** tab
-   - Add OpenAI or Gemini API key and base URL
+   - Add an OpenAI, Gemini, or Anthropic API key and base URL
    - Go to **Models** tab → click model provider → fetch available models
    - (Optional) **Prompts** tab to create custom writing templates
 
@@ -228,7 +228,7 @@ simple-ai-writer/
 │   │   ├── fileio.ts      # Tauri fs commands
 │   │   ├── db.ts          # SQLite schema & queries
 │   │   ├── rag.ts         # Context assembly, entity matching
-│   │   ├── aiClient.ts    # SSE streaming for OpenAI/Gemini
+│   │   ├── aiClient.ts    # SSE streaming for OpenAI/Gemini/Anthropic
 │   │   └── export.ts      # Markdown/HTML/PDF export
 │   ├── i18n/              # Translation files (en, zh-CN)
 │   └── App.tsx            # Root component
@@ -250,9 +250,9 @@ Keys are stored in the operating system's credential manager (Windows Credential
 
 **Adding a provider:**
 1. Open Settings ⚙ → Providers
-2. Name (e.g., "OpenAI", "My Gemini")
+2. Name (e.g., "OpenAI", "My Gemini", "Anthropic")
 3. Base URL (e.g., `https://api.openai.com/v1`)
-4. Standard (OpenAI or Gemini format)
+4. Standard (OpenAI, Gemini, or Anthropic format — pick the one the endpoint actually speaks)
 5. Paste API key → Save
 
 **Fetching models:**

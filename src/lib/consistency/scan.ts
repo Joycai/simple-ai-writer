@@ -124,6 +124,8 @@ export interface ScanArgs {
   modelId: string;
   prefix?: string;
   contextSize?: number;
+  /** Sent as `max_tokens` on the Anthropic path; planning-only elsewhere. */
+  maxOutput?: number;
 
   /** The document under test, and where it lives. */
   documentText: string;
@@ -185,6 +187,7 @@ export async function runConsistencyScan(args: ScanArgs): Promise<ConsistencyRep
     modelId: args.modelId,
     prefix: args.prefix,
     contextSize: args.contextSize,
+    maxOutput: args.maxOutput,
     systemPrompt: SYSTEM_PROMPT,
     toolInstruction: "Call the report_consistency tool exactly once with everything you found.",
     jsonInstruction:

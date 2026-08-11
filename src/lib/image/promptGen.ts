@@ -58,6 +58,8 @@ export interface ImagePromptOptions {
   modelId: string;
   prefix?: string;
   contextSize?: number;
+  /** Sent as `max_tokens` on the Anthropic path; planning-only elsewhere. */
+  maxOutput?: number;
   signal?: AbortSignal;
   /** Raw streamed text, for a live "thinking" area. */
   onText?: (accumulated: string) => void;
@@ -154,6 +156,7 @@ export async function generateImagePrompt(opts: ImagePromptOptions): Promise<Ima
     modelId: opts.modelId,
     prefix: opts.prefix,
     contextSize: opts.contextSize,
+    maxOutput: opts.maxOutput,
     systemPrompt: systemPromptFor(opts),
     toolInstruction: `\nCall ${OUTPUT_TOOL.function.name} exactly once with the result.`,
     jsonInstruction:

@@ -117,6 +117,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
         modelId: model.modelId,
         prefix: model.prefix,
         contextSize: model.contextSize,
+        maxOutput: model.maxOutput,
         documentText: content,
         filePath,
         documentTitle: (filePath?.split(/[\\/]/).pop() ?? "").replace(/\.md$/i, "")

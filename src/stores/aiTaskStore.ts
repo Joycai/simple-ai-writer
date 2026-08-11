@@ -440,6 +440,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           modelId: model.modelId,
           prefix: model.prefix,
           contextSize: model.contextSize,
+          maxOutput: model.maxOutput,
           // `plan.inputCeilingTokens` is 0 on a static plan (model declared no
           // context size), and a 0 ceiling disables history trimming entirely.
           inputCeilingTokens: plan.inputCeilingTokens || ASSUMED_INPUT_CEILING_TOKENS,
@@ -539,6 +540,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
               modelId: model.modelId,
               prefix: model.prefix,
               contextSize: model.contextSize,
+              maxOutput: model.maxOutput,
               messages,
               signal: controller.signal,
               onChunk: (chunk) => {
@@ -659,7 +661,10 @@ useProjectStore.subscribe((state, prev) => {
 });
 
 function defaultBaseUrl(standard: string): string {
-  if (standard === "gemini") return ""; // handled separately in aiClient
+  // Both of these fall back to their own default inside the adapter, so an
+  // empty string here is the signal to let it do that — handing them
+  // api.openai.com would be worse than handing them nothing.
+  if (standard === "gemini" || standard === "anthropic") return "";
   return "https://api.openai.com/v1";
 }
 

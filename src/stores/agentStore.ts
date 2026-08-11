@@ -644,6 +644,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
                   modelId: model.modelId,
                   prefix: model.prefix,
                   contextSize: model.contextSize,
+                  maxOutput: model.maxOutput,
                   safetySettings: provider.safetySettings,
                 },
                 input,
@@ -724,6 +725,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         modelId: model.modelId,
         prefix: model.prefix,
         contextSize: model.contextSize,
+        maxOutput: model.maxOutput,
         // Never undefined: without a ceiling the tool loop's history trimming
         // is a no-op, and a chat that reads pictures accumulates base64 in a
         // history that persists across turns until the provider rejects it.

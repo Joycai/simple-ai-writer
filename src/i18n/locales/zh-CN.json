@@ -1094,7 +1094,8 @@
     "apiStandards": {
       "openai": "OpenAI",
       "openai_compat": "OpenAI Compatible",
-      "gemini": "Google Gemini"
+      "gemini": "Google Gemini",
+      "anthropic": "Anthropic Claude"
     }
   },
   "lore": {

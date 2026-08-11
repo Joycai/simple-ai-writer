@@ -47,13 +47,17 @@ describe("defaultImageCaps", () => {
     expect(defaultImageCaps("openai").edit).toBe(true);
     expect(defaultImageCaps("gemini").edit).toBe(true);
     expect(defaultImageCaps("openai_compat").edit).toBe(false);
+    // Claude generates no images at all.
+    expect(defaultImageCaps("anthropic").edit).toBe(false);
   });
 
   it("still returns caps for a standard outside the union", () => {
     // `apiStandard` arrives from a free-text DB column, so an unrecognised
     // value is reachable at runtime. Falling out of the switch as undefined
     // used to crash the settings form the moment a model was set to "image".
-    expect(defaultImageCaps("anthropic" as ApiStandard)).toEqual({ edit: false });
+    // Deliberately a protocol this app has never supported — using a name that
+    // later joins the union would quietly stop testing the default branch.
+    expect(defaultImageCaps("cohere" as ApiStandard)).toEqual({ edit: false });
   });
 });
 

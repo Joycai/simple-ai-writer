@@ -3,6 +3,7 @@
  * Pure HTTP — no local storage involved (that's ./configDb).
  */
 
+import { anthropicHeaders, DEFAULT_ANTHROPIC_BASE } from "./anthropic";
 import { fetch } from "../http";
 import type { ApiStandard } from "./types";
 
@@ -26,6 +27,19 @@ export async function fetchRemoteModels(
     return (data.models ?? []).map((m: Record<string, string>) => ({
       id: m.name?.replace("models/", "") ?? m.name,
       name: m.displayName ?? m.name,
+    }));
+  }
+  if (standard === "anthropic") {
+    // Same `{ data: [...] }` envelope as OpenAI, but keyed auth headers and a
+    // human label of its own (`display_name` — "Claude Sonnet 5" rather than
+    // the bare id).
+    const base = (baseUrl || DEFAULT_ANTHROPIC_BASE).replace(/\/$/, "");
+    const res = await fetch(`${base}/models`, { headers: anthropicHeaders(apiKey) });
+    if (!res.ok) throw new Error(`Anthropic models fetch failed: ${res.status}`);
+    const data = await res.json();
+    return (data.data ?? []).map((m: Record<string, string>) => ({
+      id: m.id,
+      name: m.display_name ?? m.id,
     }));
   }
   // OpenAI / compatible
@@ -56,6 +70,16 @@ export async function testProviderConnection(
         return { ok: false, error: `Gemini API error ${res.status}: ${error}` };
       }
       return { ok: true, message: "Gemini connection successful" };
+    }
+
+    if (standard === "anthropic") {
+      const base = (baseUrl || DEFAULT_ANTHROPIC_BASE).replace(/\/$/, "");
+      const res = await fetch(`${base}/models?limit=1`, { headers: anthropicHeaders(apiKey) });
+      if (!res.ok) {
+        const error = await res.text();
+        return { ok: false, error: `Anthropic API error ${res.status}: ${error}` };
+      }
+      return { ok: true, message: "Anthropic connection successful" };
     }
 
     if (standard === "openai_compat" || standard === "openai") {

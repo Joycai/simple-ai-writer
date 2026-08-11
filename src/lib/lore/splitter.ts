@@ -9,6 +9,7 @@
 import i18n from "../../i18n";
 import { LORE_SPLIT_PRESET } from "../agent/presets";
 import { runAgent } from "../agent/runtime";
+import { JSON_ONLY_CUE, jsonModeExtraBody, needsJsonTextCue } from "../ai/jsonMode";
 import type { GeminiSafetySettings } from "../ai/safety";
 import type { ApiStandard } from "../ai/types";
 import type { FacetMeta } from "./model";
@@ -45,6 +46,8 @@ export async function splitLore(opts: {
   modelId: string;
   prefix?: string;
   contextSize?: number;
+  /** Sent as `max_tokens` on the Anthropic path; planning-only elsewhere. */
+  maxOutput?: number;
   /** The response so far, in full — a snapshot, not a delta. */
   onProgress: (fullText: string) => void;
   signal?: AbortSignal;
@@ -70,18 +73,15 @@ export async function splitLore(opts: {
     opts.instruction?.trim() ? `\nAUTHOR GUIDANCE:\n${opts.instruction.trim()}` : "",
   ].filter(Boolean).join("\n");
 
-  const extraBody = opts.standard === "gemini"
-    ? { generationConfig: { responseMimeType: "application/json" } }
-    : { response_format: { type: "json_object" } };
+  // See ai/jsonMode: native enforcement where the protocol has it, text cue
+  // where it doesn't.
+  const extraBody = jsonModeExtraBody(opts.standard);
 
   const userParts: Array<{ type: "text"; text: string }> = [
     { type: "text", text: promptText },
   ];
-  if (opts.standard === "gemini") {
-    userParts.push({
-      type: "text",
-      text: "Output ONLY valid JSON matching the schema in the system instructions. No markdown fences, no explanation.",
-    });
+  if (needsJsonTextCue(opts.standard)) {
+    userParts.push({ type: "text", text: JSON_ONLY_CUE });
   }
 
   let fullText = "";
@@ -93,6 +93,7 @@ export async function splitLore(opts: {
     modelId: opts.modelId,
     prefix: opts.prefix,
     contextSize: opts.contextSize,
+    maxOutput: opts.maxOutput,
     extraBody,
     preset: LORE_SPLIT_PRESET,
     messages: [

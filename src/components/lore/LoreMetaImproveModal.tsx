@@ -177,6 +177,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
         modelId: model.modelId,
         prefix: model.prefix,
         contextSize: model.contextSize,
+        maxOutput: model.maxOutput,
         systemPrompt: systemBase,
         toolInstruction: "Call the update_lore_metadata tool exactly once with the refined fields.",
         jsonInstruction: `Respond with ONLY a JSON object — no markdown fences, no prose — with exactly these keys: {"name": string, "aliases": string[], "category": one of [${catIds.join(", ")}], "summary": string}.`,
