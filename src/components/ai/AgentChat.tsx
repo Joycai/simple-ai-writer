@@ -33,6 +33,7 @@ import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { useAiStore } from "../../stores/aiStore";
+import { useAppStore } from "../../stores/appStore";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { AgentLog } from "./AgentLog";
 import { ApprovalCard } from "./ApprovalCard";
@@ -41,6 +42,16 @@ import { RoundLimitCard } from "./RoundLimitCard";
 import { useImeGuard } from "../../lib/ime";
 import type { AgentEvent } from "../../lib/agent/events";
 import { foldBoundary } from "../../lib/agent/transcriptFold";
+import {
+  CONTEXT_SEGMENT_ORDER,
+  computeContextBreakdown,
+  type ContextBreakdown,
+  type ContextSegmentKey,
+} from "../../lib/agent/contextBreakdown";
+import { AGENT_ASSIST_PRESET } from "../../lib/agent/presets";
+import { getToolDefinitions } from "../../lib/agent/registry";
+import { estimateToolsTokens } from "../../lib/ai/tokenEstimate";
+import { inputCeilingFor } from "../../lib/context/budget";
 import styles from "./AgentChat.module.css";
 
 function formatTime(at: number): string {
@@ -221,18 +232,37 @@ export function AgentChat() {
   // `chatUsage.inputTokens` accumulates across turns and across every tool
   // round inside them, so after a few turns it read `400k / 128k` — the one
   // question this indicator answers is "how much room is left", and the
-  // cumulative figure answers it backwards. The runtime already measures the
-  // real thing at the top of each round.
-  const contextTokens = useMemo(() => {
-    for (let i = turns.length - 1; i >= 0; i--) {
-      for (let j = turns[i].log.length - 1; j >= 0; j--) {
-        const e = turns[i].log[j];
-        if (e.kind === "round-start") return e.estInputTokens;
-      }
-    }
-    return 0;
-  }, [turns]);
-  const contextWindow = activeModel?.contextSize ?? 0;
+  // cumulative figure answers it backwards.
+  //
+  // Measured off the live history rather than the last `round-start` event: that
+  // event is a mid-turn snapshot, zero before the first run and one turn stale
+  // afterwards. See lib/agent/contextBreakdown.ts for the other two corrections
+  // (the ceiling as denominator, and counting the tool schemas).
+  const chatHistory = useAgentStore((s) => s.chatHistory);
+  const chatMeta = useAgentStore((s) => s.chatMeta);
+  const chatContextVersion = useAgentStore((s) => s.chatContextVersion);
+  const contextUtilization = useAppStore((s) => s.contextUtilization);
+  // The registry patches lore-category enums per call, but that only swaps
+  // category names in and out — noise against several KB of schema, and not
+  // worth re-measuring the whole toolset on every lore scan.
+  const toolTokens = useMemo(
+    () => estimateToolsTokens(getToolDefinitions(AGENT_ASSIST_PRESET.tools)),
+    [],
+  );
+  const context = useMemo(
+    () =>
+      computeContextBreakdown(
+        chatHistory,
+        chatMeta,
+        toolTokens,
+        inputCeilingFor(activeModel?.contextSize, contextUtilization),
+        activeModel?.contextSize ?? 0,
+      ),
+    // `chatContextVersion` is the real trigger — the history array is mutated
+    // in place, so its reference alone would never announce a change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [chatHistory, chatMeta, chatContextVersion, toolTokens, activeModel?.contextSize, contextUtilization],
+  );
 
   return (
     <div className={styles.chat}>
@@ -300,6 +330,8 @@ export function AgentChat() {
       )}
 
       <div className={styles.composer}>
+        <ContextBar context={context} />
+
         <div className={styles.attachRow}>
           {attachedQuote ? (
             <button
@@ -343,12 +375,6 @@ export function AgentChat() {
               </button>
             );
           })}
-          {contextWindow > 0 && (
-            <span className={styles.contextMeter}>
-              {t("ai.chat.contextMeter", { defaultValue: "上下文" })}{" "}
-              {formatTokens(contextTokens)} / {formatTokens(contextWindow)} tk
-            </span>
-          )}
         </div>
 
         <div className={styles.inputRow}>
@@ -397,6 +423,98 @@ export function AgentChat() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Context bar ──────────────────────────────────────────────────────────────
+
+const SEGMENT_LABELS: Record<ContextSegmentKey, { key: string; fallback: string }> = {
+  system:       { key: "ai.chat.ctxSystem",       fallback: "系统+工具" },
+  summary:      { key: "ai.chat.ctxSummary",      fallback: "摘要" },
+  seed:         { key: "ai.chat.ctxSeed",         fallback: "种子" },
+  injected:     { key: "ai.chat.ctxInjected",     fallback: "注入{{entry}}" },
+  conversation: { key: "ai.chat.ctxConversation", fallback: "对话" },
+  free:         { key: "ai.chat.ctxFree",         fallback: "空余" },
+};
+
+/**
+ * The composer's memory strip: what the next request's context is made of, and
+ * how much room is left before compaction folds the oldest turns away.
+ *
+ * The legend is collapsed by default and the bar carries per-segment `title`
+ * tooltips instead. Six always-on legend chips wrap to three lines in a narrow
+ * rail, and this sits directly above the input — permanent chrome there costs
+ * message space on every session, whether or not the author is watching memory.
+ */
+function ContextBar({ context }: { context: ContextBreakdown }) {
+  const { t } = useTranslation();
+  const terms = useTerms();
+  const [showLegend, setShowLegend] = useState(false);
+
+  // No declared window means no real ceiling either — inputCeilingFor falls back
+  // to an assumed one, and drawing a precise-looking bar against a guess would
+  // be the wrong kind of confidence.
+  if (context.contextSize <= 0) return null;
+
+  const label = (key: ContextSegmentKey) =>
+    t(SEGMENT_LABELS[key].key, { defaultValue: SEGMENT_LABELS[key].fallback, entry: terms.entry });
+
+  return (
+    <div className={styles.ctx}>
+      <button
+        className={`${styles.ctxBar} ${context.over ? styles.ctxBarOver : ""}`}
+        onClick={() => setShowLegend((v) => !v)}
+        aria-expanded={showLegend}
+        title={t("ai.chat.ctxToggle", { defaultValue: "展开/收起上下文构成" })}
+      >
+        {context.segments.map((seg) =>
+          seg.tokens > 0 ? (
+            <span
+              key={seg.key}
+              className={`${styles.ctxSeg} ${styles[`ctxSeg_${seg.key}`]}`}
+              style={{ flexGrow: seg.tokens }}
+              title={`${label(seg.key)} ≈ ${formatTokens(seg.tokens)} tk`}
+            />
+          ) : null,
+        )}
+        {/* Where compaction starts folding the oldest turns — the one threshold
+            on this bar the author can actually anticipate. */}
+        <span
+          className={styles.ctxMark}
+          style={{ left: `${context.compactMarkerPct}%` }}
+          title={t("ai.chat.ctxCompactAt", { defaultValue: "超过此处将折叠最早的对话" })}
+        />
+      </button>
+
+      <div className={styles.ctxMeter}>
+        <span>
+          {t("ai.chat.contextMeter", { defaultValue: "上下文" })}{" "}
+          {formatTokens(context.usedTokens)} / {formatTokens(context.ceilingTokens)} tk
+        </span>
+        <span className={styles.ctxWindow}>
+          {t("ai.chat.ctxWindow", {
+            defaultValue: "窗口 {{n}}",
+            n: formatTokens(context.contextSize),
+          })}
+        </span>
+      </div>
+
+      {showLegend && (
+        <div className={styles.ctxLegend}>
+          {CONTEXT_SEGMENT_ORDER.map((key) => {
+            const seg = context.segments.find((s) => s.key === key);
+            if (!seg || seg.tokens <= 0) return null;
+            return (
+              <span key={key} className={styles.ctxLegendItem}>
+                <span className={`${styles.ctxSwatch} ${styles[`ctxSeg_${key}`]}`} />
+                {label(key)}
+                <span className={styles.ctxLegendValue}>{formatTokens(seg.tokens)}</span>
+              </span>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
