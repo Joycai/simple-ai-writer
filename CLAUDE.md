@@ -121,6 +121,15 @@ Load the relevant doc **before** working in that area — don't reconstruct it f
 - **[`docs/workflows.md`](docs/workflows.md)** — Recipes: add an AI task type / provider / language; modify lore format.
 - **[`docs/ci.md`](docs/ci.md)** — CI / PR quality gate: what the `CI` workflow checks (frontend type-check + build, Rust fmt/clippy/test/build), how to enforce it via branch protection, and how to run the same checks locally.
 
+## Local Skills
+
+`.claude/skills/` (tracked in `skills-lock.json`) holds Claude Code skills installed via `npx skills add`:
+
+- **`bump-version`** — bump the app version across all four Tauri manifests in lockstep; use this instead of hand-editing version strings.
+- **`tauri`** — router/index skill for Tauri v2 development; start here for anything Tauri-related, it points to the right sub-skill below.
+- **`tauri-development`**, **`tauri-concept`**, **`tauri-ipc`**, **`tauri-config`**, **`tauri-window`**, **`tauri-app-develop`**, **`tauri-build`**, **`tauri-security`**, **`tauri-framework-security`**, **`tauri-app-plugin-permissions`** — Tauri v2 core/architecture/build/security guidance.
+- **`tauri-app-opener`**, **`tauri-app-dialog`**, **`tauri-app-file-system`**, **`tauri-app-http-client`**, **`tauri-app-sql`** — guidance for the specific Tauri plugins this project uses (`tauri-plugin-opener`/`-dialog`/`-fs`/`-http`/`-sql` in `src-tauri/Cargo.toml`).
+
 ## Testing & Type Safety
 
 - TypeScript strict mode enabled (noUnusedLocals, noUnusedParameters, noFallthroughCasesInSwitch)
