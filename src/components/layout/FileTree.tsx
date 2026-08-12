@@ -6,14 +6,18 @@ import { useTranslation } from "react-i18next";
 import {
   Folder, FolderOpen, FolderInput, FileText, File, FileImage, ChevronRight,
   FilePlus, FolderPlus, FileInput, RotateCw, LogOut, Pencil, Trash2,
-  Scissors, Copy, ClipboardPaste,
+  Scissors, Copy, ClipboardPaste, TextCursorInput,
 } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { isImagePath } from "../../lib/fs/images";
 import { fileExists } from "../../lib/fs/fileio";
 import { baseNameOf, dropRejection, parentDirOf, type TransferMode } from "../../lib/fs/moveCopy";
+import { insertAtCursor } from "../../lib/editor/format";
+import { imageMarkdown } from "../../lib/image/assets";
 import { baseName, importDocumentsDialog } from "../../lib/import";
 import { useImeGuard } from "../../lib/ime";
+import { relativePathFrom } from "../../lib/paths";
+import { useEditorStore } from "../../stores/editorStore";
 import { useProjectStore } from "../../stores/projectStore";
 import type { FileNode } from "../../lib/project";
 import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
@@ -324,6 +328,14 @@ export function FileTree() {
   const dragRef = useRef<TransferSource | null>(null);
   const springTimer = useRef<{ path: string; id: number } | null>(null);
 
+  // Whether 插入到当前位置 has anywhere to insert *into*: a markdown document
+  // open in a live editor, which is where the cursor is. EditorArea swaps the
+  // CodeEditor out for an image preview or a load notice, and `editorView` is
+  // null for exactly those — so it answers the question on its own.
+  const openDocPath = useEditorStore((s) => s.filePath);
+  const hasLiveEditor = useEditorStore((s) => s.editorView !== null);
+  const canInsertIntoDoc = hasLiveEditor && !!openDocPath && /\.md$/i.test(openDocPath);
+
   const cancelSpring = () => {
     if (springTimer.current) clearTimeout(springTimer.current.id);
     springTimer.current = null;
@@ -525,6 +537,30 @@ export function FileTree() {
     setMenu({ x: e.clientX, y: e.clientY, node });
   };
 
+  /**
+   * Link a picture from the tree into the open document at the cursor.
+   *
+   * A **relative link to where the file already is** — it is inside the project
+   * the author picked it from, so copying it would put a second one beside the
+   * first and leave them to notice the duplicate later. (The editor's own
+   * 插入图片… does copy, because there the file comes from outside the project
+   * and a link to it would break the moment the folder moves machines.)
+   *
+   * Relative rather than absolute for the same reason as every other
+   * illustration link: it has to survive the project being synced, moved, or
+   * opened on another machine.
+   */
+  const insertImageIntoDoc = (node: FileNode) => {
+    setMenu(null);
+    const { filePath, editorView } = useEditorStore.getState();
+    if (!editorView || !filePath) return;
+    const rel = relativePathFrom(parentDirOf(filePath), node.path);
+    // Alt text stands in for the picture wherever it can't be shown — a
+    // text-only model reading the document, the exported HTML. The filename is
+    // the only description available here.
+    insertAtCursor(editorView, imageMarkdown(rel, node.name.replace(/\.[^.]+$/, "")));
+  };
+
   const buildMenuItems = (node: FileNode | null): ContextMenuEntry[] => {
     const reveal = (path: string) => {
       revealItemInDir(path).catch(() => { /* best-effort */ });
@@ -578,6 +614,19 @@ export function FileTree() {
         { kind: "item", icon: <FileText size={13} />, label: t("fileTree.open"),
           action: () => setActiveFilePath(node.path) },
       );
+      // Only on a picture, so it isn't noise on every file — but shown greyed
+      // rather than hidden when there is nowhere to insert into: the author
+      // right-clicked an image meaning to place it, and a missing entry would
+      // read as "this app can't do that" instead of "open a document first".
+      if (isImagePath(node.path)) {
+        items.push({
+          kind: "item",
+          icon: <TextCursorInput size={13} />,
+          label: t("fileTree.insertImage"),
+          disabled: !canInsertIntoDoc,
+          action: () => insertImageIntoDoc(node),
+        });
+      }
     }
     const source: TransferSource = { path: node.path, isDir: node.is_dir };
     items.push(

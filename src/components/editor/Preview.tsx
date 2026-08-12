@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { renderMarkdown } from "../../lib/fs/markdown";
 import { imageToDataUrl } from "../../lib/fs/images";
-import { resolveRelativePath } from "../../lib/paths";
+import { resolveLinkPath } from "../../lib/paths";
 import { annotateCitations } from "../../lib/lore/citations";
 import { useLoreStore } from "../../stores/loreStore";
 import { MD_BODY_CLASS } from "../../lib/theme/markdownThemes";
@@ -48,9 +48,12 @@ export function Preview({ source, basePath }: Props) {
       ref.current.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
         const raw = img.getAttribute("src") ?? "";
         if (!raw || /^(https?:|data:|blob:|ai-writer-asset:)/i.test(raw)) return;
-        let rel = raw;
-        try { rel = decodeURI(raw); } catch { /* keep raw on malformed escape */ }
-        const abs = resolveRelativePath(basePath, rel);
+        // Shared with the exporter (lib/paths) rather than decoded here: this
+        // used `decodeURI`, which leaves reserved characters escaped, so a
+        // document titled "第1章 & 终局" looked for a folder with a literal
+        // "%26" in it and showed none of its illustrations — while the same
+        // document exported fine.
+        const abs = resolveLinkPath(basePath, raw);
 
         const hit = decoded.current.get(abs);
         if (typeof hit === "string") { img.src = hit; return; }

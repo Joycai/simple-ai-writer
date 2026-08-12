@@ -15,7 +15,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { renderMarkdown } from "./markdown";
 import { saveTextFileDialog } from "./transfer";
 import { imageToDataUrl } from "./images";
-import { resolveRelativePath } from "../paths";
+import { resolveLinkPath } from "../paths";
 import { IS_MAC } from "../platform";
 import {
   EXPORT_TOKEN_CSS,
@@ -50,7 +50,7 @@ async function inlineImages(html: string, baseDir?: string): Promise<string> {
   await Promise.all(imgs.map(async (img) => {
     const src = img.getAttribute("src")!;
     try {
-      const { dataUrl } = await imageToDataUrl(assetPathFor(baseDir, src));
+      const { dataUrl } = await imageToDataUrl(resolveLinkPath(baseDir, src));
       img.setAttribute("src", dataUrl);
     } catch (e) {
       // A missing file shouldn't sink the whole export; it exports as a
@@ -75,19 +75,6 @@ export function needsInlining(src: string | null): boolean {
   return !!src && !/^(https?:|data:|blob:|ai-writer-asset:)/i.test(src);
 }
 
-/** Resolve one relative `src` against the document's folder. */
-export function assetPathFor(baseDir: string, src: string): string {
-  let rel = src;
-  // Markdown links are percent-encoded per path segment (see
-  // lib/image/assets.ts `imageMarkdown`), so decode the same way. NOT
-  // `decodeURI`: by definition it leaves the escapes of reserved characters
-  // alone, so a document titled "第1章 & 终局" came back as "第1章 %26 终局"
-  // and every one of its illustrations failed to load.
-  try {
-    rel = src.split("/").map(decodeURIComponent).join("/");
-  } catch { /* keep raw on a malformed escape */ }
-  return resolveRelativePath(baseDir, rel);
-}
 
 // ─── Markdown ─────────────────────────────────────────────────────────────────
 
