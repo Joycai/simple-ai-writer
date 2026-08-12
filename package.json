@@ -1,7 +1,7 @@
 {
   "name": "simple-ai-writer",
   "private": true,
-  "version": "1.9.0",
+  "version": "1.9.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
