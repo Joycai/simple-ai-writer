@@ -1399,6 +1399,7 @@
   "fileTree": {
     "newFile": "New File",
     "open": "Open",
+    "insertImage": "Insert at cursor",
     "rename": "Rename",
     "reveal": "Reveal in File Explorer",
     "delete": "Delete",

@@ -14,7 +14,9 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@tauri-apps/plugin-fs", () => ({ readFile: vi.fn() }));
 vi.mock("./fileio", () => ({ writeFile: vi.fn(), readDir: vi.fn(), readFile: vi.fn() }));
 
-const { needsInlining, assetPathFor } = await import("../fs/export");
+const { needsInlining } = await import("../fs/export");
+// The path half moved to lib/paths, where the preview pane reads it too.
+const { resolveLinkPath } = await import("../paths");
 
 describe("needsInlining", () => {
   it("embeds local relative links", () => {
@@ -38,16 +40,16 @@ describe("needsInlining", () => {
   });
 });
 
-describe("assetPathFor", () => {
+describe("resolveLinkPath", () => {
   it("resolves against the document's own folder", () => {
-    expect(assetPathFor("/proj/writing/vol1", "assets/ch1/a.png"))
+    expect(resolveLinkPath("/proj/writing/vol1", "assets/ch1/a.png"))
       .toBe("/proj/writing/vol1/assets/ch1/a.png");
   });
 
   it("decodes the percent-encoding the markdown link carries", () => {
     // lib/image/assets.ts encodes each segment, so a Chinese filename arrives
     // here as %E7%AC%AC… and the filesystem wants the characters back.
-    expect(assetPathFor("/proj/writing", "assets/%E7%AC%AC%E4%B8%89%E7%AB%A0/%E5%9B%BE%201.png"))
+    expect(resolveLinkPath("/proj/writing", "assets/%E7%AC%AC%E4%B8%89%E7%AB%A0/%E5%9B%BE%201.png"))
       .toBe("/proj/writing/assets/第三章/图 1.png");
   });
 
@@ -55,9 +57,9 @@ describe("assetPathFor", () => {
     // The regression this guards: `decodeURI` leaves reserved characters
     // escaped, so a document called "第1章 & 终局" resolved to a path with a
     // literal "%26" in it — every illustration in the export silently vanished.
-    expect(assetPathFor("/proj/writing", "assets/%E7%AC%AC1%E7%AB%A0%20%26%20%E7%BB%88%E5%B1%80/img-1.png"))
+    expect(resolveLinkPath("/proj/writing", "assets/%E7%AC%AC1%E7%AB%A0%20%26%20%E7%BB%88%E5%B1%80/img-1.png"))
       .toBe("/proj/writing/assets/第1章 & 终局/img-1.png");
-    expect(assetPathFor("/proj/writing", "assets/A%2BB%2C%20C%3BD%3DE%40F/img-2.png"))
+    expect(resolveLinkPath("/proj/writing", "assets/A%2BB%2C%20C%3BD%3DE%40F/img-2.png"))
       .toBe("/proj/writing/assets/A+B, C;D=E@F/img-2.png");
   });
 
@@ -69,11 +71,11 @@ describe("assetPathFor", () => {
       "assets/第一章 序/img-3.png",
     ]) {
       const src = imageMarkdown(rel, "alt").match(/\]\(([^)]+)\)/)![1];
-      expect(assetPathFor("/proj/writing", src)).toBe(`/proj/writing/${rel}`);
+      expect(resolveLinkPath("/proj/writing", src)).toBe(`/proj/writing/${rel}`);
     }
   });
 
   it("keeps a malformed escape as-is instead of throwing", () => {
-    expect(assetPathFor("/proj", "assets/100%.png")).toBe("/proj/assets/100%.png");
+    expect(resolveLinkPath("/proj", "assets/100%.png")).toBe("/proj/assets/100%.png");
   });
 });
