@@ -25,6 +25,7 @@ import {
   listWritingFiles,
   readLoreEntity,
   readLoreImage,
+  readProjectImage,
   readWritingFile,
   searchWritingFiles,
   type ToolCall,
@@ -203,6 +204,7 @@ export type ToolId =
   | "list_lore_entities"
   | "read_lore_entity"
   | "read_lore_image"
+  | "read_image"
   | "list_files"
   | "read_file"
   | "search_text"
@@ -309,6 +311,34 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
         return { toolCallId: call.id, content: "Error: 'name' and 'file' arguments are required." };
       }
       return readLoreImage(call.id, args.name, args.file, ctx.loreIndex, ctx.multimodal);
+    },
+  },
+
+  read_image: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "read_image",
+        description:
+          "View an image file from the project as visual input: a document's illustrations (they live in an `assets/` folder beside it, which list_files shows), or any reference picture the author keeps in the project. For a lore entity's avatar or gallery picture use read_lore_image instead — it takes the entity and filename read_lore_entity lists. Call this only for a picture the current task actually needs; each one is expensive to send.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description:
+                "Absolute path to the image — a list_files folder line + \"/\" + the filename. A link written inside a document, ![](assets/…/x.png), is relative to that document's own folder: join the document's folder with it.",
+            },
+          },
+          required: ["path"],
+        },
+      },
+    },
+    execute: async (call, ctx) => {
+      const args = parseArgs<{ path?: string }>(call.arguments);
+      if (!args.path) return { toolCallId: call.id, content: "Error: 'path' argument is required." };
+      return readProjectImage(call.id, args.path, ctx.projectPath, ctx.multimodal);
     },
   },
 

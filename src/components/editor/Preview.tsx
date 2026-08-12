@@ -15,6 +15,22 @@ interface Props {
 
 export function Preview({ source, basePath }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  /**
+   * Decoded pictures, by absolute path — the value once it has landed, or the
+   * in-flight read that will produce it.
+   *
+   * This effect re-runs on **every keystroke** in split view (the whole DOM is
+   * rebuilt from `source`), so without a cache each character retyped meant
+   * re-reading every illustration off disk and base64-encoding it again, and
+   * each rebuilt `<img>` showed a broken icon until that landed — an
+   * illustrated chapter visibly flickered as you wrote in it. A hit is applied
+   * synchronously, before the browser ever paints the new element.
+   */
+  const decoded = useRef(new Map<string, string | Promise<string>>());
+
+  // Another document is another neighbourhood of files; keeping the old one's
+  // decoded pictures would just be megabytes nobody is going to ask for.
+  useEffect(() => { decoded.current.clear(); }, [basePath]);
 
   useEffect(() => {
     if (!ref.current) return;
@@ -35,9 +51,30 @@ export function Preview({ source, basePath }: Props) {
         let rel = raw;
         try { rel = decodeURI(raw); } catch { /* keep raw on malformed escape */ }
         const abs = resolveRelativePath(basePath, rel);
-        imageToDataUrl(abs)
-          .then(({ dataUrl }) => { img.src = dataUrl; })
-          .catch(() => { img.setAttribute("data-broken", "true"); });
+
+        const hit = decoded.current.get(abs);
+        if (typeof hit === "string") { img.src = hit; return; }
+        // The `src` the renderer wrote is a relative path this webview cannot
+        // load. Drop it now, or the browser spends the wait showing its own
+        // broken-image icon; the CSS marks the gap instead.
+        img.removeAttribute("src");
+        img.setAttribute("data-loading", "true");
+
+        const pending = hit ?? imageToDataUrl(abs).then(({ dataUrl }) => {
+          decoded.current.set(abs, dataUrl);
+          return dataUrl;
+        });
+        if (!hit) decoded.current.set(abs, pending);
+        pending
+          .then((dataUrl) => { img.removeAttribute("data-loading"); img.src = dataUrl; })
+          .catch(() => {
+            // Forgotten rather than remembered as broken: the author is most
+            // likely mid-way through typing the path, or about to create the
+            // file, and a cached failure would outlive the fix.
+            decoded.current.delete(abs);
+            img.removeAttribute("data-loading");
+            img.setAttribute("data-broken", "true");
+          });
       });
     }
 
@@ -65,7 +102,10 @@ export function Preview({ source, basePath }: Props) {
         });
       });
     });
-  }, [source]);
+    // `basePath` belongs here too: two documents in different folders can hold
+    // identical text (a template, a duplicated draft), and without it the
+    // second one would render the first one's pictures — or none at all.
+  }, [source, basePath]);
 
   // data-preview-scroller marks the element that actually scrolls (the root is
   // the one carrying `overflow-y: auto`). EditorArea's split-view sync finds it

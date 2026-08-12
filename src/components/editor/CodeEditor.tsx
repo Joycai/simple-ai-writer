@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { EditorState } from "@codemirror/state";
 import {
   EditorView,
@@ -37,7 +39,9 @@ import {
   toggleQuote,
   toggleBulletList,
   insertLink,
+  insertAtCursor,
 } from "../../lib/editor/format";
+import { imageMarkdown, importDocumentAsset } from "../../lib/image/assets";
 import styles from "./CodeEditor.module.css";
 
 /** Markdown formatting shortcuts. Kept clear of app globals: Mod-S (save),
@@ -69,6 +73,7 @@ interface Props {
 }
 
 export function CodeEditor({ value, onChange }: Props) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
@@ -77,6 +82,39 @@ export function CodeEditor({ value, onChange }: Props) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [illustrating, setIllustrating] = useState(false);
   const hasImageModel = useAiStore((s) => s.models.some((m) => m.type === "image"));
+  const filePath = useEditorStore((s) => s.filePath);
+  /** A failed 插入图片, shown until the next attempt. */
+  const [insertError, setInsertError] = useState<string | null>(null);
+
+  /**
+   * Copy a picture off disk into the document's own `assets/` folder and link
+   * it at the cursor.
+   *
+   * Copied rather than linked in place: the link is relative, so pointing at
+   * wherever the file happened to sit would break the moment the project moves
+   * to another machine — and the picture would be missing from every export
+   * and backup, which only carry the project folder.
+   */
+  const handleInsertImage = async () => {
+    const view = viewRef.current;
+    if (!view || !filePath) return;
+    setInsertError(null);
+    const picked = await openDialog({
+      multiple: false,
+      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "gif"] }],
+    });
+    if (typeof picked !== "string") return;
+    try {
+      const { relPath } = await importDocumentAsset(filePath, picked);
+      // Alt text is what a text-only model — and a reader of the exported
+      // HTML — sees in place of the picture, so an empty one makes it
+      // invisible. The filename is the only description available here.
+      const alt = (picked.split(/[/\\]/).pop() ?? "").replace(/\.[^.]+$/, "");
+      insertAtCursor(view, imageMarkdown(relPath, alt));
+    } catch (e) {
+      setInsertError(t("editor.insertImageFailed", { message: String(e) }));
+    }
+  };
 
   // Update content when external value changes (e.g. file switch)
   const externalValueRef = useRef(value);
@@ -204,10 +242,17 @@ export function CodeEditor({ value, onChange }: Props) {
           y={menu.y}
           view={viewRef.current}
           onClose={() => setMenu(null)}
-          // Offered only when an image model exists — a menu entry that can
-          // only ever open an empty modal is worse than no entry.
+          // Both are offered only when they can actually work: an entry that
+          // can only ever open an empty modal — or file a picture beside a
+          // document that has no path — is worse than no entry.
           onIllustrate={hasImageModel ? () => { setMenu(null); setIllustrating(true); } : undefined}
+          onInsertImage={filePath ? () => { setMenu(null); void handleInsertImage(); } : undefined}
         />
+      )}
+      {insertError && (
+        <div className={styles.notice} onClick={() => setInsertError(null)} role="status">
+          {insertError}
+        </div>
       )}
       {illustrating && <DocImageGenModal onClose={() => setIllustrating(false)} />}
     </div>

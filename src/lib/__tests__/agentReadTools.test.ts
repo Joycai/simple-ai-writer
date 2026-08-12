@@ -3,6 +3,7 @@
  *   - list_files  — recursive grouped listing, natural order, caps
  *   - read_file   — line-based paging and its budget
  *   - search_text — recursive scan, snippet windowing, result caps
+ *   - read_image  — path resolution, the multimodal gate, and the size ceiling
  * plus the path containment that keeps a model-supplied `folder`/`path` inside
  * the project.
  */
@@ -58,10 +59,26 @@ vi.mock("../project", () => ({
   }),
 }));
 
+/**
+ * Real classification and limits, fake decoding: `imageToDataUrl` reads bytes
+ * through the Tauri fs plugin, which is not there in a node test. Sizes come
+ * from the in-memory content's length so the ceiling can be exercised.
+ */
+vi.mock("../fs/images", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../fs/images")>()),
+  imageToDataUrl: vi.fn(async (p: string) => {
+    if (!fs.has(p)) throw new Error(`ENOENT: ${p}`);
+    const bytes = new Uint8Array(fs.get(p)!.length);
+    return { dataUrl: `data:image/png;base64,${p}`, ext: "png", bytes };
+  }),
+}));
+
 import { executeRegisteredTool, type ToolContext, type ToolId } from "../agent/registry";
+import type { ToolResult } from "../agent/tools";
+import { MAX_IMAGE_BYTES } from "../fs/images";
 
 const PROJECT = "/proj";
-const ALLOWED: ToolId[] = ["list_files", "read_file", "search_text"];
+const ALLOWED: ToolId[] = ["list_files", "read_file", "search_text", "read_image"];
 
 const ctx: ToolContext = {
   projectPath: PROJECT,
@@ -69,13 +86,20 @@ const ctx: ToolContext = {
   multimodal: false,
 };
 
-async function call(name: ToolId, args: Record<string, unknown>): Promise<string> {
-  const result = await executeRegisteredTool(
+async function callFull(
+  name: ToolId,
+  args: Record<string, unknown>,
+  over: Partial<ToolContext> = {},
+): Promise<ToolResult> {
+  return executeRegisteredTool(
     { id: "c1", name, arguments: JSON.stringify(args) },
     ALLOWED,
-    ctx,
+    { ...ctx, ...over },
   );
-  return result.content;
+}
+
+async function call(name: ToolId, args: Record<string, unknown>): Promise<string> {
+  return (await callFull(name, args)).content;
 }
 
 const search = (args: Record<string, unknown>) => call("search_text", args);
@@ -317,5 +341,111 @@ describe("search_text", () => {
 
     expect(out).toContain("in 1 file");
     expect(out).toContain("ch1.md");
+  });
+});
+
+describe("read_image", () => {
+  const readImage = (path: string) => callFull("read_image", { path }, { multimodal: true });
+  /** A document's illustration, where `saveDocumentAsset` actually puts one. */
+  const ILLUSTRATION = `${PROJECT}/writing/卷一/assets/第三章/img-1.png`;
+
+  it("refuses on a text-only model instead of sending pixels it can't read", async () => {
+    fs.set(ILLUSTRATION, "x");
+
+    const out = await call("read_image", { path: ILLUSTRATION });
+
+    expect(out).toContain("text-only");
+  });
+
+  it("hands an image back as visual input, not as text", async () => {
+    fs.set(ILLUSTRATION, "x");
+
+    const out = await readImage(ILLUSTRATION);
+
+    expect(out.imageDataUrls).toEqual([`data:image/png;base64,${ILLUSTRATION}`]);
+    // The path too: the model needs it to talk about the picture afterwards
+    // (and to ask for an edit of it).
+    expect(out.content).toContain(ILLUSTRATION);
+  });
+
+  it("resolves a project-relative path", async () => {
+    fs.set(ILLUSTRATION, "x");
+
+    const out = await readImage("writing/卷一/assets/第三章/img-1.png");
+
+    expect(out.imageDataUrls).toHaveLength(1);
+  });
+
+  it("decodes a link copied out of a document", async () => {
+    // `imageMarkdown` percent-encodes each segment, so the link the model reads
+    // in a chapter names no file on disk until it is decoded.
+    fs.set(ILLUSTRATION, "x");
+    const encoded = ILLUSTRATION.split("/").map(encodeURIComponent).join("/");
+
+    const out = await readImage(`/${encoded.slice(1)}`);
+
+    expect(out.imageDataUrls).toHaveLength(1);
+  });
+
+  it("reads reference art from anywhere in the project, not just writing/", async () => {
+    // Unlike read_file: an image tool can't leak the lore's or the profile's
+    // text back to whoever planted an instruction, and the author's reference
+    // folder is the ordinary case.
+    fs.set(`${PROJECT}/参考图/外套.png`, "x");
+
+    const out = await readImage(`${PROJECT}/参考图/外套.png`);
+
+    expect(out.imageDataUrls).toHaveLength(1);
+  });
+
+  it("refuses outright on a surface with no project", async () => {
+    // Containment is a prefix test, and every absolute path is inside the
+    // empty prefix — so this must be refused before it is reached.
+    fs.set("/etc/secret.png", "x");
+
+    const out = await callFull(
+      "read_image",
+      { path: "/etc/secret.png" },
+      { multimodal: true, projectPath: "" },
+    );
+
+    expect(out.content).toContain("no project is open");
+    expect(out.imageDataUrls).toBeUndefined();
+  });
+
+  it("refuses a path that escapes the project", async () => {
+    fs.set("/etc/secret.png", "x");
+
+    const out = await readImage(`${PROJECT}/../etc/secret.png`);
+
+    expect(out.content).toContain("outside the project");
+    expect(out.imageDataUrls).toBeUndefined();
+  });
+
+  it("sends a text file to read_file rather than trying to decode it", async () => {
+    fs.set(`${PROJECT}/writing/ch1.md`, "断剑");
+
+    const out = await readImage(`${PROJECT}/writing/ch1.md`);
+
+    expect(out.content).toContain("not an image");
+    expect(out.content).toContain("read_file");
+  });
+
+  it("says how to build a correct path when the file isn't there", async () => {
+    // A bare "not found" leaves the model retrying the same wrong spelling —
+    // and the two ways to name an image differ.
+    const out = await readImage(`${PROJECT}/writing/assets/nope.png`);
+
+    expect(out.content).toContain("list_files");
+    expect(out.content).toMatch(/relative to that document/);
+  });
+
+  it("refuses a picture too big to send", async () => {
+    fs.set(ILLUSTRATION, "x".repeat(MAX_IMAGE_BYTES + 1));
+
+    const out = await readImage(ILLUSTRATION);
+
+    expect(out.content).toContain("too large");
+    expect(out.imageDataUrls).toBeUndefined();
   });
 });

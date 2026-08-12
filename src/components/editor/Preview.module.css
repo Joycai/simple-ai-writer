@@ -48,6 +48,46 @@
   margin: 0 auto;
 }
 
+/* An illustration that has no `src` yet — either being decoded off disk, or
+   pointing at a file that isn't there. Both need a box: an <img> with no source
+   collapses to nothing, so a mistyped path used to leave no trace at all in the
+   preview, and a loading one made the page jump when it landed.
+   Sized to a plausible illustration rather than to the real one, whose
+   dimensions aren't known until it is decoded. */
+.page img[data-loading],
+.page img[data-broken] {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  aspect-ratio: 4 / 3;
+  margin: var(--space-4) auto;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+}
+.page img[data-loading] {
+  background: var(--color-bg-elevated);
+}
+/* Broken says so in words: a dashed box alone reads as "still loading", and
+   the author needs to know the link is wrong, not slow. */
+.page img[data-broken] {
+  position: relative;
+  border-color: var(--color-error);
+  background: var(--color-error-bg);
+}
+.page img[data-broken]::after {
+  content: attr(alt);
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3);
+  font: 400 12px/1.6 var(--font-sans);
+  color: var(--color-error);
+  text-align: center;
+  word-break: break-word;
+}
+
 /* Lore mention spans (when emitted by markdown renderer) */
 .preview :global(.lore-mention) {
   color: var(--color-sienna);

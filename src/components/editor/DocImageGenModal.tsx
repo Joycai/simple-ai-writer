@@ -9,8 +9,8 @@
 
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { EditorSelection } from "@codemirror/state";
 import { ImageGenModal } from "../ai/ImageGenModal";
+import { insertAtCursor as insertIntoView } from "../../lib/editor/format";
 import { imageMarkdown, saveDocumentAsset } from "../../lib/image/assets";
 import type { ImageGenTarget } from "../../lib/image/target";
 import { useEditorStore } from "../../stores/editorStore";
@@ -68,24 +68,10 @@ export function DocImageGenModal({ onClose }: Props) {
     };
   }, [filePath, terms, t]);
 
-  /**
-   * Splice the link in through CodeMirror rather than the store's content:
-   * a dispatch keeps the undo history and the cursor, where replacing the
-   * whole document would drop both.
-   */
+  /** Splice the link in through the live CodeMirror view, if there is one. */
   function insertAtCursor(text: string) {
     const v = useEditorStore.getState().editorView;
-    if (!v) return;
-    const at = v.state.selection.main.to;
-    v.dispatch(
-      v.state.update({
-        changes: { from: at, insert: text },
-        selection: EditorSelection.cursor(at + text.length),
-        scrollIntoView: true,
-        userEvent: "input.insert",
-      }),
-    );
-    v.focus();
+    if (v) insertIntoView(v, text);
   }
 
   return <ImageGenModal target={target} onClose={onClose} />;

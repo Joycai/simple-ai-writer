@@ -152,6 +152,26 @@ export function insertLink(view: EditorView): boolean {
   return true;
 }
 
+/**
+ * Drop `text` in at the cursor, leaving the caret after it.
+ *
+ * A dispatch rather than a rewrite of the store's `content`: replacing the
+ * whole document would drop the undo history and the cursor with it. Used by
+ * everything that puts a new block in — the illustration flows, and 插入图片.
+ */
+export function insertAtCursor(view: EditorView, text: string): void {
+  const at = view.state.selection.main.to;
+  view.dispatch(
+    view.state.update({
+      changes: { from: at, insert: text },
+      selection: EditorSelection.cursor(at + text.length),
+      scrollIntoView: true,
+      userEvent: "input.insert",
+    }),
+  );
+  view.focus();
+}
+
 /* ---- Clipboard --------------------------------------------------------- */
 
 export function hasSelection(view: EditorView): boolean {

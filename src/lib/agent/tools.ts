@@ -9,10 +9,10 @@
  */
 
 import { isChapterFile, naturalCompare } from "../context/outline";
-import { readFile } from "../fs/fileio";
-import { imageToDataUrl } from "../fs/images";
+import { fileExists, readFile } from "../fs/fileio";
+import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, imageToDataUrl, isImagePath } from "../fs/images";
 import { readEntityFile, type LoreEntity, type LoreIndex } from "../lore";
-import { isPathWithin } from "../paths";
+import { isPathWithin, resolveRelativePath } from "../paths";
 import { readDirRecursive, type FileNode } from "../project";
 
 export interface ToolCall {
@@ -117,10 +117,6 @@ export async function readLoreEntity(
   return { toolCallId, content: parts.join("\n\n") || "(no content)" };
 }
 
-/** Ceiling on one attached image's size, so a single oversized file can't
- *  reproduce the same timeout this tool exists to avoid. */
-const MAX_SINGLE_IMAGE_BYTES = 12 * 1024 * 1024; // ~12MB, before base64 inflation
-
 /** Fetch one specific image from an entity's gallery (or its avatar) as
  *  visual input — the on-demand counterpart to read_lore_entity's
  *  text-only gallery listing. */
@@ -159,15 +155,102 @@ export async function readLoreImage(
 
   try {
     const { dataUrl, bytes } = await imageToDataUrl(path);
-    if (bytes.length > MAX_SINGLE_IMAGE_BYTES) {
-      return {
-        toolCallId,
-        content: `Error: "${file}" is too large to attach (${(bytes.length / 1024 / 1024).toFixed(1)}MB, limit ${MAX_SINGLE_IMAGE_BYTES / 1024 / 1024}MB).`,
-      };
-    }
+    if (bytes.length > MAX_IMAGE_BYTES) return { toolCallId, content: tooLargeError(file, bytes.length) };
     return { toolCallId, content: `Image "${file}" from ${name}.`, imageDataUrls: [dataUrl] };
   } catch (e) {
     return { toolCallId, content: `Error reading "${file}": ${String(e)}` };
+  }
+}
+
+function tooLargeError(label: string, bytes: number): string {
+  return `Error: "${label}" is too large to attach (${(bytes / 1024 / 1024).toFixed(1)}MB, limit ${MAX_IMAGE_BYTES / 1024 / 1024}MB).`;
+}
+
+/**
+ * A markdown link's path, percent-decoding each segment.
+ *
+ * `imageMarkdown` (lib/image/assets) writes illustration links encoded, so the
+ * link the model reads out of a chapter is `assets/%E7%AC%AC%E4%B8%89%E7%AB%A0/img-1.png`
+ * — which names no file on disk. Tried *after* the path as given, since a
+ * filename may legitimately contain a `%`.
+ */
+function decodeLinkPath(path: string): string {
+  try {
+    return path.split("/").map(decodeURIComponent).join("/");
+  } catch {
+    return path; // malformed escape — the raw form is the only candidate
+  }
+}
+
+/**
+ * View any image in the project as visual input — the counterpart to
+ * `read_lore_image`, for pictures that don't belong to a lore entity: a
+ * chapter's illustrations under `writing/…/assets/`, and whatever reference art
+ * the author keeps in the project folder.
+ *
+ * Containment is against the **project**, not `writing/` the way `read_file`
+ * is. That tool is narrow because a model tricked into calling it could read
+ * `profile.json` or the lore's text back to whoever planted the instruction;
+ * an image tool can't — it decodes one file, by extension, into pixels the
+ * model looks at. Narrowing it to `writing/` would instead break the ordinary
+ * case (art in a top-level `参考图/`) for no gain. Traversal outside the
+ * project is still refused.
+ */
+export async function readProjectImage(
+  toolCallId: string,
+  rawPath: string,
+  projectPath: string,
+  multimodal: boolean,
+): Promise<ToolResult> {
+  if (!multimodal) {
+    return { toolCallId, content: "Error: the active model is text-only and cannot accept images." };
+  }
+  // Containment is a prefix test, and every absolute path is inside the empty
+  // prefix — so a surface that runs the loop without a project (the lore
+  // generator passes "") would turn this into "read any image on the disk".
+  if (!projectPath) {
+    return { toolCallId, content: "Error: no project is open — do not call this tool here." };
+  }
+  const wanted = rawPath.trim();
+  if (!wanted) return { toolCallId, content: "Error: 'path' argument is required." };
+
+  // Relative paths resolve against the project root — `resolveRelativePath`
+  // returns an absolute one unchanged, so both spellings go through one call.
+  const candidates = [...new Set([wanted, decodeLinkPath(wanted)])]
+    .map((p) => resolveRelativePath(projectPath, p));
+
+  if (!candidates.some(isImagePath)) {
+    return {
+      toolCallId,
+      content: `Error: "${wanted}" is not an image (expected one of: ${IMAGE_EXT_LIST}). Text files are read with read_file.`,
+    };
+  }
+  const inside = candidates.filter((p) => isPathWithin(projectPath, p));
+  if (!inside.length) {
+    return { toolCallId, content: "Error: Path is outside the project folder." };
+  }
+
+  let path: string | null = null;
+  for (const p of inside) {
+    if (await fileExists(p)) { path = p; break; }
+  }
+  if (!path) {
+    return {
+      toolCallId,
+      // Says how to build a correct path rather than just refusing: the two
+      // ways to reach an image differ, and a bare "not found" leaves the model
+      // retrying the same wrong spelling.
+      content: `Error: no image at "${inside[0]}". Absolute paths come from list_files (its folder line + "/" + the filename); a link written inside a document — ![](assets/…) — is relative to that document's own folder, so join the two.`,
+    };
+  }
+
+  try {
+    const { dataUrl, bytes } = await imageToDataUrl(path);
+    const name = path.split(/[\\/]/).pop() ?? path;
+    if (bytes.length > MAX_IMAGE_BYTES) return { toolCallId, content: tooLargeError(name, bytes.length) };
+    return { toolCallId, content: `Image "${name}" from ${path}.`, imageDataUrls: [dataUrl] };
+  } catch (e) {
+    return { toolCallId, content: `Error reading "${path}": ${String(e)}` };
   }
 }
 

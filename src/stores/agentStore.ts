@@ -482,12 +482,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   sendChat: async (text, quote, refs = []) => {
     const message = text.trim();
     if (!message || get().chatRunning) return;
-    // What the model receives: the quoted passage and any @-referenced material
-    // first, so "把这一段重写得更克制一些" has an unambiguous referent even
-    // mid-conversation. Composition lives in lib/agent/chatRefs.
     const quoted = quote?.trim();
-    const { buildChatMessage } = await import("../lib/agent/chatRefs");
-    const wireMessage = await buildChatMessage(message, quoted, refs);
 
     // Stores are reached lazily throughout this module: aiTaskStore imports
     // *this* one at the top level, so agentStore must stay free of static store
@@ -509,9 +504,20 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     if (!resolved) { set({ chatError: i18n.t("ai.errors.noModel") }); return; }
     const { model, provider } = resolved;
 
+    // What the model receives: the quoted passage and any @-referenced material
+    // first, so "把这一段重写得更克制一些" has an unambiguous referent even
+    // mid-conversation. Composition lives in lib/agent/chatRefs. Built after
+    // the model is resolved, because whether an attached picture can travel at
+    // all is a property of the model.
+    const { buildChatMessage } = await import("../lib/agent/chatRefs");
+    const { text: wireMessage, content: wireContent, imagePaths } = await buildChatMessage(
+      message, quoted, refs, { allowImages: model.type === "multimodal" },
+    );
+
     const controller = new AbortController();
     const userTurn: ChatTurn = {
       id: `t${++turnCounter}`, role: "user", text: message, log: [], at: Date.now(), quote: quoted,
+      images: imagePaths.length ? imagePaths : undefined,
     };
     const assistantTurn: ChatTurn = {
       id: `t${++turnCounter}`, role: "assistant", text: "", log: [], at: Date.now(),
@@ -575,7 +581,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // the latter (docs/chat-memory-plan.md §3). The meta records which
         // message is which — by identity, because indices don't survive
         // repairToolCallPairing's splices.
-        const seed = bundleToChatMessages(bundle);
+        const seed = bundleToChatMessages(bundle, wireContent);
         history = seed.messages;
         const meta = createSessionMeta();
         meta.seedContext = seed.seedContext;
@@ -712,7 +718,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           }
         }
 
-        const questionMsg: StreamMessage = { role: "user", content: wireMessage };
+        const questionMsg: StreamMessage = { role: "user", content: wireContent };
         if (meta) noteTurnStart(meta, questionMsg);
         history.push(questionMsg);
         bumpContext();

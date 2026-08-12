@@ -13,6 +13,7 @@
  */
 
 import i18n from "../../i18n";
+import type { MessageContent } from "../ai/types";
 import type { LoreEntity, LoreIndex } from "../lore";
 import { activeProfile, promptParams, sectionLabel } from "../profile/active";
 import { RECENT_WINDOW_MIN_CHARS } from "./budget";
@@ -570,7 +571,7 @@ export async function assembleTurnInjection(opts: {
 /** The chat seed, with the two user messages identified for session bookkeeping. */
 export interface ChatSeedMessages {
   /** What actually goes on the wire, in order. */
-  messages: { role: "system" | "user"; content: string }[];
+  messages: { role: "system" | "user"; content: MessageContent }[];
   /**
    * The seeded-context message inside `messages` — identified by reference so
    * the session can drop it at compaction time. Null when nothing was seeded
@@ -579,7 +580,7 @@ export interface ChatSeedMessages {
    */
   seedContext: { role: "user"; content: string } | null;
   /** The author's question message inside `messages`. */
-  question: { role: "user"; content: string };
+  question: { role: "user"; content: MessageContent };
 }
 
 /**
@@ -590,13 +591,22 @@ export interface ChatSeedMessages {
  * asked. Split, the context block is an independent unit the compaction pass
  * (docs/chat-memory-plan.md §4) can discard, because it is retrieval output
  * and reproducible; the question is conversation and is not.
+ *
+ * `questionContent` overrides what the question message carries on the wire,
+ * for a first turn the author attached pictures to. The bundle's `taskText` is
+ * still the text the whole context was assembled *around* — retrieval matches
+ * on words — so the override adds the image parts beside it rather than
+ * replacing what this function was given.
  */
-export function bundleToChatMessages(bundle: ContextBundle): ChatSeedMessages {
+export function bundleToChatMessages(
+  bundle: ContextBundle,
+  questionContent?: MessageContent,
+): ChatSeedMessages {
   const sections = bundleContextSections(bundle);
   const seedContext = sections.length > 0
     ? { role: "user" as const, content: sections.join("\n\n") }
     : null;
-  const question = { role: "user" as const, content: bundle.taskText };
+  const question = { role: "user" as const, content: questionContent ?? bundle.taskText };
   return {
     messages: [
       { role: "system", content: bundle.systemPrompt || profileSystemPrompt() },

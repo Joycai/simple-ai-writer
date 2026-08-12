@@ -22,6 +22,35 @@
 import type { StreamMessage } from "../ai/types";
 import type { AgentEvent } from "./events";
 import { createSessionMeta, type ChatSessionMeta } from "./compact";
+import { contentWithoutImages, hasImageParts } from "./imageHistory";
+
+/**
+ * Replaces a picture in the *saved* history. Restoring a session brings back
+ * the conversation, not the pixels — see {@link withoutImageData}.
+ */
+const DROPPED_IMAGE =
+  "[image not kept in the saved session — read it again if it still matters]";
+
+/**
+ * The history as it goes to disk: same messages, minus the base64.
+ *
+ * A picture is ~1–12MB of data URL, up to three of them survive in a live
+ * history at once, and this blob is a single SQLite row rewritten on every
+ * turn. Keeping them would mean tens of megabytes of JSON stringified and
+ * written repeatedly, for pixels a restored session cannot use anyway: the
+ * author attached theirs to a question that has already been answered, and the
+ * model can call read_image or read_lore_image again for anything it still
+ * needs — the paths are right there in the transcript.
+ *
+ * Copies rather than mutates: the live session keeps its images. Order is
+ * preserved 1:1 so the meta's index references, computed against the original
+ * array, still land on the right messages.
+ */
+function withoutImageData(history: StreamMessage[]): StreamMessage[] {
+  return history.map((m) =>
+    hasImageParts(m) ? { ...m, content: contentWithoutImages(m, DROPPED_IMAGE) } : m,
+  );
+}
 
 /** Structural mirror of agentStore's ChatTurn (lib must not import stores). */
 export interface PersistedTurn {
@@ -70,7 +99,7 @@ export function serializeChatSession(snap: ChatSnapshot): string {
   const data: SerializedChat = {
     v: 1,
     turns: snap.turns,
-    history: snap.history,
+    history: withoutImageData(snap.history),
     meta: {
       seedContext: indexOf(snap.meta.seedContext),
       summary: indexOf(snap.meta.summary),

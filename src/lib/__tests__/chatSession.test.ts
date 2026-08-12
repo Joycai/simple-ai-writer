@@ -96,6 +96,35 @@ describe("chat session round-trip", () => {
     expect(restored.meta.injected.size).toBe(0);
   });
 
+  it("saves a question's words but not the picture attached to it", () => {
+    // A data URL is megabytes, and this blob is one SQLite row rewritten every
+    // turn. The pixels don't survive a restart; the question does, and so does
+    // the path — read_image can fetch it again if it still matters.
+    const snap = makeSnapshot();
+    const withImage: StreamMessage = {
+      role: "user",
+      content: [
+        { type: "text", text: "这件外套什么颜色" },
+        { type: "image_url", image_url: { url: `data:image/png;base64,${"A".repeat(5000)}` } },
+      ],
+    };
+    snap.history.push(withImage);
+    noteTurnStart(snap.meta, withImage);
+
+    const json = serializeChatSession(snap);
+    expect(json).not.toContain("AAAA");
+    expect(json.length).toBeLessThan(3000);
+
+    const restored = deserializeChatSession(json)!;
+    const last = restored.history[restored.history.length - 1];
+    expect(last.content).toContain("这件外套什么颜色");
+    // Still a turn start after the round-trip: blanking the whole message
+    // would have kept the answer and thrown away the question.
+    expect(restored.meta.turnStarts).toContain(last);
+    // The live session keeps its pictures — serialization copies, never mutates.
+    expect(Array.isArray(withImage.content)).toBe(true);
+  });
+
   it("returns null for garbage, wrong versions, and missing fields", () => {
     expect(deserializeChatSession("not json")).toBeNull();
     expect(deserializeChatSession("42")).toBeNull();

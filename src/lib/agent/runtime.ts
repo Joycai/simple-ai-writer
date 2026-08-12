@@ -18,6 +18,7 @@ import type { GeminiSafetySettings } from "../ai/safety";
 import { estimateMessagesTokens } from "../ai/tokenEstimate";
 import type { AccumulatedToolCall, ApiStandard, AuthMode, ContentPart, StreamMessage } from "../ai/types";
 import type { AgentEvent } from "./events";
+import { contentWithoutImages, hasImageParts } from "./imageHistory";
 import { TOOL_ARGS_DETAIL_CHARS, TOOL_RESULT_DETAIL_CHARS } from "./logFormat";
 import type { TaskPreset } from "./presets";
 import { executeRegisteredTool, getToolDefinitions, type ToolContext } from "./registry";
@@ -28,37 +29,27 @@ const ELIDED_TOOL_RESULT =
   "[earlier tool result dropped to stay within the model's context window]";
 /** Stand-in for a tool call that never ran, because the run was stopped. */
 const ABORTED_TOOL_RESULT = "[not run — the user stopped the task]";
-/** Stand-in left behind when an old image tool result is dropped to reclaim room. */
-const ELIDED_IMAGE_RESULT =
-  "[earlier tool result image dropped to stay within the model's context window]";
+/** Stand-in left behind where an earlier picture was dropped to reclaim room. */
+const ELIDED_IMAGE =
+  "[earlier image dropped to stay within the model's context window]";
 
 /**
- * True for a history entry appended by the tool loop's own image-result
- * branch (`role: "user"` with `image_url` parts) — never the seeded first
- * turn, which `bundleToMessages` always hands over as a plain string.
- */
-function isImageResultMessage(m: StreamMessage): boolean {
-  return (
-    m.role === "user" &&
-    Array.isArray(m.content) &&
-    m.content.some((p) => p.type === "image_url")
-  );
-}
-
-/**
- * How many tool-supplied pictures stay in history verbatim. Enough to compare
- * a couple of gallery images against each other; few enough that the request
- * body stays in the low megabytes however long the conversation runs.
+ * How many pictures stay in history verbatim. Enough to compare a couple of
+ * gallery images against each other; few enough that the request body stays in
+ * the low megabytes however long the conversation runs.
+ *
+ * Counts the author's own attachments alongside the tool loop's: both are
+ * base64 on the same wire, and a cap that only saw one of them would be a cap
+ * the other could walk straight past.
  */
 const MAX_IMAGE_RESULTS = 3;
 
-/** Replace all but the newest {@link MAX_IMAGE_RESULTS} image results. */
+/** Strip all but the newest {@link MAX_IMAGE_RESULTS} pictures, keeping their text. */
 function elideOldImageResults(history: StreamMessage[]): number {
-  const live: number[] = [];
-  history.forEach((m, i) => { if (isImageResultMessage(m)) live.push(i); });
+  const live = history.filter(hasImageParts);
   let dropped = 0;
-  for (const i of live.slice(0, Math.max(0, live.length - MAX_IMAGE_RESULTS))) {
-    history[i].content = ELIDED_IMAGE_RESULT;
+  for (const m of live.slice(0, Math.max(0, live.length - MAX_IMAGE_RESULTS))) {
+    m.content = contentWithoutImages(m, ELIDED_IMAGE);
     dropped++;
   }
   return dropped;
@@ -81,14 +72,15 @@ function elideOldImageResults(history: StreamMessage[]): number {
  * Oldest tool results go first: they are both the bulk of the growth and the
  * least likely to still matter. Their *messages* stay — an assistant tool_call
  * with no matching tool reply is a protocol error at both OpenAI and Gemini —
- * only the payload is replaced. Image tool results (appended as a follow-up
- * `role: "user"` message — see the loop below) are elided the same way: their
- * base64 data URLs are usually the single largest thing in history, so
- * leaving them out of this pass would mean the ceiling keeps getting hit again
- * every round without ever reclaiming the room that actually matters. The
- * system prompt and the assembled first turn are never touched; if those
- * alone overflow, that is a planning bug and the pre-flight check should say
- * so rather than this quietly hiding it.
+ * only the payload is replaced. Pictures (`image_url` parts on a `role: "user"`
+ * message — a vision tool's result, or one the author attached to their
+ * question) are elided the same way: their base64 data URLs are usually the
+ * single largest thing in history, so leaving them out of this pass would mean
+ * the ceiling keeps getting hit again every round without ever reclaiming the
+ * room that actually matters. Their surrounding text survives — see
+ * lib/agent/imageHistory. The system prompt and the assembled first turn's
+ * *text* are never touched; if those alone overflow, that is a planning bug and
+ * the pre-flight check should say so rather than this quietly hiding it.
  *
  * Returns how many results were elided so the caller can log it.
  */
@@ -106,8 +98,8 @@ export function trimHistory(history: StreamMessage[], ceilingTokens?: number): n
     if (m.role === "tool" && m.content !== ELIDED_TOOL_RESULT) {
       m.content = ELIDED_TOOL_RESULT;
       dropped++;
-    } else if (isImageResultMessage(m)) {
-      m.content = ELIDED_IMAGE_RESULT;
+    } else if (hasImageParts(m)) {
+      m.content = contentWithoutImages(m, ELIDED_IMAGE);
       dropped++;
     } else {
       continue;

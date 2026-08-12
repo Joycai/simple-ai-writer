@@ -14,7 +14,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight, Send, Square, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Image as ImageIcon, Send, Square, X } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { SnippetPicker } from "./SnippetPicker";
 import {
@@ -26,7 +26,9 @@ import {
   type MentionItem,
 } from "../common/MentionPicker";
 import { renderMarkdown } from "../../lib/fs/markdown";
-import { scanProjectFiles, readTextFileContent, type ProjectFile } from "../../lib/fs/images";
+import {
+  MAX_IMAGE_BYTES, imageToDataUrl, readTextFileContent, scanProjectFiles, type ProjectFile,
+} from "../../lib/fs/images";
 import { attachedKey, type AttachedItem } from "../../lib/lore/aiTask";
 import { useImageDataUrls } from "../lore/useImageDataUrl";
 import { useLoreStore } from "../../stores/loreStore";
@@ -67,6 +69,18 @@ function formatTokens(n: number): string {
   return `${k >= 100 || Number.isInteger(k) ? Math.round(k) : k.toFixed(1)}k`;
 }
 
+/**
+ * What a `+ …` chip pre-filters the picker to.
+ *
+ * Finer than `MentionItem["type"]`, because a document and a picture are both
+ * `file` items yet the author asking for one never means the other.
+ */
+type PickKind = "lore" | "text" | "image";
+
+function matchesKind(item: MentionItem, kind: PickKind): boolean {
+  return kind === "lore" ? item.type === "lore" : item.type === "file" && item.file.kind === kind;
+}
+
 export function AgentChat() {
   const { t } = useTranslation();
   const {
@@ -75,6 +89,10 @@ export function AgentChat() {
   } = useAgentStore();
   const activeModelId = useAiStore((s) => s.activeModelId);
   const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId));
+  // Whether this conversation can carry pictures at all. Declared by the model
+  // row in 设置 → 供应商与模型, not inferred: only the author knows whether the
+  // endpoint behind a name actually accepts image input.
+  const multimodal = activeModel?.type === "multimodal";
   const selection = useAiTaskStore((s) => s.selection);
   const terms = useTerms();
 
@@ -100,8 +118,10 @@ export function AgentChat() {
   // author has already said which kind they want, so the list shouldn't make
   // them re-narrow it by typing. Cleared the moment the mention closes, so a
   // hand-typed `@` always searches everything.
-  const [pickKind, setPickKind] = useState<MentionItem["type"] | null>(null);
+  const [pickKind, setPickKind] = useState<PickKind | null>(null);
   useEffect(() => { if (!mention.open) setPickKind(null); }, [mention.open]);
+  /** Rejected attachment (too large, unreadable) — cleared by the next pick. */
+  const [refError, setRefError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!projectPath) { setProjectFiles([]); return; }
@@ -110,17 +130,17 @@ export function AgentChat() {
 
   const candidates: MentionItem[] = useMemo(() => [
     ...Object.values(loreIndex).flat().map((entity): MentionItem => ({ type: "lore", entity })),
-    // Text only: this turn goes out as a string, and a chat message that
-    // becomes a multimodal parts array breaks the shape every later turn is
-    // appended to. Pictures belong in the lore modals, which build a fresh
-    // request each time.
+    // Pictures only for a model that can read them. Offering them to a
+    // text-only model would attach something the message physically cannot
+    // carry — the author would see a chip and the assistant would answer as if
+    // nothing were there.
     ...projectFiles
-      .filter((f) => f.kind === "text")
+      .filter((f) => f.kind === "text" || multimodal)
       .map((file): MentionItem => ({ type: "file", file })),
-  ], [loreIndex, projectFiles]);
+  ], [loreIndex, projectFiles, multimodal]);
 
   const mentionItems = filterMentions(
-    pickKind ? candidates.filter((c) => c.type === pickKind) : candidates,
+    pickKind ? candidates.filter((c) => matchesKind(c, pickKind)) : candidates,
     mention.query,
   );
   const refKeys = new Set(refs.map(attachedKey));
@@ -133,7 +153,7 @@ export function AgentChat() {
    * typed mention would, instead of becoming a second kind of attachment the
    * message has to carry separately.
    */
-  const openMentionFor = (kind: MentionItem["type"]) => {
+  const openMentionFor = (kind: PickKind) => {
     const el = inputRef.current;
     const caret = el?.selectionStart ?? draftRef.current.length;
     const before = draftRef.current.slice(0, caret);
@@ -161,14 +181,42 @@ export function AgentChat() {
 
   const handlePickMention = async (item: MentionItem) => {
     if (refKeys.has(mentionKey(item))) { mention.close(); return; }
+    setRefError(null);
     if (item.type === "lore") {
       setRefs((prev) => [...prev, { kind: "lore", entity: item.entity }]);
+    } else if (item.file.kind === "image") {
+      try {
+        const { dataUrl, bytes } = await imageToDataUrl(item.file.path);
+        // Refused here rather than at send time: the author is choosing the
+        // picture *now*, and a message that quietly loses one of its
+        // attachments minutes later is unexplainable from the transcript.
+        if (bytes.length > MAX_IMAGE_BYTES) {
+          setRefError(t("ai.chat.imageTooLarge", {
+            defaultValue: "{{name}} 太大（{{size}}MB，上限 {{max}}MB）",
+            name: item.file.name,
+            size: (bytes.length / 1024 / 1024).toFixed(1),
+            max: MAX_IMAGE_BYTES / 1024 / 1024,
+          }));
+          return;
+        }
+        setRefs((prev) => [...prev, { kind: "image", file: item.file, dataUrl }]);
+      } catch {
+        setRefError(t("ai.chat.refUnreadable", {
+          defaultValue: "读不到 {{name}}",
+          name: item.file.name,
+        }));
+        return;
+      }
     } else {
       try {
         const content = await readTextFileContent(item.file.path);
         setRefs((prev) => [...prev, { kind: "text", file: item.file, content }]);
       } catch {
-        return; // unreadable — leave the draft alone
+        setRefError(t("ai.chat.refUnreadable", {
+          defaultValue: "读不到 {{name}}",
+          name: item.file.name,
+        }));
+        return;
       }
     }
     // Not inside a state updater: `accept` calls setState itself, and React
@@ -235,6 +283,7 @@ export function AgentChat() {
     const text = draft;
     const sending = refs;
     setDraft("");
+    setRefError(null);
     // References are per-message, like the typed text: the next question is
     // rarely about the same files, and the material stays in the conversation
     // history anyway.
@@ -333,6 +382,10 @@ export function AgentChat() {
                 </div>
               )}
               <div className={styles.userTurn}>{turn.text}</div>
+              {/* Below the words, unlike an assistant turn's pictures: there the
+                  prose is a caption for the image, here it is the instruction
+                  the image came with. */}
+              <TurnImages paths={turn.images} align="end" />
               <div className={styles.turnTime}>{formatTime(turn.at)}</div>
             </div>
           ) : (
@@ -408,6 +461,9 @@ export function AgentChat() {
                 onClick={() => setRefs((prev) => prev.filter((x) => attachedKey(x) !== key))}
                 title={t("ai.chat.removeRef")}
               >
+                {/* A picture is the one attachment whose cost the author can't
+                    read off its name — mark it as what it is. */}
+                {r.kind === "image" && <ImageIcon size={10} strokeWidth={2} />}
                 @{label}
                 <X size={10} strokeWidth={2} />
               </button>
@@ -427,13 +483,28 @@ export function AgentChat() {
           </button>
           <button
             className={styles.attachChipGhost}
-            onClick={() => openMentionFor("file")}
-            disabled={!candidates.some((c) => c.type === "file")}
+            onClick={() => openMentionFor("text")}
+            disabled={!candidates.some((c) => matchesKind(c, "text"))}
             title={t("ai.chat.addRefHint", { defaultValue: "插入引用（等同于输入 @）" })}
           >
             + {terms.doc}
           </button>
+          {/* Only for a multimodal model: on a text-only one the chip would be
+              permanently dead, which reads as a broken control rather than as
+              "this model can't see". */}
+          {multimodal && (
+            <button
+              className={styles.attachChipGhost}
+              onClick={() => openMentionFor("image")}
+              disabled={!candidates.some((c) => matchesKind(c, "image"))}
+              title={t("ai.chat.addRefHint", { defaultValue: "插入引用（等同于输入 @）" })}
+            >
+              + {t("ai.chat.imageRef", { defaultValue: "图片" })}
+            </button>
+          )}
         </div>
+
+        {refError && <div className={styles.refError}>{refError}</div>}
 
         <div className={styles.inputRow}>
           <textarea
@@ -577,6 +648,33 @@ function ContextBar({ context }: { context: ContextBreakdown }) {
   );
 }
 
+/**
+ * A turn's pictures, as a row of thumbnails. Shared by both turn kinds: the
+ * assistant's are ones it drew, the author's are ones they attached, and there
+ * is no reason for a picture in a conversation to look like two different
+ * things depending on who put it there. Click reveals the file, as the gallery
+ * does.
+ */
+function TurnImages({ paths, align }: { paths?: string[]; align?: "start" | "end" }) {
+  const { t } = useTranslation();
+  const urls = useImageDataUrls(paths ?? []);
+  if (!paths?.length) return null;
+  return (
+    <div className={styles.turnImages} style={align === "end" ? { justifyContent: "flex-end" } : undefined}>
+      {paths.map((path) => (
+        <button
+          key={path}
+          className={styles.turnImage}
+          onClick={() => void revealItemInDir(path)}
+          title={t("ai.chat.revealImage")}
+        >
+          {urls[path] ? <img src={urls[path]} alt="" /> : <span className={styles.turnImageLoading} />}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function AssistantTurn({ text, log, images, isLive }: {
   text: string;
   log: AgentEvent[];
@@ -584,7 +682,6 @@ function AssistantTurn({ text, log, images, isLive }: {
   isLive: boolean;
 }) {
   const { t } = useTranslation();
-  const imageUrls = useImageDataUrls(images ?? []);
   // Markdown render is cheap at chat sizes; memo keeps streaming smooth anyway.
   const html = useMemo(() => renderMarkdown(text), [text]);
 
@@ -597,24 +694,8 @@ function AssistantTurn({ text, log, images, isLive }: {
       <div className={styles.turnContent}>
         {log.length > 0 && <AgentLog log={log} isRunning={isLive} compact />}
         {/* Pictures this turn produced, above the prose: the assistant's text
-            is a caption for them, and reading the caption first is backwards.
-            Click opens the file, the way the gallery does. */}
-        {images && images.length > 0 && (
-          <div className={styles.turnImages}>
-            {images.map((path) => (
-              <button
-                key={path}
-                className={styles.turnImage}
-                onClick={() => void revealItemInDir(path)}
-                title={t("ai.chat.revealImage")}
-              >
-                {imageUrls[path]
-                  ? <img src={imageUrls[path]} alt="" />
-                  : <span className={styles.turnImageLoading} />}
-              </button>
-            ))}
-          </div>
-        )}
+            is a caption for them, and reading the caption first is backwards. */}
+        <TurnImages paths={images} />
         {text ? (
           <div className={styles.assistantBody} dangerouslySetInnerHTML={{ __html: html }} />
         ) : (
