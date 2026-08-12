@@ -3,6 +3,29 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  /* Anchors .notice — the editor fills this box, so an absolutely positioned
+     child sits over the prose rather than over the whole window. */
+  position: relative;
+}
+
+/* A failed insert has nowhere else to be reported: the menu it came from is
+   gone by then and the document is unchanged, so without this the click simply
+   appears to do nothing. Floats over the text, dismissed by clicking it. */
+.notice {
+  position: absolute;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: 20;
+  max-width: 380px;
+  padding: var(--space-2) var(--space-3);
+  font: 400 12px/1.6 var(--font-sans);
+  color: var(--color-error);
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  word-break: break-word;
 }
 
 /* Manuscript editor — Spectral serif body */

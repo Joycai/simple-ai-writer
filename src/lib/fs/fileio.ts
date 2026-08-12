@@ -13,6 +13,18 @@ export async function appendFile(path: string, content: string): Promise<void> {
 }
 
 /**
+ * Read raw bytes — for pictures the app copies rather than reads as text.
+ *
+ * Goes through the fs plugin instead of a command of our own: the plugin
+ * returns a `Uint8Array` directly, where our IPC would have to base64 the
+ * bytes through JSON the way `writeBinaryFile` does on the way out.
+ */
+export async function readBinaryFile(path: string): Promise<Uint8Array> {
+  const { readFile: pluginReadFile } = await import("@tauri-apps/plugin-fs");
+  return pluginReadFile(path);
+}
+
+/**
  * Write raw bytes.
  *
  * Sent as base64, not `Array.from(data)`. The IPC payload is JSON either way,

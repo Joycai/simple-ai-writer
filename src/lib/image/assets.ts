@@ -9,7 +9,7 @@
  */
 
 import {
-  fileExists, makeDir, readFile, removeDir, renamePath, writeBinaryFile, writeFile,
+  fileExists, makeDir, readBinaryFile, readFile, removeDir, renamePath, writeBinaryFile, writeFile,
 } from "../fs/fileio";
 
 /** Folder name for a document's illustrations, beside the document itself. */
@@ -100,19 +100,49 @@ export async function saveDocumentAsset(
   bytes: Uint8Array,
   ext: string,
 ): Promise<SavedAsset> {
+  // A generated picture has no name of its own, so it gets a timestamp.
+  return writeDocumentAsset(docPath, bytes, `img-${Date.now()}`, ext);
+}
+
+/**
+ * Copy a picture the author already has into the document's asset folder.
+ *
+ * Same destination and the same relative link as a generated one — so a
+ * hand-inserted illustration follows a rename, exports, and is found by
+ * `list_files` exactly like the AI's. What differs is the name: the author's
+ * own filename is kept, because it is how they will recognise the picture in
+ * the folder and in the link. Cleaned through `safeAssetName` first (a macOS
+ * name containing `:` or `?` is unwriteable on Windows, and this one came from
+ * wherever they happened to have it).
+ */
+export async function importDocumentAsset(
+  docPath: string,
+  sourcePath: string,
+): Promise<SavedAsset> {
+  const bytes = await readBinaryFile(sourcePath);
+  const ext = (sourcePath.split(".").pop() ?? "png").toLowerCase();
+  return writeDocumentAsset(docPath, bytes, safeAssetName(stemOf(sourcePath), "image"), ext);
+}
+
+/** Shared body: make the folder, pick a free name, write. */
+async function writeDocumentAsset(
+  docPath: string,
+  bytes: Uint8Array,
+  stem: string,
+  ext: string,
+): Promise<SavedAsset> {
   const group = safeAssetName(stemOf(docPath));
   const dir = `${dirOf(docPath)}/${ASSETS_DIR}/${group}`;
   await makeDir(dir);
 
-  const name = await uniqueAssetName(dir, ext);
+  const name = await uniqueAssetName(dir, stem, ext);
   const absPath = `${dir}/${name}`;
   await writeBinaryFile(absPath, bytes);
   return { absPath, relPath: `${ASSETS_DIR}/${group}/${name}` };
 }
 
 /** Pick a filename that doesn't collide with anything already in the folder. */
-async function uniqueAssetName(dir: string, ext: string): Promise<string> {
-  const stem = `img-${Date.now()}`;
+async function uniqueAssetName(dir: string, stem: string, ext: string): Promise<string> {
   if (!(await fileExists(`${dir}/${stem}.${ext}`))) return `${stem}.${ext}`;
   for (let i = 2; i < 1000; i++) {
     const candidate = `${stem}-${i}.${ext}`;

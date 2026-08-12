@@ -15,6 +15,7 @@ import {
   Quote,
   List,
   ImagePlus,
+  Image as ImageIcon,
 } from "lucide-react";
 import { selectAll } from "@codemirror/commands";
 import type { EditorView } from "@codemirror/view";
@@ -51,7 +52,7 @@ function sc(...keys: string[]): string {
  * `ContextMenu` so it matches the FileTree / Lore menus.
  */
 export function EditorContextMenu({
-  x, y, view, onClose, onIllustrate,
+  x, y, view, onClose, onIllustrate, onInsertImage,
 }: {
   x: number;
   y: number;
@@ -59,6 +60,8 @@ export function EditorContextMenu({
   onClose: () => void;
   /** Open the illustration flow. Absent when no image model is configured. */
   onIllustrate?: () => void;
+  /** Pick a picture off disk. Absent for a document with no path to file it beside. */
+  onInsertImage?: () => void;
 }) {
   const { t } = useTranslation();
   const sel = hasSelection(view);
@@ -83,8 +86,14 @@ export function EditorContextMenu({
       shortcut: sc("Mod", "E"), action: () => toggleInlineCode(view) },
     { kind: "item", icon: <LinkIcon size={13} />, label: t("editor.menu.link"),
       shortcut: sc("Mod", "Shift", "K"), action: () => insertLink(view) },
-    // Sits with insertLink rather than the formatting block below: both put
-    // something new at the cursor instead of restyling what is already there.
+    // These sit with insertLink rather than the formatting block below: all
+    // three put something new at the cursor instead of restyling what is
+    // already there. 插入图片 comes first — bringing a picture you already have
+    // is the ordinary case, and drawing a new one is the special one.
+    ...(onInsertImage
+      ? [{ kind: "item" as const, icon: <ImageIcon size={13} />, label: t("editor.menu.insertImage"),
+           action: onInsertImage }]
+      : []),
     ...(onIllustrate
       ? [{ kind: "item" as const, icon: <ImagePlus size={13} />, label: t("editor.menu.illustrate"),
            action: onIllustrate }]

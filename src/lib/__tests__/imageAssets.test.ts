@@ -27,10 +27,14 @@ vi.mock("../fs/fileio", () => ({
   removeDir: vi.fn(async (p: string) => void removed.push(p)),
   readFile: vi.fn(async (p: string) => texts.get(p) ?? ""),
   writeFile: vi.fn(async (p: string, c: string) => void texts.set(p, c)),
+  readBinaryFile: vi.fn(async (p: string) => {
+    if (!existing.has(p)) throw new Error(`ENOENT: ${p}`);
+    return new Uint8Array([7, 7]);
+  }),
 }));
 
 const {
-  saveDocumentAsset, imageMarkdown, assetDirFor, safeAssetName,
+  saveDocumentAsset, importDocumentAsset, imageMarkdown, assetDirFor, safeAssetName,
   moveDocumentAssets, discardDocumentAssets,
 } = await import("../image/assets");
 
@@ -156,6 +160,53 @@ describe("discardDocumentAssets", () => {
   it("does nothing for a document that never had any", async () => {
     await discardDocumentAssets("/proj/writing/ch1.md", null);
     expect(removed).toEqual([]);
+  });
+});
+
+describe("importDocumentAsset", () => {
+  const SOURCE = "/Users/me/Pictures/外套参考.png";
+
+  it("copies the file in beside the document, keeping the author's name", async () => {
+    // The name is how they will recognise it in the folder, in list_files and
+    // in the link — unlike a generated picture, this one already has one.
+    existing.add(SOURCE);
+
+    const res = await importDocumentAsset("/proj/writing/vol1/第三章.md", SOURCE);
+
+    expect(dirs[0]).toBe("/proj/writing/vol1/assets/第三章");
+    expect(res.absPath).toBe("/proj/writing/vol1/assets/第三章/外套参考.png");
+    // Relative to the document, like every other illustration link.
+    expect(res.relPath).toBe("assets/第三章/外套参考.png");
+    expect(written[0].bytes).toEqual(new Uint8Array([7, 7]));
+  });
+
+  it("cleans a name the destination platform would refuse", async () => {
+    // A macOS file called `a:b?.png` is unwriteable on Windows, which would
+    // make the whole project uncheckoutable there.
+    const messy = "/Users/me/Pictures/参考: 外套?.png";
+    existing.add(messy);
+
+    const res = await importDocumentAsset("/proj/writing/ch1.md", messy);
+
+    expect(res.absPath).toBe("/proj/writing/assets/ch1/参考_ 外套_.png");
+  });
+
+  it("does not overwrite a picture already filed under that name", async () => {
+    existing.add(SOURCE);
+    existing.add("/proj/writing/assets/ch1/外套参考.png");
+
+    const res = await importDocumentAsset("/proj/writing/ch1.md", SOURCE);
+
+    expect(res.absPath).toBe("/proj/writing/assets/ch1/外套参考-2.png");
+  });
+
+  it("lowercases the extension so the link matches what is on disk", async () => {
+    const shouty = "/Users/me/Pictures/REF.PNG";
+    existing.add(shouty);
+
+    const res = await importDocumentAsset("/proj/writing/ch1.md", shouty);
+
+    expect(res.absPath).toBe("/proj/writing/assets/ch1/REF.png");
   });
 });
 

@@ -18,6 +18,21 @@ export interface ProjectFile {
 const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "webp", "gif"]);
 const TEXT_EXTS  = new Set(["md", "txt"]);
 
+/**
+ * Ceiling on one image handed to a model, measured before base64 inflation.
+ *
+ * Lives here rather than with either caller because both need the same number:
+ * the agent's image tools encode a file the *model* asked for, the chat
+ * composer encodes one the *author* attached, and a limit that differs between
+ * them would let one path build a request the other already knows is too big.
+ * The failure it prevents is a timeout, not an error — a 35MB payload spends
+ * minutes uploading before anything rejects it.
+ */
+export const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
+
+/** The extensions {@link isImagePath} accepts, for error messages. */
+export const IMAGE_EXT_LIST = [...IMAGE_EXTS].join(", ");
+
 /** True when the path points at an image we can render (by extension). */
 export function isImagePath(path: string): boolean {
   const ext = path.split(".").pop()?.toLowerCase() ?? "";

@@ -467,6 +467,25 @@ describe("trimHistory", () => {
     expect(Array.isArray(history[3].content)).toBe(true); // image untouched
   });
 
+  it("keeps the words of the message it takes the picture out of", () => {
+    // The author's own attachments ride on their question, which is a turn
+    // boundary the compaction pass segments on. Replacing the whole content
+    // with a note threw away what was asked while keeping the answer.
+    const question: StreamMessage = {
+      role: "user",
+      content: [
+        { type: "text", text: "这件外套什么颜色" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } },
+      ],
+    };
+    const history: StreamMessage[] = [{ role: "system", content: "sys" }, question];
+
+    trimHistory(history, 50);
+
+    expect(history[1].content).toContain("这件外套什么颜色");
+    expect(String(history[1].content)).not.toContain("data:image");
+  });
+
   it("does nothing when already within the ceiling", () => {
     const history: StreamMessage[] = [
       { role: "system", content: "sys" },

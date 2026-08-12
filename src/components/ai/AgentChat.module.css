@@ -253,6 +253,16 @@
   color: var(--color-text-ghost);
 }
 
+/* Why an attachment the author just picked isn't in the row above. Quieter
+   than .error — nothing failed mid-run, a file was simply refused — but it
+   sits where the chip would have appeared, so the two read as one event. */
+.refError {
+  font: 400 11px/1.5 var(--font-sans);
+  color: var(--color-error);
+  padding: 0 var(--space-1) var(--space-1);
+  word-break: break-word;
+}
+
 /* ── Context bar ─────────────────────────────────────────────────── */
 .ctx {
   display: flex;

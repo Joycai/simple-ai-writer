@@ -246,6 +246,26 @@ Text still streams as it arrives, so a tool round's narration appears and is the
 
 This also settled a pre-existing inconsistency: `run.ts`'s `onText` was already cumulative while `splitter`'s `onProgress` was a delta, and `LoreSplitModal` appended accordingly.
 
+### Images in context (谁能看图，看多久)
+
+A picture reaches a model exactly one way: an `image_url` part on a `role: "user"` message (`ContentPart`, `lib/ai/types.ts`). Everything below is about who is allowed to create one and what happens to it afterwards.
+
+**Three entry points**, all gated on `model.type === "multimodal"` — a *declaration on the model row* in 设置 → 供应商与模型, not a guess from the model name. A text-only model is told the picture could not travel rather than silently losing it:
+
+| Entry | Who chooses the picture | Scope |
+| --- | --- | --- |
+| `read_lore_image` tool | the model | one entity's avatar / gallery image, by name + filename |
+| `read_image` tool | the model | any image file **inside the project** — document illustrations under `writing/…/assets/`, reference art anywhere else |
+| chat `@`-mention | the author | any image `scanProjectFiles` found; inlined by `lib/agent/chatRefs`, ≤ `MAX_MESSAGE_IMAGES` per message |
+
+`read_image` is contained against the *project*, where `read_file` is contained against `writing/`. That tool is narrow because a prompt-injected model could read `profile.json` or the lore back to whoever planted the instruction; an image tool decodes one file, by extension, into pixels. It refuses outright when there is no project path — every absolute path is "inside" an empty prefix.
+
+**Nothing keeps a picture for long.** Base64 is megabytes, and a chat history persists for the whole session, so three separate passes take pixels back out — all through `lib/agent/imageHistory`, which is the single definition of the shape, and all of which **keep the message's text**: the author's attachment rides on their question, which is a turn boundary `compact.ts` segments on.
+
+1. `trimHistory` (`runtime.ts`) caps a live history at the newest `MAX_IMAGE_RESULTS` (3) pictures — unconditionally, before the token check, because the token estimate charges a *flat rate* per image while the payload keeps growing.
+2. The same pass elides more, oldest-first, when the estimate is over the ceiling.
+3. `serializeChatSession` drops every picture before the session blob goes into its SQLite row. A restored session has the conversation, not the pixels — and the paths are still in the transcript, so `read_image` can fetch one again.
+
 ### RAG (Retrieval-Augmented Generation)
 
 - **Location** — `src/lib/context/rag.ts` (assembly) + `src/lib/context/loreSelect.ts` (lore selection)
