@@ -1,5 +1,5 @@
 /**
- * The thinking dials, shared by the three surfaces that run a model: the task
+ * The thinking dial, shared by the three surfaces that run a model: the task
  * panel, the conversational assistant, and 一致性检查.
  *
  * What it edits is the **active model's own setting** (`Model.reasoningEffort`),
@@ -7,11 +7,14 @@
  * (`docs/provider-layering.md` L3), so the same value shows here and in
  * Settings › 模型, and switching models switches the value with it.
  *
- * Two dials, because at protocol level they are two axes: how deep to think,
- * and how much effort to spend on the whole response. Only the first can reach
- * an endpoint today, so the second renders disabled with its reason — see
- * `supportsSeparateEffort`. Neither is rendered as a live control for a model
- * whose protocol the adapters can't yet carry the setting to.
+ * **One dial, not two.** The design sketched a second "effort" dial beside the
+ * thinking one, because at protocol level they are two axes: how deep to think,
+ * and how much work to spend on the whole response. But no endpoint exposes
+ * both as separate inputs — on the OpenAI family they collapse into one field,
+ * and on Anthropic the single `output_config.effort` governs both. Two controls
+ * writing one value would be a lie about what the author is choosing, so what
+ * varies instead is the **label**: `supportsSeparateEffort` picks the wording
+ * that matches what the level actually governs on this endpoint.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -25,9 +28,6 @@ import {
   type ReasoningEffort,
 } from "../../lib/ai/reasoning";
 import styles from "./ReasoningControls.module.css";
-
-/** The separate-effort dial's levels, for the disabled preview. */
-const EFFORT_PREVIEW: ReasoningEffort[] = ["low", "medium", "high"];
 
 function labelKeyFor(e: ReasoningEffort): string {
   return `aiConfig.models.reasoningEffort${e[0].toUpperCase()}${e.slice(1)}`;
@@ -52,13 +52,15 @@ export function ReasoningControls({ variant }: Props) {
   if (!model || !provider) return null;
 
   const thinkable = supportsThinkingLevel(provider.apiStandard);
-  const separateEffort = supportsSeparateEffort(provider.apiStandard);
-  // A model whose protocol carries neither dial gets no row at all. Rendering
-  // two disabled groups would spend three lines of a crowded panel saying only
-  // "here are two things you cannot do" — a disabled control earns its place by
-  // sitting next to a live sibling that explains what it is, which is exactly
-  // the case below, where the effort group is off but thinking is not.
-  if (!thinkable && !separateEffort) return null;
+  // A model whose protocol can't carry the level gets no row at all, rather
+  // than a disabled one: a control that never lights up is three lines of a
+  // crowded panel saying "here is something you cannot do".
+  if (!thinkable) return null;
+  // What the level actually governs here. On Anthropic it is the whole
+  // response — prose, tool calls and thinking together — so calling it
+  // "thinking depth" would understate what the author is changing.
+  const wholeResponse = supportsSeparateEffort(provider.apiStandard);
+  const label = wholeResponse ? t("ai.panel.effortLabel") : t("ai.panel.thinkingLabel");
 
   const current = model.reasoningEffort ?? "default";
   const set = (e: ReasoningEffort) => {
@@ -70,17 +72,12 @@ export function ReasoningControls({ variant }: Props) {
     return (
       <div className={styles.compactGroup}>
         <CompactDial
-          label={t("ai.panel.thinkingLabel")}
+          label={label}
           value={t(labelKeyFor(current))}
           options={REASONING_EFFORTS}
           current={current}
           onPick={set}
-          disabled={!thinkable}
-          disabledHint={t("ai.panel.thinkingUnsupported")}
         />
-        {/* The effort dial has no compact form yet: nothing can carry it, and a
-            toolbar is the wrong place to explain why. It appears in the row
-            variant, where there is space for the reason. */}
       </div>
     );
   }
@@ -88,52 +85,33 @@ export function ReasoningControls({ variant }: Props) {
   return (
     <>
       <div className={styles.row}>
-        <span className={styles.label}>{t("ai.panel.thinkingLabel")}</span>
+        <span className={styles.label}>{label}</span>
         <div className={styles.chipGroup}>
           {REASONING_EFFORTS.map((e) => (
             <button
               key={e}
               className={`${styles.chip} ${current === e ? styles.chipActive : ""}`}
               onClick={() => set(e)}
-              disabled={!thinkable}
-              title={thinkable ? undefined : t("ai.panel.thinkingUnsupported")}
             >
-              {t(labelKeyFor(e))}
-            </button>
-          ))}
-        </div>
-
-        <span className={`${styles.label} ${styles.labelSecondary}`}>
-          {t("ai.panel.effortLabel")}
-        </span>
-        <div className={`${styles.chipGroup} ${separateEffort ? "" : styles.chipGroupOff}`}>
-          {EFFORT_PREVIEW.map((e) => (
-            <button key={e} className={styles.chip} disabled title={t("ai.panel.effortUnsupported")}>
               {t(labelKeyFor(e))}
             </button>
           ))}
         </div>
       </div>
       <div className={styles.hint}>
-        {/* Reached only when at least one dial is live (see the guard above),
-            so this explains whichever one is not. */}
-        {thinkable ? t("ai.panel.effortUnsupported") : t("ai.panel.thinkingUnsupported")}
+        {wholeResponse ? t("ai.panel.effortHint") : t("ai.panel.thinkingHint")}
       </div>
     </>
   );
 }
 
 /** A toolbar-sized dial: current value on the chip, levels in a popover. */
-function CompactDial({
-  label, value, options, current, onPick, disabled, disabledHint,
-}: {
+function CompactDial({ label, value, options, current, onPick }: {
   label: string;
   value: string;
   options: ReasoningEffort[];
   current: ReasoningEffort;
   onPick: (e: ReasoningEffort) => void;
-  disabled: boolean;
-  disabledHint: string;
 }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -164,8 +142,6 @@ function CompactDial({
       <button
         className={styles.compactTrigger}
         onClick={() => setOpen((v) => !v)}
-        disabled={disabled}
-        title={disabled ? disabledHint : undefined}
         aria-haspopup="menu"
         aria-expanded={open}
       >

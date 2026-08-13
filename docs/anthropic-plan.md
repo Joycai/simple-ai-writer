@@ -1,6 +1,6 @@
 # Anthropic 族接入方案（调研与审计）
 
-> **状态：调研完成，一行代码未动。** 本文是动手前的现状审计与取舍记录。
+> **状态：六刀全部实现。** 剩下的是 §7 那几条只能靠真实请求定论的验证。
 >
 > 协议事实见 [`api/reasoning.md`](api/reasoning.md)、[`api/tools.md`](api/tools.md)、
 > [`api/landscape.md`](api/landscape.md) §5 —— 本文只写"我们现在是什么样、
@@ -314,26 +314,45 @@ Fable 5 / Mythos 5 / Mythos Preview 无条件拒绝 `disabled`；Opus 5 在 xhig
 
 按"打坏东西的风险"排序：
 
-1. ⬜ **删掉 `thinkingFor` 的 `disabled` 兜底**（§4.1）。范围收窄后这是**删除
+1. ✅ **删掉 `thinkingFor` 的 `disabled` 兜底**（§4.1）。范围收窄后这是**删除
    而非替换**：adaptive 支持强制工具调用，所以那个兜底的存在理由消失了，而它
    本身在 Fable 5 / Mythos 5 上是硬 400。独立、小、可立即做。
-2. ⬜ **`thinkingDialect` 字段 + 模型抽屉的选择器**（§3）。纯数据 + UI，没有
+2. ✅ **`thinkingDialect` 字段 + 模型抽屉的选择器**（§3）。纯数据 + UI，没有
    调用方，可单独合并。**必须排在第 3 刀之前** —— 否则中继上的 4.5 会吃到一个
    我们主动发出去的 `adaptive` 400，而作者没有任何地方可以纠正它。
-3. ⬜ **按方言发送思考配置**（§4.3 + §5.4），并同刀决定 `DEFAULT_MAX_TOKENS`
+3. ✅ **按方言发送思考配置**（§4.3 + §5.4），并同刀决定 `DEFAULT_MAX_TOKENS`
    （§5.1）。**这两件必须同刀**：只开思考不提上限，思考和正文抢那 8k，表现为
    正文被截断。
-4. ⬜ **解析 `thinking_delta` / `signature_delta` → `{reasoning}` chunk**（§4.2）。
+4. ✅ **解析 `thinking_delta` → `{reasoning}` chunk**（§4.2）。
    纯读侧加法，PR #128 的展示界面已经在等它。
-5. ⬜ **回传合规**（§5.2 + §5.3）。**最容易打坏 agent 循环，必须单独一刀**，
-   且要先定"换模型即剥离"与载体形状。
-6. ⬜ **强度映射 + 面板双拨盘解禁**（§4.4 + §5.6）。这一步做完
-   `supportsSeparateEffort` 第一次返回 true ——`output_config.effort` 正是设计稿
-   里那个一直停用的「力度」拨盘。「关闭」档按 §5.6 映射到最低 effort 而非
-   `disabled`。
+5. ✅ **回传合规**（§5.2 + §5.3）。载体定为
+   `_thinkingBlocks: {modelId, blocks}` —— 见 §9。
+6. ✅ **强度映射 + 拨盘**（§4.4 + §5.6）。**结果与计划不同：做成了一个拨盘，
+   不是两个。** 见 §8。
 
 第 1–3 刀合起来是"让 Claude 真的开始思考"；第 4 刀让它可见；第 5 刀让它在工具
 循环里不丢失；第 6 刀让作者能调。
+
+六刀都落地了；剩下的是 §7 那几条只能靠真实请求定论的验证。
+
+## 8. 落地时改掉的一个设计：一个拨盘，不是两个
+
+[`reasoning-plan.md`](reasoning-plan.md) §7 与设计稿都规划了两个拨盘 ——
+「思考」与「力度」，后者停用待 Anthropic 接入后点亮。实现时发现这是错的。
+
+**没有任何端点把两者作为独立输入暴露出来。** OpenAI 族里它们塌缩成同一个
+`reasoning_effort`；Anthropic 这边虽然 `thinking` 与 `output_config.effort` 是
+两个字段，但前者只是开关（adaptive/disabled），**唯一的档位输入是 effort**，
+而它同时管正文、工具调用和思考。
+
+所以两个拨盘会是**两个控件写同一个值** —— 对作者是关于"我在调什么"的谎话。
+
+改成：**一个拨盘，变的是标签**。`supportsSeparateEffort` 从"有没有第二个拨盘"
+改成"这个端点上这一档管的是整个回复还是只管思考"，据此选词（「力度」/「思考」）
+与说明文案。停用样式与相关 i18n key 一并删除。
+
+这也让 §5.6 的取舍在 UI 上有了着落：Claude 上「关闭」档实际发的是最低 effort，
+文案直说"等于最低档而非真正关掉"，不承诺协议不兑现的东西。
 
 ## 7. 需要实测才能定论的
 
@@ -352,3 +371,34 @@ Fable 5 / Mythos 5 / Mythos Preview 无条件拒绝 `disabled`；Opus 5 在 xhig
   官方措辞是 `adaptive thinking is not supported on this model`，与那个正则的
   `(?:function|tool)s?[ _-]?calls?` 分支不匹配，**推断为不会误判**，但值得验 ——
   这条同时决定 §3.1 说的"探测兜底"要不要单独实现，还是复用既有的降级路径。
+
+## 9. 回传载体：`_thinkingBlocks`，不是 `_native`
+
+§5.3 当时倾向"④ 族用不透明载体"，并担心 `StreamMessage` 上会攒出三个 `_` 字段。
+实现时选了具名而非泛化：
+
+```ts
+interface ThinkingBlockCarry { modelId: string; blocks: unknown[] }
+```
+
+三个理由：
+
+1. **形状真的不同，不是同一件事的三种编码。** `_reasoning` 是"一段文本 + 它来自
+   哪个字段名"，`_thinkingBlocks` 是"一个有序数组，其中某些成员只有不透明
+   payload、且顺序不可改"。把它们塞进一个 `unknown` 里，唯一的收益是字段数从
+   三降到一，代价是每个读者都要先做类型判别。
+2. **`modelId` 是这个字段自己的需求**，不是通用需求。Gemini 的 thought
+   signature 与 DeepSeek 的 `reasoning_content` 都没有"换模型必须剥离"这条
+   规则 —— 泛化载体会把一个特例提升成所有人的负担。
+3. **泛化 `_geminiModelParts` 要动一条正在工作的路径**，而这一刀本身已经是
+   "最容易打坏 agent 循环"的那一刀。
+
+真正需要泛化的地方是**剥离**，不是承载：`openai.ts` 的 `toWireMessages` 原本
+逐个列出要丢弃的字段名，那是个"下一个协议加字段时会静默泄漏到线上"的形状，
+已改为按 `_` 前缀丢弃。
+
+### 换模型剥离怎么落的
+
+`thinkingBlocksFor(msg, modelId)` 比对 carrier 上的 `modelId` 与当前请求的
+模型：不同就整组丢掉。代价只有"换回来时前几轮的思考不再回传"，而那本就是
+API 自己会做的事（它按模型决定保留策略）。

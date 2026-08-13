@@ -674,8 +674,8 @@
       "focusImage": "An image is open — open a document first",
       "thinkingLabel": "Thinking",
       "effortLabel": "Effort",
-      "thinkingUnsupported": "This model's protocol can't carry a thinking level yet; it turns on for models on the OpenAI protocol.",
-      "effortUnsupported": "This model has no effort dial separate from the thinking level, so that group is off."
+      "thinkingHint": "How deeply a reasoning model should think. \"Endpoint default\" sends no field and lets the server decide — the only choice safe on every relay. Not every model supports every level.",
+      "effortHint": "This level governs the whole response — prose, tool calls and thinking together, not just thinking depth. \"Off\" means the lowest level on Claude rather than truly off: several models reject disabling thinking, and the vendor's own advice for spending less is to lower effort."
     },
     "bubble": {
       "drawer": "Drawer",
@@ -1037,7 +1037,14 @@
       "saving": "Saving…",
       "editTitle": "Edit Model",
       "edit": "Save Changes",
-      "editing": "Saving…"
+      "editing": "Saving…",
+      "thinkingDialectLabel": "Thinking parameter shape (optional)",
+      "thinkingDialectHint": "Claude generations shape the thinking parameter differently, and a relay's model ID is free text the app can't read a generation from — you know what you bought, so you declare it. \"Auto\" assumes the current generation (4.6+); pick \"budget\" for older models, or \"send none\" when the relay has no thinking support.",
+      "thinkingDialectAuto": "Auto",
+      "thinkingDialectAdaptive": "Adaptive (4.6+)",
+      "thinkingDialectExtended": "Budget (4.5-)",
+      "thinkingDialectNone": "Send none",
+      "effortLabelAnthropic": "Effort"
     },
     "probe": {
       "title": "Probe real limits",

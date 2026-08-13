@@ -674,8 +674,8 @@
       "focusImage": "当前打开的是图片，请先打开一个文档",
       "thinkingLabel": "思考",
       "effortLabel": "力度",
-      "thinkingUnsupported": "当前模型所在的协议还不支持发送思考档位，换用 OpenAI 协议的模型后自动启用。",
-      "effortUnsupported": "当前模型没有独立于思考档位的 effort 设置，该组已停用。"
+      "thinkingHint": "推理模型的思考深度。「跟随默认」不发送任何字段，由服务端决定——这是对所有中转都安全的选择。并非每个模型都支持全部档位。",
+      "effortHint": "这一档控制整个回复花多少力气——正文、工具调用与思考都算在内，不只是思考深度。「关闭」在 Claude 上等于最低档而非真正关掉：部分模型不接受关闭思考，官方也建议用降低力度来省成本。"
     },
     "bubble": {
       "drawer": "抽屉",
@@ -1032,7 +1032,14 @@
       "saving": "保存中…",
       "editTitle": "编辑模型",
       "edit": "保存修改",
-      "editing": "保存中…"
+      "editing": "保存中…",
+      "thinkingDialectLabel": "思考参数形态 (可选)",
+      "thinkingDialectHint": "Claude 不同代模型的思考参数形状不同，而中转站上的模型 ID 是自填的，程序无法判断代次——你知道自己买的是什么，所以由你声明。「自动」按当前代（4.6 及以上）处理；接更旧的模型请选「预算模式」；中转站不支持思考时选「不发送」。",
+      "thinkingDialectAuto": "自动",
+      "thinkingDialectAdaptive": "自适应 (4.6+)",
+      "thinkingDialectExtended": "预算模式 (4.5-)",
+      "thinkingDialectNone": "不发送",
+      "effortLabelAnthropic": "力度"
     },
     "probe": {
       "title": "探测真实上限",

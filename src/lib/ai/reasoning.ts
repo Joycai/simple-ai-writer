@@ -39,6 +39,55 @@ export function parseReasoningEffort(v: unknown): ReasoningEffort | undefined {
     : undefined;
 }
 
+// ─── Which dialect of the thinking parameter a model speaks ───────────────────
+
+/**
+ * How this model wants its thinking configured.
+ *
+ * A protocol family is not enough to answer this: within one family the
+ * parameter changed shape between model generations, and **the generation is
+ * not recoverable from the model id** on a relay, where that id is free text the
+ * author typed (`特价kiro | claude-opus-4-6-thinking`). So the author declares
+ * it — they picked the relay and know what they bought; it is the code that
+ * can't tell. See `docs/anthropic-plan.md` §3.
+ *
+ *   - `adaptive`  — the model decides when and how deeply to think; depth comes
+ *                   from an effort level. Claude 4.6+.
+ *   - `extended`  — a fixed thinking token budget per request. Claude 4.5 and
+ *                   earlier. Also the shape Gemini 2.5 uses.
+ *   - `none`      — this endpoint has no thinking parameter; send nothing.
+ *
+ * Absent means "assume the family's current generation" — see `defaultDialect`.
+ */
+export type ThinkingDialect = "adaptive" | "extended" | "none";
+
+export const THINKING_DIALECTS: ThinkingDialect[] = ["adaptive", "extended", "none"];
+
+export function parseThinkingDialect(v: unknown): ThinkingDialect | undefined {
+  return typeof v === "string" && (THINKING_DIALECTS as string[]).includes(v)
+    ? (v as ThinkingDialect)
+    : undefined;
+}
+
+/**
+ * The dialect to assume when the author hasn't declared one.
+ *
+ * Optimistic on purpose, and only for families whose current generation this app
+ * declares support for: guessing `adaptive` on Anthropic is right for every
+ * model in the supported range (4.6+), and wrong in exactly one recoverable way
+ * — an older model answers with a 400 naming the problem, which is a far better
+ * outcome than defaulting to "no thinking" and leaving the author wondering why
+ * their reasoning model never reasons.
+ */
+export function defaultDialect(standard: ApiStandard): ThinkingDialect {
+  return familyOf(standard) === "anthropic" ? "adaptive" : "none";
+}
+
+/** The dialect in force for a request: the author's choice, else the default. */
+export function dialectFor(standard: ApiStandard, declared?: ThinkingDialect): ThinkingDialect {
+  return declared ?? defaultDialect(standard);
+}
+
 /**
  * OpenAI Chat Completions spells effort as a top-level `reasoning_effort`
  * string, and turns thinking off with the same field rather than a separate
@@ -77,9 +126,56 @@ export function reasoningBody(
   switch (familyOf(standard)) {
     case "openai":
       return { reasoning_effort: OPENAI_EFFORT[effort] };
-    // Gemini's thinkingConfig and Anthropic's output_config.effort land here
-    // next; until then they keep sending nothing.
+    case "anthropic":
+      return { output_config: { effort: ANTHROPIC_EFFORT[effort] } };
+    // Gemini's thinkingConfig lands here next; until then it sends nothing.
     default:
+      return undefined;
+  }
+}
+
+/**
+ * Anthropic spells effort in `output_config.effort`, and it governs the **whole
+ * response** — prose, tool calls and thinking together — not just thinking
+ * depth. That is why it is a second dial here rather than the same one.
+ *
+ * `off` maps to the lowest level rather than to `thinking: {type:"disabled"}`,
+ * which is what "off" means literally. Three reasons, in order of weight:
+ * several models reject `disabled` outright; the ones that accept it are
+ * documented to occasionally emit tool calls as plain text once thinking is
+ * gone; and the vendor's own advice for spending less is to lower effort rather
+ * than to disable. So "off" here is honestly "as little as this model allows" —
+ * the UI says so rather than promising a switch the protocol won't honour.
+ *
+ * `xhigh` is deliberately absent from this app's vocabulary (see
+ * REASONING_EFFORTS), which sidesteps the one level Claude 4.6 lacks.
+ */
+const ANTHROPIC_EFFORT: Record<Exclude<ReasoningEffort, "default">, string> = {
+  off: "low",
+  low: "low",
+  medium: "medium",
+  high: "high",
+  max: "max",
+};
+
+/**
+ * The `thinking` field for a request, or undefined to send none.
+ *
+ * `display` is not negotiable per request here: the current Claude generation
+ * defaults it to `"omitted"`, which returns thinking blocks whose text is an
+ * empty string — billed in full, and useless to a UI that wants to show the
+ * reasoning. Asking for `"summarized"` is what makes the feature visible at all.
+ */
+export function thinkingBody(
+  dialect: ThinkingDialect,
+  budgetTokens: number,
+): Record<string, unknown> | undefined {
+  switch (dialect) {
+    case "adaptive":
+      return { thinking: { type: "adaptive", display: "summarized" } };
+    case "extended":
+      return { thinking: { type: "enabled", budget_tokens: budgetTokens, display: "summarized" } };
+    case "none":
       return undefined;
   }
 }
@@ -95,7 +191,8 @@ export function reasoningBody(
  * family's mapping lands (see `reasoningBody`), never ahead of it.
  */
 export function supportsThinkingLevel(standard: ApiStandard): boolean {
-  return familyOf(standard) === "openai";
+  const family = familyOf(standard);
+  return family === "openai" || family === "anthropic";
 }
 
 /**
@@ -108,8 +205,8 @@ export function supportsThinkingLevel(standard: ApiStandard): boolean {
  * collapse into the single `reasoning_effort` field, so offering two dials
  * there would be two controls writing one value.
  */
-export function supportsSeparateEffort(_standard: ApiStandard): boolean {
-  return false;
+export function supportsSeparateEffort(standard: ApiStandard): boolean {
+  return familyOf(standard) === "anthropic";
 }
 
 // ─── Reasoning content on the OpenAI-compatible wire ──────────────────────────

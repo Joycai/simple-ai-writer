@@ -7,7 +7,10 @@ import Database from "@tauri-apps/plugin-sql";
 
 import type { GeminiSafetySettings } from "./safety";
 import { authModesFor, type ApiStandard, type AuthMode, type ImageRoute } from "./types";
-import { parseReasoningEffort, type ReasoningEffort } from "./reasoning";
+import {
+  parseReasoningEffort, parseThinkingDialect,
+  type ReasoningEffort, type ThinkingDialect,
+} from "./reasoning";
 import { migrateLegacyStandard } from "./urls";
 
 export type ModelType = "text" | "multimodal" | "image" | "video";
@@ -130,6 +133,15 @@ export interface Model {
    * Absent (and `"default"`) means send nothing.
    */
   reasoningEffort?: ReasoningEffort;
+  /**
+   * Which shape of thinking parameter this model accepts.
+   *
+   * Declared rather than derived: within one protocol family the parameter
+   * changed between model generations, and on a relay the model id is free text
+   * the author typed, so the generation isn't recoverable from it. Absent means
+   * "assume the family's current generation" — see `dialectFor`.
+   */
+  thinkingDialect?: ThinkingDialect;
   /**
    * USD per generated image. The billing shape image endpoints usually use;
    * token pricing (priceIn/priceOut) still applies on top for the providers
@@ -274,6 +286,7 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   await addColumn(db, modelCols, "models", "price_per_image", "REAL");
   await addColumn(db, modelCols, "models", "caps", "TEXT");
   await addColumn(db, modelCols, "models", "reasoning_effort", "TEXT");
+  await addColumn(db, modelCols, "models", "thinking_dialect", "TEXT");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS prompts (
@@ -480,9 +493,9 @@ export async function saveModel(
 ): Promise<void> {
   await db.execute(
     `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null]
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null]
   );
 }
 
@@ -542,6 +555,7 @@ function rowToModel(r: Record<string, unknown>): Model {
     pricePerImage: (r.price_per_image as number | null) ?? undefined,
     caps: parseImageCaps(r.caps),
     reasoningEffort: parseReasoningEffort(r.reasoning_effort),
+    thinkingDialect: parseThinkingDialect(r.thinking_dialect),
   };
 }
 
