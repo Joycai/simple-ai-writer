@@ -4,6 +4,7 @@
  */
 
 import { fetch } from "../http";
+import { reasoningBody } from "./reasoning";
 import { toSafetySettingsArray } from "./safety";
 import { geminiUrl } from "./urls";
 import type { AccumulatedToolCall, MessageContent, StreamMessage, StreamOptions } from "./types";
@@ -102,6 +103,29 @@ const GEMINI_BLOCKED_FINISH_REASONS = new Set([
   "IMAGE_SAFETY",
 ]);
 
+/**
+ * `finishReason` values that report a malformed *request* rather than a refused
+ * response, each with what actually went wrong.
+ *
+ * These are the reason this check can't just be "is it in the blocked set":
+ * a request that loses a thought signature comes back **HTTP 200 with a
+ * finishReason**, so treating anything outside the blocked set as success reads
+ * it as a normal short answer. And reporting it as a safety filter would send
+ * the author looking at their prose for something that isn't there.
+ */
+const GEMINI_REQUEST_FAULTS: Record<string, string> = {
+  // Thinking models bind their reasoning to a signature that must be echoed
+  // back verbatim on later turns (see `_geminiModelParts`). This fires when one
+  // went missing — a bug on this side, not anything the author wrote.
+  MISSING_THOUGHT_SIGNATURE:
+    "a thought signature was missing from the request history",
+  // The model asked for a tool the request never offered.
+  UNEXPECTED_TOOL_CALL: "the model called a tool that this request didn't declare",
+  // The server cut a runaway tool loop short.
+  TOO_MANY_TOOL_CALLS: "the model called tools too many times in a row",
+  MALFORMED_RESPONSE: "the model returned a malformed response",
+};
+
 export async function streamGemini(opts: StreamOptions): Promise<void> {
   // Key goes in the x-goog-api-key header, never the URL — query strings leak
   // into proxy/server logs and error messages.
@@ -143,6 +167,17 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
   const safetySettings = toSafetySettingsArray(opts.safetySettings);
   if (safetySettings.length) {
     body.safetySettings = safetySettings;
+  }
+
+  // Merged one level deep rather than assigned: `generationConfig` is shared
+  // territory — JSON mode already puts `responseMimeType` there via extraBody,
+  // and a plain assign in either direction would drop the other's field.
+  const thinking = reasoningBody(opts.standard, opts.reasoningEffort);
+  if (thinking) {
+    body.generationConfig = {
+      ...(body.generationConfig as Record<string, unknown> | undefined),
+      ...(thinking.generationConfig as Record<string, unknown>),
+    };
   }
 
   console.debug("[Gemini request]", {
@@ -203,8 +238,16 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
       functionCall?: { name: string; args?: Record<string, unknown> };
     }>;
     for (const part of parts) {
+      // Every part, thinking included, before any branching: the raw array is
+      // what gets echoed back next turn, and a dropped thoughtSignature ends
+      // the run with finishReason MISSING_THOUGHT_SIGNATURE.
       geminiAllModelParts.push(part);
-      if (part.text && !part.thought) {
+      if (part.thought && part.text) {
+        // Reasoning, kept away from `text`: that variant is what reaches the
+        // manuscript. Arrives only when the request asked for it —
+        // `includeThoughts` defaults to off (see reasoningBody).
+        opts.onChunk({ reasoning: part.text });
+      } else if (part.text) {
         opts.onChunk({ text: part.text });
       } else if (part.functionCall) {
         // Gemini sends complete functionCall objects (not streamed fragments)
@@ -237,6 +280,10 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
     // with whatever text streamed so far, reported as a normal completion.
     if (candidate?.finishReason && GEMINI_BLOCKED_FINISH_REASONS.has(candidate.finishReason)) {
       throw new Error(`Gemini blocked this response (${candidate.finishReason}). The content may have triggered a safety filter — try a different model or provider.`);
+    }
+    const fault = candidate?.finishReason && GEMINI_REQUEST_FAULTS[candidate.finishReason];
+    if (fault) {
+      throw new Error(`Gemini rejected this request (${candidate.finishReason}): ${fault}.`);
     }
     if (candidate?.finishReason === "MAX_TOKENS") truncated = true;
   };

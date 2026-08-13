@@ -1,6 +1,6 @@
 # Gemini 族接入方案（现状盘点）
 
-> **状态：盘点 + 官方 API 参考核对完成，一行代码未动。** 目标 **Gemini 3+**。
+> **状态：四刀全部实现。** 目标 **Gemini 3+**。剩下的是 §5 那几条只能靠真实请求定论的验证。
 >
 > 核对分两轮，第二轮（API 参考的 markdown 原文）纠正了第一轮的两个判断 ——
 > 指南页只讲 Interactions，但**参考页把经典 surface 的字段定义得很完整**。
@@ -95,16 +95,16 @@ thoughts in the response"*，也就是说思考仍然随响应回来，只是**�
 按"打坏东西的风险"排序。**与前两轮不同：不需要先实测** —— API 参考把字段定义
 得很完整（§2 各节）。
 
-1. ⬜ **认识 `MISSING_THOUGHT_SIGNATURE`**（§1）。把它加进
+1. ✅ **认识 `MISSING_THOUGHT_SIGNATURE`**（§1）。把它加进
    `GEMINI_BLOCKED_FINISH_REASONS`，或更准确地单独报错——它不是安全拦截，
    措辞该说清是签名缺失。独立、小、且修的是一个当前会被误读成"正常短回复"的
    失败。
-2. ⬜ **发 `thinkingConfig`**：`thinkingLevel`（六档映射）+
+2. ✅ **发 `thinkingConfig`**：`thinkingLevel`（六档映射）+
    `includeThoughts: true`。两件同刀 —— 只发档位不开 includeThoughts，等于
    花钱思考却看不到；只开 includeThoughts 不发档位，则用模型自己的默认。
-3. ⬜ **emit `part.thought` 的文本** → `{reasoning}` chunk。#128 的展示界面
+3. ✅ **emit `part.thought` 的文本** → `{reasoning}` chunk。#128 的展示界面
    在等它，前提是第 2 刀开了 `includeThoughts`。
-4. ⬜ **面板拨盘解禁**（`supportsThinkingLevel` 加 gemini）。
+4. ✅ **面板拨盘解禁**（`supportsThinkingLevel` 加 gemini）。
 
 ### 3.1 六档怎么映射
 
@@ -185,3 +185,17 @@ an error."* —— 反过来说，3+ 上发 `thinkingLevel` 就够了。
   推新 surface 而不提旧的，后者不会。**判断能力边界要看后者。**
 - **大文档要抓原文自己搜。** 摘要工具在 300KB 量级会漏掉整节，而漏掉的恰好
   可能是唯一的权威定义。
+
+## 8. 落地记录
+
+- **`MISSING_THOUGHT_SIGNATURE` 单独成一类，不并入安全拦截集合。** 它报的是
+  请求有问题，不是内容被拒；混进 `GEMINI_BLOCKED_FINISH_REASONS` 会让作者
+  去检查自己的稿子里有什么敏感内容——而问题在我们这边。同组还收了
+  `UNEXPECTED_TOOL_CALL` / `TOO_MANY_TOOL_CALLS` / `MALFORMED_RESPONSE`，
+  各带一句说明实际出了什么事。
+- **`generationConfig` 必须深合并一层。** JSON 模式经由 `extraBody` 往那里放
+  `responseMimeType`，任一方向的直接赋值都会吃掉对方的字段。有测试盯着。
+- **思考 part 仍然先进 `geminiAllModelParts` 再分支。** 原代码就是这个顺序，
+  改动只是在分支里多认一种 part——签名因此不受影响。
+- **UI 文案补了一句**：Gemini 关不掉思考，「关闭」等于最低档。此前只有 ④ 族的
+  文案说了这件事，而 ③ 族走的是另一条 hint。

@@ -128,11 +128,47 @@ export function reasoningBody(
       return { reasoning_effort: OPENAI_EFFORT[effort] };
     case "anthropic":
       return { output_config: { effort: ANTHROPIC_EFFORT[effort] } };
-    // Gemini's thinkingConfig lands here next; until then it sends nothing.
+    case "gemini":
+      return {
+        generationConfig: {
+          thinkingConfig: {
+            thinkingLevel: GEMINI_LEVEL[effort],
+            // Paired with the level on purpose. Thinking runs either way and is
+            // billed either way; this only decides whether the reasoning comes
+            // back with the answer. Setting a depth while leaving it off would
+            // pay for thinking nobody can see.
+            includeThoughts: true,
+          },
+        },
+      };
     default:
       return undefined;
   }
 }
+
+/**
+ * Gemini spells the level as an enum, in **upper case** — the lower-case
+ * `thinking_level` seen in the guides belongs to the newer Interactions API, a
+ * different surface (see `docs/api/landscape.md` §4.1).
+ *
+ * Two levels collapse. `off` maps to `MINIMAL` because this family has no way
+ * to turn thinking off at all — the docs say plainly that "`minimal` does not
+ * guarantee that thinking is off", so the UI's "off" is honestly "as little as
+ * this model allows", same as on Anthropic. `max` maps to `HIGH` because the
+ * enum stops there.
+ *
+ * `thinkingBudget` — the older numeric form — is deliberately never sent: it
+ * lives in the same object and is distinguished only by which models accept it,
+ * and this app's Gemini support starts at 3, where the level enum is the
+ * documented input.
+ */
+const GEMINI_LEVEL: Record<Exclude<ReasoningEffort, "default">, string> = {
+  off: "MINIMAL",
+  low: "LOW",
+  medium: "MEDIUM",
+  high: "HIGH",
+  max: "HIGH",
+};
 
 /**
  * Anthropic spells effort in `output_config.effort`, and it governs the **whole
@@ -187,12 +223,17 @@ export function thinkingBody(
  *
  * Answers "can the adapter *send* it today", not "does the model think" — an
  * endpoint whose family has no mapping yet would swallow the setting silently,
- * and a control that does nothing is worse than no control. Widen this as each
- * family's mapping lands (see `reasoningBody`), never ahead of it.
+ * and a control that does nothing is worse than no control.
+ *
+ * Every family this app speaks now has a mapping, so this is true across the
+ * board. It stays as a function rather than collapsing into `true` because the
+ * fourth family (OpenAI Responses) is not implemented yet, and because
+ * `reasoningBody` returning undefined for an unmapped family is exactly the
+ * silent-swallow case this guards against.
  */
 export function supportsThinkingLevel(standard: ApiStandard): boolean {
   const family = familyOf(standard);
-  return family === "openai" || family === "anthropic";
+  return family === "openai" || family === "anthropic" || family === "gemini";
 }
 
 /**
