@@ -223,3 +223,29 @@
   border-radius: 50%;
   animation: agentLogSpin 0.7s linear infinite;
 }
+
+/* ── A round's thinking ────────────────────────────────────────────────────
+   Italic serif, set apart by a rule rather than a box: this is the model
+   talking to itself, and it must never be mistaken for the prose it produced.
+   The peek line is the collapsed form — one line, clipped. */
+.reasoningPeek,
+.reasoningBody {
+  margin: 4px 0 2px 16px;
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--color-border);
+  font: italic 400 12px/1.7 var(--font-serif);
+  color: var(--color-text-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.reasoningPeek {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Capped so a long chain can't push the answer off screen — the log is read
+   while a run is live. Scrolls itself, and follows the tail while streaming. */
+.reasoningBody {
+  max-height: 190px;
+  overflow-y: auto;
+}

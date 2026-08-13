@@ -244,8 +244,11 @@ interface NativeReasoning { field: string; text: string }
    这正是 [`provider-layering.md`](provider-layering.md) §6 那一刀要买的东西。
    ⬜ Gemini / Anthropic 族的映射与 Anthropic 的降级重试。
 3. ✅ **模型抽屉 UI + i18n**（仅对 OpenAI 族渲染 —— 不给一个按了没反应的控件）。
-4. ◐ **读侧 chunk 变体**（`{reasoning}`）✅；**展示**（AiPanel / AgentLog 的折叠区
-   + prefs 开关）⬜。
+4. ✅ **读侧 chunk 变体 + 展示**。展示做成 `AgentEvent`（`kind: "reasoning"`），
+   因为 `AgentLog` 本就是三处共享的执行日志组件 —— 一次实现覆盖生成、对话助手、
+   lore 模态。一致性检查走 `structured.ts` 不经过 runtime，单接一条 `onReasoning`
+   回调。**没有做 prefs 开关**：折叠态只占一行，且那一行本身就是有用的信息
+   （见下），没到需要全局关掉的程度；真需要时再加。
 5. ✅ **回传合规 —— OpenAI 族**（`_reasoning` + 工具轮回传 + 请求前剥离内部字段），
    含 `agentRuntime.test.ts` 的多轮工具用例。⬜ Anthropic 的 thinking block 回传。
 
@@ -260,6 +263,23 @@ interface NativeReasoning { field: string; text: string }
   "并非每个模型支持每个值"这条规则总是先在边缘档位上应验。
 - 存储上 `"default"` 归一化为 `undefined`，所以 DB 行不区分"从未设置"与
   "设成了默认" —— 两者要发送的东西完全一样。
+
+### 展示的三个决定
+
+1. **一轮一条，原地更新。** 思考是流式的，每片一行会把日志冲垮。复用
+   `appendAgentEventTo` 已有的"发两次、后一次替换前一次"模式（原本只服务
+   `tool-step`），按 `round` 去重。
+2. **折叠态也要说话。** 没有做成通用的 `ExpandableRow`，因为"思考过程 · 2.1s"
+   只告诉作者发生了一件事、没告诉发生了什么 —— 而surface 思维链的全部理由
+   恰恰是它的**第一行**通常就是关键（模型有没有理解选区？有没有找到那条设定？）。
+   所以折叠态带一行截断的正文。
+3. **结束时机是「正文开始」，不是「本轮结束」。** 无工具的一轮里，思考结束后
+   正文还要流很久；按轮结束标记会让日志在正文明明已经出现时还显示转圈。
+   工具轮与出错轮在 `finally` 里兜底关闭，避免把一个转圈的行留在日志里。
+
+排版上用斜体衬线 + 左侧竖线，与正文明确区分：**这是模型在自言自语，不能被
+误读成它产出的稿子。** 展开区有高度上限并自动跟随尾部 —— 日志是在运行过程中
+读的，一条长思维链不该把答案挤出屏幕。
 
 ### 第 4–5 步（OpenAI 族）的落地记录
 

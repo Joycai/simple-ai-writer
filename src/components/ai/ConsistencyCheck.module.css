@@ -348,3 +348,27 @@
   display: flex;
   justify-content: center;
 }
+
+/* The model's reasoning for this scan. Same italic-serif treatment as the
+   execution log's: this is the model talking to itself, and it must not read
+   as one of the findings. */
+.reasoningToggle {
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  color: var(--color-sienna);
+  cursor: pointer;
+}
+.reasoningToggle:hover { color: var(--color-accent); }
+.reasoningBody {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--color-border);
+  max-height: 220px;
+  overflow-y: auto;
+  font: italic 400 12px/1.75 var(--font-serif);
+  color: var(--color-text-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
