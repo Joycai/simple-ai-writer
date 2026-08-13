@@ -38,6 +38,7 @@ const model: Model = {
   prefix: "always answer in Chinese",
   contextSize: 128_000,
   maxOutput: 8_192,
+  reasoningEffort: "high",
 };
 
 const conn: AiConn = { provider, model, apiKey: "sk-test" };
@@ -54,6 +55,7 @@ describe("connOptions", () => {
       prefix: "always answer in Chinese",
       contextSize: 128_000,
       maxOutput: 8_192,
+      reasoningEffort: "high",
     });
   });
 
@@ -76,8 +78,8 @@ describe("connOptions", () => {
   it("narrows an extended argument bag down to the transport fields", () => {
     const wide = { ...connOptions(conn), systemPrompt: "…", onText: () => {} };
     expect(Object.keys(pickConnOptions(wide)).sort()).toEqual([
-      "apiKey", "authMode", "baseUrl", "contextSize",
-      "maxOutput", "modelId", "prefix", "safetySettings", "standard",
+      "apiKey", "authMode", "baseUrl", "contextSize", "maxOutput",
+      "modelId", "prefix", "reasoningEffort", "safetySettings", "standard",
     ]);
   });
 });

@@ -7,6 +7,7 @@ import Database from "@tauri-apps/plugin-sql";
 
 import type { GeminiSafetySettings } from "./safety";
 import { authModesFor, type ApiStandard, type AuthMode, type ImageRoute } from "./types";
+import { parseReasoningEffort, type ReasoningEffort } from "./reasoning";
 import { migrateLegacyStandard } from "./urls";
 
 export type ModelType = "text" | "multimodal" | "image" | "video";
@@ -118,6 +119,17 @@ export interface Model {
    * presenting them as permanent facts.
    */
   probedAt?: number;
+  /**
+   * How hard this model should think, in this app's own vocabulary — the
+   * adapters translate (see `lib/ai/reasoning.ts`).
+   *
+   * Per-model rather than per-provider because the levels a model accepts, and
+   * whether it can think at all, vary between models served by one endpoint:
+   * a relay hosts a reasoning model and a plain one behind the same base URL.
+   *
+   * Absent (and `"default"`) means send nothing.
+   */
+  reasoningEffort?: ReasoningEffort;
   /**
    * USD per generated image. The billing shape image endpoints usually use;
    * token pricing (priceIn/priceOut) still applies on top for the providers
@@ -261,6 +273,7 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   await addColumn(db, modelCols, "models", "probed_at", "INTEGER");
   await addColumn(db, modelCols, "models", "price_per_image", "REAL");
   await addColumn(db, modelCols, "models", "caps", "TEXT");
+  await addColumn(db, modelCols, "models", "reasoning_effort", "TEXT");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS prompts (
@@ -467,9 +480,9 @@ export async function saveModel(
 ): Promise<void> {
   await db.execute(
     `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null]
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null]
   );
 }
 
@@ -528,6 +541,7 @@ function rowToModel(r: Record<string, unknown>): Model {
     probedAt: (r.probed_at as number | null) ?? undefined,
     pricePerImage: (r.price_per_image as number | null) ?? undefined,
     caps: parseImageCaps(r.caps),
+    reasoningEffort: parseReasoningEffort(r.reasoning_effort),
   };
 }
 

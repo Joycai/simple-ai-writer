@@ -21,6 +21,7 @@
 
 import i18n from "../../i18n";
 import type { Model, Provider } from "./configDb";
+import type { ReasoningEffort } from "./reasoning";
 import type { GeminiSafetySettings } from "./safety";
 import type { ApiStandard, AuthMode } from "./types";
 
@@ -62,6 +63,8 @@ export interface ConnOptions {
   contextSize?: number;
   /** Sent as `max_tokens` on the Anthropic path; planning-only elsewhere. */
   maxOutput?: number;
+  /** How hard to think, in this app's vocabulary — each adapter translates. */
+  reasoningEffort?: ReasoningEffort;
 }
 
 /**
@@ -84,6 +87,7 @@ export function connOptions(conn: AiConn): ConnOptions {
     prefix: model.prefix,
     contextSize: model.contextSize,
     maxOutput: model.maxOutput,
+    reasoningEffort: model.reasoningEffort,
   };
 }
 
@@ -105,6 +109,7 @@ export function pickConnOptions(o: ConnOptions): ConnOptions {
     prefix: o.prefix,
     contextSize: o.contextSize,
     maxOutput: o.maxOutput,
+    reasoningEffort: o.reasoningEffort,
   };
 }
 

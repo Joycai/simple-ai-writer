@@ -4,6 +4,7 @@
  * import types without pulling in the provider adapters.
  */
 
+import type { ReasoningEffort } from "./reasoning";
 import type { GeminiSafetySettings } from "./safety";
 import i18n from "../../i18n";
 
@@ -201,6 +202,12 @@ export interface StreamOptions {
    * reserving window the model could never fill.
    */
   maxOutput?: number;
+  /**
+   * How hard the model should think, in this app's own vocabulary. Translated
+   * per protocol family by `lib/ai/reasoning.ts`; absent (and `"default"`) sends
+   * nothing at all, leaving the endpoint's own default alone.
+   */
+  reasoningEffort?: ReasoningEffort;
 }
 
 /** Thrown before sending when the estimated prompt exceeds the model's configured context size. */

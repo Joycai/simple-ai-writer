@@ -3,6 +3,7 @@ import {
   streamCompletion, ContextSizeError,
   type ApiStandard, type AuthMode, type StreamChunk, type StreamMessage, type ToolDefinition,
 } from "../ai";
+import type { ReasoningEffort } from "../ai/reasoning";
 
 /** Build a fetch Response whose body streams the given raw chunks. */
 function sseResponse(chunks: string[]): Response {
@@ -37,6 +38,7 @@ async function collect(opts: {
   toolChoice?: "auto" | "none" | "required" | { type: "function"; function: { name: string } };
   messages?: StreamMessage[];
   prefix?: string;
+  reasoningEffort?: ReasoningEffort;
 }): Promise<{ received: StreamChunk[]; calls: { url: string; body: Record<string, unknown> }[] }> {
   const calls = mockFetch(opts.chunks);
   const received: StreamChunk[] = [];
@@ -48,6 +50,7 @@ async function collect(opts: {
     messages: opts.messages ?? [{ role: "user", content: "hi" }],
     prefix: opts.prefix,
     maxOutput: opts.maxOutput,
+    reasoningEffort: opts.reasoningEffort,
     tools: opts.tools,
     toolChoice: opts.toolChoice,
     onChunk: (c) => received.push(c),
@@ -355,6 +358,74 @@ describe("streamCompletion — Gemini SSE", () => {
     expect(received[received.length - 1]).toEqual({
       done: true, inputTokens: 100, outputTokens: 5, cachedTokens: 80,
     });
+  });
+});
+
+describe("streamCompletion — reasoning effort", () => {
+  const done = ['data: {"choices":[{"delta":{"content":"ok"}}]}\n', "data: [DONE]\n"];
+
+  it("sends nothing at all when the model has no effort set", async () => {
+    // The whole safety story rests on this: a model configured before the
+    // setting existed must keep producing byte-identical requests, because a
+    // field this app volunteers is a field some relay can reject.
+    const { calls } = await collect({ chunks: done });
+    expect(calls[0].body).not.toHaveProperty("reasoning_effort");
+    expect(calls[0].body).not.toHaveProperty("thinking");
+  });
+
+  it('sends nothing for "default" too', async () => {
+    const { calls } = await collect({ chunks: done, reasoningEffort: "default" });
+    expect(calls[0].body).not.toHaveProperty("reasoning_effort");
+  });
+
+  it("maps the app's levels onto the protocol's own spelling", async () => {
+    for (const [effort, wire] of [
+      ["off", "none"], ["low", "low"], ["medium", "medium"], ["high", "high"], ["max", "max"],
+    ] as const) {
+      const { calls } = await collect({ chunks: done, reasoningEffort: effort });
+      expect(calls[0].body.reasoning_effort).toBe(wire);
+    }
+  });
+
+  it("reaches a compat endpoint too — same wire protocol, same field", async () => {
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat", reasoningEffort: "high",
+    });
+    expect(calls[0].body.reasoning_effort).toBe("high");
+  });
+
+  it("lets extraBody override the configured level", async () => {
+    // extraBody is the per-request escape hatch; config must not outrank it.
+    const calls = mockFetch(done);
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "k",
+      standard: "openai",
+      modelId: "m",
+      reasoningEffort: "max",
+      extraBody: { reasoning_effort: "low" },
+      messages: [{ role: "user", content: "hi" }],
+      onChunk: () => {},
+    });
+    expect(calls[0].body.reasoning_effort).toBe("low");
+  });
+
+  it("stays off the wire for families whose translation isn't written yet", async () => {
+    // Gemini and Anthropic keep their pre-existing bodies until their own
+    // mapping lands — an untranslated level must not leak as an OpenAI field.
+    const gemini = await collect({
+      chunks: ['data: {"candidates":[{"content":{"parts":[{"text":"hi"}]}}]}\n'],
+      standard: "gemini",
+      reasoningEffort: "max",
+    });
+    expect(gemini.calls[0].body).not.toHaveProperty("reasoning_effort");
+
+    const anthropic = await collect({
+      chunks: ['event: message_stop\ndata: {"type":"message_stop"}\n\n'],
+      standard: "anthropic",
+      reasoningEffort: "max",
+    });
+    expect(anthropic.calls[0].body).not.toHaveProperty("reasoning_effort");
   });
 });
 

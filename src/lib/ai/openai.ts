@@ -3,6 +3,7 @@
  */
 
 import { fetch } from "../http";
+import { reasoningBody } from "./reasoning";
 import { openaiUrl } from "./urls";
 import type { AccumulatedToolCall, StreamOptions } from "./types";
 
@@ -22,6 +23,11 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       stream: true,
       stream_options: { include_usage: true },
       ...(opts.tools ? { tools: opts.tools, tool_choice: opts.toolChoice ?? "auto" } : {}),
+      // Absent unless the author set an effort on this model — an unset model
+      // must keep sending exactly what it sent before this existed, because a
+      // volunteered field is a field some relay can reject.
+      ...reasoningBody(opts.standard, opts.reasoningEffort),
+      // Last: extraBody is the per-request escape hatch and outranks config.
       ...opts.extraBody,
     }),
     signal: opts.signal,
