@@ -23,6 +23,7 @@ import type {
   MessageContent,
   StreamMessage,
   StreamOptions,
+  ThinkingBlockCarry,
 } from "./types";
 
 /** Messages API version. Pinned, not "latest" — the wire shape is versioned by it. */
@@ -94,7 +95,10 @@ type AnthropicBlock =
   | { type: "text"; text: string }
   | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
   | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
-  | { type: "tool_result"; tool_use_id: string; content: string };
+  | { type: "tool_result"; tool_use_id: string; content: string }
+  // Replayed verbatim, never constructed here — deliberately opaque so nothing
+  // in this file is tempted to rebuild one. The API rejects a modified block.
+  | { type: "thinking" | "redacted_thinking"; [k: string]: unknown };
 
 type AnthropicMessage = { role: "user" | "assistant"; content: AnthropicBlock[] };
 
@@ -159,7 +163,23 @@ export function extractSystem(messages: StreamMessage[]): string | undefined {
  * (a tool round often appends assistant-then-assistant), so both are fixed up
  * here rather than left to 400 at request time.
  */
-export function convertToAnthropicMessages(messages: StreamMessage[]): AnthropicMessage[] {
+/**
+ * The thinking blocks to replay for one assistant turn, or none.
+ *
+ * Dropped when they came from a different model: thinking blocks are bound to
+ * the model that produced them, and this app lets the author switch models
+ * mid-conversation. Another model won't reject them — it ignores them and bills
+ * them as input anyway, which is the worst of both.
+ */
+function thinkingBlocksFor(msg: StreamMessage, modelId: string): AnthropicBlock[] {
+  const carry = (msg as { _thinkingBlocks?: ThinkingBlockCarry })._thinkingBlocks;
+  return carry && carry.modelId === modelId ? (carry.blocks as AnthropicBlock[]) : [];
+}
+
+export function convertToAnthropicMessages(
+  messages: StreamMessage[],
+  modelId: string,
+): AnthropicMessage[] {
   const toolCallIdToName = new Map<string, string>();
   for (const m of messages) {
     if (m.role === "assistant" && "tool_calls" in m && m.tool_calls) {
@@ -194,12 +214,21 @@ export function convertToAnthropicMessages(messages: StreamMessage[]): Anthropic
     if (msg.role === "assistant" && "tool_calls" in msg && msg.tool_calls) {
       out.push({
         role: "assistant",
-        content: msg.tool_calls.map((tc) => ({
-          type: "tool_use" as const,
-          id: tc.id,
-          name: tc.function.name || toolCallIdToName.get(tc.id) || "unknown_function",
-          input: parseJsonArgs(tc.function.arguments),
-        })),
+        content: [
+          // Ahead of the tool_use blocks, exactly as the model emitted them.
+          // Required, not cosmetic: a tool call pauses the model mid-response,
+          // and the reasoning that led to it has to still be there when the
+          // result comes back. Omitting it doesn't error — the API silently
+          // turns thinking off for the request, which is the harder failure to
+          // notice.
+          ...thinkingBlocksFor(msg, modelId),
+          ...msg.tool_calls.map((tc) => ({
+            type: "tool_use" as const,
+            id: tc.id,
+            name: tc.function.name || toolCallIdToName.get(tc.id) || "unknown_function",
+            input: parseJsonArgs(tc.function.arguments),
+          })),
+        ],
       });
       i++;
       continue;
@@ -331,7 +360,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
     model: opts.modelId,
     max_tokens: maxTokens,
     stream: true,
-    messages: convertToAnthropicMessages(opts.messages),
+    messages: convertToAnthropicMessages(opts.messages, opts.modelId),
   };
   if (system) body.system = system;
   if (thinking) body.thinking = thinking;
@@ -375,6 +404,9 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
   // block announces its id and name in content_block_start, then streams its
   // arguments as input_json_delta fragments that have to be concatenated.
   const toolBlocks = new Map<number, { id: string; name: string; args: string }>();
+  // Index-keyed so the blocks go back in the order the model produced them —
+  // a reordered sequence is a 400.
+  const thinkingBlocks = new Map<number, Record<string, unknown>>();
   // Carry an incomplete trailing line across reads: a single SSE line can be
   // split across network chunks, and parsing the halves would silently drop
   // text and usage.
@@ -394,7 +426,13 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
         // loop sees a call it can't parse.
         arguments: tc.args.trim() ? tc.args : "{}",
       }));
-    opts.onChunk({ toolCalls });
+    const blocks = [...thinkingBlocks.entries()].sort(([a], [b]) => a - b).map(([, b]) => b);
+    opts.onChunk({
+      toolCalls,
+      // Only on a tool round: between plain turns the API filters prior
+      // thinking itself, so carrying it would be tokens paid for nothing.
+      ...(blocks.length ? { _thinkingBlocks: { modelId: opts.modelId, blocks } } : {}),
+    });
   };
 
   const emitDone = () => {
@@ -434,6 +472,12 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
       case "content_block_start": {
         const index = asIndex(json.index);
         const block = json.content_block as Record<string, unknown> | undefined;
+        // Kept verbatim so the turn can be echoed back unmodified: the API
+        // rejects a tool-use turn whose thinking blocks were rebuilt, and
+        // redacted ones carry only an opaque payload we must not touch.
+        if (block?.type === "thinking" || block?.type === "redacted_thinking") {
+          thinkingBlocks.set(index, { ...block });
+        }
         if (block?.type === "tool_use") {
           toolBlocks.set(index, {
             id: String(block.id ?? ""),
@@ -451,14 +495,20 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
         } else if (delta?.type === "input_json_delta" && typeof delta.partial_json === "string") {
           const entry = toolBlocks.get(index);
           if (entry) entry.args += delta.partial_json;
+        } else if (delta?.type === "signature_delta" && typeof delta.signature === "string") {
+          const block = thinkingBlocks.get(index);
+          if (block) block.signature = String(block.signature ?? "") + delta.signature;
         } else if (delta?.type === "thinking_delta" && typeof delta.thinking === "string") {
+          const block = thinkingBlocks.get(index);
+          if (block) block.thinking = String(block.thinking ?? "") + delta.thinking;
           // Summarized reasoning, streamed for display. Arrives only because the
           // request asks for display: "summarized" — the current Claude
           // generation defaults to omitting the text while still billing it.
           opts.onChunk({ reasoning: delta.thinking });
         }
-        // signature_delta is not surfaced: it carries the encrypted full
-        // reasoning for round-tripping, not anything a reader wants to see.
+        // Neither delta is *only* accumulated above: the text is also streamed
+        // for display, while the signature stays out of sight — it is the
+        // encrypted full reasoning, not anything a reader wants.
         return;
       }
       case "message_delta": {

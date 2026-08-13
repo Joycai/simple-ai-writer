@@ -5,6 +5,13 @@
  */
 
 import type { NativeReasoning, ReasoningEffort, ThinkingDialect } from "./reasoning";
+
+/** Anthropic thinking blocks, tagged with the model that produced them. */
+export interface ThinkingBlockCarry {
+  modelId: string;
+  /** `thinking` / `redacted_thinking` blocks, verbatim and in original order. */
+  blocks: unknown[];
+}
 import type { GeminiSafetySettings } from "./safety";
 import i18n from "../../i18n";
 
@@ -168,6 +175,8 @@ export type StreamChunk =
        * see `StreamMessage`.
        */
       _reasoning?: NativeReasoning;
+      /** Anthropic's thinking blocks for this turn — see `StreamMessage`. */
+      _thinkingBlocks?: ThinkingBlockCarry;
     };
 
 /** All message variants accepted by the streaming API. */
@@ -193,6 +202,22 @@ export type StreamMessage =
        * message reaches the wire and re-express whatever their protocol needs.
        */
       _reasoning?: NativeReasoning;
+      /**
+       * Anthropic's `thinking` / `redacted_thinking` blocks for this turn,
+       * verbatim and in order.
+       *
+       * A separate field from `_reasoning` because the shape is genuinely
+       * different: this is an ordered array of blocks — some carrying only an
+       * opaque `data` payload with no text at all — and the API rejects a turn
+       * whose blocks were reordered, edited, or partially dropped. A
+       * `{field, text}` pair cannot express that.
+       *
+       * Carries `modelId` because thinking blocks are bound to the model that
+       * produced them. Switching models mid-conversation (which this app
+       * allows) means the blocks must be left out: another model won't reject
+       * them, it will silently ignore them — and still bill them as input.
+       */
+      _thinkingBlocks?: ThinkingBlockCarry;
     }
   | { role: "tool"; tool_call_id: string; content: string };
 

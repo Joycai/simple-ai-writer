@@ -17,7 +17,9 @@ import { streamCompletion } from "../ai";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import { estimateMessagesTokens } from "../ai/tokenEstimate";
 import type { NativeReasoning } from "../ai/reasoning";
-import type { AccumulatedToolCall, ContentPart, StreamMessage } from "../ai/types";
+import type {
+  AccumulatedToolCall, ContentPart, StreamMessage, ThinkingBlockCarry,
+} from "../ai/types";
 import type { AgentEvent } from "./events";
 import { contentWithoutImages, hasImageParts } from "./imageHistory";
 import { TOOL_ARGS_DETAIL_CHARS, TOOL_RESULT_DETAIL_CHARS } from "./logFormat";
@@ -283,6 +285,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     let roundToolCalls: AccumulatedToolCall[] = [];
     let roundGeminiModelParts: unknown[] | undefined;
     let roundReasoning: NativeReasoning | undefined;
+    let roundThinkingBlocks: ThinkingBlockCarry | undefined;
     // Streamed reasoning for this round, reported to the log as it grows. The
     // start time is captured on the first fragment rather than at round start:
     // a model that thinks only after reading a tool result would otherwise be
@@ -347,6 +350,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
             roundToolCalls = chunk.toolCalls;
             roundGeminiModelParts = chunk._geminiModelParts;
             roundReasoning = chunk._reasoning;
+            roundThinkingBlocks = chunk._thinkingBlocks;
           } else if ("done" in chunk) {
             totalInputTokens += chunk.inputTokens;
             totalOutputTokens += chunk.outputTokens;
@@ -405,6 +409,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       })),
       _geminiModelParts: roundGeminiModelParts,
       _reasoning: roundReasoning,
+      _thinkingBlocks: roundThinkingBlocks,
     });
 
     // Execute each tool call and append results. Re-checked per call, not just

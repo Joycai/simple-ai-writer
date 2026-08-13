@@ -1060,6 +1060,106 @@ describe("streamCompletion — Anthropic SSE", () => {
     expect(received.some((c) => "reasoning" in c || "text" in c)).toBe(false);
   });
 
+  it("carries a tool round's thinking blocks back verbatim, in order", async () => {
+    // Omitting them doesn't error — the API silently turns thinking off for the
+    // request. That is the whole reason this is tested rather than trusted.
+    const { received } = await collect({
+      ...ANTHROPIC,
+      chunks: [
+        `data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"","signature":""}}\n\n`,
+        `data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"I need the weather"}}\n\n`,
+        `data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"EosnCkYICxIM"}}\n\n`,
+        `data: {"type":"content_block_start","index":1,"content_block":{"type":"redacted_thinking","data":"opaque"}}\n\n`,
+        `data: {"type":"content_block_start","index":2,"content_block":{"type":"tool_use","id":"toolu_1","name":"get_weather"}}\n\n`,
+        `data: {"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{}"}}\n\n`,
+        `data: {"type":"message_stop"}\n\n`,
+      ],
+    });
+    const call = received.find((c) => "toolCalls" in c) as {
+      _thinkingBlocks?: { modelId: string; blocks: Record<string, unknown>[] };
+    };
+    expect(call._thinkingBlocks?.modelId).toBe("test-model");
+    // Both kinds, in the order the model produced them. redacted_thinking is
+    // included on purpose: filtering on type === "thinking" drops it and
+    // breaks the round trip.
+    expect(call._thinkingBlocks?.blocks).toEqual([
+      { type: "thinking", thinking: "I need the weather", signature: "EosnCkYICxIM" },
+      { type: "redacted_thinking", data: "opaque" },
+    ]);
+  });
+
+  it("replays those blocks ahead of the tool_use on the next request", async () => {
+    const calls = mockFetch([`data: {"type":"message_stop"}\n\n`]);
+    const blocks = [
+      { type: "thinking", thinking: "reasoned", signature: "sig" },
+      { type: "redacted_thinking", data: "opaque" },
+    ];
+    await streamCompletion({
+      baseUrl: "https://api.anthropic.com",
+      apiKey: "k",
+      standard: "anthropic",
+      modelId: "claude-x",
+      messages: [
+        { role: "user", content: "weather?" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "toolu_1", type: "function", function: { name: "get_weather", arguments: "{}" } }],
+          _thinkingBlocks: { modelId: "claude-x", blocks },
+        },
+        { role: "tool", tool_call_id: "toolu_1", content: "20C" },
+      ],
+      onChunk: () => {},
+    });
+    const wire = calls[0].body.messages as { role: string; content: Record<string, unknown>[] }[];
+    expect(wire[1].content).toEqual([
+      ...blocks,
+      { type: "tool_use", id: "toolu_1", name: "get_weather", input: {} },
+    ]);
+    // The app's own bookkeeping never reaches the wire.
+    expect(wire[1]).not.toHaveProperty("_thinkingBlocks");
+  });
+
+  it("drops thinking blocks produced by a different model", async () => {
+    // The author can switch models mid-conversation. Another model won't
+    // reject foreign blocks — it ignores them and bills them as input anyway.
+    const calls = mockFetch([`data: {"type":"message_stop"}\n\n`]);
+    await streamCompletion({
+      baseUrl: "https://api.anthropic.com",
+      apiKey: "k",
+      standard: "anthropic",
+      modelId: "claude-y",
+      messages: [
+        { role: "user", content: "go" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "toolu_1", type: "function", function: { name: "f", arguments: "{}" } }],
+          _thinkingBlocks: { modelId: "claude-x", blocks: [{ type: "thinking", thinking: "old" }] },
+        },
+        { role: "tool", tool_call_id: "toolu_1", content: "r" },
+      ],
+      onChunk: () => {},
+    });
+    const wire = calls[0].body.messages as { content: Record<string, unknown>[] }[];
+    expect(wire[1].content).toEqual([
+      { type: "tool_use", id: "toolu_1", name: "f", input: {} },
+    ]);
+  });
+
+  it("emits no carrier at all when the model produced no thinking", async () => {
+    const { received } = await collect({
+      ...ANTHROPIC,
+      chunks: [
+        `data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"t1","name":"f"}}\n\n`,
+        `data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{}"}}\n\n`,
+        `data: {"type":"message_stop"}\n\n`,
+      ],
+    });
+    const call = received.find((c) => "toolCalls" in c) as { _thinkingBlocks?: unknown };
+    expect(call._thinkingBlocks).toBeUndefined();
+  });
+
   it("sends tool definitions in Anthropic's input_schema shape", async () => {
     const { calls } = await collect({
       ...ANTHROPIC,

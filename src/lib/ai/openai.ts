@@ -27,12 +27,15 @@ import type { AccumulatedToolCall, StreamMessage, StreamOptions } from "./types"
  */
 function toWireMessages(messages: StreamMessage[]): Record<string, unknown>[] {
   return messages.map((m) => {
-    const { _geminiModelParts, _reasoning, ...wire } = m as StreamMessage & {
-      _geminiModelParts?: unknown[];
-      _reasoning?: NativeReasoning;
-    };
-    void _geminiModelParts; // Gemini's own carry-back; meaningless here.
-    return _reasoning ? { ...wire, [_reasoning.field]: _reasoning.text } : wire;
+    const bag = m as Record<string, unknown>;
+    // Drop by prefix rather than by name: every protocol that needs carry-back
+    // adds a field here, and an allow-list of names silently lets the next one
+    // through to the wire.
+    const wire = Object.fromEntries(
+      Object.entries(bag).filter(([k]) => !k.startsWith("_")),
+    );
+    const reasoning = bag._reasoning as NativeReasoning | undefined;
+    return reasoning ? { ...wire, [reasoning.field]: reasoning.text } : wire;
   });
 }
 
