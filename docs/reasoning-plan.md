@@ -393,12 +393,16 @@ interface NativeReasoning { field: string; text: string }
 
 ## 9. 未决问题
 
-- **兼容中继的思维链字段名**到底有几种？已知 `reasoning_content`（DeepSeek）、
-  `reasoning`（OpenRouter）、内联 `<think>` 标签三类。第 4 步实现时按三种都试，
-  但内联标签的剥离要不要做、会不会误伤正文里合法的 `<think>` 字样，待定。
+- **兼容中继的思维链字段名**到底有几种？已实现三种（`reasoning_content` /
+  `reasoning` / 内联 `<think>`），但**穷尽性未验证** —— 多一种没覆盖的写法等于
+  那家的思维链全部丢失，且不报错。见
+  [`thinking-verification.md`](thinking-verification.md) §1.3。
+  内联标签的剥离已实现，只在响应最开头识别，避免误伤正文里合法的 `<think>`。
 - **是否给 `endpointProbe` 加一次"支持哪些档位"的探测**？现在的探测测的是
   上下文窗口与输出上限（见 `architecture.md` → Endpoint probing）。档位探测需要
   实际发一次请求看 400，成本比较高，倾向于不做，改为"发错了就降级并记住"。
-- **旧代 Anthropic 的 `budget_tokens` 必须 < `max_tokens`**，而 `maxOutput` 是
-  可选字段（未配置时 `anthropic.ts` 回落到常量）。档位推导出的 budget 与常量
-  冲突时以哪个为准，实现时定。
+- ~~旧代 Anthropic 的 `budget_tokens` 与 `max_tokens` 冲突时以哪个为准~~
+  **已解决**：`thinkingFor` 把 budget 夹在 `[1024, min(常量, maxTokens/2)]`
+  之间，两者共用一个上限，谁也不能饿死对方。
+
+其余实测项见 [`thinking-verification.md`](thinking-verification.md) §4。

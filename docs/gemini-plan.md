@@ -147,12 +147,9 @@ an error."* —— 反过来说，3+ 上发 `thinkingLevel` 就够了。
 
 ## 5. 需要实测才能定论的
 
-1. **3.1 Pro 是否拒绝 `MINIMAL`**（它的支持档位是 `low/medium/high`）。
-   影响「关闭」档在该模型上的映射。
-2. **`includeThoughts: true` 之后 `part.thought` 的实际形态** —— 是纯文本
-   part，还是带别的字段。决定第 3 刀怎么写。
-3. **档位是否真的生效**：对比 `MINIMAL` 与 `HIGH` 的 `thoughtsTokenCount`。
-   与 ④ 族验 `output_config` 的测法相同。
+汇总在 [`thinking-verification.md`](thinking-verification.md) §1.2 与 §3。
+**最要紧的一条**是 §1.2：`includeThoughts` 打开之后 `part.thought` 的实际形态
+—— 参考页没定义它，而第 3 刀的写法建立在对它的假设上。
 
 ## 6. 未决：要不要接 Interactions API
 
