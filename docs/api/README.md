@@ -112,7 +112,8 @@ Chat Completions 和 Responses 同属 OpenAI 却分成两族，是因为它们�
   official/compat 落成 6 个 `ApiStandard` 值
 - [`../reasoning-plan.md`](../reasoning-plan.md) — 本项目怎么加思考强度与思维链（① 族，已实现）
 - [`../anthropic-plan.md`](../anthropic-plan.md) — ④ 族的审计与接入（已实现）
-- [`../gemini-plan.md`](../gemini-plan.md) — ③ 族的盘点与接入方案（待实现）
+- [`../gemini-plan.md`](../gemini-plan.md) — ③ 族的盘点与接入（已实现）
+- [`../thinking-verification.md`](../thinking-verification.md) — 三族思考支持的**实测清单**（全部未验证）
 
 ## 写作约定
 

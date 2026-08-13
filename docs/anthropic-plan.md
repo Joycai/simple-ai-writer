@@ -380,21 +380,10 @@ Fable 5 / Mythos 5 / Mythos Preview 无条件拒绝 `disabled`；Opus 5 在 xhig
 
 ## 8. 需要实测才能定论的
 
-- **不回传 thinking block 时，响应里还有没有 thinking block** —— 这是判断
-  §4.2 那条"静默降级"是否正在发生的**唯一手段**，也是整份文档里最值得先测的
-  一条：它决定第 5 刀的紧迫性。
-- **`display:"summarized"` 在范围内各模型上返回的文本量**，以及与计费 token
-  的差距。影响 §5.4 的用量面板说明。
-- **`DEFAULT_MAX_TOKENS` 提高后对上下文预算的实际影响**（§5.1）——
-  `lib/context/budget.ts` 拿 `maxOutput` 做规划，这个常量不是孤立的。
-- **中继是否透传 `output_config`**（§3.5）。决定第 6 刀能不能在中继上兑现，
-  也决定 `thinkingDialect` 要不要多一个维度。测法：对同一个中继模型分别发
-  `effort: "low"` 与 `effort: "max"`，比较输出 token 量——透传了会有明显差异。
-- **中继上 `adaptive` 被拒时的 400 措辞**是否会被 `structured.ts` 的
-  `TOOL_CAPABILITY_ERROR` 误判成"不支持工具调用"、从而白白退成 JSON 模式。
-  官方措辞是 `adaptive thinking is not supported on this model`，与那个正则的
-  `(?:function|tool)s?[ _-]?calls?` 分支不匹配，**推断为不会误判**，但值得验 ——
-  这条同时决定 §3.1 说的"探测兜底"要不要单独实现，还是复用既有的降级路径。
+汇总在 [`thinking-verification.md`](thinking-verification.md) §1.1 与 §2 ——
+三族的实测项放在一处，因为它们只在同一次动手时才会被真正执行。**最要紧的一条**
+是 §1.1：不回传 thinking block 时响应里还有没有 thinking block，那是判断
+§4.2 那条"静默降级"是否正在发生的唯一手段。
 
 ## 9. 回传载体：`_thinkingBlocks`，不是 `_native`
 
