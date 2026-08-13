@@ -6,7 +6,8 @@
     "close": "Close",
     "cancel": "Cancel",
     "unsavedConfirm": "You have unsaved changes that will be lost. Close anyway?",
-    "back": "Back"
+    "back": "Back",
+    "delete": "Delete"
   },
   "errorBoundary": {
     "appTitle": "Something went wrong",
@@ -921,6 +922,7 @@
       "deleteProvider": "Delete provider",
       "deleteModel": "Delete model",
       "deleteProviderConfirm": "Delete provider “{{name}}”? Its {{count}} models will be removed too.",
+      "deleteModelConfirm": "Delete the model “{{name}}”? Its usage history is kept.",
       "deleteProviderConfirm_one": "Delete provider “{{name}}”? Its {{count}} model will be removed too.",
       "deleteProviderConfirm_other": "Delete provider “{{name}}”? Its {{count}} models will be removed too.",
       "noModels": "No models yet —",

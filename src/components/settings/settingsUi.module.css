@@ -173,7 +173,7 @@
   height: 22px;
   padding: 0;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--color-border-strong);
   cursor: pointer;
   transition: background var(--transition-fast);
@@ -499,12 +499,12 @@
   width: 100%;
   max-width: 150px;
   height: 3px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--color-border);
 }
 .usageBarFill {
   height: 3px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--color-accent);
 }
 

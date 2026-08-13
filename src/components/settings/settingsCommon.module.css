@@ -16,8 +16,8 @@
 }
 
 .label {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
   font-weight: 500;
 }
 
@@ -38,7 +38,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   color: var(--color-text-primary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
   font-family: inherit;
   outline: none;
   transition: border-color var(--transition-fast);
@@ -53,9 +53,9 @@
 .btnPrimary {
   padding: var(--space-2) var(--space-4);
   background: var(--color-accent);
-  color: #fff;
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
+  color: var(--color-bg-base);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-md);
   font-weight: 500;
   transition: background var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast), opacity var(--transition-fast);
 }
@@ -68,8 +68,8 @@
   background: var(--color-bg-elevated);
   color: var(--color-text-secondary);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-md);
   transition: background var(--transition-fast);
 }
 .btnSecondary:hover { background: var(--color-border); }
@@ -87,10 +87,25 @@
 
 /* ─── Gemini safety filtering ─────────────────────────────────────────────── */
 
+/* One boxed section: heading, explanation and sliders read as a single
+   setting, so the card wraps all three rather than just the sliders. */
+.safetyCard {
+  padding: var(--space-4);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.safetyTitle {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
 .safetyHint {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
-  margin-bottom: var(--space-2);
+  margin-top: var(--space-1);
   line-height: 1.5;
 }
 
@@ -98,10 +113,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  padding: var(--space-3);
-  background: var(--color-bg-base);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  margin-top: var(--space-4);
 }
 
 /* Sized for the 480px provider drawer it now lives in, not the old wide modal. */
@@ -171,46 +183,60 @@
   gap: var(--space-2);
 }
 
-/* ─── Test connection row ─────────────────────────────────────────────────── */
+/* ─── API key + test connection ───────────────────────────────────────────── */
 
-.testRow {
+/* The test button sits against the key it tests, not in a row of its own —
+   the two are one action. The verdict lands underneath, full width. */
+.keyRow {
   display: flex;
+  gap: var(--space-3);
+  align-items: stretch;
+}
+
+.keyRow .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.testBtn {
+  flex: none;
+  white-space: nowrap;
+  padding: 0 var(--space-4);
+}
+
+.testResultOk,
+.testResultError {
+  display: flex;
+  align-items: flex-start;
   gap: var(--space-2);
-  align-items: center;
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
 }
 
 .testResultOk {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-sm);
-  background: rgba(16, 185, 129, 0.1);
-  border: 1px solid rgba(16, 185, 129, 0.25);
+  background: var(--color-success-bg);
+  border: 1px solid var(--color-success);
   color: var(--color-success);
-  font-size: var(--font-size-sm);
-  flex: 1;
-  min-width: 0;
 }
 
 .testResultError {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-sm);
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.25);
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error);
   color: var(--color-error);
-  font-size: var(--font-size-sm);
-  flex: 1;
+}
+
+/* The probe messages carry real diagnostics (HTTP status, rejected model
+   name) — let them wrap rather than truncating the useful half. */
+.testResultMessage {
   min-width: 0;
 }
 
-.testResultMessage {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.testResultIcon {
+  flex: none;
+  margin-top: 2px;
 }
 
 /* ─── Fetch models row ────────────────────────────────────────────────────── */
@@ -238,8 +264,8 @@
 .errorNote {
   color: var(--color-error);
   font-size: var(--font-size-sm);
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.25);
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error);
   border-radius: var(--radius-sm);
   padding: var(--space-2) var(--space-3);
 }

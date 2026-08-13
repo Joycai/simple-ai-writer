@@ -3,8 +3,10 @@ import { useTranslation } from "react-i18next";
 import { ChevronRight, Pencil, Search, X } from "lucide-react";
 import { useAiStore } from "../../../stores/aiStore";
 import type { Model, ModelType } from "../../../lib/ai/configDb";
+import { ConfirmDialog } from "../../common/ConfirmDialog";
 import { ProviderDrawer } from "./ProviderDrawer";
 import { ModelDrawer } from "./ModelDrawer";
+import { Chip } from "./bits";
 import styles from "../settingsCommon.module.css";
 import ui from "../settingsUi.module.css";
 import hub from "./ProvidersModels.module.css";
@@ -18,6 +20,12 @@ const ORPHAN_ID = "__orphan__";
 type Drawer =
   | { kind: "provider"; providerId: string | null; apiKey: string }
   | { kind: "model"; providerId: string; modelId: string | null }
+  | null;
+
+/** A pending deletion, held until the author confirms it. */
+type Pending =
+  | { kind: "provider"; id: string; name: string; count: number }
+  | { kind: "model"; id: string; name: string }
   | null;
 
 interface Props {
@@ -34,12 +42,18 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
   const [typeFilter, setTypeFilter] = useState<ModelType | "all">("all");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [drawer, setDrawer] = useState<Drawer>(null);
+  const [pending, setPending] = useState<Pending>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    onEscapeInterceptChange(drawer ? () => setDrawer(null) : null);
+    // While the confirm dialog is up, ModalShell's own Escape listener closes
+    // it. Both listeners sit on `window`, so the page's would otherwise fire
+    // too and take the whole settings page down with the dialog — claiming the
+    // key with a no-op is what keeps one press to one layer.
+    const handler = pending ? () => {} : drawer ? () => setDrawer(null) : null;
+    onEscapeInterceptChange(handler);
     return () => onEscapeInterceptChange(null);
-  }, [drawer, onEscapeInterceptChange]);
+  }, [drawer, pending, onEscapeInterceptChange]);
 
   const q = query.trim().toLowerCase();
 
@@ -93,16 +107,11 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
     setDrawer({ kind: "provider", providerId, apiKey });
   };
 
-  const handleDeleteProvider = (id: string, name: string, count: number) => {
-    if (!window.confirm(t("aiConfig.hub.deleteProviderConfirm", { name, count }))) return;
-    removeProvider(id);
+  const confirmPending = () => {
+    if (!pending) return;
+    if (pending.kind === "provider") removeProvider(pending.id);
+    else removeModel(pending.id);
   };
-
-  const chip = (label: string, active: boolean, onClick: () => void, key: string) => (
-    <button key={key} className={`${ui.chip} ${active ? ui.chipActive : ""}`} onClick={onClick}>
-      {label}
-    </button>
-  );
 
   return (
     <div className={hub.hub}>
@@ -130,14 +139,14 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
               placeholder={t("aiConfig.hub.searchPlaceholder")}
             />
           </div>
-          {TYPE_FILTERS.map((f) =>
-            chip(
-              f === "all" ? t("aiConfig.hub.filterAll") : t(`aiConfig.modelTypes.${f}`),
-              typeFilter === f,
-              () => setTypeFilter(f),
-              f,
-            ),
-          )}
+          {TYPE_FILTERS.map((f) => (
+            <Chip
+              key={f}
+              label={f === "all" ? t("aiConfig.hub.filterAll") : t(`aiConfig.modelTypes.${f}`)}
+              active={typeFilter === f}
+              onClick={() => setTypeFilter(f)}
+            />
+          ))}
         </div>
       </div>
 
@@ -198,7 +207,10 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
                     <button
                       className={`${hub.iconBtn} ${hub.iconBtnDanger}`}
                       title={t("aiConfig.hub.deleteProvider")}
-                      onClick={(e) => { e.stopPropagation(); handleDeleteProvider(g.id, g.name, g.all.length); }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPending({ kind: "provider", id: g.id, name: g.name, count: g.all.length });
+                      }}
                     >
                       <X size={14} />
                     </button>
@@ -228,11 +240,16 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
                         <span className={hub.modelCtx}>{m.contextSize.toLocaleString()} ctx</span>
                       ) : null}
                       <span className={hub.groupSpacer} />
-                      <span className={hub.modelType}>{t(`aiConfig.modelTypes.${m.type}`)}</span>
+                      <span className={hub.modelType} data-type={m.type}>
+                        {t(`aiConfig.modelTypes.${m.type}`)}
+                      </span>
                       <button
                         className={`${hub.iconBtn} ${hub.iconBtnDanger}`}
                         title={t("aiConfig.hub.deleteModel")}
-                        onClick={(e) => { e.stopPropagation(); removeModel(m.id); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPending({ kind: "model", id: m.id, name: m.name });
+                        }}
                       >
                         <X size={14} />
                       </button>
@@ -288,6 +305,21 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
             />
           )}
         </>
+      )}
+
+      {pending && (
+        <ConfirmDialog
+          title={pending.kind === "provider"
+            ? t("aiConfig.hub.deleteProvider")
+            : t("aiConfig.hub.deleteModel")}
+          message={pending.kind === "provider"
+            ? t("aiConfig.hub.deleteProviderConfirm", { name: pending.name, count: pending.count })
+            : t("aiConfig.hub.deleteModelConfirm", { name: pending.name })}
+          confirmLabel={t("common.delete")}
+          danger
+          onConfirm={confirmPending}
+          onClose={() => setPending(null)}
+        />
       )}
     </div>
   );
