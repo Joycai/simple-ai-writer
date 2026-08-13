@@ -113,8 +113,11 @@ followed by tool messages responding to each tool_call_id"，Gemini 与 Anthropi
 - schema 字段叫 **`input_schema`**，是四族里唯一不叫 `parameters` 的。
 - `tool_choice.type` 的 `any` 相当于别族的 `required`；指定单个工具用
   `{type:"tool", name}`。
-- **强制工具选择与思考模式冲突**：手动 thinking 模式下强制 `tool_choice` 会被
-  拒绝。见 [`reasoning.md`](reasoning.md) §2。
+- **强制工具选择只与「手动」思考模式冲突**：`thinking:{type:"enabled"}` 下用
+  `tool_choice: any` 或 `tool` 会报错；**adaptive 思考支持强制工具调用**。
+  这条区分很容易记反，见 [`reasoning.md`](reasoning.md) §3.1。
+- **一次工具循环 = 一个 assistant 回合**，整个回合跑在同一个思考配置下，中途
+  不能切换。
 - 工具轮必须带上该轮的 thinking block 及其 `signature`，同 ③ 的
   `thoughtSignature`。
 
