@@ -1,7 +1,8 @@
 # 思考强度与思维链方案（reasoning effort / reasoning content）
 
-> **状态：写侧的 OpenAI Chat Completions 族已实现**（§7 的第 1–3 步）。
-> Gemini / Anthropic 族的写侧、以及整个读侧（思维链）未动。
+> **状态：OpenAI Chat Completions 族已完整实现** —— 写侧（强度）、读侧
+> （思维链 chunk）、回传合规、面板控件、以及结构化输出兜底路径的原生约束
+> （§8）。**未做**：Gemini / Anthropic 族的映射，以及思维链的展示 UI。
 >
 > 本文是动手前的协议对比与取舍记录 —— 四家 API 在这件事上的分歧比表面看起来
 > 大得多，且大部分分歧无法在代码里"事后发现"，只能提前决定怎么取舍。
@@ -13,8 +14,9 @@
 > 前置阅读：[`provider-standards.md`](provider-standards.md)（6 个 `ApiStandard`
 > 值、official/compat 契约）—— 本文的每一条"默认不发"都源自那里的 compat 契约。
 >
-> §2 / §3 的协议对比表属于通用知识，待 [`api/reasoning.md`](api/README.md) 写成后
-> 迁过去，本文只保留取舍（§4 起）。
+> 协议事实已迁至 [`api/reasoning.md`](api/reasoning.md)、
+> [`api/tools.md`](api/tools.md) 与 [`api/structured.md`](api/structured.md)；
+> §2 / §3 的对比表保留为速查，以那三份为准。本文其余部分是**本项目的取舍**。
 
 ---
 
@@ -269,6 +271,73 @@ interface NativeReasoning { field: string; text: string }
 - **请求前剥离 `_` 前缀字段**（`toWireMessages`）。此前 `_geminiModelParts`
   会原样出现在 OpenAI 请求体里 —— 实践中没炸，但那是运气：严格校验入参的端点
   有权拒绝未知键，宽松的端点则是白付 token。
+### 面板控件（AI 面板三处）的落地记录
+
+设计依据是 claude.ai/design 上「Simple AI Writer UI redesign」的
+「02 AI 面板」一稿：一个「思考」拨盘 + 一个「力度 / effort」拨盘，不支持的那
+一组按停用样式渲染并写明原因。三处入口：生成（AiPanel，紧接「窗口占用」行
+下方）、对话助手（输入区附件行尾）、一致性检查（筛选行 + 空状态）。
+
+三个决定，都不是显而易见的那一个：
+
+1. **控件改的是模型设置，不是单次覆盖。** 思考深度是模型的属性（见
+   [`provider-layering.md`](provider-layering.md) L3），所以三处面板与设置里的
+   模型抽屉共享同一个值，切模型时跟着变。单次覆盖要在 aiTaskStore /
+   agentStore / consistencyStore 各加一份临时状态，还要回答「对话助手这种长
+   会话里『单次』指一轮还是整个会话」——为一个作者一年调不了几次的旋钮，
+   不值得。
+
+2. **两个拨盘对应协议层真实存在的两个轴**，不是把一个字段画成两个：思考多深
+   （`thinking` / `thinkingLevel` / `reasoning_effort`）vs 整个回复花多少力气
+   （Anthropic 的 `output_config.effort`，管到 prose、工具调用与思考三者）。
+   OpenAI 族里两者塌缩成同一个字段，所以那里只有一个拨盘是活的。第二个拨盘
+   会在 Anthropic 的映射接进来时点亮，届时删掉 `supportsSeparateEffort` 的
+   常量 `false` 即可。
+
+3. **两个拨盘都不可用时整行不渲染**，而不是渲染两组停用控件。停用控件要靠
+   旁边的可用控件解释自己——设计稿里「力度」停用是成立的，因为「思考」在旁边
+   亮着；孤零零两组停用只是在拥挤的面板里占三行说「这两件事你都做不了」。
+
+一处偏离设计稿：一致性检查除了设计稿画的筛选行，**空状态里也放了一个**。
+那一行只在已有报告后才出现，而最值得调档位的恰恰是第一次检查——否则作者得
+先付一次运行的钱才能发现这个旋钮。
+
+---
+
+## 8. 结构化输出：兜底路径的原生约束
+
+放在本文而不是单开一份，是因为触发它的正是思考模式：`agent/structured.ts` 的
+降级判据里就写着 `"thinking mode"` —— **推理模型是走上那条兜底路径的主力**。
+
+协议事实见 [`api/structured.md`](api/structured.md)。本项目的取舍：
+
+1. **兜底路径此前是零约束。** 强制工具调用被拒后退回的那条 JSON 路径完全不发
+   `response_format`，纯 prompt + 从散文里抠 JSON。也就是说，**恰恰在最不容易
+   吐干净 JSON 的模型上，约束最弱**。现在退下来仍带原生参数。
+
+2. **`json_object` 的 "json" 前置条件必须由代码保证，不能靠 prompt 恰好提到。**
+   OpenAI 与 DeepSeek 都要求上下文里出现该字面量，否则直接报错。今天成立只是
+   因为内置提示词碰巧写了 JSON 字样——而 lore 生成的系统提示词是**作者可覆盖
+   的**，改写掉那个词就是一次无从定位的硬报错。
+
+3. **`jsonModeExtraBody` + `needsJsonTextCue` 合并成
+   `jsonModeShaping(standard, promptText)`。** 一次调用同时给出参数与提示语，
+   前置条件检查无法被忘记。OpenAI 族的提示语改为**条件附加**：原生约束已经
+   生效，只在作者的 prompt 没提到 json 时才补，不在每次请求上重复一遍。
+
+4. **不采用 OpenAI 的 `json_schema` 严格模式。** 三条理由：DeepSeek 不支持它
+   （同族内官方支持、兼容端点不支持，且无法从协议族推断）；严格模式要求
+   `additionalProperties:false` 且**所有字段必须 required**，而 lore 条目天然
+   有可选字段；最重要的是**我们已有更可移植的等价手段**——强制工具调用，四族
+   都支持，schema 就是工具的 `parameters`。`json_schema` 在这里是平级替代品，
+   不是升级。
+
+由此定下的分层：**能强制工具调用就用它（真 schema 强制）→ 不能就用原生 JSON
+模式 + 散文描述形状（保证合法 JSON）→ prompt 只负责形状描述这一层。** 最后
+这层无论如何省不掉，因为 `json_object` 本来就不保证形状。
+
+---
+
 ### 与 DeepSeek 官方文档的逐条核对（2026-08-13）
 
 对照 [create-chat-completion](https://api-docs.deepseek.com/zh-cn/api/create-chat-completion/)
@@ -302,7 +371,7 @@ interface NativeReasoning { field: string; text: string }
 
 ---
 
-## 8. 未决问题
+## 9. 未决问题
 
 - **兼容中继的思维链字段名**到底有几种？已知 `reasoning_content`（DeepSeek）、
   `reasoning`（OpenRouter）、内联 `<think>` 标签三类。第 4 步实现时按三种都试，
