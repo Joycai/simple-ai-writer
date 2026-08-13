@@ -48,6 +48,10 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
   // author has no way to guess.
   { name: "New API", apiStandard: "openai_compat", baseUrl: "" },
   { name: "MiniMax", apiStandard: "openai_compat", baseUrl: "https://api.minimaxi.com" },
+  // Same vendor, second protocol — the endpoint carries an /anthropic
+  // prefix, which anthropicRoot leaves alone (it only trims a trailing
+  // /v1 and /messages).
+  { name: "MiniMax (Claude 格式)", apiStandard: "anthropic_compat", baseUrl: "https://api.minimaxi.com/anthropic" },
 ];
 
 /** A server on the local machine (Ollama, LM Studio) — these need no API key. */

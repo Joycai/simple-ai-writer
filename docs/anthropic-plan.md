@@ -153,7 +153,31 @@ Gemini 有**一模一样的分裂**：新代 `thinkingConfig.thinkingLevel` vs 2
 这也满足 [`provider-layering.md`](provider-layering.md) §6 偏离四给 L2→L3 继承
 定的两条约束：继承值必须可被 L3 显式覆盖，且必须能区分"未设"与"继承来的"。
 
-### 3.5 中继还可能吞掉 `output_config`
+### 3.5 ④ 族兼容层的三处实测（MiniMax，2026-08）
+
+MiniMax 的 `/anthropic/v1/messages` 是第二个 ④ 族兼容层样本（协议事实见
+[`api/landscape.md`](api/landscape.md) §7）。逐条对照本实现：
+
+| 它的差异 | 我们受影响吗 |
+| --- | --- |
+| 端点带 `/anthropic` 前缀 | ❌ `anthropicRoot` 只剥尾部的 `/v1` 与 `/messages`，作者填 `https://api.minimaxi.com/anthropic` 即可 |
+| 不要求 `anthropic-version` | ❌ 我们照发；多一个头无害，少发在官方会挂 |
+| 流式多一个 `ping` 事件 | ❌ `default: return` 已涵盖 |
+| Bearer 与 `x-api-key` 都收 | ❌ `authModesFor` 的三档正好 |
+| thinking 默认 `disabled` | ❌ 我们显式发 `adaptive`，正是需要的 |
+| **`tool_choice` 只有 `auto`/`none`** | ⚠️ **见下** |
+| 没有 `output_config` | ⚠️ 与 New API 相同，见 §3.6 |
+| `thinking` 无 `display` 字段 | ⚠️ 我们发 `display:"summarized"`。透传则无害，严格校验则 400。未实测 |
+
+**`tool_choice` 那条已经有兜底，不需要改代码。** `structured.ts` 的
+`TOOL_CAPABILITY_ERROR` 第一条就是 `tool[_ ]?choice`，报错提到这个字段名即自动
+退回 JSON 模式；`EMPTY_TOOL_CALL` 兜住"接受了但不返回调用"那种。
+
+但这让一件事的性质变了：**"强制工具调用失败就退回 JSON 模式"从防御性设计变成
+了必需品**。这条路径今后不能当作可有可无的兜底来维护 —— 它是 ④ 族兼容层上
+结构化输出的唯一出路。
+
+### 3.6 中继还可能吞掉 `output_config`
 
 方言字段解决的是"发哪种 thinking 配置"。中继上还有第二个未知数：
 **`effort` 能不能到达上游**。
@@ -172,7 +196,7 @@ New API 的 Anthropic 格式端点（见
 要么依赖实测结论，要么让 `thinkingDialect` 顺带表达"这个端点认不认 effort"。
 倾向前者：**先测，别急着给字段加维度。**
 
-### 3.6 命名：不要叫 `profile`
+### 3.7 命名：不要叫 `profile`
 
 `profile` 在本项目已经指**工作区 profile**（`.ai-writer/profile.json`：novel /
 ttrpg / copy / weekly…，决定知识库分类、任务列表、【…】区块标签、系统提示词），
@@ -335,7 +359,7 @@ Fable 5 / Mythos 5 / Mythos Preview 无条件拒绝 `disabled`；Opus 5 在 xhig
 
 六刀都落地了；剩下的是 §7 那几条只能靠真实请求定论的验证。
 
-## 8. 落地时改掉的一个设计：一个拨盘，不是两个
+## 7. 落地时改掉的一个设计：一个拨盘，不是两个
 
 [`reasoning-plan.md`](reasoning-plan.md) §7 与设计稿都规划了两个拨盘 ——
 「思考」与「力度」，后者停用待 Anthropic 接入后点亮。实现时发现这是错的。
@@ -354,7 +378,7 @@ Fable 5 / Mythos 5 / Mythos Preview 无条件拒绝 `disabled`；Opus 5 在 xhig
 这也让 §5.6 的取舍在 UI 上有了着落：Claude 上「关闭」档实际发的是最低 effort，
 文案直说"等于最低档而非真正关掉"，不承诺协议不兑现的东西。
 
-## 7. 需要实测才能定论的
+## 8. 需要实测才能定论的
 
 - **不回传 thinking block 时，响应里还有没有 thinking block** —— 这是判断
   §4.2 那条"静默降级"是否正在发生的**唯一手段**，也是整份文档里最值得先测的
@@ -397,7 +421,7 @@ interface ThinkingBlockCarry { modelId: string; blocks: unknown[] }
 逐个列出要丢弃的字段名，那是个"下一个协议加字段时会静默泄漏到线上"的形状，
 已改为按 `_` 前缀丢弃。
 
-### 换模型剥离怎么落的
+### 9.1 换模型剥离怎么落的
 
 `thinkingBlocksFor(msg, modelId)` 比对 carrier 上的 `modelId` 与当前请求的
 模型：不同就整组丢掉。代价只有"换回来时前几轮的思考不再回传"，而那本就是

@@ -65,6 +65,31 @@ Chat Completions 和 Responses 同属 OpenAI 却分成两族，是因为它们�
 | [`usage.md`](usage.md) | token 计数的两个口径陷阱、输出上限、上下文窗口为何只能靠探测 | ✅ |
 | [`structured.md`](structured.md) | JSON mode / schema / 强制 tool_choice 的四族做法，含 `json_object` 的隐藏前置条件 | ✅ |
 
+## 接一个新协议族时，先看这三条
+
+两轮实践（① 族与 ④ 族）下来重复出现的形态，比任何单条协议事实都耐用：
+
+**① 先问"失败会不会响"。** 这决定了紧迫性与验证方式：
+
+| 族 | 做错了会怎样 |
+| --- | --- |
+| ① DeepSeek 系 | 工具轮不回传 `reasoning_content` → **400**，会逼你修 |
+| ④ Anthropic | 工具轮不回传 thinking block → **静默关掉思考**，没有任何现象 |
+| ③ Gemini | 不回传 `thoughtSignature` → 多轮工具调用失效 |
+
+**静默的那种最危险**：它不会自己暴露，只能靠对照文档发现，也只能靠"响应里
+还有没有 thinking block"这类间接观察来验证。
+
+**② 再问"默认值是什么"，而且要按模型问。** 三族都有"同一段代码在两代模型上
+行为相反且都不报错"的情况：Anthropic 的思考默认值分两派、`display` 默认
+`omitted`（拿不到文本却照全额计费）、Gemini 2.5 Pro 关不掉思考。**"省略字段
+= 用默认"从来不是一个统一的答案。**
+
+**③ 最后问"兼容层砍了什么"。** 四个样本（New API × 2、MiniMax × 2）的共同
+规律见 [`landscape.md`](landscape.md) §7。最狠的一次是 MiniMax 的 ④ 族端点
+**砍掉了 `tool_choice` 的强制档**，直接让"强制工具调用"这个四族官方都有的
+手段失效。**兼容层文档不能当能力清单**：没列既可能是不支持，也可能只是没跟上。
+
 相关的本项目方案文档：
 
 - [`../provider-layering.md`](../provider-layering.md) — 本项目的分层模型
@@ -72,7 +97,8 @@ Chat Completions 和 Responses 同属 OpenAI 却分成两族，是因为它们�
 - [`../provider-standards.md`](../provider-standards.md) — 本项目怎么把协议族 ×
   official/compat 落成 6 个 `ApiStandard` 值
 - [`../reasoning-plan.md`](../reasoning-plan.md) — 本项目怎么加思考强度与思维链（① 族，已实现）
-- [`../anthropic-plan.md`](../anthropic-plan.md) — ④ 族的现状审计与接入方案（调研中）
+- [`../anthropic-plan.md`](../anthropic-plan.md) — ④ 族的审计与接入（已实现）
+- [`../gemini-plan.md`](../gemini-plan.md) — ③ 族的现状盘点（未开始）
 
 ## 写作约定
 
