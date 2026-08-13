@@ -16,8 +16,8 @@ import { runStructuredTask } from "../agent/structured";
 import { selectLore } from "../context/loreSelect";
 import type { LoreIndex } from "../lore";
 import type { DocMemory } from "../context/memory";
-import type { GeminiSafetySettings } from "../ai/safety";
-import type { ApiStandard, AuthMode, ToolDefinition } from "../ai/types";
+import { pickConnOptions, type ConnOptions } from "../ai/conn";
+import type { ToolDefinition } from "../ai/types";
 import type { ConsistencyIssue, ConsistencyReport, IssueSeverity } from "./model";
 
 /** Lore budget for a scan, in characters. Generous: the whole point is breadth. */
@@ -115,20 +115,7 @@ const SYSTEM_PROMPT = [
   "- Answer in the language the chapter is written in.",
 ].join("\n");
 
-export interface ScanArgs {
-  /** Provider wiring, same shape every structured task takes. */
-  baseUrl: string;
-  apiKey: string;
-  standard: ApiStandard;
-  safetySettings?: GeminiSafetySettings;
-  /** Anthropic-compat auth scheme; ignored by every other protocol. */
-  authMode?: AuthMode;
-  modelId: string;
-  prefix?: string;
-  contextSize?: number;
-  /** Sent as `max_tokens` on the Anthropic path; planning-only elsewhere. */
-  maxOutput?: number;
-
+export interface ScanArgs extends ConnOptions {
   /** The document under test, and where it lives. */
   documentText: string;
   filePath: string | null;
@@ -182,15 +169,7 @@ export async function runConsistencyScan(args: ScanArgs): Promise<ConsistencyRep
   ].filter(Boolean).join("\n");
 
   const raw = await runStructuredTask({
-    baseUrl: args.baseUrl,
-    apiKey: args.apiKey,
-    standard: args.standard,
-    safetySettings: args.safetySettings,
-    authMode: args.authMode,
-    modelId: args.modelId,
-    prefix: args.prefix,
-    contextSize: args.contextSize,
-    maxOutput: args.maxOutput,
+    ...pickConnOptions(args),
     systemPrompt: SYSTEM_PROMPT,
     toolInstruction: "Call the report_consistency tool exactly once with everything you found.",
     jsonInstruction:

@@ -4,13 +4,14 @@ import { X, Sparkles, RotateCw, ChevronDown, AlertTriangle, Bot } from "lucide-r
 import { useAiStore } from "../../stores/aiStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
+import { resolveConn } from "../../lib/ai/conn";
 import {
   readEntityFile, writeEntityFile, saveFacetFile, parseFacetMeta,
   type LoreEntity, type FacetMeta,
 } from "../../lib/lore";
 import { parseFrontmatter } from "../../lib/fs/markdown";
 import {
-  resolveModel, collectAttachmentContext, buildUserContent, stripCodeFence,
+  collectAttachmentContext, buildUserContent, stripCodeFence,
   type AttachedItem,
 } from "../../lib/lore/aiTask";
 import { runLoreAgentTask } from "../../lib/agent/run";
@@ -83,8 +84,8 @@ export function LoreImproveModal({ entity, onClose }: Props) {
 
   // ── Generate ───────────────────────────────────────────────────────────────
   const handleGenerate = async () => {
-    const resolved = resolveModel(models, providers, activeModelId);
-    if (!resolved) { setError(t("ai.errors.noModel")); return; }
+    const resolved = resolveConn(models, providers, activeModelId);
+    if (!resolved.ok) { setError(resolved.error); return; }
     const { model, provider } = resolved;
 
     const ctrl = new AbortController();

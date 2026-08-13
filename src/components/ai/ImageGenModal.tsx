@@ -26,7 +26,7 @@ import {
   IMAGE_ASPECTS,
   type ImageAspect,
 } from "../../lib/image";
-import { resolveModel } from "../../lib/lore/aiTask";
+import { resolveConn } from "../../lib/ai/conn";
 import { loadApiKey } from "../../lib/keyStore";
 import { recordGeneration } from "../../lib/image/session";
 import type { ImageGenTarget } from "../../lib/image/target";
@@ -140,8 +140,8 @@ export function ImageGenModal({ target, onClose }: Props) {
   const estimatedCost = imageModel ? imageCostFor(imageModel, effectiveCount) : 0;
 
   const handleBuildPrompt = async () => {
-    const resolved = resolveModel(models, providers, promptModelId);
-    if (!resolved) { setError(t("ai.errors.noModel")); return; }
+    const resolved = resolveConn(models, providers, promptModelId);
+    if (!resolved.ok) { setError(resolved.error); return; }
     const ctrl = new AbortController();
     abort.current = ctrl;
     setBuilding(true);

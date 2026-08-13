@@ -4,6 +4,7 @@ import { X, Sparkles, RotateCw, AlertTriangle, Bot, Check } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
+import { connOptions } from "../../lib/ai/conn";
 import {
   readEntityFile, saveEntityMetaAndBody,
   type CategoryId, type LoreEntity,
@@ -170,15 +171,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
       // Unified structured-output path: forced tool_choice with JSON fallback
       // for models that reject it — see lib/agent/structured.ts.
       const toolArgs = await runStructuredTask({
-        baseUrl: provider.baseUrl,
-        apiKey,
-        standard: provider.apiStandard,
-        safetySettings: provider.safetySettings,
-        authMode: provider.authMode,
-        modelId: model.modelId,
-        prefix: model.prefix,
-        contextSize: model.contextSize,
-        maxOutput: model.maxOutput,
+        ...connOptions({ provider, model, apiKey }),
         systemPrompt: systemBase,
         toolInstruction: "Call the update_lore_metadata tool exactly once with the refined fields.",
         jsonInstruction: `Respond with ONLY a JSON object — no markdown fences, no prose — with exactly these keys: {"name": string, "aliases": string[], "category": one of [${catIds.join(", ")}], "summary": string}.`,

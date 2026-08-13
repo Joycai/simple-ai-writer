@@ -30,6 +30,7 @@ import {
   type Prompt,
   type Provider,
 } from "./configDb";
+import { parseReasoningEffort } from "./reasoning";
 import { authModesFor, type ApiStandard, type AuthMode } from "./types";
 import { migrateLegacyStandard } from "./urls";
 import { loadApiKey, saveApiKey } from "../keyStore";
@@ -212,6 +213,10 @@ export async function stageConfigImport(
       contextSize: typeof r.contextSize === "number" ? r.contextSize : undefined,
       maxOutput: typeof r.maxOutput === "number" ? r.maxOutput : undefined,
       probedAt: typeof r.probedAt === "number" ? r.probedAt : undefined,
+      // Parsed rather than cast: a backup written by a newer build (or edited by
+      // hand) can carry a level this build doesn't know, and an unknown level
+      // must degrade to "send nothing" rather than reach the wire.
+      reasoningEffort: parseReasoningEffort(r.reasoningEffort),
       pricePerImage: typeof r.pricePerImage === "number" ? r.pricePerImage : undefined,
       caps: r.caps && typeof r.caps === "object" ? (r.caps as Model["caps"]) : undefined,
     });

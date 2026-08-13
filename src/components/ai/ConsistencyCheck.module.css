@@ -339,3 +339,12 @@
   font: italic 400 11px/1.4 var(--font-serif);
   color: var(--color-text-muted);
 }
+
+/* The thinking dial under the empty state's run button — the first scan is the
+   one worth tuning, and the toolbar that normally carries this dial only
+   exists once a report does. */
+.emptyDials {
+  margin-top: var(--space-4);
+  display: flex;
+  justify-content: center;
+}

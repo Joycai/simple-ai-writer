@@ -1,0 +1,120 @@
+/* Thinking dials. The `row` variant deliberately reuses the panel's existing
+   control vocabulary (label + chip group + hairline hint) so it reads as one
+   more line of the same settings block, not as a new widget. */
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.label {
+  font: 500 11px/1.4 var(--font-sans);
+  letter-spacing: 0.16em;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+/* The second dial's label sits at the far end of the row, dimmer: it names a
+   control that is off, so it must not compete with the live one. */
+.labelSecondary {
+  margin-left: auto;
+  color: var(--color-text-faint);
+}
+
+.chipGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+.chipGroupOff { opacity: 0.38; }
+
+.chip {
+  padding: 3px 11px;
+  font: 500 11px/1.6 var(--font-mono);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast),
+    background var(--transition-fast);
+}
+.chip:hover:not(:disabled) { border-color: var(--color-sienna); color: var(--color-sienna); }
+.chipActive {
+  background: var(--color-accent-tint);
+  border-color: var(--color-sienna);
+  color: var(--color-sienna);
+}
+.chip:disabled { cursor: not-allowed; }
+.chip:disabled:hover { border-color: var(--color-border); color: var(--color-text-muted); }
+
+.hint {
+  font: 400 11px/1.6 var(--font-sans);
+  color: var(--color-text-muted);
+}
+
+/* ── Compact variant: a dial that fits in a toolbar ────────────────────────── */
+
+.compactGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.compactRoot { position: relative; }
+
+.compactTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  font: 400 11px/1 var(--font-sans);
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+.compactTrigger:hover:not(:disabled) { border-color: var(--color-sienna); }
+.compactTrigger:focus-visible { border-color: var(--color-sienna); outline: none; }
+.compactTrigger:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.compactValue {
+  font: 500 11px/1 var(--font-mono);
+  color: var(--color-sienna);
+}
+.compactCaret { color: var(--color-text-faint); flex-shrink: 0; }
+
+.compactPopover {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 108px;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-strong);
+  box-shadow: var(--shadow-lg);
+  animation: dialIn 140ms var(--ease-out);
+}
+@keyframes dialIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.compactItem {
+  padding: 7px 12px;
+  font: 400 12px/1 var(--font-sans);
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.compactItem:hover { background: var(--color-bg-surface); color: var(--color-text-primary); }
+.compactItemActive { color: var(--color-sienna); background: var(--color-accent-tint); }

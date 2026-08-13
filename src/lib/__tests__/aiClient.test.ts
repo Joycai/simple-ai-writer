@@ -3,6 +3,7 @@ import {
   streamCompletion, ContextSizeError,
   type ApiStandard, type AuthMode, type StreamChunk, type StreamMessage, type ToolDefinition,
 } from "../ai";
+import type { ReasoningEffort } from "../ai/reasoning";
 
 /** Build a fetch Response whose body streams the given raw chunks. */
 function sseResponse(chunks: string[]): Response {
@@ -37,6 +38,7 @@ async function collect(opts: {
   toolChoice?: "auto" | "none" | "required" | { type: "function"; function: { name: string } };
   messages?: StreamMessage[];
   prefix?: string;
+  reasoningEffort?: ReasoningEffort;
 }): Promise<{ received: StreamChunk[]; calls: { url: string; body: Record<string, unknown> }[] }> {
   const calls = mockFetch(opts.chunks);
   const received: StreamChunk[] = [];
@@ -48,6 +50,7 @@ async function collect(opts: {
     messages: opts.messages ?? [{ role: "user", content: "hi" }],
     prefix: opts.prefix,
     maxOutput: opts.maxOutput,
+    reasoningEffort: opts.reasoningEffort,
     tools: opts.tools,
     toolChoice: opts.toolChoice,
     onChunk: (c) => received.push(c),
@@ -355,6 +358,255 @@ describe("streamCompletion — Gemini SSE", () => {
     expect(received[received.length - 1]).toEqual({
       done: true, inputTokens: 100, outputTokens: 5, cachedTokens: 80,
     });
+  });
+});
+
+describe("streamCompletion — reasoning effort", () => {
+  const done = ['data: {"choices":[{"delta":{"content":"ok"}}]}\n', "data: [DONE]\n"];
+
+  it("sends nothing at all when the model has no effort set", async () => {
+    // The whole safety story rests on this: a model configured before the
+    // setting existed must keep producing byte-identical requests, because a
+    // field this app volunteers is a field some relay can reject.
+    const { calls } = await collect({ chunks: done });
+    expect(calls[0].body).not.toHaveProperty("reasoning_effort");
+    expect(calls[0].body).not.toHaveProperty("thinking");
+  });
+
+  it('sends nothing for "default" too', async () => {
+    const { calls } = await collect({ chunks: done, reasoningEffort: "default" });
+    expect(calls[0].body).not.toHaveProperty("reasoning_effort");
+  });
+
+  it("maps the app's levels onto the protocol's own spelling", async () => {
+    for (const [effort, wire] of [
+      ["off", "none"], ["low", "low"], ["medium", "medium"], ["high", "high"], ["max", "max"],
+    ] as const) {
+      const { calls } = await collect({ chunks: done, reasoningEffort: effort });
+      expect(calls[0].body.reasoning_effort).toBe(wire);
+    }
+  });
+
+  it("reaches a compat endpoint too — same wire protocol, same field", async () => {
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat", reasoningEffort: "high",
+    });
+    expect(calls[0].body.reasoning_effort).toBe("high");
+  });
+
+  it("lets extraBody override the configured level", async () => {
+    // extraBody is the per-request escape hatch; config must not outrank it.
+    const calls = mockFetch(done);
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "k",
+      standard: "openai",
+      modelId: "m",
+      reasoningEffort: "max",
+      extraBody: { reasoning_effort: "low" },
+      messages: [{ role: "user", content: "hi" }],
+      onChunk: () => {},
+    });
+    expect(calls[0].body.reasoning_effort).toBe("low");
+  });
+
+  it("stays off the wire for families whose translation isn't written yet", async () => {
+    // Gemini and Anthropic keep their pre-existing bodies until their own
+    // mapping lands — an untranslated level must not leak as an OpenAI field.
+    const gemini = await collect({
+      chunks: ['data: {"candidates":[{"content":{"parts":[{"text":"hi"}]}}]}\n'],
+      standard: "gemini",
+      reasoningEffort: "max",
+    });
+    expect(gemini.calls[0].body).not.toHaveProperty("reasoning_effort");
+
+    const anthropic = await collect({
+      chunks: ['event: message_stop\ndata: {"type":"message_stop"}\n\n'],
+      standard: "anthropic",
+      reasoningEffort: "max",
+    });
+    expect(anthropic.calls[0].body).not.toHaveProperty("reasoning_effort");
+  });
+});
+
+describe("streamCompletion — reasoning content", () => {
+  const finish = "data: [DONE]\n";
+
+  it("streams reasoning as its own chunk, never as answer text", async () => {
+    // The distinction is load-bearing: `text` chunks are what gets inserted
+    // into the manuscript.
+    const { received } = await collect({
+      chunks: [
+        'data: {"choices":[{"delta":{"reasoning_content":"let me think"}}]}\n',
+        'data: {"choices":[{"delta":{"content":"the answer"}}]}\n',
+        finish,
+      ],
+    });
+    expect(received).toContainEqual({ reasoning: "let me think" });
+    expect(text(received)).toBe("the answer");
+  });
+
+  it("reads the other spelling in circulation too", async () => {
+    const { received } = await collect({
+      chunks: ['data: {"choices":[{"delta":{"reasoning":"hmm"}}]}\n', finish],
+    });
+    expect(received).toContainEqual({ reasoning: "hmm" });
+  });
+
+  it("ignores a non-string reasoning field instead of stringifying it", async () => {
+    // Some endpoints send a structured `reasoning_details` beside the plain
+    // field; coercing an object would put "[object Object]" in the transcript.
+    const { received } = await collect({
+      chunks: ['data: {"choices":[{"delta":{"reasoning":{"blocks":[]}}}]}\n', finish],
+    });
+    expect(received.some((c) => "reasoning" in c)).toBe(false);
+  });
+
+  it("hands the round's whole reasoning back with the tool calls", async () => {
+    const { received } = await collect({
+      chunks: [
+        'data: {"choices":[{"delta":{"reasoning_content":"I need "}}]}\n',
+        'data: {"choices":[{"delta":{"reasoning_content":"the date"}}]}\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"get_date","arguments":"{}"}}]}}]}\n',
+        finish,
+      ],
+    });
+    const tools = received.find((c) => "toolCalls" in c) as {
+      _reasoning?: { field: string; text: string };
+    };
+    // Accumulated whole, and tagged with the field it arrived under so the
+    // echo can match.
+    expect(tools._reasoning).toEqual({ field: "reasoning_content", text: "I need the date" });
+  });
+
+  it("echoes a tool-call turn's reasoning back under its own field name", async () => {
+    // Required, not optional: thinking endpoints reject a tool-calling history
+    // whose reasoning is missing, so a thinking model could otherwise never
+    // finish a tool loop.
+    const calls = mockFetch([finish]);
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "k",
+      standard: "openai_compat",
+      modelId: "m",
+      messages: [
+        { role: "user", content: "what day is it" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "c1", type: "function", function: { name: "get_date", arguments: "{}" } }],
+          _reasoning: { field: "reasoning_content", text: "I need the date" },
+        },
+        { role: "tool", tool_call_id: "c1", content: "2026-08-13" },
+      ],
+      onChunk: () => {},
+    });
+    const wire = calls[0].body.messages as Record<string, unknown>[];
+    expect(wire[1].reasoning_content).toBe("I need the date");
+    // The app's own bookkeeping never reaches the wire.
+    expect(wire[1]).not.toHaveProperty("_reasoning");
+  });
+
+  it("echoes under whichever field the endpoint used", async () => {
+    const calls = mockFetch([finish]);
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "k",
+      standard: "openai_compat",
+      modelId: "m",
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "c1", type: "function", function: { name: "f", arguments: "{}" } }],
+          _reasoning: { field: "reasoning", text: "thought" },
+        },
+      ],
+      onChunk: () => {},
+    });
+    const wire = calls[0].body.messages as Record<string, unknown>[];
+    expect(wire[0].reasoning).toBe("thought");
+    expect(wire[0]).not.toHaveProperty("reasoning_content");
+  });
+
+  it("strips internal fields from messages that carry no reasoning", async () => {
+    // _geminiModelParts belongs to the other protocol; it used to ride along
+    // into OpenAI request bodies untouched.
+    const calls = mockFetch([finish]);
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "k",
+      standard: "openai",
+      modelId: "m",
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "c1", type: "function", function: { name: "f", arguments: "{}" } }],
+          _geminiModelParts: [{ text: "x" }],
+        },
+      ],
+      onChunk: () => {},
+    });
+    const wire = calls[0].body.messages as Record<string, unknown>[];
+    expect(wire[0]).toEqual({
+      role: "assistant",
+      content: null,
+      tool_calls: [{ id: "c1", type: "function", function: { name: "f", arguments: "{}" } }],
+    });
+  });
+});
+
+describe("streamCompletion — endpoints that inline their thinking", () => {
+  it("keeps a <think> block out of the answer text", async () => {
+    // Some endpoints wrap thinking in tags inside `content` rather than giving
+    // it a field. Unsplit it would be inserted into the manuscript.
+    const { received } = await collect({
+      chunks: [
+        'data: {"choices":[{"delta":{"content":"<think>\\nweighing"}}]}\n',
+        'data: {"choices":[{"delta":{"content":" it up\\n</think>\\n\\n她推开门。"}}]}\n',
+        "data: [DONE]\n",
+      ],
+    });
+    expect(text(received)).toBe("\n\n她推开门。");
+    expect(
+      received.filter((c): c is { reasoning: string } => "reasoning" in c)
+        .map((c) => c.reasoning).join(""),
+    ).toBe("\nweighing it up\n");
+  });
+
+  it("does not echo inlined thinking back — it has no field of its own", async () => {
+    // Reasoning that arrived inside `content` cannot be replayed as a top-level
+    // key; inventing one would send a field no endpoint knows.
+    const { received } = await collect({
+      chunks: [
+        'data: {"choices":[{"delta":{"content":"<think>hmm</think>"}}]}\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"f","arguments":"{}"}}]}}]}\n',
+        "data: [DONE]\n",
+      ],
+    });
+    const tools = received.find((c) => "toolCalls" in c) as { _reasoning?: unknown };
+    expect(tools._reasoning).toBeUndefined();
+  });
+});
+
+describe("streamCompletion — HTTP 200 failures", () => {
+  it("surfaces a status object delivered on a 200 body", async () => {
+    // Auth failure, rate limiting and insufficient balance arrive this way on
+    // some endpoints. Unhandled, an expired key reads as an empty completion.
+    await expect(collect({
+      chunks: ['data: {"base_resp":{"status_code":1004,"status_msg":"invalid api key"}}\n'],
+    })).rejects.toThrow(/invalid api key/);
+  });
+
+  it("treats status_code 0 as the success it is", async () => {
+    const { received } = await collect({
+      chunks: [
+        'data: {"base_resp":{"status_code":0,"status_msg":""},"choices":[{"delta":{"content":"hi"}}]}\n',
+        "data: [DONE]\n",
+      ],
+    });
+    expect(text(received)).toBe("hi");
   });
 });
 

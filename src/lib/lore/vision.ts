@@ -6,10 +6,10 @@
  */
 
 import { streamCompletion } from "../ai";
-import type { GeminiSafetySettings } from "../ai/safety";
-import type { ApiStandard, AuthMode, StreamMessage } from "../ai/types";
+import { pickConnOptions, type ConnOptions } from "../ai/conn";
+import type { StreamMessage } from "../ai/types";
 
-export interface DescribeLoreImageOptions {
+export interface DescribeLoreImageOptions extends ConnOptions {
   /** base64 data URL of the image to describe. */
   dataUrl: string;
   /** Name of the entity the image belongs to (context only). */
@@ -20,17 +20,6 @@ export interface DescribeLoreImageOptions {
   existingDesc?: string;
   /** UI language tag (e.g. "zh-CN") — controls the output language. */
   language: string;
-  baseUrl: string;
-  apiKey: string;
-  standard: ApiStandard;
-  safetySettings?: GeminiSafetySettings;
-  /** Anthropic-compat auth scheme; ignored by every other protocol. */
-  authMode?: AuthMode;
-  modelId: string;
-  prefix?: string;
-  contextSize?: number;
-  /** Sent as `max_tokens` on the Anthropic path; planning-only elsewhere. */
-  maxOutput?: number;
   signal?: AbortSignal;
   /** Called with the accumulated text on every streamed chunk. */
   onProgress?: (text: string) => void;
@@ -84,15 +73,7 @@ export async function describeLoreImage(opts: DescribeLoreImageOptions): Promise
 
   let acc = "";
   await streamCompletion({
-    baseUrl: opts.baseUrl,
-    apiKey: opts.apiKey,
-    standard: opts.standard,
-    safetySettings: opts.safetySettings,
-    authMode: opts.authMode,
-    modelId: opts.modelId,
-    prefix: opts.prefix,
-    contextSize: opts.contextSize,
-    maxOutput: opts.maxOutput,
+    ...pickConnOptions(opts),
     signal: opts.signal,
     messages,
     onChunk: (chunk) => {

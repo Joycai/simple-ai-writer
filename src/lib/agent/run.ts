@@ -9,7 +9,7 @@
  * single-shot streaming.
  */
 
-import type { Model, Provider } from "../ai/configDb";
+import { connOptions, type AiConn } from "../ai/conn";
 import type { ContentPart, StreamMessage } from "../ai/types";
 import type { LoreIndex } from "../lore";
 import type { AgentEvent } from "./events";
@@ -17,10 +17,7 @@ import type { TaskPreset } from "./presets";
 import type { ToolContext } from "./registry";
 import { runAgent } from "./runtime";
 
-export interface LoreAgentTaskArgs {
-  model: Model;
-  provider: Provider;
-  apiKey: string;
+export interface LoreAgentTaskArgs extends AiConn {
   preset: TaskPreset;
   systemPrompt: string;
   userContent: string | ContentPart[];
@@ -50,15 +47,7 @@ export async function runLoreAgentTask(args: LoreAgentTaskArgs): Promise<string>
 
   let accumulated = "";
   await runAgent({
-    baseUrl: args.provider.baseUrl,
-    apiKey: args.apiKey,
-    standard: args.provider.apiStandard,
-    safetySettings: args.provider.safetySettings,
-    authMode: args.provider.authMode,
-    modelId: args.model.modelId,
-    prefix: args.model.prefix,
-    contextSize: args.model.contextSize,
-    maxOutput: args.model.maxOutput,
+    ...connOptions(args),
     extraBody: args.extraBody,
     preset: args.preset,
     messages,

@@ -20,6 +20,7 @@ import { useAgentStore } from "./agentStore";
 import { useAiStore } from "./aiStore";
 import { draftCountFor, totalUsage, type Draft } from "../lib/ai/drafts";
 import { costFor } from "../lib/ai/configDb";
+import { connOptions, resolveConn } from "../lib/ai/conn";
 import { useAppStore } from "./appStore";
 import { useLoreStore } from "./loreStore";
 import { useProjectStore } from "./projectStore";
@@ -185,13 +186,10 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const { index: loreIndex } = useLoreStore.getState();
 
     if (!projectPath) { set({ error: i18n.t("ai.errors.noProject") }); return; }
-    if (!activeModelId) { set({ error: i18n.t("ai.errors.noModel") }); return; }
 
-    const model = models.find((m) => m.id === activeModelId);
-    if (!model) { set({ error: i18n.t("ai.errors.modelNotFound") }); return; }
-
-    const provider = providers.find((p) => p.id === model.providerId);
-    if (!provider) { set({ error: i18n.t("ai.errors.providerNotFound") }); return; }
+    const resolved = resolveConn(models, providers, activeModelId);
+    if (!resolved.ok) { set({ error: resolved.error }); return; }
+    const { model, provider } = resolved;
 
     // Everything below reads the task's *definition* rather than testing its id,
     // so a profile can offer any number of tasks. An id the active profile
@@ -381,10 +379,6 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       abortController: controller,
     });
 
-    // Empty is passed through on purpose: each adapter substitutes its own
-    // vendor default (lib/ai/urls.ts), which is the only layer that knows which
-    // one this provider's protocol wants.
-    const baseUrl = provider.baseUrl;
     const loreBudgetChars = plan.loreChars;
 
     // Having tools *is* what makes a run agentic — see presetForTools.
@@ -406,6 +400,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
 
     try {
       const apiKey = await loadApiKey(provider.id) ?? "";
+      const conn = connOptions({ provider, model, apiKey });
 
       if (isAgentic) {
         // ── Agentic mode: AI reads (and, in agent mode, writes) via tools ──
@@ -436,15 +431,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         }
 
         const { inputTokens, outputTokens, cachedTokens } = await runAgent({
-          baseUrl,
-          apiKey,
-          standard: provider.apiStandard,
-          safetySettings: provider.safetySettings,
-          authMode: provider.authMode,
-          modelId: model.modelId,
-          prefix: model.prefix,
-          contextSize: model.contextSize,
-          maxOutput: model.maxOutput,
+          ...conn,
           // `plan.inputCeilingTokens` is 0 on a static plan (model declared no
           // context size), and a 0 ceiling disables history trimming entirely.
           inputCeilingTokens: plan.inputCeilingTokens || ASSUMED_INPUT_CEILING_TOKENS,
@@ -537,15 +524,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         const results = await Promise.allSettled(
           drafts.map((draft) =>
             streamCompletion({
-              baseUrl,
-              apiKey,
-              standard: provider.apiStandard,
-              safetySettings: provider.safetySettings,
-              authMode: provider.authMode,
-              modelId: model.modelId,
-              prefix: model.prefix,
-              contextSize: model.contextSize,
-              maxOutput: model.maxOutput,
+              ...conn,
               messages,
               signal: controller.signal,
               onChunk: (chunk) => {

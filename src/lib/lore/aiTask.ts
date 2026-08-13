@@ -12,7 +12,6 @@
 import { readEntityFile } from "./entity";
 import type { LoreEntity } from "./model";
 import type { ProjectFile } from "../fs/images";
-import type { Model, Provider } from "../ai/configDb";
 import type { ContentPart } from "../ai/types";
 
 // ── Attachments ──────────────────────────────────────────────────────────────
@@ -27,19 +26,9 @@ export function attachedKey(a: AttachedItem): string {
   return a.kind === "lore" ? `lore:${a.entity.id}` : `file:${a.file.path}`;
 }
 
-// ── Model resolution ─────────────────────────────────────────────────────────
-
-/** Resolve the active model together with its provider, or null if unavailable. */
-export function resolveModel(
-  models: Model[],
-  providers: Provider[],
-  activeModelId: string | null,
-): { model: Model; provider: Provider } | null {
-  const model = models.find((m) => m.id === activeModelId);
-  const provider = model ? providers.find((p) => p.id === model.providerId) : null;
-  if (!model || !provider) return null;
-  return { model, provider };
-}
+// Model resolution used to live here as `resolveModel`. It is now
+// `resolveConn` in lib/ai/conn — one implementation, and it says *which* of the
+// three failures happened instead of reporting all of them as "no model".
 
 // ── Prompt assembly ──────────────────────────────────────────────────────────
 

@@ -10,9 +10,8 @@
 import i18n from "../../i18n";
 import { LORE_GENERATE_PRESET } from "../agent/presets";
 import { runAgent } from "../agent/runtime";
-import { JSON_ONLY_CUE, jsonModeExtraBody, needsJsonTextCue } from "../ai/jsonMode";
-import type { GeminiSafetySettings } from "../ai/safety";
-import type { ApiStandard, AuthMode } from "../ai/types";
+import { jsonModeShaping } from "../ai/jsonMode";
+import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import { fallbackCategoryId, isKnownCategory, loreCategoryIds } from "../profile/active";
 import { type CategoryId } from "./model";
 
@@ -24,21 +23,10 @@ export interface GeneratedLore {
   content: string;
 }
 
-export async function generateLore(opts: {
+export async function generateLore(opts: ConnOptions & {
   description: string;
   images: { dataUrl: string }[];
   textAttachments?: { name: string; content: string }[];
-  baseUrl: string;
-  apiKey: string;
-  standard: ApiStandard;
-  safetySettings?: GeminiSafetySettings;
-  /** Anthropic-compat auth scheme; ignored by every other protocol. */
-  authMode?: AuthMode;
-  modelId: string;
-  prefix?: string;
-  contextSize?: number;
-  /** Sent as `max_tokens` on the Anthropic path; planning-only elsewhere. */
-  maxOutput?: number;
   /** The response so far, in full — a snapshot, not a delta. */
   onProgress: (fullText: string) => void;
   signal?: AbortSignal;
@@ -80,10 +68,12 @@ export async function generateLore(opts: {
 
   // JSON mode: native API enforcement where the protocol has it, plus a text
   // cue where it doesn't (or where it can't be trusted alone). See ai/jsonMode.
-  const extraBody = jsonModeExtraBody(opts.standard);
-  if (needsJsonTextCue(opts.standard)) {
-    userParts.push({ type: "text", text: JSON_ONLY_CUE });
-  }
+  // The system prompt is author-overridable, so it is passed in here rather
+  // than assumed: on the OpenAI family the word "json" in it is a precondition,
+  // not a nicety.
+  const json = jsonModeShaping(opts.standard, `${opts.systemPrompt ?? ""}\n${promptText}`);
+  const extraBody = json.extraBody;
+  if (json.cue) userParts.push({ type: "text", text: json.cue });
 
   // The extraction prompt — built-in or author-overridden — enumerates the
   // categories in its own prose, and under a non-novel profile that list is
@@ -98,15 +88,7 @@ export async function generateLore(opts: {
 
   let fullText = "";
   await runAgent({
-    baseUrl: opts.baseUrl,
-    apiKey: opts.apiKey,
-    standard: opts.standard,
-    safetySettings: opts.safetySettings,
-    authMode: opts.authMode,
-    modelId: opts.modelId,
-    prefix: opts.prefix,
-    contextSize: opts.contextSize,
-    maxOutput: opts.maxOutput,
+    ...pickConnOptions(opts),
     extraBody,
     preset: LORE_GENERATE_PRESET,
     messages: [

@@ -14,9 +14,9 @@
 
 import i18n from "../../i18n";
 import { streamCompletion } from "../ai";
-import type { GeminiSafetySettings } from "../ai/safety";
+import type { ConnOptions } from "../ai/conn";
 import { estimateMessagesTokens } from "../ai/tokenEstimate";
-import type { ApiStandard, AuthMode, StreamMessage } from "../ai/types";
+import type { StreamMessage } from "../ai/types";
 import {
   buildCompactedHistory,
   injectionCarriers,
@@ -90,20 +90,8 @@ export async function compactChatHistory(opts: {
   };
 }
 
-/** Provider plumbing for the summarize request — same fields sendChat holds. */
-export interface SummarizeRequestConfig {
-  baseUrl: string;
-  apiKey: string;
-  standard: ApiStandard;
-  modelId: string;
-  prefix?: string;
-  contextSize?: number;
-  /** Sent as `max_tokens` on the Anthropic path; planning-only elsewhere. */
-  maxOutput?: number;
-  safetySettings?: GeminiSafetySettings;
-  /** Anthropic-compat auth scheme; ignored by every other protocol. */
-  authMode?: AuthMode;
-}
+/** Provider plumbing for the summarize request. */
+export type SummarizeRequestConfig = ConnOptions;
 
 /**
  * The real summarizer: one no-tools completion on the session's own model.

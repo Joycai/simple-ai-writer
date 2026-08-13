@@ -18,9 +18,10 @@ import { X, Sparkles, RotateCw, AlertTriangle, PlusCircle, Wand2, Tags } from "l
 import { useAiStore } from "../../../stores/aiStore";
 import { useProjectStore } from "../../../stores/projectStore";
 import { useLoreStore } from "../../../stores/loreStore";
+import { resolveConn } from "../../../lib/ai/conn";
 import type { LoreEntity } from "../../../lib/lore";
 import {
-  resolveModel, collectAttachmentContext, buildUserContent, stripCodeFence,
+  collectAttachmentContext, buildUserContent, stripCodeFence,
   type AttachedItem,
 } from "../../../lib/lore/aiTask";
 import { runLoreAgentTask } from "../../../lib/agent/run";
@@ -122,8 +123,8 @@ export function FacetAiAssistantModal({
   };
 
   const handleGenerate = async () => {
-    const resolved = resolveModel(models, providers, activeModelId);
-    if (!resolved) { setError(t("ai.errors.noModel")); return; }
+    const resolved = resolveConn(models, providers, activeModelId);
+    if (!resolved.ok) { setError(resolved.error); return; }
     const { model, provider } = resolved;
 
     const ctrl = new AbortController();

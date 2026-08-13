@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import { useAiStore } from "../../../stores/aiStore";
-import type { ImageRoute } from "../../../lib/ai/types";
+import { familyOf, type ImageRoute } from "../../../lib/ai/types";
+import { REASONING_EFFORTS, type ReasoningEffort } from "../../../lib/ai/reasoning";
 import { defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, type ModelType } from "../../../lib/ai/configDb";
 import { CONTEXT_SIZE_STOPS, formatContextSize } from "../../../lib/ai/contextSize";
 import { ModelProbePanel } from "../ModelProbePanel";
@@ -39,6 +40,7 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
     pricePerImage: existing?.pricePerImage ? String(existing.pricePerImage) : "",
     capsSizes: (existing?.caps?.sizes ?? []).join(", "),
     capsRoute: existing?.caps?.route ?? "",
+    reasoningEffort: existing?.reasoningEffort ?? ("default" as ReasoningEffort),
   });
   // When the two limits came from a probe rather than the keyboard — kept out
   // of `form` because it is provenance, not something the author edits.
@@ -97,6 +99,9 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
         contextSize,
         maxOutput,
         probedAt,
+        // "default" is stored as absent — one representation for "send
+        // nothing", so a row never distinguishes never-set from set-to-default.
+        reasoningEffort: form.reasoningEffort === "default" ? undefined : form.reasoningEffort,
         pricePerImage,
         caps,
       };
@@ -288,6 +293,28 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
                 onChange={(e) => setForm({ ...form, maxOutput: e.target.value })} />
               <div className={hub.fieldHint}>{t("aiConfig.models.maxOutputHint")}</div>
             </div>
+
+            {/* Only the OpenAI family translates this so far. Rendering the
+                control for a protocol whose adapter would ignore it would offer
+                a setting that silently does nothing — the same reason
+                defaultImageCaps refuses to promise an edit button. Drop the
+                condition as each family gets wired. */}
+            {provider && familyOf(provider.apiStandard) === "openai" && (
+              <div className={styles.fieldGroup}>
+                <label className={styles.label}>{t("aiConfig.models.reasoningEffortLabel")}</label>
+                <div className={ui.chipRow}>
+                  {REASONING_EFFORTS.map((e) =>
+                    chip(
+                      t(`aiConfig.models.reasoningEffort${e[0].toUpperCase()}${e.slice(1)}`),
+                      form.reasoningEffort === e,
+                      () => setForm({ ...form, reasoningEffort: e }),
+                      e,
+                    ),
+                  )}
+                </div>
+                <div className={hub.fieldHint}>{t("aiConfig.models.reasoningEffortHint")}</div>
+              </div>
+            )}
 
             <ModelProbePanel
               providerId={providerId}
