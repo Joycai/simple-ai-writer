@@ -230,6 +230,29 @@ vLLM / llama.cpp。Google 与 Anthropic 也各自提供了一层 OpenAI 兼容�
 这四条合起来就是兼容层的典型知识形态：**结构上照抄，扩展在响应侧，枚举是子集，
 而最需要确认的部分文档不写。** 只能实测。
 
+### 另一个样本：MiniMax（截至 2026-08）
+
+同样是 `POST /v1/chat/completions` + Bearer，body 形状与官方一致。但它暴露了
+两个**兼容层普遍存在、而官方端点不会有**的行为，值得单独记：
+
+- **思维链默认内联在 `content` 里**，形如
+  `<think>…</think>\n\n正式回答`。流式下标签也是从 `delta.content` 分片到达
+  的（`<thi` + `nk>` 属于正常情况）。它有 `reasoning_split: true` 可把思考拆到
+  `reasoning_content` / `reasoning_details`，但那是私有字段。
+  **含义**：任何把 `delta.content` 直接当作正文的消费者，都会把模型的思考过程
+  一并收下。
+- **失败用 `base_resp.status_code` 报告，HTTP 状态仍是 200。**
+  `0` 为成功，`1004` 鉴权失败、`1008` 余额不足、`1002` 限流、`1039` token
+  超限。这是"200 + 体内错误"的**第二种拼法**（第一种是 `error` 字段），一个只
+  认 `error` 的客户端会把过期密钥读成一次正常的空回复。
+- 思考开关是 `thinking: {type: "disabled"|"adaptive"}`（与 DeepSeek、Anthropic
+  同形），**没有 `reasoning_effort`**。M2.x 系列的思考无法关闭。
+- `max_tokens` 已弃用，改用 `max_completion_tokens`。
+- 多模态多一个 `video_url` 内容块类型。
+
+**这两条合起来说明一件事**：兼容层的差异往往不在请求体，而在**响应的解释方式**
+——同一段 JSON，官方端点和兼容端点想让你读出不同的东西。
+
 ## 8. 仍存活的自有格式（不主流，但会撞上）
 
 - **Ollama `/api/chat`** —— 自有 shape（`messages` + `options`），与它的

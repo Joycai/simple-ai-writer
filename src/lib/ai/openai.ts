@@ -3,7 +3,9 @@
  */
 
 import { fetch } from "../http";
-import { readReasoningDelta, reasoningBody, type NativeReasoning } from "./reasoning";
+import {
+  createThinkTagSplitter, readReasoningDelta, reasoningBody, type NativeReasoning,
+} from "./reasoning";
 import { openaiUrl } from "./urls";
 import type { AccumulatedToolCall, StreamMessage, StreamOptions } from "./types";
 
@@ -77,6 +79,17 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   // the round's reasoning back whole. `field` is whichever name this endpoint
   // used — remembered so the echo matches (see reasoning.ts NativeReasoning).
   let reasoning: NativeReasoning | null = null;
+  // Endpoints that don't separate thinking from the answer wrap it in
+  // <think>…</think> inside `content`. Unsplit, that prose reaches the
+  // manuscript. A no-op for every endpoint that doesn't do it.
+  const inlineThink = createThinkTagSplitter();
+  // Display only, deliberately not accumulated into `reasoning` above: text
+  // that arrived *inside* `content` has no wire field of its own, so there is
+  // nothing to echo it back under. Inventing a name would put a key no endpoint
+  // knows into the next request.
+  const emit = (pieces: ReturnType<typeof inlineThink.push>) => {
+    for (const piece of pieces) opts.onChunk(piece);
+  };
   // Carry an incomplete trailing line across reads: a single SSE line can be split
   // across network chunks, and parsing the halves would silently drop tokens/usage.
   let buffer = "";
@@ -106,6 +119,15 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       const msg = typeof err === "string" ? err : err?.message ?? JSON.stringify(json.error);
       throw new Error(`OpenAI: ${msg}`);
     }
+    // The same failure mode under a second name. Some endpoints report auth
+    // failure, rate limiting, insufficient balance and internal errors as a
+    // status object on an HTTP 200 body instead of the `error` field above —
+    // `status_code: 0` is success, anything else is not. Left unhandled, an
+    // expired key reads as a normal empty completion.
+    const base = json.base_resp as { status_code?: number; status_msg?: string } | undefined;
+    if (base && typeof base.status_code === "number" && base.status_code !== 0) {
+      throw new Error(`OpenAI: ${base.status_msg || `status_code ${base.status_code}`}`);
+    }
     if (json.usage) {
       inputTokens = json.usage.prompt_tokens ?? 0;
       outputTokens = json.usage.completion_tokens ?? 0;
@@ -115,7 +137,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     }
     const choice = json.choices?.[0];
     const delta = choice?.delta;
-    if (delta?.content) opts.onChunk({ text: delta.content });
+    if (delta?.content) emit(inlineThink.push(delta.content));
     // Thinking endpoints stream reasoning beside the answer, under a field name
     // they don't agree on. Streamed for display and accumulated for the echo;
     // an endpoint that sends none leaves both untouched.
@@ -159,6 +181,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       if (!trimmed || !trimmed.startsWith("data:")) continue;
       const data = trimmed.slice(5).trim();
       if (data === "[DONE]") {
+        emit(inlineThink.flush());
         emitToolCalls();
         opts.onChunk({
           done: true, inputTokens, outputTokens,
@@ -177,6 +200,7 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
     const data = tail.slice(5).trim();
     if (data !== "[DONE]") parseData(data);
   }
+  emit(inlineThink.flush());
   emitToolCalls();
   opts.onChunk({
     done: true, inputTokens, outputTokens,

@@ -557,6 +557,59 @@ describe("streamCompletion — reasoning content", () => {
   });
 });
 
+describe("streamCompletion — endpoints that inline their thinking", () => {
+  it("keeps a <think> block out of the answer text", async () => {
+    // Some endpoints wrap thinking in tags inside `content` rather than giving
+    // it a field. Unsplit it would be inserted into the manuscript.
+    const { received } = await collect({
+      chunks: [
+        'data: {"choices":[{"delta":{"content":"<think>\\nweighing"}}]}\n',
+        'data: {"choices":[{"delta":{"content":" it up\\n</think>\\n\\n她推开门。"}}]}\n',
+        "data: [DONE]\n",
+      ],
+    });
+    expect(text(received)).toBe("\n\n她推开门。");
+    expect(
+      received.filter((c): c is { reasoning: string } => "reasoning" in c)
+        .map((c) => c.reasoning).join(""),
+    ).toBe("\nweighing it up\n");
+  });
+
+  it("does not echo inlined thinking back — it has no field of its own", async () => {
+    // Reasoning that arrived inside `content` cannot be replayed as a top-level
+    // key; inventing one would send a field no endpoint knows.
+    const { received } = await collect({
+      chunks: [
+        'data: {"choices":[{"delta":{"content":"<think>hmm</think>"}}]}\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"f","arguments":"{}"}}]}}]}\n',
+        "data: [DONE]\n",
+      ],
+    });
+    const tools = received.find((c) => "toolCalls" in c) as { _reasoning?: unknown };
+    expect(tools._reasoning).toBeUndefined();
+  });
+});
+
+describe("streamCompletion — HTTP 200 failures", () => {
+  it("surfaces a status object delivered on a 200 body", async () => {
+    // Auth failure, rate limiting and insufficient balance arrive this way on
+    // some endpoints. Unhandled, an expired key reads as an empty completion.
+    await expect(collect({
+      chunks: ['data: {"base_resp":{"status_code":1004,"status_msg":"invalid api key"}}\n'],
+    })).rejects.toThrow(/invalid api key/);
+  });
+
+  it("treats status_code 0 as the success it is", async () => {
+    const { received } = await collect({
+      chunks: [
+        'data: {"base_resp":{"status_code":0,"status_msg":""},"choices":[{"delta":{"content":"hi"}}]}\n',
+        "data: [DONE]\n",
+      ],
+    });
+    expect(text(received)).toBe("hi");
+  });
+});
+
 describe("streamCompletion — toolChoice", () => {
   const TOOL: ToolDefinition = {
     type: "function",

@@ -154,6 +154,101 @@ export const REASONING_CONTENT_FIELDS = ["reasoning_content", "reasoning"] as co
  * `String(...)`-ing an object into the transcript would put "[object Object]"
  * in front of the author.
  */
+// ─── Reasoning inlined into the answer text ───────────────────────────────────
+
+const OPEN = "<think>";
+const CLOSE = "</think>";
+
+/** Length of the longest suffix of `s` that is a proper prefix of `tag`. */
+function danglingPrefix(s: string, tag: string): number {
+  for (let n = Math.min(s.length, tag.length - 1); n > 0; n--) {
+    if (s.endsWith(tag.slice(0, n))) return n;
+  }
+  return 0;
+}
+
+/**
+ * Pulls an inline `<think>…</think>` block out of streamed answer text.
+ *
+ * Some endpoints don't separate thinking from the answer at all — they wrap it
+ * in tags and send the whole thing as `content`. Left alone, that prose reaches
+ * the manuscript: `{text}` chunks are what gets inserted into the document.
+ *
+ * Two properties make this safe to run on every response:
+ *
+ *   - **Only at the very start.** A response is treated as tag-wrapped only
+ *     when `<think>` is the first non-whitespace thing in it, which is where
+ *     the endpoints that do this always put it. A `<think>` appearing later is
+ *     the author's own text — this is a writing app, and silently eating a
+ *     passage would be far worse than leaving a stray tag visible.
+ *   - **Tag-splitting is handled.** `<thi` + `nk>` arriving in two chunks is
+ *     normal, so any tail that could still become a tag is held back rather
+ *     than emitted as text.
+ */
+export function createThinkTagSplitter(): {
+  push(text: string): StreamPiece[];
+  /** Anything still held back when the stream ends. */
+  flush(): StreamPiece[];
+} {
+  type Phase = "start" | "thinking" | "body";
+  let phase: Phase = "start";
+  let buf = "";
+
+  const step = (out: StreamPiece[]): boolean => {
+    if (phase === "start") {
+      const lead = buf.length - buf.trimStart().length;
+      const rest = buf.slice(lead);
+      if (rest.startsWith(OPEN)) {
+        buf = rest.slice(OPEN.length);
+        phase = "thinking";
+        return true;
+      }
+      // Still possibly the opening tag, split across chunks — wait for more.
+      if (rest.length < OPEN.length && OPEN.startsWith(rest)) return false;
+      phase = "body";
+      return true;
+    }
+    if (phase === "thinking") {
+      const at = buf.indexOf(CLOSE);
+      if (at >= 0) {
+        if (at > 0) out.push({ reasoning: buf.slice(0, at) });
+        buf = buf.slice(at + CLOSE.length);
+        phase = "body";
+        return true;
+      }
+      const hold = danglingPrefix(buf, CLOSE);
+      const safe = buf.slice(0, buf.length - hold);
+      if (safe) out.push({ reasoning: safe });
+      buf = buf.slice(buf.length - hold);
+      return false;
+    }
+    if (buf) out.push({ text: buf });
+    buf = "";
+    return false;
+  };
+
+  return {
+    push(text: string) {
+      buf += text;
+      const out: StreamPiece[] = [];
+      while (step(out)) { /* phase changed — re-run against the same buffer */ }
+      return out;
+    },
+    flush() {
+      if (!buf) return [];
+      // An unterminated block: report it as reasoning rather than as answer
+      // text. The response was cut off mid-thought, and the tail is not prose
+      // the author asked for.
+      const out: StreamPiece[] = [{ [phase === "thinking" ? "reasoning" : "text"]: buf } as StreamPiece];
+      buf = "";
+      return out;
+    },
+  };
+}
+
+/** What the splitter emits — the two `StreamChunk` variants it can produce. */
+export type StreamPiece = { text: string } | { reasoning: string };
+
 export function readReasoningDelta(delta: Record<string, unknown>): NativeReasoning | null {
   for (const field of REASONING_CONTENT_FIELDS) {
     const v = delta[field];

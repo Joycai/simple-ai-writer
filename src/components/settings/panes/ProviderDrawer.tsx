@@ -47,6 +47,7 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
   // answer "which standard do I pick for my relay", which is the part an
   // author has no way to guess.
   { name: "New API", apiStandard: "openai_compat", baseUrl: "" },
+  { name: "MiniMax", apiStandard: "openai_compat", baseUrl: "https://api.minimaxi.com" },
 ];
 
 /** A server on the local machine (Ollama, LM Studio) — these need no API key. */
