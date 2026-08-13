@@ -1,0 +1,244 @@
+# 思考强度与思维链方案（reasoning effort / reasoning content）
+
+> **状态：调研完成，未实现。** 本文是动手前的协议对比与取舍记录 —— 四家 API
+> 在这件事上的分歧比表面看起来大得多，且大部分分歧无法在代码里"事后发现"，
+> 只能提前决定怎么取舍。实现推进时请回来更新每节的状态。
+>
+> 目标：让作者能为**单个模型**配置思考强度，并（可选）看到模型的思维链；
+> 同时不破坏现有的 agent 工具循环与结构化输出路径。
+>
+> 前置阅读：[`provider-standards.md`](provider-standards.md)（6 个 `ApiStandard`
+> 值、official/compat 契约）—— 本文的每一条"默认不发"都源自那里的 compat 契约。
+
+---
+
+## 1. 两件不同的事
+
+这个需求习惯被当成一件事说，实际上是两件，兼容性代价差一个数量级：
+
+| | 写侧：思考强度 | 读侧：思维链 |
+| --- | --- | --- |
+| 做什么 | 请求体里多一个字段 | 解析新的流式事件 + 决定要不要回灌历史 |
+| 四家分歧 | 档位名接近，语义不同 | 字段名、载体、回传义务**全不一样** |
+| 风险 | 发错 → 400 | 不回传 → 多轮/工具调用直接失败 |
+| 可回退 | 不发即回到今天 | 回传逻辑写错会打坏 agent 循环 |
+
+**结论：写侧先做，读侧后做，回传合规单独一刀。** 见 §7 的 PR 切片。
+
+---
+
+## 2. 写侧：四家的强度控制
+
+| 协议 | 参数位置 | 档位 | 默认 | 关闭 |
+| --- | --- | --- | --- | --- |
+| **OpenAI** Chat Completions | 顶层 `reasoning_effort` | `none / minimal / low / medium / high / xhigh / max`，**每个模型只支持子集** | 模型自定（gpt-5.x = `medium`） | `reasoning_effort: "none"` |
+| **OpenAI** Responses | `reasoning: { effort, summary }` | 同上 | 同上 | 同上 |
+| **DeepSeek** | 顶层 `reasoning_effort` + 顶层 `thinking: { type }` | 声明 `low/high/max`，**实际只有三档**：`medium`/`xhigh` 被吞成 `high` | **默认开**，effort = `high` | `thinking: {"type":"disabled"}` |
+| **Anthropic** 新代（4.6+ / 5） | `output_config: { effort }`，配 `thinking: {"type":"adaptive"}` | `low/medium/high/xhigh/max`（`xhigh`、`max` 各自只有部分模型有） | `high`（= 不传） | `thinking: {"type":"disabled"}` |
+| **Anthropic** 旧代（4.5 及更早） | `thinking: {"type":"enabled", "budget_tokens": N}` | **数值预算**，≥ 1024 且 < `max_tokens` | 关闭 | 省略该字段 |
+| **Gemini** 新代 | `generationConfig.thinkingConfig.thinkingLevel` | `minimal/low/medium/high` | 动态 | 不可关（仅 flash-lite 默认关） |
+| **Gemini** 2.5 代 | `generationConfig.thinkingConfig.thinkingBudget` | `-1` 动态 / `0` 关 / 具体 token 数 | 动态（`-1`） | `0`，但 2.5 Pro 拒绝 |
+
+DeepSeek 另有 Anthropic 风格（`reasoning: {effort: none|low|high|max}`）与
+Responses 风格（`output_config: {effort}`）两套等价写法。本项目只走
+`/chat/completions`，用 OpenAI 风格那套即可。
+
+### 2.1 四个真正的坑
+
+1. **档位词一样，语义不一样。** `low/medium/high` 是最大公约数，但 DeepSeek 的
+   `medium` 等于 `high`，OpenAI 的 `minimal`/`none` 只有部分模型有，Anthropic 的
+   `xhigh`/`max` 也是。**不能把 UI 选中的字符串直接透传** —— 同一个"中"在不同
+   模型上行为不一致，还可能 400。必须存"作者意图的抽象档位"，由各 adapter 映射。
+
+2. **"关闭"不是通用能力。** Gemini 2.5 Pro 关不掉；Claude Opus 5 在 `xhigh`/`max`
+   effort 下收到 `thinking:{type:"disabled"}` 会 400。关闭只能是 best-effort 语义，
+   UI 必须写明，不能承诺。
+
+3. **Anthropic 新旧代互斥，且代次不可从模型名可靠判断。** 4.7+ 收到
+   `thinking:{type:"enabled"}` 直接 400；4.5 及更早不认 `output_config`。在
+   `anthropic_compat` 中继上模型名是作者手填的字符串（见
+   `lib/ai/modelLabel.ts` 解析的那些 `特价kiro | claude-opus-4-6-thinking` 形态），
+   猜代次不可靠。**只能默认不发 + 失败降级。**
+
+4. **采样参数冲突 —— 本项目天然躲过了，别把它捡回来。** DeepSeek 思考模式不支持
+   `temperature`/`top_p`/`presence_penalty`/`frequency_penalty`，OpenAI 推理模型
+   同样不支持 `temperature`。而 `openai.ts:19` 与 `gemini.ts:113` 的 body 里
+   本来就没有这些字段。**加思考强度的这一版，不要顺手加"温度"设置**，否则两个
+   功能会在同一批模型上互相打架。
+
+---
+
+## 3. 读侧：四家的思维链
+
+| 协议 | 流式字段 | 多轮/工具调用是否必须回传 |
+| --- | --- | --- |
+| **OpenAI 官方** | **没有内容**。只有 `usage.completion_tokens_details.reasoning_tokens` 计数 | — |
+| **OpenAI** Responses | `reasoning.summary`（需 opt-in `summary: auto/concise/detailed`）+ `encrypted_content` | 无状态（`store:false`）时要回传 `encrypted_content` |
+| **DeepSeek** / 多数兼容中继 | `delta.reasoning_content`（DeepSeek 官方）；OpenRouter 等用 `delta.reasoning`；部分中继内联 `<think>…</think>` | 无工具：**不必**（回传会被忽略）；**有工具调用：必须原样回传** |
+| **Anthropic** | `content_block_delta` → `thinking_delta.thinking` + `signature_delta.signature` | 工具轮**必须**带 thinking block 及其 signature |
+| **Gemini** | `part.thought === true` 的文本 part + `thoughtSignature` | **必须**回传 `thoughtSignature` |
+
+### 3.1 本项目现状
+
+- `gemini.ts:207` 用 `part.text && !part.thought` 过滤掉思考文本；`thoughtSignature`
+  已经通过 `geminiAllModelParts` → `StreamChunk._geminiModelParts` →
+  `StreamMessage._geminiModelParts` 原样回传。**Gemini 的回传合规性已经做完了**，
+  缺的只是"把思考文本显示出来"。
+- `anthropic.ts:442` 明确丢弃 `thinking_delta` / `signature_delta`，注释理由是
+  "本 app 没有展示推理文本的界面，且 token 已计入 usage"。**回传合规性没做** ——
+  今天不出问题，是因为 `thinkingFor`（`anthropic.ts:240`）在 forced tool 时禁用了
+  思考，而普通 agent 轮次里 Claude 的 thinking block 缺失暂时被服务端容忍。
+  这是新代模型的行为，不是可以依赖的契约。
+- `openai.ts:81` 只读 `delta.content`，`reasoning_content` 被静默丢弃。
+- token 计数三家都已经对齐：Gemini 手动把 `thoughtsTokenCount` 折进 output
+  （`gemini.ts:230`），Anthropic 的 `output_tokens` 本就含 thinking，OpenAI 的
+  `completion_tokens` 也含 reasoning。**成本核算不需要改。**
+
+---
+
+## 4. 目标模型
+
+### 4.1 数据
+
+配置粒度是 **per-model**，落在 `configDb.ts:86` 的 `Model` 上 ——
+`contextSize` / `maxOutput` / `probedAt` 已经是这个粒度，且同一 provider 下
+reasoner 与普通模型混在一起，per-provider 粒度表达不了。
+
+```ts
+// lib/ai/configDb.ts → interface Model
+/**
+ * 作者为这个模型选的思考强度。"default" 或 undefined = 什么都不发，
+ * 用服务端自己的默认值 —— 这是唯一对所有 compat 中继都安全的取值。
+ */
+reasoningEffort?: "default" | "off" | "low" | "medium" | "high" | "max";
+/**
+ * 思考 token 预算。仅 Anthropic 旧代与 Gemini 2.5 代用得上；两者都是
+ * 数值语义而非档位语义，无法从 reasoningEffort 无损推导，所以单列。
+ */
+thinkingBudget?: number;
+```
+
+"要不要展示思维链"是**全局 UI 偏好**（"我想不想看"），生命周期与"这个模型怎么跑"
+不同，因此加进 `lib/prefs.ts` 的 `PREF_KEYS`，不进 `Model`。
+
+### 4.2 映射表放一处
+
+新增 `lib/ai/reasoning.ts`，与 `lib/ai/jsonMode.ts`（per-protocol 请求整形）同构：
+adapter 只调用它拿一段 body 片段合并进去，永远不自己写档位字符串。
+
+| 项目档位 | OpenAI / DeepSeek | Anthropic 新代 | Anthropic 旧代 | Gemini 新代 / 2.5 |
+| --- | --- | --- | --- | --- |
+| 跟随默认 | 不发 | 不发 | 不发 | 不发 |
+| 关闭 | `reasoning_effort:"none"` + `thinking:{type:"disabled"}` | `thinking:{type:"disabled"}` | `thinking:{type:"disabled"}` | `thinkingLevel:"minimal"` / `thinkingBudget:0` |
+| 低 | `"low"` | `effort:"low"` | budget 2048 | `"low"` / 2048 |
+| 中 | `"medium"` | `effort:"medium"` | budget 8192 | `"medium"` / 8192 |
+| 高 | `"high"` | `effort:"high"` | budget 16384 | `"high"` / 16384 |
+| 最高 | `"max"` | `effort:"max"` | budget 32768 | `"high"` / `-1` |
+
+`thinkingBudget` 有显式值时覆盖档位推导出的数值（仅对那两条数值语义的路径生效）。
+
+### 4.3 读侧的形状
+
+`StreamChunk`（`types.ts:133`）新增一个变体：
+
+```ts
+| { reasoning: string }
+```
+
+**纯加法。** 现有 8 处 `"text" in chunk` 的消费者（`aiTaskStore.ts:563`、
+`agent/runtime.ts:328`、`agent/structured.ts:108,132`、`agent/compactRun.ts:141`、
+`lore/vision.ts:99`、`memoryStore.ts:121`、`ai/apiLog.ts:180`）全部不受影响，
+只有需要展示的地方去接新变体。
+
+附带好处：`lib/ai/json.ts` 与 `agent/structured.ts` 今天靠"从推理散文里抠 JSON"
+兜底（`json.ts:3` 的注释就是为此写的），思维链从正文里分离出来之后，那条
+兜底路径会干净很多。
+
+### 4.4 回传：把逃生舱泛化
+
+`StreamMessage`（`types.ts:154`）今天有一个 Gemini 专用的 `_geminiModelParts`
+字段。再往里加 Anthropic 的 thinking block、DeepSeek 的 `reasoning_content`，
+就会变成每加一家多一个下划线字段。改成一个协议无关的不透明载体：
+
+```ts
+_native?: unknown;   // 由产出它的 adapter 写入，由同一个 adapter 读回
+```
+
+策略：**默认不回灌思维链**（省 token，且 OpenAI/DeepSeek 在无工具时本就忽略），
+**只在有工具调用的那一轮**按各协议的义务原样回传。
+
+---
+
+## 5. 取舍记录（为什么是这样）
+
+1. **默认必须是"跟随服务端默认"（什么都不发）。** 本 app 的主力场景是
+   `*_compat` 中继，任何主动发送都可能撞上某个中继不认的字段。四家的默认行为
+   本来就是"开且 high"，不发已经是好行为。这条与 `provider-standards.md` §2.2
+   的 compat 契约（默认值保守）一致。
+
+2. **Anthropic 只发 `output_config.effort`，`budget_tokens` 留作高级项。**
+   理由见 §2.1 坑 3。配一次 400 降级重试：识别错误信息里的
+   `output_config` / `thinking.type.enabled` 关键字后改用另一套写法。
+   `lib/ai/modelHealth.ts` 与 `lib/ai/probeAnalysis.ts` 已有"读错误信息做判断"
+   的先例可复用。
+
+3. **`anthropic.ts:240` `thinkingFor` 的优先级保持最高。** forced tool 时依然
+   无条件 disable 思考 —— 否则 `agent/structured.ts` 那批结构化任务（一致性
+   检查、lore improve、条目拆分）全部退化到 JSON fallback，静默丢掉 schema 约束。
+   该函数的注释里已经预警过这件事，实现时不要绕开它。
+
+4. **不迁移 Responses API。** OpenAI 文档建议推理模型走 Responses，但本项目的
+   compat 中继绝大多数只实现 `/chat/completions`；迁过去等于砍掉大半 provider。
+   代价是拿不到 OpenAI 官方模型的 reasoning summary —— 接受，因为官方
+   Chat Completions 本来也不返回推理内容，损失的只是"本来就没有的东西"。
+
+5. **不做 per-task 的强度覆盖。** 概念上"一致性检查用低强度、续写用高强度"很诱人，
+   但它会与 profile 的任务列表（每个 profile 可定义任意多个任务）正交相乘，
+   配置面爆炸。如果以后要做，应该做在 preset 层（`agent/presets.ts`）而不是
+   任务层，且只表达"降级"不表达"升级"。
+
+---
+
+## 6. 改动清单
+
+| 文件 | 改动 |
+| --- | --- |
+| `lib/ai/reasoning.ts` | **新增**：抽象档位类型 + 四条映射 + `effortBody(family, model)` |
+| `lib/ai/configDb.ts` | `Model` 加 `reasoningEffort` / `thinkingBudget`，含 schema 迁移与读写 |
+| `lib/ai/types.ts` | `StreamOptions` 透传两个新字段；`StreamChunk` 加 `{reasoning}`；`_geminiModelParts` → `_native` |
+| `lib/ai/openai.ts` | 请求：合并 `effortBody`；响应：解析 `delta.reasoning_content` / `delta.reasoning` |
+| `lib/ai/anthropic.ts` | 请求：`output_config` + 降级重试，保留 `thinkingFor` 优先级；响应：`thinking_delta` |
+| `lib/ai/gemini.ts` | 请求：`generationConfig.thinkingConfig`；响应：`part.thought` 的文本改为 emit `{reasoning}` 而非丢弃 |
+| `components/settings/panes/` | 模型抽屉加"思考强度"下拉 + 说明文案 |
+| `lib/prefs.ts` | `PREF_KEYS` 加"显示思维链" |
+| `components/ai/` | AiPanel / AgentLog 的思维链折叠区 |
+| `i18n/locales/` | 档位名、说明、"部分模型不支持关闭或不支持全部档位"提示 |
+
+---
+
+## 7. PR 切片
+
+按"打坏东西的风险"从低到高：
+
+1. **映射表 + 数据字段**（`reasoning.ts` + `Model` 两个字段 + 迁移）。纯新增，
+   没有调用方，可单独合并并写单测覆盖映射。
+2. **写侧接线**（三个 adapter 的请求体 + Anthropic 降级重试）。默认值是"不发"，
+   所以未配置的项目行为零变化。
+3. **模型抽屉 UI + i18n**。作者第一次能用上。
+4. **读侧 chunk 变体 + 展示**。加法，8 个既有消费者不动。
+5. **回传合规**（`_native` 泛化 + 工具轮回传）。**最容易打坏 agent 循环，
+   必须单独一刀**，并补 `__tests__/agentRuntime.test.ts` 的多轮工具用例。
+
+---
+
+## 8. 未决问题
+
+- **兼容中继的思维链字段名**到底有几种？已知 `reasoning_content`（DeepSeek）、
+  `reasoning`（OpenRouter）、内联 `<think>` 标签三类。第 4 步实现时按三种都试，
+  但内联标签的剥离要不要做、会不会误伤正文里合法的 `<think>` 字样，待定。
+- **是否给 `endpointProbe` 加一次"支持哪些档位"的探测**？现在的探测测的是
+  上下文窗口与输出上限（见 `architecture.md` → Endpoint probing）。档位探测需要
+  实际发一次请求看 400，成本比较高，倾向于不做，改为"发错了就降级并记住"。
+- **旧代 Anthropic 的 `budget_tokens` 必须 < `max_tokens`**，而 `maxOutput` 是
+  可选字段（未配置时 `anthropic.ts` 回落到常量）。档位推导出的 budget 与常量
+  冲突时以哪个为准，实现时定。
