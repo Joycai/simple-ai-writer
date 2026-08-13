@@ -14,9 +14,9 @@
 
 import i18n from "../../i18n";
 import { streamCompletion } from "../ai";
-import type { GeminiSafetySettings } from "../ai/safety";
+import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import { estimateMessagesTokens } from "../ai/tokenEstimate";
-import type { AccumulatedToolCall, ApiStandard, AuthMode, ContentPart, StreamMessage } from "../ai/types";
+import type { AccumulatedToolCall, ContentPart, StreamMessage } from "../ai/types";
 import type { AgentEvent } from "./events";
 import { contentWithoutImages, hasImageParts } from "./imageHistory";
 import { TOOL_ARGS_DETAIL_CHARS, TOOL_RESULT_DETAIL_CHARS } from "./logFormat";
@@ -155,22 +155,10 @@ export interface AgentRunResult {
   cachedTokens: number;
 }
 
-export interface AgentRuntimeOptions {
+export interface AgentRuntimeOptions extends ConnOptions {
   // ── Transport ──────────────────────────────────────────────────────────────
-  baseUrl: string;
-  apiKey: string;
-  standard: ApiStandard;
-  modelId: string;
-  /** Gemini-only: per-request safety filter thresholds. */
-  safetySettings?: GeminiSafetySettings;
-  /** Anthropic-compat auth scheme; ignored by every other protocol. */
-  authMode?: AuthMode;
-  /** Optional model-scoped prefix prompt. */
-  prefix?: string;
-  /** Optional model context window (tokens); checked before each round's request. */
-  contextSize?: number;
-  /** Sent as `max_tokens` on the Anthropic path; planning-only elsewhere. */
-  maxOutput?: number;
+  // The endpoint/model half comes from ConnOptions (lib/ai/conn) — build it with
+  // connOptions(conn) rather than listing the fields here.
   /**
    * Input-token ceiling from the context budget planner (lib/context/budget).
    * Older tool results are elided to stay under it, so a long loop degrades
@@ -311,16 +299,8 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
 
     try {
       await streamCompletion({
-        baseUrl: opts.baseUrl,
-        apiKey: opts.apiKey,
-        standard: opts.standard,
-        modelId: opts.modelId,
-        prefix: opts.prefix,
-        contextSize: opts.contextSize,
-        maxOutput: opts.maxOutput,
+        ...pickConnOptions(opts),
         messages: history,
-        safetySettings: opts.safetySettings,
-        authMode: opts.authMode,
         extraBody: opts.extraBody,
         tools: withholdTools ? undefined : toolDefinitions,
         signal: opts.signal,

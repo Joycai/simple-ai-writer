@@ -10,8 +10,7 @@ import i18n from "../../i18n";
 import { LORE_SPLIT_PRESET } from "../agent/presets";
 import { runAgent } from "../agent/runtime";
 import { JSON_ONLY_CUE, jsonModeExtraBody, needsJsonTextCue } from "../ai/jsonMode";
-import type { GeminiSafetySettings } from "../ai/safety";
-import type { ApiStandard, AuthMode } from "../ai/types";
+import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import type { FacetMeta } from "./model";
 
 export interface SplitFacetDraft {
@@ -27,7 +26,7 @@ export interface SplitResult {
   notes: string;
 }
 
-export async function splitLore(opts: {
+export async function splitLore(opts: ConnOptions & {
   entityName: string;
   /** index.md body (frontmatter stripped). */
   indexBody: string;
@@ -39,17 +38,6 @@ export async function splitLore(opts: {
   existingFacets?: { title: string; keys: string[]; body: string }[];
   /** Optional author guidance, e.g. "服装单独拆组". */
   instruction?: string;
-  baseUrl: string;
-  apiKey: string;
-  standard: ApiStandard;
-  safetySettings?: GeminiSafetySettings;
-  /** Anthropic-compat auth scheme; ignored by every other protocol. */
-  authMode?: AuthMode;
-  modelId: string;
-  prefix?: string;
-  contextSize?: number;
-  /** Sent as `max_tokens` on the Anthropic path; planning-only elsewhere. */
-  maxOutput?: number;
   /** The response so far, in full — a snapshot, not a delta. */
   onProgress: (fullText: string) => void;
   signal?: AbortSignal;
@@ -88,15 +76,7 @@ export async function splitLore(opts: {
 
   let fullText = "";
   await runAgent({
-    baseUrl: opts.baseUrl,
-    apiKey: opts.apiKey,
-    standard: opts.standard,
-    safetySettings: opts.safetySettings,
-    authMode: opts.authMode,
-    modelId: opts.modelId,
-    prefix: opts.prefix,
-    contextSize: opts.contextSize,
-    maxOutput: opts.maxOutput,
+    ...pickConnOptions(opts),
     extraBody,
     preset: LORE_SPLIT_PRESET,
     messages: [

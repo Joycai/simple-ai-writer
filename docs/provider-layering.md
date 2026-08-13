@@ -144,7 +144,78 @@ UI 呈现为"某日实测"而非永久事实。
 
 判据是**"它在别的族里有没有对应概念"**：有，就抽象；没有，就要么专属字段要么不做。
 
-## 6. 未决
+## 6. 代码对照与偏离（2026-08-13 审计）
+
+### 遵守得好的
+
+1. **L1 边界几乎无泄漏。** 全仓库每一处 `case "gemini"` / `case "anthropic"` 都在
+   `switch (familyOf(...))` 之内。唯一按原始 `ApiStandard` 分叉的
+   `defaultImageCaps` **不是违规**——它问的是"默认该多乐观"，属于 official/compat
+   的问题，正是 L2 的职责。
+2. **L2 preset 确实是数据。** `PROVIDER_PRESETS` 是一个五行数组，DeepSeek 与
+   Ollama 在里面没有任何特权。符合 §4。
+3. **品牌名没有渗进运行时分支。** 只出现在注释与探测启发式里。唯一的运行时
+   本地端点判断按 **URL 形态**而非品牌名，写法正确。
+
+### 偏离一：L2×L3 → 请求 的组装被复制了 18 处 ✅ 已修
+
+每个调用点手工摊平同样的九个字段（`baseUrl` / `apiKey` / `standard` /
+`safetySettings` / `authMode` / `modelId` / `prefix` / `contextSize` /
+`maxOutput`），另有 **8 个参数类型**把这九个字段**重新声明**了一遍：
+`AgentRuntimeOptions`、`StructuredTaskArgs`、`ScanArgs`、
+`DescribeLoreImageOptions`、`ImagePromptOptions`、`SummarizeRequestConfig`，
+以及 `generateLore` / `splitLore` 的内联参数类型。
+
+其中两处的注释已经自陈了这件事——`ScanArgs` 写着 "same shape every structured
+task takes"，`SummarizeRequestConfig` 写着 "same fields sendChat holds"。看见了，
+但没有地方可以收。
+
+**为什么是分层问题而非普通重复**：这些字段全部可选，漏掉一处**不会有编译错误，
+只会静默地行为不一致**。任何新增的 L2/L3 字段都要在 18 个地方赌记忆力。
+
+修法：`lib/ai/conn.ts` 提供 `AiConn`（L2+L3+密钥的三元组）与 `ConnOptions`
+（传输配置，即 `StreamOptions` 中来自配置层的那一半），八个参数类型改为
+`extends ConnOptions`。**新增 L2/L3 传输字段今后只改 `ConnOptions`、
+`connOptions()`、`pickConnOptions()` 三处，且它们在同一个文件里。**
+
+`pickConnOptions` 与 `connOptions` 是两份手写字段表，类型系统查不出它们的分歧
+（漏掉的字段必然是可选的），所以由 `__tests__/aiConn.test.ts` 的往返测试盯着。
+
+**未纳入**：`ImageConn`（图像端点不接受 `prefix`/`contextSize`/`maxOutput`，且多
+一个 `route`）与探测目标（没有 `Model` 行）。两者是有意的不同形状，不是遗漏。
+
+### 偏离二：模型解析有四份实现 ✅ 已修
+
+`lore/aiTask.ts`、`memoryStore`、`consistencyStore`、`aiTaskStore` 各有一份
+"从 id 找 model 再找 provider"的代码与各自的错误文案（其中一处把三种失败
+都报成"未选择模型"）。收敛为 `resolveConn()`。
+
+### 偏离三：探测维没有自己的位置
+
+- **探测结果与作者配置共用字段。** 测出的 `contextSize`/`maxOutput` 直接覆盖
+  `Model` 的同名字段，只留 `probedAt` 标记来源。§2 的补充规则说"两边都要有
+  位置"，现在只有一个：作者填的值被覆盖后不可恢复，也无法回答"这个 128k 是
+  填的还是测的"。
+- **探测状态分三处存**：`Model.probedAt` 在 config.db、`modelHealth` 的
+  blocked/recent 在 prefs、`endpointProbe` 的完整报告（多来源、多候选、判据）
+  **不持久化**，apply 完两个数字就丢。
+
+**未修**，因为它需要先决定 §7 的第一条未决问题。
+
+### 偏离四：L2→L3 的隐式继承已经存在一处
+
+`ImageCaps.route` 未设时由 provider 的 `apiStandard` 推导，而 `configDb.ts`
+的注释自陈了后果：*"对官方端点对，对中继上托管 Gemini 图像模型的情况错"*。
+
+§7 把"L2 继承默认值给 L3"列为未决且倾向不做，但代码里已经做了一次，并且已经
+踩到它的失败模式。**认领为允许的模式**，附两条约束：继承值必须可被 L3 显式
+覆盖，且必须能区分"未设"与"继承来的"（`route` 恰好满足两条）。
+
+### 偏离五：L1 缺 Responses 族
+
+已知缺口，非偏离。三个 adapter 覆盖四族中的三族。
+
+## 7. 未决
 
 - **探测结果与作者配置冲突时以谁为准**，以及探测值多久算过期。现在两者都写进
   `Model` 的同一批字段，只靠 `probedAt` 区分来源。

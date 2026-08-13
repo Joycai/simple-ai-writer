@@ -68,13 +68,14 @@ import {
 } from "../lib/context/rag";
 import { docModel, promptParams } from "../lib/profile/active";
 import type { ApprovalDecision, EditProposal, Proposal } from "../lib/agent/registry";
-import { resolveModel, type AttachedItem } from "../lib/lore/aiTask";
+import { type AttachedItem } from "../lib/lore/aiTask";
 import type { StreamMessage } from "../lib/ai/types";
 import { readFile, writeFile } from "../lib/fs/fileio";
 import { getDb } from "../lib/project";
 import { loadApiKey } from "../lib/keyStore";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
 import { costFor } from "../lib/ai/configDb";
+import { connOptions, resolveConn } from "../lib/ai/conn";
 
 /**
  * Identifies which run created a queued approval — in practice each run's own
@@ -494,14 +495,14 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     const { getWritingFocus } = await import("./editorStore");
 
     const { models, providers, activeModelId } = useAiStore.getState();
-    const resolved = resolveModel(models, providers, activeModelId);
+    const resolved = resolveConn(models, providers, activeModelId);
     const { projectPath } = useProjectStore.getState();
     // One atomic read of the focused document, held for the whole turn — see
     // editorStore.WritingFocus for why this must not be recomposed per use.
     const focus = getWritingFocus();
     const activeFilePath = focus.filePath;
     if (!projectPath) { set({ chatError: i18n.t("ai.errors.noProject") }); return; }
-    if (!resolved) { set({ chatError: i18n.t("ai.errors.noModel") }); return; }
+    if (!resolved.ok) { set({ chatError: resolved.error }); return; }
     const { model, provider } = resolved;
 
     // What the model receives: the quoted passage and any @-referenced material
@@ -643,17 +644,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             ceilingTokens: inputCeilingFor(model.contextSize, contextUtilization),
             summarize: (input) =>
               summarizeForCompaction(
-                {
-                  baseUrl: provider.baseUrl,
-                  apiKey,
-                  standard: provider.apiStandard,
-                  modelId: model.modelId,
-                  prefix: model.prefix,
-                  contextSize: model.contextSize,
-                  maxOutput: model.maxOutput,
-                  safetySettings: provider.safetySettings,
-                  authMode: provider.authMode,
-                },
+                connOptions({ provider, model, apiKey }),
                 input,
                 controller.signal,
               ),
@@ -725,15 +716,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       }
 
       const { inputTokens, outputTokens, cachedTokens } = await runAgent({
-        baseUrl: provider.baseUrl,
-        apiKey,
-        standard: provider.apiStandard,
-        safetySettings: provider.safetySettings,
-        authMode: provider.authMode,
-        modelId: model.modelId,
-        prefix: model.prefix,
-        contextSize: model.contextSize,
-        maxOutput: model.maxOutput,
+        ...connOptions({ provider, model, apiKey }),
         // Never undefined: without a ceiling the tool loop's history trimming
         // is a no-op, and a chat that reads pictures accumulates base64 in a
         // history that persists across turns until the provider rejects it.

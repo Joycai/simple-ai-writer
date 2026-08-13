@@ -15,6 +15,7 @@ import {
   applySuggestions, locateQuote, type ConsistencyIssue, type ConsistencyReport,
 } from "../lib/consistency/model";
 import { loreCategoryIds } from "../lib/profile";
+import { connOptions, resolveConn } from "../lib/ai/conn";
 import { loadApiKey } from "../lib/keyStore";
 import { useAiStore } from "./aiStore";
 import { useEditorStore } from "./editorStore";
@@ -83,12 +84,12 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
 
   scan: async () => {
     const { models, providers, activeModelId } = useAiStore.getState();
-    const model = models.find((m) => m.id === activeModelId);
-    const provider = model ? providers.find((p) => p.id === model.providerId) : null;
-    if (!model || !provider) {
-      set({ error: i18n.t("ai.errors.noModel") });
+    const resolved = resolveConn(models, providers, activeModelId);
+    if (!resolved.ok) {
+      set({ error: resolved.error });
       return;
     }
+    const { model, provider } = resolved;
 
     const { content, filePath } = useEditorStore.getState();
     if (!content.trim()) {
@@ -110,15 +111,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
       await useMemoryStore.getState().loadForActiveFile().catch(() => {});
       if (get().abortController !== controller) return;
       const report = await runConsistencyScan({
-        baseUrl: provider.baseUrl,
-        apiKey,
-        standard: provider.apiStandard,
-        safetySettings: provider.safetySettings,
-        authMode: provider.authMode,
-        modelId: model.modelId,
-        prefix: model.prefix,
-        contextSize: model.contextSize,
-        maxOutput: model.maxOutput,
+        ...connOptions({ provider, model, apiKey }),
         documentText: content,
         filePath,
         documentTitle: (filePath?.split(/[\\/]/).pop() ?? "").replace(/\.md$/i, "")

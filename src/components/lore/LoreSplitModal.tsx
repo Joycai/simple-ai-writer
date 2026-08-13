@@ -12,6 +12,7 @@ import { X, Scissors, RotateCw, ArrowLeft, AlertTriangle } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
+import { connOptions } from "../../lib/ai/conn";
 import {
   createFacetFile,
   readEntityFile,
@@ -147,15 +148,7 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
         indexBody,
         existingFacets,
         instruction,
-        baseUrl: provider.baseUrl,
-        apiKey,
-        standard: provider.apiStandard,
-        safetySettings: provider.safetySettings,
-        authMode: provider.authMode,
-        modelId: model.modelId,
-        prefix: model.prefix,
-        contextSize: model.contextSize,
-        maxOutput: model.maxOutput,
+        ...connOptions({ provider, model, apiKey }),
         // Whole output each time, not a delta — see splitter.onProgress.
         onProgress: setRawOutput,
         signal: ctrl.signal,

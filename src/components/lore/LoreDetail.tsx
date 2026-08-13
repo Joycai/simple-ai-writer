@@ -18,6 +18,7 @@ import {
 import { categoryLabel, findCategory, loreCategories } from "../../lib/profile";
 import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
+import { connOptions } from "../../lib/ai/conn";
 import { useAppStore } from "../../stores/appStore";
 import { replaceLocation } from "../../stores/navStore";
 import { useAiStore } from "../../stores/aiStore";
@@ -374,15 +375,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         entitySummary: entity.summary,
         existingDesc: img.desc,
         language: i18n.language,
-        baseUrl: provider.baseUrl,
-        apiKey,
-        standard: provider.apiStandard,
-        safetySettings: provider.safetySettings,
-        authMode: provider.authMode,
-        modelId: model.modelId,
-        prefix: model.prefix,
-        contextSize: model.contextSize,
-        maxOutput: model.maxOutput,
+        ...connOptions({ provider, model, apiKey }),
         signal: ctrl.signal,
         onProgress: (acc) => setEditingDraft(acc),
       });

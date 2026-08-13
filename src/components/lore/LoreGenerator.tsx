@@ -4,6 +4,7 @@ import { X, Bot, Sparkles, RotateCw, AlertTriangle, CheckCircle2 } from "lucide-
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useLoreStore } from "../../stores/loreStore";
+import { connOptions } from "../../lib/ai/conn";
 import { slugifyEntityId, uniqueEntityId, readEntityFile, type CategoryId } from "../../lib/lore";
 import { categoryLabel, defaultCategoryId, loreCategories } from "../../lib/profile";
 import { scanProjectFiles, imageToDataUrl, type ProjectFile } from "../../lib/fs/images";
@@ -135,15 +136,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
           ? attached.filter((a): a is AttachedImage => a.kind === "image").map((a) => ({ dataUrl: a.dataUrl }))
           : [],
         textAttachments: [...loreRefs, ...fileRefs],
-        baseUrl: provider.baseUrl,
-        apiKey,
-        standard: provider.apiStandard,
-        safetySettings: provider.safetySettings,
-        authMode: provider.authMode,
-        modelId: model.modelId,
-        prefix: model.prefix,
-        contextSize: model.contextSize,
-        maxOutput: model.maxOutput,
+        ...connOptions({ provider, model, apiKey }),
         onProgress: () => {}, // we show spinner, not raw text
         signal: ctrl.signal,
         systemPrompt: loreScenePrompt?.content,

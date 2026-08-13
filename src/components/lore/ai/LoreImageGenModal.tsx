@@ -14,7 +14,7 @@ import { readFile } from "../../../lib/fs/fileio";
 import { parseFrontmatter } from "../../../lib/fs/markdown";
 import type { ImageGenTarget, SaveInput } from "../../../lib/image/target";
 import { addLoreImage, readEntityFile, setEntityAvatar, updateLoreImageDesc, type LoreEntity } from "../../../lib/lore";
-import { resolveModel } from "../../../lib/lore/aiTask";
+import { resolveConn } from "../../../lib/ai/conn";
 import { describeLoreImage } from "../../../lib/lore/vision";
 import { categoryLabel, findCategory } from "../../../lib/profile";
 import { loadApiKey } from "../../../lib/keyStore";
@@ -77,8 +77,8 @@ export function LoreImageGenModal({ entity, onClose, onSaved }: Props) {
    * which is most of them. A failure here is a note, not a failed save.
    */
   const describe = useCallback(async (file: string, dataUrl: string) => {
-    const vision = resolveModel(models, providers, activeModelId);
-    if (!vision || vision.model.type !== "multimodal") return;
+    const vision = resolveConn(models, providers, activeModelId);
+    if (!vision.ok || vision.model.type !== "multimodal") return;
     try {
       const apiKey = (await loadApiKey(vision.provider.id)) ?? "";
       const desc = await describeLoreImage({

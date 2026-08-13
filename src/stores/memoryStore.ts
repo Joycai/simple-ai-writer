@@ -17,6 +17,7 @@ import {
 } from "../lib/context/memory";
 import { readFile } from "../lib/fs/fileio";
 import { costFor, type Model, type Provider } from "../lib/ai/configDb";
+import { connOptions, resolveConn, type ConnResolution } from "../lib/ai/conn";
 import { loadApiKey } from "../lib/keyStore";
 import { getDb } from "../lib/project";
 import { useAiStore } from "./aiStore";
@@ -70,10 +71,6 @@ async function runMemoryGeneration(opts: {
   if (coverEnd - startFrom < (force ? 1 : 500)) return { skipped: "upToDate" };
 
   const ranges = splitRange(content, startFrom, coverEnd, segmentTargetChars(model.contextSize));
-  // No OpenAI fallback here: an empty base means "use this protocol's default",
-  // and only the adapter knows which one that is (lib/ai/urls.ts). Substituting
-  // api.openai.com would have pointed a Gemini or Anthropic provider at it.
-  const baseUrl = provider.baseUrl;
   onProgress({ done: 0, total: ranges.length });
 
   let totalIn = 0;
@@ -99,15 +96,7 @@ async function runMemoryGeneration(opts: {
 
     let summary = "";
     await streamCompletion({
-      baseUrl,
-      apiKey,
-      standard: provider.apiStandard,
-      safetySettings: provider.safetySettings,
-      authMode: provider.authMode,
-      modelId: model.modelId,
-      prefix: model.prefix,
-      contextSize: model.contextSize,
-      maxOutput: model.maxOutput,
+      ...connOptions({ provider, model, apiKey }),
       messages: [
         { role: "system", content: i18n.t("ai.memory.systemPrompt") },
         { role: "user", content: parts.join("\n\n") },
@@ -142,17 +131,9 @@ async function runMemoryGeneration(opts: {
  * Resolve the model for summarization + its provider, or an error message.
  * Prefers the dedicated memory model, falling back to the active model.
  */
-function resolveModel():
-  | { model: Model; provider: Provider }
-  | { error: string } {
+function resolveModel(): ConnResolution {
   const { activeModelId, memoryModelId, models, providers } = useAiStore.getState();
-  const modelId = memoryModelId ?? activeModelId;
-  if (!modelId) return { error: i18n.t("ai.errors.noModel") };
-  const model = models.find((m) => m.id === modelId);
-  if (!model) return { error: i18n.t("ai.errors.modelNotFound") };
-  const provider = providers.find((p) => p.id === model.providerId);
-  if (!provider) return { error: i18n.t("ai.errors.providerNotFound") };
-  return { model, provider };
+  return resolveConn(models, providers, memoryModelId ?? activeModelId);
 }
 
 interface MemoryState {
@@ -236,7 +217,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
     const { filePath: activeFilePath, text: content } = getWritingFocus();
     if (!projectPath || !activeFilePath) return;
     const resolved = resolveModel();
-    if ("error" in resolved) { set({ error: resolved.error }); return; }
+    if (!resolved.ok) { set({ error: resolved.error }); return; }
     const { model, provider } = resolved;
 
     const rel = projectRelativePath(projectPath, activeFilePath);
@@ -299,7 +280,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
     const { projectPath, activeFilePath } = useProjectStore.getState();
     if (!projectPath) return;
     const resolved = resolveModel();
-    if ("error" in resolved) { set({ error: resolved.error }); return; }
+    if (!resolved.ok) { set({ error: resolved.error }); return; }
     const { model, provider } = resolved;
 
     const rel = projectRelativePath(projectPath, absFilePath);

@@ -17,22 +17,11 @@
  */
 
 import { streamCompletion } from "../ai";
-import type { GeminiSafetySettings } from "../ai/safety";
-import type { ApiStandard, AuthMode, ContentPart, StreamMessage, ToolDefinition } from "../ai/types";
+import { pickConnOptions, type ConnOptions } from "../ai/conn";
+import type { ContentPart, StreamMessage, ToolDefinition } from "../ai/types";
 import { extractJsonObject } from "../ai/json";
 
-export interface StructuredTaskArgs {
-  baseUrl: string;
-  apiKey: string;
-  standard: ApiStandard;
-  safetySettings?: GeminiSafetySettings;
-  /** Anthropic-compat auth scheme; ignored by every other protocol. */
-  authMode?: AuthMode;
-  modelId: string;
-  prefix?: string;
-  contextSize?: number;
-  /** Sent as `max_tokens` on the Anthropic path; planning-only elsewhere. */
-  maxOutput?: number;
+export interface StructuredTaskArgs extends ConnOptions {
   /** Base system prompt (no output-format instructions — added per path). */
   systemPrompt: string;
   /** Appended to the system prompt on the forced-tool path. */
@@ -78,18 +67,7 @@ const TOOL_CAPABILITY_ERROR = new RegExp(
  * (already extracted, not yet parsed — callers own their schema validation).
  */
 export async function runStructuredTask(args: StructuredTaskArgs): Promise<string> {
-  const common = {
-    baseUrl: args.baseUrl,
-    apiKey: args.apiKey,
-    standard: args.standard,
-    safetySettings: args.safetySettings,
-    authMode: args.authMode,
-    modelId: args.modelId,
-    prefix: args.prefix,
-    contextSize: args.contextSize,
-    maxOutput: args.maxOutput,
-    signal: args.signal,
-  };
+  const common = { ...pickConnOptions(args), signal: args.signal };
   const toolName = args.outputTool.function.name;
 
   const runTool = async (): Promise<string> => {

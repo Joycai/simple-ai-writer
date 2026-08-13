@@ -12,8 +12,8 @@
 
 import i18n from "../../i18n";
 import { runStructuredTask } from "../agent/structured";
-import type { GeminiSafetySettings } from "../ai/safety";
-import type { ApiStandard, AuthMode, ToolDefinition } from "../ai/types";
+import { pickConnOptions, type ConnOptions } from "../ai/conn";
+import type { ToolDefinition } from "../ai/types";
 import { promptParams } from "../profile/active";
 
 /** Aspect ratios offered to the model. Kept small — every backend supports these. */
@@ -32,7 +32,7 @@ export interface ImagePromptSpec {
   note: string;
 }
 
-export interface ImagePromptOptions {
+export interface ImagePromptOptions extends ConnOptions {
   /** What the picture is of — an entity name, a scene title. */
   subject: string;
   /** Category/type label for the subject, e.g. 角色 / 场景 / 产品. */
@@ -51,17 +51,6 @@ export interface ImagePromptOptions {
   promptLanguage: "en" | "zh";
   /** UI language tag (e.g. "zh-CN") — controls `note` only. */
   language: string;
-  baseUrl: string;
-  apiKey: string;
-  standard: ApiStandard;
-  safetySettings?: GeminiSafetySettings;
-  /** Anthropic-compat auth scheme; ignored by every other protocol. */
-  authMode?: AuthMode;
-  modelId: string;
-  prefix?: string;
-  contextSize?: number;
-  /** Sent as `max_tokens` on the Anthropic path; planning-only elsewhere. */
-  maxOutput?: number;
   signal?: AbortSignal;
   /** Raw streamed text, for a live "thinking" area. */
   onText?: (accumulated: string) => void;
@@ -151,15 +140,7 @@ function buildUserContent(opts: ImagePromptOptions): string {
 /** Generate one image-prompt spec. Throws on transport/model failure. */
 export async function generateImagePrompt(opts: ImagePromptOptions): Promise<ImagePromptSpec> {
   const raw = await runStructuredTask({
-    baseUrl: opts.baseUrl,
-    apiKey: opts.apiKey,
-    standard: opts.standard,
-    safetySettings: opts.safetySettings,
-    authMode: opts.authMode,
-    modelId: opts.modelId,
-    prefix: opts.prefix,
-    contextSize: opts.contextSize,
-    maxOutput: opts.maxOutput,
+    ...pickConnOptions(opts),
     systemPrompt: systemPromptFor(opts),
     toolInstruction: `\nCall ${OUTPUT_TOOL.function.name} exactly once with the result.`,
     jsonInstruction:

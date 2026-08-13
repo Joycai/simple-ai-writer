@@ -11,8 +11,7 @@ import i18n from "../../i18n";
 import { LORE_GENERATE_PRESET } from "../agent/presets";
 import { runAgent } from "../agent/runtime";
 import { JSON_ONLY_CUE, jsonModeExtraBody, needsJsonTextCue } from "../ai/jsonMode";
-import type { GeminiSafetySettings } from "../ai/safety";
-import type { ApiStandard, AuthMode } from "../ai/types";
+import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import { fallbackCategoryId, isKnownCategory, loreCategoryIds } from "../profile/active";
 import { type CategoryId } from "./model";
 
@@ -24,21 +23,10 @@ export interface GeneratedLore {
   content: string;
 }
 
-export async function generateLore(opts: {
+export async function generateLore(opts: ConnOptions & {
   description: string;
   images: { dataUrl: string }[];
   textAttachments?: { name: string; content: string }[];
-  baseUrl: string;
-  apiKey: string;
-  standard: ApiStandard;
-  safetySettings?: GeminiSafetySettings;
-  /** Anthropic-compat auth scheme; ignored by every other protocol. */
-  authMode?: AuthMode;
-  modelId: string;
-  prefix?: string;
-  contextSize?: number;
-  /** Sent as `max_tokens` on the Anthropic path; planning-only elsewhere. */
-  maxOutput?: number;
   /** The response so far, in full — a snapshot, not a delta. */
   onProgress: (fullText: string) => void;
   signal?: AbortSignal;
@@ -98,15 +86,7 @@ export async function generateLore(opts: {
 
   let fullText = "";
   await runAgent({
-    baseUrl: opts.baseUrl,
-    apiKey: opts.apiKey,
-    standard: opts.standard,
-    safetySettings: opts.safetySettings,
-    authMode: opts.authMode,
-    modelId: opts.modelId,
-    prefix: opts.prefix,
-    contextSize: opts.contextSize,
-    maxOutput: opts.maxOutput,
+    ...pickConnOptions(opts),
     extraBody,
     preset: LORE_GENERATE_PRESET,
     messages: [
