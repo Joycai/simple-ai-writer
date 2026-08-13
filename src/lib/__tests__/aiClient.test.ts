@@ -265,7 +265,7 @@ describe("streamCompletion — OpenAI SSE", () => {
 });
 
 describe("streamCompletion — Gemini SSE", () => {
-  it("parses text parts, skips thoughts, and reads usageMetadata", async () => {
+  it("separates thought parts from answer text, and reads usageMetadata", async () => {
     const { received } = await collect({
       standard: "gemini",
       chunks: [
@@ -273,8 +273,126 @@ describe("streamCompletion — Gemini SSE", () => {
         `data: {"candidates":[{"content":{"parts":[{"text":"there"}]}}],"usageMetadata":{"promptTokenCount":7,"candidatesTokenCount":3}}\n`,
       ],
     });
+    // A thought part must never reach `text` — that variant is what gets
+    // inserted into the manuscript.
     expect(text(received)).toBe("Hi there");
+    expect(received).toContainEqual({ reasoning: "thinking..." });
     expect(received[received.length - 1]).toEqual({ done: true, inputTokens: 7, outputTokens: 3 });
+  });
+
+  it("asks for a thinking level and for the thoughts to come back", async () => {
+    // Paired on purpose: a level without includeThoughts pays for reasoning
+    // nobody can see.
+    const { calls } = await collect({
+      standard: "gemini",
+      reasoningEffort: "medium",
+      chunks: [`data: {"candidates":[{"content":{"parts":[{"text":"hi"}]}}]}\n`],
+    });
+    expect((calls[0].body.generationConfig as Record<string, unknown>).thinkingConfig).toEqual({
+      thinkingLevel: "MEDIUM",
+      includeThoughts: true,
+    });
+  });
+
+  it("maps the app's levels onto Gemini's upper-case enum", async () => {
+    for (const [effort, level] of [
+      // No way to disable thinking in this family — "off" is the floor.
+      ["off", "MINIMAL"], ["low", "LOW"], ["medium", "MEDIUM"],
+      // The enum stops at HIGH, so "max" lands there too.
+      ["high", "HIGH"], ["max", "HIGH"],
+    ] as const) {
+      const { calls } = await collect({
+        standard: "gemini",
+        reasoningEffort: effort,
+        chunks: [`data: {"candidates":[{"content":{"parts":[{"text":"x"}]}}]}\n`],
+      });
+      const cfg = (calls[0].body.generationConfig as Record<string, unknown>)
+        .thinkingConfig as Record<string, unknown>;
+      expect(cfg.thinkingLevel).toBe(level);
+    }
+  });
+
+  it("sends no thinkingConfig when the model has no level set", async () => {
+    const { calls } = await collect({
+      standard: "gemini",
+      chunks: [`data: {"candidates":[{"content":{"parts":[{"text":"hi"}]}}]}\n`],
+    });
+    expect(calls[0].body.generationConfig).toBeUndefined();
+  });
+
+  it("merges thinkingConfig into an existing generationConfig", async () => {
+    // JSON mode already puts responseMimeType there via extraBody; assigning in
+    // either direction would drop the other's field.
+    const calls = mockFetch([`data: {"candidates":[{"content":{"parts":[{"text":"{}"}]}}]}\n`]);
+    await streamCompletion({
+      baseUrl: "https://generativelanguage.googleapis.com",
+      apiKey: "k",
+      standard: "gemini",
+      modelId: "gemini-3-pro",
+      reasoningEffort: "high",
+      extraBody: { generationConfig: { responseMimeType: "application/json" } },
+      messages: [{ role: "user", content: "hi" }],
+      onChunk: () => {},
+    });
+    expect(calls[0].body.generationConfig).toEqual({
+      responseMimeType: "application/json",
+      thinkingConfig: { thinkingLevel: "HIGH", includeThoughts: true },
+    });
+  });
+
+  it("reports a missing thought signature as the request fault it is", async () => {
+    // HTTP 200 with a finishReason — read as a normal short answer unless
+    // handled, and it is not a safety filter, so the message must not say so.
+    await expect(collect({
+      standard: "gemini",
+      chunks: [`data: {"candidates":[{"finishReason":"MISSING_THOUGHT_SIGNATURE"}]}\n`],
+    })).rejects.toThrow(/thought signature was missing/);
+  });
+
+  it("keeps safety refusals and request faults distinct", async () => {
+    await expect(collect({
+      standard: "gemini",
+      chunks: [`data: {"candidates":[{"finishReason":"SAFETY"}]}\n`],
+    })).rejects.toThrow(/safety filter/);
+    await expect(collect({
+      standard: "gemini",
+      chunks: [`data: {"candidates":[{"finishReason":"UNEXPECTED_TOOL_CALL"}]}\n`],
+    })).rejects.toThrow(/didn't declare/);
+  });
+
+  it("spells every Gemini field in camelCase", async () => {
+    // Google accepts both spellings; relays fronting it document only camel,
+    // and an unrecognised key is ignored rather than rejected — a snake_case
+    // `inline_data` means the picture silently never reaches the model.
+    const calls = mockFetch([`data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}\n`]);
+    await streamCompletion({
+      baseUrl: "https://generativelanguage.googleapis.com",
+      apiKey: "k",
+      standard: "gemini",
+      modelId: "gemini-3-pro",
+      tools: [{
+        type: "function",
+        function: { name: "f", description: "d", parameters: { type: "object", properties: {} } },
+      }],
+      toolChoice: "required",
+      messages: [
+        { role: "system", content: "sys" },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "what is this" },
+            { type: "image_url", image_url: { url: "data:image/png;base64,AAA" } },
+          ],
+        },
+      ],
+      onChunk: () => {},
+    });
+    const body = calls[0].body;
+    expect(body).toHaveProperty("systemInstruction");
+    expect(body).toHaveProperty("toolConfig");
+    expect(JSON.stringify(body)).not.toMatch(/inline_data|system_instruction|tool_config|mime_type/);
+    const parts = (body.contents as { parts: Record<string, unknown>[] }[])[0].parts;
+    expect(parts[1].inlineData).toEqual({ mimeType: "image/png", data: "AAA" });
   });
 
   it("emits complete functionCall parts as tool calls", async () => {
@@ -639,7 +757,7 @@ describe("streamCompletion — toolChoice", () => {
     });
   });
 
-  it("maps a forced tool_choice to Gemini's function_calling_config", async () => {
+  it("maps a forced tool_choice to Gemini's functionCallingConfig", async () => {
     const calls = mockFetch([`data: {"candidates":[{"content":{"parts":[]}}]}\n`]);
     await streamCompletion({
       baseUrl: "",
@@ -651,10 +769,10 @@ describe("streamCompletion — toolChoice", () => {
       toolChoice: { type: "function", function: { name: "update_lore_metadata" } },
       onChunk: () => {},
     });
-    expect(calls[0].body.tool_config).toEqual({
-      function_calling_config: {
+    expect(calls[0].body.toolConfig).toEqual({
+      functionCallingConfig: {
         mode: "ANY",
-        allowed_function_names: ["update_lore_metadata"],
+        allowedFunctionNames: ["update_lore_metadata"],
       },
     });
   });
@@ -671,7 +789,7 @@ describe("streamCompletion — toolChoice", () => {
       onChunk: () => {},
     });
     expect(calls[0].body.tools).toBeDefined();
-    expect(calls[0].body.tool_config).toBeUndefined();
+    expect(calls[0].body.toolConfig).toBeUndefined();
   });
 });
 

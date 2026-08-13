@@ -87,10 +87,18 @@ export type AuthMode = "default" | "bearer" | "both";
 export function authModesFor(standard: ApiStandard): AuthMode[] {
   // OpenAI's second convention (Azure's `api-key` header) comes with a
   // different URL shape and an api-version query string, so a header toggle
-  // alone would not reach it; Gemini's (`?key=`) is deliberately unimplemented
-  // — a key in the query string leaks into proxy logs and error messages.
-  // Neither gets a choice until those are addressed on their own terms.
-  return standard === "anthropic_compat" ? ["default", "bearer", "both"] : ["default"];
+  // alone would not reach it — it stays unavailable until that is addressed on
+  // its own terms.
+  //
+  // Gemini's own second convention (`?key=`) is deliberately unimplemented for
+  // a different reason: a key in the query string leaks into proxy logs and
+  // error messages. But relays fronting Gemini authenticate with a plain
+  // `Authorization: Bearer` instead, which has neither problem — and an
+  // endpoint that wants Bearer while receiving only `x-goog-api-key` answers
+  // 401, so without this the relay is simply unreachable.
+  return standard === "anthropic_compat" || standard === "gemini_compat"
+    ? ["default", "bearer", "both"]
+    : ["default"];
 }
 
 /**
@@ -240,7 +248,7 @@ export interface StreamOptions {
   /**
    * Tool-choice strategy. Defaults to "auto" when tools are present. Pass
    * "required" to force *some* tool, or a specific function object to force
-   * exactly that tool. Mapped to Gemini's tool_config.function_calling_config.
+   * exactly that tool. Mapped to Gemini's toolConfig.functionCallingConfig.
    */
   toolChoice?: "auto" | "none" | "required" | { type: "function"; function: { name: string } };
   /** Extra top-level fields merged into the OpenAI request body (e.g. response_format). */

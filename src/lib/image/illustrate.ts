@@ -58,6 +58,7 @@ export async function runIllustration(
     baseUrl: provider.baseUrl,
     apiKey,
     standard: provider.apiStandard,
+    authMode: provider.authMode,
     modelId: model.modelId,
     safetySettings: provider.safetySettings,
     route: model.caps?.route,

@@ -124,15 +124,27 @@ describe("authModesFor", () => {
   // Only Anthropic has two first-class conventions. OpenAI's second one is
   // Azure's, which needs a different URL shape too; Gemini's is a query-string
   // key, deliberately unimplemented because it leaks into logs.
-  it("offers a choice only where the protocol has one", () => {
-    expect(authModesFor("anthropic_compat")).toEqual(["default", "bearer", "both"]);
-    for (const s of ["anthropic", "openai", "openai_compat", "gemini", "gemini_compat"] as const) {
+  it("offers a choice on the compat halves whose ecosystems have two schemes", () => {
+    // Anthropic: ANTHROPIC_API_KEY → x-api-key vs ANTHROPIC_AUTH_TOKEN → Bearer.
+    // Gemini: Google wants x-goog-api-key, relays fronting it want Bearer.
+    for (const s of ["anthropic_compat", "gemini_compat"] as const) {
+      expect(authModesFor(s)).toEqual(["default", "bearer", "both"]);
+    }
+  });
+
+  it("locks officials and the OpenAI family to one scheme", () => {
+    // An official endpoint is a fixed address with one documented scheme, and
+    // OpenAI's second convention (Azure's `api-key`) needs a different URL
+    // shape too, so a header toggle alone would not reach it.
+    for (const s of ["anthropic", "openai", "openai_compat", "gemini"] as const) {
       expect(authModesFor(s)).toEqual(["default"]);
     }
   });
 
-  // "both" on api.anthropic.com is a 401 — two credentials on one request.
+  // "both" on a vendor's own endpoint is a 401 — two credentials on one request.
   it("never offers `both` on an official standard", () => {
-    expect(authModesFor("anthropic")).not.toContain("both");
+    for (const s of ["anthropic", "gemini", "openai"] as const) {
+      expect(authModesFor(s)).not.toContain("both");
+    }
   });
 });

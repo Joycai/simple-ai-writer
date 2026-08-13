@@ -126,7 +126,7 @@ function blocksOf(content: MessageContent): AnthropicBlock[] {
   if (typeof content === "string") return [{ type: "text", text: content }];
   return content.map((p): AnthropicBlock => {
     if (p.type === "text") return { type: "text", text: p.text };
-    // Same data-URL parse as the Gemini adapter's inline_data conversion.
+    // Same data-URL parse as the Gemini adapter's inlineData conversion.
     const [meta, data] = p.image_url.url.split(",");
     const mediaType = meta.slice("data:".length).replace(";base64", "");
     return { type: "image", source: { type: "base64", media_type: mediaType, data } };

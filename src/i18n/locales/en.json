@@ -674,7 +674,7 @@
       "focusImage": "An image is open — open a document first",
       "thinkingLabel": "Thinking",
       "effortLabel": "Effort",
-      "thinkingHint": "How deeply a reasoning model should think. \"Endpoint default\" sends no field and lets the server decide — the only choice safe on every relay. Not every model supports every level.",
+      "thinkingHint": "How deeply a reasoning model should think. \"Endpoint default\" sends no field and lets the server decide — the only choice safe on every relay. Not every model supports every level, and some (Gemini among them) cannot turn thinking off at all, so \"off\" means the lowest level they allow.",
       "effortHint": "This level governs the whole response — prose, tool calls and thinking together, not just thinking depth. \"Off\" means the lowest level on Claude rather than truly off: several models reject disabling thinking, and the vendor's own advice for spending less is to lower effort."
     },
     "bubble": {
