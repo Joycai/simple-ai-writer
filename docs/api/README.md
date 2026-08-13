@@ -59,9 +59,9 @@ Chat Completions 和 Responses 同属 OpenAI 却分成两族，是因为它们�
 | --- | --- | --- |
 | [`landscape.md`](landscape.md) | 四族总览、逐族骨架、部署变体、马甲层清单 | ✅ |
 | `messages.md` | 消息结构、system 的四种放法、多模态 part 形状 | 待写 |
-| `tools.md` | 工具定义 / 调用 / 结果回传 / tool_choice 四族对照 | 待写 |
+| [`tools.md`](tools.md) | 工具定义 / 调用 / 结果回传 / tool_choice 四族对照，含配对硬要求 | ✅ |
 | `streaming.md` | SSE 事件形状、结束信号、截断、安全拦截、中继异常 | 待写 |
-| `reasoning.md` | 思考强度档位与思维链字段的四族对照 | 待写 |
+| [`reasoning.md`](reasoning.md) | 思考强度、思维链取回、以及**回传义务**（唯一会让请求被拒的一件） | ✅ |
 | `usage.md` | token 计数口径、缓存字段、上下文与输出上限 | 待写 |
 | `structured.md` | JSON mode / schema / 强制 tool_choice 的四族做法 | 待写 |
 
