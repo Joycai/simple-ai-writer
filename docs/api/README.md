@@ -90,6 +90,20 @@ Chat Completions 和 Responses 同属 OpenAI 却分成两族，是因为它们�
 **砍掉了 `tool_choice` 的强制档**，直接让"强制工具调用"这个四族官方都有的
 手段失效。**兼容层文档不能当能力清单**：没列既可能是不支持，也可能只是没跟上。
 
+**④ 一条读文档的方法：指南页与参考页要分开读。**
+
+- **指南页**（`docs/*`）反映"官方希望你怎么用"。它会为了推新 surface 而不提
+  旧的 —— Gemini 3 的思考指南只讲 Interactions API，读完会以为经典
+  `generateContent` 上没法配思考。
+- **参考页**（`api/*`）反映"接口实际接受什么"。`ThinkingConfig` 在参考页里
+  定义得完整无缺。
+
+**判断能力边界看参考页，不看指南页。**
+
+配套的一条操作习惯：**大文档要抓原文自己搜**。那份参考页 295KB，网页摘要工具
+连着两次都没扫到 `ThinkingConfig`；`curl` 下来 grep 一次就找到了。摘要在这个
+量级会整节丢失，而丢掉的恰好可能是唯一的权威定义。
+
 相关的本项目方案文档：
 
 - [`../provider-layering.md`](../provider-layering.md) — 本项目的分层模型
@@ -98,7 +112,7 @@ Chat Completions 和 Responses 同属 OpenAI 却分成两族，是因为它们�
   official/compat 落成 6 个 `ApiStandard` 值
 - [`../reasoning-plan.md`](../reasoning-plan.md) — 本项目怎么加思考强度与思维链（① 族，已实现）
 - [`../anthropic-plan.md`](../anthropic-plan.md) — ④ 族的审计与接入（已实现）
-- [`../gemini-plan.md`](../gemini-plan.md) — ③ 族的现状盘点（未开始）
+- [`../gemini-plan.md`](../gemini-plan.md) — ③ 族的盘点与接入方案（待实现）
 
 ## 写作约定
 
