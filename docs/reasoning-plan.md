@@ -9,6 +9,9 @@
 >
 > 前置阅读：[`provider-standards.md`](provider-standards.md)（6 个 `ApiStandard`
 > 值、official/compat 契约）—— 本文的每一条"默认不发"都源自那里的 compat 契约。
+>
+> §2 / §3 的协议对比表属于通用知识，待 [`api/reasoning.md`](api/README.md) 写成后
+> 迁过去，本文只保留取舍（§4 起）。
 
 ---
 

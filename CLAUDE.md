@@ -117,6 +117,7 @@ Four rules when touching this: components read flags via `useDocModel()` and wor
 
 Load the relevant doc **before** working in that area — don't reconstruct it from scratch:
 
+- **[`docs/api/`](docs/api/README.md)** — LLM API 对接知识库: the four wire-protocol families (OpenAI Chat Completions / OpenAI Responses / Google GenAI / Anthropic Messages), deployment variants, and the third-party "OpenAI-compatible" layer's real-world gaps. Protocol *facts* only — this project's choices live in `docs/*-plan.md`. **Read before touching `src/lib/ai/`.**
 - **[`docs/design-system.md`](docs/design-system.md)** — UI/visual spec & theming: design tokens, Apple-like aesthetic rules, animation/shadow/color/component patterns. **Read before building or restyling any UI.**
 - **[`docs/architecture.md`](docs/architecture.md)** — Subsystem deep-dives: DB schema, RAG, SSE streaming, secure key storage, export, Tauri IPC, file I/O, CodeMirror, capabilities, performance.
 - **[`docs/workflows.md`](docs/workflows.md)** — Recipes: add an AI task type / provider / language; modify lore format.
