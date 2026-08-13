@@ -43,11 +43,12 @@ export function ConsistencyCheck() {
   const openFilePath = useEditorStore((s) => s.filePath);
 
   const {
-    report, isScanning, progress, error, resolved,
+    report, isScanning, progress, reasoning, error, resolved,
     scan, abort, ignore, ignoreAll, apply, applyAll, locate,
   } = useConsistencyStore();
   const open = useMemo(() => openIssues(report, resolved), [report, resolved]);
 
+  const [showReasoning, setShowReasoning] = useState(false);
   const [filter, setFilter] = useState<string>(ALL);
   const [showPassed, setShowPassed] = useState(false);
 
@@ -100,7 +101,26 @@ export function ConsistencyCheck() {
             </span>
             <span className={styles.statSep} />
             <span>{(report.durationMs / 1000).toFixed(1)}s</span>
+            {/* Only when the endpoint actually gave us one — most don't, and a
+                link onto an empty panel is worse than no link. */}
+            {reasoning && (
+              <>
+                <span className={styles.statSep} />
+                <button
+                  className={styles.reasoningToggle}
+                  onClick={() => setShowReasoning((v) => !v)}
+                  aria-expanded={showReasoning}
+                >
+                  {t("ai.agent.log.reasoning", { defaultValue: "思考过程" })}
+                  {showReasoning ? " ▾" : " ▸"}
+                </button>
+              </>
+            )}
           </div>
+        )}
+
+        {report && reasoning && showReasoning && (
+          <div className={styles.reasoningBody}>{reasoning}</div>
         )}
 
         {report && (

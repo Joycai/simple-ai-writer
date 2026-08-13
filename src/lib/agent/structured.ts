@@ -35,6 +35,11 @@ export interface StructuredTaskArgs extends ConnOptions {
   signal?: AbortSignal;
   /** Raw streamed text (fallback path, or stray prose around a tool call). */
   onText?: (accumulated: string) => void;
+  /**
+   * The model's reasoning, accumulated. Only endpoints that expose it call
+   * this; on every other model it never fires and the caller shows nothing.
+   */
+  onReasoning?: (accumulated: string) => void;
 }
 
 /**
@@ -78,6 +83,12 @@ export async function runStructuredTask(args: StructuredTaskArgs): Promise<strin
   const common = { ...pickConnOptions(args), signal: args.signal };
   const toolName = args.outputTool.function.name;
 
+  let reasoning = "";
+  const noteReasoning = (chunk: { reasoning: string }) => {
+    reasoning += chunk.reasoning;
+    args.onReasoning?.(reasoning);
+  };
+
   const runTool = async (): Promise<string> => {
     let acc = "";
     let toolArgs = "";
@@ -91,7 +102,9 @@ export async function runStructuredTask(args: StructuredTaskArgs): Promise<strin
       tools: [args.outputTool],
       toolChoice: { type: "function", function: { name: toolName } },
       onChunk: (chunk) => {
-        if ("text" in chunk) {
+        if ("reasoning" in chunk) {
+          noteReasoning(chunk);
+        } else if ("text" in chunk) {
           acc += chunk.text;
           args.onText?.(acc);
         } else if ("toolCalls" in chunk) {
@@ -126,7 +139,9 @@ export async function runStructuredTask(args: StructuredTaskArgs): Promise<strin
       messages,
       extraBody: json.extraBody,
       onChunk: (chunk) => {
-        if ("text" in chunk) {
+        if ("reasoning" in chunk) {
+          noteReasoning(chunk);
+        } else if ("text" in chunk) {
           acc += chunk.text;
           args.onText?.(acc);
         }

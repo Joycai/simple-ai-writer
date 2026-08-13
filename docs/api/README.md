@@ -71,7 +71,8 @@ Chat Completions 和 Responses 同属 OpenAI 却分成两族，是因为它们�
   （协议族 / 端点 / 模型 + 探测维）与"新参数放哪一层"的裁决依据
 - [`../provider-standards.md`](../provider-standards.md) — 本项目怎么把协议族 ×
   official/compat 落成 6 个 `ApiStandard` 值
-- [`../reasoning-plan.md`](../reasoning-plan.md) — 本项目怎么加思考强度与思维链
+- [`../reasoning-plan.md`](../reasoning-plan.md) — 本项目怎么加思考强度与思维链（① 族，已实现）
+- [`../anthropic-plan.md`](../anthropic-plan.md) — ④ 族的现状审计与接入方案（调研中）
 
 ## 写作约定
 

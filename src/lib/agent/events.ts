@@ -104,28 +104,60 @@ export type AgentEvent =
       granted: number;
       at: number;
     }
+  | {
+      /**
+       * What the model thought before answering this round.
+       *
+       * One event per round, re-emitted as the text grows (see
+       * `appendAgentEventTo`) — thinking streams, and a log line per fragment
+       * would be unreadable. `done` flips when the round's answer starts, which
+       * is what lets the UI stop showing it as in-progress.
+       *
+       * Only endpoints that expose reasoning produce these at all; for every
+       * other model the log looks exactly as it did before.
+       */
+      kind: "reasoning";
+      round: number;
+      text: string;
+      /** False while fragments are still arriving for this round. */
+      done: boolean;
+      /** Wall-clock ms from the round's first fragment to `done`. */
+      elapsedMs?: number;
+      at: number;
+    }
   | { kind: "run-done"; inputTokens: number; outputTokens: number; at: number }
   | { kind: "run-error"; message: string; at: number };
 
 /**
- * Append an event to a log immutably. A tool step is emitted twice
- * (running → done/error); the second emission replaces the first in place so
- * the log shows one line per call rather than duplicates. Shared by
- * aiTaskStore and the modal-local logs.
+ * Append an event to a log immutably.
+ *
+ * Two kinds are emitted repeatedly for the same thing and replace their earlier
+ * emission in place, so the log shows one line rather than duplicates: a tool
+ * step (running → done/error), and a round's reasoning (re-emitted on every
+ * fragment as it streams). Shared by aiTaskStore and the modal-local logs.
  */
 export function appendAgentEventTo(log: AgentEvent[], event: AgentEvent): AgentEvent[] {
+  const idx = replaceableIndex(log, event);
+  if (idx >= 0) {
+    const updated = [...log];
+    updated[idx] = event;
+    return updated;
+  }
+  return [...log, event];
+}
+
+/** Where `event` supersedes an existing entry, or -1 to append. */
+function replaceableIndex(log: AgentEvent[], event: AgentEvent): number {
   if (event.kind === "tool-step") {
-    const idx = log.findIndex(
+    return log.findIndex(
       (e) =>
         e.kind === "tool-step" &&
         e.step.toolCallId === event.step.toolCallId &&
         e.step.name === event.step.name,
     );
-    if (idx >= 0) {
-      const updated = [...log];
-      updated[idx] = event;
-      return updated;
-    }
   }
-  return [...log, event];
+  if (event.kind === "reasoning") {
+    return log.findIndex((e) => e.kind === "reasoning" && e.round === event.round);
+  }
+  return -1;
 }

@@ -133,6 +133,8 @@ export interface ScanArgs extends ConnOptions {
   signal?: AbortSignal;
   /** Raw streamed text, for the "thinking" line while it works. */
   onText?: (accumulated: string) => void;
+  /** The model's reasoning, when the endpoint exposes it. */
+  onReasoning?: (accumulated: string) => void;
 }
 
 interface RawIssue {
@@ -181,6 +183,7 @@ export async function runConsistencyScan(args: ScanArgs): Promise<ConsistencyRep
     userContent: userText,
     signal: args.signal,
     onText: args.onText,
+    onReasoning: args.onReasoning,
   });
 
   const parsed = JSON.parse(raw) as { issues?: unknown; passed?: unknown };

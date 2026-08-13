@@ -27,6 +27,7 @@ import { findTask, taskLabel } from "../../lib/profile";
 import { useTerms } from "../../stores/projectStore";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import type { AgentEvent, ToolStep } from "../../lib/agent/events";
+import { estimateTextTokens } from "../../lib/ai/tokenEstimate";
 import {
   TOOL_ARGS_DETAIL_CHARS,
   TOOL_RESULT_DETAIL_CHARS,
@@ -131,6 +132,62 @@ function ExpandableRow({ className = "", header, detail }: {
         </span>
       </button>
       {open && <div className={styles.detail}>{detail}</div>}
+    </li>
+  );
+}
+
+/**
+ * A round's thinking.
+ *
+ * Not an `ExpandableRow` because the collapsed state still has to say something:
+ * "思考过程 · 2.1s" alone tells the author a thing happened but nothing about
+ * what — and the whole reason to surface reasoning is that its *first line* is
+ * usually the tell (did it understand the selection? did it find the entry?).
+ * So the head of the text rides along, clipped to one line.
+ *
+ * While it streams the row is open and follows the tail; once the answer starts
+ * it collapses back to that one line. Reading thinking is an audit the author
+ * does occasionally, not the thing they are waiting for.
+ */
+function ReasoningRow({ event }: { event: Extract<AgentEvent, { kind: "reasoning" }> }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const live = !event.done;
+  const body = useRef<HTMLDivElement>(null);
+
+  // Follow the tail while it streams, the same way the transcript does.
+  useEffect(() => {
+    if (live && body.current) body.current.scrollTop = body.current.scrollHeight;
+  }, [live, event.text]);
+
+  return (
+    <li className={styles.rowGroup}>
+      <button
+        type="button"
+        className={`${styles.row} ${styles.rowExpandable}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={live || open}
+        title={t("ai.agent.log.detailToggle", { defaultValue: "展开详情" })}
+      >
+        <Marker state={live ? "running" : "done"} />
+        <span className={styles.rowName}>
+          {live
+            ? t("ai.agent.log.reasoningLive", { defaultValue: "正在思考" })
+            : t("ai.agent.log.reasoning", { defaultValue: "思考过程" })}
+        </span>
+        <span className={styles.rowMetaRight}>
+          {event.elapsedMs !== undefined && `${(event.elapsedMs / 1000).toFixed(1)}s · `}
+          {formatTokenCount(estimateTextTokens(event.text))} tk
+        </span>
+        <span className={styles.rowChevron}>
+          {live || open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+        </span>
+      </button>
+      {live || open ? (
+        <div ref={body} className={styles.reasoningBody}>{event.text}</div>
+      ) : (
+        <div className={styles.reasoningPeek}>{event.text}</div>
+      )}
     </li>
   );
 }
@@ -358,6 +415,8 @@ function AgentLogRow({ row, showTime }: { row: Row; showTime: boolean }) {
           }
         />
       );
+    case "reasoning":
+      return <ReasoningRow event={event} />;
     case "run-done":
       return (
         <li className={styles.row}>
