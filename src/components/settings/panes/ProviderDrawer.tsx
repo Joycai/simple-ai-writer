@@ -234,10 +234,24 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
             {t("aiConfig.providers.apiKeyLabel")}
             {!keyRequired && <span className={styles.hint}> · {t("aiConfig.providers.apiKeyOptional")}</span>}
           </label>
-          <input className={styles.input} type="password"
-            placeholder={keyRequired ? "sk-…" : t("aiConfig.providers.apiKeyLocalPlaceholder")}
-            value={form.apiKey}
-            onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
+          <div className={styles.keyRow}>
+            <input className={styles.input} type="password"
+              placeholder={keyRequired ? "sk-…" : t("aiConfig.providers.apiKeyLocalPlaceholder")}
+              value={form.apiKey}
+              onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
+            <button className={`${styles.btnSecondary} ${styles.testBtn}`} onClick={handleTest}
+              disabled={!form.baseUrl || (keyRequired && !form.apiKey) || testing}>
+              {testing ? t("aiConfig.providers.testing") : t("aiConfig.providers.testConnection")}
+            </button>
+          </div>
+          {testResult && (
+            <div className={testResult.ok ? styles.testResultOk : styles.testResultError}>
+              {testResult.ok
+                ? <Check size={14} className={styles.testResultIcon} />
+                : <AlertCircle size={14} className={styles.testResultIcon} />}
+              <span className={styles.testResultMessage}>{testResult.message}</span>
+            </div>
+          )}
         </div>
 
         {authModes.length > 1 && (
@@ -252,19 +266,6 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
             <div className={styles.hint}>{t("aiConfig.providers.authModeHint")}</div>
           </div>
         )}
-
-        <div className={styles.testRow}>
-          <button className={styles.btnSecondary} onClick={handleTest}
-            disabled={!form.baseUrl || (keyRequired && !form.apiKey) || testing}>
-            {testing ? t("aiConfig.providers.testing") : t("aiConfig.providers.testConnection")}
-          </button>
-          {testResult && (
-            <div className={testResult.ok ? styles.testResultOk : styles.testResultError}>
-              {testResult.ok ? <Check size={14} /> : <AlertCircle size={14} />}
-              <span className={styles.testResultMessage}>{testResult.message}</span>
-            </div>
-          )}
-        </div>
 
         {familyOf(form.apiStandard) === "gemini" && (
           <GeminiSafetyEditor
@@ -302,8 +303,8 @@ function GeminiSafetyEditor({
   const maxIdx = GEMINI_THRESHOLD_LEVELS.length - 1;
 
   return (
-    <div className={styles.fieldGroup}>
-      <label className={styles.label}>{t("aiConfig.providers.safetyLabel")}</label>
+    <div className={styles.safetyCard}>
+      <div className={styles.safetyTitle}>{t("aiConfig.providers.safetyLabel")}</div>
       <div className={styles.safetyHint}>{t("aiConfig.providers.safetyHint")}</div>
       <div className={styles.safetyList}>
         {GEMINI_HARM_CATEGORIES.map((category: GeminiHarmCategory) => {

@@ -10,8 +10,8 @@ import {
 import { defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, type ModelType } from "../../../lib/ai/configDb";
 import { CONTEXT_SIZE_STOPS, formatContextSize } from "../../../lib/ai/contextSize";
 import { ModelProbePanel } from "../ModelProbePanel";
+import { Chip, ChipRow } from "./bits";
 import styles from "../settingsCommon.module.css";
-import ui from "../settingsUi.module.css";
 import hub from "./ProvidersModels.module.css";
 
 const MODEL_TYPES: ModelType[] = ["text", "multimodal", "image", "video"];
@@ -124,16 +124,6 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
     }
   };
 
-  const chip = (label: string, active: boolean, onClick: () => void, key: string) => (
-    <button
-      key={key}
-      className={`${ui.chip} ${active ? ui.chipActive : ""}`}
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  );
-
   return (
     <div className={hub.drawer} role="dialog" aria-label={t("aiConfig.models.addTitle")}>
       <div className={hub.drawerHead}>
@@ -187,19 +177,24 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
 
         <div className={styles.fieldGroup}>
           <label className={styles.label}>{t("aiConfig.models.typeLabel")}</label>
-          <div className={ui.chipRow}>
-            {MODEL_TYPES.map((type) =>
-              chip(t(`aiConfig.modelTypes.${type}`), form.type === type, () => {
-                setForm({ ...form, type });
-                // Seed the edit capability from the provider's protocol the
-                // first time this becomes an image model, so the common case
-                // needs no thought and the odd one is still overridable.
-                if (type === "image" && !existing && provider) {
-                  setCapsEdit(defaultImageCaps(provider.apiStandard).edit ?? false);
-                }
-              }, type),
-            )}
-          </div>
+          <ChipRow>
+            {MODEL_TYPES.map((type) => (
+              <Chip
+                key={type}
+                label={t(`aiConfig.modelTypes.${type}`)}
+                active={form.type === type}
+                onClick={() => {
+                  setForm({ ...form, type });
+                  // Seed the edit capability from the provider's protocol the
+                  // first time this becomes an image model, so the common case
+                  // needs no thought and the odd one is still overridable.
+                  if (type === "image" && !existing && provider) {
+                    setCapsEdit(defaultImageCaps(provider.apiStandard).edit ?? false);
+                  }
+                }}
+              />
+            ))}
+          </ChipRow>
         </div>
 
         <div className={styles.fieldGroup}>
@@ -267,16 +262,20 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
               <label className={styles.label}>{t("aiConfig.models.contextSizeLabel")}</label>
               {/* Chips for the windows models actually ship with, plus a field
                   for the odd exact value (200k Claude, 64k local builds…). */}
-              <div className={ui.chipRow}>
-                {chip(
-                  t("aiConfig.models.contextSizeUnset", { defaultValue: "未设置" }),
-                  form.contextSize === "",
-                  () => setForm({ ...form, contextSize: "" }),
-                  "unset",
-                )}
-                {CONTEXT_SIZE_STOPS.map((n) =>
-                  chip(formatContextSize(n), form.contextSize === String(n), () => setForm({ ...form, contextSize: String(n) }), String(n)),
-                )}
+              <ChipRow>
+                <Chip
+                  label={t("aiConfig.models.contextSizeUnset", { defaultValue: "未设置" })}
+                  active={form.contextSize === ""}
+                  onClick={() => setForm({ ...form, contextSize: "" })}
+                />
+                {CONTEXT_SIZE_STOPS.map((n) => (
+                  <Chip
+                    key={n}
+                    label={formatContextSize(n)}
+                    active={form.contextSize === String(n)}
+                    onClick={() => setForm({ ...form, contextSize: String(n) })}
+                  />
+                ))}
                 <input
                   className={hub.ctxExact}
                   type="number" min="0" max={MAX_CONTEXT_SIZE} step="1024"
@@ -285,7 +284,7 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
                   onChange={(e) => setForm({ ...form, contextSize: e.target.value })}
                   aria-label={t("aiConfig.models.contextSizeLabel")}
                 />
-              </div>
+              </ChipRow>
               <div className={hub.fieldHint}>{t("aiConfig.models.contextSizeHint")}</div>
             </div>
 
@@ -330,16 +329,16 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
             {provider && supportsThinkingLevel(provider.apiStandard) && (
               <div className={styles.fieldGroup}>
                 <label className={styles.label}>{t("aiConfig.models.reasoningEffortLabel")}</label>
-                <div className={ui.chipRow}>
-                  {REASONING_EFFORTS.map((e) =>
-                    chip(
-                      t(`aiConfig.models.reasoningEffort${e[0].toUpperCase()}${e.slice(1)}`),
-                      form.reasoningEffort === e,
-                      () => setForm({ ...form, reasoningEffort: e }),
-                      e,
-                    ),
-                  )}
-                </div>
+                <ChipRow>
+                  {REASONING_EFFORTS.map((e) => (
+                    <Chip
+                      key={e}
+                      label={t(`aiConfig.models.reasoningEffort${e[0].toUpperCase()}${e.slice(1)}`)}
+                      active={form.reasoningEffort === e}
+                      onClick={() => setForm({ ...form, reasoningEffort: e })}
+                    />
+                  ))}
+                </ChipRow>
                 <div className={hub.fieldHint}>{t("aiConfig.models.reasoningEffortHint")}</div>
               </div>
             )}
@@ -371,7 +370,7 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
             <div className={styles.fieldGroup}>
               <label className={styles.label}>{t("aiConfig.models.prefixLabel")}</label>
               <textarea
-                className={`${styles.input} ${styles.textarea} ${hub.mono}`}
+                className={`${styles.input} ${styles.textarea} ${hub.proseArea}`}
                 rows={4}
                 placeholder={t("aiConfig.models.prefixPlaceholder")}
                 value={form.prefix}
