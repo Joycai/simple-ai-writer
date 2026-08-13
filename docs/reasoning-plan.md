@@ -269,10 +269,36 @@ interface NativeReasoning { field: string; text: string }
 - **请求前剥离 `_` 前缀字段**（`toWireMessages`）。此前 `_geminiModelParts`
   会原样出现在 OpenAI 请求体里 —— 实践中没炸，但那是运气：严格校验入参的端点
   有权拒绝未知键，宽松的端点则是白付 token。
-- **`reasoning_effort: "none"` 是否真能在 DeepSeek 上关闭思考，未经实测。**
-  DeepSeek 文档里 OpenAI 格式的开关是 `thinking: {type}`，而那个字段被官方
-  端点拒绝（见上）。若实测证明"关闭"档在 DeepSeek 上无效，正确的修法是
-  §8 的探测/降级机制，**不是**加一个按 provider 分叉的分支。
+### 与 DeepSeek 官方文档的逐条核对（2026-08-13）
+
+对照 [create-chat-completion](https://api-docs.deepseek.com/zh-cn/api/create-chat-completion/)
+与 [tool_calls 指南](https://api-docs.deepseek.com/zh-cn/guides/tool_calls)：
+
+**已确认一致**：assistant 的 `content` 是 `nullable **required**`（本实现显式发
+`content: null`，字段存在）；`tool_calls` 结构；tool 消息的
+`role`/`content`/`tool_call_id` 三个必填字段；`tool_choice` 的四种取值；
+`tools` 上限 128；`stream_options.include_usage`；以及思考模式不支持
+`temperature`/`top_p` —— 本 app 从不发送这两个。
+
+**两处官方文档自相矛盾，实现按更贴题的那一份走：**
+
+1. **`reasoning_effort` 在顶层还是 `thinking` 内部。** API 参考的顶层参数清单里
+   没有 `reasoning_effort`，它被列为 `thinking: {type, reasoning_effort}` 的子
+   字段，枚举只有 `low`/`high`/`max`；但思考模式指南的可运行示例把
+   `reasoning_effort="high"` 作为 OpenAI SDK 的具名参数传入 —— 那会序列化到
+   **顶层**。推断是两种都收（顶层为 OpenAI 兼容别名）。**本实现发顶层**，
+   因为那是整个协议族通用的写法。**未实测。**
+
+2. **`reasoning_content` 的用途。** API 参考说它是"(Beta) 用于思考模式下在对话
+   前缀续写功能下"的入参；思考模式指南则要求工具调用轮必须回传否则 400。
+   按指南实现 —— 讲工具调用的是那一页。
+
+**已知缺口：「关闭」档在 DeepSeek 上可能无效。** `thinking.reasoning_effort`
+的枚举里没有 `none`，DeepSeek 的关闭开关是 `thinking: {type:"disabled"}`，
+而那个字段发给 api.openai.com 会被拒。仍然不为此加 provider 分支：若实测证明
+无效，正确的修法是 §8 的探测/降级机制。
+
+**这三条都只需要一次真实 DeepSeek 请求就能定论**，是本方案里最值得实测的部分。
 
 ---
 
