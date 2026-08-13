@@ -429,6 +429,134 @@ describe("streamCompletion — reasoning effort", () => {
   });
 });
 
+describe("streamCompletion — reasoning content", () => {
+  const finish = "data: [DONE]\n";
+
+  it("streams reasoning as its own chunk, never as answer text", async () => {
+    // The distinction is load-bearing: `text` chunks are what gets inserted
+    // into the manuscript.
+    const { received } = await collect({
+      chunks: [
+        'data: {"choices":[{"delta":{"reasoning_content":"let me think"}}]}\n',
+        'data: {"choices":[{"delta":{"content":"the answer"}}]}\n',
+        finish,
+      ],
+    });
+    expect(received).toContainEqual({ reasoning: "let me think" });
+    expect(text(received)).toBe("the answer");
+  });
+
+  it("reads the other spelling in circulation too", async () => {
+    const { received } = await collect({
+      chunks: ['data: {"choices":[{"delta":{"reasoning":"hmm"}}]}\n', finish],
+    });
+    expect(received).toContainEqual({ reasoning: "hmm" });
+  });
+
+  it("ignores a non-string reasoning field instead of stringifying it", async () => {
+    // Some endpoints send a structured `reasoning_details` beside the plain
+    // field; coercing an object would put "[object Object]" in the transcript.
+    const { received } = await collect({
+      chunks: ['data: {"choices":[{"delta":{"reasoning":{"blocks":[]}}}]}\n', finish],
+    });
+    expect(received.some((c) => "reasoning" in c)).toBe(false);
+  });
+
+  it("hands the round's whole reasoning back with the tool calls", async () => {
+    const { received } = await collect({
+      chunks: [
+        'data: {"choices":[{"delta":{"reasoning_content":"I need "}}]}\n',
+        'data: {"choices":[{"delta":{"reasoning_content":"the date"}}]}\n',
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"get_date","arguments":"{}"}}]}}]}\n',
+        finish,
+      ],
+    });
+    const tools = received.find((c) => "toolCalls" in c) as {
+      _reasoning?: { field: string; text: string };
+    };
+    // Accumulated whole, and tagged with the field it arrived under so the
+    // echo can match.
+    expect(tools._reasoning).toEqual({ field: "reasoning_content", text: "I need the date" });
+  });
+
+  it("echoes a tool-call turn's reasoning back under its own field name", async () => {
+    // Required, not optional: thinking endpoints reject a tool-calling history
+    // whose reasoning is missing, so a thinking model could otherwise never
+    // finish a tool loop.
+    const calls = mockFetch([finish]);
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "k",
+      standard: "openai_compat",
+      modelId: "m",
+      messages: [
+        { role: "user", content: "what day is it" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "c1", type: "function", function: { name: "get_date", arguments: "{}" } }],
+          _reasoning: { field: "reasoning_content", text: "I need the date" },
+        },
+        { role: "tool", tool_call_id: "c1", content: "2026-08-13" },
+      ],
+      onChunk: () => {},
+    });
+    const wire = calls[0].body.messages as Record<string, unknown>[];
+    expect(wire[1].reasoning_content).toBe("I need the date");
+    // The app's own bookkeeping never reaches the wire.
+    expect(wire[1]).not.toHaveProperty("_reasoning");
+  });
+
+  it("echoes under whichever field the endpoint used", async () => {
+    const calls = mockFetch([finish]);
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "k",
+      standard: "openai_compat",
+      modelId: "m",
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "c1", type: "function", function: { name: "f", arguments: "{}" } }],
+          _reasoning: { field: "reasoning", text: "thought" },
+        },
+      ],
+      onChunk: () => {},
+    });
+    const wire = calls[0].body.messages as Record<string, unknown>[];
+    expect(wire[0].reasoning).toBe("thought");
+    expect(wire[0]).not.toHaveProperty("reasoning_content");
+  });
+
+  it("strips internal fields from messages that carry no reasoning", async () => {
+    // _geminiModelParts belongs to the other protocol; it used to ride along
+    // into OpenAI request bodies untouched.
+    const calls = mockFetch([finish]);
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "k",
+      standard: "openai",
+      modelId: "m",
+      messages: [
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "c1", type: "function", function: { name: "f", arguments: "{}" } }],
+          _geminiModelParts: [{ text: "x" }],
+        },
+      ],
+      onChunk: () => {},
+    });
+    const wire = calls[0].body.messages as Record<string, unknown>[];
+    expect(wire[0]).toEqual({
+      role: "assistant",
+      content: null,
+      tool_calls: [{ id: "c1", type: "function", function: { name: "f", arguments: "{}" } }],
+    });
+  });
+});
+
 describe("streamCompletion — toolChoice", () => {
   const TOOL: ToolDefinition = {
     type: "function",

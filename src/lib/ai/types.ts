@@ -4,7 +4,7 @@
  * import types without pulling in the provider adapters.
  */
 
-import type { ReasoningEffort } from "./reasoning";
+import type { NativeReasoning, ReasoningEffort } from "./reasoning";
 import type { GeminiSafetySettings } from "./safety";
 import i18n from "../../i18n";
 
@@ -133,6 +133,15 @@ export interface AccumulatedToolCall {
 
 export type StreamChunk =
   | { text: string }
+  /**
+   * A fragment of the model's reasoning, streamed alongside the answer.
+   *
+   * A separate variant rather than more `text` because the two are not
+   * interchangeable: reasoning must never reach the manuscript, and every
+   * existing consumer keys on `"text" in chunk`, so they ignore this by
+   * construction. Endpoints that emit no reasoning simply never produce it.
+   */
+  | { reasoning: string }
   | {
       done: true;
       inputTokens: number;
@@ -149,12 +158,42 @@ export type StreamChunk =
        */
       cachedTokens?: number;
     }
-  | { toolCalls: AccumulatedToolCall[]; _geminiModelParts?: unknown[] };
+  | {
+      toolCalls: AccumulatedToolCall[];
+      _geminiModelParts?: unknown[];
+      /**
+       * The round's reasoning, whole, for echoing back on the assistant message
+       * this chunk becomes. Delivered here rather than assembled from the
+       * `{reasoning}` fragments above because only a tool round needs it —
+       * see `StreamMessage`.
+       */
+      _reasoning?: NativeReasoning;
+    };
 
 /** All message variants accepted by the streaming API. */
 export type StreamMessage =
   | { role: "system" | "user" | "assistant"; content: MessageContent }
-  | { role: "assistant"; content: null; tool_calls: AssistantToolCall[]; _geminiModelParts?: unknown[] }
+  | {
+      role: "assistant";
+      content: null;
+      tool_calls: AssistantToolCall[];
+      _geminiModelParts?: unknown[];
+      /**
+       * Reasoning this assistant turn produced, echoed back verbatim.
+       *
+       * Not an optimisation — a correctness requirement, and only on messages
+       * that carry `tool_calls`. Endpoints whose models think before calling a
+       * tool treat that reasoning as part of the turn: omit it from the history
+       * and the next request is rejected outright, so a thinking model could
+       * never finish a tool loop. Between plain user turns the same field is
+       * ignored by those endpoints, which is why it is not kept there — it
+       * would be tokens paid for nothing.
+       *
+       * Fields prefixed `_` are this app's own; adapters strip them before a
+       * message reaches the wire and re-express whatever their protocol needs.
+       */
+      _reasoning?: NativeReasoning;
+    }
   | { role: "tool"; tool_call_id: string; content: string };
 
 export interface StreamOptions {

@@ -16,6 +16,7 @@ import i18n from "../../i18n";
 import { streamCompletion } from "../ai";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import { estimateMessagesTokens } from "../ai/tokenEstimate";
+import type { NativeReasoning } from "../ai/reasoning";
 import type { AccumulatedToolCall, ContentPart, StreamMessage } from "../ai/types";
 import type { AgentEvent } from "./events";
 import { contentWithoutImages, hasImageParts } from "./imageHistory";
@@ -281,6 +282,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
 
     let roundToolCalls: AccumulatedToolCall[] = [];
     let roundGeminiModelParts: unknown[] | undefined;
+    let roundReasoning: NativeReasoning | undefined;
     /** This round's text, still provisional — kept only if it ends in prose. */
     let roundText = "";
 
@@ -314,6 +316,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
           } else if ("toolCalls" in chunk) {
             roundToolCalls = chunk.toolCalls;
             roundGeminiModelParts = chunk._geminiModelParts;
+            roundReasoning = chunk._reasoning;
           } else if ("done" in chunk) {
             totalInputTokens += chunk.inputTokens;
             totalOutputTokens += chunk.outputTokens;
@@ -348,7 +351,13 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     if (roundText) opts.onOutputText(committedText);
 
     // Append the assistant's tool-call message to history.
-    // _geminiModelParts preserves thought signatures for Gemini thinking models.
+    //
+    // Both `_` fields carry what a thinking model needs to see of its own
+    // previous turn: Gemini's thought signatures, and the reasoning text the
+    // OpenAI-compatible thinking endpoints require echoed back. Dropping either
+    // one doesn't degrade the answer — it makes the *next* round of the loop
+    // fail outright, which is why they ride on the message rather than being
+    // reconstructed later.
     history.push({
       role: "assistant",
       content: null,
@@ -358,6 +367,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         function: { name: tc.name, arguments: tc.arguments },
       })),
       _geminiModelParts: roundGeminiModelParts,
+      _reasoning: roundReasoning,
     });
 
     // Execute each tool call and append results. Re-checked per call, not just

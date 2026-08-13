@@ -366,6 +366,39 @@ describe("runAgent", () => {
     ]);
   });
 
+  it("carries a thinking model's reasoning into the next round's history", async () => {
+    // Endpoints whose models think before calling a tool reject a history that
+    // has dropped that reasoning — so losing it here doesn't degrade the
+    // answer, it makes round 2 fail outright and the loop can never finish.
+    queueRound([
+      { reasoning: "I should look at the lore first" },
+      {
+        toolCalls: [{ index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" }],
+        _reasoning: { field: "reasoning_content", text: "I should look at the lore first" },
+      },
+    ]);
+    queueRound([{ text: "done" }, { done: true, inputTokens: 1, outputTokens: 1 }]);
+
+    await runAgent(makeOptions());
+
+    const assistant = sent[1].find((m) => m.role === "assistant" && "tool_calls" in m);
+    expect(assistant).toMatchObject({
+      _reasoning: { field: "reasoning_content", text: "I should look at the lore first" },
+    });
+  });
+
+  it("leaves the assistant message alone when no reasoning arrived", async () => {
+    // Endpoints that send none — OpenAI's own among them — must keep producing
+    // exactly the history they produced before this existed.
+    queueRound([{ toolCalls: [{ index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" }] }]);
+    queueRound([{ text: "done" }, { done: true, inputTokens: 1, outputTokens: 1 }]);
+
+    await runAgent(makeOptions());
+
+    const assistant = sent[1].find((m) => m.role === "assistant" && "tool_calls" in m)!;
+    expect((assistant as { _reasoning?: unknown })._reasoning).toBeUndefined();
+  });
+
   it("answers every tool_call even when stopped part-way through a round", async () => {
     // `history` IS the chat session's history. Stopping after k of N tool
     // calls left an assistant tool_calls message missing replies, and every

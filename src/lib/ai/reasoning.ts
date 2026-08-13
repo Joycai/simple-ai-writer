@@ -83,3 +83,53 @@ export function reasoningBody(
       return undefined;
   }
 }
+
+// ─── Reasoning content on the OpenAI-compatible wire ──────────────────────────
+
+/**
+ * Reasoning the model emitted, kept **verbatim together with the field name it
+ * arrived under**, so it can be echoed back exactly as received.
+ *
+ * The field name travels with the text on purpose. Endpoints speaking the same
+ * protocol disagree on what to call this, and an endpoint that sends one name
+ * is the endpoint most likely to expect that same name back. Echoing what we
+ * were given needs no knowledge of *which* vendor we are talking to — which is
+ * the only version of this that survives the next provider.
+ */
+export interface NativeReasoning {
+  /** The wire field it arrived under (`reasoning_content`, `reasoning`, …). */
+  field: string;
+  text: string;
+}
+
+/**
+ * Field names carrying reasoning text on an OpenAI-compatible delta, in
+ * preference order.
+ *
+ * OpenAI's own Chat Completions returns **no** reasoning content at all — only
+ * a `reasoning_tokens` count — so anything found here comes from an endpoint
+ * that extended the protocol. `reasoning_content` is the more widely mirrored
+ * spelling; `reasoning` is the other one in circulation. Both are read, neither
+ * is assumed: an endpoint that sends neither simply produces no reasoning, and
+ * everything downstream behaves exactly as it did before this existed.
+ *
+ * Adding a name here is the whole cost of supporting another endpoint's
+ * spelling — deliberately, so it never becomes a per-vendor branch.
+ */
+export const REASONING_CONTENT_FIELDS = ["reasoning_content", "reasoning"] as const;
+
+/**
+ * Pull a reasoning fragment off one streamed delta, or null if it carries none.
+ *
+ * Non-string values are ignored rather than coerced: at least one endpoint
+ * sends a structured `reasoning_details` array beside the plain field, and
+ * `String(...)`-ing an object into the transcript would put "[object Object]"
+ * in front of the author.
+ */
+export function readReasoningDelta(delta: Record<string, unknown>): NativeReasoning | null {
+  for (const field of REASONING_CONTENT_FIELDS) {
+    const v = delta[field];
+    if (typeof v === "string" && v.length > 0) return { field, text: v };
+  }
+  return null;
+}

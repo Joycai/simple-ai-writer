@@ -80,7 +80,7 @@ Responses 风格（`output_config: {effort}`）两套等价写法。本项目只
 | --- | --- | --- |
 | **OpenAI 官方** | **没有内容**。只有 `usage.completion_tokens_details.reasoning_tokens` 计数 | — |
 | **OpenAI** Responses | `reasoning.summary`（需 opt-in `summary: auto/concise/detailed`）+ `encrypted_content` | 无状态（`store:false`）时要回传 `encrypted_content` |
-| **DeepSeek** / 多数兼容中继 | `delta.reasoning_content`（DeepSeek 官方）；OpenRouter 等用 `delta.reasoning`；部分中继内联 `<think>…</think>` | 无工具：**不必**（回传会被忽略）；**有工具调用：必须原样回传** |
+| **DeepSeek** / 多数兼容中继 | `delta.reasoning_content`（DeepSeek 官方）；OpenRouter 等用 `delta.reasoning`；部分中继内联 `<think>…</think>` | 无工具：**不必**（回传会被忽略）；**有工具调用：必须原样回传，否则 API 直接 400**，且「后续所有 user 交互轮次」都要带 |
 | **Anthropic** | `content_block_delta` → `thinking_delta.thinking` + `signature_delta.signature` | 工具轮**必须**带 thinking block 及其 signature |
 | **Gemini** | `part.thought === true` 的文本 part + `thoughtSignature` | **必须**回传 `thoughtSignature` |
 
@@ -95,7 +95,11 @@ Responses 风格（`output_config: {effort}`）两套等价写法。本项目只
   今天不出问题，是因为 `thinkingFor`（`anthropic.ts:240`）在 forced tool 时禁用了
   思考，而普通 agent 轮次里 Claude 的 thinking block 缺失暂时被服务端容忍。
   这是新代模型的行为，不是可以依赖的契约。
-- `openai.ts:81` 只读 `delta.content`，`reasoning_content` 被静默丢弃。
+- ~~`openai.ts` 只读 `delta.content`，`reasoning_content` 被静默丢弃。~~ **已修**，
+  且这不只是"少了个展示"：DeepSeek 的推理模型在本 app 的工具循环里此前**必然
+  失败** —— 第 1 轮发出工具调用，第 2 轮把 assistant 消息拼回去时缺
+  `reasoning_content`，API 400。思考默认是开的，所以这是默认路径。
+  单次流式任务（润色/改写/摘要）不受影响：它们不回传 assistant 消息。
 - token 计数三家都已经对齐：Gemini 手动把 `thoughtsTokenCount` 折进 output
   （`gemini.ts:230`），Anthropic 的 `output_tokens` 本就含 thinking，OpenAI 的
   `completion_tokens` 也含 reasoning。**成本核算不需要改。**
@@ -160,18 +164,25 @@ adapter 只调用它拿一段 body 片段合并进去，永远不自己写档位
 兜底（`json.ts:3` 的注释就是为此写的），思维链从正文里分离出来之后，那条
 兜底路径会干净很多。
 
-### 4.4 回传：把逃生舱泛化
+### 4.4 回传（已实现，形状与原计划不同）
 
-`StreamMessage`（`types.ts:154`）今天有一个 Gemini 专用的 `_geminiModelParts`
-字段。再往里加 Anthropic 的 thinking block、DeepSeek 的 `reasoning_content`，
-就会变成每加一家多一个下划线字段。改成一个协议无关的不透明载体：
+原计划是把 `_geminiModelParts` 泛化成一个不透明的 `_native?: unknown`。
+实际做成了一个**有类型的** `_reasoning?: NativeReasoning`：
 
 ```ts
-_native?: unknown;   // 由产出它的 adapter 写入，由同一个 adapter 读回
+interface NativeReasoning { field: string; text: string }
 ```
 
-策略：**默认不回灌思维链**（省 token，且 OpenAI/DeepSeek 在无工具时本就忽略），
-**只在有工具调用的那一轮**按各协议的义务原样回传。
+改主意的理由：不透明 blob 把"谁写的谁读"变成一条只能靠注释维持的约定，
+而这里真正需要记住的东西只有两样 —— 文本，和**它是从哪个字段名来的**。
+把字段名和文本绑在一起，回传规则就变成一句与厂商无关的话：**模型给了什么，
+就用它给的那个名字还回去**。`reasoning_content` 还是 `reasoning`，代码不需要
+知道，也就不会因为下一家用了第三个名字而失效。
+
+`_geminiModelParts` 保持原样：它承载的是 thought signature，与这条正交。
+
+策略仍是**默认不回灌**、**只在有工具调用的那一轮**带上 —— 无工具时那些端点
+本就忽略它，回传只是白花 token。
 
 ---
 
@@ -231,9 +242,10 @@ _native?: unknown;   // 由产出它的 adapter 写入，由同一个 adapter �
    这正是 [`provider-layering.md`](provider-layering.md) §6 那一刀要买的东西。
    ⬜ Gemini / Anthropic 族的映射与 Anthropic 的降级重试。
 3. ✅ **模型抽屉 UI + i18n**（仅对 OpenAI 族渲染 —— 不给一个按了没反应的控件）。
-4. ⬜ **读侧 chunk 变体 + 展示**。加法，8 个既有消费者不动。
-5. ⬜ **回传合规**（`_native` 泛化 + 工具轮回传）。**最容易打坏 agent 循环，
-   必须单独一刀**，并补 `__tests__/agentRuntime.test.ts` 的多轮工具用例。
+4. ◐ **读侧 chunk 变体**（`{reasoning}`）✅；**展示**（AiPanel / AgentLog 的折叠区
+   + prefs 开关）⬜。
+5. ✅ **回传合规 —— OpenAI 族**（`_reasoning` + 工具轮回传 + 请求前剥离内部字段），
+   含 `agentRuntime.test.ts` 的多轮工具用例。⬜ Anthropic 的 thinking block 回传。
 
 ### 第 1–3 步的落地记录
 
@@ -246,6 +258,21 @@ _native?: unknown;   // 由产出它的 adapter 写入，由同一个 adapter �
   "并非每个模型支持每个值"这条规则总是先在边缘档位上应验。
 - 存储上 `"default"` 归一化为 `undefined`，所以 DB 行不区分"从未设置"与
   "设成了默认" —— 两者要发送的东西完全一样。
+
+### 第 4–5 步（OpenAI 族）的落地记录
+
+- **这一刀修的是 bug，不是加功能。** 见 §3.1：DeepSeek 推理模型在工具循环里
+  此前必然 400。
+- **没有出现任何 provider 名字。** 读取端是一张字段名候选表
+  （`REASONING_CONTENT_FIELDS`），回传端用"收到时是什么名字就用什么名字"。
+  支持下一家的成本是往那张表里加一个字符串，而不是加一个分支。
+- **请求前剥离 `_` 前缀字段**（`toWireMessages`）。此前 `_geminiModelParts`
+  会原样出现在 OpenAI 请求体里 —— 实践中没炸，但那是运气：严格校验入参的端点
+  有权拒绝未知键，宽松的端点则是白付 token。
+- **`reasoning_effort: "none"` 是否真能在 DeepSeek 上关闭思考，未经实测。**
+  DeepSeek 文档里 OpenAI 格式的开关是 `thinking: {type}`，而那个字段被官方
+  端点拒绝（见上）。若实测证明"关闭"档在 DeepSeek 上无效，正确的修法是
+  §8 的探测/降级机制，**不是**加一个按 provider 分叉的分支。
 
 ---
 
