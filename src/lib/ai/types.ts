@@ -4,7 +4,7 @@
  * import types without pulling in the provider adapters.
  */
 
-import type { NativeReasoning, ReasoningEffort } from "./reasoning";
+import type { NativeReasoning, ReasoningEffort, ThinkingDialect } from "./reasoning";
 import type { GeminiSafetySettings } from "./safety";
 import i18n from "../../i18n";
 
@@ -247,6 +247,11 @@ export interface StreamOptions {
    * nothing at all, leaving the endpoint's own default alone.
    */
   reasoningEffort?: ReasoningEffort;
+  /**
+   * Which shape of thinking parameter this model accepts. Absent means the
+   * family's current generation — see `dialectFor` in `lib/ai/reasoning.ts`.
+   */
+  thinkingDialect?: ThinkingDialect;
 }
 
 /** Thrown before sending when the estimated prompt exceeds the model's configured context size. */

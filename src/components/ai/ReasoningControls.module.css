@@ -16,20 +16,12 @@
   white-space: nowrap;
   flex-shrink: 0;
 }
-/* The second dial's label sits at the far end of the row, dimmer: it names a
-   control that is off, so it must not compete with the live one. */
-.labelSecondary {
-  margin-left: auto;
-  color: var(--color-text-faint);
-}
-
 .chipGroup {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1);
 }
-.chipGroupOff { opacity: 0.38; }
 
 .chip {
   padding: 3px 11px;

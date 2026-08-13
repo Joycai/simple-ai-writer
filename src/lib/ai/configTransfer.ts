@@ -30,7 +30,7 @@ import {
   type Prompt,
   type Provider,
 } from "./configDb";
-import { parseReasoningEffort } from "./reasoning";
+import { parseReasoningEffort, parseThinkingDialect } from "./reasoning";
 import { authModesFor, type ApiStandard, type AuthMode } from "./types";
 import { migrateLegacyStandard } from "./urls";
 import { loadApiKey, saveApiKey } from "../keyStore";
@@ -217,6 +217,7 @@ export async function stageConfigImport(
       // hand) can carry a level this build doesn't know, and an unknown level
       // must degrade to "send nothing" rather than reach the wire.
       reasoningEffort: parseReasoningEffort(r.reasoningEffort),
+      thinkingDialect: parseThinkingDialect(r.thinkingDialect),
       pricePerImage: typeof r.pricePerImage === "number" ? r.pricePerImage : undefined,
       caps: r.caps && typeof r.caps === "object" ? (r.caps as Model["caps"]) : undefined,
     });

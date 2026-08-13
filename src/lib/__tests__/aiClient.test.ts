@@ -907,19 +907,15 @@ describe("streamCompletion — Anthropic SSE", () => {
 
     const without = await collect({ ...ANTHROPIC, chunks: [`data: {"type":"message_stop"}\n\n`] });
     // Required by the Messages API — there is no server-side default to omit to.
-    expect(without.calls[0].body.max_tokens).toBe(8192);
+    // Roomy because thinking tokens come out of the same budget.
+    expect(without.calls[0].body.max_tokens).toBe(32_768);
   });
 
-  it("maps toolChoice and disables thinking only when a tool is forced", async () => {
-    const auto = await collect({
-      ...ANTHROPIC,
-      chunks: [`data: {"type":"message_stop"}\n\n`],
-      tools: [TOOL],
-    });
-    expect(auto.calls[0].body.tool_choice).toEqual({ type: "auto" });
-    // Adaptive thinking left alone — that's what the agent loop wants.
-    expect(auto.calls[0].body.thinking).toBeUndefined();
-
+  it("keeps thinking on even when a tool is forced", async () => {
+    // Adaptive thinking supports forced tool use, so the old "disable thinking
+    // on the forced-tool path" workaround is gone. Keeping it would have been
+    // actively harmful: several models in the supported range reject
+    // `thinking: {type: "disabled"}` outright.
     const forced = await collect({
       ...ANTHROPIC,
       chunks: [`data: {"type":"message_stop"}\n\n`],
@@ -927,9 +923,16 @@ describe("streamCompletion — Anthropic SSE", () => {
       toolChoice: { type: "function", function: { name: "get_weather" } },
     });
     expect(forced.calls[0].body.tool_choice).toEqual({ type: "tool", name: "get_weather" });
-    // Extended thinking is incompatible with a forced tool choice, and every
-    // structured task forces one — see thinkingFor in ai/anthropic.ts.
-    expect(forced.calls[0].body.thinking).toEqual({ type: "disabled" });
+    expect(forced.calls[0].body.thinking).toEqual({ type: "adaptive", display: "summarized" });
+  });
+
+  it("maps every toolChoice to Anthropic's own spelling", async () => {
+    const auto = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      tools: [TOOL],
+    });
+    expect(auto.calls[0].body.tool_choice).toEqual({ type: "auto" });
 
     const required = await collect({
       ...ANTHROPIC,
@@ -938,6 +941,123 @@ describe("streamCompletion — Anthropic SSE", () => {
       toolChoice: "required",
     });
     expect(required.calls[0].body.tool_choice).toEqual({ type: "any" });
+  });
+
+  it("asks for adaptive thinking with visible text by default", async () => {
+    // Two things at once: the supported range (4.6+) speaks adaptive, and the
+    // current generation defaults display to "omitted" — which bills the
+    // thinking in full and returns an empty string for it.
+    const { calls } = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+    });
+    expect(calls[0].body.thinking).toEqual({ type: "adaptive", display: "summarized" });
+  });
+
+  it("honours a declared dialect over the family default", async () => {
+    const calls = mockFetch([`data: {"type":"message_stop"}\n\n`]);
+    await streamCompletion({
+      baseUrl: "https://api.anthropic.com",
+      apiKey: "k",
+      standard: "anthropic_compat",
+      modelId: "relay-hosted-claude",
+      thinkingDialect: "extended",
+      messages: [{ role: "user", content: "hi" }],
+      onChunk: () => {},
+    });
+    const thinking = calls[0].body.thinking as Record<string, unknown>;
+    expect(thinking.type).toBe("enabled");
+    // Bounded below max_tokens: the budget is thinking-only and the response
+    // still needs room.
+    expect(thinking.budget_tokens).toBeLessThan(calls[0].body.max_tokens as number);
+    expect(thinking.budget_tokens).toBeGreaterThanOrEqual(1024);
+  });
+
+  it("sends no thinking field when the author declared none", async () => {
+    const calls = mockFetch([`data: {"type":"message_stop"}\n\n`]);
+    await streamCompletion({
+      baseUrl: "https://api.anthropic.com",
+      apiKey: "k",
+      standard: "anthropic_compat",
+      modelId: "m",
+      thinkingDialect: "none",
+      messages: [{ role: "user", content: "hi" }],
+      onChunk: () => {},
+    });
+    expect(calls[0].body).not.toHaveProperty("thinking");
+  });
+
+  it("keeps a tiny output cap from starving the response", async () => {
+    // budget_tokens must stay under max_tokens; a caller that configured a
+    // small cap must not end up with a budget that leaves no room for text.
+    const calls = mockFetch([`data: {"type":"message_stop"}\n\n`]);
+    await streamCompletion({
+      baseUrl: "https://api.anthropic.com",
+      apiKey: "k",
+      standard: "anthropic",
+      modelId: "m",
+      thinkingDialect: "extended",
+      maxOutput: 4000,
+      messages: [{ role: "user", content: "hi" }],
+      onChunk: () => {},
+    });
+    const thinking = calls[0].body.thinking as { budget_tokens: number };
+    expect(thinking.budget_tokens).toBe(2000);
+  });
+
+  it("puts effort in output_config, governing the whole response", async () => {
+    const calls = mockFetch([`data: {"type":"message_stop"}\n\n`]);
+    await streamCompletion({
+      baseUrl: "https://api.anthropic.com",
+      apiKey: "k",
+      standard: "anthropic",
+      modelId: "m",
+      reasoningEffort: "medium",
+      messages: [{ role: "user", content: "hi" }],
+      onChunk: () => {},
+    });
+    expect(calls[0].body.output_config).toEqual({ effort: "medium" });
+  });
+
+  it('maps "off" to the lowest effort rather than disabling thinking', async () => {
+    // Disabling is rejected outright by several models in the supported range,
+    // and the vendor's own advice for spending less is to lower effort.
+    const calls = mockFetch([`data: {"type":"message_stop"}\n\n`]);
+    await streamCompletion({
+      baseUrl: "https://api.anthropic.com",
+      apiKey: "k",
+      standard: "anthropic",
+      modelId: "m",
+      reasoningEffort: "off",
+      messages: [{ role: "user", content: "hi" }],
+      onChunk: () => {},
+    });
+    expect(calls[0].body.output_config).toEqual({ effort: "low" });
+    expect(calls[0].body.thinking).toEqual({ type: "adaptive", display: "summarized" });
+  });
+
+  it("streams thinking_delta as reasoning, never as answer text", async () => {
+    const { received } = await collect({
+      ...ANTHROPIC,
+      chunks: [
+        `data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"weighing it"}}\n\n`,
+        `data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"the answer"}}\n\n`,
+        `data: {"type":"message_stop"}\n\n`,
+      ],
+    });
+    expect(received).toContainEqual({ reasoning: "weighing it" });
+    expect(text(received)).toBe("the answer");
+  });
+
+  it("does not surface signature_delta — it is carry-back, not reading material", async () => {
+    const { received } = await collect({
+      ...ANTHROPIC,
+      chunks: [
+        `data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"EosnCkYICxIM"}}\n\n`,
+        `data: {"type":"message_stop"}\n\n`,
+      ],
+    });
+    expect(received.some((c) => "reasoning" in c || "text" in c)).toBe(false);
   });
 
   it("sends tool definitions in Anthropic's input_schema shape", async () => {

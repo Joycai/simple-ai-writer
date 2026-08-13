@@ -39,6 +39,7 @@ const model: Model = {
   contextSize: 128_000,
   maxOutput: 8_192,
   reasoningEffort: "high",
+  thinkingDialect: "adaptive",
 };
 
 const conn: AiConn = { provider, model, apiKey: "sk-test" };
@@ -56,6 +57,7 @@ describe("connOptions", () => {
       contextSize: 128_000,
       maxOutput: 8_192,
       reasoningEffort: "high",
+      thinkingDialect: "adaptive",
     });
   });
 
@@ -80,6 +82,7 @@ describe("connOptions", () => {
     expect(Object.keys(pickConnOptions(wide)).sort()).toEqual([
       "apiKey", "authMode", "baseUrl", "contextSize", "maxOutput",
       "modelId", "prefix", "reasoningEffort", "safetySettings", "standard",
+      "thinkingDialect",
     ]);
   });
 });

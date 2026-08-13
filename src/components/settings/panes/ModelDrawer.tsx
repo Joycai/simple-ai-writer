@@ -3,7 +3,10 @@ import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import { useAiStore } from "../../../stores/aiStore";
 import { familyOf, type ImageRoute } from "../../../lib/ai/types";
-import { REASONING_EFFORTS, type ReasoningEffort } from "../../../lib/ai/reasoning";
+import {
+  REASONING_EFFORTS, THINKING_DIALECTS, supportsThinkingLevel,
+  type ReasoningEffort, type ThinkingDialect,
+} from "../../../lib/ai/reasoning";
 import { defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, type ModelType } from "../../../lib/ai/configDb";
 import { CONTEXT_SIZE_STOPS, formatContextSize } from "../../../lib/ai/contextSize";
 import { ModelProbePanel } from "../ModelProbePanel";
@@ -41,6 +44,8 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
     capsSizes: (existing?.caps?.sizes ?? []).join(", "),
     capsRoute: existing?.caps?.route ?? "",
     reasoningEffort: existing?.reasoningEffort ?? ("default" as ReasoningEffort),
+    // "" = 未声明，按协议族推导 —— 与存储上的 undefined 一一对应。
+    thinkingDialect: (existing?.thinkingDialect ?? "") as ThinkingDialect | "",
   });
   // When the two limits came from a probe rather than the keyboard — kept out
   // of `form` because it is provenance, not something the author edits.
@@ -102,6 +107,7 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
         // "default" is stored as absent — one representation for "send
         // nothing", so a row never distinguishes never-set from set-to-default.
         reasoningEffort: form.reasoningEffort === "default" ? undefined : form.reasoningEffort,
+        thinkingDialect: form.thinkingDialect || undefined,
         pricePerImage,
         caps,
       };
@@ -294,12 +300,34 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
               <div className={hub.fieldHint}>{t("aiConfig.models.maxOutputHint")}</div>
             </div>
 
-            {/* Only the OpenAI family translates this so far. Rendering the
-                control for a protocol whose adapter would ignore it would offer
-                a setting that silently does nothing — the same reason
-                defaultImageCaps refuses to promise an edit button. Drop the
-                condition as each family gets wired. */}
-            {provider && familyOf(provider.apiStandard) === "openai" && (
+            {/* Which shape of thinking parameter this model takes. Anthropic
+                only: within that family the parameter changed between model
+                generations, and on a relay the model id is free text, so the
+                generation can't be derived — the author declares it. */}
+            {provider && familyOf(provider.apiStandard) === "anthropic" && (
+              <div className={styles.fieldGroup}>
+                <label className={styles.label}>{t("aiConfig.models.thinkingDialectLabel")}</label>
+                <div className={ui.chipRow}>
+                  {(["", ...THINKING_DIALECTS] as const).map((d) =>
+                    chip(
+                      d === ""
+                        ? t("aiConfig.models.thinkingDialectAuto")
+                        : t(`aiConfig.models.thinkingDialect${d[0].toUpperCase()}${d.slice(1)}`),
+                      form.thinkingDialect === d,
+                      () => setForm({ ...form, thinkingDialect: d }),
+                      d || "auto",
+                    ),
+                  )}
+                </div>
+                <div className={hub.fieldHint}>{t("aiConfig.models.thinkingDialectHint")}</div>
+              </div>
+            )}
+
+            {/* Rendering this for a protocol whose adapter would ignore it
+                would offer a setting that silently does nothing — the same
+                reason defaultImageCaps refuses to promise an edit button.
+                Widen as each family's mapping lands. */}
+            {provider && supportsThinkingLevel(provider.apiStandard) && (
               <div className={styles.fieldGroup}>
                 <label className={styles.label}>{t("aiConfig.models.reasoningEffortLabel")}</label>
                 <div className={ui.chipRow}>

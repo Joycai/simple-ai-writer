@@ -15,6 +15,7 @@
  */
 
 import { fetch } from "../http";
+import { dialectFor, reasoningBody, thinkingBody } from "./reasoning";
 import { anthropicUrl } from "./urls";
 import type {
   AccumulatedToolCall,
@@ -31,12 +32,29 @@ const ANTHROPIC_VERSION = "2023-06-01";
  * `max_tokens` when the model has no `maxOutput` configured.
  *
  * Anthropic requires the field on every request, so there is no "let the server
- * decide" option to fall back on. 8k is chosen to be larger than any single
- * writing task this app issues while staying well under every current model's
- * ceiling — a value above the model's own cap is itself a 400, so guessing high
- * would break the small models rather than the large ones.
+ * decide" option to fall back on.
+ *
+ * 32k, not the 8k this used to be. Thinking tokens count against `max_tokens`
+ * and it is a hard limit, so once thinking is on the old value left the model
+ * splitting 8k between reasoning and prose — the documented symptom is a
+ * response that stops with `stop_reason: "max_tokens"` and truncated or missing
+ * text. Every model in this app's supported Claude range (4.6+) accepts at
+ * least 64k output, so the old worry about overshooting a small model's ceiling
+ * doesn't apply to them; 32k stays well inside that while leaving real room to
+ * think. A value above the model's own cap is itself a 400, which is why this
+ * is not simply set to the 128k the range allows.
  */
-export const DEFAULT_MAX_TOKENS = 8_192;
+export const DEFAULT_MAX_TOKENS = 32_768;
+
+/**
+ * Thinking budget for the `extended` dialect, when the author declared that
+ * dialect but configured no output cap.
+ *
+ * Must stay below `max_tokens` — the budget is thinking-only and the response
+ * still needs room. Half of the default cap is a deliberate split rather than a
+ * tuned figure: the point is that neither half can starve the other.
+ */
+const DEFAULT_THINKING_BUDGET = 16_384;
 
 /**
  * Request headers.
@@ -211,34 +229,25 @@ function resolveMaxTokens(opts: StreamOptions): number {
 }
 
 /**
- * Whether this request forces the model into a specific tool.
+ * The `thinking` field for this request, or undefined to send none.
  *
- * `"auto"` is the default and imposes nothing; `"required"` and a named
- * function both do.
+ * This used to disable thinking whenever `tool_choice` forced a tool, because
+ * forced tool use is incompatible with *manual* extended thinking and every
+ * structured task (一致性检查, lore improve, the entry splitter) forces exactly
+ * one named tool. That workaround is gone: **adaptive thinking supports forced
+ * tool use**, and adaptive is the only mode this app's supported range (Claude
+ * 4.6+) uses. Keeping the disable would have been worse than useless — several
+ * models in that range reject `thinking: {type: "disabled"}` outright, so the
+ * guard that existed to prevent a 400 had itself become one.
+ *
+ * `budget_tokens` is bounded below `max_tokens` because the API requires it and
+ * because the two share one ceiling: a budget at or above the cap leaves the
+ * response no room to exist.
  */
-function forcesTool(opts: StreamOptions): boolean {
-  const tc = opts.toolChoice;
-  if (!tc || tc === "auto" || tc === "none") return false;
-  return true;
-}
-
-/**
- * The `thinking` field, or undefined to leave the model's default alone.
- *
- * Two facts collide here. Current Claude models think by default when the field
- * is omitted — which is what the agent loop wants, and why this returns
- * undefined for an ordinary request. But extended thinking is incompatible with
- * a forced `tool_choice`, and `runStructuredTask` (lib/agent/structured.ts)
- * forces exactly one named tool for every structured task: 一致性检查, lore
- * improve, the entry splitter. Left alone those would all 400 and fall through
- * to the JSON-mode fallback, silently losing schema enforcement.
- *
- * So thinking is disabled *only* on the forced-tool path. Don't turn this into
- * an unconditional disable when adding a thinking toggle later — that trades a
- * structured-output failure for an agent-loop regression.
- */
-function thinkingFor(opts: StreamOptions): { type: "disabled" } | undefined {
-  return forcesTool(opts) ? { type: "disabled" } : undefined;
+function thinkingFor(opts: StreamOptions, maxTokens: number): Record<string, unknown> | undefined {
+  const dialect = dialectFor(opts.standard, opts.thinkingDialect);
+  const budget = Math.max(1024, Math.min(DEFAULT_THINKING_BUDGET, Math.floor(maxTokens / 2)));
+  return thinkingBody(dialect, budget)?.thinking as Record<string, unknown> | undefined;
 }
 
 function toolChoiceBody(
@@ -315,16 +324,20 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
   const url = anthropicUrl(opts.baseUrl, "/messages");
 
   const system = extractSystem(opts.messages);
-  const thinking = thinkingFor(opts);
+  const maxTokens = resolveMaxTokens(opts);
+  const thinking = thinkingFor(opts, maxTokens);
 
   const body: Record<string, unknown> = {
     model: opts.modelId,
-    max_tokens: resolveMaxTokens(opts),
+    max_tokens: maxTokens,
     stream: true,
     messages: convertToAnthropicMessages(opts.messages),
   };
   if (system) body.system = system;
   if (thinking) body.thinking = thinking;
+  // Absent unless the author set an effort on this model. Governs the whole
+  // response here, not only thinking — see ANTHROPIC_EFFORT in ./reasoning.
+  Object.assign(body, reasoningBody(opts.standard, opts.reasoningEffort));
   if (opts.tools?.length) {
     body.tools = opts.tools.map((t) => ({
       name: t.function.name,
@@ -438,10 +451,14 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
         } else if (delta?.type === "input_json_delta" && typeof delta.partial_json === "string") {
           const entry = toolBlocks.get(index);
           if (entry) entry.args += delta.partial_json;
+        } else if (delta?.type === "thinking_delta" && typeof delta.thinking === "string") {
+          // Summarized reasoning, streamed for display. Arrives only because the
+          // request asks for display: "summarized" — the current Claude
+          // generation defaults to omitting the text while still billing it.
+          opts.onChunk({ reasoning: delta.thinking });
         }
-        // thinking_delta / signature_delta are intentionally dropped: the app
-        // has no surface for reasoning text, and the tokens are already counted
-        // in output_tokens.
+        // signature_delta is not surfaced: it carries the encrypted full
+        // reasoning for round-tripping, not anything a reader wants to see.
         return;
       }
       case "message_delta": {
