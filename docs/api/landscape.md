@@ -274,7 +274,37 @@ vLLM / llama.cpp。Google 与 Anthropic 也各自提供了一层 OpenAI 兼容�
 - 响应的 content block 只画了 `{type, text}`：`thinking`、`redacted_thinking`、
   `signature` 一个都没提，流式事件也没写。
 
-### 兼容层文档的通用规律（三个样本的共同点）
+### 第四个样本：MiniMax 的 ④ 族端点（截至 2026-08）
+
+同一家厂商**同时提供 ① 与 ④ 两种格式**（`/v1/chat/completions` 与
+`/anthropic/v1/messages`），是"协议族与厂商正交"最直白的证据：选哪个族是调用方
+的事，不是厂商的属性。
+
+与官方 ④ 的差异：
+
+- **端点带前缀**：`/anthropic/v1/messages`，不是 `/v1/messages`。
+- **`anthropic-version` 不要求**（官方必填）。多发一个头无害，少发在官方会挂。
+- **鉴权 Bearer 与 `x-api-key` 都收**，与 New API 一致 —— 两个 ④ 族兼容层
+  样本都这样，可见这个开关不是个例需求。
+- **`thinking: {type: "disabled" | "adaptive"}`**，**默认 `disabled`**。
+  官方那边当前代默认开或需显式 adaptive，这里必须显式开才有思考。
+  `display` 字段没有出现在文档里。
+- **`tool_choice` 只有 `auto` / `none`** —— **没有 `any`，也没有 `tool`**。
+  这是与官方差距最大的一条：**强制单个工具在这里做不到**，任何依赖
+  forced tool 的结构化输出都得有退路。
+- **没有 `output_config`**，所以 effort 无处安放（与 New API 相同）。
+- **thinking block 带 `signature`，且文档明确"多轮续写必需"** —— 回传规则与
+  官方一致，这一点是兼容的。
+- usage 四个桶齐全；流式事件名与官方一致，多一个 `ping` 心跳。
+- 扩展：`service_tier`（priority 1.5 倍价）、`metadata.user_id`、`system` 接受
+  带 `cache_control` 的数组。
+
+**最值得记住的一条**：④ 族兼容层可能**砍掉 `tool_choice` 的强制档**。官方的
+`any` / `tool` 是结构化输出最可靠的手段（见
+[`structured.md`](structured.md) §1），而这里没有 —— 于是"强制工具调用失败就
+退回 JSON 模式"从一个防御性设计变成了必需品。
+
+### 兼容层文档的通用规律（四个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**
 2. **枚举是子集**（reasoning_effort 只写三档、content block 只写 text）。

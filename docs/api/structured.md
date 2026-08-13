@@ -57,8 +57,11 @@
 
 ## 4. 强制工具调用与思考模式冲突
 
-强制工具调用是**四族都有**的 schema 强制手段，因此也是可移植性最好的一种。
-但它与思考模式相冲：
+强制工具调用是**四族的官方端点都有**的 schema 强制手段，因此也是可移植性最好
+的一种 —— 但"官方"这个限定词是必要的：**兼容层可能只实现 `auto`/`none`**，把
+强制档整个砍掉（实例见 [`landscape.md`](landscape.md) §7 的 MiniMax ④ 族端点）。
+
+它还与思考模式相冲：
 
 - **Anthropic**：手动 thinking（`type:"enabled"`）下强制 `tool_choice` 会被拒。
 - **① 的若干端点**：推理模型会返回形如 *"does not support tool_choice in
