@@ -728,7 +728,9 @@
         "detailError": "Error",
         "detailNoArgs": "(no arguments)",
         "detailNoResult": "(no result content)",
-        "detailClipped": "truncated"
+        "detailClipped": "truncated",
+        "reasoning": "Thinking",
+        "reasoningLive": "Thinking…"
       },
       "tool": {
         "list_lore_entities": "List {{entry}}",

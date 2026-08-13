@@ -27,6 +27,8 @@ interface ConsistencyState {
   isScanning: boolean;
   /** Streamed text while the model works — the only sign of life on a long scan. */
   progress: string;
+  /** The model's reasoning for this scan, when the endpoint exposes it. */
+  reasoning: string;
   error: string | null;
   /** Issues the author has dealt with or waved off, by id. */
   resolved: Set<string>;
@@ -78,6 +80,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
   report: null,
   isScanning: false,
   progress: "",
+  reasoning: "",
   error: null,
   resolved: new Set(),
   abortController: null,
@@ -99,7 +102,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
 
     const controller = new AbortController();
     set({
-      isScanning: true, error: null, progress: "",
+      isScanning: true, error: null, progress: "", reasoning: "",
       report: null, resolved: new Set(), abortController: controller,
     });
 
@@ -126,6 +129,9 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
           // scan's stream can still deliver a chunk after a new one started.
           if (get().abortController === controller) set({ progress: text });
         },
+        onReasoning: (text) => {
+          if (get().abortController === controller) set({ reasoning: text });
+        },
       });
       if (get().abortController !== controller) return;
       set({ report, isScanning: false, abortController: null, progress: "" });
@@ -146,7 +152,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
     set({ isScanning: false, abortController: null, progress: "" });
   },
 
-  clear: () => set({ report: null, error: null, resolved: new Set(), progress: "" }),
+  clear: () => set({ report: null, error: null, resolved: new Set(), progress: "", reasoning: "" }),
 
   ignore: (id) => set((s) => ({ resolved: new Set(s.resolved).add(id) })),
 

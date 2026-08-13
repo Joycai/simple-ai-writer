@@ -728,7 +728,9 @@
         "detailError": "错误",
         "detailNoArgs": "（无参数）",
         "detailNoResult": "（无返回内容）",
-        "detailClipped": "已截断"
+        "detailClipped": "已截断",
+        "reasoning": "思考过程",
+        "reasoningLive": "正在思考"
       },
       "tool": {
         "list_lore_entities": "列举{{entry}}",

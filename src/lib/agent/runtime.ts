@@ -283,6 +283,24 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     let roundToolCalls: AccumulatedToolCall[] = [];
     let roundGeminiModelParts: unknown[] | undefined;
     let roundReasoning: NativeReasoning | undefined;
+    // Streamed reasoning for this round, reported to the log as it grows. The
+    // start time is captured on the first fragment rather than at round start:
+    // a model that thinks only after reading a tool result would otherwise be
+    // credited with the wait for that result.
+    let reasoningText = "";
+    let reasoningStart = 0;
+    let reasoningDone = false;
+    const reportReasoning = (done: boolean) => {
+      if (!reasoningText) return;
+      opts.onEvent({
+        kind: "reasoning",
+        round,
+        text: reasoningText,
+        done,
+        ...(done ? { elapsedMs: Date.now() - reasoningStart } : {}),
+        at: reasoningStart,
+      });
+    };
     /** This round's text, still provisional — kept only if it ends in prose. */
     let roundText = "";
 
@@ -307,7 +325,19 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         tools: withholdTools ? undefined : toolDefinitions,
         signal: opts.signal,
         onChunk: (chunk) => {
-          if ("text" in chunk) {
+          if ("reasoning" in chunk) {
+            if (!reasoningText) reasoningStart = Date.now();
+            reasoningText += chunk.reasoning;
+            reportReasoning(false);
+          } else if ("text" in chunk) {
+            // The answer has started, so the thinking is over. Reported here
+            // rather than at round end because on a text round the answer
+            // streams for a while afterwards — the log would otherwise show
+            // "still thinking" while prose is visibly arriving.
+            if (reasoningText && !reasoningDone) {
+              reasoningDone = true;
+              reportReasoning(true);
+            }
             // Streamed live, but on top of `committedText` rather than into it —
             // if this round turns out to be a tool round, the whole of `roundText`
             // is dropped below and the display reverts.
@@ -325,6 +355,13 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         },
       });
     } finally {
+      // A round that called a tool without ever emitting prose, or one that
+      // failed part-way: the thinking that did happen is still worth showing,
+      // and leaving it marked in-progress would strand a spinner in the log.
+      if (!reasoningDone) {
+        reasoningDone = true;
+        reportReasoning(true);
+      }
       // The request has been sent, so the nudge has done its job. Retracting
       // it here (rather than never adding it) keeps it out of a persistent
       // history without changing what this round asked for.

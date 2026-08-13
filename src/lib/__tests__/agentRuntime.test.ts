@@ -9,6 +9,7 @@ import type { StreamOptions } from "../ai/types";
 import type { AgentEvent } from "../agent/events";
 import type { TaskPreset } from "../agent/presets";
 import { repairToolCallPairing, runAgent, trimHistory, type AgentRuntimeOptions } from "../agent/runtime";
+import { appendAgentEventTo } from "../agent/events";
 import type { LoreIndex } from "../lore";
 import type { StreamMessage } from "../ai/types";
 
@@ -397,6 +398,75 @@ describe("runAgent", () => {
 
     const assistant = sent[1].find((m) => m.role === "assistant" && "tool_calls" in m)!;
     expect((assistant as { _reasoning?: unknown })._reasoning).toBeUndefined();
+  });
+
+  it("reports thinking as one growing log entry, not one per fragment", async () => {
+    // Reasoning streams. A log line per fragment would be unreadable, so the
+    // event is re-emitted for the same round and replaces its predecessor.
+    queueRound([
+      { reasoning: "first " },
+      { reasoning: "second" },
+      { text: "done" },
+      { done: true, inputTokens: 1, outputTokens: 1 },
+    ]);
+    const opts = makeOptions();
+
+    await runAgent(opts);
+
+    const live = opts.events.filter((e) => e.kind === "reasoning");
+    expect(live.map((e) => (e as { text: string }).text)).toEqual([
+      "first ", "first second", "first second",
+    ]);
+    // Folded through the log helper, they collapse to a single row.
+    const folded = live.reduce(appendAgentEventTo, [] as AgentEvent[]);
+    expect(folded).toHaveLength(1);
+    expect(folded[0]).toMatchObject({ kind: "reasoning", text: "first second", done: true });
+  });
+
+  it("marks thinking finished as soon as the answer starts", async () => {
+    // Not at round end: on a text round the answer streams for a while after,
+    // and the log would show a spinner while prose is visibly arriving.
+    queueRound([
+      { reasoning: "pondering" },
+      { text: "the answer" },
+      { done: true, inputTokens: 1, outputTokens: 1 },
+    ]);
+    const opts = makeOptions();
+
+    await runAgent(opts);
+
+    const kinds = opts.events.map((e) => e.kind);
+    const doneAt = opts.events.findIndex((e) => e.kind === "reasoning" && (e as { done: boolean }).done);
+    expect(doneAt).toBeGreaterThanOrEqual(0);
+    // …and it carries how long the thinking took.
+    expect((opts.events[doneAt] as { elapsedMs?: number }).elapsedMs).toBeGreaterThanOrEqual(0);
+    expect(kinds).toContain("reasoning");
+  });
+
+  it("closes out thinking on a tool round that never produced prose", async () => {
+    // Otherwise the row is stranded mid-spin for the rest of the run.
+    queueRound([
+      { reasoning: "I should look this up" },
+      { toolCalls: [{ index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" }] },
+    ]);
+    queueRound([{ text: "done" }, { done: true, inputTokens: 1, outputTokens: 1 }]);
+    const opts = makeOptions();
+
+    await runAgent(opts);
+
+    const first = opts.events.filter(
+      (e) => e.kind === "reasoning" && (e as { round: number }).round === 1,
+    );
+    expect((first[first.length - 1] as { done: boolean }).done).toBe(true);
+  });
+
+  it("emits nothing at all for a model that exposes no reasoning", async () => {
+    queueRound([{ text: "plain" }, { done: true, inputTokens: 1, outputTokens: 1 }]);
+    const opts = makeOptions();
+
+    await runAgent(opts);
+
+    expect(opts.events.some((e) => e.kind === "reasoning")).toBe(false);
   });
 
   it("answers every tool_call even when stopped part-way through a round", async () => {
