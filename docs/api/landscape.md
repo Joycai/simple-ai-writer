@@ -209,6 +209,27 @@ vLLM / llama.cpp。Google 与 Anthropic 也各自提供了一层 OpenAI 兼容�
 **结论：对 ① 的适配必须按"最小公倍数发送、最大宽容接收"写。** 官方端点可以
 乐观假设可选部分存在，兼容端点不行。
 
+### 一个具体样本：New API（截至 2026-08）
+
+自建中继里最常见的一种，值得记下来作为"兼容层长什么样"的标本。
+[它的文档](https://www.newapi.ai/zh/docs/api/ai-model/chat/openai/createchatcompletion)
+自称"兼容 OpenAI Chat Completions API"，实测对照下来：
+
+- **body 形状与官方逐字相同**：同为 `POST /v1/chat/completions`、`Bearer` 鉴权、
+  同一套字段。**没有任何结构性差异** —— 这正是兼容层的典型形态，也是"兼容层
+  不配拥有独立协议族"的理由。
+- **它列为"特有扩展"的四项全在响应侧**：`message.reasoning_content`（DeepSeek
+  那一份扩展的传播结果）、`completion_tokens_details.reasoning_tokens`、
+  以及 `usage` 里的 `audio_tokens` / `image_tokens`。
+- **`reasoning_effort` 的取值只写了 `low`/`medium`/`high`** —— 官方枚举里的
+  `none`/`minimal`/`xhigh`/`max` 都不在文档中。是中继只描述了公共子集，还是真
+  只接受这三个，文档没说。
+- **文档缺口**：流式响应格式整节缺失，`tools`/`tool_choice`/`response_format`/
+  `stream_options` 的结构都只列了字段名不展开。
+
+这四条合起来就是兼容层的典型知识形态：**结构上照抄，扩展在响应侧，枚举是子集，
+而最需要确认的部分文档不写。** 只能实测。
+
 ## 8. 仍存活的自有格式（不主流，但会撞上）
 
 - **Ollama `/api/chat`** —— 自有 shape（`messages` + `options`），与它的

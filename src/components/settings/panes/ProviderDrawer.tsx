@@ -43,6 +43,10 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
   { name: "DeepSeek", apiStandard: "openai_compat", baseUrl: "https://api.deepseek.com" },
   { name: "Anthropic", apiStandard: "anthropic", baseUrl: STANDARD_ENDPOINTS.anthropic },
   { name: "Ollama", apiStandard: "openai_compat", baseUrl: "http://localhost:11434/v1" },
+  // Self-hosted, so there is no address to prefill — the preset exists to
+  // answer "which standard do I pick for my relay", which is the part an
+  // author has no way to guess.
+  { name: "New API", apiStandard: "openai_compat", baseUrl: "" },
 ];
 
 /** A server on the local machine (Ollama, LM Studio) — these need no API key. */
