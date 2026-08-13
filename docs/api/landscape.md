@@ -253,6 +253,38 @@ vLLM / llama.cpp。Google 与 Anthropic 也各自提供了一层 OpenAI 兼容�
 **这两条合起来说明一件事**：兼容层的差异往往不在请求体，而在**响应的解释方式**
 ——同一段 JSON，官方端点和兼容端点想让你读出不同的东西。
 
+### 第三个样本：兼容层也做 ④ 族（截至 2026-08）
+
+前两个样本（New API 的 OpenAI 格式、MiniMax）都是 ① 族。中继同样会提供
+**Anthropic 原生格式**的端点，New API 的
+[`POST /v1/messages`](https://www.newapi.ai/zh/docs/api/ai-model/chat/createmessage)
+即是。对照官方：
+
+- **鉴权两套都收**：`Authorization: Bearer` 与 `x-api-key` 都接受。这印证了
+  ④ 族兼容端点需要一个鉴权方式开关——官方端点只认 `x-api-key`，而生态里
+  `ANTHROPIC_AUTH_TOKEN → Bearer` 同样是一等约定，网关文档常常不说自己要哪个。
+- **`anthropic-version` 请求头必填**，与官方一致。
+- **`usage` 的四个桶齐全**（`input_tokens` / `output_tokens` /
+  `cache_creation_input_tokens` / `cache_read_input_tokens`），说明它没有把
+  Anthropic 那套"三桶不重叠"的口径压平成 OpenAI 的形状。
+- **`thinking` 列在请求体里**，但 **`output_config` 没有** —— 而 4.6+ 的
+  `effort` 就住在那里面。
+- **`temperature` / `top_p` / `top_k` 被列为可用**，而官方 4.6+ 对这三个的
+  非默认值**无条件 400**（与是否思考无关）。
+- 响应的 content block 只画了 `{type, text}`：`thinking`、`redacted_thinking`、
+  `signature` 一个都没提，流式事件也没写。
+
+### 兼容层文档的通用规律（三个样本的共同点）
+
+1. **结构照抄，扩展在响应侧。**
+2. **枚举是子集**（reasoning_effort 只写三档、content block 只写 text）。
+3. **最需要确认的部分不写**（流式格式、错误通道、回传规则）。
+4. **文档滞后于上游。** ④ 族尤其明显——Anthropic 的接口面近年动得快
+   （adaptive thinking、`output_config`、采样参数从"思考时禁用"变成"无条件
+   禁用"），中继文档描述的往往是一年前的样子。
+
+**推论：不能把兼容层文档当作能力清单。** "没列"既可能是不支持，也可能只是
+没跟上；两种都要按"未知、需实测"处理，而不是按"确认缺失"。
 ## 8. 仍存活的自有格式（不主流，但会撞上）
 
 - **Ollama `/api/chat`** —— 自有 shape（`messages` + `options`），与它的
