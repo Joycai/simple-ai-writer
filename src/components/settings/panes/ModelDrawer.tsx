@@ -306,18 +306,20 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
             {provider && familyOf(provider.apiStandard) === "anthropic" && (
               <div className={styles.fieldGroup}>
                 <label className={styles.label}>{t("aiConfig.models.thinkingDialectLabel")}</label>
-                <div className={ui.chipRow}>
-                  {(["", ...THINKING_DIALECTS] as const).map((d) =>
-                    chip(
-                      d === ""
-                        ? t("aiConfig.models.thinkingDialectAuto")
-                        : t(`aiConfig.models.thinkingDialect${d[0].toUpperCase()}${d.slice(1)}`),
-                      form.thinkingDialect === d,
-                      () => setForm({ ...form, thinkingDialect: d }),
-                      d || "auto",
-                    ),
-                  )}
-                </div>
+                <ChipRow>
+                  {(["", ...THINKING_DIALECTS] as const).map((d) => (
+                    <Chip
+                      key={d || "auto"}
+                      label={
+                        d === ""
+                          ? t("aiConfig.models.thinkingDialectAuto")
+                          : t(`aiConfig.models.thinkingDialect${d[0].toUpperCase()}${d.slice(1)}`)
+                      }
+                      active={form.thinkingDialect === d}
+                      onClick={() => setForm({ ...form, thinkingDialect: d })}
+                    />
+                  ))}
+                </ChipRow>
                 <div className={hub.fieldHint}>{t("aiConfig.models.thinkingDialectHint")}</div>
               </div>
             )}
