@@ -16,7 +16,7 @@ The UI targets a restrained, modern **Apple-like aesthetic**. These rules are th
 
 ### 核心原则 (Principles)
 1. **令牌优先** — Always consume tokens (`var(--…)`). Never hardcode colors, shadows, radii, or easing in component CSS. If a value is missing, add a token, don't inline it.
-2. **单一克制强调色** — One System Blue accent (`--color-accent`, dark `#0A84FF` / light `#007AFF`). Tints via `--color-accent-tint` (base fills) and `--color-accent-tint-strong` (hover/selected fills). **No multi-color gradients on interactive elements.** Gradients are reserved for *decorative-only* surfaces: logo, `.gradient-text`, brand accent dot, icon badges.
+2. **单一克制强调色** — One sienna accent (`--color-accent` → `--color-sienna`, light `#A0522D` / dark `#D9925B`). Tints via `--color-accent-tint` (base fills) and `--color-accent-tint-strong` (hover/selected fills). **No multi-color gradients on interactive elements.** Gradients are reserved for *decorative-only* surfaces: logo, `.gradient-text`, brand accent dot, icon badges.
 3. **克制精致动画** — Short durations (120–320ms), Apple easing curves, subtle motion ("barely perceptible but smooth"). Avoid large/bouncy movement except brief spring accents.
 4. **分层海拔** — Depth comes from the layered shadow scale, not borders alone. Pick the smallest shadow that reads.
 5. **无障碍** — All motion must degrade under `prefers-reduced-motion` (handled globally — don't fight it). Keyboard focus uses the unified `:focus-visible` ring, not just a border-color swap.
@@ -24,9 +24,11 @@ The UI targets a restrained, modern **Apple-like aesthetic**. These rules are th
 ### 令牌速查 (Token reference — `tokens.css`)
 - **Easing**: `--ease-out` (enter/expand, default), `--ease-spring` (brief pop accents only), `--ease-in-out` (symmetric size/position).
 - **Transitions**: `--transition-fast` (120ms, hover/press), `--transition-base` (200ms), `--transition-slow` (320ms, panels/drawers). All pre-bound to `--ease-out`.
-- **Radius**: `--radius-sm` 6 / `--radius-md` 10 / `--radius-lg` 14 / `--radius-xl` 20 (modals).
+- **Radius**: `--radius-sm` 6 (inputs, selects, buttons, icon buttons) / `--radius-md` 8 (cards, grouped lists, panels, boxed sections) / `--radius-lg` 12 (large cards, confirm dialogs) / `--radius-xl` 16 (modal panels) / `--radius-pill` 999 (chips, tags, badges, toggles). Never write a literal radius — every module reads the token so the whole app can move together.
 - **Shadow (elevation)**: `--shadow-sm` (resting cards/inputs) → `--shadow-md` (raised) → `--shadow-lg` (popovers/menus/dropdowns) → `--shadow-xl` (modals). `--shadow-focus` for focus rings. Each theme defines its own set (dark deeper, light subtle).
 - **Accent**: `--color-accent`, `--color-accent-hover`, `--color-accent-ring`, `--color-accent-tint`, `--color-accent-tint-strong`.
+- **Tags**: `--color-tag-bg` / `--color-tag-text` for the neutral badge. Model-type tags get one hue each — `--color-type-{text,multimodal,image,video}-{bg,fg}` — so a model list is scannable without reading the labels.
+- **Surfaces**: `--color-bg-base` → `--color-bg-surface` → `--color-bg-elevated`, plus `--color-bg-hover` for a *neutral* row hover. Use accent tint for **selected**, `--color-bg-hover` for merely **hovered** — tinting a hover reads as a selection that isn't there.
 - **Glass**: `--glass-bg` (modals), `--glass-bg-strong` (large chrome), `--glass-blur`, `--glass-border`.
 - **Typography**: `--font-serif` (body/editor), `--font-sans` (UI chrome/labels), `--font-mono` (code, numeric, prefix editor). Size scale `--font-size-xs` 11 → `--font-size-3xl` 44, with `--font-size-base` 14 sitting between `md` (13) and `lg` (17) for settings rows and nav items. Serif/sans are **swapped per font scheme** (see below); mono is fixed.
 

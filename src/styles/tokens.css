@@ -27,11 +27,14 @@
   --font-size-2xl: 32px;
   --font-size-3xl: 44px;
 
-  /* Manuscript is rectangular — radius zero everywhere */
-  --radius-sm: 0;
-  --radius-md: 0;
-  --radius-lg: 0;
-  --radius-xl: 0;
+  /* Radius — softened manuscript. Controls 6, cards 8, modals 16, and one
+     capsule for chips/tags/switches. Every module writes var(--radius-*) so
+     the whole app moves together from here. */
+  --radius-sm: 6px;    /* inputs, selects, buttons, icon buttons */
+  --radius-md: 8px;    /* cards, grouped lists, panels, boxed sections */
+  --radius-lg: 12px;   /* large cards, confirm dialogs */
+  --radius-xl: 16px;   /* modal panels */
+  --radius-pill: 999px; /* chips, tags, badges, toggles */
 
   /* Easing */
   --ease-out:    cubic-bezier(0.32, 0.72, 0, 1);
@@ -94,6 +97,7 @@
   --color-bg-base:        #F7F2E8;   /* paper */
   --color-bg-surface:     #FBF8F0;   /* card */
   --color-bg-elevated:    #F1E8D5;   /* highlight */
+  --color-bg-hover:       #EDE2CB;   /* elevated, one step darker — neutral row hover */
   --color-bg-tinted:      #F7F2E8;
   --color-bg-overlay:     rgba(60, 40, 20, 0.30);
 
@@ -126,6 +130,7 @@
   --color-border-strong:  #C9966A;
 
   --color-success:        #8DA876;
+  --color-success-bg:     rgba(141, 168, 118, 0.14);
   --color-warning:        #C9966A;
   --color-warning-bg:     #F7EBD4;
   --color-warning-text:   #8B6420;
@@ -138,6 +143,17 @@
   /* Tag chips */
   --color-tag-bg:         #F1E0BD;
   --color-tag-text:       #5C4023;
+
+  /* Model-type tags — one hue per capability so a list of models is scannable
+     without reading the labels. Muted enough to sit inside a paper row. */
+  --color-type-text-bg:        #E9E6CC;
+  --color-type-text-fg:        #75722E;
+  --color-type-multimodal-bg:  #F2DFCC;
+  --color-type-multimodal-fg:  #B05A2C;
+  --color-type-image-bg:       #EBDDE8;
+  --color-type-image-fg:       #8A5380;
+  --color-type-video-bg:       #DCE4E8;
+  --color-type-video-fg:       #4A6472;
 
   /* Elevation — warm, subtle */
   --shadow-sm:    0 1px 3px rgba(60, 40, 20, 0.06);
@@ -159,6 +175,7 @@
   --color-bg-base:        #1F1B16;
   --color-bg-surface:     #18140F;
   --color-bg-elevated:    #28231D;
+  --color-bg-hover:       #332C24;
   --color-bg-tinted:      #28231D;
   --color-bg-overlay:     rgba(0, 0, 0, 0.55);
 
@@ -189,6 +206,7 @@
   --color-border-strong:  #5A4F3D;
 
   --color-success:        #8DA876;
+  --color-success-bg:     rgba(141, 168, 118, 0.18);
   --color-warning:        #C9966A;
   --color-warning-bg:     rgba(201, 150, 106, 0.18);
   --color-warning-text:   #E0BC8A;
@@ -199,6 +217,16 @@
 
   --color-tag-bg:         rgba(217, 146, 91, 0.18);
   --color-tag-text:       #E0BC8A;
+
+  /* Same four hues as light, as translucent washes over night paper. */
+  --color-type-text-bg:        rgba(203, 199, 130, 0.18);
+  --color-type-text-fg:        #CFCA8B;
+  --color-type-multimodal-bg:  rgba(217, 146, 91, 0.20);
+  --color-type-multimodal-fg:  #E3A472;
+  --color-type-image-bg:       rgba(196, 140, 188, 0.18);
+  --color-type-image-fg:       #D3A0CB;
+  --color-type-video-bg:       rgba(140, 173, 191, 0.18);
+  --color-type-video-fg:       #9BBACB;
 
   --shadow-sm:    0 1px 3px rgba(0, 0, 0, 0.40);
   --shadow-md:    0 4px 16px rgba(0, 0, 0, 0.36);
