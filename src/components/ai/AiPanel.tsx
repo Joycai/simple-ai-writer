@@ -30,6 +30,7 @@ import { useBatchStore } from "../../stores/batchStore";
 import { draftCountFor, totalUsage, useAiTaskStore, type TaskKind } from "../../stores/aiTaskStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { AgentLog } from "./AgentLog";
+import { ReasoningControls } from "./ReasoningControls";
 import { ApprovalCard } from "./ApprovalCard";
 import { PlanCard } from "./PlanCard";
 import { RoundLimitCard } from "./RoundLimitCard";
@@ -345,6 +346,10 @@ function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
           ))}
         </div>
       </div>
+
+      {/* Directly below 窗口占用: both answer "how much does this run cost me",
+          one in prompt tokens and one in thinking tokens. */}
+      <ReasoningControls variant="row" />
     </div>
   );
 }

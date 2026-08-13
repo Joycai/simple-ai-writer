@@ -670,7 +670,11 @@
       "openingBridgeHint": "注入所选{{doc}}的结尾原文，用来衔接文风与内容",
       "focusNone": "未打开文档",
       "focusLoading": "正在载入 {{name}}…",
-      "focusImage": "当前打开的是图片，请先打开一个文档"
+      "focusImage": "当前打开的是图片，请先打开一个文档",
+      "thinkingLabel": "思考",
+      "effortLabel": "力度",
+      "thinkingUnsupported": "当前模型所在的协议还不支持发送思考档位，换用 OpenAI 协议的模型后自动启用。",
+      "effortUnsupported": "当前模型没有独立于思考档位的 effort 设置，该组已停用。"
     },
     "bubble": {
       "drawer": "抽屉",

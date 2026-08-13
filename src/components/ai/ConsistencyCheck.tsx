@@ -23,6 +23,7 @@ import {
 import { useTerms } from "../../stores/projectStore";
 import { useAppStore } from "../../stores/appStore";
 import { useLoreStore } from "../../stores/loreStore";
+import { ReasoningControls } from "./ReasoningControls";
 import { useEditorStore } from "../../stores/editorStore";
 import { openIssues, useConsistencyStore } from "../../stores/consistencyStore";
 import { locateQuote, type ConsistencyIssue } from "../../lib/consistency/model";
@@ -118,6 +119,7 @@ export function ConsistencyCheck() {
               );
             })}
             <span className={styles.spacer} />
+            <ReasoningControls variant="compact" />
             {isScanning ? (
               <button className={styles.linkBtn} onClick={abort}>
                 <Square size={9} fill="currentColor" /> {t("ai.panel.stop")}
@@ -171,6 +173,13 @@ export function ConsistencyCheck() {
               <Wand2 size={12} style={{ marginRight: 6, verticalAlign: "middle" }} />
               {t("ai.consistency.run", { defaultValue: "开始检查" })}
             </button>
+            {/* Also here, not only in the toolbar above: that toolbar only
+                exists once a report does, and the run worth tuning is the
+                first one — the author shouldn't have to pay for a scan to
+                discover the dial. */}
+            <div className={styles.emptyDials}>
+              <ReasoningControls variant="compact" />
+            </div>
           </div>
         ) : visible.length === 0 ? (
           <div className={styles.emptyState}>

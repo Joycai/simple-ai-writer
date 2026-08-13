@@ -54,6 +54,7 @@ import { AGENT_ASSIST_PRESET } from "../../lib/agent/presets";
 import { getToolDefinitions } from "../../lib/agent/registry";
 import { estimateToolsTokens } from "../../lib/ai/tokenEstimate";
 import { inputCeilingFor } from "../../lib/context/budget";
+import { ReasoningControls } from "./ReasoningControls";
 import styles from "./AgentChat.module.css";
 
 function formatTime(at: number): string {
@@ -502,6 +503,9 @@ export function AgentChat() {
               + {t("ai.chat.imageRef", { defaultValue: "图片" })}
             </button>
           )}
+          {/* Trailing edge, past the `+ …` affordances: this one doesn't add
+              material to the message, it changes how the model answers it. */}
+          <ReasoningControls variant="compact" />
         </div>
 
         {refError && <div className={styles.refError}>{refError}</div>}

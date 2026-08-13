@@ -670,7 +670,11 @@
       "openingBridgeHint": "Injects the chosen {{doc}}'s closing prose, to carry voice and content across",
       "focusNone": "No document open",
       "focusLoading": "Loading {{name}}…",
-      "focusImage": "An image is open — open a document first"
+      "focusImage": "An image is open — open a document first",
+      "thinkingLabel": "Thinking",
+      "effortLabel": "Effort",
+      "thinkingUnsupported": "This model's protocol can't carry a thinking level yet; it turns on for models on the OpenAI protocol.",
+      "effortUnsupported": "This model has no effort dial separate from the thinking level, so that group is off."
     },
     "bubble": {
       "drawer": "Drawer",

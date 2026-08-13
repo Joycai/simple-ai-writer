@@ -84,6 +84,34 @@ export function reasoningBody(
   }
 }
 
+// ─── What a given endpoint can actually be told ───────────────────────────────
+
+/**
+ * Whether a thinking level can reach this endpoint at all.
+ *
+ * Answers "can the adapter *send* it today", not "does the model think" — an
+ * endpoint whose family has no mapping yet would swallow the setting silently,
+ * and a control that does nothing is worse than no control. Widen this as each
+ * family's mapping lands (see `reasoningBody`), never ahead of it.
+ */
+export function supportsThinkingLevel(standard: ApiStandard): boolean {
+  return familyOf(standard) === "openai";
+}
+
+/**
+ * Whether this endpoint has a **separate** overall-effort dial, distinct from
+ * the thinking level.
+ *
+ * Nothing does yet. Anthropic is the one that will: its `output_config.effort`
+ * governs the whole response — prose, tool calls and thinking together — while
+ * `thinking` governs only whether it thinks. On the OpenAI family the two
+ * collapse into the single `reasoning_effort` field, so offering two dials
+ * there would be two controls writing one value.
+ */
+export function supportsSeparateEffort(_standard: ApiStandard): boolean {
+  return false;
+}
+
 // ─── Reasoning content on the OpenAI-compatible wire ──────────────────────────
 
 /**
