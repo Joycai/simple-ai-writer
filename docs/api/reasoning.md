@@ -19,7 +19,7 @@
 | --- | --- | --- | --- | --- |
 | **①** | 顶层 `reasoning_effort` | `none/minimal/low/medium/high/xhigh/max`，**每个模型只支持子集** | 模型自定 | `reasoning_effort:"none"` |
 | **② Responses** | `reasoning:{effort, summary}` | 同上 | 同上 | 同上 |
-| **③ 新代** | `generationConfig.thinkingConfig.thinkingLevel` | `minimal/low/medium/high` | 动态 | 多数模型**不可关** |
+| **③ Gemini 3+** | `thinking_level`（Interactions）；经典 surface 上的位置**文档已不给**，见 §1.5 | `minimal/low/medium/high` | **按模型分三种**，见 §1.4 | **不可关**，`minimal` 也只是「最少」 |
 | **③ 2.5 代** | `generationConfig.thinkingConfig.thinkingBudget` | `-1` 动态 / `0` 关 / 具体 token 数 | `-1` | `0`，但 2.5 Pro 拒绝 |
 | **④ 新代**（4.6+/5） | `thinking:{type:"adaptive"}` 开关 + `output_config:{effort}` 深度 | `low/medium/high/xhigh/max` | 见 §1.3 —— **按模型不同，不是统一的** | `thinking:{type:"disabled"}`，**部分模型拒绝** |
 | **④ 旧代**（4.5 及更早） | `thinking:{type:"enabled", budget_tokens:N}` | **数值预算**，≥1024 且 < `max_tokens` | 关闭 | 省略该字段 |
@@ -56,7 +56,68 @@
 - **Opus 5 关闭思考后**的副作用：官方明示它"偶尔会把工具调用当作纯文本吐出，
   或在可见输出里混入内部 XML 标签"。
 
-### 1.4 「关闭」不是通用能力
+### 1.4 ③ Gemini 3+ 的档位与默认
+
+| 模型 | 支持档位 | 默认 |
+| --- | --- | --- |
+| Gemini 3.1 Pro | `low/medium/high` —— **没有 `minimal`** | `high` |
+| Gemini 3 Flash / 3.6 Flash | `minimal/low/medium/high` | `high` / `medium` |
+| Gemini 3.1 Flash-Lite | `minimal/low/medium/high` | `minimal` |
+
+两条要点：
+
+- **默认值按模型分三种**（`high` / `medium` / `minimal`），与 ④ 族「默认值分
+  两派」是同一类陷阱：省略字段得到的行为，取决于对面是哪个模型。
+- **`minimal` 不等于关闭。** 文档原话：*"`minimal` does not guarantee that
+  thinking is off"*。③ 族**没有关闭思考的手段**，这比 ④ 族更彻底（④ 至少部分
+  模型接受 `disabled`）。
+
+### 1.5 ③ 族在经典 surface 上的完整配置（API 参考原文）
+
+指南页只给 Interactions 示例，但 **API 参考里定义齐全**
+（`generate-content.md.txt`）：
+
+```jsonc
+// generationConfig.thinkingConfig
+{
+  "includeThoughts": boolean,   // 是否在响应里返回思考
+  "thinkingBudget": integer,    // 思考 token 数
+  "thinkingLevel": enum         // MINIMAL | LOW | MEDIUM | HIGH
+}
+```
+
+逐条原文：
+
+- **`thinkingConfig` 在 `generationConfig` 之下**，与 `speechConfig`/`imageConfig`
+  并列。*"An error will be returned if this field is set for models that don't
+  support thinking."*
+- **`thinkingLevel`** —— *"Controls the maximum depth of the model's internal
+  reasoning process… The default value is model-dependent. **Recommended for
+  Gemini 3 or later models. Use with earlier models results in an error.**"*
+  枚举值是 `THINKING_LEVEL_UNSPECIFIED` / `MINIMAL` / `LOW` / `MEDIUM` / `HIGH`
+  —— **全大写**，不是指南页里那个小写的 `thinking_level`。
+- **`includeThoughts`** —— *"Indicates whether to include thoughts in the
+  response. If true, thoughts are returned only when available."*
+  **默认不返回**，与 ④ 族 `display: "omitted"` 是同一类陷阱。
+- **`thinkingBudget`** 仍在，与 `thinkingLevel` 并列。**两代的字段并存于同一个
+  对象**，靠"用错模型会报错"来区分，而不是靠不同的对象形状。
+
+### 1.6 ③ 族：签名缺失是一个 `finishReason`
+
+`finishReason` 枚举里有一项：
+
+| 值 | 原文 |
+| --- | --- |
+| `MISSING_THOUGHT_SIGNATURE` | *"Request has at least one thought signature missing."* |
+
+**这让 ③ 族的回传失败既不是 400 也不是静默降级，而是第三种形态**：请求成功、
+响应回来了、但以这个原因终止。只认 HTTP 状态码或只认 `SAFETY` 的客户端会把它
+当成一次正常的短回复。
+
+同组还有两个工具相关的：`UNEXPECTED_TOOL_CALL`（模型调了工具但请求没开工具）、
+`TOO_MANY_TOOL_CALLS`（连续调用过多被系统中断）。
+
+### 1.7 「关闭」不是通用能力
 
 - Gemini 2.5 Pro 关不掉；新代多数模型最低只能到 `minimal`。
 - Claude Opus 5 在 `xhigh`/`max` effort 下收到 `thinking:{type:"disabled"}` 会
@@ -64,13 +125,13 @@
 - ④ 的手动 thinking（`type:"enabled"`）与**强制 `tool_choice` 冲突**：需要强制
   单个工具的结构化输出场景，必须显式关掉思考。
 
-### 1.5 ④ 的新旧代互斥，且代次不可从模型名判断
+### 1.8 ④ 的新旧代互斥，且代次不可从模型名判断
 
 4.7 及以后的模型收到 `thinking:{type:"enabled"}` **直接 400**；4.5 及更早不认
 `output_config`。在第三方兼容端点上模型名是自由文本，猜代次不可靠——只能默认
 不发，或发了失败再降级。
 
-### 1.6 强度与采样参数互斥
+### 1.9 强度与采样参数互斥
 
 **①：思考模式不支持 `temperature`、`top_p`、`presence_penalty`、
 `frequency_penalty`**（DeepSeek 文档明示，OpenAI 推理模型同样不支持
@@ -86,7 +147,7 @@
 | **① OpenAI 官方** | **没有内容**，只有 `usage.completion_tokens_details.reasoning_tokens` 计数 | 想看思维链，官方 Chat Completions 这条路是不通的 |
 | **① 兼容层扩展** | `delta.reasoning_content`（DeepSeek）/ `delta.reasoning`（OpenRouter 等）/ 部分中继内联 `<think>…</think>` | **字段名没有标准**，见 §2.1 |
 | **②** | `reasoning.summary`（需 opt-in `summary: auto/concise/detailed`）+ 无状态时的 `encrypted_content` | 是摘要不是原文 |
-| **③** | `part.thought === true` 的文本 part + `thoughtSignature` | 摘要 |
+| **③** | 经典 surface：`part.thought === true` 的文本 part + `thoughtSignature`。Interactions：`steps[]` 里 `type:"thought"` 的 step，含 `signature` 与 `summary` | 摘要；Interactions 需 `thinking_summaries: "auto"` 开启 |
 | **④** | `content_block_delta` → `thinking_delta.thinking` + `signature_delta.signature` | 摘要；**且默认可能一个字都不给**，见 §2.3 |
 
 ### 2.1 ① 的字段名分歧
@@ -144,7 +205,7 @@
 | **① 官方** | 无（本来就没有内容） | — |
 | **① DeepSeek** | 两个 user 消息之间**如果模型进行了工具调用**，中间 assistant 的 `reasoning_content` 必须参与拼接，且"在后续所有 user 交互轮次中必须回传"；**没有**工具调用时无需回传（传了会被忽略） | 文档原文：**"若您的代码中未正确回传 `reasoning_content`，API 会返回 400 报错"** |
 | **②** | 无状态模式（`store:false`）下回传 reasoning item 的 `encrypted_content` | 丢失推理上下文 |
-| **③** | `thoughtSignature` 必须原样回传 | 多轮工具调用失效 |
+| **③** | 无状态模式下**必须**原样回传带签名的思考块；有状态模式（Interactions 的 `store`/`previous_interaction_id`）由服务端管 | 多轮推理连续性断裂 |
 | **④** | 工具轮必须原样带回该轮的 thinking block（含 `signature`）与 `redacted_thinking` block | **分两种，见 §3.3**：缺失 → 静默降级；改动 → 400 |
 
 四条的共同形状：**思考模型把"自己上一轮想了什么"视为这一轮上下文的一部分**，
@@ -214,7 +275,24 @@
 手动模式还额外要求：思考启用的请求，其最后一个 assistant 回合必须以 thinking
 block 开头（adaptive 模式取消了这条限制）。
 
-### 3.2 DeepSeek 的完整拼接示例
+### 3.2 ③ 族：无状态才需要自己回传
+
+Gemini 把这件事分成两种模式：
+
+- **有状态**（Interactions API 的 `store` + `previous_interaction_id`）：
+  *"server automatically manages the conversation state, including all thought
+  blocks and signatures."* 客户端什么都不用做。
+- **无状态**（经典 `generateContent`，以及不开 `store` 的 Interactions）：
+  *"you must include thought blocks with their signatures in subsequent requests
+  to validate authenticity."* 文档还有一句更强的：*"You **MUST** always resend
+  all `thought` blocks exactly as they were received from the model."*
+
+这是四族里唯一一个**可以用服务端状态把回传义务整个免掉**的 —— 代价是历史存在
+服务端（与 ② Responses 的 `store` 同构）。
+
+对经典 surface 的实现而言，义务与 ④ 族一样是"原样、完整、不可重排"。
+
+### 3.3 DeepSeek 的完整拼接示例
 
 官方示例的做法是把整条响应消息直接 append 回去：
 
@@ -226,7 +304,7 @@ messages.append({"role": "tool", "tool_call_id": tool.id, "content": "24℃"})
 即：**assistant 消息上同时带 `tool_calls` 与 `reasoning_content`**，二者一起构成
 那一轮。后续每一轮 user 交互都要继续带着它。
 
-### 3.3 一个可移植的实现规则
+### 3.4 一个可移植的实现规则
 
 由于 §2.1 的字段名分歧，"记住是哪个字段名 + 原样写回那个字段名"比"认准
 `reasoning_content`"更耐用：**收到什么名字，就用什么名字还回去**。这条规则不需要

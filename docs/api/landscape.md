@@ -126,6 +126,41 @@ POST /v1beta/models/{model}:streamGenerateContent?alt=sse
 }
 ```
 
+### 4.1 ③ 族有两套 surface（截至 2026-08）
+
+Google 上线了 **Interactions API**，与经典 `generateContent` 并存：
+
+| | 经典 `generateContent` | Interactions |
+| --- | --- | --- |
+| 端点 | `/v1beta/models/{m}:generateContent` | `POST /v1beta/interactions` |
+| 输入 | `contents[]`（Content + Part） | `input` |
+| 输出 | `candidates[0].content.parts[]` | `steps[].content[]` |
+| 多轮 | 客户端回传完整历史 | `previous_interaction_id`，**服务端存状态** |
+| 结构化输出 | `generationConfig.responseMimeType/Schema` | 顶层 `response_format[]` |
+| 流式 | `:streamGenerateContent` | 同端点 + `stream=true` |
+| 思考 | 见下 | `generation_config.thinking_level` / `thinking_summaries` |
+
+官方定位：*"The Interactions API is now generally available. We recommend using
+this API for access to all the latest features and models."* 但同时明确
+**经典 surface 不弃用**：*"While `generateContent` remains fully supported, we
+recommend the Interactions API for all new development."*
+
+**这与 ② Responses 对 ① Chat Completions 的关系高度同构**：同一厂商的第二套
+接口、结构不兼容、有服务端状态、官方推荐新项目使用、旧的继续支持。按
+[`README.md`](README.md) 的分类法，它够格算独立的一族 —— 但本目录暂不拆分，
+因为本项目尚未接入，且拆分会让每张对照表多一列空格。**接入时再拆。**
+
+#### 一个实践后果：Gemini 3+ 的思考文档只讲 Interactions
+
+`generateContent` 上如何为 Gemini 3 配置思考，官方文档已经不再给示例。文档
+只承认两者不同：*"The Interactions API handles thoughts and signatures
+differently than the `generateContent` API"*，并称在 `generateContent` 里
+*"there are no dedicated thought blocks"* —— 签名改为附着在 `functionCall`
+或最终响应等 part 上。
+
+**所以"经典 surface 上 Gemini 3 的思考长什么样"目前只能靠实测确定**，这是本
+目录里少数几处"官方文档给不出答案"的地方之一。
+
 三个别族没有的东西：
 
 - **`safetySettings`** 是请求级的安全阈值，且**默认会拦**。别族的安全策略不可配。
