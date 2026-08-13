@@ -360,6 +360,41 @@ describe("streamCompletion — Gemini SSE", () => {
     })).rejects.toThrow(/didn't declare/);
   });
 
+  it("spells every Gemini field in camelCase", async () => {
+    // Google accepts both spellings; relays fronting it document only camel,
+    // and an unrecognised key is ignored rather than rejected — a snake_case
+    // `inline_data` means the picture silently never reaches the model.
+    const calls = mockFetch([`data: {"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}\n`]);
+    await streamCompletion({
+      baseUrl: "https://generativelanguage.googleapis.com",
+      apiKey: "k",
+      standard: "gemini",
+      modelId: "gemini-3-pro",
+      tools: [{
+        type: "function",
+        function: { name: "f", description: "d", parameters: { type: "object", properties: {} } },
+      }],
+      toolChoice: "required",
+      messages: [
+        { role: "system", content: "sys" },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "what is this" },
+            { type: "image_url", image_url: { url: "data:image/png;base64,AAA" } },
+          ],
+        },
+      ],
+      onChunk: () => {},
+    });
+    const body = calls[0].body;
+    expect(body).toHaveProperty("systemInstruction");
+    expect(body).toHaveProperty("toolConfig");
+    expect(JSON.stringify(body)).not.toMatch(/inline_data|system_instruction|tool_config|mime_type/);
+    const parts = (body.contents as { parts: Record<string, unknown>[] }[])[0].parts;
+    expect(parts[1].inlineData).toEqual({ mimeType: "image/png", data: "AAA" });
+  });
+
   it("emits complete functionCall parts as tool calls", async () => {
     const { received } = await collect({
       standard: "gemini",
@@ -722,7 +757,7 @@ describe("streamCompletion — toolChoice", () => {
     });
   });
 
-  it("maps a forced tool_choice to Gemini's function_calling_config", async () => {
+  it("maps a forced tool_choice to Gemini's functionCallingConfig", async () => {
     const calls = mockFetch([`data: {"candidates":[{"content":{"parts":[]}}]}\n`]);
     await streamCompletion({
       baseUrl: "",
@@ -734,10 +769,10 @@ describe("streamCompletion — toolChoice", () => {
       toolChoice: { type: "function", function: { name: "update_lore_metadata" } },
       onChunk: () => {},
     });
-    expect(calls[0].body.tool_config).toEqual({
-      function_calling_config: {
+    expect(calls[0].body.toolConfig).toEqual({
+      functionCallingConfig: {
         mode: "ANY",
-        allowed_function_names: ["update_lore_metadata"],
+        allowedFunctionNames: ["update_lore_metadata"],
       },
     });
   });
@@ -754,7 +789,7 @@ describe("streamCompletion — toolChoice", () => {
       onChunk: () => {},
     });
     expect(calls[0].body.tools).toBeDefined();
-    expect(calls[0].body.tool_config).toBeUndefined();
+    expect(calls[0].body.toolConfig).toBeUndefined();
   });
 });
 

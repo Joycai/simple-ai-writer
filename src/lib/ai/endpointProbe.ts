@@ -32,6 +32,7 @@ import {
   type ProbeSuggestion, type TruncationResult,
 } from "./probeAnalysis";
 import { anthropicHeaders } from "./anthropic";
+import { geminiAuthHeaders } from "./gemini";
 import { familyOf, type ApiStandard, type AuthMode } from "./types";
 import { anthropicUrl, geminiUrl, modelsUrl, openaiUrl, trimBase } from "./urls";
 
@@ -276,7 +277,7 @@ function looksLocal(baseUrl: string): boolean {
 function authHeaders(t: ProbeTarget): Record<string, string> {
   switch (familyOf(t.standard)) {
     case "gemini":
-      return { "Content-Type": "application/json", "x-goog-api-key": t.apiKey };
+      return { "Content-Type": "application/json", ...geminiAuthHeaders(t.apiKey, t.authMode) };
     case "anthropic":
       return anthropicHeaders(t.apiKey, t.authMode);
     default:

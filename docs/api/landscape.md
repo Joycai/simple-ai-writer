@@ -339,7 +339,25 @@ vLLM / llama.cpp。Google 与 Anthropic 也各自提供了一层 OpenAI 兼容�
 [`structured.md`](structured.md) §1），而这里没有 —— 于是"强制工具调用失败就
 退回 JSON 模式"从一个防御性设计变成了必需品。
 
-### 兼容层文档的通用规律（四个样本的共同点）
+### 第五个样本：New API 的 ③ 族端点（截至 2026-08）
+
+路径与官方一致（`/v1beta/models/{m}:generateContent`、
+`:streamGenerateContent?alt=sse`），body 结构照抄。两处差异都会**静默失败**：
+
+- **鉴权用 `Authorization: Bearer`，不是 `x-goog-api-key`。** 这是 401 ——
+  唯一一个会响的。但它同时打到聊天、模型列表、能力探测与图像四条路径，
+  只改一处会得到"能聊天但拉不到模型列表"这种难懂的半残状态。
+- **文档只写 camelCase**（`inlineData` / `mimeType`）。Google 自己两种都收
+  （proto3 JSON 允许），中继未必。**而未识别的键是被忽略而不是被拒绝的** ——
+  发 `inline_data` 的后果不是报错，是图片压根没到模型那里。
+
+第二条是本目录里"静默失败"的最纯粹形态：请求成功、响应正常、模型只是看不见
+你发的图。
+
+**由此得出一条可移植的规则：面向兼容层时，在"官方两种都收"的地方要选中继
+文档写的那一种。** 官方的宽容不是中继的宽容。
+
+### 兼容层文档的通用规律（五个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**
 2. **枚举是子集**（reasoning_effort 只写三档、content block 只写 text）。

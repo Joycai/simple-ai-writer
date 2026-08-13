@@ -18,7 +18,8 @@ import { beginImageApiLog } from "./apiLog";
 import { convertToGeminiContents } from "./gemini";
 import { toSafetySettingsArray } from "./safety";
 import type { GeminiSafetySettings } from "./safety";
-import { familyOf, type ApiStandard, type ImageRoute } from "./types";
+import { geminiAuthHeaders } from "./gemini";
+import { familyOf, type ApiStandard, type AuthMode, type ImageRoute } from "./types";
 import { geminiUrl, openaiUrl } from "./urls";
 
 /** The provider coordinates every image call needs. */
@@ -26,6 +27,8 @@ export interface ImageConn {
   baseUrl: string;
   apiKey: string;
   standard: ApiStandard;
+  /** How to present the key. Compat endpoints only; officials have one scheme. */
+  authMode?: AuthMode;
   modelId: string;
   safetySettings?: GeminiSafetySettings;
   /** Overrides the endpoint choice derived from `standard`. See ImageRoute. */
@@ -657,7 +660,7 @@ async function chatImage(conn: ImageConn, req: ImageRequest): Promise<ImageResul
  * same endpoint as chat, which is why the message conversion is shared with the
  * streaming adapter rather than re-derived here.
  *
- * Non-streaming on purpose: the payload is one inline_data blob, so streaming
+ * Non-streaming on purpose: the payload is one inlineData blob, so streaming
  * would buy nothing but a second SSE parser.
  */
 async function geminiImage(conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
@@ -682,7 +685,7 @@ async function geminiImage(conn: ImageConn, req: ImageRequest): Promise<ImageRes
   try {
     res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": conn.apiKey },
+      headers: { "Content-Type": "application/json", ...geminiAuthHeaders(conn.apiKey, conn.authMode) },
       body: JSON.stringify({
         contents,
         generationConfig: {

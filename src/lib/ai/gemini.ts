@@ -7,11 +7,13 @@ import { fetch } from "../http";
 import { reasoningBody } from "./reasoning";
 import { toSafetySettingsArray } from "./safety";
 import { geminiUrl } from "./urls";
-import type { AccumulatedToolCall, MessageContent, StreamMessage, StreamOptions } from "./types";
+import type {
+  AccumulatedToolCall, AuthMode, MessageContent, StreamMessage, StreamOptions,
+} from "./types";
 
 type GeminiPart =
   | { text: string }
-  | { inline_data: { mime_type: string; data: string } }
+  | { inlineData: { mimeType: string; data: string } }
   | { functionCall: { name: string; args: Record<string, unknown> } }
   | { functionResponse: { name: string; response: { content: string } } };
 
@@ -24,7 +26,7 @@ function parseJsonArgs(argsStr: string): Record<string, unknown> {
 /**
  * Exported for the image client (./image.ts), which speaks to the same
  * `generateContent` endpoint and must build `contents` identically — including
- * the data-URL → inline_data conversion below.
+ * the data-URL → inlineData conversion below.
  */
 export function convertToGeminiContents(messages: StreamMessage[]): GeminiContent[] {
   // Build tool_call_id → function name map so functionResponse can include the name
@@ -78,7 +80,7 @@ export function convertToGeminiContents(messages: StreamMessage[]): GeminiConten
           const dataUrl = p.image_url.url;
           const [meta, data] = dataUrl.split(",");
           const mimeType = meta.slice("data:".length).replace(";base64", "");
-          return { inline_data: { mime_type: mimeType, data } };
+          return { inlineData: { mimeType, data } };
         })
       : [{ text: regularMsg.content as string }];
     contents.push({ role, parts });
@@ -126,6 +128,27 @@ const GEMINI_REQUEST_FAULTS: Record<string, string> = {
   MALFORMED_RESPONSE: "the model returned a malformed response",
 };
 
+/**
+ * How the key is presented.
+ *
+ * `x-goog-api-key` is what Google's own endpoint wants, and stays the default.
+ * Relays fronting Gemini commonly want `Authorization: Bearer` instead — an
+ * endpoint expecting one and receiving the other answers 401, so this is the
+ * difference between reachable and not. `both` covers a gateway whose docs
+ * don't say which; it is offered only on the compat standard, since sending two
+ * credentials to Google's own endpoint could only ever hurt.
+ *
+ * The query-string form (`?key=`) is deliberately absent: it leaks the key into
+ * proxy logs and error messages.
+ */
+export function geminiAuthHeaders(apiKey: string, authMode?: AuthMode): Record<string, string> {
+  const mode = authMode ?? "default";
+  return {
+    ...(mode === "bearer" ? {} : { "x-goog-api-key": apiKey }),
+    ...(mode === "default" ? {} : { Authorization: `Bearer ${apiKey}` }),
+  };
+}
+
 export async function streamGemini(opts: StreamOptions): Promise<void> {
   // Key goes in the x-goog-api-key header, never the URL — query strings leak
   // into proxy/server logs and error messages.
@@ -139,7 +162,7 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
     ...opts.extraBody,
   };
   if (systemMsg) {
-    body.system_instruction = { parts: [{ text: systemMsg.content }] };
+    body.systemInstruction = { parts: [{ text: systemMsg.content }] };
   }
   if (opts.tools?.length) {
     body.tools = [{
@@ -149,17 +172,17 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
         parameters: t.function.parameters,
       })),
     }];
-    // Translate toolChoice → Gemini's function_calling_config. "auto"/undefined
+    // Translate toolChoice → Gemini's functionCallingConfig. "auto"/undefined
     // leaves the default (AUTO). "required"/a specific function force a call
     // (ANY), optionally restricted to one allowed function name.
     const tc = opts.toolChoice;
     if (tc && tc !== "auto") {
       const mode = tc === "none" ? "NONE" : "ANY";
       const allowed = typeof tc === "object" ? [tc.function.name] : undefined;
-      body.tool_config = {
-        function_calling_config: {
+      body.toolConfig = {
+        functionCallingConfig: {
           mode,
-          ...(allowed ? { allowed_function_names: allowed } : {}),
+          ...(allowed ? { allowedFunctionNames: allowed } : {}),
         },
       };
     }
@@ -187,7 +210,7 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
 
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": opts.apiKey },
+    headers: { "Content-Type": "application/json", ...geminiAuthHeaders(opts.apiKey, opts.authMode) },
     body: JSON.stringify(body),
     signal: opts.signal,
   });

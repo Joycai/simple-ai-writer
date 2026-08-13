@@ -13,6 +13,7 @@
 import i18n from "../../i18n";
 import { anthropicHeaders } from "./anthropic";
 import { fetch } from "../http";
+import { geminiAuthHeaders } from "./gemini";
 import { familyOf, isCompatStandard, type ApiStandard, type AuthMode } from "./types";
 import { anthropicUrl, geminiUrl, modelsUrl, openaiUrl } from "./urls";
 
@@ -42,10 +43,10 @@ export async function fetchRemoteModels(
 ): Promise<{ id: string; name: string }[]> {
   const family = familyOf(standard);
   if (family === "gemini") {
-    // Key goes in the x-goog-api-key header, never the URL — query strings
-    // leak into proxy/server logs and error messages. Matches streamGemini.
+    // Same header choice as streamGemini — a relay that wants Bearer would
+    // 401 here too, leaving the author with an empty model list and no clue.
     const url = modelsUrl(standard, baseUrl);
-    const res = await fetch(url, { headers: { "x-goog-api-key": apiKey } });
+    const res = await fetch(url, { headers: geminiAuthHeaders(apiKey, authMode) });
     if (!res.ok) throw modelsFetchError(res.status, standard, "Gemini");
     const data = await res.json();
     return (data.models ?? []).map((m: Record<string, string>) => ({
@@ -132,7 +133,7 @@ function probeHeaders(
 ): Record<string, string> {
   switch (familyOf(standard)) {
     case "gemini":
-      return { "Content-Type": "application/json", "x-goog-api-key": apiKey };
+      return { "Content-Type": "application/json", ...geminiAuthHeaders(apiKey, authMode) };
     case "anthropic":
       return anthropicHeaders(apiKey, authMode);
     default:

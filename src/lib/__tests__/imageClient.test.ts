@@ -343,7 +343,7 @@ describe("generateImage · editing", () => {
     expect(calls[0].url).toContain(":generateContent");
     const parts = (calls[0].body.contents as { parts: Record<string, unknown>[] }[])[0].parts;
     expect(parts).toHaveLength(2);
-    expect(parts[1]).toHaveProperty("inline_data");
+    expect(parts[1]).toHaveProperty("inlineData");
   });
 
   it("sends a chat-route edit as a multimodal message", async () => {
