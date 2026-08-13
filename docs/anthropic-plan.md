@@ -153,7 +153,26 @@ Gemini 有**一模一样的分裂**：新代 `thinkingConfig.thinkingLevel` vs 2
 这也满足 [`provider-layering.md`](provider-layering.md) §6 偏离四给 L2→L3 继承
 定的两条约束：继承值必须可被 L3 显式覆盖，且必须能区分"未设"与"继承来的"。
 
-### 3.5 命名：不要叫 `profile`
+### 3.5 中继还可能吞掉 `output_config`
+
+方言字段解决的是"发哪种 thinking 配置"。中继上还有第二个未知数：
+**`effort` 能不能到达上游**。
+
+New API 的 Anthropic 格式端点（见
+[`api/landscape.md`](api/landscape.md) §7）请求体清单里有 `thinking`，
+**但没有 `output_config`** —— 而 4.6+ 的 `effort` 就住在那里面。
+
+不能据此判定它不支持：那份文档同样没画 `thinking` / `redacted_thinking` /
+`signature` 这些任何 Claude 模型都会返回的 content block，明显不完整，而中继
+通常透传未知字段。**结论是未知，需实测**（已加入 §7）。
+
+对第 6 刀的影响：`supportsSeparateEffort` 若按协议族一刀切返回 true，在吞掉
+`output_config` 的中继上会给出一个**按了没反应**的拨盘 —— 正是
+[`reasoning-plan.md`](reasoning-plan.md) §7 当初拒绝的形态。所以第 6 刀落地时
+要么依赖实测结论，要么让 `thinkingDialect` 顺带表达"这个端点认不认 effort"。
+倾向前者：**先测，别急着给字段加维度。**
+
+### 3.6 命名：不要叫 `profile`
 
 `profile` 在本项目已经指**工作区 profile**（`.ai-writer/profile.json`：novel /
 ttrpg / copy / weekly…，决定知识库分类、任务列表、【…】区块标签、系统提示词），
@@ -325,6 +344,9 @@ Fable 5 / Mythos 5 / Mythos Preview 无条件拒绝 `disabled`；Opus 5 在 xhig
   的差距。影响 §5.4 的用量面板说明。
 - **`DEFAULT_MAX_TOKENS` 提高后对上下文预算的实际影响**（§5.1）——
   `lib/context/budget.ts` 拿 `maxOutput` 做规划，这个常量不是孤立的。
+- **中继是否透传 `output_config`**（§3.5）。决定第 6 刀能不能在中继上兑现，
+  也决定 `thinkingDialect` 要不要多一个维度。测法：对同一个中继模型分别发
+  `effort: "low"` 与 `effort: "max"`，比较输出 token 量——透传了会有明显差异。
 - **中继上 `adaptive` 被拒时的 400 措辞**是否会被 `structured.ts` 的
   `TOOL_CAPABILITY_ERROR` 误判成"不支持工具调用"、从而白白退成 JSON 模式。
   官方措辞是 `adaptive thinking is not supported on this model`，与那个正则的
