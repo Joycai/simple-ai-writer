@@ -10,7 +10,7 @@
 import i18n from "../../i18n";
 import { LORE_GENERATE_PRESET } from "../agent/presets";
 import { runAgent } from "../agent/runtime";
-import { JSON_ONLY_CUE, jsonModeExtraBody, needsJsonTextCue } from "../ai/jsonMode";
+import { jsonModeShaping } from "../ai/jsonMode";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import { fallbackCategoryId, isKnownCategory, loreCategoryIds } from "../profile/active";
 import { type CategoryId } from "./model";
@@ -68,10 +68,12 @@ export async function generateLore(opts: ConnOptions & {
 
   // JSON mode: native API enforcement where the protocol has it, plus a text
   // cue where it doesn't (or where it can't be trusted alone). See ai/jsonMode.
-  const extraBody = jsonModeExtraBody(opts.standard);
-  if (needsJsonTextCue(opts.standard)) {
-    userParts.push({ type: "text", text: JSON_ONLY_CUE });
-  }
+  // The system prompt is author-overridable, so it is passed in here rather
+  // than assumed: on the OpenAI family the word "json" in it is a precondition,
+  // not a nicety.
+  const json = jsonModeShaping(opts.standard, `${opts.systemPrompt ?? ""}\n${promptText}`);
+  const extraBody = json.extraBody;
+  if (json.cue) userParts.push({ type: "text", text: json.cue });
 
   // The extraction prompt — built-in or author-overridden — enumerates the
   // categories in its own prose, and under a non-novel profile that list is

@@ -9,7 +9,7 @@
 import i18n from "../../i18n";
 import { LORE_SPLIT_PRESET } from "../agent/presets";
 import { runAgent } from "../agent/runtime";
-import { JSON_ONLY_CUE, jsonModeExtraBody, needsJsonTextCue } from "../ai/jsonMode";
+import { jsonModeShaping } from "../ai/jsonMode";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import type { FacetMeta } from "./model";
 
@@ -65,14 +65,13 @@ export async function splitLore(opts: ConnOptions & {
 
   // See ai/jsonMode: native enforcement where the protocol has it, text cue
   // where it doesn't.
-  const extraBody = jsonModeExtraBody(opts.standard);
+  const json = jsonModeShaping(opts.standard, `${opts.systemPrompt ?? ""}\n${promptText}`);
+  const extraBody = json.extraBody;
 
   const userParts: Array<{ type: "text"; text: string }> = [
     { type: "text", text: promptText },
   ];
-  if (needsJsonTextCue(opts.standard)) {
-    userParts.push({ type: "text", text: JSON_ONLY_CUE });
-  }
+  if (json.cue) userParts.push({ type: "text", text: json.cue });
 
   let fullText = "";
   await runAgent({

@@ -10,44 +10,73 @@
  *
  * Callers that need schema *enforcement* rather than "valid JSON, shape
  * described in prose" should use agent/structured.ts instead — it forces a
- * pseudo-tool call, which every protocol here supports natively.
+ * pseudo-tool call, which every protocol here supports natively. Note that a
+ * *thinking* model may refuse a forced tool choice, so that path falls back to
+ * this one; the shaping below is what keeps the fallback from being pure prose.
  */
 
 import { familyOf, type ApiStandard } from "./types";
 
+/** How to ask this endpoint for JSON. Both halves may be absent. */
+export interface JsonModeShaping {
+  /** Top-level request fields, or undefined when the protocol has no knob. */
+  extraBody?: Record<string, unknown>;
+  /**
+   * Text to append to the user turn, or undefined when nothing is needed.
+   * Append it verbatim; the wording is shared so call sites can't drift.
+   */
+  cue?: string;
+}
+
+/** The cue itself, so the call sites can't drift in wording. */
+export const JSON_ONLY_CUE =
+  "Output ONLY valid JSON matching the schema in the system instructions. No markdown fences, no explanation.";
+
 /**
- * Extra top-level request fields that put the endpoint in JSON mode, or
- * undefined when the protocol has no such field.
+ * Whether the conversation already contains the literal word "json".
+ *
+ * Not a style check — a **documented precondition**. OpenAI's `json_object`
+ * mode errors when it can't find the string "JSON" anywhere in the context
+ * ("the model may generate an unending stream of whitespace" otherwise), and
+ * DeepSeek states the same requirement in its own words. The prompts this app
+ * sends are author-editable, so the word being there today is not something the
+ * code may assume tomorrow.
  */
-export function jsonModeExtraBody(standard: ApiStandard): Record<string, unknown> | undefined {
+function mentionsJson(promptText: string): boolean {
+  return /json/i.test(promptText);
+}
+
+/**
+ * How to ask `standard` for JSON, given everything the request will say.
+ *
+ * `promptText` should be the prompt text the request already carries (system
+ * plus user); it is only read to test the precondition above.
+ */
+export function jsonModeShaping(standard: ApiStandard, promptText: string): JsonModeShaping {
   switch (familyOf(standard)) {
     case "gemini":
-      return { generationConfig: { responseMimeType: "application/json" } };
+      // The cue is belt-and-suspenders here: some models silently ignore
+      // responseMimeType.
+      return {
+        extraBody: { generationConfig: { responseMimeType: "application/json" } },
+        cue: JSON_ONLY_CUE,
+      };
     case "anthropic":
       // No equivalent parameter, and sending an unrecognized one is a 400.
-      // The text cue below is the whole mechanism here.
-      return undefined;
+      // The cue is the whole mechanism here.
+      return { cue: JSON_ONLY_CUE };
     default:
       // Includes the unrecognised-DB-value case, which familyOf maps to the
       // OpenAI family — the same place the dispatch would send it.
-      return { response_format: { type: "json_object" } };
+      //
+      // The cue is conditional, and for a different reason than above: native
+      // enforcement is real here, so the cue is not there to steer the model
+      // but to satisfy the "json" precondition when the author's own prompt
+      // doesn't already. Adding it unconditionally would spend tokens on every
+      // request to restate what the prompt usually says already.
+      return {
+        extraBody: { response_format: { type: "json_object" } },
+        ...(mentionsJson(promptText) ? {} : { cue: JSON_ONLY_CUE }),
+      };
   }
 }
-
-/**
- * Whether to also append a plain "output ONLY JSON" instruction to the user
- * turn.
- *
- * Belt-and-suspenders for Gemini, where some older models silently ignore
- * `responseMimeType` and need the text cue too. Load-bearing for Anthropic,
- * which has no parameter at all — without it there is nothing telling the model
- * to skip the prose and the fences.
- */
-export function needsJsonTextCue(standard: ApiStandard): boolean {
-  const family = familyOf(standard);
-  return family === "gemini" || family === "anthropic";
-}
-
-/** The cue itself, so the two call sites can't drift in wording. */
-export const JSON_ONLY_CUE =
-  "Output ONLY valid JSON matching the schema in the system instructions. No markdown fences, no explanation.";
