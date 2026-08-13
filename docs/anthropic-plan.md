@@ -10,8 +10,9 @@
 > 对照文档：[`reasoning-plan.md`](reasoning-plan.md) 是 OpenAI 族那一轮的同类
 > 文档，已实现。本轮的目标是把同样的三件事（强度 / 思维链 / 回传）做到 ④ 族。
 >
-> **支持范围：Claude 4.6 及以上（§2）。** 这不是一句免责声明——它消掉了本轮
-> 四个原本最难的问题，是读这份文档时最该先看的一节。
+> **两个架构决定，读这份文档时先看这两节**：
+> §2 支持范围收窄到 Claude 4.6+，消掉了本轮四个原本最难的问题；
+> §3 `thinkingDialect` 字段，处理中继上代次不可推断的那一半。
 
 ## 1. 一句话结论
 
@@ -59,17 +60,17 @@ OpenAI 族那一轮修的是"DeepSeek 推理模型在工具循环里必然 400"�
 
 **③ 强制工具调用与思考不再冲突。** adaptive 支持 forced tool use，冲突只存在于
 手动模式——而手动模式已出局。所以 `thinkingFor` 里那个 `disabled` 兜底
-（§3.1）**是删除，不是替换**。它引发的 Fable 5 / Mythos 5 上的 400 一并消失。
+（§4.1）**是删除，不是替换**。它引发的 Fable 5 / Mythos 5 上的 400 一并消失。
 
 **④ 输出上限统一到 128k。** 范围内全部支持 128k 输出；被排除的 Haiku 4.5 /
 Sonnet 4.5 / Opus 4.5 才是 64k 的那批。`DEFAULT_MAX_TOKENS` 当前注释里
-"猜高了会打断小模型"的顾虑**在这个范围内不成立**，§4.1 因此大为简化。
+"猜高了会打断小模型"的顾虑**在这个范围内不成立**，§5.1 因此大为简化。
 
 ### 2.2 另外两条被范围拉平的
 
 - **thinking block 保留策略统一为"保留全部历史回合"。** 范围内全部属于
   keep-all，不需要写 last-turn-only 的分支。代价是思考会累积在上下文里并按
-  输入计费——与我们的压缩/裁剪逻辑相关（§4.5）。
+  输入计费——与我们的压缩/裁剪逻辑相关（§5.5）。
 - **`output_config.effort` 范围内全部支持。** 这意味着
   `supportsSeparateEffort` 第一次可以对 ④ 族返回 true ——**面板上那个停用的
   「力度」拨盘会亮起来**。唯一的缺口：`xhigh` 在 Opus 4.6 / Sonnet 4.6 上没有
@@ -81,11 +82,89 @@ Sonnet 4.5 / Opus 4.5 才是 64k 的那批。`DEFAULT_MAX_TOKENS` 当前注释�
   4.7 / 4.8 / Opus 5 / Sonnet 5 / Fable 5 / Mythos 5 默认 `omitted`。
   → **必须显式发 `display: "summarized"`**，否则一半模型上拿不到文本。
 - **`disabled` 仍不通用**：Fable 5 / Mythos 5 / Mythos Preview 无条件拒绝，
-  Opus 5 在 xhigh/max 下拒绝。见 §4.6。
+  Opus 5 在 xhigh/max 下拒绝。见 §5.6。
 
-## 3. 现状审计
+### 2.4 这一节的适用边界：官方端点，不含中继
 
-### 3.1 `thinkingFor` 的三个前提，今天有两个是错的
+上面全部核销**只对官方端点成立**。作者说"只用 4.6+"约束的是他自己的选择，
+不是中继背后实际路由到什么。
+
+在 `anthropic_compat` 上，`modelId` 是作者手填的自由文本 —— `lib/ai/modelLabel.ts`
+今天解析的就是 `特价kiro | claude-opus-4-6-thinking`、
+`claude-opus-4-6-thinking [特价 kiro]` 这类形态。**代次不可推断**，所以
+§2.1 那句"adaptive 可以无条件发"在中继上不成立：中继可能front 的是 4.5，
+那会 400。
+
+处理办法见 §3 —— 这是本轮的第二个架构决定。
+
+## 3. 方言字段：作者声明，探测兜底
+
+### 3.1 为什么是配置而不是探测
+
+[`provider-layering.md`](provider-layering.md) §2 的判断法第三问是"作者答不上来、
+只能发个请求试？→ 探测维"。**这里的答案是"作者答得上来"**：他挑的中继、读过
+中继的模型列表、买的就是 Claude Opus 4.6 的额度。不知道的是代码，不是人。
+
+所以这是**配置层**的字段。探测不是替代方案，是兜底：
+
+- **配置回答"作者知道的"**：这是哪种方言。第一次请求就能对，不必先失败一次。
+- **探测/降级回答"作者猜错了"**：发出去 400 了，把结论记下来并指出该改哪个字段。
+
+### 3.2 一个字段，不是一个 profile
+
+核销之后（§2.1），4.6+ 与 4.5- 之间**真正互斥的只有一件事**：思考参数说哪种
+方言。所以不需要具名的能力捆绑包，一个字段就够：
+
+```ts
+// lib/ai/configDb.ts → interface Model
+/**
+ * 这个模型接受哪种思考配置。中继上 modelId 是自由文本、代次不可推断，
+ * 所以由作者声明 —— 他知道自己买的是什么，代码不知道。
+ * 未设 = 按协议族的默认假设。
+ */
+thinkingDialect?: "adaptive" | "extended" | "none";
+```
+
+| 值 | 发什么 | 对应 |
+| --- | --- | --- |
+| `adaptive` | `thinking:{type:"adaptive", display:"summarized"}` + `output_config.effort` | Claude 4.6+ |
+| `extended` | `thinking:{type:"enabled", budget_tokens:N}` | Claude 4.5 及更早 |
+| `none` | 什么都不发 | 中继不支持思考 / 作者不想要 |
+
+### 3.3 它跨族通用 —— 这是选这个形状的主要理由
+
+Gemini 有**一模一样的分裂**：新代 `thinkingConfig.thinkingLevel` vs 2.5 代
+`thinkingConfig.thinkingBudget`，同样无法从模型名可靠推断。同一个字段能同时
+回答两族的问题。
+
+这属于 [`provider-layering.md`](provider-layering.md) §5 私有扩展三分法里的
+**"有跨族对应物"**那一类：抽象成本项目自己的语义，各 adapter 负责映射，作者
+看到的是概念而不是某一家的字段名。
+
+对照之下，"每族一个 profile 枚举"会把三族的产品文档抄进设置界面，正是 §5
+明确要避免的形态。
+
+### 3.4 默认值沿用 `ImageCaps` 的既有形态
+
+`Model.caps` + `defaultImageCaps(standard)` 已经是"按协议族给默认、作者可覆盖"
+的模式，`thinkingDialect` 照抄即可：未设时按协议族推导（Anthropic → `adaptive`，
+因为那是我们声明的支持范围），作者显式设置时永远优先。
+
+这也满足 [`provider-layering.md`](provider-layering.md) §6 偏离四给 L2→L3 继承
+定的两条约束：继承值必须可被 L3 显式覆盖，且必须能区分"未设"与"继承来的"。
+
+### 3.5 命名：不要叫 `profile`
+
+`profile` 在本项目已经指**工作区 profile**（`.ai-writer/profile.json`：novel /
+ttrpg / copy / weekly…，决定知识库分类、任务列表、【…】区块标签、系统提示词），
+`src/lib/profile/`、`useTerms()`、`findTask()`、`profileSystemPrompt()` 全是它。
+
+复用这个词会让每次读到都要先判断是哪一个。`thinkingDialect` 只是占位名，
+要点是**避开 `profile`**。
+
+## 4. 现状审计
+
+### 4.1 `thinkingFor` 的三个前提，今天有两个是错的
 
 `lib/ai/anthropic.ts` 目前唯一与思考相关的逻辑是：forced tool 时发
 `thinking:{type:"disabled"}`，其余情况什么都不发。它的注释写了三条理由，
@@ -106,7 +185,7 @@ Claude Fable 5 或 Mythos 5，**请求直接 400**。
 不被支持，措辞未必命中。**未实测**，但两种结果都不好：命中就白白退成 JSON 模式，
 不命中就是一个作者看不懂的报错。
 
-### 3.2 thinking block 全部丢弃 → 工具循环静默失去思考
+### 4.2 thinking block 全部丢弃 → 工具循环静默失去思考
 
 `anthropic.ts` 的流式解析明确丢弃 `thinking_delta` / `signature_delta`，理由
 （注释原文）是"本 app 没有展示推理文本的界面，且 token 已计入 usage"。
@@ -120,33 +199,33 @@ Claude Fable 5 或 Mythos 5，**请求直接 400**。
 思考，而普通 agent 轮次里 thinking block 缺失暂时被服务端容忍"——**"容忍"这个
 词现在有了准确含义：不是宽容，是降级。**
 
-### 3.3 展示功能在 Claude 上会是空的
+### 4.3 展示功能在 Claude 上会是空的
 
 PR #128 的思维链展示对 ④ 族**完全无效**，两个原因叠加：
 
-1. adapter 根本不解析 `thinking_delta`（§3.2）。
+1. adapter 根本不解析 `thinking_delta`（§4.2）。
 2. 即使解析了，当前一代模型的 `display` **默认是 `"omitted"`** —— `thinking`
    字段是空字符串，只有 `signature` 有值。不显式设 `display:"summarized"`
    就一个字也拿不到，但**照全额思考 token 计费**。
 
-### 3.4 强度设置对 ④ 族无效（已知，非缺陷）
+### 4.4 强度设置对 ④ 族无效（已知，非缺陷）
 
 `lib/ai/reasoning.ts` 的 `reasoningBody` 对非 openai 族返回 undefined，
 `supportsThinkingLevel` 也只认 openai 族，所以面板上的思考档位在 Claude 模型上
 **整行不渲染**。这是 `reasoning-plan.md` §7 有意留的口子，不是 bug。
 
-### 3.5 已经正确、不要动的
+### 4.5 已经正确、不要动的
 
 - **不发采样参数。** 当前一代 Claude 对非默认 `temperature`/`top_p`/`top_k`
   **无条件 400**（与是否思考无关）。本 app 从不发送，天然安全。
 - **`max_tokens` 必填 + 兜底常量。** `DEFAULT_MAX_TOKENS = 8192`。
 - **工具结果合并成一条 user 消息**、`tool_result`/`tool_use_id` 配对。
 
-## 4. 范围收窄之后，还剩什么
+## 5. 范围收窄之后，还剩什么
 
-§1.5 消掉了四个。剩下的按"动手前必须先定"排序：
+§2 消掉了四个，§3 给了中继那部分一个出口。剩下的按"动手前必须先定"排序：
 
-### 4.1 `DEFAULT_MAX_TOKENS = 8192` 必须提高
+### 5.1 `DEFAULT_MAX_TOKENS = 8192` 必须提高
 
 思考 token **计入 `max_tokens`**，而 `max_tokens` 是硬上限（effort 只是软引导）。
 开启思考后，8k 要被思考和正文分。官方把这个症状单列为一条故障：
@@ -157,7 +236,7 @@ PR #128 的思维链展示对 ④ 族**完全无效**，两个原因叠加：
 `lib/context/budget.ts` 正是拿 `maxOutput` 来做预算规划的。这不是一个孤立的
 常量，改它会牵动上下文预算。
 
-### 4.2 换模型必须剥离 thinking block —— 而本 app 允许中途换
+### 5.2 换模型必须剥离 thinking block —— 而本 app 允许中途换
 
 thinking block 与产出它的模型绑定。换模型时必须剥掉此前回合的 `thinking` 与
 `redacted_thinking`；不剥不会被拒绝，**但仍按输入 token 计费**。
@@ -169,7 +248,7 @@ thinking block 与产出它的模型绑定。换模型时必须剥掉此前回�
 这要求历史里的 block 记住**是哪个模型产出的** —— `StreamMessage` 目前没有
 这个信息。
 
-### 4.3 `_reasoning` 的形状装不下 ④ 族
+### 5.3 `_reasoning` 的形状装不下 ④ 族
 
 ① 族那一轮定的是 `NativeReasoning { field, text }`——"收到什么字段名就用什么
 名字还回去"。④ 族要回传的是**一个有序的 block 数组**（`thinking` 与
@@ -181,7 +260,7 @@ thinking block 与产出它的模型绑定。换模型时必须剥掉此前回�
 这是 [`reasoning-plan.md`](reasoning-plan.md) §4.4 当初想避免的形态 ——
 **需要重新确认这个取舍**。
 
-### 4.4 展示：必须显式发 `display: "summarized"`
+### 5.4 展示：必须显式发 `display: "summarized"`
 
 否则一半范围内模型返回空 `thinking` 字段。两个连带决定：
 
@@ -194,14 +273,14 @@ thinking block 与产出它的模型绑定。换模型时必须剥掉此前回�
   另一个模型生成，**账单上的输出 token 数与看到的文本对不上是正常的** ——
   用量面板可能需要一句说明。
 
-### 4.5 keep-all 与我们的压缩/裁剪逻辑
+### 5.5 keep-all 与我们的压缩/裁剪逻辑
 
 思考累积在上下文里并按输入计费。`trimHistory` 目前裁的是工具结果与图片；
 `compactChatHistory` 折叠整轮。thinking block 会不会成为新的膨胀源、要不要
 纳入裁剪，需要实测数据才好判断。官方提供了 `clear_thinking_20251015` 的
 context-editing 策略作为逃生舱。
 
-### 4.6 「关闭」档在 ④ 族上给不出承诺
+### 5.6 「关闭」档在 ④ 族上给不出承诺
 
 Fable 5 / Mythos 5 / Mythos Preview 无条件拒绝 `disabled`；Opus 5 在 xhigh/max
 下拒绝。而且官方明示 **Opus 5 关闭思考后会偶尔把工具调用当作纯文本吐出、或
@@ -212,39 +291,42 @@ Fable 5 / Mythos 5 / Mythos Preview 无条件拒绝 `disabled`；Opus 5 在 xhig
 最低 effort**。理由是官方自己给的替代方案，且避免了三类 400。但这让"关闭"
 在 ① 族和 ④ 族语义不同（前者真关，后者只是最省），**需要在 UI 文案上说清楚**。
 
-## 5. 建议的切片
+## 6. 建议的切片
 
-按"打坏东西的风险"排序，交叉引用已按范围收窄后的节号更新：
+按"打坏东西的风险"排序：
 
-1. ⬜ **删掉 `thinkingFor` 的 `disabled` 兜底**（§3.1）。范围收窄后这是**删除
+1. ⬜ **删掉 `thinkingFor` 的 `disabled` 兜底**（§4.1）。范围收窄后这是**删除
    而非替换**：adaptive 支持强制工具调用，所以那个兜底的存在理由消失了，而它
    本身在 Fable 5 / Mythos 5 上是硬 400。独立、小、可立即做。
-2. ⬜ **发 `thinking: {type:"adaptive", display:"summarized"}`**（§3.3 + §4.4）。
-   范围内无条件安全（没有模型拒绝 adaptive），范围外的模型会得到一条措辞明确
-   的 400。同时决定 `DEFAULT_MAX_TOKENS`（§4.1）——**这两件必须同刀**，否则
-   开了思考却只有 8k 预算，表现为正文被截断。
-3. ⬜ **解析 `thinking_delta` / `signature_delta` → `{reasoning}` chunk**（§3.2）。
+2. ⬜ **`thinkingDialect` 字段 + 模型抽屉的选择器**（§3）。纯数据 + UI，没有
+   调用方，可单独合并。**必须排在第 3 刀之前** —— 否则中继上的 4.5 会吃到一个
+   我们主动发出去的 `adaptive` 400，而作者没有任何地方可以纠正它。
+3. ⬜ **按方言发送思考配置**（§4.3 + §5.4），并同刀决定 `DEFAULT_MAX_TOKENS`
+   （§5.1）。**这两件必须同刀**：只开思考不提上限，思考和正文抢那 8k，表现为
+   正文被截断。
+4. ⬜ **解析 `thinking_delta` / `signature_delta` → `{reasoning}` chunk**（§4.2）。
    纯读侧加法，PR #128 的展示界面已经在等它。
-4. ⬜ **回传合规**（§4.2 + §4.3）。**最容易打坏 agent 循环，必须单独一刀**，
+5. ⬜ **回传合规**（§5.2 + §5.3）。**最容易打坏 agent 循环，必须单独一刀**，
    且要先定"换模型即剥离"与载体形状。
-5. ⬜ **强度映射 + 面板双拨盘解禁**（§3.4 + §4.6）。这一步做完
+6. ⬜ **强度映射 + 面板双拨盘解禁**（§4.4 + §5.6）。这一步做完
    `supportsSeparateEffort` 第一次返回 true ——`output_config.effort` 正是设计稿
-   里那个一直停用的「力度」拨盘。「关闭」档按 §4.6 映射到最低 effort 而非
+   里那个一直停用的「力度」拨盘。「关闭」档按 §5.6 映射到最低 effort 而非
    `disabled`。
 
-第 1 刀与第 2 刀合起来是"让 Claude 真的开始思考"；第 3 刀让它可见；第 4 刀让
-它在工具循环里不丢失；第 5 刀让作者能调。
+第 1–3 刀合起来是"让 Claude 真的开始思考"；第 4 刀让它可见；第 5 刀让它在工具
+循环里不丢失；第 6 刀让作者能调。
 
-## 6. 需要实测才能定论的
+## 7. 需要实测才能定论的
 
 - **不回传 thinking block 时，响应里还有没有 thinking block** —— 这是判断
-  §3.2 那条"静默降级"是否正在发生的**唯一手段**，也是整份文档里最值得先测的
-  一条：它决定第 4 刀的紧迫性。
+  §4.2 那条"静默降级"是否正在发生的**唯一手段**，也是整份文档里最值得先测的
+  一条：它决定第 5 刀的紧迫性。
 - **`display:"summarized"` 在范围内各模型上返回的文本量**，以及与计费 token
-  的差距。影响 §4.4 的用量面板说明。
-- **`DEFAULT_MAX_TOKENS` 提高后对上下文预算的实际影响**（§4.1）——
+  的差距。影响 §5.4 的用量面板说明。
+- **`DEFAULT_MAX_TOKENS` 提高后对上下文预算的实际影响**（§5.1）——
   `lib/context/budget.ts` 拿 `maxOutput` 做规划，这个常量不是孤立的。
-- **范围外模型的 400 措辞**是否会被 `structured.ts` 的 `TOOL_CAPABILITY_ERROR`
-  误判成"不支持工具调用"从而白白退成 JSON 模式。官方措辞是
-  `adaptive thinking is not supported on this model`，与那个正则的
-  `(?:function|tool)s?[ _-]?calls?` 分支不匹配，**推断为不会误判**，但值得验。
+- **中继上 `adaptive` 被拒时的 400 措辞**是否会被 `structured.ts` 的
+  `TOOL_CAPABILITY_ERROR` 误判成"不支持工具调用"、从而白白退成 JSON 模式。
+  官方措辞是 `adaptive thinking is not supported on this model`，与那个正则的
+  `(?:function|tool)s?[ _-]?calls?` 分支不匹配，**推断为不会误判**，但值得验 ——
+  这条同时决定 §3.1 说的"探测兜底"要不要单独实现，还是复用既有的降级路径。
