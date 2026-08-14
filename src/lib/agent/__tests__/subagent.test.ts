@@ -23,6 +23,7 @@ import {
   chainCanSeeImages,
   executeDelegate,
   resolveSubAgentConn,
+  resolveVisionConn,
   type SubAgentConfig,
   type SubAgentKind,
 } from "../subagent";
@@ -86,25 +87,45 @@ describe("subagent", () => {
     vi.clearAllMocks();
   });
 
+  const NO_SUBS = {
+    search: { kind: "search", modelId: null, enabled: false },
+    vision: { kind: "vision", modelId: null, enabled: false },
+    longread: { kind: "longread", modelId: null, enabled: false },
+  } as Record<SubAgentKind, SubAgentConfig>;
+  const ALL_MODELS = [dummyVisionModel, dummyTextModel];
+
   describe("chainCanSeeImages", () => {
     it("returns true if main model is multimodal", () => {
-      expect(chainCanSeeImages(dummyVisionModel, {
-        search: { kind: "search", modelId: null, enabled: false },
-        vision: { kind: "vision", modelId: null, enabled: false },
-        longread: { kind: "longread", modelId: null, enabled: false },
-      })).toBe(true);
+      expect(chainCanSeeImages(dummyVisionModel, NO_SUBS, ALL_MODELS)).toBe(true);
     });
 
-    it("returns true if vision subagent is enabled with a modelId", () => {
-      expect(chainCanSeeImages(dummyTextModel, defaultSubs)).toBe(true);
+    it("returns true if the vision subagent is bound to a multimodal model", () => {
+      expect(chainCanSeeImages(dummyTextModel, defaultSubs, ALL_MODELS)).toBe(true);
+    });
+
+    it("returns false when the vision subagent is bound to a TEXT model", () => {
+      // The settings pane warns about this binding but still allows it. Trusting
+      // "enabled + bound" would light up an image control and then post a
+      // picture to a model that cannot read one.
+      const subs = {
+        ...defaultSubs,
+        vision: { kind: "vision", modelId: "m-text", enabled: true },
+      } as Record<SubAgentKind, SubAgentConfig>;
+      expect(chainCanSeeImages(dummyTextModel, subs, ALL_MODELS)).toBe(false);
     });
 
     it("returns false if main model is not multimodal and vision subagent is disabled", () => {
-      expect(chainCanSeeImages(dummyTextModel, {
+      const subs = {
         search: { kind: "search", modelId: "m-search", enabled: true },
         vision: { kind: "vision", modelId: "m-vision", enabled: false },
         longread: { kind: "longread", modelId: "m-text", enabled: true },
-      })).toBe(false);
+      } as Record<SubAgentKind, SubAgentConfig>;
+      expect(chainCanSeeImages(dummyTextModel, subs, ALL_MODELS)).toBe(false);
+    });
+
+    it("handles no active model at all", () => {
+      expect(chainCanSeeImages(undefined, NO_SUBS, ALL_MODELS)).toBe(false);
+      expect(chainCanSeeImages(undefined, defaultSubs, ALL_MODELS)).toBe(true);
     });
   });
 
@@ -136,6 +157,57 @@ describe("subagent", () => {
         loadKey,
       );
 
+      expect("error" in res).toBe(true);
+    });
+  });
+
+  describe("resolveVisionConn", () => {
+    const loadKey = () => vi.fn(async () => "key-p1");
+
+    it("prefers the vision subagent even when the active model could do it", async () => {
+      // The switch has to mean something for a multimodal author too, and the
+      // agent's tool routing already strips the image tools from the main model
+      // — the two must agree on what "enabled" does.
+      const res = await resolveVisionConn(
+        ALL_MODELS, [dummyProvider], "m-vision", defaultSubs, loadKey(),
+      );
+      expect("error" in res).toBe(false);
+      expect((res as { model: { id: string } }).model.id).toBe("m-vision");
+    });
+
+    it("uses the active model when no usable vision subagent exists", async () => {
+      const res = await resolveVisionConn(
+        ALL_MODELS, [dummyProvider], "m-vision", NO_SUBS, loadKey(),
+      );
+      expect("error" in res).toBe(false);
+      expect((res as { model: { id: string } }).model.id).toBe("m-vision");
+    });
+
+    it("ignores a vision subagent bound to a text model and falls through", async () => {
+      const subs = {
+        ...defaultSubs,
+        vision: { kind: "vision", modelId: "m-text", enabled: true },
+      } as Record<SubAgentKind, SubAgentConfig>;
+      const res = await resolveVisionConn(
+        ALL_MODELS, [dummyProvider], "m-vision", subs, loadKey(),
+      );
+      expect("error" in res).toBe(false);
+      expect((res as { model: { id: string } }).model.id).toBe("m-vision");
+    });
+
+    it("explains why instead of returning null when nothing can see", async () => {
+      const res = await resolveVisionConn(
+        [dummyTextModel], [dummyProvider], "m-text", NO_SUBS, loadKey(),
+      );
+      expect("error" in res).toBe(true);
+      expect((res as { error: string }).error).toBeTruthy();
+    });
+
+    it("reports a missing key as configuration, not as an empty key", async () => {
+      // `?? ""` here produced a 401 the author had to reverse-engineer.
+      const res = await resolveVisionConn(
+        ALL_MODELS, [dummyProvider], "m-vision", NO_SUBS, vi.fn(async () => null),
+      );
       expect("error" in res).toBe(true);
     });
   });

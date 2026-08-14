@@ -30,6 +30,7 @@ import {
   MAX_IMAGE_BYTES, imageToDataUrl, readTextFileContent, scanProjectFiles, type ProjectFile,
 } from "../../lib/fs/images";
 import { attachedKey, type AttachedItem } from "../../lib/lore/aiTask";
+import { chainCanSeeImages } from "../../lib/agent/subagent";
 import { useImageDataUrls } from "../lore/useImageDataUrl";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
@@ -90,10 +91,11 @@ export function AgentChat() {
   } = useAgentStore();
   const activeModelId = useAiStore((s) => s.activeModelId);
   const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId));
-  // Whether this conversation can carry pictures at all. Declared by the model
-  // row in 设置 → 供应商与模型, not inferred: only the author knows whether the
-  // endpoint behind a name actually accepts image input.
-  const multimodal = activeModel?.type === "multimodal";
+  const subAgents = useAiStore((s) => s.subAgents);
+  // Whether the model chain (either the active model directly or via vision subagent)
+  // can consume pictures.
+  const models = useAiStore((s) => s.models);
+  const canSeeImages = chainCanSeeImages(activeModel, subAgents, models);
   const selection = useAiTaskStore((s) => s.selection);
   const terms = useTerms();
 
@@ -136,9 +138,9 @@ export function AgentChat() {
     // carry — the author would see a chip and the assistant would answer as if
     // nothing were there.
     ...projectFiles
-      .filter((f) => f.kind === "text" || multimodal)
+      .filter((f) => f.kind === "text" || canSeeImages)
       .map((file): MentionItem => ({ type: "file", file })),
-  ], [loreIndex, projectFiles, multimodal]);
+  ], [loreIndex, projectFiles, canSeeImages]);
 
   const mentionItems = filterMentions(
     pickKind ? candidates.filter((c) => matchesKind(c, pickKind)) : candidates,
@@ -490,10 +492,9 @@ export function AgentChat() {
           >
             + {terms.doc}
           </button>
-          {/* Only for a multimodal model: on a text-only one the chip would be
-              permanently dead, which reads as a broken control rather than as
-              "this model can't see". */}
-          {multimodal && (
+          {/* Only when the model chain can see images: on a text-only setup without
+              vision subagent the chip would be permanently dead. */}
+          {canSeeImages && (
             <button
               className={styles.attachChipGhost}
               onClick={() => openMentionFor("image")}

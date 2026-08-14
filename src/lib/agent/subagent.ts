@@ -11,7 +11,7 @@
 import i18n from "../../i18n";
 import type { StreamMessage } from "../ai/types";
 import { costFor, type Model, type Provider } from "../ai/configDb";
-import { connOptions } from "../ai/conn";
+import { connOptions, type AiConn } from "../ai/conn";
 import { persistUsage } from "../ai/usage";
 import type { TaskPreset } from "./presets";
 import { runAgent, type AgentRunResult } from "./runtime";
@@ -73,17 +73,39 @@ function clip(text: string, maxChars: number): string {
 }
 
 /**
- * Determine whether any model in the chain can understand images.
- * Used for UI indicators (e.g. enabling "Describe with AI" on image assets).
+ * The vision subagent's model, but only when it can actually do the job.
+ *
+ * "Enabled and bound" is not enough: the settings pane warns about a text-only
+ * binding but still allows it (the author may be part-way through configuring),
+ * so a caller that trusted the flag would light up an image control and then
+ * post a picture to a model that cannot read one. The multimodal check that
+ * `executeDelegate` makes on the tool path has to exist on this path too.
+ */
+export function visionSubAgentModel(
+  models: Model[],
+  subs: Record<SubAgentKind, SubAgentConfig>,
+): Model | null {
+  const cfg = subs.vision;
+  if (!cfg?.enabled || !cfg.modelId) return null;
+  const model = models.find((m) => m.id === cfg.modelId);
+  return model && model.type === "multimodal" ? model : null;
+}
+
+/**
+ * Whether anything on this chain can understand an image — the active model
+ * itself, or a usable vision subagent behind it.
+ *
+ * For enabling UI that depends on images being *understood* somewhere. It is
+ * NOT the answer to "may I put base64 in this request": that stays
+ * `ToolContext.multimodal`, a property of the one model being called (see
+ * docs/subagent-lld.md §6.1).
  */
 export function chainCanSeeImages(
-  mainModel: Model,
+  mainModel: Model | undefined,
   subs: Record<SubAgentKind, SubAgentConfig>,
+  models: Model[],
 ): boolean {
-  return (
-    mainModel.type === "multimodal" ||
-    (Boolean(subs.vision?.enabled) && Boolean(subs.vision?.modelId))
-  );
+  return mainModel?.type === "multimodal" || visionSubAgentModel(models, subs) !== null;
 }
 
 /**
@@ -95,7 +117,7 @@ export async function resolveSubAgentConn(
   providers: Provider[],
   subs: Record<SubAgentKind, SubAgentConfig>,
   loadKey: (providerId: string) => Promise<string | null>,
-): Promise<import("../ai/conn").AiConn | { error: string }> {
+): Promise<AiConn | { error: string }> {
   const cfg = subs[kind];
   if (!cfg?.enabled || !cfg.modelId) {
     return { error: `The ${kind} subagent is not enabled or not configured with a model.` };
@@ -117,6 +139,45 @@ export async function resolveSubAgentConn(
     };
   }
   return { provider, model, apiKey };
+}
+
+/**
+ * Who describes a picture for a direct UI action (the lore gallery's AI 描述).
+ *
+ * **The vision subagent wins whenever it is usable, even if the active model
+ * could do it too.** That is the whole meaning of the switch: an author running
+ * a multimodal main model would otherwise flip it on and see no effect, and the
+ * same rule governs the agent's tool routing (`routeTools` strips the image
+ * tools from the main model), so the two would disagree about what "enabled"
+ * means. The cost is one extra hop; the benefit is one answer to "who reads
+ * images here".
+ *
+ * Returns the reason on failure rather than null: both call sites sit behind a
+ * control the author just clicked, and "nothing happened" is the least useful
+ * thing to show them.
+ */
+export async function resolveVisionConn(
+  models: Model[],
+  providers: Provider[],
+  activeModelId: string | null,
+  subs: Record<SubAgentKind, SubAgentConfig>,
+  loadKey: (providerId: string) => Promise<string | null>,
+): Promise<AiConn | { error: string }> {
+  if (visionSubAgentModel(models, subs)) {
+    return resolveSubAgentConn("vision", models, providers, subs, loadKey);
+  }
+
+  const activeModel = models.find((m) => m.id === activeModelId);
+  if (!activeModel || activeModel.type !== "multimodal") {
+    return { error: i18n.t("ai.errors.noVisionModel") };
+  }
+  const provider = providers.find((p) => p.id === activeModel.providerId);
+  if (!provider) return { error: i18n.t("ai.errors.providerNotFound") };
+  const apiKey = await loadKey(provider.id);
+  // Never "": a keyless request comes back 401 and reads as a broken feature
+  // rather than as an unset credential. Same rule as resolveSubAgentConn.
+  if (!apiKey) return { error: i18n.t("ai.errors.noApiKey", { provider: provider.name }) };
+  return { provider, model: activeModel, apiKey };
 }
 
 /**

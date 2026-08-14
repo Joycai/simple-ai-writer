@@ -1,6 +1,6 @@
 # 长任务工作区与子代理 详细设计文档（Low-Level Design）
 
-> **状态**：PR-A~PR-C 已实现（工作区 + scratchpad + 存盘暂停/恢复 + delegate/子代理 + 能力路由 + 设置面板），PR-D~E 待做
+> **状态**：PR-A~PR-D 已实现（工作区 + scratchpad + 存盘暂停/恢复 + delegate/子代理 + 能力路由 + 设置面板 + 视觉链路），PR-E 待做
 > **关联 High-Level Design**：[`docs/subagent-plan.md`](subagent-plan.md)
 > **基建依赖**：[`unified-agent-plan.md`](unified-agent-plan.md)（统一 Agent Runtime）、[`chat-memory-plan.md`](chat-memory-plan.md)（会话折叠压缩）、[`anthropic-plan.md`](anthropic-plan.md) §10（服务端工具）
 > **分支**：`feat/task-workspace-and-subagents`
@@ -781,6 +781,35 @@ export function chainCanSeeImages(mainModel: Model, subs: Record<SubAgentKind, S
   return mainModel.type === "multimodal" || (subs.vision.enabled && !!subs.vision.modelId);
 }
 ```
+
+### 6.1.1 直接 UI 动作也走同一条优先级（PR-D 定）
+
+设定库的「AI 描述」这类**不经 agent 的直接动作**，同样是 **子代理可用就优先子代理**
+（`resolveVisionConn`）。理由不是省事，是让开关只有一个含义：`routeTools` 已经在
+工具集层把图片工具从主模型手里拿走了，若 UI 动作反过来优先主模型，同一个开关在
+两处表示相反的事——而且对一个用多模态主模型的作者，那个开关将永远不产生任何效果。
+代价是多一跳。
+
+两条配套约束：
+
+- **「启用且绑定」不等于可用。** 设置面板会警告但仍允许把纯文本模型绑给
+  `vision`（作者可能配到一半），所以 `visionSubAgentModel()` 必须再验一次
+  `type === "multimodal"`；`chainCanSeeImages()` 与 `resolveVisionConn()` 都走它。
+  只信标志位，就会点亮一个图片入口然后把图发给读不了图的模型。
+- **失败要带原因。** `resolveVisionConn` 返回判别联合而不是 `null`：调用点都在
+  作者刚按下的控件后面，「什么都没发生」是最没用的反馈。密钥缺失同样不得降级成
+  空串（同 §5.2.2）。
+
+### 6.1.2 附件闸放宽了，管道也要通
+
+`allowImages` **仍然只看主模型**——base64 绝不能进一个读不了它的模型的上下文
+（§6.1）。但把 UI 的附图入口放宽到 `chainCanSeeImages` 之后，若管道不动，作者就会
+看到一个能点的回形针，然后得到一句「图片未能发送」。
+
+所以未发出的图片改为**同时给出路径**，并在有 vision 子代理待命时把那条告示从
+道歉改成指令：路径正是 `delegate(kind:"vision", refs:[...])` 要的东西
+（`buildChatMessage` 的 `visionDelegate` 选项）。只给文件名时，模型看得见缺了什么，
+却没有任何办法去取。
 
 ### 6.2 路由 = 改工具集，不是改提示词也不是改返回值
 

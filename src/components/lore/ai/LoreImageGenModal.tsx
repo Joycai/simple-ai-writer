@@ -14,7 +14,8 @@ import { readFile } from "../../../lib/fs/fileio";
 import { parseFrontmatter } from "../../../lib/fs/markdown";
 import type { ImageGenTarget, SaveInput } from "../../../lib/image/target";
 import { addLoreImage, readEntityFile, setEntityAvatar, updateLoreImageDesc, type LoreEntity } from "../../../lib/lore";
-import { resolveConn } from "../../../lib/ai/conn";
+import { connOptions } from "../../../lib/ai/conn";
+import { resolveVisionConn } from "../../../lib/agent/subagent";
 import { describeLoreImage } from "../../../lib/lore/vision";
 import { categoryLabel, findCategory } from "../../../lib/profile";
 import { loadApiKey } from "../../../lib/keyStore";
@@ -71,37 +72,37 @@ export function LoreImageGenModal({ entity, onClose, onSaved }: Props) {
     </div>
   ), [entity.facets, pickedFacets, t]);
 
+  const subAgents = useAiStore((s) => s.subAgents);
+
   /**
-   * Describe a freshly saved picture with the active multimodal model. Until
-   * this runs, the image is invisible to every text-only model in the app —
-   * which is most of them. A failure here is a note, not a failed save.
+   * Describe a freshly saved picture with the active multimodal model or vision subagent.
+   * Until this runs, the image is invisible to text-only models in the app.
+   * A failure here is a note, not a failed save.
    */
   const describe = useCallback(async (file: string, dataUrl: string) => {
-    const vision = resolveConn(models, providers, activeModelId);
-    if (!vision.ok || vision.model.type !== "multimodal") return;
+    // Best-effort and unattended (it runs straight after a save), so a missing
+    // vision model is left to the author to notice — but it is logged rather
+    // than swallowed, since "the description never appeared" is otherwise
+    // indistinguishable from a model that returned nothing.
+    const vision = await resolveVisionConn(models, providers, activeModelId, subAgents, loadApiKey);
+    if ("error" in vision) {
+      console.warn("[LoreImageGenModal] skipping auto-description:", vision.error);
+      return;
+    }
     try {
-      const apiKey = (await loadApiKey(vision.provider.id)) ?? "";
       const desc = await describeLoreImage({
         dataUrl,
         entityName: entity.name,
         entitySummary: entity.summary,
         language: i18n.language,
-        baseUrl: vision.provider.baseUrl,
-        apiKey,
-        standard: vision.provider.apiStandard,
-        authMode: vision.provider.authMode,
-        safetySettings: vision.provider.safetySettings,
-        modelId: vision.model.modelId,
-        prefix: vision.model.prefix,
-        contextSize: vision.model.contextSize,
-        maxOutput: vision.model.maxOutput,
+        ...connOptions(vision),
       });
       await updateLoreImageDesc(entity.dirPath, file, desc);
       onSaved();
     } catch {
       // Already on disk; the author can write a description by hand.
     }
-  }, [models, providers, activeModelId, entity, onSaved]);
+  }, [models, providers, activeModelId, subAgents, entity, onSaved]);
 
   const target: ImageGenTarget = useMemo(() => {
     const saveToGallery = async ({ bytes, ext, dataUrl, note }: SaveInput) => {

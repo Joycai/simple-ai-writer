@@ -68,7 +68,7 @@ import {
 } from "../lib/agent/taskWorkspace";
 import { AGENT_ASSIST_PRESET } from "../lib/agent/presets";
 import { routeTools } from "../lib/agent/routing";
-import { resolveSubAgentConn } from "../lib/agent/subagent";
+import { resolveSubAgentConn, visionSubAgentModel } from "../lib/agent/subagent";
 import { repairToolCallPairing, runAgent, type RoundLimitDecision } from "../lib/agent/runtime";
 import { persistUsage } from "../lib/ai/usage";
 import {
@@ -547,7 +547,15 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // all is a property of the model.
     const { buildChatMessage } = await import("../lib/agent/chatRefs");
     const { text: wireMessage, content: wireContent, imagePaths } = await buildChatMessage(
-      message, quoted, refs, { allowImages: model.type === "multimodal" },
+      message, quoted, refs,
+      {
+        // Unchanged and deliberately narrow: base64 goes only to a model that
+        // can read it. What widened is the *fallback* — see visionDelegate.
+        allowImages: model.type === "multimodal",
+        visionDelegate: visionSubAgentModel(
+          useAiStore.getState().models, useAiStore.getState().subAgents,
+        ) !== null,
+      },
     );
 
     const controller = new AbortController();
