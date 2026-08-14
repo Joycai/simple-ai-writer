@@ -793,7 +793,17 @@
         "detailNoResult": "(no result content)",
         "detailClipped": "truncated",
         "reasoning": "Thinking",
-        "reasoningLive": "Thinking…"
+        "reasoningLive": "Thinking…",
+        "headDone": "Done · {{rounds}} rounds · {{tools}} tool calls",
+        "headError": "Run failed",
+        "roundNoTools": "reasoning only",
+        "showEarlierRounds": "{{n}} earlier rounds",
+        "subAgents": "Subagents",
+        "subAgent": "Subagent",
+        "subRunning": "Running",
+        "subDone": "Done",
+        "subFailed": "Failed",
+        "headDoneSimple": "Done"
       },
       "tool": {
         "list_lore_entities": "List {{entry}}",
@@ -817,7 +827,14 @@
         "generate_image": "Generate image",
         "edit_image": "Edit image",
         "web_search": "Web search (server-side)",
-        "delegate": "Delegate"
+        "delegate": "Delegate",
+        "read_image": "View image",
+        "read_lore_image": "View {{entry}} image",
+        "task_plan": "Plan task",
+        "task_progress": "Update progress",
+        "write_note": "Write note",
+        "read_note": "Read note",
+        "list_notes": "List notes"
       }
     },
     "errors": {

@@ -1,70 +1,67 @@
-/* Execution log — shared by AiPanel (flat), AgentChat (boxed) and the lore AI modals. */
+/* Execution log — shared by AiPanel (flat), AgentChat + the lore AI modals (boxed).
+   Three bands stack inside one frame: header, rounds, subagents. See AgentLog.tsx. */
 
-/* ── Boxed presentation ──────────────────────────────────────────── */
+/* ── Frames ──────────────────────────────────────────────────────── */
 .box {
   border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   background: var(--color-bg-surface);
   overflow: hidden;
 }
+/* Flat: the surface around it already frames the section, so the log brings no
+   chrome of its own — only the internal rules that separate the bands. */
+.bare { display: block; }
 
-/* Header-less variant: the toggle floats at the top-right of the card so the
-   first row reads as the log's own first line (see AgentLog.tsx). */
-.boxCompact { position: relative; }
-.compactToggle {
-  position: absolute;
-  top: 0;
-  right: 0;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 var(--space-3);
-  background: transparent;
-  border: none;
-  color: var(--color-text-faint);
-  cursor: pointer;
-  transition: color var(--transition-fast);
-}
-.compactToggle:hover { color: var(--color-sienna); }
-/* Keep the first row's meta clear of the floating toggle — whether that row is
-   a plain one or an expandable row's header. */
-.boxCompact .list > .row:first-child,
-.boxCompact .list > .rowGroup:first-child > .row { padding-right: 52px; }
+@keyframes agentLogSpin { to { transform: rotate(360deg); } }
 
-.boxHeader {
+/* ── ① Header ────────────────────────────────────────────────────── */
+/* One line for the whole run. It is the card's first row, not a bar above it —
+   a title strip saying 「执行日志」 spends a line to repeat what the surrounding
+   panel already said. */
+.head {
   width: 100%;
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 5px var(--space-3);
+  padding: 6px var(--space-3);
   background: transparent;
   border: none;
   font: 500 11px/1.5 var(--font-sans);
-  color: var(--color-text-secondary);
+  color: var(--color-text-primary);
   text-align: left;
   cursor: pointer;
   transition: background var(--transition-fast);
 }
-.boxHeader:hover { background: var(--color-bg-elevated); }
+.bare .head { padding-left: 0; padding-right: 0; }
+.head:hover { background: var(--color-bg-hover); }
+/* Nothing to disclose (a log mounted before its run starts) — a line, not a
+   control, so the pointer doesn't promise a click that does nothing. */
+.headStatic { cursor: default; }
+.headStatic:hover { background: transparent; }
+.headError .headName { color: var(--color-error); }
 
-.boxChevron { flex-shrink: 0; display: flex; color: var(--color-text-muted); }
-.boxTitle { letter-spacing: 0.12em; font-size: 10px; }
-.boxCount {
+.headName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.headMeta {
+  flex-shrink: 0;
   color: var(--color-text-muted);
-  font: 400 10px/1.4 var(--font-mono);
+  font: 400 10px/1.6 var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
-.boxSpinner {
-  margin-left: auto;
-  width: 8px;
-  height: 8px;
-  border: 1.5px solid var(--color-sienna);
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: agentLogSpin 0.8s linear infinite;
+/* The tail the header opens onto: the last few rows, and nothing else. Sunk a
+   shade so it reads as the header's detail rather than as a third band. */
+.tail {
+  background: var(--color-bg-elevated);
+  border-top: 1px solid var(--color-border-soft);
+  max-height: 160px;
 }
-@keyframes agentLogSpin { to { transform: rotate(360deg); } }
+.bare .tail { border-radius: var(--radius-sm); }
 
 /* ── Rows ────────────────────────────────────────────────────────── */
 .list {
@@ -75,8 +72,79 @@
   overflow-y: auto;
 }
 .box > .list { border-top: 1px solid var(--color-border); }
-/* Flat rows sit directly on the results column — no inner padding frame. */
-.listFlat { padding: 0; max-height: none; overflow: visible; }
+.bare > .list { padding-left: 0; padding-right: 0; }
+
+/* ── ② Rounds ────────────────────────────────────────────────────── */
+.roundHead .rowName {
+  color: var(--color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.roundNum {
+  flex-shrink: 0;
+  color: var(--color-text-faint);
+  font: 400 10px/1.6 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* The open round's rows, indented under their header and free of the outer
+   list's own scroll — one scrollport per card, not one per round. */
+.roundBody {
+  max-height: none;
+  overflow: visible;
+  padding: 0 0 var(--space-1) var(--space-3);
+  border-left: 1px solid var(--color-border-soft);
+  margin-left: calc(var(--space-3) + 4px);
+}
+
+.foldBar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px var(--space-3);
+  background: transparent;
+  border: none;
+  color: var(--color-text-faint);
+  font: 400 10px/1.6 var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.foldBar:hover { color: var(--color-sienna); }
+
+/* ── ③ Subagents ─────────────────────────────────────────────────── */
+.sectionLabel {
+  padding: 4px var(--space-3) 2px;
+  border-top: 1px solid var(--color-border-soft);
+  color: var(--color-text-faint);
+  font: 500 9px/1.4 var(--font-sans);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.bare .sectionLabel { padding-left: 0; padding-right: 0; }
+
+.subIcon {
+  flex-shrink: 0;
+  display: flex;
+  align-self: center;
+  color: var(--color-text-muted);
+}
+/* A delegation's instruction is a paragraph by design — it names the card, it
+   does not get to wrap the row into a block. */
+.subHead .rowName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.subBody {
+  padding: 0 var(--space-3) var(--space-2) 0;
+  margin-left: calc(var(--space-3) + 4px);
+  border-left: 1px solid var(--color-border-soft);
+}
+.subBody > .list { max-height: none; overflow: visible; padding-left: var(--space-3); }
+.subResult { padding: 0 0 0 var(--space-3); }
 
 .row {
   display: flex;
@@ -85,7 +153,8 @@
   padding: 4px var(--space-3);
   font: 400 11px/1.6 var(--font-sans);
 }
-.listFlat .row { padding: 4px 0; }
+.bare > .list > .row,
+.bare > .list > .rowGroup > .row { padding-left: 0; padding-right: 0; }
 
 /* ── Expandable rows ─────────────────────────────────────────────── */
 /* The <li> holds a header row plus its detail, so it stacks instead of
@@ -123,7 +192,10 @@
   /* Aligned under the row name: marker width + the row's own gap. */
   padding: 2px var(--space-3) 8px calc(var(--space-3) + 8px + var(--space-2));
 }
-.listFlat .detail { padding-left: calc(8px + var(--space-2)); padding-right: 0; }
+.bare > .list > .rowGroup > .detail {
+  padding-left: calc(8px + var(--space-2));
+  padding-right: 0;
+}
 
 .detailLabel {
   display: flex;
@@ -153,6 +225,17 @@
   min-width: 0;
   color: var(--color-text-primary);
   word-break: break-word;
+}
+/* Inside a disclosure the rows are dense and the reader is scanning, so a long
+   argument clips rather than wrapping the line into a paragraph — with the
+   round chip stranded on the first line and the text flowing under it. The full
+   value is one more click away, and stays in the row's `title`. */
+.tail .rowName,
+.roundBody .rowName,
+.subBody .rowName {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .rowArgs {
   color: var(--color-text-muted);
@@ -248,12 +331,5 @@
 .reasoningBody {
   max-height: 190px;
   overflow-y: auto;
-}
-
-/* ── Nested subagent execution log ───────────────────────────────────────── */
-.nestedLog {
-  margin: 6px 0 6px 12px;
-  padding-left: var(--space-2);
-  border-left: 2px solid var(--color-border-soft);
 }
 

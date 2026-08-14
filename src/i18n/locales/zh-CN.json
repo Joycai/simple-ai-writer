@@ -793,7 +793,17 @@
         "detailNoResult": "（无返回内容）",
         "detailClipped": "已截断",
         "reasoning": "思考过程",
-        "reasoningLive": "正在思考"
+        "reasoningLive": "正在思考",
+        "headDone": "完成 · {{rounds}} 轮 · {{tools}} 次工具",
+        "headError": "运行出错",
+        "roundNoTools": "仅思考",
+        "showEarlierRounds": "更早的 {{n}} 轮",
+        "subAgents": "子代理",
+        "subAgent": "子代理",
+        "subRunning": "进行中",
+        "subDone": "已完成",
+        "subFailed": "失败",
+        "headDoneSimple": "完成"
       },
       "tool": {
         "list_lore_entities": "列举{{entry}}",
@@ -817,7 +827,14 @@
         "generate_image": "生成图片",
         "edit_image": "修改图片",
         "web_search": "联网搜索（服务端）",
-        "delegate": "委托子代理"
+        "delegate": "委托子代理",
+        "read_image": "查看图片",
+        "read_lore_image": "查看{{entry}}图片",
+        "task_plan": "拟定任务计划",
+        "task_progress": "更新任务进度",
+        "write_note": "写入笔记",
+        "read_note": "读取笔记",
+        "list_notes": "列举笔记"
       }
     },
     "errors": {
