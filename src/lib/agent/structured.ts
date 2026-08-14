@@ -80,7 +80,12 @@ function userText(content: string | ContentPart[]): string {
  * (already extracted, not yet parsed — callers own their schema validation).
  */
 export async function runStructuredTask(args: StructuredTaskArgs): Promise<string> {
-  const common = { ...pickConnOptions(args), signal: args.signal };
+  // `serverTools` dropped for the reason stated above: structured tasks don't
+  // browse. It rides in on ConnOptions as a model-level permission, so without
+  // this line a 一致性检查 could pause to search the web mid-extraction — on
+  // the forced-tool path, in a request whose one allowed tool call is the
+  // output schema.
+  const common = { ...pickConnOptions(args), serverTools: undefined, signal: args.signal };
   const toolName = args.outputTool.function.name;
 
   let reasoning = "";

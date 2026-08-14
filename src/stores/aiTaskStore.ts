@@ -535,7 +535,17 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
               messages,
               signal: controller.signal,
               onChunk: (chunk) => {
-                if ("serverTool" in chunk) {
+                if ("turnResumed" in chunk) {
+                  if (get().abortController === controller) {
+                    get().appendAgentEvent({
+                      kind: "turn-resumed",
+                      round: 1,
+                      leg: chunk.turnResumed.leg,
+                      final: chunk.turnResumed.final,
+                      at: Date.now(),
+                    });
+                  }
+                } else if ("serverTool" in chunk) {
                   // A search the endpoint ran inside this response. Nothing to
                   // execute — it is already done; the log is the whole point.
                   if (get().abortController === controller) {

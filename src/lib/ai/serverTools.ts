@@ -81,11 +81,39 @@ export function supportsServerTools(standard: ApiStandard): boolean {
   return familyOf(standard) === "anthropic";
 }
 
+/**
+ * Cap on how many searches the endpoint may run inside one request.
+ *
+ * There is no other brake. A server tool runs without asking, bills per search
+ * (Anthropic's own rate is $10/1000, and results are billed as input tokens on
+ * top), and a research-shaped question can fan out into a dozen searches — the
+ * screenshot that prompted this had eight in one turn. `max_uses` turns the
+ * worst case into a known one; exceeding it is a `max_uses_exceeded` error
+ * *inside* a result block, which the model reads and works around, not a failed
+ * request.
+ *
+ * Ten is chosen from the vendor's own guidance — 1–3 searches for a simple
+ * factual question, "10 or more" for comparative research — so it sits at the
+ * top of normal rather than in the middle of it.
+ *
+ * MiniMax's docs don't list the field. Sending it is a deliberate exception to
+ * "only send what the relay documents" (`docs/api/landscape.md` §7): the rule
+ * exists to avoid a 400 on a field the endpoint might validate, and here the
+ * downside of *omitting* it is unbounded spend. It is also the same versioned
+ * tool object the official endpoint defines, so a relay that parses the object
+ * at all knows the field.
+ */
+const MAX_SEARCHES_PER_REQUEST = 10;
+
 /** The `tools[]` entries these ids become on the Anthropic wire. */
 export function anthropicServerTools(
   ids: readonly ServerToolId[] | undefined,
-): { type: string; name: string }[] {
-  return (ids ?? []).map((id) => ({ type: ANTHROPIC_WIRE_TYPE[id], name: id }));
+): { type: string; name: string; max_uses?: number }[] {
+  return (ids ?? []).map((id) => ({
+    type: ANTHROPIC_WIRE_TYPE[id],
+    name: id,
+    ...(id === "web_search" ? { max_uses: MAX_SEARCHES_PER_REQUEST } : {}),
+  }));
 }
 
 // ─── What comes back ─────────────────────────────────────────────────────────
@@ -96,6 +124,15 @@ export interface WebSearchResult {
   url: string;
   /** Vendor's own freshness estimate ("3 days ago"), when it sends one. */
   pageAge?: string;
+  /**
+   * The page text the endpoint extracted, when it sends any.
+   *
+   * Kept — despite being by far the largest thing in a search response —
+   * because on an endpoint that stops after delivering results, this text is
+   * the *only* copy of what the model found. Re-reading it out of the model's
+   * own words isn't possible: it never got to speak. See `renderSearchResults`.
+   */
+  content?: string;
 }
 
 /**
@@ -133,9 +170,93 @@ export function readWebSearchResults(content: unknown): WebSearchResult[] {
       title: title || url,
       url,
       ...(typeof r.page_age === "string" && r.page_age ? { pageAge: r.page_age } : {}),
+      ...(typeof r.content === "string" && r.content.trim() ? { content: r.content } : {}),
     });
   }
   return out;
+}
+
+// ─── Handing the results back to a model that never got to use them ──────────
+
+/**
+ * How much of one page's extracted text survives into the transcript, and how
+ * much the whole transcript may occupy.
+ *
+ * Both caps exist because the input side of a searching turn is already the
+ * expensive part — a single observed run reached 123k input tokens across eight
+ * searches — and the transcript is *re-sent* on top of that. The per-result cap
+ * is the more important of the two: search extracts are long, front-loaded, and
+ * a model that needs more than the first few hundred characters of ten separate
+ * pages is not going to be rescued by a thousand.
+ */
+const RESULT_EXCERPT_CHARS = 600;
+const TRANSCRIPT_CHARS = 12_000;
+
+/**
+ * The turn's searches, rendered as plain text a model can read.
+ *
+ * **Why text and not the blocks themselves.** The protocol's own answer is to
+ * echo the assistant turn back verbatim, `server_tool_use` and
+ * `web_search_tool_result` included. MiniMax's endpoint rejects exactly that
+ * with `invalid params, tool result's tool id(...) not found` — its request-side
+ * validator reads any `*_tool_result` as a *client* tool's result and looks for
+ * a matching client `tool_use`, which a server tool by definition doesn't have.
+ * So the one shape the protocol prescribes is the one shape that endpoint won't
+ * take (`docs/anthropic-plan.md` §10.7).
+ *
+ * Plain text has no such dependency: it is a message like any other, and it
+ * works on an endpoint whose validator knows nothing about server tools. What
+ * it costs is the citation machinery — `encrypted_content` and the
+ * `web_search_result_location` citations only mean something to the endpoint
+ * that issued them — so the model sees the sources as prose with URLs rather
+ * than as citable references.
+ *
+ * Returns null when there is nothing worth handing back, so the caller can tell
+ * "no results" from "results the model already used".
+ */
+export function renderSearchResults(events: readonly ServerToolEvent[]): string | null {
+  const queries = new Map<string, string>();
+  for (const e of events) {
+    if (e.phase === "call") queries.set(e.id, String(e.input?.query ?? "").trim());
+  }
+
+  const sections: string[] = [];
+  let used = 0;
+  let dropped = 0;
+  for (const e of events) {
+    if (e.phase !== "result") continue;
+    const query = queries.get(e.id);
+    const head = query ? `## ${query}` : "##";
+    if (e.error) {
+      sections.push(`${head}\n(搜索失败：${e.error})`);
+      continue;
+    }
+    const lines: string[] = [head];
+    for (const r of e.results) {
+      // Budget checked per result rather than per section: one long section
+      // must not be able to crowd out every later query's hits entirely.
+      if (used >= TRANSCRIPT_CHARS) { dropped++; continue; }
+      const excerpt = r.content ? clipExcerpt(r.content) : "";
+      const entry = [
+        `- ${r.title}${r.pageAge ? ` (${r.pageAge})` : ""}`,
+        r.url ? `  ${r.url}` : "",
+        excerpt ? `  ${excerpt}` : "",
+      ].filter(Boolean).join("\n");
+      used += entry.length;
+      lines.push(entry);
+    }
+    if (lines.length > 1) sections.push(lines.join("\n"));
+  }
+
+  if (!sections.length) return null;
+  if (dropped > 0) sections.push(`(另有 ${dropped} 条结果因长度限制未列出)`);
+  return sections.join("\n\n");
+}
+
+/** One result's page text, collapsed to a single clipped paragraph. */
+function clipExcerpt(text: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > RESULT_EXCERPT_CHARS ? `${flat.slice(0, RESULT_EXCERPT_CHARS)}…` : flat;
 }
 
 /** The error text on a failed `*_tool_result` block, if it carries one. */

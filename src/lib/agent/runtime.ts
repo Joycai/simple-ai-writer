@@ -328,12 +328,30 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         messages: history,
         extraBody: opts.extraBody,
         tools: withholdTools ? undefined : toolDefinitions,
+        // Withheld alongside our own, and this is the whole reason the line
+        // exists: a server tool arrives from the *model's* configuration
+        // (ConnOptions), not from the preset, so it sailed straight past the
+        // check above. The forced final round then handed the model a live web
+        // search while telling it to stop calling tools — and a search there
+        // restarts the whole search-and-resume cycle inside a round whose only
+        // job was to end it. Presets with no tools at all (the structured JSON
+        // tasks) are covered by the same flag, where browsing is equally
+        // unwanted.
+        serverTools: withholdTools ? undefined : opts.serverTools,
         signal: opts.signal,
         onChunk: (chunk) => {
           if ("reasoning" in chunk) {
             if (!reasoningText) reasoningStart = Date.now();
             reasoningText += chunk.reasoning;
             reportReasoning(false);
+          } else if ("turnResumed" in chunk) {
+            opts.onEvent({
+              kind: "turn-resumed",
+              round,
+              leg: chunk.turnResumed.leg,
+              final: chunk.turnResumed.final,
+              at: Date.now(),
+            });
           } else if ("serverTool" in chunk) {
             // A tool the endpoint ran for itself. Reported as a tool step so it
             // reads like every other one in the log — but it never touches
@@ -363,6 +381,18 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
             totalInputTokens += chunk.inputTokens;
             totalOutputTokens += chunk.outputTokens;
             totalCachedTokens += chunk.cachedTokens ?? 0;
+            // Said out loud rather than swallowed: a truncated round looks
+            // exactly like a finished one from the outside, and the author's
+            // next move (raise the output cap / shorten the context) depends
+            // entirely on knowing which it was.
+            if (chunk.truncated) {
+              opts.onEvent({
+                kind: "output-truncated",
+                round,
+                stopReason: chunk.stopReason,
+                at: Date.now(),
+              });
+            }
           }
         },
       });

@@ -835,7 +835,10 @@ describe("streamCompletion — Anthropic SSE", () => {
       ],
     });
     expect(text(received)).toBe("Hello");
-    expect(received[received.length - 1]).toEqual({ done: true, inputTokens: 10, outputTokens: 5 });
+    // stopReason rides along for the API log — diagnostic only, never branched on.
+    expect(received[received.length - 1]).toEqual({
+      done: true, inputTokens: 10, outputTokens: 5, stopReason: "end_turn",
+    });
   });
 
   it("sums the three disjoint prompt buckets and reports cache reads as cachedTokens", async () => {
@@ -854,6 +857,7 @@ describe("streamCompletion — Anthropic SSE", () => {
       done: true,
       inputTokens: 910,
       outputTokens: 7,
+      stopReason: "end_turn",
       cachedTokens: 800,
     });
   });
@@ -1004,6 +1008,53 @@ describe("streamCompletion — Anthropic SSE", () => {
           { type: "tool_result", tool_use_id: "toolu_9b", content: "warm" },
         ],
       },
+    ]);
+  });
+
+  it("attributes author text that gets merged into a tool-result message", async () => {
+    // A run that dies mid-tool-round leaves the result with no assistant turn
+    // after it; whatever the author types next merges into that same user
+    // message, and their words end up inside the envelope the model reads as
+    // tool output. Observed: three retries typed across a morning of broken
+    // runs were re-sent on all 39 rounds of the next one and spent as a
+    // standing "keep going".
+    const { calls } = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      messages: [
+        { role: "user", content: "看看文件" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "t1", type: "function", function: { name: "read_file", arguments: "{}" } }],
+        },
+        { role: "tool", tool_call_id: "t1", content: "文件内容" },
+        { role: "user", content: "continue" },
+        { role: "user", content: "重试" },
+      ],
+    });
+    const last = (calls[0].body.messages as { role: string; content: { type: string; text?: string }[] }[])[2];
+    expect(last.content).toEqual([
+      { type: "tool_result", tool_use_id: "t1", content: "文件内容" },
+      { type: "text", text: "【作者消息】\ncontinue" },
+      { type: "text", text: "【作者消息】\n重试" },
+    ]);
+  });
+
+  it("leaves an ordinary pair of user turns unlabelled", async () => {
+    // The label is for text stranded among tool results. Two consecutive author
+    // turns merge exactly as they always did.
+    const { calls } = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      messages: [
+        { role: "user", content: "one" },
+        { role: "user", content: "two" },
+      ],
+    });
+    expect((calls[0].body.messages as { content: unknown }[])[0].content).toEqual([
+      { type: "text", text: "one" },
+      { type: "text", text: "two" },
     ]);
   });
 
@@ -1254,7 +1305,11 @@ describe("streamCompletion — Anthropic SSE", () => {
       chunks: [`data: {"type":"message_stop"}\n\n`],
       serverTools: ["web_search"],
     });
-    expect(calls[0].body.tools).toEqual([{ type: "web_search_20250305", name: "web_search" }]);
+    // max_uses is the only brake on a tool that runs without asking and bills
+    // per search — see MAX_SEARCHES_PER_REQUEST.
+    expect(calls[0].body.tools).toEqual([
+      { type: "web_search_20250305", name: "web_search", max_uses: 10 },
+    ]);
     // Nothing of ours to choose between — the endpoint decides whether to run
     // its own tool, and an opinion here would be about a decision we don't make.
     expect(calls[0].body).not.toHaveProperty("tool_choice");
@@ -1268,7 +1323,7 @@ describe("streamCompletion — Anthropic SSE", () => {
       tools: [TOOL],
     });
     expect(calls[0].body.tools).toEqual([
-      { type: "web_search_20250305", name: "web_search" },
+      { type: "web_search_20250305", name: "web_search", max_uses: 10 },
       { name: "get_weather", description: "Get the weather", input_schema: TOOL.function.parameters },
     ]);
     expect(calls[0].body.tool_choice).toEqual({ type: "auto" });
@@ -1301,6 +1356,308 @@ describe("streamCompletion — Anthropic SSE", () => {
     // agent loop answer it with a tool_result the endpoint never asked for.
     expect(received.some((c) => "toolCalls" in c)).toBe(false);
     expect(text(received)).toBe("今天多云。");
+  });
+
+  // ── pause_turn: the stop reason that is not an ending ─────────────────────
+
+  it("hands a paused turn back and streams the continuation as one answer", async () => {
+    // The bug this pins: a long search turn ends with `pause_turn`, the model
+    // has written only its opening line, and a client that treats that as an
+    // ending shows the intro and nothing else — no error anywhere.
+    const bodies: Record<string, unknown>[] = [];
+    let call = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        bodies.push(JSON.parse(String(init.body)));
+        return sseResponse(
+          call++ === 0
+            ? [
+                `data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n`,
+                `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"我去搜一下。"}}\n\n`,
+                `data: {"type":"content_block_stop","index":0}\n\n`,
+                `data: {"type":"content_block_start","index":1,"content_block":{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{"query":"天气"}}}\n\n`,
+                `data: {"type":"content_block_stop","index":1}\n\n`,
+                `data: {"type":"content_block_start","index":2,"content_block":{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[{"type":"web_search_result","title":"天气","url":"https://e.com","encrypted_content":"EQ0PAAAA"}]}}\n\n`,
+                `data: {"type":"message_delta","delta":{"stop_reason":"pause_turn"},"usage":{"output_tokens":30}}\n\n`,
+                `data: {"type":"message_stop"}\n\n`,
+              ]
+            : [
+                `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"今天多云。"}}\n\n`,
+                `data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":12}}\n\n`,
+                `data: {"type":"message_stop"}\n\n`,
+              ],
+        );
+      }),
+    );
+
+    const received: StreamChunk[] = [];
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "k",
+      standard: "anthropic",
+      modelId: "m",
+      serverTools: ["web_search"],
+      messages: [{ role: "user", content: "天气?" }],
+      onChunk: (c) => received.push(c),
+    });
+
+    expect(bodies).toHaveLength(2);
+    // The paused turn goes back as an assistant message, blocks verbatim and in
+    // order — including `encrypted_content`, which the endpoint decrypts to
+    // restore its own state. Rebuilding the block would strip exactly that.
+    const resumed = bodies[1].messages as { role: string; content: Record<string, unknown>[] }[];
+    expect(resumed[0]).toEqual({ role: "user", content: [{ type: "text", text: "天气?" }] });
+    expect(resumed[1].role).toBe("assistant");
+    expect(resumed[1].content).toEqual([
+      { type: "text", text: "我去搜一下。" },
+      { type: "server_tool_use", id: "srvtoolu_1", name: "web_search", input: { query: "天气" } },
+      {
+        type: "web_search_tool_result",
+        tool_use_id: "srvtoolu_1",
+        content: [
+          {
+            type: "web_search_result",
+            title: "天气",
+            url: "https://e.com",
+            encrypted_content: "EQ0PAAAA",
+          },
+        ],
+      },
+    ]);
+
+    // The caller sees one continuous answer and one `done`, with the usage of
+    // both requests summed — the split is the endpoint's business, not theirs.
+    expect(text(received)).toBe("我去搜一下。今天多云。");
+    const done = received.filter((c) => "done" in c);
+    expect(done).toHaveLength(1);
+    expect(done[0]).toMatchObject({ outputTokens: 42, stopReason: "end_turn" });
+  });
+
+  it("resumes a turn that stopped on its search results reporting end_turn", async () => {
+    // Reproduces a real MiniMax-M3 response: an opening line, eight searches,
+    // then `stop_reason: "end_turn"` with nothing after the results. The
+    // endpoint delivered the results but never re-invoked the model, so the
+    // answer the model promised was never written — and the response is a
+    // well-formed success, which is why nothing anywhere reported a problem.
+    const bodies: Record<string, unknown>[] = [];
+    let call = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        bodies.push(JSON.parse(String(init.body)));
+        return sseResponse(
+          call++ === 0
+            ? [
+                `data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n`,
+                `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"好的，我来搜索这些术语。"}}\n\n`,
+                `data: {"type":"content_block_stop","index":0}\n\n`,
+                `data: {"type":"content_block_start","index":1,"content_block":{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{"query":"MACD"}}}\n\n`,
+                `data: {"type":"content_block_stop","index":1}\n\n`,
+                `data: {"type":"content_block_start","index":2,"content_block":{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[{"type":"web_search_result","title":"MACD","url":"https://e.com","content":"MACD 是异同移动平均线，由 DIF 与 DEA 构成。"}]}}\n\n`,
+                `data: {"type":"content_block_stop","index":2}\n\n`,
+                `data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":784}}\n\n`,
+                `data: {"type":"message_stop"}\n\n`,
+              ]
+            : [
+                `data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n\n`,
+                `data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"MACD 是异同移动平均线。"}}\n\n`,
+                `data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":40}}\n\n`,
+                `data: {"type":"message_stop"}\n\n`,
+              ],
+        );
+      }),
+    );
+
+    const received: StreamChunk[] = [];
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "k",
+      standard: "anthropic",
+      modelId: "MiniMax-M3",
+      thinkingDialect: "switch",
+      serverTools: ["web_search"],
+      messages: [{ role: "user", content: "这些术语什么意思?" }],
+      onChunk: (c) => received.push(c),
+    });
+
+    expect(bodies).toHaveLength(2);
+    const resumed = bodies[1].messages as { role: string; content: { type: string; text: string }[] }[];
+
+    // Nothing server-tool-shaped goes back. This endpoint answers its own
+    // blocks with `invalid params, tool result's tool id(...) not found` — its
+    // request validator reads any *_tool_result as a client tool's result and
+    // looks for a matching client tool_use, which a server tool never has.
+    const wire = JSON.stringify(resumed);
+    expect(wire).not.toContain("server_tool_use");
+    expect(wire).not.toContain("tool_result");
+
+    // Instead: the model's own opening line, then the findings as plain text —
+    // a message shape no validator can object to. The page extract is carried,
+    // not just the title: on an endpoint that stops here, this is the only copy
+    // of what was found.
+    expect(resumed).toHaveLength(3);
+    expect(resumed[1]).toEqual({
+      role: "assistant",
+      content: [{ type: "text", text: "好的，我来搜索这些术语。" }],
+    });
+    expect(resumed[2].role).toBe("user");
+    expect(resumed[2].content[0].text).toContain("MACD"); // the query
+    expect(resumed[2].content[0].text).toContain("https://e.com");
+    expect(resumed[2].content[0].text).toContain("DIF 与 DEA");
+
+    expect(text(received)).toBe("好的，我来搜索这些术语。MACD 是异同移动平均线。");
+  });
+
+  it("does not resume when the searches came back empty", async () => {
+    // Nothing to hand over — resuming would ask the model to answer from the
+    // same nothing, one more billed request later.
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls++;
+        return sseResponse([
+          `data: {"type":"content_block_start","index":0,"content_block":{"type":"server_tool_use","id":"s1","name":"web_search","input":{"query":"q"}}}\n\n`,
+          `data: {"type":"content_block_stop","index":0}\n\n`,
+          `data: {"type":"content_block_start","index":1,"content_block":{"type":"web_search_tool_result","tool_use_id":"s1","content":[]}}\n\n`,
+          `data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":3}}\n\n`,
+          `data: {"type":"message_stop"}\n\n`,
+        ]);
+      }),
+    );
+
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "k",
+      standard: "anthropic",
+      modelId: "m",
+      serverTools: ["web_search"],
+      messages: [{ role: "user", content: "q" }],
+      onChunk: () => {},
+    });
+
+    expect(calls).toBe(1);
+  });
+
+  it("leaves a finished turn alone even when it ends on a search", async () => {
+    // The narrow half of the rule above: the model *did* answer after its
+    // search, so there is nothing to resume — resending here would bill a
+    // second request to re-derive an answer already in hand.
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls++;
+        return sseResponse([
+          `data: {"type":"content_block_start","index":0,"content_block":{"type":"server_tool_use","id":"s1","name":"web_search","input":{"query":"q"}}}\n\n`,
+          `data: {"type":"content_block_stop","index":0}\n\n`,
+          `data: {"type":"content_block_start","index":1,"content_block":{"type":"web_search_tool_result","tool_use_id":"s1","content":[]}}\n\n`,
+          `data: {"type":"content_block_start","index":2,"content_block":{"type":"text","text":""}}\n\n`,
+          `data: {"type":"content_block_delta","index":2,"delta":{"type":"text_delta","text":"答案在此。"}}\n\n`,
+          `data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":9}}\n\n`,
+          `data: {"type":"message_stop"}\n\n`,
+        ]);
+      }),
+    );
+
+    const received: StreamChunk[] = [];
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "k",
+      standard: "anthropic",
+      modelId: "m",
+      serverTools: ["web_search"],
+      messages: [{ role: "user", content: "q" }],
+      onChunk: (c) => received.push(c),
+    });
+
+    expect(calls).toBe(1);
+    expect(text(received)).toBe("答案在此。");
+  });
+
+  it("stops resuming at the continuation cap instead of looping forever", async () => {
+    // An endpoint that pauses every time must not be able to bill indefinitely
+    // for one visible answer.
+    let calls = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls++;
+        return sseResponse([
+          `data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":"…"}}\n\n`,
+          `data: {"type":"message_delta","delta":{"stop_reason":"pause_turn"},"usage":{"output_tokens":1}}\n\n`,
+          `data: {"type":"message_stop"}\n\n`,
+        ]);
+      }),
+    );
+
+    const received: StreamChunk[] = [];
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "k",
+      standard: "anthropic",
+      modelId: "m",
+      messages: [{ role: "user", content: "hi" }],
+      onChunk: (c) => received.push(c),
+    });
+
+    expect(calls).toBe(5); // the first request plus MAX_PAUSE_CONTINUATIONS
+    // Reported honestly rather than as a success: the turn stopped where it
+    // stood, and the log says which stop reason got it there.
+    expect(received[received.length - 1]).toMatchObject({ done: true, stopReason: "pause_turn" });
+    // Every leg is announced, and exactly one is marked final — the leg whose
+    // instruction forbids further searching.
+    const legs = received.filter((c): c is { turnResumed: { leg: number; final: boolean } } =>
+      "turnResumed" in c,
+    );
+    expect(legs.map((c) => c.turnResumed.leg)).toEqual([2, 3, 4, 5]);
+    expect(legs.filter((c) => c.turnResumed.final)).toHaveLength(1);
+    expect(legs[legs.length - 1].turnResumed.final).toBe(true);
+  });
+
+  it("forbids more searching on the last leg instead of letting it announce again", async () => {
+    // The failure this pins is a model that spends every leg saying what it
+    // will search next and never writes anything: three requests, 16 searches,
+    // 69 characters of output, all of it announcements. A leg that knows it is
+    // the last is told to produce the content it has.
+    const prompts: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        const body = JSON.parse(String(init.body)) as {
+          messages: { role: string; content: { text?: string }[] }[];
+        };
+        const last = body.messages[body.messages.length - 1];
+        if (last.role === "user") prompts.push(last.content.map((p) => p.text ?? "").join(""));
+        return sseResponse([
+          `data: {"type":"content_block_start","index":0,"content_block":{"type":"server_tool_use","id":"s","name":"web_search","input":{"query":"下一批"}}}\n\n`,
+          `data: {"type":"content_block_stop","index":0}\n\n`,
+          `data: {"type":"content_block_start","index":1,"content_block":{"type":"web_search_tool_result","tool_use_id":"s","content":[{"type":"web_search_result","title":"t","url":"https://e.com","content":"正文"}]}}\n\n`,
+          `data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":5}}\n\n`,
+          `data: {"type":"message_stop"}\n\n`,
+        ]);
+      }),
+    );
+
+    await streamCompletion({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "k",
+      standard: "anthropic",
+      modelId: "m",
+      serverTools: ["web_search"],
+      messages: [{ role: "user", content: "查一批术语" }],
+      onChunk: () => {},
+    });
+
+    // prompts[0] is the author's own turn; the rest are resume instructions.
+    const resumes = prompts.slice(1);
+    expect(resumes).toHaveLength(4);
+    expect(resumes[resumes.length - 1]).toContain("不要再发起任何检索");
+    // Only the last one says that — the earlier legs may still search, so long
+    // as they write the batch they already have first.
+    expect(resumes.slice(0, -1).some((p) => p.includes("不要再发起任何检索"))).toBe(false);
+    expect(resumes[0]).toContain("现在就把这一批的正文写出来");
   });
 
   it("still reports the query when a search is cut off mid-flight", async () => {

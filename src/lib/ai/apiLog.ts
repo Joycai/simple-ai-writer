@@ -74,6 +74,29 @@ function redactMessage(m: StreamMessage): unknown {
   return m;
 }
 
+/**
+ * A request body with its base64 image payloads replaced by a placeholder.
+ *
+ * The same reason `redactMessage` exists — a picture is megabytes of data URL,
+ * and a log line that carries one is a log line nobody can open. Structural
+ * rather than protocol-aware: it walks whatever shape it is handed and cuts any
+ * long base64-looking string, so it keeps working when an adapter's body shape
+ * changes or another protocol starts using this.
+ */
+function redactRequestBody(value: unknown, depth = 0): unknown {
+  if (typeof value === "string") {
+    return value.length > 2048 ? `<${value.length} chars omitted>` : value;
+  }
+  if (depth > 12 || value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map((v) => redactRequestBody(v, depth + 1));
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([k, v]) => [
+      k,
+      redactRequestBody(v, depth + 1),
+    ]),
+  );
+}
+
 /** Logging for one image call — the same file, so a debug session sees both. */
 export interface ImageCallLogger {
   success(result: { images: number; usage?: { inputTokens: number; outputTokens: number }; text?: string }): void;
@@ -138,12 +161,14 @@ export function beginImageApiLog(req: {
 }
 
 export interface ApiCallLogger {
+  /** One HTTP request body as the adapter sent it. May fire more than once. */
+  requestBody(body: unknown): void;
   chunk(chunk: StreamChunk): void;
   success(): void;
   error(e: unknown): void;
 }
 
-const noopLogger: ApiCallLogger = { chunk() {}, success() {}, error() {} };
+const noopLogger: ApiCallLogger = { requestBody() {}, chunk() {}, success() {}, error() {} };
 
 let seq = 0;
 
@@ -174,15 +199,52 @@ export function beginApiLog(opts: StreamOptions): ApiCallLogger {
   let output = "";
   let toolCalls: { name: string; arguments: string }[] | undefined;
   let usage: { inputTokens: number; outputTokens: number } | undefined;
+  /**
+   * Why the response ended, and whether it was cut off. Recorded because
+   * "the answer just stops" is the failure this log exists to explain, and the
+   * text alone cannot tell `max_tokens` (cut off) from `tool_use` (the turn is
+   * meant to continue) from `end_turn` (the model thought it was done).
+   */
+  let stopReason: string | undefined;
+  let truncated = false;
+  /** Searches the endpoint ran for itself — see lib/ai/serverTools. */
+  const serverTools: { name: string; input?: unknown; results?: number; error?: string }[] = [];
+
+  /** Which request of this call — a turn that resumes itself sends several. */
+  let leg = 0;
 
   return {
+    requestBody(body) {
+      leg++;
+      // The first leg is already described by the `request` entry above, in the
+      // caller's own message shape. This is the wire body, and the legs after
+      // the first exist nowhere else — an endpoint that stops mid-turn is
+      // handed something this app assembled, and that is precisely the thing
+      // worth being able to read back.
+      writeEntry({
+        type: "request-body",
+        id,
+        leg,
+        time: new Date().toISOString(),
+        body: redactRequestBody(body),
+      });
+    },
     chunk(chunk) {
       if ("text" in chunk) {
         output += chunk.text;
       } else if ("toolCalls" in chunk) {
         toolCalls = chunk.toolCalls.map((tc) => ({ name: tc.name, arguments: tc.arguments }));
+      } else if ("serverTool" in chunk) {
+        const e = chunk.serverTool;
+        serverTools.push(
+          e.phase === "call"
+            ? { name: e.name, input: e.input }
+            : { name: e.name, results: e.results.length, error: e.error },
+        );
       } else if ("done" in chunk) {
         usage = { inputTokens: chunk.inputTokens, outputTokens: chunk.outputTokens };
+        stopReason = chunk.stopReason;
+        truncated = chunk.truncated ?? false;
       }
     },
     success() {
@@ -193,7 +255,10 @@ export function beginApiLog(opts: StreamOptions): ApiCallLogger {
         durationMs: Math.round(performance.now() - start),
         model: opts.modelId,
         usage,
+        stopReason,
+        truncated,
         toolCalls,
+        ...(serverTools.length ? { serverTools } : {}),
         output,
       });
     },
