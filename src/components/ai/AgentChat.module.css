@@ -199,6 +199,15 @@
   gap: var(--space-2);
 }
 
+/* Band ④ — the task plan, between the transcript and the composer. It vanishes
+   entirely when the agent hasn't split the work: TaskPanel renders null then,
+   and a padded wrapper left standing would be a gap that says nothing. */
+.taskBand {
+  flex-shrink: 0;
+  padding: 0 var(--space-6) var(--space-3);
+}
+.taskBand:empty { display: none; }
+
 /* ── Composer ────────────────────────────────────────────────────── */
 .composer {
   flex-shrink: 0;

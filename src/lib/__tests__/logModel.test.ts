@@ -4,6 +4,8 @@ import {
   delegateKind,
   delegateTask,
   roundRows,
+  sumTokens,
+  taskDocRevision,
 } from "../agent/logModel";
 import type { AgentEvent, ToolStepStatus } from "../agent/events";
 
@@ -202,5 +204,52 @@ describe("delegate argument parsing", () => {
   it("unescapes rather than leaking JSON escapes into the label", () => {
     const raw = JSON.stringify({ kind: "search", task: 'find "the report"\nfast' });
     expect(delegateTask(raw)).toBe('find "the report"\nfast');
+  });
+});
+
+describe("sumTokens", () => {
+  it("keeps the subagents' bill separate from the main model's", () => {
+    // Two different prices on two different models — folding them into one
+    // figure would hide the point of delegating: a big cheap read moved off
+    // the expensive model.
+    const logs: AgentEvent[][] = [
+      [
+        { kind: "run-done", inputTokens: 10_000, outputTokens: 500, at: at() },
+      ],
+      [
+        { kind: "run-done", inputTokens: 40_000, outputTokens: 900, at: at(), parentStep: "d1" },
+        { kind: "run-done", inputTokens: 20_000, outputTokens: 1_200, at: at() },
+      ],
+    ];
+    expect(sumTokens(logs)).toEqual({
+      input: 30_000, output: 1_700, subInput: 40_000, subOutput: 900,
+    });
+  });
+
+  it("is zero for a session that has run nothing", () => {
+    expect(sumTokens([])).toEqual({ input: 0, output: 0, subInput: 0, subOutput: 0 });
+    expect(sumTokens([[runStart()]])).toEqual({ input: 0, output: 0, subInput: 0, subOutput: 0 });
+  });
+});
+
+describe("taskDocRevision", () => {
+  it("moves when a write to task.md lands, not when it is requested", () => {
+    const requested: AgentEvent[] = [tool("task_plan", "p1", 1, "running")];
+    const landed: AgentEvent[] = [tool("task_plan", "p1", 1, "done")];
+    expect(taskDocRevision([requested])).toBe(0);
+    expect(taskDocRevision([landed])).toBe(1);
+  });
+
+  it("ignores tools that don't touch the document", () => {
+    expect(taskDocRevision([[tool("read_file", "a"), tool("write_note", "b")]])).toBe(0);
+  });
+
+  it("accumulates across a whole session's turns", () => {
+    expect(
+      taskDocRevision([
+        [tool("task_plan", "p1", 1, "done")],
+        [tool("task_progress", "g1", 1, "done"), tool("task_progress", "g2", 2, "done")],
+      ]),
+    ).toBe(3);
   });
 });

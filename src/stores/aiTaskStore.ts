@@ -33,6 +33,7 @@ import {
 import { createPlanGate } from "../lib/agent/plan";
 import {
   createTaskWorkspace, markTaskPaused, recordSourceRef,
+  type TaskWorkspaceHandle,
 } from "../lib/agent/taskWorkspace";
 import { routeTools } from "../lib/agent/routing";
 import { resolveSubAgentConn } from "../lib/agent/subagent";
@@ -120,6 +121,15 @@ interface AiTaskState {
   abortController: AbortController | null;
   /** Execution log for the current/last run — rounds, tool calls, outcome. */
   agentLog: AgentEvent[];
+  /**
+   * The disk workspace this run writes its plan and notes into.
+   *
+   * Kept in state (rather than staying a local of `runTask`) so the task panel
+   * can read the plan back off disk while the run is still going. Per RUN, not
+   * per session: an editor task is one job, unlike the assistant's conversation
+   * — see agentStore.chatTaskWorkspace for the other half of that rule.
+   */
+  taskWorkspace: TaskWorkspaceHandle | null;
   /** Which lore entities/facets were injected (and why) for the current run. */
   loreReport: LoreActivationReport | null;
   /** Final per-layer allocation for the current run (see lib/context/budget). */
@@ -166,6 +176,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
   requestedInstruction: null,
   abortController: null,
   agentLog: [],
+  taskWorkspace: null,
   loreReport: null,
   contextAlloc: null,
   lastMessages: null,
@@ -372,7 +383,9 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const controller = new AbortController();
     set({
       isRunning: true, drafts, activeDraftId: drafts[0].id,
-      error: null, agentLog: [], loreReport: null, lastMessages: null,
+      // Cleared with the log it belongs to: until this run creates its own
+      // workspace a few lines down, the previous run's plan is not this run's.
+      error: null, agentLog: [], taskWorkspace: null, loreReport: null, lastMessages: null,
       sourceFilePath: activeFilePath,
       contextAlloc: {
         loreChars: plan.loreChars,
@@ -440,6 +453,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         // Hoisted out of toolContext: the round-cap card and the paused
         // handler below both need to ask it whether anything was written.
         const workspace = createTaskWorkspace(projectPath, model.id);
+        set({ taskWorkspace: workspace });
         const subAgents = useAiStore.getState().subAgents;
         const routed = routeTools(preset!, subAgents, workspace, models);
         const effectivePreset = {
@@ -688,7 +702,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
 
   clearOutput: () =>
     set({
-      drafts: [], activeDraftId: null, error: null, agentLog: [],
+      drafts: [], activeDraftId: null, error: null, agentLog: [], taskWorkspace: null,
       loreReport: null, lastMessages: null, sourceFilePath: null,
     }),
 

@@ -143,6 +143,18 @@ export function parseSteps(body: string): TaskStep[] {
   return out;
 }
 
+/**
+ * The task's name — its H1.
+ *
+ * The body is author-editable, so the heading may have been moved or removed;
+ * null then, and the caller decides what to show instead (the task id reads as
+ * a filename, which is right for a list and wrong for a panel header).
+ */
+export function taskTitle(body: string): string | null {
+  const m = body.match(/^#\s+(.+)$/m);
+  return m ? m[1].trim() : null;
+}
+
 /** Format a list of step titles into Markdown checkbox list. */
 export function formatInitialSteps(steps: string[]): string {
   return steps.map((s) => `- [ ] ${s.trim()}`).join("\n");
@@ -632,8 +644,7 @@ export async function listTaskSummaries(projectPath: string): Promise<TaskSummar
       const doc = await loadTaskDoc(projectPath, e.name);
       if (!doc) continue;
       const steps = parseSteps(doc.body);
-      const titleMatch = doc.body.match(/^#\s+(.+)$/m);
-      const title = titleMatch ? titleMatch[1].trim() : doc.meta.taskId;
+      const title = taskTitle(doc.body) ?? doc.meta.taskId;
       const stepsDone = steps.filter((s) => s.status === "done" || s.status === "skipped").length;
       results.push({
         taskId: doc.meta.taskId,
