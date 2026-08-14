@@ -15,6 +15,7 @@ import styles from "./RoundLimitCard.module.css";
 export function RoundLimitCard({ item }: { item: PendingRoundLimit }) {
   const { t } = useTranslation();
   const resolveRoundLimit = useAgentStore((s) => s.resolveRoundLimit);
+  const chatTaskWorkspace = useAgentStore((s) => s.chatTaskWorkspace);
 
   return (
     <div className={styles.card}>
@@ -35,12 +36,23 @@ export function RoundLimitCard({ item }: { item: PendingRoundLimit }) {
         })}
       </div>
       <div className={styles.footer}>
-        <button className={styles.btnFinish} onClick={() => resolveRoundLimit(item.runId, 0)}>
+        <button
+          className={styles.btnFinish}
+          onClick={() => resolveRoundLimit(item.runId, { action: "finish" })}
+        >
           {t("ai.roundLimit.finish", { defaultValue: "就此收尾" })}
         </button>
+        {chatTaskWorkspace && (
+          <button
+            className={styles.btnPause}
+            onClick={() => resolveRoundLimit(item.runId, { action: "pause" })}
+          >
+            {t("ai.roundLimit.pause", { defaultValue: "存盘并暂停" })}
+          </button>
+        )}
         <button
           className={styles.btnContinue}
-          onClick={() => resolveRoundLimit(item.runId, item.extension)}
+          onClick={() => resolveRoundLimit(item.runId, { action: "extend", rounds: item.extension })}
         >
           {t("ai.roundLimit.continue", { defaultValue: "继续（再 {{n}} 轮）", n: item.extension })}
         </button>

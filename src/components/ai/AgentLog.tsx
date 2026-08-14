@@ -366,16 +366,21 @@ function AgentLogRow({ row, showTime }: { row: Row; showTime: boolean }) {
         <li className={`${styles.row} ${styles.rowMeta}`}>
           <span className={styles.rowIndent} />
           <span className={styles.rowMetaText}>
-            {event.granted > 0
+            {event.decision.action === "extend"
               ? t("ai.agent.log.roundLimitGranted", {
                   defaultValue: "已达 {{n}} 轮上限 — 批准继续 {{extra}} 轮",
                   n: event.roundsUsed,
-                  extra: event.granted,
+                  extra: event.decision.rounds,
                 })
-              : t("ai.agent.log.roundLimitStopped", {
-                  defaultValue: "已达 {{n}} 轮上限 — 就此收尾",
-                  n: event.roundsUsed,
-                })}
+              : event.decision.action === "pause"
+                ? t("ai.agent.log.roundLimitPaused", {
+                    defaultValue: "已达 {{n}} 轮上限 — 存盘并暂停",
+                    n: event.roundsUsed,
+                  })
+                : t("ai.agent.log.roundLimitStopped", {
+                    defaultValue: "已达 {{n}} 轮上限 — 就此收尾",
+                    n: event.roundsUsed,
+                  })}
           </span>
           {time}
         </li>

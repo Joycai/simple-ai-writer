@@ -156,6 +156,11 @@ export function repairToolCallPairing(history: StreamMessage[]): number {
   return inserted;
 }
 
+export type RoundLimitDecision =
+  | { action: "extend"; rounds: number }
+  | { action: "finish" }
+  | { action: "pause" };
+
 export interface AgentRunResult {
   /** Rounds actually consumed (≥1). */
   rounds: number;
@@ -163,6 +168,12 @@ export interface AgentRunResult {
   outputTokens: number;
   /** Subset of inputTokens served from the provider's prompt cache. */
   cachedTokens: number;
+  /**
+   * How the run ended.
+   * - "completed": the model produced prose (normal finish).
+   * - "paused": the author chose 存盘暂停 at the round cap.
+   */
+  outcome: "completed" | "paused";
 }
 
 export interface AgentRuntimeOptions extends ConnOptions {
@@ -207,7 +218,7 @@ export interface AgentRuntimeOptions extends ConnOptions {
    * modals don't show the approvals area, and a run that blocks on a card
    * nobody can see would simply hang.
    */
-  onRoundLimit?: (roundsUsed: number) => Promise<number>;
+  onRoundLimit?: (roundsUsed: number) => Promise<RoundLimitDecision>;
   /**
    * The run's output **so far, in full** — a snapshot, not a delta, so callers
    * assign rather than append.
@@ -262,11 +273,24 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       preset.tools.length > 0 &&
       opts.onRoundLimit
     ) {
-      const granted = await opts.onRoundLimit(round - 1);
+      const decision = await opts.onRoundLimit(round - 1);
       if (opts.signal.aborted) throw new DOMException("Aborted", "AbortError");
-      opts.onEvent({ kind: "round-limit", roundsUsed: round - 1, granted, at: Date.now() });
-      if (granted > 0) {
-        maxRounds += granted;
+      opts.onEvent({ kind: "round-limit", roundsUsed: round - 1, decision, at: Date.now() });
+
+      if (decision.action === "pause") {
+        // Clean exit point: we are at the **start** of a round, so every
+        // tool_call from the previous round already has its paired tool reply.
+        // No repairToolCallPairing needed — the history is valid as-is.
+        return {
+          rounds: round - 1,
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+          cachedTokens: totalCachedTokens,
+          outcome: "paused",
+        };
+      }
+      if (decision.action === "extend") {
+        maxRounds += decision.rounds;
         isLastRound = false;
       }
     }
@@ -452,6 +476,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         inputTokens: totalInputTokens,
         outputTokens: totalOutputTokens,
         cachedTokens: totalCachedTokens,
+        outcome: "completed",
       };
     }
 
@@ -563,5 +588,6 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     inputTokens: totalInputTokens,
     outputTokens: totalOutputTokens,
     cachedTokens: totalCachedTokens,
+    outcome: "completed",
   };
 }

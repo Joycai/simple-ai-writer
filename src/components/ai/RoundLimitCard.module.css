@@ -42,7 +42,8 @@
   border-top: 1px solid var(--color-border-soft);
 }
 
-.btnFinish {
+.btnFinish,
+.btnPause {
   padding: 4px 12px;
   background: transparent;
   border: 1px solid var(--color-border-strong);
@@ -51,7 +52,8 @@
   cursor: pointer;
   transition: color var(--transition-fast), border-color var(--transition-fast);
 }
-.btnFinish:hover { color: var(--color-text-primary); border-color: var(--color-text-secondary); }
+.btnFinish:hover,
+.btnPause:hover { color: var(--color-text-primary); border-color: var(--color-text-secondary); }
 
 .btnContinue {
   padding: 4px 14px;

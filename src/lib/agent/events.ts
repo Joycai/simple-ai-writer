@@ -98,12 +98,12 @@ export type AgentEvent =
   | {
       /**
        * The round cap was reached with the model still calling tools, and the
-       * author was asked whether to keep going. `granted` is the extra rounds
-       * they allowed — 0 means they chose to let the run wrap up.
+       * author was asked whether to keep going. `decision` describes the choice:
+       * extend (extra rounds), finish (wrap up now), or pause (save and stop).
        */
       kind: "round-limit";
       roundsUsed: number;
-      granted: number;
+      decision: import("./runtime").RoundLimitDecision;
       at: number;
     }
   | {

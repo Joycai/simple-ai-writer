@@ -1,0 +1,241 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.headerTitle {
+  font: 600 13px/1.4 var(--font-sans);
+  color: var(--color-text-primary);
+}
+
+.closeBtn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.closeBtn:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+}
+
+.content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: 240px;
+  border-right: 1px solid var(--color-border);
+  overflow-y: auto;
+  padding: var(--space-2);
+}
+
+.emptyList {
+  padding: var(--space-4);
+  text-align: center;
+  font: 400 12px/1.6 var(--font-sans);
+  color: var(--color-text-muted);
+}
+
+.taskItem {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: 4px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.taskItem:hover {
+  background: var(--color-bg-hover);
+}
+
+.taskItemActive {
+  background: var(--color-bg-active);
+  border-color: var(--color-border);
+}
+
+.itemHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.taskTitle {
+  font: 500 12px/1.4 var(--font-sans);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusBadge {
+  font: 500 10px/1.2 var(--font-mono);
+  padding: 2px 6px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.statusInProgress {
+  background: var(--color-info-bg);
+  color: var(--color-info-text);
+}
+
+.statusPaused {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+}
+
+.statusCompleted {
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.statusFailed {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+.itemMeta {
+  display: flex;
+  justify-content: space-between;
+  font: 400 11px/1.4 var(--font-mono);
+  color: var(--color-text-muted);
+}
+
+.detailArea {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.detailHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.detailTitle {
+  font: 600 15px/1.4 var(--font-sans);
+  color: var(--color-text-primary);
+}
+
+.detailTaskId {
+  font: 400 11px/1.5 var(--font-mono);
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.resumeBtn {
+  padding: 6px 14px;
+  background: var(--color-sienna);
+  color: var(--color-card);
+  border: none;
+  border-radius: var(--radius-sm);
+  font: 500 12px/1.4 var(--font-sans);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  transition: background var(--transition-fast);
+}
+
+.resumeBtn:hover {
+  background: var(--color-sienna-hover);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sectionTitle {
+  font: 600 12px/1.4 var(--font-sans);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stepsList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.stepRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font: 400 12px/1.6 var(--font-sans);
+  color: var(--color-text-primary);
+}
+
+.stepGlyph {
+  font: 600 12px/1 var(--font-mono);
+  color: var(--color-text-muted);
+}
+
+.notesGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-2);
+}
+
+.noteCard {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-base);
+}
+
+.noteTitle {
+  font: 500 12px/1.4 var(--font-sans);
+  color: var(--color-text-primary);
+  margin-bottom: 2px;
+}
+
+.notePath {
+  font: 400 10px/1.4 var(--font-mono);
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

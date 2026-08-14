@@ -479,7 +479,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             // Must stay dynamic: batchStore imports this module at the top
             // level, so a static import back would close the cycle.
             const { useBatchStore } = await import("./batchStore");
-            if (useBatchStore.getState().running) return 0;
+            if (useBatchStore.getState().running) return { action: "finish" };
             return useAgentStore
               .getState()
               .requestRoundExtension(roundsUsed, preset!.maxRounds, controller);

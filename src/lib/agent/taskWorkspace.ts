@@ -543,6 +543,45 @@ export async function gcTasks(projectPath: string, keepTaskId?: string | null): 
   }
 }
 
+export interface TaskSummary {
+  taskId: string;
+  status: TaskStatus;
+  title: string;
+  stepsTotal: number;
+  stepsDone: number;
+  updatedAt: string;
+}
+
+/** List all tasks in the project with summary metadata, sorted newest first. */
+export async function listTaskSummaries(projectPath: string): Promise<TaskSummary[]> {
+  const root = `${projectPath}/.ai-writer/tasks`;
+  if (!(await fileExists(root))) return [];
+  try {
+    const entries = await readDir(root);
+    const results: TaskSummary[] = [];
+    for (const e of entries) {
+      if (!e.isDirectory) continue;
+      const doc = await loadTaskDoc(projectPath, e.name);
+      if (!doc) continue;
+      const steps = parseSteps(doc.body);
+      const titleMatch = doc.body.match(/^#\s+(.+)$/m);
+      const title = titleMatch ? titleMatch[1].trim() : doc.meta.taskId;
+      const stepsDone = steps.filter((s) => s.status === "done" || s.status === "skipped").length;
+      results.push({
+        taskId: doc.meta.taskId,
+        status: doc.meta.status,
+        title,
+        stepsTotal: steps.length,
+        stepsDone,
+        updatedAt: doc.meta.updatedAt,
+      });
+    }
+    return results.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  } catch {
+    return [];
+  }
+}
+
 // ─── Workspace Handles ───────────────────────────────────────────────────────
 
 /** Create a lazy TaskWorkspaceHandle. Creates directory only on first ensure(). */

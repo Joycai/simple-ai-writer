@@ -56,13 +56,21 @@ import {
 } from "../lib/agent/sessionDb";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import { createPlanGate, type LorePlan, type PlanDecision } from "../lib/agent/plan";
-import { createTaskWorkspace, type TaskWorkspaceHandle } from "../lib/agent/taskWorkspace";
+import {
+  appendLogToBody,
+  createTaskWorkspace,
+  existingWorkspace,
+  listTaskNotes,
+  loadTaskDoc,
+  saveTaskDoc,
+  type TaskWorkspaceHandle,
+} from "../lib/agent/taskWorkspace";
 import { AGENT_ASSIST_PRESET } from "../lib/agent/presets";
-import { repairToolCallPairing, runAgent } from "../lib/agent/runtime";
+import { repairToolCallPairing, runAgent, type RoundLimitDecision } from "../lib/agent/runtime";
 import {
   inputCeilingFor, measureCharsPerToken, RECENT_WINDOW_MIN_CHARS,
 } from "../lib/context/budget";
-import { loadMemory, MEMORY_BUDGET_CHARS } from "../lib/context/memory";
+import { hashText, loadMemory, MEMORY_BUDGET_CHARS } from "../lib/context/memory";
 import { parentDir } from "../lib/context/outline";
 import {
   assembleContext, assembleTurnInjection, bundleToChatMessages, profileSystemPrompt,
@@ -71,7 +79,7 @@ import { docModel, promptParams } from "../lib/profile/active";
 import type { ApprovalDecision, EditProposal, Proposal } from "../lib/agent/registry";
 import { type AttachedItem } from "../lib/lore/aiTask";
 import type { StreamMessage } from "../lib/ai/types";
-import { readFile, writeFile } from "../lib/fs/fileio";
+import { fileExists, readFile, writeFile } from "../lib/fs/fileio";
 import { getDb } from "../lib/project";
 import { loadApiKey } from "../lib/keyStore";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
@@ -127,7 +135,7 @@ export interface PendingRoundLimit {
   roundsUsed: number;
   /** Extra rounds a 继续 grants (the preset's own cap again). */
   extension: number;
-  resolve: (granted: number) => void;
+  resolve: (decision: RoundLimitDecision) => void;
   runId: RunId;
 }
 
@@ -216,9 +224,9 @@ interface AgentState {
   rejectAll: (reason: string, runId: RunId) => void;
 
   /** Called by the runtime's onRoundLimit when a run reaches its round cap. */
-  requestRoundExtension: (roundsUsed: number, extension: number, runId: RunId) => Promise<number>;
-  /** Resolve a blocked run's round-cap question: `granted` extra rounds (0 = wrap up). */
-  resolveRoundLimit: (runId: RunId, granted: number) => void;
+  requestRoundExtension: (roundsUsed: number, extension: number, runId: RunId) => Promise<RoundLimitDecision>;
+  /** Resolve a blocked run's round-cap question: extend, finish, or pause. */
+  resolveRoundLimit: (runId: RunId, decision: RoundLimitDecision) => void;
 
   /** Called by propose_lore_plan (via ToolContext.requestPlanApproval). */
   requestPlanApproval: (plan: LorePlan, runId: RunId) => Promise<PlanDecision>;
@@ -231,6 +239,8 @@ interface AgentState {
    *               pinned their selection to it (shown above the turn, and sent
    *               to the model as a 【选中内容】 block). */
   sendChat: (text: string, quote?: string, refs?: AttachedItem[]) => Promise<void>;
+  /** Resume a paused task with a fresh, clean context using task.md and notes. */
+  resumeTask: (taskId: string) => Promise<void>;
   stopChat: () => void;
   resetChat: () => void;
 
@@ -444,17 +454,17 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   },
 
   requestRoundExtension: (roundsUsed, extension, runId) =>
-    new Promise<number>((resolve) => {
+    new Promise<RoundLimitDecision>((resolve) => {
       const id = `round-limit-${++roundLimitCounter}`;
       set((s) => ({
         pendingRoundLimits: [...s.pendingRoundLimits, { id, roundsUsed, extension, resolve, runId }],
       }));
     }),
-  resolveRoundLimit: (runId, granted) => {
+  resolveRoundLimit: (runId, decision) => {
     const item = get().pendingRoundLimits.find((p) => p.runId === runId);
     if (!item) return;
     set((s) => ({ pendingRoundLimits: s.pendingRoundLimits.filter((p) => p.runId !== runId) }));
-    item.resolve(granted);
+    item.resolve(decision);
   },
 
   rejectAll: (reason, runId) => {
@@ -470,8 +480,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     });
     for (const item of drainP) item.resolve({ approved: false, reason });
     for (const item of drainL) item.resolve({ approved: false, reason });
-    // 0 extra rounds = wrap up; the aborted signal is re-checked right after.
-    for (const item of drainR) item.resolve(0);
+    // Finish = wrap up; the aborted signal is re-checked right after.
+    for (const item of drainR) item.resolve({ action: "finish" });
   },
 
   requestPlanApproval: (plan, runId) =>
@@ -744,7 +754,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         bumpContext();
       }
 
-      const { inputTokens, outputTokens, cachedTokens } = await runAgent({
+      const { inputTokens, outputTokens, cachedTokens, outcome } = await runAgent({
         ...connOptions({ provider, model, apiKey }),
         // Never undefined: without a ceiling the tool loop's history trimming
         // is a no-op, and a chat that reads pictures accumulates base64 in a
@@ -778,7 +788,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           taskWorkspace: taskWorkspace(),
         },
         signal: controller.signal,
-        // At the round cap, block on the author's 继续/收尾 card instead of
+        // At the round cap, block on the author's 继续/收尾/存盘暂停 card instead of
         // force-ending. Each 继续 grants the preset's own cap again.
         onRoundLimit: (roundsUsed) =>
           get().requestRoundExtension(roundsUsed, AGENT_ASSIST_PRESET.maxRounds, controller),
@@ -793,6 +803,19 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // time so it can retract a tool round's narration.
         onOutputText: (text) => patchAssistant((tn) => ({ ...tn, text })),
       });
+
+      if (outcome === "paused") {
+        const tw = get().chatTaskWorkspace;
+        if (tw?.taskId) {
+          const doc = await loadTaskDoc(projectPath, tw.taskId);
+          if (doc) {
+            doc.meta.status = "paused";
+            doc.meta.updatedAt = new Date().toISOString();
+            doc.body = appendLogToBody(doc.body, "已存盘并暂停");
+            await saveTaskDoc(projectPath, tw.taskId, doc);
+          }
+        }
+      }
 
       const cost = costFor(model, inputTokens, outputTokens, cachedTokens);
       set((s) => ({
@@ -905,6 +928,36 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     }
   },
 
+  resumeTask: async (taskId: string) => {
+    const { useProjectStore } = await import("./projectStore");
+    const { projectPath } = useProjectStore.getState();
+    if (!projectPath) return;
+
+    get().stopChat();
+
+    const { userContent, taskWorkspace } = await buildResumeSeed(projectPath, taskId);
+
+    const doc = await loadTaskDoc(projectPath, taskId);
+    if (doc) {
+      doc.meta.status = "in_progress";
+      doc.meta.updatedAt = new Date().toISOString();
+      doc.body = appendLogToBody(doc.body, "从暂停中恢复");
+      await saveTaskDoc(projectPath, taskId, doc);
+    }
+
+    set({
+      turns: [],
+      chatHistory: null,
+      chatMeta: null,
+      chatSessionId: null,
+      chatError: null,
+      chatUsage: null,
+      chatTaskWorkspace: taskWorkspace,
+    });
+
+    await get().sendChat(userContent);
+  },
+
   resetChatForProject: async (projectPath) => {
     // No persist here: the outgoing session was saved at its last turn, and
     // by the time projectStore calls this the active project has already
@@ -934,3 +987,58 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     }
   },
 }));
+
+/**
+ * Build the seed for resuming a paused task with a fresh, clean context.
+ *
+ * Reads task.md for goals/steps, lists notes, and validates the freshness
+ * of sourceRefs using FNV-1a hashes. The returned userContent is an
+ * instruction to continue without replaying any old conversation history.
+ */
+export async function buildResumeSeed(
+  projectPath: string,
+  taskId: string,
+): Promise<{ userContent: string; taskWorkspace: TaskWorkspaceHandle }> {
+  const doc = await loadTaskDoc(projectPath, taskId);
+  if (!doc) throw new Error(i18n.t("ai.errors.taskNotFound", { defaultValue: "未找到任务工作区" }));
+
+  // 1. Check reference freshness with memory.ts's hashText
+  const stale: string[] = [];
+  for (const ref of doc.meta.sourceRefs ?? []) {
+    const abs = `${projectPath}/${ref.path}`;
+    if (!(await fileExists(abs))) {
+      stale.push(`${ref.path}（已删除）`);
+      continue;
+    }
+    try {
+      const content = await readFile(abs);
+      if (hashText(content) !== ref.hash) {
+        stale.push(`${ref.path}（已修改）`);
+      }
+    } catch {
+      stale.push(`${ref.path}（读取失败）`);
+    }
+  }
+
+  // 2. notes index: paths and titles only, not whole bodies
+  const notes = await listTaskNotes(projectPath, taskId);
+
+  // 3. Clean user turn without any stale conversation history
+  const staleBlock = stale.length
+    ? `\n\n> ⚠️ 注意：以下参考文件在此期间已被修改或删除，请在引用前重新核对：\n${stale.map((s) => `- ${s}`).join("\n")}`
+    : "";
+
+  const notesBlock = notes.length
+    ? notes.map((n) => `- ${n.path} — ${n.title}（${n.chars} 字符）`).join("\n")
+    : i18n.t("ai.instructions.taskResumeNoNotes", { defaultValue: "（暂无保存的笔记）" });
+
+  const userContent = i18n.t("ai.instructions.taskResume", {
+    defaultValue:
+      "【恢复任务】\n以下是此前已暂停的任务进度与相关笔记索引：\n\n## 任务状态与规划\n{{body}}\n\n## 已有笔记索引\n{{notes}}{{stale}}\n\n请直接根据当前规划和笔记，继续推进未完成的步骤。如果需要查阅笔记详情，使用 `read_note` 读取对应路径。",
+    body: doc.body,
+    notes: notesBlock,
+    stale: staleBlock,
+  });
+
+  return { userContent, taskWorkspace: existingWorkspace(projectPath, taskId) };
+}
