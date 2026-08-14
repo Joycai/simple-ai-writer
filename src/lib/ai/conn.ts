@@ -23,6 +23,7 @@ import i18n from "../../i18n";
 import type { Model, Provider } from "./configDb";
 import type { ReasoningEffort, ThinkingDialect } from "./reasoning";
 import type { GeminiSafetySettings } from "./safety";
+import type { ServerToolId } from "./serverTools";
 import type { ApiStandard, AuthMode } from "./types";
 
 /**
@@ -67,6 +68,8 @@ export interface ConnOptions {
   reasoningEffort?: ReasoningEffort;
   /** Which shape of thinking parameter this model accepts. */
   thinkingDialect?: ThinkingDialect;
+  /** Endpoint-run tools this model may use on its own (web search). */
+  serverTools?: ServerToolId[];
 }
 
 /**
@@ -91,6 +94,7 @@ export function connOptions(conn: AiConn): ConnOptions {
     maxOutput: model.maxOutput,
     reasoningEffort: model.reasoningEffort,
     thinkingDialect: model.thinkingDialect,
+    serverTools: model.serverTools,
   };
 }
 
@@ -114,6 +118,7 @@ export function pickConnOptions(o: ConnOptions): ConnOptions {
     maxOutput: o.maxOutput,
     reasoningEffort: o.reasoningEffort,
     thinkingDialect: o.thinkingDialect,
+    serverTools: o.serverTools,
   };
 }
 

@@ -167,7 +167,10 @@ MiniMax 的 `/anthropic/v1/messages` 是第二个 ④ 族兼容层样本（协�
 | thinking 默认 `disabled` | ❌ 我们显式发 `adaptive`，正是需要的 |
 | **`tool_choice` 只有 `auto`/`none`** | ⚠️ **见下** |
 | 没有 `output_config` | ⚠️ 与 New API 相同，见 §3.6 |
-| `thinking` 无 `display` 字段 | ⚠️ 我们发 `display:"summarized"`。透传则无害，严格校验则 400。未实测 |
+| `thinking` 无 `display` 字段 | ⚠️ 我们曾无条件发 `display:"summarized"`。透传则无害，严格校验则 400 |
+
+> **这三条 ⚠️ 已在 §10 一起处理**（`switch` 方言）。下面两段是当时的判断，
+> 保留以说明为什么后来改了主意。
 
 **`tool_choice` 那条已经有兜底，不需要改代码。** `structured.ts` 的
 `TOOL_CAPABILITY_ERROR` 第一条就是 `tool[_ ]?choice`，报错提到这个字段名即自动
@@ -415,3 +418,86 @@ interface ThinkingBlockCarry { modelId: string; blocks: unknown[] }
 `thinkingBlocksFor(msg, modelId)` 比对 carrier 上的 `modelId` 与当前请求的
 模型：不同就整组丢掉。代价只有"换回来时前几轮的思考不再回传"，而那本就是
 API 自己会做的事（它按模型决定保留策略）。
+
+## 10. MiniMax-M3 落地：`switch` 方言 + 服务端工具（2026-08）
+
+§3.5 当时的结论是"三条 ⚠️ 不用改代码，靠兜底"。接 MiniMax-M3 时推翻了其中两条，
+理由不是发现了新协议事实，而是**这三条差异属于同一个端点，且都能由作者已经知道
+的一件事推出来**：他买的是 M3 的 `/anthropic` 端点。
+
+### 10.1 三条差异，一次声明
+
+新增 `thinkingDialect: "switch"`（`lib/ai/reasoning.ts`）。名字描述形状而不是
+厂商 —— **这一档的含义是"思考参数是个纯开关"**：
+
+| 官方 4.6+ | `switch` |
+| --- | --- |
+| `thinking: {type:"adaptive", display:"summarized"}` | `thinking: {type:"adaptive"}` |
+| 深度住在 `output_config.effort` | **没有这个字段** |
+| `thinking:{type:"disabled"}` 部分模型拒绝 | `disabled` 是文档里的合法值 |
+
+由此三件事一起定下来：
+
+1. **不发 `display`。** 文档没写的字段一律不发 —— 兼容层"忽略未知键"与"严格
+   校验后 400"两种都常见（[`api/landscape.md`](api/landscape.md) §7），赌哪一种
+   都不如不赌。代价：这个端点的思考文本能不能显示，取决于它自己的默认，未实测。
+2. **不发 `output_config`。** §3.6 担心的"按了没反应的拨盘"在这里有了确定答案：
+   这个端点确实没有该字段。于是「力度」在 `switch` 下只保留唯一还有意义的
+   区分 —— `off` → `{type:"disabled"}`，其余一律 `{type:"adaptive"}`。**在这里
+   `off` 是字面意义的关闭**，与官方端点上"`off` 映射成最低档"相反（§4.4、
+   `ANTHROPIC_EFFORT` 的注释解释了官方为什么不能真关）。
+3. **强制 `tool_choice` 自动降级为 `auto`。**
+
+### 10.2 第 3 条是一处刻意的耦合，值得单独说
+
+`tool_choice` 的枚举与"思考参数长什么样"没有任何逻辑关系。让思考方言决定它，
+是**用一个作者答得上来的问题（"这是不是 M3 的 /anthropic 端点"）替换一个他答
+不上来的问题（"你的端点支不支持强制单个工具"）**，而不是发现了什么因果。
+
+接受这个耦合，因为错的代价是有界的：
+
+- 降级**不会让任何东西失效**。唯一会强制工具的调用点是
+  `agent/structured.ts`，它本来就把"模型没调工具"当作退回 JSON 模式的信号
+  （`EMPTY_TOOL_CALL`）。降级最坏是让那条兜底早一轮触发。
+- 不降级则是**必然多一次 400**：请求在生成任何 token 之前就被拒，然后走同一条
+  兜底。省下的那次往返是这个改动的全部收益。
+- 将来若出现"开关式思考但支持强制工具"的端点，症状是结构化任务偶尔走 JSON
+  兜底 —— 可观测、不致命，届时再把它拆成独立字段。
+
+**没有为它加第三个设置**：模型配置里每多一个作者必须理解的开关，就多一处配错
+的可能，而这条的收益只是一次往返。
+
+### 10.3 服务端工具：`serverTools`，per-model 声明
+
+`web_search` 由服务端在同一次请求里跑完（协议事实见
+[`api/landscape.md`](api/landscape.md) §7）。落在 `lib/ai/serverTools.ts`，
+四个决定：
+
+1. **不进 agent 注册表。** 注册表里的工具是"模型请求 → 我们执行 → 回传结果"，
+   服务端工具没有中间那一步。更要紧的是**不能让它进工具循环**：给一次已完成的
+   `server_tool_use` 回一条 `tool_result`，是协议错误。适配层因此把它单独收到
+   一个 map 里，与 `toolBlocks` 完全分开。
+2. **per-model，作者声明。** 同一个 base URL 后面 M3 有、M2.x 没有，而**没有任何
+   探测能问出"你提供哪些服务端工具"**。与 `thinkingDialect` 同一条理由。
+3. **一进一出都是 id，不是 wire type。** 存的是 `"web_search"`，
+   `web_search_20250305` 只出现在 `ANTHROPIC_WIRE_TYPE` 一张表里 —— 厂商改版本
+   日期时这是一处编辑，而不是每个模型行里一个永远不会更新的旧值。
+4. **搜索结果不进历史。** 工具轮回传的 `_thinkingBlocks` 只带 thinking，不带
+   `server_tool_use` / `web_search_tool_result`。两个理由：这些 block 每条命中都
+   附带网页正文，是一次搜索响应里最大的东西，回传等于每轮重新计费；而模型自己的
+   thinking（会回传）已经概括了它查到什么。代价是多轮循环里模型不能逐字引用上一轮
+   的搜索原文 —— 接受，这是省钱的一侧。
+
+**开关默认关闭，且在 UI 上说清它是什么**：打开它等于允许该模型在每次回答时自行
+联网，本机既不参与也无法逐次批准（不同于 `propose_edit` 那种 L2 审批）。这是
+作者的授权，不是程序该替他做的默认。
+
+### 10.4 可观测性：搜索走执行日志
+
+服务端工具在流里以两个 content block 到达（调用、结果）。适配层把它们变成
+`StreamChunk` 的新分支 `{serverTool}`，`agent/events.ts` 的
+`createServerToolLog()` 再把它折成一行 `tool-step` —— 于是它在执行日志里读起来
+与本地工具一模一样：跑起来时显示 query，结束时显示命中标题。
+
+分成"调用/结果"两个 phase 而不是等结束一次性上报，是因为**这正是响应变慢的原因
+所在**：作者需要在等待时看到"它在搜什么"，而不是事后才知道搜过。

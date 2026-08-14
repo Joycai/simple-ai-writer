@@ -27,7 +27,9 @@ import { useProjectStore } from "./projectStore";
 import { getDb } from "../lib/project";
 import { loadApiKey } from "../lib/keyStore";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
-import { appendAgentEventTo, type AgentEvent, type ToolStep } from "../lib/agent/events";
+import {
+  appendAgentEventTo, createServerToolLog, type AgentEvent, type ToolStep,
+} from "../lib/agent/events";
 import { createPlanGate } from "../lib/agent/plan";
 
 /**
@@ -522,13 +524,24 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         // once: the drafts differ only by the model's own sampling, which is the
         // point — N takes on the *same* brief.
         const results = await Promise.allSettled(
-          drafts.map((draft) =>
-            streamCompletion({
+          drafts.map((draft) => {
+            // One per draft: each request is its own stream, and the searches
+            // it triggers are its own. Round 1 for all of them — a single-shot
+            // task has no rounds, and the log's round chip reads as "the one
+            // request this was".
+            const logServerTool = createServerToolLog(1);
+            return streamCompletion({
               ...conn,
               messages,
               signal: controller.signal,
               onChunk: (chunk) => {
-                if ("done" in chunk) {
+                if ("serverTool" in chunk) {
+                  // A search the endpoint ran inside this response. Nothing to
+                  // execute — it is already done; the log is the whole point.
+                  if (get().abortController === controller) {
+                    get().appendAgentEvent(logServerTool(chunk.serverTool));
+                  }
+                } else if ("done" in chunk) {
                   const { inputTokens, outputTokens, truncated, cachedTokens } = chunk;
                   const cost = costFor(model, inputTokens, outputTokens, cachedTokens);
                   patchDraft(set, draft.id, {
@@ -543,8 +556,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
                   appendDraftText(set, draft.id, chunk.text);
                 }
               },
-            }),
-          ),
+            });
+          }),
         );
 
         // allSettled, not all: one draft being refused or filtered must not

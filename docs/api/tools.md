@@ -120,6 +120,14 @@ followed by tool messages responding to each tool_call_id"，Gemini 与 Anthropi
   不能切换。
 - 工具轮必须带上该轮的 thinking block 及其 `signature`，同 ③ 的
   `thoughtSignature`。
+- **`tools` 里可以混入服务端工具**（`{type:"web_search_20250305", name:"web_search"}`
+  一类，无 `input_schema`）。它们由服务端在同一次请求内执行完，响应里是
+  `server_tool_use` + `web_search_tool_result` 两个 content block，**没有任何
+  东西要回传** —— 把 `server_tool_use` 当普通 `tool_use` 去配 `tool_result` 是
+  对一次已完成的调用回话。与 ② 族同形（那边是 item，这边是 content block），
+  ①③ 族没有对应物。样本见 [`landscape.md`](landscape.md) §7 第四个样本。
+- **兼容层可能砍掉 `tool_choice` 的强制档**（只留 `auto`/`none`），于是"强制
+  失败就退回 JSON 模式"在那些端点上是唯一出路，见 `structured.md` §1。
 
 ## 7. ② Responses
 

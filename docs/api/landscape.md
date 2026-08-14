@@ -333,6 +333,34 @@ vLLM / llama.cpp。Google 与 Anthropic 也各自提供了一层 OpenAI 兼容�
 - usage 四个桶齐全；流式事件名与官方一致，多一个 `ping` 心跳。
 - 扩展：`service_tier`（priority 1.5 倍价）、`metadata.user_id`、`system` 接受
   带 `cache_control` 的数组。
+- **有服务端工具**（`web_search`），且**只在 ④ 族端点上有** —— 同一家的 ①
+  族端点没有。见下。
+
+#### 服务端工具：④ 族独有的一类"工具"
+
+MiniMax 在 ④ 族端点上实现了 Anthropic 的**服务端工具**约定（beta）。它与普通
+工具调用是两件事，混起来会写出一个永远配不上对的循环：
+
+```jsonc
+// 声明 —— 没有 input_schema，因为参数不是调用方定义的
+"tools": [{ "type": "web_search_20250305", "name": "web_search" }]
+```
+
+- **类型带日期版本号**（`web_search_20250305`），与官方的服务端工具命名一致。
+- **模型调用、服务端执行、结果直接进同一次响应**：`content` 里按执行顺序出现
+  `text` → `server_tool_use`（`{id, name, input.query}`）→
+  `web_search_tool_result`（`{tool_use_id, content:[{title, url, page_age,
+  content}]}`）→ `text`。
+- **调用方无事可做**：没有 `tool_result` 要回传，也没有"拒绝执行"这一步 ——
+  请求发出去时权限就给出去了。相应地，**`server_tool_use` 不能当成普通
+  `tool_use` 处理**：给它回一条 `tool_result` 是对一次已完成的调用回话。
+- `tool_choice` 与它无关（那个枚举管的是调用方声明的工具），文档也没写
+  `max_uses` / 域名白名单一类的官方可选参数。
+- 代价是延迟：一次请求里含一次真实检索。
+
+> ①/③ 族没有对应物 —— 它们的"联网"要么是厂商在模型侧内置、调用方看不见，要么
+> 得自己实现一个工具。**服务端工具是 ④ 族形状**，这也是"选哪个族"会改变能力
+> 清单的少数几个地方之一。
 
 **最值得记住的一条**：④ 族兼容层可能**砍掉 `tool_choice` 的强制档**。官方的
 `any` / `tool` 是结构化输出最可靠的手段（见

@@ -7,6 +7,9 @@ import {
   REASONING_EFFORTS, THINKING_DIALECTS, supportsThinkingLevel,
   type ReasoningEffort, type ThinkingDialect,
 } from "../../../lib/ai/reasoning";
+import {
+  SERVER_TOOL_IDS, supportsServerTools, type ServerToolId,
+} from "../../../lib/ai/serverTools";
 import { defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, type ModelType } from "../../../lib/ai/configDb";
 import { CONTEXT_SIZE_STOPS, formatContextSize } from "../../../lib/ai/contextSize";
 import { ModelProbePanel } from "../ModelProbePanel";
@@ -53,6 +56,9 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
   // Out of `form` for a different reason: the price row below casts `form` to
   // Record<string, string> to index its fields, which a boolean would break.
   const [capsEdit, setCapsEdit] = useState(existing?.caps?.edit ?? false);
+  // Same reason — a list is not a string. Endpoint-run tools the author grants
+  // this model (lib/ai/serverTools).
+  const [serverTools, setServerTools] = useState<ServerToolId[]>(existing?.serverTools ?? []);
   const [fetching, setFetching] = useState(false);
   const [fetchedList, setFetchedList] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
@@ -108,6 +114,13 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
         // nothing", so a row never distinguishes never-set from set-to-default.
         reasoningEffort: form.reasoningEffort === "default" ? undefined : form.reasoningEffort,
         thinkingDialect: form.thinkingDialect || undefined,
+        // Cleared for a protocol whose adapter would drop them, so switching a
+        // model to another provider can't leave a permission that silently
+        // does nothing behind. Empty stores as absent — one shape for "none".
+        serverTools:
+          provider && supportsServerTools(provider.apiStandard) && serverTools.length
+            ? serverTools
+            : undefined,
         pricePerImage,
         caps,
       };
@@ -321,6 +334,31 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
                   ))}
                 </ChipRow>
                 <div className={hub.fieldHint}>{t("aiConfig.models.thinkingDialectHint")}</div>
+              </div>
+            )}
+
+            {/* Tools the endpoint runs itself. Anthropic-shaped endpoints only,
+                and off by default: it is a standing permission for the model to
+                reach the open web on every request, which is the author's call
+                to make rather than something a model quietly gains. */}
+            {provider && supportsServerTools(provider.apiStandard) && (
+              <div className={styles.fieldGroup}>
+                <label className={styles.label}>{t("aiConfig.models.serverToolsLabel")}</label>
+                <ChipRow>
+                  {SERVER_TOOL_IDS.map((id) => (
+                    <Chip
+                      key={id}
+                      label={t(`aiConfig.models.serverTool_${id}`)}
+                      active={serverTools.includes(id)}
+                      onClick={() =>
+                        setServerTools((cur) =>
+                          cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id],
+                        )
+                      }
+                    />
+                  ))}
+                </ChipRow>
+                <div className={hub.fieldHint}>{t("aiConfig.models.serverToolsHint")}</div>
               </div>
             )}
 

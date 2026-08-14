@@ -55,13 +55,22 @@ export function parseReasoningEffort(v: unknown): ReasoningEffort | undefined {
  *                   from an effort level. Claude 4.6+.
  *   - `extended`  — a fixed thinking token budget per request. Claude 4.5 and
  *                   earlier. Also the shape Gemini 2.5 uses.
+ *   - `switch`    — a bare on/off switch: `{type:"adaptive"|"disabled"}` and
+ *                   nothing else. No `display`, no budget, and **no
+ *                   `output_config`** — which is where family ④'s depth dial
+ *                   lives, so declaring this dialect also means "this endpoint
+ *                   has no depth dial at all". MiniMax-M3's
+ *                   `/anthropic/v1/messages` is the sample this was written for
+ *                   (see `docs/api/landscape.md` §7 第四个样本); there, thinking
+ *                   defaults to **off**, so sending the switch is the only way
+ *                   the model thinks.
  *   - `none`      — this endpoint has no thinking parameter; send nothing.
  *
  * Absent means "assume the family's current generation" — see `defaultDialect`.
  */
-export type ThinkingDialect = "adaptive" | "extended" | "none";
+export type ThinkingDialect = "adaptive" | "extended" | "switch" | "none";
 
-export const THINKING_DIALECTS: ThinkingDialect[] = ["adaptive", "extended", "none"];
+export const THINKING_DIALECTS: ThinkingDialect[] = ["adaptive", "extended", "switch", "none"];
 
 export function parseThinkingDialect(v: unknown): ThinkingDialect | undefined {
   return typeof v === "string" && (THINKING_DIALECTS as string[]).includes(v)
@@ -121,13 +130,21 @@ const OPENAI_EFFORT: Record<Exclude<ReasoningEffort, "default">, string> = {
 export function reasoningBody(
   standard: ApiStandard,
   effort: ReasoningEffort | undefined,
+  dialect?: ThinkingDialect,
 ): Record<string, unknown> | undefined {
   if (!effort || effort === "default") return undefined;
   switch (familyOf(standard)) {
     case "openai":
       return { reasoning_effort: OPENAI_EFFORT[effort] };
     case "anthropic":
-      return { output_config: { effort: ANTHROPIC_EFFORT[effort] } };
+      // The `switch` dialect *is* the statement that this endpoint has no
+      // `output_config` — depth there is expressible only as on/off, which
+      // `thinkingBody` already spent the effort setting on. Sending the field
+      // anyway would volunteer an unknown top-level argument to an endpoint
+      // whose documented request schema doesn't have one.
+      return dialect === "switch"
+        ? undefined
+        : { output_config: { effort: ANTHROPIC_EFFORT[effort] } };
     case "gemini":
       return {
         generationConfig: {
@@ -201,16 +218,28 @@ const ANTHROPIC_EFFORT: Record<Exclude<ReasoningEffort, "default">, string> = {
  * defaults it to `"omitted"`, which returns thinking blocks whose text is an
  * empty string — billed in full, and useless to a UI that wants to show the
  * reasoning. Asking for `"summarized"` is what makes the feature visible at all.
+ * The `switch` dialect is the one place it is left out, because that endpoint's
+ * documented schema has no such field — and a compat layer that ignores unknown
+ * keys and one that 400s on them are equally common (see `docs/api/landscape.md`
+ * §7), so nothing is volunteered there that the docs don't name.
+ *
+ * `effort` reaches here only for `switch`, where on/off is the *entire* depth
+ * vocabulary: with no `output_config` to carry a level, "as little as possible"
+ * can only be said by turning thinking off. Every other dialect keeps the two
+ * dials separate and ignores it.
  */
 export function thinkingBody(
   dialect: ThinkingDialect,
   budgetTokens: number,
+  effort?: ReasoningEffort,
 ): Record<string, unknown> | undefined {
   switch (dialect) {
     case "adaptive":
       return { thinking: { type: "adaptive", display: "summarized" } };
     case "extended":
       return { thinking: { type: "enabled", budget_tokens: budgetTokens, display: "summarized" } };
+    case "switch":
+      return { thinking: { type: effort === "off" ? "disabled" : "adaptive" } };
     case "none":
       return undefined;
   }

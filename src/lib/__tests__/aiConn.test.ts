@@ -40,6 +40,7 @@ const model: Model = {
   maxOutput: 8_192,
   reasoningEffort: "high",
   thinkingDialect: "adaptive",
+  serverTools: ["web_search"],
 };
 
 const conn: AiConn = { provider, model, apiKey: "sk-test" };
@@ -58,6 +59,7 @@ describe("connOptions", () => {
       maxOutput: 8_192,
       reasoningEffort: "high",
       thinkingDialect: "adaptive",
+      serverTools: ["web_search"],
     });
   });
 
@@ -81,8 +83,8 @@ describe("connOptions", () => {
     const wide = { ...connOptions(conn), systemPrompt: "…", onText: () => {} };
     expect(Object.keys(pickConnOptions(wide)).sort()).toEqual([
       "apiKey", "authMode", "baseUrl", "contextSize", "maxOutput",
-      "modelId", "prefix", "reasoningEffort", "safetySettings", "standard",
-      "thinkingDialect",
+      "modelId", "prefix", "reasoningEffort", "safetySettings", "serverTools",
+      "standard", "thinkingDialect",
     ]);
   });
 });

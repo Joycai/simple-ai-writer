@@ -31,6 +31,7 @@ import {
   type Provider,
 } from "./configDb";
 import { parseReasoningEffort, parseThinkingDialect } from "./reasoning";
+import { parseServerTools } from "./serverTools";
 import { authModesFor, type ApiStandard, type AuthMode } from "./types";
 import { migrateLegacyStandard } from "./urls";
 import { loadApiKey, saveApiKey } from "../keyStore";
@@ -218,6 +219,7 @@ export async function stageConfigImport(
       // must degrade to "send nothing" rather than reach the wire.
       reasoningEffort: parseReasoningEffort(r.reasoningEffort),
       thinkingDialect: parseThinkingDialect(r.thinkingDialect),
+      serverTools: parseServerTools(r.serverTools),
       pricePerImage: typeof r.pricePerImage === "number" ? r.pricePerImage : undefined,
       caps: r.caps && typeof r.caps === "object" ? (r.caps as Model["caps"]) : undefined,
     });
