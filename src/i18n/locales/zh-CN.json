@@ -999,6 +999,11 @@
       "ignoreAll": "全部忽略",
       "applyAll": "应用 {{n}} 项建议",
       "applyAllHint": "把所有带建议的条目一次写回正文；找不到原文的会跳过"
+    },
+    "taskPanel": {
+      "untitled": "当前任务",
+      "paused": "已暂停",
+      "tokensBreakdown": "主模型 {{main}} · 子代理 {{sub}}"
     }
   },
   "aiConfig": {

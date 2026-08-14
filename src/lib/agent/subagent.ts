@@ -310,6 +310,19 @@ export async function executeDelegate(
     return fail(`the ${kind} subagent failed: ${(e as Error).message}`);
   }
 
+  // What this specialist spent, on the record where the author can see it.
+  // The DB row below is the permanent ledger, but it is invisible until someone
+  // opens Settings → 用量 — and a delegation is exactly the step whose cost the
+  // author is deciding about *now*. `parentStep` keeps it out of the parent
+  // run's own totals, which count the parent's model only.
+  ctx.onNestedEvent({
+    kind: "run-done",
+    inputTokens: result.inputTokens,
+    outputTokens: result.outputTokens,
+    at: Date.now(),
+    parentStep: call.id,
+  });
+
   const cost = costFor(conn.model, result.inputTokens, result.outputTokens, result.cachedTokens);
   await persistUsage(
     ctx.projectPath,

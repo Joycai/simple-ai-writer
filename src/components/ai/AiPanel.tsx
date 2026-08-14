@@ -30,6 +30,8 @@ import { useBatchStore } from "../../stores/batchStore";
 import { draftCountFor, totalUsage, useAiTaskStore, type TaskKind } from "../../stores/aiTaskStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { AgentLog } from "./AgentLog";
+import { TaskPanel } from "./TaskPanel";
+import { sumTokens, taskDocRevision } from "../../lib/agent/logModel";
 import { ReasoningControls } from "./ReasoningControls";
 import { ApprovalCard } from "./ApprovalCard";
 import { PlanCard } from "./PlanCard";
@@ -806,7 +808,8 @@ function ErrorBlock({
 export function AiPanel() {
   const { t, i18n } = useTranslation();
   const {
-    isRunning, drafts, activeDraftId, error, agentLog, loreReport, sourceFilePath, lastMessages,
+    isRunning, drafts, activeDraftId, error, agentLog, taskWorkspace,
+    loreReport, sourceFilePath, lastMessages,
     runTask, abort, clearOutput, setActiveDraft, selection, selectionRange, selectionSource,
     clearSelectionFrom, requestedTask, requestedInstruction, setRequestedTask,
   } = useAiTaskStore();
@@ -1762,6 +1765,15 @@ export function AiPanel() {
                 meta={t("ai.panel.runCount", { defaultValue: "{{n}} 条", n: agentLog.length })}
               />
               {agentLog.length > 0 && <AgentLog log={agentLog} isRunning={isRunning} flat />}
+              {/* Band ④ — the plan, when the agent split the work. Read off
+                  disk (see TaskPanel.tsx), so it also shows a task resumed
+                  from an earlier session. */}
+              <TaskPanel
+                projectPath={projectPath}
+                taskId={taskWorkspace?.taskId}
+                revision={taskDocRevision([agentLog])}
+                tokens={sumTokens([agentLog])}
+              />
               {error && (
                 <ErrorBlock
                   message={error}

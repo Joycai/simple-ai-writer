@@ -933,22 +933,34 @@ if (event.kind === "reasoning") {
 参数的前 `TOOL_ARGS_DETAIL_CHARS`（400）字符，而 `delegate` 按设计就是唯一一个
 `task` 是一整段话的工具，它的 JSON 常态性地断在字符串中间、根本 parse 不出来。
 
-### 7.3 任务面板（band ④）
+### 7.3 任务面板 band ④（`components/ai/TaskPanel.tsx`）
 
 **它是会话级的，不能塞进 `AgentLog`。** 对话助手里每个 assistant 轮次各渲染一张
 `AgentLog`（`AgentChat.tsx` → `AssistantTurn`），band ④ 若照搬，十轮对话就有十份
 一模一样的任务计划。子代理属于「这一轮的执行动作」，任务计划属于「这个会话」。
+所以它挂在输入框上方（`.taskBand`，`:empty` 时整块消失），AiPanel 则挂在运行区。
 
-数据源是 `.ai-writer/tasks/<id>/task.md`，**必须读盘**，不能从事件流推：`task_plan`
-的参数同样受 400 字符截断，六个中文步骤就可能拼不回来；更要紧的是，暂停恢复之后
-新一轮对话的事件流里根本没有那份计划，只有盘上有。
+**数据源是 `.ai-writer/tasks/<id>/task.md`，必须读盘，不能从事件流推。**
+`task_plan` 的参数同样受 400 字符截断，六个中文步骤就可能拼不回来；更要紧的是，
+暂停恢复之后新一轮对话的事件流里**根本没有那份计划**，只有盘上有。何时重读由
+`taskDocRevision()` 给：数**已落地**（非 running）的 `task_plan` / `task_progress`
+调用——数「发起」会在写盘之前就去读。
 
-- 任务列表：标题、状态 Badge、步骤进度 `2/5`（由 `parseSteps` 数出来）、更新时间；
-- 详情：`task.md` 正文用 `renderMarkdown` 渲染（复选框状态可见）、notes 列表可点开预览；
-- `in_progress` / `paused` 的任务给「继续」按钮 → `buildResumeSeed` → 新 run；
-- 累计用量口径先做到**「本次会话累计，含子代理」**：主 run 的 `run-done` 加上
-  `executeDelegate` 新发的嵌套 `run-done`。真·任务级总账要给 `token_usage` 加
-  `taskId` 列，那是单独一件事，不能拿会话累计冒充。
+**没有步骤就没有面板。** 只写了笔记、没有拆过步骤的工作区不是计划，而输入框上方
+一条空进度条是每个会话都在付出的消息空间，却什么都没说。
+
+- 收起态：任务名 + `3/5` + 累计 token + 一条 pip 进度条（进度不点开就能看）；
+  展开态：同一批步骤，带标题。跳过用删除线——「这条不做了」和「这条做完了」
+  不能长一个样。
+- 用量口径是**「本次会话累计，含子代理」**，且**主/子分开算**（`sumTokens`）：
+  两者跑在不同模型、不同价钱上，合成一个数就把委托的意义盖掉了——它恰恰是把一次
+  又大又便宜的阅读从贵模型上挪走。子代理那半来自 `executeDelegate` 新发的、带
+  `parentStep` 的嵌套 `run-done`（DB 里的 `token_usage` 行是永久账本，但不打开
+  设置→用量就看不见，而委托恰恰是作者**当下**要拍板的那一步）。
+- 真·任务级总账（跨暂停恢复）要给 `token_usage` 加 `taskId` 列，那是单独一件事，
+  不能拿会话累计冒充，所以文案写「本次」。
+- 尚未做：任务列表页（多任务）、`task.md` 正文预览、notes 列表、
+  `paused` 任务的「继续」按钮 → `buildResumeSeed`。
 
 ### 7.4 设置 → 子代理（`panes/SubAgentsPane.tsx`）
 
