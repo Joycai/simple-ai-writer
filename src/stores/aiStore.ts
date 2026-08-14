@@ -11,6 +11,11 @@ import { fetchRemoteModels } from "../lib/ai/providerProbe";
 import { saveApiKey, loadApiKey, deleteApiKey, migrateLegacyKeys } from "../lib/keyStore";
 import { getGlobalDb } from "../lib/project";
 import { deletePref, readPref, writePref } from "../lib/prefs";
+import {
+  SUBAGENT_KINDS,
+  type SubAgentConfig,
+  type SubAgentKind,
+} from "../lib/agent/subagent";
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -35,6 +40,22 @@ function readSelection(field: SelectionField): string | null {
 function writeSelection(field: SelectionField, value: string | null): void {
   if (value) writePref(SELECTION_KEYS[field], value);
   else deletePref(SELECTION_KEYS[field]);
+}
+
+function readSubAgent(kind: SubAgentKind): SubAgentConfig {
+  return {
+    kind,
+    modelId: readPref(`ai:subagent:${kind}:modelId`) ?? null,
+    enabled: readPref(`ai:subagent:${kind}:enabled`) === "true",
+  };
+}
+
+function readAllSubAgents(): Record<SubAgentKind, SubAgentConfig> {
+  const res = {} as Record<SubAgentKind, SubAgentConfig>;
+  for (const k of SUBAGENT_KINDS) {
+    res[k] = readSubAgent(k);
+  }
+  return res;
 }
 
 /**
@@ -96,6 +117,7 @@ interface AiState {
    * the image UI stays disabled until an `image`-type model is picked.
    */
   imageModelId: string | null;
+  subAgents: Record<SubAgentKind, SubAgentConfig>;
   isLoading: boolean;
 
   loadConfig: () => Promise<void>;
@@ -118,6 +140,7 @@ interface AiState {
   setActivePrompt: (id: string) => void;
   setMemoryModel: (id: string | null) => void;
   setImageModel: (id: string | null) => void;
+  setSubAgent: (kind: SubAgentKind, patch: Partial<Omit<SubAgentConfig, "kind">>) => void;
 }
 
 export const useAiStore = create<AiState>((set, get) => ({
@@ -128,6 +151,7 @@ export const useAiStore = create<AiState>((set, get) => ({
   activePromptId: readSelection("activePromptId"),
   memoryModelId: readSelection("memoryModelId"),
   imageModelId: readSelection("imageModelId"),
+  subAgents: readAllSubAgents(),
   isLoading: false,
 
   loadConfig: async () => {
@@ -149,10 +173,18 @@ export const useAiStore = create<AiState>((set, get) => ({
       const promptIds = new Set(prompts.map((p) => p.id));
       const s = get();
       const liveModel = (id: string | null) => (id && modelIds.has(id) ? id : null);
+      const liveSubAgents = { ...s.subAgents };
+      for (const k of SUBAGENT_KINDS) {
+        liveSubAgents[k] = {
+          ...liveSubAgents[k],
+          modelId: liveModel(liveSubAgents[k].modelId),
+        };
+      }
       set({
         activeModelId: liveModel(s.activeModelId) ?? models[0]?.id ?? null,
         memoryModelId: liveModel(s.memoryModelId),
         imageModelId: liveModel(s.imageModelId),
+        subAgents: liveSubAgents,
         activePromptId: s.activePromptId && promptIds.has(s.activePromptId) ? s.activePromptId : null,
       });
     } finally {
@@ -190,12 +222,19 @@ export const useAiStore = create<AiState>((set, get) => ({
       const removedIds = new Set(
         s.models.filter((m) => m.providerId === id).map((m) => m.id),
       );
+      const cleanSubs = { ...s.subAgents };
+      for (const k of SUBAGENT_KINDS) {
+        if (cleanSubs[k].modelId && removedIds.has(cleanSubs[k].modelId!)) {
+          cleanSubs[k] = { ...cleanSubs[k], modelId: null };
+        }
+      }
       return {
         providers: s.providers.filter((p) => p.id !== id),
         models: s.models.filter((m) => m.providerId !== id),
         activeModelId: s.activeModelId && removedIds.has(s.activeModelId) ? null : s.activeModelId,
         memoryModelId: s.memoryModelId && removedIds.has(s.memoryModelId) ? null : s.memoryModelId,
         imageModelId: s.imageModelId && removedIds.has(s.imageModelId) ? null : s.imageModelId,
+        subAgents: cleanSubs,
       };
     });
   },
@@ -225,12 +264,21 @@ export const useAiStore = create<AiState>((set, get) => ({
       const d = await db();
       await deleteModel(d, id);
     }
-    set((s) => ({
-      models: s.models.filter((m) => m.id !== id),
-      activeModelId: s.activeModelId === id ? null : s.activeModelId,
-      memoryModelId: s.memoryModelId === id ? null : s.memoryModelId,
-      imageModelId: s.imageModelId === id ? null : s.imageModelId,
-    }));
+    set((s) => {
+      const cleanSubs = { ...s.subAgents };
+      for (const k of SUBAGENT_KINDS) {
+        if (cleanSubs[k].modelId === id) {
+          cleanSubs[k] = { ...cleanSubs[k], modelId: null };
+        }
+      }
+      return {
+        models: s.models.filter((m) => m.id !== id),
+        activeModelId: s.activeModelId === id ? null : s.activeModelId,
+        memoryModelId: s.memoryModelId === id ? null : s.memoryModelId,
+        imageModelId: s.imageModelId === id ? null : s.imageModelId,
+        subAgents: cleanSubs,
+      };
+    });
   },
 
   fetchAndImportModels: async (providerId) => {
@@ -271,6 +319,13 @@ export const useAiStore = create<AiState>((set, get) => ({
   setActivePrompt: (id) => set({ activePromptId: id }),
   setMemoryModel: (id) => set({ memoryModelId: id }),
   setImageModel: (id) => set({ imageModelId: id }),
+  setSubAgent: (kind, patch) =>
+    set((s) => ({
+      subAgents: {
+        ...s.subAgents,
+        [kind]: { ...s.subAgents[kind], ...patch },
+      },
+    })),
 }));
 
 /**
@@ -283,5 +338,13 @@ export const useAiStore = create<AiState>((set, get) => ({
 useAiStore.subscribe((state, prev) => {
   for (const field of Object.keys(SELECTION_KEYS) as SelectionField[]) {
     if (state[field] !== prev[field]) writeSelection(field, state[field]);
+  }
+  for (const k of SUBAGENT_KINDS) {
+    if (state.subAgents[k] !== prev.subAgents[k]) {
+      const cur = state.subAgents[k];
+      if (cur.modelId) writePref(`ai:subagent:${k}:modelId`, cur.modelId);
+      else deletePref(`ai:subagent:${k}:modelId`);
+      writePref(`ai:subagent:${k}:enabled`, String(cur.enabled));
+    }
   }
 });

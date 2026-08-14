@@ -105,15 +105,21 @@ export interface ChatMessagePayload {
  * asked.
  *
  * `allowImages` is the caller's answer to "is the active model multimodal" —
- * a text-only model is sent the attachment's *name* and told the picture could
- * not travel, which is the difference between the assistant saying so and the
- * assistant appearing to ignore what the author attached.
+ * a text-only model is sent the attachment's *name and path* and told the
+ * picture could not travel, which is the difference between the assistant
+ * saying so and the assistant appearing to ignore what the author attached.
+ *
+ * `visionDelegate` says a vision subagent is standing by, which turns that
+ * notice from an apology into an instruction: the path is exactly what
+ * `delegate(vision, refs)` takes. Kept separate from `allowImages` on purpose —
+ * base64 still must not go to a model that cannot read it, however capable the
+ * chain is as a whole (docs/subagent-lld.md §6.1).
  */
 export async function buildChatMessage(
   message: string,
   quote?: string,
   refs: AttachedItem[] = [],
-  opts: { allowImages?: boolean } = {},
+  opts: { allowImages?: boolean; visionDelegate?: boolean } = {},
 ): Promise<ChatMessagePayload> {
   const parts: string[] = [];
 
@@ -154,11 +160,22 @@ export async function buildChatMessage(
     );
   }
   if (unsent.length) {
+    // Paths, not just names. A picture that cannot travel on this request can
+    // still be *read* — by the vision subagent, which takes a path. Naming the
+    // file alone left the model with something it could see was missing and no
+    // way to go and get it.
+    const listed = unsent.map((a) => `- ${a.file.name} — ${a.file.path}`).join("\n");
     parts.push(
-      i18n.t("ai.chat.imagesNotSent", {
-        defaultValue: "（以下图片未能随本条消息发送：{{names}}）",
-        names: unsent.map((a) => a.file.name).join("、"),
-      }),
+      opts.visionDelegate
+        ? i18n.t("ai.chat.imagesNotSentDelegate", {
+            defaultValue:
+              "（以下图片未能直接随本条消息发送，但已启用图像理解子代理——需要看图时用 delegate(kind:\"vision\", refs:[路径]) 让它读，并把结论用于回答：\n{{list}}）",
+            list: listed,
+          })
+        : i18n.t("ai.chat.imagesNotSent", {
+            defaultValue: "（以下图片未能随本条消息发送——当前模型读不了图：\n{{list}}）",
+            list: listed,
+          }),
     );
   }
 

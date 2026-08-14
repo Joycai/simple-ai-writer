@@ -172,3 +172,29 @@ export function formatUsd(n: number): string {
   if (n < 0.0001) return "<$0.0001";
   return `$${n.toFixed(n < 1 ? 4 : 2)}`;
 }
+
+/**
+ * Record a single completed LLM call into the project's `token_usage` table.
+ * Best-effort and non-critical (never throws).
+ */
+export async function persistUsage(
+  projectPath: string,
+  modelId: string,
+  inputTokens: number,
+  outputTokens: number,
+  cost: number,
+  task: string,
+  cachedTokens = 0,
+): Promise<void> {
+  try {
+    const db = await getDb(projectPath);
+    await db.execute(
+      `INSERT INTO token_usage (model_id, task, prompt_tokens, cached_tokens, completion_tokens, cost_usd, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [modelId, task, inputTokens, cachedTokens, outputTokens, cost, Math.floor(Date.now() / 1000)],
+    );
+  } catch {
+    // non-critical: usage accounting must not crash the caller
+  }
+}
+

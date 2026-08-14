@@ -91,7 +91,7 @@ describe("runAgent", () => {
 
     const result = await runAgent(opts);
 
-    expect(result).toEqual({ rounds: 1, inputTokens: 10, outputTokens: 5, cachedTokens: 0 });
+    expect(result).toEqual({ rounds: 1, inputTokens: 10, outputTokens: 5, cachedTokens: 0, outcome: "completed" });
     expect(last(opts.output)).toBe("hello world");
     // Streamed, not delivered in one lump.
     expect(opts.output).toEqual(["hello ", "hello world"]);
@@ -151,7 +151,7 @@ describe("runAgent", () => {
 
     const result = await runAgent(opts);
 
-    expect(result).toEqual({ rounds: 2, inputTokens: 28, outputTokens: 9, cachedTokens: 0 });
+    expect(result).toEqual({ rounds: 2, inputTokens: 28, outputTokens: 9, cachedTokens: 0, outcome: "completed" });
 
     // Event order: round 1, tool running, tool done, round 2
     expect(opts.events.map((e) => e.kind)).toEqual([
@@ -187,7 +187,7 @@ describe("runAgent", () => {
 
     const result = await runAgent(opts);
 
-    expect(result).toEqual({ rounds: 2, inputTokens: 28, outputTokens: 9, cachedTokens: 20 });
+    expect(result).toEqual({ rounds: 2, inputTokens: 28, outputTokens: 9, cachedTokens: 20, outcome: "completed" });
   });
 
   it("says so in the log when the endpoint cut the output short", async () => {
@@ -372,7 +372,7 @@ describe("runAgent", () => {
       preset: { ...PRESET, maxRounds: 2 },
       onRoundLimit: async (roundsUsed) => {
         asks.push(roundsUsed);
-        return 2;
+        return { action: "extend", rounds: 2 };
       },
     });
 
@@ -380,11 +380,12 @@ describe("runAgent", () => {
 
     expect(asks).toEqual([1]);
     expect(result.rounds).toBe(3);
+    expect(result.outcome).toBe("completed");
     expect(last(opts.output)).toBe("done");
     // Round 2 kept its tools — the forced-write instruction was never injected.
     expect(sent.some((round) => round.some((m) => String(m.content) === CAP_NUDGE))).toBe(false);
     expect(opts.events.filter((e) => e.kind === "round-limit")).toEqual([
-      expect.objectContaining({ roundsUsed: 1, granted: 2 }),
+      expect.objectContaining({ roundsUsed: 1, decision: { action: "extend", rounds: 2 } }),
     ]);
     // The raised cap is visible in the log from round 2 onwards.
     const starts = opts.events.filter(
@@ -401,12 +402,13 @@ describe("runAgent", () => {
     queueRound([{ text: "forced" }, { done: true, inputTokens: 2, outputTokens: 2 }]);
     const opts = makeOptions({
       preset: { ...PRESET, maxRounds: 2 },
-      onRoundLimit: async () => 0,
+      onRoundLimit: async () => ({ action: "finish" }),
     });
 
     const result = await runAgent(opts);
 
     expect(result.rounds).toBe(2);
+    expect(result.outcome).toBe("completed");
     expect(last(opts.output)).toBe("forced");
     // The declined final round is exactly today's behaviour: tools withheld,
     // write-now instruction injected.
@@ -415,7 +417,7 @@ describe("runAgent", () => {
     // But not left behind for the next turn to inherit.
     expect(opts.messages.some((m) => String(m.content) === CAP_NUDGE)).toBe(false);
     expect(opts.events.filter((e) => e.kind === "round-limit")).toEqual([
-      expect.objectContaining({ roundsUsed: 1, granted: 0 }),
+      expect.objectContaining({ roundsUsed: 1, decision: { action: "finish" } }),
     ]);
   });
 
@@ -565,7 +567,7 @@ describe("runAgent", () => {
       // this models that: the abort lands before the "decision" resolves.
       onRoundLimit: async () => {
         controller.abort();
-        return 0;
+        return { action: "finish" };
       },
     });
 

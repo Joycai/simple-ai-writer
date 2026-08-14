@@ -23,6 +23,7 @@ import { useAppStore } from "../../stores/appStore";
 import { replaceLocation } from "../../stores/navStore";
 import { useAiStore } from "../../stores/aiStore";
 import { loadApiKey } from "../../lib/keyStore";
+import { chainCanSeeImages, resolveVisionConn } from "../../lib/agent/subagent";
 import { describeLoreImage } from "../../lib/lore/vision";
 import { readFile, removeFile } from "../../lib/fs/fileio";
 import { imageToDataUrl } from "../../lib/fs/images";
@@ -112,7 +113,9 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   const models = useAiStore((s) => s.models);
   const providers = useAiStore((s) => s.providers);
   const activeModelId = useAiStore((s) => s.activeModelId);
-  const visionReady = models.find((m) => m.id === activeModelId)?.type === "multimodal";
+  const subAgents = useAiStore((s) => s.subAgents);
+  const activeModel = models.find((m) => m.id === activeModelId);
+  const visionReady = chainCanSeeImages(activeModel, subAgents, models);
   // AI image generation needs a model of its own — the active text model can't
   // stand in for it, so the entry point stays disabled until one is configured.
   const imageGenReady = models.some((m) => m.type === "image");
@@ -352,20 +355,20 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   };
 
   // Generate a textual description of one gallery image with the active
-  // multimodal model. Streams into the edit area; the user commits via the
-  // regular ✓ button, so a bad generation is just an X away from discarded.
+  // multimodal model or configured vision subagent. Streams into the edit area;
+  // the user commits via the regular ✓ button, so a bad generation is just an X away.
   const handleAiDesc = async (img: LoreImage) => {
     if (busy || aiDescFile) return;
-    const model = models.find((m) => m.id === activeModelId);
-    const provider = model ? providers.find((p) => p.id === model.providerId) : null;
-    if (!model || !provider || model.type !== "multimodal") return;
+    const conn = await resolveVisionConn(models, providers, activeModelId, subAgents, loadApiKey);
+    // Say why rather than doing nothing: the author just pressed a button that
+    // the chain-level check said was available, so silence reads as a bug.
+    if ("error" in conn) { window.alert(conn.error); return; }
 
     const ctrl = new AbortController();
     aiDescAbort.current = ctrl;
     setAiDescFile(img.file);
     startEdit(img.file, img.desc);
     try {
-      const apiKey = (await loadApiKey(provider.id)) ?? "";
       // Reuse the already-loaded gallery data URL; fall back to a fresh read
       // if that load failed (broken thumbnail but readable file).
       const dataUrl = imageDataUrls[img.absPath] ?? (await imageToDataUrl(img.absPath)).dataUrl;
@@ -375,7 +378,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         entitySummary: entity.summary,
         existingDesc: img.desc,
         language: i18n.language,
-        ...connOptions({ provider, model, apiKey }),
+        ...connOptions(conn),
         signal: ctrl.signal,
         onProgress: (acc) => setEditingDraft(acc),
       });

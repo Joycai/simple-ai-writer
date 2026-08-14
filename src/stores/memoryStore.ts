@@ -17,9 +17,9 @@ import {
 } from "../lib/context/memory";
 import { readFile } from "../lib/fs/fileio";
 import { costFor, type Model, type Provider } from "../lib/ai/configDb";
+import { persistUsage } from "../lib/ai/usage";
 import { connOptions, resolveConn, type ConnResolution } from "../lib/ai/conn";
 import { loadApiKey } from "../lib/keyStore";
-import { getDb } from "../lib/project";
 import { useAiStore } from "./aiStore";
 import { useProjectStore } from "./projectStore";
 import { getWritingFocus, useEditorStore } from "./editorStore";
@@ -360,25 +360,6 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
 function recordUsage(projectPath: string, model: Model, usage: { in: number; out: number; cached: number }): void {
   if (usage.in <= 0 && usage.out <= 0) return;
   const cost = costFor(model, usage.in, usage.out, usage.cached);
-  void persistUsage(projectPath, model.id, usage.in, usage.out, cost, usage.cached);
+  void persistUsage(projectPath, model.id, usage.in, usage.out, cost, "memory", usage.cached);
 }
 
-async function persistUsage(
-  projectPath: string,
-  modelId: string,
-  inputTokens: number,
-  outputTokens: number,
-  cost: number,
-  cachedTokens = 0,
-): Promise<void> {
-  try {
-    const db = await getDb(projectPath);
-    await db.execute(
-      `INSERT INTO token_usage (model_id, task, prompt_tokens, cached_tokens, completion_tokens, cost_usd, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [modelId, "memory", inputTokens, cachedTokens, outputTokens, cost, Math.floor(Date.now() / 1000)]
-    );
-  } catch {
-    // non-critical
-  }
-}

@@ -20,7 +20,11 @@ import type { NativeReasoning } from "../ai/reasoning";
 import type {
   AccumulatedToolCall, ContentPart, StreamMessage, ThinkingBlockCarry,
 } from "../ai/types";
-import { createServerToolLog, type AgentEvent } from "./events";
+import { createServerToolLog, type AgentEvent, type RoundLimitDecision } from "./events";
+
+// Re-exported: callers reach the round-cap contract through the runtime that
+// enforces it, not through the event module that only has to describe it.
+export type { RoundLimitDecision };
 import { contentWithoutImages, hasImageParts } from "./imageHistory";
 import { TOOL_ARGS_DETAIL_CHARS, TOOL_RESULT_DETAIL_CHARS } from "./logFormat";
 import type { TaskPreset } from "./presets";
@@ -35,6 +39,13 @@ const ABORTED_TOOL_RESULT = "[not run — the user stopped the task]";
 /** Stand-in left behind where an earlier picture was dropped to reclaim room. */
 const ELIDED_IMAGE =
   "[earlier image dropped to stay within the model's context window]";
+
+/**
+ * Context utilization threshold (fraction of input ceiling) at which the agent
+ * is nudged to write its intermediate conclusions into notes before trimHistory
+ * elides older tool results.
+ */
+const CHECKPOINT_RATIO = 0.85;
 
 /**
  * How many pictures stay in history verbatim. Enough to compare a couple of
@@ -156,6 +167,12 @@ export interface AgentRunResult {
   outputTokens: number;
   /** Subset of inputTokens served from the provider's prompt cache. */
   cachedTokens: number;
+  /**
+   * How the run ended.
+   * - "completed": the model produced prose (normal finish).
+   * - "paused": the author chose 存盘暂停 at the round cap.
+   */
+  outcome: "completed" | "paused";
 }
 
 export interface AgentRuntimeOptions extends ConnOptions {
@@ -200,7 +217,7 @@ export interface AgentRuntimeOptions extends ConnOptions {
    * modals don't show the approvals area, and a run that blocks on a card
    * nobody can see would simply hang.
    */
-  onRoundLimit?: (roundsUsed: number) => Promise<number>;
+  onRoundLimit?: (roundsUsed: number) => Promise<RoundLimitDecision>;
   /**
    * The run's output **so far, in full** — a snapshot, not a delta, so callers
    * assign rather than append.
@@ -233,6 +250,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
 
   // Mutable: the author can extend it at the cap via onRoundLimit.
   let maxRounds = preset.maxRounds;
+  let checkpointArmed = false;
 
   for (let round = 1; round <= maxRounds; round++) {
     if (opts.signal.aborted) throw new DOMException("Aborted", "AbortError");
@@ -254,17 +272,34 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       preset.tools.length > 0 &&
       opts.onRoundLimit
     ) {
-      const granted = await opts.onRoundLimit(round - 1);
+      const decision = await opts.onRoundLimit(round - 1);
       if (opts.signal.aborted) throw new DOMException("Aborted", "AbortError");
-      opts.onEvent({ kind: "round-limit", roundsUsed: round - 1, granted, at: Date.now() });
-      if (granted > 0) {
-        maxRounds += granted;
+      opts.onEvent({ kind: "round-limit", roundsUsed: round - 1, decision, at: Date.now() });
+
+      if (decision.action === "pause") {
+        // Clean exit point: we are at the **start** of a round, so every
+        // tool_call from the previous round already has its paired tool reply.
+        // No repairToolCallPairing needed — the history is valid as-is.
+        return {
+          rounds: round - 1,
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+          cachedTokens: totalCachedTokens,
+          outcome: "paused",
+        };
+      }
+      if (decision.action === "extend") {
+        maxRounds += decision.rounds;
         isLastRound = false;
       }
     }
 
     const withholdTools =
       preset.tools.length === 0 || (isLastRound && preset.finishPolicy === "force-text");
+    const serverToolPolicy = preset.serverTools ?? "final-round-off";
+    const withholdServerTools =
+      serverToolPolicy === "off" ||
+      (serverToolPolicy === "final-round-off" && isLastRound && preset.finishPolicy === "force-text");
     /**
      * The "stop calling tools" nudge, retracted after this round's request.
      *
@@ -309,9 +344,28 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     /** Searches the endpoint ran for itself this round, as log rows. */
     const logServerTool = createServerToolLog(round);
 
+    let checkpointNotice: StreamMessage | null = null;
+    if (
+      preset.scratchpad === "required" &&
+      opts.inputCeilingTokens &&
+      estimateMessagesTokens(history) > opts.inputCeilingTokens * CHECKPOINT_RATIO &&
+      !checkpointArmed
+    ) {
+      checkpointNotice = {
+        role: "user",
+        content: i18n.t("ai.instructions.scratchpadCheckpoint", {
+          defaultValue:
+            "【系统提示】当前上下文接近上限并即将触发裁剪。请使用 write_note 将已获取的关键结论与资料写进笔记文件，避免信息丢失。",
+        }),
+      };
+      history.push(checkpointNotice);
+      checkpointArmed = true;
+    }
+
     const dropped = trimHistory(history, opts.inputCeilingTokens);
     if (dropped > 0) {
       opts.onEvent({ kind: "context-trimmed", count: dropped, at: Date.now() });
+      checkpointArmed = false;
     }
 
     opts.onEvent({
@@ -328,16 +382,10 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         messages: history,
         extraBody: opts.extraBody,
         tools: withholdTools ? undefined : toolDefinitions,
-        // Withheld alongside our own, and this is the whole reason the line
-        // exists: a server tool arrives from the *model's* configuration
-        // (ConnOptions), not from the preset, so it sailed straight past the
-        // check above. The forced final round then handed the model a live web
-        // search while telling it to stop calling tools — and a search there
-        // restarts the whole search-and-resume cycle inside a round whose only
-        // job was to end it. Presets with no tools at all (the structured JSON
-        // tasks) are covered by the same flag, where browsing is equally
-        // unwanted.
-        serverTools: withholdTools ? undefined : opts.serverTools,
+        // Governed by preset.serverTools (final-round-off | off | always).
+        // Separate from local tools because search subagent has no local tools
+        // (preset.tools: []) but requires serverTools enabled on every round.
+        serverTools: withholdServerTools ? undefined : opts.serverTools,
         signal: opts.signal,
         onChunk: (chunk) => {
           if ("reasoning" in chunk) {
@@ -411,6 +459,10 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         const at = history.indexOf(forcedTextNotice);
         if (at >= 0) history.splice(at, 1);
       }
+      if (checkpointNotice) {
+        const at = history.indexOf(checkpointNotice);
+        if (at >= 0) history.splice(at, 1);
+      }
     }
 
     // No tool calls → the model produced prose → that prose is the answer.
@@ -421,6 +473,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         inputTokens: totalInputTokens,
         outputTokens: totalOutputTokens,
         cachedTokens: totalCachedTokens,
+        outcome: "completed",
       };
     }
 
@@ -484,10 +537,15 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
 
       // Executor never throws — bad calls come back as error-text results the
       // model can read and correct on the next round.
+      const callContext: ToolContext = {
+        ...opts.toolContext,
+        signal: opts.signal,
+        onNestedEvent: opts.onEvent,
+      };
       const result: ToolResult = await executeRegisteredTool(
         toolCall,
         preset.tools,
-        opts.toolContext,
+        callContext,
       );
       const isError = result.content.startsWith("Error") || result.content.startsWith("Unknown tool");
       opts.onEvent({
@@ -532,5 +590,6 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     inputTokens: totalInputTokens,
     outputTokens: totalOutputTokens,
     cachedTokens: totalCachedTokens,
+    outcome: "completed",
   };
 }

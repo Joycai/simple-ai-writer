@@ -199,7 +199,8 @@
       "prompts": "Prompts",
       "shortcuts": "Shortcuts",
       "about": "About",
-      "usage": "Usage"
+      "usage": "Usage",
+      "subagents": "Subagents"
     },
     "workspace": {
       "profileSection": "Workspace profile",
@@ -364,6 +365,20 @@
       "restoreFailed": "Restore failed:",
       "destNotEmpty": "That folder is not empty. Create a new empty folder to restore into, so the backup can't mix with what is already there.",
       "emptyBundle": "That backup file contains no project content."
+    },
+    "subagents": {
+      "paneSub": "Hand context-heavy or capability-specific work to a dedicated model. A subagent works in its own context and returns only a summary and a note path.",
+      "search": "Web research",
+      "searchSub": "Verify facts and gather material. Needs a model with server-side web_search enabled.",
+      "vision": "Image analysis",
+      "visionSub": "Read images and answer. Needs a multimodal model.",
+      "longread": "Long-document digest",
+      "longreadSub": "Read long documents and extract what matters. Suits a cheap large-window model.",
+      "pickModel": "Select a model",
+      "noModel": "No model bound",
+      "warnNoSearch": "This model has no server-side web_search enabled, so the subagent cannot browse.",
+      "warnNotMultimodal": "This model is text-only and cannot read images.",
+      "enable": "Enable"
     }
   },
   "project": {
@@ -494,7 +509,7 @@
       "summary": "Briefly summarize the 【选中内容】 above, distilling the main content and key points. The preceding 【近期内容】 is reference only. Output only the summary, with no title or commentary.",
       "summaryNovel": "Briefly summarize the 【选中内容】 above, distilling the main plot and character developments. The preceding 【近期内容】 is reference only. Output only the summary, with no title or commentary.",
       "followOutline": "Important: an 【{{outlineSection}}】 block has been provided — follow its direction, arrangement, and requirements strictly when continuing; do not deviate or start a different direction on your own.",
-      "chatCompact": "You are a conversation summarizer. Condense the 【conversation to fold】 into a bullet-point summary that later turns can rely on as background.\n- Keep: the author's goals and intent, decisions and conclusions reached, writing constraints and preferences, names of files/chapters/entries mentioned, unfinished items.\n- Drop: small talk, tool-call mechanics, intermediate conclusions overturned later in the conversation.\n- If an 【existing summary】 is provided, merge it with the new content into one coherent summary rather than concatenating.\n- Use third-person statements (\"the author asked…\", \"the assistant did…\").\n- Stay under roughly 600 words. Output only the summary body — no title, no commentary.",
+      "chatCompact": "You are a conversation summarizer. Condense the 【conversation to fold】 into a bullet-point summary that later turns can rely on as background.\n- Keep: the author's goals and intent, decisions and conclusions reached, writing constraints and preferences, names of files/chapters/entries mentioned, saved note paths (.ai-writer/tasks/.../notes/...), unfinished items.\n- Drop: small talk, tool-call mechanics, intermediate conclusions overturned later in the conversation.\n- If an 【existing summary】 is provided, merge it with the new content into one coherent summary rather than concatenating.\n- Use third-person statements (\"the author asked…\", \"the assistant did…\").\n- Stay under roughly 600 words. Output only the summary body — no title, no commentary.",
       "chatCompactExisting": "【existing summary】",
       "chatCompactFold": "【conversation to fold】",
       "chatCompactBlock": "【Conversation summary】(earlier turns have been condensed into the following)\n{{summary}}",
@@ -527,10 +542,49 @@
       "continueNewChapter": "Note: this {{doc}} is still empty and you are writing its opening. If a 【{{prevTail}}】 block is provided, it is only there so you know the joining point and the voice — do not continue its sentences; write a fresh opening for this {{doc}}.",
       "imagePrompt": "You are an image-prompt engineer. The author gives you a subject, source material, and possibly extra direction; you produce one prompt ready to send to a text-to-image model.\n\n## Principles\n- **Only what is visible**: appearance, build, clothing, accessories, pose, expression, setting, lighting, framing. Abstract traits (personality, history, powers) must be translated into visual features first ('wary' → 'brow furrowed, hand resting on the sword hilt'); anything you cannot translate, leave out.\n- **Be faithful to the material**: features stated in the source (hair colour, scars, signature weapon, cut of the clothing) must appear in the prompt. Do not invent details the source does not give — omission beats a wrong invention.\n- **Never put the subject's name in the prompt**: the model does not know it and the words are wasted. Refer to the subject by appearance.\n- **References outrank imagination**: when descriptions of existing reference images are supplied, the new picture must match them in face, hair, palette and clothing — that is the only thing making it the same subject.\n- **The author's direction wins** wherever it conflicts with the source material.\n- Keep style as its own clause, out of the prompt; put only genuine exclusions in negative, and an empty string when there are none.\n- Choose aspect from the framing: full-body portraits lean vertical, scenes and banners lean horizontal.\n\n## Language\nWrite prompt, style and negative in {{promptLang}}; write note as one sentence in {{noteLang}} telling the author what the picture will show.",
       "roundCapReached": "You have reached the maximum number of tool calls for this turn. Write your answer now, directly, without calling any more tools.",
+      "scratchpadCheckpoint": "[System note] Context limit is approaching and older tool results will soon be trimmed. Please use write_note to record your intermediate conclusions and findings into notes on disk so they are not lost.",
+      "taskResume": "[Resumed Task]\nBelow is the saved progress and notes index for this task:\n\n## Task Status & Plan\n{{body}}\n\n## Saved Notes Index\n{{notes}}{{stale}}\n\nPlease proceed directly with the unfinished steps based on the current plan and notes. Use read_note to read full note contents if needed.",
+      "taskResumeNoNotes": "(no saved notes)",
       "authorMessage": "[Message from the author]",
       "searchedFor": "I have finished searching the web.",
       "searchResults": "Here are the results of the web searches you just ran.\n\n**Write this batch up now.** So far you have produced only an announcement — not one line of the actual content. Do not spend another turn saying what you are about to search for next: that produces nothing.\n\nIn this order: first write out (or write to the document, using your tools) the full content for this batch, based on the results below. Then, if terms remain uncovered, start the next batch of searches. Cite sources by their URL.\n\n{{results}}",
-      "searchResultsFinal": "Here are the results of the web searches you just ran.\n\n**This is the last chance in this turn — do not start any more searches.** Write the full content now from everything you already have, calling your tools if it belongs in the document. For anything still uncovered, just say plainly that it was not covered; do not search for it.\n\n{{results}}"
+      "searchResultsFinal": "Here are the results of the web searches you just ran.\n\n**This is the last chance in this turn — do not start any more searches.** Write the full content now from everything you already have, calling your tools if it belongs in the document. For anything still uncovered, just say plainly that it was not covered; do not search for it.\n\n{{results}}",
+      "taskResumeStale": "\n\n> ⚠️ These reference files changed while the task was paused — re-check them before relying on them:\n{{list}}",
+      "taskResumeDeleted": "deleted",
+      "taskResumeModified": "modified",
+      "taskResumeUnreadable": "unreadable",
+      "subagent": {
+        "search": "You are a research specialist. Your role is to use web search to verify facts, gather background material, and produce clear structured summaries.\nList key findings, supporting facts, and their source URLs.",
+        "vision": "You are an image analysis specialist. Your role is to examine and interpret reference images, extract visual traits, appearance details, or composition elements, and produce clear descriptive summaries.",
+        "longread": "You are a document digest specialist. Your role is to read the specified documents thoroughly, extract outlines, core worldbuilding, or plotlines, and compile a checklist of essential details."
+      },
+      "subagentTask": "Task objective:\n{{task}}",
+      "subagentTaskWithRefs": "Task objective:\n{{task}}\n\nReferences:\n{{refs}}"
+    },
+    "taskDoc": {
+      "untitled": "Untitled task",
+      "stepsHeading": "Steps",
+      "logHeading": "Progress log",
+      "sources": "**Sources:**",
+      "logPaused": "Saved and paused",
+      "logResumed": "Resumed from pause"
+    },
+    "taskWorkspace": {
+      "title": "Task Workspace",
+      "loading": "Loading…",
+      "empty": "No task history",
+      "resume": "Resume & Continue",
+      "steps": "Task Steps",
+      "notes": "Saved Notes",
+      "selectPrompt": "Select a task on the left to view details",
+      "status": {
+        "inProgress": "In Progress",
+        "paused": "Paused",
+        "completed": "Completed",
+        "failed": "Failed"
+      },
+      "stepsCount": "{{done}}/{{total}} steps",
+      "resumeTurn": "Resuming task: {{title}}"
     },
     "snippets": {
       "button": "Snippets",
@@ -727,6 +781,7 @@
         "seededLoreHits": "{{n}} matched",
         "seededLoreNone": "no match",
         "roundLimitGranted": "Round cap ({{n}}) reached — {{extra}} more granted",
+        "roundLimitPaused": "Round cap ({{n}}) reached — saved and paused",
         "roundLimitStopped": "Round cap ({{n}}) reached — wrapping up",
         "compacted": "Compacted {{n}} earlier turns",
         "detailSummary": "Summary",
@@ -761,17 +816,21 @@
         "delete_chapter": "Delete {{doc}}",
         "generate_image": "Generate image",
         "edit_image": "Edit image",
-        "web_search": "Web search (server-side)"
+        "web_search": "Web search (server-side)",
+        "delegate": "Delegate"
       }
     },
     "errors": {
       "noProject": "Please open a project first",
       "taskNotFound": "This workspace profile has no task called \"{{task}}\".",
+      "taskWorkspaceNotFound": "Task workspace not found",
       "noModel": "Please select a model in AI Config first",
       "modelNotFound": "Selected model not found",
       "providerNotFound": "Provider not found",
       "contextExceeded": "This request is roughly {{estimated}} tokens, exceeding the model's configured context size ({{limit}} tokens), so it was not sent. Trim the document or referenced content, or raise the context size in Settings → Models; for local models (e.g. Ollama) also raise the server-side context limit (num_ctx), otherwise the request gets silently truncated.",
-      "focusNotReady": "The editor has not loaded the current document yet — try again in a moment"
+      "focusNotReady": "The editor has not loaded the current document yet — try again in a moment",
+      "noVisionModel": "No model here can read images. Switch the active model to a multimodal one, or enable Image analysis in Settings → Subagents and bind a multimodal model to it.",
+      "noApiKey": "No API key stored for \"{{provider}}\" — add it in Settings → Providers & Models."
     },
     "approval": {
       "title": "Pending edit",
@@ -798,6 +857,7 @@
       "rounds": "{{n}} rounds",
       "body": "The agent has used {{n}} consecutive tool rounds and is not finished. Continue grants {{extra}} more; Wrap up makes it answer with what it has.",
       "finish": "Wrap up",
+      "pause": "Save & Pause",
       "continue": "Continue (+{{n}} rounds)"
     },
     "plan": {
@@ -835,7 +895,7 @@
       "refBlockLabel": "【Referenced material】",
       "imageRef": "Image",
       "imageBlockLabel": "【Attached images】",
-      "imagesNotSent": "(These images could not be sent with this message: {{names}})",
+      "imagesNotSent": "(These images could not travel with this message — the active model cannot read images:\n{{list}})",
       "imageTooLarge": "{{name}} is too large ({{size}}MB, limit {{max}}MB)",
       "refUnreadable": "Could not read {{name}}",
       "noSelection": "No selection",
@@ -853,7 +913,20 @@
       "showEarlier": "{{n}} earlier exchanges",
       "collapseEarlier": "Collapse earlier turns",
       "history": "Session history",
-      "untitledSession": "(empty session)"
+      "untitledSession": "(empty session)",
+      "imagesNotSentDelegate": "(These images could not travel with this message directly, but a vision subagent is available — call delegate(kind:\"vision\", refs:[path]) to have it read them, then use its findings in your answer:\n{{list}})",
+      "subagentChipsLabel": "Session subagent toggles",
+      "subagentChip": {
+        "search": "Search",
+        "searchActive": "Web search subagent active (click to disable for this session)",
+        "searchDisabled": "Web search subagent disabled for this session (click to enable)",
+        "vision": "Vision",
+        "visionActive": "Vision subagent active (click to disable for this session)",
+        "visionDisabled": "Vision subagent disabled for this session (click to enable)",
+        "longread": "Long read",
+        "longreadActive": "Long-read subagent active (click to disable for this session)",
+        "longreadDisabled": "Long-read subagent disabled for this session (click to enable)"
+      }
     },
     "drawer": {
       "tabGenerate": "Generate",

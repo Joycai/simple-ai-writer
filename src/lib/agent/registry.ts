@@ -48,6 +48,17 @@ import {
   updateLoreFileTool,
   updateMemoryTool,
 } from "./writeTools";
+import type { TaskWorkspaceHandle } from "./taskWorkspace";
+import {
+  listNotesTool,
+  readNoteTool,
+  taskPlanTool,
+  taskProgressTool,
+  writeNoteTool,
+} from "./scratchpadTools";
+import { executeDelegate, type SubAgentKind } from "./subagent";
+import type { AgentEvent } from "./events";
+import type { AiConn } from "../ai/conn";
 
 export type ToolAccess = "read" | "write-auto" | "write-approval";
 
@@ -181,6 +192,22 @@ export interface ToolContext {
   requestPlanApproval?: (plan: LorePlan) => Promise<PlanDecision>;
   /** This run's approved-plan record — see lib/agent/plan.ts. */
   lorePlan?: PlanGate;
+  /** Active on-disk task workspace (.ai-writer/tasks/<taskId>/). */
+  taskWorkspace?: TaskWorkspaceHandle;
+  /**
+   * Abort signal for this run. Tools that launch nested runs (delegate) must
+   * share it so cancelling the parent run cancels all child work.
+   */
+  signal?: AbortSignal;
+  /**
+   * Forward events from nested child agents into the parent's execution log.
+   */
+  onNestedEvent?: (event: AgentEvent) => void;
+  /**
+   * Resolver for child agent connections. Injected by the caller from aiStore,
+   * avoiding reverse dependencies from lib/agent into stores.
+   */
+  resolveSubAgent?: (kind: SubAgentKind) => Promise<AiConn | { error: string }>;
 }
 
 export interface RegisteredTool {
@@ -222,7 +249,13 @@ export type ToolId =
   | "move_chapter"
   | "delete_chapter"
   | "generate_image"
-  | "edit_image";
+  | "edit_image"
+  | "task_plan"
+  | "task_progress"
+  | "write_note"
+  | "read_note"
+  | "list_notes"
+  | "delegate";
 
 function parseArgs<T>(raw: string): T {
   return JSON.parse(raw || "{}") as T;
@@ -942,6 +975,184 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => deleteChapterTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  task_plan: {
+    access: "write-auto",
+    definition: {
+      type: "function",
+      function: {
+        name: "task_plan",
+        description:
+          "Initialize or rewrite the task goal and step checklist in the on-disk task workspace (task.md). Use this at the start of a multi-step task to establish a clear roadmap.",
+        parameters: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "Clear title summarizing the task goal" },
+            steps: {
+              type: "array",
+              items: { type: "string" },
+              description: "List of actionable steps to execute",
+            },
+          },
+          required: ["title", "steps"],
+        },
+      },
+    },
+    execute: taskPlanTool,
+  },
+
+  task_progress: {
+    access: "write-auto",
+    definition: {
+      type: "function",
+      function: {
+        name: "task_progress",
+        description:
+          "Update the task checklist in task.md. Use 'check' to mark a step done, 'start' to mark in-progress, 'skip' to skip, 'add_step' to append a new step, or 'log' to record a progress note.",
+        parameters: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["check", "start", "skip", "add_step", "log"],
+              description: "The progress action to perform",
+            },
+            step: {
+              type: "integer",
+              description: "1-indexed step number (required for check, start, skip)",
+            },
+            text: {
+              type: "string",
+              description: "Text content for add_step or log",
+            },
+          },
+          required: ["action"],
+        },
+      },
+    },
+    execute: taskProgressTool,
+  },
+
+  write_note: {
+    access: "write-auto",
+    definition: {
+      type: "function",
+      function: {
+        name: "write_note",
+        description:
+          "Save an intermediate finding, research note, or analysis to notes/<slug>.md in the task workspace. Returns the relative path. Use this before context is trimmed to keep crucial conclusions on disk.",
+        parameters: {
+          type: "object",
+          properties: {
+            slug: {
+              type: "string",
+              description: "Short alphanumeric identifier for the note filename, e.g. search-nobles",
+            },
+            title: {
+              type: "string",
+              description: "Human-readable title for the note",
+            },
+            content: {
+              type: "string",
+              description: "Markdown content to save in the note",
+            },
+            sources: {
+              type: "array",
+              items: { type: "string" },
+              description: "Optional list of source URLs or file paths referenced",
+            },
+          },
+          required: ["slug", "title", "content"],
+        },
+      },
+    },
+    execute: writeNoteTool,
+  },
+
+  read_note: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "read_note",
+        description:
+          "Read a saved note from the task workspace. Supports line-based pagination (up to 4000 chars per call).",
+        parameters: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Relative note path (e.g. .ai-writer/tasks/<taskId>/notes/foo.md) or slug",
+            },
+            start_line: {
+              type: "integer",
+              description: "1-indexed line to start reading from (defaults to 1)",
+            },
+          },
+          required: ["path"],
+        },
+      },
+    },
+    execute: readNoteTool,
+  },
+
+  list_notes: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "list_notes",
+        description:
+          "List all saved notes in the active task workspace, including their slug, title, path, and size.",
+        parameters: {
+          type: "object",
+          properties: {},
+        },
+      },
+    },
+    execute: listNotesTool,
+  },
+
+  delegate: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "delegate",
+        description:
+          "Hand a context-heavy or capability-specific job to a specialist subagent " +
+          "running on its own model. The subagent works in a separate context, writes " +
+          "its full findings to a note file, and returns only a short summary plus the " +
+          "note path — so its raw material never enters this conversation. Use it for " +
+          "web research, reading images, and digesting long documents.",
+        parameters: {
+          type: "object",
+          properties: {
+            kind: {
+              type: "string",
+              enum: ["search", "vision", "longread"],
+              description:
+                "search — look things up on the web; vision — describe or analyse images; " +
+                "longread — read long documents and report what matters.",
+            },
+            task: {
+              type: "string",
+              description:
+                "A complete, self-contained instruction. The subagent cannot see this " +
+                "conversation, so state everything it needs to know.",
+            },
+            refs: {
+              type: "array",
+              items: { type: "string" },
+              description: "Paths the subagent should work on (documents or images).",
+            },
+          },
+          required: ["kind", "task"],
+        },
+      },
+    },
+    execute: executeDelegate,
   },
 };
 

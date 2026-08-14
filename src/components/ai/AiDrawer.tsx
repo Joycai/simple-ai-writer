@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "motion/react";
-import { Bot, CheckCircle2, History, RotateCw, Sparkles, X } from "lucide-react";
+import { Bot, CheckCircle2, History, ListTodo, RotateCw, Sparkles, X } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { AgentChat } from "./AgentChat";
 import { ModelSelector } from "./ModelSelector";
 import { AiPanel } from "./AiPanel";
 import { ConsistencyCheck } from "./ConsistencyCheck";
+import { TaskWorkspaceView } from "./TaskWorkspaceView";
 import { MOD_KEY } from "../../lib/platform";
 import { drawerSlide, overlayFade, overlayFadeTransition, springDrawer } from "../../lib/motion";
 import styles from "./AiDrawer.module.css";
@@ -32,10 +33,14 @@ export function AiDrawer() {
   } = useAgentStore();
 
   const close = () => setShowAiDrawer(false);
-  const setMode = (m: Mode) => setShowAiDrawer(true, m);
+  const setMode = (m: Mode) => {
+    setShowTasks(false);
+    setShowAiDrawer(true, m);
+  };
 
   // ── Session history menu ──
   const [showSessions, setShowSessions] = useState(false);
+  const [showTasks, setShowTasks] = useState(false);
   const sessionsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!showSessions) return;
@@ -105,6 +110,15 @@ export function AiDrawer() {
           </div>
 
           <div className={styles.headerActions}>
+            {aiDrawerMode === "chat" && (
+              <button
+                className={`${styles.headerBtn} ${showTasks ? styles.headerBtnAccent : ""}`}
+                onClick={() => setShowTasks((v) => !v)}
+                title={t("ai.taskWorkspace.title", { defaultValue: "任务工作区" })}
+              >
+                <ListTodo size={11} strokeWidth={1.8} style={{ verticalAlign: -1.5 }} />
+              </button>
+            )}
             {aiDrawerMode === "chat" && chatSessions.length > 0 && (
               <div className={styles.sessionMenuWrap} ref={sessionsRef}>
                 <button
@@ -124,6 +138,7 @@ export function AiDrawer() {
                         className={`${styles.sessionItem} ${s.id === chatSessionId ? styles.sessionItemActive : ""}`}
                         onClick={() => {
                           setShowSessions(false);
+                          setShowTasks(false);
                           void switchChatSession(s.id);
                         }}
                       >
@@ -140,7 +155,10 @@ export function AiDrawer() {
             {aiDrawerMode === "chat" && (
               <button
                 className={`${styles.headerBtn} ${styles.headerBtnAccent}`}
-                onClick={resetChat}
+                onClick={() => {
+                  setShowTasks(false);
+                  resetChat();
+                }}
                 disabled={turns.length === 0 && !chatError}
               >
                 <RotateCw size={10} strokeWidth={1.8} style={{ marginRight: 4, verticalAlign: -1 }} />
@@ -180,11 +198,15 @@ export function AiDrawer() {
         </div>
 
         <div className={styles.body}>
-          {aiDrawerMode === "generate"
-            ? <AiPanel />
-            : aiDrawerMode === "chat"
-              ? <AgentChat />
-              : <ConsistencyCheck />}
+          {showTasks ? (
+            <TaskWorkspaceView onClose={() => setShowTasks(false)} />
+          ) : aiDrawerMode === "generate" ? (
+            <AiPanel />
+          ) : aiDrawerMode === "chat" ? (
+            <AgentChat />
+          ) : (
+            <ConsistencyCheck />
+          )}
         </div>
       </motion.aside>
       )}

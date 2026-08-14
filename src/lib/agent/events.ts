@@ -14,6 +14,19 @@
 
 import { summarizeSearchResults, type ServerToolEvent } from "../ai/serverTools";
 
+/**
+ * What the author chose when a run hit its round cap.
+ *
+ * Declared here rather than in runtime.ts, which is where it is acted on: the
+ * `round-limit` event carries it, and runtime already imports this module — so
+ * the other direction would be a cycle, previously dodged with an inline
+ * `import("./runtime")` type. runtime re-exports it for its callers.
+ */
+export type RoundLimitDecision =
+  | { action: "extend"; rounds: number }
+  | { action: "finish" }
+  | { action: "pause" };
+
 export type ToolStepStatus = "running" | "done" | "error";
 
 /** One tool invocation's lifecycle. Emitted twice per call: running, then done/error. */
@@ -28,7 +41,13 @@ export interface ToolStep {
   resultSummary?: string;
 }
 
-export type AgentEvent =
+/** Scope fields attached to an event. Set only when forwarded from a nested subagent. */
+export interface AgentEventScope {
+  /** The parent delegate step's toolCallId, if this event occurred inside a subagent run. */
+  parentStep?: string;
+}
+
+export type AgentEvent = AgentEventScope & (
   | {
       kind: "run-start";
       /** Task kind (continue / polish / …) — translated by the UI when known. */
@@ -98,12 +117,12 @@ export type AgentEvent =
   | {
       /**
        * The round cap was reached with the model still calling tools, and the
-       * author was asked whether to keep going. `granted` is the extra rounds
-       * they allowed — 0 means they chose to let the run wrap up.
+       * author was asked whether to keep going. `decision` describes the choice:
+       * extend (extra rounds), finish (wrap up now), or pause (save and stop).
        */
       kind: "round-limit";
       roundsUsed: number;
-      granted: number;
+      decision: RoundLimitDecision;
       at: number;
     }
   | {
@@ -162,7 +181,7 @@ export type AgentEvent =
       at: number;
     }
   | { kind: "run-done"; inputTokens: number; outputTokens: number; at: number }
-  | { kind: "run-error"; message: string; at: number };
+  | { kind: "run-error"; message: string; at: number });
 
 /**
  * Turns a stream's server-tool reports into log rows — one row per search,
@@ -234,12 +253,18 @@ function replaceableIndex(log: AgentEvent[], event: AgentEvent): number {
     return log.findIndex(
       (e) =>
         e.kind === "tool-step" &&
+        e.parentStep === event.parentStep &&
         e.step.toolCallId === event.step.toolCallId &&
         e.step.name === event.step.name,
     );
   }
   if (event.kind === "reasoning") {
-    return log.findIndex((e) => e.kind === "reasoning" && e.round === event.round);
+    return log.findIndex(
+      (e) =>
+        e.kind === "reasoning" &&
+        e.parentStep === event.parentStep &&
+        e.round === event.round,
+    );
   }
   return -1;
 }

@@ -27,6 +27,20 @@ export interface TaskPreset {
   /** Cap on model↔tool rounds, preventing unbounded loops. */
   maxRounds: number;
   finishPolicy: FinishPolicy;
+  /**
+   * Whether this task uses the on-disk workspace (.ai-writer/tasks/).
+   *  - "off" (default)  — no scratchpad tools; behavior identical to legacy
+   *  - "offered"        — scratchpad tools available, no active checkpoint reminder
+   *  - "required"       — scratchpad tools available + active checkpoint nudge before trimming
+   */
+  scratchpad?: "off" | "offered" | "required";
+  /**
+   * How this task permits provider/server-side tools (e.g. web_search):
+   *  - "final-round-off" (default) — allowed, but withheld on the force-text final round
+   *  - "off"                       — never allowed (e.g. structured JSON tasks)
+   *  - "always"                    — allowed every round, including the final round (search subagent)
+   */
+  serverTools?: "final-round-off" | "off" | "always";
 }
 
 /** 续写 — the agentic continuation task (reads lore + prior chapters, then writes). */
@@ -63,6 +77,7 @@ export const LORE_GENERATE_PRESET: TaskPreset = {
   tools: [],
   maxRounds: 1,
   finishPolicy: "force-text",
+  serverTools: "off",
 };
 
 /** 特征拆解 — verbatim facet split, structured JSON, single-shot (same JSON-mode constraint). */
@@ -71,6 +86,7 @@ export const LORE_SPLIT_PRESET: TaskPreset = {
   tools: [],
   maxRounds: 1,
   finishPolicy: "force-text",
+  serverTools: "off",
 };
 
 /**
@@ -112,9 +128,15 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "delete_chapter",
     "generate_image",
     "edit_image",
+    "task_plan",
+    "task_progress",
+    "write_note",
+    "read_note",
+    "list_notes",
   ],
   maxRounds: 20,
   finishPolicy: "force-text",
+  scratchpad: "required",
 };
 
 /**

@@ -199,7 +199,8 @@
       "prompts": "Prompt",
       "shortcuts": "快捷键",
       "about": "关于",
-      "usage": "用量"
+      "usage": "用量",
+      "subagents": "子代理"
     },
     "workspace": {
       "profileSection": "工作台类型",
@@ -364,6 +365,20 @@
       "restoreFailed": "恢复失败：",
       "destNotEmpty": "所选文件夹不是空的。请新建一个空文件夹再恢复，避免和已有内容混在一起。",
       "emptyBundle": "这个备份文件里没有任何项目内容。"
+    },
+    "subagents": {
+      "paneSub": "把耗上下文或需要专门能力的活儿交给专用模型。子代理在独立上下文里工作，只把摘要和笔记路径交回主模型。",
+      "search": "联网检索",
+      "searchSub": "查证事实、收集资料。需要模型已开启服务端 web_search。",
+      "vision": "图像理解",
+      "visionSub": "读图并回答。需要一个多模态模型。",
+      "longread": "长文精读",
+      "longreadSub": "通读长文档并提炼要点。适合大窗口的便宜模型。",
+      "pickModel": "选择模型",
+      "noModel": "未绑定模型",
+      "warnNoSearch": "该模型没有开启服务端 web_search，子代理无法联网。",
+      "warnNotMultimodal": "该模型是纯文本模型，无法读图。",
+      "enable": "启用"
     }
   },
   "project": {
@@ -494,7 +509,7 @@
       "summary": "请对上面【选中内容】进行简要总结，提炼主要内容与要点。前文的【近期内容】仅供参考。只输出总结文字，不要加标题或任何说明。",
       "summaryNovel": "请对上面【选中内容】进行简要总结，提炼主要情节和人物动态。前文的【近期内容】仅供参考。只输出总结文字，不要加标题或任何说明。",
       "followOutline": "重要：本次已提供【{{outlineSection}}】，请严格依照其中的走向、安排与要求来推进续写，不得偏离或擅自另起方向。",
-      "chatCompact": "你是会话归纳器。请把【待归纳对话】压缩成一段要点式摘要，供后续对话作为背景使用。\n- 保留：作者的目标与意图、已做出的决定与结论、写作上的约束与偏好、提到的文件/章节/条目名称、尚未完成的事项。\n- 舍弃：寒暄、工具调用的过程细节、被后续对话推翻的中间结论。\n- 若提供了【已有摘要】，将其与新内容合并为一份连贯摘要，而不是简单拼接。\n- 用第三人称陈述（「作者要求…」「助手完成了…」）。\n- 长度不超过约 800 字。只输出摘要正文，不要标题或任何说明。",
+      "chatCompact": "你是会话归纳器。请把【待归纳对话】压缩成一段要点式摘要，供后续对话作为背景使用。\n- 保留：作者的目标与意图、已做出的决定与结论、写作上的约束与偏好、提到的文件/章节/条目名称、保存的笔记路径（.ai-writer/tasks/.../notes/...）、尚未完成的事项。\n- 舍弃：寒暄、工具调用的过程细节、被后续对话推翻的中间结论。\n- 若提供了【已有摘要】，将其与新内容合并为一份连贯摘要，而不是简单拼接。\n- 用第三人称陈述（「作者要求…」「助手完成了…」）。\n- 长度不超过约 800 字。只输出摘要正文，不要标题或任何说明。",
       "chatCompactExisting": "【已有摘要】",
       "chatCompactFold": "【待归纳对话】",
       "chatCompactBlock": "【历史摘要】（更早的对话已归纳为以下要点）\n{{summary}}",
@@ -527,10 +542,49 @@
       "continueNewChapter": "注意：本{{doc}}尚无正文，你正在写这一{{doc}}的开头。若上文提供了【{{prevTail}}】，那只用于了解衔接点与文风——不要接着它的句子往下写，而要为本{{doc}}写一个新的开头。",
       "imagePrompt": "你是图像提示词工程师。作者会给你一个主体、相关资料，可能还有额外要求，你要产出一条能直接送进文生图模型的提示词。\n\n## 原则\n- **只写看得见的东西**：外貌、身材、服饰、配饰、姿态、表情、环境、光线、构图景别。性格、身世、能力这类抽象设定必须先翻译成视觉特征（「谨慎多疑」→「眉头微蹙，手按在刀柄上」）；翻译不出来的就不要写。\n- **忠于资料**：资料写明的特征（发色、伤疤、惯用武器、服饰形制）必须出现在提示词里。资料没写的细节不要编造，留白比编错好。\n- **不要写主体的名字**：模型不认识它，名字只会占位置。用外貌特征指代。\n- **参考图优先于想象**：给出了已有参考图的描述时，新画面在长相、发型、配色、服饰上必须与其一致——这是「同一个主体」的唯一依据。\n- **作者的额外要求优先级最高**，与资料冲突时以作者为准。\n- style 单独成句，不要混进 prompt；negative 只写真正需要排除的内容，没有就留空字符串。\n- aspect 按构图选：全身立绘偏竖版，场景与横幅偏横版。\n\n## 语言\nprompt、style、negative 用{{promptLang}}书写；note 用{{noteLang}}写一句话，告诉作者这张图画的是什么。",
       "roundCapReached": "本轮的工具调用次数已用尽。请现在直接写出你的答复，不要再调用任何工具。",
+      "scratchpadCheckpoint": "【系统提示】当前上下文接近上限并即将触发裁剪。请使用 write_note 将已获取的关键结论与资料写进笔记文件，避免信息丢失。",
+      "taskResume": "【恢复任务】\n以下是此前已暂停的任务进度与相关笔记索引：\n\n## 任务状态与规划\n{{body}}\n\n## 已有笔记索引\n{{notes}}{{stale}}\n\n请直接根据当前规划和笔记，继续推进未完成的步骤。如果需要查阅笔记详情，使用 `read_note` 读取对应路径。",
+      "taskResumeNoNotes": "（暂无保存的笔记）",
       "authorMessage": "【作者消息】",
       "searchedFor": "我已完成联网搜索。",
       "searchResults": "以下是你刚才发起的联网搜索返回的结果。\n\n**现在就把这一批的正文写出来**——你目前只写了一句预告，实际内容一个字都还没有。不要再用一整轮去说「接下来我要搜索什么」：那等于什么都没产出。\n\n请照这个顺序做：先基于下面的结果写出（或用工具写入文档）这一批的完整内容；写完之后，如果还有没查的术语，再发起下一批检索。引用来源时直接给出网址。\n\n{{results}}",
-      "searchResultsFinal": "以下是你刚才发起的联网搜索返回的结果。\n\n**这是本轮最后一次机会，不要再发起任何检索。**现在就用已经拿到的全部资料写出完整正文（需要写入文档就调用工具）。还没查到的部分，如实说明尚未覆盖即可，不要再去搜。\n\n{{results}}"
+      "searchResultsFinal": "以下是你刚才发起的联网搜索返回的结果。\n\n**这是本轮最后一次机会，不要再发起任何检索。**现在就用已经拿到的全部资料写出完整正文（需要写入文档就调用工具）。还没查到的部分，如实说明尚未覆盖即可，不要再去搜。\n\n{{results}}",
+      "taskResumeStale": "\n\n> ⚠️ 以下参考文件在暂停期间发生过变动，引用前请重新核对：\n{{list}}",
+      "taskResumeDeleted": "已删除",
+      "taskResumeModified": "已修改",
+      "taskResumeUnreadable": "读取失败",
+      "subagent": {
+        "search": "你是联网研究专员。你的职责是使用网络搜索查证事实、收集背景资料，并输出条理清晰的总结。\n请列出关键结论、支持事实及对应的来源网址。",
+        "vision": "你是图像理解专员。你的职责是观察和解析参考图片，提取视觉特征、外观细节或构图元素，并输出条理清晰的视觉描述。",
+        "longread": "你是长文提炼专员。你的职责是通读指定文档，提炼大纲、核心设定或情节走向，并整理出关键细节清单。"
+      },
+      "subagentTask": "任务目标：\n{{task}}",
+      "subagentTaskWithRefs": "任务目标：\n{{task}}\n\n参考资源：\n{{refs}}"
+    },
+    "taskDoc": {
+      "untitled": "未命名任务",
+      "stepsHeading": "步骤",
+      "logHeading": "进度记录",
+      "sources": "**来源**：",
+      "logPaused": "已存盘并暂停",
+      "logResumed": "从暂停中恢复"
+    },
+    "taskWorkspace": {
+      "title": "任务工作区",
+      "loading": "加载中…",
+      "empty": "暂无历史任务",
+      "resume": "恢复并继续",
+      "steps": "任务步骤",
+      "notes": "相关笔记",
+      "selectPrompt": "从左侧选择一个任务查看详情",
+      "status": {
+        "inProgress": "进行中",
+        "paused": "已暂停",
+        "completed": "已完成",
+        "failed": "失败"
+      },
+      "stepsCount": "{{done}}/{{total}} 步",
+      "resumeTurn": "恢复任务：{{title}}"
     },
     "snippets": {
       "button": "快捷指令",
@@ -727,6 +781,7 @@
         "seededLoreHits": "命中 {{n}} 条",
         "seededLoreNone": "未命中",
         "roundLimitGranted": "已达 {{n}} 轮上限 — 批准继续 {{extra}} 轮",
+        "roundLimitPaused": "已达 {{n}} 轮上限 — 存盘并暂停",
         "roundLimitStopped": "已达 {{n}} 轮上限 — 就此收尾",
         "compacted": "已归纳前 {{n}} 轮对话",
         "detailSummary": "历史摘要",
@@ -761,17 +816,21 @@
         "delete_chapter": "删除{{doc}}",
         "generate_image": "生成图片",
         "edit_image": "修改图片",
-        "web_search": "联网搜索（服务端）"
+        "web_search": "联网搜索（服务端）",
+        "delegate": "委托子代理"
       }
     },
     "errors": {
       "noProject": "请先打开项目",
       "taskNotFound": "当前工作台没有「{{task}}」这个任务。",
+      "taskWorkspaceNotFound": "未找到对应的任务工作区",
       "noModel": "请先在 AI 配置中选择模型",
       "modelNotFound": "找不到选中的模型",
       "providerNotFound": "找不到供应商",
       "contextExceeded": "本次请求内容约 {{estimated}} tokens，超过了模型设置的上下文大小（{{limit}} tokens），已停止发送。请减少正文或引用内容，或在「设置 → 模型」中调大上下文大小；本地模型（如 Ollama）还需同时调大服务端的上下文限制（num_ctx），否则请求会被静默截断。",
-      "focusNotReady": "编辑器尚未载入当前文档，请稍候再试"
+      "focusNotReady": "编辑器尚未载入当前文档，请稍候再试",
+      "noVisionModel": "没有可读图的模型：请把当前模型换成多模态模型，或在 设置 → 子代理 里启用「图像理解」并绑定一个多模态模型。",
+      "noApiKey": "「{{provider}}」还没有保存 API 密钥，请到 设置 → 供应商与模型 里填写。"
     },
     "approval": {
       "title": "待确认的正文修改",
@@ -798,6 +857,7 @@
       "rounds": "{{n}} 轮",
       "body": "Agent 已连续调用 {{n}} 轮工具，仍未完成。继续会再给它 {{extra}} 轮；就此收尾则让它用已有的信息直接给出结果。",
       "finish": "就此收尾",
+      "pause": "存盘并暂停",
       "continue": "继续（再 {{n}} 轮）"
     },
     "plan": {
@@ -834,7 +894,7 @@
       "refBlockLabel": "【引用资料】",
       "imageRef": "图片",
       "imageBlockLabel": "【附图】",
-      "imagesNotSent": "（以下图片未能随本条消息发送：{{names}}）",
+      "imagesNotSent": "（以下图片未能随本条消息发送——当前模型读不了图：\n{{list}}）",
       "imageTooLarge": "{{name}} 太大（{{size}}MB，上限 {{max}}MB）",
       "refUnreadable": "读不到 {{name}}",
       "noSelection": "未选中正文",
@@ -852,7 +912,20 @@
       "showEarlier": "更早的 {{n}} 轮对话",
       "collapseEarlier": "收起早前对话",
       "history": "历史会话",
-      "untitledSession": "（空会话）"
+      "untitledSession": "（空会话）",
+      "imagesNotSentDelegate": "（以下图片未能直接随本条消息发送，但已启用图像理解子代理——需要看图时用 delegate(kind:\"vision\", refs:[路径]) 让它读，并把结论用于回答：\n{{list}}）",
+      "subagentChipsLabel": "会话子代理开关",
+      "subagentChip": {
+        "search": "联网",
+        "searchActive": "联网检索子代理已启用（点击在本次对话停用）",
+        "searchDisabled": "联网检索子代理已在本次对话停用（点击启用）",
+        "vision": "识图",
+        "visionActive": "图像理解子代理已启用（点击在本次对话停用）",
+        "visionDisabled": "图像理解子代理已在本次对话停用（点击启用）",
+        "longread": "长文",
+        "longreadActive": "长文精读子代理已启用（点击在本次对话停用）",
+        "longreadDisabled": "长文精读子代理已在本次对话停用（点击启用）"
+      }
     },
     "drawer": {
       "tabGenerate": "生成",
