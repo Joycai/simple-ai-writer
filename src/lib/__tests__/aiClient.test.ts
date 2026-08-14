@@ -1011,6 +1011,53 @@ describe("streamCompletion — Anthropic SSE", () => {
     ]);
   });
 
+  it("attributes author text that gets merged into a tool-result message", async () => {
+    // A run that dies mid-tool-round leaves the result with no assistant turn
+    // after it; whatever the author types next merges into that same user
+    // message, and their words end up inside the envelope the model reads as
+    // tool output. Observed: three retries typed across a morning of broken
+    // runs were re-sent on all 39 rounds of the next one and spent as a
+    // standing "keep going".
+    const { calls } = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      messages: [
+        { role: "user", content: "看看文件" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "t1", type: "function", function: { name: "read_file", arguments: "{}" } }],
+        },
+        { role: "tool", tool_call_id: "t1", content: "文件内容" },
+        { role: "user", content: "continue" },
+        { role: "user", content: "重试" },
+      ],
+    });
+    const last = (calls[0].body.messages as { role: string; content: { type: string; text?: string }[] }[])[2];
+    expect(last.content).toEqual([
+      { type: "tool_result", tool_use_id: "t1", content: "文件内容" },
+      { type: "text", text: "【作者消息】\ncontinue" },
+      { type: "text", text: "【作者消息】\n重试" },
+    ]);
+  });
+
+  it("leaves an ordinary pair of user turns unlabelled", async () => {
+    // The label is for text stranded among tool results. Two consecutive author
+    // turns merge exactly as they always did.
+    const { calls } = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      messages: [
+        { role: "user", content: "one" },
+        { role: "user", content: "two" },
+      ],
+    });
+    expect((calls[0].body.messages as { content: unknown }[])[0].content).toEqual([
+      { type: "text", text: "one" },
+      { type: "text", text: "two" },
+    ]);
+  });
+
   it("converts a data-URL image part into a base64 image block", async () => {
     const { calls } = await collect({
       ...ANTHROPIC,

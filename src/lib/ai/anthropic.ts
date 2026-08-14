@@ -252,10 +252,53 @@ export function convertToAnthropicMessages(
   const merged: AnthropicMessage[] = [];
   for (const m of out) {
     const prev = merged[merged.length - 1];
-    if (prev && prev.role === m.role) prev.content.push(...m.content);
-    else merged.push({ role: m.role, content: [...m.content] });
+    if (prev && prev.role === m.role) {
+      // Both tool results and the author's own turns are `role: "user"` here,
+      // so this merge can put them in one message — see labelAuthorText.
+      prev.content.push(...(hasToolResult(prev) ? labelAuthorText(m.content) : m.content));
+    } else {
+      merged.push({ role: m.role, content: [...m.content] });
+    }
   }
   return merged;
+}
+
+function hasToolResult(m: AnthropicMessage): boolean {
+  return m.content.some((b) => b.type === "tool_result");
+}
+
+/**
+ * Mark text that ends up sharing a message with tool results as the author's.
+ *
+ * Anthropic puts tool results in a `role: "user"` message, which is also where
+ * the author's own turns live, and adjacent same-role messages have to be
+ * merged. So a run that dies mid-tool-round — the result is appended, no
+ * assistant turn follows, and the author then types something — produces one
+ * message reading `[tool_result, "continue"]`. Their words are now inside the
+ * envelope the model reads as tool output.
+ *
+ * That was observed doing real damage: three retries typed across a morning of
+ * broken runs (`continue` / `retry` / `重试`) merged into a single `read_file`
+ * result and were then re-sent on all 39 rounds of the next run, which spent
+ * them as a standing order — "the user wants me to keep going" appeared in the
+ * model's own reasoning long after those words had stopped meaning that.
+ *
+ * The label doesn't make stale words fresh; it makes them attributable, which
+ * is the part this layer can honestly fix. A 【…】 tag is the same device the
+ * assembled prompt uses for every other injected section, so it reads as
+ * structure rather than as something the author typed.
+ *
+ * Only the merged-in blocks are labelled, and only when tool results are
+ * actually present — an ordinary pair of consecutive user turns merges exactly
+ * as it did before.
+ */
+function labelAuthorText(blocks: AnthropicBlock[]): AnthropicBlock[] {
+  let labelled = false;
+  return blocks.map((b) => {
+    if (labelled || b.type !== "text") return b;
+    labelled = true;
+    return { type: "text", text: `${i18n.t("ai.instructions.authorMessage")}\n${b.text}` };
+  });
 }
 
 // ─── Request shaping ─────────────────────────────────────────────────────────

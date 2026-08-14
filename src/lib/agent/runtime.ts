@@ -328,6 +328,16 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         messages: history,
         extraBody: opts.extraBody,
         tools: withholdTools ? undefined : toolDefinitions,
+        // Withheld alongside our own, and this is the whole reason the line
+        // exists: a server tool arrives from the *model's* configuration
+        // (ConnOptions), not from the preset, so it sailed straight past the
+        // check above. The forced final round then handed the model a live web
+        // search while telling it to stop calling tools — and a search there
+        // restarts the whole search-and-resume cycle inside a round whose only
+        // job was to end it. Presets with no tools at all (the structured JSON
+        // tasks) are covered by the same flag, where browsing is equally
+        // unwanted.
+        serverTools: withholdTools ? undefined : opts.serverTools,
         signal: opts.signal,
         onChunk: (chunk) => {
           if ("reasoning" in chunk) {

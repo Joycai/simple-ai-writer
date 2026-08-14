@@ -218,6 +218,30 @@ describe("runAgent", () => {
     expect(opts.events.some((e) => e.kind === "output-truncated")).toBe(false);
   });
 
+  it("withholds the endpoint's own tools alongside ours, not just ours", async () => {
+    // A server tool arrives from the model's configuration rather than from the
+    // preset, so it used to sail past the withhold check: the forced final
+    // round handed the model a live web search while instructing it to stop
+    // calling tools — and a search there restarts the search-and-resume cycle
+    // inside the round whose only job was to end it.
+    queueRound([{ toolCalls: [{ index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" }] },
+      { done: true, inputTokens: 1, outputTokens: 1 }]);
+    queueRound([{ text: "写完了" }, { done: true, inputTokens: 1, outputTokens: 1 }]);
+    const opts = makeOptions({
+      preset: { ...PRESET, maxRounds: 2 },
+      serverTools: ["web_search"],
+    });
+
+    await runAgent(opts);
+
+    // Round 1 is a normal tool round: both sets available.
+    expect(mockStream.mock.calls[0][0].serverTools).toEqual(["web_search"]);
+    expect(mockStream.mock.calls[0][0].tools).toBeDefined();
+    // Round 2 is the forced wrap-up: neither is.
+    expect(mockStream.mock.calls[1][0].tools).toBeUndefined();
+    expect(mockStream.mock.calls[1][0].serverTools).toBeUndefined();
+  });
+
   it("reports a tool-step error for unknown tools and lets the model retry", async () => {
     queueRound([
       { toolCalls: [{ index: 0, id: "c1", name: "no_such_tool", arguments: "{}" }] },
