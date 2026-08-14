@@ -27,6 +27,13 @@ export interface TaskPreset {
   /** Cap on model↔tool rounds, preventing unbounded loops. */
   maxRounds: number;
   finishPolicy: FinishPolicy;
+  /**
+   * Whether this task uses the on-disk workspace (.ai-writer/tasks/).
+   *  - "off" (default)  — no scratchpad tools; behavior identical to legacy
+   *  - "offered"        — scratchpad tools available, no active checkpoint reminder
+   *  - "required"       — scratchpad tools available + active checkpoint nudge before trimming
+   */
+  scratchpad?: "off" | "offered" | "required";
 }
 
 /** 续写 — the agentic continuation task (reads lore + prior chapters, then writes). */
@@ -112,9 +119,15 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "delete_chapter",
     "generate_image",
     "edit_image",
+    "task_plan",
+    "task_progress",
+    "write_note",
+    "read_note",
+    "list_notes",
   ],
   maxRounds: 20,
   finishPolicy: "force-text",
+  scratchpad: "required",
 };
 
 /**

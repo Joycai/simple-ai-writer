@@ -37,6 +37,13 @@ const ELIDED_IMAGE =
   "[earlier image dropped to stay within the model's context window]";
 
 /**
+ * Context utilization threshold (fraction of input ceiling) at which the agent
+ * is nudged to write its intermediate conclusions into notes before trimHistory
+ * elides older tool results.
+ */
+const CHECKPOINT_RATIO = 0.85;
+
+/**
  * How many pictures stay in history verbatim. Enough to compare a couple of
  * gallery images against each other; few enough that the request body stays in
  * the low megabytes however long the conversation runs.
@@ -233,6 +240,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
 
   // Mutable: the author can extend it at the cap via onRoundLimit.
   let maxRounds = preset.maxRounds;
+  let checkpointArmed = false;
 
   for (let round = 1; round <= maxRounds; round++) {
     if (opts.signal.aborted) throw new DOMException("Aborted", "AbortError");
@@ -309,9 +317,28 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     /** Searches the endpoint ran for itself this round, as log rows. */
     const logServerTool = createServerToolLog(round);
 
+    let checkpointNotice: StreamMessage | null = null;
+    if (
+      preset.scratchpad === "required" &&
+      opts.inputCeilingTokens &&
+      estimateMessagesTokens(history) > opts.inputCeilingTokens * CHECKPOINT_RATIO &&
+      !checkpointArmed
+    ) {
+      checkpointNotice = {
+        role: "user",
+        content: i18n.t("ai.instructions.scratchpadCheckpoint", {
+          defaultValue:
+            "【系统提示】当前上下文接近上限并即将触发裁剪。请使用 write_note 将已获取的关键结论与资料写进笔记文件，避免信息丢失。",
+        }),
+      };
+      history.push(checkpointNotice);
+      checkpointArmed = true;
+    }
+
     const dropped = trimHistory(history, opts.inputCeilingTokens);
     if (dropped > 0) {
       opts.onEvent({ kind: "context-trimmed", count: dropped, at: Date.now() });
+      checkpointArmed = false;
     }
 
     opts.onEvent({
@@ -409,6 +436,10 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       // history without changing what this round asked for.
       if (forcedTextNotice) {
         const at = history.indexOf(forcedTextNotice);
+        if (at >= 0) history.splice(at, 1);
+      }
+      if (checkpointNotice) {
+        const at = history.indexOf(checkpointNotice);
         if (at >= 0) history.splice(at, 1);
       }
     }

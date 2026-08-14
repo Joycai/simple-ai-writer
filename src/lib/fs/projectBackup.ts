@@ -9,6 +9,10 @@
  * missing them behaves differently with nothing on screen saying why. This
  * module packs the project as it actually is.
  *
+ * Note on `.ai-writer/tasks/`: task workspace state and notes are intentionally
+ * INCLUDED (not in PROJECT_BACKUP_EXCLUDES) because they represent recoverable
+ * long-running task and subagent state that belongs with the project.
+ *
  * What it deliberately leaves out:
  *   - `.ai-writer/backups/` — pre-write copies, recoverable state for *this*
  *     machine, and easily larger than the project itself.
