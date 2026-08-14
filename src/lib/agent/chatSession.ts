@@ -118,6 +118,45 @@ export function serializeChatSession(snap: ChatSnapshot): string {
   return JSON.stringify(data);
 }
 
+/**
+ * Bring one persisted log entry up to the current `AgentEvent` shape.
+ *
+ * A session blob outlives the code that wrote it, so an event's payload is
+ * effectively a wire format. `round-limit` carried `granted: number` until the
+ * round cap grew a third answer (存盘暂停) and became a discriminated union —
+ * and a stale row reaching the renderer as `event.decision.action` took the
+ * whole AI drawer down through the error boundary, on nothing worse than
+ * opening an old conversation.
+ *
+ * Returns null for anything unrecognisable, which the caller drops: one
+ * unreadable line of history is worth losing, a session is not.
+ */
+function migrateLogEvent(raw: unknown): AgentEvent | null {
+  if (!raw || typeof raw !== "object") return null;
+  const e = raw as Record<string, unknown>;
+  if (typeof e.kind !== "string") return null;
+
+  if (e.kind === "round-limit" && e.decision === undefined) {
+    // Pre-1.13: `granted` extra rounds, where 0 meant "wrap up now".
+    const granted = typeof e.granted === "number" ? e.granted : 0;
+    return {
+      ...(e as object),
+      decision: granted > 0 ? { action: "extend", rounds: granted } : { action: "finish" },
+    } as AgentEvent;
+  }
+  return e as unknown as AgentEvent;
+}
+
+/** Every turn's log, migrated and stripped of entries that survived nothing. */
+function normalizeTurns(turns: readonly PersistedTurn[]): PersistedTurn[] {
+  return turns.map((t) => ({
+    ...t,
+    log: Array.isArray(t.log)
+      ? t.log.map(migrateLogEvent).filter((e): e is AgentEvent => e !== null)
+      : [],
+  }));
+}
+
 export function deserializeChatSession(json: string): ChatSnapshot | null {
   let raw: unknown;
   try {
@@ -153,7 +192,7 @@ export function deserializeChatSession(json: string): ChatSnapshot | null {
   meta.lastDocPath = typeof data.meta.lastDocPath === "string" ? data.meta.lastDocPath : null;
 
   return {
-    turns: data.turns,
+    turns: normalizeTurns(data.turns),
     history: data.history,
     meta,
     usage: data.usage ?? null,

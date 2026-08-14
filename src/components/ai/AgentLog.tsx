@@ -386,18 +386,23 @@ function AgentLogRow({
           </li>
         </>
       );
-    case "round-limit":
+    case "round-limit": {
+      // Belt to the deserializer's braces (lib/agent/chatSession migrates the
+      // pre-1.13 `granted` shape): a log row also arrives straight from a live
+      // run, and no single line of history is worth taking the whole drawer
+      // down for through the error boundary.
+      const decision = event.decision ?? { action: "finish" as const };
       return (
         <li className={`${styles.row} ${styles.rowMeta}`}>
           <span className={styles.rowIndent} />
           <span className={styles.rowMetaText}>
-            {event.decision.action === "extend"
+            {decision.action === "extend"
               ? t("ai.agent.log.roundLimitGranted", {
                   defaultValue: "已达 {{n}} 轮上限 — 批准继续 {{extra}} 轮",
                   n: event.roundsUsed,
-                  extra: event.decision.rounds,
+                  extra: decision.rounds,
                 })
-              : event.decision.action === "pause"
+              : decision.action === "pause"
                 ? t("ai.agent.log.roundLimitPaused", {
                     defaultValue: "已达 {{n}} 轮上限 — 存盘并暂停",
                     n: event.roundsUsed,
@@ -410,6 +415,7 @@ function AgentLogRow({
           {time}
         </li>
       );
+    }
     case "turn-resumed":
       // Why one round is taking several requests' worth of time and money.
       return (
