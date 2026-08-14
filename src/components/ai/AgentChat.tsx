@@ -30,7 +30,7 @@ import {
   MAX_IMAGE_BYTES, imageToDataUrl, readTextFileContent, scanProjectFiles, type ProjectFile,
 } from "../../lib/fs/images";
 import { attachedKey, type AttachedItem } from "../../lib/lore/aiTask";
-import { chainCanSeeImages } from "../../lib/agent/subagent";
+import { chainCanSeeImages, withSessionOverrides } from "../../lib/agent/subagent";
 import { useImageDataUrls } from "../lore/useImageDataUrl";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
@@ -56,6 +56,7 @@ import { getToolDefinitions } from "../../lib/agent/registry";
 import { estimateToolsTokens } from "../../lib/ai/tokenEstimate";
 import { inputCeilingFor } from "../../lib/context/budget";
 import { ReasoningControls } from "./ReasoningControls";
+import { SubAgentChips } from "./SubAgentChips";
 import styles from "./AgentChat.module.css";
 
 function formatTime(at: number): string {
@@ -92,10 +93,15 @@ export function AgentChat() {
   const activeModelId = useAiStore((s) => s.activeModelId);
   const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId));
   const subAgents = useAiStore((s) => s.subAgents);
-  // Whether the model chain (either the active model directly or via vision subagent)
-  // can consume pictures.
+  const disabledSubAgents = useAgentStore((s) => s.disabledSubAgents);
   const models = useAiStore((s) => s.models);
-  const canSeeImages = chainCanSeeImages(activeModel, subAgents, models);
+  const effectiveSubs = useMemo(
+    () => withSessionOverrides(subAgents, disabledSubAgents),
+    [subAgents, disabledSubAgents],
+  );
+  // Whether the model chain (either the active model directly or via vision subagent)
+  // can consume pictures for the live session.
+  const canSeeImages = chainCanSeeImages(activeModel, effectiveSubs, models);
   const selection = useAiTaskStore((s) => s.selection);
   const terms = useTerms();
 
@@ -504,6 +510,8 @@ export function AgentChat() {
               + {t("ai.chat.imageRef", { defaultValue: "图片" })}
             </button>
           )}
+          {/* Subagent session toggles (search, vision, longread) */}
+          <SubAgentChips />
           {/* Trailing edge, past the `+ …` affordances: this one doesn't add
               material to the message, it changes how the model answers it. */}
           <ReasoningControls variant="compact" />

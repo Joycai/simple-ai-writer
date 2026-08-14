@@ -10,7 +10,8 @@
 import type { ToolId } from "./registry";
 import type { TaskPreset } from "./presets";
 import type { TaskWorkspaceHandle } from "./taskWorkspace";
-import { SUBAGENT_KINDS, type SubAgentConfig, type SubAgentKind } from "./subagent";
+import { subAgentModel, SUBAGENT_KINDS, type SubAgentConfig, type SubAgentKind } from "./subagent";
+import type { Model } from "../ai/configDb";
 
 export interface RoutedTools {
   tools: ToolId[];
@@ -30,9 +31,14 @@ export function routeTools(
   preset: TaskPreset,
   subs: Record<SubAgentKind, SubAgentConfig>,
   workspace: TaskWorkspaceHandle | undefined,
+  models: Model[],
 ): RoutedTools {
   let tools = [...preset.tools];
-  const live = (k: SubAgentKind) => Boolean(subs[k]?.enabled) && Boolean(subs[k]?.modelId);
+  // Usable, not merely enabled. A search subagent bound to a model without
+  // web_search would otherwise take the main model's own browsing away
+  // (serverTools: "off") and give nothing back — strictly worse than leaving
+  // the switch alone.
+  const live = (k: SubAgentKind) => subAgentModel(k, models, subs) !== null;
 
   // Vision takes over reading images: strip local image reading tools from main agent.
   if (live("vision")) {

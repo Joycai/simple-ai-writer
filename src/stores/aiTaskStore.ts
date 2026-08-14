@@ -441,7 +441,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         // handler below both need to ask it whether anything was written.
         const workspace = createTaskWorkspace(projectPath, model.id);
         const subAgents = useAiStore.getState().subAgents;
-        const routed = routeTools(preset!, subAgents, workspace);
+        const routed = routeTools(preset!, subAgents, workspace, models);
         const effectivePreset = {
           ...preset!,
           tools: routed.tools,

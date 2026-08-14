@@ -68,7 +68,9 @@ import {
 } from "../lib/agent/taskWorkspace";
 import { AGENT_ASSIST_PRESET } from "../lib/agent/presets";
 import { routeTools } from "../lib/agent/routing";
-import { resolveSubAgentConn, visionSubAgentModel } from "../lib/agent/subagent";
+import {
+  resolveSubAgentConn, visionSubAgentModel, withSessionOverrides, type SubAgentKind,
+} from "../lib/agent/subagent";
 import { repairToolCallPairing, runAgent, type RoundLimitDecision } from "../lib/agent/runtime";
 import { persistUsage } from "../lib/ai/usage";
 import {
@@ -236,6 +238,9 @@ interface AgentState {
   chatSessionId: number | null;
   /** Recent sessions (newest first, ≤ MAX_CHAT_SESSIONS) for the history menu. */
   chatSessions: ChatSessionRow[];
+  /** Subagents temporarily disabled for the live session (session-level override). */
+  disabledSubAgents: SubAgentKind[];
+  toggleSubAgent: (kind: SubAgentKind) => void;
 
   /** Called by the tool executor (via ToolContext.requestApproval). */
   requestApproval: (proposal: Proposal, runId: RunId, binding?: ApprovalBinding) => Promise<ApprovalDecision>;
@@ -423,6 +428,13 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   chatTaskWorkspace: null,
   chatSessionId: null,
   chatSessions: [],
+  disabledSubAgents: [],
+  toggleSubAgent: (kind) =>
+    set((s) => ({
+      disabledSubAgents: s.disabledSubAgents.includes(kind)
+        ? s.disabledSubAgents.filter((k) => k !== kind)
+        : [...s.disabledSubAgents, kind],
+    })),
 
   requestApproval: (proposal, runId, binding) =>
     new Promise<ApprovalDecision>((resolve) => {
@@ -545,6 +557,12 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // mid-conversation. Composition lives in lib/agent/chatRefs. Built after
     // the model is resolved, because whether an attached picture can travel at
     // all is a property of the model.
+    // Resolved once for the whole turn: the composer, the router and the
+    // delegate resolver all have to agree on which subagents are live.
+    const effectiveSubs = withSessionOverrides(
+      useAiStore.getState().subAgents, get().disabledSubAgents,
+    );
+
     const { buildChatMessage } = await import("../lib/agent/chatRefs");
     const { text: wireMessage, content: wireContent, imagePaths } = await buildChatMessage(
       message, quoted, refs,
@@ -553,7 +571,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // can read it. What widened is the *fallback* — see visionDelegate.
         allowImages: model.type === "multimodal",
         visionDelegate: visionSubAgentModel(
-          useAiStore.getState().models, useAiStore.getState().subAgents,
+          useAiStore.getState().models, effectiveSubs,
         ) !== null,
       },
     );
@@ -778,8 +796,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       }
 
       const tw = taskWorkspace();
-      const subAgents = useAiStore.getState().subAgents;
-      const routed = routeTools(AGENT_ASSIST_PRESET, subAgents, tw);
+      const routed = routeTools(
+        AGENT_ASSIST_PRESET, effectiveSubs, tw, useAiStore.getState().models,
+      );
       const effectivePreset = {
         ...AGENT_ASSIST_PRESET,
         tools: routed.tools,
@@ -819,8 +838,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           // ...unlike the workspace, which is per SESSION — see chatTaskWorkspace.
           taskWorkspace: tw,
           resolveSubAgent: (k) => {
-            const { models, providers, subAgents: subs } = useAiStore.getState();
-            return resolveSubAgentConn(k, models, providers, subs, loadApiKey);
+            const { models: allModels, providers: allProviders } = useAiStore.getState();
+            return resolveSubAgentConn(k, allModels, allProviders, effectiveSubs, loadApiKey);
           },
         },
         signal: controller.signal,
@@ -925,6 +944,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       // A new conversation is a new job: it must not inherit the previous
       // one's notes, or read_note would surface findings from another topic.
       chatTaskWorkspace: null,
+      disabledSubAgents: [],
     });
   },
 
@@ -973,6 +993,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         chatUsage: snap.usage,
         chatSessionId: id,
         chatError: null,
+        // The chips say "this conversation", so they cannot survive into a
+        // different one. Not stored in the session blob either: a temporary
+        // switch is not worth a format change (see resetChat).
+        disabledSubAgents: [],
       });
     } catch (e) {
       console.warn("chat session load failed:", e);

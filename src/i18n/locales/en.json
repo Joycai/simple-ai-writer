@@ -914,7 +914,19 @@
       "collapseEarlier": "Collapse earlier turns",
       "history": "Session history",
       "untitledSession": "(empty session)",
-      "imagesNotSentDelegate": "(These images could not travel with this message directly, but a vision subagent is available — call delegate(kind:\"vision\", refs:[path]) to have it read them, then use its findings in your answer:\n{{list}})"
+      "imagesNotSentDelegate": "(These images could not travel with this message directly, but a vision subagent is available — call delegate(kind:\"vision\", refs:[path]) to have it read them, then use its findings in your answer:\n{{list}})",
+      "subagentChipsLabel": "Session subagent toggles",
+      "subagentChip": {
+        "search": "Search",
+        "searchActive": "Web search subagent active (click to disable for this session)",
+        "searchDisabled": "Web search subagent disabled for this session (click to enable)",
+        "vision": "Vision",
+        "visionActive": "Vision subagent active (click to disable for this session)",
+        "visionDisabled": "Vision subagent disabled for this session (click to enable)",
+        "longread": "Long read",
+        "longreadActive": "Long-read subagent active (click to disable for this session)",
+        "longreadDisabled": "Long-read subagent disabled for this session (click to enable)"
+      }
     },
     "drawer": {
       "tabGenerate": "Generate",

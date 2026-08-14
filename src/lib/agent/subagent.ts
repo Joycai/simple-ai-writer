@@ -73,22 +73,59 @@ function clip(text: string, maxChars: number): string {
 }
 
 /**
- * The vision subagent's model, but only when it can actually do the job.
+ * The model behind one subagent, but only when it can actually do that job.
  *
- * "Enabled and bound" is not enough: the settings pane warns about a text-only
- * binding but still allows it (the author may be part-way through configuring),
- * so a caller that trusted the flag would light up an image control and then
- * post a picture to a model that cannot read one. The multimodal check that
- * `executeDelegate` makes on the tool path has to exist on this path too.
+ * **"Enabled and bound" is not "usable."** The settings pane warns about a
+ * mismatched binding and still allows it — the author may be part-way through
+ * configuring — so anything that acts on the flag alone ends up offering a
+ * capability that will refuse the moment it is used: an image control that
+ * posts to a text model, or a search subagent on a model with no web_search
+ * (which is worse than useless, since `routeTools` takes the main model's own
+ * browsing away in its favour).
+ *
+ * These are the same preconditions `executeDelegate` enforces. They live here
+ * so every surface asks the same question instead of each re-deriving it.
  */
+export function subAgentModel(
+  kind: SubAgentKind,
+  models: Model[],
+  subs: Record<SubAgentKind, SubAgentConfig>,
+): Model | null {
+  const cfg = subs[kind];
+  if (!cfg?.enabled || !cfg.modelId) return null;
+  const model = models.find((m) => m.id === cfg.modelId);
+  if (!model) return null;
+  if (kind === "vision" && model.type !== "multimodal") return null;
+  if (kind === "search" && !model.serverTools?.includes("web_search")) return null;
+  return model;
+}
+
+/** {@link subAgentModel} for the vision kind — the one with callers outside the agent. */
 export function visionSubAgentModel(
   models: Model[],
   subs: Record<SubAgentKind, SubAgentConfig>,
 ): Model | null {
-  const cfg = subs.vision;
-  if (!cfg?.enabled || !cfg.modelId) return null;
-  const model = models.find((m) => m.id === cfg.modelId);
-  return model && model.type === "multimodal" ? model : null;
+  return subAgentModel("vision", models, subs);
+}
+
+/**
+ * The author's settings with this conversation's chip toggles applied.
+ *
+ * Subtractive only: a chip can switch off something Settings enabled, never the
+ * reverse — "use it just this once" would need a model binding the author never
+ * made. One implementation because the composer, the router and the delegate
+ * resolver must agree on what is live; two copies of this drift.
+ */
+export function withSessionOverrides(
+  subs: Record<SubAgentKind, SubAgentConfig>,
+  disabled: readonly SubAgentKind[],
+): Record<SubAgentKind, SubAgentConfig> {
+  if (disabled.length === 0) return subs;
+  const next = { ...subs };
+  for (const kind of disabled) {
+    if (next[kind]) next[kind] = { ...next[kind], enabled: false };
+  }
+  return next;
 }
 
 /**

@@ -913,7 +913,19 @@
       "collapseEarlier": "收起早前对话",
       "history": "历史会话",
       "untitledSession": "（空会话）",
-      "imagesNotSentDelegate": "（以下图片未能直接随本条消息发送，但已启用图像理解子代理——需要看图时用 delegate(kind:\"vision\", refs:[路径]) 让它读，并把结论用于回答：\n{{list}}）"
+      "imagesNotSentDelegate": "（以下图片未能直接随本条消息发送，但已启用图像理解子代理——需要看图时用 delegate(kind:\"vision\", refs:[路径]) 让它读，并把结论用于回答：\n{{list}}）",
+      "subagentChipsLabel": "会话子代理开关",
+      "subagentChip": {
+        "search": "联网",
+        "searchActive": "联网检索子代理已启用（点击在本次对话停用）",
+        "searchDisabled": "联网检索子代理已在本次对话停用（点击启用）",
+        "vision": "识图",
+        "visionActive": "图像理解子代理已启用（点击在本次对话停用）",
+        "visionDisabled": "图像理解子代理已在本次对话停用（点击启用）",
+        "longread": "长文",
+        "longreadActive": "长文精读子代理已启用（点击在本次对话停用）",
+        "longreadDisabled": "长文精读子代理已在本次对话停用（点击启用）"
+      }
     },
     "drawer": {
       "tabGenerate": "生成",

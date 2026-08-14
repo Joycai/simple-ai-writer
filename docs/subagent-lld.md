@@ -1,6 +1,6 @@
 # 长任务工作区与子代理 详细设计文档（Low-Level Design）
 
-> **状态**：PR-A~PR-D 已实现（工作区 + scratchpad + 存盘暂停/恢复 + delegate/子代理 + 能力路由 + 设置面板 + 视觉链路），PR-E 待做
+> **状态**：PR-A~PR-E 全部实现。`imageModelId` 的配置归口未做（见 §12 PR-E），其余按本文落地。
 > **关联 High-Level Design**：[`docs/subagent-plan.md`](subagent-plan.md)
 > **基建依赖**：[`unified-agent-plan.md`](unified-agent-plan.md)（统一 Agent Runtime）、[`chat-memory-plan.md`](chat-memory-plan.md)（会话折叠压缩）、[`anthropic-plan.md`](anthropic-plan.md) §10（服务端工具）
 > **分支**：`feat/task-workspace-and-subagents`
@@ -919,9 +919,25 @@ if (event.kind === "reasoning") {
 - 用量从 `token_usage` 按 `task LIKE 'subagent:%'` 聚合，加进 `lib/ai/usage.ts` 的既有 rollup；
 - `search` 卡在所选模型缺 `serverTools` 时显示一条内联警告，并给去「供应商与模型」的跳转。
 
+### 7.4.1 「启用」不等于「可用」，一处判断，处处一致
+
+`subAgentModel(kind, models, subs)` 是这个问题的唯一答案：绑定存在、模型还在、
+且满足该 kind 的前置条件（vision 要多模态，search 要 `web_search`）。
+`routeTools`、chips、`chainCanSeeImages`、`resolveVisionConn` 全部走它。
+
+不这么做的代价不止是「多一个没用的按钮」：`routeTools` 见到 search 被启用，就会
+把**主模型自己的**联网关掉（`serverTools: "off"`）并改发 `delegate`——若那个子代理
+其实不能上网，作者就既失去了主模型的联网，又什么都没换回来。
+
 ### 7.5 会话级 chips
 
 `AgentChat.tsx` / `AiPanel.tsx` 输入框上方渲染已启用子代理的 chips，可单次点掉。**会话级覆盖存在 store 里，不落 prefs** —— 它是「这次对话」的意思，不是设置。
+
+覆盖**只减不增**（`withSessionOverrides`）：chip 只能关掉设置里已启用的，不能打开
+一个没绑模型的——「就这一次用一下」需要一个作者从未做过的绑定。
+
+而「这次对话」必须**在对话变化时全部清掉**：`resetChat` 与 `switchChatSession` 都要清。
+只清前者，作者在对话 A 关掉的联网会跟着他进入从历史里打开的对话 B。
 
 ---
 
