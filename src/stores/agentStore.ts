@@ -57,12 +57,13 @@ import {
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import { createPlanGate, type LorePlan, type PlanDecision } from "../lib/agent/plan";
 import {
-  appendLogToBody,
   createTaskWorkspace,
   existingWorkspace,
   listTaskNotes,
   loadTaskDoc,
-  saveTaskDoc,
+  markTaskPaused,
+  markTaskResumed,
+  recordSourceRef,
   type TaskWorkspaceHandle,
 } from "../lib/agent/taskWorkspace";
 import { AGENT_ASSIST_PRESET } from "../lib/agent/presets";
@@ -70,7 +71,9 @@ import { repairToolCallPairing, runAgent, type RoundLimitDecision } from "../lib
 import {
   inputCeilingFor, measureCharsPerToken, RECENT_WINDOW_MIN_CHARS,
 } from "../lib/context/budget";
-import { hashText, loadMemory, MEMORY_BUDGET_CHARS } from "../lib/context/memory";
+import {
+  hashText, loadMemory, MEMORY_BUDGET_CHARS, projectRelativePath,
+} from "../lib/context/memory";
 import { parentDir } from "../lib/context/outline";
 import {
   assembleContext, assembleTurnInjection, bundleToChatMessages, profileSystemPrompt,
@@ -135,6 +138,16 @@ export interface PendingRoundLimit {
   roundsUsed: number;
   /** Extra rounds a 继续 grants (the preset's own cap again). */
   extension: number;
+  /**
+   * Whether 存盘暂停 is on offer for this run.
+   *
+   * A property of the RUN, not of the store. This card is shared by chat and
+   * the task panel, so reading a chat field to decide would put the button on
+   * a panel run — whose caller has nowhere to save to and no handler for the
+   * answer. Each caller says for itself, at the moment the cap is hit, whether
+   * it has a workspace with something in it.
+   */
+  canPause: boolean;
   resolve: (decision: RoundLimitDecision) => void;
   runId: RunId;
 }
@@ -157,6 +170,15 @@ export interface ChatTurn {
    * apologised for being unable to show the image it had just saved.
    */
   images?: string[];
+}
+
+/** Extras for a programmatically composed turn (today: resuming a task). */
+export interface SendChatOptions {
+  /**
+   * What the transcript shows in place of the sent text. The full text still
+   * goes to the model — this only changes what the author reads.
+   */
+  displayText?: string;
 }
 
 interface ChatUsage {
@@ -224,7 +246,9 @@ interface AgentState {
   rejectAll: (reason: string, runId: RunId) => void;
 
   /** Called by the runtime's onRoundLimit when a run reaches its round cap. */
-  requestRoundExtension: (roundsUsed: number, extension: number, runId: RunId) => Promise<RoundLimitDecision>;
+  requestRoundExtension: (
+    roundsUsed: number, extension: number, runId: RunId, canPause: boolean,
+  ) => Promise<RoundLimitDecision>;
   /** Resolve a blocked run's round-cap question: extend, finish, or pause. */
   resolveRoundLimit: (runId: RunId, decision: RoundLimitDecision) => void;
 
@@ -238,7 +262,9 @@ interface AgentState {
   /** @param quote Manuscript passage attached to the message, if the author
    *               pinned their selection to it (shown above the turn, and sent
    *               to the model as a 【选中内容】 block). */
-  sendChat: (text: string, quote?: string, refs?: AttachedItem[]) => Promise<void>;
+  sendChat: (
+    text: string, quote?: string, refs?: AttachedItem[], opts?: SendChatOptions,
+  ) => Promise<void>;
   /** Resume a paused task with a fresh, clean context using task.md and notes. */
   resumeTask: (taskId: string) => Promise<void>;
   stopChat: () => void;
@@ -453,11 +479,14 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     item.resolve({ approved: false, reason });
   },
 
-  requestRoundExtension: (roundsUsed, extension, runId) =>
+  requestRoundExtension: (roundsUsed, extension, runId, canPause) =>
     new Promise<RoundLimitDecision>((resolve) => {
       const id = `round-limit-${++roundLimitCounter}`;
       set((s) => ({
-        pendingRoundLimits: [...s.pendingRoundLimits, { id, roundsUsed, extension, resolve, runId }],
+        pendingRoundLimits: [
+          ...s.pendingRoundLimits,
+          { id, roundsUsed, extension, canPause, resolve, runId },
+        ],
       }));
     }),
   resolveRoundLimit: (runId, decision) => {
@@ -505,7 +534,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   // ── Chat session ──────────────────────────────────────────────────────────
 
-  sendChat: async (text, quote, refs = []) => {
+  sendChat: async (text, quote, refs = [], opts) => {
     const message = text.trim();
     if (!message || get().chatRunning) return;
     const quoted = quote?.trim();
@@ -542,7 +571,12 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
     const controller = new AbortController();
     const userTurn: ChatTurn = {
-      id: `t${++turnCounter}`, role: "user", text: message, log: [], at: Date.now(), quote: quoted,
+      id: `t${++turnCounter}`, role: "user",
+      // The wire gets `message`; the transcript can show something shorter. A
+      // resume seed is a whole task.md plus a notes index — correct to send,
+      // but a wall of machine-written text attributed to the author on screen.
+      text: opts?.displayText ?? message,
+      log: [], at: Date.now(), quote: quoted,
       images: imagePaths.length ? imagePaths : undefined,
     };
     const assistantTurn: ChatTurn = {
@@ -791,7 +825,14 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // At the round cap, block on the author's 继续/收尾/存盘暂停 card instead of
         // force-ending. Each 继续 grants the preset's own cap again.
         onRoundLimit: (roundsUsed) =>
-          get().requestRoundExtension(roundsUsed, AGENT_ASSIST_PRESET.maxRounds, controller),
+          get().requestRoundExtension(
+            roundsUsed, AGENT_ASSIST_PRESET.maxRounds, controller,
+            // Evaluated here, at the cap — not at run start. A workspace the
+            // model created three rounds ago counts; pausing with nothing on
+            // disk would throw the turn away, since pause keeps only what was
+            // written down.
+            !!taskWorkspace().taskId,
+          ),
         // Every runtime event marks a point where the history just grew (a
         // round's messages, a tool reply) or shrank (trimHistory) — which is
         // exactly the cadence the context bar wants to redraw at.
@@ -805,14 +846,22 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       });
 
       if (outcome === "paused") {
-        const tw = get().chatTaskWorkspace;
-        if (tw?.taskId) {
-          const doc = await loadTaskDoc(projectPath, tw.taskId);
-          if (doc) {
-            doc.meta.status = "paused";
-            doc.meta.updatedAt = new Date().toISOString();
-            doc.body = appendLogToBody(doc.body, "已存盘并暂停");
-            await saveTaskDoc(projectPath, tw.taskId, doc);
+        const pausedId = get().chatTaskWorkspace?.taskId;
+        // Guaranteed non-null: `canPause` was false without it, so the button
+        // was never offered. Checked anyway — a silent no-op here would mean
+        // the author pressed 存盘 and nothing was saved.
+        if (pausedId) {
+          await markTaskPaused(projectPath, pausedId);
+          // The document the work was based on, as it stands right now. This is
+          // the only writer of sourceRefs: a resume compares against the state
+          // the task was suspended at, which is exactly this moment.
+          const rel = activeFilePath ? projectRelativePath(projectPath, activeFilePath) : null;
+          if (rel && focus.text) {
+            await recordSourceRef(
+              projectPath, pausedId,
+              rel,
+              hashText(focus.text),
+            );
           }
         }
       }
@@ -935,15 +984,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
     get().stopChat();
 
-    const { userContent, taskWorkspace } = await buildResumeSeed(projectPath, taskId);
+    const { userContent, title, taskWorkspace } = await buildResumeSeed(projectPath, taskId);
 
-    const doc = await loadTaskDoc(projectPath, taskId);
-    if (doc) {
-      doc.meta.status = "in_progress";
-      doc.meta.updatedAt = new Date().toISOString();
-      doc.body = appendLogToBody(doc.body, "从暂停中恢复");
-      await saveTaskDoc(projectPath, taskId, doc);
-    }
+    await markTaskResumed(projectPath, taskId);
 
     set({
       turns: [],
@@ -955,7 +998,14 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       chatTaskWorkspace: taskWorkspace,
     });
 
-    await get().sendChat(userContent);
+    await get().sendChat(userContent, undefined, [], {
+      displayText: i18n.t("ai.taskWorkspace.resumeTurn", { title }),
+    });
+
+    // The status was set optimistically so a run that does start finds the task
+    // live. If it never got off the ground — no model configured, no project —
+    // say so on disk rather than leaving a task that claims to be running.
+    if (get().chatError) await markTaskPaused(projectPath, taskId);
   },
 
   resetChatForProject: async (projectPath) => {
@@ -998,7 +1048,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 export async function buildResumeSeed(
   projectPath: string,
   taskId: string,
-): Promise<{ userContent: string; taskWorkspace: TaskWorkspaceHandle }> {
+): Promise<{ userContent: string; title: string; taskWorkspace: TaskWorkspaceHandle }> {
   const doc = await loadTaskDoc(projectPath, taskId);
   if (!doc) throw new Error(i18n.t("ai.errors.taskNotFound", { defaultValue: "未找到任务工作区" }));
 
@@ -1006,17 +1056,16 @@ export async function buildResumeSeed(
   const stale: string[] = [];
   for (const ref of doc.meta.sourceRefs ?? []) {
     const abs = `${projectPath}/${ref.path}`;
+    const mark = (reasonKey: string) =>
+      stale.push(`- ${ref.path}（${i18n.t(`ai.instructions.${reasonKey}`)}）`);
     if (!(await fileExists(abs))) {
-      stale.push(`${ref.path}（已删除）`);
+      mark("taskResumeDeleted");
       continue;
     }
     try {
-      const content = await readFile(abs);
-      if (hashText(content) !== ref.hash) {
-        stale.push(`${ref.path}（已修改）`);
-      }
+      if (hashText(await readFile(abs)) !== ref.hash) mark("taskResumeModified");
     } catch {
-      stale.push(`${ref.path}（读取失败）`);
+      mark("taskResumeUnreadable");
     }
   }
 
@@ -1025,7 +1074,7 @@ export async function buildResumeSeed(
 
   // 3. Clean user turn without any stale conversation history
   const staleBlock = stale.length
-    ? `\n\n> ⚠️ 注意：以下参考文件在此期间已被修改或删除，请在引用前重新核对：\n${stale.map((s) => `- ${s}`).join("\n")}`
+    ? i18n.t("ai.instructions.taskResumeStale", { list: stale.join("\n") })
     : "";
 
   const notesBlock = notes.length
@@ -1040,5 +1089,9 @@ export async function buildResumeSeed(
     stale: staleBlock,
   });
 
-  return { userContent, taskWorkspace: existingWorkspace(projectPath, taskId) };
+  return {
+    userContent,
+    title: doc.body.match(/^#\s+(.+)$/m)?.[1].trim() || taskId,
+    taskWorkspace: existingWorkspace(projectPath, taskId),
+  };
 }

@@ -533,13 +533,19 @@
       "authorMessage": "【作者消息】",
       "searchedFor": "我已完成联网搜索。",
       "searchResults": "以下是你刚才发起的联网搜索返回的结果。\n\n**现在就把这一批的正文写出来**——你目前只写了一句预告，实际内容一个字都还没有。不要再用一整轮去说「接下来我要搜索什么」：那等于什么都没产出。\n\n请照这个顺序做：先基于下面的结果写出（或用工具写入文档）这一批的完整内容；写完之后，如果还有没查的术语，再发起下一批检索。引用来源时直接给出网址。\n\n{{results}}",
-      "searchResultsFinal": "以下是你刚才发起的联网搜索返回的结果。\n\n**这是本轮最后一次机会，不要再发起任何检索。**现在就用已经拿到的全部资料写出完整正文（需要写入文档就调用工具）。还没查到的部分，如实说明尚未覆盖即可，不要再去搜。\n\n{{results}}"
+      "searchResultsFinal": "以下是你刚才发起的联网搜索返回的结果。\n\n**这是本轮最后一次机会，不要再发起任何检索。**现在就用已经拿到的全部资料写出完整正文（需要写入文档就调用工具）。还没查到的部分，如实说明尚未覆盖即可，不要再去搜。\n\n{{results}}",
+      "taskResumeStale": "\n\n> ⚠️ 以下参考文件在暂停期间发生过变动，引用前请重新核对：\n{{list}}",
+      "taskResumeDeleted": "已删除",
+      "taskResumeModified": "已修改",
+      "taskResumeUnreadable": "读取失败"
     },
     "taskDoc": {
       "untitled": "未命名任务",
       "stepsHeading": "步骤",
       "logHeading": "进度记录",
-      "sources": "**来源**："
+      "sources": "**来源**：",
+      "logPaused": "已存盘并暂停",
+      "logResumed": "从暂停中恢复"
     },
     "taskWorkspace": {
       "title": "任务工作区",
@@ -554,7 +560,9 @@
         "paused": "已暂停",
         "completed": "已完成",
         "failed": "失败"
-      }
+      },
+      "stepsCount": "{{done}}/{{total}} 步",
+      "resumeTurn": "恢复任务：{{title}}"
     },
     "snippets": {
       "button": "快捷指令",

@@ -153,7 +153,13 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
                   </span>
                 </div>
                 <div className={styles.itemMeta}>
-                  <span>{task.stepsDone}/{task.stepsTotal} 步</span>
+                  <span>
+                    {t("ai.taskWorkspace.stepsCount", {
+                      defaultValue: "{{done}}/{{total}} 步",
+                      done: task.stepsDone,
+                      total: task.stepsTotal,
+                    })}
+                  </span>
                   <span>{new Date(task.updatedAt).toLocaleDateString()}</span>
                 </div>
               </button>
@@ -170,7 +176,7 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
                     {tasks.find((t) => t.taskId === selectedId)?.title || selectedId}
                   </div>
                   <div className={styles.detailTaskId}>
-                    ID: {selectedId} · {selectedDoc.meta.updatedAt}
+                    ID: {selectedId} · {new Date(selectedDoc.meta.updatedAt).toLocaleString()}
                   </div>
                 </div>
                 {selectedDoc.meta.status !== "completed" && (

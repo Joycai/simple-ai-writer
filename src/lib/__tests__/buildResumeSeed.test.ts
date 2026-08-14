@@ -85,14 +85,17 @@ describe("buildResumeSeed and task listing", () => {
     expect(seed.userContent).toContain("# 探索长城遗迹");
     expect(seed.userContent).toContain("长城建造年代考");
     expect(seed.userContent).toContain(".ai-writer/tasks/20260814-120000-res123/notes/wall-history.md");
-    // Source ref is fresh, so no stale warning block
-    expect(seed.userContent).not.toContain("已被修改或删除");
+    // Source ref is fresh, so no stale warning block. Asserted on the marker
+    // rather than a sentence — the wording is i18n copy and will keep moving.
+    expect(seed.userContent).not.toContain("⚠️");
   });
 
   it("detects stale or deleted source references in resume seed", async () => {
     const originalCh1 = "旧正文";
     const modifiedCh1 = "新修改的正文";
+    const freshCh2 = "没动过的正文";
     fs.set(`${projectPath}/writing/ch1.md`, modifiedCh1);
+    fs.set(`${projectPath}/writing/fresh.md`, freshCh2);
 
     const doc: TaskDoc = {
       meta: {
@@ -104,6 +107,9 @@ describe("buildResumeSeed and task listing", () => {
         sourceRefs: [
           { path: "writing/ch1.md", hash: hashText(originalCh1) },
           { path: "writing/deleted.md", hash: "somehash" },
+          // Unchanged since the pause — must not be listed as stale, or the
+          // warning becomes noise the model learns to ignore.
+          { path: "writing/fresh.md", hash: hashText(freshCh2) },
         ],
       },
       body: `# 调查任务\n\n## 步骤\n\n- [ ] 步骤一`,
@@ -113,9 +119,11 @@ describe("buildResumeSeed and task listing", () => {
 
     const seed = await buildResumeSeed(projectPath, taskId);
 
-    expect(seed.userContent).toContain("已被修改或删除");
-    expect(seed.userContent).toContain("writing/ch1.md（已修改）");
-    expect(seed.userContent).toContain("writing/deleted.md（已删除）");
+    expect(seed.userContent).toContain("⚠️");
+    expect(seed.userContent).toContain("writing/ch1.md");
+    expect(seed.userContent).toContain("writing/deleted.md");
+    // The fresh one must NOT be flagged.
+    expect(seed.userContent).not.toContain("writing/fresh.md");
   });
 
   it("throws error when task does not exist", async () => {

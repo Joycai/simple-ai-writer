@@ -326,6 +326,74 @@ export async function loadTaskDoc(projectPath: string, taskId: string): Promise<
   }
 }
 
+/**
+ * Serializer every `task.md` write goes through.
+ *
+ * Lives here rather than with the tools because the tools are no longer the
+ * only writer: pausing, resuming and source-ref recording all read-modify-write
+ * the same file, and a chain that covered only the tools would let those race
+ * with them and lose an update.
+ */
+let writeChain: Promise<unknown> = Promise.resolve();
+
+export function serializeTaskWrite<T>(fn: () => Promise<T>): Promise<T> {
+  const run = writeChain.then(fn, fn);
+  writeChain = run.then(() => {}, () => {});
+  return run;
+}
+
+/** Read-modify-write one task.md under the shared chain. No-op if it's gone. */
+async function patchTaskDoc(
+  projectPath: string,
+  taskId: string,
+  patch: (doc: TaskDoc) => void,
+): Promise<void> {
+  await serializeTaskWrite(async () => {
+    const doc = await loadTaskDoc(projectPath, taskId);
+    if (!doc) return;
+    patch(doc);
+    doc.meta.updatedAt = new Date().toISOString();
+    await saveTaskDoc(projectPath, taskId, doc);
+  });
+}
+
+/** Author chose 存盘暂停 at the round cap: the task keeps its place on disk. */
+export async function markTaskPaused(projectPath: string, taskId: string): Promise<void> {
+  await patchTaskDoc(projectPath, taskId, (doc) => {
+    doc.meta.status = "paused";
+    doc.body = appendLogToBody(doc.body, i18n.t("ai.taskDoc.logPaused"));
+  });
+}
+
+/** Author picked 恢复并继续 — undone again if the resumed run never starts. */
+export async function markTaskResumed(projectPath: string, taskId: string): Promise<void> {
+  await patchTaskDoc(projectPath, taskId, (doc) => {
+    doc.meta.status = "in_progress";
+    doc.body = appendLogToBody(doc.body, i18n.t("ai.taskDoc.logResumed"));
+  });
+}
+
+/**
+ * Note that this task's work was based on `relPath` as it stood, so a resume can
+ * warn that the author has edited it since.
+ *
+ * Recorded at pause time rather than on every read: it is the state the task was
+ * suspended against that a resume needs to compare with, and hashing every file
+ * the model happened to open would cost a full re-read per tool call.
+ */
+export async function recordSourceRef(
+  projectPath: string,
+  taskId: string,
+  relPath: string,
+  hash: string,
+): Promise<void> {
+  await patchTaskDoc(projectPath, taskId, (doc) => {
+    const refs = (doc.meta.sourceRefs ?? []).filter((r) => r.path !== relPath);
+    refs.push({ path: relPath, hash });
+    doc.meta.sourceRefs = refs;
+  });
+}
+
 export async function saveTaskDoc(projectPath: string, taskId: string, doc: TaskDoc): Promise<void> {
   const dir = taskWorkspaceDir(projectPath, taskId);
   await makeDir(dir);

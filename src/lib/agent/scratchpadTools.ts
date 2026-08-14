@@ -34,6 +34,7 @@ import {
   parseSteps,
   readTaskNote,
   saveTaskDoc,
+  serializeTaskWrite as serializeWrite,
   updateStepInBody,
   withSteps,
   writeTaskNote,
@@ -43,14 +44,6 @@ import {
 
 const MAX_TASK_DOC_CHARS = 20_000;
 const MAX_NOTE_CHARS = 100_000;
-
-let writeChain: Promise<unknown> = Promise.resolve();
-
-function serializeWrite<T>(fn: () => Promise<T>): Promise<T> {
-  const run = writeChain.then(fn, fn);
-  writeChain = run.then(() => {}, () => {});
-  return run;
-}
 
 function parseArgs<T>(raw: string): T {
   try {

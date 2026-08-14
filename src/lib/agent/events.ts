@@ -14,6 +14,19 @@
 
 import { summarizeSearchResults, type ServerToolEvent } from "../ai/serverTools";
 
+/**
+ * What the author chose when a run hit its round cap.
+ *
+ * Declared here rather than in runtime.ts, which is where it is acted on: the
+ * `round-limit` event carries it, and runtime already imports this module — so
+ * the other direction would be a cycle, previously dodged with an inline
+ * `import("./runtime")` type. runtime re-exports it for its callers.
+ */
+export type RoundLimitDecision =
+  | { action: "extend"; rounds: number }
+  | { action: "finish" }
+  | { action: "pause" };
+
 export type ToolStepStatus = "running" | "done" | "error";
 
 /** One tool invocation's lifecycle. Emitted twice per call: running, then done/error. */
@@ -103,7 +116,7 @@ export type AgentEvent =
        */
       kind: "round-limit";
       roundsUsed: number;
-      decision: import("./runtime").RoundLimitDecision;
+      decision: RoundLimitDecision;
       at: number;
     }
   | {

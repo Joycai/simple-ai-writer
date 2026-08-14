@@ -1,6 +1,6 @@
 # 长任务工作区与子代理 详细设计文档（Low-Level Design）
 
-> **状态**：PR-A 已实现（任务工作区 + 5 个 scratchpad 工具 + checkpoint），PR-B~E 待做
+> **状态**：PR-A、PR-B 已实现（工作区 + scratchpad 工具 + checkpoint + 存盘暂停/恢复），PR-C~E 待做
 > **关联 High-Level Design**：[`docs/subagent-plan.md`](subagent-plan.md)
 > **基建依赖**：[`unified-agent-plan.md`](unified-agent-plan.md)（统一 Agent Runtime）、[`chat-memory-plan.md`](chat-memory-plan.md)（会话折叠压缩）、[`anthropic-plan.md`](anthropic-plan.md) §10（服务端工具）
 > **分支**：`feat/task-workspace-and-subagents`
@@ -405,7 +405,12 @@ if (isLastRound && round > 1 && preset.finishPolicy === "force-text"
 - `AgentEvent` 的 `round-limit` 成员：`granted: number` → `decision: RoundLimitDecision`；
 - `agentStore.requestRoundExtension(...) => Promise<RoundLimitDecision>`，`resolveRoundLimit(runId, decision)`；
 - `rejectAll` 里 `item.resolve(0)` → `item.resolve({ action: "finish" })`（`agentStore.ts:456`）；
-- `RoundLimitCard.tsx` 三个按钮：`就此收尾` / `存盘并暂停` / `继续（再 N 轮）`。中间那个只在 `ctx.taskWorkspace` 存在时渲染 —— 没有工作区就没什么可存的；
+- `RoundLimitCard.tsx` 三个按钮：`就此收尾` / `存盘并暂停` / `继续（再 N 轮）`。
+  中间那个的可见性由 **`PendingRoundLimit.canPause`** 决定，由发起 run 的一方在
+  撞上限的那一刻求值（`!!workspace.taskId`）。**不要让卡片去读 chat 的状态**：
+  这张卡 chat 与 AiPanel 共用，读 `chatTaskWorkspace` 会把按钮显示在面板的任务上，
+  而那一侧既没处理 `paused` 也无处可存 —— 点下去整轮工作无声消失。
+  同理，**两个调用方都必须处理 `outcome === "paused"`**，不能只做聊天那一侧；
 - 调用方拿到 `outcome === "paused"` 时：把 `task.md` 的 `status` 置 `paused`、追加一条进度记录、**不**再强跑一轮成文。
 
 ### 4.4 从 `task.md` 恢复
@@ -922,7 +927,7 @@ src/
 | 路径越界 | 模型传 `../../writing/x.md` | `isPathWithin` + slug 字符白名单 |
 | 同轮并发写 `task.md` | 丢更新 | 模块内 `writeChain` 串行化（§3.3.5） |
 | 磁盘堆积 | 任务目录无界增长 | 排序 GC，未收尾的优先保留但**不豁免**（§3.4） |
-| 恢复时源文件已变 | 基于过期正文推理 | `sourceRefs` 的 FNV-1a 比对，变动清单写进恢复提示（§4.4） |
+| 恢复时源文件已变 | 基于过期正文推理 | `sourceRefs` 的 FNV-1a 比对，变动清单写进恢复提示（§4.4）。**这个字段必须真有写入方**——只声明而无人填，检查就永远不会触发。写入点是**暂停时**记录当前文档（`recordSourceRef`）：恢复要比对的正是「任务挂起时的那个状态」，而给模型读过的每个文件都算哈希要多一次整文件读 |
 | 嵌套事件顶掉主 run 的日志行 | 日志错乱 | 去重键带 `parentStep`（§7.1） |
 | 子代理返回空 | 写出一篇空 note | 空产出直接返回 tool error，不建 note |
 | 会话折叠吃掉 note 路径 | 模型忘了自己存过什么 | `compact.ts` 的 `renderTurnsForSummary` 已渲染工具调用；在 `ai.instructions.chatCompact` 里加一句「保留提到过的 `notes/` 路径」。**不**把 note 加进 `injectionCarriers`（那是给可复现的检索块用的） |

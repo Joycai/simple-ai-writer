@@ -13,7 +13,7 @@ import {
   reflowMemoryBudget, type ContextAllocation,
 } from "../lib/context/budget";
 import { BOOK_PREV_TAIL_CHARS, buildBookContext } from "../lib/context/bookContext";
-import { loadMemory, projectRelativePath } from "../lib/context/memory";
+import { hashText, loadMemory, projectRelativePath } from "../lib/context/memory";
 import type { LoreActivationReport } from "../lib/context/loreSelect";
 import type { StreamMessage } from "../lib/ai/types";
 import { useAgentStore } from "./agentStore";
@@ -31,7 +31,9 @@ import {
   appendAgentEventTo, createServerToolLog, type AgentEvent, type ToolStep,
 } from "../lib/agent/events";
 import { createPlanGate } from "../lib/agent/plan";
-import { createTaskWorkspace } from "../lib/agent/taskWorkspace";
+import {
+  createTaskWorkspace, markTaskPaused, recordSourceRef,
+} from "../lib/agent/taskWorkspace";
 
 /**
  * A task id, as declared by the active profile's `tasks` (see lib/profile).
@@ -433,7 +435,11 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           set({ loreReport: bundle.loreReport, lastMessages: agentMessages });
         }
 
-        const { inputTokens, outputTokens, cachedTokens } = await runAgent({
+        // Hoisted out of toolContext: the round-cap card and the paused
+        // handler below both need to ask it whether anything was written.
+        const workspace = createTaskWorkspace(projectPath, model.id);
+
+        const { inputTokens, outputTokens, cachedTokens, outcome } = await runAgent({
           ...conn,
           // `plan.inputCeilingTokens` is 0 on a static plan (model declared no
           // context size), and a 0 ceiling disables history trimming entirely.
@@ -469,7 +475,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             // task is one job, start to finish) rather than per-session as in
             // chat. Lazy: nothing is written unless the model actually files a
             // plan or a note, so short tasks leave no directory behind.
-            taskWorkspace: createTaskWorkspace(projectPath, model.id),
+            taskWorkspace: workspace,
           },
           signal: controller.signal,
           // At the round cap, block on the AiPanel's 继续/收尾 card instead of
@@ -482,7 +488,13 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             if (useBatchStore.getState().running) return { action: "finish" };
             return useAgentStore
               .getState()
-              .requestRoundExtension(roundsUsed, preset!.maxRounds, controller);
+              .requestRoundExtension(
+                roundsUsed, preset!.maxRounds, controller,
+                // Offer 存盘暂停 only once there is something on disk to resume
+                // from — pausing discards the wire history and keeps only what
+                // the model wrote down.
+                !!workspace.taskId,
+              );
           },
           // Guarded: abort() resets isRunning/abortController synchronously,
           // without waiting for this run's in-flight promise to actually
@@ -500,6 +512,22 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           // it needs no separate guard.
           onOutputText: (text) => patchDraft(set, drafts[0].id, { text }),
         });
+
+        // The author chose 存盘暂停 at the round cap. The wire history is
+        // discarded, so what survives is whatever the model wrote to disk —
+        // mark it paused there and let the execution log explain the ending.
+        // Without this the run would just stop with no draft and no reason.
+        if (outcome === "paused" && workspace.taskId) {
+          await markTaskPaused(projectPath, workspace.taskId);
+          const rel = activeFilePath ? projectRelativePath(projectPath, activeFilePath) : null;
+          if (rel) {
+            await recordSourceRef(
+              projectPath, workspace.taskId,
+              rel,
+              hashText(focus.text),
+            );
+          }
+        }
         const cost = costFor(model, inputTokens, outputTokens, cachedTokens);
         patchDraft(set, drafts[0].id, { usage: { inputTokens, outputTokens, cost }, done: true });
         if (get().abortController === controller) {

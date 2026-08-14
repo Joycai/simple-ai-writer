@@ -20,7 +20,11 @@ import type { NativeReasoning } from "../ai/reasoning";
 import type {
   AccumulatedToolCall, ContentPart, StreamMessage, ThinkingBlockCarry,
 } from "../ai/types";
-import { createServerToolLog, type AgentEvent } from "./events";
+import { createServerToolLog, type AgentEvent, type RoundLimitDecision } from "./events";
+
+// Re-exported: callers reach the round-cap contract through the runtime that
+// enforces it, not through the event module that only has to describe it.
+export type { RoundLimitDecision };
 import { contentWithoutImages, hasImageParts } from "./imageHistory";
 import { TOOL_ARGS_DETAIL_CHARS, TOOL_RESULT_DETAIL_CHARS } from "./logFormat";
 import type { TaskPreset } from "./presets";
@@ -155,11 +159,6 @@ export function repairToolCallPairing(history: StreamMessage[]): number {
   }
   return inserted;
 }
-
-export type RoundLimitDecision =
-  | { action: "extend"; rounds: number }
-  | { action: "finish" }
-  | { action: "pause" };
 
 export interface AgentRunResult {
   /** Rounds actually consumed (≥1). */
