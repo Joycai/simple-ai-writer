@@ -26,6 +26,9 @@ export async function streamCompletion(opts: StreamOptions): Promise<void> {
   }
   const wrapped: StreamOptions = {
     ...merged,
+    // Wired here, not by callers: it is the log's own plumbing. An adapter that
+    // sends several requests for one call reports each of them through it.
+    _onRequestBody: (body) => log.requestBody(body),
     onChunk: (chunk) => {
       log.chunk(chunk);
       merged.onChunk(chunk);

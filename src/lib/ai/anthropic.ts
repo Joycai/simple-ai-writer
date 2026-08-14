@@ -14,12 +14,15 @@
  *      See `thinkingFor`.
  */
 
+import i18n from "../../i18n";
 import { fetch } from "../http";
 import { dialectFor, reasoningBody, thinkingBody, type ThinkingDialect } from "./reasoning";
 import {
   anthropicServerTools,
   readServerToolError,
   readWebSearchResults,
+  renderSearchResults,
+  type ServerToolEvent,
 } from "./serverTools";
 import { anthropicUrl } from "./urls";
 import type {
@@ -376,7 +379,57 @@ function readUsage(raw: unknown, prev: Usage): Usage {
  */
 const ANTHROPIC_REFUSAL_STOP_REASONS = new Set(["refusal"]);
 
+/**
+ * The stop reason that means "this turn isn't over" — the endpoint suspended a
+ * long-running server-tool turn and expects the paused assistant message handed
+ * straight back.
+ *
+ * The only stop reason that is neither an ending nor an error. Treating it as
+ * an ending is silent: the searches all ran, the model wrote its opening line,
+ * and the answer it promised never arrives.
+ */
+const ANTHROPIC_PAUSE_STOP_REASON = "pause_turn";
+
 // ─── The adapter ─────────────────────────────────────────────────────────────
+
+/**
+ * How many times one logical turn may be resumed after the endpoint stopped
+ * mid-turn.
+ *
+ * Each resumption is a fresh billed request carrying the whole unfinished turn
+ * — search results and all — so this is a cost ceiling as much as a loop guard.
+ * Four is enough for the shape it exists for (a research question that fans out
+ * into a dozen searches, stopping every few) while bounding the worst case at
+ * five requests for one visible answer.
+ *
+ * Hitting the cap is not an error: the turn ends where it stands, and the `done`
+ * chunk reports the stop reason that got it there.
+ */
+const MAX_PAUSE_CONTINUATIONS = 4;
+
+/**
+ * One request's outcome, as far as the turn-level loop cares.
+ *
+ * `null` means finished. Otherwise the turn has to be handed back, and *how*
+ * depends on why — see the two variants.
+ */
+type Attempt =
+  | { resume: null }
+  /**
+   * The endpoint said `pause_turn`: it wants its own turn back, verbatim, and
+   * documents that as the way to continue. Blocks are passed through untouched
+   * — a search result's `encrypted_content` is decrypted on that round trip and
+   * a rebuilt block loses it.
+   */
+  | { resume: "verbatim"; blocks: Record<string, unknown>[] }
+  /**
+   * The turn stopped on its search results without using them, and the endpoint
+   * has no notion of being handed them back (it rejects its own server-tool
+   * blocks — `docs/anthropic-plan.md` §10.7). The results go back as plain
+   * text instead, which no validator can object to.
+   */
+  | { resume: "transcript"; text: string; transcript: string };
+
 
 export async function streamAnthropic(opts: StreamOptions): Promise<void> {
   const url = anthropicUrl(opts.baseUrl, "/messages");
@@ -386,24 +439,23 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
   const dialect = dialectFor(opts.standard, opts.thinkingDialect);
   const thinking = thinkingFor(opts, dialect, maxTokens);
 
-  const body: Record<string, unknown> = {
+  const baseBody: Record<string, unknown> = {
     model: opts.modelId,
     max_tokens: maxTokens,
     stream: true,
-    messages: convertToAnthropicMessages(opts.messages, opts.modelId),
   };
-  if (system) body.system = system;
-  if (thinking) body.thinking = thinking;
+  if (system) baseBody.system = system;
+  if (thinking) baseBody.thinking = thinking;
   // Absent unless the author set an effort on this model. Governs the whole
   // response here, not only thinking — see ANTHROPIC_EFFORT in ./reasoning.
-  Object.assign(body, reasoningBody(opts.standard, opts.reasoningEffort, dialect));
+  Object.assign(baseBody, reasoningBody(opts.standard, opts.reasoningEffort, dialect));
   // Server-side tools ride in the same array as ours: one list, two kinds of
   // entry (`{type,name}` for the endpoint's own, `{name,input_schema}` for
   // ours). They are sent even on a request that declares no tools of its own —
   // a standing permission on the model, not something a task opts into.
   const serverTools = anthropicServerTools(opts.serverTools);
   if (opts.tools?.length || serverTools.length) {
-    body.tools = [
+    baseBody.tools = [
       ...serverTools,
       ...(opts.tools ?? []).map((t) => ({
         name: t.function.name,
@@ -415,33 +467,31 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
     // calls, and a request whose only tool is the server's has nothing to
     // choose — `{type:"auto"}` there would be an opinion about a decision the
     // endpoint makes internally.
-    if (opts.tools?.length) body.tool_choice = toolChoiceBody(opts, dialect);
+    if (opts.tools?.length) baseBody.tool_choice = toolChoiceBody(opts, dialect);
   }
   // `opts.extraBody` is deliberately NOT spread in. It carries OpenAI-shaped
   // fields (`response_format`) that the Messages API rejects outright with a
   // 400 — see jsonModeExtraBody in ./jsonMode, which is why nothing sends one
   // down this path any more.
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: authHeaders(opts.apiKey, opts.authMode),
-    body: JSON.stringify(body),
-    signal: opts.signal,
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    // The URL is part of the message on purpose: the most common failure on a
-    // third-party endpoint is a base URL that resolves somewhere unintended,
-    // and a bare "404: <html>" gives the author nothing to compare against the
-    // address they pasted.
-    throw new Error(`Anthropic API error ${res.status} (${url}): ${err}`);
-  }
-
-  const reader = res.body!.getReader();
-  const decoder = new TextDecoder();
-  let usage: Usage = { inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
+  // ── Turn-level state, spanning every request this turn takes ───────────────
+  //
+  // A `pause_turn` splits one assistant turn across several HTTP requests (see
+  // below). Everything the caller is told once per turn — usage, the tool
+  // calls, the closing `done` — is therefore accumulated out here rather than
+  // per request.
+  /**
+   * The turn's billed total, summed over its requests.
+   *
+   * Summed, not carried: each request reports its own running totals, so a
+   * resumed turn that simply kept the latest numbers would bill the author for
+   * the last leg only — and the resumed request is the *expensive* one, since
+   * it re-sends the whole paused turn including its search results.
+   */
+  let total: Usage = { inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
   let truncated = false;
+  /** The endpoint's own `stop_reason`, carried to the API log verbatim. */
+  let stopReason: string | undefined;
   // Block-index-keyed, like the OpenAI adapter's tool_calls map: a tool_use
   // block announces its id and name in content_block_start, then streams its
   // arguments as input_json_delta fragments that have to be concatenated.
@@ -449,24 +499,8 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
   // Index-keyed so the blocks go back in the order the model produced them —
   // a reordered sequence is a 400.
   const thinkingBlocks = new Map<number, Record<string, unknown>>();
-  /**
-   * Searches (and any later server-side tool) the endpoint ran inside this
-   * response. Kept apart from `toolBlocks` on purpose: these are already
-   * finished, and letting one reach the agent loop would produce a tool call
-   * nobody can execute and a `tool_result` the API never asked for.
-   *
-   * Nothing accumulated here is replayed in history. The blocks are the largest
-   * thing in a searching response — each hit carries page text — and the
-   * model's own thinking, which *is* replayed, already summarizes what it
-   * found; carrying the raw transcript would re-bill it every round of a loop.
-   */
-  const serverToolBlocks = new Map<number, { id: string; name: string; args: string }>();
   /** `server_tool_use` id → tool name, for labelling the result block. */
   const serverToolNames = new Map<string, string>();
-  // Carry an incomplete trailing line across reads: a single SSE line can be
-  // split across network chunks, and parsing the halves would silently drop
-  // text and usage.
-  let buffer = "";
   let finished = false;
 
   const emitToolCalls = () => {
@@ -491,96 +525,187 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
     });
   };
 
-  /** Report a finished `server_tool_use` block once, when it closes. */
-  const emitServerToolCall = (index: number) => {
-    const entry = serverToolBlocks.get(index);
-    if (!entry) return;
-    serverToolBlocks.delete(index); // once per block, whoever gets here first
-    opts.onChunk({
-      serverTool: {
-        phase: "call",
-        id: entry.id,
-        name: entry.name,
-        input: parseJsonArgs(entry.args),
-      },
-    });
-  };
-
   const emitDone = () => {
     if (finished) return;
     finished = true;
-    // A response cut off mid-search still says what it was searching for.
-    for (const index of [...serverToolBlocks.keys()].sort((a, b) => a - b)) {
-      emitServerToolCall(index);
-    }
     emitToolCalls();
     opts.onChunk({
       done: true,
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
+      inputTokens: total.inputTokens,
+      outputTokens: total.outputTokens,
+      ...(stopReason ? { stopReason } : {}),
       ...(truncated ? { truncated } : {}),
-      ...(usage.cachedTokens ? { cachedTokens: usage.cachedTokens } : {}),
+      ...(total.cachedTokens ? { cachedTokens: total.cachedTokens } : {}),
     });
   };
 
-  const parseData = (data: string) => {
-    let json: Record<string, unknown>;
-    try {
-      json = JSON.parse(data) as Record<string, unknown>;
-    } catch {
-      return; // ignore malformed SSE lines
+  /**
+   * Stream one request of this turn.
+   *
+   * Per-request state (the SSE line buffer, the blocks of *this* response)
+   * lives here; anything the caller hears about once per turn lives outside.
+   */
+  const runOnce = async (messages: AnthropicMessage[]): Promise<Attempt> => {
+    const requestBody = { ...baseBody, messages };
+    opts._onRequestBody?.(requestBody);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: authHeaders(opts.apiKey, opts.authMode),
+      body: JSON.stringify(requestBody),
+      signal: opts.signal,
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      // The URL is part of the message on purpose: the most common failure on a
+      // third-party endpoint is a base URL that resolves somewhere unintended,
+      // and a bare "404: <html>" gives the author nothing to compare against the
+      // address they pasted.
+      throw new Error(`Anthropic API error ${res.status} (${url}): ${err}`);
     }
 
-    switch (json.type) {
-      case "error": {
-        // HTTP 200 followed by an in-band failure — overloaded_error and
-        // rate-limit mid-stream both arrive this way. Left unhandled the stream
-        // would end with whatever text arrived first, reported as a success.
-        const err = json.error as { message?: string } | undefined;
-        throw new Error(`Anthropic: ${err?.message ?? JSON.stringify(json.error)}`);
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    /**
+     * This request's own usage. Per-request because `message_delta` reports a
+     * running total for the response it belongs to; the turn's total is summed
+     * from these when the request ends.
+     */
+    let usage: Usage = { inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
+    /**
+     * Every content block of *this* response, verbatim and in arrival order.
+     *
+     * Kept whole — not just the fields this adapter reads — because a paused
+     * turn has to be echoed back **unmodified**, and a search result carries an
+     * `encrypted_content` payload the API decrypts to restore its own context.
+     * Rebuilding a block from the parts we understand would strip exactly that.
+     */
+    const turnBlocks = new Map<number, Record<string, unknown>>();
+    /** Streamed `input_json` fragments per block index, applied on close. */
+    const blockArgs = new Map<number, string>();
+    /** Server-tool calls awaiting their closing event, by block index. */
+    const pendingServerCalls = new Map<number, { id: string; name: string }>();
+    let paused = false;
+    /**
+     * Whether the model has said anything since its last search came back.
+     *
+     * This is the test for "did the turn actually finish", and it is asked this
+     * way — as a fact about the text stream — rather than by inspecting the
+     * last content block, because a block is only recorded if its
+     * `content_block_start` arrived. Keying the decision on that would make a
+     * missing start event mean "the model never spoke", which resends a
+     * finished turn and bills for it.
+     *
+     * Starts true so a response with no server tool in it at all is finished by
+     * definition.
+     */
+    let spokeSinceSearch = true;
+    /** This request's searches, kept so they can be handed back as text. */
+    const searchEvents: ServerToolEvent[] = [];
+    /** Plain text the model produced this request, for the resumed turn. */
+    let spokenText = "";
+    // Carry an incomplete trailing line across reads: a single SSE line can be
+    // split across network chunks, and parsing the halves would silently drop
+    // text and usage.
+    let buffer = "";
+    let ended = false;
+
+    /** Fold a block's streamed argument fragments back into its `input`. */
+    const settleArgs = (index: number) => {
+      const raw = blockArgs.get(index);
+      if (raw === undefined) return;
+      const block = turnBlocks.get(index);
+      if (block) block.input = parseJsonArgs(raw);
+    };
+
+    /** Report a finished `server_tool_use` block once, when it closes. */
+    const emitServerToolCall = (index: number) => {
+      const entry = pendingServerCalls.get(index);
+      if (!entry) return;
+      pendingServerCalls.delete(index); // once per block, whoever gets here first
+      settleArgs(index);
+      const event: ServerToolEvent = {
+        phase: "call",
+        id: entry.id,
+        name: entry.name,
+        input: parseJsonArgs(blockArgs.get(index) ?? ""),
+      };
+      searchEvents.push(event);
+      opts.onChunk({ serverTool: event });
+    };
+
+    /** A response cut off mid-search still says what it was searching for. */
+    const flushServerCalls = () => {
+      for (const index of [...pendingServerCalls.keys()].sort((a, b) => a - b)) {
+        emitServerToolCall(index);
       }
-      case "message_start": {
-        const message = json.message as Record<string, unknown> | undefined;
-        usage = readUsage(message?.usage, usage);
-        return;
+    };
+
+    const parseData = (data: string) => {
+      let json: Record<string, unknown>;
+      try {
+        json = JSON.parse(data) as Record<string, unknown>;
+      } catch {
+        return; // ignore malformed SSE lines
       }
-      case "content_block_start": {
-        const index = asIndex(json.index);
-        const block = json.content_block as Record<string, unknown> | undefined;
-        // Kept verbatim so the turn can be echoed back unmodified: the API
-        // rejects a tool-use turn whose thinking blocks were rebuilt, and
-        // redacted ones carry only an opaque payload we must not touch.
-        if (block?.type === "thinking" || block?.type === "redacted_thinking") {
-          thinkingBlocks.set(index, { ...block });
+
+      switch (json.type) {
+        case "error": {
+          // HTTP 200 followed by an in-band failure — overloaded_error and
+          // rate-limit mid-stream both arrive this way. Left unhandled the stream
+          // would end with whatever text arrived first, reported as a success.
+          const err = json.error as { message?: string } | undefined;
+          throw new Error(`Anthropic: ${err?.message ?? JSON.stringify(json.error)}`);
         }
-        if (block?.type === "tool_use") {
-          toolBlocks.set(index, {
-            id: String(block.id ?? ""),
-            name: String(block.name ?? ""),
-            args: "",
-          });
+        case "message_start": {
+          const message = json.message as Record<string, unknown> | undefined;
+          usage = readUsage(message?.usage, usage);
+          return;
         }
-        // A search the endpoint is running for itself. Its query streams as
-        // input_json_delta exactly like a tool_use's, so it is accumulated the
-        // same way and reported once the block closes.
-        if (block?.type === "server_tool_use") {
-          const id = String(block.id ?? "");
-          const name = String(block.name ?? "");
-          serverToolBlocks.set(index, {
-            id,
-            name,
+        case "content_block_start": {
+          const index = asIndex(json.index);
+          const block = json.content_block as Record<string, unknown> | undefined;
+          if (!block) return;
+          // Shallow copy so the deltas below accumulate into our own object
+          // rather than the parsed event's. Every block is kept, including the
+          // types this adapter has no other use for — see `turnBlocks`.
+          turnBlocks.set(index, { ...block });
+
+          // Thinking blocks are additionally tracked on the *turn*, because
+          // they are replayed on the next round of the agent loop, not just
+          // within this turn. Redacted ones carry only an opaque payload.
+          if (block.type === "thinking" || block.type === "redacted_thinking") {
+            thinkingBlocks.set(index, turnBlocks.get(index)!);
+          }
+          if (block.type === "tool_use") {
+            toolBlocks.set(index, {
+              id: String(block.id ?? ""),
+              name: String(block.name ?? ""),
+              args: "",
+            });
+          }
+          // A search the endpoint is running for itself. Its query streams as
+          // input_json_delta exactly like a tool_use's, so it is accumulated the
+          // same way and reported once the block closes.
+          if (block.type === "server_tool_use") {
+            const id = String(block.id ?? "");
+            const name = String(block.name ?? "");
+            pendingServerCalls.set(index, { id, name });
             // Some endpoints send the input whole on the start block instead of
-            // streaming it; keep it, and let any deltas append to nothing.
-            args: block.input && Object.keys(block.input).length ? JSON.stringify(block.input) : "",
-          });
-          if (id) serverToolNames.set(id, name);
-        }
-        // The results, delivered whole — there is no delta form for them.
-        if (typeof block?.type === "string" && block.type.endsWith("_tool_result")) {
-          const id = String(block.tool_use_id ?? "");
-          const error = readServerToolError(block.content);
-          opts.onChunk({
-            serverTool: {
+            // streaming it; seed the buffer so both shapes end up in one place.
+            if (block.input && Object.keys(block.input).length) {
+              blockArgs.set(index, JSON.stringify(block.input));
+            }
+            if (id) serverToolNames.set(id, name);
+          }
+          // The results, delivered whole — there is no delta form for them.
+          if (typeof block.type === "string" && block.type.endsWith("_tool_result")) {
+            // The model now owes an answer built on these. Cleared again by the
+            // first text that follows.
+            spokeSinceSearch = false;
+            const id = String(block.tool_use_id ?? "");
+            const error = readServerToolError(block.content);
+            const event: ServerToolEvent = {
               phase: "result",
               id,
               // The call block named the tool; falling back to the result
@@ -589,78 +714,196 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
               name: serverToolNames.get(id) ?? block.type.replace(/_tool_result$/, ""),
               results: readWebSearchResults(block.content),
               ...(error ? { error } : {}),
-            },
-          });
+            };
+            searchEvents.push(event);
+            opts.onChunk({ serverTool: event });
+          }
+          return;
         }
-        return;
-      }
-      case "content_block_delta": {
-        const index = asIndex(json.index);
-        const delta = json.delta as Record<string, unknown> | undefined;
-        if (delta?.type === "text_delta" && typeof delta.text === "string") {
-          opts.onChunk({ text: delta.text });
-        } else if (delta?.type === "input_json_delta" && typeof delta.partial_json === "string") {
-          const entry = toolBlocks.get(index) ?? serverToolBlocks.get(index);
-          if (entry) entry.args += delta.partial_json;
-        } else if (delta?.type === "signature_delta" && typeof delta.signature === "string") {
-          const block = thinkingBlocks.get(index);
-          if (block) block.signature = String(block.signature ?? "") + delta.signature;
-        } else if (delta?.type === "thinking_delta" && typeof delta.thinking === "string") {
-          const block = thinkingBlocks.get(index);
-          if (block) block.thinking = String(block.thinking ?? "") + delta.thinking;
-          // Summarized reasoning, streamed for display. Arrives only because the
-          // request asks for display: "summarized" — the current Claude
-          // generation defaults to omitting the text while still billing it.
-          opts.onChunk({ reasoning: delta.thinking });
+        case "content_block_delta": {
+          const index = asIndex(json.index);
+          const delta = json.delta as Record<string, unknown> | undefined;
+          const block = turnBlocks.get(index);
+          if (delta?.type === "text_delta" && typeof delta.text === "string") {
+            if (block) block.text = String(block.text ?? "") + delta.text;
+            if (delta.text.trim()) spokeSinceSearch = true;
+            spokenText += delta.text;
+            opts.onChunk({ text: delta.text });
+          } else if (delta?.type === "input_json_delta" && typeof delta.partial_json === "string") {
+            blockArgs.set(index, (blockArgs.get(index) ?? "") + delta.partial_json);
+            const entry = toolBlocks.get(index);
+            if (entry) entry.args += delta.partial_json;
+          } else if (delta?.type === "signature_delta" && typeof delta.signature === "string") {
+            if (block) block.signature = String(block.signature ?? "") + delta.signature;
+          } else if (delta?.type === "thinking_delta" && typeof delta.thinking === "string") {
+            if (block) block.thinking = String(block.thinking ?? "") + delta.thinking;
+            // Summarized reasoning, streamed for display. Arrives only because the
+            // request asks for display: "summarized" — the current Claude
+            // generation defaults to omitting the text while still billing it.
+            opts.onChunk({ reasoning: delta.thinking });
+          }
+          // Neither delta is *only* accumulated above: the text is also streamed
+          // for display, while the signature stays out of sight — it is the
+          // encrypted full reasoning, not anything a reader wants.
+          return;
         }
-        // Neither delta is *only* accumulated above: the text is also streamed
-        // for display, while the signature stays out of sight — it is the
-        // encrypted full reasoning, not anything a reader wants.
-        return;
-      }
-      case "message_delta": {
-        usage = readUsage(json.usage, usage);
-        const stop = (json.delta as { stop_reason?: string } | undefined)?.stop_reason;
-        if (stop && ANTHROPIC_REFUSAL_STOP_REASONS.has(stop)) {
-          throw new Error(
-            `Anthropic declined this response (stop_reason: ${stop}). The content may have triggered a safety classifier — try a different model or provider.`,
-          );
+        case "message_delta": {
+          usage = readUsage(json.usage, usage);
+          const stop = (json.delta as { stop_reason?: string } | undefined)?.stop_reason;
+          if (stop) stopReason = stop;
+          if (stop && ANTHROPIC_REFUSAL_STOP_REASONS.has(stop)) {
+            throw new Error(
+              `Anthropic declined this response (stop_reason: ${stop}). The content may have triggered a safety classifier — try a different model or provider.`,
+            );
+          }
+          if (stop === "max_tokens") truncated = true;
+          // Not an ending: the endpoint suspended a long-running turn and wants
+          // it handed straight back. Handled by the caller below.
+          if (stop === ANTHROPIC_PAUSE_STOP_REASON) paused = true;
+          return;
         }
-        if (stop === "max_tokens") truncated = true;
-        return;
+        case "content_block_stop": {
+          // The only block whose *closing* is news: a server tool's query is
+          // complete exactly here, and reporting it now is what puts the search
+          // in the execution log before its results arrive.
+          const index = asIndex(json.index);
+          emitServerToolCall(index);
+          settleArgs(index);
+          return;
+        }
+        case "message_stop":
+          ended = true;
+          return;
+        default:
+          return; // ping, and anything added later
       }
-      case "content_block_stop":
-        // The only block whose *closing* is news: a server tool's query is
-        // complete exactly here, and reporting it now is what puts the search
-        // in the execution log before its results arrive.
-        emitServerToolCall(asIndex(json.index));
-        return;
-      case "message_stop":
-        emitDone();
-        return;
-      default:
-        return; // ping, and anything added later
+    };
+
+    while (!ended) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? ""; // keep the last (possibly incomplete) line
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue; // `event:` lines carry no payload
+        parseData(trimmed.slice(5).trim());
+        if (ended) break;
+      }
     }
+    // Stream ended without a message_stop — flush any buffered final line so a
+    // last usage report or stop reason isn't lost.
+    if (!ended) {
+      const tail = buffer.trim();
+      if (tail.startsWith("data:")) parseData(tail.slice(5).trim());
+    }
+    flushServerCalls();
+    total = {
+      inputTokens: total.inputTokens + usage.inputTokens,
+      outputTokens: total.outputTokens + usage.outputTokens,
+      cachedTokens: total.cachedTokens + usage.cachedTokens,
+    };
+
+    /**
+     * Two ways for a turn to be unfinished, only one of them announced — and
+     * they are resumed differently because the endpoints that produce them
+     * disagree about what they will accept back.
+     *
+     * `pause_turn` is the documented signal, and its endpoint documents the
+     * verbatim echo along with it.
+     *
+     * The other is a turn that stops on its own search results without using
+     * them: the model asked a question, the endpoint answered it, and the
+     * answer is worth nothing unless the model gets to speak again — whatever
+     * stop reason came with it. That case exists because the vendor's own
+     * endpoint runs the follow-through *inside* one request while MiniMax's
+     * beta implementation stops after delivering results and reports
+     * `end_turn`. Its symptom is an opening line as the whole visible answer,
+     * inside a well-formed success (`docs/anthropic-plan.md` §10.5) — and that
+     * same endpoint rejects its own blocks on the way back, so the results
+     * return as text instead (§10.7).
+     */
+    if (paused) {
+      return {
+        resume: "verbatim",
+        blocks: [...turnBlocks.entries()].sort(([a], [b]) => a - b).map(([, b]) => b),
+      };
+    }
+    if (spokeSinceSearch) return { resume: null };
+    const transcript = renderSearchResults(searchEvents);
+    // Nothing came back worth reading — resuming would ask the model to answer
+    // from the same nothing, one more billed request later.
+    if (!transcript) return { resume: null };
+    return { resume: "transcript", text: spokenText, transcript };
   };
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? ""; // keep the last (possibly incomplete) line
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith("data:")) continue; // `event:` lines carry no payload
-      parseData(trimmed.slice(5).trim());
-      if (finished) return;
-    }
+  /**
+   * One assistant turn, however many requests it takes to finish.
+   *
+   * The vendor's own endpoint runs a server tool's follow-through *inside* one
+   * request: search, results, keep writing. Two things break that assumption,
+   * and both look like a completed response from outside —
+   *
+   *   - `pause_turn`, the documented "this is taking a while, hand it back";
+   *   - a turn that stops on the search results themselves, which is what
+   *     MiniMax's beta implementation does while reporting `end_turn`.
+   *
+   * Either way the fix is the same round trip: send the unfinished turn back
+   * **verbatim** so the model can use what it found. Verbatim is load-bearing —
+   * a search result carries an `encrypted_content` payload the endpoint
+   * decrypts to restore its own context, and a rebuilt block loses it.
+   *
+   * The caller is told none of this. It sees one continuous stream of text and
+   * a single `done`, because "how many HTTP requests one answer took" is the
+   * transport's business.
+   */
+  let messages = convertToAnthropicMessages(opts.messages, opts.modelId);
+  for (let attempt = 0; ; attempt++) {
+    const outcome = await runOnce(messages);
+    if (!outcome.resume) break;
+    // An unfinished turn can't also be a tool round — the API answers a mixed
+    // parallel call with `tool_use` instead, leaving the search unrun — but if
+    // one ever arrives, the tool call is the half that needs answering first.
+    if (toolBlocks.size > 0) break;
+    if (attempt >= MAX_PAUSE_CONTINUATIONS) break;
+    // The last leg this turn is allowed. Said out loud in the instruction
+    // below, because a model that expects another chance uses this one to
+    // announce what it will do next — see `searchResultsFinal`.
+    const final = attempt >= MAX_PAUSE_CONTINUATIONS - 1;
+    opts.onChunk({ turnResumed: { leg: attempt + 2, final } });
+    messages =
+      outcome.resume === "verbatim"
+        ? [...messages, { role: "assistant", content: outcome.blocks as AnthropicBlock[] }]
+        : [
+            ...messages,
+            // Two plain-text messages, not one: the alternation rule means the
+            // results can't simply be appended after the trailing user turn,
+            // and the assistant half is where the model's own opening line
+            // belongs. Its fallback names the searches instead, because an
+            // empty assistant message is itself a 400.
+            {
+              role: "assistant",
+              content: [
+                {
+                  type: "text",
+                  text: outcome.text.trim() || i18n.t("ai.instructions.searchedFor"),
+                },
+              ],
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: i18n.t(
+                    final ? "ai.instructions.searchResultsFinal" : "ai.instructions.searchResults",
+                    { results: outcome.transcript },
+                  ),
+                },
+              ],
+            },
+          ];
   }
-
-  // Stream ended without a message_stop — flush any buffered final line, then
-  // emit `done` anyway so callers aren't left waiting on a chunk that will
-  // never arrive.
-  const tail = buffer.trim();
-  if (tail.startsWith("data:")) parseData(tail.slice(5).trim());
   emitDone();
 }

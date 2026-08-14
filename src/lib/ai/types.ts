@@ -168,6 +168,16 @@ export type StreamChunk =
    * everything that keys on `"text" in chunk`.
    */
   | { serverTool: ServerToolEvent }
+  /**
+   * The endpoint stopped mid-turn and the adapter handed the turn back to keep
+   * it going (see `lib/ai/anthropic.ts`).
+   *
+   * Reported because it is otherwise invisible: one call becomes several
+   * requests, each with its own latency and its own bill, and the author is
+   * left watching a minute of silence with nothing to explain it. Diagnostic
+   * only — nothing branches on it.
+   */
+  | { turnResumed: { leg: number; final: boolean } }
   | {
       done: true;
       inputTokens: number;
@@ -176,6 +186,18 @@ export type StreamChunk =
        *  finish_reason "length" / Gemini finishReason "MAX_TOKENS") rather than
        *  the model finishing on its own. */
       truncated?: boolean;
+      /**
+       * Why the model stopped, in the endpoint's own words — diagnostic only,
+       * never branched on.
+       *
+       * Here because "the answer just stops" is the hardest failure to reason
+       * about from the outside, and the reason is the one datum that separates
+       * its causes (`max_tokens` cut it off / `tool_use` means the turn is
+       * meant to continue / `end_turn` means the model considered itself done).
+       * Written to the API log; an adapter that has no such field simply omits
+       * it.
+       */
+      stopReason?: string;
       /**
        * Portion of `inputTokens` served from the provider's prompt cache
        * (OpenAI `usage.prompt_tokens_details.cached_tokens` / Gemini
@@ -275,6 +297,16 @@ export interface StreamOptions {
   safetySettings?: GeminiSafetySettings;
   /** Optional model-scoped prefix prompt, prepended as the leading system instruction. */
   prefix?: string;
+  /**
+   * Every HTTP request body an adapter actually sends, reported for the API log.
+   *
+   * Wired by `streamCompletion`, never by a task. It exists because one call can
+   * become several requests — an Anthropic turn resumes itself when the endpoint
+   * stops mid-turn (see `lib/ai/anthropic.ts`) — and a log that records only the
+   * caller's intent cannot show what the endpoint was actually sent. Every bug
+   * found in that resume path so far was found by reading these bodies.
+   */
+  _onRequestBody?: (body: unknown) => void;
   /**
    * Optional model context window (tokens). When set, a request whose
    * estimated prompt size exceeds it is rejected with ContextSizeError

@@ -122,12 +122,91 @@ followed by tool messages responding to each tool_call_id"，Gemini 与 Anthropi
   `thoughtSignature`。
 - **`tools` 里可以混入服务端工具**（`{type:"web_search_20250305", name:"web_search"}`
   一类，无 `input_schema`）。它们由服务端在同一次请求内执行完，响应里是
-  `server_tool_use` + `web_search_tool_result` 两个 content block，**没有任何
-  东西要回传** —— 把 `server_tool_use` 当普通 `tool_use` 去配 `tool_result` 是
+  `server_tool_use` + `web_search_tool_result` 两个 content block，**不需要
+  `tool_result`** —— 把 `server_tool_use` 当普通 `tool_use` 去配一条结果，是
   对一次已完成的调用回话。与 ② 族同形（那边是 item，这边是 content block），
-  ①③ 族没有对应物。样本见 [`landscape.md`](landscape.md) §7 第四个样本。
+  ①③ 族没有对应物。详见 §6.1。
 - **兼容层可能砍掉 `tool_choice` 的强制档**（只留 `auto`/`none`），于是"强制
   失败就退回 JSON 模式"在那些端点上是唯一出路，见 `structured.md` §1。
+
+### 6.1 服务端工具：`pause_turn` 是"没结束"，不是结束
+
+服务端工具（`web_search` / `web_fetch` / `code_execution`…）声明在同一个
+`tools` 数组里，但生命周期与普通工具**完全相反**：模型调用它，**服务端自己
+执行**，结果直接进同一次响应，调用方无事可做也无从拒绝。
+
+```jsonc
+"tools": [{ "type": "web_search_20250305", "name": "web_search", "max_uses": 10 }]
+
+// 响应 content 按执行顺序：
+{ "type": "server_tool_use", "id": "srvtoolu_1", "name": "web_search", "input": {"query": "…"} }
+{ "type": "web_search_tool_result", "tool_use_id": "srvtoolu_1",
+  "content": [{ "type": "web_search_result", "url": "…", "title": "…",
+                "page_age": "…", "encrypted_content": "EqgfCioIARgB…" }] }
+```
+
+**两条会静默毁掉功能的规则：**
+
+**①「一次请求 = 一个完整回答」不成立。** 服务端可能把 turn 停在半路，而
+**只有一种停法是明说的**：
+
+- **`stop_reason: "pause_turn"`** —— 官方 ④ 族的说法，读 stop_reason 就知道。
+- **停在 `*_tool_result` 上、报 `end_turn`** —— 兼容层实测存在（MiniMax，见
+  [`landscape.md`](landscape.md) §7 第四个样本）：它把搜索结果送回来后不再叫
+  模型，于是响应是个格式完好的成功，模型却只留下搜索前那句开场白。**没有任何
+  字段说少了东西**，唯一的判据是「结果之后模型还说话了吗」。
+
+两者补救**理论上**相同：把未完成的 assistant turn 原样送回去再发一次。但见下面
+那条警告 —— 兼容层可能连自己发出来的块都不收。
+
+**① 的官方形态：`pause_turn`。** 服务端把一个跑得久的
+turn 挂起了，要求调用方**把那条 assistant 消息原样送回**再发一次，模型接着写。
+官方原文：*"The API can pause a long-running search turn and return
+`stop_reason: "pause_turn"`. To continue, send the paused assistant message back
+unchanged in a new request."*
+
+把它当成正常结束，症状是**搜索全都跑了、模型写了一句开场白、然后没了，且没有
+任何报错** —— 这是本目录里最难自行发现的一种失败，因为响应是 200、文本也确实
+有一段。
+
+**② 回传时 `encrypted_content` 必须一字不改。** 官方原文：*"send the assistant's
+content blocks back exactly as you received them, including each result's
+`encrypted_content` … If `encrypted_content` is missing or modified, the request
+fails with a 400 validation error."* 服务端靠解密它来恢复模型看到的搜索内容。
+
+**推论：适配层不能"理解后重建" content block。** 只保留自己认识的字段再拼回去，
+恰好会丢掉 `encrypted_content` —— 与 ③ 族 `thoughtSignature` 是同一条教训
+（§5）：**跨轮要回传的东西必须整块留存，不能归一化。**
+
+**③ 兼容层可能拒收自己发出来的服务端工具块。** MiniMax 实测（2026-08）：把它的
+`server_tool_use` + `web_search_tool_result` 原样送回，得到
+
+```
+400 invalid params, tool result's tool id(call_019ffefc…) not found (2013)
+```
+
+那个 id 正是它自己在上一次响应里生成的。**推断**：请求侧校验器把任何
+`*_tool_result` 都当客户端工具的结果、去找同 id 的 `tool_use`，而
+`server_tool_use` 不是那个东西。响应侧实现了、请求侧没有 —— beta 的典型形态。
+
+于是在这类端点上，**协议规定的续跑方式恰好是唯一不被接受的形状**。可移植的兜底
+是把结果**渲染成纯文本**当普通消息送回：丢掉引用机制（`encrypted_content` 与
+citation 只对签发方有意义），但不依赖对方懂不懂服务端工具。
+
+其他：
+
+- **混合调用走另一条路**：同一组并行调用里既有服务端工具又有调用方工具时，
+  `stop_reason` 是 `tool_use` 而**不是** `pause_turn`，且搜索**尚未执行** ——
+  先回传调用方的 `tool_result`，服务端在下一轮才跑搜索。
+- **失败是 200 里的一个 block**，不是 HTTP 错误：
+  `{"type":"web_search_tool_result_error","error_code":"max_uses_exceeded"}`，
+  `content` 此时是单个对象而非数组。错误码有
+  `too_many_requests` / `invalid_tool_input` / `max_uses_exceeded` /
+  `query_too_long` / `request_too_large` / `unavailable`。**搜到 0 条不是错误**，
+  是空数组。
+- **计费两头都算**：按次（官方 $10/1000 次）+ 搜索结果按 input token 计，
+  且**在同一轮的多次迭代与后续轮次里反复计**。`usage.server_tool_use
+  .web_search_requests` 给出次数。`max_uses` 是唯一的刹车。
 
 ## 7. ② Responses
 

@@ -380,6 +380,32 @@ function AgentLogRow({ row, showTime }: { row: Row; showTime: boolean }) {
           {time}
         </li>
       );
+    case "turn-resumed":
+      // Why one round is taking several requests' worth of time and money.
+      return (
+        <li className={`${styles.row} ${styles.rowMeta}`}>
+          <span className={styles.rowIndent} />
+          <span className={styles.rowMetaText}>
+            {t(event.final ? "ai.agent.log.turnResumedFinal" : "ai.agent.log.turnResumed", {
+              leg: event.leg,
+            })}
+          </span>
+        </li>
+      );
+    case "output-truncated":
+      // Warning-shaped, not error-shaped: the text that did arrive is real and
+      // usable, it just isn't all of it.
+      return (
+        <li className={`${styles.row} ${styles.rowMeta}`}>
+          <span className={styles.rowIndent} />
+          <span className={styles.rowMetaText}>
+            {t("ai.agent.log.outputTruncated", {
+              defaultValue: "输出被上限截断，回答未写完",
+            })}
+            {event.stopReason && ` · ${event.stopReason}`}
+          </span>
+        </li>
+      );
     case "context-trimmed":
       return (
         <li className={`${styles.row} ${styles.rowMeta}`}>

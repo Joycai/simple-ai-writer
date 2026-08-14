@@ -190,6 +190,34 @@ describe("runAgent", () => {
     expect(result).toEqual({ rounds: 2, inputTokens: 28, outputTokens: 9, cachedTokens: 20 });
   });
 
+  it("says so in the log when the endpoint cut the output short", async () => {
+    // The symptom this exists for: an answer that stops mid-sentence looks
+    // exactly like one the model chose to end, and the fix (raise max-output)
+    // is invisible without being told.
+    queueRound([
+      { text: "半句话就没" },
+      { done: true, inputTokens: 5, outputTokens: 5, truncated: true, stopReason: "max_tokens" },
+    ]);
+    const opts = makeOptions();
+
+    await runAgent(opts);
+
+    expect(opts.events).toContainEqual(
+      expect.objectContaining({ kind: "output-truncated", round: 1, stopReason: "max_tokens" }),
+    );
+    // The text that did arrive is still the run's output — truncated, not lost.
+    expect(last(opts.output)).toBe("半句话就没");
+  });
+
+  it("stays quiet about truncation when the model finished on its own", async () => {
+    queueRound([{ text: "写完了" }, { done: true, inputTokens: 5, outputTokens: 5 }]);
+    const opts = makeOptions();
+
+    await runAgent(opts);
+
+    expect(opts.events.some((e) => e.kind === "output-truncated")).toBe(false);
+  });
+
   it("reports a tool-step error for unknown tools and lets the model retry", async () => {
     queueRound([
       { toolCalls: [{ index: 0, id: "c1", name: "no_such_tool", arguments: "{}" }] },

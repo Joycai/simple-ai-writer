@@ -127,6 +127,40 @@ export type AgentEvent =
       elapsedMs?: number;
       at: number;
     }
+  | {
+      /**
+       * The endpoint stopped mid-turn and the adapter handed the turn back so
+       * the model could keep going (`lib/ai/anthropic.ts`).
+       *
+       * One round of the loop, several requests to the endpoint — which is
+       * otherwise invisible, and shows up only as a round that takes a minute
+       * and costs several times what its round-start estimate said. `final`
+       * marks the last leg the turn is allowed, which is when a run that keeps
+       * announcing instead of answering gets cut off.
+       */
+      kind: "turn-resumed";
+      round: number;
+      leg: number;
+      final: boolean;
+      at: number;
+    }
+  | {
+      /**
+       * The endpoint cut this round's output short instead of letting the model
+       * finish — `max_tokens` reached.
+       *
+       * Streamed tasks have shown this on the draft since drafts existed; the
+       * tool loop dropped it on the floor, so an agent or chat answer that got
+       * truncated looked exactly like one the model chose to end. That is the
+       * single most misleading thing this log can omit: the visible symptom is
+       * an answer that stops mid-thought with nothing to say why.
+       */
+      kind: "output-truncated";
+      round: number;
+      /** The endpoint's own stop reason, when it named one. */
+      stopReason?: string;
+      at: number;
+    }
   | { kind: "run-done"; inputTokens: number; outputTokens: number; at: number }
   | { kind: "run-error"; message: string; at: number };
 
