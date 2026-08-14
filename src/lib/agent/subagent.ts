@@ -56,6 +56,9 @@ export const SUB_PRESETS: Record<SubAgentKind, TaskPreset> = {
 
 const DELEGATE_SUMMARY_CHARS = 800;
 
+/** How much of the instruction survives into the note's filename. */
+const SLUG_HINT_CHARS = 20;
+
 function parseArgs<T>(json: string): T {
   try {
     return JSON.parse(json) as T;
@@ -105,7 +108,14 @@ export async function resolveSubAgentConn(
   if (!provider) {
     return { error: `Provider for ${kind} subagent not found.` };
   }
-  const apiKey = (await loadKey(provider.id)) ?? "";
+  const apiKey = await loadKey(provider.id);
+  // Not defaulted to "": an empty key produces a 401 the parent model reads as
+  // "the subagent is broken", when the actual fix is to paste a key. Say which.
+  if (!apiKey) {
+    return {
+      error: `No API key stored for the provider serving the ${kind} subagent ("${provider.name}"). Tell the author to add it in Settings → Providers.`,
+    };
+  }
   return { provider, model, apiKey };
 }
 
@@ -139,43 +149,40 @@ export async function executeDelegate(
   const conn = await ctx.resolveSubAgent(kind);
   if ("error" in conn) return fail(conn.error);
 
+  // Capability preconditions, checked here rather than inside the sub-run: a
+  // subagent bound to a model that cannot do its one job would otherwise burn a
+  // whole round trip before reporting it, and report it as a failure rather
+  // than as a configuration problem the author can fix.
   if (kind === "search" && !conn.model.serverTools?.includes("web_search")) {
     return fail(
       `the search subagent's model "${conn.model.name}" has no server-side web_search enabled. ` +
         `Tell the author to turn it on in Settings → Models, or answer without searching.`,
     );
   }
+  if (kind === "vision" && conn.model.type !== "multimodal") {
+    return fail(
+      `the vision subagent's model "${conn.model.name}" is text-only and cannot read images. ` +
+        `Tell the author to bind a multimodal model to it in Settings → Subagents.`,
+    );
+  }
 
   const refs = (args.refs ?? []).filter((r) => typeof r === "string" && r.trim());
   const preset = SUB_PRESETS[kind];
 
-  const defaultSystemPrompt =
-    kind === "search"
-      ? "你是联网研究专员。你的职责是使用网络搜索查证事实、收集背景资料，并输出条理清晰的总结。\n请列出关键结论、支持事实及对应的来源网址。"
-      : kind === "vision"
-        ? "你是图像理解专员。你的职责是观察和解析参考图片，提取视觉特征、外观细节或构图元素，并输出条理清晰的视觉描述。"
-        : "你是长文提炼专员。你的职责是通读指定文档，提炼大纲、核心设定或情节走向，并整理出关键细节清单。";
-
-  const defaultTaskPrompt = refs.length
-    ? `任务目标：\n{{task}}\n\n参考资源：\n{{refs}}`
-    : `任务目标：\n{{task}}`;
-
-  const refsText = refs.map((r) => `- ${r}`).join("\n");
-
+  // Two templates, not one with an interpolated blank: the refs-bearing key
+  // carries its own 「参考资源」 heading, so reusing it with nothing to list
+  // handed the subagent an empty section — an instruction to consult sources
+  // that aren't there.
   const messages: StreamMessage[] = [
-    {
-      role: "system",
-      content: i18n.t(`ai.instructions.subagent.${kind}`, {
-        defaultValue: defaultSystemPrompt,
-      }),
-    },
+    { role: "system", content: i18n.t(`ai.instructions.subagent.${kind}`) },
     {
       role: "user",
-      content: i18n.t("ai.instructions.subagentTask", {
-        defaultValue: defaultTaskPrompt,
-        task,
-        refs: refsText,
-      }),
+      content: refs.length
+        ? i18n.t("ai.instructions.subagentTaskWithRefs", {
+            task,
+            refs: refs.map((r) => `- ${r}`).join("\n"),
+          })
+        : i18n.t("ai.instructions.subagentTask", { task }),
     },
   ];
 
@@ -220,9 +227,17 @@ export async function executeDelegate(
     return fail(`the ${kind} subagent returned nothing. Try a narrower task, or do it yourself.`);
   }
 
-  const { taskId } = await ctx.taskWorkspace.ensure(task.slice(0, 60));
+  // Generic title, never the delegated instruction. Naming the workspace after
+  // whichever artefact happened to land first is the defect PR-A fixed for
+  // write_note, and it reads worse here: a delegate task is a whole paragraph
+  // by design, so it became the document's H1. The task's name belongs to
+  // task_plan.
+  const { taskId } = await ctx.taskWorkspace.ensure(i18n.t("ai.taskDoc.untitled"));
   const note = await writeTaskNote(ctx.projectPath, taskId, {
-    slug: `${kind}-${task}`,
+    // A filename, not a sentence — the full instruction is the note's title on
+    // the first line, and `writeTaskNote` suffixes rather than overwrites when
+    // two delegations share an opening.
+    slug: `${kind}-${[...task].slice(0, SLUG_HINT_CHARS).join("")}`,
     title: task.slice(0, 80),
     content: output,
     sources: refs,

@@ -93,3 +93,27 @@ describe("aiStore.removeProvider", () => {
     expect(state.subAgents.search.modelId).toBe("m3");
   });
 });
+
+describe("subagent key resolution", () => {
+  it("reports a missing API key as configuration, not as a subagent failure", async () => {
+    const { resolveSubAgentConn } = await import("../agent/subagent");
+    const models = [{ id: "m1", providerId: "p1", modelId: "x", name: "N", type: "text",
+      priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true }] as never;
+    const providers = [{ id: "p1", name: "Prov", baseUrl: "", apiStandard: "openai" }] as never;
+    const subs = {
+      search: { kind: "search", modelId: "m1", enabled: true },
+      vision: { kind: "vision", modelId: null, enabled: false },
+      longread: { kind: "longread", modelId: null, enabled: false },
+    } as never;
+
+    // An empty string used to be substituted here, so the request went out
+    // keyless and came back 401 — which the parent model read as "the subagent
+    // is broken" rather than "paste a key".
+    const res = await resolveSubAgentConn("search", models, providers, subs, async () => null);
+    expect("error" in res).toBe(true);
+    expect((res as { error: string }).error).toMatch(/API key/i);
+
+    const ok = await resolveSubAgentConn("search", models, providers, subs, async () => "k");
+    expect("error" in ok).toBe(false);
+  });
+});

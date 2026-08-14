@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { routeTools } from "../routing";
+import type { TaskWorkspaceHandle } from "../taskWorkspace";
+
+/** Stand-in handle: routeTools only tests it for presence. */
+const WS: TaskWorkspaceHandle = { taskId: null, ensure: async () => ({ taskId: "t", dir: "/d" }) };
 import { AGENT_ASSIST_PRESET } from "../presets";
 import type { SubAgentConfig, SubAgentKind } from "../subagent";
 
@@ -11,7 +15,7 @@ describe("routeTools", () => {
   };
 
   it("leaves tools and serverTools unchanged when no subagents are active", () => {
-    const res = routeTools(AGENT_ASSIST_PRESET, allDisabled, true);
+    const res = routeTools(AGENT_ASSIST_PRESET, allDisabled, WS);
     expect(res.tools).toEqual(AGENT_ASSIST_PRESET.tools);
     expect(res.serverTools).toBe("final-round-off");
   });
@@ -21,7 +25,7 @@ describe("routeTools", () => {
       ...allDisabled,
       search: { kind: "search", modelId: "m-search", enabled: true },
     };
-    const res = routeTools(AGENT_ASSIST_PRESET, subs, true);
+    const res = routeTools(AGENT_ASSIST_PRESET, subs, WS);
     expect(res.serverTools).toBe("off");
     expect(res.tools).toContain("delegate");
   });
@@ -31,7 +35,7 @@ describe("routeTools", () => {
       ...allDisabled,
       vision: { kind: "vision", modelId: "m-vision", enabled: true },
     };
-    const res = routeTools(AGENT_ASSIST_PRESET, subs, true);
+    const res = routeTools(AGENT_ASSIST_PRESET, subs, WS);
     expect(res.tools).not.toContain("read_image");
     expect(res.tools).not.toContain("read_lore_image");
     expect(res.tools).toContain("delegate");
@@ -42,7 +46,7 @@ describe("routeTools", () => {
       ...allDisabled,
       search: { kind: "search", modelId: "m-search", enabled: true },
     };
-    const res = routeTools(AGENT_ASSIST_PRESET, subs, false);
+    const res = routeTools(AGENT_ASSIST_PRESET, subs, undefined);
     expect(res.tools).not.toContain("delegate");
   });
 });

@@ -9,6 +9,7 @@
 
 import type { ToolId } from "./registry";
 import type { TaskPreset } from "./presets";
+import type { TaskWorkspaceHandle } from "./taskWorkspace";
 import { SUBAGENT_KINDS, type SubAgentConfig, type SubAgentKind } from "./subagent";
 
 export interface RoutedTools {
@@ -17,10 +18,18 @@ export interface RoutedTools {
   serverTools: "final-round-off" | "off" | "always";
 }
 
+/**
+ * @param workspace the run's task-workspace handle, or undefined on a surface
+ *   that has none. Taken as the handle rather than a boolean because the
+ *   callers construct one unconditionally — `Boolean(handle)` was always true,
+ *   so the guard it looked like never actually guarded anything. A subagent's
+ *   findings have to land somewhere, so a surface without a workspace does not
+ *   get `delegate` at all.
+ */
 export function routeTools(
   preset: TaskPreset,
   subs: Record<SubAgentKind, SubAgentConfig>,
-  hasWorkspace: boolean,
+  workspace: TaskWorkspaceHandle | undefined,
 ): RoutedTools {
   let tools = [...preset.tools];
   const live = (k: SubAgentKind) => Boolean(subs[k]?.enabled) && Boolean(subs[k]?.modelId);
@@ -31,7 +40,7 @@ export function routeTools(
   }
 
   // If any subagent is configured/enabled and we have an active/provisional workspace, provide delegate.
-  if (SUBAGENT_KINDS.some(live) && hasWorkspace && !tools.includes("delegate")) {
+  if (SUBAGENT_KINDS.some(live) && workspace && !tools.includes("delegate")) {
     tools.push("delegate");
   }
 

@@ -771,7 +771,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
       const tw = taskWorkspace();
       const subAgents = useAiStore.getState().subAgents;
-      const routed = routeTools(AGENT_ASSIST_PRESET, subAgents, Boolean(tw));
+      const routed = routeTools(AGENT_ASSIST_PRESET, subAgents, tw);
       const effectivePreset = {
         ...AGENT_ASSIST_PRESET,
         tools: routed.tools,

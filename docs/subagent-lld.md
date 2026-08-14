@@ -1,6 +1,6 @@
 # 长任务工作区与子代理 详细设计文档（Low-Level Design）
 
-> **状态**：PR-A、PR-B 已实现（工作区 + scratchpad 工具 + checkpoint + 存盘暂停/恢复），PR-C~E 待做
+> **状态**：PR-A~PR-C 已实现（工作区 + scratchpad + 存盘暂停/恢复 + delegate/子代理 + 能力路由 + 设置面板），PR-D~E 待做
 > **关联 High-Level Design**：[`docs/subagent-plan.md`](subagent-plan.md)
 > **基建依赖**：[`unified-agent-plan.md`](unified-agent-plan.md)（统一 Agent Runtime）、[`chat-memory-plan.md`](chat-memory-plan.md)（会话折叠压缩）、[`anthropic-plan.md`](anthropic-plan.md) §10（服务端工具）
 > **分支**：`feat/task-workspace-and-subagents`
@@ -546,6 +546,14 @@ serverTools: withholdServerTools ? undefined : opts.serverTools,
 
 #### 5.2.2 绑定校验
 
+**每个 kind 各有一条前置条件，都在 `delegate` 里检查、而非留给子跑去发现** ——
+否则作者要等一整个往返，才被告知一件设置界面早就知道的事，而且报出来的形态是
+「子代理失败」而不是「配置不对」。`vision` 要求 `model.type === "multimodal"`，
+`search` 要求下面这条。同样的判断也在设置面板上就地提示。
+
+**密钥缺失同理**：`resolveSubAgentConn` 不得把取不到的密钥降级成空串——
+那会发出一个无钥请求，401 回来被包装成「子代理坏了」，而真正的修法是去粘一个 key。
+
 `search` 子代理绑定的模型若没有配 `serverTools: ["web_search"]`（`Model.serverTools`，`configDb.ts:156`），它就是个不能上网的普通模型。`delegate` 执行前检查，并给出可操作的错误：
 
 ```
@@ -655,6 +663,12 @@ export async function executeDelegate(call: ToolCall, ctx: ToolContext): Promise
   const preset = SUB_PRESETS[kind];
 
   // 全新历史：两条消息，不带主 agent 的任何上下文。
+> 提示词按有无 `refs` 分成**两个 i18n 键**（`subagentTask` / `subagentTaskWithRefs`），
+> 不能用一个键插值一个空串：带 refs 的那个键自带「参考资源」小节标题，
+> 复用它就等于给子代理一个空的资料清单——一条「去查这些来源」的指令，
+> 而来源并不存在。（按 `refs.length` 分叉 `defaultValue` 是无效的：
+> 键存在时 `defaultValue` 根本不会被采用。）
+
   const messages: StreamMessage[] = [
     { role: "system", content: i18n.t(`ai.instructions.subagent.${kind}`, promptParams(isZh())) },
     { role: "user", content: i18n.t("ai.instructions.subagentTask", { task, refs: refs.join("\n") }) },
@@ -701,7 +715,7 @@ export async function executeDelegate(call: ToolCall, ctx: ToolContext): Promise
 
   if (!output.trim()) return fail(`the ${kind} subagent returned nothing. Try a narrower task, or do it yourself.`);
 
-  const { taskId } = await ctx.taskWorkspace.ensure(task.slice(0, 60));
+  const { taskId } = await ctx.taskWorkspace.ensure(i18n.t("ai.taskDoc.untitled"));
   const note = await writeTaskNote(ctx.projectPath, taskId, {
     slug: `${kind}-${slugify(task)}`,
     title: task.slice(0, 80),
@@ -720,6 +734,12 @@ export async function executeDelegate(call: ToolCall, ctx: ToolContext): Promise
     ].join("\n"),
   };
 }
+
+**命名的两条规矩**（PR-C 审阅补）：工作区标题用 `ai.taskDoc.untitled`，
+**绝不是**委托指令——任务叫什么归 `task_plan` 管，而 delegate 的 `task` 按设计
+就是一整段自足指令，拿它当标题会让 `task.md` 的 H1 变成一个段落（PR-A 已为
+`write_note` 修过同一条）。note 的 slug 只取指令前 20 个码点：文件名是文件名，
+完整指令留在 note 首行的标题里。
 
 /** 回给主模型的摘要上限。够判断「要不要展开读」，不够顺手替代读 note。 */
 const DELEGATE_SUMMARY_CHARS = 800;
@@ -983,7 +1003,10 @@ CI 是 PR 门禁（`docs/ci.md`：tsc + vitest + build，Rust fmt/clippy/test）
 `routing.ts`、`chainCanSeeImages`。
 **验收**：主模型为纯文本时能完成识图任务，且它的工具集里确实没有 `read_image`。
 
-### PR-E · 设置面板、会话 chips 与归口
+### PR-E · 会话 chips 与归口
+
+> 设置面板已提前到 PR-C：没有它，`ai:subagent:*:enabled` 没有任何写入途径，
+> PR-C 那条「用 DeepSeek 主模型经 delegate 调起 MiniMax」的验收标准就无法执行。
 `SubAgentsPane`、`SubAgentChips`、`imageModelId` 归口到子代理配置表（**仅配置层归口，生图调用链与审批卡不变**）。
 **验收**：设置里可配可看用量；chips 能单次关掉某个子代理。
 

@@ -199,7 +199,8 @@
       "prompts": "Prompts",
       "shortcuts": "Shortcuts",
       "about": "About",
-      "usage": "Usage"
+      "usage": "Usage",
+      "subagents": "Subagents"
     },
     "workspace": {
       "profileSection": "Workspace profile",
@@ -364,6 +365,20 @@
       "restoreFailed": "Restore failed:",
       "destNotEmpty": "That folder is not empty. Create a new empty folder to restore into, so the backup can't mix with what is already there.",
       "emptyBundle": "That backup file contains no project content."
+    },
+    "subagents": {
+      "paneSub": "Hand context-heavy or capability-specific work to a dedicated model. A subagent works in its own context and returns only a summary and a note path.",
+      "search": "Web research",
+      "searchSub": "Verify facts and gather material. Needs a model with server-side web_search enabled.",
+      "vision": "Image analysis",
+      "visionSub": "Read images and answer. Needs a multimodal model.",
+      "longread": "Long-document digest",
+      "longreadSub": "Read long documents and extract what matters. Suits a cheap large-window model.",
+      "pickModel": "Select a model",
+      "noModel": "No model bound",
+      "warnNoSearch": "This model has no server-side web_search enabled, so the subagent cannot browse.",
+      "warnNotMultimodal": "This model is text-only and cannot read images.",
+      "enable": "Enable"
     }
   },
   "project": {
@@ -543,7 +558,8 @@
         "vision": "You are an image analysis specialist. Your role is to examine and interpret reference images, extract visual traits, appearance details, or composition elements, and produce clear descriptive summaries.",
         "longread": "You are a document digest specialist. Your role is to read the specified documents thoroughly, extract outlines, core worldbuilding, or plotlines, and compile a checklist of essential details."
       },
-      "subagentTask": "Task Objective:\n{{task}}\n\nReferences:\n{{refs}}"
+      "subagentTask": "Task objective:\n{{task}}",
+      "subagentTaskWithRefs": "Task objective:\n{{task}}\n\nReferences:\n{{refs}}"
     },
     "taskDoc": {
       "untitled": "Untitled task",

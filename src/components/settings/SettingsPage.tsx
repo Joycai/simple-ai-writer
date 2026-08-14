@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { X, SlidersHorizontal, Layers, MessageSquare, Info, BookOpen, Keyboard, BarChart3 } from "lucide-react";
+import { X, SlidersHorizontal, Layers, MessageSquare, Info, BookOpen, Keyboard, BarChart3, Users } from "lucide-react";
 import { type SettingsTab } from "../../stores/appStore";
 import { ModalErrorBoundary } from "../common/ErrorBoundary";
 import { panelFade, overlayFadeTransition } from "../../lib/motion";
@@ -12,6 +12,7 @@ import { PromptsPane } from "./panes/PromptsPane";
 import { ShortcutsPane } from "./panes/ShortcutsPane";
 import { AboutPane } from "./panes/AboutPane";
 import { ProvidersModelsPane } from "./panes/ProvidersModelsPane";
+import { SubAgentsPane } from "./panes/SubAgentsPane";
 import styles from "./SettingsPage.module.css";
 
 interface Props {
@@ -87,6 +88,7 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
           {navBtn("workspace", <BookOpen size={15} />, "systemSettings.tabs.workspace")}
           <div className={styles.navGroupLabel}>{t("systemSettings.tabs.aiGroup")}</div>
           {navBtn("providers-models", <Layers size={15} />, "systemSettings.tabs.providersModels")}
+          {navBtn("subagents", <Users size={15} />, "systemSettings.tabs.subagents")}
           {navBtn("prompts", <MessageSquare size={15} />, "systemSettings.tabs.prompts")}
           {navBtn("usage", <BarChart3 size={15} />, "systemSettings.tabs.usage")}
           <div className={styles.navDivider} />
@@ -101,6 +103,7 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
             {activeTab === "general" && <GeneralPane />}
             {activeTab === "workspace" && <WorkspacePane />}
             {activeTab === "providers-models" && <ProvidersModelsPane onEscapeInterceptChange={setEscIntercept} />}
+            {activeTab === "subagents" && <SubAgentsPane />}
             {activeTab === "prompts" && <PromptsPane onEscapeInterceptChange={setEscIntercept} />}
             {activeTab === "usage" && <UsagePane />}
             {activeTab === "shortcuts" && <ShortcutsPane />}

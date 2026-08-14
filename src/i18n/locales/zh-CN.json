@@ -199,7 +199,8 @@
       "prompts": "Prompt",
       "shortcuts": "快捷键",
       "about": "关于",
-      "usage": "用量"
+      "usage": "用量",
+      "subagents": "子代理"
     },
     "workspace": {
       "profileSection": "工作台类型",
@@ -364,6 +365,20 @@
       "restoreFailed": "恢复失败：",
       "destNotEmpty": "所选文件夹不是空的。请新建一个空文件夹再恢复，避免和已有内容混在一起。",
       "emptyBundle": "这个备份文件里没有任何项目内容。"
+    },
+    "subagents": {
+      "paneSub": "把耗上下文或需要专门能力的活儿交给专用模型。子代理在独立上下文里工作，只把摘要和笔记路径交回主模型。",
+      "search": "联网检索",
+      "searchSub": "查证事实、收集资料。需要模型已开启服务端 web_search。",
+      "vision": "图像理解",
+      "visionSub": "读图并回答。需要一个多模态模型。",
+      "longread": "长文精读",
+      "longreadSub": "通读长文档并提炼要点。适合大窗口的便宜模型。",
+      "pickModel": "选择模型",
+      "noModel": "未绑定模型",
+      "warnNoSearch": "该模型没有开启服务端 web_search，子代理无法联网。",
+      "warnNotMultimodal": "该模型是纯文本模型，无法读图。",
+      "enable": "启用"
     }
   },
   "project": {
@@ -543,7 +558,8 @@
         "vision": "你是图像理解专员。你的职责是观察和解析参考图片，提取视觉特征、外观细节或构图元素，并输出条理清晰的视觉描述。",
         "longread": "你是长文提炼专员。你的职责是通读指定文档，提炼大纲、核心设定或情节走向，并整理出关键细节清单。"
       },
-      "subagentTask": "任务目标：\n{{task}}\n\n参考资源：\n{{refs}}"
+      "subagentTask": "任务目标：\n{{task}}",
+      "subagentTaskWithRefs": "任务目标：\n{{task}}\n\n参考资源：\n{{refs}}"
     },
     "taskDoc": {
       "untitled": "未命名任务",

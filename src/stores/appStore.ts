@@ -134,6 +134,7 @@ export type SettingsTab =
   | "general"
   | "workspace"
   | "providers-models"
+  | "subagents"
   | "prompts"
   | "usage"
   | "shortcuts"
