@@ -296,6 +296,10 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
 
     const withholdTools =
       preset.tools.length === 0 || (isLastRound && preset.finishPolicy === "force-text");
+    const serverToolPolicy = preset.serverTools ?? "final-round-off";
+    const withholdServerTools =
+      serverToolPolicy === "off" ||
+      (serverToolPolicy === "final-round-off" && isLastRound && preset.finishPolicy === "force-text");
     /**
      * The "stop calling tools" nudge, retracted after this round's request.
      *
@@ -378,16 +382,10 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         messages: history,
         extraBody: opts.extraBody,
         tools: withholdTools ? undefined : toolDefinitions,
-        // Withheld alongside our own, and this is the whole reason the line
-        // exists: a server tool arrives from the *model's* configuration
-        // (ConnOptions), not from the preset, so it sailed straight past the
-        // check above. The forced final round then handed the model a live web
-        // search while telling it to stop calling tools — and a search there
-        // restarts the whole search-and-resume cycle inside a round whose only
-        // job was to end it. Presets with no tools at all (the structured JSON
-        // tasks) are covered by the same flag, where browsing is equally
-        // unwanted.
-        serverTools: withholdTools ? undefined : opts.serverTools,
+        // Governed by preset.serverTools (final-round-off | off | always).
+        // Separate from local tools because search subagent has no local tools
+        // (preset.tools: []) but requires serverTools enabled on every round.
+        serverTools: withholdServerTools ? undefined : opts.serverTools,
         signal: opts.signal,
         onChunk: (chunk) => {
           if ("reasoning" in chunk) {
@@ -539,10 +537,15 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
 
       // Executor never throws — bad calls come back as error-text results the
       // model can read and correct on the next round.
+      const callContext: ToolContext = {
+        ...opts.toolContext,
+        signal: opts.signal,
+        onNestedEvent: opts.onEvent,
+      };
       const result: ToolResult = await executeRegisteredTool(
         toolCall,
         preset.tools,
-        opts.toolContext,
+        callContext,
       );
       const isError = result.content.startsWith("Error") || result.content.startsWith("Unknown tool");
       opts.onEvent({

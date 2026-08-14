@@ -28,6 +28,11 @@ beforeEach(() => {
     models: [MODEL_A, MODEL_B],
     activeModelId: "m1",
     memoryModelId: "m1",
+    subAgents: {
+      search: { kind: "search", modelId: "m1", enabled: true },
+      vision: { kind: "vision", modelId: "m2", enabled: true },
+      longread: { kind: "longread", modelId: null, enabled: false },
+    },
   });
 });
 
@@ -42,6 +47,12 @@ describe("aiStore.removeModel", () => {
     expect(useAiStore.getState().memoryModelId).toBeNull();
   });
 
+  it("clears subAgents.modelId when it points at the removed model", async () => {
+    await useAiStore.getState().removeModel("m1");
+    expect(useAiStore.getState().subAgents.search.modelId).toBeNull();
+    expect(useAiStore.getState().subAgents.vision.modelId).toBe("m2");
+  });
+
   it("leaves both pointers alone when a different model is removed", async () => {
     await useAiStore.getState().removeModel("m2");
     expect(useAiStore.getState().activeModelId).toBe("m1");
@@ -50,13 +61,15 @@ describe("aiStore.removeModel", () => {
 });
 
 describe("aiStore.removeProvider", () => {
-  it("clears activeModelId and memoryModelId when they point at a model owned by the removed provider", async () => {
+  it("clears activeModelId, memoryModelId, and subAgents.modelId when they point at a model owned by the removed provider", async () => {
     await useAiStore.getState().removeProvider("p1");
 
     const state = useAiStore.getState();
     expect(state.models).toHaveLength(0);
     expect(state.activeModelId).toBeNull();
     expect(state.memoryModelId).toBeNull();
+    expect(state.subAgents.search.modelId).toBeNull();
+    expect(state.subAgents.vision.modelId).toBeNull();
   });
 
   it("leaves the pointers alone when the removed provider owns neither model", async () => {
@@ -65,6 +78,11 @@ describe("aiStore.removeProvider", () => {
       models: [MODEL_A, MODEL_OTHER],
       activeModelId: "m3",
       memoryModelId: "m3",
+      subAgents: {
+        search: { kind: "search", modelId: "m3", enabled: true },
+        vision: { kind: "vision", modelId: null, enabled: false },
+        longread: { kind: "longread", modelId: null, enabled: false },
+      },
     });
 
     await useAiStore.getState().removeProvider("p1");
@@ -72,5 +90,6 @@ describe("aiStore.removeProvider", () => {
     const state = useAiStore.getState();
     expect(state.activeModelId).toBe("m3");
     expect(state.memoryModelId).toBe("m3");
+    expect(state.subAgents.search.modelId).toBe("m3");
   });
 });

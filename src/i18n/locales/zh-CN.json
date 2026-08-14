@@ -537,7 +537,13 @@
       "taskResumeStale": "\n\n> ⚠️ 以下参考文件在暂停期间发生过变动，引用前请重新核对：\n{{list}}",
       "taskResumeDeleted": "已删除",
       "taskResumeModified": "已修改",
-      "taskResumeUnreadable": "读取失败"
+      "taskResumeUnreadable": "读取失败",
+      "subagent": {
+        "search": "你是联网研究专员。你的职责是使用网络搜索查证事实、收集背景资料，并输出条理清晰的总结。\n请列出关键结论、支持事实及对应的来源网址。",
+        "vision": "你是图像理解专员。你的职责是观察和解析参考图片，提取视觉特征、外观细节或构图元素，并输出条理清晰的视觉描述。",
+        "longread": "你是长文提炼专员。你的职责是通读指定文档，提炼大纲、核心设定或情节走向，并整理出关键细节清单。"
+      },
+      "subagentTask": "任务目标：\n{{task}}\n\n参考资源：\n{{refs}}"
     },
     "taskDoc": {
       "untitled": "未命名任务",
@@ -794,7 +800,8 @@
         "delete_chapter": "删除{{doc}}",
         "generate_image": "生成图片",
         "edit_image": "修改图片",
-        "web_search": "联网搜索（服务端）"
+        "web_search": "联网搜索（服务端）",
+        "delegate": "委托子代理"
       }
     },
     "errors": {

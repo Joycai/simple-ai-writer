@@ -46,6 +46,12 @@ export const PREF_KEYS = [
   "ai:imageModelId",
   "ai:recentModels",
   "ai:blockedModels",
+  "ai:subagent:search:modelId",
+  "ai:subagent:search:enabled",
+  "ai:subagent:vision:modelId",
+  "ai:subagent:vision:enabled",
+  "ai:subagent:longread:modelId",
+  "ai:subagent:longread:enabled",
 ] as const;
 
 /**

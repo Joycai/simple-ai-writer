@@ -56,6 +56,9 @@ import {
   taskProgressTool,
   writeNoteTool,
 } from "./scratchpadTools";
+import { executeDelegate, type SubAgentKind } from "./subagent";
+import type { AgentEvent } from "./events";
+import type { AiConn } from "../ai/conn";
 
 export type ToolAccess = "read" | "write-auto" | "write-approval";
 
@@ -191,6 +194,20 @@ export interface ToolContext {
   lorePlan?: PlanGate;
   /** Active on-disk task workspace (.ai-writer/tasks/<taskId>/). */
   taskWorkspace?: TaskWorkspaceHandle;
+  /**
+   * Abort signal for this run. Tools that launch nested runs (delegate) must
+   * share it so cancelling the parent run cancels all child work.
+   */
+  signal?: AbortSignal;
+  /**
+   * Forward events from nested child agents into the parent's execution log.
+   */
+  onNestedEvent?: (event: AgentEvent) => void;
+  /**
+   * Resolver for child agent connections. Injected by the caller from aiStore,
+   * avoiding reverse dependencies from lib/agent into stores.
+   */
+  resolveSubAgent?: (kind: SubAgentKind) => Promise<AiConn | { error: string }>;
 }
 
 export interface RegisteredTool {
@@ -237,7 +254,8 @@ export type ToolId =
   | "task_progress"
   | "write_note"
   | "read_note"
-  | "list_notes";
+  | "list_notes"
+  | "delegate";
 
 function parseArgs<T>(raw: string): T {
   return JSON.parse(raw || "{}") as T;
@@ -1094,6 +1112,47 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: listNotesTool,
+  },
+
+  delegate: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "delegate",
+        description:
+          "Hand a context-heavy or capability-specific job to a specialist subagent " +
+          "running on its own model. The subagent works in a separate context, writes " +
+          "its full findings to a note file, and returns only a short summary plus the " +
+          "note path — so its raw material never enters this conversation. Use it for " +
+          "web research, reading images, and digesting long documents.",
+        parameters: {
+          type: "object",
+          properties: {
+            kind: {
+              type: "string",
+              enum: ["search", "vision", "longread"],
+              description:
+                "search — look things up on the web; vision — describe or analyse images; " +
+                "longread — read long documents and report what matters.",
+            },
+            task: {
+              type: "string",
+              description:
+                "A complete, self-contained instruction. The subagent cannot see this " +
+                "conversation, so state everything it needs to know.",
+            },
+            refs: {
+              type: "array",
+              items: { type: "string" },
+              description: "Paths the subagent should work on (documents or images).",
+            },
+          },
+          required: ["kind", "task"],
+        },
+      },
+    },
+    execute: executeDelegate,
   },
 };
 

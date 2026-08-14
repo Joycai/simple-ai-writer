@@ -537,7 +537,13 @@
       "taskResumeStale": "\n\n> ⚠️ These reference files changed while the task was paused — re-check them before relying on them:\n{{list}}",
       "taskResumeDeleted": "deleted",
       "taskResumeModified": "modified",
-      "taskResumeUnreadable": "unreadable"
+      "taskResumeUnreadable": "unreadable",
+      "subagent": {
+        "search": "You are a research specialist. Your role is to use web search to verify facts, gather background material, and produce clear structured summaries.\nList key findings, supporting facts, and their source URLs.",
+        "vision": "You are an image analysis specialist. Your role is to examine and interpret reference images, extract visual traits, appearance details, or composition elements, and produce clear descriptive summaries.",
+        "longread": "You are a document digest specialist. Your role is to read the specified documents thoroughly, extract outlines, core worldbuilding, or plotlines, and compile a checklist of essential details."
+      },
+      "subagentTask": "Task Objective:\n{{task}}\n\nReferences:\n{{refs}}"
     },
     "taskDoc": {
       "untitled": "Untitled task",
@@ -794,7 +800,8 @@
         "delete_chapter": "Delete {{doc}}",
         "generate_image": "Generate image",
         "edit_image": "Edit image",
-        "web_search": "Web search (server-side)"
+        "web_search": "Web search (server-side)",
+        "delegate": "Delegate"
       }
     },
     "errors": {

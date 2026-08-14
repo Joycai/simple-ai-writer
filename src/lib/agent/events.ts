@@ -41,7 +41,13 @@ export interface ToolStep {
   resultSummary?: string;
 }
 
-export type AgentEvent =
+/** Scope fields attached to an event. Set only when forwarded from a nested subagent. */
+export interface AgentEventScope {
+  /** The parent delegate step's toolCallId, if this event occurred inside a subagent run. */
+  parentStep?: string;
+}
+
+export type AgentEvent = AgentEventScope & (
   | {
       kind: "run-start";
       /** Task kind (continue / polish / …) — translated by the UI when known. */
@@ -175,7 +181,7 @@ export type AgentEvent =
       at: number;
     }
   | { kind: "run-done"; inputTokens: number; outputTokens: number; at: number }
-  | { kind: "run-error"; message: string; at: number };
+  | { kind: "run-error"; message: string; at: number });
 
 /**
  * Turns a stream's server-tool reports into log rows — one row per search,
@@ -247,12 +253,18 @@ function replaceableIndex(log: AgentEvent[], event: AgentEvent): number {
     return log.findIndex(
       (e) =>
         e.kind === "tool-step" &&
+        e.parentStep === event.parentStep &&
         e.step.toolCallId === event.step.toolCallId &&
         e.step.name === event.step.name,
     );
   }
   if (event.kind === "reasoning") {
-    return log.findIndex((e) => e.kind === "reasoning" && e.round === event.round);
+    return log.findIndex(
+      (e) =>
+        e.kind === "reasoning" &&
+        e.parentStep === event.parentStep &&
+        e.round === event.round,
+    );
   }
   return -1;
 }

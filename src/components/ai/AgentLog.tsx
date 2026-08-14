@@ -60,10 +60,11 @@ interface Row {
  * Collapse the raw event stream into display rows: round markers are absorbed
  * into the next row rather than occupying one of their own.
  */
-function toRows(log: AgentEvent[]): Row[] {
+function toRows(log: AgentEvent[], filterTopLevel = true): Row[] {
+  const targetLog = filterTopLevel ? log.filter((e) => !e.parentStep) : log;
   const rows: Row[] = [];
   let pending: Row["round"];
-  for (const event of log) {
+  for (const event of targetLog) {
     if (event.kind === "round-start") {
       pending = {
         round: event.round,
@@ -192,7 +193,7 @@ function ReasoningRow({ event }: { event: Extract<AgentEvent, { kind: "reasoning
   );
 }
 
-function ToolStepDetail({ step }: { step: ToolStep }) {
+function ToolStepDetail({ step, childEvents }: { step: ToolStep; childEvents?: AgentEvent[] }) {
   const { t } = useTranslation();
   const args = formatToolArgsDetail(step.argumentSummary);
   return (
@@ -202,6 +203,20 @@ function ToolStepDetail({ step }: { step: ToolStep }) {
         body={args || t("ai.agent.log.detailNoArgs", { defaultValue: "（无参数）" })}
         cap={args ? TOOL_ARGS_DETAIL_CHARS : undefined}
       />
+      {childEvents && childEvents.length > 0 && (
+        <div className={styles.nestedLog}>
+          <ul className={styles.list}>
+            {toRows(childEvents, false).map((childRow, i) => (
+              <AgentLogRow
+                key={`${i}-${childRow.event.kind}`}
+                row={childRow}
+                showTime={false}
+                allEvents={childEvents}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
       {step.status !== "running" && (
         <DetailBlock
           label={
@@ -236,7 +251,15 @@ function ToolStepRow({ step }: { step: ToolStep }) {
   );
 }
 
-function AgentLogRow({ row, showTime }: { row: Row; showTime: boolean }) {
+function AgentLogRow({
+  row,
+  showTime,
+  allEvents = [],
+}: {
+  row: Row;
+  showTime: boolean;
+  allEvents?: AgentEvent[];
+}) {
   const { t, i18n } = useTranslation();
   const terms = useTerms();
   const isZh = i18n.language.startsWith("zh");
@@ -292,7 +315,8 @@ function AgentLogRow({ row, showTime }: { row: Row; showTime: boolean }) {
           {roundChip}
         </li>
       );
-    case "tool-step":
+    case "tool-step": {
+      const childEvents = allEvents.filter((e) => e.parentStep === event.step.toolCallId);
       return (
         <ExpandableRow
           header={
@@ -302,9 +326,10 @@ function AgentLogRow({ row, showTime }: { row: Row; showTime: boolean }) {
               {time}
             </>
           }
-          detail={<ToolStepDetail step={event.step} />}
+          detail={<ToolStepDetail step={event.step} childEvents={childEvents} />}
         />
       );
+    }
     case "context-seeded":
       // Two facts, two rows — the manuscript that came along, and what the lore
       // index matched. A miss (0 entities) is reported just as loudly as a hit.
@@ -506,7 +531,12 @@ export function AgentLog({
   const list = (
     <ul ref={listRef} className={`${styles.list} ${flat ? styles.listFlat : ""}`}>
       {(open ? rows : rows.slice(0, 1)).map((row, i) => (
-        <AgentLogRow key={`${i}-${row.event.kind}`} row={row} showTime={!compact} />
+        <AgentLogRow
+          key={`${i}-${row.event.kind}`}
+          row={row}
+          showTime={!compact}
+          allEvents={log}
+        />
       ))}
     </ul>
   );

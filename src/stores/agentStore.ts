@@ -67,7 +67,10 @@ import {
   type TaskWorkspaceHandle,
 } from "../lib/agent/taskWorkspace";
 import { AGENT_ASSIST_PRESET } from "../lib/agent/presets";
+import { routeTools } from "../lib/agent/routing";
+import { resolveSubAgentConn } from "../lib/agent/subagent";
 import { repairToolCallPairing, runAgent, type RoundLimitDecision } from "../lib/agent/runtime";
+import { persistUsage } from "../lib/ai/usage";
 import {
   inputCeilingFor, measureCharsPerToken, RECENT_WINDOW_MIN_CHARS,
 } from "../lib/context/budget";
@@ -83,7 +86,6 @@ import type { ApprovalDecision, EditProposal, Proposal } from "../lib/agent/regi
 import { type AttachedItem } from "../lib/lore/aiTask";
 import type { StreamMessage } from "../lib/ai/types";
 import { fileExists, readFile, writeFile } from "../lib/fs/fileio";
-import { getDb } from "../lib/project";
 import { loadApiKey } from "../lib/keyStore";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
 import { costFor } from "../lib/ai/configDb";
@@ -283,27 +285,6 @@ interface AgentState {
 
 let turnCounter = 0;
 let roundLimitCounter = 0;
-
-/** Chat's own usage recorder (aiTaskStore has an equivalent; kept local to avoid a store cycle). */
-async function recordChatUsage(
-  projectPath: string,
-  modelId: string,
-  inputTokens: number,
-  outputTokens: number,
-  cost: number,
-  cachedTokens = 0,
-): Promise<void> {
-  try {
-    const db = await getDb(projectPath);
-    await db.execute(
-      `INSERT INTO token_usage (model_id, task, prompt_tokens, cached_tokens, completion_tokens, cost_usd, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [modelId, "chat", inputTokens, cachedTokens, outputTokens, cost, Math.floor(Date.now() / 1000)],
-    );
-  } catch {
-    // non-critical
-  }
-}
 
 // ─── Applying an approved proposal ───────────────────────────────────────────
 
@@ -788,13 +769,22 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         bumpContext();
       }
 
+      const tw = taskWorkspace();
+      const subAgents = useAiStore.getState().subAgents;
+      const routed = routeTools(AGENT_ASSIST_PRESET, subAgents, Boolean(tw));
+      const effectivePreset = {
+        ...AGENT_ASSIST_PRESET,
+        tools: routed.tools,
+        serverTools: routed.serverTools,
+      };
+
       const { inputTokens, outputTokens, cachedTokens, outcome } = await runAgent({
         ...connOptions({ provider, model, apiKey }),
         // Never undefined: without a ceiling the tool loop's history trimming
         // is a no-op, and a chat that reads pictures accumulates base64 in a
         // history that persists across turns until the provider rejects it.
         inputCeilingTokens: inputCeilingFor(model.contextSize, contextUtilization),
-        preset: AGENT_ASSIST_PRESET,
+        preset: effectivePreset,
         messages: history,
         toolContext: {
           projectPath,
@@ -819,7 +809,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           // does not silently authorise the next one.
           lorePlan: createPlanGate(),
           // ...unlike the workspace, which is per SESSION — see chatTaskWorkspace.
-          taskWorkspace: taskWorkspace(),
+          taskWorkspace: tw,
+          resolveSubAgent: (k) => {
+            const { models, providers, subAgents: subs } = useAiStore.getState();
+            return resolveSubAgentConn(k, models, providers, subs, loadApiKey);
+          },
         },
         signal: controller.signal,
         // At the round cap, block on the author's 继续/收尾/存盘暂停 card instead of
@@ -831,7 +825,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             // model created three rounds ago counts; pausing with nothing on
             // disk would throw the turn away, since pause keeps only what was
             // written down.
-            !!taskWorkspace().taskId,
+            !!tw.taskId,
           ),
         // Every runtime event marks a point where the history just grew (a
         // round's messages, a tool reply) or shrank (trimHistory) — which is
@@ -883,7 +877,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       // the next turn.
       bumpContext();
       recordRunOutcome(model.id, null);
-      void recordChatUsage(projectPath, model.id, inputTokens, outputTokens, cost, cachedTokens);
+      void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, "chat", cachedTokens);
     } catch (e) {
       if ((e as Error).name !== "AbortError" && get().chatAbort === controller) {
         const msg = String(e);

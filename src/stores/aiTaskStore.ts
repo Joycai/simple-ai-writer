@@ -20,11 +20,11 @@ import { useAgentStore } from "./agentStore";
 import { useAiStore } from "./aiStore";
 import { draftCountFor, totalUsage, type Draft } from "../lib/ai/drafts";
 import { costFor } from "../lib/ai/configDb";
+import { persistUsage } from "../lib/ai/usage";
 import { connOptions, resolveConn } from "../lib/ai/conn";
 import { useAppStore } from "./appStore";
 import { useLoreStore } from "./loreStore";
 import { useProjectStore } from "./projectStore";
-import { getDb } from "../lib/project";
 import { loadApiKey } from "../lib/keyStore";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
 import {
@@ -34,6 +34,8 @@ import { createPlanGate } from "../lib/agent/plan";
 import {
   createTaskWorkspace, markTaskPaused, recordSourceRef,
 } from "../lib/agent/taskWorkspace";
+import { routeTools } from "../lib/agent/routing";
+import { resolveSubAgentConn } from "../lib/agent/subagent";
 
 /**
  * A task id, as declared by the active profile's `tasks` (see lib/profile).
@@ -438,6 +440,13 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         // Hoisted out of toolContext: the round-cap card and the paused
         // handler below both need to ask it whether anything was written.
         const workspace = createTaskWorkspace(projectPath, model.id);
+        const subAgents = useAiStore.getState().subAgents;
+        const routed = routeTools(preset!, subAgents, Boolean(workspace));
+        const effectivePreset = {
+          ...preset!,
+          tools: routed.tools,
+          serverTools: routed.serverTools,
+        };
 
         const { inputTokens, outputTokens, cachedTokens, outcome } = await runAgent({
           ...conn,
@@ -445,7 +454,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           // context size), and a 0 ceiling disables history trimming entirely.
           inputCeilingTokens: plan.inputCeilingTokens || ASSUMED_INPUT_CEILING_TOKENS,
           // Non-null on this branch — isAgentic is exactly `preset !== null`.
-          preset: preset!,
+          preset: effectivePreset,
           messages: agentMessages,
           toolContext: {
             projectPath,
@@ -476,6 +485,10 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             // chat. Lazy: nothing is written unless the model actually files a
             // plan or a note, so short tasks leave no directory behind.
             taskWorkspace: workspace,
+            resolveSubAgent: (k) => {
+              const { models, providers, subAgents: subs } = useAiStore.getState();
+              return resolveSubAgentConn(k, models, providers, subs, loadApiKey);
+            },
           },
           signal: controller.signal,
           // At the round cap, block on the AiPanel's 继续/收尾 card instead of
@@ -701,23 +714,3 @@ useProjectStore.subscribe((state, prev) => {
   }
 });
 
-async function persistUsage(
-  projectPath: string,
-  modelId: string,
-  inputTokens: number,
-  outputTokens: number,
-  cost: number,
-  task: string,
-  cachedTokens = 0,
-): Promise<void> {
-  try {
-    const db = await getDb(projectPath);
-    await db.execute(
-      `INSERT INTO token_usage (model_id, task, prompt_tokens, cached_tokens, completion_tokens, cost_usd, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [modelId, task, inputTokens, cachedTokens, outputTokens, cost, Math.floor(Date.now() / 1000)]
-    );
-  } catch {
-    // non-critical — don't surface DB errors to the user
-  }
-}
