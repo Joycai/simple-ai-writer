@@ -1,0 +1,966 @@
+# 长任务工作区与子代理 详细设计文档（Low-Level Design）
+
+> **状态**：详细设计（LLD），尚未实现
+> **关联 High-Level Design**：[`docs/subagent-plan.md`](subagent-plan.md)
+> **基建依赖**：[`unified-agent-plan.md`](unified-agent-plan.md)（统一 Agent Runtime）、[`chat-memory-plan.md`](chat-memory-plan.md)（会话折叠压缩）、[`anthropic-plan.md`](anthropic-plan.md) §10（服务端工具）
+> **分支**：`feat/task-workspace-and-subagents`
+
+---
+
+## 0. 修订记录
+
+本文是第二版。第一版（另一模型产出）的骨架被保留，以下内容经对照代码后修正：
+
+| 类别 | 修正 |
+| :--- | :--- |
+| **致命** | `search` 子代理原设计 `tools: []`，会被 `runtime.ts` 的 `withholdTools` 连带撤掉 `serverTools`，**永远不会联网**。改为在 `TaskPreset` 上引入显式的 `serverTools` 策略字段（§5.2.1） |
+| **致命** | checkpoint 提示原设计永久 `push` 进 history，与 `forcedTextNotice` 已修过的坑同类（一次性话术变成常驻指令）。改为发出即撤（§4.2） |
+| **致命** | 原设计用 `extractLastAssistantText(subMessages)` 取子代理产出。runtime 在成文轮**直接 return，文本从不入 history**，取到的必然是空或上一轮。改为经 `onOutputText` 捕获（§5.3） |
+| **API** | `read_project_image` → `read_image`；`AgentEventBase` 不存在（改用交叉类型）；`recordTokenUsage` 不存在（需先抽 `persistUsage`）；`costFor` 漏第 4 参 `cachedTokens`；`loadApiKey` 返回可空；`ctx.models/providers/activeTaskId` 均不在 `ToolContext` |
+| **契约** | 「存盘暂停」无法经 `Promise<number>` 回传。`onRoundLimit` 契约改为判别联合，并新增 runtime 的提前退出路径（§4.3、§4.4） |
+| **格式** | `task.md` 未真正沿用 `memory.ts`（后者是三行式注释）。且原设计步骤数据在 JSON 与正文中各存一份，双事实源。改为**步骤只存在于正文，按序号寻址**（§3.2） |
+| **语义** | `ToolContext.multimodal` 的升级方向是反的——它是「能否把 base64 塞进**当前模型**」的闸，改成「链路上有人能看图」会让纯文本主模型收到读不了的图片。改为语义不动，路由改工具集（§6） |
+| **需求** | vision 路由原被收窄为「仅当主模型是纯文本」，与 HLD「两边都支持时优先子代理」不符。改回 HLD 语义（§6.2） |
+| **补充** | `activeTaskId` 的来源（原文未定义，却被所有新工具依赖）、嵌套日志的去重键冲突、同轮并发写 `task.md` 的丢更新、GC 的无界增长漏洞、与 chat 折叠的交互、测试计划、i18n 与 profile terms 约束 |
+
+---
+
+## 1. 背景与系统目标
+
+当前 Agent Runtime（`lib/agent/runtime.ts`）的记忆完全依赖内存态的 wire message history（`StreamMessage[]`）。处理长任务（多次联网搜索、多文件阅读、图片理解）时存在三个结构缺陷：
+
+1. **上下文膨胀与破坏性裁剪**：`trimHistory`（`runtime.ts:90`）为避免超窗，把旧工具结果整体替换为 `[earlier tool result dropped…]`，模型丢失中间结论后**重复搜索/阅读**，很快又填满；
+2. **缺乏状态恢复**：撞到 `maxRounds` 时只有「继续加轮」与「强制收尾」两个出口，无法存档；
+3. **主上下文污染**：搜索网页正文、图片 base64、长文切片直接灌进主模型上下文（观测到单次运行 8 次搜索 / 123k input token，见 `lib/ai/serverTools.ts` 的 `TRANSCRIPT_CHARS` 注释）。
+
+**设计目标**：
+
+1. **记忆落盘**：`.ai-writer/tasks/<taskId>/` 工作区，`task.md` 管目标与进度，`notes/*.md` 存中间结论 —— 使裁剪从「破坏性丢失」变为「可回读恢复」；
+2. **状态化断点续跑**：恢复时基于 `task.md` + notes 索引启动**全新干净上下文**，不重放旧 wire history；
+3. **单层单向委托**：`delegate` 工具，子代理用专属模型与独立 context 运行，主模型只收到「摘要 + 路径」；
+4. **确定性能力路由**：在**工具集层**而非提示词层实现能力隔离。
+
+---
+
+## 2. 总体架构与数据流
+
+```
+                  ┌──────────────── 主 Agent（runAgent，全工具集）────────────────┐
+                  │                                                              │
+                  │  wire history ── trimHistory / compact（只管上下文，不管记忆）│
+                  │       │                                                      │
+                  │       ├── task_plan / task_progress / write_note ────────┐   │
+                  │       │   read_note / list_notes                         │   │
+                  │       │                                                  │   │
+                  │       └── delegate(kind, task, refs) ──┐                 │   │
+                  └───────────────────────────────────────┼─────────────────┼───┘
+                                                          │                 │
+                                   ┌──────────────────────▼──────┐          │
+                                   │ 子代理（嵌套 runAgent）      │          │
+                                   │  · 独立 ConnOptions          │          │
+                                   │  · 全新 history（2 条消息）  │          │
+                                   │  · 深度 1 · 只读             │          │
+                                   │  · 共享 signal · 独立记账    │          │
+                                   └──────────────┬───────────────┘          │
+                                                  │ 产出经 onOutputText 落盘 │ 读写
+                                                  ▼                          ▼
+                                 .ai-writer/tasks/<taskId>/
+                                   ├── task.md
+                                   └── notes/{search,vision,read}-*.md
+```
+
+---
+
+## 3. 任务工作区（Task Workspace）
+
+### 3.1 目录结构、命名与生命周期归属
+
+```
+<projectPath>/.ai-writer/tasks/
+  └── 20260814-163000-a1b2c3/
+        ├── task.md
+        └── notes/
+              ├── search-east-nobles.md
+              ├── vision-avatar-01.md
+              └── read-ch45-summary.md
+```
+
+- **`taskId` 格式**：`YYYYMMDD-HHmmss-<6 位随机>`，严格时间序 + 唯一。
+- **不进 `writing/`**，不出现在文件树，不参与导出；**进 `projectBackup`**（不在 `PROJECT_BACKUP_EXCLUDES` 里，`projectBackup.ts:41`）。
+
+#### 3.1.1 `activeTaskId` 从哪来 —— 懒创建
+
+> 第一版把这件事留空了，但**所有新工具都依赖它**。这里定死。
+
+绝大多数 run 是短任务，不该凭空产生一个任务目录。所以工作区**在第一次被需要时才创建**：
+
+```ts
+// lib/agent/taskWorkspace.ts
+export interface TaskWorkspaceHandle {
+  /** 已创建的任务 id；null 表示这次运行还没用到工作区。 */
+  readonly taskId: string | null;
+  /** 创建（或复用）本次运行的工作区。title 只在首次创建时用。 */
+  ensure(title: string): Promise<{ taskId: string; dir: string }>;
+}
+```
+
+- 由**发起 run 的调用方**构造一个 handle 放进 `ToolContext.taskWorkspace`，与 `lorePlan`（一次运行一个 `PlanGate`）同构；
+- `AgentChat` 的会话把 handle 绑在 session 上（同一会话多轮共用一个任务），`AiPanel` 的单次任务绑在这一次 run 上；
+- **可选字段**。lore modal、generator、splitter 等不传，此时 scratchpad 工具返回
+  `"Error: this surface has no task workspace — do not call this tool here."`
+  —— 与 `checkPlan` 在 `gate` 缺失时的措辞策略一致（`plan.ts:108`）。
+
+### 3.2 `task.md` 协议格式
+
+沿用 `context/memory.ts` **实际**的格式（`memory.ts:131` / `140`）：三行式注释头，`<!--` 与 `-->` 各自独占一行。
+
+> 第一版写成单行 `<!-- ai-writer-task {json} -->`。这既与先例不符，也会在一个「邀请作者手改」的文件里产生一条几千字符的长行。
+
+#### 关键决策：步骤只有一个事实源
+
+`memory.ts` 的做法值得原样照搬 —— 它的元数据里**只有机器状态**（`from`/`to`/`hash`），人可编辑的摘要正文不在 JSON 里，段落按**出现顺序**与元数据配对，注释里明说「heading text is display-only so author edits to headings can't corrupt ranges」。
+
+因此：**步骤的标题与状态只存在于正文的复选框列表里，JSON 里一个都不放。** 工具按 **1 基序号** 寻址步骤，于是连 `step.id` 都不需要。作者手改 `- [ ]` 为 `- [x]`，就是真的改了状态，不存在两份数据打架。
+
+#### 文件内容
+
+```markdown
+<!-- ai-writer-task
+{"taskId":"20260814-163000-a1b2c3","status":"in_progress","modelId":"mdl-7","createdAt":"2026-08-14T08:30:00.000Z","updatedAt":"2026-08-14T08:35:12.000Z","sourceRefs":[{"path":"writing/第03卷/第45章.md","hash":"3f8a9b1c"}]}
+-->
+
+# 调查东境贵族世系与魔法起源
+
+## 步骤
+
+- [x] 检索东境三大家族设定
+- [/] 分析初代家主与禁忌魔法关联
+- [ ] 起草补充设定并更新词条
+
+## 进度记录
+
+- 16:32 家族关系网比对完成，见 `notes/search-east-nobles.md`
+```
+
+复选框字形即状态：`[ ]` pending · `[/]` in_progress · `[x]` done · `[-]` skipped。
+
+#### 类型与序列化（`src/lib/agent/taskWorkspace.ts`）
+
+```ts
+export type TaskStatus = "in_progress" | "paused" | "completed" | "failed";
+export type StepStatus = "pending" | "in_progress" | "done" | "skipped";
+
+/** 只有机器状态。标题与步骤状态**不在**这里 —— 见上文。 */
+export interface TaskMeta {
+  taskId: string;
+  status: TaskStatus;
+  /** 发起这次任务的主模型配置行 id（Model.id，不是 Model.modelId）。 */
+  modelId: string;
+  createdAt: string;
+  updatedAt: string;
+  /** 恢复时用于判断作者是否改过参考文件。 */
+  sourceRefs?: { path: string; hash: string }[];
+}
+
+/** 从正文解析出来的一步，序号是它在列表中的位置（1 基）。 */
+export interface TaskStep {
+  index: number;
+  title: string;
+  status: StepStatus;
+}
+
+export interface TaskDoc {
+  meta: TaskMeta;
+  /** 正文原文，作者可任意编辑。 */
+  body: string;
+}
+
+export interface TaskNoteHeader {
+  slug: string;
+  title: string;
+  /** 项目相对路径，可直接喂给 read_note。 */
+  path: string;
+  chars: number;
+  updatedAt: string;
+}
+```
+
+```ts
+const TASK_META_RE = /^<!--\s*ai-writer-task\s*\n([\s\S]*?)\n-->/;
+
+export function serializeTaskDoc(meta: TaskMeta, body: string): string {
+  return `<!-- ai-writer-task\n${JSON.stringify(meta)}\n-->\n\n${body.trim()}\n`;
+}
+
+export function parseTaskDoc(raw: string): TaskDoc | null {
+  const m = raw.match(TASK_META_RE);
+  if (!m) return null;
+  let meta: unknown;
+  try { meta = JSON.parse(m[1]); } catch { return null; }
+  if (!meta || typeof meta !== "object" || typeof (meta as TaskMeta).taskId !== "string") return null;
+  return { meta: meta as TaskMeta, body: raw.slice(m[0].length).trim() };
+}
+
+const STEP_RE = /^[-*]\s+\[([ x\/-])\]\s+(.*)$/;
+const GLYPH: Record<string, StepStatus> = {
+  " ": "pending", "/": "in_progress", x: "done", "-": "skipped",
+};
+
+/** 正文里的复选框行即步骤表。解析失败的行原样保留，不做规整。 */
+export function parseSteps(body: string): TaskStep[] {
+  const out: TaskStep[] = [];
+  for (const line of body.split("\n")) {
+    const m = line.match(STEP_RE);
+    if (m) out.push({ index: out.length + 1, title: m[2].trim(), status: GLYPH[m[1]] });
+  }
+  return out;
+}
+```
+
+### 3.3 Scratchpad 工具集
+
+新增 5 个 `ToolId`，注册进 `registry.ts` 的 `REGISTRY`，执行器实现在新文件 `src/lib/agent/scratchpadTools.ts`。
+
+| 工具 | access | 参数 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `task_plan` | `write-auto` | `{ title: string; steps: string[] }` | 建立或重写 `task.md` 的标题与步骤列表。会**保留**已有的「进度记录」小节 |
+| `task_progress` | `write-auto` | `{ action: "check"\|"start"\|"skip"\|"add_step"\|"log"; step?: number; text?: string }` | 增量改一行。`step` 是 1 基序号；`add_step`/`log` 用 `text` |
+| `write_note` | `write-auto` | `{ slug: string; title: string; content: string; sources?: string[] }` | 写 `notes/<slug>.md`，自动补标题、时间戳与来源清单，返回相对路径 |
+| `read_note` | `read` | `{ path: string; start_line?: number }` | 分页回读，**沿用 `read_file` 的行号分页语义**（单次 4000 字符、按行边界切、回报 `lines a-b of N` 与下一个 `start_line`） |
+| `list_notes` | `read` | `{}` | 列出本任务的所有 note：slug、标题、路径、字符数。**不给正文** |
+
+#### 实现要点
+
+1. **路径沙箱**：所有路径先经 `isPathWithin(taskDir, target)`（`lib/paths.ts`，写工具既有做法）。`slug` 额外做白名单清洗：`/[^a-z0-9-]/g → "-"`，截断 60 字符，空则用 `note-<序号>`。两道防线，因为 slug 来自模型。
+2. **大小熔断**：单个 note ≤ `100_000` 字符，`task.md` ≤ `20_000` 字符；超限返回 tool error 而非截断（截断会让模型以为写成功了）。
+3. **不做备份**。`write-auto` 在别处意味着「自动应用 + 写前备份」（`agent/backup.ts`），但工作区是 agent 自己的草稿纸：备份它只会让 `.ai-writer/backups/` 翻倍增长，而没有任何可恢复价值。这一点要写进工具注释，否则下一个人会以为是漏了。
+4. **不过任何审批门**：不经 `PlanGate`，不经 `requestApproval`。理由同上 —— 那两道门是为「改作者的内容」设的。
+5. **写入串行化**：模型可以在同一轮发出多个 tool call（`runtime.ts:465` 的循环），两个 `task_progress` 并发读改写 `task.md` 会丢更新。模块内维护一条 `writeChain: Promise<void>`，所有 `task.md` 写入串上去 —— 与 `apiLog.ts:51` 的做法相同。
+
+```ts
+// scratchpadTools.ts — 所有 task.md 写入的唯一入口
+let writeChain: Promise<void> = Promise.resolve();
+
+function serializeWrite<T>(fn: () => Promise<T>): Promise<T> {
+  const run = writeChain.then(fn, fn);
+  writeChain = run.then(() => {}, () => {});
+  return run;
+}
+```
+
+### 3.4 GC 与保留策略
+
+- **上限** `MAX_SAVED_TASKS = 20`（对照 `MAX_CHAT_SESSIONS = 5`，`sessionDb.ts:15`；任务目录比会话轻，且断点续跑的价值窗口更长，故放宽）。
+- **排序键**：先按「是否已收尾」（`completed`/`failed` 排前面，优先被淘汰），再按 `updatedAt` 倒序；保留前 20 个。
+
+  > 第一版写的是「未完成的不清理」，那样一个永不收尾的任务序列会无界增长。上面的排序保证「未完成的优先留下，但不豁免」。
+- **绝不删除当前 run 持有的 `taskId`**（handle 里有它）。
+- **触发时机**：`ensure()` 成功创建新目录之后，`void gcTasks(projectPath, keepId)` 异步执行，失败只 `console.warn`。
+
+### 3.5 项目备份
+
+`projectBackup.ts` 的 `PROJECT_BACKUP_EXCLUDES`（`projectBackup.ts:41`）**不加** `.ai-writer/tasks`，即默认包含。理由与 `.ai-writer/tmp` 被排除恰好相反：tmp 是 scratch，tasks 是可恢复状态。
+
+需要在 `projectBackup.ts` 的模块注释里补一句说明，否则下次有人清理 `.ai-writer/` 时会顺手把它加进排除表。
+
+---
+
+## 4. 状态机、Checkpoint 与断点续跑
+
+### 4.1 生命周期
+
+```
+  ┌──────────┐  task_plan / 首次 write_note
+  │  (无)    ├──────────────────────────────► in_progress
+  └──────────┘                                   │
+                     撞轮数上限选「存盘暂停」     │  步骤全部收尾 / 作者收尾
+                  ┌────────────────────────────┤
+                  ▼                             ▼
+              paused ──── UI 点「继续」───► in_progress ───► completed
+                                                │
+                                                ▼  运行异常 / 作者彻底中止
+                                             failed
+```
+
+### 4.2 裁剪前的 Checkpoint 注入
+
+在 `runtime.ts` 的轮循环顶部、`trimHistory` **之前**插入。关键是**发出即撤**：
+
+```ts
+// runtime.ts —— 与 forcedTextNotice（runtime.ts:276-283 / 410-413）完全同构
+let checkpointNotice: StreamMessage | null = null;
+if (
+  preset.scratchpad === "required" &&
+  opts.inputCeilingTokens &&
+  estimateMessagesTokens(history) > opts.inputCeilingTokens * CHECKPOINT_RATIO &&
+  !checkpointArmed
+) {
+  checkpointNotice = { role: "user", content: i18n.t("ai.instructions.scratchpadCheckpoint") };
+  history.push(checkpointNotice);
+  checkpointArmed = true;   // 本轮已提醒
+}
+…
+} finally {
+  // 与 forcedTextNotice 同理：这是一条「关于本轮」的指令，而 chat 的 history
+  // 是持久的。留在里面等于给之后每一轮都下了一道常驻命令 —— 这正是
+  // 「agent 不停告诉自己用户要求继续」那类故障的成因。
+  if (checkpointNotice) {
+    const at = history.indexOf(checkpointNotice);
+    if (at >= 0) history.splice(at, 1);
+  }
+}
+```
+
+两个补充：
+
+- `CHECKPOINT_RATIO = 0.85`。必须**早于** `trimHistory` 的触发点（后者在 `> inputCeilingTokens` 时才动手），否则提醒发出时内容已经被删了。
+- `checkpointArmed` 在**每次 `trimHistory` 真正丢弃了内容之后重新置回 `false`**（`dropped > 0` 时）。第一版只置一次，等于整段运行只 checkpoint 一次，长任务照样丢。
+
+`preset.scratchpad` 新增于 `TaskPreset`：
+
+```ts
+/**
+ * 这个任务是否使用磁盘工作区。
+ *  - "off"（默认）  —— 不给 scratchpad 工具，行为与今天完全一致
+ *  - "offered"      —— 给工具，但不主动提醒
+ *  - "required"     —— 给工具，并在裁剪前与撞墙时强制提醒
+ */
+scratchpad?: "off" | "offered" | "required";
+```
+
+默认 `"off"` 意味着**整套机制可以整体回退**：不改任何预设，就是今天的行为。
+
+### 4.3 轮数上限：新增「存盘暂停」
+
+现契约是 `onRoundLimit: (roundsUsed: number) => Promise<number>`（`runtime.ts:203`）与 `resolveRoundLimit(runId, granted: number)`（`agentStore.ts:207`）。一个 `number` 表达不了「暂停」，**必须换契约**：
+
+```ts
+// lib/agent/runtime.ts
+export type RoundLimitDecision =
+  | { action: "extend"; rounds: number }
+  | { action: "finish" }              // 今天的 granted: 0 —— 撤工具、强制成文
+  | { action: "pause" };              // 新增 —— 不再发请求，直接收工
+
+export interface AgentRunResult {
+  rounds: number;
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+  /** 新增。"paused" 表示作者选了存盘暂停，本次没有产出正文。 */
+  outcome: "completed" | "paused";
+}
+```
+
+runtime 的处理（替换 `runtime.ts:250-264` 那一段）：
+
+```ts
+if (isLastRound && round > 1 && preset.finishPolicy === "force-text"
+    && preset.tools.length > 0 && opts.onRoundLimit) {
+  const decision = await opts.onRoundLimit(round - 1);
+  if (opts.signal.aborted) throw new DOMException("Aborted", "AbortError");
+  opts.onEvent({ kind: "round-limit", roundsUsed: round - 1, decision, at: Date.now() });
+
+  if (decision.action === "pause") {
+    // 干净的退出点：我们在一轮的**开头**，上一轮的 tool_calls 全都已配对，
+    // history 本身是合法的，不需要 repairToolCallPairing。
+    return { rounds: round - 1, inputTokens: totalInputTokens,
+             outputTokens: totalOutputTokens, cachedTokens: totalCachedTokens,
+             outcome: "paused" };
+  }
+  if (decision.action === "extend") { maxRounds += decision.rounds; isLastRound = false; }
+}
+```
+
+> 为什么在轮首暂停是干净的：`runtime.ts:440-521` 的不变式是「一轮结束时，每个 `tool_call` 都有配对的 `tool` 回复」，`abortedMidRound` 那段专门维护它。轮首退出天然满足，所以暂停不会像中途 abort 那样把会话写坏。
+
+配套改动：
+
+- `AgentEvent` 的 `round-limit` 成员：`granted: number` → `decision: RoundLimitDecision`；
+- `agentStore.requestRoundExtension(...) => Promise<RoundLimitDecision>`，`resolveRoundLimit(runId, decision)`；
+- `rejectAll` 里 `item.resolve(0)` → `item.resolve({ action: "finish" })`（`agentStore.ts:456`）；
+- `RoundLimitCard.tsx` 三个按钮：`就此收尾` / `存盘并暂停` / `继续（再 N 轮）`。中间那个只在 `ctx.taskWorkspace` 存在时渲染 —— 没有工作区就没什么可存的；
+- 调用方拿到 `outcome === "paused"` 时：把 `task.md` 的 `status` 置 `paused`、追加一条进度记录、**不**再强跑一轮成文。
+
+### 4.4 从 `task.md` 恢复
+
+```ts
+// stores/agentStore.ts
+export async function buildResumeSeed(
+  projectPath: string,
+  taskId: string,
+): Promise<{ userContent: string; taskWorkspace: TaskWorkspaceHandle }> {
+  const doc = await loadTaskDoc(projectPath, taskId);
+  if (!doc) throw new Error(i18n.t("ai.errors.taskNotFound"));
+
+  // 1. 参考文件新鲜度 —— 复用 memory.ts 的 FNV-1a
+  const stale: string[] = [];
+  for (const ref of doc.meta.sourceRefs ?? []) {
+    const abs = `${projectPath}/${ref.path}`;
+    if (!(await fileExists(abs))) { stale.push(`${ref.path}（已删除）`); continue; }
+    if (hashText(await readFile(abs)) !== ref.hash) stale.push(`${ref.path}（已修改）`);
+  }
+
+  // 2. notes 索引：只给标题与路径，不给正文
+  const notes = await listTaskNotes(projectPath, taskId);
+
+  // 3. 全新的干净用户轮 —— 不带任何旧 wire history
+  const userContent = i18n.t("ai.instructions.taskResume", {
+    body: doc.body,
+    notes: notes.length
+      ? notes.map((n) => `- ${n.path} — ${n.title}（${n.chars} 字符）`).join("\n")
+      : i18n.t("ai.instructions.taskResumeNoNotes"),
+    stale: stale.length ? stale.map((s) => `- ${s}`).join("\n") : "",
+  });
+
+  return { userContent, taskWorkspace: existingWorkspace(projectPath, taskId) };
+}
+```
+
+启动时 `messages = [{ role: "system", content: profileSystemPrompt(...) + agent 指令 }, { role: "user", content: userContent }]`。
+
+> **这正面解掉了 `【作者消息】` 那一层兜底所治标的病**：恢复的是**任务状态**而非**对话记录**，作者三周前那句 `continue` 根本不会出现在新上下文里。
+>
+> 系统提示词必须走 `profileSystemPrompt()`，不能用 `ai.instructions.system` —— 否则非小说项目会拿到小说指令（CLAUDE.md 明令）。
+
+---
+
+## 5. 子代理执行引擎
+
+### 5.1 数据模型与配置存储
+
+```ts
+// lib/agent/subagent.ts
+/** 可委托的子代理种类。`image` 不在此列 —— 见 §5.5。 */
+export type SubAgentKind = "search" | "vision" | "longread";
+
+export const SUBAGENT_KINDS: readonly SubAgentKind[] = ["search", "vision", "longread"];
+
+export interface SubAgentConfig {
+  kind: SubAgentKind;
+  /** Model.id（配置行主键），null = 未绑定。 */
+  modelId: string | null;
+  enabled: boolean;
+}
+```
+
+#### 持久化
+
+沿用 `imageModelId` / `memoryModelId` 的做法：应用级偏好，不进 `.ai-writer/`（它描述的是作者买了什么账号，不是这个项目的内容）。在 `lib/prefs.ts` 的 `PREF_KEYS` 注册 6 个键：
+
+```
+ai:subagent:search:modelId    ai:subagent:search:enabled
+ai:subagent:vision:modelId    ai:subagent:vision:enabled
+ai:subagent:longread:modelId  ai:subagent:longread:enabled
+```
+
+`aiStore` 提供 `subAgents: Record<SubAgentKind, SubAgentConfig>` 与 `setSubAgent(kind, patch)`，并**必须**接进既有的两处清理逻辑（`aiStore.ts:148-155` 模型表刷新、`aiStore.ts:231` 单个模型删除）—— 否则删掉一个模型后，子代理会指向一个不存在的行。`aiStoreRemoval.test.ts` 已经为 `memoryModelId` 立过这个规矩。
+
+> **绝不要用 `localStorage`**：加键到 `PREF_KEYS`（CLAUDE.md 明令）。
+
+### 5.2 内置种类规范
+
+| kind | 定位 | `tools` | `maxRounds` | `serverTools` 策略 | 产出 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `search` | 联网检索与查证 | `[]` | 2 | **`"always"`** | `notes/search-*.md`：结论 + 事实 + **原始 URL** |
+| `vision` | 图像理解 | `["read_image", "read_lore_image"]` | 3 | `"off"` | `notes/vision-*.md`：视觉描述与结论 |
+| `longread` | 长文精读提要 | `["read_file", "search_text", "list_files"]` | 4 | `"off"` | `notes/read-*.md`：大纲 + 关键细节 |
+
+三者一律 `finishPolicy: "force-text"`（子代理必须以文本收尾，那段文本就是产出）。
+
+#### 5.2.1 致命修正：`serverTools` 必须脱离 `withholdTools`
+
+`runtime.ts:266` 现状：
+
+```ts
+const withholdTools = preset.tools.length === 0 || (isLastRound && preset.finishPolicy === "force-text");
+…
+serverTools: withholdTools ? undefined : opts.serverTools,   // runtime.ts:340
+```
+
+`search` 子代理没有任何本地工具（搜索发生在端点内部），`preset.tools.length === 0` 恒真 ⇒ `withholdTools` 恒真 ⇒ **`web_search` 每一轮都被撤掉，子代理开机即哑**。
+
+这行是为「force-text 收尾轮不该再联网」加的兜底，方向没错，但把两件不同的事并成了一条。拆开：在 `TaskPreset` 上加显式策略。
+
+```ts
+// presets.ts
+/**
+ * 这个任务允许模型使用**端点自带**的服务端工具（web_search）到什么程度。
+ *
+ * 与本地工具分开表达，因为「没有本地工具」和「该收尾了」是两件事：
+ * 搜索子代理正是一个没有任何本地工具、而联网就是它全部工作的预设。
+ *
+ *  - "final-round-off"（默认）—— 允许，但 force-text 的收尾轮撤掉。
+ *      收尾轮的唯一任务是把已有信息写成文；在那里放一次搜索，会重新触发
+ *      整个「搜索 → 续跑」循环（docs/anthropic-plan.md §10.8）。
+ *  - "off"      —— 从不。结构化 JSON 任务用它。
+ *  - "always"   —— 每轮都允许，含最后一轮。只有搜索子代理该用。
+ */
+serverTools?: "final-round-off" | "off" | "always";
+```
+
+```ts
+// runtime.ts —— 替换 340 行那一处
+const serverToolPolicy = preset.serverTools ?? "final-round-off";
+const withholdServerTools =
+  serverToolPolicy === "off" ||
+  (serverToolPolicy === "final-round-off" && isLastRound && preset.finishPolicy === "force-text");
+…
+tools: withholdTools ? undefined : toolDefinitions,
+serverTools: withholdServerTools ? undefined : opts.serverTools,
+```
+
+- 现有预设不写这个字段，取默认值 —— 行为与今天**逐字相同**（`LORE_GENERATE` / `LORE_SPLIT` 是 `maxRounds: 1` + force-text，第 1 轮即最后一轮，照样被撤）。为表明意图，仍给这两个显式写上 `serverTools: "off"`。
+- `structured.ts:common` 里那句 `serverTools: undefined` 保留 —— 它走的是 `streamCompletion` 而非 runtime，是另一条路径上的同一道闸。
+
+#### 5.2.2 绑定校验
+
+`search` 子代理绑定的模型若没有配 `serverTools: ["web_search"]`（`Model.serverTools`，`configDb.ts:156`），它就是个不能上网的普通模型。`delegate` 执行前检查，并给出可操作的错误：
+
+```
+Error: the search subagent's model "<name>" has no server-side web_search enabled.
+Tell the author to turn it on in Settings → Models, or answer without searching.
+```
+
+### 5.3 `delegate` 工具与嵌套调用
+
+#### 5.3.1 `ToolContext` 扩展
+
+`delegate` 需要三样 `ToolContext` 今天没有的东西。全部**可选**，这样 `run.ts:41` 与两个 lore modal 的三字段构造不用改：
+
+```ts
+// registry.ts — ToolContext 追加
+export interface ToolContext {
+  … // 既有 8 个字段不动
+
+  /** 本次运行的任务工作区（懒创建）。缺失时 scratchpad 工具与 delegate 拒绝。 */
+  taskWorkspace?: TaskWorkspaceHandle;
+  /**
+   * 本次运行的中止信号。自己发起请求的工具（delegate）必须共用它，
+   * 否则作者点「停止」之后子代理还在后台烧钱。
+   */
+  signal?: AbortSignal;
+  /** 把嵌套运行的事件转发进本次运行的执行日志。 */
+  onNestedEvent?: (event: AgentEvent) => void;
+  /** 供 delegate 解析子代理连接。由调用方从 aiStore 取，lib 层不反向依赖 store。 */
+  resolveSubAgent?: (kind: SubAgentKind) => Promise<AiConn | { error: string }>;
+}
+```
+
+> 第一版把 `parentSignal` / `onParentEvent` 写成 `executeDelegate` 的额外形参，但注册表的执行器签名是 `execute(call, ctx)`（`registry.ts:189`），多出来的参数无处传入。走 `ToolContext` 是唯一的口子。
+>
+> `resolveSubAgent` 做成回调而不是 `ctx.models` / `ctx.providers`，是为了不把 `lib/agent` 变成 store 的下游 —— `agentStore` 已经因为循环依赖被迫全用 `await import()`（见其模块注释），不该再加一条。
+
+runtime 在构造调用时补上：`signal: opts.signal`、`onNestedEvent: opts.onEvent`（`toolContext` 由调用方给，runtime 在 `executeRegisteredTool` 前浅合并这两项即可）。
+
+#### 5.3.2 工具定义
+
+```ts
+// registry.ts
+delegate: {
+  access: "read",     // 它本身不写作者的任何东西；子代理只写自己的 notes
+  definition: {
+    type: "function",
+    function: {
+      name: "delegate",
+      description:
+        "Hand a context-heavy or capability-specific job to a specialist subagent " +
+        "running on its own model. The subagent works in a separate context, writes " +
+        "its full findings to a note file, and returns only a short summary plus the " +
+        "note path — so its raw material never enters this conversation. Use it for " +
+        "web research, reading images, and digesting long documents.",
+      parameters: {
+        type: "object",
+        properties: {
+          kind: {
+            type: "string",
+            enum: ["search", "vision", "longread"],
+            description:
+              "search — look things up on the web; vision — describe or analyse images; " +
+              "longread — read long documents and report what matters.",
+          },
+          task: {
+            type: "string",
+            description:
+              "A complete, self-contained instruction. The subagent cannot see this " +
+              "conversation, so state everything it needs to know.",
+          },
+          refs: {
+            type: "array",
+            items: { type: "string" },
+            description: "Paths the subagent should work on (documents or images).",
+          },
+        },
+        required: ["kind", "task"],
+      },
+    },
+  },
+  execute: executeDelegate,
+},
+```
+
+> 描述里刻意用 `documents` 而不是「章节」：工具描述对所有 workspace profile 通用，硬编码 `章/卷/设定` 会让跑团/文案项目读到错的词（CLAUDE.md 的 `terms` 约束）。需要 profile 词汇的地方走 `getToolDefinitions` 的占位符替换机制（`registry.ts` 的 `CATEGORY_PLACEHOLDER`）。
+
+#### 5.3.3 执行器
+
+```ts
+// lib/agent/subagent.ts
+export async function executeDelegate(call: ToolCall, ctx: ToolContext): Promise<ToolResult> {
+  const fail = (msg: string): ToolResult => ({ toolCallId: call.id, content: `Error: ${msg}` });
+
+  if (!ctx.taskWorkspace || !ctx.signal || !ctx.onNestedEvent || !ctx.resolveSubAgent) {
+    return fail("this surface cannot run subagents — do not call this tool here.");
+  }
+  const args = parseArgs<{ kind?: string; task?: string; refs?: string[] }>(call.arguments);
+  const kind = args.kind as SubAgentKind;
+  if (!SUBAGENT_KINDS.includes(kind)) return fail(`unknown subagent kind "${args.kind}".`);
+  const task = args.task?.trim();
+  if (!task) return fail("'task' is required — state the whole job, the subagent cannot see this conversation.");
+
+  const conn = await ctx.resolveSubAgent(kind);
+  if ("error" in conn) return fail(conn.error);
+
+  const refs = (args.refs ?? []).filter((r) => typeof r === "string");
+  const preset = SUB_PRESETS[kind];
+
+  // 全新历史：两条消息，不带主 agent 的任何上下文。
+  const messages: StreamMessage[] = [
+    { role: "system", content: i18n.t(`ai.instructions.subagent.${kind}`, promptParams(isZh())) },
+    { role: "user", content: i18n.t("ai.instructions.subagentTask", { task, refs: refs.join("\n") }) },
+  ];
+
+  // 产出经 onOutputText 捕获 —— runtime 在成文轮**直接 return，那段文本
+  // 从不进 history**（runtime.ts:417-425），所以事后翻 messages 一定是空的。
+  // 它是累积快照而非增量，赋值即可（runtime.ts:220）。
+  let output = "";
+
+  let result: AgentRunResult;
+  try {
+    result = await runAgent({
+      ...connOptions(conn),
+      preset,
+      messages,
+      toolContext: {
+        projectPath: ctx.projectPath,
+        loreIndex: ctx.loreIndex,
+        // 子代理自己的多模态能力，与主模型无关。
+        multimodal: conn.model.type === "multimodal",
+        // 沙箱：没有审批通道、没有方案门、没有工作区句柄 ⇒ 它既写不了正文
+        // 与设定，也调不动 delegate（后者还被 SUB_PRESETS 的工具集挡了一道）。
+        taskWorkspace: undefined,
+        signal: ctx.signal,
+      },
+      signal: ctx.signal,
+      onEvent: (e) => ctx.onNestedEvent!({ ...e, parentStep: call.id }),
+      onOutputText: (text) => { output = text; },
+      // 不给 onRoundLimit：子代理撞上限就按老规矩强制成文，不去打扰作者。
+    });
+  } catch (e) {
+    if ((e as Error).name === "AbortError") throw e;   // 中止要往上传，不能吞
+    return fail(`the ${kind} subagent failed: ${(e as Error).message}`);
+  }
+
+  // 记账：一次子跑一行，model_id 是子代理的。
+  await persistUsage(
+    ctx.projectPath, conn.model.id,
+    result.inputTokens, result.outputTokens,
+    costFor(conn.model, result.inputTokens, result.outputTokens, result.cachedTokens),
+    `subagent:${kind}`, result.cachedTokens,
+  );
+
+  if (!output.trim()) return fail(`the ${kind} subagent returned nothing. Try a narrower task, or do it yourself.`);
+
+  const { taskId } = await ctx.taskWorkspace.ensure(task.slice(0, 60));
+  const note = await writeTaskNote(ctx.projectPath, taskId, {
+    slug: `${kind}-${slugify(task)}`,
+    title: task.slice(0, 80),
+    content: output,
+    sources: refs,
+  });
+
+  return {
+    toolCallId: call.id,
+    content: [
+      `The ${kind} subagent finished. Full findings saved to: ${note.path}`,
+      `Call read_note with that path when you need the detail.`,
+      ``,
+      `Summary:`,
+      clip(output, DELEGATE_SUMMARY_CHARS),
+    ].join("\n"),
+  };
+}
+
+/** 回给主模型的摘要上限。够判断「要不要展开读」，不够顺手替代读 note。 */
+const DELEGATE_SUMMARY_CHARS = 800;
+```
+
+关于 `persistUsage`：**今天没有可复用的函数**。三份逐字相同的私有副本分别在 `aiTaskStore.ts:670`、`memoryStore.ts:369`、`agentStore.ts:241`。`lib/agent` 不该再抄第四份，也不该反向 import store。**PR-C 的前置改动**：把它提到 `lib/ai/usage.ts`（用量的读侧已经在那里），三个 store 改为 import。这是纯搬运，独立可测。
+
+### 5.4 四条硬约束的落实点
+
+| 约束 | 落实处 | 为什么这里够 |
+| :--- | :--- | :--- |
+| **深度 1** | `SUB_PRESETS[kind].tools` 不含 `"delegate"` | `executeRegisteredTool`（`registry.ts:1003`）按 `allowed` 白名单查表，不在名单里直接返回 `Unknown tool` |
+| **只读** | 子 `ToolContext` 的 `requestApproval` / `requestPlanApproval` / `lorePlan` / `taskWorkspace` 全部不传 | L2 提案工具在缺 `requestApproval` 时自报错（`imageTools.ts:51`），lore 写工具在缺 `lorePlan` 时被 `checkPlan` 挡下（`plan.ts:108`）。**两道独立的闸，工具集是第三道** |
+| **零上下文渗透** | `messages` 只有 2 条，现场构造 | —— |
+| **共享 signal** | `ctx.signal` 直接透传给 `runAgent`；`AbortError` 向上重抛而不转成 tool error | 转成 tool error 会让主模型以为「搜索失败」并重试，而作者其实是按了停止 |
+
+### 5.5 `image` 为什么不在里面
+
+生图已经有完整的 L2 提案链路（`imageTools.ts` + `lib/image/illustrate.ts`）与自己的模型选择（`imageModelId`），且它**要花钱、必须逐次审批**，与「子代理默默干活再交报告」的形态相反。把它塞进 `delegate` 只会绕过审批卡。
+
+`imageModelId` 与子代理表的归口留到 PR-E，且只是配置层面的归口，调用链不变。
+
+---
+
+## 6. 能力路由
+
+### 6.1 `ToolContext.multimodal` 的语义不动
+
+`multimodal` 在 `tools.ts:130` 与 `tools.ts:205` 里决定的是 **「要不要把 base64 塞进当前这次请求的模型」**，由 `run.ts:45` 从 `model.type === "multimodal"` 得出。
+
+把它改成「链路上有人能看图」会让纯文本主模型收到它读不了的 base64 —— 烧 token，还可能被端点 400。**所以这个字段一个字不改。**
+
+UI 的灰显判断需要的是另一个概念，单独给：
+
+```ts
+// lib/agent/subagent.ts
+/** 这条链路上有没有人能看图 —— 只给 UI 用（设定库的「AI 描述」按钮等）。 */
+export function chainCanSeeImages(mainModel: Model, subs: Record<SubAgentKind, SubAgentConfig>): boolean {
+  return mainModel.type === "multimodal" || (subs.vision.enabled && !!subs.vision.modelId);
+}
+```
+
+### 6.2 路由 = 改工具集，不是改提示词也不是改返回值
+
+作者的规则是「主模型也支持、子代理也支持时，**优先子代理**」。
+
+> 第一版把它收窄成「仅当主模型是纯文本时才重定向」，那样多模态主模型仍自己看图，vision 子代理形同虚设。这里改回 HLD 语义。
+
+做法是**从主模型的有效工具集里拿掉被接管的工具**，而不是让工具返回一句「请改用 delegate」。前者是硬保证，后者仍要模型配合，而且白白花一次工具往返。
+
+```ts
+// lib/agent/routing.ts（新文件，位于 preset 与 registry 之间）
+export interface RoutedTools {
+  tools: ToolId[];
+  /** 主模型这次是否还允许用端点自带的搜索。 */
+  serverTools: "final-round-off" | "off";
+}
+
+export function routeTools(
+  preset: TaskPreset,
+  subs: Record<SubAgentKind, SubAgentConfig>,
+  hasWorkspace: boolean,
+): RoutedTools {
+  let tools = [...preset.tools];
+  const live = (k: SubAgentKind) => subs[k].enabled && !!subs[k].modelId;
+
+  // vision 接管看图：拿掉图片工具，主模型只能委托。
+  if (live("vision")) tools = tools.filter((t) => t !== "read_image" && t !== "read_lore_image");
+
+  // longread 不接管 read_file —— 主模型读一小段正文是它的日常工作，
+  // 全部委托出去反而多一次往返。longread 是「通读一大摞」的加法，不是替代。
+
+  if (SUBAGENT_KINDS.some(live) && hasWorkspace && !tools.includes("delegate")) {
+    tools.push("delegate");
+  }
+  // search 接管联网：主模型不再直接持有端点搜索。
+  return { tools, serverTools: live("search") ? "off" : (preset.serverTools ?? "final-round-off") };
+}
+```
+
+三点说明：
+
+1. **`delegate` 需要工作区**（子代理产出要落盘），所以 `hasWorkspace` 为假时不加它 —— lore modal 这类表面不会莫名其妙多出一个用不了的工具。
+2. **`search` 启用 ⇒ 主模型的 `serverTools` 关掉。** 这不只是「优先子代理」，更是把 MiniMax 那套 `pause_turn` / 续跑 / `tool id not found` 的复杂度**关进子跑里** —— 主 history 从此见不到 `web_search_tool_result` 这类块（`anthropic-plan.md` §10.7）。
+3. 路由结果覆盖 `preset.serverTools`，两者的优先级要在 runtime 入口处一次性算清，不要两处各判一次。
+
+### 6.3 模型幻觉调用被拿掉的工具
+
+主模型若仍调 `read_image`，`executeRegisteredTool` 返回 `Unknown tool: read_image`（`registry.ts:1014`）。这条信息偏弱但可自纠。**不**为此加特例分支：路由一旦开始按名字打补丁，就得为每一对「被谁接管」维护映射表。真观察到模型反复撞墙，再在 `delegate` 的描述里点名它接管了什么。
+
+---
+
+## 7. 前端与可视化
+
+### 7.1 `AgentEvent` 加 `parentStep`
+
+`AgentEvent` 是 13 个内联对象字面量的联合（`events.ts:31-165`），**没有** `AgentEventBase` 可以继承。最小改动是把整个联合包一层交叉类型 —— 联合与对象类型的交叉会分配到每个成员，`kind` 的判别式收窄与穷尽检查都不受影响：
+
+```ts
+// events.ts
+/** 每个事件都带。只有从嵌套子代理转发上来的事件会设值。 */
+export interface AgentEventScope {
+  /** 拥有这个事件的 `delegate` 步骤的 toolCallId。 */
+  parentStep?: string;
+}
+
+export type AgentEvent = AgentEventScope & (
+  | { kind: "run-start"; … }
+  | …                              // 13 个成员一字不改
+);
+```
+
+#### 去重键必须带上 `parentStep`
+
+`replaceableIndex`（`events.ts` 末尾）现在按 `toolCallId + name` 去重 tool-step、按 `round` 去重 reasoning。子跑的轮次也从 1 开始，**它的 reasoning 会顶掉主 run 第 1 轮的 reasoning 行**。两处都补上作用域比较：
+
+```ts
+if (event.kind === "tool-step") {
+  return log.findIndex((e) => e.kind === "tool-step"
+    && e.parentStep === event.parentStep
+    && e.step.toolCallId === event.step.toolCallId
+    && e.step.name === event.step.name);
+}
+if (event.kind === "reasoning") {
+  return log.findIndex((e) => e.kind === "reasoning"
+    && e.parentStep === event.parentStep
+    && e.round === event.round);
+}
+```
+
+### 7.2 `AgentLog.tsx` 嵌套渲染
+
+- 一个 `tool-step`（`name === "delegate"`）若存在 `parentStep === step.toolCallId` 的事件，渲染成**可展开块**；
+- 收起态（默认）：`delegate · search — 东境贵族历史  ✓ 3.2s · 1.4k tok`；
+- 展开态：缩进渲染子跑的 `round-start` / `tool-step` / `reasoning` / `turn-resumed`，复用现有行组件；
+- 子事件**不**在顶层再出现一次 —— 渲染前先按 `parentStep` 分组。
+
+### 7.3 任务面板（AiDrawer 新增 Tab）
+
+- 任务列表：标题、状态 Badge、步骤进度 `2/5`（由 `parseSteps` 数出来）、更新时间；
+- 详情：`task.md` 正文用 `renderMarkdown` 渲染（复选框状态可见）、notes 列表可点开预览；
+- `in_progress` / `paused` 的任务给「继续」按钮 → `buildResumeSeed` → 新 run。
+
+### 7.4 设置 → 子代理（`panes/SubAgentsPane.tsx`）
+
+- 用 `settingsUi.module.css` 的 row/section/card 词汇，三张卡（联网检索 / 图像理解 / 长文精读）；
+- 每张：开关 + 模型下拉（列 `type` 为 `text`/`multimodal` 的行）+ 累计用量；
+- 用量从 `token_usage` 按 `task LIKE 'subagent:%'` 聚合，加进 `lib/ai/usage.ts` 的既有 rollup；
+- `search` 卡在所选模型缺 `serverTools` 时显示一条内联警告，并给去「供应商与模型」的跳转。
+
+### 7.5 会话级 chips
+
+`AgentChat.tsx` / `AiPanel.tsx` 输入框上方渲染已启用子代理的 chips，可单次点掉。**会话级覆盖存在 store 里，不落 prefs** —— 它是「这次对话」的意思，不是设置。
+
+---
+
+## 8. 文件变更清单
+
+```
+src/
+├── lib/
+│   ├── agent/
+│   │   ├── events.ts            [MODIFY] AgentEventScope 交叉类型；replaceableIndex 带 parentStep；
+│   │   │                                 round-limit 事件改载 decision
+│   │   ├── presets.ts           [MODIFY] TaskPreset 增 scratchpad / serverTools 字段；
+│   │   │                                 LORE_GENERATE / LORE_SPLIT 显式 serverTools:"off"
+│   │   ├── registry.ts          [MODIFY] ToolContext 增 4 个可选字段；注册 5 个 scratchpad 工具 + delegate
+│   │   ├── runtime.ts           [MODIFY] serverTools 脱离 withholdTools；checkpoint 注入并撤回；
+│   │   │                                 RoundLimitDecision 与 outcome:"paused" 提前退出；
+│   │   │                                 toolContext 合入 signal / onNestedEvent
+│   │   ├── routing.ts           [NEW] 能力路由（工具集改写）
+│   │   ├── scratchpadTools.ts   [NEW] 5 个工作区工具 + 写入串行化
+│   │   ├── subagent.ts          [NEW] SubAgentConfig / SUB_PRESETS / executeDelegate / chainCanSeeImages
+│   │   └── taskWorkspace.ts     [NEW] task.md 序列化、步骤解析、note 读写、GC、Handle
+│   ├── ai/
+│   │   └── usage.ts             [MODIFY] 抽出共享 persistUsage（三个 store 改为 import）
+│   ├── prefs.ts                 [MODIFY] 6 个子代理 PREF_KEYS
+│   └── fs/projectBackup.ts      [MODIFY] 注释说明 .ai-writer/tasks 有意包含
+├── stores/
+│   ├── agentStore.ts            [MODIFY] RoundLimitDecision 契约；buildResumeSeed；
+│   │                                     构造 taskWorkspace / resolveSubAgent
+│   ├── aiTaskStore.ts           [MODIFY] persistUsage 改 import；同上的 ctx 构造
+│   ├── memoryStore.ts           [MODIFY] persistUsage 改 import
+│   └── aiStore.ts               [MODIFY] subAgents 状态 + 两处清理逻辑接入
+├── components/
+│   ├── ai/
+│   │   ├── AgentLog.tsx         [MODIFY] 按 parentStep 分组 + 嵌套折叠
+│   │   ├── RoundLimitCard.tsx   [MODIFY] 第三个按钮「存盘并暂停」
+│   │   ├── SubAgentChips.tsx    [NEW] 会话级开关
+│   │   └── TaskWorkspaceView.tsx[NEW] 任务列表与详情
+│   └── settings/panes/
+│       └── SubAgentsPane.tsx    [NEW]
+└── i18n/locales/{en,zh-CN}.json [MODIFY] 见 §10
+```
+
+---
+
+## 9. 异常与边界
+
+| 场景 | 风险 | 对策 |
+| :--- | :--- | :--- |
+| 子代理异常 / 超时 | 主 run 崩溃 | `executeDelegate` 全包 try/catch → tool error；**唯独 `AbortError` 重抛**，否则主模型会把作者的「停止」读成「搜索失败」并重试 |
+| 作者点停止 | 子代理后台继续烧钱 | 共享 `ctx.signal` |
+| 递归委托 | 指数爆炸 | `SUB_PRESETS` 工具集不含 `delegate` + 注册表白名单双保险 |
+| 路径越界 | 模型传 `../../writing/x.md` | `isPathWithin` + slug 字符白名单 |
+| 同轮并发写 `task.md` | 丢更新 | 模块内 `writeChain` 串行化（§3.3.5） |
+| 磁盘堆积 | 任务目录无界增长 | 排序 GC，未收尾的优先保留但**不豁免**（§3.4） |
+| 恢复时源文件已变 | 基于过期正文推理 | `sourceRefs` 的 FNV-1a 比对，变动清单写进恢复提示（§4.4） |
+| 嵌套事件顶掉主 run 的日志行 | 日志错乱 | 去重键带 `parentStep`（§7.1） |
+| 子代理返回空 | 写出一篇空 note | 空产出直接返回 tool error，不建 note |
+| 会话折叠吃掉 note 路径 | 模型忘了自己存过什么 | `compact.ts` 的 `renderTurnsForSummary` 已渲染工具调用；在 `ai.instructions.chatCompact` 里加一句「保留提到过的 `notes/` 路径」。**不**把 note 加进 `injectionCarriers`（那是给可复现的检索块用的） |
+| 子代理绑的模型被删 | 指向空行 | `aiStore` 两处清理逻辑接入（§5.1）；`resolveSubAgent` 再兜一次 |
+
+---
+
+## 10. i18n 与 profile 约束
+
+- 提示词一律走 i18n，**不硬编码中文**：`ai.instructions.subagent.{search,vision,longread}`、`subagentTask`、`scratchpadCheckpoint`、`taskResume`、`taskResumeNoNotes`；
+- 需要 profile 词汇的提示词在解析处传 `promptParams(isZh)`（CLAUDE.md：绝不在组件或 i18n 值里硬编码 章/卷/设定）；
+- 子代理的 system prompt 属于「通用助手」语域，用中性词（文档 / 知识库），novel 需要小说措辞时另开 `*Novel` 键；
+- 工具 `description` 保持英文（与注册表其余工具一致），但同样避开 章节/设定 这类 profile 专属词；
+- 恢复任务的 system prompt **必须** `profileSystemPrompt()`，不得用 `ai.instructions.system`。
+
+---
+
+## 11. 测试计划
+
+CI 是 PR 门禁（`docs/ci.md`：tsc + vitest + build，Rust fmt/clippy/test）。至少覆盖：
+
+| 测试 | 位置 | 断言 |
+| :--- | :--- | :--- |
+| `task.md` 序列化往返 | `lib/__tests__/taskWorkspace.test.ts` | parse∘serialize 恒等；作者手改复选框后 `parseSteps` 读出新状态；元数据损坏时 `parseTaskDoc` 返回 null 而不抛 |
+| 步骤寻址 | 同上 | `task_progress({step:2,action:"check"})` 只改第 2 行；越界序号返回 tool error |
+| 路径沙箱 | `lib/__tests__/scratchpadTools.test.ts` | `slug: "../../x"`、绝对路径、空 slug 三种输入都被挡 |
+| **serverTools 策略** | `lib/__tests__/agentRuntime.test.ts` | `tools:[] + serverTools:"always"` 的预设，**每一轮**的请求都带 serverTools（这是 §5.2.1 那个 bug 的回归测试）；默认策略的收尾轮不带 |
+| checkpoint 撤回 | 同上 | 注入 checkpoint 的那一轮请求里有提示消息，**该轮结束后 history 里没有** |
+| 暂停退出 | 同上 | `onRoundLimit` 返回 `{action:"pause"}` 时 `outcome === "paused"`，且 history 的 tool_call 配对完整 |
+| 委托沙箱 | `lib/__tests__/subagent.test.ts` | 子 `ToolContext` 不含 approval/plan/workspace；`SUB_PRESETS` 均不含 `delegate`；`AbortError` 被重抛而非转成 tool error |
+| 产出捕获 | 同上 | mock `runAgent` 只经 `onOutputText` 吐字，note 内容与之一致（这是 §0 第三条的回归测试） |
+| 能力路由 | `lib/__tests__/routing.test.ts` | vision 启用 ⇒ 工具集无 `read_image`；search 启用 ⇒ `serverTools: "off"`；无工作区 ⇒ 无 `delegate` |
+| 日志作用域 | `lib/__tests__/agentEvents.test.ts` | 主 run 与子跑各自的 round-1 reasoning 并存，互不覆盖 |
+| 子代理配置清理 | `lib/__tests__/aiStoreRemoval.test.ts` | 删除模型后 `subAgents.*.modelId` 被清空（沿用 `memoryModelId` 的既有用例） |
+
+---
+
+## 12. 分阶段实施
+
+### PR-A · 任务工作区与 scratchpad 基建
+`taskWorkspace.ts`、`scratchpadTools.ts`、`ToolContext.taskWorkspace`、`TaskPreset.scratchpad`、checkpoint 注入与撤回、GC、备份注释。
+**验收**：长任务在接近上限时写出 notes；裁剪后模型能 `read_note` 取回结论而不重搜；`preset.scratchpad = "off"` 时行为与 main 逐字一致。
+
+### PR-B · 存盘暂停与恢复
+`RoundLimitDecision` 契约、runtime 提前退出、`buildResumeSeed`、`TaskWorkspaceView`。
+**验收**：撞上限后暂停 → 重启应用 → 点继续 → 新上下文里没有任何旧对话，且接着未完成的步骤跑。
+
+### PR-C · `delegate` 与 `search` 子代理
+前置：抽出共享 `persistUsage`。含 `subagent.ts`、`TaskPreset.serverTools` 策略拆分、`AgentEventScope`、嵌套日志。
+**验收**：主模型 DeepSeek（不能联网），经 `delegate(search)` 调起 MiniMax-M3 完成查证；日志嵌套折叠；`token_usage` 出现 `subagent:search` 行且 `model_id` 是子代理的；**主 run 的请求体里从头到尾没有 `web_search`**。
+
+### PR-D · `vision` / `longread` 与能力路由
+`routing.ts`、`chainCanSeeImages`。
+**验收**：主模型为纯文本时能完成识图任务，且它的工具集里确实没有 `read_image`。
+
+### PR-E · 设置面板、会话 chips 与归口
+`SubAgentsPane`、`SubAgentChips`、`imageModelId` 归口到子代理配置表（**仅配置层归口，生图调用链与审批卡不变**）。
+**验收**：设置里可配可看用量；chips 能单次关掉某个子代理。
+
+---
+
+## 13. 与既有机制的边界（不做什么）
+
+- **不替代 `compact`**：会话折叠管「聊过什么」，工作区管「查到什么、做到哪」。
+- **不替代 `PlanGate`**：那是授权，这是记忆。`task.md` 的步骤**不授予任何写权限**。
+- **不做通用多智能体框架**：无子代理间通信、无并行编排、无递归。
+- **工作区不进 `writing/`**，不参与导出。
+- **子代理不写正文、不写设定、不生图。**
