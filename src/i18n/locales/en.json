@@ -1000,6 +1000,11 @@
       "ignoreAll": "Ignore all",
       "applyAll": "Apply {{n}} suggestions",
       "applyAllHint": "Writes every suggested fix back into the text at once; anything that can't be located is skipped"
+    },
+    "taskPanel": {
+      "untitled": "Current task",
+      "paused": "Paused",
+      "tokensBreakdown": "Main model {{main}} · subagents {{sub}}"
     }
   },
   "aiConfig": {

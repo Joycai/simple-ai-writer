@@ -259,6 +259,66 @@ function pickCurrent({
   return events[events.length - 1] ?? null;
 }
 
+/** Tools whose completion means the task document on disk has moved. */
+const TASK_DOC_TOOLS = new Set(["task_plan", "task_progress"]);
+
+/**
+ * A number that changes whenever the task document was written.
+ *
+ * The plan is on disk, not in this stream — `task_plan`'s arguments are subject
+ * to the same 400-char truncation as everything else, and a six-step Chinese
+ * plan does not survive it. So the panel re-reads the file, and this is what
+ * tells it when: settled calls to the two tools that write it. Counting settled
+ * calls (not all of them) means the number moves once the write has landed,
+ * not when it was requested.
+ */
+export function taskDocRevision(logs: readonly (readonly AgentEvent[])[]): number {
+  let n = 0;
+  for (const log of logs) {
+    for (const e of log) {
+      if (e.kind === "tool-step" && TASK_DOC_TOOLS.has(e.step.name) && e.step.status !== "running") {
+        n++;
+      }
+    }
+  }
+  return n;
+}
+
+export interface TokenTotals {
+  /** The main model's own consumption. */
+  input: number;
+  output: number;
+  /** What delegated specialists spent on their own models. */
+  subInput: number;
+  subOutput: number;
+}
+
+/**
+ * What a set of runs cost, subagents counted separately.
+ *
+ * Separately because they are different bills: the specialists run on their own
+ * models at their own prices, and folding them into one figure would hide the
+ * single most useful thing about delegation — that it moved a large, cheap read
+ * off the expensive model. Both halves come from `run-done`, which for a
+ * subagent is emitted by `executeDelegate` with `parentStep` set.
+ */
+export function sumTokens(logs: readonly (readonly AgentEvent[])[]): TokenTotals {
+  const total: TokenTotals = { input: 0, output: 0, subInput: 0, subOutput: 0 };
+  for (const log of logs) {
+    for (const e of log) {
+      if (e.kind !== "run-done") continue;
+      if (e.parentStep) {
+        total.subInput += e.inputTokens;
+        total.subOutput += e.outputTokens;
+      } else {
+        total.input += e.inputTokens;
+        total.output += e.outputTokens;
+      }
+    }
+  }
+  return total;
+}
+
 /**
  * The rows a round contributes to the log body.
  *

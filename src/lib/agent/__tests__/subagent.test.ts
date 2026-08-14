@@ -288,6 +288,31 @@ describe("subagent", () => {
       expect(mockWriteTaskNote).toHaveBeenCalledTimes(1);
       expect(res.content).toContain(".ai-writer/tasks/task-123/notes/search-find-facts.md");
       expect(res.content).toContain("Here is the detailed research report on topic X.");
+
+      // What the specialist spent, on the record the author can actually see.
+      // The DB row above is the permanent ledger but is invisible until someone
+      // opens Settings → 用量, and a delegation is exactly the step whose cost
+      // is being decided about now. `parentStep` keeps it out of the parent
+      // run's totals, which count the parent's model only.
+      expect(ctx.onNestedEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "run-done",
+          inputTokens: 50,
+          outputTokens: 100,
+          parentStep: "c1",
+        }),
+      );
+    });
+
+    it("reports no cost for a subagent that failed before running", async () => {
+      const ctx = makeCtx({
+        resolveSubAgent: vi.fn(async () => ({ error: "no key" })),
+      });
+      const call: ToolCall = { id: "c1", name: "delegate", arguments: JSON.stringify({ kind: "search", task: "x" }) };
+      await executeDelegate(call, ctx);
+      expect(ctx.onNestedEvent).not.toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "run-done" }),
+      );
     });
   });
 });

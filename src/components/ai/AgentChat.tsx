@@ -42,6 +42,8 @@ import { AgentLog } from "./AgentLog";
 import { ApprovalCard } from "./ApprovalCard";
 import { PlanCard } from "./PlanCard";
 import { RoundLimitCard } from "./RoundLimitCard";
+import { TaskPanel } from "./TaskPanel";
+import { sumTokens, taskDocRevision } from "../../lib/agent/logModel";
 import { useImeGuard } from "../../lib/ime";
 import type { AgentEvent } from "../../lib/agent/events";
 import { foldBoundary } from "../../lib/agent/transcriptFold";
@@ -284,6 +286,15 @@ export function AgentChat() {
     }
   }, [turns, chatRunning]);
 
+  // ── Task plan (band ④) ──
+  // The handle's `taskId` is a getter on a stable object, so it is read through
+  // a selector rather than off the object: the store's turns change on every
+  // agent event, which is exactly when a workspace comes into being.
+  const chatTaskId = useAgentStore((s) => s.chatTaskWorkspace?.taskId ?? null);
+  const turnLogs = useMemo(() => turns.map((tn) => tn.log), [turns]);
+  const taskRevision = useMemo(() => taskDocRevision(turnLogs), [turnLogs]);
+  const taskTokens = useMemo(() => sumTokens(turnLogs), [turnLogs]);
+
   const attachedQuote = !detached && selection ? selection : undefined;
   const canSend = !!draft.trim() && !chatRunning && !!activeModelId;
 
@@ -428,6 +439,18 @@ export function AgentChat() {
           ))}
         </div>
       )}
+
+      {/* Band ④ — the task the agent split the work into. One per session, not
+          one per turn: a plan written in turn 1 and ticked off in turn 4 is not
+          a property of either. See TaskPanel.tsx. */}
+      <div className={styles.taskBand}>
+        <TaskPanel
+          projectPath={projectPath}
+          taskId={chatTaskId}
+          revision={taskRevision}
+          tokens={taskTokens}
+        />
+      </div>
 
       <div className={styles.composer}>
         <ContextBar context={context} />
