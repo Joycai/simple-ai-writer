@@ -533,6 +533,12 @@
       "searchResults": "Here are the results of the web searches you just ran.\n\n**Write this batch up now.** So far you have produced only an announcement — not one line of the actual content. Do not spend another turn saying what you are about to search for next: that produces nothing.\n\nIn this order: first write out (or write to the document, using your tools) the full content for this batch, based on the results below. Then, if terms remain uncovered, start the next batch of searches. Cite sources by their URL.\n\n{{results}}",
       "searchResultsFinal": "Here are the results of the web searches you just ran.\n\n**This is the last chance in this turn — do not start any more searches.** Write the full content now from everything you already have, calling your tools if it belongs in the document. For anything still uncovered, just say plainly that it was not covered; do not search for it.\n\n{{results}}"
     },
+    "taskDoc": {
+      "untitled": "Untitled task",
+      "stepsHeading": "Steps",
+      "logHeading": "Progress log",
+      "sources": "**Sources:**"
+    },
     "snippets": {
       "button": "Snippets",
       "hint": "Insert a predefined prompt (managed in Settings → Prompt, scene \"snippet\")"

@@ -56,6 +56,7 @@ import {
 } from "../lib/agent/sessionDb";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import { createPlanGate, type LorePlan, type PlanDecision } from "../lib/agent/plan";
+import { createTaskWorkspace, type TaskWorkspaceHandle } from "../lib/agent/taskWorkspace";
 import { AGENT_ASSIST_PRESET } from "../lib/agent/presets";
 import { repairToolCallPairing, runAgent } from "../lib/agent/runtime";
 import {
@@ -186,6 +187,19 @@ interface AgentState {
    * streamed text, which arrives per chunk and never touches the history.
    */
   chatContextVersion: number;
+  /**
+   * Disk workspace the scratchpad tools write into, for the *whole* session.
+   *
+   * Per-session rather than per-turn: a note the assistant filed on turn 3 has
+   * to still be readable on turn 9 — that is the entire point of putting it on
+   * disk. Lazy, like the handle itself: a conversation that never plans or
+   * takes a note leaves no directory behind.
+   *
+   * Not persisted with the session blob yet, so reopening an old conversation
+   * starts a fresh workspace. Carrying it across a restart is PR-B's job (it is
+   * the same state `resumeTask` will need).
+   */
+  chatTaskWorkspace: TaskWorkspaceHandle | null;
   /** DB row this session saves into; null until the first persist. */
   chatSessionId: number | null;
   /** Recent sessions (newest first, ≤ MAX_CHAT_SESSIONS) for the history menu. */
@@ -389,6 +403,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   chatHistory: null,
   chatMeta: null,
   chatContextVersion: 0,
+  chatTaskWorkspace: null,
   chatSessionId: null,
   chatSessions: [],
 
@@ -537,6 +552,20 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
     /** Tell the context bar the history changed under it (see chatContextVersion). */
     const bumpContext = () => set((s) => ({ chatContextVersion: s.chatContextVersion + 1 }));
+
+    /**
+     * This session's disk workspace, created on first use and reused by every
+     * later turn. Built here rather than in the state initialiser because it
+     * needs the project path and the model, neither of which exists until a
+     * turn actually runs.
+     */
+    const taskWorkspace = (): TaskWorkspaceHandle => {
+      const existing = get().chatTaskWorkspace;
+      if (existing) return existing;
+      const handle = createTaskWorkspace(projectPath, model.id);
+      set({ chatTaskWorkspace: handle });
+      return handle;
+    };
 
     try {
       const apiKey = (await loadApiKey(provider.id)) ?? "";
@@ -745,6 +774,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           // One gate per turn: a plan the author approved for *this* request
           // does not silently authorise the next one.
           lorePlan: createPlanGate(),
+          // ...unlike the workspace, which is per SESSION — see chatTaskWorkspace.
+          taskWorkspace: taskWorkspace(),
         },
         signal: controller.signal,
         // At the round cap, block on the author's 继续/收尾 card instead of
@@ -814,7 +845,13 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     get().stopChat();
     // The old session stays in the history menu (it was persisted at its last
     // turn); clearing the id makes the next turn open a fresh row.
-    set({ turns: [], chatHistory: null, chatMeta: null, chatSessionId: null, chatError: null, chatUsage: null });
+    set({
+      turns: [], chatHistory: null, chatMeta: null, chatSessionId: null,
+      chatError: null, chatUsage: null,
+      // A new conversation is a new job: it must not inherit the previous
+      // one's notes, or read_note would surface findings from another topic.
+      chatTaskWorkspace: null,
+    });
   },
 
   persistChat: async () => {

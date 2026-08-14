@@ -1,6 +1,6 @@
 # 长任务工作区与子代理 详细设计文档（Low-Level Design）
 
-> **状态**：详细设计（LLD），尚未实现
+> **状态**：PR-A 已实现（任务工作区 + 5 个 scratchpad 工具 + checkpoint），PR-B~E 待做
 > **关联 High-Level Design**：[`docs/subagent-plan.md`](subagent-plan.md)
 > **基建依赖**：[`unified-agent-plan.md`](unified-agent-plan.md)（统一 Agent Runtime）、[`chat-memory-plan.md`](chat-memory-plan.md)（会话折叠压缩）、[`anthropic-plan.md`](anthropic-plan.md) §10（服务端工具）
 > **分支**：`feat/task-workspace-and-subagents`
@@ -131,18 +131,25 @@ export interface TaskWorkspaceHandle {
 
 # 调查东境贵族世系与魔法起源
 
-## 步骤
+## 步骤 <!-- ai-writer-task-steps -->
 
 - [x] 检索东境三大家族设定
 - [/] 分析初代家主与禁忌魔法关联
 - [ ] 起草补充设定并更新词条
 
-## 进度记录
+## 进度记录 <!-- ai-writer-task-log -->
 
 - 16:32 家族关系网比对完成，见 `notes/search-east-nobles.md`
 ```
 
 复选框字形即状态：`[ ]` pending · `[/]` in_progress · `[x]` done · `[-]` skipped。
+缩进的复选框**也算一步**：工具按位置寻址，而作者是照着渲染后的列表数位置的，
+解析器漏掉一条就会让其后每个序号错位、勾错行。
+
+小节标题经 i18n 翻译（作者要读这个文件），但各自带一个语言无关的锚点注释
+`<!-- ai-writer-task-steps -->` / `<!-- ai-writer-task-log -->`。工具靠锚点定位小节，
+所以换了应用语言、或作者改了标题措辞，追加的位置都不会错——按标题文本去找，
+第一次切换语言就会把进度记录写到别处去。
 
 #### 类型与序列化（`src/lib/agent/taskWorkspace.ts`）
 
@@ -181,7 +188,12 @@ export interface TaskNoteHeader {
   /** 项目相对路径，可直接喂给 read_note。 */
   path: string;
   chars: number;
-  updatedAt: string;
+  /**
+   * 请求的 slug 已被占用、实际落盘时加了后缀时才有值——工具据此告诉模型
+   * 真实文件名。**不要**在这里放 updatedAt：readDir 拿不到 mtime，
+   * 填 `new Date()` 等于放一个永远说谎的字段。
+   */
+  renamedFrom?: string;
 }
 ```
 
@@ -231,11 +243,26 @@ export function parseSteps(body: string): TaskStep[] {
 
 #### 实现要点
 
-1. **路径沙箱**：所有路径先经 `isPathWithin(taskDir, target)`（`lib/paths.ts`，写工具既有做法）。`slug` 额外做白名单清洗：`/[^a-z0-9-]/g → "-"`，截断 60 字符，空则用 `note-<序号>`。两道防线，因为 slug 来自模型。
-2. **大小熔断**：单个 note ≤ `100_000` 字符，`task.md` ≤ `20_000` 字符；超限返回 tool error 而非截断（截断会让模型以为写成功了）。
-3. **不做备份**。`write-auto` 在别处意味着「自动应用 + 写前备份」（`agent/backup.ts`），但工作区是 agent 自己的草稿纸：备份它只会让 `.ai-writer/backups/` 翻倍增长，而没有任何可恢复价值。这一点要写进工具注释，否则下一个人会以为是漏了。
-4. **不过任何审批门**：不经 `PlanGate`，不经 `requestApproval`。理由同上 —— 那两道门是为「改作者的内容」设的。
-5. **写入串行化**：模型可以在同一轮发出多个 tool call（`runtime.ts:465` 的循环），两个 `task_progress` 并发读改写 `task.md` 会丢更新。模块内维护一条 `writeChain: Promise<void>`，所有 `task.md` 写入串上去 —— 与 `apiLog.ts:51` 的做法相同。
+1. **路径沙箱**：`slug` 经 `sanitizeSlug` 清洗——**保留任何文字系统的字母与数字**
+   （`/[^\p{L}\p{N}-]/gu`），按码点截断 60 字符，空则回落 `note`。
+   这条不能写成 ASCII 白名单：那样每个纯中文 slug（「搜索结果」「第一章分析」）都会
+   被清空并回落到同一个名字，于是中文项目的每篇笔记都写进 `note.md` 覆盖上一篇——
+   正是工作区要防的那种丢失。清洗后的名字里不可能含 `/`、`\` 或 `.`，
+   所以拼进 notes 目录后天然出不去，无须再叠一次 `isPathWithin`。
+   **读**侧的引用另走 `noteSlugFromReference`：接受相对路径、`<slug>.md` 和裸 slug
+   三种形态（前两种就来自本应用自己的工具输出），指向别的任务则返回「找不到」。
+2. **绝不覆盖**：slug 撞车时自动加 `-2`、`-3` 后缀，并在工具结果里说明真实文件名。
+   静默覆盖等于丢数据，而模型没有任何办法察觉它发生过。
+3. **谁能创建工作区**：只有 `task_plan`（标题即计划主题）与 `write_note`
+   （checkpoint 提示点名要它，拒绝会让那条提示变成死路；但它用**中性标题**建仓，
+   任务叫什么是计划的事，不能由碰巧第一个落盘的笔记决定）。
+   `task_progress` **不创建**——它编辑的是一份必须已经存在的清单。
+   新建的工作区**不含任何占位步骤**：伪造一条「开始任务」会被 `parseSteps` 数进去，
+   于是一个没人规划过的任务显示 0/1，模型还会去勾一条它没写过的步骤。
+4. **大小熔断**：note 正文 ≤ `100_000` 字符，`task.md` ≤ `20_000` 字符；超限返回 tool error 而非截断（截断会让模型以为写成功了）。
+5. **不做备份**。`write-auto` 在别处意味着「自动应用 + 写前备份」（`agent/backup.ts`），但工作区是 agent 自己的草稿纸：备份它只会让 `.ai-writer/backups/` 翻倍增长，而没有任何可恢复价值。这一点要写进工具注释，否则下一个人会以为是漏了。
+6. **不过任何审批门**：不经 `PlanGate`，不经 `requestApproval`。理由同上 —— 那两道门是为「改作者的内容」设的。
+7. **写入串行化**：模型可以在同一轮发出多个 tool call（`runtime.ts:465` 的循环），两个 `task_progress` 并发读改写 `task.md` 会丢更新。模块内维护一条 `writeChain: Promise<void>`，所有 `task.md` 写入串上去 —— 与 `apiLog.ts:51` 的做法相同。
 
 ```ts
 // scratchpadTools.ts — 所有 task.md 写入的唯一入口

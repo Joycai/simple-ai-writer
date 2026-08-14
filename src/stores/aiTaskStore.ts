@@ -31,6 +31,7 @@ import {
   appendAgentEventTo, createServerToolLog, type AgentEvent, type ToolStep,
 } from "../lib/agent/events";
 import { createPlanGate } from "../lib/agent/plan";
+import { createTaskWorkspace } from "../lib/agent/taskWorkspace";
 
 /**
  * A task id, as declared by the active profile's `tasks` (see lib/profile).
@@ -464,6 +465,11 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             // so each task starts with a clean slate.
             requestPlanApproval: (p) => useAgentStore.getState().requestPlanApproval(p, controller),
             lorePlan: createPlanGate(),
+            // Disk workspace for the scratchpad tools. Per-run here (a panel
+            // task is one job, start to finish) rather than per-session as in
+            // chat. Lazy: nothing is written unless the model actually files a
+            // plan or a note, so short tasks leave no directory behind.
+            taskWorkspace: createTaskWorkspace(projectPath, model.id),
           },
           signal: controller.signal,
           // At the round cap, block on the AiPanel's 继续/收尾 card instead of

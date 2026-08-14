@@ -10,6 +10,7 @@
  * See docs/subagent-lld.md §3 for full design specification.
  */
 
+import i18n from "../../i18n";
 import {
   fileExists,
   makeDir,
@@ -55,7 +56,12 @@ export interface TaskNoteHeader {
   /** Project-relative path, e.g. .ai-writer/tasks/<taskId>/notes/<slug>.md */
   path: string;
   chars: number;
-  updatedAt: string;
+  /**
+   * Set when the requested slug was taken and a suffix was appended, so the
+   * caller can tell the model the real filename instead of the one it asked
+   * for. Absent on the normal path.
+   */
+  renamedFrom?: string;
 }
 
 export interface TaskWorkspaceHandle {
@@ -68,7 +74,27 @@ export interface TaskWorkspaceHandle {
 // ─── Regex & Formatting ──────────────────────────────────────────────────────
 
 const TASK_META_RE = /^<!--\s*ai-writer-task\s*\n([\s\S]*?)\n-->/;
-const STEP_RE = /^[-*]\s+\[([ x/\-])\]\s+(.*)$/;
+/**
+ * A step is any markdown checkbox line, indented or not.
+ *
+ * Indented ones count deliberately. `task_progress` addresses steps by their
+ * 1-based position, and the author reads that position off the rendered list —
+ * so a nested item the parser skipped would shift every number after it and
+ * silently tick the wrong line.
+ */
+const STEP_RE = /^\s*[-*]\s+\[([ x/\-])\]\s+(.*)$/;
+
+/**
+ * Language-independent anchors for the two sections the tools write into.
+ *
+ * The headings themselves are translated (the author reads this file), so
+ * locating a section by its text would break the moment the app language
+ * changes — or, worse, quietly append to the wrong place. Same trick the rest
+ * of the project uses for machine state in markdown: an HTML comment that
+ * survives rendering and hand-editing alike (see lib/context/memory.ts).
+ */
+export const STEPS_ANCHOR = "<!-- ai-writer-task-steps -->";
+export const LOG_ANCHOR = "<!-- ai-writer-task-log -->";
 const GLYPH: Record<string, StepStatus> = {
   " ": "pending",
   "/": "in_progress",
@@ -154,21 +180,91 @@ export function appendStepToBody(body: string, stepTitle: string): string {
     lines.splice(lastStepIndex + 1, 0, newStepLine);
     return lines.join("\n");
   }
-  // If no steps section exists, add one
-  return `${body.trim()}\n\n## 步骤\n\n${newStepLine}\n`;
+  return `${body.trim()}\n\n${stepsHeading()}\n\n${newStepLine}\n`;
 }
 
-/** Append a log entry to ## 进度记录 section. */
+/**
+ * Where the section opened at `anchorLine` ends — the index of the next heading,
+ * or the end of the document.
+ *
+ * `trimBlanks` picks which of the two callers' needs it serves. Appending wants
+ * the last *content* line, so a new entry sits against the previous one instead
+ * of after the gap. Replacing wants the raw boundary, blank lines included:
+ * leaving them behind and then writing a fresh separator is how the file grew
+ * one blank line per re-plan.
+ */
+function sectionEnd(lines: string[], anchorLine: number, trimBlanks: boolean): number {
+  let end = lines.length;
+  for (let i = anchorLine + 1; i < lines.length; i++) {
+    if (/^#{1,6}\s/.test(lines[i])) {
+      end = i;
+      break;
+    }
+  }
+  if (trimBlanks) {
+    while (end > anchorLine + 1 && lines[end - 1].trim() === "") end--;
+  }
+  return end;
+}
+
+/**
+ * Append one entry to the progress-log section.
+ *
+ * Inserts at the *end of that section*, not at the end of the file. The
+ * distinction matters as soon as the author adds a section of their own below
+ * it — appending to the document would file every later entry under whatever
+ * heading happens to be last.
+ */
 export function appendLogToBody(body: string, text: string): string {
   const now = new Date();
-  const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-  const logLine = `- ${timeStr} ${text.trim()}`;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const logLine = `- ${pad(now.getHours())}:${pad(now.getMinutes())} ${text.trim()}`;
 
-  const progressHeaderIndex = body.indexOf("## 进度记录");
-  if (progressHeaderIndex >= 0) {
-    return `${body.trim()}\n${logLine}\n`;
+  const lines = body.split("\n");
+  const anchorLine = lines.findIndex((l) => l.includes(LOG_ANCHOR));
+  if (anchorLine < 0) {
+    return `${body.trim()}\n\n${logHeading()}\n\n${logLine}\n`;
   }
-  return `${body.trim()}\n\n## 进度记录\n\n${logLine}\n`;
+  const at = sectionEnd(lines, anchorLine, true);
+  // `at === anchorLine + 1` means the section is still empty; the blank line
+  // keeps the heading and its first entry apart, the way the rest of the
+  // document is spaced.
+  lines.splice(at, 0, ...(at === anchorLine + 1 ? ["", logLine] : [logLine]));
+  return lines.join("\n");
+}
+
+// ─── Section headings ────────────────────────────────────────────────────────
+//
+// task.md is a file the author opens and edits, so its headings are translated
+// — but each carries a stable anchor comment so the tools can still find the
+// section in a document written under a different app language.
+
+function stepsHeading(): string {
+  return `## ${i18n.t("ai.taskDoc.stepsHeading")} ${STEPS_ANCHOR}`;
+}
+
+function logHeading(): string {
+  return `## ${i18n.t("ai.taskDoc.logHeading")} ${LOG_ANCHOR}`;
+}
+
+/** The body a brand-new workspace starts with: a title and two empty sections. */
+export function initialTaskBody(title: string): string {
+  const heading = title.trim() || i18n.t("ai.taskDoc.untitled");
+  return `# ${heading}\n\n${stepsHeading()}\n\n${logHeading()}\n`;
+}
+
+/** Rebuild the steps section, keeping everything else in `body` intact. */
+export function withSteps(body: string, steps: string[]): string {
+  const lines = body.split("\n");
+  const anchorLine = lines.findIndex((l) => l.includes(STEPS_ANCHOR));
+  const list = formatInitialSteps(steps);
+  if (anchorLine < 0) return `${body.trim()}\n\n${stepsHeading()}\n\n${list}\n`;
+  // Untrimmed: the whole span up to the next heading is replaced, blank lines
+  // included, and exactly one separator is written back on each side. Keeping
+  // the old blanks and adding new ones is what made the gap grow per re-plan.
+  const end = sectionEnd(lines, anchorLine, false);
+  lines.splice(anchorLine + 1, end - anchorLine - 1, "", list, "");
+  return lines.join("\n");
 }
 
 // ─── Paths & ID ──────────────────────────────────────────────────────────────
@@ -193,9 +289,28 @@ export function taskNotesDir(projectPath: string, taskId: string): string {
   return `${taskWorkspaceDir(projectPath, taskId)}/notes`;
 }
 
+/**
+ * Turn a model-supplied slug into a safe filename stem.
+ *
+ * Letters and digits in **any** script survive. An ASCII-only rule looks
+ * harmless until you remember who writes with this app: every pure-CJK slug
+ * ("搜索结果", "第一章分析") reduces to nothing and falls back to the same
+ * name, so a Chinese project's notes all pile into `note.md`, each overwriting
+ * the last — which is precisely the data loss the workspace exists to prevent.
+ *
+ * Path separators, dots and everything else structural are still stripped:
+ * `\p{L}`/`\p{N}` admit no `/`, `\` or `.`, so the result can never climb out
+ * of the notes directory whatever the model sends.
+ */
 export function sanitizeSlug(slug: string): string {
-  const clean = slug.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
-  return clean.slice(0, 60) || "note";
+  const clean = slug
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}-]/gu, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+  // Sliced by code points, not UTF-16 units: cutting at 60 units could land
+  // inside a surrogate pair and leave a lone half in a filename.
+  return [...clean].slice(0, 60).join("") || "note";
 }
 
 // ─── File Operations ─────────────────────────────────────────────────────────
@@ -219,37 +334,74 @@ export async function saveTaskDoc(projectPath: string, taskId: string, doc: Task
   await writeFile(taskDocPath(projectPath, taskId), raw);
 }
 
+/** How many `-2`, `-3`… suffixes to try before giving up on a free filename. */
+const MAX_SLUG_ATTEMPTS = 50;
+
 export async function writeTaskNote(
   projectPath: string,
   taskId: string,
   opts: { slug: string; title: string; content: string; sources?: string[] },
 ): Promise<TaskNoteHeader> {
-  const slug = sanitizeSlug(opts.slug);
+  const base = sanitizeSlug(opts.slug);
   const notesDir = taskNotesDir(projectPath, taskId);
   await makeDir(notesDir);
 
-  const fullPath = `${notesDir}/${slug}.md`;
-  const relPath = `.ai-writer/tasks/${taskId}/notes/${slug}.md`;
-  const nowIso = new Date().toISOString();
+  // Never overwrite. Two findings that happen to share a slug are two
+  // findings; silently replacing the first is the same data loss the notes
+  // directory exists to prevent, and the model has no way to notice it
+  // happened. `renamedFrom` lets the tool tell it what the file ended up called.
+  let slug = base;
+  for (let n = 2; n <= MAX_SLUG_ATTEMPTS; n++) {
+    if (!(await fileExists(`${notesDir}/${slug}.md`))) break;
+    slug = `${base}-${n}`;
+  }
 
   let body = `# ${opts.title.trim()}\n\n`;
   if (opts.sources && opts.sources.length > 0) {
-    body += `> **来源**：\n${opts.sources.map((s) => `> - ${s}`).join("\n")}\n\n`;
+    body += `> ${i18n.t("ai.taskDoc.sources")}\n${opts.sources.map((s) => `> - ${s}`).join("\n")}\n\n`;
   }
   body += opts.content.trim() + "\n";
 
-  await writeFile(fullPath, body);
+  await writeFile(`${notesDir}/${slug}.md`, body);
 
   return {
     slug,
     title: opts.title.trim(),
-    path: relPath,
+    path: `.ai-writer/tasks/${taskId}/notes/${slug}.md`,
     chars: body.length,
-    updatedAt: nowIso,
+    ...(slug === base ? {} : { renamedFrom: base }),
   };
 }
 
 const NOTE_PAGE_CHARS = 4000;
+
+/**
+ * Resolve however the model referred to a note down to a slug in *this* task,
+ * or null when the reference points somewhere else entirely.
+ *
+ * Three forms are accepted because all three are things a model will send, and
+ * two of them come straight out of this app's own tool results: the relative
+ * path `list_notes` prints, the bare filename, and the bare slug. Rejecting the
+ * `<slug>.md` form — which the previous containment check did — meant answering
+ * an obviously benign input with a security error, and a model that reads
+ * "access denied" tends to retry the same thing rather than reformat it.
+ *
+ * A path naming a *different* task returns null instead of being coerced into
+ * this one: reading a note the caller didn't ask for is worse than not finding it.
+ */
+export function noteSlugFromReference(reference: string, taskId: string): string | null {
+  let ref = reference.trim().replace(/^\/+/, "");
+  const prefix = ".ai-writer/tasks/";
+  if (ref.startsWith(prefix)) {
+    const rest = ref.slice(prefix.length);
+    const [owner, notes, ...tail] = rest.split("/");
+    if (owner !== taskId || notes !== "notes" || tail.length !== 1) return null;
+    ref = tail[0];
+  }
+  // Anything still carrying structure is not a note in this task's folder.
+  if (ref.includes("/") || ref.includes("\\")) return null;
+  return sanitizeSlug(ref.replace(/\.md$/i, ""));
+}
 
 export async function readTaskNote(
   projectPath: string,
@@ -257,8 +409,8 @@ export async function readTaskNote(
   notePathOrSlug: string,
   startLine = 1,
 ): Promise<{ content: string; lines: [number, number]; totalLines: number; nextStartLine?: number }> {
-  const cleanSlug = notePathOrSlug.replace(/^\.ai-writer\/tasks\/[^/]+\/notes\//, "").replace(/\.md$/, "");
-  const slug = sanitizeSlug(cleanSlug);
+  const slug = noteSlugFromReference(notePathOrSlug, taskId);
+  if (!slug) throw new Error(`Note not found: ${notePathOrSlug}`);
   const fullPath = `${taskNotesDir(projectPath, taskId)}/${slug}.md`;
 
   if (!(await fileExists(fullPath))) {
@@ -312,14 +464,15 @@ export async function listTaskNotes(projectPath: string, taskId: string): Promis
         title,
         path: `.ai-writer/tasks/${taskId}/notes/${entry.name}`,
         chars: content.length,
-        updatedAt: new Date().toISOString(),
       });
     } catch {
       // skip unreadable note
     }
   }
 
-  return headers;
+  // Stable order, so the same list twice in one conversation reads the same
+  // way — readDir makes no promise about the order the OS hands entries back.
+  return headers.sort((a, b) => a.slug.localeCompare(b.slug));
 }
 
 // ─── GC & Retention ─────────────────────────────────────────────────────────
@@ -423,7 +576,10 @@ export function createTaskWorkspace(
           createdAt: nowIso,
           updatedAt: nowIso,
         },
-        body: `# ${title.trim() || "未命名任务"}\n\n## 步骤\n\n- [ ] 开始任务\n\n## 进度记录\n`,
+        // No placeholder step. A fabricated "- [ ] 开始任务" would be counted by
+        // parseSteps, so `task_progress` would report 0/1 done on a task nobody
+        // planned — and the model would tick a step it never wrote.
+        body: initialTaskBody(title),
       };
 
       await writeFile(taskDocPath(projectPath, activeId), serializeTaskDoc(doc.meta, doc.body));

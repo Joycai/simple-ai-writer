@@ -41,12 +41,16 @@ import {
   gcTasks,
   listTaskNotes,
   loadTaskDoc,
+  LOG_ANCHOR,
   parseSteps,
   parseTaskDoc,
   readTaskNote,
+  sanitizeSlug,
   saveTaskDoc,
   serializeTaskDoc,
+  STEPS_ANCHOR,
   updateStepInBody,
+  withSteps,
   writeTaskNote,
   type TaskDoc,
   type TaskMeta,
@@ -205,5 +209,59 @@ describe("taskWorkspace file operations & GC", () => {
     expect(remainingTaskIds.has("task-03")).toBe(true);
     expect(remainingTaskIds.has("task-04")).toBe(true);
     expect(remainingTaskIds.has("task-05")).toBe(true);
+  });
+  // ── Regression tests for the defects found reviewing PR-A ────────────────
+
+  it("files a log entry inside the progress section, not at the end of the file", async () => {
+    // It used to append to the end of the body, so any section the author added
+    // below the log swallowed every later entry.
+    const body = [
+      "# T",
+      "",
+      `## 进度记录 ${LOG_ANCHOR}`,
+      "",
+      "- 10:00 first",
+      "",
+      "## 参考",
+      "",
+      "- writing/ch1.md",
+    ].join("\n");
+
+    const out = appendLogToBody(body, "second");
+    const lines = out.split("\n");
+    expect(lines.findIndex((l) => l.includes("second"))).toBeLessThan(
+      lines.findIndex((l) => l.startsWith("## 参考")),
+    );
+    expect(out).toContain("- writing/ch1.md");
+  });
+
+  it("counts indented checkboxes, so step numbers match what the author sees", async () => {
+    // Skipping them shifted every later number, and task_progress addresses
+    // steps by position — it would have ticked the wrong line.
+    const steps = parseSteps("- [ ] a\n  - [ ] a1\n- [x] b");
+    expect(steps.map((s) => s.title)).toEqual(["a", "a1", "b"]);
+    expect(steps[2].index).toBe(3);
+  });
+
+  it("re-planning keeps the progress log", async () => {
+    const body = `# Old\n\n## 步骤 ${STEPS_ANCHOR}\n\n- [x] done one\n\n## 进度记录 ${LOG_ANCHOR}\n\n- 09:00 something happened\n`;
+    const out = withSteps(body, ["fresh one", "fresh two"]);
+    expect(out).toContain("- 09:00 something happened");
+    expect(out).toContain("- [ ] fresh one");
+    expect(out).not.toContain("done one");
+  });
+
+  it("slugs long CJK titles without splitting a character in half", async () => {
+    const slug = sanitizeSlug("東".repeat(80));
+    expect([...slug]).toHaveLength(60);
+    expect(slug).not.toContain("\uFFFD");
+  });
+  it("re-planning does not grow a blank line each time", async () => {
+    // withSteps used to leave the old separator blanks in place and write a new
+    // one, so the gap before the next heading widened on every replan.
+    let body = `# T\n\n## Steps ${STEPS_ANCHOR}\n\n## Log ${LOG_ANCHOR}\n`;
+    for (let i = 0; i < 4; i++) body = withSteps(body, [`s${i}a`, `s${i}b`]);
+    expect(body).not.toMatch(/\n\n\n/);
+    expect(body).toContain("- [ ] s3a");
   });
 });

@@ -9,7 +9,13 @@
  *   - list_notes: list available notes in the active workspace
  *
  * Invariants:
- *   - Sandbox: strictly guarded by isPathWithin and slug sanitization
+ *   - Sandbox: every filename goes through `sanitizeSlug`, which admits only
+ *     letters, digits and dashes — no separator survives, so a name can never
+ *     leave the notes folder it is joined to. References the model supplies for
+ *     *reading* are resolved by `noteSlugFromReference`, which refuses anything
+ *     naming another task.
+ *   - Only `task_plan` and `write_note` may create the workspace; everything
+ *     else operates on one that already exists (see `requireTaskId`).
  *   - Size limits: single note ≤ 100,000 chars, task.md ≤ 20,000 chars
  *   - Write serialization: all writes serialize through a shared writeChain
  *   - No approval gate / No auto-backup (agent's private scratchpad)
@@ -17,21 +23,19 @@
  * See docs/subagent-lld.md §3.3 for details.
  */
 
-import { isPathWithin } from "../paths";
+import i18n from "../../i18n";
 import type { ToolCall, ToolResult } from "./tools";
 import type { ToolContext } from "./registry";
 import {
   appendLogToBody,
   appendStepToBody,
-  formatInitialSteps,
   listTaskNotes,
   loadTaskDoc,
   parseSteps,
   readTaskNote,
-  sanitizeSlug,
   saveTaskDoc,
-  taskWorkspaceDir,
   updateStepInBody,
+  withSteps,
   writeTaskNote,
   type StepStatus,
   type TaskDoc,
@@ -63,6 +67,36 @@ function noWorkspaceError(call: ToolCall): ToolResult {
   };
 }
 
+/**
+ * The workspace this run already owns, or an error telling the model to plan first.
+ *
+ * Only `task_plan` and `write_note` may bring a workspace into being. Everything
+ * else works on one that exists — `task_progress` in particular, because
+ * `ensure()`ing from there used to create the task *and* satisfy the very check
+ * meant to demand a plan, so the "call task_plan first" branch could never run
+ * and a stray progress call left behind a workspace titled after nothing.
+ */
+function requireTaskId(call: ToolCall, ctx: ToolContext): string | ToolResult {
+  const taskId = ctx.taskWorkspace?.taskId;
+  if (!taskId) {
+    return {
+      toolCallId: call.id,
+      content:
+        "Error: no task workspace exists yet. Call task_plan first to state the goal and the steps.",
+    };
+  }
+  return taskId;
+}
+
+/** Replace the document's H1, or add one when the body has none. */
+function retitle(body: string, title: string): string {
+  const lines = body.split("\n");
+  const at = lines.findIndex((l) => /^#\s/.test(l));
+  if (at < 0) return `# ${title}\n\n${body.trim()}`;
+  lines[at] = `# ${title}`;
+  return lines.join("\n");
+}
+
 // ─── task_plan ───────────────────────────────────────────────────────────────
 
 export async function taskPlanTool(call: ToolCall, ctx: ToolContext): Promise<ToolResult> {
@@ -81,37 +115,35 @@ export async function taskPlanTool(call: ToolCall, ctx: ToolContext): Promise<To
 
   return serializeWrite(async () => {
     try {
+      // The one tool that may create the workspace with a real title — the
+      // title IS the plan's subject. `ensure` stamps the run's model id, so
+      // nothing here has to invent one.
       const { taskId } = await ctx.taskWorkspace!.ensure(title);
       const existing = await loadTaskDoc(ctx.projectPath, taskId);
+      if (!existing) {
+        return { toolCallId: call.id, content: "Error: could not read task.md after creating it." };
+      }
 
-      const nowIso = new Date().toISOString();
-      const existingProgress = existing?.body.includes("## 进度记录")
-        ? existing.body.slice(existing.body.indexOf("## 进度记录"))
-        : "## 进度记录\n";
-
-      const newBody = `# ${title}\n\n## 步骤\n\n${formatInitialSteps(steps)}\n\n${existingProgress}\n`;
-
+      // Only the steps section is rebuilt. The progress log — and anything the
+      // author added by hand — survives a re-plan; replanning is a normal move
+      // mid-task, and it must not silently erase the record of what was done.
+      const newBody = withSteps(retitle(existing.body, title), steps);
       if (newBody.length > MAX_TASK_DOC_CHARS) {
-        return { toolCallId: call.id, content: `Error: task.md exceeds size limit (${MAX_TASK_DOC_CHARS} chars).` };
+        return {
+          toolCallId: call.id,
+          content: `Error: task.md would exceed its size limit (${MAX_TASK_DOC_CHARS} chars). Use fewer or shorter steps.`,
+        };
       }
 
       const doc: TaskDoc = {
-        meta: {
-          taskId,
-          status: "in_progress",
-          modelId: existing?.meta.modelId || "active",
-          createdAt: existing?.meta.createdAt || nowIso,
-          updatedAt: nowIso,
-          sourceRefs: existing?.meta.sourceRefs,
-        },
+        meta: { ...existing.meta, status: "in_progress", updatedAt: new Date().toISOString() },
         body: newBody,
       };
-
       await saveTaskDoc(ctx.projectPath, taskId, doc);
 
       return {
         toolCallId: call.id,
-        content: `Task plan established successfully for task ${taskId}:\nTitle: ${title}\nSteps: ${steps.length} steps initialized.`,
+        content: `Task plan saved (task ${taskId}): "${title}", ${steps.length} step(s). Use task_progress to tick them off as you go.`,
       };
     } catch (e) {
       return { toolCallId: call.id, content: `Error creating task plan: ${(e as Error).message}` };
@@ -135,9 +167,12 @@ export async function taskProgressTool(call: ToolCall, ctx: ToolContext): Promis
     return { toolCallId: call.id, content: "Error: 'action' is required (check, start, skip, add_step, log)." };
   }
 
+  const taskIdOrError = requireTaskId(call, ctx);
+  if (typeof taskIdOrError !== "string") return taskIdOrError;
+  const taskId = taskIdOrError;
+
   return serializeWrite(async () => {
     try {
-      const { taskId } = await ctx.taskWorkspace!.ensure("任务");
       const doc = await loadTaskDoc(ctx.projectPath, taskId);
       if (!doc) {
         return { toolCallId: call.id, content: "Error: no task.md exists yet. Call task_plan first." };
@@ -231,25 +266,24 @@ export async function writeNoteTool(call: ToolCall, ctx: ToolContext): Promise<T
 
   return serializeWrite(async () => {
     try {
-      const { taskId, dir } = await ctx.taskWorkspace!.ensure(title);
+      // A note is a legitimate first artefact — the checkpoint nudge asks for
+      // one by name, and refusing it until a plan exists would make that nudge
+      // a dead end. But the workspace is titled generically, NOT after this
+      // note: the task's name is the plan's business, and letting whichever
+      // note happened to come first name the whole task made it a lottery.
+      const { taskId } = await ctx.taskWorkspace!.ensure(i18n.t("ai.taskDoc.untitled"));
 
-      const cleanSlug = sanitizeSlug(slug);
-      // Verify path containment
-      const targetNotePath = `${dir}/notes/${cleanSlug}.md`;
-      if (!isPathWithin(dir, targetNotePath)) {
-        return { toolCallId: call.id, content: "Error: invalid slug — path escapes task directory." };
-      }
+      // Containment needs no check here: `writeTaskNote` runs the slug through
+      // `sanitizeSlug`, which admits only letters, digits and dashes — a name
+      // with no separator in it cannot leave the folder it is joined to.
+      const note = await writeTaskNote(ctx.projectPath, taskId, { slug, title, content, sources });
 
-      const note = await writeTaskNote(ctx.projectPath, taskId, {
-        slug: cleanSlug,
-        title,
-        content,
-        sources,
-      });
-
+      const renamed = note.renamedFrom
+        ? ` (a note called "${note.renamedFrom}" already existed, so this one was filed as "${note.slug}")`
+        : "";
       return {
         toolCallId: call.id,
-        content: `Note saved successfully to '${note.path}' (${note.chars} chars). You can re-read it anytime using read_note with this path.`,
+        content: `Note saved to '${note.path}' (${note.chars} chars)${renamed}. Read it back any time with read_note.`,
       };
     } catch (e) {
       return { toolCallId: call.id, content: `Error writing note: ${(e as Error).message}` };
@@ -270,19 +304,14 @@ export async function readNoteTool(call: ToolCall, ctx: ToolContext): Promise<To
     return { toolCallId: call.id, content: "Error: 'path' is required for read_note." };
   }
 
+  const taskIdOrError = requireTaskId(call, ctx);
+  if (typeof taskIdOrError !== "string") return taskIdOrError;
+
   try {
-    const taskId = ctx.taskWorkspace.taskId;
-    if (!taskId) {
-      return { toolCallId: call.id, content: "Error: no task workspace exists yet." };
-    }
-
-    const dir = taskWorkspaceDir(ctx.projectPath, taskId);
-    const resolvedPath = `${ctx.projectPath}/${target.replace(/^\/+/, "")}`;
-    if (!isPathWithin(dir, resolvedPath) && !target.match(/^[a-z0-9_-]+$/i)) {
-      return { toolCallId: call.id, content: "Error: access denied — path escapes the task workspace." };
-    }
-
-    const res = await readTaskNote(ctx.projectPath, taskId, target, startLine);
+    // The reference is resolved to a slug inside this task's own notes folder
+    // (see noteSlugFromReference); a path naming anywhere else comes back as
+    // "not found" rather than being read.
+    const res = await readTaskNote(ctx.projectPath, taskIdOrError, target, startLine);
 
     let header = `[lines ${res.lines[0]}-${res.lines[1]} of ${res.totalLines}]`;
     if (res.nextStartLine) {
