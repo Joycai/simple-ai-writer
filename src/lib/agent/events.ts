@@ -12,6 +12,8 @@
  * Timestamps are epoch millis; the UI formats them per locale.
  */
 
+import { summarizeSearchResults, type ServerToolEvent } from "../ai/serverTools";
+
 export type ToolStepStatus = "running" | "done" | "error";
 
 /** One tool invocation's lifecycle. Emitted twice per call: running, then done/error. */
@@ -127,6 +129,52 @@ export type AgentEvent =
     }
   | { kind: "run-done"; inputTokens: number; outputTokens: number; at: number }
   | { kind: "run-error"; message: string; at: number };
+
+/**
+ * Turns a stream's server-tool reports into log rows — one row per search,
+ * updated in place from running to done.
+ *
+ * Stateful because the two halves arrive apart: the query comes with the call
+ * and the hits come later, while `appendAgentEventTo` replaces a row wholesale
+ * by `toolCallId`. Without remembering the query, the finished row would show
+ * results with nothing to say what was asked. One factory call per stream keeps
+ * that memory scoped to the run that owns it.
+ *
+ * Everything about these rows is display: nothing here can be executed,
+ * retried, or answered — see `lib/ai/serverTools.ts`.
+ */
+export function createServerToolLog(round: number): (event: ServerToolEvent) => AgentEvent {
+  const queries = new Map<string, string>();
+  return (event) => {
+    if (event.phase === "call") {
+      const args = JSON.stringify(event.input ?? {});
+      queries.set(event.id, args);
+      return {
+        kind: "tool-step",
+        step: {
+          round,
+          toolCallId: event.id,
+          name: event.name,
+          argumentSummary: args,
+          status: "running",
+        },
+        at: Date.now(),
+      };
+    }
+    return {
+      kind: "tool-step",
+      step: {
+        round,
+        toolCallId: event.id,
+        name: event.name,
+        argumentSummary: queries.get(event.id) ?? "{}",
+        status: event.error ? "error" : "done",
+        resultSummary: event.error ?? summarizeSearchResults(event.results),
+      },
+      at: Date.now(),
+    };
+  };
+}
 
 /**
  * Append an event to a log immutably.

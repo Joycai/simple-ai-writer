@@ -753,7 +753,8 @@
         "move_chapter": "Move {{doc}}",
         "delete_chapter": "Delete {{doc}}",
         "generate_image": "Generate image",
-        "edit_image": "Edit image"
+        "edit_image": "Edit image",
+        "web_search": "Web search (server-side)"
       }
     },
     "errors": {
@@ -1039,11 +1040,15 @@
       "edit": "Save Changes",
       "editing": "Saving…",
       "thinkingDialectLabel": "Thinking parameter shape (optional)",
-      "thinkingDialectHint": "Claude generations shape the thinking parameter differently, and a relay's model ID is free text the app can't read a generation from — you know what you bought, so you declare it. \"Auto\" assumes the current generation (4.6+); pick \"budget\" for older models, or \"send none\" when the relay has no thinking support.",
+      "thinkingDialectHint": "Claude generations shape the thinking parameter differently, and a relay's model ID is free text the app can't read a generation from — you know what you bought, so you declare it. \"Auto\" assumes the current generation (4.6+); pick \"budget\" for older models. Pick \"switch\" for MiniMax-M3's /anthropic endpoint: thinking is off there unless asked for, there is no depth dial (Effort only distinguishes \"off\" from everything else, which all mean adaptive), and forcing a single tool isn't supported — it is downgraded to auto. \"Send none\" is for relays with no thinking support at all.",
       "thinkingDialectAuto": "Auto",
       "thinkingDialectAdaptive": "Adaptive (4.6+)",
       "thinkingDialectExtended": "Budget (4.5-)",
+      "thinkingDialectSwitch": "Switch (MiniMax M3)",
       "thinkingDialectNone": "Send none",
+      "serverToolsLabel": "Server-side tools (optional)",
+      "serverToolsHint": "Tools the *endpoint* runs inside the same request. Nothing happens locally and there is no per-call approval — turning one on grants this model standing permission to search the open web whenever it answers. Only MiniMax-M3's /anthropic endpoint offers web_search today (vendor-marked beta); elsewhere the setting has no effect. Searches and the pages they hit are recorded in the execution log.",
+      "serverTool_web_search": "Web search",
       "effortLabelAnthropic": "Effort"
     },
     "probe": {

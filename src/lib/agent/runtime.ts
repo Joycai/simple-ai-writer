@@ -20,7 +20,7 @@ import type { NativeReasoning } from "../ai/reasoning";
 import type {
   AccumulatedToolCall, ContentPart, StreamMessage, ThinkingBlockCarry,
 } from "../ai/types";
-import type { AgentEvent } from "./events";
+import { createServerToolLog, type AgentEvent } from "./events";
 import { contentWithoutImages, hasImageParts } from "./imageHistory";
 import { TOOL_ARGS_DETAIL_CHARS, TOOL_RESULT_DETAIL_CHARS } from "./logFormat";
 import type { TaskPreset } from "./presets";
@@ -306,6 +306,8 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     };
     /** This round's text, still provisional — kept only if it ends in prose. */
     let roundText = "";
+    /** Searches the endpoint ran for itself this round, as log rows. */
+    const logServerTool = createServerToolLog(round);
 
     const dropped = trimHistory(history, opts.inputCeilingTokens);
     if (dropped > 0) {
@@ -332,6 +334,12 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
             if (!reasoningText) reasoningStart = Date.now();
             reasoningText += chunk.reasoning;
             reportReasoning(false);
+          } else if ("serverTool" in chunk) {
+            // A tool the endpoint ran for itself. Reported as a tool step so it
+            // reads like every other one in the log — but it never touches
+            // `roundToolCalls`: there is nothing left to execute, and answering
+            // it with a tool_result would break the round's message pairing.
+            opts.onEvent(logServerTool(chunk.serverTool));
           } else if ("text" in chunk) {
             // The answer has started, so the thinking is over. Reported here
             // rather than at round end because on a text round the answer

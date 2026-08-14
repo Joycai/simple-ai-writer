@@ -11,6 +11,7 @@ import {
   parseReasoningEffort, parseThinkingDialect,
   type ReasoningEffort, type ThinkingDialect,
 } from "./reasoning";
+import { parseServerTools, type ServerToolId } from "./serverTools";
 import { migrateLegacyStandard } from "./urls";
 
 export type ModelType = "text" | "multimodal" | "image" | "video";
@@ -142,6 +143,17 @@ export interface Model {
    * "assume the family's current generation" — see `dialectFor`.
    */
   thinkingDialect?: ThinkingDialect;
+  /**
+   * Tools this model may have the **endpoint** run for it — today only
+   * `web_search`, and only on the Anthropic wire (see `lib/ai/serverTools.ts`).
+   *
+   * Per-model and declared, for the same reason as everything else here: it is
+   * a property of what the author bought (MiniMax-M3 serves it; the M2.x models
+   * behind the same base URL do not), and no probe can ask an endpoint which
+   * server tools it offers. Absent means none, which is what every model
+   * configured before this setting existed sends.
+   */
+  serverTools?: ServerToolId[];
   /**
    * USD per generated image. The billing shape image endpoints usually use;
    * token pricing (priceIn/priceOut) still applies on top for the providers
@@ -287,6 +299,7 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   await addColumn(db, modelCols, "models", "caps", "TEXT");
   await addColumn(db, modelCols, "models", "reasoning_effort", "TEXT");
   await addColumn(db, modelCols, "models", "thinking_dialect", "TEXT");
+  await addColumn(db, modelCols, "models", "server_tools", "TEXT");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS prompts (
@@ -493,9 +506,9 @@ export async function saveModel(
 ): Promise<void> {
   await db.execute(
     `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null]
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, server_tools)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null]
   );
 }
 
@@ -556,6 +569,7 @@ function rowToModel(r: Record<string, unknown>): Model {
     caps: parseImageCaps(r.caps),
     reasoningEffort: parseReasoningEffort(r.reasoning_effort),
     thinkingDialect: parseThinkingDialect(r.thinking_dialect),
+    serverTools: parseServerTools(r.server_tools),
   };
 }
 

@@ -753,7 +753,8 @@
         "move_chapter": "移动{{doc}}",
         "delete_chapter": "删除{{doc}}",
         "generate_image": "生成图片",
-        "edit_image": "修改图片"
+        "edit_image": "修改图片",
+        "web_search": "联网搜索（服务端）"
       }
     },
     "errors": {
@@ -1034,11 +1035,15 @@
       "edit": "保存修改",
       "editing": "保存中…",
       "thinkingDialectLabel": "思考参数形态 (可选)",
-      "thinkingDialectHint": "Claude 不同代模型的思考参数形状不同，而中转站上的模型 ID 是自填的，程序无法判断代次——你知道自己买的是什么，所以由你声明。「自动」按当前代（4.6 及以上）处理；接更旧的模型请选「预算模式」；中转站不支持思考时选「不发送」。",
+      "thinkingDialectHint": "Claude 不同代模型的思考参数形状不同，而中转站上的模型 ID 是自填的，程序无法判断代次——你知道自己买的是什么，所以由你声明。「自动」按当前代（4.6 及以上）处理；接更旧的模型请选「预算模式」；MiniMax-M3 的 /anthropic 端点请选「开关式」——那里思考默认关闭，只有开关、没有深度档，「力度」在该端点只区分「关闭」与其余（其余一律按自适应开启），且强制单个工具不被支持、会自动降级为 auto；中转站不支持思考时选「不发送」。",
       "thinkingDialectAuto": "自动",
       "thinkingDialectAdaptive": "自适应 (4.6+)",
       "thinkingDialectExtended": "预算模式 (4.5-)",
+      "thinkingDialectSwitch": "开关式 (MiniMax M3)",
       "thinkingDialectNone": "不发送",
+      "serverToolsLabel": "服务端内置工具 (可选)",
+      "serverToolsHint": "由「服务端」在同一次请求里执行的工具，本机不参与、也无法逐次批准——开启即等于允许该模型每次回答都可以自行联网检索。目前只有 MiniMax-M3 的 /anthropic 端点提供 web_search（官方标注 Beta），其余端点开了也不会生效。搜索过程与命中的网页会记录在执行日志里。",
+      "serverTool_web_search": "联网搜索",
       "effortLabelAnthropic": "力度"
     },
     "probe": {

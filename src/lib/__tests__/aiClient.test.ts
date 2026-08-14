@@ -3,7 +3,8 @@ import {
   streamCompletion, ContextSizeError,
   type ApiStandard, type AuthMode, type StreamChunk, type StreamMessage, type ToolDefinition,
 } from "../ai";
-import type { ReasoningEffort } from "../ai/reasoning";
+import type { ReasoningEffort, ThinkingDialect } from "../ai/reasoning";
+import type { ServerToolId } from "../ai/serverTools";
 
 /** Build a fetch Response whose body streams the given raw chunks. */
 function sseResponse(chunks: string[]): Response {
@@ -39,6 +40,8 @@ async function collect(opts: {
   messages?: StreamMessage[];
   prefix?: string;
   reasoningEffort?: ReasoningEffort;
+  thinkingDialect?: ThinkingDialect;
+  serverTools?: ServerToolId[];
 }): Promise<{ received: StreamChunk[]; calls: { url: string; body: Record<string, unknown> }[] }> {
   const calls = mockFetch(opts.chunks);
   const received: StreamChunk[] = [];
@@ -51,6 +54,8 @@ async function collect(opts: {
     prefix: opts.prefix,
     maxOutput: opts.maxOutput,
     reasoningEffort: opts.reasoningEffort,
+    thinkingDialect: opts.thinkingDialect,
+    serverTools: opts.serverTools,
     tools: opts.tools,
     toolChoice: opts.toolChoice,
     onChunk: (c) => received.push(c),
@@ -738,6 +743,18 @@ describe("streamCompletion — toolChoice", () => {
     },
   };
 
+  it("keeps a server tool off a protocol that has no such thing", async () => {
+    // The setting is Anthropic-only. A model moved to an OpenAI-shaped provider
+    // keeps the stored permission, and a `{type:"web_search_20250305"}` entry
+    // in an OpenAI tools array is a 400 — the adapter must simply not carry it.
+    const { calls } = await collect({
+      chunks: [`data: [DONE]\n`],
+      standard: "openai",
+      serverTools: ["web_search"],
+    });
+    expect(calls[0].body).not.toHaveProperty("tools");
+  });
+
   it("forwards a forced tool_choice into the OpenAI body", async () => {
     const calls = mockFetch([`data: [DONE]\n`]);
     await streamCompletion({
@@ -1152,6 +1169,172 @@ describe("streamCompletion — Anthropic SSE", () => {
     });
     expect(calls[0].body.output_config).toEqual({ effort: "low" });
     expect(calls[0].body.thinking).toEqual({ type: "adaptive", display: "summarized" });
+  });
+
+  // ── The `switch` dialect: MiniMax-M3's Messages endpoint ──────────────────
+  // Its documented request schema is a subset of Anthropic's, and every test
+  // here pins one thing this app must NOT send there. See docs/api/landscape.md
+  // §7 第四个样本.
+
+  it("sends the bare on/off switch, with no display field", async () => {
+    const { calls } = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      thinkingDialect: "switch",
+    });
+    // Explicit, because thinking defaults to *off* there — omitting the field
+    // is how you get a model that never thinks.
+    expect(calls[0].body.thinking).toEqual({ type: "adaptive" });
+  });
+
+  it("spends the effort setting on the switch, and sends no output_config", async () => {
+    const on = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      thinkingDialect: "switch",
+      reasoningEffort: "high",
+    });
+    // There is no depth dial on this endpoint, so a level has nowhere to go.
+    expect(on.calls[0].body).not.toHaveProperty("output_config");
+    expect(on.calls[0].body.thinking).toEqual({ type: "adaptive" });
+
+    const off = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      thinkingDialect: "switch",
+      reasoningEffort: "off",
+    });
+    // "off" is honoured literally here, unlike on the official endpoint where it
+    // maps to the lowest effort — this switch is the only control there is.
+    expect(off.calls[0].body.thinking).toEqual({ type: "disabled" });
+    expect(off.calls[0].body).not.toHaveProperty("output_config");
+  });
+
+  it("downgrades a forced tool choice to auto on the switch dialect", async () => {
+    // `any` / `{type:"tool"}` are a 400 there. Structured callers already treat
+    // "the model didn't call it" as their cue to fall back to JSON mode, so
+    // downgrading costs one fallback at worst; sending it costs a dead request
+    // *and* the same fallback.
+    const named = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      thinkingDialect: "switch",
+      tools: [TOOL],
+      toolChoice: { type: "function", function: { name: "get_weather" } },
+    });
+    expect(named.calls[0].body.tool_choice).toEqual({ type: "auto" });
+
+    const required = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      thinkingDialect: "switch",
+      tools: [TOOL],
+      toolChoice: "required",
+    });
+    expect(required.calls[0].body.tool_choice).toEqual({ type: "auto" });
+
+    // "none" survives: it is in the endpoint's enum, and it means the opposite
+    // of forcing — downgrading it would hand the model a tool it was told not
+    // to use.
+    const none = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      thinkingDialect: "switch",
+      tools: [TOOL],
+      toolChoice: "none",
+    });
+    expect(none.calls[0].body.tool_choice).toEqual({ type: "none" });
+  });
+
+  // ── Server-side tools ─────────────────────────────────────────────────────
+
+  it("declares a server tool by its versioned wire type", async () => {
+    const { calls } = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      serverTools: ["web_search"],
+    });
+    expect(calls[0].body.tools).toEqual([{ type: "web_search_20250305", name: "web_search" }]);
+    // Nothing of ours to choose between — the endpoint decides whether to run
+    // its own tool, and an opinion here would be about a decision we don't make.
+    expect(calls[0].body).not.toHaveProperty("tool_choice");
+  });
+
+  it("puts server tools and our own in one array", async () => {
+    const { calls } = await collect({
+      ...ANTHROPIC,
+      chunks: [`data: {"type":"message_stop"}\n\n`],
+      serverTools: ["web_search"],
+      tools: [TOOL],
+    });
+    expect(calls[0].body.tools).toEqual([
+      { type: "web_search_20250305", name: "web_search" },
+      { name: "get_weather", description: "Get the weather", input_schema: TOOL.function.parameters },
+    ]);
+    expect(calls[0].body.tool_choice).toEqual({ type: "auto" });
+  });
+
+  it("reports a server-run search as activity, never as a tool call", async () => {
+    const { received } = await collect({
+      ...ANTHROPIC,
+      chunks: [
+        `data: {"type":"content_block_start","index":0,"content_block":{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{}}}\n\n`,
+        `data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"query\\":\\"上海天气\\"}"}}\n\n`,
+        `data: {"type":"content_block_stop","index":0}\n\n`,
+        `data: {"type":"content_block_start","index":1,"content_block":{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[{"type":"web_search_result","title":"上海天气预报","url":"https://example.com/sh","page_age":"1 day ago"}]}}\n\n`,
+        `data: {"type":"content_block_delta","index":2,"delta":{"type":"text_delta","text":"今天多云。"}}\n\n`,
+        `data: {"type":"message_stop"}\n\n`,
+      ],
+    });
+    expect(received).toContainEqual({
+      serverTool: { phase: "call", id: "srvtoolu_1", name: "web_search", input: { query: "上海天气" } },
+    });
+    expect(received).toContainEqual({
+      serverTool: {
+        phase: "result",
+        id: "srvtoolu_1",
+        name: "web_search",
+        results: [{ title: "上海天气预报", url: "https://example.com/sh", pageAge: "1 day ago" }],
+      },
+    });
+    // The search is already done: surfacing it as a tool call would have the
+    // agent loop answer it with a tool_result the endpoint never asked for.
+    expect(received.some((c) => "toolCalls" in c)).toBe(false);
+    expect(text(received)).toBe("今天多云。");
+  });
+
+  it("still reports the query when a search is cut off mid-flight", async () => {
+    const { received } = await collect({
+      ...ANTHROPIC,
+      chunks: [
+        `data: {"type":"content_block_start","index":0,"content_block":{"type":"server_tool_use","id":"srvtoolu_2","name":"web_search","input":{}}}\n\n`,
+        `data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\\"query\\":\\"半路断了\\"}"}}\n\n`,
+      ],
+    });
+    expect(received).toContainEqual({
+      serverTool: { phase: "call", id: "srvtoolu_2", name: "web_search", input: { query: "半路断了" } },
+    });
+  });
+
+  it("reports a failed search as an error rather than as empty results", async () => {
+    const { received } = await collect({
+      ...ANTHROPIC,
+      chunks: [
+        `data: {"type":"content_block_start","index":0,"content_block":{"type":"server_tool_use","id":"srvtoolu_3","name":"web_search","input":{"query":"x"}}}\n\n`,
+        `data: {"type":"content_block_stop","index":0}\n\n`,
+        `data: {"type":"content_block_start","index":1,"content_block":{"type":"web_search_tool_result","tool_use_id":"srvtoolu_3","content":{"type":"web_search_tool_result_error","error_code":"max_uses_exceeded"}}}\n\n`,
+        `data: {"type":"message_stop"}\n\n`,
+      ],
+    });
+    expect(received).toContainEqual({
+      serverTool: {
+        phase: "result",
+        id: "srvtoolu_3",
+        name: "web_search",
+        results: [],
+        error: "max_uses_exceeded",
+      },
+    });
   });
 
   it("streams thinking_delta as reasoning, never as answer text", async () => {

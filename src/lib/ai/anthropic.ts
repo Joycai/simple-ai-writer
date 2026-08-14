@@ -15,7 +15,12 @@
  */
 
 import { fetch } from "../http";
-import { dialectFor, reasoningBody, thinkingBody } from "./reasoning";
+import { dialectFor, reasoningBody, thinkingBody, type ThinkingDialect } from "./reasoning";
+import {
+  anthropicServerTools,
+  readServerToolError,
+  readWebSearchResults,
+} from "./serverTools";
 import { anthropicUrl } from "./urls";
 import type {
   AccumulatedToolCall,
@@ -273,18 +278,42 @@ function resolveMaxTokens(opts: StreamOptions): number {
  * because the two share one ceiling: a budget at or above the cap leaves the
  * response no room to exist.
  */
-function thinkingFor(opts: StreamOptions, maxTokens: number): Record<string, unknown> | undefined {
-  const dialect = dialectFor(opts.standard, opts.thinkingDialect);
+function thinkingFor(
+  opts: StreamOptions,
+  dialect: ThinkingDialect,
+  maxTokens: number,
+): Record<string, unknown> | undefined {
   const budget = Math.max(1024, Math.min(DEFAULT_THINKING_BUDGET, Math.floor(maxTokens / 2)));
-  return thinkingBody(dialect, budget)?.thinking as Record<string, unknown> | undefined;
+  return thinkingBody(dialect, budget, opts.reasoningEffort)?.thinking as
+    | Record<string, unknown>
+    | undefined;
 }
 
+/**
+ * `tool_choice`, in Anthropic's own spelling.
+ *
+ * The `switch` clause is the one place a *thinking* declaration decides
+ * something about tools, and it is deliberate. That dialect describes one real
+ * endpoint — MiniMax's Messages implementation — whose documented `tool_choice`
+ * enum is `auto | none` only: no `any`, no `{type:"tool"}` (`docs/api/landscape.md`
+ * §7 第四个样本). Forcing there is a 400 before a single token is generated, so
+ * a forced choice is downgraded to `auto` rather than sent to fail.
+ *
+ * Downgrading is safe because forcing was never load-bearing on its own: the
+ * only caller that forces is `agent/structured.ts`, which already treats "the
+ * model declined to call the tool" as its cue to re-run in JSON mode. The worst
+ * case here is that fallback firing one turn earlier than it would have; the
+ * alternative — a guaranteed failed request first — costs the same fallback
+ * plus a wasted round trip.
+ */
 function toolChoiceBody(
   opts: StreamOptions,
+  dialect: ThinkingDialect,
 ): { type: "auto" | "any" | "none" } | { type: "tool"; name: string } | undefined {
   const tc = opts.toolChoice;
   if (!tc || tc === "auto") return { type: "auto" };
   if (tc === "none") return { type: "none" };
+  if (dialect === "switch") return { type: "auto" };
   if (tc === "required") return { type: "any" };
   return { type: "tool", name: tc.function.name };
 }
@@ -354,7 +383,8 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
 
   const system = extractSystem(opts.messages);
   const maxTokens = resolveMaxTokens(opts);
-  const thinking = thinkingFor(opts, maxTokens);
+  const dialect = dialectFor(opts.standard, opts.thinkingDialect);
+  const thinking = thinkingFor(opts, dialect, maxTokens);
 
   const body: Record<string, unknown> = {
     model: opts.modelId,
@@ -366,14 +396,26 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
   if (thinking) body.thinking = thinking;
   // Absent unless the author set an effort on this model. Governs the whole
   // response here, not only thinking — see ANTHROPIC_EFFORT in ./reasoning.
-  Object.assign(body, reasoningBody(opts.standard, opts.reasoningEffort));
-  if (opts.tools?.length) {
-    body.tools = opts.tools.map((t) => ({
-      name: t.function.name,
-      description: t.function.description,
-      input_schema: t.function.parameters,
-    }));
-    body.tool_choice = toolChoiceBody(opts);
+  Object.assign(body, reasoningBody(opts.standard, opts.reasoningEffort, dialect));
+  // Server-side tools ride in the same array as ours: one list, two kinds of
+  // entry (`{type,name}` for the endpoint's own, `{name,input_schema}` for
+  // ours). They are sent even on a request that declares no tools of its own —
+  // a standing permission on the model, not something a task opts into.
+  const serverTools = anthropicServerTools(opts.serverTools);
+  if (opts.tools?.length || serverTools.length) {
+    body.tools = [
+      ...serverTools,
+      ...(opts.tools ?? []).map((t) => ({
+        name: t.function.name,
+        description: t.function.description,
+        input_schema: t.function.parameters,
+      })),
+    ];
+    // Only when *we* declared tools. `tool_choice` governs the model's own
+    // calls, and a request whose only tool is the server's has nothing to
+    // choose — `{type:"auto"}` there would be an opinion about a decision the
+    // endpoint makes internally.
+    if (opts.tools?.length) body.tool_choice = toolChoiceBody(opts, dialect);
   }
   // `opts.extraBody` is deliberately NOT spread in. It carries OpenAI-shaped
   // fields (`response_format`) that the Messages API rejects outright with a
@@ -407,6 +449,20 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
   // Index-keyed so the blocks go back in the order the model produced them —
   // a reordered sequence is a 400.
   const thinkingBlocks = new Map<number, Record<string, unknown>>();
+  /**
+   * Searches (and any later server-side tool) the endpoint ran inside this
+   * response. Kept apart from `toolBlocks` on purpose: these are already
+   * finished, and letting one reach the agent loop would produce a tool call
+   * nobody can execute and a `tool_result` the API never asked for.
+   *
+   * Nothing accumulated here is replayed in history. The blocks are the largest
+   * thing in a searching response — each hit carries page text — and the
+   * model's own thinking, which *is* replayed, already summarizes what it
+   * found; carrying the raw transcript would re-bill it every round of a loop.
+   */
+  const serverToolBlocks = new Map<number, { id: string; name: string; args: string }>();
+  /** `server_tool_use` id → tool name, for labelling the result block. */
+  const serverToolNames = new Map<string, string>();
   // Carry an incomplete trailing line across reads: a single SSE line can be
   // split across network chunks, and parsing the halves would silently drop
   // text and usage.
@@ -435,9 +491,28 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
     });
   };
 
+  /** Report a finished `server_tool_use` block once, when it closes. */
+  const emitServerToolCall = (index: number) => {
+    const entry = serverToolBlocks.get(index);
+    if (!entry) return;
+    serverToolBlocks.delete(index); // once per block, whoever gets here first
+    opts.onChunk({
+      serverTool: {
+        phase: "call",
+        id: entry.id,
+        name: entry.name,
+        input: parseJsonArgs(entry.args),
+      },
+    });
+  };
+
   const emitDone = () => {
     if (finished) return;
     finished = true;
+    // A response cut off mid-search still says what it was searching for.
+    for (const index of [...serverToolBlocks.keys()].sort((a, b) => a - b)) {
+      emitServerToolCall(index);
+    }
     emitToolCalls();
     opts.onChunk({
       done: true,
@@ -485,6 +560,38 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
             args: "",
           });
         }
+        // A search the endpoint is running for itself. Its query streams as
+        // input_json_delta exactly like a tool_use's, so it is accumulated the
+        // same way and reported once the block closes.
+        if (block?.type === "server_tool_use") {
+          const id = String(block.id ?? "");
+          const name = String(block.name ?? "");
+          serverToolBlocks.set(index, {
+            id,
+            name,
+            // Some endpoints send the input whole on the start block instead of
+            // streaming it; keep it, and let any deltas append to nothing.
+            args: block.input && Object.keys(block.input).length ? JSON.stringify(block.input) : "",
+          });
+          if (id) serverToolNames.set(id, name);
+        }
+        // The results, delivered whole — there is no delta form for them.
+        if (typeof block?.type === "string" && block.type.endsWith("_tool_result")) {
+          const id = String(block.tool_use_id ?? "");
+          const error = readServerToolError(block.content);
+          opts.onChunk({
+            serverTool: {
+              phase: "result",
+              id,
+              // The call block named the tool; falling back to the result
+              // block's own type (`web_search_tool_result` → `web_search`)
+              // covers a stream whose two halves didn't pair up.
+              name: serverToolNames.get(id) ?? block.type.replace(/_tool_result$/, ""),
+              results: readWebSearchResults(block.content),
+              ...(error ? { error } : {}),
+            },
+          });
+        }
         return;
       }
       case "content_block_delta": {
@@ -493,7 +600,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
         if (delta?.type === "text_delta" && typeof delta.text === "string") {
           opts.onChunk({ text: delta.text });
         } else if (delta?.type === "input_json_delta" && typeof delta.partial_json === "string") {
-          const entry = toolBlocks.get(index);
+          const entry = toolBlocks.get(index) ?? serverToolBlocks.get(index);
           if (entry) entry.args += delta.partial_json;
         } else if (delta?.type === "signature_delta" && typeof delta.signature === "string") {
           const block = thinkingBlocks.get(index);
@@ -522,11 +629,17 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
         if (stop === "max_tokens") truncated = true;
         return;
       }
+      case "content_block_stop":
+        // The only block whose *closing* is news: a server tool's query is
+        // complete exactly here, and reporting it now is what puts the search
+        // in the execution log before its results arrive.
+        emitServerToolCall(asIndex(json.index));
+        return;
       case "message_stop":
         emitDone();
         return;
       default:
-        return; // ping, content_block_stop, and anything added later
+        return; // ping, and anything added later
     }
   };
 

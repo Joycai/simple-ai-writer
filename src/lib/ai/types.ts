@@ -13,6 +13,7 @@ export interface ThinkingBlockCarry {
   blocks: unknown[];
 }
 import type { GeminiSafetySettings } from "./safety";
+import type { ServerToolEvent, ServerToolId } from "./serverTools";
 import i18n from "../../i18n";
 
 /**
@@ -157,6 +158,16 @@ export type StreamChunk =
    * construction. Endpoints that emit no reasoning simply never produce it.
    */
   | { reasoning: string }
+  /**
+   * A tool the *endpoint* ran inside this response — its call, then its results
+   * (see `lib/ai/serverTools.ts`).
+   *
+   * Reporting only: there is nothing to execute and nothing to send back, so
+   * unlike `toolCalls` this never becomes a message. Consumers that don't know
+   * about it ignore it by construction, the same way `reasoning` is ignored by
+   * everything that keys on `"text" in chunk`.
+   */
+  | { serverTool: ServerToolEvent }
   | {
       done: true;
       inputTokens: number;
@@ -245,6 +256,13 @@ export interface StreamOptions {
   signal?: AbortSignal;
   /** Tool definitions for function calling. Honored by both OpenAI and Gemini. */
   tools?: ToolDefinition[];
+  /**
+   * Server-side tools the endpoint should be allowed to run on its own (web
+   * search). Anthropic-protocol only; every other adapter ignores it. Sent on
+   * every request the model handles, `tools` or no `tools` — it is a standing
+   * permission the author granted the model, not a per-task input.
+   */
+  serverTools?: ServerToolId[];
   /**
    * Tool-choice strategy. Defaults to "auto" when tools are present. Pass
    * "required" to force *some* tool, or a specific function object to force
