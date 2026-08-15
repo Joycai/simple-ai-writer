@@ -14,7 +14,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight, Image as ImageIcon, Send, Square, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Image as ImageIcon, Square, X } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { SnippetPicker } from "./SnippetPicker";
 import {
@@ -582,7 +582,8 @@ export function AgentChat() {
               </button>
             ) : (
               <button className={styles.sendBtn} onClick={handleSend} disabled={!canSend} title={t("ai.chat.send")}>
-                <Send size={12} />
+                {/* The send mark is an ink square, not an arrow — see mockup 1b. */}
+                <span className={styles.sendGlyph} aria-hidden />
               </button>
             )}
           </div>

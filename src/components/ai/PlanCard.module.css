@@ -1,29 +1,28 @@
 /* Pending lore-plan approval card — the gate on every lore write. */
 
+/* Same frame language as the write-approval card — a plan is also a gate. */
 .card {
-  border: 1px solid var(--color-border);
-  border-left: 2px solid var(--color-sienna);
-  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-accent);
+  background: var(--color-bg-inset);
 }
 
 .header {
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
-  padding: 7px var(--space-3);
-  border-bottom: 1px solid var(--color-border-soft);
+  padding: 10px var(--space-3);
+  border-bottom: 1px solid var(--color-hairline);
 }
 .headerTitle {
-  font: 500 11px/1.5 var(--font-sans);
-  letter-spacing: 0.12em;
-  color: var(--color-text-secondary);
+  font: 400 12px/1.5 var(--font-sans);
+  color: var(--color-text-primary);
   white-space: nowrap;
 }
 .headerCount {
   margin-left: auto;
   flex-shrink: 0;
-  font: 400 10px/1.5 var(--font-mono);
-  color: var(--color-text-muted);
+  font: 400 11px/1.5 var(--font-mono);
+  color: var(--color-text-hint);
   font-variant-numeric: tabular-nums;
 }
 
@@ -58,7 +57,7 @@
   align-items: baseline;
   gap: var(--space-2);
   padding: 6px 10px;
-  background: var(--color-bg-elevated);
+  background: var(--color-bg-base);
 }
 
 .action {
@@ -76,7 +75,7 @@
 
 .entity {
   min-width: 0;
-  font: 500 12px/1.6 var(--font-sans);
+  font: 400 13px/1.6 var(--font-serif);
   color: var(--color-text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -84,7 +83,7 @@
 }
 .file {
   font: 400 10px/1.6 var(--font-mono);
-  color: var(--color-text-faint);
+  color: var(--color-text-hint);
 }
 
 .detail {
@@ -98,41 +97,41 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border-top: 1px solid var(--color-border-soft);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border-top: 1px solid var(--color-hairline);
 }
 
 .rejectInput {
   flex: 1;
   min-width: 0;
   font: 400 11px/1.6 var(--font-sans);
-  padding: 4px var(--space-2);
-  border: 1px solid var(--color-border);
+  padding: 6px var(--space-2);
+  border: 1px solid var(--color-border-panel);
   background: transparent;
   color: var(--color-text-primary);
   outline: none;
   transition: border-color var(--transition-fast);
 }
-.rejectInput::placeholder { color: var(--color-text-ghost); }
+.rejectInput::placeholder { color: var(--color-text-hint); }
 .rejectInput:focus { border-color: var(--color-sienna); }
 
 .btnReject {
-  padding: 4px 12px;
+  padding: 8px 14px;
   background: transparent;
-  border: 1px solid var(--color-border-strong);
-  color: var(--color-text-secondary);
-  font: 500 11px/1.6 var(--font-sans);
+  border: 1px solid var(--color-border-emphasis);
+  color: var(--color-text-primary);
+  font: 400 11px/1.6 var(--font-sans);
   cursor: pointer;
   transition: color var(--transition-fast), border-color var(--transition-fast);
 }
-.btnReject:hover:not(:disabled) { color: var(--color-error); border-color: var(--color-error); }
+.btnReject:hover:not(:disabled) { color: var(--color-error-text-strong); border-color: var(--color-error-node); }
 .btnReject:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .btnApprove {
-  padding: 4px 14px;
+  padding: 8px 16px;
   background: var(--color-sienna);
   border: none;
-  color: var(--color-card);
+  color: var(--color-on-accent);
   font: 500 11px/1.6 var(--font-sans);
   cursor: pointer;
   transition: background var(--transition-fast);
