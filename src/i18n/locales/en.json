@@ -1303,7 +1303,9 @@
       "submitBtnSaving": "Saving…",
       "stopBtn": "Stop Generation",
       "regenerateBtn": "Regenerate",
-      "saveTolore": "Save to Lore"
+      "saveTolore": "Save to Lore",
+      "footerNote": "You review the result before it is saved — everything stays editable",
+      "hintReview": "{{n}} entries so far. Results are reviewed by you before saving."
     },
     "panel": {
       "newEntry": "New Entry",
@@ -1368,7 +1370,9 @@
       "previewNext": "Next",
       "loadError": "Could not read the content; the file on disk is untouched",
       "loadErrorEditTitle": "Content could not be read, so it cannot be edited yet",
-      "noContent": "No content"
+      "noContent": "No content",
+      "addTagHint": "Add aliases / tags in edit mode",
+      "moreActions": "More actions"
     },
     "facet": {
       "section": "Facets",
@@ -1418,8 +1422,19 @@
         "generate": "Generate",
         "applyKeys": "Apply keys",
         "applyAppend": "Append to body",
-        "applyBody": "Apply to body"
-      }
+        "applyBody": "Apply to body",
+        "linkLabel": "AI assistant · ask about or rewrite this facet"
+      },
+      "addKeyShort": "+ Add",
+      "behaviorHead": "Retrieval behavior",
+      "behaviorText": "When a prompt hits a facet's keywords, only that facet is injected — the rest of the budget is saved.",
+      "headerNote": "Facets retrieve independently — only what matches gets injected",
+      "listEmpty": "No facets yet — fill in the first one on the right",
+      "modeAutoShort": "Auto",
+      "modeAlwaysShort": "Always",
+      "modeManualShort": "Manual",
+      "needsWork": "Needs work",
+      "switchDiscard": "This facet has unsaved changes; switching discards them. Continue?"
     },
     "split": {
       "title": "Split into facets",
@@ -1440,7 +1455,11 @@
       "applying": "Applying…",
       "backupHint": "The original entry is backed up before applying",
       "emptyEntry": "This entry has no body — nothing to split",
-      "replaceWarn": "Applying will replace the existing {{count}} facet(s) with the ones below (the originals are backed up first)"
+      "replaceWarn": "Applying will replace the existing {{count}} facet(s) with the ones below (the originals are backed up first)",
+      "applyCount": "Split · {{count}} facets",
+      "chars": "chars",
+      "newTag": "new",
+      "reason": "Overlong entries dilute retrieval · splitting recommended"
     },
     "improve": {
       "subtitle": "AI Improve",
@@ -1460,7 +1479,9 @@
       "targetLabel": "Write target",
       "targetIndex": "Whole entry (index.md)",
       "targetFacetPrefix": "Facet",
-      "facetMetaError": "Could not read this facet's metadata"
+      "facetMetaError": "Could not read this facet's metadata",
+      "footerNote": "Applying overwrites the current content · review the draft first",
+      "suggestOnlyHint": "The AI only suggests; keep editing the result on the right before applying."
     },
     "imageGen": {
       "title": "Generate image",
@@ -1511,11 +1532,14 @@
       "improveName": "Update entry",
       "improveDesc": "Update content with material / images; write to the whole entry or a chosen facet",
       "splitName": "Split & organize",
-      "splitDesc": "Reorganize the entry content and split it into facets"
+      "splitDesc": "Reorganize the entry content and split it into facets",
+      "imageName": "Generate art",
+      "imageDesc": "Paint from the body text · saved to the entry gallery"
     },
     "newEntry": {
       "manual": "Manual",
-      "ai": "AI Extract"
+      "ai": "AI Extract",
+      "aiHint": "Extract lore from the manuscript or a description"
     },
     "form": {
       "title": "Create New Entry",

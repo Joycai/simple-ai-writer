@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { X, Sparkles, RotateCw, AlertTriangle, Bot, Check } from "lucide-react";
+import { X, Sparkles, RotateCw, AlertTriangle, Check } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
@@ -246,10 +246,24 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
           <div className={styles.headerLeft}>
             {avatarUrl
               ? <img src={avatarUrl} className={styles.headerAvatar} alt={entity.name} />
-              : <div className={styles.headerAvatarPlaceholder}><Bot size={16} strokeWidth={1.5} /></div>}
+              : <div className={styles.headerAvatarPlaceholder}>{entity.name.charAt(0)}</div>}
             <div>
-              <div className={styles.headerName}>{entity.name}</div>
-              <div className={styles.headerSub}>{isZh ? "AI 优化元数据" : "AI improve metadata"}</div>
+              <div className={styles.headerName}>
+                {entity.name} · {isZh ? "元信息完善" : "Metadata"}
+              </div>
+              <div className={styles.headerSub}>
+                {isZh ? "缺失的摘要与别名会显著降低检索命中" : "Missing summary or aliases hurt retrieval"}
+              </div>
+              {(!entity.summary || entity.aliases.length === 0) && (
+                <div className={extra.badges}>
+                  {!entity.summary && (
+                    <span className={extra.badge}>{isZh ? "缺摘要" : "no summary"}</span>
+                  )}
+                  {entity.aliases.length === 0 && (
+                    <span className={extra.badge}>{isZh ? "缺别名" : "no aliases"}</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           <select
@@ -308,10 +322,17 @@ summary: ${entity.summary}
           </div>
 
           {/* Streaming raw output */}
-          {phase === "generating" && rawOutput && (
+          {phase === "generating" && (
             <div className={styles.section}>
-              <label className={styles.label}>{isZh ? "正在生成…" : "Generating…"}</label>
-              <pre className={styles.currentPre}>{rawOutput}</pre>
+              <div className={extra.genRow}>
+                <span className={extra.genDots}>
+                  <span className={extra.genDot} />
+                  <span className={extra.genDot} />
+                  <span className={extra.genDot} />
+                </span>
+                <span className={extra.genLabel}>{isZh ? "生成中" : "generating"}</span>
+              </div>
+              {rawOutput && <pre className={styles.currentPre}>{rawOutput}</pre>}
             </div>
           )}
 
@@ -355,7 +376,10 @@ summary: ${entity.summary}
                   {pAliases.length > 0 && (
                     <div className={styles.chips} style={{ marginBottom: 6 }}>
                       {pAliases.map((a, i) => (
-                        <span key={`${a}-${i}`} className={styles.chip}>
+                        <span
+                          key={`${a}-${i}`}
+                          className={`${styles.chip} ${entity.aliases.includes(a) ? "" : extra.chipNew}`}
+                        >
                           {a}
                           <button className={styles.chipRemove} onClick={() => removeAlias(i)}>
                             <X size={10} />
@@ -377,7 +401,12 @@ summary: ${entity.summary}
                   />
                 </div>
 
-                <label className={extra.gLabel}>{isZh ? "概要" : "summary"}</label>
+                <label className={extra.gLabel}>
+                  {isZh ? "概要" : "summary"}
+                  {pSummary.trim() && (
+                    <span className={extra.charNote}>{pSummary.trim().length} {isZh ? "字" : "ch"}</span>
+                  )}
+                </label>
                 <MarkdownTextarea
                   className={`${extra.gInput} ${extra.gTextarea}`}
                   value={pSummary}
@@ -391,10 +420,13 @@ summary: ${entity.summary}
 
         {/* Footer */}
         <div className={styles.footer}>
-          <button className={styles.btnSecondary} onClick={onClose}>
-            {isZh ? "取消" : "Cancel"}
-          </button>
+          <span className={styles.footerNote}>
+            {isZh ? "「应用」只更新元信息，不改动正文" : "Apply only updates metadata — the body is untouched"}
+          </span>
           <div className={styles.footerRight}>
+            <button className={styles.btnGhost} onClick={onClose}>
+              {isZh ? "取消" : "Cancel"}
+            </button>
             {phase === "input" && (
               <button
                 className={styles.btnPrimary}

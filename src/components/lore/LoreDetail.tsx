@@ -16,7 +16,7 @@ import {
   setEntityAvatar,
 } from "../../lib/lore";
 import { categoryLabel, findCategory, loreCategories } from "../../lib/profile";
-import { useProjectStore } from "../../stores/projectStore";
+import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { connOptions } from "../../lib/ai/conn";
 import { useAppStore } from "../../stores/appStore";
@@ -37,6 +37,8 @@ import { FacetEditModal } from "./FacetEditModal";
 import { LoreSplitModal } from "./LoreSplitModal";
 import { EntityAiHubModal } from "./ai/EntityAiHubModal";
 import { LoreImageGenModal } from "./ai/LoreImageGenModal";
+import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
+import { categoryColor } from "./catColor";
 import styles from "./LoreDetail.module.css";
 
 interface Props {
@@ -46,15 +48,6 @@ interface Props {
   initialEditing?: boolean;
 }
 
-const TABS = [
-  { id: "summary", label: "概要" },
-  { id: "relations", label: "关系" },
-  { id: "appearances", label: "出场" },
-  { id: "history", label: "历史" },
-] as const;
-
-type Tab = (typeof TABS)[number]["id"];
-
 export function LoreDetail({ entity: initialEntity, onBack, initialEditing = false }: Props) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
@@ -62,7 +55,9 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   const loreIndex = useLoreStore((s) => s.index);
   const scanProject = useLoreStore((s) => s.scanProject);
   const deleteEntity = useLoreStore((s) => s.deleteEntity);
+  const openDetail = useLoreStore((s) => s.openDetail);
   const setMainView = useAppStore((s) => s.setMainView);
+  const terms = useTerms();
 
   // Where the entity currently lives. Normally this is where it was opened
   // from, but saving an edit with a changed category moves the folder — the
@@ -82,7 +77,6 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   const [avatarVersion, setAvatarVersion] = useState(0);
   const avatarUrl = useImageDataUrl(entity.avatarPath, avatarVersion);
 
-  const [tab, setTab] = useState<Tab>("summary");
   const [content, setContent] = useState<string>("");
   const [showAiHub, setShowAiHub] = useState(false);
   const [showImprove, setShowImprove] = useState(false);
@@ -90,6 +84,21 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   // Facet form modal: { file: null } → create, { file } → edit/convert.
   const [facetModal, setFacetModal] = useState<{ file: string | null } | null>(null);
   const [showSplit, setShowSplit] = useState(false);
+  // The hero's ⋯ button opens the secondary actions (open in editor / reveal /
+  // delete) as a menu instead of a button row — 设计稿 03's three-button hero.
+  const [moreMenu, setMoreMenu] = useState<{ x: number; y: number } | null>(null);
+
+  // Previous/next entity in wall order, for the breadcrumb's pager. Uses the
+  // same flattening as the wall so the ‹ › order matches what the author saw.
+  const neighbors = useMemo(() => {
+    const flat: LoreEntity[] = [];
+    for (const c of loreCategories()) for (const e of (loreIndex[c.id] ?? [])) flat.push(e);
+    const i = flat.findIndex((e) => e.dirPath === entity.dirPath);
+    return {
+      prev: i > 0 ? flat[i - 1] : null,
+      next: i >= 0 && i < flat.length - 1 ? flat[i + 1] : null,
+    };
+  }, [loreIndex, entity.dirPath]);
 
   // In-place edit mode: draft metadata + body, committed via saveEntityMetaAndBody.
   const [editing, setEditing] = useState(false);
@@ -447,11 +456,13 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
       {showAiHub && (
         <EntityAiHubModal
           entityName={entity.name}
+          imageGenReady={imageGenReady}
           onClose={() => setShowAiHub(false)}
           onPick={(task) => {
             setShowAiHub(false);
             if (task === "meta") setShowMetaImprove(true);
             else if (task === "improve") setShowImprove(true);
+            else if (task === "image") setShowImageGen(true);
             else setShowSplit(true);
           }}
         />
@@ -546,19 +557,21 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         document.body,
       )}
 
-      <div className={styles.topBar}>
-        <button className={styles.back} onClick={onBack}>
+      <div className={styles.crumbBar}>
+        <button className={styles.back} onClick={onBack} title={t("common.back", { defaultValue: "返回" })}>
           <ArrowLeft size={11} strokeWidth={1.8} />
-          {t("common.back", { defaultValue: "返回" })}
         </button>
-        <span className={styles.crumb}>
-          LORE <span className={styles.crumbBold}>/</span>
+        <span className={styles.crumbPart}>{terms.kb}</span>
+        <span className={styles.crumbSep}>/</span>
+        <span className={styles.crumbCat}>
+          <span className={styles.crumbDot} style={{ background: categoryColor(entity.category) }} />
           {/* Through `categoryLabel`, like every other category label in this
               file — reading `labelZh` directly showed an English UI the
               Chinese name. */}
-          {cat ? categoryLabel(cat, isZh) : entity.category} <span className={styles.crumbBold}>/</span>
-          <span className={styles.crumbBold}>{entity.name}</span>
+          {cat ? categoryLabel(cat, isZh) : entity.category}
         </span>
+        <span className={styles.crumbSep}>/</span>
+        <span className={styles.crumbName}>{entity.name}</span>
         <span className={styles.spacer} />
         {editing ? (
           <>
@@ -578,30 +591,18 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
           </>
         ) : (
           <>
-            <button
-              className={`${styles.actionBtn} ${styles.actionBtnPrimary}`}
-              onClick={startEntityEdit}
-              disabled={contentLoadFailed}
-              title={contentLoadFailed ? t("lore.detail.loadErrorEditTitle", { defaultValue: "内容未能读取，暂不能编辑" }) : undefined}
-            >
-              <Pencil size={11} /> {t("lore.detail.edit", { defaultValue: "编辑" })}
-            </button>
-            <button className={styles.actionBtn} onClick={() => setShowAiHub(true)}>
-              <Sparkles size={11} /> {t("lore.aiHub.title", { defaultValue: "AI 编辑助手" })}
-            </button>
-            <button className={styles.actionBtn} onClick={openInEditor}>
-              <ExternalLink size={11} /> {t("lore.detail.openInEditor", { defaultValue: "在编辑器中打开" })}
-            </button>
-            <button className={styles.actionBtn} onClick={reveal}>
-              <FolderOpen size={11} /> {t("lore.panel.showInBrowser")}
-            </button>
-            <button
-              className={`${styles.actionBtn} ${styles.actionBtnDanger}`}
-              onClick={handleDelete}
-              disabled={busy}
-            >
-              <Trash2 size={11} /> {t("lore.panel.deleteEntity")}
-            </button>
+            <span className={styles.crumbId}>id: {entity.id}</span>
+            {(neighbors.prev || neighbors.next) && <span className={styles.crumbDivider} />}
+            {neighbors.prev && (
+              <button className={styles.navBtn} onClick={() => openDetail(neighbors.prev!.dirPath)}>
+                ‹ {neighbors.prev.name}
+              </button>
+            )}
+            {neighbors.next && (
+              <button className={styles.navBtn} onClick={() => openDetail(neighbors.next!.dirPath)}>
+                {neighbors.next.name} ›
+              </button>
+            )}
           </>
         )}
       </div>
@@ -707,35 +708,74 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
           </div>
         </div>
         <div className={styles.heroText}>
-          <div className={styles.eyebrow}>{cat?.labelEn ?? entity.category}</div>
+          <div className={styles.eyebrow}>
+            {cat ? `${cat.labelEn} · ${categoryLabel(cat, isZh)}` : entity.category}
+          </div>
           <div className={styles.heroName}>{entity.name}</div>
-          {entity.aliases.length > 0 && (
-            <div className={styles.heroAliases}>
-              {entity.aliases.map((a) => (
-                <span key={a} className={styles.alias}>{a}</span>
-              ))}
-            </div>
-          )}
+          <div className={styles.heroAliases}>
+            {entity.aliases.map((a) => (
+              <span key={a} className={styles.alias}>{a}</span>
+            ))}
+            <button
+              className={styles.aliasAdd}
+              onClick={startEntityEdit}
+              disabled={contentLoadFailed}
+              title={t("lore.detail.addTagHint", { defaultValue: "在编辑中添加别名/标签" })}
+            >
+              + {isZh ? "标签" : "tag"}
+            </button>
+          </div>
           {entity.summary && <div className={styles.heroSummary}>"{entity.summary}"</div>}
+        </div>
+        <div className={styles.heroActions}>
+          <button
+            className={styles.heroBtnPrimary}
+            onClick={startEntityEdit}
+            disabled={contentLoadFailed}
+            title={contentLoadFailed ? t("lore.detail.loadErrorEditTitle", { defaultValue: "内容未能读取，暂不能编辑" }) : undefined}
+          >
+            {t("lore.detail.edit", { defaultValue: "编辑" })}
+          </button>
+          <button className={styles.heroBtnSecondary} onClick={() => setShowAiHub(true)}>
+            <Sparkles size={11} strokeWidth={2} />
+            {t("lore.aiHub.title", { defaultValue: "AI 编辑助手" })}
+          </button>
+          <button
+            className={styles.heroBtnGhost}
+            onClick={(ev) => {
+              const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+              setMoreMenu({ x: r.left, y: r.bottom + 4 });
+            }}
+            title={t("lore.detail.moreActions", { defaultValue: "更多操作" })}
+          >
+            ⋯
+          </button>
         </div>
       </div>
 
-      <div className={styles.tabs}>
-        {TABS.map((tt) => (
-          <button
-            key={tt.id}
-            className={`${styles.tab} ${tab === tt.id ? styles.tabActive : ""}`}
-            onClick={() => setTab(tt.id)}
-          >
-            {tt.label}
-          </button>
-        ))}
-      </div>
+      {moreMenu && (
+        <ContextMenu
+          x={moreMenu.x}
+          y={moreMenu.y}
+          items={([
+            { kind: "item", icon: <ExternalLink size={13} />, label: t("lore.detail.openInEditor", { defaultValue: "在编辑器中打开" }),
+              action: openInEditor },
+            { kind: "item", icon: <FolderOpen size={13} />, label: t("lore.panel.showInBrowser"),
+              action: () => void reveal() },
+            { kind: "divider" },
+            { kind: "item", icon: <Trash2 size={13} />, label: t("lore.panel.deleteEntity"), danger: true,
+              action: () => void handleDelete() },
+          ] satisfies ContextMenuEntry[])}
+          onClose={() => setMoreMenu(null)}
+        />
+      )}
 
-      <div className={styles.body}>
-        {tab === "summary" ? (
-          <>
-            {content ? (
+      <div className={styles.cols}>
+        <div className={styles.colMain}>
+          <div className={styles.colHead}>
+            {isZh ? "profile · 正文" : "profile"}
+          </div>
+          {content ? (
               <MarkdownPreview
                 source={content}
                 basePath={entity.dirPath}
@@ -973,14 +1013,58 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                 </div>
               )}
             </section>
-          </>
-        ) : (
-          <div className={styles.notLoaded}>
-            {tab === "relations" && "关系图谱 — 待接入"}
-            {tab === "appearances" && "出场记录 — 待接入"}
-            {tab === "history" && "编辑历史 — 待接入"}
+        </div>
+
+        {/* Col 2 · relations — the graph isn't in the data model yet, so the
+            column carries the design structure with an empty state. */}
+        <div className={`${styles.colSide} ${styles.colRelations}`}>
+          <div className={styles.colHead}>relations · {isZh ? "关系" : "relations"}</div>
+          <div className={styles.sideEmpty}>
+            {isZh
+              ? "关系图谱待接入 — AI 将从手稿中提取人物关联"
+              : "Relation graph coming soon — AI will extract links from the manuscript"}
           </div>
-        )}
+          <button className={styles.addRelBtn} disabled title={isZh ? "待接入" : "Coming soon"}>
+            + {isZh ? "添加关系" : "Add relation"}
+          </button>
+
+          <div className={styles.threadsBlock}>
+            <div className={styles.colHeadRow}>
+              <span className={styles.colHead}>open threads · {isZh ? "悬念" : "threads"}</span>
+            </div>
+            <div className={styles.sideEmpty}>
+              {isZh ? "暂无悬念记录" : "No open threads yet"}
+            </div>
+          </div>
+        </div>
+
+        {/* Col 3 · appearances — density timeline renders its empty track until
+            per-chapter appearance stats land in the data model. */}
+        <div className={styles.colSide}>
+          <div className={styles.colHeadRow}>
+            <span className={styles.colHead}>appearances · {isZh ? "出场" : "appearances"}</span>
+            <span className={styles.appearCount}>—</span>
+          </div>
+          <div className={styles.densityGrid}>
+            {Array.from({ length: 14 }, (_, i) => (
+              <div key={i} className={styles.densityCell} />
+            ))}
+          </div>
+          <div className={styles.densityScale}>
+            <span>1</span>
+            <span>14</span>
+          </div>
+          <div className={styles.densityLegend}>
+            <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: "var(--lore-density-0)" }} />{isZh ? "无" : "none"}</span>
+            <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: "var(--lore-density-1)" }} />{isZh ? "浅" : "light"}</span>
+            <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: "var(--lore-density-2)" }} />{isZh ? "中" : "mid"}</span>
+            <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: "var(--lore-density-3)" }} />{isZh ? "重" : "heavy"}</span>
+            <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: "var(--lore-density-now)" }} />{isZh ? "此章" : "now"}</span>
+          </div>
+          <div className={styles.sideEmpty}>
+            {isZh ? "出场统计待接入" : "Appearance stats coming soon"}
+          </div>
+        </div>
       </div>
       </>)}
     </div>

@@ -84,6 +84,20 @@ Rules of the road:
 - **One remap, not eighteen restyles**: every settings module consumes the same `--color-*` vocabulary as the rest of the app, so `SettingsPage.module.css` re-points those roles at `--stg-*` **once on `.page`** (custom properties resolve at use time, so the whole subtree — panes, drawers, probe panel — follows). Element-level exceptions that the mapping can't express (kbd 键帽, stat cards `#F7F1E2`, usage bar `#C68B5A`, hint blocks `#F8F2E3`) read their `--stg-*` token directly.
 - **Portals escape the remap** on purpose: `ConfirmDialog` renders through `ModalShell`'s portal and keeps the app-wide manuscript palette — a modal is app chrome, not settings furniture.
 
+### 设定集设计语言 (Lore surfaces — `src/components/lore/**`)
+
+设计稿 03（claude.ai/design 项目 → `03 设定集 Lore`）给设定集一套**索引卡**语汇：网格纸墙上的微旋转硬阴影卡片、六色分类系统、880×760 的成对模态。实现为 `tokens.css` 里的 `--lore-*` 族（per theme；夜间是把每个角色映射到既有夜色阶的推导，设计稿只给了纸色）。
+
+- **分类六色** `--lore-cat-{character,location,item,event,faction,concept}`：分类圆点、实体头像底、候选徽标共用。映射入口是 `src/components/lore/catColor.ts`（墙与详情共用；未知分类 id 哈希进同一调色板，保证跨会话稳定）。**不要**在组件里再写分类→颜色的字典。
+- **卡片墙**：墙底 `--lore-wall-bg` + 36px 网格线 `--lore-wall-grid`；索引卡硬阴影三档 `--lore-card-shadow{,-lg,-hover}`（硬偏移阴影是索引卡的"纸感"，不是海拔——不要换成模糊阴影）。卡片微旋转 ±0.4deg 由实体 id 哈希得出，悬停回正。
+- **模态外壳**：`#FBF8F0` 面板 + `--color-border` 边 + `--lore-shadow-modal`（0 12px 48px）；footer 一律 `--color-bg-inset`（#F1E8D5）条 = 左侧斜体说明 + 右侧 取消(轻)/次/主 三级按钮。共用外壳类在 `LoreImproveModal.module.css`（Meta/AiHub/ImageGen/FacetAssist 四个模态借用，改类名前先查引用）。880×760 画幅用 `.panelWide`。
+- **diff 绿**：AI 新增内容（改写对照的新行、新标签、建议别名、拆分"新条目"注）一律 `--lore-add-bg`/`--lore-add-text`；改写对照的"新增行"判定是**行级包含**（不在原文的非空行），够用即可，不是真 diff。
+- **拆分归属色**：保留 `--lore-split-keep` / 新条目 `--lore-split-a`/`-b`（方案卡色块与正文底色一一对应）。
+- **待完善黄**：复用 `--color-warning-bg/-text`；分面的"待完善"是**派生态**（auto 模式且无关键词），不是存储字段。
+- **输入底**：lore 模态里的 textarea/编辑器用 `--lore-bg-input`（#FFFDF6），比卡面再亮半步。
+- **mono 纪律**：字数、id、置信度、状态计数（`已接受 1 · 待处理 2`）一律 `--font-mono`——与 AI 面板同规。
+- **数据模型未接入而按结构落地的部分**（详情页关系/出场两栏空态 + 密度时间线空轨 + 四档图例；提取器单候选而非多候选管线；分面无版本号）：设计稿的这些区域需要关系图谱、出场统计、条目版本三套数据；本轮只落结构与空态，接数据时样式已就位。排序下拉（最近编辑▾）与 DRAW FROM 取材开关同理未做。
+
 ### AI 面板设计语言 (AI surfaces — `src/components/ai/**`)
 
 The AI drawer and every surface it spawns (panels, cards, modals, the inline bubble) follow a scoped **manuscript-ink** dialect of the system, transcribed from the AI-panel mockup in the claude.ai/design project ("Simple AI Writer UI redesign" → `02 AI 面板`). The dark rendition is the binding reference; light values are paper equivalents derived from the same project's paper screens. Everything below is implemented as tokens in `tokens.css` under the `AI 面板设计语言` comment in each theme block.
