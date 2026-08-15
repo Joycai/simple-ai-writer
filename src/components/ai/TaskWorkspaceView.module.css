@@ -304,6 +304,22 @@
   border-top: 1px solid var(--color-border-panel);
 }
 
+.clearBtn {
+  padding: 8px 16px;
+  background: transparent;
+  color: var(--color-text-hint);
+  border: 1px solid var(--color-border-panel);
+  font: 500 12px/1.4 var(--font-sans);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.clearBtn:hover {
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
 .resumeBtn {
   padding: 8px 16px;
   background: var(--color-sienna);

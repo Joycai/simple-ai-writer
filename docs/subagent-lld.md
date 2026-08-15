@@ -300,6 +300,7 @@ function serializeWrite<T>(fn: () => Promise<T>): Promise<T> {
   > 第一版写的是「未完成的不清理」，那样一个永不收尾的任务序列会无界增长。上面的排序保证「未完成的优先留下，但不豁免」。
 - **绝不删除当前 run 持有的 `taskId`**（handle 里有它）。
 - **触发时机**：`ensure()` 成功创建新目录之后，`void gcTasks(projectPath, keepId)` 异步执行，失败只 `console.warn`。
+- **手动清除**：任务工作区 footer 的「清除已完成任务」按钮（`TaskWorkspaceView`）经 `ConfirmDialog` 确认后调 `clearCompletedTasks(projectPath, keepTaskId)`，只删 `status === "completed"` 的目录；`keepTaskId` 同样豁免当前会话持有的任务，理由同上。
 
 ### 3.5 项目备份
 

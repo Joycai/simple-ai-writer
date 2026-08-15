@@ -604,7 +604,11 @@
         "failed": "Failed"
       },
       "stepsCount": "{{done}}/{{total}} steps",
-      "resumeTurn": "Resuming task: {{title}}"
+      "resumeTurn": "Resuming task: {{title}}",
+      "clearCompleted": "Clear completed tasks",
+      "clearCompletedTitle": "Clear completed tasks",
+      "clearCompletedMessage": "This will delete the plan and note files of {{n}} completed task(s). This cannot be undone. In-progress and paused tasks are not affected.",
+      "clearCompletedConfirm": "Delete"
     },
     "snippets": {
       "button": "Snippets",
