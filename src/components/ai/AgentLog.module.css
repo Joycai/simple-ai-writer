@@ -3,13 +3,12 @@
 
 /* ── Frames ──────────────────────────────────────────────────────── */
 .box {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-panel);
+  background: var(--color-bg-stream);
   overflow: hidden;
 }
-/* Flat: the surface around it already frames the section, so the log brings no
-   chrome of its own — only the internal rules that separate the bands. */
+/* Flat: the surface around it already frames the section — the log's own chrome
+   is the timeline spine its list draws (see .bare > .list). */
 .bare { display: block; }
 
 @keyframes agentLogSpin { to { transform: rotate(360deg); } }
@@ -23,11 +22,11 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 6px var(--space-3);
+  padding: 8px var(--space-3);
   background: transparent;
   border: none;
-  font: 500 11px/1.5 var(--font-sans);
-  color: var(--color-text-primary);
+  font: 400 12px/1.5 var(--font-sans);
+  color: var(--color-text-soft);
   text-align: left;
   cursor: pointer;
   transition: background var(--transition-fast);
@@ -38,7 +37,7 @@
    control, so the pointer doesn't promise a click that does nothing. */
 .headStatic { cursor: default; }
 .headStatic:hover { background: transparent; }
-.headError .headName { color: var(--color-error); }
+.headError .headName { color: var(--color-error-text-strong); }
 
 .headName {
   flex: 1;
@@ -49,7 +48,7 @@
 }
 .headMeta {
   flex-shrink: 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-hint);
   font: 400 10px/1.6 var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
@@ -57,11 +56,10 @@
 /* The tail the header opens onto: the last few rows, and nothing else. Sunk a
    shade so it reads as the header's detail rather than as a third band. */
 .tail {
-  background: var(--color-bg-elevated);
-  border-top: 1px solid var(--color-border-soft);
+  background: var(--color-bg-inset);
+  border-top: 1px solid var(--color-hairline);
   max-height: 160px;
 }
-.bare .tail { border-radius: var(--radius-sm); }
 
 /* ── Rows ────────────────────────────────────────────────────────── */
 .list {
@@ -71,19 +69,26 @@
   max-height: 280px;
   overflow-y: auto;
 }
-.box > .list { border-top: 1px solid var(--color-border); }
-.bare > .list { padding-left: 0; padding-right: 0; }
+.box > .list { border-top: 1px solid var(--color-border-panel); }
+/* Boxed rows read as one merged tool list — hairlines between entries. */
+.box > .list > li + li { border-top: 1px solid var(--color-hairline); }
+/* Flat (run stream): the list hangs off a timeline spine. */
+.bare > .list {
+  padding-left: 14px;
+  padding-right: 0;
+  border-left: 1px solid var(--color-border-panel);
+}
 
 /* ── ② Rounds ────────────────────────────────────────────────────── */
 .roundHead .rowName {
-  color: var(--color-text-secondary);
+  color: var(--color-text-soft);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .roundNum {
   flex-shrink: 0;
-  color: var(--color-text-faint);
+  color: var(--color-text-hint);
   font: 400 10px/1.6 var(--font-mono);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -94,7 +99,7 @@
   max-height: none;
   overflow: visible;
   padding: 0 0 var(--space-1) var(--space-3);
-  border-left: 1px solid var(--color-border-soft);
+  border-left: 1px solid var(--color-hairline);
   margin-left: calc(var(--space-3) + 4px);
 }
 
@@ -117,10 +122,10 @@
 /* ── ③ Subagents ─────────────────────────────────────────────────── */
 .sectionLabel {
   padding: 4px var(--space-3) 2px;
-  border-top: 1px solid var(--color-border-soft);
-  color: var(--color-text-faint);
+  border-top: 1px solid var(--color-hairline);
+  color: var(--color-text-label);
   font: 500 9px/1.4 var(--font-sans);
-  letter-spacing: 0.12em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 .bare .sectionLabel { padding-left: 0; padding-right: 0; }
@@ -141,7 +146,7 @@
 .subBody {
   padding: 0 var(--space-3) var(--space-2) 0;
   margin-left: calc(var(--space-3) + 4px);
-  border-left: 1px solid var(--color-border-soft);
+  border-left: 1px solid var(--color-hairline);
 }
 .subBody > .list { max-height: none; overflow: visible; padding-left: var(--space-3); }
 .subResult { padding: 0 0 0 var(--space-3); }
@@ -175,12 +180,12 @@
   cursor: pointer;
   transition: background var(--transition-fast);
 }
-.rowExpandable:hover { background: var(--color-bg-elevated); }
+.rowExpandable:hover { background: var(--color-bg-hover); }
 .rowChevron {
   flex-shrink: 0;
   align-self: center;
   display: flex;
-  color: var(--color-text-faint);
+  color: var(--color-text-hint);
   transition: color var(--transition-fast);
 }
 .rowExpandable:hover .rowChevron { color: var(--color-sienna); }
@@ -211,10 +216,9 @@
 .detailBody {
   margin: 0;
   padding: 6px 8px;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-secondary);
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-panel);
+  color: var(--color-text-soft);
   font: 400 10px/1.6 var(--font-mono);
   white-space: pre-wrap;
   word-break: break-word;
@@ -223,7 +227,7 @@
 .rowName {
   flex: 1;
   min-width: 0;
-  color: var(--color-text-primary);
+  color: var(--color-text-soft);
   word-break: break-word;
 }
 /* Inside a disclosure the rows are dense and the reader is scanning, so a long
@@ -279,22 +283,24 @@
   letter-spacing: 0.02em;
 }
 
-.rowError .rowName { color: var(--color-error); }
+.rowError .rowName { color: var(--color-error-text-strong); }
 
 /* A retrieval that matched nothing — still reported, but it shouldn't read as
    an accomplishment. */
 .rowMuted .rowName { color: var(--color-text-muted); }
 
 /* ── Status markers ──────────────────────────────────────────────── */
+/* Square timeline nodes: completed steps are outline marks (the record, not a
+   celebration); only a failure fills solid. */
 .marker {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   flex-shrink: 0;
   align-self: center;
 }
-.marker_pending { box-shadow: inset 0 0 0 1px var(--color-sienna); }
-.marker_done { background: var(--color-sienna); }
-.marker_error { background: var(--color-error); }
+.marker_pending { box-shadow: inset 0 0 0 1px var(--color-border-muted); }
+.marker_done { box-shadow: inset 0 0 0 1px var(--color-border-accent); }
+.marker_error { background: var(--color-error-node); }
 
 .markerSpinner {
   width: 8px;
@@ -315,9 +321,9 @@
 .reasoningBody {
   margin: 4px 0 2px 16px;
   padding-left: var(--space-3);
-  border-left: 1px solid var(--color-border);
+  border-left: 1px solid var(--color-border-muted);
   font: italic 400 12px/1.7 var(--font-serif);
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }

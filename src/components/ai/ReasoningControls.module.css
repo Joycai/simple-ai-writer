@@ -10,11 +10,11 @@
 }
 
 .label {
-  font: 500 11px/1.4 var(--font-sans);
-  letter-spacing: 0.16em;
+  font: 400 12px/1.4 var(--font-sans);
   color: var(--color-text-muted);
   white-space: nowrap;
   flex-shrink: 0;
+  min-width: 62px;
 }
 .chipGroup {
   display: flex;
@@ -24,28 +24,29 @@
 }
 
 .chip {
-  padding: 3px 11px;
-  font: 500 11px/1.6 var(--font-mono);
+  padding: 5px 11px;
+  font: 400 11px/1.6 var(--font-mono);
   background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-muted);
+  border: 1px solid var(--color-border-panel);
+  color: var(--color-text-dim);
   cursor: pointer;
   transition: border-color var(--transition-fast), color var(--transition-fast),
     background var(--transition-fast);
 }
-.chip:hover:not(:disabled) { border-color: var(--color-sienna); color: var(--color-sienna); }
-.chipActive {
-  background: var(--color-accent-tint);
+.chip:hover:not(:disabled) { border-color: var(--color-border-accent); color: var(--color-accent-text); }
+.chipActive,
+.chipActive:hover:not(:disabled) {
+  background: var(--color-bg-selected);
   border-color: var(--color-sienna);
-  color: var(--color-sienna);
+  color: var(--color-accent-text);
+  font-weight: 500;
 }
 .chip:disabled { cursor: not-allowed; }
-.chip:disabled:hover { border-color: var(--color-border); color: var(--color-text-muted); }
+.chip:disabled:hover { border-color: var(--color-border-panel); color: var(--color-text-dim); }
 
 .hint {
-  font: 400 11px/1.6 var(--font-sans);
-  color: var(--color-text-muted);
+  font: 400 11px/1.5 var(--font-sans);
+  color: var(--color-text-label);
 }
 
 /* ── Compact variant: a dial that fits in a toolbar ────────────────────────── */
@@ -62,25 +63,24 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 9px;
+  padding: 6px 9px;
   font: 400 11px/1 var(--font-sans);
-  color: var(--color-text-secondary);
+  color: var(--color-text-soft);
   background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-muted);
   cursor: pointer;
   white-space: nowrap;
   transition: border-color var(--transition-fast), color var(--transition-fast);
 }
-.compactTrigger:hover:not(:disabled) { border-color: var(--color-sienna); }
+.compactTrigger:hover:not(:disabled) { border-color: var(--color-border-accent); }
 .compactTrigger:focus-visible { border-color: var(--color-sienna); outline: none; }
 .compactTrigger:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .compactValue {
   font: 500 11px/1 var(--font-mono);
-  color: var(--color-sienna);
+  color: var(--color-accent-text);
 }
-.compactCaret { color: var(--color-text-faint); flex-shrink: 0; }
+.compactCaret { color: var(--color-text-label); flex-shrink: 0; }
 
 .compactPopover {
   position: absolute;
@@ -90,9 +90,8 @@
   min-width: 108px;
   display: flex;
   flex-direction: column;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-input);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
   animation: dialIn 140ms var(--ease-out);
@@ -108,9 +107,9 @@
   text-align: left;
   background: transparent;
   border: none;
-  color: var(--color-text-secondary);
+  color: var(--color-text-soft);
   cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast);
 }
-.compactItem:hover { background: var(--color-bg-surface); color: var(--color-text-primary); }
-.compactItemActive { color: var(--color-sienna); background: var(--color-accent-tint); }
+.compactItem:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
+.compactItemActive { color: var(--color-accent-text); background: var(--color-bg-accent-wash); }

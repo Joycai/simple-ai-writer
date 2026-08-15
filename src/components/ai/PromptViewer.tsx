@@ -110,7 +110,16 @@ export function PromptViewer({
                   <span className={styles.roleRule} />
                   <span className={styles.roleChars}>{text.length.toLocaleString()}</span>
                 </div>
-                <pre className={styles.content}>{text}</pre>
+                <pre className={styles.content}>
+                  {/* Display-only: tint [[lore:…]] citations, leave text intact. */}
+                  {text.split(/(\[\[lore:[^\]]+\]\])/g).map((part, j) =>
+                    part.startsWith("[[lore:") ? (
+                      <span key={j} className={styles.loreRef}>{part}</span>
+                    ) : (
+                      part
+                    ),
+                  )}
+                </pre>
               </div>
             );
           })}

@@ -20,7 +20,7 @@
   width: min(860px, 100%);
   max-height: 100%;
   background: var(--color-bg-base);
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-panel);
   box-shadow: var(--shadow-xl);
   animation: scaleIn 240ms var(--ease-out);
 }
@@ -31,16 +31,16 @@
   gap: var(--space-3);
   flex-shrink: 0;
   padding: var(--space-4) var(--space-5);
-  background: var(--color-bg-surface);
-  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-inset);
+  border-bottom: 1px solid var(--color-border-panel);
 }
 .title {
-  font: 400 17px/1 var(--font-serif);
+  font: 400 18px/1 var(--font-serif);
   color: var(--color-text-primary);
 }
 .meta {
   font: 400 var(--font-size-xs)/1 var(--font-mono);
-  color: var(--color-text-muted);
+  color: var(--color-text-hint);
 }
 .spacer { flex: 1; }
 
@@ -48,15 +48,15 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 5px 11px;
+  padding: 5px 0;
   background: transparent;
-  border: 1px solid var(--color-border-strong);
-  color: var(--color-text-secondary);
-  font: 500 var(--font-size-xs)/1.5 var(--font-sans);
+  border: none;
+  color: var(--color-sienna);
+  font: 400 var(--font-size-sm)/1.5 var(--font-sans);
   cursor: pointer;
-  transition: color var(--transition-fast), border-color var(--transition-fast);
+  transition: color var(--transition-fast);
 }
-.headerBtn:hover { color: var(--color-sienna); border-color: var(--color-sienna); }
+.headerBtn:hover { color: var(--color-sienna-hover); }
 .headerBtn:active { transform: scale(0.96); }
 
 .closeBtn {
@@ -92,22 +92,26 @@
   gap: var(--space-3);
 }
 .role {
-  font: 500 10px/1 var(--font-sans);
-  letter-spacing: var(--letter-label);
+  font: 400 10px/1 var(--font-sans);
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--color-sienna);
 }
-.roleRule { flex: 1; height: 1px; background: var(--color-border); }
+.roleRule { flex: 1; height: 1px; background: var(--color-hairline); }
 .roleChars {
   font: 400 var(--font-size-xs)/1 var(--font-mono);
-  color: var(--color-text-faint);
+  color: var(--color-text-hint);
 }
 
-/* Whitespace is the content here — the 【…】 blocks are read by their shape. */
+/* Prompt prose reads in the manuscript face; pre-wrap keeps the 【…】 blocks'
+   shape intact — whitespace is still part of the content. */
 .content {
   margin: 0;
-  font: 400 var(--font-size-sm)/1.7 var(--font-mono);
-  color: var(--color-text-secondary);
+  font: 400 12.5px/1.75 var(--font-serif);
+  color: var(--color-text-dim);
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* [[lore:…]] citations surface in accent so injected entities are scannable. */
+.loreRef { color: var(--color-sienna); }
