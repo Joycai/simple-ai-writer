@@ -271,7 +271,13 @@ function ToolStepRow({ step }: { step: ToolStep }) {
   );
 }
 
-function AgentLogRow({ row, showTime }: { row: Row; showTime: boolean }) {
+function AgentLogRow({ row, showTime, runStatus }: {
+  row: Row;
+  showTime: boolean;
+  /** The enclosing run's terminal status — only a subagent card's nested log
+      sees its run-start row, so only SubAgentCard passes this. */
+  runStatus?: ToolStep["status"];
+}) {
   const { t, i18n } = useTranslation();
   const terms = useTerms();
   const isZh = i18n.language.startsWith("zh");
@@ -302,7 +308,9 @@ function AgentLogRow({ row, showTime }: { row: Row; showTime: boolean }) {
     case "run-start":
       return (
         <li className={styles.row}>
-          <Marker state="pending" />
+          {/* Error stays "done" here: this row states that the run started,
+              and the failure is stated once, by the run-error row. */}
+          <Marker state={runStatus === undefined || runStatus === "running" ? "pending" : "done"} />
           <span className={styles.rowName}>
             {t("ai.agent.log.start", {
               // The active profile's wording for the task; falls back to the
@@ -740,6 +748,7 @@ function SubAgentCard({
                 key={`${i}-${row.event.kind}`}
                 row={row}
                 showTime={showTime}
+                runStatus={run.status}
               />
             ))}
           </ul>
