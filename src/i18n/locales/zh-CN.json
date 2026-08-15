@@ -1298,7 +1298,9 @@
       "submitBtnSaving": "保存中…",
       "stopBtn": "停止生成",
       "regenerateBtn": "重新生成",
-      "saveTolore": "保存到 Lore"
+      "saveTolore": "保存到 Lore",
+      "footerNote": "生成结果先经你审核，入库前可修改",
+      "hintReview": "已有 {{n}} 条，生成结果先经你审核，入库前可修改。"
     },
     "panel": {
       "newEntry": "新建条目",
@@ -1363,7 +1365,9 @@
       "previewNext": "下一张",
       "loadError": "内容读取失败，磁盘上的文件未被改动",
       "loadErrorEditTitle": "内容未能读取，暂不能编辑",
-      "noContent": "无内容"
+      "noContent": "无内容",
+      "addTagHint": "在编辑中添加别名/标签",
+      "moreActions": "更多操作"
     },
     "facet": {
       "section": "特征",
@@ -1413,8 +1417,19 @@
         "generate": "生成",
         "applyKeys": "应用关键词",
         "applyAppend": "追加到正文",
-        "applyBody": "应用到正文"
-      }
+        "applyBody": "应用到正文",
+        "linkLabel": "AI 助手 · 就这个分面提问或改写"
+      },
+      "addKeyShort": "+ 添加",
+      "behaviorHead": "检索行为",
+      "behaviorText": "提示词命中某个分面的关键词时只注入该分面，省下其余字数预算。",
+      "headerNote": "分面独立检索，命中哪个注入哪个 — 不再整条塞入",
+      "listEmpty": "还没有分面 — 右侧填写第一条",
+      "modeAutoShort": "自动",
+      "modeAlwaysShort": "总是",
+      "modeManualShort": "仅手动",
+      "needsWork": "待完善",
+      "switchDiscard": "当前分面有未保存的修改，切换将丢弃，继续？"
     },
     "split": {
       "title": "拆分特征",
@@ -1435,7 +1450,11 @@
       "applying": "应用中…",
       "backupHint": "应用前会自动备份原条目",
       "emptyEntry": "当前条目没有正文，无需拆分",
-      "replaceWarn": "应用后将用下面的特征替换现有的 {{count}} 个特征（原文件会先自动备份）"
+      "replaceWarn": "应用后将用下面的特征替换现有的 {{count}} 个特征（原文件会先自动备份）",
+      "applyCount": "执行拆分 · {{count}} 个特征",
+      "chars": "字",
+      "newTag": "新条目",
+      "reason": "条目过长会稀释检索命中 · 建议拆分"
     },
     "improve": {
       "subtitle": "AI 优化",
@@ -1455,7 +1474,9 @@
       "targetLabel": "写入目标",
       "targetIndex": "整体条目（index.md）",
       "targetFacetPrefix": "特征",
-      "facetMetaError": "无法读取该特征的元数据"
+      "facetMetaError": "无法读取该特征的元数据",
+      "footerNote": "应用后会覆盖当前内容 · 请先审阅建议稿",
+      "suggestOnlyHint": "AI 仅会建议；应用前可在右侧继续编辑结果。"
     },
     "imageGen": {
       "title": "AI 生成图片",
@@ -1506,11 +1527,14 @@
       "improveName": "更新条目",
       "improveDesc": "结合资料/图片更新内容，可写入整体或指定特征",
       "splitName": "拆分整理",
-      "splitDesc": "把条目内容重新整理并拆分为特征"
+      "splitDesc": "把条目内容重新整理并拆分为特征",
+      "imageName": "生成配图",
+      "imageDesc": "按正文描述出图 · 存入条目图库"
     },
     "newEntry": {
       "manual": "手动录入",
-      "ai": "AI 提取"
+      "ai": "AI 提取",
+      "aiHint": "从手稿或描述中提取设定"
     },
     "form": {
       "title": "新建条目",
