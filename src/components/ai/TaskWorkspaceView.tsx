@@ -4,6 +4,7 @@ import { FileText } from "lucide-react";
 import { useAgentStore } from "../../stores/agentStore";
 import { useProjectStore } from "../../stores/projectStore";
 import {
+  clearCompletedTasks,
   listTaskNotes,
   listTaskSummaries,
   loadTaskDoc,
@@ -14,6 +15,7 @@ import {
   type TaskSummary,
 } from "../../lib/agent/taskWorkspace";
 import { formatTokenCount } from "../../lib/agent/logFormat";
+import { ConfirmDialog } from "../common/ConfirmDialog";
 import styles from "./TaskWorkspaceView.module.css";
 
 interface TaskWorkspaceViewProps {
@@ -47,6 +49,7 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
   const projectPath = useProjectStore((s) => s.projectPath);
   const resumeTask = useAgentStore((s) => s.resumeTask);
   const chatRunning = useAgentStore((s) => s.chatRunning);
+  const chatTaskId = useAgentStore((s) => s.chatTaskWorkspace?.taskId ?? null);
 
   const [tasks, setTasks] = useState<TaskSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -54,6 +57,7 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
   const [selectedSteps, setSelectedSteps] = useState<TaskStep[]>([]);
   const [selectedNotes, setSelectedNotes] = useState<TaskNoteHeader[]>([]);
   const [loading, setLoading] = useState(true);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   useEffect(() => {
     if (!projectPath) return;
@@ -95,6 +99,18 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
   const handleResume = async (taskId: string) => {
     onClose();
     await resumeTask(taskId);
+  };
+
+  // The chat's live workspace handle is spared even when completed — deleting
+  // its dir would strand the handle on a recreated empty dir.
+  const handleClearCompleted = async () => {
+    if (!projectPath) return;
+    await clearCompletedTasks(projectPath, chatTaskId);
+    const next = await listTaskSummaries(projectPath);
+    setTasks(next);
+    setSelectedId((prev) =>
+      prev && next.some((task) => task.taskId === prev) ? prev : next[0]?.taskId ?? null,
+    );
   };
 
   const getStatusClass = (status: string) => {
@@ -154,6 +170,9 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
   ).length;
   const selectedTask = tasks.find((task) => task.taskId === selectedId);
   const isPaused = selectedDoc?.meta.status === "paused";
+  const completedCount = tasks.filter(
+    (task) => task.status === "completed" && task.taskId !== chatTaskId,
+  ).length;
 
   return (
     <div className={styles.container}>
@@ -302,8 +321,13 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
       </div>
 
       <div className={styles.footer}>
-        {/* Left half stays empty until the per-task token ledger exists
-            (token_usage has no taskId column yet — subagent-lld §7.3). */}
+        {/* Flex row with gap — the per-task token ledger (subagent-lld §7.3)
+            can slot in beside the clear button when it exists. */}
+        {completedCount > 0 && (
+          <button className={styles.clearBtn} onClick={() => setConfirmClear(true)}>
+            {t("ai.taskWorkspace.clearCompleted", { defaultValue: "清除已完成任务" })}
+          </button>
+        )}
         <div className={styles.headerSpacer} />
         {selectedDoc && selectedId && selectedDoc.meta.status !== "completed" && (
           <button
@@ -315,6 +339,21 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
           </button>
         )}
       </div>
+
+      {confirmClear && (
+        <ConfirmDialog
+          title={t("ai.taskWorkspace.clearCompletedTitle", { defaultValue: "清除已完成任务" })}
+          message={t("ai.taskWorkspace.clearCompletedMessage", {
+            defaultValue:
+              "将删除 {{n}} 个已完成任务的计划与笔记文件，此操作不可恢复。进行中和已暂停的任务不受影响。",
+            n: completedCount,
+          })}
+          confirmLabel={t("ai.taskWorkspace.clearCompletedConfirm", { defaultValue: "删除" })}
+          danger
+          onConfirm={() => void handleClearCompleted()}
+          onClose={() => setConfirmClear(false)}
+        />
+      )}
     </div>
   );
 }

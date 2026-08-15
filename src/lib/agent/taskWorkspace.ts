@@ -679,6 +679,39 @@ export async function gcTasks(projectPath: string, keepTaskId?: string | null): 
   }
 }
 
+/**
+ * Remove every task whose persisted status is "completed", except keepTaskId
+ * (the chat's live workspace handle — deleting its dir would strand the handle
+ * on a recreated empty dir). Returns the number of task directories removed.
+ */
+export async function clearCompletedTasks(
+  projectPath: string,
+  keepTaskId?: string | null,
+): Promise<number> {
+  const root = `${projectPath}/.ai-writer/tasks`;
+  if (!(await fileExists(root))) return 0;
+
+  let removed = 0;
+  try {
+    const entries = await readDir(root);
+    for (const entry of entries) {
+      if (!entry.isDirectory) continue;
+      if (keepTaskId && entry.name === keepTaskId) continue;
+      const doc = await loadTaskDoc(projectPath, entry.name);
+      if (!doc || doc.meta.status !== "completed") continue;
+      try {
+        await removeDir(entry.path);
+        removed++;
+      } catch (e) {
+        console.warn(`[taskWorkspace] failed to clear task ${entry.name}:`, e);
+      }
+    }
+  } catch (e) {
+    console.warn("[taskWorkspace] clearCompletedTasks failed:", e);
+  }
+  return removed;
+}
+
 export interface TaskSummary {
   taskId: string;
   status: TaskStatus;

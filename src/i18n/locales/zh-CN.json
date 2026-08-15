@@ -604,7 +604,11 @@
         "failed": "失败"
       },
       "stepsCount": "{{done}}/{{total}} 步",
-      "resumeTurn": "恢复任务：{{title}}"
+      "resumeTurn": "恢复任务：{{title}}",
+      "clearCompleted": "清除已完成任务",
+      "clearCompletedTitle": "清除已完成任务",
+      "clearCompletedMessage": "将删除 {{n}} 个已完成任务的计划与笔记文件，此操作不可恢复。进行中和已暂停的任务不受影响。",
+      "clearCompletedConfirm": "删除"
     },
     "snippets": {
       "button": "快捷指令",

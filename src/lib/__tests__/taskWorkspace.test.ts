@@ -37,6 +37,7 @@ vi.mock("../fs/fileio", () => ({
 import {
   appendLogToBody,
   appendStepToBody,
+  clearCompletedTasks,
   createTaskWorkspace,
   gcTasks,
   listTaskNotes,
@@ -250,6 +251,46 @@ describe("taskWorkspace file operations & GC", () => {
     expect(remainingTaskIds.has("task-04")).toBe(true);
     expect(remainingTaskIds.has("task-05")).toBe(true);
   });
+  it("clearCompletedTasks removes only completed dirs and returns the count", async () => {
+    const seed = async (id: string, status: TaskMeta["status"]) => {
+      const doc: TaskDoc = {
+        meta: {
+          taskId: id,
+          status,
+          modelId: "mdl-1",
+          createdAt: "2026-08-14T08:00:00.000Z",
+          updatedAt: "2026-08-14T08:00:00.000Z",
+        },
+        body: `# ${id}`,
+      };
+      await saveTaskDoc(projectPath, id, doc);
+    };
+    await seed("t-active", "in_progress");
+    await seed("t-paused", "paused");
+    await seed("t-done-1", "completed");
+    await seed("t-done-2", "completed");
+    await seed("t-done-keep", "completed");
+    // A corrupt dir must be left alone and not counted.
+    fs.set("/project/.ai-writer/tasks/t-corrupt/task.md", "not a task doc");
+
+    const removed = await clearCompletedTasks(projectPath, "t-done-keep");
+    expect(removed).toBe(2);
+
+    const remaining = new Set(
+      [...fs.keys()]
+        .filter((k) => k.startsWith("/project/.ai-writer/tasks/"))
+        .map((k) => k.slice("/project/.ai-writer/tasks/".length).split("/")[0]),
+    );
+    expect(remaining).toEqual(
+      new Set(["t-active", "t-paused", "t-done-keep", "t-corrupt"]),
+    );
+  });
+
+  it("clearCompletedTasks is a no-op when the tasks root does not exist", async () => {
+    expect(await clearCompletedTasks(projectPath)).toBe(0);
+    expect(fs.size).toBe(0);
+  });
+
   // ── Regression tests for the defects found reviewing PR-A ────────────────
 
   it("files a log entry inside the progress section, not at the end of the file", async () => {
