@@ -54,6 +54,29 @@ export interface ResolvedWorkspace {
   issues: string[];
 }
 
+/** One pack's visible tasks, for surfaces that present the menu by pack. */
+export interface PackTaskGroup {
+  pack: WorkspaceProfile;
+  tasks: ResolvedTask[];
+}
+
+/**
+ * The visible task menu, grouped by declaring pack in arbitration order.
+ *
+ * The first group is always the primary's (its task list is never empty), and
+ * it includes the shared base tasks — so a single-pack workspace yields
+ * exactly one group holding exactly `visibleTasks()`, and a panel that
+ * renders group[0] flat and the rest as labelled extras collapses to the
+ * pre-pack layout on its own. A secondary pack whose every task deduped away
+ * contributes no group rather than an empty heading.
+ */
+export function visibleTaskGroups(workspace: ResolvedWorkspace): PackTaskGroup[] {
+  const visible = workspace.tasks.filter((task) => !task.hidden);
+  return workspace.enabled
+    .map((pack) => ({ pack, tasks: visible.filter((task) => task.packId === pack.id) }))
+    .filter((group) => group.tasks.length > 0);
+}
+
 /**
  * Merge `enabled` packs into one workspace view. Pure; never mutates a pack —
  * the built-in profiles are module-level singletons, and a merge that pushed

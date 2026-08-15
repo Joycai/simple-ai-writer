@@ -209,6 +209,20 @@
   box-shadow: inset 0 -2px 0 var(--color-sienna);
 }
 
+/* A secondary pack's tasks: same segments, under a small pack-name eyebrow —
+   present in multi-pack projects only, so the everyday single-pack row is
+   untouched. */
+.packTaskGroup { margin-top: var(--space-2); }
+
+.packTaskEyebrow {
+  display: block;
+  margin-bottom: 4px;
+  font: 500 10px/1.4 var(--font-sans);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--color-text-label);
+}
+
 /* ── Edit target card ────────────────────────────────────────────── */
 .targetCard {
   display: flex;
