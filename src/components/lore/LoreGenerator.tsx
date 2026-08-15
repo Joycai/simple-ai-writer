@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { X, Bot, Sparkles, RotateCw, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { X, Sparkles, RotateCw, AlertTriangle } from "lucide-react";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useLoreStore } from "../../stores/loreStore";
@@ -207,54 +207,58 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
 
         {/* Header */}
         <div className={styles.header}>
-          <div className={styles.headerLeft}>
-            <div className={styles.headerIcon}><Bot size={20} strokeWidth={1.5} /></div>
-            <div className={styles.headerText}>
-              <div className={styles.title}>{t("lore.generator.title", { entry: terms.entry })}</div>
-              <div className={styles.subtitle}>{t("lore.generator.subtitle")}</div>
-            </div>
+          <div className={styles.headerRow}>
+            <Sparkles size={17} strokeWidth={1.6} color="var(--color-sienna)" />
+            <span className={styles.headerEyebrow}>
+              {isZh ? "extract · 提取" : "extract"}
+            </span>
+            <span className={styles.spacer} />
+            <button className={styles.closeBtn} onClick={onClose}><X size={14} /></button>
           </div>
-          <button className={styles.closeBtn} onClick={onClose}><X size={16} /></button>
+          <h2 className={styles.title}>{t("lore.generator.title", { entry: terms.entry })}</h2>
+          <p className={styles.subtitle}>{t("lore.generator.subtitle")}</p>
         </div>
 
-        {/* Scrollable body */}
-        <div className={styles.body}>
+        {/* Two-column body */}
+        <div className={styles.cols}>
 
-          {onModeChange && (
-            <div style={{ marginBottom: "var(--space-3)" }}>
+          {/* Left: options */}
+          <div className={styles.side}>
+            <div>
+              <div className={styles.sectionLabel}>{isZh ? "category · 分类" : "category"}</div>
+              <select className={styles.select} value={category}
+                onChange={(e) => setCategory(e.target.value as CategoryId)}>
+                {loreCategories().map((c) => (
+                  <option key={c.id} value={c.id}>{categoryLabel(c, isZh)}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <div className={styles.sectionLabel}>{isZh ? "model · 模型" : "model"}</div>
+              <select className={styles.select} value={activeModelId ?? ""}
+                onChange={(e) => setActiveModel(e.target.value)}>
+                <option value="">{t("lore.generator.selectModel")}</option>
+                {multimodalModels.map((m) => {
+                  const pname = providers.find((p) => p.id === m.providerId)?.name ?? "";
+                  return <option key={m.id} value={m.id}>{pname} / {m.name}</option>;
+                })}
+              </select>
+            </div>
+            <span className={styles.spacer} />
+            <div className={styles.hintCard}>
+              <div className={styles.hintHead}>hint</div>
+              {t("lore.generator.hintReview", {
+                defaultValue: "已有 {{n}} 条，生成结果先经你审核，入库前可修改。",
+                n: allEntities.length,
+              })}
+            </div>
+          </div>
+
+          {/* Right: description + result */}
+          <div className={styles.main}>
+            {onModeChange && (
               <NewEntryTabs value="ai" onChange={onModeChange} />
-            </div>
-          )}
-
-          {/* ── Input card ── */}
-          <div className={styles.card}>
-            <div className={styles.cardTitle}>
-              <span>{t("lore.generator.step1")}</span>
-            </div>
-
-            {/* Category + Model */}
-            <div className={styles.row}>
-              <div className={styles.fieldGroup}>
-                <label className={styles.label}>{t("lore.generator.categoryLabel")}</label>
-                <select className={styles.select} value={category}
-                  onChange={(e) => setCategory(e.target.value as CategoryId)}>
-                  {loreCategories().map((c) => (
-                    <option key={c.id} value={c.id}>{categoryLabel(c, isZh)}</option>
-                  ))}
-                </select>
-              </div>
-              <div className={styles.fieldGroup}>
-                <label className={styles.label}>{t("lore.generator.modelLabel")}</label>
-                <select className={styles.select} value={activeModelId ?? ""}
-                  onChange={(e) => setActiveModel(e.target.value)}>
-                  <option value="">{t("lore.generator.selectModel")}</option>
-                  {multimodalModels.map((m) => {
-                    const pname = providers.find((p) => p.id === m.providerId)?.name ?? "";
-                    return <option key={m.id} value={m.id}>{pname} / {m.name}</option>;
-                  })}
-                </select>
-              </div>
-            </div>
+            )}
 
             {/* Description + @-mention composer (entities / files / images) */}
             <div className={styles.fieldGroup}>
@@ -274,34 +278,37 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
                 textareaClassName={styles.textarea}
               />
             </div>
-          </div>
 
           {/* Error */}
           {error && <div className={styles.error}><AlertTriangle size={13} style={{ flexShrink: 0 }} /> {error}</div>}
 
-          {/* ── Generating state ── */}
+          {/* ── Generating state: 3 gradient squares ── */}
           {phase === "generating" && (
-            <div className={styles.card}>
-              <div className={styles.generating}>
-                <div className={styles.spinner} />
-                <div className={styles.generatingText}>
-                  {genStatus}<span className={styles.generatingDots} />
-                </div>
-              </div>
+            <div className={styles.generating}>
+              <span className={styles.genDots}>
+                <span className={styles.genDot} />
+                <span className={styles.genDot} />
+                <span className={styles.genDot} />
+              </span>
+              <span className={styles.generatingText}>{genStatus}</span>
             </div>
           )}
 
-          {/* ── Result card ── */}
+          {/* ── Result card (候选卡「新条目」态) ── */}
           {phase === "result" && (
             <>
-              <div className={styles.divider}>{t("lore.generator.completed")}</div>
+              <div className={styles.statusRow}>
+                <span className={styles.statusLabel}>{isZh ? "candidate · 候选" : "candidate"}</span>
+                <span className={styles.statusDone}>
+                  <span className={styles.statusDot} />
+                  {t("lore.generator.completed")}
+                </span>
+              </div>
 
-              <div className={styles.card}>
+              <div className={styles.resultCard}>
                 <div className={styles.resultHeader}>
-                  <div className={styles.cardTitle}>
-                    <span className={styles.cardTitleAccent}>{t("lore.generator.step2")}</span>
-                  </div>
-                  <span className={styles.resultBadge}><CheckCircle2 size={13} /> {t("lore.generator.success")}</span>
+                  <span className={styles.resultNew}>{isZh ? "新" : "new"}</span>
+                  <span className={styles.resultBadge}>{t("lore.generator.success")}</span>
                 </div>
 
                 {/* Name + Category */}
@@ -368,17 +375,21 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
               </div>
             </>
           )}
+          </div>
         </div>
 
-        {/* ── Sticky footer ── */}
+        {/* ── Footer strip ── */}
         <div className={styles.footer}>
+          <span className={styles.footerNote}>
+            {t("lore.generator.footerNote", { defaultValue: "生成结果先经你审核，入库前可修改" })}
+          </span>
+          <span className={styles.spacer} />
           {phase === "input" && (
             <>
-              <button className={styles.btnSecondary} onClick={onClose}>{t("lore.generator.cancel")}</button>
+              <button className={styles.btnGhost} onClick={onClose}>{t("lore.generator.cancel")}</button>
               <button className={styles.btnPrimary} onClick={handleGenerate}
-                disabled={!activeModelId || !description.trim()}
-                style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <Sparkles size={14} /> {t("lore.generator.submitBtn", { entry: terms.entry })}
+                disabled={!activeModelId || !description.trim()}>
+                <Sparkles size={13} /> {t("lore.generator.submitBtn", { entry: terms.entry })}
               </button>
             </>
           )}
@@ -390,10 +401,9 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
           )}
           {phase === "result" && (
             <>
-              <button className={styles.btnSecondary} onClick={onClose}>{t("lore.generator.cancel")}</button>
+              <button className={styles.btnGhost} onClick={onClose}>{t("lore.generator.cancel")}</button>
               <button className={styles.btnSecondary} onClick={handleGenerate}
-                disabled={!activeModelId || !description.trim()}
-                style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                disabled={!activeModelId || !description.trim()}>
                 <RotateCw size={13} /> {t("lore.generator.regenerateBtn")}
               </button>
               <button className={styles.btnPrimary} onClick={handleSave}
