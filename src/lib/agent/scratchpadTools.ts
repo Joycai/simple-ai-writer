@@ -269,7 +269,13 @@ export async function writeNoteTool(call: ToolCall, ctx: ToolContext): Promise<T
       // Containment needs no check here: `writeTaskNote` runs the slug through
       // `sanitizeSlug`, which admits only letters, digits and dashes — a name
       // with no separator in it cannot leave the folder it is joined to.
-      const note = await writeTaskNote(ctx.projectPath, taskId, { slug, title, content, sources });
+      const note = await writeTaskNote(ctx.projectPath, taskId, {
+        slug,
+        title,
+        content,
+        sources,
+        origin: "main",
+      });
 
       const renamed = note.renamedFrom
         ? ` (a note called "${note.renamedFrom}" already existed, so this one was filed as "${note.slug}")`

@@ -23,6 +23,12 @@
 | **需求** | vision 路由原被收窄为「仅当主模型是纯文本」，与 HLD「两边都支持时优先子代理」不符。改回 HLD 语义（§6.2） |
 | **补充** | `activeTaskId` 的来源（原文未定义，却被所有新工具依赖）、嵌套日志的去重键冲突、同轮并发写 `task.md` 的丢更新、GC 的无界增长漏洞、与 chat 折叠的交互、测试计划、i18n 与 profile terms 约束 |
 
+**2026-08-15 · 任务工作区对齐设计稿 1g（§3.3 / §4.5 / §7.3）。** 对照 claude.ai/design
+的 `02 AI 面板` 1g 屏复查后落三件事：note 文件加来源机器头（§3.3 第 2a 条），
+`TaskWorkspaceView` 全面改到 1g 的视觉词汇（§7.3），会话 blob 携带 `taskId` 并顺手
+修掉 `switchChatSession` 的工作区句柄泄漏（§4.5）。任务级 token 总账（`token_usage`
+加 `taskId` 列）经确认仍然不做，1g 底栏的用量数字继续缺省。
+
 **2026-08-14 · 执行日志重排（§7.2 / §7.3 改写）。** PR-A~E 全部落地后，面板上的信息量
 本身成了问题：三条平级的事件流挤在一列里，子代理的执行过程更是藏在两层展开之下。
 改为四段分层，并把 band ④（任务列表）定为**会话级**——它按会话存在，而 `AgentLog`
@@ -256,6 +262,14 @@ export function parseSteps(body: string): TaskStep[] {
    三种形态（前两种就来自本应用自己的工具输出），指向别的任务则返回「找不到」。
 2. **绝不覆盖**：slug 撞车时自动加 `-2`、`-3` 后缀，并在工具结果里说明真实文件名。
    静默覆盖等于丢数据，而模型没有任何办法察觉它发生过。
+2a. **来源机器头（2026-08-15，设计稿 1g 对齐）**：note 文件首行是一行 HTML 注释
+   `<!-- ai-writer-note {"origin":"longread","sources":2} -->`——与 `task.md`、
+   `memory.ts` 同一约定：注释在渲染与作者手改下都存活，且单行即可整行丢弃，不碰正文。
+   `origin`（`search|vision|longread|main`）由**执行器**填（`executeDelegate` 传
+   kind、`write_note` 传 `main`），不是工具参数——模型没有理由也没有资格谎报出处。
+   `listTaskNotes` 解析它连同 `sources` 数回给 UI（任务工作区的笔记行显示
+   「长读子代理 · 6.2k 字 · 2 条来源」）；标题解析随之从「取首行」改为「取第一个
+   H1」，否则机器头会被当成标题。旧笔记没有这行头 → 字段缺省，只显示字数。
 3. **谁能创建工作区**：只有 `task_plan`（标题即计划主题）与 `write_note`
    （checkpoint 提示点名要它，拒绝会让那条提示变成死路；但它用**中性标题**建仓，
    任务叫什么是计划的事，不能由碰巧第一个落盘的笔记决定）。
@@ -456,6 +470,20 @@ export async function buildResumeSeed(
 > **这正面解掉了 `【作者消息】` 那一层兜底所治标的病**：恢复的是**任务状态**而非**对话记录**，作者三周前那句 `continue` 根本不会出现在新上下文里。
 >
 > 系统提示词必须走 `profileSystemPrompt()`，不能用 `ai.instructions.system` —— 否则非小说项目会拿到小说指令（CLAUDE.md 明令）。
+
+### 4.5 会话与工作区的绑定跨重启（2026-08-15，原 PR-B 遗留）
+
+`chatTaskWorkspace` 的 `taskId` 现在随会话 blob 持久化（`chatSession.ts` 的
+`SerializedChat.taskId`，**可选字段、版本仍是 v1**——旧行照常还原为 `null`，旧代码读
+新行会忽略它）。恢复端（`switchChatSession` / `resetChatForProject`）经
+`workspaceForSnapshot` 重建句柄：taskId 存在**且 `task.md` 仍可解析**才给
+`existingWorkspace`，否则显式置 `null`——工作区可能已被 GC（20 个上限），拿着已剪掉
+任务的句柄会在下一条笔记时悄悄复活一个空目录。
+
+为什么「显式置 null」值得写进注释：修这条时发现 `switchChatSession` 原本**不碰**
+`chatTaskWorkspace`，于是切到历史会话后，惰性创建器直接复用上一个会话的句柄——
+历史会话的新笔记会写进**另一个任务**的工作区。恢复代码对这个字段沉默就是继承污染，
+所以每条恢复路径都必须给它一个明确的值。
 
 ---
 
@@ -959,8 +987,12 @@ if (event.kind === "reasoning") {
   设置→用量就看不见，而委托恰恰是作者**当下**要拍板的那一步）。
 - 真·任务级总账（跨暂停恢复）要给 `token_usage` 加 `taskId` 列，那是单独一件事，
   不能拿会话累计冒充，所以文案写「本次」。
-- 尚未做：任务列表页（多任务）、`task.md` 正文预览、notes 列表、
-  `paused` 任务的「继续」按钮 → `buildResumeSeed`。
+- 任务列表页、notes 列表、`paused` 任务的继续按钮已由 `TaskWorkspaceView` 落地
+  （对话头部「任务」入口），并于 2026-08-15 对齐设计稿 1g：步骤行用方块词汇
+  （绿勾 / 赭石实心方块+行高亮+「暂停于此」/ 描边空方块 / `–`+删除线），笔记为
+  发丝线行式列表（mono 文件名 + 来源·字数 meta，见 §3.3 的机器头），底栏放
+  「在新会话中继续」CTA。底栏左半留空——那是任务级 token 总账的落位处，仍待
+  `token_usage` 的 `taskId` 列。尚未做：`task.md` 正文预览。
 
 ### 7.4 设置 → 子代理（`panes/SubAgentsPane.tsx`）
 

@@ -56,7 +56,7 @@ function makeSnapshot(): ChatSnapshot {
     { id: "t3", role: "user", text: "q1", log: [], at: 1 },
     { id: "t4", role: "assistant", text: "a1", log: [], at: 2, images: ["/p/img.png"] },
   ];
-  return { turns, history, meta, usage: { inputTokens: 10, outputTokens: 5, cost: 0.01 } };
+  return { turns, history, meta, usage: { inputTokens: 10, outputTokens: 5, cost: 0.01 }, taskId: null };
 }
 
 describe("chat session round-trip", () => {
@@ -123,6 +123,26 @@ describe("chat session round-trip", () => {
     expect(restored.meta.turnStarts).toContain(last);
     // The live session keeps its pictures — serialization copies, never mutates.
     expect(Array.isArray(withImage.content)).toBe(true);
+  });
+
+  it("carries the task workspace id, and tolerates blobs from before it existed", () => {
+    // With a workspace: the restored session must reconnect to its own notes.
+    const snap = makeSnapshot();
+    snap.taskId = "20260815-021423-ab12cd";
+    expect(deserializeChatSession(serializeChatSession(snap))!.taskId).toBe(
+      "20260815-021423-ab12cd",
+    );
+
+    // Without one, and on rows written before the field existed: null, never
+    // undefined and never a guess.
+    const bare = makeSnapshot();
+    const json = serializeChatSession(bare);
+    expect(json).not.toContain("taskId");
+    expect(deserializeChatSession(json)!.taskId).toBeNull();
+
+    const legacy = JSON.parse(json);
+    legacy.taskId = 42; // a corrupt row must not become a workspace path
+    expect(deserializeChatSession(JSON.stringify(legacy))!.taskId).toBeNull();
   });
 
   it("returns null for garbage, wrong versions, and missing fields", () => {

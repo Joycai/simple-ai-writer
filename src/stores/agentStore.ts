@@ -229,9 +229,10 @@ interface AgentState {
    * disk. Lazy, like the handle itself: a conversation that never plans or
    * takes a note leaves no directory behind.
    *
-   * Not persisted with the session blob yet, so reopening an old conversation
-   * starts a fresh workspace. Carrying it across a restart is PR-B's job (it is
-   * the same state `resumeTask` will need).
+   * The taskId rides in the session blob, so a conversation reopened from the
+   * history menu reconnects to its own notes (`workspaceForSnapshot`); restores
+   * must set this field explicitly — leaving it untouched hands the previous
+   * session's workspace to the restored one.
    */
   chatTaskWorkspace: TaskWorkspaceHandle | null;
   /** DB row this session saves into; null until the first persist. */
@@ -957,6 +958,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     try {
       const data = serializeChatSession({
         turns, history: chatHistory, meta: chatMeta, usage: chatUsage,
+        taskId: get().chatTaskWorkspace?.taskId ?? null,
       });
       const id = await upsertChatSession(
         projectPath, chatSessionId, data, sessionPreview(turns),
@@ -993,6 +995,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         chatUsage: snap.usage,
         chatSessionId: id,
         chatError: null,
+        // The restored conversation's own workspace — explicitly, because
+        // leaving the field alone would carry the *previous* session's handle
+        // across the switch and file new notes under another task.
+        chatTaskWorkspace: await workspaceForSnapshot(projectPath, snap.taskId),
         // The chips say "this conversation", so they cannot survive into a
         // different one. Not stored in the session blob either: a temporary
         // switch is not worth a format change (see resetChat).
@@ -1055,6 +1061,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             chatMeta: snap.meta,
             chatUsage: snap.usage,
             chatSessionId: sessions[0].id,
+            chatTaskWorkspace: await workspaceForSnapshot(projectPath, snap.taskId),
           });
         }
       }
@@ -1063,6 +1070,25 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     }
   },
 }));
+
+/**
+ * Rebind a restored session to its own task workspace — or to nothing.
+ *
+ * The workspace may have been GC'd since the session was saved (20-task cap);
+ * a handle to a pruned task would quietly resurrect an empty directory on the
+ * next note, so only a taskId whose task.md still parses gets a handle back.
+ */
+async function workspaceForSnapshot(
+  projectPath: string,
+  taskId: string | null,
+): Promise<TaskWorkspaceHandle | null> {
+  if (!taskId) return null;
+  try {
+    return (await loadTaskDoc(projectPath, taskId)) ? existingWorkspace(projectPath, taskId) : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Build the seed for resuming a paused task with a fresh, clean context.

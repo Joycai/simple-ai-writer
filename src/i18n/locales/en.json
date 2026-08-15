@@ -579,11 +579,23 @@
     },
     "taskWorkspace": {
       "title": "Task Workspace",
+      "backToChat": "← Back to Chat",
       "loading": "Loading…",
       "empty": "No task history",
-      "resume": "Resume & Continue",
-      "steps": "Task Steps",
-      "notes": "Saved Notes",
+      "resume": "Continue in a New Session",
+      "updatedAt": "Updated {{time}}",
+      "diskNote": "A paused task can continue in a new session — its plan and notes live on disk, independent of this conversation.",
+      "stepsProgress": "Steps · {{done}}/{{total}}",
+      "pausedHere": "paused here",
+      "notesCount": "Notes · {{n}}",
+      "noteChars": "{{n}} chars",
+      "noteSources": "{{n}} sources",
+      "noteOrigin": {
+        "search": "Search agent",
+        "vision": "Vision agent",
+        "longread": "Long-read agent",
+        "main": "Main model"
+      },
       "selectPrompt": "Select a task on the left to view details",
       "status": {
         "inProgress": "In Progress",
