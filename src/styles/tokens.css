@@ -22,6 +22,9 @@
   /* Settings rows, nav items — the reading size between chrome (13) and a
      heading (17). Added for the settings page; reuse it, don't inline 14px. */
   --font-size-base: 14px;
+  /* Generated/agent prose in the AI surfaces — Spectral at reading size,
+     between base (14) and lg (17). Pairs with line-height 1.85. */
+  --font-size-reading: 15px;
   --font-size-lg: 17px;
   --font-size-xl: 22px;
   --font-size-2xl: 32px;
@@ -168,6 +171,56 @@
   --glass-bg-strong:      rgba(251, 248, 240, 0.72);
   --glass-blur:           blur(16px);
   --glass-border:         1px solid rgba(60, 40, 20, 0.08);
+
+  /* ── AI 面板设计语言 (docs/design-system.md) ──
+     The dark values are the binding mockup; these are the paper equivalents,
+     derived from the light inline-bubble / consistency-check screens. */
+  --color-bg-inset:        #F1E8D5;   /* header/footer strips, inputs, card heads */
+  --color-bg-stream:       #F4EEE0;   /* run-stream column, tool-call list bg */
+  --color-bg-raised:       #FBF8F0;   /* user bubble, send button block */
+  --color-bg-selected:     #F1E0BD;   /* selected segment / 档位 chip bg */
+  --color-bg-accent-wash:  #F7EBD4;   /* active accent chips, current-step row */
+  --color-bg-active:       var(--color-bg-accent-wash);
+
+  --color-hairline:        #F1E8D5;   /* row separators inside lists/groups */
+  --color-border-panel:    #E5DCC9;   /* component frames, one per component max */
+  --color-border-input:    #E5DCC9;   /* textarea/composer/popover borders */
+  --color-border-muted:    #E5DCC9;   /* tertiary buttons, dashed excluded chips */
+  --color-border-emphasis: #C9966A;   /* secondary buttons, unchecked checkboxes */
+  --color-border-accent:   #C9966A;   /* accent-outline chips, icon box, approvals */
+
+  --color-accent-text:     #A0522D;   /* text on selected segments/chips */
+  --color-accent-deep:     #A0522D;   /* chip ×, 暂停于此, mid-ochre notes */
+  --color-on-accent:       #FBF8F0;   /* text on solid sienna buttons */
+  --color-text-prose:      #2A2520;   /* generated body (Spectral reading/1.85) */
+  --color-text-soft:       #5C5346;   /* secondary UI text */
+  --color-text-dim:        #736A5C;   /* meta, mono counts */
+  --color-text-label:      #8B7E6A;   /* 10px uppercase section headers */
+  --color-text-hint:       #8B7E6A;   /* placeholders, empty states */
+  --color-text-kbd:        #B5A99A;   /* kbd hints, |/／ separators, ghost stamps */
+
+  --color-success-text:    #8DA876;
+  --color-success-border:  #C9D6BB;
+  --color-success-bar:     #8DA876;
+  --color-error-node:      #A85D44;   /* timeline failure node */
+  --color-error-text-strong: #A85D44;
+  --color-error-surface:   #FDEAE2;
+  --color-error-body:      #5C5346;
+  --color-diff-del-text:   #A85D44;
+  --color-diff-del-bg:     #FDEAE2;
+  --color-diff-add-text:   #55663F;
+  --color-diff-add-bg:     rgba(141, 168, 118, 0.18);
+  --color-bar-track:       #E5DCC9;   /* progress/alloc track */
+  --color-alloc-lore:      #C9966A;   /* context-allocation bar: 设定 segment */
+  --color-alloc-memory:    #D9BC94;   /*                          前情 segment */
+  --color-ctx-chapter:     #C9966A;   /* chat memory bar: 章节 segment */
+
+  /* Previously referenced but never defined — real definitions so the
+     TaskWorkspaceView status badges stop rendering unstyled. */
+  --color-info-bg:         var(--color-type-video-bg);
+  --color-info-text:       var(--color-type-video-fg);
+  --color-danger-bg:       var(--color-error-bg);
+  --color-danger-text:     var(--color-error);
 }
 
 /* ───────── DARK · Night ───────── */
@@ -239,4 +292,52 @@
   --glass-bg-strong:      rgba(24, 20, 15, 0.62);
   --glass-blur:           blur(16px);
   --glass-border:         1px solid rgba(255, 220, 180, 0.06);
+
+  /* ── AI 面板设计语言 (docs/design-system.md) ──
+     Values transcribed from the AI-panel mockup (design project, 02 AI 面板);
+     the dark rendition is the acceptance reference. */
+  --color-bg-inset:        #17130F;
+  --color-bg-stream:       #1B1712;
+  --color-bg-raised:       #2A241C;
+  --color-bg-selected:     #2A211A;
+  --color-bg-accent-wash:  #241C15;
+  --color-bg-active:       var(--color-bg-accent-wash);
+
+  --color-hairline:        #241F19;
+  --color-border-panel:    #2E2820;
+  --color-border-input:    #3A332A;
+  --color-border-muted:    #332C24;
+  --color-border-emphasis: #4A4238;
+  --color-border-accent:   #6B4B2E;
+
+  --color-accent-text:     #E8B183;
+  --color-accent-deep:     #8E6540;
+  --color-on-accent:       #17130F;
+  --color-text-prose:      #D9CFC0;
+  --color-text-soft:       #B3A794;
+  --color-text-dim:        #8E8271;
+  --color-text-label:      #6E6455;
+  --color-text-hint:       #5E564A;
+  --color-text-kbd:        #4A4238;
+
+  --color-success-text:    #8DA876;
+  --color-success-border:  #3A4634;
+  --color-success-bar:     #6B7A57;
+  --color-error-node:      #C4614A;
+  --color-error-text-strong: #D98878;
+  --color-error-surface:   #231613;
+  --color-error-body:      #C9A79C;
+  --color-diff-del-text:   #B0705B;
+  --color-diff-del-bg:     rgba(138, 75, 59, 0.14);
+  --color-diff-add-text:   #9AB080;
+  --color-diff-add-bg:     rgba(76, 92, 63, 0.16);
+  --color-bar-track:       #241F19;
+  --color-alloc-lore:      #B3764A;
+  --color-alloc-memory:    #6B4B2E;
+  --color-ctx-chapter:     #B8875B;
+
+  --color-info-bg:         var(--color-type-video-bg);
+  --color-info-text:       var(--color-type-video-fg);
+  --color-danger-bg:       var(--color-error-bg);
+  --color-danger-text:     var(--color-error);
 }
