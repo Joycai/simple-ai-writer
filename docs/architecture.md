@@ -452,6 +452,21 @@ The sidebar's file tree supports drag-and-drop and a cut/copy/paste menu. Three 
 - Must include: `sql:*`, `dialog:*`, and read-only `fs` permissions (key storage uses custom `secret_*` commands, no plugin permission needed)
 - The fs plugin is granted **read-only** (`read-file`, `read-dir`) — all writes/deletes go through the audited custom `fs_*` Rust commands. The fs scope stays broad (`/**`) because projects can live anywhere on disk.
 
+### Window chrome（自定义标题栏，方案 B 混合）
+
+The app draws its own titlebar (`TitleBar.tsx`) and the OS chrome is handled per platform:
+
+- **macOS** — native traffic lights are kept, floating over our bar: `titleBarStyle: "Overlay"` + `hiddenTitle: true` in `tauri.conf.json`. The bar reserves a blank strip for them (`.macInset`, ~56px + bar padding), collapsed in fullscreen (the system hides the buttons there). Rounded corners / shadow / fullscreen animation / stage-manager behaviors all stay native. Traffic-light vertical centering in the 48px bar is the OS default (slightly high); if it ever needs pixel-perfect insetting, that's `tauri-plugin-decorum`'s `setTrafficLightsInset` — deliberately not pulled in yet.
+- **Windows** — `decorations: false` in **`tauri.windows.conf.json`**, and `TitleBar` renders its own caption buttons (minimize / maximize-restore / close, Segoe-style strokes, close hovers `#e81123`). Known trade-off: Win11 Snap Layouts on hover are lost (same decorum plugin would restore them). Edge resize + shadow are handled by Tauri for undecorated windows.
+- **Linux / plain browser** — base config keeps `decorations` on, so `useWindowControls` sees a decorated window and renders no buttons; outside Tauri entirely (plain `pnpm dev`), the bar falls back to the decorative 设计稿 dots.
+
+Wiring lives in `src/components/layout/useWindowControls.ts` (state + actions; `close()` goes through `window.close()` so `useWindowCloseFlush`'s autosave flush still runs). Dragging is `data-tauri-drag-region` on the bar, crumb and spacer — the attribute only works on the element it sits on directly, so child buttons stay clickable; double-click on a drag region toggles maximize (built into Tauri's injected handler).
+
+Two maintenance caveats:
+
+- **Platform config merge is JSON Merge Patch (RFC 7396): arrays are replaced whole.** `tauri.windows.conf.json` therefore repeats the *entire* window object, not just `decorations` — keep it in sync with the window in `tauri.conf.json` when editing either.
+- The window permissions behind all this are explicit in `capabilities/default.json`: `start-dragging`, `internal-toggle-maximize` (double-click), `minimize`, `toggle-maximize`, `close`, and the `is-maximized` / `is-fullscreen` / `is-decorated` getters.
+
 ### Content Security Policy
 - Production CSP is set in `tauri.conf.json` (`app.security.csp`); `devCsp` is `null` so Vite HMR keeps working in dev
 - `connect-src` allows `https:`/`http:` because users configure arbitrary AI endpoints (incl. local LLMs like Ollama); `script-src` is locked to `'self'`

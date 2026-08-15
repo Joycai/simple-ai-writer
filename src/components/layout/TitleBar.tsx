@@ -3,8 +3,9 @@ import { Sparkles } from "lucide-react";
 import { useAppStore, type ThemeMode, type Language } from "../../stores/appStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useEditorStore, type ViewMode } from "../../stores/editorStore";
-import { MOD_K } from "../../lib/platform";
+import { IS_TAURI, MOD_K } from "../../lib/platform";
 import { ExportMenu } from "./ExportMenu";
+import { useWindowControls } from "./useWindowControls";
 import styles from "./TitleBar.module.css";
 
 const THEME_ORDER: ThemeMode[] = ["dark", "light", "system"];
@@ -40,6 +41,7 @@ export function TitleBar() {
   } = useAppStore();
   const { projectPath, activeFilePath, wordCount } = useProjectStore();
   const { isDirty, viewMode, setViewMode } = useEditorStore();
+  const chrome = useWindowControls();
 
   const projectName = basename(projectPath) ?? t("titleBar.noProject");
   const fileName = basename(activeFilePath)?.replace(/\.md$/i, "") ?? null;
@@ -55,19 +57,32 @@ export function TitleBar() {
   };
 
   return (
-    <div className={styles.bar}>
-      <div className={styles.traffic}>
-        <span className={styles.trafficDot} />
-        <span className={styles.trafficDot} />
-        <span className={styles.trafficDot} />
-      </div>
-      <span className={styles.sep} />
+    <div
+      className={`${styles.bar} ${chrome.showCaptionButtons ? styles.barCaptions : ""}`}
+      data-tauri-drag-region
+    >
+      {/* Left edge, one of three chromes:
+          mac in Tauri  — blank inset under the native traffic lights (Overlay);
+          browser (dev) — the decorative dots of 设计稿 01;
+          undecorated   — nothing, caption buttons live on the right instead. */}
+      {chrome.macInset ? (
+        <div className={styles.macInset} data-tauri-drag-region />
+      ) : !IS_TAURI ? (
+        <>
+          <div className={styles.traffic}>
+            <span className={styles.trafficDot} />
+            <span className={styles.trafficDot} />
+            <span className={styles.trafficDot} />
+          </div>
+          <span className={styles.sep} />
+        </>
+      ) : null}
       <span className={styles.brandIcon}>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
           <path d="M12 2 L22 8 L12 14 L2 8 Z M2 16 L12 22 L22 16" />
         </svg>
       </span>
-      <div className={styles.crumb}>
+      <div className={styles.crumb} data-tauri-drag-region>
         <span className={fileName ? styles.crumbMid : styles.crumbCurrent}>{projectName}</span>
         {volumeName && (
           <>
@@ -84,7 +99,7 @@ export function TitleBar() {
         )}
       </div>
 
-      <div className={styles.spacer} />
+      <div className={styles.spacer} data-tauri-drag-region />
 
       <div className={styles.right}>
         {activeFilePath && (
@@ -141,6 +156,50 @@ export function TitleBar() {
           AI · {MOD_K}
         </button>
       </div>
+
+      {/* Undecorated Windows: our own caption buttons, Segoe-style strokes.
+          Order and semantics follow the OS: minimize / maximize-restore / close. */}
+      {chrome.showCaptionButtons && (
+        <div className={styles.captions}>
+          <button
+            className={styles.captionBtn}
+            onClick={chrome.minimize}
+            aria-label={t("titleBar.minimize")}
+            title={t("titleBar.minimize")}
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10">
+              <path d="M0 5 H10" stroke="currentColor" strokeWidth="1" fill="none" />
+            </svg>
+          </button>
+          <button
+            className={styles.captionBtn}
+            onClick={chrome.toggleMaximize}
+            aria-label={t(chrome.isMaximized ? "titleBar.restore" : "titleBar.maximize")}
+            title={t(chrome.isMaximized ? "titleBar.restore" : "titleBar.maximize")}
+          >
+            {chrome.isMaximized ? (
+              <svg width="10" height="10" viewBox="0 0 10 10">
+                <rect x="0.5" y="2.5" width="7" height="7" stroke="currentColor" strokeWidth="1" fill="none" />
+                <path d="M2.5 2.5 V0.5 H9.5 V7.5 H7.5" stroke="currentColor" strokeWidth="1" fill="none" />
+              </svg>
+            ) : (
+              <svg width="10" height="10" viewBox="0 0 10 10">
+                <rect x="0.5" y="0.5" width="9" height="9" stroke="currentColor" strokeWidth="1" fill="none" />
+              </svg>
+            )}
+          </button>
+          <button
+            className={`${styles.captionBtn} ${styles.captionClose}`}
+            onClick={chrome.close}
+            aria-label={t("titleBar.close")}
+            title={t("titleBar.close")}
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10">
+              <path d="M0 0 L10 10 M10 0 L0 10" stroke="currentColor" strokeWidth="1" fill="none" />
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

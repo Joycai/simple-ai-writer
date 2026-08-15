@@ -11,6 +11,18 @@
   font-size: var(--font-size-md);
 }
 
+/* Undecorated Windows: caption buttons sit flush against the window edge. */
+.barCaptions {
+  padding-right: 0;
+}
+
+/* macOS Overlay mode: blank strip under the native traffic lights.
+   The bar already pads 18px, lights span to ≈70px from the window edge. */
+.macInset {
+  width: 56px;
+  flex-shrink: 0;
+}
+
 .traffic {
   display: flex;
   gap: 7px;
@@ -161,4 +173,31 @@
 }
 .ctrlChevron {
   color: var(--color-text-muted);
+}
+
+/* Caption buttons (undecorated Windows) — full-height hit targets, zero
+   radius per the global rule; close turns the platform's warning red. */
+.captions {
+  display: flex;
+  align-self: stretch;
+  flex-shrink: 0;
+}
+.captionBtn {
+  width: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--color-text-dim);
+  cursor: default;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.captionBtn:hover {
+  background: var(--color-bg-elevated);
+  color: var(--color-text-primary);
+}
+.captionClose:hover {
+  background: #e81123;
+  color: #fff;
 }
