@@ -74,6 +74,13 @@ export interface ChatSnapshot {
   history: StreamMessage[];
   meta: ChatSessionMeta;
   usage: PersistedUsage | null;
+  /**
+   * Disk task workspace this conversation writes into, if it created one. A
+   * restored session must reconnect to *its own* notes: without this, reopening
+   * an old conversation started a fresh workspace — and worse, switching left
+   * the previous session's handle live, filing new notes under another task.
+   */
+  taskId: string | null;
 }
 
 /** On-disk shape. Bump `v` on breaking changes; old versions restore as null. */
@@ -91,6 +98,8 @@ interface SerializedChat {
     lastDocPath: string | null;
   };
   usage: PersistedUsage | null;
+  /** Additive since 1.16 — older rows simply lack it, older readers ignore it. */
+  taskId?: string;
 }
 
 export function serializeChatSession(snap: ChatSnapshot): string {
@@ -114,6 +123,7 @@ export function serializeChatSession(snap: ChatSnapshot): string {
       lastDocPath: snap.meta.lastDocPath,
     },
     usage: snap.usage,
+    ...(snap.taskId ? { taskId: snap.taskId } : {}),
   };
   return JSON.stringify(data);
 }
@@ -196,6 +206,7 @@ export function deserializeChatSession(json: string): ChatSnapshot | null {
     history: data.history,
     meta,
     usage: data.usage ?? null,
+    taskId: typeof data.taskId === "string" ? data.taskId : null,
   };
 }
 

@@ -6,13 +6,28 @@
   color: var(--color-text-primary);
 }
 
+/* ── Header: back link · title · task.md path (mockup 1g) ─────────────────── */
+
 .header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: var(--space-3);
   padding: var(--space-3) var(--space-5);
   background: var(--color-bg-inset);
   border-bottom: 1px solid var(--color-border-panel);
+}
+
+.backBtn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font: 400 12px/1 var(--font-sans);
+  color: var(--color-accent-text);
+  cursor: pointer;
+}
+
+.backBtn:hover {
+  color: var(--color-text-primary);
 }
 
 .headerTitle {
@@ -20,20 +35,16 @@
   color: var(--color-text-primary);
 }
 
-.closeBtn {
-  background: transparent;
-  border: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  padding: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.headerSpacer {
+  flex: 1;
 }
 
-.closeBtn:hover {
-  color: var(--color-text-primary);
-  background: var(--color-bg-hover);
+.headerPath {
+  font: 400 11px/1 var(--font-mono);
+  color: var(--color-text-hint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .content {
@@ -138,42 +149,34 @@
   gap: var(--space-4);
 }
 
+/* ── Detail head: title · status badge · updated-at, disk note under ──────── */
+
 .detailHeader {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.detailTitleRow {
+  display: flex;
+  align-items: baseline;
   gap: var(--space-3);
-  padding-bottom: var(--space-3);
-  border-bottom: 1px solid var(--color-hairline);
 }
 
 .detailTitle {
-  font: 400 20px/1.3 var(--font-serif);
+  font: 400 22px/1.2 var(--font-serif);
   color: var(--color-text-primary);
 }
 
-.detailTaskId {
-  font: 400 11px/1.5 var(--font-mono);
+.updatedAt {
+  font: 400 11px/1 var(--font-mono);
   color: var(--color-text-hint);
-  margin-top: 4px;
-}
-
-.resumeBtn {
-  padding: 8px 16px;
-  background: var(--color-sienna);
-  color: var(--color-on-accent);
-  border: none;
-  font: 500 12px/1.4 var(--font-sans);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
   flex-shrink: 0;
-  transition: background var(--transition-fast);
 }
 
-.resumeBtn:hover {
-  background: var(--color-sienna-hover);
+.diskNote {
+  font: 400 12px/1.6 var(--font-sans);
+  color: var(--color-text-label);
 }
 
 .section {
@@ -189,7 +192,8 @@
   letter-spacing: 0.14em;
 }
 
-/* Steps live in one bordered list with hairline rows (mockup 1g). */
+/* ── Steps: one bordered list, hairline rows, 1g square vocabulary ────────── */
+
 .stepsList {
   display: flex;
   flex-direction: column;
@@ -201,43 +205,121 @@
 
 .stepRow {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-3);
   padding: 11px 14px;
   font: 400 13px/1.5 var(--font-serif);
-  color: var(--color-text-soft);
   border-bottom: 1px solid var(--color-hairline);
 }
 .stepRow:last-child { border-bottom: none; }
 
-.stepGlyph {
-  font: 400 12px/1 var(--font-mono);
-  color: var(--color-text-dim);
+.step_done .stepTitle { color: var(--color-text-soft); }
+.step_pending .stepTitle { color: var(--color-text-dim); }
+.step_in_progress {
+  background: var(--color-bg-selected);
 }
-
-.notesGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: var(--space-2);
-}
-
-.noteCard {
-  border: 1px solid var(--color-border-panel);
-  padding: var(--space-2) var(--space-3);
-  background: var(--color-bg-inset);
-}
-
-.noteTitle {
-  font: 400 12px/1.5 var(--font-mono);
-  color: var(--color-text-soft);
-  margin-bottom: 2px;
-  word-break: break-all;
-}
-
-.notePath {
-  font: 400 10px/1.4 var(--font-mono);
+.step_in_progress .stepTitle { color: var(--color-text-primary); }
+.step_skipped .stepTitle {
   color: var(--color-text-hint);
+  text-decoration: line-through;
+}
+
+.markDone {
+  stroke: var(--color-success-text);
+  flex-shrink: 0;
+}
+
+.markCurrent,
+.markPending {
+  width: 8px;
+  height: 8px;
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.markCurrent { background: var(--color-sienna); }
+.markPending { border: 1px solid var(--color-border-muted); }
+
+.markSkipped {
+  width: 12px;
+  text-align: center;
+  font: 400 11px/1 var(--font-mono);
+  color: var(--color-text-hint);
+  flex-shrink: 0;
+}
+
+.pausedHere {
+  font: 400 11px/1 var(--font-mono);
+  color: var(--color-warning-text);
+  flex-shrink: 0;
+}
+
+/* ── Notes: same bordered hairline list — filename + origin/size meta ─────── */
+
+.notesList {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--color-border-panel);
+}
+
+.noteRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--color-hairline);
+}
+.noteRow:last-child { border-bottom: none; }
+
+.noteIcon {
+  color: var(--color-text-soft);
+  flex-shrink: 0;
+}
+
+.noteName {
+  font: 400 12.5px/1 var(--font-mono);
+  color: var(--color-text-soft);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.noteMeta {
+  font: 400 11px/1 var(--font-sans);
+  color: var(--color-text-hint);
+  flex-shrink: 0;
+}
+
+/* ── Footer: (token ledger slot, B2) · resume CTA ─────────────────────────── */
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-bg-inset);
+  border-top: 1px solid var(--color-border-panel);
+}
+
+.resumeBtn {
+  padding: 8px 16px;
+  background: var(--color-sienna);
+  color: var(--color-on-accent);
+  border: none;
+  font: 500 12px/1.4 var(--font-sans);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--transition-fast);
+}
+
+.resumeBtn:hover {
+  background: var(--color-sienna-hover);
+}
+
+.resumeBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }

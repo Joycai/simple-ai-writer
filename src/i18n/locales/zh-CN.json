@@ -575,11 +575,23 @@
     },
     "taskWorkspace": {
       "title": "任务工作区",
+      "backToChat": "← 返回对话",
       "loading": "加载中…",
       "empty": "暂无历史任务",
-      "resume": "恢复并继续",
-      "steps": "任务步骤",
-      "notes": "相关笔记",
+      "resume": "在新会话中继续",
+      "updatedAt": "更新于 {{time}}",
+      "diskNote": "暂停的任务可在新会话中继续——计划与笔记都在磁盘上，不依赖当前对话。",
+      "stepsProgress": "步骤 · {{done}}/{{total}}",
+      "pausedHere": "暂停于此",
+      "notesCount": "笔记 · {{n}}",
+      "noteChars": "{{n}} 字",
+      "noteSources": "{{n}} 条来源",
+      "noteOrigin": {
+        "search": "检索子代理",
+        "vision": "视觉子代理",
+        "longread": "长读子代理",
+        "main": "主模型"
+      },
       "selectPrompt": "从左侧选择一个任务查看详情",
       "status": {
         "inProgress": "进行中",

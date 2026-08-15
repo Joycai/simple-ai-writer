@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CheckSquare, Clock, FileText, MinusSquare, Play, Square, X } from "lucide-react";
+import { FileText } from "lucide-react";
 import { useAgentStore } from "../../stores/agentStore";
 import { useProjectStore } from "../../stores/projectStore";
 import {
@@ -13,10 +13,33 @@ import {
   type TaskStep,
   type TaskSummary,
 } from "../../lib/agent/taskWorkspace";
+import { formatTokenCount } from "../../lib/agent/logFormat";
 import styles from "./TaskWorkspaceView.module.css";
 
 interface TaskWorkspaceViewProps {
   onClose: () => void;
+}
+
+/**
+ * Step state in the 1g vocabulary — the same square marks TaskPanel speaks,
+ * sized for a reading row: success check, filled sienna square (current),
+ * outlined square (pending), mono dash (skipped).
+ */
+function StepMark({ status }: { status: TaskStep["status"] }) {
+  if (status === "done") {
+    return (
+      <svg className={styles.markDone} width="12" height="12" viewBox="0 0 24 24" fill="none" strokeWidth="2" aria-hidden>
+        <path d="M5 12 L10 17 L20 7" />
+      </svg>
+    );
+  }
+  if (status === "skipped") return <span className={styles.markSkipped} aria-hidden>–</span>;
+  return (
+    <span
+      className={status === "in_progress" ? styles.markCurrent : styles.markPending}
+      aria-hidden
+    />
+  );
 }
 
 export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
@@ -104,29 +127,47 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
     }
   };
 
-  const renderStepIcon = (status: TaskStep["status"]) => {
-    switch (status) {
-      case "done":
-        return <CheckSquare size={13} strokeWidth={2} style={{ color: "var(--color-success-text)" }} />;
-      case "in_progress":
-        return <Clock size={13} strokeWidth={2} style={{ color: "var(--color-info-text)" }} />;
-      case "skipped":
-        return <MinusSquare size={13} strokeWidth={2} style={{ color: "var(--color-text-muted)" }} />;
-      case "pending":
-      default:
-        return <Square size={13} strokeWidth={1.8} style={{ color: "var(--color-text-muted)" }} />;
+  /** Right-hand meta of a note row: who filed it, how big, what it cites. */
+  const noteMeta = (note: TaskNoteHeader): string => {
+    const parts: string[] = [];
+    if (note.origin) {
+      parts.push(
+        t(`ai.taskWorkspace.noteOrigin.${note.origin}`, { defaultValue: note.origin }),
+      );
     }
+    parts.push(
+      t("ai.taskWorkspace.noteChars", {
+        defaultValue: "{{n}} 字",
+        n: formatTokenCount(note.chars),
+      }),
+    );
+    if (note.sources) {
+      parts.push(
+        t("ai.taskWorkspace.noteSources", { defaultValue: "{{n}} 条来源", n: note.sources }),
+      );
+    }
+    return parts.join(" · ");
   };
+
+  const stepsDone = selectedSteps.filter(
+    (s) => s.status === "done" || s.status === "skipped",
+  ).length;
+  const selectedTask = tasks.find((task) => task.taskId === selectedId);
+  const isPaused = selectedDoc?.meta.status === "paused";
 
   return (
     <div className={styles.container}>
       <div className={styles.header}>
+        <button className={styles.backBtn} onClick={onClose}>
+          {t("ai.taskWorkspace.backToChat", { defaultValue: "← 返回对话" })}
+        </button>
         <div className={styles.headerTitle}>
           {t("ai.taskWorkspace.title", { defaultValue: "任务工作区" })}
         </div>
-        <button className={styles.closeBtn} onClick={onClose} aria-label="Close">
-          <X size={15} strokeWidth={1.8} />
-        </button>
+        <div className={styles.headerSpacer} />
+        {selectedId && (
+          <span className={styles.headerPath}>.ai-writer/tasks/{selectedId}/task.md</span>
+        )}
       </div>
 
       <div className={styles.content}>
@@ -171,36 +212,58 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
           {selectedDoc && selectedId ? (
             <>
               <div className={styles.detailHeader}>
-                <div>
+                <div className={styles.detailTitleRow}>
                   <div className={styles.detailTitle}>
-                    {tasks.find((t) => t.taskId === selectedId)?.title || selectedId}
+                    {selectedTask?.title || selectedId}
                   </div>
-                  <div className={styles.detailTaskId}>
-                    ID: {selectedId} · {new Date(selectedDoc.meta.updatedAt).toLocaleString()}
-                  </div>
-                </div>
-                {selectedDoc.meta.status !== "completed" && (
-                  <button
-                    className={styles.resumeBtn}
-                    onClick={() => handleResume(selectedId)}
-                    disabled={chatRunning}
+                  <span
+                    className={`${styles.statusBadge} ${getStatusClass(selectedDoc.meta.status)}`}
                   >
-                    <Play size={12} strokeWidth={2.2} />
-                    {t("ai.taskWorkspace.resume", { defaultValue: "恢复并继续" })}
-                  </button>
+                    {getStatusLabel(selectedDoc.meta.status)}
+                  </span>
+                  <div className={styles.headerSpacer} />
+                  <span className={styles.updatedAt}>
+                    {t("ai.taskWorkspace.updatedAt", {
+                      defaultValue: "更新于 {{time}}",
+                      time: new Date(selectedDoc.meta.updatedAt).toLocaleString(),
+                    })}
+                  </span>
+                </div>
+                {isPaused && (
+                  <div className={styles.diskNote}>
+                    {t("ai.taskWorkspace.diskNote", {
+                      defaultValue:
+                        "暂停的任务可在新会话中继续——计划与笔记都在磁盘上，不依赖当前对话。",
+                    })}
+                  </div>
                 )}
               </div>
 
               {selectedSteps.length > 0 && (
                 <div className={styles.section}>
                   <div className={styles.sectionTitle}>
-                    {t("ai.taskWorkspace.steps", { defaultValue: "任务步骤" })}
+                    {t("ai.taskWorkspace.stepsProgress", {
+                      defaultValue: "步骤 · {{done}}/{{total}}",
+                      done: stepsDone,
+                      total: selectedSteps.length,
+                    })}
                   </div>
                   <ul className={styles.stepsList}>
                     {selectedSteps.map((step) => (
-                      <li key={step.index} className={styles.stepRow}>
-                        {renderStepIcon(step.status)}
-                        <span>{step.title}</span>
+                      <li
+                        key={step.index}
+                        className={`${styles.stepRow} ${styles[`step_${step.status}`]}`}
+                      >
+                        <StepMark status={step.status} />
+                        <span className={styles.stepTitle}>{step.title}</span>
+                        {isPaused && step.status === "in_progress" && (
+                          <>
+                            <div className={styles.headerSpacer} />
+                            <span className={styles.pausedHere}>
+                              {t("ai.taskWorkspace.pausedHere", { defaultValue: "暂停于此" })}
+                            </span>
+                          </>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -210,19 +273,23 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
               {selectedNotes.length > 0 && (
                 <div className={styles.section}>
                   <div className={styles.sectionTitle}>
-                    {t("ai.taskWorkspace.notes", { defaultValue: "相关笔记" })} ({selectedNotes.length})
+                    {t("ai.taskWorkspace.notesCount", {
+                      defaultValue: "笔记 · {{n}}",
+                      n: selectedNotes.length,
+                    })}
                   </div>
-                  <div className={styles.notesGrid}>
+                  <ul className={styles.notesList}>
                     {selectedNotes.map((note) => (
-                      <div key={note.slug} className={styles.noteCard}>
-                        <div className={styles.noteTitle}>
-                          <FileText size={12} strokeWidth={1.8} style={{ marginRight: 4, verticalAlign: -1 }} />
-                          {note.title}
-                        </div>
-                        <div className={styles.notePath}>{note.path}</div>
-                      </div>
+                      <li key={note.slug} className={styles.noteRow}>
+                        <FileText size={12} strokeWidth={1.6} className={styles.noteIcon} />
+                        <span className={styles.noteName} title={note.title}>
+                          {note.slug}.md
+                        </span>
+                        <div className={styles.headerSpacer} />
+                        <span className={styles.noteMeta}>{noteMeta(note)}</span>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 </div>
               )}
             </>
@@ -232,6 +299,21 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
             </div>
           )}
         </div>
+      </div>
+
+      <div className={styles.footer}>
+        {/* Left half stays empty until the per-task token ledger exists
+            (token_usage has no taskId column yet — subagent-lld §7.3). */}
+        <div className={styles.headerSpacer} />
+        {selectedDoc && selectedId && selectedDoc.meta.status !== "completed" && (
+          <button
+            className={styles.resumeBtn}
+            onClick={() => handleResume(selectedId)}
+            disabled={chatRunning}
+          >
+            {t("ai.taskWorkspace.resume", { defaultValue: "在新会话中继续" })}
+          </button>
+        )}
       </div>
     </div>
   );

@@ -352,6 +352,7 @@ export async function executeDelegate(
     title: task.slice(0, 80),
     content: output,
     sources: refs,
+    origin: kind,
   });
 
   return {

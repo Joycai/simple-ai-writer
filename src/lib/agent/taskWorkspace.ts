@@ -50,12 +50,26 @@ export interface TaskDoc {
   body: string;
 }
 
+/**
+ * Who filed a note: one of the subagent kinds, or the main model's own
+ * `write_note`. Declared here rather than imported from `subagent.ts` because
+ * that module already imports this one — the kinds are a stable wire vocabulary
+ * either way (they appear verbatim in saved note headers).
+ */
+export type NoteOrigin = "search" | "vision" | "longread" | "main";
+
+const NOTE_ORIGINS: readonly NoteOrigin[] = ["search", "vision", "longread", "main"];
+
 export interface TaskNoteHeader {
   slug: string;
   title: string;
   /** Project-relative path, e.g. .ai-writer/tasks/<taskId>/notes/<slug>.md */
   path: string;
   chars: number;
+  /** Which agent filed it. Absent on notes saved before origins were recorded. */
+  origin?: NoteOrigin;
+  /** How many sources the note cites. Absent when none were recorded. */
+  sources?: number;
   /**
    * Set when the requested slug was taken and a suffix was appended, so the
    * caller can tell the model the real filename instead of the one it asked
@@ -74,6 +88,36 @@ export interface TaskWorkspaceHandle {
 // ─── Regex & Formatting ──────────────────────────────────────────────────────
 
 const TASK_META_RE = /^<!--\s*ai-writer-task\s*\n([\s\S]*?)\n-->/;
+/**
+ * Machine header on a note file — same convention as task.md and
+ * lib/context/memory.ts: an HTML comment survives markdown rendering and the
+ * author's hand-edits alike. One line, because a note body is free-form prose
+ * and the header must be droppable without touching it.
+ */
+const NOTE_META_RE = /^<!--\s*ai-writer-note\s+(\{.*?\})\s*-->\s*\n?/;
+
+interface NoteMeta {
+  origin?: NoteOrigin;
+  sources?: number;
+}
+
+function parseNoteMeta(raw: string): NoteMeta {
+  const m = raw.match(NOTE_META_RE);
+  if (!m) return {};
+  try {
+    const data = JSON.parse(m[1]) as Record<string, unknown>;
+    return {
+      ...(NOTE_ORIGINS.includes(data.origin as NoteOrigin)
+        ? { origin: data.origin as NoteOrigin }
+        : {}),
+      ...(typeof data.sources === "number" && data.sources > 0
+        ? { sources: data.sources }
+        : {}),
+    };
+  } catch {
+    return {};
+  }
+}
 /**
  * A step is any markdown checkbox line, indented or not.
  *
@@ -420,7 +464,7 @@ const MAX_SLUG_ATTEMPTS = 50;
 export async function writeTaskNote(
   projectPath: string,
   taskId: string,
-  opts: { slug: string; title: string; content: string; sources?: string[] },
+  opts: { slug: string; title: string; content: string; sources?: string[]; origin?: NoteOrigin },
 ): Promise<TaskNoteHeader> {
   const base = sanitizeSlug(opts.slug);
   const notesDir = taskNotesDir(projectPath, taskId);
@@ -436,7 +480,16 @@ export async function writeTaskNote(
     slug = `${base}-${n}`;
   }
 
-  let body = `# ${opts.title.trim()}\n\n`;
+  const meta: NoteMeta = {
+    ...(opts.origin ? { origin: opts.origin } : {}),
+    ...(opts.sources && opts.sources.length > 0 ? { sources: opts.sources.length } : {}),
+  };
+
+  let body = "";
+  if (Object.keys(meta).length > 0) {
+    body += `<!-- ai-writer-note ${JSON.stringify(meta)} -->\n`;
+  }
+  body += `# ${opts.title.trim()}\n\n`;
   if (opts.sources && opts.sources.length > 0) {
     body += `> ${i18n.t("ai.taskDoc.sources")}\n${opts.sources.map((s) => `> - ${s}`).join("\n")}\n\n`;
   }
@@ -449,6 +502,7 @@ export async function writeTaskNote(
     title: opts.title.trim(),
     path: `.ai-writer/tasks/${taskId}/notes/${slug}.md`,
     chars: body.length,
+    ...meta,
     ...(slug === base ? {} : { renamedFrom: base }),
   };
 }
@@ -536,14 +590,16 @@ export async function listTaskNotes(projectPath: string, taskId: string): Promis
     if (entry.isDirectory || !entry.name.endsWith(".md")) continue;
     try {
       const content = await readFile(entry.path);
-      const firstLine = content.split("\n")[0] || "";
-      const title = firstLine.replace(/^#+\s*/, "").trim() || entry.name.replace(/\.md$/, "");
+      // First heading, not first line — the machine header may sit above it.
+      const title =
+        content.match(/^#\s+(.+)$/m)?.[1].trim() || entry.name.replace(/\.md$/, "");
       const slug = entry.name.replace(/\.md$/, "");
       headers.push({
         slug,
         title,
         path: `.ai-writer/tasks/${taskId}/notes/${entry.name}`,
         chars: content.length,
+        ...parseNoteMeta(content),
       });
     } catch {
       // skip unreadable note

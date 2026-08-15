@@ -171,6 +171,46 @@ describe("taskWorkspace file operations & GC", () => {
     expect(read.content).toContain("林德曼家族起源于第三纪元");
   });
 
+  it("records who filed a note, and the list reads it back", async () => {
+    const handle = createTaskWorkspace(projectPath, "mdl-1");
+    const { taskId } = await handle.ensure("研究任务");
+
+    const written = await writeTaskNote(projectPath, taskId, {
+      slug: "longread-第四章通读",
+      title: "第四章通读",
+      content: "内容",
+      sources: ["writing/ch4.md", "writing/ch5.md"],
+      origin: "longread",
+    });
+    expect(written.origin).toBe("longread");
+    expect(written.sources).toBe(2);
+
+    const [note] = await listTaskNotes(projectPath, taskId);
+    expect(note.origin).toBe("longread");
+    expect(note.sources).toBe(2);
+    // The machine header sits above the H1 — the title must still be the H1.
+    expect(note.title).toBe("第四章通读");
+  });
+
+  it("tolerates notes from before origins were recorded, and corrupt headers", async () => {
+    const handle = createTaskWorkspace(projectPath, "mdl-1");
+    const { taskId } = await handle.ensure("研究任务");
+    const notesDir = `/project/.ai-writer/tasks/${taskId}/notes`;
+    fs.set(`${notesDir}/legacy.md`, "# 旧笔记\n\n正文\n");
+    fs.set(`${notesDir}/corrupt.md`, "<!-- ai-writer-note {not json} -->\n# 坏头\n\n正文\n");
+
+    const list = await listTaskNotes(projectPath, taskId);
+    const legacy = list.find((n) => n.slug === "legacy")!;
+    expect(legacy.origin).toBeUndefined();
+    expect(legacy.sources).toBeUndefined();
+    expect(legacy.title).toBe("旧笔记");
+    expect(legacy.chars).toBeGreaterThan(0);
+
+    const corrupt = list.find((n) => n.slug === "corrupt")!;
+    expect(corrupt.origin).toBeUndefined();
+    expect(corrupt.title).toBe("坏头");
+  });
+
   it("prunes excess completed/failed tasks in gcTasks while retaining active tasks", async () => {
     // Populate 25 task directories
     for (let i = 1; i <= 25; i++) {
