@@ -26,13 +26,13 @@
   color: var(--color-text-muted);
 }
 .statStrong { color: var(--color-text-primary); font-weight: 500; }
-.statConflict { color: var(--color-error); }
+.statConflict { color: var(--color-error-text-strong); }
 .statWarning { color: var(--color-warning-text); }
 .statPass { color: var(--color-success); }
 .statSep {
   width: 1px;
   height: 11px;
-  background: var(--color-border);
+  background: var(--color-border-panel);
 }
 
 .filterTabs {
@@ -69,11 +69,13 @@
 
 .issue {
   background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
-  border-left: 3px solid var(--color-border-strong);
+  border: 1px solid var(--color-border-panel);
+  /* Severity bars are semantic marks, a documented exception to the
+     no-colored-left-border rule (docs/design-system.md). */
+  border-left: 3px solid var(--color-border-emphasis);
   padding: 12px 16px;
 }
-.issueConflict { border-left-color: var(--color-error); }
+.issueConflict { border-left-color: var(--color-error-node); }
 .issueWarning { border-left-color: var(--color-warning); }
 .issuePass { border-left-color: var(--color-success); }
 
@@ -92,7 +94,7 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
-.sevConflict { background: var(--color-error-bg); color: var(--color-error); }
+.sevConflict { background: var(--color-error-bg); color: var(--color-error-text-strong); }
 .sevWarning  { background: var(--color-warning-bg); color: var(--color-warning-text); }
 .issueTitle {
   font: 500 13px/1.2 var(--font-serif);
@@ -100,7 +102,7 @@
 }
 .issueMeta {
   font: 400 11px/1 var(--font-sans);
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
 }
 .spacer { flex: 1; }
 .linkBtn {
@@ -130,7 +132,7 @@
   padding-top: 2px;
   font: 500 10px/1.4 var(--font-sans);
   letter-spacing: 0.15em;
-  color: var(--color-text-muted);
+  color: var(--color-text-label);
   text-transform: uppercase;
 }
 .highlight {
@@ -163,10 +165,10 @@
 
 .error {
   padding: 10px 12px;
-  border-left: 2px solid var(--color-error);
-  background: var(--color-error-bg);
+  border-left: 2px solid var(--color-error-node);
+  background: var(--color-error-surface);
   font: 400 11px/1.7 var(--font-sans);
-  color: var(--color-text-secondary);
+  color: var(--color-error-body);
   word-break: break-word;
 }
 
@@ -192,7 +194,7 @@
   overflow: hidden;
   text-align: left;
   font: 400 10px/1.6 var(--font-mono);
-  color: var(--color-text-faint);
+  color: var(--color-text-hint);
   white-space: pre-wrap;
   word-break: break-all;
 }
@@ -214,7 +216,7 @@
 .actBtnPrimary {
   padding: 5px 11px;
   background: var(--color-sienna);
-  color: var(--color-card);
+  color: var(--color-on-accent);
   border: none;
   font: 500 11px/1 var(--font-sans);
   cursor: pointer;
@@ -225,7 +227,7 @@
 .actBtnSecondary {
   padding: 5px 11px;
   background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-strong);
+  border: 1px solid var(--color-border-emphasis);
   color: var(--color-sienna);
   font: 500 11px/1 var(--font-sans);
   cursor: pointer;
@@ -236,13 +238,13 @@
 .actBtnGhost {
   padding: 5px 11px;
   background: transparent;
-  border: 1px solid var(--color-border);
-  color: var(--color-text-muted);
+  border: 1px solid var(--color-border-panel);
+  color: var(--color-text-dim);
   font: 500 11px/1 var(--font-sans);
   cursor: pointer;
   transition: color var(--transition-fast), border-color var(--transition-fast);
 }
-.actBtnGhost:hover:not(:disabled) { color: var(--color-text-primary); border-color: var(--color-border-strong); }
+.actBtnGhost:hover:not(:disabled) { color: var(--color-text-primary); border-color: var(--color-border-emphasis); }
 .actBtnGhost:active:not(:disabled) { transform: scale(0.97); }
 .actBtnPrimary:disabled,
 .actBtnGhost:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -251,8 +253,8 @@
 
 .passSummary {
   margin-top: auto;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-panel);
 }
 .passToggle {
   width: 100%;
@@ -292,9 +294,9 @@
 }
 .passItem {
   padding: 4px 9px;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-panel);
   font: 400 11px/1.5 var(--font-sans);
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
 }
 
 .emptyState {
@@ -320,7 +322,7 @@
 .emptyBtn {
   padding: 9px 16px;
   background: var(--color-sienna);
-  color: var(--color-card);
+  color: var(--color-on-accent);
   border: none;
   font: 500 12px/1 var(--font-sans);
   cursor: pointer;
@@ -328,11 +330,11 @@
 
 .footer {
   padding: 12px 24px;
-  border-top: 1px solid var(--color-border-soft);
+  border-top: 1px solid var(--color-border-panel);
   display: flex;
   align-items: center;
   gap: 10px;
-  background: var(--color-bg-elevated);
+  background: var(--color-bg-inset);
 }
 .footerHint {
   flex: 1;
@@ -364,11 +366,11 @@
 .reasoningBody {
   margin: var(--space-2) 0 0;
   padding-left: var(--space-3);
-  border-left: 1px solid var(--color-border);
+  border-left: 1px solid var(--color-border-muted);
   max-height: 220px;
   overflow-y: auto;
   font: italic 400 12px/1.75 var(--font-serif);
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }

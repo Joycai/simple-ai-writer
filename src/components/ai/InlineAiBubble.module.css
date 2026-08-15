@@ -2,7 +2,7 @@
   position: fixed;
   width: 360px;
   background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-strong);
+  border: 1px solid var(--color-border-accent);
   box-shadow: var(--shadow-md);
   z-index: 80;
   animation: scaleIn 160ms var(--ease-out);
@@ -16,8 +16,8 @@
   width: 12px;
   height: 12px;
   background: var(--color-bg-surface);
-  border-right: 1px solid var(--color-border-strong);
-  border-bottom: 1px solid var(--color-border-strong);
+  border-right: 1px solid var(--color-border-accent);
+  border-bottom: 1px solid var(--color-border-accent);
   transform: rotate(45deg);
 }
 
@@ -26,8 +26,8 @@
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--color-border-soft);
-  background: var(--color-bg-elevated);
+  border-bottom: 1px solid var(--color-hairline);
+  background: var(--color-bg-inset);
 }
 .headLabel {
   font: 500 11px/1 var(--font-sans);
@@ -52,17 +52,17 @@
 /* The hand-off group — same rows, a hairline to say the outcome differs. */
 .gridHandoff {
   padding-top: 6px;
-  border-top: 1px solid var(--color-border-soft);
+  border-top: 1px solid var(--color-hairline);
 }
 
-.customRow { padding: 6px 10px 10px; border-top: 1px dashed var(--color-border-soft); }
+.customRow { padding: 6px 10px 10px; border-top: 1px dashed var(--color-hairline); }
 .customField {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 7px 10px;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-panel);
   transition: border-color var(--transition-fast);
 }
 .customField:focus-within { border-color: var(--color-sienna); }
@@ -76,7 +76,7 @@
   font: italic 400 12px/1.4 var(--font-serif);
   color: var(--color-text-primary);
 }
-.customInput::placeholder { color: var(--color-text-faint); }
+.customInput::placeholder { color: var(--color-text-hint); }
 .customInput:disabled { cursor: not-allowed; }
 .customKbd {
   font: 500 10px/1 var(--font-mono);
@@ -96,7 +96,7 @@
   cursor: pointer;
   transition: background var(--transition-fast);
 }
-.action:hover:not(:disabled) { background: var(--color-bg-elevated); }
+.action:hover:not(:disabled) { background: var(--color-bg-hover); }
 .action:disabled { opacity: 0.4; cursor: not-allowed; }
 .actionIcon { color: var(--color-sienna); display: flex; flex-shrink: 0; }
 .actionLabel { flex: 1; }
