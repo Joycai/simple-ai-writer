@@ -142,7 +142,6 @@
   appearance: none;
   width: 100%;
   height: 4px;
-  border-radius: 2px;
   background: var(--color-border-strong);
   outline: none;
   cursor: pointer;
