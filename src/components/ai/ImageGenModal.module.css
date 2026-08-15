@@ -1,5 +1,204 @@
-/* Image generation modal — the fields and result grid. The shell (overlay,
-   panel, header, footer, buttons) is shared with LoreImproveModal.module.css. */
+/* Image generation modal (mockup 1e) — fields, result grid, and its own shell.
+   The shell used to be borrowed from LoreImproveModal.module.css; it lives here
+   now so the AI surfaces can move without dragging the lore modals along. */
+
+/* ── Shell ── */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--color-bg-overlay);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: var(--space-4);
+  animation: fadeIn 200ms var(--ease-out);
+}
+
+.panel {
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border-panel);
+  width: 100%;
+  max-width: 680px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-xl);
+  overflow: hidden;
+  animation: scaleIn 240ms var(--ease-out);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-bg-inset);
+  border-bottom: 1px solid var(--color-border-panel);
+  flex-shrink: 0;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.headerAvatarPlaceholder {
+  width: 34px;
+  height: 34px;
+  background: transparent;
+  border: 1px solid var(--color-border-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-sienna);
+  flex-shrink: 0;
+}
+
+.headerName {
+  font: 400 18px/1.2 var(--font-serif);
+  color: var(--color-text-primary);
+}
+
+.headerSub {
+  font: 400 var(--font-size-xs)/1.4 var(--font-sans);
+  color: var(--color-text-hint);
+  margin-top: 2px;
+}
+
+.modelSelect {
+  padding: 5px 8px;
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border-muted);
+  color: var(--color-text-soft);
+  font: 400 11px/1.5 var(--font-mono);
+  outline: none;
+  cursor: pointer;
+  max-width: 200px;
+  transition: border-color var(--transition-fast);
+}
+.modelSelect:focus { border-color: var(--color-sienna); }
+
+.closeBtn {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.closeBtn:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.label {
+  font: 400 11px/1.4 var(--font-sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-label);
+}
+
+/* 画面描述 is written prose — it reads in the manuscript face. */
+.textarea {
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-input);
+  color: var(--color-text-prose);
+  font: 400 13.5px/1.7 var(--font-serif);
+  resize: vertical;
+  outline: none;
+  transition: border-color var(--transition-fast);
+  box-sizing: border-box;
+}
+.textarea:focus { border-color: var(--color-sienna); }
+.textarea::placeholder { color: var(--color-text-hint); }
+
+.error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-error-surface);
+  border-left: 2px solid var(--color-error-node);
+  color: var(--color-error-body);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--color-border-panel);
+  flex-shrink: 0;
+  background: var(--color-bg-inset);
+}
+
+.footerRight {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.btnPrimary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 18px;
+  background: var(--color-sienna);
+  color: var(--color-on-accent);
+  font: 500 var(--font-size-sm)/1.4 var(--font-sans);
+  transition: background var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast);
+}
+.btnPrimary:hover:not(:disabled) { background: var(--color-sienna-hover); }
+.btnPrimary:active:not(:disabled) { transform: scale(0.98); }
+.btnPrimary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btnSecondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 14px;
+  background: transparent;
+  border: 1px solid var(--color-border-muted);
+  color: var(--color-text-soft);
+  font: 400 var(--font-size-sm)/1.4 var(--font-sans);
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.btnSecondary:hover { color: var(--color-accent-text); border-color: var(--color-border-accent); }
+.btnSecondary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btnAbort {
+  padding: 10px 16px;
+  background: var(--color-error-surface);
+  color: var(--color-error-text-strong);
+  font: 500 var(--font-size-sm)/1.4 var(--font-sans);
+  border: 1px solid var(--color-error-node);
+  transition: opacity var(--transition-fast);
+}
+.btnAbort:hover { opacity: 0.85; }
+
+/* ── Fields ── */
 
 .labelRow {
   display: flex;
@@ -12,26 +211,24 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  padding: 3px var(--space-2);
+  padding: 4px var(--space-2);
   background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-muted);
+  color: var(--color-text-soft);
   font-size: var(--font-size-xs);
   font-family: inherit;
   cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+  transition: color var(--transition-fast), border-color var(--transition-fast);
 }
 .draftBtn:hover:not(:disabled) {
-  background: var(--color-bg-elevated);
-  border-color: var(--color-accent);
-  color: var(--color-text-primary);
+  border-color: var(--color-border-accent);
+  color: var(--color-accent-text);
 }
 .draftBtn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .hint {
   font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+  color: var(--color-text-hint);
   line-height: 1.5;
 }
 
@@ -53,9 +250,9 @@
 
 .modelPickerLabel {
   font-size: 10px;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--color-text-muted);
+  color: var(--color-text-label);
 }
 
 /* Facet chips — multi-select, so they toggle in place rather than behaving
@@ -67,23 +264,23 @@
 }
 
 .facetChip {
-  padding: 3px var(--space-3);
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-full, 999px);
-  color: var(--color-text-secondary);
+  padding: 5px var(--space-3);
+  background: transparent;
+  border: 1px solid var(--color-border-muted);
+  color: var(--color-text-soft);
   font-size: var(--font-size-xs);
   font-family: inherit;
   cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
-.facetChip:hover:not(:disabled) { border-color: var(--color-accent); color: var(--color-text-primary); }
+.facetChip:hover:not(:disabled) { border-color: var(--color-border-accent); color: var(--color-accent-text); }
 .facetChip:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* Selected 档位 = solid accent block with dark ink text (mockup 1e). */
 .facetChipOn {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: var(--color-bg-base, #fff);
+  background: var(--color-sienna);
+  border-color: var(--color-sienna);
+  color: var(--color-on-accent);
 }
 
 .fieldRow {
@@ -108,27 +305,26 @@
   flex: none;
 }
 
+/* Size/count values are data — mono. */
 .input {
   width: 100%;
   padding: var(--space-2) var(--space-3);
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-panel);
   color: var(--color-text-primary);
-  font-size: var(--font-size-sm);
-  font-family: inherit;
+  font: 400 var(--font-size-xs)/1.6 var(--font-mono);
   outline: none;
   transition: border-color var(--transition-fast);
   box-sizing: border-box;
 }
-.input:focus { border-color: var(--color-accent); }
+.input:focus { border-color: var(--color-sienna); }
 .input:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .costHint {
   margin-left: auto;
   padding-bottom: var(--space-2);
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+  font: 400 var(--font-size-xs)/1.5 var(--font-mono);
+  color: var(--color-text-hint);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -146,9 +342,8 @@
   width: 132px;
   height: 132px;
   padding: 0;
-  background: var(--color-bg-surface);
-  border: 2px solid var(--color-border);
-  border-radius: var(--radius-md);
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-panel);
   overflow: hidden;
   cursor: pointer;
   transition: border-color var(--transition-fast), transform var(--transition-fast);
@@ -160,7 +355,7 @@
   display: block;
 }
 .thumb:hover:not(:disabled) { transform: translateY(-1px); }
-.thumbActive { border-color: var(--color-accent); }
+.thumbActive { border-color: var(--color-sienna); box-shadow: inset 0 0 0 1px var(--color-sienna); }
 .thumb:disabled { cursor: not-allowed; }
 
 /* Edit box — the conversational half. Sits directly under the candidates so
@@ -182,53 +377,50 @@
 }
 
 .turnChip {
-  padding: 2px var(--space-2);
+  padding: 4px var(--space-2);
   max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   background: transparent;
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-muted);
+  border: 1px dashed var(--color-border-muted);
+  color: var(--color-text-hint);
   font-size: 11px;
   font-family: inherit;
   cursor: pointer;
   transition: color var(--transition-fast), border-color var(--transition-fast);
 }
-.turnChip:hover:not(:disabled) { color: var(--color-text-primary); border-color: var(--color-accent); }
+.turnChip:hover:not(:disabled) { color: var(--color-text-primary); border-color: var(--color-border-accent); }
 .turnChip:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .turnChipOn {
   border-style: solid;
-  border-color: var(--color-accent);
-  color: var(--color-text-primary);
+  border-color: var(--color-border-accent);
+  color: var(--color-accent-text);
 }
 
 /* A regeneration that stood in for an edit. Warned about rather than styled as
    an error: the run succeeded, it just didn't do what was asked. */
 .degraded {
   padding: var(--space-2) var(--space-3);
-  background: color-mix(in srgb, var(--color-warning, #d08c3c) 12%, transparent);
-  border-left: 2px solid var(--color-warning, #d08c3c);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-secondary);
+  background: var(--color-warning-bg);
+  border-left: 2px solid var(--color-warning);
+  color: var(--color-text-soft);
   font-size: var(--font-size-xs);
   line-height: 1.6;
 }
 
 .revised {
   font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
   line-height: 1.6;
   padding: var(--space-2) var(--space-3);
-  background: var(--color-bg-elevated);
-  border-radius: var(--radius-sm);
+  background: var(--color-bg-inset);
 }
 
 .revisedLabel {
   display: block;
-  font-weight: 600;
-  color: var(--color-text-secondary);
+  font-weight: 500;
+  color: var(--color-text-soft);
   margin-bottom: 2px;
 }
