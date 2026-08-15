@@ -33,8 +33,9 @@
   /* Radius — manuscript is square-cornered (设计稿 01/04: 全局无圆角).
      Every module reads var(--radius-*), so zeroing the scale here squares the
      whole app at once. The only sanctioned circles are dot indicators,
-     spinners, switch knobs and radio marks — those read --radius-round
-     (or border-radius: 50%) explicitly, never the scale. */
+     spinners and radio marks — those read --radius-round (or
+     border-radius: 50%) explicitly, never the scale. Switch knobs are
+     square too (设计稿 04). */
   --radius-sm: 0;
   --radius-md: 0;
   --radius-lg: 0;
@@ -263,6 +264,7 @@
   --stg-line-row:         #F1E9D6;   /* row separators */
   --stg-line-section:     #E7DCC4;   /* section-title rules */
   --stg-kbd-border:       #DFD3B8;
+  --stg-knob:             #A99C7F;   /* switch off-knob */
   --stg-bar:              #C68B5A;   /* usage share bars */
   --stg-focus-ring:       rgba(169, 81, 43, 0.3);
   --stg-overlay:          rgba(72, 63, 48, 0.30);
@@ -418,6 +420,7 @@
   --stg-line-row:         #241F19;
   --stg-line-section:     #2E2820;
   --stg-kbd-border:       #3A332A;
+  --stg-knob:             #8E8271;
   --stg-bar:              #B3764A;
   --stg-focus-ring:       rgba(217, 146, 91, 0.35);
   --stg-overlay:          rgba(0, 0, 0, 0.55);

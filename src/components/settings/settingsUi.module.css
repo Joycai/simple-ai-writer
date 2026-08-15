@@ -166,32 +166,31 @@
 
 /* ─── Toggle switch ──────────────────────────────────────────────────────── */
 
+/* 设计稿 04: bordered square track, flat square knob. Reads --stg-* directly —
+   the off-border and knob tones have no generic --color-* role. */
 .toggle {
   flex: none;
   position: relative;
-  width: 40px;
+  width: 42px;
   height: 22px;
   padding: 0;
-  border: none;
-  border-radius: var(--radius-pill);
-  background: var(--color-border-strong);
+  border: 1px solid var(--stg-border-menu);
+  background: var(--stg-card-head);
   cursor: pointer;
-  transition: background var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
-.toggleOn { background: var(--color-accent); }
+.toggleOn { background: var(--stg-accent); border-color: var(--stg-accent); }
 
 .toggleKnob {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--color-bg-surface);
-  box-shadow: var(--shadow-sm);
-  transition: left var(--transition-fast);
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  background: var(--stg-knob);
+  transition: left var(--transition-fast), background var(--transition-fast);
 }
-.toggleOn .toggleKnob { left: 20px; }
+.toggleOn .toggleKnob { left: 24px; background: var(--stg-bg-input); }
 
 /* ─── Selectable cards (font scheme, markdown theme, workspace profile) ──── */
 
