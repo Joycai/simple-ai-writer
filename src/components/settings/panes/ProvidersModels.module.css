@@ -416,6 +416,7 @@
   color: var(--color-text-secondary);
   cursor: pointer;
 }
+.checkLabel input { accent-color: var(--color-sienna); }
 
 @media (max-width: 900px) {
   .head { padding: var(--space-4) var(--space-4) 0; }

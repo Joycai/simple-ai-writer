@@ -80,6 +80,7 @@
   color: var(--color-text-muted);
   cursor: pointer;
 }
+.deepToggle input { accent-color: var(--color-sienna); }
 
 .confirmNote {
   font-size: var(--font-size-xs);
