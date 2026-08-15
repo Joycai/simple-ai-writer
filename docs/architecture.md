@@ -156,10 +156,12 @@ Asking for N assembles the context **once** and then fires N independent `stream
 
 ### Workspace profiles (工作台档案)
 
-- **Location** — `src/lib/profile/` (`model.ts` types + built-ins + validation, `active.ts` singleton, `store.ts` persistence)
-- **Stored at** — `.ai-writer/profile.json`, per project. **Absent means the novel profile**, so every project created before profiles existed keeps behaving identically.
+- **Location** — `src/lib/profile/` (`model.ts` pack types + built-ins + validation, `resolve.ts` the multi-pack merge, `file.ts` profile.json v1/v2 parsing, `active.ts` singleton holding the merged `ResolvedWorkspace`, `store.ts` persistence)
+- **Stored at** — `.ai-writer/profile.json`, per project. v2 is a selection — `{version: 2, primary, enabled: [ids], packs: [custom]}`; a v1 file (the whole object is one profile) still reads as that pack alone, and is only rewritten as v2 when the author changes the selection. **Absent means the novel pack alone**, so every project created before profiles existed keeps behaving identically.
 
-A profile declares what kind of writing a project is, so a new domain is data rather than new branches in `TaskKind`:
+A project **enables one or more capability packs**; each pack declares one kind of writing, so a new domain is data rather than new branches in `TaskKind`. `resolveWorkspace(primary, enabled)` merges them: **categories union** (deduped case-insensitively by id — a shared id like `style` is the same directory; first declarer labels it, `packIds` records every declarer), **tasks union** (first declarer wins; the base 续写/润色/… set every pack re-tunes dedupes silently to the primary's copy, and each `ResolvedTask` carries the `packId` that `sectionLabel`/`profileSystemPrompt` resolve wording against), while **the primary pack alone** owns `docModel`, `terms` and the fallback wording — a project either is an ordered book or isn't, whatever else it enables.
+
+Per pack:
 
 | Field | Drives |
 | --- | --- |
@@ -169,7 +171,7 @@ A profile declares what kind of writing a project is, so a new domain is data ra
 | `docModel` | Which novel-shaped document machinery applies — see below |
 | `systemPromptKey` | Which i18n system prompt is the fallback when no prompt template is active |
 
-Built-ins: `novel` (the default), `ttrpg` (跑团模组), `copy` (文案), `wechat` (微信公众号), `weekly` (周报), `feedback` (反馈报告) and `bid` (标书应答). Switching is Settings → 工作台, which calls `projectStore.setProfile()`: persist → scaffold the new folders → rescan. **Non-destructive** — the previous categories' folders and entities stay on disk and reappear on switching back; they are simply not scanned while another profile is active.
+Built-ins: `novel` (the default), `ttrpg` (跑团模组), `copy` (文案), `wechat` (微信公众号), `weekly` (周报), `feedback` (反馈报告) and `bid` (标书应答). Selection is Settings → 工作台 — click a card to make that pack primary, toggle a card to enable/disable it as a secondary — which calls `projectStore.setPacks(primaryId, enabledIds)`: persist (v2) → scaffold the union's folders → rescan. **Non-destructive** — a disabled pack's category folders and entities stay on disk (the pane notes "N 个分类目录仍有内容") and reappear on re-enabling; they are simply not scanned meanwhile. The AI panel groups the task menu by pack (`visibleTaskGroups`): the primary's menu flat, each secondary's own tasks under a pack-name eyebrow.
 
 #### Tasks (`tasks`)
 

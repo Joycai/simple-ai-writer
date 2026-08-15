@@ -36,7 +36,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { findTask, taskLabel } from "../../lib/profile";
+import { findTask, taskLabel, taskPackLabel } from "../../lib/profile";
 import { useTerms } from "../../stores/projectStore";
 import { ChevronDown, ChevronRight, Bot, Eye, Globe, ScrollText } from "lucide-react";
 import type { AgentEvent, ToolStep } from "../../lib/agent/events";
@@ -317,7 +317,10 @@ function AgentLogRow({ row, showTime, runStatus }: {
               // raw id, which is what a log line from another profile has.
               task: (() => {
                 const def = findTask(event.task);
-                return def ? taskLabel(def, isZh, t) : event.task;
+                if (!def) return event.task;
+                // A secondary pack's task carries its pack, like the menu.
+                const pack = taskPackLabel(def, isZh);
+                return pack ? `${taskLabel(def, isZh, t)} · ${pack}` : taskLabel(def, isZh, t);
               })(),
               model: event.modelName,
             })}
@@ -559,7 +562,9 @@ function useHeadline(model: AgentLogModel): string {
       ? t("ai.agent.log.start", {
           task: (() => {
             const def = findTask(start.task);
-            return def ? taskLabel(def, isZh, t) : start.task;
+            if (!def) return start.task;
+            const pack = taskPackLabel(def, isZh);
+            return pack ? `${taskLabel(def, isZh, t)} · ${pack}` : taskLabel(def, isZh, t);
           })(),
           model: start.modelName,
         })
