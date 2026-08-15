@@ -10,6 +10,39 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--color-bg-base);
+
+  /* ── 设置页色系接入 (设计稿 04) ──
+     The settings surface keeps its own warm-paper family, one step lighter
+     than the workspace, and reads in Source Serif 4 / Noto Serif SC. Every
+     pane, drawer and dialog under this subtree consumes the same --color-*
+     vocabulary as the rest of the app, so the palette swap happens here
+     once: each consumed role is re-pointed at its --stg-* token (defined
+     per-theme in tokens.css) instead of restyling eighteen modules. */
+  --font-serif: var(--font-serif-settings);
+
+  --color-bg-base:        var(--stg-bg);
+  --color-bg-surface:     var(--stg-bg-input);
+  --color-card:           var(--stg-card);
+  --color-bg-elevated:    var(--stg-card-head);
+  --color-bg-hover:       var(--stg-stat);
+  --color-bg-overlay:     var(--stg-overlay);
+
+  --color-sienna:         var(--stg-accent);
+  --color-sienna-hover:   var(--stg-accent-hover);
+  --color-accent-ring:    var(--stg-focus-ring);
+
+  --color-text-primary:   var(--stg-text);
+  --color-text-secondary: var(--stg-text-secondary);
+  --color-text-muted:     var(--stg-text-desc);
+  --color-text-faint:     var(--stg-text-faint);
+  --color-text-ghost:     var(--stg-text-placeholder);
+
+  --color-border:         var(--stg-border);
+  --color-border-soft:    var(--stg-line-row);
+  --color-border-strong:  var(--stg-border-mid);
+
+  --color-tag-bg:         var(--stg-badge-bg);
+  --color-tag-text:       var(--stg-badge-text);
 }
 
 /* ─── Header ──────────────────────────────────────────────────────────────── */
