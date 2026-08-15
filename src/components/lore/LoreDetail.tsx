@@ -456,11 +456,13 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
       {showAiHub && (
         <EntityAiHubModal
           entityName={entity.name}
+          imageGenReady={imageGenReady}
           onClose={() => setShowAiHub(false)}
           onPick={(task) => {
             setShowAiHub(false);
             if (task === "meta") setShowMetaImprove(true);
             else if (task === "improve") setShowImprove(true);
+            else if (task === "image") setShowImageGen(true);
             else setShowSplit(true);
           }}
         />

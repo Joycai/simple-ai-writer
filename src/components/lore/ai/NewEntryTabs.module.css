@@ -1,34 +1,39 @@
-/* Segmented toggle shared by the two new-entry modes (manual form / AI extract).
-   Sits at the top of each modal so switching modes feels like one flow. */
+/* New-entry mode tabs (设计稿 03 · 新建条目): text tabs with a 2px sienna
+   underline on the active one, faint right-side context note. */
 
 .tabs {
   display: flex;
-  gap: 3px;
-  padding: 3px;
-  border-radius: var(--radius-md);
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
+  align-items: flex-end;
+  gap: 20px;
+  border-bottom: 1px solid var(--color-border-soft);
 }
 
 .tab {
-  flex: 1;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 6px;
-  padding: 7px 12px;
-  border-radius: var(--radius-sm);
+  padding: 0 0 12px;
   background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font: 400 15px/1 var(--font-serif);
   color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-  font-weight: 500;
   cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition: color var(--transition-fast);
 }
 .tab:hover { color: var(--color-text-primary); }
 
 .tabActive {
-  background: var(--color-bg-base);
-  color: var(--color-accent);
-  box-shadow: var(--shadow-sm);
+  font-weight: 500;
+  color: var(--color-sienna);
+  border-bottom-color: var(--color-sienna);
+}
+
+.spacer { flex: 1; }
+
+.note {
+  font: 400 10px/1 var(--font-sans);
+  color: var(--color-text-faint);
+  padding-bottom: 12px;
 }

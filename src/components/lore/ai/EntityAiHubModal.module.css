@@ -1,60 +1,55 @@
-/* Entity-level AI task chooser. Chrome (overlay/panel/header) reused from
-   LoreImproveModal.module.css; this file only styles the task cards. */
+/* Entity-level AI task chooser (设计稿 03 · 实体 AI 中心): 2×2 动作格，
+   1px #ECE2CE 缝隙线。 Overlay/panel chrome reused from
+   LoreImproveModal.module.css; this file styles header + grid. */
 
-.list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.card {
+.head {
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--color-border-soft);
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-elevated);
-  text-align: left;
+  gap: 10px;
+}
+
+.headTitle {
+  font: 400 17px/1 var(--font-serif);
+  color: var(--color-text-primary);
+}
+
+.headKbd {
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-faint);
+}
+
+.spacer { flex: 1; }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--color-border-soft);
+}
+
+.cell {
+  background: var(--color-card);
+  padding: 16px 20px;
   cursor: pointer;
-  transition: border-color var(--transition-fast), background var(--transition-fast), transform var(--transition-fast);
+  border: none;
+  text-align: left;
+  transition: background var(--transition-fast);
 }
-.card:hover {
-  border-color: var(--color-accent);
-  background: var(--color-accent-tint);
-  transform: translateY(-1px);
-}
-.card:active { transform: translateY(0) scale(0.99); }
-
-.icon {
-  width: 34px;
-  height: 34px;
-  flex-shrink: 0;
-  border-radius: var(--radius-md);
-  background: var(--color-bg-base);
-  border: 1px solid var(--color-border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-accent);
-}
-
-.text { flex: 1; min-width: 0; }
+.cell:hover:not(:disabled) { background: var(--color-bg-base); }
+.cell:active:not(:disabled) { transform: scale(0.99); }
+.cell:disabled { cursor: not-allowed; }
+.cell:disabled .name,
+.cell:disabled .desc { opacity: 0.45; }
 
 .name {
-  font-size: var(--font-size-sm);
-  font-weight: 600;
+  font: 500 13px/1 var(--font-serif);
   color: var(--color-text-primary);
 }
 
 .desc {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  margin-top: 2px;
-  line-height: 1.4;
-}
-
-.chevron {
-  flex-shrink: 0;
-  color: var(--color-text-muted);
+  font: 400 11px/1.6 var(--font-sans);
+  color: var(--color-text-label);
+  margin-top: 6px;
 }

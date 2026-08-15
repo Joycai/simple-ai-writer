@@ -23,7 +23,7 @@ export function NewEntryTabs({ value, onChange }: Props) {
         className={`${styles.tab} ${value === "manual" ? styles.tabActive : ""}`}
         onClick={() => onChange("manual")}
       >
-        <Plus size={13} strokeWidth={2} /> {t("lore.newEntry.manual", { defaultValue: "手动创建" })}
+        <Plus size={13} strokeWidth={2} /> {t("lore.newEntry.manual", { defaultValue: "手动录入" })}
       </button>
       <button
         className={`${styles.tab} ${value === "ai" ? styles.tabActive : ""}`}
@@ -31,6 +31,8 @@ export function NewEntryTabs({ value, onChange }: Props) {
       >
         <Sparkles size={13} strokeWidth={1.7} /> {t("lore.newEntry.ai", { defaultValue: "AI 提取" })}
       </button>
+      <span className={styles.spacer} />
+      <span className={styles.note}>{t("lore.panel.newEntry", { defaultValue: "新建条目" })}</span>
     </div>
   );
 }
