@@ -14,7 +14,7 @@
   flex-direction: column;
   flex: 0 0 clamp(330px, 42%, 520px);
   min-height: 0;
-  border-right: 1px solid var(--color-border-soft);
+  border-right: 1px solid var(--color-border-panel);
 }
 .configScroll {
   flex: 1;
@@ -31,10 +31,11 @@
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-3) var(--space-6) var(--space-4);
-  border-top: 1px solid var(--color-border-soft);
-  background: var(--color-bg-elevated);
+  border-top: 1px solid var(--color-border-panel);
+  background: var(--color-bg-inset);
 }
 
+/* The run stream sits one step below the recipe — depth by bg, not borders. */
 .resultCol {
   flex: 1;
   min-width: 0;
@@ -42,7 +43,7 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  background: var(--color-bg-surface);
+  background: var(--color-bg-stream);
 }
 .resultScroll {
   flex: 1;
@@ -81,9 +82,10 @@
   min-height: 20px;
 }
 .sectionLabel {
-  font: 500 11px/1.4 var(--font-sans);
-  letter-spacing: 0.16em;
-  color: var(--color-text-muted);
+  font: 500 10px/1.4 var(--font-sans);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--color-text-label);
   white-space: nowrap;
 }
 /* Meta + action share one right-aligned group so neither fights the other for
@@ -98,7 +100,7 @@
 }
 .sectionMeta {
   font: 400 11px/1.4 var(--font-mono);
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -111,7 +113,7 @@
 
 .emptyHint {
   font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+  color: var(--color-text-hint);
   text-align: center;
   padding: var(--space-8) var(--space-3);
   line-height: 1.7;
@@ -119,12 +121,12 @@
 
 .hintLine {
   font: 400 11px/1.6 var(--font-sans);
-  color: var(--color-text-muted);
+  color: var(--color-text-label);
 }
 .warnLine {
   font: 400 11px/1.6 var(--font-sans);
-  color: var(--color-accent);
-  background: var(--color-accent-tint);
+  color: var(--color-accent-text);
+  background: var(--color-bg-accent-wash);
   padding: 6px 9px;
 }
 .errorLine {
@@ -156,14 +158,14 @@
   gap: 5px;
   align-self: flex-start;
   padding: 5px 10px;
-  background: var(--color-accent-tint);
-  color: var(--color-accent);
-  border-radius: var(--radius-md);
+  background: var(--color-bg-accent-wash);
+  color: var(--color-accent-text);
+  border: 1px solid var(--color-border-accent);
   font: 500 11px/1.4 var(--font-sans);
   cursor: pointer;
   transition: background var(--transition-fast), transform var(--transition-fast);
 }
-.batchBtn:hover:not(:disabled) { background: var(--color-accent-tint-strong); }
+.batchBtn:hover:not(:disabled) { background: var(--color-bg-selected); }
 .batchBtn:active:not(:disabled) { transform: scale(0.97); }
 .batchBtn:disabled { opacity: 0.45; cursor: default; }
 
@@ -176,33 +178,35 @@
   display: flex;
   flex-wrap: wrap;
   gap: 1px;
-  background: var(--color-border);
-  border: 1px solid var(--color-border);
+  background: var(--color-border-panel);
+  border: 1px solid var(--color-border-panel);
 }
 .taskSegment {
   /* Grow to fill the row, but never below a readable width — squeezing a 4-glyph
      label into a seventh of the panel is what the wrap exists to avoid. */
   flex: 1 1 auto;
   min-width: 4.5em;
-  padding: 8px 4px;
-  background: var(--color-bg-surface);
+  padding: 11px 4px;
+  background: var(--color-bg-inset);
   border: none;
-  color: var(--color-text-secondary);
-  font: 500 13px/1.4 var(--font-sans);
+  color: var(--color-text-muted);
+  font: 400 14px/1.4 var(--font-serif);
   cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 .taskSegment:hover:not(:disabled):not(.taskSegmentActive) {
-  background: var(--color-bg-elevated);
+  background: var(--color-bg-hover);
   color: var(--color-text-primary);
 }
 .taskSegment:disabled { opacity: 0.4; cursor: not-allowed; }
+/* Selected = the tab language: warmed cell + ochre baseline, no outline box. */
 .taskSegmentActive {
   position: relative;
   z-index: 1;
-  background: var(--color-accent-tint);
-  color: var(--color-sienna);
-  box-shadow: inset 0 0 0 1px var(--color-sienna);
+  background: var(--color-bg-selected);
+  color: var(--color-accent-text);
+  font-weight: 500;
+  box-shadow: inset 0 -2px 0 var(--color-sienna);
 }
 
 /* ── Edit target card ────────────────────────────────────────────── */
@@ -210,16 +214,17 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: 8px 12px;
-  background: var(--color-bg-surface);
-  border-left: 2px solid var(--color-sienna);
+  padding: 10px 12px;
+  background: var(--color-bg-inset);
+  border-left: 2px solid var(--color-border-accent);
 }
 .targetLabel {
   flex: 1;
   min-width: 0;
-  font: 400 12px/1.4 var(--font-sans);
-  color: var(--color-text-secondary);
+  font: 400 12px/1.5 var(--font-sans);
+  color: var(--color-text-muted);
 }
+.targetLabel strong, .targetLabel b { color: var(--color-text-soft); font-weight: 400; }
 
 /* ── Controls: label + chip row (+ unit) ─────────────────────────── */
 .controlRow {
@@ -228,17 +233,18 @@
   align-items: center;
   gap: var(--space-2);
 }
+/* Row labels form a quiet left column so the chip groups align vertically. */
 .controlLabel {
-  font: 500 11px/1.4 var(--font-sans);
-  letter-spacing: 0.16em;
+  font: 400 12px/1.4 var(--font-sans);
   color: var(--color-text-muted);
   white-space: nowrap;
   flex-shrink: 0;
+  min-width: 62px;
 }
 .controlUnit {
   margin-left: auto;
-  font: 400 11px/1.4 var(--font-sans);
-  color: var(--color-text-faint);
+  font: 400 11px/1.4 var(--font-mono);
+  color: var(--color-text-label);
 }
 
 .chipGroup {
@@ -249,31 +255,33 @@
 }
 
 .chip {
-  padding: 3px 11px;
-  font: 500 11px/1.6 var(--font-mono);
+  padding: 5px 11px;
+  font: 400 11px/1.6 var(--font-mono);
   background: transparent;
-  border: 1px solid var(--color-border);
-  color: var(--color-text-muted);
+  border: 1px solid var(--color-border-panel);
+  color: var(--color-text-dim);
   cursor: pointer;
   transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
 }
-.chip:hover:not(:disabled) { border-color: var(--color-sienna); color: var(--color-sienna); }
-.chipActive {
-  background: var(--color-accent-tint);
+.chip:hover:not(:disabled) { border-color: var(--color-border-accent); color: var(--color-accent-text); }
+.chipActive,
+.chipActive:hover:not(:disabled) {
+  background: var(--color-bg-selected);
   border-color: var(--color-sienna);
-  color: var(--color-sienna);
+  color: var(--color-accent-text);
+  font-weight: 500;
 }
 .chip:disabled { opacity: 0.4; cursor: not-allowed; }
-.chip:disabled:hover { border-color: var(--color-border); color: var(--color-text-muted); }
+.chip:disabled:hover { border-color: var(--color-border-panel); color: var(--color-text-dim); }
 
 /* Free-form lore budget entry for values the presets don't cover. */
 .budgetInput {
   width: 58px;
-  padding: 3px 7px;
+  padding: 5px 7px;
   background: transparent;
-  border: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  font: 500 11px/1.6 var(--font-mono);
+  border: 1px solid var(--color-border-panel);
+  color: var(--color-text-soft);
+  font: 400 11px/1.6 var(--font-mono);
   text-align: right;
   outline: none;
   box-sizing: border-box;
@@ -288,9 +296,9 @@
 .select {
   flex: 1;
   min-width: 0;
-  padding: 4px 8px;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
+  padding: 5px 8px;
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-panel);
   color: var(--color-text-primary);
   font: 400 11px/1.6 var(--font-sans);
   outline: none;
@@ -299,19 +307,24 @@
 .select:focus { border-color: var(--color-sienna); }
 
 /* ── Context allocation bar ──────────────────────────────────────── */
+/* Inset trough with a 2px air gap — the segments read as ink strokes, not a
+   filled progress bar. Free space is a visible track, never blank border. */
 .allocBar {
   display: flex;
-  height: 8px;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
+  gap: 2px;
+  height: 10px;
+  padding: 2px;
+  box-sizing: border-box;
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-panel);
   overflow: hidden;
 }
 .allocSeg { display: block; min-width: 1px; }
 
 .allocSeg_recent { background: var(--color-sienna); }
-.allocSeg_lore   { background: var(--color-amber); }
-.allocSeg_memory { background: var(--color-amber-soft); }
-.allocSeg_free   { background: transparent; }
+.allocSeg_lore   { background: var(--color-alloc-lore); }
+.allocSeg_memory { background: var(--color-alloc-memory); }
+.allocSeg_free   { background: var(--color-bar-track); }
 
 .allocLegend {
   display: flex;
@@ -321,32 +334,32 @@
 .allocLegendItem {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font: 400 11px/1.4 var(--font-sans);
-  color: var(--color-text-muted);
+  gap: 6px;
+  font: 400 11px/1.4 var(--font-mono);
+  color: var(--color-text-dim);
 }
 .allocSwatch {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   flex-shrink: 0;
 }
-.allocSwatch.allocSeg_free { box-shadow: inset 0 0 0 1px var(--color-border-strong); }
+.allocSwatch.allocSeg_free { box-shadow: inset 0 0 0 1px var(--color-border-input); }
 .allocLegendValue {
   font-family: var(--font-mono);
-  color: var(--color-text-secondary);
+  color: var(--color-text-soft);
   font-variant-numeric: tabular-nums;
 }
 
 /* ── Story-memory coverage ───────────────────────────────────────── */
 .progressTrack {
   height: 3px;
-  background: var(--color-border);
+  background: var(--color-bar-track);
   overflow: hidden;
 }
 .progressFill {
   display: block;
   height: 100%;
-  background: var(--color-success);
+  background: var(--color-success-bar);
   transition: width var(--transition-base);
 }
 .progressFillStale { background: var(--color-warning); }
@@ -354,16 +367,16 @@
 /* ── Lore picker ─────────────────────────────────────────────────── */
 .searchInput {
   width: 100%;
-  padding: 6px 10px;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
+  padding: 8px 12px;
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-panel);
   color: var(--color-text-primary);
-  font: 400 11px/1.6 var(--font-sans);
+  font: 400 12px/1.6 var(--font-sans);
   outline: none;
   box-sizing: border-box;
   transition: border-color var(--transition-fast);
 }
-.searchInput::placeholder { color: var(--color-text-faint); }
+.searchInput::placeholder { color: var(--color-text-hint); }
 .searchInput:focus { border-color: var(--color-sienna); }
 
 .loreList {
@@ -382,17 +395,38 @@
 .loreItem {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: 5px 6px;
+  gap: var(--space-3);
+  padding: 8px 2px;
   cursor: pointer;
-  border-bottom: 1px solid var(--color-border-soft);
+  border-bottom: 1px solid var(--color-hairline);
   transition: background var(--transition-fast);
 }
-.loreItem:hover { background: var(--color-bg-surface); }
+.loreItem:hover { background: var(--color-bg-inset); }
+/* 13px ink square, filled sienna when picked — no native widget look. */
 .loreItem input[type="checkbox"] {
   flex-shrink: 0;
   cursor: pointer;
-  accent-color: var(--color-sienna);
+  appearance: none;
+  -webkit-appearance: none;
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  border: 1px solid var(--color-border-emphasis);
+  background: transparent;
+  display: inline-grid;
+  place-content: center;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.loreItem input[type="checkbox"]:checked {
+  background: var(--color-sienna);
+  border-color: var(--color-sienna);
+}
+.loreItem input[type="checkbox"]:checked::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  background: var(--color-on-accent);
+  clip-path: polygon(13% 47%, 0 63%, 41% 100%, 100% 19%, 84% 6%, 39% 74%);
 }
 .loreItemPinned .loreName { color: var(--color-text-primary); }
 .loreItemFacet { padding-left: 26px; }
@@ -400,25 +434,25 @@
 .loreName {
   flex: 1;
   min-width: 0;
-  font: 400 12px/1.5 var(--font-serif);
-  color: var(--color-text-secondary);
+  font: 400 13px/1.5 var(--font-serif);
+  color: var(--color-text-soft);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .loreCat {
-  font-size: 10px;
-  color: var(--color-text-faint);
+  font: 400 10px/1.4 var(--font-sans);
+  color: var(--color-text-label);
   flex-shrink: 0;
 }
 .loreCount {
   font: 400 10px/1.4 var(--font-mono);
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
   flex-shrink: 0;
 }
 .loreTk {
   font: 400 10px/1.4 var(--font-mono);
-  color: var(--color-text-faint);
+  color: var(--color-text-hint);
   flex-shrink: 0;
 }
 .loreGroup {
@@ -433,30 +467,30 @@
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
-  padding: 1px 4px;
+  padding: 2px 4px;
   font: 500 10px/1 var(--font-mono);
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
   background: transparent;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-panel);
   cursor: pointer;
   transition: color var(--transition-fast), border-color var(--transition-fast);
 }
-.loreExpand:hover { color: var(--color-sienna); border-color: var(--color-sienna); }
+.loreExpand:hover { color: var(--color-accent-text); border-color: var(--color-border-accent); }
 
 /* ── Textareas & toggles ─────────────────────────────────────────── */
 .textarea, .extraTextarea {
   width: 100%;
-  padding: 10px 12px;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
+  padding: 12px 14px;
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-panel);
   color: var(--color-text-primary);
-  font: 400 12px/1.7 var(--font-sans);
+  font: 400 13px/1.6 var(--font-sans);
   resize: vertical;
   outline: none;
   box-sizing: border-box;
   transition: border-color var(--transition-fast);
 }
-.textarea::placeholder, .extraTextarea::placeholder { color: var(--color-text-faint); }
+.textarea::placeholder, .extraTextarea::placeholder { color: var(--color-text-hint); }
 .textarea:focus, .extraTextarea:focus { border-color: var(--color-sienna); }
 
 .toggleRow {
@@ -464,14 +498,14 @@
   align-items: center;
   gap: var(--space-2);
   font: 400 11px/1.5 var(--font-sans);
-  color: var(--color-text-secondary);
+  color: var(--color-text-soft);
   cursor: pointer;
   user-select: none;
 }
 .toggleRow input { accent-color: var(--color-sienna); }
 
 /* Collapsible extras (outline / additional knowledge) */
-.extraSection { border: 1px solid var(--color-border); }
+.extraSection { border: 1px solid var(--color-border-panel); }
 .extraSectionToggle {
   width: 100%;
   display: flex;
@@ -486,18 +520,18 @@
   cursor: pointer;
   transition: background var(--transition-fast);
 }
-.extraSectionToggle:hover { background: var(--color-bg-surface); }
+.extraSectionToggle:hover { background: var(--color-bg-inset); }
 .extraSectionChevron { flex-shrink: 0; display: flex; color: var(--color-text-muted); }
 .extraSectionLabel { flex: 1; }
 .extraSectionBadge {
-  font: 600 10px/1.6 var(--font-mono);
-  color: var(--color-sienna);
-  background: var(--color-accent-tint);
+  font: 500 10px/1.6 var(--font-mono);
+  color: var(--color-accent-text);
+  background: var(--color-bg-accent-wash);
   padding: 0 5px;
 }
 .extraSectionContent {
   padding: var(--space-2);
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-hairline);
 }
 
 /* ── Footer: forecast + run ──────────────────────────────────────── */
@@ -505,13 +539,13 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  font: 400 10px/1.5 var(--font-sans);
-  color: var(--color-text-muted);
+  font: 400 10px/1.6 var(--font-mono);
+  color: var(--color-text-label);
   white-space: nowrap;
 }
 .estimate strong {
-  font: 500 11px/1.5 var(--font-mono);
-  color: var(--color-text-secondary);
+  font: 400 11px/1.5 var(--font-mono);
+  color: var(--color-text-soft);
   font-variant-numeric: tabular-nums;
 }
 
@@ -521,11 +555,11 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  padding: 11px var(--space-4);
+  padding: 13px var(--space-4);
   background: var(--color-sienna);
   border: none;
-  color: var(--color-card);
-  font: 600 13px/1 var(--font-sans);
+  color: var(--color-on-accent);
+  font: 500 14px/1 var(--font-sans);
   cursor: pointer;
   transition: background var(--transition-fast), opacity var(--transition-fast);
 }
@@ -571,16 +605,16 @@
 .injectedName {
   display: inline-flex;
   align-items: baseline;
-  gap: 5px;
+  gap: 8px;
   min-width: 0;
-  font: 400 15px/1.3 var(--font-serif);
+  font: 500 15px/1.3 var(--font-serif);
   color: var(--color-text-primary);
 }
 /* Aliases trail the name in the quiet UI face — they identify, they don't title. */
 .injectedAlias {
   min-width: 0;
   font: 400 var(--font-size-sm)/1.3 var(--font-sans);
-  color: var(--color-text-faint);
+  color: var(--color-text-label);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -594,43 +628,43 @@
 .injectedChip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
+  gap: 6px;
+  padding: 5px 9px;
   font: 400 11px/1.5 var(--font-sans);
-  color: var(--color-sienna);
-  border: 1px solid var(--color-accent-tint-strong);
-  background: var(--color-accent-tint);
+  color: var(--color-accent-text);
+  border: 1px solid var(--color-border-accent);
+  background: var(--color-bg-accent-wash);
 }
 .injectedTk {
   font: 400 10px/1 var(--font-mono);
-  opacity: 0.7;
+  opacity: 0.75;
 }
 .droppedLabel {
   font: 400 10px/1.4 var(--font-sans);
   letter-spacing: 0.1em;
-  color: var(--color-text-faint);
+  color: var(--color-text-hint);
   margin-right: 2px;
 }
 .droppedChip {
-  padding: 3px 9px;
+  padding: 5px 9px;
   font: 400 11px/1.5 var(--font-sans);
-  color: var(--color-text-faint);
-  border: 1px dashed var(--color-border-strong);
+  color: var(--color-text-hint);
+  border: 1px dashed var(--color-border-muted);
   background: transparent;
 }
 
-/* Error block with recoveries */
+/* Error block with recoveries — reads as the failure node's detail box. */
 .errorBlock {
-  border-left: 2px solid var(--color-error);
-  background: var(--color-error-bg);
-  padding: 10px 12px;
+  border-left: 2px solid var(--color-error-node);
+  background: var(--color-error-surface);
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 .errorBody {
-  font: 400 11px/1.7 var(--font-sans);
-  color: var(--color-text-secondary);
+  font: 400 12px/1.65 var(--font-sans);
+  color: var(--color-error-body);
   word-break: break-word;
   max-height: 160px;
   overflow-y: auto;
@@ -642,7 +676,7 @@
   align-items: center;
   gap: var(--space-2);
   font: 400 11px/1.5 var(--font-sans);
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
 }
 .spinner {
   width: 9px;
@@ -670,28 +704,29 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 11px;
-  font: 500 11px/1.6 var(--font-mono);
+  padding: 4px 11px;
+  font: 400 11px/1.6 var(--font-mono);
   background: transparent;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-border-panel);
   border-bottom-color: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
   cursor: pointer;
   transition: border-color var(--transition-fast), color var(--transition-fast),
     background var(--transition-fast);
 }
 .draftTab:hover:not(.draftTabActive) {
-  border-color: var(--color-sienna);
+  border-color: var(--color-border-accent);
   border-bottom-color: transparent;
-  color: var(--color-sienna);
+  color: var(--color-accent-text);
 }
 .draftTab:active { transform: scale(0.96); }
 
 .draftTabActive {
-  background: var(--color-bg-elevated);
-  border-color: var(--color-border);
-  border-bottom-color: var(--color-bg-elevated);
-  color: var(--color-sienna);
+  background: var(--color-bg-inset);
+  border-color: var(--color-border-panel);
+  border-bottom-color: var(--color-bg-inset);
+  color: var(--color-accent-text);
+  font-weight: 500;
 }
 
 /* A failed draft stays selectable — the author should be able to read why. */
@@ -712,11 +747,11 @@
 
 .output {
   flex: 1;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border);
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-panel);
   padding: var(--space-4);
-  font: 400 13px/1.9 var(--font-serif);
-  color: var(--color-text-primary);
+  font: 400 var(--font-size-reading)/1.85 var(--font-serif);
+  color: var(--color-text-prose);
   white-space: pre-wrap;
   overflow-y: auto;
   max-height: 420px;
@@ -746,20 +781,20 @@
   justify-content: center;
   gap: 6px;
   min-height: 140px;
-  border: 1px dashed var(--color-border-strong);
+  border: 1px dashed var(--color-border-panel);
   padding: var(--space-6);
   text-align: center;
-  color: var(--color-text-faint);
-  font: 400 12px/1.7 var(--font-sans);
+  color: var(--color-text-hint);
+  font: 400 14px/1.7 var(--font-serif);
 }
-.resultEmptySub { font-size: 11px; color: var(--color-text-ghost); }
+.resultEmptySub { font: 400 12px/1.7 var(--font-sans); color: var(--color-text-hint); }
 
 .usageBar {
   display: flex;
   gap: var(--space-4);
   flex-wrap: wrap;
   font: 400 10px/1.5 var(--font-mono);
-  color: var(--color-text-muted);
+  color: var(--color-text-hint);
 }
 
 .truncatedNotice {
@@ -767,22 +802,21 @@
   color: var(--color-warning);
 }
 
-/* Status bar */
+/* Status bar — all data, so all mono, per the mockup's footer strip. */
 .statusBar {
   flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-3);
   padding: var(--space-2) var(--space-6);
-  border-top: 1px solid var(--color-border-soft);
-  font: 400 10px/1.6 var(--font-sans);
-  color: var(--color-text-muted);
+  border-top: 1px solid var(--color-border-panel);
+  font: 400 11px/1.6 var(--font-mono);
+  color: var(--color-text-hint);
 }
-.statusSep { color: var(--color-text-ghost); }
+.statusSep { color: var(--color-border-muted); }
 /* The focused document's name — the answer to "what is the AI working on". */
 .statusFocus {
-  color: var(--color-text-secondary);
-  font-weight: 500;
+  color: var(--color-text-dim);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -797,14 +831,14 @@
   gap: 6px;
   padding: 7px var(--space-6);
   border-top: 1px solid var(--color-border-soft);
-  background: var(--color-accent-tint);
-  color: var(--color-sienna);
+  background: var(--color-bg-accent-wash);
+  color: var(--color-accent-text);
   font: 400 11px/1.5 var(--font-sans);
 }
 .statusModel {
   margin-left: auto;
   font-family: var(--font-mono);
-  color: var(--color-text-faint);
+  color: var(--color-text-hint);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -812,10 +846,10 @@
 
 /* ── Shared small buttons ────────────────────────────────────────── */
 .btnPrimary {
-  padding: 4px 12px;
+  padding: 6px 12px;
   background: var(--color-sienna);
   border: none;
-  color: var(--color-card);
+  color: var(--color-on-accent);
   font: 500 11px/1.6 var(--font-sans);
   cursor: pointer;
   transition: background var(--transition-fast);
@@ -827,12 +861,12 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 4px 12px;
+  padding: 6px 12px;
   background: transparent;
-  border: 1px solid var(--color-border-strong);
-  color: var(--color-text-secondary);
-  font: 500 11px/1.6 var(--font-sans);
+  border: 1px solid var(--color-border-emphasis);
+  color: var(--color-text-primary);
+  font: 400 11px/1.6 var(--font-sans);
   cursor: pointer;
   transition: color var(--transition-fast), border-color var(--transition-fast);
 }
-.btnSecondary:hover { color: var(--color-sienna); border-color: var(--color-sienna); }
+.btnSecondary:hover { color: var(--color-accent-text); border-color: var(--color-border-accent); }

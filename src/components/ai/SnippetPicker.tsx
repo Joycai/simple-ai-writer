@@ -53,6 +53,8 @@ export function SnippetPicker({ onPick }: Props) {
           items={snippets.map((s) => ({
             kind: "item" as const,
             label: s.name,
+            /* Mono 角标 in the shortcut slot — marks the row as a snippet. */
+            shortcut: "snippet",
             action: () => onPick(s.content),
           }))}
           onClose={() => setMenu(null)}

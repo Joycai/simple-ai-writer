@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--color-bg-surface);
+  background: var(--color-bg-base);
   color: var(--color-text-primary);
 }
 
@@ -10,12 +10,13 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-bg-inset);
+  border-bottom: 1px solid var(--color-border-panel);
 }
 
 .headerTitle {
-  font: 600 13px/1.4 var(--font-sans);
+  font: 400 18px/1.4 var(--font-serif);
   color: var(--color-text-primary);
 }
 
@@ -25,7 +26,6 @@
   color: var(--color-text-muted);
   cursor: pointer;
   padding: 4px;
-  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -44,7 +44,7 @@
 
 .sidebar {
   width: 240px;
-  border-right: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border-panel);
   overflow-y: auto;
   padding: var(--space-2);
 }
@@ -61,7 +61,6 @@
   text-align: left;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
   padding: var(--space-2) var(--space-3);
   margin-bottom: 4px;
   cursor: pointer;
@@ -77,7 +76,7 @@
 
 .taskItemActive {
   background: var(--color-bg-active);
-  border-color: var(--color-border);
+  border-color: var(--color-border-panel);
 }
 
 .itemHeader {
@@ -96,9 +95,9 @@
 }
 
 .statusBadge {
-  font: 500 10px/1.2 var(--font-mono);
-  padding: 2px 6px;
-  border-radius: 999px;
+  font: 400 10px/1.2 var(--font-mono);
+  padding: 3px 7px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   flex-shrink: 0;
 }
@@ -145,26 +144,25 @@
   justify-content: space-between;
   gap: var(--space-3);
   padding-bottom: var(--space-3);
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-hairline);
 }
 
 .detailTitle {
-  font: 600 15px/1.4 var(--font-sans);
+  font: 400 20px/1.3 var(--font-serif);
   color: var(--color-text-primary);
 }
 
 .detailTaskId {
   font: 400 11px/1.5 var(--font-mono);
-  color: var(--color-text-muted);
-  margin-top: 2px;
+  color: var(--color-text-hint);
+  margin-top: 4px;
 }
 
 .resumeBtn {
-  padding: 6px 14px;
+  padding: 8px 16px;
   background: var(--color-sienna);
-  color: var(--color-card);
+  color: var(--color-on-accent);
   border: none;
-  border-radius: var(--radius-sm);
   font: 500 12px/1.4 var(--font-sans);
   cursor: pointer;
   display: flex;
@@ -185,32 +183,36 @@
 }
 
 .sectionTitle {
-  font: 600 12px/1.4 var(--font-sans);
-  color: var(--color-text-secondary);
+  font: 400 11px/1.4 var(--font-sans);
+  color: var(--color-text-label);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.14em;
 }
 
+/* Steps live in one bordered list with hairline rows (mockup 1g). */
 .stepsList {
   display: flex;
   flex-direction: column;
-  gap: 6px;
   list-style: none;
   padding: 0;
   margin: 0;
+  border: 1px solid var(--color-border-panel);
 }
 
 .stepRow {
   display: flex;
   align-items: baseline;
-  gap: var(--space-2);
-  font: 400 12px/1.6 var(--font-sans);
-  color: var(--color-text-primary);
+  gap: var(--space-3);
+  padding: 11px 14px;
+  font: 400 13px/1.5 var(--font-serif);
+  color: var(--color-text-soft);
+  border-bottom: 1px solid var(--color-hairline);
 }
+.stepRow:last-child { border-bottom: none; }
 
 .stepGlyph {
-  font: 600 12px/1 var(--font-mono);
-  color: var(--color-text-muted);
+  font: 400 12px/1 var(--font-mono);
+  color: var(--color-text-dim);
 }
 
 .notesGrid {
@@ -220,21 +222,21 @@
 }
 
 .noteCard {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-panel);
   padding: var(--space-2) var(--space-3);
-  background: var(--color-bg-base);
+  background: var(--color-bg-inset);
 }
 
 .noteTitle {
-  font: 500 12px/1.4 var(--font-sans);
-  color: var(--color-text-primary);
+  font: 400 12px/1.5 var(--font-mono);
+  color: var(--color-text-soft);
   margin-bottom: 2px;
+  word-break: break-all;
 }
 
 .notePath {
   font: 400 10px/1.4 var(--font-mono);
-  color: var(--color-text-muted);
+  color: var(--color-text-hint);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

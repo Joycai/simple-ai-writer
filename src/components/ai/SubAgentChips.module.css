@@ -1,51 +1,44 @@
+/* Sub-agent capability chips (mockup 1b/1h): configured agents wear a quiet
+   green outline with their ✓; unconfigured ones a dashed ghost border. Click
+   toggles a configured agent off for this session only. */
+
 .chipsRow {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-2);
 }
 
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: 22px;
-  padding: 0 7px;
-  border-radius: 11px;
-  font-size: 11px;
-  line-height: 1;
-  cursor: pointer;
-  user-select: none;
-  transition: all 0.15s ease;
+  gap: 6px;
+  padding: 6px 9px;
+  font: 400 11px/1 var(--font-sans);
   background: transparent;
   border: 1px solid transparent;
-  font-family: inherit;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .chipActive {
-  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
-  border-color: var(--border-subtle, rgba(255, 255, 255, 0.15));
-  color: var(--text-secondary, #cbd5e1);
+  color: var(--color-success-text);
+  border-color: var(--color-success-border);
 }
-
 .chipActive:hover {
-  background: var(--accent-subtle, rgba(99, 102, 241, 0.15));
-  border-color: var(--accent-border, rgba(99, 102, 241, 0.3));
-  color: var(--text-primary, #f8fafc);
+  color: var(--color-accent-text);
+  border-color: var(--color-border-accent);
 }
 
+/* Off or never configured — dashed, no strikethrough: absence, not an error. */
 .chipDisabled {
-  background: transparent;
-  border-color: var(--border-dim, rgba(255, 255, 255, 0.06));
-  color: var(--text-muted, #64748b);
-  opacity: 0.55;
-  text-decoration: line-through;
+  border: 1px dashed var(--color-border-muted);
+  color: var(--color-text-hint);
 }
-
 .chipDisabled:hover {
-  opacity: 0.85;
-  border-color: var(--border-subtle, rgba(255, 255, 255, 0.15));
-  color: var(--text-secondary, #cbd5e1);
-  text-decoration: none;
+  color: var(--color-text-soft);
+  border-color: var(--color-border-emphasis);
 }
 
 .icon {

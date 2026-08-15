@@ -38,15 +38,15 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 11px;
+  padding: 4px 11px;
   background: transparent;
-  border: 1px dashed var(--color-border-strong);
-  color: var(--color-text-muted);
-  font: 500 11px/1.5 var(--font-sans);
+  border: 1px dashed var(--color-border-muted);
+  color: var(--color-text-hint);
+  font: 400 11px/1.5 var(--font-sans);
   cursor: pointer;
   transition: color var(--transition-fast), border-color var(--transition-fast);
 }
-.foldBar:hover { color: var(--color-sienna); border-color: var(--color-sienna); }
+.foldBar:hover { color: var(--color-accent-text); border-color: var(--color-border-accent); }
 .foldBar:active { transform: scale(0.96); }
 
 .emptyHint {
@@ -63,47 +63,48 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 6px;
-  max-width: 78%;
+  gap: 8px;
+  max-width: 74%;
 }
 
 /* The passage the message is about, shown above it so the referent is visible
    in the transcript rather than only inside the prompt. */
 .quote {
   align-self: stretch;
-  border-left: 2px solid var(--color-sienna);
-  background: var(--color-bg-surface);
-  padding: 7px 11px;
+  border-left: 2px solid var(--color-border-accent);
+  background: var(--color-bg-inset);
+  padding: 10px 14px;
 }
 .quoteLabel {
-  font: 500 10px/1.4 var(--font-sans);
-  letter-spacing: 0.14em;
-  color: var(--color-text-faint);
-  margin-bottom: 3px;
+  font: 400 10px/1.4 var(--font-sans);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-text-label);
+  margin-bottom: 6px;
 }
 .quoteBody {
-  font: 400 12px/1.7 var(--font-serif);
-  color: var(--color-text-muted);
+  font: 400 13px/1.6 var(--font-serif);
+  color: var(--color-text-dim);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 92px;
   overflow-y: auto;
 }
 
+/* The author speaks in the manuscript face, on the raised layer — no border. */
 .userTurn {
   align-self: stretch;
-  background: var(--color-accent-tint);
-  border: 1px solid var(--color-accent-tint-strong);
+  background: var(--color-bg-raised);
   color: var(--color-text-primary);
-  padding: 10px 14px;
-  font: 400 13px/1.8 var(--font-sans);
+  padding: 14px 18px;
+  font: 400 var(--font-size-reading)/1.7 var(--font-serif);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .turnTime {
-  font: 400 10px/1 var(--font-mono);
-  color: var(--color-text-ghost);
+  font: 400 11px/1 var(--font-mono);
+  color: var(--color-text-hint);
   font-variant-numeric: tabular-nums;
 }
 
@@ -119,13 +120,15 @@
   align-items: start;
 }
 
+/* 7px timeline anchors: settled turns in accent ink, the live one in the
+   dimmer accent-border tone — it hasn't earned the full colour yet. */
 .turnMarker {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   margin-top: 9px;
-  background: var(--color-text-ghost);
+  background: var(--color-sienna);
 }
-.turnMarkerLive { background: var(--color-sienna); }
+.turnMarkerLive { background: var(--color-border-accent); }
 
 .turnContent {
   min-width: 0;
@@ -135,9 +138,10 @@
 }
 
 .assistantBody {
-  font: 400 13px/1.9 var(--font-sans);
-  color: var(--color-text-primary);
+  font: 400 var(--font-size-reading)/1.85 var(--font-serif);
+  color: var(--color-text-prose);
   word-break: break-word;
+  text-wrap: pretty;
 }
 .assistantBody :is(p, ul, ol) { margin: 0 0 var(--space-3); }
 .assistantBody :is(p, ul, ol):last-child { margin-bottom: 0; }
@@ -147,13 +151,13 @@
      grid above is meant to prevent — pin it to the content track. */
   margin: var(--space-3) 0;
   border: none;
-  border-top: 1px solid var(--color-border-soft);
+  border-top: 1px solid var(--color-hairline);
 }
 .assistantBody :is(ul, ol) { padding-left: 1.4em; }
 .assistantBody li { margin-bottom: var(--space-1); }
 .assistantBody pre {
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-panel);
   padding: var(--space-3);
   overflow-x: auto;
   font-size: 11px;
@@ -167,7 +171,7 @@
   align-items: center;
   gap: var(--space-2);
   font: 400 11px/1.5 var(--font-sans);
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
 }
 .thinkingSpinner {
   width: 9px;
@@ -180,10 +184,10 @@
 @keyframes chatSpin { to { transform: rotate(360deg); } }
 
 .error {
-  font: 400 11px/1.7 var(--font-sans);
-  color: var(--color-error);
-  background: var(--color-error-bg);
-  border-left: 2px solid var(--color-error);
+  font: 400 12px/1.65 var(--font-sans);
+  color: var(--color-error-body);
+  background: var(--color-error-surface);
+  border-left: 2px solid var(--color-error-node);
   padding: var(--space-2) var(--space-3);
   margin: 0 var(--space-6) var(--space-2);
   word-break: break-word;
@@ -211,7 +215,8 @@
 /* ── Composer ────────────────────────────────────────────────────── */
 .composer {
   flex-shrink: 0;
-  border-top: 1px solid var(--color-border-soft);
+  border-top: 1px solid var(--color-border-panel);
+  background: var(--color-bg-inset);
   padding: var(--space-3) var(--space-6) var(--space-4);
   display: flex;
   flex-direction: column;
@@ -232,34 +237,34 @@
 .attachChip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  background: var(--color-accent-tint);
-  border: 1px solid var(--color-sienna);
-  color: var(--color-sienna);
-  font: 500 11px/1.5 var(--font-sans);
+  gap: 6px;
+  padding: 5px 10px;
+  background: var(--color-bg-accent-wash);
+  border: 1px solid var(--color-border-accent);
+  color: var(--color-accent-text);
+  font: 400 12px/1.5 var(--font-sans);
   cursor: pointer;
   transition: background var(--transition-fast);
 }
-.attachChip:hover { background: var(--color-accent-tint-strong); }
+.attachChip:hover { background: var(--color-bg-selected); }
 
 .attachChipGhost {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 9px;
+  padding: 5px 10px;
   background: transparent;
-  border: 1px dashed var(--color-border-strong);
-  color: var(--color-text-muted);
-  font: 500 11px/1.5 var(--font-sans);
+  border: 1px solid var(--color-border-muted);
+  color: var(--color-text-soft);
+  font: 400 12px/1.5 var(--font-sans);
   cursor: pointer;
   transition: color var(--transition-fast), border-color var(--transition-fast);
 }
-.attachChipGhost:hover { color: var(--color-sienna); border-color: var(--color-sienna); }
+.attachChipGhost:hover { color: var(--color-accent-text); border-color: var(--color-border-accent); }
 
 .attachEmpty {
   font: 400 11px/1.5 var(--font-sans);
-  color: var(--color-text-ghost);
+  color: var(--color-text-hint);
 }
 
 /* Why an attachment the author just picked isn't in the row above. Quieter
@@ -286,13 +291,13 @@
   height: 6px;
   padding: 0;
   width: 100%;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
+  background: var(--color-bar-track);
+  border: 1px solid transparent;
   overflow: hidden;
   cursor: pointer;
   transition: border-color var(--transition-fast);
 }
-.ctxBar:hover { border-color: var(--color-border-strong); }
+.ctxBar:hover { border-color: var(--color-border-input); }
 /* Past the ceiling there is no free segment left to shrink, so the only place
    the overflow can show is the frame. */
 .ctxBarOver { border-color: var(--color-warning); }
@@ -302,15 +307,15 @@
   min-width: 1px;
   transition: flex-grow var(--transition-base);
 }
-/* The one neutral fill in the palette that clears the track in *both* themes —
-   --color-text-ghost is within a hair of the dark surface and vanishes. */
-.ctxSeg_system       { background: var(--color-text-faint); }
-.ctxSeg_summary      { background: var(--color-success); }
-.ctxSeg_seed         { background: var(--color-amber-soft); }
-.ctxSeg_injected     { background: var(--color-amber); }
+/* Mockup mapping: 系统 grey · 设定(injected) green · 章节(seed) tan ·
+   前情摘要 deep ochre · 对话 sienna · free = the visible track. */
+.ctxSeg_system       { background: var(--color-text-dim); }
+.ctxSeg_summary      { background: var(--color-alloc-memory); }
+.ctxSeg_seed         { background: var(--color-ctx-chapter); }
+.ctxSeg_injected     { background: var(--color-success); }
 .ctxSeg_conversation { background: var(--color-sienna); }
 .ctxSeg_free         { background: transparent; }
-.ctxSwatch.ctxSeg_free { box-shadow: inset 0 0 0 1px var(--color-border-strong); }
+.ctxSwatch.ctxSeg_free { box-shadow: inset 0 0 0 1px var(--color-border-input); }
 
 /* The compaction threshold, drawn over the fills so it stays readable
    whichever segment happens to reach it. */
@@ -329,41 +334,41 @@
   align-items: baseline;
   gap: var(--space-2);
   font: 400 10px/1.5 var(--font-mono);
-  color: var(--color-text-faint);
+  color: var(--color-text-hint);
   font-variant-numeric: tabular-nums;
 }
 .ctxWindow {
   margin-left: auto;
-  color: var(--color-text-ghost);
+  color: var(--color-text-hint);
 }
 
 .ctxLegend {
   display: flex;
   flex-wrap: wrap;
-  gap: 3px var(--space-3);
+  gap: 3px var(--space-4);
   padding-bottom: 2px;
 }
 .ctxLegendItem {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font: 400 10px/1.4 var(--font-sans);
-  color: var(--color-text-muted);
+  gap: 6px;
+  font: 400 11px/1.4 var(--font-mono);
+  color: var(--color-text-hint);
 }
 .ctxSwatch {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   flex-shrink: 0;
 }
 .ctxLegendValue {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  color: var(--color-text-faint);
+  color: var(--color-text-hint);
 }
 
 .inputRow {
-  border: 1px solid var(--color-border);
-  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-input);
+  background: var(--color-bg-base);
   display: flex;
   flex-direction: column;
   transition: border-color var(--transition-fast);
@@ -376,42 +381,50 @@
   border: none;
   background: transparent;
   color: var(--color-text-primary);
-  font: 400 13px/1.8 var(--font-sans);
-  padding: 11px 13px 4px;
+  font: 400 14px/1.7 var(--font-sans);
+  padding: 12px 14px 4px;
   outline: none;
   box-sizing: border-box;
   max-height: 180px;
 }
-.input::placeholder { color: var(--color-text-faint); }
+.input::placeholder { color: var(--color-text-hint); }
 
 .inputFooter {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: 0 8px 8px 13px;
+  padding: 0 8px 8px 14px;
 }
 .inputHint {
   margin-right: auto;
   font: 400 10px/1.5 var(--font-mono);
-  color: var(--color-text-ghost);
+  color: var(--color-text-kbd);
 }
 
+/* A raised square holding a small accent square — an ink stamp, not an arrow. */
 .sendBtn {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   border: none;
-  background: var(--color-sienna);
-  color: var(--color-card);
+  background: var(--color-bg-raised);
+  color: var(--color-on-accent);
   cursor: pointer;
   transition: background var(--transition-fast), opacity var(--transition-fast);
 }
-.sendBtn:hover:not(:disabled) { background: var(--color-sienna-hover); }
+.sendGlyph {
+  width: 11px;
+  height: 11px;
+  background: var(--color-sienna);
+  transition: background var(--transition-fast);
+}
+.sendBtn:hover:not(:disabled) { background: var(--color-bg-hover); }
+.sendBtn:hover:not(:disabled) .sendGlyph { background: var(--color-sienna-hover); }
 .sendBtn:disabled { opacity: 0.35; cursor: not-allowed; }
-.stopBtn { background: var(--color-error); }
+.stopBtn { background: var(--color-error); color: var(--color-paper); }
 .stopBtn:hover:not(:disabled) { background: var(--color-error); opacity: 0.85; }
 
 /* ── Pictures produced by a turn ─────────────────────────────────────────── */
@@ -430,13 +443,12 @@
   height: 148px;
   padding: 0;
   overflow: hidden;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-panel);
+  background: var(--color-bg-inset);
   cursor: pointer;
   transition: border-color var(--transition-fast), transform var(--transition-fast);
 }
-.turnImage:hover { border-color: var(--color-sienna); transform: translateY(-1px); }
+.turnImage:hover { border-color: var(--color-border-accent); transform: translateY(-1px); }
 
 .turnImage img {
   width: 100%;

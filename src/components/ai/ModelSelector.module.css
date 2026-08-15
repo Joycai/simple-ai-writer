@@ -20,7 +20,7 @@
   text-align: left;
   transition: border-color var(--transition-fast), background var(--transition-fast);
 }
-.trigger:hover { border-color: var(--color-border); background: var(--color-bg-surface); }
+.trigger:hover { border-color: var(--color-border-panel); background: var(--color-bg-hover); }
 .trigger:focus-visible { border-color: var(--color-sienna); outline: none; }
 
 .dot {
@@ -32,23 +32,24 @@
 }
 .dotOn { background: var(--color-success); }
 
-/* The provider is context, not the subject — it stays quiet and yields space. */
+/* The whole closed line is mono — a model id is data, not prose. The provider
+   is context, not the subject: it stays quiet and yields space. */
 .triggerProvider {
-  font: 400 11px/1.5 var(--font-sans);
-  color: var(--color-text-muted);
+  font: 400 11px/1.5 var(--font-mono);
+  color: var(--color-text-dim);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
 }
 .triggerSep {
-  font: 400 11px/1.5 var(--font-sans);
-  color: var(--color-text-ghost);
+  font: 400 11px/1.5 var(--font-mono);
+  color: var(--color-text-kbd);
   flex-shrink: 0;
 }
 .triggerModel {
-  font: 500 13px/1.4 var(--font-sans);
-  color: var(--color-text-primary);
+  font: 400 11px/1.5 var(--font-mono);
+  color: var(--color-text-soft);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -64,8 +65,8 @@
 .ctxBadge {
   flex-shrink: 0;
   padding: 1px 6px;
-  border: 1px solid var(--color-border-strong);
-  color: var(--color-sienna);
+  border: 1px solid var(--color-border-accent);
+  color: var(--color-accent-deep);
   font: 500 10px/1.6 var(--font-mono);
 }
 
@@ -93,9 +94,9 @@
   max-width: min(560px, calc(100vw - 64px));
   display: flex;
   flex-direction: column;
-  background: var(--color-bg-elevated);
-  border: 1px solid var(--color-border-strong);
-  box-shadow: var(--shadow-lg);
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-input);
+  box-shadow: var(--shadow-xl);
   animation: modelPickerIn 140ms var(--ease-out);
 }
 @keyframes modelPickerIn {
@@ -110,7 +111,7 @@
   padding: 11px var(--space-4);
   border-bottom: 1px solid var(--color-border-soft);
 }
-.searchIcon { color: var(--color-text-faint); flex-shrink: 0; }
+.searchIcon { color: var(--color-text-label); flex-shrink: 0; }
 .searchInput {
   flex: 1;
   min-width: 0;
@@ -124,7 +125,7 @@
 .searchCount {
   flex-shrink: 0;
   font: 400 11px/1.5 var(--font-mono);
-  color: var(--color-text-faint);
+  color: var(--color-text-hint);
   font-variant-numeric: tabular-nums;
 }
 
@@ -136,18 +137,21 @@
   border-bottom: 1px solid var(--color-border-soft);
 }
 .filterChip {
-  padding: 4px 13px;
+  padding: 5px 11px;
   background: transparent;
-  border: 1px solid var(--color-border);
-  color: var(--color-text-muted);
-  font: 400 12px/1.5 var(--font-sans);
+  border: 1px solid var(--color-border-panel);
+  color: var(--color-text-dim);
+  font: 400 11px/1.5 var(--font-sans);
   cursor: pointer;
-  transition: color var(--transition-fast), border-color var(--transition-fast);
+  transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
 }
-.filterChip:hover { color: var(--color-sienna); border-color: var(--color-sienna); }
-.filterChipActive {
-  border-color: var(--color-sienna);
-  color: var(--color-sienna);
+.filterChip:hover { color: var(--color-accent-text); border-color: var(--color-border-accent); }
+.filterChipActive,
+.filterChipActive:hover {
+  border-color: var(--color-border-accent);
+  background: var(--color-bg-accent-wash);
+  color: var(--color-accent-text);
+  font-weight: 500;
 }
 
 .list {
@@ -176,24 +180,24 @@
 }
 .groupName {
   font: 500 10px/1.4 var(--font-sans);
-  letter-spacing: 0.2em;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: var(--color-text-muted);
+  color: var(--color-text-label);
   white-space: nowrap;
 }
 .groupTag {
   margin-left: 5px;
   letter-spacing: 0.1em;
-  color: var(--color-text-faint);
+  color: var(--color-text-hint);
 }
 .groupRule {
   flex: 1;
   height: 1px;
-  background: var(--color-border-soft);
+  background: var(--color-hairline);
 }
 .groupCount {
   font: 400 10px/1.4 var(--font-mono);
-  color: var(--color-text-faint);
+  color: var(--color-text-kbd);
   font-variant-numeric: tabular-nums;
 }
 
@@ -212,9 +216,12 @@
   cursor: pointer;
   transition: background var(--transition-fast);
 }
-.itemActive { background: var(--color-bg-surface); }
-/* Selection reads as a margin mark, not a filled band — the list stays calm. */
-.itemSelected { border-left-color: var(--color-sienna); }
+.itemActive { background: var(--color-bg-hover); }
+/* Selection = margin rule + a barely-raised band, not a solid accent fill. */
+.itemSelected {
+  border-left-color: var(--color-sienna);
+  background: var(--color-bg-accent-wash);
+}
 
 .itemMain {
   flex: 1;
@@ -232,25 +239,26 @@
 /* Long names wrap rather than truncate — the identity is the whole point. */
 .itemTitle {
   font: 400 14px/1.4 var(--font-sans);
-  color: var(--color-text-secondary);
+  color: var(--color-text-soft);
   word-break: break-word;
 }
 .itemSelected .itemTitle,
 .itemActive .itemTitle { color: var(--color-text-primary); }
+.itemSelected .itemTitle { font-weight: 500; }
 
 .itemBadge {
   flex-shrink: 0;
-  padding: 1px 7px;
-  border: 1px solid var(--color-border-strong);
-  color: var(--color-text-muted);
-  font: 400 10px/1.6 var(--font-sans);
+  padding: 3px 6px;
+  border: 1px solid var(--color-border-muted);
+  color: var(--color-text-dim);
+  font: 400 10px/1.4 var(--font-sans);
   white-space: nowrap;
 }
-.itemSelected .itemBadge { border-color: var(--color-sienna); color: var(--color-sienna); }
+.itemSelected .itemBadge { border-color: var(--color-border-accent); color: var(--color-accent-text); }
 
 .itemSubtitle {
   font: 400 10px/1.5 var(--font-mono);
-  color: var(--color-text-faint);
+  color: var(--color-text-hint);
   word-break: break-all;
 }
 
@@ -260,14 +268,14 @@
   gap: 3px;
   flex-shrink: 0;
   font: 400 10px/1.5 var(--font-sans);
-  color: var(--color-sienna);
+  color: var(--color-accent-deep);
   white-space: nowrap;
 }
 
 .itemCtx {
   flex-shrink: 0;
   font: 400 11px/1.5 var(--font-mono);
-  color: var(--color-text-muted);
+  color: var(--color-text-dim);
   font-variant-numeric: tabular-nums;
 }
 
@@ -285,12 +293,13 @@
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  padding: 9px var(--space-4);
+  padding: 11px var(--space-4);
   border-top: 1px solid var(--color-border-soft);
+  background: var(--color-bg-stream);
 }
 .hint {
-  font: 400 10px/1.5 var(--font-sans);
-  color: var(--color-text-faint);
+  font: 400 10px/1.5 var(--font-mono);
+  color: var(--color-text-kbd);
   white-space: nowrap;
 }
 .manageBtn {

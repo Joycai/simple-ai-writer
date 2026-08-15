@@ -36,7 +36,10 @@ import { useProjectStore } from "../../stores/projectStore";
 import { useImageDataUrls } from "../lore/useImageDataUrl";
 import { useImeGuard } from "../../lib/ime";
 import i18n from "../../i18n";
-import styles from "../lore/LoreImproveModal.module.css";
+/* Shell + fields both live in this component's own module now — the lore
+   modals keep LoreImproveModal.module.css to themselves. The two import names
+   survive so the many existing className references stay untouched. */
+import styles from "./ImageGenModal.module.css";
 import gen from "./ImageGenModal.module.css";
 
 interface Props {
