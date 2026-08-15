@@ -20,26 +20,27 @@ import {
   type WorkspaceProfile,
 } from "../profile/model";
 import {
-  activeProfile,
   defaultCategoryId,
   fallbackCategoryId,
   findCategory,
   isKnownCategory,
   loreCategories,
   loreCategoryIds,
+  primaryPack,
   promptParams,
-  resetActiveProfile,
+  resetActiveWorkspace,
   sectionLabel,
-  setActiveProfile,
+  setActiveWorkspace,
 } from "../profile/active";
+import { resolveWorkspace } from "../profile/resolve";
 
 // The active profile is a module singleton, so a test that switches it must put
 // it back or it leaks into every test that runs afterwards.
-afterEach(() => resetActiveProfile());
+afterEach(() => resetActiveWorkspace());
 
 describe("builtin profiles", () => {
   it("defaults to novel and exposes the ttrpg profile", () => {
-    expect(activeProfile()).toBe(NOVEL_PROFILE);
+    expect(primaryPack()).toBe(NOVEL_PROFILE);
     expect(builtinProfile("ttrpg")).toBe(TTRPG_PROFILE);
     expect(builtinProfile("bid")?.labelZh).toBe("标书应答");
     expect(builtinProfile("wechat")?.labelZh).toBe("微信公众号");
@@ -70,7 +71,7 @@ describe("builtin profiles", () => {
 
 describe("active profile accessors", () => {
   it("follows setActiveProfile for categories and section labels", () => {
-    setActiveProfile(TTRPG_PROFILE);
+    setActiveWorkspace(resolveWorkspace(TTRPG_PROFILE, []));
 
     expect(loreCategoryIds()).toContain("npcs");
     expect(loreCategoryIds()).not.toContain("characters");
@@ -85,7 +86,7 @@ describe("active profile accessors", () => {
   });
 
   it("distinguishes the form default from the bad-input fallback", () => {
-    setActiveProfile(TTRPG_PROFILE);
+    setActiveWorkspace(resolveWorkspace(TTRPG_PROFILE, []));
     expect(defaultCategoryId()).toBe("npcs"); // first category
     expect(fallbackCategoryId()).toBe("custom"); // misc bucket
 
@@ -93,14 +94,14 @@ describe("active profile accessors", () => {
       ...TTRPG_PROFILE,
       categories: [{ id: "scenes", labelZh: "场景", labelEn: "Scenes" }],
     };
-    setActiveProfile(noCustom);
+    setActiveWorkspace(resolveWorkspace(noCustom, []));
     // With no "custom" bucket both must still name a category that exists.
     expect(fallbackCategoryId()).toBe("scenes");
     expect(defaultCategoryId()).toBe("scenes");
   });
 
   it("builds prompt interpolation params from the active profile", () => {
-    setActiveProfile(BID_PROFILE);
+    setActiveWorkspace(resolveWorkspace(BID_PROFILE, []));
     const params = promptParams(true);
     expect(params.kb).toBe("企业知识库");
     expect(params.doc).toBe("文档");
@@ -112,10 +113,14 @@ describe("active profile accessors", () => {
     expect(en.kb).toBe("Knowledge Base");
   });
 
-  it("restores the novel profile on reset", () => {
-    setActiveProfile(TTRPG_PROFILE);
-    resetActiveProfile();
-    expect(loreCategories()).toBe(NOVEL_PROFILE.categories);
+  it("restores the novel pack on reset", () => {
+    setActiveWorkspace(resolveWorkspace(TTRPG_PROFILE, []));
+    resetActiveWorkspace();
+    expect(primaryPack()).toBe(NOVEL_PROFILE);
+    // The merged view wraps the categories (adding packIds), so equality is
+    // structural on the pack-level fields rather than by reference.
+    expect(loreCategories().map(({ packIds, ...cat }) => cat)).toEqual(NOVEL_PROFILE.categories);
+    expect(loreCategories().every((c) => c.packIds.join() === "novel")).toBe(true);
   });
 });
 

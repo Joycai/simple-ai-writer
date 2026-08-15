@@ -33,7 +33,7 @@ vi.mock("../fs/fileio", () => ({
 vi.mock("../fs/transfer", () => ({ zipExportDialog: vi.fn(), zipImportDialog: vi.fn() }));
 vi.mock("../lore/entity", () => ({ uniqueEntityId: h.uniqueEntityId }));
 vi.mock("../profile/active", () => ({
-  activeProfile: () => ({ id: "novel" }),
+  primaryPack: () => ({ id: "novel" }),
   loreCategoryIds: h.loreCategoryIds,
 }));
 vi.mock("@tauri-apps/api/app", () => ({ getVersion: async () => "1.3.1" }));

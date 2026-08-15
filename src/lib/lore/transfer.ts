@@ -19,7 +19,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { fileExists, makeDir, readDir, readFile, removeDir, renamePath } from "../fs/fileio";
 import { zipExportDialog, zipImportDialog } from "../fs/transfer";
 import { parseFrontmatter } from "../fs/markdown";
-import { activeProfile, loreCategoryIds } from "../profile/active";
+import { loreCategoryIds, primaryPack } from "../profile/active";
 import { CATEGORY_ID_RE } from "../profile/model";
 import { uniqueEntityId } from "./entity";
 
@@ -123,7 +123,7 @@ export async function exportLoreBundle(projectPath: string): Promise<string | nu
     version: LORE_BUNDLE_VERSION,
     exportedAt: new Date().toISOString(),
     appVersion,
-    profileId: activeProfile().id,
+    profileId: primaryPack().id,
     entities,
   };
 

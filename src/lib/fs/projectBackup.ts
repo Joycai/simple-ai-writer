@@ -32,7 +32,7 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { readDir } from "./fileio";
 import { zipExportDialog, zipImportDialog } from "./transfer";
-import { activeProfile } from "../profile/active";
+import { primaryPack } from "../profile/active";
 import { getDb, openProjectFolder } from "../project";
 
 export const PROJECT_BUNDLE_KIND = "ai-writer-project-bundle";
@@ -114,7 +114,7 @@ export async function exportProjectBundle(projectPath: string): Promise<string |
     exportedAt: new Date().toISOString(),
     appVersion: await appVersion(),
     projectName: folderName(projectPath),
-    profileId: activeProfile().id,
+    profileId: primaryPack().id,
   };
 
   const date = new Date().toISOString().slice(0, 10);

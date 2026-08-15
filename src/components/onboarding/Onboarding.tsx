@@ -106,7 +106,9 @@ export function Onboarding() {
       // profile.json regardless of what the chip row says.
       const picked = BUILTIN_PROFILES.find((p) => p.id === workspaceId);
       if (picked && picked.id !== store.profile.id && store.profile.id === NOVEL_PROFILE.id) {
-        await store.setProfile(picked);
+        // The chosen preset, alone — onboarding picks a starting point, it
+        // doesn't compose packs.
+        await store.setPacks(picked.id, [picked.id]);
       }
       setStep(3);
     } catch (e) {

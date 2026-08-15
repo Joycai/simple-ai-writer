@@ -28,14 +28,15 @@ import {
   defaultTask,
   findTask,
   profileTasks,
-  resetActiveProfile,
-  setActiveProfile,
+  resetActiveWorkspace,
+  setActiveWorkspace,
   visibleTasks,
 } from "../profile/active";
+import { resolveWorkspace } from "../profile/resolve";
 import { presetForTools, AGENT_ASSIST_PRESET, CONTINUE_PRESET } from "../agent/presets";
 import { draftCountFor } from "../ai/drafts";
 
-afterEach(() => resetActiveProfile());
+afterEach(() => resetActiveWorkspace());
 
 /** Echoing translator — asserts *which* key a label resolves to. */
 const t = (key: string) => key;
@@ -425,23 +426,23 @@ describe("profile task lists", () => {
 
   it("resolves tasks against the active profile", () => {
     expect(findTask("continue")).not.toBeNull();
-    setActiveProfile(COPY_PROFILE);
+    setActiveWorkspace(resolveWorkspace(COPY_PROFILE, []));
     // Not a defensive branch — panel state can outlive the profile that had it.
     expect(findTask("continue")).toBeNull();
     expect(findTask("polish")).not.toBeNull();
   });
 
   it("hides the agent task from the pickable list but keeps it resolvable", () => {
-    setActiveProfile(NOVEL_PROFILE);
+    setActiveWorkspace(resolveWorkspace(NOVEL_PROFILE, []));
     expect(visibleTasks().map((task) => task.id)).not.toContain("agent");
     expect(profileTasks().map((task) => task.id)).toContain("agent");
     expect(findTask("agent")).not.toBeNull();
   });
 
   it("opens on the first visible task", () => {
-    setActiveProfile(NOVEL_PROFILE);
+    setActiveWorkspace(resolveWorkspace(NOVEL_PROFILE, []));
     expect(defaultTask().id).toBe("continue");
-    setActiveProfile(COPY_PROFILE);
+    setActiveWorkspace(resolveWorkspace(COPY_PROFILE, []));
     expect(defaultTask().id).toBe("rewrite");
   });
 });

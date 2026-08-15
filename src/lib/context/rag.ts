@@ -15,7 +15,7 @@
 import i18n from "../../i18n";
 import type { MessageContent } from "../ai/types";
 import type { LoreEntity, LoreIndex } from "../lore";
-import { activeProfile, promptParams, sectionLabel } from "../profile/active";
+import { promptParams, sectionLabel, systemPromptKeyFor } from "../profile/active";
 import { RECENT_WINDOW_MIN_CHARS } from "./budget";
 import { selectLore, type LoreActivationReport } from "./loreSelect";
 import { selectMemoryForContext, type DocMemory } from "./memory";
@@ -30,6 +30,12 @@ export const MAX_CONTEXT_CHARS = RECENT_WINDOW_MIN_CHARS;
 
 /** Extra options available for AI tasks (continue / polish / rewrite / summary). */
 export interface TaskExtras {
+  /**
+   * The pack that declared the task being assembled (`ResolvedTask.packId`) —
+   * scopes the 【…】 block labels and the fallback system prompt to that
+   * pack's wording. Omitted → the primary pack's, the pre-pack behaviour.
+   */
+  packId?: string;
   /** dirPaths of manually pinned lore entities — merged with auto-matched. */
   manualLorePaths?: string[];
   /** Outline or writing direction the model should follow ("continue" only). */
@@ -113,6 +119,13 @@ export interface ContextBundle {
   recentContext: string;
   /** Project-relative path of the current document (tool-using tasks only). */
   currentFilePath?: string;
+  /**
+   * The pack that declared the task this bundle was assembled for — the
+   * wording anchor `bundleToMessages` resolves 【…】 labels and the fallback
+   * system prompt against. Absent for project-scoped assemblies (chat), which
+   * speak the primary pack's wording.
+   */
+  packId?: string;
   taskText: string;
   outline?: string;
   additionalKnowledge?: string;
@@ -376,6 +389,7 @@ export async function assembleContext(
   const prevChapterTail = book?.prevChapterTail?.trim() || "";
   const prevChapterTitle = book?.prevChapterTitle || "";
 
+  const packId = extras?.packId;
   const requirement = extras?.requirement?.trim();
   const outline = extras?.outline?.trim() || undefined;
   const additionalKnowledge = extras?.additionalKnowledge?.trim() || undefined;
@@ -384,14 +398,14 @@ export async function assembleContext(
   // append mode the selection is an anchor (already folded into 【近期内容】),
   // so it is never echoed back as a 【选中内容】 edit target.
   const baseTask = selection && !appendMode
-    ? `【${sectionLabel("selection")}】\n${selection}\n\n${taskInstruction}`
+    ? `【${sectionLabel("selection", packId)}】\n${selection}\n\n${taskInstruction}`
     : taskInstruction;
   const taskParts = [baseTask];
-  if (requirement) taskParts.push(`【${sectionLabel("requirement")}】\n${requirement}`);
+  if (requirement) taskParts.push(`【${sectionLabel("requirement", packId)}】\n${requirement}`);
   // When an outline was actually filled in, explicitly bind the model to it:
   // the 【大纲/写作方向】 data block alone is easy for smaller local models to
   // treat as background. Empty outline → no directive → free continuation.
-  if (outline) taskParts.push(i18n.t("ai.instructions.followOutline", promptParams(i18n.language === "zh-CN")));
+  if (outline) taskParts.push(i18n.t("ai.instructions.followOutline", promptParams(i18n.language === "zh-CN", packId)));
   const taskText = taskParts.join("\n\n");
 
   // Rough token estimate
@@ -405,6 +419,7 @@ export async function assembleContext(
     systemPrompt, loreSnippets, loreReport, priorChaptersSummary, prevChapterTail,
     prevChapterTitle, storySummary, recentContext, taskText, outline,
     additionalKnowledge, estimatedTokens, currentFilePath: extras?.currentFilePath,
+    packId,
   };
 }
 
@@ -416,8 +431,8 @@ export async function assembleContext(
  * hardcoding it silently defeats the profile — the caller fills the slot with
  * novel instructions before `bundleToMessages` ever gets a chance to fall back.
  */
-export function profileSystemPrompt(): string {
-  return i18n.t(activeProfile().systemPromptKey);
+export function profileSystemPrompt(packId?: string): string {
+  return i18n.t(systemPromptKeyFor(packId));
 }
 
 /**
@@ -435,33 +450,33 @@ function bundleContextSections(bundle: ContextBundle): string[] {
   // First, because it tells a tool-using task which of the files it is about to
   // list is the one it was invoked on.
   if (bundle.currentFilePath) {
-    parts.push(`【${sectionLabel("currentFile")}】
+    parts.push(`【${sectionLabel("currentFile", bundle.packId)}】
 ${bundle.currentFilePath}`);
   }
   if (bundle.loreSnippets) {
-    parts.push(`【${sectionLabel("knowledge")}】\n${bundle.loreSnippets}`);
+    parts.push(`【${sectionLabel("knowledge", bundle.packId)}】\n${bundle.loreSnippets}`);
   }
   if (bundle.additionalKnowledge) {
-    parts.push(`【${sectionLabel("additionalKnowledge")}】\n${bundle.additionalKnowledge}`);
+    parts.push(`【${sectionLabel("additionalKnowledge", bundle.packId)}】\n${bundle.additionalKnowledge}`);
   }
   if (bundle.outline) {
-    parts.push(`【${sectionLabel("outline")}】\n${bundle.outline}`);
+    parts.push(`【${sectionLabel("outline", bundle.packId)}】\n${bundle.outline}`);
   }
   if (bundle.priorChaptersSummary) {
-    parts.push(`【${sectionLabel("priorAll")}】\n${bundle.priorChaptersSummary}`);
+    parts.push(`【${sectionLabel("priorAll", bundle.packId)}】\n${bundle.priorChaptersSummary}`);
   }
   if (bundle.storySummary) {
-    parts.push(`【${sectionLabel("priorRecap")}】\n${bundle.storySummary}`);
+    parts.push(`【${sectionLabel("priorRecap", bundle.packId)}】\n${bundle.storySummary}`);
   }
   if (bundle.prevChapterTail) {
-    const prevTail = sectionLabel("prevTail");
+    const prevTail = sectionLabel("prevTail", bundle.packId);
     const label = bundle.prevChapterTitle
       ? `【${prevTail}·${bundle.prevChapterTitle}】`
       : `【${prevTail}】`;
     parts.push(`${label}\n${bundle.prevChapterTail}`);
   }
   if (bundle.recentContext) {
-    parts.push(`【${sectionLabel("recent")}】\n${bundle.recentContext}`);
+    parts.push(`【${sectionLabel("recent", bundle.packId)}】\n${bundle.recentContext}`);
   }
   return parts;
 }
@@ -471,7 +486,7 @@ export function bundleToMessages(
 ): { role: "system" | "user"; content: string }[] {
   const parts = [...bundleContextSections(bundle), bundle.taskText];
   return [
-    { role: "system", content: bundle.systemPrompt || profileSystemPrompt() },
+    { role: "system", content: bundle.systemPrompt || profileSystemPrompt(bundle.packId) },
     { role: "user", content: parts.join("\n\n") },
   ];
 }
@@ -609,7 +624,7 @@ export function bundleToChatMessages(
   const question = { role: "user" as const, content: questionContent ?? bundle.taskText };
   return {
     messages: [
-      { role: "system", content: bundle.systemPrompt || profileSystemPrompt() },
+      { role: "system", content: bundle.systemPrompt || profileSystemPrompt(bundle.packId) },
       ...(seedContext ? [seedContext] : []),
       question,
     ],
