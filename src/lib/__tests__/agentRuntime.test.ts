@@ -122,6 +122,12 @@ describe("runAgent", () => {
     // not stalling the real answer behind a round-completion check.
     expect(opts.output).toContain("我先去找文件列表。");
     expect(opts.output).toContain("");
+    // The narration is also absent from the transcript: only the round-2 reply
+    // lands as assistant text.
+    const assistantTexts = opts.messages.filter(
+      (m) => m.role === "assistant" && typeof m.content === "string",
+    );
+    expect(assistantTexts).toEqual([{ role: "assistant", content: "**未提及**\n- 权限接口" }]);
   });
 
   it("keeps text from every round that ends in prose", async () => {
@@ -161,15 +167,19 @@ describe("runAgent", () => {
     expect(doneStep.step.status).toBe("done");
     expect(doneStep.step.resultSummary).toContain("Ava");
 
-    // History protocol: assistant tool_calls + matching tool result appended
+    // History protocol: assistant tool_calls + matching tool result + the
+    // final reply itself. `history` IS the chat session's transcript — a
+    // reply that only reached the screen left the next turn's model blind to
+    // what it had just said.
     const history = opts.messages;
-    expect(history).toHaveLength(4);
+    expect(history).toHaveLength(5);
     const assistant = history[2] as { role: string; tool_calls: Array<{ id: string }> };
     expect(assistant.role).toBe("assistant");
     expect(assistant.tool_calls[0].id).toBe("c1");
     const toolMsg = history[3] as { role: string; tool_call_id: string; content: string };
     expect(toolMsg).toMatchObject({ role: "tool", tool_call_id: "c1" });
     expect(toolMsg.content).toContain("Ava");
+    expect(history[4]).toEqual({ role: "assistant", content: "done" });
 
     // Round 2's request carried the grown history and still offered tools
     const secondCall = mockStream.mock.calls[1][0];
@@ -290,8 +300,10 @@ describe("runAgent", () => {
 
     const call = mockStream.mock.calls[0][0];
     expect(call.tools).toBeUndefined();
-    // No forced-write injection for a toolless task — the seeded turns are untouched
-    expect(opts.messages).toHaveLength(2);
+    // No forced-write injection for a toolless task — the seeded turns gain
+    // only the reply itself.
+    expect(opts.messages).toHaveLength(3);
+    expect(opts.messages[2]).toEqual({ role: "assistant", content: "plain" });
   });
 
   it("passes extraBody (JSON mode) through to the streaming client", async () => {
@@ -352,6 +364,37 @@ describe("runAgent", () => {
     expect(rollbackSeen).toBe(true);
     // Neither tool call reached the executor — no tool-step events at all.
     expect(opts.events.some((e) => e.kind === "tool-step")).toBe(false);
+  });
+
+  it("commits the streamed prose to history when stopped mid-answer", async () => {
+    // The partial text stays on screen after a 停止, so it must also stay in
+    // the transcript — otherwise the next turn's model never saw the words the
+    // author is replying to.
+    const ctrl = new AbortController();
+    mockStream.mockImplementationOnce(async (streamOpts: StreamOptions) => {
+      sent.push([...streamOpts.messages]);
+      streamOpts.onChunk({ text: "写到一半" } as never);
+      throw new DOMException("Aborted", "AbortError");
+    });
+    const opts = makeOptions({ signal: ctrl.signal });
+
+    await expect(runAgent(opts)).rejects.toMatchObject({ name: "AbortError" });
+
+    expect(opts.messages[opts.messages.length - 1]).toEqual({
+      role: "assistant",
+      content: "写到一半",
+    });
+  });
+
+  it("adds no assistant message for a round of pure whitespace", async () => {
+    // Anthropic rejects empty content blocks, so a blank reply must not leave
+    // a blank assistant message behind in a persistent history.
+    queueRound([{ text: "  \n" }, { done: true, inputTokens: 1, outputTokens: 1 }]);
+    const opts = makeOptions();
+
+    await runAgent(opts);
+
+    expect(opts.messages.some((m) => m.role === "assistant")).toBe(false);
   });
 
   it("asks onRoundLimit at the cap and continues with the granted rounds", async () => {
