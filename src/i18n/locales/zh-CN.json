@@ -81,7 +81,11 @@
     "summonAi": "AI 助手",
     "noProject": "未命名项目",
     "noFile": "未命名",
-    "themeCycle": "主题 · 点击循环：亮 / 暗 / 跟随系统"
+    "themeCycle": "主题 · 点击循环：亮 / 暗 / 跟随系统",
+    "minimize": "最小化",
+    "maximize": "最大化",
+    "restore": "还原",
+    "close": "关闭"
   },
   "editorStrip": {
     "summon": "{{mod}} K · 召唤 AI",

@@ -8,6 +8,10 @@
 export const IS_MAC =
   typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
+/** Running inside a Tauri window (vs the plain Vite dev server / a browser).
+ *  Same check http.ts and useWindowCloseFlush use. */
+export const IS_TAURI = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
 /** The OS modifier key label. */
 export const MOD_KEY = IS_MAC ? "⌘" : "Ctrl";
 

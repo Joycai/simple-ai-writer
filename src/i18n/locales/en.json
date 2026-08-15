@@ -81,7 +81,11 @@
     "summonAi": "AI",
     "noProject": "Untitled project",
     "noFile": "Untitled",
-    "themeCycle": "Theme · click to cycle: light / dark / system"
+    "themeCycle": "Theme · click to cycle: light / dark / system",
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "close": "Close"
   },
   "editorStrip": {
     "summon": "{{mod}} K · summon AI",
