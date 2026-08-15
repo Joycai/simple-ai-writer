@@ -76,6 +76,26 @@ Rules of the road:
 - **Reusable keyframes** (in `global.css`): `fadeIn`, `scaleIn`, `slideUp`, `slideInRight` — reuse these, don't redefine per component.
 - **Selected/active list items**: `--color-accent-tint` fill + `--color-accent` text.
 
+### AI 面板设计语言 (AI surfaces — `src/components/ai/**`)
+
+The AI drawer and every surface it spawns (panels, cards, modals, the inline bubble) follow a scoped **manuscript-ink** dialect of the system, transcribed from the AI-panel mockup in the claude.ai/design project ("Simple AI Writer UI redesign" → `02 AI 面板`). The dark rendition is the binding reference; light values are paper equivalents derived from the same project's paper screens. Everything below is implemented as tokens in `tokens.css` under the `AI 面板设计语言` comment in each theme block.
+
+**Why a dialect**: the panel used to stack card-in-card-in-input (three nested borders); the redesign expresses hierarchy with **background depth + 1px hairlines** instead, so the drawer reads as part of the manuscript rather than as a foreign toolbox.
+
+- **Zero radius** — no `border-radius` anywhere under `src/components/ai/` (and it leaks into AgentLog's two lore-modal consumers). The only rounds are tiny status dots (`border-radius: 50%`) and spinners. This intentionally diverges from the global `--radius-*` scale; don't "fix" it back.
+- **Surface ladder** (per theme): `--color-bg-stream` (run column, tool lists) → `--color-bg-inset` (headers, footers, inputs, card interiors) → `--color-bg-base` (drawer body) → `--color-bg-raised` (user bubble, send stamp) → `--color-bg-selected` / `--color-bg-accent-wash` (selected 档位 / active chips).
+- **One frame border max** — a component gets at most one `--color-border-panel` frame; interior grouping uses `--color-hairline` rules + 10px uppercase `--color-text-label` section headers (`letter-spacing .18–.24em`). Section head pattern: label + `flex:1` hairline + right-aligned mono metric.
+- **No colored left-border cards.** Documented exceptions (semantic marks, not chrome): ConsistencyCheck severity bars (3px), the 2px `--color-border-accent` selection bar on `.targetCard` / chat quote cards, and error boxes' 2px `--color-error-node` rule.
+- **Three-font roles**: Spectral (`--font-serif`) for generated/user prose at `--font-size-reading` 15px/1.85 (`--color-text-prose`), titles, task-segment and lore-entity names; Inter Tight (`--font-sans`) for UI labels 11–13px; JetBrains Mono (`--font-mono`) for **every** number, token count, timestamp, model id, cost, kbd hint and file path — no exceptions.
+- **档位组 (mono pill group)**: idle `--color-text-dim` + `--color-border-panel`; selected `--color-accent-text` on `--color-bg-selected` with a sienna border (or, in the task segmented control, `inset 0 -2px 0 var(--color-sienna)` — the tab language). A whole group that the current model doesn't support gets `opacity: .38` plus an explanation line, never `display:none`.
+- **Chip taxonomy**: active = `--color-bg-accent-wash` + `--color-border-accent` + `--color-accent-text`; neutral = `--color-border-muted` + `--color-text-soft`; excluded/unconfigured = **dashed** `--color-border-muted` + `--color-text-hint` (absence, not error — no strikethrough); sub-agent-ok = `--color-success-text` + `--color-success-border`.
+- **Button tiers**: solid sienna + `--color-on-accent` / outline `--color-border-emphasis` + text-primary / outline `--color-border-muted` + text-soft.
+- **Checkboxes**: 13px `appearance:none` squares — sienna-filled with an ink check when on, `--color-border-emphasis` outline when off.
+- **Timeline (execution log, flat)**: 1px `--color-border-panel` spine, 9px **square** nodes — completed steps are outline marks (`--color-border-accent`), only failures fill solid (`--color-error-node`). The error detail box (`--color-error-surface` + 2px node rule) reads as that node's detail, and an error is stated **once**, on the timeline. Chat turns anchor on 7px squares (settled = sienna, live = `--color-border-accent`).
+- **Diff**: mono 12/1.8, del `--color-diff-del-text/-bg`, add `--color-diff-add-text/-bg`.
+- **Allocation bars**: context-allocation 10px trough (`--color-bg-inset`, 2px padding + 2px gaps); chat memory bar 6px on `--color-bar-track`; free space is always a visible track segment, and legends use 7px square swatches + mono values.
+- **Known deltas from the global rules**: the drawer is **opaque ink** (`--color-bg-base`), not glass — the hairline hierarchy would be muddied by blur; depth inside the panel comes from background steps and borders, with shadows only on true overlays (分层海拔 applies to overlays only here); TaskPanel's done-pips are success green (progress semantics), not accent tint.
+
 ### 禁止 (Do NOT)
 - Hardcode `rgba(…)` accent tints or `box-shadow: 0 …` — use tokens.
 - Use gradient backgrounds on buttons/badges/active states.
