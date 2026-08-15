@@ -62,6 +62,16 @@
 返回 `[system, 播种注入, 用户问题]`——现有 `bundleToMessages` 给 panel 任务
 继续用，不动。拆开之后播种块才第一次成为可独立淘汰的对象。
 
+> **修复记录（2026-08-15）**：上面结构里的「assistant 文本」此前从未真正
+> 入史——runtime 的纯文本轮直接 `return`，最终回复只到达展示层
+> `turns[].text`，wire history 里从无带文本的 assistant 消息（API 日志可
+> 证：下一轮请求里全是 user/tool/assistant(null+tool_calls)）。Anthropic
+> 适配器再把相邻 user 消息合并，模型看到的对话里一个自己的发言都没有，
+> 表现为"提完方案下一轮否认提过"的失忆。现 `runtime.ts` 在 prose 分支和
+> 中止（AbortError）时若本轮无工具调用、`roundText` 非空，push
+> `{role:"assistant", content}` 入史；空文本不入（Anthropic 拒绝空
+> content 块）。工具轮 narration 的回滚设计不变——只有作为答案的文本入史。
+
 ## 4. 压缩机制（compaction）
 
 **时机**：`sendChat` 里 push 用户消息**之前**判一次
