@@ -204,12 +204,15 @@
       "subagents": "子代理"
     },
     "workspace": {
-      "profileSection": "工作台类型",
-      "profileHint": "决定这个项目的知识库分类，以及提示词里各个上下文区块的称谓（例如「上一章结尾」还是「上一场景结尾」）。",
-      "noProject": "打开一个项目后可以设置工作台类型。",
-      "switchHint": "切换不会删除任何内容：旧分类的文件夹和条目仍保留在磁盘上，切回即可看到。",
-      "paneSub": "当前项目的类型与备份",
-      "current": "当前"
+      "profileSection": "能力包",
+      "profileHint": "一个项目可以同时启用多个能力包：知识库分类与 AI 任务会叠加；点击卡片选主包，它决定项目形态与界面词汇（例如「章节」还是「文档」），开关则把某个包作为副包启用。",
+      "noProject": "打开一个项目后可以设置能力包。",
+      "switchHint": "调整不会删除任何内容：停用的包，其分类文件夹和条目仍保留在磁盘上，重新启用即可看到。",
+      "paneSub": "当前项目的能力包与备份",
+      "primary": "主包",
+      "enablePack": "启用 {{pack}} 为副包",
+      "disablePack": "停用 {{pack}}",
+      "disabledHasData": "{{count}} 个分类目录仍有内容，重新启用即可看到"
     },
     "shortcuts": {
       "categories": {

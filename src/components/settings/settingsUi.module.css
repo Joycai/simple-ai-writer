@@ -299,6 +299,32 @@
   font-size: var(--font-size-xs);
 }
 
+/* Multi-pack workspace: the pack card is a div (its enable toggle nests
+   inside), an enabled secondary is a weaker echo of the primary highlight,
+   and the parked-data note marks a disabled pack whose directories still
+   hold entities. */
+.cardClickable {
+  cursor: pointer;
+  user-select: none;
+}
+.cardClickable[aria-disabled="true"] { opacity: 0.6; cursor: default; }
+
+.cardEnabled,
+.cardEnabled:hover {
+  border-color: var(--color-border-strong);
+}
+
+.packToggle {
+  display: inline-flex;
+  margin-left: auto;
+}
+
+.packDataNote {
+  margin-top: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
 /* ─── Mono badge (prompt scene, API standard, version pill) ──────────────── */
 
 .badge {
