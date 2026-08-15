@@ -282,6 +282,8 @@
   --lore-wall-bg:         #F3EDDD;   /* card-wall ground */
   --lore-wall-grid:       rgba(60, 40, 20, 0.022); /* 36px grid lines */
   --lore-card-shadow:     2px 3px 0 rgba(60, 40, 20, 0.05); /* index-card hard shadow */
+  --lore-card-shadow-lg:  3px 4px 0 rgba(60, 40, 20, 0.05); /* featured 2x2 card */
+  --lore-card-shadow-hover: 4px 6px 0 rgba(60, 40, 20, 0.08);
   --lore-bg-input:        #FFFDF6;   /* textareas / editors inside lore modals */
   --lore-shadow-modal:    0 12px 48px rgba(60, 40, 20, 0.20);
 
@@ -466,6 +468,8 @@
   --lore-wall-bg:         #1B1712;
   --lore-wall-grid:       rgba(255, 220, 180, 0.028);
   --lore-card-shadow:     2px 3px 0 rgba(0, 0, 0, 0.35);
+  --lore-card-shadow-lg:  3px 4px 0 rgba(0, 0, 0, 0.35);
+  --lore-card-shadow-hover: 4px 6px 0 rgba(0, 0, 0, 0.45);
   --lore-bg-input:        #18140F;
   --lore-shadow-modal:    0 12px 48px rgba(0, 0, 0, 0.60);
 

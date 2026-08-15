@@ -33,45 +33,7 @@ import { ModalShell } from "../common/ModalShell";
 import { fillLayer, pushBackdrop, pushForward, springScreen } from "../../lib/motion";
 import styles from "./LoreWall.module.css";
 
-// Per-category accent dot color, for the built-in novel categories. Kept as
-// explicit overrides rather than folded into the palette below so the novel
-// wall keeps exactly the colors it has always had.
-const CAT_COLOR: Record<string, string> = {
-  characters: "var(--color-sienna)",
-  world:      "var(--color-success)",
-  items:      "var(--color-amber)",
-  factions:   "var(--color-text-primary)",
-  skills:     "#7BA8A6",
-  style:      "#A78BBA",
-  custom:     "var(--color-text-muted)",
-};
-
-/**
- * Fallback dot colors — the same set as above, since those are the tones proven
- * to read in both themes.
- */
-const CAT_PALETTE = Object.values(CAT_COLOR);
-
-/**
- * Accent dot color for a category id.
- *
- * Categories are profile-defined (lib/profile), so this component cannot know
- * every id it will be asked to render: a TTRPG module has npcs/locations/rules/
- * hooks, none of which `CAT_COLOR` names. Those used to resolve to `undefined`,
- * and `.chipDot` sets no background of its own, so the dot rendered invisible.
- *
- * Unknown ids hash into the palette instead, which keeps a category the same
- * color across renders and sessions without a per-profile table. Two categories
- * can land on one color — acceptable for a 6px dot that always sits next to its
- * text label.
- */
-function categoryColor(id: string): string {
-  const override = CAT_COLOR[id];
-  if (override) return override;
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
-  return CAT_PALETTE[Math.abs(h) % CAT_PALETTE.length];
-}
+import { categoryColor } from "./catColor";
 
 // Stable, deterministic small rotation per entity id
 function rotationFor(id: string): number {
@@ -348,6 +310,7 @@ export function LoreWall() {
           <div className={styles.eyebrow}>{kbEyebrow}</div>
           <div className={styles.title}>{terms.kb}</div>
           <div className={styles.subtitle}>
+            {projectPath ? `${projectPath.split(/[\\/]/).pop()} · ` : ""}
             {t("lore.wallStats", {
               defaultValue: "{{n}} 条 · {{r}} 关系",
               n: counts.all,
@@ -370,21 +333,11 @@ export function LoreWall() {
 
           <button
             className={styles.btnSecondary}
-            onClick={handleExport}
-            disabled={transferBusy}
-            title={t("lore.transfer.exportHint", { kb: terms.kb })}
+            onClick={() => setNewMode("ai")}
+            title={t("lore.newEntry.aiHint", { defaultValue: "从手稿或描述中提取设定" })}
           >
-            <FileDown size={12} strokeWidth={2} />
-            {t("lore.transfer.export")}
-          </button>
-          <button
-            className={styles.btnSecondary}
-            onClick={handleImport}
-            disabled={transferBusy}
-            title={t("lore.transfer.importHint", { entry: terms.entry })}
-          >
-            <FileUp size={12} strokeWidth={2} />
-            {t("lore.transfer.import")}
+            <Sparkles size={12} strokeWidth={1.8} />
+            {t("lore.newEntry.ai", { defaultValue: "AI 提取" })}
           </button>
           <button className={styles.btnPrimary} onClick={() => setNewMode("manual")}>
             <Plus size={12} strokeWidth={2.5} />
@@ -500,7 +453,7 @@ export function LoreWall() {
             <div className={styles.newCard} onClick={() => setNewMode("manual")}>
               <Plus size={22} color="var(--color-sienna)" strokeWidth={1.6} />
               <div className={styles.newCardLabel}>{t("lore.panel.newEntry")}</div>
-              <div className={styles.newCardHint}>{isZh ? "手动或 AI 提取" : "Manual or AI extract"}</div>
+              <div className={styles.newCardHint}>{isZh ? "手填或从手稿提取" : "Fill in, or extract from the manuscript"}</div>
             </div>
           </div>
         )}
