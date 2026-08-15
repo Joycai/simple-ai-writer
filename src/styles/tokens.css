@@ -267,6 +267,37 @@
   --stg-focus-ring:       rgba(169, 81, 43, 0.3);
   --stg-overlay:          rgba(72, 63, 48, 0.30);
   --stg-shadow-menu:      0 10px 26px rgba(60, 50, 30, 0.16);
+
+  /* ── 设定集色系 (设计稿 03) ──
+     The lore surfaces (card wall, entity detail, extract/improve/facet/split/
+     meta modals) read these on top of the shared manuscript palette.
+     Components under src/components/lore/ may read --lore-* directly. */
+  --lore-cat-character:   #A0522D;   /* 角色 */
+  --lore-cat-location:    #8DA876;   /* 地点 */
+  --lore-cat-item:        #C9966A;   /* 物品 */
+  --lore-cat-event:       #B57F4A;   /* 事件 */
+  --lore-cat-faction:     #5C5346;   /* 势力 */
+  --lore-cat-concept:     #7BA8A6;   /* 概念 */
+
+  --lore-wall-bg:         #F3EDDD;   /* card-wall ground */
+  --lore-wall-grid:       rgba(60, 40, 20, 0.022); /* 36px grid lines */
+  --lore-card-shadow:     2px 3px 0 rgba(60, 40, 20, 0.05); /* index-card hard shadow */
+  --lore-bg-input:        #FFFDF6;   /* textareas / editors inside lore modals */
+  --lore-shadow-modal:    0 12px 48px rgba(60, 40, 20, 0.20);
+
+  --lore-add-bg:          #E8F0E0;   /* diff additions, new tags, 已存在 wash */
+  --lore-add-text:        #5C7548;
+
+  --lore-split-keep:      #F0E4D2;   /* split: paragraphs kept in the source */
+  --lore-split-a:         #E8F0E0;   /* split: new entry A */
+  --lore-split-b:         #E4E9F0;   /* split: new entry B */
+
+  /* Appearance-density timeline, 4 steps + current chapter */
+  --lore-density-0:       #F1E8D5;
+  --lore-density-1:       #F1E0BD;
+  --lore-density-2:       #D9B589;
+  --lore-density-3:       #A0522D;
+  --lore-density-now:     #2A2520;
 }
 
 /* ───────── DARK · Night ───────── */
@@ -422,4 +453,32 @@
   --stg-focus-ring:       rgba(217, 146, 91, 0.35);
   --stg-overlay:          rgba(0, 0, 0, 0.55);
   --stg-shadow-menu:      0 10px 26px rgba(0, 0, 0, 0.5);
+
+  /* ── 设定集色系 · night ── 设计稿 03 only specifies paper; night maps each
+     role onto the existing night ramp (category hues lightened for contrast). */
+  --lore-cat-character:   #D9925B;
+  --lore-cat-location:    #8DA876;
+  --lore-cat-item:        #C9966A;
+  --lore-cat-event:       #C98F55;
+  --lore-cat-faction:     #C0B49E;
+  --lore-cat-concept:     #8FBCBA;
+
+  --lore-wall-bg:         #1B1712;
+  --lore-wall-grid:       rgba(255, 220, 180, 0.028);
+  --lore-card-shadow:     2px 3px 0 rgba(0, 0, 0, 0.35);
+  --lore-bg-input:        #18140F;
+  --lore-shadow-modal:    0 12px 48px rgba(0, 0, 0, 0.60);
+
+  --lore-add-bg:          rgba(76, 92, 63, 0.22);
+  --lore-add-text:        #9AB080;
+
+  --lore-split-keep:      rgba(201, 150, 106, 0.14);
+  --lore-split-a:         rgba(76, 92, 63, 0.22);
+  --lore-split-b:         rgba(140, 173, 191, 0.16);
+
+  --lore-density-0:       #241F19;
+  --lore-density-1:       #2A211A;
+  --lore-density-2:       #6B4B2E;
+  --lore-density-3:       #D9925B;
+  --lore-density-now:     #E8DFD0;
 }
