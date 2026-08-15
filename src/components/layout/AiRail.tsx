@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { useAppStore } from "../../stores/appStore";
+import { MOD_K } from "../../lib/platform";
 import styles from "./AiRail.module.css";
 
 export function AiRail() {
@@ -15,7 +16,7 @@ export function AiRail() {
         onClick={() => setShowAiDrawer(true)}
         title={t("titleBar.summonAi")}
       >
-        {t("titleBar.summonAi")}
+        {t("titleBar.summonAi")} · {MOD_K}
       </button>
       <span className={styles.spacer} />
     </div>

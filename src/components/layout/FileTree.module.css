@@ -53,11 +53,12 @@
   border-color: var(--color-border);
 }
 
-/* Tree */
+/* Tree — rows bleed edge to edge so the active highlight reaches the
+   container rim (设计稿 01); indentation lives on each row's padding. */
 .tree {
   flex: 1;
   overflow-y: auto;
-  padding: 0 14px 12px;
+  padding: 0 0 12px;
 }
 
 /* Node row */
@@ -68,7 +69,7 @@
   cursor: pointer;
   user-select: none;
   margin: 0;
-  padding-right: 8px;
+  padding-right: 14px;
   position: relative;
   gap: 2px;
   font-family: var(--font-serif);
@@ -83,7 +84,7 @@
 .node.active::before {
   content: "";
   position: absolute;
-  left: -14px;
+  left: 0;
   top: 0;
   bottom: 0;
   width: 2px;
@@ -112,7 +113,7 @@
 }
 
 .transferError {
-  margin: 0 14px 6px;
+  margin: 0 14px 6px 18px;
   padding: 5px 8px;
   font: 400 11px/1.45 var(--font-sans);
   color: var(--color-error);
@@ -151,6 +152,15 @@
 
 .folderIcon { color: var(--color-amber); }
 .fileIcon { color: var(--color-text-muted); }
+
+/* 卷行右侧章数 (mono, faint) */
+.dirCount {
+  flex-shrink: 0;
+  font: 500 10px/1 var(--font-mono);
+  color: var(--color-text-faint);
+  margin-left: 4px;
+}
+.node:hover .dirCount { display: none; } /* yields to the hover actions */
 
 .label {
   flex: 1;

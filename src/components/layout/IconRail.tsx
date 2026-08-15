@@ -4,6 +4,7 @@ import {
 } from "lucide-react";
 import { useAppStore, type SideTab, type MainView } from "../../stores/appStore";
 import { useDocModel, useMainView, useTerms } from "../../stores/projectStore";
+import { useLoreStore } from "../../stores/loreStore";
 
 import styles from "./IconRail.module.css";
 
@@ -61,6 +62,10 @@ export function IconRail({ onOpenSettings }: Props) {
   // The *effective* view, matching what App renders — highlighting off the raw
   // stored value would leave the sidebar showing with no rail icon lit.
   const mainView = useMainView();
+  // 设计稿 01: the knowledge-base icon carries an entity-count badge.
+  const loreCount = useLoreStore((s) =>
+    Object.values(s.index).reduce((n, list) => n + list.length, 0),
+  );
 
   const handleSideClick = (id: SideTab) => {
     if (id === "search") {
@@ -116,6 +121,9 @@ export function IconRail({ onOpenSettings }: Props) {
             title={it.id === "lore-wall" ? terms.kb : t(it.labelKey)}
           >
             {it.icon}
+            {it.id === "lore-wall" && loreCount > 0 && (
+              <span className={styles.badge}>{loreCount}</span>
+            )}
           </button>
         );
       })}

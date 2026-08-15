@@ -30,14 +30,17 @@
   --font-size-2xl: 32px;
   --font-size-3xl: 44px;
 
-  /* Radius — softened manuscript. Controls 6, cards 8, modals 16, and one
-     capsule for chips/tags/switches. Every module writes var(--radius-*) so
-     the whole app moves together from here. */
-  --radius-sm: 6px;    /* inputs, selects, buttons, icon buttons */
-  --radius-md: 8px;    /* cards, grouped lists, panels, boxed sections */
-  --radius-lg: 12px;   /* large cards, confirm dialogs */
-  --radius-xl: 16px;   /* modal panels */
-  --radius-pill: 999px; /* chips, tags, badges, toggles */
+  /* Radius — manuscript is square-cornered (设计稿 01/04: 全局无圆角).
+     Every module reads var(--radius-*), so zeroing the scale here squares the
+     whole app at once. The only sanctioned circles are dot indicators,
+     spinners, switch knobs and radio marks — those read --radius-round
+     (or border-radius: 50%) explicitly, never the scale. */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+  --radius-pill: 0;
+  --radius-round: 999px; /* knobs, dots, circular icon badges only */
 
   /* Easing */
   --ease-out:    cubic-bezier(0.32, 0.72, 0, 1);
@@ -63,6 +66,12 @@
   --letter-label: 0.22em;       /* uppercase Inter Tight labels */
   --letter-eyebrow: 0.4em;      /* chapter eyebrow */
   --letter-tracked: 0.34em;     /* dramatic centered serif lines */
+  --letter-handle: 0.45em;      /* collapsed AI handle vertical text */
+  --letter-ornament: 0.7em;     /* "— · —" chapter separator ornaments */
+
+  /* Settings page heading serif (设计稿 04 — the settings surface reads in
+     Source Serif 4 / Noto Serif SC rather than Spectral). */
+  --font-serif-settings: "Source Serif 4", "Noto Serif SC", Georgia, "Songti SC", "Noto Serif CJK SC", serif;
 }
 
 /* ───────── Font schemes (CJK × Western pairings) ─────────
@@ -221,6 +230,43 @@
   --color-info-text:       var(--color-type-video-fg);
   --color-danger-bg:       var(--color-error-bg);
   --color-danger-text:     var(--color-error);
+
+  /* Chrome details (设计稿 01) */
+  --color-traffic:         #D9C7A5;   /* titlebar traffic-light dots */
+
+  /* ── 设置页色系 (设计稿 04) ──
+     The settings surface keeps its own warm-paper family — same hues as the
+     workspace but one step lighter, with its own sienna. Components under
+     src/components/settings/ read --stg-* only. */
+  --stg-bg:               #FBF7EE;   /* page ground */
+  --stg-bg-input:         #FFFDF6;   /* inputs, unselected chips */
+  --stg-card:             #FDFAF1;   /* group cards */
+  --stg-card-head:        #F3EBD9;   /* card headers */
+  --stg-stat:             #F7F1E2;   /* stat cards, drawer footer, kbd bg */
+  --stg-hint:             #F8F2E3;   /* soft hint blocks (probe panel) */
+  --stg-accent:           #A9512B;
+  --stg-accent-hover:     #93431F;
+  --stg-accent-soft:      #B4713D;   /* range accent, secondary brown */
+  --stg-badge-bg:         #EFE0CB;
+  --stg-badge-text:       #A0703F;
+  --stg-text:             #3B352C;
+  --stg-text-secondary:   #7C7466;
+  --stg-text-warm:        #7A6A4C;   /* warm secondary (subtitles) */
+  --stg-text-desc:        #98907F;   /* row descriptions */
+  --stg-text-faint:       #A79D88;   /* section titles, weak labels */
+  --stg-text-mono-dim:    #ACA28C;   /* dimmed mono (URLs) */
+  --stg-text-placeholder: #B5AC98;
+  --stg-border:           #E3D8BF;   /* card borders */
+  --stg-border-mid:       #DDD2BA;   /* chip/control borders */
+  --stg-border-soft:      #EAE1CC;   /* shell header border */
+  --stg-border-menu:      #CBBB97;   /* dropdown menu border */
+  --stg-line-row:         #F1E9D6;   /* row separators */
+  --stg-line-section:     #E7DCC4;   /* section-title rules */
+  --stg-kbd-border:       #DFD3B8;
+  --stg-bar:              #C68B5A;   /* usage share bars */
+  --stg-focus-ring:       rgba(169, 81, 43, 0.3);
+  --stg-overlay:          rgba(72, 63, 48, 0.30);
+  --stg-shadow-menu:      0 10px 26px rgba(60, 50, 30, 0.16);
 }
 
 /* ───────── DARK · Night ───────── */
@@ -340,4 +386,40 @@
   --color-info-text:       var(--color-type-video-fg);
   --color-danger-bg:       var(--color-error-bg);
   --color-danger-text:     var(--color-error);
+
+  /* Chrome details (设计稿 01) */
+  --color-traffic:         #5A4F3D;
+
+  /* ── 设置页色系 · night ── The mockup only specifies the light settings
+     palette; night maps each --stg-* role onto the existing night ramp so the
+     settings surface follows the theme without a second design pass. */
+  --stg-bg:               #1F1B16;
+  --stg-bg-input:         #18140F;
+  --stg-card:             #241F19;
+  --stg-card-head:        #28231D;
+  --stg-stat:             #28231D;
+  --stg-hint:             #241C15;
+  --stg-accent:           #D9925B;
+  --stg-accent-hover:     #F4C28A;
+  --stg-accent-soft:      #B3764A;
+  --stg-badge-bg:         rgba(217, 146, 91, 0.18);
+  --stg-badge-text:       #E0BC8A;
+  --stg-text:             #E8DFD0;
+  --stg-text-secondary:   #B3A794;
+  --stg-text-warm:        #C0B49E;
+  --stg-text-desc:        #9A8E7A;
+  --stg-text-faint:       #8E8271;
+  --stg-text-mono-dim:    #6E6455;
+  --stg-text-placeholder: #5E564A;
+  --stg-border:           #2E2820;
+  --stg-border-mid:       #3A332A;
+  --stg-border-soft:      #2A241C;
+  --stg-border-menu:      #4A4238;
+  --stg-line-row:         #241F19;
+  --stg-line-section:     #2E2820;
+  --stg-kbd-border:       #3A332A;
+  --stg-bar:              #B3764A;
+  --stg-focus-ring:       rgba(217, 146, 91, 0.35);
+  --stg-overlay:          rgba(0, 0, 0, 0.55);
+  --stg-shadow-menu:      0 10px 26px rgba(0, 0, 0, 0.5);
 }

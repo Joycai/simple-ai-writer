@@ -52,7 +52,6 @@
   background: var(--color-card);
   border: 1px solid var(--color-border);
   color: var(--color-text-primary);
-  border-radius: 3px;
   max-width: 160px;
 }
 .headBtn {
@@ -98,7 +97,6 @@
   background: var(--color-card);
   border: 1px solid var(--color-border-strong);
   color: var(--color-text-primary);
-  border-radius: 3px;
 }
 .clearBtn {
   font: 400 11px/1 var(--font-sans);
@@ -125,7 +123,6 @@
   padding: 0;
   background: transparent;
   border: none;
-  border-radius: 3px;
   color: var(--color-text-muted);
   cursor: pointer;
 }
@@ -144,7 +141,6 @@
 .selectDotOn {
   background: var(--color-sienna);
   color: var(--color-card);
-  border-radius: 3px;
 }
 
 .viewToggle {
@@ -187,6 +183,7 @@
   color: var(--color-text-muted);
 }
 .statValue {
+  font-family: var(--font-mono);
   color: var(--color-text-primary);
   font-weight: 500;
   font-size: 13px;
@@ -305,8 +302,8 @@
   color: var(--color-text-muted);
 }
 .chapterWords {
-  font: 400 10px/1 var(--font-sans);
-  color: var(--color-text-muted);
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-faint);
 }
 .chapterStatus {
   font: 500 10px/1 var(--font-sans);
@@ -325,7 +322,6 @@
 .memoChip {
   font: 500 10px/1 var(--font-sans);
   padding: 2px 6px;
-  border-radius: 3px;
   white-space: nowrap;
 }
 .memoFresh { color: var(--color-success); background: color-mix(in srgb, var(--color-success) 12%, transparent); }
@@ -341,7 +337,6 @@
   padding: 0;
   background: transparent;
   border: none;
-  border-radius: 3px;
   color: var(--color-sienna);
   cursor: pointer;
   opacity: 0.55;
@@ -393,7 +388,6 @@
   padding: 0;
   background: transparent;
   border: none;
-  border-radius: 3px;
   color: var(--color-text-muted);
   cursor: pointer;
   transition: background var(--transition-fast), color var(--transition-fast);

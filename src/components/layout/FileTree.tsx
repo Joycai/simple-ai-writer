@@ -104,7 +104,7 @@ function CreateInput({ depth }: { depth: number }) {
     <>
       <div
         className={styles.createInputRow}
-        style={{ paddingLeft: `${4 + (depth + 1) * 12}px` }}
+        style={{ paddingLeft: `${18 + (depth + 1) * 12}px` }}
       >
         <span className={styles.chevron} />
         <span className={styles.nodeIcon}>
@@ -186,6 +186,15 @@ function FileIcon({ name }: { name: string }) {
 
 // ── Tree node ─────────────────────────────────────────────────────────────────
 
+function countDocsIn(node: FileNode): number {
+  let n = 0;
+  for (const child of node.children ?? []) {
+    if (child.is_dir) n += countDocsIn(child);
+    else if (/\.md$/i.test(child.name)) n++;
+  }
+  return n;
+}
+
 function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
   const { t } = useTranslation();
   const {
@@ -204,6 +213,8 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
     useProjectStore.getState().setDirExpanded(node.path, next);
   const isActive = !node.is_dir && activeFilePath === node.path;
   const isRenaming = renamingPath === node.path;
+  // 设计稿 01: 卷行右侧带章数 — the documents under this folder, at any depth.
+  const docCount = node.is_dir ? countDocsIn(node) : 0;
 
   // Auto-expand when this folder becomes the target of an inline create
   // (context menu can trigger creates on collapsed folders).
@@ -231,7 +242,7 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
     <div>
       <div
         className={classes}
-        style={{ paddingLeft: `${4 + depth * 12}px` }}
+        style={{ paddingLeft: `${18 + depth * 12}px` }}
         onClick={handleClick}
         onContextMenu={(e) => openMenu(e, node)}
         // Renaming turns the label into a text input; a draggable ancestor
@@ -262,7 +273,15 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
         </span>
         {isRenaming
           ? <RenameInput node={node} />
-          : <span className={styles.label}>{node.name}</span>}
+          : (
+            <span className={styles.label}>
+              {node.is_dir ? node.name : node.name.replace(/\.md$/i, "")}
+            </span>
+          )}
+
+        {node.is_dir && !isRenaming && docCount > 0 && (
+          <span className={styles.dirCount}>{docCount}</span>
+        )}
 
         {node.is_dir && !isRenaming && (
           <span className={styles.nodeActions} onClick={(e) => e.stopPropagation()}>

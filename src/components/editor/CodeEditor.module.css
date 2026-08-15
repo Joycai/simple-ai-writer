@@ -53,7 +53,6 @@
   background: var(--color-border-strong);
   background-clip: content-box;
   border: 3px solid transparent;
-  border-radius: 6px;
 }
 .wrap :global(.cm-scroller)::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-muted);

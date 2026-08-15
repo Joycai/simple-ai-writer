@@ -44,7 +44,7 @@
   margin: 32px 0 36px;
   font: 400 15px/1 var(--font-serif);
   color: var(--color-text-ghost);
-  letter-spacing: 0.7em;
+  letter-spacing: var(--letter-ornament);
 }
 
 .emptyHint {
@@ -157,5 +157,5 @@
   margin: 32px 0 0;
   font: 400 15px/1 var(--font-serif);
   color: var(--color-text-ghost);
-  letter-spacing: 0.7em;
+  letter-spacing: var(--letter-ornament);
 }

@@ -80,7 +80,8 @@
     "saving": "saving",
     "summonAi": "AI",
     "noProject": "Untitled project",
-    "noFile": "Untitled"
+    "noFile": "Untitled",
+    "themeCycle": "Theme · click to cycle: light / dark / system"
   },
   "editorStrip": {
     "summon": "{{mod}} K · summon AI",
@@ -88,7 +89,7 @@
     "markStartHint": "Mark the AI range's start at the cursor ({{mod}}+Shift+[)",
     "markEnd": "Mark end",
     "markEndHint": "Mark the AI range's end at the cursor ({{mod}}+Shift+])",
-    "markCount": "{{chars}} chars marked",
+    "markCount": "AI range · {{chars}} chars",
     "markPending": "end not marked yet",
     "markClear": "Clear",
     "markClearHint": "Clear the AI range ({{mod}}+Shift+\\)",

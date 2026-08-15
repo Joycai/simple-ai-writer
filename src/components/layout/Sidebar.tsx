@@ -60,7 +60,6 @@ export function Sidebar() {
         <button
           className={styles.searchBox}
           onClick={() => setShowCommandPalette(true)}
-          style={{ all: "unset", margin: "16px 22px 0", display: "flex", alignItems: "center", gap: 8, padding: "8px 11px", background: "var(--color-bg-base)", border: "1px solid var(--color-border)", cursor: "pointer" }}
         >
           <SearchIcon size={11} strokeWidth={1.6} color="var(--color-text-muted)" />
           <span className={styles.searchPlaceholder}>
