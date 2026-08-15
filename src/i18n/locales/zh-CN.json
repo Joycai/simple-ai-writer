@@ -947,7 +947,8 @@
     "drawer": {
       "tabGenerate": "生成",
       "consistencyTitle": "一致性检查",
-      "generateTitle": "AI 助手"
+      "generateTitle": "AI 助手",
+      "tasksAction": "任务"
     },
     "modelPicker": {
       "search": "搜索模型…",

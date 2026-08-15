@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "motion/react";
-import { Bot, CheckCircle2, History, ListTodo, RotateCw, Sparkles, X } from "lucide-react";
+import { Bot, CheckCircle2, Sparkles, X } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { AgentChat } from "./AgentChat";
@@ -116,7 +116,7 @@ export function AiDrawer() {
                 onClick={() => setShowTasks((v) => !v)}
                 title={t("ai.taskWorkspace.title", { defaultValue: "任务工作区" })}
               >
-                <ListTodo size={11} strokeWidth={1.8} style={{ verticalAlign: -1.5 }} />
+                {t("ai.drawer.tasksAction", { defaultValue: "任务" })}
               </button>
             )}
             {aiDrawerMode === "chat" && chatSessions.length > 0 && (
@@ -128,7 +128,7 @@ export function AiDrawer() {
                   aria-expanded={showSessions}
                   title={t("ai.chat.history", { defaultValue: "历史会话" })}
                 >
-                  <History size={11} strokeWidth={1.8} style={{ verticalAlign: -1.5 }} />
+                  {t("ai.chat.history", { defaultValue: "历史会话" })}
                 </button>
                 {showSessions && (
                   <div className={styles.sessionMenu}>
@@ -161,7 +161,6 @@ export function AiDrawer() {
                 }}
                 disabled={turns.length === 0 && !chatError}
               >
-                <RotateCw size={10} strokeWidth={1.8} style={{ marginRight: 4, verticalAlign: -1 }} />
                 {t("ai.chat.newSession")}
               </button>
             )}

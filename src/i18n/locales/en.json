@@ -948,7 +948,8 @@
     "drawer": {
       "tabGenerate": "Generate",
       "consistencyTitle": "Consistency check",
-      "generateTitle": "AI assistant"
+      "generateTitle": "AI assistant",
+      "tasksAction": "Tasks"
     },
     "modelPicker": {
       "search": "Search models…",
