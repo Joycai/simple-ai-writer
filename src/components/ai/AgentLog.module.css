@@ -290,8 +290,9 @@
 .rowMuted .rowName { color: var(--color-text-muted); }
 
 /* ── Status markers ──────────────────────────────────────────────── */
-/* Square timeline nodes: completed steps are outline marks (the record, not a
-   celebration); only a failure fills solid. */
+/* Square timeline nodes: pending is an outline; completion fills success green
+   and carries the checkbox glyph sized down (progress semantics, like
+   TaskPanel's pips); a failure fills solid with no glyph. */
 .marker {
   width: 9px;
   height: 9px;
@@ -299,7 +300,18 @@
   align-self: center;
 }
 .marker_pending { box-shadow: inset 0 0 0 1px var(--color-border-muted); }
-.marker_done { box-shadow: inset 0 0 0 1px var(--color-border-accent); }
+.marker_done {
+  background: var(--color-success);
+  display: inline-grid;
+  place-content: center;
+}
+.marker_done::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  background: var(--color-on-accent);
+  clip-path: polygon(13% 47%, 0 63%, 41% 100%, 100% 19%, 84% 6%, 39% 74%);
+}
 .marker_error { background: var(--color-error-node); }
 
 .markerSpinner {
