@@ -23,7 +23,8 @@ export function WorkspacePane() {
   const isZh = i18nInst.language.startsWith("zh");
   const projectPath = useProjectStore((s) => s.projectPath);
   const profile = useProjectStore((s) => s.profile);
-  const setProfile = useProjectStore((s) => s.setProfile);
+  const workspace = useProjectStore((s) => s.workspace);
+  const setPacks = useProjectStore((s) => s.setPacks);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,7 +33,11 @@ export function WorkspacePane() {
     setBusy(true);
     setError(null);
     try {
-      await setProfile(next);
+      // Single-select for now (the multi-pack picker lands with the workspace
+      // UI change): the clicked pack becomes primary, and packs already
+      // enabled — a hand-written multi-pack profile.json — stay enabled
+      // rather than being dropped by what reads as switching, not removing.
+      await setPacks(next.id, [next.id, ...workspace.enabled.map((p) => p.id)]);
     } catch (e) {
       setError(String(e));
     } finally {

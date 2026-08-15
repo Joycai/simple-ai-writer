@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { resetActiveProfile, setActiveProfile } from "../profile/active";
-import { TTRPG_PROFILE } from "../profile/model";
+import { resetActiveWorkspace, setActiveWorkspace } from "../profile/active";
+import { resolveWorkspace } from "../profile/resolve";
+import { BID_PROFILE, NOVEL_PROFILE, TTRPG_PROFILE } from "../profile/model";
 import {
   assembleContext,
   bundleToChatMessages,
@@ -346,10 +347,10 @@ describe("bundleToMessages", () => {
   // so they have to follow the project's workspace profile: a TTRPG module
   // labelled 【上一章结尾】 is actively misleading.
   describe("with a non-novel workspace profile", () => {
-    afterEach(() => resetActiveProfile());
+    afterEach(() => resetActiveWorkspace());
 
     it("labels blocks with the active profile's wording", async () => {
-      setActiveProfile(TTRPG_PROFILE);
+      setActiveWorkspace(resolveWorkspace(TTRPG_PROFILE, []));
       const bundle = await assembleContext(
         "SYS", makeLoreIndex(), "Aria sang in Ironhold.", "", "Continue.",
         {
@@ -373,10 +374,43 @@ describe("bundleToMessages", () => {
     });
 
     it("falls back to the profile's system prompt when none is active", async () => {
-      setActiveProfile(TTRPG_PROFILE);
+      setActiveWorkspace(resolveWorkspace(TTRPG_PROFILE, []));
       const bundle = await assembleContext("", makeLoreIndex(), "x", "", "Continue.");
       // i18n is mocked to echo the key, so this asserts *which* key is used.
       expect(bundleToMessages(bundle)[0].content).toBe("ai.instructions.systemTtrpg");
+    });
+  });
+
+  // A task speaks the wording of the pack that declared it: a bid task in a
+  // novel-primary project must not label its knowledge block 【设定资料】.
+  describe("with a secondary pack's task (packId)", () => {
+    afterEach(() => resetActiveWorkspace());
+
+    it("labels blocks and picks the system prompt from the task's pack", async () => {
+      setActiveWorkspace(resolveWorkspace(NOVEL_PROFILE, [BID_PROFILE]));
+      const bundle = await assembleContext(
+        "", makeLoreIndex(), "Aria sang in Ironhold.", "", "Respond.",
+        { packId: "bid", additionalKnowledge: "投标须知。", outline: "第三章应答。" },
+      );
+      const [system, user] = bundleToMessages(bundle).map((m) => m.content);
+      expect(system).toBe("ai.instructions.systemBid");
+      expect(user).toContain("【企业知识库】");
+      expect(user).toContain("【应答大纲】");
+      expect(user).not.toContain("【设定资料】");
+      // A section bid doesn't override falls through to the primary → default
+      // chain, not to nothing.
+      expect(user).toContain("【附加知识】");
+    });
+
+    it("keeps the primary's wording when no packId is given", async () => {
+      setActiveWorkspace(resolveWorkspace(NOVEL_PROFILE, [BID_PROFILE]));
+      const bundle = await assembleContext(
+        "", makeLoreIndex(), "Aria sang in Ironhold.", "", "Continue.",
+      );
+      const [system, user] = bundleToMessages(bundle).map((m) => m.content);
+      expect(system).toBe("ai.instructions.system");
+      expect(user).toContain("【设定资料】");
+      expect(user).not.toContain("【企业知识库】");
     });
   });
 });

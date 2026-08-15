@@ -218,7 +218,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
 
     // System prompt: user-selected prompt (scene === "system"), else default
     const prompt = prompts.find((p) => p.id === activePromptId);
-    const systemPrompt = prompt?.content ?? profileSystemPrompt();
+    const systemPrompt = prompt?.content ?? profileSystemPrompt(task.packId);
 
     // Snapshot the writing focus and the committed selection together, here —
     // before the keyring read below and every other await further down (memory
@@ -264,7 +264,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         // or {{doc}}. Unused params are harmless.
         ? i18n.t(task.instructionKey, {
             length: continueLength ?? 500,
-            ...promptParams(i18n.language === "zh-CN"),
+            ...promptParams(i18n.language === "zh-CN", task.packId),
           })
         : "");
     let instruction: string;
@@ -279,7 +279,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // where the text ends" then means "continue the previous chapter". Nothing in
     // the prompt otherwise says a new one is starting.
     if (task.continuation && documentText.trim() === "") {
-      instruction += `\n\n${i18n.t("ai.instructions.continueNewChapter", promptParams(i18n.language === "zh-CN"))}`;
+      instruction += `\n\n${i18n.t("ai.instructions.continueNewChapter", promptParams(i18n.language === "zh-CN", task.packId))}`;
     }
 
     // ── Context budget ──────────────────────────────────────────────────────
@@ -434,8 +434,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           selection,
           instruction,
           isContinue
-            ? { ...extras, ...bookExtras, appendMode: true, contextChars: plan.recentWindowChars, currentFilePath }
-            : { ...extras, contextChars: plan.recentWindowChars, currentFilePath },
+            ? { ...extras, ...bookExtras, appendMode: true, contextChars: plan.recentWindowChars, currentFilePath, packId: task.packId }
+            : { ...extras, contextChars: plan.recentWindowChars, currentFilePath, packId: task.packId },
           selectionRange,
           memory,
           loreBudgetChars,
@@ -569,7 +569,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           documentText,
           selection,
           instruction,
-          { ...extras, contextChars: plan.recentWindowChars },
+          { ...extras, contextChars: plan.recentWindowChars, packId: task.packId },
           selectionRange,
           memory,
           loreBudgetChars,

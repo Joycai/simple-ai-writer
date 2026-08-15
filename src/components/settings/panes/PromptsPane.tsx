@@ -4,7 +4,7 @@ import { ChevronRight, X } from "lucide-react";
 import { useAiStore } from "../../../stores/aiStore";
 import { useProjectStore } from "../../../stores/projectStore";
 import type { Prompt } from "../../../lib/ai/configDb";
-import { activeProfile, findTask, profileLabel, promptParams } from "../../../lib/profile";
+import { findTask, primaryPack, profileLabel, promptParams } from "../../../lib/profile";
 import { PromptDrawer, SNIPPET_SCENE } from "./PromptDrawer";
 import { Pane, PaneHeader, Section } from "./bits";
 import ui from "../settingsUi.module.css";
@@ -42,10 +42,13 @@ export function PromptsPane({ onEscapeInterceptChange }: Props) {
   // summary with its own wording), and "system" shows this profile's system
   // prompt — otherwise the editor would display a text no run ever sends.
   const builtins = BUILTIN_PROMPTS_CONFIG.map((b) => {
+    const task = b.scene === "system" ? null : findTask(b.scene);
     const key = b.scene === "system"
-      ? activeProfile().systemPromptKey
-      : findTask(b.scene)?.instructionKey ?? b.instructionKey;
-    return { ...b, label: t(`ai.tasks.${b.scene}`), text: t(key, promptParams(isZh)) };
+      ? primaryPack().systemPromptKey
+      : task?.instructionKey ?? b.instructionKey;
+    // The pack that declared the task, so its preview shows the wording the
+    // run will actually use (see promptParams).
+    return { ...b, label: t(`ai.tasks.${b.scene}`), text: t(key, promptParams(isZh, task?.packId)) };
   });
 
   const closeDrawer = () => { setDraft(null); onEscapeInterceptChange(null); };

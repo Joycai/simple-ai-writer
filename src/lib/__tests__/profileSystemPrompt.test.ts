@@ -27,16 +27,17 @@ vi.mock("../fs/fileio", () => ({
 }));
 
 import { profileSystemPrompt } from "../context/rag";
-import { resetActiveProfile, setActiveProfile } from "../profile/active";
+import { resetActiveWorkspace, setActiveWorkspace } from "../profile/active";
+import { resolveWorkspace } from "../profile/resolve";
 import { BUILTIN_PROFILES, NOVEL_PROFILE, TTRPG_PROFILE } from "../profile/model";
 
-afterEach(() => resetActiveProfile());
+afterEach(() => resetActiveWorkspace());
 
 describe("profileSystemPrompt", () => {
   it("resolves the active profile's key", () => {
     // i18n is mocked to echo keys, so this asserts *which* key is used.
     expect(profileSystemPrompt()).toBe(NOVEL_PROFILE.systemPromptKey);
-    setActiveProfile(TTRPG_PROFILE);
+    setActiveWorkspace(resolveWorkspace(TTRPG_PROFILE, []));
     expect(profileSystemPrompt()).toBe(TTRPG_PROFILE.systemPromptKey);
   });
 

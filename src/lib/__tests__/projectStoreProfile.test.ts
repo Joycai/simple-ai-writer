@@ -1,11 +1,11 @@
 /**
- * projectStore's workspace-profile lifecycle.
+ * projectStore's workspace lifecycle.
  *
- * The store is the *only* writer of both the React-visible `profile` field and
- * the `lib/profile/active` module singleton that non-React code reads, so the
- * invariant worth pinning is that the two never disagree — including on the
- * paths where an open fails halfway. The ordering comments in the store assert
- * that; these tests hold them to it.
+ * The store is the *only* writer of both the React-visible `profile`/`workspace`
+ * fields and the `lib/profile/active` module singleton that non-React code
+ * reads, so the invariant worth pinning is that they never disagree — including
+ * on the paths where an open fails halfway. The ordering comments in the store
+ * assert that; these tests hold them to it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -18,8 +18,8 @@ const h = vi.hoisted(() => ({
   readDirRecursive: vi.fn(async () => []),
   getDb: vi.fn(async () => ({})),
   resetDb: vi.fn(() => {}),
-  loadProfileMock: vi.fn(async (_p: string) => null as unknown),
-  saveProfileMock: vi.fn(async (_p: string, _prof: unknown) => {}),
+  loadProfileFileMock: vi.fn(async (_p: string) => null as unknown),
+  saveProfileFileMock: vi.fn(async (_p: string, _sel: unknown) => {}),
   scanProject: vi.fn(async (_p: string) => {}),
   addRecentProject: vi.fn(() => {}),
   removeRecentProject: vi.fn(() => {}),
@@ -38,16 +38,16 @@ vi.mock("../project", () => ({
 }));
 
 // The profile *module* is mocked only for its two IO functions; the real
-// active-profile singleton and the real built-ins are kept, since the whole
+// active-workspace singleton, resolver and built-ins are kept, since the whole
 // point is to observe what the store does to that singleton.
 vi.mock("../profile", async () => {
   const actual = await vi.importActual<typeof import("../profile")>("../profile");
   return {
     ...actual,
-    loadProfile: h.loadProfileMock,
-    saveProfile: (p: string, prof: unknown) => {
+    loadProfileFile: h.loadProfileFileMock,
+    saveProfileFile: (p: string, sel: unknown) => {
       h.calls.push("save");
-      return h.saveProfileMock(p, prof);
+      return h.saveProfileFileMock(p, sel);
     },
   };
 });
@@ -94,8 +94,9 @@ vi.mock("../../stores/appStore", () => ({
 }));
 
 import { useProjectStore } from "../../stores/projectStore";
-import { activeProfile, resetActiveProfile } from "../profile/active";
-import { NOVEL_PROFILE, TTRPG_PROFILE } from "../profile/model";
+import { primaryPack, loreCategoryIds, resetActiveWorkspace } from "../profile/active";
+import { BID_PROFILE, NOVEL_PROFILE, TTRPG_PROFILE } from "../profile/model";
+import type { ProfileSelection } from "../profile/file";
 
 /** Category ids scaffoldProject was last asked to create. */
 function lastScaffoldCategories(): string[] {
@@ -103,55 +104,75 @@ function lastScaffoldCategories(): string[] {
   return calls.length > 0 ? calls[calls.length - 1][1] : [];
 }
 
+/** A single-pack selection, as loadProfileFile would return for a v1 file. */
+function selectionOf(...packs: (typeof NOVEL_PROFILE)[]): ProfileSelection {
+  return { primary: packs[0], enabled: packs, customPacks: [], issues: [] };
+}
+
 beforeEach(() => {
   h.calls.length = 0;
   vi.clearAllMocks();
-  h.loadProfileMock.mockResolvedValue(null);
+  h.loadProfileFileMock.mockResolvedValue(null);
   h.getDb.mockResolvedValue({});
-  useProjectStore.setState({ projectPath: null, profile: NOVEL_PROFILE });
-  resetActiveProfile();
+  useProjectStore.setState({ projectPath: null, profile: NOVEL_PROFILE, customPacks: [] });
+  resetActiveWorkspace();
 });
 
-afterEach(() => resetActiveProfile());
+afterEach(() => resetActiveWorkspace());
 
 describe("openProject", () => {
-  it("activates the project's profile and scaffolds that profile's categories", async () => {
-    h.loadProfileMock.mockResolvedValue(TTRPG_PROFILE);
+  it("activates the project's packs and scaffolds their categories", async () => {
+    h.loadProfileFileMock.mockResolvedValue(selectionOf(TTRPG_PROFILE));
 
     await useProjectStore.getState().openProject("D:/projects/module");
 
     expect(useProjectStore.getState().profile).toBe(TTRPG_PROFILE);
-    expect(activeProfile()).toBe(TTRPG_PROFILE);
+    expect(primaryPack()).toBe(TTRPG_PROFILE);
     expect(lastScaffoldCategories()).toEqual(TTRPG_PROFILE.categories.map((c) => c.id));
+  });
+
+  it("scaffolds the union of a multi-pack selection's categories", async () => {
+    h.loadProfileFileMock.mockResolvedValue(selectionOf(NOVEL_PROFILE, BID_PROFILE));
+
+    await useProjectStore.getState().openProject("D:/projects/kb");
+
+    expect(primaryPack()).toBe(NOVEL_PROFILE);
+    const novelIds = NOVEL_PROFILE.categories.map((c) => c.id);
+    const scaffolded = lastScaffoldCategories();
+    // Primary's categories first, then the bid pack's novel ones — deduped.
+    expect(scaffolded.slice(0, novelIds.length)).toEqual(novelIds);
+    expect(scaffolded).toContain("capabilities");
+    expect(new Set(scaffolded).size).toBe(scaffolded.length);
+    expect(loreCategoryIds()).toEqual(scaffolded);
   });
 
   it("treats a project with no profile.json as a novel project", async () => {
     await useProjectStore.getState().openProject("D:/projects/old-book");
 
-    expect(activeProfile()).toBe(NOVEL_PROFILE);
+    expect(primaryPack()).toBe(NOVEL_PROFILE);
     expect(lastScaffoldCategories()).toEqual(NOVEL_PROFILE.categories.map((c) => c.id));
   });
 
   it("scaffolds before the lore scan, so the folders exist when it runs", async () => {
-    h.loadProfileMock.mockResolvedValue(TTRPG_PROFILE);
+    h.loadProfileFileMock.mockResolvedValue(selectionOf(TTRPG_PROFILE));
     await useProjectStore.getState().openProject("D:/projects/module");
     expect(h.calls.indexOf("scaffold")).toBeLessThan(h.calls.indexOf("scanLore"));
   });
 
-  it("leaves the previous project's profile active when the open fails", async () => {
-    // The failure has to land *after* the profile is resolved, which is the
+  it("leaves the previous project's workspace active when the open fails", async () => {
+    // The failure has to land *after* the selection is resolved, which is the
     // window the store's ordering comment is about: activating early would point
     // the still-open project's lore/prompt code at the failed project.
     const previous = useProjectStore.getState();
     await previous.openProject("D:/projects/module");
-    h.loadProfileMock.mockResolvedValue(TTRPG_PROFILE);
+    h.loadProfileFileMock.mockResolvedValue(selectionOf(TTRPG_PROFILE));
     h.getDb.mockRejectedValueOnce(new Error("db is corrupt"));
 
     await expect(useProjectStore.getState().openProject("D:/projects/broken")).rejects.toThrow(
       "db is corrupt",
     );
 
-    expect(activeProfile()).toBe(NOVEL_PROFILE);
+    expect(primaryPack()).toBe(NOVEL_PROFILE);
     expect(useProjectStore.getState().profile).toBe(NOVEL_PROFILE);
     // ...and the path that failed is dropped from recents.
     expect(h.removeRecentProject).toHaveBeenCalledWith("D:/projects/broken");
@@ -159,20 +180,20 @@ describe("openProject", () => {
 });
 
 describe("closeProject", () => {
-  it("resets the active profile so nothing still reads the closed project's categories", async () => {
-    h.loadProfileMock.mockResolvedValue(TTRPG_PROFILE);
+  it("resets the workspace so nothing still reads the closed project's categories", async () => {
+    h.loadProfileFileMock.mockResolvedValue(selectionOf(TTRPG_PROFILE));
     await useProjectStore.getState().openProject("D:/projects/module");
-    expect(activeProfile()).toBe(TTRPG_PROFILE);
+    expect(primaryPack()).toBe(TTRPG_PROFILE);
 
     await useProjectStore.getState().closeProject();
 
-    expect(activeProfile()).toBe(NOVEL_PROFILE);
+    expect(primaryPack()).toBe(NOVEL_PROFILE);
     expect(useProjectStore.getState().profile).toBe(NOVEL_PROFILE);
     expect(useProjectStore.getState().projectPath).toBeNull();
   });
 });
 
-describe("setProfile", () => {
+describe("setPacks", () => {
   beforeEach(async () => {
     await useProjectStore.getState().openProject("D:/projects/book");
     h.calls.length = 0;
@@ -180,45 +201,69 @@ describe("setProfile", () => {
   });
 
   it("persists, activates, scaffolds the new categories, and rescans lore", async () => {
-    await useProjectStore.getState().setProfile(TTRPG_PROFILE);
+    await useProjectStore.getState().setPacks("ttrpg", ["ttrpg"]);
 
-    expect(activeProfile()).toBe(TTRPG_PROFILE);
+    expect(primaryPack()).toBe(TTRPG_PROFILE);
     expect(useProjectStore.getState().profile).toBe(TTRPG_PROFILE);
-    expect(h.saveProfileMock).toHaveBeenCalledWith("D:/projects/book", TTRPG_PROFILE);
+    expect(h.saveProfileFileMock).toHaveBeenCalledWith(
+      "D:/projects/book",
+      expect.objectContaining({ primary: TTRPG_PROFILE, enabled: [TTRPG_PROFILE] }),
+    );
     expect(lastScaffoldCategories()).toEqual(TTRPG_PROFILE.categories.map((c) => c.id));
     // The lore index is keyed by category, so a rescan is not optional.
     expect(h.scanProject).toHaveBeenCalledWith("D:/projects/book");
   });
 
+  it("enables a secondary pack: categories union, tasks union, primary's docModel", async () => {
+    await useProjectStore.getState().setPacks("novel", ["novel", "bid"]);
+
+    const { workspace } = useProjectStore.getState();
+    expect(workspace.primary).toBe(NOVEL_PROFILE);
+    expect(workspace.enabled).toEqual([NOVEL_PROFILE, BID_PROFILE]);
+    // The bid pack's tasks joined the menu, tagged with their pack...
+    const respond = workspace.tasks.find((t) => t.id === "respond");
+    expect(respond?.packId).toBe("bid");
+    // ...while the shared base tasks stay the primary's.
+    expect(workspace.tasks.find((t) => t.id === "continue")?.packId).toBe("novel");
+    expect(lastScaffoldCategories()).toContain("qualifications");
+  });
+
   it("writes profile.json before touching anything else", async () => {
     // If the write fails, nothing else has moved and the next open still
-    // resolves the previous profile — which only holds if it goes first.
-    await useProjectStore.getState().setProfile(TTRPG_PROFILE);
+    // resolves the previous selection — which only holds if it goes first.
+    await useProjectStore.getState().setPacks("ttrpg", ["ttrpg"]);
     expect(h.calls).toEqual(["save", "scaffold", "scanLore"]);
   });
 
-  it("leaves the profile alone when persisting it fails", async () => {
-    h.saveProfileMock.mockRejectedValueOnce(new Error("disk full"));
+  it("leaves the workspace alone when persisting it fails", async () => {
+    h.saveProfileFileMock.mockRejectedValueOnce(new Error("disk full"));
 
-    await expect(useProjectStore.getState().setProfile(TTRPG_PROFILE)).rejects.toThrow("disk full");
+    await expect(useProjectStore.getState().setPacks("ttrpg", ["ttrpg"])).rejects.toThrow("disk full");
 
-    expect(activeProfile()).toBe(NOVEL_PROFILE);
+    expect(primaryPack()).toBe(NOVEL_PROFILE);
     expect(useProjectStore.getState().profile).toBe(NOVEL_PROFILE);
     expect(h.scaffoldProject).not.toHaveBeenCalled();
     expect(h.scanProject).not.toHaveBeenCalled();
   });
 
-  it("is a no-op when the profile is already active", async () => {
-    await useProjectStore.getState().setProfile(NOVEL_PROFILE);
-    expect(h.saveProfileMock).not.toHaveBeenCalled();
+  it("is a no-op when the selection is already active", async () => {
+    await useProjectStore.getState().setPacks("novel", ["novel"]);
+    expect(h.saveProfileFileMock).not.toHaveBeenCalled();
     expect(h.scaffoldProject).not.toHaveBeenCalled();
   });
 
-  it("refuses to set a profile with no project open", async () => {
+  it("rejects an unknown pack id without touching anything", async () => {
+    await expect(useProjectStore.getState().setPacks("nope", ["nope"])).rejects.toThrow(
+      /Unknown pack/,
+    );
+    expect(h.saveProfileFileMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses to change packs with no project open", async () => {
     await useProjectStore.getState().closeProject();
-    await expect(useProjectStore.getState().setProfile(TTRPG_PROFILE)).rejects.toThrow(
+    await expect(useProjectStore.getState().setPacks("ttrpg", ["ttrpg"])).rejects.toThrow(
       /Open a project/,
     );
-    expect(h.saveProfileMock).not.toHaveBeenCalled();
+    expect(h.saveProfileFileMock).not.toHaveBeenCalled();
   });
 });

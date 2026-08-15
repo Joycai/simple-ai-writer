@@ -10,15 +10,18 @@ import {
 } from "../lib/project";
 import { useMemo } from "react";
 import {
-  loadProfile,
+  builtinProfile,
+  loadProfileFile,
   profileTerms,
-  resetActiveProfile,
-  saveProfile,
-  setActiveProfile,
+  resetActiveWorkspace,
+  resolveWorkspace,
+  saveProfileFile,
+  setActiveWorkspace,
   DEFAULT_SECTION_LABELS,
   NOVEL_PROFILE,
   type DocModel,
   type ResolvedTerms,
+  type ResolvedWorkspace,
   type SectionId,
   type WorkspaceProfile,
 } from "../lib/profile";
@@ -56,17 +59,33 @@ function resetDocuments(): void {
   useLoreStore.setState({ index: {}, selectedEntity: null, selectedFile: null, fileContent: "", isDirty: false, saveTimer: null });
 }
 
+/** The workspace with no project open: the novel pack, alone. */
+const DEFAULT_WORKSPACE = resolveWorkspace(NOVEL_PROFILE, []);
+
 interface ProjectState {
   projectPath: string | null;
   /**
-   * The open project's workspace profile — what kind of writing this is (see
-   * lib/profile). Mirrors the `lib/profile/active` singleton, which is what
-   * non-React code reads; this copy exists so components re-render when the
-   * profile changes. **This store is the only writer of both**: keeping them in
-   * sync anywhere else would let the UI and the prompt disagree about which
-   * profile is in force.
+   * The primary pack of the open project's workspace — the owner of docModel,
+   * UI terms and fallback wording (see lib/profile). Kept as its own field
+   * (`= workspace.primary`) because it is what `useTerms`/`useDocModel`/
+   * `useSectionLabel` subscribe to.
    */
   profile: WorkspaceProfile;
+  /**
+   * The merged view of every enabled pack — categories and tasks unioned.
+   * Mirrors the `lib/profile/active` singleton, which is what non-React code
+   * reads; this copy exists so components re-render when the selection
+   * changes. **This store is the only writer of both**: keeping them in sync
+   * anywhere else would let the UI and the prompt disagree about which packs
+   * are in force.
+   */
+  workspace: ResolvedWorkspace;
+  /**
+   * The hand-written packs the project's profile.json carries (usually none).
+   * Held so `setPacks` can resolve their ids and `saveProfileFile` can write
+   * them back — dropping them on save would delete the author's own pack.
+   */
+  customPacks: WorkspaceProfile[];
   activeFilePath: string | null;
   fileTree: FileNode[];
   /**
@@ -91,12 +110,14 @@ interface ProjectState {
   closeProject: () => Promise<void>;
   refreshFileTree: () => Promise<void>;
   /**
-   * Switch the open project to another profile: persist it, scaffold the new
-   * category folders, and rescan. Non-destructive — the previous profile's
-   * folders and the entities in them stay on disk, so switching back restores
-   * them (they are simply not scanned while another profile is active).
+   * Change the open project's pack selection: persist it, scaffold any new
+   * category folders, and rescan. Non-destructive — a disabled pack's folders
+   * and the entities in them stay on disk, so re-enabling it restores them
+   * (they are simply not scanned while the pack is disabled). Ids resolve
+   * against the project's custom packs first, then the built-ins; `primaryId`
+   * is moved to the front of `enabledIds` if it isn't there already.
    */
-  setProfile: (profile: WorkspaceProfile) => Promise<void>;
+  setPacks: (primaryId: string, enabledIds: string[]) => Promise<void>;
 
   /**
    * Create a file (or folder) under `parentDir` and return its absolute path.
@@ -137,6 +158,8 @@ interface ProjectState {
 export const useProjectStore = create<ProjectState>((set, get) => ({
   projectPath: null,
   profile: NOVEL_PROFILE,
+  workspace: DEFAULT_WORKSPACE,
+  customPacks: [],
   activeFilePath: null,
   fileTree: [],
   expandedDirs: {},
@@ -159,17 +182,23 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       // scoped fs commands reject them until the Rust side verifies the
       // on-disk .ai-writer marker and allows the root.
       if (typeof path === "string") await registerProjectRoot(target);
-      // Resolve the profile before the scaffold, which creates the folders it
-      // names — but don't *activate* it until the open can no longer fail.
-      // Activating early would leave the still-open previous project reading
-      // the failed project's categories.
-      const profile = (await loadProfile(target)) ?? NOVEL_PROFILE;
-      await scaffoldProject(target, profile.categories.map((c) => c.id));
+      // Resolve the pack selection before the scaffold, which creates the
+      // folders it names — but don't *activate* it until the open can no
+      // longer fail. Activating early would leave the still-open previous
+      // project reading the failed project's categories.
+      const selection = await loadProfileFile(target);
+      const workspace = selection
+        ? resolveWorkspace(selection.primary, selection.enabled)
+        : DEFAULT_WORKSPACE;
+      if (workspace.issues.length > 0) {
+        console.warn(`[profile] ${target} merge problems:\n  - ${workspace.issues.join("\n  - ")}`);
+      }
+      await scaffoldProject(target, workspace.categories.map((c) => c.id));
       resetDb();
       resetDocuments();
       await getDb(target);
-      setActiveProfile(profile);
-      set({ projectPath: target, profile, activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null, wordCount: 0, charCount: 0 });
+      setActiveWorkspace(workspace);
+      set({ projectPath: target, profile: workspace.primary, workspace, customPacks: selection?.customPacks ?? [], activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null, wordCount: 0, charCount: 0 });
       await get().refreshFileTree();
       await useLoreStore.getState().scanProject(target);
       useAppStore.getState().addRecentProject(target);
@@ -193,23 +222,50 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const { useAgentStore } = await import("./agentStore");
     await useAgentStore.getState().resetChatForProject(null);
     resetDb();
-    // Back to the default profile: with no project open, anything that reads
-    // the active profile must not still see the closed project's categories.
-    resetActiveProfile();
-    set({ projectPath: null, profile: NOVEL_PROFILE, activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null, wordCount: 0, charCount: 0 });
+    // Back to the default workspace: with no project open, anything that reads
+    // the active workspace must not still see the closed project's categories.
+    resetActiveWorkspace();
+    set({ projectPath: null, profile: NOVEL_PROFILE, workspace: DEFAULT_WORKSPACE, customPacks: [], activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null, wordCount: 0, charCount: 0 });
   },
 
-  setProfile: async (profile) => {
-    const { projectPath } = get();
-    if (!projectPath) throw new Error("Open a project before changing its profile.");
-    if (profile.id === get().profile.id) return;
+  setPacks: async (primaryId, enabledIds) => {
+    const { projectPath, workspace, customPacks } = get();
+    if (!projectPath) throw new Error("Open a project before changing its packs.");
+
+    // A project's own pack beats the built-in of the same id — the same
+    // "file overrides built-in" contract profile.json has always had.
+    const resolvePack = (id: string): WorkspaceProfile => {
+      const pack = customPacks.find((p) => p.id === id) ?? builtinProfile(id);
+      if (!pack) throw new Error(`Unknown pack "${id}".`); // UI passes known ids; loud beats silent
+      return pack;
+    };
+    const primary = resolvePack(primaryId);
+    const enabled: WorkspaceProfile[] = [];
+    for (const id of enabledIds) {
+      if (enabled.some((p) => p.id === id)) continue;
+      enabled.push(resolvePack(id));
+    }
+
+    const next = resolveWorkspace(primary, enabled);
+    if (next.issues.length > 0) {
+      console.warn(`[profile] merge problems:\n  - ${next.issues.join("\n  - ")}`);
+    }
+    // Same selection in the same order — nothing to do (the "clicked the
+    // current card" case, like the old same-profile check).
+    if (
+      next.primary.id === workspace.primary.id &&
+      next.enabled.length === workspace.enabled.length &&
+      next.enabled.every((p, i) => p.id === workspace.enabled[i].id)
+    ) {
+      return;
+    }
 
     // Persist first: if writing profile.json fails, nothing else has moved and
-    // the next open still resolves the previous profile.
-    await saveProfile(projectPath, profile);
-    setActiveProfile(profile);
-    set({ profile });
-    await scaffoldProject(projectPath, profile.categories.map((c) => c.id));
+    // the next open still resolves the previous selection.
+    await saveProfileFile(projectPath, { primary: next.primary, enabled: next.enabled, customPacks, issues: [] });
+    setActiveWorkspace(next);
+    set({ profile: next.primary, workspace: next });
+    await scaffoldProject(projectPath, next.categories.map((c) => c.id));
     await get().refreshFileTree();
     // The lore index is keyed by category, so it is entirely stale now.
     await useLoreStore.getState().scanProject(projectPath);
