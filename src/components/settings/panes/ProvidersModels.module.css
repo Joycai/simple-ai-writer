@@ -72,7 +72,7 @@
 .searchInput {
   width: 100%;
   padding: var(--space-2) var(--space-3) var(--space-2) var(--space-8);
-  background: var(--color-bg-base);
+  background: var(--stg-bg-input);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   color: var(--color-text-primary);
@@ -100,7 +100,7 @@
 .group {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: var(--color-bg-surface);
+  background: var(--color-card);
   margin-bottom: var(--space-3);
   /* Clips the header fill and the row separators to the rounded corners. */
   overflow: hidden;
@@ -302,11 +302,11 @@
   right: 0;
   bottom: 0;
   z-index: 2;
-  width: 480px;
+  width: 478px;
   max-width: 82%;
   display: flex;
   flex-direction: column;
-  background: var(--color-bg-surface);
+  background: var(--stg-bg);
   border-left: 1px solid var(--color-border);
   box-shadow: var(--shadow-drawer);
   animation: slideInRight 220ms var(--ease-out);
@@ -359,7 +359,7 @@
   gap: var(--space-2);
   padding: var(--space-3) var(--space-5);
   border-top: 1px solid var(--color-border);
-  background: var(--color-bg-elevated);
+  background: var(--stg-stat);
   flex-shrink: 0;
 }
 
@@ -387,7 +387,7 @@
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
   padding: var(--space-1) var(--space-2);
-  background: var(--color-bg-base);
+  background: var(--stg-bg-input);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   color: var(--color-text-primary);

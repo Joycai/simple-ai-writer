@@ -290,7 +290,6 @@
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  border-radius: 10px;
   background: var(--color-accent-tint);
   color: var(--color-accent);
   font-size: 12px;

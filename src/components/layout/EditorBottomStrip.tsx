@@ -1,5 +1,4 @@
 import { useTranslation } from "react-i18next";
-import { Brackets, X } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { useEditorStore } from "../../stores/editorStore";
@@ -40,8 +39,7 @@ export function EditorBottomStrip({ paragraph, sentence, refsCount = 0 }: Props)
                 mod: MOD_KEY,
               })}
             >
-              <Brackets size={11} strokeWidth={1.8} />
-              {t("editorStrip.markStart", { defaultValue: "标记开头" })}
+              ⟦ {t("editorStrip.markStart", { defaultValue: "标记开头" })}
             </button>
             <button
               className={styles.markBtn}
@@ -51,11 +49,11 @@ export function EditorBottomStrip({ paragraph, sentence, refsCount = 0 }: Props)
                 mod: MOD_KEY,
               })}
             >
-              {t("editorStrip.markEnd", { defaultValue: "标记结尾" })}
+              {t("editorStrip.markEnd", { defaultValue: "标记结尾" })} ⟧
             </button>
             {marked !== null && (
               <span className={styles.markState}>
-                {t("editorStrip.markCount", { defaultValue: "已选 {{chars}} 字", chars: marked })}
+                {t("editorStrip.markCount", { defaultValue: "AI 选区 · 已选 {{chars}} 字", chars: marked })}
               </span>
             )}
             {pending && (
@@ -65,15 +63,15 @@ export function EditorBottomStrip({ paragraph, sentence, refsCount = 0 }: Props)
             )}
             {aiTarget && (
               <button
-                className={styles.markBtn}
+                className={styles.markClear}
                 onClick={() => clearTarget(editorView)}
                 title={t("editorStrip.markClearHint", {
                   defaultValue: "清除 AI 选区（{{mod}}+Shift+\\）",
                   mod: MOD_KEY,
                 })}
+                aria-label={t("editorStrip.markClear", { defaultValue: "清除" })}
               >
-                <X size={11} strokeWidth={1.8} />
-                {t("editorStrip.markClear", { defaultValue: "清除" })}
+                ×
               </button>
             )}
           </>

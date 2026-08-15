@@ -24,7 +24,7 @@ The UI targets a restrained, modern **Apple-like aesthetic**. These rules are th
 ### 令牌速查 (Token reference — `tokens.css`)
 - **Easing**: `--ease-out` (enter/expand, default), `--ease-spring` (brief pop accents only), `--ease-in-out` (symmetric size/position).
 - **Transitions**: `--transition-fast` (120ms, hover/press), `--transition-base` (200ms), `--transition-slow` (320ms, panels/drawers). All pre-bound to `--ease-out`.
-- **Radius**: `--radius-sm` 6 (inputs, selects, buttons, icon buttons) / `--radius-md` 8 (cards, grouped lists, panels, boxed sections) / `--radius-lg` 12 (large cards, confirm dialogs) / `--radius-xl` 16 (modal panels) / `--radius-pill` 999 (chips, tags, badges, toggles). Never write a literal radius — every module reads the token so the whole app can move together.
+- **Radius**: **all zero** (设计稿 01/04 收紧为全局无圆角 — the manuscript reads as cut paper, not rounded cards). The whole `--radius-*` scale is 0 in `tokens.css`; modules keep reading the tokens so a future turn of the dial is still one edit. The only sanctioned circles are dot indicators, spinners, switch knobs and radio marks — `border-radius: 50%` or `--radius-round`. Never write any other literal radius, and don't "fix" a square control back to round.
 - **Shadow (elevation)**: `--shadow-sm` (resting cards/inputs) → `--shadow-md` (raised) → `--shadow-lg` (popovers/menus/dropdowns) → `--shadow-xl` (modals). `--shadow-focus` for focus rings. Each theme defines its own set (dark deeper, light subtle).
 - **Accent**: `--color-accent`, `--color-accent-hover`, `--color-accent-ring`, `--color-accent-tint`, `--color-accent-tint-strong`.
 - **Tags**: `--color-tag-bg` / `--color-tag-text` for the neutral badge. Model-type tags get one hue each — `--color-type-{text,multimodal,image,video}-{bg,fg}` — so a model list is scannable without reading the labels.
@@ -76,13 +76,21 @@ Rules of the road:
 - **Reusable keyframes** (in `global.css`): `fadeIn`, `scaleIn`, `slideUp`, `slideInRight` — reuse these, don't redefine per component.
 - **Selected/active list items**: `--color-accent-tint` fill + `--color-accent` text.
 
+### 设置页色系 (Settings surface — `src/components/settings/**`)
+
+设计稿 04 gives the settings page its **own warm-paper family** — same hues as the workspace but one step lighter (page `#FBF7EE`, inputs `#FFFDF6`, its own sienna `#A9512B`) — and its own heading serif (Source Serif 4 / Noto Serif SC via `--font-serif-settings`). Implementation decisions:
+
+- **Tokens**: the palette lives in `tokens.css` as `--stg-*`, defined per theme. The mockup only specifies light; the night block maps each `--stg-*` role onto the existing night ramp so dark mode follows without a second design pass.
+- **One remap, not eighteen restyles**: every settings module consumes the same `--color-*` vocabulary as the rest of the app, so `SettingsPage.module.css` re-points those roles at `--stg-*` **once on `.page`** (custom properties resolve at use time, so the whole subtree — panes, drawers, probe panel — follows). Element-level exceptions that the mapping can't express (kbd 键帽, stat cards `#F7F1E2`, usage bar `#C68B5A`, hint blocks `#F8F2E3`) read their `--stg-*` token directly.
+- **Portals escape the remap** on purpose: `ConfirmDialog` renders through `ModalShell`'s portal and keeps the app-wide manuscript palette — a modal is app chrome, not settings furniture.
+
 ### AI 面板设计语言 (AI surfaces — `src/components/ai/**`)
 
 The AI drawer and every surface it spawns (panels, cards, modals, the inline bubble) follow a scoped **manuscript-ink** dialect of the system, transcribed from the AI-panel mockup in the claude.ai/design project ("Simple AI Writer UI redesign" → `02 AI 面板`). The dark rendition is the binding reference; light values are paper equivalents derived from the same project's paper screens. Everything below is implemented as tokens in `tokens.css` under the `AI 面板设计语言` comment in each theme block.
 
 **Why a dialect**: the panel used to stack card-in-card-in-input (three nested borders); the redesign expresses hierarchy with **background depth + 1px hairlines** instead, so the drawer reads as part of the manuscript rather than as a foreign toolbox.
 
-- **Zero radius** — no `border-radius` anywhere under `src/components/ai/` (and it leaks into AgentLog's two lore-modal consumers). The only rounds are tiny status dots (`border-radius: 50%`) and spinners. This intentionally diverges from the global `--radius-*` scale; don't "fix" it back.
+- **Zero radius** — no `border-radius` anywhere under `src/components/ai/` (and it leaks into AgentLog's two lore-modal consumers). The only rounds are tiny status dots (`border-radius: 50%`) and spinners. (The AI panel pioneered this; 设计稿 01/04 later made zero radius the global rule — see 令牌速查 above.)
 - **Surface ladder** (per theme): `--color-bg-stream` (run column, tool lists) → `--color-bg-inset` (headers, footers, inputs, card interiors) → `--color-bg-base` (drawer body) → `--color-bg-raised` (user bubble, send stamp) → `--color-bg-selected` / `--color-bg-accent-wash` (selected 档位 / active chips).
 - **One frame border max** — a component gets at most one `--color-border-panel` frame; interior grouping uses `--color-hairline` rules + 10px uppercase `--color-text-label` section headers (`letter-spacing .18–.24em`). Section head pattern: label + `flex:1` hairline + right-aligned mono metric.
 - **No colored left-border cards.** Documented exceptions (semantic marks, not chrome): ConsistencyCheck severity bars (3px), the 2px `--color-border-accent` selection bar on `.targetCard` / chat quote cards, and error boxes' 2px `--color-error-node` rule.
