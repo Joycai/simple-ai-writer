@@ -58,7 +58,8 @@ import {
   MEMORY_SUGGEST_THRESHOLD_CHARS,
 } from "../../lib/context/memory";
 import {
-  categoryLabel, defaultTask, findTask, loreCategories, taskDesc, taskLabel, visibleTasks,
+  categoryLabel, defaultTask, findTask, loreCategories, profileLabel, taskDesc, taskLabel,
+  visibleTaskGroups, type ResolvedTask,
 } from "../../lib/profile";
 import {
   BOOK_PREV_TAIL_CHARS, BOOK_PREV_TAIL_NEAR_START_CHARS,
@@ -854,9 +855,14 @@ export function AiPanel() {
     return () => clearTimeout(id);
   }, [content, usesMemory]);
 
-  // The profile's first task is the default: the panel should open on a usable
-  // request, not on an empty shell that needs a click before it shows anything.
-  const tasks = visibleTasks();
+  // The primary pack's first task is the default: the panel should open on a
+  // usable request, not on an empty shell that needs a click before it shows
+  // anything. Grouped by pack, and derived from the *subscribed* workspace —
+  // enabling or disabling a secondary pack must reshape the task row
+  // immediately, and the non-reactive singleton alone would leave it stale
+  // when the primary (which `useDocModel` etc. subscribe to) didn't change.
+  const workspace = useProjectStore((s) => s.workspace);
+  const taskGroups = visibleTaskGroups(workspace);
   const [selectedTask, setSelectedTask] = useState<TaskKind>(() => defaultTask().id);
   // A profile switch can remove the selected task. Fall back rather than render
   // controls for a task that no longer exists (and can no longer be run).
@@ -1291,10 +1297,14 @@ export function AiPanel() {
               {/* ── Task ── */}
               <div className={styles.section}>
                 <SectionHead label={t("ai.panel.taskLabel", { defaultValue: "任务" })} />
-                {/* Whatever the profile offers, however many — 自定义 is an
-                    ordinary entry in that list, not a hardcoded extra button. */}
-                <div className={styles.taskSegmented}>
-                  {tasks.map((opt) => (
+                {/* Whatever the enabled packs offer, however many — 自定义 is
+                    an ordinary entry in that list, not a hardcoded extra
+                    button. The primary pack's menu renders flat (the pre-pack
+                    layout: one pack → nothing changes); each secondary pack's
+                    tasks follow as their own labelled row, so a bid task is
+                    findable without diluting the everyday writing row. */}
+                {taskGroups.map((group, i) => {
+                  const renderSegment = (opt: ResolvedTask) => (
                     <button
                       key={opt.id}
                       className={`${styles.taskSegment} ${task.id === opt.id ? styles.taskSegmentActive : ""}`}
@@ -1304,8 +1314,20 @@ export function AiPanel() {
                     >
                       {taskLabel(opt, isZh, t)}
                     </button>
-                  ))}
-                </div>
+                  );
+                  return i === 0 ? (
+                    <div key={group.pack.id} className={styles.taskSegmented}>
+                      {group.tasks.map(renderSegment)}
+                    </div>
+                  ) : (
+                    <div key={group.pack.id} className={styles.packTaskGroup}>
+                      <span className={styles.packTaskEyebrow}>{profileLabel(group.pack, isZh)}</span>
+                      <div className={styles.taskSegmented}>
+                        {group.tasks.map(renderSegment)}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* ── Target + instruction ──

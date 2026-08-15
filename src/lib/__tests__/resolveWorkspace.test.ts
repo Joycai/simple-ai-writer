@@ -16,7 +16,7 @@ import {
   type TaskDef,
   type WorkspaceProfile,
 } from "../profile/model";
-import { resolveWorkspace } from "../profile/resolve";
+import { resolveWorkspace, visibleTaskGroups } from "../profile/resolve";
 
 /** Strip the merge-added fields, leaving what the pack declared. */
 const bare = <T extends { packIds?: string[]; packId?: string }>({ packIds, packId, ...rest }: T) => rest;
@@ -135,6 +135,40 @@ describe("task union", () => {
     // trip it, whatever combination is enabled.
     const w = resolveWorkspace(BUILTIN_PROFILES[0], BUILTIN_PROFILES.slice(1));
     expect(w.issues).toEqual([]);
+  });
+});
+
+describe("visibleTaskGroups", () => {
+  it("yields exactly the visible tasks as one group for a single pack", () => {
+    const w = resolveWorkspace(NOVEL_PROFILE, []);
+    const groups = visibleTaskGroups(w);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].pack).toBe(NOVEL_PROFILE);
+    // Same menu the panel used to render flat: no hidden tasks (agent), no
+    // reordering — group[0] rendered flat *is* the pre-pack layout.
+    expect(groups[0].tasks.map((t) => t.id)).toEqual(
+      w.tasks.filter((t) => !t.hidden).map((t) => t.id),
+    );
+  });
+
+  it("groups a secondary pack's own tasks under that pack, primary first", () => {
+    const w = resolveWorkspace(NOVEL_PROFILE, [BID_PROFILE, TTRPG_PROFILE]);
+    const groups = visibleTaskGroups(w);
+    expect(groups.map((g) => g.pack.id)).toEqual(["novel", "bid", "ttrpg"]);
+    // The base tasks live in the primary group; secondaries carry only what
+    // they added.
+    expect(groups[0].tasks.some((t) => t.id === "continue")).toBe(true);
+    expect(groups[1].tasks.map((t) => t.id)).toEqual(["respond", "deviation", "extract"]);
+    expect(groups[1].tasks.every((t) => t.packId === "bid")).toBe(true);
+    expect(groups[2].tasks.some((t) => t.id === "encounter")).toBe(true);
+  });
+
+  it("omits a pack whose every task deduped away, rather than an empty heading", () => {
+    // A pack that only re-tunes the base tasks: everything it declares dedupes
+    // into the primary's copies.
+    const baseOnly: WorkspaceProfile = { ...TTRPG_PROFILE, id: "baseonly", tasks: [...DEFAULT_TASKS] };
+    const groups = visibleTaskGroups(resolveWorkspace(NOVEL_PROFILE, [baseOnly]));
+    expect(groups.map((g) => g.pack.id)).toEqual(["novel"]);
   });
 });
 
