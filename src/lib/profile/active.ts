@@ -26,6 +26,7 @@
 
 import {
   NOVEL_PROFILE,
+  profileLabel,
   profileTerms,
   DEFAULT_SECTION_LABELS,
   type DocModel,
@@ -183,6 +184,19 @@ export function promptParams(isZh: boolean, packId?: string): Record<string, str
     recent: sectionLabel("recent", packId),
     selection: sectionLabel("selection", packId),
   };
+}
+
+/**
+ * The label of the pack a task came from, when that is worth saying — i.e.
+ * when the task is a *secondary* pack's. Null for the primary's own tasks
+ * (naming the pack every ordinary 续写 row belongs to is noise) and for a
+ * pack that is no longer enabled. For display surfaces (usage table, agent
+ * log) that want a run attributed the way the grouped task menu presents it.
+ */
+export function taskPackLabel(task: ResolvedTask, isZh: boolean): string | null {
+  if (task.packId === active.primary.id) return null;
+  const pack = packById(task.packId);
+  return pack ? profileLabel(pack, isZh) : null;
 }
 
 /**

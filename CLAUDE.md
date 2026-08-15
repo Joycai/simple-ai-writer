@@ -63,7 +63,7 @@ All in `src/stores/`:
 
 1. **User selection** → `aiTaskStore.setSelection()`
 2. **Task trigger** → `aiTaskStore.runTask(taskId, customInstruction?)`
-   - Resolves the task against the active profile (`findTask`) and branches on its declared `tools` / `target` / `continuation`, never on its id
+   - Resolves the task against the enabled packs (`findTask`) and branches on its declared `tools` / `target` / `continuation`, never on its id
    - Loads system prompt, calls `assembleContext()` (4-layer: system → lore → document → task), formats via `bundleToMessages()`
 3. **Streaming** → `streamCompletion()` (SSE) — parses chunks into a `Draft`, extracts token counts/cost on final chunk. A run holds a **list** of drafts (`drafts` + `activeDraftId`); asking for several fans out into N parallel calls over the one assembled context — see `docs/architecture.md` → Multi-draft output
 4. **Persist** → Writes one `token_usage` row per draft in SQLite
@@ -73,21 +73,21 @@ All AI features run on the **unified agent runtime** (`src/lib/agent/runtime.ts`
 
 > Details: RAG context assembly, SSE parsing, and DB schema are in `docs/architecture.md`.
 
-### Workspace Profiles
+### Workspace Packs (能力包)
 
-The project is not hardcoded to novels. A per-project **profile** (`.ai-writer/profile.json`, absent = the built-in `novel` one) declares the knowledge-base categories, its **task list** (each task = a prompt + a tool set, so a profile can offer any number of them), the 【…】 block labels used in the assembled prompt, the fallback system prompt, and a **`docModel`** — whether the documents form an ordered spine, carry prior-document context, or use rolling memory. Turning those off removes the injected context *and* the UI that configures it, so supporting another kind of writing (跑团模组, 文案, 周报…) is a data addition, not new branches. Built-ins (`novel`, `ttrpg`, `copy`, `wechat`, `weekly`, `feedback`, `bid`) live in `src/lib/profile/model.ts`; the author switches via Settings → 工作台.
+The project is not hardcoded to novels — and not to one domain at a time. A project **enables one or more capability packs** (`.ai-writer/profile.json`; absent = the built-in `novel` pack alone). Each pack (a `WorkspaceProfile` in `model.ts`) declares knowledge-base categories, a **task list** (each task = a prompt + a tool set), 【…】 prompt block labels, a fallback system prompt, UI `terms`, and a `docModel`. `resolveWorkspace()` (`lib/profile/resolve.ts`) merges the enabled packs: **categories and tasks union** (deduped by id, first declarer wins, each `ResolvedTask` carrying its `packId`), while the **primary pack alone** owns the non-additive dimensions — `docModel` (ordered spine / prior context / rolling memory) and `terms`. Supporting another kind of writing (跑团模组, 文案, 周报…) is still a data addition, not new branches. Built-ins (`novel`, `ttrpg`, `copy`, `wechat`, `weekly`, `feedback`, `bid`) live in `src/lib/profile/model.ts`; the author picks the primary and toggles secondaries via Settings → 工作台 (`projectStore.setPacks`).
 
-Profiles also declare a UI **`terms`** vocabulary (what a document/group/knowledge base is *called* on screen: 章节/卷/设定库 vs 文档/分组/企业知识库) — components read it via `useTerms()` and pass the words into parametrized i18n strings, so never hardcode 章/卷/设定 in a component or an i18n value. Prompt templates (`ai.instructions.*`) get the same words plus the 【…】 section labels via `promptParams(isZh)` at every resolution site; the shared continue/rewrite/summary instructions are domain-neutral and the novel profile overrides them with `*Novel` keys — keep new shared instruction text neutral and give novel its own variant when fiction wording matters.
+Packs also declare a UI **`terms`** vocabulary (what a document/group/knowledge base is *called* on screen: 章节/卷/设定库 vs 文档/分组/企业知识库) — always the **primary's**; components read it via `useTerms()` and pass the words into parametrized i18n strings, so never hardcode 章/卷/设定 in a component or an i18n value. Prompt templates (`ai.instructions.*`) get the same words plus the 【…】 section labels via `promptParams(isZh, packId?)` — pass the running task's `packId` so a secondary pack's task speaks its own wording (【企业知识库】, not 【设定资料】); the resolution chain is task's pack → primary → defaults. The shared continue/rewrite/summary instructions are domain-neutral and the novel pack overrides them with `*Novel` keys — keep new shared instruction text neutral and give novel its own variant when fiction wording matters.
 
-Four rules when touching this: components read flags via `useDocModel()` and wording via `useTerms()` (the singleton isn't reactive); **never** resolve a system prompt with `ai.instructions.system` — call `profileSystemPrompt()`, or a non-novel project gets novel instructions; and resolve a task with `findTask()` and handle the null, because a task id can outlive the profile that defined it. Recipe: `docs/workflows.md` → Add a new workspace profile.
+Rules when touching this: components read flags via `useDocModel()` and wording via `useTerms()`, and derive the task menu from the subscribed `projectStore.workspace` (the singleton isn't reactive, and the primary reference alone doesn't change when a secondary toggles); **never** resolve a system prompt with `ai.instructions.system` — call `profileSystemPrompt(packId?)`, or a non-novel project gets novel instructions; resolve a task with `findTask()` and handle the null, because a task id can outlive the pack that defined it; and `primaryPack()` is only for the primary-owned dimensions — the merged accessors (`loreCategories()`, `profileTasks()`…) are the truth about what is enabled. Recipe: `docs/workflows.md` → Add a new workspace profile.
 
 ### Project Structure
 
 **Filesystem**
 - `.ai-writer/project.db` — SQLite database (project-scoped)
-- `.ai-writer/profile.json` — Workspace profile (what kind of writing this project is; absent = novel)
+- `.ai-writer/profile.json` — Enabled capability packs (v2: `{primary, enabled[], packs[]}`; a v1 single-profile file still reads as that pack alone; absent = novel)
 - `writing/` — User markdown files (organized tree)
-- `.ai-writer/lore/<category>/<entity>/index.md` — Entity summary with frontmatter (categories come from the active profile — novel: characters, world, factions, items, skills, style, custom)
+- `.ai-writer/lore/<category>/<entity>/index.md` — Entity summary with frontmatter (categories are the union of the enabled packs' — novel: characters, world, factions, items, skills, style, custom)
 
 **Code**
 - `src/components/layout/` — Main layout structure (TitleBar, IconRail, Sidebar, FileTree, EditorArea, EditorBottomStrip, AiRail)
@@ -102,7 +102,7 @@ Four rules when touching this: components read flags via `useDocModel()` and wor
   - `src/lib/lore/` — lore domain model (`model.ts`), entity scan/CRUD (`entity.ts`), gallery/avatar (`gallery.ts`), AI generation (`generator.ts`), `[[lore:…]]` citation resolution/navigation (`citations.ts`); import via `lib/lore` (index re-exports all but generator)
   - `src/lib/batch/` — clause splitting for batch runs (`clauses.ts`: heading/numbered mode detection)
   - `src/lib/consistency/` — 一致性检查: one structured pass over a document against the lore index (`scan.ts`, via `agent/structured.ts`) plus the quote-anchoring that turns a finding into working buttons (`model.ts` — `locateQuote` / `applySuggestions`). State in `stores/consistencyStore.ts`, UI in `components/ai/ConsistencyCheck.tsx`
-  - `src/lib/profile/` — workspace profiles: what kind of writing a project is (`model.ts` types/built-ins/validation, `active.ts` module singleton, `store.ts` `.ai-writer/profile.json`). Drives the lore category layout, the prompt's 【…】 block labels, and the fallback system prompt. **Read `loreCategories()` at call time, never at module scope** — see `docs/architecture.md` → Workspace profiles
+  - `src/lib/profile/` — capability packs: what kinds of writing a project enables (`model.ts` pack types/built-ins/validation, `resolve.ts` multi-pack merge, `file.ts` profile.json v1/v2 parsing, `active.ts` module singleton holding the merged `ResolvedWorkspace`, `store.ts` `.ai-writer/profile.json` IO). Drives the lore category layout, the prompt's 【…】 block labels, and the fallback system prompt. **Read `loreCategories()` at call time, never at module scope** — see `docs/architecture.md` → Workspace profiles
   - `src/lib/context/` — RAG assembly (`rag.ts`), story memory (`memory.ts`), book spine (`outline.ts`), book-level continuation context (`bookContext.ts`)
   - `src/lib/fs/` — Tauri file I/O wrappers (`fileio.ts`), markdown render/frontmatter (`markdown.ts`), image/text file utils (`images.ts`), export (`export.ts`), whole-project backup/restore (`projectBackup.ts` — wider scope than the lore bundle on purpose; see `docs/architecture.md` → Export / Import)
   - `src/lib/theme/` — Markdown typography themes (`markdownThemes.ts`): the `--md-*` CSS generated once and shared by the preview pane, lore previews and exported HTML/PDF. See `docs/design-system.md` → Markdown 排版主题

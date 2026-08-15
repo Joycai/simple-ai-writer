@@ -30,6 +30,7 @@ import {
   profileTasks,
   resetActiveWorkspace,
   setActiveWorkspace,
+  taskPackLabel,
   visibleTasks,
 } from "../profile/active";
 import { resolveWorkspace } from "../profile/resolve";
@@ -444,6 +445,14 @@ describe("profile task lists", () => {
     expect(defaultTask().id).toBe("continue");
     setActiveWorkspace(resolveWorkspace(COPY_PROFILE, []));
     expect(defaultTask().id).toBe("rewrite");
+  });
+
+  it("attributes a secondary pack's task to its pack, and the primary's to nothing", () => {
+    setActiveWorkspace(resolveWorkspace(NOVEL_PROFILE, [BID_PROFILE]));
+    // The primary's own rows would all say "小说" — noise, so null.
+    expect(taskPackLabel(findTask("continue")!, true)).toBeNull();
+    expect(taskPackLabel(findTask("respond")!, true)).toBe("标书应答");
+    expect(taskPackLabel(findTask("respond")!, false)).toBe("Bid Response");
   });
 });
 

@@ -12,7 +12,7 @@ import {
   type UsageSummary,
   type UsageWindow,
 } from "../../../lib/ai/usage";
-import { findTask, taskLabel } from "../../../lib/profile";
+import { findTask, taskLabel, taskPackLabel } from "../../../lib/profile";
 import { Pane, PaneHeader, Section, Row, Chip, ChipRow } from "./bits";
 import ui from "../settingsUi.module.css";
 
@@ -97,7 +97,8 @@ export function UsagePane() {
    */
   const taskRow = (id: string): { name: string; sub: string } => {
     const task = findTask(id);
-    if (task) return { name: taskLabel(task, isZh, t), sub: "" };
+    // A secondary pack's task names its pack, matching the grouped task menu.
+    if (task) return { name: taskLabel(task, isZh, t), sub: taskPackLabel(task, isZh) ?? "" };
     return { name: t(`systemSettings.usage.kinds.${id}`, { defaultValue: id }), sub: "" };
   };
 
