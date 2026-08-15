@@ -204,12 +204,15 @@
       "subagents": "Subagents"
     },
     "workspace": {
-      "profileSection": "Workspace profile",
-      "profileHint": "Decides this project's knowledge-base categories and what the prompt calls each context block (e.g. 【上一章结尾】 vs 【上一场景结尾】).",
-      "noProject": "Open a project to choose its workspace profile.",
-      "switchHint": "Switching deletes nothing: the previous categories' folders and entities stay on disk and reappear if you switch back.",
-      "paneSub": "This project’s type and its backups",
-      "current": "current"
+      "profileSection": "Capability packs",
+      "profileHint": "A project can enable several packs at once: their knowledge-base categories and AI tasks stack. Click a card to make it the primary pack — it decides the project's shape and UI vocabulary (e.g. \"chapter\" vs \"document\") — and use the toggle to enable a pack as a secondary.",
+      "noProject": "Open a project to choose its capability packs.",
+      "switchHint": "Changing packs deletes nothing: a disabled pack's category folders and entities stay on disk and reappear when re-enabled.",
+      "paneSub": "This project’s packs and its backups",
+      "primary": "primary",
+      "enablePack": "Enable {{pack}} as a secondary pack",
+      "disablePack": "Disable {{pack}}",
+      "disabledHasData": "{{count}} category folder(s) still hold content — re-enable to see them"
     },
     "shortcuts": {
       "categories": {
