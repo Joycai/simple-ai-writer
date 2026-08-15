@@ -13,7 +13,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, Download } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
 import { exportHtml, exportMarkdown, exportPdf } from "../../lib/fs/export";
 import { useEditorStore } from "../../stores/editorStore";
@@ -91,8 +91,9 @@ export function ExportMenu() {
         }}
         title={t("editor.export")}
       >
-        {status ? <Check size={12} /> : <Download size={12} />}
+        {status ? <Check size={12} /> : null}
         {status ?? t("editor.export")}
+        {!status && <ChevronDown size={9} strokeWidth={2} className={styles.ctrlChevron} />}
       </button>
       {menuAt && (
         <ContextMenu x={menuAt.x} y={menuAt.y} items={items} onClose={() => setMenuAt(null)} />

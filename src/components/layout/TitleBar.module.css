@@ -4,11 +4,22 @@
   height: var(--titlebar-height);
   padding: 0 18px;
   gap: 14px;
-  background: var(--color-bg-elevated);
+  background: var(--color-bg-base);
   border-bottom: 1px solid var(--color-border-soft);
   flex-shrink: 0;
   font-family: var(--font-sans);
   font-size: var(--font-size-md);
+}
+
+.traffic {
+  display: flex;
+  gap: 7px;
+}
+.trafficDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-traffic);
 }
 
 .sep {
@@ -16,6 +27,11 @@
   height: 18px;
   background: var(--color-border);
   margin: 0 6px;
+}
+.sepThin {
+  width: 1px;
+  height: 14px;
+  background: var(--color-border);
 }
 
 .brandIcon {
@@ -30,25 +46,20 @@
   min-width: 0;
   font-family: var(--font-sans);
 }
-.crumbProject {
-  font-weight: 500;
-  color: var(--color-text-primary);
-  white-space: nowrap;
-}
-.crumbSlash {
-  color: var(--color-text-faint);
-}
-.crumbVolume {
-  font-weight: 400;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-}
-.crumbChapter {
+.crumbCurrent {
   font-weight: 500;
   color: var(--color-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.crumbMid {
+  font-weight: 400;
+  color: var(--color-text-dim);
+  white-space: nowrap;
+}
+.crumbSlash {
+  color: var(--color-text-faint);
 }
 .crumbState {
   font-size: var(--font-size-xs);
@@ -64,19 +75,25 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
+  font: 400 12px/1 var(--font-sans);
+  color: var(--color-text-dim);
+}
+
+.wordCount {
+  white-space: nowrap;
 }
 .wordCount strong {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
   color: var(--color-text-primary);
   font-weight: 500;
-  margin-right: 2px;
 }
 
 .saveState {
   display: flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
 }
 .saveDot {
   width: 7px;
@@ -92,19 +109,24 @@
   border: 1px solid var(--color-border);
 }
 .viewBtn {
-  padding: 4px 10px;
-  font: 500 11px/1 var(--font-sans);
-  color: var(--color-text-muted);
+  padding: 5px 11px;
+  font: 400 11px/1 var(--font-sans);
+  color: var(--color-text-dim);
   background: transparent;
   border: none;
   cursor: pointer;
   transition: color var(--transition-fast);
 }
+.viewBtn + .viewBtn {
+  border-left: 1px solid var(--color-border);
+}
 .viewBtn:hover { color: var(--color-text-primary); }
 .viewBtnActive {
+  font-weight: 500;
   background: var(--color-sienna);
   color: var(--color-card);
 }
+.viewBtnActive:hover { color: var(--color-card); }
 
 .aiBtn {
   display: flex;
@@ -120,19 +142,23 @@
 }
 .aiBtn:hover { background: var(--color-bg-elevated); }
 
+/* Borderless text controls (导出 / 主题 / 语言) — 设计稿 01 keeps these as
+   plain words in the meta row, not boxed buttons. */
 .ctrl {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 5px 9px;
+  padding: 5px 0;
   background: transparent;
-  border: 1px solid var(--color-border);
-  color: var(--color-text-muted);
-  font: 500 11px/1 var(--font-sans);
+  border: none;
+  color: var(--color-text-dim);
+  font: 400 12px/1 var(--font-sans);
   cursor: pointer;
-  transition: color var(--transition-fast), border-color var(--transition-fast);
+  transition: color var(--transition-fast);
 }
 .ctrl:hover {
   color: var(--color-sienna);
-  border-color: var(--color-border-strong);
+}
+.ctrlChevron {
+  color: var(--color-text-muted);
 }

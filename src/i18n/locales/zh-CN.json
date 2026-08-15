@@ -80,7 +80,8 @@
     "saving": "保存中",
     "summonAi": "AI 助手",
     "noProject": "未命名项目",
-    "noFile": "未命名"
+    "noFile": "未命名",
+    "themeCycle": "主题 · 点击循环：亮 / 暗 / 跟随系统"
   },
   "editorStrip": {
     "summon": "{{mod}} K · 召唤 AI",
@@ -88,7 +89,7 @@
     "markStartHint": "在光标处标记 AI 选区的开头（{{mod}}+Shift+[）",
     "markEnd": "标记结尾",
     "markEndHint": "在光标处标记 AI 选区的结尾（{{mod}}+Shift+]）",
-    "markCount": "已选 {{chars}} 字",
+    "markCount": "AI 选区 · 已选 {{chars}} 字",
     "markPending": "待标记结尾",
     "markClear": "清除",
     "markClearHint": "清除 AI 选区（{{mod}}+Shift+\\）",
