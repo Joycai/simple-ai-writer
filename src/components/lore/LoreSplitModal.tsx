@@ -243,11 +243,15 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
         {/* Header */}
         <div className={styles.header}>
           <div className={styles.headerLeft}>
-            <Scissors size={15} strokeWidth={1.8} />
             <span className={styles.headerTitle}>
-              {t("lore.split.title", { defaultValue: "拆分特征" })}
+              {t("lore.split.title", { defaultValue: "拆分条目" })} · {entity.name}
             </span>
-            <span className={styles.headerEntity}>{entity.name}</span>
+            <span className={styles.headerEntity}>
+              {entity.category} · {indexBody.length.toLocaleString()} {t("lore.split.chars", { defaultValue: "字" })}
+            </span>
+            <span className={styles.headerHint}>
+              {t("lore.split.reason", { defaultValue: "条目过长会稀释检索命中 · 建议拆分" })}
+            </span>
           </div>
           <select
             className={styles.modelSelect}
@@ -312,7 +316,8 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
                 </div>
               )}
               <div className={styles.sectionLabel}>
-                {t("lore.split.coreLabel", { defaultValue: "核心卡（保留在 index.md）" })}
+                <span className={styles.swatch} style={{ background: "var(--lore-split-keep)" }} />
+                {t("lore.split.coreLabel", { defaultValue: "保留 · 概述（index.md）" })}
                 <span className={styles.tokenTag}>
                   ~{estTk(core.length)} tk
                   <span className={styles.tokenBefore}>／{t("lore.split.before", { defaultValue: "原" })} {estTk(indexBody.length)} tk</span>
@@ -333,6 +338,10 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
                 {drafts.map((d, i) => (
                   <div key={i} className={`${styles.draftCard} ${d.include ? "" : styles.draftExcluded}`}>
                     <div className={styles.draftHead}>
+                      <span
+                        className={styles.swatch}
+                        style={{ background: i % 2 === 0 ? "var(--lore-split-a)" : "var(--lore-split-b)" }}
+                      />
                       <label className={styles.draftInclude}>
                         <input
                           type="checkbox"
@@ -362,6 +371,11 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
                         disabled={!d.include}
                         title={t("lore.facet.fieldPriority", { defaultValue: "优先级" })}
                       />
+                      {d.include && (
+                        <span className={styles.draftNewTag}>
+                          {t("lore.split.newTag", { defaultValue: "新条目" })}
+                        </span>
+                      )}
                       <span className={styles.tokenTag}>~{estTk(d.content.length)} tk</span>
                     </div>
                     {d.include && (
@@ -415,18 +429,18 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
           )}
           {phase === "review" && (
             <>
+              <span className={styles.footerHint}>
+                {t("lore.split.backupHint", { defaultValue: "执行后原条目瘦身为概述 · 全文自动备份一份" })}
+              </span>
+              <span className={styles.footerSpacer} />
+              <button className={`${styles.btn} ${styles.btnSecondary}`} onClick={handleGenerate} disabled={saving}>
+                <RotateCw size={12} />
+                {t("lore.split.regenerate", { defaultValue: "AI 重新分组" })}
+              </button>
               <button className={styles.btn} onClick={() => setPhase("input")} disabled={saving}>
                 <ArrowLeft size={12} />
                 {t("lore.split.back", { defaultValue: "返回" })}
               </button>
-              <button className={styles.btn} onClick={handleGenerate} disabled={saving}>
-                <RotateCw size={12} />
-                {t("lore.split.regenerate", { defaultValue: "重新拆解" })}
-              </button>
-              <span className={styles.footerSpacer} />
-              <span className={styles.footerHint}>
-                {t("lore.split.backupHint", { defaultValue: "应用前会自动备份原条目" })}
-              </span>
               <button
                 className={`${styles.btn} ${styles.btnPrimary}`}
                 onClick={handleApply}
@@ -434,7 +448,10 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
               >
                 {saving
                   ? t("lore.split.applying", { defaultValue: "应用中…" })
-                  : t("lore.split.apply", { defaultValue: "应用拆分" })}
+                  : t("lore.split.applyCount", {
+                      count: included.length,
+                      defaultValue: `执行拆分 · ${included.length} 个特征`,
+                    })}
               </button>
             </>
           )}

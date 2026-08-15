@@ -30,3 +30,52 @@
   min-height: 48px;
   font-family: var(--font-serif);
 }
+
+/* 缺摘要 / 缺别名 badges (设计稿 03 待完善黄) */
+.badges {
+  display: flex;
+  gap: 5px;
+  margin-top: 5px;
+}
+.badge {
+  padding: 2px 7px;
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  font: 500 10px/1.4 var(--font-sans);
+}
+
+/* AI 建议中新增的别名 — diff 绿 */
+.chipNew {
+  background: var(--lore-add-bg) !important;
+  color: var(--lore-add-text) !important;
+}
+
+/* 生成中: 3 个渐变小方点 + mono */
+.genRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.genDots { display: flex; gap: 4px; }
+.genDot {
+  width: 5px;
+  height: 5px;
+  background: var(--color-sienna);
+  animation: metaPulse 1.2s ease-in-out infinite;
+}
+.genDot:nth-child(2) { background: var(--color-amber); animation-delay: 0.2s; }
+.genDot:nth-child(3) { background: var(--color-amber-soft); animation-delay: 0.4s; }
+@keyframes metaPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.genLabel {
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-faint);
+}
+
+.charNote {
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-faint);
+  margin-left: 6px;
+}
