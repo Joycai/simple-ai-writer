@@ -444,6 +444,20 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
           }
         },
       });
+    } catch (err) {
+      // A stop mid-prose: the text already streamed stays on screen, so it
+      // must also stay in the transcript — otherwise the next turn's model
+      // never saw what the author is replying to. Tool-round narration keeps
+      // its rollback: commit only when no tool call had been emitted.
+      if (
+        err instanceof DOMException &&
+        err.name === "AbortError" &&
+        roundToolCalls.length === 0 &&
+        roundText.trim()
+      ) {
+        history.push({ role: "assistant", content: roundText });
+      }
+      throw err;
     } finally {
       // A round that called a tool without ever emitting prose, or one that
       // failed part-way: the thinking that did happen is still worth showing,
@@ -468,6 +482,13 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     // No tool calls → the model produced prose → that prose is the answer.
     if (roundToolCalls.length === 0) {
       committedText += roundText;
+      // The reply belongs in the wire history, not just on screen: `history`
+      // IS the chat session's transcript, and without this the next turn's
+      // model has never seen its own answer. Empty text stays out — Anthropic
+      // rejects empty content blocks.
+      if (roundText.trim()) {
+        history.push({ role: "assistant", content: roundText });
+      }
       return {
         rounds: round,
         inputTokens: totalInputTokens,
