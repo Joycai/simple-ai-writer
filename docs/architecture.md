@@ -248,6 +248,20 @@ Text still streams as it arrives, so a tool round's narration appears and is the
 
 This also settled a pre-existing inconsistency: `run.ts`'s `onText` was already cumulative while `splitter`'s `onProgress` was a delta, and `LoreSplitModal` appended accordingly.
 
+### 本次都批准 (standing approval grants)
+
+Every L2 proposal and every lore plan blocks the tool loop on its own card. Right for one change, wrong for twenty: a housekeeping pass fires a dozen identical cards and the author stops reading by the fourth. So `ApprovalCard` and `PlanCard` each offer a third button that stands for the ones after it — `lib/agent/autoApprove.ts` + `agentStore.autoApprove`.
+
+**Two kinds are never covered, whatever the author turned on.** `delete` removes a chapter and `illustrate` **spends money** (the card prints the price). An authorisation given for "keep fixing my prose" must not quietly become one for "keep buying pictures", so the excluded set lives in one list (`isAutoApprovable`) and the button simply doesn't render for those kinds — nothing to explain to the author, and nothing to remember at a call site.
+
+**Scope is the caller's to declare, not the store's.** Both approval queues are shared by chat and the task panel, so a grant carries a `key`: the literal `"chat"` for a conversation (deliberately *not* the turn's controller — the grant has to outlive the turn it was pressed in), the run's own `AbortController` for a panel task. A proposal auto-approves only against its own key. That single test is what stops a panel task's grant from reaching chat, and is the same shape as `PendingRoundLimit.canPause`: a property of the run, decided by whoever owns it.
+
+**One slot, so one surface at a time.** A second grant displaces the first rather than accumulating. Deliberate — the displaced surface falls back to asking, and erring toward one more question is always the safe direction.
+
+Ending a grant: `rejectAll(reason, runId)` clears a run-keyed one (every panel finish/abort path already goes through it), `resetChat` and `switchChatSession` clear chat's. It is **not** written into the session blob: reopening a conversation from the history menu re-asks, which also saves a `chatSession` format change. There is no cross-restart persistence at all — standing authorisation that survives the process is a larger decision than this button.
+
+Two things keep it from being invisible. `AutoApproveChip` sits in the chip row for as long as a grant is live and revokes it on click; and `ApprovalDecision.auto` rides back into the tool result (`writeTools.reportDecision`) so the model is told plainly that nobody reviewed that change. Note the plan grant skips the *card*, not the *gate* — the model still has to declare its steps, and `checkPlan` still refuses any lore write they don't cover.
+
 ### Images in context (谁能看图，看多久)
 
 A picture reaches a model exactly one way: an `image_url` part on a `role: "user"` message (`ContentPart`, `lib/ai/types.ts`). Everything below is about who is allowed to create one and what happens to it afterwards.

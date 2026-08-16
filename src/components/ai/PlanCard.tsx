@@ -14,8 +14,9 @@
 
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { LorePlan, LorePlanAction } from "../../lib/agent/plan";
-import { useAgentStore } from "../../stores/agentStore";
+import type { LorePlanAction } from "../../lib/agent/plan";
+import { autoApproveScope } from "../../lib/agent/autoApprove";
+import { useAgentStore, type PendingPlan } from "../../stores/agentStore";
 import { useTerms } from "../../stores/projectStore";
 import styles from "./PlanCard.module.css";
 
@@ -26,12 +27,14 @@ const ACTION_STYLE: Record<LorePlanAction, string> = {
   delete: styles.actionDelete,
 };
 
-export function PlanCard({ plan }: { plan: LorePlan }) {
+export function PlanCard({ item }: { item: PendingPlan }) {
   const { t } = useTranslation();
   const terms = useTerms();
-  const { approvePlan, rejectPlan } = useAgentStore();
+  const { approvePlan, rejectPlan, enableAutoApprove } = useAgentStore();
   const [rejectReason, setRejectReason] = useState("");
   const [deciding, setDeciding] = useState(false);
+
+  const { plan, autoApproveKey } = item;
 
   return (
     <div className={styles.card}>
@@ -75,6 +78,21 @@ export function PlanCard({ plan }: { plan: LorePlan }) {
         >
           {t("ai.plan.reject")}
         </button>
+        {autoApproveKey !== undefined && (
+          <button
+            className={styles.btnApproveAlways}
+            onClick={() => {
+              setDeciding(true);
+              enableAutoApprove(autoApproveKey, "plans");
+              approvePlan(plan.id);
+            }}
+            disabled={deciding}
+          >
+            {autoApproveScope(autoApproveKey) === "session"
+              ? t("ai.plan.approveAlways", { defaultValue: "本次对话都批准" })
+              : t("ai.plan.approveAlwaysRun", { defaultValue: "本次任务都批准" })}
+          </button>
+        )}
         <button
           className={styles.btnApprove}
           onClick={() => { setDeciding(true); approvePlan(plan.id); }}

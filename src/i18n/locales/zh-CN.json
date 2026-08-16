@@ -905,8 +905,15 @@
       "expand": "展开全文",
       "collapse": "收起",
       "approve": "批准",
+      "approveAlways": "本次对话都批准",
+      "approveAlwaysRun": "本次任务都批准",
       "reject": "拒绝",
       "rejectPlaceholder": "拒绝原因（可选，会反馈给 AI）"
+    },
+    "autoApprove": {
+      "chipSession": "本次对话自动批准中",
+      "chipRun": "本次任务自动批准中",
+      "off": "点击恢复逐条审批"
     },
     "roundLimit": {
       "title": "已达轮数上限",
@@ -920,6 +927,8 @@
       "title": "待批准的{{entry}}方案",
       "stepCount": "{{count}} 项改动",
       "approve": "同意方案",
+      "approveAlways": "本次对话都批准",
+      "approveAlwaysRun": "本次任务都批准",
       "reject": "拒绝",
       "rejectPlaceholder": "理由（可选，会原样反馈给 AI）",
       "action": {

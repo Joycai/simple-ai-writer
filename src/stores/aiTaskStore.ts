@@ -488,11 +488,18 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             // continue's preset has no propose_edit). Scoped to this run's own
             // controller so an unrelated chat turn ending doesn't drain them.
             // No turnId: the panel has no transcript to attach a picture to.
+            // 本次都批准 is keyed to the controller here, not to a conversation:
+            // a panel task is one job start to finish, so the grant dies with
+            // the run (agentStore.rejectAll clears it on every exit path).
             requestApproval: (p) =>
-              useAgentStore.getState().requestApproval(p, controller, { signal: controller.signal }),
+              useAgentStore.getState().requestApproval(p, controller, {
+                signal: controller.signal,
+                autoApproveKey: controller,
+              }),
             // Lore changes are gated on an approved plan; the gate is per-run,
             // so each task starts with a clean slate.
-            requestPlanApproval: (p) => useAgentStore.getState().requestPlanApproval(p, controller),
+            requestPlanApproval: (p) =>
+              useAgentStore.getState().requestPlanApproval(p, controller, controller),
             lorePlan: createPlanGate(),
             // Disk workspace for the scratchpad tools. Per-run here (a panel
             // task is one job, start to finish) rather than per-session as in

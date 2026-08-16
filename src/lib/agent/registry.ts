@@ -183,7 +183,16 @@ export type Proposal =
   | IllustrateProposal;
 
 export type ApprovalDecision =
-  | { approved: true; backupPath?: string | null }
+  | {
+      approved: true;
+      backupPath?: string | null;
+      /**
+       * Applied under a standing 本次都批准 grant, so no human read this one.
+       * Reported to the model (see writeTools.reportDecision) precisely so it
+       * cannot mistake "approved" for "the author checked my work".
+       */
+      auto?: true;
+    }
   | { approved: false; reason?: string };
 
 /** Everything an executor may need about the running project. */

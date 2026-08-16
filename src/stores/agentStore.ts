@@ -55,6 +55,10 @@ import {
   listChatSessions, loadChatSession, upsertChatSession, type ChatSessionRow,
 } from "../lib/agent/sessionDb";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
+import {
+  CHAT_AUTO_APPROVE_KEY, grants, isAutoApprovable,
+  type AutoApproveKind, type AutoApproveState,
+} from "../lib/agent/autoApprove";
 import { createPlanGate, type LorePlan, type PlanDecision } from "../lib/agent/plan";
 import {
   createTaskWorkspace,
@@ -117,18 +121,26 @@ export interface ApprovalBinding {
   turnId?: string;
   /** The run's abort signal, so an approved-but-slow apply can be cancelled. */
   signal?: AbortSignal;
+  /**
+   * Which auto-approve scope this run belongs to — `"chat"` for the whole
+   * conversation, the run's own controller for a panel task. Absent means the
+   * surface does not offer 本次都批准 at all, and every card is asked.
+   */
+  autoApproveKey?: unknown;
 }
 
-interface PendingApproval extends ApprovalBinding {
+export interface PendingApproval extends ApprovalBinding {
   proposal: Proposal;
   resolve: (decision: ApprovalDecision) => void;
   runId: RunId;
 }
 
-interface PendingPlan {
+export interface PendingPlan {
   plan: LorePlan;
   resolve: (decision: PlanDecision) => void;
   runId: RunId;
+  /** Same meaning as on ApprovalBinding — plans carry their own grant flag. */
+  autoApproveKey?: unknown;
 }
 
 /**
@@ -198,6 +210,11 @@ interface AgentState {
   pendingPlans: PendingPlan[];
   /** Round-cap questions awaiting the author's decision — one per blocked run. */
   pendingRoundLimits: PendingRoundLimit[];
+  /**
+   * The one surface currently auto-approving, if any (lib/agent/autoApprove).
+   * Null is the normal state: every card is asked.
+   */
+  autoApprove: AutoApproveState | null;
 
   // ── Chat session ──
   turns: ChatTurn[];
@@ -244,6 +261,15 @@ interface AgentState {
   disabledSubAgents: SubAgentKind[];
   toggleSubAgent: (kind: SubAgentKind) => void;
 
+  /**
+   * Author pressed 本次都批准 on a card: everything of that kind from the same
+   * surface applies without a card until the grant is cleared. Same key merges,
+   * a different key replaces — only one surface may hold a grant.
+   */
+  enableAutoApprove: (key: unknown, what: AutoApproveKind) => void;
+  /** Author dismissed the indicator chip — back to asking every time. */
+  clearAutoApprove: () => void;
+
   /** Called by the tool executor (via ToolContext.requestApproval). */
   requestApproval: (proposal: Proposal, runId: RunId, binding?: ApprovalBinding) => Promise<ApprovalDecision>;
   /** User approved: backup, apply, resolve. */
@@ -262,7 +288,7 @@ interface AgentState {
   resolveRoundLimit: (runId: RunId, decision: RoundLimitDecision) => void;
 
   /** Called by propose_lore_plan (via ToolContext.requestPlanApproval). */
-  requestPlanApproval: (plan: LorePlan, runId: RunId) => Promise<PlanDecision>;
+  requestPlanApproval: (plan: LorePlan, runId: RunId, autoApproveKey?: unknown) => Promise<PlanDecision>;
   /** User approved the plan — the gate records its steps and the loop resumes. */
   approvePlan: (id: string) => void;
   /** User rejected the plan: their reason goes back to the model verbatim. */
@@ -443,10 +469,43 @@ async function applyProposal(proposal: Proposal, signal?: AbortSignal): Promise<
   }
 }
 
+/**
+ * Carry out an approved proposal and unblock the tool call waiting on it.
+ *
+ * Shared by the card's 批准 button and by the auto-approve path, so that the
+ * two cannot drift: an auto-approved edit is applied, backed up and reported
+ * exactly like one the author clicked through. The item must already be out of
+ * `pending` (or never have entered it) — this function only applies.
+ */
+async function settleApproval(
+  item: PendingApproval,
+  set: (fn: (s: AgentState) => Partial<AgentState>) => void,
+  auto: boolean,
+): Promise<void> {
+  try {
+    const { report, imagePath } = await applyProposal(item.proposal, item.signal);
+    // A picture goes into the transcript as well as onto disk — into the turn
+    // the request came from, named at request time. The task panel shares
+    // this queue and binds no turn, so its images stay out of the chat.
+    if (imagePath && item.turnId) {
+      set((s) => ({
+        turns: s.turns.map((tn) =>
+          tn.id === item.turnId ? { ...tn, images: [...(tn.images ?? []), imagePath] } : tn),
+      }));
+    }
+    item.resolve({ approved: true, backupPath: report, auto: auto || undefined });
+  } catch (e) {
+    // Approval failed to apply — report as a rejection so the model knows
+    // the manuscript is untouched.
+    item.resolve({ approved: false, reason: `apply failed: ${String(e)}` });
+  }
+}
+
 export const useAgentStore = create<AgentState>((set, get) => ({
   pending: [],
   pendingPlans: [],
   pendingRoundLimits: [],
+  autoApprove: null,
 
   turns: [],
   chatRunning: false,
@@ -467,33 +526,40 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         : [...s.disabledSubAgents, kind],
     })),
 
+  enableAutoApprove: (key, what) =>
+    set((s) => {
+      const held = s.autoApprove?.key === key ? s.autoApprove : null;
+      return {
+        autoApprove: {
+          key,
+          proposals: what === "proposals" || !!held?.proposals,
+          plans: what === "plans" || !!held?.plans,
+        },
+      };
+    }),
+
+  clearAutoApprove: () => set({ autoApprove: null }),
+
   requestApproval: (proposal, runId, binding) =>
     new Promise<ApprovalDecision>((resolve) => {
-      set((s) => ({ pending: [...s.pending, { proposal, resolve, runId, ...binding }] }));
+      const item: PendingApproval = { proposal, resolve, runId, ...binding };
+      // Covered by a standing grant: apply now and never queue. Queuing first
+      // and approving synchronously would flash the card for a frame.
+      if (
+        grants(get().autoApprove, item.autoApproveKey, "proposals") &&
+        isAutoApprovable(proposal.kind)
+      ) {
+        void settleApproval(item, set, true);
+        return;
+      }
+      set((s) => ({ pending: [...s.pending, item] }));
     }),
 
   approve: async (id) => {
     const item = get().pending.find((p) => p.proposal.id === id);
     if (!item) return;
     set((s) => ({ pending: s.pending.filter((p) => p.proposal.id !== id) }));
-
-    try {
-      const { report, imagePath } = await applyProposal(item.proposal, item.signal);
-      // A picture goes into the transcript as well as onto disk — into the turn
-      // the request came from, named at request time. The task panel shares
-      // this queue and binds no turn, so its images stay out of the chat.
-      if (imagePath && item.turnId) {
-        set((s) => ({
-          turns: s.turns.map((tn) =>
-            tn.id === item.turnId ? { ...tn, images: [...(tn.images ?? []), imagePath] } : tn),
-        }));
-      }
-      item.resolve({ approved: true, backupPath: report });
-    } catch (e) {
-      // Approval failed to apply — report as a rejection so the model knows
-      // the manuscript is untouched.
-      item.resolve({ approved: false, reason: `apply failed: ${String(e)}` });
-    }
+    await settleApproval(item, set, false);
   },
 
   reject: (id, reason) => {
@@ -521,6 +587,12 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   },
 
   rejectAll: (reason, runId) => {
+    // A panel task's grant is scoped to its run, and this is the one place
+    // every finish/abort path already goes through. Chat's grant is keyed
+    // "chat", never a controller, so it is untouched here — resetChat and
+    // switchChatSession are what end it.
+    if (get().autoApprove?.key === runId) set({ autoApprove: null });
+
     const { pending, pendingPlans, pendingRoundLimits } = get();
     const drainP = pending.filter((p) => p.runId === runId);
     const drainL = pendingPlans.filter((p) => p.runId === runId);
@@ -537,9 +609,16 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     for (const item of drainR) item.resolve({ action: "finish" });
   },
 
-  requestPlanApproval: (plan, runId) =>
+  requestPlanApproval: (plan, runId, autoApproveKey) =>
     new Promise<PlanDecision>((resolve) => {
-      set((s) => ({ pendingPlans: [...s.pendingPlans, { plan, resolve, runId }] }));
+      // A standing grant skips the card, not the gate: the model still had to
+      // declare its steps, and every lore write is still checked against them
+      // (plan.ts → checkPlan). What the author gave up is reading each pass.
+      if (grants(get().autoApprove, autoApproveKey, "plans")) {
+        resolve({ approved: true });
+        return;
+      }
+      set((s) => ({ pendingPlans: [...s.pendingPlans, { plan, resolve, runId, autoApproveKey }] }));
     }),
 
   approvePlan: (id) => {
@@ -861,8 +940,12 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             get().requestApproval(p, controller, {
               turnId: assistantTurn.id,
               signal: controller.signal,
+              // Not the controller: 本次对话都批准 has to outlive the turn it
+              // was pressed in, which is the whole point of the button.
+              autoApproveKey: CHAT_AUTO_APPROVE_KEY,
             }),
-          requestPlanApproval: (p) => get().requestPlanApproval(p, controller),
+          requestPlanApproval: (p) =>
+            get().requestPlanApproval(p, controller, CHAT_AUTO_APPROVE_KEY),
           // One gate per turn: a plan the author approved for *this* request
           // does not silently authorise the next one.
           lorePlan: createPlanGate(),
@@ -976,6 +1059,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       // one's notes, or read_note would surface findings from another topic.
       chatTaskWorkspace: null,
       disabledSubAgents: [],
+      // Same reasoning as the chips: the button said "this conversation", and
+      // this is a different one.
+      autoApprove: null,
     });
   },
 
@@ -1033,6 +1119,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // different one. Not stored in the session blob either: a temporary
         // switch is not worth a format change (see resetChat).
         disabledSubAgents: [],
+        // Auto-approve says the same words, and standing authorisation to
+        // rewrite prose is the last thing that should follow the author into
+        // another manuscript. Deliberately not persisted: reopening a
+        // conversation from the history menu re-asks.
+        autoApprove: null,
       });
     } catch (e) {
       console.warn("chat session load failed:", e);

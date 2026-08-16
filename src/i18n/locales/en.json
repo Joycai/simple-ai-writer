@@ -905,8 +905,15 @@
       "expand": "Show all",
       "collapse": "Collapse",
       "approve": "Approve",
+      "approveAlways": "Approve all this conversation",
+      "approveAlwaysRun": "Approve all this run",
       "reject": "Reject",
       "rejectPlaceholder": "Reason (optional, fed back to the AI)"
+    },
+    "autoApprove": {
+      "chipSession": "Auto-approving this conversation",
+      "chipRun": "Auto-approving this run",
+      "off": "Click to review each change again"
     },
     "roundLimit": {
       "title": "Round cap reached",
@@ -921,6 +928,8 @@
       "stepCount": "{{count}} change",
       "stepCount_other": "{{count}} changes",
       "approve": "Approve plan",
+      "approveAlways": "Approve all this conversation",
+      "approveAlwaysRun": "Approve all this run",
       "reject": "Reject",
       "rejectPlaceholder": "Reason (optional, fed back to the AI)",
       "action": {
