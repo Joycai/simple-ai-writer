@@ -322,6 +322,32 @@ interface NativeReasoning { field: string; text: string }
 那一行只在已有报告后才出现，而最值得调档位的恰恰是第一次检查——否则作者得
 先付一次运行的钱才能发现这个旋钮。
 
+### openai 族的 `switch` 方言 —— 千问 / DashScope（2026-08-16）
+
+千问的 DashScope 兼容端点把思考开关拼成顶层 `enable_thinking: bool`
+（SDK 文档写在 `extra_body`，落到 wire 就是顶层字段），且文档写明与
+`reasoning_effort` **互斥**；默认值按模型代分裂（Qwen3.5+ 默认开，
+Qwen3-Max/Plus 等商业款默认关——后者不发开关就永远不思考）。协议事实见
+[`api/landscape.md`](api/landscape.md) §7 第六个样本。三个决定：
+
+1. **复用 `switch` 方言值，不新增。** `ThinkingDialect` 的值是跨族的
+   "参数形状"词汇（`extended` 同时描述 Claude 4.5 与 Gemini 2.5），而
+   `reasoningBody` 先按族分派再看方言——同一个 `switch` 在 anthropic 族拼成
+   `thinking:{type}`（MiniMax-M3），在 openai 族拼成 `enable_thinking`。
+   不新增值意味着 parse 白名单、configTransfer、DB 列零改动。
+2. **声明了方言就不发 `reasoning_effort`。** 不只因为互斥：声明 `switch`
+   本身就是"这个端点没有深度档"的陈述，「力度」在那里只区分「关闭」与其余
+   ——与 anthropic 族同一方言的处理完全一致。§5 里"厂商开关字段故意不发"
+   的立场随之精确为"**未声明方言时**不发"：默认路径一个字节不变。
+3. **`thinking_budget` 不做。** 全 app 没有 budget 的 UI 载体（anthropic 侧
+   同理跳过了 `thinkingBudget`——没有读者的字段只会变成噪音），且它与
+   `reasoning_effort` 的互斥让"两个都发"成为新的踩坑面。需要时再加。
+
+UI 侧选项按族给：anthropic 族四个形状照旧，openai 族只有「自动」与「开关式」
+——给 openai 族显示 `adaptive`/`extended` 就是"按了没反应的控件"。
+新款 Qwen3.7+ 直接接受标准 `reasoning_effort`（未实测，见
+[`thinking-verification.md`](thinking-verification.md) §4），保持「自动」即可。
+
 ---
 
 ## 8. 结构化输出：兜底路径的原生约束

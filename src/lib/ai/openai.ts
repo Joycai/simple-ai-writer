@@ -58,7 +58,9 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       // Absent unless the author set an effort on this model — an unset model
       // must keep sending exactly what it sent before this existed, because a
       // volunteered field is a field some relay can reject.
-      ...reasoningBody(opts.standard, opts.reasoningEffort),
+      // Declared dialect only, no dialectFor(): absent means "this endpoint
+      // speaks the standard reasoning_effort", not a guessed generation.
+      ...reasoningBody(opts.standard, opts.reasoningEffort, opts.thinkingDialect),
       // Last: extraBody is the per-request escape hatch and outranks config.
       ...opts.extraBody,
     }),

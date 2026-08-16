@@ -41,6 +41,12 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
   { name: "OpenAI", apiStandard: "openai", baseUrl: STANDARD_ENDPOINTS.openai },
   { name: "Google Gemini", apiStandard: "gemini", baseUrl: STANDARD_ENDPOINTS.gemini },
   { name: "DeepSeek", apiStandard: "openai_compat", baseUrl: "https://api.deepseek.com" },
+  // DashScope's OpenAI compatible-mode; the base already carries /v1, which
+  // openaiUrl requires (it appends paths verbatim). Two rows because the
+  // domestic and international deployments are separate hosts with separate
+  // keys, same as MiniMax's two entries below.
+  { name: "通义千问 (DashScope)", apiStandard: "openai_compat", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1" },
+  { name: "通义千问 (国际)", apiStandard: "openai_compat", baseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1" },
   { name: "Anthropic", apiStandard: "anthropic", baseUrl: STANDARD_ENDPOINTS.anthropic },
   { name: "Ollama", apiStandard: "openai_compat", baseUrl: "http://localhost:11434/v1" },
   // Self-hosted, so there is no address to prefill — the preset exists to

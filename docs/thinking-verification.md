@@ -135,6 +135,9 @@ thinking block 开头、后跟 `tool_use`。缺了就是回传没生效。
 | 4.1 | `reasoning_effort` 发顶层是否被 DeepSeek 接受 | 设一个非默认档位，看是否生效（对比输出长度） | DeepSeek 的 API 参考说它在 `thinking` 内部，指南的示例发顶层；若只认嵌套，**强度设置在 DeepSeek 上静默失效** |
 | 4.2 | 「关闭」档在 DeepSeek 上是否有效 | 设「关闭」，看响应还有没有 `reasoning_content` | `thinking.reasoning_effort` 的枚举没有 `none`，大概率无效 |
 | 4.3 | newAPI 的流式是否返回 usage | 跑一次，看用量统计是不是 0 | 不返回的表现是**用量统计全为 0**，不报错 |
+| 4.4 | DashScope：`switch` 方言的 `enable_thinking` 是否生效 | `openai_compat` 接 compatible-mode，模型声明「开关式」、力度设非「关闭」，对默认关思考的商业款（qwen3-max 一类）看响应有没有 `reasoning_content` | 不生效则这类模型**永远不思考**，且不报错 |
+| 4.5 | DashScope：「关闭」档是否真的关思考 | 同上，力度设「关闭」，对默认开思考的模型（Qwen3.5+）看 `reasoning_content` 是否消失 | 不生效的表现是照常思考照常计费 |
+| 4.6 | DashScope：Qwen3.7+ 对顶层 `reasoning_effort` 的实际接受度 | 不声明方言、设非默认档，看是否 400 或生效 | 被拒则新款也得声明「开关式」，ModelDrawer 的 openai 族 hint 文案要跟着改 |
 
 ---
 
@@ -142,6 +145,6 @@ thinking block 开头、后跟 `tool_use`。缺了就是回传没生效。
 
 - **回原文档更新结论** —— 本文只是索引，判断依据要留在各自的方案文档里。
 - **新发现的兼容层差异**记进 [`api/landscape.md`](api/landscape.md) §7 的样本
-  清单，那里已经有五个样本和四条通用规律。
+  清单，那里已经有六个样本和四条通用规律。
 - **本文验完即可删**。它存在的理由是"这些事只在同一次动手时才会被执行"，
   执行完就没有价值了。
