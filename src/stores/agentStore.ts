@@ -438,9 +438,9 @@ async function applyProposal(proposal: Proposal, signal?: AbortSignal): Promise<
       return { report: null, resultPath: await copyEntry(proposal.path, proposal.destDir, proposal.isDir) };
 
     case "delete":
-      // Folders never reach here (delete_chapter refuses them), but the backup
-      // is what makes an approved deletion recoverable, so it is not optional.
-      return { report: await deleteEntry(proposal.path, false, { backup: true }) };
+      // The backup is what makes an approved deletion recoverable, so it is
+      // not optional. A folder (isDir) is renamed into backups whole.
+      return { report: await deleteEntry(proposal.path, !!proposal.isDir, { backup: true }) };
 
     case "illustrate": {
       // The only kind whose "apply" spends money and calls out to a provider.

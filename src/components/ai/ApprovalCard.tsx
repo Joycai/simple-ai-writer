@@ -59,7 +59,7 @@ function headerTitle(proposal: Proposal, t: TFunction, terms: ResolvedTerms): st
     case "copy":
       return proposal.isDir ? t("ai.approval.titleCopyFolder", words) : t("ai.approval.titleCopy", words);
     case "delete":
-      return t("ai.approval.titleDelete", words);
+      return proposal.isDir ? t("ai.approval.titleDeleteVolume", words) : t("ai.approval.titleDelete", words);
     case "illustrate":
       return proposal.sourcePath
         ? t("ai.approval.titleEditImage")
@@ -83,7 +83,10 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
     case "copy":
       return "";
     case "delete":
-      return `${proposal.chars} ${chars}`;
+      // A folder's stake is how many files it takes with it, not characters.
+      return proposal.isDir
+        ? t("ai.approval.fileCount", { n: proposal.fileCount ?? 0 })
+        : `${proposal.chars} ${chars}`;
     case "illustrate":
       // The price is the metric here — it is what makes this decision
       // different from every other card.
@@ -218,7 +221,11 @@ function DeleteBody({ proposal }: { proposal: DeleteProposal }) {
   return (
     <div className={styles.deleteBlock}>
       <div className={styles.movePath}>{projectRelative(proposal.path)}</div>
-      <div className={styles.emptyNote}>{t("ai.approval.deleteRecoverable")}</div>
+      <div className={styles.emptyNote}>
+        {proposal.isDir
+          ? t("ai.approval.deleteFolderRecoverable", { n: proposal.fileCount ?? 0 })
+          : t("ai.approval.deleteRecoverable")}
+      </div>
     </div>
   );
 }

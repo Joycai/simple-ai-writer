@@ -53,6 +53,40 @@ vi.mock("../fs/fileio", () => ({
   }),
 }));
 
+/**
+ * Recursive tree over the same flat map, dotfiles skipped like the Rust side —
+ * delete_directory counts files through it for its card.
+ */
+vi.mock("../project", () => ({
+  readDirRecursive: vi.fn(async (dir: string) => {
+    interface Node { name: string; path: string; is_dir: boolean; children?: Node[] }
+    const roots: Node[] = [];
+    const dirs = new Map<string, Node>();
+    for (const path of fs.keys()) {
+      if (!path.startsWith(dir + "/")) continue;
+      const segments = path.slice(dir.length + 1).split("/");
+      if (segments.some((s) => s.startsWith("."))) continue;
+      let parent: Node[] = roots;
+      let prefix = dir;
+      for (let i = 0; i < segments.length; i++) {
+        prefix += "/" + segments[i];
+        if (i === segments.length - 1) {
+          parent.push({ name: segments[i], path: prefix, is_dir: false });
+        } else {
+          let node = dirs.get(prefix);
+          if (!node) {
+            node = { name: segments[i], path: prefix, is_dir: true, children: [] };
+            dirs.set(prefix, node);
+            parent.push(node);
+          }
+          parent = node.children!;
+        }
+      }
+    }
+    return roots;
+  }),
+}));
+
 import { serializeMemory, type DocMemory } from "../context/memory";
 import type { LoreIndex } from "../lore";
 import { backupFile } from "../agent/backup";
@@ -65,6 +99,7 @@ const ALL_TOOLS: ToolId[] = [
   "update_facet_meta", "delete_lore_file", "move_lore_entity", "delete_lore_entity",
   "update_memory", "propose_edit",
   "create_chapter", "create_file", "create_directory", "move_chapter", "copy_file", "delete_chapter",
+  "delete_directory",
 ];
 
 /**
@@ -1043,6 +1078,55 @@ describe("chapter structure tools", () => {
     });
   });
 
+  describe("delete_directory", () => {
+    it("proposes a folder deletion flagged isDir, with a recursive file count", async () => {
+      fs.set(`${PROJECT}/writing/卷一/番外/彩蛋.md`, "x");
+
+      const res = await run(
+        "delete_directory",
+        { path: `${PROJECT}/writing/卷一`, reason: "整卷废弃" },
+        approving(),
+      );
+
+      expect(proposals[0]).toMatchObject({
+        kind: "delete",
+        path: `${PROJECT}/writing/卷一`,
+        isDir: true,
+        fileCount: 3, // 第1章 + 第2章 + 番外/彩蛋
+        reason: "整卷废弃",
+      });
+      expect(res.content).toContain("backups");
+      expect(fs.has(CH1)).toBe(true); // the approver deletes, not the tool
+    });
+
+    it("refuses the project root — that is the workspace, not a folder in it", async () => {
+      const res = await run("delete_directory", { path: PROJECT, reason: "x" }, approving());
+      expect(res.content).toContain("project folder itself");
+      expect(proposals).toHaveLength(0);
+    });
+
+    it("refuses files (delete_chapter's job), missing paths, and .ai-writer", async () => {
+      const file = await run("delete_directory", { path: CH1, reason: "x" }, approving());
+      expect(file.content).toContain("delete_chapter");
+
+      const missing = await run("delete_directory", { path: `${PROJECT}/无`, reason: "x" }, approving());
+      expect(missing.content).toContain("does not exist");
+
+      const protectedPath = await run(
+        "delete_directory",
+        { path: `${PROJECT}/.ai-writer/lore`, reason: "x" },
+        approving(),
+      );
+      expect(protectedPath.content).toContain(".ai-writer");
+      expect(proposals).toHaveLength(0);
+    });
+
+    it("requires a reason — the author decides from that line alone", async () => {
+      const res = await run("delete_directory", { path: `${PROJECT}/writing/卷一` }, approving());
+      expect(res.content).toContain("'reason' argument is required");
+    });
+  });
+
   it("feeds a rejection reason back to the model for every kind", async () => {
     const rejecting = makeCtx({
       requestApproval: async () => ({ approved: false, reason: "先别动结构" }),
@@ -1055,6 +1139,7 @@ describe("chapter structure tools", () => {
       ["move_chapter", { path: CH1, new_path: `${PROJECT}/writing/别处.md` }],
       ["copy_file", { path: CH1, dest_dir: `${PROJECT}/writing/卷一` }],
       ["delete_chapter", { path: CH1, reason: "重复" }],
+      ["delete_directory", { path: `${PROJECT}/writing/卷一`, reason: "整卷废弃" }],
     ] as const) {
       const res = await run(tool, args, rejecting);
       expect(res.content).toContain("REJECTED");

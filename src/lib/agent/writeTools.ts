@@ -44,6 +44,7 @@ import {
 import { isChapterFile, normalizeChapterFileName, parentDir } from "../context/outline";
 import { parseFrontmatter } from "../fs/markdown";
 import { makeDir, readDir, readFile, removeFile, renamePath } from "../fs/fileio";
+import { readDirRecursive, type FileNode } from "../project";
 import { backupFile } from "./backup";
 import {
   LORE_PLAN_ACTIONS,
@@ -1045,8 +1046,7 @@ export async function deleteChapterTool(
     return {
       toolCallId,
       content:
-        "Error: delete_chapter removes a single chapter file, not a volume folder — deleting a whole volume is the author's own call. " +
-        "Say what you would remove and let them do it in the sidebar.",
+        "Error: delete_chapter removes a single chapter file, not a volume folder — use delete_directory for a whole folder (it needs its own approval).",
     };
   }
 
@@ -1068,6 +1068,73 @@ export async function deleteChapterTool(
     toolCallId,
     decision,
     `Deleted ${target.path}. It was moved to .ai-writer/backups and can be restored.`,
+  );
+}
+
+/** Files inside a directory tree, recursively — the number the delete card leads with. */
+function countFiles(nodes: FileNode[]): number {
+  let n = 0;
+  for (const node of nodes) {
+    n += node.is_dir ? countFiles(node.children ?? []) : 1;
+  }
+  return n;
+}
+
+/**
+ * Propose deleting a whole folder. The heavyweight counterpart to
+ * `delete_chapter`: the blast radius is every file inside, so the proposal
+ * carries a recursive file count for the card to lead with, and the kind
+ * ("delete") keeps it permanently outside 本次都批准 grants — every folder
+ * deletion is its own card, every time. On approval the whole directory is
+ * renamed into `.ai-writer/backups`, so it stays recoverable as one piece.
+ */
+export async function deleteDirectoryTool(
+  toolCallId: string,
+  args: { path?: string; reason?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const target = manuscriptTarget(toolCallId, "delete_directory", args.path, ctx);
+  if ("refusal" in target) return target.refusal;
+
+  const reason = args.reason?.trim();
+  if (!reason) {
+    return { toolCallId, content: "Error: 'reason' argument is required — the author decides on the card, and needs to know why." };
+  }
+
+  // isWorkspacePath accepts the project root itself; deleting it is not a
+  // proposal, it is the workspace.
+  if (!isStrictDescendant(ctx.projectPath, target.path)) {
+    return { toolCallId, content: "Error: cannot delete the project folder itself." };
+  }
+
+  const stat = await statEntry(target.path);
+  if (!stat) {
+    return { toolCallId, content: `Error: "${target.path}" does not exist. Check the path with list_files.` };
+  }
+  if (!stat.isDir) {
+    return { toolCallId, content: "Error: delete_directory removes a folder — for a single file use delete_chapter." };
+  }
+
+  let fileCount = 0;
+  try {
+    fileCount = countFiles(await readDirRecursive(target.path));
+  } catch {
+    // Unlistable but present — still proposable; the card just cannot size it.
+  }
+
+  const decision = await ctx.requestApproval!({
+    kind: "delete",
+    id: `delete-${++proposalCounter}`,
+    path: target.path,
+    chars: 0,
+    isDir: true,
+    fileCount,
+    reason,
+  });
+  return reportDecision(
+    toolCallId,
+    decision,
+    `Deleted the folder ${target.path} (${fileCount} file(s)). It was moved to .ai-writer/backups and can be restored as a whole.`,
   );
 }
 
