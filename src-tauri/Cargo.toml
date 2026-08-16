@@ -47,6 +47,28 @@ calamine = { version = "0.36", features = ["chrono"] }
 # of numbers — see `fs_write_binary_file`.
 base64 = "0.22"
 
+# print.rs runs its own NSPrintOperation instead of wry's `print()`, because
+# wry zeroes all four margins on the *shared* NSPrintInfo (wry 0.55 wkwebview
+# print_with_options) — the saved PDF has text flush against the paper edge and
+# the process-wide print defaults are left mutated. Every crate below is
+# already in the tree via wry at these versions; the features gate the exact
+# APIs used: margin setters (app-kit `objc2-core-foundation`), NSPrintOperation
+# + runOperationModalForWindow (`NSPrintOperation`/`NSResponder`/`NSWindow`),
+# WKWebView::printOperationWithPrintInfo (web-kit `objc2-app-kit`), and
+# NSCopying (foundation `NSObject`).
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSObject"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+    "std",
+    "objc2-core-foundation",
+    "NSResponder",
+    "NSWindow",
+    "NSPrintInfo",
+    "NSPrintOperation",
+] }
+objc2-web-kit = { version = "0.3", default-features = false, features = ["std", "WKWebView", "objc2-app-kit"] }
+
 [dev-dependencies]
 # Builds the workbooks the xlsx.rs round-trip tests read back. Checking a
 # binary .xlsx fixture into the repo would make those tests unreadable and

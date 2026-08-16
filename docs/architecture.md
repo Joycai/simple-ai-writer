@@ -414,7 +414,9 @@ Story Memory is *per-document*, so a chapter is its own file and knows nothing o
 - **Location** — `src/lib/fs/export.ts`
 - **Markdown** — Copy to clipboard
 - **HTML** — Self-contained file (inline CSS, no external assets)
-- **PDF** — Create hidden iframe, render HTML, call `window.print()`, remove iframe after 2s
+- **PDF** — The system print dialog is the PDF engine; the path there is per-platform:
+  - **Windows/Linux** — hidden iframe, render HTML, `window.print()`, remove iframe after 2s. The webview is Chromium (WebView2) / WebKitGTK, where printing a detached iframe just works, and the dialog owns the paper margins.
+  - **macOS** — `window.print()` is a silent no-op (WebKit forwards JS print to the host's `WKUIDelegate`; wry implements no print callback), so the frontend calls `invoke("print_document")` instead. `src-tauri/src/print.rs` stages the HTML behind a custom `ai-writer-print://` scheme (single-use, nothing on disk), opens a print-preview window on it, and runs its own `NSPrintOperation` on the WKWebView. It does **not** use wry's `print()`/tauri's `WebviewWindow::print()`, because wry zeroes all four margins on the process-wide *shared* `NSPrintInfo` — text flush against the paper edge, and the mutated defaults leak into later print jobs. `print_with_margins` copies the shared print info and sets 0.5in margins (the print CSS zeroes the body's own padding so the two don't stack). macOS has no virtual PDF printer — the export exit is the print dialog's easily-missed "PDF ▾ → Save as PDF" menu — so the preview window carries a bottom banner (`editor.exportPdfHint`, hidden under `@media print`) pointing at it.
 
 > Theming/design tokens live in `docs/design-system.md`.
 
@@ -437,6 +439,7 @@ Because those targets are also imported statically elsewhere (components), the b
 - `secrets.rs` — `secret_save` / `secret_load` / `secret_delete` (OS keyring)
 - `transfer.rs` — export/import: `zip_export_dialog` / `zip_import_dialog` (lore + project bundles) and `save_text_file_dialog` / `open_text_file_dialog` (config backup JSON). Dialogs run Rust-side (same trust rationale as `project_open_dialog`); zip extraction is zip-slip-guarded via `enclosed_name()`. `excludes` prunes whole subtrees at the directory during the walk, matched on **whole path components** (so `.ai-writer/tmp` never swallows `.ai-writer/tmpl`). `require_manifest_kind` reads the manifest in a first pass and returns before extracting anything, which is what lets a restore into a user-picked folder promise "wrong file, nothing happened"
 - `protocol.rs` — custom `ai-writer-asset://` scheme for lore images (extension allowlist)
+- `print.rs` — `print_document` + custom `ai-writer-print://` scheme (macOS PDF export: preview window + native `NSPrintOperation` with real margins — see Export above; other platforms never call it)
 - Plugin permissions in `src-tauri/capabilities/default.json`
 
 ### File I/O

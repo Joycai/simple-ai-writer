@@ -408,6 +408,7 @@
     "exportMarkdown": "复制 Markdown",
     "exportHtml": "导出 HTML…",
     "exportPdf": "打印 / PDF…",
+    "exportPdfHint": "如需导出 PDF，请在打印对话框左下角点击「PDF ▾」菜单，选择「存储为 PDF」。",
     "exportCopied": "已复制",
     "exportSaved": "已导出",
     "exportFailed": "导出失败：{{message}}",
