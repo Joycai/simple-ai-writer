@@ -136,7 +136,7 @@ export async function taskPlanTool(call: ToolCall, ctx: ToolContext): Promise<To
 
       return {
         toolCallId: call.id,
-        content: `Task plan saved (task ${taskId}): "${title}", ${steps.length} step(s). Use task_progress to tick them off as you go.`,
+        content: `Task plan saved (task ${taskId}): "${title}", ${steps.length} step(s). Mark each step with task_progress as you work: 'start' when you begin it, 'check' the moment it is done — do not batch updates at the end.`,
       };
     } catch (e) {
       return { toolCallId: call.id, content: `Error creating task plan: ${(e as Error).message}` };

@@ -29,6 +29,7 @@ import { contentWithoutImages, hasImageParts } from "./imageHistory";
 import { TOOL_ARGS_DETAIL_CHARS, TOOL_RESULT_DETAIL_CHARS } from "./logFormat";
 import type { TaskPreset } from "./presets";
 import { executeRegisteredTool, getToolDefinitions, type ToolContext } from "./registry";
+import { loadTaskDoc, parseSteps, type TaskStep } from "./taskWorkspace";
 import type { ToolCall, ToolResult } from "./tools";
 
 /** Stand-in left behind when an old tool result is dropped to reclaim room. */
@@ -46,6 +47,34 @@ const ELIDED_IMAGE =
  * elides older tool results.
  */
 const CHECKPOINT_RATIO = 0.85;
+
+/**
+ * Tool rounds of checklist silence tolerated before the runtime reminds the
+ * model to bring task.md up to date. A nudge, not a verification: only the
+ * model knows which tool call finished which step, so the enforceable half is
+ * detecting silence — several rounds without a task_plan/task_progress write
+ * while unfinished steps exist means the author's progress view has gone
+ * stale.
+ */
+const TASK_NUDGE_ROUNDS = 3;
+
+/** Checkbox glyphs for the nudge's checklist snapshot (mirrors taskWorkspace). */
+const NUDGE_GLYPH: Record<TaskStep["status"], string> = {
+  pending: " ",
+  in_progress: "/",
+  done: "x",
+  skipped: "-",
+};
+
+/** The active task's steps, or [] when there is no plan (or it can't be read). */
+async function loadTaskSteps(projectPath: string, taskId: string): Promise<TaskStep[]> {
+  try {
+    const doc = await loadTaskDoc(projectPath, taskId);
+    return doc ? parseSteps(doc.body) : [];
+  } catch {
+    return [];
+  }
+}
 
 /**
  * How many pictures stay in history verbatim. Enough to compare a couple of
@@ -251,6 +280,8 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
   // Mutable: the author can extend it at the cap via onRoundLimit.
   let maxRounds = preset.maxRounds;
   let checkpointArmed = false;
+  /** Tool rounds since the model last wrote to the checklist — see TASK_NUDGE_ROUNDS. */
+  let roundsSinceTaskTouch = 0;
 
   for (let round = 1; round <= maxRounds; round++) {
     if (opts.signal.aborted) throw new DOMException("Aborted", "AbortError");
@@ -360,6 +391,39 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       };
       history.push(checkpointNotice);
       checkpointArmed = true;
+    }
+
+    // The checklist staleness nudge. task.md only advances when the model
+    // calls task_progress — the runtime cannot tell which tool call finished
+    // which step — so after several tool rounds of silence with unfinished
+    // steps on the plan, remind it with a snapshot of the checklist as it
+    // stands. Injected fresh and retracted after the request, like the
+    // notices above; the counter resets so it re-fires only after another
+    // stretch of silence.
+    let taskNudgeNotice: StreamMessage | null = null;
+    if (
+      preset.scratchpad === "required" &&
+      !withholdTools &&
+      roundsSinceTaskTouch >= TASK_NUDGE_ROUNDS &&
+      opts.toolContext.taskWorkspace?.taskId
+    ) {
+      const steps = await loadTaskSteps(
+        opts.toolContext.projectPath,
+        opts.toolContext.taskWorkspace.taskId,
+      );
+      const unfinished = steps.some((s) => s.status === "pending" || s.status === "in_progress");
+      if (unfinished) {
+        taskNudgeNotice = {
+          role: "user",
+          content: i18n.t("ai.instructions.taskChecklistNudge", {
+            checklist: steps
+              .map((s) => `${s.index}. [${NUDGE_GLYPH[s.status]}] ${s.title}`)
+              .join("\n"),
+          }),
+        };
+        history.push(taskNudgeNotice);
+        roundsSinceTaskTouch = 0;
+      }
     }
 
     const dropped = trimHistory(history, opts.inputCeilingTokens);
@@ -477,6 +541,10 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         const at = history.indexOf(checkpointNotice);
         if (at >= 0) history.splice(at, 1);
       }
+      if (taskNudgeNotice) {
+        const at = history.indexOf(taskNudgeNotice);
+        if (at >= 0) history.splice(at, 1);
+      }
     }
 
     // No tool calls → the model produced prose → that prose is the answer.
@@ -536,6 +604,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     // used to wedge the conversation permanently: the next turn appended a
     // user message onto a malformed transcript and every provider rejected it.
     let abortedMidRound = false;
+    let touchedChecklist = false;
     for (const tc of roundToolCalls) {
       if (abortedMidRound || opts.signal.aborted) {
         abortedMidRound = true;
@@ -569,6 +638,9 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         callContext,
       );
       const isError = result.content.startsWith("Error") || result.content.startsWith("Unknown tool");
+      if (!isError && (tc.name === "task_plan" || tc.name === "task_progress")) {
+        touchedChecklist = true;
+      }
       opts.onEvent({
         kind: "tool-step",
         step: {
@@ -598,6 +670,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         history.push({ role: "user", content: imageParts });
       }
     }
+    roundsSinceTaskTouch = touchedChecklist ? 0 : roundsSinceTaskTouch + 1;
     // Thrown only once the round's history is complete, so what the caller
     // keeps is a transcript the next turn can be appended to.
     if (abortedMidRound) throw new DOMException("Aborted", "AbortError");

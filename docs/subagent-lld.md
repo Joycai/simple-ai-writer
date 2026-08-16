@@ -23,6 +23,11 @@
 | **需求** | vision 路由原被收窄为「仅当主模型是纯文本」，与 HLD「两边都支持时优先子代理」不符。改回 HLD 语义（§6.2） |
 | **补充** | `activeTaskId` 的来源（原文未定义，却被所有新工具依赖）、嵌套日志的去重键冲突、同轮并发写 `task.md` 的丢更新、GC 的无界增长漏洞、与 chat 折叠的交互、测试计划、i18n 与 profile terms 约束 |
 
+**2026-08-16 · 清单滞后提醒（§4.2.1）。** 任务清单不逐步推进、结尾"突然全部完成"的
+成因是四层指令都没要求模型边做边勾；提示词层补齐后，runtime 再加一道确定性兜底：
+连续 3 个工具轮没有 `task_progress` 落地且清单仍有未完成步骤时，注入带清单快照的
+提醒（发出即撤，同 checkpoint 模式）。
+
 **2026-08-15 · 任务工作区对齐设计稿 1g（§3.3 / §4.5 / §7.3）。** 对照 claude.ai/design
 的 `02 AI 面板` 1g 屏复查后落三件事：note 文件加来源机器头（§3.3 第 2a 条），
 `TaskWorkspaceView` 全面改到 1g 的视觉词汇（§7.3），会话 blob 携带 `taskId` 并顺手
@@ -388,6 +393,16 @@ scratchpad?: "off" | "offered" | "required";
 ```
 
 默认 `"off"` 意味着**整套机制可以整体回退**：不改任何预设，就是今天的行为。
+
+### 4.2.1 清单滞后提醒（2026-08-16）
+
+**问题**：作者反馈 task_plan 拆出的 4-5 步清单在执行中不逐步推进，而是最后一刻"突然全部完成"。排查确认链路本身是实时的（每个 tool-step 落地即写 store，`TaskPanel` 按 revision 重读磁盘），根因是**没有任何一层指令要求模型边做边勾**——于是模型把所有 `task_progress` 攒到最后一轮批量发出，同轮几百毫秒内全部落盘，且最后一勾同时把 `meta.status` 翻成 `completed`。
+
+**为什么不能硬校验**：步骤只是 task.md 里的一行文字，runtime 不知道哪个工具调用完成了哪一步——"每步完成必须上报"在 runtime 侧不可判定。可判定的是**沉默**：清单上还有未完成步骤，却连续多轮没有任何 `task_plan`/`task_progress` 成功落地。
+
+**机制**（`runtime.ts`，与 checkpoint 同构、同样发出即撤）：轮循环维护 `roundsSinceTaskTouch`，工具轮里有成功的 `task_plan`/`task_progress` 就归零，否则 +1；达到 `TASK_NUDGE_ROUNDS = 3` 且 `loadTaskDoc` 读出的清单仍有 pending/in_progress 步骤时，注入 `ai.instructions.taskChecklistNudge`——**附当前清单快照**（带序号和勾选态），让模型对照实际进展逐条补勾，而不是凭记忆乱勾。注入后计数器归零，再沉默 3 轮才会重发。条件里带 `!withholdTools`（末轮收走工具时提醒只会制造死路）和 `preset.scratchpad === "required"`（与 checkpoint 同一开关，整体可回退）。
+
+**提示词层同日配套**（这是第一道防线，nudge 是兜底）：`ai.instructions.agent` 新增「任务清单」一节（system 层是唯一每轮存活的层），`task_plan`/`task_progress` 的 description 补调用时机，`makePlan` 补执行期约定，`scratchpadCheckpoint` 顺带要求补勾清单。测试：`agentRuntimeTaskNudge.test.ts`。
 
 ### 4.3 轮数上限：新增「存盘暂停」
 

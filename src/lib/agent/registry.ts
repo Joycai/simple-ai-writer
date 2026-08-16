@@ -1039,7 +1039,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "task_plan",
         description:
-          "Initialize or rewrite the task goal and step checklist in the on-disk task workspace (task.md). Use this at the start of a multi-step task to establish a clear roadmap.",
+          "Initialize or rewrite the task goal and step checklist in the on-disk task workspace (task.md). Use this at the start of a multi-step task to establish a clear roadmap, then keep it updated with task_progress as you execute.",
         parameters: {
           type: "object",
           properties: {
@@ -1064,7 +1064,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "task_progress",
         description:
-          "Update the task checklist in task.md. Use 'check' to mark a step done, 'start' to mark in-progress, 'skip' to skip, 'add_step' to append a new step, or 'log' to record a progress note.",
+          "Update the task checklist in task.md. Use 'check' to mark a step done, 'start' to mark in-progress, 'skip' to skip, 'add_step' to append a new step, or 'log' to record a progress note. Call it the moment a step's state changes: 'start' right before you begin a step, 'check' as soon as it is finished. Never batch all the updates at the end of the task.",
         parameters: {
           type: "object",
           properties: {
