@@ -551,6 +551,7 @@
       "imagePrompt": "You are an image-prompt engineer. The author gives you a subject, source material, and possibly extra direction; you produce one prompt ready to send to a text-to-image model.\n\n## Principles\n- **Only what is visible**: appearance, build, clothing, accessories, pose, expression, setting, lighting, framing. Abstract traits (personality, history, powers) must be translated into visual features first ('wary' → 'brow furrowed, hand resting on the sword hilt'); anything you cannot translate, leave out.\n- **Be faithful to the material**: features stated in the source (hair colour, scars, signature weapon, cut of the clothing) must appear in the prompt. Do not invent details the source does not give — omission beats a wrong invention.\n- **Never put the subject's name in the prompt**: the model does not know it and the words are wasted. Refer to the subject by appearance.\n- **References outrank imagination**: when descriptions of existing reference images are supplied, the new picture must match them in face, hair, palette and clothing — that is the only thing making it the same subject.\n- **The author's direction wins** wherever it conflicts with the source material.\n- Keep style as its own clause, out of the prompt; put only genuine exclusions in negative, and an empty string when there are none.\n- Choose aspect from the framing: full-body portraits lean vertical, scenes and banners lean horizontal.\n\n## Language\nWrite prompt, style and negative in {{promptLang}}; write note as one sentence in {{noteLang}} telling the author what the picture will show.",
       "roundCapReached": "You have reached the maximum number of tool calls for this turn. Write your answer now, directly, without calling any more tools.",
       "scratchpadCheckpoint": "[System note] Context limit is approaching and older tool results will soon be trimmed. Please use write_note to record your intermediate conclusions and findings into notes on disk so they are not lost.",
+      "makePlan": "Break down what we are working on into an actionable plan: state the goal in one sentence, then call task_plan with a title and a step-by-step checklist. Steps must be concrete and individually checkable, not vague. If a plan already exists, revise it against where we actually are. Do not start executing after writing the plan — wait for my confirmation.",
       "taskResume": "[Resumed Task]\nBelow is the saved progress and notes index for this task:\n\n## Task Status & Plan\n{{body}}\n\n## Saved Notes Index\n{{notes}}{{stale}}\n\nPlease proceed directly with the unfinished steps based on the current plan and notes. Use read_note to read full note contents if needed.",
       "taskResumeNoNotes": "(no saved notes)",
       "authorMessage": "[Message from the author]",
@@ -575,7 +576,8 @@
       "logHeading": "Progress log",
       "sources": "**Sources:**",
       "logPaused": "Saved and paused",
-      "logResumed": "Resumed from pause"
+      "logResumed": "Resumed from pause",
+      "logAborted": "Terminated by the author"
     },
     "taskWorkspace": {
       "title": "Task Workspace",
@@ -601,14 +603,23 @@
         "inProgress": "In Progress",
         "paused": "Paused",
         "completed": "Completed",
-        "failed": "Failed"
+        "failed": "Failed",
+        "aborted": "Terminated"
       },
       "stepsCount": "{{done}}/{{total}} steps",
       "resumeTurn": "Resuming task: {{title}}",
       "clearCompleted": "Clear completed tasks",
       "clearCompletedTitle": "Clear completed tasks",
       "clearCompletedMessage": "This will delete the plan and note files of {{n}} completed task(s). This cannot be undone. In-progress and paused tasks are not affected.",
-      "clearCompletedConfirm": "Delete"
+      "clearCompletedConfirm": "Delete",
+      "abort": "Terminate task",
+      "abortTitle": "Terminate task",
+      "abortMessage": "This will stop \"{{title}}\" and mark it terminated. Its plan and notes stay on disk, but the task cannot be continued.",
+      "abortConfirm": "Terminate",
+      "delete": "Delete task",
+      "deleteTitle": "Delete task",
+      "deleteMessage": "This will delete the plan and note files of \"{{title}}\". This cannot be undone.",
+      "deleteConfirm": "Delete"
     },
     "snippets": {
       "button": "Snippets",
@@ -875,6 +886,9 @@
     },
     "approval": {
       "title": "Pending edit",
+      "titleRewrite": "Pending full rewrite of {{doc}}",
+      "rewriteGrow": "Full rewrite: {{n}} chars longer than the original",
+      "rewriteShrink": "Full rewrite: {{n}} chars shorter than the original — check nothing was dropped",
       "titleCreate": "Pending new {{doc}}",
       "titleMove": "Pending {{doc}} move",
       "titleMoveVolume": "Pending {{group}} move",
@@ -940,6 +954,9 @@
       "imageTooLarge": "{{name}} is too large ({{size}}MB, limit {{max}}MB)",
       "refUnreadable": "Could not read {{name}}",
       "noSelection": "No selection",
+      "makePlan": "Make a plan",
+      "makePlanHint": "Have the model break the current work into checkable steps, recorded in the task workspace",
+      "makePlanTurn": "Make a plan",
       "contextMeter": "Context",
       "ctxSystem": "System + tools",
       "ctxSummary": "Summary",

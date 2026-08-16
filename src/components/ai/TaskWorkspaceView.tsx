@@ -5,6 +5,8 @@ import { useAgentStore } from "../../stores/agentStore";
 import { useProjectStore } from "../../stores/projectStore";
 import {
   clearCompletedTasks,
+  deleteTask,
+  isFinishedStatus,
   listTaskNotes,
   listTaskSummaries,
   loadTaskDoc,
@@ -21,6 +23,17 @@ import styles from "./TaskWorkspaceView.module.css";
 interface TaskWorkspaceViewProps {
   onClose: () => void;
 }
+
+/**
+ * Which confirmation is open. One slot rather than a boolean each, so two
+ * dialogs can never be open at once and the destructive target always travels
+ * with the request instead of being re-derived from the selection at confirm
+ * time (which the confirm itself can change).
+ */
+type PendingConfirm =
+  | { kind: "clear" }
+  | { kind: "abort"; taskId: string }
+  | { kind: "delete"; taskId: string };
 
 /**
  * Step state in the 1g vocabulary — the same square marks TaskPanel speaks,
@@ -48,6 +61,7 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
   const { t } = useTranslation();
   const projectPath = useProjectStore((s) => s.projectPath);
   const resumeTask = useAgentStore((s) => s.resumeTask);
+  const abortTask = useAgentStore((s) => s.abortTask);
   const chatRunning = useAgentStore((s) => s.chatRunning);
   const chatTaskId = useAgentStore((s) => s.chatTaskWorkspace?.taskId ?? null);
 
@@ -57,7 +71,7 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
   const [selectedSteps, setSelectedSteps] = useState<TaskStep[]>([]);
   const [selectedNotes, setSelectedNotes] = useState<TaskNoteHeader[]>([]);
   const [loading, setLoading] = useState(true);
-  const [confirmClear, setConfirmClear] = useState(false);
+  const [confirm, setConfirm] = useState<PendingConfirm | null>(null);
 
   useEffect(() => {
     if (!projectPath) return;
@@ -101,16 +115,37 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
     await resumeTask(taskId);
   };
 
+  /** Re-list after a mutation, keeping the selection if it survived. */
+  const refresh = async (root: string) => {
+    const next = await listTaskSummaries(root);
+    setTasks(next);
+    setSelectedId((prev) =>
+      prev && next.some((task) => task.taskId === prev) ? prev : next[0]?.taskId ?? null,
+    );
+    return next;
+  };
+
   // The chat's live workspace handle is spared even when completed — deleting
   // its dir would strand the handle on a recreated empty dir.
   const handleClearCompleted = async () => {
     if (!projectPath) return;
     await clearCompletedTasks(projectPath, chatTaskId);
-    const next = await listTaskSummaries(projectPath);
-    setTasks(next);
-    setSelectedId((prev) =>
-      prev && next.some((task) => task.taskId === prev) ? prev : next[0]?.taskId ?? null,
-    );
+    await refresh(projectPath);
+  };
+
+  const handleAbort = async (taskId: string) => {
+    if (!projectPath) return;
+    await abortTask(taskId);
+    await refresh(projectPath);
+    // Re-read the open doc: the status badge and the footer's buttons both
+    // hang off it, and abortTask wrote straight to disk behind this view.
+    setSelectedDoc(await loadTaskDoc(projectPath, taskId));
+  };
+
+  const handleDelete = async (taskId: string) => {
+    if (!projectPath) return;
+    await deleteTask(projectPath, taskId, chatTaskId);
+    await refresh(projectPath);
   };
 
   const getStatusClass = (status: string) => {
@@ -123,6 +158,8 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
         return styles.statusCompleted;
       case "failed":
         return styles.statusFailed;
+      case "aborted":
+        return styles.statusAborted;
       default:
         return "";
     }
@@ -138,6 +175,8 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
         return t("ai.taskWorkspace.status.completed", { defaultValue: "已完成" });
       case "failed":
         return t("ai.taskWorkspace.status.failed", { defaultValue: "失败" });
+      case "aborted":
+        return t("ai.taskWorkspace.status.aborted", { defaultValue: "已终止" });
       default:
         return status;
     }
@@ -173,6 +212,15 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
   const completedCount = tasks.filter(
     (task) => task.status === "completed" && task.taskId !== chatTaskId,
   ).length;
+
+  // A task in play can be terminated; a finished one can be deleted — except
+  // the chat's live workspace, whose dir must outlive the handle pointing at it.
+  const selectedStatus = selectedDoc?.meta.status;
+  const canAbort = !!selectedStatus && !isFinishedStatus(selectedStatus);
+  const canDelete =
+    !!selectedStatus && isFinishedStatus(selectedStatus) && selectedId !== chatTaskId;
+  // Terminated is terminal on purpose: resuming would just undo the decision.
+  const canResume = !!selectedStatus && selectedStatus !== "completed" && selectedStatus !== "aborted";
 
   return (
     <div className={styles.container}>
@@ -324,12 +372,30 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
         {/* Flex row with gap — the per-task token ledger (subagent-lld §7.3)
             can slot in beside the clear button when it exists. */}
         {completedCount > 0 && (
-          <button className={styles.clearBtn} onClick={() => setConfirmClear(true)}>
+          <button className={styles.clearBtn} onClick={() => setConfirm({ kind: "clear" })}>
             {t("ai.taskWorkspace.clearCompleted", { defaultValue: "清除已完成任务" })}
           </button>
         )}
         <div className={styles.headerSpacer} />
-        {selectedDoc && selectedId && selectedDoc.meta.status !== "completed" && (
+        {/* Terminate and delete are mutually exclusive by construction: a task
+            is either still in play (terminable) or finished (deletable). */}
+        {selectedId && canAbort && (
+          <button
+            className={styles.abortBtn}
+            onClick={() => setConfirm({ kind: "abort", taskId: selectedId })}
+          >
+            {t("ai.taskWorkspace.abort", { defaultValue: "终止任务" })}
+          </button>
+        )}
+        {selectedId && canDelete && (
+          <button
+            className={styles.deleteBtn}
+            onClick={() => setConfirm({ kind: "delete", taskId: selectedId })}
+          >
+            {t("ai.taskWorkspace.delete", { defaultValue: "删除任务" })}
+          </button>
+        )}
+        {selectedDoc && selectedId && canResume && (
           <button
             className={styles.resumeBtn}
             onClick={() => handleResume(selectedId)}
@@ -340,7 +406,7 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
         )}
       </div>
 
-      {confirmClear && (
+      {confirm?.kind === "clear" && (
         <ConfirmDialog
           title={t("ai.taskWorkspace.clearCompletedTitle", { defaultValue: "清除已完成任务" })}
           message={t("ai.taskWorkspace.clearCompletedMessage", {
@@ -351,7 +417,36 @@ export function TaskWorkspaceView({ onClose }: TaskWorkspaceViewProps) {
           confirmLabel={t("ai.taskWorkspace.clearCompletedConfirm", { defaultValue: "删除" })}
           danger
           onConfirm={() => void handleClearCompleted()}
-          onClose={() => setConfirmClear(false)}
+          onClose={() => setConfirm(null)}
+        />
+      )}
+
+      {confirm?.kind === "abort" && (
+        <ConfirmDialog
+          title={t("ai.taskWorkspace.abortTitle", { defaultValue: "终止任务" })}
+          message={t("ai.taskWorkspace.abortMessage", {
+            defaultValue:
+              "将停止「{{title}}」并标记为已终止。计划与笔记会保留在磁盘上，但该任务不能再继续。",
+            title: selectedTask?.title ?? selectedId,
+          })}
+          confirmLabel={t("ai.taskWorkspace.abortConfirm", { defaultValue: "终止" })}
+          danger
+          onConfirm={() => void handleAbort(confirm.taskId)}
+          onClose={() => setConfirm(null)}
+        />
+      )}
+
+      {confirm?.kind === "delete" && (
+        <ConfirmDialog
+          title={t("ai.taskWorkspace.deleteTitle", { defaultValue: "删除任务" })}
+          message={t("ai.taskWorkspace.deleteMessage", {
+            defaultValue: "将删除「{{title}}」的计划与笔记文件，此操作不可恢复。",
+            title: selectedTask?.title ?? selectedId,
+          })}
+          confirmLabel={t("ai.taskWorkspace.deleteConfirm", { defaultValue: "删除" })}
+          danger
+          onConfirm={() => void handleDelete(confirm.taskId)}
+          onClose={() => setConfirm(null)}
         />
       )}
     </div>

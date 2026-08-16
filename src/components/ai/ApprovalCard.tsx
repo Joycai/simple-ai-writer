@@ -19,6 +19,7 @@ import type {
   CreateProposal,
   DeleteProposal,
   EditProposal,
+  RewriteProposal,
   IllustrateProposal,
   MoveProposal,
   Proposal,
@@ -47,6 +48,8 @@ function headerTitle(proposal: Proposal, t: TFunction, terms: ResolvedTerms): st
   switch (proposal.kind) {
     case "edit":
       return t("ai.approval.title", words);
+    case "rewrite":
+      return t("ai.approval.titleRewrite", words);
     case "create":
       return t("ai.approval.titleCreate", words);
     case "move":
@@ -66,6 +69,10 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
   switch (proposal.kind) {
     case "edit":
       return `${proposal.find.length} → ${proposal.replace.length} ${chars}`;
+    case "rewrite":
+      // Whole-file scale, so the delta is the header's whole job: it is what
+      // tells the author at a glance that a "reformat" is quietly dropping text.
+      return `${proposal.originalChars} → ${proposal.content.length} ${chars}`;
     case "create":
       return `${proposal.content.length} ${chars}`;
     case "move":
@@ -96,6 +103,41 @@ function EditBody({ proposal }: { proposal: EditProposal }) {
         {t("ai.approval.findLabel")}
       </button>
       {showOriginal && <pre className={styles.findBlock}>{proposal.find}</pre>}
+    </>
+  );
+}
+
+/**
+ * A rewrite replaces everything, so unlike an edit there is no "original" worth
+ * folding away — the decision is entirely "is this still my chapter?". The new
+ * text is therefore rendered in full (clipped, expandable) the way a new
+ * chapter is, with the size change called out above it because that is the one
+ * signal that a formatting pass has quietly eaten a section.
+ */
+function RewriteBody({ proposal }: { proposal: RewriteProposal }) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const delta = proposal.content.length - proposal.originalChars;
+
+  return (
+    <>
+      {delta !== 0 && (
+        <div className={delta < 0 ? styles.rewriteDeltaWarn : styles.rewriteDelta}>
+          {t(delta < 0 ? "ai.approval.rewriteShrink" : "ai.approval.rewriteGrow", {
+            n: Math.abs(delta),
+          })}
+        </div>
+      )}
+      <div
+        className={expanded ? styles.previewBlock : styles.previewBlockClipped}
+        dangerouslySetInnerHTML={{ __html: renderMarkdown(proposal.content) }}
+      />
+      {proposal.content.length > CLIP_CHARS && (
+        <button className={styles.originalToggle} onClick={() => setExpanded((v) => !v)}>
+          {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+          {expanded ? t("ai.approval.collapse") : t("ai.approval.expand")}
+        </button>
+      )}
     </>
   );
 }
@@ -185,6 +227,8 @@ function ProposalBody({ proposal }: { proposal: Proposal }) {
   switch (proposal.kind) {
     case "edit":
       return <EditBody proposal={proposal} />;
+    case "rewrite":
+      return <RewriteBody proposal={proposal} />;
     case "create":
       return <CreateBody proposal={proposal} />;
     case "move":

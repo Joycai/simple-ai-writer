@@ -102,6 +102,13 @@ export const LORE_SPLIT_PRESET: TaskPreset = {
  * *whole* lore folder ("整理一下设定"), which costs one list + one read per
  * entity, then a plan round, before a single write happens. A cap that runs out
  * mid-sweep reads to the author as the agent refusing to act.
+ *
+ * Raised 20 → 40 once whole-document work became expressible: reformatting a
+ * chapter means paging the file in through read_file (4000 chars a call), then
+ * rewrite_document, and a long chapter spent most of a 20-round budget just
+ * reading. The number is also what one 继续 press on the round-limit card grants
+ * (agentStore passes maxRounds as the extension), so it sets the granularity of
+ * "keep going" as much as the initial ceiling.
  */
 export const AGENT_ASSIST_PRESET: TaskPreset = {
   id: "agent-assist",
@@ -123,6 +130,7 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "delete_lore_entity",
     "update_memory",
     "propose_edit",
+    "rewrite_document",
     "create_chapter",
     "move_chapter",
     "delete_chapter",
@@ -134,7 +142,7 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "read_note",
     "list_notes",
   ],
-  maxRounds: 20,
+  maxRounds: 40,
   finishPolicy: "force-text",
   scratchpad: "required",
 };

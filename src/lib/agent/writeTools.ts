@@ -1016,3 +1016,79 @@ export async function proposeEditTool(
       (decision.backupPath ? ` Previous version backed up to ${decision.backupPath}.` : ""),
   };
 }
+
+// ─── rewrite_document ────────────────────────────────────────────────────────
+
+/**
+ * Below this fraction of the original length, a rewrite is refused outright
+ * rather than shown as a card.
+ *
+ * read_file pages at 4000 chars, so the standing hazard is a model that read
+ * the first page, reformatted it, and sent that back as "the whole document" —
+ * which would delete the rest. The author *could* catch that on the card, but
+ * a proposal that is half the file is far more often this bug than a genuine
+ * intent, and bouncing it back to the model (which can then finish reading)
+ * fixes it without spending the author's attention. Deliberate large cuts
+ * still have propose_edit and delete_chapter.
+ */
+const REWRITE_MIN_RATIO = 0.5;
+
+export async function rewriteDocumentTool(
+  toolCallId: string,
+  args: { path?: string; content?: string; reason?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const path = args.path?.trim();
+  if (!path) return { toolCallId, content: "Error: 'path' argument is required." };
+  if (!isPathWithin(`${ctx.projectPath}/writing`, path)) {
+    return { toolCallId, content: "Error: rewrite_document only works on files under the project's writing/ directory." };
+  }
+  if (typeof args.content !== "string") {
+    return { toolCallId, content: "Error: 'content' argument is required (the complete new file body)." };
+  }
+  if (!ctx.requestApproval) {
+    return { toolCallId, content: "Error: this surface cannot review manuscript edits — do not call rewrite_document here." };
+  }
+
+  let original: string;
+  try {
+    original = await readFile(path);
+  } catch (e) {
+    return { toolCallId, content: `Error reading file: ${String(e)}` };
+  }
+
+  if (args.content === original) {
+    return { toolCallId, content: "The proposed content is identical to the file — nothing to do." };
+  }
+  if (original.length > 0 && args.content.length < original.length * REWRITE_MIN_RATIO) {
+    return {
+      toolCallId,
+      content:
+        `Error: the proposed content is ${args.content.length} chars but the file is ${original.length} — ` +
+        `that would delete most of it. If you only read part of the file, call read_file again with start_line ` +
+        `until it reports no more lines, then resend the complete document. To remove a passage on purpose, use propose_edit.`,
+    };
+  }
+
+  const decision = await ctx.requestApproval({
+    kind: "rewrite",
+    id: `rewrite-${++proposalCounter}`,
+    path,
+    content: args.content,
+    originalChars: original.length,
+    reason: args.reason?.trim() || undefined,
+  });
+
+  if (!decision.approved) {
+    return {
+      toolCallId,
+      content: `The user REJECTED this rewrite${decision.reason ? ` — reason: ${decision.reason}` : "."} Do not resend the same content; adjust per the reason or move on.`,
+    };
+  }
+  return {
+    toolCallId,
+    content:
+      `Rewrite approved and applied (${original.length} → ${args.content.length} chars).` +
+      (decision.backupPath ? ` Previous version backed up to ${decision.backupPath}.` : ""),
+  };
+}

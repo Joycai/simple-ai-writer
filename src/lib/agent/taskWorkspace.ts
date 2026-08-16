@@ -20,7 +20,13 @@ import {
   writeFile,
 } from "../fs/fileio";
 
-export type TaskStatus = "in_progress" | "paused" | "completed" | "failed";
+/**
+ * `aborted` is the author calling the task off; `failed` is the run dying on
+ * its own. They are kept apart rather than folded together because only the
+ * first is a decision — a terminated task is finished business (deletable, not
+ * resumable), where a failed one is a fault the author may still want to retry.
+ */
+export type TaskStatus = "in_progress" | "paused" | "completed" | "failed" | "aborted";
 export type StepStatus = "pending" | "in_progress" | "done" | "skipped";
 
 export const MAX_SAVED_TASKS = 20;
@@ -421,6 +427,18 @@ export async function markTaskPaused(projectPath: string, taskId: string): Promi
   });
 }
 
+/**
+ * Author called the task off. Terminal: the workspace view offers delete rather
+ * than resume from here, and the run (if this is the live task) is aborted by
+ * the caller — this only records the decision on disk.
+ */
+export async function markTaskAborted(projectPath: string, taskId: string): Promise<void> {
+  await patchTaskDoc(projectPath, taskId, (doc) => {
+    doc.meta.status = "aborted";
+    doc.body = appendLogToBody(doc.body, i18n.t("ai.taskDoc.logAborted"));
+  });
+}
+
 /** Author picked 恢复并继续 — undone again if the resumed run never starts. */
 export async function markTaskResumed(projectPath: string, taskId: string): Promise<void> {
   await patchTaskDoc(projectPath, taskId, (doc) => {
@@ -652,11 +670,11 @@ export async function gcTasks(projectPath: string, keepTaskId?: string | null): 
     }
 
     // Sort order:
-    // 1. Completed / failed tasks come first (pruned first)
+    // 1. Finished tasks (completed / failed / aborted) come first (pruned first)
     // 2. Older updatedAt comes first
     tasks.sort((a, b) => {
-      const aDone = a.status === "completed" || a.status === "failed";
-      const bDone = b.status === "completed" || b.status === "failed";
+      const aDone = isFinishedStatus(a.status);
+      const bDone = isFinishedStatus(b.status);
       if (aDone !== bDone) return aDone ? -1 : 1;
       return a.updatedAt - b.updatedAt;
     });
@@ -676,6 +694,42 @@ export async function gcTasks(projectPath: string, keepTaskId?: string | null): 
     }
   } catch (e) {
     console.warn("[taskWorkspace] gcTasks failed:", e);
+  }
+}
+
+/**
+ * Is this task over? Governs both what GC prunes first and what the workspace
+ * view offers to delete — a task still in play must never be either.
+ */
+export function isFinishedStatus(status: TaskStatus): boolean {
+  return status === "completed" || status === "failed" || status === "aborted";
+}
+
+/**
+ * Delete one task's folder — plan, log and notes together.
+ *
+ * Refuses a task that is still in play, so the button can never be the thing
+ * that loses work in progress; the caller is expected to terminate first. It
+ * also refuses the chat's live workspace id for the same reason
+ * clearCompletedTasks spares it: `existingWorkspace.ensure()` would recreate
+ * the directory empty and the handle would go on writing into a ghost.
+ */
+export async function deleteTask(
+  projectPath: string,
+  taskId: string,
+  liveTaskId?: string | null,
+): Promise<boolean> {
+  if (liveTaskId && taskId === liveTaskId) return false;
+  const doc = await loadTaskDoc(projectPath, taskId);
+  // A corrupted dir has no status to trust and is exactly what the author is
+  // trying to clear out, so it is deletable; a readable one must be finished.
+  if (doc && !isFinishedStatus(doc.meta.status)) return false;
+  try {
+    await removeDir(taskWorkspaceDir(projectPath, taskId));
+    return true;
+  } catch (e) {
+    console.warn(`[taskWorkspace] failed to delete task ${taskId}:`, e);
+    return false;
   }
 }
 
