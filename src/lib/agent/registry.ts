@@ -40,6 +40,7 @@ import {
   createFileTool,
   createLoreEntityTool,
   deleteChapterTool,
+  deleteDirectoryTool,
   deleteLoreEntityTool,
   deleteLoreFileTool,
   moveChapterTool,
@@ -126,14 +127,19 @@ export interface MoveProposal extends ProposalBase {
 }
 
 /**
- * Remove a chapter file. Volume folders are deliberately not proposable: the
- * blast radius (every chapter inside) is the author's call to make in the
- * sidebar, not something to approve from a card mid-run.
+ * Remove a chapter file, or (isDir) a whole folder. Sharing the "delete" kind
+ * is what keeps the folder variant permanently outside 本次都批准 grants —
+ * the exclusion is by kind (see autoApprove), so it cannot be forgotten per
+ * tool. On approval the target moves into `.ai-writer/backups`, never unlink.
  */
 export interface DeleteProposal extends ProposalBase {
   kind: "delete";
-  /** Size at proposal time, so the card can say what is at stake. */
+  /** Size at proposal time, so the card can say what is at stake. 0 for a folder. */
   chars: number;
+  /** True when `path` is a folder — the deletion takes everything inside. */
+  isDir?: true;
+  /** Recursive file count, the folder card's headline number. */
+  fileCount?: number;
 }
 
 /**
@@ -312,6 +318,7 @@ export type ToolId =
   | "move_chapter"
   | "copy_file"
   | "delete_chapter"
+  | "delete_directory"
   | "generate_image"
   | "edit_image"
   | "task_plan"
@@ -1143,7 +1150,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "delete_chapter",
         description:
-          "Propose deleting ONE chapter file. NOTHING is removed until the user approves the card, and on approval the file is moved into .ai-writer/backups rather than erased, so it stays recoverable. Volume folders are refused — deleting a whole volume is the author's own call; describe what you would remove and let them do it. When merging two chapters, propose_edit the surviving one FIRST, then delete the other.",
+          "Propose deleting ONE chapter file. NOTHING is removed until the user approves the card, and on approval the file is moved into .ai-writer/backups rather than erased, so it stays recoverable. Folders are refused — use delete_directory for those. When merging two chapters, propose_edit the surviving one FIRST, then delete the other.",
         parameters: {
           type: "object",
           properties: {
@@ -1159,6 +1166,31 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => deleteChapterTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  delete_directory: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "delete_directory",
+        description:
+          "Propose deleting a whole folder and EVERYTHING inside it. The heavyweight deletion: the card leads with the file count, the author must approve it individually EVERY time (a standing 本次都批准 grant never covers deletions), and on approval the entire folder is moved into .ai-writer/backups in one piece, so it stays recoverable. The project folder itself cannot be deleted. For a single file use delete_chapter.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "Full path of the folder to delete" },
+            reason: {
+              type: "string",
+              description:
+                "Why the whole folder should go, in the author's language — they decide from this line alone",
+            },
+          },
+          required: ["path", "reason"],
+        },
+      },
+    },
+    execute: (call, ctx) => deleteDirectoryTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   task_plan: {

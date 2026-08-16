@@ -137,6 +137,7 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "move_chapter",
     "copy_file",
     "delete_chapter",
+    "delete_directory",
     "generate_image",
     "edit_image",
     "task_plan",
