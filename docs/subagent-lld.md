@@ -274,6 +274,13 @@ export function parseSteps(body: string): TaskStep[] {
    （checkpoint 提示点名要它，拒绝会让那条提示变成死路；但它用**中性标题**建仓，
    任务叫什么是计划的事，不能由碰巧第一个落盘的笔记决定）。
    `task_progress` **不创建**——它编辑的是一份必须已经存在的清单。
+
+   > **作者主动要计划（2026-08-16）**：对话输入框上方新增「制定计划」按钮。它**不**直接建仓，
+   > 而是照 `resumeTask` 的老路发一条普通轮次——`ai.instructions.makePlan` 上线、
+   > 转录里只显示短标签，由模型自己去调 `task_plan`。UI 直接写一份 `task.md` 也做得到，
+   > 但那样建出来的计划模型没参与、也不会照着走，只是一份骗人的进度条。
+   > 在此之前，工作区只在**模型**认为活儿够大时才出现，作者没有办法对一件被判定为
+   > 「小事」的工作说「这个要跟踪」，跑偏之后也没有办法把计划要回来。
    新建的工作区**不含任何占位步骤**：伪造一条「开始任务」会被 `parseSteps` 数进去，
    于是一个没人规划过的任务显示 0/1，模型还会去勾一条它没写过的步骤。
 4. **大小熔断**：note 正文 ≤ `100_000` 字符，`task.md` ≤ `20_000` 字符；超限返回 tool error 而非截断（截断会让模型以为写成功了）。
@@ -295,12 +302,13 @@ function serializeWrite<T>(fn: () => Promise<T>): Promise<T> {
 ### 3.4 GC 与保留策略
 
 - **上限** `MAX_SAVED_TASKS = 20`（对照 `MAX_CHAT_SESSIONS = 5`，`sessionDb.ts:15`；任务目录比会话轻，且断点续跑的价值窗口更长，故放宽）。
-- **排序键**：先按「是否已收尾」（`completed`/`failed` 排前面，优先被淘汰），再按 `updatedAt` 倒序；保留前 20 个。
+- **排序键**：先按「是否已收尾」（`completed`/`failed`/`aborted` 排前面，优先被淘汰，判定收在 `isFinishedStatus()` 一处），再按 `updatedAt` 倒序；保留前 20 个。
 
   > 第一版写的是「未完成的不清理」，那样一个永不收尾的任务序列会无界增长。上面的排序保证「未完成的优先留下，但不豁免」。
 - **绝不删除当前 run 持有的 `taskId`**（handle 里有它）。
 - **触发时机**：`ensure()` 成功创建新目录之后，`void gcTasks(projectPath, keepId)` 异步执行，失败只 `console.warn`。
 - **手动清除**：任务工作区 footer 的「清除已完成任务」按钮（`TaskWorkspaceView`）经 `ConfirmDialog` 确认后调 `clearCompletedTasks(projectPath, keepTaskId)`，只删 `status === "completed"` 的目录；`keepTaskId` 同样豁免当前会话持有的任务，理由同上。
+- **单个删除（2026-08-16）**：footer 的「删除任务」按钮调 `deleteTask(projectPath, taskId, liveTaskId)`，只对**已收尾**的任务开放（`isFinishedStatus`），并同样豁免当前会话的 `taskId`。工具层而非只在 UI 层做这两道判断，是因为「删掉正在跑的任务」丢的是没法找回的工作——按钮的可见性是提示，函数的拒绝才是保证。目录解析不出 `task.md` 的算可删：那正是作者要清掉的东西。
 
 ### 3.5 项目备份
 
@@ -318,14 +326,20 @@ function serializeWrite<T>(fn: () => Promise<T>): Promise<T> {
   ┌──────────┐  task_plan / 首次 write_note
   │  (无)    ├──────────────────────────────► in_progress
   └──────────┘                                   │
-                     撞轮数上限选「存盘暂停」     │  步骤全部收尾 / 作者收尾
+                     撞轮数上限选「存盘暂停」     │  步骤全部收尾
                   ┌────────────────────────────┤
                   ▼                             ▼
               paused ──── UI 点「继续」───► in_progress ───► completed
-                                                │
-                                                ▼  运行异常 / 作者彻底中止
-                                             failed
+                  │                             │
+                  │        作者点「终止任务」   │  运行异常
+                  └──────────────┬──────────────┘
+                                 ▼              ▼
+                             aborted         failed
 ```
+
+**`aborted` 与 `failed` 分开（2026-08-16）：** 前者是作者的决定，后者是运行自己出的事。分开不是为了措辞好看——两者的后续动作正相反：终止的任务是「办完了的事」，可删、不可续（续跑等于把刚做的决定撤销）；失败的任务是故障，作者多半还想重试。UI 上 `aborted` 用中性色而非 `failed` 的告警色，也是同一个理由。
+
+**入口**：`agentStore.abortTask(taskId)`。顺序是**先停后写**——若终止的正是当前会话的任务且仍在跑，先 `stopChat()`，否则循环里下一次 `task_progress` 会把刚写的 `aborted` 覆盖掉。写完还要 `chatTaskWorkspace: null` 把 handle 摘掉：`task_plan` 会无条件把状态重置回 `in_progress`，不摘的话作者随后一句「再规划一下」就悄悄把终止的任务复活了。
 
 ### 4.2 裁剪前的 Checkpoint 注入
 

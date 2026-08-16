@@ -14,7 +14,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight, Image as ImageIcon, Square, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Image as ImageIcon, ListChecks, Square, X } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { SnippetPicker } from "./SnippetPicker";
 import {
@@ -311,6 +311,24 @@ export function AgentChat() {
     void sendChat(text, attachedQuote, sending);
   };
 
+  /**
+   * Ask the model to lay out a plan. Sent as an ordinary turn — the instruction
+   * goes on the wire while the transcript shows the short label, the same shape
+   * resumeTask uses — so the model answers it with the full conversation in
+   * view and calls task_plan itself, rather than the UI fabricating a task doc
+   * the model never agreed to and would not follow.
+   *
+   * Any draft the author is mid-way through typing is deliberately left alone:
+   * this is a side request, not the message they were composing.
+   */
+  const handleMakePlan = async () => {
+    if (chatRunning || !activeModelId) return;
+    setRefError(null);
+    await sendChat(t("ai.instructions.makePlan"), undefined, [], {
+      displayText: t("ai.chat.makePlanTurn", { defaultValue: "制定计划" }),
+    });
+  };
+
   // Enter sends — unless a CJK IME is mid-word, where Enter commits the typed
   // letters and must not also fire off the message. See lib/ime.
   const ime = useImeGuard();
@@ -535,6 +553,21 @@ export function AgentChat() {
           )}
           {/* Subagent session toggles (search, vision, longread) */}
           <SubAgentChips />
+          {/* Ask for a plan outright. Until now a task workspace only appeared
+              when the model decided the work warranted one, which left the
+              author with no way to say "track this" about work it judged
+              small — and no way to get the plan back once a run had drifted. */}
+          <button
+            className={styles.attachChipGhost}
+            onClick={() => void handleMakePlan()}
+            disabled={chatRunning || !activeModelId}
+            title={t("ai.chat.makePlanHint", {
+              defaultValue: "让模型把当前工作拆成可勾选的步骤，记录到任务工作区",
+            })}
+          >
+            <ListChecks size={10} strokeWidth={2} />
+            {t("ai.chat.makePlan", { defaultValue: "制定计划" })}
+          </button>
           {/* Trailing edge, past the `+ …` affordances: this one doesn't add
               material to the message, it changes how the model answers it. */}
           <ReasoningControls variant="compact" />

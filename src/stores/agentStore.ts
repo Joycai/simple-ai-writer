@@ -61,6 +61,7 @@ import {
   existingWorkspace,
   listTaskNotes,
   loadTaskDoc,
+  markTaskAborted,
   markTaskPaused,
   markTaskResumed,
   recordSourceRef,
@@ -84,7 +85,7 @@ import {
   assembleContext, assembleTurnInjection, bundleToChatMessages, profileSystemPrompt,
 } from "../lib/context/rag";
 import { docModel, promptParams } from "../lib/profile/active";
-import type { ApprovalDecision, EditProposal, Proposal } from "../lib/agent/registry";
+import type { ApprovalDecision, EditProposal, Proposal, RewriteProposal } from "../lib/agent/registry";
 import { type AttachedItem } from "../lib/lore/aiTask";
 import type { StreamMessage } from "../lib/ai/types";
 import { fileExists, readFile, writeFile } from "../lib/fs/fileio";
@@ -275,6 +276,8 @@ interface AgentState {
   ) => Promise<void>;
   /** Resume a paused task with a fresh, clean context using task.md and notes. */
   resumeTask: (taskId: string) => Promise<void>;
+  /** Author called a task off: stop it if live, then mark it aborted on disk. */
+  abortTask: (taskId: string) => Promise<void>;
   stopChat: () => void;
   resetChat: () => void;
 
@@ -339,6 +342,30 @@ async function applyEdit(proposal: EditProposal): Promise<string | null> {
 }
 
 /**
+ * Apply an approved whole-file rewrite. Returns the pre-write backup path.
+ *
+ * Unlike applyEdit there is nothing to re-locate — the proposal is the entire
+ * new file — so the author's concurrent typing cannot be detected, only
+ * overwritten. The backup is therefore load-bearing rather than a courtesy,
+ * and it is taken before anything is written.
+ */
+async function applyRewrite(proposal: RewriteProposal): Promise<string | null> {
+  const { useProjectStore } = await import("./projectStore");
+  const { projectPath, activeFilePath } = useProjectStore.getState();
+  const backupPath = projectPath ? await backupFile(projectPath, proposal.path) : null;
+
+  if (activeFilePath === proposal.path) {
+    // Same reason as applyEdit: go through the editor so the change is visible
+    // and autosaved rather than being clobbered by the open buffer on next save.
+    const { useEditorStore } = await import("./editorStore");
+    useEditorStore.getState().setContent(proposal.content);
+  } else {
+    await writeFile(proposal.path, proposal.content);
+  }
+  return backupPath;
+}
+
+/**
  * What an applied proposal reports.
  *
  * `report` is what the model is told (historically just a backup path, hence
@@ -362,6 +389,9 @@ async function applyProposal(proposal: Proposal, signal?: AbortSignal): Promise<
   switch (proposal.kind) {
     case "edit":
       return { report: await applyEdit(proposal) };
+
+    case "rewrite":
+      return { report: await applyRewrite(proposal) };
 
     case "create": {
       const dir = parentDir(proposal.path);
@@ -1038,6 +1068,25 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // live. If it never got off the ground — no model configured, no project —
     // say so on disk rather than leaving a task that claims to be running.
     if (get().chatError) await markTaskPaused(projectPath, taskId);
+  },
+
+  abortTask: async (taskId: string) => {
+    const { useProjectStore } = await import("./projectStore");
+    const { projectPath } = useProjectStore.getState();
+    if (!projectPath) return;
+
+    // Stop the work before recording the decision — otherwise a still-running
+    // loop's next task_progress call writes over the aborted status.
+    if (get().chatTaskWorkspace?.taskId === taskId) {
+      if (get().chatRunning) get().stopChat();
+      // Detach: the conversation continues, but a later task_plan starts a
+      // fresh workspace instead of quietly reviving the one just called off
+      // (task_plan resets status to in_progress unconditionally).
+      set({ chatTaskWorkspace: null });
+      void get().persistChat();
+    }
+
+    await markTaskAborted(projectPath, taskId);
   },
 
   resetChatForProject: async (projectPath) => {

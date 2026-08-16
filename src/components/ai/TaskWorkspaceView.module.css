@@ -133,6 +133,13 @@
   color: var(--color-danger-text);
 }
 
+/* Terminated is a decision, not a fault — muted rather than the danger tint
+   `failed` carries, so a called-off task doesn't read as something gone wrong. */
+.statusAborted {
+  background: var(--color-bg-inset);
+  color: var(--color-text-hint);
+}
+
 .itemMeta {
   display: flex;
   justify-content: space-between;
@@ -338,4 +345,17 @@
 .resumeBtn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+/* Both destructive, both outlined rather than solid: the filled button in this
+   footer is 继续, and stopping or deleting should never be the easiest target.
+   (composes takes one simple selector each — it cannot be grouped.) */
+.abortBtn {
+  composes: clearBtn;
+}
+
+.deleteBtn {
+  composes: clearBtn;
+  color: var(--color-error);
+  border-color: var(--color-error);
 }

@@ -551,6 +551,7 @@
       "imagePrompt": "你是图像提示词工程师。作者会给你一个主体、相关资料，可能还有额外要求，你要产出一条能直接送进文生图模型的提示词。\n\n## 原则\n- **只写看得见的东西**：外貌、身材、服饰、配饰、姿态、表情、环境、光线、构图景别。性格、身世、能力这类抽象设定必须先翻译成视觉特征（「谨慎多疑」→「眉头微蹙，手按在刀柄上」）；翻译不出来的就不要写。\n- **忠于资料**：资料写明的特征（发色、伤疤、惯用武器、服饰形制）必须出现在提示词里。资料没写的细节不要编造，留白比编错好。\n- **不要写主体的名字**：模型不认识它，名字只会占位置。用外貌特征指代。\n- **参考图优先于想象**：给出了已有参考图的描述时，新画面在长相、发型、配色、服饰上必须与其一致——这是「同一个主体」的唯一依据。\n- **作者的额外要求优先级最高**，与资料冲突时以作者为准。\n- style 单独成句，不要混进 prompt；negative 只写真正需要排除的内容，没有就留空字符串。\n- aspect 按构图选：全身立绘偏竖版，场景与横幅偏横版。\n\n## 语言\nprompt、style、negative 用{{promptLang}}书写；note 用{{noteLang}}写一句话，告诉作者这张图画的是什么。",
       "roundCapReached": "本轮的工具调用次数已用尽。请现在直接写出你的答复，不要再调用任何工具。",
       "scratchpadCheckpoint": "【系统提示】当前上下文接近上限并即将触发裁剪。请使用 write_note 将已获取的关键结论与资料写进笔记文件，避免信息丢失。",
+      "makePlan": "请把我们当前要做的事拆成一份可执行的计划：先用一句话说明目标，然后调用 task_plan 写入标题和分步骤清单。步骤要具体、可逐条勾选，不要笼统。如果已经有计划了，就根据目前进展重新梳理一份。写完计划后先不要动手执行，等我确认。",
       "taskResume": "【恢复任务】\n以下是此前已暂停的任务进度与相关笔记索引：\n\n## 任务状态与规划\n{{body}}\n\n## 已有笔记索引\n{{notes}}{{stale}}\n\n请直接根据当前规划和笔记，继续推进未完成的步骤。如果需要查阅笔记详情，使用 `read_note` 读取对应路径。",
       "taskResumeNoNotes": "（暂无保存的笔记）",
       "authorMessage": "【作者消息】",
@@ -575,7 +576,8 @@
       "logHeading": "进度记录",
       "sources": "**来源**：",
       "logPaused": "已存盘并暂停",
-      "logResumed": "从暂停中恢复"
+      "logResumed": "从暂停中恢复",
+      "logAborted": "已由作者终止"
     },
     "taskWorkspace": {
       "title": "任务工作区",
@@ -601,14 +603,23 @@
         "inProgress": "进行中",
         "paused": "已暂停",
         "completed": "已完成",
-        "failed": "失败"
+        "failed": "失败",
+        "aborted": "已终止"
       },
       "stepsCount": "{{done}}/{{total}} 步",
       "resumeTurn": "恢复任务：{{title}}",
       "clearCompleted": "清除已完成任务",
       "clearCompletedTitle": "清除已完成任务",
       "clearCompletedMessage": "将删除 {{n}} 个已完成任务的计划与笔记文件，此操作不可恢复。进行中和已暂停的任务不受影响。",
-      "clearCompletedConfirm": "删除"
+      "clearCompletedConfirm": "删除",
+      "abort": "终止任务",
+      "abortTitle": "终止任务",
+      "abortMessage": "将停止「{{title}}」并标记为已终止。计划与笔记会保留在磁盘上，但该任务不能再继续。",
+      "abortConfirm": "终止",
+      "delete": "删除任务",
+      "deleteTitle": "删除任务",
+      "deleteMessage": "将删除「{{title}}」的计划与笔记文件，此操作不可恢复。",
+      "deleteConfirm": "删除"
     },
     "snippets": {
       "button": "快捷指令",
@@ -875,6 +886,9 @@
     },
     "approval": {
       "title": "待确认的正文修改",
+      "titleRewrite": "待确认的{{doc}}全文改写",
+      "rewriteGrow": "全文改写：比原文多 {{n}} 字",
+      "rewriteShrink": "全文改写：比原文少 {{n}} 字，请确认没有内容被删掉",
       "titleCreate": "待确认的新建{{doc}}",
       "titleMove": "待确认的{{doc}}移动",
       "titleMoveVolume": "待确认的{{group}}移动",
@@ -939,6 +953,9 @@
       "imageTooLarge": "{{name}} 太大（{{size}}MB，上限 {{max}}MB）",
       "refUnreadable": "读不到 {{name}}",
       "noSelection": "未选中正文",
+      "makePlan": "制定计划",
+      "makePlanHint": "让模型把当前工作拆成可勾选的步骤，记录到任务工作区",
+      "makePlanTurn": "制定计划",
       "contextMeter": "上下文",
       "ctxSystem": "系统+工具",
       "ctxSummary": "摘要",

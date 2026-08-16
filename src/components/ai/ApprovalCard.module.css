@@ -47,6 +47,18 @@
   color: var(--color-text-muted);
 }
 
+/* Size change on a whole-file rewrite. Shrinking gets the warning tint because
+   that is the direction that loses the author's words — growing is ordinary. */
+.rewriteDelta,
+.rewriteDeltaWarn {
+  font: 500 11px/1.6 var(--font-sans);
+  color: var(--color-text-muted);
+}
+
+.rewriteDeltaWarn {
+  color: var(--color-error);
+}
+
 /* Diff faces are mono — this is a change under review, not finished prose.
    Outgoing text in the del tint, incoming in the add tint (mockup 1h). */
 .replaceBlock,

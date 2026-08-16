@@ -43,6 +43,7 @@ import {
   moveLoreEntityTool,
   updateFacetMetaTool,
   proposeEditTool,
+  rewriteDocumentTool,
   proposeLorePlanTool,
   readMemoryTool,
   updateLoreFileTool,
@@ -80,6 +81,27 @@ export interface EditProposal extends ProposalBase {
   /** Exact text to replace — must occur exactly once in the file. */
   find: string;
   replace: string;
+}
+
+/**
+ * Replace a whole manuscript file's contents.
+ *
+ * The counterpart to `edit`, and it exists because formatting work is not
+ * expressible as find/replace: normalising blank lines, indents or quote marks
+ * targets precisely the text that *repeats*, so every such edit bounces off
+ * `edit`'s uniqueness rule, and a document-wide pass would be dozens of cards
+ * besides. One card for the whole file is the honest unit of review here.
+ *
+ * `originalChars` rides along so the card can lead with the size delta — the
+ * one number that catches the failure mode this kind introduces, a rewrite
+ * composed from a partial read that would silently truncate the document.
+ */
+export interface RewriteProposal extends ProposalBase {
+  kind: "rewrite";
+  /** Full new file body, replacing everything currently there. */
+  content: string;
+  /** Length of the file at proposal time. */
+  originalChars: number;
 }
 
 /** Add a chapter that does not exist yet, with its opening text. */
@@ -154,6 +176,7 @@ export interface IllustrateProposal extends ProposalBase {
  */
 export type Proposal =
   | EditProposal
+  | RewriteProposal
   | CreateProposal
   | MoveProposal
   | DeleteProposal
@@ -245,6 +268,7 @@ export type ToolId =
   | "delete_lore_entity"
   | "update_memory"
   | "propose_edit"
+  | "rewrite_document"
   | "create_chapter"
   | "move_chapter"
   | "delete_chapter"
@@ -801,6 +825,37 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => proposeEditTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  rewrite_document: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "rewrite_document",
+        description:
+          "Replace the ENTIRE contents of a manuscript file under writing/. Use this for whole-document work that propose_edit cannot express — reformatting, normalising punctuation or indentation, restructuring headings — i.e. changes that touch text repeated throughout the file. For a single localised change, use propose_edit instead. You MUST read the whole file first (call read_file repeatedly until it stops reporting more lines): 'content' replaces everything, so anything you did not read is deleted. NOTHING is written until the user approves the card; the call blocks until they decide, and the previous version is backed up on approval.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Absolute path of the writing file, as returned by list_files",
+            },
+            content: {
+              type: "string",
+              description: "The complete new file body — everything currently in the file is replaced by this",
+            },
+            reason: {
+              type: "string",
+              description: "One-line justification shown to the user on the review card",
+            },
+          },
+          required: ["path", "content"],
+        },
+      },
+    },
+    execute: (call, ctx) => rewriteDocumentTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   create_chapter: {
