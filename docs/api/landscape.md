@@ -408,7 +408,28 @@ MiniMax 在 ④ 族端点上实现了 Anthropic 的**服务端工具**约定（b
 **由此得出一条可移植的规则：面向兼容层时，在"官方两种都收"的地方要选中继
 文档写的那一种。** 官方的宽容不是中继的宽容。
 
-### 兼容层文档的通用规律（五个样本的共同点）
+### 第六个样本：阿里 DashScope 的 ① 族兼容层（截至 2026-08，未实测）
+
+千问（Qwen）的 OpenAI 兼容端点：`https://dashscope.aliyuncs.com/compatible-mode/v1`
+（国际部署 `dashscope-intl.aliyuncs.com`，独立的 host 与 key），`Bearer` 鉴权，
+`/chat/completions` + 标准 SSE。响应侧扩展与 DeepSeek 同名：思维链在
+`delta.reasoning_content`，多轮工具调用要求把它回传。请求侧的差异集中在思考控制：
+
+- **思考开关是顶层 `enable_thinking: bool`，另有 `thinking_budget`（数值）。**
+  官方 SDK 示例写在 `extra_body` 里，但那只是 OpenAI SDK 的透传机制——落到
+  wire 上就是 body 顶层字段。
+- **新款模型（Qwen3.7+）同时接受标准 `reasoning_effort`**，且文档写明与
+  `thinking_budget` 互斥。也就是说同一个端点上，两代模型的思考控制字段不同。
+- **默认值按模型代分裂**：Qwen3.5+ / Qwen3.7+ 思考默认开，Qwen3-Max/Plus/Flash
+  等商业款默认关——后者不发开关就永远不思考。这是通用规律里"同一段代码在
+  两代模型上行为相反且都不报错"的又一例。
+- **部分开源模型的思考模式强制 `stream: true`**，非流式直接报错。
+- **`response_format: {type:"json_object"}` 要求 prompt 里出现 "JSON" 字样**，
+  否则 400（`'messages' must contain the word 'json'`）——这是 ① 族官方就有的
+  隐藏前置条件（见 [`structured.md`](structured.md)），DashScope 原样继承。
+  `json_schema` strict 仅新款（Qwen3.7-Max/Plus、3.8-Max）支持。
+
+### 兼容层文档的通用规律（六个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**
 2. **枚举是子集**（reasoning_effort 只写三档、content block 只写 text）。

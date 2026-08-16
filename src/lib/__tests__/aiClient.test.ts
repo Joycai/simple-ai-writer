@@ -552,6 +552,40 @@ describe("streamCompletion — reasoning effort", () => {
   });
 });
 
+describe("streamCompletion — switch dialect on the OpenAI family", () => {
+  const done = ['data: {"choices":[{"delta":{"content":"ok"}}]}\n', "data: [DONE]\n"];
+
+  it("spells thinking as enable_thinking and keeps reasoning_effort off the wire", async () => {
+    // Qwen documents the two fields as mutually exclusive — sending both is
+    // exactly the kind of volunteered field this whole layer exists to avoid.
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat",
+      reasoningEffort: "high", thinkingDialect: "switch",
+    });
+    expect(calls[0].body.enable_thinking).toBe(true);
+    expect(calls[0].body).not.toHaveProperty("reasoning_effort");
+  });
+
+  it('"off" is the one level the switch can express', async () => {
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat",
+      reasoningEffort: "off", thinkingDialect: "switch",
+    });
+    expect(calls[0].body.enable_thinking).toBe(false);
+  });
+
+  it("a default effort still sends nothing, dialect or not", async () => {
+    // Declaring the dialect states how thinking *would* be spelled, not that
+    // anything should be volunteered — the endpoint's own default stays.
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat",
+      reasoningEffort: "default", thinkingDialect: "switch",
+    });
+    expect(calls[0].body).not.toHaveProperty("enable_thinking");
+    expect(calls[0].body).not.toHaveProperty("reasoning_effort");
+  });
+});
+
 describe("streamCompletion — reasoning content", () => {
   const finish = "data: [DONE]\n";
 

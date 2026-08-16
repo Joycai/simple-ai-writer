@@ -85,7 +85,7 @@ Chat Completions 和 Responses 同属 OpenAI 却分成两族，是因为它们�
 `omitted`（拿不到文本却照全额计费）、Gemini 2.5 Pro 关不掉思考。**"省略字段
 = 用默认"从来不是一个统一的答案。**
 
-**③ 最后问"兼容层砍了什么"。** 四个样本（New API × 2、MiniMax × 2）的共同
+**③ 最后问"兼容层砍了什么"。** 六个样本（New API、MiniMax、DashScope）的共同
 规律见 [`landscape.md`](landscape.md) §7。最狠的一次是 MiniMax 的 ④ 族端点
 **砍掉了 `tool_choice` 的强制档**，直接让"强制工具调用"这个四族官方都有的
 手段失效。**兼容层文档不能当能力清单**：没列既可能是不支持，也可能只是没跟上。

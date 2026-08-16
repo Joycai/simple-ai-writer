@@ -32,6 +32,16 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
   const { providers, models, addModel, updateModel, fetchAndImportModels } = useAiStore();
   const existing = modelId ? models.find((m) => m.id === modelId) : undefined;
   const provider = providers.find((p) => p.id === providerId);
+  const family = provider ? familyOf(provider.apiStandard) : undefined;
+  // Which dialects this family can be *offered*: Anthropic has four shapes
+  // across generations; the OpenAI family has exactly one declared deviation
+  // from the standard `reasoning_effort` — the bare `enable_thinking` switch
+  // (Qwen on DashScope). Offering the other shapes there would be controls
+  // the adapter ignores.
+  const dialectChoices: ThinkingDialect[] | null =
+    family === "anthropic" ? THINKING_DIALECTS
+    : family === "openai" ? ["switch"]
+    : null;
 
   const [form, setForm] = useState({
     modelId: existing?.modelId ?? "",
@@ -312,28 +322,35 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
               <div className={hub.fieldHint}>{t("aiConfig.models.maxOutputHint")}</div>
             </div>
 
-            {/* Which shape of thinking parameter this model takes. Anthropic
-                only: within that family the parameter changed between model
-                generations, and on a relay the model id is free text, so the
-                generation can't be derived — the author declares it. */}
-            {provider && familyOf(provider.apiStandard) === "anthropic" && (
+            {/* Which shape of thinking parameter this model takes. Within a
+                family the parameter changed between model generations (and
+                between compat vendors), and on a relay the model id is free
+                text, so the shape can't be derived — the author declares it.
+                The choice set is per-family: see dialectChoices above. */}
+            {provider && dialectChoices && (
               <div className={styles.fieldGroup}>
                 <label className={styles.label}>{t("aiConfig.models.thinkingDialectLabel")}</label>
                 <ChipRow>
-                  {(["", ...THINKING_DIALECTS] as const).map((d) => (
+                  {["" as const, ...dialectChoices].map((d) => (
                     <Chip
                       key={d || "auto"}
                       label={
                         d === ""
                           ? t("aiConfig.models.thinkingDialectAuto")
-                          : t(`aiConfig.models.thinkingDialect${d[0].toUpperCase()}${d.slice(1)}`)
+                          : family === "openai"
+                            ? t("aiConfig.models.thinkingDialectSwitchOpenai")
+                            : t(`aiConfig.models.thinkingDialect${d[0].toUpperCase()}${d.slice(1)}`)
                       }
                       active={form.thinkingDialect === d}
                       onClick={() => setForm({ ...form, thinkingDialect: d })}
                     />
                   ))}
                 </ChipRow>
-                <div className={hub.fieldHint}>{t("aiConfig.models.thinkingDialectHint")}</div>
+                <div className={hub.fieldHint}>
+                  {family === "openai"
+                    ? t("aiConfig.models.thinkingDialectHintOpenai")
+                    : t("aiConfig.models.thinkingDialectHint")}
+                </div>
               </div>
             )}
 

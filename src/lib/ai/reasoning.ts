@@ -55,13 +55,17 @@ export function parseReasoningEffort(v: unknown): ReasoningEffort | undefined {
  *                   from an effort level. Claude 4.6+.
  *   - `extended`  — a fixed thinking token budget per request. Claude 4.5 and
  *                   earlier. Also the shape Gemini 2.5 uses.
- *   - `switch`    — a bare on/off switch: `{type:"adaptive"|"disabled"}` and
- *                   nothing else. No `display`, no budget, and **no
- *                   `output_config`** — which is where family ④'s depth dial
- *                   lives, so declaring this dialect also means "this endpoint
- *                   has no depth dial at all". MiniMax-M3's
- *                   `/anthropic/v1/messages` is the sample this was written for
- *                   (see `docs/api/landscape.md` §7 第四个样本); there, thinking
+ *   - `switch`    — a bare on/off switch, spelled per family: on Anthropic
+ *                   bodies `{type:"adaptive"|"disabled"}` and nothing else — no
+ *                   `display`, no budget, and **no `output_config`**, which is
+ *                   where family ④'s depth dial lives; on OpenAI-compatible
+ *                   bodies a top-level `enable_thinking: bool` (Qwen's DashScope
+ *                   compatible-mode — what the SDK docs put in `extra_body` is
+ *                   just a top-level wire field). Declaring this dialect also
+ *                   means "this endpoint has no depth dial at all". The samples
+ *                   it was written for: MiniMax-M3's `/anthropic/v1/messages`
+ *                   (`docs/api/landscape.md` §7 第四个样本) and Qwen3 on
+ *                   DashScope — on both, thinking on the affected models
  *                   defaults to **off**, so sending the switch is the only way
  *                   the model thinks.
  *   - `none`      — this endpoint has no thinking parameter; send nothing.
@@ -106,10 +110,15 @@ export function dialectFor(standard: ApiStandard, declared?: ThinkingDialect): T
  * the fringes first.
  *
  * DeepSeek and the other OpenAI-compatible endpoints accept the same field.
- * Their extra `thinking: {type}` switch is deliberately **not** sent: it is a
- * single vendor's dialect, and OpenAI's own endpoint rejects unknown top-level
- * arguments outright — so volunteering it would break the official path to
- * spell something `reasoning_effort: "none"` already says.
+ * Vendor switch fields (`thinking: {type}`, `enable_thinking`) are deliberately
+ * **not** sent unless the author declared the `switch` dialect on the model:
+ * they are single-vendor spellings, and OpenAI's own endpoint rejects unknown
+ * top-level arguments outright — so volunteering one would break the official
+ * path to spell something `reasoning_effort: "none"` already says. With the
+ * dialect declared, the statement inverts: this endpoint's thinking vocabulary
+ * *is* the switch, so `enable_thinking` is sent and `reasoning_effort` is not
+ * (on Qwen the two are documented as mutually exclusive — effort there
+ * only distinguishes "off" from everything else).
  */
 const OPENAI_EFFORT: Record<Exclude<ReasoningEffort, "default">, string> = {
   off: "none",
@@ -135,7 +144,14 @@ export function reasoningBody(
   if (!effort || effort === "default") return undefined;
   switch (familyOf(standard)) {
     case "openai":
-      return { reasoning_effort: OPENAI_EFFORT[effort] };
+      // The `switch` dialect is the statement that this endpoint's thinking
+      // vocabulary is a bare `enable_thinking` boolean (Qwen on DashScope
+      // compatible-mode) and that `reasoning_effort` is not welcome beside it.
+      // No depth dial exists there, so effort is spent on on/off alone —
+      // exactly the deal the same dialect strikes on the Anthropic family.
+      return dialect === "switch"
+        ? { enable_thinking: effort !== "off" }
+        : { reasoning_effort: OPENAI_EFFORT[effort] };
     case "anthropic":
       // The `switch` dialect *is* the statement that this endpoint has no
       // `output_config` — depth there is expressible only as on/off, which
