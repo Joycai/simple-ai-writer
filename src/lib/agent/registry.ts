@@ -34,7 +34,10 @@ import {
 import { LORE_PLAN_ACTIONS, type LorePlan, type PlanDecision, type PlanGate } from "./plan";
 import { editImageTool, generateImageTool } from "./imageTools";
 import {
+  copyFileTool,
   createChapterTool,
+  createDirectoryTool,
+  createFileTool,
   createLoreEntityTool,
   deleteChapterTool,
   deleteLoreEntityTool,
@@ -105,11 +108,13 @@ export interface RewriteProposal extends ProposalBase {
   originalChars: number;
 }
 
-/** Add a chapter that does not exist yet, with its opening text. */
+/** Add a file (or folder) that does not exist yet, with its opening text. */
 export interface CreateProposal extends ProposalBase {
   kind: "create";
-  /** Body the new file starts with; may be empty. */
+  /** Body the new file starts with; may be empty. Always empty for a folder. */
   content: string;
+  /** True when `path` is a new empty folder rather than a file. */
+  isDir?: true;
 }
 
 /** Rename a chapter, or move it into another volume. */
@@ -129,6 +134,20 @@ export interface DeleteProposal extends ProposalBase {
   kind: "delete";
   /** Size at proposal time, so the card can say what is at stake. */
   chars: number;
+}
+
+/**
+ * Duplicate a file (or folder) into a destination directory. The copy keeps
+ * the source's name; a collision is auto-numbered ("稿 (1).md") by the apply
+ * step, and the actual landing path travels back on the decision so the model
+ * can refer to the file it just made.
+ */
+export interface CopyProposal extends ProposalBase {
+  kind: "copy";
+  /** Directory the copy lands in. */
+  destDir: string;
+  /** True when `path` is a folder — the copy carries everything in it. */
+  isDir: boolean;
 }
 
 /**
@@ -181,12 +200,20 @@ export type Proposal =
   | CreateProposal
   | MoveProposal
   | DeleteProposal
+  | CopyProposal
   | IllustrateProposal;
 
 export type ApprovalDecision =
   | {
       approved: true;
       backupPath?: string | null;
+      /**
+       * Where the applied change actually landed, when that differs from what
+       * was proposed — today only a copy, whose collision auto-numbering picks
+       * the final name at apply time. Not `backupPath`: that field's wording
+       * is backup-specific in every report that includes it.
+       */
+      resultPath?: string;
       /**
        * Applied under a standing 本次都批准 grant, so no human read this one.
        * Reported to the model (see writeTools.reportDecision) precisely so it
@@ -280,7 +307,10 @@ export type ToolId =
   | "propose_edit"
   | "rewrite_document"
   | "create_chapter"
+  | "create_file"
+  | "create_directory"
   | "move_chapter"
+  | "copy_file"
   | "delete_chapter"
   | "generate_image"
   | "edit_image"
@@ -900,6 +930,64 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
     execute: (call, ctx) => createChapterTool(call.id, parseArgs(call.arguments), ctx),
   },
 
+  create_file: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "create_file",
+        description:
+          "Propose a NEW file of any type — notes, data, config (e.g. .json, .csv, .txt), anywhere in the project. NOTHING is written until the user approves the card; the call blocks until they decide. The filename MUST carry an explicit extension: for manuscript text use create_chapter instead, which defaults to .md and enters the outline. Fails if something is already at that path. Parent folders that do not exist yet are created with the file.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Full path of the new file, extension included, e.g. <project folder>/资料/人物表.csv",
+            },
+            content: {
+              type: "string",
+              description: "The file's starting content. Pass an empty string for an empty file.",
+            },
+            reason: {
+              type: "string",
+              description: "One-line justification shown to the user on the review card",
+            },
+          },
+          required: ["path", "content"],
+        },
+      },
+    },
+    execute: (call, ctx) => createFileTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  create_directory: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "create_directory",
+        description:
+          "Propose a NEW empty folder anywhere in the project — a volume, a materials directory, any grouping. NOTHING is created until the user approves the card; the call blocks until they decide. Note that create_chapter/create_file already create missing parent folders on the way to a file — reach for this only when the folder itself is the point (e.g. preparing a structure before filling it).",
+        parameters: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Full path of the new folder, e.g. <project folder>/素材/访谈记录",
+            },
+            reason: {
+              type: "string",
+              description: "One-line justification shown to the user on the review card",
+            },
+          },
+          required: ["path"],
+        },
+      },
+    },
+    execute: (call, ctx) => createDirectoryTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
   move_chapter: {
     access: "write-approval",
     definition: {
@@ -930,6 +1018,37 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => moveChapterTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  copy_file: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "copy_file",
+        description:
+          "Propose duplicating a file (or a whole folder) into a destination directory — e.g. drafting a variant of a chapter, or snapshotting material before a heavy edit. NOTHING is copied until the user approves the card. The copy keeps the source's name; if that name is taken in the destination, it is auto-numbered (\"稿 (1).md\") and the result reports where the copy actually landed. The destination directory must already exist (create_directory first if not).",
+        parameters: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Full path of the file or folder to copy",
+            },
+            dest_dir: {
+              type: "string",
+              description: "Full path of the existing destination folder the copy lands in (the project folder itself is allowed)",
+            },
+            reason: {
+              type: "string",
+              description: "One-line justification shown to the user on the review card",
+            },
+          },
+          required: ["path", "dest_dir"],
+        },
+      },
+    },
+    execute: (call, ctx) => copyFileTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   generate_image: {

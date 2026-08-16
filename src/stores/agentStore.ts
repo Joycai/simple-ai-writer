@@ -402,6 +402,8 @@ async function applyRewrite(proposal: RewriteProposal): Promise<string | null> {
 interface ApplyOutcome {
   report: string | null;
   imagePath?: string;
+  /** Where a copy actually landed (collision auto-numbering decides at apply time). */
+  resultPath?: string;
 }
 
 /**
@@ -410,7 +412,7 @@ interface ApplyOutcome {
  */
 async function applyProposal(proposal: Proposal, signal?: AbortSignal): Promise<ApplyOutcome> {
   const { useProjectStore } = await import("./projectStore");
-  const { createEntry, moveEntry, deleteEntry } = useProjectStore.getState();
+  const { createEntry, moveEntry, deleteEntry, copyEntry } = useProjectStore.getState();
 
   switch (proposal.kind) {
     case "edit":
@@ -421,13 +423,19 @@ async function applyProposal(proposal: Proposal, signal?: AbortSignal): Promise<
 
     case "create": {
       const dir = parentDir(proposal.path);
-      await createEntry(dir, proposal.path.slice(dir.length + 1), "file", proposal.content);
+      const name = proposal.path.slice(dir.length + 1);
+      await createEntry(dir, name, proposal.isDir ? "folder" : "file", proposal.content);
       return { report: null }; // nothing existed to back up
     }
 
     case "move":
       await moveEntry(proposal.path, proposal.newPath);
       return { report: null }; // the file still exists, at its new path
+
+    case "copy":
+      // The source is untouched; the interesting fact is where the copy
+      // landed, which collision auto-numbering decides only now.
+      return { report: null, resultPath: await copyEntry(proposal.path, proposal.destDir, proposal.isDir) };
 
     case "delete":
       // Folders never reach here (delete_chapter refuses them), but the backup
@@ -483,7 +491,7 @@ async function settleApproval(
   auto: boolean,
 ): Promise<void> {
   try {
-    const { report, imagePath } = await applyProposal(item.proposal, item.signal);
+    const { report, imagePath, resultPath } = await applyProposal(item.proposal, item.signal);
     // A picture goes into the transcript as well as onto disk — into the turn
     // the request came from, named at request time. The task panel shares
     // this queue and binds no turn, so its images stay out of the chat.
@@ -493,7 +501,7 @@ async function settleApproval(
           tn.id === item.turnId ? { ...tn, images: [...(tn.images ?? []), imagePath] } : tn),
       }));
     }
-    item.resolve({ approved: true, backupPath: report, auto: auto || undefined });
+    item.resolve({ approved: true, backupPath: report, resultPath, auto: auto || undefined });
   } catch (e) {
     // Approval failed to apply — report as a rejection so the model knows
     // the manuscript is untouched.

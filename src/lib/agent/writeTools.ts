@@ -54,7 +54,7 @@ import {
   type LorePlanStep,
 } from "./plan";
 import type { ApprovalDecision, ToolContext } from "./registry";
-import { isPathWithin, isStrictDescendant, isWorkspacePath } from "../paths";
+import { isPathWithin, isStrictDescendant, isWorkspacePath, normalizePathSegments } from "../paths";
 import { allEntityNames, findEntityByName, type ToolResult } from "./tools";
 
 // ─── propose_lore_plan (the gate every lore write goes through) ──────────────
@@ -854,6 +854,127 @@ export async function createChapterTool(
     reason: args.reason?.trim() || undefined,
   });
   return reportDecision(toolCallId, decision, `Created ${path}.`);
+}
+
+/**
+ * Create a file of any type — the general-purpose counterpart to
+ * `create_chapter`, for everything the outline should NOT treat as a chapter
+ * (notes, data files, config). The extension is therefore *required* rather
+ * than defaulted: a bare name here means the model has not decided what kind
+ * of file it is making, and silently appending `.md` would quietly turn data
+ * into a chapter.
+ */
+export async function createFileTool(
+  toolCallId: string,
+  args: { path?: string; content?: string; reason?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const target = manuscriptTarget(toolCallId, "create_file", args.path, ctx);
+  if ("refusal" in target) return target.refusal;
+  if (typeof args.content !== "string") {
+    return { toolCallId, content: "Error: 'content' argument is required (may be an empty string)." };
+  }
+
+  const dir = parentDir(target.path);
+  const name = target.path.slice(dir.length + 1);
+  if (!/^[^.].*\.[^./\\]+$/.test(name)) {
+    return {
+      toolCallId,
+      content:
+        `Error: "${name}" has no file extension. Give the full filename (e.g. 大纲.md, 人物表.csv, 配置.json) — ` +
+        "or use create_chapter for manuscript text, which defaults to .md.",
+    };
+  }
+
+  if (await statEntry(target.path)) {
+    return {
+      toolCallId,
+      content: `Error: "${name}" already exists. Use propose_edit or rewrite_document to change it, or pick another name.`,
+    };
+  }
+
+  const decision = await ctx.requestApproval!({
+    kind: "create",
+    id: `create-${++proposalCounter}`,
+    path: target.path,
+    content: args.content,
+    reason: args.reason?.trim() || undefined,
+  });
+  return reportDecision(toolCallId, decision, `Created ${target.path}.`);
+}
+
+/** Create an empty folder — a volume, a materials directory, any grouping. */
+export async function createDirectoryTool(
+  toolCallId: string,
+  args: { path?: string; reason?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const target = manuscriptTarget(toolCallId, "create_directory", args.path, ctx);
+  if ("refusal" in target) return target.refusal;
+
+  if (await statEntry(target.path)) {
+    return { toolCallId, content: `Error: something already exists at "${target.path}".` };
+  }
+
+  const decision = await ctx.requestApproval!({
+    kind: "create",
+    id: `create-${++proposalCounter}`,
+    path: target.path,
+    content: "",
+    isDir: true,
+    reason: args.reason?.trim() || undefined,
+  });
+  return reportDecision(toolCallId, decision, `Created folder ${target.path}.`);
+}
+
+/**
+ * Duplicate a file or folder into a destination directory. The copy keeps the
+ * source's name — a collision is auto-numbered by the apply step, and the
+ * final path comes back on the decision (`resultPath`), so the report tells
+ * the model where the copy actually landed.
+ */
+export async function copyFileTool(
+  toolCallId: string,
+  args: { path?: string; dest_dir?: string; reason?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const target = manuscriptTarget(toolCallId, "copy_file", args.path, ctx);
+  if ("refusal" in target) return target.refusal;
+
+  const destDir = args.dest_dir?.trim();
+  if (!destDir) {
+    return { toolCallId, content: "Error: 'dest_dir' argument is required (the folder the copy lands in)." };
+  }
+  if (!isWorkspacePath(ctx.projectPath, destDir)) {
+    return { toolCallId, content: "Error: the destination must be inside the project folder (not in .ai-writer)." };
+  }
+
+  const source = await statEntry(target.path);
+  if (!source) {
+    return { toolCallId, content: `Error: "${target.path}" does not exist. Check the path with list_files.` };
+  }
+  // The project root always exists but has no parent listing for statEntry to
+  // find it in — accept it without stat. Anything else must be a real folder.
+  if (normalizePathSegments(destDir) !== normalizePathSegments(ctx.projectPath)) {
+    const dest = await statEntry(destDir);
+    if (!dest?.isDir) {
+      return { toolCallId, content: `Error: destination folder "${destDir}" does not exist (create_directory first), or is a file.` };
+    }
+  }
+  if (source.isDir && (target.path === destDir || isStrictDescendant(target.path, destDir))) {
+    return { toolCallId, content: "Error: cannot copy a folder into itself." };
+  }
+
+  const decision = await ctx.requestApproval!({
+    kind: "copy",
+    id: `copy-${++proposalCounter}`,
+    path: target.path,
+    destDir,
+    isDir: source.isDir,
+    reason: args.reason?.trim() || undefined,
+  });
+  const landed = decision.approved ? (decision.resultPath ?? destDir) : destDir;
+  return reportDecision(toolCallId, decision, `Copied ${target.path} to ${landed}.`);
 }
 
 export async function moveChapterTool(

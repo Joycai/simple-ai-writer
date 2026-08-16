@@ -64,7 +64,7 @@ const ALL_TOOLS: ToolId[] = [
   "read_memory", "propose_lore_plan", "create_lore_entity", "update_lore_file",
   "update_facet_meta", "delete_lore_file", "move_lore_entity", "delete_lore_entity",
   "update_memory", "propose_edit",
-  "create_chapter", "move_chapter", "delete_chapter",
+  "create_chapter", "create_file", "create_directory", "move_chapter", "copy_file", "delete_chapter",
 ];
 
 /**
@@ -925,6 +925,124 @@ describe("chapter structure tools", () => {
     });
   });
 
+  describe("create_file", () => {
+    it("proposes a file of any type, at any depth in the project", async () => {
+      const res = await run(
+        "create_file",
+        { path: `${PROJECT}/资料/人物表.csv`, content: "名字,身份", reason: "整理人物" },
+        approving(),
+      );
+      expect(proposals[0]).toMatchObject({
+        kind: "create",
+        path: `${PROJECT}/资料/人物表.csv`,
+        content: "名字,身份",
+      });
+      expect(proposals[0].isDir).toBeUndefined();
+      expect(res.content).toContain("Created");
+    });
+
+    it("requires an explicit extension rather than silently defaulting", async () => {
+      const res = await run("create_file", { path: `${PROJECT}/资料/备注`, content: "x" }, approving());
+      expect(res.content).toContain("no file extension");
+      expect(res.content).toContain("create_chapter");
+      expect(proposals).toHaveLength(0);
+    });
+
+    it("refuses .ai-writer paths and existing files", async () => {
+      const outside = await run(
+        "create_file",
+        { path: `${PROJECT}/.ai-writer/profile.json`, content: "{}" },
+        approving(),
+      );
+      expect(outside.content).toContain(".ai-writer");
+
+      const dup = await run("create_file", { path: CH1, content: "x" }, approving());
+      expect(dup.content).toContain("already exists");
+      expect(proposals).toHaveLength(0);
+    });
+  });
+
+  describe("create_directory", () => {
+    it("proposes an empty folder, flagged isDir for the card and the apply step", async () => {
+      const res = await run(
+        "create_directory",
+        { path: `${PROJECT}/素材/访谈记录`, reason: "备料" },
+        approving(),
+      );
+      expect(proposals[0]).toMatchObject({
+        kind: "create",
+        path: `${PROJECT}/素材/访谈记录`,
+        content: "",
+        isDir: true,
+      });
+      expect(res.content).toContain("Created folder");
+    });
+
+    it("refuses when something already exists there", async () => {
+      const res = await run("create_directory", { path: CH1 }, approving());
+      expect(res.content).toContain("already exists");
+      expect(proposals).toHaveLength(0);
+    });
+  });
+
+  describe("copy_file", () => {
+    it("proposes a copy carrying source, destination and isDir", async () => {
+      const res = await run(
+        "copy_file",
+        { path: CH1, dest_dir: `${PROJECT}/writing/卷一`, reason: "留个底稿" },
+        approving(),
+      );
+      expect(proposals[0]).toMatchObject({
+        kind: "copy",
+        path: CH1,
+        destDir: `${PROJECT}/writing/卷一`,
+        isDir: false,
+      });
+      expect(res.content).toContain("Copied");
+    });
+
+    it("reports where the copy actually landed when the decision carries resultPath", async () => {
+      const ctx = makeCtx({
+        requestApproval: async () => ({
+          approved: true,
+          resultPath: `${PROJECT}/writing/卷一/第1章 (1).md`,
+        }),
+      });
+      const res = await run("copy_file", { path: CH1, dest_dir: `${PROJECT}/writing/卷一` }, ctx);
+      expect(res.content).toContain("第1章 (1).md");
+    });
+
+    it("accepts the project root itself as the destination", async () => {
+      await run("copy_file", { path: CH1, dest_dir: PROJECT }, approving());
+      expect(proposals[0]).toMatchObject({ kind: "copy", destDir: PROJECT });
+    });
+
+    it("refuses a missing source, a missing destination folder, and .ai-writer", async () => {
+      const missing = await run(
+        "copy_file",
+        { path: `${PROJECT}/writing/无.md`, dest_dir: `${PROJECT}/writing/卷一` },
+        approving(),
+      );
+      expect(missing.content).toContain("does not exist");
+
+      const noDest = await run("copy_file", { path: CH1, dest_dir: `${PROJECT}/不存在` }, approving());
+      expect(noDest.content).toContain("create_directory");
+
+      const outside = await run("copy_file", { path: CH1, dest_dir: `${PROJECT}/.ai-writer` }, approving());
+      expect(outside.content).toContain(".ai-writer");
+      expect(proposals).toHaveLength(0);
+    });
+
+    it("refuses copying a folder into its own subtree", async () => {
+      const res = await run(
+        "copy_file",
+        { path: `${PROJECT}/writing/卷一`, dest_dir: `${PROJECT}/writing/卷一` },
+        approving(),
+      );
+      expect(res.content).toContain("into itself");
+    });
+  });
+
   it("feeds a rejection reason back to the model for every kind", async () => {
     const rejecting = makeCtx({
       requestApproval: async () => ({ approved: false, reason: "先别动结构" }),
@@ -932,7 +1050,10 @@ describe("chapter structure tools", () => {
 
     for (const [tool, args] of [
       ["create_chapter", { path: `${PROJECT}/writing/新.md`, content: "x" }],
+      ["create_file", { path: `${PROJECT}/新.json`, content: "{}" }],
+      ["create_directory", { path: `${PROJECT}/新目录` }],
       ["move_chapter", { path: CH1, new_path: `${PROJECT}/writing/别处.md` }],
+      ["copy_file", { path: CH1, dest_dir: `${PROJECT}/writing/卷一` }],
       ["delete_chapter", { path: CH1, reason: "重复" }],
     ] as const) {
       const res = await run(tool, args, rejecting);
