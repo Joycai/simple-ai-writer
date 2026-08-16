@@ -31,7 +31,9 @@ function messageText(m: StreamMessage): string {
     .map((p) =>
       p.type === "text"
         ? p.text
-        : `<image ${p.image_url.url.length.toLocaleString()} chars>`,
+        : p.type === "file"
+          ? `<file ${p.file.filename}, ${p.file.file_data.length.toLocaleString()} chars>`
+          : `<image ${p.image_url.url.length.toLocaleString()} chars>`,
     )
     .join("\n");
 }

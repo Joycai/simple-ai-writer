@@ -429,6 +429,27 @@ MiniMax 在 ④ 族端点上实现了 Anthropic 的**服务端工具**约定（b
   隐藏前置条件（见 [`structured.md`](structured.md)），DashScope 原样继承。
   `json_schema` strict 仅新款（Qwen3.7-Max/Plus、3.8-Max）支持。
 
+工具调用与随请求跑的能力（2026-08-17 补，同样未实测）：
+
+- **思考开启时 `tool_choice` 枚举只剩 `auto` | `none`**——强制单个工具与
+  `required` 都不支持，发了就是 400。思考关闭时强制档合法。这与 MiniMax
+  `/anthropic` 端点砍档（第四个样本）是同一现象落在两个族上，差别在于千问的
+  砍档**随开关动态出现**，不是端点常态。思考模型的 `reasoning_content` 必须
+  在后续 assistant 消息里原样回传（DeepSeek 同款规则），否则报错。
+  `parallel_tool_calls` 默认关：不发则每轮最多回一个工具调用。
+- **服务端联网搜索是顶层 `enable_search: true`**（可选 `search_options` 配
+  `search_strategy: turbo|max|agent|agent_max` 等）。关键限制文档明载：
+  **Chat Completions 模式不返回搜索来源、不支持角标引用**——搜索对客户端完全
+  不可见，答案直接吸收检索结果；来源与引用只在 DashScope 原生和 Responses API
+  上有。按次计费（turbo ¥0.003/千次，max/agent ¥0.004/千次），叠加正常 token 费。
+- **PDF 理解仅 qwen3.8-max**：用户消息 content 里放
+  `{type:"file", file:{file_url:"https://…"}}` 或
+  `{type:"file", file:{file_data:"data:application/pdf;base64,…", filename:"…"}}`
+  （base64 形态**必须带 `filename`**）。单文件 ≤150MB / ≤500 页，首响应可达
+  300s；计费两段：抽取出的文本图片按输入 token + 处理费 ¥0.02/页。
+  Responses API 暂不支持该能力。file 内容块与 ① 族官方（gpt-4o/4.1 的 PDF
+  输入）同形，是镜像而非私有发明。
+
 ### 兼容层文档的通用规律（六个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**

@@ -102,6 +102,7 @@ export { authHeaders as anthropicHeaders };
 type AnthropicBlock =
   | { type: "text"; text: string }
   | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
+  | { type: "document"; source: { type: "base64"; media_type: string; data: string } }
   | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
   | { type: "tool_result"; tool_use_id: string; content: string }
   // Replayed verbatim, never constructed here — deliberately opaque so nothing
@@ -134,10 +135,16 @@ function blocksOf(content: MessageContent): AnthropicBlock[] {
   if (typeof content === "string") return [{ type: "text", text: content }];
   return content.map((p): AnthropicBlock => {
     if (p.type === "text") return { type: "text", text: p.text };
-    // Same data-URL parse as the Gemini adapter's inlineData conversion.
-    const [meta, data] = p.image_url.url.split(",");
+    // Same data-URL parse as the Gemini adapter's inlineData conversion. A file
+    // part becomes a `document` block — Anthropic's own PDF-input shape — so a
+    // file that ever reaches this wire arrives as something it documents rather
+    // than an unknown key.
+    const dataUrl = p.type === "file" ? p.file.file_data : p.image_url.url;
+    const [meta, data] = dataUrl.split(",");
     const mediaType = meta.slice("data:".length).replace(";base64", "");
-    return { type: "image", source: { type: "base64", media_type: mediaType, data } };
+    return p.type === "file"
+      ? { type: "document", source: { type: "base64", media_type: mediaType, data } }
+      : { type: "image", source: { type: "base64", media_type: mediaType, data } };
   });
 }
 

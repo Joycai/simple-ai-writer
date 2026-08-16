@@ -22,6 +22,7 @@ describe("routeTools", () => {
     search: { kind: "search", modelId: null, enabled: false },
     vision: { kind: "vision", modelId: null, enabled: false },
     longread: { kind: "longread", modelId: null, enabled: false },
+    pdf: { kind: "pdf", modelId: null, enabled: false },
   };
 
   it("leaves tools and serverTools unchanged when no subagents are active", () => {

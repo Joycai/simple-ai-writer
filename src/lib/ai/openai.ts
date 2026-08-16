@@ -6,6 +6,7 @@ import { fetch } from "../http";
 import {
   createThinkTagSplitter, readReasoningDelta, reasoningBody, type NativeReasoning,
 } from "./reasoning";
+import { openaiServerToolsBody } from "./serverTools";
 import { openaiUrl } from "./urls";
 import type { AccumulatedToolCall, StreamMessage, StreamOptions } from "./types";
 
@@ -39,6 +40,37 @@ function toWireMessages(messages: StreamMessage[]): Record<string, unknown>[] {
   });
 }
 
+/**
+ * `tool_choice` for this request, with one endpoint-specific downgrade.
+ *
+ * The `switch` dialect describes endpoints whose thinking is a bare
+ * `enable_thinking` boolean (Qwen on DashScope compatible-mode), and those
+ * endpoints document that **while thinking is on, `tool_choice` accepts only
+ * `auto` and `none`** — a forced function (or `required`) is a 400 before a
+ * single token is generated. So a forced choice is downgraded to `auto`
+ * exactly when this request also says `enable_thinking: true` — that is,
+ * dialect declared *and* an effort other than `off`/`default` set (see
+ * `reasoningBody`: `off` sends `false`, `default` sends nothing, and the
+ * models this dialect exists for default thinking to off, so both leave
+ * forcing legal).
+ *
+ * Same safety argument as the Anthropic adapter's `toolChoiceBody`: the only
+ * caller that forces is `agent/structured.ts`, which already treats "the model
+ * declined to call the tool" as its cue to fall back to JSON mode. The worst
+ * case is that fallback firing one turn earlier; not downgrading is a
+ * guaranteed failed request followed by the same fallback.
+ */
+function toolChoiceFor(opts: StreamOptions): StreamOptions["toolChoice"] {
+  const tc = opts.toolChoice ?? "auto";
+  const forced = tc === "required" || typeof tc === "object";
+  const thinkingOn =
+    opts.thinkingDialect === "switch" &&
+    opts.reasoningEffort !== undefined &&
+    opts.reasoningEffort !== "default" &&
+    opts.reasoningEffort !== "off";
+  return forced && thinkingOn ? "auto" : tc;
+}
+
 export async function streamOpenAI(opts: StreamOptions): Promise<void> {
   const url = openaiUrl(opts.baseUrl, "/chat/completions");
   const res = await fetch(url, {
@@ -54,7 +86,12 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       messages: toWireMessages(opts.messages),
       stream: true,
       stream_options: { include_usage: true },
-      ...(opts.tools ? { tools: opts.tools, tool_choice: opts.toolChoice ?? "auto" } : {}),
+      ...(opts.tools ? { tools: opts.tools, tool_choice: toolChoiceFor(opts) } : {}),
+      // A standing permission the author granted this model, spelled the way
+      // this wire wants it (enable_search — see lib/ai/serverTools.ts). Empty
+      // object for every model without the declaration, so their requests are
+      // byte-identical to before this existed.
+      ...openaiServerToolsBody(opts.standard, opts.serverTools),
       // Absent unless the author set an effort on this model — an unset model
       // must keep sending exactly what it sent before this existed, because a
       // volunteered field is a field some relay can reject.

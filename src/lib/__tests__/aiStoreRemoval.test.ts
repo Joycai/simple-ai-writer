@@ -32,6 +32,7 @@ beforeEach(() => {
       search: { kind: "search", modelId: "m1", enabled: true },
       vision: { kind: "vision", modelId: "m2", enabled: true },
       longread: { kind: "longread", modelId: null, enabled: false },
+      pdf: { kind: "pdf", modelId: null, enabled: false },
     },
   });
 });
@@ -82,6 +83,7 @@ describe("aiStore.removeProvider", () => {
         search: { kind: "search", modelId: "m3", enabled: true },
         vision: { kind: "vision", modelId: null, enabled: false },
         longread: { kind: "longread", modelId: null, enabled: false },
+        pdf: { kind: "pdf", modelId: null, enabled: false },
       },
     });
 

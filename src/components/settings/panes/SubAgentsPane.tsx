@@ -40,6 +40,9 @@ export function SubAgentsPane() {
     if (kind === "vision" && model.type !== "multimodal") {
       return t("systemSettings.subagents.warnNotMultimodal");
     }
+    if (kind === "pdf" && !model.pdfInput) {
+      return t("systemSettings.subagents.warnNoPdf");
+    }
     return undefined;
   };
 

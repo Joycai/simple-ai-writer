@@ -382,10 +382,13 @@
       "visionSub": "读图并回答。需要一个多模态模型。",
       "longread": "长文精读",
       "longreadSub": "通读长文档并提炼要点。适合大窗口的便宜模型。",
+      "pdf": "PDF 理解",
+      "pdfSub": "把 PDF 原件整份交给模型精读并提炼。需要模型支持 PDF 文件输入（目前为千问 qwen3.8-max）。",
       "pickModel": "选择模型",
       "noModel": "未绑定模型",
       "warnNoSearch": "该模型没有开启服务端 web_search，子代理无法联网。",
       "warnNotMultimodal": "该模型是纯文本模型，无法读图。",
+      "warnNoPdf": "该模型未声明支持 PDF 文件输入（在 模型设置 里勾选），子代理无法读 PDF。",
       "enable": "启用"
     }
   },
@@ -567,7 +570,8 @@
       "subagent": {
         "search": "你是联网研究专员。你的职责是使用网络搜索查证事实、收集背景资料，并输出条理清晰的总结。\n请列出关键结论、支持事实及对应的来源网址。",
         "vision": "你是图像理解专员。你的职责是观察和解析参考图片，提取视觉特征、外观细节或构图元素，并输出条理清晰的视觉描述。",
-        "longread": "你是长文提炼专员。你的职责是通读指定文档，提炼大纲、核心设定或情节走向，并整理出关键细节清单。"
+        "longread": "你是长文提炼专员。你的职责是通读指定文档，提炼大纲、核心设定或情节走向，并整理出关键细节清单。",
+        "pdf": "你是 PDF 精读专员。用户消息附带一份或多份 PDF 原件。你的职责是通读它们，按任务要求提炼结构、关键内容与细节，并输出条理清晰的总结；引用原文时尽量注明所在页码或章节。"
       },
       "subagentTask": "任务目标：\n{{task}}",
       "subagentTaskWithRefs": "任务目标：\n{{task}}\n\n参考资源：\n{{refs}}"
@@ -598,6 +602,7 @@
         "search": "检索子代理",
         "vision": "视觉子代理",
         "longread": "长读子代理",
+        "pdf": "PDF 子代理",
         "main": "主模型"
       },
       "selectPrompt": "从左侧选择一个任务查看详情",
@@ -1005,7 +1010,10 @@
         "visionDisabled": "图像理解子代理已在本次对话停用（点击启用）",
         "longread": "长文",
         "longreadActive": "长文精读子代理已启用（点击在本次对话停用）",
-        "longreadDisabled": "长文精读子代理已在本次对话停用（点击启用）"
+        "longreadDisabled": "长文精读子代理已在本次对话停用（点击启用）",
+        "pdf": "PDF",
+        "pdfActive": "PDF 理解子代理已启用（点击在本次对话停用）",
+        "pdfDisabled": "PDF 理解子代理已在本次对话停用（点击启用）"
       }
     },
     "drawer": {
@@ -1213,6 +1221,9 @@
       "serverToolsLabel": "服务端内置工具 (可选)",
       "serverToolsHint": "由「服务端」在同一次请求里执行的工具，本机不参与、也无法逐次批准——开启即等于允许该模型每次回答都可以自行联网检索。仅对 Anthropic 协议族端点生效：官方 api.anthropic.com 为正式（GA）能力，MiniMax-M3 的 /anthropic 端点为厂商 Beta；其余端点开了也不会生效。搜索过程与命中的网页会记录在执行日志里。",
       "serverTool_web_search": "联网搜索",
+      "serverToolsHintOpenai": "由「服务端」在同一次请求里执行的工具，本机不参与、也无法逐次批准——开启即等于允许该模型每次回答都可以自行联网检索。OpenAI 兼容端点上按千问 (DashScope 兼容模式) 的方式发送 enable_search: true；其他兼容端点开了通常不会生效，官方 api.openai.com 不接受该字段（本设置对官方端点不显示）。注意：该协议下搜索过程与命中网页不会返回，执行日志里看不到搜索明细，答案直接吸收检索结果。",
+      "pdfInputLabel": "PDF 文件输入",
+      "pdfInputHint": "声明该模型接受整份 PDF 作为消息内容（OpenAI file 内容块；千问 DashScope 兼容模式目前仅 qwen3.8-max 支持，单文件 ≤150MB / ≤500 页，另按页计费）。勾选后它才能被绑定为 PDF 理解子代理。",
       "effortLabelAnthropic": "力度"
     },
     "probe": {

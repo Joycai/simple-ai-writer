@@ -138,6 +138,9 @@ thinking block 开头、后跟 `tool_use`。缺了就是回传没生效。
 | 4.4 | DashScope：`switch` 方言的 `enable_thinking` 是否生效 | `openai_compat` 接 compatible-mode，模型声明「开关式」、力度设非「关闭」，对默认关思考的商业款（qwen3-max 一类）看响应有没有 `reasoning_content` | 不生效则这类模型**永远不思考**，且不报错 |
 | 4.5 | DashScope：「关闭」档是否真的关思考 | 同上，力度设「关闭」，对默认开思考的模型（Qwen3.5+）看 `reasoning_content` 是否消失 | 不生效的表现是照常思考照常计费 |
 | 4.6 | DashScope：Qwen3.7+ 对顶层 `reasoning_effort` 的实际接受度 | 不声明方言、设非默认档，看是否 400 或生效 | 被拒则新款也得声明「开关式」，ModelDrawer 的 openai 族 hint 文案要跟着改 |
+| 4.7 | DashScope：`enable_search: true` 在 Chat Completions 上是否生效 | 模型开启服务端 web_search，问一个时效性问题（"今天……"），对比开关前后的答案 | 文档说该模式不返回任何搜索痕迹，所以**不生效也完全无症状**——只能靠答案内容判断；不生效则搜索子代理绑千问等于白跑 |
+| 4.8 | DashScope：思考开 + forced `tool_choice` 的报错与降级条件是否精确 | 声明「开关式」、力度设「关闭」，跑一次结构化任务（forced pseudo-tool），确认思考关时 forced 真的合法 | 若「关闭」时也拒 forced，`toolChoiceFor` 的降级条件要放宽成"方言声明即降级"（与 anthropic 侧对齐） |
+| 4.9 | DashScope：`file` 内容块（base64 `file_data` + `filename`）是否被 qwen3.8-max 接受；一次多个 PDF 是否可行 | PDF 子代理绑 qwen3.8-max，delegate 一份小 PDF；再试 refs 传两份 | 文档只给了单文件示例；多文件被拒则 `MAX_PDF_FILES` 应降为 1 |
 
 ---
 

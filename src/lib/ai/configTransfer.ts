@@ -220,6 +220,7 @@ export async function stageConfigImport(
       reasoningEffort: parseReasoningEffort(r.reasoningEffort),
       thinkingDialect: parseThinkingDialect(r.thinkingDialect),
       serverTools: parseServerTools(r.serverTools),
+      pdfInput: r.pdfInput === true ? true : undefined,
       pricePerImage: typeof r.pricePerImage === "number" ? r.pricePerImage : undefined,
       caps: r.caps && typeof r.caps === "object" ? (r.caps as Model["caps"]) : undefined,
     });

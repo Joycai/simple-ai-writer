@@ -119,7 +119,19 @@ export type ImageRoute = "images-api" | "chat" | "gemini";
 /** A single part inside a multimodal user message. */
 export type ContentPart =
   | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } }; // url = data:<mime>;base64,<data>
+  | { type: "image_url"; image_url: { url: string } } // url = data:<mime>;base64,<data>
+  /**
+   * A whole document handed to the model as a file — the OpenAI Chat
+   * Completions file part, which DashScope mirrors for Qwen's PDF
+   * understanding (see `docs/api/landscape.md` §7 第六个样本). `file_data` is a
+   * data URL, same encoding as `image_url`; `filename` is required beside it —
+   * the endpoint refuses base64 file bodies that arrive nameless.
+   *
+   * Only the PDF subagent builds these (lib/agent/subagent.ts), so they live in
+   * one fresh 2-message context and never enter a long-lived history — nothing
+   * like `imageHistory`'s eviction is needed for them.
+   */
+  | { type: "file"; file: { file_data: string; filename: string } };
 
 export type MessageContent = string | ContentPart[];
 
@@ -280,9 +292,10 @@ export interface StreamOptions {
   tools?: ToolDefinition[];
   /**
    * Server-side tools the endpoint should be allowed to run on its own (web
-   * search). Anthropic-protocol only; every other adapter ignores it. Sent on
-   * every request the model handles, `tools` or no `tools` — it is a standing
-   * permission the author granted the model, not a per-task input.
+   * search). Spelled per wire — Anthropic-family `tools[]` entries, OpenAI-compat
+   * `enable_search` (see `lib/ai/serverTools.ts`); the Gemini adapter ignores it.
+   * Sent on every request the model handles, `tools` or no `tools` — it is a
+   * standing permission the author granted the model, not a per-task input.
    */
   serverTools?: ServerToolId[];
   /**

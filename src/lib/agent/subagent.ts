@@ -9,19 +9,21 @@
  */
 
 import i18n from "../../i18n";
-import type { StreamMessage } from "../ai/types";
+import type { ContentPart, MessageContent, StreamMessage } from "../ai/types";
 import { costFor, type Model, type Provider } from "../ai/configDb";
 import { connOptions, type AiConn } from "../ai/conn";
 import { persistUsage } from "../ai/usage";
+import { fileExists, readBinaryFile } from "../fs/fileio";
+import { isWorkspacePath, resolveRelativePath } from "../paths";
 import type { TaskPreset } from "./presets";
 import { runAgent, type AgentRunResult } from "./runtime";
 import type { ToolContext } from "./registry";
 import type { ToolCall, ToolResult } from "./tools";
 import { writeTaskNote } from "./taskWorkspace";
 
-export type SubAgentKind = "search" | "vision" | "longread";
+export type SubAgentKind = "search" | "vision" | "longread" | "pdf";
 
-export const SUBAGENT_KINDS: readonly SubAgentKind[] = ["search", "vision", "longread"];
+export const SUBAGENT_KINDS: readonly SubAgentKind[] = ["search", "vision", "longread", "pdf"];
 
 export interface SubAgentConfig {
   kind: SubAgentKind;
@@ -52,9 +54,89 @@ export const SUB_PRESETS: Record<SubAgentKind, TaskPreset> = {
     finishPolicy: "force-text",
     serverTools: "off",
   },
+  // Single-shot on purpose: the PDF rides in the first user message as file
+  // parts (there is no tool that could fetch one later), so the whole job is
+  // one request — the endpoint extracts the document server-side and answers.
+  pdf: {
+    id: "subagent-pdf",
+    tools: [],
+    maxRounds: 1,
+    finishPolicy: "force-text",
+    serverTools: "off",
+  },
 };
 
 const DELEGATE_SUMMARY_CHARS = 800;
+
+/**
+ * Per-file ceiling for a delegated PDF — DashScope's own documented cap. The
+ * base64 form is a third larger again and the whole request body is built in
+ * webview memory, so a file near this limit is slow but loud about any
+ * failure; nothing here truncates silently.
+ */
+const MAX_PDF_BYTES = 150 * 1024 * 1024;
+
+/**
+ * How many PDFs one delegation may carry. The vendor's examples show one file
+ * per request and document no multi-file contract, so this stays small enough
+ * that a refusal reads as "split the job", not as an arbitrary wall.
+ */
+const MAX_PDF_FILES = 3;
+
+/**
+ * Uint8Array → base64, linear in the input.
+ *
+ * Not `imageToDataUrl`'s accumulator loop: that `binary +=` is quadratic in
+ * chunk count, which a 12MB image cap keeps invisible and a 150MB PDF turns
+ * into minutes of copying. Chunked `fromCharCode` still, for the call-stack
+ * limit; joined once at the end.
+ */
+function bytesToBase64(u8: Uint8Array): string {
+  const chunk = 8192;
+  const pieces: string[] = [];
+  for (let i = 0; i < u8.length; i += chunk) {
+    pieces.push(String.fromCharCode(...u8.subarray(i, i + chunk)));
+  }
+  return btoa(pieces.join(""));
+}
+
+/**
+ * Read one project PDF for a delegation, or say exactly why not.
+ *
+ * Containment mirrors `read_file`, not `read_image`: `.ai-writer/` is refused.
+ * A PDF is a document the model reads as text, so the exfiltration argument
+ * that keeps `read_file` out of the app's own data applies unchanged — and
+ * unlike lore gallery images, nothing this tool serves legitimately lives
+ * there.
+ */
+async function loadProjectPdf(
+  projectPath: string,
+  rawPath: string,
+): Promise<{ dataUrl: string; name: string } | { error: string }> {
+  // Empty prefix would contain every absolute path — same guard as the read tools.
+  if (!projectPath) return { error: "no project is open — the pdf subagent cannot run here." };
+  const wanted = rawPath.trim();
+  if (!wanted.toLowerCase().endsWith(".pdf")) {
+    return { error: `"${rawPath}" is not a .pdf file. The pdf subagent reads PDFs only; for text documents use the longread subagent or read_file.` };
+  }
+  const path = resolveRelativePath(projectPath, wanted);
+  // `isWorkspacePath` is the tools' whole answer — inside the project AND not
+  // in `.ai-writer/` — so the guard is its single negation, not a re-derivation.
+  if (!isWorkspacePath(projectPath, path)) {
+    return { error: `"${rawPath}" is outside the project's documents.` };
+  }
+  if (!(await fileExists(path))) {
+    return { error: `no file at "${path}". Paths come from list_files (folder line + "/" + filename).` };
+  }
+  const bytes = await readBinaryFile(path);
+  if (bytes.length > MAX_PDF_BYTES) {
+    return { error: `"${rawPath}" is ${(bytes.length / 1024 / 1024).toFixed(0)}MB — over the 150MB per-file limit.` };
+  }
+  return {
+    dataUrl: `data:application/pdf;base64,${bytesToBase64(bytes)}`,
+    name: path.split(/[\\/]/).pop() ?? "document.pdf",
+  };
+}
 
 /** How much of the instruction survives into the note's filename. */
 const SLUG_HINT_CHARS = 20;
@@ -97,6 +179,7 @@ export function subAgentModel(
   if (!model) return null;
   if (kind === "vision" && model.type !== "multimodal") return null;
   if (kind === "search" && !model.serverTools?.includes("web_search")) return null;
+  if (kind === "pdf" && !model.pdfInput) return null;
   return model;
 }
 
@@ -236,7 +319,7 @@ export async function executeDelegate(
   const args = parseArgs<{ kind?: string; task?: string; refs?: string[] }>(call.arguments);
   const kind = args.kind as SubAgentKind;
   if (!SUBAGENT_KINDS.includes(kind)) {
-    return fail(`unknown subagent kind "${args.kind}". Must be one of: search, vision, longread.`);
+    return fail(`unknown subagent kind "${args.kind}". Must be one of: search, vision, longread, pdf.`);
   }
 
   const task = args.task?.trim();
@@ -263,6 +346,12 @@ export async function executeDelegate(
         `Tell the author to bind a multimodal model to it in Settings → Subagents.`,
     );
   }
+  if (kind === "pdf" && !conn.model.pdfInput) {
+    return fail(
+      `the pdf subagent's model "${conn.model.name}" is not declared to accept PDF files. ` +
+        `Tell the author to enable PDF input on it in Settings → Models, or read the document another way.`,
+    );
+  }
 
   const refs = (args.refs ?? []).filter((r) => typeof r === "string" && r.trim());
   const preset = SUB_PRESETS[kind];
@@ -271,17 +360,38 @@ export async function executeDelegate(
   // carries its own 「参考资源」 heading, so reusing it with nothing to list
   // handed the subagent an empty section — an instruction to consult sources
   // that aren't there.
+  let userContent: MessageContent = refs.length
+    ? i18n.t("ai.instructions.subagentTaskWithRefs", {
+        task,
+        refs: refs.map((r) => `- ${r}`).join("\n"),
+      })
+    : i18n.t("ai.instructions.subagentTask", { task });
+
+  // The pdf kind is the one whose refs are *payload*, not reading list: each
+  // is loaded here and attached as a file part, because the sub-run has no
+  // tool that could fetch a document later — the request is the whole job.
+  // Files precede the instruction, matching the vendor's documented order.
+  if (kind === "pdf") {
+    const pdfRefs = refs.filter((r) => r.toLowerCase().endsWith(".pdf"));
+    if (!pdfRefs.length) {
+      return fail("the pdf subagent needs at least one .pdf path in 'refs' — pass the document's full path from list_files.");
+    }
+    if (pdfRefs.length > MAX_PDF_FILES) {
+      return fail(`too many PDFs (${pdfRefs.length}) — delegate at most ${MAX_PDF_FILES} per call, splitting the job if needed.`);
+    }
+    const parts: ContentPart[] = [];
+    for (const ref of pdfRefs) {
+      const loaded = await loadProjectPdf(ctx.projectPath, ref);
+      if ("error" in loaded) return fail(loaded.error);
+      parts.push({ type: "file", file: { file_data: loaded.dataUrl, filename: loaded.name } });
+    }
+    parts.push({ type: "text", text: i18n.t("ai.instructions.subagentTask", { task }) });
+    userContent = parts;
+  }
+
   const messages: StreamMessage[] = [
     { role: "system", content: i18n.t(`ai.instructions.subagent.${kind}`) },
-    {
-      role: "user",
-      content: refs.length
-        ? i18n.t("ai.instructions.subagentTaskWithRefs", {
-            task,
-            refs: refs.map((r) => `- ${r}`).join("\n"),
-          })
-        : i18n.t("ai.instructions.subagentTask", { task }),
-    },
+    { role: "user", content: userContent },
   ];
 
   let output = "";

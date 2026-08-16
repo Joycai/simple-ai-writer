@@ -155,6 +155,19 @@ export interface Model {
    */
   serverTools?: ServerToolId[];
   /**
+   * Whether this endpoint accepts whole PDF files as message content (the
+   * OpenAI `file` content part — today Qwen3.8-Max on DashScope
+   * compatible-mode; see `docs/api/landscape.md` §7 第六个样本).
+   *
+   * Declared rather than derived, same as `serverTools` above: it is a
+   * property of what the author bought — one model behind a DashScope endpoint
+   * reads PDFs, the rest behind the same base URL do not — and no probe can
+   * ask without spending a real document run. The PDF subagent's eligibility
+   * check reads this. Absent means no, which is what every model configured
+   * before this setting existed sends.
+   */
+  pdfInput?: boolean;
+  /**
    * USD per generated image. The billing shape image endpoints usually use;
    * token pricing (priceIn/priceOut) still applies on top for the providers
    * that bill image generation as tokens. See `imageCostFor`.
@@ -300,6 +313,7 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   await addColumn(db, modelCols, "models", "reasoning_effort", "TEXT");
   await addColumn(db, modelCols, "models", "thinking_dialect", "TEXT");
   await addColumn(db, modelCols, "models", "server_tools", "TEXT");
+  await addColumn(db, modelCols, "models", "pdf_input", "INTEGER");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS prompts (
@@ -506,9 +520,9 @@ export async function saveModel(
 ): Promise<void> {
   await db.execute(
     `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, server_tools)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null]
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, server_tools, pdf_input)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null]
   );
 }
 
@@ -570,6 +584,9 @@ function rowToModel(r: Record<string, unknown>): Model {
     reasoningEffort: parseReasoningEffort(r.reasoning_effort),
     thinkingDialect: parseThinkingDialect(r.thinking_dialect),
     serverTools: parseServerTools(r.server_tools),
+    // Absent for anything but an explicit 1 — the column is free-typed like
+    // the rest, and "no declaration" must stay one representation.
+    pdfInput: r.pdf_input === 1 ? true : undefined,
   };
 }
 

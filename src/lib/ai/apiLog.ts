@@ -67,7 +67,11 @@ function redactMessage(m: StreamMessage): unknown {
       content: m.content.map((p) =>
         p.type === "image_url"
           ? { type: "image_url", image_url: { url: `<image data url, ${p.image_url.url.length} chars omitted>` } }
-          : p,
+          : p.type === "file"
+            // Same weight problem as an image, at PDF scale — a 100MB document
+            // would otherwise land in the log verbatim.
+            ? { type: "file", file: { filename: p.file.filename, file_data: `<file data url, ${p.file.file_data.length} chars omitted>` } }
+            : p,
       ),
     };
   }

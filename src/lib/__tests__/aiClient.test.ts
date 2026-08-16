@@ -586,6 +586,90 @@ describe("streamCompletion — switch dialect on the OpenAI family", () => {
   });
 });
 
+describe("streamCompletion — forced tool_choice under the OpenAI switch dialect", () => {
+  const done = ['data: {"choices":[{"delta":{"content":"ok"}}]}\n', "data: [DONE]\n"];
+  const tool: ToolDefinition = {
+    type: "function",
+    function: { name: "emit", description: "d", parameters: { type: "object", properties: {} } },
+  };
+  const forced = { type: "function" as const, function: { name: "emit" } };
+
+  it("downgrades a forced choice to auto while enable_thinking is true", async () => {
+    // Qwen documents tool_choice as auto|none only while thinking is on —
+    // forcing there is a guaranteed 400, and the one forcing caller
+    // (agent/structured.ts) already treats "no call" as its fallback cue.
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat", tools: [tool], toolChoice: forced,
+      reasoningEffort: "high", thinkingDialect: "switch",
+    });
+    expect(calls[0].body.tool_choice).toBe("auto");
+  });
+
+  it('leaves forcing alone when thinking is explicitly off', async () => {
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat", tools: [tool], toolChoice: forced,
+      reasoningEffort: "off", thinkingDialect: "switch",
+    });
+    expect(calls[0].body.tool_choice).toEqual(forced);
+  });
+
+  it("leaves forcing alone without the dialect (regression guard)", async () => {
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat", tools: [tool], toolChoice: forced,
+      reasoningEffort: "high",
+    });
+    expect(calls[0].body.tool_choice).toEqual(forced);
+  });
+});
+
+describe("streamCompletion — server tools on the OpenAI-compatible wire", () => {
+  const done = ['data: {"choices":[{"delta":{"content":"ok"}}]}\n', "data: [DONE]\n"];
+
+  it("spells web_search as a top-level enable_search on openai_compat", async () => {
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat", serverTools: ["web_search"],
+    });
+    expect(calls[0].body.enable_search).toBe(true);
+  });
+
+  it("never sends enable_search to the official endpoint", async () => {
+    // api.openai.com rejects unknown top-level arguments outright — the config
+    // layer refuses to store the declaration there, and the adapter must hold
+    // the line even against a row that travelled in via import.
+    const { calls } = await collect({
+      chunks: done, standard: "openai", serverTools: ["web_search"],
+    });
+    expect(calls[0].body).not.toHaveProperty("enable_search");
+  });
+
+  it("sends nothing without the declaration", async () => {
+    const { calls } = await collect({ chunks: done, standard: "openai_compat" });
+    expect(calls[0].body).not.toHaveProperty("enable_search");
+  });
+});
+
+describe("streamCompletion — file content parts", () => {
+  const done = ['data: {"choices":[{"delta":{"content":"ok"}}]}\n', "data: [DONE]\n"];
+
+  it("passes a PDF file part through to the OpenAI wire untouched", async () => {
+    const { calls } = await collect({
+      chunks: done, standard: "openai_compat",
+      messages: [{
+        role: "user",
+        content: [
+          { type: "file", file: { file_data: "data:application/pdf;base64,QUJD", filename: "a.pdf" } },
+          { type: "text", text: "总结这份文件" },
+        ],
+      }],
+    });
+    const msg = (calls[0].body.messages as Array<{ content: unknown }>)[0];
+    expect(msg.content).toEqual([
+      { type: "file", file: { file_data: "data:application/pdf;base64,QUJD", filename: "a.pdf" } },
+      { type: "text", text: "总结这份文件" },
+    ]);
+  });
+});
+
 describe("streamCompletion — reasoning content", () => {
   const finish = "data: [DONE]\n";
 
