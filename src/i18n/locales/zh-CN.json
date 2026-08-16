@@ -132,7 +132,7 @@
     "workspaceHint": "决定知识库分类、AI 任务与界面用词；之后可在 设置 → 工作台 更改",
     "pickFolder": "选择本地文件夹",
     "opening": "打开中…",
-    "pickFolderHint": "系统将创建 writing/ 与 .ai-writer/ 子目录",
+    "pickFolderHint": "系统将在其中创建 .ai-writer/ 数据目录,文档可在文件夹内自由组织",
     "later": "稍后再说",
     "laterHint": "之后可在左下角图标栏打开",
     "step3Eyebrow": "STEP 3 · 知识库",

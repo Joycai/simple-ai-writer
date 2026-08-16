@@ -175,7 +175,7 @@ Binaries for all platforms end up under `src-tauri/target/release/bundle/`.
 
 1. **Open or create a project**
    - Click "Open Project" to select or scaffold a new workspace
-   - Auto-creates `writing/`, `lore/`, and `project.db`
+   - Auto-creates the `.ai-writer/` data directory (lore categories + `project.db`); your documents live directly in the workspace, organized however you like
 
 2. **Write content**
    - Create/edit Markdown files in the left sidebar
@@ -343,7 +343,7 @@ migrated into the keyring and dropped on first launch.
 ### Writing a story chapter
 
 1. Open `lore/` and add character entities with backstories
-2. Create a new file in `writing/chapter1.md`
+2. Create a new file, e.g. `chapter1.md` (any folder layout works)
 3. Start typing the opening scene
 4. Select key plot points → AI panel → "Continue" → watch AI extend your narrative
 5. Click "Insert to Document" to add the output

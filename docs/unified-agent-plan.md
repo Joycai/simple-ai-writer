@@ -70,9 +70,9 @@ lib/ai/*（streamCompletion 等，不动） · lib/context/*（预算化注入�
 | 工具 | 读/写 | 说明 |
 | --- | --- | --- |
 | `list_lore_entities` / `read_lore_entity` | 读 | 设定侧只读，原样迁入 |
-| `list_files` | 读 | 递归列出 writing/ 全树（含分卷子目录），按 `ls -R` 分组输出：绝对目录路径一行，其下文件名缩进。不逐行重复项目前缀是为了省 context——几百章各带一遍长前缀，光目录就能吃掉几千 token |
+| `list_files` | 读 | 递归列出工作区全树（含子目录；`.ai-writer/` 除外），按 `ls -R` 分组输出：绝对目录路径一行，其下文件名缩进。不逐行重复项目前缀是为了省 context——几百章各带一遍长前缀，光目录就能吃掉几千 token |
 | `read_file` | 读 | 单次上限 4000 字符，**按行边界切**；截断时回报 `lines a-b of N` 与下一个 `start_line`，长章节可顺序翻页。分页坐标用行号而非字符偏移，因为 `search_text` 给的就是行号（`L34`），「从第 34 行读」是直接的后续动作 |
-| `search_text` | 读 | 在 writing/ 内全文检索：递归扫所有章节文件，返回 `路径 + 行号 + 片段`。字面匹配、大小写不敏感，**不支持正则**（模型给的病态正则会卡死 UI 线程且无法中断）。结果有上限（全局 40 行 / 单文件 8 行），长段落按命中位置开窗截断——否则一个常用词就能吃光整个上下文 |
+| `search_text` | 读 | 在工作区内全文检索：递归扫所有章节文件（`.ai-writer/` 除外），返回 `路径 + 行号 + 片段`。字面匹配、大小写不敏感，**不支持正则**（模型给的病态正则会卡死 UI 线程且无法中断）。结果有上限（全局 40 行 / 单文件 8 行），长段落按命中位置开窗截断——否则一个常用词就能吃光整个上下文 |
 | `read_memory` | 读 | 读当前文档的前情记忆 |
 | `propose_lore_plan` | 写·审批 | 提交设定改动方案（步骤 = action + entity + detail），阻塞等作者批准；**四个 lore 写工具的准入门槛** |
 | `create_lore_entity` | 写·L1 | 新建实体（name/category/summary/content），落盘前校验 frontmatter |
@@ -82,8 +82,8 @@ lib/ai/*（streamCompletion 等，不动） · lib/context/*（预算化注入�
 | `move_lore_entity` | 写·L1 | 改名 / 换分类。换分类只能走它——扫描器认的是文件夹位置，只改 frontmatter 会在下次重扫时被还原 |
 | `delete_lore_entity` | 写·L1 | 删除实体：整个文件夹 rename 进 `.ai-writer/backups/deleted-…`，图库等二进制资产一并保住，可整目录搬回还原 |
 | `update_memory` | 写·L1 | 更新前情记忆段落（走 memory.ts 的分段协议，不允许破坏元数据注释） |
-| `propose_edit` | 写·L2 | 对 writing/ 正文提出修改（唯一 find + 新文本），**只产生提案不落盘** |
-| `rewrite_document` | 写·L2 | 整文件替换 writing/ 下的某个正文文件（完整新内容），**只产生提案不落盘** |
+| `propose_edit` | 写·L2 | 对工作区正文文件提出修改（唯一 find + 新文本；`.ai-writer/` 不可触及），**只产生提案不落盘** |
+| `rewrite_document` | 写·L2 | 整文件替换工作区内的某个正文文件（完整新内容；`.ai-writer/` 不可触及），**只产生提案不落盘** |
 | `create_chapter` | 写·L2 | 新建章节（完整路径 + 开篇正文）。路径里不存在的文件夹一并创建——新开一卷就是这么来的。审批卡用 `renderMarkdown` 渲染正文预览 |
 | `move_chapter` | 写·L2 | 改名 / 移到别的卷（同一个操作，表达为新的完整路径），也可作用于分卷文件夹。目标已存在则拒绝，移进自己的子树则拒绝 |
 | `delete_chapter` | 写·L2 | 删**单个**章节文件，批准后移入 `.ai-writer/backups` 可恢复。**分卷文件夹一律拒绝**——删整卷的爆炸半径是作者自己的决定，不该在运行中间用一张卡片批掉 |
@@ -108,8 +108,8 @@ lib/ai/*（streamCompletion 等，不动） · lib/context/*（预算化注入�
 - **L2（正文）：必须审批。** `propose_edit` 只把 diff 放进 agentStore 的
   待审批队列，UI 渲染 diff，用户确认后才写入 editorStore/磁盘；拒绝则把
   「用户拒绝+理由」作为 tool result 回给模型。
-- 所有路径参数一律过 `isPathWithin`，写类工具额外限定在
-  `.ai-writer/lore/`、`.ai-writer/memory/`、`writing/` 白名单内。
+- 所有路径参数一律过 `isPathWithin`；正文写工具经 `isWorkspacePath`
+  限定在工作区内且排除 `.ai-writer/`，lore/memory 写入只能走各自的专用工具。
 
 ### 3.3 TaskPreset（`presets.ts`）
 
