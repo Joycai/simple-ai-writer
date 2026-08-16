@@ -107,6 +107,18 @@ thinking block 开头、后跟 `tool_use`。缺了就是回传没生效。
 | 2.6.13 | `max_uses` 是否被接受 | 同上，看是否 400、搜索次数是否被压到 10 以内 | 它的文档没列这个字段；被拒则要撤掉（§10.6） |
 | 2.6.14 | `usage.server_tool_use.web_search_requests` 有没有 | 看响应 usage | 决定能不能把搜索次数计入用量面板 |
 
+### 2.7 官方端点服务端工具（api.anthropic.com，全部未验）
+
+现有实现对官方端点是"预期走正路"的推断（[`anthropic-plan.md`](anthropic-plan.md)
+§10.10）：声明格式与官方一致、`pause_turn` 的 verbatim 续跑本就按官方行为实现，
+但没有对 api.anthropic.com 实测过。配一个官方供应商、给模型勾上 web_search 即可验。
+
+| # | 验什么 | 怎么验 | 影响 |
+| --- | --- | --- | --- |
+| 2.7.1 | `web_search_20250305` 不带 `anthropic-beta` header 是否被接受 | 勾选 web_search 后随便问一个需要联网的问题 | 官方资料称 GA 无需 header；若 400 则 `authHeaders` 要加头 |
+| 2.7.2 | `pause_turn` → verbatim 续跑是否成功 | 问一个会触发多次搜索的问题，看 API 日志里 `leg:2` 的请求体：应是**原样回传的块**（含 `encrypted_content`），且不被 400 拒 | 这是与 MiniMax 分叉的那条正路（§10.5/§10.7），从未走通过一次 |
+| 2.7.3 | `usage.server_tool_use.web_search_requests` 有没有 | 看响应 usage | 与 2.6.14 同一问题，官方端点上按官方文档应当存在；验到即可把搜索次数计入用量面板 |
+
 ## 3. ③ Gemini
 
 | # | 验什么 | 怎么验 | 影响 |

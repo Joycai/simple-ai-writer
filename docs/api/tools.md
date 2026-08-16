@@ -145,6 +145,15 @@ followed by tool messages responding to each tool_call_id"，Gemini 与 Anthropi
                 "page_age": "…", "encrypted_content": "EqgfCioIARgB…" }] }
 ```
 
+**官方端点上 `web_search_20250305` 是 GA 能力，不需要任何 `anthropic-beta`
+header** —— 普通 `/v1/messages` 直接声明即可（2026-08 复核官方资料确认）。除
+`max_uses` 外还有可选参数：`allowed_domains` / `blocked_domains`（二选一，不能
+同时给）与 `user_location`。另有两件同族但更新的东西，记录在此以免误当缺失：
+新款模型（Opus 4.6+ / Sonnet 4.6+ / Sonnet 5 / Opus 5）支持
+`web_search_20260209`（带动态过滤；Vertex AI 上只有基础版），以及
+`web_fetch_20250910` / `_20260209`。本项目均暂未采用，取舍见
+[`../anthropic-plan.md`](../anthropic-plan.md) §10.10。
+
 **两条会静默毁掉功能的规则：**
 
 **①「一次请求 = 一个完整回答」不成立。** 服务端可能把 turn 停在半路，而

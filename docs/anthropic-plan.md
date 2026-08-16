@@ -769,3 +769,39 @@ browse"，`serverTools` 恰好把这条写下来的不变量破坏了。
 `serverTools` 是"作者授予这个模型的常驻权限"，而 `withholdTools` 是"这一次请求
 不许用工具"。两者住在不同的层，于是前者默认赢。**下一个模型级开关落地时，第一件
 要问的事就是它会不会同样绕过任务级的约束。**
+
+### 10.10 官方端点确认：同一张表，零代码改动（2026-08）
+
+给 MiniMax 接完 `web_search` 后回头核对了官方端点，结论有两条。
+
+**一、官方确实有同一能力，而且现有实现已经覆盖它。**
+`web_search_20250305` 在 api.anthropic.com 上是 GA 工具，不需要任何
+`anthropic-beta` header（协议事实记在 [`api/tools.md`](api/tools.md) §6.1）——
+MiniMax 的声明格式本就是照抄官方的。核对逐层成立：
+
+- `supportsServerTools()` 当初刻意按**整个 anthropic 协议族**判断而不限于
+  `anthropic_compat`（§10.3），所以官方供应商下的模型现在就能勾选 `web_search`，
+  不需要新开关；
+- 发出去的 `{type:"web_search_20250305", name:"web_search", max_uses:10}` 与
+  官方声明一字不差，`max_uses` 在官方是文档明列的字段（在 MiniMax 才是赌注，
+  §10.6）；
+- 响应侧的 `server_tool_use` / `*_tool_result` 解析、以及 `pause_turn` 的
+  verbatim 续跑（整块原样回传、`encrypted_content` 不动）**本来就是按官方行为
+  写的** —— MiniMax 走的才是 §10.7 的纯文本降级路径。官方端点预期走正路。
+
+所以这次的"接入"没有一行 TS：只把 UI 提示（`aiConfig.models.serverToolsHint`
+两个语言）从"只有 MiniMax 提供"改成"Anthropic 协议族端点均生效（官方 GA /
+MiniMax Beta）"。
+
+**二、wire type 维持 `web_search_20250305`，不升 `_20260209`。**
+官方对新款模型（Opus 4.6+ / Sonnet 4.6+ / Sonnet 5 / Opus 5）另有
+`web_search_20260209`（动态过滤版），但基础版全模型可用、且与 MiniMax 共用同
+一条路径；新版则要求**按模型型号选版本**，而本项目对模型一无所知、无法探测
+（与 §10.3"由作者按模型声明"同一处境）。要支持它，正确形态大概率是把
+`ANTHROPIC_WIRE_TYPE` 的值也变成作者可选的声明，而不是适配层猜型号 —— 等有真实
+需求再做。`web_fetch` 同理未纳入 `ServerToolId`。
+
+**三、未经真机验证。** 以上"预期走正路"仍是推断：官方端点的
+`pause_turn` → verbatim 续跑、`encrypted_content` 回传被接受、
+`usage.server_tool_use.web_search_requests` 是否存在，都没有对 api.anthropic.com
+实测过。验证项在 [`thinking-verification.md`](thinking-verification.md) §2.7。

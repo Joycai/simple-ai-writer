@@ -1214,7 +1214,7 @@
       "thinkingDialectSwitch": "Switch (MiniMax M3)",
       "thinkingDialectNone": "Send none",
       "serverToolsLabel": "Server-side tools (optional)",
-      "serverToolsHint": "Tools the *endpoint* runs inside the same request. Nothing happens locally and there is no per-call approval — turning one on grants this model standing permission to search the open web whenever it answers. Only MiniMax-M3's /anthropic endpoint offers web_search today (vendor-marked beta); elsewhere the setting has no effect. Searches and the pages they hit are recorded in the execution log.",
+      "serverToolsHint": "Tools the *endpoint* runs inside the same request. Nothing happens locally and there is no per-call approval — turning one on grants this model standing permission to search the open web whenever it answers. Anthropic-protocol endpoints only: web_search is GA on the official api.anthropic.com and vendor-marked beta on MiniMax-M3's /anthropic endpoint; elsewhere the setting has no effect. Searches and the pages they hit are recorded in the execution log.",
       "serverTool_web_search": "Web search",
       "effortLabelAnthropic": "Effort"
     },
