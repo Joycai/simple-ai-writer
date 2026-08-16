@@ -408,6 +408,7 @@
     "exportMarkdown": "Copy Markdown",
     "exportHtml": "Export HTML…",
     "exportPdf": "Print / PDF…",
+    "exportPdfHint": "To save as PDF, open the PDF ▾ menu in the bottom-left corner of the print dialog and choose \"Save as PDF\".",
     "exportCopied": "Copied",
     "exportSaved": "Exported",
     "exportFailed": "Export failed: {{message}}",

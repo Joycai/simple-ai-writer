@@ -7,11 +7,18 @@
 //! print — while Tauri adds no delegate of its own. Nothing throws; the call
 //! just does nothing, which is why the export menu looked dead.
 //!
-//! The one path that does work on macOS is the Rust side: `Webview::print()`
-//! → `printOperationWithPrintInfo`. It prints *a whole webview*, so the export
-//! HTML gets a webview of its own — a print-preview window — and that is what
-//! we print. Printing the main window instead would mean fighting the app
-//! shell's own layout for pagination.
+//! The one path that does work on macOS is the Rust side:
+//! `printOperationWithPrintInfo` on the WKWebView. It prints *a whole
+//! webview*, so the export HTML gets a webview of its own — a print-preview
+//! window — and that is what we print. Printing the main window instead would
+//! mean fighting the app shell's own layout for pagination.
+//!
+//! We run the NSPrintOperation ourselves rather than going through wry's
+//! `print()` (tauri's `WebviewWindow::print()`), because wry zeroes all four
+//! margins — and does it on the process-wide *shared* NSPrintInfo. The saved
+//! PDF had text flush against the paper edge, and the mutated defaults leaked
+//! into every later print job. `print_with_margins` below mirrors wry's call
+//! sequence on a *copy* of the shared print info, with real margins.
 //!
 //! The HTML reaches that window through a custom URI scheme rather than a temp
 //! file: nothing to clean up, no widening of the fs scope, and no dependence
@@ -101,7 +108,11 @@ pub async fn print_document<R: Runtime>(
             let window = window.clone();
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_millis(200));
-                if let Err(e) = window.print() {
+                #[cfg(target_os = "macos")]
+                let result = print_with_margins(&window);
+                #[cfg(not(target_os = "macos"))]
+                let result = window.print();
+                if let Err(e) = result {
                     log_print_error(&e);
                 }
             });
@@ -110,6 +121,57 @@ pub async fn print_document<R: Runtime>(
         .map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+/// Open the system print dialog on the preview window's webview, with real
+/// page margins.
+///
+/// Mirrors wry's `print()` sequence (availability check → print info →
+/// NSPrintOperation → modal sheet), except the print info is a *copy* of the
+/// shared one — margins set here don't leak into other apps' print jobs — and
+/// the margins are half an inch instead of zero. The export CSS zeroes the
+/// body's own print padding, so these are the only margins on the page.
+#[cfg(target_os = "macos")]
+fn print_with_margins<R: Runtime>(window: &tauri::WebviewWindow<R>) -> tauri::Result<()> {
+    window.with_webview(|pw| {
+        use objc2::runtime::NSObjectProtocol;
+        use objc2_app_kit::{NSPrintInfo, NSWindow};
+        use objc2_foundation::NSCopying;
+        use objc2_web_kit::WKWebView;
+
+        // 0.5in on every side (CGFloat is in points).
+        const MARGIN_PT: f64 = 36.0;
+
+        // SAFETY: with_webview runs on the main thread, and the pointers are
+        // the live WKWebView / NSWindow of this webview window. None of the
+        // MainThreadOnly objects escape the closure.
+        unsafe {
+            let webview: &WKWebView = &*pw.inner().cast();
+            let ns_window: &NSWindow = &*pw.ns_window().cast();
+
+            // printOperationWithPrintInfo: is macOS 11+, and the bundle's
+            // minimum system version is older — same check wry performs.
+            if !webview.respondsToSelector(objc2::sel!(printOperationWithPrintInfo:)) {
+                eprintln!("print_document: WKWebView printing needs macOS 11+");
+                return;
+            }
+
+            let print_info = NSPrintInfo::sharedPrintInfo().copy();
+            print_info.setTopMargin(MARGIN_PT);
+            print_info.setBottomMargin(MARGIN_PT);
+            print_info.setLeftMargin(MARGIN_PT);
+            print_info.setRightMargin(MARGIN_PT);
+
+            let op = webview.printOperationWithPrintInfo(&print_info);
+            op.setCanSpawnSeparateThread(true);
+            op.runOperationModalForWindow_delegate_didRunSelector_contextInfo(
+                ns_window,
+                None,
+                None,
+                std::ptr::null_mut(),
+            );
+        }
+    })
 }
 
 fn log_print_error(e: &tauri::Error) {

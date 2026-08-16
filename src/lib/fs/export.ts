@@ -129,6 +129,13 @@ ${body}
 
 export async function exportPdf(source: string, title: string, baseDir?: string): Promise<void> {
   const body = await inlineImages(renderMarkdown(source), baseDir);
+  // macOS shows the preview window, and its print dialog has no virtual PDF
+  // printer — the PDF exit is the easily-missed "PDF ▾" menu in the dialog's
+  // corner. A banner at the bottom of the preview window points at it; the
+  // print sheet drops from the title bar, so the bottom edge stays visible.
+  const macHint = IS_MAC
+    ? `<div class="pdf-export-hint">${escapeHtml(i18n.t("editor.exportPdfHint"))}</div>`
+    : "";
   const html = `<!DOCTYPE html>
 <html lang="${docLang()}">
 <head>
@@ -136,17 +143,32 @@ export async function exportPdf(source: string, title: string, baseDir?: string)
 <title>${escapeHtml(title)}</title>
 <style>
 ${documentCss()}
-/* Print sheet: white paper, no page margin of our own. */
+/* Print sheet: white paper, no page margin of our own — the paper margins
+   come from the print system (NSPrintInfo on macOS, the dialog elsewhere),
+   so the body's screen padding is zeroed too rather than stacking on top. */
 body { background: #fff; }
+.pdf-export-hint {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  padding: 10px 16px;
+  background: var(--color-bg-elevated);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+}
 @media print {
-  body { margin: 0; max-width: none; }
+  body { margin: 0; padding: 0; max-width: none; }
+  .pdf-export-hint { display: none; }
   a { text-decoration: none; }
   pre, blockquote, table, img { break-inside: avoid; }
   h1, h2, h3 { break-after: avoid; }
 }
 </style>
 </head>
-<body>${body}</body>
+<body>${body}${macHint}</body>
 </html>`;
 
   // macOS has no `window.print()`. WebKit forwards a JS print request to the
