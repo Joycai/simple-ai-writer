@@ -1,6 +1,6 @@
 /**
  * Document import: pick tender/source documents (docx, xlsx, pdf, txt, md),
- * convert each to markdown and write it into a folder under `writing/`, where
+ * convert each to markdown and write it into a folder in the workspace, where
  * the read-tool agents can reach it (`list_files`/`search_text` only discover
  * the writing tree).
  *
@@ -127,7 +127,7 @@ export interface ImportOutcome {
 }
 
 /**
- * Pick documents and import them into `destDir` (a folder inside `writing/`).
+ * Pick documents and import them into `destDir` (a folder in the workspace).
  * Resolves to null when the author cancels the dialog. Failures are collected
  * per file rather than thrown — one unreadable PDF must not abort the other
  * nine imports of a batch.

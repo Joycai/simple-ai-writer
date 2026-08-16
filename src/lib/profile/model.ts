@@ -622,9 +622,9 @@ export const WEEKLY_PROFILE: WorkspaceProfile = {
  * harmful, and it reads exactly like a good finding. Both tasks and the system
  * prompt are built around that.
  *
- * Source material lives in a folder under `writing/` — that is the only tree
- * `list_files`/`search_text` can discover (`read_file` reaches the whole
- * project, but the model has to know a path first).
+ * Source material lives in any folder in the workspace —
+ * `list_files`/`search_text` discover the whole project tree (only the app's
+ * `.ai-writer` data is off-limits).
  */
 export const FEEDBACK_PROFILE: WorkspaceProfile = {
   id: "feedback",

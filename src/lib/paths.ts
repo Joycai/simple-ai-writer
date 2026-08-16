@@ -47,6 +47,41 @@ export function isStrictDescendant(base: string, target: string): boolean {
   return t !== b && t.startsWith(b + "/");
 }
 
+/**
+ * True when `target` touches the app's own data directory
+ * (`<projectPath>/.ai-writer`, the directory itself included).
+ *
+ * An empty `projectPath` answers true — fail closed. `` `${""}/.ai-writer` ``
+ * would otherwise make the base a relative path that matches nothing, and the
+ * caller's "not protected" branch would wave the path through.
+ */
+export function isProtectedPath(projectPath: string, target: string): boolean {
+  if (!projectPath) return true;
+  return isPathWithin(`${projectPath}/.ai-writer`, target);
+}
+
+/**
+ * The agent tools' single "may I touch this path?" answer: a non-empty
+ * project, the path inside it, and not inside `.ai-writer/`.
+ *
+ * The empty-project guard is load-bearing, not belt-and-braces: the tools used
+ * to scope to `${projectPath}/writing`, whose `/writing` suffix kept the base
+ * non-empty by accident. With the base now the project root, an unset
+ * `projectPath` would degrade `isPathWithin` into a match-everything prefix —
+ * so the guard lives here, once, instead of in every tool handler.
+ *
+ * `.ai-writer` stays off-limits because the manuscript tools must not be a
+ * back door into lore, memory, or profile.json — those have their own tools
+ * with their own approval protocols (`propose_lore_plan` et al.).
+ */
+export function isWorkspacePath(projectPath: string, target: string): boolean {
+  return (
+    !!projectPath &&
+    isPathWithin(projectPath, target) &&
+    !isProtectedPath(projectPath, target)
+  );
+}
+
 // ─── Relative resolution ─────────────────────────────────────────────────────
 
 /**

@@ -27,7 +27,8 @@ vi.mock("../fs/fileio", () => ({
 
 /**
  * Rebuild the FileNode tree read_dir_recursive would return, from the flat
- * in-memory paths — so tests declare files, not directory objects.
+ * in-memory paths — so tests declare files, not directory objects. Mirrors the
+ * Rust side's dotfile filter: `.ai-writer` (and any dot-entry) never appears.
  */
 vi.mock("../project", () => ({
   readDirRecursive: vi.fn(async (dir: string) => {
@@ -37,6 +38,7 @@ vi.mock("../project", () => ({
     for (const path of fs.keys()) {
       if (!path.startsWith(dir + "/")) continue;
       const segments = path.slice(dir.length + 1).split("/");
+      if (segments.some((s) => s.startsWith("."))) continue;
       let parent: Node[] = roots;
       let prefix = dir;
       for (let i = 0; i < segments.length; i++) {
@@ -113,17 +115,27 @@ beforeEach(() => {
 
 describe("list_files", () => {
   it("recurses into volume folders, grouped by absolute folder path", async () => {
-    fs.set(`${PROJECT}/writing/序章.md`, "x");
-    fs.set(`${PROJECT}/writing/卷一/第1章.md`, "x");
-    fs.set(`${PROJECT}/writing/卷一/第2章.md`, "x");
-    fs.set(`${PROJECT}/writing/卷二/第3章.md`, "x");
+    fs.set(`${PROJECT}/序章.md`, "x");
+    fs.set(`${PROJECT}/卷一/第1章.md`, "x");
+    fs.set(`${PROJECT}/卷一/第2章.md`, "x");
+    fs.set(`${PROJECT}/卷二/第3章.md`, "x");
 
     const out = await list();
 
-    expect(out).toContain("4 files in 3 folders under writing/");
-    expect(out).toContain(`${PROJECT}/writing\n  序章.md`);
-    expect(out).toContain(`${PROJECT}/writing/卷一\n  第1章.md\n  第2章.md`);
-    expect(out).toContain(`${PROJECT}/writing/卷二\n  第3章.md`);
+    expect(out).toContain("4 files in 3 folders under the project folder");
+    expect(out).toContain(`${PROJECT}\n  序章.md`);
+    expect(out).toContain(`${PROJECT}/卷一\n  第1章.md\n  第2章.md`);
+    expect(out).toContain(`${PROJECT}/卷二\n  第3章.md`);
+  });
+
+  it("never lists the app's .ai-writer data", async () => {
+    fs.set(`${PROJECT}/第1章.md`, "x");
+    fs.set(`${PROJECT}/.ai-writer/lore/characters/ava/index.md`, "x");
+
+    const out = await list();
+
+    expect(out).toContain("第1章.md");
+    expect(out).not.toContain(".ai-writer");
   });
 
   it("orders files and folders numerically", async () => {
@@ -139,8 +151,8 @@ describe("list_files", () => {
   });
 
   it("scopes to a subfolder", async () => {
-    fs.set(`${PROJECT}/writing/卷一/第1章.md`, "x");
-    fs.set(`${PROJECT}/writing/卷二/第2章.md`, "x");
+    fs.set(`${PROJECT}/卷一/第1章.md`, "x");
+    fs.set(`${PROJECT}/卷二/第2章.md`, "x");
 
     const out = await list({ folder: "卷一" });
 
@@ -148,14 +160,25 @@ describe("list_files", () => {
     expect(out).not.toContain("第2章.md");
   });
 
-  it("rejects a folder that escapes writing/", async () => {
-    expect(await list({ folder: "../.ai-writer" })).toContain(
-      "Error: Folder is outside the project writing directory.",
+  it("rejects a folder that escapes the project or enters .ai-writer", async () => {
+    expect(await list({ folder: "../elsewhere" })).toContain(
+      "Error: Folder is outside the project",
+    );
+    expect(await list({ folder: ".ai-writer/lore" })).toContain(
+      "Error: Folder is outside the project",
     );
   });
 
+  it("rejects everything on a surface with no project", async () => {
+    // An empty projectPath would prefix-match any absolute path — the guard
+    // must refuse before the listing is attempted.
+    const out = await callFull("list_files", {}, { projectPath: "" });
+
+    expect(out.content).toContain("Error: Folder is outside the project");
+  });
+
   it("reports an empty manuscript", async () => {
-    expect(await list()).toContain("No files found in writing/.");
+    expect(await list()).toContain("No files found in the project folder.");
   });
 });
 
@@ -207,18 +230,38 @@ describe("read_file", () => {
     );
   });
 
+  it("reads a file anywhere in the project, not just under writing/", async () => {
+    fs.set(`${PROJECT}/大纲.md`, "自由组织");
+
+    expect(await read({ path: `${PROJECT}/大纲.md` })).toBe("自由组织");
+  });
+
   it("rejects a path outside the project", async () => {
     expect(await read({ path: "/etc/passwd" })).toContain(
-      "Error: Path is outside the project writing directory.",
+      "Error: Path is outside the project",
     );
   });
 
-  it("rejects a path inside the project but outside writing/", async () => {
+  it("rejects the app's .ai-writer data", async () => {
+    // Reading profile.json or lore text here would hand it to whoever planted
+    // a prompt injection — those files have their own tools.
     fs.set(`${PROJECT}/.ai-writer/profile.json`, "{}");
 
     expect(await read({ path: `${PROJECT}/.ai-writer/profile.json` })).toContain(
-      "Error: Path is outside the project writing directory.",
+      "Error: Path is outside the project",
     );
+  });
+
+  it("rejects everything on a surface with no project", async () => {
+    fs.set("/etc/passwd", "root");
+
+    const out = await callFull(
+      "read_file",
+      { path: "/etc/passwd" },
+      { projectPath: "" },
+    );
+
+    expect(out.content).toContain("Error: Path is outside the project");
   });
 });
 
@@ -254,8 +297,8 @@ describe("search_text", () => {
   });
 
   it("scopes to a subfolder when 'folder' is given", async () => {
-    fs.set(`${PROJECT}/writing/卷一/第1章.md`, "断剑");
-    fs.set(`${PROJECT}/writing/卷二/第1章.md`, "断剑");
+    fs.set(`${PROJECT}/卷一/第1章.md`, "断剑");
+    fs.set(`${PROJECT}/卷二/第1章.md`, "断剑");
 
     const out = await search({ query: "断剑", folder: "卷一" });
 
@@ -324,12 +367,15 @@ describe("search_text", () => {
     expect(await search({})).toContain("Error: 'query' argument is required.");
   });
 
-  it("rejects a folder that escapes writing/", async () => {
+  it("rejects a folder that escapes the project or enters .ai-writer", async () => {
     fs.set(`${PROJECT}/.ai-writer/lore/characters/ava/index.md`, "断剑");
 
-    const out = await search({ query: "断剑", folder: "../.ai-writer/lore" });
-
-    expect(out).toContain("Error: Folder is outside the project writing directory.");
+    expect(await search({ query: "断剑", folder: "../elsewhere" })).toContain(
+      "Error: Folder is outside the project",
+    );
+    expect(await search({ query: "断剑", folder: ".ai-writer/lore" })).toContain(
+      "Error: Folder is outside the project",
+    );
   });
 
   it("skips an unreadable file rather than failing the whole search", async () => {

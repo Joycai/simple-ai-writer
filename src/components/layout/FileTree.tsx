@@ -208,7 +208,7 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
   // collapse every folder the author opened whenever they looked at another tab.
   // No entry yet = never touched = the default below.
   const stored = useProjectStore((s) => s.expandedDirs[node.path]);
-  const open = stored ?? (depth === 0 || node.name === "writing");
+  const open = stored ?? depth === 0;
   const setOpen = (next: boolean) =>
     useProjectStore.getState().setDirExpanded(node.path, next);
   const isActive = !node.is_dir && activeFilePath === node.path;
@@ -458,7 +458,7 @@ export function FileTree() {
 
   /** Where a paste aimed at this row lands: a folder itself, else its parent. */
   const pasteTargetOf = (node: FileNode | null): string | null => {
-    if (!node) return projectPath ? `${projectPath}/writing` : null;
+    if (!node) return projectPath || null;
     return node.is_dir ? node.path : parentDirOf(node.path);
   };
 
@@ -605,11 +605,11 @@ export function FileTree() {
     if (!node) {
       return [
         { kind: "item", icon: <FilePlus size={13} />, label: t("fileTree.newFile"),
-          action: () => { if (projectPath) startCreate(`${projectPath}/writing`, "file"); } },
+          action: () => { if (projectPath) startCreate(projectPath, "file"); } },
         { kind: "item", icon: <FolderPlus size={13} />, label: t("fileTree.newFolder"),
-          action: () => { if (projectPath) startCreate(`${projectPath}/writing`, "folder"); } },
+          action: () => { if (projectPath) startCreate(projectPath, "folder"); } },
         { kind: "item", icon: <FileInput size={13} />, label: t("fileTree.importDoc"),
-          action: () => { if (projectPath) void handleImport(`${projectPath}/writing`); } },
+          action: () => { if (projectPath) void handleImport(projectPath); } },
         ...pasteItem(),
         { kind: "divider" },
         { kind: "item", icon: <FolderOpen size={13} />, label: t("fileTree.reveal"),
@@ -717,7 +717,7 @@ export function FileTree() {
             <button
               className={styles.toolbarBtn}
               title={t("fileTree.newFile")}
-              onClick={() => projectPath && startCreate(`${projectPath}/writing`, "file")}
+              onClick={() => projectPath && startCreate(projectPath, "file")}
             >
               <FilePlus size={14} />
             </button>
@@ -725,7 +725,7 @@ export function FileTree() {
               className={styles.toolbarBtn}
               title={t("fileTree.importDoc")}
               disabled={importing}
-              onClick={() => projectPath && void handleImport(`${projectPath}/writing`)}
+              onClick={() => projectPath && void handleImport(projectPath)}
             >
               <FileInput size={14} />
             </button>
@@ -757,7 +757,7 @@ export function FileTree() {
               <div className={styles.emptyText}>{t("project.emptyTree")}</div>
               <button
                 className={styles.createBtn}
-                onClick={() => projectPath && startCreate(`${projectPath}/writing`, "file")}
+                onClick={() => projectPath && startCreate(projectPath, "file")}
               >
                 <FilePlus size={13} />
                 {t("fileTree.newFile")}

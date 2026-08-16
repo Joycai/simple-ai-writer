@@ -1,7 +1,7 @@
 /**
  * Tool implementations for the agent runtime.
  *
- * This module owns the *handlers* — reading lore, listing/reading writing
+ * This module owns the *handlers* — reading lore, listing/reading project
  * files. Wire definitions and dispatch live in registry.ts; the loop that
  * drives calls lives in runtime.ts; the path-containment helpers that keep
  * model-controlled path arguments inside the project live in lib/paths.ts,
@@ -12,7 +12,7 @@ import { isChapterFile, naturalCompare } from "../context/outline";
 import { fileExists, readFile } from "../fs/fileio";
 import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, imageToDataUrl, isImagePath } from "../fs/images";
 import { readEntityFile, type LoreEntity, type LoreIndex } from "../lore";
-import { isPathWithin, resolveRelativePath } from "../paths";
+import { isPathWithin, isWorkspacePath, resolveRelativePath } from "../paths";
 import { readDirRecursive, type FileNode } from "../project";
 
 export interface ToolCall {
@@ -185,16 +185,16 @@ function decodeLinkPath(path: string): string {
 /**
  * View any image in the project as visual input — the counterpart to
  * `read_lore_image`, for pictures that don't belong to a lore entity: a
- * chapter's illustrations under `writing/…/assets/`, and whatever reference art
- * the author keeps in the project folder.
+ * chapter's illustrations under its sibling `assets/`, and whatever reference
+ * art the author keeps in the project folder.
  *
- * Containment is against the **project**, not `writing/` the way `read_file`
- * is. That tool is narrow because a model tricked into calling it could read
- * `profile.json` or the lore's text back to whoever planted the instruction;
- * an image tool can't — it decodes one file, by extension, into pixels the
- * model looks at. Narrowing it to `writing/` would instead break the ordinary
- * case (art in a top-level `参考图/`) for no gain. Traversal outside the
- * project is still refused.
+ * Containment is against the whole **project**, `.ai-writer` included — wider
+ * than `read_file`. That tool excludes `.ai-writer` because a model tricked
+ * into calling it could read `profile.json` or the lore's text back to
+ * whoever planted the instruction; an image tool can't — it decodes one file,
+ * by extension, into pixels the model looks at, and lore gallery images live
+ * under `.ai-writer/lore/` where this tool must still reach them. Traversal
+ * outside the project is still refused.
  */
 export async function readProjectImage(
   toolCallId: string,
@@ -279,26 +279,30 @@ function collectListings(nodes: FileNode[], dir: string, out: DirListing[]): voi
 }
 
 /**
- * List the manuscript tree under `writing/`, recursively.
+ * List the project's document tree, recursively.
  *
  * Grouped as `ls -R` does — absolute directory path, then its filenames
  * indented — rather than one absolute path per line: repeating a long project
  * prefix on every one of several hundred chapters costs more context than the
  * listing itself is worth.
+ *
+ * `.ai-writer/` never appears: the tree comes from `readDirRecursive`, whose
+ * Rust side skips dotfiles, and the model-controlled `folder` argument is
+ * refused by `isWorkspacePath` if it points inside it.
  */
 export async function listWritingFiles(
   toolCallId: string,
   projectPath: string,
   folder?: string,
 ): Promise<ToolResult> {
-  const base = `${projectPath}/writing`;
-  const target = folder ? `${base}/${folder}` : base;
-  // The folder argument is model-controlled — reject `../` escapes.
-  if (!isPathWithin(base, target)) {
-    return { toolCallId, content: "Error: Folder is outside the project writing directory." };
+  const target = folder ? `${projectPath}/${folder}` : projectPath;
+  // The folder argument is model-controlled — reject `../` escapes and the
+  // app's own .ai-writer data; the empty-projectPath guard lives in the check.
+  if (!isWorkspacePath(projectPath, target)) {
+    return { toolCallId, content: "Error: Folder is outside the project (the app's .ai-writer data is off-limits)." };
   }
 
-  const scope = folder ? `writing/${folder}` : "writing/";
+  const scope = folder || "the project folder";
   let listings: DirListing[];
   try {
     listings = [];
@@ -391,11 +395,11 @@ export async function searchWritingFiles(
   const q = (query ?? "").trim();
   if (!q) return { toolCallId, content: "Error: 'query' argument is required." };
 
-  const base = `${projectPath}/writing`;
-  const target = folder ? `${base}/${folder}` : base;
-  // The folder argument is model-controlled — reject `../` escapes.
-  if (!isPathWithin(base, target)) {
-    return { toolCallId, content: "Error: Folder is outside the project writing directory." };
+  const target = folder ? `${projectPath}/${folder}` : projectPath;
+  // The folder argument is model-controlled — reject `../` escapes and the
+  // app's own .ai-writer data; the empty-projectPath guard lives in the check.
+  if (!isWorkspacePath(projectPath, target)) {
+    return { toolCallId, content: "Error: Folder is outside the project (the app's .ai-writer data is off-limits)." };
   }
 
   const files: string[] = [];
@@ -406,7 +410,7 @@ export async function searchWritingFiles(
   }
   files.sort(naturalCompare);
 
-  const scope = folder ? `writing/${folder}` : "writing/";
+  const scope = folder || "the project folder";
   const needle = q.toLowerCase();
   const blocks: string[] = [];
   let totalHits = 0;
@@ -482,12 +486,11 @@ export async function readWritingFile(
   // The path argument is model-controlled. A plain startsWith check would
   // accept `../` traversal (`/project/../etc/x`) and prefix siblings
   // (`/project-evil/x`), so compare lexically normalized paths on whole
-  // component boundaries. Scoped to writing/ like list_files/search_text —
-  // the tool is documented (and its `path` built) as manuscript-only, so a
-  // prompt-injected model can't use it to read profile.json, memory, or lore.
-  const base = `${projectPath}/writing`;
-  if (!isPathWithin(base, path)) {
-    return { toolCallId, content: "Error: Path is outside the project writing directory." };
+  // component boundaries. Scoped to the project root minus `.ai-writer/` —
+  // lore, memory, and profile.json have their own tools with their own
+  // approval protocols, so a prompt-injected model can't read them here.
+  if (!isWorkspacePath(projectPath, path)) {
+    return { toolCallId, content: "Error: Path is outside the project (the app's .ai-writer data is off-limits)." };
   }
 
   let raw: string;

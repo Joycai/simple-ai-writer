@@ -12,8 +12,12 @@ import {
   fileExists, makeDir, readBinaryFile, readFile, removeDir, renamePath, writeBinaryFile, writeFile,
 } from "../fs/fileio";
 
-/** Folder name for a document's illustrations, beside the document itself. */
-const ASSETS_DIR = "assets";
+/**
+ * Folder name for a document's illustrations, beside the document itself.
+ * Exported so the outline's volume grouping can skip these folders — an
+ * `assets/` directory is pictures, not a volume of chapters.
+ */
+export const ASSETS_DIR = "assets";
 
 /** Directory part of a file path (no trailing slash). */
 function dirOf(filePath: string): string {

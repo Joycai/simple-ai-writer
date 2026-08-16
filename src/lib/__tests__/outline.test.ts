@@ -102,6 +102,74 @@ describe("groupVolumes", () => {
     expect(vols.map((v) => v.name)).toEqual(["writing", "vol2"]);
     expect(vols[1].chapters).toEqual([]);
   });
+
+  it("groups workspace-root chapter files as a default volume keyed \"\"", () => {
+    const roots: FileNode[] = [
+      { name: "序章.md", path: `${PROJ}/序章.md`, is_dir: false },
+      { name: "cover.png", path: `${PROJ}/cover.png`, is_dir: false },
+      {
+        name: "卷一", path: `${PROJ}/卷一`, is_dir: true,
+        children: [{ name: "第1章.md", path: `${PROJ}/卷一/第1章.md`, is_dir: false }],
+      },
+    ];
+    const vols = groupVolumes(roots, PROJ);
+    expect(vols.map((v) => v.relPath)).toEqual(["", "卷一"]);
+    // The root volume is named after the project folder, and its key "" can
+    // never collide with a real directory's relPath.
+    expect(vols[0].name).toBe("proj");
+    expect(vols[0].chapters.map((c) => c.relPath)).toEqual(["序章.md"]);
+    expect(vols[1].chapters[0].relPath).toBe("卷一/第1章.md");
+  });
+
+  it("recurses into nested folders so deep chapters are not lost", () => {
+    const roots: FileNode[] = [
+      {
+        name: "写作", path: `${PROJ}/写作`, is_dir: true,
+        children: [
+          {
+            name: "第一部", path: `${PROJ}/写作/第一部`, is_dir: true,
+            children: [{ name: "a.md", path: `${PROJ}/写作/第一部/a.md`, is_dir: false }],
+          },
+        ],
+      },
+    ];
+    const vols = groupVolumes(roots, PROJ);
+    expect(vols.map((v) => v.relPath)).toEqual(["写作", "写作/第一部"]);
+    expect(vols[1].chapters[0].relPath).toBe("写作/第一部/a.md");
+  });
+
+  it("skips assets/ folders — illustrations are not a volume", () => {
+    const roots: FileNode[] = [
+      { name: "第1章.md", path: `${PROJ}/第1章.md`, is_dir: false },
+      {
+        name: "assets", path: `${PROJ}/assets`, is_dir: true,
+        children: [
+          {
+            name: "第1章", path: `${PROJ}/assets/第1章`, is_dir: true,
+            children: [{ name: "img.png", path: `${PROJ}/assets/第1章/img.png`, is_dir: false }],
+          },
+        ],
+      },
+    ];
+    const vols = groupVolumes(roots, PROJ);
+    expect(vols.map((v) => v.relPath)).toEqual([""]);
+  });
+
+  it("keeps an old writing/-layout project's spine keys intact", () => {
+    // The zero-migration guarantee: writing/ is just a folder now, and the
+    // recursive grouping must produce the exact relPaths an old outline.json
+    // recorded ("writing", "writing/卷二", "writing/卷二/第3章.md").
+    const sub: FileNode = {
+      name: "卷二", path: `${PROJ}/writing/卷二`, is_dir: true,
+      children: [{ name: "第3章.md", path: `${PROJ}/writing/卷二/第3章.md`, is_dir: false }],
+    };
+    const vols = groupVolumes(tree(["第1章.md"], [sub]), PROJ);
+    expect(vols.map((v) => v.relPath)).toEqual(["writing", "writing/卷二"]);
+
+    const spine: BookSpine = { version: 1, order: { "writing/卷二": ["writing/卷二/第3章.md"] } };
+    const out = applySpine(vols, spine);
+    expect(out[1].chapters.map((c) => c.relPath)).toEqual(["writing/卷二/第3章.md"]);
+  });
 });
 
 describe("parentDir", () => {

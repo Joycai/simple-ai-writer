@@ -20,16 +20,17 @@ function basename(p: string | null): string | null {
 }
 
 /**
- * The 卷 level of the breadcrumb: the document's parent folder inside
- * `writing/`, when there is one. Purely presentational — derived from the
- * path, so grouping documents differently needs no store change here.
+ * The 卷 level of the breadcrumb: the document's parent folder inside the
+ * workspace, when there is one (a file at the workspace root has none). Purely
+ * presentational — derived from the path, so grouping documents differently
+ * needs no store change here.
  */
-function volumeOf(p: string | null): string | null {
-  if (!p) return null;
+function volumeOf(p: string | null, projectPath: string | null): string | null {
+  if (!p || !projectPath) return null;
   const parts = p.replace(/\\/g, "/").split("/").filter(Boolean);
-  const w = parts.lastIndexOf("writing");
-  // parts between writing/ and the file itself; only show the innermost.
-  if (w === -1 || parts.length - w <= 2) return null;
+  const rootDepth = projectPath.replace(/\\/g, "/").split("/").filter(Boolean).length;
+  // parts between the workspace root and the file itself; only the innermost.
+  if (parts.length - rootDepth <= 1) return null;
   return parts[parts.length - 2];
 }
 
@@ -45,7 +46,7 @@ export function TitleBar() {
 
   const projectName = basename(projectPath) ?? t("titleBar.noProject");
   const fileName = basename(activeFilePath)?.replace(/\.md$/i, "") ?? null;
-  const volumeName = volumeOf(activeFilePath);
+  const volumeName = volumeOf(activeFilePath, projectPath);
 
   const cycleTheme = () => {
     const idx = THEME_ORDER.indexOf(theme);

@@ -24,6 +24,7 @@ import {
 } from "../../lib/context/outline";
 import { loadMemory, memoryStatus, moveMemory, projectRelativePath, type MemoryStatus } from "../../lib/context/memory";
 import { readFile, makeDir, removeDir, renamePath } from "../../lib/fs/fileio";
+import { ASSETS_DIR } from "../../lib/image/assets";
 import { useImeGuard } from "../../lib/ime";
 import styles from "./OutlineFullView.module.css";
 
@@ -232,8 +233,11 @@ export function OutlineFullView() {
   const createVolume = async () => {
     const name = newVolName.trim();
     if (!name || !projectPath) { setCreatingVol(false); setNewVolName(""); return; }
+    // "assets" is reserved for illustrations and dot-names are invisible in
+    // the tree — a volume by either name would silently never appear.
+    if (name === ASSETS_DIR || name.startsWith(".")) { setCreatingVol(false); setNewVolName(""); return; }
     try {
-      await makeDir(`${projectPath}/writing/${name}`);
+      await makeDir(`${projectPath}/${name}`);
       await refreshFileTree();
     } catch (e) {
       console.error("[outline] create volume failed:", e);
@@ -243,7 +247,9 @@ export function OutlineFullView() {
   };
 
   const deleteVolume = async (vol: Volume) => {
-    if (vol.chapters.length > 0 || vol.relPath === "writing") return;
+    // relPath "" is the project root itself — removeDir there would delete the
+    // whole workspace, not a volume.
+    if (vol.chapters.length > 0 || vol.relPath === "") return;
     if (!window.confirm(t("outline.deleteVolumeConfirm", { group: terms.group }))) return;
     try {
       await removeDir(vol.path);
@@ -292,7 +298,7 @@ export function OutlineFullView() {
         </div>
         <div className={styles.empty}>
           {t("outline.empty", {
-            defaultValue: "未发现{{group}}/{{doc}}结构 — 在 writing/ 下创建子文件夹来组织{{group}}",
+            defaultValue: "未发现{{group}}/{{doc}}结构 — 在项目文件夹下创建子文件夹来组织{{group}}",
             group: terms.group,
             doc: terms.doc,
           })}
@@ -425,7 +431,7 @@ export function OutlineFullView() {
       <div className={styles.columns}>
         {volumes.map((vol, vi) => {
           const isCurrent = vi === activeVolumeIdx;
-          const canDelete = vol.chapters.length === 0 && vol.relPath !== "writing";
+          const canDelete = vol.chapters.length === 0 && vol.relPath !== "";
           return (
             <div key={vol.path} className={`${styles.column} ${isCurrent ? styles.columnCurrent : ""}`}>
               <div className={styles.colHead}>
