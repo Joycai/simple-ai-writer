@@ -24,8 +24,9 @@ import type {
   MoveProposal,
   Proposal,
 } from "../../lib/agent/registry";
+import { autoApproveScope, isAutoApprovable } from "../../lib/agent/autoApprove";
 import { useImageDataUrl } from "../lore/useImageDataUrl";
-import { useAgentStore } from "../../stores/agentStore";
+import { useAgentStore, type PendingApproval } from "../../stores/agentStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import type { ResolvedTerms } from "../../lib/profile";
 import styles from "./ApprovalCard.module.css";
@@ -240,14 +241,19 @@ function ProposalBody({ proposal }: { proposal: Proposal }) {
   }
 }
 
-export function ApprovalCard({ proposal }: { proposal: Proposal }) {
+export function ApprovalCard({ item }: { item: PendingApproval }) {
   const { t } = useTranslation();
   const terms = useTerms();
-  const { approve, reject } = useAgentStore();
+  const { approve, reject, enableAutoApprove } = useAgentStore();
   const [rejectReason, setRejectReason] = useState("");
   const [deciding, setDeciding] = useState(false);
 
+  const { proposal, autoApproveKey } = item;
   const fileName = proposal.path.split(/[\\/]/).pop() ?? proposal.path;
+  // Absent on a surface that cannot hold a grant, and never offered for the
+  // two kinds a grant may not cover — so 删除 and 配图 cards simply don't grow
+  // a third button, which needs no explaining.
+  const canGrant = autoApproveKey !== undefined && isAutoApprovable(proposal.kind);
 
   return (
     <div className={styles.card}>
@@ -277,6 +283,21 @@ export function ApprovalCard({ proposal }: { proposal: Proposal }) {
         >
           {t("ai.approval.reject")}
         </button>
+        {canGrant && (
+          <button
+            className={styles.btnApproveAlways}
+            onClick={() => {
+              setDeciding(true);
+              enableAutoApprove(autoApproveKey, "proposals");
+              void approve(proposal.id);
+            }}
+            disabled={deciding}
+          >
+            {autoApproveScope(autoApproveKey) === "session"
+              ? t("ai.approval.approveAlways", { defaultValue: "本次对话都批准" })
+              : t("ai.approval.approveAlwaysRun", { defaultValue: "本次任务都批准" })}
+          </button>
+        )}
         <button
           className={styles.btnApprove}
           onClick={() => { setDeciding(true); void approve(proposal.id); }}

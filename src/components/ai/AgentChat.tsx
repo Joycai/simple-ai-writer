@@ -59,6 +59,8 @@ import { estimateToolsTokens } from "../../lib/ai/tokenEstimate";
 import { inputCeilingFor } from "../../lib/context/budget";
 import { ReasoningControls } from "./ReasoningControls";
 import { SubAgentChips } from "./SubAgentChips";
+import { AutoApproveChip } from "./AutoApproveChip";
+import { CHAT_AUTO_APPROVE_KEY } from "../../lib/agent/autoApprove";
 import styles from "./AgentChat.module.css";
 
 function formatTime(at: number): string {
@@ -444,10 +446,10 @@ export function AgentChat() {
       {(pendingPlans.length > 0 || pending.length > 0 || pendingRoundLimits.length > 0) && (
         <div className={styles.approvals}>
           {pendingPlans.map((p) => (
-            <PlanCard key={p.plan.id} plan={p.plan} />
+            <PlanCard key={p.plan.id} item={p} />
           ))}
           {pending.map((p) => (
-            <ApprovalCard key={p.proposal.id} proposal={p.proposal} />
+            <ApprovalCard key={p.proposal.id} item={p} />
           ))}
           {pendingRoundLimits.map((p) => (
             // Keyed by the run, like the other two lists are keyed by their
@@ -553,6 +555,8 @@ export function AgentChat() {
           )}
           {/* Subagent session toggles (search, vision, longread) */}
           <SubAgentChips />
+          {/* Only while 本次对话都批准 is live — see AutoApproveChip. */}
+          <AutoApproveChip owner={CHAT_AUTO_APPROVE_KEY} />
           {/* Ask for a plan outright. Until now a task workspace only appeared
               when the model decided the work warranted one, which left the
               author with no way to say "track this" about work it judged

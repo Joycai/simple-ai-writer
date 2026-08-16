@@ -36,6 +36,7 @@ import { ReasoningControls } from "./ReasoningControls";
 import { ApprovalCard } from "./ApprovalCard";
 import { PlanCard } from "./PlanCard";
 import { RoundLimitCard } from "./RoundLimitCard";
+import { AutoApproveChip } from "./AutoApproveChip";
 import { useAiStore } from "../../stores/aiStore";
 import { useAppStore, LORE_BUDGET_MIN, LORE_BUDGET_MAX } from "../../stores/appStore";
 import { MAX_DRAFTS } from "../../lib/ai/drafts";
@@ -964,6 +965,7 @@ export function AiPanel() {
   const pendingApprovals = useAgentStore((s) => s.pending);
   const pendingPlans = useAgentStore((s) => s.pendingPlans);
   const pendingRoundLimits = useAgentStore((s) => s.pendingRoundLimits);
+  const taskAbortController = useAiTaskStore((s) => s.abortController);
   const outputRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -1767,13 +1769,18 @@ export function AiPanel() {
             />
           )}
 
+          {/* Only while 本次任务都批准 is live. Keyed to the running task's own
+              controller, which is exactly what aiTaskStore passed as the grant
+              key — so the chip goes out by itself when the run ends. */}
+          <AutoApproveChip owner={taskAbortController} />
+
           {/* Pending lore plans + manuscript edits + round-cap questions — the
               loop is blocked on these */}
           {pendingPlans.map((p) => (
-            <PlanCard key={p.plan.id} plan={p.plan} />
+            <PlanCard key={p.plan.id} item={p} />
           ))}
           {pendingApprovals.map((p) => (
-            <ApprovalCard key={p.proposal.id} proposal={p.proposal} />
+            <ApprovalCard key={p.proposal.id} item={p} />
           ))}
           {pendingRoundLimits.map((p) => (
             <RoundLimitCard key={p.id} item={p} />

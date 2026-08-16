@@ -191,6 +191,21 @@
 .btnReject:hover:not(:disabled) { color: var(--color-error-text-strong); border-color: var(--color-error-node); }
 .btnReject:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* Quieter than the primary approve: it authorises more, but the author should
+   read it as the same decision made once instead of a bigger, bolder one. */
+.btnApproveAlways {
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid var(--color-border-panel);
+  color: var(--color-text-secondary);
+  font: 400 11px/1.6 var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.btnApproveAlways:hover:not(:disabled) { color: var(--color-sienna); border-color: var(--color-sienna); }
+.btnApproveAlways:disabled { opacity: 0.4; cursor: not-allowed; }
+
 .btnApprove {
   padding: 8px 16px;
   background: var(--color-sienna);

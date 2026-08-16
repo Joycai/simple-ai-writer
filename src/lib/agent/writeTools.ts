@@ -804,7 +804,10 @@ function reportDecision(
     toolCallId,
     content:
       `${done}` +
-      (decision.backupPath ? ` The previous state was backed up to ${decision.backupPath}.` : ""),
+      (decision.backupPath ? ` The previous state was backed up to ${decision.backupPath}.` : "") +
+      (decision.auto
+        ? " NOTE: this was auto-approved under a standing grant — the author did not review it. Hold yourself to the same standard you would if they had."
+        : ""),
   };
 }
 
