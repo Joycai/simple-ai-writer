@@ -15,8 +15,8 @@
  *   - memory updates go through rewriteMemorySegment, which preserves the
  *     segment ranges/hash protocol and only swaps summary text
  *
- * Manuscript (writing/) edits are deliberately absent: those are L2 and go
- * through the propose→diff→approve flow (PR4).
+ * Direct manuscript edits are deliberately absent from the L1 tier: those are
+ * L2 and go through the propose→diff→approve flow below.
  */
 
 import { loreCategoryIds } from "../profile/active";
@@ -54,7 +54,7 @@ import {
   type LorePlanStep,
 } from "./plan";
 import type { ApprovalDecision, ToolContext } from "./registry";
-import { isPathWithin, isStrictDescendant } from "../paths";
+import { isPathWithin, isStrictDescendant, isWorkspacePath } from "../paths";
 import { allEntityNames, findEntityByName, type ToolResult } from "./tools";
 
 // ─── propose_lore_plan (the gate every lore write goes through) ──────────────
@@ -663,8 +663,9 @@ export async function deleteLoreEntityTool(
 
 function checkDocPath(toolCallId: string, ctx: ToolContext, path?: string): ToolResult | string {
   const p = path?.trim();
-  if (!p) return { toolCallId, content: "Error: 'path' argument is required (the writing file's absolute path, as returned by list_files)." };
-  if (!isPathWithin(ctx.projectPath, p)) {
+  if (!p) return { toolCallId, content: "Error: 'path' argument is required (the document's absolute path, as returned by list_files)." };
+  // An empty projectPath would prefix-match every absolute path — fail closed.
+  if (!ctx.projectPath || !isPathWithin(ctx.projectPath, p)) {
     return { toolCallId, content: "Error: Path is outside the project directory." };
   }
   return p;
@@ -734,8 +735,9 @@ let proposalCounter = 0;
 
 /**
  * Shared preamble for every manuscript proposal: a trimmed path that is really
- * inside `writing/`, and a live approval channel to block on. Returns the error
- * result to hand straight back to the model when either is missing.
+ * inside the project (and not inside `.ai-writer/`), and a live approval
+ * channel to block on. Returns the error result to hand straight back to the
+ * model when either is missing.
  */
 function manuscriptTarget(
   toolCallId: string,
@@ -747,12 +749,14 @@ function manuscriptTarget(
   if (!path) {
     return { refusal: { toolCallId, content: "Error: 'path' argument is required." } };
   }
-  // Manuscript only — lore/memory have their own (L1) tools.
-  if (!isPathWithin(`${ctx.projectPath}/writing`, path)) {
+  // Project files only — .ai-writer is the app's data; lore/memory have their
+  // own (L1) tools with their own approval protocols, and letting a document
+  // tool write there would bypass the lore plan gate wholesale.
+  if (!isWorkspacePath(ctx.projectPath, path)) {
     return {
       refusal: {
         toolCallId,
-        content: `Error: ${tool} only works on files under the project's writing/ directory.`,
+        content: `Error: ${tool} only works on files inside the project folder (the app's .ai-writer data is off-limits — use the lore/memory tools for that).`,
       },
     };
   }
@@ -864,8 +868,8 @@ export async function moveChapterTool(
   if (!rawDest) {
     return { toolCallId, content: "Error: 'new_path' argument is required (the full destination path)." };
   }
-  if (!isPathWithin(`${ctx.projectPath}/writing`, rawDest)) {
-    return { toolCallId, content: "Error: the destination must also be under the project's writing/ directory." };
+  if (!isWorkspacePath(ctx.projectPath, rawDest)) {
+    return { toolCallId, content: "Error: the destination must also be inside the project folder (not in .ai-writer)." };
   }
 
   const source = await statEntry(target.path);
@@ -963,9 +967,9 @@ export async function proposeEditTool(
 ): Promise<ToolResult> {
   const path = args.path?.trim();
   if (!path) return { toolCallId, content: "Error: 'path' argument is required." };
-  // Manuscript edits only — lore/memory have their own (L1) tools.
-  if (!isPathWithin(`${ctx.projectPath}/writing`, path)) {
-    return { toolCallId, content: "Error: propose_edit only works on files under the project's writing/ directory." };
+  // Project files only — .ai-writer would be a back door into lore/profile.
+  if (!isWorkspacePath(ctx.projectPath, path)) {
+    return { toolCallId, content: "Error: propose_edit only works on files inside the project folder (the app's .ai-writer data is off-limits — use the lore/memory tools for that)." };
   }
   if (typeof args.find !== "string" || !args.find) {
     return { toolCallId, content: "Error: 'find' argument is required (the exact text to replace)." };
@@ -1043,8 +1047,8 @@ export async function rewriteDocumentTool(
 ): Promise<ToolResult> {
   const path = args.path?.trim();
   if (!path) return { toolCallId, content: "Error: 'path' argument is required." };
-  if (!isPathWithin(`${ctx.projectPath}/writing`, path)) {
-    return { toolCallId, content: "Error: rewrite_document only works on files under the project's writing/ directory." };
+  if (!isWorkspacePath(ctx.projectPath, path)) {
+    return { toolCallId, content: "Error: rewrite_document only works on files inside the project folder (the app's .ai-writer data is off-limits — use the lore/memory tools for that)." };
   }
   if (typeof args.content !== "string") {
     return { toolCallId, content: "Error: 'content' argument is required (the complete new file body)." };

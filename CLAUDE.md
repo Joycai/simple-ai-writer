@@ -86,7 +86,7 @@ Rules when touching this: components read flags via `useDocModel()` and wording 
 **Filesystem**
 - `.ai-writer/project.db` — SQLite database (project-scoped)
 - `.ai-writer/profile.json` — Enabled capability packs (v2: `{primary, enabled[], packs[]}`; a v1 single-profile file still reads as that pack alone; absent = novel)
-- `writing/` — User markdown files (organized tree)
+- User documents — anywhere in the workspace root, freely organized (older projects keep their `writing/` folder as an ordinary directory)
 - `.ai-writer/lore/<category>/<entity>/index.md` — Entity summary with frontmatter (categories are the union of the enabled packs' — novel: characters, world, factions, items, skills, style, custom)
 
 **Code**
@@ -107,7 +107,7 @@ Rules when touching this: components read flags via `useDocModel()` and wording 
   - `src/lib/fs/` — Tauri file I/O wrappers (`fileio.ts`), markdown render/frontmatter (`markdown.ts`), image/text file utils (`images.ts`), export (`export.ts`), whole-project backup/restore (`projectBackup.ts` — wider scope than the lore bundle on purpose; see `docs/architecture.md` → Export / Import)
   - `src/lib/theme/` — Markdown typography themes (`markdownThemes.ts`): the `--md-*` CSS generated once and shared by the preview pane, lore previews and exported HTML/PDF. See `docs/design-system.md` → Markdown 排版主题
   - `src/lib/image/` — a document's illustrations: where they land and what links them (`assets.ts` — `assets/<文档名>/` beside the document, **relative** links, `saveDocumentAsset` for a generated picture / `importDocumentAsset` for one the author picked off disk, plus the move/delete follow-up that keeps links alive), and the approval→generate→file step (`illustrate.ts`). Lore entities use `lib/lore/gallery.ts` instead — they own a folder, a document is one file
-  - `src/lib/import/` — document import into `writing/`: docx via mammoth+turndown (`docx.ts`/`markdown.ts`), xlsx via the Rust `xlsx_to_markdown` command (`xlsx.ts` → `src-tauri/src/xlsx.rs`, the only converter not in the webview — calamine reads cached formula results, real dates and merged ranges), PDF text extraction via lazy pdfjs (`pdf.ts`), GBK-aware text decode (`text.ts`), dialog orchestration + naming (`index.ts`). Everything lands as markdown because **no model API accepts docx/xlsx binaries** — they are zip archives; converting is not a shortcut, it is the only option
+  - `src/lib/import/` — document import into the workspace: docx via mammoth+turndown (`docx.ts`/`markdown.ts`), xlsx via the Rust `xlsx_to_markdown` command (`xlsx.ts` → `src-tauri/src/xlsx.rs`, the only converter not in the webview — calamine reads cached formula results, real dates and merged ranges), PDF text extraction via lazy pdfjs (`pdf.ts`), GBK-aware text decode (`text.ts`), dialog orchestration + naming (`index.ts`). Everything lands as markdown because **no model API accepts docx/xlsx binaries** — they are zip archives; converting is not a shortcut, it is the only option
   - root: `project.ts`, `keyStore.ts`, `prefs.ts` (**every** app preference — theme, language, panel widths, model selections; backed by `config.db`, read synchronously from an in-memory cache that `main.tsx` hydrates *before* importing anything that reads one. Never add a `localStorage` call: add a key to `PREF_KEYS` instead — see `docs/architecture.md` → Preferences), `http.ts`, `paths.ts`, `platform.ts`
 - `src/stores/` — Zustand state managers
 - `src/styles/` — Design tokens (`tokens.css`) + global styles (`global.css`)

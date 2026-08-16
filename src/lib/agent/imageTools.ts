@@ -13,7 +13,7 @@
 
 import { imageCostFor } from "../ai/configDb";
 import { fileExists } from "../fs/fileio";
-import { isPathWithin } from "../paths";
+import { isWorkspacePath } from "../paths";
 import type { IllustrateProposal, ToolContext } from "./registry";
 import type { ToolResult } from "./tools";
 
@@ -115,17 +115,17 @@ export async function generateImageTool(
 
   const path = args.path?.trim();
   if (!path) {
-    return { toolCallId, content: "Error: give either 'entity' (file it in that entity's gallery) or 'path' (a document under writing/)." };
+    return { toolCallId, content: "Error: give either 'entity' (file it in that entity's gallery) or 'path' (a document in the project)." };
   }
-  // `isPathWithin(base, base)` is true, so the prefix check alone accepts the
-  // writing/ directory itself — and `saveDocumentAsset` would then compute a
-  // group from its name and write the picture to `<proj>/assets/writing/`,
-  // outside writing/ entirely. Require an actual document.
-  if (!isPathWithin(`${ctx.projectPath}/writing`, path) || !/\.md$/i.test(path)) {
-    return { toolCallId, content: "Error: 'path' must be a .md document under the project's writing/ directory." };
+  // `isWorkspacePath(base, base)` is true for the project root itself — and
+  // `saveDocumentAsset` would then compute a group from its name and write the
+  // picture to `<proj>/../assets/…`, outside the project entirely. The `.md`
+  // requirement is what refuses directories, so keep it.
+  if (!isWorkspacePath(ctx.projectPath, path) || !/\.md$/i.test(path)) {
+    return { toolCallId, content: "Error: 'path' must be a .md document inside the project folder." };
   }
   if (!(await fileExists(path))) {
-    return { toolCallId, content: `Error: no document at "${path}". Call list_chapters to see the real paths.` };
+    return { toolCallId, content: `Error: no document at "${path}". Call list_files to see the real paths.` };
   }
   return proposeIllustration(toolCallId, ctx, {
     prompt, note, aspect: args.aspect, reason: args.reason,

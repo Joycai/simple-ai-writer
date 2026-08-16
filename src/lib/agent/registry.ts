@@ -67,8 +67,9 @@ export type ToolAccess = "read" | "write-auto" | "write-approval";
 interface ProposalBase {
   id: string;
   /**
-   * Absolute path the proposal acts on — under writing/ for the manuscript
-   * kinds, the destination folder or file for an illustration.
+   * Absolute path the proposal acts on — a project file for the manuscript
+   * kinds (never inside .ai-writer/), the destination folder or file for an
+   * illustration.
    */
   path: string;
   /** Model's one-line justification, shown on the approval card. */
@@ -415,14 +416,14 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "list_files",
         description:
-          "List the manuscript tree under the project's writing/ directory, recursively — every volume subfolder included. Output is grouped like `ls -R`: an absolute folder path on its own line, then that folder's filenames indented under it. A file's full path, as read_file wants it, is the folder line + \"/\" + the filename. Use this to see what chapters exist; to find where something is written, use search_text instead.",
+          "List the project's document tree, recursively — the whole workspace folder, every subfolder included (the app's own .ai-writer data never appears). Output is grouped like `ls -R`: an absolute folder path on its own line, then that folder's filenames indented under it. A file's full path, as read_file wants it, is the folder line + \"/\" + the filename. Use this to see what files exist; to find where something is written, use search_text instead.",
         parameters: {
           type: "object",
           properties: {
             folder: {
               type: "string",
               description:
-                "Subfolder of writing/ to list (e.g. one volume). Omit to list the whole manuscript.",
+                "Subfolder to list, relative to the project root (e.g. one volume). Omit to list the whole project.",
             },
           },
         },
@@ -441,7 +442,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "read_file",
         description:
-          "Read the text content of a writing file. Up to 4000 characters come back per call, cut on a line boundary; if the file is longer the result ends with the line range shown and the start_line to pass next, so a long chapter can be read in order. To jump straight to a passage search_text found, pass its line number as start_line.",
+          "Read the text content of a project file (anywhere in the workspace except the app's .ai-writer data). Up to 4000 characters come back per call, cut on a line boundary; if the file is longer the result ends with the line range shown and the start_line to pass next, so a long chapter can be read in order. To jump straight to a passage search_text found, pass its line number as start_line.",
         parameters: {
           type: "object",
           properties: {
@@ -473,7 +474,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "search_text",
         description:
-          "Full-text search across the manuscript. Scans every chapter file under writing/ (recursively, including volume subfolders) and returns each hit as file path + line number + a snippet of the surrounding line. This is the way to locate a scene, a name, or a piece of foreshadowing — use it instead of reading chapters one by one with read_file, then read_file only the chapter the hits point at. Matching is literal and case-insensitive; regular expressions are NOT supported. Search a distinctive name or phrase: a common word returns capped, unhelpful results.",
+          "Full-text search across the project's documents. Scans every document file in the workspace (recursively, including subfolders) and returns each hit as file path + line number + a snippet of the surrounding line. This is the way to locate a scene, a name, or a piece of foreshadowing — use it instead of reading chapters one by one with read_file, then read_file only the chapter the hits point at. Matching is literal and case-insensitive; regular expressions are NOT supported. Search a distinctive name or phrase: a common word returns capped, unhelpful results.",
         parameters: {
           type: "object",
           properties: {
@@ -485,7 +486,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             folder: {
               type: "string",
               description:
-                "Subfolder of writing/ to limit the search to (e.g. one volume). Omit to search the whole manuscript.",
+                "Subfolder to limit the search to, relative to the project root (e.g. one volume). Omit to search the whole project.",
             },
           },
           required: ["query"],
@@ -505,13 +506,13 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "read_memory",
         description:
-          "Read the story memory (rolling plot summary) of a writing file: numbered segments, each covering a source character range. Call this before update_memory to learn the segment indices and current summaries.",
+          "Read the story memory (rolling plot summary) of a document: numbered segments, each covering a source character range. Call this before update_memory to learn the segment indices and current summaries.",
         parameters: {
           type: "object",
           properties: {
             path: {
               type: "string",
-              description: "Absolute path of the writing file, as returned by list_files",
+              description: "Absolute path of the document, as returned by list_files",
             },
           },
           required: ["path"],
@@ -783,13 +784,13 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "update_memory",
         description:
-          "Replace the summary text of one story-memory segment of a writing file. Segment ranges are fixed — only the summary wording changes. Call read_memory first to see segment indices and current text. The previous memory file is backed up automatically.",
+          "Replace the summary text of one story-memory segment of a document. Segment ranges are fixed — only the summary wording changes. Call read_memory first to see segment indices and current text. The previous memory file is backed up automatically.",
         parameters: {
           type: "object",
           properties: {
             path: {
               type: "string",
-              description: "Absolute path of the writing file, as returned by list_files",
+              description: "Absolute path of the document, as returned by list_files",
             },
             segment_index: {
               type: "number",
@@ -811,13 +812,13 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "propose_edit",
         description:
-          "Propose a change to a manuscript file under writing/. NOTHING is written until the user approves the proposal on a review card; the call blocks until they decide, and a rejection (with their reason) comes back so you can adjust. 'find' must be the EXACT text currently in the file and must occur exactly once — include enough surrounding text to make it unique. Propose one focused edit per call.",
+          "Propose a change to a document file in the project. NOTHING is written until the user approves the proposal on a review card; the call blocks until they decide, and a rejection (with their reason) comes back so you can adjust. 'find' must be the EXACT text currently in the file and must occur exactly once — include enough surrounding text to make it unique. Propose one focused edit per call.",
         parameters: {
           type: "object",
           properties: {
             path: {
               type: "string",
-              description: "Absolute path of the writing file, as returned by list_files",
+              description: "Absolute path of the document, as returned by list_files",
             },
             find: {
               type: "string",
@@ -843,13 +844,13 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "rewrite_document",
         description:
-          "Replace the ENTIRE contents of a manuscript file under writing/. Use this for whole-document work that propose_edit cannot express — reformatting, normalising punctuation or indentation, restructuring headings — i.e. changes that touch text repeated throughout the file. For a single localised change, use propose_edit instead. You MUST read the whole file first (call read_file repeatedly until it stops reporting more lines): 'content' replaces everything, so anything you did not read is deleted. NOTHING is written until the user approves the card; the call blocks until they decide, and the previous version is backed up on approval.",
+          "Replace the ENTIRE contents of a document file in the project. Use this for whole-document work that propose_edit cannot express — reformatting, normalising punctuation or indentation, restructuring headings — i.e. changes that touch text repeated throughout the file. For a single localised change, use propose_edit instead. You MUST read the whole file first (call read_file repeatedly until it stops reporting more lines): 'content' replaces everything, so anything you did not read is deleted. NOTHING is written until the user approves the card; the call blocks until they decide, and the previous version is backed up on approval.",
         parameters: {
           type: "object",
           properties: {
             path: {
               type: "string",
-              description: "Absolute path of the writing file, as returned by list_files",
+              description: "Absolute path of the document, as returned by list_files",
             },
             content: {
               type: "string",
@@ -874,14 +875,14 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "create_chapter",
         description:
-          "Propose a NEW chapter file under writing/, with its opening text. NOTHING is written until the user approves the card; the call blocks until they decide. Give the full destination path — a subfolder that does not exist yet is created with it, which is how a new volume comes into being. Fails if something is already at that path: use propose_edit to change an existing chapter. A chapter created here lands at the end of its volume's order, which the author can rearrange in the outline view.",
+          "Propose a NEW chapter file anywhere in the project, with its opening text. NOTHING is written until the user approves the card; the call blocks until they decide. Give the full destination path — a subfolder that does not exist yet is created with it, which is how a new volume comes into being. Fails if something is already at that path: use propose_edit to change an existing chapter. A chapter created here lands at the end of its volume's order, which the author can rearrange in the outline view.",
         parameters: {
           type: "object",
           properties: {
             path: {
               type: "string",
               description:
-                "Full path of the new file, e.g. <writing folder>/卷二/第31章.md. A missing extension becomes .md.",
+                "Full path of the new file, e.g. <project folder>/卷二/第31章.md. A missing extension becomes .md.",
             },
             content: {
               type: "string",
@@ -938,7 +939,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "generate_image",
         description:
-          "Draw a NEW picture and file it. Give either `entity` (goes into that lore entity's gallery) or `path` (a document under writing/ — the image is saved beside it and the markdown to place it comes back in the result, which you then position with propose_edit). The author reviews the prompt and its cost on a card before anything is generated, so write the prompt you actually want. Write prompts in concrete visual nouns — appearance, clothing, pose, setting, lighting, framing — never the subject's name, which the image model does not know. Read the entity or the passage first so the picture matches what is written.",
+          "Draw a NEW picture and file it. Give either `entity` (goes into that lore entity's gallery) or `path` (a document in the project — the image is saved beside it and the markdown to place it comes back in the result, which you then position with propose_edit). The author reviews the prompt and its cost on a card before anything is generated, so write the prompt you actually want. Write prompts in concrete visual nouns — appearance, clothing, pose, setting, lighting, framing — never the subject's name, which the image model does not know. Read the entity or the passage first so the picture matches what is written.",
         parameters: {
           type: "object",
           properties: {
@@ -952,7 +953,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             },
             path: {
               type: "string",
-              description: "Full path of a document under writing/, when the picture illustrates the text rather than an entity.",
+              description: "Full path of a .md document in the project, when the picture illustrates the text rather than an entity.",
             },
             note: {
               type: "string",

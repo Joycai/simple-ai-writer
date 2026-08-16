@@ -10,12 +10,14 @@
  * are dropped. So creating/deleting a chapter outside the outline UI never
  * breaks the ordering — new files just land at the end in a sensible spot.
  *
- * A "volume" is a book: top-level chapter files under `writing/` form a default
- * volume, and each sub-folder is its own volume. Continuation memory is resolved
+ * A "volume" is a book: top-level chapter files in the workspace root form a
+ * default volume (relPath `""`), and each folder — at any depth — is its own
+ * volume holding its direct chapter files. Continuation memory is resolved
  * strictly within the active chapter's volume (see ./bookContext).
  */
 
 import { readFile, writeFile, makeDir, fileExists } from "../fs/fileio";
+import { ASSETS_DIR } from "../image/assets";
 import { projectRelativePath } from "./memory";
 import type { FileNode } from "../project";
 
@@ -80,39 +82,55 @@ export function naturalCompare(a: string, b: string): number {
 // ─── Volume grouping ─────────────────────────────────────────────────────────
 
 /**
- * Group manuscript files under `writing/` into volumes. Order here is the raw
- * fileTree order (byte-sorted by the backend); `applySpine` imposes the real
+ * Group the workspace's manuscript files into volumes, recursively from the
+ * project root. Order here is the raw fileTree order (byte-sorted by the
+ * backend), parents before their subfolders; `applySpine` imposes the real
  * order afterward.
+ *
+ * Chapter files directly in the root form a default volume with relPath `""` —
+ * a key no directory can produce, so it never collides with a real volume. A
+ * project whose files still live under a `writing/` folder (the pre-freeform
+ * layout) groups to the same relPaths as before (`"writing"`, `"writing/卷二"`),
+ * which is what keeps an old `outline.json` valid with no migration.
+ *
+ * `assets/` folders are skipped entirely — they hold a document's
+ * illustrations, and every illustrated chapter would otherwise sprout a fake
+ * volume beside itself. `.ai-writer` never appears in the tree (the backend
+ * skips dotfiles).
  */
 export function groupVolumes(fileTree: FileNode[], projectPath: string): Volume[] {
-  const writingNode = fileTree.find((n) => n.is_dir && n.name === "writing");
-  if (!writingNode || !writingNode.children) return [];
-
   const rel = (p: string) => projectRelativePath(projectPath, p) ?? p.replace(/\\/g, "/");
   const toChapter = (c: FileNode): Chapter => ({ name: c.name, path: c.path, relPath: rel(c.path) });
+  const chaptersOf = (nodes: FileNode[]): Chapter[] =>
+    nodes.filter((c) => !c.is_dir && isChapterFile(c.name)).map(toChapter);
 
   const volumes: Volume[] = [];
 
-  // Top-level chapter files → one default volume named after writing/.
-  const topFiles = writingNode.children.filter((c) => !c.is_dir && isChapterFile(c.name));
-  if (topFiles.length > 0) {
-    volumes.push({
-      name: writingNode.name,
-      path: writingNode.path,
-      relPath: rel(writingNode.path),
-      chapters: topFiles.map(toChapter),
-    });
+  // Root-level chapter files → one default volume keyed "" (the project root
+  // is not a directory entry, so projectRelativePath can't name it).
+  const rootFiles = chaptersOf(fileTree);
+  if (rootFiles.length > 0) {
+    const rootName = projectPath.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? "";
+    volumes.push({ name: rootName, path: projectPath, relPath: "", chapters: rootFiles });
   }
 
-  // Each sub-folder → its own volume (empty ones included, so freshly-created
-  // volumes show up as drop targets and can be deleted while empty).
-  for (const child of writingNode.children) {
-    if (!child.is_dir) continue;
-    const chapters = (child.children ?? [])
-      .filter((c) => !c.is_dir && isChapterFile(c.name))
-      .map(toChapter);
-    volumes.push({ name: child.name, path: child.path, relPath: rel(child.path), chapters });
-  }
+  // Every folder, at any depth → its own volume of its direct chapter files
+  // (empty ones included, so freshly-created volumes show up as drop targets
+  // and can be deleted while empty).
+  const walk = (nodes: FileNode[]) => {
+    for (const child of nodes) {
+      if (!child.is_dir || child.name === ASSETS_DIR) continue;
+      const children = child.children ?? [];
+      volumes.push({
+        name: child.name,
+        path: child.path,
+        relPath: rel(child.path),
+        chapters: chaptersOf(children),
+      });
+      walk(children);
+    }
+  };
+  walk(fileTree);
 
   return volumes;
 }

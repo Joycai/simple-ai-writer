@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { relativePathFrom, resolveRelativePath } from "../paths";
+import {
+  isProtectedPath,
+  isWorkspacePath,
+  relativePathFrom,
+  resolveRelativePath,
+} from "../paths";
 
 describe("resolveRelativePath", () => {
   it("joins a simple relative path to the base dir", () => {
@@ -68,5 +73,54 @@ describe("relativePathFrom", () => {
     // Two Windows drives: there is no relative path to write, and a link that
     // works on this machine beats one that works nowhere.
     expect(relativePathFrom("C:/proj/writing", "D:/pics/a.png")).toBe("D:/pics/a.png");
+  });
+});
+
+describe("isProtectedPath", () => {
+  it("covers .ai-writer itself and its subtree", () => {
+    expect(isProtectedPath("/proj", "/proj/.ai-writer")).toBe(true);
+    expect(isProtectedPath("/proj", "/proj/.ai-writer/lore/角色/主角/index.md")).toBe(true);
+  });
+
+  it("does not cover ordinary project files", () => {
+    expect(isProtectedPath("/proj", "/proj/第一章.md")).toBe(false);
+    expect(isProtectedPath("/proj", "/proj/writing/第一章.md")).toBe(false);
+  });
+
+  it("normalizes `..` before deciding", () => {
+    expect(isProtectedPath("/proj", "/proj/writing/../.ai-writer/profile.json")).toBe(true);
+  });
+
+  it("does not mistake a lookalike sibling for the data dir", () => {
+    expect(isProtectedPath("/proj", "/proj/.ai-writer-evil/x.md")).toBe(false);
+  });
+
+  it("fails closed on an empty project path", () => {
+    expect(isProtectedPath("", "/anywhere/at/all")).toBe(true);
+  });
+});
+
+describe("isWorkspacePath", () => {
+  it("accepts files anywhere in the project, at any depth", () => {
+    expect(isWorkspacePath("/proj", "/proj/第一章.md")).toBe(true);
+    expect(isWorkspacePath("/proj", "/proj/素材/摘录/第9层/notes.txt")).toBe(true);
+  });
+
+  it("rejects paths outside the project", () => {
+    expect(isWorkspacePath("/proj", "/etc/passwd")).toBe(false);
+    expect(isWorkspacePath("/proj", "/proj/../other/a.md")).toBe(false);
+    expect(isWorkspacePath("/proj", "/proj-evil/a.md")).toBe(false);
+  });
+
+  it("rejects the app's own .ai-writer data", () => {
+    expect(isWorkspacePath("/proj", "/proj/.ai-writer/profile.json")).toBe(false);
+    expect(isWorkspacePath("/proj", "/proj/.ai-writer")).toBe(false);
+  });
+
+  it("rejects everything when the project path is empty", () => {
+    // The load-bearing guard: an empty base would otherwise prefix-match any
+    // absolute path and turn the tools into a whole-disk read.
+    expect(isWorkspacePath("", "/proj/a.md")).toBe(false);
+    expect(isWorkspacePath("", "")).toBe(false);
   });
 });

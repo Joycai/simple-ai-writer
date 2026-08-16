@@ -690,13 +690,33 @@ describe("propose_edit", () => {
     expect(res.content).toContain("keep the slow pacing");
   });
 
+  it("works on a file anywhere in the project, not just under writing/", async () => {
+    const proposals: object[] = [];
+    const ctx = makeCtx({
+      requestApproval: async (p) => {
+        proposals.push(p);
+        return { approved: true };
+      },
+    });
+    fs.set(`${PROJECT}/大纲.md`, "总纲。待补。");
+
+    const res = await run("propose_edit", {
+      path: `${PROJECT}/大纲.md`, find: "待补。", replace: "已定稿。",
+    }, ctx);
+
+    expect(proposals).toHaveLength(1);
+    expect(res.content).toContain("approved and applied");
+  });
+
   it("validates path containment, find uniqueness, and the approval channel", async () => {
     const ctxOk = makeCtx({ requestApproval: async () => ({ approved: true }) });
 
+    // The .ai-writer refusal is the regression guard for the lore plan gate:
+    // letting propose_edit in here would bypass propose_lore_plan wholesale.
     const outside = await run("propose_edit", {
       path: `${PROJECT}/.ai-writer/lore/characters/ava/index.md`, find: "x", replace: "y",
     }, ctxOk);
-    expect(outside.content).toContain("writing/");
+    expect(outside.content).toContain(".ai-writer");
 
     const missing = await run("propose_edit", { path: DOC, find: "no such text", replace: "y" }, ctxOk);
     expect(missing.content).toContain("not found");
@@ -776,13 +796,13 @@ describe("chapter structure tools", () => {
       expect(res.content).toContain("not a manuscript file");
     });
 
-    it("refuses paths outside writing/ and surfaces a missing approval channel", async () => {
+    it("refuses .ai-writer paths and surfaces a missing approval channel", async () => {
       const outside = await run(
         "create_chapter",
         { path: `${PROJECT}/.ai-writer/lore/x.md`, content: "x" },
         approving(),
       );
-      expect(outside.content).toContain("writing/");
+      expect(outside.content).toContain(".ai-writer");
 
       const noChannel = await run(
         "create_chapter",
@@ -790,6 +810,18 @@ describe("chapter structure tools", () => {
         makeCtx(),
       );
       expect(noChannel.content).toContain("cannot review");
+    });
+
+    it("creates a chapter at the project root — free organisation", async () => {
+      await run(
+        "create_chapter",
+        { path: `${PROJECT}/随笔/杂记`, content: "自由组织。" },
+        approving(),
+      );
+      expect(proposals[0]).toMatchObject({
+        kind: "create",
+        path: `${PROJECT}/随笔/杂记.md`,
+      });
     });
   });
 
@@ -838,7 +870,7 @@ describe("chapter structure tools", () => {
       expect(res.content).toContain("into itself");
     });
 
-    it("refuses a missing source, a same-path move, and a destination outside writing/", async () => {
+    it("refuses a missing source, a same-path move, and a destination in .ai-writer", async () => {
       const missing = await run(
         "move_chapter",
         { path: `${PROJECT}/writing/无.md`, new_path: `${PROJECT}/writing/有.md` },
@@ -854,7 +886,7 @@ describe("chapter structure tools", () => {
         { path: CH1, new_path: `${PROJECT}/.ai-writer/第1章.md` },
         approving(),
       );
-      expect(outside.content).toContain("writing/");
+      expect(outside.content).toContain(".ai-writer");
     });
   });
 

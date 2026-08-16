@@ -292,7 +292,9 @@ pub fn read_dir_recursive(
 }
 
 fn read_dir_inner(path: &Path, depth: u8) -> Result<Vec<FileNode>, String> {
-    if depth > 5 {
+    // Deep enough that freely-organised projects never lose files from the
+    // tree, shallow enough to stop a symlink cycle from recursing forever.
+    if depth > 12 {
         return Ok(vec![]);
     }
 

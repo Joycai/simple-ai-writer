@@ -88,10 +88,15 @@ describe("generate_image", () => {
     expect(seen).toHaveLength(0);
   });
 
-  it("keeps document illustrations inside writing/", async () => {
+  it("keeps document illustrations out of .ai-writer and out of bare directories", async () => {
     const { ctx, seen } = ctxWith();
     const res = await generateImageTool("c1", { prompt: "x", path: "/proj/.ai-writer/secrets.md" }, ctx);
-    expect(res.content).toMatch(/writing\//);
+    expect(res.content).toMatch(/\.md document inside the project/);
+
+    // The project root itself is "within" the project but is not a document —
+    // saveDocumentAsset would write to <proj>/../assets/ from it.
+    const root = await generateImageTool("c1", { prompt: "x", path: "/proj" }, ctx);
+    expect(root.content).toMatch(/\.md document inside the project/);
     expect(seen).toHaveLength(0);
   });
 
