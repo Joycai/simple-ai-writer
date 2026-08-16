@@ -16,6 +16,7 @@ import type { TFunction } from "i18next";
 import { ArrowRight, ChevronDown, ChevronRight } from "lucide-react";
 import { renderMarkdown } from "../../lib/fs/markdown";
 import type {
+  CopyProposal,
   CreateProposal,
   DeleteProposal,
   EditProposal,
@@ -52,9 +53,11 @@ function headerTitle(proposal: Proposal, t: TFunction, terms: ResolvedTerms): st
     case "rewrite":
       return t("ai.approval.titleRewrite", words);
     case "create":
-      return t("ai.approval.titleCreate", words);
+      return proposal.isDir ? t("ai.approval.titleCreateFolder", words) : t("ai.approval.titleCreate", words);
     case "move":
       return proposal.isDir ? t("ai.approval.titleMoveVolume", words) : t("ai.approval.titleMove", words);
+    case "copy":
+      return proposal.isDir ? t("ai.approval.titleCopyFolder", words) : t("ai.approval.titleCopy", words);
     case "delete":
       return t("ai.approval.titleDelete", words);
     case "illustrate":
@@ -75,8 +78,9 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
       // tells the author at a glance that a "reformat" is quietly dropping text.
       return `${proposal.originalChars} → ${proposal.content.length} ${chars}`;
     case "create":
-      return `${proposal.content.length} ${chars}`;
+      return proposal.isDir ? "" : `${proposal.content.length} ${chars}`;
     case "move":
+    case "copy":
       return "";
     case "delete":
       return `${proposal.chars} ${chars}`;
@@ -153,6 +157,9 @@ function CreateBody({ proposal }: { proposal: CreateProposal }) {
   const terms = useTerms();
   const [expanded, setExpanded] = useState(false);
 
+  if (proposal.isDir) {
+    return <div className={styles.emptyNote}>{t("ai.approval.emptyFolder")}</div>;
+  }
   if (!proposal.content.trim()) {
     return <div className={styles.emptyNote}>{t("ai.approval.emptyChapter", { doc: terms.doc })}</div>;
   }
@@ -182,6 +189,27 @@ function MoveBody({ proposal }: { proposal: MoveProposal }) {
       <ArrowRight size={12} className={styles.moveArrow} />
       <span className={styles.movePath}>{to}</span>
     </div>
+  );
+}
+
+/**
+ * Source → destination folder. The copy's decision is only "should this exist
+ * twice" — no content to weigh, so the card stays two lines plus the note
+ * that a name collision auto-numbers rather than overwrites.
+ */
+function CopyBody({ proposal }: { proposal: CopyProposal }) {
+  const { t } = useTranslation();
+  const from = projectRelative(proposal.path);
+  const to = projectRelative(proposal.destDir);
+  return (
+    <>
+      <div className={styles.moveBlock}>
+        <span className={styles.movePath}>{from}</span>
+        <ArrowRight size={12} className={styles.moveArrow} />
+        <span className={styles.movePath}>{to || "/"}</span>
+      </div>
+      <div className={styles.emptyNote}>{t("ai.approval.copyNote")}</div>
+    </>
   );
 }
 
@@ -234,6 +262,8 @@ function ProposalBody({ proposal }: { proposal: Proposal }) {
       return <CreateBody proposal={proposal} />;
     case "move":
       return <MoveBody proposal={proposal} />;
+    case "copy":
+      return <CopyBody proposal={proposal} />;
     case "delete":
       return <DeleteBody proposal={proposal} />;
     case "illustrate":

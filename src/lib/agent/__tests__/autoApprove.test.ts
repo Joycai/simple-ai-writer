@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 
-import { CHAT_AUTO_APPROVE_KEY } from "../autoApprove";
+import { CHAT_AUTO_APPROVE_KEY, isAutoApprovable } from "../autoApprove";
 import type { Proposal } from "../registry";
 
 // Same shims as subagentChips.test: agentStore reaches projectStore lazily, and
@@ -56,6 +56,18 @@ function illustrateProposal(id: string): Proposal {
     note: "knight", modelId: "m1", modelName: "Test Image", costUsd: 0.04,
   };
 }
+
+describe("isAutoApprovable — the kind-level floor", () => {
+  it("covers the text-moving kinds, copy included, and never delete/illustrate", () => {
+    for (const kind of ["edit", "rewrite", "create", "move", "copy"] as const) {
+      expect(isAutoApprovable(kind)).toBe(true);
+    }
+    // Green-to-red here means a prose grant started deleting files or
+    // spending money without a card.
+    expect(isAutoApprovable("delete")).toBe(false);
+    expect(isAutoApprovable("illustrate")).toBe(false);
+  });
+});
 
 describe("本次都批准 grants", () => {
   beforeEach(() => {

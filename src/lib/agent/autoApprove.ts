@@ -59,6 +59,7 @@ const AUTO_APPROVABLE: ReadonlySet<Proposal["kind"]> = new Set([
   "rewrite",
   "create",
   "move",
+  "copy",
 ]);
 
 /** Whether this kind of proposal may skip its card under an active grant. */
