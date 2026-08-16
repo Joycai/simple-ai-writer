@@ -100,7 +100,7 @@
 ```
 
 - **`taskId` 格式**：`YYYYMMDD-HHmmss-<6 位随机>`，严格时间序 + 唯一。
-- **不进 `writing/`**，不出现在文件树，不参与导出；**进 `projectBackup`**（不在 `PROJECT_BACKUP_EXCLUDES` 里，`projectBackup.ts:41`）。
+- **不进文档树**，不出现在文件树，不参与导出；**进 `projectBackup`**（不在 `PROJECT_BACKUP_EXCLUDES` 里，`projectBackup.ts:41`）。
 
 #### 3.1.1 `activeTaskId` 从哪来 —— 懒创建
 
@@ -1174,5 +1174,5 @@ CI 是 PR 门禁（`docs/ci.md`：tsc + vitest + build，Rust fmt/clippy/test）
 - **不替代 `compact`**：会话折叠管「聊过什么」，工作区管「查到什么、做到哪」。
 - **不替代 `PlanGate`**：那是授权，这是记忆。`task.md` 的步骤**不授予任何写权限**。
 - **不做通用多智能体框架**：无子代理间通信、无并行编排、无递归。
-- **工作区不进 `writing/`**，不参与导出。
+- **工作区不进文档树**，不参与导出。
 - **子代理不写正文、不写设定、不生图。**

@@ -76,9 +76,11 @@ pub fn scaffold_project(
         return Err(format!("Invalid lore category name: {bad}"));
     }
 
+    // Only the app's own data tree. The workspace root itself is where the
+    // author's documents live, organised however they like — no scaffolded
+    // writing/ (or the never-read output/) directory dictating a layout.
     let lore_root = root.join(".ai-writer").join("lore");
-    let mut dirs = vec![root.join("writing"), root.join("output")];
-    dirs.extend(categories.iter().map(|c| lore_root.join(c)));
+    let dirs: Vec<_> = categories.iter().map(|c| lore_root.join(c)).collect();
 
     for dir in &dirs {
         fs::create_dir_all(dir).map_err(|e| e.to_string())?;
