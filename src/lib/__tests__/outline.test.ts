@@ -6,6 +6,7 @@ import {
   groupVolumes,
   applySpine,
   spineFromVolumes,
+  renameVolumeInSpine,
   findChapterContext,
   chapterTitle,
   parentDir,
@@ -229,6 +230,23 @@ describe("applySpine", () => {
     const out = applySpine(vols, spine);
     expect(out[0].chapters.map((c) => c.name)).toEqual(["ch2.md", "ch1.md", "ch10.md"]);
   });
+
+  it("orders the volume list by spine.volumes with overlay semantics", () => {
+    const sub = (n: string): FileNode => ({
+      name: n, path: `${PROJ}/writing/${n}`, is_dir: true,
+      children: [{ name: "a.md", path: `${PROJ}/writing/${n}/a.md`, is_dir: false }],
+    });
+    const grouped = groupVolumes(tree(["1.md"], [sub("v1"), sub("v2"), sub("v3")]), PROJ);
+    const spine: BookSpine = {
+      version: 1,
+      order: {},
+      // v2 first, gone volume dropped, unlisted (writing, v1, v3) appended in
+      // traversal order.
+      volumes: ["writing/v2", "writing/gone"],
+    };
+    const out = applySpine(grouped, spine);
+    expect(out.map((v) => v.relPath)).toEqual(["writing/v2", "writing", "writing/v1", "writing/v3"]);
+  });
 });
 
 describe("spineFromVolumes", () => {
@@ -236,6 +254,7 @@ describe("spineFromVolumes", () => {
     const vols = applySpine(groupVolumes(tree(["a.md", "b.md"]), PROJ), null);
     const spine = spineFromVolumes(vols);
     expect(spine.order.writing).toEqual(["writing/a.md", "writing/b.md"]);
+    expect(spine.volumes).toEqual(["writing"]);
     expect(spine.status).toBeUndefined();
   });
 
@@ -250,6 +269,42 @@ describe("spineFromVolumes", () => {
     expect(spine.status).toEqual({ "writing/a.md": "writing" });
     // Must be a copy, not the same reference.
     expect(spine.status).not.toBe(prev.status);
+  });
+});
+
+describe("renameVolumeInSpine", () => {
+  const spine: BookSpine = {
+    version: 1,
+    order: {
+      "写作": ["写作/序.md"],
+      "写作/第一部": ["写作/第一部/1.md", "写作/第一部/2.md"],
+      "写作/第一部分册": ["写作/第一部分册/x.md"],
+    },
+    status: { "写作/第一部/1.md": "writing" },
+    volumes: ["写作/第一部", "写作", "写作/第一部分册"],
+  };
+
+  it("rewrites the volume key, its chapters, status and volume order", () => {
+    const out = renameVolumeInSpine(spine, "写作/第一部", "写作/首部");
+    expect(out.order["写作/首部"]).toEqual(["写作/首部/1.md", "写作/首部/2.md"]);
+    expect(out.order["写作/第一部"]).toBeUndefined();
+    expect(out.status).toEqual({ "写作/首部/1.md": "writing" });
+    expect(out.volumes).toEqual(["写作/首部", "写作", "写作/第一部分册"]);
+  });
+
+  it("rewrites nested volumes under a renamed parent, but not lookalike prefixes", () => {
+    const out = renameVolumeInSpine(spine, "写作", "手稿");
+    expect(Object.keys(out.order).sort()).toEqual(["手稿", "手稿/第一部", "手稿/第一部分册"].sort());
+    expect(out.order["手稿/第一部"]).toEqual(["手稿/第一部/1.md", "手稿/第一部/2.md"]);
+    // "写作/第一部分册" starts with "写作/第一部" as a *string* but is a sibling
+    // volume — prefix rewriting must be path-segment aware.
+    const sib = renameVolumeInSpine(spine, "写作/第一部", "写作/首部");
+    expect(sib.order["写作/第一部分册"]).toEqual(["写作/第一部分册/x.md"]);
+  });
+
+  it("returns the spine untouched for the root or a no-op rename", () => {
+    expect(renameVolumeInSpine(spine, "", "x")).toBe(spine);
+    expect(renameVolumeInSpine(spine, "写作", "写作")).toBe(spine);
   });
 });
 
