@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 import {
-  FolderTree, ListTree, Search, LayoutGrid, GitBranch, Settings,
+  FolderTree, ListTree, Search, LayoutGrid, Library, Settings,
 } from "lucide-react";
 import { useAppStore, type SideTab, type MainView } from "../../stores/appStore";
 import { useDocModel, useMainView, useTerms } from "../../stores/projectStore";
@@ -34,20 +34,20 @@ const SIDE_ITEMS: SideItem[] = [
 
 const VIEW_ITEMS: ViewItem[] = [
   { kind: "view", id: "lore-wall", icon: <LayoutGrid size={17} strokeWidth={1.5} />, labelKey: "sidebar.lore" },
-  { kind: "view", id: "outline-full", icon: <GitBranch size={17} strokeWidth={1.5} />, labelKey: "sidebar.outlineFull" },
+  { kind: "view", id: "library", icon: <Library size={17} strokeWidth={1.5} />, labelKey: "sidebar.library" },
 ];
 
 /**
- * The full outline view arranges the book spine (volumes and chapter order), so
- * it only means anything where the documents *have* an order — see
+ * The library view arranges the book spine (volumes and chapter order), so it
+ * only means anything where the documents *have* an order — see
  * DocModel.ordered.
  *
- * The `outline` side tab is deliberately NOT gated: despite the shared name it
- * lists the headings inside the current document, which a standalone piece of
- * copy has just as much as a chapter does.
+ * The `outline` side tab is NOT gated: it lists the headings inside the
+ * current document, which a standalone piece of copy has just as much as a
+ * chapter does.
  */
 function visibleViewItems(ordered: boolean): ViewItem[] {
-  return ordered ? VIEW_ITEMS : VIEW_ITEMS.filter((it) => it.id !== "outline-full");
+  return ordered ? VIEW_ITEMS : VIEW_ITEMS.filter((it) => it.id !== "library");
 }
 
 export function IconRail({ onOpenSettings }: Props) {
@@ -71,7 +71,7 @@ export function IconRail({ onOpenSettings }: Props) {
       setShowCommandPalette(true);
       return;
     }
-    // Returning from a non-editor main view (lore wall, full outline) should
+    // Returning from a non-editor main view (lore wall, library) should
     // just bring the editor back with whatever sidebar state was left behind
     // — not fold it into the toggle below, which would collapse a panel the
     // user never asked to close.

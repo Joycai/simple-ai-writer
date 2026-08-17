@@ -10,7 +10,7 @@
  * The history is **recorded by observation, not by interception**: the store
  * subscribes to the three stores that own those fields and notices when the
  * location changed. Every existing navigation path — the file tree, the
- * command palette, outline rows, citation clicks, "open in editor" buttons —
+ * command palette, library rows, citation clicks, "open in editor" buttons —
  * therefore lands in the history without a single call site knowing this file
  * exists, and one added later can't forget to register itself.
  *
@@ -26,7 +26,7 @@ import { useLoreStore } from "./loreStore";
 export type NavLocation =
   | { kind: "editor"; filePath: string | null }
   | { kind: "lore"; entityDir: string | null }
-  | { kind: "outline" };
+  | { kind: "library" };
 
 /** Deep enough to cover a session's wandering, bounded so it can't grow forever. */
 const MAX_HISTORY = 100;
@@ -45,7 +45,7 @@ function readLocation(): NavLocation {
   // records what the author did, and the fallback re-applies itself on render.
   const view = useAppStore.getState().mainView;
   if (view === "lore-wall") return { kind: "lore", entityDir: useLoreStore.getState().detailPath };
-  if (view === "outline-full") return { kind: "outline" };
+  if (view === "library") return { kind: "library" };
   return { kind: "editor", filePath: useProjectStore.getState().activeFilePath };
 }
 
@@ -71,7 +71,7 @@ function applyLocation(loc: NavLocation): void {
       // An entry deleted since it was visited simply resolves to the grid.
       useLoreStore.getState().openDetail(loc.entityDir);
     } else {
-      setMainView("outline-full");
+      setMainView("library");
     }
   } finally {
     applying = false;

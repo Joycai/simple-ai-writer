@@ -74,6 +74,30 @@ describe("groupVolumes", () => {
     expect(vols[0].relPath).toBe("writing");
     expect(vols[0].chapters.map((c) => c.name)).toEqual(["1.txt", "2.md"]);
     expect(vols[0].chapters[0].relPath).toBe("writing/1.txt");
+    // Non-chapter files surface as the volume's resources, not chapters.
+    expect(vols[0].resources.map((r) => r.name)).toEqual(["cover.png"]);
+    expect(vols[0].resources[0].relPath).toBe("writing/cover.png");
+  });
+
+  it("natural-sorts resources and keeps them out of the spine's chapter set", () => {
+    const vols = groupVolumes(tree(["ch1.md", "img10.png", "img2.png", "notes.pdf"]), PROJ);
+    expect(vols[0].chapters.map((c) => c.name)).toEqual(["ch1.md"]);
+    expect(vols[0].resources.map((r) => r.name)).toEqual(["img2.png", "img10.png", "notes.pdf"]);
+  });
+
+  it("shows a folder holding only resources as a volume (root included)", () => {
+    const roots: FileNode[] = [
+      { name: "ref.png", path: `${PROJ}/ref.png`, is_dir: false },
+      {
+        name: "素材", path: `${PROJ}/素材`, is_dir: true,
+        children: [{ name: "map.jpg", path: `${PROJ}/素材/map.jpg`, is_dir: false }],
+      },
+    ];
+    const vols = groupVolumes(roots, PROJ);
+    expect(vols.map((v) => v.relPath)).toEqual(["", "素材"]);
+    expect(vols[0].chapters).toEqual([]);
+    expect(vols[0].resources.map((r) => r.name)).toEqual(["ref.png"]);
+    expect(vols[1].resources.map((r) => r.relPath)).toEqual(["素材/map.jpg"]);
   });
 
   it("makes each sub-folder its own volume", () => {

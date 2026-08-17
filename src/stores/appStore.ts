@@ -126,7 +126,7 @@ function prefBackedState() {
   };
 }
 
-export type MainView = "editor" | "lore-wall" | "outline-full";
+export type MainView = "editor" | "lore-wall" | "library";
 export type AiDrawerMode = "generate" | "chat" | "consistency";
 /** Every pane the settings page renders — `openSettings(tab)` can reach all of
  *  them, so this union and SettingsPage's nav must stay in step. */
