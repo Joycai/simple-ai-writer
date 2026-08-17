@@ -476,7 +476,11 @@ The workspace is the **whole project directory** — documents live wherever the
 ### Capabilities & Permissions
 - `src-tauri/capabilities/default.json` — Explicit permissions for all Tauri plugins
 - Must include: `sql:*`, `dialog:*`, and read-only `fs` permissions (key storage uses custom `secret_*` commands, no plugin permission needed)
-- The fs plugin is granted **read-only** (`read-file`, `read-dir`) — all writes/deletes go through the audited custom `fs_*` Rust commands. The fs scope stays broad (`/**`) because projects can live anywhere on disk.
+- The fs plugin is granted **read-only** (`read-file`, `read-dir`) — all writes/deletes go through the audited custom `fs_*` Rust commands.
+- **Two path scopes exist, and they do not agree.** Projects can live anywhere on disk, so neither can be a static allowlist:
+  - `src-tauri/src/scope.rs` (`FsScope`) guards every custom `fs_*` command. Roots are registered only from trusted sources (the Rust-side folder picker, or a recents entry with an on-disk `.ai-writer` marker). Containment is component-wise with `..` and symlinks resolved — no special case for dot-directories.
+  - `tauri-plugin-fs`'s own scope guards the handful of **binary image reads** the frontend does directly (`src/lib/fs/images.ts`, `LoreDetail`/`LoreWall`, `lib/import`). `allow_for_plugin_fs` extends it to a registered root; dialog-picked files are auto-scoped by the dialog plugin for that session.
+- **The plugin's scope is glob-based, and on unix a wildcard will not match a leading dot.** Its runtime scope is built from `FsScope::default()`, which means `require_literal_leading_dot: true` — so `<root>/**` covers `<root>/writing/…` but *not* `<root>/.ai-writer/…`, and the `requireLiteralLeadingDot` config knob cannot reach it (that value only feeds the per-call scope built from static capability entries). Since every generated picture lives under `.ai-writer/`, `allow_for_plugin_fs` grants `<root>/.ai-writer` a second time with the dot spelled out. Symptom when this is missing: `forbidden path: …` on image reads while documents load fine — see `docs/image-generation-plan.md` §8. Adding another dot-directory the frontend must read means adding another grant; the durable fix is routing project-internal binary reads through the custom `fs_*` commands too.
 
 ### Window chrome（自定义标题栏，方案 B 混合）
 

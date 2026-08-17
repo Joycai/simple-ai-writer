@@ -16,6 +16,11 @@
 //! dialog plugin for that session; `allow_for_plugin_fs` below additionally
 //! extends the plugin's scope to a registered project root, so images already
 //! imported into the project keep loading after it's reopened.
+//!
+//! That second scope is glob-based and does **not** share this one's
+//! semantics — most notably it will not let a wildcard match `.ai-writer`, so
+//! granting a root is not enough to read anything inside it. See
+//! `allow_for_plugin_fs`.
 
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
@@ -47,10 +52,24 @@ impl FsScope {
     /// this scope. Best-effort: a failure here would only affect the plugin's
     /// `readFile` (image previews), never the custom `fs_*` commands this
     /// scope actually guards.
-    pub fn allow_for_plugin_fs(&self, app: &tauri::AppHandle, root: &Path) {
+    pub fn allow_for_plugin_fs<R: tauri::Runtime>(&self, app: &tauri::AppHandle<R>, root: &Path) {
         self.allow(root);
         use tauri_plugin_fs::FsExt;
-        let _ = app.fs_scope().allow_directory(root, true);
+        let scope = app.fs_scope();
+        let _ = scope.allow_directory(root, true);
+        // `<root>/**` does not cover `<root>/.ai-writer/…`, and that is not a
+        // typo: the plugin's *runtime* scope is built from `FsScope::default()`,
+        // which on unix means glob matching with `require_literal_leading_dot:
+        // true` — a `*` or `**` refuses to match a path component that starts
+        // with a dot, so the pattern has to spell `.ai-writer` out. (The
+        // `requireLiteralLeadingDot` knob in `tauri.conf.json` cannot help: it
+        // only reaches the per-call scope built from static capability entries,
+        // never this one.) Everything the frontend reads through
+        // `tauri-plugin-fs` lives under that dot-directory — lore galleries and
+        // avatars, and the image session's scratch candidates — so without this
+        // second grant every one of those reads fails with "forbidden path"
+        // while ordinary documents load fine.
+        let _ = scope.allow_directory(root.join(".ai-writer"), true);
     }
 
     /// True when `path` is absolute and inside one of the allowed roots.
@@ -264,7 +283,6 @@ mod tests {
     /// Unique scratch dir under the OS temp dir, for the symlink tests below
     /// (which need real filesystem entries — `canonicalize` requires it).
     /// Mirrors `transfer::tests::scratch`.
-    #[cfg(unix)]
     fn scratch(tag: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("saw-scope-test-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -294,6 +312,42 @@ mod tests {
 
         assert!(s.is_allowed(&root.join("writing/normal.md")));
         assert!(!s.is_allowed(&root.join("writing/escape/secret.md")));
+    }
+
+    /// The other scope: `tauri-plugin-fs`'s, which guards the frontend's direct
+    /// binary image reads and matches with globs rather than components. On
+    /// unix its runtime scope uses `require_literal_leading_dot: true`, so
+    /// granting a project root does **not** reach anything under
+    /// `<root>/.ai-writer/` — every generated picture the app renders. That
+    /// asymmetry is invisible in our own code, so assert it against the real
+    /// plugin rather than trusting the comment in `allow_for_plugin_fs`.
+    #[test]
+    fn plugin_fs_scope_reaches_into_the_dot_ai_writer_directory() {
+        let app = tauri::test::mock_builder()
+            .plugin(tauri_plugin_fs::init())
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .expect("mock app");
+
+        let root = scratch("plugin-fs-scope");
+        std::fs::create_dir_all(root.join(".ai-writer/tmp/imagegen/sess")).unwrap();
+        std::fs::create_dir_all(root.join("writing")).unwrap();
+        let picture = root.join(".ai-writer/tmp/imagegen/sess/cand-0.png");
+        let document = root.join("writing/ch1.md");
+        for f in [&picture, &document] {
+            std::fs::write(f, b"x").unwrap();
+        }
+
+        let scope = FsScope::new();
+        scope.allow_for_plugin_fs(app.handle(), &root);
+
+        use tauri_plugin_fs::FsExt;
+        let plugin = app.fs_scope();
+        // The plain document is what `allow_directory(root, true)` already
+        // covered; the picture is what needs the second, dot-literal grant.
+        assert!(plugin.is_allowed(&document));
+        assert!(plugin.is_allowed(&picture));
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[cfg(unix)]
