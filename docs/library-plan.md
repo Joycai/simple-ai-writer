@@ -52,10 +52,6 @@
 4. **跨卷拖拽**：拖到任意章节卡即插入该位置（同卷=排序，跨卷=文件移动 + 记忆 + spine 位置 + 在写状态），拖到列空白处追加到末尾；拖拽状态在 dragstart 捕获（路径/relPath），不依赖拖动中可能刷新的 volumes 索引。
 5. 顺带把多选移动从裸 `renamePath` 换成 `moveEntry` —— 从此批量移动也会带走文档的 `assets/` 插图并正确处理打开中的文件。
 
-### 之后（按需，不承诺）
-
-- `appStore.activeRightTab: "outline" | "ai"` 是无消费者的死状态，随右栏改版一并清理。
-
 ## 4. 不变式
 
 - spine 仍是 overlay：文件系统是存在性唯一真相，`outline.json` 只记顺序。

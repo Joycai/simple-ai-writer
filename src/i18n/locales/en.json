@@ -181,10 +181,6 @@
     "tipSaveLabel": "{{mod}} S",
     "tipSave": "Auto-saves to your local folder"
   },
-  "rightPanel": {
-    "outline": "Outline",
-    "ai": "AI Assistant"
-  },
   "statusBar": {
     "noProject": "No project open",
     "words": "Words",

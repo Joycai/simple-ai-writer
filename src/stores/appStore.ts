@@ -164,7 +164,6 @@ interface AppState {
    */
   draftCount: number;
   activeSideTab: SideTab;
-  activeRightTab: "outline" | "ai";
 
   // Manuscript additions
   mainView: MainView;
@@ -205,7 +204,6 @@ interface AppState {
   removeRecentProject: (path: string) => void;
   clearRecentProjects: () => void;
   setActiveSideTab: (tab: SideTab) => void;
-  setActiveRightTab: (tab: AppState["activeRightTab"]) => void;
 
   /**
    * Re-read every preference-backed field and re-apply the ones that paint
@@ -275,7 +273,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   sidebarCollapsed: false,
   rightPanelCollapsed: false,
   activeSideTab: "files",
-  activeRightTab: "outline",
 
   mainView: "editor",
   showCommandPalette: false,
@@ -405,7 +402,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setActiveSideTab: (tab) => set({ activeSideTab: tab }),
-  setActiveRightTab: (tab) => set({ activeRightTab: tab }),
 
   setMainView: (v) => set({ mainView: v }),
   setShowCommandPalette: (v) => set({ showCommandPalette: v }),
