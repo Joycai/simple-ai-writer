@@ -39,6 +39,7 @@ import i18n from "../../i18n";
 /* Shell + fields both live in this component's own module now — the lore
    modals keep LoreImproveModal.module.css to themselves. The two import names
    survive so the many existing className references stay untouched. */
+import { Select } from "../common/Select";
 import styles from "./ImageGenModal.module.css";
 import gen from "./ImageGenModal.module.css";
 
@@ -316,25 +317,25 @@ export function ImageGenModal({ target, onClose }: Props) {
           <div className={gen.modelPickers}>
             <label className={gen.modelPicker}>
               <span className={gen.modelPickerLabel}>{t("lore.imageGen.promptModelLabel")}</span>
-              <select
+              <Select
                 className={styles.modelSelect}
                 value={promptModelId}
-                onChange={(e) => setPromptModelId(e.target.value)}
+                onChange={(v) => setPromptModelId(v)}
                 disabled={busy || textModels.length === 0}
-              >
-                {textModels.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
+                options={textModels.map((m) => ({ value: m.id, label: m.name }))}
+                ariaLabel={t("lore.imageGen.promptModelLabel")}
+              />
             </label>
             <label className={gen.modelPicker}>
               <span className={gen.modelPickerLabel}>{t("lore.imageGen.modelLabel")}</span>
-              <select
+              <Select
                 className={styles.modelSelect}
                 value={effectiveImageModelId}
-                onChange={(e) => setImageModel(e.target.value)}
+                onChange={(v) => setImageModel(v)}
                 disabled={busy || imageModels.length === 0}
-              >
-                {imageModels.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
+                options={imageModels.map((m) => ({ value: m.id, label: m.name }))}
+                ariaLabel={t("lore.imageGen.modelLabel")}
+              />
             </label>
           </div>
           <button className={styles.closeBtn} onClick={handleClose}><X size={16} /></button>
@@ -399,19 +400,20 @@ export function ImageGenModal({ target, onClose }: Props) {
               <div className={gen.fieldRow}>
                 <div className={gen.fieldNarrow}>
                   <label className={styles.label}>{t("lore.imageGen.aspectLabel")}</label>
-                  <select className={gen.input} value={aspect} disabled={busy}
-                    onChange={(e) => setAspect(e.target.value as ImageAspect)}>
-                    {IMAGE_ASPECTS.map((a) => <option key={a} value={a}>{a}</option>)}
-                  </select>
+                  <Select className={gen.selectInput} value={aspect} disabled={busy}
+                    onChange={(v) => setAspect(v as ImageAspect)}
+                    options={IMAGE_ASPECTS.map((a) => ({ value: a, label: a }))}
+                    ariaLabel={t("lore.imageGen.aspectLabel")} />
                 </div>
                 <div className={gen.fieldNarrow}>
                   <label className={styles.label}>{t("lore.imageGen.countLabel")}</label>
-                  <select className={gen.input} value={effectiveCount} disabled={busy || chatRoute}
-                    onChange={(e) => setCount(parseInt(e.target.value, 10))}>
-                    {Array.from({ length: MAX_COUNT }, (_, i) => i + 1).map((n) => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
+                  <Select className={gen.selectInput} value={String(effectiveCount)} disabled={busy || chatRoute}
+                    onChange={(v) => setCount(parseInt(v, 10))}
+                    options={Array.from({ length: MAX_COUNT }, (_, i) => ({
+                      value: String(i + 1),
+                      label: String(i + 1),
+                    }))}
+                    ariaLabel={t("lore.imageGen.countLabel")} />
                 </div>
                 <div className={gen.field}>
                   <label className={styles.label}>{t("lore.imageGen.sizeLabel")}</label>

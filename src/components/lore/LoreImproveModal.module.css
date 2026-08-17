@@ -88,18 +88,22 @@
   margin-top: 3px;
 }
 
-.modelSelect {
+/* Doubled: re-skins the shared Select trigger (see common/Select) — 0-2-0
+   outranks its base class without depending on bundle order. */
+.modelSelect.modelSelect {
   padding: 5px 8px;
   background: var(--color-card);
   border: 1px solid var(--color-border);
   color: var(--color-text-secondary);
   font: 400 11px/1.4 var(--font-sans);
-  outline: none;
-  cursor: pointer;
   max-width: 200px;
-  transition: border-color var(--transition-fast);
 }
-.modelSelect:focus { border-color: var(--color-sienna); }
+
+/* The improve target picker fills its rail instead of hugging the header. */
+.targetSelect.targetSelect {
+  max-width: none;
+  width: 100%;
+}
 
 .closeBtn {
   width: 26px;

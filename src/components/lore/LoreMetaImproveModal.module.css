@@ -25,6 +25,17 @@
 }
 .gInput:focus { border-color: var(--color-accent); }
 
+/* gInput's skin for the shared Select trigger — doubled to outrank the base
+   class deterministically (see common/Select). */
+.gSelect.gSelect {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border);
+  font: 400 13px/1.4 var(--font-serif);
+  color: var(--color-text-primary);
+}
+
 .gTextarea {
   resize: vertical;
   min-height: 48px;

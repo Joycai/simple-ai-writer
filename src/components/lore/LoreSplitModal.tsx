@@ -27,6 +27,7 @@ import { loadApiKey } from "../../lib/keyStore";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { ModalShell } from "../common/ModalShell";
 import { useImeGuard } from "../../lib/ime";
+import { Select } from "../common/Select";
 import styles from "./LoreSplitModal.module.css";
 
 interface Props {
@@ -253,18 +254,20 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
               {t("lore.split.reason", { defaultValue: "条目过长会稀释检索命中 · 建议拆分" })}
             </span>
           </div>
-          <select
+          <Select
             className={styles.modelSelect}
             value={activeModelId ?? ""}
-            onChange={(e) => setActiveModel(e.target.value)}
+            onChange={(v) => setActiveModel(v)}
             disabled={phase === "generating"}
-          >
-            <option value="">{t("lore.generator.selectModel")}</option>
-            {models.map((m) => {
-              const pname = providers.find((p) => p.id === m.providerId)?.name ?? "";
-              return <option key={m.id} value={m.id}>{pname} / {m.name}</option>;
-            })}
-          </select>
+            options={[
+              { value: "", label: t("lore.generator.selectModel") },
+              ...models.map((m) => ({
+                value: m.id,
+                label: `${providers.find((p) => p.id === m.providerId)?.name ?? ""} / ${m.name}`,
+              })),
+            ]}
+            ariaLabel={t("lore.generator.selectModel")}
+          />
           <button className={styles.closeBtn} onClick={onClose} disabled={phase === "generating"}>
             <X size={16} />
           </button>

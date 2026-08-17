@@ -46,7 +46,9 @@
   color: var(--color-text-muted);
   text-transform: uppercase;
 }
-.modelSelect {
+/* Doubled: re-skins the shared Select trigger (see common/Select) — 0-2-0
+   outranks its base class without depending on bundle order. */
+.modelSelect.modelSelect {
   font: 400 12px/1 var(--font-sans);
   padding: 4px 6px;
   background: var(--color-card);
@@ -91,7 +93,7 @@
   font: 500 12px/1 var(--font-sans);
   color: var(--color-sienna);
 }
-.moveSelect {
+.moveSelect.moveSelect {
   font: 400 12px/1 var(--font-sans);
   padding: 5px 8px;
   background: var(--color-card);

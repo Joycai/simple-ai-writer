@@ -17,6 +17,7 @@ import { NewEntryTabs, type NewEntryMode } from "./ai/NewEntryTabs";
 import { writeBinaryFile } from "../../lib/fs/fileio";
 import { loadApiKey } from "../../lib/keyStore";
 import { useImeGuard } from "../../lib/ime";
+import { Select } from "../common/Select";
 import styles from "./LoreGenerator.module.css";
 
 interface Props {
@@ -226,23 +227,22 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
           <div className={styles.side}>
             <div>
               <div className={styles.sectionLabel}>{isZh ? "category · 分类" : "category"}</div>
-              <select className={styles.select} value={category}
-                onChange={(e) => setCategory(e.target.value as CategoryId)}>
-                {loreCategories().map((c) => (
-                  <option key={c.id} value={c.id}>{categoryLabel(c, isZh)}</option>
-                ))}
-              </select>
+              <Select className={styles.select} value={category}
+                onChange={(v) => setCategory(v as CategoryId)}
+                options={loreCategories().map((c) => ({ value: c.id, label: categoryLabel(c, isZh) }))} />
             </div>
             <div>
               <div className={styles.sectionLabel}>{isZh ? "model · 模型" : "model"}</div>
-              <select className={styles.select} value={activeModelId ?? ""}
-                onChange={(e) => setActiveModel(e.target.value)}>
-                <option value="">{t("lore.generator.selectModel")}</option>
-                {multimodalModels.map((m) => {
-                  const pname = providers.find((p) => p.id === m.providerId)?.name ?? "";
-                  return <option key={m.id} value={m.id}>{pname} / {m.name}</option>;
-                })}
-              </select>
+              <Select className={styles.select} value={activeModelId ?? ""}
+                onChange={(v) => setActiveModel(v)}
+                options={[
+                  { value: "", label: t("lore.generator.selectModel") },
+                  ...multimodalModels.map((m) => ({
+                    value: m.id,
+                    label: `${providers.find((p) => p.id === m.providerId)?.name ?? ""} / ${m.name}`,
+                  })),
+                ]}
+                ariaLabel={t("lore.generator.selectModel")} />
             </div>
             <span className={styles.spacer} />
             <div className={styles.hintCard}>
@@ -320,12 +320,9 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
                   </div>
                   <div className={styles.fieldGroup}>
                     <label className={styles.label}>{t("lore.generator.categoryLabel2")}</label>
-                    <select className={styles.select} value={editCat}
-                      onChange={(e) => setEditCat(e.target.value as CategoryId)}>
-                      {loreCategories().map((c) => (
-                        <option key={c.id} value={c.id}>{categoryLabel(c, isZh)}</option>
-                      ))}
-                    </select>
+                    <Select className={styles.select} value={editCat}
+                      onChange={(v) => setEditCat(v as CategoryId)}
+                      options={loreCategories().map((c) => ({ value: c.id, label: categoryLabel(c, isZh) }))} />
                   </div>
                 </div>
 

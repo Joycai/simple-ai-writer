@@ -307,7 +307,9 @@
 .budgetInput::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .budgetInput { -moz-appearance: textfield; appearance: textfield; }
 
-.select {
+/* Doubled: re-skins the shared Select trigger (see common/Select) — 0-2-0
+   outranks its base class without depending on bundle order. */
+.select.select {
   flex: 1;
   min-width: 0;
   padding: 5px 8px;
@@ -315,10 +317,7 @@
   border: 1px solid var(--color-border-panel);
   color: var(--color-text-primary);
   font: 400 11px/1.6 var(--font-sans);
-  outline: none;
-  transition: border-color var(--transition-fast);
 }
-.select:focus { border-color: var(--color-sienna); }
 
 /* ── Context allocation bar ──────────────────────────────────────── */
 /* Inset trough with a 2px air gap — the segments read as ink strokes, not a

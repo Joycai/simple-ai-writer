@@ -32,7 +32,7 @@
   font-family: inherit;
 }
 
-.input, .select {
+.input {
   padding: var(--space-2) var(--space-3);
   background: var(--stg-bg-input);
   border: 1px solid var(--color-border);
@@ -44,9 +44,13 @@
   transition: border-color var(--transition-fast);
   width: 100%;
 }
-.input:focus, .select:focus { border-color: var(--color-accent); }
+.input:focus { border-color: var(--color-accent); }
 
-.select option { background: var(--color-bg-elevated); }
+/* Sizes the themed Select (common/Select) sitting in a settings Row — the row
+   action slot is content-sized, and the trigger has no intrinsic width. */
+.rowSelect {
+  width: 236px;
+}
 
 /* ─── Buttons ─────────────────────────────────────────────────────────────── */
 

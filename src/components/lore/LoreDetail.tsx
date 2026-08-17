@@ -39,6 +39,7 @@ import { EntityAiHubModal } from "./ai/EntityAiHubModal";
 import { LoreImageGenModal } from "./ai/LoreImageGenModal";
 import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
 import { categoryColor } from "./catColor";
+import { Select } from "../common/Select";
 import styles from "./LoreDetail.module.css";
 
 interface Props {
@@ -644,15 +645,12 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
               <label className={styles.eLabel}>
                 {t("lore.detail.fieldCategory", { defaultValue: isZh ? "分类" : "Category" })}
               </label>
-              <select
-                className={styles.eInput}
+              <Select
+                className={styles.eSelect}
                 value={dCategory}
-                onChange={(e) => setDCategory(e.target.value as CategoryId)}
-              >
-                {loreCategories().map((c) => (
-                  <option key={c.id} value={c.id}>{categoryLabel(c, isZh)}</option>
-                ))}
-              </select>
+                onChange={(v) => setDCategory(v as CategoryId)}
+                options={loreCategories().map((c) => ({ value: c.id, label: categoryLabel(c, isZh) }))}
+              />
 
               <label className={styles.eLabel}>
                 {t("lore.detail.fieldAliases", { defaultValue: isZh ? "别名" : "Aliases" })}

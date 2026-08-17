@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import { useAiStore } from "../../../stores/aiStore";
 import type { Prompt } from "../../../lib/ai/configDb";
+import { Select } from "../../common/Select";
 import styles from "../settingsCommon.module.css";
 import ui from "../settingsUi.module.css";
 import hub from "./ProvidersModels.module.css";
@@ -83,17 +84,15 @@ export function PromptDrawer({ draft, onClose }: Props) {
 
         <div className={styles.fieldGroup}>
           <label className={styles.label}>{t("aiConfig.prompts.sceneLabel")}</label>
-          <select
-            className={styles.select}
+          <Select
             value={form.scene}
-            onChange={(e) => setForm({ ...form, scene: e.target.value })}
-          >
-            {SCENES.map((s) => (
-              <option key={s} value={s}>
-                {s === SNIPPET_SCENE ? `${t("aiConfig.prompts.sceneSnippet")} (${s})` : `${t(`ai.tasks.${s}`)} (${s})`}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => setForm({ ...form, scene: v })}
+            options={SCENES.map((s) => ({
+              value: s,
+              label: s === SNIPPET_SCENE ? `${t("aiConfig.prompts.sceneSnippet")} (${s})` : `${t(`ai.tasks.${s}`)} (${s})`,
+            }))}
+            ariaLabel={t("aiConfig.prompts.sceneLabel")}
+          />
           <div className={ui.rowDesc}>
             {form.scene === SNIPPET_SCENE
               ? t("aiConfig.prompts.sceneSnippetHint")

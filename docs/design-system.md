@@ -73,6 +73,7 @@ Rules of the road:
 - **Chrome surfaces** (sidebar, right panel, tab bar, status bar): `--glass-bg-strong` + `backdrop-filter: var(--glass-blur)` (always pair with `-webkit-backdrop-filter`).
 - **Modals**: overlay `animation: fadeIn 200ms var(--ease-out)` + `backdrop-filter: blur(8px)`; panel `scaleIn 240ms`, `--radius-xl`, `--shadow-xl`.
 - **Popovers / menus / dropdowns**: `slideUp 160ms var(--ease-out)` + `--shadow-lg`.
+- **Select (下拉选择)**: use `components/common/Select`, never a native `<select>` — the browser's option popup can't be themed, so it renders OS furniture regardless of tokens. The trigger reads as a text input (`--color-bg-surface`, so the settings `--stg-*` remap reaches it); the menu portals to `<body>` like ContextMenu — app chrome by design, which also keeps it clear of `overflow` clipping in drawers. Selected option = accent tint + accent text per the list-item rule. Surfaces with their own input dialect (AI panel inset/mono, lore paper) re-skin the trigger by passing a class **doubled in their own module** (`.x.x { … }`) — 0-2-0 outranks the base class deterministically, where a single class would tie and fall to bundle order.
 - **Reusable keyframes** (in `global.css`): `fadeIn`, `scaleIn`, `slideUp`, `slideInRight` — reuse these, don't redefine per component.
 - **Selected/active list items**: `--color-accent-tint` fill + `--color-accent` text.
 

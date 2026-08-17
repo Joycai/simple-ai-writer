@@ -1,0 +1,110 @@
+/* The trigger mirrors the text-input look (settingsCommon `.input`) so a form
+   mixing the two reads as one family; the menu mirrors ContextMenu. */
+
+/* No own width: column-flex parents (the drawers' fieldGroup) stretch it to
+   full width, row parents size it with a class (rowSelect, fetchRowSelect) —
+   a width here would tie with those classes on specificity and win or lose
+   on bundle order. */
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-md);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+.trigger:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.triggerOpen {
+  border-color: var(--color-accent);
+}
+
+.value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.placeholder {
+  color: var(--color-text-muted);
+}
+
+.caret {
+  flex: none;
+  color: var(--color-text-muted);
+  transition: transform var(--transition-fast);
+}
+.triggerOpen .caret {
+  transform: rotate(180deg);
+}
+
+.menu {
+  position: fixed;
+  z-index: 1000;
+  padding: var(--space-1);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-strong);
+  box-shadow: var(--shadow-lg);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  animation: slideUp 160ms var(--ease-out);
+}
+
+/* Wrapper exists only to pair a group header with its first option; it must
+   not affect layout. */
+.optionWrap {
+  display: contents;
+}
+
+.group {
+  padding: var(--space-2) var(--space-3) 2px;
+  font: 500 10px/1.6 var(--font-sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 30px;
+  padding: var(--space-1) var(--space-3);
+  background: transparent;
+  border: none;
+  font-size: var(--font-size-md);
+  font-family: inherit;
+  color: var(--color-text-secondary);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.optionActive {
+  background: var(--color-bg-hover);
+  color: var(--color-text-primary);
+}
+.optionSelected {
+  background: var(--color-accent-tint);
+  color: var(--color-accent);
+}
+.optionSelected.optionActive {
+  background: var(--color-accent-tint-strong);
+  color: var(--color-accent);
+}
+
+.optionLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

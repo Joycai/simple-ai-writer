@@ -31,6 +31,7 @@ import { MarkdownPreview } from "../common/MarkdownPreview";
 import { ModalShell } from "../common/ModalShell";
 import { useImeGuard } from "../../lib/ime";
 import { FacetAiAssistantModal } from "./ai/FacetAiAssistantModal";
+import { Select } from "../common/Select";
 import styles from "./FacetEditModal.module.css";
 
 interface Props {
@@ -241,11 +242,16 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
                   <label className={styles.label}>
                     {t("lore.facet.fieldMode", { defaultValue: "激活方式" })}
                   </label>
-                  <select className={styles.input} value={mode} onChange={(e) => setMode(e.target.value as FacetMeta["mode"])}>
-                    <option value="auto">{t("lore.facet.modeAutoShort", { defaultValue: "自动" })}</option>
-                    <option value="always">{t("lore.facet.modeAlwaysShort", { defaultValue: "总是" })}</option>
-                    <option value="manual">{t("lore.facet.modeManualShort", { defaultValue: "仅手动" })}</option>
-                  </select>
+                  <Select
+                    className={styles.modeSelect}
+                    value={mode}
+                    onChange={(v) => setMode(v as FacetMeta["mode"])}
+                    options={[
+                      { value: "auto", label: t("lore.facet.modeAutoShort", { defaultValue: "自动" }) },
+                      { value: "always", label: t("lore.facet.modeAlwaysShort", { defaultValue: "总是" }) },
+                      { value: "manual", label: t("lore.facet.modeManualShort", { defaultValue: "仅手动" }) },
+                    ]}
+                  />
                 </div>
               </div>
 
