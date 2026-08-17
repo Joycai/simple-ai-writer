@@ -181,10 +181,6 @@
     "tipSaveLabel": "{{mod}} S",
     "tipSave": "自动保存到本地"
   },
-  "rightPanel": {
-    "outline": "大纲",
-    "ai": "AI 助手"
-  },
   "statusBar": {
     "noProject": "未打开项目",
     "words": "字数",
