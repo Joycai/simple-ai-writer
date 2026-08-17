@@ -40,6 +40,15 @@ describe("sizeForAspect", () => {
   it("falls back to the first declared size when none parse", () => {
     expect(sizeForAspect("1:1", ["auto", "large"])).toBe("auto");
   });
+
+  it("parses DashScope's 宽*高 spelling alongside WxH", () => {
+    const sizes = ["1024*1024", "1024*1536", "1536*1024"];
+    expect(sizeForAspect("1:1", sizes)).toBe("1024*1024");
+    expect(sizeForAspect("3:4", sizes)).toBe("1024*1536");
+    // Wan's "2K" presets carry no aspect — they only ever win as the fallback.
+    expect(sizeForAspect("1:1", ["2K", "1024*1536"])).toBe("1024*1536");
+    expect(sizeForAspect("1:1", ["2K"])).toBe("2K");
+  });
 });
 
 describe("defaultImageCaps", () => {

@@ -105,9 +105,14 @@ function redactRequestBody(value: unknown, depth = 0): unknown {
 export interface ImageCallLogger {
   success(result: { images: number; usage?: { inputTokens: number; outputTokens: number }; text?: string }): void;
   error(e: unknown): void;
+  /**
+   * A mid-call progress fact worth having when the call never completes —
+   * the async task id a hung DashScope poll would otherwise take with it.
+   */
+  note(data: Record<string, unknown>): void;
 }
 
-const noopImageLogger: ImageCallLogger = { success() {}, error() {} };
+const noopImageLogger: ImageCallLogger = { success() {}, error() {}, note() {} };
 
 /**
  * Start logging one `generateImage` call.
@@ -160,6 +165,9 @@ export function beginImageApiLog(req: {
         model: req.modelId,
         error: e instanceof Error ? e.message : String(e),
       });
+    },
+    note(data) {
+      writeEntry({ type: "image-progress", id, time: new Date().toISOString(), ...data });
     },
   };
 }

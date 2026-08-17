@@ -62,6 +62,7 @@ export async function runIllustration(
     modelId: model.modelId,
     safetySettings: provider.safetySettings,
     route: model.caps?.route,
+    asyncTask: model.caps?.asyncTask,
   };
   const req = {
     prompt: proposal.prompt,

@@ -450,6 +450,32 @@ MiniMax 在 ④ 族端点上实现了 Anthropic 的**服务端工具**约定（b
   Responses API 暂不支持该能力。file 内容块与 ① 族官方（gpt-4o/4.1 的 PDF
   输入）同形，是镜像而非私有发明。
 
+#### DashScope 的图片模型：不在兼容层上，走原生协议（截至 2026-08，未实测）
+
+qwen-image / wan / z-image 系列**不经过** `compatible-mode` —— 出图走原生
+`/api/v1`（同 host、同 key，只是路径不同；本项目在 `lib/ai/image.ts` 的
+`dashscope` route 里从兼容层 base 推导原生 base）：
+
+- **同步**（qwen-image-3.0\*、qwen-image-edit\*、z-image-turbo、wan 改图）：
+  `POST /api/v1/services/aigc/multimodal-generation/generation`。
+- **异步**（wan2.7-image\* 文生图只有这条）：
+  `POST /api/v1/services/aigc/image-generation/generation` + 请求头
+  `X-DashScope-Async: enable`，返回 `output.task_id`；轮询
+  `GET /api/v1/tasks/{id}`，`task_status: PENDING/RUNNING → SUCCEEDED/FAILED`，
+  官方建议 ~3s 间隔。
+- **body 两段式**：`input.messages[].content` 是 `{image}`/`{text}` part 数组
+  （改图 = image part 在前、指令 text 在后；image 收公网 URL 或
+  `data:<mime>;base64,…`），旋钮全在 `parameters`（`n`、`size` 写作
+  `宽*高`、`negative_prompt`（wan2.7 不支持）、`seed`、`watermark`、
+  `prompt_extend`；wan 专属 `enable_sequential` / `color_palette` /
+  `bbox_list`，`size` 另收 `"1K"/"2K"/"4K"`）。
+- **响应**：`output.choices[0].message.content[]` 里 `{image:"<URL>"}`（wan
+  任务另见 `output.results[].url` 形状），`usage` 报张数与像素而非 token。
+  **图片 URL 24 小时过期**——必须当场下载落盘。
+- **错误是顶层 `{code, message}`**（任务失败时嵌在 `output` 里）：
+  `Throttling`（429）、`DataInspectionFailed`（内容审核拒绝——是"理解了但
+  拒绝"，不是"端点不存在"，不能触发降级重生成）。
+
 ### 兼容层文档的通用规律（六个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**

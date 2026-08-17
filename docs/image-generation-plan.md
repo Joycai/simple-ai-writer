@@ -367,6 +367,39 @@ PR1 刻意留给 PR2 的：`ImageRequest.images`（占位，调用即报错）�
 
 ---
 
+### PR5 · DashScope 原生 route（千问/万相出图）— ✅ 已实现
+
+qwen-image / wan / z-image 系列不走 DashScope 的 compatible-mode——出图只有
+原生 `/api/v1` 协议（`input.messages` + `parameters` 两段式，协议事实见
+`docs/api/landscape.md` §7）。body 形状与 OpenAI images API 完全不同，按
+`provider-layering.md` §4 的标准配得上第四个 `ImageRoute` 值：`"dashscope"`。
+
+三个决策及理由：
+
+- **原生 base 从既有供应商行推导，不要求建第二个供应商。**
+  `dashscopeNativeBase()` 剥掉 base URL 尾部的 `/compatible-mode/v1` 再拼
+  `/api/v1`——同一行、同一个 keyring 密钥同时服务文本与出图，国内/intl 域名
+  都成立；已是原生地址或裸 host 的输入原样通过。
+- **同步/异步是声明的能力（`ImageCaps.asyncTask`），不是 model-id 嗅探。**
+  wan2.7 的文生图只有异步任务接口（提交带 `X-DashScope-Async: enable`，轮询
+  `GET /tasks/{id}`，~3s 起步、10 次后放缓到 5s，整个任务 600s 封顶，轮询的
+  瞬时失败连续 3 次才算真错）；qwen-image\*、qwen-image-edit\*、z-image-turbo
+  与 wan 改图都是同步。哪条路由对，作者在 ModelDrawer 勾选，猜错会收到
+  DashScope 自己的明确报错——与 caps 体系「声明而非探测」的既有规则一致。
+  任务 id 在提交后立刻记进 API 日志（`ImageCallLogger.note`），轮询挂死时
+  不至于无从查起。
+- **`extraBody` 并进 `parameters` 而非顶层。** 那里才是 DashScope 的旋钮
+  命名空间（`negative_prompt`/`watermark`/`seed`/`prompt_extend`…）；顶层
+  只有 `model` 和 `input`。v1 不给这些旋钮做配置 UI（layering §5 的长尾
+  原则），负面描述继续折进 prose。
+
+配套小改动：`sizeForAspect` 的尺寸分隔符放宽为 `x`/`*`/`×`（DashScope 写作
+`宽*高`），route 内把作者写的 `1024x1024` 归一成 `1024*1024` 再上线；
+`parseErrorBody` 补读顶层 `{code, message}`——`DataInspectionFailed` 这类
+内容审核拒绝因此带上结构化 code，不会被 `isEditUnsupportedError` 的 prose
+正则误读成「端点不能编辑」而触发第二次计费的降级重生成。生成的图片 URL
+24 小时过期，`urlToDataUrl` 当场下载落盘（既有行为，正好覆盖）。
+
 ## 9. 风险与对策
 
 | 风险 | 影响 | 对策 |

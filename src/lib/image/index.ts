@@ -29,7 +29,8 @@ export function sizeForAspect(
   let best: string | undefined;
   let bestDelta = Infinity;
   for (const size of sizes) {
-    const [w, h] = size.toLowerCase().split("x").map(Number);
+    // "x" is the app's convention, "*" is DashScope's, "×" is a human's.
+    const [w, h] = size.toLowerCase().split(/[x*×]/).map(Number);
     if (!w || !h) continue;
     const delta = Math.abs(w / h - target);
     if (delta < bestDelta) {
