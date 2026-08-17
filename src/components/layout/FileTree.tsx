@@ -735,6 +735,11 @@ export function FileTree() {
    * Delete every target behind one confirmation. Failures are logged rather
    * than raised: a delete that fails partway through a selection should still
    * remove the entries it can, and the tree refresh shows what survived.
+   *
+   * With `backup` — the sidebar offers no undo of its own, and the agent's
+   * deletes have always been snapshotted; the author's own hand deserves at
+   * least the safety net the model gets. The confirm copy says where the
+   * snapshot goes, so 确认 is informed rather than a leap.
    */
   const handleDelete = async (targets: readonly TransferSource[]) => {
     setMenu(null);
@@ -746,7 +751,7 @@ export function FileTree() {
     if (!ok) return;
     for (const target of pruneNested(targets)) {
       try {
-        await deleteEntry(target.path, target.isDir);
+        await deleteEntry(target.path, target.isDir, { backup: true });
       } catch (err) {
         console.error("[fileTree] delete failed:", err);
       }

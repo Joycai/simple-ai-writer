@@ -1640,8 +1640,8 @@
     "rename": "Rename",
     "reveal": "Reveal in File Explorer",
     "delete": "Delete",
-    "deleteConfirm": "Delete this file?",
-    "deleteFolderConfirm": "Delete this folder and all its contents?",
+    "deleteConfirm": "Delete this file? (A snapshot is kept in .ai-writer/backups first.)",
+    "deleteFolderConfirm": "Delete this folder and everything in it? (It is moved into .ai-writer/backups first.)",
     "newFolder": "New Folder",
     "refresh": "Refresh",
     "fileNamePlaceholder": "filename.md",
@@ -1660,7 +1660,7 @@
     "cutMany": "Cut {{count}} items",
     "copyMany": "Copy {{count}} items",
     "deleteMany": "Delete {{count}} items",
-    "deleteManyConfirm": "Delete the {{count}} selected entries and everything in them?",
+    "deleteManyConfirm": "Delete the {{count}} selected entries and everything in them? (Snapshots are kept in .ai-writer/backups first.)",
     "dragCount": "{{count}} items"
   },
   "language": {

@@ -1635,8 +1635,8 @@
     "rename": "重命名",
     "reveal": "在文件浏览器中显示",
     "delete": "删除",
-    "deleteConfirm": "确认删除此文件？",
-    "deleteFolderConfirm": "确认删除此文件夹及其全部内容？",
+    "deleteConfirm": "确认删除此文件？（会先在 .ai-writer/backups 留下快照）",
+    "deleteFolderConfirm": "确认删除此文件夹及其全部内容？（会先移入 .ai-writer/backups 备份）",
     "newFolder": "新建文件夹",
     "refresh": "刷新",
     "fileNamePlaceholder": "文件名.md",
@@ -1655,7 +1655,7 @@
     "cutMany": "剪切 {{count}} 项",
     "copyMany": "复制 {{count}} 项",
     "deleteMany": "删除 {{count}} 项",
-    "deleteManyConfirm": "确认删除选中的 {{count}} 项及其全部内容？",
+    "deleteManyConfirm": "确认删除选中的 {{count}} 项及其全部内容？（会先在 .ai-writer/backups 留下快照）",
     "dragCount": "{{count}} 项"
   },
   "language": {
