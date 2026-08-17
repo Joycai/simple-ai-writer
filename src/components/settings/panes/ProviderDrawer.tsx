@@ -12,6 +12,7 @@ import {
   type GeminiHarmCategory,
 } from "../../../lib/ai/safety";
 import { testProviderConnection } from "../../../lib/ai/providerProbe";
+import { Select } from "../../common/Select";
 import styles from "../settingsCommon.module.css";
 import hub from "./ProvidersModels.module.css";
 
@@ -210,9 +211,10 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
           </div>
           <div className={styles.fieldGroup}>
             <label className={styles.label}>{t("aiConfig.providers.apiStandardLabel")}</label>
-            <select className={styles.select} value={form.apiStandard}
-              onChange={(e) => {
-                const standard = e.target.value as ApiStandard;
+            <Select value={form.apiStandard} options={apiStandardOptions}
+              ariaLabel={t("aiConfig.providers.apiStandardLabel")}
+              onChange={(v) => {
+                const standard = v as ApiStandard;
                 setForm({
                   ...form,
                   apiStandard: standard,
@@ -222,9 +224,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
                   // official endpoint, which rejects two credentials.
                   authMode: authModesFor(standard).includes(form.authMode) ? form.authMode : "default",
                 });
-              }}>
-              {apiStandardOptions.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
+              }} />
           </div>
         </div>
 
@@ -267,12 +267,10 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
         {authModes.length > 1 && (
           <div className={styles.fieldGroup}>
             <label className={styles.label}>{t("aiConfig.providers.authModeLabel")}</label>
-            <select className={styles.select} value={form.authMode}
-              onChange={(e) => setForm({ ...form, authMode: e.target.value as AuthMode })}>
-              {authModes.map((mode) => (
-                <option key={mode} value={mode}>{t(`aiConfig.providers.authModes.${mode}`)}</option>
-              ))}
-            </select>
+            <Select value={form.authMode}
+              options={authModes.map((mode) => ({ value: mode, label: t(`aiConfig.providers.authModes.${mode}`) }))}
+              ariaLabel={t("aiConfig.providers.authModeLabel")}
+              onChange={(v) => setForm({ ...form, authMode: v as AuthMode })} />
             <div className={styles.hint}>{t("aiConfig.providers.authModeHint")}</div>
           </div>
         )}

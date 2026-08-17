@@ -3,6 +3,7 @@ import { useAiStore } from "../../../stores/aiStore";
 import { SUBAGENT_KINDS, type SubAgentKind } from "../../../lib/agent/subagent";
 import type { Model } from "../../../lib/ai/configDb";
 import { Pane, PaneHeader, Section, Row, Toggle } from "./bits";
+import { Select } from "../../common/Select";
 import common from "../settingsCommon.module.css";
 
 /**
@@ -77,16 +78,16 @@ export function SubAgentsPane() {
               />
             </Row>
             <Row title={t("systemSettings.subagents.pickModel")} warn={warningFor(kind, model)} last>
-              <select
-                className={common.select}
+              <Select
+                className={common.rowSelect}
                 value={cfg.modelId ?? ""}
-                onChange={(e) => setSubAgent(kind, { modelId: e.target.value || null })}
-              >
-                <option value="">{t("systemSettings.subagents.noModel")}</option>
-                {candidates.map((m) => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
-                ))}
-              </select>
+                onChange={(v) => setSubAgent(kind, { modelId: v || null })}
+                options={[
+                  { value: "", label: t("systemSettings.subagents.noModel") },
+                  ...candidates.map((m) => ({ value: m.id, label: m.name })),
+                ]}
+                ariaLabel={t("systemSettings.subagents.pickModel")}
+              />
             </Row>
           </Section>
         );

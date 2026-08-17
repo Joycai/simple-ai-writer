@@ -14,6 +14,7 @@ import { defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, type ModelType } f
 import { CONTEXT_SIZE_STOPS, formatContextSize } from "../../../lib/ai/contextSize";
 import { ModelProbePanel } from "../ModelProbePanel";
 import { Chip, ChipRow } from "./bits";
+import { Select } from "../../common/Select";
 import styles from "../settingsCommon.module.css";
 import hub from "./ProvidersModels.module.css";
 
@@ -184,14 +185,15 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
               {fetching ? t("aiConfig.models.fetching") : t("aiConfig.models.fetchBtn")}
             </button>
             {fetchedList.length > 0 && (
-              <select className={`${styles.select} ${styles.fetchRowSelect}`}
-                onChange={(e) => {
-                  const m = fetchedList.find((x) => x.id === e.target.value);
+              <Select className={styles.fetchRowSelect}
+                value={form.modelId}
+                placeholder={t("aiConfig.models.selectOption")}
+                options={fetchedList.map((m) => ({ value: m.id, label: m.name }))}
+                ariaLabel={t("aiConfig.models.selectOption")}
+                onChange={(v) => {
+                  const m = fetchedList.find((x) => x.id === v);
                   if (m) setForm((f) => ({ ...f, modelId: m.id, name: m.name }));
-                }}>
-                <option value="">{t("aiConfig.models.selectOption")}</option>
-                {fetchedList.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
+                }} />
             )}
           </div>
         )}
@@ -269,9 +271,16 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
             </div>
             <div className={styles.fieldGroup}>
               <label className={styles.label}>{t("aiConfig.models.capsRouteLabel")}</label>
-              <select className={styles.select} value={form.capsRoute}
-                onChange={(e) => {
-                  const capsRoute = e.target.value;
+              <Select value={form.capsRoute}
+                options={[
+                  { value: "", label: t("aiConfig.models.capsRouteAuto") },
+                  { value: "images-api", label: t("aiConfig.models.capsRouteImages") },
+                  { value: "chat", label: t("aiConfig.models.capsRouteChat") },
+                  { value: "gemini", label: t("aiConfig.models.capsRouteGemini") },
+                  { value: "dashscope", label: t("aiConfig.models.capsRouteDashscope") },
+                ]}
+                ariaLabel={t("aiConfig.models.capsRouteLabel")}
+                onChange={(capsRoute) => {
                   setForm((f) => ({
                     ...f,
                     capsRoute,
@@ -283,13 +292,7 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
                       : {}),
                   }));
                   if (capsRoute === "dashscope") setCapsEdit(true);
-                }}>
-                <option value="">{t("aiConfig.models.capsRouteAuto")}</option>
-                <option value="images-api">{t("aiConfig.models.capsRouteImages")}</option>
-                <option value="chat">{t("aiConfig.models.capsRouteChat")}</option>
-                <option value="gemini">{t("aiConfig.models.capsRouteGemini")}</option>
-                <option value="dashscope">{t("aiConfig.models.capsRouteDashscope")}</option>
-              </select>
+                }} />
               <div className={hub.fieldHint}>{t("aiConfig.models.capsRouteHint")}</div>
             </div>
             <div className={styles.fieldGroup}>
