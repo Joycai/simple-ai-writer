@@ -467,7 +467,31 @@ The workspace is the **whole project directory** — documents live wherever the
 ### Export / Import (lore bundles & config backup)
 - **Lore bundle** (`src/lib/lore/transfer.ts`, UI in `LoreWall`): a zip with root `manifest.json` + the whole on-disk `.ai-writer/lore/` tree under `lore/…` — *all* categories on disk, not just the active profile's, so bundles survive profile switches. Import is two-phase: `stageLoreImport` extracts into `.ai-writer/lore-import-tmp` and reports conflicts; `applyLoreImport` moves entity dirs in under a user-chosen strategy (skip / overwrite / keep-both via `uniqueEntityId`), then deletes the staging dir. **Overwrite displaces rather than deletes**: the entity being replaced is renamed into `.ai-writer/backups/replaced-<ts>-<category>-<id>` (the same directory `delete_lore_entity` uses), and if the move-in then fails it is renamed back. The previous `removeDir`-then-`rename` both destroyed an entry — gallery images included — with no undo, and left a window where a failed rename lost the folder from both places. Categories that fail `CATEGORY_ID_RE` are ignored.
 - **Project backup** (`src/lib/fs/projectBackup.ts`, UI in Settings → 工作台): the whole project folder as one zip under `project/…` + root `manifest.json` (`kind: "ai-writer-project-bundle"`). Scope is deliberately wider than the lore bundle — `profile.json`, `outline.json`, `.ai-writer/memory/`, `imagegen.json` and each document's `assets/` are all things *the model sees*, so a project missing them behaves differently with nothing on screen saying why. `PROJECT_BACKUP_EXCLUDES` drops `.ai-writer/backups`, the scratch/staging dirs, the SQLite `-wal`/`-shm` sidecars, `.git` and `node_modules`; `project.db` is WAL-checkpointed first (`PRAGMA wal_checkpoint(TRUNCATE)` via `select`, best-effort) so the single archived file is complete. Restore takes an **empty** folder picked through `project_open_dialog` (which is also what allows it as an fs root), and `zip_import_dialog` is given `requireManifestKind` so a wrong zip is refused before a single file is written. Not included: `config.db` and the keyring — those belong to the installation, and the UI says so.
-- **Config backup** (`src/lib/ai/configTransfer.ts`, UI in Settings → General): providers/models/prompts **plus the portable preferences** (see Preferences) as one JSON file — the `prefs` field is optional, so a backup written before they were included still restores. API keys (OS keyring) are **excluded unless the user opts in** — then embedded in plaintext and re-saved to the keyring on import. Restore merges by id (`INSERT OR REPLACE`); models whose provider is neither in the backup nor already configured are dropped during validation.
+- **Config backup** (`src/lib/ai/configTransfer.ts`, UI in Settings → General): providers/models/prompts **plus the portable preferences** (see Preferences) as one JSON file — the `prefs` field is optional, so a backup written before they were included still restores. API keys (OS keyring) are **excluded unless the user opts in** — then embedded in plaintext and re-saved to the keyring on import. Restore merges by id (`INSERT OR REPLACE`); models whose provider is neither in the backup nor already configured are dropped during validation. The row writes go through `sqlTransaction` (see Transactions below), providers before the models that reference them; preferences and keyring writes land after the commit, because neither can join a SQL transaction and a failure in them must not undo the configuration that already succeeded.
+
+### Transactions (`src/lib/sqlTx.ts` + `src-tauri/src/sqltx.rs`)
+
+`@tauri-apps/plugin-sql` looks like a connection but is a **pool**: each
+`db.execute()` borrows whichever connection is free, and sqlx returns it from a
+spawned task *after* the call resolves, so the next statement often opens a
+second connection instead of reusing the first. `execute("BEGIN")` … the writes
+… `execute("COMMIT")` therefore is not one transaction. The BEGIN opens a
+transaction on connection A; the writes land on A or B by luck; and the moment
+one lands inside A's still-open transaction, A holds SQLite's write lock while
+the next statement on B waits out the busy timeout and fails with
+`error returned from database: (code: 5) database is locked`. Worse, sqlx's
+on-release check is a ping and not a rollback, so A goes back into the pool
+mid-transaction and keeps that lock until the app restarts — the config restore
+hit exactly this, and a failed attempt could poison later config writes too.
+
+`sqlTransaction(dbPath, statements)` hands the batch to the `sqlite_transaction`
+Rust command, which opens a **private** connection, runs `BEGIN IMMEDIATE` (so a
+busy database fails before any of the batch applies rather than half way
+through), and closes it after. `dbPath` goes through the same `FsScope` as the
+`fs_*` commands, so it can only be one of this app's own databases. **Never
+write a bare `BEGIN` through a `Database` handle** — `configImportTx.test.ts`
+asserts the config restore issues no transaction control statement through the
+pooled handle, and `sqltx.rs`'s own tests cover the commit/rollback behaviour.
 
 ### CodeMirror 6 Setup
 - Extensions: GFM, Markdown language, history, search, Vim bindings optional

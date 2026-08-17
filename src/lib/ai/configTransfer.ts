@@ -22,9 +22,9 @@ import {
   listModels,
   listPrompts,
   listProviders,
-  saveModel,
-  savePrompt,
-  saveProvider,
+  modelUpsert,
+  promptUpsert,
+  providerUpsert,
   type Model,
   type ModelType,
   type Prompt,
@@ -36,7 +36,8 @@ import { authModesFor, type ApiStandard, type AuthMode } from "./types";
 import { migrateLegacyStandard } from "./urls";
 import { loadApiKey, saveApiKey } from "../keyStore";
 import { applyPrefEntries, portablePrefEntries } from "../prefs";
-import { getGlobalDb } from "../project";
+import { getGlobalDb, getGlobalDbPath } from "../project";
+import { sqlTransaction } from "../sqlTx";
 import { openTextFileDialog, saveTextFileDialog } from "../fs/transfer";
 
 export const CONFIG_BACKUP_KIND = "ai-writer-config-backup";
@@ -269,19 +270,28 @@ export async function stageConfigImport(
  * entirely — so they happen after the rows are committed, and a failure there
  * is reported as exactly what it is: the configuration landed, the keys did
  * not.
+ *
+ * That transaction runs through `sqlTransaction`, **not** as `db.execute`d
+ * BEGIN/COMMIT around the usual per-row helpers. The SQL plugin hands out a
+ * connection pool, so those three calls were three different connections: the
+ * writes ended up outside the transaction the BEGIN had opened, and once one of
+ * them landed inside it, the connection holding the write lock made every later
+ * statement fail with `(code: 5) database is locked` — the import error this
+ * restore reported for a config it could have merged fine. See lib/sqlTx.
+ *
+ * Providers are written before the models that reference them: sqlx connects
+ * with `foreign_keys = ON`, and `models.provider_id` is a real foreign key.
  */
 export async function applyConfigImport(staged: StagedConfigImport): Promise<void> {
-  const db = await configDb();
-  await db.execute("BEGIN");
-  try {
-    for (const { apiKey: _apiKey, ...provider } of staged.providers) await saveProvider(db, provider);
-    for (const m of staged.models) await saveModel(db, m);
-    for (const p of staged.prompts) await savePrompt(db, p);
-    await db.execute("COMMIT");
-  } catch (e) {
-    await db.execute("ROLLBACK").catch(() => { /* the failure below is the one that matters */ });
-    throw e;
-  }
+  // Not for the writes below — this is what guarantees the tables and their
+  // added columns exist before the transaction's own connection touches them.
+  await configDb();
+
+  await sqlTransaction(await getGlobalDbPath(), [
+    ...staged.providers.map(({ apiKey: _apiKey, ...provider }) => providerUpsert(provider)),
+    ...staged.models.map(modelUpsert),
+    ...staged.prompts.map(promptUpsert),
+  ]);
 
   // Preferences are not part of the transaction and deliberately land after
   // it: they are the cosmetic half of the restore, and a failure here must not

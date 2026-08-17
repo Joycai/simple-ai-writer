@@ -5,6 +5,7 @@
 
 import Database from "@tauri-apps/plugin-sql";
 
+import type { SqlStatement } from "../sqlTx";
 import type { GeminiSafetySettings } from "./safety";
 import { authModesFor, type ApiStandard, type AuthMode, type ImageRoute } from "./types";
 import {
@@ -464,18 +465,23 @@ function parseSafetySettings(raw: unknown): GeminiSafetySettings | undefined {
   }
 }
 
-export async function saveProvider(
-  db: Awaited<ReturnType<typeof Database.load>>,
-  p: Provider
-): Promise<void> {
+/**
+ * The write for one provider, as a statement rather than an execution.
+ *
+ * Split out so the config restore can hand the whole batch to `sqlTransaction`
+ * (which runs it on one connection, atomically) without restating the columns
+ * — the schema stays described in exactly one place. Same for the model and
+ * prompt builders below.
+ */
+export function providerUpsert(p: Provider): SqlStatement {
   // A real upsert, NOT `INSERT OR REPLACE`: that is a DELETE followed by an
   // INSERT, and `models.provider_id` declares `ON DELETE CASCADE`. sqlx (which
   // backs tauri-plugin-sql) connects with `foreign_keys = ON` by default, so
   // renaming a provider — or importing a config over an existing one — would
   // take every model configured under it with it. `created_at` is deliberately
   // left out of the update: editing a provider must not re-date it.
-  await db.execute(
-    `INSERT INTO providers (id, name, base_url, api_standard, safety_settings, auth_mode, created_at)
+  return {
+    sql: `INSERT INTO providers (id, name, base_url, api_standard, safety_settings, auth_mode, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name = excluded.name,
@@ -483,7 +489,7 @@ export async function saveProvider(
        api_standard = excluded.api_standard,
        safety_settings = excluded.safety_settings,
        auth_mode = excluded.auth_mode`,
-    [
+    values: [
       p.id,
       p.name,
       p.baseUrl,
@@ -491,8 +497,16 @@ export async function saveProvider(
       p.safetySettings ? JSON.stringify(p.safetySettings) : null,
       p.authMode ?? null,
       p.createdAt,
-    ]
-  );
+    ],
+  };
+}
+
+export async function saveProvider(
+  db: Awaited<ReturnType<typeof Database.load>>,
+  p: Provider
+): Promise<void> {
+  const { sql, values } = providerUpsert(p);
+  await db.execute(sql, values);
 }
 
 export async function deleteProvider(
@@ -521,16 +535,21 @@ export async function listModels(
   return rows.map(rowToModel);
 }
 
+export function modelUpsert(m: Model): SqlStatement {
+  return {
+    sql: `INSERT OR REPLACE INTO models
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, server_tools, pdf_input)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null],
+  };
+}
+
 export async function saveModel(
   db: Awaited<ReturnType<typeof Database.load>>,
   m: Model
 ): Promise<void> {
-  await db.execute(
-    `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, server_tools, pdf_input)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null]
-  );
+  const { sql, values } = modelUpsert(m);
+  await db.execute(sql, values);
 }
 
 export async function deleteModel(
@@ -554,14 +573,19 @@ export async function listPrompts(
   }));
 }
 
+export function promptUpsert(p: Prompt): SqlStatement {
+  return {
+    sql: `INSERT OR REPLACE INTO prompts (id, name, content, scene) VALUES (?, ?, ?, ?)`,
+    values: [p.id, p.name, p.content, p.scene],
+  };
+}
+
 export async function savePrompt(
   db: Awaited<ReturnType<typeof Database.load>>,
   p: Prompt
 ): Promise<void> {
-  await db.execute(
-    `INSERT OR REPLACE INTO prompts (id, name, content, scene) VALUES (?, ?, ?, ?)`,
-    [p.id, p.name, p.content, p.scene]
-  );
+  const { sql, values } = promptUpsert(p);
+  await db.execute(sql, values);
 }
 
 export async function deletePrompt(
