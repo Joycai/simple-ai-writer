@@ -1648,7 +1648,15 @@
     "copy": "复制",
     "pasteEntry": "粘贴「{{name}}」",
     "moveExists": "目标位置已有同名的「{{name}}」。",
-    "moveIntoSelf": "不能把文件夹移到它自己里面。"
+    "moveIntoSelf": "不能把文件夹移到它自己里面。",
+    "newFileAtRoot": "在根目录新建文件",
+    "newFolderAtRoot": "在根目录新建文件夹",
+    "pasteEntries": "粘贴 {{count}} 项",
+    "cutMany": "剪切 {{count}} 项",
+    "copyMany": "复制 {{count}} 项",
+    "deleteMany": "删除 {{count}} 项",
+    "deleteManyConfirm": "确认删除选中的 {{count}} 项及其全部内容？",
+    "dragCount": "{{count}} 项"
   },
   "language": {
     "chinese": "中文",

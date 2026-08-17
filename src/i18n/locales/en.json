@@ -1653,7 +1653,15 @@
     "copy": "Copy",
     "pasteEntry": "Paste \"{{name}}\"",
     "moveExists": "\"{{name}}\" already exists there.",
-    "moveIntoSelf": "A folder cannot be moved inside itself."
+    "moveIntoSelf": "A folder cannot be moved inside itself.",
+    "newFileAtRoot": "New file in project root",
+    "newFolderAtRoot": "New folder in project root",
+    "pasteEntries": "Paste {{count}} items",
+    "cutMany": "Cut {{count}} items",
+    "copyMany": "Copy {{count}} items",
+    "deleteMany": "Delete {{count}} items",
+    "deleteManyConfirm": "Delete the {{count}} selected entries and everything in them?",
+    "dragCount": "{{count}} items"
   },
   "language": {
     "chinese": "中文",
