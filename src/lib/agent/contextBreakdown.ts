@@ -61,7 +61,18 @@ export interface ContextBreakdown {
   contextSize: number;
   /** Where compaction triggers, as a percentage of the bar's full width. */
   compactMarkerPct: number;
-  /** True once the estimate has outgrown the ceiling — the bar has no free room. */
+  /**
+   * True once the estimate has crossed the compaction trigger — the threshold
+   * mark the bar draws. This is what the warning visuals key on: the mark sits
+   * at `COMPACT_TRIGGER` (70% of the ceiling), and warning only at 100% meant
+   * the bar could stand well past its own line while looking perfectly calm.
+   */
+  willCompact: boolean;
+  /**
+   * True once the estimate has outgrown the ceiling — the bar has no free room
+   * and the scale becomes `used`. Implies `willCompact`; kept separate because
+   * it drives geometry (span packing), not the warning state.
+   */
   over: boolean;
 }
 
@@ -124,6 +135,7 @@ export function computeContextBreakdown(
     ceilingTokens: ceiling,
     contextSize,
     compactMarkerPct: Math.min(100, (ceiling * COMPACT_TRIGGER * 100) / span),
+    willCompact: usedTokens > ceiling * COMPACT_TRIGGER,
     over: usedTokens > ceiling,
   };
 }

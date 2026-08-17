@@ -39,6 +39,16 @@ export interface ToolStep {
   status: ToolStepStatus;
   /** Head of the result content (TOOL_RESULT_DETAIL_CHARS), set on done/error */
   resultSummary?: string;
+  /**
+   * Whether `argumentSummary` / `resultSummary` were actually cut, recorded at
+   * the slice site — the one place that knows. The UI's 已截断 badge used to
+   * guess from `length >= cap`, which mis-fired both ways: pretty-printed args
+   * outgrow the cap without losing a character, and an exactly-at-cap result
+   * looks cut when it isn't. `undefined` means the event predates the flags
+   * (persisted sessions) and the length heuristic is the honest fallback.
+   */
+  argsTruncated?: boolean;
+  resultTruncated?: boolean;
 }
 
 /** Scope fields attached to an event. Set only when forwarded from a nested subagent. */
@@ -210,6 +220,8 @@ export function createServerToolLog(round: number): (event: ServerToolEvent) => 
           name: event.name,
           argumentSummary: args,
           status: "running",
+          // Server-tool rows carry a summary composed here, never a slice.
+          argsTruncated: false,
         },
         at: Date.now(),
       };
@@ -223,6 +235,8 @@ export function createServerToolLog(round: number): (event: ServerToolEvent) => 
         argumentSummary: queries.get(event.id) ?? "{}",
         status: event.error ? "error" : "done",
         resultSummary: event.error ?? summarizeSearchResults(event.results),
+        argsTruncated: false,
+        resultTruncated: false,
       },
       at: Date.now(),
     };

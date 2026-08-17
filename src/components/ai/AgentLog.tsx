@@ -51,6 +51,7 @@ import { estimateTextTokens } from "../../lib/ai/tokenEstimate";
 import {
   TOOL_ARGS_DETAIL_CHARS,
   TOOL_RESULT_DETAIL_CHARS,
+  detailTruncated,
   formatTokenCount,
   formatToolArgs,
   formatToolArgsDetail,
@@ -112,17 +113,23 @@ function toRows(log: AgentEvent[], filterTopLevel = true): Row[] {
 }
 
 /**
- * One labelled block of the expanded detail. `cap` is the number of chars the
- * runtime keeps for this field: a body sitting exactly on it was cut, and the
- * block says so rather than passing the slice off as the whole thing.
+ * One labelled block of the expanded detail. `truncated` is the runtime's own
+ * record from the slice site; events persisted before the flag existed carry
+ * none, and for those `cap` drives the length-heuristic fallback (a body
+ * sitting on the cap was probably cut) — see `detailTruncated`.
  */
-function DetailBlock({ label, body, cap }: { label: string; body: string; cap?: number }) {
+function DetailBlock({ label, body, cap, truncated }: {
+  label: string;
+  body: string;
+  cap?: number;
+  truncated?: boolean;
+}) {
   const { t } = useTranslation();
   return (
     <div className={styles.detailBlock}>
       <div className={styles.detailLabel}>
         {label}
-        {cap !== undefined && body.length >= cap && (
+        {detailTruncated(truncated, body, cap) && (
           <span className={styles.detailClipped}>
             {t("ai.agent.log.detailClipped", { defaultValue: "已截断" })}
           </span>
@@ -236,6 +243,7 @@ function ToolStepDetail({ step }: { step: ToolStep }) {
         label={t("ai.agent.log.detailArgs", { defaultValue: "调用参数" })}
         body={args || t("ai.agent.log.detailNoArgs", { defaultValue: "（无参数）" })}
         cap={args ? TOOL_ARGS_DETAIL_CHARS : undefined}
+        truncated={args ? step.argsTruncated : false}
       />
       {step.status !== "running" && (
         <DetailBlock
@@ -246,6 +254,7 @@ function ToolStepDetail({ step }: { step: ToolStep }) {
           }
           body={step.resultSummary || t("ai.agent.log.detailNoResult", { defaultValue: "（无返回内容）" })}
           cap={step.resultSummary ? TOOL_RESULT_DETAIL_CHARS : undefined}
+          truncated={step.resultSummary ? step.resultTruncated : false}
         />
       )}
     </>
@@ -268,6 +277,46 @@ function ToolStepRow({ step }: { step: ToolStep }) {
         <span className={styles.rowMetaRight} title={step.resultSummary}>{result}</span>
       )}
     </>
+  );
+}
+
+/**
+ * A round-cap decision as one muted line. Rendered by the shell after band ②'s
+ * accordion (the mockup's standalone bottom line), and by `AgentLogRow` for the
+ * copies that still live inside a stream (nested subagent logs).
+ */
+function RoundLimitLine({ event, showTime }: {
+  event: Extract<AgentEvent, { kind: "round-limit" }>;
+  showTime: boolean;
+}) {
+  const { t } = useTranslation();
+  // Belt to the deserializer's braces (lib/agent/chatSession migrates the
+  // pre-1.13 `granted` shape): a log row also arrives straight from a live
+  // run, and no single line of history is worth taking the whole drawer
+  // down for through the error boundary.
+  const decision = event.decision ?? { action: "finish" as const };
+  return (
+    <li className={`${styles.row} ${styles.rowMeta}`}>
+      <span className={styles.rowIndent} />
+      <span className={styles.rowMetaText}>
+        {decision.action === "extend"
+          ? t("ai.agent.log.roundLimitGranted", {
+              defaultValue: "已达 {{n}} 轮上限 — 批准继续 {{extra}} 轮",
+              n: event.roundsUsed,
+              extra: decision.rounds,
+            })
+          : decision.action === "pause"
+            ? t("ai.agent.log.roundLimitPaused", {
+                defaultValue: "已达 {{n}} 轮上限 — 存盘并暂停",
+                n: event.roundsUsed,
+              })
+            : t("ai.agent.log.roundLimitStopped", {
+                defaultValue: "已达 {{n}} 轮上限 — 就此收尾",
+                n: event.roundsUsed,
+              })}
+      </span>
+      {showTime && <span className={styles.rowTime}>{formatLogTime(event.at)}</span>}
+    </li>
   );
 }
 
@@ -407,36 +456,11 @@ function AgentLogRow({ row, showTime, runStatus }: {
           </li>
         </>
       );
-    case "round-limit": {
-      // Belt to the deserializer's braces (lib/agent/chatSession migrates the
-      // pre-1.13 `granted` shape): a log row also arrives straight from a live
-      // run, and no single line of history is worth taking the whole drawer
-      // down for through the error boundary.
-      const decision = event.decision ?? { action: "finish" as const };
-      return (
-        <li className={`${styles.row} ${styles.rowMeta}`}>
-          <span className={styles.rowIndent} />
-          <span className={styles.rowMetaText}>
-            {decision.action === "extend"
-              ? t("ai.agent.log.roundLimitGranted", {
-                  defaultValue: "已达 {{n}} 轮上限 — 批准继续 {{extra}} 轮",
-                  n: event.roundsUsed,
-                  extra: decision.rounds,
-                })
-              : decision.action === "pause"
-                ? t("ai.agent.log.roundLimitPaused", {
-                    defaultValue: "已达 {{n}} 轮上限 — 存盘并暂停",
-                    n: event.roundsUsed,
-                  })
-                : t("ai.agent.log.roundLimitStopped", {
-                    defaultValue: "已达 {{n}} 轮上限 — 就此收尾",
-                    n: event.roundsUsed,
-                  })}
-          </span>
-          {time}
-        </li>
-      );
-    }
+    case "round-limit":
+      // Reached only through a nested subagent log or a stitched stream —
+      // `buildLogModel` hoists top-level ones into `model.roundLimits`, rendered
+      // after the round accordion. Kept so no source of the event goes blank.
+      return <RoundLimitLine event={event} showTime={showTime} />;
     case "turn-resumed":
       // Why one round is taking several requests' worth of time and money.
       return (
@@ -768,6 +792,7 @@ function SubAgentCard({
                 }
                 body={run.step.resultSummary || t("ai.agent.log.detailNoResult", { defaultValue: "（无返回内容）" })}
                 cap={run.step.resultSummary ? TOOL_RESULT_DETAIL_CHARS : undefined}
+                truncated={run.step.resultSummary ? run.step.resultTruncated : false}
               />
             </div>
           )}
@@ -915,7 +940,7 @@ export function AgentLog({
         </ul>
       )}
 
-      {visible.length > 0 && (
+      {(visible.length > 0 || model.roundLimits.length > 0) && (
         <ul className={styles.list}>
           {hiddenRounds > 0 && (
             <li>
@@ -937,6 +962,11 @@ export function AgentLog({
               onToggle={() => setOpenRound((v) => (v === group.round ? null : group.round))}
               showTime={showTime}
             />
+          ))}
+          {/* Cap decisions close the band: they punctuate the accordion as a
+              whole, not any single round's body — see logModel.roundLimits. */}
+          {model.roundLimits.map((e, i) => (
+            <RoundLimitLine key={`limit-${i}`} event={e} showTime={showTime} />
           ))}
         </ul>
       )}

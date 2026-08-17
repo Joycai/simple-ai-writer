@@ -114,6 +114,23 @@ export function formatToolArgsDetail(raw: string): string {
   }
 }
 
+/**
+ * Whether a detail block should wear the 已截断 badge.
+ *
+ * The runtime's flag wins — it was recorded at the slice site, the one place
+ * that knows. Events persisted before the flags existed carry `undefined`, and
+ * for those the length heuristic is the honest fallback: it mis-fires on
+ * pretty-printed args and exactly-at-cap results, but it is all an old log has.
+ */
+export function detailTruncated(
+  flag: boolean | undefined,
+  body: string,
+  cap?: number,
+): boolean {
+  if (flag !== undefined) return flag;
+  return cap !== undefined && body.length >= cap;
+}
+
 /** Compact token count for log meta: 38400 → "38k", 3244 → "3.2k". */
 export function formatTokenCount(n: number): string {
   if (n < 1000) return String(n);

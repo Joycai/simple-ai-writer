@@ -958,6 +958,9 @@
         "delete": "删除"
       }
     },
+    "mention": {
+      "badgeImage": "图片"
+    },
     "chat": {
       "tab": "助手",
       "title": "对话助手",
@@ -996,6 +999,7 @@
       "ctxWindow": "窗口 {{n}}",
       "ctxToggle": "展开/收起上下文构成",
       "ctxCompactAt": "超过此处将折叠最早的对话",
+      "ctxCompactExplain": "越过竖线后，下一轮把最早的对话归纳成摘要——执行日志里出现「已归纳前 N 轮对话」，摘要段随之变宽。",
       "sendHint": "Enter 发送 · Shift+Enter 换行",
       "showEarlier": "更早的 {{n}} 轮对话",
       "collapseEarlier": "收起早前对话",

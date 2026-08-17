@@ -34,6 +34,30 @@ export function routeTools(
   workspace: TaskWorkspaceHandle | undefined,
   models: Model[],
 ): RoutedTools {
+  return route(preset, subs, workspace !== undefined, models);
+}
+
+/**
+ * The toolset the next request *will* carry, for surfaces that estimate before
+ * running. The chat store creates its task workspace at run start
+ * (stores/agentStore taskWorkspace()), so an estimate taken while idle must
+ * predict `delegate` present — asking for the real handle from a component
+ * would create the workspace as a side effect of rendering a meter.
+ */
+export function routePlannedTools(
+  preset: TaskPreset,
+  subs: Record<SubAgentKind, SubAgentConfig>,
+  models: Model[],
+): RoutedTools {
+  return route(preset, subs, true, models);
+}
+
+function route(
+  preset: TaskPreset,
+  subs: Record<SubAgentKind, SubAgentConfig>,
+  hasWorkspace: boolean,
+  models: Model[],
+): RoutedTools {
   let tools = [...preset.tools];
   // Usable, not merely enabled. A search subagent bound to a model without
   // web_search would otherwise take the main model's own browsing away
@@ -61,7 +85,7 @@ export function routeTools(
   // active/provisional workspace, provide delegate. `imagegen` must not count:
   // it cannot hold the conversational sub-run `delegate` dispatches, so alone
   // it would add a tool with no valid kind to call.
-  if (DELEGATE_KINDS.some(live) && workspace && !tools.includes("delegate")) {
+  if (DELEGATE_KINDS.some(live) && hasWorkspace && !tools.includes("delegate")) {
     tools.push("delegate");
   }
 

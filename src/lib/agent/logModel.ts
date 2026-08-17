@@ -73,6 +73,14 @@ export interface AgentLogModel {
    */
   preamble: AgentEvent[];
   rounds: RoundGroup[];
+  /**
+   * Round-cap decisions, hoisted out of the round groups. The event is emitted
+   * *between* rounds (after round N's work, before round N+1's start), so left
+   * in the stream's grouping it lands inside round N's body and reads as one of
+   * that round's own acts. The design treats it as a property of the whole
+   * accordion — a standalone line after the rounds — and this is its slot.
+   */
+  roundLimits: Extract<AgentEvent, { kind: "round-limit" }>[];
   subagents: SubAgentRun[];
   summary: LogSummary;
   /**
@@ -133,6 +141,7 @@ export function buildLogModel(log: readonly AgentEvent[], isRunning: boolean): A
   const top = log.filter((e) => !e.parentStep);
   const preamble: AgentEvent[] = [];
   const rounds: RoundGroup[] = [];
+  const roundLimits: Extract<AgentEvent, { kind: "round-limit" }>[] = [];
   const subagents: SubAgentRun[] = [];
   const subIndex = new Map<string, SubAgentRun>();
 
@@ -152,6 +161,10 @@ export function buildLogModel(log: readonly AgentEvent[], isRunning: boolean): A
     }
     if (event.kind === "run-error") {
       error = event;
+      continue;
+    }
+    if (event.kind === "round-limit") {
+      roundLimits.push(event);
       continue;
     }
     if (event.kind === "round-start") {
@@ -207,6 +220,7 @@ export function buildLogModel(log: readonly AgentEvent[], isRunning: boolean): A
   return {
     preamble,
     rounds,
+    roundLimits,
     subagents,
     summary: {
       state,

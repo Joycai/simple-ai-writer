@@ -102,6 +102,12 @@
   word-break: break-word;
 }
 
+/* An `@[名称]` reference inside the sent text — the ref chips' accent, so the
+   bubble shows what was cited the way the composer did before sending. */
+.mentionRef {
+  color: var(--color-accent-text);
+}
+
 .turnTime {
   font: 400 11px/1 var(--font-mono);
   color: var(--color-text-hint);
@@ -298,9 +304,12 @@
   transition: border-color var(--transition-fast);
 }
 .ctxBar:hover { border-color: var(--color-border-input); }
-/* Past the ceiling there is no free segment left to shrink, so the only place
-   the overflow can show is the frame. */
-.ctxBarOver { border-color: var(--color-warning); }
+/* Past the compaction mark — the line the bar itself draws — the frame warns
+   and the conversation segment (the part compaction will fold) turns to the
+   over tone. Keyed on willCompact (70% of the ceiling), not on being packed
+   full: warning only at 100% contradicted the visible mark. */
+.ctxBarWarn { border-color: var(--color-warning); }
+.ctxBarWarn .ctxSeg_conversation { background: var(--color-error-node); }
 
 .ctxSeg {
   display: block;
@@ -340,6 +349,15 @@
 .ctxWindow {
   margin-left: auto;
   color: var(--color-text-hint);
+}
+/* The used-token figure, once past the mark. */
+.ctxCountWarn { color: var(--color-error-text-strong); }
+
+/* What crossing the mark means — shown only with the legend open while warned. */
+.ctxExplain {
+  font: 400 11px/1.6 var(--font-sans);
+  color: var(--color-text-soft);
+  padding-bottom: 2px;
 }
 
 .ctxLegend {

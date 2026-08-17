@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { routeTools } from "../routing";
+import { routePlannedTools, routeTools } from "../routing";
 import type { TaskWorkspaceHandle } from "../taskWorkspace";
 
 /** Bindings that satisfy every kind's precondition — routing is what's under test. */
@@ -192,5 +192,24 @@ describe("routeTools", () => {
     );
     expect(off.tools).not.toContain("generate_image");
     expect(off.tools).not.toContain("edit_image");
+  });
+
+  // ── Planned routing (estimation before the run) ──────────────────────────
+
+  it("routePlannedTools predicts delegate without needing a handle", () => {
+    // The chat surface creates its workspace at run start, so an estimate
+    // taken while idle must match what routeTools produces once it exists.
+    const subs: Record<SubAgentKind, SubAgentConfig> = {
+      ...allDisabled,
+      search: { kind: "search", modelId: "m-search", enabled: true },
+    };
+    const planned = routePlannedTools(AGENT_ASSIST_PRESET, subs, MODELS);
+    expect(planned.tools).toContain("delegate");
+    expect(planned).toEqual(routeTools(AGENT_ASSIST_PRESET, subs, WS, MODELS));
+  });
+
+  it("routePlannedTools matches run-time routing with nothing enabled too", () => {
+    expect(routePlannedTools(AGENT_ASSIST_PRESET, allDisabled, MODELS))
+      .toEqual(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS));
   });
 });

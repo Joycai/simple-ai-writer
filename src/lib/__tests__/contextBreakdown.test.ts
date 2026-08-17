@@ -97,4 +97,33 @@ describe("computeContextBreakdown", () => {
     expect(b.usedTokens).toBe(4_000);
     expect(b.segments.find((s) => s.key === "free")!.tokens).toBe(60_000);
   });
+
+  it("warns the moment the mark is crossed, not once the bar is packed", () => {
+    const { meta, history } = session();
+    const used = computeContextBreakdown(history, meta, 0, 100_000, 128_000).usedTokens;
+
+    // Below the trigger: calm on both counts.
+    const calm = computeContextBreakdown(history, meta, 0, used * 2, 128_000);
+    expect(calm.willCompact).toBe(false);
+    expect(calm.over).toBe(false);
+
+    // Between the trigger and the ceiling — the bar stands past its own line.
+    // This is the band the old `over`-only state left unmarked.
+    const ceiling = Math.floor(used / (COMPACT_TRIGGER + 0.1));
+    expect(used).toBeGreaterThan(ceiling * COMPACT_TRIGGER);
+    expect(used).toBeLessThanOrEqual(ceiling);
+    const warned = computeContextBreakdown(history, meta, 0, ceiling, 128_000);
+    expect(warned.willCompact).toBe(true);
+    expect(warned.over).toBe(false);
+
+    // Past the ceiling both hold — over implies willCompact.
+    const packed = computeContextBreakdown(history, meta, 0, 10, 128_000);
+    expect(packed.willCompact).toBe(true);
+    expect(packed.over).toBe(true);
+  });
+
+  it("stays calm on an empty session with no ceiling to cross", () => {
+    const b = computeContextBreakdown(null, null, 0, 0, 0);
+    expect(b.willCompact).toBe(false);
+  });
 });
