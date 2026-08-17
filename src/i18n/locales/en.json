@@ -1409,8 +1409,6 @@
     "transfer": {
       "export": "Export",
       "import": "Import",
-      "exportHint": "Pack the whole {{kb}} into a zip bundle",
-      "importHint": "Import {{entry}} entries from a zip bundle",
       "exportFailed": "Failed to export the {{kb}} bundle:",
       "importFailed": "Failed to import the {{kb}} bundle:",
       "emptyBundle": "The selected file is not a valid {{kb}} bundle (no entries found).",

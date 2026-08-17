@@ -1404,8 +1404,6 @@
     "transfer": {
       "export": "导出",
       "import": "导入",
-      "exportHint": "把整个{{kb}}打包为 zip 文件",
-      "importHint": "从 zip 包导入{{entry}}条目",
       "exportFailed": "导出{{kb}}失败：",
       "importFailed": "导入{{kb}}失败：",
       "emptyBundle": "所选文件不是有效的{{kb}}包（没有找到任何条目）。",
