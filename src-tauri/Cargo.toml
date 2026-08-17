@@ -75,3 +75,7 @@ objc2-web-kit = { version = "0.3", default-features = false, features = ["std", 
 # unmaintainable — generating one in the test states the input in the same
 # place as the expectation.
 rust_xlsxwriter = "0.97"
+# `tauri::test::mock_app`, so scope.rs can assert what `tauri-plugin-fs`'s own
+# glob scope actually allows — the leading-dot rule there is invisible in our
+# code and cost a release to find (see docs/image-generation-plan.md §8).
+tauri = { version = "2", features = ["test"] }

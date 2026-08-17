@@ -400,7 +400,7 @@ qwen-image / wan / z-image 系列不走 DashScope 的 compatible-mode——出�
 正则误读成「端点不能编辑」而触发第二次计费的降级重生成。生成的图片 URL
 24 小时过期，`urlToDataUrl` 当场下载落盘（既有行为，正好覆盖）。
 
-**PR5 上线后发现、随即补上的：大图缩略图静默不显示。** 现象：wan2.7 生成的
+**PR5 上线后发现、随即补上的：图片静默不显示（第一轮诊断，结论后被推翻，见其后一段）。** 现象：wan2.7 生成的
 图片在对话历史里就是个空白框，永远不变。用真实用户的调试日志 + 磁盘文件核实
 （`file`/`xxd` 看 magic bytes，直接 `Read` 打开图片看内容）排除了协议层——
 API 日志显示这次调用 200 成功、返回 1 张图；磁盘上那张 2048×2048 PNG 完整
@@ -419,6 +419,45 @@ payload：新增 `imageToThumbnailDataUrl`（`lib/fs/images.ts`）用 `<canvas>`
 `.catch()` 都补上 `console.warn`——静默失败必须至少在控制台可查，这条本可以
 更快定位。
 
+**真正的原因（第二轮，实证）：`tauri-plugin-fs` 的 glob scope 不让通配符匹配
+`.ai-writer`。** 上一段的 WebKit 解码上限是一个**没有被验证过的猜测**，而且是
+错的：那次读取根本没拿到过字节。真相在下一轮暴露——生图工作台把候选写进
+`.ai-writer/tmp/imagegen/…` 再读回时，报错终于走到了 UI 上：
+`forbidden path: …/.ai-writer/tmp/imagegen/K0Jx79il/DtVwe2-0.png`。
+
+链路是这样的（逐层查 crate 源码 + 一个 `glob` 最小复现确认，非推测）：
+
+1. 前端的二进制图片读取（`imageToDataUrl` / `imageToThumbnailDataUrl` /
+   `fileio.readBinaryFile`）走的是 **`tauri-plugin-fs`**，它有一套**独立于**
+   `src-tauri/src/scope.rs` 那个 `FsScope` 的 scope——项目里同时存在两套路径
+   校验，而且语义不同。
+2. 打开项目时 `allow_for_plugin_fs` 调 `allow_directory(root, recursive)`，
+   插件侧落成 glob：`<root>` 和 `<root>/**`。
+3. 这个 **runtime scope 是用 `FsScope::default()` 构造的**
+   （`tauri-plugin-fs/src/lib.rs` 的 `setup`），于是 unix 下取
+   `require_literal_leading_dot: true`。`tauri.conf.json` 里的
+   `requireLiteralLeadingDot` 开关**救不了它**——那个值只流进 `resolve_path`
+   里按 capability 静态条目临时构造的另一个 scope。
+4. glob 在该选项下**拒绝让 `*`/`**` 匹配以点开头的路径段**：
+   `<root>/**` 匹配 `<root>/writing/ch1.md`，但不匹配
+   `<root>/.ai-writer/任何东西`。
+
+也就是说：**macOS / Linux 上，`.ai-writer/` 下的每一张图片，经插件读都是
+`forbidden path`**——lore 图集与头像、对话历史里的插图、生图候选，全都在里面。
+文档正文不受影响，因为那些走的是自己的 `fs_*` 命令（`FsScope` 没有点目录特例）。
+之所以拖到现在才现形，是因为图片读取的失败一路被 `.catch()` 吞掉，只留一个空
+白框；生图工作台是第一个把这个错误显示出来的地方。
+
+修法在 `allow_for_plugin_fs`：在授予 `<root>` 之外，**再显式授予
+`<root>/.ai-writer`**——点目录在 pattern 里字面写出来，leading-dot 规则就不再
+生效，其后的 `**` 正常展开。上一轮的降采样不是白做（148px 的格子本来也不该内联
+5.5MB 原图，省内存），但它当时并没有修好那个 bug；这一条才是。
+
+教训有两条，都比这个具体 bug 更值钱：**同一个进程里维护两套路径 scope，就要
+预期它们的语义会分叉**（真正的收口做法是让项目内的二进制读取也走自己的
+`fs_*` 命令，只把对话框选中的项目外文件留给插件）；以及**猜测型根因必须标注为
+猜测**——上一段如果当时写成「WebKit 上限（未验证）」，第二轮就不会从零开始。
+
 ## 9. 风险与对策
 
 | 风险 | 影响 | 对策 |
@@ -430,7 +469,8 @@ payload：新增 `imageToThumbnailDataUrl`（`lib/fs/images.ts`）用 `<canvas>`
 | base64 大图撑爆内存 | 多轮改图后卡顿 | 结果即时落临时文件，store 只存路径（§4.2） |
 | 出图费用失控 | 一次误点烧掉几十次调用 | 张数上限（默认 1，最大 4）+ 审批卡片前置显示预估费用 |
 | 模型 id 命名随平台变动 | 硬编码模型名很快过时 | 全程不硬编码：模型 id 由作者在设置里填，能力由 `caps` 声明 |
-| **超大图作为缩略图的完整 data URL 塞进 `<img src>` → 静默不渲染**（2026-08 发现，见下） | 聊天记录里的图不显示，无任何报错；`.catch(()=>{})` 又把仅有的线索也吞了 | 小尺寸展示位改用 `useImageThumbnails`（`imageToThumbnailDataUrl`：`<canvas>` 降采样后再编码），不再内联原图；读取失败额外 `console.warn`，不再纯静默 |
+| **`tauri-plugin-fs` 的 glob scope 不匹配 `.ai-writer`**（2026-08 发现，见 §8 第二轮诊断） | unix 上 `.ai-writer/` 下所有图片经插件读一律 `forbidden path`——lore 图集/头像、对话插图、生图候选全部空白；文档正文不受影响，掩盖了问题 | `allow_for_plugin_fs` 额外显式授予 `<root>/.ai-writer`（点段字面写出，绕开 `require_literal_leading_dot`）；根治方向是项目内二进制读取收回自己的 `fs_*` 命令 |
+| 超大图作为缩略图的完整 data URL 塞进 `<img src>` | 148px 的格子内联 5.5MB 原图，纯属浪费内存（**注**：曾被误判为上一行那个 bug 的成因，见 §8） | 小尺寸展示位改用 `useImageThumbnails`（`imageToThumbnailDataUrl`：`<canvas>` 降采样后再编码）；读取失败额外 `console.warn`，不再纯静默 |
 
 ## 10. 明确不做
 
