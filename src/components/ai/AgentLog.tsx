@@ -38,7 +38,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { findTask, taskLabel, taskPackLabel } from "../../lib/profile";
 import { useTerms } from "../../stores/projectStore";
-import { ChevronDown, ChevronRight, Bot, Eye, Globe, ScrollText } from "lucide-react";
+import { ChevronDown, ChevronRight, Bot, Eye, FileText, Globe, ScrollText } from "lucide-react";
 import type { AgentEvent, ToolStep } from "../../lib/agent/events";
 import {
   buildLogModel,
@@ -695,6 +695,7 @@ const SUB_ICONS: Record<string, typeof Bot> = {
   search: Globe,
   vision: Eye,
   longread: ScrollText,
+  pdf: FileText,
 };
 
 /**

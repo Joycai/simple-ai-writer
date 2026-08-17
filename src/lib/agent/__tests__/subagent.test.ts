@@ -19,6 +19,14 @@ vi.mock("../taskWorkspace", () => ({
   writeTaskNote: (...args: unknown[]) => mockWriteTaskNote(...args),
 }));
 
+const mockFileExists = vi.fn();
+const mockReadBinaryFile = vi.fn();
+
+vi.mock("../../fs/fileio", () => ({
+  fileExists: (...args: unknown[]) => mockFileExists(...args),
+  readBinaryFile: (...args: unknown[]) => mockReadBinaryFile(...args),
+}));
+
 import {
   chainCanSeeImages,
   executeDelegate,
@@ -81,6 +89,7 @@ describe("subagent", () => {
     search: { kind: "search", modelId: "m-search", enabled: true },
     vision: { kind: "vision", modelId: "m-vision", enabled: true },
     longread: { kind: "longread", modelId: "m-text", enabled: true },
+    pdf: { kind: "pdf", modelId: null, enabled: false },
   };
 
   beforeEach(() => {
@@ -302,6 +311,86 @@ describe("subagent", () => {
           parentStep: "c1",
         }),
       );
+    });
+
+    it("fails if the pdf subagent's model has no pdfInput declared", async () => {
+      const ctx = makeCtx({
+        resolveSubAgent: vi.fn(async () => ({
+          provider: dummyProvider,
+          model: dummyTextModel, // no pdfInput
+          apiKey: "k",
+        })),
+      });
+      const call: ToolCall = {
+        id: "c1", name: "delegate",
+        arguments: JSON.stringify({ kind: "pdf", task: "读这份文件", refs: ["docs/spec.pdf"] }),
+      };
+      const res = await executeDelegate(call, ctx);
+      expect(res.content).toContain("not declared to accept PDF files");
+    });
+
+    it("fails a pdf delegation that carries no .pdf refs", async () => {
+      const pdfModel: Model = { ...dummyTextModel, id: "m-pdf", name: "Qwen3.8-Max", pdfInput: true };
+      const ctx = makeCtx({
+        resolveSubAgent: vi.fn(async () => ({ provider: dummyProvider, model: pdfModel, apiKey: "k" })),
+      });
+      const call: ToolCall = {
+        id: "c1", name: "delegate",
+        arguments: JSON.stringify({ kind: "pdf", task: "读这份文件", refs: ["docs/spec.md"] }),
+      };
+      const res = await executeDelegate(call, ctx);
+      expect(res.content).toContain("at least one .pdf path");
+    });
+
+    it("attaches the PDF as a file content part ahead of the instruction", async () => {
+      mockFileExists.mockResolvedValue(true);
+      // "ABC" — small but real bytes, so the data URL is verifiable end to end.
+      mockReadBinaryFile.mockResolvedValue(new Uint8Array([65, 66, 67]));
+      mockRunAgent.mockImplementation(async (opts) => {
+        opts.onOutputText("文档要点如下。");
+        return { rounds: 1, inputTokens: 10, outputTokens: 20, cachedTokens: 0, outcome: "success" };
+      });
+      mockWriteTaskNote.mockResolvedValueOnce({
+        slug: "pdf-x", title: "x", path: ".ai-writer/tasks/task-123/notes/pdf-x.md", size: 10,
+      });
+
+      const pdfModel: Model = { ...dummyTextModel, id: "m-pdf", name: "Qwen3.8-Max", pdfInput: true };
+      const ctx = makeCtx({
+        resolveSubAgent: vi.fn(async () => ({ provider: dummyProvider, model: pdfModel, apiKey: "k" })),
+      });
+      const call: ToolCall = {
+        id: "c1", name: "delegate",
+        arguments: JSON.stringify({ kind: "pdf", task: "总结这份规格书", refs: ["docs/spec.pdf"] }),
+      };
+
+      const res = await executeDelegate(call, ctx);
+      expect(res.content).toContain("pdf-x.md");
+
+      const runOpts = mockRunAgent.mock.calls[0][0];
+      const userMsg = runOpts.messages[1];
+      expect(Array.isArray(userMsg.content)).toBe(true);
+      expect(userMsg.content[0]).toEqual({
+        type: "file",
+        file: { file_data: "data:application/pdf;base64,QUJD", filename: "spec.pdf" },
+      });
+      // The instruction rides behind the files, matching the vendor's order.
+      expect(userMsg.content[1].type).toBe("text");
+      expect(userMsg.content[1].text).toContain("总结这份规格书");
+    });
+
+    it("refuses a pdf ref that escapes the project or hides in .ai-writer", async () => {
+      const pdfModel: Model = { ...dummyTextModel, id: "m-pdf", name: "Qwen3.8-Max", pdfInput: true };
+      const ctx = makeCtx({
+        resolveSubAgent: vi.fn(async () => ({ provider: dummyProvider, model: pdfModel, apiKey: "k" })),
+      });
+      for (const ref of ["../outside/secret.pdf", "/test-project/.ai-writer/backups/x.pdf"]) {
+        const call: ToolCall = {
+          id: "c1", name: "delegate",
+          arguments: JSON.stringify({ kind: "pdf", task: "读", refs: [ref] }),
+        };
+        const res = await executeDelegate(call, ctx);
+        expect(res.content).toContain("outside the project");
+      }
     });
 
     it("reports no cost for a subagent that failed before running", async () => {

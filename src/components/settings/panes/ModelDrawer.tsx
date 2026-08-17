@@ -69,6 +69,8 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
   // Same reason — a list is not a string. Endpoint-run tools the author grants
   // this model (lib/ai/serverTools).
   const [serverTools, setServerTools] = useState<ServerToolId[]>(existing?.serverTools ?? []);
+  // Whether this model takes whole PDFs as message content (lib/ai/configDb).
+  const [pdfInput, setPdfInput] = useState(existing?.pdfInput ?? false);
   const [fetching, setFetching] = useState(false);
   const [fetchedList, setFetchedList] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
@@ -131,6 +133,10 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
           provider && supportsServerTools(provider.apiStandard) && serverTools.length
             ? serverTools
             : undefined,
+        // Same clearing rule: the declaration only survives where the wire has
+        // a spelling for it (the OpenAI-family file content part), and only on
+        // a model type that converses. False stores as absent.
+        pdfInput: family === "openai" && !isImageModel && pdfInput ? true : undefined,
         pricePerImage,
         caps,
       };
@@ -354,7 +360,8 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
               </div>
             )}
 
-            {/* Tools the endpoint runs itself. Anthropic-shaped endpoints only,
+            {/* Tools the endpoint runs itself. Anthropic-shaped endpoints and
+                OpenAI compat (Qwen's enable_search — see supportsServerTools),
                 and off by default: it is a standing permission for the model to
                 reach the open web on every request, which is the author's call
                 to make rather than something a model quietly gains. */}
@@ -375,7 +382,25 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
                     />
                   ))}
                 </ChipRow>
-                <div className={hub.fieldHint}>{t("aiConfig.models.serverToolsHint")}</div>
+                <div className={hub.fieldHint}>
+                  {family === "openai"
+                    ? t("aiConfig.models.serverToolsHintOpenai")
+                    : t("aiConfig.models.serverToolsHint")}
+                </div>
+              </div>
+            )}
+
+            {/* Whole-PDF input (the OpenAI file content part). Family-gated
+                like the dialect chips above: no endpoint on the other wires is
+                declared to take one here, so showing the checkbox there would
+                promise a subagent that refuses at run time. */}
+            {family === "openai" && (
+              <div className={styles.fieldGroup}>
+                <label className={hub.checkLabel}>
+                  <input type="checkbox" checked={pdfInput} onChange={(e) => setPdfInput(e.target.checked)} />
+                  {t("aiConfig.models.pdfInputLabel")}
+                </label>
+                <div className={hub.fieldHint}>{t("aiConfig.models.pdfInputHint")}</div>
               </div>
             )}
 

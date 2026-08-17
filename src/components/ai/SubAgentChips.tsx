@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Globe, Eye, BookOpen, type LucideIcon } from "lucide-react";
+import { Globe, Eye, BookOpen, FileText, type LucideIcon } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { subAgentModel, SUBAGENT_KINDS, type SubAgentKind } from "../../lib/agent/subagent";
@@ -9,6 +9,7 @@ const ICONS: Record<SubAgentKind, LucideIcon> = {
   search: Globe,
   vision: Eye,
   longread: BookOpen,
+  pdf: FileText,
 };
 
 /**
@@ -44,7 +45,8 @@ export function SubAgentChips() {
         const Icon = ICONS[kind];
         const isDisabledThisSession = disabledSubAgents.includes(kind);
         const label = t(`ai.chat.subagentChip.${kind}`, {
-          defaultValue: kind === "search" ? "联网" : kind === "vision" ? "识图" : "长文",
+          defaultValue:
+            kind === "search" ? "联网" : kind === "vision" ? "识图" : kind === "pdf" ? "PDF" : "长文",
         });
         const title = isDisabledThisSession
           ? t(`ai.chat.subagentChip.${kind}Disabled`, {

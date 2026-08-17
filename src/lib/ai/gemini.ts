@@ -77,7 +77,9 @@ export function convertToGeminiContents(messages: StreamMessage[]): GeminiConten
     const parts: GeminiPart[] = Array.isArray(regularMsg.content)
       ? regularMsg.content.map((p) => {
           if (p.type === "text") return { text: p.text };
-          const dataUrl = p.image_url.url;
+          // Images and files both travel as data URLs, and Gemini takes both as
+          // inlineData — a PDF is just inlineData with an application/pdf mime.
+          const dataUrl = p.type === "file" ? p.file.file_data : p.image_url.url;
           const [meta, data] = dataUrl.split(",");
           const mimeType = meta.slice("data:".length).replace(";base64", "");
           return { inlineData: { mimeType, data } };

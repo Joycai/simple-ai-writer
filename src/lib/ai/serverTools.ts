@@ -20,12 +20,23 @@
  *   - **Read-only reporting.** All this app does with one is show what the model
  *     searched and what came back, in the execution log.
  *
- * Today the list has exactly one entry, because exactly one endpoint offers one:
- * MiniMax-M3's `/anthropic/v1/messages` serves `web_search`, in beta, and only
- * on the Anthropic wire (`docs/api/landscape.md` §7 第四个样本). The shape is
- * Anthropic's own versioned-tool convention, so if the official endpoint's
- * server tools are ever wired up they land in the same table rather than beside
- * it.
+ * Today the list has exactly one entry — `web_search` — spoken by two wires:
+ *
+ *   - **Anthropic family**: MiniMax-M3's `/anthropic/v1/messages` serves it in
+ *     beta (`docs/api/landscape.md` §7 第四个样本), as Anthropic's own
+ *     versioned-tool convention (`tools[]` entries — see `anthropicServerTools`).
+ *   - **OpenAI compat**: Qwen on DashScope's compatible-mode spells the same
+ *     permission as a top-level body field, `enable_search: true`
+ *     (`docs/api/landscape.md` §7 第六个样本 — what the SDK docs put in
+ *     `extra_body` is just a top-level wire field; see `openaiServerToolsBody`).
+ *     One honesty note: on that wire the search leaves **no trace** in the
+ *     response — the vendor documents that Chat Completions mode returns no
+ *     sources and no citations — so unlike the Anthropic wire there is nothing
+ *     to show in the execution log; the answer simply absorbs what was found.
+ *
+ * Same id on purpose: the app-level meaning ("this model may reach the web on
+ * its own, on every request") is identical, and the id is what the search
+ * subagent's eligibility check reads. The *spelling* is the family's business.
  */
 
 import { familyOf, type ApiStandard } from "./types";
@@ -71,14 +82,22 @@ function safeParse(s: string): unknown {
 /**
  * Whether this endpoint can be told about server tools at all.
  *
- * Anthropic-shaped endpoints only, and deliberately not narrowed to the compat
- * half: the declaration is the author's, and an official endpoint that grows
- * its own server tools would take the same field. Offering the setting where
- * the adapter would drop it is the failure this guards against — the same rule
+ * Anthropic-shaped endpoints, deliberately not narrowed to the compat half:
+ * the declaration is the author's, and an official endpoint that grows its own
+ * server tools would take the same field. Offering the setting where the
+ * adapter would drop it is the failure this guards against — the same rule
  * `supportsThinkingLevel` follows.
+ *
+ * The OpenAI family gets the **opposite** narrowing, and the same reasoning
+ * produces it: there the spelling is `enable_search: true`, a DashScope
+ * extension that api.openai.com does not know — and OpenAI's official endpoint
+ * rejects unknown top-level arguments outright, so on `openai` (official) the
+ * adapter must never send it and this setting must never appear. Compat is
+ * exactly the half where the author typed the address and knows whether they
+ * bought a DashScope-shaped endpoint.
  */
 export function supportsServerTools(standard: ApiStandard): boolean {
-  return familyOf(standard) === "anthropic";
+  return familyOf(standard) === "anthropic" || standard === "openai_compat";
 }
 
 /**
@@ -114,6 +133,27 @@ export function anthropicServerTools(
     name: id,
     ...(id === "web_search" ? { max_uses: MAX_SEARCHES_PER_REQUEST } : {}),
   }));
+}
+
+/**
+ * The body fields these ids become on the OpenAI-compatible wire — Qwen on
+ * DashScope compatible-mode spells the permission `enable_search: true` at the
+ * top level of the request.
+ *
+ * Gated on the standard here rather than trusting the caller, mirroring the
+ * asymmetry in `supportsServerTools`: the config layer refuses to *store* the
+ * permission on an official-OpenAI model, but a config row travels (import,
+ * hand edits), and this field on api.openai.com is a guaranteed 400. Nothing
+ * like Anthropic's `max_uses` exists to send: DashScope documents no per-request
+ * search cap on this wire, and search bills per call at a rate three orders of
+ * magnitude below Anthropic's, so the missing brake is not the same hazard.
+ */
+export function openaiServerToolsBody(
+  standard: ApiStandard,
+  ids: readonly ServerToolId[] | undefined,
+): Record<string, unknown> {
+  if (standard !== "openai_compat" || !ids?.includes("web_search")) return {};
+  return { enable_search: true };
 }
 
 // ─── What comes back ─────────────────────────────────────────────────────────

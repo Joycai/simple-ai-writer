@@ -524,9 +524,9 @@ export async function buildResumeSeed(
 ```ts
 // lib/agent/subagent.ts
 /** 可委托的子代理种类。`image` 不在此列 —— 见 §5.5。 */
-export type SubAgentKind = "search" | "vision" | "longread";
+export type SubAgentKind = "search" | "vision" | "longread" | "pdf";
 
-export const SUBAGENT_KINDS: readonly SubAgentKind[] = ["search", "vision", "longread"];
+export const SUBAGENT_KINDS: readonly SubAgentKind[] = ["search", "vision", "longread", "pdf"];
 
 export interface SubAgentConfig {
   kind: SubAgentKind;
@@ -544,6 +544,7 @@ export interface SubAgentConfig {
 ai:subagent:search:modelId    ai:subagent:search:enabled
 ai:subagent:vision:modelId    ai:subagent:vision:enabled
 ai:subagent:longread:modelId  ai:subagent:longread:enabled
+ai:subagent:pdf:modelId       ai:subagent:pdf:enabled
 ```
 
 `aiStore` 提供 `subAgents: Record<SubAgentKind, SubAgentConfig>` 与 `setSubAgent(kind, patch)`，并**必须**接进既有的两处清理逻辑（`aiStore.ts:148-155` 模型表刷新、`aiStore.ts:231` 单个模型删除）—— 否则删掉一个模型后，子代理会指向一个不存在的行。`aiStoreRemoval.test.ts` 已经为 `memoryModelId` 立过这个规矩。
@@ -557,8 +558,27 @@ ai:subagent:longread:modelId  ai:subagent:longread:enabled
 | `search` | 联网检索与查证 | `[]` | 2 | **`"always"`** | `notes/search-*.md`：结论 + 事实 + **原始 URL** |
 | `vision` | 图像理解 | `["read_image", "read_lore_image"]` | 3 | `"off"` | `notes/vision-*.md`：视觉描述与结论 |
 | `longread` | 长文精读提要 | `["read_file", "search_text", "list_files"]` | 4 | `"off"` | `notes/read-*.md`：大纲 + 关键细节 |
+| `pdf` | PDF 原件精读（2026-08-17 加） | `[]` | 1 | `"off"` | `notes/pdf-*.md`：结构 + 关键内容 |
 
-三者一律 `finishPolicy: "force-text"`（子代理必须以文本收尾，那段文本就是产出）。
+一律 `finishPolicy: "force-text"`（子代理必须以文本收尾，那段文本就是产出）。
+
+`pdf` 与 `longread` 的分界：`longread` 靠 `read_file` 分页读**文本**文档；PDF 是
+二进制，`read_file` 读不了，而项目的 docx/pdf 导入线（`lib/import`）是作者手动
+动作，agent 够不着。`pdf` 子代理把**原件整份**作为 `file` 内容块放进首条 user
+消息（`{type:"file", file:{file_data: <data URL>, filename}}`——ContentPart 的
+第三个变体，`lib/ai/types.ts`），端点服务端抽取并作答。因此它 `maxRounds: 1`、
+零工具：没有任何工具能在后续轮次再取一份文件，请求本身就是全部工作。文件在
+`executeDelegate` 里按 `refs` 就地读取（`loadProjectPdf`）：`.pdf` 后缀强制、
+`isWorkspacePath` 包含校验（**`.ai-writer/` 拒绝**——PDF 是模型当文本读的文档，
+`read_file` 挡外泄的论证原样适用）、单文件 ≤150MB（DashScope 自己的上限）、
+单次 ≤3 份（厂商只给过单文件示例，多文件是否可行见
+`thinking-verification.md` 4.9）。base64 编码用线性 join 而非 `imageToDataUrl`
+的累加循环——那个循环在 12MB 图片帽下看不出问题，150MB 会二次方到分钟级。
+
+能力位是 `Model.pdfInput`（声明式布尔，`configDb` 新列 `pdf_input`，
+ModelDrawer 仅 openai 族显示）：与 `serverTools` 同一哲学——这是作者买了什么的
+属性（同一 DashScope 端点后面只有 qwen3.8-max 读得了 PDF），探测无从问起。
+**不 sniff 模型名**：厂商扩大支持面时作者勾一下就行，代码零改。
 
 #### 5.2.1 致命修正：`serverTools` 必须脱离 `withholdTools`
 
@@ -610,7 +630,9 @@ serverTools: withholdServerTools ? undefined : opts.serverTools,
 **每个 kind 各有一条前置条件，都在 `delegate` 里检查、而非留给子跑去发现** ——
 否则作者要等一整个往返，才被告知一件设置界面早就知道的事，而且报出来的形态是
 「子代理失败」而不是「配置不对」。`vision` 要求 `model.type === "multimodal"`，
-`search` 要求下面这条。同样的判断也在设置面板上就地提示。
+`pdf` 要求 `model.pdfInput`，`search` 要求下面这条。同样的判断也在设置面板上
+就地提示（`SubAgentsPane.warningFor`），也是 `subAgentModel` 的「可用」判定——
+三处一个实现。
 
 **密钥缺失同理**：`resolveSubAgentConn` 不得把取不到的密钥降级成空串——
 那会发出一个无钥请求，401 回来被包装成「子代理坏了」，而真正的修法是去粘一个 key。
@@ -621,6 +643,13 @@ serverTools: withholdServerTools ? undefined : opts.serverTools,
 Error: the search subagent's model "<name>" has no server-side web_search enabled.
 Tell the author to turn it on in Settings → Models, or answer without searching.
 ```
+
+自 2026-08-17 起 `web_search` 不再是 Anthropic 族专属：`openai_compat` 端点
+（千问 DashScope 兼容模式）也可声明，adapter 拼成顶层 `enable_search: true`
+（`lib/ai/serverTools.ts` 的 `openaiServerToolsBody`）。一个诚实的差别要知道：
+该协议**不返回任何搜索痕迹**（厂商文档明载无来源、无角标），所以千问当搜索
+子代理时执行日志里没有「搜了什么、命中了什么」的行——产出笔记里的结论就是
+全部可见物，`renderSearchResults` 那套回手转写在这条线上天然无事可做。
 
 ### 5.3 `delegate` 工具与嵌套调用
 

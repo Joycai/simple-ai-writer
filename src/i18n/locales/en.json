@@ -382,10 +382,13 @@
       "visionSub": "Read images and answer. Needs a multimodal model.",
       "longread": "Long-document digest",
       "longreadSub": "Read long documents and extract what matters. Suits a cheap large-window model.",
+      "pdf": "PDF digest",
+      "pdfSub": "Hand a whole PDF to the model to read and distill. Needs a model with PDF file input (currently Qwen's qwen3.8-max).",
       "pickModel": "Select a model",
       "noModel": "No model bound",
       "warnNoSearch": "This model has no server-side web_search enabled, so the subagent cannot browse.",
       "warnNotMultimodal": "This model is text-only and cannot read images.",
+      "warnNoPdf": "This model is not declared to accept PDF file input (check it in the model's settings), so the subagent cannot read PDFs.",
       "enable": "Enable"
     }
   },
@@ -567,7 +570,8 @@
       "subagent": {
         "search": "You are a research specialist. Your role is to use web search to verify facts, gather background material, and produce clear structured summaries.\nList key findings, supporting facts, and their source URLs.",
         "vision": "You are an image analysis specialist. Your role is to examine and interpret reference images, extract visual traits, appearance details, or composition elements, and produce clear descriptive summaries.",
-        "longread": "You are a document digest specialist. Your role is to read the specified documents thoroughly, extract outlines, core worldbuilding, or plotlines, and compile a checklist of essential details."
+        "longread": "You are a document digest specialist. Your role is to read the specified documents thoroughly, extract outlines, core worldbuilding, or plotlines, and compile a checklist of essential details.",
+        "pdf": "You are a PDF digest specialist. The user message carries one or more PDF files. Your role is to read them thoroughly, extract their structure, key content and details as the task requires, and produce a clear structured summary; cite page numbers or sections where identifiable."
       },
       "subagentTask": "Task objective:\n{{task}}",
       "subagentTaskWithRefs": "Task objective:\n{{task}}\n\nReferences:\n{{refs}}"
@@ -598,6 +602,7 @@
         "search": "Search agent",
         "vision": "Vision agent",
         "longread": "Long-read agent",
+        "pdf": "PDF agent",
         "main": "Main model"
       },
       "selectPrompt": "Select a task on the left to view details",
@@ -1006,7 +1011,10 @@
         "visionDisabled": "Vision subagent disabled for this session (click to enable)",
         "longread": "Long read",
         "longreadActive": "Long-read subagent active (click to disable for this session)",
-        "longreadDisabled": "Long-read subagent disabled for this session (click to enable)"
+        "longreadDisabled": "Long-read subagent disabled for this session (click to enable)",
+        "pdf": "PDF",
+        "pdfActive": "PDF subagent active (click to disable for this session)",
+        "pdfDisabled": "PDF subagent disabled for this session (click to enable)"
       }
     },
     "drawer": {
@@ -1218,6 +1226,9 @@
       "serverToolsLabel": "Server-side tools (optional)",
       "serverToolsHint": "Tools the *endpoint* runs inside the same request. Nothing happens locally and there is no per-call approval — turning one on grants this model standing permission to search the open web whenever it answers. Anthropic-protocol endpoints only: web_search is GA on the official api.anthropic.com and vendor-marked beta on MiniMax-M3's /anthropic endpoint; elsewhere the setting has no effect. Searches and the pages they hit are recorded in the execution log.",
       "serverTool_web_search": "Web search",
+      "serverToolsHintOpenai": "Tools the *endpoint* runs inside the same request. Nothing happens locally and there is no per-call approval — turning one on grants this model standing permission to search the open web whenever it answers. On OpenAI-compatible endpoints this is sent the Qwen (DashScope compatible-mode) way, as enable_search: true; other compat endpoints will usually ignore it, and the official api.openai.com rejects the field (this setting is hidden there). Note: on this protocol the search leaves no trace — no sources or citations come back, so the execution log shows nothing; the answer simply absorbs what was found.",
+      "pdfInputLabel": "PDF file input",
+      "pdfInputHint": "Declares that this model accepts whole PDF files as message content (the OpenAI file content part; on Qwen's DashScope compatible-mode currently qwen3.8-max only, ≤150MB / ≤500 pages per file, billed per page on top of tokens). Required before it can be bound as the PDF digest subagent.",
       "effortLabelAnthropic": "Effort"
     },
     "probe": {

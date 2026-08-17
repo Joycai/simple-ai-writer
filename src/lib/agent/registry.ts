@@ -1341,16 +1341,17 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
           "running on its own model. The subagent works in a separate context, writes " +
           "its full findings to a note file, and returns only a short summary plus the " +
           "note path — so its raw material never enters this conversation. Use it for " +
-          "web research, reading images, and digesting long documents.",
+          "web research, reading images, reading PDF files, and digesting long documents.",
         parameters: {
           type: "object",
           properties: {
             kind: {
               type: "string",
-              enum: ["search", "vision", "longread"],
+              enum: ["search", "vision", "longread", "pdf"],
               description:
                 "search — look things up on the web; vision — describe or analyse images; " +
-                "longread — read long documents and report what matters.",
+                "longread — read long text documents and report what matters; " +
+                "pdf — read PDF files (refs must be .pdf paths; the only way to read a PDF's contents).",
             },
             task: {
               type: "string",
@@ -1361,7 +1362,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             refs: {
               type: "array",
               items: { type: "string" },
-              description: "Paths the subagent should work on (documents or images).",
+              description: "Paths the subagent should work on (documents, images, or PDF files).",
             },
           },
           required: ["kind", "task"],

@@ -342,6 +342,16 @@ Qwen3-Max/Plus 等商业款默认关——后者不发开关就永远不思考�
 3. **`thinking_budget` 不做。** 全 app 没有 budget 的 UI 载体（anthropic 侧
    同理跳过了 `thinkingBudget`——没有读者的字段只会变成噪音），且它与
    `reasoning_effort` 的互斥让"两个都发"成为新的踩坑面。需要时再加。
+4. **强制 `tool_choice` 在「思考实际开着」时降级为 auto（2026-08-17 补）。**
+   千问文档明载：thinking 开启时 `tool_choice` 只接受 `auto`|`none`，forced 是
+   发出即 400。openai 适配器的 `toolChoiceFor` 与 anthropic 族 `toolChoiceBody`
+   共享同一安全论证——唯一 forced 的调用方（`agent/structured.ts`）本就把
+   "模型没调工具"当回退信号，降级最坏是回退早触发一轮，不降级是必败请求 +
+   同一个回退。差别在触发条件：MiniMax 的 `switch` 端点**从来没有**强制档，
+   所以那边无条件降级；千问端点思考关着时强制档合法，所以这边精确到
+   "本次请求真的发出 `enable_thinking: true`"（方言已声明 + 力度非
+   「默认」非「关闭」——`默认` 不发字段，而声明 `switch` 的模型思考默认关，
+   两者都留 forced 合法）。
 
 UI 侧选项按族给：anthropic 族四个形状照旧，openai 族只有「自动」与「开关式」
 ——给 openai 族显示 `adaptive`/`extended` 就是"按了没反应的控件"。
