@@ -33,6 +33,7 @@ beforeEach(() => {
       vision: { kind: "vision", modelId: "m2", enabled: true },
       longread: { kind: "longread", modelId: null, enabled: false },
       pdf: { kind: "pdf", modelId: null, enabled: false },
+      imagegen: { kind: "imagegen", modelId: null, enabled: false },
     },
   });
 });
@@ -84,6 +85,7 @@ describe("aiStore.removeProvider", () => {
         vision: { kind: "vision", modelId: null, enabled: false },
         longread: { kind: "longread", modelId: null, enabled: false },
         pdf: { kind: "pdf", modelId: null, enabled: false },
+      imagegen: { kind: "imagegen", modelId: null, enabled: false },
       },
     });
 

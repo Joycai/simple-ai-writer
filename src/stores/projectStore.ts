@@ -28,7 +28,6 @@ import {
   type SectionId,
   type WorkspaceProfile,
 } from "../lib/profile";
-import { backupFile } from "../lib/agent/backup";
 import { normalizeChapterFileName } from "../lib/context/outline";
 import { copyPath, fileExists, makeDir, removeDir, removeFile, renamePath, writeFile } from "../lib/fs/fileio";
 import { baseNameOf, resolveCopyTarget, type TransferMode } from "../lib/fs/moveCopy";
@@ -412,28 +411,30 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     let backupPath: string | null = null;
     try {
       if (opts?.backup && projectPath) {
-        if (isDir) {
-          // Move rather than copy: one rename both backs the folder up and
-          // removes it, so there is no half-deleted state, and binary assets
-          // travel too (backupFile is text-only).
-          const backupRoot = `${projectPath}/.ai-writer/backups`;
-          await makeDir(backupRoot);
-          const flat = path.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? "folder";
-          backupPath = `${backupRoot}/deleted-${Date.now()}-${flat}`;
-          await renamePath(path, backupPath);
-          return backupPath;
-        }
-        // A failed backup must abort the delete, never delete anyway.
-        backupPath = await backupFile(projectPath, path);
+        // Move rather than copy, for folders and files alike: one rename both
+        // backs the entry up and removes it, so there is no half-deleted
+        // state, and it is byte-exact whatever the entry holds. The old
+        // file branch copied through backupFile, whose text-only IPC fails on
+        // a picture — and a failed backup must abort the delete, so images
+        // would have become undeletable the moment the sidebar started
+        // backing up.
+        const backupRoot = `${projectPath}/.ai-writer/backups`;
+        await makeDir(backupRoot);
+        const flat = path.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? "entry";
+        backupPath = `${backupRoot}/deleted-${Date.now()}-${flat}`;
+        await renamePath(path, backupPath);
+        // The document's pictures go beside the backup, so a restore brings
+        // back a document whose image links still resolve.
+        if (!isDir) await discardDocumentAssets(path, backupPath);
+        return backupPath;
       }
       if (isDir) {
         await removeDir(path);
       } else {
         await removeFile(path);
         // Otherwise the document's pictures stay on disk attached to nothing,
-        // still visible in the tree. With a backup they go beside it, so a
-        // restore brings back a document whose image links still resolve.
-        await discardDocumentAssets(path, backupPath);
+        // still visible in the tree.
+        await discardDocumentAssets(path, null);
       }
     } finally {
       await get().refreshFileTree();

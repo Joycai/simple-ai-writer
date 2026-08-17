@@ -559,8 +559,23 @@ ai:subagent:pdf:modelId       ai:subagent:pdf:enabled
 | `vision` | 图像理解 | `["read_image", "read_lore_image"]` | 3 | `"off"` | `notes/vision-*.md`：视觉描述与结论 |
 | `longread` | 长文精读提要 | `["read_file", "search_text", "list_files"]` | 4 | `"off"` | `notes/read-*.md`：大纲 + 关键细节 |
 | `pdf` | PDF 原件精读（2026-08-17 加） | `[]` | 1 | `"off"` | `notes/pdf-*.md`：结构 + 关键内容 |
+| `imagegen` | 图片生成（2026-08-17 加）| —（非会话型，见下） | — | — | 文档 `assets/` 或条目图库里的一张图 |
 
 一律 `finishPolicy: "force-text"`（子代理必须以文本收尾，那段文本就是产出）。
+
+`imagegen` 是唯一**非会话型**的种类：图像模型开不了 `runAgent` 的子回合，所以
+它不走 `delegate`（`DELEGATE_KINDS = SubAgentKind \ {imagegen}`，`executeDelegate`
+对 `kind:"imagegen"` 直接拒绝并把模型指回图片工具）。它的接口是既有的
+`generate_image` / `edit_image` 工具对（L2 审批卡：提案→出示提示词与价格→同意
+才生成，`lib/agent/imageTools.ts` + `lib/image/illustrate.ts`），绑定让开关有了
+实义：`routeTools` 只在 `subAgentModel("imagegen")` 可用（启用 + 绑到
+`type:"image"` 模型）时保留这两个工具，工具解析模型也只认这份绑定——不再回退
+到"随便哪个图像模型"。与 `vision` 的分工：vision 接管**读**图，imagegen 提供
+**画**图，二者在路由里互不干涉。会话芯片对它同样生效（本次对话关掉 ⇒ 工具被
+剥掉）。迁移：`ai:subagent:imagegen:*` 两个 pref 都缺席时，从旧的
+`ai:imageModelId`（生成弹窗的选择）播种为「启用 + 同一模型」——此前 agent 画图
+一直隐式在线，升级后静默失能会被读成"助手坏了"；弹窗自己仍用 `imageModelId`
+（作者当场可换，互不影响）。
 
 `pdf` 与 `longread` 的分界：`longread` 靠 `read_file` 分页读**文本**文档；PDF 是
 二进制，`read_file` 读不了，而项目的 docx/pdf 导入线（`lib/import`）是作者手动

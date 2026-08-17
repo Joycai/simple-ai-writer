@@ -14,10 +14,13 @@ import type { LoreIndex } from "../lore";
 const generateImage = vi.fn();
 vi.mock("../ai/image", () => ({ generateImage: (...a: unknown[]) => generateImage(...a) }));
 
-// The tools reach for the configured image model through the store.
+// The tools reach for their model through the imagegen subagent's binding.
 let storeModels: unknown[] = [];
+let storeSubAgents: Record<string, unknown> = {};
 vi.mock("../../stores/aiStore", () => ({
-  useAiStore: { getState: () => ({ models: storeModels, providers: [], imageModelId: null }) },
+  useAiStore: {
+    getState: () => ({ models: storeModels, providers: [], subAgents: storeSubAgents }),
+  },
 }));
 
 const { generateImageTool, editImageTool } = await import("../agent/imageTools");
@@ -51,6 +54,7 @@ function ctxWith(decision: { approved: boolean; reason?: string } = { approved: 
 beforeEach(() => {
   generateImage.mockReset();
   storeModels = [IMAGE_MODEL];
+  storeSubAgents = { imagegen: { kind: "imagegen", modelId: "m1", enabled: true } };
 });
 
 describe("generate_image", () => {
@@ -106,11 +110,22 @@ describe("generate_image", () => {
     expect(res.content).toMatch(/entity.*path|path.*entity/i);
   });
 
-  it("says so when no image model is configured, rather than proposing an unpriced run", async () => {
+  it("says so when the imagegen subagent is unusable, rather than proposing an unpriced run", async () => {
     storeModels = [];
     const { ctx, seen } = ctxWith();
     const res = await generateImageTool("c1", { prompt: "x", entity: "艾尔登" }, ctx);
-    expect(res.content).toMatch(/no image model/i);
+    expect(res.content).toMatch(/subagent/i);
+    expect(seen).toHaveLength(0);
+  });
+
+  it("does not fall back to some other image model when the binding is off", async () => {
+    // The pre-subagent behaviour was "whatever image model exists" — routing
+    // normally strips the tools before this can run, but the resolver must
+    // agree with the routing rather than quietly resurrect the fallback.
+    storeSubAgents = { imagegen: { kind: "imagegen", modelId: null, enabled: false } };
+    const { ctx, seen } = ctxWith();
+    const res = await generateImageTool("c1", { prompt: "x", entity: "艾尔登" }, ctx);
+    expect(res.content).toMatch(/subagent/i);
     expect(seen).toHaveLength(0);
   });
 

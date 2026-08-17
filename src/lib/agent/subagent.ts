@@ -21,9 +21,22 @@ import type { ToolContext } from "./registry";
 import type { ToolCall, ToolResult } from "./tools";
 import { writeTaskNote } from "./taskWorkspace";
 
-export type SubAgentKind = "search" | "vision" | "longread" | "pdf";
+export type SubAgentKind = "search" | "vision" | "longread" | "pdf" | "imagegen";
 
-export const SUBAGENT_KINDS: readonly SubAgentKind[] = ["search", "vision", "longread", "pdf"];
+export const SUBAGENT_KINDS: readonly SubAgentKind[] = ["search", "vision", "longread", "pdf", "imagegen"];
+
+/**
+ * The kinds `delegate` can dispatch to — a *conversational* sub-run on the
+ * bound model. `imagegen` is deliberately not one of them: an image model
+ * cannot hold a conversation, so the assistant's interface to that specialist
+ * is the `generate_image` / `edit_image` tool pair (proposal → approval card →
+ * generation, see lib/agent/imageTools.ts), and `routeTools` is what makes the
+ * binding matter — those tools exist only while this subagent is usable, and
+ * they draw with its model.
+ */
+export type DelegateKind = Exclude<SubAgentKind, "imagegen">;
+
+export const DELEGATE_KINDS: readonly DelegateKind[] = ["search", "vision", "longread", "pdf"];
 
 export interface SubAgentConfig {
   kind: SubAgentKind;
@@ -32,7 +45,7 @@ export interface SubAgentConfig {
   enabled: boolean;
 }
 
-export const SUB_PRESETS: Record<SubAgentKind, TaskPreset> = {
+export const SUB_PRESETS: Record<DelegateKind, TaskPreset> = {
   search: {
     id: "subagent-search",
     tools: [],
@@ -180,6 +193,7 @@ export function subAgentModel(
   if (kind === "vision" && model.type !== "multimodal") return null;
   if (kind === "search" && !model.serverTools?.includes("web_search")) return null;
   if (kind === "pdf" && !model.pdfInput) return null;
+  if (kind === "imagegen" && model.type !== "image") return null;
   return model;
 }
 
@@ -317,8 +331,11 @@ export async function executeDelegate(
   }
 
   const args = parseArgs<{ kind?: string; task?: string; refs?: string[] }>(call.arguments);
-  const kind = args.kind as SubAgentKind;
-  if (!SUBAGENT_KINDS.includes(kind)) {
+  const kind = args.kind as DelegateKind;
+  if (!DELEGATE_KINDS.includes(kind)) {
+    if ((args.kind as SubAgentKind) === "imagegen") {
+      return fail("images are not delegated — call generate_image or edit_image directly.");
+    }
     return fail(`unknown subagent kind "${args.kind}". Must be one of: search, vision, longread, pdf.`);
   }
 

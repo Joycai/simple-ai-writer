@@ -4,13 +4,14 @@
  * Rewrites the tool list and serverTools policy for the main agent:
  * - If search subagent is active: withhold serverTools from main agent
  * - If vision subagent is active: strip read_image and read_lore_image from main agent
- * - If any subagent is active and workspace exists: append delegate tool
+ * - If the imagegen subagent is NOT active: strip generate_image and edit_image
+ * - If any delegate-capable subagent is active and workspace exists: append delegate tool
  */
 
 import type { ToolId } from "./registry";
 import type { TaskPreset } from "./presets";
 import type { TaskWorkspaceHandle } from "./taskWorkspace";
-import { subAgentModel, SUBAGENT_KINDS, type SubAgentConfig, type SubAgentKind } from "./subagent";
+import { subAgentModel, DELEGATE_KINDS, type SubAgentConfig, type SubAgentKind } from "./subagent";
 import type { Model } from "../ai/configDb";
 
 export interface RoutedTools {
@@ -45,8 +46,22 @@ export function routeTools(
     tools = tools.filter((t) => t !== "read_image" && t !== "read_lore_image");
   }
 
-  // If any subagent is configured/enabled and we have an active/provisional workspace, provide delegate.
-  if (SUBAGENT_KINDS.some(live) && workspace && !tools.includes("delegate")) {
+  // The image tools exist only while the imagegen subagent can serve them —
+  // this is what makes the settings switch *mean* something. Unlike vision,
+  // which takes a capability away from a model that has its own, the main
+  // model cannot draw at all: with no usable image binding the tools could
+  // only collect an error, and a tool the model can see but that always fails
+  // reads to the author as the assistant being broken rather than a feature
+  // being off.
+  if (!live("imagegen")) {
+    tools = tools.filter((t) => t !== "generate_image" && t !== "edit_image");
+  }
+
+  // If any delegate-capable subagent is enabled and we have an
+  // active/provisional workspace, provide delegate. `imagegen` must not count:
+  // it cannot hold the conversational sub-run `delegate` dispatches, so alone
+  // it would add a tool with no valid kind to call.
+  if (DELEGATE_KINDS.some(live) && workspace && !tools.includes("delegate")) {
     tools.push("delegate");
   }
 
