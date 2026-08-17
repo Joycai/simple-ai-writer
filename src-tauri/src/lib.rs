@@ -3,6 +3,7 @@ mod print;
 mod protocol;
 mod scope;
 mod secrets;
+mod sqltx;
 mod transfer;
 mod xlsx;
 
@@ -59,6 +60,7 @@ pub fn run() {
             secrets::secret_save,
             secrets::secret_load,
             secrets::secret_delete,
+            sqltx::sqlite_transaction,
             transfer::zip_export_dialog,
             transfer::zip_import_dialog,
             transfer::save_text_file_dialog,

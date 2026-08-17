@@ -86,11 +86,22 @@ export function resetDb() {
 
 let _globalDb: Awaited<ReturnType<typeof Database.load>> | null = null;
 
+/**
+ * The config database's path on disk.
+ *
+ * Exported because a transaction cannot go through the handle above: the SQL
+ * plugin is a pool, so `sqlTransaction` (lib/sqlTx) needs the file itself to
+ * open a connection of its own. Derived here rather than at the call site so
+ * both routes to this database can never disagree about which file it is.
+ */
+export async function getGlobalDbPath(): Promise<string> {
+  const { appDataDir } = await import("@tauri-apps/api/path");
+  return `${await appDataDir()}/config.db`;
+}
+
 export async function getGlobalDb() {
   if (_globalDb) return _globalDb;
-  const { appDataDir } = await import("@tauri-apps/api/path");
-  const dir = await appDataDir();
-  _globalDb = await Database.load(`sqlite:${dir}/config.db`);
+  _globalDb = await Database.load(`sqlite:${await getGlobalDbPath()}`);
   return _globalDb;
 }
 
