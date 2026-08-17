@@ -20,7 +20,7 @@ import {
   type LoreEntity,
   type StagedLoreImport,
 } from "../../lib/lore";
-import { categoryLabel, defaultCategoryId, findCategory, loreCategories, profileTerms } from "../../lib/profile";
+import { appTerms, categoryLabel, defaultCategoryId, findCategory, loreCategories, loreCategoryIds, suggestCategoryId } from "../../lib/profile";
 import { useAppStore } from "../../stores/appStore";
 import { imageToDataUrl } from "../../lib/fs/images";
 import { MOD_K_SPACED } from "../../lib/platform";
@@ -50,9 +50,8 @@ export function LoreWall() {
   const { projectPath } = useProjectStore();
   const terms = useTerms();
   // The eyebrow is decorative English regardless of UI language (matching
-  // "MANUSCRIPT · 正文"), so it resolves the en term explicitly.
-  const profile = useProjectStore((s) => s.profile);
-  const kbEyebrow = profileTerms(profile, false).kb.toUpperCase();
+  // "DOCUMENTS · 文档"), so it resolves the en term explicitly.
+  const kbEyebrow = appTerms(false).kb.toUpperCase();
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
 
   // Entering the wall re-reads disk. There is no filesystem watcher, and this
@@ -66,6 +65,7 @@ export function LoreWall() {
 
   const [filter, setFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [showNewCategory, setShowNewCategory] = useState(false);
   // Unified new-entry flow: null = closed, else which mode the modal opens in.
   const [newMode, setNewMode] = useState<NewEntryMode | null>(null);
   // A passage the editor's 提取为设定 handed over. Read once, and held here for
@@ -309,6 +309,21 @@ export function LoreWall() {
           onModeChange={setNewMode}
         />
       )}
+      {showNewCategory && (
+        <NewCategoryModal
+          onClose={() => setShowNewCategory(false)}
+          onCreate={async (label) => {
+            const id = suggestCategoryId(label, loreCategoryIds());
+            const store = useProjectStore.getState();
+            await store.setCustomCategories([
+              ...store.customCategories,
+              { id, labelZh: label, labelEn: label },
+            ]);
+            setShowNewCategory(false);
+            setFilter(id);
+          }}
+        />
+      )}
       {newMode === "manual" && (
         <NewEntryModal
           initialCategory={filter !== "all" ? (filter as CategoryId) : defaultCategoryId()}
@@ -385,6 +400,14 @@ export function LoreWall() {
               <span className={styles.chipCount}>{counts[cat.id] ?? 0}</span>
             </span>
           ))}
+          <span
+            className={styles.chip}
+            onClick={() => setShowNewCategory(true)}
+            title={t("lore.newCategory.hint", { defaultValue: isZh ? "新建一个知识库分类" : "Create a knowledge-base category" })}
+          >
+            <Plus size={11} strokeWidth={2.2} />
+            {t("lore.newCategory.cta", { defaultValue: isZh ? "新建分类" : "New category" })}
+          </span>
         </div>
       </div>
 
@@ -504,6 +527,85 @@ export function LoreWall() {
         )}
       </AnimatePresence>
     </div>
+  );
+}
+
+/**
+ * Create one user-defined knowledge-base category. The author names it; the
+ * folder id is derived (`suggestCategoryId`) so the dialog never has to
+ * explain folder-name rules. One label serves both languages — a per-language
+ * pair here would be ceremony for a personal organisational bucket.
+ */
+function NewCategoryModal({
+  onClose,
+  onCreate,
+}: {
+  onClose: () => void;
+  onCreate: (label: string) => Promise<void>;
+}) {
+  const { t, i18n } = useTranslation();
+  const isZh = i18n.language.startsWith("zh");
+  const [label, setLabel] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const ime = useImeGuard();
+
+  const handleSubmit = async () => {
+    if (!label.trim() || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onCreate(label.trim());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <ModalShell overlayClassName={styles.modalBackdrop} onClose={onClose} isDirty={label.trim().length > 0} closeOnBackdrop={false}>
+      <div className={styles.modal}>
+        <div className={styles.modalHeader}>
+          <div className={styles.modalEyebrow}>{isZh ? "新建分类" : "NEW CATEGORY"}</div>
+          <div className={styles.modalTitle}>
+            {t("lore.newCategory.title", { defaultValue: isZh ? "新建知识库分类" : "New knowledge-base category" })}
+          </div>
+        </div>
+
+        <div className={styles.modalBody}>
+          <label className={styles.modalLabel}>{isZh ? "名称" : "Name"}</label>
+          <input
+            className={styles.modalInput}
+            placeholder={t("lore.newCategory.placeholder", { defaultValue: isZh ? "如：会议纪要、竞品调研…" : "e.g. Meeting notes, Research…" })}
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            maxLength={40}
+            {...ime.imeProps}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !ime.isComposing(e)) void handleSubmit();
+            }}
+            autoFocus
+          />
+          {error && (
+            <div style={{ marginTop: 6, font: "400 12px/1.5 var(--font-sans)", color: "var(--color-red, #b91c1c)" }}>
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div className={styles.modalActions}>
+          <button className={styles.btnSecondary} onClick={onClose}>
+            {t("lore.form.cancel", { defaultValue: isZh ? "取消" : "Cancel" })}
+          </button>
+          <button className={styles.btnPrimary} onClick={handleSubmit} disabled={!label.trim() || saving}>
+            {saving
+              ? t("lore.form.creating", { defaultValue: isZh ? "创建中…" : "Creating…" })
+              : t("lore.form.create", { defaultValue: isZh ? "创建" : "Create" })}
+          </button>
+        </div>
+      </div>
+    </ModalShell>
   );
 }
 

@@ -4,7 +4,7 @@ import { ChevronRight, X } from "lucide-react";
 import { useAiStore } from "../../../stores/aiStore";
 import { useProjectStore } from "../../../stores/projectStore";
 import type { Prompt } from "../../../lib/ai/configDb";
-import { findTask, primaryPack, profileLabel, promptParams } from "../../../lib/profile";
+import { findTask, promptParams } from "../../../lib/profile";
 import { PromptDrawer, SNIPPET_SCENE } from "./PromptDrawer";
 import { Pane, PaneHeader, Section } from "./bits";
 import ui from "../settingsUi.module.css";
@@ -33,18 +33,19 @@ export function PromptsPane({ onEscapeInterceptChange }: Props) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
   const { prompts, removePrompt } = useAiStore();
-  const profile = useProjectStore((s) => s.profile);
+  // Subscribe to the workspace so task-instruction previews follow the pack
+  // selection (novel overrides continue/rewrite/summary with its own wording).
+  useProjectStore((s) => s.workspace);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [draft, setDraft] = useState<Partial<Prompt> | null>(null);
 
-  // Resolve against the active profile: a scene that is a task id shows the
-  // instruction that task actually uses (novel overrides continue/rewrite/
-  // summary with its own wording), and "system" shows this profile's system
-  // prompt — otherwise the editor would display a text no run ever sends.
+  // Resolve against the merged workspace: a scene that is a task id shows the
+  // instruction that task actually uses — otherwise the editor would display
+  // a text no run ever sends. "system" is the one app-level neutral prompt.
   const builtins = BUILTIN_PROMPTS_CONFIG.map((b) => {
     const task = b.scene === "system" ? null : findTask(b.scene);
     const key = b.scene === "system"
-      ? primaryPack().systemPromptKey
+      ? "ai.instructions.system"
       : task?.instructionKey ?? b.instructionKey;
     // The pack that declared the task, so its preview shows the wording the
     // run will actually use (see promptParams).
@@ -115,7 +116,7 @@ export function PromptsPane({ onEscapeInterceptChange }: Props) {
 
       <Section label={t("aiConfig.prompts.builtinTitle")}>
         <div className={ui.rowDesc} style={{ marginBottom: "var(--space-3)" }}>
-          {t("aiConfig.prompts.builtinHint", { profile: profileLabel(profile, isZh) })}
+          {t("aiConfig.prompts.builtinHint")}
         </div>
         {builtins.map((b) => {
           const expanded = !!open[b.scene];

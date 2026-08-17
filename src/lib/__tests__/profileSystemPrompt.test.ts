@@ -1,18 +1,15 @@
 /**
- * The system-prompt fallback, and the invariant that every caller goes through
- * it.
+ * The system-prompt seam, and the invariant that every caller goes through it.
  *
- * This exists because of a real regression: `bundleToMessages` fell back to the
- * profile's prompt correctly, but `aiTaskStore` had already resolved the slot to
- * `i18n.t("ai.instructions.system")` — the *novel* prompt — before the bundle was
- * ever built. The fallback therefore never fired on the path that matters, and a
- * TTRPG project was silently prompted as a novel. The unit test below passed
- * throughout, because it called `assembleContext("")` directly.
- *
- * So there are two tests here: one for the helper, and one that scans the source
- * for the hardcoded key that defeats it.
+ * The prompt is one neutral writing-collaborator identity for every project —
+ * packs add tasks and categories, never a persona. `profileSystemPrompt()` in
+ * lib/context/rag is still the single seam every caller must resolve through:
+ * it is where a future per-project override would land, and the history here
+ * is a real regression — `aiTaskStore` once resolved the slot to the i18n key
+ * directly, so the then-per-pack fallback never fired on the path that
+ * mattered. The source guard below keeps callers honest.
  */
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../../i18n", () => ({ default: { t: (key: string) => key } }));
 vi.mock("../fs/fileio", () => ({
@@ -27,36 +24,24 @@ vi.mock("../fs/fileio", () => ({
 }));
 
 import { profileSystemPrompt } from "../context/rag";
-import { resetActiveWorkspace, setActiveWorkspace } from "../profile/active";
-import { resolveWorkspace } from "../profile/resolve";
-import { BUILTIN_PROFILES, NOVEL_PROFILE, TTRPG_PROFILE } from "../profile/model";
-
-afterEach(() => resetActiveWorkspace());
 
 describe("profileSystemPrompt", () => {
-  it("resolves the active profile's key", () => {
+  it("resolves the one neutral key, whatever is enabled", () => {
     // i18n is mocked to echo keys, so this asserts *which* key is used.
-    expect(profileSystemPrompt()).toBe(NOVEL_PROFILE.systemPromptKey);
-    setActiveWorkspace(resolveWorkspace(TTRPG_PROFILE, []));
-    expect(profileSystemPrompt()).toBe(TTRPG_PROFILE.systemPromptKey);
-  });
-
-  it("gives every builtin a distinct prompt key", () => {
-    const keys = BUILTIN_PROFILES.map((p) => p.systemPromptKey);
-    expect(new Set(keys).size).toBe(keys.length);
+    expect(profileSystemPrompt()).toBe("ai.instructions.system");
   });
 });
 
 // ── Source guard ─────────────────────────────────────────────────────────────
 
 /**
- * Files allowed to mention the novel prompt key directly, with the reason:
- *   - profile/model.ts   — it *is* the novel profile's declared key
+ * Files allowed to mention the system prompt key directly, with the reason:
+ *   - context/rag.ts     — it *is* the seam; the key lives here
  *   - PromptsPane.tsx    — lists the built-in prompt templates by scene for the
  *                          editor; app-level config, not a per-run fallback
  * Anything else resolving a system prompt must call `profileSystemPrompt()`.
  */
-const ALLOWED = ["src/lib/profile/model.ts", "src/components/settings/panes/PromptsPane.tsx"];
+const ALLOWED = ["src/lib/context/rag.ts", "src/components/settings/panes/PromptsPane.tsx"];
 
 /**
  * Every source file's text, keyed by repo-relative path.
@@ -71,8 +56,8 @@ const SOURCES = import.meta.glob("/src/**/*.{ts,tsx}", {
   import: "default",
 }) as Record<string, string>;
 
-describe("no hardcoded novel system prompt", () => {
-  it("routes every system-prompt fallback through the profile", () => {
+describe("no hardcoded system prompt key", () => {
+  it("routes every system-prompt fallback through profileSystemPrompt()", () => {
     const hits = Object.entries(SOURCES)
       .filter(([path]) => !path.includes("/__tests__/"))
       .filter(([, text]) => text.includes('ai.instructions.system"'))
@@ -87,10 +72,10 @@ describe("no hardcoded novel system prompt", () => {
 
     expect(
       offenders,
-      "These files reference the novel system prompt directly, which fills the " +
-        "system slot before the profile's fallback can apply — a non-novel project " +
-        "then gets novel instructions. Call profileSystemPrompt() from lib/context/rag " +
-        "instead, or add the file to ALLOWED here with a reason.",
+      "These files reference the system prompt's i18n key directly, which " +
+        "bypasses the one seam a future per-project override would land in. " +
+        "Call profileSystemPrompt() from lib/context/rag instead, or add the " +
+        "file to ALLOWED here with a reason.",
     ).toEqual([]);
   });
 });

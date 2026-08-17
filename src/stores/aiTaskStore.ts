@@ -218,7 +218,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
 
     // System prompt: user-selected prompt (scene === "system"), else default
     const prompt = prompts.find((p) => p.id === activePromptId);
-    const systemPrompt = prompt?.content ?? profileSystemPrompt(task.packId);
+    const systemPrompt = prompt?.content ?? profileSystemPrompt();
 
     // Snapshot the writing focus and the committed selection together, here —
     // before the keyring read below and every other await further down (memory

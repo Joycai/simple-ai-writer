@@ -1,15 +1,20 @@
 /**
- * Workspace profiles — the per-project "what am I writing" declaration.
+ * Capability packs — the per-project "what can I ask for" declaration.
  *
- * Everything domain-specific about a project is meant to live here rather than
- * in code: the knowledge-base categories (which are also the `.ai-writer/lore/`
- * folder layout), the labels the prompt uses for each context block, and which
- * system prompt the model falls back to. Adding a new kind of writing should be
- * a new profile, not a new branch in `TaskKind`.
+ * A pack is purely **additive**: it contributes predefined tasks (标书应答,
+ * 小说续写…) and knowledge-base categories (which are also the
+ * `.ai-writer/lore/` folder layout), and may reword the 【…】 context-block
+ * labels *for its own tasks*. It does not own the app's vocabulary, the
+ * document model, or the AI's persona — those are app-level and uniform, so a
+ * project with no packs at all is a perfectly usable "knowledge base + neutral
+ * tasks" workspace. There used to be a "primary pack" that decided those
+ * dimensions; it was removed because it made packs unequal and made the agent
+ * assume a domain role the author never asked for. Adding a new kind of
+ * writing is still a new pack, not a new branch in `TaskKind`.
  *
- * A project's profile is stored at `.ai-writer/profile.json` (see ./store). The
- * novel profile is the default, so every project that predates this file keeps
- * behaving exactly as it did.
+ * A project's pack selection (plus its user-defined categories) is stored at
+ * `.ai-writer/profile.json` (see ./store). The novel pack is the default, so
+ * every project that predates this file keeps its categories and task menu.
  */
 
 /**
@@ -41,13 +46,14 @@ export type SectionId =
   | "currentFile";
 
 /**
- * What shape this project's documents have — the machinery built for a novel
- * that only makes sense when the documents really are a book.
+ * What shape a project's documents have.
  *
- * Every flag defaults to `true`, i.e. novel behaviour, so a profile that says
- * nothing keeps the original feature set. Turning one off removes both the
- * context it injects and the UI that configures it: a half-hidden feature that
- * still spends context budget is worse than either.
+ * Since packs became purely additive this is **app-level and always all-on**
+ * (`DEFAULT_DOC_MODEL`): every project gets the spine, the prior-document
+ * bridge and rolling memory, and simply doesn't use what it doesn't need.
+ * The type (and the `docModel()` accessor) survives as the seam a future
+ * per-project setting would plug into — consumers keep reading flags instead
+ * of assuming them.
  */
 export interface DocModel {
   /**
@@ -71,17 +77,21 @@ export interface DocModel {
 }
 
 /**
- * The UI-side domain vocabulary. `sections` names the 【…】 blocks inside the
- * prompt; this names the same concepts *on screen* — the sidebar stats, the
- * outline view, the knowledge-base title. Without it every profile is narrated
- * in novel words (章/卷/设定库) no matter what the author is writing.
+ * The UI-side vocabulary — what a document, a folder of them, and the
+ * knowledge base are *called* on screen and inside prompt templates.
  *
- *   - `doc`         what one document is called: 章节 / 场景 / 周报 / 文档…
- *   - `group`       what a folder of them is called: 卷 / 章 / 分组
- *   - `kb`          the knowledge base's display name: 设定库 / 企业知识库…
- *   - `entry`       one knowledge-base entry, in counts and chips: 设定 / 条目
- *   - `filesHeader` the sidebar file-panel header: "MANUSCRIPT · 正文"…
- *   - `emptyEyebrow` the decorative eyebrow on an empty document: "章 一 · CHAPTER ONE"…
+ * App-level and uniform since packs became additive: every project's knowledge
+ * store is a 知识库, every file a 文档, whatever packs are enabled. Packs used
+ * to override these (章节/卷/设定库 for a novel, 企业知识库 for bids), which
+ * required a "primary pack" to arbitrate; uniform wording is what lets that
+ * concept go.
+ *
+ *   - `doc`         what one document is called: 文档
+ *   - `group`       what a folder of them is called: 分组
+ *   - `kb`          the knowledge base's display name: 知识库
+ *   - `entry`       one knowledge-base entry, in counts and chips: 条目
+ *   - `filesHeader` the sidebar file-panel header
+ *   - `emptyEyebrow` the decorative eyebrow on an empty document
  */
 export type TermId = "doc" | "group" | "kb" | "entry" | "filesHeader" | "emptyEyebrow";
 
@@ -192,31 +202,30 @@ export interface WorkspaceProfile {
   id: string;
   labelZh: string;
   labelEn: string;
-  /** Knowledge-base categories, in display order. Never empty. */
+  /**
+   * The knowledge-base categories this pack contributes, in display order.
+   * May be empty for a pack that only brings tasks. The app-level `custom`
+   * category always exists regardless (see resolve.ts), so no pack declares it.
+   */
   categories: ProfileCategory[];
   /**
-   * What the author can ask for, in display order. Never empty — a profile with
-   * no tasks would render a panel that can't do anything.
+   * The tasks this pack contributes, in display order. A task whose id matches
+   * one of `DEFAULT_TASKS` *overrides* that base task (typically to re-point
+   * its instruction at domain wording — see `NOVEL_PROFILE`); any other id is
+   * appended to the menu as this pack's own entry.
    */
   tasks: TaskDef[];
   /**
-   * Section-label overrides. Anything absent falls back to
-   * `DEFAULT_SECTION_LABELS`, so a partial or hand-written profile still
-   * produces a complete prompt.
+   * Section-label overrides, applied only when assembling *this pack's* tasks.
+   * Anything absent falls back to `DEFAULT_SECTION_LABELS`, so a partial or
+   * hand-written pack still produces a complete prompt. `knowledge` is
+   * deliberately never overridden by built-ins: the knowledge base is called
+   * 知识库 everywhere.
    */
   sections: Partial<Record<SectionId, string>>;
-  /**
-   * UI-vocabulary overrides. Same contract as `sections`: anything absent falls
-   * back to `DEFAULT_TERMS` (the novel wording) via `profileTerms`.
-   */
-  terms: Partial<Record<TermId, TermLabel>>;
-  /** Which novel-shaped document machinery applies — see `DocModel`. */
-  docModel: DocModel;
-  /** i18n key of the system prompt used when no prompt is explicitly active. */
-  systemPromptKey: string;
 }
 
-/** Novel behaviour: everything on. What a profile gets by saying nothing. */
+/** The app-level document model: everything on, for every project. */
 export const DEFAULT_DOC_MODEL: DocModel = {
   ordered: true,
   priorContext: true,
@@ -299,37 +308,32 @@ export const DEFAULT_TASKS: readonly TaskDef[] = [
 ];
 
 /**
- * Fallback wording for every context block.
- *
- * These are the novel labels, which is why `NOVEL_PROFILE.sections` is empty:
- * the defaults *are* the novel phrasing. Other profiles override only what
- * genuinely differs, and a malformed profile.json still renders a sane prompt.
+ * Fallback wording for every context block — deliberately domain-neutral.
+ * A pack overrides only what genuinely differs for its own tasks (novel says
+ * 全书前情/上一章结尾), and a malformed profile.json still renders a sane
+ * prompt. `knowledge` is the uniform knowledge-base name and is not overridden.
  */
 export const DEFAULT_SECTION_LABELS: Record<SectionId, string> = {
-  knowledge: "设定资料",
+  knowledge: "知识库",
   additionalKnowledge: "附加知识",
   outline: "大纲/写作方向",
-  priorAll: "全书前情",
+  priorAll: "前文回顾",
   priorRecap: "前情提要",
-  prevTail: "上一章结尾",
+  prevTail: "上一篇结尾",
   recent: "近期内容",
   selection: "选中内容",
   requirement: "额外要求",
   currentFile: "当前文件",
 };
 
-/**
- * Fallback wording for every UI term — the novel vocabulary, for the same
- * reason `DEFAULT_SECTION_LABELS` is: `NOVEL_PROFILE.terms` stays empty and a
- * malformed profile.json still renders a coherent UI.
- */
+/** The one app-level vocabulary. Uniform across projects — see `TermId`. */
 export const DEFAULT_TERMS: Record<TermId, TermLabel> = {
-  doc: { zh: "章节", en: "chapter" },
-  group: { zh: "卷", en: "volume" },
-  kb: { zh: "设定库", en: "Lore" },
-  entry: { zh: "设定", en: "lore entry", enPlural: "lore entries" },
-  filesHeader: { zh: "MANUSCRIPT · 正文", en: "MANUSCRIPT" },
-  emptyEyebrow: { zh: "章 一 · CHAPTER ONE", en: "CHAPTER ONE" },
+  doc: { zh: "文档", en: "document" },
+  group: { zh: "分组", en: "group" },
+  kb: { zh: "知识库", en: "Knowledge Base" },
+  entry: { zh: "条目", en: "entry", enPlural: "entries" },
+  filesHeader: { zh: "DOCUMENTS · 文档", en: "DOCUMENTS" },
+  emptyEyebrow: { zh: "新篇 · NEW DOCUMENT", en: "NEW DOCUMENT" },
 };
 
 /**
@@ -348,9 +352,9 @@ export interface ResolvedTerms {
   emptyEyebrow: string;
 }
 
-/** Resolve a profile's terms for one language, falling back to `DEFAULT_TERMS`. */
-export function profileTerms(profile: WorkspaceProfile, isZh: boolean): ResolvedTerms {
-  const get = (id: TermId): TermLabel => profile.terms[id] ?? DEFAULT_TERMS[id];
+/** The app vocabulary in one UI language, plurals included. */
+export function appTerms(isZh: boolean): ResolvedTerms {
+  const get = (id: TermId): TermLabel => DEFAULT_TERMS[id];
   const one = (id: TermId): string => (isZh ? get(id).zh : get(id).en);
   const many = (id: TermId): string => {
     const term = get(id);
@@ -369,7 +373,7 @@ export function profileTerms(profile: WorkspaceProfile, isZh: boolean): Resolved
   };
 }
 
-/** 小说 — the original (and default) profile. */
+/** 小说 — the original (and default) pack. */
 export const NOVEL_PROFILE: WorkspaceProfile = {
   id: "novel",
   labelZh: "小说",
@@ -381,32 +385,30 @@ export const NOVEL_PROFILE: WorkspaceProfile = {
     { id: "items", labelZh: "道具", labelEn: "Items" },
     { id: "skills", labelZh: "技能", labelEn: "Skills" },
     { id: "style", labelZh: "风格", labelEn: "Style" },
-    { id: "custom", labelZh: "自定义", labelEn: "Custom" },
   ],
-  sections: {},
-  terms: {},
-  docModel: DEFAULT_DOC_MODEL,
-  // The shared instructions are deliberately domain-neutral (they serve six
-  // profiles); the novel ones keep the original fiction wording — 情节、人物、
-  // 世界规则 — via these overrides, so novel behaviour is unchanged by the
-  // neutralisation.
-  tasks: DEFAULT_TASKS.map((t) =>
+  sections: {
+    priorAll: "全书前情",
+    prevTail: "上一章结尾",
+  },
+  // Base-task overrides: the shared instructions are domain-neutral, so the
+  // novel pack re-points three of them at the original fiction wording —
+  // 情节、人物、世界规则 — and novel projects keep behaving as they did.
+  tasks: DEFAULT_TASKS.filter((t) =>
+    ["continue", "rewrite", "summary"].includes(t.id),
+  ).map((t) =>
     t.id === "continue" ? { ...t, instructionKey: "ai.instructions.continueNovel" }
     : t.id === "rewrite" ? { ...t, instructionKey: "ai.instructions.rewriteNovel" }
-    : t.id === "summary" ? { ...t, instructionKey: "ai.instructions.summaryNovel" }
-    : t,
+    : { ...t, instructionKey: "ai.instructions.summaryNovel" },
   ),
-  systemPromptKey: "ai.instructions.system",
 };
 
 /**
  * 跑团模组 — a tabletop RPG scenario.
  *
  * Structurally the closest neighbour to a novel: scenes run in order, earlier
- * scenes are context for later ones, so the whole spine/memory machinery
- * carries over untouched. What differs is the cast of the knowledge base
- * (locations and rules matter as much as NPCs), the wording of the context
- * blocks ("上一场景结尾", not "上一章结尾"), and a system prompt that writes for
+ * scenes are context for later ones. What differs is the cast of the knowledge
+ * base (locations and rules matter as much as NPCs), the wording of the
+ * context blocks ("上一场景结尾", not "上一章结尾"), and tasks that write for
  * a GM at the table rather than for a reader.
  */
 export const TTRPG_PROFILE: WorkspaceProfile = {
@@ -421,27 +423,13 @@ export const TTRPG_PROFILE: WorkspaceProfile = {
     { id: "rules", labelZh: "规则", labelEn: "Rules" },
     { id: "hooks", labelZh: "剧情钩子", labelEn: "Hooks" },
     { id: "style", labelZh: "基调", labelEn: "Tone" },
-    { id: "custom", labelZh: "自定义", labelEn: "Custom" },
   ],
   sections: {
-    knowledge: "模组资料",
     outline: "大纲/推进方向",
     priorAll: "全模组前情",
     prevTail: "上一场景结尾",
   },
-  terms: {
-    doc: { zh: "场景", en: "scene" },
-    group: { zh: "章", en: "chapter" },
-    kb: { zh: "模组资料", en: "Module Library" },
-    entry: { zh: "资料", en: "entry", enPlural: "entries" },
-    filesHeader: { zh: "MODULE · 模组", en: "MODULE" },
-    emptyEyebrow: { zh: "场景 一 · SCENE ONE", en: "SCENE ONE" },
-  },
-  // Scenes run in order and earlier ones are context for later ones, so the
-  // whole spine/memory machinery carries over unchanged.
-  docModel: DEFAULT_DOC_MODEL,
   tasks: [
-    ...DEFAULT_TASKS,
     {
       id: "encounter",
       labelKey: "ai.tasks.encounter",
@@ -469,21 +457,14 @@ export const TTRPG_PROFILE: WorkspaceProfile = {
       freeform: true,
     },
   ],
-  systemPromptKey: "ai.instructions.systemTtrpg",
 };
 
 /**
  * 文案 — marketing / product copy.
  *
- * The first profile that is *not* book-shaped, and the reason `docModel` exists.
- * A landing page headline and a product description are independent pieces: they
- * have no order, nothing "precedes" one, and each fits in context whole. Leaving
- * the novel machinery on would spend budget recapping unrelated documents and
- * offer an outline view over a folder that has no sequence.
- *
  * The knowledge base carries over almost unchanged in shape — brand, product,
  * audience, competitors are exactly the kind of thing the lore/facet system is
- * good at, which is why this profile is mostly subtraction.
+ * good at — so this pack is categories plus two option-generating tasks.
  */
 export const COPY_PROFILE: WorkspaceProfile = {
   id: "copy",
@@ -495,26 +476,12 @@ export const COPY_PROFILE: WorkspaceProfile = {
     { id: "audience", labelZh: "受众", labelEn: "Audience" },
     { id: "competitors", labelZh: "竞品", labelEn: "Competitors" },
     { id: "style", labelZh: "调性", labelEn: "Voice" },
-    { id: "custom", labelZh: "自定义", labelEn: "Custom" },
   ],
   sections: {
-    knowledge: "品牌资料",
     outline: "写作要求",
     recent: "当前文案",
   },
-  terms: {
-    doc: { zh: "文案", en: "piece" },
-    group: { zh: "分组", en: "group" },
-    kb: { zh: "品牌库", en: "Brand Library" },
-    entry: { zh: "资料", en: "entry", enPlural: "entries" },
-    filesHeader: { zh: "COPY · 文案", en: "COPY" },
-    emptyEyebrow: { zh: "新篇 · NEW PIECE", en: "NEW PIECE" },
-  },
-  docModel: { ordered: false, priorContext: false, memory: false },
-  // 续写 is dropped: a headline has nothing to continue from. The rest of the
-  // shared set still applies to a piece of copy being edited.
   tasks: [
-    ...DEFAULT_TASKS.filter((t) => t.id !== "continue"),
     {
       id: "headlines",
       labelKey: "ai.tasks.headlines",
@@ -545,16 +512,13 @@ export const COPY_PROFILE: WorkspaceProfile = {
       freeform: true,
     },
   ],
-  systemPromptKey: "ai.instructions.systemCopy",
 };
 
 /**
  * 周报 — a recurring status report.
  *
- * Chronological rather than book-shaped, which is a real distinction the doc
- * model already draws: reports sit in date order and **last week's is the
- * context** (what did I say I would do?), but a single report is far too short
- * for rolling memory.
+ * Reports sit in date order and **last week's is the context** (what did I
+ * say I would do?), which is what the 对照上期 task is for.
  */
 export const WEEKLY_PROFILE: WorkspaceProfile = {
   id: "weekly",
@@ -565,26 +529,14 @@ export const WEEKLY_PROFILE: WorkspaceProfile = {
     { id: "people", labelZh: "相关方", labelEn: "Stakeholders" },
     { id: "metrics", labelZh: "指标", labelEn: "Metrics" },
     { id: "style", labelZh: "风格", labelEn: "Voice" },
-    { id: "custom", labelZh: "自定义", labelEn: "Custom" },
   ],
   sections: {
-    knowledge: "背景资料",
     outline: "本期要点",
     priorAll: "往期回顾",
     prevTail: "上期周报",
     recent: "当前草稿",
   },
-  terms: {
-    doc: { zh: "周报", en: "report" },
-    group: { zh: "分组", en: "group" },
-    kb: { zh: "背景库", en: "Context Library" },
-    entry: { zh: "资料", en: "entry", enPlural: "entries" },
-    filesHeader: { zh: "REPORTS · 周报", en: "REPORTS" },
-    emptyEyebrow: { zh: "本期 · THIS WEEK", en: "THIS WEEK" },
-  },
-  docModel: { ordered: true, priorContext: true, memory: false },
   tasks: [
-    ...DEFAULT_TASKS.filter((t) => t.id !== "continue"),
     {
       id: "digest",
       labelKey: "ai.tasks.digest",
@@ -611,7 +563,6 @@ export const WEEKLY_PROFILE: WorkspaceProfile = {
       // freeform task can't run on an empty box.
     },
   ],
-  systemPromptKey: "ai.instructions.systemWeekly",
 };
 
 /**
@@ -619,8 +570,8 @@ export const WEEKLY_PROFILE: WorkspaceProfile = {
  *
  * The one domain whose main failure mode is not dullness but **overclaiming**:
  * "most users complain about X" when three of two hundred did is actively
- * harmful, and it reads exactly like a good finding. Both tasks and the system
- * prompt are built around that.
+ * harmful, and it reads exactly like a good finding. Both tasks are built
+ * around that.
  *
  * Source material lives in any folder in the workspace —
  * `list_files`/`search_text` discover the whole project tree (only the app's
@@ -636,26 +587,12 @@ export const FEEDBACK_PROFILE: WorkspaceProfile = {
     { id: "products", labelZh: "产品", labelEn: "Products" },
     { id: "metrics", labelZh: "指标", labelEn: "Metrics" },
     { id: "style", labelZh: "风格", labelEn: "Voice" },
-    { id: "custom", labelZh: "自定义", labelEn: "Custom" },
   ],
   sections: {
-    knowledge: "背景资料",
     outline: "报告要求",
     recent: "当前报告",
   },
-  terms: {
-    doc: { zh: "报告", en: "report" },
-    group: { zh: "分组", en: "group" },
-    kb: { zh: "背景库", en: "Context Library" },
-    entry: { zh: "资料", en: "entry", enPlural: "entries" },
-    filesHeader: { zh: "REPORTS · 报告", en: "REPORTS" },
-    emptyEyebrow: { zh: "报告 · REPORT", en: "REPORT" },
-  },
-  // Each report is independent: no order, nothing precedes one, and a report is
-  // short enough to hold whole.
-  docModel: { ordered: false, priorContext: false, memory: false },
   tasks: [
-    ...DEFAULT_TASKS.filter((t) => t.id !== "continue"),
     {
       id: "themes",
       labelKey: "ai.tasks.themes",
@@ -680,7 +617,6 @@ export const FEEDBACK_PROFILE: WorkspaceProfile = {
       needsSelection: true,
     },
   ],
-  systemPromptKey: "ai.instructions.systemFeedback",
 };
 
 /**
@@ -688,10 +624,10 @@ export const FEEDBACK_PROFILE: WorkspaceProfile = {
  *
  * Like 反馈报告, the domain's failure mode is overclaiming — but here a
  * fabricated capability doesn't just mislead, it goes into a contract and
- * becomes an acceptance criterion. So both domain tasks and the system prompt
- * are built around grounding: every response states its deviation verdict
- * (正/负偏差), cites the knowledge-base entries it rests on, and marks what the
- * knowledge base cannot support instead of writing it as compliant.
+ * becomes an acceptance criterion. So the domain tasks are built around
+ * grounding: every response states its deviation verdict (正/负偏差), cites
+ * the knowledge-base entries it rests on, and marks what the knowledge base
+ * cannot support instead of writing it as compliant.
  *
  * The knowledge base is also the *product* of the work, not just its input:
  * 提取入库 runs the full write-capable toolset (plan-gated) to fold what a bid
@@ -710,29 +646,12 @@ export const BID_PROFILE: WorkspaceProfile = {
     { id: "cases", labelZh: "项目案例", labelEn: "Cases" },
     { id: "qualifications", labelZh: "资质证书", labelEn: "Qualifications" },
     { id: "style", labelZh: "措辞风格", labelEn: "Voice" },
-    { id: "custom", labelZh: "自定义", labelEn: "Custom" },
   ],
   sections: {
-    knowledge: "企业知识库",
     outline: "应答大纲",
     recent: "当前应答",
   },
-  terms: {
-    doc: { zh: "文档", en: "document" },
-    group: { zh: "分组", en: "group" },
-    kb: { zh: "企业知识库", en: "Knowledge Base" },
-    entry: { zh: "条目", en: "entry", enPlural: "entries" },
-    filesHeader: { zh: "DOCUMENTS · 应答", en: "DOCUMENTS" },
-    emptyEyebrow: { zh: "应答 · RESPONSE", en: "RESPONSE" },
-  },
-  // A response document mirrors the tender's numbered structure, so the spine
-  // is real — but each item stands alone: nothing "precedes" one, and a single
-  // item is far too short for rolling memory.
-  docModel: { ordered: true, priorContext: false, memory: false },
   tasks: [
-    // The full shared set stays: the narrative sections of a 技术方案书 are
-    // long-form prose where 续写/润色/改写 all apply as-is.
-    ...DEFAULT_TASKS,
     {
       id: "respond",
       labelKey: "ai.tasks.respond",
@@ -777,25 +696,18 @@ export const BID_PROFILE: WorkspaceProfile = {
       freeform: true,
     },
   ],
-  systemPromptKey: "ai.instructions.systemBid",
 };
 
 /**
  * 微信公众号 — articles for a WeChat Official Account.
  *
- * Long-form prose like a novel chapter, but published as independent pieces:
- * each article stands alone, nothing "precedes" one, and a 2–4k word article
- * fits in context whole. So the whole shared task set applies (续写/润色/改写/
- * 总结 all mean what they always meant on a paragraph of prose) while the
- * spine, prior-document context and rolling memory all come off.
- *
- * What is genuinely different is that the *packaging* is half the work. A WeChat
- * article lives or dies on two numbers the author can actually move — 打开率
- * (the title) and 完读率 (the opening) — so those get tasks of their own rather
- * than being left to 自定义. And 合规 is not optional decoration: 广告法 absolute
- * superlatives, medical/financial claims and 诱导分享 get articles deleted or the
- * account restricted, which is why 合规红线 is a knowledge-base category and the
- * audit is a task that reads it.
+ * What is genuinely different about the domain is that the *packaging* is half
+ * the work. A WeChat article lives or dies on two numbers the author can
+ * actually move — 打开率 (the title) and 完读率 (the opening) — so those get
+ * tasks of their own rather than being left to 自定义. And 合规 is not optional
+ * decoration: 广告法 absolute superlatives, medical/financial claims and
+ * 诱导分享 get articles deleted or the account restricted, which is why 合规红线
+ * is a knowledge-base category and the audit is a task that reads it.
  */
 export const WECHAT_PROFILE: WorkspaceProfile = {
   id: "wechat",
@@ -811,29 +723,12 @@ export const WECHAT_PROFILE: WorkspaceProfile = {
     // Not a nicety: an article that trips 广告法 or 诱导分享 gets deleted, so
     // the red lines are material the audit task has to be able to look up.
     { id: "compliance", labelZh: "合规红线", labelEn: "Compliance" },
-    { id: "custom", labelZh: "自定义", labelEn: "Custom" },
   ],
   sections: {
-    knowledge: "公众号资料",
     outline: "写作要求",
     recent: "当前文章",
   },
-  terms: {
-    doc: { zh: "文章", en: "article" },
-    group: { zh: "专栏", en: "column" },
-    kb: { zh: "公众号资料库", en: "Account Library" },
-    entry: { zh: "资料", en: "entry", enPlural: "entries" },
-    filesHeader: { zh: "ARTICLES · 文章", en: "ARTICLES" },
-    emptyEyebrow: { zh: "新篇 · NEW ARTICLE", en: "NEW ARTICLE" },
-  },
-  // Independent pieces: no order, nothing precedes one, and one article is far
-  // short enough to hold whole.
-  docModel: { ordered: false, priorContext: false, memory: false },
   tasks: [
-    // The full shared set stays — unlike 文案, an article *is* long-form prose,
-    // so 续写 has something to continue from. With `priorContext` off it simply
-    // continues the open article, with no cross-document bridge.
-    ...DEFAULT_TASKS,
     {
       id: "topic",
       labelKey: "ai.tasks.topic",
@@ -888,7 +783,6 @@ export const WECHAT_PROFILE: WorkspaceProfile = {
       // you didn't select is exactly as fatal.
     },
   ],
-  systemPromptKey: "ai.instructions.systemWechat",
 };
 
 /** Every built-in profile, in the order a picker should show them. */
@@ -961,14 +855,18 @@ export function taskDesc(
 export const CATEGORY_ID_RE = /^[a-z0-9][a-z0-9_-]{0,39}$/i;
 /** i18n keys are dotted identifiers; anything else is a typo or worse. */
 const PROMPT_KEY_RE = /^[A-Za-z0-9_][A-Za-z0-9_.]{0,79}$/;
-const MAX_CATEGORIES = 24;
+export const MAX_CATEGORIES = 24;
 const MAX_LABEL_CHARS = 40;
 /** Section labels are rendered inside 【】 in the prompt — keep them short. */
 const MAX_SECTION_LABEL_CHARS = 20;
 
 const SECTION_IDS = Object.keys(DEFAULT_SECTION_LABELS) as SectionId[];
-const DOC_MODEL_KEYS = Object.keys(DEFAULT_DOC_MODEL) as (keyof DocModel)[];
-const TERM_IDS = Object.keys(DEFAULT_TERMS) as TermId[];
+/**
+ * Fields a pack used to carry before packs became purely additive. A file
+ * declaring one is old (or copied from an old example), not wrong — the field
+ * is ignored with a note rather than an error.
+ */
+const RETIRED_PROFILE_KEYS = ["terms", "docModel", "systemPromptKey"] as const;
 
 function cleanLabel(value: unknown, max: number): string | null {
   if (typeof value !== "string") return null;
@@ -998,6 +896,63 @@ function parseCategory(raw: unknown, issues: string[]): ProfileCategory | null {
     labelZh: cleanLabel(rec.labelZh, MAX_LABEL_CHARS) ?? id,
     labelEn: cleanLabel(rec.labelEn, MAX_LABEL_CHARS) ?? id,
   };
+}
+
+/**
+ * Derive a usable category id (a folder name) from an author-typed label.
+ *
+ * A latin label slugs down to itself ("Meeting Notes" → "meeting-notes"); a
+ * CJK label has nothing the folder-name rule can keep, so it falls back to a
+ * neutral `kb` stem. Either way the result is numbered past anything in
+ * `taken` (case-insensitive, matching the merge's Windows-proof dedupe).
+ */
+export function suggestCategoryId(label: string, taken: Iterable<string>): string {
+  const existing = new Set<string>();
+  for (const id of taken) existing.add(id.toLowerCase());
+  const slug = label
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^[-_]+|[-_]+$/g, "")
+    .slice(0, 32);
+  const base = CATEGORY_ID_RE.test(slug) ? slug : "kb";
+  if (!existing.has(base)) return base;
+  for (let n = 2; ; n++) {
+    const id = `${base}-${n}`;
+    if (!existing.has(id)) return id;
+  }
+}
+
+/**
+ * Validate a standalone category list — the project's user-defined categories
+ * in a v3 profile.json (a top-level `categories`, not part of any pack). Bad
+ * entries are dropped with an issue; case-insensitive duplicates are rejected
+ * for the same Windows reason as in `parseProfile`.
+ */
+export function parseCategoryList(raw: unknown, issues: string[]): ProfileCategory[] {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) {
+    issues.push("`categories` is not an array");
+    return [];
+  }
+  const categories: ProfileCategory[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    if (categories.length >= MAX_CATEGORIES) {
+      issues.push(`more than ${MAX_CATEGORIES} categories — the rest were ignored`);
+      break;
+    }
+    const cat = parseCategory(entry, issues);
+    if (!cat) continue;
+    const key = cat.id.toLowerCase();
+    if (seen.has(key)) {
+      issues.push(`duplicate category id "${cat.id}"`);
+      continue;
+    }
+    seen.add(key);
+    categories.push(cat);
+  }
+  return categories;
 }
 
 /**
@@ -1121,10 +1076,10 @@ export function parseProfile(data: unknown, fallback: WorkspaceProfile): ParsedP
   // Categories: drop the bad ones, and reject case-insensitive duplicates —
   // Windows would map "Items" and "items" onto one directory.
   //
-  // Omitting `categories` entirely is not an error: it means "inherit", which is
-  // what makes `{"id":"ttrpg"}` a complete profile. Only a list that was
-  // *provided* and yielded nothing usable is worth complaining about — treating
-  // the two alike would log a warning on every open of a perfectly good file.
+  // Omitting `categories` entirely means "inherit", which is what makes
+  // `{"id":"ttrpg"}` a complete pack. A declared empty list is *valid* now that
+  // packs are additive — a pack may bring only tasks. Only a list that was
+  // provided non-empty and yielded nothing usable is worth complaining about.
   const categories: ProfileCategory[] = [];
   const seen = new Set<string>();
   const declaresCategories = rec.categories !== undefined;
@@ -1147,17 +1102,23 @@ export function parseProfile(data: unknown, fallback: WorkspaceProfile): ParsedP
     seen.add(key);
     categories.push(cat);
   }
-  if (categories.length === 0) {
+  // A declared, well-formed, empty list is deliberate (a tasks-only pack);
+  // anything else that yielded nothing — omitted, malformed, or all-dropped —
+  // inherits the fallback's.
+  const deliberatelyEmptyCategories =
+    Array.isArray(rec.categories) && rec.categories.length === 0;
+  if (categories.length === 0 && !deliberatelyEmptyCategories) {
     if (declaresCategories) {
-      issues.push(`no usable categories — falling back to the "${fallback.id}" profile`);
+      issues.push(`no usable categories — inheriting the "${fallback.id}" pack's`);
     }
     // Inherit the fallback's categories but keep this file's other fields, so a
-    // profile can override just the section labels and leave the layout alone.
+    // pack can override just the section labels and leave the layout alone.
     categories.push(...fallback.categories);
   }
 
-  // Tasks: same contract as categories — a declared-but-unusable list warns and
-  // inherits, an omitted one inherits silently. Replacing rather than layering,
+  // Tasks: same contract as categories — omitted inherits silently, a declared
+  // empty list is valid (a categories-only pack), and a declared list that
+  // yielded nothing usable warns and inherits. Replacing rather than layering,
   // because a task list is an *ordered menu*: merging one entry into the
   // fallback's would put it in an arbitrary place, and there would be no way to
   // remove a task you don't want.
@@ -1188,9 +1149,10 @@ export function parseProfile(data: unknown, fallback: WorkspaceProfile): ParsedP
       delete task.agentTaskId;
     }
   }
-  if (tasks.length === 0) {
+  const deliberatelyEmptyTasks = Array.isArray(rec.tasks) && rec.tasks.length === 0;
+  if (tasks.length === 0 && !deliberatelyEmptyTasks) {
     if (declaresTasks) {
-      issues.push(`no usable tasks — inheriting the "${fallback.id}" profile's`);
+      issues.push(`no usable tasks — inheriting the "${fallback.id}" pack's`);
     }
     tasks.push(...fallback.tasks);
   }
@@ -1224,75 +1186,13 @@ export function parseProfile(data: unknown, fallback: WorkspaceProfile): ParsedP
     issues.push("`sections` is not an object");
   }
 
-  // Terms layer over the fallback's for the same reason sections do — an
-  // unnamed term falls through `profileTerms` to `DEFAULT_TERMS`, which are the
-  // novel words, so replacing wholesale would re-introduce the mislabelling.
-  // A term needs both languages to be usable: half a term would show the novel
-  // word in one language and the profile's in the other.
-  const terms: Partial<Record<TermId, TermLabel>> = { ...fallback.terms };
-  if (rec.terms && typeof rec.terms === "object" && !Array.isArray(rec.terms)) {
-    const rawTerms = rec.terms as Record<string, unknown>;
-    for (const key of Object.keys(rawTerms)) {
-      if (!TERM_IDS.includes(key as TermId)) {
-        issues.push(`unknown term "${key}"`);
-        continue;
-      }
-      const raw = rawTerms[key];
-      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-        issues.push(`term "${key}" is not an object`);
-        continue;
-      }
-      const termRec = raw as Record<string, unknown>;
-      const zh = cleanLabel(termRec.zh, MAX_LABEL_CHARS);
-      const en = cleanLabel(termRec.en, MAX_LABEL_CHARS);
-      if (!zh || !en) {
-        issues.push(`term "${key}" needs both zh and en labels`);
-        continue;
-      }
-      const term: TermLabel = { zh, en };
-      const enPlural = cleanLabel(termRec.enPlural, MAX_LABEL_CHARS);
-      if (enPlural) term.enPlural = enPlural;
-      else if (termRec.enPlural !== undefined) issues.push(`term "${key}" has an unusable enPlural`);
-      terms[key as TermId] = term;
+  // Fields packs no longer carry (vocabulary, doc model, persona) are ignored
+  // with a note: the app owns those dimensions now, and silently eating the
+  // field would leave the author wondering why their wording never shows up.
+  for (const key of RETIRED_PROFILE_KEYS) {
+    if (rec[key] !== undefined) {
+      issues.push(`\`${key}\` is no longer part of a pack — packs only add tasks and categories; ignored`);
     }
-  } else if (rec.terms !== undefined) {
-    issues.push("`terms` is not an object");
-  }
-
-  // docModel layers over the fallback's for the same reason sections do: a file
-  // turning one flag off must keep that profile's answer for the other two.
-  // Only real booleans count — a truthy string like "false" flipping a feature on
-  // is the kind of thing a hand-edited JSON file produces.
-  const docModel: DocModel = { ...fallback.docModel };
-  if (rec.docModel && typeof rec.docModel === "object" && !Array.isArray(rec.docModel)) {
-    const rawDoc = rec.docModel as Record<string, unknown>;
-    for (const key of Object.keys(rawDoc)) {
-      if (!DOC_MODEL_KEYS.includes(key as keyof DocModel)) {
-        issues.push(`unknown docModel flag "${key}"`);
-        continue;
-      }
-      const value = rawDoc[key];
-      if (typeof value !== "boolean") {
-        issues.push(`docModel.${key} must be true or false`);
-        continue;
-      }
-      docModel[key as keyof DocModel] = value;
-    }
-  } else if (rec.docModel !== undefined) {
-    issues.push("`docModel` is not an object");
-  }
-  // "Previous document" has no meaning without an order, and a profile asking
-  // for one without the other would inject a bridge the outline can't resolve.
-  if (docModel.priorContext && !docModel.ordered) {
-    issues.push("docModel.priorContext needs ordered — disabling it");
-    docModel.priorContext = false;
-  }
-
-  let systemPromptKey = fallback.systemPromptKey;
-  if (typeof rec.systemPromptKey === "string") {
-    const key = rec.systemPromptKey.trim();
-    if (PROMPT_KEY_RE.test(key)) systemPromptKey = key;
-    else issues.push(`systemPromptKey ${JSON.stringify(rec.systemPromptKey)} is not a valid i18n key`);
   }
 
   // Labels: inherit the fallback's when this file *is* that profile, otherwise
@@ -1308,9 +1208,6 @@ export function parseProfile(data: unknown, fallback: WorkspaceProfile): ParsedP
       categories,
       tasks,
       sections,
-      terms,
-      docModel,
-      systemPromptKey,
     },
     issues,
   };

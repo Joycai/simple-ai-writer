@@ -32,7 +32,7 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { readDir } from "./fileio";
 import { zipExportDialog, zipImportDialog } from "./transfer";
-import { primaryPack } from "../profile/active";
+import { activeWorkspace } from "../profile/active";
 import { getDb, openProjectFolder } from "../project";
 
 export const PROJECT_BUNDLE_KIND = "ai-writer-project-bundle";
@@ -114,7 +114,9 @@ export async function exportProjectBundle(projectPath: string): Promise<string |
     exportedAt: new Date().toISOString(),
     appVersion: await appVersion(),
     projectName: folderName(projectPath),
-    profileId: primaryPack().id,
+    // Informational only (shown when restoring). Packs are equal toggles, so
+    // the stamp is the whole enabled list rather than a single profile.
+    profileId: activeWorkspace().enabled.map((p) => p.id).join("+") || "none",
   };
 
   const date = new Date().toISOString().slice(0, 10);

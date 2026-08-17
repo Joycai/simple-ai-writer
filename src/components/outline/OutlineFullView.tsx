@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useDocModel, useProjectStore, useTerms } from "../../stores/projectStore";
-import { profileTerms } from "../../lib/profile";
+import { appTerms } from "../../lib/profile";
 import { useEditorStore } from "../../stores/editorStore";
 import { useMemoryStore } from "../../stores/memoryStore";
 import { useAiStore } from "../../stores/aiStore";
@@ -96,8 +96,7 @@ export function OutlineFullView() {
   const terms = useTerms();
   const docs = useDocModel();
   // Column eyebrows are decorative English regardless of UI language.
-  const profile = useProjectStore((s) => s.profile);
-  const groupEyebrow = profileTerms(profile, false).group.toUpperCase();
+  const groupEyebrow = appTerms(false).group.toUpperCase();
   // The per-chapter recaps generated here feed the prior-context and rolling
   // memory layers. When the profile injects neither, a generated summary has no
   // consumer — offering the button would just burn tokens — so the whole memo
