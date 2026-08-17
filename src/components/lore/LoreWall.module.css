@@ -81,6 +81,22 @@
   align-items: center;
   gap: 6px;
 }
+/* Overflow (⋯) — same height rhythm as the two buttons beside it, quieter than
+   both. Mirrors LoreDetail's .heroBtnGhost. */
+.btnGhost {
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-dim);
+  font: 500 12px/1 var(--font-sans);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+.btnGhost:hover {
+  color: var(--color-sienna);
+  border-color: var(--color-border-strong);
+}
 
 .filters {
   display: flex;

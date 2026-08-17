@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { Search, Sparkles, Plus, Camera, BookOpen, Pencil, FolderOpen, RotateCw, Trash2, FileDown, FileUp, AlertTriangle } from "lucide-react";
+import { Search, Sparkles, Plus, Camera, BookOpen, Pencil, FolderOpen, RotateCw, Trash2, FileDown, FileUp, MoreHorizontal, AlertTriangle } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -79,7 +79,12 @@ export function LoreWall() {
     setExtractSeed(takePendingExtract());
     setNewMode("ai");
   }, [pendingExtract, takePendingExtract]);
-  const [menu, setMenu] = useState<{ x: number; y: number; entity: LoreEntity | null } | null>(null);
+  // One menu state for both openers: right-click (entity or empty background)
+  // and the header's ⋯ button, which sets `header` to get the trimmed list —
+  // 新建条目 / AI 提取 are buttons right beside it, so repeating them is noise.
+  const [menu, setMenu] = useState<
+    { x: number; y: number; entity: LoreEntity | null; header?: boolean } | null
+  >(null);
   // Lore bundle transfer: staged import awaiting the user's conflict decision.
   const [importStaged, setImportStaged] = useState<StagedLoreImport | null>(null);
   const [transferBusy, setTransferBusy] = useState(false);
@@ -237,7 +242,29 @@ export function LoreWall() {
     }
   };
 
-  const buildMenuItems = (e: LoreEntity | null): ContextMenuEntry[] => {
+  // Bundle export/import — the knowledge-base backup. Shared by the header ⋯
+  // menu and the empty-background right-click menu so the two can't drift.
+  const transferItems = (): ContextMenuEntry[] => {
+    const disabled = !projectPath || transferBusy;
+    return [
+      { kind: "item", icon: <FileDown size={13} />, label: t("lore.transfer.export"),
+        disabled, action: () => void handleExport() },
+      { kind: "item", icon: <FileUp size={13} />, label: t("lore.transfer.import"),
+        disabled, action: () => void handleImport() },
+    ];
+  };
+
+  const refreshItem = (): ContextMenuEntry => ({
+    kind: "item", icon: <RotateCw size={13} />, label: t("fileTree.refresh"),
+    disabled: !projectPath,
+    action: () => { if (projectPath) void scanProject(projectPath); },
+  });
+
+  const buildMenuItems = (m: { entity: LoreEntity | null; header?: boolean }): ContextMenuEntry[] => {
+    const e = m.entity;
+    if (m.header) {
+      return [...transferItems(), { kind: "divider" }, refreshItem()];
+    }
     if (!e) {
       return [
         { kind: "item", icon: <Plus size={13} />, label: t("lore.panel.newEntry"),
@@ -245,13 +272,9 @@ export function LoreWall() {
         { kind: "item", icon: <Sparkles size={13} />, label: t("lore.newEntry.ai", { defaultValue: "AI 提取" }),
           action: () => setNewMode("ai") },
         { kind: "divider" },
-        { kind: "item", icon: <FileDown size={13} />, label: t("lore.transfer.export"),
-          action: () => void handleExport() },
-        { kind: "item", icon: <FileUp size={13} />, label: t("lore.transfer.import"),
-          action: () => void handleImport() },
+        ...transferItems(),
         { kind: "divider" },
-        { kind: "item", icon: <RotateCw size={13} />, label: t("fileTree.refresh"),
-          action: () => { if (projectPath) void scanProject(projectPath); } },
+        refreshItem(),
       ];
     }
     return [
@@ -378,6 +401,18 @@ export function LoreWall() {
           <button className={styles.btnPrimary} onClick={() => setNewMode("manual")}>
             <Plus size={12} strokeWidth={2.5} />
             {t("lore.panel.newEntry")}
+          </button>
+          <button
+            className={styles.btnGhost}
+            onClick={(ev) => {
+              const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+              setMenu({ x: r.left, y: r.bottom + 4, entity: null, header: true });
+            }}
+            title={t("lore.detail.moreActions", { defaultValue: "更多操作" })}
+          >
+            {/* Icon, not a ⋯ glyph: the header row is baseline-aligned and the
+                ellipsis character's fallback-font baseline sits 2px low. */}
+            <MoreHorizontal size={12} strokeWidth={2} />
           </button>
         </div>
 
@@ -507,7 +542,7 @@ export function LoreWall() {
         <ContextMenu
           x={menu.x}
           y={menu.y}
-          items={buildMenuItems(menu.entity)}
+          items={buildMenuItems(menu)}
           onClose={() => setMenu(null)}
         />
       )}
