@@ -27,6 +27,12 @@ tauri-plugin-fs = "2"
 # now pass through unchecked).
 tauri-plugin-http = { version = "2", features = ["unsafe-headers"] }
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+# The same sqlx `tauri-plugin-sql` is built on, declared directly for `sqltx.rs`.
+# The plugin only ever hands the frontend a connection *pool*, so a BEGIN/COMMIT
+# pair issued as two `db.execute()` calls is not one transaction — see the module
+# doc comment. `sqltx.rs` opens its own connection to get a real one; the version
+# and feature set match the plugin's so cargo unifies them into one build.
+sqlx = { version = "0.8", default-features = false, features = ["sqlite", "runtime-tokio", "json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # v4 split the API into keyring-core and each credential store into its own
@@ -79,3 +85,6 @@ rust_xlsxwriter = "0.97"
 # glob scope actually allows — the leading-dot rule there is invisible in our
 # code and cost a release to find (see docs/image-generation-plan.md §8).
 tauri = { version = "2", features = ["test"] }
+# `#[tokio::test]` for the sqltx.rs transaction tests — sqlx's async API needs a
+# runtime, and every other test in the tree is synchronous.
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
