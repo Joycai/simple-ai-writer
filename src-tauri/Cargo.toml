@@ -1,6 +1,6 @@
 [package]
 name = "simple-ai-writer"
-version = "1.18.2"
+version = "1.18.3"
 description = "Simple AI Writer"
 authors = ["joycai"]
 edition = "2021"

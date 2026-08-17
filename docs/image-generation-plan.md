@@ -400,6 +400,25 @@ qwen-image / wan / z-image 系列不走 DashScope 的 compatible-mode——出�
 正则误读成「端点不能编辑」而触发第二次计费的降级重生成。生成的图片 URL
 24 小时过期，`urlToDataUrl` 当场下载落盘（既有行为，正好覆盖）。
 
+**PR5 上线后发现、随即补上的：大图缩略图静默不显示。** 现象：wan2.7 生成的
+图片在对话历史里就是个空白框，永远不变。用真实用户的调试日志 + 磁盘文件核实
+（`file`/`xxd` 看 magic bytes，直接 `Read` 打开图片看内容）排除了协议层——
+API 日志显示这次调用 200 成功、返回 1 张图；磁盘上那张 2048×2048 PNG 完整
+有效、内容正确，是这个工作区迄今生成过的最大图片（5.5MB，比这之前项目里任何
+一张图都大一个数量级）。问题在纯前端：聊天记录的缩略图是 148px 的 CSS 盒子，
+但渲染用的是 `useImageDataUrls` 读回的**原始分辨率** data URL——把 5.5MB
+搬进 `<img src="data:...">` 至少浪费内存，WebKit 对超大 `data:` URI 还有一个
+真实的解码上限，超过了就是**渲染不出来、不报任何错**（`.catch(()=>{})` 恰好
+把唯一的线索也吞了）。对策不是去猜 WebKit 的具体阈值，而是从根上不发这么大的
+payload：新增 `imageToThumbnailDataUrl`（`lib/fs/images.ts`）用 `<canvas>`
+在编码前先按目标尺寸降采样，配套 hook `useImageThumbnails`（保留
+`useImageDataUrls`/`useImageDataUrl` 给需要看清像素本身的场景，如审批卡片的
+改图原图、lore 封面）。聊天缩略图（`AgentChat.tsx`）与生图候选格
+（`ImageGenModal.tsx`）都切过去；点击缩略图仍然打开磁盘上的原图，选中候选也
+仍从文件路径而非缩略图 data URL 落盘，降采样只影响预览。三个 hook 的
+`.catch()` 都补上 `console.warn`——静默失败必须至少在控制台可查，这条本可以
+更快定位。
+
 ## 9. 风险与对策
 
 | 风险 | 影响 | 对策 |
@@ -411,6 +430,7 @@ qwen-image / wan / z-image 系列不走 DashScope 的 compatible-mode——出�
 | base64 大图撑爆内存 | 多轮改图后卡顿 | 结果即时落临时文件，store 只存路径（§4.2） |
 | 出图费用失控 | 一次误点烧掉几十次调用 | 张数上限（默认 1，最大 4）+ 审批卡片前置显示预估费用 |
 | 模型 id 命名随平台变动 | 硬编码模型名很快过时 | 全程不硬编码：模型 id 由作者在设置里填，能力由 `caps` 声明 |
+| **超大图作为缩略图的完整 data URL 塞进 `<img src>` → 静默不渲染**（2026-08 发现，见下） | 聊天记录里的图不显示，无任何报错；`.catch(()=>{})` 又把仅有的线索也吞了 | 小尺寸展示位改用 `useImageThumbnails`（`imageToThumbnailDataUrl`：`<canvas>` 降采样后再编码），不再内联原图；读取失败额外 `console.warn`，不再纯静默 |
 
 ## 10. 明确不做
 

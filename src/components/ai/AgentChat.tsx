@@ -31,7 +31,7 @@ import {
 } from "../../lib/fs/images";
 import { attachedKey, type AttachedItem } from "../../lib/lore/aiTask";
 import { chainCanSeeImages, withSessionOverrides } from "../../lib/agent/subagent";
-import { useImageDataUrls } from "../lore/useImageDataUrl";
+import { useImageThumbnails } from "../lore/useImageDataUrl";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { useAgentStore } from "../../stores/agentStore";
@@ -731,7 +731,11 @@ function ContextBar({ context }: { context: ContextBreakdown }) {
  */
 function TurnImages({ paths, align }: { paths?: string[]; align?: "start" | "end" }) {
   const { t } = useTranslation();
-  const urls = useImageDataUrls(paths ?? []);
+  // Thumbnails, not full resolution — a generated picture can be several
+  // megabytes (DashScope's wan models return up to 4096×4096), which both
+  // wastes memory and can silently fail to render at all as an oversized
+  // `<img src="data:...">`. Clicking still reveals the full-resolution file.
+  const urls = useImageThumbnails(paths ?? []);
   if (!paths?.length) return null;
   return (
     <div className={styles.turnImages} style={align === "end" ? { justifyContent: "flex-end" } : undefined}>
