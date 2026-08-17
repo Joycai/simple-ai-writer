@@ -33,7 +33,7 @@ import type { ImageGenTarget } from "../../lib/image/target";
 import { useAiStore } from "../../stores/aiStore";
 import { useImageStore, type RunContext } from "../../stores/imageStore";
 import { useProjectStore } from "../../stores/projectStore";
-import { useImageDataUrls } from "../lore/useImageDataUrl";
+import { useImageThumbnails } from "../lore/useImageDataUrl";
 import { useImeGuard } from "../../lib/ime";
 import i18n from "../../i18n";
 /* Shell + fields both live in this component's own module now — the lore
@@ -118,7 +118,10 @@ export function ImageGenModal({ target, onClose }: Props) {
   const generating = running;
   /** The pending edit instruction — the conversational half of the modal. */
   const [editDraft, setEditDraft] = useState("");
-  const candidateUrls = useImageDataUrls(currentTurn?.candidates ?? []);
+  // Thumbnails for the picker grid, not full resolution — see
+  // useImageThumbnails. Choosing a candidate saves from its file path, never
+  // from this downscaled preview.
+  const candidateUrls = useImageThumbnails(currentTurn?.candidates ?? []);
 
   useEffect(() => () => abort.current?.abort(), []);
 

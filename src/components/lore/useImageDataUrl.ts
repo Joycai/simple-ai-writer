@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { imageToDataUrl } from "../../lib/fs/images";
+import { imageToDataUrl, imageToThumbnailDataUrl } from "../../lib/fs/images";
 
 /**
  * Load a local image file as a base64 data URL for <img> rendering.
@@ -19,7 +19,7 @@ export function useImageDataUrl(path: string | null | undefined, refreshKey?: un
     if (!path) return;
     imageToDataUrl(path)
       .then(({ dataUrl }) => { if (!cancelled) setUrl(dataUrl); })
-      .catch(() => { /* fall back to placeholder */ });
+      .catch((e) => { console.warn(`[useImageDataUrl] failed to read ${path}:`, e); });
     return () => { cancelled = true; };
   }, [path, refreshKey]);
   return url;
@@ -54,10 +54,49 @@ export function useImageDataUrls(paths: string[]): Record<string, string> {
         .then(({ dataUrl }) => {
           if (!cancelled) setUrls((prev) => (prev[path] ? prev : { ...prev, [path]: dataUrl }));
         })
-        .catch(() => { /* leave it out; the caller renders a placeholder */ });
+        .catch((e) => {
+          // Left out; the caller renders a placeholder — but that placeholder
+          // then sits there forever with no visible cause, so at least this
+          // makes the failure findable in devtools instead of purely silent.
+          console.warn(`[useImageDataUrls] failed to read ${path}:`, e);
+        });
     }
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
+  return urls;
+}
+
+/**
+ * Like {@link useImageDataUrls}, but every image is downscaled before it
+ * reaches state or the DOM — see {@link imageToThumbnailDataUrl} for why a
+ * full-resolution generated picture can silently fail to render as a small
+ * thumbnail otherwise. Use this for any fixed-size preview grid (chat
+ * pictures, galleries); reserve the full-resolution hooks for views where the
+ * pixels themselves are being reviewed (an edit's source image, a lore cover).
+ */
+export function useImageThumbnails(paths: string[], maxDim = 320): Record<string, string> {
+  const [urls, setUrls] = useState<Record<string, string>>({});
+  const key = paths.join("|");
+  useEffect(() => {
+    let cancelled = false;
+    setUrls((prev) => {
+      const wanted = new Set(paths);
+      const kept = Object.keys(prev).filter((p) => wanted.has(p));
+      if (kept.length === Object.keys(prev).length) return prev;
+      return Object.fromEntries(kept.map((p) => [p, prev[p]]));
+    });
+    for (const path of paths) {
+      imageToThumbnailDataUrl(path, maxDim)
+        .then((dataUrl) => {
+          if (!cancelled) setUrls((prev) => (prev[path] ? prev : { ...prev, [path]: dataUrl }));
+        })
+        .catch((e) => {
+          console.warn(`[useImageThumbnails] failed to read ${path}:`, e);
+        });
+    }
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, maxDim]);
   return urls;
 }
