@@ -88,14 +88,15 @@ vi.mock("../project", () => ({
 }));
 
 import { serializeMemory, type DocMemory } from "../context/memory";
-import type { LoreIndex } from "../lore";
+import { scanLore, type LoreIndex } from "../lore";
 import { backupFile } from "../agent/backup";
 import { createPlanGate, type LorePlan, type LorePlanStep } from "../agent/plan";
 import { executeRegisteredTool, type ToolContext, type ToolId } from "../agent/registry";
 
 const PROJECT = "/proj";
 const ALL_TOOLS: ToolId[] = [
-  "read_memory", "propose_lore_plan", "create_lore_entity", "update_lore_file",
+  "read_memory", "list_lore_entities", "read_lore_entity",
+  "propose_lore_plan", "create_lore_entity", "update_lore_file",
   "update_facet_meta", "delete_lore_file", "move_lore_entity", "delete_lore_entity",
   "update_memory", "propose_edit",
   "create_chapter", "create_file", "create_directory", "move_chapter", "copy_file", "delete_chapter",
@@ -157,6 +158,16 @@ function makeCtx(overrides: Partial<ToolContext> = {}): ToolContext & {
     get memoryChanged() { return counters.memoryChanged; },
     ...overrides,
   };
+}
+
+/**
+ * A context whose `onLoreChanged` behaves like a real surface: it rescans disk
+ * and hands the fresh index back, which is what lets a run resolve an entity it
+ * created itself. `makeCtx`'s default returns void — that is the no-rescan
+ * surface (lore/generator, lore/splitter), covered separately below.
+ */
+function makeRescanCtx(overrides: Partial<ToolContext> = {}) {
+  return makeCtx({ onLoreChanged: () => scanLore(PROJECT), ...overrides });
 }
 
 function run(name: ToolId, args: object, ctx: ToolContext) {
@@ -1145,5 +1156,108 @@ describe("chapter structure tools", () => {
       expect(res.content).toContain("REJECTED");
       expect(res.content).toContain("先别动结构");
     }
+  });
+});
+
+/**
+ * The run's lore snapshot vs. disk.
+ *
+ * `ToolContext.loreIndex` is captured once per run and shared by reference
+ * across every tool call, so a write that changes what entities exist has to be
+ * folded back into it. It used not to be for `create_lore_entity`, and the
+ * symptom was the reported bug: the model creates an entity, immediately tries
+ * to write its body, and is told the entity does not exist — while the create's
+ * own result text claims the index was refreshed.
+ */
+describe("run snapshot stays in step with disk", () => {
+  it("resolves an entity the same run just created (the reported bug)", async () => {
+    const ctx = makeRescanCtx();
+    // The realistic shape of the reported run: one plan authorising both steps.
+    ctx.lorePlan!.steps.push({ action: "update", entity: "Kael", detail: "write the body" });
+
+    const created = await run("create_lore_entity", {
+      name: "Kael", category: "characters", summary: "the rival", content: "# Kael\n",
+    }, ctx);
+    expect(created.content).toContain("Created lore entity");
+
+    const updated = await run("update_lore_file", {
+      entity: "Kael",
+      file: "index.md",
+      content: `---\nname: Kael\naliases: []\ncategory: characters\nsummary: "the rival"\n---\n\n# Kael\n改写过的正文\n`,
+    }, ctx);
+
+    expect(updated.content).not.toContain("not found");
+    expect(updated.content).toContain('Wrote index.md of entity "Kael"');
+    expect(fs.get(`${PROJECT}/.ai-writer/lore/characters/kael/index.md`)).toContain("改写过的正文");
+  });
+
+  it("lists and reads a just-created entity without waiting for the next run", async () => {
+    const ctx = makeRescanCtx();
+    await run("create_lore_entity", {
+      name: "Kael", category: "characters", summary: "the rival", content: "# Kael\n",
+    }, ctx);
+
+    expect((await run("list_lore_entities", {}, ctx)).content).toContain("Kael");
+    expect((await run("read_lore_entity", { name: "Kael" }, ctx)).content).not.toContain("not found");
+  });
+
+  it("reads back a file the same run added to an existing entity", async () => {
+    // update_lore_file creating a *new* file never reached the snapshot's
+    // mdFiles, so read_lore_entity — which iterates exactly that list — could
+    // not see it.
+    const ctx = makeRescanCtx();
+    await run("update_lore_file", { entity: "Ava", file: "outfit.md", content: FACET_MD }, ctx);
+
+    expect((await run("read_lore_entity", { name: "Ava" }, ctx)).content).toContain("=== outfit.md ===");
+  });
+
+  it("refuses a duplicate create instead of quietly making a second folder", async () => {
+    const ctx = makeRescanCtx();
+    const args = { name: "Kael", category: "characters", summary: "the rival", content: "# Kael\n" };
+
+    await run("create_lore_entity", args, ctx);
+    const again = await run("create_lore_entity", args, ctx);
+
+    expect(again.content).toContain("already exists");
+    expect(fs.has(`${PROJECT}/.ai-writer/lore/characters/kael-2/index.md`)).toBe(false);
+  });
+
+  it("reports a successful write even when the rescan throws", async () => {
+    // executeRegisteredTool converts a throw into "Error: …", so a rescan that
+    // fails after the write landed would make the model redo the create.
+    const ctx = makeRescanCtx({
+      onLoreChanged: () => { throw new Error("scan exploded"); },
+    });
+
+    const created = await run("create_lore_entity", {
+      name: "Kael", category: "characters", summary: "the rival", content: "# Kael\n",
+    }, ctx);
+
+    expect(created.content).toContain("Created lore entity");
+    expect(created.content).not.toContain("Error");
+    // The local snapshot patch is the fallback that keeps the run usable.
+    expect((await run("read_lore_entity", { name: "Kael" }, ctx)).content).not.toContain("not found");
+  });
+
+  it("keeps the new entity resolvable on a surface that cannot rescan", async () => {
+    // lore/generator and lore/splitter pass `loreIndex: {}` and no callback.
+    const ctx = makeCtx({ onLoreChanged: undefined });
+
+    await run("create_lore_entity", {
+      name: "Kael", category: "characters", summary: "the rival", content: "# Kael\n",
+    }, ctx);
+
+    expect((await run("read_lore_entity", { name: "Kael" }, ctx)).content).not.toContain("not found");
+  });
+
+  it("leaves the caller's index object untouched — the run mutates its own copy", async () => {
+    // runAgent clones on the way in; these tools are called directly here, so
+    // this asserts the tools do not reach outside the object they were handed.
+    const ctx = makeRescanCtx();
+    const before = JSON.stringify(makeLoreIndex());
+
+    await run("move_lore_entity", { entity: "Ava", new_category: "world" }, ctx);
+
+    expect(JSON.stringify(makeLoreIndex())).toBe(before);
   });
 });

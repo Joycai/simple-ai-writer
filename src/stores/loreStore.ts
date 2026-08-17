@@ -53,6 +53,32 @@ interface LoreState {
   deleteEntity: (projectPath: string, entity: LoreEntity) => Promise<void>;
 }
 
+/**
+ * Scan scheduling — module-level because it is about the disk, not the view.
+ *
+ * Scans used to run fire-and-parallel: several lore writes in one agent round
+ * started overlapping full walks, and whichever *resolved* last installed its
+ * index — not the one that started last. Serializing fixes the ordering and,
+ * more importantly, makes `await scanProject()` mean what every caller assumes:
+ * the index is at least as fresh as the moment they asked. `syncLore` in the
+ * agent's write tools depends on exactly that guarantee.
+ *
+ * `queued` is shared with any caller that arrives while it is still *waiting*,
+ * because a scan that has not begun will read disk strictly after their write.
+ * A caller arriving once it has begun queues a fresh one instead. That is what
+ * keeps a burst of writes to one extra walk rather than one walk each — and it
+ * holds only because the queued scan has genuinely not called `scanLore` yet.
+ * Anything that pre-starts it breaks the guarantee silently.
+ */
+let chain: Promise<void> = Promise.resolve();
+/** The scan scheduled but not yet reading disk, if any, and what identifies it. */
+let queued: Promise<void> | null = null;
+let queuedToken: object | null = null;
+/** Which project `queued` will scan — a project switch must not be served the old one. */
+let queuedPath: string | null = null;
+/** Scans scheduled and not yet finished, so `isLoading` doesn't flicker between them. */
+let activeScans = 0;
+
 export const useLoreStore = create<LoreState>((set, get) => ({
   index: {},
   selectedEntity: null,
@@ -74,14 +100,34 @@ export const useLoreStore = create<LoreState>((set, get) => ({
 
   openDetail: (dirPath, editing = false) => set({ detailPath: dirPath, detailEditing: editing }),
 
-  scanProject: async (projectPath) => {
+  scanProject: (projectPath) => {
+    // Share a scan that is queued but not yet reading disk — see the note above.
+    if (queued && queuedPath === projectPath) return queued;
+
+    const token = {};
+    activeScans++;
     set({ isLoading: true });
-    try {
-      const index = await scanLore(projectPath);
-      set({ index });
-    } finally {
-      set({ isLoading: false });
-    }
+
+    const walk = async () => {
+      // Claimed here, not when scheduled: this scan's view of disk is fixed
+      // from now on, so a caller arriving later must schedule its own.
+      if (queuedToken === token) { queued = null; queuedToken = null; queuedPath = null; }
+      try {
+        set({ index: await scanLore(projectPath) });
+      } finally {
+        if (--activeScans === 0) set({ isLoading: false });
+      }
+    };
+
+    // `.then(walk, walk)` rather than `.then(walk)`: a scan that failed must not
+    // wedge every scan behind it. The rejection still reaches its own caller,
+    // while `chain` swallows it so the queue keeps moving.
+    const promise = chain.then(walk, walk);
+    chain = promise.catch(() => {});
+    queued = promise;
+    queuedToken = token;
+    queuedPath = projectPath;
+    return promise;
   },
 
   selectEntity: async (entity) => {
@@ -138,6 +184,13 @@ export const useLoreStore = create<LoreState>((set, get) => ({
     if (!selectedEntity || !selectedFile) { set({ saveTimer: null }); return; }
     try {
       await writeEntityFile(selectedEntity.dirPath, selectedFile, fileContent);
+      // TODO: refresh `index` for this entity. Editing index.md here changes
+      // name/aliases/summary on disk but not in the index. A blanket
+      // scanProject() is the wrong shape — this runs on a 2s autosave debounce
+      // while the author types, so it would walk the whole lore tree every
+      // couple of seconds. The right fix is a targeted `rescanEntity(dirPath)`
+      // in lib/lore/entity.ts (readEntity is module-private today) spliced into
+      // `index`. Not urgent: no component reads this editor path today.
       set({ isDirty: false, saveTimer: null });
     } catch (e) {
       // Keep isDirty true so the unsaved indicator stays truthful and the next

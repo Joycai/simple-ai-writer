@@ -262,6 +262,22 @@ Ending a grant: `rejectAll(reason, runId)` clears a run-keyed one (every panel f
 
 Two things keep it from being invisible. `AutoApproveChip` sits in the chip row for as long as a grant is live and revokes it on click; and `ApprovalDecision.auto` rides back into the tool result (`writeTools.reportDecision`) so the model is told plainly that nobody reviewed that change. Note the plan grant skips the *card*, not the *gate* — the model still has to declare its steps, and `checkPlan` still refuses any lore write they don't cover.
 
+### The run's lore snapshot
+
+`ToolContext.loreIndex` is a **snapshot**, captured once when `runAgent` starts and shared by reference across every tool call in the run (the loop spreads the same context per call rather than rebuilding it). That is deliberate — resolving entities against a moving index mid-run would make a plan's steps mean different things at different rounds — but it has a sharp edge: a write that changes *what entities exist* is invisible to the rest of the run unless someone puts it there.
+
+For a long time only some writes did. `move`/`delete` patched the snapshot by hand (`relocateInSnapshot`), `create` did not — so the model would create an entity, immediately try to write its body, and be told `entity "X" not found`, while the create's own result text said the index had been refreshed. It generally concluded it had the name wrong and created the entity a second time.
+
+Three rules now hold it together:
+
+- **`onLoreChanged` returns the fresh index**, and `writeTools.syncLore` pours it *into* `ctx.loreIndex` — in place, because reassigning would only fix the current call's view. Every write tool calls it **last**, and nothing may touch disk through an entity resolved before it: those objects are detached once it returns.
+- **`runAgent` clones the index it is given** (`cloneLoreIndex`). What callers hand over is the live `loreStore` state object, and the snapshot patches splice its arrays — mutating it would edit store state behind zustand's back, on arrays React is rendering from. Cloning at the one funnel every surface passes through means a caller added later cannot forget it.
+- **`syncLore` never throws.** `executeRegisteredTool` turns a throw into an `"Error: …"` result, so a rescan failing *after* a successful write would report the write as failed — and the model would redo it. The hand-written snapshot patches stay as the fallback, which is also what keeps surfaces with no rescan at all (`lore/generator`, `lore/splitter`, both passing `loreIndex: {}`) working.
+
+Because the tools now *await* the rescan, `loreStore.scanProject` has to be worth awaiting. It serializes: scans used to run fire-and-parallel, and whichever *resolved* last installed its index — not the one that started last, which is where the intermittent "the index didn't update" came from. A caller arriving while a scan is merely **queued** shares it (that scan will read disk strictly after their write, so it is fresh enough), which is what keeps a burst of writes to one extra walk instead of one each. That guarantee holds only because the queued scan has genuinely not called `scanLore` yet — anything that pre-starts it breaks it silently.
+
+A preset carrying lore *write* tools must supply `onLoreChanged`; it stays optional on `ToolContext` only because the read-only presets legitimately have nothing to write.
+
 ### Images in context (谁能看图，看多久)
 
 A picture reaches a model exactly one way: an `image_url` part on a `role: "user"` message (`ContentPart`, `lib/ai/types.ts`). Everything below is about who is allowed to create one and what happens to it afterwards.
@@ -494,6 +510,6 @@ Two maintenance caveats:
 ## Performance Considerations
 
 - **Editor debouncing** — `editorStore` uses `setTimeout` to auto-save on content change (not on every keystroke)
-- **Lore scanning** — Scans `lore/` tree at project open only; manual refresh via store action
+- **Lore scanning** — Full `lore/` tree walk per `loreStore.scanProject()`; triggered on project open, on a profile switch, after every in-app lore mutation, after every agent lore write, and on entering the lore wall. Scans are **serialized and coalesced** (see → The run's lore snapshot), so a burst costs one extra walk rather than one each
 - **RAG caching** — Entity summaries cached in `loreStore.index` after first scan
 - **Context assembly** — 4-layer context capped at ~4000 tokens total to keep request size reasonable

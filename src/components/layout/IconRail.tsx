@@ -5,6 +5,7 @@ import {
 import { useAppStore, type SideTab, type MainView } from "../../stores/appStore";
 import { useDocModel, useMainView, useTerms } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
+import { loreEntityCount } from "../../lib/lore";
 
 import styles from "./IconRail.module.css";
 
@@ -63,9 +64,7 @@ export function IconRail({ onOpenSettings }: Props) {
   // stored value would leave the sidebar showing with no rail icon lit.
   const mainView = useMainView();
   // 设计稿 01: the knowledge-base icon carries an entity-count badge.
-  const loreCount = useLoreStore((s) =>
-    Object.values(s.index).reduce((n, list) => n + list.length, 0),
-  );
+  const loreCount = useLoreStore((s) => loreEntityCount(s.index));
 
   const handleSideClick = (id: SideTab) => {
     if (id === "search") {

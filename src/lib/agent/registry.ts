@@ -236,12 +236,21 @@ export interface ToolContext {
   /** Whether the active model accepts image inputs (controls lore gallery payloads). */
   multimodal: boolean;
   /**
-   * Called after a write-auto tool changed lore on disk, so the caller can
-   * rescan loreStore and the UI reflects the agent's edit immediately.
-   * NOTE: ctx.loreIndex is a snapshot from run start — the rescan updates the
-   * app, not this context.
+   * Called after a write-auto tool changed lore on disk: rescan loreStore so
+   * the UI reflects the agent's edit immediately, and **return the fresh
+   * index** so the run's snapshot can be brought back in line with it (see
+   * `writeTools.syncLore`).
+   *
+   * The return value is the whole point. `ctx.loreIndex` is captured once at
+   * run start, so without it a tool that creates an entity leaves every later
+   * call in the same run unable to resolve it — while the result text tells
+   * the model the index was refreshed, and the model goes and creates it twice.
+   *
+   * Optional only because the read-only presets legitimately have no lore to
+   * write (see `presets.ts`). Any context whose preset carries a lore *write*
+   * tool must supply it.
    */
-  onLoreChanged?: () => void;
+  onLoreChanged?: () => LoreIndex | void | Promise<LoreIndex | void>;
   /** Same, for story-memory writes (memoryStore refresh). */
   onMemoryChanged?: () => void;
   /**

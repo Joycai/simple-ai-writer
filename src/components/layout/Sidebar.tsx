@@ -7,6 +7,7 @@ import { useLoreStore } from "../../stores/loreStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { FileTree } from "./FileTree";
 import { OutlinePanel } from "../editor/OutlinePanel";
+import { loreEntityCount } from "../../lib/lore";
 import { MOD_K_SPACED } from "../../lib/platform";
 import { panelFade, springPanel } from "../../lib/motion";
 import styles from "./Sidebar.module.css";
@@ -30,7 +31,7 @@ export function Sidebar() {
   const { t } = useTranslation();
   const { sidebarCollapsed, activeSideTab, setShowCommandPalette, recentProjects, removeRecentProject, clearRecentProjects } = useAppStore();
   const { projectPath, openProject, isLoading, fileTree, wordCount } = useProjectStore();
-  const loreCount = useLoreStore((s) => Object.keys(s.index).length);
+  const loreCount = useLoreStore((s) => loreEntityCount(s.index));
   const { headings } = useEditorStore();
   const terms = useTerms();
 

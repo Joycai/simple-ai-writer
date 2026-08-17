@@ -406,6 +406,13 @@ export async function executeDelegate(
         projectPath: ctx.projectPath,
         loreIndex: ctx.loreIndex,
         multimodal: conn.model.type === "multimodal",
+        // Threaded through so this stays correct if a delegate preset ever
+        // gains a lore write tool (none has one today). runAgent clones the
+        // index per run, so a child's writes reach disk and the app but not the
+        // parent's snapshot — self-healing, since the parent's next syncLore
+        // re-reads disk.
+        onLoreChanged: ctx.onLoreChanged,
+        onMemoryChanged: ctx.onMemoryChanged,
         taskWorkspace: undefined,
         signal: ctx.signal,
       },
