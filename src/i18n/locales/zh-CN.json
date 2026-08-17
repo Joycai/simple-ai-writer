@@ -54,6 +54,10 @@
     "unmarkWriting": "取消在写标记",
     "writingBadge": "在写",
     "resources": "资源 · {{count}}",
+    "digestLabel": "{{group}}摘要",
+    "digestGenerate": "生成{{group}}摘要",
+    "digestUpdate": "更新{{group}}摘要",
+    "loreRefs": "引用{{entries}}",
     "wordsUnit": "字",
     "statDone": "完 {{n}}",
     "statWriting": "在写 {{n}}",
@@ -333,6 +337,7 @@
       "kinds": {
         "chat": "对话",
         "memory": "前情提要",
+        "digest": "集合摘要",
         "image-gen": "生成插图",
         "image-edit": "修改插图",
         "consistency": "一致性检查"
@@ -801,6 +806,10 @@
       "instruction": "请输出这段正文的前情提要，长度控制在 300 字以内。",
       "coverage": "{{covered}} / {{total}} 字已摘要 {{pct}}%",
       "tailNote": "剩余 {{chars}} 字为最近段落，将以原文进入提示。"
+    },
+    "digest": {
+      "systemPrompt": "你是文集摘要助手。基于给定的多篇正文（或其摘要），输出这一组文稿的整体摘要：概括主线脉络与阶段进展、关键人物或主体及其变化、贯穿的主题与重要伏笔；使用与正文相同的语言，客观陈述，不评论、不引用原句。只输出摘要正文，不要标题或任何说明。",
+      "instruction": "请输出这组文稿的整体摘要，长度控制在 400 字以内。"
     },
     "agent": {
       "log": {

@@ -1,6 +1,6 @@
 # 文库（Library）——「大纲」模块完成计划
 
-> 状态：第一期已实施（本文档随实现推进更新）。
+> 状态：第一期、第二期均已实施（本文档随实现推进更新）。
 > 背景：原「大纲 · 全图」是设计稿阶段的半成品，本计划把它定型为「文库」并补齐作者真正要的能力。
 
 ## 1. 现状与问题
@@ -35,14 +35,14 @@
 3. **资源展示**：`Volume` 新增 `resources`（该文件夹直属的非章节文件）。每列在章节卡下方渲染紧凑的资源区：图片带缩略图（`imageToDataUrl`，与 ImagePreview 同路），其他文件用图标 + 文件名；单击在编辑区打开（与 FileTree 行为一致）。仅有资源、没有章节的文件夹（含根目录）也成列。`assets/` 仍整体跳过——它是文档的插图目录，归属各文档自己的预览。
 4. **测试**：`outline.test.ts` 补 `groupVolumes` 的资源分组用例。
 
-### 第二期（下个 PR）：集合摘要 + lore 引用
+### 第二期（已实施）：集合摘要 + lore 引用
 
-1. **lore 引用（本地扫描，无 AI 成本）**：对集合内每章正文做实体名/别名匹配（复用 `loreSelect` 的匹配思路），聚合成集合级的 lore chips；点击跳转对应条目（复用 citations 的导航）。视图打开时按需计算，不持久化——始终新鲜。
-2. **AI 集合摘要**：新模块 `lib/context/collectionDigest.ts`。
-   - 持久化：`.ai-writer/collections/<集合 relPath>.md`，头部 `<!-- ai-writer-digest {json} -->` 元数据（章节 relPath 列表 + 各章内容 hash + updatedAt），正文为可编辑的摘要文本——与 `memory.ts` 同一格式哲学。
-   - 生成：优先拼接各章已就绪的前情摘要（memory segments），缺失时退回截断正文；单次 `streamCompletion`，走摘要模型（`memoryModelId ?? activeModelId`），用量记入 `token_usage`（scope `digest`）。
-   - 新鲜度：章节集合变动或任一章 hash 失配 → 「需更新」徽章；集合头部放 生成/更新/取消 按钮，复用 MemoBadge 的交互语言。
-3. **UI**：集合列头下方加摘要卡（可折叠）+ lore chips 行。
+1. **lore 引用（本地扫描，无 AI 成本）**：`lib/lore/match.ts` 的 `matchEntitiesInText`（与 `loreSelect` 自动匹配同语义：大小写不敏感的名称/别名子串），对集合内全部章节正文聚合成 lore chips；点击经 `loreStore.openDetail` 跳转条目。视图打开时按需计算，不持久化——始终新鲜。
+2. **AI 集合摘要**：`lib/context/collectionDigest.ts`。
+   - 持久化：`.ai-writer/collections/<集合 relPath>/digest.md`（根集合直接落在 `collections/digest.md`；目录式路径天然不与相邻集合冲突），头部 `<!-- ai-writer-digest {json} -->` 元数据（章节 relPath+hash 有序列表 + updatedAt），正文为可编辑的摘要文本——与 `memory.ts` 同一格式哲学。
+   - 生成（`stores/digestStore.ts`，单飞行）：逐章取正文（打开中的文件用编辑器实时内容，摘要与 hash 都基于作者所见），前情记忆全段新鲜时用其摘要代替正文，超预算时按均分份额截断（下限 400 字符）；单次 `streamCompletion`，走摘要模型（`memoryModelId ?? activeModelId`），用量记入 `token_usage`（task `digest`，用量页有对应文案）。
+   - 新鲜度：章节增删、**重排**（摘要叙述的是有序的弧线）或任一章 hash 失配 → 「需更新」；集合卡上生成/更新/取消，复用 MemoBadge 的交互语言。
+3. **UI**：集合列头下方的摘要卡（正文默认 5 行截断，点击展开）+ 「引用条目」chips 行。
 
 ### 之后（按需，不承诺）
 
