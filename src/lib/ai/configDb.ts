@@ -35,6 +35,13 @@ export interface ImageCaps {
    * wrong for relays hosting a Gemini image model behind an OpenAI protocol.
    */
   route?: ImageRoute;
+  /**
+   * "dashscope" route only: submit as an async task and poll /tasks/{id}.
+   * Wan text-to-image (wan2.7-image*) is async-only; qwen-image* and
+   * z-image-turbo answer synchronously and leave this unset. Declared, not
+   * sniffed from the model id — same rule as every other capability here.
+   */
+  asyncTask?: boolean;
 }
 
 /**

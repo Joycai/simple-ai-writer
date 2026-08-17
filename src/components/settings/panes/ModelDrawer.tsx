@@ -66,6 +66,8 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
   // Out of `form` for a different reason: the price row below casts `form` to
   // Record<string, string> to index its fields, which a boolean would break.
   const [capsEdit, setCapsEdit] = useState(existing?.caps?.edit ?? false);
+  // dashscope route only: the async submit-and-poll flow (wan text-to-image).
+  const [capsAsync, setCapsAsync] = useState(existing?.caps?.asyncTask ?? false);
   // Same reason — a list is not a string. Endpoint-run tools the author grants
   // this model (lib/ai/serverTools).
   const [serverTools, setServerTools] = useState<ServerToolId[]>(existing?.serverTools ?? []);
@@ -108,6 +110,9 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
             edit: capsEdit,
             ...(sizes.length ? { sizes } : {}),
             ...(form.capsRoute ? { route: form.capsRoute as ImageRoute } : {}),
+            // Only meaningful on the dashscope route; dropped elsewhere so a
+            // route change can't leave a stale flag steering the wrong client.
+            ...(form.capsRoute === "dashscope" && capsAsync ? { asyncTask: true } : {}),
           }
         : undefined;
       const shared = {
@@ -265,11 +270,25 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
             <div className={styles.fieldGroup}>
               <label className={styles.label}>{t("aiConfig.models.capsRouteLabel")}</label>
               <select className={styles.select} value={form.capsRoute}
-                onChange={(e) => setForm({ ...form, capsRoute: e.target.value })}>
+                onChange={(e) => {
+                  const capsRoute = e.target.value;
+                  setForm((f) => ({
+                    ...f,
+                    capsRoute,
+                    // Seed DashScope's conventions once: its image models all
+                    // edit, and sizes are written 宽*高. Only fills blanks —
+                    // an author's own list is never overwritten.
+                    ...(capsRoute === "dashscope" && !f.capsSizes
+                      ? { capsSizes: "1024*1024, 1328*1328" }
+                      : {}),
+                  }));
+                  if (capsRoute === "dashscope") setCapsEdit(true);
+                }}>
                 <option value="">{t("aiConfig.models.capsRouteAuto")}</option>
                 <option value="images-api">{t("aiConfig.models.capsRouteImages")}</option>
                 <option value="chat">{t("aiConfig.models.capsRouteChat")}</option>
                 <option value="gemini">{t("aiConfig.models.capsRouteGemini")}</option>
+                <option value="dashscope">{t("aiConfig.models.capsRouteDashscope")}</option>
               </select>
               <div className={hub.fieldHint}>{t("aiConfig.models.capsRouteHint")}</div>
             </div>
@@ -280,6 +299,15 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
               </label>
               <div className={hub.fieldHint}>{t("aiConfig.models.capsEditHint")}</div>
             </div>
+            {form.capsRoute === "dashscope" && (
+              <div className={styles.fieldGroup}>
+                <label className={hub.checkLabel}>
+                  <input type="checkbox" checked={capsAsync} onChange={(e) => setCapsAsync(e.target.checked)} />
+                  {t("aiConfig.models.capsAsyncLabel")}
+                </label>
+                <div className={hub.fieldHint}>{t("aiConfig.models.capsAsyncHint")}</div>
+              </div>
+            )}
           </>
         )}
 

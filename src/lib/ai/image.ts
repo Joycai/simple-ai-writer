@@ -14,7 +14,7 @@
  */
 
 import { fetch } from "../http";
-import { beginImageApiLog } from "./apiLog";
+import { beginImageApiLog, type ImageCallLogger } from "./apiLog";
 import { convertToGeminiContents } from "./gemini";
 import { toSafetySettingsArray } from "./safety";
 import type { GeminiSafetySettings } from "./safety";
@@ -33,6 +33,8 @@ export interface ImageConn {
   safetySettings?: GeminiSafetySettings;
   /** Overrides the endpoint choice derived from `standard`. See ImageRoute. */
   route?: ImageRoute;
+  /** dashscope route only: submit-and-poll instead of one synchronous call. */
+  asyncTask?: boolean;
 }
 
 /**
@@ -125,11 +127,23 @@ export class ImageHttpError extends Error {
 /** Pull `{ error: { message, code, param } }` out of a response body, if present. */
 function parseErrorBody(body: string): { message?: string; code?: string; param?: string } {
   try {
-    const json = JSON.parse(body) as { error?: { message?: string; code?: string; param?: string } | string };
+    const json = JSON.parse(body) as {
+      error?: { message?: string; code?: string; param?: string } | string;
+      code?: string;
+      message?: string;
+    };
     if (typeof json.error === "string") return { message: json.error };
     if (json.error) {
       return { message: json.error.message, code: json.error.code, param: json.error.param };
     }
+    // DashScope puts `{ code, message }` at the top level (and inside a failed
+    // task's `output`). Reading it here is what lets a refusal like
+    // `DataInspectionFailed` carry a structured code instead of falling
+    // through to the prose regexes in isEditUnsupportedError.
+    if (typeof json.code === "string" && json.code) {
+      return { message: json.message, code: json.code };
+    }
+    if (typeof json.message === "string" && json.message) return { message: json.message };
   } catch {
     // Plenty of relays answer with plain text or an HTML error page.
   }
@@ -202,7 +216,7 @@ export async function generateImage(conn: ImageConn, req: ImageRequest): Promise
   });
 
   try {
-    const result = await dispatchImage(route, conn, req);
+    const result = await dispatchImage(route, conn, req, log);
     log.success({ images: result.images.length, usage: result.usage, text: result.text });
     return result;
   } catch (e) {
@@ -211,7 +225,7 @@ export async function generateImage(conn: ImageConn, req: ImageRequest): Promise
   }
 }
 
-function dispatchImage(route: ImageRoute, conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
+function dispatchImage(route: ImageRoute, conn: ImageConn, req: ImageRequest, log: ImageCallLogger): Promise<ImageResult> {
   switch (route) {
     case "gemini":
       // One endpoint for both: the input images simply become extra parts.
@@ -219,6 +233,11 @@ function dispatchImage(route: ImageRoute, conn: ImageConn, req: ImageRequest): P
     case "chat":
       // Likewise — an edit is a multimodal user message.
       return chatImage(conn, req);
+    case "dashscope":
+      // One route, two transports: wan text-to-image only exists as an async
+      // task, everything else answers in the request. The split is a declared
+      // capability (caps.asyncTask), not a model-id guess.
+      return conn.asyncTask ? dashscopeAsyncImage(conn, req, log) : dashscopeImage(conn, req);
     default:
       // The OpenAI protocol is the odd one out: editing is a different URL
       // with a different encoding (multipart), not the same call with extra
@@ -755,4 +774,232 @@ async function geminiImage(conn: ImageConn, req: ImageRequest): Promise<ImageRes
       }
     : undefined;
   return { images, usage, ...(texts.length ? { text: texts.join("\n\n") } : {}) };
+}
+
+// ─── DashScope (Qwen / Wan image models, native protocol) ────────────────────
+//
+// DashScope's compatible-mode serves text models only; its image models speak
+// the native `input.messages` / `parameters` shape at /api/v1. Generation and
+// editing are the same call — input images are extra content parts — and the
+// answer is a short-lived (24 h) https URL, downloaded immediately like every
+// other link-returning endpoint here. Wan text-to-image is the one async case:
+// submit with `X-DashScope-Async`, then poll /tasks/{id}.
+// Protocol facts: docs/api/landscape.md.
+
+/**
+ * The native `/api/v1` base for a DashScope provider row.
+ *
+ * The provider preset stores the compatible-mode base
+ * (`https://dashscope.aliyuncs.com/compatible-mode/v1`) because that is what
+ * the text side speaks — deriving the native base from it means one provider
+ * row and one keyring entry serve both, on the domestic and intl hosts alike.
+ * A base that is already native (or a bare host) passes through unchanged.
+ */
+export function dashscopeNativeBase(baseUrl: string): string {
+  const trimmed = baseUrl.replace(/\/+$/, "");
+  const host = trimmed.replace(/\/compatible-mode\/v1$/, "").replace(/\/api\/v1$/, "");
+  return `${host}/api/v1`;
+}
+
+/** `1024x1024` → `1024*1024`; anything that isn't `W×H` (e.g. "2K") passes through. */
+function normalizeDashscopeSize(size: string): string {
+  const m = size.toLowerCase().match(/^(\d+)\s*[x*×]\s*(\d+)$/);
+  return m ? `${m[1]}*${m[2]}` : size;
+}
+
+/**
+ * The shared request body — sync and async take the same shape. `extraBody`
+ * merges into `parameters` rather than the top level: that is DashScope's
+ * knob namespace (`negative_prompt`, `watermark`, `seed`, `prompt_extend`…),
+ * and the top level has only `model` and `input` beside it.
+ */
+function dashscopeBody(conn: ImageConn, req: ImageRequest): Record<string, unknown> {
+  return {
+    model: conn.modelId,
+    input: {
+      messages: [{
+        role: "user",
+        content: [
+          ...(req.images ?? []).map((image) => ({ image })),
+          { text: req.prompt },
+        ],
+      }],
+    },
+    parameters: {
+      ...(req.n && req.n > 1 ? { n: req.n } : {}),
+      ...(req.size ? { size: normalizeDashscopeSize(req.size) } : {}),
+      ...req.extraBody,
+    },
+  };
+}
+
+function dashscopeHeaders(conn: ImageConn): Record<string, string> {
+  return {
+    "Content-Type": "application/json",
+    ...(conn.apiKey ? { Authorization: `Bearer ${conn.apiKey}` } : {}),
+  };
+}
+
+/** Both output shapes: `choices[].message.content[]` (qwen) and `results[].url` (wan tasks). */
+interface DashscopeOutput {
+  choices?: { message?: { content?: ({ image?: string; text?: string } | string)[] } }[];
+  results?: { url?: string }[];
+  task_status?: string;
+  code?: string;
+  message?: string;
+}
+
+function parseDashscopeOutput(output: DashscopeOutput | undefined): { urls: string[]; texts: string[] } {
+  const urls: string[] = [];
+  const texts: string[] = [];
+  for (const choice of output?.choices ?? []) {
+    const content = choice.message?.content;
+    if (!Array.isArray(content)) continue;
+    for (const part of content) {
+      if (typeof part === "string") {
+        if (part.trim()) texts.push(part);
+      } else if (part.image) {
+        urls.push(part.image);
+      } else if (part.text) {
+        texts.push(part.text);
+      }
+    }
+  }
+  for (const r of output?.results ?? []) if (r.url) urls.push(r.url);
+  return { urls, texts };
+}
+
+/** Download every URL now — DashScope links expire in 24 h — and inline data URLs as-is. */
+async function collectDashscopeImages(
+  urls: string[],
+  texts: string[],
+  signal: AbortSignal | undefined,
+): Promise<ImageResult> {
+  const images: GeneratedImage[] = [];
+  for (const u of urls) {
+    if (u.startsWith("data:")) images.push({ dataUrl: u, mime: mimeOfDataUrl(u) });
+    else images.push(await urlToDataUrl(u, signal));
+  }
+  if (!images.length) throw new NoImageError(texts.join(" ").slice(0, 200) || undefined);
+  // No usage: DashScope reports image counts and dimensions, not tokens —
+  // billing goes through pricePerImage like the other per-image endpoints.
+  return { images, ...(texts.length ? { text: texts.join("\n\n") } : {}) };
+}
+
+/**
+ * `POST /services/aigc/multimodal-generation/generation` — the synchronous
+ * path, serving qwen-image-3.0*, qwen-image-edit*, z-image-turbo and wan
+ * editing.
+ */
+async function dashscopeImage(conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
+  const url = `${dashscopeNativeBase(conn.baseUrl)}/services/aigc/multimodal-generation/generation`;
+  const deadline = withDeadline(req.signal, GENERATE_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: dashscopeHeaders(conn),
+      body: JSON.stringify(dashscopeBody(conn, req)),
+      signal: deadline.signal,
+    });
+  } finally {
+    deadline.done();
+  }
+
+  if (!res.ok) throw new ImageHttpError("Image API error", res.status, await res.text());
+  const json = (await readJson(res, "Image API error")) as { code?: string; output?: DashscopeOutput };
+  // Status 200 with `code` set is how DashScope delivers e.g.
+  // DataInspectionFailed — an ImageHttpError so the structured code survives.
+  if (json.code) throw new ImageHttpError("Image API error", 200, JSON.stringify(json));
+
+  const { urls, texts } = parseDashscopeOutput(json.output);
+  return collectDashscopeImages(urls, texts, req.signal);
+}
+
+/** Wall-clock cap on one async task, submit through last download. */
+const DASHSCOPE_TASK_TIMEOUT_MS = 600_000;
+/** Poll cadence: the documented ~3 s at first, easing off for long renders. */
+const DASHSCOPE_POLL_MS = 3_000;
+const DASHSCOPE_POLL_SLOW_MS = 5_000;
+
+/** Sleep that a deadline or the user's 停止 can cut short. */
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const fail = () => reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+    if (signal.aborted) return fail();
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      fail();
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/**
+ * The async task flow (wan text-to-image): submit to
+ * `/services/aigc/image-generation/generation` with `X-DashScope-Async`, then
+ * poll `/tasks/{id}` until it settles. One deadline spans the whole task —
+ * the generation is minutes, not seconds, so the per-call cap would be wrong.
+ */
+async function dashscopeAsyncImage(conn: ImageConn, req: ImageRequest, log: ImageCallLogger): Promise<ImageResult> {
+  const base = dashscopeNativeBase(conn.baseUrl);
+  const deadline = withDeadline(req.signal, DASHSCOPE_TASK_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${base}/services/aigc/image-generation/generation`, {
+      method: "POST",
+      headers: { ...dashscopeHeaders(conn), "X-DashScope-Async": "enable" },
+      body: JSON.stringify(dashscopeBody(conn, req)),
+      signal: deadline.signal,
+    });
+    if (!res.ok) throw new ImageHttpError("Image API error", res.status, await res.text());
+    const submitted = (await readJson(res, "Image API error")) as {
+      code?: string;
+      output?: { task_id?: string };
+    };
+    if (submitted.code) throw new ImageHttpError("Image API error", 200, JSON.stringify(submitted));
+    const taskId = submitted.output?.task_id;
+    if (!taskId) throw new ImageHttpError("Image API error", 200, JSON.stringify(submitted).slice(0, 400));
+    // The one fact a hung poll would otherwise take with it.
+    log.note({ taskId });
+
+    let polls = 0;
+    let misses = 0;
+    for (;;) {
+      await sleep(polls < 10 ? DASHSCOPE_POLL_MS : DASHSCOPE_POLL_SLOW_MS, deadline.signal);
+      polls++;
+
+      let json: { output?: DashscopeOutput };
+      try {
+        const poll = await fetch(`${base}/tasks/${taskId}`, {
+          headers: dashscopeHeaders(conn),
+          signal: deadline.signal,
+        });
+        if (!poll.ok) throw new ImageHttpError("Image task error", poll.status, await poll.text());
+        json = (await readJson(poll, "Image task error")) as { output?: DashscopeOutput };
+      } catch (e) {
+        // The generation is already paid for and a poll is a cheap GET, so a
+        // network blip or a 429 is worth riding out — but only a few in a row,
+        // after which the error is real.
+        if (deadline.signal.aborted || ++misses >= 3) throw e;
+        continue;
+      }
+      misses = 0;
+
+      const status = json.output?.task_status;
+      if (status === "PENDING" || status === "RUNNING") continue;
+      if (status === "SUCCEEDED") {
+        const { urls, texts } = parseDashscopeOutput(json.output);
+        return await collectDashscopeImages(urls, texts, deadline.signal);
+      }
+      // FAILED / CANCELED / anything unrecognized. The failure's code and
+      // message live inside `output`, which parseErrorBody reads top-level.
+      throw new ImageHttpError("Image task error", 200, JSON.stringify(json.output ?? json));
+    }
+  } finally {
+    deadline.done();
+  }
 }

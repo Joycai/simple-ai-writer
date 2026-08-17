@@ -8,7 +8,9 @@
  * xAI rejects the field outright.
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { generateImage, ImageHttpError, isEditUnsupportedError, NoImageError } from "../ai/image";
+import {
+  dashscopeNativeBase, generateImage, ImageHttpError, isEditUnsupportedError, NoImageError,
+} from "../ai/image";
 
 const OPENAI = {
   baseUrl: "https://api.example.com/v1",
@@ -358,6 +360,230 @@ describe("generateImage · editing", () => {
     expect(Array.isArray(content)).toBe(true);
     expect(content[0]).toEqual({ type: "text", text: "make it blue" });
     expect(content[1]).toEqual({ type: "image_url", image_url: { url: SOURCE } });
+  });
+});
+
+describe("generateImage · dashscope route", () => {
+  // Qwen/Wan image models speak DashScope's native protocol at /api/v1 — the
+  // provider row stores the compatible-mode base the text side uses, and the
+  // route derives the native base from it.
+  const DASHSCOPE = {
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    apiKey: "k",
+    standard: "openai_compat" as const,
+    modelId: "qwen-image-3.0",
+    route: "dashscope" as const,
+  };
+  const NATIVE = "https://dashscope.aliyuncs.com/api/v1";
+  const IMAGE_PART = { image: "data:image/png;base64,aGk=" };
+
+  /** Like mockJson, but keeps the request headers too. */
+  function mockDashscope(payload: unknown, status = 200) {
+    const calls: { url: string; body: Record<string, unknown>; headers: Headers }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        calls.push({ url: String(url), body: JSON.parse(String(init.body)), headers: new Headers(init.headers) });
+        return new Response(JSON.stringify(payload), {
+          status,
+          headers: { "content-type": "application/json" },
+        });
+      }),
+    );
+    return calls;
+  }
+
+  it("derives the native base from whatever the author configured", () => {
+    expect(dashscopeNativeBase("https://dashscope.aliyuncs.com/compatible-mode/v1")).toBe(NATIVE);
+    expect(dashscopeNativeBase("https://dashscope-intl.aliyuncs.com/compatible-mode/v1/")).toBe(
+      "https://dashscope-intl.aliyuncs.com/api/v1",
+    );
+    // Already native, or a bare host: pass through rather than doubling up.
+    expect(dashscopeNativeBase(NATIVE)).toBe(NATIVE);
+    expect(dashscopeNativeBase("https://dashscope.aliyuncs.com")).toBe(NATIVE);
+  });
+
+  it("posts the native body to multimodal-generation with Bearer auth", async () => {
+    const calls = mockDashscope({
+      output: { choices: [{ message: { content: [IMAGE_PART] } }] },
+    });
+    const res = await generateImage(DASHSCOPE, {
+      prompt: "a cat",
+      size: "1024x1024",
+      extraBody: { watermark: false },
+    });
+
+    expect(calls[0].url).toBe(`${NATIVE}/services/aigc/multimodal-generation/generation`);
+    expect(calls[0].headers.get("authorization")).toBe("Bearer k");
+    expect(calls[0].body.model).toBe("qwen-image-3.0");
+    const input = calls[0].body.input as { messages: { role: string; content: unknown[] }[] };
+    expect(input.messages[0].content).toEqual([{ text: "a cat" }]);
+    const params = calls[0].body.parameters as Record<string, unknown>;
+    // The size reaches the wire in DashScope's spelling regardless of how the
+    // author wrote it, n is omitted at the default, and extraBody lands in
+    // `parameters` — DashScope's knob namespace, not the top level.
+    expect(params.size).toBe("1024*1024");
+    expect(params).not.toHaveProperty("n");
+    expect(params.watermark).toBe(false);
+    expect(res.images[0].dataUrl).toBe("data:image/png;base64,aGk=");
+  });
+
+  it("sends an edit as image parts before the instruction, on the same endpoint", async () => {
+    const calls = mockDashscope({
+      output: { choices: [{ message: { content: [IMAGE_PART] } }] },
+    });
+    await generateImage(DASHSCOPE, {
+      prompt: "make it blue",
+      images: ["data:image/png;base64,c3Jj"],
+      n: 2,
+    });
+    const input = calls[0].body.input as { messages: { content: unknown[] }[] };
+    expect(input.messages[0].content).toEqual([
+      { image: "data:image/png;base64,c3Jj" },
+      { text: "make it blue" },
+    ]);
+    expect((calls[0].body.parameters as Record<string, unknown>).n).toBe(2);
+  });
+
+  it("downloads a URL answer immediately — DashScope links die in 24 hours", async () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    let call = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        call++;
+        if (call === 1) {
+          return new Response(JSON.stringify({
+            output: { choices: [{ message: { content: [
+              { image: "https://dashscope-result.oss.aliyuncs.com/x.png?Expires=1" },
+              { text: "扩写后的提示词" },
+            ] } }] },
+          }), { status: 200, headers: { "content-type": "application/json" } });
+        }
+        return new Response(png, { status: 200, headers: { "content-type": "image/png" } });
+      }),
+    );
+    const res = await generateImage(DASHSCOPE, { prompt: "a cat" });
+    expect(call).toBe(2);
+    expect(res.images[0].dataUrl.startsWith("data:image/png;base64,")).toBe(true);
+    // The rewritten prompt survives as commentary, same as revised_prompt does.
+    expect(res.text).toBe("扩写后的提示词");
+  });
+
+  it("carries a refusal's code so it is not misread as a missing route", async () => {
+    // DashScope's errors are top-level {code, message} — DataInspectionFailed
+    // is a content-review refusal, and regenerating on it would bill twice.
+    mockDashscope({ code: "DataInspectionFailed", message: "inappropriate content" }, 400);
+    let caught: unknown;
+    try {
+      await generateImage(DASHSCOPE, { prompt: "x", images: ["data:image/png;base64,aGk="] });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(ImageHttpError);
+    expect((caught as ImageHttpError).code).toBe("DataInspectionFailed");
+    expect((caught as ImageHttpError).message).toMatch(/inappropriate content/);
+    expect(isEditUnsupportedError(caught)).toBe(false);
+  });
+
+  it("surfaces an error delivered inside a 200 body", async () => {
+    mockDashscope({ code: "Throttling", message: "Requests throttled" });
+    await expect(generateImage(DASHSCOPE, { prompt: "x" })).rejects.toThrow(/Requests throttled/);
+  });
+
+  it("throws NoImageError when the response carries no image", async () => {
+    mockDashscope({ output: { choices: [{ message: { content: [{ text: "只有文字" }] } }] } });
+    await expect(generateImage(DASHSCOPE, { prompt: "x" })).rejects.toBeInstanceOf(NoImageError);
+  });
+
+  describe("async task flow (caps.asyncTask — wan text-to-image)", () => {
+    const WAN = { ...DASHSCOPE, modelId: "wan2.7-image", asyncTask: true };
+
+    afterEach(() => vi.useRealTimers());
+
+    it("submits with X-DashScope-Async and polls the task to completion", async () => {
+      vi.useFakeTimers();
+      const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+      const calls: { url: string; headers: Headers; method: string }[] = [];
+      let poll = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) => {
+          calls.push({ url: String(url), headers: new Headers(init?.headers), method: init?.method ?? "GET" });
+          const u = String(url);
+          if (u.endsWith("/services/aigc/image-generation/generation")) {
+            return new Response(JSON.stringify({ output: { task_id: "t1", task_status: "PENDING" } }), {
+              status: 200, headers: { "content-type": "application/json" },
+            });
+          }
+          if (u.endsWith("/tasks/t1")) {
+            poll++;
+            return new Response(JSON.stringify(
+              poll === 1
+                ? { output: { task_id: "t1", task_status: "RUNNING" } }
+                // Wan tasks answer in the results[].url shape, not choices.
+                : { output: { task_id: "t1", task_status: "SUCCEEDED", results: [{ url: "https://cdn/x.png" }] } },
+            ), { status: 200, headers: { "content-type": "application/json" } });
+          }
+          return new Response(png, { status: 200, headers: { "content-type": "image/png" } });
+        }),
+      );
+
+      const pending = generateImage(WAN, { prompt: "a cat" });
+      // Swallow a rejection that fires while timers are still being advanced.
+      pending.catch(() => {});
+      await vi.advanceTimersByTimeAsync(3_000); // → poll 1: RUNNING
+      await vi.advanceTimersByTimeAsync(3_000); // → poll 2: SUCCEEDED → download
+      const res = await pending;
+
+      expect(calls[0].url).toBe(`${NATIVE}/services/aigc/image-generation/generation`);
+      expect(calls[0].method).toBe("POST");
+      expect(calls[0].headers.get("x-dashscope-async")).toBe("enable");
+      expect(calls[1].url).toBe(`${NATIVE}/tasks/t1`);
+      expect(res.images[0].dataUrl.startsWith("data:image/png;base64,")).toBe(true);
+    });
+
+    it("reports a failed task with its own error message", async () => {
+      vi.useFakeTimers();
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) =>
+          String(url).endsWith("/tasks/t1")
+            ? new Response(JSON.stringify({
+                output: { task_id: "t1", task_status: "FAILED", code: "InvalidParameter", message: "size out of range" },
+              }), { status: 200, headers: { "content-type": "application/json" } })
+            : new Response(JSON.stringify({ output: { task_id: "t1", task_status: "PENDING" } }), {
+                status: 200, headers: { "content-type": "application/json" },
+              })),
+      );
+      const pending = generateImage(WAN, { prompt: "x" });
+      pending.catch(() => {});
+      await vi.advanceTimersByTimeAsync(3_000);
+      await expect(pending).rejects.toThrow(/size out of range/);
+    });
+
+    it("stops polling the moment the caller aborts", async () => {
+      vi.useFakeTimers();
+      const ctrl = new AbortController();
+      const fetchMock = vi.fn(async (url: string) =>
+        String(url).endsWith("/tasks/t1")
+          ? new Response(JSON.stringify({ output: { task_id: "t1", task_status: "RUNNING" } }), {
+              status: 200, headers: { "content-type": "application/json" },
+            })
+          : new Response(JSON.stringify({ output: { task_id: "t1", task_status: "PENDING" } }), {
+              status: 200, headers: { "content-type": "application/json" },
+            }));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const pending = generateImage(WAN, { prompt: "x", signal: ctrl.signal });
+      pending.catch(() => {});
+      await vi.advanceTimersByTimeAsync(3_000); // one poll happens
+      const pollsBefore = fetchMock.mock.calls.length;
+      ctrl.abort(new DOMException("stopped", "AbortError"));
+      await expect(pending).rejects.toThrow();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(fetchMock.mock.calls.length).toBe(pollsBefore);
+    });
   });
 });
 

@@ -113,8 +113,13 @@ export function authModesFor(standard: ApiStandard): AuthMode[] {
  *   - "images-api" — POST /images/generations (OpenAI, xAI, Imagen on relays)
  *   - "chat"       — POST /chat/completions, image comes back in the message
  *   - "gemini"     — POST /models/{id}:generateContent (Gemini native)
+ *   - "dashscope"  — DashScope native (Qwen/Wan image models):
+ *                    POST {api/v1}/services/aigc/multimodal-generation/generation,
+ *                    or the async task flow when `ImageCaps.asyncTask` is set.
+ *                    Never a default — the DashScope provider preset is
+ *                    `openai_compat`, whose derived route must stay "images-api".
  */
-export type ImageRoute = "images-api" | "chat" | "gemini";
+export type ImageRoute = "images-api" | "chat" | "gemini" | "dashscope";
 
 /** A single part inside a multimodal user message. */
 export type ContentPart =
