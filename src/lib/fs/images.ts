@@ -98,6 +98,45 @@ export async function imageToDataUrl(imagePath: string): Promise<{ dataUrl: stri
 }
 
 /**
+ * Read an image file, downscale it, and return a small base64 data URL —
+ * for thumbnails only, never for a view where the pixels themselves matter.
+ *
+ * A generated picture can be several megabytes at full resolution (DashScope's
+ * wan models return up to 4096×4096, and even 2048×2048 lands north of 5MB) —
+ * inlining that whole thing as a data URL for a ~150px CSS thumbnail wastes
+ * memory for no visible benefit, and worse, WebKit has a real ceiling on how
+ * large a `data:` URI it will decode into an `<img>`: past it the element
+ * renders nothing, with no error to catch. Shrinking the pixels before
+ * building the data URL sidesteps both — a `<canvas>` re-encode, not
+ * `OffscreenCanvas`, since this app already works around WebView2 quirks and
+ * a classic canvas is the more universally-supported path. PNG output keeps
+ * transparency (a downscaled generated image is still occasionally an edit
+ * result with alpha); size cost at thumbnail resolution is negligible.
+ */
+export async function imageToThumbnailDataUrl(imagePath: string, maxDim = 320): Promise<string> {
+  const u8 = await readBinaryFile(imagePath);
+  const blob = new Blob([u8]);
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const img = new Image();
+    img.src = objectUrl;
+    await img.decode();
+    const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("2D canvas context unavailable");
+    ctx.drawImage(img, 0, 0, w, h);
+    return canvas.toDataURL("image/png");
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+/**
  * Inverse of `imageToDataUrl`: decode a base64 data URL into the bytes to
  * write, plus the file extension implied by its mime type. Used for images the
  * app received over the wire (AI generation) rather than read from disk.
