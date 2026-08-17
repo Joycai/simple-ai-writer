@@ -30,6 +30,20 @@ export interface Chapter {
   relPath: string;
 }
 
+/**
+ * A non-chapter file living in a volume's folder (image, PDF, spreadsheet…).
+ * Purely a display-layer concept for the library view: resources never enter
+ * the spine, bookContext, or any AI context assembly.
+ */
+export interface ResourceFile {
+  /** File basename (display). */
+  name: string;
+  /** Absolute path — matches fileTree nodes and activeFilePath. */
+  path: string;
+  /** Project-relative path, forward slashes. */
+  relPath: string;
+}
+
 export interface Volume {
   name: string;
   /** Absolute folder path. */
@@ -37,6 +51,8 @@ export interface Volume {
   /** Project-relative folder path (forward slashes) — the spine key. */
   relPath: string;
   chapters: Chapter[];
+  /** Direct non-chapter files of this folder, natural-sorted. */
+  resources: ResourceFile[];
 }
 
 /** Author-set chapter status (only "writing" for now; absence means done). */
@@ -103,15 +119,23 @@ export function groupVolumes(fileTree: FileNode[], projectPath: string): Volume[
   const toChapter = (c: FileNode): Chapter => ({ name: c.name, path: c.path, relPath: rel(c.path) });
   const chaptersOf = (nodes: FileNode[]): Chapter[] =>
     nodes.filter((c) => !c.is_dir && isChapterFile(c.name)).map(toChapter);
+  const resourcesOf = (nodes: FileNode[]): ResourceFile[] =>
+    nodes
+      .filter((c) => !c.is_dir && !isChapterFile(c.name))
+      .map((c): ResourceFile => ({ name: c.name, path: c.path, relPath: rel(c.path) }))
+      .sort((a, b) => naturalCompare(a.name, b.name));
 
   const volumes: Volume[] = [];
 
-  // Root-level chapter files → one default volume keyed "" (the project root
-  // is not a directory entry, so projectRelativePath can't name it).
+  // Root-level files → one default volume keyed "" (the project root is not a
+  // directory entry, so projectRelativePath can't name it). Resources alone
+  // are enough to make it show — a folder of reference images is still a
+  // collection worth seeing in the library.
   const rootFiles = chaptersOf(fileTree);
-  if (rootFiles.length > 0) {
+  const rootResources = resourcesOf(fileTree);
+  if (rootFiles.length > 0 || rootResources.length > 0) {
     const rootName = projectPath.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? "";
-    volumes.push({ name: rootName, path: projectPath, relPath: "", chapters: rootFiles });
+    volumes.push({ name: rootName, path: projectPath, relPath: "", chapters: rootFiles, resources: rootResources });
   }
 
   // Every folder, at any depth → its own volume of its direct chapter files
@@ -126,6 +150,7 @@ export function groupVolumes(fileTree: FileNode[], projectPath: string): Volume[
         path: child.path,
         relPath: rel(child.path),
         chapters: chaptersOf(children),
+        resources: resourcesOf(children),
       });
       walk(children);
     }

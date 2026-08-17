@@ -11,7 +11,7 @@ import { SettingsPage } from "./components/settings/SettingsPage";
 import { AiDrawer } from "./components/ai/AiDrawer";
 import { InlineAiBubble } from "./components/ai/InlineAiBubble";
 import { LoreWall } from "./components/lore/LoreWall";
-import { OutlineFullView } from "./components/outline/OutlineFullView";
+import { LibraryView } from "./components/library/LibraryView";
 import { CommandPalette } from "./components/command/CommandPalette";
 import { Onboarding } from "./components/onboarding/Onboarding";
 import { useAppStore } from "./stores/appStore";
@@ -93,7 +93,7 @@ export default function App() {
             >
               {view === "editor" && <EditorArea />}
               {view === "lore-wall" && <LoreWall />}
-              {view === "outline-full" && <OutlineFullView />}
+              {view === "library" && <LibraryView />}
             </motion.div>
           </AnimatePresence>
         </div>

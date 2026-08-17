@@ -14,12 +14,14 @@ const volumes: Volume[] = [
     path: "/p/writing/v1",
     relPath: "writing/v1",
     chapters: [ch("v1", "01"), ch("v1", "02"), ch("v1", "03")],
+    resources: [],
   },
   {
     name: "第二卷",
     path: "/p/writing/v2",
     relPath: "writing/v2",
     chapters: [ch("v2", "01"), ch("v2", "02")],
+    resources: [],
   },
 ];
 

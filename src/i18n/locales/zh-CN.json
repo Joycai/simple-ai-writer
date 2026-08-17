@@ -22,7 +22,7 @@
     "copy": "复制",
     "copied": "已复制"
   },
-  "outline": {
+  "library": {
     "empty": "未发现{{group}}/{{doc}}结构 — 在项目文件夹下创建子文件夹来组织{{group}}",
     "reorderHint": "单击选中{{doc}}，双击打开；用按钮或拖拽在{{group}}内排序",
     "subtitle": "{{count}} {{docs}} · {{words}} 字",
@@ -53,10 +53,7 @@
     "markWriting": "标记为在写",
     "unmarkWriting": "取消在写标记",
     "writingBadge": "在写",
-    "tabCards": "{{doc}}卡",
-    "tabTimeline": "时间线",
-    "tabBoard": "看板",
-    "aiSuggestNext": "AI 建议下一{{doc}}",
+    "resources": "资源 · {{count}}",
     "wordsUnit": "字",
     "statDone": "完 {{n}}",
     "statWriting": "在写 {{n}}",
@@ -69,7 +66,7 @@
     "outline": "大纲",
     "search": "搜索",
     "searchComingSoon": "搜索 — 即将推出",
-    "outlineFull": "大纲 · 全图",
+    "library": "文库",
     "settings": "设置",
     "project": "PROJECT",
     "projectSearch": "搜索文稿与{{entries}}"

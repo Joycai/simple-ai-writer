@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Sparkles, ChevronUp, ChevronDown, ChevronsUp, ChevronsDown,
-  Loader2, X, FolderPlus, Trash2, Check, PenLine, FileText,
+  Loader2, X, FolderPlus, Trash2, Check, PenLine, FileText, File as FileIcon,
 } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useDocModel, useProjectStore, useTerms } from "../../stores/projectStore";
@@ -21,13 +21,15 @@ import {
   type BookSpine,
   type Volume,
   type Chapter,
+  type ResourceFile,
 } from "../../lib/context/outline";
 import { loadMemory, memoryStatus, moveMemory, projectRelativePath, type MemoryStatus } from "../../lib/context/memory";
 import { readFile, makeDir, removeDir, renamePath } from "../../lib/fs/fileio";
 import { ASSETS_DIR } from "../../lib/image/assets";
+import { imageToDataUrl, isImagePath } from "../../lib/fs/images";
 import { useImeGuard } from "../../lib/ime";
 import { Select } from "../common/Select";
-import styles from "./OutlineFullView.module.css";
+import styles from "./LibraryView.module.css";
 
 /** Move an array item from one index to another (immutably). */
 function move<T>(arr: T[], from: number, to: number): T[] {
@@ -56,7 +58,7 @@ function MemoBadge({ chapter, status }: { chapter: Chapter; status?: MemoryStatu
         <span className={styles.memoGenText}>
           {chapterGen.total > 0 ? `${chapterGen.done}/${chapterGen.total}` : t("ai.memory.generating")}
         </span>
-        <button className={styles.memoCancel} title={t("outline.memoCancel")} onClick={abortChapterGen}>
+        <button className={styles.memoCancel} title={t("library.memoCancel")} onClick={abortChapterGen}>
           <X size={11} />
         </button>
       </span>
@@ -66,15 +68,15 @@ function MemoBadge({ chapter, status }: { chapter: Chapter; status?: MemoryStatu
   if (!status) return null;
 
   const meta: Record<MemoryStatus, { cls: string; label: string }> = {
-    fresh: { cls: styles.memoFresh, label: t("outline.memoFresh") },
-    stale: { cls: styles.memoStale, label: t("outline.memoStale") },
-    none: { cls: styles.memoNone, label: t("outline.memoNone") },
-    short: { cls: styles.memoShort, label: t("outline.memoShort") },
+    fresh: { cls: styles.memoFresh, label: t("library.memoFresh") },
+    stale: { cls: styles.memoStale, label: t("library.memoStale") },
+    none: { cls: styles.memoNone, label: t("library.memoNone") },
+    short: { cls: styles.memoShort, label: t("library.memoShort") },
   };
   const m = meta[status];
   // "short" chapters can still be summarized here (forced whole-chapter recap).
   const force = status === "short";
-  const actionLabel = status === "fresh" ? t("outline.memoUpdate") : t("outline.memoGenerate");
+  const actionLabel = status === "fresh" ? t("library.memoUpdate") : t("library.memoGenerate");
   return (
     <span className={styles.memoCell} onClick={(e) => e.stopPropagation()}>
       <span className={`${styles.memoChip} ${m.cls}`}>{m.label}</span>
@@ -90,7 +92,42 @@ function MemoBadge({ chapter, status }: { chapter: Chapter; status?: MemoryStatu
   );
 }
 
-export function OutlineFullView() {
+/**
+ * A volume's non-chapter file (image, PDF…), shown compactly under its
+ * chapters. Images load a small thumbnail the same way ImagePreview does
+ * (data URL — the asset protocol is unreliable on Windows drive paths).
+ */
+function ResourceRow({ resource, onOpen }: { resource: ResourceFile; onOpen: () => void }) {
+  const isImage = isImagePath(resource.name);
+  const [thumb, setThumb] = useState<string | null>(null);
+  const [broken, setBroken] = useState(false);
+
+  useEffect(() => {
+    if (!isImage) return;
+    let cancelled = false;
+    setThumb(null);
+    setBroken(false);
+    imageToDataUrl(resource.path)
+      .then(({ dataUrl }) => { if (!cancelled) setThumb(dataUrl); })
+      .catch(() => { if (!cancelled) setBroken(true); });
+    return () => { cancelled = true; };
+  }, [resource.path, isImage]);
+
+  return (
+    <button className={styles.resource} title={resource.name} onClick={onOpen}>
+      {isImage && thumb && !broken ? (
+        <img src={thumb} alt="" className={styles.resourceThumb} />
+      ) : (
+        <span className={styles.resourceIcon}>
+          <FileIcon size={13} strokeWidth={1.6} />
+        </span>
+      )}
+      <span className={styles.resourceName}>{resource.name}</span>
+    </button>
+  );
+}
+
+export function LibraryView() {
   const { t } = useTranslation();
   const { fileTree, projectPath, activeFilePath, setActiveFilePath, wordCount, refreshFileTree } = useProjectStore();
   const setMainView = useAppStore((s) => s.setMainView);
@@ -219,11 +256,11 @@ export function OutlineFullView() {
   const menuItems = (ch: Chapter): ContextMenuEntry[] => {
     const writing = isWriting(ch);
     return [
-      { kind: "item", icon: <FileText size={13} />, label: t("outline.openChapter", { doc: terms.doc }), action: () => openChapter(ch.path) },
+      { kind: "item", icon: <FileText size={13} />, label: t("library.openChapter", { doc: terms.doc }), action: () => openChapter(ch.path) },
       {
         kind: "item",
         icon: <PenLine size={13} />,
-        label: writing ? t("outline.unmarkWriting") : t("outline.markWriting"),
+        label: writing ? t("library.unmarkWriting") : t("library.markWriting"),
         action: () => setChapterWriting(ch, !writing),
       },
     ];
@@ -248,9 +285,10 @@ export function OutlineFullView() {
 
   const deleteVolume = async (vol: Volume) => {
     // relPath "" is the project root itself — removeDir there would delete the
-    // whole workspace, not a volume.
-    if (vol.chapters.length > 0 || vol.relPath === "") return;
-    if (!window.confirm(t("outline.deleteVolumeConfirm", { group: terms.group }))) return;
+    // whole workspace, not a volume. Resources count too: a folder holding
+    // only images is not "empty", and removeDir would take them with it.
+    if (vol.chapters.length > 0 || vol.resources.length > 0 || vol.relPath === "") return;
+    if (!window.confirm(t("library.deleteVolumeConfirm", { group: terms.group }))) return;
     try {
       await removeDir(vol.path);
       await refreshFileTree();
@@ -292,12 +330,12 @@ export function OutlineFullView() {
       <div className={styles.view}>
         <div className={styles.header}>
           <div className={styles.headRow}>
-            <div className={styles.title}>{t("sidebar.outline")}</div>
+            <div className={styles.title}>{t("sidebar.library")}</div>
             <div className={styles.subtitle}>{t("titleBar.noProject")}</div>
           </div>
         </div>
         <div className={styles.empty}>
-          {t("outline.empty", {
+          {t("library.empty", {
             defaultValue: "未发现{{group}}/{{doc}}结构 — 在项目文件夹下创建子文件夹来组织{{group}}",
             group: terms.group,
             doc: terms.doc,
@@ -311,9 +349,9 @@ export function OutlineFullView() {
     <div className={styles.view}>
       <div className={styles.header}>
         <div className={styles.headRow}>
-          <div className={styles.title}>{t("sidebar.outline")}</div>
+          <div className={styles.title}>{t("sidebar.library")}</div>
           <div className={styles.subtitle}>
-            {t("outline.subtitle", {
+            {t("library.subtitle", {
               defaultValue: "{{count}} {{docs}} · {{words}} 字",
               count: allChaptersCount,
               docs: terms.docs,
@@ -321,20 +359,20 @@ export function OutlineFullView() {
             })}
           </div>
           <div className={styles.reorderHint}>
-            {t("outline.reorderHint", { doc: terms.doc, group: terms.group })}
+            {t("library.reorderHint", { doc: terms.doc, group: terms.group })}
           </div>
           <span className={styles.spacer} />
 
           {showMemo && (
-            <label className={styles.modelPicker} title={t("outline.summaryModelHint")}>
-              <span className={styles.modelLabel}>{t("outline.summaryModel")}</span>
+            <label className={styles.modelPicker} title={t("library.summaryModelHint")}>
+              <span className={styles.modelLabel}>{t("library.summaryModel")}</span>
               <Select
                 className={styles.modelSelect}
                 value={memoModelValue}
                 onChange={(v) => setMemoryModel(v || null)}
                 options={
                   enabledModels.length === 0
-                    ? [{ value: "", label: t("outline.noModel") }]
+                    ? [{ value: "", label: t("library.noModel") }]
                     : enabledModels.map((m) => ({ value: m.id, label: m.name }))
                 }
               />
@@ -346,7 +384,7 @@ export function OutlineFullView() {
               className={styles.volInput}
               autoFocus
               value={newVolName}
-              placeholder={t("outline.volumeNamePlaceholder", { group: terms.group })}
+              placeholder={t("library.volumeNamePlaceholder", { group: terms.group })}
               onChange={(e) => setNewVolName(e.target.value)}
               {...volIme.imeProps}
               onKeyDown={(e) => {
@@ -359,35 +397,24 @@ export function OutlineFullView() {
           ) : (
             <button className={styles.headBtn} onClick={() => setCreatingVol(true)}>
               <FolderPlus size={12} strokeWidth={1.8} />
-              {t("outline.newVolume", { group: terms.group })}
+              {t("library.newVolume", { group: terms.group })}
             </button>
           )}
 
-          <div className={styles.viewToggle}>
-            <button className={`${styles.viewTab} ${styles.viewTabActive}`}>
-              {t("outline.tabCards", { defaultValue: "{{doc}}卡", doc: terms.doc })}
-            </button>
-            <button className={styles.viewTab}>{t("outline.tabTimeline", { defaultValue: "时间线" })}</button>
-            <button className={styles.viewTab}>{t("outline.tabBoard", { defaultValue: "看板" })}</button>
-          </div>
-          <button className={styles.aiSuggestBtn}>
-            <Sparkles size={10} strokeWidth={1.8} />
-            {t("outline.aiSuggestNext", { defaultValue: "AI 建议下一{{doc}}", doc: terms.doc })}
-          </button>
         </div>
 
         {selected.size > 0 ? (
           <div className={styles.selectionBar}>
             <span className={styles.selectionInfo}>
               <Check size={12} strokeWidth={2} />
-              {t("outline.selectedCount", { count: selected.size, doc: terms.doc })}
+              {t("library.selectedCount", { count: selected.size, doc: terms.doc })}
             </span>
             <Select
               className={styles.moveSelect}
               value=""
               disabled={busy}
-              placeholder={t("outline.moveToVolume", { group: terms.group })}
-              ariaLabel={t("outline.moveToVolume", { group: terms.group })}
+              placeholder={t("library.moveToVolume", { group: terms.group })}
+              ariaLabel={t("library.moveToVolume", { group: terms.group })}
               options={volumes.map((v) => ({ value: v.relPath, label: v.name }))}
               onChange={(v) => {
                 const vol = volumes.find((x) => x.relPath === v);
@@ -395,32 +422,32 @@ export function OutlineFullView() {
               }}
             />
             <button className={styles.clearBtn} onClick={() => setSelected(new Set())}>
-              {t("outline.clearSelection")}
+              {t("library.clearSelection")}
             </button>
           </div>
         ) : (
           <div className={styles.stats}>
             <span>
               <span className={styles.statValue}>{wordCount.toLocaleString()}</span>{" "}
-              {t("outline.wordsUnit", { defaultValue: "字" })}
+              {t("library.wordsUnit", { defaultValue: "字" })}
             </span>
             <span className={styles.statSep} />
             <span>
               <span className={styles.statDot} style={{ color: "var(--color-success)" }}>●</span>{" "}
-              {t("outline.statDone", { defaultValue: "完 {{n}}", n: allChaptersCount - writingCount })}
+              {t("library.statDone", { defaultValue: "完 {{n}}", n: allChaptersCount - writingCount })}
             </span>
             <span style={{ margin: "0 10px" }} />
             <span>
               <span className={styles.statDot} style={{ color: "var(--color-sienna)" }}>●</span>{" "}
-              {t("outline.statWriting", { defaultValue: "在写 {{n}}", n: writingCount })}
+              {t("library.statWriting", { defaultValue: "在写 {{n}}", n: writingCount })}
             </span>
             <span className={styles.spacer} />
             <span>
-              {t("outline.avgPrefix", { defaultValue: "平均" })}{" "}
+              {t("library.avgPrefix", { defaultValue: "平均" })}{" "}
               <span className={styles.statValue}>
                 {allChaptersCount > 0 ? Math.round(wordCount / allChaptersCount).toLocaleString() : 0}
               </span>{" "}
-              {t("outline.avgSuffix", { defaultValue: "字 / {{doc}}", doc: terms.doc })}
+              {t("library.avgSuffix", { defaultValue: "字 / {{doc}}", doc: terms.doc })}
             </span>
           </div>
         )}
@@ -429,7 +456,7 @@ export function OutlineFullView() {
       <div className={styles.columns}>
         {volumes.map((vol, vi) => {
           const isCurrent = vi === activeVolumeIdx;
-          const canDelete = vol.chapters.length === 0 && vol.relPath !== "";
+          const canDelete = vol.chapters.length === 0 && vol.resources.length === 0 && vol.relPath !== "";
           return (
             <div key={vol.path} className={`${styles.column} ${isCurrent ? styles.columnCurrent : ""}`}>
               <div className={styles.colHead}>
@@ -450,7 +477,7 @@ export function OutlineFullView() {
                   {canDelete && (
                     <button
                       className={styles.volDeleteBtn}
-                      title={t("outline.deleteVolume", { group: terms.group })}
+                      title={t("library.deleteVolume", { group: terms.group })}
                       onClick={() => void deleteVolume(vol)}
                     >
                       <Trash2 size={12} />
@@ -501,14 +528,14 @@ export function OutlineFullView() {
                         <span className={styles.chapterName}>{title}</span>
                         {isWriting(ch) && (
                           <span className={styles.chapterStatus}>
-                            {t("outline.writingBadge", { defaultValue: "在写" })}
+                            {t("library.writingBadge", { defaultValue: "在写" })}
                           </span>
                         )}
                         {showMemo && <MemoBadge chapter={ch} status={statuses[ch.path]} />}
                         <span className={styles.moveControls} onClick={(e) => e.stopPropagation()}>
                           <button
                             className={styles.moveBtn}
-                            title={t("outline.moveTop")}
+                            title={t("library.moveTop")}
                             disabled={isFirst}
                             onClick={() => reorder(vol, ci, 0)}
                           >
@@ -516,7 +543,7 @@ export function OutlineFullView() {
                           </button>
                           <button
                             className={styles.moveBtn}
-                            title={t("outline.moveUp")}
+                            title={t("library.moveUp")}
                             disabled={isFirst}
                             onClick={() => reorder(vol, ci, ci - 1)}
                           >
@@ -524,7 +551,7 @@ export function OutlineFullView() {
                           </button>
                           <button
                             className={styles.moveBtn}
-                            title={t("outline.moveDown")}
+                            title={t("library.moveDown")}
                             disabled={isLast}
                             onClick={() => reorder(vol, ci, ci + 1)}
                           >
@@ -532,7 +559,7 @@ export function OutlineFullView() {
                           </button>
                           <button
                             className={styles.moveBtn}
-                            title={t("outline.moveBottom")}
+                            title={t("library.moveBottom")}
                             disabled={isLast}
                             onClick={() => reorder(vol, ci, last)}
                           >
@@ -546,11 +573,26 @@ export function OutlineFullView() {
 
                 {vol.chapters.length === 0 && (
                   <div className={styles.placeholderCard}>
-                    <div>{t("outline.emptyVolume", { group: terms.group })}</div>
-                    <div>{t("outline.emptyVolumeHint", { doc: terms.doc, group: terms.group })}</div>
+                    <div>{t("library.emptyVolume", { group: terms.group })}</div>
+                    <div>{t("library.emptyVolumeHint", { doc: terms.doc, group: terms.group })}</div>
                   </div>
                 )}
               </div>
+
+              {vol.resources.length > 0 && (
+                <div className={styles.resources}>
+                  <div className={styles.resourcesLabel}>
+                    {t("library.resources", { count: vol.resources.length })}
+                  </div>
+                  {vol.resources.map((res) => (
+                    <ResourceRow
+                      key={res.path}
+                      resource={res}
+                      onOpen={() => openChapter(res.path)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}

@@ -22,7 +22,7 @@
     "copy": "Copy",
     "copied": "Copied"
   },
-  "outline": {
+  "library": {
     "empty": "No {{group}}/{{doc}} structure found — create sub-folders in the project folder to organize {{group}}s",
     "reorderHint": "Click to select a {{doc}}, double-click to open; reorder within a {{group}} via buttons or drag",
     "subtitle": "{{count}} {{docs}} · {{words}} words",
@@ -53,10 +53,7 @@
     "markWriting": "Mark as in-progress",
     "unmarkWriting": "Clear in-progress",
     "writingBadge": "WIP",
-    "tabCards": "{{doc}} cards",
-    "tabTimeline": "Timeline",
-    "tabBoard": "Board",
-    "aiSuggestNext": "AI: next {{doc}}",
+    "resources": "Resources · {{count}}",
     "wordsUnit": "words",
     "statDone": "Done {{n}}",
     "statWriting": "Writing {{n}}",
@@ -69,7 +66,7 @@
     "outline": "Outline",
     "search": "Search",
     "searchComingSoon": "Search — coming soon",
-    "outlineFull": "Outline Full",
+    "library": "Library",
     "settings": "Settings",
     "project": "PROJECT",
     "projectSearch": "Search documents & {{entries}}"

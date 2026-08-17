@@ -496,5 +496,5 @@ export function useSectionLabel(id: SectionId): string {
 export function useMainView(): MainView {
   const mainView = useAppStore((s) => s.mainView);
   const { ordered } = useDocModel();
-  return mainView === "outline-full" && !ordered ? "editor" : mainView;
+  return mainView === "library" && !ordered ? "editor" : mainView;
 }
