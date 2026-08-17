@@ -98,12 +98,14 @@ interface ProjectState {
    */
   expandedDirs: Record<string, boolean>;
   /**
-   * The entry the author cut or copied from the sidebar, waiting for a paste.
-   * Lives here for the same reason `expandedDirs` does — the sidebar's tab
-   * transition remounts the tree, and a clipboard that emptied itself whenever
-   * the author looked at the lore tab would be worse than not having one.
+   * The entries the author cut or copied from the sidebar, waiting for a
+   * paste. Lives here for the same reason `expandedDirs` does — the sidebar's
+   * tab transition remounts the tree, and a clipboard that emptied itself
+   * whenever the author looked at the lore tab would be worse than not having
+   * one. A **list**, because the sidebar selection is one: a clipboard that
+   * held a single entry would quietly drop the rest of a multi-selection cut.
    */
-  clipboard: { path: string; isDir: boolean; mode: TransferMode } | null;
+  clipboard: { entries: { path: string; isDir: boolean }[]; mode: TransferMode } | null;
   wordCount: number;
   charCount: number;
   isLoading: boolean;
@@ -156,7 +158,9 @@ interface ProjectState {
   ) => Promise<string | null>;
 
   setActiveFilePath: (path: string | null) => void;
-  setClipboard: (entry: { path: string; isDir: boolean; mode: TransferMode } | null) => void;
+  setClipboard: (
+    entry: { entries: { path: string; isDir: boolean }[]; mode: TransferMode } | null,
+  ) => void;
   setDirExpanded: (path: string, open: boolean) => void;
   setWordCount: (n: number) => void;
   setCharCount: (n: number) => void;

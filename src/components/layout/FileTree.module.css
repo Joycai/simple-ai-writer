@@ -54,11 +54,17 @@
 }
 
 /* Tree — rows bleed edge to edge so the active highlight reaches the
-   container rim (设计稿 01); indentation lives on each row's padding. */
+   container rim (设计稿 01); indentation lives on each row's padding.
+   The bottom padding is also the project root's drop zone: it has no row of
+   its own, so the empty strip after the last entry is what an author drags
+   onto to move something back up to the top level. */
 .tree {
   flex: 1;
   overflow-y: auto;
-  padding: 0 0 12px;
+  padding: 0 0 40px;
+}
+.tree.rootDropTarget {
+  box-shadow: inset 0 0 0 1px var(--color-sienna);
 }
 
 /* Node row */
@@ -95,9 +101,32 @@
   font-weight: 500;
 }
 
-/* Drag & drop — the row being carried, and the folder it would land in. */
+/* Multi-selection. Fainter than .active on purpose: the open document keeps
+   the sienna rule at the left edge, and a selection of several rows must not
+   look like several open documents. */
+.node.selected {
+  background: var(--color-bg-elevated);
+}
+.node.selected .label {
+  color: var(--color-text-primary);
+}
+
+/* Drag & drop — the rows being carried, and the folder they would land in. */
 .node.dragging {
   opacity: 0.4;
+}
+
+/* Ghost shown under the cursor while several entries travel together. */
+.dragBadge {
+  position: absolute;
+  top: -1000px;
+  left: -1000px;
+  padding: 4px 10px;
+  font: 500 11px/1.3 var(--font-sans);
+  color: var(--color-bg-base);
+  background: var(--color-sienna);
+  white-space: nowrap;
+  pointer-events: none;
 }
 .node.dropTarget {
   background: var(--color-bg-elevated);

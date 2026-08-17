@@ -1,5 +1,5 @@
 import {
-  useState, useRef, useEffect, createContext, useContext,
+  useState, useRef, useEffect, useMemo, createContext, useContext,
   type DragEvent, type KeyboardEvent, type MouseEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -12,11 +12,15 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { isImagePath } from "../../lib/fs/images";
 import { fileExists } from "../../lib/fs/fileio";
 import { baseNameOf, dropRejection, parentDirOf, type TransferMode } from "../../lib/fs/moveCopy";
+import {
+  allRows, flattenVisible, isDirOpen, pruneNested, pruneSelection, rangeBetween,
+} from "../../lib/fs/selection";
 import { insertAtCursor } from "../../lib/editor/format";
 import { imageMarkdown } from "../../lib/image/assets";
 import { baseName, importDocumentsDialog } from "../../lib/import";
 import { useImeGuard } from "../../lib/ime";
 import { relativePathFrom } from "../../lib/paths";
+import { IS_MAC } from "../../lib/platform";
 import { useEditorStore } from "../../stores/editorStore";
 import { useProjectStore } from "../../stores/projectStore";
 import type { FileNode } from "../../lib/project";
@@ -35,14 +39,43 @@ function isCopyDrag(e: DragEvent): boolean {
   return e.ctrlKey || e.altKey;
 }
 
+/**
+ * The "add to the selection" modifier: ⌘ on macOS, Ctrl elsewhere. Ctrl is
+ * deliberately *not* accepted on macOS — there it opens the context menu, and
+ * a Ctrl-click that both toggled the selection and raised a menu would leave
+ * the menu acting on a set the author never meant to build.
+ */
+function isAdditiveClick(e: MouseEvent): boolean {
+  return IS_MAC ? e.metaKey : e.ctrlKey;
+}
+
 /** How long a folder must be hovered mid-drag before it springs open. */
 const SPRING_OPEN_MS = 700;
+
+/**
+ * Replace the drag ghost with a badge naming how many entries are travelling.
+ * Without it a multi-entry drag looks exactly like a single-entry one — the
+ * browser paints only the row the gesture started on.
+ */
+function setMultiDragImage(e: DragEvent, label: string): void {
+  const ghost = document.createElement("div");
+  ghost.textContent = label;
+  ghost.className = styles.dragBadge;
+  document.body.appendChild(ghost);
+  e.dataTransfer.setDragImage(ghost, 14, 14);
+  // The browser snapshots the element synchronously; it only has to survive
+  // this tick.
+  window.setTimeout(() => ghost.remove(), 0);
+}
 
 // ── Context ───────────────────────────────────────────────────────────────────
 
 interface TreeCtx {
   activeFilePath: string | null;
-  setActiveFilePath: (p: string) => void;
+  /** Paths in the sidebar selection — one after a plain click, more after ⌘/⇧. */
+  selected: ReadonlySet<string>;
+  /** Click a row: updates the selection, and opens the file unless modified. */
+  onRowClick: (e: MouseEvent, node: FileNode) => void;
   creatingIn: string | null;
   creatingType: "file" | "folder";
   startCreate: (parentPath: string, type: "file" | "folder") => void;
@@ -54,12 +87,12 @@ interface TreeCtx {
   confirmRename: (node: FileNode, name: string) => Promise<void>;
   cancelRename: () => void;
   openMenu: (e: MouseEvent, node: FileNode | null) => void;
-  /** Path of the row being dragged right now, so it can dim itself. */
-  draggingPath: string | null;
+  /** Paths being dragged right now, so they can dim themselves. */
+  draggingPaths: ReadonlySet<string>;
   /** Path of the folder row currently lit up as the drop target. */
   dragOverDir: string | null;
-  /** Path of the entry waiting to be pasted by a cut, dimmed until then. */
-  cutPath: string | null;
+  /** Paths waiting to be pasted by a cut, dimmed until then. */
+  cutPaths: ReadonlySet<string>;
   onDragStart: (e: DragEvent, node: FileNode) => void;
   onDragEnd: () => void;
   onDragOverDir: (e: DragEvent, node: FileNode) => void;
@@ -71,6 +104,11 @@ const TreeCtx = createContext<TreeCtx>(null!);
 
 // ── Inline create input ───────────────────────────────────────────────────────
 
+/**
+ * `depth` is the depth of the row the new entry is being created *under* — so
+ * a create at the project root passes -1, which lands the input at the same
+ * indent as a top-level row.
+ */
 function CreateInput({ depth }: { depth: number }) {
   const { t } = useTranslation();
   const { cancelCreate, confirmCreate, createError, creatingType } = useContext(TreeCtx);
@@ -198,17 +236,18 @@ function countDocsIn(node: FileNode): number {
 function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
   const { t } = useTranslation();
   const {
-    activeFilePath, setActiveFilePath, creatingIn, startCreate,
+    activeFilePath, selected, onRowClick, creatingIn, startCreate,
     renamingPath, renameError, openMenu,
-    draggingPath, dragOverDir, cutPath,
+    draggingPaths, dragOverDir, cutPaths,
     onDragStart, onDragEnd, onDragOverDir, onDragLeaveDir, onDropInDir,
   } = useContext(TreeCtx);
   // Expansion is stored per project (projectStore.expandedDirs), not per node:
   // the sidebar's tab transition remounts this tree, so local state would
   // collapse every folder the author opened whenever they looked at another tab.
-  // No entry yet = never touched = the default below.
+  // `isDirOpen` owns the default so the rendered tree and the flattened one the
+  // selection ranges over cannot disagree about which rows exist.
   const stored = useProjectStore((s) => s.expandedDirs[node.path]);
-  const open = stored ?? depth === 0;
+  const open = isDirOpen(stored, depth);
   const setOpen = (next: boolean) =>
     useProjectStore.getState().setDirExpanded(node.path, next);
   const isActive = !node.is_dir && activeFilePath === node.path;
@@ -224,18 +263,23 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
     }
   }, [creatingIn, node.path]);
 
-  const handleClick = () => {
+  const handleClick = (e: MouseEvent) => {
     if (isRenaming) return;
+    onRowClick(e, node);
+    // A modified click is about building a selection, nothing else: opening a
+    // document or toggling a folder on the way would undo what the author is
+    // in the middle of assembling.
+    if (e.shiftKey || isAdditiveClick(e)) return;
     if (node.is_dir) setOpen(!open);
-    else setActiveFilePath(node.path);
   };
 
   const classes = [
     styles.node,
     isActive ? styles.active : "",
-    draggingPath === node.path ? styles.dragging : "",
+    selected.has(node.path) ? styles.selected : "",
+    draggingPaths.has(node.path) ? styles.dragging : "",
     dragOverDir === node.path ? styles.dropTarget : "",
-    cutPath === node.path ? styles.cut : "",
+    cutPaths.has(node.path) ? styles.cut : "",
   ].filter(Boolean).join(" ");
 
   return (
@@ -326,7 +370,7 @@ interface CtxMenuState { x: number; y: number; node: FileNode | null }
 
 export function FileTree() {
   const { t } = useTranslation();
-  const { fileTree, projectPath, refreshFileTree, activeFilePath, setActiveFilePath,
+  const { fileTree, expandedDirs, projectPath, refreshFileTree, activeFilePath, setActiveFilePath,
           openProject, closeProject, createEntry, moveEntry, copyEntry, deleteEntry,
           clipboard, setClipboard } =
     useProjectStore();
@@ -339,18 +383,57 @@ export function FileTree() {
   const [renameError, setRenameError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [transferError, setTransferError] = useState<string | null>(null);
-  const [draggingPath, setDraggingPath] = useState<string | null>(null);
+  const [draggingPaths, setDraggingPaths] = useState<ReadonlySet<string>>(new Set());
   const [dragOverDir, setDragOverDir] = useState<string | null>(null);
-  // The dragged entry also lives in a ref: `dragover` fires dozens of times a
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  // Where a shift-range starts. Held separately from the selection because it
+  // must survive the range being redrawn: dragging a shift-click up and down
+  // has to grow and shrink one span, not chain new ones off the last row.
+  const [anchor, setAnchor] = useState<string | null>(null);
+  // The dragged entries also live in a ref: `dragover` fires dozens of times a
   // second and cannot read dataTransfer (browsers withhold it until the drop),
   // so the validity check has to consult something synchronous.
-  const dragRef = useRef<TransferSource | null>(null);
+  const dragRef = useRef<TransferSource[] | null>(null);
   const springTimer = useRef<{ path: string; id: number } | null>(null);
 
-  // Whether 插入到当前位置 has anywhere to insert *into*: a markdown document
-  // open in a live editor, which is where the cursor is. EditorArea swaps the
-  // CodeEditor out for an image preview or a load notice, and `editorView` is
-  // null for exactly those — so it answers the question on its own.
+  // Every row of the tree, and the subset currently on screen. The first
+  // answers "what does this selected path point at"; the second is what a
+  // shift-range walks, since a range must not reach into a collapsed folder.
+  const everyRow = useMemo(() => allRows(fileTree), [fileTree]);
+  const visibleRows = useMemo(
+    () => flattenVisible(fileTree, expandedDirs),
+    [fileTree, expandedDirs],
+  );
+
+  // A selection outlives the gesture that acted on it — a move rewrites every
+  // selected path, a delete removes them — so anything no longer on disk has
+  // to drop out before it can widen the *next* gesture.
+  useEffect(() => {
+    setSelected((prev) => {
+      const next = pruneSelection(prev, everyRow);
+      return next.size === prev.size ? prev : next;
+    });
+  }, [everyRow]);
+
+  // Opening a document from anywhere else (command palette, outline, a link)
+  // moves the selection with it, so the sidebar never shows one file open and
+  // a different one selected.
+  useEffect(() => {
+    if (!activeFilePath) return;
+    setSelected((prev) => (prev.has(activeFilePath) ? prev : new Set([activeFilePath])));
+    setAnchor(activeFilePath);
+  }, [activeFilePath]);
+
+  /** The selected rows, in tree order, as transfer sources. */
+  const selectedSources = (): TransferSource[] =>
+    everyRow.filter((r) => selected.has(r.path)).map((r) => ({ path: r.path, isDir: r.isDir }));
+
+  /**
+   * Whether 插入到当前位置 has anywhere to insert *into*: a markdown document
+   * open in a live editor, which is where the cursor is. EditorArea swaps the
+   * CodeEditor out for an image preview or a load notice, and `editorView` is
+   * null for exactly those — so it answers the question on its own.
+   */
   const openDocPath = useEditorStore((s) => s.filePath);
   const hasLiveEditor = useEditorStore((s) => s.editorView !== null);
   const canInsertIntoDoc = hasLiveEditor && !!openDocPath && /\.md$/i.test(openDocPath);
@@ -374,61 +457,137 @@ export function FileTree() {
   const endDrag = () => {
     cancelSpring();
     dragRef.current = null;
-    setDraggingPath(null);
+    setDraggingPaths(new Set());
     setDragOverDir(null);
   };
 
   useEffect(() => cancelSpring, []);
 
-  /**
-   * Move or copy an entry into `destDir` — the one path behind both the drop
-   * gesture and the paste menu item, so the two cannot drift apart.
-   */
-  const transfer = async (src: TransferSource, destDir: string, mode: TransferMode) => {
-    const rejection = dropRejection(src.path, destDir, mode);
-    if (rejection) {
-      // "same-parent" means the author dropped an entry back where it already
-      // is — an accident, not a failure, so it passes silently.
-      setTransferError(rejection === "into-self" ? t("fileTree.moveIntoSelf") : null);
+  // ── Selection ───────────────────────────────────────────────────────────────
+
+  const onRowClick = (e: MouseEvent, node: FileNode) => {
+    if (e.shiftKey && anchor) {
+      const range = rangeBetween(visibleRows, anchor, node.path);
+      if (range.length > 0) {
+        setSelected(new Set(range));
+        return; // anchor stays put, so the span can be redrawn from it
+      }
+    }
+    if (isAdditiveClick(e)) {
+      setSelected((prev) => {
+        const next = new Set(prev);
+        if (!next.delete(node.path)) next.add(node.path);
+        return next;
+      });
+      setAnchor(node.path);
       return;
     }
+    setSelected(new Set([node.path]));
+    setAnchor(node.path);
+    if (!node.is_dir) setActiveFilePath(node.path);
+  };
+
+  const clearSelection = () => {
+    setSelected(new Set());
+    setAnchor(null);
+  };
+
+  // ── Transfers ───────────────────────────────────────────────────────────────
+
+  /**
+   * Move or copy entries into `destDir` — the one path behind the drop
+   * gesture, the paste menu item and the root drop zone, so they cannot drift
+   * apart.
+   *
+   * Every source is attempted: one entry that cannot land (an occupied name, a
+   * folder dropped into itself) must not strand the rest of a multi-selection
+   * halfway. What did fail is reported together at the end.
+   */
+  const transferMany = async (
+    sources: readonly TransferSource[],
+    destDir: string,
+    mode: TransferMode,
+  ) => {
     setTransferError(null);
-    const name = baseNameOf(src.path);
-    try {
-      if (mode === "copy") {
-        await copyEntry(src.path, destDir, src.isDir);
-      } else {
-        // moveEntry refuses an occupied destination too; checking here is what
-        // turns that into a sentence naming the file, in the author's language.
-        const dest = `${destDir}/${name}`;
-        if (await fileExists(dest)) {
-          setTransferError(t("fileTree.moveExists", { name }));
-          return;
+    const errors: string[] = [];
+    const landed: string[] = [];
+    // A folder carries its contents, so a selection holding both is not a
+    // conflict — the descendants are simply already covered.
+    for (const src of pruneNested(sources)) {
+      const rejection = dropRejection(src.path, destDir, mode);
+      // "same-parent" means the entry was dropped back where it already is —
+      // an accident, not a failure, so it passes silently.
+      if (rejection === "same-parent") continue;
+      if (rejection === "into-self") { errors.push(t("fileTree.moveIntoSelf")); continue; }
+      const name = baseNameOf(src.path);
+      try {
+        if (mode === "copy") {
+          landed.push(await copyEntry(src.path, destDir, src.isDir));
+        } else {
+          // moveEntry refuses an occupied destination too; checking here is
+          // what turns that into a sentence naming the file, in the author's
+          // language.
+          const dest = `${destDir}/${name}`;
+          if (await fileExists(dest)) {
+            errors.push(t("fileTree.moveExists", { name }));
+            continue;
+          }
+          await moveEntry(src.path, dest);
+          landed.push(dest);
         }
-        await moveEntry(src.path, dest);
+      } catch (err) {
+        errors.push(err instanceof Error ? err.message : String(err));
       }
-      useProjectStore.getState().setDirExpanded(destDir, true);
-    } catch (err) {
-      setTransferError(err instanceof Error ? err.message : String(err));
     }
+    // De-duplicated: five files blocked by the same folder is one sentence.
+    setTransferError(errors.length > 0 ? [...new Set(errors)].join(" ") : null);
+    if (landed.length > 0) {
+      useProjectStore.getState().setDirExpanded(destDir, true);
+      // Follow the entries to where they went. Leaving the selection on the
+      // old paths would let the next gesture act on a set that no longer
+      // exists, and the author has just said these are the entries they care
+      // about.
+      setSelected(new Set(landed));
+      setAnchor(landed[landed.length - 1]);
+    }
+  };
+
+  /** Whether at least one dragged entry could land in `destDir`. */
+  const canDropInto = (destDir: string, mode: TransferMode): boolean => {
+    const sources = dragRef.current;
+    return !!sources && sources.some((s) => !dropRejection(s.path, destDir, mode));
   };
 
   const onDragStart = (e: DragEvent, node: FileNode) => {
-    const src = { path: node.path, isDir: node.is_dir };
-    dragRef.current = src;
-    setDraggingPath(node.path);
+    // Dragging a row inside the selection carries the whole selection;
+    // dragging one outside it means the author changed their mind about what
+    // they were pointing at, so the selection follows the pointer.
+    let sources: TransferSource[];
+    if (selected.has(node.path) && selected.size > 1) {
+      sources = selectedSources();
+    } else {
+      sources = [{ path: node.path, isDir: node.is_dir }];
+      setSelected(new Set([node.path]));
+      setAnchor(node.path);
+    }
+    sources = pruneNested(sources);
+    dragRef.current = sources;
+    setDraggingPaths(new Set(sources.map((s) => s.path)));
     setTransferError(null);
     e.dataTransfer.effectAllowed = "copyMove";
     // Some engines abort a drag that carries no payload at all.
-    e.dataTransfer.setData("text/plain", node.path);
+    e.dataTransfer.setData("text/plain", sources.map((s) => s.path).join("\n"));
+    if (sources.length > 1) {
+      setMultiDragImage(e, t("fileTree.dragCount", { count: sources.length }));
+    }
   };
 
   const onDragOverDir = (e: DragEvent, node: FileNode) => {
-    const src = dragRef.current;
-    // Only folders take drops, and only from a drag that started in this tree
-    // (an OS file drag has no ref and must fall through untouched).
-    if (!src || !node.is_dir) return;
-    if (dropRejection(src.path, node.path, isCopyDrag(e) ? "copy" : "move")) {
+    // The row decides, always — letting the event reach the container would
+    // make the tree's root drop zone silently claim a drag aimed at a file.
+    if (!dragRef.current) return; // an OS file drag must fall through untouched
+    e.stopPropagation();
+    if (!node.is_dir || !canDropInto(node.path, isCopyDrag(e) ? "copy" : "move")) {
       cancelSpring();
       setDragOverDir(null);
       return; // no preventDefault → the row shows "no drop" and fires no drop
@@ -449,11 +608,45 @@ export function FileTree() {
   };
 
   const onDropInDir = (e: DragEvent, node: FileNode) => {
+    if (!dragRef.current) return;
     e.preventDefault();
-    const src = dragRef.current;
+    e.stopPropagation();
+    const sources = dragRef.current;
     const mode: TransferMode = isCopyDrag(e) ? "copy" : "move";
     endDrag();
-    if (src && node.is_dir) void transfer(src, node.path, mode);
+    if (node.is_dir) void transferMany(sources, node.path, mode);
+  };
+
+  // ── Root drop zone ──────────────────────────────────────────────────────────
+  // The empty space of the tree is the project root. Without it the root is the
+  // one folder an entry can be dragged *out of* but never back into — the
+  // workspace is the whole project directory now, and its top level has to be
+  // as reachable as any folder in it.
+
+  const onDragOverTree = (e: DragEvent) => {
+    if (!dragRef.current || !projectPath) return;
+    if (!canDropInto(projectPath, isCopyDrag(e) ? "copy" : "move")) {
+      setDragOverDir(null);
+      return;
+    }
+    e.preventDefault();
+    e.dataTransfer.dropEffect = isCopyDrag(e) ? "copy" : "move";
+    cancelSpring();
+    setDragOverDir(projectPath);
+  };
+
+  const onDragLeaveTree = (e: DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+    setDragOverDir((cur) => (cur === projectPath ? null : cur));
+  };
+
+  const onDropInTree = (e: DragEvent) => {
+    const sources = dragRef.current;
+    if (!sources || !projectPath) return;
+    e.preventDefault();
+    const mode: TransferMode = isCopyDrag(e) ? "copy" : "move";
+    endDrag();
+    void transferMany(sources, projectPath, mode);
   };
 
   /** Where a paste aimed at this row lands: a folder itself, else its parent. */
@@ -465,10 +658,9 @@ export function FileTree() {
   const handlePaste = async (node: FileNode | null) => {
     const dest = pasteTargetOf(node);
     if (!clipboard || !dest) return;
-    const { path, isDir, mode } = clipboard;
-    await transfer({ path, isDir }, dest, mode);
+    await transferMany(clipboard.entries, dest, clipboard.mode);
     // A cut is spent once pasted; a copy stays, so it can be pasted again.
-    if (mode === "move") setClipboard(null);
+    if (clipboard.mode === "move") setClipboard(null);
   };
 
   // Convert picked documents (docx/pdf/txt/md) into markdown files in destDir.
@@ -509,6 +701,8 @@ export function FileTree() {
     try {
       const path = await createEntry(creatingIn, name, creatingType);
       if (creatingType === "file") setActiveFilePath(path);
+      setSelected(new Set([path]));
+      setAnchor(path);
       cancelCreate();
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : String(err));
@@ -537,22 +731,39 @@ export function FileTree() {
     }
   };
 
-  const handleDelete = async (node: FileNode) => {
+  /**
+   * Delete every target behind one confirmation. Failures are logged rather
+   * than raised: a delete that fails partway through a selection should still
+   * remove the entries it can, and the tree refresh shows what survived.
+   */
+  const handleDelete = async (targets: readonly TransferSource[]) => {
     setMenu(null);
     const ok = window.confirm(
-      t(node.is_dir ? "fileTree.deleteFolderConfirm" : "fileTree.deleteConfirm"),
+      targets.length > 1
+        ? t("fileTree.deleteManyConfirm", { count: targets.length })
+        : t(targets[0].isDir ? "fileTree.deleteFolderConfirm" : "fileTree.deleteConfirm"),
     );
     if (!ok) return;
-    try {
-      await deleteEntry(node.path, node.is_dir);
-    } catch (err) {
-      console.error("[fileTree] delete failed:", err);
+    for (const target of pruneNested(targets)) {
+      try {
+        await deleteEntry(target.path, target.isDir);
+      } catch (err) {
+        console.error("[fileTree] delete failed:", err);
+      }
     }
+    clearSelection();
   };
 
   const openMenu = (e: MouseEvent, node: FileNode | null) => {
     e.preventDefault();
     e.stopPropagation();
+    // Right-clicking outside the selection retargets it, the way every file
+    // manager does — otherwise 删除 5 项 could appear over a row that is not
+    // one of the five.
+    if (node && !selected.has(node.path)) {
+      setSelected(new Set([node.path]));
+      setAnchor(node.path);
+    }
     setMenu({ x: e.clientX, y: e.clientY, node });
   };
 
@@ -592,11 +803,14 @@ export function FileTree() {
     const pasteItem = (): ContextMenuEntry[] => {
       if (!clipboard) return [];
       const dest = pasteTargetOf(node);
-      const blocked = !dest || !!dropRejection(clipboard.path, dest, clipboard.mode);
+      const blocked =
+        !dest || clipboard.entries.every((entry) => !!dropRejection(entry.path, dest, clipboard.mode));
       return [{
         kind: "item",
         icon: <ClipboardPaste size={13} />,
-        label: t("fileTree.pasteEntry", { name: baseNameOf(clipboard.path) }),
+        label: clipboard.entries.length > 1
+          ? t("fileTree.pasteEntries", { count: clipboard.entries.length })
+          : t("fileTree.pasteEntry", { name: baseNameOf(clipboard.entries[0].path) }),
         disabled: blocked,
         action: () => void handlePaste(node),
       }];
@@ -618,6 +832,28 @@ export function FileTree() {
           action: () => void refreshFileTree() },
       ];
     }
+
+    // `openMenu` has already made sure the clicked row is in the selection, so
+    // the menu can act on all of it. Everything that only makes sense for one
+    // entry — 打开, 重命名, 新建 — drops out when there are several.
+    const targets = selected.has(node.path) && selected.size > 1
+      ? selectedSources()
+      : [{ path: node.path, isDir: node.is_dir }];
+    const count = targets.length;
+
+    if (count > 1) {
+      return [
+        { kind: "item", icon: <Scissors size={13} />, label: t("fileTree.cutMany", { count }),
+          action: () => setClipboard({ entries: targets, mode: "move" }) },
+        { kind: "item", icon: <Copy size={13} />, label: t("fileTree.copyMany", { count }),
+          action: () => setClipboard({ entries: targets, mode: "copy" }) },
+        ...pasteItem(),
+        { kind: "divider" },
+        { kind: "item", icon: <Trash2 size={13} />, label: t("fileTree.deleteMany", { count }),
+          danger: true, action: () => void handleDelete(targets) },
+      ];
+    }
+
     const items: ContextMenuEntry[] = [];
     if (node.is_dir) {
       items.push(
@@ -647,13 +883,12 @@ export function FileTree() {
         });
       }
     }
-    const source: TransferSource = { path: node.path, isDir: node.is_dir };
     items.push(
       { kind: "divider" },
       { kind: "item", icon: <Scissors size={13} />, label: t("fileTree.cut"),
-        action: () => setClipboard({ ...source, mode: "move" }) },
+        action: () => setClipboard({ entries: targets, mode: "move" }) },
       { kind: "item", icon: <Copy size={13} />, label: t("fileTree.copy"),
-        action: () => setClipboard({ ...source, mode: "copy" }) },
+        action: () => setClipboard({ entries: targets, mode: "copy" }) },
       ...pasteItem(),
       { kind: "divider" },
       { kind: "item", icon: <Pencil size={13} />, label: t("fileTree.rename"),
@@ -662,16 +897,18 @@ export function FileTree() {
         action: () => reveal(node.path) },
       { kind: "divider" },
       { kind: "item", icon: <Trash2 size={13} />, label: t("fileTree.delete"), danger: true,
-        action: () => void handleDelete(node) },
+        action: () => void handleDelete(targets) },
     );
     return items;
   };
 
   const projectName = projectPath?.split("/").pop()?.toUpperCase() ?? "";
+  const creatingAtRoot = !!projectPath && creatingIn === projectPath;
 
   const ctx: TreeCtx = {
     activeFilePath,
-    setActiveFilePath,
+    selected,
+    onRowClick,
     creatingIn,
     creatingType,
     startCreate,
@@ -683,9 +920,11 @@ export function FileTree() {
     confirmRename,
     cancelRename,
     openMenu,
-    draggingPath,
+    draggingPaths,
     dragOverDir,
-    cutPath: clipboard?.mode === "move" ? clipboard.path : null,
+    cutPaths: clipboard?.mode === "move"
+      ? new Set(clipboard.entries.map((entry) => entry.path))
+      : new Set<string>(),
     onDragStart,
     onDragEnd: endDrag,
     onDragOverDir,
@@ -716,10 +955,17 @@ export function FileTree() {
             </button>
             <button
               className={styles.toolbarBtn}
-              title={t("fileTree.newFile")}
+              title={t("fileTree.newFileAtRoot")}
               onClick={() => projectPath && startCreate(projectPath, "file")}
             >
               <FilePlus size={14} />
+            </button>
+            <button
+              className={styles.toolbarBtn}
+              title={t("fileTree.newFolderAtRoot")}
+              onClick={() => projectPath && startCreate(projectPath, "folder")}
+            >
+              <FolderPlus size={14} />
             </button>
             <button
               className={styles.toolbarBtn}
@@ -750,9 +996,21 @@ export function FileTree() {
           </div>
         )}
 
-        {/* Tree or empty state */}
-        <div className={styles.tree} onContextMenu={(e) => openMenu(e, null)}>
-          {fileTree.length === 0 ? (
+        {/* Tree or empty state. The container itself is the project root: its
+            empty space takes drops, its background clears the selection, and
+            a root-level create renders its input here rather than under a row
+            (the root has no row of its own — `readDirRecursive` returns the
+            project's children, not the project). */}
+        <div
+          className={`${styles.tree} ${dragOverDir === projectPath ? styles.rootDropTarget : ""}`}
+          onContextMenu={(e) => openMenu(e, null)}
+          onClick={(e) => { if (e.target === e.currentTarget) clearSelection(); }}
+          onDragOver={onDragOverTree}
+          onDragLeave={onDragLeaveTree}
+          onDrop={onDropInTree}
+        >
+          {creatingAtRoot && <CreateInput depth={-1} />}
+          {fileTree.length === 0 && !creatingAtRoot ? (
             <div className={styles.emptyState}>
               <div className={styles.emptyText}>{t("project.emptyTree")}</div>
               <button
