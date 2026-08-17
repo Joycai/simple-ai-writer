@@ -55,6 +55,15 @@ export function LoreWall() {
   const kbEyebrow = profileTerms(profile, false).kb.toUpperCase();
   const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
 
+  // Entering the wall re-reads disk. There is no filesystem watcher, and this
+  // component is unmounted on every view switch, so it otherwise renders
+  // whatever index the store happens to hold — stale after an agent write that
+  // landed while another view was up, or after a scan that failed. The store
+  // coalesces queued scans, so a fast view toggle costs one walk, not several.
+  useEffect(() => {
+    if (projectPath) void scanProject(projectPath);
+  }, [projectPath, scanProject]);
+
   const [filter, setFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   // Unified new-entry flow: null = closed, else which mode the modal opens in.
@@ -91,6 +100,15 @@ export function LoreWall() {
     return Object.values(index).flat().find((e) => e.dirPath === detailPath) ?? null;
   }, [detailPath, index]);
 
+  // Keyed on the avatars, not on `index`: every rescan produces a fresh index
+  // object, and re-running this would re-base64 every avatar on the wall for a
+  // change that touched none of them. With a rescan on mount and one per agent
+  // lore write, that is the difference between a free re-render and an O(images)
+  // encode pass each time.
+  const avatarKey = useMemo(
+    () => Object.values(index).flat().map((e) => `${e.id}:${e.avatarPath ?? ""}`).join("|"),
+    [index],
+  );
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -109,7 +127,10 @@ export function LoreWall() {
       if (!cancelled) setAvatarDataUrls(next);
     })();
     return () => { cancelled = true; };
-  }, [index]);
+    // `index` is read inside but deliberately not a dep — avatarKey is its
+    // avatar-relevant projection, and the read is always of the current render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [avatarKey]);
 
   const handleAvatarPick = async (entity: LoreEntity) => {
     if (!projectPath || avatarBusy) return;

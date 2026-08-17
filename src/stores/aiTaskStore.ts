@@ -476,8 +476,12 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             multimodal: model.type === "multimodal",
             // Write-auto tools call these after touching disk so the panels
             // reflect agent edits immediately (no-ops for read-only presets).
-            onLoreChanged: () => {
-              void useLoreStore.getState().scanProject(projectPath);
+            // Awaited, and returns the fresh index, so the run's own snapshot
+            // can resolve an entity the run itself just created — see
+            // writeTools.syncLore.
+            onLoreChanged: async () => {
+              await useLoreStore.getState().scanProject(projectPath);
+              return useLoreStore.getState().index;
             },
             onMemoryChanged: () => {
               void import("./memoryStore").then((m) =>

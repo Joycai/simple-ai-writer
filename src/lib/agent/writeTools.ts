@@ -22,6 +22,7 @@
 import { loreCategoryIds } from "../profile/active";
 import {
   RESERVED_ENTITY_FILES,
+  cloneLoreIndex,
   createEntityWithContent,
   parseFacetMeta,
   readEntityFile,
@@ -141,6 +142,35 @@ export async function proposeLorePlanTool(
 }
 
 /**
+ * Fold a lore write back into this run's snapshot, and refresh the app with it.
+ *
+ * `ctx.loreIndex` is one object shared by every tool call in the run (the
+ * runtime spreads the same context per call), so the fresh index is poured
+ * *into* it rather than reassigned — a reassignment would be invisible to the
+ * next call. It is cloned on the way in for the same reason the runtime clones
+ * at run start: what comes back is the live store object, and the snapshot
+ * patches below splice its arrays.
+ *
+ * Never throws. `executeRegisteredTool` turns a throw into an `"Error: …"`
+ * result, so a rescan that fails *after* a successful write would tell the
+ * model its create failed — and the model would create the entity a second
+ * time. The hand-written snapshot patches are the fallback.
+ *
+ * Invariant for callers: resync **last**, and never touch disk through an
+ * entity resolved before it — those objects are detached once this returns.
+ */
+async function syncLore(ctx: ToolContext): Promise<void> {
+  try {
+    const fresh = await ctx.onLoreChanged?.();
+    if (!fresh) return;
+    for (const key of Object.keys(ctx.loreIndex)) delete ctx.loreIndex[key];
+    Object.assign(ctx.loreIndex, cloneLoreIndex(fresh));
+  } catch (e) {
+    console.warn("[agent] lore rescan failed; run snapshot keeps its local patches:", e);
+  }
+}
+
+/**
  * Gate helper for the write tools: returns the refusal result to hand straight
  * back, or the covering step whose `detail` gets echoed into the success
  * message (so the log shows intent and outcome together).
@@ -202,7 +232,15 @@ export async function createLoreEntityTool(
     ctx.projectPath, category, entityId, name, aliases, summary, content,
   );
 
-  ctx.onLoreChanged?.();
+  // Insert into the run snapshot before resyncing, mirroring what
+  // relocateInSnapshot does for move/delete. syncLore overwrites this with disk
+  // truth a line later on any surface that can rescan — this is what keeps the
+  // new entity resolvable on one that cannot, or when the rescan fails.
+  (ctx.loreIndex[category] ??= []).push({
+    id: entityId, category, dirPath, name, aliases, summary,
+    avatarPath: null, mdFiles: ["index.md"], images: [], facets: [],
+  });
+  await syncLore(ctx);
   return {
     toolCallId,
     content:
@@ -287,7 +325,7 @@ export async function updateLoreFileTool(
   const backupPath = await backupFile(ctx.projectPath, targetPath);
   await writeEntityFile(entity.dirPath, file, content);
 
-  ctx.onLoreChanged?.();
+  await syncLore(ctx);
   const suffix = backupPath
     ? `Previous version backed up to ${backupPath}.`
     : "This is a new file (no backup needed).";
@@ -356,8 +394,11 @@ export async function updateFacetMetaTool(
   if (typeof checked !== "string") return checked;
   const file = checked;
 
-  // Read from disk rather than trusting the run snapshot: a facet this run
-  // just created through update_lore_file is on disk but not in the snapshot.
+  // Read from disk rather than trusting the run snapshot. Belt and braces since
+  // syncLore landed, but still the correct behaviour on its own terms: the
+  // frontmatter on disk is the source of truth, and the body below has to be
+  // carried through verbatim. It also remains the only thing that works on a
+  // surface with no rescan.
   let raw: string;
   try {
     raw = await readEntityFile(entity.dirPath, file);
@@ -429,7 +470,7 @@ export async function updateFacetMetaTool(
   if (at >= 0) entity.facets[at] = snapshot;
   else (entity.facets ??= []).push(snapshot);
 
-  ctx.onLoreChanged?.();
+  await syncLore(ctx);
   const inert = next.mode === "auto" && next.keys.length === 0;
   return {
     toolCallId,
@@ -480,7 +521,7 @@ export async function deleteLoreFileTool(
   await removeFile(targetPath);
   forgetFileInSnapshot(entity, file);
 
-  ctx.onLoreChanged?.();
+  await syncLore(ctx);
   return {
     toolCallId,
     content:
@@ -494,11 +535,15 @@ export async function deleteLoreFileTool(
 /**
  * Keep the run's lore snapshot honest after a folder-level change.
  *
- * ctx.loreIndex is captured at run start (see registry.ToolContext) — the
- * app-side rescan that onLoreChanged fires never reaches it. Without this, the
- * next call in the same run resolves the entity to a directory that no longer
- * exists, and the model gets a baffling ENOENT for the move it just made
- * successfully. Pass `next: null` to drop the entity entirely.
+ * ctx.loreIndex is captured at run start (see registry.ToolContext). `syncLore`
+ * now folds the rescan back into it, so this is the *fallback* rather than the
+ * only repair: it is what keeps the snapshot honest on a surface that supplies
+ * no `onLoreChanged` (lore/generator, lore/splitter — both pass `loreIndex:
+ * {}`) and when a rescan fails. Without either, the next call in the same run
+ * resolves the entity to a directory that no longer exists, and the model gets
+ * a baffling ENOENT for the move it just made successfully.
+ *
+ * Pass `next: null` to drop the entity entirely.
  */
 function relocateInSnapshot(
   loreIndex: LoreIndex,
@@ -606,7 +651,7 @@ export async function moveLoreEntityTool(
   entity.name = newName ?? entity.name;
   entity.aliases = aliases;
 
-  ctx.onLoreChanged?.();
+  await syncLore(ctx);
   const changes = [
     newName && newName !== entityName ? `renamed to "${newName}"` : null,
     newCategory && newCategory !== previousCategory
@@ -650,7 +695,9 @@ export async function deleteLoreEntityTool(
   await renamePath(entity.dirPath, trashPath);
 
   relocateInSnapshot(ctx.loreIndex, entity, null);
-  ctx.onLoreChanged?.();
+  // Reads `entity.name`/`entity.category` below off the now-detached object on
+  // purpose: the message should report what was deleted, not what remains.
+  await syncLore(ctx);
   return {
     toolCallId,
     content:

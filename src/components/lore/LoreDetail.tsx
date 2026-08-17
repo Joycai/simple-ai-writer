@@ -192,22 +192,42 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   // (e.g. LoreSplitModal Apply) — the body must be re-read, or a later Edit →
   // Save would write the stale pre-split body back and undo the split.
   const [contentVersion, setContentVersion] = useState(0);
+  /** Which path the flags below describe, so a same-path reload doesn't reset them. */
+  const loadedPathRef = useRef<string | null>(null);
+  // Also keyed on `loreIndex`: the same "Edit → Save writes a stale body back"
+  // hazard applies to an *agent* rewriting this entity's index.md while the
+  // page is open, and only a rescan announces that. Re-reading during an edit
+  // is safe — `dBody` is a separate draft, seeded from `content` once when edit
+  // mode opens — and it is what makes the *next* edit start from the truth.
   useEffect(() => {
     const indexPath = `${entity.dirPath}/index.md`;
-    setContentLoaded(false);
-    setContentLoadFailed(false);
+    // Only a genuine navigation clears these: they gate the Edit button and the
+    // autoEdit effect below, so flipping them on every rescan would flicker the
+    // button and could re-trip autoEdit mid-session.
+    if (loadedPathRef.current !== indexPath) {
+      loadedPathRef.current = indexPath;
+      setContentLoaded(false);
+      setContentLoadFailed(false);
+    }
+    // Now that this fires on every rescan, two reads can be in flight at once;
+    // without the guard the slower (older) one wins and reinstates a stale body.
+    let cancelled = false;
     readFile(indexPath)
       .then((rawFile) => {
+        if (cancelled) return;
         const raw = rawFile.replace(/\r\n/g, "\n"); // CRLF-safe frontmatter match
         const m = raw.match(/^---\n[\s\S]*?\n---\n?/);
         setContent(m ? raw.slice(m[0].length) : raw);
+        setContentLoadFailed(false);
       })
       .catch(() => {
+        if (cancelled) return;
         setContent("");
         setContentLoadFailed(true);
       })
-      .finally(() => setContentLoaded(true));
-  }, [entity.dirPath, contentVersion]);
+      .finally(() => { if (!cancelled) setContentLoaded(true); });
+    return () => { cancelled = true; };
+  }, [entity.dirPath, contentVersion, loreIndex]);
 
   const cat = findCategory(entity.category);
 

@@ -451,8 +451,10 @@ async function applyProposal(proposal: Proposal, signal?: AbortSignal): Promise<
       const outcome = await runIllustration(proposal, root ?? "", signal);
       if (proposal.dest.kind === "lore") {
         // The gallery grew — rescan so the entity view shows it at once.
+        // Awaited: this function's caller reports the outcome to the model, and
+        // an unawaited scan makes "saved" race the index that proves it.
         const { useLoreStore } = await import("./loreStore");
-        if (root) void useLoreStore.getState().scanProject(root);
+        if (root) await useLoreStore.getState().scanProject(root);
       }
       // Reported back to the model through backupPath (see the shared apply
       // contract): the document case needs the markdown to place next, and
@@ -933,11 +935,16 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         messages: history,
         toolContext: {
           projectPath,
-          // Live index — a lore write in turn N must be visible to turn N+1.
+          // Live index — a lore write in turn N is visible to turn N+1 because
+          // onLoreChanged below *awaits* its rescan. runAgent clones this for
+          // the run, so the tools' in-place patches never reach store state.
           loreIndex: useLoreStore.getState().index,
           multimodal: model.type === "multimodal",
-          onLoreChanged: () => {
-            void useLoreStore.getState().scanProject(projectPath);
+          onLoreChanged: async () => {
+            await useLoreStore.getState().scanProject(projectPath);
+            // Re-read rather than returning scanProject's own result: if a
+            // later scan won the store's queue, that is the one we want.
+            return useLoreStore.getState().index;
           },
           onMemoryChanged: () => {
             void import("./memoryStore").then((m) =>

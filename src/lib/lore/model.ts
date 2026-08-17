@@ -87,6 +87,51 @@ export interface LoreIndex {
   [category: string]: LoreEntity[];
 }
 
+/**
+ * Total entities across every category.
+ *
+ * Worth a named helper because the obvious `Object.keys(index).length` is
+ * wrong and looks right: `scanLore` seeds `index[cat.id] = []` for *every*
+ * category, so counting keys counts categories and never moves as entities are
+ * added. The sidebar shipped that bug against a rail badge that had it right.
+ */
+export function loreEntityCount(index: LoreIndex): number {
+  return Object.values(index).reduce((n, list) => n + list.length, 0);
+}
+
+/**
+ * A detached copy for an agent run to mutate.
+ *
+ * A run's `ToolContext.loreIndex` is patched in place by the lore write tools
+ * (see `agent/writeTools`), and the object a caller hands in is the live
+ * `loreStore` state object — mutating that would edit store state behind
+ * zustand's back, on arrays React is rendering from. Entities are copied too,
+ * because those patches rewrite `id`/`dirPath`/`category` on the entity
+ * itself, and so are the four arrays they splice or reassign. Facet and image
+ * objects are only ever replaced wholesale, so they stay shared.
+ *
+ * Hand-written rather than `structuredClone`: this has to work in every
+ * webview and in jsdom, and the shape is small and known.
+ *
+ * The four arrays are defaulted rather than assumed. `scanLore` always fills
+ * them, but entities also arrive from hand-built fixtures and callers that
+ * only need identity — the same reason `readLoreEntity` guards `mdFiles?.length`
+ * — and a clone is the wrong place to start throwing about it.
+ */
+export function cloneLoreIndex(index: LoreIndex): LoreIndex {
+  const out: LoreIndex = {};
+  for (const [category, list] of Object.entries(index)) {
+    out[category] = list.map((e) => ({
+      ...e,
+      aliases: [...(e.aliases ?? [])],
+      mdFiles: [...(e.mdFiles ?? [])],
+      facets: [...(e.facets ?? [])],
+      images: [...(e.images ?? [])],
+    }));
+  }
+  return out;
+}
+
 export interface EntityMeta {
   name: string;
   aliases: string[];

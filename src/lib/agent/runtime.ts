@@ -26,6 +26,7 @@ import { createServerToolLog, type AgentEvent, type RoundLimitDecision } from ".
 // enforces it, not through the event module that only has to describe it.
 export type { RoundLimitDecision };
 import { contentWithoutImages, hasImageParts } from "./imageHistory";
+import { cloneLoreIndex } from "../lore";
 import { TOOL_ARGS_DETAIL_CHARS, TOOL_RESULT_DETAIL_CHARS } from "./logFormat";
 import type { TaskPreset } from "./presets";
 import { executeRegisteredTool, getToolDefinitions, type ToolContext } from "./registry";
@@ -270,6 +271,17 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
   const { preset } = opts;
   const history = opts.messages;
   const toolDefinitions = getToolDefinitions(preset.tools);
+
+  // The run's own lore snapshot. The write tools patch it and resync it in
+  // place (see writeTools.syncLore) — but the object callers hand in is the
+  // live loreStore state object, so mutating it would edit store state behind
+  // zustand's back, on arrays React is rendering from. Cloning here rather
+  // than at each call site is deliberate: this is the one funnel every surface
+  // passes through, so a caller added later cannot forget it.
+  const runToolContext: ToolContext = {
+    ...opts.toolContext,
+    loreIndex: cloneLoreIndex(opts.toolContext.loreIndex),
+  };
 
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
@@ -628,7 +640,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       // Executor never throws — bad calls come back as error-text results the
       // model can read and correct on the next round.
       const callContext: ToolContext = {
-        ...opts.toolContext,
+        ...runToolContext,
         signal: opts.signal,
         onNestedEvent: opts.onEvent,
       };
