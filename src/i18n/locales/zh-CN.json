@@ -394,7 +394,10 @@
       "warnNoSearch": "该模型没有开启服务端 web_search，子代理无法联网。",
       "warnNotMultimodal": "该模型是纯文本模型，无法读图。",
       "warnNoPdf": "该模型未声明支持 PDF 文件输入（在 模型设置 里勾选），子代理无法读 PDF。",
-      "enable": "启用"
+      "enable": "启用",
+      "imagegen": "图片生成",
+      "imagegenSub": "为文档和知识库条目生成插图。需要一个图像模型；助手每次生成都先出审批卡（提示词与价格），同意后才花钱。",
+      "warnNotImage": "该模型不是图像模型，无法生成图片。"
     }
   },
   "project": {
@@ -1012,7 +1015,10 @@
         "longreadDisabled": "长文精读子代理已在本次对话停用（点击启用）",
         "pdf": "PDF",
         "pdfActive": "PDF 理解子代理已启用（点击在本次对话停用）",
-        "pdfDisabled": "PDF 理解子代理已在本次对话停用（点击启用）"
+        "pdfDisabled": "PDF 理解子代理已在本次对话停用（点击启用）",
+        "imagegen": "绘图",
+        "imagegenActive": "图片生成子代理已启用（点击在本次对话停用）",
+        "imagegenDisabled": "图片生成子代理已在本次对话停用（点击启用）"
       }
     },
     "drawer": {

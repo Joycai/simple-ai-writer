@@ -61,7 +61,7 @@ import {
   taskProgressTool,
   writeNoteTool,
 } from "./scratchpadTools";
-import { executeDelegate, type SubAgentKind } from "./subagent";
+import { executeDelegate, type DelegateKind } from "./subagent";
 import type { AgentEvent } from "./events";
 import type { AiConn } from "../ai/conn";
 
@@ -282,7 +282,7 @@ export interface ToolContext {
    * Resolver for child agent connections. Injected by the caller from aiStore,
    * avoiding reverse dependencies from lib/agent into stores.
    */
-  resolveSubAgent?: (kind: SubAgentKind) => Promise<AiConn | { error: string }>;
+  resolveSubAgent?: (kind: DelegateKind) => Promise<AiConn | { error: string }>;
 }
 
 export interface RegisteredTool {

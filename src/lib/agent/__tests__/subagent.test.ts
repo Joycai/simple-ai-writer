@@ -90,6 +90,7 @@ describe("subagent", () => {
     vision: { kind: "vision", modelId: "m-vision", enabled: true },
     longread: { kind: "longread", modelId: "m-text", enabled: true },
     pdf: { kind: "pdf", modelId: null, enabled: false },
+    imagegen: { kind: "imagegen", modelId: null, enabled: false },
   };
 
   beforeEach(() => {
@@ -248,6 +249,15 @@ describe("subagent", () => {
       const call: ToolCall = { id: "c1", name: "delegate", arguments: JSON.stringify({ kind: "search", task: "find info" }) };
       const res = await executeDelegate(call, { projectPath: "/p", loreIndex: {} as any, multimodal: false });
       expect(res.content).toContain("cannot run subagents");
+    });
+
+    it("refuses kind=imagegen and points at the image tools instead", async () => {
+      // The imagegen subagent is real, but its interface is generate_image /
+      // edit_image (approval-carded) — an image model cannot hold the
+      // conversational sub-run delegate dispatches.
+      const call: ToolCall = { id: "c1", name: "delegate", arguments: JSON.stringify({ kind: "imagegen", task: "draw a cat" }) };
+      const res = await executeDelegate(call, makeCtx());
+      expect(res.content).toContain("generate_image");
     });
 
     it("fails if search subagent model has no web_search serverTools configured", async () => {

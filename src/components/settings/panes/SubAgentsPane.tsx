@@ -22,8 +22,13 @@ export function SubAgentsPane() {
   const subAgents = useAiStore((s) => s.subAgents);
   const setSubAgent = useAiStore((s) => s.setSubAgent);
 
-  // Image models can't hold a conversation, so they are never candidates.
-  const candidates = models.filter((m) => m.enabled && m.type !== "image");
+  // Image models can't hold a conversation, so the conversational kinds never
+  // offer them — and the imagegen kind offers nothing else: it exists to draw,
+  // and binding it to a text model would be the mirror image of the mistake.
+  const textCandidates = models.filter((m) => m.enabled && m.type !== "image");
+  const imageCandidates = models.filter((m) => m.enabled && m.type === "image");
+  const candidatesFor = (kind: SubAgentKind): Model[] =>
+    kind === "imagegen" ? imageCandidates : textCandidates;
 
   /**
    * Why a bound model can't do this job, if it can't.
@@ -43,6 +48,9 @@ export function SubAgentsPane() {
     if (kind === "pdf" && !model.pdfInput) {
       return t("systemSettings.subagents.warnNoPdf");
     }
+    if (kind === "imagegen" && model.type !== "image") {
+      return t("systemSettings.subagents.warnNotImage");
+    }
     return undefined;
   };
 
@@ -55,6 +63,7 @@ export function SubAgentsPane() {
 
       {SUBAGENT_KINDS.map((kind) => {
         const cfg = subAgents[kind];
+        const candidates = candidatesFor(kind);
         const model = candidates.find((m) => m.id === cfg.modelId);
         return (
           <Section key={kind} label={t(`systemSettings.subagents.${kind}`)}>

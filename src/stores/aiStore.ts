@@ -43,11 +43,20 @@ function writeSelection(field: SelectionField, value: string | null): void {
 }
 
 function readSubAgent(kind: SubAgentKind): SubAgentConfig {
-  return {
-    kind,
-    modelId: readPref(`ai:subagent:${kind}:modelId`) ?? null,
-    enabled: readPref(`ai:subagent:${kind}:enabled`) === "true",
-  };
+  const modelId = readPref(`ai:subagent:${kind}:modelId`) ?? null;
+  const enabled = readPref(`ai:subagent:${kind}:enabled`);
+  // Seed the imagegen subagent from the pre-subagent image-model pick. Before
+  // the kind existed, the agent's image tools drew with `ai:imageModelId` and
+  // were always on — an author who used them would otherwise find the
+  // assistant silently unable to draw after an update, with nothing saying
+  // why. Untouched prefs only (both keys absent): the first explicit change
+  // persists real values (see the store subscription) and this derivation
+  // stops applying.
+  if (kind === "imagegen" && modelId === null && enabled === null) {
+    const legacy = readPref("ai:imageModelId");
+    if (legacy) return { kind, modelId: legacy, enabled: true };
+  }
+  return { kind, modelId, enabled: enabled === "true" };
 }
 
 function readAllSubAgents(): Record<SubAgentKind, SubAgentConfig> {
