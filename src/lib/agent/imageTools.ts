@@ -15,18 +15,26 @@ import { imageCostFor } from "../ai/configDb";
 import { fileExists } from "../fs/fileio";
 import { isWorkspacePath } from "../paths";
 import type { IllustrateProposal, ToolContext } from "./registry";
+import { subAgentModel } from "./subagent";
 import type { ToolResult } from "./tools";
 
 let proposalCounter = 0;
 
-/** Resolve the image model the author selected, with a usable error if absent. */
+/**
+ * Resolve the model the imagegen subagent is bound to, with a usable error if
+ * absent.
+ *
+ * The subagent binding (Settings → 子代理) and nothing else — no fallback to
+ * "whatever image model exists", which is what this replaced. `routeTools`
+ * strips these tools whenever the binding is unusable, so under normal flow
+ * this cannot return null; the error path survives for a surface that skips
+ * routing, and it must name the actual switch rather than send the author
+ * hunting through model settings.
+ */
 async function activeImageModel() {
   const { useAiStore } = await import("../../stores/aiStore");
-  const { models, imageModelId } = useAiStore.getState();
-  const imageModels = models.filter((m) => m.type === "image");
-  // Same fallback as the modal: with one image model configured, never make
-  // anyone choose it.
-  return imageModels.find((m) => m.id === imageModelId) ?? imageModels[0] ?? null;
+  const { models, subAgents } = useAiStore.getState();
+  return subAgentModel("imagegen", models, subAgents);
 }
 
 /**
@@ -57,7 +65,7 @@ async function proposeIllustration(
   if (!model) {
     return {
       toolCallId,
-      content: "Error: no image model is configured. Tell the author to add one in Settings → Models (type: Image).",
+      content: "Error: the image-generation subagent is not usable. Tell the author to enable it and bind an image model in Settings → 子代理.",
     };
   }
 

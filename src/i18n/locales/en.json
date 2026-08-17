@@ -394,7 +394,10 @@
       "warnNoSearch": "This model has no server-side web_search enabled, so the subagent cannot browse.",
       "warnNotMultimodal": "This model is text-only and cannot read images.",
       "warnNoPdf": "This model is not declared to accept PDF file input (check it in the model's settings), so the subagent cannot read PDFs.",
-      "enable": "Enable"
+      "enable": "Enable",
+      "imagegen": "Image generation",
+      "imagegenSub": "Draws illustrations for documents and knowledge-base entries. Needs an image model; every generation shows an approval card (prompt and price) before any money is spent.",
+      "warnNotImage": "This is not an image model — it cannot generate pictures."
     }
   },
   "project": {
@@ -1013,7 +1016,10 @@
         "longreadDisabled": "Long-read subagent disabled for this session (click to enable)",
         "pdf": "PDF",
         "pdfActive": "PDF subagent active (click to disable for this session)",
-        "pdfDisabled": "PDF subagent disabled for this session (click to enable)"
+        "pdfDisabled": "PDF subagent disabled for this session (click to enable)",
+        "imagegen": "Draw",
+        "imagegenActive": "Image-generation subagent active (click to disable for this session)",
+        "imagegenDisabled": "Image-generation subagent disabled for this session (click to enable)"
       }
     },
     "drawer": {
@@ -1643,8 +1649,8 @@
     "rename": "Rename",
     "reveal": "Reveal in File Explorer",
     "delete": "Delete",
-    "deleteConfirm": "Delete this file?",
-    "deleteFolderConfirm": "Delete this folder and all its contents?",
+    "deleteConfirm": "Delete this file? (A snapshot is kept in .ai-writer/backups first.)",
+    "deleteFolderConfirm": "Delete this folder and everything in it? (It is moved into .ai-writer/backups first.)",
     "newFolder": "New Folder",
     "refresh": "Refresh",
     "fileNamePlaceholder": "filename.md",
@@ -1663,7 +1669,7 @@
     "cutMany": "Cut {{count}} items",
     "copyMany": "Copy {{count}} items",
     "deleteMany": "Delete {{count}} items",
-    "deleteManyConfirm": "Delete the {{count}} selected entries and everything in them?",
+    "deleteManyConfirm": "Delete the {{count}} selected entries and everything in them? (Snapshots are kept in .ai-writer/backups first.)",
     "dragCount": "{{count}} items"
   },
   "language": {

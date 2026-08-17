@@ -439,7 +439,7 @@ async function applyProposal(proposal: Proposal, signal?: AbortSignal): Promise<
 
     case "delete":
       // The backup is what makes an approved deletion recoverable, so it is
-      // not optional. A folder (isDir) is renamed into backups whole.
+      // not optional. The entry — file or folder — is renamed into backups whole.
       return { report: await deleteEntry(proposal.path, !!proposal.isDir, { backup: true }) };
 
     case "illustrate": {

@@ -10,6 +10,8 @@ const MODELS = [
     priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true },
   { id: "m-long", providerId: "p", modelId: "l", name: "L", type: "text",
     priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true },
+  { id: "m-image", providerId: "p", modelId: "i", name: "I", type: "image",
+    priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true },
 ] as never;
 
 /** Stand-in handle: routeTools only tests it for presence. */
@@ -23,11 +25,18 @@ describe("routeTools", () => {
     vision: { kind: "vision", modelId: null, enabled: false },
     longread: { kind: "longread", modelId: null, enabled: false },
     pdf: { kind: "pdf", modelId: null, enabled: false },
+    imagegen: { kind: "imagegen", modelId: null, enabled: false },
   };
+  /** The preset as it routes with nothing enabled: no drawing arm, no image tools. */
+  const BASELINE_TOOLS = AGENT_ASSIST_PRESET.tools.filter(
+    (t) => t !== "generate_image" && t !== "edit_image",
+  );
 
-  it("leaves tools and serverTools unchanged when no subagents are active", () => {
+  it("keeps everything except the image tools when no subagents are active", () => {
+    // The image tools are the imagegen subagent's — with no usable binding the
+    // main model (which cannot draw) would only ever collect an error from them.
     const res = routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS);
-    expect(res.tools).toEqual(AGENT_ASSIST_PRESET.tools);
+    expect(res.tools).toEqual(BASELINE_TOOLS);
     expect(res.serverTools).toBe("final-round-off");
   });
 
@@ -94,6 +103,47 @@ describe("routeTools", () => {
     expect(res.tools).not.toContain("delegate");
   });
 
+  // ── Image generation ─────────────────────────────────────────────────────
+
+  it("hands the image tools to a usable imagegen subagent", () => {
+    const subs: Record<SubAgentKind, SubAgentConfig> = {
+      ...allDisabled,
+      imagegen: { kind: "imagegen", modelId: "m-image", enabled: true },
+    };
+    const res = routeTools(AGENT_ASSIST_PRESET, subs, WS, MODELS);
+    expect(res.tools).toContain("generate_image");
+    expect(res.tools).toContain("edit_image");
+  });
+
+  it("does not add delegate for imagegen alone — it has no conversational sub-run", () => {
+    const subs: Record<SubAgentKind, SubAgentConfig> = {
+      ...allDisabled,
+      imagegen: { kind: "imagegen", modelId: "m-image", enabled: true },
+    };
+    const res = routeTools(AGENT_ASSIST_PRESET, subs, WS, MODELS);
+    expect(res.tools).not.toContain("delegate");
+  });
+
+  it("ignores an imagegen subagent bound to a text model", () => {
+    const subs: Record<SubAgentKind, SubAgentConfig> = {
+      ...allDisabled,
+      imagegen: { kind: "imagegen", modelId: "m-long", enabled: true },
+    };
+    const res = routeTools(AGENT_ASSIST_PRESET, subs, WS, MODELS);
+    expect(res.tools).not.toContain("generate_image");
+  });
+
+  it("keeps drawing and seeing independent — vision strips reads, not draws", () => {
+    const subs: Record<SubAgentKind, SubAgentConfig> = {
+      ...allDisabled,
+      vision: { kind: "vision", modelId: "m-vision", enabled: true },
+      imagegen: { kind: "imagegen", modelId: "m-image", enabled: true },
+    };
+    const res = routeTools(AGENT_ASSIST_PRESET, subs, WS, MODELS);
+    expect(res.tools).not.toContain("read_image");
+    expect(res.tools).toContain("generate_image");
+  });
+
   // ── Session chips ────────────────────────────────────────────────────────
 
   it("a chip switched off this conversation takes the routing with it", () => {
@@ -123,9 +173,24 @@ describe("routeTools", () => {
   it("session overrides only subtract — a chip cannot enable what Settings did not", () => {
     const restored = withSessionOverrides(allDisabled, []);
     expect(routeTools(AGENT_ASSIST_PRESET, restored, WS, MODELS).tools)
-      .toEqual(AGENT_ASSIST_PRESET.tools);
+      .toEqual(BASELINE_TOOLS);
     // And an override for a kind that was never on is a no-op, not a toggle-on.
     const stillOff = withSessionOverrides(allDisabled, ["search"]);
     expect(stillOff.search.enabled).toBe(false);
+  });
+
+  it("an imagegen chip switched off takes the image tools with it", () => {
+    const subs: Record<SubAgentKind, SubAgentConfig> = {
+      ...allDisabled,
+      imagegen: { kind: "imagegen", modelId: "m-image", enabled: true },
+    };
+    const off = routeTools(
+      AGENT_ASSIST_PRESET,
+      withSessionOverrides(subs, ["imagegen"]),
+      WS,
+      MODELS,
+    );
+    expect(off.tools).not.toContain("generate_image");
+    expect(off.tools).not.toContain("edit_image");
   });
 });
