@@ -64,6 +64,13 @@ export interface BookSpine {
   order: Record<string, string[]>;
   /** chapter relPath → status; absent entries are treated as done. */
   status?: Record<string, ChapterStatus>;
+  /**
+   * Ordered volume relPaths — the same overlay semantics as `order`: listed
+   * volumes first, unlisted ones appended in filesystem-traversal order, gone
+   * ones dropped. Absent in pre-existing files (volumes then keep traversal
+   * order, which is what they always had).
+   */
+  volumes?: string[];
 }
 
 const CHAPTER_EXTS = ["md", "markdown", "txt"];
@@ -170,9 +177,11 @@ export function parentDir(path: string): string {
  * Impose the spine's order on grouped volumes: manifest order first (skipping
  * entries whose file vanished), then any un-listed files appended in natural
  * order. With no spine entry for a volume, everything falls back to natural sort.
+ * The volume *list* itself is ordered by `spine.volumes` with the same overlay
+ * semantics (listed → that order; unlisted → appended in traversal order).
  */
 export function applySpine(volumes: Volume[], spine: BookSpine | null): Volume[] {
-  return volumes.map((vol) => {
+  return orderVolumes(volumes, spine?.volumes).map((vol) => {
     const wanted = spine?.order[vol.relPath];
     const natural = [...vol.chapters].sort((a, b) => naturalCompare(a.name, b.name));
     if (!wanted || wanted.length === 0) return { ...vol, chapters: natural };
@@ -189,6 +198,19 @@ export function applySpine(volumes: Volume[], spine: BookSpine | null): Volume[]
   });
 }
 
+/** Order the volume list by the manifest overlay (see applySpine). */
+function orderVolumes(volumes: Volume[], wanted: string[] | undefined): Volume[] {
+  if (!wanted || wanted.length === 0) return volumes;
+  const byRel = new Map(volumes.map((v) => [v.relPath, v]));
+  const ordered: Volume[] = [];
+  const used = new Set<string>();
+  for (const rel of wanted) {
+    const vol = byRel.get(rel);
+    if (vol && !used.has(rel)) { ordered.push(vol); used.add(rel); }
+  }
+  return [...ordered, ...volumes.filter((v) => !used.has(v.relPath))];
+}
+
 /**
  * Capture the current order of resolved volumes as a spine (for persistence),
  * carrying over the previous spine's chapter status map when given.
@@ -196,9 +218,34 @@ export function applySpine(volumes: Volume[], spine: BookSpine | null): Volume[]
 export function spineFromVolumes(volumes: Volume[], prev?: BookSpine | null): BookSpine {
   const order: Record<string, string[]> = {};
   for (const vol of volumes) order[vol.relPath] = vol.chapters.map((c) => c.relPath);
-  const spine: BookSpine = { version: 1, order };
+  const spine: BookSpine = { version: 1, order, volumes: volumes.map((v) => v.relPath) };
   if (prev?.status && Object.keys(prev.status).length > 0) spine.status = { ...prev.status };
   return spine;
+}
+
+/**
+ * Rewrite a spine after a volume folder rename: the volume's own key, every
+ * nested volume's key (a parent rename shifts its children's relPaths too),
+ * all chapter relPaths under them, the status map, and the volume order.
+ * Renaming the root ("") is meaningless here and returns the spine untouched.
+ */
+export function renameVolumeInSpine(spine: BookSpine, oldRel: string, newRel: string): BookSpine {
+  if (!oldRel || oldRel === newRel) return spine;
+  const rewrite = (rel: string): string =>
+    rel === oldRel ? newRel : rel.startsWith(oldRel + "/") ? newRel + rel.slice(oldRel.length) : rel;
+
+  const order: Record<string, string[]> = {};
+  for (const [volRel, chapters] of Object.entries(spine.order)) {
+    order[rewrite(volRel)] = chapters.map(rewrite);
+  }
+  const next: BookSpine = { version: 1, order };
+  if (spine.volumes) next.volumes = spine.volumes.map(rewrite);
+  if (spine.status && Object.keys(spine.status).length > 0) {
+    const status: Record<string, ChapterStatus> = {};
+    for (const [rel, st] of Object.entries(spine.status)) status[rewrite(rel)] = st;
+    next.status = status;
+  }
+  return next;
 }
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
@@ -217,6 +264,9 @@ export async function loadSpine(projectPath: string): Promise<BookSpine | null> 
     const spine: BookSpine = { version: 1, order: parsed.order as Record<string, string[]> };
     if (parsed.status && typeof parsed.status === "object") {
       spine.status = parsed.status as Record<string, ChapterStatus>;
+    }
+    if (Array.isArray(parsed.volumes)) {
+      spine.volumes = (parsed.volumes as unknown[]).map(String);
     }
     return spine;
   } catch {

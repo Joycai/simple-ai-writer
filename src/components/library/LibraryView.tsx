@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Sparkles, ChevronUp, ChevronDown, ChevronsUp, ChevronsDown,
-  Loader2, X, FolderPlus, Trash2, Check, PenLine, FileText, File as FileIcon,
+  Sparkles, ChevronUp, ChevronDown, ChevronsUp, ChevronsDown, ChevronLeft, ChevronRight,
+  Loader2, X, FolderPlus, Trash2, Check, PenLine, Pencil, FileText, File as FileIcon,
 } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useDocModel, useProjectStore, useTerms } from "../../stores/projectStore";
@@ -17,15 +17,19 @@ import {
   groupVolumes,
   applySpine,
   spineFromVolumes,
+  renameVolumeInSpine,
   loadSpine,
   saveSpine,
   parentDir,
+  chapterTitle,
   type BookSpine,
   type Volume,
   type Chapter,
   type ResourceFile,
 } from "../../lib/context/outline";
-import { loadMemory, memoryStatus, moveMemory, projectRelativePath, type MemoryStatus } from "../../lib/context/memory";
+import {
+  loadMemory, memoryStatus, moveMemory, memoryFilePath, projectRelativePath, type MemoryStatus,
+} from "../../lib/context/memory";
 import {
   digestStatus,
   loadDigest,
@@ -33,7 +37,7 @@ import {
   type DigestStatus,
 } from "../../lib/context/collectionDigest";
 import { matchEntitiesInText, type LoreEntity } from "../../lib/lore";
-import { readFile, makeDir, removeDir, renamePath } from "../../lib/fs/fileio";
+import { readFile, makeDir, removeDir, renamePath, fileExists } from "../../lib/fs/fileio";
 import { ASSETS_DIR } from "../../lib/image/assets";
 import { imageToDataUrl, isImagePath } from "../../lib/fs/images";
 import { useImeGuard } from "../../lib/ime";
@@ -48,9 +52,22 @@ function move<T>(arr: T[], from: number, to: number): T[] {
   return next;
 }
 
+/**
+ * The dragged chapter, captured at dragstart — volumes can recompute mid-drag
+ * (tree refreshes), so the drop must not rely on indexing back into them.
+ */
 interface DragState {
   volRel: string;
   from: number;
+  path: string;
+  name: string;
+  rel: string;
+}
+
+/** Where a drop would land: a chapter index, or the end of a volume's list. */
+interface DropTarget {
+  volRel: string;
+  index: number;
 }
 
 /** Per-chapter memory badge + inline generate/update trigger. */
@@ -238,7 +255,10 @@ function DigestCard({ volume, meta }: { volume: Volume; meta?: VolumeMeta }) {
 
 export function LibraryView() {
   const { t } = useTranslation();
-  const { fileTree, projectPath, activeFilePath, setActiveFilePath, wordCount, refreshFileTree } = useProjectStore();
+  const {
+    fileTree, projectPath, activeFilePath, setActiveFilePath, wordCount, refreshFileTree,
+    createEntry, moveEntry, deleteEntry,
+  } = useProjectStore();
   const setMainView = useAppStore((s) => s.setMainView);
   const terms = useTerms();
   const docs = useDocModel();
@@ -257,7 +277,7 @@ export function LibraryView() {
 
   const [spine, setSpine] = useState<BookSpine | null>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
-  const [dragOver, setDragOver] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState<DropTarget | null>(null);
   const [statuses, setStatuses] = useState<Record<string, MemoryStatus>>({});
   const [volMeta, setVolMeta] = useState<Record<string, VolumeMeta>>({});
   const loreIndex = useLoreStore((s) => s.index);
@@ -265,6 +285,12 @@ export function LibraryView() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [creatingVol, setCreatingVol] = useState(false);
   const [newVolName, setNewVolName] = useState("");
+  const [creatingChapterIn, setCreatingChapterIn] = useState<string | null>(null);
+  const [newChapterName, setNewChapterName] = useState("");
+  const [renamingChapter, setRenamingChapter] = useState<Chapter | null>(null);
+  const [renameChapterName, setRenameChapterName] = useState("");
+  const [renamingVol, setRenamingVol] = useState<Volume | null>(null);
+  const [renameVolName, setRenameVolName] = useState("");
   const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; chapter: Chapter } | null>(null);
   const chapterGen = useMemoryStore((s) => s.chapterGen);
@@ -345,13 +371,163 @@ export function LibraryView() {
   const isWriting = (ch: Chapter) => spine?.status?.[ch.relPath] === "writing";
   const writingCount = volumes.reduce((n, v) => n + v.chapters.filter(isWriting).length, 0);
 
+  const persistSpine = (next: BookSpine) => {
+    setSpine(next);
+    if (projectPath) void saveSpine(projectPath, next);
+  };
+
   const reorder = (vol: Volume, from: number, to: number) => {
     if (from === to || !projectPath) return;
     const reordered = move(vol.chapters, from, to);
     const next = spineFromVolumes(volumes, spine);
     next.order[vol.relPath] = reordered.map((c) => c.relPath);
-    setSpine(next);
-    void saveSpine(projectPath, next);
+    persistSpine(next);
+  };
+
+  /** Reorder the columns themselves (persisted as spine.volumes). */
+  const reorderVolume = (from: number, to: number) => {
+    if (from === to || to < 0 || to >= volumes.length || !projectPath) return;
+    persistSpine(spineFromVolumes(move(volumes, from, to), spine));
+  };
+
+  /** Create a chapter file inside a volume (the empty-volume placeholder CTA). */
+  const createChapter = async (vol: Volume) => {
+    const name = newChapterName.trim();
+    setCreatingChapterIn(null);
+    setNewChapterName("");
+    if (!name || !projectPath) return;
+    try {
+      const path = await createEntry(vol.path, name, "file");
+      openChapter(path);
+    } catch (e) {
+      window.alert(String(e));
+    }
+  };
+
+  /**
+   * Rename a chapter file in place, carrying its spine position, 在写 status
+   * and story memory over to the new relPath. A bare new name keeps the old
+   * extension (a .txt chapter must not silently become .md).
+   */
+  const submitRenameChapter = async () => {
+    const ch = renamingChapter;
+    const name = renameChapterName.trim();
+    setRenamingChapter(null);
+    setRenameChapterName("");
+    if (!ch || !name || !projectPath) return;
+    const ext = ch.name.slice(ch.name.lastIndexOf("."));
+    const finalName = name.includes(".") ? name : `${name}${ext}`;
+    if (finalName === ch.name) return;
+    const newPath = `${parentDir(ch.path)}/${finalName}`;
+    try {
+      await moveEntry(ch.path, newPath); // editor flush + assets + active path
+      const newRel = projectRelativePath(projectPath, newPath);
+      if (!newRel) return;
+      await moveMemory(projectPath, ch.relPath, newRel);
+      const next = spineFromVolumes(volumes, spine);
+      for (const key of Object.keys(next.order)) {
+        next.order[key] = next.order[key].map((r) => (r === ch.relPath ? newRel : r));
+      }
+      if (next.status?.[ch.relPath]) {
+        next.status[newRel] = next.status[ch.relPath];
+        delete next.status[ch.relPath];
+      }
+      persistSpine(next);
+    } catch (e) {
+      window.alert(String(e));
+    }
+  };
+
+  /** Delete a chapter (snapshotted into .ai-writer/backups first, like the file tree). */
+  const deleteChapter = async (ch: Chapter) => {
+    if (!projectPath) return;
+    if (!window.confirm(t("library.deleteChapterConfirm", { name: chapterTitle(ch) }))) return;
+    try {
+      await deleteEntry(ch.path, false, { backup: true });
+      // The order overlay self-heals (missing files are dropped), but a status
+      // entry would linger in the file forever.
+      if (spine?.status?.[ch.relPath]) {
+        const next = spineFromVolumes(
+          volumes.map((v) => ({ ...v, chapters: v.chapters.filter((c) => c.path !== ch.path) })),
+          spine,
+        );
+        delete next.status?.[ch.relPath];
+        persistSpine(next);
+      }
+    } catch (e) {
+      console.error("[library] delete chapter failed:", e);
+    }
+  };
+
+  /**
+   * Rename a volume folder. The memory and digest trees mirror the document
+   * tree, so their subfolders travel along; the spine is prefix-rewritten
+   * (nested volume keys included) via renameVolumeInSpine.
+   */
+  const submitRenameVolume = async () => {
+    const vol = renamingVol;
+    const name = renameVolName.trim();
+    setRenamingVol(null);
+    setRenameVolName("");
+    if (!vol || !projectPath || vol.relPath === "") return;
+    if (!name || name === vol.name || name === ASSETS_DIR || name.startsWith(".")) return;
+    const newPath = `${parentDir(vol.path)}/${name}`;
+    try {
+      await moveEntry(vol.path, newPath); // editor flush + active path descendants
+    } catch (e) {
+      window.alert(String(e));
+      return;
+    }
+    const newRel = projectRelativePath(projectPath, newPath);
+    if (!newRel) return;
+    for (const mirrored of [memoryFilePath(projectPath, vol.relPath), `${projectPath}/.ai-writer/collections/${vol.relPath}`]) {
+      const to = mirrored.slice(0, mirrored.length - vol.relPath.length) + newRel;
+      try {
+        if (await fileExists(mirrored)) await renamePath(mirrored, to);
+      } catch (e) {
+        console.error("[library] moving mirrored folder failed:", e);
+      }
+    }
+    persistSpine(renameVolumeInSpine(spineFromVolumes(volumes, spine), vol.relPath, newRel));
+  };
+
+  /**
+   * Drop the dragged chapter at `index` of `targetVol` — an in-volume reorder,
+   * or a cross-volume move (file + memory + spine position + status).
+   */
+  const dropChapter = async (targetVol: Volume, index: number) => {
+    const d = drag;
+    setDrag(null);
+    setDragOver(null);
+    if (!d || !projectPath) return;
+    if (d.volRel === targetVol.relPath) {
+      reorder(targetVol, d.from, Math.min(index, targetVol.chapters.length - 1));
+      return;
+    }
+    if (busy) return;
+    setBusy(true);
+    try {
+      const newPath = `${targetVol.path}/${d.name}`;
+      await moveEntry(d.path, newPath);
+      const newRel = projectRelativePath(projectPath, newPath);
+      if (newRel) {
+        await moveMemory(projectPath, d.rel, newRel);
+        const next = spineFromVolumes(volumes, spine);
+        next.order[d.volRel] = (next.order[d.volRel] ?? []).filter((r) => r !== d.rel);
+        const target = [...(next.order[targetVol.relPath] ?? [])];
+        target.splice(Math.min(index, target.length), 0, newRel);
+        next.order[targetVol.relPath] = target;
+        if (next.status?.[d.rel]) {
+          next.status[newRel] = next.status[d.rel];
+          delete next.status[d.rel];
+        }
+        persistSpine(next);
+      }
+    } catch (e) {
+      window.alert(String(e));
+    } finally {
+      setBusy(false);
+    }
   };
 
   /** Mark a chapter as "在写" or clear it (persisted in the spine). */
@@ -395,10 +571,26 @@ export function LibraryView() {
         label: writing ? t("library.unmarkWriting") : t("library.markWriting"),
         action: () => setChapterWriting(ch, !writing),
       },
+      {
+        kind: "item",
+        icon: <Pencil size={13} />,
+        label: t("library.renameChapter"),
+        action: () => { setRenamingChapter(ch); setRenameChapterName(chapterTitle(ch)); },
+      },
+      {
+        kind: "item",
+        icon: <Trash2 size={13} />,
+        label: t("library.deleteChapter", { doc: terms.doc }),
+        danger: true,
+        action: () => void deleteChapter(ch),
+      },
     ];
   };
 
   const volIme = useImeGuard();
+  const chapIme = useImeGuard();
+  const renChIme = useImeGuard();
+  const renVolIme = useImeGuard();
   const createVolume = async () => {
     const name = newVolName.trim();
     if (!name || !projectPath) { setCreatingVol(false); setNewVolName(""); return; }
@@ -436,22 +628,20 @@ export function LibraryView() {
     if (toMove.length === 0) { setSelected(new Set()); return; }
     setBusy(true);
     try {
-      // Flush the open document first if it's among those being moved.
-      const editor = useEditorStore.getState();
-      if (editor.isDirty && editor.filePath && toMove.some((c) => c.path === editor.filePath)) {
-        await editor.saveNow();
-      }
+      // moveEntry handles the editor flush, the document's assets/ folder and
+      // the active-file pointer; memory files stay ours to carry.
       for (const ch of toMove) {
-        const newPath = `${targetVol.path}/${ch.name}`;
-        await renamePath(ch.path, newPath);
-        const newRel = projectRelativePath(projectPath, newPath);
-        if (newRel) await moveMemory(projectPath, ch.relPath, newRel);
-        if (activeFilePath === ch.path) setActiveFilePath(newPath);
+        try {
+          const newPath = `${targetVol.path}/${ch.name}`;
+          await moveEntry(ch.path, newPath);
+          const newRel = projectRelativePath(projectPath, newPath);
+          if (newRel) await moveMemory(projectPath, ch.relPath, newRel);
+        } catch (e) {
+          // A name collision in the target volume shouldn't abort the rest.
+          console.error("[library] move failed:", ch.relPath, e);
+        }
       }
-      await refreshFileTree();
       setSelected(new Set());
-    } catch (e) {
-      console.error("[outline] move failed:", e);
     } finally {
       setBusy(false);
     }
@@ -592,13 +782,29 @@ export function LibraryView() {
           return (
             <div key={vol.path} className={`${styles.column} ${isCurrent ? styles.columnCurrent : ""}`}>
               <div className={styles.colHead}>
-                <div>
+                <div className={styles.colHeadMain}>
                   <div className={isCurrent ? styles.colEyebrow : styles.colEyebrowMuted}>
                     {groupEyebrow} {vi + 1}{isCurrent ? " · CURRENT" : ""}
                   </div>
-                  <div className={isCurrent ? styles.colTitle : styles.colTitleMuted}>
-                    {vol.name}
-                  </div>
+                  {renamingVol?.relPath === vol.relPath ? (
+                    <input
+                      className={styles.volTitleInput}
+                      autoFocus
+                      value={renameVolName}
+                      onChange={(e) => setRenameVolName(e.target.value)}
+                      {...renVolIme.imeProps}
+                      onKeyDown={(e) => {
+                        if (renVolIme.isComposing(e)) return;
+                        if (e.key === "Enter") void submitRenameVolume();
+                        if (e.key === "Escape") { setRenamingVol(null); setRenameVolName(""); }
+                      }}
+                      onBlur={() => void submitRenameVolume()}
+                    />
+                  ) : (
+                    <div className={isCurrent ? styles.colTitle : styles.colTitleMuted}>
+                      {vol.name}
+                    </div>
+                  )}
                 </div>
                 <span className={styles.colHeadRight}>
                   <span className={`${styles.colCount} ${
@@ -606,6 +812,31 @@ export function LibraryView() {
                   }`}>
                     {vol.chapters.length} {terms.docs}
                   </span>
+                  <button
+                    className={styles.volBtn}
+                    title={t("library.moveVolLeft", { group: terms.group })}
+                    disabled={vi === 0}
+                    onClick={() => reorderVolume(vi, vi - 1)}
+                  >
+                    <ChevronLeft size={12} />
+                  </button>
+                  <button
+                    className={styles.volBtn}
+                    title={t("library.moveVolRight", { group: terms.group })}
+                    disabled={vi === volumes.length - 1}
+                    onClick={() => reorderVolume(vi, vi + 1)}
+                  >
+                    <ChevronRight size={12} />
+                  </button>
+                  {vol.relPath !== "" && (
+                    <button
+                      className={styles.volBtn}
+                      title={t("library.renameVolume", { group: terms.group })}
+                      onClick={() => { setRenamingVol(vol); setRenameVolName(vol.name); }}
+                    >
+                      <Pencil size={12} />
+                    </button>
+                  )}
                   {canDelete && (
                     <button
                       className={styles.volDeleteBtn}
@@ -620,14 +851,29 @@ export function LibraryView() {
 
               <DigestCard volume={vol} meta={volMeta[vol.relPath]} />
 
-              <div className={styles.chapters}>
+              <div
+                className={`${styles.chapters} ${
+                  dragOver?.volRel === vol.relPath && dragOver.index === vol.chapters.length
+                    ? styles.chaptersDropEnd
+                    : ""
+                }`}
+                onDragOver={(e) => {
+                  if (!drag) return;
+                  e.preventDefault();
+                  setDragOver({ volRel: vol.relPath, index: vol.chapters.length });
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  void dropChapter(vol, vol.chapters.length);
+                }}
+              >
                 {vol.chapters.map((ch, ci) => {
                   const active = ch.path === activeFilePath;
                   const isSelected = selected.has(ch.path);
-                  const title = ch.name.replace(/\.(md|markdown|txt)$/i, "");
-                  const isDragging = drag?.volRel === vol.relPath && drag.from === ci;
+                  const title = chapterTitle(ch);
+                  const isDragging = drag?.path === ch.path;
                   const isDropTarget =
-                    drag?.volRel === vol.relPath && dragOver === ci && drag.from !== ci;
+                    dragOver?.volRel === vol.relPath && dragOver.index === ci && drag?.path !== ch.path;
                   const last = vol.chapters.length - 1;
                   const isFirst = ci === 0;
                   const isLast = ci === last;
@@ -637,18 +883,20 @@ export function LibraryView() {
                       className={`${styles.chapter} ${active ? styles.chapterActive : ""} ${
                         isSelected ? styles.chapterSelected : ""
                       } ${isDragging ? styles.dragging : ""} ${isDropTarget ? styles.dropTarget : ""}`}
-                      draggable
-                      onDragStart={() => setDrag({ volRel: vol.relPath, from: ci })}
+                      draggable={renamingChapter?.path !== ch.path}
+                      onDragStart={() =>
+                        setDrag({ volRel: vol.relPath, from: ci, path: ch.path, name: ch.name, rel: ch.relPath })
+                      }
                       onDragOver={(e) => {
-                        if (drag?.volRel !== vol.relPath) return;
+                        if (!drag) return;
                         e.preventDefault();
-                        setDragOver(ci);
+                        e.stopPropagation(); // keep the container's drop-at-end quiet
+                        setDragOver({ volRel: vol.relPath, index: ci });
                       }}
                       onDrop={(e) => {
                         e.preventDefault();
-                        if (drag?.volRel === vol.relPath) reorder(vol, drag.from, ci);
-                        setDrag(null);
-                        setDragOver(null);
+                        e.stopPropagation();
+                        void dropChapter(vol, ci);
                       }}
                       onDragEnd={() => { setDrag(null); setDragOver(null); }}
                       onClick={() => toggleSelect(ch.path)}
@@ -659,7 +907,25 @@ export function LibraryView() {
                         <span className={`${styles.selectDot} ${isSelected ? styles.selectDotOn : ""}`}>
                           {isSelected ? <Check size={11} strokeWidth={2.5} /> : String(ci + 1).padStart(2, "0")}
                         </span>
-                        <span className={styles.chapterName}>{title}</span>
+                        {renamingChapter?.path === ch.path ? (
+                          <input
+                            className={styles.chapterRenameInput}
+                            autoFocus
+                            value={renameChapterName}
+                            onChange={(e) => setRenameChapterName(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onDoubleClick={(e) => e.stopPropagation()}
+                            {...renChIme.imeProps}
+                            onKeyDown={(e) => {
+                              if (renChIme.isComposing(e)) return;
+                              if (e.key === "Enter") void submitRenameChapter();
+                              if (e.key === "Escape") { setRenamingChapter(null); setRenameChapterName(""); }
+                            }}
+                            onBlur={() => void submitRenameChapter()}
+                          />
+                        ) : (
+                          <span className={styles.chapterName}>{title}</span>
+                        )}
                         {isWriting(ch) && (
                           <span className={styles.chapterStatus}>
                             {t("library.writingBadge", { defaultValue: "在写" })}
@@ -706,10 +972,30 @@ export function LibraryView() {
                 })}
 
                 {vol.chapters.length === 0 && (
-                  <div className={styles.placeholderCard}>
-                    <div>{t("library.emptyVolume", { group: terms.group })}</div>
-                    <div>{t("library.emptyVolumeHint", { doc: terms.doc, group: terms.group })}</div>
-                  </div>
+                  creatingChapterIn === vol.relPath ? (
+                    <input
+                      className={styles.chapterCreateInput}
+                      autoFocus
+                      value={newChapterName}
+                      placeholder={t("library.chapterNamePlaceholder", { doc: terms.doc })}
+                      onChange={(e) => setNewChapterName(e.target.value)}
+                      {...chapIme.imeProps}
+                      onKeyDown={(e) => {
+                        if (chapIme.isComposing(e)) return;
+                        if (e.key === "Enter") void createChapter(vol);
+                        if (e.key === "Escape") { setCreatingChapterIn(null); setNewChapterName(""); }
+                      }}
+                      onBlur={() => void createChapter(vol)}
+                    />
+                  ) : (
+                    <div
+                      className={styles.placeholderCard}
+                      onClick={() => { setCreatingChapterIn(vol.relPath); setNewChapterName(""); }}
+                    >
+                      <div>{t("library.newChapter", { doc: terms.doc })}</div>
+                      <div>{t("library.emptyVolumeHint", { doc: terms.doc, group: terms.group })}</div>
+                    </div>
+                  )
                 )}
               </div>
 
