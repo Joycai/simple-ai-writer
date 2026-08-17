@@ -226,6 +226,86 @@
 .colCountDone { color: var(--color-success); }
 .colCountActive { color: var(--color-sienna); }
 
+/* Collection digest card — AI summary + referenced lore, above the chapters. */
+.digestCard {
+  margin-bottom: 12px;
+  padding: 9px 11px;
+  background: var(--color-card);
+  border: 1px dashed var(--color-border-strong);
+}
+.digestHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.digestLabel {
+  font: 500 9px/1 var(--font-sans);
+  letter-spacing: var(--letter-label);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+.digestBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--color-sienna);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity var(--transition-fast), background var(--transition-fast);
+}
+.digestBtn:hover:not(:disabled) { opacity: 1; background: var(--color-bg-surface); }
+.digestBtn:disabled { opacity: 0.3; cursor: default; }
+.digestError {
+  margin-top: 6px;
+  font: 400 10px/1.4 var(--font-sans);
+  color: var(--color-danger, #c0522d);
+  word-break: break-all;
+}
+.digestBody,
+.digestBodyClamped {
+  margin-top: 7px;
+  font: 400 11px/1.6 var(--font-serif);
+  color: var(--color-text-secondary);
+  white-space: pre-wrap;
+  cursor: pointer;
+}
+.digestBodyClamped {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.loreChips {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.loreChipsLabel {
+  font: 500 9px/1 var(--font-sans);
+  letter-spacing: var(--letter-label);
+  color: var(--color-text-faint);
+  text-transform: uppercase;
+  margin-right: 2px;
+}
+.loreChip {
+  padding: 2px 7px;
+  font: 400 10px/1.4 var(--font-sans);
+  background: var(--color-tag-bg);
+  border: none;
+  color: var(--color-sienna);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.loreChip:hover { background: color-mix(in srgb, var(--color-sienna) 16%, var(--color-card)); }
+
 .chapters {
   display: flex;
   flex-direction: column;

@@ -10,6 +10,8 @@ import { appTerms } from "../../lib/profile";
 import { useEditorStore } from "../../stores/editorStore";
 import { useMemoryStore } from "../../stores/memoryStore";
 import { useAiStore } from "../../stores/aiStore";
+import { useLoreStore } from "../../stores/loreStore";
+import { useDigestStore } from "../../stores/digestStore";
 import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
 import {
   groupVolumes,
@@ -24,6 +26,13 @@ import {
   type ResourceFile,
 } from "../../lib/context/outline";
 import { loadMemory, memoryStatus, moveMemory, projectRelativePath, type MemoryStatus } from "../../lib/context/memory";
+import {
+  digestStatus,
+  loadDigest,
+  type CollectionDigest,
+  type DigestStatus,
+} from "../../lib/context/collectionDigest";
+import { matchEntitiesInText, type LoreEntity } from "../../lib/lore";
 import { readFile, makeDir, removeDir, renamePath } from "../../lib/fs/fileio";
 import { ASSETS_DIR } from "../../lib/image/assets";
 import { imageToDataUrl, isImagePath } from "../../lib/fs/images";
@@ -127,6 +136,106 @@ function ResourceRow({ resource, onOpen }: { resource: ResourceFile; onOpen: () 
   );
 }
 
+/** What the view derives per volume from one read of its chapters. */
+interface VolumeMeta {
+  digest: CollectionDigest | null;
+  status: DigestStatus;
+  /** Lore entities mentioned anywhere in the volume's chapters. */
+  refs: LoreEntity[];
+}
+
+/**
+ * Collection digest card: AI summary of the whole volume + the lore entities
+ * its chapters mention. The summary persists as an editable markdown file
+ * (lib/context/collectionDigest); the lore chips are recomputed locally on
+ * every visit — no AI cost, never stale.
+ */
+function DigestCard({ volume, meta }: { volume: Volume; meta?: VolumeMeta }) {
+  const { t } = useTranslation();
+  const terms = useTerms();
+  const gen = useDigestStore((s) => s.gen);
+  const error = useDigestStore((s) => s.error);
+  const errorVol = useDigestStore((s) => s.errorVol);
+  const generateForVolume = useDigestStore((s) => s.generateForVolume);
+  const abortGen = useDigestStore((s) => s.abortGen);
+  const setMainView = useAppStore((s) => s.setMainView);
+  const [expanded, setExpanded] = useState(false);
+
+  if (volume.chapters.length === 0) return null;
+
+  const status: DigestStatus = meta?.status ?? "none";
+  const running = gen === volume.relPath;
+  const chipMeta: Record<DigestStatus, { cls: string; label: string }> = {
+    fresh: { cls: styles.memoFresh, label: t("library.memoFresh") },
+    stale: { cls: styles.memoStale, label: t("library.memoStale") },
+    none: { cls: styles.memoNone, label: t("library.memoNone") },
+  };
+  const chip = chipMeta[status];
+  const actionLabel =
+    status === "none"
+      ? t("library.digestGenerate", { group: terms.group })
+      : t("library.digestUpdate", { group: terms.group });
+
+  const openLore = (entity: LoreEntity) => {
+    useLoreStore.getState().openDetail(entity.dirPath);
+    setMainView("lore-wall");
+  };
+
+  return (
+    <div className={styles.digestCard}>
+      <div className={styles.digestHead}>
+        <span className={styles.digestLabel}>{t("library.digestLabel", { group: terms.group })}</span>
+        {running ? (
+          <span className={styles.memoCell}>
+            <Loader2 size={12} className={styles.memoSpin} />
+            <button className={styles.memoCancel} title={t("library.memoCancel")} onClick={abortGen}>
+              <X size={11} />
+            </button>
+          </span>
+        ) : (
+          <span className={styles.memoCell}>
+            <span className={`${styles.memoChip} ${chip.cls}`}>{chip.label}</span>
+            <button
+              className={styles.digestBtn}
+              title={actionLabel}
+              disabled={gen !== null}
+              onClick={() => void generateForVolume(volume)}
+            >
+              <Sparkles size={11} strokeWidth={1.9} />
+            </button>
+          </span>
+        )}
+      </div>
+      {errorVol === volume.relPath && error && <div className={styles.digestError}>{error}</div>}
+      {meta?.digest?.summary && (
+        <div
+          className={expanded ? styles.digestBody : styles.digestBodyClamped}
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {meta.digest.summary}
+        </div>
+      )}
+      {meta && meta.refs.length > 0 && (
+        <div className={styles.loreChips}>
+          <span className={styles.loreChipsLabel}>
+            {t("library.loreRefs", { entries: terms.entries })}
+          </span>
+          {meta.refs.map((entity) => (
+            <button
+              key={entity.dirPath}
+              className={styles.loreChip}
+              title={entity.summary || entity.name}
+              onClick={() => openLore(entity)}
+            >
+              {entity.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function LibraryView() {
   const { t } = useTranslation();
   const { fileTree, projectPath, activeFilePath, setActiveFilePath, wordCount, refreshFileTree } = useProjectStore();
@@ -150,6 +259,9 @@ export function LibraryView() {
   const [drag, setDrag] = useState<DragState | null>(null);
   const [dragOver, setDragOver] = useState<number | null>(null);
   const [statuses, setStatuses] = useState<Record<string, MemoryStatus>>({});
+  const [volMeta, setVolMeta] = useState<Record<string, VolumeMeta>>({});
+  const loreIndex = useLoreStore((s) => s.index);
+  const digestVersion = useDigestStore((s) => s.version);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [creatingVol, setCreatingVol] = useState(false);
   const [newVolName, setNewVolName] = useState("");
@@ -180,31 +292,51 @@ export function LibraryView() {
     });
   }, [volumes]);
 
-  // Per-chapter memory status. Recomputed when the chapter set changes or a
-  // generation starts/finishes (chapterGen toggling picks up the fresh file).
+  // One read of every chapter drives all derived state: the per-chapter memory
+  // badge, and per volume the digest freshness + referenced lore entities.
+  // Recomputed when the chapter set changes, a memory generation starts/
+  // finishes (chapterGen), a digest is saved (digestVersion), or the lore
+  // index rescans.
   useEffect(() => {
     let cancelled = false;
-    if (!projectPath) { setStatuses({}); return; }
-    const chapters = volumes.flatMap((v) => v.chapters);
-    if (chapters.length === 0) { setStatuses({}); return; }
+    if (!projectPath) { setStatuses({}); setVolMeta({}); return; }
     (async () => {
       const activePath = useProjectStore.getState().activeFilePath;
       const activeContent = useEditorStore.getState().content;
-      const entries = await Promise.all(
-        chapters.map(async (ch): Promise<[string, MemoryStatus]> => {
+      const statusEntries: [string, MemoryStatus][] = [];
+      const metaEntries: [string, VolumeMeta][] = [];
+      for (const vol of volumes) {
+        // A chapter that fails to read is skipped here, which digestStatus
+        // then sees as a shorter chapter list — i.e. "stale", not "fresh".
+        const contents: { rel: string; content: string }[] = [];
+        for (const ch of vol.chapters) {
           try {
             const content = ch.path === activePath ? activeContent : await readFile(ch.path);
             const mem = await loadMemory(projectPath, ch.path);
-            return [ch.path, memoryStatus(content, mem)];
+            statusEntries.push([ch.path, memoryStatus(content, mem)]);
+            contents.push({ rel: ch.relPath, content });
           } catch {
-            return [ch.path, "none"];
+            statusEntries.push([ch.path, "none"]);
           }
-        }),
-      );
-      if (!cancelled) setStatuses(Object.fromEntries(entries));
+          if (cancelled) return;
+        }
+        if (vol.chapters.length > 0) {
+          const digest = await loadDigest(projectPath, vol.relPath);
+          metaEntries.push([vol.relPath, {
+            digest,
+            status: digestStatus(digest, contents),
+            refs: matchEntitiesInText(contents.map((c) => c.content).join("\n"), loreIndex),
+          }]);
+        }
+        if (cancelled) return;
+      }
+      if (!cancelled) {
+        setStatuses(Object.fromEntries(statusEntries));
+        setVolMeta(Object.fromEntries(metaEntries));
+      }
     })();
     return () => { cancelled = true; };
-  }, [volumes, projectPath, chapterGen]);
+  }, [volumes, projectPath, chapterGen, loreIndex, digestVersion]);
 
   const allChaptersCount = volumes.reduce((s, v) => s + v.chapters.length, 0);
   const activeVolumeIdx = volumes.findIndex((v) => v.chapters.some((c) => c.path === activeFilePath));
@@ -485,6 +617,8 @@ export function LibraryView() {
                   )}
                 </span>
               </div>
+
+              <DigestCard volume={vol} meta={volMeta[vol.relPath]} />
 
               <div className={styles.chapters}>
                 {vol.chapters.map((ch, ci) => {

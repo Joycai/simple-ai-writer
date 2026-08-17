@@ -54,6 +54,10 @@
     "unmarkWriting": "Clear in-progress",
     "writingBadge": "WIP",
     "resources": "Resources · {{count}}",
+    "digestLabel": "{{group}} digest",
+    "digestGenerate": "Generate {{group}} digest",
+    "digestUpdate": "Update {{group}} digest",
+    "loreRefs": "Referenced {{entries}}",
     "wordsUnit": "words",
     "statDone": "Done {{n}}",
     "statWriting": "Writing {{n}}",
@@ -333,6 +337,7 @@
       "kinds": {
         "chat": "Chat",
         "memory": "Story memory",
+        "digest": "Collection digest",
         "image-gen": "Image generation",
         "image-edit": "Image edit",
         "consistency": "Consistency check"
@@ -801,6 +806,10 @@
       "instruction": "Output the recap of this passage, within 300 characters.",
       "coverage": "{{covered}} / {{total}} chars summarized · {{pct}}%",
       "tailNote": "The last {{chars}} chars are recent paragraphs — sent verbatim."
+    },
+    "digest": {
+      "systemPrompt": "You are a collection-digest assistant. From the given documents (or their summaries), produce one overall digest of the set: the through-line and its stages, the key people or subjects and how they change, recurring themes and important setups. Write in the same language as the source, state facts objectively, no commentary and no verbatim quotes. Output only the digest body — no title, no preamble.",
+      "instruction": "Write the overall digest of this set of documents, within 300 words."
     },
     "agent": {
       "log": {
