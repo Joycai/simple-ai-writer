@@ -19,6 +19,7 @@ import { imageToDataUrl } from "../../lib/fs/images";
 import { useImeGuard } from "../../lib/ime";
 import { runStructuredTask } from "../../lib/agent/structured";
 import type { ToolDefinition } from "../../lib/ai";
+import { Select } from "../common/Select";
 import styles from "./LoreImproveModal.module.css";
 import extra from "./LoreMetaImproveModal.module.css";
 
@@ -266,17 +267,19 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
               )}
             </div>
           </div>
-          <select
+          <Select
             className={styles.modelSelect}
             value={activeModelId ?? ""}
-            onChange={(e) => setActiveModel(e.target.value)}
-          >
-            <option value="">{t("lore.generator.selectModel", { defaultValue: "选择模型" })}</option>
-            {models.map((m) => {
-              const pname = providers.find((p) => p.id === m.providerId)?.name ?? "";
-              return <option key={m.id} value={m.id}>{pname} / {m.name}</option>;
-            })}
-          </select>
+            onChange={(v) => setActiveModel(v)}
+            options={[
+              { value: "", label: t("lore.generator.selectModel", { defaultValue: "选择模型" }) },
+              ...models.map((m) => ({
+                value: m.id,
+                label: `${providers.find((p) => p.id === m.providerId)?.name ?? ""} / ${m.name}`,
+              })),
+            ]}
+            ariaLabel={t("lore.generator.selectModel", { defaultValue: "选择模型" })}
+          />
           <button className={styles.closeBtn} onClick={onClose}><X size={16} /></button>
         </div>
 
@@ -359,17 +362,15 @@ summary: ${entity.summary}
                 />
 
                 <label className={extra.gLabel}>{isZh ? "分类" : "category"}</label>
-                <select
-                  className={extra.gInput}
+                <Select
+                  className={extra.gSelect}
                   value={pCategory}
-                  onChange={(e) => setPCategory(e.target.value as CategoryId)}
-                >
-                  {loreCategories().map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {categoryLabel(c, isZh)}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(v) => setPCategory(v as CategoryId)}
+                  options={loreCategories().map((c) => ({
+                    value: c.id,
+                    label: categoryLabel(c, isZh),
+                  }))}
+                />
 
                 <label className={extra.gLabel}>{isZh ? "别名" : "aliases"}</label>
                 <div>

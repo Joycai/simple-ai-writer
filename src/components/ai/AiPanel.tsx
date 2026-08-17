@@ -74,6 +74,7 @@ import { contextLabel } from "../../lib/ai/modelLabel";
 import { MOD_KEY } from "../../lib/platform";
 import { panelFade, springPanel } from "../../lib/motion";
 import { PINNED_LORE_PREFIX, readPref, writePref } from "../../lib/prefs";
+import { Select } from "../common/Select";
 import styles from "./AiPanel.module.css";
 
 const CONTINUE_LENGTH_OPTIONS = [200, 500, 1000, 2000];
@@ -1550,25 +1551,17 @@ export function AiPanel() {
                             </button>
                           </div>
                           {openingMode === "bridge" && (
-                            <select
+                            <Select
                               className={styles.select}
                               value={bridgePath ?? ""}
-                              onChange={(e) => setBridgePath(e.target.value || null)}
-                              aria-label={t("ai.panel.openingBridge", { defaultValue: "承接前一{{doc}}", doc: terms.doc })}
-                            >
-                              {volumes.map((v) => {
-                                const options = v.chapters.filter((c) =>
-                                  bridgeCandidates.some((b) => b.path === c.path));
-                                if (options.length === 0) return null;
-                                return (
-                                  <optgroup key={v.name} label={v.name}>
-                                    {options.map((c) => (
-                                      <option key={c.path} value={c.path}>{c.title}</option>
-                                    ))}
-                                  </optgroup>
-                                );
-                              })}
-                            </select>
+                              onChange={(v) => setBridgePath(v || null)}
+                              ariaLabel={t("ai.panel.openingBridge", { defaultValue: "承接前一{{doc}}", doc: terms.doc })}
+                              options={volumes.flatMap((v) =>
+                                v.chapters
+                                  .filter((c) => bridgeCandidates.some((b) => b.path === c.path))
+                                  .map((c) => ({ value: c.path, label: c.title, group: v.name })),
+                              )}
+                            />
                           )}
                         </div>
                       )}
@@ -1694,16 +1687,18 @@ export function AiPanel() {
                   <span className={styles.controlLabel}>
                     {t("ai.panel.systemPromptLabel", { defaultValue: "系统提示" })}
                   </span>
-                  <select
+                  <Select
                     className={styles.select}
                     value={activePromptId ?? ""}
-                    onChange={(e) => setActivePrompt(e.target.value)}
-                  >
-                    <option value="">{t("ai.panel.defaultSystemPrompt")}</option>
-                    {prompts.filter((p) => p.scene === "system").map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
+                    onChange={(v) => setActivePrompt(v)}
+                    options={[
+                      { value: "", label: t("ai.panel.defaultSystemPrompt") },
+                      ...prompts
+                        .filter((p) => p.scene === "system")
+                        .map((p) => ({ value: p.id, label: p.name })),
+                    ]}
+                    ariaLabel={t("ai.panel.defaultSystemPrompt")}
+                  />
                 </div>
               )}
             </>

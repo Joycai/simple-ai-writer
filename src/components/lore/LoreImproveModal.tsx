@@ -25,6 +25,7 @@ import { ModalShell } from "../common/ModalShell";
 import { AttachmentTextarea } from "./ai/AttachmentTextarea";
 import { scanProjectFiles, type ProjectFile } from "../../lib/fs/images";
 import { loadApiKey } from "../../lib/keyStore";
+import { Select } from "../common/Select";
 import styles from "./LoreImproveModal.module.css";
 
 interface Props {
@@ -239,17 +240,19 @@ export function LoreImproveModal({ entity, onClose }: Props) {
               </div>
             </div>
           </div>
-          <select
+          <Select
             className={styles.modelSelect}
             value={activeModelId ?? ""}
-            onChange={(e) => setActiveModel(e.target.value)}
-          >
-            <option value="">{t("lore.generator.selectModel")}</option>
-            {multimodalModels.map((m) => {
-              const pname = providers.find((p) => p.id === m.providerId)?.name ?? "";
-              return <option key={m.id} value={m.id}>{pname} / {m.name}</option>;
-            })}
-          </select>
+            onChange={(v) => setActiveModel(v)}
+            options={[
+              { value: "", label: t("lore.generator.selectModel") },
+              ...multimodalModels.map((m) => ({
+                value: m.id,
+                label: `${providers.find((p) => p.id === m.providerId)?.name ?? ""} / ${m.name}`,
+              })),
+            ]}
+            ariaLabel={t("lore.generator.selectModel")}
+          />
           <button className={styles.closeBtn} onClick={onClose}><X size={14} /></button>
         </div>
 
@@ -285,20 +288,19 @@ export function LoreImproveModal({ entity, onClose }: Props) {
                 <div className={styles.label} style={{ marginBottom: 10 }}>
                   {isZh ? "target · 写入目标" : "target"}
                 </div>
-                <select
-                  className={styles.modelSelect}
-                  style={{ maxWidth: "none", width: "100%" }}
+                <Select
+                  className={`${styles.modelSelect} ${styles.targetSelect}`}
                   value={target}
                   disabled={phase === "generating"}
-                  onChange={(e) => { setTarget(e.target.value); setOutput(""); setPhase("input"); }}
-                >
-                  <option value={INDEX}>{t("lore.improve.targetIndex", { defaultValue: "整体条目（index.md）" })}</option>
-                  {entity.facets.map((f) => (
-                    <option key={f.file} value={f.file}>
-                      {t("lore.improve.targetFacetPrefix", { defaultValue: "特征" })}：{f.title}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(v) => { setTarget(v); setOutput(""); setPhase("input"); }}
+                  options={[
+                    { value: INDEX, label: t("lore.improve.targetIndex", { defaultValue: "整体条目（index.md）" }) },
+                    ...entity.facets.map((f) => ({
+                      value: f.file,
+                      label: `${t("lore.improve.targetFacetPrefix", { defaultValue: "特征" })}：${f.title}`,
+                    })),
+                  ]}
+                />
               </div>
             )}
 

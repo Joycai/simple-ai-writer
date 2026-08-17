@@ -214,6 +214,17 @@
 .input:focus-visible { border-color: var(--color-sienna); }
 .inputNarrow { max-width: 120px; }
 
+/* .input's skin for the shared Select trigger — doubled to outrank the base
+   class deterministically (see common/Select). */
+.modeSelect.modeSelect {
+  width: 100%;
+  padding: 9px 12px;
+  font: 400 13px/1.4 var(--font-serif);
+  color: var(--color-text-primary);
+  background: var(--lore-bg-input);
+  border: 1px solid var(--color-border);
+}
+
 .hintWarn {
   margin-top: 6px;
   font: italic 400 11px/1.5 var(--font-serif);

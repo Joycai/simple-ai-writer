@@ -151,19 +151,16 @@
   color: var(--color-text-muted);
   opacity: 0.8;
 }
-.select {
+/* Doubled: re-skins the shared Select trigger (see common/Select) — 0-2-0
+   outranks its base class without depending on bundle order. */
+.select.select {
   padding: 8px 10px;
   background: var(--color-card);
   border: 1px solid var(--color-border);
   color: var(--color-text-primary);
   font: 400 12px/1.4 var(--font-serif);
-  outline: none;
   width: 100%;
-  cursor: pointer;
-  transition: border-color var(--transition-fast);
 }
-.select:focus { border-color: var(--color-sienna); }
-.select option { background: var(--color-card); }
 
 .input {
   padding: 8px 10px;

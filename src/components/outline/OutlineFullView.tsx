@@ -26,6 +26,7 @@ import { loadMemory, memoryStatus, moveMemory, projectRelativePath, type MemoryS
 import { readFile, makeDir, removeDir, renamePath } from "../../lib/fs/fileio";
 import { ASSETS_DIR } from "../../lib/image/assets";
 import { useImeGuard } from "../../lib/ime";
+import { Select } from "../common/Select";
 import styles from "./OutlineFullView.module.css";
 
 /** Move an array item from one index to another (immutably). */
@@ -327,16 +328,16 @@ export function OutlineFullView() {
           {showMemo && (
             <label className={styles.modelPicker} title={t("outline.summaryModelHint")}>
               <span className={styles.modelLabel}>{t("outline.summaryModel")}</span>
-              <select
+              <Select
                 className={styles.modelSelect}
                 value={memoModelValue}
-                onChange={(e) => setMemoryModel(e.target.value || null)}
-              >
-                {enabledModels.length === 0 && <option value="">{t("outline.noModel")}</option>}
-                {enabledModels.map((m) => (
-                  <option key={m.id} value={m.id}>{m.name}</option>
-                ))}
-              </select>
+                onChange={(v) => setMemoryModel(v || null)}
+                options={
+                  enabledModels.length === 0
+                    ? [{ value: "", label: t("outline.noModel") }]
+                    : enabledModels.map((m) => ({ value: m.id, label: m.name }))
+                }
+              />
             </label>
           )}
 
@@ -381,20 +382,18 @@ export function OutlineFullView() {
               <Check size={12} strokeWidth={2} />
               {t("outline.selectedCount", { count: selected.size, doc: terms.doc })}
             </span>
-            <select
+            <Select
               className={styles.moveSelect}
               value=""
               disabled={busy}
-              onChange={(e) => {
-                const vol = volumes.find((v) => v.relPath === e.target.value);
+              placeholder={t("outline.moveToVolume", { group: terms.group })}
+              ariaLabel={t("outline.moveToVolume", { group: terms.group })}
+              options={volumes.map((v) => ({ value: v.relPath, label: v.name }))}
+              onChange={(v) => {
+                const vol = volumes.find((x) => x.relPath === v);
                 if (vol) void moveSelectedTo(vol);
               }}
-            >
-              <option value="" disabled>{t("outline.moveToVolume", { group: terms.group })}</option>
-              {volumes.map((v) => (
-                <option key={v.relPath} value={v.relPath}>{v.name}</option>
-              ))}
-            </select>
+            />
             <button className={styles.clearBtn} onClick={() => setSelected(new Set())}>
               {t("outline.clearSelection")}
             </button>

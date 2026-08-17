@@ -33,6 +33,7 @@ import { loadApiKey } from "../../../lib/keyStore";
 import { MarkdownTextarea } from "../../common/MarkdownTextarea";
 import { ModalShell } from "../../common/ModalShell";
 import { AttachmentTextarea } from "./AttachmentTextarea";
+import { Select } from "../../common/Select";
 import styles from "../LoreImproveModal.module.css";
 import task from "./FacetAiAssistantModal.module.css";
 
@@ -212,17 +213,19 @@ export function FacetAiAssistantModal({
               <div className={styles.headerSub}>{facetTitle.trim() || t("lore.facet.ai.untitled", { defaultValue: "未命名特征" })}</div>
             </div>
           </div>
-          <select
+          <Select
             className={styles.modelSelect}
             value={activeModelId ?? ""}
-            onChange={(e) => setActiveModel(e.target.value)}
-          >
-            <option value="">{t("lore.generator.selectModel", { defaultValue: "选择模型" })}</option>
-            {multimodalModels.map((m) => {
-              const pname = providers.find((p) => p.id === m.providerId)?.name ?? "";
-              return <option key={m.id} value={m.id}>{pname} / {m.name}</option>;
-            })}
-          </select>
+            onChange={(v) => setActiveModel(v)}
+            options={[
+              { value: "", label: t("lore.generator.selectModel", { defaultValue: "选择模型" }) },
+              ...multimodalModels.map((m) => ({
+                value: m.id,
+                label: `${providers.find((p) => p.id === m.providerId)?.name ?? ""} / ${m.name}`,
+              })),
+            ]}
+            ariaLabel={t("lore.generator.selectModel", { defaultValue: "选择模型" })}
+          />
           <button className={styles.closeBtn} onClick={onClose}><X size={16} /></button>
         </div>
 

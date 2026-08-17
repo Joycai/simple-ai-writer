@@ -70,18 +70,16 @@
   margin-top: 2px;
 }
 
-.modelSelect {
+/* Doubled: re-skins the shared Select trigger (see common/Select) — 0-2-0
+   outranks its base class without depending on bundle order. */
+.modelSelect.modelSelect {
   padding: 5px 8px;
   background: var(--color-bg-base);
   border: 1px solid var(--color-border-muted);
   color: var(--color-text-soft);
   font: 400 11px/1.5 var(--font-mono);
-  outline: none;
-  cursor: pointer;
   max-width: 200px;
-  transition: border-color var(--transition-fast);
 }
-.modelSelect:focus { border-color: var(--color-sienna); }
 
 .closeBtn {
   width: 30px;
@@ -319,6 +317,17 @@
 }
 .input:focus { border-color: var(--color-sienna); }
 .input:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* .input's skin for the shared Select trigger — doubled to outrank the base
+   class deterministically (see common/Select). */
+.selectInput.selectInput {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-panel);
+  color: var(--color-text-primary);
+  font: 400 var(--font-size-xs)/1.6 var(--font-mono);
+}
 
 .costHint {
   margin-left: auto;

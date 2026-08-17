@@ -9,6 +9,11 @@
  * An empty selection is expressed as an option with `value: ""` when it is a
  * real choice (自动 / 不启用), or left out entirely and named via `placeholder`
  * when it is merely the not-yet-chosen state.
+ *
+ * Surfaces with their own input dialect (the AI panel's inset/mono, the lore
+ * modals' paper) re-skin the trigger by passing a class **doubled in its own
+ * module** (`.x.x { … }`): 0-2-0 outranks the base `.trigger` deterministically,
+ * where a single class would tie and win or lose on bundle order.
  */
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
@@ -18,6 +23,9 @@ import styles from "./Select.module.css";
 export interface SelectOption {
   value: string;
   label: string;
+  /** Consecutive options sharing a group get one non-interactive header —
+   *  the flat-list spelling of `<optgroup>`. */
+  group?: string;
 }
 
 const ROW_HEIGHT = 30;
@@ -110,10 +118,11 @@ export function Select({
   }, [open]);
 
   // Keep the keyboard cursor visible while arrowing through a scrolled menu.
+  // By id, not child index — group headers sit between the option buttons.
   useEffect(() => {
     if (!open) return;
-    menuRef.current?.children[active]?.scrollIntoView({ block: "nearest" });
-  }, [open, active]);
+    document.getElementById(`${menuId}-${active}`)?.scrollIntoView({ block: "nearest" });
+  }, [open, active, menuId]);
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (!open) {
@@ -177,20 +186,24 @@ export function Select({
         createPortal(
           <div ref={menuRef} id={menuId} role="listbox" className={styles.menu} style={menuStyle}>
             {options.map((o, i) => (
-              <button
-                key={o.value}
-                id={`${menuId}-${i}`}
-                type="button"
-                role="option"
-                aria-selected={o.value === value}
-                className={`${styles.option} ${i === active ? styles.optionActive : ""} ${
-                  o.value === value ? styles.optionSelected : ""
-                }`}
-                onMouseEnter={() => setActive(i)}
-                onClick={() => pick(o.value)}
-              >
-                <span className={styles.optionLabel}>{o.label}</span>
-              </button>
+              <div key={`${o.value}-${i}`} className={styles.optionWrap}>
+                {o.group && o.group !== options[i - 1]?.group && (
+                  <div className={styles.group}>{o.group}</div>
+                )}
+                <button
+                  id={`${menuId}-${i}`}
+                  type="button"
+                  role="option"
+                  aria-selected={o.value === value}
+                  className={`${styles.option} ${i === active ? styles.optionActive : ""} ${
+                    o.value === value ? styles.optionSelected : ""
+                  }`}
+                  onMouseEnter={() => setActive(i)}
+                  onClick={() => pick(o.value)}
+                >
+                  <span className={styles.optionLabel}>{o.label}</span>
+                </button>
+              </div>
             ))}
           </div>,
           document.body,

@@ -60,6 +60,20 @@
   animation: slideUp 160ms var(--ease-out);
 }
 
+/* Wrapper exists only to pair a group header with its first option; it must
+   not affect layout. */
+.optionWrap {
+  display: contents;
+}
+
+.group {
+  padding: var(--space-2) var(--space-3) 2px;
+  font: 500 10px/1.6 var(--font-sans);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
 .option {
   display: flex;
   align-items: center;
