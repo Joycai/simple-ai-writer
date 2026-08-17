@@ -1,40 +1,46 @@
 /**
  * profile.json parsing — the file format behind ./store, kept pure so the
- * v1 → v2 normalisation is testable without a filesystem.
+ * v1 → v2 → v3 normalisation is testable without a filesystem.
  *
- * Two generations of the file exist:
+ * Three generations of the file exist:
  *
  *   - **v1** (no `version`, or `version: 1`): the whole object *is* one
  *     profile, read as a patch over the built-in named by its `id`. Every
  *     project created before packs existed has one of these — or none at all.
- *   - **v2** (`version: 2`): a selection of packs —
- *     `{ version, primary, enabled: [ids], packs: [custom profiles] }`.
- *     Built-in packs appear by id only; `packs` carries hand-written ones.
+ *   - **v2** (`version: 2`): a selection with a **primary** pack —
+ *     `{ version, primary, enabled: [ids], packs: [custom profiles] }`. The
+ *     primary owned the non-additive dimensions (vocabulary, doc model,
+ *     persona); those are app-level now, so on read the primary is simply the
+ *     first enabled pack and nothing more.
+ *   - **v3** (`version: 3`): the current format — packs are equal toggles and
+ *     the project's user-defined knowledge-base categories ride along:
+ *     `{ version, enabled: [ids], packs: [custom profiles], categories: […] }`.
  *
- * A v1 file is normalised to "that one profile, as the primary and only
- * enabled pack", which is exactly the pre-v2 behaviour. Nothing here writes:
- * a v1 file stays v1 on disk until the author actually changes the selection
- * (see ./store), so old projects remain readable by old builds.
+ * Old files are normalised on read and only rewritten (as v3) when the author
+ * actually changes the selection (see ./store), so old projects remain
+ * readable by old builds until they opt in.
  */
 
 import {
   builtinProfile,
   NOVEL_PROFILE,
+  parseCategoryList,
   parseProfile,
+  type ProfileCategory,
   type WorkspaceProfile,
 } from "./model";
 
 /** What profile.json describes once parsed: the project's pack selection. */
 export interface ProfileSelection {
-  /** The pack in charge of the non-additive dimensions. Always in `enabled`. */
-  primary: WorkspaceProfile;
-  /** Every enabled pack, primary first, file order otherwise. */
+  /** Every enabled pack, in file order. May be empty (a packs-free project). */
   enabled: WorkspaceProfile[];
   /**
    * The hand-written packs this file carries — what `saveProfileFile` must
    * persist. Built-ins are not repeated here; they serialise as bare ids.
    */
   customPacks: WorkspaceProfile[];
+  /** The project's user-defined knowledge-base categories, in file order. */
+  customCategories: ProfileCategory[];
   /** Human-readable problems found while parsing; empty when the file is clean. */
   issues: string[];
 }
@@ -43,7 +49,7 @@ export interface ProfileSelection {
 const V1_META_KEYS = new Set(["id", "version"]);
 
 /**
- * Parse the JSON of a profile.json of either generation.
+ * Parse the JSON of a profile.json of any generation.
  *
  * Never throws, and always yields a usable selection: like `parseProfile`,
  * malformed input degrades toward the novel defaults with issues recorded,
@@ -52,12 +58,13 @@ const V1_META_KEYS = new Set(["id", "version"]);
 export function parseProfileFile(data: unknown): ProfileSelection {
   if (data && typeof data === "object" && !Array.isArray(data)) {
     const rec = data as Record<string, unknown>;
-    if (rec.version === 2) return parseV2(rec);
+    if (rec.version === 3) return parseSelection(rec, 3);
+    if (rec.version === 2) return parseSelection(rec, 2);
   }
   return parseV1(data);
 }
 
-/** v1: the object is one profile — that pack, alone, primary. */
+/** v1: the object is one profile — that pack, alone. */
 function parseV1(data: unknown): ProfileSelection {
   // Same resolution as the pre-v2 loader: a file naming a built-in inherits
   // that profile's defaults for anything it leaves out, so `{"id":"ttrpg"}`
@@ -79,15 +86,18 @@ function parseV1(data: unknown): ProfileSelection {
     Object.keys(data).some((key) => !V1_META_KEYS.has(key));
 
   return {
-    primary: profile,
     enabled: [profile],
     customPacks: isCustom ? [profile] : [],
+    customCategories: [],
     issues,
   };
 }
 
-/** v2: a selection — custom packs, enabled ids, a primary. */
-function parseV2(rec: Record<string, unknown>): ProfileSelection {
+/**
+ * v2 and v3 share everything but two details: v2 has a `primary` (normalised
+ * to "first enabled"), v3 has top-level `categories` (the user-defined ones).
+ */
+function parseSelection(rec: Record<string, unknown>, version: 2 | 3): ProfileSelection {
   const issues: string[] = [];
 
   // Custom packs first: `enabled` may reference them. A pack whose id matches
@@ -143,29 +153,33 @@ function parseV2(rec: Record<string, unknown>): ProfileSelection {
     issues.push("`enabled` is not an array");
   }
 
-  // Primary: must be one of the enabled packs. A primary that names a known
-  // pack missing from a *declared* enabled list is quietly promoted into it —
-  // `{"version":2,"primary":"ttrpg"}` should mean what it obviously means.
-  const primaryId = typeof rec.primary === "string" ? rec.primary.trim() : "";
-  let primary = enabled.find((p) => p.id === primaryId) ?? null;
-  if (!primary) {
-    const pack = primaryId ? resolvePack(primaryId) : null;
-    if (pack) {
-      primary = pack;
-      enabled.unshift(pack);
+  if (version === 2) {
+    // The v2 primary owned dimensions that are app-level now, so all that is
+    // left of it is ordering: it goes first, the way the v2 loader ordered it.
+    // A primary naming a known pack missing from the enabled list is promoted
+    // into it — `{"version":2,"primary":"ttrpg"}` should mean what it meant.
+    const primaryId = typeof rec.primary === "string" ? rec.primary.trim() : "";
+    const inList = enabled.find((p) => p.id === primaryId) ?? null;
+    if (inList) {
+      const rest = enabled.filter((p) => p.id !== primaryId);
+      enabled.length = 0;
+      enabled.push(inList, ...rest);
     } else if (primaryId) {
-      issues.push(`primary pack "${primaryId}" is unknown`);
-    } else {
-      issues.push("no usable primary");
+      const pack = resolvePack(primaryId);
+      if (pack) enabled.unshift(pack);
+      else issues.push(`primary pack "${primaryId}" is unknown`);
+    }
+    // A v2 file that resolved to nothing meant "novel" (there was always a
+    // primary); keep that meaning rather than degrading it to an empty
+    // selection the author never chose.
+    if (enabled.length === 0) {
+      issues.push('no usable packs — falling back to the "novel" pack');
+      enabled.push(NOVEL_PROFILE);
     }
   }
-  if (enabled.length === 0) {
-    issues.push('no usable packs — falling back to the "novel" pack');
-    enabled.push(NOVEL_PROFILE);
-  }
-  if (!primary) primary = enabled[0];
 
-  // Primary first — the arbitration order `resolveWorkspace` consumes.
-  const ordered = [primary, ...enabled.filter((p) => p.id !== primary.id)];
-  return { primary, enabled: ordered, customPacks, issues };
+  const customCategories =
+    version === 3 ? parseCategoryList(rec.categories, issues) : [];
+
+  return { enabled, customPacks, customCategories, issues };
 }

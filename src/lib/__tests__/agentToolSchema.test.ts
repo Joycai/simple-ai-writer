@@ -41,15 +41,16 @@ function paramEnum(toolId: "create_lore_entity" | "move_lore_entity", param: str
 }
 
 describe("lore-category enums in tool definitions", () => {
-  it("offers the novel categories by default", () => {
-    expect(paramEnum("create_lore_entity", "category")).toEqual(
-      NOVEL_PROFILE.categories.map((c) => c.id),
-    );
+  it("offers the novel categories (plus the custom bucket) by default", () => {
+    expect(paramEnum("create_lore_entity", "category")).toEqual([
+      ...NOVEL_PROFILE.categories.map((c) => c.id),
+      "custom",
+    ]);
   });
 
-  it("follows the active profile", () => {
-    setActiveWorkspace(resolveWorkspace(TTRPG_PROFILE, []));
-    const expected = TTRPG_PROFILE.categories.map((c) => c.id);
+  it("follows the active workspace", () => {
+    setActiveWorkspace(resolveWorkspace([TTRPG_PROFILE]));
+    const expected = [...TTRPG_PROFILE.categories.map((c) => c.id), "custom"];
     expect(paramEnum("create_lore_entity", "category")).toEqual(expected);
     expect(paramEnum("move_lore_entity", "new_category")).toEqual(expected);
     expect(paramEnum("create_lore_entity", "category")).not.toContain("characters");
@@ -58,15 +59,15 @@ describe("lore-category enums in tool definitions", () => {
   it("does not leak one profile's categories into the next resolution", () => {
     // The registry object is shared across every run, so patching it in place
     // would leave a closed project's categories in the schema for the next one.
-    setActiveWorkspace(resolveWorkspace(TTRPG_PROFILE, []));
+    setActiveWorkspace(resolveWorkspace([TTRPG_PROFILE]));
     expect(paramEnum("create_lore_entity", "category")).toContain("npcs");
-    setActiveWorkspace(resolveWorkspace(NOVEL_PROFILE, []));
+    setActiveWorkspace(resolveWorkspace([NOVEL_PROFILE]));
     expect(paramEnum("create_lore_entity", "category")).toContain("characters");
     expect(paramEnum("create_lore_entity", "category")).not.toContain("npcs");
   });
 
   it("leaves the rest of the schema intact", () => {
-    setActiveWorkspace(resolveWorkspace(TTRPG_PROFILE, []));
+    setActiveWorkspace(resolveWorkspace([TTRPG_PROFILE]));
     const [def] = getToolDefinitions(["create_lore_entity"]);
     const props = def.function.parameters.properties as Record<string, unknown>;
     expect(def.function.name).toBe("create_lore_entity");
@@ -89,7 +90,7 @@ describe("lore categories named in a tool description", () => {
     getToolDefinitions([id])[0].function.description;
 
   it("substitutes the active profile's categories", () => {
-    setActiveWorkspace(resolveWorkspace(TTRPG_PROFILE, []));
+    setActiveWorkspace(resolveWorkspace([TTRPG_PROFILE]));
     const text = describeOf("list_lore_entities");
     expect(text).toContain("npcs, locations");
     // Prose listing the wrong categories misleads the model exactly as much as a
@@ -100,7 +101,7 @@ describe("lore categories named in a tool description", () => {
 
   it("leaves no placeholder behind for any builtin profile", () => {
     for (const profile of BUILTIN_PROFILES) {
-      setActiveWorkspace(resolveWorkspace(profile, []));
+      setActiveWorkspace(resolveWorkspace([profile]));
       expect(describeOf("list_lore_entities")).not.toContain("{{");
     }
   });

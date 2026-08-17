@@ -1,53 +1,52 @@
 /**
- * Workspace-profile tests: defensive parsing of `profile.json` (its category ids
- * become directory names, so this is the layer that must not pass junk through),
- * and the active-profile accessors the lore/agent/prompt code reads.
+ * Capability-pack tests: defensive parsing of `profile.json` (its category ids
+ * become directory names, so this is the layer that must not pass junk
+ * through), and the active-workspace accessors the lore/agent/prompt code
+ * reads.
  */
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  appTerms,
   BID_PROFILE,
   BUILTIN_PROFILES,
   CATEGORY_ID_RE,
-  COPY_PROFILE,
-  DEFAULT_DOC_MODEL,
   DEFAULT_SECTION_LABELS,
   DEFAULT_TERMS,
   NOVEL_PROFILE,
   TTRPG_PROFILE,
   builtinProfile,
   parseProfile,
-  profileTerms,
-  type WorkspaceProfile,
+  suggestCategoryId,
 } from "../profile/model";
 import {
+  activeWorkspace,
   defaultCategoryId,
   fallbackCategoryId,
   findCategory,
   isKnownCategory,
   loreCategories,
   loreCategoryIds,
-  primaryPack,
   promptParams,
   resetActiveWorkspace,
   sectionLabel,
   setActiveWorkspace,
 } from "../profile/active";
-import { resolveWorkspace } from "../profile/resolve";
+import { CUSTOM_CATEGORY, resolveWorkspace } from "../profile/resolve";
 
-// The active profile is a module singleton, so a test that switches it must put
-// it back or it leaks into every test that runs afterwards.
+// The active workspace is a module singleton, so a test that switches it must
+// put it back or it leaks into every test that runs afterwards.
 afterEach(() => resetActiveWorkspace());
 
-describe("builtin profiles", () => {
-  it("defaults to novel and exposes the ttrpg profile", () => {
-    expect(primaryPack()).toBe(NOVEL_PROFILE);
+describe("builtin packs", () => {
+  it("defaults to novel and exposes the ttrpg pack", () => {
+    expect(activeWorkspace().enabled).toEqual([NOVEL_PROFILE]);
     expect(builtinProfile("ttrpg")).toBe(TTRPG_PROFILE);
     expect(builtinProfile("bid")?.labelZh).toBe("标书应答");
     expect(builtinProfile("wechat")?.labelZh).toBe("微信公众号");
     expect(builtinProfile("nope")).toBeNull();
   });
 
-  it("gives every builtin a unique id and non-empty categories", () => {
+  it("gives every builtin a unique id and valid category ids", () => {
     const ids = BUILTIN_PROFILES.map((p) => p.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const p of BUILTIN_PROFILES) {
@@ -57,21 +56,25 @@ describe("builtin profiles", () => {
       // it here, so the check cannot drift from what parseProfile enforces.
       for (const c of p.categories) expect(c.id).toMatch(CATEGORY_ID_RE);
       expect(new Set(p.categories.map((c) => c.id)).size).toBe(p.categories.length);
+      // The custom bucket is app-level; no pack may declare it.
+      expect(p.categories.some((c) => c.id === CUSTOM_CATEGORY.id)).toBe(false);
     }
   });
 
-  it("keeps novel wording as the section defaults", () => {
-    // NOVEL_PROFILE overrides nothing, so the defaults must already read as the
-    // novel labels — otherwise existing projects would silently change prompts.
-    expect(NOVEL_PROFILE.sections).toEqual({});
-    expect(sectionLabel("prevTail")).toBe("上一章结尾");
-    expect(sectionLabel("knowledge")).toBe("设定资料");
+  it("keeps the section defaults neutral, with novel overriding its own wording", () => {
+    // The defaults serve every project, so they must be domain-neutral; the
+    // novel pack carries the fiction wording as ordinary overrides.
+    expect(sectionLabel("prevTail")).toBe("上一篇结尾");
+    expect(sectionLabel("knowledge")).toBe("知识库");
+    expect(sectionLabel("prevTail", "novel")).toBe("上一章结尾");
+    // No built-in renames the knowledge base — 知识库 is uniform.
+    for (const p of BUILTIN_PROFILES) expect(p.sections.knowledge).toBeUndefined();
   });
 });
 
-describe("active profile accessors", () => {
-  it("follows setActiveProfile for categories and section labels", () => {
-    setActiveWorkspace(resolveWorkspace(TTRPG_PROFILE, []));
+describe("active workspace accessors", () => {
+  it("follows setActiveWorkspace for categories and section labels", () => {
+    setActiveWorkspace(resolveWorkspace([TTRPG_PROFILE]));
 
     expect(loreCategoryIds()).toContain("npcs");
     expect(loreCategoryIds()).not.toContain("characters");
@@ -80,47 +83,86 @@ describe("active profile accessors", () => {
     expect(findCategory("npcs")?.labelEn).toBe("NPCs");
     expect(findCategory("skills")).toBeNull();
 
-    // Overridden section, and one that falls through to the default.
-    expect(sectionLabel("prevTail")).toBe("上一场景结尾");
+    // Pack-scoped override, and the neutral default without a packId.
+    expect(sectionLabel("prevTail", "ttrpg")).toBe("上一场景结尾");
     expect(sectionLabel("recent")).toBe(DEFAULT_SECTION_LABELS.recent);
   });
 
   it("distinguishes the form default from the bad-input fallback", () => {
-    setActiveWorkspace(resolveWorkspace(TTRPG_PROFILE, []));
+    setActiveWorkspace(resolveWorkspace([TTRPG_PROFILE]));
     expect(defaultCategoryId()).toBe("npcs"); // first category
     expect(fallbackCategoryId()).toBe("custom"); // misc bucket
 
-    const noCustom: WorkspaceProfile = {
-      ...TTRPG_PROFILE,
-      categories: [{ id: "scenes", labelZh: "场景", labelEn: "Scenes" }],
-    };
-    setActiveWorkspace(resolveWorkspace(noCustom, []));
-    // With no "custom" bucket both must still name a category that exists.
-    expect(fallbackCategoryId()).toBe("scenes");
-    expect(defaultCategoryId()).toBe("scenes");
+    // The custom bucket is app-level, so it exists whatever is enabled —
+    // including nothing at all.
+    setActiveWorkspace(resolveWorkspace([]));
+    expect(fallbackCategoryId()).toBe("custom");
+    expect(defaultCategoryId()).toBe("custom");
   });
 
-  it("builds prompt interpolation params from the active profile", () => {
-    setActiveWorkspace(resolveWorkspace(BID_PROFILE, []));
+  it("builds prompt interpolation params from the app vocabulary + task pack", () => {
+    setActiveWorkspace(resolveWorkspace([BID_PROFILE]));
+    // Terms are app-level and uniform — the knowledge base is 知识库
+    // everywhere, whatever packs are enabled.
     const params = promptParams(true);
-    expect(params.kb).toBe("企业知识库");
+    expect(params.kb).toBe("知识库");
     expect(params.doc).toBe("文档");
-    expect(params.knowledge).toBe("企业知识库"); // bid's sections.knowledge
-    // A section bid doesn't override falls through to the shared default.
-    expect(params.prevTail).toBe(DEFAULT_SECTION_LABELS.prevTail);
+    expect(params.knowledge).toBe("知识库");
+    expect(params.outlineSection).toBe(DEFAULT_SECTION_LABELS.outline);
+
+    // A bid task's assembly passes its packId and gets bid wording for the
+    // sections bid overrides.
+    const bidParams = promptParams(true, "bid");
+    expect(bidParams.outlineSection).toBe("应答大纲");
+    expect(bidParams.recent).toBe("当前应答");
+    expect(bidParams.knowledge).toBe("知识库"); // never renamed
 
     const en = promptParams(false);
     expect(en.kb).toBe("Knowledge Base");
   });
 
   it("restores the novel pack on reset", () => {
-    setActiveWorkspace(resolveWorkspace(TTRPG_PROFILE, []));
+    setActiveWorkspace(resolveWorkspace([TTRPG_PROFILE]));
     resetActiveWorkspace();
-    expect(primaryPack()).toBe(NOVEL_PROFILE);
-    // The merged view wraps the categories (adding packIds), so equality is
-    // structural on the pack-level fields rather than by reference.
-    expect(loreCategories().map(({ packIds, ...cat }) => cat)).toEqual(NOVEL_PROFILE.categories);
-    expect(loreCategories().every((c) => c.packIds.join() === "novel")).toBe(true);
+    expect(activeWorkspace().enabled).toEqual([NOVEL_PROFILE]);
+    // The merged view wraps the categories (adding packIds) and appends the
+    // app-level custom bucket.
+    expect(loreCategories().map(({ packIds, userDefined, ...cat }) => cat)).toEqual([
+      ...NOVEL_PROFILE.categories,
+      CUSTOM_CATEGORY,
+    ]);
+  });
+});
+
+describe("app vocabulary", () => {
+  it("resolves per language with plural fallbacks", () => {
+    const zh = appTerms(true);
+    expect(zh.kb).toBe("知识库");
+    expect(zh.doc).toBe(DEFAULT_TERMS.doc.zh);
+    expect(zh.docs).toBe(zh.doc); // Chinese has no plural form
+
+    const en = appTerms(false);
+    expect(en.kb).toBe("Knowledge Base");
+    expect(en.docs).toBe("documents"); // default en + "s"
+    expect(en.entries).toBe("entries"); // explicit enPlural wins
+  });
+});
+
+describe("suggestCategoryId", () => {
+  it("slugs a latin label and falls back to a neutral stem for CJK", () => {
+    expect(suggestCategoryId("Meeting Notes", [])).toBe("meeting-notes");
+    expect(suggestCategoryId("会议纪要", [])).toBe("kb");
+  });
+
+  it("numbers past taken ids, case-insensitively", () => {
+    expect(suggestCategoryId("会议纪要", ["kb"])).toBe("kb-2");
+    expect(suggestCategoryId("Notes", ["NOTES", "notes-2"])).toBe("notes-3");
+  });
+
+  it("always yields a valid folder name", () => {
+    for (const label of ["会议纪要", "---", "A B C", "", "日程 2026"]) {
+      expect(suggestCategoryId(label, [])).toMatch(CATEGORY_ID_RE);
+    }
   });
 });
 
@@ -144,7 +186,7 @@ describe("parseProfile", () => {
     expect(profile.labelEn).toBe("weekly");
   });
 
-  it("reads a full custom profile", () => {
+  it("reads a full custom pack", () => {
     const { profile, issues } = parseProfile(
       {
         id: "weekly",
@@ -154,15 +196,42 @@ describe("parseProfile", () => {
           { id: "projects", labelZh: "项目", labelEn: "Projects" },
           { id: "people", labelZh: "同事", labelEn: "People" },
         ],
-        sections: { knowledge: "背景资料", prevTail: "上期周报" },
-        systemPromptKey: "ai.instructions.system",
+        sections: { outline: "本期要点", prevTail: "上期周报" },
       },
       NOVEL_PROFILE,
     );
     expect(issues).toEqual([]);
     expect(profile.id).toBe("weekly");
     expect(profile.categories.map((c) => c.id)).toEqual(["projects", "people"]);
-    expect(profile.sections.knowledge).toBe("背景资料");
+    expect(profile.sections.outline).toBe("本期要点");
+  });
+
+  it("accepts a declared-empty category list — a tasks-only pack", () => {
+    const { profile, issues } = parseProfile(
+      { id: "x", categories: [], tasks: [{ id: "draft", tools: "none", target: "detached", freeform: true }] },
+      NOVEL_PROFILE,
+    );
+    expect(profile.categories).toEqual([]);
+    expect(issues).toEqual([]);
+  });
+
+  it("notes and ignores the retired pack fields", () => {
+    const { profile, issues } = parseProfile(
+      {
+        id: "x",
+        categories: [{ id: "a", labelZh: "A", labelEn: "A" }],
+        terms: { doc: { zh: "条款", en: "clause" } },
+        docModel: { ordered: false },
+        systemPromptKey: "ai.instructions.custom",
+      },
+      NOVEL_PROFILE,
+    );
+    expect(profile.categories.map((c) => c.id)).toEqual(["a"]);
+    expect((profile as unknown as Record<string, unknown>).terms).toBeUndefined();
+    const reported = issues.join(" | ");
+    for (const key of ["terms", "docModel", "systemPromptKey"]) {
+      expect(reported).toContain(key);
+    }
   });
 
   it("drops category ids that are not a single safe folder name", () => {
@@ -216,9 +285,9 @@ describe("parseProfile", () => {
 
   it("inherits categories — with a warning — when a declared list yields none", () => {
     // The file is otherwise usable, so its own id/labels/sections survive; only
-    // the layout falls back. Discarding the whole file would throw away work the
-    // author *did* get right.
-    for (const categories of [[], [{ id: ".." }], "nonsense"]) {
+    // the layout falls back. A declared *empty* list is different (see above):
+    // that is a deliberate tasks-only pack, not breakage.
+    for (const categories of [[{ id: ".." }], "nonsense"]) {
       const { profile, issues } = parseProfile({ id: "x", categories }, TTRPG_PROFILE);
       expect(profile.id).toBe("x");
       expect(profile.categories).toEqual(TTRPG_PROFILE.categories);
@@ -243,133 +312,13 @@ describe("parseProfile", () => {
       },
       NOVEL_PROFILE,
     );
-    expect(profile.sections).toEqual({ knowledge: "资料" });
+    // Layered over the fallback's own overrides, as always.
+    expect(profile.sections).toEqual({ ...NOVEL_PROFILE.sections, knowledge: "资料" });
     const reported = issues.join(" | ");
     expect(reported).toContain('unknown section "nonsense"');
     // Empty, and over the 20-char label cap.
     expect(reported).toContain('section "recent" has an unusable label');
     expect(reported).toContain('section "outline" has an unusable label');
-  });
-
-  it("refuses a systemPromptKey that is not an i18n key", () => {
-    const { profile, issues } = parseProfile(
-      {
-        id: "x",
-        categories: [{ id: "a", labelZh: "A", labelEn: "A" }],
-        systemPromptKey: "../../etc/passwd",
-      },
-      NOVEL_PROFILE,
-    );
-    expect(profile.systemPromptKey).toBe(NOVEL_PROFILE.systemPromptKey);
-    expect(issues.join(" ")).toContain("systemPromptKey");
-  });
-
-  it("layers docModel over the fallback's", () => {
-    // Turning one flag off must not silently re-enable the other two.
-    const { profile, issues } = parseProfile(
-      { id: "copy", docModel: { memory: false } },
-      COPY_PROFILE,
-    );
-    expect(profile.docModel).toEqual({ ordered: false, priorContext: false, memory: false });
-    expect(issues).toEqual([]);
-
-    const partial = parseProfile({ id: "novel", docModel: { memory: false } }, NOVEL_PROFILE);
-    expect(partial.profile.docModel).toEqual({ ordered: true, priorContext: true, memory: false });
-  });
-
-  it("defaults docModel to novel behaviour and rejects non-booleans", () => {
-    const { profile: inherited } = parseProfile(
-      { id: "x", categories: [{ id: "a", labelZh: "A", labelEn: "A" }] },
-      NOVEL_PROFILE,
-    );
-    expect(inherited.docModel).toEqual(DEFAULT_DOC_MODEL);
-
-    // A hand-edited JSON file is exactly where `"false"` shows up, and a truthy
-    // string flipping a feature on is worse than being told it's invalid.
-    const { profile, issues } = parseProfile(
-      {
-        id: "x",
-        categories: [{ id: "a", labelZh: "A", labelEn: "A" }],
-        docModel: { memory: "false", nonsense: true },
-      },
-      NOVEL_PROFILE,
-    );
-    expect(profile.docModel).toEqual(DEFAULT_DOC_MODEL);
-    expect(issues.join(" ")).toContain("docModel.memory");
-    expect(issues.join(" ")).toContain("nonsense");
-  });
-
-  it("refuses priorContext without ordered", () => {
-    // "The previous document" is meaningless with no order to read it from.
-    const { profile, issues } = parseProfile(
-      {
-        id: "x",
-        categories: [{ id: "a", labelZh: "A", labelEn: "A" }],
-        docModel: { ordered: false, priorContext: true },
-      },
-      NOVEL_PROFILE,
-    );
-    expect(profile.docModel.priorContext).toBe(false);
-    expect(issues.join(" ")).toContain("priorContext");
-  });
-
-  it("keeps every builtin's docModel self-consistent", () => {
-    for (const p of BUILTIN_PROFILES) {
-      if (p.docModel.priorContext) expect(p.docModel.ordered).toBe(true);
-    }
-  });
-
-  it("layers terms over the fallback's and validates their shape", () => {
-    // Overriding one term keeps the fallback profile's wording for the rest —
-    // wholesale replacement would fall through to the novel words.
-    const { profile, issues } = parseProfile(
-      { id: "bid", terms: { doc: { zh: "条款", en: "clause" } } },
-      BID_PROFILE,
-    );
-    expect(issues).toEqual([]);
-    expect(profile.terms.doc).toEqual({ zh: "条款", en: "clause" });
-    expect(profile.terms.kb).toEqual(BID_PROFILE.terms.kb);
-
-    const bad = parseProfile(
-      {
-        id: "x",
-        categories: [{ id: "a", labelZh: "A", labelEn: "A" }],
-        terms: {
-          nonsense: { zh: "x", en: "x" },
-          doc: "not-an-object",
-          group: { zh: "组" },
-          entry: { zh: "条", en: "item", enPlural: 42 },
-        },
-      },
-      NOVEL_PROFILE,
-    );
-    const reported = bad.issues.join(" | ");
-    expect(reported).toContain('unknown term "nonsense"');
-    expect(reported).toContain('term "doc" is not an object');
-    expect(reported).toContain('term "group" needs both zh and en labels');
-    expect(reported).toContain('term "entry" has an unusable enPlural');
-    // The half-valid entries fall back rather than half-apply.
-    expect(bad.profile.terms.doc).toBeUndefined();
-    expect(bad.profile.terms.group).toBeUndefined();
-    // entry itself was usable — only its enPlural was dropped.
-    expect(bad.profile.terms.entry).toEqual({ zh: "条", en: "item" });
-  });
-
-  it("resolves terms per language with plural fallbacks", () => {
-    // Novel overrides nothing, so the defaults must already be the novel words.
-    expect(NOVEL_PROFILE.terms).toEqual({});
-    const zh = profileTerms(NOVEL_PROFILE, true);
-    expect(zh.doc).toBe(DEFAULT_TERMS.doc.zh);
-    expect(zh.docs).toBe(zh.doc); // Chinese has no plural form
-    expect(zh.entries).toBe("设定");
-
-    const en = profileTerms(NOVEL_PROFILE, false);
-    expect(en.docs).toBe("chapters"); // default en + "s"
-    expect(en.entries).toBe("lore entries"); // explicit enPlural wins
-
-    const bid = profileTerms(BID_PROFILE, true);
-    expect(bid.kb).toBe("企业知识库");
-    expect(bid.doc).toBe("文档");
   });
 
   it("caps the category count", () => {

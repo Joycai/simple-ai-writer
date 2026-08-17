@@ -15,7 +15,7 @@
 import i18n from "../../i18n";
 import type { MessageContent } from "../ai/types";
 import type { LoreEntity, LoreIndex } from "../lore";
-import { promptParams, sectionLabel, systemPromptKeyFor } from "../profile/active";
+import { promptParams, sectionLabel } from "../profile/active";
 import { RECENT_WINDOW_MIN_CHARS } from "./budget";
 import { selectLore, type LoreActivationReport } from "./loreSelect";
 import { selectMemoryForContext, type DocMemory } from "./memory";
@@ -32,8 +32,8 @@ export const MAX_CONTEXT_CHARS = RECENT_WINDOW_MIN_CHARS;
 export interface TaskExtras {
   /**
    * The pack that declared the task being assembled (`ResolvedTask.packId`) —
-   * scopes the 【…】 block labels and the fallback system prompt to that
-   * pack's wording. Omitted → the primary pack's, the pre-pack behaviour.
+   * scopes the 【…】 block labels to that pack's wording. Omitted (base tasks,
+   * chat) → the app-level neutral labels.
    */
   packId?: string;
   /** dirPaths of manually pinned lore entities — merged with auto-matched. */
@@ -121,9 +121,9 @@ export interface ContextBundle {
   currentFilePath?: string;
   /**
    * The pack that declared the task this bundle was assembled for — the
-   * wording anchor `bundleToMessages` resolves 【…】 labels and the fallback
-   * system prompt against. Absent for project-scoped assemblies (chat), which
-   * speak the primary pack's wording.
+   * wording anchor `bundleToMessages` resolves 【…】 labels against. Absent
+   * for base tasks and project-scoped assemblies (chat), which speak the
+   * app-level neutral wording.
    */
   packId?: string;
   taskText: string;
@@ -426,13 +426,15 @@ export async function assembleContext(
 /**
  * The system prompt to use when the author has no prompt template selected.
  *
- * Every caller that resolves a system prompt must go through here rather than
- * reaching for `ai.instructions.system`: that key is the *novel* prompt, and
- * hardcoding it silently defeats the profile — the caller fills the slot with
- * novel instructions before `bundleToMessages` ever gets a chance to fall back.
+ * One neutral writing-collaborator identity for every project: packs add
+ * tasks and categories, they do not preset the AI's persona — the domain
+ * expertise lives in each pack task's *instruction* instead (see
+ * `ai.instructions.bidRespond` etc.). Every caller that resolves a system
+ * prompt still goes through here rather than reaching for the i18n key, so a
+ * future per-project override has one seam to land in.
  */
-export function profileSystemPrompt(packId?: string): string {
-  return i18n.t(systemPromptKeyFor(packId));
+export function profileSystemPrompt(): string {
+  return i18n.t("ai.instructions.system");
 }
 
 /**
@@ -486,7 +488,7 @@ export function bundleToMessages(
 ): { role: "system" | "user"; content: string }[] {
   const parts = [...bundleContextSections(bundle), bundle.taskText];
   return [
-    { role: "system", content: bundle.systemPrompt || profileSystemPrompt(bundle.packId) },
+    { role: "system", content: bundle.systemPrompt || profileSystemPrompt() },
     { role: "user", content: parts.join("\n\n") },
   ];
 }
@@ -624,7 +626,7 @@ export function bundleToChatMessages(
   const question = { role: "user" as const, content: questionContent ?? bundle.taskText };
   return {
     messages: [
-      { role: "system", content: bundle.systemPrompt || profileSystemPrompt(bundle.packId) },
+      { role: "system", content: bundle.systemPrompt || profileSystemPrompt() },
       ...(seedContext ? [seedContext] : []),
       question,
     ],

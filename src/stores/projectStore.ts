@@ -10,16 +10,19 @@ import {
 } from "../lib/project";
 import { useMemo } from "react";
 import {
+  appTerms,
   builtinProfile,
   loadProfileFile,
-  profileTerms,
+  parseCategoryList,
   resetActiveWorkspace,
   resolveWorkspace,
   saveProfileFile,
   setActiveWorkspace,
+  DEFAULT_DOC_MODEL,
   DEFAULT_SECTION_LABELS,
   NOVEL_PROFILE,
   type DocModel,
+  type ProfileCategory,
   type ResolvedTerms,
   type ResolvedWorkspace,
   type SectionId,
@@ -60,24 +63,17 @@ function resetDocuments(): void {
 }
 
 /** The workspace with no project open: the novel pack, alone. */
-const DEFAULT_WORKSPACE = resolveWorkspace(NOVEL_PROFILE, []);
+const DEFAULT_WORKSPACE = resolveWorkspace([NOVEL_PROFILE]);
 
 interface ProjectState {
   projectPath: string | null;
   /**
-   * The primary pack of the open project's workspace — the owner of docModel,
-   * UI terms and fallback wording (see lib/profile). Kept as its own field
-   * (`= workspace.primary`) because it is what `useTerms`/`useDocModel`/
-   * `useSectionLabel` subscribe to.
-   */
-  profile: WorkspaceProfile;
-  /**
-   * The merged view of every enabled pack — categories and tasks unioned.
-   * Mirrors the `lib/profile/active` singleton, which is what non-React code
-   * reads; this copy exists so components re-render when the selection
-   * changes. **This store is the only writer of both**: keeping them in sync
-   * anywhere else would let the UI and the prompt disagree about which packs
-   * are in force.
+   * The merged view of every enabled pack plus the project's user-defined
+   * categories. Mirrors the `lib/profile/active` singleton, which is what
+   * non-React code reads; this copy exists so components re-render when the
+   * selection changes. **This store is the only writer of both**: keeping
+   * them in sync anywhere else would let the UI and the prompt disagree about
+   * which packs are in force.
    */
   workspace: ResolvedWorkspace;
   /**
@@ -86,6 +82,12 @@ interface ProjectState {
    * them back — dropping them on save would delete the author's own pack.
    */
   customPacks: WorkspaceProfile[];
+  /**
+   * The project's user-defined knowledge-base categories, as stored in
+   * profile.json. The merged view (`workspace.categories`) already contains
+   * them; this is the editable source list `setCustomCategories` works from.
+   */
+  customCategories: ProfileCategory[];
   activeFilePath: string | null;
   fileTree: FileNode[];
   /**
@@ -114,10 +116,15 @@ interface ProjectState {
    * category folders, and rescan. Non-destructive — a disabled pack's folders
    * and the entities in them stay on disk, so re-enabling it restores them
    * (they are simply not scanned while the pack is disabled). Ids resolve
-   * against the project's custom packs first, then the built-ins; `primaryId`
-   * is moved to the front of `enabledIds` if it isn't there already.
+   * against the project's custom packs first, then the built-ins.
    */
-  setPacks: (primaryId: string, enabledIds: string[]) => Promise<void>;
+  setPacks: (enabledIds: string[]) => Promise<void>;
+  /**
+   * Replace the project's user-defined knowledge-base categories: persist,
+   * scaffold new folders, rescan. Same non-destructive contract as `setPacks`
+   * — removing a category only hides its directory, never deletes it.
+   */
+  setCustomCategories: (categories: ProfileCategory[]) => Promise<void>;
 
   /**
    * Create a file (or folder) under `parentDir` and return its absolute path.
@@ -157,9 +164,9 @@ interface ProjectState {
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
   projectPath: null,
-  profile: NOVEL_PROFILE,
   workspace: DEFAULT_WORKSPACE,
   customPacks: [],
+  customCategories: [],
   activeFilePath: null,
   fileTree: [],
   expandedDirs: {},
@@ -188,7 +195,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       // project reading the failed project's categories.
       const selection = await loadProfileFile(target);
       const workspace = selection
-        ? resolveWorkspace(selection.primary, selection.enabled)
+        ? resolveWorkspace(selection.enabled, selection.customCategories)
         : DEFAULT_WORKSPACE;
       if (workspace.issues.length > 0) {
         console.warn(`[profile] ${target} merge problems:\n  - ${workspace.issues.join("\n  - ")}`);
@@ -198,7 +205,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       resetDocuments();
       await getDb(target);
       setActiveWorkspace(workspace);
-      set({ projectPath: target, profile: workspace.primary, workspace, customPacks: selection?.customPacks ?? [], activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null, wordCount: 0, charCount: 0 });
+      set({ projectPath: target, workspace, customPacks: selection?.customPacks ?? [], customCategories: selection?.customCategories ?? [], activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null, wordCount: 0, charCount: 0 });
       await get().refreshFileTree();
       await useLoreStore.getState().scanProject(target);
       useAppStore.getState().addRecentProject(target);
@@ -225,11 +232,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // Back to the default workspace: with no project open, anything that reads
     // the active workspace must not still see the closed project's categories.
     resetActiveWorkspace();
-    set({ projectPath: null, profile: NOVEL_PROFILE, workspace: DEFAULT_WORKSPACE, customPacks: [], activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null, wordCount: 0, charCount: 0 });
+    set({ projectPath: null, workspace: DEFAULT_WORKSPACE, customPacks: [], customCategories: [], activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null, wordCount: 0, charCount: 0 });
   },
 
-  setPacks: async (primaryId, enabledIds) => {
-    const { projectPath, workspace, customPacks } = get();
+  setPacks: async (enabledIds) => {
+    const { projectPath, workspace, customPacks, customCategories } = get();
     if (!projectPath) throw new Error("Open a project before changing its packs.");
 
     // A project's own pack beats the built-in of the same id — the same
@@ -239,21 +246,19 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       if (!pack) throw new Error(`Unknown pack "${id}".`); // UI passes known ids; loud beats silent
       return pack;
     };
-    const primary = resolvePack(primaryId);
     const enabled: WorkspaceProfile[] = [];
     for (const id of enabledIds) {
       if (enabled.some((p) => p.id === id)) continue;
       enabled.push(resolvePack(id));
     }
 
-    const next = resolveWorkspace(primary, enabled);
+    const next = resolveWorkspace(enabled, customCategories);
     if (next.issues.length > 0) {
       console.warn(`[profile] merge problems:\n  - ${next.issues.join("\n  - ")}`);
     }
     // Same selection in the same order — nothing to do (the "clicked the
     // current card" case, like the old same-profile check).
     if (
-      next.primary.id === workspace.primary.id &&
       next.enabled.length === workspace.enabled.length &&
       next.enabled.every((p, i) => p.id === workspace.enabled[i].id)
     ) {
@@ -262,12 +267,47 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     // Persist first: if writing profile.json fails, nothing else has moved and
     // the next open still resolves the previous selection.
-    await saveProfileFile(projectPath, { primary: next.primary, enabled: next.enabled, customPacks, issues: [] });
+    await saveProfileFile(projectPath, { enabled: next.enabled, customPacks, customCategories, issues: [] });
     setActiveWorkspace(next);
-    set({ profile: next.primary, workspace: next });
+    set({ workspace: next });
     await scaffoldProject(projectPath, next.categories.map((c) => c.id));
     await get().refreshFileTree();
     // The lore index is keyed by category, so it is entirely stale now.
+    await useLoreStore.getState().scanProject(projectPath);
+  },
+
+  setCustomCategories: async (categories) => {
+    const { projectPath, workspace, customPacks, customCategories } = get();
+    if (!projectPath) throw new Error("Open a project before changing its categories.");
+
+    // Run the list through the same validator profile.json goes through, so a
+    // bad id from the UI fails here rather than surviving until the next open.
+    const issues: string[] = [];
+    const cleaned = parseCategoryList(categories, issues);
+    if (issues.length > 0) {
+      throw new Error(`Invalid categories:\n  - ${issues.join("\n  - ")}`);
+    }
+    if (
+      cleaned.length === customCategories.length &&
+      cleaned.every(
+        (c, i) =>
+          c.id === customCategories[i].id &&
+          c.labelZh === customCategories[i].labelZh &&
+          c.labelEn === customCategories[i].labelEn,
+      )
+    ) {
+      return;
+    }
+
+    const next = resolveWorkspace(workspace.enabled, cleaned);
+    // Persist first, same contract as setPacks.
+    await saveProfileFile(projectPath, { enabled: workspace.enabled, customPacks, customCategories: cleaned, issues: [] });
+    setActiveWorkspace(next);
+    set({ workspace: next, customCategories: cleaned });
+    await scaffoldProject(projectPath, next.categories.map((c) => c.id));
+    await get().refreshFileTree();
+    // A removed category hides its entities; an added one may reveal parked
+    // ones — either way the index is stale.
     await useLoreStore.getState().scanProject(projectPath);
   },
 
@@ -408,49 +448,41 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 }));
 
 /**
- * The active profile's document model, **subscribed** — for components.
- *
- * Components must not read `docModel()` from `lib/profile/active` directly: that
- * singleton is not reactive, so a component whose only other subscriptions are
- * unrelated would keep rendering the previous profile's UI after a switch. Going
- * through the store is what the mirrored `profile` state is for. Non-React code
- * (aiTaskStore, agentStore) still uses the singleton — it reads once per run.
- *
- * The reference is stable while the profile is, so this triggers no extra renders.
+ * The document model — app-level and all-on since packs became additive.
+ * Kept as a hook (rather than deleting the seam) so components stay wired for
+ * a future per-project setting; today it never changes, so it subscribes to
+ * nothing.
  */
 export function useDocModel(): DocModel {
-  return useProjectStore((s) => s.profile.docModel);
+  return DEFAULT_DOC_MODEL;
 }
 
 /**
- * The active profile's UI vocabulary in the active language — what a component
- * calls a document, a folder of them, the knowledge base. Same reactivity
- * contract as `useDocModel`; non-React code resolves `profileTerms` against the
- * singleton itself. Memoised so consumers can use the object in dependency
- * arrays without re-firing every render.
+ * The app vocabulary in the active language — what a component calls a
+ * document, a folder of them, the knowledge base. Uniform across projects
+ * (知识库/文档/分组/条目); only the language varies. Memoised so consumers can
+ * use the object in dependency arrays without re-firing every render.
  */
 export function useTerms(): ResolvedTerms {
-  const profile = useProjectStore((s) => s.profile);
   const language = useAppStore((s) => s.language);
-  return useMemo(() => profileTerms(profile, language === "zh-CN"), [profile, language]);
+  return useMemo(() => appTerms(language === "zh-CN"), [language]);
 }
 
 /**
- * The active profile's 【…】 label for one prompt block — the reactive
- * counterpart of `sectionLabel()` for UI copy that *mentions* a block
- * (e.g. "【设定资料】最多占用…" must say 【企业知识库】 in a bid project).
+ * The 【…】 label for one prompt block, for UI copy that *mentions* a block
+ * (e.g. "【知识库】最多占用…"). App-level neutral wording — pack overrides
+ * apply only inside a pack task's own prompt, which UI copy is not.
  */
 export function useSectionLabel(id: SectionId): string {
-  return useProjectStore((s) => s.profile.sections[id] ?? DEFAULT_SECTION_LABELS[id]);
+  return DEFAULT_SECTION_LABELS[id];
 }
 
 /**
  * The main view to actually render, which is not always the stored one.
  *
- * `mainView` is persisted, so it can point at the full outline view after the
- * author switches a project to a profile with no ordered spine — and the rail no
- * longer offers a button to leave it. This falls back instead of rewriting the
- * stored value, so switching back restores where they were.
+ * `mainView` is persisted; the fallback used to matter when a profile could
+ * turn the ordered spine off. The doc model is always all-on now, so this is
+ * a pass-through that keeps the seam (and its consumers) intact.
  *
  * Every consumer must go through here, not `appStore.mainView`: App renders the
  * sidebar off the effective view while IconRail highlights off it, and the two

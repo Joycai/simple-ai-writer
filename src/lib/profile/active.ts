@@ -1,5 +1,6 @@
 /**
- * The active workspace — the merged view of the open project's enabled packs.
+ * The active workspace — the merged view of the open project's enabled packs
+ * and user-defined categories.
  *
  * A module-level singleton rather than a Zustand store, because it is read
  * from places that have no React context and must resolve it synchronously:
@@ -16,41 +17,34 @@
  *
  * Merging lives in ./resolve; this module only holds the result and answers
  * questions about it. The one wrinkle it owns is *pack-scoped resolution*:
- * `sectionLabel` and friends take an optional `packId`, because a task's
- * prompt must speak the wording of the pack that declared the task — a bid
- * task in a novel-primary project says 【企业知识库】, not 【设定资料】.
- * Omitting `packId` resolves against the primary pack, which is both the
- * pre-v2 behaviour and correct for every project-scoped caller (the chat
- * assistant, consistency scan, memory summaries).
+ * `sectionLabel` and friends take an optional `packId` — the pack that
+ * declared the task being assembled (`ResolvedTask.packId`) — because a
+ * task's prompt may speak the wording of its own domain: a bid task says
+ * 【应答大纲】, not 【大纲/写作方向】. Omitting `packId` (or passing an
+ * unknown one) resolves the app-level neutral defaults, which is correct for
+ * every project-scoped caller (the chat assistant, consistency scan, memory
+ * summaries).
  */
 
 import {
+  appTerms,
   NOVEL_PROFILE,
   profileLabel,
-  profileTerms,
+  DEFAULT_DOC_MODEL,
   DEFAULT_SECTION_LABELS,
   type DocModel,
   type SectionId,
   type WorkspaceProfile,
 } from "./model";
 import {
+  BASE_TASK_IDS,
   resolveWorkspace,
   type ResolvedCategory,
   type ResolvedTask,
   type ResolvedWorkspace,
 } from "./resolve";
 
-let active: ResolvedWorkspace = resolveWorkspace(NOVEL_PROFILE, []);
-
-/**
- * The primary pack of the open project — the owner of the non-additive
- * dimensions: docModel, UI terms, the fallback wording. Callers that used to
- * read `activeProfile()` for those read this; callers that meant "the task
- * menu" or "the categories" read the merged accessors below instead.
- */
-export function primaryPack(): WorkspaceProfile {
-  return active.primary;
-}
+let active: ResolvedWorkspace = resolveWorkspace([NOVEL_PROFILE]);
 
 /** The whole merged view — for surfaces that show packs (workspace settings, AI panel grouping). */
 export function activeWorkspace(): ResolvedWorkspace {
@@ -63,7 +57,7 @@ export function setActiveWorkspace(workspace: ResolvedWorkspace): void {
 
 /** Restore the default (novel, alone) — used when a project is closed. */
 export function resetActiveWorkspace(): void {
-  active = resolveWorkspace(NOVEL_PROFILE, []);
+  active = resolveWorkspace([NOVEL_PROFILE]);
 }
 
 /** Look up an enabled pack by id; null when no such pack is enabled. */
@@ -72,7 +66,8 @@ export function packById(id: string): WorkspaceProfile | null {
 }
 
 /**
- * The knowledge-base categories of every enabled pack, merged.
+ * The knowledge-base categories of the merged view: every enabled pack's, the
+ * project's user-defined ones, and the app-level `custom` bucket.
  *
  * It is a function, not a constant, precisely so it can't be captured at
  * module-load time and freeze to whichever workspace happened to be active
@@ -93,7 +88,7 @@ export function findCategory(id: string): ResolvedCategory | null {
 }
 
 /**
- * Whether `id` is a category of any enabled pack — the guard every path that
+ * Whether `id` is a category of the merged view — the guard every path that
  * turns model- or user-supplied text into a lore directory must pass through.
  */
 export function isKnownCategory(id: string): boolean {
@@ -103,22 +98,22 @@ export function isKnownCategory(id: string): boolean {
 /**
  * Where an entity goes when the requested category is unusable — a model that
  * invented an id, or an entity whose folder no longer matches any enabled
- * pack. Prefers an explicit "custom" bucket, since a misc pile is exactly what
- * an unclassifiable entity wants, and otherwise takes the first category.
+ * pack. The app-level `custom` misc bucket, which always exists (resolve.ts
+ * appends it unconditionally).
  */
 export function fallbackCategoryId(): string {
   return isKnownCategory("custom") ? "custom" : active.categories[0].id;
 }
 
 /**
- * The category a "new entity" form starts on: the merged view's first, which
- * is the primary pack's first — each pack orders its most-used category up
- * front (人物 for a novel, NPC for a TTRPG module). Distinct from
- * `fallbackCategoryId`, which is about recovering from bad input rather than
- * picking a sensible default.
+ * The category a "new entity" form starts on: the merged view's first — each
+ * pack orders its most-used category up front (人物 for a novel, NPC for a
+ * TTRPG module), and a packs-free project starts on its first user category
+ * (or `custom`). Distinct from `fallbackCategoryId`, which is about
+ * recovering from bad input rather than picking a sensible default.
  *
- * Safe to index: every pack has at least one category (`parseProfile` rejects
- * an empty list rather than producing one), and the merge keeps them all.
+ * Safe to index: the merge always appends the `custom` bucket, so the list is
+ * never empty.
  */
 export function defaultCategoryId(): string {
   return active.categories[0].id;
@@ -129,9 +124,9 @@ export function defaultCategoryId(): string {
  *
  * With a `packId`, resolves the wording of that pack — the pack that declared
  * the task being assembled (`ResolvedTask.packId`). The chain is pack →
- * primary → defaults, so a pack that overrides only what genuinely differs
- * still produces a complete prompt. Without a `packId`, the primary's wording,
- * which is the pre-v2 behaviour.
+ * neutral defaults, so a pack that overrides only what genuinely differs
+ * still produces a complete prompt. Without a `packId` (base tasks, chat,
+ * project-scoped callers), the neutral defaults.
  */
 export function sectionLabel(id: SectionId, packId?: string): string {
   if (packId) {
@@ -139,36 +134,21 @@ export function sectionLabel(id: SectionId, packId?: string): string {
     const label = pack?.sections[id];
     if (label) return label;
   }
-  return active.primary.sections[id] ?? DEFAULT_SECTION_LABELS[id];
+  return DEFAULT_SECTION_LABELS[id];
 }
 
 /**
- * The system prompt key to fall back to. Same pack → primary chain as
- * `sectionLabel` (every built-in pack declares its own key; the chain is for
- * hand-written packs that leave it out).
- */
-export function systemPromptKeyFor(packId?: string): string {
-  if (packId) {
-    const pack = packById(packId);
-    if (pack) return pack.systemPromptKey;
-  }
-  return active.primary.systemPromptKey;
-}
-
-/**
- * Interpolation params for the built-in instruction templates: the UI terms
- * plus the 【…】 block labels, so a template can say "【{{knowledge}}】中出现
- * 的名称" and read 【企业知识库】 in a bid project.
+ * Interpolation params for the built-in instruction templates: the app
+ * vocabulary plus the 【…】 block labels, so a template can say
+ * "【{{knowledge}}】中出现的名称" and stay correct everywhere.
  *
- * `packId` scopes the *section labels* the way `sectionLabel` does. The terms
- * stay the primary pack's on purpose: they name project-level concepts (what
- * a document is, what the sidebar shows), and a task template mixing another
- * pack's vocabulary into them would contradict the UI around the result.
- * `isZh` comes from the caller because this module deliberately doesn't
- * import i18n (see the header comment).
+ * `packId` scopes the *section labels* the way `sectionLabel` does; the terms
+ * are app-level and uniform (知识库/文档/…). `isZh` comes from the caller
+ * because this module deliberately doesn't import i18n (see the header
+ * comment).
  */
 export function promptParams(isZh: boolean, packId?: string): Record<string, string> {
-  const terms = profileTerms(active.primary, isZh);
+  const terms = appTerms(isZh);
   return {
     doc: terms.doc,
     docs: terms.docs,
@@ -188,27 +168,29 @@ export function promptParams(isZh: boolean, packId?: string): Record<string, str
 
 /**
  * The label of the pack a task came from, when that is worth saying — i.e.
- * when the task is a *secondary* pack's. Null for the primary's own tasks
- * (naming the pack every ordinary 续写 row belongs to is noise) and for a
- * pack that is no longer enabled. For display surfaces (usage table, agent
- * log) that want a run attributed the way the grouped task menu presents it.
+ * when the task is a pack's *own* (标书应答的「应答撰写」). Null for the base
+ * menu (naming a pack on every ordinary 续写 row is noise, even when a pack
+ * re-worded it) and for a pack that is no longer enabled. For display
+ * surfaces (usage table, agent log) that want a run attributed the way the
+ * grouped task menu presents it.
  */
 export function taskPackLabel(task: ResolvedTask, isZh: boolean): string | null {
-  if (task.packId === active.primary.id) return null;
+  if (!task.packId || BASE_TASK_IDS.has(task.id)) return null;
   const pack = packById(task.packId);
   return pack ? profileLabel(pack, isZh) : null;
 }
 
 /**
- * Which novel-shaped document machinery applies — the ordered spine, the
- * prior-document bridge, the rolling memory. The primary pack's alone: a
- * project either is an ordered book or isn't, whatever else it has enabled.
+ * Which document machinery applies — the ordered spine, the prior-document
+ * bridge, the rolling memory. App-level and always all-on since packs became
+ * additive; kept as an accessor so consumers stay wired for a future
+ * per-project setting.
  */
 export function docModel(): DocModel {
-  return active.primary.docModel;
+  return DEFAULT_DOC_MODEL;
 }
 
-/** Every task of every enabled pack, in display order (including hidden ones). */
+/** Every task of the merged view, in display order (including hidden ones). */
 export function profileTasks(): readonly ResolvedTask[] {
   return active.tasks;
 }
@@ -232,12 +214,11 @@ export function findTask(id: string): ResolvedTask | null {
 }
 
 /**
- * The task a panel should start on: the first visible one — which the merge
- * order guarantees is the primary pack's first visible task.
+ * The task a panel should start on: the first visible one, which the merge
+ * order guarantees is the first base task (续写).
  *
- * Safe to index — `parseProfile` refuses to produce an empty task list, and a
- * pack whose every task is hidden would have no usable UI anyway, so the
- * fallback to the first task at all is deliberate.
+ * Safe to index — the base menu always exists, and a workspace whose every
+ * task is hidden can't happen (the base menu keeps its visible entries).
  */
 export function defaultTask(): ResolvedTask {
   return visibleTasks()[0] ?? active.tasks[0];

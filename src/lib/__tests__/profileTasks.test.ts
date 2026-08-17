@@ -90,23 +90,27 @@ describe("built-in tasks preserve the pre-refactor behaviour", () => {
     expect(agent.instructionKey).toBe("ai.instructions.agent");
   });
 
-  it("keeps the fiction wording in novel via instruction-key overrides", () => {
+  it("keeps the fiction wording in novel via base-task overrides", () => {
     // The shared continue/rewrite/summary instructions are domain-neutral; the
-    // novel profile must still send its original fiction wording, and ttrpg
-    // deliberately uses the neutral set (its knowledge block is 模组资料, which
-    // the old novel text mislabelled as 设定资料).
+    // novel pack declares base-task overrides that re-point them at its
+    // original fiction wording. Other packs declare no base overrides, so a
+    // ttrpg or bid project gets the neutral set.
     const keyIn = (profile: { tasks: readonly TaskDef[] }, id: string) =>
       profile.tasks.find((task) => task.id === id)?.instructionKey;
     expect(keyIn(NOVEL_PROFILE, "continue")).toBe("ai.instructions.continueNovel");
     expect(keyIn(NOVEL_PROFILE, "rewrite")).toBe("ai.instructions.rewriteNovel");
     expect(keyIn(NOVEL_PROFILE, "summary")).toBe("ai.instructions.summaryNovel");
-    // polish is genuinely neutral, so novel stays on the shared key.
-    expect(keyIn(NOVEL_PROFILE, "polish")).toBe("ai.instructions.polish");
-    expect(keyIn(TTRPG_PROFILE, "continue")).toBe("ai.instructions.continue");
-    expect(keyIn(BID_PROFILE, "continue")).toBe("ai.instructions.continue");
+    // polish is genuinely neutral, so novel declares no override for it.
+    expect(keyIn(NOVEL_PROFILE, "polish")).toBeUndefined();
+    expect(keyIn(TTRPG_PROFILE, "continue")).toBeUndefined();
+    const ttrpg = resolveWorkspace([TTRPG_PROFILE]);
+    expect(ttrpg.tasks.find((task) => task.id === "continue")?.instructionKey).toBe(
+      "ai.instructions.continue",
+    );
   });
 
   it("gives every built-in task a valid id and a resolvable label", () => {
+    const baseIds = DEFAULT_TASKS.map((task) => task.id);
     for (const profile of BUILTIN_PROFILES) {
       expect(profile.tasks.length).toBeGreaterThan(0);
       const ids = profile.tasks.map((task) => task.id);
@@ -118,8 +122,8 @@ describe("built-in tasks preserve the pre-refactor behaviour", () => {
         expect(task.instructionKey || task.freeform).toBeTruthy();
         // A continuation is by definition an append.
         if (task.continuation) expect(task.target).toBe("append");
-        // An agentTaskId has to resolve within the same profile.
-        if (task.agentTaskId) expect(ids).toContain(task.agentTaskId);
+        // An agentTaskId has to resolve in the merged view (base menu + pack).
+        if (task.agentTaskId) expect([...baseIds, ...ids]).toContain(task.agentTaskId);
       }
     }
   });
@@ -128,13 +132,15 @@ describe("built-in tasks preserve the pre-refactor behaviour", () => {
 describe("the ttrpg profile's domain tasks", () => {
   const ttrpgTask = (id: string) => TTRPG_PROFILE.tasks.find((task) => task.id === id);
 
-  it("adds 遭遇 and 随机表 on top of the shared set", () => {
+  it("adds 遭遇 and 随机表 on top of the app-level base menu", () => {
     const ids = TTRPG_PROFILE.tasks.map((task) => task.id);
     expect(ids).toContain("encounter");
     expect(ids).toContain("randomtable");
-    // ...without losing the domain-neutral ones.
-    expect(ids).toContain("continue");
-    expect(ids).toContain("polish");
+    // The base menu is app-level: the merged view has it without the pack
+    // declaring anything.
+    const merged = resolveWorkspace([TTRPG_PROFILE]).tasks.map((task) => task.id);
+    expect(merged).toContain("continue");
+    expect(merged).toContain("polish");
   });
 
   it("keeps them off the other profiles", () => {
@@ -214,14 +220,6 @@ describe("the copy profile's domain tasks", () => {
 describe("the 周报 profile", () => {
   const task = (id: string) => WEEKLY_PROFILE.tasks.find((t) => t.id === id);
 
-  it("is chronological without rolling memory", () => {
-    // Reports sit in date order and last week's is genuinely the context, but a
-    // single report is far too short to need compacting.
-    expect(WEEKLY_PROFILE.docModel).toEqual({
-      ordered: true, priorContext: true, memory: false,
-    });
-  });
-
   it("leaves 汇总 toolless — the author brings the material", () => {
     const digest = task("digest")!;
     expect(digest.tools).toBe("none");
@@ -244,12 +242,6 @@ describe("the 周报 profile", () => {
 
 describe("the 反馈报告 profile", () => {
   const task = (id: string) => FEEDBACK_PROFILE.tasks.find((t) => t.id === id);
-
-  it("treats each report as independent", () => {
-    expect(FEEDBACK_PROFILE.docModel).toEqual({
-      ordered: false, priorContext: false, memory: false,
-    });
-  });
 
   it("gives both domain tasks read tools", () => {
     // Both have to consult the corpus: a synthesis of feedback the model never
@@ -275,22 +267,6 @@ describe("the 反馈报告 profile", () => {
 
 describe("the 标书应答 profile", () => {
   const task = (id: string) => BID_PROFILE.tasks.find((t) => t.id === id);
-
-  it("has an ordered spine but no prior-context or memory", () => {
-    // A response document mirrors the tender's numbered structure, but each
-    // item stands alone — nothing "precedes" one.
-    expect(BID_PROFILE.docModel).toEqual({
-      ordered: true, priorContext: false, memory: false,
-    });
-  });
-
-  it("keeps the full shared set, including 续写", () => {
-    // Unlike copy: the narrative sections of a 技术方案书 are long-form prose.
-    const ids = BID_PROFILE.tasks.map((t) => t.id);
-    for (const id of ["continue", "polish", "rewrite", "summary"]) {
-      expect(ids).toContain(id);
-    }
-  });
 
   it("keeps its domain tasks off the other profiles", () => {
     for (const profile of BUILTIN_PROFILES.filter((p) => p !== BID_PROFILE)) {
@@ -352,24 +328,6 @@ describe("the 标书应答 profile", () => {
 describe("the 微信公众号 profile", () => {
   const task = (id: string) => WECHAT_PROFILE.tasks.find((t) => t.id === id);
 
-  it("treats articles as independent pieces", () => {
-    // Long-form prose, but published standalone: no spine, nothing precedes an
-    // article, and one fits in context whole.
-    expect(WECHAT_PROFILE.docModel).toEqual({
-      ordered: false, priorContext: false, memory: false,
-    });
-  });
-
-  it("keeps the full shared set, including 续写", () => {
-    // Unlike 文案: an article *is* long-form prose, so 续写 has something to
-    // continue from. With priorContext off it just continues the open article.
-    const ids = WECHAT_PROFILE.tasks.map((t) => t.id);
-    for (const id of ["continue", "polish", "rewrite", "summary"]) {
-      expect(ids).toContain(id);
-    }
-    expect(task("continue")!.continuation).toBe(true);
-  });
-
   it("keeps its domain tasks off the other profiles", () => {
     for (const profile of BUILTIN_PROFILES.filter((p) => p !== WECHAT_PROFILE)) {
       const ids = profile.tasks.map((t) => t.id);
@@ -417,39 +375,41 @@ describe("the 微信公众号 profile", () => {
   });
 });
 
-describe("profile task lists", () => {
-  it("drops 续写 from the copy profile", () => {
-    // A headline has nothing to continue from; the rest of the shared set does
-    // still apply to a piece of copy being edited.
-    expect(COPY_PROFILE.tasks.map((task) => task.id)).not.toContain("continue");
-    expect(COPY_PROFILE.tasks.map((task) => task.id)).toContain("polish");
+describe("workspace task lists", () => {
+  it("declares only its own tasks on the copy pack — the base menu is app-level", () => {
+    expect(COPY_PROFILE.tasks.map((task) => task.id)).toEqual(["headlines", "channel"]);
+    const merged = resolveWorkspace([COPY_PROFILE]).tasks.map((task) => task.id);
+    expect(merged).toContain("continue");
+    expect(merged).toContain("polish");
   });
 
-  it("resolves tasks against the active profile", () => {
-    expect(findTask("continue")).not.toBeNull();
-    setActiveWorkspace(resolveWorkspace(COPY_PROFILE, []));
-    // Not a defensive branch — panel state can outlive the profile that had it.
-    expect(findTask("continue")).toBeNull();
+  it("resolves tasks against the active workspace", () => {
+    setActiveWorkspace(resolveWorkspace([NOVEL_PROFILE, BID_PROFILE]));
+    expect(findTask("respond")).not.toBeNull();
+    setActiveWorkspace(resolveWorkspace([NOVEL_PROFILE]));
+    // Not a defensive branch — panel state can outlive the pack that had it.
+    expect(findTask("respond")).toBeNull();
     expect(findTask("polish")).not.toBeNull();
   });
 
   it("hides the agent task from the pickable list but keeps it resolvable", () => {
-    setActiveWorkspace(resolveWorkspace(NOVEL_PROFILE, []));
+    setActiveWorkspace(resolveWorkspace([NOVEL_PROFILE]));
     expect(visibleTasks().map((task) => task.id)).not.toContain("agent");
     expect(profileTasks().map((task) => task.id)).toContain("agent");
     expect(findTask("agent")).not.toBeNull();
   });
 
-  it("opens on the first visible task", () => {
-    setActiveWorkspace(resolveWorkspace(NOVEL_PROFILE, []));
+  it("opens on the first visible task — 续写, whatever is enabled", () => {
+    setActiveWorkspace(resolveWorkspace([NOVEL_PROFILE]));
     expect(defaultTask().id).toBe("continue");
-    setActiveWorkspace(resolveWorkspace(COPY_PROFILE, []));
-    expect(defaultTask().id).toBe("rewrite");
+    setActiveWorkspace(resolveWorkspace([COPY_PROFILE]));
+    expect(defaultTask().id).toBe("continue");
   });
 
-  it("attributes a secondary pack's task to its pack, and the primary's to nothing", () => {
-    setActiveWorkspace(resolveWorkspace(NOVEL_PROFILE, [BID_PROFILE]));
-    // The primary's own rows would all say "小说" — noise, so null.
+  it("attributes a pack's own task to its pack, and the base menu to nothing", () => {
+    setActiveWorkspace(resolveWorkspace([NOVEL_PROFILE, BID_PROFILE]));
+    // Base rows would all say the same thing — noise, so null; and an
+    // overridden base task (novel's 续写) is still a base row.
     expect(taskPackLabel(findTask("continue")!, true)).toBeNull();
     expect(taskPackLabel(findTask("respond")!, true)).toBe("标书应答");
     expect(taskPackLabel(findTask("respond")!, false)).toBe("Bid Response");

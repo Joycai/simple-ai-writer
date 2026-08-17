@@ -1301,11 +1301,11 @@ export function AiPanel() {
                 <SectionHead label={t("ai.panel.taskLabel", { defaultValue: "任务" })} />
                 {/* Whatever the enabled packs offer, however many — 自定义 is
                     an ordinary entry in that list, not a hardcoded extra
-                    button. The primary pack's menu renders flat (the pre-pack
-                    layout: one pack → nothing changes); each secondary pack's
-                    tasks follow as their own labelled row, so a bid task is
-                    findable without diluting the everyday writing row. */}
-                {taskGroups.map((group, i) => {
+                    button. The base menu (`pack: null`) renders flat — it is
+                    the row every project has; each pack's own tasks follow as
+                    their own labelled row, so a bid task is findable without
+                    diluting the everyday writing row. */}
+                {taskGroups.map((group) => {
                   const renderSegment = (opt: ResolvedTask) => (
                     <button
                       key={opt.id}
@@ -1317,8 +1317,8 @@ export function AiPanel() {
                       {taskLabel(opt, isZh, t)}
                     </button>
                   );
-                  return i === 0 ? (
-                    <div key={group.pack.id} className={styles.taskSegmented}>
+                  return group.pack === null ? (
+                    <div key="base" className={styles.taskSegmented}>
                       {group.tasks.map(renderSegment)}
                     </div>
                   ) : (

@@ -4,14 +4,14 @@
  * Absence is the normal case for a project created before profiles existed,
  * and it means "novel" — so opening an old project stays read-only and behaves
  * exactly as it used to. The file is written only when the author actually
- * changes the pack selection, which is also the only moment a v1 file is
- * rewritten as v2 (see ./file for both formats).
+ * changes the pack selection or the user-defined categories, which is also the
+ * only moment a v1/v2 file is rewritten as v3 (see ./file for the formats).
  */
 
 import { fileExists, makeDir, readFile, writeFile } from "../fs/fileio";
 import { parseProfileFile, type ProfileSelection } from "./file";
 
-const PROFILE_FILE_VERSION = 2;
+const PROFILE_FILE_VERSION = 3;
 
 function profilePath(projectPath: string): string {
   return `${projectPath.replace(/\\/g, "/")}/.ai-writer/profile.json`;
@@ -51,12 +51,12 @@ export async function saveProfileFile(projectPath: string, selection: ProfileSel
   // are the part nothing else can reconstruct, so they are written out in
   // full, whether currently enabled or not (disabling a pack must not delete
   // its definition — the same never-silently-lose-data rule the lore
-  // directories follow).
+  // directories follow). The user-defined categories ride along the same way.
   const body: Record<string, unknown> = {
     version: PROFILE_FILE_VERSION,
-    primary: selection.primary.id,
     enabled: selection.enabled.map((p) => p.id),
   };
   if (selection.customPacks.length > 0) body.packs = selection.customPacks;
+  if (selection.customCategories.length > 0) body.categories = selection.customCategories;
   await writeFile(path, JSON.stringify(body, null, 2) + "\n");
 }

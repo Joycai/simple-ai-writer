@@ -47,9 +47,10 @@ export function Onboarding() {
   const [selected, setSelected] = useState<Provider>("anthropic");
   const [apiKey, setApiKey] = useState("");
   const [saving, setSaving] = useState(false);
-  // The workspace type the project will be created as (Settings → 工作台 can
-  // change it later). Novel is the historical default.
-  const [workspaceId, setWorkspaceId] = useState(NOVEL_PROFILE.id);
+  // The capability packs the project starts with (Settings → 工作台 can
+  // change them later). Multi-select — packs are additive toggles, and a
+  // project may well be "小说 + 周报". Novel is the historical default.
+  const [packIds, setPackIds] = useState<string[]>([NOVEL_PROFILE.id]);
   const [opening, setOpening] = useState(false);
 
   // Auto-show on first run if no provider configured
@@ -101,14 +102,17 @@ export function Onboarding() {
       const store = useProjectStore.getState();
       // Dialog cancelled — nothing opened, stay on this step.
       if (!store.projectPath) return;
-      // Apply the chosen workspace type, but never clobber a folder that
-      // already declares one: an existing non-novel project keeps its own
-      // profile.json regardless of what the chip row says.
-      const picked = BUILTIN_PROFILES.find((p) => p.id === workspaceId);
-      if (picked && picked.id !== store.profile.id && store.profile.id === NOVEL_PROFILE.id) {
-        // The chosen preset, alone — onboarding picks a starting point, it
-        // doesn't compose packs.
-        await store.setPacks(picked.id, [picked.id]);
+      // Apply the chosen packs, but never clobber a folder that already
+      // declares its own: an existing project keeps its profile.json
+      // regardless of what the chip row says. "Still the default" means the
+      // novel pack alone — the state of a folder with no profile.json.
+      const stillDefault =
+        store.workspace.enabled.length === 1 &&
+        store.workspace.enabled[0].id === NOVEL_PROFILE.id;
+      const sameAsPicked =
+        packIds.length === 1 && packIds[0] === NOVEL_PROFILE.id;
+      if (stillDefault && !sameAsPicked) {
+        await store.setPacks(packIds);
       }
       setStep(3);
     } catch (e) {
@@ -208,20 +212,29 @@ export function Onboarding() {
           <div className={styles.formEyebrow}>{t("onboarding.step2Eyebrow")}</div>
           <h2 className={styles.formTitle}>{t("onboarding.step2Title")}</h2>
 
-          {/* What kind of writing this project is — drives the knowledge-base
-              layout, the AI tasks, and the UI vocabulary. */}
+          {/* Which capability packs the project starts with — each adds its
+              predefined tasks and knowledge-base categories. Multi-select;
+              none at all is also valid (a plain knowledge-base project). */}
           <div className={styles.inputBlock}>
             <div className={styles.inputLabel}>{t("onboarding.workspaceLabel")}</div>
             <div className={styles.wsChips}>
-              {BUILTIN_PROFILES.map((p) => (
-                <button
-                  key={p.id}
-                  className={`${styles.wsChip} ${workspaceId === p.id ? styles.wsChipActive : ""}`}
-                  onClick={() => setWorkspaceId(p.id)}
-                >
-                  {profileLabel(p, isZh)}
-                </button>
-              ))}
+              {BUILTIN_PROFILES.map((p) => {
+                const on = packIds.includes(p.id);
+                return (
+                  <button
+                    key={p.id}
+                    className={`${styles.wsChip} ${on ? styles.wsChipActive : ""}`}
+                    aria-pressed={on}
+                    onClick={() =>
+                      setPackIds((ids) =>
+                        on ? ids.filter((id) => id !== p.id) : [...ids, p.id],
+                      )
+                    }
+                  >
+                    {profileLabel(p, isZh)}
+                  </button>
+                );
+              })}
             </div>
             <div className={styles.inputHint}>{t("onboarding.workspaceHint")}</div>
           </div>

@@ -309,7 +309,7 @@ describe("bundleToMessages", () => {
 
     const user = messages[1].content;
     // Layer order: lore → knowledge → outline → recent → task
-    const idxLore = user.indexOf("【设定资料】");
+    const idxLore = user.indexOf("【知识库】");
     const idxKnowledge = user.indexOf("【附加知识】");
     const idxOutline = user.indexOf("【大纲/写作方向】");
     const idxRecent = user.indexOf("【近期内容】");
@@ -321,7 +321,7 @@ describe("bundleToMessages", () => {
     expect(idxTask).toBeGreaterThan(idxRecent);
   });
 
-  it("emits 【全书前情】 before 【近期内容】 and labels the previous chapter's ending", async () => {
+  it("emits 【前文回顾】 before 【近期内容】 and labels the previous document's ending", async () => {
     const bundle = await assembleContext(
       "SYS", makeLoreIndex(), "本章开头正文", "", "Continue.",
       {
@@ -334,8 +334,8 @@ describe("bundleToMessages", () => {
       },
     );
     const user = bundleToMessages(bundle)[1].content;
-    const idxPrior = user.indexOf("【全书前情】");
-    const idxPrevTail = user.indexOf("【上一章结尾·第2章】");
+    const idxPrior = user.indexOf("【前文回顾】");
+    const idxPrevTail = user.indexOf("【上一篇结尾·第2章】");
     const idxRecent = user.indexOf("【近期内容】");
     expect(idxPrior).toBeGreaterThanOrEqual(0);
     expect(idxPrevTail).toBeGreaterThan(idxPrior);
@@ -343,17 +343,18 @@ describe("bundleToMessages", () => {
     expect(user).toContain("上一章的最后一句。");
   });
 
-  // The block headings are the only thing telling the model what each block is,
-  // so they have to follow the project's workspace profile: a TTRPG module
-  // labelled 【上一章结尾】 is actively misleading.
-  describe("with a non-novel workspace profile", () => {
+  // The block headings are the only thing telling the model what each block
+  // is, so a task assembled with its pack's id must speak that pack's wording
+  // — while the same blocks stay neutral without one.
+  describe("with a pack task's packId", () => {
     afterEach(() => resetActiveWorkspace());
 
-    it("labels blocks with the active profile's wording", async () => {
-      setActiveWorkspace(resolveWorkspace(TTRPG_PROFILE, []));
+    it("labels blocks with the declaring pack's wording", async () => {
+      setActiveWorkspace(resolveWorkspace([TTRPG_PROFILE]));
       const bundle = await assembleContext(
         "SYS", makeLoreIndex(), "Aria sang in Ironhold.", "", "Continue.",
         {
+          packId: "ttrpg",
           appendMode: true,
           additionalKnowledge: "Magic is rare.",
           bookContext: {
@@ -364,53 +365,44 @@ describe("bundleToMessages", () => {
         },
       );
       const user = bundleToMessages(bundle)[1].content;
-      expect(user).toContain("【模组资料】");
       expect(user).toContain("【全模组前情】");
       expect(user).toContain("【上一场景结尾·序场】");
-      expect(user).not.toContain("【设定资料】");
-      expect(user).not.toContain("【上一章结尾");
-      // A section the profile does not override keeps the shared default.
+      expect(user).not.toContain("【上一篇结尾");
+      // The knowledge base is never renamed, and a section the pack does not
+      // override keeps the shared default.
+      expect(user).toContain("【知识库】");
       expect(user).toContain("【附加知识】");
     });
 
-    it("falls back to the profile's system prompt when none is active", async () => {
-      setActiveWorkspace(resolveWorkspace(TTRPG_PROFILE, []));
+    it("falls back to the one neutral system prompt when none is active", async () => {
+      setActiveWorkspace(resolveWorkspace([TTRPG_PROFILE]));
       const bundle = await assembleContext("", makeLoreIndex(), "x", "", "Continue.");
       // i18n is mocked to echo the key, so this asserts *which* key is used.
-      expect(bundleToMessages(bundle)[0].content).toBe("ai.instructions.systemTtrpg");
+      expect(bundleToMessages(bundle)[0].content).toBe("ai.instructions.system");
     });
-  });
 
-  // A task speaks the wording of the pack that declared it: a bid task in a
-  // novel-primary project must not label its knowledge block 【设定资料】.
-  describe("with a secondary pack's task (packId)", () => {
-    afterEach(() => resetActiveWorkspace());
-
-    it("labels blocks and picks the system prompt from the task's pack", async () => {
-      setActiveWorkspace(resolveWorkspace(NOVEL_PROFILE, [BID_PROFILE]));
+    it("labels a bid task's blocks with bid wording, others stay neutral", async () => {
+      setActiveWorkspace(resolveWorkspace([NOVEL_PROFILE, BID_PROFILE]));
       const bundle = await assembleContext(
         "", makeLoreIndex(), "Aria sang in Ironhold.", "", "Respond.",
         { packId: "bid", additionalKnowledge: "投标须知。", outline: "第三章应答。" },
       );
       const [system, user] = bundleToMessages(bundle).map((m) => m.content);
-      expect(system).toBe("ai.instructions.systemBid");
-      expect(user).toContain("【企业知识库】");
+      expect(system).toBe("ai.instructions.system");
       expect(user).toContain("【应答大纲】");
-      expect(user).not.toContain("【设定资料】");
-      // A section bid doesn't override falls through to the primary → default
-      // chain, not to nothing.
+      expect(user).toContain("【知识库】");
       expect(user).toContain("【附加知识】");
     });
 
-    it("keeps the primary's wording when no packId is given", async () => {
-      setActiveWorkspace(resolveWorkspace(NOVEL_PROFILE, [BID_PROFILE]));
+    it("keeps the neutral wording when no packId is given", async () => {
+      setActiveWorkspace(resolveWorkspace([NOVEL_PROFILE, BID_PROFILE]));
       const bundle = await assembleContext(
         "", makeLoreIndex(), "Aria sang in Ironhold.", "", "Continue.",
       );
       const [system, user] = bundleToMessages(bundle).map((m) => m.content);
       expect(system).toBe("ai.instructions.system");
-      expect(user).toContain("【设定资料】");
-      expect(user).not.toContain("【企业知识库】");
+      expect(user).toContain("【知识库】");
+      expect(user).not.toContain("【应答大纲】");
     });
   });
 });
@@ -428,7 +420,7 @@ describe("bundleToChatMessages", () => {
     // droppable seed block and the first turn's start.
     expect(seed.messages[1]).toBe(seed.seedContext);
     expect(seed.messages[2]).toBe(seed.question);
-    expect(seed.seedContext!.content).toContain("【设定资料】");
+    expect(seed.seedContext!.content).toContain("【知识库】");
     expect(seed.seedContext!.content).toContain("【近期内容】");
     expect(seed.question.content).toContain("第一个问题");
     // The question is conversation, the seed is retrieval — no bleed-through.

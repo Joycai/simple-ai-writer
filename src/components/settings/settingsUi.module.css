@@ -264,7 +264,7 @@
 }
 .mdSample > :first-child { margin-top: 0; }
 
-/* Workspace-profile card: name + 「current」 + category tags */
+/* Capability-pack card: name + enable toggle + category tags */
 .profileHead {
   display: flex;
   align-items: center;
@@ -276,12 +276,7 @@
   font-weight: 600;
   color: var(--color-text-primary);
 }
-.cardActive .profileName { color: var(--color-accent); }
-
-.profileCurrent {
-  font-size: var(--font-size-xs);
-  color: var(--color-accent);
-}
+.cardEnabled .profileName { color: var(--color-accent); }
 
 .tagRow {
   display: flex;
@@ -299,10 +294,10 @@
   font-size: var(--font-size-xs);
 }
 
-/* Multi-pack workspace: the pack card is a div (its enable toggle nests
-   inside), an enabled secondary is a weaker echo of the primary highlight,
-   and the parked-data note marks a disabled pack whose directories still
-   hold entities. */
+/* Capability packs: the pack card is a div (its enable toggle nests inside);
+   packs are equal toggles, so "enabled" is the one highlighted state, and the
+   parked-data note marks a disabled pack whose directories still hold
+   entities. */
 .cardClickable {
   cursor: pointer;
   user-select: none;
@@ -311,7 +306,8 @@
 
 .cardEnabled,
 .cardEnabled:hover {
-  border-color: var(--color-border-strong);
+  border-color: var(--color-accent);
+  background: var(--color-accent-tint);
 }
 
 .packToggle {

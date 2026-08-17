@@ -154,24 +154,24 @@ Asking for N assembles the context **once** and then fires N independent `stream
 
 `MAX_DRAFTS` and the draft types live in `lib/ai/drafts` rather than in either store because both ends need them — `appStore` owns the setting, `aiTaskStore` owns the run — and importing across would close a cycle. It also keeps the pure parts testable without a store that touches `localStorage`/`document` at module load.
 
-### Workspace profiles (工作台档案)
+### Capability packs (能力包)
 
-- **Location** — `src/lib/profile/` (`model.ts` pack types + built-ins + validation, `resolve.ts` the multi-pack merge, `file.ts` profile.json v1/v2 parsing, `active.ts` singleton holding the merged `ResolvedWorkspace`, `store.ts` persistence)
-- **Stored at** — `.ai-writer/profile.json`, per project. v2 is a selection — `{version: 2, primary, enabled: [ids], packs: [custom]}`; a v1 file (the whole object is one profile) still reads as that pack alone, and is only rewritten as v2 when the author changes the selection. **Absent means the novel pack alone**, so every project created before profiles existed keeps behaving identically.
+- **Location** — `src/lib/profile/` (`model.ts` pack types + built-ins + validation, `resolve.ts` the multi-pack merge, `file.ts` profile.json v1/v2/v3 parsing, `active.ts` singleton holding the merged `ResolvedWorkspace`, `store.ts` persistence)
+- **Stored at** — `.ai-writer/profile.json`, per project. v3 is the current format — `{version: 3, enabled: [ids], packs: [custom], categories: [user-defined]}`; a v2 file (`{version: 2, primary, enabled, packs}`) reads with its retired primary normalised to "first enabled", and a v1 file (the whole object is one profile) still reads as that pack alone. Old files are only rewritten as v3 when the author changes the selection. **Absent means the novel pack alone**, so every project created before profiles existed keeps its categories and task menu.
 
-A project **enables one or more capability packs**; each pack declares one kind of writing, so a new domain is data rather than new branches in `TaskKind`. `resolveWorkspace(primary, enabled)` merges them: **categories union** (deduped case-insensitively by id — a shared id like `style` is the same directory; first declarer labels it, `packIds` records every declarer), **tasks union** (first declarer wins; the base 续写/润色/… set every pack re-tunes dedupes silently to the primary's copy, and each `ResolvedTask` carries the `packId` that `sectionLabel`/`profileSystemPrompt` resolve wording against), while **the primary pack alone** owns `docModel`, `terms` and the fallback wording — a project either is an ordered book or isn't, whatever else it enables.
+Packs are **equal, purely additive toggles**: enabling one adds its predefined tasks and its knowledge-base categories, nothing more. There is deliberately no "primary pack" any more — it used to own the non-additive dimensions (UI vocabulary, doc model, the AI's persona), which made packs unequal and made the agent assume a domain role the author never chose. Those dimensions are app-level now: every project's knowledge store is a **知识库**, every file a 文档 (`appTerms`/`useTerms`), the document model is always all-on, and the system prompt is one neutral writing collaborator (see below). A project with **zero packs** is valid and useful: the base task menu, the user's own categories, the `custom` misc bucket.
+
+`resolveWorkspace(enabled, userCategories)` merges: **categories** = every enabled pack's (union, deduped case-insensitively by id — a shared id like `style` is the same directory; first declarer labels it, `packIds` records every declarer) + the project's **user-defined categories** (from profile.json's top-level `categories`; marked `userDefined`, the only ones the settings UI lets the author rename/remove) + the app-level **`custom` bucket, always last** (so `fallbackCategoryId()` always has a misc pile). **Tasks** = the app-level base menu (`DEFAULT_TASKS`: 续写/润色/改写/总结/自定义/agent — always present) + each pack's own tasks; a pack declaring a *base* id **overrides** that base task in place (first enabled pack wins — this is how novel re-points 续写/改写/总结 at fiction wording), any other colliding id is dropped loudly. Each `ResolvedTask` carries the `packId` that `sectionLabel` resolves 【…】 wording against; base tasks nobody overrode carry none and speak the neutral defaults.
 
 Per pack:
 
 | Field | Drives |
 | --- | --- |
 | `categories` | The `.ai-writer/lore/<category>` folders — the knowledge-base layout, the lore scan, the category pickers, and the `category` enum in the agent's lore tools |
-| `sections` | The 【…】 block labels in the assembled prompt (`bundleToMessages`), e.g. 【上一场景结尾】 instead of 【上一章结尾】 |
-| `tasks` | What the author can ask for — see below |
-| `docModel` | Which novel-shaped document machinery applies — see below |
-| `systemPromptKey` | Which i18n system prompt is the fallback when no prompt template is active |
+| `sections` | The 【…】 block labels *for this pack's tasks* (`bundleToMessages`), e.g. 【上一场景结尾】 instead of 【上一篇结尾】. `knowledge` is never overridden by built-ins — the knowledge base is called 知识库 everywhere |
+| `tasks` | Base-task overrides and the pack's own tasks — see below |
 
-Built-ins: `novel` (the default), `ttrpg` (跑团模组), `copy` (文案), `wechat` (微信公众号), `weekly` (周报), `feedback` (反馈报告) and `bid` (标书应答). Selection is Settings → 工作台 — click a card to make that pack primary, toggle a card to enable/disable it as a secondary — which calls `projectStore.setPacks(primaryId, enabledIds)`: persist (v2) → scaffold the union's folders → rescan. **Non-destructive** — a disabled pack's category folders and entities stay on disk (the pane notes "N 个分类目录仍有内容") and reappear on re-enabling; they are simply not scanned meanwhile. The AI panel groups the task menu by pack (`visibleTaskGroups`): the primary's menu flat, each secondary's own tasks under a pack-name eyebrow.
+Built-ins: `novel` (the default), `ttrpg` (跑团模组), `copy` (文案), `wechat` (微信公众号), `weekly` (周报), `feedback` (反馈报告) and `bid` (标书应答). Selection is Settings → 工作台 — each card is one on/off toggle — which calls `projectStore.setPacks(enabledIds)`: persist (v3) → scaffold the union's folders → rescan. The same pane (and the lore wall's 「+ 新建分类」 chip) manages the user-defined categories via `projectStore.setCustomCategories`, with folder ids derived by `suggestCategoryId` so the author only ever types a name. **Non-destructive** — a disabled pack's category folders and entities stay on disk (the pane notes "N 个分类目录仍有内容") and reappear on re-enabling, and removing a user category only hides its directory; nothing is scanned meanwhile. The AI panel groups the task menu by origin (`visibleTaskGroups`): the base menu flat (`pack: null` — an overridden base task still renders here), each pack's own tasks under a pack-name eyebrow.
 
 #### Tasks (`tasks`)
 
@@ -190,7 +190,7 @@ The task `id` is load-bearing in three places, so renaming one is a breaking cha
 
 `draftCountFor` derives its rule from `tools`, not from a list of task names: **any tool-using task produces a single draft.** Every round of the loop reports into one shared `agentLog`, so parallel runs would interleave into an unreadable log; a `full` toolset additionally can't have concurrent runs touching one lore folder or racing approval cards. Stating it this way covers tasks nobody has written yet.
 
-`DEFAULT_TASKS` is the shared starting set (续写/改写/润色/总结/自定义/agent) — domain-neutral, so profiles spread it and add or filter. `COPY_PROFILE` drops 续写: a headline has nothing to continue from. `TTRPG_PROFILE` adds two, and the pair shows how `tools` is the load-bearing choice:
+`DEFAULT_TASKS` is the app-level base menu (续写/改写/润色/总结/自定义/agent) — domain-neutral and present in every project, so a pack declares only its *own* tasks (plus any base-id overrides; novel's three instruction re-points are the only built-in ones). Packs can no longer drop a base task — the menu is uniform, and 续写 in a copy project simply continues the open document. `TTRPG_PROFILE`'s pair shows how `tools` is the load-bearing choice:
 
 | Task | Shape | Why |
 | --- | --- | --- |
@@ -216,29 +216,17 @@ Both are `freeform`: the author supplies the situation ("下水道，被跟踪")
 
 **Ids can outlive the profile that defined them** (persisted panel selection, a log entry, a prompt template's `scene`), so `findTask()` returns null rather than throwing and every caller decides what to do — the panel falls back to `defaultTask()`, the log shows the raw id, `runTask` reports `ai.errors.taskNotFound`.
 
-#### The document model (`docModel`)
+#### The document model (`DocModel`)
 
-Three flags, all defaulting to `true` so a profile that says nothing keeps the original feature set:
+Three flags — `ordered` (volume/chapter spine + full outline view), `priorContext` (【前文回顾】 + 【上一篇结尾】 and the 承接/独立 picker), `memory` (per-document rolling summary, 【前情提要】). Since packs became purely additive the model is **app-level and always all-on** (`DEFAULT_DOC_MODEL`): every project gets the machinery and simply doesn't use what it doesn't need. Turning them off per-domain required a primary pack to arbitrate, and hiding working features bought less than the concept cost. The type, `docModel()` and `useDocModel()` survive as the seam a future *per-project* setting would plug into — consumers still read flags instead of assuming them, so re-introducing a switch is one edit, not an archaeology dig.
 
-| Flag | On | Off |
-| --- | --- | --- |
-| `ordered` | Volume/chapter spine (`.ai-writer/outline.json`), the full outline view | The rail drops the outline view; `App.tsx` falls back to the editor if the persisted `mainView` pointed at it |
-| `priorContext` | A continuation gets 【全书前情】 + 【上一章结尾】; the 承接/独立 picker appears | `buildBookContext` is skipped and the layer is dropped from the budget |
-| `memory` | Per-document rolling summary (`.ai-writer/memory/`, 【前情提要】) | `loadMemory` is skipped and the AiPanel memory section is hidden |
+Details that are easy to get wrong:
 
-`priorContext` requires `ordered` — "the previous document" needs an order — and `parseProfile` disables it if a file asks for one without the other.
-
-Turning a flag off removes **both** the context it injects and the UI that configures it. The pairing is the point: a hidden memory section whose memory still loads would keep feeding `memoryChars` into the context forecast, showing the author a layer `runTask` never sends. Note `ordered` gates the *full outline view* (the book spine) but **not** the `outline` side tab — despite the shared name, that one lists headings inside the current document, which any long piece has.
-
-Components read the flags through `useDocModel()` (in `projectStore`), never `docModel()` from `lib/profile/active`: the singleton isn't reactive, so a component with no other relevant subscription would keep rendering the previous profile's UI after a switch. Non-React callers (`aiTaskStore`, `agentStore`) use the singleton — they read once per run.
-
-Two details that are easy to get wrong:
-
-- **`active.ts` is a module singleton, not a store.** The lore scanner, the agent's tool-schema builder, and the prompt assembler all need it synchronously from non-React code (mirrors how `i18n` is consumed). `projectStore` mirrors it as `profile` state *purely so components re-render*, and is the **only** writer of both — syncing them anywhere else lets the UI and the prompt disagree about which profile is in force.
+- **`active.ts` is a module singleton, not a store.** The lore scanner, the agent's tool-schema builder, and the prompt assembler all need it synchronously from non-React code (mirrors how `i18n` is consumed). `projectStore` mirrors it as `workspace` state *purely so components re-render*, and is the **only** writer of both — syncing them anywhere else lets the UI and the prompt disagree about which packs are in force.
 - **Anything module-level must resolve categories per call.** `registry.ts` is a `const` evaluated once at import, so its lore-tool `enum`s (via `profileCategoryParams`) and the `{{categories}}` placeholder in tool descriptions are both substituted in `getToolDefinitions()`, returning a copy. The same hazard applies to any future top-level constant: use `loreCategories()` at call time, never at module scope.
-- **Never resolve a system prompt with `ai.instructions.system`.** That key is the *novel* prompt; filling the slot with it defeats the profile before `bundleToMessages` can fall back. Call `profileSystemPrompt()` (`lib/context/rag`). This was a real regression — a TTRPG project was prompted as a novel while the unit test passed, because it exercised the fallback in isolation rather than the path `aiTaskStore` actually takes. `profileSystemPrompt.test.ts` now scans the source for that key.
+- **Never resolve a system prompt with `ai.instructions.system` directly.** The prompt is one neutral collaborator identity now, but `profileSystemPrompt()` (`lib/context/rag`) stays the single seam — it is where a per-project override would land, and history says callers drift: a TTRPG project was once prompted as a novel because `aiTaskStore` reached for the key while the then-per-pack fallback sat unexercised. `profileSystemPrompt.test.ts` still scans the source for the key. The packs' former persona prompts are gone; their domain rules (bid's deviation discipline, wechat's 合规, feedback's anti-overclaiming…) live in the pack tasks' *instructions*, where they only fire on the tasks they belong to.
 
-`profile.json` is hand-editable, and its category ids become **directory names** — so it is parsed defensively (`parseProfile` drops bad entries, rejects case-insensitive duplicates, caps the count) and re-validated in Rust (`valid_category` in `commands.rs`, which is the actual boundary). A file is read as a *patch on the built-in it names*: `{"id":"ttrpg"}` resolves back to that profile exactly.
+`profile.json` is hand-editable, and its category ids become **directory names** — so it is parsed defensively (`parseProfile`/`parseCategoryList` drop bad entries, reject case-insensitive duplicates, cap the count; the retired pack fields `terms`/`docModel`/`systemPromptKey` are ignored with a note) and re-validated in Rust (`valid_category` in `commands.rs`, which is the actual boundary). A pack entry is read as a *patch on the built-in it names*: `{"id":"ttrpg"}` resolves back to that pack exactly.
 
 ### Agent output: snapshots, not deltas
 

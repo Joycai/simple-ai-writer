@@ -4,9 +4,9 @@
 
 ## Add a new AI task type
 
-Tasks are profile data (`docs/architecture.md` → Tasks), so this is an edit to one profile — not to a union, the panel, or the run loop.
+Tasks are pack data (`docs/architecture.md` → Tasks), so this is an edit to one pack — not to a union, the panel, or the run loop. A pack's `tasks` list carries only its *own* tasks (and any overrides of a base-menu id); the base 续写/润色/… menu is app-level (`DEFAULT_TASKS`) and needs no declaring.
 
-1. Add a `TaskDef` to the profile's `tasks` in `src/lib/profile/model.ts`:
+1. Add a `TaskDef` to the pack's `tasks` in `src/lib/profile/model.ts`:
    - `instructionKey` — an `ai.instructions.*` key holding the prompt (or `freeform: true` to let the author type it)
    - `tools` — `none` for a plain completion, `read` to let it consult lore/chapters first, `full` for the write-capable toolset. Anything but `none` runs the agent loop and produces a single draft
    - `target` — `append` / `replace` / `detached`, i.e. where an accepted result goes
@@ -20,22 +20,21 @@ Task ids are used as prompt `scene` keys and as the `token_usage.task` value, so
 
 **Still app-global:** the built-in prompt list in Settings → Prompt (`BUILTIN_PROMPTS_CONFIG` in `settings/panes/PromptsPane.tsx`) is a static set of scenes. A profile-specific task can still be overridden by a template whose `scene` matches its id, but it won't be pre-listed there yet.
 
-## Add a new workspace profile (新的写作类型)
+## Add a new capability pack (新的写作类型)
 
-A profile is data — reach for this instead of adding branches for a new kind of writing (文案 / 周报 / 报告 …). See `docs/architecture.md` → Workspace profiles.
+A pack is data — reach for this instead of adding branches for a new kind of writing (文案 / 周报 / 报告 …). See `docs/architecture.md` → Capability packs. A pack is **purely additive**: it contributes tasks and knowledge-base categories, and may reword the 【…】 labels *for its own tasks*. It does not set the UI vocabulary, the document model, or the AI's persona — those are app-level; domain rules belong in the pack tasks' instruction texts (see how `bidRespond` carries the deviation discipline).
 
 1. Add a `WorkspaceProfile` const in `src/lib/profile/model.ts` and append it to `BUILTIN_PROFILES`:
-   - `categories` — knowledge-base folders. Ids must match `[A-Za-z0-9][A-Za-z0-9_-]*` and be ≤40 chars (they become directory names, and `scaffold_project` re-checks the same rule in Rust); order matters, the first is the "new entity" default
-   - `sections` — only the 【…】 block labels that differ from the novel wording; anything omitted inherits `DEFAULT_SECTION_LABELS`
-   - `docModel` — which novel-shaped machinery applies: `ordered` (volume/chapter spine + the full outline view), `priorContext` (【全书前情】 + 【上一章结尾】 on a continuation), `memory` (the per-document rolling summary). Omit it for `DEFAULT_DOC_MODEL` (all on). `priorContext` requires `ordered` — "previous document" needs an order, and `parseProfile` disables it otherwise
-   - `systemPromptKey` — an `ai.instructions.*` key
-2. Add that system prompt to **both** locales (`en.json`, `zh-CN.json`) under `ai.instructions`. Reference the profile's own section labels in the prompt text, not the novel ones.
-3. Nothing else is required — the picker (Settings → 工作台), the scaffold, the lore scan, the category pickers, the agent tool schemas and the document-model gating all read the profile at runtime.
-4. Tests: extend `src/lib/__tests__/profile.test.ts` (the built-in loop already validates ids/uniqueness for every profile). `profileStore.test.ts` covers the `profile.json` read/write path and `projectStoreProfile.test.ts` the open/close/switch ordering.
+   - `categories` — knowledge-base folders. Ids must match `[A-Za-z0-9][A-Za-z0-9_-]*` and be ≤40 chars (they become directory names, and `scaffold_project` re-checks the same rule in Rust); order matters, the first is the "new entity" default. Don't declare `custom` — the misc bucket is app-level and always present
+   - `sections` — only the 【…】 block labels that differ from the neutral defaults, applied to this pack's own tasks; anything omitted inherits `DEFAULT_SECTION_LABELS`. Don't override `knowledge` — the knowledge base is called 知识库 everywhere
+   - `tasks` — the pack's own tasks, plus a base-id entry only to *override* a base task's instruction (the way novel re-points 续写 at `continueNovel`)
+2. Add the task instructions to **both** locales (`en.json`, `zh-CN.json`) under `ai.instructions`, folding the domain's non-negotiables into them — there is no per-pack system prompt to carry them.
+3. Nothing else is required — the toggles (Settings → 工作台), the scaffold, the lore scan, the category pickers and the agent tool schemas all read the merged workspace at runtime.
+4. Tests: extend `src/lib/__tests__/profile.test.ts` (the built-in loop already validates ids/uniqueness for every pack). `resolveWorkspace.test.ts` covers the merge, `profileStore.test.ts` the `profile.json` read/write path and `projectStoreProfile.test.ts` the open/close/switch ordering.
 
-For a **project-specific** layout with no code change, hand-write `.ai-writer/profile.json`; a file naming a built-in patches it (`{"id":"ttrpg","sections":{"prevTail":"上一幕结尾"}}`) — `categories` and `sections` both layer over that built-in's, so overriding one label keeps the rest of its wording.
+For **project-specific categories** no code (and no pack) is needed: the lore wall's 「+ 新建分类」 chip and Settings → 工作台 manage user-defined categories persisted in profile.json's top-level `categories`. For a project-specific *pack*, hand-write `.ai-writer/profile.json`; a `packs[]` entry naming a built-in patches it (`{"id":"ttrpg","sections":{"prevTail":"上一幕结尾"}}`) — `categories` and `sections` both layer over that built-in's, so overriding one label keeps the rest of its wording.
 
-Tasks are profile data too — see **Add a new AI task type** above.
+Tasks are pack data too — see **Add a new AI task type** above.
 
 ## Change how many drafts a task produces
 
