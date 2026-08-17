@@ -47,6 +47,7 @@ import { sumTokens, taskDocRevision } from "../../lib/agent/logModel";
 import { useImeGuard } from "../../lib/ime";
 import type { AgentEvent } from "../../lib/agent/events";
 import { foldBoundary } from "../../lib/agent/transcriptFold";
+import { splitMentions } from "../../lib/agent/mentionText";
 import {
   CONTEXT_SEGMENT_ORDER,
   computeContextBreakdown,
@@ -55,6 +56,7 @@ import {
 } from "../../lib/agent/contextBreakdown";
 import { AGENT_ASSIST_PRESET } from "../../lib/agent/presets";
 import { getToolDefinitions } from "../../lib/agent/registry";
+import { routePlannedTools } from "../../lib/agent/routing";
 import { estimateToolsTokens } from "../../lib/ai/tokenEstimate";
 import { inputCeilingFor } from "../../lib/context/budget";
 import { ReasoningControls } from "./ReasoningControls";
@@ -369,12 +371,19 @@ export function AgentChat() {
   const chatMeta = useAgentStore((s) => s.chatMeta);
   const chatContextVersion = useAgentStore((s) => s.chatContextVersion);
   const contextUtilization = useAppStore((s) => s.contextUtilization);
-  // The registry patches lore-category enums per call, but that only swaps
-  // category names in and out — noise against several KB of schema, and not
-  // worth re-measuring the whole toolset on every lore scan.
+  // Measured off the *routed* toolset — what sendChat actually puts on the wire
+  // (agentStore routeTools with the session's sub-agent overrides), not the raw
+  // preset: routing strips read_image/generate_image and appends delegate, and
+  // a 系统+工具 segment that ignored the chips it sits next to drifted from the
+  // request it claims to describe. The registry still patches lore-category
+  // enums per call, but that only swaps category names in and out — noise
+  // against several KB of schema, and not worth re-measuring per lore scan.
   const toolTokens = useMemo(
-    () => estimateToolsTokens(getToolDefinitions(AGENT_ASSIST_PRESET.tools)),
-    [],
+    () =>
+      estimateToolsTokens(
+        getToolDefinitions(routePlannedTools(AGENT_ASSIST_PRESET, effectiveSubs, models).tools),
+      ),
+    [effectiveSubs, models],
   );
   const context = useMemo(
     () =>
@@ -421,7 +430,7 @@ export function AgentChat() {
                   <div className={styles.quoteBody}>{turn.quote}</div>
                 </div>
               )}
-              <div className={styles.userTurn}>{turn.text}</div>
+              <div className={styles.userTurn}><MentionText text={turn.text} /></div>
               {/* Below the words, unlike an assistant turn's pictures: there the
                   prose is a caption for the image, here it is the instruction
                   the image came with. */}
@@ -600,6 +609,7 @@ export function AgentChat() {
               items={mentionItems}
               usedKeys={refKeys}
               activeIndex={mention.active}
+              preferAbove
               onPick={(item) => void handlePickMention(item)}
               onDismiss={mention.close}
             />
@@ -666,7 +676,10 @@ function ContextBar({ context }: { context: ContextBreakdown }) {
   return (
     <div className={styles.ctx}>
       <button
-        className={`${styles.ctxBar} ${context.over ? styles.ctxBarOver : ""}`}
+        // Warned once past the *mark* the bar itself draws (COMPACT_TRIGGER),
+        // not once packed full — a bar standing beyond its own line while
+        // looking calm was the state 2c exists to fix.
+        className={`${styles.ctxBar} ${context.willCompact ? styles.ctxBarWarn : ""}`}
         onClick={() => setShowLegend((v) => !v)}
         aria-expanded={showLegend}
         title={t("ai.chat.ctxToggle", { defaultValue: "展开/收起上下文构成" })}
@@ -693,7 +706,10 @@ function ContextBar({ context }: { context: ContextBreakdown }) {
       <div className={styles.ctxMeter}>
         <span>
           {t("ai.chat.contextMeter", { defaultValue: "上下文" })}{" "}
-          {formatTokens(context.usedTokens)} / {formatTokens(context.ceilingTokens)} tk
+          <span className={context.willCompact ? styles.ctxCountWarn : undefined}>
+            {formatTokens(context.usedTokens)}
+          </span>{" "}
+          / {formatTokens(context.ceilingTokens)} tk
         </span>
         <span className={styles.ctxWindow}>
           {t("ai.chat.ctxWindow", {
@@ -715,6 +731,18 @@ function ContextBar({ context }: { context: ContextBreakdown }) {
                 <span className={styles.ctxLegendValue}>{formatTokens(seg.tokens)}</span>
               </span>
             );
+          })}
+        </div>
+      )}
+
+      {/* What crossing the mark means, said once and only to someone looking:
+          the legend is the bar's opened state, and permanent chrome above the
+          input costs message space on every session (see the legend note). */}
+      {showLegend && context.willCompact && (
+        <div className={styles.ctxExplain}>
+          {t("ai.chat.ctxCompactExplain", {
+            defaultValue:
+              "越过竖线后，下一轮把最早的对话归纳成摘要——执行日志里出现「已归纳前 N 轮对话」，摘要段随之变宽。",
           })}
         </div>
       )}
@@ -750,6 +778,23 @@ function TurnImages({ paths, align }: { paths?: string[]; align?: "start" | "end
         </button>
       ))}
     </div>
+  );
+}
+
+/**
+ * A sent message's text with its `@[名称]` references in the accent color —
+ * the same amber the ref chips wore before sending, so the bubble reads as the
+ * record of that composition. Plain spans keep `.userTurn`'s pre-wrap intact.
+ */
+function MentionText({ text }: { text: string }) {
+  return (
+    <>
+      {splitMentions(text).map((seg, i) =>
+        seg.kind === "mention"
+          ? <span key={i} className={styles.mentionRef}>{seg.text}</span>
+          : <span key={i}>{seg.text}</span>,
+      )}
+    </>
   );
 }
 

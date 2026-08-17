@@ -627,13 +627,14 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       // Kept as valid JSON rather than pre-truncated: the log formats these for
       // display (lib/agent/logFormat), and it can only pull out the identifying
       // argument if the object still parses. Bounded by what the model emits.
-      const argumentSummary = tc.arguments.length > TOOL_ARGS_DETAIL_CHARS
+      const argsTruncated = tc.arguments.length > TOOL_ARGS_DETAIL_CHARS;
+      const argumentSummary = argsTruncated
         ? tc.arguments.slice(0, TOOL_ARGS_DETAIL_CHARS)
         : tc.arguments;
 
       opts.onEvent({
         kind: "tool-step",
-        step: { round, toolCallId: tc.id, name: tc.name, argumentSummary, status: "running" },
+        step: { round, toolCallId: tc.id, name: tc.name, argumentSummary, status: "running", argsTruncated },
         at: Date.now(),
       });
 
@@ -664,6 +665,8 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
           // Enough for the expanded row to be worth opening — a 200-char slice
           // stopped inside the first paragraph of a chapter read.
           resultSummary: result.content.slice(0, TOOL_RESULT_DETAIL_CHARS),
+          argsTruncated,
+          resultTruncated: result.content.length > TOOL_RESULT_DETAIL_CHARS,
         },
         at: Date.now(),
       });

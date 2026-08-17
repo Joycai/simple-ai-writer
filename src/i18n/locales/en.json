@@ -959,6 +959,9 @@
         "delete": "Delete"
       }
     },
+    "mention": {
+      "badgeImage": "image"
+    },
     "chat": {
       "tab": "Assistant",
       "title": "Assistant",
@@ -997,6 +1000,7 @@
       "ctxWindow": "window {{n}}",
       "ctxToggle": "Show/hide the context breakdown",
       "ctxCompactAt": "Past here the earliest turns get folded away",
+      "ctxCompactExplain": "Past the tick, the next turn folds the oldest conversation into a summary — the log shows \"Compacted first N rounds\" and the summary segment widens.",
       "sendHint": "Enter to send · Shift+Enter for newline",
       "showEarlier": "{{n}} earlier exchanges",
       "collapseEarlier": "Collapse earlier turns",

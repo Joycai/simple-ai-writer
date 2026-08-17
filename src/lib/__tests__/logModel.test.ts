@@ -178,6 +178,49 @@ describe("buildLogModel — subagents", () => {
   });
 });
 
+describe("buildLogModel — round limits", () => {
+  it("hoists the cap decision out of the round it was emitted after", () => {
+    // The runtime emits round-limit between rounds — after round 1's work,
+    // before round 2's start — so left to the stream's grouping it would land
+    // inside round 1's body and read as one of that round's own acts.
+    const log: AgentEvent[] = [
+      runStart(),
+      roundStart(1),
+      tool("read_file", "a", 1),
+      { kind: "round-limit", roundsUsed: 1, decision: { action: "extend", rounds: 4 }, at: at() },
+      roundStart(2),
+      tool("write_note", "b", 2),
+      { kind: "run-done", inputTokens: 100, outputTokens: 50, at: at() },
+    ];
+    const model = buildLogModel(log, false);
+    expect(model.roundLimits).toHaveLength(1);
+    expect(model.roundLimits[0].decision).toEqual({ action: "extend", rounds: 4 });
+    for (const round of model.rounds) {
+      expect(round.events.some((e) => e.kind === "round-limit")).toBe(false);
+    }
+    expect(model.preamble.some((e) => e.kind === "round-limit")).toBe(false);
+  });
+
+  it("keeps repeated extensions in order", () => {
+    const log: AgentEvent[] = [
+      runStart(),
+      roundStart(1),
+      { kind: "round-limit", roundsUsed: 1, decision: { action: "extend", rounds: 2 }, at: at() },
+      roundStart(2),
+      { kind: "round-limit", roundsUsed: 2, decision: { action: "finish" }, at: at() },
+    ];
+    const model = buildLogModel(log, false);
+    expect(model.roundLimits.map((e) => e.roundsUsed)).toEqual([1, 2]);
+  });
+
+  it("catches a limit that arrives before any round — nothing is dropped", () => {
+    const log: AgentEvent[] = [
+      { kind: "round-limit", roundsUsed: 8, decision: { action: "pause" }, at: at() },
+    ];
+    expect(buildLogModel(log, false).roundLimits).toHaveLength(1);
+  });
+});
+
 describe("delegate argument parsing", () => {
   it("reads kind and task out of well-formed arguments", () => {
     const raw = JSON.stringify({ kind: "vision", task: "描述这张图" });

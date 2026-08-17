@@ -156,7 +156,36 @@ wire 历史本就分离，聊天记录的显示不受压缩影响。
 assistant/tool 配对；`MIN_KEEP_TURNS` 恒成立;插桩后边界仍然正确；归纳失败
 回退不改历史；注入账本的去重、折叠回收、内容变更重注入。
 
-## 8. 非目标
+## 8. 上下文构成条的口径（`lib/agent/contextBreakdown.ts` + AgentChat `ContextBar`）
+
+§4 的压缩机制在 composer 上的可视化。写下口径本身，因为每一条都是改错过一次
+之后定下来的：
+
+- **画的是「下一次请求将携带什么」**，按当前 `chatHistory` 实测（按 `chatMeta`
+  的对象身份分类每条消息 → 系统+工具 / 摘要 / 种子 / 注入 / 对话），不是本会话
+  累计消耗。旧文本计量表用 `chatUsage.inputTokens`（跨轮累加），几轮后读作
+  `400k / 128k`——它回答的唯一问题「还剩多少空间」被答反了。
+- **分母是输入上限**（`inputCeilingFor` = 窗口 × 利用率，`lib/context/budget.ts`），
+  不是裸窗口：压缩与运行时都按上限规划，对着窗口画会让压缩在条的 35% 处
+  无端触发。工具 schema 计入固定成本（预检门也数它们）。
+- **工具段按「实际发出的工具集」计量**（`routePlannedTools` = `routeTools`
+  预判 workspace 存在——chat 在运行开始时必建 workspace，而从组件里拿真句柄
+  会把「渲染一个仪表」变成「创建 workspace」的副作用）。响应会话内子代理开关
+  （`disabledSubAgents`）：路由会剥 `read_image`/图像工具、追加 `delegate`，
+  无视旁边芯片的 系统+工具 段与它声称描述的请求是两回事。
+- **`willCompact` vs `over`**：`willCompact`（> 上限 × `COMPACT_TRIGGER`，即条上
+  画的那条竖线）驱动警示视觉——竖线就是触发线，只在 100% 才警示意味着条可以
+  站在自己画的线外面还一脸平静；`over`（> 上限）保留为几何事实（空余为 0、
+  刻度改按 used 缩放），蕴含 `willCompact`。
+- **模型未声明窗口时整条隐藏**（`contextSize <= 0` 返 null）——分母会退到假设值，
+  对着猜出来的分母画精确的条，是错误的自信。
+- `context-compacted` 行留在它先于的那一轮轮体内（不上提为带间分隔）：设计稿
+  就把「已归纳前 N 轮对话」画作轮体内的一行，落在哪一轮只是压缩何时发生的
+  记录。与之相对，`round-limit` 在 logModel 里上提为手风琴收尾行——它发生在
+  两轮**之间**，是对整个手风琴的注脚（见 `docs/design-system.md` → AI 面板
+  设计语言）。
+
+## 9. 非目标
 
 - ~~**会话持久化**~~（已另行完成 — 项目库 `chat_sessions` 表保最近 5 个会话：
   `lib/agent/chatSession.ts` 序列化（meta 的对象身份引用 ↔ 历史下标互转，

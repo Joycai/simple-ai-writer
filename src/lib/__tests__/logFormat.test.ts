@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { formatToolArgs, formatToolArgsDetail, formatToolResult } from "../agent/logFormat";
+import {
+  detailTruncated,
+  formatToolArgs,
+  formatToolArgsDetail,
+  formatToolResult,
+} from "../agent/logFormat";
 
 describe("formatToolArgs", () => {
   it("reduces a Windows path argument to its chapter name", () => {
@@ -80,5 +85,24 @@ describe("formatToolResult", () => {
 
   it("returns empty for a missing result", () => {
     expect(formatToolResult(undefined)).toBe("");
+  });
+});
+
+describe("detailTruncated", () => {
+  it("trusts the runtime's flag over any length", () => {
+    // A short body can still be a cut one (the flag says so)…
+    expect(detailTruncated(true, "short", 400)).toBe(true);
+    // …and a long body can be complete: pretty-printing re-indents past the
+    // cap without losing a character. This is the false positive the flag fixes.
+    expect(detailTruncated(false, "x".repeat(500), 400)).toBe(false);
+  });
+
+  it("falls back to the length heuristic for pre-flag persisted events", () => {
+    expect(detailTruncated(undefined, "x".repeat(400), 400)).toBe(true);
+    expect(detailTruncated(undefined, "x".repeat(399), 400)).toBe(false);
+  });
+
+  it("never badges a capless block", () => {
+    expect(detailTruncated(undefined, "x".repeat(10_000))).toBe(false);
   });
 });

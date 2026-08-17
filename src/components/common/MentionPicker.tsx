@@ -14,10 +14,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { FileText, Image as ImageIcon } from "lucide-react";
 import { useImageDataUrl } from "../lore/useImageDataUrl";
 import { imageToDataUrl, type ProjectFile } from "../../lib/fs/images";
 import type { LoreEntity } from "../../lib/lore";
+// The pure vocabulary function, not stores/projectStore's useTerms hook: this
+// module's helpers (findMention, filterMentions) are imported by node-side
+// tests, and a store import would drag appStore's module-scope theme work —
+// which touches `document` — into that chain. Same words either way: useTerms
+// is appTerms keyed on the app language, which i18n already knows.
+import { appTerms } from "../../lib/profile/model";
 import styles from "./MentionPicker.module.css";
 
 export type MentionItem =
@@ -184,13 +191,23 @@ interface MentionPickerProps {
   usedKeys: Set<string>;
   /** Row the host's ↑/↓ has highlighted, and what Enter will pick. */
   activeIndex?: number;
+  /**
+   * Anchor the list above the input instead of below. The chat composer sits at
+   * the panel's bottom edge, so above is where the room is — and where the 2b
+   * design puts it. The lore modals keep the below-first default: their
+   * textareas are mid-modal and a list opening upwards would cover the field
+   * being typed in.
+   */
+  preferAbove?: boolean;
   onPick: (item: MentionItem) => void;
   onDismiss: () => void;
 }
 
 export function MentionPicker({
-  anchorRef, items, usedKeys, activeIndex = 0, onPick, onDismiss,
+  anchorRef, items, usedKeys, activeIndex = 0, preferAbove = false, onPick, onDismiss,
 }: MentionPickerProps) {
+  const { t, i18n } = useTranslation();
+  const terms = appTerms(i18n.language.startsWith("zh"));
   const [style, setStyle] = useState<React.CSSProperties>({});
   const listRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLButtonElement>(null);
@@ -200,17 +217,23 @@ export function MentionPicker({
     activeRef.current?.scrollIntoView({ block: "nearest" });
   }, [activeIndex]);
 
-  // Below the anchor, flipping above when the viewport is short on room.
+  // Below the anchor by default, flipping above when the viewport is short on
+  // room; `preferAbove` swaps the roles and falls back below the same way.
   useEffect(() => {
     const el = anchorRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - r.bottom - 8;
     const height = Math.min(240, window.innerHeight * 0.4);
-    setStyle(spaceBelow >= height
-      ? { top: r.bottom + 4, left: r.left, width: r.width }
-      : { bottom: window.innerHeight - r.top + 4, left: r.left, width: r.width });
-  }, [anchorRef, items.length]);
+    const above = { bottom: window.innerHeight - r.top + 4, left: r.left, width: r.width };
+    const below = { top: r.bottom + 4, left: r.left, width: r.width };
+    if (preferAbove) {
+      const spaceAbove = r.top - 8;
+      setStyle(spaceAbove >= height ? above : below);
+    } else {
+      const spaceBelow = window.innerHeight - r.bottom - 8;
+      setStyle(spaceBelow >= height ? below : above);
+    }
+  }, [anchorRef, items.length, preferAbove]);
 
   // Outside click closes — but a click inside the list is a selection.
   useEffect(() => {
@@ -244,8 +267,16 @@ export function MentionPicker({
               ? <EntityThumb avatarPath={item.entity.avatarPath} />
               : <FileThumb file={item.file} />}
             <span className={styles.pickerName}>{mentionLabel(item)}</span>
+            {/* Lore keeps its category verbatim — that is the author's own
+                vocabulary. File kinds are ours and get the workspace's words:
+                terms.doc rather than 章节, because the workspace is a free file
+                manager with no chapter model to classify against. */}
             <span className={styles.pickerBadge}>
-              {item.type === "lore" ? item.entity.category : item.file.kind}
+              {item.type === "lore"
+                ? item.entity.category
+                : item.file.kind === "image"
+                  ? t("ai.mention.badgeImage", { defaultValue: "图片" })
+                  : terms.doc}
             </span>
           </button>
         );
