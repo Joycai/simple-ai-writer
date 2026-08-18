@@ -111,6 +111,21 @@
 .previewBlock :is(table, img),
 .previewBlockClipped :is(table, img) { max-width: 100%; }
 
+/* An .html proposal rendered live (sandboxed iframe). Explicit heights: the
+   frame sits in a plain card body, so the flex sizing it has in the editor
+   pane doesn't apply — without a height an iframe defaults to 150px. The
+   toggle trades viewport, not clipping. */
+.htmlFrame,
+.htmlFrameTall {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--color-border-soft);
+  height: 240px;
+}
+.htmlFrameTall {
+  height: 520px;
+}
+
 /* Move: from → to, on one line when it fits, wrapping rather than truncating —
    the tail of a path is the part that changed. */
 .moveBlock {
