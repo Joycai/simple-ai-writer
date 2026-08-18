@@ -22,6 +22,18 @@
 }
 .trigger:hover { border-color: var(--color-border-panel); background: var(--color-bg-hover); }
 .trigger:focus-visible { border-color: var(--color-sienna); outline: none; }
+.trigger:disabled { opacity: 0.6; cursor: default; }
+
+/* 纸面变体 (lore 模态 footer 的受控实例): 常显描边 chip + 放宽的最小宽度，
+   内容语汇（点/供应商/模型/上下文徽标/菜单）与助手头部完全一致。 */
+.triggerPaper {
+  border-color: var(--color-border);
+  background: var(--color-card);
+  min-width: 240px;
+  max-width: 380px;
+  padding: 6px 10px 6px 8px;
+}
+.triggerPaper:hover:not(:disabled) { border-color: var(--color-border-strong); background: var(--color-card); }
 
 .dot {
   width: 5px;
@@ -101,6 +113,17 @@
 }
 @keyframes modelPickerIn {
   from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* footer 里的实例向上展开 (设计稿 03 v4 屏 10 的上拉菜单) */
+.popoverUp {
+  top: auto;
+  bottom: calc(100% + 6px);
+  animation-name: modelPickerInUp;
+}
+@keyframes modelPickerInUp {
+  from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: none; }
 }
 
@@ -314,3 +337,10 @@
   transition: color var(--transition-fast);
 }
 .manageBtn:hover { color: var(--color-sienna-hover); }
+
+/* 受控实例的脚注 (设计稿屏 10): 默认跟随全局设置 */
+.followNote {
+  margin-left: auto;
+  font: italic 400 10px/1.5 var(--font-serif);
+  color: var(--color-text-hint);
+}
