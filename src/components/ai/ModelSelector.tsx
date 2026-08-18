@@ -52,11 +52,41 @@ interface Row {
   provider: Provider | undefined;
 }
 
-export function ModelSelector() {
+export interface ModelSelectorProps {
+  /**
+   * Controlled mode (the lore modals' per-task picker): selection state lives
+   * with the caller and NEVER writes back to the global active model. Without
+   * these the component is the assistant header's global picker, as before.
+   */
+  value?: string;
+  onChange?: (id: string) => void;
+  /** Restrict the list (e.g. multimodal-only, image models). Default: all. */
+  models?: Model[];
+  disabled?: boolean;
+  /** Open the popover above the trigger — for pickers sitting in a footer. */
+  openUp?: boolean;
+  /** Paper-surface trigger: bordered chip on --color-card, wider min-width. */
+  paper?: boolean;
+}
+
+export function ModelSelector({
+  value,
+  onChange,
+  models: modelsOverride,
+  disabled,
+  openUp,
+  paper,
+}: ModelSelectorProps = {}) {
   const { t } = useTranslation();
-  const { models, providers, activeModelId, setActiveModel } = useAiStore();
+  const { models: allModels, providers, activeModelId, setActiveModel } = useAiStore();
   const openSettings = useAppStore((s) => s.openSettings);
   const modelPickerNonce = useAppStore((s) => s.modelPickerNonce);
+
+  // Controlled = the caller owns the selection (and the global side effects —
+  // ⌘M, the "open the picker" nonce, 管理供应商 — stay with the header instance).
+  const controlled = onChange !== undefined;
+  const models = modelsOverride ?? allModels;
+  const selectedId = controlled ? (value ?? "") : activeModelId;
 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -82,14 +112,16 @@ export function ModelSelector() {
 
   // Someone elsewhere in the assistant asked for the picker — e.g. the failed
   // run's 换模型重试. Skips the initial render, whose nonce is the seed value.
+  // Controlled instances ignore it: the nonce addresses the header picker.
   const seenNonce = useRef(modelPickerNonce);
   useEffect(() => {
+    if (controlled) return;
     if (modelPickerNonce === seenNonce.current) return;
     seenNonce.current = modelPickerNonce;
     setOpen(true);
-  }, [modelPickerNonce]);
+  }, [modelPickerNonce, controlled]);
 
-  const activeModel = models.find((m) => m.id === activeModelId);
+  const activeModel = models.find((m) => m.id === selectedId);
   const activeProvider = activeModel
     ? providers.find((p) => p.id === activeModel.providerId)
     : undefined;
@@ -128,9 +160,9 @@ export function ModelSelector() {
 
   useEffect(() => {
     // Land on the current model when opening; clamp when filtering shrinks the list.
-    const current = flat.findIndex((r) => r.model.id === activeModelId);
+    const current = flat.findIndex((r) => r.model.id === selectedId);
     setActiveIndex(current >= 0 ? current : 0);
-  }, [flat, activeModelId]);
+  }, [flat, selectedId]);
 
   // Keep the highlighted row in view during keyboard traversal.
   useEffect(() => {
@@ -140,7 +172,11 @@ export function ModelSelector() {
   }, [activeIndex, open]);
 
   const choose = (model: Model) => {
-    setActiveModel(model.id);
+    if (controlled) {
+      onChange!(model.id);
+    } else {
+      setActiveModel(model.id);
+    }
     noteModelUsed(model.id);
     setOpen(false);
   };
@@ -150,7 +186,9 @@ export function ModelSelector() {
   // drawer, whose handler sits on window in the bubble phase (see App.tsx).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "m") {
+      // ⌘M belongs to the assistant header's global picker alone — a modal's
+      // controlled instance answering it too would toggle both at once.
+      if (!controlled && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "m") {
         e.preventDefault();
         setOpen((v) => !v);
         return;
@@ -164,7 +202,7 @@ export function ModelSelector() {
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [open]);
+  }, [open, controlled]);
 
   // Dismiss on outside click / focus leaving the popover.
   useEffect(() => {
@@ -197,8 +235,9 @@ export function ModelSelector() {
   return (
     <div className={styles.root} ref={rootRef}>
       <button
-        className={styles.trigger}
+        className={`${styles.trigger} ${paper ? styles.triggerPaper : ""}`}
         onClick={() => setOpen((v) => !v)}
+        disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
         title={activeModel ? `${activeProvider?.name ?? ""} / ${activeModel.name}` : undefined}
@@ -215,13 +254,17 @@ export function ModelSelector() {
           <span className={styles.triggerEmpty}>{t("ai.panel.selectModel")}</span>
         )}
         <span className={styles.triggerRight}>
-          <span className={styles.shortcut}>{modKeyM}</span>
+          {!controlled && <span className={styles.shortcut}>{modKeyM}</span>}
           <ChevronDown size={13} strokeWidth={1.6} />
         </span>
       </button>
 
       {open && (
-        <div className={styles.popover} role="listbox" onKeyDown={onListKeyDown}>
+        <div
+          className={`${styles.popover} ${openUp ? styles.popoverUp : ""}`}
+          role="listbox"
+          onKeyDown={onListKeyDown}
+        >
           <div className={styles.searchRow}>
             <Search size={13} strokeWidth={1.7} className={styles.searchIcon} />
             <input
@@ -276,7 +319,7 @@ export function ModelSelector() {
                       const idx = flat.indexOf(row);
                       const label = parseModelLabel(row.model.name, row.model.modelId);
                       const ctx = contextLabel(row.model.contextSize);
-                      const selected = row.model.id === activeModelId;
+                      const selected = row.model.id === selectedId;
                       return (
                         <button
                           key={row.model.id}
@@ -332,12 +375,20 @@ export function ModelSelector() {
             <span className={styles.hint}>
               esc {t("ai.modelPicker.navClose", { defaultValue: "关闭" })}
             </span>
-            <button
-              className={styles.manageBtn}
-              onClick={() => { setOpen(false); openSettings("providers-models"); }}
-            >
-              {t("ai.modelPicker.manageProviders", { defaultValue: "管理供应商" })}
-            </button>
+            {/* Settings is a full-window surface — from inside a modal the jump
+                would land underneath it, so only the header instance offers it. */}
+            {controlled ? (
+              <span className={`${styles.hint} ${styles.followNote}`}>
+                {t("lore.run.modelFollowsGlobal", { defaultValue: "默认跟随全局设置" })}
+              </span>
+            ) : (
+              <button
+                className={styles.manageBtn}
+                onClick={() => { setOpen(false); openSettings("providers-models"); }}
+              >
+                {t("ai.modelPicker.manageProviders", { defaultValue: "管理供应商" })}
+              </button>
+            )}
           </div>
         </div>
       )}
