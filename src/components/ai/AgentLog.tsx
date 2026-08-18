@@ -405,6 +405,23 @@ function AgentLogRow({ row, showTime, runStatus }: {
       // index matched. A miss (0 entities) is reported just as loudly as a hit.
       return (
         <>
+          {/* A named document with no window: the assistant was told which file
+              is open and left to read it if the question turns out to be about
+              it (lib/context/docFocus). Muted, because nothing was spent. */}
+          {event.recentChars === 0 && event.documentName && (
+            <li className={`${styles.row} ${styles.rowMuted}`}>
+              <Marker state="done" />
+              <span className={styles.rowName}>
+                {t("ai.agent.log.docNamed", { defaultValue: "当前文档" })}
+                <span className={styles.rowArgs}> · {event.documentName}</span>
+                <span className={styles.rowArgs}>
+                  {" · "}
+                  {t("ai.agent.log.docNotInjected", { defaultValue: "未注入正文" })}
+                </span>
+              </span>
+              {time}
+            </li>
+          )}
           {event.recentChars > 0 && (
             <li className={styles.row}>
               <Marker state="done" />

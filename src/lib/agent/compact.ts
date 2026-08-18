@@ -84,8 +84,23 @@ export interface ChatSessionMeta {
    * forgotten, and it can always read again.
    */
   injected: Map<string, InjectionRecord>;
-  /** Document the last injected window belongs to — a switch re-injects. */
+  /**
+   * Document the conversation has been *told about* — by brief or by body. A
+   * switch to another file sends at least its brief (lib/context/docFocus).
+   */
   lastDocPath: string | null;
+  /**
+   * Document whose text is actually in the context, as opposed to merely
+   * named. Null while only the brief was sent, which is the default: a later
+   * turn that does point at the manuscript (「把这一段…」) injects the window
+   * then, and this is how it knows it hasn't already.
+   *
+   * Like the lore ledger, it is not revised when compaction folds the message
+   * that carried the window away — the model can read the file again, and
+   * re-injecting on every turn after a compaction would be worse than the
+   * occasional extra read.
+   */
+  bodyDocPath: string | null;
 }
 
 export function createSessionMeta(): ChatSessionMeta {
@@ -96,6 +111,7 @@ export function createSessionMeta(): ChatSessionMeta {
     turnStarts: [],
     injected: new Map(),
     lastDocPath: null,
+    bodyDocPath: null,
   };
 }
 

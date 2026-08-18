@@ -169,7 +169,7 @@ describe("assembleTurnInjection", () => {
     expect(inj.docChars).toBe(0);
   });
 
-  it("adds file, recap and window blocks on a document switch", async () => {
+  it("adds file, recap and window blocks when the turn asks for the body", async () => {
     const memory = {
       sourcePath: "writing/ch2.md",
       coveredChars: 5000,
@@ -183,10 +183,7 @@ describe("assembleTurnInjection", () => {
       excludeDirs: new Set(),
       doc: {
         filePath: "/proj/writing/ch2.md",
-        documentText: doc,
-        memory,
-        contextChars: 500,
-        memoryBudgetChars: 1000,
+        body: { documentText: doc, memory, contextChars: 500, memoryBudgetChars: 1000 },
       },
     });
     expect(inj.text).toContain("/proj/writing/ch2.md");
@@ -195,5 +192,23 @@ describe("assembleTurnInjection", () => {
     expect(inj.docChars).toBe(500);
     expect(inj.memoryChars).toBeGreaterThan(0);
     expect(inj.loreReport.entities).toHaveLength(0);
+  });
+
+  it("names the document without its text when only a brief is sent", async () => {
+    // The default on a document switch: the assistant is told where the author
+    // is, and reads the file itself if the question turns out to be about it.
+    const inj = await assembleTurnInjection({
+      loreIndex: makeIndex(),
+      matchTarget: "没有实体匹配",
+      excludeDirs: new Set(),
+      doc: {
+        filePath: "writing/ch2.md",
+        brief: "标题: 第二章\n篇幅: 约 3,000 字",
+      },
+    });
+    expect(inj.text).toContain("writing/ch2.md");
+    expect(inj.text).toContain("第二章");
+    expect(inj.docChars).toBe(0);
+    expect(inj.memoryChars).toBe(0);
   });
 });

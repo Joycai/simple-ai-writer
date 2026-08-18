@@ -286,6 +286,22 @@ export function parseSteps(body: string): TaskStep[] {
    > 但那样建出来的计划模型没参与、也不会照着走，只是一份骗人的进度条。
    > 在此之前，工作区只在**模型**认为活儿够大时才出现，作者没有办法对一件被判定为
    > 「小事」的工作说「这个要跟踪」，跑偏之后也没有办法把计划要回来。
+   >
+   > **改成模式开关（2026-08-18）**：按钮换成「计划模式」开关（`PlanModeChip`，与子代理
+   > chips 并排、共用 `toggleChip.module.css`），状态在 `agentStore.planMode`。
+   > 按钮的问题是**时机**：它只能在活儿已经说完之后补一份计划，那份计划针对的是一段
+   > 转录而不是一次请求，作者发下一条消息时模型又回到原来的做法。开关则作用在作者
+   > **将要**提的那件事上——只要它开着，`sendChat` 就在每一轮的 wire content 后面缀上
+   > `ai.instructions.planMode`（`chatRefs.withDirective`），模型先立清单再动手，并在
+   > 执行期用 `task_progress` 维护它。
+   >
+   > 三个具体决定：**每轮都发**，不是开启时宣告一次——system 层是唯一每轮存活的层，
+   > 而这个开关是会话中途拨的，宣告一次到第三轮就被埋了，恰好是模型决定要不要立
+   > 清单的时候；**只缀在 wire content 上**，`ChatMessagePayload.text` 保持原样，因为
+   > 那一半是检索的 matchTarget，每轮重复一段固定指令只会污染知识库匹配；
+   > **会话级、新会话归零**（与 chips、`autoApprove` 同一条理由：它说的是「本次对话」）。
+   > 计划完不停下来等确认——作者要的是「模型 plan task 来完成任务」，
+   > 停下来等确认那是另一回事，真要停有 `propose_*` 审批卡在管。
    新建的工作区**不含任何占位步骤**：伪造一条「开始任务」会被 `parseSteps` 数进去，
    于是一个没人规划过的任务显示 0/1，模型还会去勾一条它没写过的步骤。
 4. **大小熔断**：note 正文 ≤ `100_000` 字符，`task.md` ≤ `20_000` 字符；超限返回 tool error 而非截断（截断会让模型以为写成功了）。
@@ -402,7 +418,7 @@ scratchpad?: "off" | "offered" | "required";
 
 **机制**（`runtime.ts`，与 checkpoint 同构、同样发出即撤）：轮循环维护 `roundsSinceTaskTouch`，工具轮里有成功的 `task_plan`/`task_progress` 就归零，否则 +1；达到 `TASK_NUDGE_ROUNDS = 3` 且 `loadTaskDoc` 读出的清单仍有 pending/in_progress 步骤时，注入 `ai.instructions.taskChecklistNudge`——**附当前清单快照**（带序号和勾选态），让模型对照实际进展逐条补勾，而不是凭记忆乱勾。注入后计数器归零，再沉默 3 轮才会重发。条件里带 `!withholdTools`（末轮收走工具时提醒只会制造死路）和 `preset.scratchpad === "required"`（与 checkpoint 同一开关，整体可回退）。
 
-**提示词层同日配套**（这是第一道防线，nudge 是兜底）：`ai.instructions.agent` 新增「任务清单」一节（system 层是唯一每轮存活的层），`task_plan`/`task_progress` 的 description 补调用时机，`makePlan` 补执行期约定，`scratchpadCheckpoint` 顺带要求补勾清单。测试：`agentRuntimeTaskNudge.test.ts`。
+**提示词层同日配套**（这是第一道防线，nudge 是兜底）：`ai.instructions.agent` 新增「任务清单」一节（system 层是唯一每轮存活的层），`task_plan`/`task_progress` 的 description 补调用时机，`makePlan`（今为 `planMode`）补执行期约定，`scratchpadCheckpoint` 顺带要求补勾清单。测试：`agentRuntimeTaskNudge.test.ts`。
 
 ### 4.3 轮数上限：新增「存盘暂停」
 

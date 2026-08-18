@@ -296,6 +296,7 @@ A picture reaches a model exactly one way: an `image_url` part on a `role: "user
   3. Recent document context (last 2400 chars before selection)
   4. Task instruction (continue/polish/rewrite/summary/custom)
 - **Output** → `ContextBundle` → formatted to messages via `bundleToMessages()`; carries a `loreReport` (what was injected/dropped and why) rendered in `AiPanel`
+- **The chat is the exception to layer 3.** A writing task is invoked *on* the open document, so it gets the window. The conversational assistant is not: it defaults to a **brief** of the open file (path, title, length, heading outline, plus a line saying the text was withheld and which path to `read_file`), and injects the window only when the turn points at the document — a pinned selection, or wording like 这一段 / 本章 / 全文 / 继续写 / `this chapter`. Decision layer in `src/lib/context/docFocus.ts`, wiring in `agentStore.sendChat`, rationale in `docs/chat-memory-plan.md` §5a. The body can arrive on any later turn (`ChatSessionMeta.bodyDocPath` remembers whether it already did)
 
 #### Facet-aware lore selection (`loreSelect.ts`)
 

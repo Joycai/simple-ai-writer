@@ -101,6 +101,27 @@ export interface TaskExtras {
    * file only spends tokens.
    */
   currentFilePath?: string;
+  /**
+   * A description of the current document to send *instead of* its text —
+   * title, length, heading outline (see ./docFocus). Rendered under the same
+   * 【当前文件】 block, right after the path.
+   *
+   * The chat's default: most questions are not about the file that happens to
+   * be open, and a tool-using assistant can read it the moment it decides one
+   * is. Pass `contextChars: 0` alongside it — a brief and a window are two
+   * answers to the same question.
+   */
+  documentBrief?: string;
+  /**
+   * Extra text folded into the lore **match target** without being injected.
+   *
+   * The match target is otherwise the selection plus the text around it, which
+   * is right for a writing task (the lore that matters is the lore in the
+   * passage) and wrong for a conversation, where the question is the thing
+   * worth matching on — and, once the document window stops being injected by
+   * default, the only thing left to match on at all.
+   */
+  extraMatchText?: string;
 }
 
 export interface ContextBundle {
@@ -119,6 +140,8 @@ export interface ContextBundle {
   recentContext: string;
   /** Project-relative path of the current document (tool-using tasks only). */
   currentFilePath?: string;
+  /** The current document described rather than injected — see TaskExtras. */
+  documentBrief?: string;
   /**
    * The pack that declared the task this bundle was assembled for — the
    * wording anchor `bundleToMessages` resolves 【…】 labels against. Absent
@@ -355,7 +378,7 @@ export async function assembleContext(
   const MATCH_TAIL_CHARS = 500;
   const matchTarget = selection + (
     endIdx >= 0 ? documentText.slice(Math.max(0, endIdx - MATCH_TAIL_CHARS), endIdx) : ""
-  );
+  ) + (extras?.extraMatchText ? `\n${extras.extraMatchText}` : "");
   const { text: loreSnippets, report: loreReport } = await selectLore(
     matchTarget,
     loreIndex,
@@ -419,6 +442,7 @@ export async function assembleContext(
     systemPrompt, loreSnippets, loreReport, priorChaptersSummary, prevChapterTail,
     prevChapterTitle, storySummary, recentContext, taskText, outline,
     additionalKnowledge, estimatedTokens, currentFilePath: extras?.currentFilePath,
+    documentBrief: extras?.documentBrief,
     packId,
   };
 }
@@ -451,9 +475,12 @@ function bundleContextSections(bundle: ContextBundle): string[] {
 
   // First, because it tells a tool-using task which of the files it is about to
   // list is the one it was invoked on.
-  if (bundle.currentFilePath) {
-    parts.push(`【${sectionLabel("currentFile", bundle.packId)}】
-${bundle.currentFilePath}`);
+  // The brief (when there is one) continues the same block: it is more about
+  // the same file, and a second 【…】 header for "and here is what else we know
+  // about the path we just gave you" reads as a different subject.
+  if (bundle.currentFilePath || bundle.documentBrief) {
+    const body = [bundle.currentFilePath, bundle.documentBrief].filter(Boolean).join("\n");
+    parts.push(`【${sectionLabel("currentFile", bundle.packId)}】\n${body}`);
   }
   if (bundle.loreSnippets) {
     parts.push(`【${sectionLabel("knowledge", bundle.packId)}】\n${bundle.loreSnippets}`);
@@ -513,9 +540,12 @@ export interface TurnInjection {
  * unchanged context appends nothing and the wire history stays append-only
  * (replacing an old block would invalidate the prompt-cache prefix).
  *
- * `doc` is passed only when the focused document changed since the last
- * injection: the seeded window belongs to the old document, and the model
- * otherwise has no idea the author is now somewhere else.
+ * `doc` is passed when the conversation has to be told something about the
+ * open document: that the focus moved to another file (its `brief`), or that
+ * this turn is about the manuscript after all and wants the text (`body`).
+ * Either half may be sent alone — a switch onto a file nobody asked about is
+ * brief-only, and 「把这一段改紧凑些」 five turns into the same file is
+ * body-only.
  */
 export async function assembleTurnInjection(opts: {
   loreIndex: LoreIndex;
@@ -525,10 +555,23 @@ export async function assembleTurnInjection(opts: {
   loreBudgetChars?: number;
   doc?: {
     filePath: string;
-    documentText: string;
-    memory: DocMemory | null;
-    contextChars?: number;
-    memoryBudgetChars?: number;
+    /**
+     * The document described rather than injected (./docFocus). Sent when the
+     * focus moved to a file the conversation has not been told about — the
+     * assistant has to know *where* the author is even on turns whose question
+     * has nothing to do with the manuscript.
+     */
+    brief?: string | null;
+    /**
+     * The window + recap, for a turn that actually points at the document.
+     * Null: the brief alone, and `read_file` if the assistant wants more.
+     */
+    body?: {
+      documentText: string;
+      memory: DocMemory | null;
+      contextChars?: number;
+      memoryBudgetChars?: number;
+    } | null;
   } | null;
 }): Promise<TurnInjection> {
   const { text: loreSnippets, report } = await selectLore(
@@ -545,23 +588,25 @@ export async function assembleTurnInjection(opts: {
   let docChars = 0;
   let memoryChars = 0;
   if (opts.doc) {
-    parts.push(`【${sectionLabel("currentFile")}】\n${opts.doc.filePath}`);
+    const head = [opts.doc.filePath, opts.doc.brief].filter(Boolean).join("\n");
+    parts.push(`【${sectionLabel("currentFile")}】\n${head}`);
   }
   if (loreSnippets) {
     parts.push(`【${sectionLabel("knowledge")}】\n${loreSnippets}`);
   }
-  if (opts.doc) {
-    const span = opts.doc.contextChars ?? MAX_CONTEXT_CHARS;
-    const len = opts.doc.documentText.length;
+  const body = opts.doc?.body;
+  if (body) {
+    const span = body.contextChars ?? MAX_CONTEXT_CHARS;
+    const len = body.documentText.length;
     const detailStart = Math.max(0, len - span);
-    const storySummary = opts.doc.memory
-      ? selectMemoryForContext(opts.doc.memory, detailStart, opts.doc.memoryBudgetChars)
+    const storySummary = body.memory
+      ? selectMemoryForContext(body.memory, detailStart, body.memoryBudgetChars)
       : "";
     if (storySummary) {
       parts.push(`【${sectionLabel("priorRecap")}】\n${storySummary}`);
       memoryChars = storySummary.length;
     }
-    const recent = opts.doc.documentText.slice(detailStart).trim();
+    const recent = body.documentText.slice(detailStart).trim();
     if (recent) {
       parts.push(`【${sectionLabel("recent")}】\n${recent}`);
       docChars = recent.length;

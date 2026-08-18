@@ -260,6 +260,22 @@ interface AgentState {
   /** Subagents temporarily disabled for the live session (session-level override). */
   disabledSubAgents: SubAgentKind[];
   toggleSubAgent: (kind: SubAgentKind) => void;
+  /**
+   * 计划模式: while on, every turn of this conversation carries a standing
+   * instruction to open a task checklist with `task_plan` and keep it live with
+   * `task_progress` while working.
+   *
+   * A mode, not a one-off request. The button it replaced fired a single
+   * "make a plan" turn, so planning was something the author asked for *after*
+   * the fact — about work already described, in a conversation that then went
+   * back to its old habits. As a switch it applies to the work the author is
+   * about to ask for, which is when a plan is worth anything.
+   *
+   * Session-level like the subagent chips: it says "this conversation", so a
+   * new one starts back at off.
+   */
+  planMode: boolean;
+  setPlanMode: (on: boolean) => void;
 
   /**
    * Author pressed 本次都批准 on a card: everything of that kind from the same
@@ -528,6 +544,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   chatTaskWorkspace: null,
   chatSessionId: null,
   chatSessions: [],
+  planMode: false,
+  setPlanMode: (on) => set({ planMode: on }),
   disabledSubAgents: [],
   toggleSubAgent: (kind) =>
     set((s) => ({
@@ -683,8 +701,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       useAiStore.getState().subAgents, get().disabledSubAgents,
     );
 
-    const { buildChatMessage } = await import("../lib/agent/chatRefs");
-    const { text: wireMessage, content: wireContent, imagePaths } = await buildChatMessage(
+    const { buildChatMessage, withDirective } = await import("../lib/agent/chatRefs");
+    const { text: wireMessage, content: composed, imagePaths } = await buildChatMessage(
       message, quoted, refs,
       {
         // Unchanged and deliberately narrow: base64 goes only to a model that
@@ -695,6 +713,39 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         ) !== null,
       },
     );
+    // 计划模式: repeated on every turn while the switch is on, not stated once.
+    // The system layer is the only one that survives intact, and this mode is
+    // toggled mid-conversation — so a one-time announcement would be buried by
+    // turn three, exactly when the model decides whether this job needs a plan.
+    const wireContent = get().planMode
+      ? withDirective(composed, i18n.t("ai.instructions.planMode"))
+      : composed;
+
+    // ── Is this turn about the document the author has open? ──
+    // The chat used to answer "always" and seed its tail window into every
+    // session. Most questions are not about the file that happens to be in the
+    // editor, so the default is now the path plus a *brief* (title, length,
+    // outline) and the assistant reads the file itself when it judges it
+    // relevant. See lib/context/docFocus for what counts as pointing at the
+    // document, and docs/chat-memory-plan.md §5a for why the line is drawn
+    // where it is.
+    const { documentBrief, wantsDocumentBody } = await import("../lib/context/docFocus");
+    const docRelPath = activeFilePath ? projectRelativePath(projectPath, activeFilePath) : null;
+    const wantsDocBody = !!activeFilePath && wantsDocumentBody({
+      query: message,
+      hasQuote: !!quoted,
+      // The author `@`-ed the open file: chatRefs already inlined it, and the
+      // window would send the same paragraphs a second time.
+      alreadyAttached: refs.some(
+        (r) => r.kind === "text" && r.file.path === activeFilePath,
+      ),
+    });
+    // Sent in both modes — the title, length and outline describe parts of the
+    // document the tail window doesn't reach. Only the "text withheld, read it
+    // yourself" line is conditional.
+    const docBrief = docRelPath
+      ? documentBrief(focus.text, { withheld: !wantsDocBody })
+      : null;
 
     const controller = new AbortController();
     const userTurn: ChatTurn = {
@@ -758,8 +809,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         const systemPrompt = `${writingPrompt}\n\n${i18n.t("ai.instructions.agent", promptParams(i18n.language === "zh-CN"))}`;
         const documentText = focus.text;
         // Follows the profile, like the panel's tasks do: a project whose
-        // documents don't use rolling memory has none to inject.
-        const memory = docModel().memory && activeFilePath
+        // documents don't use rolling memory has none to inject. Loaded only
+        // when the window is: the recap summarises the same text, so it rides
+        // with it rather than standing in for it.
+        const memory = wantsDocBody && docModel().memory && activeFilePath
           ? await loadMemory(projectPath, activeFilePath)
           : null;
         const { loreBudgetTokens } = useAppStore.getState();
@@ -771,7 +824,19 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           documentText,
           "",
           wireMessage,
-          { contextChars: RECENT_WINDOW_MIN_CHARS },
+          {
+            // 0 → the document is described, not injected (docBrief below).
+            contextChars: wantsDocBody ? RECENT_WINDOW_MIN_CHARS : 0,
+            // Named in both modes: which file the author is looking at is what
+            // read_file, propose_edit and every other path-taking tool need,
+            // and the chat never used to say it at all.
+            currentFilePath: docRelPath ?? undefined,
+            documentBrief: docBrief ?? undefined,
+            // With no window in the context, the question is the only thing
+            // left to match lore against — and it was always the better
+            // target for a conversation anyway.
+            extraMatchText: wireMessage,
+          },
           null,
           memory,
           loreBudgetTokens * charsPerToken,
@@ -787,6 +852,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         const meta = createSessionMeta();
         meta.seedContext = seed.seedContext;
         meta.lastDocPath = activeFilePath ?? null;
+        meta.bodyDocPath = wantsDocBody ? activeFilePath ?? null : null;
         noteTurnStart(meta, seed.question);
         // The seeded lore goes in the injection ledger, carried by the seed
         // block — otherwise turn 2's retrieval would re-inject everything the
@@ -859,13 +925,22 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
         // ── Per-turn injection (docs/chat-memory-plan.md §5) ──
         // The seed's retrieval, re-run against *this* question, minus what the
-        // ledger says is already in the conversation. A document switch also
-        // re-injects the window + recap — the seeded ones belong to the old
-        // document. Nothing net-new appends nothing: the history stays
-        // append-only, so the prompt-cache prefix survives.
+        // ledger says is already in the conversation. Nothing net-new appends
+        // nothing: the history stays append-only, so the prompt-cache prefix
+        // survives.
+        //
+        // Two independent reasons to say something about the document here.
+        // A **switch** onto another file always sends at least its brief —
+        // the assistant has to know where the author is, even on a turn that
+        // has nothing to do with the manuscript. And a turn that *points* at
+        // the document ("把这一段…") sends the window, however many turns ago
+        // the file was opened — this is where the deferred body lands when the
+        // seed described the file instead of injecting it.
         if (meta) {
           const docSwitched = !!activeFilePath && activeFilePath !== meta.lastDocPath;
-          const memory = docSwitched && docModel().memory && activeFilePath
+          const needsBody = wantsDocBody && !!activeFilePath
+            && activeFilePath !== meta.bodyDocPath;
+          const memory = needsBody && docModel().memory && activeFilePath
             ? await loadMemory(projectPath, activeFilePath)
             : null;
           const loreIdx = useLoreStore.getState().index;
@@ -877,13 +952,21 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             matchTarget: wireMessage + focus.text.slice(-500),
             excludeDirs: excludeDirsFor(meta, loreIdx),
             loreBudgetChars: loreBudgetTokens * measureCharsPerToken(focus.text),
-            doc: docSwitched && activeFilePath
+            doc: (docSwitched || needsBody) && activeFilePath
               ? {
-                  filePath: activeFilePath,
-                  documentText: focus.text,
-                  memory,
-                  contextChars: RECENT_WINDOW_MIN_CHARS,
-                  memoryBudgetChars: MEMORY_BUDGET_CHARS,
+                  filePath: docRelPath ?? activeFilePath,
+                  // Only on a switch: mid-conversation the file was described
+                  // when it was opened, and repeating that costs the append-only
+                  // history for nothing.
+                  brief: docSwitched ? docBrief : null,
+                  body: needsBody
+                    ? {
+                        documentText: focus.text,
+                        memory,
+                        contextChars: RECENT_WINDOW_MIN_CHARS,
+                        memoryBudgetChars: MEMORY_BUDGET_CHARS,
+                      }
+                    : null,
                 }
               : null,
           });
@@ -892,11 +975,12 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             history.push(injMsg);
             recordInjections(meta, inj.matchedEntities, injMsg);
             if (docSwitched) meta.lastDocPath = activeFilePath;
+            if (needsBody) meta.bodyDocPath = activeFilePath;
             patchAssistant((tn) => ({
               ...tn,
               log: appendAgentEventTo(tn.log, {
                 kind: "context-seeded",
-                documentName: docSwitched && activeFilePath
+                documentName: (docSwitched || needsBody) && activeFilePath
                   ? (activeFilePath.split(/[\\/]/).pop() ?? "").replace(/\.md$/i, "")
                   : null,
                 recentChars: inj.docChars,
@@ -1074,6 +1158,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       // one's notes, or read_note would surface findings from another topic.
       chatTaskWorkspace: null,
       disabledSubAgents: [],
+      // Same reasoning as the chips: 计划模式 is a switch on *this*
+      // conversation, so a fresh one starts back at off.
+      planMode: false,
       // Same reasoning as the chips: the button said "this conversation", and
       // this is a different one.
       autoApprove: null,
@@ -1134,6 +1221,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // different one. Not stored in the session blob either: a temporary
         // switch is not worth a format change (see resetChat).
         disabledSubAgents: [],
+        planMode: false,
         // Auto-approve says the same words, and standing authorisation to
         // rewrite prose is the last thing that should follow the author into
         // another manuscript. Deliberately not persisted: reopening a

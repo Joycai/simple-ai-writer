@@ -3,7 +3,7 @@ import { Globe, Eye, BookOpen, FileText, ImagePlus, type LucideIcon } from "luci
 import { useAiStore } from "../../stores/aiStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { subAgentModel, SUBAGENT_KINDS, type SubAgentKind } from "../../lib/agent/subagent";
-import styles from "./SubAgentChips.module.css";
+import styles from "./toggleChip.module.css";
 
 const ICONS: Record<SubAgentKind, LucideIcon> = {
   search: Globe,
