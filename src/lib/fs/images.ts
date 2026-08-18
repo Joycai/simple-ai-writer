@@ -39,6 +39,18 @@ export function isImagePath(path: string): boolean {
   return IMAGE_EXTS.has(ext);
 }
 
+const HTML_EXTS = new Set(["html", "htm"]);
+
+/**
+ * True when the path points at an HTML document — the third file kind the
+ * editor area dispatches on (after images): still edited as text, but
+ * previewed in a sandboxed iframe rather than through the markdown renderer.
+ */
+export function isHtmlPath(path: string): boolean {
+  const ext = path.split(".").pop()?.toLowerCase() ?? "";
+  return HTML_EXTS.has(ext);
+}
+
 const MIME: Record<string, string> = {
   png:  "image/png",
   jpg:  "image/jpeg",

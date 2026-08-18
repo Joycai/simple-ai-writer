@@ -890,7 +890,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "rewrite_document",
         description:
-          "Replace the ENTIRE contents of a document file in the project. Use this for whole-document work that propose_edit cannot express — reformatting, normalising punctuation or indentation, restructuring headings — i.e. changes that touch text repeated throughout the file. For a single localised change, use propose_edit instead. You MUST read the whole file first (call read_file repeatedly until it stops reporting more lines): 'content' replaces everything, so anything you did not read is deleted. NOTHING is written until the user approves the card; the call blocks until they decide, and the previous version is backed up on approval.",
+          "Replace the ENTIRE contents of a document file in the project. Use this for whole-document work that propose_edit cannot express — reformatting, normalising punctuation or indentation, restructuring headings — i.e. changes that touch text repeated throughout the file. Also the way to overhaul an .html deliverable (keep it self-contained: inline CSS/JS, inline SVG, no external dependencies). For a single localised change, use propose_edit instead. You MUST read the whole file first (call read_file repeatedly until it stops reporting more lines): 'content' replaces everything, so anything you did not read is deleted. NOTHING is written until the user approves the card; the call blocks until they decide, and the previous version is backed up on approval.",
         parameters: {
           type: "object",
           properties: {
@@ -953,7 +953,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "create_file",
         description:
-          "Propose a NEW file of any type — notes, data, config (e.g. .json, .csv, .txt), anywhere in the project. NOTHING is written until the user approves the card; the call blocks until they decide. The filename MUST carry an explicit extension: for manuscript text use create_chapter instead, which defaults to .md and enters the outline. Fails if something is already at that path. Parent folders that do not exist yet are created with the file.",
+          "Propose a NEW file of any type — notes, data, config (e.g. .json, .csv, .txt), anywhere in the project. NOTHING is written until the user approves the card; the call blocks until they decide. The filename MUST carry an explicit extension: for manuscript text use create_chapter instead, which defaults to .md and enters the outline. Fails if something is already at that path. Parent folders that do not exist yet are created with the file. For a visual deliverable — a diagram, an architecture chart, a promo or landing page — write a SELF-CONTAINED .html file: all CSS and JS inline, graphics drawn as inline SVG, no external CDN or network dependencies. The approval card and the app preview render it live in a sandboxed offline frame, and the author can open it in their system browser. Relative <img> links resolve against the file's own folder.",
         parameters: {
           type: "object",
           properties: {

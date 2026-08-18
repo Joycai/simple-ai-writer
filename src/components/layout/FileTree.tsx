@@ -4,12 +4,12 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import {
-  Folder, FolderOpen, FolderInput, FileText, File, FileImage, ChevronRight,
+  Folder, FolderOpen, FolderInput, FileText, File, FileCode, FileImage, ChevronRight,
   FilePlus, FolderPlus, FileInput, RotateCw, LogOut, Pencil, Trash2,
   Scissors, Copy, ClipboardPaste, TextCursorInput,
 } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { isImagePath } from "../../lib/fs/images";
+import { isHtmlPath, isImagePath } from "../../lib/fs/images";
 import { fileExists } from "../../lib/fs/fileio";
 import { baseNameOf, dropRejection, parentDirOf, type TransferMode } from "../../lib/fs/moveCopy";
 import {
@@ -219,6 +219,8 @@ function FileIcon({ name }: { name: string }) {
     return <FileText size={14} className={styles.fileIcon} />;
   if (isImagePath(name))
     return <FileImage size={14} className={styles.fileIcon} />;
+  if (isHtmlPath(name))
+    return <FileCode size={14} className={styles.fileIcon} />;
   return <File size={14} className={styles.fileIcon} />;
 }
 
