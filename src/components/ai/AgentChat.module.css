@@ -473,14 +473,18 @@
   align-items: center;
   gap: 10px;
   font: 400 11px/1 var(--font-mono);
-  color: var(--color-accent-deep);
+  color: var(--color-accent-mid);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .runningDots { display: inline-flex; gap: 4px; }
 .runningDots span { width: 4px; height: 4px; }
+/* The middle dot takes the ramp's mid step rather than the mockup's
+   accent-deep: on paper accent-deep *is* sienna, which collapsed dots 2 and 3
+   into one tone and left the ramp reading as two steps. Its dark neighbour is
+   one notch away at 4px — the ramp staying legible in both themes wins. */
 .runningDots span:nth-child(1) { background: var(--color-border-accent); }
-.runningDots span:nth-child(2) { background: var(--color-accent-deep); }
+.runningDots span:nth-child(2) { background: var(--color-accent-mid); }
 .runningDots span:nth-child(3) { background: var(--color-sienna); }
 
 /* ── Pictures produced by a turn ─────────────────────────────────────────── */
