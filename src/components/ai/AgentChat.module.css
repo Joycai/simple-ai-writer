@@ -415,6 +415,12 @@
   min-height: 40px;
 }
 .input::placeholder { color: var(--color-text-hint); }
+/* The composer already says "focused" by turning the whole frame sienna
+   (.inputRow:focus-within). The global :focus-visible ring would say it a
+   second time — and because this textarea is borderless and full-width, only
+   the ring's bottom edge shows: a hairline across the box that lands on the
+   send button's top edge. */
+.input:focus-visible { box-shadow: none; }
 
 .inputFooter {
   display: flex;
