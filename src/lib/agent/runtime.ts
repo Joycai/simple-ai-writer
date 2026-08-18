@@ -20,11 +20,13 @@ import type { NativeReasoning } from "../ai/reasoning";
 import type {
   AccumulatedToolCall, ContentPart, StreamMessage, ThinkingBlockCarry,
 } from "../ai/types";
-import { createServerToolLog, type AgentEvent, type RoundLimitDecision } from "./events";
+import {
+  createServerToolLog, type AgentEvent, type RoundLimitDecision, type TruncationDecision,
+} from "./events";
 
 // Re-exported: callers reach the round-cap contract through the runtime that
 // enforces it, not through the event module that only has to describe it.
-export type { RoundLimitDecision };
+export type { RoundLimitDecision, TruncationDecision };
 import { contentWithoutImages, hasImageParts } from "./imageHistory";
 import { cloneLoreIndex } from "../lore";
 import { TOOL_ARGS_DETAIL_CHARS, TOOL_RESULT_DETAIL_CHARS } from "./logFormat";
@@ -38,6 +40,29 @@ const ELIDED_TOOL_RESULT =
   "[earlier tool result dropped to stay within the model's context window]";
 /** Stand-in for a tool call that never ran, because the run was stopped. */
 const ABORTED_TOOL_RESULT = "[not run — the user stopped the task]";
+
+/**
+ * How many times one run recovers from the output cap on its own.
+ *
+ * A long answer running into `max_tokens` once is ordinary, and a card for it
+ * would be noise. Three in a row is not: either the model keeps trying to emit
+ * something no single reply can hold, or the cap is configured far too low —
+ * and every retry is another paid request. So the run recovers silently this
+ * many times, then asks (see AgentRuntimeOptions.onTruncationLimit). Answering
+ * 继续 grants the same allowance again.
+ */
+const TRUNCATION_RECOVERY_LIMIT = 3;
+
+/** Whether a tool call's arguments survived the response intact. */
+function argumentsUsable(raw: string): boolean {
+  if (!raw.trim()) return true; // a no-argument call legitimately sends ""
+  try {
+    JSON.parse(raw);
+    return true;
+  } catch {
+    return false;
+  }
+}
 /** Stand-in left behind where an earlier picture was dropped to reclaim room. */
 const ELIDED_IMAGE =
   "[earlier image dropped to stay within the model's context window]";
@@ -249,6 +274,16 @@ export interface AgentRuntimeOptions extends ConnOptions {
    */
   onRoundLimit?: (roundsUsed: number) => Promise<RoundLimitDecision>;
   /**
+   * Called when the output cap has cut the model off once too often (see
+   * TRUNCATION_RECOVERY_LIMIT). Blocks the loop on the author's answer, like
+   * `onRoundLimit`.
+   *
+   * Optional for the same reason: a surface that cannot render the card would
+   * hang on it. Without it the run simply stops recovering — which is the
+   * conservative direction, since every retry costs another request.
+   */
+  onTruncationLimit?: (recoveries: number) => Promise<TruncationDecision>;
+  /**
    * The run's output **so far, in full** — a snapshot, not a delta, so callers
    * assign rather than append.
    *
@@ -291,6 +326,33 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
 
   // Mutable: the author can extend it at the cap via onRoundLimit.
   let maxRounds = preset.maxRounds;
+  /** Output-cap recoveries spent in this run — reset when the author grants more. */
+  let truncationRecoveries = 0;
+  /**
+   * May the run recover from one more truncation?
+   *
+   * Silent for the first {@link TRUNCATION_RECOVERY_LIMIT}; past that the
+   * author decides, because from here on the loop is spending money on requests
+   * that keep getting cut off. A surface with no card to show says no — the
+   * conservative answer, and the only honest one when nobody can be asked.
+   */
+  const mayRecoverFromTruncation = async (): Promise<boolean> => {
+    truncationRecoveries++;
+    if (truncationRecoveries <= TRUNCATION_RECOVERY_LIMIT) return true;
+    if (!opts.onTruncationLimit) return false;
+    const decision = await opts.onTruncationLimit(truncationRecoveries - 1);
+    if (opts.signal.aborted) throw new DOMException("Aborted", "AbortError");
+    opts.onEvent({
+      kind: "truncation-limit",
+      recoveries: truncationRecoveries - 1,
+      decision,
+      at: Date.now(),
+    });
+    if (decision.action === "stop") return false;
+    // 继续 buys the same allowance again, exactly like the round cap's 继续.
+    truncationRecoveries = 0;
+    return true;
+  };
   let checkpointArmed = false;
   /** Tool rounds since the model last wrote to the checklist — see TASK_NUDGE_ROUNDS. */
   let roundsSinceTaskTouch = 0;
@@ -361,6 +423,9 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     }
 
     let roundToolCalls: AccumulatedToolCall[] = [];
+    /** Whether the endpoint cut this round off at `max_tokens`. */
+    let roundTruncated = false;
+    let roundStopReason: string | undefined;
     let roundGeminiModelParts: unknown[] | undefined;
     let roundReasoning: NativeReasoning | undefined;
     let roundThinkingBlocks: ThinkingBlockCarry | undefined;
@@ -505,17 +570,12 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
             totalInputTokens += chunk.inputTokens;
             totalOutputTokens += chunk.outputTokens;
             totalCachedTokens += chunk.cachedTokens ?? 0;
-            // Said out loud rather than swallowed: a truncated round looks
-            // exactly like a finished one from the outside, and the author's
-            // next move (raise the output cap / shorten the context) depends
-            // entirely on knowing which it was.
+            // Held, not emitted: the event now also reports what the runtime
+            // *did* about it, and that isn't known until we see whether this
+            // round's casualty was the prose or a tool call's arguments.
             if (chunk.truncated) {
-              opts.onEvent({
-                kind: "output-truncated",
-                round,
-                stopReason: chunk.stopReason,
-                at: Date.now(),
-              });
+              roundTruncated = true;
+              roundStopReason = chunk.stopReason;
             }
           }
         },
@@ -569,6 +629,37 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       if (roundText.trim()) {
         history.push({ role: "assistant", content: roundText });
       }
+
+      // Cut off mid-sentence: ask for the rest instead of handing the author
+      // half an answer. The nudge STAYS in the history — unlike the notices
+      // above, which are retracted — because dropping it would leave two
+      // assistant messages side by side, and the Anthropic protocol requires
+      // the roles to alternate. It is also simply true: the model was asked to
+      // continue, and the next turn should see that it was.
+      if (roundTruncated && roundText.trim() && (await mayRecoverFromTruncation())) {
+        opts.onEvent({
+          kind: "output-truncated",
+          round,
+          stopReason: roundStopReason,
+          recovery: { kind: "text", attempt: truncationRecoveries },
+          at: Date.now(),
+        });
+        history.push({
+          role: "user",
+          content: i18n.t("ai.instructions.continueTruncated", {
+            defaultValue:
+              "【系统提示】你上一条回复被输出上限截断了。请从断掉的地方**接着写完**，"
+              + "不要重复已经写出来的内容，也不要重新开头。如果剩下的部分很长，"
+              + "先写完这一段，我会再让你继续。",
+          }),
+        });
+        continue;
+      }
+      if (roundTruncated) {
+        opts.onEvent({
+          kind: "output-truncated", round, stopReason: roundStopReason, at: Date.now(),
+        });
+      }
       return {
         rounds: round,
         inputTokens: totalInputTokens,
@@ -583,6 +674,45 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     // actually been committed so the narration can't end up in the document.
     if (roundText) opts.onOutputText(committedText);
 
+    // ── Tool calls the output cap cut in half ──
+    //
+    // A truncated call is a fragment of JSON, and there is nothing to salvage:
+    // it cannot be executed, and it must not enter the history either — the
+    // Anthropic and Gemini adapters re-serialise every past tool call, and a
+    // fragment that fails to parse would break not this round but every round
+    // after it, permanently. So the broken calls are dropped before the
+    // assistant message is built, and the model is told plainly what happened.
+    //
+    // This is where a big write dies today: the model spends its whole output
+    // budget on one create_file carrying a 60k-character page, the call is cut,
+    // nothing is written, and the old code handed it a raw JSON syntax error —
+    // on which the sensible-looking move is to send the same thing again.
+    const brokenCalls = roundToolCalls.filter((tc) => !argumentsUsable(tc.arguments));
+    if (brokenCalls.length > 0) {
+      roundToolCalls = roundToolCalls.filter((tc) => argumentsUsable(tc.arguments));
+      for (const tc of brokenCalls) {
+        // Reported as a failed step rather than a silent omission: the author
+        // watching the log has to see that the model tried to write and that
+        // nothing landed.
+        opts.onEvent({
+          kind: "tool-step",
+          step: {
+            round,
+            toolCallId: tc.id,
+            name: tc.name,
+            argumentSummary: tc.arguments.slice(0, TOOL_ARGS_DETAIL_CHARS),
+            status: "error",
+            resultSummary: i18n.t("ai.agent.log.truncatedCall", {
+              defaultValue: "参数被输出上限截断，未执行，也没有写入任何内容",
+            }),
+            argsTruncated: true,
+            resultTruncated: false,
+          },
+          at: Date.now(),
+        });
+      }
+    }
+
     // Append the assistant's tool-call message to history.
     //
     // Both `_` fields carry what a thinking model needs to see of its own
@@ -591,18 +721,23 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     // one doesn't degrade the answer — it makes the *next* round of the loop
     // fail outright, which is why they ride on the message rather than being
     // reconstructed later.
-    history.push({
-      role: "assistant",
-      content: null,
-      tool_calls: roundToolCalls.map((tc) => ({
-        id: tc.id,
-        type: "function" as const,
-        function: { name: tc.name, arguments: tc.arguments },
-      })),
-      _geminiModelParts: roundGeminiModelParts,
-      _reasoning: roundReasoning,
-      _thinkingBlocks: roundThinkingBlocks,
-    });
+    // Skipped when the cap ate every call in the round: an assistant message
+    // with an empty tool_calls array is not a valid request on any of the three
+    // protocols, and there is nothing left to pair a tool reply with.
+    if (roundToolCalls.length > 0) {
+      history.push({
+        role: "assistant",
+        content: null,
+        tool_calls: roundToolCalls.map((tc) => ({
+          id: tc.id,
+          type: "function" as const,
+          function: { name: tc.name, arguments: tc.arguments },
+        })),
+        _geminiModelParts: roundGeminiModelParts,
+        _reasoning: roundReasoning,
+        _thinkingBlocks: roundThinkingBlocks,
+      });
+    }
 
     // Execute each tool call and append results. Re-checked per call, not just
     // per round: the model can emit several tool calls in one round (e.g. a
@@ -689,6 +824,39 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     // Thrown only once the round's history is complete, so what the caller
     // keeps is a transcript the next turn can be appended to.
     if (abortedMidRound) throw new DOMException("Aborted", "AbortError");
+
+    // Now that every surviving call has its reply, tell the model about the
+    // ones the cap ate. Placed after the tool replies rather than instead of
+    // them so a round that got one call through keeps that work.
+    if (brokenCalls.length > 0) {
+      if (!(await mayRecoverFromTruncation())) {
+        return {
+          rounds: round,
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+          cachedTokens: totalCachedTokens,
+          outcome: "completed",
+        };
+      }
+      opts.onEvent({
+        kind: "output-truncated",
+        round,
+        stopReason: roundStopReason,
+        recovery: { kind: "tool-args", attempt: truncationRecoveries },
+        at: Date.now(),
+      });
+      history.push({
+        role: "user",
+        content: i18n.t("ai.instructions.truncatedToolCall", {
+          defaultValue:
+            "【系统提示】你上一轮的工具调用（{{tools}}）因为超出输出上限被截断，已被丢弃："
+            + "它没有执行，也没有写入任何内容。一次回复装不下的内容，必须分多次写："
+            + "先用 create_file 建好骨架（结构 + 每节一行 `<!-- SECTION: 名字 -->` 占位注释），"
+            + "再用 append_file 一节一节追加（每次只发这一节）。不要原样重发刚才那次调用。",
+          tools: [...new Set(brokenCalls.map((tc) => tc.name))].join("、"),
+        }),
+      });
+    }
   }
 
   // Fell through maxRounds without the model producing text — shouldn't happen

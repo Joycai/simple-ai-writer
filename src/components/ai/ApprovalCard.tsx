@@ -18,6 +18,7 @@ import { renderMarkdown } from "../../lib/fs/markdown";
 import { isHtmlPath } from "../../lib/fs/images";
 import { HtmlFrame } from "../editor/HtmlPreview";
 import type {
+  AppendProposal,
   CopyProposal,
   CreateProposal,
   DeleteProposal,
@@ -54,6 +55,8 @@ function headerTitle(proposal: Proposal, t: TFunction, terms: ResolvedTerms): st
       return t("ai.approval.title", words);
     case "rewrite":
       return t("ai.approval.titleRewrite", words);
+    case "append":
+      return t("ai.approval.titleAppend", { ...words, defaultValue: "追加内容" });
     case "create":
       return proposal.isDir ? t("ai.approval.titleCreateFolder", words) : t("ai.approval.titleCreate", words);
     case "move":
@@ -79,6 +82,11 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
       // Whole-file scale, so the delta is the header's whole job: it is what
       // tells the author at a glance that a "reformat" is quietly dropping text.
       return `${proposal.originalChars} → ${proposal.content.length} ${chars}`;
+    case "append":
+      // Both ends, like a rewrite: what matters is that the file *grew* by this
+      // much and lost nothing — an append that reads as a replacement would be
+      // the one thing worth catching here.
+      return `${proposal.originalChars} → ${proposal.originalChars + proposal.content.length} ${chars}`;
     case "create":
       return proposal.isDir ? "" : `${proposal.content.length} ${chars}`;
     case "move":
@@ -295,12 +303,41 @@ function IllustrateBody({ proposal }: { proposal: IllustrateProposal }) {
   );
 }
 
+/**
+ * An append shows only what is being added — the existing file is untouched by
+ * definition, so putting it on the card would bury the decision under text
+ * nobody needs to re-read. Rendered raw rather than as markdown or a page: a
+ * section pulled out of its document is a fragment, and previewing a fragment
+ * as if it were the whole (half an HTML page, a heading with no context) is
+ * more misleading than showing the source.
+ */
+function AppendBody({ proposal }: { proposal: AppendProposal }) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <>
+      <pre className={expanded ? styles.replaceBlock : styles.replaceBlockClipped}>
+        {proposal.content}
+      </pre>
+      {proposal.content.length > CLIP_CHARS && (
+        <button className={styles.originalToggle} onClick={() => setExpanded((v) => !v)}>
+          {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+          {expanded ? t("ai.approval.collapse") : t("ai.approval.expand")}
+        </button>
+      )}
+    </>
+  );
+}
+
 function ProposalBody({ proposal }: { proposal: Proposal }) {
   switch (proposal.kind) {
     case "edit":
       return <EditBody proposal={proposal} />;
     case "rewrite":
       return <RewriteBody proposal={proposal} />;
+    case "append":
+      return <AppendBody proposal={proposal} />;
     case "create":
       return <CreateBody proposal={proposal} />;
     case "move":
@@ -317,7 +354,7 @@ function ProposalBody({ proposal }: { proposal: Proposal }) {
 export function ApprovalCard({ item }: { item: PendingApproval }) {
   const { t } = useTranslation();
   const terms = useTerms();
-  const { approve, reject, enableAutoApprove } = useAgentStore();
+  const { approve, reject, enableAutoApprove, grantAppendPath } = useAgentStore();
   const [rejectReason, setRejectReason] = useState("");
   const [deciding, setDeciding] = useState(false);
 
@@ -356,6 +393,26 @@ export function ApprovalCard({ item }: { item: PendingApproval }) {
         >
           {t("ai.approval.reject")}
         </button>
+        {/* Building one deliverable is a dozen appends to the same file, and a
+            dozen identical cards is how an author learns to stop reading them.
+            Narrower than 本次都批准 on both axes — this file, appends only —
+            so the click that ends the noise is not also a blanket write grant. */}
+        {proposal.kind === "append" && autoApproveKey !== undefined && (
+          <button
+            className={styles.btnApproveAlways}
+            onClick={() => {
+              setDeciding(true);
+              grantAppendPath(autoApproveKey, proposal.path);
+              void approve(proposal.id);
+            }}
+            disabled={deciding}
+            title={t("ai.approval.appendAlwaysHint", {
+              defaultValue: "之后追加到这个文件都直接应用，其它改动照常询问",
+            })}
+          >
+            {t("ai.approval.appendAlways", { defaultValue: "本文件都追加" })}
+          </button>
+        )}
         {canGrant && (
           <button
             className={styles.btnApproveAlways}

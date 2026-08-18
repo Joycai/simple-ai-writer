@@ -38,6 +38,7 @@ export const PREF_KEYS = [
   "app:contextUtilization",
   "app:aiDrawerMode",
   "app:draftCount",
+  "app:defaultMaxOutput",
   "app:apiLogEnabled",
   "manuscript:onboarding-done",
   "ai:activeModelId",

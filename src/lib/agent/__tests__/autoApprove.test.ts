@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 
-import { CHAT_AUTO_APPROVE_KEY, isAutoApprovable } from "../autoApprove";
+import { CHAT_AUTO_APPROVE_KEY, grants, grantsAppend, isAutoApprovable } from "../autoApprove";
 import type { Proposal } from "../registry";
 
 // Same shims as subagentChips.test: agentStore reaches projectStore lazily, and
@@ -133,7 +133,7 @@ describe("本次都批准 grants", () => {
     store.enableAutoApprove(RUN, "plans");
 
     expect(useAgentStore.getState().autoApprove).toEqual({
-      key: RUN, proposals: false, plans: true,
+      key: RUN, proposals: false, plans: true, appendPaths: [],
     });
   });
 
@@ -143,7 +143,7 @@ describe("本次都批准 grants", () => {
     store.enableAutoApprove(CHAT_AUTO_APPROVE_KEY, "plans");
 
     expect(useAgentStore.getState().autoApprove).toEqual({
-      key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: true,
+      key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: true, appendPaths: [],
     });
   });
 
@@ -165,15 +165,47 @@ describe("本次都批准 grants", () => {
     expect(useAgentStore.getState().autoApprove).toMatchObject({ key: CHAT_AUTO_APPROVE_KEY });
   });
 
+  it("covers only the file it names, and only appends", () => {
+    const store = useAgentStore.getState();
+    store.grantAppendPath(CHAT_AUTO_APPROVE_KEY, "/proj/page.html");
+    const state = useAgentStore.getState().autoApprove;
+
+    expect(grantsAppend(state, CHAT_AUTO_APPROVE_KEY, "/proj/page.html")).toBe(true);
+    expect(grantsAppend(state, CHAT_AUTO_APPROVE_KEY, "/proj/other.html")).toBe(false);
+    // The narrow grant must not quietly become a blanket one.
+    expect(grants(state, CHAT_AUTO_APPROVE_KEY, "proposals")).toBe(false);
+    expect(grants(state, CHAT_AUTO_APPROVE_KEY, "plans")).toBe(false);
+  });
+
+  it("belongs to the surface that made it", () => {
+    const store = useAgentStore.getState();
+    store.grantAppendPath(CHAT_AUTO_APPROVE_KEY, "/proj/page.html");
+    const state = useAgentStore.getState().autoApprove;
+
+    expect(grantsAppend(state, RUN, "/proj/page.html")).toBe(false);
+    expect(grantsAppend(state, undefined, "/proj/page.html")).toBe(false);
+  });
+
+  it("keeps 本次都批准 alongside a per-file append grant", () => {
+    const store = useAgentStore.getState();
+    store.grantAppendPath(CHAT_AUTO_APPROVE_KEY, "/proj/page.html");
+    store.enableAutoApprove(CHAT_AUTO_APPROVE_KEY, "proposals");
+
+    expect(useAgentStore.getState().autoApprove).toEqual({
+      key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: false,
+      appendPaths: ["/proj/page.html"],
+    });
+  });
+
   it("ends chat's grant on a new conversation", () => {
-    useAgentStore.setState({ autoApprove: { key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: true } });
+    useAgentStore.setState({ autoApprove: { key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: true, appendPaths: [] } });
     useAgentStore.getState().resetChat();
     expect(useAgentStore.getState().autoApprove).toBeNull();
   });
 
   it("ends chat's grant when switching to another saved conversation", async () => {
     useAgentStore.setState({
-      autoApprove: { key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: false },
+      autoApprove: { key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: false, appendPaths: [] },
       chatSessionId: 1, chatRunning: false, turns: [],
     });
 

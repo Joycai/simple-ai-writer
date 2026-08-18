@@ -308,6 +308,14 @@ An entity is a folder; any sibling `.md` with a `facet` frontmatter field (title
 
 Pins come from `AiPanel` as `dirPath` (whole entity) or `dirPath#file` (single facet; implies its entity). Facet/core content is re-read from disk each call so hand edits are never stale. AI-assisted splitting of an oversized `index.md` into facets lives in `src/lib/lore/splitter.ts` + `LoreSplitModal` (backs up to `.ai-writer/backups/` before applying). See `docs/lore-facet-plan.md` for the full design.
 
+### Large outputs: the per-reply cap (`modelLimits.ts` + the runtime's recovery)
+
+The limit a big deliverable hits is **max output tokens** — one reply's ceiling — not the context window. Three layers deal with it, because no single one can:
+
+- **Say what the ceiling is.** `effectiveMaxOutput(model, defaultMaxOutput())` resolves it in one place for both the request and the planner: the author's own `maxOutput` → the built-in table (`src/lib/ai/modelLimits.ts`) → the app-wide default (Settings → 供应商与模型, pref `app:defaultMaxOutput`) → each protocol's own fallback. The table deliberately holds **no Anthropic entries**: there a `max_tokens` above the model's ceiling is a 400, so `anthropic.DEFAULT_MAX_TOKENS` (32k) keeps that job. Elsewhere the value is planning-only — the OpenAI and Gemini adapters send no cap at all. 「探测真实上限」 (`endpointProbe.ts`) measures the truth and writes it onto the model; the table is only what an author sees before they bother.
+- **Write files in pieces.** `append_file` is the one write tool whose per-call size is independent of the file's size: `create_file` the skeleton (structure + one `<!-- SECTION: x -->` placeholder per section), then a call per section. Its card offers a **per-file** grant (`AutoApproveState.appendPaths`) so a long build isn't a click per section, without becoming a blanket write authorisation.
+- **Recover when it happens anyway.** `runAgent` distinguishes the two casualties. Cut prose: keep what arrived, append a "continue from where you stopped" user message (kept in the history — dropping it would put two assistant messages side by side, which Anthropic rejects), loop. A cut **tool call**: drop it unexecuted and never let it into the history — the Anthropic and Gemini adapters re-serialise past tool calls, so one fragment of JSON breaks every later round — execute whatever else that round emitted, and tell the model to write in pieces. Three recoveries per run are silent; after that the author decides on a card (`TruncationCard`), since every retry is another paid request. Surfaces that can't render the card (batch runs, lore modals) simply stop recovering.
+
 ### Context budget planner (`budget.ts`)
 
 `src/lib/context/budget.ts` divides the model's declared window among the layers that can be sized, so a 1M-token model isn't fed the same 1500-token recap as an 8k one. Called from `aiTaskStore.runTask()` **before** `buildBookContext()`, since that build spends its own budget.

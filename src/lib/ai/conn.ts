@@ -25,6 +25,7 @@ import type { ReasoningEffort, ThinkingDialect } from "./reasoning";
 import type { GeminiSafetySettings } from "./safety";
 import type { ServerToolId } from "./serverTools";
 import type { ApiStandard, AuthMode } from "./types";
+import { defaultMaxOutput, effectiveMaxOutput } from "./modelLimits";
 
 /**
  * A resolved endpoint + model + credential: everything a request needs except
@@ -91,7 +92,10 @@ export function connOptions(conn: AiConn): ConnOptions {
     modelId: model.modelId,
     prefix: model.prefix,
     contextSize: model.contextSize,
-    maxOutput: model.maxOutput,
+    // Resolved, not copied: an unconfigured model still has a real per-reply
+    // ceiling, and the one place every request is built is the one place that
+    // can make the planner and the wire agree on what it is. See ./modelLimits.
+    maxOutput: effectiveMaxOutput(model, defaultMaxOutput()),
     reasoningEffort: model.reasoningEffort,
     thinkingDialect: model.thinkingDialect,
     serverTools: model.serverTools,
