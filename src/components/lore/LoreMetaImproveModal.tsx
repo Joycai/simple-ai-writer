@@ -23,6 +23,7 @@ import {
   LoreRunSteps, RunStatusLine, ThinkingPanel, estimateRunTokens, useRunClock,
   type RunStep,
 } from "./ai/LoreRunProgress";
+import { ModelPicker } from "./ai/ModelPicker";
 import { Select } from "../common/Select";
 import styles from "./LoreImproveModal.module.css";
 import extra from "./LoreMetaImproveModal.module.css";
@@ -43,7 +44,9 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
   const { projectPath } = useProjectStore();
-  const { models, providers, activeModelId, setActiveModel } = useAiStore();
+  const { models, providers, activeModelId } = useAiStore();
+  // 本次任务使用的模型 — 默认跟随全局设置，改动不写回全局 (设计稿 v4)。
+  const [modelId, setModelId] = useState(activeModelId ?? "");
   const { scanProject } = useLoreStore();
   const avatarUrl = useImageDataUrl(entity.avatarPath);
 
@@ -75,7 +78,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
   }, [entity.dirPath]);
 
   const handleGenerate = async () => {
-    const model = models.find((m) => m.id === activeModelId);
+    const model = models.find((m) => m.id === modelId);
     const provider = model ? providers.find((p) => p.id === model.providerId) : null;
     if (!model || !provider) {
       setError(t("ai.errors.noModel", { defaultValue: "请先在设置中选择模型" }));
@@ -240,7 +243,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
   const removeAlias = (i: number) =>
     setPAliases(pAliases.filter((_, x) => x !== i));
 
-  const activeModel = models.find((m) => m.id === activeModelId);
+  const activeModel = models.find((m) => m.id === modelId);
   const imageCount = (entity.avatarPath ? 1 : 0) + entity.images.length;
   const willSendImages = activeModel?.type === "multimodal" && imageCount > 0;
 
@@ -286,19 +289,6 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
               )}
             </div>
           </div>
-          <Select
-            className={styles.modelSelect}
-            value={activeModelId ?? ""}
-            onChange={(v) => setActiveModel(v)}
-            options={[
-              { value: "", label: t("lore.generator.selectModel", { defaultValue: "选择模型" }) },
-              ...models.map((m) => ({
-                value: m.id,
-                label: `${providers.find((p) => p.id === m.providerId)?.name ?? ""} / ${m.name}`,
-              })),
-            ]}
-            ariaLabel={t("lore.generator.selectModel", { defaultValue: "选择模型" })}
-          />
           <button className={styles.closeBtn} onClick={onClose}><X size={16} /></button>
         </div>
 
@@ -349,7 +339,8 @@ summary: ${entity.summary}
             <div className={styles.section}>
               <div className={styles.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 {t("lore.meta.suggestionLabel", { defaultValue: "AI 建议" })}
-                <RunStatusLine state="running" elapsedSec={elapsedSec} />
+                <RunStatusLine state="running" elapsedSec={elapsedSec}
+                  model={models.find((m) => m.id === modelId)?.name} />
               </div>
               <LoreRunSteps steps={metaSteps} />
               <ThinkingPanel text={reasoning} running />
@@ -446,11 +437,20 @@ summary: ${entity.summary}
 
         {/* Footer */}
         <div className={styles.footer}>
-          <span className={styles.footerNote}>
-            {t("lore.meta.footerNote", {
-              defaultValue: "「应用」只写入主词条四个字段：名称 · 别名 · 分类 · 概要，不改特征正文",
-            })}
-          </span>
+          <div className={styles.footerLeft}>
+            <ModelPicker
+              models={models}
+              providers={providers}
+              value={modelId}
+              onChange={setModelId}
+              disabled={phase === "generating"}
+            />
+            <span className={styles.footerNote}>
+              {t("lore.meta.footerNote", {
+                defaultValue: "「应用」只写入主词条四个字段：名称 · 别名 · 分类 · 概要，不改特征正文",
+              })}
+            </span>
+          </div>
           <div className={styles.footerRight}>
             <button className={styles.btnGhost} onClick={onClose}>
               {t("common.cancel", { defaultValue: "取消" })}
@@ -459,7 +459,7 @@ summary: ${entity.summary}
               <button
                 className={styles.btnPrimary}
                 onClick={handleGenerate}
-                disabled={!activeModelId}
+                disabled={!modelId}
               >
                 <Sparkles size={13} /> {t("lore.meta.generate", { defaultValue: "生成建议" })}
               </button>
@@ -477,7 +477,7 @@ summary: ${entity.summary}
                 <button
                   className={styles.btnSecondary}
                   onClick={handleGenerate}
-                  disabled={!activeModelId}
+                  disabled={!modelId}
                 >
                   <RotateCw size={12} /> {t("lore.improve.regenerate", { defaultValue: "重新生成" })}
                 </button>

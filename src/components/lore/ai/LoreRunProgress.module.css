@@ -38,6 +38,19 @@
   color: var(--color-text-secondary);
 }
 
+/* 本次任务使用的模型 — 运行头小灰签 (设计稿 17) */
+.modelChip {
+  padding: 4px 8px;
+  background: var(--color-bg-inset);
+  font: 500 10px/1 var(--font-sans);
+  color: var(--color-text-dim);
+  flex-shrink: 0;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .stopBtn {
   margin-left: 4px;
   padding: 4px 10px;

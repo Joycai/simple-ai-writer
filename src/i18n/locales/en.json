@@ -1697,7 +1697,9 @@
       "thinking": "Thinking",
       "thinkingNote": "streamed live · not saved",
       "collapse": "Collapse",
-      "expand": "Expand"
+      "expand": "Expand",
+      "modelLabel": "Model",
+      "modelFollowsGlobal": "Defaults to the global setting"
     },
     "meta": {
       "title": "Headword completion",

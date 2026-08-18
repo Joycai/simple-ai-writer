@@ -27,6 +27,7 @@ import {
   LoreRunSteps, RunStatusLine, ThinkingPanel, estimateRunTokens, useRunClock, useRunTelemetry,
   type RunStep,
 } from "./ai/LoreRunProgress";
+import { ModelPicker } from "./ai/ModelPicker";
 import { useImageDataUrl } from "./useImageDataUrl";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { ModalShell } from "../common/ModalShell";
@@ -45,7 +46,9 @@ export function LoreImproveModal({ entity, onClose }: Props) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
   const { projectPath } = useProjectStore();
-  const { models, providers, activeModelId, setActiveModel } = useAiStore();
+  const { models, providers, activeModelId } = useAiStore();
+  // 本次任务使用的模型 — 默认跟随全局设置，改动不写回全局 (设计稿 v4)。
+  const [modelId, setModelId] = useState(activeModelId ?? "");
   const { index, scanProject } = useLoreStore();
   const avatarUrl = useImageDataUrl(entity.avatarPath);
 
@@ -138,7 +141,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
 
   // ── Generate ───────────────────────────────────────────────────────────────
   const handleGenerate = async () => {
-    const resolved = resolveConn(models, providers, activeModelId);
+    const resolved = resolveConn(models, providers, modelId);
     if (!resolved.ok) { setError(resolved.error); return; }
     const { model, provider } = resolved;
 
@@ -353,19 +356,6 @@ export function LoreImproveModal({ entity, onClose }: Props) {
               </div>
             </div>
           </div>
-          <Select
-            className={styles.modelSelect}
-            value={activeModelId ?? ""}
-            onChange={(v) => setActiveModel(v)}
-            options={[
-              { value: "", label: t("lore.generator.selectModel") },
-              ...multimodalModels.map((m) => ({
-                value: m.id,
-                label: `${providers.find((p) => p.id === m.providerId)?.name ?? ""} / ${m.name}`,
-              })),
-            ]}
-            ariaLabel={t("lore.generator.selectModel")}
-          />
           <button className={styles.closeBtn} onClick={onClose}><X size={14} /></button>
         </div>
 
@@ -427,7 +417,8 @@ export function LoreImproveModal({ entity, onClose }: Props) {
                     : t("lore.improve.compareHead", { defaultValue: "对照" })}
                 </span>
                 {phase === "generating" && (
-                  <RunStatusLine state="running" elapsedSec={elapsedSec} />
+                  <RunStatusLine state="running" elapsedSec={elapsedSec}
+                    model={models.find((m) => m.id === modelId)?.name} />
                 )}
                 {phase === "result" && (
                   <RunStatusLine
@@ -438,7 +429,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
                 )}
                 <span style={{ flex: 1 }} />
                 {phase === "result" && (
-                  <button className={styles.diffToggle} onClick={handleGenerate} disabled={!activeModelId}>
+                  <button className={styles.diffToggle} onClick={handleGenerate} disabled={!modelId}>
                     ⟳ {t("lore.improve.regenerate")}
                   </button>
                 )}
@@ -599,13 +590,22 @@ export function LoreImproveModal({ entity, onClose }: Props) {
 
         {/* ── Footer ── */}
         <div className={styles.footer}>
-          <span className={styles.footerNote}>
-            {t("lore.improve.footerNote", { defaultValue: "应用后会覆盖当前内容 · 请先审阅建议稿" })}
-          </span>
+          <div className={styles.footerLeft}>
+            <ModelPicker
+              models={multimodalModels}
+              providers={providers}
+              value={modelId}
+              onChange={setModelId}
+              disabled={phase === "generating"}
+            />
+            <span className={styles.footerNote}>
+              {t("lore.improve.footerNote", { defaultValue: "应用后会覆盖当前内容 · 请先审阅建议稿" })}
+            </span>
+          </div>
           <div className={styles.footerRight}>
             <button className={styles.btnGhost} onClick={onClose}>{t("lore.improve.cancel")}</button>
             {phase === "input" && (
-              <button className={styles.btnPrimary} onClick={handleGenerate} disabled={!activeModelId}>
+              <button className={styles.btnPrimary} onClick={handleGenerate} disabled={!modelId}>
                 <Sparkles size={13} /> {t("lore.improve.generate")}
               </button>
             )}
@@ -617,7 +617,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
             )}
             {phase === "result" && (
               <>
-                <button className={styles.btnSecondary} onClick={handleGenerate} disabled={!activeModelId}>
+                <button className={styles.btnSecondary} onClick={handleGenerate} disabled={!modelId}>
                   <RotateCw size={12} /> {t("lore.improve.regenerate")}
                 </button>
                 <button className={styles.btnPrimary} onClick={handleApply} disabled={saving || !output.trim()}>

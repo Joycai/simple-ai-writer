@@ -17,6 +17,7 @@ import {
   LoreRunSteps, RunStatusLine, ThinkingPanel, useRunClock, useRunTelemetry,
   type RunStep,
 } from "./ai/LoreRunProgress";
+import { ModelPicker } from "./ai/ModelPicker";
 import { NewEntryTabs, type NewEntryMode } from "./ai/NewEntryTabs";
 import { writeBinaryFile } from "../../lib/fs/fileio";
 import { loadApiKey } from "../../lib/keyStore";
@@ -41,7 +42,9 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
   const isZh = i18n.language.startsWith("zh");
   const { projectPath } = useProjectStore();
   const terms = useTerms();
-  const { models, providers, activeModelId, setActiveModel, prompts } = useAiStore();
+  const { models, providers, activeModelId, prompts } = useAiStore();
+  // 本次任务使用的模型 — 默认跟随全局设置，改动不写回全局 (设计稿 v4)。
+  const [modelId, setModelId] = useState(activeModelId ?? "");
   const { createNewEntity, scanProject } = useLoreStore();
   const loreIndex = useLoreStore((s) => s.index);
 
@@ -114,7 +117,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
 
   // ── Generate ─────────────────────────────────────────────────────────────
   const handleGenerate = async () => {
-    const model = models.find((m) => m.id === activeModelId);
+    const model = models.find((m) => m.id === modelId);
     const provider = model ? providers.find((p) => p.id === model.providerId) : null;
     if (!model || !provider) { setError(t("ai.errors.noModel")); return; }
 
@@ -254,19 +257,6 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
                 ))}
               </div>
             </div>
-            <div>
-              <div className={styles.sectionLabel}>{isZh ? "model · 模型" : "model"}</div>
-              <Select className={styles.select} value={activeModelId ?? ""}
-                onChange={(v) => setActiveModel(v)}
-                options={[
-                  { value: "", label: t("lore.generator.selectModel") },
-                  ...multimodalModels.map((m) => ({
-                    value: m.id,
-                    label: `${providers.find((p) => p.id === m.providerId)?.name ?? ""} / ${m.name}`,
-                  })),
-                ]}
-                ariaLabel={t("lore.generator.selectModel")} />
-            </div>
             <span className={styles.spacer} />
             <div className={styles.hintCard}>
               <div className={styles.hintHead}>hint</div>
@@ -312,7 +302,8 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
                 <span className={styles.statusLabel}>
                   {t("lore.generator.resultHead", { defaultValue: "提取结果" })}
                 </span>
-                <RunStatusLine state="running" elapsedSec={elapsedSec} />
+                <RunStatusLine state="running" elapsedSec={elapsedSec}
+                  model={models.find((m) => m.id === modelId)?.name} />
               </div>
               <LoreRunSteps steps={genSteps} />
               <ThinkingPanel text={reasoning} running />
@@ -402,6 +393,13 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
 
         {/* ── Footer strip ── */}
         <div className={styles.footer}>
+          <ModelPicker
+            models={multimodalModels}
+            providers={providers}
+            value={modelId}
+            onChange={setModelId}
+            disabled={phase === "generating"}
+          />
           <span className={styles.footerNote}>
             {t("lore.generator.footerNote", { defaultValue: "生成结果先经你审核，入库前可修改" })}
           </span>
@@ -410,7 +408,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
             <>
               <button className={styles.btnGhost} onClick={onClose}>{t("lore.generator.cancel")}</button>
               <button className={styles.btnPrimary} onClick={handleGenerate}
-                disabled={!activeModelId || !description.trim()}>
+                disabled={!modelId || !description.trim()}>
                 <Sparkles size={13} /> {t("lore.generator.submitBtn", { entry: terms.entry })}
               </button>
             </>
@@ -425,7 +423,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
             <>
               <button className={styles.btnGhost} onClick={onClose}>{t("lore.generator.cancel")}</button>
               <button className={styles.btnSecondary} onClick={handleGenerate}
-                disabled={!activeModelId || !description.trim()}>
+                disabled={!modelId || !description.trim()}>
                 <RotateCw size={13} /> {t("lore.generator.regenerateBtn")}
               </button>
               <button className={styles.btnPrimary} onClick={handleSave}

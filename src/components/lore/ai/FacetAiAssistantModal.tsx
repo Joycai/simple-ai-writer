@@ -34,7 +34,7 @@ import { MarkdownTextarea } from "../../common/MarkdownTextarea";
 import { ModalShell } from "../../common/ModalShell";
 import { AttachmentTextarea } from "./AttachmentTextarea";
 import { RunStatusLine, useRunClock, useRunTelemetry } from "./LoreRunProgress";
-import { Select } from "../../common/Select";
+import { ModelPicker } from "./ModelPicker";
 import styles from "../LoreImproveModal.module.css";
 import task from "./FacetAiAssistantModal.module.css";
 
@@ -95,7 +95,9 @@ export function FacetAiAssistantModal({
 }: Props) {
   const { t } = useTranslation();
   const { projectPath } = useProjectStore();
-  const { models, providers, activeModelId, setActiveModel } = useAiStore();
+  const { models, providers, activeModelId } = useAiStore();
+  // 本次任务使用的模型 — 默认跟随全局设置，改动不写回全局 (设计稿 v4)。
+  const [modelId, setModelId] = useState(activeModelId ?? "");
   const index = useLoreStore((s) => s.index);
 
   const [kind, setKind] = useState<TaskKind>("append");
@@ -133,7 +135,7 @@ export function FacetAiAssistantModal({
   };
 
   const handleGenerate = async () => {
-    const resolved = resolveConn(models, providers, activeModelId);
+    const resolved = resolveConn(models, providers, modelId);
     if (!resolved.ok) { setError(resolved.error); return; }
     const { model, provider } = resolved;
 
@@ -228,19 +230,6 @@ export function FacetAiAssistantModal({
               <div className={styles.headerSub}>{facetTitle.trim() || t("lore.facet.ai.untitled", { defaultValue: "未命名特征" })}</div>
             </div>
           </div>
-          <Select
-            className={styles.modelSelect}
-            value={activeModelId ?? ""}
-            onChange={(v) => setActiveModel(v)}
-            options={[
-              { value: "", label: t("lore.generator.selectModel", { defaultValue: "选择模型" }) },
-              ...multimodalModels.map((m) => ({
-                value: m.id,
-                label: `${providers.find((p) => p.id === m.providerId)?.name ?? ""} / ${m.name}`,
-              })),
-            ]}
-            ariaLabel={t("lore.generator.selectModel", { defaultValue: "选择模型" })}
-          />
           <button className={styles.closeBtn} onClick={onClose}><X size={16} /></button>
         </div>
 
@@ -308,6 +297,7 @@ export function FacetAiAssistantModal({
                   state={phase === "generating" ? "running" : "done"}
                   elapsedSec={elapsedSec}
                   tokens={phase === "result" ? usageTokens : null}
+                  model={phase === "generating" ? models.find((m) => m.id === modelId)?.name : undefined}
                 />
               </label>
               {/* 建议触发词预览 (设计稿 10): 新词 diff 绿 */}
@@ -335,14 +325,23 @@ export function FacetAiAssistantModal({
           )}
         </div>
 
-        {/* Footer */}
+        {/* Footer — 模型选择贴在发送动作旁 (设计稿 10 的下拉位) */}
         <div className={styles.footer}>
-          <button className={styles.btnSecondary} onClick={onClose}>
-            {t("common.cancel", { defaultValue: "取消" })}
-          </button>
+          <div className={styles.footerLeft}>
+            <ModelPicker
+              models={multimodalModels}
+              providers={providers}
+              value={modelId}
+              onChange={setModelId}
+              disabled={phase === "generating"}
+            />
+            <button className={styles.btnSecondary} onClick={onClose}>
+              {t("common.cancel", { defaultValue: "取消" })}
+            </button>
+          </div>
           <div className={styles.footerRight}>
             {phase === "input" && (
-              <button className={styles.btnPrimary} onClick={handleGenerate} disabled={!activeModelId}>
+              <button className={styles.btnPrimary} onClick={handleGenerate} disabled={!modelId}>
                 <Sparkles size={13} /> {t("lore.facet.ai.generate", { defaultValue: "生成" })}
               </button>
             )}
@@ -354,7 +353,7 @@ export function FacetAiAssistantModal({
             )}
             {phase === "result" && (
               <>
-                <button className={styles.btnSecondary} onClick={handleGenerate} disabled={!activeModelId}>
+                <button className={styles.btnSecondary} onClick={handleGenerate} disabled={!modelId}>
                   <RotateCw size={12} /> {t("lore.improve.regenerate", { defaultValue: "重新生成" })}
                 </button>
                 <button className={styles.btnPrimary} onClick={handleApply} disabled={!output.trim()}>
