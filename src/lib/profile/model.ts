@@ -287,6 +287,19 @@ export const DEFAULT_TASKS: readonly TaskDef[] = [
     referenceWindow: true,
   },
   {
+    // HTML 工件：图示/架构图/宣传页 as a self-contained .html deliverable —
+    // the one-click entry the plan's 三期 promised (docs/html-artifact-plan.md).
+    // Freeform + full toolset: the author describes the page, the agent reads
+    // the material and proposes it via create_file (L2 approval).
+    id: "htmlArtifact",
+    labelKey: "ai.tasks.htmlArtifact",
+    descKey: "ai.tasks.htmlArtifactDesc",
+    instructionKey: "ai.instructions.htmlArtifact",
+    tools: "full",
+    target: "detached",
+    freeform: true,
+  },
+  {
     id: "custom",
     labelKey: "ai.tasks.customShort",
     tools: "none",

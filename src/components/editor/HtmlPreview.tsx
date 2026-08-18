@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ExternalLink, RefreshCw } from "lucide-react";
+import { ExternalLink, Monitor, RefreshCw } from "lucide-react";
 import { inlineHtmlImages } from "../../lib/fs/htmlDoc";
-import { openWithDefaultApp } from "../../lib/fs/fileio";
+import { openWithDefaultApp, previewHtmlWindow } from "../../lib/fs/fileio";
 import { useEditorStore } from "../../stores/editorStore";
 import styles from "./HtmlPreview.module.css";
 
@@ -105,16 +105,16 @@ export function HtmlPreview({ source, filePath }: Props) {
 
   const baseDir = filePath ? filePath.replace(/[/\\][^/\\]*$/, "") : null;
 
-  const openInBrowser = async () => {
+  // Both destinations read the file off disk — flush the editor's dirty
+  // buffer first so they show what the author is looking at, not the last
+  // autosave.
+  const openVia = async (open: (path: string) => Promise<void>) => {
     if (!filePath) return;
     try {
-      // The browser reads the file off disk — flush the editor's dirty
-      // buffer first so it shows what the author is looking at, not the
-      // last autosave.
       await useEditorStore.getState().saveNow();
-      await openWithDefaultApp(filePath);
+      await open(filePath);
     } catch (e) {
-      console.error("[HtmlPreview] open in browser failed:", e);
+      console.error("[HtmlPreview] open failed:", e);
     }
   };
 
@@ -131,7 +131,16 @@ export function HtmlPreview({ source, filePath }: Props) {
         </button>
         <button
           className={styles.btn}
-          onClick={() => void openInBrowser()}
+          onClick={() => void openVia(previewHtmlWindow)}
+          disabled={!filePath}
+          title={t("editor.htmlPreview.openWindow")}
+        >
+          <Monitor size={11} />
+          {t("editor.htmlPreview.openWindow")}
+        </button>
+        <button
+          className={styles.btn}
+          onClick={() => void openVia(openWithDefaultApp)}
           disabled={!filePath}
           title={t("editor.htmlPreview.openInBrowser")}
         >

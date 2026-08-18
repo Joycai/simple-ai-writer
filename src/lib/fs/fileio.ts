@@ -80,6 +80,14 @@ export async function openWithDefaultApp(path: string): Promise<void> {
   return invoke("open_with_default_app", { path });
 }
 
+/**
+ * Open a project .html file in the standalone preview window (its own webview,
+ * real viewport, relative links served from disk). Scope-checked in Rust.
+ */
+export async function previewHtmlWindow(path: string): Promise<void> {
+  return invoke("preview_html_window", { path });
+}
+
 export interface DirEntry { name: string; path: string; isDirectory: boolean; }
 
 export async function readDir(path: string): Promise<DirEntry[]> {

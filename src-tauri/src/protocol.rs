@@ -8,17 +8,31 @@ pub fn register_asset_protocol<R: Runtime>(builder: tauri::Builder<R>) -> tauri:
     builder.register_uri_scheme_protocol("ai-writer-asset", handle_asset_request)
 }
 
-fn handle_asset_request<R: Runtime>(
-    ctx: UriSchemeContext<'_, R>,
-    request: Request<Vec<u8>>,
-) -> Response<Vec<u8>> {
-    let uri = request.uri().to_string();
-    let path_str = uri
-        .strip_prefix("ai-writer-asset://localhost")
-        .unwrap_or("")
-        .to_string();
+/**
+Extract the filesystem path from a custom-scheme request URI.
 
-    let decoded = percent_decode(&path_str);
+Handles both URL shapes the webview may emit — `scheme://localhost/<path>`
+(macOS/Linux) and `http(s)://scheme.localhost/<path>` (Windows maps custom
+schemes onto http origins) — plus a query/fragment tail, percent-encoding, and
+the synthetic leading slash before a Windows drive letter (`/D:/foo`) that a
+well-formed URL requires.
+
+Shared by every file-serving protocol (`ai-writer-asset`, `ai-writer-preview`)
+so the parsing quirks are fixed in one place.
+*/
+pub(crate) fn fs_path_from_uri(uri: &str, scheme: &str) -> PathBuf {
+    let mac_prefix = format!("{scheme}://localhost");
+    let win_http = format!("http://{scheme}.localhost");
+    let win_https = format!("https://{scheme}.localhost");
+    let path_str = uri
+        .strip_prefix(mac_prefix.as_str())
+        .or_else(|| uri.strip_prefix(win_http.as_str()))
+        .or_else(|| uri.strip_prefix(win_https.as_str()))
+        .unwrap_or("");
+    // `page.html?v=1#top` — the query/fragment is URL furniture, not filename.
+    let path_str = path_str.split(['?', '#']).next().unwrap_or("");
+
+    let decoded = percent_decode(path_str);
     // Windows: JS-side `assetUrl` prepends a `/` to drive-lettered paths so the
     // URL is well-formed (`ai-writer-asset://localhost/D:/foo`). Strip that
     // synthetic leading slash before turning the string into a path, otherwise
@@ -35,7 +49,14 @@ fn handle_asset_request<R: Runtime>(
             &decoded
         }
     };
-    let path = PathBuf::from(cleaned);
+    PathBuf::from(cleaned)
+}
+
+fn handle_asset_request<R: Runtime>(
+    ctx: UriSchemeContext<'_, R>,
+    request: Request<Vec<u8>>,
+) -> Response<Vec<u8>> {
+    let path = fs_path_from_uri(&request.uri().to_string(), "ai-writer-asset");
 
     // This protocol only ever serves lore avatar images. Restrict it to known image
     // extensions so it can't be coerced (e.g. via a crafted markdown image URL) into

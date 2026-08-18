@@ -1,6 +1,6 @@
 # AI 生成 HTML 工件（图示 / 架构图 / 宣传页）计划
 
-> 状态：一、二期已实施（PR #210 / 本 PR）；三期按需触发，未启动。
+> 状态：三期全部实施完毕（一期 PR #210，二期 PR #212，三期本 PR）。
 > 背景：作者需要图示、架构图、宣传页这类**版式精确**的交付物。生图模型精度低且不可控，而 HTML+SVG 是模型最擅长的"作图语言"——像 code agent 一样让 AI 助手产出 `.html` 文件，再在 app 内用系统浏览器内核预览。
 
 ## 1. 现状盘点
@@ -81,16 +81,19 @@ HTML 预览工具栏加「在浏览器打开」按钮。实施时对原方案（
 2. `create_file`/`rewrite_document` description 与 agent 系统提示的 HTML 交付引导（D7）。
 3. i18n。
 
-### 第三期（可选，按需触发）
+### 第三期（已实施）：独立窗口 / 搜索 / 任务入口
 
-1. **独立预览窗口**：generalize `print.rs` 为 `ai-writer-preview://`（`FsScope` 围栏 + `text/html` MIME，改造 `ai-writer-asset://` 的 403 逻辑或新协议）+ `WebviewWindow` + capability entry；预览工具栏加「新窗口打开」。宣传页需要真实视口尺寸时的方案。
-2. **搜索覆盖**：`search_text` 加 `.html`——用独立谓词，别动 `isChapterFile`（避免把 html 卷进 outline/spine）。
-3. **任务菜单入口**：packs 数据项，一键「生成图示/页面」。
+1. **独立预览窗口**（`src-tauri/src/preview.rs`）：新协议 `ai-writer-preview://` 从磁盘直接服务项目文件——每个请求（入口文档和子资源一视同仁）都过 `FsScope::is_allowed` + MIME 白名单（html/css/js/图片/字体；`.db`、`.md` 等一律 403），URI 解析与 `ai-writer-asset://` 共用 `fs_path_from_uri`（三种平台 URL 形态 + 查询串 + Windows 盘符斜杠，一处修）。`preview_html_window` 命令复用 print.rs 的单例窗口模式（destroy-then-rebuild，1100×800）。三个实施要点：
+   - **相对链接天然可用**：文档 URL 镜像其文件系统路径，`assets/x.png` 走同协议解析，不需要 iframe 那套 data URL 内联。
+   - **主窗口 CSP 不注入**：核对过 tauri 2.11 源码（`manager/webview.rs`），配置的 CSP 只注入自家 `tauri://` 资源和 `data:` URL，app 注册的自定义协议 handler 原样透传——页面 inline script 在新窗口里照常运行，这是方案成立的前提。
+   - **无 IPC**：`capabilities/default.json` 只覆盖 `main`，`html-preview` 窗口无任何 capability entry，页面摸不到任何 Tauri 命令——原计划"必须加 capability entry"实为不需要，不加恰好是想要的零权限。
+2. **搜索覆盖**：`search_text` 改用独立谓词 `isSearchableFile`（= `isChapterFile` ∪ `isHtmlPath`），`isChapterFile` 本身不动，outline/spine 不受影响。
+3. **任务菜单入口**：`DEFAULT_TASKS` 新增 `htmlArtifact`（图示/页面）——freeform + `tools:"full"`，作者描述想要的页面，agent 读材料后经 `create_file` 提案。纯数据新增：面板全部按任务定义字段分派，无 id 特判，零面板代码改动。
 
 ## 4. 不变式与风险
 
 - 沙箱底线：预览 iframe **永不** `allow-same-origin`；审批卡与编辑区预览共用同一组件，安全参数只存在一份。
 - CSP 的 `script-src` 不放宽，主 webview 永远不执行生成的脚本。
 - `.html` 不进任何写作上下文管线（spine / RAG / memory / bookContext）。
-- capability 变更点两处，都要最小化：`open-path` scope 限项目路径；三期新窗口必须显式加 capability entry（默认 capability 只覆盖 `main`，忘了就是静默无权限）。
+- capability 零变更（实施后修正）：「浏览器打开」走 Rust 命令 + `FsScope`（见 D5）；预览窗口 `html-preview` **故意不加** capability entry——静默无权限正是这个纯展示窗口该有的姿态，页面脚本摸不到任何 Tauri 命令。
 - autosave 与预览 debounce 互不阻塞（与 markdown 分屏同构，无新增状态）。

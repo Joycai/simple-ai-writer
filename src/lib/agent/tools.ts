@@ -9,6 +9,7 @@
  */
 
 import { isChapterFile, naturalCompare } from "../context/outline";
+import { isHtmlPath } from "../fs/images";
 import { fileExists, readFile } from "../fs/fileio";
 import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, imageToDataUrl, isImagePath } from "../fs/images";
 import { readEntityFile, type LoreEntity, type LoreIndex } from "../lore";
@@ -359,11 +360,21 @@ const SEARCH_MAX_PER_FILE = 8;
 /** Longest snippet emitted per hit; longer lines are windowed around the match. */
 const SNIPPET_MAX = 160;
 
-/** Manuscript files under a recursively-listed tree, depth-first. */
+/**
+ * What full-text search scans: manuscript files plus .html deliverables.
+ * A separate predicate rather than widening `isChapterFile` — that one also
+ * decides what enters the outline/spine, and an HTML artifact is a deliverable,
+ * not a chapter (docs/html-artifact-plan.md §3 三期).
+ */
+function isSearchableFile(name: string): boolean {
+  return isChapterFile(name) || isHtmlPath(name);
+}
+
+/** Searchable files under a recursively-listed tree, depth-first. */
 function collectChapterFiles(nodes: FileNode[], out: string[]): void {
   for (const n of nodes) {
     if (n.is_dir) collectChapterFiles(n.children ?? [], out);
-    else if (isChapterFile(n.name)) out.push(n.path);
+    else if (isSearchableFile(n.name)) out.push(n.path);
   }
 }
 
