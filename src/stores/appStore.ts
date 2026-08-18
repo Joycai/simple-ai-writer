@@ -2,6 +2,7 @@ import { create } from "zustand";
 import i18n from "../i18n";
 import { deletePref, PINNED_LORE_PREFIX, prunePrefsWithPrefix, readPref, writePref } from "../lib/prefs";
 import { MAX_DRAFTS } from "../lib/ai/drafts";
+import { DEFAULT_MAX_OUTPUT_KEY, DEFAULT_MAX_OUTPUT_MAX } from "../lib/ai/modelLimits";
 import {
   CONTEXT_UTILIZATION_DEFAULT,
   CONTEXT_UTILIZATION_MAX,
@@ -102,6 +103,16 @@ const storedContextUtilization = () =>
     CONTEXT_UTILIZATION_MIN, CONTEXT_UTILIZATION_MAX,
   );
 const storedDraftCount = () => clamp(parseInt(readPref(DRAFT_COUNT_KEY) ?? "1", 10) || 1, 1, MAX_DRAFTS);
+/**
+ * App-wide fallback for a model's per-reply output cap. 0 = no opinion, which
+ * is the default and leaves each protocol's own behaviour alone.
+ *
+ * Stored here for the settings UI to bind to; the *authority* is
+ * `lib/ai/modelLimits.defaultMaxOutput()`, which reads the same pref at call
+ * time — the request path must not depend on a React store being current.
+ */
+const storedDefaultMaxOutput = () =>
+  clamp(parseInt(readPref(DEFAULT_MAX_OUTPUT_KEY) ?? "0", 10) || 0, 0, DEFAULT_MAX_OUTPUT_MAX);
 
 /** Which assistant tab the drawer reopens on — persisted like the panel widths. */
 const storedAiDrawerMode = (): AiDrawerMode => {
@@ -122,6 +133,7 @@ function prefBackedState() {
     loreBudgetTokens: storedLoreBudget(),
     contextUtilization: storedContextUtilization(),
     draftCount: storedDraftCount(),
+    defaultMaxOutput: storedDefaultMaxOutput(),
     aiDrawerMode: storedAiDrawerMode(),
   };
 }
@@ -155,6 +167,11 @@ interface AppState {
   loreBudgetTokens: number;
   /** Share of the model's context window one request may occupy (0–1). */
   contextUtilization: number;
+  /**
+   * Fallback per-reply output cap for models that declare none and aren't in
+   * the built-in table (`lib/ai/modelLimits`). 0 = leave it to each protocol.
+   */
+  defaultMaxOutput: number;
   /**
    * How many drafts a generative task should produce (1–`MAX_DRAFTS`).
    *
@@ -200,6 +217,7 @@ interface AppState {
   setLoreBudgetTokens: (tokens: number) => void;
   setContextUtilization: (ratio: number) => void;
   setDraftCount: (n: number) => void;
+  setDefaultMaxOutput: (tokens: number) => void;
   addRecentProject: (path: string) => void;
   removeRecentProject: (path: string) => void;
   clearRecentProjects: () => void;
@@ -359,6 +377,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     const clamped = clamp(Math.round(n), 1, MAX_DRAFTS);
     writePref(DRAFT_COUNT_KEY, String(clamped));
     set({ draftCount: clamped });
+  },
+
+  setDefaultMaxOutput: (tokens) => {
+    const clamped = clamp(Math.round(tokens) || 0, 0, DEFAULT_MAX_OUTPUT_MAX);
+    writePref(DEFAULT_MAX_OUTPUT_KEY, String(clamped));
+    set({ defaultMaxOutput: clamped });
   },
 
   addRecentProject: (path) => {

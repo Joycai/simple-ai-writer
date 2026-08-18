@@ -37,6 +37,7 @@ import { ReasoningControls } from "./ReasoningControls";
 import { ApprovalCard } from "./ApprovalCard";
 import { PlanCard } from "./PlanCard";
 import { RoundLimitCard } from "./RoundLimitCard";
+import { TruncationCard } from "./TruncationCard";
 import { AutoApproveChip } from "./AutoApproveChip";
 import { useAiStore } from "../../stores/aiStore";
 import { useAppStore, LORE_BUDGET_MIN, LORE_BUDGET_MAX } from "../../stores/appStore";
@@ -975,6 +976,7 @@ export function AiPanel() {
   const pendingApprovals = useAgentStore((s) => s.pending);
   const pendingPlans = useAgentStore((s) => s.pendingPlans);
   const pendingRoundLimits = useAgentStore((s) => s.pendingRoundLimits);
+  const pendingTruncations = useAgentStore((s) => s.pendingTruncations);
   const taskAbortController = useAiTaskStore((s) => s.abortController);
   const outputRef = useRef<HTMLDivElement>(null);
 
@@ -1785,6 +1787,9 @@ export function AiPanel() {
           ))}
           {pendingApprovals.map((p) => (
             <ApprovalCard key={p.proposal.id} item={p} />
+          ))}
+          {pendingTruncations.map((p) => (
+            <TruncationCard key={p.id} item={p} />
           ))}
           {pendingRoundLimits.map((p) => (
             <RoundLimitCard key={p.id} item={p} />

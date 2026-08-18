@@ -47,6 +47,7 @@ import {
   moveLoreEntityTool,
   updateFacetMetaTool,
   proposeEditTool,
+  appendFileTool,
   rewriteDocumentTool,
   proposeLorePlanTool,
   readMemoryTool,
@@ -106,6 +107,25 @@ export interface RewriteProposal extends ProposalBase {
   /** Full new file body, replacing everything currently there. */
   content: string;
   /** Length of the file at proposal time. */
+  originalChars: number;
+}
+
+/**
+ * Add text to the end of a file that already exists.
+ *
+ * The tool that makes a big deliverable possible at all. A model's *output*
+ * cap — not its context window — is what a 60k-character HTML page runs into,
+ * and neither `create_file` nor `rewrite_document` can express "the rest of
+ * it": both take the whole body as one argument, so the whole body has to fit
+ * in one reply. Appending is the one write whose per-call size is decoupled
+ * from the file's size, which is why every agent that writes real files has
+ * some version of it.
+ */
+export interface AppendProposal extends ProposalBase {
+  kind: "append";
+  /** Text added at the end; the existing content is never touched. */
+  content: string;
+  /** Length of the file before the append — the card's "grew from" figure. */
   originalChars: number;
 }
 
@@ -203,6 +223,7 @@ export interface IllustrateProposal extends ProposalBase {
 export type Proposal =
   | EditProposal
   | RewriteProposal
+  | AppendProposal
   | CreateProposal
   | MoveProposal
   | DeleteProposal
@@ -321,6 +342,7 @@ export type ToolId =
   | "update_memory"
   | "propose_edit"
   | "rewrite_document"
+  | "append_file"
   | "create_chapter"
   | "create_file"
   | "create_directory"
@@ -912,6 +934,38 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => rewriteDocumentTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  append_file: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "append_file",
+        description:
+          "Add text to the END of an existing file, leaving everything already in it untouched. This is how you write a file too large to emit in one reply: create_file the skeleton first, then append_file one section at a time — each call only has to carry its own section, so the file can grow past what a single response could ever hold. Nothing before the appended text is re-sent or re-read, so it cannot be damaged by a partial write. Use propose_edit to change text that is already there, and rewrite_document only when the whole file must be re-laid-out. NOTHING is written until the user approves the card; the call blocks until they decide. The card offers the author a per-file grant, so a long build does not mean a click per section.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Absolute path of the existing file, as returned by list_files",
+            },
+            content: {
+              type: "string",
+              description:
+                "Text to add at the end. Start it with the newline(s) you want between the existing ending and this section — nothing is inserted for you.",
+            },
+            reason: {
+              type: "string",
+              description: "One-line justification shown to the user on the review card",
+            },
+          },
+          required: ["path", "content"],
+        },
+      },
+    },
+    execute: (call, ctx) => appendFileTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   create_chapter: {

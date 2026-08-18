@@ -56,7 +56,7 @@ import {
 } from "../lib/agent/sessionDb";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import {
-  CHAT_AUTO_APPROVE_KEY, grants, isAutoApprovable,
+  CHAT_AUTO_APPROVE_KEY, grants, grantsAppend, isAutoApprovable,
   type AutoApproveKind, type AutoApproveState,
 } from "../lib/agent/autoApprove";
 import { createPlanGate, type LorePlan, type PlanDecision } from "../lib/agent/plan";
@@ -76,7 +76,10 @@ import { routeTools } from "../lib/agent/routing";
 import {
   resolveSubAgentConn, visionSubAgentModel, withSessionOverrides, type SubAgentKind,
 } from "../lib/agent/subagent";
-import { repairToolCallPairing, runAgent, type RoundLimitDecision } from "../lib/agent/runtime";
+import {
+  repairToolCallPairing, runAgent,
+  type RoundLimitDecision, type TruncationDecision,
+} from "../lib/agent/runtime";
 import { persistUsage } from "../lib/ai/usage";
 import {
   inputCeilingFor, measureCharsPerToken, RECENT_WINDOW_MIN_CHARS,
@@ -89,7 +92,9 @@ import {
   assembleContext, assembleTurnInjection, bundleToChatMessages, profileSystemPrompt,
 } from "../lib/context/rag";
 import { docModel, promptParams } from "../lib/profile/active";
-import type { ApprovalDecision, EditProposal, Proposal, RewriteProposal } from "../lib/agent/registry";
+import type {
+  AppendProposal, ApprovalDecision, EditProposal, Proposal, RewriteProposal,
+} from "../lib/agent/registry";
 import { type AttachedItem } from "../lib/lore/aiTask";
 import type { StreamMessage } from "../lib/ai/types";
 import { fileExists, readFile, writeFile } from "../lib/fs/fileio";
@@ -169,6 +174,20 @@ export interface PendingRoundLimit {
   runId: RunId;
 }
 
+/**
+ * A run blocked on "the output cap keeps cutting you off — keep going?".
+ *
+ * Same shape as {@link PendingRoundLimit} and for the same reason: the loop is
+ * waiting on a person, and both chat and the task panel render the card.
+ */
+export interface PendingTruncation {
+  id: string;
+  /** Recoveries the runtime already made on its own before asking. */
+  recoveries: number;
+  resolve: (decision: TruncationDecision) => void;
+  runId: RunId;
+}
+
 export interface ChatTurn {
   id: string;
   role: "user" | "assistant";
@@ -210,6 +229,8 @@ interface AgentState {
   pendingPlans: PendingPlan[];
   /** Round-cap questions awaiting the author's decision — one per blocked run. */
   pendingRoundLimits: PendingRoundLimit[];
+  /** Repeated-truncation questions awaiting the author — one per blocked run. */
+  pendingTruncations: PendingTruncation[];
   /**
    * The one surface currently auto-approving, if any (lib/agent/autoApprove).
    * Null is the normal state: every card is asked.
@@ -283,6 +304,11 @@ interface AgentState {
    * a different key replaces — only one surface may hold a grant.
    */
   enableAutoApprove: (key: unknown, what: AutoApproveKind) => void;
+  /**
+   * Author pressed 本次都追加到这个文件 on an append card: further appends to
+   * that one path apply without a card, for as long as the grant lives.
+   */
+  grantAppendPath: (key: unknown, path: string) => void;
   /** Author dismissed the indicator chip — back to asking every time. */
   clearAutoApprove: () => void;
 
@@ -302,6 +328,11 @@ interface AgentState {
   ) => Promise<RoundLimitDecision>;
   /** Resolve a blocked run's round-cap question: extend, finish, or pause. */
   resolveRoundLimit: (runId: RunId, decision: RoundLimitDecision) => void;
+
+  /** Called by the runtime's onTruncationLimit after repeated truncation. */
+  requestTruncationDecision: (recoveries: number, runId: RunId) => Promise<TruncationDecision>;
+  /** Resolve a blocked run's truncation question: keep going, or stop here. */
+  resolveTruncation: (runId: RunId, decision: TruncationDecision) => void;
 
   /** Called by propose_lore_plan (via ToolContext.requestPlanApproval). */
   requestPlanApproval: (plan: LorePlan, runId: RunId, autoApproveKey?: unknown) => Promise<PlanDecision>;
@@ -336,6 +367,7 @@ interface AgentState {
 
 let turnCounter = 0;
 let roundLimitCounter = 0;
+let truncationCounter = 0;
 
 // ─── Applying an approved proposal ───────────────────────────────────────────
 
@@ -408,6 +440,33 @@ async function applyRewrite(proposal: RewriteProposal): Promise<string | null> {
 }
 
 /**
+ * Apply an approved append. Returns the pre-write backup path.
+ *
+ * Reads the file *now* rather than trusting the length the proposal recorded:
+ * the author may have kept typing while the card sat there, and an append is
+ * the one write where that is harmless — whatever they added stays, and the
+ * new section lands after it. The recorded length is only the card's "grew
+ * from" figure, never a precondition.
+ */
+async function applyAppend(proposal: AppendProposal): Promise<string | null> {
+  const { useProjectStore } = await import("./projectStore");
+  const { projectPath, activeFilePath } = useProjectStore.getState();
+  const backupPath = projectPath ? await backupFile(projectPath, proposal.path) : null;
+
+  if (activeFilePath === proposal.path) {
+    // Same reason as applyEdit/applyRewrite: through the editor, so the open
+    // buffer doesn't overwrite the append on its next autosave.
+    const { useEditorStore } = await import("./editorStore");
+    const { content, setContent } = useEditorStore.getState();
+    setContent(content + proposal.content);
+  } else {
+    const raw = await readFile(proposal.path);
+    await writeFile(proposal.path, raw + proposal.content);
+  }
+  return backupPath;
+}
+
+/**
  * What an applied proposal reports.
  *
  * `report` is what the model is told (historically just a backup path, hence
@@ -436,6 +495,9 @@ async function applyProposal(proposal: Proposal, signal?: AbortSignal): Promise<
 
     case "rewrite":
       return { report: await applyRewrite(proposal) };
+
+    case "append":
+      return { report: await applyAppend(proposal) };
 
     case "create": {
       const dir = parentDir(proposal.path);
@@ -531,6 +593,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   pending: [],
   pendingPlans: [],
   pendingRoundLimits: [],
+  pendingTruncations: [],
   autoApprove: null,
 
   turns: [],
@@ -562,6 +625,24 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           key,
           proposals: what === "proposals" || !!held?.proposals,
           plans: what === "plans" || !!held?.plans,
+          appendPaths: held?.appendPaths ?? [],
+        },
+      };
+    }),
+
+  grantAppendPath: (key, path) =>
+    set((s) => {
+      // Same displacement rule as enableAutoApprove: a grant from another
+      // surface is replaced, not merged, so only one surface ever holds one.
+      const held = s.autoApprove?.key === key ? s.autoApprove : null;
+      return {
+        autoApprove: {
+          key,
+          proposals: !!held?.proposals,
+          plans: !!held?.plans,
+          appendPaths: held?.appendPaths.includes(path)
+            ? held.appendPaths
+            : [...(held?.appendPaths ?? []), path],
         },
       };
     }),
@@ -573,10 +654,13 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       const item: PendingApproval = { proposal, resolve, runId, ...binding };
       // Covered by a standing grant: apply now and never queue. Queuing first
       // and approving synchronously would flash the card for a frame.
-      if (
-        grants(get().autoApprove, item.autoApproveKey, "proposals") &&
-        isAutoApprovable(proposal.kind)
-      ) {
+      const covered =
+        (grants(get().autoApprove, item.autoApproveKey, "proposals")
+          && isAutoApprovable(proposal.kind))
+        // The narrow grant: this one file, appends only.
+        || (proposal.kind === "append"
+          && grantsAppend(get().autoApprove, item.autoApproveKey, proposal.path));
+      if (covered) {
         void settleApproval(item, set, true);
         return;
       }
@@ -607,6 +691,20 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         ],
       }));
     }),
+  requestTruncationDecision: (recoveries, runId) =>
+    new Promise<TruncationDecision>((resolve) => {
+      const id = `truncation-${++truncationCounter}`;
+      set((s) => ({
+        pendingTruncations: [...s.pendingTruncations, { id, recoveries, resolve, runId }],
+      }));
+    }),
+  resolveTruncation: (runId, decision) => {
+    const item = get().pendingTruncations.find((p) => p.runId === runId);
+    if (!item) return;
+    set((s) => ({ pendingTruncations: s.pendingTruncations.filter((p) => p !== item) }));
+    item.resolve(decision);
+  },
+
   resolveRoundLimit: (runId, decision) => {
     const item = get().pendingRoundLimits.find((p) => p.runId === runId);
     if (!item) return;
@@ -621,20 +719,28 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // switchChatSession are what end it.
     if (get().autoApprove?.key === runId) set({ autoApprove: null });
 
-    const { pending, pendingPlans, pendingRoundLimits } = get();
+    const { pending, pendingPlans, pendingRoundLimits, pendingTruncations } = get();
     const drainP = pending.filter((p) => p.runId === runId);
     const drainL = pendingPlans.filter((p) => p.runId === runId);
     const drainR = pendingRoundLimits.filter((p) => p.runId === runId);
-    if (drainP.length === 0 && drainL.length === 0 && drainR.length === 0) return;
+    const drainT = pendingTruncations.filter((p) => p.runId === runId);
+    if (
+      drainP.length === 0 && drainL.length === 0
+      && drainR.length === 0 && drainT.length === 0
+    ) return;
     set({
       pending: pending.filter((p) => p.runId !== runId),
       pendingPlans: pendingPlans.filter((p) => p.runId !== runId),
       pendingRoundLimits: pendingRoundLimits.filter((p) => p.runId !== runId),
+      pendingTruncations: pendingTruncations.filter((p) => p.runId !== runId),
     });
     for (const item of drainP) item.resolve({ approved: false, reason });
     for (const item of drainL) item.resolve({ approved: false, reason });
     // Finish = wrap up; the aborted signal is re-checked right after.
     for (const item of drainR) item.resolve({ action: "finish" });
+    // Stop, for the same reason: the run is over, and answering 继续 into a
+    // dead run would leave the loop trying to recover from nothing.
+    for (const item of drainT) item.resolve({ action: "stop" });
   },
 
   requestPlanApproval: (plan, runId, autoApproveKey) =>
@@ -1058,6 +1164,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         signal: controller.signal,
         // At the round cap, block on the author's 继续/收尾/存盘暂停 card instead of
         // force-ending. Each 继续 grants the preset's own cap again.
+        // The card can render here (the approvals area is right above the
+        // composer), so repeated truncation becomes a question instead of a
+        // silent stop.
+        onTruncationLimit: (recoveries) =>
+          get().requestTruncationDecision(recoveries, controller),
         onRoundLimit: (roundsUsed) =>
           get().requestRoundExtension(
             roundsUsed, AGENT_ASSIST_PRESET.maxRounds, controller,

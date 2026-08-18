@@ -43,6 +43,7 @@ import { AgentLog } from "./AgentLog";
 import { ApprovalCard } from "./ApprovalCard";
 import { PlanCard } from "./PlanCard";
 import { RoundLimitCard } from "./RoundLimitCard";
+import { TruncationCard } from "./TruncationCard";
 import { TaskPanel } from "./TaskPanel";
 import { sumTokens, taskDocRevision } from "../../lib/agent/logModel";
 import { useImeGuard } from "../../lib/ime";
@@ -96,6 +97,7 @@ export function AgentChat() {
   const { t } = useTranslation();
   const {
     turns, chatRunning, chatError, pending, pendingPlans, pendingRoundLimits,
+    pendingTruncations,
     sendChat, stopChat,
   } = useAgentStore();
   const activeModelId = useAiStore((s) => s.activeModelId);
@@ -483,7 +485,8 @@ export function AgentChat() {
       {chatError && <div className={styles.error}>{chatError}</div>}
 
       {/* Lore plans + manuscript edits + round-cap questions — the loop is blocked on these */}
-      {(pendingPlans.length > 0 || pending.length > 0 || pendingRoundLimits.length > 0) && (
+      {(pendingPlans.length > 0 || pending.length > 0 || pendingRoundLimits.length > 0
+        || pendingTruncations.length > 0) && (
         <div className={styles.approvals}>
           {pendingPlans.map((p) => (
             <PlanCard key={p.plan.id} item={p} />
@@ -496,6 +499,9 @@ export function AgentChat() {
             // subject — an array index makes React reuse one blocked run's
             // card for another's the moment an earlier one resolves.
             <RoundLimitCard key={p.id} item={p} />
+          ))}
+          {pendingTruncations.map((p) => (
+            <TruncationCard key={p.id} item={p} />
           ))}
         </div>
       )}

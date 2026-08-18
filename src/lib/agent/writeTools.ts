@@ -1275,6 +1275,73 @@ export async function proposeEditTool(
  */
 const REWRITE_MIN_RATIO = 0.5;
 
+/**
+ * Add text to the end of an existing file.
+ *
+ * Deliberately the *only* write that never carries the file's existing
+ * content. `create_file` and `rewrite_document` both take the whole body as
+ * one tool argument, which means the whole body has to fit inside one model
+ * reply — a 60k-character HTML page does not, and the failure mode is a
+ * truncated tool call that writes nothing after the model spent the output
+ * budget generating it. Appending decouples per-call size from file size:
+ * skeleton first, then a section per call, each one landing on disk before the
+ * next is generated.
+ *
+ * The file must already exist. Appending to a missing path would be a
+ * disguised create — with none of create_file's extension check, and no way
+ * for the author's card to say whether they are approving a new file or an
+ * addition to one they know.
+ */
+export async function appendFileTool(
+  toolCallId: string,
+  args: { path?: string; content?: string; reason?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const target = manuscriptTarget(toolCallId, "append_file", args.path, ctx);
+  if ("refusal" in target) return target.refusal;
+  if (typeof args.content !== "string" || args.content === "") {
+    return {
+      toolCallId,
+      content: "Error: 'content' argument is required — the text to add at the end of the file.",
+    };
+  }
+
+  let original: string;
+  try {
+    original = await readFile(target.path);
+  } catch {
+    return {
+      toolCallId,
+      content:
+        `Error: "${target.path}" does not exist (or cannot be read). append_file only extends a file that is ` +
+        "already there — use create_file (or create_chapter) to start it.",
+    };
+  }
+
+  const decision = await ctx.requestApproval!({
+    kind: "append",
+    id: `append-${++proposalCounter}`,
+    path: target.path,
+    content: args.content,
+    originalChars: original.length,
+    reason: args.reason?.trim() || undefined,
+  });
+
+  if (!decision.approved) {
+    return {
+      toolCallId,
+      content: `The user REJECTED this addition${decision.reason ? ` — reason: ${decision.reason}` : "."} Do not resend the same text; adjust per the reason or move on.`,
+    };
+  }
+  return {
+    toolCallId,
+    content:
+      `Appended ${args.content.length} chars to ${target.path} (now ${original.length + args.content.length}).` +
+      (decision.auto ? " Applied under a standing grant — nobody read it." : "") +
+      (decision.backupPath ? ` Previous version backed up to ${decision.backupPath}.` : ""),
+  };
+}
+
 export async function rewriteDocumentTool(
   toolCallId: string,
   args: { path?: string; content?: string; reason?: string },
