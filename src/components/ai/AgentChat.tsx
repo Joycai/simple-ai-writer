@@ -14,7 +14,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight, Image as ImageIcon, ListChecks, Square, X } from "lucide-react";
+import { ArrowUp, ChevronDown, ChevronRight, Image as ImageIcon, ListChecks, X } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { SnippetPicker } from "./SnippetPicker";
 import {
@@ -315,6 +315,38 @@ export function AgentChat() {
     void sendChat(text, attachedQuote, sending);
   };
 
+  // 2d: the composer stays typeable during a run, and Enter queues the draft
+  // instead of sending — it goes on the wire the moment the run settles. A
+  // manual stop (Esc or the ■ button) clears the queue: stopping is an
+  // intervention, and auto-firing the held message would undo it.
+  const [queued, setQueued] = useState(false);
+  useEffect(() => {
+    if (chatRunning || !queued) return;
+    setQueued(false);
+    handleSend();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- gate on the run
+    // settling, not on every keystroke re-creating handleSend
+  }, [chatRunning, queued]);
+
+  const handleStop = () => {
+    setQueued(false);
+    stopChat();
+  };
+
+  // 2d: 正在生成 · mm:ss — timed from when this run started.
+  const [runSeconds, setRunSeconds] = useState(0);
+  useEffect(() => {
+    if (!chatRunning) return;
+    setRunSeconds(0);
+    const startedAt = Date.now();
+    const id = window.setInterval(
+      () => setRunSeconds(Math.floor((Date.now() - startedAt) / 1000)),
+      1000,
+    );
+    return () => window.clearInterval(id);
+  }, [chatRunning]);
+  const runClock = `${String(Math.floor(runSeconds / 60)).padStart(2, "0")}:${String(runSeconds % 60).padStart(2, "0")}`;
+
   /**
    * Ask the model to lay out a plan. Sent as an ordinary turn — the instruction
    * goes on the wire while the transcript shows the short label, the same shape
@@ -351,8 +383,19 @@ export function AgentChat() {
         return;
       }
     }
+    // 2d: Esc 同效 — while a run is live, Esc anywhere in the composer stops
+    // it (the mention branch above already claimed Esc for closing the picker).
+    if (e.key === "Escape" && chatRunning) {
+      e.preventDefault();
+      handleStop();
+      return;
+    }
     if (e.key === "Enter" && !e.shiftKey && !ime.isComposing(e)) {
       e.preventDefault();
+      if (chatRunning) {
+        if (draftRef.current.trim() && activeModelId) setQueued(true);
+        return;
+      }
       handleSend();
     }
   };
@@ -588,7 +631,7 @@ export function AgentChat() {
 
         {refError && <div className={styles.refError}>{refError}</div>}
 
-        <div className={styles.inputRow}>
+        <div className={`${styles.inputRow} ${chatRunning ? styles.inputRowRunning : ""}`}>
           <textarea
             ref={inputRef}
             className={styles.input}
@@ -620,17 +663,30 @@ export function AgentChat() {
             <SnippetPicker
               onPick={(c) => setDraft((prev) => (prev.trim() ? `${prev}\n${c}` : c))}
             />
+            {chatRunning && (
+              <span className={styles.runningNote}>
+                <span className={styles.runningDots} aria-hidden>
+                  <span /><span /><span />
+                </span>
+                {t("ai.chat.generating", { defaultValue: "正在生成" })} · {runClock}
+              </span>
+            )}
             <span className={styles.inputHint}>
-              {t("ai.chat.sendHint", { defaultValue: "Enter 发送 · Shift+Enter 换行" })}
+              {chatRunning
+                ? queued
+                  ? t("ai.chat.queuedHint", { defaultValue: "已排队 · 本轮结束后发送" })
+                  : t("ai.chat.stopHint", { defaultValue: "Esc 停止" })
+                : t("ai.chat.sendHint", { defaultValue: "Enter 发送 · Shift+Enter 换行" })}
             </span>
             {chatRunning ? (
-              <button className={`${styles.sendBtn} ${styles.stopBtn}`} onClick={stopChat} title={t("ai.chat.stop")}>
-                <Square size={12} fill="currentColor" />
+              // 2d: the ink square is the *stop* mark — same slot, the raised
+              // block framed in the run accent.
+              <button className={`${styles.sendBtn} ${styles.stopBtn}`} onClick={handleStop} title={t("ai.chat.stop")}>
+                <span className={styles.sendGlyph} aria-hidden />
               </button>
             ) : (
               <button className={styles.sendBtn} onClick={handleSend} disabled={!canSend} title={t("ai.chat.send")}>
-                {/* The send mark is an ink square, not an arrow — see mockup 1b. */}
-                <span className={styles.sendGlyph} aria-hidden />
+                <ArrowUp size={14} strokeWidth={2.2} />
               </button>
             )}
           </div>
