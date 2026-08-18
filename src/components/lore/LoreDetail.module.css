@@ -95,12 +95,36 @@
 .colIndex {
   width: 320px;
   flex-shrink: 0;
-  padding: 24px 24px 22px;
   border-right: 1px solid var(--color-border-soft);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  min-height: 0;
+  overflow: hidden;
+}
+/* 主词条栏和另两栏同构：钉住的栏首 + 自己滚的主体 + 钉在栏底的落款。别让
+   .colIndex 自己当滚动盒——正文长度不定，一旦给正文块配 min-height:0，flex 就
+   把渲染好的 markdown 压到低于内容高度，而它不裁剪，段落于是画到文件清单和两个
+   按钮上。栏首单独钉住的第二个理由：三栏的 head 在屏 15 里齐平成一条基线，跟着
+   正文滚就散了。 */
+.indexHead {
+  flex-shrink: 0;
+  padding: 24px 24px 13px;
+}
+.indexScroll {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  padding: 0 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.indexFoot {
+  flex-shrink: 0;
+  padding: 0 24px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 .colFacets {
   flex: 1;
@@ -260,7 +284,7 @@
 .summaryEmpty:disabled { cursor: not-allowed; }
 
 .indexBody {
-  min-height: 0;
+  flex-shrink: 0;
 }
 /* Rendered-markdown subtree for index.md's body. Typography comes from the
    active markdown theme (.md-body, applied by MarkdownPreview); this only

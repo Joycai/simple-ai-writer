@@ -849,101 +849,106 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
 
         {/* ── 主词条 · index.md ─────────────────────────────────────────── */}
         <div className={styles.colIndex}>
-          <div className={styles.colHead}>
-            {t("lore.detail.colIndex", { defaultValue: "主词条 · index.md" })}
-          </div>
-
-          <div
-            className={styles.avatarWrap}
-            onClick={handleAvatarPick}
-            title={t("lore.wall.changeAvatar", { defaultValue: "更换头像" })}
-          >
-            {avatarUrl ? (
-              <img src={avatarUrl} alt={entity.name} className={styles.avatarImg} />
-            ) : (
-              <div className={styles.avatar} style={{ background: categoryColor(entity.category) }}>
-                {entity.name.charAt(0)}
-              </div>
-            )}
-            <div className={styles.avatarOverlay}>
-              <Camera size={18} strokeWidth={1.8} />
-            </div>
-          </div>
-
-          <div>
-            <div className={styles.heroName}>{entity.name}</div>
-            {entity.aliases.length > 0 && (
-              <div className={styles.heroAliases}>
-                {t("lore.detail.fieldAliases", { defaultValue: "别名" })}：{entity.aliases.join(" · ")}
-              </div>
-            )}
-          </div>
-
-          <div className={styles.catRow}>
-            <span className={styles.catLabel}>
-              {t("lore.detail.fieldCategory", { defaultValue: "分类" })}
+          <div className={styles.indexHead}>
+            <span className={styles.colHead}>
+              {t("lore.detail.colIndex", { defaultValue: "主词条 · index.md" })}
             </span>
-            <button
-              className={styles.catChip}
-              onClick={startEntityEdit}
-              disabled={contentLoadFailed}
-              title={t("lore.detail.edit", { defaultValue: "编辑" })}
+          </div>
+
+          <div className={styles.indexScroll}>
+            <div
+              className={styles.avatarWrap}
+              onClick={handleAvatarPick}
+              title={t("lore.wall.changeAvatar", { defaultValue: "更换头像" })}
             >
-              <span className={styles.crumbDot} style={{ background: categoryColor(entity.category) }} />
-              {cat ? categoryLabel(cat, isZh) : entity.category}
-            </button>
-          </div>
-
-          <div>
-            <div className={styles.fieldHead}>
-              {t("lore.detail.summaryHead", { defaultValue: "摘要 · 命中即注入" })}
-            </div>
-            {entity.summary ? (
-              <div className={styles.summaryBox}>{entity.summary}</div>
-            ) : (
-              <button className={styles.summaryEmpty} onClick={startEntityEdit} disabled={contentLoadFailed}>
-                {t("lore.detail.summaryEmpty", { defaultValue: "（无摘要 — 点击填写）" })}
-              </button>
-            )}
-          </div>
-
-          <div className={styles.indexBody}>
-            <div className={styles.fieldHead}>
-              {t("lore.detail.bodyHead", { defaultValue: "正文" })}
-            </div>
-            {content ? (
-              <MarkdownPreview
-                source={content}
-                basePath={entity.dirPath}
-                className={styles.markdown}
-              />
-            ) : contentLoadFailed ? (
-              <div className={styles.notLoaded}>
-                {t("lore.detail.loadError", { defaultValue: "内容读取失败，磁盘上的文件未被改动" })}
+              {avatarUrl ? (
+                <img src={avatarUrl} alt={entity.name} className={styles.avatarImg} />
+              ) : (
+                <div className={styles.avatar} style={{ background: categoryColor(entity.category) }}>
+                  {entity.name.charAt(0)}
+                </div>
+              )}
+              <div className={styles.avatarOverlay}>
+                <Camera size={18} strokeWidth={1.8} />
               </div>
-            ) : (
-              <div className={styles.notLoaded}>{t("lore.detail.noContent")}</div>
-            )}
+            </div>
+
+            <div>
+              <div className={styles.heroName}>{entity.name}</div>
+              {entity.aliases.length > 0 && (
+                <div className={styles.heroAliases}>
+                  {t("lore.detail.fieldAliases", { defaultValue: "别名" })}：{entity.aliases.join(" · ")}
+                </div>
+              )}
+            </div>
+
+            <div className={styles.catRow}>
+              <span className={styles.catLabel}>
+                {t("lore.detail.fieldCategory", { defaultValue: "分类" })}
+              </span>
+              <button
+                className={styles.catChip}
+                onClick={startEntityEdit}
+                disabled={contentLoadFailed}
+                title={t("lore.detail.edit", { defaultValue: "编辑" })}
+              >
+                <span className={styles.crumbDot} style={{ background: categoryColor(entity.category) }} />
+                {cat ? categoryLabel(cat, isZh) : entity.category}
+              </button>
+            </div>
+
+            <div>
+              <div className={styles.fieldHead}>
+                {t("lore.detail.summaryHead", { defaultValue: "摘要 · 命中即注入" })}
+              </div>
+              {entity.summary ? (
+                <div className={styles.summaryBox}>{entity.summary}</div>
+              ) : (
+                <button className={styles.summaryEmpty} onClick={startEntityEdit} disabled={contentLoadFailed}>
+                  {t("lore.detail.summaryEmpty", { defaultValue: "（无摘要 — 点击填写）" })}
+                </button>
+              )}
+            </div>
+
+            <div className={styles.indexBody}>
+              <div className={styles.fieldHead}>
+                {t("lore.detail.bodyHead", { defaultValue: "正文" })}
+              </div>
+              {content ? (
+                <MarkdownPreview
+                  source={content}
+                  basePath={entity.dirPath}
+                  className={styles.markdown}
+                />
+              ) : contentLoadFailed ? (
+                <div className={styles.notLoaded}>
+                  {t("lore.detail.loadError", { defaultValue: "内容读取失败，磁盘上的文件未被改动" })}
+                </div>
+              ) : (
+                <div className={styles.notLoaded}>{t("lore.detail.noContent")}</div>
+              )}
+            </div>
           </div>
 
-          <span className={styles.spacer} />
+          {/* 落款: 屏 15 把文件清单和两个按钮压在栏底 — 钉住, 不随正文滚。 */}
+          <div className={styles.indexFoot}>
+            {/* What the entity is on disk — the mockup's mono file listing. */}
+            <div className={styles.fileTree}>
+              <div>lore/{entity.category}/{entity.id}/</div>
+              <div>├ index.md</div>
+              <div>├ images.md{entity.images.length > 0 ? ` · ${entity.images.length}` : ""}</div>
+              <div>└ {entity.facets.length} × {t("lore.facet.section", { defaultValue: "特征" })} .md</div>
+            </div>
 
-          {/* What the entity is on disk — the mockup's mono file listing. */}
-          <div className={styles.fileTree}>
-            <div>lore/{entity.category}/{entity.id}/</div>
-            <div>├ index.md</div>
-            <div>├ images.md{entity.images.length > 0 ? ` · ${entity.images.length}` : ""}</div>
-            <div>└ {entity.facets.length} × {t("lore.facet.section", { defaultValue: "特征" })} .md</div>
-          </div>
-
-          <div className={styles.colActions}>
-            <button className={styles.colActionPrimary} onClick={() => setShowAiHub(true)}>
-              <Sparkles size={11} strokeWidth={2} />
-              {t("lore.aiHub.title", { defaultValue: "AI 编辑助手" })}
-            </button>
-            <button className={styles.colAction} onClick={() => setShowSplit(true)}>
-              {t("lore.detail.splitEntry", { defaultValue: "拆分条目" })}
-            </button>
+            <div className={styles.colActions}>
+              <button className={styles.colActionPrimary} onClick={() => setShowAiHub(true)}>
+                <Sparkles size={11} strokeWidth={2} />
+                {t("lore.aiHub.title", { defaultValue: "AI 编辑助手" })}
+              </button>
+              <button className={styles.colAction} onClick={() => setShowSplit(true)}>
+                {t("lore.detail.splitEntry", { defaultValue: "拆分条目" })}
+              </button>
+            </div>
           </div>
         </div>
 
