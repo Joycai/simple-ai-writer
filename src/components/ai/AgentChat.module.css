@@ -404,6 +404,8 @@
   outline: none;
   box-sizing: border-box;
   max-height: 180px;
+  /* One line survives any squeeze; past that the textarea scrolls. */
+  min-height: 40px;
 }
 .input::placeholder { color: var(--color-text-hint); }
 
@@ -412,6 +414,9 @@
   align-items: center;
   gap: var(--space-3);
   padding: 0 8px 8px 14px;
+  /* Under height pressure the textarea yields, never this row — otherwise the
+     send stamp gets pushed onto the box's bottom border. */
+  flex-shrink: 0;
 }
 .inputHint {
   margin-right: auto;
@@ -419,7 +424,10 @@
   color: var(--color-text-kbd);
 }
 
-/* A raised square holding a small accent square — an ink stamp, not an arrow. */
+/* A raised square holding a small accent square — an ink stamp, not an arrow.
+   The hairline is what keeps the block legible on paper, where bg-raised is
+   almost the composer's own bg — without it only the glyph shows, and a bare
+   ■ reads as a stop icon. */
 .sendBtn {
   flex-shrink: 0;
   display: flex;
@@ -427,7 +435,8 @@
   justify-content: center;
   width: 34px;
   height: 34px;
-  border: none;
+  border: 1px solid var(--color-border-input);
+  box-sizing: border-box;
   background: var(--color-bg-raised);
   color: var(--color-on-accent);
   cursor: pointer;
@@ -442,7 +451,7 @@
 .sendBtn:hover:not(:disabled) { background: var(--color-bg-hover); }
 .sendBtn:hover:not(:disabled) .sendGlyph { background: var(--color-sienna-hover); }
 .sendBtn:disabled { opacity: 0.35; cursor: not-allowed; }
-.stopBtn { background: var(--color-error); color: var(--color-paper); }
+.stopBtn { background: var(--color-error); border-color: var(--color-error); color: var(--color-paper); }
 .stopBtn:hover:not(:disabled) { background: var(--color-error); opacity: 0.85; }
 
 /* ── Pictures produced by a turn ─────────────────────────────────────────── */
