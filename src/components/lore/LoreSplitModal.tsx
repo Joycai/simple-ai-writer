@@ -27,6 +27,10 @@ import { loadApiKey } from "../../lib/keyStore";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { ModalShell } from "../common/ModalShell";
 import { useImeGuard } from "../../lib/ime";
+import {
+  LoreRunSteps, RunStatusLine, ThinkingPanel, useRunClock, useRunTelemetry,
+  type RunStep,
+} from "./ai/LoreRunProgress";
 import { Select } from "../common/Select";
 import styles from "./LoreSplitModal.module.css";
 
@@ -91,13 +95,14 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
   const [phase, setPhase] = useState<"input" | "generating" | "review">("input");
   const [indexRaw, setIndexRaw] = useState("");
   const [instruction, setInstruction] = useState("");
-  const [rawOutput, setRawOutput] = useState("");
   const [core, setCore] = useState("");
   const [drafts, setDrafts] = useState<EditableDraft[]>([]);
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const elapsedSec = useRunClock(phase === "generating");
+  const { reasoning, usageTokens, onEvent: onRunEvent, reset: resetTelemetry } = useRunTelemetry();
 
   useEffect(() => {
     // Normalize CRLF up front: the frontmatter regex below assumes \n, and a
@@ -126,7 +131,7 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setError(null);
-    setRawOutput("");
+    resetTelemetry();
     setPhase("generating");
 
     try {
@@ -150,8 +155,9 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
         existingFacets,
         instruction,
         ...connOptions({ provider, model, apiKey }),
-        // Whole output each time, not a delta — see splitter.onProgress.
-        onProgress: setRawOutput,
+        // Raw JSON stays hidden — the progress card (步骤列 + 思维链) speaks instead.
+        onProgress: () => {},
+        onEvent: onRunEvent,
         signal: ctrl.signal,
       });
       // Empty core would wipe the entry on Apply — fall back to the original.
@@ -168,6 +174,17 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
       abortRef.current = null;
     }
   };
+
+  // 语义步骤 (设计稿 17): 读取 → 拆解分组 → 交给作者确认。
+  const splitSteps: RunStep[] = [
+    {
+      label: t("lore.split.stepRead", { defaultValue: "读取条目正文与特征" }),
+      status: "done",
+      meta: `${indexBody.length.toLocaleString()} ${t("lore.split.chars", { defaultValue: "字" })}${entity.facets.length > 0 ? ` · ${entity.facets.length} ${t("lore.facet.section", { defaultValue: "特征" })}` : ""}`,
+    },
+    { label: t("lore.split.stepDraft", { defaultValue: "拆解分组 · 起草特征与触发词" }), status: "active" },
+    { label: t("lore.split.stepConfirm", { defaultValue: "交给你确认后写入条目目录" }), status: "pending" },
+  ];
 
   const handleCancelGenerate = () => {
     abortRef.current?.abort();
@@ -248,7 +265,11 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
               {t("lore.split.title", { defaultValue: "拆分条目" })} · {entity.name}
             </span>
             <span className={styles.headerEntity}>
-              {entity.category} · {indexBody.length.toLocaleString()} {t("lore.split.chars", { defaultValue: "字" })}
+              {t("lore.split.statChip", {
+                chars: indexBody.length.toLocaleString(),
+                facets: entity.facets.length,
+                defaultValue: `正文 ${indexBody.length.toLocaleString()} 字 · ${entity.facets.length} 特征`,
+              })}
             </span>
             <span className={styles.headerHint}>
               {t("lore.split.reason", { defaultValue: "条目过长会稀释检索命中 · 建议拆分" })}
@@ -300,14 +321,21 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
           {phase === "generating" && (
             <>
               <div className={styles.sectionLabel}>
-                {t("lore.split.generating", { defaultValue: "正在拆解…" })}
+                {t("lore.split.planLabel", { defaultValue: "整理方案 · AI 建议" })}
+                <RunStatusLine state="running" elapsedSec={elapsedSec} />
               </div>
-              <pre className={styles.streamOutput}>{rawOutput || "…"}</pre>
+              <LoreRunSteps steps={splitSteps} />
+              <ThinkingPanel text={reasoning} running />
             </>
           )}
 
           {phase === "review" && (
             <>
+              <div className={styles.sectionLabel}>
+                {t("lore.split.planLabel", { defaultValue: "整理方案 · AI 建议" })}
+                <RunStatusLine state="done" elapsedSec={elapsedSec} tokens={usageTokens} />
+              </div>
+              <ThinkingPanel text={reasoning} running={false} />
               {notes && <div className={styles.notes}>{notes}</div>}
               {entity.facets.length > 0 && (
                 <div className={styles.error}>
@@ -374,16 +402,24 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
                         disabled={!d.include}
                         title={t("lore.facet.fieldPriority", { defaultValue: "优先级" })}
                       />
+                      <span className={styles.modeBadge}>
+                        {t("lore.facet.modeAutoShort", { defaultValue: "自动" })}
+                      </span>
                       {d.include && (
                         <span className={styles.draftNewTag}>
-                          {t("lore.split.newTag", { defaultValue: "新条目" })}
+                          {t("lore.split.newTag", { defaultValue: "新特征" })}
                         </span>
                       )}
                       <span className={styles.tokenTag}>~{estTk(d.content.length)} tk</span>
                     </div>
                     {d.include && (
                       <>
-                        <KeysEditor keys={d.meta.keys} onChange={(keys) => updateDraftMeta(i, { keys })} />
+                        <div className={styles.keysRow}>
+                          <span className={styles.keysLabel}>
+                            {t("lore.facet.fieldKeys", { defaultValue: "触发词" })}
+                          </span>
+                          <KeysEditor keys={d.meta.keys} onChange={(keys) => updateDraftMeta(i, { keys })} />
+                        </div>
                         {d.meta.keys.length === 0 && (
                           <div className={styles.draftWarn}>
                             <AlertTriangle size={11} />

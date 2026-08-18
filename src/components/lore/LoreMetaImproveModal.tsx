@@ -19,6 +19,10 @@ import { imageToDataUrl } from "../../lib/fs/images";
 import { useImeGuard } from "../../lib/ime";
 import { runStructuredTask } from "../../lib/agent/structured";
 import type { ToolDefinition } from "../../lib/ai";
+import {
+  LoreRunSteps, RunStatusLine, ThinkingPanel, estimateRunTokens, useRunClock,
+  type RunStep,
+} from "./ai/LoreRunProgress";
 import { Select } from "../common/Select";
 import styles from "./LoreImproveModal.module.css";
 import extra from "./LoreMetaImproveModal.module.css";
@@ -46,6 +50,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
   const [body, setBody] = useState("");
   const [phase, setPhase] = useState<"input" | "generating" | "result">("input");
   const [rawOutput, setRawOutput] = useState("");
+  const [reasoning, setReasoning] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [instruction, setInstruction] = useState("");
@@ -58,6 +63,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
   const [aliasInput, setAliasInput] = useState("");
 
   const abortRef = useRef<AbortController | null>(null);
+  const elapsedSec = useRunClock(phase === "generating");
 
   useEffect(() => {
     readEntityFile(entity.dirPath, "index.md")
@@ -80,6 +86,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
     abortRef.current = ctrl;
     setError(null);
     setRawOutput("");
+    setReasoning("");
     setPhase("generating");
 
     try {
@@ -180,6 +187,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
         userContent,
         signal: ctrl.signal,
         onText: setRawOutput,
+        onReasoning: setReasoning,
       });
 
       const parsed = JSON.parse(toolArgs) as Partial<MetaProposal>;
@@ -236,6 +244,17 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
   const imageCount = (entity.avatarPath ? 1 : 0) + entity.images.length;
   const willSendImages = activeModel?.type === "multimodal" && imageCount > 0;
 
+  // 语义步骤 (设计稿 17): 读取 → 生成建议 → 交给作者确认。
+  const metaSteps: RunStep[] = [
+    {
+      label: t("lore.meta.stepRead", { defaultValue: "读取主词条与配图" }),
+      status: "done",
+      meta: `${body.length}${isZh ? " 字" : " ch"}${willSendImages ? ` · ${imageCount}${isZh ? " 图" : " img"}` : ""}`,
+    },
+    { label: t("lore.meta.stepDraft", { defaultValue: "生成建议 · 名称 / 别名 / 分类 / 概要" }), status: "active" },
+    { label: t("lore.meta.stepConfirm", { defaultValue: "交给你确认后写入 index.md" }), status: "pending" },
+  ];
+
   // Unsaved once the user has typed an instruction or a proposal was generated.
   const dirty = phase !== "input" || instruction.trim().length > 0;
 
@@ -250,18 +269,18 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
               : <div className={styles.headerAvatarPlaceholder}>{entity.name.charAt(0)}</div>}
             <div>
               <div className={styles.headerName}>
-                {entity.name} · {isZh ? "元信息完善" : "Metadata"}
+                {entity.name} · {t("lore.meta.title", { defaultValue: "主词条补全" })}
               </div>
               <div className={styles.headerSub}>
-                {isZh ? "缺失的摘要与别名会显著降低检索命中" : "Missing summary or aliases hurt retrieval"}
+                {t("lore.meta.subtitle", { defaultValue: "缺失的概要与别名会显著降低命中率" })}
               </div>
               {(!entity.summary || entity.aliases.length === 0) && (
                 <div className={extra.badges}>
                   {!entity.summary && (
-                    <span className={extra.badge}>{isZh ? "缺摘要" : "no summary"}</span>
+                    <span className={extra.badge}>{t("lore.meta.missingSummary", { defaultValue: "缺概要" })}</span>
                   )}
                   {entity.aliases.length === 0 && (
-                    <span className={extra.badge}>{isZh ? "缺别名" : "no aliases"}</span>
+                    <span className={extra.badge}>{t("lore.meta.missingAliases", { defaultValue: "缺别名" })}</span>
                   )}
                 </div>
               )}
@@ -287,14 +306,15 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
         <div className={styles.body}>
           {willSendImages && (
             <div className={styles.section} style={{ opacity: 0.75, fontSize: 12 }}>
-              {isZh
-                ? `将随词条设定一并发送 ${imageCount} 张图片（头像 + 图库）供多模态模型参考。`
-                : `Sending ${imageCount} image(s) (avatar + gallery) to the multimodal model.`}
+              {t("lore.meta.sendImages", {
+                count: imageCount,
+                defaultValue: `将随条目一并发送 ${imageCount} 张图片（头像 + 图库）供多模态模型参考。`,
+              })}
             </div>
           )}
           {/* Current snapshot */}
           <div className={styles.section}>
-            <label className={styles.label}>{isZh ? "当前元数据" : "Current metadata"}</label>
+            <label className={styles.label}>{t("lore.meta.currentLabel", { defaultValue: "当前主词条" })}</label>
             <pre className={styles.currentPre}>
 {`---
 name: ${entity.name}
@@ -308,34 +328,31 @@ summary: ${entity.summary}
           {/* Instruction (optional) */}
           <div className={styles.section}>
             <label className={styles.label}>
-              {isZh ? "额外指令" : "Extra instruction"}
-              <span className={styles.hint}> · {isZh ? "可选" : "optional"}</span>
+              {t("lore.meta.instructionLabel", { defaultValue: "额外指令" })}
+              <span className={styles.hint}> · {t("lore.facet.optional", { defaultValue: "可选" })}</span>
             </label>
             <MarkdownTextarea
               format={false}
               className={styles.textarea}
               rows={2}
-              placeholder={isZh
-                ? "例如：补充别名、把概要缩短到一句话…"
-                : "e.g. add aliases inferred from the body, tighten the summary…"}
+              placeholder={t("lore.meta.instructionPlaceholder", {
+                defaultValue: "例如：补充别名、把概要缩短到一句话…",
+              })}
               value={instruction}
               onChange={(e) => setInstruction(e.target.value)}
               disabled={phase === "generating"}
             />
           </div>
 
-          {/* Streaming raw output */}
+          {/* 运行进度: 状态行 + 步骤列 + 思维链 (设计稿 17) */}
           {phase === "generating" && (
             <div className={styles.section}>
-              <div className={extra.genRow}>
-                <span className={extra.genDots}>
-                  <span className={extra.genDot} />
-                  <span className={extra.genDot} />
-                  <span className={extra.genDot} />
-                </span>
-                <span className={extra.genLabel}>{isZh ? "生成中" : "generating"}</span>
+              <div className={styles.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {t("lore.meta.suggestionLabel", { defaultValue: "AI 建议" })}
+                <RunStatusLine state="running" elapsedSec={elapsedSec} />
               </div>
-              {rawOutput && <pre className={styles.currentPre}>{rawOutput}</pre>}
+              <LoreRunSteps steps={metaSteps} />
+              <ThinkingPanel text={reasoning} running />
             </div>
           )}
 
@@ -350,18 +367,24 @@ summary: ${entity.summary}
           {/* Editable proposal */}
           {phase === "result" && (
             <div className={styles.section}>
-              <label className={styles.label}>
-                {isZh ? "AI 建议（应用前可编辑）" : "AI suggestion (editable before apply)"}
+              <label className={styles.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {t("lore.meta.suggestionEditable", { defaultValue: "AI 建议（应用前可编辑）" })}
+                <RunStatusLine
+                  state="done"
+                  elapsedSec={elapsedSec}
+                  tokens={estimateRunTokens(rawOutput, reasoning)}
+                />
               </label>
+              <ThinkingPanel text={reasoning} running={false} />
               <div className={extra.grid}>
-                <label className={extra.gLabel}>{isZh ? "名称" : "name"}</label>
+                <label className={extra.gLabel}>{t("lore.detail.fieldName", { defaultValue: "名称" })}</label>
                 <input
                   className={extra.gInput}
                   value={pName}
                   onChange={(e) => setPName(e.target.value)}
                 />
 
-                <label className={extra.gLabel}>{isZh ? "分类" : "category"}</label>
+                <label className={extra.gLabel}>{t("lore.detail.fieldCategory", { defaultValue: "分类" })}</label>
                 <Select
                   className={extra.gSelect}
                   value={pCategory}
@@ -372,7 +395,7 @@ summary: ${entity.summary}
                   }))}
                 />
 
-                <label className={extra.gLabel}>{isZh ? "别名" : "aliases"}</label>
+                <label className={extra.gLabel}>{t("lore.detail.fieldAliases", { defaultValue: "别名" })}</label>
                 <div>
                   {pAliases.length > 0 && (
                     <div className={styles.chips} style={{ marginBottom: 6 }}>
@@ -398,18 +421,20 @@ summary: ${entity.summary}
                       if (aliasIme.isComposing(e)) return;
                       if (e.key === "Enter") { e.preventDefault(); addAlias(); }
                     }}
-                    placeholder={isZh ? "添加别名（回车确认）" : "Add alias (press Enter)"}
+                    placeholder={t("lore.detail.aliasPlaceholder", { defaultValue: "添加别名（回车确认）" })}
                   />
                 </div>
 
                 <label className={extra.gLabel}>
-                  {isZh ? "概要" : "summary"}
+                  {t("lore.detail.fieldSummary", { defaultValue: "概要" })}
                   {pSummary.trim() && (
-                    <span className={extra.charNote}>{pSummary.trim().length} {isZh ? "字" : "ch"}</span>
+                    <span className={extra.charNote}>
+                      {t("lore.facet.chars", { chars: pSummary.trim().length, defaultValue: `${pSummary.trim().length} 字` })}
+                    </span>
                   )}
                 </label>
                 <MarkdownTextarea
-                  className={`${extra.gInput} ${extra.gTextarea}`}
+                  className={`${extra.gInput} ${extra.gTextarea} ${pSummary.trim() && pSummary.trim() !== entity.summary ? extra.gChanged : ""}`}
                   value={pSummary}
                   onChange={(e) => setPSummary(e.target.value)}
                   rows={2}
@@ -422,11 +447,13 @@ summary: ${entity.summary}
         {/* Footer */}
         <div className={styles.footer}>
           <span className={styles.footerNote}>
-            {isZh ? "「应用」只更新元信息，不改动正文" : "Apply only updates metadata — the body is untouched"}
+            {t("lore.meta.footerNote", {
+              defaultValue: "「应用」只写入主词条四个字段：名称 · 别名 · 分类 · 概要，不改特征正文",
+            })}
           </span>
           <div className={styles.footerRight}>
             <button className={styles.btnGhost} onClick={onClose}>
-              {isZh ? "取消" : "Cancel"}
+              {t("common.cancel", { defaultValue: "取消" })}
             </button>
             {phase === "input" && (
               <button
@@ -434,7 +461,7 @@ summary: ${entity.summary}
                 onClick={handleGenerate}
                 disabled={!activeModelId}
               >
-                <Sparkles size={13} /> {isZh ? "生成建议" : "Generate"}
+                <Sparkles size={13} /> {t("lore.meta.generate", { defaultValue: "生成建议" })}
               </button>
             )}
             {phase === "generating" && (
@@ -442,7 +469,7 @@ summary: ${entity.summary}
                 className={styles.btnAbort}
                 onClick={() => { abortRef.current?.abort(); setPhase(rawOutput ? "result" : "input"); }}
               >
-                {isZh ? "停止" : "Stop"}
+                {t("lore.improve.stop", { defaultValue: "停止" })}
               </button>
             )}
             {phase === "result" && (
@@ -452,14 +479,16 @@ summary: ${entity.summary}
                   onClick={handleGenerate}
                   disabled={!activeModelId}
                 >
-                  <RotateCw size={12} /> {isZh ? "重新生成" : "Regenerate"}
+                  <RotateCw size={12} /> {t("lore.improve.regenerate", { defaultValue: "重新生成" })}
                 </button>
                 <button
                   className={styles.btnPrimary}
                   onClick={handleApply}
                   disabled={saving || !pName.trim()}
                 >
-                  <Check size={13} /> {saving ? (isZh ? "应用中…" : "Applying…") : (isZh ? "应用" : "Apply")}
+                  <Check size={13} /> {saving
+                    ? t("lore.improve.applying", { defaultValue: "应用中…" })
+                    : t("lore.meta.apply", { defaultValue: "应用" })}
                 </button>
               </>
             )}

@@ -13,6 +13,10 @@ import { type AttachedImage, type AttachedText, type AttachedLore, type Attached
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { ModalShell } from "../common/ModalShell";
 import { AttachmentTextarea } from "./ai/AttachmentTextarea";
+import {
+  LoreRunSteps, RunStatusLine, ThinkingPanel, useRunClock, useRunTelemetry,
+  type RunStep,
+} from "./ai/LoreRunProgress";
 import { NewEntryTabs, type NewEntryMode } from "./ai/NewEntryTabs";
 import { writeBinaryFile } from "../../lib/fs/fileio";
 import { loadApiKey } from "../../lib/keyStore";
@@ -44,14 +48,17 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
   // ── Input state ──────────────────────────────────────────────────────────
   const [description, setDescription] = useState(initialDescription ?? "");
   const [attached, setAttached] = useState<AttachedItem[]>([]);
-  const [category, setCategory] = useState<CategoryId>(defaultCategoryId);
+  // 分类范围 (设计稿 08): which categories the extraction may file into.
+  // All enabled by default; at least one must stay on.
+  const [selCats, setSelCats] = useState<CategoryId[]>(() => loreCategories().map((c) => c.id));
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
 
   // ── Generation state ─────────────────────────────────────────────────────
   const [phase, setPhase] = useState<"input" | "generating" | "result">("input");
-  const [genStatus, setGenStatus] = useState("");
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const elapsedSec = useRunClock(phase === "generating");
+  const { reasoning, usageTokens, onEvent: onRunEvent, reset: resetTelemetry } = useRunTelemetry();
 
   // ── Editable result fields ───────────────────────────────────────────────
   const [editName, setEditName] = useState("");
@@ -62,14 +69,6 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Status messages for generation
-  const statusMessages = [
-    t("lore.generator.status1"),
-    t("lore.generator.status2"),
-    t("lore.generator.status3"),
-    t("lore.generator.status4"),
-  ];
-
   useEffect(() => {
     if (projectPath) {
       scanProjectFiles(projectPath).then(setProjectFiles).catch(() => {});
@@ -78,6 +77,24 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
 
   // Candidates for @-mention: every existing entity (this is a brand-new one).
   const allEntities = Object.values(loreIndex).flat();
+
+  const toggleCat = (id: CategoryId) => {
+    setSelCats((prev) => prev.includes(id)
+      ? (prev.length > 1 ? prev.filter((c) => c !== id) : prev) // keep at least one
+      : [...prev, id]);
+  };
+
+  // 语义步骤 (设计稿 17): 读取 → 提取 → 交给作者确认。
+  const refCount = attached.length;
+  const genSteps: RunStep[] = [
+    {
+      label: t("lore.generator.stepRead", { defaultValue: "读取描述与引用资料" }),
+      status: "done",
+      meta: `${description.trim().length}${isZh ? " 字" : " ch"}${refCount > 0 ? ` · ${refCount}${isZh ? " 引用" : " refs"}` : ""}`,
+    },
+    { label: t("lore.generator.stepExtract", { defaultValue: "提取条目 · 生成主词条与概要" }), status: "active" },
+    { label: t("lore.generator.stepConfirm", { defaultValue: "交给你确认后入库" }), status: "pending" },
+  ];
 
   // ── Tag input helpers ────────────────────────────────────────────────────
   const commitTag = () => {
@@ -104,12 +121,8 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setError(null);
-    setGenStatus(statusMessages[0]);
+    resetTelemetry();
     setPhase("generating");
-
-    // Cycle status messages so UI feels alive
-    let si = 0;
-    const tick = setInterval(() => { si = (si + 1) % statusMessages.length; setGenStatus(statusMessages[si]); }, 1800);
 
     try {
       const apiKey = await loadApiKey(provider.id) ?? "";
@@ -138,9 +151,11 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
           : [],
         textAttachments: [...loreRefs, ...fileRefs],
         ...connOptions({ provider, model, apiKey }),
-        onProgress: () => {}, // we show spinner, not raw text
+        onProgress: () => {}, // raw JSON stays hidden — the progress card speaks instead
+        onEvent: onRunEvent,  // reasoning stream + token totals (设计稿 17)
         signal: ctrl.signal,
         systemPrompt: loreScenePrompt?.content,
+        allowedCategories: selCats,
       });
       setEditName(result.name);
       setEditCat(result.category);
@@ -154,7 +169,6 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
       }
       setPhase("input");
     } finally {
-      clearInterval(tick);
       abortRef.current = null;
     }
   };
@@ -226,10 +240,19 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
           {/* Left: options */}
           <div className={styles.side}>
             <div>
-              <div className={styles.sectionLabel}>{isZh ? "category · 分类" : "category"}</div>
-              <Select className={styles.select} value={category}
-                onChange={(v) => setCategory(v as CategoryId)}
-                options={loreCategories().map((c) => ({ value: c.id, label: categoryLabel(c, isZh) }))} />
+              <div className={styles.sectionLabel}>{isZh ? "scope · 分类范围" : "scope"}</div>
+              <div className={styles.catChips}>
+                {loreCategories().map((c) => (
+                  <button
+                    key={c.id}
+                    className={`${styles.catChip} ${selCats.includes(c.id) ? styles.catChipOn : ""}`}
+                    disabled={phase === "generating"}
+                    onClick={() => toggleCat(c.id)}
+                  >
+                    {categoryLabel(c, isZh)}
+                  </button>
+                ))}
+              </div>
             </div>
             <div>
               <div className={styles.sectionLabel}>{isZh ? "model · 模型" : "model"}</div>
@@ -282,28 +305,30 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
           {/* Error */}
           {error && <div className={styles.error}><AlertTriangle size={13} style={{ flexShrink: 0 }} /> {error}</div>}
 
-          {/* ── Generating state: 3 gradient squares ── */}
+          {/* ── Generating: 步骤列 + 思维链 (设计稿 17) ── */}
           {phase === "generating" && (
-            <div className={styles.generating}>
-              <span className={styles.genDots}>
-                <span className={styles.genDot} />
-                <span className={styles.genDot} />
-                <span className={styles.genDot} />
-              </span>
-              <span className={styles.generatingText}>{genStatus}</span>
-            </div>
+            <>
+              <div className={styles.statusRow}>
+                <span className={styles.statusLabel}>
+                  {t("lore.generator.resultHead", { defaultValue: "提取结果" })}
+                </span>
+                <RunStatusLine state="running" elapsedSec={elapsedSec} />
+              </div>
+              <LoreRunSteps steps={genSteps} />
+              <ThinkingPanel text={reasoning} running />
+            </>
           )}
 
           {/* ── Result card (候选卡「新条目」态) ── */}
           {phase === "result" && (
             <>
               <div className={styles.statusRow}>
-                <span className={styles.statusLabel}>{isZh ? "candidate · 候选" : "candidate"}</span>
-                <span className={styles.statusDone}>
-                  <span className={styles.statusDot} />
-                  {t("lore.generator.completed")}
+                <span className={styles.statusLabel}>
+                  {t("lore.generator.resultHead", { defaultValue: "提取结果" })}
                 </span>
+                <RunStatusLine state="done" elapsedSec={elapsedSec} tokens={usageTokens} />
               </div>
+              <ThinkingPanel text={reasoning} running={false} />
 
               <div className={styles.resultCard}>
                 <div className={styles.resultHeader}>

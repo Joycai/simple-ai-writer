@@ -1,41 +1,46 @@
-/* Task selector for the facet AI assistant. Rest of the chrome is reused from
-   LoreImproveModal.module.css. */
+/* 快捷动作 chips (设计稿 03 · 屏 10 特征 AI 助手) — 单行描边小签，选中
+   amber 描边 + sienna 字。其余外壳复用 LoreImproveModal.module.css。 */
 
 .tasks {
   display: flex;
-  gap: var(--space-2);
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .taskBtn {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: var(--space-2) var(--space-3);
+  padding: 6px 12px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-elevated);
-  text-align: left;
-  transition: border-color var(--transition-fast), background var(--transition-fast);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: 500 11px/1 var(--font-sans);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
 }
 .taskBtn:hover { border-color: var(--color-border-strong); }
 
 .taskBtnActive {
-  border-color: var(--color-accent);
-  background: var(--color-accent-tint);
+  border-color: var(--color-border-strong);
+  color: var(--color-sienna);
 }
 
-.taskName {
+/* 建议触发词预览 (屏 10): 新词 diff 绿，已有词普通签 */
+.keysPreview {
   display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: var(--color-text-primary);
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
-.taskDesc {
-  font-size: 11px;
-  color: var(--color-text-muted);
-  line-height: 1.4;
+.keyChip {
+  padding: 4px 10px;
+  background: var(--color-tag-bg);
+  color: var(--color-tag-text);
+  font: 400 12px/1.4 var(--font-serif);
+}
+
+.keyChipNew {
+  background: var(--lore-add-bg);
+  color: var(--lore-add-text);
 }

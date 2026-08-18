@@ -61,28 +61,12 @@
   color: var(--lore-add-text) !important;
 }
 
-/* 生成中: 3 个渐变小方点 + mono */
-.genRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.genDots { display: flex; gap: 4px; }
-.genDot {
-  width: 5px;
-  height: 5px;
-  background: var(--color-sienna);
-  animation: metaPulse 1.2s ease-in-out infinite;
-}
-.genDot:nth-child(2) { background: var(--color-amber); animation-delay: 0.2s; }
-.genDot:nth-child(3) { background: var(--color-amber-soft); animation-delay: 0.4s; }
-@keyframes metaPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-.genLabel {
-  font: 400 10px/1 var(--font-mono);
-  color: var(--color-text-faint);
+/* 生成中的展示由共享进度词汇承担（LoreRunProgress: 状态行/步骤列/思维链）。 */
+
+/* AI 建议改动过的概要 — 与新增别名同一张 diff 绿 (设计稿 12) */
+.gChanged {
+  background: var(--lore-add-bg);
+  color: var(--lore-add-text);
 }
 
 .charNote {

@@ -28,13 +28,13 @@ export function EntityAiHubModal({ entityName, imageGenReady = false, onPick, on
   const cells: { task: EntityAiTask; name: string; desc: string; disabled?: boolean; title?: string }[] = [
     {
       task: "improve",
-      name: t("lore.aiHub.improveName", { defaultValue: "完善正文" }),
-      desc: t("lore.aiHub.improveDesc", { defaultValue: "结合资料/图片更新内容，可写入整体或指定特征" }),
+      name: t("lore.aiHub.improveName", { defaultValue: "更新条目" }),
+      desc: t("lore.aiHub.improveDesc", { defaultValue: "结合资料/图片更新内容，可写入指定特征或生成新特征" }),
     },
     {
       task: "meta",
-      name: t("lore.aiHub.metaName", { defaultValue: "补全元信息" }),
-      desc: t("lore.aiHub.metaDesc", { defaultValue: "摘要与别名 · 提高检索命中" }),
+      name: t("lore.aiHub.metaName", { defaultValue: "优化元数据" }),
+      desc: t("lore.aiHub.metaDesc", { defaultValue: "重写名称、别名、分类与概要" }),
     },
     {
       task: "image",
@@ -56,7 +56,7 @@ export function EntityAiHubModal({ entityName, imageGenReady = false, onPick, on
         <div className={hub.head}>
           <Sparkles size={13} strokeWidth={1.8} color="var(--color-sienna)" />
           <span className={hub.headTitle}>
-            {entityName} · {t("lore.aiHub.title", { defaultValue: "AI 助手" })}
+            {entityName} · {t("lore.aiHub.title", { defaultValue: "AI 编辑助手" })}
           </span>
           <span className={hub.spacer} />
           <span className={hub.headKbd}>Esc {t("common.close", { defaultValue: "关闭" })}</span>

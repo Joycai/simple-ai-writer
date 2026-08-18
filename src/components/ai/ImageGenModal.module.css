@@ -433,3 +433,29 @@
   color: var(--color-text-soft);
   margin-bottom: 2px;
 }
+
+/* ── 出图进度 (设计稿 18) ── */
+
+/* 出图中的占位卡: 斜纹底 + 共享 RunStatusLine（转圈 + 生成中 · Ns） */
+.genPlaceholder {
+  height: 160px;
+  border: 1px solid var(--color-border);
+  background: repeating-linear-gradient(
+    45deg,
+    var(--color-bg-inset),
+    var(--color-bg-inset) 8px,
+    var(--color-bg-base) 8px,
+    var(--color-bg-base) 16px
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* label 行内的小字说明（不参与大写化） */
+.hintInline {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--color-text-muted);
+}

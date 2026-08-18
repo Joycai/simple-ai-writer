@@ -111,6 +111,18 @@ Rules of the road:
 - **墙上的卡片**（屏 14，`LoreWall`）：标签行是**特征名**（`◈` 前缀），不再是别名的第二次复读（别名已经在名字下面那行）；卡片底部虚线上一条 `N 特征 · M 配图`。头像在 v2 稿里是方块——全局零圆角，`cardFeatured` 上遗留的三处 `border-radius:50%` 一并去掉。
 - **术语**：UI 一律 **特征**（不是"分面"）。i18n 里 `lore.facet.*` 的 key 名保留（磁盘 frontmatter 字段仍叫 `facet`），只有文案改了；三种模式的中文是 自动 / 常驻 / 手动。
 
+#### v2 · AI 流程与进度指示（设计稿屏 08–13/17/18）
+
+设计稿又一轮重画了知识库的全部 AI 流程屏，核心是屏 17「AI 执行进度 · 思维链」给出的**统一进度词汇**。此前六个 lore AI 模态各说各话（三个渐变点 + 轮播文案 / 裸 JSON 流 / 只换按钮文字 / AgentLog），本轮统一为三个积木（`src/components/lore/ai/LoreRunProgress.tsx`）：
+
+- **状态行 `RunStatusLine`**：12px 转圈（`--color-border` 圈 + sienna 顶弧）或 6px 绿点 + 斜体衬线「生成中/完成」+ mono `Ns · X tok`。六个流的节首都用它；完成态保留耗时与 token 数。运行状态的圆（转圈、步骤圆点、绿点）与 AI 面板的 status dot 同属"已批准的圆"清单——其余一律方角。
+- **步骤列 `LoreRunSteps`**：**语义步骤**（读取 → 起草 → 交给你确认），不是工具调用回放——16px 圆标（✓ 实底绿 / sienna 描边脉冲 / 灰描边半透明）+ 1×8px 连接线 + 右侧 mono 注记。固定三段、首段即完成是有意的：单发流没有中途信号，步骤列的价值是告诉作者"现在卡在哪一段、最后一段要他出手"。
+- **思维链 `ThinkingPanel`**：`--color-bg-stream` 折叠带，头行 `思维链 · 实时流式 · 不入库`；正文斜体衬线 12px/1.8、顶部渐隐、闪烁光标，流式时自动展开+跟滚，结束自动收起（作者手动切换后以作者为准）。**不入库**是承诺：reasoning 只进这块面板，不进任何文件。
+- **分工**：走 agent 工具环的两个流（更新条目、特征 AI 助手）的步骤+思维链仍由 `AgentLog` 承担（工具粒度更细），只补状态行；三个单发流（提取 / 拆分整理 / 主词条补全）用全套。数据源是现成的：`generateLore`/`splitLore` 本就跑在 runtime 上，把 `onEvent` 穿透出去即得 reasoning 与 token 总量（此前 `onEvent: () => {}` 白白扔掉）；结构化流用 `runStructuredTask.onReasoning`，token 是 `estimateTextTokens` 估算。
+- **各模态对齐**（屏号 → 组件）：08 提取 = 分类范围多选 chips（实底 sienna 选中态，至少留一枚，收窄 `generateLore.allowedCategories` 的枚举）；09 更新条目 = 左栏改为**写入目标列表**（主词条 / 各特征 / 虚线 `+ 生成新特征`），GOAL 预设删除（v2 无此栏，指令框仍在），footer 主键 `应用到 <文件>`；**生成新特征**走 `draft_lore_facet` 结构化单发（标题/触发词/注入方式/正文一次成稿，虚线草稿条可改，Apply → `createFacetFile`）——这正是屏 17 演示的那个任务；10 特征助手 = 快捷动作改单行描边 chips（新增 压缩正文；检查互斥组未做，见下），触发词结果多一排 diff 绿 `+词` 预览；11 拆分整理 = 改名 + 头部统计签 `正文 N 字 · M 特征` + 方案卡补「自动」徽标与「触发词」行标 + footer `应用 · 生成 N 条特征`；12 主词条补全 = 改名 + 全量 i18n（原先整页 `isZh ?` 三元）+ 建议概要 diff 绿；13 AI 中心 = 代码 defaultValue 与 locale 对齐（此前两套文案）；18 生成配图 = 斜纹占位卡（`生成中 · Ns`）+ 补上此前不存在的**图库描述**输入（`note` 状态一直有，只是没有 UI）。
+- **术语**：主词条的那句话统一叫 **概要**（屏 15 v3 把「摘要·命中即注入」改成了「概要·命中即注入」；`summary` 字段名与 i18n key 不动）。拆分保留段叫 **正文概述**（屏 11 原文）。
+- **数据模型未接入、本轮有意不做的**：提取多候选与「并入已有条目」（屏 08 的三卡与置信度需要多候选管线）；更新条目的「整体 · 全部特征」目标与「当前文档/全部工作区文档」资料开关（跨文件 agent 写与检索范围开关）；主词条补全的**批量**形态（屏 12 是三条目队列，现实现仍是单条目）；特征助手的「检查互斥组」（单特征作用域拿不到组上下文）；屏 17 的**折叠条变体**（嵌在详情页顶部的后台运行需要 store 级运行态，模态内运行用不上）。接这些时样式词汇已就位。
+
 ### AI 面板设计语言 (AI surfaces — `src/components/ai/**`)
 
 The AI drawer and every surface it spawns (panels, cards, modals, the inline bubble) follow a scoped **manuscript-ink** dialect of the system, transcribed from the AI-panel mockup in the claude.ai/design project ("Simple AI Writer UI redesign" → `02 AI 面板`). The dark rendition is the binding reference; light values are paper equivalents derived from the same project's paper screens. Everything below is implemented as tokens in `tokens.css` under the `AI 面板设计语言` comment in each theme block.

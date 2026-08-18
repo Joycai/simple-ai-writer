@@ -39,6 +39,7 @@ import i18n from "../../i18n";
 /* Shell + fields both live in this component's own module now — the lore
    modals keep LoreImproveModal.module.css to themselves. The two import names
    survive so the many existing className references stay untouched. */
+import { RunStatusLine, useRunClock } from "../lore/ai/LoreRunProgress";
 import { Select } from "../common/Select";
 import styles from "./ImageGenModal.module.css";
 import gen from "./ImageGenModal.module.css";
@@ -117,6 +118,8 @@ export function ImageGenModal({ target, onClose }: Props) {
   const storeError = useImageStore((s) => s.error);
   const currentTurn = getCurrentTurn();
   const generating = running;
+  // 出图计时 (设计稿 18: 生成中 · 9s) — 独立于提示词起草。
+  const genElapsed = useRunClock(generating);
   /** The pending edit instruction — the conversational half of the modal. */
   const [editDraft, setEditDraft] = useState("");
   // Thumbnails for the picker grid, not full resolution — see
@@ -437,9 +440,35 @@ export function ImageGenModal({ target, onClose }: Props) {
                 )}
               </div>
 
+              {/* 图库描述 (设计稿 18): 保存时写入的那一行文字，供纯文本模型阅读 */}
+              <div className={styles.section}>
+                <label className={styles.label}>
+                  {t("lore.imageGen.noteLabel", { defaultValue: "图库描述" })}
+                  <span className={gen.hintInline}> · {t("lore.imageGen.noteHint", { defaultValue: "保存时作为图片描述写入，供纯文本模型阅读" })}</span>
+                </label>
+                <input
+                  className={gen.input}
+                  placeholder={t("lore.imageGen.notePlaceholder", { defaultValue: "一句话说明这张图画的是什么…" })}
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  disabled={busy}
+                />
+              </div>
+
               {chatRoute && <div className={gen.hint}>{t("lore.imageGen.chatRouteLimits")}</div>}
 
               {(error || storeError) && <div className={styles.error}>{error ?? storeError}</div>}
+
+              {/* 出图中的占位卡 (设计稿 18): 斜纹底 + 转圈 + 生成中 · Ns */}
+              {generating && (
+                <div className={gen.genPlaceholder}>
+                  <RunStatusLine
+                    state="running"
+                    label={t("lore.imageGen.generatingShort", { defaultValue: "生成中" })}
+                    elapsedSec={genElapsed}
+                  />
+                </div>
+              )}
 
               {currentTurn && (
                 <div className={styles.section}>

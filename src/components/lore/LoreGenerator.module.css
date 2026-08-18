@@ -118,19 +118,7 @@
   color: var(--color-sienna);
   text-transform: uppercase;
 }
-.statusDone {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font: italic 400 11px/1 var(--font-serif);
-  color: var(--color-text-secondary);
-}
-.statusDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-success);
-}
+/* 完成/生成中 状态本体由共享的 RunStatusLine 渲染 (LoreRunProgress)。 */
 
 /* ── Form controls ── */
 .fieldGroup {
@@ -189,34 +177,29 @@
 .textarea:focus { border-color: var(--color-sienna); }
 .textarea::placeholder { color: var(--color-text-faint); font-style: italic; }
 
-/* ── Generating: 3 gradient squares ── */
-.generating {
+/* ── 分类范围 chips (设计稿 08): 选中实底 sienna，未选描边 ── */
+.catChips {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 40px 16px;
+  flex-wrap: wrap;
+  gap: 5px;
 }
-.genDots {
-  display: flex;
-  gap: 4px;
+.catChip {
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-label);
+  font: 400 11px/1.4 var(--font-serif);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
 }
-.genDot {
-  width: 7px;
-  height: 7px;
+.catChip:hover:not(:disabled) { border-color: var(--color-border-strong); }
+.catChip:disabled { cursor: default; opacity: 0.7; }
+.catChipOn {
   background: var(--color-sienna);
-  animation: pulse 1.2s ease-in-out infinite;
+  border-color: var(--color-sienna);
+  color: var(--color-on-accent);
 }
-.genDot:nth-child(2) { background: var(--color-amber); animation-delay: 0.2s; }
-.genDot:nth-child(3) { background: var(--color-amber-soft); animation-delay: 0.4s; }
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-.generatingText {
-  font: italic 400 12px/1.4 var(--font-serif);
-  color: var(--color-text-secondary);
-}
+.catChipOn:disabled { opacity: 1; }
 
 /* ── Result card: 候选卡「新条目」态 — 1.5px sienna 强边框 ── */
 .resultCard {
