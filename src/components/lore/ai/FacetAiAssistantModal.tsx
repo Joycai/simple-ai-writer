@@ -14,7 +14,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { X, Sparkles, RotateCw, AlertTriangle, PlusCircle, Wand2, Tags } from "lucide-react";
+import { X, Sparkles, RotateCw, AlertTriangle, PlusCircle, Wand2, Tags, Minimize2 } from "lucide-react";
 import { useAiStore } from "../../../stores/aiStore";
 import { useProjectStore } from "../../../stores/projectStore";
 import { useLoreStore } from "../../../stores/loreStore";
@@ -33,11 +33,12 @@ import { loadApiKey } from "../../../lib/keyStore";
 import { MarkdownTextarea } from "../../common/MarkdownTextarea";
 import { ModalShell } from "../../common/ModalShell";
 import { AttachmentTextarea } from "./AttachmentTextarea";
+import { RunStatusLine, useRunClock, useRunTelemetry } from "./LoreRunProgress";
 import { Select } from "../../common/Select";
 import styles from "../LoreImproveModal.module.css";
 import task from "./FacetAiAssistantModal.module.css";
 
-type TaskKind = "append" | "restructure" | "keys";
+type TaskKind = "append" | "restructure" | "compress" | "keys";
 
 interface Props {
   entity: LoreEntity;
@@ -64,6 +65,11 @@ const SYSTEM_PROMPTS: Record<TaskKind, string> = {
     "You are a lore assistant tidying ONE facet of a lore entity.",
     "Reorganize the ordering and clean up the formatting of the facet body for clarity and consistency. Do NOT add or remove any facts.",
     "Return ONLY the COMPLETE reorganized facet body as markdown — no YAML frontmatter, no code fences, no explanation.",
+  ].join("\n"),
+  compress: [
+    "You are a lore assistant compressing ONE facet of a lore entity.",
+    "Rewrite the facet body to be significantly shorter while keeping every fact. Cut redundancy and filler, keep the author's terminology.",
+    "Return ONLY the COMPLETE compressed facet body as markdown — no YAML frontmatter, no code fences, no explanation.",
   ].join("\n"),
   keys: [
     "You are a lore assistant choosing trigger keywords for ONE facet of a lore entity.",
@@ -101,6 +107,8 @@ export function FacetAiAssistantModal({
   const [agentLog, setAgentLog] = useState<AgentEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const elapsedSec = useRunClock(phase === "generating");
+  const { usageTokens, onEvent: onRunEvent, reset: resetTelemetry } = useRunTelemetry();
 
   useEffect(() => {
     if (projectPath) scanProjectFiles(projectPath).then(setProjectFiles).catch(() => {});
@@ -111,8 +119,9 @@ export function FacetAiAssistantModal({
 
   const TASK_META: { kind: TaskKind; name: string; desc: string; icon: React.ReactNode }[] = [
     { kind: "append",      icon: <PlusCircle size={13} />, name: t("lore.facet.ai.appendName", { defaultValue: "追加内容" }),   desc: t("lore.facet.ai.appendDesc", { defaultValue: "结合额外资料/图片补充这个特征" }) },
-    { kind: "restructure", icon: <Wand2 size={13} />,      name: t("lore.facet.ai.tidyName", { defaultValue: "整理结构" }),     desc: t("lore.facet.ai.tidyDesc", { defaultValue: "只调整格式与顺序，不改事实" }) },
-    { kind: "keys",        icon: <Tags size={13} />,       name: t("lore.facet.ai.keysName", { defaultValue: "更新触发词" }),   desc: t("lore.facet.ai.keysDesc", { defaultValue: "根据正文重新建议触发关键词" }) },
+    { kind: "restructure", icon: <Wand2 size={13} />,      name: t("lore.facet.ai.tidyName", { defaultValue: "改写正文" }),     desc: t("lore.facet.ai.tidyDesc", { defaultValue: "只调整格式与顺序，不改事实" }) },
+    { kind: "compress",    icon: <Minimize2 size={13} />,  name: t("lore.facet.ai.compressName", { defaultValue: "压缩正文" }), desc: t("lore.facet.ai.compressDesc", { defaultValue: "在不丢事实的前提下写短" }) },
+    { kind: "keys",        icon: <Tags size={13} />,       name: t("lore.facet.ai.keysName", { defaultValue: "提炼触发词" }),   desc: t("lore.facet.ai.keysDesc", { defaultValue: "根据正文重新建议触发关键词" }) },
   ];
 
   const selectTask = (next: TaskKind) => {
@@ -133,6 +142,7 @@ export function FacetAiAssistantModal({
     setError(null);
     setOutput("");
     setAgentLog([]);
+    resetTelemetry();
     setPhase("generating");
 
     try {
@@ -144,7 +154,9 @@ export function FacetAiAssistantModal({
         ? "Expand this facet with more concrete detail."
         : kind === "restructure"
           ? "Tidy the structure and formatting."
-          : "Suggest trigger keywords for this facet.";
+          : kind === "compress"
+            ? "Compress this facet body without losing any fact."
+            : "Suggest trigger keywords for this facet.";
 
       const textContent = [
         `ENTITY: ${entity.name}`,
@@ -168,7 +180,10 @@ export function FacetAiAssistantModal({
         loreIndex: index,
         signal: ctrl.signal,
         onText: setOutput,
-        onEvent: (e) => setAgentLog((prev) => appendAgentEventTo(prev, e)),
+        onEvent: (e) => {
+          onRunEvent(e); // elapsed/token telemetry for the status line
+          setAgentLog((prev) => appendAgentEventTo(prev, e));
+        },
       });
       setPhase("result");
     } catch (e) {
@@ -231,16 +246,16 @@ export function FacetAiAssistantModal({
 
         {/* Body */}
         <div className={styles.body}>
-          {/* Task selector */}
+          {/* 快捷动作 chips (设计稿 10) — 说明挪到 title 悬浮提示 */}
           <div className={task.tasks}>
             {TASK_META.map((tm) => (
               <button
                 key={tm.kind}
                 className={`${task.taskBtn} ${kind === tm.kind ? task.taskBtnActive : ""}`}
                 onClick={() => selectTask(tm.kind)}
+                title={tm.desc}
               >
-                <span className={task.taskName}>{tm.icon}{tm.name}</span>
-                <span className={task.taskDesc}>{tm.desc}</span>
+                {tm.icon}{tm.name}
               </button>
             ))}
           </div>
@@ -283,15 +298,31 @@ export function FacetAiAssistantModal({
           {/* Output */}
           {(phase === "generating" || phase === "result") && (
             <div className={styles.section}>
-              <label className={styles.label}>
-                {phase === "generating"
-                  ? t("lore.improve.generating", { defaultValue: "生成中…" })
-                  : kind === "keys"
-                    ? t("lore.facet.ai.keysResultLabel", { defaultValue: "建议关键词（逗号分隔，可编辑）" })
-                    : kind === "append"
-                      ? t("lore.facet.ai.appendResultLabel", { defaultValue: "将追加到正文的内容（可编辑）" })
-                      : t("lore.facet.ai.bodyResultLabel", { defaultValue: "结果（应用前可编辑）" })}
+              <label className={styles.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {kind === "keys"
+                  ? t("lore.facet.ai.keysResultLabel", { defaultValue: "建议触发词（逗号分隔，可编辑）" })
+                  : kind === "append"
+                    ? t("lore.facet.ai.appendResultLabel", { defaultValue: "将追加到正文的内容（可编辑）" })
+                    : t("lore.facet.ai.bodyResultLabel", { defaultValue: "结果（应用前可编辑）" })}
+                <RunStatusLine
+                  state={phase === "generating" ? "running" : "done"}
+                  elapsedSec={elapsedSec}
+                  tokens={phase === "result" ? usageTokens : null}
+                />
               </label>
+              {/* 建议触发词预览 (设计稿 10): 新词 diff 绿 */}
+              {kind === "keys" && phase === "result" && output.trim() && (
+                <div className={task.keysPreview}>
+                  {parseKeywords(output).map((k) => (
+                    <span
+                      key={k}
+                      className={`${task.keyChip} ${facetKeys.includes(k) ? "" : task.keyChipNew}`}
+                    >
+                      {facetKeys.includes(k) ? k : `+ ${k}`}
+                    </span>
+                  ))}
+                </div>
+              )}
               <MarkdownTextarea
                 className={`${styles.textarea} ${styles.outputArea}`}
                 value={output}

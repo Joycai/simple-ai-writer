@@ -373,37 +373,34 @@
   gap: 5px;
 }
 
-.goalItem {
+/* 写入目标列表 (设计稿 09): 主词条 / 各特征 / + 生成新特征 */
+.targetItem {
   padding: 9px 11px;
   background: var(--color-card);
   border: 1px solid var(--color-border);
   color: var(--color-text-primary);
   font: 400 12px/1.4 var(--font-serif);
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: block;
   cursor: pointer;
   text-align: left;
   width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   transition: border-color var(--transition-fast);
 }
-.goalItem:hover { border-color: var(--color-border-strong); }
-.goalItemActive {
+.targetItem:hover:not(:disabled) { border-color: var(--color-border-strong); }
+.targetItem:disabled { cursor: default; opacity: 0.7; }
+.targetItemActive.targetItemActive {
   background: var(--color-sienna);
   border-color: var(--color-sienna);
   color: var(--color-on-accent);
   font-weight: 500;
+  opacity: 1;
 }
-.goalDot {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  border: 1.5px solid var(--color-border-strong);
-  flex-shrink: 0;
-}
-.goalItemActive .goalDot {
-  border: none;
-  background: var(--color-on-accent);
+.targetItemNew {
+  border: 1px dashed var(--color-border-strong);
+  color: var(--color-sienna);
 }
 
 .goalHint {
@@ -443,19 +440,7 @@
   color: var(--color-sienna);
   text-transform: uppercase;
 }
-.diffStatus {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font: italic 400 11px/1 var(--font-serif);
-  color: var(--color-text-secondary);
-}
-.diffStatusDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-success);
-}
+/* 运行状态（转圈/绿点 + Ns · tok）由共享 RunStatusLine 渲染 (LoreRunProgress)。 */
 .diffToggle {
   font: 500 11px/1 var(--font-serif);
   color: var(--color-sienna);
@@ -516,3 +501,46 @@
   background: var(--lore-add-bg);
   color: var(--lore-add-text);
 }
+
+/* ── 新特征草稿条 (设计稿 17 「草稿 · 边生成边出现」) ── */
+
+.draftStrip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: var(--color-bg-base);
+  border: 1px dashed var(--color-border-strong);
+}
+
+.draftStripMark {
+  font: 500 12px/1 var(--font-serif);
+  color: var(--color-text-primary);
+  flex-shrink: 0;
+}
+
+.draftTitleInput {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  background: var(--lore-bg-input);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font: 500 12px/1.4 var(--font-serif);
+  outline: none;
+}
+.draftTitleInput:focus { border-color: var(--color-sienna); }
+
+.draftModeSelect.draftModeSelect { max-width: 90px; }
+
+.draftKeysInput {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--lore-bg-input);
+  border: 1px solid var(--color-border);
+  color: var(--color-tag-text);
+  font: 400 12px/1.5 var(--font-serif);
+  outline: none;
+  box-sizing: border-box;
+}
+.draftKeysInput:focus { border-color: var(--color-sienna); }

@@ -8,6 +8,7 @@
  */
 
 import i18n from "../../i18n";
+import type { AgentEvent } from "../agent/events";
 import { LORE_GENERATE_PRESET } from "../agent/presets";
 import { runAgent } from "../agent/runtime";
 import { jsonModeShaping } from "../ai/jsonMode";
@@ -29,8 +30,12 @@ export async function generateLore(opts: ConnOptions & {
   textAttachments?: { name: string; content: string }[];
   /** The response so far, in full — a snapshot, not a delta. */
   onProgress: (fullText: string) => void;
+  /** Runtime progress (reasoning stream, token totals) for the progress UI. */
+  onEvent?: (event: AgentEvent) => void;
   signal?: AbortSignal;
   systemPrompt?: string;
+  /** Restrict the category the model may pick (设计稿 08 · 分类范围). */
+  allowedCategories?: CategoryId[];
 }): Promise<GeneratedLore> {
   // Strip @[filename] visual placeholders from the user description — they're UI labels only.
   const cleanDesc = opts.description.replace(/@\[[^\]]*\]/g, "").trim();
@@ -82,9 +87,13 @@ export async function generateLore(opts: ConnOptions & {
   // actually exists on disk; anything else it invents lands in the fallback
   // bucket, silently mis-filing the entity.
   const baseSystemPrompt = opts.systemPrompt ?? i18n.t("ai.instructions.lore");
+  // The author may have narrowed the extraction scope to a subset of the
+  // profile's categories; an empty/absent list means the full set.
+  const allowed = (opts.allowedCategories ?? []).filter((c) => isKnownCategory(c));
+  const categoryIds = allowed.length > 0 ? allowed : loreCategoryIds();
   const systemPrompt =
     `${baseSystemPrompt}\n\n## Valid categories (authoritative)\n` +
-    `The "category" field MUST be exactly one of: ${loreCategoryIds().join(", ")}.`;
+    `The "category" field MUST be exactly one of: ${categoryIds.join(", ")}.`;
 
   let fullText = "";
   await runAgent({
@@ -98,7 +107,7 @@ export async function generateLore(opts: ConnOptions & {
     // Single-shot preset — tools are empty, so the context is never consulted.
     toolContext: { projectPath: "", loreIndex: {}, multimodal: true },
     signal: opts.signal ?? new AbortController().signal,
-    onEvent: () => {},
+    onEvent: opts.onEvent ?? (() => {}),
     onOutputText: (text) => {
       fullText = text;
       opts.onProgress(text);

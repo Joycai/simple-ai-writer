@@ -160,19 +160,7 @@
 .instructionInput:focus-visible { border-color: var(--color-sienna); }
 .instructionInput::placeholder { color: var(--color-text-faint); font-style: italic; }
 
-.streamOutput {
-  min-height: 200px;
-  max-height: 50vh;
-  overflow-y: auto;
-  margin: 0;
-  padding: 12px;
-  font: 400 11px/1.6 var(--font-mono);
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--color-text-secondary);
-  background: var(--color-bg-base);
-  border: 1px solid var(--color-border);
-}
+/* 运行中的展示由共享进度词汇承担（LoreRunProgress: 状态行/步骤列/思维链）。 */
 
 .notes {
   padding: 10px 12px;
@@ -224,6 +212,28 @@
   color: var(--lore-add-text);
   flex-shrink: 0;
 }
+
+/* 注入方式徽标 (设计稿 11): 拆出的特征默认「自动」— 描边 amber 小签 */
+.modeBadge {
+  padding: 2px 7px;
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-sienna);
+  font: 500 9px/1 var(--font-sans);
+  flex-shrink: 0;
+}
+
+.keysLabel {
+  font: 500 10px/1 var(--font-sans);
+  color: var(--color-text-label);
+  flex-shrink: 0;
+}
+
+.keysRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.keysRow > :last-child { flex: 1; }
 
 .draftInclude {
   display: flex;

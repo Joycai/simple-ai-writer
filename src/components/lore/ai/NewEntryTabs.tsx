@@ -29,7 +29,7 @@ export function NewEntryTabs({ value, onChange }: Props) {
         className={`${styles.tab} ${value === "ai" ? styles.tabActive : ""}`}
         onClick={() => onChange("ai")}
       >
-        <Sparkles size={13} strokeWidth={1.7} /> {t("lore.newEntry.ai", { defaultValue: "AI 提取" })}
+        <Sparkles size={13} strokeWidth={1.7} /> {t("lore.newEntry.ai", { defaultValue: "AI 生成" })}
       </button>
       <span className={styles.spacer} />
       <span className={styles.note}>{t("lore.panel.newEntry", { defaultValue: "新建条目" })}</span>

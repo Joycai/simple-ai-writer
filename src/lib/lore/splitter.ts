@@ -7,6 +7,7 @@
  */
 
 import i18n from "../../i18n";
+import type { AgentEvent } from "../agent/events";
 import { LORE_SPLIT_PRESET } from "../agent/presets";
 import { runAgent } from "../agent/runtime";
 import { jsonModeShaping } from "../ai/jsonMode";
@@ -40,6 +41,8 @@ export async function splitLore(opts: ConnOptions & {
   instruction?: string;
   /** The response so far, in full — a snapshot, not a delta. */
   onProgress: (fullText: string) => void;
+  /** Runtime progress (reasoning stream, token totals) for the progress UI. */
+  onEvent?: (event: AgentEvent) => void;
   signal?: AbortSignal;
   systemPrompt?: string;
 }): Promise<SplitResult> {
@@ -85,7 +88,7 @@ export async function splitLore(opts: ConnOptions & {
     // Single-shot preset — tools are empty, so the context is never consulted.
     toolContext: { projectPath: "", loreIndex: {}, multimodal: false },
     signal: opts.signal ?? new AbortController().signal,
-    onEvent: () => {},
+    onEvent: opts.onEvent ?? (() => {}),
     onOutputText: (text) => {
       fullText = text;
       opts.onProgress(text);

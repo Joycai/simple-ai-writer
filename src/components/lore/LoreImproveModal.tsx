@@ -4,11 +4,13 @@ import { X, Sparkles, RotateCw, AlertTriangle } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
-import { resolveConn } from "../../lib/ai/conn";
+import { connOptions, resolveConn } from "../../lib/ai/conn";
 import {
-  readEntityFile, writeEntityFile, saveFacetFile, parseFacetMeta,
+  readEntityFile, writeEntityFile, saveFacetFile, parseFacetMeta, createFacetFile,
   type LoreEntity, type FacetMeta,
 } from "../../lib/lore";
+
+type FacetMode = FacetMeta["mode"];
 import { parseFrontmatter } from "../../lib/fs/markdown";
 import { categoryLabel, findCategory } from "../../lib/profile";
 import {
@@ -18,7 +20,13 @@ import {
 import { runLoreAgentTask } from "../../lib/agent/run";
 import { LORE_IMPROVE_PRESET } from "../../lib/agent/presets";
 import { appendAgentEventTo, type AgentEvent } from "../../lib/agent/events";
+import { runStructuredTask } from "../../lib/agent/structured";
+import type { ToolDefinition } from "../../lib/ai";
 import { AgentLog } from "../ai/AgentLog";
+import {
+  LoreRunSteps, RunStatusLine, ThinkingPanel, estimateRunTokens, useRunClock, useRunTelemetry,
+  type RunStep,
+} from "./ai/LoreRunProgress";
 import { useImageDataUrl } from "./useImageDataUrl";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { ModalShell } from "../common/ModalShell";
@@ -33,26 +41,6 @@ interface Props {
   onClose: () => void;
 }
 
-/** 改写目标预设 (设计稿 03 GOAL 单选) — 每项只是把一条现成指令填进指令框，
-    作者仍可自由改写；不携带任何检索/上下文行为。 */
-const GOALS = [
-  { id: "detail", zh: "补全细节", en: "Fill in details",
-    insZh: "补全这条设定的细节：扩展背景、外观与具体描写，保持既有事实不变。",
-    insEn: "Fill in the details of this entry: expand background, appearance and concrete description without changing established facts." },
-  { id: "voice", zh: "统一口吻", en: "Unify the voice",
-    insZh: "统一全文口吻与叙述风格，修正前后不一致的措辞。",
-    insEn: "Unify the narrative voice across the entry and fix inconsistent wording." },
-  { id: "tighten", zh: "紧凑改写", en: "Tighten prose",
-    insZh: "在不丢失信息的前提下压缩行文，使内容更紧凑。",
-    insEn: "Compress the prose without losing information." },
-  { id: "conflict", zh: "增加冲突点", en: "Add tension",
-    insZh: "为这条设定增加可用于叙事的冲突点或张力。",
-    insEn: "Add narrative tension or points of conflict to this entry." },
-  { id: "sample", zh: "添加口吻样本", en: "Add voice samples",
-    insZh: "为该条目补充口吻样本（引语），体现说话习惯。",
-    insEn: "Add voice samples (quotes) that capture how this character speaks." },
-] as const;
-
 export function LoreImproveModal({ entity, onClose }: Props) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
@@ -61,15 +49,17 @@ export function LoreImproveModal({ entity, onClose }: Props) {
   const { index, scanProject } = useLoreStore();
   const avatarUrl = useImageDataUrl(entity.avatarPath);
 
-  // Write target: "__index__" = the whole entity index.md, else a facet filename.
+  // Write target (设计稿 09 · 写入目标): "__index__" = the entity's index.md,
+  // "__new__" = draft a brand-new facet (设计稿 17), else a facet filename.
   const INDEX = "__index__";
+  const NEW = "__new__";
   const [target, setTarget] = useState<string>(INDEX);
-  const isFacet = target !== INDEX;
+  const isFacet = target !== INDEX && target !== NEW;
+  const isNewFacet = target === NEW;
   const facetMetaRef = useRef<FacetMeta | null>(null);
 
   const [currentContent, setCurrentContent] = useState("");
   const [instruction, setInstruction] = useState("");
-  const [goal, setGoal] = useState<string | null>(null);
   // Result phase: false = highlighted read-only preview, true = raw textarea.
   const [editRaw, setEditRaw] = useState(false);
   const [attached, setAttached] = useState<AttachedItem[]>([]);
@@ -77,9 +67,16 @@ export function LoreImproveModal({ entity, onClose }: Props) {
   const [phase, setPhase] = useState<"input" | "generating" | "result">("input");
   const [output, setOutput] = useState("");
   const [agentLog, setAgentLog] = useState<AgentEvent[]>([]);
+  // 新特征草稿的元字段 (只在 target === NEW 时使用)。
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftKeysText, setDraftKeysText] = useState("");
+  const [draftMode, setDraftMode] = useState<FacetMode>("auto");
+  const [structReasoning, setStructReasoning] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const elapsedSec = useRunClock(phase === "generating");
+  const { usageTokens, onEvent: onRunEvent, reset: resetTelemetry } = useRunTelemetry();
 
   useEffect(() => {
     if (projectPath) {
@@ -88,8 +85,14 @@ export function LoreImproveModal({ entity, onClose }: Props) {
   }, [projectPath]);
 
   // Load the current target's content: the whole index.md, or a facet's body
-  // (frontmatter stripped) with its meta stashed for a later frontmatter-safe save.
+  // (frontmatter stripped) with its meta stashed for a later frontmatter-safe
+  // save. A new facet has no file yet — the pane starts empty.
   useEffect(() => {
+    if (isNewFacet) {
+      facetMetaRef.current = null;
+      setCurrentContent("");
+      return;
+    }
     const file = isFacet ? target : "index.md";
     readEntityFile(entity.dirPath, file)
       .then((raw) => {
@@ -102,10 +105,26 @@ export function LoreImproveModal({ entity, onClose }: Props) {
         }
       })
       .catch(() => setCurrentContent(""));
-  }, [entity.dirPath, target, isFacet]);
+  }, [entity.dirPath, target, isFacet, isNewFacet]);
 
   const facetTitle = entity.facets.find((f) => f.file === target)?.title ?? target;
   const otherEntities = Object.values(index).flat().filter((e) => e.id !== entity.id);
+
+  // 状态行左侧的对照标签: `index.md · 对照` / `<facet 文件> · 对照` / `新特征 · 草稿`。
+  const targetFileLabel = isNewFacet
+    ? t("lore.improve.targetNewShort", { defaultValue: "新特征" })
+    : isFacet ? target : "index.md";
+
+  // 新特征起草的语义步骤 (设计稿 17)。
+  const newFacetSteps: RunStep[] = [
+    {
+      label: t("lore.improve.stepCompare", { defaultValue: "读取条目，比对现有特征" }),
+      status: "done",
+      meta: `${entity.facets.length} ${t("lore.improve.facetsRead", { defaultValue: "特征已读" })}`,
+    },
+    { label: t("lore.improve.stepDraft", { defaultValue: "起草特征 · 生成触发词与注入方式" }), status: "active" },
+    { label: t("lore.improve.stepConfirm", { defaultValue: "交给你确认后写入条目目录" }), status: "pending" },
+  ];
 
   // Added-line detection for the before/after view: a trimmed output line the
   // current content doesn't contain reads as new. Line containment, not a real
@@ -128,12 +147,90 @@ export function LoreImproveModal({ entity, onClose }: Props) {
     setError(null);
     setOutput("");
     setAgentLog([]);
+    setStructReasoning("");
+    resetTelemetry();
     setPhase("generating");
 
     try {
       const apiKey = (await loadApiKey(provider.id)) ?? "";
       const supportsImages = model.type === "multimodal";
       const { loreRefs, textRefs, images } = await collectAttachmentContext(attached, supportsImages);
+
+      // 新特征 (设计稿 17): one structured pass drafting title + trigger keys +
+      // injection mode + body. Structured output can't browse (see structured.ts),
+      // so the index body and facet inventory ride in as context instead.
+      if (isNewFacet) {
+        const idxBody = await readEntityFile(entity.dirPath, "index.md")
+          .then((raw) => parseFrontmatter(raw).content)
+          .catch(() => "");
+        const facetTool: ToolDefinition = {
+          type: "function",
+          function: {
+            name: "draft_lore_facet",
+            description:
+              "Draft ONE new facet (title, trigger keys, injection mode, markdown body) for the knowledge-base entity. Never duplicates existing facets.",
+            parameters: {
+              type: "object",
+              properties: {
+                title: { type: "string", description: "Short facet name" },
+                keys: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "2-6 concise trigger keywords likely to appear in prose when this facet is relevant",
+                },
+                mode: {
+                  type: "string",
+                  enum: ["auto", "always", "manual"],
+                  description: "auto = inject when entity + a key match (default); always = inject whenever the entity matches; manual = only when pinned",
+                },
+                body: { type: "string", description: "The facet's markdown body" },
+              },
+              required: ["title", "keys", "mode", "body"],
+            },
+          },
+        };
+        const userText = [
+          `ENTITY: ${entity.name}`,
+          entity.summary ? `SUMMARY: ${entity.summary}` : "",
+          `INDEX BODY:\n${idxBody.trim() || "(empty)"}`,
+          entity.facets.length > 0
+            ? `EXISTING FACETS (do NOT duplicate):\n${entity.facets
+                .map((f) => `- ${f.title}${f.keys.length ? ` (keys: ${f.keys.join(", ")})` : ""}`)
+                .join("\n")}`
+            : "",
+          loreRefs.length > 0 ? "\nREFERENCED LORE ENTRIES:\n" + loreRefs.join("\n\n") : "",
+          textRefs.length > 0 ? "\nREFERENCED FILES:\n" + textRefs.join("\n\n") : "",
+          `\nUSER INSTRUCTION:\n${instruction.trim() || "Draft the most useful missing facet for this entity."}`,
+        ].filter(Boolean).join("\n");
+
+        const toolArgs = await runStructuredTask({
+          ...connOptions({ provider, model, apiKey }),
+          systemPrompt: [
+            "You are drafting ONE new facet for a knowledge-base entity.",
+            "A facet is an independently-injectable aspect of the entity (an outfit, a pricing policy, a backstory arc…).",
+            "Prefer 'auto' mode unless the material is relevant to almost every mention of the entity.",
+            "Write the body in the same language as the entity's own text.",
+          ].join("\n"),
+          toolInstruction: "Call the draft_lore_facet tool exactly once with the drafted facet.",
+          jsonInstruction:
+            'Respond with ONLY a JSON object — no markdown fences, no prose — with exactly these keys: {"title": string, "keys": string[], "mode": "auto"|"always"|"manual", "body": string}.',
+          outputTool: facetTool,
+          userContent: buildUserContent(userText, images),
+          signal: ctrl.signal,
+          onReasoning: setStructReasoning,
+        });
+        const parsed = JSON.parse(toolArgs) as {
+          title?: string; keys?: string[]; mode?: string; body?: string;
+        };
+        setDraftTitle(typeof parsed.title === "string" ? parsed.title.trim() : "");
+        setDraftKeysText(Array.isArray(parsed.keys)
+          ? parsed.keys.filter((k): k is string => typeof k === "string" && k.trim().length > 0).join(", ")
+          : "");
+        setDraftMode(parsed.mode === "always" || parsed.mode === "manual" ? parsed.mode : "auto");
+        setOutput(typeof parsed.body === "string" ? parsed.body : "");
+        setPhase("result");
+        return;
+      }
 
       const toolHint =
         "You may call list_lore_entities / read_lore_entity first to consult related lore for consistency.";
@@ -173,7 +270,10 @@ export function LoreImproveModal({ entity, onClose }: Props) {
         loreIndex: index,
         signal: ctrl.signal,
         onText: setOutput,
-        onEvent: (e) => setAgentLog((prev) => appendAgentEventTo(prev, e)),
+        onEvent: (e) => {
+          onRunEvent(e); // elapsed/token telemetry for the status line
+          setAgentLog((prev) => appendAgentEventTo(prev, e));
+        },
       });
       setPhase("result");
     } catch (e) {
@@ -192,6 +292,19 @@ export function LoreImproveModal({ entity, onClose }: Props) {
     setSaving(true);
     try {
       const body = stripCodeFence(output);
+      if (isNewFacet) {
+        const keys = draftKeysText.split(/[,，\n]/).map((k) => k.trim()).filter(Boolean);
+        await createFacetFile(entity.dirPath, {
+          title: draftTitle.trim() || t("lore.facet.ai.untitled", { defaultValue: "未命名特征" }),
+          keys,
+          group: null,
+          priority: 0,
+          mode: draftMode,
+        }, body);
+        await scanProject(projectPath);
+        onClose();
+        return;
+      }
       if (isFacet) {
         // Preserve the facet's frontmatter; only its body is regenerated.
         const meta = facetMetaRef.current ?? (() => {
@@ -229,7 +342,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
               : <div className={styles.headerAvatarPlaceholder}>{entity.name.charAt(0)}</div>}
             <div>
               <div className={styles.headerName}>
-                {entity.name} · {isZh ? "改写" : "Improve"}
+                {entity.name} · {t("lore.improve.title", { defaultValue: "更新条目" })}
               </div>
               <div className={styles.headerSub}>
                 {[
@@ -260,54 +373,47 @@ export function LoreImproveModal({ entity, onClose }: Props) {
         <div className={styles.improveCols}>
 
           <div className={styles.goalRail}>
+            {/* 写入目标 (设计稿 09): 主词条 / 各特征 / + 生成新特征 */}
             <div>
               <div className={styles.label} style={{ marginBottom: 10 }}>
-                {isZh ? "goal · 改写目标" : "goal"}
+                {t("lore.improve.targetLabel", { defaultValue: "写入目标" })}
               </div>
               <div className={styles.goalList}>
-                {GOALS.map((g) => (
+                <button
+                  className={`${styles.targetItem} ${target === INDEX ? styles.targetItemActive : ""}`}
+                  disabled={phase === "generating"}
+                  onClick={() => { setTarget(INDEX); setOutput(""); setPhase("input"); }}
+                >
+                  {t("lore.improve.targetIndex", { defaultValue: "主词条 · 概要（index.md）" })}
+                </button>
+                {entity.facets.map((f) => (
                   <button
-                    key={g.id}
-                    className={`${styles.goalItem} ${goal === g.id ? styles.goalItemActive : ""}`}
+                    key={f.file}
+                    className={`${styles.targetItem} ${target === f.file ? styles.targetItemActive : ""}`}
                     disabled={phase === "generating"}
-                    onClick={() => {
-                      setGoal(g.id);
-                      setInstruction(isZh ? g.insZh : g.insEn);
-                    }}
+                    onClick={() => { setTarget(f.file); setOutput(""); setPhase("input"); }}
                   >
-                    <span className={styles.goalDot} />
-                    {isZh ? g.zh : g.en}
+                    ◈ {f.title}
                   </button>
                 ))}
+                <button
+                  className={`${styles.targetItem} ${styles.targetItemNew} ${isNewFacet ? styles.targetItemActive : ""}`}
+                  disabled={phase === "generating"}
+                  onClick={() => { setTarget(NEW); setOutput(""); setPhase("input"); }}
+                >
+                  + {t("lore.improve.targetNew", { defaultValue: "生成新特征" })}
+                </button>
               </div>
             </div>
 
-            {/* Write target — only meaningful once the entity has facets */}
-            {entity.facets.length > 0 && (
-              <div>
-                <div className={styles.label} style={{ marginBottom: 10 }}>
-                  {isZh ? "target · 写入目标" : "target"}
-                </div>
-                <Select
-                  className={`${styles.modelSelect} ${styles.targetSelect}`}
-                  value={target}
-                  disabled={phase === "generating"}
-                  onChange={(v) => { setTarget(v); setOutput(""); setPhase("input"); }}
-                  options={[
-                    { value: INDEX, label: t("lore.improve.targetIndex", { defaultValue: "整体条目（index.md）" }) },
-                    ...entity.facets.map((f) => ({
-                      value: f.file,
-                      label: `${t("lore.improve.targetFacetPrefix", { defaultValue: "特征" })}：${f.title}`,
-                    })),
-                  ]}
-                />
-              </div>
-            )}
-
             <div className={styles.goalHint}>
-              {t("lore.improve.suggestOnlyHint", {
-                defaultValue: "AI 仅会建议；应用前可在右侧继续编辑结果。",
-              })}
+              {isNewFacet
+                ? t("lore.improve.scopeHintNew", {
+                    defaultValue: "起草一条新特征：触发词与注入方式一并生成，入库前可改。",
+                  })
+                : t("lore.improve.scopeHint", {
+                    defaultValue: "只改选中的一个文件；其余特征与配图不动。",
+                  })}
             </div>
           </div>
 
@@ -316,16 +422,19 @@ export function LoreImproveModal({ entity, onClose }: Props) {
 
               <div className={styles.diffHead}>
                 <span className={styles.diffHeadLabel}>
-                  {isZh ? "before / after · 对照" : "before / after"}
+                  {targetFileLabel} · {isNewFacet
+                    ? t("lore.improve.draftHead", { defaultValue: "草稿" })
+                    : t("lore.improve.compareHead", { defaultValue: "对照" })}
                 </span>
                 {phase === "generating" && (
-                  <span className={styles.diffStatus}>{t("lore.improve.generating")}…</span>
+                  <RunStatusLine state="running" elapsedSec={elapsedSec} />
                 )}
                 {phase === "result" && (
-                  <span className={styles.diffStatus}>
-                    <span className={styles.diffStatusDot} />
-                    {t("lore.generator.completed")}
-                  </span>
+                  <RunStatusLine
+                    state="done"
+                    elapsedSec={elapsedSec}
+                    tokens={usageTokens ?? (isNewFacet ? estimateRunTokens(output, structReasoning) : null)}
+                  />
                 )}
                 <span style={{ flex: 1 }} />
                 {phase === "result" && (
@@ -363,14 +472,73 @@ export function LoreImproveModal({ entity, onClose }: Props) {
                 </div>
               )}
 
-              {/* Execution log (tool consultations, rounds) */}
+              {/* Execution log (tool consultations, rounds) — agent flows only */}
               {agentLog.length > 0 && (phase === "generating" || phase === "result") && (
                 <div className={styles.section}>
                   <AgentLog log={agentLog} isRunning={phase === "generating"} />
                 </div>
               )}
 
-              {/* Before / after panes */}
+              {/* 新特征: 步骤列 + 思维链 + 草稿条 (设计稿 17) */}
+              {isNewFacet && phase === "generating" && (
+                <>
+                  <LoreRunSteps steps={newFacetSteps} />
+                  <ThinkingPanel text={structReasoning} running />
+                </>
+              )}
+              {isNewFacet && phase === "result" && (
+                <>
+                  <ThinkingPanel text={structReasoning} running={false} />
+                  <div className={styles.draftStrip}>
+                    <span className={styles.draftStripMark}>◈</span>
+                    <input
+                      className={styles.draftTitleInput}
+                      value={draftTitle}
+                      onChange={(e) => setDraftTitle(e.target.value)}
+                      placeholder={t("lore.facet.titlePlaceholder", { defaultValue: "如：战甲形象" })}
+                    />
+                    <Select
+                      className={`${styles.modelSelect} ${styles.draftModeSelect}`}
+                      value={draftMode}
+                      onChange={(v) => setDraftMode(v as FacetMode)}
+                      options={[
+                        { value: "auto", label: t("lore.facet.modeAutoShort", { defaultValue: "自动" }) },
+                        { value: "always", label: t("lore.facet.modeAlwaysShort", { defaultValue: "常驻" }) },
+                        { value: "manual", label: t("lore.facet.modeManualShort", { defaultValue: "手动" }) },
+                      ]}
+                      ariaLabel={t("lore.facet.fieldMode", { defaultValue: "注入方式" })}
+                    />
+                  </div>
+                  <div className={styles.section}>
+                    <label className={styles.label}>
+                      {t("lore.facet.fieldKeys", { defaultValue: "触发词" })}
+                      <span className={styles.hint}> · {t("lore.improve.keysHint", { defaultValue: "逗号分隔" })}</span>
+                    </label>
+                    <input
+                      className={styles.draftKeysInput}
+                      value={draftKeysText}
+                      onChange={(e) => setDraftKeysText(e.target.value)}
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* 新特征正文 — 没有旧文可对照，单栏编辑 */}
+              {isNewFacet ? (
+                (phase === "generating" || phase === "result") && (
+                  <div className={styles.section}>
+                    <label className={styles.label}>{t("lore.facet.fieldBody", { defaultValue: "正文" })}</label>
+                    <MarkdownTextarea
+                      className={`${styles.textarea} ${styles.outputArea}`}
+                      value={output}
+                      onChange={(e) => setOutput(e.target.value)}
+                      rows={12}
+                      readOnly={phase === "generating"}
+                      spellCheck={false}
+                    />
+                  </div>
+                )
+              ) : (
               <div className={styles.diffGrid}>
                 <div className={styles.diffPane}>
                   <div className={styles.paneHead}>
@@ -424,6 +592,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
                   )}
                 </div>
               </div>
+              )}
             </div>
           </div>
         </div>
@@ -452,7 +621,11 @@ export function LoreImproveModal({ entity, onClose }: Props) {
                   <RotateCw size={12} /> {t("lore.improve.regenerate")}
                 </button>
                 <button className={styles.btnPrimary} onClick={handleApply} disabled={saving || !output.trim()}>
-                  {saving ? t("lore.improve.applying") : t("lore.improve.apply")}
+                  {saving
+                    ? t("lore.improve.applying")
+                    : isNewFacet
+                      ? t("lore.improve.applyNew", { defaultValue: "新建特征" })
+                      : t("lore.improve.applyTo", { file: targetFileLabel, defaultValue: `应用到 ${targetFileLabel}` })}
                 </button>
               </>
             )}

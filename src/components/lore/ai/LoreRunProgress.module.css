@@ -1,0 +1,208 @@
+/* 屏 17「AI 执行进度 · 思维链」的进度词汇 — 状态行 / 步骤列 / 思维链。
+   圆形只用于运行状态标记（转圈、步骤圆点、完成绿点）——与 .diffStatusDot 同一
+   张「已批准的圆」清单；其余一律方角。 */
+
+/* ── Status line ── */
+
+/* 常被嵌进 10px 大写节首里 — 自身文案不参与大写化/字距 */
+.statusLine {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-sienna);
+  border-radius: var(--radius-round);
+  animation: lrSpin 0.9s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes lrSpin { to { transform: rotate(360deg); } }
+
+.doneDot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-round);
+  background: var(--color-success);
+  flex-shrink: 0;
+}
+
+.statusText {
+  font: italic 400 11px/1 var(--font-serif);
+  color: var(--color-text-secondary);
+}
+
+.stopBtn {
+  margin-left: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-text-dim);
+  font: 500 11px/1 var(--font-sans);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.stopBtn:hover { color: var(--color-text-primary); border-color: var(--color-border-strong); }
+
+/* ── Step list ── */
+
+.steps {
+  display: flex;
+  flex-direction: column;
+}
+
+.stepConnector {
+  width: 1px;
+  height: 8px;
+  background: var(--color-border);
+  margin-left: 8px;
+}
+
+.stepRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+.stepPending { opacity: 0.5; }
+
+.stepDone {
+  width: 16px;
+  height: 16px;
+  background: var(--color-success);
+  color: var(--color-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 600 9px/1 var(--font-sans);
+  border-radius: var(--radius-round);
+  flex-shrink: 0;
+}
+
+.stepActive {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--color-sienna);
+  border-radius: var(--radius-round);
+  animation: lrPulse 1.2s infinite;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+@keyframes lrPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+.stepWait {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--color-text-faint);
+  border-radius: var(--radius-round);
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.stepLabel {
+  font: 400 13px/1.3 var(--font-serif);
+  color: var(--color-text-secondary);
+}
+.stepLabelActive {
+  font-weight: 500;
+  color: var(--color-sienna);
+}
+
+.stepSpacer { flex: 1; }
+
+.stepMeta {
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-faint);
+  flex-shrink: 0;
+}
+.stepMetaActive { color: var(--color-sienna); }
+
+/* ── Thinking chain ── */
+
+.thinking {
+  background: var(--color-bg-stream);
+}
+
+.thinkingHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  text-align: left;
+  color: var(--color-text-label);
+}
+
+.thinkingChevron {
+  flex-shrink: 0;
+  transition: transform var(--transition-fast);
+}
+.thinkingChevronOpen { transform: rotate(90deg); }
+
+.thinkingTitle {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: var(--letter-label);
+  color: var(--color-text-label);
+  text-transform: uppercase;
+}
+
+.thinkingNote {
+  font: italic 400 11px/1 var(--font-serif);
+  color: var(--color-text-faint);
+}
+
+.thinkingToggle {
+  font: 500 11px/1 var(--font-sans);
+  color: var(--color-sienna);
+}
+
+.thinkingBodyWrap {
+  position: relative;
+  margin: 0 14px 12px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+}
+
+.thinkingBody {
+  padding: 12px 14px;
+  font: italic 400 12px/1.8 var(--font-serif);
+  color: var(--color-text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* Newest thought matters most — wash the oldest visible line out at the top. */
+.thinkingFade {
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  top: 1px;
+  height: 32px;
+  background: linear-gradient(var(--color-card), transparent);
+  pointer-events: none;
+}
+
+.thinkingCursor {
+  display: inline-block;
+  width: 7px;
+  height: 13px;
+  background: var(--color-sienna);
+  margin-left: 2px;
+  vertical-align: -2px;
+  animation: lrBlink 1s infinite;
+}
+
+@keyframes lrBlink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
