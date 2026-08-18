@@ -83,14 +83,19 @@ jobs:
       # the linux dependency graph at all (no tray icon in this app), verified with
       #   cargo tree --target x86_64-unknown-linux-gnu -e normal -i libappindicator
       # `libdbus-1-dev` stays — `libdbus-sys` *is* in the graph, via tao -> dbus.
+      #
+      # Cached rather than apt-fetched because this step's problem is its *tail*,
+      # not its average: across 40 successful runs it took a 33 s median but 78 /
+      # 165 / 445 s at the top end, since it pulls from the public Ubuntu mirrors.
+      # Restoring from the Actions cache trades that for GitHub's own infra. On a
+      # cache miss the action just runs apt itself, i.e. today's behaviour.
+      # Bump `version:` to force a rebuild of the cache.
       - name: Install system dependencies
-        env:
-          DEBIAN_FRONTEND: noninteractive
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libwebkit2gtk-4.1-dev \
-            libdbus-1-dev
+        uses: awalsh128/cache-apt-pkgs-action@v1.6.3
+        with:
+          packages: libwebkit2gtk-4.1-dev libdbus-1-dev
+          version: 1
+          execute_install_scripts: true
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
