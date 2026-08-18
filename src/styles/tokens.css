@@ -200,6 +200,7 @@
   --color-border-accent:   #C9966A;   /* accent-outline chips, icon box, approvals */
 
   --color-accent-text:     #A0522D;   /* text on selected segments/chips */
+  --color-accent-mid:      #B3764A;   /* ochre ramp mid step — see dark block */
   --color-accent-deep:     #A0522D;   /* chip ×, 暂停于此, mid-ochre notes */
   --color-on-accent:       #FBF8F0;   /* text on solid sienna buttons */
   --color-text-prose:      #2A2520;   /* generated body (Spectral reading/1.85) */
@@ -223,7 +224,6 @@
   --color-bar-track:       #E5DCC9;   /* progress/alloc track */
   --color-alloc-lore:      #C9966A;   /* context-allocation bar: 设定 segment */
   --color-alloc-memory:    #D9BC94;   /*                          前情 segment */
-  --color-ctx-chapter:     #C9966A;   /* chat memory bar: 章节 segment */
 
   /* Previously referenced but never defined — real definitions so the
      TaskWorkspaceView status badges stop rendering unstyled. */
@@ -392,6 +392,13 @@
   --color-border-accent:   #6B4B2E;
 
   --color-accent-text:     #E8B183;
+  /* The ochre ramp's mid step, between sienna and accent-deep. Shared by the
+     mockup's 设定/摘要 bar segments and the 正在生成 note. Deliberately the
+     same hex in both themes: on paper it lands within 2 units of the exact
+     midpoint of #A0522D↔#C9966A, so it reads as the middle step there too —
+     lightening it for the light theme would only flatten it toward the
+     border tone. (Precedent: --color-success-text is likewise shared.) */
+  --color-accent-mid:      #B3764A;
   --color-accent-deep:     #8E6540;
   --color-on-accent:       #17130F;
   --color-text-prose:      #D9CFC0;
@@ -415,7 +422,6 @@
   --color-bar-track:       #241F19;
   --color-alloc-lore:      #B3764A;
   --color-alloc-memory:    #6B4B2E;
-  --color-ctx-chapter:     #B8875B;
 
   --color-info-bg:         var(--color-type-video-bg);
   --color-info-text:       var(--color-type-video-fg);
