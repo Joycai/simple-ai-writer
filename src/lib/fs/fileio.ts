@@ -71,6 +71,15 @@ export async function copyPath(from: string, to: string): Promise<void> {
   return invoke("fs_copy", { from, to });
 }
 
+/**
+ * Open a project file with the OS default application (an .html lands in the
+ * system browser). Path containment is enforced Rust-side by `FsScope`, same
+ * as every other command here.
+ */
+export async function openWithDefaultApp(path: string): Promise<void> {
+  return invoke("open_with_default_app", { path });
+}
+
 export interface DirEntry { name: string; path: string; isDirectory: boolean; }
 
 export async function readDir(path: string): Promise<DirEntry[]> {

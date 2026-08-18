@@ -335,6 +335,27 @@ fn read_dir_inner(path: &Path, depth: u8) -> Result<Vec<FileNode>, String> {
     Ok(entries)
 }
 
+/// Open a project file with the OS default application — for an .html that is
+/// the system browser, which is the whole point (HTML preview's 在浏览器打开).
+///
+/// Goes through this command rather than the opener plugin's own `openPath`
+/// permission: that permission's scope is *static* capability config, while
+/// which folders are projects here is decided at runtime by `FsScope`. Calling
+/// the plugin from the Rust side keeps the containment check and the open in
+/// one place, gated the same way as every other `fs_*` command.
+#[command]
+pub fn open_with_default_app(
+    path: String,
+    app: tauri::AppHandle,
+    scope: State<'_, FsScope>,
+) -> Result<(), String> {
+    scope.check(&path)?;
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_path(&path, None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{is_within, valid_category};

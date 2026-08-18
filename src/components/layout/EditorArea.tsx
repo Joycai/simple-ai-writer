@@ -8,9 +8,10 @@ import { CodeEditor } from "../editor/CodeEditor";
 import { EditorScrollNav } from "../editor/EditorScrollNav";
 import { Preview } from "../editor/Preview";
 import { ImagePreview } from "../editor/ImagePreview";
+import { HtmlPreview } from "../editor/HtmlPreview";
 import { EditorBottomStrip } from "./EditorBottomStrip";
 import { MOD_KEY } from "../../lib/platform";
-import { isImagePath } from "../../lib/fs/images";
+import { isHtmlPath, isImagePath } from "../../lib/fs/images";
 import { linkScrollers } from "../../lib/editor/scrollSync";
 import styles from "./EditorArea.module.css";
 
@@ -22,6 +23,9 @@ export function EditorArea() {
   const terms = useTerms();
 
   const isImage = !!activeFilePath && isImagePath(activeFilePath);
+  // Third file kind: edited as text like markdown, but previewed in a
+  // sandboxed iframe (HtmlPreview) instead of the markdown renderer.
+  const isHtml = !!activeFilePath && isHtmlPath(activeFilePath);
 
   const previewPaneRef = useRef<HTMLDivElement>(null);
 
@@ -38,12 +42,14 @@ export function EditorArea() {
   // dependency list changes when a view appears. Keying on the view instead
   // makes the link rebuild exactly when its target does.
   useEffect(() => {
-    if (viewMode !== "split" || !activeFilePath || isImage) return;
+    // isHtml excluded: the preview there is an iframe whose inner scroll
+    // position is out of the parent's reach — there is nothing to link.
+    if (viewMode !== "split" || !activeFilePath || isImage || isHtml) return;
     const editor = editorView?.scrollDOM;
     const preview = previewPaneRef.current?.querySelector<HTMLElement>("[data-preview-scroller]");
     if (!editor || !preview) return;
     return linkScrollers(editor, preview);
-  }, [viewMode, activeFilePath, isImage, editorView]);
+  }, [viewMode, activeFilePath, isImage, isHtml, editorView]);
 
   // Load file when active path changes. Images are rendered directly (see below),
   // so we must NOT read them as text — that would fill the editor with binary
@@ -148,7 +154,9 @@ export function EditorArea() {
         )}
         {showPreview && (
           <div className={styles.previewPane} ref={previewPaneRef}>
-            <Preview source={content} basePath={filePath ? filePath.replace(/[/\\][^/\\]*$/, "") : null} />
+            {isHtml
+              ? <HtmlPreview source={content} filePath={filePath} />
+              : <Preview source={content} basePath={filePath ? filePath.replace(/[/\\][^/\\]*$/, "") : null} />}
           </div>
         )}
       </div>
