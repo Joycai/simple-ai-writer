@@ -1,0 +1,34 @@
+/* Footer 模型选择 (设计稿 03 v4): 「模型」灰签 + 描边 chip + 1px 分隔线。 */
+
+.picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pickerLabel {
+  font: 500 10px/1 var(--font-sans);
+  color: var(--color-text-label);
+  flex-shrink: 0;
+  cursor: default;
+}
+
+/* Doubled: re-skins the shared Select trigger (see common/Select) — 0-2-0
+   outranks its base class without depending on bundle order. */
+.pickerChip.pickerChip {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-text-secondary);
+  font: 500 11px/1 var(--font-sans);
+  max-width: 180px;
+}
+.pickerChip.pickerChip:hover:not(:disabled) { border-color: var(--color-border-strong); }
+
+.pickerDivider {
+  width: 1px;
+  height: 14px;
+  background: var(--color-border);
+  flex-shrink: 0;
+}

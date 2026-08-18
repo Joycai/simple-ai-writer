@@ -287,6 +287,14 @@
   color: var(--color-text-muted);
 }
 
+/* footer 左组: 模型选择 + 斜体说明贴在一起 (设计稿 v4)，右侧按钮组靠 space-between 推开 */
+.footerLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
 .footerRight {
   display: flex;
   align-items: center;

@@ -1608,7 +1608,7 @@
     },
     "imageGen": {
       "title": "AI 生成图片",
-      "modelLabel": "生图模型",
+      "modelLabel": "出图模型",
       "promptModelLabel": "提示词模型",
       "facetsLabel": "参考特征",
       "facetsHint": "选中的特征正文会一起交给提示词模型 —— 服装、形态这类视觉细节通常写在特征里，条目正文反而没有",
@@ -1692,7 +1692,9 @@
       "thinking": "思维链",
       "thinkingNote": "实时流式 · 不入库",
       "collapse": "收起",
-      "expand": "展开"
+      "expand": "展开",
+      "modelLabel": "模型",
+      "modelFollowsGlobal": "默认跟随全局设置"
     },
     "meta": {
       "title": "主词条补全",

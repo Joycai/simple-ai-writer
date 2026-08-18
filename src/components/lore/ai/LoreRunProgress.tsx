@@ -88,12 +88,14 @@ export function estimateRunTokens(...texts: string[]): number {
 
 // ── Status line ──────────────────────────────────────────────────────────────
 
-export function RunStatusLine({ state, label, elapsedSec = null, tokens = null, onStop }: {
+export function RunStatusLine({ state, label, elapsedSec = null, tokens = null, model, onStop }: {
   state: "running" | "done";
   /** Overrides the default 生成中/完成 text. */
   label?: string;
   elapsedSec?: number | null;
   tokens?: number | null;
+  /** 本次任务使用的模型名 — 渲染成小灰签 (设计稿 17 运行头)。 */
+  model?: string;
   /** Renders a 停止 button on the right while running. */
   onStop?: () => void;
 }) {
@@ -110,6 +112,7 @@ export function RunStatusLine({ state, label, elapsedSec = null, tokens = null, 
           : t("lore.run.done", { defaultValue: "完成" }))}
         {meta && ` · ${meta}`}
       </span>
+      {model && <span className={styles.modelChip}>{model}</span>}
       {state === "running" && onStop && (
         <button className={styles.stopBtn} onClick={onStop}>
           {t("lore.run.stop", { defaultValue: "停止" })}

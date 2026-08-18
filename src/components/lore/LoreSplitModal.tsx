@@ -31,7 +31,7 @@ import {
   LoreRunSteps, RunStatusLine, ThinkingPanel, useRunClock, useRunTelemetry,
   type RunStep,
 } from "./ai/LoreRunProgress";
-import { Select } from "../common/Select";
+import { ModelPicker } from "./ai/ModelPicker";
 import styles from "./LoreSplitModal.module.css";
 
 interface Props {
@@ -89,7 +89,9 @@ function KeysEditor({ keys, onChange }: { keys: string[]; onChange: (keys: strin
 export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
   const { t } = useTranslation();
   const { projectPath } = useProjectStore();
-  const { models, providers, activeModelId, setActiveModel } = useAiStore();
+  const { models, providers, activeModelId } = useAiStore();
+  // 本次任务使用的模型 — 默认跟随全局设置，改动不写回全局 (设计稿 v4)。
+  const [modelId, setModelId] = useState(activeModelId ?? "");
   const scanProject = useLoreStore((s) => s.scanProject);
 
   const [phase, setPhase] = useState<"input" | "generating" | "review">("input");
@@ -123,7 +125,7 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
   const estTk = (chars: number) => Math.ceil(chars / 3);
 
   const handleGenerate = async () => {
-    const model = models.find((m) => m.id === activeModelId);
+    const model = models.find((m) => m.id === modelId);
     const provider = model ? providers.find((p) => p.id === model.providerId) : null;
     if (!model || !provider) { setError(t("ai.errors.noModel")); return; }
     if (!indexBody && entity.facets.length === 0) { setError(t("lore.split.emptyEntry", { defaultValue: "当前条目没有正文，无需拆分" })); return; }
@@ -275,20 +277,6 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
               {t("lore.split.reason", { defaultValue: "条目过长会稀释检索命中 · 建议拆分" })}
             </span>
           </div>
-          <Select
-            className={styles.modelSelect}
-            value={activeModelId ?? ""}
-            onChange={(v) => setActiveModel(v)}
-            disabled={phase === "generating"}
-            options={[
-              { value: "", label: t("lore.generator.selectModel") },
-              ...models.map((m) => ({
-                value: m.id,
-                label: `${providers.find((p) => p.id === m.providerId)?.name ?? ""} / ${m.name}`,
-              })),
-            ]}
-            ariaLabel={t("lore.generator.selectModel")}
-          />
           <button className={styles.closeBtn} onClick={onClose} disabled={phase === "generating"}>
             <X size={16} />
           </button>
@@ -322,7 +310,8 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
             <>
               <div className={styles.sectionLabel}>
                 {t("lore.split.planLabel", { defaultValue: "整理方案 · AI 建议" })}
-                <RunStatusLine state="running" elapsedSec={elapsedSec} />
+                <RunStatusLine state="running" elapsedSec={elapsedSec}
+                  model={models.find((m) => m.id === modelId)?.name} />
               </div>
               <LoreRunSteps steps={splitSteps} />
               <ThinkingPanel text={reasoning} running />
@@ -446,8 +435,16 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
 
         {/* Footer */}
         <div className={styles.footer}>
+          <ModelPicker
+            models={models}
+            providers={providers}
+            value={modelId}
+            onChange={setModelId}
+            disabled={phase === "generating"}
+          />
           {phase === "input" && (
             <>
+              <span className={styles.footerSpacer} />
               <button className={styles.btn} onClick={onClose}>
                 {t("common.cancel", { defaultValue: "取消" })}
               </button>
@@ -462,9 +459,12 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
             </>
           )}
           {phase === "generating" && (
-            <button className={styles.btn} onClick={handleCancelGenerate}>
-              {t("lore.split.cancel", { defaultValue: "停止" })}
-            </button>
+            <>
+              <span className={styles.footerSpacer} />
+              <button className={styles.btn} onClick={handleCancelGenerate}>
+                {t("lore.split.cancel", { defaultValue: "停止" })}
+              </button>
+            </>
           )}
           {phase === "review" && (
             <>

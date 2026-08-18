@@ -40,6 +40,7 @@ import i18n from "../../i18n";
    modals keep LoreImproveModal.module.css to themselves. The two import names
    survive so the many existing className references stay untouched. */
 import { RunStatusLine, useRunClock } from "../lore/ai/LoreRunProgress";
+import { ModelPicker } from "../lore/ai/ModelPicker";
 import { Select } from "../common/Select";
 import styles from "./ImageGenModal.module.css";
 import gen from "./ImageGenModal.module.css";
@@ -314,9 +315,8 @@ export function ImageGenModal({ target, onClose }: Props) {
               <div className={styles.headerSub}>{target.subject}</div>
             </div>
           </div>
-          {/* Both models this run uses, each labelled: which one drafts the
-              prompt is not guessable from a bare dropdown, and it was
-              previously invisible — silently the app-wide active model. */}
+          {/* 提示词模型留在 header（设计稿 18 未画它，但哪一个在起草提示词
+              必须可见）；出图模型挪去 footer 的动作条 (设计稿 v4)。 */}
           <div className={gen.modelPickers}>
             <label className={gen.modelPicker}>
               <span className={gen.modelPickerLabel}>{t("lore.imageGen.promptModelLabel")}</span>
@@ -327,17 +327,6 @@ export function ImageGenModal({ target, onClose }: Props) {
                 disabled={busy || textModels.length === 0}
                 options={textModels.map((m) => ({ value: m.id, label: m.name }))}
                 ariaLabel={t("lore.imageGen.promptModelLabel")}
-              />
-            </label>
-            <label className={gen.modelPicker}>
-              <span className={gen.modelPickerLabel}>{t("lore.imageGen.modelLabel")}</span>
-              <Select
-                className={styles.modelSelect}
-                value={effectiveImageModelId}
-                onChange={(v) => setImageModel(v)}
-                disabled={busy || imageModels.length === 0}
-                options={imageModels.map((m) => ({ value: m.id, label: m.name }))}
-                ariaLabel={t("lore.imageGen.modelLabel")}
               />
             </label>
           </div>
@@ -553,7 +542,17 @@ export function ImageGenModal({ target, onClose }: Props) {
         </div>
 
         <div className={styles.footer}>
-          <button className={styles.btnSecondary} onClick={handleClose}>{t("lore.imageGen.close")}</button>
+          <div className={styles.footerLeft}>
+            <ModelPicker
+              label={t("lore.imageGen.modelLabel")}
+              models={imageModels}
+              providers={providers}
+              value={effectiveImageModelId}
+              onChange={(v) => setImageModel(v)}
+              disabled={busy || imageModels.length === 0}
+            />
+            <button className={styles.btnSecondary} onClick={handleClose}>{t("lore.imageGen.close")}</button>
+          </div>
           <div className={styles.footerRight}>
             {currentTurn && (
               <>
