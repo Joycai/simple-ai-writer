@@ -336,7 +336,8 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
           <button className={styles.btn} onClick={onClose} disabled={busy}>
             {t("common.cancel", { defaultValue: "取消" })}
           </button>
-          <button className={styles.btnPrimary} onClick={handleSave} disabled={!canSave}>
+          {/* btnPrimary 只带覆盖色，基础皮在 btn 上 (与其他模态一致) */}
+          <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleSave} disabled={!canSave}>
             {busy
               ? t("lore.facet.saving", { defaultValue: "保存中…" })
               : t("lore.facet.saveFacet", { defaultValue: "保存特征" })}

@@ -354,8 +354,10 @@
 .footerHint {
   font: italic 400 11px/1.4 var(--font-serif);
   color: var(--color-text-muted);
+  min-width: 0;
 }
 
+/* 按钮不参与压缩 (见 LoreGenerator.module.css 同注): 中文标签被压窄会逐字折行。 */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -366,6 +368,8 @@
   background: transparent;
   color: var(--color-text-dim);
   cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
   transition: color var(--transition-fast), border-color var(--transition-fast);
 }
 .btn:hover:not(:disabled) { color: var(--color-text-primary); border-color: var(--color-border-strong); }

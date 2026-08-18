@@ -29,7 +29,10 @@
 .triggerPaper {
   border-color: var(--color-border);
   background: var(--color-card);
-  min-width: 240px;
+  /* 期望宽 240，但在窄 footer 里可以让到 168 —— 让位的顺序是「先收窄选择器，
+     再压缩说明文案，按钮永不动」。 */
+  width: 240px;
+  min-width: 168px;
   max-width: 380px;
   padding: 6px 10px 6px 8px;
 }

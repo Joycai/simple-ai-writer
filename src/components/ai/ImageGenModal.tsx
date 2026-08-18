@@ -306,7 +306,8 @@ export function ImageGenModal({ target, onClose }: Props) {
       confirmMessage={t("lore.imageGen.discardConfirm")}
       closeOnBackdrop={false}
     >
-      <div className={styles.panel} style={{ maxWidth: 720 }}>
+      {/* 760: footer 要放下「出图模型」选择器 + 关闭 + 最多三枚保存/生成按钮 */}
+      <div className={styles.panel} style={{ maxWidth: 760 }}>
         <div className={styles.header}>
           <div className={styles.headerLeft}>
             <div className={styles.headerAvatarPlaceholder}><ImageIcon size={16} strokeWidth={1.5} /></div>
