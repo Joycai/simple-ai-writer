@@ -169,6 +169,30 @@ describe("subagent", () => {
 
       expect("error" in res).toBe(true);
     });
+
+    it("reports a missing API key as configuration, not as a subagent failure", async () => {
+      // An empty string used to be substituted here, so the request went out
+      // keyless and came back 401 — which the parent model read as "the
+      // subagent is broken" rather than "paste a key".
+      const res = await resolveSubAgentConn(
+        "search",
+        [dummySearchModel],
+        [dummyProvider],
+        defaultSubs,
+        async () => null,
+      );
+      expect("error" in res).toBe(true);
+      expect((res as { error: string }).error).toMatch(/API key/i);
+
+      const ok = await resolveSubAgentConn(
+        "search",
+        [dummySearchModel],
+        [dummyProvider],
+        defaultSubs,
+        async () => "k",
+      );
+      expect("error" in ok).toBe(false);
+    });
   });
 
   describe("resolveVisionConn", () => {

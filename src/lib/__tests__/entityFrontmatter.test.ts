@@ -20,7 +20,10 @@ function roundTrip(meta: EntityMeta) {
 }
 
 describe("serializeEntityFrontmatter / parseFrontmatter round-trip", () => {
-  it("survives a multi-line summary", () => {
+  it("survives a multi-line summary without corrupting the key that follows it", () => {
+    // Regression check for the literal failure mode: a raw newline in the
+    // quoted scalar would make `category` look like part of the summary
+    // value (or vice versa), rather than its own key.
     const meta: EntityMeta = {
       name: "Ava", aliases: ["A"], category: "characters",
       summary: "First line.\nSecond line.",
@@ -46,18 +49,5 @@ describe("serializeEntityFrontmatter / parseFrontmatter round-trip", () => {
     };
     const data = roundTrip(meta);
     expect(data.aliases).toEqual(['Bob "The Bear"']);
-  });
-
-  it("does not corrupt the line that follows a multi-line summary", () => {
-    // Regression check for the literal failure mode: a raw newline in the
-    // quoted scalar would make `category` look like part of the summary
-    // value (or vice versa), rather than its own key.
-    const meta: EntityMeta = {
-      name: "Ava", aliases: [], category: "world",
-      summary: "Line one\nLine two",
-    };
-    const data = roundTrip(meta);
-    expect(data.summary).toBe("Line one\nLine two");
-    expect(data.category).toBe("world");
   });
 });
