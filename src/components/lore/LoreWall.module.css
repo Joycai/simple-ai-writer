@@ -225,7 +225,6 @@
   font: 300 17px/1 var(--font-serif);
 }
 .cardFeatured .cardAvatar {
-  border-radius: 50%;
   font-size: 30px;
 }
 
@@ -236,10 +235,6 @@
   display: block;
   background: var(--color-bg-surface);
 }
-.cardFeatured .cardAvatarImg {
-  border-radius: 50%;
-}
-
 .cardAvatarOverlay {
   position: absolute;
   inset: 0;
@@ -250,9 +245,6 @@
   color: #fff;
   opacity: 0;
   transition: opacity var(--transition-base);
-}
-.cardFeatured .cardAvatarOverlay {
-  border-radius: 50%;
 }
 .cardAvatarWrap:hover .cardAvatarOverlay {
   opacity: 1;
@@ -290,20 +282,26 @@
   padding: 3px 8px;
   background: var(--color-tag-bg);
   color: var(--color-tag-text);
-  font: 500 11px/1.4 var(--font-serif);
+  font: 400 11px/1.4 var(--font-serif);
+}
+.cardTagMore {
+  padding: 3px 6px;
+  font: 400 10px/1.4 var(--font-mono);
+  color: var(--color-text-faint);
 }
 
+/* 屏 14 card footer: dashed rule + "N 特征 · M 配图". */
 .cardFoot {
-  padding-top: 14px;
+  margin-top: 12px;
+  padding-top: 10px;
   border-top: 1px dashed var(--color-border);
-  display: flex;
-  align-items: center;
-  gap: 14px;
   font: 400 11px/1.5 var(--font-sans);
   color: var(--color-text-muted);
-  margin-top: 16px;
 }
-.cardFootValue { color: var(--color-sienna); font-weight: 500; }
+.cardFeatured .cardFoot {
+  margin-top: 14px;
+  padding-top: 12px;
+}
 
 /* "+ new" card */
 .newCard {

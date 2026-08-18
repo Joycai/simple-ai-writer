@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Sparkles, FolderOpen, ExternalLink, FileText, Plus, Pencil, Trash2, Check, X, Camera, ChevronLeft, ChevronRight, Layers, Zap, Pin, Hand } from "lucide-react";
+import { ArrowLeft, Sparkles, FolderOpen, ExternalLink, FileText, Plus, Pencil, Trash2, Check, X, Camera, ChevronLeft, ChevronRight, Layers, MoreHorizontal } from "lucide-react";
 import { createPortal } from "react-dom";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -8,6 +8,7 @@ import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
 import {
   type CategoryId,
   type LoreEntity,
+  type LoreFacet,
   type LoreImage,
   addLoreImage,
   updateLoreImageDesc,
@@ -458,17 +459,112 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     .filter((f) => f !== "index.md" && f !== "images.md" && !facetFileSet.has(f))
     .sort((a, b) => a.localeCompare(b));
 
-  const MODE_ICONS = {
-    auto: <Zap size={10} strokeWidth={1.8} />,
-    always: <Pin size={10} strokeWidth={1.8} />,
-    manual: <Hand size={10} strokeWidth={1.8} />,
-  } as const;
-  const modeTitle = (mode: "auto" | "always" | "manual") =>
+  // 屏 15 lays the 特征 column out as loose rows with the mutual-exclusion
+  // groups boxed together, so the flat facet list is folded into blocks: a
+  // group takes the position of its first member and collects the rest,
+  // highest priority first (only one of them ever injects).
+  const facetBlocks = useMemo(() => {
+    type Block =
+      | { kind: "facet"; facet: LoreFacet }
+      | { kind: "group"; group: string; facets: LoreFacet[] };
+    const blocks: Block[] = [];
+    const byGroup = new Map<string, LoreFacet[]>();
+    for (const f of entity.facets) {
+      if (!f.group) { blocks.push({ kind: "facet", facet: f }); continue; }
+      const existing = byGroup.get(f.group);
+      if (existing) { existing.push(f); continue; }
+      const list = [f];
+      byGroup.set(f.group, list);
+      blocks.push({ kind: "group", group: f.group, facets: list });
+    }
+    for (const list of byGroup.values()) list.sort((a, b) => b.priority - a.priority);
+    return blocks;
+  }, [entity.facets]);
+
+  const modeLabel = (mode: LoreFacet["mode"]) =>
     mode === "auto"
-      ? t("lore.facet.modeAuto", { defaultValue: "自动 — 实体命中且关键词命中时注入" })
+      ? t("lore.facet.modeAutoShort", { defaultValue: "自动" })
       : mode === "always"
-        ? t("lore.facet.modeAlways", { defaultValue: "总是 — 实体命中即注入" })
-        : t("lore.facet.modeManual", { defaultValue: "仅手动 — 只在被固定（pin）时注入" });
+        ? t("lore.facet.modeAlwaysShort", { defaultValue: "常驻" })
+        : t("lore.facet.modeManualShort", { defaultValue: "手动" });
+  const modeTitle = (mode: LoreFacet["mode"]) =>
+    mode === "auto"
+      ? t("lore.facet.modeAutoHint", { defaultValue: "主词条命中 + 出现任一触发词" })
+      : mode === "always"
+        ? t("lore.facet.modeAlwaysHint", { defaultValue: "主词条命中即注入" })
+        : t("lore.facet.modeManualHint", { defaultValue: "仅在对话中手动引用时注入" });
+  const MODE_CLASS: Record<LoreFacet["mode"], string> = {
+    auto: styles.facetModeAuto,
+    always: styles.facetModeAlways,
+    manual: styles.facetModeManual,
+  };
+
+  /** One facet row (屏 15). `inGroup` swaps the metric for 优先级 N · 字数. */
+  const renderFacetRow = (f: LoreFacet, inGroup: boolean) => (
+    <div
+      key={f.file}
+      className={`${styles.facetRow} ${f.mode === "always" ? styles.facetRowAlways : ""} ${f.mode === "manual" ? styles.facetRowManual : ""}`}
+      onClick={() => setFacetModal({ file: f.file })}
+      title={t("lore.facet.editTitle", { defaultValue: "编辑特征" })}
+    >
+      <div className={styles.facetRowHead}>
+        <span className={styles.facetTitle}>{f.title}</span>
+        <span className={`${styles.facetMode} ${MODE_CLASS[f.mode]}`} title={modeTitle(f.mode)}>
+          {modeLabel(f.mode)}
+        </span>
+        {f.mode === "manual" && (
+          <span className={styles.facetNote}>
+            {t("lore.facet.manualNote", { defaultValue: "仅在手动引用时注入" })}
+          </span>
+        )}
+        <span className={styles.spacer} />
+        <span className={styles.facetChars}>
+          {inGroup
+            ? t("lore.facet.priorityChars", {
+                priority: f.priority,
+                chars: f.charCount.toLocaleString("en-US"),
+                defaultValue: `优先级 ${f.priority} · ${f.charCount} 字`,
+              })
+            : t("lore.facet.chars", {
+                chars: f.charCount.toLocaleString("en-US"),
+                defaultValue: `${f.charCount} 字`,
+              })}
+        </span>
+        <div className={styles.facetActions} onClick={(ev) => ev.stopPropagation()}>
+          <button
+            className={styles.iconBtn}
+            onClick={() => openFileInEditor(f.file)}
+            disabled={busy}
+            title={t("lore.detail.openInEditor", { defaultValue: "在编辑器中打开" })}
+          >
+            <ExternalLink size={11} strokeWidth={1.8} />
+          </button>
+          <button
+            className={styles.iconBtn}
+            onClick={() => handleDeleteFacet(f.file, f.title)}
+            disabled={busy}
+            title={t("lore.facet.delete", { defaultValue: "删除特征" })}
+          >
+            <Trash2 size={11} strokeWidth={1.8} />
+          </button>
+        </div>
+      </div>
+      {f.keys.length > 0 ? (
+        <div className={styles.facetKeys}>
+          <span className={styles.facetKeysLabel}>
+            {t("lore.facet.fieldKeys", { defaultValue: "触发词" })}
+          </span>
+          {f.keys.map((k) => (
+            <span key={k} className={styles.facetKey}>{k}</span>
+          ))}
+        </div>
+      ) : f.mode === "auto" ? (
+        <div className={styles.facetWarn}>
+          {t("lore.facet.keysEmptyWarn", { defaultValue: "自动模式下没有关键词，此特征永远不会被自动注入" })}
+        </div>
+      ) : null}
+    </div>
+  );
 
   const previewImg = previewIndex !== null ? entity.images[previewIndex] : null;
 
@@ -613,6 +709,26 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         ) : (
           <>
             <span className={styles.crumbId}>id: {entity.id}</span>
+            <span className={styles.crumbDivider} />
+            <button
+              className={`${styles.actionBtn} ${styles.actionBtnPrimary}`}
+              onClick={startEntityEdit}
+              disabled={contentLoadFailed}
+              title={contentLoadFailed ? t("lore.detail.loadErrorEditTitle", { defaultValue: "内容未能读取，暂不能编辑" }) : undefined}
+            >
+              <Pencil size={11} strokeWidth={1.8} />
+              {t("lore.detail.edit", { defaultValue: "编辑" })}
+            </button>
+            <button
+              className={styles.actionBtn}
+              onClick={(ev) => {
+                const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+                setMoreMenu({ x: r.left, y: r.bottom + 4 });
+              }}
+              title={t("lore.detail.moreActions", { defaultValue: "更多操作" })}
+            >
+              <MoreHorizontal size={12} strokeWidth={1.8} />
+            </button>
             {(neighbors.prev || neighbors.next) && <span className={styles.crumbDivider} />}
             {neighbors.prev && (
               <button className={styles.navBtn} onClick={() => openDetail(neighbors.prev!.dirPath)}>
@@ -710,67 +826,6 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
           </div>
         </div>
       ) : (<>
-      <div className={styles.hero}>
-        <div
-          className={styles.avatarWrap}
-          onClick={handleAvatarPick}
-          title={t("lore.wall.changeAvatar", { defaultValue: "更换头像" })}
-        >
-          {avatarUrl ? (
-            <img src={avatarUrl} alt={entity.name} className={styles.avatarImg} />
-          ) : (
-            <div className={styles.avatar}>{entity.name.charAt(0)}</div>
-          )}
-          <div className={styles.avatarOverlay}>
-            <Camera size={18} strokeWidth={1.8} />
-          </div>
-        </div>
-        <div className={styles.heroText}>
-          <div className={styles.eyebrow}>
-            {cat ? `${cat.labelEn} · ${categoryLabel(cat, isZh)}` : entity.category}
-          </div>
-          <div className={styles.heroName}>{entity.name}</div>
-          <div className={styles.heroAliases}>
-            {entity.aliases.map((a) => (
-              <span key={a} className={styles.alias}>{a}</span>
-            ))}
-            <button
-              className={styles.aliasAdd}
-              onClick={startEntityEdit}
-              disabled={contentLoadFailed}
-              title={t("lore.detail.addTagHint", { defaultValue: "在编辑中添加别名/标签" })}
-            >
-              + {isZh ? "标签" : "tag"}
-            </button>
-          </div>
-          {entity.summary && <div className={styles.heroSummary}>"{entity.summary}"</div>}
-        </div>
-        <div className={styles.heroActions}>
-          <button
-            className={styles.heroBtnPrimary}
-            onClick={startEntityEdit}
-            disabled={contentLoadFailed}
-            title={contentLoadFailed ? t("lore.detail.loadErrorEditTitle", { defaultValue: "内容未能读取，暂不能编辑" }) : undefined}
-          >
-            {t("lore.detail.edit", { defaultValue: "编辑" })}
-          </button>
-          <button className={styles.heroBtnSecondary} onClick={() => setShowAiHub(true)}>
-            <Sparkles size={11} strokeWidth={2} />
-            {t("lore.aiHub.title", { defaultValue: "AI 编辑助手" })}
-          </button>
-          <button
-            className={styles.heroBtnGhost}
-            onClick={(ev) => {
-              const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
-              setMoreMenu({ x: r.left, y: r.bottom + 4 });
-            }}
-            title={t("lore.detail.moreActions", { defaultValue: "更多操作" })}
-          >
-            ⋯
-          </button>
-        </div>
-      </div>
-
       {moreMenu && (
         <ContextMenu
           x={moreMenu.x}
@@ -788,12 +843,75 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         />
       )}
 
+      {/* 设计稿 03 · 屏 15 — 三段结构直接对应数据模型:
+          主词条 index.md | 特征 *.md | 配图 images.md */}
       <div className={styles.cols}>
-        <div className={styles.colMain}>
+
+        {/* ── 主词条 · index.md ─────────────────────────────────────────── */}
+        <div className={styles.colIndex}>
           <div className={styles.colHead}>
-            {isZh ? "profile · 正文" : "profile"}
+            {t("lore.detail.colIndex", { defaultValue: "主词条 · index.md" })}
           </div>
-          {content ? (
+
+          <div
+            className={styles.avatarWrap}
+            onClick={handleAvatarPick}
+            title={t("lore.wall.changeAvatar", { defaultValue: "更换头像" })}
+          >
+            {avatarUrl ? (
+              <img src={avatarUrl} alt={entity.name} className={styles.avatarImg} />
+            ) : (
+              <div className={styles.avatar} style={{ background: categoryColor(entity.category) }}>
+                {entity.name.charAt(0)}
+              </div>
+            )}
+            <div className={styles.avatarOverlay}>
+              <Camera size={18} strokeWidth={1.8} />
+            </div>
+          </div>
+
+          <div>
+            <div className={styles.heroName}>{entity.name}</div>
+            {entity.aliases.length > 0 && (
+              <div className={styles.heroAliases}>
+                {t("lore.detail.fieldAliases", { defaultValue: "别名" })}：{entity.aliases.join(" · ")}
+              </div>
+            )}
+          </div>
+
+          <div className={styles.catRow}>
+            <span className={styles.catLabel}>
+              {t("lore.detail.fieldCategory", { defaultValue: "分类" })}
+            </span>
+            <button
+              className={styles.catChip}
+              onClick={startEntityEdit}
+              disabled={contentLoadFailed}
+              title={t("lore.detail.edit", { defaultValue: "编辑" })}
+            >
+              <span className={styles.crumbDot} style={{ background: categoryColor(entity.category) }} />
+              {cat ? categoryLabel(cat, isZh) : entity.category}
+            </button>
+          </div>
+
+          <div>
+            <div className={styles.fieldHead}>
+              {t("lore.detail.summaryHead", { defaultValue: "摘要 · 命中即注入" })}
+            </div>
+            {entity.summary ? (
+              <div className={styles.summaryBox}>{entity.summary}</div>
+            ) : (
+              <button className={styles.summaryEmpty} onClick={startEntityEdit} disabled={contentLoadFailed}>
+                {t("lore.detail.summaryEmpty", { defaultValue: "（无摘要 — 点击填写）" })}
+              </button>
+            )}
+          </div>
+
+          <div className={styles.indexBody}>
+            <div className={styles.fieldHead}>
+              {t("lore.detail.bodyHead", { defaultValue: "正文" })}
+            </div>
+            {content ? (
               <MarkdownPreview
                 source={content}
                 basePath={entity.dirPath}
@@ -806,281 +924,223 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
             ) : (
               <div className={styles.notLoaded}>{t("lore.detail.noContent")}</div>
             )}
+          </div>
 
-            <section className={styles.facets}>
-              <div className={styles.facetsHeader}>
-                <Layers size={12} strokeWidth={1.8} />
-                <span className={styles.facetsHead}>
-                  {t("lore.facet.section", { defaultValue: "特征" })}
-                </span>
-                <span className={styles.facetsCount}>{entity.facets.length}</span>
-                <span className={styles.spacer} />
-                <button
-                  className={styles.galleryAddBtn}
-                  onClick={() => setFacetModal({ file: null })}
-                  disabled={busy}
-                >
-                  <Plus size={12} strokeWidth={2} />
-                  {t("lore.facet.new", { defaultValue: "新建特征" })}
-                </button>
+          <span className={styles.spacer} />
+
+          {/* What the entity is on disk — the mockup's mono file listing. */}
+          <div className={styles.fileTree}>
+            <div>lore/{entity.category}/{entity.id}/</div>
+            <div>├ index.md</div>
+            <div>├ images.md{entity.images.length > 0 ? ` · ${entity.images.length}` : ""}</div>
+            <div>└ {entity.facets.length} × {t("lore.facet.section", { defaultValue: "特征" })} .md</div>
+          </div>
+
+          <div className={styles.colActions}>
+            <button className={styles.colActionPrimary} onClick={() => setShowAiHub(true)}>
+              <Sparkles size={11} strokeWidth={2} />
+              {t("lore.aiHub.title", { defaultValue: "AI 编辑助手" })}
+            </button>
+            <button className={styles.colAction} onClick={() => setShowSplit(true)}>
+              {t("lore.detail.splitEntry", { defaultValue: "拆分条目" })}
+            </button>
+          </div>
+        </div>
+
+        {/* ── 特征 ──────────────────────────────────────────────────────── */}
+        <div className={styles.colFacets}>
+          <div className={styles.sectionHeader}>
+            <span className={styles.colHead}>
+              {t("lore.facet.section", { defaultValue: "特征" })} · {entity.facets.length}
+            </span>
+            <span className={styles.sectionHint}>
+              {t("lore.facet.sectionHint", { defaultValue: "每条特征独立决定是否注入上下文" })}
+            </span>
+            <span className={styles.spacer} />
+            <button
+              className={styles.addBtn}
+              onClick={() => setFacetModal({ file: null })}
+              disabled={busy}
+            >
+              <Plus size={12} strokeWidth={2} />
+              {t("lore.facet.new", { defaultValue: "新建特征" })}
+            </button>
+          </div>
+
+          <div className={styles.colScroll}>
+            {entity.facets.length === 0 ? (
+              <div className={styles.facetsEmpty}>
+                {t("lore.facet.empty", { defaultValue: "暂无特征 — 把条目的不同侧面拆成独立特征，写作时按需注入" })}
               </div>
+            ) : (
+              facetBlocks.map((block) =>
+                block.kind === "facet"
+                  ? renderFacetRow(block.facet, false)
+                  : (
+                    <div key={`g:${block.group}`} className={styles.groupBox}>
+                      <div className={styles.groupHead}>
+                        <span className={styles.groupName}>
+                          {t("lore.facet.groupBoxHead", { group: block.group, defaultValue: `互斥组 · ${block.group}` })}
+                        </span>
+                        <span className={styles.groupHint}>
+                          {t("lore.facet.groupBoxHint", { defaultValue: "同组按优先级只注入一条" })}
+                        </span>
+                      </div>
+                      <div className={styles.groupRows}>
+                        {block.facets.map((f) => renderFacetRow(f, true))}
+                      </div>
+                    </div>
+                  ),
+              )
+            )}
 
-              {entity.facets.length === 0 ? (
-                <div className={styles.facetsEmpty}>
-                  {t("lore.facet.empty", { defaultValue: "暂无特征 — 把服装、背景故事等拆成独立特征，写作时按需注入，避免整条设定挤占上下文" })}
+            {attachments.length > 0 && (
+              <>
+                <div className={styles.filesHead}>
+                  {t("lore.facet.attachments", { defaultValue: "附件（不参与注入）" })}
                 </div>
-              ) : (
-                <div className={styles.facetGrid}>
-                  {entity.facets.map((f) => (
-                    <div
-                      key={f.file}
-                      className={styles.facetCard}
-                      onClick={() => setFacetModal({ file: f.file })}
-                      title={t("lore.facet.editTitle", { defaultValue: "编辑特征" })}
-                    >
-                      <div className={styles.facetCardHead}>
-                        <span className={styles.facetMode} title={modeTitle(f.mode)}>
-                          {MODE_ICONS[f.mode]}
-                        </span>
-                        <span className={styles.facetTitle}>{f.title}</span>
-                        {f.group && <span className={styles.facetGroup}>{f.group}</span>}
-                        <span className={styles.spacer} />
-                        <span className={styles.facetTokens}>
-                          ~{Math.ceil(f.charCount / 3)} tk
-                        </span>
-                      </div>
-                      {f.keys.length > 0 ? (
-                        <div className={styles.facetKeys}>
-                          {f.keys.map((k) => (
-                            <span key={k} className={styles.facetKey}>{k}</span>
-                          ))}
-                        </div>
-                      ) : f.mode === "auto" ? (
-                        <div className={styles.facetWarn}>
-                          {t("lore.facet.keysEmptyWarn", { defaultValue: "自动模式下没有关键词，此特征永远不会被自动注入" })}
-                        </div>
-                      ) : null}
-                      <div className={styles.facetActions} onClick={(ev) => ev.stopPropagation()}>
-                        <button
-                          className={styles.iconBtn}
-                          onClick={() => openFileInEditor(f.file)}
-                          disabled={busy}
-                          title={t("lore.detail.openInEditor", { defaultValue: "在编辑器中打开" })}
-                        >
-                          <ExternalLink size={11} strokeWidth={1.8} />
-                        </button>
-                        <button
-                          className={styles.iconBtn}
-                          onClick={() => handleDeleteFacet(f.file, f.title)}
-                          disabled={busy}
-                          title={t("lore.facet.delete", { defaultValue: "删除特征" })}
-                        >
-                          <Trash2 size={11} strokeWidth={1.8} />
-                        </button>
-                      </div>
+                <div className={styles.fileList}>
+                  {attachments.map((f) => (
+                    <div key={f} className={styles.attachmentRow}>
+                      <button
+                        className={styles.fileItem}
+                        onClick={() => openFileInEditor(f)}
+                        title={t("lore.detail.openInEditor", { defaultValue: "在编辑器中打开" })}
+                      >
+                        <FileText size={11} strokeWidth={1.8} />
+                        <span className={styles.fileName}>{f}</span>
+                      </button>
+                      <button
+                        className={styles.convertBtn}
+                        onClick={() => setFacetModal({ file: f })}
+                        disabled={busy}
+                        title={t("lore.facet.convertHint", { defaultValue: "补全触发关键词等信息，使其可被按需注入" })}
+                      >
+                        <Layers size={10} strokeWidth={1.8} />
+                        {t("lore.facet.convert", { defaultValue: "转为特征" })}
+                      </button>
                     </div>
                   ))}
                 </div>
-              )}
+              </>
+            )}
+          </div>
+        </div>
 
-              {attachments.length > 0 && (
-                <>
-                  <div className={styles.filesHead}>
-                    {t("lore.facet.attachments", { defaultValue: "附件（不参与注入）" })}
-                  </div>
-                  <div className={styles.fileList}>
-                    {attachments.map((f) => (
-                      <div key={f} className={styles.attachmentRow}>
-                        <button
-                          className={styles.fileItem}
-                          onClick={() => openFileInEditor(f)}
-                          title={t("lore.detail.openInEditor", { defaultValue: "在编辑器中打开" })}
-                        >
-                          <FileText size={11} strokeWidth={1.8} />
-                          <span className={styles.fileName}>{f}</span>
-                        </button>
-                        <button
-                          className={styles.convertBtn}
-                          onClick={() => setFacetModal({ file: f })}
-                          disabled={busy}
-                          title={t("lore.facet.convertHint", { defaultValue: "补全触发关键词等信息，使其可被按需注入" })}
-                        >
-                          <Layers size={10} strokeWidth={1.8} />
-                          {t("lore.facet.convert", { defaultValue: "转为特征" })}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </section>
+        {/* ── 配图 · images.md ──────────────────────────────────────────── */}
+        <div className={styles.colImages}>
+          <div className={styles.sectionHeader}>
+            <span className={styles.colHead}>
+              {t("lore.detail.colImages", { defaultValue: "配图 · images.md" })}
+            </span>
+            <span className={styles.galleryCount}>{entity.images.length}</span>
+            <span className={styles.spacer} />
+            <button
+              className={styles.iconBtn}
+              onClick={() => setShowImageGen(true)}
+              disabled={busy || !imageGenReady}
+              title={imageGenReady
+                ? t("lore.detail.aiGenImage")
+                : t("lore.detail.aiGenImageNeedModel")}
+            >
+              <Sparkles size={13} strokeWidth={1.8} />
+            </button>
+            <button className={styles.addLink} onClick={handleAddImages} disabled={busy}>
+              + {t("lore.detail.addImageShort", { defaultValue: "添加" })}
+            </button>
+          </div>
 
-            <section className={styles.gallery}>
-              <div className={styles.galleryHeader}>
-                <div className={styles.galleryHead}>{t("lore.detail.gallery", { defaultValue: "图集" })}</div>
-                <span className={styles.galleryCount}>{entity.images.length}</span>
-                <span className={styles.spacer} />
-                <button
-                  className={styles.galleryAddBtn}
-                  onClick={() => setShowImageGen(true)}
-                  disabled={busy || !imageGenReady}
-                  title={imageGenReady
-                    ? t("lore.detail.aiGenImage")
-                    : t("lore.detail.aiGenImageNeedModel")}
-                >
-                  <Sparkles size={12} strokeWidth={2} />
-                  {t("lore.detail.aiGenImage")}
-                </button>
-                <button
-                  className={styles.galleryAddBtn}
-                  onClick={handleAddImages}
-                  disabled={busy}
-                  title={t("lore.detail.addImage", { defaultValue: "添加图片" })}
-                >
-                  <Plus size={12} strokeWidth={2} />
-                  {t("lore.detail.addImage", { defaultValue: "添加图片" })}
-                </button>
+          <div className={styles.colScroll}>
+            {entity.images.length === 0 ? (
+              <div className={styles.galleryEmpty}>
+                {t("lore.detail.galleryEmpty", { defaultValue: "暂无图片 — 点击「添加」选择本地图片，然后填写描述" })}
               </div>
-
-              {entity.images.length === 0 ? (
-                <div className={styles.galleryEmpty}>
-                  {t("lore.detail.galleryEmpty", { defaultValue: "暂无图片 — 点击「添加图片」选择本地图片，然后填写描述" })}
-                </div>
-              ) : (
-                <div className={styles.galleryGrid}>
-                  {entity.images.map((img) => {
-                    const isEditing = editingFile === img.file;
-                    return (
-                      <figure key={img.file} className={styles.galleryItem}>
-                        <img
-                          src={imageDataUrls[img.absPath] ?? ""}
-                          alt={img.desc || img.file}
-                          className={styles.galleryImg}
-                          style={!imageDataUrls[img.absPath] ? { background: "var(--color-bg-surface)" } : undefined}
-                          onClick={() => setPreviewIndex(entity.images.indexOf(img))}
-                          title={t("lore.detail.previewImage", { defaultValue: "点击放大预览" })}
-                        />
-                        <figcaption className={styles.galleryCaption}>
-                          <div className={styles.galleryFileRow}>
-                            <span className={styles.galleryFile}>{img.file}</span>
-                            <div className={styles.galleryActions}>
-                              <button
-                                className={styles.iconBtn}
-                                onClick={() => handleAiDesc(img)}
-                                disabled={busy || !visionReady || aiDescFile !== null}
-                                title={visionReady
-                                  ? t("lore.detail.aiDesc", { defaultValue: "AI 生成描述" })
-                                  : t("lore.detail.aiDescNeedMultimodal", { defaultValue: "需要多模态模型 — 请在设置中选择支持图片输入的模型" })}
-                              >
-                                <Sparkles size={11} strokeWidth={1.8} />
-                              </button>
-                              {!isEditing && (
-                                <button
-                                  className={styles.iconBtn}
-                                  onClick={() => startEdit(img.file, img.desc)}
-                                  disabled={busy}
-                                  title={t("lore.detail.editDesc", { defaultValue: "编辑描述" })}
-                                >
-                                  <Pencil size={11} strokeWidth={1.8} />
-                                </button>
-                              )}
-                              <button
-                                className={styles.iconBtn}
-                                onClick={() => handleRemove(img.file)}
-                                disabled={busy}
-                                title={t("lore.detail.removeImage", { defaultValue: "删除图片" })}
-                              >
-                                <Trash2 size={11} strokeWidth={1.8} />
-                              </button>
-                            </div>
-                          </div>
-                          {isEditing ? (
-                            <div className={styles.editArea}>
-                              <MarkdownTextarea
-                                format={false}
-                                className={styles.editTextarea}
-                                value={editingDraft}
-                                onChange={(e) => setEditingDraft(e.target.value)}
-                                placeholder={t("lore.detail.descPlaceholder", { defaultValue: "一句话描述这张图片…" })}
-                                autoFocus
-                                rows={3}
-                              />
-                              <div className={styles.editButtons}>
-                                <button className={styles.iconBtnCommit} onClick={commitEdit} disabled={busy || aiDescFile !== null} title="保存">
-                                  <Check size={12} strokeWidth={2} />
-                                </button>
-                                <button className={styles.iconBtn} onClick={cancelEdit} disabled={busy} title="取消">
-                                  <X size={12} strokeWidth={2} />
-                                </button>
-                              </div>
-                            </div>
-                          ) : img.desc ? (
-                            <span className={styles.galleryDesc}>{img.desc}</span>
-                          ) : (
-                            <span
-                              className={styles.galleryDescEmpty}
-                              onClick={() => startEdit(img.file, "")}
+            ) : (
+              entity.images.map((img) => {
+                const isEditing = editingFile === img.file;
+                return (
+                  <figure key={img.file} className={styles.galleryItem}>
+                    <img
+                      src={imageDataUrls[img.absPath] ?? ""}
+                      alt={img.desc || img.file}
+                      className={styles.galleryImg}
+                      style={!imageDataUrls[img.absPath] ? { background: "var(--color-bg-surface)" } : undefined}
+                      onClick={() => setPreviewIndex(entity.images.indexOf(img))}
+                      title={t("lore.detail.previewImage", { defaultValue: "点击放大预览" })}
+                    />
+                    <figcaption className={styles.galleryCaption}>
+                      <div className={styles.galleryFileRow}>
+                        <span className={styles.galleryFile}>{img.file}</span>
+                        <div className={styles.galleryActions}>
+                          <button
+                            className={styles.iconBtn}
+                            onClick={() => handleAiDesc(img)}
+                            disabled={busy || !visionReady || aiDescFile !== null}
+                            title={visionReady
+                              ? t("lore.detail.aiDesc", { defaultValue: "AI 生成描述" })
+                              : t("lore.detail.aiDescNeedMultimodal", { defaultValue: "需要多模态模型 — 请在设置中选择支持图片输入的模型" })}
+                          >
+                            <Sparkles size={11} strokeWidth={1.8} />
+                          </button>
+                          {!isEditing && (
+                            <button
+                              className={styles.iconBtn}
+                              onClick={() => startEdit(img.file, img.desc)}
+                              disabled={busy}
+                              title={t("lore.detail.editDesc", { defaultValue: "编辑描述" })}
                             >
-                              {t("lore.detail.noDesc", { defaultValue: "（无描述 — 点击添加）" })}
-                            </span>
+                              <Pencil size={11} strokeWidth={1.8} />
+                            </button>
                           )}
-                        </figcaption>
-                      </figure>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-        </div>
+                          <button
+                            className={styles.iconBtn}
+                            onClick={() => handleRemove(img.file)}
+                            disabled={busy}
+                            title={t("lore.detail.removeImage", { defaultValue: "删除图片" })}
+                          >
+                            <Trash2 size={11} strokeWidth={1.8} />
+                          </button>
+                        </div>
+                      </div>
+                      {isEditing ? (
+                        <div className={styles.editArea}>
+                          <MarkdownTextarea
+                            format={false}
+                            className={styles.editTextarea}
+                            value={editingDraft}
+                            onChange={(e) => setEditingDraft(e.target.value)}
+                            placeholder={t("lore.detail.descPlaceholder", { defaultValue: "一句话描述这张图片…" })}
+                            autoFocus
+                            rows={3}
+                          />
+                          <div className={styles.editButtons}>
+                            <button className={styles.iconBtnCommit} onClick={commitEdit} disabled={busy || aiDescFile !== null} title="保存">
+                              <Check size={12} strokeWidth={2} />
+                            </button>
+                            <button className={styles.iconBtn} onClick={cancelEdit} disabled={busy} title="取消">
+                              <X size={12} strokeWidth={2} />
+                            </button>
+                          </div>
+                        </div>
+                      ) : img.desc ? (
+                        <span className={styles.galleryDesc}>{img.desc}</span>
+                      ) : (
+                        <span
+                          className={styles.galleryDescEmpty}
+                          onClick={() => startEdit(img.file, "")}
+                        >
+                          {t("lore.detail.noDesc", { defaultValue: "（无描述 — 点击添加）" })}
+                        </span>
+                      )}
+                    </figcaption>
+                  </figure>
+                );
+              })
+            )}
+          </div>
 
-        {/* Col 2 · relations — the graph isn't in the data model yet, so the
-            column carries the design structure with an empty state. */}
-        <div className={`${styles.colSide} ${styles.colRelations}`}>
-          <div className={styles.colHead}>relations · {isZh ? "关系" : "relations"}</div>
-          <div className={styles.sideEmpty}>
-            {isZh
-              ? "关系图谱待接入 — AI 将从手稿中提取人物关联"
-              : "Relation graph coming soon — AI will extract links from the manuscript"}
-          </div>
-          <button className={styles.addRelBtn} disabled title={isZh ? "待接入" : "Coming soon"}>
-            + {isZh ? "添加关系" : "Add relation"}
-          </button>
-
-          <div className={styles.threadsBlock}>
-            <div className={styles.colHeadRow}>
-              <span className={styles.colHead}>open threads · {isZh ? "悬念" : "threads"}</span>
-            </div>
-            <div className={styles.sideEmpty}>
-              {isZh ? "暂无悬念记录" : "No open threads yet"}
-            </div>
-          </div>
-        </div>
-
-        {/* Col 3 · appearances — density timeline renders its empty track until
-            per-chapter appearance stats land in the data model. */}
-        <div className={styles.colSide}>
-          <div className={styles.colHeadRow}>
-            <span className={styles.colHead}>appearances · {isZh ? "出场" : "appearances"}</span>
-            <span className={styles.appearCount}>—</span>
-          </div>
-          <div className={styles.densityGrid}>
-            {Array.from({ length: 14 }, (_, i) => (
-              <div key={i} className={styles.densityCell} />
-            ))}
-          </div>
-          <div className={styles.densityScale}>
-            <span>1</span>
-            <span>14</span>
-          </div>
-          <div className={styles.densityLegend}>
-            <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: "var(--lore-density-0)" }} />{isZh ? "无" : "none"}</span>
-            <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: "var(--lore-density-1)" }} />{isZh ? "浅" : "light"}</span>
-            <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: "var(--lore-density-2)" }} />{isZh ? "中" : "mid"}</span>
-            <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: "var(--lore-density-3)" }} />{isZh ? "重" : "heavy"}</span>
-            <span className={styles.legendItem}><span className={styles.legendSwatch} style={{ background: "var(--lore-density-now)" }} />{isZh ? "此章" : "now"}</span>
-          </div>
-          <div className={styles.sideEmpty}>
-            {isZh ? "出场统计待接入" : "Appearance stats coming soon"}
+          <div className={styles.colFootNote}>
+            {t("lore.detail.imagesFootNote", { defaultValue: "文字描述供纯文本模型阅读，也用于图库检索。" })}
           </div>
         </div>
       </div>
