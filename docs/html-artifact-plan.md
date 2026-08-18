@@ -1,6 +1,6 @@
 # AI 生成 HTML 工件（图示 / 架构图 / 宣传页）计划
 
-> 状态：规划中，未实施。
+> 状态：一、二期已实施（PR #210 / 本 PR）；三期按需触发，未启动。
 > 背景：作者需要图示、架构图、宣传页这类**版式精确**的交付物。生图模型精度低且不可控，而 HTML+SVG 是模型最擅长的"作图语言"——像 code agent 一样让 AI 助手产出 `.html` 文件，再在 app 内用系统浏览器内核预览。
 
 ## 1. 现状盘点
@@ -44,9 +44,9 @@ blob iframe 没有文档基址，解析不了项目相对路径。两头解决�
 
 `CreateBody`/`RewriteBody` 按目标路径扩展名分支：`.html` → 渲染同一个沙箱 iframe（限高 + 可展开），作者审的是**页面**，不是源码墙。`rewrite` 卡保留原有的字数差 meta（防截断的那个数字）。`propose_edit` 的 find/replace 维持文本展示——局部改动看源码是合理的。
 
-### D5 在系统浏览器打开 = `openPath`
+### D5 在系统浏览器打开 = Rust 命令 + `FsScope` 围栏
 
-HTML 预览工具栏加「在浏览器打开」按钮，走 opener 插件 `openPath(文件路径)`；capability 增加 `open-path` 权限，scope 限定项目文件（与 `FsScope` 语义一致，不开任意路径）。
+HTML 预览工具栏加「在浏览器打开」按钮。实施时对原方案（opener 插件 `openPath` + capability scope）做了修正：插件权限的 scope 是**静态** capability 配置，而项目根由 `FsScope` **运行时**注册，静态 scope 表达不了。改为 Rust 命令 `open_with_default_app`——`FsScope::check` 后调 opener 插件的 Rust API，围栏和打开在同一处，与其他 `fs_*` 命令同一纪律，capability 零改动。
 
 ### D6 `.html` 是一等文本文件，不是章节
 
@@ -67,7 +67,7 @@ HTML 预览工具栏加「在浏览器打开」按钮，走 opener 插件 `openP
 
 ## 3. 分期
 
-### 第一期：预览基建（`.html` 成为一等文件类型）
+### 第一期（已实施）：预览基建（`.html` 成为一等文件类型）
 
 1. `isHtmlPath`（`.html`/`.htm`）谓词，与 `isImagePath` 并列。
 2. `EditorArea` 第三分支：html → CodeMirror + 新组件 `components/editor/HtmlPreview.tsx`（沙箱 iframe、blob URL 生命周期、相对图片内联、工具栏：刷新 / 在浏览器打开）。三态 `viewMode` 复用。
@@ -75,7 +75,7 @@ HTML 预览工具栏加「在浏览器打开」按钮，走 opener 插件 `openP
 4. opener `openPath` 接线 + capability scope。
 5. 测试：`isHtmlPath`；内联复用已测路径。
 
-### 第二期：审批卡渲染预览 + 生成引导
+### 第二期（已实施）：审批卡渲染预览 + 生成引导
 
 1. `ApprovalCard` 的 Create/Rewrite body 按扩展名分支 → 复用 `HtmlPreview` 内核（同一实现，避免两套沙箱参数漂移）。
 2. `create_file`/`rewrite_document` description 与 agent 系统提示的 HTML 交付引导（D7）。

@@ -6,13 +6,6 @@ import { openWithDefaultApp } from "../../lib/fs/fileio";
 import { useEditorStore } from "../../stores/editorStore";
 import styles from "./HtmlPreview.module.css";
 
-interface Props {
-  /** The document text as the editor holds it right now. */
-  source: string;
-  /** Absolute path of the .html file, or null before the load settles. */
-  filePath: string | null;
-}
-
 /**
  * Rebuilding the frame on every keystroke would restart any script in the
  * page each time; the markdown pane can afford per-keystroke because its
@@ -20,9 +13,23 @@ interface Props {
  */
 const REBUILD_DEBOUNCE_MS = 400;
 
+interface FrameProps {
+  /** The HTML document text to render. */
+  source: string;
+  /** Directory the document's relative image links resolve against. */
+  baseDir: string | null;
+  /** Wait before rebuilding on a source change; 0 for static content. */
+  debounceMs?: number;
+  /** Bump to force a fresh document from the same source (re-runs scripts). */
+  generation?: number;
+  className?: string;
+}
+
 /**
- * Sandboxed preview for a project .html document — AI-generated diagrams and
- * promo pages, or any page the author keeps in the workspace.
+ * The app's ONE containment boundary for AI-written HTML: every surface that
+ * renders a project page — the editor's preview pane and the approval card —
+ * goes through this component, so the sandbox parameters exist in exactly one
+ * place (docs/html-artifact-plan.md §4).
  *
  * The document goes in through a `blob:` URL, and that choice is load-bearing:
  *   - `srcdoc` (and any same-origin injection) inherits the app window's CSP,
@@ -30,23 +37,15 @@ const REBUILD_DEBOUNCE_MS = 400;
  *     A blob document is its own opaque origin, so its scripts run.
  *   - `sandbox="allow-scripts"` — and nothing more. No `allow-same-origin`
  *     (scripts must never reach the app's window, IPC, or Tauri API), no
- *     `allow-top-navigation`, no `allow-popups`. This is the app's one
- *     containment boundary for AI-written script; approval cards will reuse
- *     this component so the parameters can't drift apart (see
- *     docs/html-artifact-plan.md).
+ *     `allow-top-navigation`, no `allow-popups`.
  */
-export function HtmlPreview({ source, filePath }: Props) {
+export function HtmlFrame({ source, baseDir, debounceMs = 0, generation = 0, className }: FrameProps) {
   const { t } = useTranslation();
   const [url, setUrl] = useState<string | null>(null);
-  // Bumped by the refresh button: same source, fresh document — the way to
-  // restart an animation or re-run a page's scripts from the top.
-  const [generation, setGeneration] = useState(0);
-
-  const baseDir = filePath ? filePath.replace(/[/\\][^/\\]*$/, "") : null;
 
   useEffect(() => {
     let cancelled = false;
-    const timer = setTimeout(async () => {
+    const build = async () => {
       // A failed image walk shouldn't blank the preview — fall back to the
       // raw source (broken images show as broken, which is the truth).
       const html = await inlineHtmlImages(source, baseDir).catch(() => source);
@@ -58,12 +57,14 @@ export function HtmlPreview({ source, filePath }: Props) {
         if (prev) URL.revokeObjectURL(prev);
         return next;
       });
-    }, REBUILD_DEBOUNCE_MS);
+    };
+    const timer = debounceMs > 0 ? setTimeout(() => void build(), debounceMs) : null;
+    if (!timer) void build();
     return () => {
       cancelled = true;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
     };
-  }, [source, baseDir, generation]);
+  }, [source, baseDir, debounceMs, generation]);
 
   // The last blob outlives the effect above (its cleanup only cancels the
   // *pending* rebuild), so unmount has to revoke it explicitly.
@@ -72,6 +73,37 @@ export function HtmlPreview({ source, filePath }: Props) {
   useEffect(() => () => {
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
   }, []);
+
+  if (!url) return null;
+  return (
+    <iframe
+      className={`${styles.frame} ${className ?? ""}`}
+      src={url}
+      sandbox="allow-scripts"
+      title={t("editor.htmlPreview.title")}
+    />
+  );
+}
+
+interface Props {
+  /** The document text as the editor holds it right now. */
+  source: string;
+  /** Absolute path of the .html file, or null before the load settles. */
+  filePath: string | null;
+}
+
+/**
+ * The editor area's preview pane for a project .html document — AI-generated
+ * diagrams and promo pages, or any page the author keeps in the workspace.
+ * A toolbar (refresh / open in system browser) around the sandboxed HtmlFrame.
+ */
+export function HtmlPreview({ source, filePath }: Props) {
+  const { t } = useTranslation();
+  // Bumped by the refresh button: same source, fresh document — the way to
+  // restart an animation or re-run a page's scripts from the top.
+  const [generation, setGeneration] = useState(0);
+
+  const baseDir = filePath ? filePath.replace(/[/\\][^/\\]*$/, "") : null;
 
   const openInBrowser = async () => {
     if (!filePath) return;
@@ -107,14 +139,12 @@ export function HtmlPreview({ source, filePath }: Props) {
           {t("editor.htmlPreview.openInBrowser")}
         </button>
       </div>
-      {url && (
-        <iframe
-          className={styles.frame}
-          src={url}
-          sandbox="allow-scripts"
-          title={t("editor.htmlPreview.title")}
-        />
-      )}
+      <HtmlFrame
+        source={source}
+        baseDir={baseDir}
+        debounceMs={REBUILD_DEBOUNCE_MS}
+        generation={generation}
+      />
     </div>
   );
 }

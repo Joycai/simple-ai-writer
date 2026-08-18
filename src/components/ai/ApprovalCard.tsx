@@ -15,6 +15,8 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { ArrowRight, ChevronDown, ChevronRight } from "lucide-react";
 import { renderMarkdown } from "../../lib/fs/markdown";
+import { isHtmlPath } from "../../lib/fs/images";
+import { HtmlFrame } from "../editor/HtmlPreview";
 import type {
   CopyProposal,
   CreateProposal,
@@ -116,6 +118,33 @@ function EditBody({ proposal }: { proposal: EditProposal }) {
 }
 
 /**
+ * An .html proposal is judged as a page, not a source listing — the card
+ * renders it in the same sandboxed frame the editor's preview pane uses
+ * (HtmlFrame owns the sandbox parameters, so they cannot drift). The toggle
+ * here trades viewport height rather than clipping text: a page has no
+ * natural "first 600 characters".
+ */
+function HtmlProposalBody({ path, content }: { path: string; content: string }) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const baseDir = path.replace(/[/\\][^/\\]*$/, "");
+
+  return (
+    <>
+      <HtmlFrame
+        source={content}
+        baseDir={baseDir}
+        className={expanded ? styles.htmlFrameTall : styles.htmlFrame}
+      />
+      <button className={styles.originalToggle} onClick={() => setExpanded((v) => !v)}>
+        {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+        {expanded ? t("ai.approval.collapse") : t("ai.approval.expand")}
+      </button>
+    </>
+  );
+}
+
+/**
  * A rewrite replaces everything, so unlike an edit there is no "original" worth
  * folding away — the decision is entirely "is this still my chapter?". The new
  * text is therefore rendered in full (clipped, expandable) the way a new
@@ -136,11 +165,15 @@ function RewriteBody({ proposal }: { proposal: RewriteProposal }) {
           })}
         </div>
       )}
-      <div
-        className={expanded ? styles.previewBlock : styles.previewBlockClipped}
-        dangerouslySetInnerHTML={{ __html: renderMarkdown(proposal.content) }}
-      />
-      {proposal.content.length > CLIP_CHARS && (
+      {isHtmlPath(proposal.path) ? (
+        <HtmlProposalBody path={proposal.path} content={proposal.content} />
+      ) : (
+        <div
+          className={expanded ? styles.previewBlock : styles.previewBlockClipped}
+          dangerouslySetInnerHTML={{ __html: renderMarkdown(proposal.content) }}
+        />
+      )}
+      {!isHtmlPath(proposal.path) && proposal.content.length > CLIP_CHARS && (
         <button className={styles.originalToggle} onClick={() => setExpanded((v) => !v)}>
           {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
           {expanded ? t("ai.approval.collapse") : t("ai.approval.expand")}
@@ -165,6 +198,9 @@ function CreateBody({ proposal }: { proposal: CreateProposal }) {
   }
   if (!proposal.content.trim()) {
     return <div className={styles.emptyNote}>{t("ai.approval.emptyChapter", { doc: terms.doc })}</div>;
+  }
+  if (isHtmlPath(proposal.path)) {
+    return <HtmlProposalBody path={proposal.path} content={proposal.content} />;
   }
   return (
     <>
