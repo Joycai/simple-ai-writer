@@ -29,6 +29,7 @@ import { SnippetPicker } from "./SnippetPicker";
 import { useBatchStore } from "../../stores/batchStore";
 import { draftCountFor, totalUsage, useAiTaskStore, type TaskKind } from "../../stores/aiTaskStore";
 import { useAgentStore } from "../../stores/agentStore";
+import { useComposerStore } from "../../stores/composerStore";
 import { AgentLog } from "./AgentLog";
 import { TaskPanel } from "./TaskPanel";
 import { sumTokens, taskDocRevision } from "../../lib/agent/logModel";
@@ -954,14 +955,22 @@ export function AiPanel() {
     setSelectedLorePaths(loadPinnedLore(projectPath));
   }, [projectPath]);
 
+  // Everything the author types lives in composerStore rather than useState:
+  // the drawer unmounts when it closes, and an outline typed out by hand must
+  // not evaporate because the panel was collapsed to look at the chapter.
+  //
   // Outline + extra knowledge state (continue)
-  const [outline, setOutline] = useState("");
-  const [additionalKnowledge, setAdditionalKnowledge] = useState("");
+  const outline = useComposerStore((s) => s.panelOutline);
+  const setOutline = useComposerStore((s) => s.setPanelOutline);
+  const additionalKnowledge = useComposerStore((s) => s.panelKnowledge);
+  const setAdditionalKnowledge = useComposerStore((s) => s.setPanelKnowledge);
 
   // Extra requirement for polish / rewrite / summary
-  const [requirement, setRequirement] = useState("");
+  const requirement = useComposerStore((s) => s.panelRequirement);
+  const setRequirement = useComposerStore((s) => s.setPanelRequirement);
 
-  const [customInstr, setCustomInstr] = useState("");
+  const customInstr = useComposerStore((s) => s.panelInstruction);
+  const setCustomInstr = useComposerStore((s) => s.setPanelInstruction);
   const [agentMode, setAgentMode] = useState(false);
   const pendingApprovals = useAgentStore((s) => s.pending);
   const pendingPlans = useAgentStore((s) => s.pendingPlans);
