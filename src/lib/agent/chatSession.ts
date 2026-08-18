@@ -96,6 +96,8 @@ interface SerializedChat {
     /** [dirPath, version, carrierIndex] triples. */
     injected: [string, string, number][];
     lastDocPath: string | null;
+    /** Additive since 1.18.8 — an older row restores as "body never injected". */
+    bodyDocPath?: string | null;
   };
   usage: PersistedUsage | null;
   /** Additive since 1.16 — older rows simply lack it, older readers ignore it. */
@@ -121,6 +123,7 @@ export function serializeChatSession(snap: ChatSnapshot): string {
         return i >= 0 ? [[dir, rec.version, i] as [string, string, number]] : [];
       }),
       lastDocPath: snap.meta.lastDocPath,
+      bodyDocPath: snap.meta.bodyDocPath,
     },
     usage: snap.usage,
     ...(snap.taskId ? { taskId: snap.taskId } : {}),
@@ -200,6 +203,7 @@ export function deserializeChatSession(json: string): ChatSnapshot | null {
     }
   }
   meta.lastDocPath = typeof data.meta.lastDocPath === "string" ? data.meta.lastDocPath : null;
+  meta.bodyDocPath = typeof data.meta.bodyDocPath === "string" ? data.meta.bodyDocPath : null;
 
   return {
     turns: normalizeTurns(data.turns),

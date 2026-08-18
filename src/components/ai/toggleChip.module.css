@@ -1,6 +1,8 @@
-/* Sub-agent capability chips (mockup 1b/1h): configured agents wear a quiet
-   green outline with their ✓; unconfigured ones a dashed ghost border. Click
-   toggles a configured agent off for this session only. */
+/* Composer toggle chips (mockup 1b/1h) — shared by SubAgentChips and
+   PlanModeChip, because they are one control: a session switch the author flips
+   on the composer, on when it wears a quiet green outline and off when it wears
+   a dashed ghost border. Two stylesheets for that would drift the moment one
+   of them got a padding tweak. */
 
 .chipsRow {
   display: inline-flex;

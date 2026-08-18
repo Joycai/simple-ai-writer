@@ -95,6 +95,33 @@ export interface ChatMessagePayload {
 }
 
 /**
+ * Append a standing directive (today: 计划模式) to the wire form of a composed
+ * message, leaving its `text` alone.
+ *
+ * Two reasons it lands here rather than inside {@link buildChatMessage}'s
+ * `parts`: the `text` half is what the retrieval passes match on, and a fixed
+ * block of instructions repeated every turn is noise to match against; and the
+ * directive is about *how* to work, not material for the request, so it reads
+ * last — after the author's own words, before nothing.
+ *
+ * Appended to the existing text part rather than pushed as a new one, so
+ * attached pictures stay at the end of the parts array where every provider
+ * expects them (see the note on ordering above).
+ */
+export function withDirective(content: MessageContent, directive: string): MessageContent {
+  const note = directive.trim();
+  if (!note) return content;
+  if (typeof content === "string") return `${content}\n\n${note}`;
+  let appended = false;
+  const parts = content.map((part): ContentPart => {
+    if (appended || part.type !== "text") return part;
+    appended = true;
+    return { ...part, text: `${part.text}\n\n${note}` };
+  });
+  return appended ? parts : [...parts, { type: "text", text: note }];
+}
+
+/**
  * Compose the wire message: quoted selection, then references, then what the
  * author actually typed.
  *
