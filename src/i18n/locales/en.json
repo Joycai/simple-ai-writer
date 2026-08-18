@@ -240,6 +240,7 @@
         "aiChatDrawer": "Toggle the AI chat drawer",
         "aiGenerateDrawer": "Toggle the AI generate-task panel",
         "closeOverlays": "Close the command palette / AI drawer",
+        "openSettings": "Open Settings",
         "navBack": "Back (previous location)",
         "navForward": "Forward (next location)",
         "saveFile": "Save the current file",

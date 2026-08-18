@@ -57,6 +57,11 @@ export function useGlobalShortcuts() {
         setShowAiDrawer(false);
         return;
       }
+      if (matchesCombo(e, { mod: true, key: "," })) {
+        e.preventDefault();
+        useAppStore.getState().openSettings();
+        return;
+      }
       if (matchesCombo(e, { mod: true, key: "s" })) {
         e.preventDefault();
         useEditorStore.getState().saveNow();
