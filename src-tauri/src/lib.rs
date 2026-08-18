@@ -55,6 +55,7 @@ pub fn run() {
             commands::fs_remove_dir,
             commands::fs_remove_file,
             commands::fs_rename,
+            commands::open_with_default_app,
             scope::project_open_dialog,
             scope::project_register_root,
             secrets::secret_save,

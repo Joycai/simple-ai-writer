@@ -434,6 +434,11 @@
       "split": "Split",
       "preview": "Preview"
     },
+    "htmlPreview": {
+      "title": "HTML preview",
+      "refresh": "Refresh",
+      "openInBrowser": "Open in browser"
+    },
     "unsavedChanges": "Unsaved changes",
     "noHeadings": "No headings yet",
     "imageLoadError": "Couldn't load this image",

@@ -434,6 +434,11 @@
       "split": "分栏",
       "preview": "预览"
     },
+    "htmlPreview": {
+      "title": "HTML 预览",
+      "refresh": "刷新",
+      "openInBrowser": "在浏览器打开"
+    },
     "unsavedChanges": "未保存的更改",
     "noHeadings": "暂无标题",
     "imageLoadError": "无法加载此图片",
