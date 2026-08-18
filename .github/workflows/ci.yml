@@ -19,6 +19,26 @@ permissions:
   contents: read
 
 jobs:
+  # Most PRs here are frontend-only. The Rust job costs ~2-3 minutes of which
+  # almost all is setup (apt install of the webkit dev tree + restoring the
+  # cargo cache) — none of it tells us anything when no Rust file moved. Gate
+  # the job on the diff instead; `ci-success` below treats a skip as a pass.
+  changes:
+    name: Detect changed areas
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            rust:
+              - 'src-tauri/**'
+              - '.github/workflows/ci.yml'
+
   frontend:
     name: Frontend (lint, type-check, build)
     runs-on: ubuntu-latest
@@ -51,18 +71,26 @@ jobs:
   rust:
     name: Backend (fmt, clippy, test, build)
     runs-on: ubuntu-22.04
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     steps:
       - uses: actions/checkout@v4
 
+      # Only what `cargo build` needs to *link*, not what `tauri build` needs to
+      # *bundle*. This job never produces an AppImage/deb, so `librsvg2-dev` and
+      # `patchelf` (bundler-only) are deliberately absent — release.yml keeps them.
+      # `libappindicator3-dev` is gone too: the `libappindicator` crate is not in
+      # the linux dependency graph at all (no tray icon in this app), verified with
+      #   cargo tree --target x86_64-unknown-linux-gnu -e normal -i libappindicator
+      # `libdbus-1-dev` stays — `libdbus-sys` *is* in the graph, via tao -> dbus.
       - name: Install system dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
+          sudo apt-get install -y --no-install-recommends \
             libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            libdbus-1-dev \
-            patchelf
+            libdbus-1-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -95,14 +123,24 @@ jobs:
   ci-success:
     name: CI Success
     if: always()
-    needs: [frontend, rust]
+    needs: [changes, frontend, rust]
     runs-on: ubuntu-latest
     steps:
       - name: Verify all jobs passed
         run: |
-          if [ "${{ needs.frontend.result }}" != "success" ] || \
-             [ "${{ needs.rust.result }}" != "success" ]; then
+          fail=0
+          [ "${{ needs.changes.result }}" = "success" ] || fail=1
+          [ "${{ needs.frontend.result }}" = "success" ] || fail=1
+          # `skipped` is a pass for rust: the diff touched no Rust file.
+          case "${{ needs.rust.result }}" in
+            success|skipped) ;;
+            *) fail=1 ;;
+          esac
+          if [ "$fail" != "0" ]; then
             echo "One or more CI jobs failed."
+            echo "  changes=${{ needs.changes.result }}"
+            echo "  frontend=${{ needs.frontend.result }}"
+            echo "  rust=${{ needs.rust.result }}"
             exit 1
           fi
           echo "All CI jobs passed."
