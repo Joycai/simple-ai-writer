@@ -107,6 +107,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   { id: "aiChatDrawer", category: "global", combo: { mod: true, key: "l" }, labelKey: "aiChatDrawer", scope: "dispatch" },
   { id: "aiGenerateDrawer", category: "global", combo: { mod: true, key: "j" }, labelKey: "aiGenerateDrawer", scope: "dispatch" },
   { id: "closeOverlays", category: "global", combo: { key: "Escape" }, labelKey: "closeOverlays", scope: "dispatch" },
+  { id: "openSettings", category: "global", combo: { mod: true, key: "," }, labelKey: "openSettings", scope: "dispatch" },
   { id: "navBack", category: "global", keysLabel: combosLabel(NAV_BACK_COMBOS), labelKey: "navBack", scope: "dispatch" },
   { id: "navForward", category: "global", keysLabel: combosLabel(NAV_FORWARD_COMBOS), labelKey: "navForward", scope: "dispatch" },
 

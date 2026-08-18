@@ -240,6 +240,7 @@
         "aiChatDrawer": "切换 AI 对话抽屉",
         "aiGenerateDrawer": "切换 AI 生成任务面板",
         "closeOverlays": "关闭命令面板 / AI 抽屉",
+        "openSettings": "打开设置",
         "navBack": "后退（上一个位置）",
         "navForward": "前进（下一个位置）",
         "saveFile": "保存当前文件",
