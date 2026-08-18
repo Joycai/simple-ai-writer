@@ -316,11 +316,14 @@
   min-width: 1px;
   transition: flex-grow var(--transition-base);
 }
-/* Mockup mapping: 系统 grey · 设定(injected) green · 章节(seed) tan ·
-   前情摘要 deep ochre · 对话 sienna · free = the visible track. */
+/* Mockup mapping, read off 2c's own segment/legend hexes: 系统+工具 grey ·
+   摘要 mid ochre · 种子 deep ochre · 注入设定 green · 对话 sienna ·
+   free = the visible track (hexes are the dark mockup's; light follows by
+   token). 摘要 and 种子 were transposed until now — see design-system.md
+   → AI 面板设计语言 → Chat memory bar segments. */
 .ctxSeg_system       { background: var(--color-text-dim); }
-.ctxSeg_summary      { background: var(--color-alloc-memory); }
-.ctxSeg_seed         { background: var(--color-ctx-chapter); }
+.ctxSeg_summary      { background: var(--color-accent-mid); }
+.ctxSeg_seed         { background: var(--color-border-accent); }
 .ctxSeg_injected     { background: var(--color-success); }
 .ctxSeg_conversation { background: var(--color-sienna); }
 .ctxSeg_free         { background: transparent; }

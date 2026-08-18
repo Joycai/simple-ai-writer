@@ -224,7 +224,6 @@
   --color-bar-track:       #E5DCC9;   /* progress/alloc track */
   --color-alloc-lore:      #C9966A;   /* context-allocation bar: 设定 segment */
   --color-alloc-memory:    #D9BC94;   /*                          前情 segment */
-  --color-ctx-chapter:     #C9966A;   /* chat memory bar: 章节 segment */
 
   /* Previously referenced but never defined — real definitions so the
      TaskWorkspaceView status badges stop rendering unstyled. */
@@ -423,7 +422,6 @@
   --color-bar-track:       #241F19;
   --color-alloc-lore:      #B3764A;
   --color-alloc-memory:    #6B4B2E;
-  --color-ctx-chapter:     #B8875B;
 
   --color-info-bg:         var(--color-type-video-bg);
   --color-info-text:       var(--color-type-video-fg);
