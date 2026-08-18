@@ -41,10 +41,21 @@ import type { Proposal } from "./registry";
  */
 export interface AutoApproveState {
   key: unknown;
-  /** Manuscript proposals (edit/rewrite/create/move) apply without a card. */
+  /** Manuscript proposals (edit/rewrite/append/create/move) apply without a card. */
   proposals: boolean;
   /** Lore plans are recorded without a card — the gate itself still applies. */
   plans: boolean;
+  /**
+   * Files the author authorised **appends to**, by absolute path.
+   *
+   * Narrower than `proposals` on both axes on purpose. Building one big
+   * deliverable is a dozen `append_file` calls to the *same* file, and asking
+   * a dozen times trains the author to click through without reading — but
+   * "keep adding to this page" is not "keep changing my manuscript", and it is
+   * certainly not "keep deleting". So the grant names one file and covers one
+   * kind: everything else still asks.
+   */
+  appendPaths: string[];
 }
 
 /** What a grant can cover. One flag per card kind that offers the button. */
@@ -57,6 +68,7 @@ export const CHAT_AUTO_APPROVE_KEY = "chat";
 const AUTO_APPROVABLE: ReadonlySet<Proposal["kind"]> = new Set([
   "edit",
   "rewrite",
+  "append",
   "create",
   "move",
   "copy",
@@ -80,6 +92,21 @@ export function grants(
 ): boolean {
   if (!state || key === undefined) return false;
   return state.key === key && state[what];
+}
+
+/**
+ * Whether appends to `path` are covered by a standing per-file grant.
+ *
+ * Same key rule as {@link grants} — a grant belongs to the surface that made
+ * it, and an absent key must never match.
+ */
+export function grantsAppend(
+  state: AutoApproveState | null,
+  key: unknown,
+  path: string,
+): boolean {
+  if (!state || key === undefined) return false;
+  return state.key === key && state.appendPaths.includes(path);
 }
 
 /** How the button and the indicator chip should word themselves. */

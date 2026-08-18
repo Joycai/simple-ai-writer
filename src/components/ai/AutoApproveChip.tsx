@@ -23,18 +23,38 @@ export function AutoApproveChip({ owner }: { owner: unknown }) {
 
   if (!autoApprove || autoApprove.key !== owner) return null;
 
+  const blanket = autoApprove.proposals || autoApprove.plans;
+  const appendCount = autoApprove.appendPaths.length;
+  if (!blanket && appendCount === 0) return null;
+
   const scope = autoApproveScope(owner);
-  const label =
-    scope === "session"
+  // A per-file append grant is real authorisation and must be visible — but it
+  // is not 本次都批准, and wearing that label would overstate what the author
+  // agreed to on a card that said "this file".
+  const label = blanket
+    ? scope === "session"
       ? t("ai.autoApprove.chipSession", { defaultValue: "本次对话自动批准中" })
-      : t("ai.autoApprove.chipRun", { defaultValue: "本次任务自动批准中" });
+      : t("ai.autoApprove.chipRun", { defaultValue: "本次任务自动批准中" })
+    : t("ai.autoApprove.chipAppend", {
+        defaultValue: "自动追加 {{n}} 个文件",
+        n: appendCount,
+      });
 
   return (
     <button
       type="button"
       className={styles.chip}
       onClick={clearAutoApprove}
-      title={t("ai.autoApprove.off", { defaultValue: "点击恢复逐条审批" })}
+      title={
+        blanket
+          ? t("ai.autoApprove.off", { defaultValue: "点击恢复逐条审批" })
+          : t("ai.autoApprove.offAppend", {
+              defaultValue: "以下文件的追加不再询问：{{files}}（点击恢复逐条审批）",
+              files: autoApprove.appendPaths
+                .map((p) => p.split(/[\\/]/).pop() ?? p)
+                .join("、"),
+            })
+      }
     >
       <ShieldOff size={12} className={styles.icon} />
       <span className={styles.label}>{label}</span>

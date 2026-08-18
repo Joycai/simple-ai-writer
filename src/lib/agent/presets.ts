@@ -131,6 +131,7 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "update_memory",
     "propose_edit",
     "rewrite_document",
+    "append_file",
     "create_chapter",
     "create_file",
     "create_directory",

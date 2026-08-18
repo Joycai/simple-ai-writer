@@ -56,7 +56,7 @@ import {
 } from "../lib/agent/sessionDb";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import {
-  CHAT_AUTO_APPROVE_KEY, grants, isAutoApprovable,
+  CHAT_AUTO_APPROVE_KEY, grants, grantsAppend, isAutoApprovable,
   type AutoApproveKind, type AutoApproveState,
 } from "../lib/agent/autoApprove";
 import { createPlanGate, type LorePlan, type PlanDecision } from "../lib/agent/plan";
@@ -89,7 +89,9 @@ import {
   assembleContext, assembleTurnInjection, bundleToChatMessages, profileSystemPrompt,
 } from "../lib/context/rag";
 import { docModel, promptParams } from "../lib/profile/active";
-import type { ApprovalDecision, EditProposal, Proposal, RewriteProposal } from "../lib/agent/registry";
+import type {
+  AppendProposal, ApprovalDecision, EditProposal, Proposal, RewriteProposal,
+} from "../lib/agent/registry";
 import { type AttachedItem } from "../lib/lore/aiTask";
 import type { StreamMessage } from "../lib/ai/types";
 import { fileExists, readFile, writeFile } from "../lib/fs/fileio";
@@ -283,6 +285,11 @@ interface AgentState {
    * a different key replaces — only one surface may hold a grant.
    */
   enableAutoApprove: (key: unknown, what: AutoApproveKind) => void;
+  /**
+   * Author pressed 本次都追加到这个文件 on an append card: further appends to
+   * that one path apply without a card, for as long as the grant lives.
+   */
+  grantAppendPath: (key: unknown, path: string) => void;
   /** Author dismissed the indicator chip — back to asking every time. */
   clearAutoApprove: () => void;
 
@@ -408,6 +415,33 @@ async function applyRewrite(proposal: RewriteProposal): Promise<string | null> {
 }
 
 /**
+ * Apply an approved append. Returns the pre-write backup path.
+ *
+ * Reads the file *now* rather than trusting the length the proposal recorded:
+ * the author may have kept typing while the card sat there, and an append is
+ * the one write where that is harmless — whatever they added stays, and the
+ * new section lands after it. The recorded length is only the card's "grew
+ * from" figure, never a precondition.
+ */
+async function applyAppend(proposal: AppendProposal): Promise<string | null> {
+  const { useProjectStore } = await import("./projectStore");
+  const { projectPath, activeFilePath } = useProjectStore.getState();
+  const backupPath = projectPath ? await backupFile(projectPath, proposal.path) : null;
+
+  if (activeFilePath === proposal.path) {
+    // Same reason as applyEdit/applyRewrite: through the editor, so the open
+    // buffer doesn't overwrite the append on its next autosave.
+    const { useEditorStore } = await import("./editorStore");
+    const { content, setContent } = useEditorStore.getState();
+    setContent(content + proposal.content);
+  } else {
+    const raw = await readFile(proposal.path);
+    await writeFile(proposal.path, raw + proposal.content);
+  }
+  return backupPath;
+}
+
+/**
  * What an applied proposal reports.
  *
  * `report` is what the model is told (historically just a backup path, hence
@@ -436,6 +470,9 @@ async function applyProposal(proposal: Proposal, signal?: AbortSignal): Promise<
 
     case "rewrite":
       return { report: await applyRewrite(proposal) };
+
+    case "append":
+      return { report: await applyAppend(proposal) };
 
     case "create": {
       const dir = parentDir(proposal.path);
@@ -562,6 +599,24 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           key,
           proposals: what === "proposals" || !!held?.proposals,
           plans: what === "plans" || !!held?.plans,
+          appendPaths: held?.appendPaths ?? [],
+        },
+      };
+    }),
+
+  grantAppendPath: (key, path) =>
+    set((s) => {
+      // Same displacement rule as enableAutoApprove: a grant from another
+      // surface is replaced, not merged, so only one surface ever holds one.
+      const held = s.autoApprove?.key === key ? s.autoApprove : null;
+      return {
+        autoApprove: {
+          key,
+          proposals: !!held?.proposals,
+          plans: !!held?.plans,
+          appendPaths: held?.appendPaths.includes(path)
+            ? held.appendPaths
+            : [...(held?.appendPaths ?? []), path],
         },
       };
     }),
@@ -573,10 +628,13 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       const item: PendingApproval = { proposal, resolve, runId, ...binding };
       // Covered by a standing grant: apply now and never queue. Queuing first
       // and approving synchronously would flash the card for a frame.
-      if (
-        grants(get().autoApprove, item.autoApproveKey, "proposals") &&
-        isAutoApprovable(proposal.kind)
-      ) {
+      const covered =
+        (grants(get().autoApprove, item.autoApproveKey, "proposals")
+          && isAutoApprovable(proposal.kind))
+        // The narrow grant: this one file, appends only.
+        || (proposal.kind === "append"
+          && grantsAppend(get().autoApprove, item.autoApproveKey, proposal.path));
+      if (covered) {
         void settleApproval(item, set, true);
         return;
       }

@@ -98,7 +98,7 @@ const ALL_TOOLS: ToolId[] = [
   "read_memory", "list_lore_entities", "read_lore_entity",
   "propose_lore_plan", "create_lore_entity", "update_lore_file",
   "update_facet_meta", "delete_lore_file", "move_lore_entity", "delete_lore_entity",
-  "update_memory", "propose_edit",
+  "update_memory", "propose_edit", "append_file",
   "create_chapter", "create_file", "create_directory", "move_chapter", "copy_file", "delete_chapter",
   "delete_directory",
 ];
@@ -1004,6 +1004,48 @@ describe("chapter structure tools", () => {
 
       const dup = await run("create_file", { path: CH1, content: "x" }, approving());
       expect(dup.content).toContain("already exists");
+      expect(proposals).toHaveLength(0);
+    });
+  });
+
+  describe("append_file", () => {
+    it("proposes only the new text, and reports the resulting size", async () => {
+      const res = await run(
+        "append_file",
+        { path: CH1, content: "\n\n## 二\n灯还亮着。", reason: "补第二节" },
+        approving(),
+      );
+      expect(proposals[0]).toMatchObject({
+        kind: "append",
+        path: CH1,
+        content: "\n\n## 二\n灯还亮着。",
+      });
+      // The existing body is never re-sent — that is the whole point of the
+      // tool: per-call size is decoupled from file size.
+      expect(proposals[0].content).not.toContain(fs.get(CH1)!.slice(0, 10));
+      expect(res.content).toContain("Appended");
+    });
+
+    it("refuses a file that does not exist — that would be a disguised create", async () => {
+      const res = await run(
+        "append_file",
+        { path: `${PROJECT}/卷一/第九章.md`, content: "x" },
+        approving(),
+      );
+      expect(res.content).toContain("create_file");
+      expect(proposals).toHaveLength(0);
+    });
+
+    it("refuses empty content and .ai-writer paths", async () => {
+      const empty = await run("append_file", { path: CH1, content: "" }, approving());
+      expect(empty.content).toContain("'content'");
+
+      const outside = await run(
+        "append_file",
+        { path: `${PROJECT}/.ai-writer/profile.json`, content: "x" },
+        approving(),
+      );
+      expect(outside.content).toContain(".ai-writer");
       expect(proposals).toHaveLength(0);
     });
   });

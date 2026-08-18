@@ -78,6 +78,17 @@
   color: var(--color-diff-del-text);
 }
 
+/* An appended section, folded: same add tint (it IS incoming text), but faded
+   out at the bottom rather than scrollable — a section is read to decide, not
+   scrolled through, and the fade says "there is more" without a scrollbar to
+   fight with inside a card that already scrolls. */
+.replaceBlockClipped {
+  composes: replaceBlock;
+  max-height: 150px;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 65%, transparent 100%);
+}
+
 /* New-chapter preview: rendered prose, not source — the author is reading what
    would enter the book, so it gets the manuscript serif rather than a code block. */
 .previewBlock,
