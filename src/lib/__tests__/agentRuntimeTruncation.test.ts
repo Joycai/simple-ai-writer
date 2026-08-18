@@ -162,7 +162,9 @@ describe("truncated tool call", () => {
 
     // Nothing unparseable reached the wire history — that is what would break
     // every subsequent round rather than just this one.
-    const toolCallMessages = opts.messages.filter((m) => m.tool_calls?.length);
+    const toolCallMessages = opts.messages.filter(
+      (m) => m.role === "assistant" && "tool_calls" in m,
+    );
     expect(toolCallMessages).toHaveLength(0);
     expect(opts.messages.some((m) => m.role === "tool")).toBe(false);
 
@@ -196,8 +198,9 @@ describe("truncated tool call", () => {
 
     await runAgent(opts);
 
-    const call = opts.messages.find((m) => m.tool_calls?.length);
-    expect(call?.tool_calls?.map((c) => c.id)).toEqual(["ok"]);
+    const call = opts.messages.find((m) => m.role === "assistant" && "tool_calls" in m) as
+      { tool_calls: Array<{ id: string }> } | undefined;
+    expect(call?.tool_calls.map((c) => c.id)).toEqual(["ok"]);
     // Every surviving call still has its paired reply — the protocol rule that
     // makes a broken history permanent if it is ever violated.
     expect(opts.messages.filter((m) => m.role === "tool")).toHaveLength(1);
