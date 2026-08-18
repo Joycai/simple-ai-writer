@@ -1,0 +1,177 @@
+/* 子代理 pane (设计稿 04). A subagent is a bound pair — a specialist and the
+   model that runs it — so each one is a card that says in one glance whether
+   that pair works: status dot, requirement, switch, binding, and the caution
+   it has earned. The generic row/section vocabulary can't carry that. */
+
+/* ─── Header summary: "已启用 3 / 5 · 1 项需要处理" ───────────────────────── */
+
+.titleLine {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+}
+
+.summary {
+  font-size: var(--font-size-sm);
+  color: var(--stg-text-faint);
+}
+
+/* ─── Group: how these subagents are reached, over a rule ────────────────── */
+
+.group {
+  margin-top: var(--space-6);
+}
+
+.groupHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.groupLabel {
+  flex: none;
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.16em;
+  color: var(--stg-text-faint);
+}
+
+.groupHint {
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  color: var(--stg-text-whisper);
+}
+
+.groupRule {
+  height: 1px;
+  margin-top: var(--space-2);
+  background: var(--stg-line-section);
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+/* ─── One subagent ───────────────────────────────────────────────────────── */
+
+.card {
+  border: 1px solid var(--stg-border);
+  background: var(--stg-bg-input);
+}
+/* Only an *enabled* subagent that can't run is worth a loud frame — a
+   disabled one with a bad binding is nobody's problem yet. */
+.cardWarn { border-color: var(--stg-border-warn); }
+
+/* Everything above the caution strip dims together when the switch is off. */
+.body { opacity: 0.55; }
+.bodyOn { opacity: 1; }
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) 0;
+}
+
+.dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  background: var(--stg-border-menu);
+}
+.dotReady { background: var(--stg-ok); }
+.dotWarn { background: var(--stg-accent); }
+
+.name {
+  flex: none;
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--stg-text);
+}
+
+/* What the bound model must be able to do — the same sentence the warning
+   below would spell out, in the tense of a requirement rather than a failure. */
+.req {
+  flex: none;
+  padding: 2px var(--space-2);
+  background: var(--stg-card-head);
+  color: var(--stg-text-warm);
+  font-size: var(--font-size-xs);
+}
+
+.spacer { flex: 1; }
+
+.status {
+  font-size: var(--font-size-sm);
+  color: var(--stg-text-faint);
+}
+.statusReady { color: var(--stg-ok); }
+.statusWarn { color: var(--stg-accent); }
+
+/* Indented past the dot so the description and the binding hang off the name. */
+.desc {
+  padding: var(--space-2) var(--space-4) 0 36px;
+  font-size: var(--font-size-sm);
+  line-height: 1.7;
+  color: var(--stg-text-desc);
+}
+
+.bind {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) 14px 36px;
+}
+
+.bindLabel {
+  flex: none;
+  font-size: var(--font-size-sm);
+  color: var(--stg-text-warm);
+}
+
+.bindSelect {
+  flex: none;
+  width: 300px;
+}
+
+/* Round budget / per-request limits — fixed by the preset, not editable, so
+   it sits opposite the control it qualifies rather than under it. */
+.meta {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  font-size: var(--font-size-xs);
+  color: var(--stg-text-faint);
+}
+
+.warn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 9px var(--space-4);
+  border-top: 1px solid var(--stg-warn-line);
+  background: var(--stg-warn-bg);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--stg-accent);
+}
+
+.warnIcon {
+  flex: none;
+  color: var(--stg-accent);
+}
+
+.foot {
+  margin-top: var(--space-6);
+  font-size: var(--font-size-xs);
+  line-height: 1.7;
+  color: var(--stg-text-faint);
+}
+
+@media (max-width: 900px) {
+  .bind { flex-wrap: wrap; }
+  .bindSelect { width: 100%; flex: 1; }
+  .meta { flex-basis: 100%; text-align: left; }
+}

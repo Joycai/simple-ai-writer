@@ -87,14 +87,14 @@ const DELEGATE_SUMMARY_CHARS = 800;
  * webview memory, so a file near this limit is slow but loud about any
  * failure; nothing here truncates silently.
  */
-const MAX_PDF_BYTES = 150 * 1024 * 1024;
+export const MAX_PDF_BYTES = 150 * 1024 * 1024;
 
 /**
  * How many PDFs one delegation may carry. The vendor's examples show one file
  * per request and document no multi-file contract, so this stays small enough
  * that a refusal reads as "split the job", not as an arbitrary wall.
  */
-const MAX_PDF_FILES = 3;
+export const MAX_PDF_FILES = 3;
 
 /**
  * Uint8Array → base64, linear in the input.

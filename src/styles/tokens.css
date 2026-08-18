@@ -245,9 +245,11 @@
   --stg-card-head:        #F3EBD9;   /* card headers */
   --stg-stat:             #F7F1E2;   /* stat cards, drawer footer, kbd bg */
   --stg-hint:             #F8F2E3;   /* soft hint blocks (probe panel) */
+  --stg-warn-bg:          #F9F0DC;   /* caution strip inside a card */
   --stg-accent:           #A9512B;
   --stg-accent-hover:     #93431F;
   --stg-accent-soft:      #B4713D;   /* range accent, secondary brown */
+  --stg-ok:               #75722E;   /* "ready" olive — status dots and labels */
   --stg-badge-bg:         #EFE0CB;
   --stg-badge-text:       #A0703F;
   --stg-text:             #3B352C;
@@ -255,12 +257,15 @@
   --stg-text-warm:        #7A6A4C;   /* warm secondary (subtitles) */
   --stg-text-desc:        #98907F;   /* row descriptions */
   --stg-text-faint:       #A79D88;   /* section titles, weak labels */
+  --stg-text-whisper:     #C0B49A;   /* the faintest tier: inline group hints */
   --stg-text-mono-dim:    #ACA28C;   /* dimmed mono (URLs) */
   --stg-text-placeholder: #B5AC98;
   --stg-border:           #E3D8BF;   /* card borders */
   --stg-border-mid:       #DDD2BA;   /* chip/control borders */
   --stg-border-soft:      #EAE1CC;   /* shell header border */
   --stg-border-menu:      #CBBB97;   /* dropdown menu border */
+  --stg-border-warn:      #D9B48F;   /* frame of a card that needs attention */
+  --stg-warn-line:        #EAD9BF;   /* rule above a caution strip */
   --stg-line-row:         #F1E9D6;   /* row separators */
   --stg-line-section:     #E7DCC4;   /* section-title rules */
   --stg-kbd-border:       #DFD3B8;
@@ -440,9 +445,11 @@
   --stg-card-head:        #28231D;
   --stg-stat:             #28231D;
   --stg-hint:             #241C15;
+  --stg-warn-bg:          #2A2114;
   --stg-accent:           #D9925B;
   --stg-accent-hover:     #F4C28A;
   --stg-accent-soft:      #B3764A;
+  --stg-ok:               #A7AC63;
   --stg-badge-bg:         rgba(217, 146, 91, 0.18);
   --stg-badge-text:       #E0BC8A;
   --stg-text:             #E8DFD0;
@@ -450,12 +457,15 @@
   --stg-text-warm:        #C0B49E;
   --stg-text-desc:        #9A8E7A;
   --stg-text-faint:       #8E8271;
+  --stg-text-whisper:     #7A6F5F;
   --stg-text-mono-dim:    #6E6455;
   --stg-text-placeholder: #5E564A;
   --stg-border:           #2E2820;
   --stg-border-mid:       #3A332A;
   --stg-border-soft:      #2A241C;
   --stg-border-menu:      #4A4238;
+  --stg-border-warn:      #5C4630;
+  --stg-warn-line:        #3E3323;
   --stg-line-row:         #241F19;
   --stg-line-section:     #2E2820;
   --stg-kbd-border:       #3A332A;
