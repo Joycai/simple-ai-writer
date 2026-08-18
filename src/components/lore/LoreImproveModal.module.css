@@ -21,7 +21,9 @@
   background: var(--color-card);
   border: 1px solid var(--color-border);
   width: 100%;
-  max-width: 680px;
+  /* 760 而不是 680: footer 一条要同时放下「模型」选择器 (240–380) 与三枚按钮，
+     680 时右侧按钮会被挤到折行 —— 见 .footerRight 的注释。 */
+  max-width: 760px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -285,20 +287,33 @@
 .footerNote {
   font: italic 400 11px/1.4 var(--font-serif);
   color: var(--color-text-muted);
+  min-width: 0;
 }
 
-/* footer 左组: 模型选择 + 斜体说明贴在一起 (设计稿 v4)，右侧按钮组靠 space-between 推开 */
+/* footer 左组: 模型选择 + 斜体说明贴在一起 (设计稿 v4)，右侧按钮组靠 space-between 推开。
+   压缩全部由左组吸收 (说明先换行、模型选择器再收窄)，右组按钮一步不让 —— 中文
+   标签一旦被压到字宽以下就会逐字折行成「取 消」，那是这条 strip 唯一不能出的错。 */
 .footerLeft {
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .footerRight {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
+}
+
+.btnPrimary,
+.btnSecondary,
+.btnGhost,
+.btnAbort {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .btnPrimary {

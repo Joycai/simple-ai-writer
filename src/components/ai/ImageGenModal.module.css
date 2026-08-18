@@ -156,14 +156,24 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  flex-shrink: 0;
 }
 
-/* footer 左组: 出图模型选择 + 关闭 (设计稿 v4) */
+/* footer 左组: 出图模型选择 + 关闭 (设计稿 v4)。压缩全部落在模型选择器上，
+   按钮一步不让 —— 中文标签被压窄会逐字折行成「关 闭」。 */
 .footerLeft {
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
+  flex: 1 1 auto;
+}
+
+.btnPrimary,
+.btnSecondary,
+.btnAbort {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .btnPrimary {

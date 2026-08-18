@@ -312,11 +312,23 @@
 .footerNote {
   font: italic 400 11px/1.4 var(--font-serif);
   color: var(--color-text-muted);
+  min-width: 0;
 }
 .footerNote b { color: var(--color-sienna); font-weight: 500; }
 .footer .spacer { flex: 1; }
 
 /* ── Button tiers (设计稿 03): 主实底 / 次 #C9966A 描边 / 轻透明 ── */
+
+/* 按钮不参与压缩: 中文标签被压到字宽以下会逐字折行成「取 消」。窄 footer 里
+   让位的是模型选择器和斜体说明，不是动作。 */
+.btnPrimary,
+.btnSecondary,
+.btnGhost,
+.btnAbort {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .btnPrimary {
   display: inline-flex;
   align-items: center;

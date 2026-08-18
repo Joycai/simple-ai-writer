@@ -300,6 +300,7 @@
   background: var(--color-bg-inset);
   flex-shrink: 0;
 }
+/* 长文案的 AI 入口是这条 footer 里唯一该让位的元素 (按钮见下)。 */
 .aiLink {
   display: flex;
   align-items: center;
@@ -310,10 +311,13 @@
   border: none;
   cursor: pointer;
   padding: 0;
+  min-width: 0;
+  text-align: left;
 }
 .aiLink:hover { text-decoration: underline; }
 .aiLink:disabled { opacity: 0.5; cursor: not-allowed; text-decoration: none; }
 
+/* 按钮不参与压缩: 中文标签被压到字宽以下会逐字折行成「取 消」。 */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -324,6 +328,8 @@
   background: transparent;
   color: var(--color-text-dim);
   cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
   transition: color var(--transition-fast), border-color var(--transition-fast);
 }
 .btn:hover:not(:disabled) { color: var(--color-text-primary); border-color: var(--color-border-strong); }

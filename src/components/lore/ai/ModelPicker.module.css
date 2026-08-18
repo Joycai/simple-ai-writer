@@ -1,10 +1,14 @@
 /* Footer 模型选择 (设计稿 03 v4): 「模型」灰签 + 描边 chip + 1px 分隔线。 */
 
+/* footer 里的让位顺序是「斜体说明先换行 → 选择器再收窄 → 按钮永不动」：说明
+   吃掉全部压缩 (它 min-width:0，可以一路换行)，选择器因此在正常窗口里始终是
+   设计稿的 240 宽。真到放不下时 .triggerPaper 还有 168 的地板。 */
 .picker {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
+  flex-shrink: 0;
 }
 
 .pickerLabel {
