@@ -1,5 +1,9 @@
 # 对话助手记忆系统方案（chat context compaction）
 
+> **状态：三期全部实现**（PR1 结构 / PR2 压缩 / PR3 每轮注入，见 §7）。
+> 纯逻辑落在 [`lib/agent/compact.ts`](../src/lib/agent/compact.ts)，编排落在
+> `compactRun.ts`，接入点是 `agentStore.sendChat`。
+>
 > 目标：把对话助手的上下文管理从「只挖不补」升级为**分层记忆**——
 > 稳定前缀（system + 工具定义）→ 历史摘要 → 最近轮次逐字 → 本轮注入 → 用户问题。
 > 长会话不再走向 `ContextSizeError` 死局，被淘汰的轮次归纳成摘要而不是蒸发。

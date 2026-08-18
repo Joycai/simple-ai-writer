@@ -1,6 +1,6 @@
 # 长任务工作区与子代理 详细设计文档（Low-Level Design）
 
-> **状态**：PR-A~PR-E 全部实现。`imageModelId` 的配置归口未做（见 §12 PR-E），其余按本文落地。
+> **状态**：PR-A~PR-E 全部实现。`imageModelId` 的配置归口已在 PR #178（`feat(agent): 图片生成成为子代理`，commit `a785584`）完成——`imagegen` 成为独立 `SubAgentKind`，绑定模型迁移进 `ai:subagent:imagegen:*` 前缀，`SubAgentsPane.tsx` 提供配置 UI；本文 §8 的文件改动清单止于 PR-E，未覆盖该次追加。
 > **关联 High-Level Design**：[`docs/subagent-plan.md`](subagent-plan.md)
 > **基建依赖**：[`unified-agent-plan.md`](unified-agent-plan.md)（统一 Agent Runtime）、[`chat-memory-plan.md`](chat-memory-plan.md)（会话折叠压缩）、[`anthropic-plan.md`](anthropic-plan.md) §10（服务端工具）
 > **分支**：`feat/task-workspace-and-subagents`

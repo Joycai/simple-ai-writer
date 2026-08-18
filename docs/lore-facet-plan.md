@@ -1,5 +1,12 @@
 # Lore 特征（Facet）系统落地方案
 
+> **状态：已实现**（PR-1~4 均已落地：`loreSelect.ts` 分层预算注入 /
+> `FacetEditModal` 管理 UI / `splitter.ts` + `LoreSplitModal` AI 拆解 /
+> `AiPanel` 的 facet 级 pin）。设计与
+> [`architecture.md`](architecture.md)「Facet-aware lore selection」一致，
+> 本文保留作为设计决策记录。方向 2（状态跟踪）与方向 4/6（递归激活/向量兜底）
+> 未实现，见 [`lore-granularity-research.md`](lore-granularity-research.md)。
+>
 > 目标：把 lore 的注入粒度从"实体"降到"特征（facet）"，配合分层预算注入（调研方向 1+3），并用 AI 自动拆解已有条目降低作者负担。涵盖数据模型、注入引擎、AI 拆解流程、UI 更新、迁移兼容与分期计划。
 >
 > 日期：2026-07-18 · 基于当前 main 分支代码阅读（rag.ts / entity.ts / model.ts / loreStore / LoreDetail / LoreImproveModal / AiPanel / generator.ts）
