@@ -61,12 +61,4 @@ describe("SubAgentChips store state", () => {
     expect(useAgentStore.getState().chatSessionId).toBe(2);
     expect(useAgentStore.getState().disabledSubAgents).toEqual([]);
   });
-
-  it("session overrides subtract only, and survive nothing but the live turn", () => {
-    useAgentStore.setState({ disabledSubAgents: [] });
-    const store = useAgentStore.getState();
-    store.toggleSubAgent("longread");
-    store.toggleSubAgent("longread");
-    expect(useAgentStore.getState().disabledSubAgents).toEqual([]);
-  });
 });

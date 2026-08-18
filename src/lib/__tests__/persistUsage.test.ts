@@ -20,13 +20,19 @@ describe("persistUsage", () => {
     expect(mockExecute).toHaveBeenCalledTimes(1);
     const [sql, params] = mockExecute.mock.calls[0] as unknown as [string, unknown[]];
     expect(sql).toContain("INSERT INTO token_usage");
-    expect(params[0]).toBe("model-deepseek");
-    expect(params[1]).toBe("subagent:search");
-    expect(params[2]).toBe(100);
-    expect(params[3]).toBe(20);
-    expect(params[4]).toBe(50);
-    expect(params[5]).toBe(0.002);
-    expect(typeof params[6]).toBe("number");
+    // Match params to their column by name (from the SQL's own column list)
+    // rather than by array index, so a harmless column reorder can't fail this.
+    const columns = sql.match(/\(([^)]+)\)/)![1].split(",").map((c) => c.trim());
+    const row = Object.fromEntries(columns.map((c, i) => [c, params[i]]));
+    expect(row).toMatchObject({
+      model_id: "model-deepseek",
+      task: "subagent:search",
+      prompt_tokens: 100,
+      cached_tokens: 20,
+      completion_tokens: 50,
+      cost_usd: 0.002,
+    });
+    expect(typeof row.created_at).toBe("number");
   });
 
   it("does not throw if db execution fails", async () => {

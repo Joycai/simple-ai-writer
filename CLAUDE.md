@@ -135,7 +135,7 @@ Load the relevant doc **before** working in that area — don't reconstruct it f
 ## Testing & Type Safety
 
 - TypeScript strict mode enabled (noUnusedLocals, noUnusedParameters, noFallthroughCasesInSwitch)
-- Frontend tests: Vitest (`pnpm test`) — smoke tests in `src/lib/__tests__/` cover RAG assembly and SSE stream parsing
-- Rust tests: `cargo test` (from `src-tauri/`) — unit tests live inline in `secrets.rs` and `protocol.rs`
+- Frontend tests: Vitest (`pnpm test`) — regression/unit tests under `src/lib/__tests__/` and `src/lib/agent/__tests__/`, covering wire-protocol parsing, the agent tool runtime, capability-pack resolution, RAG assembly, and other `lib/` logic; one file per module, not a single smoke-test set
+- Rust tests: `cargo test` (from `src-tauri/`) — unit tests live inline in `commands.rs`, `protocol.rs`, `scope.rs`, `secrets.rs`, `transfer.rs`, and `xlsx.rs`
 - Frontend type-checks via `pnpm tsc --noEmit`
 - CI gate on PRs to `main` runs frontend (type-check + vitest + build) and Rust (fmt/clippy/test/build) — see [`docs/ci.md`](docs/ci.md)
