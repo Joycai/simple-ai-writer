@@ -79,39 +79,101 @@
 }
 .actionBtn:hover { color: var(--color-sienna); border-color: var(--color-border-strong); }
 .actionBtn:disabled { opacity: 0.5; cursor: not-allowed; }
-.actionBtnDanger:hover {
-  color: var(--color-error);
-  border-color: var(--color-error);
-}
 .actionBtnPrimary {
   color: var(--color-sienna);
   border-color: var(--color-sienna);
 }
-
-.hero {
-  padding: 26px 32px 22px;
-  border-bottom: 1px solid var(--color-border-soft);
+/* ── 三段结构 (设计稿 03 · 屏 15): 主词条 index.md | 特征 | 配图 images.md ──
+   替代旧的 人物志/关系/出场 三栏——关系与出场是无数据的空态结构，v2 稿把它们
+   移出了详情页。 */
+.cols {
+  flex: 1;
   display: flex;
-  gap: 24px;
-  align-items: flex-start;
+  min-height: 0;
+  overflow-x: auto;
+}
+.colIndex {
+  width: 320px;
+  flex-shrink: 0;
+  padding: 24px 24px 22px;
+  border-right: 1px solid var(--color-border-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+.colFacets {
+  flex: 1;
+  min-width: 340px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--color-bg-base);
+}
+.colImages {
+  width: 300px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--color-border-soft);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.colHead {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: var(--letter-label);
+  color: var(--color-sienna);
+  text-transform: uppercase;
+}
+/* Section header shared by the 特征 and 配图 columns. */
+.sectionHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 24px 26px 13px;
   flex-shrink: 0;
 }
+.sectionHint {
+  font: italic 400 12px/1 var(--font-serif);
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.colScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 26px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.colFootNote {
+  flex-shrink: 0;
+  margin: 0 24px;
+  padding: 10px 0 16px;
+  border-top: 1px dashed var(--color-border);
+  font: italic 400 11px/1.6 var(--font-serif);
+  color: var(--color-text-faint);
+}
+
+/* ── 主词条栏 ─────────────────────────────────────────────────────────── */
+/* Square avatar tile (屏 14/15) — the round portrait was the pre-v2 wording. */
 .avatar {
   width: 96px;
   height: 96px;
-  border-radius: 50%;
   background: var(--color-sienna);
   color: var(--color-card);
   display: flex;
   align-items: center;
   justify-content: center;
-  font: 300 48px/1 var(--font-serif);
+  font: 300 46px/1 var(--font-serif);
   flex-shrink: 0;
 }
 .avatarImg {
   width: 96px;
   height: 96px;
-  border-radius: 50%;
   object-fit: cover;
   display: block;
   flex-shrink: 0;
@@ -122,13 +184,11 @@
   width: 96px;
   height: 96px;
   flex-shrink: 0;
-  border-radius: 50%;
   cursor: pointer;
 }
 .avatarOverlay {
   position: absolute;
   inset: 0;
-  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -138,87 +198,441 @@
   transition: opacity var(--transition-fast);
 }
 .avatarWrap:hover .avatarOverlay { opacity: 1; }
-.heroText { flex: 1; min-width: 0; }
-.eyebrow {
+
+.heroName {
+  font: 400 26px/1.15 var(--font-serif);
+  color: var(--color-text-primary);
+}
+.heroAliases {
+  margin-top: 4px;
+  font: italic 400 12px/1.5 var(--font-serif);
+  color: var(--color-text-muted);
+}
+
+.catRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.catLabel {
   font: 500 10px/1 var(--font-sans);
-  letter-spacing: 0.24em;
-  color: var(--color-sienna);
+  color: var(--color-text-muted);
+}
+.catChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  font: 500 12px/1 var(--font-serif);
+  cursor: pointer;
+}
+.catChip:hover:not(:disabled) { border-color: var(--color-border-strong); }
+.catChip:disabled { cursor: not-allowed; opacity: 0.6; }
+
+.fieldHead {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: 0.14em;
+  color: var(--color-text-muted);
   text-transform: uppercase;
   margin-bottom: 6px;
 }
-.heroName {
-  font: 300 44px/1.05 var(--font-serif);
-  color: var(--color-text-primary);
-  letter-spacing: -0.012em;
+.summaryBox {
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  background: var(--lore-bg-input);
+  font: 400 13px/1.65 var(--font-serif);
+  color: var(--color-text-secondary);
 }
-.heroAliases {
-  margin-top: 14px;
-  display: flex;
-  gap: 5px;
-  flex-wrap: wrap;
-}
-.alias {
-  padding: 3px 8px;
-  background: var(--color-tag-bg);
-  color: var(--color-tag-text);
-  font: 500 11px/1.4 var(--font-serif);
-}
-.aliasAdd {
-  padding: 3px 8px;
-  background: var(--color-card);
-  border: 1px dashed var(--color-border-strong);
-  color: var(--color-sienna);
-  font: 500 11px/1.4 var(--font-serif);
+.summaryEmpty {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px dashed var(--color-border);
+  background: transparent;
+  font: italic 400 12px/1.5 var(--font-serif);
+  color: var(--color-text-faint);
+  text-align: left;
   cursor: pointer;
 }
-.aliasAdd:hover:not(:disabled) { background: var(--color-tag-bg); }
-.aliasAdd:disabled { opacity: 0.5; cursor: not-allowed; }
-.heroSummary {
-  margin-top: 12px;
-  font: italic 400 14px/1.6 var(--font-serif);
-  color: var(--color-text-secondary);
-  max-width: 720px;
+.summaryEmpty:hover:not(:disabled) { color: var(--color-sienna); }
+.summaryEmpty:disabled { cursor: not-allowed; }
+
+.indexBody {
+  min-height: 0;
+}
+/* Rendered-markdown subtree for index.md's body. Typography comes from the
+   active markdown theme (.md-body, applied by MarkdownPreview); this only
+   picks the size it runs at. */
+.markdown {
+  --md-size: 13.5px;
+}
+.notLoaded {
+  color: var(--color-text-muted);
+  font: italic 400 12px/1.6 var(--font-serif);
 }
 
-.heroActions {
+/* What the entity is on disk — the mockup's mono listing. */
+.fileTree {
+  padding-top: 12px;
+  border-top: 1px dashed var(--color-border);
+  font: 400 11px/1.7 var(--font-mono);
+  color: var(--color-text-faint);
+  word-break: break-all;
+}
+
+.colActions {
   display: flex;
   gap: 8px;
-  flex-shrink: 0;
 }
-.heroBtnPrimary {
-  padding: 9px 16px;
-  background: var(--color-sienna);
-  color: var(--color-on-accent);
-  border: none;
-  font: 500 12px/1 var(--font-sans);
-  cursor: pointer;
-  align-self: flex-start;
-}
-.heroBtnPrimary:hover:not(:disabled) { background: var(--color-sienna-hover); }
-.heroBtnPrimary:disabled { opacity: 0.5; cursor: not-allowed; }
-.heroBtnSecondary {
-  padding: 9px 14px;
-  background: var(--color-card);
-  border: 1px solid var(--color-border-strong);
-  color: var(--color-sienna);
-  font: 500 12px/1 var(--font-sans);
-  cursor: pointer;
-  display: flex;
+.colAction {
+  flex: 1;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  align-self: flex-start;
-}
-.heroBtnSecondary:hover { background: var(--color-tag-bg); }
-.heroBtnGhost {
-  padding: 9px 14px;
+  padding: 9px 0;
   background: transparent;
   border: 1px solid var(--color-border);
   color: var(--color-text-dim);
   font: 500 12px/1 var(--font-sans);
   cursor: pointer;
-  align-self: flex-start;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
 }
-.heroBtnGhost:hover { color: var(--color-sienna); border-color: var(--color-border-strong); }
+.colAction:hover { color: var(--color-text-primary); border-color: var(--color-border-strong); }
+.colActionPrimary {
+  composes: colAction;
+  border-color: var(--color-border-strong);
+  color: var(--color-sienna);
+}
+.colActionPrimary:hover { color: var(--color-sienna); background: var(--color-tag-bg); }
+
+/* ── 特征栏 ───────────────────────────────────────────────────────────── */
+.addBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-sienna);
+  font: 500 12px/1 var(--font-sans);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.addBtn:hover:not(:disabled) { background: var(--color-tag-bg); }
+.addBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.addLink {
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--color-sienna);
+  font: 500 12px/1 var(--font-sans);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.addLink:hover:not(:disabled) { text-decoration: underline; }
+.addLink:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.facetsEmpty {
+  padding: 20px;
+  border: 1px dashed var(--color-border);
+  text-align: center;
+  font: italic 400 13px/1.6 var(--font-serif);
+  color: var(--color-text-muted);
+}
+
+/* One facet = one row. 常驻 carries the 3px sienna edge (it always injects);
+   手动 is dimmed (it only injects when asked for). */
+.facetRow {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  padding: 13px 17px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.facetRow:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--lore-card-shadow);
+}
+.facetRowAlways {
+  border-left: 3px solid var(--color-sienna);
+}
+.facetRowManual {
+  opacity: 0.75;
+}
+.facetRowManual:hover { opacity: 1; }
+.facetRowHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.facetTitle {
+  font: 500 15px/1.2 var(--font-serif);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.facetMode {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  font: 500 10px/1 var(--font-sans);
+}
+.facetModeAlways {
+  background: var(--color-sienna);
+  color: var(--color-on-accent);
+}
+.facetModeAuto {
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-sienna);
+}
+.facetModeManual {
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+.facetNote {
+  font: italic 400 11px/1 var(--font-serif);
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+.facetChars {
+  flex-shrink: 0;
+  font: 400 11px/1 var(--font-mono);
+  color: var(--color-text-faint);
+}
+.facetActions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+.facetRow:hover .facetActions { opacity: 1; }
+.facetKeys {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.facetKeysLabel {
+  font: 500 10px/1 var(--font-sans);
+  color: var(--color-text-muted);
+}
+.facetKey {
+  padding: 2px 8px;
+  background: var(--color-tag-bg);
+  color: var(--color-tag-text);
+  font: 400 11px/1.5 var(--font-serif);
+}
+.facetWarn {
+  font: italic 400 11px/1.5 var(--font-serif);
+  color: var(--color-warning-text);
+}
+
+/* Mutual-exclusion group: a dashed box around the members, since only one of
+   them can ever reach the context. */
+.groupBox {
+  border: 1px dashed var(--color-border-strong);
+  padding: 10px 14px 12px;
+}
+.groupHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.groupName {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: 0.14em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+.groupHint {
+  font: italic 400 11px/1 var(--font-serif);
+  color: var(--color-text-faint);
+}
+.groupRows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Supplementary .md files inside the entity dir (non-facet attachments) */
+.filesHead {
+  margin-top: 18px;
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: var(--letter-label);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+.fileList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.fileItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font: 500 12px/1 var(--font-mono);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.fileItem:hover {
+  color: var(--color-sienna);
+  border-color: var(--color-border-strong);
+}
+.fileName {
+  word-break: break-all;
+}
+.attachmentRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.convertBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  font: 500 11px/1 var(--font-sans);
+  color: var(--color-sienna);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.convertBtn:hover:not(:disabled) {
+  border-color: var(--color-border-strong);
+  background: var(--color-tag-bg);
+}
+.convertBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ── 配图栏 ───────────────────────────────────────────────────────────── */
+.galleryCount {
+  font: 500 11px/1 var(--font-mono);
+  color: var(--color-text-muted);
+}
+.galleryEmpty {
+  padding: 22px 16px;
+  border: 1px dashed var(--color-border);
+  text-align: center;
+  font: italic 400 12px/1.5 var(--font-serif);
+  color: var(--color-text-muted);
+}
+.galleryItem {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--lore-bg-input);
+  border: 1px solid var(--color-border);
+}
+.galleryImg {
+  width: 100%;
+  height: 130px;
+  object-fit: cover;
+  display: block;
+  background: var(--color-bg-surface);
+  cursor: zoom-in;
+}
+.galleryCaption {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+}
+.galleryFileRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.galleryFile {
+  flex: 1;
+  font: 400 10px/1.3 var(--font-mono);
+  color: var(--color-text-faint);
+  word-break: break-all;
+}
+.galleryActions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.iconBtn:hover:not(:disabled) {
+  color: var(--color-sienna);
+  border-color: var(--color-border);
+}
+.iconBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.iconBtnCommit {
+  composes: iconBtn;
+  color: var(--color-success);
+}
+.iconBtnCommit:hover:not(:disabled) {
+  color: var(--color-success);
+  border-color: var(--color-success);
+}
+.galleryDesc {
+  font: 400 12px/1.55 var(--font-serif);
+  color: var(--color-text-secondary);
+}
+.galleryDescEmpty {
+  font: italic 400 12px/1.5 var(--font-serif);
+  color: var(--color-text-faint);
+  cursor: text;
+}
+.galleryDescEmpty:hover {
+  color: var(--color-sienna);
+}
+.editArea {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.editTextarea {
+  width: 100%;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  padding: 6px 8px;
+  font: 400 12px/1.5 var(--font-serif);
+  color: var(--color-text-primary);
+  resize: vertical;
+}
+.editTextarea:focus {
+  outline: none;
+  border-color: var(--color-sienna);
+}
+.editButtons {
+  display: flex;
+  gap: 2px;
+  justify-content: flex-end;
+}
 
 /* Edit-mode scroll container (view mode uses the 3-column .cols instead). */
 .body {
@@ -233,127 +647,6 @@
   line-height: 1.78;
   color: var(--color-text-primary);
   white-space: pre-wrap;
-}
-
-/* ── 3-column body (设计稿 03): 人物志 / 关系 / 出场 ─────────────────────── */
-.cols {
-  flex: 1;
-  display: flex;
-  min-height: 0;
-  overflow-x: auto;
-}
-.colMain {
-  flex: 1;
-  min-width: 360px;
-  padding: 24px 28px 60px;
-  overflow-y: auto;
-  border-right: 1px solid var(--color-border-soft);
-  font-family: var(--font-serif);
-  font-size: 15px;
-  line-height: 1.78;
-  color: var(--color-text-primary);
-}
-.colSide {
-  width: clamp(280px, 22vw, 420px);
-  flex-shrink: 0;
-  padding: 24px;
-  overflow-y: auto;
-}
-.colRelations {
-  border-right: 1px solid var(--color-border-soft);
-  background: var(--color-bg-base);
-}
-.colHead {
-  font: 500 10px/1 var(--font-sans);
-  letter-spacing: var(--letter-label);
-  color: var(--color-sienna);
-  text-transform: uppercase;
-  margin-bottom: 14px;
-}
-.colHeadRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-.colHeadRow .colHead { margin-bottom: 0; }
-.appearCount {
-  font: 500 12px/1 var(--font-serif);
-  color: var(--color-sienna);
-}
-.sideEmpty {
-  padding: 14px 16px;
-  border: 1px dashed var(--color-border);
-  font: italic 400 12px/1.6 var(--font-serif);
-  color: var(--color-text-muted);
-  text-align: center;
-}
-.addRelBtn {
-  margin-top: 10px;
-  padding: 7px 12px;
-  background: transparent;
-  border: 1px dashed var(--color-border-strong);
-  color: var(--color-sienna);
-  font: 500 11px/1 var(--font-sans);
-  cursor: pointer;
-  width: 100%;
-}
-.addRelBtn:disabled { opacity: 0.55; cursor: not-allowed; }
-.threadsBlock { margin-top: 24px; }
-
-/* Appearance-density timeline: 14 cells, 4-step scale + current chapter. */
-.densityGrid {
-  display: grid;
-  grid-template-columns: repeat(14, 1fr);
-  gap: 3px;
-  margin-bottom: 6px;
-}
-.densityCell {
-  aspect-ratio: 1;
-  background: var(--lore-density-0);
-}
-.densityScale {
-  display: flex;
-  justify-content: space-between;
-  font: 400 10px/1 var(--font-sans);
-  color: var(--color-text-label);
-  margin-bottom: 12px;
-}
-.densityLegend {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.legendItem {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font: 400 10px/1 var(--font-sans);
-  color: var(--color-text-label);
-}
-.legendSwatch {
-  width: 9px;
-  height: 9px;
-  display: inline-block;
-}
-.bodyHead {
-  font: 500 11px/1 var(--font-sans);
-  letter-spacing: var(--letter-label);
-  color: var(--color-sienna);
-  text-transform: uppercase;
-  margin-bottom: 16px;
-}
-.notLoaded {
-  color: var(--color-text-muted);
-  font-style: italic;
-}
-
-/* Rendered-markdown subtree inside the summary tab. Typography comes from the
-   active markdown theme (.md-body, applied by MarkdownPreview); this only picks
-   the size it runs at. */
-.markdown {
-  --md-size: 15px;
 }
 
 /* ── In-place edit mode ────────────────────────────────────────────────── */
@@ -443,202 +736,6 @@
 .bodyTextarea:focus {
   outline: none;
   border-color: var(--color-sienna);
-}
-
-/* Supplementary .md files inside the entity dir (anything besides index.md) */
-.files {
-  margin-top: 40px;
-  padding-top: 24px;
-  border-top: 1px solid var(--color-border-soft);
-}
-.filesHead {
-  font: 500 11px/1 var(--font-sans);
-  letter-spacing: var(--letter-label);
-  color: var(--color-sienna);
-  text-transform: uppercase;
-  margin-bottom: 14px;
-}
-.fileList {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.fileItem {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  font: 500 12px/1 var(--font-mono);
-  cursor: pointer;
-  transition: color var(--transition-fast), border-color var(--transition-fast);
-}
-.fileItem:hover {
-  color: var(--color-sienna);
-  border-color: var(--color-border-strong);
-}
-.fileName {
-  word-break: break-all;
-}
-
-.gallery {
-  margin-top: 40px;
-  padding-top: 24px;
-  border-top: 1px solid var(--color-border-soft);
-}
-.galleryHeader {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 18px;
-}
-.galleryHead {
-  font: 500 11px/1 var(--font-sans);
-  letter-spacing: var(--letter-label);
-  color: var(--color-sienna);
-  text-transform: uppercase;
-}
-.galleryCount {
-  font: 500 11px/1 var(--font-mono);
-  color: var(--color-text-muted);
-}
-.galleryAddBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 10px;
-  background: transparent;
-  border: 1px solid var(--color-border);
-  color: var(--color-sienna);
-  font: 500 11px/1 var(--font-sans);
-  cursor: pointer;
-}
-.galleryAddBtn:hover:not(:disabled) {
-  border-color: var(--color-sienna);
-  background: var(--color-tag-bg);
-}
-.galleryAddBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.galleryEmpty {
-  padding: 28px 20px;
-  border: 1px dashed var(--color-border);
-  text-align: center;
-  font: italic 400 13px/1.5 var(--font-serif);
-  color: var(--color-text-muted);
-}
-.galleryGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 18px;
-}
-.galleryItem {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  background: var(--color-card);
-  border: 1px solid var(--color-border-soft);
-  padding: 10px;
-}
-.galleryImg {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-  display: block;
-  background: var(--color-bg-surface);
-  cursor: zoom-in;
-  transition: transform var(--transition-base);
-}
-.galleryImg:hover {
-  transform: scale(1.015);
-}
-.galleryCaption {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.galleryFileRow {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-}
-.galleryFile {
-  flex: 1;
-  font: 500 10px/1.3 var(--font-mono);
-  color: var(--color-text-muted);
-  word-break: break-all;
-}
-.galleryActions {
-  display: flex;
-  gap: 2px;
-  flex-shrink: 0;
-}
-.iconBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-}
-.iconBtn:hover:not(:disabled) {
-  color: var(--color-sienna);
-  border-color: var(--color-border);
-}
-.iconBtn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-.iconBtnCommit {
-  composes: iconBtn;
-  color: var(--color-success);
-}
-.iconBtnCommit:hover:not(:disabled) {
-  color: var(--color-success);
-  border-color: var(--color-success);
-}
-.galleryDesc {
-  font: italic 400 13px/1.5 var(--font-serif);
-  color: var(--color-text-secondary);
-}
-.galleryDescEmpty {
-  font: italic 400 12px/1.5 var(--font-serif);
-  color: var(--color-text-faint);
-  cursor: text;
-}
-.galleryDescEmpty:hover {
-  color: var(--color-sienna);
-}
-.editArea {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.editTextarea {
-  width: 100%;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border);
-  padding: 6px 8px;
-  font: 400 13px/1.5 var(--font-serif);
-  color: var(--color-text-primary);
-  resize: vertical;
-}
-.editTextarea:focus {
-  outline: none;
-  border-color: var(--color-sienna);
-}
-.editButtons {
-  display: flex;
-  gap: 2px;
-  justify-content: flex-end;
 }
 
 /* ── Lightbox ──────────────────────────────────────────────────────────── */
@@ -736,178 +833,4 @@
 .lightboxClose:hover {
   background: rgba(0, 0, 0, 0.5);
   color: #fff;
-}
-
-/* ── Facets (activatable sub-entries) ──────────────────────────────────────── */
-
-.facets {
-  margin-top: 40px;
-  padding-top: 24px;
-  border-top: 1px solid var(--color-border-soft);
-}
-
-/* Attachment sub-head inside the facets section needs its own top spacing. */
-.facets .filesHead {
-  margin-top: 28px;
-}
-
-.facetsHeader {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-3);
-  color: var(--color-text-secondary);
-}
-
-.facetsHead {
-  font: 500 11px/1 var(--font-sans);
-  letter-spacing: var(--letter-label);
-  color: var(--color-sienna);
-  text-transform: uppercase;
-}
-
-.facetsCount {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-}
-
-.facetsEmpty {
-  font-family: var(--font-sans);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-muted);
-  padding: var(--space-4);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-md);
-  text-align: center;
-}
-
-.facetGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: var(--space-3);
-}
-
-.facetCard {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
-}
-
-.facetCard:hover {
-  border-color: var(--color-border-strong);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
-}
-
-.facetCard:active {
-  transform: translateY(0) scale(0.99);
-}
-
-.facetCardHead {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.facetMode {
-  display: flex;
-  align-items: center;
-  color: var(--color-text-muted);
-  flex-shrink: 0;
-}
-
-.facetTitle {
-  font-family: var(--font-sans);
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: var(--color-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.facetGroup {
-  flex-shrink: 0;
-  padding: 1px var(--space-2);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--color-tag-text);
-  background: var(--color-tag-bg);
-  border-radius: var(--radius-sm);
-}
-
-.facetTokens {
-  flex-shrink: 0;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--color-text-muted);
-}
-
-.facetKeys {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-}
-
-.facetKey {
-  padding: 1px var(--space-2);
-  font-family: var(--font-sans);
-  font-size: var(--font-size-xs);
-  color: var(--color-accent);
-  background: var(--color-accent-tint);
-  border-radius: var(--radius-sm);
-}
-
-.facetWarn {
-  font-family: var(--font-sans);
-  font-size: var(--font-size-xs);
-  color: var(--color-warning);
-}
-
-.facetActions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-1);
-}
-
-.attachmentRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.convertBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px var(--space-2);
-  font-family: var(--font-sans);
-  font-size: var(--font-size-xs);
-  color: var(--color-accent);
-  background: var(--color-accent-tint);
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: background var(--transition-fast), transform var(--transition-fast);
-}
-
-.convertBtn:hover:not(:disabled) {
-  background: var(--color-accent-tint-strong);
-}
-
-.convertBtn:active:not(:disabled) {
-  transform: scale(0.96);
-}
-
-.convertBtn:disabled {
-  opacity: 0.5;
-  cursor: default;
 }

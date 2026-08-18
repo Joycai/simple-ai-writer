@@ -1412,7 +1412,8 @@
       "deleteConfirm": "删除「{{name}}」？此操作不可撤销。"
     },
     "wall": {
-      "changeAvatar": "更换头像"
+      "changeAvatar": "更换头像",
+      "cardCounts": "{{facets}} 特征 · {{images}} 配图"
     },
     "transfer": {
       "export": "导出",
@@ -1466,7 +1467,15 @@
       "loadErrorEditTitle": "内容未能读取，暂不能编辑",
       "noContent": "无内容",
       "addTagHint": "在编辑中添加别名/标签",
-      "moreActions": "更多操作"
+      "moreActions": "更多操作",
+      "colIndex": "主词条 · index.md",
+      "colImages": "配图 · images.md",
+      "summaryHead": "摘要 · 命中即注入",
+      "summaryEmpty": "（无摘要 — 点击填写）",
+      "bodyHead": "正文",
+      "addImageShort": "添加",
+      "imagesFootNote": "文字描述供纯文本模型阅读，也用于图库检索。",
+      "splitEntry": "拆分条目"
     },
     "facet": {
       "section": "特征",
@@ -1481,23 +1490,37 @@
       "editTitle": "编辑特征",
       "fieldTitle": "名称",
       "titlePlaceholder": "如：战甲形象",
-      "fieldKeys": "触发关键词",
-      "keysPlaceholder": "添加关键词（回车确认）— 正文出现任一关键词即激活",
+      "fieldKeys": "触发词",
       "keysEmptyWarn": "自动模式下没有关键词，此特征永远不会被自动注入",
       "removeKey": "移除",
-      "fieldMode": "激活方式",
+      "fieldMode": "注入方式",
       "modeAuto": "自动 — 实体命中且关键词命中时注入",
       "modeAlways": "总是 — 实体命中即注入",
       "modeManual": "仅手动 — 只在被固定（pin）时注入",
       "fieldGroup": "互斥组",
       "groupPlaceholder": "可留空；同组同时命中只注入优先级最高的一个（如 outfit）",
       "fieldPriority": "优先级",
-      "fieldBody": "内容 · Markdown",
+      "fieldBody": "正文",
       "bodyPlaceholder": "这一特征的具体内容…",
       "previewEmpty": "暂无内容",
       "save": "保存",
       "saving": "保存中…",
       "loadError": "读取文件失败",
+      "modeAutoShort": "自动",
+      "modeAlwaysShort": "常驻",
+      "modeManualShort": "手动",
+      "modeAutoHint": "主词条命中 + 出现任一触发词",
+      "modeAlwaysHint": "主词条命中即注入",
+      "modeManualHint": "仅在对话中手动引用时注入",
+      "addKeyEnter": "输入后回车…",
+      "optional": "可选",
+      "saveFacet": "保存特征",
+      "sectionHint": "每条特征独立决定是否注入上下文",
+      "groupBoxHead": "互斥组 · {{group}}",
+      "groupBoxHint": "同组按优先级只注入一条",
+      "priorityChars": "优先级 {{priority}} · {{chars}} 字",
+      "chars": "{{chars}} 字",
+      "manualNote": "仅在手动引用时注入",
       "ai": {
         "open": "AI 助手",
         "title": "AI 助手",
@@ -1517,18 +1540,8 @@
         "applyKeys": "应用关键词",
         "applyAppend": "追加到正文",
         "applyBody": "应用到正文",
-        "linkLabel": "AI 助手 · 就这个分面提问或改写"
-      },
-      "addKeyShort": "+ 添加",
-      "behaviorHead": "检索行为",
-      "behaviorText": "提示词命中某个分面的关键词时只注入该分面，省下其余字数预算。",
-      "headerNote": "分面独立检索，命中哪个注入哪个 — 不再整条塞入",
-      "listEmpty": "还没有分面 — 右侧填写第一条",
-      "modeAutoShort": "自动",
-      "modeAlwaysShort": "总是",
-      "modeManualShort": "仅手动",
-      "needsWork": "待完善",
-      "switchDiscard": "当前分面有未保存的修改，切换将丢弃，继续？"
+        "linkLabel": "AI 助手 · 就这个特征提问或改写"
+      }
     },
     "split": {
       "title": "拆分特征",
