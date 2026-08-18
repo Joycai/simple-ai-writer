@@ -30,7 +30,7 @@
   animation: scaleIn 240ms var(--ease-out);
 }
 
-/* 880×760 variant (提取/改写/分面/拆分 四屏的画幅) */
+/* 880×760 variant (提取/改写/特征/拆分 四屏的画幅) */
 .panelWide {
   max-width: 880px;
   height: 760px;

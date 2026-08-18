@@ -1417,7 +1417,8 @@
       "deleteConfirm": "Delete \"{{name}}\"? This cannot be undone."
     },
     "wall": {
-      "changeAvatar": "Change avatar"
+      "changeAvatar": "Change avatar",
+      "cardCounts": "{{facets}} facets · {{images}} images"
     },
     "transfer": {
       "export": "Export",
@@ -1471,7 +1472,15 @@
       "loadErrorEditTitle": "Content could not be read, so it cannot be edited yet",
       "noContent": "No content",
       "addTagHint": "Add aliases / tags in edit mode",
-      "moreActions": "More actions"
+      "moreActions": "More actions",
+      "colIndex": "Entry · index.md",
+      "colImages": "Images · images.md",
+      "summaryHead": "Summary · injected on match",
+      "summaryEmpty": "(No summary — click to write one)",
+      "bodyHead": "Body",
+      "addImageShort": "Add",
+      "imagesFootNote": "The text description is what text-only models read, and what gallery search matches on.",
+      "splitEntry": "Split entry"
     },
     "facet": {
       "section": "Facets",
@@ -1486,23 +1495,37 @@
       "editTitle": "Edit facet",
       "fieldTitle": "Name",
       "titlePlaceholder": "e.g. Battle armor",
-      "fieldKeys": "Trigger keys",
-      "keysPlaceholder": "Add key (press Enter) — any key appearing in the text activates this facet",
+      "fieldKeys": "Trigger words",
       "keysEmptyWarn": "No keys in auto mode — this facet will never auto-inject",
       "removeKey": "Remove",
-      "fieldMode": "Activation",
+      "fieldMode": "Injection",
       "modeAuto": "Auto — inject when the entity matches AND a key matches",
       "modeAlways": "Always — inject whenever the entity matches",
       "modeManual": "Manual — inject only when pinned",
       "fieldGroup": "Exclusion group",
       "groupPlaceholder": "Optional; only the highest-priority facet of a group injects (e.g. outfit)",
       "fieldPriority": "Priority",
-      "fieldBody": "Content · Markdown",
+      "fieldBody": "Content",
       "bodyPlaceholder": "The content of this facet…",
       "previewEmpty": "Nothing to preview yet",
       "save": "Save",
       "saving": "Saving…",
       "loadError": "Failed to read file",
+      "modeAutoShort": "Auto",
+      "modeAlwaysShort": "Always",
+      "modeManualShort": "Manual",
+      "modeAutoHint": "Entry matches + any trigger word appears",
+      "modeAlwaysHint": "Injected whenever the entry matches",
+      "modeManualHint": "Only when referenced by hand in a conversation",
+      "addKeyEnter": "type, then Enter…",
+      "optional": "optional",
+      "saveFacet": "Save facet",
+      "sectionHint": "each facet decides on its own whether to enter the context",
+      "groupBoxHead": "Exclusion group · {{group}}",
+      "groupBoxHint": "only one per group injects, by priority",
+      "priorityChars": "priority {{priority}} · {{chars}} ch",
+      "chars": "{{chars}} ch",
+      "manualNote": "injected only when referenced by hand",
       "ai": {
         "open": "AI Assistant",
         "title": "AI Assistant",
@@ -1523,17 +1546,7 @@
         "applyAppend": "Append to body",
         "applyBody": "Apply to body",
         "linkLabel": "AI assistant · ask about or rewrite this facet"
-      },
-      "addKeyShort": "+ Add",
-      "behaviorHead": "Retrieval behavior",
-      "behaviorText": "When a prompt hits a facet's keywords, only that facet is injected — the rest of the budget is saved.",
-      "headerNote": "Facets retrieve independently — only what matches gets injected",
-      "listEmpty": "No facets yet — fill in the first one on the right",
-      "modeAutoShort": "Auto",
-      "modeAlwaysShort": "Always",
-      "modeManualShort": "Manual",
-      "needsWork": "Needs work",
-      "switchDiscard": "This facet has unsaved changes; switching discards them. Continue?"
+      }
     },
     "split": {
       "title": "Split into facets",

@@ -511,19 +511,35 @@ export function LoreWall() {
                     </div>
                     <div>
                       <div className={styles.cardName}>{e.name}</div>
-                      <div className={styles.cardMeta}>{e.aliases.slice(0, 2).join(" · ")}</div>
+                      {e.aliases.length > 0 && (
+                      <div className={styles.cardMeta}>
+                        {t("lore.detail.fieldAliases", { defaultValue: "别名" })}：{e.aliases.slice(0, 3).join(" · ")}
+                      </div>
+                    )}
                     </div>
                   </div>
                   <div className={styles.cardSummary}>
                     {e.summary || "—"}
                   </div>
-                  {e.aliases.length > 0 && (
+                  {/* 屏 14: the chips are the entry's 特征 — the aliases already
+                      sit under the name, and repeating them said nothing. */}
+                  {e.facets.length > 0 && (
                     <div className={styles.cardTags}>
-                      {e.aliases.slice(0, 4).map((a) => (
-                        <span key={a} className={styles.cardTag}>{a}</span>
+                      {e.facets.slice(0, featured ? 5 : 3).map((f) => (
+                        <span key={f.file} className={styles.cardTag}>◈ {f.title}</span>
                       ))}
+                      {e.facets.length > (featured ? 5 : 3) && (
+                        <span className={styles.cardTagMore}>+{e.facets.length - (featured ? 5 : 3)}</span>
+                      )}
                     </div>
                   )}
+                  <div className={styles.cardFoot}>
+                    {t("lore.wall.cardCounts", {
+                      facets: e.facets.length,
+                      images: e.images.length,
+                      defaultValue: `${e.facets.length} 特征 · ${e.images.length} 配图`,
+                    })}
+                  </div>
                 </div>
               );
             })}
