@@ -1171,7 +1171,10 @@
       "belongsTo": "Provider: {{provider}}",
       "exactValue": "Exact",
       "escToClose": "Esc to close",
-      "unknownProvider": "Unknown provider (config missing)"
+      "unknownProvider": "Unknown provider (config missing)",
+      "defaultMaxOutput": "Default max output",
+      "defaultMaxOutputEmpty": "protocol default",
+      "defaultMaxOutputHint": "Used when a model has no 'max output' of its own and isn't in the built-in table. Empty/0 = each protocol's own default (32k on Anthropic, server's choice elsewhere)."
     },
     "providers": {
       "configured": "Configured Providers",
@@ -1246,7 +1249,7 @@
       "contextSizeUnset": "unset",
       "contextSizeHint": "The model's context window, up to 2,000,000. Pick a common size or type an exact value. When set: (1) requests estimated to exceed it are blocked before sending, so the server can't silently truncate them; (2) the verbatim recent-text window, the story-memory and the book-recap budgets all scale with this window (see \"Context usage\" in the AI panel). Leave blank and neither applies — those layers fall back to fixed budgets and the lore block is capped.",
       "maxOutputLabel": "Max Output (tokens, optional)",
-      "maxOutputHint": "How many tokens this model can emit in one reply. Never sent to the provider — it only stops the context budget from reserving window the model could never fill, handing that space back to the prompt. Leave blank if unsure, or fill it in with the probe below.",
+      "maxOutputHint": "How many tokens the model can produce in ONE reply. Sent as max_tokens on the Anthropic path (32k default when empty); on every other protocol it is planning-only — the reserve for the reply shrinks to what the model can actually emit, and the rest goes back to the prompt. Leave it empty to fall back to the built-in table and then the app-wide default, or fill it by probing below.",
       "reasoningEffortLabel": "Thinking effort (optional)",
       "reasoningEffortHint": "How deeply a reasoning model should think. \"Endpoint default\" sends no field at all and lets the server decide — the only choice that is safe on every relay, and what this app did before this setting existed. The other levels are translated into each protocol's own spelling. Note that not every model supports every level, and some reasoning models cannot turn thinking off at all: the endpoint may ignore the setting or reject it.",
       "reasoningEffortDefault": "Endpoint default",

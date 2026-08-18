@@ -1166,7 +1166,10 @@
       "belongsTo": "所属供应商：{{provider}}",
       "exactValue": "精确值",
       "escToClose": "Esc 关闭",
-      "unknownProvider": "未知供应商（配置已丢失）"
+      "unknownProvider": "未知供应商（配置已丢失）",
+      "defaultMaxOutput": "默认最大输出",
+      "defaultMaxOutputEmpty": "跟随协议默认",
+      "defaultMaxOutputHint": "模型没填「最大输出」且不在内置表里时用这个值。留空/0 = 各协议自己的默认（Anthropic 32k，其余交给服务端）。"
     },
     "providers": {
       "configured": "已配置供应商",
@@ -1241,7 +1244,7 @@
       "contextSizeUnset": "未设置",
       "contextSizeHint": "模型的上下文窗口大小，最大 2,000,000。点常见档位，或直接填精确值。设置后：① 估算超出此大小的请求会在发送前拦截，避免被服务端静默截断；② 逐字「近期内容」窗口与前情提要/全书前情的预算都按此窗口动态分配（比例见 AI 助手的「上下文利用率」）。留空则两者都不生效，这些层退回固定预算，且知识库资料会被限额。",
       "maxOutputLabel": "最大输出长度 (tokens，可选)",
-      "maxOutputHint": "模型单次回复最多能产出多少 token。不会发给服务端，只用于预算规划：模型吐不出这么多时就不再为回复预留窗口，把这部分空间还给提示词。不确定就留空，或用下面的探测填。",
+      "maxOutputHint": "模型单次回复最多能产出多少 token。Anthropic 协议会把它作为 max_tokens 发出去（不填则用 32k 默认）；其余协议不发，只用于预算规划——模型吐不出这么多时就不再为回复预留窗口，把这部分空间还给提示词。不确定就留空（会先查内置表，再用全局默认），或用下面的探测填。",
       "reasoningEffortLabel": "思考强度 (可选)",
       "reasoningEffortHint": "推理模型的思考深度。「跟随默认」不发送任何字段，由服务端自己决定 —— 这是对所有中继都安全的选择，也是升级前的行为。其余档位会映射成该协议自己的写法。注意：并非每个模型都支持全部档位，部分推理模型也无法真正关闭思考，服务端可能忽略或报错。",
       "reasoningEffortDefault": "跟随默认",

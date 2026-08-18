@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronRight, Pencil, Search, X } from "lucide-react";
 import { useAiStore } from "../../../stores/aiStore";
+import { useAppStore } from "../../../stores/appStore";
 import type { Model, ModelType } from "../../../lib/ai/configDb";
 import { ConfirmDialog } from "../../common/ConfirmDialog";
 import { ProviderDrawer } from "./ProviderDrawer";
@@ -37,6 +38,8 @@ interface Props {
 export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
   const { t } = useTranslation();
   const { providers, models, removeProvider, removeModel, getApiKey } = useAiStore();
+  const defaultMaxOutput = useAppStore((s) => s.defaultMaxOutput);
+  const setDefaultMaxOutput = useAppStore((s) => s.setDefaultMaxOutput);
 
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<ModelType | "all">("all");
@@ -147,6 +150,33 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
               onClick={() => setTypeFilter(f)}
             />
           ))}
+        </div>
+
+        {/* The one setting here that belongs to no single model: what to assume
+            when a model declares no per-reply cap and isn't in the built-in
+            table. Sits with the model list rather than in 通用 because that is
+            where an author is when the question occurs to them. */}
+        <div className={hub.toolbar}>
+          <label className={hub.fieldHint} htmlFor="default-max-output">
+            {t("aiConfig.hub.defaultMaxOutput", { defaultValue: "默认最大输出" })}
+          </label>
+          <input
+            id="default-max-output"
+            className={`${styles.input} ${hub.mono}`}
+            style={{ maxWidth: 140 }}
+            type="number"
+            min="0"
+            step="1024"
+            placeholder={t("aiConfig.hub.defaultMaxOutputEmpty", { defaultValue: "跟随协议默认" })}
+            value={defaultMaxOutput || ""}
+            onChange={(e) => setDefaultMaxOutput(parseInt(e.target.value, 10) || 0)}
+          />
+          <span className={hub.fieldHint}>
+            {t("aiConfig.hub.defaultMaxOutputHint", {
+              defaultValue:
+                "模型没填「最大输出」且不在内置表里时用这个值。留空/0 = 各协议自己的默认。",
+            })}
+          </span>
         </div>
       </div>
 

@@ -22,6 +22,7 @@ import { draftCountFor, totalUsage, type Draft } from "../lib/ai/drafts";
 import { costFor } from "../lib/ai/configDb";
 import { persistUsage } from "../lib/ai/usage";
 import { connOptions, resolveConn } from "../lib/ai/conn";
+import { defaultMaxOutput, effectiveMaxOutput } from "../lib/ai/modelLimits";
 import { useAppStore } from "./appStore";
 import { useLoreStore } from "./loreStore";
 import { useProjectStore } from "./projectStore";
@@ -314,7 +315,10 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       : anchorValid ? anchorRange!.to : documentText.length;
     const plan = planContextBudget({
       contextSize: model.contextSize,
-      maxOutputTokens: model.maxOutput,
+      // Same resolution the request itself will use (lib/ai/conn) — a planner
+      // that assumed a different ceiling than the wire sent is how a "context
+      // budget" stops describing what actually happened.
+      maxOutputTokens: effectiveMaxOutput(model, defaultMaxOutput()),
       utilization: contextUtilization,
       loreBudgetTokens,
       fixedChars: fixedContextChars({
