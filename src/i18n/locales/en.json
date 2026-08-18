@@ -600,7 +600,9 @@
         "pdf": "You are a PDF digest specialist. The user message carries one or more PDF files. Your role is to read them thoroughly, extract their structure, key content and details as the task requires, and produce a clear structured summary; cite page numbers or sections where identifiable."
       },
       "subagentTask": "Task objective:\n{{task}}",
-      "subagentTaskWithRefs": "Task objective:\n{{task}}\n\nReferences:\n{{refs}}"
+      "subagentTaskWithRefs": "Task objective:\n{{task}}\n\nReferences:\n{{refs}}",
+      "continueTruncated": "[SYSTEM] Your last reply was cut off by the output cap. Continue from exactly where it stopped — do not repeat what you already wrote and do not start over. If a lot is left, finish this stretch and you will be asked to continue again.",
+      "truncatedToolCall": "[SYSTEM] Your tool call(s) last round ({{tools}}) ran past the output cap and were cut off, so they were DISCARDED: nothing ran and nothing was written. Anything too big for one reply must be written in pieces — create_file the skeleton first (structure plus one `<!-- SECTION: name -->` placeholder comment per section), then append_file one section per call. Do not resend the same call unchanged."
     },
     "taskDoc": {
       "untitled": "Untitled task",
@@ -877,7 +879,12 @@
         "subRunning": "Running",
         "subDone": "Done",
         "subFailed": "Failed",
-        "headDoneSimple": "Done"
+        "headDoneSimple": "Done",
+        "truncatedCall": "arguments cut off by the output cap — not executed, nothing written",
+        "truncatedContinued": "output hit the cap — asked it to continue ({{n}}×)",
+        "truncatedRetried": "tool call hit the cap and was discarded — asked it to write in pieces ({{n}}×)",
+        "truncationContinue": "cut off {{n}}× in a row — author chose to keep trying",
+        "truncationStop": "cut off {{n}}× in a row — author chose to stop"
       },
       "tool": {
         "list_lore_entities": "List {{entry}}",
@@ -1125,6 +1132,13 @@
       "untitled": "Current task",
       "paused": "Paused",
       "tokensBreakdown": "Main model {{main}} · subagents {{sub}}"
+    },
+    "truncation": {
+      "title": "Output keeps hitting the cap",
+      "count": "{{n}}×",
+      "body": "The model's output has been cut off by the per-reply cap {{n}} times in a row; the first few were resumed automatically. Continue retries the same number of times again; or stop here and either raise 'max output' in the model settings, or have it build large files in pieces (create_file for the skeleton, append_file per section).",
+      "stop": "Stop here",
+      "continue": "Keep trying"
     }
   },
   "aiConfig": {

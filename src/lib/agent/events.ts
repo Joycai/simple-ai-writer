@@ -27,6 +27,18 @@ export type RoundLimitDecision =
   | { action: "finish" }
   | { action: "pause" };
 
+/**
+ * What to do after the output cap has cut the model off several times running.
+ *
+ * The runtime recovers from the first few silently (see runtime's
+ * TRUNCATION_RECOVERY_LIMIT) — one truncation is a normal cost of a long
+ * answer, and asking about it would be noise. Repeated truncation is different:
+ * either the model keeps trying to emit something too big for one reply, or the
+ * output cap is set too low, and continuing to retry spends the author's money
+ * on rounds that keep getting cut off. So the loop stops and asks.
+ */
+export type TruncationDecision = { action: "continue" } | { action: "stop" };
+
 export type ToolStepStatus = "running" | "done" | "error";
 
 /** One tool invocation's lifecycle. Emitted twice per call: running, then done/error. */
@@ -188,6 +200,31 @@ export type AgentEvent = AgentEventScope & (
       round: number;
       /** The endpoint's own stop reason, when it named one. */
       stopReason?: string;
+      /**
+       * What the runtime did about it, when it did something.
+       *
+       * `text` — the answer was cut mid-sentence and the loop asked the model
+       * to continue from where it stopped. `tool-args` — a tool call's
+       * arguments were cut, so the call was **dropped unexecuted** (half a JSON
+       * object cannot be run, and replaying it would corrupt the history) and
+       * the model was told to write in smaller pieces.
+       *
+       * `attempt` counts recoveries in this run, so the log shows a pattern
+       * rather than three identical lines. Absent on older events, and on the
+       * surfaces that only report truncation without recovering from it.
+       */
+      recovery?: { kind: "text" | "tool-args"; attempt: number };
+      at: number;
+    }
+  | {
+      /**
+       * The author was asked whether to keep going after repeated truncation.
+       * Distinct from `output-truncated` because the question is the event:
+       * the run stopped and waited for a person.
+       */
+      kind: "truncation-limit";
+      recoveries: number;
+      decision: TruncationDecision;
       at: number;
     }
   | { kind: "run-done"; inputTokens: number; outputTokens: number; at: number }

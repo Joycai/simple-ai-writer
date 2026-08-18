@@ -76,7 +76,10 @@ import { routeTools } from "../lib/agent/routing";
 import {
   resolveSubAgentConn, visionSubAgentModel, withSessionOverrides, type SubAgentKind,
 } from "../lib/agent/subagent";
-import { repairToolCallPairing, runAgent, type RoundLimitDecision } from "../lib/agent/runtime";
+import {
+  repairToolCallPairing, runAgent,
+  type RoundLimitDecision, type TruncationDecision,
+} from "../lib/agent/runtime";
 import { persistUsage } from "../lib/ai/usage";
 import {
   inputCeilingFor, measureCharsPerToken, RECENT_WINDOW_MIN_CHARS,
@@ -171,6 +174,20 @@ export interface PendingRoundLimit {
   runId: RunId;
 }
 
+/**
+ * A run blocked on "the output cap keeps cutting you off — keep going?".
+ *
+ * Same shape as {@link PendingRoundLimit} and for the same reason: the loop is
+ * waiting on a person, and both chat and the task panel render the card.
+ */
+export interface PendingTruncation {
+  id: string;
+  /** Recoveries the runtime already made on its own before asking. */
+  recoveries: number;
+  resolve: (decision: TruncationDecision) => void;
+  runId: RunId;
+}
+
 export interface ChatTurn {
   id: string;
   role: "user" | "assistant";
@@ -212,6 +229,8 @@ interface AgentState {
   pendingPlans: PendingPlan[];
   /** Round-cap questions awaiting the author's decision — one per blocked run. */
   pendingRoundLimits: PendingRoundLimit[];
+  /** Repeated-truncation questions awaiting the author — one per blocked run. */
+  pendingTruncations: PendingTruncation[];
   /**
    * The one surface currently auto-approving, if any (lib/agent/autoApprove).
    * Null is the normal state: every card is asked.
@@ -310,6 +329,11 @@ interface AgentState {
   /** Resolve a blocked run's round-cap question: extend, finish, or pause. */
   resolveRoundLimit: (runId: RunId, decision: RoundLimitDecision) => void;
 
+  /** Called by the runtime's onTruncationLimit after repeated truncation. */
+  requestTruncationDecision: (recoveries: number, runId: RunId) => Promise<TruncationDecision>;
+  /** Resolve a blocked run's truncation question: keep going, or stop here. */
+  resolveTruncation: (runId: RunId, decision: TruncationDecision) => void;
+
   /** Called by propose_lore_plan (via ToolContext.requestPlanApproval). */
   requestPlanApproval: (plan: LorePlan, runId: RunId, autoApproveKey?: unknown) => Promise<PlanDecision>;
   /** User approved the plan — the gate records its steps and the loop resumes. */
@@ -343,6 +367,7 @@ interface AgentState {
 
 let turnCounter = 0;
 let roundLimitCounter = 0;
+let truncationCounter = 0;
 
 // ─── Applying an approved proposal ───────────────────────────────────────────
 
@@ -568,6 +593,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   pending: [],
   pendingPlans: [],
   pendingRoundLimits: [],
+  pendingTruncations: [],
   autoApprove: null,
 
   turns: [],
@@ -665,6 +691,20 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         ],
       }));
     }),
+  requestTruncationDecision: (recoveries, runId) =>
+    new Promise<TruncationDecision>((resolve) => {
+      const id = `truncation-${++truncationCounter}`;
+      set((s) => ({
+        pendingTruncations: [...s.pendingTruncations, { id, recoveries, resolve, runId }],
+      }));
+    }),
+  resolveTruncation: (runId, decision) => {
+    const item = get().pendingTruncations.find((p) => p.runId === runId);
+    if (!item) return;
+    set((s) => ({ pendingTruncations: s.pendingTruncations.filter((p) => p !== item) }));
+    item.resolve(decision);
+  },
+
   resolveRoundLimit: (runId, decision) => {
     const item = get().pendingRoundLimits.find((p) => p.runId === runId);
     if (!item) return;
@@ -679,20 +719,28 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // switchChatSession are what end it.
     if (get().autoApprove?.key === runId) set({ autoApprove: null });
 
-    const { pending, pendingPlans, pendingRoundLimits } = get();
+    const { pending, pendingPlans, pendingRoundLimits, pendingTruncations } = get();
     const drainP = pending.filter((p) => p.runId === runId);
     const drainL = pendingPlans.filter((p) => p.runId === runId);
     const drainR = pendingRoundLimits.filter((p) => p.runId === runId);
-    if (drainP.length === 0 && drainL.length === 0 && drainR.length === 0) return;
+    const drainT = pendingTruncations.filter((p) => p.runId === runId);
+    if (
+      drainP.length === 0 && drainL.length === 0
+      && drainR.length === 0 && drainT.length === 0
+    ) return;
     set({
       pending: pending.filter((p) => p.runId !== runId),
       pendingPlans: pendingPlans.filter((p) => p.runId !== runId),
       pendingRoundLimits: pendingRoundLimits.filter((p) => p.runId !== runId),
+      pendingTruncations: pendingTruncations.filter((p) => p.runId !== runId),
     });
     for (const item of drainP) item.resolve({ approved: false, reason });
     for (const item of drainL) item.resolve({ approved: false, reason });
     // Finish = wrap up; the aborted signal is re-checked right after.
     for (const item of drainR) item.resolve({ action: "finish" });
+    // Stop, for the same reason: the run is over, and answering 继续 into a
+    // dead run would leave the loop trying to recover from nothing.
+    for (const item of drainT) item.resolve({ action: "stop" });
   },
 
   requestPlanApproval: (plan, runId, autoApproveKey) =>
@@ -1116,6 +1164,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         signal: controller.signal,
         // At the round cap, block on the author's 继续/收尾/存盘暂停 card instead of
         // force-ending. Each 继续 grants the preset's own cap again.
+        // The card can render here (the approvals area is right above the
+        // composer), so repeated truncation becomes a question instead of a
+        // silent stop.
+        onTruncationLimit: (recoveries) =>
+          get().requestTruncationDecision(recoveries, controller),
         onRoundLimit: (roundsUsed) =>
           get().requestRoundExtension(
             roundsUsed, AGENT_ASSIST_PRESET.maxRounds, controller,

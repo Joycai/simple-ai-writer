@@ -516,6 +516,14 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             },
           },
           signal: controller.signal,
+          // Repeated output-cap truncation: same rule as the round cap below —
+          // the panel can show the card, a batch run cannot, and a batch that
+          // blocked on an invisible card would hang the whole sweep.
+          onTruncationLimit: async (recoveries) => {
+            const { useBatchStore } = await import("./batchStore");
+            if (useBatchStore.getState().running) return { action: "stop" };
+            return useAgentStore.getState().requestTruncationDecision(recoveries, controller);
+          },
           // At the round cap, block on the AiPanel's 继续/收尾 card instead of
           // force-ending. Skipped during a batch run: the batch modal covers
           // the panel, and a card nobody can see would hang the whole sweep.

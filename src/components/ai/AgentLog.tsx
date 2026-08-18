@@ -492,15 +492,49 @@ function AgentLogRow({ row, showTime, runStatus }: {
       );
     case "output-truncated":
       // Warning-shaped, not error-shaped: the text that did arrive is real and
-      // usable, it just isn't all of it.
+      // usable, it just isn't all of it — and when the runtime recovered, the
+      // row says so, because "被截断" alone reads like something was lost.
       return (
         <li className={`${styles.row} ${styles.rowMeta}`}>
           <span className={styles.rowIndent} />
           <span className={styles.rowMetaText}>
-            {t("ai.agent.log.outputTruncated", {
-              defaultValue: "输出被上限截断，回答未写完",
-            })}
+            {event.recovery
+              ? t(
+                  event.recovery.kind === "text"
+                    ? "ai.agent.log.truncatedContinued"
+                    : "ai.agent.log.truncatedRetried",
+                  {
+                    defaultValue:
+                      event.recovery.kind === "text"
+                        ? "输出被上限截断，已让它接着写（第 {{n}} 次）"
+                        : "工具调用被上限截断并丢弃，已要求分段重写（第 {{n}} 次）",
+                    n: event.recovery.attempt,
+                  },
+                )
+              : t("ai.agent.log.outputTruncated", {
+                  defaultValue: "输出被上限截断，回答未写完",
+                })}
             {event.stopReason && ` · ${event.stopReason}`}
+          </span>
+        </li>
+      );
+    case "truncation-limit":
+      return (
+        <li className={`${styles.row} ${styles.rowMeta}`}>
+          <span className={styles.rowIndent} />
+          <span className={styles.rowMetaText}>
+            {t(
+              event.decision.action === "continue"
+                ? "ai.agent.log.truncationContinue"
+                : "ai.agent.log.truncationStop",
+              {
+                defaultValue:
+                  event.decision.action === "continue"
+                    ? "连续 {{n}} 次被截断 — 作者选择继续重试"
+                    : "连续 {{n}} 次被截断 — 作者选择到此为止",
+                n: event.recoveries,
+              },
+            )}
           </span>
         </li>
       );
