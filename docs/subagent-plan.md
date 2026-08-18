@@ -1,6 +1,7 @@
 # 长任务工作区与子代理（high-level design）
 
-> **状态：设计稿，尚未实现。** 本文只做可行性判断与架构选型，不描述已有行为。
+> **状态：设计已实现，本文件为历史设计稿**（保留可行性判断与架构选型的推理过程）。
+> 落地细节与验收标准见 [`subagent-lld.md`](subagent-lld.md)。
 > 已实现的 agent 体系见 [`unified-agent-plan.md`](unified-agent-plan.md)，
 > 对话侧的上下文折叠见 [`chat-memory-plan.md`](chat-memory-plan.md)。
 
