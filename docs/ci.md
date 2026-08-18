@@ -50,8 +50,34 @@ Deliberately **absent**, and they should stay absent:
   cd src-tauri && cargo tree --target x86_64-unknown-linux-gnu -e normal -i libappindicator
   ```
 
-`--no-install-recommends` trims another layer. If a link error ever points at a missing
-`-dev` package, add that one package rather than reinstating the whole old list.
+If a link error ever points at a missing `-dev` package, add that one package rather than
+reinstating the whole old list.
+
+### Why the packages come from a cache
+
+The step is installed through [`awalsh128/cache-apt-pkgs-action`] rather than a plain
+`apt-get install`, because its problem was the **tail**, not the average. Measured across
+40 successful runs before the change:
+
+```
+21 21 22 23 23 23 24 26 27 27 27 27 28 29 29 29 29 31 31 33
+34 35 35 36 37 38 41 41 42 44 44 45 45 49 49 55 57 78 165 445
+```
+
+Median 33 s, p90 ~50 s — but 78 / 165 / 445 s at the top, because it fetches from the public
+Ubuntu mirrors and those occasionally crawl. Restoring from the Actions cache swaps that for
+GitHub's own infrastructure; on a cache **miss** the action just runs apt, i.e. exactly the
+old behaviour, so the worst case is unchanged and the common case loses its tail.
+
+Bump the action's `version:` input to force the cache to rebuild (e.g. after changing the
+package list). If a restore ever produces a subtly broken install, that surfaces as a link
+error in `cargo build`, not as a silent pass.
+
+One thing was given up in the trade: the action resolves dependencies itself and exposes no
+`--no-install-recommends`, so recommended packages come back. That makes the short package
+list above matter *more*, not less — it is now what keeps the cache small.
+
+[`awalsh128/cache-apt-pkgs-action`]: https://github.com/awalsh128/cache-apt-pkgs-action
 
 ## Enforcing "must pass before merge"
 
