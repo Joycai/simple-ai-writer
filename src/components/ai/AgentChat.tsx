@@ -29,7 +29,7 @@ import { renderMarkdown } from "../../lib/fs/markdown";
 import {
   MAX_IMAGE_BYTES, imageToDataUrl, readTextFileContent, scanProjectFiles, type ProjectFile,
 } from "../../lib/fs/images";
-import { attachedKey, type AttachedItem } from "../../lib/lore/aiTask";
+import { attachedKey } from "../../lib/lore/aiTask";
 import { chainCanSeeImages, withSessionOverrides } from "../../lib/agent/subagent";
 import { useImageThumbnails } from "../lore/useImageDataUrl";
 import { useLoreStore } from "../../stores/loreStore";
@@ -38,6 +38,7 @@ import { useAgentStore } from "../../stores/agentStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useAppStore } from "../../stores/appStore";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
+import { useComposerStore } from "../../stores/composerStore";
 import { AgentLog } from "./AgentLog";
 import { ApprovalCard } from "./ApprovalCard";
 import { PlanCard } from "./PlanCard";
@@ -111,7 +112,10 @@ export function AgentChat() {
   const selection = useAiTaskStore((s) => s.selection);
   const terms = useTerms();
 
-  const [draft, setDraft] = useState("");
+  // Held in composerStore, not useState: closing the drawer unmounts this
+  // component, and a half-typed question must survive that.
+  const draft = useComposerStore((s) => s.chatDraft);
+  const setDraft = useComposerStore((s) => s.setChatDraft);
   // Mirrors `draft` for the handlers that read it after an await — reading a
   // large file takes long enough for the author to have kept typing.
   const draftRef = useRef(draft);
@@ -126,7 +130,9 @@ export function AgentChat() {
   const projectPath = useProjectStore((s) => s.projectPath);
   const loreIndex = useLoreStore((s) => s.index);
   const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
-  const [refs, setRefs] = useState<AttachedItem[]>([]);
+  const refs = useComposerStore((s) => s.chatRefs);
+  const setRefs = useComposerStore((s) => s.setChatRefs);
+  const clearComposer = useComposerStore((s) => s.clearChatComposer);
   const mention = useMentionState();
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // Set only when the picker was opened from a `+ 设定` / `+ 章节` chip: the
@@ -306,12 +312,11 @@ export function AgentChat() {
     if (!canSend) return;
     const text = draft;
     const sending = refs;
-    setDraft("");
     setRefError(null);
     // References are per-message, like the typed text: the next question is
     // rarely about the same files, and the material stays in the conversation
     // history anyway.
-    setRefs([]);
+    clearComposer();
     void sendChat(text, attachedQuote, sending);
   };
 

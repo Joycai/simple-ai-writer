@@ -36,6 +36,7 @@ import { isStrictDescendant } from "../lib/paths";
 import { useLoreStore } from "./loreStore";
 import { useEditorStore } from "./editorStore";
 import { useAppStore, type MainView } from "./appStore";
+import { useComposerStore } from "./composerStore";
 
 /**
  * Persist any unsaved editor/lore edits and cancel their pending autosave timers.
@@ -217,6 +218,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       // back into this store (see its module doc on circular deps).
       const { useAgentStore } = await import("./agentStore");
       await useAgentStore.getState().resetChatForProject(target);
+      useComposerStore.getState().resetAll();
     } catch (err) {
       // A recent path that no longer opens (moved/deleted) should drop out of the list.
       if (typeof path === "string") useAppStore.getState().removeRecentProject(path);
@@ -231,6 +233,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     resetDocuments();
     const { useAgentStore } = await import("./agentStore");
     await useAgentStore.getState().resetChatForProject(null);
+    useComposerStore.getState().resetAll();
     resetDb();
     // Back to the default workspace: with no project open, anything that reads
     // the active workspace must not still see the closed project's categories.
