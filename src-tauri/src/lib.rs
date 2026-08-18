@@ -1,4 +1,5 @@
 mod commands;
+mod preview;
 mod print;
 mod protocol;
 mod scope;
@@ -68,9 +69,11 @@ pub fn run() {
             transfer::open_text_file_dialog,
             xlsx::xlsx_to_markdown,
             print::print_document,
+            preview::preview_html_window,
         ]);
 
     let builder = protocol::register_asset_protocol(builder);
+    let builder = preview::register_preview_protocol(builder);
     print::register_print_protocol(builder)
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
