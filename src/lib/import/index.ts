@@ -1,14 +1,25 @@
 /**
- * Document import: pick tender/source documents (docx, xlsx, pdf, txt, md),
- * convert each to markdown and write it into a folder in the workspace, where
- * the read-tool agents can reach it (`list_files`/`search_text` only discover
- * the writing tree).
+ * Document import: pick source documents (docx, xlsx, pdf), plain text
+ * (txt, md, html) and pictures, and land each of them in a folder of the
+ * workspace where the read-tool agents can reach it (`list_files` /
+ * `search_text` only discover the writing tree).
  *
- * Landing as markdown in the tree is the whole design: no mainstream model API
- * accepts a .docx or .xlsx as binary input (they are zip archives — the bytes
- * are meaningless to the model), so *something* has to convert, and doing it
- * here means the author can read and edit the result instead of trusting an
- * opaque server-side extraction.
+ * Two dispositions, decided by extension:
+ *
+ * - **Convert** (docx / xlsx / pdf → markdown). No mainstream model API
+ *   accepts a .docx or .xlsx as binary input — they are zip archives, the
+ *   bytes are meaningless to the model — so *something* has to convert, and
+ *   doing it here means the author can read and edit the result instead of
+ *   trusting an opaque server-side extraction.
+ * - **Copy as-is** (txt / md / html / images). The same argument runs the
+ *   other way: the app already opens these — markdown and text in the editor,
+ *   `.html` in the sandboxed preview, pictures in the image view — so
+ *   rewriting them would destroy information (a `.txt` renamed to `.md` gets
+ *   read as markdown; an image cannot become text at all) to solve a problem
+ *   that does not exist. The only thing that changes is the encoding: a GBK
+ *   text file is decoded and rewritten as UTF-8, because everything
+ *   downstream — editor, agent, export — reads UTF-8 and mojibake looks
+ *   exactly like a successful import.
  *
  * The dialog + fs flow follows the lore avatar/gallery pattern: paths picked
  * in the native dialog are auto-scoped for `tauri-plugin-fs` by the dialog
@@ -19,20 +30,40 @@
 
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
-import { fileExists, writeFile } from "../fs/fileio";
+import { fileExists, writeBinaryFile, writeFile } from "../fs/fileio";
+import { IMAGE_EXTENSIONS, TEXT_EXTENSIONS } from "../fs/images";
 import { decodeText } from "./text";
 import { tidyMarkdown } from "./markdown";
 import { xlsxToMarkdown } from "./xlsx";
 
 /**
- * What the picker offers. Legacy .doc/.xls are left out on purpose: no
- * converter here can read them faithfully, and a half-garbled import looks
+ * What gets converted to markdown. Legacy .doc/.xls are left out on purpose:
+ * no converter here can read them faithfully, and a half-garbled import looks
  * exactly like a successful one. (The xlsx parser could in fact read .xls, but
  * offering it would drag the same judgement call back in for .doc, which has
  * no comparable reader — so both legacy formats stay out together.)
  */
-export const IMPORT_EXTENSIONS = ["docx", "xlsx", "pdf", "txt", "md"] as const;
-export type ImportableExt = (typeof IMPORT_EXTENSIONS)[number];
+export const CONVERT_EXTENSIONS = ["docx", "xlsx", "pdf"] as const;
+
+/**
+ * What gets copied in unchanged, kept in step with the app's own file kinds
+ * (`lib/fs/images`) rather than listed again here: whatever the editor, the
+ * HTML preview and the `@` picker can already open is exactly what there is no
+ * reason to convert.
+ */
+export const COPY_TEXT_EXTENSIONS = TEXT_EXTENSIONS;
+export const COPY_BINARY_EXTENSIONS = IMAGE_EXTENSIONS;
+
+/** Everything the picker offers, convert and copy alike. */
+export const IMPORT_EXTENSIONS: readonly string[] = [
+  ...CONVERT_EXTENSIONS,
+  ...COPY_TEXT_EXTENSIONS,
+  ...COPY_BINARY_EXTENSIONS,
+];
+
+/** How one file travels into the workspace. */
+export type ImportMode = "convert" | "copy-text" | "copy-binary";
+export type ConvertExt = (typeof CONVERT_EXTENSIONS)[number];
 
 /**
  * Conversion input cap. Tender documents run tens of MB with embedded scans;
@@ -41,14 +72,25 @@ export type ImportableExt = (typeof IMPORT_EXTENSIONS)[number];
  */
 export const MAX_IMPORT_BYTES = 64 * 1024 * 1024;
 
-/** File name (or path) → the extension this importer handles, or null. */
-export function importExtension(name: string): ImportableExt | null {
+/** File name (or path) → the lowercased extension, or "" when there is none. */
+function extensionOf(name: string): string {
   const dot = name.lastIndexOf(".");
-  if (dot < 0) return null;
-  const ext = name.slice(dot + 1).toLowerCase();
-  return (IMPORT_EXTENSIONS as readonly string[]).includes(ext)
-    ? (ext as ImportableExt)
-    : null;
+  return dot < 0 ? "" : name.slice(dot + 1).toLowerCase();
+}
+
+/**
+ * How this importer would handle the file, or null when it would not.
+ *
+ * The disposition, not just the extension: every caller downstream branches on
+ * what happens to the file, and re-deriving that from the extension in three
+ * places is how a newly-added format ends up converted in one of them.
+ */
+export function importMode(name: string): ImportMode | null {
+  const ext = extensionOf(name);
+  if ((CONVERT_EXTENSIONS as readonly string[]).includes(ext)) return "convert";
+  if (COPY_TEXT_EXTENSIONS.includes(ext)) return "copy-text";
+  if (COPY_BINARY_EXTENSIONS.includes(ext)) return "copy-binary";
+  return null;
 }
 
 /** Basename of a picked path, tolerant of both separator styles. */
@@ -65,31 +107,41 @@ export function markdownName(sourceName: string): string {
 }
 
 /**
- * First "<stem>.md" / "<stem>-2.md" / … that `exists` denies. Injected
+ * What the imported file is called in the workspace: a converted document
+ * takes the markdown name, a copied one keeps its own — including its
+ * extension, which is the whole point of copying it (see the module docs).
+ */
+export function importedName(sourceName: string, mode: ImportMode): string {
+  return mode === "convert" ? markdownName(sourceName) : sourceName;
+}
+
+/**
+ * First "<stem>.<ext>" / "<stem>-2.<ext>" / … that `exists` denies. Injected
  * predicate rather than direct fs so the numbering rule is testable; the cap
  * matches the sibling-collision loops elsewhere and just guards runaway.
  */
-export async function uniqueMarkdownPath(
+export async function uniqueImportPath(
   dir: string,
-  sourceName: string,
+  fileName: string,
   exists: (path: string) => Promise<boolean> = fileExists,
 ): Promise<string> {
-  const name = markdownName(sourceName);
-  const stem = name.slice(0, -3);
+  const dot = fileName.lastIndexOf(".");
+  const stem = dot > 0 ? fileName.slice(0, dot) : fileName;
+  const suffix = dot > 0 ? fileName.slice(dot) : "";
   for (let n = 1; n < 1000; n++) {
-    const candidate = n === 1 ? `${dir}/${name}` : `${dir}/${stem}-${n}.md`;
+    const candidate = n === 1 ? `${dir}/${fileName}` : `${dir}/${stem}-${n}${suffix}`;
     if (!(await exists(candidate))) return candidate;
   }
-  throw new Error(`No free name for ${name} in ${dir}`);
+  throw new Error(`No free name for ${fileName} in ${dir}`);
 }
 
 /**
  * Convert one document's bytes to markdown. The docx/pdf converters are
  * lazy-imported modules of their own (both carry a heavy parser); xlsx parses
- * in Rust so there is nothing to defer; txt/md is a decode + tidy.
+ * in Rust so there is nothing to defer.
  */
 export async function convertToMarkdown(
-  ext: ImportableExt,
+  ext: ConvertExt,
   data: Uint8Array,
 ): Promise<string> {
   switch (ext) {
@@ -103,16 +155,13 @@ export async function convertToMarkdown(
       const { pdfToMarkdown } = await import("./pdf");
       return pdfToMarkdown(data);
     }
-    case "txt":
-    case "md":
-      return tidyMarkdown(decodeText(data));
   }
 }
 
 export interface ImportedDocument {
   /** Source path the author picked. */
   source: string;
-  /** Markdown file written into the project. */
+  /** File written into the project (markdown for a conversion, else a copy). */
   path: string;
 }
 
@@ -127,7 +176,8 @@ export interface ImportOutcome {
 }
 
 /**
- * Pick documents and import them into `destDir` (a folder in the workspace).
+ * Pick files and import them into `destDir` (a folder in the workspace) —
+ * converted or copied as-is per {@link importMode}.
  * Resolves to null when the author cancels the dialog. Failures are collected
  * per file rather than thrown — one unreadable PDF must not abort the other
  * nine imports of a batch.
@@ -147,15 +197,26 @@ export async function importDocumentsDialog(
   const outcome: ImportOutcome = { imported: [], failures: [] };
   for (const source of paths) {
     try {
-      const ext = importExtension(source);
-      if (!ext) throw new Error(`Unsupported file type: ${baseName(source)}`);
+      const name = baseName(source);
+      const mode = importMode(name);
+      if (!mode) throw new Error(`Unsupported file type: ${name}`);
       const data = await readBinaryFile(source);
       if (data.byteLength > MAX_IMPORT_BYTES) {
         throw new Error("File is too large to import (max 64 MB)");
       }
-      const markdown = await convertToMarkdown(ext, data);
-      const target = await uniqueMarkdownPath(destDir, baseName(source));
-      await writeFile(target, markdown.length ? `${markdown}\n` : "");
+      const target = await uniqueImportPath(destDir, importedName(name, mode));
+      if (mode === "convert") {
+        const markdown = await convertToMarkdown(extensionOf(name) as ConvertExt, data);
+        await writeFile(target, markdown.length ? `${markdown}\n` : "");
+      } else if (mode === "copy-text") {
+        // Decoded, not copied byte-for-byte: see the module docs on encoding.
+        // No `tidyMarkdown` — that is a repair for converter output, and
+        // rewriting an author's own file's blank lines is not this importer's
+        // business.
+        await writeFile(target, decodeText(data));
+      } else {
+        await writeBinaryFile(target, data);
+      }
       outcome.imported.push({ source, path: target });
     } catch (err) {
       outcome.failures.push({

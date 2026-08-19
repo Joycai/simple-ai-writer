@@ -665,7 +665,8 @@ export function FileTree() {
     if (clipboard.mode === "move") setClipboard(null);
   };
 
-  // Convert picked documents (docx/pdf/txt/md) into markdown files in destDir.
+  // Bring picked files into destDir: docx/xlsx/pdf are converted to markdown,
+  // text (txt/md/html) and images are copied in as-is (see lib/import).
   // Single-flight: a pdf conversion can take seconds, and a second dialog over
   // a running batch would interleave two writes into the same folder.
   const handleImport = async (destDir: string) => {

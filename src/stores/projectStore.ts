@@ -30,6 +30,7 @@ import {
 } from "../lib/profile";
 import { normalizeChapterFileName } from "../lib/context/outline";
 import { copyPath, fileExists, makeDir, removeDir, removeFile, renamePath, writeFile } from "../lib/fs/fileio";
+import { projectFilesFromTree, type ProjectFile } from "../lib/fs/images";
 import { baseNameOf, resolveCopyTarget, type TransferMode } from "../lib/fs/moveCopy";
 import { discardDocumentAssets, moveDocumentAssets } from "../lib/image/assets";
 import { isStrictDescendant } from "../lib/paths";
@@ -474,6 +475,20 @@ export function useDocModel(): DocModel {
 export function useTerms(): ResolvedTerms {
   const language = useAppStore((s) => s.language);
   return useMemo(() => appTerms(language === "zh-CN"), [language]);
+}
+
+/**
+ * The project's `@`-pickable files, derived from the tree the sidebar shows.
+ *
+ * A hook rather than a per-surface scan: the chat composer and the three lore
+ * modals all need the same list, and each keeping its own copy is what made a
+ * file added after the project opened invisible to `@` (see
+ * `projectFilesFromTree`). Recomputed only when the tree object changes —
+ * `refreshFileTree` sets a fresh array, so identity is the right trigger.
+ */
+export function useProjectFiles(): ProjectFile[] {
+  const fileTree = useProjectStore((s) => s.fileTree);
+  return useMemo(() => projectFilesFromTree(fileTree), [fileTree]);
 }
 
 /**

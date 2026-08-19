@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Sparkles, RotateCw, AlertTriangle } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
-import { useProjectStore } from "../../stores/projectStore";
+import { useProjectFiles, useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { connOptions, resolveConn } from "../../lib/ai/conn";
 import {
@@ -32,7 +32,6 @@ import { useImageDataUrl } from "./useImageDataUrl";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { ModalShell } from "../common/ModalShell";
 import { AttachmentTextarea } from "./ai/AttachmentTextarea";
-import { scanProjectFiles, type ProjectFile } from "../../lib/fs/images";
 import { loadApiKey } from "../../lib/keyStore";
 import { Select } from "../common/Select";
 import styles from "./LoreImproveModal.module.css";
@@ -66,7 +65,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
   // Result phase: false = highlighted read-only preview, true = raw textarea.
   const [editRaw, setEditRaw] = useState(false);
   const [attached, setAttached] = useState<AttachedItem[]>([]);
-  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
+  const projectFiles = useProjectFiles();
   const [phase, setPhase] = useState<"input" | "generating" | "result">("input");
   const [output, setOutput] = useState("");
   const [agentLog, setAgentLog] = useState<AgentEvent[]>([]);
@@ -80,12 +79,6 @@ export function LoreImproveModal({ entity, onClose }: Props) {
   const abortRef = useRef<AbortController | null>(null);
   const elapsedSec = useRunClock(phase === "generating");
   const { usageTokens, onEvent: onRunEvent, reset: resetTelemetry } = useRunTelemetry();
-
-  useEffect(() => {
-    if (projectPath) {
-      scanProjectFiles(projectPath).then(setProjectFiles).catch(() => {});
-    }
-  }, [projectPath]);
 
   // Load the current target's content: the whole index.md, or a facet's body
   // (frontmatter stripped) with its meta stashed for a later frontmatter-safe
