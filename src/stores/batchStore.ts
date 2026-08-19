@@ -20,6 +20,7 @@ import i18n from "../i18n";
 import { appendFile, writeFile } from "../lib/fs/fileio";
 import type { Clause } from "../lib/batch/clauses";
 import { useAiTaskStore } from "./aiTaskStore";
+import { muteRunFinished, notify } from "../lib/notify";
 
 export type BatchItemStatus = "pending" | "running" | "done" | "failed" | "skipped";
 
@@ -88,6 +89,10 @@ export const useBatchStore = create<BatchState>((set, get) => ({
     }));
     set({ running: true, taskId, items, outputPath, stopRequested: false });
 
+    // One job, one notification: each clause is a full `runTask`, and 40
+    // clauses must not arrive as 40 "task finished" pings. Released in the
+    // finally, just before this loop sends the one that speaks for all of them.
+    const unmute = muteRunFinished();
     try {
       await writeFile(
         outputPath,
@@ -133,6 +138,12 @@ export const useBatchStore = create<BatchState>((set, get) => ({
       // The batch owned the committed selection; leaving the last clause
       // committed would quietly target the next manual run at it.
       useAiTaskStore.getState().clearSelectionFrom("commit");
+      unmute();
+      const finished = get().items;
+      notify("done", i18n.t("notify.doneTitle"), i18n.t("notify.batchDone", {
+        done: String(finished.filter((it) => it.status === "done").length),
+        failed: String(finished.filter((it) => it.status === "failed").length),
+      }));
       set({ running: false });
     }
   },

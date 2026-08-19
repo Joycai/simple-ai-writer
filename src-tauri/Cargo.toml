@@ -27,6 +27,14 @@ tauri-plugin-fs = "2"
 # now pass through unchecked).
 tauri-plugin-http = { version = "2", features = ["unsafe-headers"] }
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+# System notifications (需要审批 / 执行完成), gated behind a settings switch —
+# see `src/lib/notify.ts`. Desktop `request_permission` always answers Granted:
+# the OS-level authorization is macOS's own, granted implicitly the first time a
+# *bundled* app posts one. Under `tauri dev` the plugin deliberately posts as
+# `com.apple.Terminal` on macOS and without an AppUserModelID on Windows, so a
+# dev-mode notification wears the terminal's name and icon — only an installed
+# build shows this app's.
+tauri-plugin-notification = "2"
 # The same sqlx `tauri-plugin-sql` is built on, declared directly for `sqltx.rs`.
 # The plugin only ever hands the frontend a connection *pool*, so a BEGIN/COMMIT
 # pair issued as two `db.execute()` calls is not one transaction — see the module

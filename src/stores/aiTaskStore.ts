@@ -6,6 +6,8 @@ import {
   type TaskExtras,
 } from "../lib/context/rag";
 import { docModel, findTask, promptParams } from "../lib/profile/active";
+import { taskLabel } from "../lib/profile";
+import { notify } from "../lib/notify";
 import { presetForTools } from "../lib/agent/presets";
 import { runAgent } from "../lib/agent/runtime";
 import {
@@ -163,6 +165,23 @@ interface AiTaskState {
   clearOutput: () => void;
   setActiveDraft: (id: string) => void;
   appendAgentEvent: (event: AgentEvent) => void;
+}
+
+/**
+ * The OS ping for "this task is over", sent once the run has actually let go
+ * of the store. A clause batch drives this store once per clause and mutes
+ * these for the duration, announcing the whole job itself (batchStore).
+ */
+function notifyRunFinished(kind: TaskKind, failure: string | null): void {
+  const def = findTask(kind);
+  const label = def ? taskLabel(def, i18n.language === "zh-CN", (k) => i18n.t(k)) : kind;
+  notify(
+    "done",
+    i18n.t(failure ? "notify.failedTitle" : "notify.doneTitle"),
+    failure
+      ? i18n.t("notify.taskFailed", { task: label, error: failure })
+      : i18n.t("notify.taskDone", { task: label }),
+  );
 }
 
 export const useAiTaskStore = create<AiTaskState>((set, get) => ({
@@ -711,6 +730,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       // Same guard: abort() already cleared state, and a newer task may own it now.
       if (get().abortController === controller) {
         set({ isRunning: false, abortController: null });
+        notifyRunFinished(kind, get().error);
       }
     }
   },
