@@ -171,7 +171,21 @@ Apply             写文件 + 备份 + rescan
 
 ### 3.2 模型调用（`src/lib/lore/splitter.ts`，新文件，套 generator.ts 模式）
 
-JSON mode 输出 schema：
+> **已实现，但传输方式换过一次（2026-08）。** 下面这个"一次吐出整个对象"的 JSON mode
+> 设计上线后在长条目上频繁失败：模型要亲手把作者原文（含半角引号、换行）转义进一个
+> 几千字符的 JSON 字符串，漏escape 一个 `"` 或者输出上限落在字符串中间，整轮全废，
+> 报成 `Failed to parse model response as JSON`。对照证据是同一个模型在对话助手里拆
+> 同一条目从不出错——那边一次 `update_lore_file` 写一个文件，转义由端点的受限解码负责。
+>
+> 现在改成工具环：`split_core` 一次 + `split_facet` 每条特征一次（`lib/agent/splitTools.ts`），
+> `LORE_SPLIT_PRESET` 从 `maxRounds: 1` 提到 16、去掉 JSON mode（与工具调用冲突）。
+> 收益有二：转义不再是模型的活；输出上限最多截断**一条**特征，而 runtime 会丢弃那次
+> 调用并告诉模型重发（同 title 覆盖，不会重复）。下面的字段语义原样有效——它们现在是
+> `split_facet` 的参数而不是数组元素，`filename` 由 `createFacetFile` 生成而不再由模型给；
+> `notes` 变成模型收尾时说的那句话（工具环的最后一轮 force-text）。
+> `parseSplitResponse` 作为兜底保留：模型无视工具、照旧打印整个对象时仍能收下。
+
+原 JSON mode 输出 schema：
 
 ```json
 {

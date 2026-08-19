@@ -95,6 +95,19 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
   const scanProject = useLoreStore((s) => s.scanProject);
 
   const [phase, setPhase] = useState<"input" | "generating" | "review">("input");
+  /**
+   * The plan as the model submits it, piece by piece. The split arrives as one
+   * tool call per facet now, so there is something real to show while the run
+   * is still going — and if the round cap or the author's 停止 ends it early,
+   * this is what already landed.
+   */
+  const [partial, setPartial] = useState<{ core?: string; facets: number }>({ facets: 0 });
+  /**
+   * The run produced facets but never submitted a core card. The original body
+   * stands in so Apply can't erase the entry — but then the facet text is in
+   * two places at once, which the author has to be told before they apply it.
+   */
+  const [coreMissing, setCoreMissing] = useState(false);
   const [indexRaw, setIndexRaw] = useState("");
   const [instruction, setInstruction] = useState("");
   const [core, setCore] = useState("");
@@ -134,6 +147,7 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
     abortRef.current = ctrl;
     setError(null);
     resetTelemetry();
+    setPartial({ facets: 0 });
     setPhase("generating");
 
     try {
@@ -157,12 +171,12 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
         existingFacets,
         instruction,
         ...connOptions({ provider, model, apiKey }),
-        // Raw JSON stays hidden — the progress card (步骤列 + 思维链) speaks instead.
-        onProgress: () => {},
+        onPartial: (p) => setPartial({ core: p.core, facets: p.facets.length }),
         onEvent: onRunEvent,
         signal: ctrl.signal,
       });
       // Empty core would wipe the entry on Apply — fall back to the original.
+      setCoreMissing(!result.core.trim() && result.facets.length > 0);
       setCore(result.core || indexBody);
       setDrafts(result.facets.map((f) => ({ include: true, meta: f.meta, content: f.content })));
       setNotes(result.notes);
@@ -184,7 +198,22 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
       status: "done",
       meta: `${indexBody.length.toLocaleString()} ${t("lore.split.chars", { defaultValue: "字" })}${entity.facets.length > 0 ? ` · ${entity.facets.length} ${t("lore.facet.section", { defaultValue: "特征" })}` : ""}`,
     },
-    { label: t("lore.split.stepDraft", { defaultValue: "拆解分组 · 起草特征与触发词" }), status: "active" },
+    {
+      label: t("lore.split.stepDraft", { defaultValue: "拆解分组 · 起草特征与触发词" }),
+      status: "active",
+      // One tool call per piece, so this counts real submissions, not a guess.
+      meta: [
+        partial.core !== undefined
+          ? t("lore.split.progressCore", { defaultValue: "概述已提交" })
+          : null,
+        partial.facets > 0
+          ? t("lore.split.progressFacets", {
+              count: partial.facets,
+              defaultValue: `已提交 ${partial.facets} 个特征`,
+            })
+          : null,
+      ].filter(Boolean).join(" · ") || undefined,
+    },
     { label: t("lore.split.stepConfirm", { defaultValue: "交给你确认后写入条目目录" }), status: "pending" },
   ];
 
@@ -326,6 +355,14 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
               </div>
               <ThinkingPanel text={reasoning} running={false} />
               {notes && <div className={styles.notes}>{notes}</div>}
+              {coreMissing && (
+                <div className={styles.error}>
+                  <AlertTriangle size={12} />
+                  {t("lore.split.coreMissingWarn", {
+                    defaultValue: "AI 没有提交精简后的概述（可能是中途停止）。下面填的是原正文，直接应用会让内容重复一份——请先手动删掉已拆进特征的段落。",
+                  })}
+                </div>
+              )}
               {entity.facets.length > 0 && (
                 <div className={styles.error}>
                   <AlertTriangle size={12} />

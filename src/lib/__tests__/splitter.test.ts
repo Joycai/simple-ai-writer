@@ -4,6 +4,14 @@ import { parseSplitResponse } from "../lore/splitter";
 // i18n touches localStorage at import time (browser-only).
 vi.mock("../../i18n", () => ({ default: { t: (key: string) => key } }));
 
+/**
+ * `parseSplitResponse` is now the *fallback* — the split itself arrives through
+ * the split_* tools (splitTools.test.ts). It stays covered because a model that
+ * ignores the tools and prints one JSON object anyway is exactly the case it
+ * catches, and because the trailing-prose case below used to be a real failure:
+ * a reply that began with `{` was handed to JSON.parse whole, closing remark
+ * and all.
+ */
 describe("parseSplitResponse", () => {
   it("parses a clean JSON response with defaults applied", () => {
     const res = parseSplitResponse(JSON.stringify({
@@ -30,7 +38,19 @@ describe("parseSplitResponse", () => {
     expect(res.core).toBe("c");
   });
 
+  it("ignores a closing remark after an object the reply starts with", () => {
+    const res = parseSplitResponse('{"core":"c","facets":[],"notes":""}\n\n以上就是拆分方案。');
+    expect(res.core).toBe("c");
+  });
+
   it("throws a helpful error on non-JSON output", () => {
     expect(() => parseSplitResponse("I cannot do that")).toThrow(/valid JSON/);
+  });
+
+  it("names the unescaped-quote failure in its error, with a preview", () => {
+    // The failure this whole change is about: the author's own straight quotes
+    // copied verbatim into a hand-written JSON string.
+    const broken = '{"core": "其名取自"在黑暗中举行的盛宴"——", "facets": []}';
+    expect(() => parseSplitResponse(broken)).toThrow(/Failed to parse[\s\S]*黑暗/);
   });
 });

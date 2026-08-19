@@ -664,6 +664,7 @@ serverTools: withholdServerTools ? undefined : opts.serverTools,
 ```
 
 - 现有预设不写这个字段，取默认值 —— 行为与今天**逐字相同**（`LORE_GENERATE` / `LORE_SPLIT` 是 `maxRounds: 1` + force-text，第 1 轮即最后一轮，照样被撤）。为表明意图，仍给这两个显式写上 `serverTools: "off"`。
+  > 后续：`LORE_SPLIT` 已改成多轮工具环（`split_core` / `split_facet`，见 `lib/agent/splitTools.ts`），"第 1 轮即最后一轮"不再成立——那句显式 `serverTools: "off"` 从表明意图变成了真正在起作用的一行。
 - `structured.ts:common` 里那句 `serverTools: undefined` 保留 —— 它走的是 `streamCompletion` 而非 runtime，是另一条路径上的同一道闸。
 
 #### 5.2.2 绑定校验

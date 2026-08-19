@@ -80,11 +80,28 @@ export const LORE_GENERATE_PRESET: TaskPreset = {
   serverTools: "off",
 };
 
-/** 特征拆解 — verbatim facet split, structured JSON, single-shot (same JSON-mode constraint). */
+/**
+ * 特征拆解 — verbatim facet split, submitted one piece at a time.
+ *
+ * Not single-shot, and deliberately not JSON mode. Asking for the whole split
+ * as one JSON object made the model hand-write a multi-thousand-character
+ * string full of the author's own quotes and newlines, where one missed escape
+ * — or an output cap landing mid-string — threw the entire run away with a
+ * parse error. The split_* tools (agent/splitTools.ts) let the endpoint decode
+ * the arguments against the schema instead, one facet per call, so the cap can
+ * only ever cut one facet short and the runtime hands that back as a retryable
+ * error.
+ *
+ * maxRounds is sized for the shape of the work: one core + one call per facet,
+ * plus the closing prose round that carries the author-facing note, plus room
+ * for a couple of truncation retries on a long facet. force-text is what ends
+ * the run — the last round withholds the tools, so a plan that ran long still
+ * arrives at the review list with everything submitted so far.
+ */
 export const LORE_SPLIT_PRESET: TaskPreset = {
   id: "lore-split",
-  tools: [],
-  maxRounds: 1,
+  tools: ["split_core", "split_facet"],
+  maxRounds: 16,
   finishPolicy: "force-text",
   serverTools: "off",
 };

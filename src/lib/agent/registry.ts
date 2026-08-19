@@ -62,6 +62,7 @@ import {
   taskProgressTool,
   writeNoteTool,
 } from "./scratchpadTools";
+import { splitCoreCall, splitFacetCall, type SplitSink } from "./splitTools";
 import { executeDelegate, type DelegateKind } from "./subagent";
 import type { AgentEvent } from "./events";
 import type { AiConn } from "../ai/conn";
@@ -288,6 +289,13 @@ export interface ToolContext {
   requestPlanApproval?: (plan: LorePlan) => Promise<PlanDecision>;
   /** This run's approved-plan record — see lib/agent/plan.ts. */
   lorePlan?: PlanGate;
+  /**
+   * Collector for a facet-split run (lib/agent/splitTools). Nothing is written
+   * to disk — the modal reviews the sink and the author's Apply does the
+   * writing. Absent means this surface isn't a split, and the split_* tools
+   * refuse rather than dropping the model's work on the floor.
+   */
+  splitSink?: SplitSink;
   /** Active on-disk task workspace (.ai-writer/tasks/<taskId>/). */
   taskWorkspace?: TaskWorkspaceHandle;
   /**
@@ -340,6 +348,8 @@ export type ToolId =
   | "move_lore_entity"
   | "delete_lore_entity"
   | "update_memory"
+  | "split_core"
+  | "split_facet"
   | "propose_edit"
   | "rewrite_document"
   | "append_file"
@@ -871,6 +881,76 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => updateMemoryTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  // ── Facet split (lib/agent/splitTools) ──
+  // "read" access is accurate, oddly enough: these two write nothing anywhere.
+  // They collect the reorganization into the run's sink, and the author's
+  // Apply in the split modal is what reaches disk.
+  split_core: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "split_core",
+        description:
+          "Submit the slimmed-down CORE CARD of the entry being split — the part that stays in index.md. Call this once, before the facets. Calling it again replaces what you sent. Send only the body text; the entry's frontmatter is preserved for you.",
+        parameters: {
+          type: "object",
+          properties: {
+            content: {
+              type: "string",
+              description:
+                "Full body of the core card, moved verbatim from the entry. Never empty.",
+            },
+          },
+          required: ["content"],
+        },
+      },
+    },
+    execute: splitCoreCall,
+  },
+
+  split_facet: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "split_facet",
+        description:
+          "Submit ONE facet of the entry being split — one outfit, one backstory arc, one set of relationships, one ability. Call it once per facet, never batching several into one call: each call is size-capped on its own, so a long facet can only ever cut short itself, and you can resend just that one. Re-sending a title already submitted REPLACES it, which is how you retry a call that came back truncated.",
+        parameters: {
+          type: "object",
+          properties: {
+            title: {
+              type: "string",
+              description: "Facet name, e.g. \"Battle armor\". Also its identity when resending.",
+            },
+            content: {
+              type: "string",
+              description: "The paragraphs this facet takes from the entry, moved verbatim.",
+            },
+            keys: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "4-8 trigger words that make this facet inject: referring terms from the text, scene triggers, common synonyms. Each must pass \"if this word appears in prose, this facet is almost certainly relevant\". Without keys the facet never fires.",
+            },
+            group: {
+              type: "string",
+              description:
+                "Mutual-exclusion group. Facets only one of which can be true at a time (outfits, forms, phase states) MUST share one, e.g. \"outfit\". Omit when the facet excludes nothing.",
+            },
+            priority: {
+              type: "number",
+              description: "Higher wins within a group; default 0.",
+            },
+          },
+          required: ["title", "content", "keys"],
+        },
+      },
+    },
+    execute: splitFacetCall,
   },
 
   propose_edit: {
