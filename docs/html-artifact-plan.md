@@ -29,7 +29,10 @@
 ### D2 预览 = 沙箱 iframe（blob URL，`sandbox="allow-scripts"`），嵌进 EditorArea 现有三态
 
 - **"系统浏览器内核"就是它**：Tauri 主 webview 本身即 WKWebView / WebView2，iframe 同内核渲染，满足需求原意，零新依赖。
-- **安全模型**：`blob:` iframe 是 opaque origin——主窗口 CSP 的 `script-src` 不约束其内部（inline `<script>`/`<style>` 能跑），同时**不给** `allow-same-origin`，页面脚本摸不到 app 的 `window`、IPC、任何 Tauri API。不给 `allow-top-navigation`/`allow-popups`。这与 `Preview.tsx` 里 mermaid 坚持 `securityLevel:"strict"` 的注释是同一个威胁模型：AI 生成的脚本永远不进 app 上下文。
+- **安全模型**：**不给** `allow-same-origin`，页面脚本摸不到 app 的 `window`、IPC、任何 Tauri API；也不给 `allow-top-navigation`/`allow-popups`。这与 `Preview.tsx` 里 mermaid 坚持 `securityLevel:"strict"` 的注释是同一个威胁模型：AI 生成的脚本永远不进 app 上下文。
+- **⚠️ 更正（2026-08，PPTX 导出时实测）**：本条原先写的是「`blob:` iframe 是 opaque origin——主窗口 CSP 的 `script-src` 不约束其内部（inline `<script>` 能跑）」。**这是错的。** `blob:` 是 local scheme，文档**继承创建它的页面的 CSP**；opaque origin 豁免的是同源访问，不是策略。在 `script-src 'self'` 下，这个 iframe 里**任何**内联脚本都不执行——加不加 `sandbox` 都一样（两种情形都在真浏览器里对照验证过）。
+  - 实际后果：**预览面里 AI 页面自带的 JS 从来没跑过**，能跑的只有 inline `<style>`（`style-src` 有 `'unsafe-inline'`）。图示类页面靠 SVG 和 CSS，所以两期下来没人发现。要让页面脚本真的跑，只有独立预览窗口那条路（`preview.rs` 走自定义协议，不受主窗 CSP 约束，模块注释里写对了）。
+  - 这条错误的直接代价：PPTX 导出的采集脚本注进这个 iframe 后一行没执行，每次导出都是 20 秒静默超时。修法见 `docs/pptx-plan.md` D18——用 CSP `sha256-` 精确放行**那一个**脚本，页面自己的脚本仍然全部拦住，威胁模型不变。
 - 弃用【直接挂主 DOM】：CSP 禁 inline script，放宽等于把 AI 生成脚本放进 app 上下文，不做。
 - 弃用【独立 WebviewWindow 作为唯一预览】：新窗口没有 capability、要管导航和生命周期，成本高；iframe 覆盖日常迭代场景。独立窗口作为三期可选增强（见 §3 三期）。
 

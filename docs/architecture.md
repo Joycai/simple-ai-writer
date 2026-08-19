@@ -525,7 +525,8 @@ The workspace is the **whole project directory** — documents live wherever the
 ```
 
 - **为什么不重新实现 CSS**：不需要。页面已经在 iframe 里布局完成，`getBoundingClientRect` 会精确说出每个盒子和每一行文字落在哪。flex / grid / 绝对定位用哪种都无所谓，只读最终结果。
-- **怎么读到**：预览 frame 是 `blob:` + `sandbox="allow-scripts"`、**不给** `allow-same-origin`，所以 app 读不到它的 DOM——采集脚本（`lib/pptx/harvester.js`，`?raw` 注进去）在里面量，靠 `postMessage` 把结果送出来。消息认两件事：`event.source` 是这个 frame 的 `contentWindow`，且带着编译进脚本的一次性 nonce。**这个 sandbox 参数不能动**：加上 `allow-same-origin` 能省掉注入，代价是把 AI 生成的脚本放进 app 上下文。
+- **怎么读到**：预览 frame 是 `blob:` + `sandbox="allow-scripts"`、**不给** `allow-same-origin`，所以 app 读不到它的 DOM——采集脚本（`lib/pptx/harvester.js`，`?raw` 注进去）在里面量，靠 `postMessage` 把结果送出来。消息认两件事：`event.source` 是这个 frame 的 `contentWindow`，且带着这一轮挂在 `data-nonce` 属性上的一次性 token。**这个 sandbox 参数不能动**：加上 `allow-same-origin` 能省掉注入，代价是把"AI 脚本进不了 app 上下文"这条保证从 sandbox 转嫁给 CSP。
+- **它凭什么能跑**：`blob:` 文档**继承创建它的页面的 CSP**（opaque origin 豁免的是同源访问，不是策略），而 app 的 `script-src` 是 `'self'`——所以一期发出去的版本里这个脚本一行都没执行，每次导出都是 20 秒静默超时。现在 `tauri.conf.json` 的 `script-src` 带一个 `'sha256-'`，精确放行**这一个**脚本；页面自己带的内联脚本仍然全被拦住。两条纪律由 `pptxHarvesterCsp.test.ts` 钉住：**改 `harvester.js` 就必须同步改 conf 里的 hash**（漂了的症状还是那个静默超时），以及**每轮变化的数据只能放属性**，塞进脚本正文会让 hash 每次都不同。
 - **分层**：`harvester.js` 只测量和分类（jsdom 没有布局引擎，它测不了）；`deck.ts` 是纯的——单位换算、幻灯片尺寸、颜色、剪枝、文本余量，测试都在这；`write.ts` 只调 pptxgenjs（lazy import，272KB 独立分片）。切成这样是为了让有 bug 的那层可测。
 - **文字仍是文字**，PowerPoint 里能改——这是产出 .pptx 而不是 PDF 的唯一理由。所以 `pruneBlocks` 必须丢掉没有可见绘制的布局容器：不剪的话视觉上完美，打开一看图层面板三百层，等于交了份不能改的东西。
 - **入口两个**，都要作者点头：`export_pptx` 工具（L2 审批卡，说明「哪个页面 → 哪个文件」；转换在 `applyProposal` 里跑，因为那里才有 DOM）和 `.html` 预览工具栏的导出按钮。
