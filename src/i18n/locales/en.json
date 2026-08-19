@@ -464,11 +464,11 @@
       "refresh": "Refresh",
       "openWindow": "Preview in window",
       "openInBrowser": "Open in browser",
-        "exportPptx": "Export PPTX",
-        "exportPptxHint": "Render this page and write it as a PowerPoint file beside it",
-        "pptxBusy": "Exporting…",
-        "pptxDone": "{{n}} slides → {{name}}",
-        "pptxFailed": "Export failed"
+      "exportPptx": "Export PPTX",
+      "exportPptxHint": "Render this page and write it as a PowerPoint file beside it",
+      "pptxBusy": "Exporting…",
+      "pptxDone": "{{n}} slides → {{name}}",
+      "pptxFailed": "Export failed"
     },
     "unsavedChanges": "Unsaved changes",
     "noHeadings": "No headings yet",
@@ -1805,6 +1805,29 @@
       "footerNote": "\"Apply\" writes only the four headword fields — name · aliases · category · summary; facet bodies stay put",
       "generate": "Generate",
       "apply": "Apply"
+    },
+    "slot": {
+      "field": "Slot",
+      "fieldHint": "From type {{type}} — affects grouping and defaults only",
+      "fieldHintNoType": "affects grouping and defaults only",
+      "none": "Unclassified",
+      "unclassified": "Unclassified",
+      "prefilled": "prefilled",
+      "prefillNote": "Defaults for “{{slot}}” have been filled in below. Prefilled only on creation — once saved they are yours, and your edits never write back to the type.",
+      "typeLine": "Type {{type}} · {{facets}} facet slots · {{images}} image slots",
+      "typeLineOff": "Type {{type}} · pack not enabled",
+      "coverage": "{{covered}} of the {{total}} facets this type suggests",
+      "coverageMissing": "Missing: {{names}}",
+      "hintGrouped": "grouped into this type's {{count}} facet slots — slots only classify and suggest; each facet still decides its own injection",
+      "hintGaps": "an empty slot is only a nudge — it changes nothing about the facets you have",
+      "hintFlat": "flat list · each facet's mode, triggers and exclusion group work exactly as before",
+      "addToSlot": "New “{{slot}}” facet",
+      "addToImageSlot": "Add a “{{slot}}” image",
+      "fillFacet": "Fill this one in",
+      "fillImages": "Add these images",
+      "imageStorageNote": "※ grouping is stored as a slot line in images.md",
+      "degradedBanner": "This entry's type “{{type}}” comes from a pack that isn't enabled · nothing is lost · enabling it restores the grouping",
+      "enablePack": "Enable {{pack}}"
     }
   },
   "fileTree": {

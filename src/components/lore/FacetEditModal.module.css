@@ -349,3 +349,55 @@
   transform: translateY(-1px);
 }
 .btnPrimary:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+
+/* ── 归属槽位 (设计稿 03 · 屏 21) ───────────────────────────────────────────
+   面只影响归类与默认值，所以它坐在名称与注入方式之间：先说这是哪一面，再说它
+   什么时候注入。默认值只在新建时预填，「预填」徽标就是那句承诺的可见形式。 */
+.slotChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.slotChip {
+  padding: 5px 11px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-base);
+  font: 400 12px/1 var(--font-serif);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.slotChip:hover {
+  border-color: var(--color-border-strong);
+}
+.slotChipNone {
+  color: var(--color-text-muted);
+}
+.slotChipActive {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg-base);
+  font-weight: 500;
+}
+.prefillNote {
+  margin-top: 8px;
+  padding: 9px 12px;
+  background: var(--color-bg-surface);
+  border: 1px dashed var(--color-border-accent);
+  font: italic 400 11px/1.6 var(--font-serif);
+  color: var(--color-text-secondary);
+}
+.prefillBadge {
+  margin-left: 6px;
+  padding: 2px 6px;
+  background: var(--lore-add-bg);
+  color: var(--lore-add-text);
+  font: 500 9px/1 var(--font-sans);
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* 预填的触发词沿用 diff 绿 —— 与「AI 新增内容」同一套语汇：不是你写的。 */
+.chipTagPrefilled {
+  background: var(--lore-add-bg);
+  color: var(--lore-add-text);
+}

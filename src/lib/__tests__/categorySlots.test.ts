@@ -14,12 +14,13 @@
  */
 import { describe, expect, it, beforeEach } from "vitest";
 import {
+  BUILTIN_PROFILES,
   NOVEL_PROFILE,
   parseProfile,
   type FacetSlot,
   type WorkspaceProfile,
 } from "../profile/model";
-import { resolveWorkspace } from "../profile/resolve";
+import { packsDeclaringCategory, resolveWorkspace } from "../profile/resolve";
 import {
   categoryFacetSlots,
   categoryImageSlots,
@@ -270,5 +271,26 @@ describe("active accessors — and what a disabled pack degrades to", () => {
     // Re-enabling restores it, which is why a scan must never rewrite the value.
     setActiveWorkspace(resolveWorkspace([NOVEL_PROFILE]));
     expect(findFacetSlot("characters", "appearance")?.id).toBe("appearance");
+  });
+});
+
+/**
+ * `packsDeclaringCategory` — who would give an orphan category its type back
+ * (设计稿 03 屏 23's banner and its one button).
+ */
+describe("packsDeclaringCategory", () => {
+  it("finds the disabled pack that declares a category", () => {
+    const ttrpg = BUILTIN_PROFILES.find((p) => p.id === "ttrpg")!;
+    expect(packsDeclaringCategory("npcs", BUILTIN_PROFILES).map((p) => p.id)).toEqual(["ttrpg"]);
+    expect(packsDeclaringCategory("NPCS", [ttrpg])).toEqual([ttrpg]);
+    // A shared category legitimately has several declarers; the banner names the
+    // first, which is the merge's own tie-break.
+    expect(packsDeclaringCategory("items", BUILTIN_PROFILES).map((p) => p.id))
+      .toEqual(["novel", "ttrpg"]);
+  });
+
+  it("finds nothing for a folder no pack ever declared", () => {
+    expect(packsDeclaringCategory("meetings", BUILTIN_PROFILES)).toEqual([]);
+    expect(packsDeclaringCategory("  ", BUILTIN_PROFILES)).toEqual([]);
   });
 });

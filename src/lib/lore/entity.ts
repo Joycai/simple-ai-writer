@@ -135,10 +135,10 @@ async function readEntity(
   try {
     const raw = await readFile(`${dirPath}/images.md`);
     const entries = parseImagesMd(raw);
-    for (const { file, desc } of entries) {
+    for (const { file, desc, slot } of entries) {
       const absPath = `${dirPath}/${file}`;
       if (await fileExists(absPath)) {
-        images.push({ file, desc, absPath });
+        images.push({ file, desc, slot, absPath });
       }
     }
   } catch {

@@ -24,6 +24,14 @@ export interface LoreImage {
   file: string;
   /** Plain-text description, shown to text-only models and rendered in the gallery. */
   desc: string;
+  /**
+   * Which **image slot** of the category's type schema this picture fills
+   * (人设图 / 建筑图 / 概念图), from the block's `slot:` line; null when
+   * unclassified. Presentation only — like a facet's slot, nothing on the
+   * injection path reads it, so an id no enabled pack declares simply groups
+   * under 未归类 until that pack is back.
+   */
+  slot: string | null;
   /** Absolute path on disk (populated by scanLore). */
   absPath: string;
 }

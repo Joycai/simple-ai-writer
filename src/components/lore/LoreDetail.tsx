@@ -12,13 +12,25 @@ import {
   type LoreImage,
   addLoreImage,
   assignableCategories,
+  categoryTypeName,
+  facetSections,
+  imageSections,
   indexCategories,
+  slotCoverage,
   updateLoreImageDesc,
+  updateLoreImageSlot,
   removeLoreImage,
   saveEntityMetaAndBody,
   setEntityAvatar,
 } from "../../lib/lore";
-import { categoryLabel, findCategory } from "../../lib/profile";
+import {
+  BUILTIN_PROFILES,
+  categoryImageSlots,
+  categoryLabel,
+  findCategory,
+  packsDeclaringCategory,
+  slotLabel,
+} from "../../lib/profile";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { connOptions } from "../../lib/ai/conn";
@@ -50,6 +62,36 @@ interface Props {
   onBack: () => void;
   /** Open directly in edit mode (used by the wall's card context menu). */
   initialEditing?: boolean;
+}
+
+/**
+ * Facet rows for one list: a plain facet stays a row, facets sharing a
+ * mutual-exclusion group collapse into one dashed box in first-seen order,
+ * highest priority first inside it.
+ *
+ * Pulled out of the component so the flat list and each slot section (屏 19) run
+ * the same grouping. A group whose facets carry different slots lands in the
+ * section of the first one seen — mutually exclusive facets are one 面 by
+ * definition, and splitting the box across sections would make the "only one of
+ * these is injected" rule unreadable.
+ */
+type FacetBlock =
+  | { kind: "facet"; facet: LoreFacet }
+  | { kind: "group"; group: string; facets: LoreFacet[] };
+
+function buildFacetBlocks(facets: readonly LoreFacet[]): FacetBlock[] {
+  const blocks: FacetBlock[] = [];
+  const byGroup = new Map<string, LoreFacet[]>();
+  for (const f of facets) {
+    if (!f.group) { blocks.push({ kind: "facet", facet: f }); continue; }
+    const existing = byGroup.get(f.group);
+    if (existing) { existing.push(f); continue; }
+    const list = [f];
+    byGroup.set(f.group, list);
+    blocks.push({ kind: "group", group: f.group, facets: list });
+  }
+  for (const list of byGroup.values()) list.sort((a, b) => b.priority - a.priority);
+  return blocks;
 }
 
 export function LoreDetail({ entity: initialEntity, onBack, initialEditing = false }: Props) {
@@ -86,7 +128,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   const [showImprove, setShowImprove] = useState(false);
   const [showMetaImprove, setShowMetaImprove] = useState(false);
   // Facet form modal: { file: null } → create, { file } → edit/convert.
-  const [facetModal, setFacetModal] = useState<{ file: string | null } | null>(null);
+  const [facetModal, setFacetModal] = useState<{ file: string | null; slot?: string | null } | null>(null);
   const [showSplit, setShowSplit] = useState(false);
   // The hero's ⋯ button opens the secondary actions (open in editor / reveal /
   // delete) as a menu instead of a button row — 设计稿 03's three-button hero.
@@ -116,6 +158,8 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   // Gallery edit state
   const [editingFile, setEditingFile] = useState<string | null>(null);
   const [editingDraft, setEditingDraft] = useState("");
+  /** Image slot picked in the open edit area (屏 22); null = 未归类. */
+  const [editingSlot, setEditingSlot] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   // AI image description: which gallery file is being generated for (null =
@@ -235,6 +279,41 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
 
   const cat = findCategory(entity.category);
 
+  // ── The category's type schema, as this entry sees it (设计稿 03 屏 19–23) ──
+  // Facets grouped per slot, gallery grouped per image slot, and the coverage
+  // note. All three are empty for a category with no schema — a user-defined
+  // one, the `custom` bucket, or one whose pack is disabled — and then every
+  // column renders the flat list it always did. That flat rendering *is* the
+  // degraded presentation (屏 23); nothing here changes what gets injected.
+  const sections = useMemo(() => facetSections(entity), [entity]);
+  const imgSections = useMemo(() => imageSections(entity), [entity]);
+  const coverage = useMemo(() => slotCoverage(entity), [entity]);
+  const imageSlots = categoryImageSlots(entity.category);
+  const typeName = categoryTypeName(entity.category, isZh);
+
+  // An orphan category (no enabled pack declares it) whose type a *disabled*
+  // pack would restore — the one case worth a banner, because it is the only one
+  // where something was lost and one click brings it back. A category that
+  // simply has no schema (user-defined, `custom`) gets no banner: nothing is
+  // missing there. See lib/profile → packsDeclaringCategory.
+  const customPacks = useProjectStore((s) => s.customPacks);
+  const orphanPack = useMemo(() => {
+    if (cat) return null;
+    const candidates = [
+      ...BUILTIN_PROFILES.map((b) => customPacks.find((c) => c.id === b.id) ?? b),
+      ...customPacks.filter((c) => !BUILTIN_PROFILES.some((b) => b.id === c.id)),
+    ];
+    return packsDeclaringCategory(entity.category, candidates)[0] ?? null;
+  }, [cat, customPacks, entity.category]);
+
+  const enableOrphanPack = async () => {
+    if (!orphanPack || busy) return;
+    const store = useProjectStore.getState();
+    const enabled = store.workspace.enabled.map((p) => p.id);
+    if (enabled.includes(orphanPack.id)) return;
+    await store.setPacks([...enabled, orphanPack.id]);
+  };
+
   // Opening a file only sets the active path — the editor lives in the
   // "editor" main view, so switch back to it or the open is invisible.
   const openFileInEditor = (filename: string) => {
@@ -344,7 +423,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     if (projectPath) await scanProject(projectPath);
   };
 
-  const handleAddImages = async () => {
+  const handleAddImages = async (slot: string | null = null) => {
     if (busy) return;
     const picked = await openDialog({
       multiple: true,
@@ -358,7 +437,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
       for (const srcPath of paths) {
         const bytes = await readBinaryFile(srcPath);
         const basename = srcPath.split(/[\\/]/).pop() || "image";
-        await addLoreImage(entity.dirPath, basename, bytes, "");
+        await addLoreImage(entity.dirPath, basename, bytes, "", slot);
       }
       await refresh();
     } finally {
@@ -369,17 +448,26 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   const startEdit = (file: string, desc: string) => {
     setEditingFile(file);
     setEditingDraft(desc);
+    // The slot rides along in the same edit: 屏 22 gives a section a ＋ for new
+    // pictures, but a gallery that predates the schema needs a way to classify
+    // the images it already has, and this is the affordance that already exists.
+    setEditingSlot(entity.images.find((i) => i.file === file)?.slot ?? null);
   };
   const cancelEdit = () => {
     aiDescAbort.current?.abort(); // also stops an in-flight AI description
     setEditingFile(null);
     setEditingDraft("");
+    setEditingSlot(null);
   };
   const commitEdit = async () => {
     if (!editingFile || busy || aiDescFile) return;
     setBusy(true);
     try {
       await updateLoreImageDesc(entity.dirPath, editingFile, editingDraft);
+      const before = entity.images.find((i) => i.file === editingFile)?.slot ?? null;
+      if ((editingSlot ?? null) !== before) {
+        await updateLoreImageSlot(entity.dirPath, editingFile, editingSlot);
+      }
       await refresh();
       cancelEdit();
     } finally {
@@ -465,23 +553,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   // groups boxed together, so the flat facet list is folded into blocks: a
   // group takes the position of its first member and collects the rest,
   // highest priority first (only one of them ever injects).
-  const facetBlocks = useMemo(() => {
-    type Block =
-      | { kind: "facet"; facet: LoreFacet }
-      | { kind: "group"; group: string; facets: LoreFacet[] };
-    const blocks: Block[] = [];
-    const byGroup = new Map<string, LoreFacet[]>();
-    for (const f of entity.facets) {
-      if (!f.group) { blocks.push({ kind: "facet", facet: f }); continue; }
-      const existing = byGroup.get(f.group);
-      if (existing) { existing.push(f); continue; }
-      const list = [f];
-      byGroup.set(f.group, list);
-      blocks.push({ kind: "group", group: f.group, facets: list });
-    }
-    for (const list of byGroup.values()) list.sort((a, b) => b.priority - a.priority);
-    return blocks;
-  }, [entity.facets]);
+  const facetBlocks = useMemo(() => buildFacetBlocks(entity.facets), [entity.facets]);
 
   const modeLabel = (mode: LoreFacet["mode"]) =>
     mode === "auto"
@@ -500,6 +572,134 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     always: styles.facetModeAlways,
     manual: styles.facetModeManual,
   };
+
+  /**
+   * One gallery card. Extracted so the flat column and each image-slot section
+   * (屏 22) render the identical card — the sections only decide the order and
+   * the headings.
+   */
+  const renderImageCard = (img: LoreImage) => {
+                const isEditing = editingFile === img.file;
+                return (
+                  <figure key={img.file} className={styles.galleryItem}>
+                    <img
+                      src={imageDataUrls[img.absPath] ?? ""}
+                      alt={img.desc || img.file}
+                      className={styles.galleryImg}
+                      style={!imageDataUrls[img.absPath] ? { background: "var(--color-bg-surface)" } : undefined}
+                      onClick={() => setPreviewIndex(entity.images.indexOf(img))}
+                      title={t("lore.detail.previewImage", { defaultValue: "点击放大预览" })}
+                    />
+                    <figcaption className={styles.galleryCaption}>
+                      <div className={styles.galleryFileRow}>
+                        <span className={styles.galleryFile}>{img.file}</span>
+                        <div className={styles.galleryActions}>
+                          <button
+                            className={styles.iconBtn}
+                            onClick={() => handleAiDesc(img)}
+                            disabled={busy || !visionReady || aiDescFile !== null}
+                            title={visionReady
+                              ? t("lore.detail.aiDesc", { defaultValue: "AI 生成描述" })
+                              : t("lore.detail.aiDescNeedMultimodal", { defaultValue: "需要多模态模型 — 请在设置中选择支持图片输入的模型" })}
+                          >
+                            <Sparkles size={11} strokeWidth={1.8} />
+                          </button>
+                          {!isEditing && (
+                            <button
+                              className={styles.iconBtn}
+                              onClick={() => startEdit(img.file, img.desc)}
+                              disabled={busy}
+                              title={t("lore.detail.editDesc", { defaultValue: "编辑描述" })}
+                            >
+                              <Pencil size={11} strokeWidth={1.8} />
+                            </button>
+                          )}
+                          <button
+                            className={styles.iconBtn}
+                            onClick={() => handleRemove(img.file)}
+                            disabled={busy}
+                            title={t("lore.detail.removeImage", { defaultValue: "删除图片" })}
+                          >
+                            <Trash2 size={11} strokeWidth={1.8} />
+                          </button>
+                        </div>
+                      </div>
+                      {isEditing ? (
+                        <div className={styles.editArea}>
+                          <MarkdownTextarea
+                            format={false}
+                            className={styles.editTextarea}
+                            value={editingDraft}
+                            onChange={(e) => setEditingDraft(e.target.value)}
+                            placeholder={t("lore.detail.descPlaceholder", { defaultValue: "一句话描述这张图片…" })}
+                            autoFocus
+                            rows={3}
+                          />
+                          {imageSlots.length > 0 && (
+                            <div className={styles.imgSlotPick}>
+                              <button
+                                className={`${styles.imgSlotChip} ${editingSlot === null ? styles.imgSlotChipActive : ""}`}
+                                onClick={() => setEditingSlot(null)}
+                              >
+                                {t("lore.slot.none", { defaultValue: "不归类" })}
+                              </button>
+                              {imageSlots.map((sl) => (
+                                <button
+                                  key={sl.id}
+                                  className={`${styles.imgSlotChip} ${editingSlot === sl.id ? styles.imgSlotChipActive : ""}`}
+                                  onClick={() => setEditingSlot(sl.id)}
+                                  title={(isZh ? sl.hintZh : sl.hintEn) ?? undefined}
+                                >
+                                  {slotLabel(sl, isZh)}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          <div className={styles.editButtons}>
+                            <button className={styles.iconBtnCommit} onClick={commitEdit} disabled={busy || aiDescFile !== null} title="保存">
+                              <Check size={12} strokeWidth={2} />
+                            </button>
+                            <button className={styles.iconBtn} onClick={cancelEdit} disabled={busy} title="取消">
+                              <X size={12} strokeWidth={2} />
+                            </button>
+                          </div>
+                        </div>
+                      ) : img.desc ? (
+                        <span className={styles.galleryDesc}>{img.desc}</span>
+                      ) : (
+                        <span
+                          className={styles.galleryDescEmpty}
+                          onClick={() => startEdit(img.file, "")}
+                        >
+                          {t("lore.detail.noDesc", { defaultValue: "（无描述 — 点击添加）" })}
+                        </span>
+                      )}
+                    </figcaption>
+                  </figure>
+                );
+              };
+
+  /** Rows for one block list — plain facets and dashed exclusion boxes (屏 15). */
+  const renderBlocks = (blocks: FacetBlock[]) =>
+    blocks.map((block) =>
+      block.kind === "facet"
+        ? renderFacetRow(block.facet, false)
+        : (
+          <div key={`g:${block.group}`} className={styles.groupBox}>
+            <div className={styles.groupHead}>
+              <span className={styles.groupName}>
+                {t("lore.facet.groupBoxHead", { group: block.group, defaultValue: `互斥组 · ${block.group}` })}
+              </span>
+              <span className={styles.groupHint}>
+                {t("lore.facet.groupBoxHint", { defaultValue: "同组按优先级只注入一条" })}
+              </span>
+            </div>
+            <div className={styles.groupRows}>
+              {block.facets.map((f) => renderFacetRow(f, true))}
+            </div>
+          </div>
+        ),
+    );
 
   /** One facet row (屏 15). `inGroup` swaps the metric for 优先级 N · 字数. */
   const renderFacetRow = (f: LoreFacet, inGroup: boolean) => (
@@ -598,7 +798,12 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         <LoreMetaImproveModal entity={entity} onClose={() => setShowMetaImprove(false)} />
       )}
       {facetModal && (
-        <FacetEditModal entity={entity} file={facetModal.file} onClose={() => setFacetModal(null)} />
+        <FacetEditModal
+          entity={entity}
+          file={facetModal.file}
+          initialSlot={facetModal.slot ?? null}
+          onClose={() => setFacetModal(null)}
+        />
       )}
       {showSplit && (
         <LoreSplitModal
@@ -851,6 +1056,25 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         />
       )}
 
+      {/* 屏 23 — the type came from a pack that is off. Muted, never an error
+          colour: the entry is intact and still injected exactly as before, so an
+          alarming treatment here would misreport the state. */}
+      {orphanPack && (
+        <div className={styles.degradedBar}>
+          <span className={styles.degradedDot} />
+          <span className={styles.degradedText}>
+            {t("lore.slot.degradedBanner", {
+              type: `${orphanPack.id}/${entity.category}`,
+              defaultValue: `这个条目的类型「${orphanPack.id}/${entity.category}」来自未启用的能力包 · 内容完好 · 启用后恢复分组`,
+            })}
+          </span>
+          <span className={styles.spacer} />
+          <button className={styles.degradedBtn} onClick={() => void enableOrphanPack()} disabled={busy}>
+            {t("lore.slot.enablePack", { pack: orphanPack.id, defaultValue: `启用 ${orphanPack.id}` })}
+          </button>
+        </div>
+      )}
+
       {/* 设计稿 03 · 屏 15 — 三段结构直接对应数据模型:
           主词条 index.md | 特征 *.md | 配图 images.md */}
       <div className={styles.cols}>
@@ -904,6 +1128,26 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                 {cat ? categoryLabel(cat, isZh) : entity.category}
               </button>
             </div>
+            {/* 屏 19's mono type line: which type this entry has, and how much of
+                it exists at all. Absent when no pack declares the category —
+                there is no type to name then. */}
+            {typeName ? (
+              <div className={styles.typeLine}>
+                {t("lore.slot.typeLine", {
+                  type: typeName,
+                  facets: sections.filter((x) => x.slot).length,
+                  images: imageSlots.length,
+                  defaultValue: `类型 ${typeName} · ${sections.filter((x) => x.slot).length} 特征面 · ${imageSlots.length} 配图组`,
+                })}
+              </div>
+            ) : orphanPack ? (
+              <div className={styles.typeLine}>
+                {t("lore.slot.typeLineOff", {
+                  type: `${orphanPack.id}/${entity.category}`,
+                  defaultValue: `类型 ${orphanPack.id}/${entity.category} · 能力包未启用`,
+                })}
+              </div>
+            ) : null}
 
             <div>
               <div className={styles.fieldHead}>
@@ -940,6 +1184,26 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
 
           {/* 落款: 屏 15 把文件清单和两个按钮压在栏底 — 钉住, 不随正文滚。 */}
           <div className={styles.indexFoot}>
+            {/* 屏 20 — how much of the type's suggestion this entry has taken up.
+                Only shown when something is actually missing: a complete entry
+                doesn't need to be told it is complete. */}
+            {coverage.missing.length > 0 && (
+              <div className={styles.coverageNote}>
+                <div>
+                  {t("lore.slot.coverage", {
+                    total: coverage.total,
+                    covered: coverage.covered,
+                    defaultValue: `本类型建议的 ${coverage.total} 面已有 ${coverage.covered}`,
+                  })}
+                </div>
+                <div>
+                  {t("lore.slot.coverageMissing", {
+                    names: coverage.missing.map((sl) => slotLabel(sl, isZh)).join(" · "),
+                    defaultValue: `缺：${coverage.missing.map((sl) => slotLabel(sl, isZh)).join(" · ")}`,
+                  })}
+                </div>
+              </div>
+            )}
             {/* What the entity is on disk — the mockup's mono file listing. */}
             <div className={styles.fileTree}>
               <div>lore/{entity.category}/{entity.id}/</div>
@@ -967,7 +1231,17 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
               {t("lore.facet.section", { defaultValue: "特征" })} · {entity.facets.length}
             </span>
             <span className={styles.sectionHint}>
-              {t("lore.facet.sectionHint", { defaultValue: "每条特征独立决定是否注入上下文" })}
+              {sections.length === 0
+                ? orphanPack
+                  // 屏 23: say what still works, since the grouping just vanished.
+                  ? t("lore.slot.hintFlat", { defaultValue: "平铺列表 · 每条的注入方式、触发词、互斥组照常生效" })
+                  : t("lore.facet.sectionHint", { defaultValue: "每条特征独立决定是否注入上下文" })
+                : coverage.missing.length > 0
+                  ? t("lore.slot.hintGaps", { defaultValue: "空着的面只是缺口提示，不影响已有特征的注入" })
+                  : t("lore.slot.hintGrouped", {
+                      count: coverage.total,
+                      defaultValue: `按类型的 ${coverage.total} 个面归组 · 面只是归类与提示，注入仍由每条自定`,
+                    })}
             </span>
             <span className={styles.spacer} />
             <button
@@ -981,30 +1255,64 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
           </div>
 
           <div className={styles.colScroll}>
-            {entity.facets.length === 0 ? (
+            {/* The generic empty state still applies when the schema has nothing to
+                invite either — otherwise the column would render as blank. */}
+            {entity.facets.length === 0 && !sections.some((x) => x.missing) ? (
               <div className={styles.facetsEmpty}>
                 {t("lore.facet.empty", { defaultValue: "暂无特征 — 把条目的不同侧面拆成独立特征，写作时按需注入" })}
               </div>
+            ) : sections.length === 0 ? (
+              // No schema (or the pack is off): the flat list, as it always was.
+              renderBlocks(facetBlocks)
             ) : (
-              facetBlocks.map((block) =>
-                block.kind === "facet"
-                  ? renderFacetRow(block.facet, false)
-                  : (
-                    <div key={`g:${block.group}`} className={styles.groupBox}>
-                      <div className={styles.groupHead}>
-                        <span className={styles.groupName}>
-                          {t("lore.facet.groupBoxHead", { group: block.group, defaultValue: `互斥组 · ${block.group}` })}
-                        </span>
-                        <span className={styles.groupHint}>
-                          {t("lore.facet.groupBoxHint", { defaultValue: "同组按优先级只注入一条" })}
-                        </span>
-                      </div>
-                      <div className={styles.groupRows}>
-                        {block.facets.map((f) => renderFacetRow(f, true))}
-                      </div>
+              sections.map((section) => {
+                const slotId = section.slot?.id ?? null;
+                const label = section.slot
+                  ? slotLabel(section.slot, isZh)
+                  : t("lore.slot.unclassified", { defaultValue: "未归类" });
+                // 屏 20: an expected slot with nothing in it is an invitation —
+                // dashed, sienna link, no warning colour anywhere.
+                if (section.slot && section.facets.length === 0 && section.missing) {
+                  const hint = isZh ? section.slot.hintZh : section.slot.hintEn;
+                  return (
+                    <div key={`s:${slotId}`} className={styles.slotGap}>
+                      <span className={styles.slotGapName}>{label}</span>
+                      {hint && <span className={styles.slotGapHint}>{hint}</span>}
+                      <span className={styles.spacer} />
+                      <button
+                        className={styles.slotGapAdd}
+                        onClick={() => setFacetModal({ file: null, slot: slotId })}
+                        disabled={busy}
+                      >
+                        + {t("lore.slot.fillFacet", { defaultValue: "补上这一面" })}
+                      </button>
                     </div>
-                  ),
-              )
+                  );
+                }
+                // A declared slot nobody expected and nobody filled: no row at
+                // all. The checklist lives in the coverage note, not as blanks.
+                if (section.slot && section.facets.length === 0) return null;
+                return (
+                  <div key={`s:${slotId ?? "none"}`} className={styles.slotSection}>
+                    <div className={`${styles.slotHead} ${section.slot ? "" : styles.slotHeadLoose}`}>
+                      <span className={styles.slotName}>{label}</span>
+                      <span className={styles.slotCount}>{section.facets.length}</span>
+                      <span className={styles.slotRule} />
+                      {section.slot && (
+                        <button
+                          className={styles.slotAdd}
+                          onClick={() => setFacetModal({ file: null, slot: slotId })}
+                          disabled={busy}
+                          title={t("lore.slot.addToSlot", { slot: label, defaultValue: `新增「${label}」特征` })}
+                        >
+                          ＋
+                        </button>
+                      )}
+                    </div>
+                    {renderBlocks(buildFacetBlocks(section.facets))}
+                  </div>
+                );
+              })
             )}
 
             {attachments.length > 0 && (
@@ -1058,95 +1366,61 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
             >
               <Sparkles size={13} strokeWidth={1.8} />
             </button>
-            <button className={styles.addLink} onClick={handleAddImages} disabled={busy}>
+            <button className={styles.addLink} onClick={() => void handleAddImages()} disabled={busy}>
               + {t("lore.detail.addImageShort", { defaultValue: "添加" })}
             </button>
           </div>
 
           <div className={styles.colScroll}>
-            {entity.images.length === 0 ? (
+            {entity.images.length === 0 && imgSections.length === 0 ? (
               <div className={styles.galleryEmpty}>
                 {t("lore.detail.galleryEmpty", { defaultValue: "暂无图片 — 点击「添加」选择本地图片，然后填写描述" })}
               </div>
+            ) : imgSections.length === 0 ? (
+              entity.images.map(renderImageCard)
             ) : (
-              entity.images.map((img) => {
-                const isEditing = editingFile === img.file;
+              imgSections.map((section) => {
+                const slotId = section.slot?.id ?? null;
+                const label = section.slot
+                  ? slotLabel(section.slot, isZh)
+                  : t("lore.slot.unclassified", { defaultValue: "未归类" });
+                if (section.slot && section.images.length === 0 && !section.missing) return null;
                 return (
-                  <figure key={img.file} className={styles.galleryItem}>
-                    <img
-                      src={imageDataUrls[img.absPath] ?? ""}
-                      alt={img.desc || img.file}
-                      className={styles.galleryImg}
-                      style={!imageDataUrls[img.absPath] ? { background: "var(--color-bg-surface)" } : undefined}
-                      onClick={() => setPreviewIndex(entity.images.indexOf(img))}
-                      title={t("lore.detail.previewImage", { defaultValue: "点击放大预览" })}
-                    />
-                    <figcaption className={styles.galleryCaption}>
-                      <div className={styles.galleryFileRow}>
-                        <span className={styles.galleryFile}>{img.file}</span>
-                        <div className={styles.galleryActions}>
-                          <button
-                            className={styles.iconBtn}
-                            onClick={() => handleAiDesc(img)}
-                            disabled={busy || !visionReady || aiDescFile !== null}
-                            title={visionReady
-                              ? t("lore.detail.aiDesc", { defaultValue: "AI 生成描述" })
-                              : t("lore.detail.aiDescNeedMultimodal", { defaultValue: "需要多模态模型 — 请在设置中选择支持图片输入的模型" })}
-                          >
-                            <Sparkles size={11} strokeWidth={1.8} />
-                          </button>
-                          {!isEditing && (
-                            <button
-                              className={styles.iconBtn}
-                              onClick={() => startEdit(img.file, img.desc)}
-                              disabled={busy}
-                              title={t("lore.detail.editDesc", { defaultValue: "编辑描述" })}
-                            >
-                              <Pencil size={11} strokeWidth={1.8} />
-                            </button>
-                          )}
-                          <button
-                            className={styles.iconBtn}
-                            onClick={() => handleRemove(img.file)}
-                            disabled={busy}
-                            title={t("lore.detail.removeImage", { defaultValue: "删除图片" })}
-                          >
-                            <Trash2 size={11} strokeWidth={1.8} />
-                          </button>
-                        </div>
-                      </div>
-                      {isEditing ? (
-                        <div className={styles.editArea}>
-                          <MarkdownTextarea
-                            format={false}
-                            className={styles.editTextarea}
-                            value={editingDraft}
-                            onChange={(e) => setEditingDraft(e.target.value)}
-                            placeholder={t("lore.detail.descPlaceholder", { defaultValue: "一句话描述这张图片…" })}
-                            autoFocus
-                            rows={3}
-                          />
-                          <div className={styles.editButtons}>
-                            <button className={styles.iconBtnCommit} onClick={commitEdit} disabled={busy || aiDescFile !== null} title="保存">
-                              <Check size={12} strokeWidth={2} />
-                            </button>
-                            <button className={styles.iconBtn} onClick={cancelEdit} disabled={busy} title="取消">
-                              <X size={12} strokeWidth={2} />
-                            </button>
-                          </div>
-                        </div>
-                      ) : img.desc ? (
-                        <span className={styles.galleryDesc}>{img.desc}</span>
-                      ) : (
-                        <span
-                          className={styles.galleryDescEmpty}
-                          onClick={() => startEdit(img.file, "")}
+                  <div key={`is:${slotId ?? "none"}`} className={styles.imgSection}>
+                    <div className={`${styles.slotHead} ${section.slot ? "" : styles.slotHeadLoose}`}>
+                      <span className={styles.slotName}>{label}</span>
+                      <span className={styles.slotCount}>{section.images.length}</span>
+                      <span className={styles.slotRule} />
+                      {section.slot && (
+                        <button
+                          className={styles.slotAdd}
+                          onClick={() => void handleAddImages(slotId)}
+                          disabled={busy}
+                          title={t("lore.slot.addToImageSlot", { slot: label, defaultValue: `添加「${label}」配图` })}
                         >
-                          {t("lore.detail.noDesc", { defaultValue: "（无描述 — 点击添加）" })}
-                        </span>
+                          ＋
+                        </button>
                       )}
-                    </figcaption>
-                  </figure>
+                    </div>
+                    {section.images.length === 0 ? (
+                      <div className={styles.slotGapImages}>
+                        {section.slot && (isZh ? section.slot.hintZh : section.slot.hintEn) && (
+                          <span className={styles.slotGapHint}>
+                            {isZh ? section.slot.hintZh : section.slot.hintEn}
+                          </span>
+                        )}
+                        <button
+                          className={styles.slotGapAdd}
+                          onClick={() => void handleAddImages(slotId)}
+                          disabled={busy}
+                        >
+                          + {t("lore.slot.fillImages", { defaultValue: "补上这组图" })}
+                        </button>
+                      </div>
+                    ) : (
+                      section.images.map(renderImageCard)
+                    )}
+                  </div>
                 );
               })
             )}
@@ -1154,6 +1428,11 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
 
           <div className={styles.colFootNote}>
             {t("lore.detail.imagesFootNote", { defaultValue: "文字描述供纯文本模型阅读，也用于图库检索。" })}
+            {imgSections.length > 0 && (
+              <div className={styles.imgSlotNote}>
+                {t("lore.slot.imageStorageNote", { defaultValue: "※ 分组写入 images.md 的 slot 行" })}
+              </div>
+            )}
           </div>
         </div>
       </div>
