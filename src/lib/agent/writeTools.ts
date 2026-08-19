@@ -47,7 +47,7 @@ import { parseFrontmatter } from "../fs/markdown";
 import { makeDir, readDir, readFile, removeFile, renamePath } from "../fs/fileio";
 import { readDirRecursive, type FileNode } from "../project";
 import { backupFile } from "./backup";
-import { describeEditTarget, findOccurrences } from "./editApply";
+import { countLines, describeEditTarget, findOccurrences, occurrenceAt, sliceLines } from "./editApply";
 import {
   LORE_PLAN_ACTIONS,
   checkPlan,
@@ -1644,6 +1644,120 @@ export async function proposeEditTool(
     toolCallId,
     content:
       `Edit approved and applied${scope ? ` (${scope})` : ""}.` +
+      (decision.backupPath ? ` Previous version backed up to ${decision.backupPath}.` : ""),
+  };
+}
+
+// ─── rewrite_lines ───────────────────────────────────────────────────────────
+
+/**
+ * Replace a range of lines — the chunked path `rewrite_document` never had.
+ *
+ * `rewrite_document` takes the whole new body as one tool argument, so the
+ * file it is most needed for is the file it cannot finish: a long HTML page
+ * re-laid-out in one reply runs past the model's output cap, and a tool call
+ * cut off there writes NOTHING — the dozen `read_file` calls that preceded it
+ * are spent for nothing too. Creation already had the answer to this
+ * (`create_file` a skeleton, then `append_file` per section); revision did
+ * not, and `propose_edit` cannot express "restructure this whole region"
+ * without quoting every original line into `find`.
+ *
+ * So: the model names a line range it has already read and sends only the
+ * replacement. The tool reads that range off disk and builds an ordinary
+ * **edit** proposal from it — same card, same approval, same apply path,
+ * including the occurrence bookkeeping that refuses a file which moved on
+ * while the card was waiting. Nothing here is a new kind of write; the only
+ * new thing is that the model no longer has to say the old text out loud.
+ *
+ * A full re-layout is then K of these, each one landing on disk, so a
+ * truncation costs one chunk instead of the whole document.
+ */
+export async function rewriteLinesTool(
+  toolCallId: string,
+  args: { path?: string; start_line?: number; end_line?: number; content?: string; reason?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const target = manuscriptTarget(toolCallId, "rewrite_lines", args.path, ctx);
+  if ("refusal" in target) return target.refusal;
+  if (typeof args.content !== "string") {
+    return {
+      toolCallId,
+      content: "Error: 'content' argument is required (the replacement text for those lines; an empty string deletes them).",
+    };
+  }
+
+  const from = Math.floor(Number(args.start_line));
+  const to = Math.floor(Number(args.end_line));
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from < 1 || to < from) {
+    return {
+      toolCallId,
+      content: "Error: 'start_line' and 'end_line' must be whole numbers with start_line ≥ 1 and end_line ≥ start_line (read_file's trailer reports the numbers).",
+    };
+  }
+
+  let original: string;
+  try {
+    original = await readFile(target.path);
+  } catch (e) {
+    return { toolCallId, content: `Error reading file: ${String(e)}` };
+  }
+
+  const slice = sliceLines(original, from, to);
+  if (!slice) {
+    return {
+      toolCallId,
+      content: `Error: start_line ${from} is past the end of the file, which has ${countLines(original)} line(s).`,
+    };
+  }
+  // An empty file has one line of nothing, and an empty `find` can never be
+  // located — the proposal would be unappliable. Starting a file is a
+  // different tool's job.
+  if (slice.text === "") {
+    return {
+      toolCallId,
+      content: `Error: ${target.path} is empty, so there are no lines to replace. Use append_file to write into it.`,
+    };
+  }
+
+  // Welding guard: the range carries the terminator of its last line, so a
+  // replacement without one would run the following line onto this text. The
+  // model is not asked to remember that — it is the kind of detail that goes
+  // wrong once per long document and shows up as a corrupted heading.
+  let replacement = args.content;
+  if (slice.text.endsWith("\n") && replacement !== "" && !replacement.endsWith("\n")) {
+    replacement += "\n";
+  }
+  if (replacement === slice.text) {
+    return { toolCallId, content: `Lines ${from}-${slice.to} already read exactly like that — nothing to do.` };
+  }
+
+  const { occurrences, index } = occurrenceAt(original, slice.text, slice.start);
+  const decision = await ctx.requestApproval!({
+    kind: "edit",
+    id: `edit-${++proposalCounter}`,
+    path: target.path,
+    find: slice.text,
+    replace: replacement,
+    occurrences,
+    target: occurrences === 1 ? undefined : index,
+    range: { from, to: slice.to },
+    reason: args.reason?.trim() || undefined,
+  });
+
+  if (!decision.approved) {
+    return {
+      toolCallId,
+      content: `The user REJECTED this rewrite${decision.reason ? ` — reason: ${decision.reason}` : "."} Do not resend the same content; adjust per the reason or move on.`,
+    };
+  }
+  const grew = replacement.length - slice.text.length;
+  return {
+    toolCallId,
+    content:
+      `Rewrote lines ${from}-${slice.to} of ${target.path} (${slice.text.length} → ${replacement.length} chars, ` +
+      `${grew >= 0 ? "+" : ""}${grew}). The rest of the file is untouched — re-read around the region before ` +
+      `naming another range, since the line numbers after it have shifted.` +
+      (decision.auto ? " Applied under a standing grant — nobody read it." : "") +
       (decision.backupPath ? ` Previous version backed up to ${decision.backupPath}.` : ""),
   };
 }
