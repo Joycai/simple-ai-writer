@@ -234,7 +234,7 @@ Details that are easy to get wrong:
 
 Text still streams as it arrives, so a tool round's narration appears and is then retracted when the round resolves. Buffering each round until its nature is known would instead stall the final answer — the part actually worth watching. The execution log records what the discarded round did, so nothing is lost.
 
-This also settled a pre-existing inconsistency: `run.ts`'s `onText` was already cumulative while `splitter`'s `onProgress` was a delta, and `LoreSplitModal` appended accordingly.
+This also settled a pre-existing inconsistency: `run.ts`'s `onText` was already cumulative while `splitter`'s `onProgress` was a delta, and `LoreSplitModal` appended accordingly. (`onProgress` is gone now — the split reports progress through its sink instead; see Facet splitting below.)
 
 ### 本次都批准 (standing approval grants)
 
@@ -307,6 +307,20 @@ An entity is a folder; any sibling `.md` with a `facet` frontmatter field (title
 3. **Facets** — `auto` fires on entity match AND any key in the match target; same-`group` facets are mutually exclusive (highest priority wins; pins override); a facet that doesn't fit whole is dropped, never truncated
 
 Pins come from `AiPanel` as `dirPath` (whole entity) or `dirPath#file` (single facet; implies its entity). Facet/core content is re-read from disk each call so hand edits are never stale. AI-assisted splitting of an oversized `index.md` into facets lives in `src/lib/lore/splitter.ts` + `LoreSplitModal` (backs up to `.ai-writer/backups/` before applying). See `docs/lore-facet-plan.md` for the full design.
+
+#### Facet splitting: why the result arrives as tool calls
+
+The split asks the model to move the author's own paragraphs, verbatim, into a core card plus N facets — and it used to ask for all of that as **one JSON object in the reply text**. That makes the model hand-write a multi-thousand-character JSON string full of someone else's quotes and newlines, and it failed constantly on real entries: one unescaped `"` copied straight out of the source (`其名取自"…"`), or an output cap landing mid-string, threw the whole run away with `Failed to parse model response as JSON` — after paying for every token of it.
+
+The controlled experiment was already in the app: asked to do the same split, the conversational assistant never trips on this, because it writes one `update_lore_file` per facet and the endpoint decodes those arguments against the schema. Total output is *larger* there, so volume was never the variable. The two that matter are **whether the JSON is constrained-decoded** and **how long a single uninterrupted hand-written string has to be**.
+
+So `splitLore` runs a tool loop over `split_core` + `split_facet` (`lib/agent/splitTools.ts`) — the only tools in the registry that write nothing anywhere. They append to a `SplitSink` handed in on `ToolContext`; the modal renders the sink as its review list and the author's Apply is still the only thing that reaches disk. Consequences worth keeping straight:
+
+- **Escaping stops being the model's job.** Same mechanism `update_lore_file` has always had.
+- **The output cap can only cut one facet short.** The runtime drops a truncated call and tells the model so (`argumentsUsable`); resending the facet under the same title *replaces* it, so the retry can't duplicate.
+- **A run that ends early still delivers.** `force-text` withholds tools on the last round, so whatever was submitted arrives at the review list. When the core card is among the missing pieces the modal fills in the original body and says so — otherwise Apply would leave the facet text in two places.
+- **No JSON mode.** `response_format` conflicts with tool calling on several providers; the schema is the enforcement now.
+- `parseSplitResponse` survives as the fallback for a model that ignores the tools and prints the old object anyway.
 
 ### Large outputs: the per-reply cap (`modelLimits.ts` + the runtime's recovery)
 
