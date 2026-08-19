@@ -10,15 +10,48 @@
  * by `postMessage` rather than being called.
  *
  * The message is trusted on two independent checks: it must come from this
- * frame's own `contentWindow`, and it must carry the one-time nonce that was
- * compiled into the script. A page that tries to answer on another page's
- * behalf has neither.
+ * frame's own `contentWindow`, and it must carry the one-time nonce this run
+ * put on the script tag. A page that tries to answer on another page's behalf
+ * has neither.
+ *
+ * ## Why the script is allowed to run at all
+ *
+ * A `blob:` document **inherits the CSP of the page that created it** — being
+ * an opaque origin exempts it from same-origin access, not from policy. The
+ * app ships `script-src 'self'`, so for a while this frame ran no script
+ * whatsoever: every export timed out waiting for an answer that could never
+ * come, on any page, including a blank one.
+ *
+ * The fix is the mechanism CSP hashes exist for: `tauri.conf.json` allows
+ * `'sha256-<this file>'`, so *this* script runs and any other inline script —
+ * including whatever the page brought with it — still does not. The threat
+ * model is therefore unchanged and, if anything, stated more sharply than the
+ * sandbox alone stated it.
+ *
+ * Two consequences to keep in mind when editing `harvester.js`:
+ *
+ * 1. **The hash is over its exact bytes.** Change the file and the hash in
+ *    `tauri.conf.json` must change with it — `pptxHarvesterCsp.test.ts` fails
+ *    when they drift, because the symptom otherwise is a silent 20-second
+ *    timeout with nothing in any log.
+ * 2. **Per-run data travels on attributes, never in the text.** The nonce is
+ *    read from `data-nonce`; splicing it into the source would change the
+ *    hash on every run.
  */
 
 import { nanoid } from "nanoid";
 import harvesterSource from "./harvester.js?raw";
 import { inlineHtmlImages } from "../fs/htmlDoc";
 import type { HarvestedDeck } from "./deck";
+
+/**
+ * The harvester exactly as it is hashed: newlines normalised, nothing else.
+ *
+ * Normalising is what keeps the hash stable across checkouts — a CRLF clone on
+ * Windows would otherwise compute a different digest from the one in
+ * `tauri.conf.json` and break the export for that machine only.
+ */
+export const HARVESTER_SOURCE = harvesterSource.replace(/\r\n/g, "\n");
 
 /**
  * Viewport the page is laid out in.
@@ -57,7 +90,9 @@ export async function harvestDeck(
   // with the same holes the author already sees in the preview.
   const prepared = await inlineHtmlImages(html, baseDir).catch(() => html);
   const nonce = nanoid();
-  const script = `<script>${harvesterSource.replace("__SAW_NONCE__", nonce)}</script>`;
+  // The nonce rides on an attribute: the script's text is what the CSP hash
+  // covers, so it must be byte-identical every run.
+  const script = `<script data-nonce="${nonce}">${HARVESTER_SOURCE}</script>`;
   const document_ = prepared.match(/<\/body>/i)
     ? prepared.replace(/<\/body>/i, `${script}</body>`)
     : `${prepared}\n${script}`;

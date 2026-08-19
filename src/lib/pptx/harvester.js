@@ -26,7 +26,18 @@
  */
 
 (function () {
-  var NONCE = "__SAW_NONCE__";
+  /**
+   * This run's one-time token, read from the script tag's own attribute.
+   *
+   * Not substituted into the source, because the source's **bytes** are what
+   * the app's CSP allows: `script-src` carries a `sha256-` of exactly this
+   * file, which is what lets it run inside a frame where the page's own
+   * inline scripts cannot (see harvest.ts). A nonce spliced into the text
+   * would change the hash on every run and nothing would execute at all.
+   * Attributes are not covered by the hash, so they are where per-run data
+   * has to travel.
+   */
+  var NONCE = (document.currentScript && document.currentScript.getAttribute("data-nonce")) || "";
 
   /** Selectors tried in order; the first that matches anything wins. */
   var SLIDE_SELECTORS = [

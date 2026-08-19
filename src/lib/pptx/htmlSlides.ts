@@ -14,8 +14,11 @@
  * while exporting, and an author reviewing "the change to slide 7" would be
  * looking at the wrong box. The list is duplicated rather than imported
  * because harvester.js is injected into a sandboxed frame as raw text (it
- * cannot import), so the invariant is held by this comment and by
- * `htmlSlides.test.ts` — keep both in step when either side changes.
+ * cannot import — and its bytes are hashed into the app's `script-src`, so it
+ * cannot grow an import either), so the invariant is held by a test:
+ * `htmlSlides.test.ts` parses the list back out of the harvester source and
+ * compares. Editing harvester.js therefore means updating two things — the
+ * `sha256-` in tauri.conf.json, and this list if the selectors moved.
  *
  * Pure and text-level rather than DOM-based: this runs in the tool layer, not
  * in a renderer, and `harvest.ts`'s offscreen frame exists to *measure* a
@@ -27,9 +30,12 @@ import type { SlideRange } from "../fs/pptx";
 
 /**
  * Selectors tried in order; the first that matches anything wins.
- * Mirrors `SLIDE_SELECTORS` in harvester.js — see the module comment.
+ *
+ * Mirrors `SLIDE_SELECTORS` in harvester.js — see the module comment. Exported
+ * so `htmlSlides.test.ts` can hold the two lists to each other rather than
+ * leaving the invariant to a comment nobody reads at the moment it matters.
  */
-const SLIDE_TIERS = ["[data-slide]", "section.slide", ".slide", "section", "article"] as const;
+export const SLIDE_TIERS = ["[data-slide]", "section.slide", ".slide", "section", "article"] as const;
 
 /** Elements whose contents are raw text: tags inside them are not markup. */
 const RAW_TEXT_TAGS = ["script", "style", "textarea"];

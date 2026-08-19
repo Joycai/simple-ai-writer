@@ -25,7 +25,7 @@
     "security": {
       "csp": {
         "default-src": "'self'",
-        "script-src": "'self'",
+        "script-src": "'self' 'sha256-v+wRe4ZgLeRFUEPAxvIYN8rhtxJMhkdb+0QBthfgF3I='",
         "style-src": "'self' 'unsafe-inline'",
         "img-src": "'self' data: blob: ai-writer-asset: http://ai-writer-asset.localhost",
         "font-src": "'self' data:",

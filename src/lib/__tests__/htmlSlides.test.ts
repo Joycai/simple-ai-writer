@@ -9,7 +9,23 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { readHtmlSlideRange, splitHtmlSlides } from "../pptx/htmlSlides";
+import { HARVESTER_SOURCE } from "../pptx/harvest";
+import { SLIDE_TIERS, readHtmlSlideRange, splitHtmlSlides } from "../pptx/htmlSlides";
+
+describe("the slide convention", () => {
+  it("is the same list the exporter's harvester uses", () => {
+    // Held as a test rather than a comment because the failure is silent and
+    // late: a drifted list means "slide 7" addresses one box while reading and
+    // a different one in the exported deck, and the author reviewing "the
+    // change to slide 7" would be looking at the wrong one.
+    // Non-greedy to the closing "];" — a character class excluding "]" would
+    // stop inside the very first entry, "[data-slide]".
+    const literal = /SLIDE_SELECTORS\s*=\s*\[([\s\S]*?)\];/.exec(HARVESTER_SOURCE);
+    expect(literal).not.toBeNull();
+    const fromHarvester = [...literal![1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    expect(fromHarvester).toEqual([...SLIDE_TIERS]);
+  });
+});
 
 const page = (body: string) => `<!doctype html>\n<html>\n<body>\n${body}\n</body>\n</html>\n`;
 
