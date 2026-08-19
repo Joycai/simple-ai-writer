@@ -55,7 +55,7 @@ describe("split_facet", () => {
     const sink = createSplitSink();
     await splitFacetTool("f1", FACET, ctxWith(sink));
     expect(sink.facets).toEqual([
-      { title: "战甲形象", keys: ["战甲", "铠甲"], group: null, priority: 0, content: "她换上战甲。" },
+      { title: "战甲形象", slot: null, keys: ["战甲", "铠甲"], group: null, priority: 0, content: "她换上战甲。" },
     ]);
   });
 
@@ -115,5 +115,43 @@ describe("without a sink", () => {
   it("refuses instead of throwing away the model's work silently", async () => {
     expect((await splitCoreTool("c1", { content: "x" }, ctxWith())).content).toMatch(/^Error:/);
     expect((await splitFacetTool("f1", FACET, ctxWith())).content).toMatch(/^Error:/);
+  });
+});
+
+/**
+ * The `slot` argument — which slot of the category's type schema a facet fills.
+ * The declared list rides on the sink rather than being looked up here, so these
+ * tools still touch nothing outside it (see splitTools' header).
+ */
+describe("split_facet — slot", () => {
+  const SLOTS = [
+    { id: "outfit", labelZh: "装扮", labelEn: "Outfit", defaults: { group: "outfit" } },
+    { id: "appearance", labelZh: "外貌", labelEn: "Appearance" },
+  ];
+
+  it("records a declared slot, normalised to the schema's casing", async () => {
+    const sink = createSplitSink(undefined, SLOTS);
+    const res = await splitFacetTool("f1", { ...FACET, slot: " OUTFIT " }, ctxWith(sink));
+    expect(sink.facets[0].slot).toBe("outfit");
+    expect(res.content).toContain("slot outfit");
+  });
+
+  it("refuses an undeclared slot instead of dropping it silently", async () => {
+    // A dropped slot would land the facet in the unclassified pile with nothing
+    // saying why; an error is one retry away from the right id.
+    const sink = createSplitSink(undefined, SLOTS);
+    const res = await splitFacetTool("f1", { ...FACET, slot: "stats" }, ctxWith(sink));
+    expect(res.content).toMatch(/^Error:/);
+    expect(res.content).toContain("outfit, appearance");
+    expect(sink.facets).toHaveLength(0);
+  });
+
+  it("ignores a slot when the category declares none", async () => {
+    // A schema-less category (or one whose pack is disabled) must not turn a
+    // helpful model into a failing run.
+    const sink = createSplitSink();
+    const res = await splitFacetTool("f1", { ...FACET, slot: "outfit" }, ctxWith(sink));
+    expect(res.content).not.toMatch(/^Error:/);
+    expect(sink.facets[0].slot).toBeNull();
   });
 });

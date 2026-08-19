@@ -14,7 +14,7 @@ import { isPptxPath, readPptxSlides, type SlideRange } from "../fs/pptx";
 import { readHtmlSlideRange, splitHtmlSlides } from "../pptx/htmlSlides";
 import { fileExists, readFile } from "../fs/fileio";
 import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, imageToDataUrl, isImagePath } from "../fs/images";
-import { readEntityFile, type LoreEntity, type LoreIndex } from "../lore";
+import { readEntityFile, slotChecklistText, type LoreEntity, type LoreIndex } from "../lore";
 import { isKnownCategory } from "../profile/active";
 import { isPathWithin, isWorkspacePath, resolveRelativePath } from "../paths";
 import { readDirRecursive, type FileNode } from "../project";
@@ -124,6 +124,14 @@ export async function readLoreEntity(
       : "=== images === (text descriptions only — current model is text-only)";
     parts.push(`${header}\n${galleryLines.join("\n")}`);
   }
+
+  // The category's type schema, with what currently covers each slot. The facet
+  // files above already show their own `slot:` frontmatter; what they cannot show
+  // is which slots exist and which are still empty — and that is exactly what
+  // `update_facet_meta`'s `slot` argument needs. Empty for a category with no
+  // schema, which is a normal state and prints nothing at all.
+  const checklist = slotChecklistText(found);
+  if (checklist) parts.push(`=== facet slots ===\n${checklist}`);
 
   return { toolCallId, content: parts.join("\n\n") || "(no content)" };
 }
