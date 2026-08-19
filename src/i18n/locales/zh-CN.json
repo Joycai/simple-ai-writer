@@ -464,11 +464,11 @@
       "refresh": "刷新",
       "openWindow": "新窗口预览",
       "openInBrowser": "在浏览器打开",
-        "exportPptx": "导出 PPTX",
-        "exportPptxHint": "渲染这个页面，在旁边写出一份 PowerPoint 文件",
-        "pptxBusy": "导出中…",
-        "pptxDone": "{{n}} 页 → {{name}}",
-        "pptxFailed": "导出失败"
+      "exportPptx": "导出 PPTX",
+      "exportPptxHint": "渲染这个页面，在旁边写出一份 PowerPoint 文件",
+      "pptxBusy": "导出中…",
+      "pptxDone": "{{n}} 页 → {{name}}",
+      "pptxFailed": "导出失败"
     },
     "unsavedChanges": "未保存的更改",
     "noHeadings": "暂无标题",
@@ -1800,6 +1800,29 @@
       "footerNote": "「应用」只写入主词条四个字段：名称 · 别名 · 分类 · 概要，不改特征正文",
       "generate": "生成建议",
       "apply": "应用"
+    },
+    "slot": {
+      "field": "归属槽位",
+      "fieldHint": "来自类型 {{type}} · 只影响归类与默认值",
+      "fieldHintNoType": "只影响归类与默认值",
+      "none": "不归类",
+      "unclassified": "未归类",
+      "prefilled": "预填",
+      "prefillNote": "「{{slot}}」的默认值已预填到下方。只在新建时预填，保存后归你，改动不会回写类型。",
+      "typeLine": "类型 {{type}} · {{facets}} 特征面 · {{images}} 配图组",
+      "typeLineOff": "类型 {{type}} · 能力包未启用",
+      "coverage": "本类型建议的 {{total}} 面已有 {{covered}}",
+      "coverageMissing": "缺：{{names}}",
+      "hintGrouped": "按类型的 {{count}} 个面归组 · 面只是归类与提示，注入仍由每条自定",
+      "hintGaps": "空着的面只是缺口提示，不影响已有特征的注入",
+      "hintFlat": "平铺列表 · 每条的注入方式、触发词、互斥组照常生效",
+      "addToSlot": "新增「{{slot}}」特征",
+      "addToImageSlot": "添加「{{slot}}」配图",
+      "fillFacet": "补上这一面",
+      "fillImages": "补上这组图",
+      "imageStorageNote": "※ 分组写入 images.md 的 slot 行",
+      "degradedBanner": "这个条目的类型「{{type}}」来自未启用的能力包 · 内容完好 · 启用后恢复分组",
+      "enablePack": "启用 {{pack}}"
     }
   },
   "fileTree": {

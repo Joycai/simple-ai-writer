@@ -1446,6 +1446,11 @@ export function categoryLabel(cat: ProfileCategory, isZh: boolean): string {
   return isZh ? cat.labelZh : cat.labelEn;
 }
 
+/** Facet- or image-slot label in the active UI language (as `categoryLabel`). */
+export function slotLabel(slot: { labelZh: string; labelEn: string }, isZh: boolean): string {
+  return isZh ? slot.labelZh : slot.labelEn;
+}
+
 /** Profile label in the active UI language. */
 export function profileLabel(profile: WorkspaceProfile, isZh: boolean): string {
   return isZh ? profile.labelZh : profile.labelEn;

@@ -1,7 +1,7 @@
 # 知识库条目类型系统落地方案
 
-> **状态：分期落地中**（第 1 期「槽位骨架」、第 2 期「孤儿分类」、第 3 期
-> 「创作侧接线」已实现；第 4~5 期见 §6）。
+> **状态：第 1~4 期已实现**（槽位骨架 / 孤儿分类 / 创作侧接线 / UI 呈现）；
+> 第 5 期 `subtypes` 按计划不做，见 §6。
 >
 > 目标：让条目在保持「主词条 + 特征 + 配图」三段结构不变的前提下**带上类型**，
 > 由能力包声明；类型给出该类条目**应该有哪些面**（外貌 / 组织架构 / 人设图…），
@@ -270,7 +270,7 @@ mode: auto
 | **1** | **槽位骨架**：`FacetSlot`/`ImageSlot` 类型与校验、`ResolvedCategory` 并集合并、facet frontmatter `slot` 解析/序列化、写入路径保值、novel 包的槽位表、单测。零 UI、零行为变化。 | ✅ 已实现 |
 | **2** | **孤儿分类**（§5）+ §7 坑 1 的那批循环 + `lib/lore/categories.ts` 的两问分家。 | ✅ 已实现 |
 | **3** | **创作侧接线**：`lib/lore/slots.ts`（`slotStatuses` / `unslottedFacets` / `slotChecklistText` / `withSlotDefaults`）；拆分整理与「生成新特征」的 prompt 带清单；`split_facet`、`update_facet_meta`、`draft_lore_facet` 加 `slot`（**不带 enum**，改为执行时按分类校验——见 §3.4）；`read_lore_entity` 多一段槽位清单；ttrpg/copy/wechat/bid 的槽位表。 | ✅ 已实现 |
-| 4 | **UI 呈现**：详情页特征栏按槽位分组、缺口提示、配图按 imageSlot 分组（含 `images.md` 格式扩展）、墙上的类型标记。先出设计稿，prompt 见 §8。 | 待做 |
+| **4** | **UI 呈现**（设计稿屏 19–23）：详情页特征栏按槽位分段、缺口邀请、类型行与覆盖小结、特征编辑的归属槽位与预填、配图按 imageSlot 分段（含 `images.md` 的 `slot:` 行）、降级条与「启用 <包>」。落地口径记在 [`design-system.md`](design-system.md) → 设定集设计语言 → 类型系统。 | ✅ 已实现 |
 | 5 | `subtypes`（§2 末）——等真有一个能力包需要再说。 | 不做 |
 
 其余内置包的槽位表放到第 3 期、和消费它的提示词一起给：第 1 期只有 novel 有槽位，
@@ -301,10 +301,12 @@ mode: auto
 4. **改类型 = 搬目录**，会断 `dirPath#facetFile` 形式的 pin（`loreSelect.ts:56`）和
    `category/id` 形式的引用（`citations.ts:16`）。这是今天改分类**已有**的行为，
    写在这里是为了别以后被当成新 bug 重新发现（也是方案 A 唯一有力的论据，见 §2）。
-5. **`images.md` 是唯一必须改格式的存储**。现在是 `## 文件名` + 描述段（`gallery.ts:14`），
-   没有放 slot 的地方。最稳的做法是在描述块首行加一个 `slot: portrait` 让 parser 吃掉——
-   老版本会把它当描述文字显示出来，纯观感问题，不丢数据。
-   **别用 h1 分组**：现在的 parser 会把 h1 行吞进上一张图的描述里。
+5. ~~**`images.md` 是唯一必须改格式的存储**~~（第 4 期已改，就按这条做的）：描述块首行的
+   `slot: portrait` 被 parser 吃掉，**只认第一行**，所以正文里再出现 "slot:" 不受影响；
+   无 slot 时**一个字都不写**，老项目的 diff 保持干净。老版本会把 slot 行当描述文字显示，
+   纯观感问题，不丢数据。**别用 h1 分组**：现在的 parser 会把 h1 行吞进上一张图的描述里。
+   写入侧同样守保值纪律——`updateLoreImageDesc` 只改描述、带着 slot 走，改归类是
+   `updateLoreImageSlot` 自己的事。
 6. **`FacetMeta` 的写入路径都要保值**（§3.3）。已知三处：`FacetEditModal.handleSave`、
    `updateFacetMetaTool`、`LoreImproveModal` 的 `facetMetaRef`（后者整体透传，天然安全）。
    `LoreSplitModal` 建的是新特征，第 3 期才由 AI 填 slot。
@@ -373,5 +375,10 @@ mode: auto
   同桶、清单文本、`withSlotDefaults` 只填中性字段且不动无 schema 的条目）、
   `splitTools.test.ts` 的 slot 三例（认、拒并列出合法 id、无 schema 时忽略）、
   `agentWriteTools.test.ts` 的 `update_facet_meta` 三例（含「不提 slot 的编辑不得把它抹掉」）。
-- 第 4 期：接进 UI 后，回归验证不变量一——同一段正文、同一个条目，
-  开关能力包前后 `selectLore` 的输出必须逐字相同（第 1 期已有一例，UI 落地后再跑一遍）。
+- 第 4 期：`facetSlots.test.ts` 补 `facetSections`/`imageSections`/`slotCoverage`/
+  `categoryTypeName`（分段顺序、未归类兜底、缺口只认 expected、无 schema 时为空）、
+  `imagesMdSlots.test.ts`（slot 行只认第一行、无 slot 不写、与老格式互读）、
+  `categorySlots.test.ts` 补 `packsDeclaringCategory`。不变量一仍由第 1 期
+  `loreSelect.test.ts` 那一例守着——本期没有往注入路径上加任何东西。
+  **UI 本身没有自动化验证**，本期也没有手工跑过：详情页要一个真实项目才渲染得出来。
+  纯逻辑（分段、缺口、格式读写）都在上面的单测里，样式与交互需要作者在真实项目上过一眼。

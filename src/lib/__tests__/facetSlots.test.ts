@@ -9,8 +9,17 @@
  * model or the author actually decided.
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import { slotChecklistText, slotStatuses, unslottedFacets, withSlotDefaults } from "../lore/slots";
-import type { FacetMeta, LoreEntity, LoreFacet } from "../lore/model";
+import {
+  categoryTypeName,
+  facetSections,
+  imageSections,
+  slotChecklistText,
+  slotCoverage,
+  slotStatuses,
+  unslottedFacets,
+  withSlotDefaults,
+} from "../lore/slots";
+import type { FacetMeta, LoreEntity, LoreFacet, LoreImage } from "../lore/model";
 import { NOVEL_PROFILE, resetActiveWorkspace, resolveWorkspace, setActiveWorkspace } from "../profile";
 
 const facet = (partial: Partial<LoreFacet> & { file: string; title: string }): LoreFacet => ({
@@ -129,5 +138,99 @@ describe("withSlotDefaults", () => {
     // pack-shaped check: keys given by the caller are never replaced.
     const given = withSlotDefaults(meta({ slot: "outfit", keys: ["战甲"] }), "characters");
     expect(given.keys).toEqual(["战甲"]);
+  });
+});
+
+/**
+ * The detail pane's view models (设计稿 03 屏 19/20/22). Pure on purpose: the
+ * ordering rules and the "which section does this land in" decisions are what
+ * break silently, and they should be checkable without rendering a column.
+ */
+describe("facetSections / slotCoverage", () => {
+  it("lists sections in schema order with the unclassified ones last", () => {
+    const e = entity("characters", [
+      facet({ file: "notes.md", title: "杂记" }),
+      facet({ file: "voice.md", title: "语癖", slot: "voice" }),
+      facet({ file: "look.md", title: "外貌", slot: "appearance" }),
+      facet({ file: "gm.md", title: "GM 提示", slot: "stats" }), // undeclared here
+    ]);
+    const sections = facetSections(e);
+    expect(sections.map((s) => s.slot?.id ?? "(loose)")).toEqual([
+      "appearance", "outfit", "relations", "backstory", "ability", "voice", "(loose)",
+    ]);
+    expect(sections[sections.length - 1].facets.map((f) => f.title)).toEqual(["杂记", "GM 提示"]);
+    // `relations` is expected and empty — the dashed invitation of 屏 20.
+    expect(sections.find((s) => s.slot?.id === "relations")!.missing).toBe(true);
+    // `backstory` is empty but not expected — no row is drawn for it at all.
+    expect(sections.find((s) => s.slot?.id === "backstory")!.missing).toBe(false);
+  });
+
+  it("has no sections at all without a schema, which is the degraded rendering", () => {
+    expect(facetSections(entity("custom", [facet({ file: "a.md", title: "A" })]))).toEqual([]);
+    // Distinguishable from "schema, nothing classified yet", which does have
+    // sections — the caller renders a flat list only in the first case.
+    expect(facetSections(entity("characters", [facet({ file: "a.md", title: "A" })])).length)
+      .toBeGreaterThan(0);
+  });
+
+  it("counts coverage and names only the expected gaps", () => {
+    const e = entity("characters", [facet({ file: "look.md", title: "外貌", slot: "appearance" })]);
+    const cov = slotCoverage(e);
+    expect(cov.total).toBe(6);
+    expect(cov.covered).toBe(1);
+    // 外貌 covered; 人物关系 + 人设图-less slots that are `expected` remain.
+    expect(cov.missing.map((s) => s.id)).toEqual(["relations"]);
+    expect(slotCoverage(entity("custom", [])).total).toBe(0);
+  });
+});
+
+describe("imageSections", () => {
+  const img = (file: string, slot: string | null): LoreImage => ({
+    file, desc: "", slot, absPath: `/p/${file}`,
+  });
+  const withImages = (category: string, images: LoreImage[]): LoreEntity => ({
+    ...entity(category, []), images,
+  });
+
+  it("groups by image slot, unclassified last, undeclared ids included there", () => {
+    const e = withImages("characters", [
+      img("a.png", "portrait"),
+      img("b.png", null),
+      img("c.png", "map"), // a world slot — not declared on characters
+      img("d.png", "expression"),
+    ]);
+    const sections = imageSections(e);
+    expect(sections.map((s) => s.slot?.id ?? "(loose)")).toEqual([
+      "portrait", "expression", "outfit", "(loose)",
+    ]);
+    expect(sections[sections.length - 1].images.map((i) => i.file)).toEqual(["b.png", "c.png"]);
+    expect(sections.find((s) => s.slot?.id === "portrait")!.missing).toBe(false);
+  });
+
+  it("marks an expected image slot with nothing in it", () => {
+    const sections = imageSections(withImages("characters", []));
+    expect(sections.find((s) => s.slot?.id === "portrait")!.missing).toBe(true);
+    // Nothing unclassified, so no trailing section is invented.
+    expect(sections.every((s) => s.slot !== null)).toBe(true);
+  });
+
+  it("returns nothing when the category declares no image slots", () => {
+    expect(imageSections(withImages("skills", [img("a.png", null)]))).toEqual([]);
+  });
+});
+
+describe("categoryTypeName", () => {
+  it("is packId/categoryLabel for a pack-declared category", () => {
+    expect(categoryTypeName("characters", true)).toBe("novel/人物");
+    expect(categoryTypeName("characters", false)).toBe("novel/Characters");
+  });
+
+  it("is null when no *enabled* pack declares it", () => {
+    // The misc bucket, a user category, and an orphan all have no type to name;
+    // an orphan's is looked up from the disabled pack instead (屏 23).
+    expect(categoryTypeName("custom", true)).toBeNull();
+    expect(categoryTypeName("npcs", true)).toBeNull();
+    setActiveWorkspace(resolveWorkspace([]));
+    expect(categoryTypeName("characters", true)).toBeNull();
   });
 });

@@ -18,6 +18,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Sparkles } from "lucide-react";
 import {
+  categoryTypeName,
   createFacetFile,
   parseFacetMeta,
   readEntityFile,
@@ -25,6 +26,7 @@ import {
   type FacetMeta,
   type LoreEntity,
 } from "../../lib/lore";
+import { categoryFacetSlots, findFacetSlot, slotLabel } from "../../lib/profile";
 import { parseFrontmatter } from "../../lib/fs/markdown";
 import { estimateTextTokens } from "../../lib/ai/tokenEstimate";
 import { useProjectStore } from "../../stores/projectStore";
@@ -40,13 +42,23 @@ interface Props {
   entity: LoreEntity;
   /** null → create; existing facet file → edit; plain attachment → convert. */
   file: string | null;
+  /**
+   * Slot to start on — set when the form was opened from a slot's ＋ or from a
+   * gap row (屏 19/20), so the author lands with that 面 already chosen and its
+   * defaults prefilled.
+   */
+  initialSlot?: string | null;
   onClose: () => void;
 }
+
+/** Which fields a slot's defaults filled, for the 预填 badges (屏 21). */
+type Prefilled = { mode: boolean; keys: boolean; group: boolean; priority: boolean };
+const NO_PREFILL: Prefilled = { mode: false, keys: false, group: false, priority: false };
 
 /** The three injection modes, in the mockup's order, with their explanations. */
 const MODES: FacetMeta["mode"][] = ["auto", "always", "manual"];
 
-export function FacetEditModal({ entity, file, onClose }: Props) {
+export function FacetEditModal({ entity, file, initialSlot = null, onClose }: Props) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
   const { projectPath } = useProjectStore();
@@ -71,10 +83,52 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
     [entity.facets],
   );
 
-  // The facet's slot (its place in the category's type schema) has no control in
-  // this form yet — it rides through the save so editing a facet can't silently
-  // unclassify it. See docs/lore-entry-type-plan.md §6 phase 4.
-  const slotRef = useRef<string | null>(null);
+  // ── 归属槽位 (屏 21) ────────────────────────────────────────────────────
+  // The facet's place in its category's type schema. The whole field disappears
+  // when the category declares no slots — a user-defined category, the `custom`
+  // bucket, or one whose pack is off — which is the degraded form of this form.
+  const slots = categoryFacetSlots(entity.category);
+  const typeName = categoryTypeName(entity.category, isZh);
+  const [slot, setSlot] = useState<string | null>(initialSlot);
+  const [prefilled, setPrefilled] = useState<Prefilled>(NO_PREFILL);
+
+  /**
+   * Apply a slot's defaults to the form — creation only.
+   *
+   * Two rules, both from the mockup's own wording («只在新建时预填，保存后归你»):
+   * a field the author has already filled is never overwritten, and a value that
+   * *was* prefilled and is still untouched follows the slot when the choice
+   * changes (otherwise switching 装扮 → 往事 would leave the outfit group behind
+   * on a facet that no longer belongs to it). Editing an existing facet only
+   * re-classifies: its metadata is the author's, however it got there.
+   */
+  const pickSlot = (next: string | null) => {
+    setSlot(next);
+    if (file) return; // editing: classification only, never a re-prefill
+    const defaults = next ? findFacetSlot(entity.category, next)?.defaults : undefined;
+    const filled: Prefilled = { ...NO_PREFILL };
+    if (prefilled.mode || mode === "auto") {
+      setMode(defaults?.mode ?? "auto");
+      filled.mode = !!defaults?.mode;
+    }
+    if (prefilled.keys || keys.length === 0) {
+      setKeys([...(defaults?.keys ?? [])]);
+      filled.keys = !!defaults?.keys?.length;
+    }
+    if (prefilled.group || group.trim() === "") {
+      setGroup(defaults?.group ?? "");
+      filled.group = !!defaults?.group;
+    }
+    if (prefilled.priority || priority === 0) {
+      setPriority(defaults?.priority ?? 0);
+      filled.priority = defaults?.priority !== undefined;
+    }
+    setPrefilled(filled);
+  };
+
+  /** The author touching a prefilled field makes it theirs — the badge goes. */
+  const own = (field: keyof Prefilled) =>
+    setPrefilled((p) => (p[field] ? { ...p, [field]: false } : p));
 
   const initialSnapshot = useRef<string | null>(null);
   useEffect(() => {
@@ -86,15 +140,37 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
     setMode("auto");
     setBody("");
     setError(null);
-    slotRef.current = null;
     initialSnapshot.current = null;
-    if (!file) { setLoaded(true); return; }
+    if (!file) {
+      // Fresh create: land on the slot the ＋ came from, defaults and all.
+      // Applied straight from the schema rather than through `pickSlot`, which
+      // reads the *current* form state — the resets above are still queued here,
+      // so it would compare against the previous facet's values.
+      const defaults = initialSlot
+        ? findFacetSlot(entity.category, initialSlot)?.defaults
+        : undefined;
+      setSlot(initialSlot);
+      if (defaults?.mode) setMode(defaults.mode);
+      if (defaults?.keys?.length) setKeys([...defaults.keys]);
+      if (defaults?.group) setGroup(defaults.group);
+      if (defaults?.priority !== undefined) setPriority(defaults.priority);
+      setPrefilled({
+        mode: !!defaults?.mode,
+        keys: !!defaults?.keys?.length,
+        group: !!defaults?.group,
+        priority: defaults?.priority !== undefined,
+      });
+      setLoaded(true);
+      return;
+    }
+    setSlot(null);
+    setPrefilled(NO_PREFILL);
     setLoaded(false);
     readEntityFile(entity.dirPath, file)
       .then((raw) => {
         const meta = parseFacetMeta(raw, file);
         if (meta) {
-          slotRef.current = meta.slot;
+          setSlot(meta.slot);
           setTitle(meta.title);
           setKeys(meta.keys);
           setGroup(meta.group ?? "");
@@ -108,24 +184,33 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
       })
       .catch(() => setError(t("lore.facet.loadError", { defaultValue: "读取文件失败" })))
       .finally(() => setLoaded(true));
-  }, [entity.dirPath, file, t]);
+  }, [entity.category, entity.dirPath, file, initialSlot, t]);
 
   const keyIme = useImeGuard();
   const addKey = () => {
     const v = keyInput.trim();
-    if (v && !keys.includes(v)) setKeys([...keys, v]);
+    if (v && !keys.includes(v)) { setKeys([...keys, v]); own("keys"); }
     setKeyInput("");
   };
 
   // Dirty tracking: snapshot the form once it's loaded, then compare. A close
   // gesture only prompts when the current form differs from that baseline.
-  const snapshot = JSON.stringify({ title, keys, group, priority, mode, body });
+  const snapshot = JSON.stringify({ title, slot, keys, group, priority, mode, body });
   useEffect(() => {
     if (loaded && initialSnapshot.current === null) initialSnapshot.current = snapshot;
   }, [loaded, snapshot]);
   const dirty = loaded && initialSnapshot.current !== null && initialSnapshot.current !== snapshot;
 
   const canSave = loaded && !busy && title.trim().length > 0;
+
+  const anyPrefilled = prefilled.mode || prefilled.keys || prefilled.group || prefilled.priority;
+  const slotName = slot
+    ? (() => {
+        const found = slots.find((sl) => sl.id === slot);
+        return found ? slotLabel(found, isZh) : slot;
+      })()
+    : "";
+  const prefillLabel = t("lore.slot.prefilled", { defaultValue: "预填" });
 
   const handleSave = async () => {
     if (!canSave || !projectPath) return;
@@ -134,7 +219,7 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
     try {
       const meta: FacetMeta = {
         title: title.trim(),
-        slot: slotRef.current,
+        slot,
         keys: keys.map((k) => k.trim()).filter(Boolean),
         group: group.trim() || null,
         priority: Number.isFinite(priority) ? priority : 0,
@@ -197,10 +282,58 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
             />
           </div>
 
+          {/* 归属槽位 (屏 21) — 面只影响归类与默认值，不影响注入规则本身。 */}
+          {slots.length > 0 && (
+            <div>
+              <div className={styles.label}>
+                {t("lore.slot.field", { defaultValue: "归属槽位" })}
+                <span className={styles.labelOptional}>
+                  {typeName
+                    ? t("lore.slot.fieldHint", {
+                        type: typeName,
+                        defaultValue: `来自类型 ${typeName} · 只影响归类与默认值`,
+                      })
+                    : t("lore.slot.fieldHintNoType", { defaultValue: "只影响归类与默认值" })}
+                </span>
+              </div>
+              <div className={styles.slotChips}>
+                <button
+                  type="button"
+                  className={`${styles.slotChip} ${slot === null ? styles.slotChipActive : ""} ${styles.slotChipNone}`}
+                  onClick={() => pickSlot(null)}
+                  aria-pressed={slot === null}
+                >
+                  {t("lore.slot.none", { defaultValue: "不归类" })}
+                </button>
+                {slots.map((sl) => (
+                  <button
+                    key={sl.id}
+                    type="button"
+                    className={`${styles.slotChip} ${slot === sl.id ? styles.slotChipActive : ""}`}
+                    onClick={() => pickSlot(sl.id)}
+                    aria-pressed={slot === sl.id}
+                    title={(isZh ? sl.hintZh : sl.hintEn) ?? undefined}
+                  >
+                    {slotLabel(sl, isZh)}
+                  </button>
+                ))}
+              </div>
+              {anyPrefilled && (
+                <div className={styles.prefillNote}>
+                  {t("lore.slot.prefillNote", {
+                    slot: slotName,
+                    defaultValue: `「${slotName}」的默认值已预填到下方。只在新建时预填，保存后归你，改动不会回写类型。`,
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* 注入方式 — radio rows, each stating when it fires (屏 16). */}
           <div>
             <div className={styles.label}>
               {t("lore.facet.fieldMode", { defaultValue: "注入方式" })}
+              {prefilled.mode && <span className={styles.prefillBadge}>{prefillLabel}</span>}
             </div>
             <div className={styles.modeRows}>
               {MODES.map((m) => (
@@ -208,7 +341,7 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
                   key={m}
                   type="button"
                   className={`${styles.modeRow} ${mode === m ? styles.modeRowActive : ""}`}
-                  onClick={() => setMode(m)}
+                  onClick={() => { setMode(m); own("mode"); }}
                   aria-pressed={mode === m}
                 >
                   <span className={styles.radio} />
@@ -222,14 +355,15 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
           <div>
             <label className={styles.label}>
               {t("lore.facet.fieldKeys", { defaultValue: "触发词" })}
+              {prefilled.keys && <span className={styles.prefillBadge}>{prefillLabel}</span>}
             </label>
             <div className={styles.chips}>
               {keys.map((k, i) => (
-                <span key={`${k}-${i}`} className={styles.chipTag}>
+                <span key={`${k}-${i}`} className={`${styles.chipTag} ${prefilled.keys ? styles.chipTagPrefilled : ""}`}>
                   {k}
                   <button
                     className={styles.chipRemove}
-                    onClick={() => setKeys(keys.filter((_, x) => x !== i))}
+                    onClick={() => { setKeys(keys.filter((_, x) => x !== i)); own("keys"); }}
                     title={t("lore.facet.removeKey", { defaultValue: "移除" })}
                   >
                     <X size={10} />
@@ -263,11 +397,12 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
                 <span className={styles.labelOptional}>
                   {t("lore.facet.optional", { defaultValue: "可选" })}
                 </span>
+                {prefilled.group && <span className={styles.prefillBadge}>{prefillLabel}</span>}
               </label>
               <input
                 className={styles.input}
                 value={group}
-                onChange={(e) => setGroup(e.target.value)}
+                onChange={(e) => { setGroup(e.target.value); own("group"); }}
                 list="facet-group-suggestions"
                 placeholder={t("lore.facet.groupPlaceholder", { defaultValue: "可留空；同组同时命中只注入优先级最高的一个（如 outfit）" })}
               />
@@ -278,12 +413,13 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
             <div className={styles.fieldNarrow}>
               <label className={styles.label}>
                 {t("lore.facet.fieldPriority", { defaultValue: "优先级" })}
+                {prefilled.priority && <span className={styles.prefillBadge}>{prefillLabel}</span>}
               </label>
               <input
                 className={styles.input}
                 type="number"
                 value={priority}
-                onChange={(e) => setPriority(Number(e.target.value))}
+                onChange={(e) => { setPriority(Number(e.target.value)); own("priority"); }}
               />
             </div>
           </div>

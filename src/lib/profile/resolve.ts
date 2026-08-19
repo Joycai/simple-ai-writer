@@ -140,6 +140,28 @@ export function visibleTaskGroups(workspace: ResolvedWorkspace): PackTaskGroup[]
 }
 
 /**
+ * Which of `packs` declare a knowledge-base category — used to explain an
+ * **orphan** category: "this entry's type comes from a pack that isn't enabled"
+ * (设计稿 03 屏 23), and to offer the one button that fixes it.
+ *
+ * Deliberately not part of the merge, and deliberately not what labels an orphan
+ * category: borrowing a disabled pack's label would present the category as if
+ * its schema were in effect (see lib/lore/categories). Naming the pack is the
+ * opposite move — it says *why* the schema is absent, which is only honest when
+ * the UI shows it as absent.
+ *
+ * Matched case-insensitively, like every other category-id comparison.
+ */
+export function packsDeclaringCategory(
+  categoryId: string,
+  packs: readonly WorkspaceProfile[],
+): WorkspaceProfile[] {
+  const key = categoryId.trim().toLowerCase();
+  if (!key) return [];
+  return packs.filter((pack) => pack.categories.some((cat) => cat.id.toLowerCase() === key));
+}
+
+/**
  * Merge `enabled` packs and the project's user-defined categories into one
  * workspace view. Pure; never mutates a pack — the built-in profiles are
  * module-level singletons, and a merge that pushed onto their arrays would

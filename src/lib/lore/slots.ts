@@ -18,9 +18,29 @@
  *      injection semantics, which is what makes rule 1 survivable.
  */
 
-import { categoryFacetSlots, findFacetSlot } from "../profile/active";
-import type { FacetSlot } from "../profile/model";
-import type { FacetMeta, LoreEntity, LoreFacet } from "./model";
+import { categoryFacetSlots, categoryImageSlots, findCategory, findFacetSlot } from "../profile/active";
+import { categoryLabel, type FacetSlot, type ImageSlot } from "../profile/model";
+import type { FacetMeta, LoreEntity, LoreFacet, LoreImage } from "./model";
+
+/**
+ * `novel/人物` — the pack that declares this category, then the category's own
+ * label. What the detail pane calls the entry's **type**.
+ *
+ * The pack **id** rather than its label because it is the short stable token the
+ * author sees everywhere else a pack is named (Settings → 工作台, profile.json),
+ * and because the label ("小说") reads as a genre next to a category name.
+ *
+ * Null when no *enabled* pack declares the category: a user-defined category,
+ * the `custom` bucket, or an orphan. An orphan's type still has a name, but only
+ * a disabled pack can supply it — that lookup is `packsDeclaringCategory`, and
+ * it belongs to the surface that also says the pack is off (设计稿 03 屏 23).
+ */
+export function categoryTypeName(category: string, isZh: boolean): string | null {
+  const resolved = findCategory(category);
+  const packId = resolved?.packIds[0];
+  if (!resolved || !packId) return null;
+  return `${packId}/${categoryLabel(resolved, isZh)}`;
+}
 
 /** One declared slot plus what the entry currently has in it. */
 export interface SlotStatus {
@@ -58,6 +78,88 @@ export function unslottedFacets(entity: LoreEntity): LoreFacet[] {
   return (entity.facets ?? []).filter(
     (f) => !f.slot || !findFacetSlot(entity.category, f.slot),
   );
+}
+
+/**
+ * One section of the detail pane's facet column: a declared slot with the facets
+ * that fill it, then one final `slot: null` section for everything unclassified.
+ *
+ * `missing` marks a section the author is *invited* to fill — declared
+ * `expected`, currently empty. It is a nudge, so nothing about it blocks or
+ * warns: 设计稿 03 屏 20 draws it as a dashed row, not an error.
+ */
+export interface FacetSection {
+  slot: FacetSlot | null;
+  facets: LoreFacet[];
+  missing: boolean;
+}
+
+/**
+ * Group an entry's facets into sections, in schema order, with the unclassified
+ * ones last.
+ *
+ * Returns `[]` when the category has no schema — the caller then renders the
+ * flat list it always did, which *is* the degraded presentation (屏 23). An
+ * empty array rather than one all-encompassing section, so "no schema" and
+ * "schema with nothing classified yet" stay distinguishable at the call site.
+ */
+export function facetSections(entity: LoreEntity): FacetSection[] {
+  const statuses = slotStatuses(entity);
+  if (statuses.length === 0) return [];
+  const sections: FacetSection[] = statuses.map(({ slot, facets, missing }) => ({
+    slot,
+    facets,
+    missing,
+  }));
+  const loose = unslottedFacets(entity);
+  if (loose.length > 0) sections.push({ slot: null, facets: loose, missing: false });
+  return sections;
+}
+
+/** How much of the type's suggestion an entry has taken up (屏 20's mono note). */
+export interface SlotCoverage {
+  /** Slots the category declares. */
+  total: number;
+  /** Of those, how many have at least one facet. */
+  covered: number;
+  /** The `expected` ones still empty — what the note names. */
+  missing: FacetSlot[];
+}
+
+export function slotCoverage(entity: LoreEntity): SlotCoverage {
+  const statuses = slotStatuses(entity);
+  return {
+    total: statuses.length,
+    covered: statuses.filter((s) => s.facets.length > 0).length,
+    missing: statuses.filter((s) => s.missing).map((s) => s.slot),
+  };
+}
+
+/** The image column's counterpart to `FacetSection` (屏 22). */
+export interface ImageSection {
+  slot: ImageSlot | null;
+  images: LoreImage[];
+  missing: boolean;
+}
+
+/**
+ * Group an entry's gallery by image slot, same contract as `facetSections`:
+ * schema order, unclassified last, `[]` when the category declares no image
+ * slots (then the column stays the flat list it was).
+ */
+export function imageSections(entity: LoreEntity): ImageSection[] {
+  const slots = categoryImageSlots(entity.category);
+  if (slots.length === 0) return [];
+  const images = entity.images ?? [];
+  const declared = new Set(slots.map((s) => s.id.toLowerCase()));
+  const sections: ImageSection[] = slots.map((slot) => {
+    const key = slot.id.toLowerCase();
+    const filled = images.filter((i) => (i.slot ?? "").toLowerCase() === key);
+    return { slot, images: filled, missing: slot.expected === true && filled.length === 0 };
+  });
+  const loose = images.filter((i) => !i.slot || !declared.has(i.slot.toLowerCase()));
+  if (loose.length > 0) sections.push({ slot: null, images: loose, missing: false });
+  return sections;
 }
 
 /** `id (中文 / English)` — the model may be writing in either language, and the
