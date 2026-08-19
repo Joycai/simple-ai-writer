@@ -167,6 +167,9 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
 
       const result: SplitResult = await splitLore({
         entityName: entity.name,
+        // Resolves the category's facet slots into a checklist for the prompt and
+        // into `split_facet`'s validation (lib/lore/slots).
+        category: entity.category,
         indexBody,
         existingFacets,
         instruction,

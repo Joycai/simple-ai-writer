@@ -763,11 +763,124 @@ export const TTRPG_PROFILE: WorkspaceProfile = {
   id: "ttrpg",
   labelZh: "跑团模组",
   labelEn: "TTRPG Module",
+  // Slots on the four categories whose entries are long enough to be worth
+  // splitting; 规则/剧情钩子/基调 entries are single-purpose and stay plain.
   categories: [
-    { id: "npcs", labelZh: "NPC", labelEn: "NPCs" },
-    { id: "locations", labelZh: "地点", labelEn: "Locations" },
-    { id: "factions", labelZh: "势力", labelEn: "Factions" },
-    { id: "items", labelZh: "道具", labelEn: "Items" },
+    {
+      id: "npcs",
+      labelZh: "NPC",
+      labelEn: "NPCs",
+      slots: [
+        {
+          id: "appearance", labelZh: "外貌", labelEn: "Appearance",
+          hintZh: "第一眼看到什么——给 GM 一句能直接念出来的描述",
+          hintEn: "What the party sees first — one line the GM can read aloud",
+          expected: true,
+        },
+        {
+          id: "attitude", labelZh: "态度与动机", labelEn: "Attitude",
+          hintZh: "想要什么、对玩家的初始态度、什么能说服他",
+          hintEn: "What they want, how they start toward the party, what persuades them",
+          expected: true,
+        },
+        {
+          id: "stats", labelZh: "数据块", labelEn: "Stat block",
+          hintZh: "战斗数值与特殊能力；只在真会打起来时才需要",
+          hintEn: "Combat numbers and special abilities — only if a fight is possible",
+          // A stat block is dead weight until the table rolls initiative.
+          defaults: { mode: "auto", keys: ["战斗", "先手", "combat", "initiative"] },
+        },
+        {
+          id: "knowledge", labelZh: "掌握的情报", labelEn: "What they know",
+          hintZh: "能透露什么、要什么代价、什么绝不说",
+          hintEn: "What they can reveal, at what price, and what they never say",
+        },
+      ],
+      imageSlots: [
+        { id: "portrait", labelZh: "立绘", labelEn: "Portrait", hintZh: "给玩家看的一张脸", hintEn: "A face to show the players", expected: true },
+      ],
+    },
+    {
+      id: "locations",
+      labelZh: "地点",
+      labelEn: "Locations",
+      slots: [
+        {
+          id: "position", labelZh: "位置", labelEn: "Position",
+          hintZh: "在哪、怎么到、路上多久",
+          hintEn: "Where it is, how you get there, how long it takes",
+          expected: true,
+        },
+        {
+          id: "layout", labelZh: "布局", labelEn: "Layout",
+          hintZh: "分区与通路——玩家会问「还能往哪走」",
+          hintEn: "Areas and connections — the party will ask what else leads where",
+          expected: true,
+        },
+        {
+          id: "encounters", labelZh: "遭遇", labelEn: "Encounters",
+          hintZh: "这里会遇到什么，含触发条件",
+          hintEn: "What happens here, and what sets it off",
+        },
+        {
+          id: "clues", labelZh: "线索", labelEn: "Clues",
+          hintZh: "能在这里拿到的信息与物件",
+          hintEn: "Information and objects available here",
+        },
+      ],
+      imageSlots: [
+        { id: "map", labelZh: "地图", labelEn: "Map", hintZh: "标注比精美重要", hintEn: "Labels matter more than polish", expected: true },
+        { id: "scene", labelZh: "场景图", labelEn: "Scene art", hintZh: "推到桌上的那张气氛图", hintEn: "The mood shot you slide across the table" },
+      ],
+    },
+    {
+      id: "factions",
+      labelZh: "势力",
+      labelEn: "Factions",
+      slots: [
+        {
+          id: "structure", labelZh: "组织架构", labelEn: "Structure",
+          hintZh: "谁说话算数、层级、加入方式",
+          hintEn: "Who speaks for it, the tiers, how one joins",
+          expected: true,
+        },
+        {
+          id: "stance", labelZh: "阵营态度", labelEn: "Stance",
+          hintZh: "对玩家与其他势力的态度，以及什么会改变它",
+          hintEn: "How it regards the party and the other factions, and what changes that",
+          expected: true,
+        },
+        {
+          id: "territory", labelZh: "势力范围", labelEn: "Territory",
+          hintZh: "地盘、据点、影响力到哪为止",
+          hintEn: "Ground held, strongholds, where the influence stops",
+        },
+      ],
+    },
+    {
+      id: "items",
+      labelZh: "道具",
+      labelEn: "Items",
+      slots: [
+        {
+          id: "appearance", labelZh: "外形", labelEn: "Appearance",
+          hintZh: "拿到手上看到什么——玩家鉴定前就能知道的部分",
+          hintEn: "What it looks like in hand — what the party knows before identifying it",
+          expected: true,
+        },
+        {
+          id: "effect", labelZh: "效果与规则", labelEn: "Effect",
+          hintZh: "机制、判定、次数限制",
+          hintEn: "Mechanics, rolls, uses per rest",
+          expected: true,
+        },
+        {
+          id: "origin", labelZh: "来历", labelEn: "Provenance",
+          hintZh: "谁造的、怎么流落到这里",
+          hintEn: "Who made it and how it ended up here",
+        },
+      ],
+    },
     { id: "rules", labelZh: "规则", labelEn: "Rules" },
     { id: "hooks", labelZh: "剧情钩子", labelEn: "Hooks" },
     { id: "style", labelZh: "基调", labelEn: "Tone" },
@@ -819,9 +932,79 @@ export const COPY_PROFILE: WorkspaceProfile = {
   labelZh: "文案",
   labelEn: "Copywriting",
   categories: [
-    { id: "brand", labelZh: "品牌", labelEn: "Brand" },
-    { id: "products", labelZh: "产品", labelEn: "Products" },
-    { id: "audience", labelZh: "受众", labelEn: "Audience" },
+    {
+      id: "brand",
+      labelZh: "品牌",
+      labelEn: "Brand",
+      slots: [
+        {
+          id: "story", labelZh: "品牌故事", labelEn: "Story",
+          hintZh: "来历与主张——文案要引用的那几句",
+          hintEn: "Origin and claim — the few lines copy quotes",
+        },
+        {
+          id: "forbidden", labelZh: "禁区", labelEn: "Off-limits",
+          hintZh: "不能说的话、不能碰的词、法务红线",
+          hintEn: "Words and claims that are off the table, legal red lines",
+          // A red line is due on every piece of copy, not only when it is
+          // mentioned — which is exactly what `always` means.
+          defaults: { mode: "always" },
+        },
+      ],
+      imageSlots: [
+        { id: "visual", labelZh: "视觉规范", labelEn: "Visual", hintZh: "标志、配色、版式示例", hintEn: "Logo, palette, layout samples" },
+      ],
+    },
+    {
+      id: "products",
+      labelZh: "产品",
+      labelEn: "Products",
+      slots: [
+        {
+          id: "selling", labelZh: "卖点", labelEn: "Selling points",
+          hintZh: "一条一句，按说服力排序",
+          hintEn: "One line each, strongest first",
+          expected: true,
+        },
+        {
+          id: "spec", labelZh: "规格参数", labelEn: "Specs",
+          hintZh: "能被核对的事实：尺寸、成分、兼容性",
+          hintEn: "Checkable facts: size, materials, compatibility",
+        },
+        {
+          id: "pricing", labelZh: "价格与套餐", labelEn: "Pricing",
+          hintZh: "档位、优惠、有效期",
+          hintEn: "Tiers, discounts, validity",
+        },
+      ],
+      imageSlots: [
+        { id: "product", labelZh: "产品图", labelEn: "Product shot", hintZh: "主图与细节图", hintEn: "Hero shot and details" },
+      ],
+    },
+    {
+      id: "audience",
+      labelZh: "受众",
+      labelEn: "Audience",
+      slots: [
+        {
+          id: "profile", labelZh: "画像", labelEn: "Profile",
+          hintZh: "是谁、在什么场景下看到这条文案",
+          hintEn: "Who they are and where they meet this copy",
+          expected: true,
+        },
+        {
+          id: "pain", labelZh: "痛点", labelEn: "Pain points",
+          hintZh: "他们自己会怎么说这个问题——用他们的词",
+          hintEn: "How they would phrase the problem — in their words",
+          expected: true,
+        },
+        {
+          id: "objection", labelZh: "异议", labelEn: "Objections",
+          hintZh: "不买的理由，以及能回应的事实",
+          hintEn: "Reasons not to buy, and the facts that answer them",
+        },
+      ],
+    },
     { id: "competitors", labelZh: "竞品", labelEn: "Competitors" },
     { id: "style", labelZh: "调性", labelEn: "Voice" },
   ],
@@ -987,11 +1170,62 @@ export const BID_PROFILE: WorkspaceProfile = {
   labelZh: "标书应答",
   labelEn: "Bid Response",
   categories: [
-    { id: "capabilities", labelZh: "业务能力", labelEn: "Capabilities" },
+    {
+      id: "capabilities",
+      labelZh: "业务能力",
+      labelEn: "Capabilities",
+      // 标书应答按点抽取，一个条目常常几千字：拆成面之后，一条应答只带它真正
+      // 要引用的那一面，而不是把整份能力说明塞进上下文。
+      slots: [
+        {
+          id: "scope", labelZh: "功能范围", labelEn: "Scope",
+          hintZh: "做到什么程度，按招标条目的说法组织",
+          hintEn: "What is covered, phrased the way the tender asks",
+          expected: true,
+        },
+        {
+          id: "integration", labelZh: "接口与集成", labelEn: "Integration",
+          hintZh: "对外接口、协议、可对接的系统",
+          hintEn: "Interfaces, protocols, systems it connects to",
+        },
+        {
+          id: "compliance", labelZh: "合规与安全", labelEn: "Compliance",
+          hintZh: "等保/密评/信创等可核验的结论与编号",
+          hintEn: "Verifiable certifications and their reference numbers",
+        },
+        {
+          id: "metrics", labelZh: "度量", labelEn: "Metrics",
+          hintZh: "容量、性能、SLA——能写进承诺的数字",
+          hintEn: "Capacity, performance, SLA — numbers you can commit to",
+        },
+      ],
+    },
     { id: "implementation", labelZh: "技术实现", labelEn: "Implementation" },
     { id: "architecture", labelZh: "架构说明", labelEn: "Architecture" },
     { id: "boundaries", labelZh: "技术边界", labelEn: "Boundaries" },
-    { id: "cases", labelZh: "项目案例", labelEn: "Cases" },
+    {
+      id: "cases",
+      labelZh: "项目案例",
+      labelEn: "Cases",
+      slots: [
+        {
+          id: "client", labelZh: "客户与规模", labelEn: "Client",
+          hintZh: "行业、体量、合同年份——评标先看这些",
+          hintEn: "Sector, size, contract year — what a reviewer checks first",
+          expected: true,
+        },
+        {
+          id: "delivery", labelZh: "交付范围", labelEn: "Delivery",
+          hintZh: "实际交付的内容与周期",
+          hintEn: "What was actually delivered, and over how long",
+        },
+        {
+          id: "outcome", labelZh: "成效数据", labelEn: "Outcome",
+          hintZh: "可引用的结果数字及其来源",
+          hintEn: "Quotable result figures and where they come from",
+        },
+      ],
+    },
     { id: "qualifications", labelZh: "资质证书", labelEn: "Qualifications" },
     { id: "style", labelZh: "措辞风格", labelEn: "Voice" },
   ],
@@ -1062,9 +1296,67 @@ export const WECHAT_PROFILE: WorkspaceProfile = {
   labelZh: "微信公众号",
   labelEn: "WeChat Article",
   categories: [
-    { id: "account", labelZh: "账号定位", labelEn: "Account" },
-    { id: "audience", labelZh: "读者画像", labelEn: "Audience" },
-    { id: "topics", labelZh: "选题库", labelEn: "Topics" },
+    {
+      id: "account",
+      labelZh: "账号定位",
+      labelEn: "Account",
+      slots: [
+        {
+          id: "positioning", labelZh: "定位", labelEn: "Positioning",
+          hintZh: "写给谁、解决什么、和同类号的差别",
+          hintEn: "Who it is for, what it solves, how it differs",
+          expected: true,
+        },
+        {
+          id: "compliance", labelZh: "合规红线", labelEn: "Compliance",
+          hintZh: "广告法用词、诱导分享、行业禁忌——每篇都要守",
+          hintEn: "Ad-law wording, share-baiting, industry taboos — due on every article",
+          // Not keyword-triggered: a red line applies to every draft.
+          defaults: { mode: "always" },
+        },
+        {
+          id: "columns", labelZh: "固定栏目", labelEn: "Columns",
+          hintZh: "常设系列与各自的格式",
+          hintEn: "Recurring series and the format each uses",
+        },
+      ],
+    },
+    {
+      id: "audience",
+      labelZh: "读者画像",
+      labelEn: "Audience",
+      slots: [
+        {
+          id: "profile", labelZh: "画像", labelEn: "Profile",
+          hintZh: "是谁、什么时候刷到、读完想干什么",
+          hintEn: "Who they are, when they scroll past, what they want next",
+          expected: true,
+        },
+        {
+          id: "language", labelZh: "他们的说法", labelEn: "Their words",
+          hintZh: "读者自己的用词与梗——标题要用的就是这些",
+          hintEn: "The words and in-jokes they use — headlines live here",
+        },
+      ],
+    },
+    {
+      id: "topics",
+      labelZh: "选题库",
+      labelEn: "Topics",
+      slots: [
+        {
+          id: "angle", labelZh: "切入角度", labelEn: "Angle",
+          hintZh: "同一个题材可以怎么写，一条一个角度",
+          hintEn: "Ways into the same subject, one per facet",
+          expected: true,
+        },
+        {
+          id: "evidence", labelZh: "素材与依据", labelEn: "Evidence",
+          hintZh: "数据、案例、引文及其出处",
+          hintEn: "Figures, cases, quotes — with where each came from",
+        },
+      ],
+    },
     { id: "products", labelZh: "产品服务", labelEn: "Products" },
     { id: "references", labelZh: "对标爆款", labelEn: "References" },
     { id: "style", labelZh: "文风", labelEn: "Voice" },
@@ -1152,6 +1444,11 @@ export function builtinProfile(id: string): WorkspaceProfile | null {
 /** Category label in the active UI language. */
 export function categoryLabel(cat: ProfileCategory, isZh: boolean): string {
   return isZh ? cat.labelZh : cat.labelEn;
+}
+
+/** Facet- or image-slot label in the active UI language (as `categoryLabel`). */
+export function slotLabel(slot: { labelZh: string; labelEn: string }, isZh: boolean): string {
+  return isZh ? slot.labelZh : slot.labelEn;
 }
 
 /** Profile label in the active UI language. */

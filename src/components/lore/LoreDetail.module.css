@@ -858,3 +858,193 @@
   background: rgba(0, 0, 0, 0.5);
   color: #fff;
 }
+
+/* ── 类型系统 (设计稿 03 · 屏 19/20/22/23) ─────────────────────────────────
+   槽位分段、缺口邀请、类型行与降级条。全部只是归类与提示的表达：注入语义仍写在
+   每条特征自己的 frontmatter 上，所以这里没有任何一处颜色表示"错误"。 */
+
+/* 主词条栏的类型行 — 屏 19 的 mono 小字。 */
+.typeLine {
+  margin-top: 6px;
+  font: 400 10px/1.6 var(--font-mono);
+  color: var(--color-text-faint);
+}
+
+/* 缺口小结，钉在左栏落款上方 — 只在真的缺东西时出现 (屏 20)。 */
+.coverageNote {
+  padding: 9px 12px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-surface);
+  font: 400 10px/1.7 var(--font-mono);
+  color: var(--color-text-muted);
+}
+
+/* 槽位分段 —— 段首是一条基线：名字 · 计数 · 细线 · ＋。 */
+.slotSection,
+.imgSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.imgSection {
+  gap: 10px;
+}
+.slotHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 4px;
+}
+.slotName {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: 0.18em;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+}
+/* 未归类段的段首压低一档 —— 它不是类型的一部分。 */
+.slotHeadLoose .slotName {
+  color: var(--color-text-faint);
+}
+.slotCount {
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-faint);
+}
+.slotRule {
+  flex: 1;
+  border-bottom: 1px solid var(--color-border);
+}
+.slotAdd {
+  flex-shrink: 0;
+  padding: 0 2px;
+  border: none;
+  background: none;
+  font: 500 13px/1 var(--font-sans);
+  color: var(--color-accent);
+  cursor: pointer;
+  transition: opacity var(--transition-fast);
+}
+.slotAdd:hover:not(:disabled) {
+  opacity: 0.7;
+}
+.slotAdd:disabled {
+  color: var(--color-text-faint);
+  cursor: default;
+}
+
+/* 缺口 —— 虚线一行，是邀请不是错误 (屏 20)。 */
+.slotGap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 16px;
+  border: 1px dashed var(--color-border-strong);
+}
+.slotGapName {
+  flex-shrink: 0;
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: 0.18em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+.slotGapHint {
+  font: italic 400 12px/1.4 var(--font-serif);
+  color: var(--color-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.slotGapAdd {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  padding: 0;
+  font: 500 12px/1 var(--font-sans);
+  color: var(--color-accent);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.slotGapAdd:hover:not(:disabled) {
+  opacity: 0.75;
+}
+.slotGapAdd:disabled {
+  color: var(--color-text-faint);
+  cursor: default;
+}
+/* 配图缺口是竖排的：右栏只有 300 宽，一行放不下提示加动作 (屏 22)。 */
+.slotGapImages {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 13px 14px;
+  border: 1px dashed var(--color-border-strong);
+}
+
+/* 编辑配图时的槽位选择 —— 已有图库靠它归类。 */
+.imgSlotPick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.imgSlotChip {
+  padding: 3px 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-base);
+  font: 400 11px/1.4 var(--font-serif);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.imgSlotChip:hover {
+  border-color: var(--color-border-strong);
+}
+.imgSlotChipActive {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg-base);
+}
+.imgSlotNote {
+  margin-top: 4px;
+  font: 400 10px/1.6 var(--font-mono);
+  color: var(--color-text-faint);
+}
+
+/* 降级条 (屏 23) —— 灰点 + 斜体说明 + 启用按钮。刻意不用警告色：条目完好。 */
+.degradedBar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 28px;
+  background: var(--color-bg-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+.degradedDot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-round);
+  background: var(--color-text-faint);
+  flex-shrink: 0;
+}
+.degradedText {
+  font: italic 400 12px/1.4 var(--font-serif);
+  color: var(--color-text-secondary);
+}
+.degradedBtn {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border: 1px solid var(--color-border-accent);
+  background: var(--color-bg-base);
+  color: var(--color-accent);
+  font: 500 11px/1 var(--font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.degradedBtn:hover:not(:disabled) {
+  background: var(--color-accent-tint);
+}
+.degradedBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

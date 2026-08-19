@@ -22,7 +22,9 @@ import { runAgent } from "../agent/runtime";
 import { createSplitSink, type SplitSink } from "../agent/splitTools";
 import { pickConnOptions, type ConnOptions } from "../ai/conn";
 import type { StreamMessage } from "../ai/types";
-import type { FacetMeta } from "./model";
+import { categoryFacetSlots } from "../profile/active";
+import type { CategoryId, FacetMeta } from "./model";
+import { withSlotDefaults } from "./slots";
 
 export interface SplitFacetDraft {
   meta: FacetMeta;
@@ -37,22 +39,41 @@ export interface SplitResult {
   notes: string;
 }
 
-/** Turn a sink facet into the draft shape the review UI edits. */
-function toDraft(f: SplitSink["facets"][number]): SplitFacetDraft {
+/**
+ * Turn a sink facet into the draft shape the review UI edits.
+ *
+ * Slot defaults are materialised **here**, before the author sees the draft, so
+ * the review list shows the injection mode that will actually be written — and
+ * so the write path stays a plain `createFacetFile` with no schema lookups in
+ * it. `mode` is not a field `split_facet` exposes, which is what makes it safe
+ * to let a slot's default raise it above the "auto" this always produces (see
+ * `withSlotDefaults`).
+ */
+function toDraft(f: SplitSink["facets"][number], category: CategoryId): SplitFacetDraft {
   return {
-    meta: {
-      title: f.title || "未命名特征",
-      keys: f.keys,
-      group: f.group,
-      priority: f.priority,
-      mode: "auto" as const,
-    },
+    meta: withSlotDefaults(
+      {
+        title: f.title || "未命名特征",
+        slot: f.slot,
+        keys: f.keys,
+        group: f.group,
+        priority: f.priority,
+        mode: "auto" as const,
+      },
+      category,
+    ),
     content: f.content,
   };
 }
 
 export async function splitLore(opts: ConnOptions & {
   entityName: string;
+  /**
+   * The entity's category — what its facet slots are resolved from. Optional so
+   * a caller with no workspace (a test, a bare script) still works: no category
+   * means no schema, which means no checklist and no `slot` on any draft.
+   */
+  category?: CategoryId;
   /** index.md body (frontmatter stripped). */
   indexBody: string;
   /**
@@ -86,16 +107,38 @@ export async function splitLore(opts: ConnOptions & {
       ].join("\n")
     : "";
 
+  // The category's type schema, as a checklist. Empty for a category with no
+  // schema — including one whose pack is disabled — and then the split behaves
+  // exactly as it did before slots existed.
+  const category = opts.category ?? "";
+  const slots = category ? categoryFacetSlots(category) : [];
+  const slotBlock = slots.length
+    ? [
+        "",
+        `FACET SLOTS declared by this entry's category ("${category}") — prefer them when they fit,`,
+        "passing the id as `slot`. They are a guide to the aspects worth separating, not a quota:",
+        "do not invent a facet just to fill one, and omit `slot` for a facet none of them describes.",
+        ...slots.map((s) => {
+          const labels = s.labelZh === s.labelEn ? s.labelZh : `${s.labelZh} / ${s.labelEn}`;
+          const hint = s.hintZh || s.hintEn ? ` — ${[s.hintZh, s.hintEn].filter(Boolean).join(" / ")}` : "";
+          const group = s.defaults?.group ? ` — mutually exclusive: share group "${s.defaults.group}"` : "";
+          return `- ${s.id} (${labels})${s.expected ? " [expected]" : ""}${hint}${group}`;
+        }),
+      ].join("\n")
+    : "";
+
   const promptText = [
     `ENTITY NAME: ${opts.entityName}`,
     `CURRENT ENTRY (index.md body):`,
     opts.indexBody,
     existingBlock,
+    slotBlock,
     opts.instruction?.trim() ? `\nAUTHOR GUIDANCE:\n${opts.instruction.trim()}` : "",
   ].filter(Boolean).join("\n");
 
-  const sink = createSplitSink((s) =>
-    opts.onPartial?.({ core: s.core, facets: s.facets.map(toDraft) }),
+  const sink = createSplitSink(
+    (s) => opts.onPartial?.({ core: s.core, facets: s.facets.map((f) => toDraft(f, category)) }),
+    slots,
   );
   const empty = () => sink.core === undefined && sink.facets.length === 0;
 
@@ -154,7 +197,7 @@ export async function splitLore(opts: ConnOptions & {
 
   return {
     core: (sink.core ?? "").trim(),
-    facets: sink.facets.map(toDraft).filter((f) => f.content.length > 0),
+    facets: sink.facets.map((f) => toDraft(f, category)).filter((f) => f.content.length > 0),
     notes: fullText.trim(),
   };
 }
@@ -192,6 +235,10 @@ export function parseSplitResponse(fullText: string): SplitResult {
     .map((f) => ({
       meta: {
         title: typeof f.title === "string" && f.title.trim() ? f.title.trim() : "未命名特征",
+        // Unvalidated here, unlike the tool path: this fallback has no category
+        // to check against. An id nothing declares reads as unclassified, which
+        // is the same thing a hand-written frontmatter slot does.
+        slot: typeof f.slot === "string" && f.slot.trim() ? f.slot.trim() : null,
         keys: Array.isArray(f.keys)
           ? f.keys.filter((k): k is string => typeof k === "string").map((k) => k.trim()).filter(Boolean)
           : [],

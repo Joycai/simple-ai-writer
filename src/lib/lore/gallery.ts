@@ -6,24 +6,59 @@
 import { fileExists, readFile, removeFile, writeBinaryFile, writeFile } from "../fs/fileio";
 import { safeAssetName } from "../image/assets";
 
+/** One images.md entry: the file, its description, and its image slot. */
+export interface ImageEntry {
+  file: string;
+  desc: string;
+  /** Image slot of the category's type schema; null when unclassified. */
+  slot: string | null;
+}
+
+/** `slot: portrait` as the block's first line — see `parseImagesMd`. */
+const SLOT_LINE_RE = /^slot:\s*(.+?)\s*$/i;
+
 /**
  * Parse an `images.md` body where each `## <filename>` heading marks an image
  * and the following lines (until the next heading) form its description.
  * Tolerant of leading/trailing whitespace and entries without descriptions.
+ *
+ * An image's **slot** rides as a `slot: <id>` line at the very start of its
+ * block, before the description. Only the first line counts, so a description
+ * that happens to contain "slot:" further down is left alone.
+ *
+ * A key line rather than a heading level or a suffix on the filename, because
+ * this file is read by builds that know nothing about slots: an older app shows
+ * the line as part of the description — cosmetic, nothing lost — whereas an `#`
+ * grouping heading would be swallowed into the *previous* image's description,
+ * and a decorated `## file [slot]` heading would corrupt the filename itself.
  */
-export function parseImagesMd(raw: string): { file: string; desc: string }[] {
-  const out: { file: string; desc: string }[] = [];
+export function parseImagesMd(raw: string): ImageEntry[] {
+  const out: ImageEntry[] = [];
   let current: { file: string; desc: string[] } | null = null;
+  const flush = () => {
+    if (!current) return;
+    const lines = [...current.desc];
+    // Leading blank lines may precede the slot line; skip them to find it.
+    let at = 0;
+    while (at < lines.length && lines[at].trim() === "") at++;
+    let slot: string | null = null;
+    const match = at < lines.length ? lines[at].match(SLOT_LINE_RE) : null;
+    if (match) {
+      slot = match[1].trim() || null;
+      lines.splice(0, at + 1);
+    }
+    out.push({ file: current.file, desc: lines.join("\n").trim(), slot });
+  };
   for (const line of raw.split(/\r?\n/)) {
     const heading = line.match(/^##\s+(.+?)\s*$/);
     if (heading) {
-      if (current) out.push({ file: current.file, desc: current.desc.join("\n").trim() });
+      flush();
       current = { file: heading[1].trim(), desc: [] };
     } else if (current) {
       current.desc.push(line);
     }
   }
-  if (current) out.push({ file: current.file, desc: current.desc.join("\n").trim() });
+  flush();
   return out;
 }
 
@@ -32,11 +67,16 @@ export function parseImagesMd(raw: string): { file: string; desc: string }[] {
  * consumed by parseImagesMd. Empty list → empty string (caller decides whether
  * to write or delete the file).
  */
-export function serializeImagesMd(images: { file: string; desc: string }[]): string {
+export function serializeImagesMd(
+  images: { file: string; desc: string; slot?: string | null }[],
+): string {
   if (!images.length) return "";
-  const blocks = images.map(({ file, desc }) => {
+  const blocks = images.map(({ file, desc, slot }) => {
+    const lines = [`## ${file}`];
+    if (slot) lines.push(`slot: ${slot}`);
     const body = desc.trim();
-    return body ? `## ${file}\n${body}` : `## ${file}`;
+    if (body) lines.push(body);
+    return lines.join("\n");
   });
   return blocks.join("\n\n") + "\n";
 }
@@ -47,7 +87,7 @@ export function serializeImagesMd(images: { file: string; desc: string }[]): str
  */
 export async function writeImagesMd(
   dirPath: string,
-  images: { file: string; desc: string }[],
+  images: { file: string; desc: string; slot?: string | null }[],
 ): Promise<void> {
   const path = `${dirPath}/images.md`;
   if (!images.length) {
@@ -57,7 +97,7 @@ export async function writeImagesMd(
   await writeFile(path, serializeImagesMd(images));
 }
 
-async function readImagesMdAsList(dirPath: string): Promise<{ file: string; desc: string }[]> {
+async function readImagesMdAsList(dirPath: string): Promise<ImageEntry[]> {
   try {
     const raw = await readFile(`${dirPath}/images.md`);
     return parseImagesMd(raw);
@@ -96,17 +136,22 @@ export async function addLoreImage(
   requestedName: string,
   bytes: Uint8Array,
   desc = "",
+  slot: string | null = null,
 ): Promise<string> {
   const filename = await uniqueImageName(dirPath, requestedName);
   await writeBinaryFile(`${dirPath}/${filename}`, bytes);
   const existing = await readImagesMdAsList(dirPath);
-  existing.push({ file: filename, desc });
+  existing.push({ file: filename, desc, slot });
   await writeImagesMd(dirPath, existing);
   return filename;
 }
 
 /**
  * Update one image's description. No-op if the file is not listed in images.md.
+ *
+ * The slot is carried through rather than rewritten — the same discipline every
+ * facet write follows: an edit that only means to touch the description must not
+ * silently unclassify the image.
  */
 export async function updateLoreImageDesc(
   dirPath: string,
@@ -116,7 +161,23 @@ export async function updateLoreImageDesc(
   const existing = await readImagesMdAsList(dirPath);
   const idx = existing.findIndex((i) => i.file === file);
   if (idx === -1) return;
-  existing[idx] = { file, desc };
+  existing[idx] = { ...existing[idx], desc };
+  await writeImagesMd(dirPath, existing);
+}
+
+/**
+ * Move one image into an image slot of the category's schema (or out of any, on
+ * null). No-op if the file is not listed in images.md.
+ */
+export async function updateLoreImageSlot(
+  dirPath: string,
+  file: string,
+  slot: string | null,
+): Promise<void> {
+  const existing = await readImagesMdAsList(dirPath);
+  const idx = existing.findIndex((i) => i.file === file);
+  if (idx === -1) return;
+  existing[idx] = { ...existing[idx], slot };
   await writeImagesMd(dirPath, existing);
 }
 
