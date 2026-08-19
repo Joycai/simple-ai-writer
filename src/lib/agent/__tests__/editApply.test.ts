@@ -8,7 +8,13 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { applyFindReplace, describeEditTarget, findOccurrences } from "../editApply";
+import {
+  applyFindReplace,
+  describeEditTarget,
+  findOccurrences,
+  occurrenceAt,
+  sliceLines,
+} from "../editApply";
 
 const DOC = "红色的门。红色的窗。红色的墙。";
 
@@ -72,5 +78,60 @@ describe("describeEditTarget", () => {
   it("names the scope once there is a choice to report", () => {
     expect(describeEditTarget(12, "all")).toBe("all 12 occurrences");
     expect(describeEditTarget(12, 3)).toBe("occurrence 3 of 12");
+  });
+});
+
+describe("sliceLines", () => {
+  const DOC = "一\n二\n三\n";
+
+  it("takes the range including the terminator of its last line", () => {
+    expect(sliceLines(DOC, 1, 1)?.text).toBe("一\n");
+    expect(sliceLines(DOC, 2, 3)?.text).toBe("二\n三\n");
+    expect(sliceLines(DOC, 1, 3)?.text).toBe(DOC);
+  });
+
+  it("reports where the slice starts, so the occurrence can be identified", () => {
+    expect(sliceLines(DOC, 2, 2)?.start).toBe(2);
+    expect(DOC.slice(2, 2 + 2)).toBe("二\n");
+  });
+
+  it("does not count a trailing newline as a fourth line", () => {
+    expect(sliceLines(DOC, 1, 1)?.lineCount).toBe(3);
+    expect(sliceLines("一\n二", 1, 1)?.lineCount).toBe(2);
+  });
+
+  it("clamps an end past the last line — 'to the end' is an ordinary thing to mean", () => {
+    const slice = sliceLines(DOC, 2, 99);
+    expect(slice?.to).toBe(3);
+    expect(slice?.text).toBe("二\n三\n");
+  });
+
+  it("refuses a start past the end, where there is no region at all", () => {
+    expect(sliceLines(DOC, 4, 4)).toBeNull();
+    expect(sliceLines(DOC, 0, 1)).toBeNull();
+  });
+
+  it("keeps the file's own line terminators", () => {
+    // Re-joining with "\n" would quietly convert this region to LF while the
+    // rest of the file stayed CRLF.
+    expect(sliceLines("a\r\nb\r\n", 1, 1)?.text).toBe("a\r\n");
+  });
+
+  it("handles a last line with no terminator", () => {
+    expect(sliceLines("a\nb", 2, 2)?.text).toBe("b");
+  });
+});
+
+describe("occurrenceAt", () => {
+  it("says which of the identical regions this one is", () => {
+    // Two identical slides: the proposal has to record that it took the
+    // second, or applying would re-locate to the first.
+    const doc = "<s>x</s>\n<s>x</s>\n";
+    const second = sliceLines(doc, 2, 2)!;
+    expect(occurrenceAt(doc, second.text, second.start)).toEqual({ occurrences: 2, index: 2 });
+  });
+
+  it("reports a unique region as the only one", () => {
+    expect(occurrenceAt("a\nb\n", "b\n", 2)).toEqual({ occurrences: 1, index: 1 });
   });
 });

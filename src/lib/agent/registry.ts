@@ -53,6 +53,7 @@ import {
   proposeEditTool,
   appendFileTool,
   rewriteDocumentTool,
+  rewriteLinesTool,
   proposeLorePlanTool,
   readMemoryTool,
   updateLoreFileTool,
@@ -106,6 +107,13 @@ export interface EditProposal extends ProposalBase {
    * only one, which is the shape every edit had before targeting existed.
    */
   target?: number | "all";
+  /**
+   * Present when the edit came from `rewrite_lines`: the line range the model
+   * named. Display only — the write is located by `find` like any other edit —
+   * but it is what tells the author on the card that they are approving a
+   * region of the file rather than a snippet somewhere in it.
+   */
+  range?: { from: number; to: number };
 }
 
 /**
@@ -393,6 +401,7 @@ export type ToolId =
   | "split_facet"
   | "propose_edit"
   | "rewrite_document"
+  | "rewrite_lines"
   | "append_file"
   | "create_chapter"
   | "create_file"
@@ -1179,7 +1188,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "rewrite_document",
         description:
-          "Replace the ENTIRE contents of a document file in the project. Use this for whole-document work that propose_edit cannot express — reformatting, normalising punctuation or indentation, restructuring headings — i.e. changes that touch text repeated throughout the file. Also the way to overhaul an .html deliverable (keep it self-contained: inline CSS/JS, inline SVG, no external dependencies). For a single localised change, use propose_edit instead. You MUST read the whole file first (call read_file repeatedly until it stops reporting more lines): 'content' replaces everything, so anything you did not read is deleted. NOTHING is written until the user approves the card; the call blocks until they decide, and the previous version is backed up on approval.",
+          "Replace the ENTIRE contents of a document file in the project. Use this for whole-document work that propose_edit cannot express — reformatting, normalising punctuation or indentation, restructuring headings — i.e. changes that touch text repeated throughout the file, and ONLY when the whole new body comfortably fits in one reply. For a long document use rewrite_lines instead, region by region: this tool carries the entire file as one argument, so on a long one the call is truncated and writes nothing. Also the way to overhaul an .html deliverable (keep it self-contained: inline CSS/JS, inline SVG, no external dependencies). For a single localised change, use propose_edit instead. You MUST read the whole file first (call read_file repeatedly until it stops reporting more lines): 'content' replaces everything, so anything you did not read is deleted. NOTHING is written until the user approves the card; the call blocks until they decide, and the previous version is backed up on approval.",
         parameters: {
           type: "object",
           properties: {
@@ -1201,6 +1210,46 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => rewriteDocumentTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  rewrite_lines: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "rewrite_lines",
+        description:
+          "Replace a RANGE OF LINES of a document with new text, leaving the rest of the file untouched. This is how a long file gets restructured or re-laid-out: read a region with read_file, send back only its replacement, repeat for the next region. Use it instead of rewrite_document whenever the file is long — rewrite_document carries the WHOLE new body in one call, so on a long document it runs past the output cap and a call cut off there writes nothing at all, losing everything you generated. You do NOT quote the old lines: give start_line and end_line (the numbers read_file and search_text report) and the tool reads that range itself. end_line past the last line means 'to the end of the file'; an empty 'content' deletes the range. NOTHING is written until the user approves the card; the call blocks until they decide. After each approved call the line numbers below the region have moved — re-read before naming the next range, or work from the bottom of the file upwards.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Absolute path of the document, as returned by list_files",
+            },
+            start_line: {
+              type: "number",
+              description: "1-based first line to replace",
+            },
+            end_line: {
+              type: "number",
+              description: "1-based last line to replace (inclusive). Past the end of the file means 'to the end'.",
+            },
+            content: {
+              type: "string",
+              description:
+                "The replacement text for those lines — only this region, never the whole file. An empty string deletes them.",
+            },
+            reason: {
+              type: "string",
+              description: "One-line justification shown to the user on the review card",
+            },
+          },
+          required: ["path", "start_line", "end_line", "content"],
+        },
+      },
+    },
+    execute: (call, ctx) => rewriteLinesTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   append_file: {
