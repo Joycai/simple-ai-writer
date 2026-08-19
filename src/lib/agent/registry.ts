@@ -53,6 +53,7 @@ import {
   proposeEditTool,
   appendFileTool,
   rewriteDocumentTool,
+  rewriteLinesTool,
   proposeLorePlanTool,
   readMemoryTool,
   updateLoreFileTool,
@@ -90,9 +91,29 @@ interface ProposalBase {
 /** Rewrite a passage in place. */
 export interface EditProposal extends ProposalBase {
   kind: "edit";
-  /** Exact text to replace — must occur exactly once in the file. */
+  /** Exact text to replace. */
   find: string;
   replace: string;
+  /**
+   * How many times `find` occurred when this proposal was built.
+   *
+   * Recorded rather than recomputed at apply time: it is what the card showed
+   * the author, so it is what the write must still find to be the write they
+   * approved. See `agent/editApply`.
+   */
+  occurrences: number;
+  /**
+   * Which occurrence to replace — a 1-based index, or "all". Absent means the
+   * only one, which is the shape every edit had before targeting existed.
+   */
+  target?: number | "all";
+  /**
+   * Present when the edit came from `rewrite_lines`: the line range the model
+   * named. Display only — the write is located by `find` like any other edit —
+   * but it is what tells the author on the card that they are approving a
+   * region of the file rather than a snippet somewhere in it.
+   */
+  range?: { from: number; to: number };
 }
 
 /**
@@ -380,6 +401,7 @@ export type ToolId =
   | "split_facet"
   | "propose_edit"
   | "rewrite_document"
+  | "rewrite_lines"
   | "append_file"
   | "create_chapter"
   | "create_file"
@@ -581,7 +603,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "read_slides",
         description:
-          "Read a PowerPoint presentation (.pptx) in the project. read_file cannot: a .pptx is a compressed archive, not text. Slides come back as markdown in the deck's running order — one `## Slide N` heading per slide, its bullets nested by outline level, tables as markdown tables, pictures named, speaker notes quoted. Around 4000 characters come back per call, cut on a slide boundary; if the deck is longer the result ends with the slide range shown and the start_slide to pass next, so a long deck can be read in order. Legacy .ppt files (PowerPoint 97-2003) cannot be read at all.",
+          "Read a presentation in the project **by slide** — either a .pptx or an .html deck. For a .pptx: read_file cannot open one (it is a compressed archive, not text), and slides come back as markdown in running order — one `## Slide N` heading per slide, bullets nested by outline level, tables as markdown tables, pictures named, speaker notes quoted. For an .html deck: each slide comes back as its **verbatim HTML source** under the same `## Slide N` heading, which is what you quote into propose_edit to change one slide — use this instead of paging the whole page with read_file. Around 4000 characters come back per call, cut on a slide boundary; if the deck is longer the result ends with the slide range shown and the start_slide to pass next, so a long deck can be read in order. Legacy .ppt files (PowerPoint 97-2003) cannot be read at all.",
         parameters: {
           type: "object",
           properties: {
@@ -1125,7 +1147,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "propose_edit",
         description:
-          "Propose a change to a document file in the project. NOTHING is written until the user approves the proposal on a review card; the call blocks until they decide, and a rejection (with their reason) comes back so you can adjust. 'find' must be the EXACT text currently in the file and must occur exactly once — include enough surrounding text to make it unique. Propose one focused edit per call.",
+          "Propose a change to a document file in the project. NOTHING is written until the user approves the proposal on a review card; the call blocks until they decide, and a rejection (with their reason) comes back so you can adjust. 'find' must be the EXACT text currently in the file. When it occurs more than once you have three ways to say which one you mean: make 'find' unique by including surrounding text, pass 'occurrence' to target the Nth (read_slides numbers an .html deck's slides for exactly this), or pass replace_all=true to change every one — that last is how a document-wide substitution is done WITHOUT rewrite_document. Propose one focused edit per call.",
         parameters: {
           type: "object",
           properties: {
@@ -1138,6 +1160,15 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
               description: "Exact existing text to replace (unique in the file)",
             },
             replace: { type: "string", description: "The replacement text" },
+            occurrence: {
+              type: "number",
+              description:
+                "1-based: which occurrence of 'find' to replace, when it appears more than once. Omit when 'find' is unique.",
+            },
+            replace_all: {
+              type: "boolean",
+              description: "Replace EVERY occurrence of 'find' in the file. Cannot be combined with 'occurrence'.",
+            },
             reason: {
               type: "string",
               description: "One-line justification shown to the user on the review card",
@@ -1157,7 +1188,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "rewrite_document",
         description:
-          "Replace the ENTIRE contents of a document file in the project. Use this for whole-document work that propose_edit cannot express — reformatting, normalising punctuation or indentation, restructuring headings — i.e. changes that touch text repeated throughout the file. Also the way to overhaul an .html deliverable (keep it self-contained: inline CSS/JS, inline SVG, no external dependencies). For a single localised change, use propose_edit instead. You MUST read the whole file first (call read_file repeatedly until it stops reporting more lines): 'content' replaces everything, so anything you did not read is deleted. NOTHING is written until the user approves the card; the call blocks until they decide, and the previous version is backed up on approval.",
+          "Replace the ENTIRE contents of a document file in the project. Use this for whole-document work that propose_edit cannot express — reformatting, normalising punctuation or indentation, restructuring headings — i.e. changes that touch text repeated throughout the file, and ONLY when the whole new body comfortably fits in one reply. For a long document use rewrite_lines instead, region by region: this tool carries the entire file as one argument, so on a long one the call is truncated and writes nothing. Also the way to overhaul an .html deliverable (keep it self-contained: inline CSS/JS, inline SVG, no external dependencies). For a single localised change, use propose_edit instead. You MUST read the whole file first (call read_file repeatedly until it stops reporting more lines): 'content' replaces everything, so anything you did not read is deleted. NOTHING is written until the user approves the card; the call blocks until they decide, and the previous version is backed up on approval.",
         parameters: {
           type: "object",
           properties: {
@@ -1179,6 +1210,46 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => rewriteDocumentTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  rewrite_lines: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "rewrite_lines",
+        description:
+          "Replace a RANGE OF LINES of a document with new text, leaving the rest of the file untouched. This is how a long file gets restructured or re-laid-out: read a region with read_file, send back only its replacement, repeat for the next region. Use it instead of rewrite_document whenever the file is long — rewrite_document carries the WHOLE new body in one call, so on a long document it runs past the output cap and a call cut off there writes nothing at all, losing everything you generated. You do NOT quote the old lines: give start_line and end_line (the numbers read_file and search_text report) and the tool reads that range itself. end_line past the last line means 'to the end of the file'; an empty 'content' deletes the range. NOTHING is written until the user approves the card; the call blocks until they decide. After each approved call the line numbers below the region have moved — re-read before naming the next range, or work from the bottom of the file upwards.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Absolute path of the document, as returned by list_files",
+            },
+            start_line: {
+              type: "number",
+              description: "1-based first line to replace",
+            },
+            end_line: {
+              type: "number",
+              description: "1-based last line to replace (inclusive). Past the end of the file means 'to the end'.",
+            },
+            content: {
+              type: "string",
+              description:
+                "The replacement text for those lines — only this region, never the whole file. An empty string deletes them.",
+            },
+            reason: {
+              type: "string",
+              description: "One-line justification shown to the user on the review card",
+            },
+          },
+          required: ["path", "start_line", "end_line", "content"],
+        },
+      },
+    },
+    execute: (call, ctx) => rewriteLinesTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   append_file: {

@@ -151,6 +151,24 @@ docx/xlsx/pdf 的转换器都在 `lib/import/`，因为它们只有导入这一�
 
 消息认两件独立的事：`event.source` 必须是这个 frame 自己的 `contentWindow`，且携带编译进脚本的一次性 nonce。
 
+### D18 采集脚本靠 CSP `sha256-` 放行（**修 bug 时补的，很重要**）
+
+一期发出去的版本**在 app 里根本跑不起来**：每次导出都是 20 秒静默超时，任何页面都一样，包括空白页。
+
+原因是 `docs/html-artifact-plan.md` D2 写错了一条事实（现已更正）：`blob:` 文档不是"opaque origin 所以不受主窗 CSP 约束"——`blob:` 是 local scheme，**继承创建它的页面的 CSP**。app 的 `script-src` 是 `'self'`，于是注进去的采集脚本一行都没执行。真浏览器对照实验（加不加 `sandbox` 各一次）两次都是 `Executing inline script violates ... 'script-src 'self''`。
+
+修法是 CSP hash——正是它存在的理由：
+
+```jsonc
+// src-tauri/tauri.conf.json
+"script-src": "'self' 'sha256-<harvester.js 的摘要>'"
+```
+
+- **只放行那一个脚本。** 页面自带的内联脚本（模型写的）照样全部拦住——实测验证过一次"我们的跑了 / 它的没跑"。比 `'unsafe-inline'` 严格得多，威胁模型不但没松反而说得更死：这个 frame 里能执行的代码，只有我们自己那份。
+- **不给 `allow-same-origin`。** 曾考虑过：给了就能让 app 直接读 frame 的 DOM，采集代码变成普通 TypeScript（可测！）、不用注入、不用 postMessage。否掉的理由是它把"AI 脚本进不了 app 上下文"这条保证从 sandbox 转嫁给 CSP——今天成立，但哪天有人为了别的需求给 `script-src` 加上 `'unsafe-inline'`，这就是一个静默的洞。
+- **两条施工纪律**，都由 `pptxHarvesterCsp.test.ts` 钉住：hash 覆盖 `harvester.js` 的**字节**，改文件就得改 conf（漂了的症状还是那个 20 秒静默超时，日志里什么都没有）；每轮变化的数据（nonce）只能放**属性**，塞进脚本正文会让每次的 hash 都不一样。
+- **换行归一化**后再算 hash，否则 Windows 上 CRLF 检出的 clone 摘要不同，只在那台机器上坏。
+
 ### D14 分层：能不碰 DOM 决定的，都不在 DOM 里决定
 
 | 文件 | 职责 | 可测 |
@@ -219,12 +237,39 @@ pptxgenjs 是 lazy import 的独立分片（272KB），没开 Beta 的作者一�
 2. **`LAYOUT_16x9` 不是 16:9 宽屏**。pptxgenjs 的 "16x9" 是 10×5.625in（旧宽屏），PowerPoint 2013 起默认的 13.333×7.5 在它那儿叫 `LAYOUT_WIDE`。选错了视觉上毫无异常——直到这份 deck 和别人的合并，它以四分之三的尺寸出现。
 3. **`rectRadius` 的单位是英寸，不是比例**。OOXML 的 `adj` 是比例，所以传比例看起来天经地义；pptxgenjs 自己会除以短边。传错的结果是圆角明显变小，没有任何东西报错。
 
-**未验证**：桌面 app 里没跑过——Settings 开关、审批卡、`export_pptx` 的完整链路只有类型检查和单测担保（这台机器上 Vite dev server 起得来但没有项目和模型，导出要读磁盘上的文件）。
+**验证的缺口，以及它的代价**：上面这些实验都跑在 `localhost` 上，而那个页面**没有 CSP**——于是整条链路里最关键的一环（blob 文档继承主窗 CSP）从头到尾没有被测到，功能发出去在 app 里一次都没成功过。补的办法是让探针页面挂上 `tauri.conf.json` 里**真实的** CSP 再跑一遍：现在验证的是"hash 放行的采集脚本跑了 + 页面自带脚本被拦住 + deck 正确采集"。
+
+**仍未验证**：桌面 app 里没跑过——Settings 开关、审批卡、`export_pptx` 的完整链路只有类型检查和单测担保（这台机器上 Vite dev server 起得来但没有项目和模型，导出要读磁盘上的文件）。
+
+### D19 `read_slides` 也读 .html——同一个工具，不是第二个（2026-08-19）
+
+生成端让模型把 deck 写成 HTML，但**读回来**只有 `read_file`，按 4000 字符盲翻。
+改第 7 页要先翻十几次才找得到它，找到之后 `propose_edit` 还需要那一页的精确源码去引用。
+所以 `read_slides` 增加一条 .html 分支（`lib/pptx/htmlSlides.ts`）。
+
+- **为什么不是新工具**（与 D5 只是表面矛盾）：D5 讲的是 `read_slides` 不该是 `read_file` 的分支——
+  那两者的分页单位不同（行 vs 页），合并会让 `start_line` 的语义随扩展名漂移。
+  这里恰恰相反：两种 deck 的分页单位**都是页**，`start_slide` 含义完全一致，
+  模型的问题是「给我看第 7 页」，deck 存成哪种格式不属于这个问题。
+- **返回逐字节的原始 HTML**，不是渲染后的文本：模型拿到它之后的下一个动作，
+  就是把其中一段抄进 `propose_edit` 的 `find`。渲染过的文本抄回去对不上。
+- **切分约定必须与 `harvester.js` 的 `SLIDE_SELECTORS` 一致**，否则「第 7 页」在读和导出时
+  是两个东西，作者审「第 7 页的改动」会看错框。harvester.js 是以原始文本注入沙箱帧的
+  （它 import 不了任何东西，而且 D18 之后它的**字节**被写进了 CSP 的 `sha256-`，更不可能长出 import），
+  所以这份不变量靠测试守：`htmlSlides.test.ts` 把列表从 harvester 源码里解析回来逐条对比。
+- **纯文本切分，不碰 DOM**（D14 的同一条纪律）：`harvest.ts` 那个离屏帧存在的意义是**量**页面，
+  需要真实布局；切源码不需要布局。纯函数才是能承载测试的那部分——
+  扫描器要跳过 `<script>`/`<style>`/注释（生成的 deck 里 `<script>` 字符串常出现 `<section>`，
+  数进去就会在错误的位置收页），属性值里的 `>` 也不能提前结束标签。
+- **切不开的页有硬顶**：选择器一个都没匹配上时 body 就是唯一一页，可能有 60k 字符。
+  整页返回会让一次调用吃掉整轮上下文，所以按预算截断并给出 `read_file` 的 `start_line` 接力——
+  和 D4「一页超预算仍整页返回」的取舍不同，因为那里的一页是真的一页，这里的一页是**切分失败**。
 
 ## 5. 不变式与风险
 
 - **`.pptx` 不是章节**：不进 spine、不进 bookContext、不进 RAG/前情记忆，`isChapterFile` 不动。导入后的 `.md` 是普通文档。
 - **分页永远在页边界**：任何让 `read_slides` 返回半页的改动都会破坏"尾注给出的 `start_slide` 能续上"这个契约。
+- **`.html` 的分页与导出的分页同源**：`htmlSlides.ts` 的选择器表和 `harvester.js` 的 `SLIDE_SELECTORS` 必须逐条一致——不一致的那天，作者审的「第 7 页」和导出的第 7 页不是同一页。`htmlSlides.test.ts` 把这份列表从 harvester 源码里解析回来对比，所以动 `harvester.js` 要同时看两处：D18 的 `sha256-`，和这张表。
 - **截断必须发声**：单页 4000 字符顶、整份导入 500 页顶、导出的每一处降级，三处都写进输出。
 - **沙箱参数不动**：导出 frame 与预览 frame 的 `sandbox` 必须保持一致（`allow-scripts`，**没有** `allow-same-origin`）。加上 same-origin 会让 app 能直接读 DOM——省掉注入和 postMessage，同时把 AI 生成的脚本放进 app 上下文。不做。
 - **风险：版式复杂的 deck 提取质量**。SmartArt、组合图形里的文字、自由排版的宣传页——读取端按 XML 文档顺序取，会给出顺序古怪的列表。格式的固有限制（同 PDF 导入丢表格版式），不靠启发式去猜。

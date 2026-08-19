@@ -99,7 +99,7 @@ const ALL_TOOLS: ToolId[] = [
   "propose_lore_plan", "create_lore_entity", "update_lore_file",
   "update_lore_meta", "append_lore_file", "edit_lore_file",
   "update_facet_meta", "delete_lore_file", "move_lore_entity", "delete_lore_entity",
-  "update_memory", "propose_edit", "append_file",
+  "update_memory", "propose_edit", "append_file", "rewrite_lines",
   "create_chapter", "create_file", "create_directory", "move_chapter", "copy_file", "delete_chapter",
   "delete_directory",
 ];
@@ -942,9 +942,192 @@ describe("propose_edit", () => {
 
     const ambiguous = await run("propose_edit", { path: DOC, find: "hall", replace: "cave" }, ctxOk);
     expect(ambiguous.content).toContain("2 times");
+    // A bare refusal used to leave rewrite_document as the only move — the
+    // error has to name the ways out, or the model takes the expensive one.
+    expect(ambiguous.content).toContain("occurrence=N");
+    expect(ambiguous.content).toContain("replace_all=true");
 
     const noChannel = await run("propose_edit", { path: DOC, find: "She waited.", replace: "y" }, makeCtx());
     expect(noChannel.content).toContain("cannot review");
+  });
+});
+
+// ─── propose_edit targeting (occurrence / replace_all) ───────────────────────
+
+describe("propose_edit targeting", () => {
+  const DECK = `${PROJECT}/路演.html`;
+  const captured: object[] = [];
+  const ctx = () => {
+    captured.length = 0;
+    return makeCtx({
+      requestApproval: async (p) => {
+        captured.push(p);
+        return { approved: true };
+      },
+    });
+  };
+
+  beforeEach(() => {
+    // Three structurally identical slides — the shape that has no unique
+    // `find` at all, and used to force a whole-file rewrite.
+    fs.set(DECK, "<section><h1>标题</h1></section>".repeat(3));
+  });
+
+  it("records the occurrence count and the chosen target on the proposal", async () => {
+    const c = ctx();
+    const res = await run("propose_edit", {
+      path: DECK, find: "<h1>标题</h1>", replace: "<h1>第二页</h1>", occurrence: 2,
+    }, c);
+
+    expect(captured[0]).toMatchObject({ kind: "edit", occurrences: 3, target: 2 });
+    expect(res.content).toContain("occurrence 2 of 3");
+  });
+
+  it("carries replace_all through as target 'all'", async () => {
+    const c = ctx();
+    const res = await run("propose_edit", {
+      path: DECK, find: "<h1>标题</h1>", replace: "<h1>新标题</h1>", replace_all: true,
+    }, c);
+
+    expect(captured[0]).toMatchObject({ occurrences: 3, target: "all" });
+    expect(res.content).toContain("all 3 occurrences");
+  });
+
+  it("leaves a single match untargeted, however it was addressed", async () => {
+    fs.set(DECK, "<section><h1>唯一</h1></section>");
+    const c = ctx();
+    await run("propose_edit", { path: DECK, find: "唯一", replace: "x", occurrence: 1 }, c);
+    // occurrences === 1 is the plain case: the card should not say "1 of 1".
+    expect(captured[0]).toMatchObject({ occurrences: 1 });
+    expect(captured[0]).not.toHaveProperty("target", 1);
+  });
+
+  it("refuses both selectors at once, and an occurrence past the end", async () => {
+    const c = ctx();
+    const both = await run("propose_edit", {
+      path: DECK, find: "<h1>标题</h1>", replace: "x", occurrence: 1, replace_all: true,
+    }, c);
+    expect(both.content).toContain("not both");
+
+    const past = await run("propose_edit", {
+      path: DECK, find: "<h1>标题</h1>", replace: "x", occurrence: 9,
+    }, c);
+    expect(past.content).toContain("occurrence 9 does not exist");
+
+    const zero = await run("propose_edit", {
+      path: DECK, find: "<h1>标题</h1>", replace: "x", occurrence: 0,
+    }, c);
+    expect(zero.content).toContain("whole number");
+
+    expect(captured).toHaveLength(0);
+  });
+});
+
+// ─── rewrite_lines ───────────────────────────────────────────────────────────
+
+describe("rewrite_lines", () => {
+  const DOC = `${PROJECT}/writing/ch1.md`;
+  const BODY = "# 第一章\n\n她推开门。\n屋里很暗。\n她等着。\n";
+  const captured: object[] = [];
+  const ctx = () => {
+    captured.length = 0;
+    return makeCtx({
+      requestApproval: async (p) => {
+        captured.push(p);
+        return { approved: true };
+      },
+    });
+  };
+
+  beforeEach(() => {
+    fs.set(DOC, BODY);
+  });
+
+  it("proposes an ordinary edit whose find is read from disk, not quoted", async () => {
+    const c = ctx();
+    const res = await run("rewrite_lines", {
+      path: DOC, start_line: 3, end_line: 4, content: "她推开门，屋里一片漆黑。",
+    }, c);
+
+    // The whole point: the model sent only the replacement, and the proposal
+    // still carries the exact original for the apply step to re-locate.
+    expect(captured[0]).toMatchObject({
+      kind: "edit",
+      find: "她推开门。\n屋里很暗。\n",
+      replace: "她推开门，屋里一片漆黑。\n",
+      range: { from: 3, to: 4 },
+    });
+    expect(res.content).toContain("Rewrote lines 3-4");
+  });
+
+  it("restores the line terminator the replacement forgot", async () => {
+    const c = ctx();
+    await run("rewrite_lines", { path: DOC, start_line: 5, end_line: 5, content: "她走了。" }, c);
+    // Without this the next line would be welded onto the replacement.
+    expect(captured[0]).toMatchObject({ replace: "她走了。\n" });
+  });
+
+  it("clamps an end past the file and reports the real range", async () => {
+    const c = ctx();
+    const res = await run("rewrite_lines", { path: DOC, start_line: 4, end_line: 99, content: "完。" }, c);
+    expect(captured[0]).toMatchObject({ range: { from: 4, to: 5 } });
+    expect(res.content).toContain("Rewrote lines 4-5");
+  });
+
+  it("deletes the range on an empty content", async () => {
+    const c = ctx();
+    await run("rewrite_lines", { path: DOC, start_line: 4, end_line: 4, content: "" }, c);
+    expect(captured[0]).toMatchObject({ find: "屋里很暗。\n", replace: "" });
+  });
+
+  it("records which identical region it took", async () => {
+    fs.set(DOC, "<section>x</section>\n<section>x</section>\n");
+    const c = ctx();
+    await run("rewrite_lines", { path: DOC, start_line: 2, end_line: 2, content: "<section>y</section>" }, c);
+    // Two byte-identical slides: without the index, applying would re-locate
+    // to the first one and rewrite the wrong slide.
+    expect(captured[0]).toMatchObject({ occurrences: 2, target: 2 });
+  });
+
+  it("refuses a start past the end, a bad range, and .ai-writer", async () => {
+    const c = ctx();
+    const past = await run("rewrite_lines", { path: DOC, start_line: 99, end_line: 99, content: "x" }, c);
+    expect(past.content).toContain("past the end");
+
+    const backwards = await run("rewrite_lines", { path: DOC, start_line: 4, end_line: 2, content: "x" }, c);
+    expect(backwards.content).toContain("end_line ≥ start_line");
+
+    const lore = await run("rewrite_lines", {
+      path: `${PROJECT}/.ai-writer/lore/characters/ava/index.md`, start_line: 1, end_line: 1, content: "x",
+    }, c);
+    expect(lore.content).toContain(".ai-writer");
+
+    expect(captured).toHaveLength(0);
+    expect(fs.get(DOC)).toBe(BODY);
+  });
+
+  it("refuses an empty file, where there is no line to locate", async () => {
+    // find would be "" — a proposal nothing could ever re-locate.
+    fs.set(DOC, "");
+    const c = ctx();
+    const res = await run("rewrite_lines", { path: DOC, start_line: 1, end_line: 1, content: "x" }, c);
+    expect(res.content).toContain("is empty");
+    expect(captured).toHaveLength(0);
+  });
+
+  it("counts lines the way the slicer does, so the error names a real range", async () => {
+    // "…等着。\n" is 5 lines, not the 6 a naive split would report — and line 6
+    // must be refused rather than silently accepted.
+    const c = ctx();
+    const res = await run("rewrite_lines", { path: DOC, start_line: 6, end_line: 6, content: "x" }, c);
+    expect(res.content).toContain("which has 5 line(s)");
+  });
+
+  it("says so instead of proposing a no-op", async () => {
+    const c = ctx();
+    const res = await run("rewrite_lines", { path: DOC, start_line: 5, end_line: 5, content: "她等着。" }, c);
+    expect(res.content).toContain("nothing to do");
+    expect(captured).toHaveLength(0);
   });
 });
 

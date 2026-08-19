@@ -119,9 +119,26 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
 function EditBody({ proposal }: { proposal: EditProposal }) {
   const { t } = useTranslation();
   const [showOriginal, setShowOriginal] = useState(false);
+  const all = proposal.target === "all";
+  // What the author is being asked to authorise, beyond the diff itself: which
+  // region of the file, and — when `find` repeats — which of its matches. A
+  // rewrite_lines edit is scoped by both, so they read as one line.
+  const scope = [
+    proposal.range && t("ai.approval.editLines", { from: proposal.range.from, to: proposal.range.to }),
+    proposal.occurrences > 1 &&
+      (all
+        ? t("ai.approval.editAll", { n: proposal.occurrences })
+        : t("ai.approval.editNth", {
+            n: typeof proposal.target === "number" ? proposal.target : 1,
+            total: proposal.occurrences,
+          })),
+  ].filter(Boolean);
 
   return (
     <>
+      {scope.length > 0 && (
+        <div className={all ? styles.editScopeWarn : styles.editScope}>{scope.join(" · ")}</div>
+      )}
       <pre className={styles.replaceBlock}>{proposal.replace}</pre>
       <button className={styles.originalToggle} onClick={() => setShowOriginal((v) => !v)}>
         {showOriginal ? <ChevronDown size={10} /> : <ChevronRight size={10} />}

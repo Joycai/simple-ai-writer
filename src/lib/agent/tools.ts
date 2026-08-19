@@ -11,6 +11,7 @@
 import { isChapterFile, naturalCompare } from "../context/outline";
 import { isHtmlPath } from "../fs/images";
 import { isPptxPath, readPptxSlides, type SlideRange } from "../fs/pptx";
+import { readHtmlSlideRange, splitHtmlSlides } from "../pptx/htmlSlides";
 import { fileExists, readFile } from "../fs/fileio";
 import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, imageToDataUrl, isImagePath } from "../fs/images";
 import { readEntityFile, type LoreEntity, type LoreIndex } from "../lore";
@@ -605,11 +606,35 @@ export async function readSlidesFile(
   if (!isWorkspacePath(projectPath, path)) {
     return { toolCallId, content: "Error: Path is outside the project (the app's .ai-writer data is off-limits)." };
   }
+
+  // An .html deck pages by slide too. Same tool rather than a second one: the
+  // model's question is "show me slide 7", and which of the two file kinds the
+  // deck happens to be saved as is not part of that question. The source comes
+  // back verbatim, because the next thing the model does with it is quote a
+  // piece of it into propose_edit.
+  if (isHtmlPath(path)) {
+    let html: string;
+    try {
+      html = await readFile(path);
+    } catch (e) {
+      return { toolCallId, content: `Error reading file: ${String(e)}` };
+    }
+    const slides = splitHtmlSlides(html);
+    const from = startSlide === undefined ? 1 : Math.max(1, Math.floor(startSlide));
+    if (from > slides.length) {
+      return {
+        toolCallId,
+        content: `Error: start_slide ${from} is past the end — this page has ${slides.length} slide(s).`,
+      };
+    }
+    return { toolCallId, content: formatSlideRange(readHtmlSlideRange(html, from, SLIDES_MAX_CHARS)) };
+  }
+
   if (!isPptxPath(path)) {
     return {
       toolCallId,
       content:
-        `Error: "${path}" is not a .pptx file. read_slides reads presentations only — ` +
+        `Error: "${path}" is neither a .pptx nor an .html file. read_slides reads presentations only — ` +
         "use read_file for text documents. Legacy .ppt (PowerPoint 97-2003) cannot be " +
         "read at all; it has to be saved as .pptx first.",
     };
