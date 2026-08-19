@@ -26,6 +26,80 @@ export interface ProfileCategory {
   id: string;
   labelZh: string;
   labelEn: string;
+  /**
+   * The category's **type schema**: which facets and which images entries of
+   * this category are expected to have (外貌 / 组织架构 / 人设图…).
+   *
+   * Absent — never an empty array, see `parseCategory` — for a category with no
+   * schema: every user-defined category, the `custom` bucket, and any category
+   * whose declaring pack is currently disabled. That absence *is* the degraded
+   * state a disabled pack falls back to, so every consumer must read "no
+   * slots" as "an ordinary entry", never as an error.
+   */
+  slots?: FacetSlot[];
+  imageSlots?: ImageSlot[];
+}
+
+/**
+ * One **facet slot** of a category's schema — "外貌", "装扮", "组织架构".
+ *
+ * A slot is a *classification and a prompt hint*, never an injection rule: the
+ * only facet fields `selectLore` reads are the file's own `keys` / `group` /
+ * `priority` / `mode`, so a slot whose declaring pack got disabled costs the
+ * author the grouping and the nudges — and changes what the model sees by not
+ * one character. See `docs/lore-entry-type-plan.md` §4 for the invariants.
+ */
+export interface FacetSlot {
+  /**
+   * Stable id, written into a facet's `slot` frontmatter and (phase 3) offered
+   * as a tool-schema enum value. Same portable slug rule as a category id
+   * (`CATEGORY_ID_RE`): it has to survive as an unquoted YAML scalar and as a
+   * JSON enum member.
+   */
+  id: string;
+  labelZh: string;
+  labelEn: string;
+  /** What belongs in this facet — the AI checklists read it (phase 3). */
+  hintZh?: string;
+  hintEn?: string;
+  /**
+   * Entries of this category usually have this facet, so its absence is worth
+   * pointing out. A nudge, never a validation — nothing refuses to save.
+   */
+  expected?: boolean;
+  /**
+   * What a *newly created* facet of this slot is pre-filled with.
+   *
+   * Nested rather than flattened on purpose: a flattened `mode`/`priority`
+   * would read as "the slot's injection behaviour", and the whole design rests
+   * on these being **materialised into the file at creation time** rather than
+   * resolved from the schema at read time. Written out, the file keeps its full
+   * injection semantics after the pack that suggested them is gone.
+   */
+  defaults?: FacetSlotDefaults;
+}
+
+/** The frontmatter a new facet of a slot starts with. See `FacetSlot.defaults`. */
+export interface FacetSlotDefaults {
+  mode?: "auto" | "always" | "manual";
+  priority?: number;
+  group?: string;
+  keys?: string[];
+}
+
+/**
+ * One **image slot** of a category's schema — 人设图 / 建筑图 / 概念图.
+ *
+ * No behaviour fields: gallery images are never conditionally injected, so a
+ * slot here is only how the gallery groups them and what it asks the author for.
+ */
+export interface ImageSlot {
+  id: string;
+  labelZh: string;
+  labelEn: string;
+  hintZh?: string;
+  hintEn?: string;
+  expected?: boolean;
 }
 
 /**
@@ -391,12 +465,273 @@ export const NOVEL_PROFILE: WorkspaceProfile = {
   id: "novel",
   labelZh: "小说",
   labelEn: "Novel",
+  // The novel pack is the only one carrying a type schema so far, on purpose:
+  // the format proves itself on one real domain first, and the other packs get
+  // their slot tables in phase 3 together with the prompts that consume them —
+  // a checklist nothing reads yet is a half-built thing to show an author.
+  // See docs/lore-entry-type-plan.md §6.
   categories: [
-    { id: "characters", labelZh: "人物", labelEn: "Characters" },
-    { id: "world", labelZh: "世界观", labelEn: "World" },
-    { id: "factions", labelZh: "势力", labelEn: "Factions" },
-    { id: "items", labelZh: "道具", labelEn: "Items" },
-    { id: "skills", labelZh: "技能", labelEn: "Skills" },
+    {
+      id: "characters",
+      labelZh: "人物",
+      labelEn: "Characters",
+      slots: [
+        {
+          id: "appearance",
+          labelZh: "外貌",
+          labelEn: "Appearance",
+          hintZh: "身形、发色、五官、气质——不随场景变化的那部分",
+          hintEn: "Build, hair, features, bearing — the part that doesn't change per scene",
+          expected: true,
+        },
+        {
+          id: "outfit",
+          labelZh: "装扮",
+          labelEn: "Outfit",
+          hintZh: "一套造型一条：便装、战甲、礼服。同组只会注入一套",
+          hintEn: "One look per facet: casual, armour, formal. Only one of a group is injected",
+          // Looks are mutually exclusive by nature, so a new one starts in the
+          // group rather than needing the author to remember it.
+          defaults: { group: "outfit" },
+        },
+        {
+          id: "relations",
+          labelZh: "人物关系",
+          labelEn: "Relationships",
+          hintZh: "与谁是什么关系、怎么称呼、有什么恩怨——写关系，不是写对方",
+          hintEn: "Who they are to each other, how they address them, what stands between them",
+          expected: true,
+        },
+        {
+          id: "backstory",
+          labelZh: "往事",
+          labelEn: "Backstory",
+          hintZh: "出身、转折、旧伤；只写会影响当下言行的部分",
+          hintEn: "Origin, turning points, old wounds — only what still shapes present behaviour",
+        },
+        {
+          id: "ability",
+          labelZh: "能力",
+          labelEn: "Abilities",
+          hintZh: "战力、专长、限制；招式细节留给技能条目",
+          hintEn: "Strength, specialities, limits — leave move-level detail to a skill entry",
+        },
+        {
+          id: "voice",
+          labelZh: "说话方式",
+          labelEn: "Voice",
+          hintZh: "口癖、语气、常用词——只要这个人物出场就该守住",
+          hintEn: "Verbal tics, register, pet words — due whenever the character is on the page",
+          // Voice has no trigger word of its own: it applies whenever the
+          // character does, which is exactly what `always` means.
+          defaults: { mode: "always" },
+        },
+      ],
+      imageSlots: [
+        {
+          id: "portrait",
+          labelZh: "人设图",
+          labelEn: "Character sheet",
+          hintZh: "全身或半身定妆，作为这个人物的基准形象",
+          hintEn: "Full- or half-body reference — the baseline look",
+          expected: true,
+        },
+        {
+          id: "expression",
+          labelZh: "表情",
+          labelEn: "Expressions",
+          hintZh: "情绪参考，一张一种",
+          hintEn: "Emotion reference, one per image",
+        },
+        {
+          id: "outfit",
+          labelZh: "服装设定",
+          labelEn: "Outfit design",
+          hintZh: "造型三视或细节图，与「装扮」特征对应",
+          hintEn: "Turnarounds or detail sheets, paired with the Outfit facet",
+        },
+      ],
+    },
+    {
+      id: "world",
+      labelZh: "世界观",
+      labelEn: "World",
+      slots: [
+        {
+          id: "geography",
+          labelZh: "地理位置",
+          labelEn: "Geography",
+          hintZh: "在哪、周边有什么、气候、怎么进出",
+          hintEn: "Where it is, what surrounds it, climate, how you get in and out",
+          expected: true,
+        },
+        {
+          id: "structure",
+          labelZh: "结构布局",
+          labelEn: "Layout",
+          hintZh: "内部怎么分区、谁在哪一层——建筑与城邦都用它",
+          hintEn: "How the inside is divided and who sits where — buildings and cities alike",
+        },
+        {
+          id: "history",
+          labelZh: "历史沿革",
+          labelEn: "History",
+          hintZh: "谁建的、发生过什么、留下了什么痕迹",
+          hintEn: "Who built it, what happened here, what marks are left",
+        },
+        {
+          id: "rules",
+          labelZh: "运作规则",
+          labelEn: "Rules",
+          hintZh: "这地方的规矩、禁忌、日常秩序",
+          hintEn: "Local rules, taboos, the order of an ordinary day",
+        },
+      ],
+      imageSlots: [
+        {
+          id: "scene",
+          labelZh: "场景概念图",
+          labelEn: "Concept art",
+          hintZh: "气氛与视角，一眼看出这是什么地方",
+          hintEn: "Mood and vantage point — what the place feels like at a glance",
+          expected: true,
+        },
+        {
+          id: "building",
+          labelZh: "建筑图",
+          labelEn: "Architecture",
+          hintZh: "平面/剖面/立面，说清空间关系",
+          hintEn: "Plan, section, elevation — whatever makes the space legible",
+        },
+        {
+          id: "map",
+          labelZh: "地图",
+          labelEn: "Map",
+          hintZh: "位置与路线，标注比精美重要",
+          hintEn: "Positions and routes; labels matter more than polish",
+        },
+      ],
+    },
+    {
+      id: "factions",
+      labelZh: "势力",
+      labelEn: "Factions",
+      slots: [
+        {
+          id: "structure",
+          labelZh: "组织架构",
+          labelEn: "Structure",
+          hintZh: "层级、席位、谁向谁负责",
+          hintEn: "Tiers, seats, who answers to whom",
+          expected: true,
+        },
+        {
+          id: "members",
+          labelZh: "核心成员",
+          labelEn: "Key members",
+          hintZh: "关键人物与各自位置；人物细节留给人物条目",
+          hintEn: "Who matters and where they sit — personal detail belongs to their own entry",
+        },
+        {
+          id: "territory",
+          labelZh: "势力范围",
+          labelEn: "Territory",
+          hintZh: "地盘、据点、影响力到哪为止",
+          hintEn: "Ground held, strongholds, where the influence stops",
+        },
+        {
+          id: "agenda",
+          labelZh: "目标与手段",
+          labelEn: "Agenda",
+          hintZh: "要什么、怎么拿、底线在哪",
+          hintEn: "What they want, how they take it, where the line is",
+        },
+      ],
+      imageSlots: [
+        {
+          id: "emblem",
+          labelZh: "徽记",
+          labelEn: "Emblem",
+          hintZh: "旗帜、纹章、制服上的识别标",
+          hintEn: "Banner, crest, the mark on a uniform",
+        },
+        {
+          id: "chart",
+          labelZh: "组织架构图",
+          labelEn: "Org chart",
+          hintZh: "把层级画出来，比文字快",
+          hintEn: "The hierarchy drawn — faster to read than prose",
+        },
+      ],
+    },
+    {
+      id: "items",
+      labelZh: "道具",
+      labelEn: "Items",
+      slots: [
+        {
+          id: "appearance",
+          labelZh: "外形",
+          labelEn: "Appearance",
+          hintZh: "看上去什么样、拿在手里什么感觉",
+          hintEn: "What it looks like and what it feels like in hand",
+          expected: true,
+        },
+        {
+          id: "effect",
+          labelZh: "效果",
+          labelEn: "Effect",
+          hintZh: "能做什么、代价与限制",
+          hintEn: "What it does, at what cost, within what limits",
+        },
+        {
+          id: "origin",
+          labelZh: "来历",
+          labelEn: "Provenance",
+          hintZh: "谁造的、经过谁的手、现在在哪",
+          hintEn: "Who made it, whose hands it passed through, where it is now",
+        },
+      ],
+      imageSlots: [
+        {
+          id: "concept",
+          labelZh: "概念图",
+          labelEn: "Concept art",
+          hintZh: "外形与比例参考",
+          hintEn: "Shape and scale reference",
+        },
+      ],
+    },
+    {
+      id: "skills",
+      labelZh: "技能",
+      labelEn: "Skills",
+      slots: [
+        {
+          id: "effect",
+          labelZh: "效果",
+          labelEn: "Effect",
+          hintZh: "打出去是什么样、判定与范围",
+          hintEn: "What it does on the page, its reach and its resolution",
+          expected: true,
+        },
+        {
+          id: "cost",
+          labelZh: "代价",
+          labelEn: "Cost",
+          hintZh: "消耗、冷却、反噬——限制比威力更常被用到",
+          hintEn: "Drain, cooldown, backlash — limits get used more often than power",
+        },
+        {
+          id: "progression",
+          labelZh: "进阶",
+          labelEn: "Progression",
+          hintZh: "怎么练上去、各阶段的差别",
+          hintEn: "How it is trained up and how the stages differ",
+        },
+      ],
+    },
+    // 风格 is a bucket for tone samples, not a thing with parts — no schema.
     { id: "style", labelZh: "风格", labelEn: "Style" },
   ],
   sections: {
@@ -870,6 +1205,14 @@ export const CATEGORY_ID_RE = /^[a-z0-9][a-z0-9_-]{0,39}$/i;
 const PROMPT_KEY_RE = /^[A-Za-z0-9_][A-Za-z0-9_.]{0,79}$/;
 export const MAX_CATEGORIES = 24;
 const MAX_LABEL_CHARS = 40;
+/** Schema size caps — a category schema is a checklist, not a database. */
+const MAX_SLOTS = 12;
+const MAX_IMAGE_SLOTS = 8;
+/** Suggested trigger words per slot, capped like a facet's own key list. */
+const MAX_SLOT_KEYS = 8;
+/** Slot hints are pasted into prompts, so they pay per character. */
+const MAX_HINT_CHARS = 120;
+const FACET_MODES = ["auto", "always", "manual"] as const;
 /** Section labels are rendered inside 【】 in the prompt — keep them short. */
 const MAX_SECTION_LABEL_CHARS = 20;
 
@@ -889,9 +1232,159 @@ function cleanLabel(value: unknown, max: number): string | null {
 }
 
 /**
+ * The id + labels every slot has. Null when unusable: like a category, a bad
+ * *label* falls back to the id, but a bad *id* has no fallback — it is what
+ * ends up in a facet's frontmatter and in a tool-schema enum.
+ */
+function parseSlotBase(
+  raw: unknown,
+  what: string,
+  issues: string[],
+): Omit<FacetSlot, "defaults"> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    issues.push(`${what} entry is not an object`);
+    return null;
+  }
+  const rec = raw as Record<string, unknown>;
+  const id = typeof rec.id === "string" ? rec.id.trim() : "";
+  if (!CATEGORY_ID_RE.test(id)) {
+    issues.push(`${what} id ${JSON.stringify(rec.id)} is not a valid slot id`);
+    return null;
+  }
+  // The base shape is exactly an `ImageSlot`; a facet slot adds `defaults`.
+  const slot: Omit<FacetSlot, "defaults"> = {
+    id,
+    labelZh: cleanLabel(rec.labelZh, MAX_LABEL_CHARS) ?? id,
+    labelEn: cleanLabel(rec.labelEn, MAX_LABEL_CHARS) ?? id,
+  };
+  // Hints and `expected` are omitted when absent or unusable rather than
+  // defaulted, so a schema-less category and a schema whose optional fields
+  // were left out serialise (and compare) identically.
+  const hintZh = cleanLabel(rec.hintZh, MAX_HINT_CHARS);
+  if (hintZh) slot.hintZh = hintZh;
+  const hintEn = cleanLabel(rec.hintEn, MAX_HINT_CHARS);
+  if (hintEn) slot.hintEn = hintEn;
+  if (rec.expected === true) slot.expected = true;
+  else if (rec.expected !== undefined && rec.expected !== false) {
+    issues.push(`${what} "${id}" expected must be true or false`);
+  }
+  return slot;
+}
+
+/**
+ * `FacetSlot.defaults` — what a new facet of this slot is pre-filled with.
+ * Undefined when nothing usable was declared, which is also what an entirely
+ * absent `defaults` yields: there is no such thing as an empty default set.
+ */
+function parseSlotDefaults(
+  raw: unknown,
+  slotId: string,
+  issues: string[],
+): FacetSlotDefaults | undefined {
+  if (raw === undefined) return undefined;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    issues.push(`facet slot "${slotId}" defaults is not an object`);
+    return undefined;
+  }
+  const rec = raw as Record<string, unknown>;
+  const out: FacetSlotDefaults = {};
+
+  if (rec.mode !== undefined) {
+    if (typeof rec.mode === "string" && (FACET_MODES as readonly string[]).includes(rec.mode)) {
+      out.mode = rec.mode as FacetSlotDefaults["mode"];
+    } else {
+      issues.push(`facet slot "${slotId}" defaults.mode must be one of ${FACET_MODES.join(" / ")}`);
+    }
+  }
+  if (rec.priority !== undefined) {
+    const priority = Number(rec.priority);
+    if (Number.isFinite(priority)) out.priority = priority;
+    else issues.push(`facet slot "${slotId}" defaults.priority must be a number`);
+  }
+  if (rec.group !== undefined) {
+    const group = cleanLabel(rec.group, MAX_LABEL_CHARS);
+    if (group) out.group = group;
+    else issues.push(`facet slot "${slotId}" defaults.group is not a usable group name`);
+  }
+  if (rec.keys !== undefined) {
+    if (Array.isArray(rec.keys)) {
+      // Cleaned and deduped *before* the cap, so the cap counts keys that will
+      // actually be written rather than being eaten by repeats and blanks.
+      const keys: string[] = [];
+      for (const entry of rec.keys) {
+        const key = cleanLabel(entry, MAX_LABEL_CHARS);
+        if (key && !keys.includes(key)) keys.push(key);
+      }
+      if (keys.length > MAX_SLOT_KEYS) {
+        issues.push(`facet slot "${slotId}" declares more than ${MAX_SLOT_KEYS} default keys — the rest were ignored`);
+        keys.length = MAX_SLOT_KEYS;
+      }
+      if (keys.length > 0) out.keys = keys;
+    } else {
+      issues.push(`facet slot "${slotId}" defaults.keys is not an array`);
+    }
+  }
+
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function parseFacetSlot(raw: unknown, issues: string[]): FacetSlot | null {
+  const base = parseSlotBase(raw, "facet slot", issues);
+  if (!base) return null;
+  const defaults = parseSlotDefaults((raw as Record<string, unknown>).defaults, base.id, issues);
+  return defaults ? { ...base, defaults } : base;
+}
+
+function parseImageSlot(raw: unknown, issues: string[]): ImageSlot | null {
+  return parseSlotBase(raw, "image slot", issues);
+}
+
+/**
+ * One slot list of a category schema. Case-insensitive duplicate ids are
+ * rejected for the same reason category ids are (Windows-proof matching, and a
+ * facet's `slot` is resolved case-insensitively).
+ */
+function parseSlotList<T extends { id: string }>(
+  raw: unknown,
+  what: string,
+  max: number,
+  parseOne: (raw: unknown, issues: string[]) => T | null,
+  issues: string[],
+): T[] {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) {
+    issues.push(`${what}s is not an array`);
+    return [];
+  }
+  const out: T[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    if (out.length >= max) {
+      issues.push(`more than ${max} ${what}s — the rest were ignored`);
+      break;
+    }
+    const slot = parseOne(entry, issues);
+    if (!slot) continue;
+    const key = slot.id.toLowerCase();
+    if (seen.has(key)) {
+      issues.push(`duplicate ${what} id "${slot.id}"`);
+      continue;
+    }
+    seen.add(key);
+    out.push(slot);
+  }
+  return out;
+}
+
+/**
  * Validate one category. Returns null when it can't be used at all — an
  * unusable *label* falls back to the id, but an unusable *id* has no fallback
  * because it is the folder name.
+ *
+ * The type schema (`slots` / `imageSlots`) is only attached when non-empty:
+ * "has no schema" must be the *absence* of the key, so a plain category still
+ * compares and serialises exactly as it did before schemas existed (and old
+ * builds, whose parser drops keys it doesn't know, keep reading these files).
  */
 function parseCategory(raw: unknown, issues: string[]): ProfileCategory | null {
   if (!raw || typeof raw !== "object") {
@@ -904,11 +1397,16 @@ function parseCategory(raw: unknown, issues: string[]): ProfileCategory | null {
     issues.push(`category id ${JSON.stringify(rec.id)} is not a valid folder name`);
     return null;
   }
-  return {
+  const category: ProfileCategory = {
     id,
     labelZh: cleanLabel(rec.labelZh, MAX_LABEL_CHARS) ?? id,
     labelEn: cleanLabel(rec.labelEn, MAX_LABEL_CHARS) ?? id,
   };
+  const slots = parseSlotList(rec.slots, "facet slot", MAX_SLOTS, parseFacetSlot, issues);
+  if (slots.length > 0) category.slots = slots;
+  const imageSlots = parseSlotList(rec.imageSlots, "image slot", MAX_IMAGE_SLOTS, parseImageSlot, issues);
+  if (imageSlots.length > 0) category.imageSlots = imageSlots;
+  return category;
 }
 
 /**

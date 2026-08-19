@@ -48,10 +48,41 @@ export const BASE_TASK_IDS: ReadonlySet<string> = new Set(DEFAULT_TASKS.map((t) 
  * `custom` bucket. The label is the *first* declarer's. `userDefined` marks
  * the project's own categories: the only ones the settings UI lets the author
  * rename or remove.
+ *
+ * The type schema inherited from `ProfileCategory` (`slots` / `imageSlots`) is
+ * the **union** of every declarer's, first-declarer-wins per slot id — see
+ * `unionSlots`.
  */
 export interface ResolvedCategory extends ProfileCategory {
   packIds: string[];
   userDefined?: boolean;
+}
+
+/**
+ * Union a later declarer's slot list into the resolved one: slots are added by
+ * id and the **first declarer wins** for a shared id — the same rule as the
+ * label, and what keeps packs order-insensitive beyond that. Additive because
+ * that is what a pack is: enabling a second pack may give a shared category
+ * more facets worth filling, never a different meaning for one it already had.
+ *
+ * Returns a fresh array (or the original when there is nothing to add), never
+ * mutating either side: `from` is a built-in pack's module-level array, and
+ * appending to it would leak this project's merge into every other one.
+ */
+function unionSlots<T extends { id: string }>(
+  into: T[] | undefined,
+  from: readonly T[] | undefined,
+): T[] | undefined {
+  if (!from || from.length === 0) return into;
+  const out = into ? [...into] : [];
+  const seen = new Set(out.map((slot) => slot.id.toLowerCase()));
+  for (const slot of from) {
+    const key = slot.id.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(slot);
+  }
+  return out;
 }
 
 /**
@@ -138,9 +169,19 @@ export function resolveWorkspace(
     const existing = categoryByKey.get(key);
     if (existing) {
       if (packId) existing.packIds.push(packId);
+      // Only assign when there is something to hold: a plain category must keep
+      // *no* schema key at all (see `parseCategory`).
+      const slots = unionSlots(existing.slots, cat.slots);
+      if (slots) existing.slots = slots;
+      const imageSlots = unionSlots(existing.imageSlots, cat.imageSlots);
+      if (imageSlots) existing.imageSlots = imageSlots;
       return;
     }
     const resolved: ResolvedCategory = { ...cat, packIds: packId ? [packId] : [] };
+    // Copy the schema arrays the spread just aliased — they belong to a built-in
+    // pack singleton, and `unionSlots` would otherwise be handed them to grow.
+    if (cat.slots) resolved.slots = [...cat.slots];
+    if (cat.imageSlots) resolved.imageSlots = [...cat.imageSlots];
     if (userDefined) resolved.userDefined = true;
     categoryByKey.set(key, resolved);
     categories.push(resolved);

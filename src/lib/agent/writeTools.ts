@@ -34,6 +34,7 @@ import {
   type CategoryId,
   type FacetMeta,
   type LoreEntity,
+  type LoreFacet,
   type LoreIndex,
 } from "../lore";
 import {
@@ -785,6 +786,9 @@ export async function updateFacetMetaTool(
 
   const next: FacetMeta = {
     title: args.title?.trim() || current.title,
+    // Carried, not editable: this tool has no `slot` argument yet (phase 3), and
+    // a metadata edit that dropped the field would silently unclassify the facet.
+    slot: current.slot,
     keys: current.keys,
     group: current.group,
     priority: current.priority,
@@ -823,7 +827,9 @@ export async function updateFacetMetaTool(
   await saveFacetFile(entity.dirPath, file, next, body);
 
   const at = (entity.facets ?? []).findIndex((f) => f.file === file);
-  const snapshot = { file, ...next, charCount: body.length };
+  // `slot` is optional on FacetMeta and definite on LoreFacet — the run's index
+  // must say "unclassified", not "unknown".
+  const snapshot: LoreFacet = { file, ...next, slot: next.slot ?? null, charCount: body.length };
   if (at >= 0) entity.facets[at] = snapshot;
   else (entity.facets ??= []).push(snapshot);
 
