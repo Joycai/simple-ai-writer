@@ -171,7 +171,24 @@ Per pack:
 | `sections` | The 【…】 block labels *for this pack's tasks* (`bundleToMessages`), e.g. 【上一场景结尾】 instead of 【上一篇结尾】. `knowledge` is never overridden by built-ins — the knowledge base is called 知识库 everywhere |
 | `tasks` | Base-task overrides and the pack's own tasks — see below |
 
-Built-ins: `novel` (the default), `ttrpg` (跑团模组), `copy` (文案), `wechat` (微信公众号), `weekly` (周报), `feedback` (反馈报告) and `bid` (标书应答). Selection is Settings → 工作台 — each card is one on/off toggle — which calls `projectStore.setPacks(enabledIds)`: persist (v3) → scaffold the union's folders → rescan. The same pane (and the lore wall's 「+ 新建分类」 chip) manages the user-defined categories via `projectStore.setCustomCategories`, with folder ids derived by `suggestCategoryId` so the author only ever types a name. **Non-destructive** — a disabled pack's category folders and entities stay on disk (the pane notes "N 个分类目录仍有内容") and reappear on re-enabling, and removing a user category only hides its directory; nothing is scanned meanwhile. The AI panel groups the task menu by origin (`visibleTaskGroups`): the base menu flat (`pack: null` — an overridden base task still renders here), each pack's own tasks under a pack-name eyebrow.
+Built-ins: `novel` (the default), `ttrpg` (跑团模组), `copy` (文案), `wechat` (微信公众号), `weekly` (周报), `feedback` (反馈报告) and `bid` (标书应答). Selection is Settings → 工作台 — each card is one on/off toggle — which calls `projectStore.setPacks(enabledIds)`: persist (v3) → scaffold the union's folders → rescan. The same pane (and the lore wall's 「+ 新建分类」 chip) manages the user-defined categories via `projectStore.setCustomCategories`, with folder ids derived by `suggestCategoryId` so the author only ever types a name. **Non-destructive** — a disabled pack's category folders and entities stay on disk and reappear on re-enabling, and removing a user category only hides its directory. The entries themselves stay *usable* meanwhile, as **orphan categories** (below); the pane's "N 个分类目录仍有内容" note now says which pack would give those categories their names and type schemas back. The AI panel groups the task menu by origin (`visibleTaskGroups`): the base menu flat (`pack: null` — an overridden base task still renders here), each pack's own tasks under a pack-name eyebrow.
+
+#### 孤儿分类 (orphan categories)
+
+`scanLore` 扫的是**磁盘上真实存在的目录**，不只是合并后的分类表：任何已启用包和用户自建分类都不声明、但里面有条目的目录，作为**孤儿分类**进入 `LoreIndex`（空目录不算——没人能往里新建的幽灵分类只会碍事；大小写不同的同一目录也只进一次，因为大小写不敏感的文件系统会把它报成另一个名字）。于是关掉一个能力包是**降级**而不是消失：条目照常出现在知识库墙、命令面板、AI 面板的清单里，照常被注入；失去的是分类的显示名（退回目录名）、类型 schema（`slots`/`imageSlots`，见 [`lore-entry-type-plan.md`](lore-entry-type-plan.md)），以及作为新建目标的资格。
+
+两个问题必须分开问——`src/lib/lore/categories.ts` 就是为此存在的：
+
+| 问题 | 用什么 | 孤儿算不算 |
+| --- | --- | --- |
+| 「能往哪写」——新建条目、模型给的 `category`、移动目标 | `loreCategories()` / `isKnownCategory()`（也填 `create_lore_entity` 的 enum） | **不算** |
+| 「有些什么」——墙、命令面板、AI 面板清单、详情页翻页 | `indexCategories(loreIndex)` | 算 |
+
+搞混的后果很具体：注入侧走的是 `Object.values(loreIndex)`（`selectLore`/`rag`/`agent/tools` 都是），UI 侧若还枚举 `loreCategories()`，作者看到的条目会**少于**模型看到的——看不见的条目照样进 prompt。
+
+`assignableCategories(current)` 是唯一的例外口子：条目自己正待在某个孤儿分类里时，分类选择器必须把它列出来，否则界面会显示一个它并不在的分类，而下一次保存就按那个值把目录搬走了。反过来「搬进」孤儿分类仍然不可能——从停用包的目录里迁出去是合理操作，往一个应用建不出来的目录里填东西不是。
+
+标签用**目录名**，而不是借那个被停用的包的标签：借来的标签会让人以为 schema 还在，而目录名对手工建的、或者跟着别人项目一起来的文件夹也是唯一诚实的答案。`list_lore_entities` 的输出会在孤儿分类后面缀一句说明，免得模型试一次被拒才知道不能往里建。
 
 #### Tasks (`tasks`)
 

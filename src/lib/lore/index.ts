@@ -5,6 +5,7 @@
  */
 
 export * from "./model";
+export * from "./categories";
 export * from "./entity";
 export * from "./gallery";
 export * from "./transfer";

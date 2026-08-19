@@ -11,12 +11,14 @@ import {
   type LoreFacet,
   type LoreImage,
   addLoreImage,
+  assignableCategories,
+  indexCategories,
   updateLoreImageDesc,
   removeLoreImage,
   saveEntityMetaAndBody,
   setEntityAvatar,
 } from "../../lib/lore";
-import { categoryLabel, findCategory, loreCategories } from "../../lib/profile";
+import { categoryLabel, findCategory } from "../../lib/profile";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { connOptions } from "../../lib/ai/conn";
@@ -94,7 +96,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   // same flattening as the wall so the ‹ › order matches what the author saw.
   const neighbors = useMemo(() => {
     const flat: LoreEntity[] = [];
-    for (const c of loreCategories()) for (const e of (loreIndex[c.id] ?? [])) flat.push(e);
+    for (const c of indexCategories(loreIndex)) for (const e of (loreIndex[c.id] ?? [])) flat.push(e);
     const i = flat.findIndex((e) => e.dirPath === entity.dirPath);
     return {
       prev: i > 0 ? flat[i - 1] : null,
@@ -765,7 +767,13 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                 className={styles.eSelect}
                 value={dCategory}
                 onChange={(v) => setDCategory(v as CategoryId)}
-                options={loreCategories().map((c) => ({ value: c.id, label: categoryLabel(c, isZh) }))}
+                // Includes this entry's own category when it is an orphan —
+                // otherwise the picker would display a category the entry isn't
+                // in, and saving would move the folder (lib/lore/categories).
+                options={assignableCategories(entity.category).map((c) => ({
+                  value: c.id,
+                  label: categoryLabel(c, isZh),
+                }))}
               />
 
               <label className={styles.eLabel}>

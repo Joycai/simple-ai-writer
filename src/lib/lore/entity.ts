@@ -21,32 +21,73 @@ import {
 /**
  * Scan the entire lore directory and return all entities grouped by category.
  *
- * Only the *active profile's* categories are scanned, so switching a project's
- * profile hides the old categories' entities rather than deleting them — the
- * folders stay on disk and come back if the profile is switched back.
+ * Two passes, because a category directory can outlive the pack that named it:
+ *
+ *   1. every category of the merged workspace, seeded even when empty — that is
+ *      the app's own list, and an empty one is a filter the author can still see;
+ *   2. every *other* directory that holds at least one entry — an **orphan
+ *      category** (see `indexCategories`).
+ *
+ * The second pass is what makes disabling a pack a **degradation** instead of a
+ * disappearance. Scanning only the merged list used to drop those entries out of
+ * the wall, the palette and the pickers in one go, while the injection path —
+ * which walks the index itself, not the category list — never saw them either,
+ * because they were never in the index. Now they are listed, editable and
+ * injectable; what they lose is the type schema and being a creation target
+ * (`isKnownCategory` still says no, deliberately).
+ *
+ * Nothing is moved or rewritten to achieve that: the folders stay where they
+ * are, so re-enabling the pack restores the categories exactly.
  */
 export async function scanLore(projectPath: string): Promise<LoreIndex> {
   const loreRoot = `${projectPath}/.ai-writer/lore`;
   const index: LoreIndex = {};
 
-  for (const cat of loreCategories()) {
-    const catPath = `${loreRoot}/${cat.id}`;
-    index[cat.id] = [];
+  const known = loreCategories();
+  for (const cat of known) {
+    index[cat.id] = await readCategoryEntities(`${loreRoot}/${cat.id}`, cat.id);
+  }
 
-    try {
-      const entries = await readDir(catPath);
-      for (const entry of entries) {
-        if (!entry.isDirectory) continue;
-        const entityDir = `${catPath}/${entry.name}`;
-        const entity = await readEntity(cat.id, entry.name, entityDir);
-        if (entity) index[cat.id].push(entity);
-      }
-    } catch {
-      // category dir may not exist yet
+  // Only a folder that actually holds an entry becomes an orphan category: an
+  // empty leftover directory would otherwise show up as a phantom category
+  // nothing can fill (new entries can't be created in an orphan).
+  const seen = new Set(known.map((c) => c.id.toLowerCase()));
+  try {
+    for (const entry of await readDir(loreRoot)) {
+      // Compared lowercased: a case-insensitive filesystem reports the folder
+      // under whatever casing it was created with, and that is the *same*
+      // directory the first pass already read.
+      if (!entry.isDirectory || seen.has(entry.name.toLowerCase())) continue;
+      const entities = await readCategoryEntities(`${loreRoot}/${entry.name}`, entry.name);
+      if (entities.length > 0) index[entry.name] = entities;
     }
+  } catch {
+    // no lore directory yet — a project with no knowledge base at all
   }
 
   return index;
+}
+
+/**
+ * Every entity directory under one category folder. A missing or unreadable
+ * folder yields nothing rather than throwing: category directories are created
+ * lazily, on the first entry.
+ */
+async function readCategoryEntities(
+  catPath: string,
+  category: CategoryId,
+): Promise<LoreEntity[]> {
+  const out: LoreEntity[] = [];
+  try {
+    for (const entry of await readDir(catPath)) {
+      if (!entry.isDirectory) continue;
+      const entity = await readEntity(category, entry.name, `${catPath}/${entry.name}`);
+      if (entity) out.push(entity);
+    }
+  } catch {
+    // category dir may not exist yet
+  }
+  return out;
 }
 
 async function readEntity(

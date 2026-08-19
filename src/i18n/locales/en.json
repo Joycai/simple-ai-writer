@@ -219,7 +219,7 @@
       "paneSub": "This project's packs, knowledge-base categories and backups",
       "enablePack": "Enable {{pack}}",
       "disablePack": "Disable {{pack}}",
-      "disabledHasData": "{{count}} category folder(s) still hold content — re-enable to see them",
+      "disabledHasData": "{{count}} category folder(s) still hold content — the entries stay visible and editable; re-enabling restores the category's name and type schema",
       "categoriesSection": "Custom knowledge-base categories",
       "categoriesHint": "Define this project's own categories alongside what the enabled packs provide. Removing a category keeps its folder and entries on disk; add it back to see them again.",
       "addCategory": "Add",

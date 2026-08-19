@@ -102,7 +102,7 @@ vi.mock("../fs/pptx", async (importOriginal) => ({
 }));
 
 import { executeRegisteredTool, type ToolContext, type ToolId } from "../agent/registry";
-import type { ToolResult } from "../agent/tools";
+import { formatLoreIndex, type ToolResult } from "../agent/tools";
 import { MAX_IMAGE_BYTES } from "../fs/images";
 
 const PROJECT = "/proj";
@@ -591,5 +591,27 @@ describe("read_slides", () => {
     const out = await read({ path: DECK });
 
     expect(out).toContain("read_slides");
+  });
+});
+
+/**
+ * `list_lore_entities`' rendering. The interesting case is an **orphan**
+ * category (lib/lore/categories): its entries are readable and editable, but
+ * `create_lore_entity` / `move_lore_entity` refuse it, so the listing has to say
+ * so — otherwise the model only finds out by having a call rejected.
+ */
+describe("formatLoreIndex", () => {
+  it("marks a category no enabled pack declares, and leaves declared ones bare", () => {
+    const out = formatLoreIndex({
+      characters: [{ name: "Aria", summary: "骑士" } as never],
+      npcs: [{ name: "Guard", summary: "" } as never],
+      world: [],
+    });
+    expect(out).toContain("[characters]\n");
+    expect(out).toContain("  - Aria: 骑士");
+    expect(out).toMatch(/\[npcs\] {2}\(no enabled capability pack declares this category/);
+    expect(out).toContain("  - Guard: (no summary)");
+    // An empty category is still not listed, orphan or not.
+    expect(out).not.toContain("[world]");
   });
 });

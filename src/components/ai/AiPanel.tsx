@@ -55,13 +55,13 @@ import {
 } from "../../lib/context/rag";
 import { clearTarget } from "../../lib/editor/aiTarget";
 import { parsePins, type LoreActivationReport } from "../../lib/context/loreSelect";
-import type { LoreFacet } from "../../lib/lore";
+import { indexCategories, type LoreFacet } from "../../lib/lore";
 import {
   MEMORY_MIN_DOC_CHARS,
   MEMORY_SUGGEST_THRESHOLD_CHARS,
 } from "../../lib/context/memory";
 import {
-  categoryLabel, defaultTask, findTask, loreCategories, profileLabel, taskDesc, taskLabel,
+  categoryLabel, defaultTask, findTask, profileLabel, taskDesc, taskLabel,
   visibleTaskGroups, type ResolvedTask,
 } from "../../lib/profile";
 import {
@@ -1198,7 +1198,7 @@ export function AiPanel() {
 
   // Flatten lore index to searchable list
   const isZh = i18n.language.startsWith("zh");
-  const allLoreEntities = loreCategories().flatMap((cat) =>
+  const allLoreEntities = indexCategories(loreIndex).flatMap((cat) =>
     (loreIndex[cat.id] ?? []).map((entity) => ({
       ...entity,
       categoryLabel: categoryLabel(cat, isZh),
