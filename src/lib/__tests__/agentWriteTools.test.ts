@@ -511,6 +511,43 @@ describe("update_facet_meta", () => {
     expect(fs.get(ARMOR)).not.toContain("group:");
   });
 
+  /**
+   * `slot` — the facet's place in its category's type schema. Checked against
+   * *this entity's* category rather than a global enum: tool schemas are built
+   * per preset, not per run, so no wire enum can know which category is in play
+   * (docs/lore-entry-type-plan.md phase 3).
+   */
+  it("sets a declared slot, normalised to the schema's casing", async () => {
+    const res = await run(
+      "update_facet_meta",
+      { entity: "Ava", file: "armor.md", slot: " OUTFIT " },
+      makeCtx(),
+    );
+    expect(res.content).toContain("slot=outfit");
+    expect(fs.get(ARMOR)).toContain('slot: "outfit"');
+  });
+
+  it("refuses a slot the entity's category does not declare, and says which do", async () => {
+    // `stats` is a TTRPG NPC slot; Ava is a novel character.
+    const res = await run("update_facet_meta", { entity: "Ava", file: "armor.md", slot: "stats" }, makeCtx());
+    expect(res.content).toMatch(/^Error:/);
+    expect(res.content).toContain("appearance");
+    expect(fs.get(ARMOR)).toBe(FACET_MD); // nothing written
+  });
+
+  it("clears the slot on an empty string, and carries it through unrelated edits", async () => {
+    const ctx = makeCtx();
+    await run("update_facet_meta", { entity: "Ava", file: "armor.md", slot: "outfit" }, ctx);
+    // The regression that matters: an edit that never mentions `slot` must not
+    // unclassify the facet on its way past.
+    await run("update_facet_meta", { entity: "Ava", file: "armor.md", keys: ["战甲"] }, ctx);
+    expect(fs.get(ARMOR)).toContain('slot: "outfit"');
+
+    const cleared = await run("update_facet_meta", { entity: "Ava", file: "armor.md", slot: "" }, ctx);
+    expect(cleared.content).toContain("slot=none");
+    expect(fs.get(ARMOR)).not.toContain("slot:");
+  });
+
   it("warns when the new metadata makes the facet unreachable", async () => {
     const res = await run("update_facet_meta", { entity: "Ava", file: "armor.md", keys: [] }, makeCtx());
     expect(res.content).toContain("will never be injected");

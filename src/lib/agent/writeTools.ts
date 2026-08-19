@@ -19,7 +19,7 @@
  * L2 and go through the propose→diff→approve flow below.
  */
 
-import { loreCategoryIds } from "../profile/active";
+import { categoryFacetSlots, findFacetSlot, loreCategoryIds } from "../profile/active";
 import {
   RESERVED_ENTITY_FILES,
   cloneLoreIndex,
@@ -731,6 +731,7 @@ export async function updateFacetMetaTool(
     entity?: string;
     file?: string;
     title?: string;
+    slot?: string | null;
     keys?: string[];
     group?: string | null;
     priority?: number;
@@ -776,24 +777,45 @@ export async function updateFacetMetaTool(
     };
   }
 
-  const touches = ["title", "keys", "group", "priority", "mode"].filter((k) => k in args);
+  const touches = ["title", "slot", "keys", "group", "priority", "mode"].filter((k) => k in args);
   if (touches.length === 0) {
     return {
       toolCallId,
-      content: "Error: pass at least one of title / keys / group / priority / mode — this tool only edits facet metadata, not the body (use update_lore_file for the text).",
+      content: "Error: pass at least one of title / slot / keys / group / priority / mode — this tool only edits facet metadata, not the body (use update_lore_file for the text).",
     };
   }
 
   const next: FacetMeta = {
     title: args.title?.trim() || current.title,
-    // Carried, not editable: this tool has no `slot` argument yet (phase 3), and
-    // a metadata edit that dropped the field would silently unclassify the facet.
+    // Carried when untouched: dropping it would silently unclassify the facet.
     slot: current.slot,
     keys: current.keys,
     group: current.group,
     priority: current.priority,
     mode: current.mode,
   };
+  if ("slot" in args) {
+    const wanted = typeof args.slot === "string" ? args.slot.trim() : "";
+    if (!wanted) {
+      next.slot = null; // explicit "" clears the classification
+    } else {
+      // Checked against *this entity's* category rather than a global enum: a
+      // slot only means anything inside the schema that declares it, and the
+      // error is where the model learns which ones those are (no per-entity
+      // enum can reach the wire — tool schemas are built per preset, not per run).
+      const slot = findFacetSlot(entity.category, wanted);
+      if (!slot) {
+        const declared = categoryFacetSlots(entity.category);
+        return {
+          toolCallId,
+          content: declared.length === 0
+            ? `Error: category "${entity.category}" declares no facet slots, so 'slot' cannot be set here. Pass an empty string to clear it, or omit it.`
+            : `Error: "${wanted}" is not a facet slot of category "${entity.category}". Its slots are: ${declared.map((sl) => sl.id).join(", ")}. Pass an empty string to clear the slot instead.`,
+        };
+      }
+      next.slot = slot.id; // normalised to the declared casing
+    }
+  }
   if ("keys" in args) {
     if (!Array.isArray(args.keys)) {
       return { toolCallId, content: "Error: 'keys' must be an array of strings." };
@@ -839,7 +861,7 @@ export async function updateFacetMetaTool(
     toolCallId,
     content:
       `Updated facet metadata of ${file} ("${next.title}") on entity "${entity.name}": ` +
-      `keys=[${next.keys.join(", ")}], group=${next.group ?? "none"}, priority=${next.priority}, mode=${next.mode}. ` +
+      `slot=${next.slot ?? "none"}, keys=[${next.keys.join(", ")}], group=${next.group ?? "none"}, priority=${next.priority}, mode=${next.mode}. ` +
       `The body was left untouched.` +
       (inert ? " NOTE: with mode=auto and no keys this facet will never be injected." : "") +
       (backupPath ? ` Previous version backed up to ${backupPath}.` : "") +

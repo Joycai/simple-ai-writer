@@ -911,7 +911,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "update_facet_meta",
         description:
-          "Retune ONE facet's activation metadata — its title, keys, group, priority or mode — without touching its body text. This is the right tool for 'this facet never fires' or 'these two outfits should exclude each other': update_lore_file would make you resend the whole file, risking silent edits to the prose. `keys` are the trigger words the injector matches against the manuscript; facets sharing a `group` compete so only the highest `priority` one is injected; `mode` auto = key-matched, always = every time, manual = pinned only. Read the file with read_lore_entity first — the fields you omit keep their current values.",
+          "Retune ONE facet's activation metadata — its title, slot, keys, group, priority or mode — without touching its body text. This is the right tool for 'this facet never fires' or 'these two outfits should exclude each other': update_lore_file would make you resend the whole file, risking silent edits to the prose. `keys` are the trigger words the injector matches against the manuscript; facets sharing a `group` compete so only the highest `priority` one is injected; `mode` auto = key-matched, always = every time, manual = pinned only. Read the file with read_lore_entity first — the fields you omit keep their current values.",
         parameters: {
           type: "object",
           properties: {
@@ -924,6 +924,11 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
               description: "The facet's .md filename inside the entity directory (not index.md)",
             },
             title: { type: "string", description: "Facet display title" },
+            slot: {
+              type: "string",
+              description:
+                "Which slot of the entity's category type schema this facet fills, by id. read_lore_entity lists the category's slots and what already covers each; an id that category doesn't declare is refused. Pass an empty string to leave the facet unclassified.",
+            },
             keys: {
               type: "array",
               items: { type: "string" },
@@ -1112,6 +1117,11 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             title: {
               type: "string",
               description: "Facet name, e.g. \"Battle armor\". Also its identity when resending.",
+            },
+            slot: {
+              type: "string",
+              description:
+                "Which slot of the category's type schema this facet fills, by id — the FACET SLOTS list in the prompt names them (a category may declare none, in which case leave this out). Omit it when the facet genuinely fits none; an id that isn't declared is refused.",
             },
             content: {
               type: "string",

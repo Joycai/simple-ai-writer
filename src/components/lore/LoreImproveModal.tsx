@@ -7,12 +7,13 @@ import { useLoreStore } from "../../stores/loreStore";
 import { connOptions, resolveConn } from "../../lib/ai/conn";
 import {
   readEntityFile, writeEntityFile, saveFacetFile, parseFacetMeta, createFacetFile,
+  slotChecklistText, withSlotDefaults,
   type LoreEntity, type FacetMeta,
 } from "../../lib/lore";
 
 type FacetMode = FacetMeta["mode"];
 import { parseFrontmatter } from "../../lib/fs/markdown";
-import { categoryLabel, findCategory } from "../../lib/profile";
+import { categoryLabel, findCategory, findFacetSlot } from "../../lib/profile";
 import {
   collectAttachmentContext, buildUserContent, stripCodeFence,
   type AttachedItem,
@@ -73,6 +74,10 @@ export function LoreImproveModal({ entity, onClose }: Props) {
   const [draftTitle, setDraftTitle] = useState("");
   const [draftKeysText, setDraftKeysText] = useState("");
   const [draftMode, setDraftMode] = useState<FacetMode>("auto");
+  // Which slot of the category's type schema the drafted facet fills. No control
+  // for it yet (设计稿 03 屏 21, plan phase 4) — the model picks it from the
+  // checklist and it rides through to the file.
+  const [draftSlot, setDraftSlot] = useState<string | null>(null);
   const [structReasoning, setStructReasoning] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -169,6 +174,11 @@ export function LoreImproveModal({ entity, onClose }: Props) {
               type: "object",
               properties: {
                 title: { type: "string", description: "Short facet name" },
+                slot: {
+                  type: "string",
+                  description:
+                    "Which slot of the category's type schema this facet fills, by id — see FACET SLOTS below. Omit when none of them describes it.",
+                },
                 keys: {
                   type: "array",
                   items: { type: "string" },
@@ -191,9 +201,12 @@ export function LoreImproveModal({ entity, onClose }: Props) {
           `INDEX BODY:\n${idxBody.trim() || "(empty)"}`,
           entity.facets.length > 0
             ? `EXISTING FACETS (do NOT duplicate):\n${entity.facets
-                .map((f) => `- ${f.title}${f.keys.length ? ` (keys: ${f.keys.join(", ")})` : ""}`)
+                .map((f) => `- ${f.title}${f.slot ? ` [slot: ${f.slot}]` : ""}${f.keys.length ? ` (keys: ${f.keys.join(", ")})` : ""}`)
                 .join("\n")}`
             : "",
+          // The category's slots, with what already covers each — this is what
+          // turns "draft the most useful missing facet" into a grounded ask.
+          slotChecklistText(entity),
           loreRefs.length > 0 ? "\nREFERENCED LORE ENTRIES:\n" + loreRefs.join("\n\n") : "",
           textRefs.length > 0 ? "\nREFERENCED FILES:\n" + textRefs.join("\n\n") : "",
           `\nUSER INSTRUCTION:\n${instruction.trim() || "Draft the most useful missing facet for this entity."}`,
@@ -205,6 +218,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
             "You are drafting ONE new facet for a knowledge-base entity.",
             "A facet is an independently-injectable aspect of the entity (an outfit, a pricing policy, a backstory arc…).",
             "Prefer 'auto' mode unless the material is relevant to almost every mention of the entity.",
+            "When the FACET SLOTS list is present, prefer a slot that is expected and not yet covered, and pass its id as `slot`.",
             "Write the body in the same language as the entity's own text.",
           ].join("\n"),
           toolInstruction: "Call the draft_lore_facet tool exactly once with the drafted facet.",
@@ -216,8 +230,13 @@ export function LoreImproveModal({ entity, onClose }: Props) {
           onReasoning: setStructReasoning,
         });
         const parsed = JSON.parse(toolArgs) as {
-          title?: string; keys?: string[]; mode?: string; body?: string;
+          title?: string; slot?: string; keys?: string[]; mode?: string; body?: string;
         };
+        // Resolved against the category, so a slot the model invented (or one from
+        // a pack that isn't enabled) lands the facet as unclassified rather than
+        // writing a value nothing can group by.
+        const slot = typeof parsed.slot === "string" ? findFacetSlot(entity.category, parsed.slot) : null;
+        setDraftSlot(slot?.id ?? null);
         setDraftTitle(typeof parsed.title === "string" ? parsed.title.trim() : "");
         setDraftKeysText(Array.isArray(parsed.keys)
           ? parsed.keys.filter((k): k is string => typeof k === "string" && k.trim().length > 0).join(", ")
@@ -290,13 +309,17 @@ export function LoreImproveModal({ entity, onClose }: Props) {
       const body = stripCodeFence(output);
       if (isNewFacet) {
         const keys = draftKeysText.split(/[,，\n]/).map((k) => k.trim()).filter(Boolean);
-        await createFacetFile(entity.dirPath, {
+        // `withSlotDefaults` fills only what is still neutral, so the group and
+        // priority a slot suggests land here while the mode the model chose (and
+        // the author may have changed in the form) is kept.
+        await createFacetFile(entity.dirPath, withSlotDefaults({
           title: draftTitle.trim() || t("lore.facet.ai.untitled", { defaultValue: "未命名特征" }),
+          slot: draftSlot,
           keys,
           group: null,
           priority: 0,
           mode: draftMode,
-        }, body);
+        }, entity.category), body);
         await scanProject(projectPath);
         onClose();
         return;

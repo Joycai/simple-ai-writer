@@ -21,12 +21,15 @@
  * an entry, it writes one `update_lore_file` per facet and never trips on this.
  */
 
+import type { FacetSlot } from "../profile/model";
 import type { ToolContext } from "./registry";
 import type { ToolCall, ToolResult } from "./tools";
 
 /** One facet as the model proposed it — pre-review, nothing on disk yet. */
 export interface SplitDraftFacet {
   title: string;
+  /** Slot of the category's type schema, when the model named a declared one. */
+  slot: string | null;
   keys: string[];
   group: string | null;
   priority: number;
@@ -42,13 +45,24 @@ export interface SplitSink {
   /** Core card body, from the last split_core call. */
   core?: string;
   facets: SplitDraftFacet[];
+  /**
+   * The facet slots the entity's category declares, so `split_facet` can check
+   * the `slot` it was handed. Passed in rather than looked up here: the split
+   * tools deliberately touch nothing outside the sink, which is also what keeps
+   * them testable without an active workspace. Empty ⇒ the category has no
+   * schema and `slot` is simply ignored.
+   */
+  slots?: readonly FacetSlot[];
   /** Fired after every accepted call, for live progress. */
   onChange?: (sink: SplitSink) => void;
 }
 
 /** A fresh, empty sink. */
-export function createSplitSink(onChange?: (sink: SplitSink) => void): SplitSink {
-  return { facets: [], onChange };
+export function createSplitSink(
+  onChange?: (sink: SplitSink) => void,
+  slots?: readonly FacetSlot[],
+): SplitSink {
+  return { facets: [], slots, onChange };
 }
 
 const NO_SINK =
@@ -100,6 +114,7 @@ export async function splitFacetTool(
   toolCallId: string,
   args: {
     title?: unknown;
+    slot?: unknown;
     content?: unknown;
     keys?: unknown;
     group?: unknown;
@@ -132,7 +147,27 @@ export async function splitFacetTool(
   const priority =
     typeof args.priority === "number" && Number.isFinite(args.priority) ? args.priority : 0;
 
-  const facet: SplitDraftFacet = { title, keys, group, priority, content };
+  // An unknown slot is refused rather than dropped: the model is one retry away
+  // from the right id, whereas a silently discarded slot would land the facet in
+  // the unclassified pile with nothing anywhere saying why.
+  const declared = sink.slots ?? [];
+  const wanted = typeof args.slot === "string" ? args.slot.trim() : "";
+  let slot: string | null = null;
+  if (wanted && declared.length > 0) {
+    const match = declared.find((s) => s.id.toLowerCase() === wanted.toLowerCase());
+    if (!match) {
+      return {
+        toolCallId,
+        content:
+          `Error: facet "${title}" names slot "${wanted}", which this category does not declare. ` +
+          `Its slots are: ${declared.map((s) => s.id).join(", ")}. Omit 'slot' if none of them fits.`,
+      };
+    }
+    // Normalised to the declared casing — this string goes into the file.
+    slot = match.id;
+  }
+
+  const facet: SplitDraftFacet = { title, slot, keys, group, priority, content };
   const existing = sink.facets.findIndex((f) => f.title === title);
   if (existing >= 0) sink.facets[existing] = facet;
   else sink.facets.push(facet);
@@ -143,7 +178,8 @@ export async function splitFacetTool(
   return commit(
     sink,
     `Facet ${existing >= 0 ? "replaced" : "recorded"}: "${title}" (${content.length} chars, ` +
-      `${keys.length} keys). ${sink.facets.length} facet(s) in the plan so far.${note}`,
+      `${keys.length} keys${slot ? `, slot ${slot}` : ""}). ` +
+      `${sink.facets.length} facet(s) in the plan so far.${note}`,
     toolCallId,
   );
 }

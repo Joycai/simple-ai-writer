@@ -27,7 +27,7 @@ describe("parseSplitResponse", () => {
     expect(res.notes).toBe("拆了两条");
     expect(res.facets).toHaveLength(2);
     expect(res.facets[0].meta).toEqual({
-      title: "战甲形象", group: "outfit", priority: 2, keys: ["战甲", "铠甲"], mode: "auto",
+      title: "战甲形象", slot: null, group: "outfit", priority: 2, keys: ["战甲", "铠甲"], mode: "auto",
     });
     expect(res.facets[1].meta.group).toBeNull();
     expect(res.facets[1].meta.priority).toBe(0);
