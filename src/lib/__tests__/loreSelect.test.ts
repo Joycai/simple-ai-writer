@@ -29,7 +29,7 @@ vi.mock("../fs/fileio", () => ({
 const ARIA = "/proj/.ai-writer/lore/characters/aria";
 
 function facet(partial: Partial<LoreFacet> & { file: string; title: string }): LoreFacet {
-  return { keys: [], group: null, priority: 0, mode: "auto", charCount: 0, ...partial };
+  return { slot: null, keys: [], group: null, priority: 0, mode: "auto", charCount: 0, ...partial };
 }
 
 function entity(partial: Partial<LoreEntity> & { dirPath: string; name: string }): LoreEntity {
@@ -224,6 +224,7 @@ describe("parseFacetMeta", () => {
     expect(parseFacetMeta(raw, "outfit-armor.md")).toEqual({
       file: "outfit-armor.md",
       title: "战甲形象",
+      slot: null,
       keys: ["战甲", "板甲"],
       group: "outfit",
       priority: 2,
@@ -269,5 +270,62 @@ describe("parseFacetMeta", () => {
     expect(parseFacetMeta("---\nname: x\n---\nbody", "notes.md")).toBeNull();
     const minimal = parseFacetMeta("---\nfacet: 特征\n---\nb", "f.md")!;
     expect(minimal).toMatchObject({ keys: [], group: null, priority: 0, mode: "auto" });
+  });
+});
+
+/**
+ * The facet `slot` field — a facet's place in its category's type schema
+ * (docs/lore-entry-type-plan.md). Two things are being pinned here: the value
+ * survives a round-trip *including* one no enabled pack declares, and it changes
+ * nothing about injection. The second is the invariant the whole "disabling a
+ * pack degrades an entry instead of altering it" promise rests on, and it is the
+ * kind that breaks silently — no error, just a different prompt.
+ */
+describe("facet slot (type schema)", () => {
+  const meta = (slot?: string) => ({
+    title: "外貌", slot, keys: [], group: null, priority: 0, mode: "auto" as const,
+  });
+
+  it("round-trips, and keeps a slot no pack declares", () => {
+    expect(parseFacetMeta(`---\nfacet: 外貌\nslot: appearance\n---\nTall.`, "a.md")!.slot)
+      .toBe("appearance");
+    // A slot whose declaring pack is disabled must come back verbatim when it
+    // is re-enabled, so the scan may not "clean up" what it can't resolve.
+    expect(parseFacetMeta(`---\nfacet: x\nslot: 未知槽位\n---\nb`, "x.md")!.slot)
+      .toBe("未知槽位");
+    expect(parseFacetMeta(serializeFacetFrontmatter(meta("appearance")) + "\nTall.", "f.md")!.slot)
+      .toBe("appearance");
+  });
+
+  it("writes nothing at all when unclassified — the absence is the state", () => {
+    const bare = serializeFacetFrontmatter(meta());
+    expect(bare).not.toContain("slot:");
+    expect(parseFacetMeta(bare + "\nTall.", "f.md")!.slot).toBeNull();
+  });
+
+  it("changes nothing about what is injected, including an unresolvable slot", async () => {
+    const target = "Aria 披上战甲，回想童年。";
+    const pins = [`${ARIA}#secret.md`];
+    const plain = await selectLore(target, makeIndex(), pins);
+
+    // Same entity, same bodies — every facet classified, on disk as well as in
+    // the scanned metadata, one of them into a slot nothing declares.
+    const slots: Record<string, string> = {
+      "outfit-armor.md": "outfit",
+      "outfit-casual.md": "outfit",
+      "backstory.md": "backstory",
+      "secret.md": "某个未启用能力包的槽位",
+      "voice.md": "voice",
+    };
+    const slotted = makeIndex();
+    for (const f of slotted.characters[0].facets) f.slot = slots[f.file] ?? null;
+    for (const [file, slot] of Object.entries(slots)) {
+      const raw = files.get(`${ARIA}/${file}`)!;
+      files.set(`${ARIA}/${file}`, raw.replace("---\nfacet:", `---\nslot: ${slot}\nfacet:`));
+    }
+
+    const withSlots = await selectLore(target, slotted, pins);
+    expect(withSlots.text).toBe(plain.text);
+    expect(withSlots.report).toEqual(plain.report);
   });
 });

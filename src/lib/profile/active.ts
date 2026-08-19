@@ -33,6 +33,8 @@ import {
   DEFAULT_DOC_MODEL,
   DEFAULT_SECTION_LABELS,
   type DocModel,
+  type FacetSlot,
+  type ImageSlot,
   type SectionId,
   type WorkspaceProfile,
 } from "./model";
@@ -93,6 +95,44 @@ export function findCategory(id: string): ResolvedCategory | null {
  */
 export function isKnownCategory(id: string): boolean {
   return active.categories.some((c) => c.id === id);
+}
+
+/**
+ * The facet slots of a category's type schema, in declaration order.
+ *
+ * Empty is a first-class answer, not a failure: a user-defined category, the
+ * `custom` bucket, and every category whose declaring pack is currently
+ * disabled all have no schema. **That emptiness is the degraded state** — read
+ * it as "an ordinary entry", never as an error, and never as a reason to move
+ * or rewrite anything on disk.
+ *
+ * A slot only ever affects authoring, presentation and prompts. Nothing here
+ * may reach the injection path: `selectLore` reads a facet's own frontmatter,
+ * so disabling a pack can change what the author *sees*, never what the model
+ * sees. See docs/lore-entry-type-plan.md §4.
+ */
+export function categoryFacetSlots(categoryId: string): readonly FacetSlot[] {
+  return findCategory(categoryId)?.slots ?? [];
+}
+
+/** The image slots of a category's type schema. Same "empty is fine" contract. */
+export function categoryImageSlots(categoryId: string): readonly ImageSlot[] {
+  return findCategory(categoryId)?.imageSlots ?? [];
+}
+
+/**
+ * Resolve one facet slot, or null when the category has no schema or doesn't
+ * declare that slot.
+ *
+ * Null is a real case, like `findTask`'s: a facet's `slot` frontmatter can
+ * outlive the pack that defined it, and such a facet is simply unclassified —
+ * its value stays on disk untouched so it means something again when the pack
+ * comes back. Matched case-insensitively, matching the merge's dedupe.
+ */
+export function findFacetSlot(categoryId: string, slotId: string): FacetSlot | null {
+  const key = slotId.trim().toLowerCase();
+  if (!key) return null;
+  return categoryFacetSlots(categoryId).find((slot) => slot.id.toLowerCase() === key) ?? null;
 }
 
 /**

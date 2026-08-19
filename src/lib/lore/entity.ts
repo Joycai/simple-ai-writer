@@ -134,6 +134,9 @@ export function parseFacetMeta(raw: string, file: string): LoreFacet | null {
   if (typeof data.facet !== "string" || !data.facet.trim()) return null;
 
   const keys = coerceStringList(data.keys);
+  // Kept verbatim, never validated against the active schema: a slot whose pack
+  // is disabled must still be there when the pack comes back (see LoreFacet.slot).
+  const slot = typeof data.slot === "string" && data.slot.trim() ? data.slot.trim() : null;
   const group =
     typeof data.group === "string" && data.group.trim() ? data.group.trim() : null;
   const priority = Number(data.priority);
@@ -143,6 +146,7 @@ export function parseFacetMeta(raw: string, file: string): LoreFacet | null {
   return {
     file,
     title: data.facet.trim(),
+    slot,
     keys,
     group,
     priority: Number.isFinite(priority) ? priority : 0,
@@ -160,6 +164,10 @@ export function serializeFacetFrontmatter(meta: FacetMeta): string {
   // Title/group are quoted so values that would otherwise parse as JSON
   // (e.g. a title of "[1]") still round-trip as strings.
   const lines = ["---", `facet: ${JSON.stringify(meta.title)}`];
+  // Right after the title because that is how the file reads: what this is,
+  // then which slot it fills. Omitted when unclassified rather than written as
+  // an empty value — the absence is the state.
+  if (meta.slot) lines.push(`slot: ${JSON.stringify(meta.slot)}`);
   lines.push(`keys: [${meta.keys.map((k) => JSON.stringify(k)).join(", ")}]`);
   if (meta.group) lines.push(`group: ${JSON.stringify(meta.group)}`);
   if (meta.priority !== 0) lines.push(`priority: ${meta.priority}`);

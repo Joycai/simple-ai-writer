@@ -71,6 +71,11 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
     [entity.facets],
   );
 
+  // The facet's slot (its place in the category's type schema) has no control in
+  // this form yet — it rides through the save so editing a facet can't silently
+  // unclassify it. See docs/lore-entry-type-plan.md §6 phase 4.
+  const slotRef = useRef<string | null>(null);
+
   const initialSnapshot = useRef<string | null>(null);
   useEffect(() => {
     setTitle("");
@@ -81,6 +86,7 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
     setMode("auto");
     setBody("");
     setError(null);
+    slotRef.current = null;
     initialSnapshot.current = null;
     if (!file) { setLoaded(true); return; }
     setLoaded(false);
@@ -88,6 +94,7 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
       .then((raw) => {
         const meta = parseFacetMeta(raw, file);
         if (meta) {
+          slotRef.current = meta.slot;
           setTitle(meta.title);
           setKeys(meta.keys);
           setGroup(meta.group ?? "");
@@ -127,6 +134,7 @@ export function FacetEditModal({ entity, file, onClose }: Props) {
     try {
       const meta: FacetMeta = {
         title: title.trim(),
+        slot: slotRef.current,
         keys: keys.map((k) => k.trim()).filter(Boolean),
         group: group.trim() || null,
         priority: Number.isFinite(priority) ? priority : 0,

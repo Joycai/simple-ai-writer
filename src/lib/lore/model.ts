@@ -45,6 +45,17 @@ export interface LoreFacet {
   file: string;
   /** Display name from frontmatter `facet`. */
   title: string;
+  /**
+   * Which **slot** of the category's type schema this facet fills (外貌,
+   * 组织架构…), from frontmatter `slot`; null when unclassified.
+   *
+   * Metadata only — the injection engine never reads it, so a value naming a
+   * slot no enabled pack declares is simply unclassified *for now* and is kept
+   * verbatim: the pack coming back must restore the grouping, which a scan that
+   * "cleaned up" the value could not do. See `findFacetSlot` and
+   * docs/lore-entry-type-plan.md §4.
+   */
+  slot: string | null;
   /** Secondary activation keywords. Empty + mode "auto" ⇒ never auto-fires. */
   keys: string[];
   /** Mutual-exclusion group (scoped to the entity); null = ungrouped. */
@@ -59,9 +70,17 @@ export interface LoreFacet {
 /** Entity-dir filenames that can never be facets. */
 export const RESERVED_ENTITY_FILES = ["index.md", "images.md"];
 
-/** Editable facet metadata — what the facet form reads and writes. */
+/**
+ * Editable facet metadata — what the facet form reads and writes.
+ *
+ * `slot` is optional here while `LoreFacet.slot` is not: parsing always has an
+ * answer, whereas a writer may not care. Every writer must still *carry it
+ * through* rather than omitting it — dropping the field silently unclassifies
+ * the facet on the next save.
+ */
 export interface FacetMeta {
   title: string;
+  slot?: string | null;
   keys: string[];
   group: string | null;
   priority: number;
