@@ -254,6 +254,30 @@ export async function createLoreEntityTool(
 /** Reserved names the agent may never write through this tool. */
 const REFUSED_FILES = new Set(["images.md"]);
 
+/**
+ * Validate a model-supplied filename as a writable file inside the entity dir.
+ * The argument is model-controlled, so anything that could navigate ('/', '\',
+ * '..') is refused, as is the app-managed gallery file. index.md IS allowed
+ * here — `checkFacetFilename` is the stricter variant for the tools that may
+ * only touch facets.
+ */
+function checkEntityFilename(toolCallId: string, raw: unknown): ToolResult | string {
+  const file = String(raw ?? "").trim();
+  if (!/^[^/\\]+\.md$/.test(file) || file.includes("..")) {
+    return {
+      toolCallId,
+      content: "Error: 'file' must be a plain .md filename inside the entity directory (no paths).",
+    };
+  }
+  if (REFUSED_FILES.has(file)) {
+    return {
+      toolCallId,
+      content: "Error: images.md is managed by the app's gallery UI and cannot be written by the agent.",
+    };
+  }
+  return file;
+}
+
 export async function updateLoreFileTool(
   toolCallId: string,
   args: { entity?: string; file?: string; content?: string },
@@ -269,21 +293,9 @@ export async function updateLoreFileTool(
     };
   }
 
-  const file = (args.file ?? "index.md").trim();
-  // Single filename inside the entity dir — the argument is model-controlled,
-  // so refuse anything that could navigate ('/', '\', '..') and non-md targets.
-  if (!/^[^/\\]+\.md$/.test(file) || file.includes("..")) {
-    return {
-      toolCallId,
-      content: "Error: 'file' must be a plain .md filename inside the entity directory (no paths).",
-    };
-  }
-  if (REFUSED_FILES.has(file)) {
-    return {
-      toolCallId,
-      content: "Error: images.md is managed by the app's gallery UI and cannot be written by the agent.",
-    };
-  }
+  const checked = checkEntityFilename(toolCallId, args.file ?? "index.md");
+  if (typeof checked !== "string") return checked;
+  const file = checked;
 
   const content = args.content ?? "";
   if (!content.trim()) {
@@ -334,6 +346,350 @@ export async function updateLoreFileTool(
     content:
       `Wrote ${file} of entity "${entity.name}". ${suffix} ` +
       `Plan step: ${gated.step.detail}. The lore index has been refreshed.`,
+  };
+}
+
+// ─── update_lore_meta / append_lore_file / edit_lore_file ────────────────────
+
+/**
+ * Surgical alternatives to `update_lore_file`.
+ *
+ * Whole-file replacement is the only *complete* write — every change can be
+ * expressed as "send the new file" — but it is the wrong instrument for the
+ * three commonest edits, and expensively so. To fix one line of `summary`, to
+ * add a paragraph, or to correct one sentence, the model must first read the
+ * entity back and then re-emit every character of it: the content is paid for
+ * twice, and each re-emitted character is one the model can quietly paraphrase
+ * on the way past. That is the failure the author never catches, because the
+ * diff they would have to read is the whole file.
+ *
+ * So the split `update_facet_meta` already made for facet metadata is made for
+ * the rest of an entity:
+ *
+ *   update_lore_meta  — index.md frontmatter only; the body is carried through
+ *   append_lore_file  — adds at the end; nothing existing is re-sent at all
+ *   edit_lore_file    — one unique find/replace inside the body
+ *
+ * All three read from disk and put the frontmatter block back byte-for-byte
+ * (`splitFrontmatter`) or regenerate it from typed fields (update_lore_meta).
+ * That is what makes the structural validation `update_lore_file` performs
+ * unnecessary here rather than merely skipped: a write that cannot reach the
+ * frontmatter cannot change a category, cannot drop a `name`, and cannot
+ * deactivate a facet by losing its `facet:` field.
+ */
+
+/**
+ * Split a lore file into its frontmatter block and everything after it, such
+ * that `head + body === raw`.
+ *
+ * Deliberately not `parseFrontmatter`, which trimStart()s the body and hands
+ * back parsed data: these tools need the head as the *original bytes*, so
+ * putting it back cannot reformat YAML the author hand-wrote.
+ */
+function splitFrontmatter(raw: string): { head: string; body: string } {
+  if (!raw.startsWith("---")) return { head: "", body: raw };
+  const end = raw.indexOf("\n---", 4);
+  if (end === -1) return { head: "", body: raw };
+  // Keep the remainder of the closing delimiter's line with the head, so the
+  // body starts at a line boundary.
+  const nl = raw.indexOf("\n", end + 4);
+  const cut = nl === -1 ? raw.length : nl + 1;
+  return { head: raw.slice(0, cut), body: raw.slice(cut) };
+}
+
+/** Resolve a model-supplied entity name, or the error to hand straight back. */
+function requireEntity(
+  toolCallId: string,
+  ctx: ToolContext,
+  raw: string | undefined,
+): LoreEntity | ToolResult {
+  const name = raw?.trim();
+  if (!name) return { toolCallId, content: "Error: 'entity' argument is required." };
+  const entity = findEntityByName(ctx.loreIndex, name);
+  if (!entity) {
+    return {
+      toolCallId,
+      content: `Error: entity "${name}" not found. Available: ${allEntityNames(ctx.loreIndex) || "none"}`,
+    };
+  }
+  return entity;
+}
+
+/** The entity's own .md files, for the "which files are there?" error text. */
+function facetFileList(entity: LoreEntity): string {
+  const known = (entity.mdFiles ?? []).filter((f) => !RESERVED_ENTITY_FILES.includes(f));
+  return known.join(", ") || "none";
+}
+
+/**
+ * Re-derive a facet's cached body length after a body-only write, so the run
+ * snapshot's token estimates don't lag the file. Re-parsing rather than
+ * measuring by hand keeps `charCount` defined in exactly one place
+ * (`parseFacetMeta`), which is where the UI reads it from.
+ */
+function refreshFacetInSnapshot(entity: LoreEntity, file: string, raw: string): void {
+  const at = (entity.facets ?? []).findIndex((f) => f.file === file);
+  if (at < 0) return;
+  const parsed = parseFacetMeta(raw, file);
+  if (parsed) entity.facets[at] = parsed;
+}
+
+export async function updateLoreMetaTool(
+  toolCallId: string,
+  args: { entity?: string; summary?: string; aliases?: string[]; add_aliases?: string[] },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const found = requireEntity(toolCallId, ctx, args.entity);
+  if ("toolCallId" in found) return found;
+  const entity = found;
+
+  const touches = ["summary", "aliases", "add_aliases"].filter((k) => k in args);
+  if (touches.length === 0) {
+    return {
+      toolCallId,
+      content:
+        "Error: pass at least one of summary / aliases / add_aliases. This tool edits index.md's frontmatter only — " +
+        "for the body use edit_lore_file or append_lore_file, and for the name or category use move_lore_entity (both move the folder).",
+    };
+  }
+  if ("aliases" in args && "add_aliases" in args) {
+    return {
+      toolCallId,
+      content: "Error: pass either 'aliases' (replaces the whole list) or 'add_aliases' (appends to it), not both.",
+    };
+  }
+
+  // Disk is the source of truth for what the frontmatter currently says, and
+  // the body has to be carried through verbatim — same reasoning as
+  // update_facet_meta, and the only thing that works on a surface with no
+  // rescan. A missing index.md is not an error: the entity exists (it was
+  // scanned), so this rebuilds one from the scanned metadata.
+  let body = `# ${entity.name}\n`;
+  let name = entity.name;
+  let aliases = entity.aliases ?? [];
+  let summary = entity.summary;
+  try {
+    const parsed = parseFrontmatter(await readEntityFile(entity.dirPath, "index.md"));
+    body = parsed.content;
+    if (typeof parsed.data.name === "string" && parsed.data.name.trim()) name = parsed.data.name.trim();
+    if (Array.isArray(parsed.data.aliases)) {
+      aliases = parsed.data.aliases.map((a) => String(a).trim()).filter(Boolean);
+    }
+    if (typeof parsed.data.summary === "string") summary = parsed.data.summary;
+  } catch {
+    // no index.md — rebuilt below from the scanned metadata
+  }
+
+  const aliasesBefore = aliases;
+  if ("summary" in args) {
+    if (typeof args.summary !== "string") {
+      return { toolCallId, content: "Error: 'summary' must be a string." };
+    }
+    summary = args.summary.trim();
+  }
+  if ("aliases" in args) {
+    if (!Array.isArray(args.aliases)) {
+      return { toolCallId, content: "Error: 'aliases' must be an array of strings (it replaces the current list)." };
+    }
+    aliases = args.aliases.map((a) => String(a).trim()).filter(Boolean);
+  }
+  if ("add_aliases" in args) {
+    if (!Array.isArray(args.add_aliases)) {
+      return { toolCallId, content: "Error: 'add_aliases' must be an array of strings." };
+    }
+    for (const raw of args.add_aliases) {
+      const alias = String(raw).trim();
+      if (alias) aliases = withAlias(aliases, alias);
+    }
+  }
+
+  // An alias another entity already answers to would make both unresolvable by
+  // name — the same ambiguity move_lore_entity refuses on a rename. Only the
+  // aliases this call introduces are checked: a collision that predates the
+  // call is not something a summary edit should be blocked on, and refusing it
+  // would leave the author no way to fix the entry from here.
+  const added = aliases.filter(
+    (a) => !aliasesBefore.some((b) => b.toLowerCase() === a.toLowerCase()),
+  );
+  for (const alias of added) {
+    const clash = findEntityByName(ctx.loreIndex, alias);
+    if (clash && clash !== entity) {
+      return {
+        toolCallId,
+        content: `Error: the alias "${alias}" already resolves to entity "${clash.name}" (category: ${clash.category}) — both would become unresolvable by name. Drop it, or merge the two entities.`,
+      };
+    }
+  }
+
+  const gated = gate(toolCallId, ctx, "update", entity.name, "index.md");
+  if ("refusal" in gated) return gated.refusal;
+
+  const backupPath = await backupFile(ctx.projectPath, `${entity.dirPath}/index.md`);
+  await saveEntityMetaAndBody(
+    ctx.projectPath,
+    entity,
+    { name, aliases, category: entity.category, summary },
+    body,
+  );
+  entity.aliases = aliases;
+  entity.summary = summary;
+
+  await syncLore(ctx);
+  const changed = [
+    "summary" in args ? `summary="${summary}"` : null,
+    "aliases" in args || "add_aliases" in args ? `aliases=[${aliases.join(", ")}]` : null,
+  ].filter(Boolean);
+  return {
+    toolCallId,
+    content:
+      `Updated the frontmatter of "${entity.name}": ${changed.join(", ")}. The body was left untouched.` +
+      (backupPath ? ` Previous index.md backed up to ${backupPath}.` : "") +
+      ` Plan step: ${gated.step.detail}. The lore index has been refreshed.`,
+  };
+}
+
+export async function appendLoreFileTool(
+  toolCallId: string,
+  args: { entity?: string; file?: string; content?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const found = requireEntity(toolCallId, ctx, args.entity);
+  if ("toolCallId" in found) return found;
+  const entity = found;
+
+  const checked = checkEntityFilename(toolCallId, args.file ?? "index.md");
+  if (typeof checked !== "string") return checked;
+  const file = checked;
+
+  const addition = (args.content ?? "").trim();
+  if (!addition) {
+    return { toolCallId, content: "Error: 'content' argument is required (the text to add at the end)." };
+  }
+  // A whole file where a section was asked for. Appended, its frontmatter would
+  // sit stranded in the middle of the body — markdown the scanner reads as
+  // prose and the author reads as corruption. The model meant update_lore_file.
+  if (addition.startsWith("---")) {
+    return {
+      toolCallId,
+      content:
+        "Error: 'content' starts with a frontmatter delimiter, so it looks like a complete file. Send ONLY the new text — " +
+        "the existing frontmatter and body stay exactly where they are. Use update_lore_file to replace a whole file.",
+    };
+  }
+
+  let raw: string;
+  try {
+    raw = await readEntityFile(entity.dirPath, file);
+  } catch {
+    return {
+      toolCallId,
+      content:
+        `Error: "${file}" does not exist in entity "${entity.name}" (its files: ${facetFileList(entity)}). ` +
+        "Create it with update_lore_file, which takes the complete content including frontmatter.",
+    };
+  }
+
+  const gated = gate(toolCallId, ctx, "update", entity.name, file);
+  if ("refusal" in gated) return gated.refusal;
+
+  // One blank line between what was there and what arrives, always. The
+  // manuscript-side append_file makes the model spell out its own separator,
+  // which is right for prose where the join is the author's decision; here the
+  // payload is structure (a new `##` section, another list item) and a missing
+  // blank line silently welds it onto the last paragraph.
+  const next = `${raw.replace(/\s+$/, "")}\n\n${addition}\n`;
+  const backupPath = await backupFile(ctx.projectPath, `${entity.dirPath}/${file}`);
+  await writeEntityFile(entity.dirPath, file, next);
+  refreshFacetInSnapshot(entity, file, next);
+
+  await syncLore(ctx);
+  return {
+    toolCallId,
+    content:
+      `Appended ${addition.length} chars to the end of ${file} on entity "${entity.name}". ` +
+      `Everything already in the file is unchanged.` +
+      (backupPath ? ` Previous version backed up to ${backupPath}.` : "") +
+      ` Plan step: ${gated.step.detail}.`,
+  };
+}
+
+export async function editLoreFileTool(
+  toolCallId: string,
+  args: { entity?: string; file?: string; find?: string; replace?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const found = requireEntity(toolCallId, ctx, args.entity);
+  if ("toolCallId" in found) return found;
+  const entity = found;
+
+  const checked = checkEntityFilename(toolCallId, args.file ?? "index.md");
+  if (typeof checked !== "string") return checked;
+  const file = checked;
+
+  const find = typeof args.find === "string" ? args.find : "";
+  if (!find) {
+    return { toolCallId, content: "Error: 'find' argument is required — the exact text to replace, copied from the file." };
+  }
+  if (typeof args.replace !== "string") {
+    return { toolCallId, content: "Error: 'replace' argument is required (pass an empty string to delete the found text)." };
+  }
+  const replace = args.replace;
+  if (replace === find) {
+    return { toolCallId, content: "Error: 'replace' is identical to 'find', so nothing would change." };
+  }
+
+  let raw: string;
+  try {
+    raw = await readEntityFile(entity.dirPath, file);
+  } catch {
+    return {
+      toolCallId,
+      content: `Error: "${file}" does not exist in entity "${entity.name}" (its files: ${facetFileList(entity)}).`,
+    };
+  }
+
+  // The match is looked for in the body alone, and the head is put back
+  // untouched: metadata has its own tools precisely because find/replace over
+  // YAML is how a facet silently stops being injected.
+  const { head, body } = splitFrontmatter(raw);
+  const hits = body.split(find).length - 1;
+  if (hits === 0) {
+    return {
+      toolCallId,
+      content:
+        `Error: that 'find' text does not appear in the body of ${file}. ` +
+        (head.includes(find)
+          ? "It is in the frontmatter, which this tool never touches — use update_lore_meta (index.md) or update_facet_meta (a facet) for metadata."
+          : "Read the file with read_lore_entity and copy the snippet exactly, whitespace and line breaks included."),
+    };
+  }
+  if (hits > 1) {
+    return {
+      toolCallId,
+      content: `Error: that 'find' text appears ${hits} times in ${file} — it must be unique. Include enough surrounding text to pin down the one you mean.`,
+    };
+  }
+
+  const gated = gate(toolCallId, ctx, "update", entity.name, file);
+  if ("refusal" in gated) return gated.refusal;
+
+  // split/join rather than String.replace: a replacement containing `$&` or
+  // `$1` would otherwise be expanded as a pattern reference, silently writing
+  // something other than what the author approved. `find` is unique, so this
+  // is the same single substitution, taken literally.
+  const next = head + body.split(find).join(replace);
+  const backupPath = await backupFile(ctx.projectPath, `${entity.dirPath}/${file}`);
+  await writeEntityFile(entity.dirPath, file, next);
+  refreshFacetInSnapshot(entity, file, next);
+
+  await syncLore(ctx);
+  return {
+    toolCallId,
+    content:
+      `Replaced ${find.length} chars with ${replace.length} in ${file} on entity "${entity.name}". ` +
+      `The rest of the file, and its frontmatter, are unchanged.` +
+      (backupPath ? ` Previous version backed up to ${backupPath}.` : "") +
+      ` Plan step: ${gated.step.detail}.`,
   };
 }
 

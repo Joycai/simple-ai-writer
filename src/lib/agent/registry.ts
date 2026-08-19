@@ -41,6 +41,8 @@ import {
   createDirectoryTool,
   createFileTool,
   createLoreEntityTool,
+  appendLoreFileTool,
+  editLoreFileTool,
   deleteChapterTool,
   deleteDirectoryTool,
   deleteLoreEntityTool,
@@ -54,6 +56,7 @@ import {
   proposeLorePlanTool,
   readMemoryTool,
   updateLoreFileTool,
+  updateLoreMetaTool,
   updateMemoryTool,
 } from "./writeTools";
 import type { TaskWorkspaceHandle } from "./taskWorkspace";
@@ -365,6 +368,9 @@ export type ToolId =
   | "propose_lore_plan"
   | "create_lore_entity"
   | "update_lore_file"
+  | "update_lore_meta"
+  | "append_lore_file"
+  | "edit_lore_file"
   | "update_facet_meta"
   | "delete_lore_file"
   | "move_lore_entity"
@@ -751,7 +757,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "update_lore_file",
         description:
-          "Overwrite one .md file of an existing lore entity with complete new content (send the WHOLE file, not a diff). index.md must include full frontmatter (name/aliases/category/summary) and may not change the category. A facet file must keep its facet frontmatter. images.md cannot be written. Read the current content with read_lore_entity first. The previous version is backed up automatically before writing.",
+          "Overwrite one .md file of an existing lore entity with complete new content (send the WHOLE file, not a diff). Reach for it only when the whole file must be re-laid-out, or to create a new facet file: to change metadata use update_lore_meta / update_facet_meta, to add a section use append_lore_file, and to fix a sentence use edit_lore_file — none of which make you re-emit the rest of the entry. index.md must include full frontmatter (name/aliases/category/summary) and may not change the category. A facet file must keep its facet frontmatter. images.md cannot be written. Read the current content with read_lore_entity first. The previous version is backed up automatically before writing.",
         parameters: {
           type: "object",
           properties: {
@@ -770,6 +776,110 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => updateLoreFileTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  update_lore_meta: {
+    access: "write-auto",
+    definition: {
+      type: "function",
+      function: {
+        name: "update_lore_meta",
+        description:
+          "Change an entity's index.md metadata — summary and/or aliases — WITHOUT resending its body. The entity-level twin of update_facet_meta, and the right tool for 'fix this one-line summary' or 'she is also called X': update_lore_file would make you re-emit the whole entry, paying for the content twice and risking silently reworded prose. Name and category are deliberately NOT here — both relocate the entity's folder, so they go through move_lore_entity. Omitted fields keep their current values; `aliases` replaces the whole list, `add_aliases` appends to it. The previous index.md is backed up automatically.",
+        parameters: {
+          type: "object",
+          properties: {
+            entity: {
+              type: "string",
+              description: "Entity name exactly as returned by list_lore_entities",
+            },
+            summary: {
+              type: "string",
+              description: "One-line summary shown in listings and used for activation",
+            },
+            aliases: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "Replaces the current alias list entirely — pass every alias the entity should keep, not just the new one",
+            },
+            add_aliases: {
+              type: "array",
+              items: { type: "string" },
+              description: "Aliases to add to the current list, leaving the existing ones in place",
+            },
+          },
+          required: ["entity"],
+        },
+      },
+    },
+    execute: (call, ctx) => updateLoreMetaTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  append_lore_file: {
+    access: "write-auto",
+    definition: {
+      type: "function",
+      function: {
+        name: "append_lore_file",
+        description:
+          "Add text to the END of one of an entity's .md files, leaving everything already in it untouched — a new section on an entry, one more event on a timeline, another note under a heading. Nothing before the addition is re-sent, so this write cannot damage it and you do not pay for the existing content twice. Send ONLY the new text: no frontmatter, no repetition of what is already there. One blank line is inserted between the existing ending and your text. Defaults to index.md; a facet's filename appends to that facet. Use edit_lore_file to change text that already exists, and update_lore_file only when the whole file must be re-laid-out. Backed up automatically.",
+        parameters: {
+          type: "object",
+          properties: {
+            entity: {
+              type: "string",
+              description: "Entity name exactly as returned by list_lore_entities",
+            },
+            file: {
+              type: "string",
+              description: "Filename inside the entity directory (default: index.md). The file must already exist.",
+            },
+            content: {
+              type: "string",
+              description: "The new text to add at the end — only the addition itself",
+            },
+          },
+          required: ["entity", "content"],
+        },
+      },
+    },
+    execute: (call, ctx) => appendLoreFileTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  edit_lore_file: {
+    access: "write-auto",
+    definition: {
+      type: "function",
+      function: {
+        name: "edit_lore_file",
+        description:
+          "Replace ONE exact snippet inside an entity's .md file — correct a sentence, update a number, fix a name in the prose — without resending the rest. What propose_edit is for the manuscript, this is for the knowledge base (applied immediately with a backup, once the approved lore plan covers it). 'find' must be text that currently exists in the file's BODY and must occur exactly once: include enough surrounding text to make it unique. Read the file with read_lore_entity first and copy the snippet verbatim, whitespace included. Pass an empty 'replace' to delete the found text. Frontmatter is never touched — use update_lore_meta or update_facet_meta for metadata. Defaults to index.md.",
+        parameters: {
+          type: "object",
+          properties: {
+            entity: {
+              type: "string",
+              description: "Entity name exactly as returned by list_lore_entities",
+            },
+            file: {
+              type: "string",
+              description: "Filename inside the entity directory (default: index.md)",
+            },
+            find: {
+              type: "string",
+              description: "Exact existing text to replace (must be unique within the file body)",
+            },
+            replace: {
+              type: "string",
+              description: "The replacement text; an empty string deletes the found text",
+            },
+          },
+          required: ["entity", "find", "replace"],
+        },
+      },
+    },
+    execute: (call, ctx) => editLoreFileTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   update_facet_meta: {
