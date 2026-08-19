@@ -11,6 +11,7 @@ import {
   applyLoreImport,
   cancelLoreImport,
   exportLoreBundle,
+  indexCategories,
   setEntityAvatar,
   slugifyEntityId,
   stageLoreImport,
@@ -118,7 +119,7 @@ export function LoreWall() {
     let cancelled = false;
     (async () => {
       const next: Record<string, string> = {};
-      for (const cat of loreCategories()) {
+      for (const cat of indexCategories(index)) {
         for (const e of (index[cat.id] ?? [])) {
           if (!e.avatarPath) continue;
           try {
@@ -156,21 +157,26 @@ export function LoreWall() {
   };
 
   // Flatten + filter
+  // Wall order = every category the *scan* found, so entries whose category
+  // comes from a disabled pack are on the wall rather than silently absent
+  // (they are in the model's context either way — see lib/lore/categories).
+  const cats = useMemo(() => indexCategories(index), [index]);
+
   const allEntities = useMemo(() => {
     const flat: LoreEntity[] = [];
-    for (const cat of loreCategories()) {
+    for (const cat of cats) {
       for (const e of (index[cat.id] ?? [])) flat.push(e);
     }
     return flat;
-  }, [index]);
+  }, [cats, index]);
 
   const counts = useMemo(() => {
     const out: Record<string, number> = { all: allEntities.length };
-    for (const cat of loreCategories()) {
+    for (const cat of cats) {
       out[cat.id] = (index[cat.id] ?? []).length;
     }
     return out;
-  }, [allEntities, index]);
+  }, [allEntities, cats, index]);
 
   const filtered = useMemo(() => {
     let list = allEntities;
@@ -424,11 +430,19 @@ export function LoreWall() {
             {isZh ? "全部" : "All"}
             <span className={styles.chipCount}>{counts.all}</span>
           </span>
-          {loreCategories().map((cat) => (
+          {cats.map((cat) => (
             <span
               key={cat.id}
               className={`${styles.chip} ${filter === cat.id ? styles.chipActive : ""}`}
               onClick={() => setFilter(cat.id)}
+              // Orphans look like any other chip on purpose: their entries are
+              // intact, so an alarming treatment would misreport the state. The
+              // dedicated presentation is 设计稿 03 屏 23 (plan phase 4).
+              title={cat.orphan
+                ? (isZh
+                    ? "这个分类来自未启用的能力包 · 条目完好，只是不能在这里新建"
+                    : "From a pack that isn't enabled — entries are intact, but nothing new can be created here")
+                : undefined}
             >
               <span className={styles.chipDot} style={{ background: categoryColor(cat.id) }} />
               {categoryLabel(cat, isZh)}
@@ -699,6 +713,8 @@ function NewEntryModal({
         <div className={styles.modalBody}>
           <NewEntryTabs value="manual" onChange={onModeChange} />
           <label className={styles.modalLabel}>{isZh ? "分类" : "Category"}</label>
+          {/* Creation target — the workspace list, never `indexCategories`: an
+              orphan category is not a folder this app may create an entry in. */}
           <div className={styles.modalCats}>
             {loreCategories().map((cat) => (
               <span

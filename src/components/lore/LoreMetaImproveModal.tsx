@@ -6,10 +6,10 @@ import { useProjectStore } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { connOptions } from "../../lib/ai/conn";
 import {
-  readEntityFile, saveEntityMetaAndBody,
+  assignableCategories, readEntityFile, saveEntityMetaAndBody,
   type CategoryId, type LoreEntity,
 } from "../../lib/lore";
-import { categoryLabel, findCategory, loreCategories, loreCategoryIds } from "../../lib/profile";
+import { categoryLabel, findCategory, loreCategoryIds } from "../../lib/profile";
 import { useImageDataUrl } from "./useImageDataUrl";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { ModalShell } from "../common/ModalShell";
@@ -380,7 +380,9 @@ summary: ${entity.summary}
                   className={extra.gSelect}
                   value={pCategory}
                   onChange={(v) => setPCategory(v as CategoryId)}
-                  options={loreCategories().map((c) => ({
+                  // Same asymmetry as the detail pane's picker: an orphan is
+                  // offered only when the entry already sits in it.
+                  options={assignableCategories(entity.category).map((c) => ({
                     value: c.id,
                     label: categoryLabel(c, isZh),
                   }))}

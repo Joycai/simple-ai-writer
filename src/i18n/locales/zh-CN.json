@@ -219,7 +219,7 @@
       "paneSub": "当前项目的能力包、知识库分类与备份",
       "enablePack": "启用 {{pack}}",
       "disablePack": "停用 {{pack}}",
-      "disabledHasData": "{{count}} 个分类目录仍有内容，重新启用即可看到",
+      "disabledHasData": "{{count}} 个分类目录仍有内容 · 条目照常可见可编辑，重新启用可恢复分类名与类型",
       "categoriesSection": "自定义知识库分类",
       "categoriesHint": "在能力包提供的分类之外，为这个项目自定义知识库分类，方便按自己的方式组织。移除分类不会删除其文件夹与条目，重新添加同名分类即可看到。",
       "addCategory": "添加",

@@ -1,7 +1,7 @@
 # 知识库条目类型系统落地方案
 
-> **状态：分期落地中**（第 1 期「槽位骨架」已实现：`ProfileCategory.slots/imageSlots`
-> + facet frontmatter `slot` + 合并规则 + 单测；第 2~5 期见 §6）。
+> **状态：分期落地中**（第 1 期「槽位骨架」、第 2 期「孤儿分类」已实现；
+> 第 3~5 期见 §6）。
 >
 > 目标：让条目在保持「主词条 + 特征 + 配图」三段结构不变的前提下**带上类型**，
 > 由能力包声明；类型给出该类条目**应该有哪些面**（外貌 / 组织架构 / 人设图…），
@@ -220,6 +220,23 @@ mode: auto
 
 配套的第二个坑见 §7 坑 1——这两件事必须同一个 PR 改完。
 
+**落地口径**（第 2 期，运行时说明记在 [`architecture.md`](architecture.md) →
+孤儿分类）：
+
+- 两个问题分家到 `src/lib/lore/categories.ts`：`indexCategories(index)` 答「有些什么」，
+  `loreCategories()`/`isKnownCategory()` 继续答「能往哪写」。
+- **空的孤儿目录不算分类**：谁也不能往里新建，列出来只是碍事。大小写不同的同一目录只进一次
+  （大小写不敏感的文件系统会把它报成另一个名字）。
+- 孤儿的**标签用目录名**，不借那个被停用的包的标签——借来的标签会让人以为 schema 还在，
+  而目录名对手工建的、或跟着别人项目一起来的文件夹也是唯一诚实的答案。
+- `assignableCategories(current)` 是唯一例外：条目正待在某个孤儿分类里时，选择器必须列出它，
+  否则界面显示一个它不在的分类，下一次保存就把目录搬走了。「搬进」孤儿仍然不可能。
+- `list_lore_entities` 在孤儿分类后缀一句说明，免得模型试一次被拒才知道。
+- Settings → 工作台 的「N 个分类目录仍有内容」文案同步改掉：它此前说「重新启用即可看到」，
+  而现在本来就看得到，重新启用恢复的是分类名与类型。
+- **视觉上仍是普通分类**（只多一个 tooltip）：条目是完好的，报警式的处理会谎报状态；
+  专门的降级呈现是设计稿屏 23，第 4 期的事。
+
 ---
 
 ## 6. 分期计划
@@ -227,7 +244,7 @@ mode: auto
 | 期 | 内容 | 状态 |
 |---|---|---|
 | **1** | **槽位骨架**：`FacetSlot`/`ImageSlot` 类型与校验、`ResolvedCategory` 并集合并、facet frontmatter `slot` 解析/序列化、写入路径保值、novel 包的槽位表、单测。零 UI、零行为变化。 | ✅ 已实现 |
-| 2 | **孤儿分类**（§5）+ §7 坑 1 的一批循环。独立成立：就算类型系统后面不做，这一期也该做。 | 待做 |
+| **2** | **孤儿分类**（§5）+ §7 坑 1 的那批循环 + `lib/lore/categories.ts` 的两问分家。 | ✅ 已实现 |
 | 3 | **创作侧接线**：生成 / 拆分 / 改进 / 特征助手拿到「这类条目该有哪些面」的清单；`split_facet`、`update_facet_meta` 加可选 `slot`（enum 从 schema 填，照 `profileCategoryParams` 的先例）。价值最高的一期。 | 待做 |
 | 4 | **UI 呈现**：详情页特征栏按槽位分组、缺口提示、配图按 imageSlot 分组（含 `images.md` 格式扩展）、墙上的类型标记。先出设计稿，prompt 见 §8。 | 待做 |
 | 5 | `subtypes`（§2 末）——等真有一个能力包需要再说。 | 不做 |
@@ -239,11 +256,13 @@ mode: auto
 
 ## 7. 坑清单
 
-1. **约 8 处 `loreCategories()` + `loreIndex[c.id]` 的循环**——
-   `LoreWall.tsx:121/161/169`、`LoreDetail.tsx:97`、`CommandPalette.tsx:61`、`AiPanel.tsx:1201`。
-   而 `selectLore` 走的是 `Object.values(loreIndex)`（`loreSelect.ts:149`）。
-   所以 `scanLore` 一旦产出孤儿键，**注入立刻覆盖到它们，UI 却看不见**——
-   错的方向：作者看不见的条目悄悄进了 prompt。第 2 期必须一起改。
+1. ~~**约 8 处 `loreCategories()` + `loreIndex[c.id]` 的循环**~~（第 2 期已改）——
+   `LoreWall` 三处 + `LoreDetail` 翻页 + `CommandPalette` + `AiPanel` 清单改走
+   `indexCategories(index)`；新建条目的分类选择器**保持** `loreCategories()`，
+   两个分类选择器改走 `assignableCategories(entity.category)`。
+   原因留档：`selectLore` 走的是 `Object.values(loreIndex)`（`loreSelect.ts:149`），
+   `scanLore` 一旦产出孤儿键，**注入立刻覆盖到它们，UI 却看不见**——
+   错的方向，作者看不见的条目悄悄进了 prompt。新增循环时照此二分。
 2. **槽位默认值必须写进文件**（§4 不变量二）。
 3. **跨包共享分类的槽位合并要显式定**（§3.2）。否则「启用第二个包」会静默改掉一个已有分类的 schema；
    合并时忘了复制数组则会污染内置包单例。
@@ -314,7 +333,9 @@ mode: auto
 - 第 1 期：`pnpm test`（新增 `categorySlots.test.ts` + `loreSelect.test.ts` 的 parseFacetMeta 用例）
   与 `pnpm tsc --noEmit`。行为不变的证据是**现有测试全绿且没被改动语义**：
   slots 没有任何消费者，`parseFacetMeta` 只多一个字段。
-- 第 2 期：手工造一个目录（`.ai-writer/lore/npcs/…`）后关掉 ttrpg 包，
-  确认条目仍出现在墙上、能打开、能被注入，且 `create_lore_entity` 的 enum 里**没有** `npcs`。
+- 第 2 期：`orphanCategories.test.ts` —— 扫描认出孤儿目录 / 空目录不认 / 大小写变体不重复；
+  `indexCategories` 的顺序与「枚举出的条目数 == 索引里的条目数」（坑 1 的回归钉）；
+  `assignableCategories` 的例外只放行条目自己那一个；`isKnownCategory("npcs")` 仍为 false。
+  `agentReadTools.test.ts` 补了 `formatLoreIndex` 的孤儿标注。
 - 第 3/4 期：接进提示词与 UI 后，回归验证不变量一——同一段正文、同一个条目，
   开关能力包前后 `selectLore` 的输出必须逐字相同。

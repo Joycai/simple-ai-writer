@@ -7,8 +7,7 @@ import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
-import { type LoreEntity } from "../../lib/lore";
-import { loreCategories } from "../../lib/profile";
+import { indexCategories, type LoreEntity } from "../../lib/lore";
 import { MOD_KEY } from "../../lib/platform";
 import { useImeGuard } from "../../lib/ime";
 import { modalPop, overlayFade, overlayFadeTransition, springPanel } from "../../lib/motion";
@@ -58,7 +57,9 @@ export function CommandPalette() {
   // Flatten lore for searching
   const allLore = useMemo(() => {
     const out: LoreEntity[] = [];
-    for (const cat of loreCategories()) {
+    // Every category the scan found, orphans included — the palette is a "find
+    // what exists" surface, not a "pick a destination" one (lib/lore/categories).
+    for (const cat of indexCategories(loreIndex)) {
       for (const e of (loreIndex[cat.id] ?? [])) out.push(e);
     }
     return out;

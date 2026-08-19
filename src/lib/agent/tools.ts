@@ -15,6 +15,7 @@ import { readHtmlSlideRange, splitHtmlSlides } from "../pptx/htmlSlides";
 import { fileExists, readFile } from "../fs/fileio";
 import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, imageToDataUrl, isImagePath } from "../fs/images";
 import { readEntityFile, type LoreEntity, type LoreIndex } from "../lore";
+import { isKnownCategory } from "../profile/active";
 import { isPathWithin, isWorkspacePath, resolveRelativePath } from "../paths";
 import { readDirRecursive, type FileNode } from "../project";
 
@@ -36,7 +37,14 @@ export function formatLoreIndex(loreIndex: LoreIndex): string {
   const lines: string[] = [];
   for (const [category, entities] of Object.entries(loreIndex)) {
     if (!entities.length) continue;
-    lines.push(`[${category}]`);
+    // An orphan category — no enabled pack declares it (see lib/lore/categories).
+    // Its entries read and edit like any other, but `create_lore_entity` and
+    // `move_lore_entity` refuse it, so say so here rather than letting the model
+    // discover it by having a call rejected.
+    const orphan = isKnownCategory(category)
+      ? ""
+      : "  (no enabled capability pack declares this category — you can read and edit these entries, but you cannot create or move entries into it)";
+    lines.push(`[${category}]${orphan}`);
     for (const e of entities) {
       lines.push(`  - ${e.name}: ${e.summary || "(no summary)"}`);
     }

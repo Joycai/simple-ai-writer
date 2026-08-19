@@ -65,9 +65,11 @@ export function WorkspacePane() {
   };
 
   // Which disabled packs still have entities on disk — their own categories
-  // (not shared with anything enabled, which is still scanned) with content
-  // under `.ai-writer/lore/`. Disabling never deletes, so this is the note
-  // telling the author their data is parked, not gone.
+  // (not shared with anything enabled) with content under `.ai-writer/lore/`.
+  // Since orphan categories are scanned (lib/lore/categories), those entries are
+  // not parked any more: they stay on the wall and in context, minus the
+  // category's name and type schema. This note says which pack would give those
+  // back.
   const [parkedCounts, setParkedCounts] = useState<Record<string, number>>({});
   useEffect(() => {
     if (!projectPath) {
