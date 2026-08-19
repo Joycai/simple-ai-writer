@@ -71,6 +71,10 @@ const AUTO_APPROVABLE: ReadonlySet<Proposal["kind"]> = new Set([
   "append",
   "create",
   "move",
+  // A deck is a deterministic re-rendering of a page the author already has:
+  // it costs nothing, destroys nothing, and iterating on a slide layout means
+  // exporting the same file repeatedly.
+  "pptx",
   "copy",
 ]);
 

@@ -554,6 +554,28 @@ async function applyProposal(proposal: Proposal, signal?: AbortSignal): Promise<
         ].filter(Boolean).join("\n"),
       };
     }
+
+    case "pptx": {
+      // Applied here rather than in the tool for the same reason `illustrate`
+      // is: the work needs something the tool loop does not have. There it was
+      // the author's money; here it is a DOM — the page has to be laid out by
+      // a real browser before anything can be measured (lib/pptx).
+      const { exportHtmlToPptx } = await import("../lib/pptx");
+      const outcome = await exportHtmlToPptx(proposal.sourcePath, proposal.path);
+      // The deck is written with the raw byte writer, which the file tree knows
+      // nothing about — without this the new file is invisible until something
+      // else refreshes.
+      await useProjectStore.getState().refreshFileTree();
+      return {
+        resultPath: outcome.path,
+        report: [
+          `Exported ${outcome.slides} slide(s) to ${outcome.path}.`,
+          outcome.degraded.length
+            ? `These did not carry across faithfully — tell the author:\n- ${outcome.degraded.join("\n- ")}`
+            : "",
+        ].filter(Boolean).join("\n"),
+      };
+    }
   }
 }
 

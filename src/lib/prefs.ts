@@ -40,6 +40,7 @@ export const PREF_KEYS = [
   "app:draftCount",
   "app:defaultMaxOutput",
   "app:apiLogEnabled",
+  "app:pptxExportBeta",
   "manuscript:onboarding-done",
   "ai:activeModelId",
   "ai:activePromptId",

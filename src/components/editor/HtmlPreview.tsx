@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ExternalLink, Monitor, RefreshCw } from "lucide-react";
+import { ExternalLink, Monitor, Presentation, RefreshCw } from "lucide-react";
 import { inlineHtmlImages } from "../../lib/fs/htmlDoc";
 import { openWithDefaultApp, previewHtmlWindow } from "../../lib/fs/fileio";
+import { isPptxExportEnabled } from "../../lib/pptx/flag";
 import { useEditorStore } from "../../stores/editorStore";
+import { useProjectStore } from "../../stores/projectStore";
 import styles from "./HtmlPreview.module.css";
 
 /**
@@ -99,6 +101,11 @@ interface Props {
  */
 export function HtmlPreview({ source, filePath }: Props) {
   const { t } = useTranslation();
+  // Read once per mount: the switch lives in Settings, and a page the author
+  // is already looking at should not grow a button under their cursor.
+  const [pptxOn] = useState(isPptxExportEnabled);
+  const [exporting, setExporting] = useState(false);
+  const [exportNote, setExportNote] = useState<string | null>(null);
   // Bumped by the refresh button: same source, fresh document — the way to
   // restart an animation or re-run a page's scripts from the top.
   const [generation, setGeneration] = useState(0);
@@ -115,6 +122,34 @@ export function HtmlPreview({ source, filePath }: Props) {
       await open(filePath);
     } catch (e) {
       console.error("[HtmlPreview] open failed:", e);
+    }
+  };
+
+  /**
+   * Export the page as a deck. The file is read off disk by the converter, so
+   * the editor's buffer is flushed first — exporting the last autosave of a
+   * page the author has since edited is a quiet lie.
+   */
+  const exportPptx = async () => {
+    if (!filePath || exporting) return;
+    setExporting(true);
+    setExportNote(null);
+    try {
+      await useEditorStore.getState().saveNow();
+      const { exportHtmlToPptx } = await import("../../lib/pptx");
+      const result = await exportHtmlToPptx(filePath);
+      await useProjectStore.getState().refreshFileTree();
+      setExportNote(
+        t("editor.htmlPreview.pptxDone", {
+          n: result.slides,
+          name: result.path.split(/[\\/]/).pop(),
+        }) + (result.degraded.length ? ` · ${result.degraded.length}` : ""),
+      );
+    } catch (e) {
+      console.error("[HtmlPreview] pptx export failed:", e);
+      setExportNote(t("editor.htmlPreview.pptxFailed"));
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -147,6 +182,17 @@ export function HtmlPreview({ source, filePath }: Props) {
           <ExternalLink size={11} />
           {t("editor.htmlPreview.openInBrowser")}
         </button>
+        {pptxOn && (
+          <button
+            className={styles.btn}
+            onClick={() => void exportPptx()}
+            disabled={!filePath || exporting}
+            title={t("editor.htmlPreview.exportPptxHint")}
+          >
+            <Presentation size={11} />
+            {exportNote ?? (exporting ? t("editor.htmlPreview.pptxBusy") : t("editor.htmlPreview.exportPptx"))}
+          </button>
+        )}
       </div>
       <HtmlFrame
         source={source}

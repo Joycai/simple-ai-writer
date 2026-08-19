@@ -516,6 +516,25 @@ The workspace is the **whole project directory** — documents live wherever the
 
 设计与被否掉的方案：`docs/pptx-plan.md`。
 
+### HTML → PPTX 导出（Beta）
+
+`.html` 是模型最擅长的排版语言，这个 app 已经能预览它、审批它、让作者改它。所以生成 pptx 这件事被拆成两半：**模型继续写 HTML，转换一步不经过模型**。整条链路是确定性代码，同一份文件每次转出来一样，没有生成的脚本需要谁去审。
+
+```
+.html → 离屏沙箱 iframe 渲染 → 量出每个盒子 → 写成 PowerPoint 形状 → .pptx
+```
+
+- **为什么不重新实现 CSS**：不需要。页面已经在 iframe 里布局完成，`getBoundingClientRect` 会精确说出每个盒子和每一行文字落在哪。flex / grid / 绝对定位用哪种都无所谓，只读最终结果。
+- **怎么读到**：预览 frame 是 `blob:` + `sandbox="allow-scripts"`、**不给** `allow-same-origin`，所以 app 读不到它的 DOM——采集脚本（`lib/pptx/harvester.js`，`?raw` 注进去）在里面量，靠 `postMessage` 把结果送出来。消息认两件事：`event.source` 是这个 frame 的 `contentWindow`，且带着编译进脚本的一次性 nonce。**这个 sandbox 参数不能动**：加上 `allow-same-origin` 能省掉注入，代价是把 AI 生成的脚本放进 app 上下文。
+- **分层**：`harvester.js` 只测量和分类（jsdom 没有布局引擎，它测不了）；`deck.ts` 是纯的——单位换算、幻灯片尺寸、颜色、剪枝、文本余量，测试都在这；`write.ts` 只调 pptxgenjs（lazy import，272KB 独立分片）。切成这样是为了让有 bug 的那层可测。
+- **文字仍是文字**，PowerPoint 里能改——这是产出 .pptx 而不是 PDF 的唯一理由。所以 `pruneBlocks` 必须丢掉没有可见绘制的布局容器：不剪的话视觉上完美，打开一看图层面板三百层，等于交了份不能改的东西。
+- **入口两个**，都要作者点头：`export_pptx` 工具（L2 审批卡，说明「哪个页面 → 哪个文件」；转换在 `applyProposal` 里跑，因为那里才有 DOM）和 `.html` 预览工具栏的导出按钮。
+- **Beta 开关**（Settings → 通用 → 实验功能，`lib/pptx/flag.ts`）关着时 `routeTools` 把 `export_pptx` 从工具列表里**删掉**而不是让它报错——同 imagegen 未绑定时删掉画图工具。
+- **会降级的**：内联 SVG 和 `<canvas>` 变图片，渐变背景变色标平均色，CSS 滤镜/混合模式/文字阴影/动画丢掉。每次导出把降级项列给作者。
+- **最大的风险不是冷门 CSS，是字体和文本回流**：HTML 的换行引擎不是 PowerPoint 的，web font 也进不了 pptx。对策是按字形而不是容器测量文本框、四周留 6% 对称余量、多行允许自动缩字号，外加工具描述里要求用系统字体。
+
+设计、被否掉的方案（让模型写 Python 转换、slides markdown、模型直接调 pptx 工具、整页截图）、以及验证时抓到的三个 bug：`docs/pptx-plan.md` §4。
+
 ### Export / Import (lore bundles & config backup)
 - **Lore bundle** (`src/lib/lore/transfer.ts`, UI in `LoreWall`): a zip with root `manifest.json` + the whole on-disk `.ai-writer/lore/` tree under `lore/…` — *all* categories on disk, not just the active profile's, so bundles survive profile switches. Import is two-phase: `stageLoreImport` extracts into `.ai-writer/lore-import-tmp` and reports conflicts; `applyLoreImport` moves entity dirs in under a user-chosen strategy (skip / overwrite / keep-both via `uniqueEntityId`), then deletes the staging dir. **Overwrite displaces rather than deletes**: the entity being replaced is renamed into `.ai-writer/backups/replaced-<ts>-<category>-<id>` (the same directory `delete_lore_entity` uses), and if the move-in then fails it is renamed back. The previous `removeDir`-then-`rename` both destroyed an entry — gallery images included — with no undo, and left a window where a failed rename lost the folder from both places. Categories that fail `CATEGORY_ID_RE` are ignored.
 - **Project backup** (`src/lib/fs/projectBackup.ts`, UI in Settings → 工作台): the whole project folder as one zip under `project/…` + root `manifest.json` (`kind: "ai-writer-project-bundle"`). Scope is deliberately wider than the lore bundle — `profile.json`, `outline.json`, `.ai-writer/memory/`, `imagegen.json` and each document's `assets/` are all things *the model sees*, so a project missing them behaves differently with nothing on screen saying why. `PROJECT_BACKUP_EXCLUDES` drops `.ai-writer/backups`, the scratch/staging dirs, the SQLite `-wal`/`-shm` sidecars, `.git` and `node_modules`; `project.db` is WAL-checkpointed first (`PRAGMA wal_checkpoint(TRUNCATE)` via `select`, best-effort) so the single archived file is complete. Restore takes an **empty** folder picked through `project_open_dialog` (which is also what allows it as an fs root), and `zip_import_dialog` is given `requireManifestKind` so a wrong zip is refused before a single file is written. Not included: `config.db` and the keyring — those belong to the installation, and the UI says so.
