@@ -76,7 +76,10 @@ lib/ai/*（streamCompletion 等，不动） · lib/context/*（预算化注入�
 | `read_memory` | 读 | 读当前文档的前情记忆 |
 | `propose_lore_plan` | 写·审批 | 提交设定改动方案（步骤 = action + entity + detail），阻塞等作者批准；**四个 lore 写工具的准入门槛** |
 | `create_lore_entity` | 写·L1 | 新建实体（name/category/summary/content），落盘前校验 frontmatter |
-| `update_lore_file` | 写·L1 | 改写实体的 index.md 或特征 md（整文件替换，沿用 splitter 的逐字校验思路） |
+| `update_lore_file` | 写·L1 | 改写实体的 index.md 或特征 md（整文件替换，沿用 splitter 的逐字校验思路）。**兜底手段**：整篇重排或新建特征文件才用它，小改动见下面三个 |
+| `update_lore_meta` | 写·L1 | 只改实体 index.md 的 summary / aliases，正文原样带过。`aliases` 整表替换、`add_aliases` 追加；**改名与换分类不在这里**（都要搬文件夹，走 `move_lore_entity`） |
+| `append_lore_file` | 写·L1 | 往实体某个 .md 末尾追加（默认 index.md），前面的内容既不重发也不重读，中间自动留一个空行 |
+| `edit_lore_file` | 写·L1 | 替换实体某个 .md **正文**里唯一的一处原文（find 必须唯一，replace 为空即删除）；frontmatter 永不触及 |
 | `update_facet_meta` | 写·L1 | 只改某个特征的 keys/group/priority/mode/title，正文原样保留（走 saveFacetFile 序列化，模型不用手写 YAML） |
 | `delete_lore_file` | 写·L1 | 删掉实体下的单个特征/附件 md（先备份；index.md 与 images.md 拒绝） |
 | `move_lore_entity` | 写·L1 | 改名 / 换分类。换分类只能走它——扫描器认的是文件夹位置，只改 frontmatter 会在下次重扫时被还原 |
@@ -315,3 +318,43 @@ generator/splitter 换 runStructuredTask、对话会话持久化（重启后恢�
 改成「步骤声明了 file，调用就必须给出同一个 file」。删单个特征与删整个条目现在
 是两条互不越权的步骤，`PlanCard` 上也分别显示为 `DELETE Ava / armor.md` 与
 `DELETE Ava`。
+
+### 8.4 手术刀级的设定编辑（2026-08-19）
+
+8.3 只给特征开了「不必整篇重发」的口子，实体本身没有。作者盘的是同一件事的另外三种形态：
+**只改一个 metadata、只搬一下分类、只追加一段**，凭什么都要重写整个条目。
+
+盘完的结论是：搬分类本来就不用重写（`move_lore_entity` 从 8.1 起就是唯一途径，
+`update_lore_file` 明确拒绝改 category），特征元数据也不用（8.3 的 `update_facet_meta`）。
+真缺的是三处，都补了（见 3.2）：
+
+- **实体的 summary / aliases：以前只能整篇重发。** 特征有 `update_facet_meta`，
+  实体却没有对等物，改一句 summary 也要 `update_lore_file` 把正文原样吐一遍。
+  → `update_lore_meta`，从磁盘读 frontmatter、body 经 parseFrontmatter 原样带过，
+  未传的字段保持原值。**name / category 故意不收**：这两个会搬动实体文件夹，
+  而文件夹位置才是扫描器认的真相——同一件事有两个入口，迟早有一个是错的。
+  别名冲突照 `move_lore_entity` 改名时的规矩拒绝（两个条目都会变得按名字解析不出来）。
+- **追加内容：以前没有任何途径。** 正文侧的 `append_file` / `propose_edit` 都被
+  `manuscriptTarget` 挡在 `.ai-writer/` 外（挡得对：那会绕过方案门控），设定侧就只剩
+  整文件替换。→ `append_lore_file`，只发新增的那一段，前面的字节既不重发也不重读，
+  因而**不可能被这次写坏**。与正文侧的 `append_file` 有一处故意不同：分隔的空行由工具补，
+  不让模型自己拼——正文里那个接缝是作者的决定，而这里的载荷是 markdown 结构
+  （一个新的 `##`、又一条列表项），少一个空行就会静默焊到上一段末尾。
+  开头是 `---` 的 content 直接拒绝：那是模型把整份文件当增量发了，追加进去会在正文中间
+  留一块游离的 frontmatter。
+- **改错一句话：以前得整篇重发。** → `edit_lore_file`，正文侧 `propose_edit` 的设定版
+  （唯一 find + 替换），只是它是 L1：方案覆盖到了就直接落盘 + 备份。
+
+三个工具都用 `splitFrontmatter` 把文件切成「frontmatter 原始字节 + 正文」，写回时 head 原样拼回。
+这不是省事，是**结构校验因此不再需要**：够不着 frontmatter 的写入，改不了 category、
+丢不掉 `name`、也不可能把 `facet:` 写没了而让一条特征悄悄停止注入——
+`update_lore_file` 那三道落盘前校验防的正是这些。`edit_lore_file` 的 find 只在正文里匹配，
+命中 frontmatter 时报错直接把模型指去 `update_lore_meta` / `update_facet_meta`。
+
+**为什么值得开三个而不是让模型多花点 token 重发：** 重发的代价不只是把内容付两遍钱，
+而是每一个被重新吐出来的字符都是模型可以顺手改写的字符——「说好只改 summary，
+正文措辞也变了」这类漂移，作者唯一能发现它的方式是读完整篇 diff，也就等于发现不了。
+工具层面够不着的东西，才是真的不会被改。
+
+`ai.instructions.agent`（中英两份）里改成按**改动大小**挑工具，`update_lore_file`
+明确降级为最后手段——工具存在但提示词不引导，模型还是会走它最熟的那条路。

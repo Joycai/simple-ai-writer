@@ -97,6 +97,7 @@ const PROJECT = "/proj";
 const ALL_TOOLS: ToolId[] = [
   "read_memory", "list_lore_entities", "read_lore_entity",
   "propose_lore_plan", "create_lore_entity", "update_lore_file",
+  "update_lore_meta", "append_lore_file", "edit_lore_file",
   "update_facet_meta", "delete_lore_file", "move_lore_entity", "delete_lore_entity",
   "update_memory", "propose_edit", "append_file",
   "create_chapter", "create_file", "create_directory", "move_chapter", "copy_file", "delete_chapter",
@@ -301,6 +302,175 @@ describe("update_lore_file", () => {
   });
 });
 
+// ─── update_lore_meta / append_lore_file / edit_lore_file ────────────────────
+
+describe("update_lore_meta", () => {
+  const AVA = `${PROJECT}/.ai-writer/lore/characters/ava/index.md`;
+
+  it("rewrites only the frontmatter, carrying name, category and body through", async () => {
+    const ctx = makeCtx();
+    const res = await run("update_lore_meta", { entity: "Ava", summary: "now a queen" }, ctx);
+
+    expect(res.content).toContain("body was left untouched");
+    const written = fs.get(AVA)!;
+    expect(written).toContain('summary: "now a queen"');
+    expect(written).toContain("name: Ava");
+    expect(written).toContain("category: characters");
+    expect(written).toContain("# Ava");
+    expect(fs.get(backupsOf()[0])).toBe(INDEX_MD);
+    expect(ctx.loreChanged).toBe(1);
+  });
+
+  it("replaces the alias list with 'aliases' and extends it with 'add_aliases'", async () => {
+    const ctx = makeCtx();
+    await run("update_lore_meta", { entity: "Ava", aliases: ["阿瓦", "Av"] }, ctx);
+    expect(fs.get(AVA)).toContain('aliases:\n  - "阿瓦"\n  - "Av"\n');
+
+    // Case-insensitive dedup: "av" must not land beside the existing "Av".
+    await run("update_lore_meta", { entity: "Ava", add_aliases: ["av", "白鸦"] }, ctx);
+    const written = fs.get(AVA)!;
+    expect(written).toContain('aliases:\n  - "阿瓦"\n  - "Av"\n  - "白鸦"\n');
+    expect(ctx.loreIndex.characters[0].aliases).toEqual(["阿瓦", "Av", "白鸦"]);
+  });
+
+  it("only vets the aliases the call introduces, not ones that already collided", async () => {
+    const ctx = makeCtx();
+    // A pre-existing collision: another entity answers to Ava's own alias.
+    // Refusing on it would leave the author unable to fix the entry from here.
+    ctx.loreIndex.characters.unshift({
+      ...ctx.loreIndex.characters[0],
+      id: "kael", name: "Kael", aliases: ["阿瓦"],
+      dirPath: `${PROJECT}/.ai-writer/lore/characters/kael`,
+    });
+    const res = await run("update_lore_meta", { entity: "Ava", summary: "now a queen" }, ctx);
+    expect(res.content).toContain("body was left untouched");
+    expect(fs.get(AVA)).toContain('summary: "now a queen"');
+  });
+
+  it("refuses a no-op call, both alias arguments at once, and a hijacked alias", async () => {
+    const ctx = makeCtx();
+    const empty = await run("update_lore_meta", { entity: "Ava" }, ctx);
+    expect(empty.content).toContain("at least one of summary / aliases / add_aliases");
+
+    const both = await run("update_lore_meta", { entity: "Ava", aliases: ["x"], add_aliases: ["y"] }, ctx);
+    expect(both.content).toContain("not both");
+
+    ctx.loreIndex.characters.push({
+      ...ctx.loreIndex.characters[0],
+      id: "kael", name: "Kael", aliases: [],
+      dirPath: `${PROJECT}/.ai-writer/lore/characters/kael`,
+    });
+    const clash = await run("update_lore_meta", { entity: "Ava", add_aliases: ["Kael"] }, ctx);
+    expect(clash.content).toContain('already resolves to entity "Kael"');
+
+    expect(fs.get(AVA)).toBe(INDEX_MD);
+    expect(ctx.loreChanged).toBe(0);
+  });
+});
+
+describe("append_lore_file", () => {
+  const AVA = `${PROJECT}/.ai-writer/lore/characters/ava/index.md`;
+  const ARMOR = `${PROJECT}/.ai-writer/lore/characters/ava/armor.md`;
+
+  it("adds at the end of index.md, leaving every existing byte in place", async () => {
+    const ctx = makeCtx();
+    const res = await run("append_lore_file", { entity: "Ava", content: "## 经历\n\n加冕于第二卷。" }, ctx);
+
+    expect(res.content).toContain("Appended");
+    const written = fs.get(AVA)!;
+    expect(written.startsWith(INDEX_MD.replace(/\s+$/, ""))).toBe(true);
+    expect(written).toContain("\n\n## 经历\n\n加冕于第二卷。\n");
+    expect(fs.get(backupsOf()[0])).toBe(INDEX_MD);
+    expect(ctx.loreChanged).toBe(1);
+  });
+
+  it("appends to a facet without disturbing its frontmatter, and refreshes charCount", async () => {
+    const ctx = makeCtx();
+    await run("append_lore_file", { entity: "Ava", file: "armor.md", content: "肩甲刻着家纹。" }, ctx);
+
+    const written = fs.get(ARMOR)!;
+    expect(written.startsWith(`---\nfacet: "战甲"`)).toBe(true);
+    expect(written).toContain("她的战甲是黑色的。\n\n肩甲刻着家纹。");
+    const facet = ctx.loreIndex.characters[0].facets[0];
+    expect(facet.title).toBe("战甲");
+    expect(facet.charCount).toBeGreaterThan(10);
+  });
+
+  it("refuses a whole file, a missing file, and the reserved names", async () => {
+    const ctx = makeCtx();
+    const whole = await run("append_lore_file", {
+      entity: "Ava", content: `---\nname: Ava\n---\n\n# Ava\n`,
+    }, ctx);
+    expect(whole.content).toContain("looks like a complete file");
+
+    const ghost = await run("append_lore_file", { entity: "Ava", file: "ghost.md", content: "x" }, ctx);
+    expect(ghost.content).toContain("does not exist");
+
+    for (const file of ["../evil.md", "sub/evil.md", "note.txt", "images.md"]) {
+      expect((await run("append_lore_file", { entity: "Ava", file, content: "x" }, ctx)).content)
+        .toMatch(/^Error/);
+    }
+    expect(fs.get(AVA)).toBe(INDEX_MD);
+    expect(ctx.loreChanged).toBe(0);
+  });
+});
+
+describe("edit_lore_file", () => {
+  const ARMOR = `${PROJECT}/.ai-writer/lore/characters/ava/armor.md`;
+  const AVA = `${PROJECT}/.ai-writer/lore/characters/ava/index.md`;
+
+  it("replaces one unique snippet in the body and leaves the frontmatter alone", async () => {
+    const ctx = makeCtx();
+    const res = await run("edit_lore_file", {
+      entity: "Ava", file: "armor.md", find: "黑色", replace: "银色",
+    }, ctx);
+
+    expect(res.content).toContain("Replaced");
+    expect(fs.get(ARMOR)).toBe(FACET_MD.replace("黑色", "银色"));
+    expect(fs.get(backupsOf()[0])).toBe(FACET_MD);
+    expect(ctx.loreChanged).toBe(1);
+  });
+
+  it("writes a replacement containing $-patterns literally", async () => {
+    const ctx = makeCtx();
+    await run("edit_lore_file", {
+      entity: "Ava", file: "armor.md", find: "黑色", replace: "$& 银色 $1",
+    }, ctx);
+    // String.replace would expand `$&` into the matched text; the payload is
+    // the author's prose, so it has to land byte for byte.
+    expect(fs.get(ARMOR)).toContain("她的战甲是$& 银色 $1的。");
+  });
+
+  it("deletes the snippet when 'replace' is empty", async () => {
+    const ctx = makeCtx();
+    await run("edit_lore_file", { entity: "Ava", file: "armor.md", find: "是黑色的", replace: "" }, ctx);
+    expect(fs.get(ARMOR)).toContain("她的战甲。");
+  });
+
+  it("refuses a snippet that is missing, ambiguous, frontmatter-only, or unchanged", async () => {
+    const ctx = makeCtx();
+    fs.set(ARMOR, `---\nfacet: "战甲"\nkeys: ["战甲"]\n---\n\n黑色的披风。黑色的手套。\n`);
+
+    const twice = await run("edit_lore_file", { entity: "Ava", file: "armor.md", find: "黑色", replace: "银色" }, ctx);
+    expect(twice.content).toContain("appears 2 times");
+
+    const missing = await run("edit_lore_file", { entity: "Ava", file: "armor.md", find: "红色", replace: "x" }, ctx);
+    expect(missing.content).toContain("does not appear in the body");
+
+    // A find that only matches inside the frontmatter is a metadata edit in
+    // disguise — the error has to send the model to the right tool.
+    const meta = await run("edit_lore_file", { entity: "Ava", file: "armor.md", find: "facet:", replace: "x" }, ctx);
+    expect(meta.content).toContain("update_facet_meta");
+
+    const same = await run("edit_lore_file", { entity: "Ava", find: "# Ava", replace: "# Ava" }, ctx);
+    expect(same.content).toContain("nothing would change");
+
+    expect(fs.get(AVA)).toBe(INDEX_MD);
+    expect(backupsOf()).toHaveLength(0);
+    expect(ctx.loreChanged).toBe(0);
+  });
+});
+
 // ─── update_facet_meta ───────────────────────────────────────────────────────
 
 describe("update_facet_meta", () => {
@@ -420,6 +590,9 @@ describe("lore plan gate", () => {
     const calls: [ToolId, object][] = [
       ["create_lore_entity", { name: "Kael", category: "characters", summary: "x", content: "y" }],
       ["update_lore_file", { entity: "Ava", content: NEW_INDEX }],
+      ["update_lore_meta", { entity: "Ava", summary: "queen" }],
+      ["append_lore_file", { entity: "Ava", content: "另一段" }],
+      ["edit_lore_file", { entity: "Ava", find: "# Ava", replace: "# 阿瓦" }],
       ["move_lore_entity", { entity: "Ava", new_category: "factions" }],
       ["delete_lore_entity", { entity: "Ava" }],
     ];
