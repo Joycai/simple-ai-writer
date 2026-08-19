@@ -6,6 +6,10 @@ import { useAppStore, type ThemeMode, type Language, type FontScheme } from "../
 import { MARKDOWN_THEMES } from "../../../lib/theme/markdownThemes";
 import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../../lib/ai/apiLog";
 import { isPptxExportEnabled, setPptxExportEnabled } from "../../../lib/pptx/flag";
+import {
+  isNotifyEnabled, isNotifyKindEnabled, requestNotifyPermission,
+  sendTestNotification, setNotifyEnabled, setNotifyKindEnabled,
+} from "../../../lib/notify";
 import { applyConfigImport, exportAiConfig, stageConfigImport } from "../../../lib/ai/configTransfer";
 import { Pane, PaneHeader, Section, Row, Chip, ChipRow, Toggle } from "./bits";
 import ui from "../settingsUi.module.css";
@@ -37,6 +41,10 @@ export function GeneralPane() {
   const markdownTheme = useAppStore((s) => s.markdownTheme);
   const setMarkdownTheme = useAppStore((s) => s.setMarkdownTheme);
   const [apiLogOn, setApiLogOn] = useState(isApiLogEnabled());
+  const [notifyOn, setNotifyOn] = useState(isNotifyEnabled());
+  const [notifyApproval, setNotifyApprovalOn] = useState(isNotifyKindEnabled("approval"));
+  const [notifyDone, setNotifyDoneOn] = useState(isNotifyKindEnabled("done"));
+  const [notifyStatus, setNotifyStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [pptxOn, setPptxOn] = useState(isPptxExportEnabled());
   const providers = useAiStore((s) => s.providers);
   const loadConfig = useAiStore((s) => s.loadConfig);
@@ -47,6 +55,33 @@ export function GeneralPane() {
   const togglePptx = (enabled: boolean) => {
     setPptxExportEnabled(enabled);
     setPptxOn(enabled);
+  };
+
+  const toggleNotify = (enabled: boolean) => {
+    setNotifyEnabled(enabled);
+    setNotifyOn(enabled);
+    setNotifyStatus(null);
+    // Asking here rather than at the first notification: this is the moment
+    // the author said yes, so it is the moment an OS prompt belongs to.
+    if (enabled) void requestNotifyPermission();
+  };
+
+  const testNotify = async () => {
+    setNotifyStatus(null);
+    try {
+      await sendTestNotification(t("notify.testTitle"), t("notify.testBody"));
+      setNotifyStatus({ ok: true, text: t("systemSettings.general.notifyTestOk") });
+    } catch (e) {
+      // The one failure with an actionable fix gets its own wording; anything
+      // else is a plumbing error the author can only report.
+      const denied = e instanceof Error && e.message === "notification-permission-denied";
+      setNotifyStatus({
+        ok: false,
+        text: denied
+          ? t("systemSettings.general.notifyTestDenied")
+          : t("systemSettings.general.notifyTestFailed", { error: String(e) }),
+      });
+    }
   };
 
   const toggleApiLog = (enabled: boolean) => {
@@ -171,6 +206,50 @@ export function GeneralPane() {
             ))}
           </ChipRow>
         </Row>
+      </Section>
+
+      <Section label={t("systemSettings.general.notifySection")}>
+        <Row
+          title={t("systemSettings.general.notifyLabel")}
+          desc={t("systemSettings.general.notifyHint")}
+          last={!notifyOn}
+        >
+          <Toggle on={notifyOn} onChange={toggleNotify} label={t("systemSettings.general.notifyLabel")} />
+        </Row>
+        {/* The per-kind switches and the test button only mean anything once
+            the master switch is on — off, they would read as dead controls. */}
+        {notifyOn && (
+          <>
+            <Row
+              title={t("systemSettings.general.notifyApprovalLabel")}
+              desc={t("systemSettings.general.notifyApprovalHint")}
+            >
+              <Toggle
+                on={notifyApproval}
+                onChange={(next) => { setNotifyKindEnabled("approval", next); setNotifyApprovalOn(next); }}
+                label={t("systemSettings.general.notifyApprovalLabel")}
+              />
+            </Row>
+            <Row
+              title={t("systemSettings.general.notifyDoneLabel")}
+              desc={t("systemSettings.general.notifyDoneHint")}
+            >
+              <Toggle
+                on={notifyDone}
+                onChange={(next) => { setNotifyKindEnabled("done", next); setNotifyDoneOn(next); }}
+                label={t("systemSettings.general.notifyDoneLabel")}
+              />
+            </Row>
+            <Row desc={t("systemSettings.general.notifyPlatformHint")} last>
+              <button className={ui.rowBtn} onClick={testNotify}>
+                {t("systemSettings.general.notifyTest")}
+              </button>
+            </Row>
+            {notifyStatus && (
+              <div className={notifyStatus.ok ? ui.statusOk : ui.statusError}>{notifyStatus.text}</div>
+            )}
+          </>
+        )}
       </Section>
 
       <Section label={t("systemSettings.general.betaSection")}>
