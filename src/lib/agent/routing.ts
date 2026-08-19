@@ -5,6 +5,7 @@
  * - If search subagent is active: withhold serverTools from main agent
  * - If vision subagent is active: strip read_image and read_lore_image from main agent
  * - If the imagegen subagent is NOT active: strip generate_image and edit_image
+ * - If the PPTX export Beta is off: strip export_pptx
  * - If any delegate-capable subagent is active and workspace exists: append delegate tool
  */
 
@@ -12,6 +13,7 @@ import type { ToolId } from "./registry";
 import type { TaskPreset } from "./presets";
 import type { TaskWorkspaceHandle } from "./taskWorkspace";
 import { subAgentModel, DELEGATE_KINDS, type SubAgentConfig, type SubAgentKind } from "./subagent";
+import { isPptxExportEnabled } from "../pptx/flag";
 import type { Model } from "../ai/configDb";
 
 export interface RoutedTools {
@@ -79,6 +81,14 @@ function route(
   // being off.
   if (!live("imagegen")) {
     tools = tools.filter((t) => t !== "generate_image" && t !== "edit_image");
+  }
+
+  // A Beta feature is off by default, and off means *absent* rather than
+  // refused: a tool the model can see but that answers "the author has not
+  // enabled this" reads to the author as the assistant being broken, and
+  // wastes a round finding out. Same argument as the image tools above.
+  if (!isPptxExportEnabled()) {
+    tools = tools.filter((t) => t !== "export_pptx");
   }
 
   // If any delegate-capable subagent is enabled and we have an

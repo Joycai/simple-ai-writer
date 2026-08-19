@@ -159,6 +159,7 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "delete_directory",
     "generate_image",
     "edit_image",
+    "export_pptx",
     "task_plan",
     "task_progress",
     "write_note",

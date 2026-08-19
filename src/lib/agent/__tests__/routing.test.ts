@@ -1,4 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+/**
+ * The PPTX Beta switch, flipped by hand. It reads a preference, and in a node
+ * test there is no localStorage behind one — mocking the accessor keeps the
+ * gate itself under test instead of the preference store.
+ */
+const beta = { on: false };
+vi.mock("../../pptx/flag", () => ({ isPptxExportEnabled: () => beta.on }));
+
 import { routePlannedTools, routeTools } from "../routing";
 import type { TaskWorkspaceHandle } from "../taskWorkspace";
 
@@ -27,9 +36,12 @@ describe("routeTools", () => {
     pdf: { kind: "pdf", modelId: null, enabled: false },
     imagegen: { kind: "imagegen", modelId: null, enabled: false },
   };
-  /** The preset as it routes with nothing enabled: no drawing arm, no image tools. */
+  /**
+   * The preset as it routes with nothing enabled: no drawing arm, no image
+   * tools, and no PPTX export (a Beta feature is off until the author says so).
+   */
   const BASELINE_TOOLS = AGENT_ASSIST_PRESET.tools.filter(
-    (t) => t !== "generate_image" && t !== "edit_image",
+    (t) => t !== "generate_image" && t !== "edit_image" && t !== "export_pptx",
   );
 
   it("keeps everything except the image tools when no subagents are active", () => {
@@ -211,5 +223,35 @@ describe("routeTools", () => {
   it("routePlannedTools matches run-time routing with nothing enabled too", () => {
     expect(routePlannedTools(AGENT_ASSIST_PRESET, allDisabled, MODELS))
       .toEqual(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS));
+  });
+});
+
+describe("the PPTX export Beta gate", () => {
+  const allDisabled: Record<SubAgentKind, SubAgentConfig> = {
+    search: { kind: "search", modelId: null, enabled: false },
+    vision: { kind: "vision", modelId: null, enabled: false },
+    longread: { kind: "longread", modelId: null, enabled: false },
+    pdf: { kind: "pdf", modelId: null, enabled: false },
+    imagegen: { kind: "imagegen", modelId: null, enabled: false },
+  };
+
+  it("withholds export_pptx entirely while the switch is off", () => {
+    // Absent rather than refused: a tool the model can see but that always
+    // answers "not enabled" reads as the assistant being broken, and costs a
+    // round to find out. Same rule the image tools follow.
+    beta.on = false;
+    expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS).tools).not.toContain("export_pptx");
+  });
+
+  it("offers it once the author turns it on", () => {
+    beta.on = true;
+    try {
+      expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS).tools).toContain("export_pptx");
+      // The estimator has to predict the same toolset, or the context meter
+      // disagrees with the request that follows it.
+      expect(routePlannedTools(AGENT_ASSIST_PRESET, allDisabled, MODELS).tools).toContain("export_pptx");
+    } finally {
+      beta.on = false;
+    }
   });
 });

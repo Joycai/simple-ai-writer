@@ -56,6 +56,10 @@ HTML 预览工具栏加「在浏览器打开」按钮。实施时对原方案（
 - **不变式**：`.html` 不进 spine、不进 bookContext、不进 RAG/前情记忆——它是交付物，不是章节。`isChapterFile` 不动。
 - `@` 引用：`.html` 是 `@` 选择器的文本候选（`lib/fs/images` 的 `TEXT_EXTS`，徽标显示 HTML），与 `search_text` 的覆盖面对齐——读一个交付物从来没有理由被拦住，改它的正是写它的那个助手。见 `docs/architecture.md` →「`@` 引用的候选文件」。
 
+### D6.1 后续：`.html` 可以变成 `.pptx`（Beta）
+
+这条计划的产出——模型写单文件 HTML——后来成了 PPTX 生成端的**起点**：与其教模型一门新的排版语言，不如把它已经写得好的 HTML 量出来写成 PowerPoint 形状。转换是确定性代码，不经过模型。见 `docs/pptx-plan.md` §4；对本文的唯一影响是 D2 的 sandbox 参数现在还多担一个职责（采集脚本注在里面，靠 postMessage 应答），因此**更**不能加 `allow-same-origin`。
+
 ### D7 引导面是数据，不是新机制
 
 - `create_file`/`rewrite_document` 的 description 补一句：图示/页面类交付物用自包含 HTML（inline CSS/JS、SVG 作图、无外链依赖）。

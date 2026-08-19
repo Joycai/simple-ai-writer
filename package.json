@@ -42,6 +42,7 @@
     "motion": "^12.42.2",
     "nanoid": "^6.0.0",
     "pdfjs-dist": "^6.2.108",
+    "pptxgenjs": "^4.0.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-i18next": "^17.0.11",

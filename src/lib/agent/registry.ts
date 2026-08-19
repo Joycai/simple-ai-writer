@@ -34,6 +34,7 @@ import {
 } from "./tools";
 import { LORE_PLAN_ACTIONS, type LorePlan, type PlanDecision, type PlanGate } from "./plan";
 import { editImageTool, generateImageTool } from "./imageTools";
+import { exportPptxTool } from "./pptxTools";
 import {
   copyFileTool,
   createChapterTool,
@@ -214,6 +215,24 @@ export interface IllustrateProposal extends ProposalBase {
 }
 
 /**
+ * Turn a project `.html` page into a PowerPoint deck beside it.
+ *
+ * Nothing model-authored lands here: the bytes are a deterministic rendering of
+ * a page the author already has (and already approved). What the card is for is
+ * that a *new file* appears in their project — the same reason every other
+ * manuscript write blocks — so it names both ends and stays out of the way.
+ *
+ * The conversion runs on approval rather than at proposal time because it needs
+ * a DOM to lay the page out in, and that exists in the renderer where proposals
+ * are applied — not in the tool loop. See lib/pptx.
+ */
+export interface PptxProposal extends ProposalBase {
+  kind: "pptx";
+  /** The `.html` the deck is rendered from. `path` is where the .pptx lands. */
+  sourcePath: string;
+}
+
+/**
  * Something the agent wants done that only the author may authorise. Nothing
  * happens until the card is approved, and the tool call stays blocked until it
  * is decided either way.
@@ -230,7 +249,8 @@ export type Proposal =
   | MoveProposal
   | DeleteProposal
   | CopyProposal
-  | IllustrateProposal;
+  | IllustrateProposal
+  | PptxProposal;
 
 export type ApprovalDecision =
   | {
@@ -362,6 +382,7 @@ export type ToolId =
   | "copy_file"
   | "delete_chapter"
   | "delete_directory"
+  | "export_pptx"
   | "generate_image"
   | "edit_image"
   | "task_plan"
@@ -1233,6 +1254,38 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => copyFileTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  export_pptx: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "export_pptx",
+        description:
+          "Turn a project .html page into a PowerPoint file (.pptx) beside it. NOTHING is written until the user approves the card. Write the deck as HTML first with create_file, then call this — the conversion is deterministic code, not a model: it lays the page out in a browser and writes every box it measures as a PowerPoint shape, so text stays real editable text. Rules for an .html that converts well: ONE `<section class=\"slide\">` per slide, every slide the same fixed pixel size (1280x720 for 16:9); lay out however you like inside it (absolute, flex, grid all work — only the final measured layout matters); use SYSTEM fonts (PingFang SC / Microsoft YaHei / Arial / Helvetica / Georgia) because a web font cannot travel into a .pptx and PowerPoint will substitute it and shift the layout; keep text in real text elements rather than drawing it inside an SVG. What degrades: inline SVG becomes a picture (fine for diagrams), a gradient background becomes its average solid colour, and CSS filters, blend modes, shadows on text and animation are dropped. Put `data-pptx-skip` on anything decorative that should not become a shape. The result reports the slide count and everything that degraded — pass that on to the author.",
+        parameters: {
+          type: "object",
+          properties: {
+            html_path: {
+              type: "string",
+              description: "Full path of the .html page to convert",
+            },
+            out_path: {
+              type: "string",
+              description:
+                "Full path for the .pptx. Omit to write it beside the page under the same name.",
+            },
+            reason: {
+              type: "string",
+              description: "One-line justification shown to the user on the review card",
+            },
+          },
+          required: ["html_path"],
+        },
+      },
+    },
+    execute: (call, ctx) => exportPptxTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   generate_image: {

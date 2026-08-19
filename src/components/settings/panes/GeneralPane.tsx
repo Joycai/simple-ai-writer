@@ -5,6 +5,7 @@ import { useAiStore } from "../../../stores/aiStore";
 import { useAppStore, type ThemeMode, type Language, type FontScheme } from "../../../stores/appStore";
 import { MARKDOWN_THEMES } from "../../../lib/theme/markdownThemes";
 import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../../lib/ai/apiLog";
+import { isPptxExportEnabled, setPptxExportEnabled } from "../../../lib/pptx/flag";
 import { applyConfigImport, exportAiConfig, stageConfigImport } from "../../../lib/ai/configTransfer";
 import { Pane, PaneHeader, Section, Row, Chip, ChipRow, Toggle } from "./bits";
 import ui from "../settingsUi.module.css";
@@ -36,11 +37,17 @@ export function GeneralPane() {
   const markdownTheme = useAppStore((s) => s.markdownTheme);
   const setMarkdownTheme = useAppStore((s) => s.setMarkdownTheme);
   const [apiLogOn, setApiLogOn] = useState(isApiLogEnabled());
+  const [pptxOn, setPptxOn] = useState(isPptxExportEnabled());
   const providers = useAiStore((s) => s.providers);
   const loadConfig = useAiStore((s) => s.loadConfig);
   const [includeKeys, setIncludeKeys] = useState(false);
   const [backupBusy, setBackupBusy] = useState(false);
   const [backupStatus, setBackupStatus] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const togglePptx = (enabled: boolean) => {
+    setPptxExportEnabled(enabled);
+    setPptxOn(enabled);
+  };
 
   const toggleApiLog = (enabled: boolean) => {
     setApiLogEnabled(enabled);
@@ -163,6 +170,16 @@ export function GeneralPane() {
               <Chip key={lang.value} label={lang.label} active={language === lang.value} onClick={() => setLanguage(lang.value)} />
             ))}
           </ChipRow>
+        </Row>
+      </Section>
+
+      <Section label={t("systemSettings.general.betaSection")}>
+        <Row
+          title={t("systemSettings.general.pptxLabel")}
+          desc={t("systemSettings.general.pptxHint")}
+          last
+        >
+          <Toggle on={pptxOn} onChange={togglePptx} label={t("systemSettings.general.pptxLabel")} />
         </Row>
       </Section>
 

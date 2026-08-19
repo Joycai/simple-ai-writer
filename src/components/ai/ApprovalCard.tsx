@@ -25,6 +25,7 @@ import type {
   EditProposal,
   RewriteProposal,
   IllustrateProposal,
+  PptxProposal,
   MoveProposal,
   Proposal,
 } from "../../lib/agent/registry";
@@ -69,6 +70,8 @@ function headerTitle(proposal: Proposal, t: TFunction, terms: ResolvedTerms): st
       return proposal.sourcePath
         ? t("ai.approval.titleEditImage")
         : t("ai.approval.titleIllustrate");
+    case "pptx":
+      return t("ai.approval.titlePptx");
   }
 }
 
@@ -101,6 +104,10 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
       // The price is the metric here — it is what makes this decision
       // different from every other card.
       return proposal.costUsd > 0 ? `≈ $${proposal.costUsd.toFixed(3)}` : "";
+    case "pptx":
+      // Nothing to weigh in advance: the slide count is only known once the
+      // page has been rendered, which is what approving sets off.
+      return "";
   }
 }
 
@@ -240,6 +247,26 @@ function MoveBody({ proposal }: { proposal: MoveProposal }) {
 }
 
 /**
+ * Page → deck. Both ends and nothing else: the content is a page the author
+ * already has and has already seen previewed, so re-rendering it on the card
+ * would ask them to review the same thing twice. What is new is that a file
+ * appears — so the card says which file, from what.
+ */
+function PptxBody({ proposal }: { proposal: PptxProposal }) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <div className={styles.moveBlock}>
+        <span className={styles.movePath}>{projectRelative(proposal.sourcePath)}</span>
+        <ArrowRight size={12} className={styles.moveArrow} />
+        <span className={styles.movePath}>{projectRelative(proposal.path)}</span>
+      </div>
+      <div className={styles.emptyNote}>{t("ai.approval.pptxNote")}</div>
+    </>
+  );
+}
+
+/**
  * Source → destination folder. The copy's decision is only "should this exist
  * twice" — no content to weigh, so the card stays two lines plus the note
  * that a name collision auto-numbers rather than overwrites.
@@ -348,6 +375,8 @@ function ProposalBody({ proposal }: { proposal: Proposal }) {
       return <DeleteBody proposal={proposal} />;
     case "illustrate":
       return <IllustrateBody proposal={proposal} />;
+    case "pptx":
+      return <PptxBody proposal={proposal} />;
   }
 }
 
