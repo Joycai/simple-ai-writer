@@ -26,6 +26,7 @@ import {
   readLoreEntity,
   readLoreImage,
   readProjectImage,
+  readSlidesFile,
   readWritingFile,
   searchWritingFiles,
   type ToolCall,
@@ -338,6 +339,7 @@ export type ToolId =
   | "read_image"
   | "list_files"
   | "read_file"
+  | "read_slides"
   | "search_text"
   | "read_memory"
   | "propose_lore_plan"
@@ -542,6 +544,38 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       const args = JSON.parse(call.arguments || "{}") as { path?: string; start_line?: number };
       if (!args.path) return { toolCallId: call.id, content: "Error: 'path' argument is required." };
       return readWritingFile(call.id, args.path, ctx.projectPath, args.start_line);
+    },
+  },
+
+  read_slides: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "read_slides",
+        description:
+          "Read a PowerPoint presentation (.pptx) in the project. read_file cannot: a .pptx is a compressed archive, not text. Slides come back as markdown in the deck's running order — one `## Slide N` heading per slide, its bullets nested by outline level, tables as markdown tables, pictures named, speaker notes quoted. Around 4000 characters come back per call, cut on a slide boundary; if the deck is longer the result ends with the slide range shown and the start_slide to pass next, so a long deck can be read in order. Legacy .ppt files (PowerPoint 97-2003) cannot be read at all.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Absolute path, built from a list_files folder line + \"/\" + filename",
+            },
+            start_slide: {
+              type: "number",
+              description:
+                "1-based slide to start at — the start_slide the previous call handed back. Omit to read from the first slide.",
+            },
+          },
+          required: ["path"],
+        },
+      },
+    },
+    execute: async (call, ctx) => {
+      const args = JSON.parse(call.arguments || "{}") as { path?: string; start_slide?: number };
+      if (!args.path) return { toolCallId: call.id, content: "Error: 'path' argument is required." };
+      return readSlidesFile(call.id, args.path, ctx.projectPath, args.start_slide);
     },
   },
 
@@ -1493,7 +1527,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
               enum: ["search", "vision", "longread", "pdf"],
               description:
                 "search — look things up on the web; vision — describe or analyse images; " +
-                "longread — read long text documents and report what matters; " +
+                "longread — read long text documents and presentations (.pptx) and report what matters; " +
                 "pdf — read PDF files (refs must be .pdf paths; the only way to read a PDF's contents).",
             },
             task: {

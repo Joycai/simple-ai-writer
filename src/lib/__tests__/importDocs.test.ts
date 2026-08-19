@@ -134,17 +134,20 @@ describe("naming and dispatch", () => {
     expect(importMode("标书.docx")).toBe("convert");
     expect(importMode("报价表.xlsx")).toBe("convert");
     expect(importMode("C:\\bids\\招标文件.PDF")).toBe("convert");
+    expect(importMode("路演.pptx")).toBe("convert");
     // Text the app already opens is copied, not rewritten — a .txt renamed to
     // .md would start being read as markdown.
     expect(importMode("notes.txt")).toBe("copy-text");
     expect(importMode("readme.md")).toBe("copy-text");
     expect(importMode("架构图.html")).toBe("copy-text");
     expect(importMode("封面.PNG")).toBe("copy-binary");
-    // Legacy .doc/.xls are out on purpose — see CONVERT_EXTENSIONS. The xlsx
-    // parser would in fact read .xls, so this assertion is what keeps it from
-    // drifting into the picker on its own.
+    // Legacy .doc/.xls/.ppt are out on purpose — see CONVERT_EXTENSIONS. The
+    // xlsx parser would in fact read .xls, so this assertion is what keeps it
+    // from drifting into the picker on its own; .ppt is an OLE compound
+    // binary that the .pptx reader genuinely cannot open.
     expect(importMode("old.doc")).toBeNull();
     expect(importMode("old.xls")).toBeNull();
+    expect(importMode("old.ppt")).toBeNull();
     expect(importMode("noext")).toBeNull();
   });
 

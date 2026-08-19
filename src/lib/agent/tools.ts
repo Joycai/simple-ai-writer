@@ -10,6 +10,7 @@
 
 import { isChapterFile, naturalCompare } from "../context/outline";
 import { isHtmlPath } from "../fs/images";
+import { isPptxPath, readPptxSlides, type SlideRange } from "../fs/pptx";
 import { fileExists, readFile } from "../fs/fileio";
 import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, imageToDataUrl, isImagePath } from "../fs/images";
 import { readEntityFile, type LoreEntity, type LoreIndex } from "../lore";
@@ -504,6 +505,15 @@ export async function readWritingFile(
     return { toolCallId, content: "Error: Path is outside the project (the app's .ai-writer data is off-limits)." };
   }
 
+  // A presentation is a zip: reading it as text returns noise. Say which tool
+  // does read it rather than letting the model spend a round on the noise.
+  if (isPptxPath(path)) {
+    return {
+      toolCallId,
+      content: `Error: "${path}" is a PowerPoint presentation, not a text file. Use read_slides to read it.`,
+    };
+  }
+
   let raw: string;
   try {
     raw = await readFile(path);
@@ -548,4 +558,69 @@ export async function readWritingFile(
   }
   if (to < lines.length) notes.push(`call read_file again with start_line=${to + 1} to continue`);
   return { toolCallId, content: `${content}\n\n[... ${notes.join("; ")} ...]` };
+}
+
+/** Characters one read_slides call may return, before it pages. */
+const SLIDES_MAX_CHARS = 4000;
+
+/**
+ * A slide range, plus the note telling the model where it is in the deck.
+ *
+ * Pure and exported so the paging protocol is testable without Tauri. It
+ * deliberately reads like `read_file`'s trailer: the two tools page through
+ * different things, but a model that has learned one should not have to learn
+ * the other.
+ */
+export function formatSlideRange(range: SlideRange): string {
+  if (range.total_slides === 0) return range.markdown;
+
+  const whole = range.from_slide === 1 && range.next_slide === null;
+  if (whole) return range.markdown;
+
+  const notes = [
+    `slides ${range.from_slide}-${range.to_slide} of ${range.total_slides} shown`,
+  ];
+  if (range.next_slide !== null) {
+    notes.push(`call read_slides again with start_slide=${range.next_slide} to continue`);
+  }
+  return `${range.markdown}\n\n[... ${notes.join("; ")} ...]`;
+}
+
+/**
+ * Read a .pptx presentation, a range of slides at a time.
+ *
+ * Separate from `read_file` rather than folded into it: a presentation is not
+ * text on disk (it is a zip of XML, so `read_file` returns binary noise for
+ * it), its natural paging unit is the slide rather than the line, and the two
+ * tools' arguments would otherwise mean different things depending on the
+ * file's extension. Containment is `read_file`'s — the workspace minus the
+ * app's own `.ai-writer/` data.
+ */
+export async function readSlidesFile(
+  toolCallId: string,
+  path: string,
+  projectPath: string,
+  startSlide?: number,
+): Promise<ToolResult> {
+  if (!isWorkspacePath(projectPath, path)) {
+    return { toolCallId, content: "Error: Path is outside the project (the app's .ai-writer data is off-limits)." };
+  }
+  if (!isPptxPath(path)) {
+    return {
+      toolCallId,
+      content:
+        `Error: "${path}" is not a .pptx file. read_slides reads presentations only — ` +
+        "use read_file for text documents. Legacy .ppt (PowerPoint 97-2003) cannot be " +
+        "read at all; it has to be saved as .pptx first.",
+    };
+  }
+
+  const from = startSlide === undefined ? undefined : Math.max(1, Math.floor(startSlide));
+  let range: SlideRange;
+  try {
+    range = await readPptxSlides(path, from, SLIDES_MAX_CHARS);
+  } catch (e) {
+    return { toolCallId, content: `Error reading presentation: ${String(e)}` };
+  }
+  return { toolCallId, content: formatSlideRange(range) };
 }

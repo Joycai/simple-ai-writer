@@ -1,12 +1,12 @@
 /**
- * Document import: pick source documents (docx, xlsx, pdf), plain text
+ * Document import: pick source documents (docx, xlsx, pdf, pptx), plain text
  * (txt, md, html) and pictures, and land each of them in a folder of the
  * workspace where the read-tool agents can reach it (`list_files` /
  * `search_text` only discover the writing tree).
  *
  * Two dispositions, decided by extension:
  *
- * - **Convert** (docx / xlsx / pdf → markdown). No mainstream model API
+ * - **Convert** (docx / xlsx / pdf / pptx → markdown). No mainstream model API
  *   accepts a .docx or .xlsx as binary input — they are zip archives, the
  *   bytes are meaningless to the model — so *something* has to convert, and
  *   doing it here means the author can read and edit the result instead of
@@ -34,16 +34,19 @@ import { fileExists, writeBinaryFile, writeFile } from "../fs/fileio";
 import { IMAGE_EXTENSIONS, TEXT_EXTENSIONS } from "../fs/images";
 import { decodeText } from "./text";
 import { tidyMarkdown } from "./markdown";
+import { pptxToMarkdown } from "../fs/pptx";
 import { xlsxToMarkdown } from "./xlsx";
 
 /**
- * What gets converted to markdown. Legacy .doc/.xls are left out on purpose:
- * no converter here can read them faithfully, and a half-garbled import looks
- * exactly like a successful one. (The xlsx parser could in fact read .xls, but
- * offering it would drag the same judgement call back in for .doc, which has
- * no comparable reader — so both legacy formats stay out together.)
+ * What gets converted to markdown. Legacy .doc/.xls/.ppt are left out on
+ * purpose: no converter here can read them faithfully, and a half-garbled
+ * import looks exactly like a successful one. (The xlsx parser could in fact
+ * read .xls, but offering it would drag the same judgement call back in for
+ * .doc and .ppt, which have no comparable reader — so the legacy formats stay
+ * out together. .ppt in particular is an OLE compound binary, not a zip, so
+ * the .pptx reader cannot touch it.)
  */
-export const CONVERT_EXTENSIONS = ["docx", "xlsx", "pdf"] as const;
+export const CONVERT_EXTENSIONS = ["docx", "xlsx", "pdf", "pptx"] as const;
 
 /**
  * What gets copied in unchanged, kept in step with the app's own file kinds
@@ -137,8 +140,8 @@ export async function uniqueImportPath(
 
 /**
  * Convert one document's bytes to markdown. The docx/pdf converters are
- * lazy-imported modules of their own (both carry a heavy parser); xlsx parses
- * in Rust so there is nothing to defer.
+ * lazy-imported modules of their own (both carry a heavy parser); xlsx and
+ * pptx parse in Rust so there is nothing to defer.
  */
 export async function convertToMarkdown(
   ext: ConvertExt,
@@ -155,6 +158,8 @@ export async function convertToMarkdown(
       const { pdfToMarkdown } = await import("./pdf");
       return pdfToMarkdown(data);
     }
+    case "pptx":
+      return pptxToMarkdown(data);
   }
 }
 

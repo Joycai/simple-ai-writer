@@ -62,7 +62,7 @@ export const SUB_PRESETS: Record<DelegateKind, TaskPreset> = {
   },
   longread: {
     id: "subagent-longread",
-    tools: ["read_file", "search_text", "list_files"],
+    tools: ["read_file", "read_slides", "search_text", "list_files"],
     maxRounds: 4,
     finishPolicy: "force-text",
     serverTools: "off",

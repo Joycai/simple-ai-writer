@@ -38,7 +38,7 @@ export async function writeBinaryFile(path: string, data: Uint8Array): Promise<v
 }
 
 /** Chunked: one `String.fromCharCode(...bytes)` over a whole image overflows the stack. */
-function toBase64(bytes: Uint8Array): string {
+export function toBase64(bytes: Uint8Array): string {
   let binary = "";
   for (let i = 0; i < bytes.length; i += 0x8000) {
     binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
