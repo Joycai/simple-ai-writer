@@ -1,4 +1,5 @@
 mod commands;
+mod pptx;
 mod preview;
 mod print;
 mod protocol;
@@ -68,6 +69,8 @@ pub fn run() {
             transfer::save_text_file_dialog,
             transfer::open_text_file_dialog,
             xlsx::xlsx_to_markdown,
+            pptx::pptx_to_markdown,
+            pptx::pptx_read_slides,
             print::print_document,
             preview::preview_html_window,
         ]);

@@ -498,6 +498,24 @@ The workspace is the **whole project directory** — documents live wherever the
 - **外部改动怎么进来**：`useExternalFileRefresh`（`src/useExternalFileRefresh.ts`）在**窗口重新获得焦点**时 `refreshFileTree()`，1.5s 内不重复。焦点正好是这件事的形状——作者去了文件管理器又回来。不上目录监听：对任意项目目录做 watch 是新的权限面，事件流最后还是要 UI 自己去抖，收益只有"应用在前台时别人改了文件"这一种边角情形。
 - **不覆盖的**：知识库条目仍只在项目打开 / 写操作后扫（`loreStore.scanProject`）；外部直接往 `.ai-writer/lore/` 里塞条目仍需重开项目。
 
+### 读 .pptx（导入转换 + 按页读）
+
+演示文稿是 zip 里的一堆 XML，模型拿到字节等于拿到噪声，所以解析在 Rust：`src-tauri/src/pptx.rs`，前端只有 `src/lib/fs/pptx.ts` 这一跳。两个入口共用一个转换函数：
+
+- **导入**（`pptx_to_markdown`，字节走 IPC）：`CONVERT_EXTENSIONS` 里的第四种，产物是 markdown 文件。这一步顺带把 `@` 引用、`search_text`、`read_file` 分页、RAG 全部打通——它们面对的已经是普通文本了。
+- **Agent 直读**（`pptx_read_slides` → `read_slides` 工具，走**路径**+`FsScope::check`）：作者从外部拷进项目的 .pptx 不必先导入。分段在 Rust 侧按幻灯片切，整份 deck 从不跨 IPC；这也是为什么它不是"读字节再切"。
+
+设计上要记住的几条：
+
+- **顺序来自 `presentation.xml` 的 `<p:sldIdLst>`，不是文件名。** `slide10.xml` 排在 `slide2.xml` 前面，而且文件名本来就不权威——按目录读会静默打乱整份演示。
+- **分段单位是页，不是行。** 预算（4000 字符）花完就在页边界停下，尾注写明 `slides 8-24 of 30 shown; call read_slides again with start_slide=25`——刻意和 `read_file` 的尾注同形，学会一个就会另一个。一页超预算时仍整页返回（同 `read_file` 对超长行的规则：能返回空的预算等于没有出路）。
+- **只解析范围内的页。** 顺序表和 zip 条目都是按名取的，所以翻一页的成本是一页，不是整份。
+- **`search_text` 不扫 .pptx**，`read_file` 遇到 .pptx 也直接改口指向 `read_slides`（否则模型会花一轮读二进制噪声，然后判定文件是空的）。全文搜索要遍历整个项目，解 zip 比读文本贵一个数量级；导入后的 markdown 本来就在搜索面里。
+- **超大 deck 的最后一道防线是 subagent**：`read_slides` 在 `longread` 的工具集里，几百页丢给它，主上下文只收摘要 + note 路径。
+- **`.ppt`（97-2003）读不了，也不打算读**：OLE 复合二进制，不是 zip。与 `.doc`/`.xls` 同一条判断——半乱码的结果和成功的长得一模一样。导入器不收它，`read_slides` 直接说明要先另存为 .pptx。
+
+设计与被否掉的方案：`docs/pptx-plan.md`。
+
 ### Export / Import (lore bundles & config backup)
 - **Lore bundle** (`src/lib/lore/transfer.ts`, UI in `LoreWall`): a zip with root `manifest.json` + the whole on-disk `.ai-writer/lore/` tree under `lore/…` — *all* categories on disk, not just the active profile's, so bundles survive profile switches. Import is two-phase: `stageLoreImport` extracts into `.ai-writer/lore-import-tmp` and reports conflicts; `applyLoreImport` moves entity dirs in under a user-chosen strategy (skip / overwrite / keep-both via `uniqueEntityId`), then deletes the staging dir. **Overwrite displaces rather than deletes**: the entity being replaced is renamed into `.ai-writer/backups/replaced-<ts>-<category>-<id>` (the same directory `delete_lore_entity` uses), and if the move-in then fails it is renamed back. The previous `removeDir`-then-`rename` both destroyed an entry — gallery images included — with no undo, and left a window where a failed rename lost the folder from both places. Categories that fail `CATEGORY_ID_RE` are ignored.
 - **Project backup** (`src/lib/fs/projectBackup.ts`, UI in Settings → 工作台): the whole project folder as one zip under `project/…` + root `manifest.json` (`kind: "ai-writer-project-bundle"`). Scope is deliberately wider than the lore bundle — `profile.json`, `outline.json`, `.ai-writer/memory/`, `imagegen.json` and each document's `assets/` are all things *the model sees*, so a project missing them behaves differently with nothing on screen saying why. `PROJECT_BACKUP_EXCLUDES` drops `.ai-writer/backups`, the scratch/staging dirs, the SQLite `-wal`/`-shm` sidecars, `.git` and `node_modules`; `project.db` is WAL-checkpointed first (`PRAGMA wal_checkpoint(TRUNCATE)` via `select`, best-effort) so the single archived file is complete. Restore takes an **empty** folder picked through `project_open_dialog` (which is also what allows it as an fs root), and `zip_import_dialog` is given `requireManifestKind` so a wrong zip is refused before a single file is written. Not included: `config.db` and the keyring — those belong to the installation, and the UI says so.

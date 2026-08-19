@@ -60,7 +60,7 @@ fn cell_ref(row: u32, col: u32) -> String {
 /// Make one cell safe to sit inside a markdown table row: pipes would end the
 /// cell early and newlines would end the row, so both are neutralised rather
 /// than dropped.
-fn escape_cell(raw: &str) -> String {
+pub(crate) fn escape_cell(raw: &str) -> String {
     let trimmed = raw.trim();
     let clipped: String = if trimmed.chars().count() > MAX_CELL_CHARS {
         trimmed

@@ -4,6 +4,7 @@
  *   - read_file   — line-based paging and its budget
  *   - search_text — recursive scan, snippet windowing, result caps
  *   - read_image  — path resolution, the multimodal gate, and the size ceiling
+ *   - read_slides — the .pptx guard rails and the slide-paging trailer
  * plus the path containment that keeps a model-supplied `folder`/`path` inside
  * the project.
  */
@@ -75,12 +76,37 @@ vi.mock("../fs/images", async (importOriginal) => ({
   }),
 }));
 
+/**
+ * Real classification, fake conversion: the parser is Rust behind an IPC call
+ * that does not exist in a node test. The fake deck returns what the Rust side
+ * would, so the trailer this file asserts is the real protocol.
+ */
+const deck = { total: 0 };
+vi.mock("../fs/pptx", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../fs/pptx")>()),
+  readPptxSlides: vi.fn(async (path: string, startSlide?: number) => {
+    if (!fs.has(path)) throw new Error(`ENOENT: ${path}`);
+    const from = startSlide ?? 1;
+    if (from > deck.total) throw new Error(`start_slide ${from} is past the end`);
+    const to = Math.min(deck.total, from + 4);
+    return {
+      markdown: Array.from({ length: to - from + 1 }, (_, i) => `<!-- slide ${from + i} -->`).join(
+        "\n\n",
+      ),
+      total_slides: deck.total,
+      from_slide: from,
+      to_slide: to,
+      next_slide: to < deck.total ? to + 1 : null,
+    };
+  }),
+}));
+
 import { executeRegisteredTool, type ToolContext, type ToolId } from "../agent/registry";
 import type { ToolResult } from "../agent/tools";
 import { MAX_IMAGE_BYTES } from "../fs/images";
 
 const PROJECT = "/proj";
-const ALLOWED: ToolId[] = ["list_files", "read_file", "search_text", "read_image"];
+const ALLOWED: ToolId[] = ["list_files", "read_file", "search_text", "read_image", "read_slides"];
 
 const ctx: ToolContext = {
   projectPath: PROJECT,
@@ -493,5 +519,77 @@ describe("read_image", () => {
 
     expect(out.content).toContain("too large");
     expect(out.imageDataUrls).toBeUndefined();
+  });
+});
+
+describe("read_slides", () => {
+  const DECK = `${PROJECT}/材料/路演.pptx`;
+  const slides = (args: Record<string, unknown>) => call("read_slides", args);
+
+  beforeEach(() => {
+    fs.set(DECK, "PK\u0003\u0004…");
+    deck.total = 12;
+  });
+
+  it("hands back the whole deck with no paging note when it fits", async () => {
+    deck.total = 3;
+
+    const out = await slides({ path: DECK });
+
+    expect(out).toContain("<!-- slide 1 -->");
+    expect(out).toContain("<!-- slide 3 -->");
+    expect(out).not.toContain("[...");
+  });
+
+  it("says where it stopped and what to pass next", async () => {
+    const out = await slides({ path: DECK });
+
+    expect(out).toContain("slides 1-5 of 12 shown");
+    expect(out).toContain("start_slide=6");
+  });
+
+  it("resumes from a slide number without re-reporting the start of the deck", async () => {
+    const out = await slides({ path: DECK, start_slide: 6 });
+
+    expect(out).toContain("<!-- slide 6 -->");
+    expect(out).not.toContain("<!-- slide 1 -->");
+    expect(out).toContain("slides 6-10 of 12 shown");
+  });
+
+  it("drops the resume note on the last page", async () => {
+    const out = await slides({ path: DECK, start_slide: 11 });
+
+    expect(out).toContain("slides 11-12 of 12 shown");
+    expect(out).not.toContain("start_slide=");
+  });
+
+  it("refuses a file that is not a presentation, naming the tool that reads it", async () => {
+    fs.set(`${PROJECT}/notes.md`, "hi");
+
+    const out = await slides({ path: `${PROJECT}/notes.md` });
+
+    expect(out).toContain("read_file");
+  });
+
+  it("says legacy .ppt cannot be read rather than failing on the parse", async () => {
+    // The zip reader genuinely cannot open an OLE compound file, so the honest
+    // answer comes up front — not a mangled result that reads like a short deck.
+    const out = await slides({ path: `${PROJECT}/材料/旧稿.ppt` });
+
+    expect(out).toContain(".pptx");
+  });
+
+  it("keeps the app's own data off-limits, like read_file", async () => {
+    const out = await slides({ path: `${PROJECT}/.ai-writer/lore/x.pptx` });
+
+    expect(out).toContain("outside the project");
+  });
+
+  it("sends a model reading a presentation with read_file to the right tool", async () => {
+    // Without this the model spends a round on binary noise and concludes the
+    // deck is empty.
+    const out = await read({ path: DECK });
+
+    expect(out).toContain("read_slides");
   });
 });

@@ -49,6 +49,10 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 # date instead of the raw serial number Excel stores it as — without it every
 # date in an imported sheet reads as "45678".
 calamine = { version = "0.36", features = ["chrono"] }
+# .pptx import + the agent's paged slide reader (see pptx.rs). Already in the
+# tree under calamine at this version, so declaring it directly adds a name to
+# this file and nothing to the build.
+quick-xml = "0.41"
 # Binary file writes cross the IPC boundary as base64 rather than a JSON array
 # of numbers — see `fs_write_binary_file`.
 base64 = "0.22"
