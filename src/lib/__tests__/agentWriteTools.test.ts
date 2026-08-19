@@ -942,9 +942,84 @@ describe("propose_edit", () => {
 
     const ambiguous = await run("propose_edit", { path: DOC, find: "hall", replace: "cave" }, ctxOk);
     expect(ambiguous.content).toContain("2 times");
+    // A bare refusal used to leave rewrite_document as the only move — the
+    // error has to name the ways out, or the model takes the expensive one.
+    expect(ambiguous.content).toContain("occurrence=N");
+    expect(ambiguous.content).toContain("replace_all=true");
 
     const noChannel = await run("propose_edit", { path: DOC, find: "She waited.", replace: "y" }, makeCtx());
     expect(noChannel.content).toContain("cannot review");
+  });
+});
+
+// ─── propose_edit targeting (occurrence / replace_all) ───────────────────────
+
+describe("propose_edit targeting", () => {
+  const DECK = `${PROJECT}/路演.html`;
+  const captured: object[] = [];
+  const ctx = () => {
+    captured.length = 0;
+    return makeCtx({
+      requestApproval: async (p) => {
+        captured.push(p);
+        return { approved: true };
+      },
+    });
+  };
+
+  beforeEach(() => {
+    // Three structurally identical slides — the shape that has no unique
+    // `find` at all, and used to force a whole-file rewrite.
+    fs.set(DECK, "<section><h1>标题</h1></section>".repeat(3));
+  });
+
+  it("records the occurrence count and the chosen target on the proposal", async () => {
+    const c = ctx();
+    const res = await run("propose_edit", {
+      path: DECK, find: "<h1>标题</h1>", replace: "<h1>第二页</h1>", occurrence: 2,
+    }, c);
+
+    expect(captured[0]).toMatchObject({ kind: "edit", occurrences: 3, target: 2 });
+    expect(res.content).toContain("occurrence 2 of 3");
+  });
+
+  it("carries replace_all through as target 'all'", async () => {
+    const c = ctx();
+    const res = await run("propose_edit", {
+      path: DECK, find: "<h1>标题</h1>", replace: "<h1>新标题</h1>", replace_all: true,
+    }, c);
+
+    expect(captured[0]).toMatchObject({ occurrences: 3, target: "all" });
+    expect(res.content).toContain("all 3 occurrences");
+  });
+
+  it("leaves a single match untargeted, however it was addressed", async () => {
+    fs.set(DECK, "<section><h1>唯一</h1></section>");
+    const c = ctx();
+    await run("propose_edit", { path: DECK, find: "唯一", replace: "x", occurrence: 1 }, c);
+    // occurrences === 1 is the plain case: the card should not say "1 of 1".
+    expect(captured[0]).toMatchObject({ occurrences: 1 });
+    expect(captured[0]).not.toHaveProperty("target", 1);
+  });
+
+  it("refuses both selectors at once, and an occurrence past the end", async () => {
+    const c = ctx();
+    const both = await run("propose_edit", {
+      path: DECK, find: "<h1>标题</h1>", replace: "x", occurrence: 1, replace_all: true,
+    }, c);
+    expect(both.content).toContain("not both");
+
+    const past = await run("propose_edit", {
+      path: DECK, find: "<h1>标题</h1>", replace: "x", occurrence: 9,
+    }, c);
+    expect(past.content).toContain("occurrence 9 does not exist");
+
+    const zero = await run("propose_edit", {
+      path: DECK, find: "<h1>标题</h1>", replace: "x", occurrence: 0,
+    }, c);
+    expect(zero.content).toContain("whole number");
+
+    expect(captured).toHaveLength(0);
   });
 });
 

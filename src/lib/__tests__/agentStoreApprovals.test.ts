@@ -9,7 +9,7 @@ import type { EditProposal } from "../agent/registry";
 import type { LorePlan } from "../agent/plan";
 
 function proposal(id: string): EditProposal {
-  return { kind: "edit", id, path: "/p/writing/a.md", find: "x", replace: "y" };
+  return { kind: "edit", id, path: "/p/writing/a.md", find: "x", replace: "y", occurrences: 1 };
 }
 
 function plan(id: string): LorePlan {
