@@ -59,6 +59,20 @@
   color: var(--color-error);
 }
 
+/* Which occurrence a targeted edit lands on, shown only when there is more
+   than one. "All of them" takes the warning tint for the same reason a
+   shrinking rewrite does: it is the case where more of the file changes than
+   the single find/replace below it appears to say. */
+.editScope,
+.editScopeWarn {
+  font: 500 11px/1.6 var(--font-sans);
+  color: var(--color-text-muted);
+}
+
+.editScopeWarn {
+  color: var(--color-error);
+}
+
 /* Diff faces are mono — this is a change under review, not finished prose.
    Outgoing text in the del tint, incoming in the add tint (mockup 1h). */
 .replaceBlock,

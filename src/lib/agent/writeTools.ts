@@ -47,6 +47,7 @@ import { parseFrontmatter } from "../fs/markdown";
 import { makeDir, readDir, readFile, removeFile, renamePath } from "../fs/fileio";
 import { readDirRecursive, type FileNode } from "../project";
 import { backupFile } from "./backup";
+import { describeEditTarget, findOccurrences } from "./editApply";
 import {
   LORE_PLAN_ACTIONS,
   checkPlan,
@@ -1544,16 +1545,16 @@ export async function deleteDirectoryTool(
 // ─── propose_edit ────────────────────────────────────────────────────────────
 
 /** Count non-overlapping occurrences of `find` in `text`. */
-function countOccurrences(text: string, find: string): number {
-  if (!find) return 0;
-  let count = 0;
-  for (let i = text.indexOf(find); i !== -1; i = text.indexOf(find, i + find.length)) count++;
-  return count;
-}
-
 export async function proposeEditTool(
   toolCallId: string,
-  args: { path?: string; find?: string; replace?: string; reason?: string },
+  args: {
+    path?: string;
+    find?: string;
+    replace?: string;
+    occurrence?: number;
+    replace_all?: boolean;
+    reason?: string;
+  },
   ctx: ToolContext,
 ): Promise<ToolResult> {
   const path = args.path?.trim();
@@ -1578,19 +1579,48 @@ export async function proposeEditTool(
   } catch (e) {
     return { toolCallId, content: `Error reading file: ${String(e)}` };
   }
-  const occurrences = countOccurrences(content, args.find);
+  const occurrences = findOccurrences(content, args.find).length;
   if (occurrences === 0) {
     return {
       toolCallId,
       content: "Error: 'find' text not found in the file. Re-read the file and copy the target text exactly.",
     };
   }
-  if (occurrences > 1) {
+
+  const all = args.replace_all === true;
+  const nth = args.occurrence === undefined ? undefined : Math.floor(Number(args.occurrence));
+  if (all && nth !== undefined) {
     return {
       toolCallId,
-      content: `Error: 'find' text occurs ${occurrences} times — include more surrounding text so it is unique.`,
+      content: "Error: pass either 'occurrence' (one of them) or replace_all=true (every one), not both.",
     };
   }
+  if (nth !== undefined && (!Number.isFinite(nth) || nth < 1)) {
+    return { toolCallId, content: "Error: 'occurrence' must be a whole number ≥ 1 (1 = the first match)." };
+  }
+  if (nth !== undefined && nth > occurrences) {
+    return {
+      toolCallId,
+      content: `Error: 'find' occurs ${occurrences} time(s) in the file, so occurrence ${nth} does not exist.`,
+    };
+  }
+  // Ambiguity is only an error when the call has not resolved it. Saying which
+  // of the three ways out applies is the whole point — the old bare refusal
+  // left rewrite_document as the model's only move on a repetitive file.
+  if (occurrences > 1 && !all && nth === undefined) {
+    return {
+      toolCallId,
+      content:
+        `Error: 'find' text occurs ${occurrences} times, so this call does not say which one you mean. ` +
+        "Either include more surrounding text so it is unique, or pass occurrence=N (1-based) for one of them, " +
+        "or replace_all=true to change all of them.",
+    };
+  }
+
+  // A file with a single match is the plain case however it was addressed —
+  // normalising here keeps the card and the apply path from having to spell
+  // out "occurrence 1 of 1".
+  const target = occurrences === 1 ? undefined : all ? ("all" as const) : (nth ?? 1);
 
   const decision = await ctx.requestApproval({
     kind: "edit",
@@ -1598,6 +1628,8 @@ export async function proposeEditTool(
     path,
     find: args.find,
     replace: args.replace,
+    occurrences,
+    target,
     reason: args.reason?.trim() || undefined,
   });
 
@@ -1607,10 +1639,11 @@ export async function proposeEditTool(
       content: `The user REJECTED this edit${decision.reason ? ` — reason: ${decision.reason}` : "."} Do not retry the same change; adjust per the reason or move on.`,
     };
   }
+  const scope = describeEditTarget(occurrences, target);
   return {
     toolCallId,
     content:
-      `Edit approved and applied.` +
+      `Edit approved and applied${scope ? ` (${scope})` : ""}.` +
       (decision.backupPath ? ` Previous version backed up to ${decision.backupPath}.` : ""),
   };
 }

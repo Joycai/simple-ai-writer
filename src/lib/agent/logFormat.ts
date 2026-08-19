@@ -28,7 +28,7 @@ const IDENTITY_KEYS = [
 ];
 
 /** Keys that are worth showing as a qualifier after the identity. */
-const DETAIL_KEYS = ["facet", "group", "start_line", "limit", "count", "new_path", "dest_dir"];
+const DETAIL_KEYS = ["facet", "group", "start_line", "limit", "count", "new_path", "dest_dir", "occurrence", "replace_all"];
 
 const MAX_ARG_CHARS = 44;
 const MAX_RESULT_CHARS = 38;

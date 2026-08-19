@@ -119,9 +119,20 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
 function EditBody({ proposal }: { proposal: EditProposal }) {
   const { t } = useTranslation();
   const [showOriginal, setShowOriginal] = useState(false);
+  const all = proposal.target === "all";
 
   return (
     <>
+      {proposal.occurrences > 1 && (
+        <div className={all ? styles.editScopeWarn : styles.editScope}>
+          {all
+            ? t("ai.approval.editAll", { n: proposal.occurrences })
+            : t("ai.approval.editNth", {
+                n: typeof proposal.target === "number" ? proposal.target : 1,
+                total: proposal.occurrences,
+              })}
+        </div>
+      )}
       <pre className={styles.replaceBlock}>{proposal.replace}</pre>
       <button className={styles.originalToggle} onClick={() => setShowOriginal((v) => !v)}>
         {showOriginal ? <ChevronDown size={10} /> : <ChevronRight size={10} />}

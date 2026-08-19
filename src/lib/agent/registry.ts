@@ -90,9 +90,22 @@ interface ProposalBase {
 /** Rewrite a passage in place. */
 export interface EditProposal extends ProposalBase {
   kind: "edit";
-  /** Exact text to replace — must occur exactly once in the file. */
+  /** Exact text to replace. */
   find: string;
   replace: string;
+  /**
+   * How many times `find` occurred when this proposal was built.
+   *
+   * Recorded rather than recomputed at apply time: it is what the card showed
+   * the author, so it is what the write must still find to be the write they
+   * approved. See `agent/editApply`.
+   */
+  occurrences: number;
+  /**
+   * Which occurrence to replace — a 1-based index, or "all". Absent means the
+   * only one, which is the shape every edit had before targeting existed.
+   */
+  target?: number | "all";
 }
 
 /**
@@ -581,7 +594,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "read_slides",
         description:
-          "Read a PowerPoint presentation (.pptx) in the project. read_file cannot: a .pptx is a compressed archive, not text. Slides come back as markdown in the deck's running order — one `## Slide N` heading per slide, its bullets nested by outline level, tables as markdown tables, pictures named, speaker notes quoted. Around 4000 characters come back per call, cut on a slide boundary; if the deck is longer the result ends with the slide range shown and the start_slide to pass next, so a long deck can be read in order. Legacy .ppt files (PowerPoint 97-2003) cannot be read at all.",
+          "Read a presentation in the project **by slide** — either a .pptx or an .html deck. For a .pptx: read_file cannot open one (it is a compressed archive, not text), and slides come back as markdown in running order — one `## Slide N` heading per slide, bullets nested by outline level, tables as markdown tables, pictures named, speaker notes quoted. For an .html deck: each slide comes back as its **verbatim HTML source** under the same `## Slide N` heading, which is what you quote into propose_edit to change one slide — use this instead of paging the whole page with read_file. Around 4000 characters come back per call, cut on a slide boundary; if the deck is longer the result ends with the slide range shown and the start_slide to pass next, so a long deck can be read in order. Legacy .ppt files (PowerPoint 97-2003) cannot be read at all.",
         parameters: {
           type: "object",
           properties: {
@@ -1125,7 +1138,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "propose_edit",
         description:
-          "Propose a change to a document file in the project. NOTHING is written until the user approves the proposal on a review card; the call blocks until they decide, and a rejection (with their reason) comes back so you can adjust. 'find' must be the EXACT text currently in the file and must occur exactly once — include enough surrounding text to make it unique. Propose one focused edit per call.",
+          "Propose a change to a document file in the project. NOTHING is written until the user approves the proposal on a review card; the call blocks until they decide, and a rejection (with their reason) comes back so you can adjust. 'find' must be the EXACT text currently in the file. When it occurs more than once you have three ways to say which one you mean: make 'find' unique by including surrounding text, pass 'occurrence' to target the Nth (read_slides numbers an .html deck's slides for exactly this), or pass replace_all=true to change every one — that last is how a document-wide substitution is done WITHOUT rewrite_document. Propose one focused edit per call.",
         parameters: {
           type: "object",
           properties: {
@@ -1138,6 +1151,15 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
               description: "Exact existing text to replace (unique in the file)",
             },
             replace: { type: "string", description: "The replacement text" },
+            occurrence: {
+              type: "number",
+              description:
+                "1-based: which occurrence of 'find' to replace, when it appears more than once. Omit when 'find' is unique.",
+            },
+            replace_all: {
+              type: "boolean",
+              description: "Replace EVERY occurrence of 'find' in the file. Cannot be combined with 'occurrence'.",
+            },
             reason: {
               type: "string",
               description: "One-line justification shown to the user on the review card",

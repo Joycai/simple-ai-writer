@@ -40,7 +40,7 @@ const RUN = {} as unknown; // stands in for a panel run's AbortController
 function editProposal(id: string): Proposal {
   return {
     kind: "edit", id, path: "/p/writing/ch1.md",
-    find: "TARGET", replace: "REPLACED", reason: "tighten",
+    find: "TARGET", replace: "REPLACED", occurrences: 1, reason: "tighten",
   };
 }
 

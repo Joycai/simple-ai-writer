@@ -43,6 +43,7 @@
 import { create } from "zustand";
 import i18n from "../i18n";
 import { backupFile } from "../lib/agent/backup";
+import { applyFindReplace } from "../lib/agent/editApply";
 import {
   createSessionMeta, excludeDirsFor, noteTurnStart, recordInjections,
   type ChatSessionMeta,
@@ -383,34 +384,22 @@ async function applyEdit(proposal: EditProposal): Promise<string | null> {
   const { projectPath, activeFilePath } = useProjectStore.getState();
   const backupPath = projectPath ? await backupFile(projectPath, proposal.path) : null;
 
-  // Same reasoning as rag.ts's resolveEditRange: repeated lines are ordinary
-  // in a draft, and applying at the first match when there's more than one
-  // rewrites text the author never actually approved — they approved this
-  // find/replace, not "wherever it happens to appear first". Ambiguous ->
-  // refuse, exactly like a stale (no-longer-present) match already does.
-  const locate = (text: string): number => {
-    const first = text.indexOf(proposal.find);
-    if (first < 0) throw new Error("Document changed — the target text no longer matches.");
-    if (first !== text.lastIndexOf(proposal.find)) {
-      throw new Error("The target text appears more than once in the document — too ambiguous to apply automatically.");
-    }
-    return first;
-  };
+  // Which occurrence(s), and what to do when the file has moved on, are
+  // `agent/editApply`'s job — the same reasoning as rag.ts's resolveEditRange
+  // (repeated lines are ordinary in a draft, so writing at "wherever it happens
+  // to appear first" would change text the author never approved), generalised
+  // to the targeted edits propose_edit can now make.
+  const rewrite = (text: string): string =>
+    applyFindReplace(text, proposal.find, proposal.replace, proposal.occurrences, proposal.target);
 
   if (activeFilePath === proposal.path) {
     // The file is open — go through the editor so unsaved edits are kept
     // and the change is visible (and autosaved) immediately.
     const { useEditorStore } = await import("./editorStore");
     const { content, setContent } = useEditorStore.getState();
-    const idx = locate(content);
-    setContent(content.slice(0, idx) + proposal.replace + content.slice(idx + proposal.find.length));
+    setContent(rewrite(content));
   } else {
-    const raw = await readFile(proposal.path);
-    const idx = locate(raw);
-    await writeFile(
-      proposal.path,
-      raw.slice(0, idx) + proposal.replace + raw.slice(idx + proposal.find.length),
-    );
+    await writeFile(proposal.path, rewrite(await readFile(proposal.path)));
   }
   return backupPath;
 }
