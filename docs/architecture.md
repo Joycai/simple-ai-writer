@@ -549,6 +549,7 @@ The workspace is the **whole project directory** — documents live wherever the
 - **入口两个**，都要作者点头：`export_pptx` 工具（L2 审批卡，说明「哪个页面 → 哪个文件」；转换在 `applyProposal` 里跑，因为那里才有 DOM）和 `.html` 预览工具栏的导出按钮。
 - **Beta 开关**（Settings → 通用 → 实验功能，`lib/pptx/flag.ts`）关着时 `routeTools` 把 `export_pptx` 从工具列表里**删掉**而不是让它报错——同 imagegen 未绑定时删掉画图工具。
 - **会降级的**：内联 SVG 和 `<canvas>` 变图片，渐变背景变色标平均色，CSS 滤镜/混合模式/文字阴影/动画丢掉。每次导出把降级项列给作者。
+- **SVG 栅格化前必须内联计算样式**：序列化出来的 `<svg>` 是独立文档，页面样式表一条都不跟着走，靠 CSS 上色的图示和 `currentColor` 会整块变黑——而且栅格化"成功"，没有异常也没有降级提示。见 `docs/pptx-plan.md` D19。
 - **最大的风险不是冷门 CSS，是字体和文本回流**：HTML 的换行引擎不是 PowerPoint 的，web font 也进不了 pptx。对策是按字形而不是容器测量文本框、四周留 6% 对称余量、多行允许自动缩字号，外加工具描述里要求用系统字体。
 
 设计、被否掉的方案（让模型写 Python 转换、slides markdown、模型直接调 pptx 工具、整页截图）、以及验证时抓到的三个 bug：`docs/pptx-plan.md` §4。

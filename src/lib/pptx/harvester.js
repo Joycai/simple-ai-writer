@@ -246,6 +246,63 @@
     return { box: box, lines: Math.max(1, lines) };
   }
 
+  /**
+   * SVG properties that decide what a shape looks like, and that a page is
+   * free to set from CSS rather than from an attribute.
+   *
+   * `transform` is deliberately absent: the attribute form is already in the
+   * clone, and the computed form is a matrix whose origin rules differ between
+   * the CSS and SVG sides — copying it would move things that were fine.
+   */
+  var SVG_STYLE_PROPS = [
+    "fill", "fill-opacity", "fill-rule",
+    "stroke", "stroke-width", "stroke-opacity", "stroke-linecap",
+    "stroke-linejoin", "stroke-dasharray", "stroke-dashoffset", "stroke-miterlimit",
+    "opacity", "color", "visibility", "display",
+    "font-family", "font-size", "font-weight", "font-style",
+    "text-anchor", "dominant-baseline", "letter-spacing", "word-spacing",
+    "marker-start", "marker-mid", "marker-end",
+    "clip-path", "mask", "filter", "paint-order",
+  ];
+
+  /** Elements one SVG may carry before style inlining gives up on it. */
+  var MAX_SVG_NODES = 4000;
+
+  /**
+   * Copy the page's computed styling onto the clone, inline.
+   *
+   * This is the difference between an SVG that survives export and one that
+   * arrives solid black. A serialized `<svg>` is a *standalone document*: none
+   * of the page's stylesheets follow it, so `.chart rect { fill: … }` and
+   * `fill="currentColor"` both fall back to the SVG default, which is black.
+   * Reading the computed value resolves stylesheets, inheritance and
+   * `currentColor` in one step, and writing it inline makes the clone
+   * self-describing.
+   *
+   * The failure this fixes is silent — the rasterization *succeeds*, it just
+   * produces the wrong picture — so there is nothing to report and no error to
+   * catch. The only defence is not to create it.
+   */
+  function inlineComputedStyles(original, clone) {
+    var from = [original].concat(Array.prototype.slice.call(original.querySelectorAll("*")));
+    var to = [clone].concat(Array.prototype.slice.call(clone.querySelectorAll("*")));
+    var count = Math.min(from.length, to.length, MAX_SVG_NODES);
+    for (var i = 0; i < count; i++) {
+      var computed = getComputedStyle(from[i]);
+      var declarations = "";
+      for (var p = 0; p < SVG_STYLE_PROPS.length; p++) {
+        var value = computed.getPropertyValue(SVG_STYLE_PROPS[p]);
+        if (value) declarations += SVG_STYLE_PROPS[p] + ":" + value + ";";
+      }
+      // Appended, so anything the element already declared inline still wins —
+      // and so a `style` attribute the author wrote is never dropped.
+      if (declarations) {
+        to[i].setAttribute("style", declarations + (to[i].getAttribute("style") || ""));
+      }
+    }
+    return from.length > MAX_SVG_NODES;
+  }
+
   function rasterizeSvg(svg, rect) {
     return new Promise(function (resolve) {
       try {
@@ -253,6 +310,13 @@
         clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
         clone.setAttribute("width", String(rect.width));
         clone.setAttribute("height", String(rect.height));
+        // Without a viewBox the standalone document has no coordinate system
+        // to scale into, so an SVG sized purely by CSS would rasterize at its
+        // intrinsic size and land cropped.
+        if (!clone.getAttribute("viewBox")) {
+          clone.setAttribute("viewBox", "0 0 " + rect.width + " " + rect.height);
+        }
+        inlineComputedStyles(svg, clone);
         var source = new XMLSerializer().serializeToString(clone);
         var img = new Image();
         img.onload = function () {
@@ -276,10 +340,14 @@
   }
 
   function rasterizeImg(img, rect) {
+    var src = img.currentSrc || "";
     // Already self-contained: the app inlines every local picture as a data
     // URL before the frame loads (lib/fs/htmlDoc), so this is the normal path.
-    if (img.currentSrc && img.currentSrc.indexOf("data:") === 0) {
-      return Promise.resolve(img.currentSrc);
+    // An SVG is the exception — PowerPoint's support for it is uneven, and a
+    // deck that opens with holes in it is worse than one drawn at 2x — so it
+    // falls through to the canvas below and arrives as a PNG.
+    if (src.indexOf("data:") === 0 && src.indexOf("data:image/svg") !== 0) {
+      return Promise.resolve(src);
     }
     return new Promise(function (resolve) {
       try {
@@ -331,6 +399,23 @@
 
       if (tag === "svg" || tag === "SVG") {
         var svgRect = rect;
+        // A CSS background on the <svg> element paints in the page but is not
+        // part of the SVG document, so it would vanish on rasterization —
+        // emit it as its own rectangle underneath.
+        var svgPaint = paints(style);
+        if (svgPaint.fill || svgPaint.borderWidth) {
+          push(
+            {
+              kind: "rect",
+              fill: svgPaint.fill || undefined,
+              line: svgPaint.borderWidth
+                ? { color: style.borderTopColor, widthPx: svgPaint.borderWidth }
+                : undefined,
+              radiusPx: parseFloat(style.borderTopLeftRadius) || 0,
+            },
+            svgRect,
+          );
+        }
         pending.push(
           rasterizeSvg(el, svgRect).then(function (data) {
             if (data) push({ kind: "image", data: data }, svgRect);
