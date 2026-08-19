@@ -19,6 +19,7 @@ import { useAiStore } from "./stores/aiStore";
 import { useMainView } from "./stores/projectStore";
 import { useGlobalShortcuts } from "./useGlobalShortcuts";
 import { useWindowCloseFlush } from "./useWindowCloseFlush";
+import { useExternalFileRefresh } from "./useExternalFileRefresh";
 import { installCitationNavigation } from "./lib/lore/citations";
 import { installNavigationHistory } from "./stores/navStore";
 import { fillLayer, springScreen, viewSlide } from "./lib/motion";
@@ -49,6 +50,8 @@ export default function App() {
 
   useGlobalShortcuts();
   useWindowCloseFlush();
+  // Files added to the project folder from outside the app appear on return.
+  useExternalFileRefresh();
 
   return (
     <MotionConfig reducedMotion="user">

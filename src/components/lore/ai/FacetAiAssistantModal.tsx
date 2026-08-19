@@ -12,11 +12,11 @@
  * works even on an unsaved / brand-new facet.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Sparkles, RotateCw, AlertTriangle, PlusCircle, Wand2, Tags, Minimize2 } from "lucide-react";
 import { useAiStore } from "../../../stores/aiStore";
-import { useProjectStore } from "../../../stores/projectStore";
+import { useProjectFiles, useProjectStore } from "../../../stores/projectStore";
 import { useLoreStore } from "../../../stores/loreStore";
 import { resolveConn } from "../../../lib/ai/conn";
 import type { LoreEntity } from "../../../lib/lore";
@@ -28,7 +28,6 @@ import { runLoreAgentTask } from "../../../lib/agent/run";
 import { FACET_ASSIST_PRESET } from "../../../lib/agent/presets";
 import { appendAgentEventTo, type AgentEvent } from "../../../lib/agent/events";
 import { AgentLog } from "../../ai/AgentLog";
-import { scanProjectFiles, type ProjectFile } from "../../../lib/fs/images";
 import { loadApiKey } from "../../../lib/keyStore";
 import { MarkdownTextarea } from "../../common/MarkdownTextarea";
 import { ModalShell } from "../../common/ModalShell";
@@ -103,7 +102,7 @@ export function FacetAiAssistantModal({
   const [kind, setKind] = useState<TaskKind>("append");
   const [instruction, setInstruction] = useState("");
   const [attached, setAttached] = useState<AttachedItem[]>([]);
-  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
+  const projectFiles = useProjectFiles();
   const [phase, setPhase] = useState<"input" | "generating" | "result">("input");
   const [output, setOutput] = useState("");
   const [agentLog, setAgentLog] = useState<AgentEvent[]>([]);
@@ -111,10 +110,6 @@ export function FacetAiAssistantModal({
   const abortRef = useRef<AbortController | null>(null);
   const elapsedSec = useRunClock(phase === "generating");
   const { usageTokens, onEvent: onRunEvent, reset: resetTelemetry } = useRunTelemetry();
-
-  useEffect(() => {
-    if (projectPath) scanProjectFiles(projectPath).then(setProjectFiles).catch(() => {});
-  }, [projectPath]);
 
   const otherEntities = Object.values(index).flat().filter((e) => e.id !== entity.id);
   const outputKind: "body" | "keys" = kind === "keys" ? "keys" : "body";

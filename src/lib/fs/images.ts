@@ -1,11 +1,14 @@
 /**
  * Generic project-file utilities for images and text attachments:
- * discovery (scan), classification (by extension), and encoding (base64 data
- * URLs for multimodal prompts / in-app rendering).
+ * classification (by extension — the one definition of what counts as a
+ * picture, a readable text file, or an HTML deliverable), picking the
+ * candidates out of the project tree, and encoding (base64 data URLs for
+ * multimodal prompts / in-app rendering).
  */
 
 import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
-import { readDir, readFile as readTextFile } from "./fileio";
+import { readFile as readTextFile } from "./fileio";
+import type { FileNode } from "../project";
 
 export type ProjectFileKind = "image" | "text";
 
@@ -16,7 +19,24 @@ export interface ProjectFile {
 }
 
 const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "webp", "gif"]);
-const TEXT_EXTS  = new Set(["md", "txt"]);
+/**
+ * What counts as a *readable* project file — the `@` picker's text candidates
+ * and the import's copy-as-is list both key off this.
+ *
+ * `.html`/`.htm` belong here even though they are deliverables rather than
+ * chapters (docs/html-artifact-plan.md D6): the assistant that wrote the page
+ * is the one the author then asks to change it, and `search_text` already
+ * scans them (`isSearchableFile`), so leaving them out of `@` only meant the
+ * author had to describe a file the model could have been handed. Kept in
+ * step with `isChapterFile`'s `markdown` alias so an `.markdown` file is not
+ * a chapter everywhere except here.
+ */
+const TEXT_EXTS  = new Set(["md", "markdown", "txt", "html", "htm"]);
+
+/** The image extensions, for pickers and dialog filters. */
+export const IMAGE_EXTENSIONS: readonly string[] = [...IMAGE_EXTS];
+/** The text extensions the app opens as-is (no conversion). */
+export const TEXT_EXTENSIONS: readonly string[] = [...TEXT_EXTS];
 
 /**
  * Ceiling on one image handed to a model, measured before base64 inflation.
@@ -59,33 +79,30 @@ const MIME: Record<string, string> = {
   gif:  "image/gif",
 };
 
-/** Recursively scan the project folder for image and text files (max depth 5). */
-export async function scanProjectFiles(projectPath: string): Promise<ProjectFile[]> {
-  const results: ProjectFile[] = [];
-
-  async function walk(dir: string, depth: number) {
-    if (depth > 5) return;
-    try {
-      const entries = await readDir(dir);
-      for (const e of entries) {
-        if (e.isDirectory && !e.name.startsWith(".")) {
-          await walk(e.path, depth + 1);
-        } else if (!e.isDirectory) {
-          const ext = e.name.split(".").pop()?.toLowerCase() ?? "";
-          if (IMAGE_EXTS.has(ext)) {
-            results.push({ name: e.name, path: e.path, kind: "image" });
-          } else if (TEXT_EXTS.has(ext)) {
-            results.push({ name: e.name, path: e.path, kind: "text" });
-          }
-        }
-      }
-    } catch {
-      // unreadable dirs are skipped
+/**
+ * The pickable files in an already-read project tree, depth-first.
+ *
+ * Derived from `projectStore.fileTree` rather than walking the disk again:
+ * a second scanner meant the `@` picker kept its own snapshot of the project,
+ * taken once when the project opened. A file added afterwards — by the agent,
+ * by a copy in Finder — existed in the sidebar and did not exist for `@`, with
+ * nothing on screen explaining the difference. One tree, one refresh path.
+ *
+ * Dotfiles never appear: `read_dir_recursive` skips them on the Rust side, so
+ * `.ai-writer/` stays out the same way it does for the agent's read tools.
+ */
+export function projectFilesFromTree(nodes: FileNode[]): ProjectFile[] {
+  const out: ProjectFile[] = [];
+  const walk = (list: FileNode[]) => {
+    for (const n of list) {
+      if (n.is_dir) { walk(n.children ?? []); continue; }
+      const ext = n.name.split(".").pop()?.toLowerCase() ?? "";
+      if (IMAGE_EXTS.has(ext)) out.push({ name: n.name, path: n.path, kind: "image" });
+      else if (TEXT_EXTS.has(ext)) out.push({ name: n.name, path: n.path, kind: "text" });
     }
-  }
-
-  await walk(projectPath, 0);
-  return results;
+  };
+  walk(nodes);
+  return out;
 }
 
 /** Read an image file and return a base64 data URL. */

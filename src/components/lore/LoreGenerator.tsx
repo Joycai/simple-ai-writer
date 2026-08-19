@@ -1,13 +1,13 @@
-import { useState, useEffect, useRef, KeyboardEvent } from "react";
+import { useState, useRef, KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Sparkles, RotateCw, AlertTriangle } from "lucide-react";
-import { useProjectStore, useTerms } from "../../stores/projectStore";
+import { useProjectFiles, useProjectStore, useTerms } from "../../stores/projectStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { connOptions } from "../../lib/ai/conn";
 import { slugifyEntityId, uniqueEntityId, readEntityFile, type CategoryId } from "../../lib/lore";
 import { categoryLabel, defaultCategoryId, loreCategories } from "../../lib/profile";
-import { scanProjectFiles, imageToDataUrl, type ProjectFile } from "../../lib/fs/images";
+import { imageToDataUrl } from "../../lib/fs/images";
 import { generateLore } from "../../lib/lore/generator";
 import { type AttachedImage, type AttachedText, type AttachedLore, type AttachedItem } from "../../lib/lore/aiTask";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
@@ -54,7 +54,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
   // 分类范围 (设计稿 08): which categories the extraction may file into.
   // All enabled by default; at least one must stay on.
   const [selCats, setSelCats] = useState<CategoryId[]>(() => loreCategories().map((c) => c.id));
-  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
+  const projectFiles = useProjectFiles();
 
   // ── Generation state ─────────────────────────────────────────────────────
   const [phase, setPhase] = useState<"input" | "generating" | "result">("input");
@@ -71,12 +71,6 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
   const [editSummary, setEditSummary] = useState("");
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (projectPath) {
-      scanProjectFiles(projectPath).then(setProjectFiles).catch(() => {});
-    }
-  }, [projectPath]);
 
   // Candidates for @-mention: every existing entity (this is a brand-new one).
   const allEntities = Object.values(loreIndex).flat();

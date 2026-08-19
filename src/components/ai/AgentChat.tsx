@@ -27,13 +27,13 @@ import {
 } from "../common/MentionPicker";
 import { renderMarkdown } from "../../lib/fs/markdown";
 import {
-  MAX_IMAGE_BYTES, imageToDataUrl, readTextFileContent, scanProjectFiles, type ProjectFile,
+  MAX_IMAGE_BYTES, imageToDataUrl, readTextFileContent,
 } from "../../lib/fs/images";
 import { attachedKey } from "../../lib/lore/aiTask";
 import { chainCanSeeImages, withSessionOverrides } from "../../lib/agent/subagent";
 import { useImageThumbnails } from "../lore/useImageDataUrl";
 import { useLoreStore } from "../../stores/loreStore";
-import { useProjectStore, useTerms } from "../../stores/projectStore";
+import { useProjectFiles, useProjectStore, useTerms } from "../../stores/projectStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { useAiStore } from "../../stores/aiStore";
 import { useAppStore } from "../../stores/appStore";
@@ -132,7 +132,9 @@ export function AgentChat() {
   // ── @ references ──
   const projectPath = useProjectStore((s) => s.projectPath);
   const loreIndex = useLoreStore((s) => s.index);
-  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
+  // From the sidebar's tree, so a file that appeared after the project opened
+  // is pickable as soon as the tree knows about it — no separate snapshot.
+  const projectFiles = useProjectFiles();
   const refs = useComposerStore((s) => s.chatRefs);
   const setRefs = useComposerStore((s) => s.setChatRefs);
   const clearComposer = useComposerStore((s) => s.clearChatComposer);
@@ -146,11 +148,6 @@ export function AgentChat() {
   useEffect(() => { if (!mention.open) setPickKind(null); }, [mention.open]);
   /** Rejected attachment (too large, unreadable) — cleared by the next pick. */
   const [refError, setRefError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!projectPath) { setProjectFiles([]); return; }
-    scanProjectFiles(projectPath).then(setProjectFiles).catch(() => {});
-  }, [projectPath]);
 
   const candidates: MentionItem[] = useMemo(() => [
     ...Object.values(loreIndex).flat().map((entity): MentionItem => ({ type: "lore", entity })),

@@ -11,9 +11,10 @@ import { itemsToLines, linesToMarkdown, type PdfTextItem } from "../import/pdf";
 import { decodeText } from "../import/text";
 import {
   baseName,
-  importExtension,
+  importMode,
+  importedName,
   markdownName,
-  uniqueMarkdownPath,
+  uniqueImportPath,
 } from "../import";
 
 describe("htmlToMarkdown", () => {
@@ -129,18 +130,22 @@ describe("decodeText", () => {
 });
 
 describe("naming and dispatch", () => {
-  it("recognises exactly the supported extensions", () => {
-    expect(importExtension("标书.docx")).toBe("docx");
-    expect(importExtension("报价表.xlsx")).toBe("xlsx");
-    expect(importExtension("C:\\bids\\招标文件.PDF")).toBe("pdf");
-    expect(importExtension("notes.txt")).toBe("txt");
-    expect(importExtension("readme.md")).toBe("md");
-    // Legacy .doc/.xls are out on purpose — see IMPORT_EXTENSIONS. The xlsx
+  it("converts office documents and copies everything else as-is", () => {
+    expect(importMode("标书.docx")).toBe("convert");
+    expect(importMode("报价表.xlsx")).toBe("convert");
+    expect(importMode("C:\\bids\\招标文件.PDF")).toBe("convert");
+    // Text the app already opens is copied, not rewritten — a .txt renamed to
+    // .md would start being read as markdown.
+    expect(importMode("notes.txt")).toBe("copy-text");
+    expect(importMode("readme.md")).toBe("copy-text");
+    expect(importMode("架构图.html")).toBe("copy-text");
+    expect(importMode("封面.PNG")).toBe("copy-binary");
+    // Legacy .doc/.xls are out on purpose — see CONVERT_EXTENSIONS. The xlsx
     // parser would in fact read .xls, so this assertion is what keeps it from
     // drifting into the picker on its own.
-    expect(importExtension("old.doc")).toBeNull();
-    expect(importExtension("old.xls")).toBeNull();
-    expect(importExtension("noext")).toBeNull();
+    expect(importMode("old.doc")).toBeNull();
+    expect(importMode("old.xls")).toBeNull();
+    expect(importMode("noext")).toBeNull();
   });
 
   it("takes the basename from either separator style", () => {
@@ -154,10 +159,17 @@ describe("naming and dispatch", () => {
     expect(markdownName("noext")).toBe("noext.md");
   });
 
-  it("numbers collisions from -2 upward", async () => {
-    const taken = new Set(["d/标书.md", "d/标书-2.md"]);
+  it("names a conversion .md and leaves a copy's own name alone", () => {
+    expect(importedName("招标文件.docx", "convert")).toBe("招标文件.md");
+    expect(importedName("笔记.txt", "copy-text")).toBe("笔记.txt");
+    expect(importedName("封面.PNG", "copy-binary")).toBe("封面.PNG");
+  });
+
+  it("numbers collisions from -2 upward, keeping the extension", async () => {
+    const taken = new Set(["d/标书.md", "d/标书-2.md", "d/封面.png"]);
     const exists = async (p: string) => taken.has(p);
-    expect(await uniqueMarkdownPath("d", "标书.docx", exists)).toBe("d/标书-3.md");
-    expect(await uniqueMarkdownPath("d", "其他.docx", exists)).toBe("d/其他.md");
+    expect(await uniqueImportPath("d", "标书.md", exists)).toBe("d/标书-3.md");
+    expect(await uniqueImportPath("d", "其他.md", exists)).toBe("d/其他.md");
+    expect(await uniqueImportPath("d", "封面.png", exists)).toBe("d/封面-2.png");
   });
 });

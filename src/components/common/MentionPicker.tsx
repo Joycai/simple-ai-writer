@@ -17,7 +17,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { FileText, Image as ImageIcon } from "lucide-react";
 import { useImageDataUrl } from "../lore/useImageDataUrl";
-import { imageToDataUrl, type ProjectFile } from "../../lib/fs/images";
+import { imageToDataUrl, isHtmlPath, type ProjectFile } from "../../lib/fs/images";
 import type { LoreEntity } from "../../lib/lore";
 // The pure vocabulary function, not stores/projectStore's useTerms hook: this
 // module's helpers (findMention, filterMentions) are imported by node-side
@@ -276,7 +276,12 @@ export function MentionPicker({
                 ? item.entity.category
                 : item.file.kind === "image"
                   ? t("ai.mention.badgeImage", { defaultValue: "图片" })
-                  : terms.doc}
+                  // HTML files are read as text like any other, but calling one
+                  // 文档 in a list beside the chapters hides the one thing that
+                  // distinguishes it — it is the page, not prose about it.
+                  : isHtmlPath(item.file.path)
+                    ? "HTML"
+                    : terms.doc}
             </span>
           </button>
         );
