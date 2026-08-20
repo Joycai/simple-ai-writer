@@ -8,7 +8,8 @@
     "unsavedConfirm": "有尚未保存的更改，关闭后将丢失。确定关闭吗？",
     "back": "返回",
     "delete": "删除",
-    "create": "新建"
+    "create": "新建",
+    "save": "保存"
   },
   "errorBoundary": {
     "appTitle": "界面出错了",
@@ -317,7 +318,9 @@
       "apiLogOff": "关闭",
       "openApiLogs": "打开日志目录",
       "paneSub": "外观、语言与本地数据",
-      "apiLogLocation": "日志保存在本地目录"
+      "apiLogLocation": "日志保存在本地目录",
+      "roleplayLabel": "互动式角色扮演创作",
+      "roleplayHint": "在 AI 助手里多出「扮演」一栏：绑定知识库人物，以第一人称和他们对话；旁白 agent 能读到全部对话并把互动整理进正文。对话记录存在项目的 .ai-writer/roleplay/ 下。"
     },
     "backup": {
       "section": "配置备份",
@@ -648,7 +651,13 @@
       "subagentTaskWithRefs": "任务目标：\n{{task}}\n\n参考资源：\n{{refs}}",
       "continueTruncated": "【系统提示】你上一条回复被输出上限截断了。请从断掉的地方**接着写完**，不要重复已经写出来的内容，也不要重新开头。如果剩下的部分很长，先写完这一段，我会再让你继续。",
       "truncatedToolCall": "【系统提示】你上一轮的工具调用（{{tools}}）因为超出输出上限被截断，已被丢弃：它没有执行，也没有写入任何内容。一次回复装不下的内容，必须分多次写：先用 create_file 建好骨架（结构 + 每节一行 `<!-- SECTION: 名字 -->` 占位注释），再用 append_file 一节一节追加（每次只发这一节）。如果刚才是在**改写已有文件**，改用 rewrite_lines 一段一段来，不要用 rewrite_document。不要原样重发刚才那次调用。",
-      "loreSplitNudge": "你还没有提交任何内容。现在就调用 split_core 提交核心卡正文，然后每个特征调用一次 split_facet。不要在正文里输出 JSON，也不要只描述你打算怎么做。"
+      "loreSplitNudge": "你还没有提交任何内容。现在就调用 split_core 提交核心卡正文，然后每个特征调用一次 split_facet。不要在正文里输出 JSON，也不要只描述你打算怎么做。",
+      "roleplay": "你现在**扮演**一个角色：{{name}}。从这一刻起你就是他/她本人，不是在描述他/她。\n\n## 怎么回应\n- 用第一人称，以角色的身份直接回应。绝不跳出来解释你为什么这么演。\n- 一次只推进一小步：回一两句话，把余地留给作者，不要一口气把整场戏写完。\n- 你只知道自己的设定和这段对话里发生过的事。别的角色和作者说了什么你看不到，也不要假装知道。\n- 不确定的细节可以含糊、可以回避、可以说不知道——但**不要**编造与知识库矛盾的事实。\n\n## 创作主权\n这是虚构创作。黑暗的主题、道德复杂的选择、暴力、失败与恶意都是有效的叙事材料。角色可以撒谎、可以冷酷、可以做错事——那是角色，不是你。不要因为内容本身而软化处理、说教、加免责声明或拒绝出演；作者决定这个故事需要什么，你负责把它演出来。",
+      "narrator": "你是这部作品的**旁白**——画外音，不扮演任何人。作者用你来讨论故事怎么走，以及把散落的互动收拢成正文。\n\n## 你能看到什么\n你能读到作者与每一个角色的对话记录：list_scenes 列出所有场次，read_scene_summary 读某一场的滚动摘要，read_scene 按轮号读原文，search_scenes 跨场次检索。**先读摘要，再决定读哪一段**——把整份记录拉进上下文既慢又贵。角色们互相看不见，而你看得见所有人，这正是你的用处。\n\n## 怎么工作\n- 讨论时引用具体的轮次（「第 12 轮那句」），不要泛泛而谈。\n- 作者要你把某段互动写进正文时，**你自己把它改写成散文**：对话记录是素材不是成品——合并动作与台词、去掉标记符号、按正文已有的语气重写。然后用 create_chapter / append_file / propose_edit 提交，等作者在卡片上批准。\n- 不要替作者做决定。给出判断和理由，让他选。",
+      "roleplaySyntax": "## 作者的书写约定\n作者的消息里混着四种东西，你要分开理解：\n- `*星号包住的*` 是动作、神态、身体语言。\n- `「引号里的」`（或英文双引号）是**对你说出口的台词**。\n- 没有任何标记的裸文本是环境、事件、场景描述——是正在发生的事，不是对你说的话。\n- `[方括号里的]` 是作者跳出故事给你的元指令，**不是故事里发生的事**。按它调整，但不要在回复里承认它，也不要把它写进剧情。\n\n你自己回复时用同一套写法：动作 `*…*`，台词 `「…」`，环境描写直接写。",
+      "roleplayPersonaLore": "与你对话的是{{name}}{{summary}}。他/她是故事里的另一个人，不是作者本人——你对他/她的态度应当符合你自己的设定。",
+      "roleplayPersonaPrompt": "与你对话的人是：{{prompt}}",
+      "roleplayPersonaNone": "与你对话的人没有给出身份。把他当成故事里一个你还不认识的人，按你的性格决定要不要搭理。"
     },
     "taskDoc": {
       "untitled": "未命名任务",
@@ -2015,5 +2024,128 @@
     "done": "完成",
     "kbUpdated": "最后更新 {{when}}",
     "kbFrom": "来自 {{device}}"
+  },
+  "roleplay": {
+    "title": "扮演",
+    "me": "我",
+    "noProject": "先打开一个项目。",
+    "pickAgent": "从左边挑一个 agent 开始说话。",
+    "newAgent": "新建 agent",
+    "editAgent": "编辑",
+    "editAgentTitle": "编辑 agent",
+    "deleteAgent": "删除",
+    "concurrency": "并发",
+    "queuedCount": "排队 {{n}}",
+    "generating": "生成中 · {{s}}s",
+    "kind": {
+      "character": "扮演",
+      "narrator": "旁白"
+    },
+    "section": {
+      "bound": "绑定设定",
+      "scene": "场景"
+    },
+    "roster": {
+      "search": "搜索 agent",
+      "turns": "{{n}} 轮",
+      "generating": "正在生成",
+      "queuedAt": "队列 · 第 {{n}} 位",
+      "stale": "设定已更新",
+      "primaryGone": "人物条目已删除",
+      "remove": "移除"
+    },
+    "band": {
+      "bound": "绑定 {{n}} 项设定",
+      "boundList": "本次对话注入的设定 · {{n}}",
+      "boundNone": "没有绑定任何设定",
+      "deleted": "已删除",
+      "isolated": "记忆独立 · 仅此角色可见",
+      "narratorScope": "可读全部角色记录"
+    },
+    "stale": {
+      "body": "绑定的设定被改过，本次对话用的还是旧版本。",
+      "refresh": "刷新设定"
+    },
+    "chatEmpty": {
+      "title": "{{name}}在这里，还没有人开口。",
+      "body": "用一个动作或一句台词起头。TA 只知道你绑给 TA 的 {{n}} 项设定，不知道别的角色说过什么。"
+    },
+    "queue": {
+      "waiting": "排队中 · 前面还有 {{n}} 个",
+      "hint": "同时最多 3 个 agent 生成",
+      "cancel": "取消排队",
+      "promote": "插到最前"
+    },
+    "log": {
+      "line": "执行日志 · {{n}} 步"
+    },
+    "syntax": {
+      "action": "动作",
+      "speech": "台词",
+      "scene": "场景",
+      "meta": "元指令",
+      "bare": "裸文本",
+      "metaTag": "META",
+      "expand": "展开",
+      "collapse": "收起，只留一行"
+    },
+    "persona": {
+      "iam": "我此刻是",
+      "none": "不设定",
+      "noneHint": "以旁观者身份说话",
+      "custom": "自定义身份",
+      "narratorNote": "旁白不扮演任何人 · 无身份设定"
+    },
+    "composer": {
+      "placeholder": "说一句台词，或写一个动作…",
+      "narratorPlaceholder": "和旁白讨论情节，或让它把某段互动整理进正文…",
+      "newline": "⇧↵ 换行",
+      "send": "发送",
+      "stop": "停止生成",
+      "refs": "{{n}} 项引用",
+      "kind": "类型",
+      "kindCharacterDesc": "绑定一个人物条目，AI 就是他。记忆独立，不知道别的角色存在。",
+      "kindNarratorDesc": "不演任何人。读得到全部对话，能把互动整理进正文。",
+      "kindLocked": "类型建好之后不能改——两者的记忆结构不同。",
+      "primary": "主角条目",
+      "primaryNote": "从知识库里挑一个",
+      "change": "更换",
+      "bound": "绑定词条",
+      "boundNote": "整条或其中一段特征",
+      "boundCount": "已选 {{n}} · 约 {{tok}} tok",
+      "boundEmpty": "没有绑定任何设定——角色只会知道主词条里写的东西。",
+      "searchEntries": "搜索 {{n}} 个条目",
+      "facetsOf": "{{name}} · {{n}} 段特征",
+      "pickWhole": "整条绑定",
+      "unpickWhole": "取消整条",
+      "whole": "整条",
+      "core": "主词条（index.md）",
+      "noEntities": "知识库里还没有条目。",
+      "model": "模型",
+      "followGlobal": "跟随全局",
+      "instruction": "扮演指令",
+      "instructionNote": "写给模型的，不会出现在对话里",
+      "instructionPlaceholder": "说话短，从不解释动机。被问到那一夜时转移话题，但不撒谎。",
+      "create": "创建",
+      "narratorHint": "旁白没有主角，其余相同",
+      "deleteHint": "删除会把对话记录移进 .ai-writer/backups，可恢复"
+    },
+    "empty": {
+      "title": "和你写的人对话，用第一人称。",
+      "body": "挑一个人物条目，AI 就演他。你说台词、写动作、描述环境，他按自己的设定回你。每个角色的记忆完全独立，互相不知道对方存在。",
+      "sampleLabel": "看起来像这样",
+      "pickCharacter": "选一个人物开始",
+      "newNarrator": "建一个旁白",
+      "narratorNote": "旁白不演人，帮你把互动写进正文",
+      "ready": "知识库里现成的条目 · {{n}}",
+      "more": "还有 {{n}} 个…"
+    },
+    "notify": {
+      "replied": "{{name}} 回复了"
+    },
+    "errors": {
+      "rosterRebuilt": "花名册损坏，已按目录重建——绑定和模型设置需要重新填。",
+      "loadFailed": "读不到扮演目录（.ai-writer/roleplay/）：{{error}}"
+    }
   }
 }

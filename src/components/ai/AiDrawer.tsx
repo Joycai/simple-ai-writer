@@ -2,18 +2,21 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "motion/react";
 import { Bot, CheckCircle2, Sparkles, X } from "lucide-react";
-import { useAppStore } from "../../stores/appStore";
+import { useAppStore, type AiDrawerMode } from "../../stores/appStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { AgentChat } from "./AgentChat";
 import { ModelSelector } from "./ModelSelector";
 import { AiPanel } from "./AiPanel";
 import { ConsistencyCheck } from "./ConsistencyCheck";
+import { RoleplayPanel } from "../roleplay/RoleplayPanel";
+import { isRoleplayEnabled } from "../../lib/roleplay/flag";
+import { useRoleplayStore } from "../../stores/roleplayStore";
 import { TaskWorkspaceView } from "./TaskWorkspaceView";
 import { MOD_KEY } from "../../lib/platform";
 import { drawerSlide, overlayFade, overlayFadeTransition, springDrawer } from "../../lib/motion";
 import styles from "./AiDrawer.module.css";
 
-type Mode = "generate" | "chat" | "consistency";
+type Mode = AiDrawerMode;
 
 /** Global binding that opens each mode (see App.tsx). Shown in the header so the
  *  shortcut is discoverable from the surface it opens. */
@@ -21,6 +24,7 @@ const MODE_SHORTCUT: Record<Mode, string | null> = {
   generate: "J",
   chat: "L",
   consistency: null,
+  roleplay: null,
 };
 
 export function AiDrawer() {
@@ -57,8 +61,16 @@ export function AiDrawer() {
     return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
+  // 一个 Beta 开关，读一次就够：它只会在设置页被改，而改完抽屉会重挂。
+  const roleplayOn = isRoleplayEnabled();
+  const roleplayUnread = useRoleplayStore(
+    (s) => s.order.some((id) => s.unread[id]) || s.running.length > 0,
+  );
+
   const headerTitle =
-    aiDrawerMode === "consistency"
+    aiDrawerMode === "roleplay"
+      ? t("roleplay.title", { defaultValue: "扮演" })
+      : aiDrawerMode === "consistency"
       ? t("ai.drawer.consistencyTitle", { defaultValue: "一致性检查" })
       : aiDrawerMode === "chat"
         ? t("ai.chat.title")
@@ -194,6 +206,17 @@ export function AiDrawer() {
           >
             {t("ai.drawer.consistencyTitle", { defaultValue: "一致性检查" })}
           </button>
+          {/* 扮演永远是一个平级 tab，不折进「更多」——它是一种模式，不是一个
+              工具，而作者切进切出的频率最高（设计稿 08 屏 1i）。 */}
+          {roleplayOn && (
+            <button
+              className={`${styles.modeTab} ${aiDrawerMode === "roleplay" ? styles.modeTabActive : ""}`}
+              onClick={() => setMode("roleplay")}
+            >
+              {t("roleplay.title", { defaultValue: "扮演" })}
+              {roleplayUnread && aiDrawerMode !== "roleplay" && <span className={styles.modeTabDot} />}
+            </button>
+          )}
         </div>
 
         <div className={styles.body}>
@@ -203,6 +226,8 @@ export function AiDrawer() {
             <AiPanel />
           ) : aiDrawerMode === "chat" ? (
             <AgentChat />
+          ) : aiDrawerMode === "roleplay" ? (
+            <RoleplayPanel />
           ) : (
             <ConsistencyCheck />
           )}

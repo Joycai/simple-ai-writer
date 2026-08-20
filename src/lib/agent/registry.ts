@@ -36,6 +36,13 @@ import { LORE_PLAN_ACTIONS, type LorePlan, type PlanDecision, type PlanGate } fr
 import { editImageTool, generateImageTool } from "./imageTools";
 import { exportPptxTool } from "./pptxTools";
 import {
+  listScenesTool,
+  readSceneSummaryTool,
+  readSceneTool,
+  searchScenesTool,
+  type SceneReader,
+} from "../roleplay/sceneTools";
+import {
   copyFileTool,
   createChapterTool,
   createDirectoryTool,
@@ -357,6 +364,16 @@ export interface ToolContext {
    * avoiding reverse dependencies from lib/agent into stores.
    */
   resolveSubAgent?: (kind: DelegateKind) => Promise<AiConn | { error: string }>;
+  /**
+   * A narrator's window onto the other roleplay scenes. **Reaches only
+   * transcript.md / summary.md** — another agent's wire history has no path
+   * here, which is what makes the isolation structural rather than a promise
+   * in a prompt (docs/feature/roleplay/01-overview.md, invariant 3).
+   *
+   * Absent means this surface is not a narrator, and the scene tools say so
+   * rather than quietly returning nothing.
+   */
+  scenes?: SceneReader;
 }
 
 export interface RegisteredTool {
@@ -418,6 +435,10 @@ export type ToolId =
   | "write_note"
   | "read_note"
   | "list_notes"
+  | "list_scenes"
+  | "read_scene"
+  | "search_scenes"
+  | "read_scene_summary"
   | "delegate";
 
 function parseArgs<T>(raw: string): T {
@@ -1749,6 +1770,85 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: listNotesTool,
+  },
+
+  // ── Roleplay scenes (lib/roleplay/sceneTools) ──
+  // Narrator-only, and read-only by construction: they reach transcript.md and
+  // summary.md, never another agent's wire history. See the note on
+  // ToolContext.scenes.
+  list_scenes: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "list_scenes",
+        description:
+          "List the roleplay scenes in this project — one per character agent the author is playing with. Returns scene ids, the character's name, turn counts and a one-line gist. Call this first; every other scene tool takes an id from here. You are not in this list.",
+        parameters: { type: "object", properties: {} },
+      },
+    },
+    execute: (call, ctx) => listScenesTool(call.id, ctx),
+  },
+
+  read_scene: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "read_scene",
+        description:
+          "Read the verbatim transcript of one roleplay scene by turn range. Omit from/to to get the most recent turns. Prefer read_scene_summary first on a long scene, then read only the range that matters.",
+        parameters: {
+          type: "object",
+          properties: {
+            agent: { type: "string", description: "Scene id from list_scenes" },
+            from: { type: "integer", description: "First turn number (1-based, inclusive). Omit for the latest window." },
+            to: { type: "integer", description: "Last turn number (inclusive)." },
+          },
+          required: ["agent"],
+        },
+      },
+    },
+    execute: (call, ctx) => readSceneTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  search_scenes: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "search_scenes",
+        description:
+          "Full-text search across roleplay transcripts. Returns matching turn numbers with the matching line, so you can then read_scene the range around them. This is how you find something said long ago without reading everything.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Text to look for" },
+            agent: { type: "string", description: "Restrict to one scene. Omit to search all of them." },
+          },
+          required: ["query"],
+        },
+      },
+    },
+    execute: (call, ctx) => searchScenesTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  read_scene_summary: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "read_scene_summary",
+        description:
+          "Read a scene's rolling summary — the cheap way to catch up on a long scene before deciding which turns to read verbatim. Start here rather than pulling a whole transcript into context.",
+        parameters: {
+          type: "object",
+          properties: { agent: { type: "string", description: "Scene id from list_scenes" } },
+          required: ["agent"],
+        },
+      },
+    },
+    execute: (call, ctx) => readSceneSummaryTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   delegate: {

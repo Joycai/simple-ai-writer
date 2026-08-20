@@ -8,7 +8,8 @@
     "unsavedConfirm": "You have unsaved changes that will be lost. Close anyway?",
     "back": "Back",
     "delete": "Delete",
-    "create": "Create"
+    "create": "Create",
+    "save": "Save"
   },
   "errorBoundary": {
     "appTitle": "Something went wrong",
@@ -317,7 +318,9 @@
       "apiLogOff": "Off",
       "openApiLogs": "Open Log Folder",
       "paneSub": "Appearance, language and local data",
-      "apiLogLocation": "Logs are written to a local folder"
+      "apiLogLocation": "Logs are written to a local folder",
+      "roleplayLabel": "Interactive roleplay",
+      "roleplayHint": "Adds a Roleplay tab to the assistant: bind a character entry and talk to them in first person. A narrator agent reads every conversation and can work exchanges into the manuscript. Transcripts live in the project's .ai-writer/roleplay/."
     },
     "backup": {
       "section": "Config Backup",
@@ -648,7 +651,13 @@
       "subagentTaskWithRefs": "Task objective:\n{{task}}\n\nReferences:\n{{refs}}",
       "continueTruncated": "[SYSTEM] Your last reply was cut off by the output cap. Continue from exactly where it stopped — do not repeat what you already wrote and do not start over. If a lot is left, finish this stretch and you will be asked to continue again.",
       "truncatedToolCall": "[SYSTEM] Your tool call(s) last round ({{tools}}) ran past the output cap and were cut off, so they were DISCARDED: nothing ran and nothing was written. Anything too big for one reply must be written in pieces — create_file the skeleton first (structure plus one `<!-- SECTION: name -->` placeholder comment per section), then append_file one section per call. If you were REVISING an existing file, use rewrite_lines one region at a time instead of rewrite_document. Do not resend the same call unchanged.",
-      "loreSplitNudge": "You have not submitted anything yet. Call split_core now with the core card body, then split_facet once per facet. Do not print JSON in your reply, and do not just describe what you plan to do."
+      "loreSplitNudge": "You have not submitted anything yet. Call split_core now with the core card body, then split_facet once per facet. Do not print JSON in your reply, and do not just describe what you plan to do.",
+      "roleplay": "You are **playing** a character: {{name}}. From now on you ARE this person — you are not describing them.\n\n## How to respond\n- First person, in character, always. Never step out to explain your choices.\n- Move one small step at a time: one or two lines, leaving room for the author. Do not write the whole scene at once.\n- You know only your own setting and what happened in THIS conversation. You cannot see what other characters said and must not pretend to.\n- Uncertain details can be dodged, deflected or admitted as unknown — but never invent facts that contradict the knowledge base.\n\n## Creative sovereignty\nThis is fiction. Dark themes, morally complex choices, violence, failure and malice are valid narrative material. A character may lie, may be cruel, may be wrong — that is the character, not you. Do not soften, moralise, add disclaimers, or refuse on the basis of content: the author decides what the story needs.",
+      "narrator": "You are this work's **narrator** — a voice-over that plays no one. The author uses you to talk through where the story goes, and to gather scattered improvisation into finished prose.\n\n## What you can see\nYou can read the author's conversation with every character: list_scenes for the scenes, read_scene_summary for a scene's rolling summary, read_scene for verbatim turns, search_scenes to find something said long ago. **Read the summary first, then decide which turns to pull in** — dragging a whole transcript into context is slow and expensive. The characters cannot see each other; you can see all of them, and that is what you are for.\n\n## How to work\n- Cite specific turns when you discuss (\"that line in turn 12\"), never vaguely.\n- When the author asks you to put an exchange into the manuscript, **rewrite it into prose yourself**: a transcript is raw material, not a draft — merge action and dialogue, drop the markup, match the voice already in the manuscript. Then submit with create_chapter / append_file / propose_edit and wait for approval.\n- Do not decide for the author. Give a judgement and the reason, and let them choose.",
+      "roleplaySyntax": "## The author's notation\nFour different things are mixed into the author's messages — keep them apart:\n- `*wrapped in asterisks*` is action, expression, body language.\n- `「in corner brackets」` (or plain double quotes) is **spoken dialogue addressed to you**.\n- Unmarked bare text is environment, events, scene description — things happening, not words said to you.\n- `[in square brackets]` is the author stepping outside the story to direct you. It is **not** an event in the story. Adjust accordingly, but never acknowledge it in your reply and never write it into the scene.\n\nUse the same notation yourself: `*…*` for action, `「…」` for dialogue, bare text for description.",
+      "roleplayPersonaLore": "You are speaking with {{name}}{{summary}} — another person in the story, not the author. Treat them as your own setting says you would.",
+      "roleplayPersonaPrompt": "The person speaking with you: {{prompt}}",
+      "roleplayPersonaNone": "The person speaking has not given an identity. Treat them as someone in the story you do not yet know, and react as your character would."
     },
     "taskDoc": {
       "untitled": "Untitled task",
@@ -2020,5 +2029,128 @@
     "done": "Done",
     "kbUpdated": "updated {{when}}",
     "kbFrom": "from {{device}}"
+  },
+  "roleplay": {
+    "title": "Roleplay",
+    "me": "Me",
+    "noProject": "Open a project first.",
+    "pickAgent": "Pick an agent on the left to start talking.",
+    "newAgent": "New agent",
+    "editAgent": "Edit",
+    "editAgentTitle": "Edit agent",
+    "deleteAgent": "Delete",
+    "concurrency": "Running",
+    "queuedCount": "{{n}} queued",
+    "generating": "generating · {{s}}s",
+    "kind": {
+      "character": "Character",
+      "narrator": "Narrator"
+    },
+    "section": {
+      "bound": "Bound setting",
+      "scene": "Scene"
+    },
+    "roster": {
+      "search": "Search agents",
+      "turns": "{{n}} turns",
+      "generating": "generating",
+      "queuedAt": "queued · #{{n}}",
+      "stale": "setting updated",
+      "primaryGone": "character entry deleted",
+      "remove": "Remove"
+    },
+    "band": {
+      "bound": "{{n}} bound entries",
+      "boundList": "Injected into this conversation · {{n}}",
+      "boundNone": "Nothing bound",
+      "deleted": "deleted",
+      "isolated": "Private memory · this character only",
+      "narratorScope": "Reads every character's transcript"
+    },
+    "stale": {
+      "body": "A bound entry changed; this conversation is still using the old version.",
+      "refresh": "Refresh"
+    },
+    "chatEmpty": {
+      "title": "{{name}} is here. Nobody has spoken yet.",
+      "body": "Open with an action or a line. They know only the {{n}} entries you bound to them, and nothing any other character has said."
+    },
+    "queue": {
+      "waiting": "Queued · {{n}} ahead",
+      "hint": "At most 3 agents generate at once",
+      "cancel": "Leave queue",
+      "promote": "Move to front"
+    },
+    "log": {
+      "line": "Execution log · {{n}} steps"
+    },
+    "syntax": {
+      "action": "action",
+      "speech": "dialogue",
+      "scene": "scene",
+      "meta": "aside",
+      "bare": "bare text",
+      "metaTag": "META",
+      "expand": "Expand",
+      "collapse": "Collapse to one line"
+    },
+    "persona": {
+      "iam": "I am",
+      "none": "Nobody",
+      "noneHint": "speak as an observer",
+      "custom": "Custom identity",
+      "narratorNote": "The narrator plays no one · no identity needed"
+    },
+    "composer": {
+      "placeholder": "Say a line, or write an action…",
+      "narratorPlaceholder": "Talk through the plot, or have it work an exchange into the manuscript…",
+      "newline": "⇧↵ newline",
+      "send": "Send",
+      "stop": "Stop",
+      "refs": "{{n}} references",
+      "kind": "Type",
+      "kindCharacterDesc": "Bind one character entry and the AI becomes them. Private memory; unaware of the other characters.",
+      "kindNarratorDesc": "Plays no one. Reads every conversation and can work exchanges into the manuscript.",
+      "kindLocked": "Type is fixed after creation — the two have different memory structures.",
+      "primary": "Character entry",
+      "primaryNote": "pick one from the knowledge base",
+      "change": "Change",
+      "bound": "Bound entries",
+      "boundNote": "a whole entry or one of its facets",
+      "boundCount": "{{n}} selected · ~{{tok}} tok",
+      "boundEmpty": "Nothing bound — the character will know only what its own entry says.",
+      "searchEntries": "Search {{n}} entries",
+      "facetsOf": "{{name}} · {{n}} facets",
+      "pickWhole": "Bind whole entry",
+      "unpickWhole": "Unbind whole entry",
+      "whole": "whole entry",
+      "core": "Core card (index.md)",
+      "noEntities": "The knowledge base is empty.",
+      "model": "Model",
+      "followGlobal": "Follow global",
+      "instruction": "Direction",
+      "instructionNote": "written for the model; it never appears in the conversation",
+      "instructionPlaceholder": "Speaks in short sentences, never explains their motives. Deflects questions about that night, but does not lie.",
+      "create": "Create",
+      "narratorHint": "A narrator has no character entry; everything else is the same",
+      "deleteHint": "Deleting moves the transcript into .ai-writer/backups — recoverable"
+    },
+    "empty": {
+      "title": "Talk to the people you wrote, in first person.",
+      "body": "Pick a character entry and the AI plays them. You speak, act, describe the room; they answer from their own setting. Each character's memory is completely separate — they do not know the others exist.",
+      "sampleLabel": "It looks like this",
+      "pickCharacter": "Pick a character",
+      "newNarrator": "Add a narrator",
+      "narratorNote": "The narrator plays no one — it writes your improvisation into the manuscript",
+      "ready": "Ready in your knowledge base · {{n}}",
+      "more": "{{n}} more…"
+    },
+    "notify": {
+      "replied": "{{name}} replied"
+    },
+    "errors": {
+      "rosterRebuilt": "The roster was corrupt and has been rebuilt from the directories — bindings and model choices need to be filled in again.",
+      "loadFailed": "Could not read the roleplay directory (.ai-writer/roleplay/): {{error}}"
+    }
   }
 }

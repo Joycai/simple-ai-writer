@@ -6,6 +6,7 @@ import { useAppStore, type ThemeMode, type Language, type FontScheme } from "../
 import { MARKDOWN_THEMES } from "../../../lib/theme/markdownThemes";
 import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../../lib/ai/apiLog";
 import { isPptxExportEnabled, setPptxExportEnabled } from "../../../lib/pptx/flag";
+import { isRoleplayEnabled, setRoleplayEnabled } from "../../../lib/roleplay/flag";
 import {
   isNotifyEnabled, isNotifyKindEnabled, requestNotifyPermission,
   sendTestNotification, setNotifyEnabled, setNotifyKindEnabled,
@@ -46,6 +47,7 @@ export function GeneralPane() {
   const [notifyDone, setNotifyDoneOn] = useState(isNotifyKindEnabled("done"));
   const [notifyStatus, setNotifyStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [pptxOn, setPptxOn] = useState(isPptxExportEnabled());
+  const [roleplayOn, setRoleplayOn] = useState(isRoleplayEnabled());
   const providers = useAiStore((s) => s.providers);
   const loadConfig = useAiStore((s) => s.loadConfig);
   const [includeKeys, setIncludeKeys] = useState(false);
@@ -55,6 +57,11 @@ export function GeneralPane() {
   const togglePptx = (enabled: boolean) => {
     setPptxExportEnabled(enabled);
     setPptxOn(enabled);
+  };
+
+  const toggleRoleplay = (enabled: boolean) => {
+    setRoleplayEnabled(enabled);
+    setRoleplayOn(enabled);
   };
 
   const toggleNotify = (enabled: boolean) => {
@@ -256,9 +263,21 @@ export function GeneralPane() {
         <Row
           title={t("systemSettings.general.pptxLabel")}
           desc={t("systemSettings.general.pptxHint")}
-          last
         >
           <Toggle on={pptxOn} onChange={togglePptx} label={t("systemSettings.general.pptxLabel")} />
+        </Row>
+        <Row
+          title={t("systemSettings.general.roleplayLabel", { defaultValue: "互动式角色扮演创作" })}
+          desc={t("systemSettings.general.roleplayHint", {
+            defaultValue: "在 AI 助手里多出「扮演」一栏：绑定知识库人物，以第一人称和他们对话；旁白 agent 能读到全部对话并把互动整理进正文。对话记录存在项目的 .ai-writer/roleplay/ 下。",
+          })}
+          last
+        >
+          <Toggle
+            on={roleplayOn}
+            onChange={toggleRoleplay}
+            label={t("systemSettings.general.roleplayLabel", { defaultValue: "互动式角色扮演创作" })}
+          />
         </Row>
       </Section>
 
