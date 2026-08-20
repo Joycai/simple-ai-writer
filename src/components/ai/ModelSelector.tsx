@@ -67,6 +67,22 @@ export interface ModelSelectorProps {
   openUp?: boolean;
   /** Paper-surface trigger: bordered chip on --color-card, wider min-width. */
   paper?: boolean;
+  /**
+   * Small label inside the trigger, before the dot — for pickers that sit next
+   * to another one and would otherwise be indistinguishable from it. The
+   * roleplay band needs this: its picker rebinds **that agent**, permanently,
+   * while the identical-looking one in the drawer header sets the app-wide
+   * default. Two controls, same shape, different reach.
+   */
+  prefix?: string;
+  /**
+   * Marks this picker as "may fall back to the global model", and supplies the
+   * way back. With it, an empty `value` no longer renders as 「选择模型」 —
+   * it renders the **global** model plus a 跟随全局 badge, because that is what
+   * an unset binding actually runs. The menu grows a 跟随全局设置 action so the
+   * binding is undoable from where it was made.
+   */
+  onFollowGlobal?: () => void;
 }
 
 export function ModelSelector({
@@ -76,6 +92,8 @@ export function ModelSelector({
   disabled,
   openUp,
   paper,
+  prefix,
+  onFollowGlobal,
 }: ModelSelectorProps = {}) {
   const { t } = useTranslation();
   const { models: allModels, providers, activeModelId, setActiveModel } = useAiStore();
@@ -86,7 +104,12 @@ export function ModelSelector({
   // ⌘M, the "open the picker" nonce, 管理供应商 — stay with the header instance).
   const controlled = onChange !== undefined;
   const models = modelsOverride ?? allModels;
-  const selectedId = controlled ? (value ?? "") : activeModelId;
+  /**
+   * 没绑模型、但这个 picker 会回落到全局 —— 那就照实显示全局的那一个。
+   * 空态（「选择模型」+ 灰点）在这里是**假话**：跑起来用的正是全局模型。
+   */
+  const following = controlled && onFollowGlobal !== undefined && !value;
+  const selectedId = following ? activeModelId : (controlled ? (value ?? "") : activeModelId);
 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -242,6 +265,7 @@ export function ModelSelector({
         aria-expanded={open}
         title={activeModel ? `${activeProvider?.name ?? ""} / ${activeModel.name}` : undefined}
       >
+        {prefix && <span className={styles.triggerPrefix}>{prefix}</span>}
         <span className={`${styles.dot} ${activeModel ? styles.dotOn : ""}`} />
         {activeModel ? (
           <>
@@ -249,6 +273,11 @@ export function ModelSelector({
             <span className={styles.triggerSep}>/</span>
             <span className={styles.triggerModel}>{triggerLabel?.title}</span>
             {triggerContext && <span className={styles.ctxBadge}>{triggerContext}</span>}
+            {following && (
+              <span className={styles.followBadge}>
+                {t("ai.modelPicker.following", { defaultValue: "跟随全局" })}
+              </span>
+            )}
           </>
         ) : (
           <span className={styles.triggerEmpty}>{t("ai.panel.selectModel")}</span>
@@ -377,7 +406,15 @@ export function ModelSelector({
             </span>
             {/* Settings is a full-window surface — from inside a modal the jump
                 would land underneath it, so only the header instance offers it. */}
-            {controlled ? (
+            {onFollowGlobal ? (
+              <button
+                className={styles.manageBtn}
+                disabled={following}
+                onClick={() => { setOpen(false); onFollowGlobal(); }}
+              >
+                {t("ai.modelPicker.followGlobal", { defaultValue: "跟随全局设置" })}
+              </button>
+            ) : controlled ? (
               <span className={`${styles.hint} ${styles.followNote}`}>
                 {t("lore.run.modelFollowsGlobal", { defaultValue: "默认跟随全局设置" })}
               </span>

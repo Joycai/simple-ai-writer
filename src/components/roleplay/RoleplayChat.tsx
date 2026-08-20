@@ -318,10 +318,15 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           <ChevronDown size={9} strokeWidth={2.4} />
         </button>
         <span className={styles.sep} />
+        {/* 「本角色」不是装饰：抽屉头部那个 picker 长得一模一样，改的却是全局
+            默认值，而这一个是**永久重绑这个 agent**。两个控件同形不同义，标签
+            是唯一能当场分清它们的东西。 */}
         <div className={styles.modelSlot}>
           <ModelSelector
+            prefix={t("roleplay.band.modelScope", { defaultValue: "本角色" })}
             value={agent.modelId ?? undefined}
             onChange={(id) => void setAgentModel(agent.id, id)}
+            onFollowGlobal={() => void setAgentModel(agent.id, null)}
           />
         </div>
         <button
