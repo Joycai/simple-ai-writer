@@ -167,7 +167,13 @@
 
 .summary {
   flex: none;
-  padding: 14px 26px 12px;
+  /* Flex only so the bulk buttons can sit at the far end; the counts are
+     separate spans that already carry their own separators, so a zero gap
+     keeps them reading as one sentence. */
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 11px 26px 10px;
   font: 400 12.5px/1 var(--font-sans);
   color: var(--sync-body);
 }
@@ -214,7 +220,10 @@
 .list { flex: 1; min-height: 0; overflow-y: auto; margin: 0 26px; }
 .grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 60px 178px 24px 178px;
+  /* …name · action · local hash · arrow · remote hash · this-run toggle. The
+     toggle is the last column rather than the first because the row reads as a
+     sentence: what happens to what, and only then whether you want it. */
+  grid-template-columns: minmax(0, 1fr) 60px 156px 24px 156px 72px;
   gap: 10px;
   align-items: center;
 }
@@ -231,6 +240,7 @@
   z-index: 1;
 }
 .thTarget { color: var(--stg-accent); }
+.thDecide { text-align: right; }
 
 .groupHead {
   display: flex;
@@ -264,6 +274,16 @@
   border-top: 1px solid var(--sync-risk-line);
 }
 
+/* A skipped row stays legible but stops competing: it describes something that
+   is NOT going to happen, so it is the one row state that recedes. It keeps its
+   warning text — that is the reason the author skipped it — and only the alarm
+   colouring is dropped, back in the component.
+   Every cell dims EXCEPT the toggle: `opacity` on the row itself would take the
+   control that undoes the skip down with it, and the way back is the one thing
+   a skipped row has to keep. */
+.rowSkipped > *:not(.decide) { opacity: 0.5; }
+.rowSkipped .badge { text-decoration: line-through; }
+
 .entry { font: 500 13.5px/1.4 var(--font-serif-settings, var(--font-serif)); }
 .entryCat { color: var(--stg-text-desc); }
 .warn {
@@ -281,6 +301,47 @@
 .badgeCreate { border: 1px solid var(--stg-border-menu); color: var(--stg-text-warm); }
 .badgeOverwrite { background: var(--sync-badge-ow-bg); color: var(--sync-badge-ow-fg); }
 .badgeDelete { background: var(--sync-badge-del-bg); color: var(--sync-badge-del-fg); }
+.badgeSkipped { border: 1px solid var(--stg-border-mid); color: var(--stg-text-faint); }
+
+/* ── Per-entry decision ────────────────────────────────────────────────────
+   The off switch every actionable row carries. Quiet while the step is going
+   to run (the default needs no advertising) and accent-tinted once it is off,
+   because "this one is excluded" is a state the author must be able to spot
+   while scrolling past two hundred rows. */
+.decide {
+  justify-self: end;
+  cursor: pointer;
+  font: 500 11.5px/1 var(--font-sans);
+  padding: 5px 9px;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--stg-text-desc);
+  transition: color var(--transition-fast), border-color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+.decide:hover { color: var(--stg-accent); border-color: var(--stg-border-mid); }
+.decide:active { transform: scale(0.96); }
+.decide:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--stg-focus-ring); }
+.decideOff {
+  background: var(--sync-chip-on-bg);
+  color: var(--sync-chip-on-fg);
+  border-color: var(--sync-chip-on-border);
+}
+
+.bulk { display: flex; gap: 6px; }
+.bulkBtn {
+  cursor: pointer;
+  font: 500 11.5px/1 var(--font-sans);
+  padding: 6px 10px;
+  background: none;
+  border: 1px solid var(--stg-border-mid);
+  color: var(--stg-text-warm);
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.bulkBtn:hover:not(:disabled) { color: var(--stg-accent); border-color: var(--sync-chip-on-border); }
+.bulkBtn:active:not(:disabled) { transform: scale(0.96); }
+.bulkBtn:disabled { color: var(--stg-text-placeholder); border-color: var(--stg-line-row); cursor: default; }
+.bulkBtn:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--stg-focus-ring); }
 
 .hash { font: 500 12px var(--font-mono); color: var(--sync-body); }
 .hashWhen { margin-top: 2px; font: 400 10.5px var(--font-mono); color: var(--stg-text-placeholder); }

@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { planSync, actionableSteps, hasWarnings } from "../sync/plan";
+import {
+  planSync,
+  actionableSteps,
+  decidableSteps,
+  hasWarnings,
+  withDecisions,
+} from "../sync/plan";
 import type { HashMap, SyncDirection, SyncStep } from "../sync/model";
 
 const A = "a".repeat(64);
@@ -158,7 +164,14 @@ describe("planSync — shape of the result", () => {
       { "a/overwrite": A, "a/same": A, "a/delete": A },
       { "a/overwrite": A, "a/same": A, "a/delete": B },
     );
-    expect(p.summary).toEqual({ create: 1, overwrite: 1, delete: 1, unchanged: 1, warnings: 1 });
+    expect(p.summary).toEqual({
+      create: 1,
+      overwrite: 1,
+      delete: 1,
+      unchanged: 1,
+      warnings: 1,
+      skipped: 0,
+    });
     expect(hasWarnings(p)).toBe(true);
     expect(actionableSteps(p).map((s) => s.path)).toEqual(["a/create", "a/delete", "a/overwrite"]);
   });
@@ -173,6 +186,82 @@ describe("planSync — shape of the result", () => {
   it("handles two empty sides", () => {
     const p = plan("push", {}, {}, {});
     expect(p.steps).toEqual([]);
-    expect(p.summary).toEqual({ create: 0, overwrite: 0, delete: 0, unchanged: 0, warnings: 0 });
+    expect(p.summary).toEqual({
+      create: 0,
+      overwrite: 0,
+      delete: 0,
+      unchanged: 0,
+      warnings: 0,
+      skipped: 0,
+    });
+  });
+});
+
+describe("withDecisions — the per-entry opt-out", () => {
+  // One plan reused across the cases below: a create, an overwrite the author
+  // would lose work to, and a remote-only entry the mirror wants deleted.
+  const base = () =>
+    plan(
+      "push",
+      { "a/new": A, "a/edit": B },
+      { "a/edit": C, "a/theirs": A },
+      { "a/edit": A },
+    );
+
+  it("plans everything as apply", () => {
+    expect(base().steps.every((s) => s.decision === "apply")).toBe(true);
+    expect(base().summary.skipped).toBe(0);
+  });
+
+  it("takes a skipped step out of the run without dropping it from the plan", () => {
+    const p = withDecisions(base(), ["a/theirs"], "skip");
+    expect(at(p.steps, "a/theirs")).toMatchObject({ action: "delete", decision: "skip" });
+    expect(actionableSteps(p).map((s) => s.path)).toEqual(["a/edit", "a/new"]);
+    // Still listed, so the preview can show it dimmed and offer it back.
+    expect(decidableSteps(p)).toHaveLength(3);
+  });
+
+  it("recounts the summary so the footer describes the run, not the mirror", () => {
+    const p = withDecisions(base(), ["a/theirs", "a/new"], "skip");
+    expect(p.summary).toEqual({
+      create: 0,
+      overwrite: 1,
+      delete: 0,
+      unchanged: 0,
+      warnings: 1,
+      skipped: 2,
+    });
+  });
+
+  it("stops counting a skipped step as a warning", () => {
+    // The whole point of the acknowledgement gate is that it describes what is
+    // about to be lost. A conflict that no longer runs costs nothing, so it
+    // stops being something to accept.
+    expect(base().summary.warnings).toBe(2); // the conflict and the delete
+    expect(withDecisions(base(), ["a/edit"], "skip").summary.warnings).toBe(1);
+    const none = withDecisions(base(), ["a/edit", "a/theirs"], "skip");
+    expect(none.summary.warnings).toBe(0);
+    expect(hasWarnings(none)).toBe(false);
+  });
+
+  it("restores a skipped step", () => {
+    const p = withDecisions(withDecisions(base(), ["a/edit"], "skip"), ["a/edit"], "apply");
+    expect(at(p.steps, "a/edit").decision).toBe("apply");
+    expect(p.summary).toMatchObject({ overwrite: 1, warnings: 2, skipped: 0 });
+  });
+
+  it("ignores unchanged entries and unknown paths", () => {
+    const p0 = plan("push", { "a/same": A }, { "a/same": A }, { "a/same": A });
+    const p = withDecisions(p0, ["a/same", "a/nonexistent"], "skip");
+    expect(at(p.steps, "a/same").decision).toBe("apply");
+    expect(p.summary.skipped).toBe(0);
+    expect(decidableSteps(p)).toEqual([]);
+  });
+
+  it("leaves the original plan untouched", () => {
+    const original = base();
+    withDecisions(original, ["a/theirs"], "skip");
+    expect(at(original.steps, "a/theirs").decision).toBe("apply");
+    expect(original.summary.skipped).toBe(0);
   });
 });
