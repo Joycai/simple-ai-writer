@@ -590,9 +590,9 @@ impl Store {
         let mut hasher = Sha256::new();
         for e in &entries {
             hasher.update(e.path.as_bytes());
-            hasher.update([0]);
+            hasher.update(*b"\0");
             hasher.update(e.hash.as_bytes());
-            hasher.update([b'\n']);
+            hasher.update(*b"\n");
         }
         Ok(Manifest {
             kb: meta,
@@ -804,6 +804,17 @@ mod tests {
         let m = s.manifest(&kb.id).unwrap();
         let paths: Vec<_> = m.entries.iter().map(|e| e.path.as_str()).collect();
         assert_eq!(paths, vec!["characters/alice", "world/north"]);
+
+        // Pinned, not merely self-consistent: `digest` is a protocol value a
+        // client compares across versions of this server, so the bytes fed to
+        // the hasher (path, NUL, hash, LF — in sorted order) are a wire format.
+        // Computed independently:
+        //   for p, h in entries: sha256.update(p + b"\0" + h + b"\n")
+        assert_eq!(
+            m.digest,
+            "781441779d45e95af072ad80b7b80c7169d166bbc2a3df5a69333b143e665bb4"
+        );
+
         let before = m.digest.clone();
 
         // Same content re-uploaded: the digest must not move, or every client

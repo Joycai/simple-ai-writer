@@ -20,6 +20,11 @@ Notes:
 - Frontend tests run with Vitest (`src/**/*.test.ts`, config in `vitest.config.ts`) — currently smoke tests for RAG context assembly and OpenAI/Gemini SSE parsing.
 - Rust unit tests live inline in `src-tauri/src/secrets.rs` and `protocol.rs`; the sync server's live inline in `server/src/ids.rs` and `store.rs`.
 - `clippy` is enforced with `-D warnings`: any new warning fails CI.
+- Both Rust jobs install `dtolnay/rust-toolchain@stable`, i.e. **whatever stable is on the
+  day the job runs** — which is often newer than the toolchain on your machine. Clippy gains
+  lints between releases, so a local `cargo clippy` can be clean while CI fails on a lint that
+  did not exist locally (this has happened: `byte_char_slices`). Run `rustup update stable`
+  before trusting a local clippy run as a CI prediction.
 
 ### Why the Rust and server jobs are conditional
 
