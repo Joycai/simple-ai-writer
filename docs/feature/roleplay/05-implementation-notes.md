@@ -134,6 +134,31 @@ agent 通常是个位数个，而比对只在知识库重扫之后跑一次。�
 transcript 只追加不改写。作者主动「停止」也没有这个入口：它不进错误带，而给中止
 的那一轮补一个重试口子需要另一处界面，留给下一轮。
 
+## 2.9 镜像层要跟着 textarea 滚（第五轮补的）
+
+输入框超过可见行数（3 行）之后排版就乱了：带色的字停在原地，光标和真正的文本
+各走各的。
+
+两个原因叠在一起：
+
+1. **`mirrorRef` 挂错了元素。** 它挂在外面那层没有样式的 wrapper 上，而会滚动的
+   是 `.mirror` 自己（`position: absolute; inset: 0; overflow: hidden`）。wrapper
+   的高度是 0、`overflow: visible`，给它设 `scrollTop` **静默无效**——浏览器不会
+   报错，只是什么也不做。
+2. **组字期间镜像层是卸载的。** 它让位给原生文本（否则作者对着一片透明打字），
+   组完字重新挂上来时 `scrollTop` 归零，而这中间 textarea 早滚下去了。**中文
+   输入法下每打一个词都会撞上这条**，所以只挂 `onScroll` 不够。
+
+改法：ref 移到 `.mirror` 本身（`ComposerMirror` 收一个 `innerRef`），滚动同步抽成
+`syncMirror()`，`onScroll` 和 `useLayoutEffect([draft, composing])` 各调一次。
+
+实测两层度量完全一致（`clientHeight` 86 / `scrollHeight` 173 两边相同），且
+`overflow: hidden` 的元素**可以**用 `scrollTop` 程序化滚动——这是这套方案成立的
+前提，值得记一笔。
+
+> 教训：**盖一层镜像做实时着色，就要把 textarea 的每一种位移都照抄过去**——滚动
+> 是一种，卸载重挂是另一种。度量对齐只保证静止时对得上。
+
 ## 3. 与设计稿的差异（明确没做的部分）
 
 | 设计稿里的东西 | 为什么没做 |
