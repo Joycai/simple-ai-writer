@@ -456,6 +456,18 @@ Story Memory is *per-document*, so a chapter is its own file and knows nothing o
 - **Boundaries** — a blocking overlay (settings, palette, onboarding) suspends both directions; opening another project clears the history, since another project's files aren't places in this one. Depth caps at 100.
 - **Prerequisite** — the wall's open lore entry lives in `loreStore.detailPath` (not LoreWall local state) precisely so history can read and restore it; an unresolvable path just renders the grid, which also covers "entry deleted since you visited it".
 
+### 系统通知 (OS notifications)
+
+- **Location** — `src/lib/notify.ts` (switches + gating), `tauri-plugin-notification` on the Rust side, Settings → 通用 → 系统通知.
+- **What is announced** — only the two moments the author is likely to have switched windows: *the run stopped and is waiting for you* (an edit/rewrite/append/illustrate/pptx approval card, a lore write plan, the round-limit card, the truncation card) and *the run ended* (a chat turn, an AI-panel task, a batch run). Everything else stays in-app.
+- **Four gates, in order** — the master switch (`app:notifyEnabled`, **default off**); the per-kind switch (`app:notifyApproval` / `app:notifyDone`, default on); **window focus** — a notification for something already on screen is noise, so a focused window is silence; and a per-kind coalescing window (approvals 8s, completions none) so a run that proposes six edits summons the author once. `isFocused()` failing counts as *focused*: a notification framework's failure mode should be quiet, not chatty.
+- **Why the master switch defaults to off** — the first notification is what registers the app with the OS's notification centre. Flipping the switch is the moment the author asked for that, which is also where `requestPermission()` is called from.
+- **What a notification never carries** — the model's text or the document's. These land on lock screens and stay in notification history; content belongs in the app's own panels. Bodies name the surface and the outcome (and, for an edit, the file's basename).
+- **One job, one ping** — `batchStore` drives `aiTaskStore.runTask` once per clause, so it holds `muteRunFinished()` for the whole loop and sends a single summary at the end. The mute is a counter (nesting-safe) and covers `done` only: a batch that stops for an approval still has to summon the author. It is checked on the *first* line of `notify()`, synchronously, because the last clause's completion and the loop's exit are one microtask apart.
+- **Permission is a mobile concept here** — the desktop plugin answers `Granted` to both `isPermissionGranted` and `requestPermission` unconditionally. The real authorization is the OS's: macOS registers the app under 系统设置 → 通知 the first time a **bundled** build posts one, and Windows needs the app **installed** (an AppUserModelID is only set outside `target/`). That is why the settings pane carries a 发送测试通知 button — on a desktop where the API cannot tell you anything, actually sending one is the only honest check.
+- **Dev mode wears someone else's face** — under `tauri dev` the plugin deliberately posts as `com.apple.Terminal` on macOS and with no app id on Windows, so a dev-mode notification shows the terminal's / PowerShell's name and icon. Expected, not a misconfiguration.
+- **Permissions** — `notification:allow-is-permission-granted` / `allow-request-permission` / `allow-notify` in `capabilities/default.json`, rather than `notification:default` (the scheduling, channel and listener commands are unused). Focus reading needs nothing new: `core:window:default` already includes `allow-is-focused`.
+
 ### Export
 
 - **Location** — `src/lib/fs/export.ts`

@@ -103,6 +103,7 @@ import { loadApiKey } from "../lib/keyStore";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
 import { costFor } from "../lib/ai/configDb";
 import { connOptions, resolveConn } from "../lib/ai/conn";
+import { notify } from "../lib/notify";
 
 /**
  * Identifies which run created a queued approval — in practice each run's own
@@ -600,6 +601,23 @@ async function settleApproval(
   }
 }
 
+/**
+ * The OS ping for "the run has stopped and is waiting for you". Every queueing
+ * point calls this right after the card lands in state, never before: a card
+ * that turned out to be covered by a standing grant is not a wait.
+ *
+ * `notify` decides whether anything is actually sent (switch off / window
+ * focused / another approval already announced seconds ago) — see lib/notify.
+ */
+function notifyApproval(bodyKey: string, params?: Record<string, string>): void {
+  notify("approval", i18n.t("notify.approvalTitle"), i18n.t(bodyKey, params ?? {}));
+}
+
+/** Basename, for a notification that must fit on one line. */
+function fileLabel(path: string): string {
+  return path.split(/[\\/]/).pop() || path;
+}
+
 export const useAgentStore = create<AgentState>((set, get) => ({
   pending: [],
   pendingPlans: [],
@@ -676,6 +694,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         return;
       }
       set((s) => ({ pending: [...s.pending, item] }));
+      // Deliberately kind-neutral: a notification is a summons, and the card
+      // itself is where "改动 / 删除 / 导出" is spelled out.
+      notifyApproval("notify.approvalWork", { file: fileLabel(proposal.path) });
     }),
 
   approve: async (id) => {
@@ -701,6 +722,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           { id, roundsUsed, extension, canPause, resolve, runId },
         ],
       }));
+      notifyApproval("notify.approvalRound");
     }),
   requestTruncationDecision: (recoveries, runId) =>
     new Promise<TruncationDecision>((resolve) => {
@@ -708,6 +730,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       set((s) => ({
         pendingTruncations: [...s.pendingTruncations, { id, recoveries, resolve, runId }],
       }));
+      notifyApproval("notify.approvalTruncation");
     }),
   resolveTruncation: (runId, decision) => {
     const item = get().pendingTruncations.find((p) => p.runId === runId);
@@ -764,6 +787,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         return;
       }
       set((s) => ({ pendingPlans: [...s.pendingPlans, { plan, resolve, runId, autoApproveKey }] }));
+      notifyApproval("notify.approvalPlan");
     }),
 
   approvePlan: (id) => {
@@ -1255,6 +1279,16 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       get().rejectAll("task ended", controller);
       if (get().chatAbort === controller) {
         set({ chatRunning: false, chatAbort: null });
+        // Only on this guard: a turn the author stopped, or one already
+        // superseded by a newer turn, has no news worth an OS notification.
+        const failure = get().chatError;
+        notify(
+          "done",
+          i18n.t(failure ? "notify.failedTitle" : "notify.doneTitle"),
+          failure
+            ? i18n.t("notify.chatFailed", { error: failure })
+            : i18n.t("notify.chatDone"),
+        );
       }
       // Save after every turn, success or failure — the crash that loses a
       // session never announces itself first.
