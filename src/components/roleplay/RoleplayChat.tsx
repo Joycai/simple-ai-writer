@@ -21,6 +21,11 @@ import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { ModelSelector } from "../ai/ModelSelector";
 import { AgentLog } from "../ai/AgentLog";
+import { ApprovalCard } from "../ai/ApprovalCard";
+import { RoundLimitCard } from "../ai/RoundLimitCard";
+import { TruncationCard } from "../ai/TruncationCard";
+import { useAgentStore } from "../../stores/agentStore";
+import { cardsForSurface } from "../../lib/agent/approvalRouting";
 import { ScriptText } from "./ScriptText";
 import {
   MentionPicker, filterMentions, mentionKey, mentionLabel,
@@ -105,6 +110,13 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const taRef = useRef<HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // 被这个 agent 阻塞住的卡片。按 surface 取，而不是把 agentStore 的队列整个
+  // 渲染出来——三个 agent 并发时，不区分就等于每个面板都显示别人的卡片，而
+  // 旁白的那张会跑到「对话助手」tab 里去（lib/agent/approvalRouting）。
+  const approvals = cardsForSurface(useAgentStore((s) => s.pending), agent.id);
+  const roundLimits = cardsForSurface(useAgentStore((s) => s.pendingRoundLimits), agent.id);
+  const truncations = cardsForSurface(useAgentStore((s) => s.pendingTruncations), agent.id);
 
   const loreIndex = useLoreStore((s) => s.index);
   const fileTree = useProjectStore((s) => s.fileTree);
@@ -365,6 +377,16 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           {session?.error && <div className={styles.errorBar}>{session.error}</div>}
         </div>
       </div>
+
+      {/* 阻塞中的卡片：紧挨着输入框，因为它们是「现在轮到你」的东西。
+          旁白改稿的确认卡就落在这里——没有它，旁白最重要的那条能力走不通。 */}
+      {(approvals.length > 0 || roundLimits.length > 0 || truncations.length > 0) && (
+        <div className={styles.approvals}>
+          {approvals.map((p) => <ApprovalCard key={p.proposal.id} item={p} />)}
+          {roundLimits.map((p) => <RoundLimitCard key={p.id} item={p} />)}
+          {truncations.map((p) => <TruncationCard key={p.id} item={p} />)}
+        </div>
+      )}
 
       {/* ── 输入区 ── */}
       <div className={styles.composer}>

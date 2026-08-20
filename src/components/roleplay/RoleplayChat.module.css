@@ -330,6 +330,21 @@
   color: var(--color-text-soft);
 }
 
+/* 阻塞中的卡片：紧贴输入框上方，和稿面同宽居中——它们讲的是稿子里的一段话，
+   不该比那段话更宽。 */
+.approvals {
+  flex-shrink: 0;
+  width: 640px;
+  max-width: calc(100% - 52px);
+  margin: 0 auto;
+  padding-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
 /* ── 输入区 ── */
 .composer {
   flex-shrink: 0;

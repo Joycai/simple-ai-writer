@@ -333,12 +333,38 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
             return useAgentStore.getState().requestApproval(p, controller, {
               signal: controller.signal,
               autoApproveKey: controller,
+              // 卡片归本 agent 的对话区渲染，不归对话助手——三个并发的 agent
+              // 各看各的（lib/agent/approvalRouting）。
+              surface: agent.id,
             });
           },
           resolveSubAgent: (k) =>
             resolveSubAgentConn(k, models, providers, effectiveSubs, loadApiKey),
         },
         signal: controller.signal,
+        // 只有旁白接这两个回调。
+        //
+        // 扮演 agent 的 `maxRounds: 4` 是刻意的小：它的期望响应是一句台词，
+        // 撞到上限说明模型在做错的事，force-text 收尾正是想要的降级——弹一张
+        // 「要不要再给四轮」的卡片，只会训练作者为一个本就不该需要轮数的模式
+        // 一再放行，顺带把一场戏切断。
+        //
+        // 旁白不同：它 `maxRounds: 20`，读几场戏再改写成正文完全可能撞上，而
+        // 撞上就直接收尾等于半途而废。存盘暂停不给（`canPause: false`）——扮演
+        // 这边没有恢复已暂停任务的入口，给了就是一个存进去再也拿不出来的按钮。
+        ...(agent.kind === "narrator" ? {
+          onRoundLimit: async (roundsUsed: number) => {
+            const { useAgentStore } = await import("./agentStore");
+            return useAgentStore.getState().requestRoundExtension(
+              roundsUsed, preset.maxRounds, controller, false, agent.id,
+            );
+          },
+          onTruncationLimit: async (recoveries: number) => {
+            const { useAgentStore } = await import("./agentStore");
+            return useAgentStore.getState()
+              .requestTruncationDecision(recoveries, controller, agent.id);
+          },
+        } : {}),
         onEvent: (event) =>
           patchSession(job.agentId, (s) => ({ ...s, liveLog: appendAgentEventTo(s.liveLog, event) })),
         onOutputText: (text) => patchSession(job.agentId, (s) => ({ ...s, streaming: text })),
@@ -643,7 +669,16 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     },
 
     stop: (agentId) => {
-      get().aborts[agentId]?.abort();
+      const controller = get().aborts[agentId];
+      controller?.abort();
+      // 中止信号解不开一张正阻塞着的卡片：`onRoundLimit` 等的是一个 Promise，
+      // 而 abort 不会让它 reject。所以这里要像 stopChat 一样主动排空本次运行
+      // 的队列，否则「停止」按下去之后这个 agent 会永远卡在那张卡片上。
+      if (controller) {
+        void import("./agentStore").then((m) =>
+          m.useAgentStore.getState().rejectAll("aborted by user", controller),
+        );
+      }
       set((st) => ({ queue: st.queue.filter((j) => j.agentId !== agentId) }));
     },
 
