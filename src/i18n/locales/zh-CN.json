@@ -1158,6 +1158,8 @@
       "navSelect": "选择",
       "navConfirm": "确认",
       "navClose": "关闭",
+      "following": "跟随全局",
+      "followGlobal": "跟随全局设置",
       "manageProviders": "管理供应商"
     },
     "consistency": {
@@ -2084,6 +2086,7 @@
       "boundNone": "没有绑定任何设定",
       "deleted": "已删除",
       "isolated": "记忆独立 · 仅此角色可见",
+      "modelScope": "本角色",
       "narratorScope": "可读全部角色记录"
     },
     "stale": {
@@ -2147,7 +2150,6 @@
       "core": "主词条（index.md）",
       "noEntities": "知识库里还没有条目。",
       "model": "模型",
-      "followGlobal": "跟随全局",
       "instruction": "扮演指令",
       "instructionNote": "写给模型的，不会出现在对话里",
       "instructionPlaceholder": "说话短，从不解释动机。被问到那一夜时转移话题，但不撒谎。",

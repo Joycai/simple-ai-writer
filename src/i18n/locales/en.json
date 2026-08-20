@@ -1159,6 +1159,8 @@
       "navSelect": "select",
       "navConfirm": "confirm",
       "navClose": "close",
+      "following": "Global",
+      "followGlobal": "Follow global setting",
       "manageProviders": "Manage providers"
     },
     "consistency": {
@@ -2089,6 +2091,7 @@
       "boundNone": "Nothing bound",
       "deleted": "deleted",
       "isolated": "Private memory · this character only",
+      "modelScope": "This agent",
       "narratorScope": "Reads every character's transcript"
     },
     "stale": {
@@ -2152,7 +2155,6 @@
       "core": "Core card (index.md)",
       "noEntities": "The knowledge base is empty.",
       "model": "Model",
-      "followGlobal": "Follow global",
       "instruction": "Direction",
       "instructionNote": "written for the model; it never appears in the conversation",
       "instructionPlaceholder": "Speaks in short sentences, never explains their motives. Deflects questions about that night, but does not lie.",

@@ -350,14 +350,17 @@ export function AgentComposer({
           {/* 模型 */}
           <section className={styles.modelRow}>
             <span className={styles.label}>{t("roleplay.composer.model", { defaultValue: "模型" })}</span>
+            {/* 「跟随全局」从旁边的链接挪进了菜单脚注：留空时触发器显示的是
+                全局那一个 + 一个虚线的「跟随全局」签，所以撤销绑定的入口应该
+                就在改绑定的地方，而不是它旁边再挂一个按钮。 */}
             <div className={styles.modelSlot}>
-              <ModelSelector value={modelId ?? undefined} onChange={setModelId} paper />
+              <ModelSelector
+                value={modelId ?? undefined}
+                onChange={setModelId}
+                onFollowGlobal={() => setModelId(null)}
+                paper
+              />
             </div>
-            {modelId && (
-              <button type="button" className={styles.linkBtn} onClick={() => setModelId(null)}>
-                {t("roleplay.composer.followGlobal", { defaultValue: "跟随全局" })}
-              </button>
-            )}
           </section>
 
           {/* 指令 */}

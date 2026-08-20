@@ -18,6 +18,10 @@
   border: 1px solid transparent;
   cursor: pointer;
   text-align: left;
+  /* 被挤窄时裁掉，而不是让不可收缩的徽标（上下文窗口 / 跟随全局）顶出去压在
+     邻居身上——扮演的信息带里它右边紧挨着「记事本」，实测能压过去 113px。
+     弹层是这个按钮的**兄弟**节点（同在 `.root` 下），所以裁不到它。 */
+  overflow: hidden;
   transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 .trigger:hover { border-color: var(--color-border-panel); background: var(--color-bg-hover); }
@@ -83,6 +87,27 @@
   border: 1px solid var(--color-border-accent);
   color: var(--color-accent-deep);
   font: 500 10px/1.6 var(--font-mono);
+}
+
+/* 触发器前缀（扮演的信息带用「本角色」）：告诉作者这个 picker 管的是谁。它和
+   抽屉头部那个全局 picker 长得一模一样，不写清楚就只能靠猜。 */
+.triggerPrefix {
+  flex-shrink: 0;
+  font: 500 10px/1.6 var(--font-sans);
+  letter-spacing: 0.06em;
+  color: var(--color-text-label);
+}
+
+/* 「跟随全局」：没绑模型时显示的正是全局那一个，这个签说明它是**借来的**，
+   不是绑定的——否则作者会以为自己已经绑好了。比上下文徽标更轻：它是状态，
+   不是数据。 */
+.followBadge {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border: 1px dashed var(--color-border-panel);
+  color: var(--color-text-hint);
+  font: 400 10px/1.6 var(--font-sans);
+  white-space: nowrap;
 }
 
 .triggerRight {
@@ -339,7 +364,8 @@
   white-space: nowrap;
   transition: color var(--transition-fast);
 }
-.manageBtn:hover { color: var(--color-sienna-hover); }
+.manageBtn:hover:not(:disabled) { color: var(--color-sienna-hover); }
+.manageBtn:disabled { color: var(--color-text-hint); cursor: default; }
 
 /* 受控实例的脚注 (设计稿屏 10): 默认跟随全局设置 */
 .followNote {
