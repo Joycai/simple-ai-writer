@@ -41,6 +41,17 @@ export interface RoleplayAgent {
   updatedAt: number;
   /** transcript 里的轮数，花名册直接显示，避免为了一个数字去解析文件。 */
   turnCount: number;
+  /**
+   * 播种（或上一次「刷新设定」）时，绑定内容的哈希。null = 还没开过口。
+   *
+   * 和 `turnCount` 一样，是**会话派生的事实缓存在花名册里**：花名册要在不打开
+   * 会话的前提下显示「设定已更新」，而那个判断需要一个基线。放在
+   * `LiveSession` 里时它只对本次运行里打开过的 agent 存在——攒了十个角色的
+   * 项目，刚打开应用时一个都不会亮，而那恰恰是最需要它亮的时刻。
+   *
+   * 存哈希而不是内容：这是给「变没变」用的，不是给「变成什么」用的。
+   */
+  boundHash: string | null;
 }
 
 /** transcript 里的一轮。`index` 从 1 起，单调递增，是一切寻址的单位。 */

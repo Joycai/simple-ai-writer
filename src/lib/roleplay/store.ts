@@ -79,6 +79,8 @@ function coerceAgent(raw: unknown): RoleplayAgent | null {
     createdAt: typeof a.createdAt === "number" ? a.createdAt : 0,
     updatedAt: typeof a.updatedAt === "number" ? a.updatedAt : 0,
     turnCount: typeof a.turnCount === "number" ? a.turnCount : 0,
+    // 旧花名册没有这个字段，读成 null = 「没有基线」，于是不会误报「已更新」。
+    boundHash: typeof a.boundHash === "string" ? a.boundHash : null,
   };
 }
 
@@ -129,6 +131,7 @@ async function rebuildRoster(projectPath: string): Promise<RoleplayAgent[]> {
         createdAt: 0,
         updatedAt: 0,
         turnCount: 0,
+        boundHash: null,
       });
     } catch {
       // 连人设卡都读不出的目录不值得猜，跳过。

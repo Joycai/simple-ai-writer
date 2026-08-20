@@ -77,9 +77,7 @@ export interface LiveSession {
   /** 本轮的执行日志（还没有轮号可挂）。 */
   liveLog: AgentEvent[];
   usage: { inputTokens: number; outputTokens: number; cost: number } | null;
-  /** 播种时绑定内容的 hash，用来发现「设定已更新」。 */
-  boundHash: string | null;
-  /** 失效的绑定（条目/特征已删）。 */
+  /** 失效的绑定（条目/特征已删）。基线哈希在 `RoleplayAgent.boundHash` 上。 */
   stalePaths: string[];
   workspace: TaskWorkspaceHandle | null;
   error: string | null;
@@ -147,7 +145,7 @@ export interface AgentDraft {
 function emptySession(): LiveSession {
   return {
     turns: [], log: {}, history: null, meta: null, streaming: "", liveLog: [],
-    usage: null, boundHash: null, stalePaths: [], workspace: null, error: null,
+    usage: null, stalePaths: [], workspace: null, error: null,
   };
 }
 
@@ -238,10 +236,19 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         });
         history = seeded.messages;
         meta = seeded.meta;
+        // 基线进花名册而不是进内存的会话：没打开过的 agent 也要能亮起
+        // 「设定已更新」，而那正是刚打开应用时最需要它的时刻。
+        set((st) => ({
+          agents: {
+            ...st.agents,
+            [agent.id]: { ...st.agents[agent.id], boundHash: hashText(seeded.bound.text) },
+          },
+          stale: { ...st.stale, [agent.id]: false },
+        }));
+        void persistRoster();
         patchSession(job.agentId, (s) => ({
           ...s,
           history, meta,
-          boundHash: hashText(seeded.bound.text),
           stalePaths: seeded.bound.stalePaths,
           liveLog: appendAgentEventTo(s.liveLog, {
             kind: "context-seeded",
@@ -531,6 +538,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         createdAt: now,
         updatedAt: now,
         turnCount: 0,
+        boundHash: null,
       };
       set((st) => ({ order: [...st.order, id], agents: { ...st.agents, [id]: agent } }));
       await savePersonaCard(projectPath, agent, draft.instruction);
@@ -554,9 +562,9 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       set((st) => ({ agents: { ...st.agents, [id]: next } }));
       await savePersonaCard(projectPath, next, draft.instruction);
       await persistRoster();
-      // 改了绑定就等于设定变了：让顶部的「刷新设定」条出来，由作者决定何时
-      // 付那次 prompt 缓存的钱。
-      set((st) => ({ stale: { ...st.stale, [id]: true } }));
+      // 改了绑定也是一种「设定变了」。不直接置 true，而是重新比对一遍——把
+      // 「过期与否」的判断留在唯一的一处，否则改回原样之后那条提示会赖着不走。
+      void get().checkBindings();
     },
 
     removeAgent: async (id) => {
@@ -698,36 +706,63 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     refreshBinding: async (agentId) => {
       const { projectPath } = get();
       const agent = get().agents[agentId];
-      const session = get().sessions[agentId];
-      if (!projectPath || !agent || !session?.meta) {
-        set((st) => ({ stale: { ...st.stale, [agentId]: false } }));
-        return;
-      }
+      if (!projectPath || !agent) return;
+
       const { useLoreStore } = await import("./loreStore");
-      const bound = await refreshBoundBlock(useLoreStore.getState().index, agent, session.meta);
-      patchSession(agentId, (s) => ({
-        ...s, boundHash: hashText(bound.text), stalePaths: bound.stalePaths,
+      const loreIndex = useLoreStore.getState().index;
+      const session = get().sessions[agentId];
+
+      // 有活的历史就就地重写绑定块（对象身份不变，meta 继续指着它）；没有的
+      // 话什么都不用改写——下一次发送会重新播种，那时用的自然是新内容。两条
+      // 路都要把基线更新到「现在」，否则 checkBindings 下一轮又把它标成过期。
+      const bound = session?.meta
+        ? await refreshBoundBlock(loreIndex, agent, session.meta)
+        : await buildBoundContent(loreIndex, agent.boundPaths);
+
+      set((st) => ({
+        agents: {
+          ...st.agents,
+          [agentId]: { ...st.agents[agentId], boundHash: hashText(bound.text) },
+        },
+        stale: { ...st.stale, [agentId]: false },
       }));
-      set((st) => ({ stale: { ...st.stale, [agentId]: false } }));
+      patchSession(agentId, (s) => ({ ...s, stalePaths: bound.stalePaths }));
+      void persistRoster();
     },
 
+    /**
+     * 重新比对每个 agent 的绑定内容。
+     *
+     * 遍历**整个花名册**，不只是打开过的会话：基线 (`agent.boundHash`) 现在存在
+     * 花名册里，所以刚打开应用、一个会话都没打开时，攒了十个角色的项目也能立刻
+     * 看出哪几个的设定变过——那正是最需要这条提示的时刻。
+     *
+     * 没有基线的 agent（还没开过口）被跳过：它没有任何已经烘进上下文的旧内容，
+     * 下一次发送就是新的，标成「已更新」是在报一件没发生的事。
+     *
+     * 每次比对要读绑定条目的正文——知识库索引里只有元数据，特征正文不在其中。
+     * 没有为此加一层「先比元数据签名、不同再读文件」的快路：绑定通常是个位数
+     * 条目、agent 通常是个位数个，而这个函数只在知识库重扫之后跑一次；先加缓存
+     * 层，等于为一个还没量到的问题增加一处会和真相不同步的状态。
+     */
     checkBindings: async () => {
-      const { projectPath, sessions } = get();
+      const { projectPath, order } = get();
       if (!projectPath) return;
       const { useLoreStore } = await import("./loreStore");
       const loreIndex = useLoreStore.getState().index;
+
       const next: Record<string, boolean> = {};
       const stalePaths: Record<string, string[]> = {};
-      for (const [id, session] of Object.entries(sessions)) {
+      for (const id of order) {
         const agent = get().agents[id];
-        if (!agent || session.boundHash === null) continue;
+        if (!agent || agent.boundHash === null) continue;
         const bound = await buildBoundContent(loreIndex, agent.boundPaths);
-        next[id] = hashText(bound.text) !== session.boundHash;
+        next[id] = hashText(bound.text) !== agent.boundHash;
         stalePaths[id] = bound.stalePaths;
       }
       set((st) => ({ stale: { ...st.stale, ...next } }));
       for (const [id, paths] of Object.entries(stalePaths)) {
-        patchSession(id, (s) => ({ ...s, stalePaths: paths }));
+        if (get().sessions[id]) patchSession(id, (s) => ({ ...s, stalePaths: paths }));
       }
     },
 

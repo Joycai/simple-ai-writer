@@ -30,17 +30,21 @@ vi.mock("../../lore/entity", () => ({
 import { buildCompactedHistory, planFold, segmentHistory } from "../../agent/compact";
 import type { StreamMessage } from "../../ai/types";
 import type { LoreEntity, LoreIndex } from "../../lore/model";
-import { seedRoleplayHistory, type RoleplaySessionMeta } from "../context";
+import { buildBoundContent, seedRoleplayHistory, type RoleplaySessionMeta } from "../context";
 import type { RoleplayAgent } from "../model";
 
-function entity(name: string, dirPath: string): LoreEntity {
+function entity(name: string, dirPath: string, facets: string[] = []): LoreEntity {
   return {
     id: name, category: "characters", dirPath, name, aliases: [], summary: `${name}的一句话`,
-    avatarPath: null, mdFiles: ["index.md"], images: [], facets: [],
+    avatarPath: null, mdFiles: ["index.md"], images: [],
+    facets: facets.map((file) => ({
+      file, title: file.replace(/\.md$/, ""), slot: null, keys: [], group: null,
+      priority: 0, mode: "manual" as const, charCount: 100,
+    })),
   };
 }
 
-const ELDEN = entity("沈砚", "/p/.ai-writer/lore/characters/elden");
+const ELDEN = entity("沈砚", "/p/.ai-writer/lore/characters/elden", ["speech.md"]);
 const TOWER = entity("塔", "/p/.ai-writer/lore/world/tower");
 const INDEX: LoreIndex = { characters: [ELDEN], world: [TOWER] };
 
@@ -49,7 +53,7 @@ const AGENT: RoleplayAgent = {
   primaryDirPath: ELDEN.dirPath,
   boundPaths: [ELDEN.dirPath],
   modelId: null, authorPersona: null, taskId: null,
-  createdAt: 0, updatedAt: 0, turnCount: 0,
+  createdAt: 0, updatedAt: 0, turnCount: 0, boundHash: null,
 };
 
 async function seed(firstMessage = "「你还在等？」") {
@@ -125,5 +129,42 @@ describe("不变量二 · 压缩之后", () => {
     expect(meta.seedContext).toBeNull();
     // 并且绑定块仍然在 prelude 里，不会在下一次折叠时被当成一轮对话。
     expect(segmentHistory(next, meta).prelude).toContain(boundBlock!);
+  });
+});
+
+describe("buildBoundContent", () => {
+  it("resolves an entity pin and a facet pin to their file bodies", async () => {
+    const bound = await buildBoundContent(INDEX, [ELDEN.dirPath, `${ELDEN.dirPath}#speech.md`]);
+    expect(bound.stalePaths).toEqual([]);
+    expect(bound.text).toContain("index.md 的正文");
+    expect(bound.text).toContain("speech.md 的正文");
+    // 条目只记一次账，即使它被两个 pin 引用。
+    expect(bound.entities).toEqual([ELDEN]);
+  });
+
+  it("reports a pin to a deleted entity as stale instead of skipping it silently", async () => {
+    const bound = await buildBoundContent(INDEX, ["/p/.ai-writer/lore/characters/gone"]);
+    expect(bound.stalePaths).toEqual(["/p/.ai-writer/lore/characters/gone"]);
+    expect(bound.text).toBe("");
+  });
+
+  /**
+   * 这条是安全性质的：一个指向已删特征的 pin **绝不能**退化成「整条都注入」。
+   * 作者当初挑了一段特征，正意味着其余的他不想让这个角色知道；悄悄升级成整条
+   * 会把他刻意排除的内容送进上下文，而界面上什么都不会显示。
+   */
+  it("never degrades a dead facet pin into a whole-entity injection", async () => {
+    const bound = await buildBoundContent(INDEX, [`${ELDEN.dirPath}#deleted-facet.md`]);
+    expect(bound.stalePaths).toEqual([`${ELDEN.dirPath}#deleted-facet.md`]);
+    expect(bound.text).toBe("");
+    expect(bound.entities).toEqual([]);
+  });
+
+  // 「设定已更新」靠对这段文字取哈希来判断，所以同样的输入必须给同样的输出。
+  it("is deterministic for the same pins", async () => {
+    const pins = [`${ELDEN.dirPath}#speech.md`, TOWER.dirPath];
+    const a = await buildBoundContent(INDEX, pins);
+    const b = await buildBoundContent(INDEX, pins);
+    expect(a.text).toBe(b.text);
   });
 });
