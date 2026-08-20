@@ -69,6 +69,7 @@ pub fn run() {
             transfer::zip_import_dialog,
             transfer::zip_dir_to_path,
             transfer::unzip_from_path,
+            commands::device_label,
             lorehash::lore_tree_hashes,
             lorehash::lore_entry_hash,
             transfer::save_text_file_dialog,

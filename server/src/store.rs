@@ -45,12 +45,50 @@ use sha2::{Digest, Sha256};
 
 use crate::ids;
 
+/// What `meta.json` holds — the two facts that never change after creation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KbMeta {
     pub id: String,
     pub name: String,
     #[serde(rename = "createdAtMs")]
     pub created_at_ms: u64,
+}
+
+/// What a client is shown for a knowledge base it might bind to.
+///
+/// Everything beyond `meta` is **derived on read**, not maintained on write:
+/// the count and the timestamp come from walking `entries/`, so they cannot
+/// drift from what is actually stored (the same reason there is no index
+/// file). `last_device` is the one exception and the one thing that cannot be
+/// derived — see `record_write`.
+#[derive(Debug, Clone, Serialize)]
+pub struct KbSummary {
+    #[serde(flatten)]
+    pub meta: KbMeta,
+    #[serde(rename = "entryCount")]
+    pub entry_count: usize,
+    /// Newest entry mtime, epoch millis; 0 for an empty knowledge base.
+    #[serde(rename = "updatedAtMs")]
+    pub updated_at_ms: u64,
+    /// Which machine wrote last, as that machine named itself. Absent when
+    /// nothing has been written since the server started keeping track.
+    #[serde(rename = "lastDevice")]
+    pub last_device: Option<String>,
+}
+
+/// `last-write.json` — who wrote last, and when they said so.
+///
+/// Deliberately a separate file rather than a field in `meta.json`: meta.json
+/// is written once at creation and read on every listing, and turning it into
+/// something every upload rewrites would put a read-modify-write cycle in the
+/// hot path for a fact that is decoration. Best-effort in both directions — a
+/// missing, truncated or unparseable file simply means "unknown device", which
+/// is exactly what it meant before this existed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LastWrite {
+    device: String,
+    #[serde(rename = "atMs")]
+    at_ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -72,7 +110,7 @@ pub struct ManifestEntry {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Manifest {
-    pub kb: KbMeta,
+    pub kb: KbSummary,
     /// sha256 over the sorted `path\0hash\n` lines — one value that changes iff
     /// some entry's content changed. Lets a client answer "is there anything to
     /// do at all?" without diffing, and lets it detect that the remote moved
@@ -92,6 +130,23 @@ pub enum Precondition {
     Match(String),
     /// Proceed only if nothing is stored (`If-None-Match: *`).
     Absent,
+}
+
+/// Everything one upload carries besides *where* it goes.
+///
+/// Bundled rather than passed as six positional arguments: at the call site
+/// `precondition` and `device` are both `Option`-ish tail arguments that read
+/// as noise, and a hash and a byte slice next to each other are easy to get
+/// backwards. Naming them at every call is worth one struct.
+#[derive(Debug, Clone)]
+pub struct EntryWrite<'a> {
+    /// The client's content hash — see the module docs on why it is not ours.
+    pub hash: &'a str,
+    /// The zipped entry directory.
+    pub bytes: &'a [u8],
+    pub precondition: Precondition,
+    /// Which machine is writing, as it names itself; shown in the binding picker.
+    pub device: Option<&'a str>,
 }
 
 /// Whether a `put_entry` call added an entry or replaced one.
@@ -204,7 +259,7 @@ impl Store {
 
     // ── Knowledge bases ─────────────────────────────────────────────────────
 
-    pub fn list_kbs(&self) -> Result<Vec<KbMeta>> {
+    pub fn list_kbs(&self) -> Result<Vec<KbSummary>> {
         let mut out = Vec::new();
         let dir = match fs::read_dir(self.kbs_dir()) {
             Ok(d) => d,
@@ -221,10 +276,10 @@ impl Store {
             // something the operator dropped in by hand, and neither should
             // make the whole listing fail.
             if let Some(meta) = self.read_kb_meta(&name) {
-                out.push(meta);
+                out.push(self.summarise(meta));
             }
         }
-        out.sort_by(|a, b| a.id.cmp(&b.id));
+        out.sort_by(|a, b| a.meta.id.cmp(&b.meta.id));
         Ok(out)
     }
 
@@ -233,16 +288,77 @@ impl Store {
         serde_json::from_str::<KbMeta>(&raw).ok()
     }
 
-    pub fn require_kb(&self, kb: &str) -> Result<KbMeta> {
+    pub fn require_kb(&self, kb: &str) -> Result<KbSummary> {
         ids::validate_kb_id(kb)?;
-        self.read_kb_meta(kb)
-            .ok_or_else(|| StoreError::NoSuchKb(kb.to_string()))
+        let meta = self
+            .read_kb_meta(kb)
+            .ok_or_else(|| StoreError::NoSuchKb(kb.to_string()))?;
+        Ok(self.summarise(meta))
+    }
+
+    /// Count the entries and find the newest one, then attach the last writer.
+    ///
+    /// One directory walk per knowledge base. That is a real cost on a listing
+    /// of many bases, and it is the price of the count never disagreeing with
+    /// what a manifest would report — the alternative is a maintained counter,
+    /// which is an index by another name.
+    fn summarise(&self, meta: KbMeta) -> KbSummary {
+        let mut entry_count = 0usize;
+        let mut updated_at_ms = 0u64;
+        let entries_root = self.kb_dir(&meta.id).join("entries");
+        if let Ok(categories) = fs::read_dir(&entries_root) {
+            for category in categories.flatten() {
+                let Ok(files) = fs::read_dir(category.path()) else {
+                    continue;
+                };
+                for file in files.flatten() {
+                    let name = file.file_name().to_string_lossy().to_string();
+                    if split_payload_name(&name).is_none() {
+                        continue;
+                    }
+                    entry_count += 1;
+                    if let Ok(m) = file.metadata() {
+                        updated_at_ms = updated_at_ms.max(mtime_ms(&m));
+                    }
+                }
+            }
+        }
+        KbSummary {
+            last_device: self.read_last_write(&meta.id).map(|w| w.device),
+            meta,
+            entry_count,
+            updated_at_ms,
+        }
+    }
+
+    fn last_write_path(&self, kb: &str) -> PathBuf {
+        self.kb_dir(kb).join("last-write.json")
+    }
+
+    fn read_last_write(&self, kb: &str) -> Option<LastWrite> {
+        serde_json::from_str(&fs::read_to_string(self.last_write_path(kb)).ok()?).ok()
+    }
+
+    /// Note which machine just wrote, for the binding picker to show.
+    ///
+    /// Failures are swallowed: this is a label on a list row, and refusing an
+    /// upload that already landed because a decorative file could not be
+    /// written would be the wrong trade every time.
+    fn record_write(&self, kb: &str, device: Option<&str>) {
+        let Some(device) = device else { return };
+        let record = LastWrite {
+            device: device.to_string(),
+            at_ms: now_ms(),
+        };
+        if let Ok(json) = serde_json::to_vec(&record) {
+            let _ = fs::write(self.last_write_path(kb), json);
+        }
     }
 
     /// Create a knowledge base. `id` is derived from the display name when the
     /// caller does not supply one; a collision gets a `-2`, `-3`… suffix, the
     /// same shape the app's `uniqueEntityId` uses for entity folders.
-    pub fn create_kb(&self, name: &str, requested_id: Option<&str>) -> Result<KbMeta> {
+    pub fn create_kb(&self, name: &str, requested_id: Option<&str>) -> Result<KbSummary> {
         let name = name.trim();
         if name.is_empty() {
             return Err(StoreError::Invalid("a name is required".into()));
@@ -291,7 +407,7 @@ impl Store {
             dir.join("meta.json"),
             serde_json::to_vec_pretty(&meta).unwrap(),
         )?;
-        Ok(meta)
+        Ok(self.summarise(meta))
     }
 
     // ── Entries ─────────────────────────────────────────────────────────────
@@ -354,10 +470,14 @@ impl Store {
         kb: &str,
         category: &str,
         id: &str,
-        hash: &str,
-        bytes: &[u8],
-        precondition: Precondition,
+        write: EntryWrite<'_>,
     ) -> Result<PutOutcome> {
+        let EntryWrite {
+            hash,
+            bytes,
+            precondition,
+            device,
+        } = write;
         self.require_kb(kb)?;
         ids::validate_category(category)?;
         ids::validate_entity_id(id)?;
@@ -411,6 +531,7 @@ impl Store {
                 let _ = fs::remove_file(old_path);
             }
         }
+        self.record_write(kb, device);
         Ok(outcome)
     }
 
@@ -420,6 +541,7 @@ impl Store {
         category: &str,
         id: &str,
         precondition: Precondition,
+        device: Option<&str>,
     ) -> Result<()> {
         self.require_kb(kb)?;
         ids::validate_category(category)?;
@@ -434,6 +556,7 @@ impl Store {
         let (path, _, _) =
             existing.ok_or_else(|| StoreError::NoSuchEntry(format!("{category}/{id}")))?;
         fs::remove_file(path)?;
+        self.record_write(kb, device);
         Ok(())
     }
 
@@ -560,7 +683,7 @@ mod tests {
     #[test]
     fn create_list_and_roundtrip() {
         let (_d, s) = store();
-        let kb = s.create_kb("My Wuxia World", None).unwrap();
+        let kb = s.create_kb("My Wuxia World", None).unwrap().meta;
         assert_eq!(kb.id, "my-wuxia-world");
         assert_eq!(s.list_kbs().unwrap().len(), 1);
 
@@ -568,9 +691,12 @@ mod tests {
             &kb.id,
             "characters",
             "爱丽丝",
-            H1,
-            b"zipbytes",
-            Precondition::Absent,
+            EntryWrite {
+                hash: H1,
+                bytes: b"zipbytes",
+                precondition: Precondition::Absent,
+                device: None,
+            },
         )
         .unwrap();
         let (bytes, hash) = s.read_entry(&kb.id, "characters", "爱丽丝").unwrap();
@@ -579,13 +705,101 @@ mod tests {
     }
 
     #[test]
-    fn manifest_lists_entries_and_digest_tracks_content() {
+    fn a_summary_counts_entries_and_names_the_last_writer() {
+        // What the binding picker shows for a knowledge base it might bind to.
         let (_d, s) = store();
         let kb = s.create_kb("k", None).unwrap();
-        s.put_entry(&kb.id, "characters", "alice", H1, b"a", Precondition::None)
-            .unwrap();
-        s.put_entry(&kb.id, "world", "north", H2, b"b", Precondition::None)
-            .unwrap();
+        assert_eq!(kb.entry_count, 0);
+        assert_eq!(kb.last_device, None, "a fresh base has no writer yet");
+
+        s.put_entry(
+            &kb.meta.id,
+            "characters",
+            "alice",
+            EntryWrite {
+                hash: H1,
+                bytes: b"a",
+                precondition: Precondition::None,
+                device: Some("MacBook-Pro"),
+            },
+        )
+        .unwrap();
+
+        let listed = &s.list_kbs().unwrap()[0];
+        assert_eq!(listed.entry_count, 1);
+        assert!(listed.updated_at_ms > 0);
+        assert_eq!(listed.last_device.as_deref(), Some("MacBook-Pro"));
+
+        // A delete is a write too — the label follows whoever touched it last.
+        s.delete_entry(
+            &kb.meta.id,
+            "characters",
+            "alice",
+            Precondition::None,
+            Some("DESKTOP-WIN"),
+        )
+        .unwrap();
+        let listed = &s.list_kbs().unwrap()[0];
+        assert_eq!(listed.entry_count, 0);
+        assert_eq!(listed.last_device.as_deref(), Some("DESKTOP-WIN"));
+    }
+
+    #[test]
+    fn a_write_without_a_device_leaves_the_previous_label_alone() {
+        // A client that sends no header must not blank out what another one
+        // recorded — "unknown" is not a claim about who wrote last.
+        let (_d, s) = store();
+        let kb = s.create_kb("k", None).unwrap();
+        let put = |device| {
+            s.put_entry(
+                &kb.meta.id,
+                "characters",
+                "alice",
+                EntryWrite {
+                    hash: H1,
+                    bytes: b"a",
+                    precondition: Precondition::None,
+                    device,
+                },
+            )
+            .unwrap()
+        };
+        put(Some("MacBook-Pro"));
+        put(None);
+        assert_eq!(
+            s.list_kbs().unwrap()[0].last_device.as_deref(),
+            Some("MacBook-Pro")
+        );
+    }
+
+    #[test]
+    fn manifest_lists_entries_and_digest_tracks_content() {
+        let (_d, s) = store();
+        let kb = s.create_kb("k", None).unwrap().meta;
+        s.put_entry(
+            &kb.id,
+            "characters",
+            "alice",
+            EntryWrite {
+                hash: H1,
+                bytes: b"a",
+                precondition: Precondition::None,
+                device: None,
+            },
+        )
+        .unwrap();
+        s.put_entry(
+            &kb.id,
+            "world",
+            "north",
+            EntryWrite {
+                hash: H2,
+                bytes: b"b",
+                precondition: Precondition::None,
+                device: None,
+            },
+        )
+        .unwrap();
 
         let m = s.manifest(&kb.id).unwrap();
         let paths: Vec<_> = m.entries.iter().map(|e| e.path.as_str()).collect();
@@ -594,35 +808,61 @@ mod tests {
 
         // Same content re-uploaded: the digest must not move, or every client
         // would see a phantom change on each sync.
-        s.put_entry(&kb.id, "characters", "alice", H1, b"a", Precondition::None)
-            .unwrap();
+        s.put_entry(
+            &kb.id,
+            "characters",
+            "alice",
+            EntryWrite {
+                hash: H1,
+                bytes: b"a",
+                precondition: Precondition::None,
+                device: None,
+            },
+        )
+        .unwrap();
         assert_eq!(s.manifest(&kb.id).unwrap().digest, before);
 
-        s.put_entry(&kb.id, "characters", "alice", H2, b"c", Precondition::None)
-            .unwrap();
+        s.put_entry(
+            &kb.id,
+            "characters",
+            "alice",
+            EntryWrite {
+                hash: H2,
+                bytes: b"c",
+                precondition: Precondition::None,
+                device: None,
+            },
+        )
+        .unwrap();
         assert_ne!(s.manifest(&kb.id).unwrap().digest, before);
     }
 
     #[test]
     fn overwrite_replaces_the_previous_version() {
         let (_d, s) = store();
-        let kb = s.create_kb("k", None).unwrap();
+        let kb = s.create_kb("k", None).unwrap().meta;
         s.put_entry(
             &kb.id,
             "characters",
             "alice",
-            H1,
-            b"old",
-            Precondition::None,
+            EntryWrite {
+                hash: H1,
+                bytes: b"old",
+                precondition: Precondition::None,
+                device: None,
+            },
         )
         .unwrap();
         s.put_entry(
             &kb.id,
             "characters",
             "alice",
-            H2,
-            b"new",
-            Precondition::Match(H1.into()),
+            EntryWrite {
+                hash: H2,
+                bytes: b"new",
+                precondition: Precondition::Match(H1.into()),
+                device: None,
+            },
         )
         .unwrap();
 
@@ -642,15 +882,35 @@ mod tests {
         // This is what the HTTP layer turns into 201 vs 204, and it has to come
         // back from inside the write lock — see `PutOutcome`.
         let (_d, s) = store();
-        let kb = s.create_kb("k", None).unwrap();
+        let kb = s.create_kb("k", None).unwrap().meta;
         assert_eq!(
-            s.put_entry(&kb.id, "characters", "alice", H1, b"a", Precondition::None)
-                .unwrap(),
+            s.put_entry(
+                &kb.id,
+                "characters",
+                "alice",
+                EntryWrite {
+                    hash: H1,
+                    bytes: b"a",
+                    precondition: Precondition::None,
+                    device: None
+                }
+            )
+            .unwrap(),
             PutOutcome::Created
         );
         assert_eq!(
-            s.put_entry(&kb.id, "characters", "alice", H2, b"b", Precondition::None)
-                .unwrap(),
+            s.put_entry(
+                &kb.id,
+                "characters",
+                "alice",
+                EntryWrite {
+                    hash: H2,
+                    bytes: b"b",
+                    precondition: Precondition::None,
+                    device: None
+                }
+            )
+            .unwrap(),
             PutOutcome::Replaced
         );
     }
@@ -658,9 +918,19 @@ mod tests {
     #[test]
     fn preconditions_reject_a_moved_remote() {
         let (_d, s) = store();
-        let kb = s.create_kb("k", None).unwrap();
-        s.put_entry(&kb.id, "characters", "alice", H1, b"a", Precondition::None)
-            .unwrap();
+        let kb = s.create_kb("k", None).unwrap().meta;
+        s.put_entry(
+            &kb.id,
+            "characters",
+            "alice",
+            EntryWrite {
+                hash: H1,
+                bytes: b"a",
+                precondition: Precondition::None,
+                device: None,
+            },
+        )
+        .unwrap();
 
         // Someone else already wrote: our If-Match names the version we planned
         // against, which is no longer there.
@@ -669,9 +939,12 @@ mod tests {
                 &kb.id,
                 "characters",
                 "alice",
-                H2,
-                b"b",
-                Precondition::Match(H2.into()),
+                EntryWrite {
+                    hash: H2,
+                    bytes: b"b",
+                    precondition: Precondition::Match(H2.into()),
+                    device: None,
+                },
             )
             .unwrap_err();
         assert!(matches!(err, StoreError::Precondition { current: Some(ref h) } if h == H1));
@@ -682,9 +955,12 @@ mod tests {
                 &kb.id,
                 "characters",
                 "alice",
-                H2,
-                b"b",
-                Precondition::Absent,
+                EntryWrite {
+                    hash: H2,
+                    bytes: b"b",
+                    precondition: Precondition::Absent,
+                    device: None,
+                },
             )
             .unwrap_err();
         assert!(matches!(err, StoreError::Precondition { .. }));
@@ -696,16 +972,27 @@ mod tests {
     #[test]
     fn delete_honours_preconditions() {
         let (_d, s) = store();
-        let kb = s.create_kb("k", None).unwrap();
-        s.put_entry(&kb.id, "characters", "alice", H1, b"a", Precondition::None)
-            .unwrap();
+        let kb = s.create_kb("k", None).unwrap().meta;
+        s.put_entry(
+            &kb.id,
+            "characters",
+            "alice",
+            EntryWrite {
+                hash: H1,
+                bytes: b"a",
+                precondition: Precondition::None,
+                device: None,
+            },
+        )
+        .unwrap();
 
         assert!(s
             .delete_entry(
                 &kb.id,
                 "characters",
                 "alice",
-                Precondition::Match(H2.into())
+                Precondition::Match(H2.into()),
+                None,
             )
             .is_err());
         s.delete_entry(
@@ -713,6 +1000,7 @@ mod tests {
             "characters",
             "alice",
             Precondition::Match(H1.into()),
+            None,
         )
         .unwrap();
         assert!(s.read_entry(&kb.id, "characters", "alice").is_err());
@@ -722,9 +1010,19 @@ mod tests {
     #[test]
     fn a_second_version_left_by_a_crash_resolves_to_one_entry() {
         let (_d, s) = store();
-        let kb = s.create_kb("k", None).unwrap();
-        s.put_entry(&kb.id, "characters", "alice", H1, b"a", Precondition::None)
-            .unwrap();
+        let kb = s.create_kb("k", None).unwrap().meta;
+        s.put_entry(
+            &kb.id,
+            "characters",
+            "alice",
+            EntryWrite {
+                hash: H1,
+                bytes: b"a",
+                precondition: Precondition::None,
+                device: None,
+            },
+        )
+        .unwrap();
         // Simulate the crash window: commit rename done, sweep never ran.
         let dir = s.entry_dir(&kb.id, "characters");
         fs::write(dir.join(format!("alice.{H2}.zip")), b"b").unwrap();
@@ -739,9 +1037,19 @@ mod tests {
     #[test]
     fn ids_with_dots_round_trip() {
         let (_d, s) = store();
-        let kb = s.create_kb("k", None).unwrap();
-        s.put_entry(&kb.id, "world", "st._louis", H1, b"x", Precondition::None)
-            .unwrap();
+        let kb = s.create_kb("k", None).unwrap().meta;
+        s.put_entry(
+            &kb.id,
+            "world",
+            "st._louis",
+            EntryWrite {
+                hash: H1,
+                bytes: b"x",
+                precondition: Precondition::None,
+                device: None,
+            },
+        )
+        .unwrap();
         let m = s.manifest(&kb.id).unwrap();
         assert_eq!(m.entries[0].path, "world/st._louis");
         assert_eq!(s.read_entry(&kb.id, "world", "st._louis").unwrap().1, H1);
@@ -750,19 +1058,32 @@ mod tests {
     #[test]
     fn traversal_never_reaches_the_filesystem() {
         let (_d, s) = store();
-        let kb = s.create_kb("k", None).unwrap();
+        let kb = s.create_kb("k", None).unwrap().meta;
         assert!(s
             .put_entry(
                 &kb.id,
                 "characters",
                 "../../escape",
-                H1,
-                b"x",
-                Precondition::None
+                EntryWrite {
+                    hash: H1,
+                    bytes: b"x",
+                    precondition: Precondition::None,
+                    device: None
+                }
             )
             .is_err());
         assert!(s
-            .put_entry(&kb.id, "../..", "alice", H1, b"x", Precondition::None)
+            .put_entry(
+                &kb.id,
+                "../..",
+                "alice",
+                EntryWrite {
+                    hash: H1,
+                    bytes: b"x",
+                    precondition: Precondition::None,
+                    device: None
+                }
+            )
             .is_err());
         assert!(s.read_entry("../..", "characters", "alice").is_err());
     }
@@ -777,10 +1098,13 @@ mod tests {
     #[test]
     fn duplicate_names_get_distinct_ids() {
         let (_d, s) = store();
-        assert_eq!(s.create_kb("Same Name", None).unwrap().id, "same-name");
-        assert_eq!(s.create_kb("Same Name", None).unwrap().id, "same-name-2");
+        assert_eq!(s.create_kb("Same Name", None).unwrap().meta.id, "same-name");
+        assert_eq!(
+            s.create_kb("Same Name", None).unwrap().meta.id,
+            "same-name-2"
+        );
         // A non-ASCII display name keeps its name but gets a generic id.
-        let cjk = s.create_kb("我的武侠世界", None).unwrap();
+        let cjk = s.create_kb("我的武侠世界", None).unwrap().meta;
         assert_eq!(cjk.id, "kb");
         assert_eq!(cjk.name, "我的武侠世界");
     }

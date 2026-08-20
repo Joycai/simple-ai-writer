@@ -5,6 +5,8 @@ app 把一个项目绑定到其中一个,然后把本地 `.ai-writer/lore/` **�
 或**整体拉下来** —— 单向覆盖,不做合并。
 
 设计与取舍见 [`../docs/remote-knowledge-base-feasibility.md`](../docs/remote-knowledge-base-feasibility.md) §13–§18。
+**部署、生成密钥、systemd / Docker / 反向代理、轮换与排错见
+[`DEPLOY.md`](DEPLOY.md)** —— 这里只讲它是什么和 API 长什么样。
 
 > **状态:服务端已实现,客户端未接入。** 本目录可以独立编译、测试、运行,
 > 但 app 里还没有连接它的 UI。
@@ -31,6 +33,9 @@ AIW_KB_DATA_DIR=/var/lib/aiw-kb \
 AIW_KB_BIND=127.0.0.1:8787 \
 ./target/release/aiw-kb-server
 ```
+
+完整流程(交叉编译、systemd 单元、Docker、TLS、token 轮换)见
+[`DEPLOY.md`](DEPLOY.md)。
 
 ### 配置(全部走环境变量)
 
@@ -67,7 +72,10 @@ AIW_KB_BIND=127.0.0.1:8787 \
 
 ```json
 {
-  "kb": { "id": "my-wuxia-world", "name": "我的武侠世界", "createdAtMs": 1787191234718 },
+  "kb": {
+    "id": "my-wuxia-world", "name": "我的武侠世界", "createdAtMs": 1787191234718,
+    "entryCount": 1, "updatedAtMs": 1787191247004, "lastDevice": "MacBook-Pro"
+  },
   "digest": "990a0206…",
   "entries": [
     { "path": "characters/爱丽丝", "hash": "fe25ec9d…", "size": 15, "updatedAtMs": 1787191247004 }
@@ -80,6 +88,24 @@ AIW_KB_BIND=127.0.0.1:8787 \
 - `updatedAtMs` 来自文件 mtime,**仅供显示**。同步判断一律看 hash(§14.2):
   mtime 会被复制数据目录、恢复备份、解压归档重置,拿它做判断会在任何一次
   搬迁之后报告「所有条目都变了」。
+- `entryCount` / `updatedAtMs` 是**读时现算**的(遍历 `entries/`),不是维护出来的
+  计数器 —— 和 manifest 一样,不给「记的数」和「实际有的」留下分歧的可能。
+  `lastDevice` 是唯一算不出来的那个,见下。
+
+### 谁写的:`X-Source-Device`
+
+写操作(`PUT` / `DELETE`)可以带一个 `X-Source-Device` 头,内容是客户端
+**自己报的机器名**(app 用主机名)。服务端把它记在 `<kb>/last-write.json`,
+并在知识库列表里回显成「来自 MacBook-Pro」,好让作者在几个知识库之间认出
+哪个是自己一直在写的那个。
+
+它是**纯标签**:没有任何鉴权或授权看它,值非法就丢弃而不是拒绝请求 ——
+为一个装饰性的头失败掉一次已经落盘的上传,是永远划不来的交易。不带这个头
+的客户端不会把别人记下的名字抹掉:「未知」不是一个关于谁写过的断言。
+
+单独存一个文件而不是塞进 `meta.json`:后者创建时写一次、列表时每次读,
+把它变成每次上传都要改的东西等于在热路径上加一次读-改-写,而换来的只是
+一行装饰。
 
 ### 写入的前置条件(重要)
 

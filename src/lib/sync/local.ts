@@ -75,3 +75,17 @@ export async function unzipEntry(zipPath: string, destDir: string): Promise<numb
     prefix: ENTRY_ZIP_PREFIX,
   });
 }
+
+/**
+ * This machine's name, for the sync server's "last written by" label.
+ *
+ * Never throws: the label is decoration, and a platform that will not report a
+ * hostname must not stop a sync. "" reaches the server as no header at all.
+ */
+export async function deviceLabel(): Promise<string> {
+  try {
+    return await invoke<string>("device_label");
+  } catch {
+    return "";
+  }
+}

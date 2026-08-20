@@ -1989,6 +1989,8 @@
     "repreview": "Re-preview these {{n}}",
     "resultIntact": "The {{n}} that failed were left exactly as they were.",
     "backup": "Archive",
-    "done": "Done"
+    "done": "Done",
+    "kbUpdated": "updated {{when}}",
+    "kbFrom": "from {{device}}"
   }
 }

@@ -27,7 +27,7 @@ import {
   saveToken,
   setServerUrl,
 } from "../lib/sync/config";
-import { localEntryHashes } from "../lib/sync/local";
+import { deviceLabel, localEntryHashes } from "../lib/sync/local";
 import type { HashMap, SyncBinding, SyncDirection, SyncPlan } from "../lib/sync/model";
 import { planSync } from "../lib/sync/plan";
 import { runSync, type SyncRunResult } from "../lib/sync/run";
@@ -153,7 +153,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     }
     set({ connection: "connecting", error: null });
     try {
-      const next = createSyncClient(url, token);
+      const next = createSyncClient(url, token, await deviceLabel());
       const kbs = await next.listKbs();
       client = next;
       setServerUrl(url);

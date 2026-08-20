@@ -36,7 +36,7 @@ use serde::Deserialize;
 use std::sync::Arc;
 
 use crate::error::ApiError;
-use crate::store::{KbMeta, Manifest, Precondition, PutOutcome, Store};
+use crate::store::{EntryWrite, KbSummary, Manifest, Precondition, PutOutcome, Store};
 
 pub struct AppState {
     pub store: Store,
@@ -118,7 +118,7 @@ async fn require_token(
 
 // ─── Knowledge bases ─────────────────────────────────────────────────────────
 
-async fn list_kbs(State(state): State<Arc<AppState>>) -> Result<Json<Vec<KbMeta>>, ApiError> {
+async fn list_kbs(State(state): State<Arc<AppState>>) -> Result<Json<Vec<KbSummary>>, ApiError> {
     let store = Arc::clone(&state);
     let kbs = blocking(move || store.store.list_kbs()).await??;
     Ok(Json(kbs))
@@ -135,7 +135,7 @@ struct CreateKb {
 async fn create_kb(
     State(state): State<Arc<AppState>>,
     Json(body): Json<CreateKb>,
-) -> Result<(StatusCode, Json<KbMeta>), ApiError> {
+) -> Result<(StatusCode, Json<KbSummary>), ApiError> {
     let store = Arc::clone(&state);
     let meta = blocking(move || store.store.create_kb(&body.name, body.id.as_deref())).await??;
     Ok((StatusCode::CREATED, Json(meta)))
@@ -197,12 +197,21 @@ async fn put_entry(
         return Err(ApiError::bad_request("the request body is empty"));
     }
     let precondition = precondition_from(&headers)?;
+    let device = device_from(&headers);
 
     let store = Arc::clone(&state);
     let outcome = blocking(move || {
-        store
-            .store
-            .put_entry(&kb, &category, &id, &hash, &body, precondition)
+        store.store.put_entry(
+            &kb,
+            &category,
+            &id,
+            EntryWrite {
+                hash: &hash,
+                bytes: &body,
+                precondition,
+                device: device.as_deref(),
+            },
+        )
     })
     .await??;
 
@@ -218,9 +227,32 @@ async fn delete_entry(
     headers: HeaderMap,
 ) -> Result<StatusCode, ApiError> {
     let precondition = precondition_from(&headers)?;
+    let device = device_from(&headers);
     let store = Arc::clone(&state);
-    blocking(move || store.store.delete_entry(&kb, &category, &id, precondition)).await??;
+    blocking(move || {
+        store
+            .store
+            .delete_entry(&kb, &category, &id, precondition, device.as_deref())
+    })
+    .await??;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// The machine that is writing, as it names itself (`X-Source-Device`).
+///
+/// Purely a label the binding picker shows, so a bad value is dropped rather
+/// than refused: failing an upload over a decorative header would be the wrong
+/// trade. Trimmed to a sane length and stripped of control characters, because
+/// it is written to a file and rendered in the app — untrusted text either way.
+fn device_from(headers: &HeaderMap) -> Option<String> {
+    let raw = headers.get("x-source-device")?.to_str().ok()?.trim();
+    let cleaned: String = raw.chars().filter(|c| !c.is_control()).take(64).collect();
+    let cleaned = cleaned.trim().to_string();
+    if cleaned.is_empty() {
+        None
+    } else {
+        Some(cleaned)
+    }
 }
 
 /// Read `If-Match` / `If-None-Match` into a store precondition.

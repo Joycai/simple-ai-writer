@@ -63,6 +63,31 @@ describe("preconditions", () => {
     expect(header("X-Entry-Hash")).toBe("h".repeat(64));
   });
 
+  it("stamps writes with the machine name, and reads without it", async () => {
+    // The label is decoration the server shows back in its kb list; a read has
+    // no writer, so it carries no claim about one.
+    const named = createSyncClient("http://box:8787", "tok", " MacBook-Pro ");
+    respond = () => new Response(null, { status: 201 });
+    await named.uploadEntry("kb", "a/x", "h", new Uint8Array([1]), { kind: "absent" });
+    expect(header("X-Source-Device")).toBe("MacBook-Pro");
+
+    calls.length = 0;
+    respond = () => new Response(null, { status: 204 });
+    await named.deleteEntry("kb", "a/x", { kind: "any" });
+    expect(header("X-Source-Device")).toBe("MacBook-Pro");
+
+    calls.length = 0;
+    respond = () => new Response(new Uint8Array([1]), { status: 200 });
+    await named.downloadEntry("kb", "a/x");
+    expect(header("X-Source-Device")).toBeNull();
+  });
+
+  it("omits the header entirely when the machine has no name", async () => {
+    respond = () => new Response(null, { status: 201 });
+    await client().uploadEntry("kb", "a/x", "h", new Uint8Array([1]), { kind: "absent" });
+    expect(header("X-Source-Device")).toBeNull();
+  });
+
   it("sends no condition when the caller opted out", async () => {
     respond = () => new Response(null, { status: 204 });
     await client().uploadEntry("kb", "a/x", "h", new Uint8Array([1]), { kind: "any" });
@@ -125,7 +150,7 @@ describe("manifest", () => {
   it("reduces to the hash map the planner takes", () => {
     expect(
       manifestHashes({
-        kb: { id: "k", name: "k", createdAtMs: 0 },
+        kb: { id: "k", name: "k", createdAtMs: 0, entryCount: 2, updatedAtMs: 0, lastDevice: null },
         digest: "d",
         entries: [
           { path: "a/x", hash: "1", size: 1, updatedAtMs: 0 },

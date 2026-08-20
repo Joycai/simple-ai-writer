@@ -49,6 +49,10 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 # produces is a wire format shared with the sync server, so this is a real
 # dependency of the protocol, not an implementation detail.
 sha2 = "0.10"
+# `device_label` — the machine name shown as "last written by" in knowledge-base
+# sync. std has no portable hostname call; this is a ~50-line shim over the
+# platform APIs with no dependencies of its own.
+gethostname = "1"
 # .xlsx import (see xlsx.rs). `chrono` is what turns a date cell into a real
 # date instead of the raw serial number Excel stores it as — without it every
 # date in an imported sheet reads as "45678".

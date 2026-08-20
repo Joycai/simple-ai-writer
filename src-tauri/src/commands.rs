@@ -410,3 +410,19 @@ mod tests {
         assert!(valid_category("side-quests"));
     }
 }
+
+/// This machine's name, for the knowledge-base sync server's "last written by".
+///
+/// Sent as `X-Source-Device` on every sync write so the binding picker can say
+/// which machine a knowledge base was last touched from. Purely a label —
+/// nothing authenticates or authorises on it, which is why an unavailable
+/// hostname degrades to an empty string rather than an error: the sync works
+/// fine without one, it just says "unknown".
+///
+/// The hostname is what the author already recognises ("MacBook-Pro"), and it
+/// is the same value on every project on this machine, which is what makes it
+/// useful for telling machines apart.
+#[command]
+pub fn device_label() -> String {
+    gethostname::gethostname().to_string_lossy().to_string()
+}

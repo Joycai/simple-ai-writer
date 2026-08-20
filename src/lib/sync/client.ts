@@ -22,6 +22,12 @@ export interface RemoteKb {
   id: string;
   name: string;
   createdAtMs: number;
+  /** How many entries it holds. Derived server-side by walking, never a counter. */
+  entryCount: number;
+  /** Newest entry's mtime; 0 when empty. Display only — sync decides on hashes. */
+  updatedAtMs: number;
+  /** Which machine wrote last, as that machine named itself; null if unknown. */
+  lastDevice: string | null;
 }
 
 export interface RemoteManifestEntry {
@@ -82,10 +88,17 @@ export interface SyncClient {
   deleteEntry(kbId: string, path: string, expect: Expect): Promise<void>;
 }
 
-export function createSyncClient(serverUrl: string, token: string): SyncClient {
+/**
+ * @param device This machine's name, sent on every write as `X-Source-Device`.
+ *   Only a label the server shows back in its knowledge-base list — nothing
+ *   authenticates on it — so an empty string simply means "unknown machine".
+ */
+export function createSyncClient(serverUrl: string, token: string, device = ""): SyncClient {
   const base = normalizeServerUrl(serverUrl);
 
   const authHeaders = (): Record<string, string> => ({ Authorization: `Bearer ${token}` });
+  const writeHeaders = (): Record<string, string> =>
+    device.trim() ? { "X-Source-Device": device.trim() } : {};
 
   /**
    * Percent-encode each path segment, never the separator.
@@ -177,6 +190,7 @@ export function createSyncClient(serverUrl: string, token: string): SyncClient {
         method: "PUT",
         headers: {
           ...authHeaders(),
+          ...writeHeaders(),
           ...preconditionHeaders(expect),
           "Content-Type": "application/zip",
           "X-Entry-Hash": hash,
@@ -189,7 +203,7 @@ export function createSyncClient(serverUrl: string, token: string): SyncClient {
     async deleteEntry(kbId, path, expect) {
       const r = await fetch(entryUrl(kbId, path), {
         method: "DELETE",
-        headers: { ...authHeaders(), ...preconditionHeaders(expect) },
+        headers: { ...authHeaders(), ...writeHeaders(), ...preconditionHeaders(expect) },
       });
       // 404 is success for a delete: the end state a mirror wants is "not
       // there", and someone else having removed it first achieves that. Failing

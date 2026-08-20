@@ -242,6 +242,23 @@ export function SyncPane() {
   );
 }
 
+/**
+ * "128 条 · 最后更新 08-19 22:41 · 来自 MacBook-Pro" — the line that tells the
+ * author which of several knowledge bases is the one they have been writing
+ * into. Each clause is dropped when the server has nothing to say: an empty
+ * base has no update time, and a base written by a client that sent no
+ * `X-Source-Device` has no machine name. Rendering "unknown" for those would
+ * be noise dressed as information.
+ */
+function kbSubtitle(kb: RemoteKb, t: (k: string, o?: Record<string, unknown>) => string): string {
+  const parts = [t("sync.entryCount", { n: kb.entryCount })];
+  if (kb.updatedAtMs > 0) {
+    parts.push(t("sync.kbUpdated", { when: new Date(kb.updatedAtMs).toLocaleString() }));
+  }
+  if (kb.lastDevice) parts.push(t("sync.kbFrom", { device: kb.lastDevice }));
+  return parts.join(" · ");
+}
+
 function KbRow({
   kb,
   selected,
@@ -253,6 +270,7 @@ function KbRow({
   last: boolean;
   onSelect: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className={`${ui.row} ${last ? ui.rowLast : ""}`}
@@ -282,7 +300,7 @@ function KbRow({
       </span>
       <div className={ui.rowMain}>
         <div className={ui.rowTitle}>{kb.name}</div>
-        <div className={ui.rowDesc}>{new Date(kb.createdAtMs).toLocaleDateString()}</div>
+        <div className={ui.rowDesc}>{kbSubtitle(kb, t)}</div>
       </div>
     </div>
   );

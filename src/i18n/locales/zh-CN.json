@@ -1984,6 +1984,8 @@
     "repreview": "重新预览这 {{n}} 条",
     "resultIntact": "失败的 {{n}} 条内容保持原样，未被改动。",
     "backup": "备份",
-    "done": "完成"
+    "done": "完成",
+    "kbUpdated": "最后更新 {{when}}",
+    "kbFrom": "来自 {{device}}"
   }
 }
