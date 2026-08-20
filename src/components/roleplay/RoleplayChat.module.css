@@ -24,17 +24,20 @@
   gap: 14px;
   padding: 0 26px;
   height: 46px;
-  overflow: hidden;
   border-bottom: 1px solid var(--color-hairline);
 }
+
+/* 这条带子**不能**裁剪溢出。模型选择器的弹层是它的绝对定位子元素，46px 高的
+   带子上加 overflow:hidden 会把整张菜单切成一条缝。挤不下时靠下面几条让位，
+   不靠裁。 */
 
 /* 这一条带子里的每一项都不换行。挤不下时该消失的是最边缘的说明文字，而不是
    把「绑定 1 项设定」折成两行——46px 的固定高度里换行只会被裁掉一半。 */
 .band > * { flex-shrink: 0; white-space: nowrap; }
 
-/* 记事本拉开时横向空间少了 300px：先收走那句只读的说明，再让模型选择器让步。 */
+/* 记事本拉开时横向空间少了 300px：直接收走那句只读的说明。选择器的让步是常
+   设的（见下），不必也不能在这里额外加 overflow。 */
 .bandNarrow .isolation { display: none; }
-.bandNarrow .modelSlot { flex-shrink: 1; min-width: 0; overflow: hidden; }
 
 .bandName {
   font-family: var(--font-serif);
@@ -83,16 +86,22 @@
   color: var(--color-on-accent);
 }
 
-.modelSlot { display: flex; align-items: center; min-width: 0; }
-.spacer { flex-shrink: 1; }
+/* 让位顺序里的第二位：选择器自己收窄，触发器内部的省略号接手。这里同样不能
+   写 overflow —— 会连弹层一起裁掉。 */
+.modelSlot { display: flex; align-items: center; min-width: 0; flex-shrink: 1; }
 
 .spacer { flex: 1; }
 
+/* 让位顺序里的第一位：这句话是只读说明，先省略、再（窄到一定程度时）消失。 */
 .isolation {
   font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1;
   color: var(--color-text-hint);
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── 绑定弹层 ── */
@@ -380,7 +389,30 @@
   font-size: 12px;
   line-height: 1.5;
   color: var(--color-text-soft);
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
 }
+
+.errorText { flex: 1; min-width: 0; word-break: break-word; }
+
+/* 重试是这条错误带上唯一能按的东西，所以它用赭石——但仍是一行小字，不是按钮
+   块：错误本身才是要读的内容。 */
+.errorRetry {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-accent);
+  cursor: pointer;
+}
+.errorRetry:hover { text-decoration: underline; }
 
 /* 阻塞中的卡片：紧贴输入框上方，和稿面同宽居中——它们讲的是稿子里的一段话，
    不该比那段话更宽。 */

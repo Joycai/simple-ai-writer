@@ -2038,6 +2038,7 @@
     "pickAgent": "Pick an agent on the left to start talking.",
     "newAgent": "New agent",
     "editAgent": "Edit",
+    "retry": "Retry",
     "editAgentTitle": "Edit agent",
     "deleteAgent": "Delete",
     "concurrency": "Running",

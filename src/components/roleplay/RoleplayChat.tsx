@@ -15,7 +15,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, RotateCw } from "lucide-react";
 import { useRoleplayStore } from "../../stores/roleplayStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectStore } from "../../stores/projectStore";
@@ -106,7 +106,7 @@ function TurnBlock({ turn, log, memories }: {
 export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: () => void }) {
   const { t } = useTranslation();
   const {
-    sessions, running, queue, stale, send, stop, dequeue, promote,
+    sessions, running, queue, stale, send, stop, retry, dequeue, promote,
     refreshBinding, setAgentModel,
   } = useRoleplayStore();
   const session = sessions[agent.id];
@@ -414,7 +414,23 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
             </div>
           )}
 
-          {session?.error && <div className={styles.errorBar}>{session.error}</div>}
+          {/* 报错 = 这一轮没有回复。作者轮已经在 transcript 里了，所以「重试」是
+              接着那一问再跑一次，不是重新说一遍话。 */}
+          {session?.error && (
+            <div className={styles.errorBar}>
+              <span className={styles.errorText}>{session.error}</span>
+              {session.lastJob && !isRunning && queuePos < 0 && (
+                <button
+                  type="button"
+                  className={styles.errorRetry}
+                  onClick={() => retry(agent.id)}
+                >
+                  <RotateCw size={11} strokeWidth={2} />
+                  {t("roleplay.retry", { defaultValue: "重试" })}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
