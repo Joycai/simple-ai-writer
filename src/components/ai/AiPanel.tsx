@@ -29,6 +29,7 @@ import { SnippetPicker } from "./SnippetPicker";
 import { useBatchStore } from "../../stores/batchStore";
 import { draftCountFor, totalUsage, useAiTaskStore, type TaskKind } from "../../stores/aiTaskStore";
 import { useAgentStore } from "../../stores/agentStore";
+import { cardsForSurface } from "../../lib/agent/approvalRouting";
 import { useComposerStore } from "../../stores/composerStore";
 import { AgentLog } from "./AgentLog";
 import { TaskPanel } from "./TaskPanel";
@@ -973,10 +974,11 @@ export function AiPanel() {
   const customInstr = useComposerStore((s) => s.panelInstruction);
   const setCustomInstr = useComposerStore((s) => s.setPanelInstruction);
   const [agentMode, setAgentMode] = useState(false);
-  const pendingApprovals = useAgentStore((s) => s.pending);
-  const pendingPlans = useAgentStore((s) => s.pendingPlans);
-  const pendingRoundLimits = useAgentStore((s) => s.pendingRoundLimits);
-  const pendingTruncations = useAgentStore((s) => s.pendingTruncations);
+  // 同 AgentChat：只渲染没有 surface 标记的卡片（lib/agent/approvalRouting）。
+  const pendingApprovals = cardsForSurface(useAgentStore((s) => s.pending), null);
+  const pendingPlans = cardsForSurface(useAgentStore((s) => s.pendingPlans), null);
+  const pendingRoundLimits = cardsForSurface(useAgentStore((s) => s.pendingRoundLimits), null);
+  const pendingTruncations = cardsForSurface(useAgentStore((s) => s.pendingTruncations), null);
   const taskAbortController = useAiTaskStore((s) => s.abortController);
   const outputRef = useRef<HTMLDivElement>(null);
 

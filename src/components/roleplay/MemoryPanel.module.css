@@ -1,0 +1,276 @@
+/* 记事本：可收起的第三栏。视觉语汇跟花名册一致——它也是一列「东西」，
+   不该发明第二套。 */
+
+.panel {
+  width: 300px;
+  flex-shrink: 0;
+  background: var(--rp-rail);
+  border-left: 1px solid var(--color-border-panel);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.title {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--color-text-primary);
+}
+
+.count,
+.id {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--color-text-label);
+}
+
+.spacer { flex: 1; }
+
+.iconBtn {
+  border: none;
+  background: none;
+  padding: 2px;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  align-self: center;
+}
+
+.iconBtn:hover { color: var(--color-accent); }
+
+.staleBar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 14px;
+  background: var(--rp-row-selected);
+  border-left: 2px solid var(--color-accent);
+}
+
+.staleText {
+  flex: 1;
+  font-family: var(--font-serif);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-soft);
+}
+
+.staleBtn {
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-accent);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.scroll { flex: 1; overflow-y: auto; min-height: 0; padding: 4px 0 14px; }
+
+.group { padding-top: 10px; }
+
+.groupLabel {
+  padding: 4px 14px 6px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--color-text-hint);
+}
+
+.record {
+  padding: 9px 14px 8px;
+  border-left: 2px solid transparent;
+}
+
+.record:hover { background: var(--rp-row-hover); }
+
+/* 已了结的不靠颜色区分——整个应用只有一个赭石。压暗 + 删除线标题就够了，
+   而且它们整组默认是折起来的。 */
+.recordClosed { opacity: 0.55; }
+.recordClosed .recordTitle { text-decoration: line-through; }
+
+.recordHead { display: flex; align-items: baseline; gap: 8px; }
+
+.recordTitle {
+  flex: 1;
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--color-text-primary);
+}
+
+.turnLink {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--color-text-label);
+  cursor: pointer;
+}
+
+.turnLink:hover { color: var(--color-accent); }
+
+.subject {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--color-text-label);
+  margin-top: 4px;
+}
+
+.body {
+  font-family: var(--font-serif);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--color-text-dim);
+  margin-top: 4px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 7px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.record:hover .actions,
+.record:focus-within .actions { opacity: 1; }
+
+.action {
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-text-dim);
+  cursor: pointer;
+}
+
+.action:hover { color: var(--color-accent); }
+
+.closedToggle {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  padding: 6px 14px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-text-label);
+  cursor: pointer;
+}
+
+.closedToggle:hover { color: var(--color-text-primary); }
+
+.empty { padding: 28px 16px; }
+
+.emptyTitle {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text-dim);
+}
+
+.emptyHint {
+  font-family: var(--font-serif);
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--color-text-hint);
+  margin-top: 8px;
+}
+
+/* 手动记一条 */
+.form {
+  padding: 12px 14px;
+  margin: 0 0 6px;
+  background: var(--rp-input);
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.kindRow { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 9px; }
+
+.kindChip {
+  padding: 4px 9px;
+  border: 1px solid var(--color-border-panel);
+  background: none;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-text-dim);
+  cursor: pointer;
+}
+
+.kindChipOn {
+  background: var(--rp-row-selected);
+  border-color: var(--color-accent);
+  color: var(--color-accent-text);
+}
+
+.input,
+.textarea {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--rp-rail);
+  border: 1px solid var(--color-border-panel);
+  outline: none;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+}
+
+.input:focus,
+.textarea:focus { border-color: var(--color-border-accent); }
+
+.textarea { min-height: 60px; resize: vertical; margin-top: 7px; }
+
+.input::placeholder,
+.textarea::placeholder { color: var(--color-text-hint); }
+
+.formFoot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 9px; }
+
+.ghost,
+.primary {
+  padding: 6px 14px;
+  border: 1px solid var(--color-border-panel);
+  background: none;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-text-dim);
+  cursor: pointer;
+}
+
+.primary {
+  border-color: transparent;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.primary:disabled { background: var(--rp-avatar-bg); color: var(--color-text-label); cursor: default; }

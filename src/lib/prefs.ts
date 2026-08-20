@@ -41,6 +41,7 @@ export const PREF_KEYS = [
   "app:defaultMaxOutput",
   "app:apiLogEnabled",
   "app:pptxExportBeta",
+  "app:roleplayBeta",
   "app:notifyEnabled",
   "app:notifyApproval",
   "app:notifyDone",

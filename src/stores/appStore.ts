@@ -2,6 +2,7 @@ import { create } from "zustand";
 import i18n from "../i18n";
 import { deletePref, PINNED_LORE_PREFIX, prunePrefsWithPrefix, readPref, writePref } from "../lib/prefs";
 import { MAX_DRAFTS } from "../lib/ai/drafts";
+import { isRoleplayEnabled } from "../lib/roleplay/flag";
 import { DEFAULT_MAX_OUTPUT_KEY, DEFAULT_MAX_OUTPUT_MAX } from "../lib/ai/modelLimits";
 import {
   CONTEXT_UTILIZATION_DEFAULT,
@@ -114,9 +115,17 @@ const storedDraftCount = () => clamp(parseInt(readPref(DRAFT_COUNT_KEY) ?? "1", 
 const storedDefaultMaxOutput = () =>
   clamp(parseInt(readPref(DEFAULT_MAX_OUTPUT_KEY) ?? "0", 10) || 0, 0, DEFAULT_MAX_OUTPUT_MAX);
 
-/** Which assistant tab the drawer reopens on — persisted like the panel widths. */
+/**
+ * Which assistant tab the drawer reopens on — persisted like the panel widths.
+ *
+ * `roleplay` is downgraded when its Beta switch is off: the tab is *absent*
+ * in that case, so restoring it would open the drawer onto a mode with no tab
+ * to leave it by. This is the one stored mode that can stop existing between
+ * two launches.
+ */
 const storedAiDrawerMode = (): AiDrawerMode => {
   const raw = readPref(AI_DRAWER_MODE_KEY);
+  if (raw === "roleplay") return isRoleplayEnabled() ? "roleplay" : "generate";
   return raw === "chat" || raw === "consistency" || raw === "generate" ? raw : "generate";
 };
 
@@ -139,7 +148,7 @@ function prefBackedState() {
 }
 
 export type MainView = "editor" | "lore-wall" | "library";
-export type AiDrawerMode = "generate" | "chat" | "consistency";
+export type AiDrawerMode = "generate" | "chat" | "consistency" | "roleplay";
 /** Every pane the settings page renders — `openSettings(tab)` can reach all of
  *  them, so this union and SettingsPage's nav must stay in step. */
 export type SettingsTab =

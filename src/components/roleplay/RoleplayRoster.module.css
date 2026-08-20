@@ -1,0 +1,303 @@
+/* 设计稿 08 屏 1a / 1d。行高 56px，左侧 2px 状态规。 */
+
+.rail {
+  width: 272px;
+  flex-shrink: 0;
+  background: var(--rp-rail);
+  border-right: 1px solid var(--color-border-panel);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.railHead {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.search {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--rp-input);
+  border: 1px solid var(--color-border-panel);
+  color: var(--color-text-label);
+  min-width: 0;
+}
+
+.search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--color-text-soft);
+}
+
+.search input::placeholder { color: var(--color-text-label); }
+
+.newBtn {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border-accent);
+  background: none;
+  color: var(--color-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.newBtn:hover { background: var(--color-accent-tint); }
+
+.scroll { flex: 1; overflow-y: auto; min-height: 0; }
+
+.groupLabel {
+  padding: 14px 16px 8px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--color-text-hint);
+}
+
+.groupCount {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0;
+  color: var(--color-text-kbd);
+}
+
+.row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 16px;
+  border: none;
+  border-left: 2px solid transparent;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+/* 悬停＝中性灰，无左规。 */
+.row:hover { background: var(--rp-row-hover); }
+
+/* 选中＝赭石淡染 + 赭石左规。两者永不混淆。 */
+.rowSelected,
+.rowSelected:hover {
+  background: var(--rp-row-selected);
+  border-left-color: var(--color-accent);
+}
+
+.avatar {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--rp-avatar-bg);
+  color: var(--rp-avatar-fg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-serif);
+  font-weight: 300;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.avatarActive {
+  background: var(--rp-avatar-bg-active);
+  color: var(--rp-avatar-fg-active);
+}
+
+/* 旁白：直角方框套一个小方块。形状承担分类，颜色不参与。 */
+.narratorMark {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border: 1px solid var(--color-border-emphasis);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.narratorMark span {
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--color-text-dim);
+}
+
+.rowBody { flex: 1; min-width: 0; }
+
+.rowHead { display: flex; align-items: baseline; gap: 8px; }
+
+.name {
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.2;
+  color: var(--color-text-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowSelected .name {
+  font-weight: 500;
+  color: var(--rp-name-selected);
+}
+
+.nameGone {
+  color: var(--color-text-hint);
+  text-decoration: line-through;
+  text-decoration-color: var(--color-border-emphasis);
+}
+
+.kindTag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0.14em;
+  color: var(--color-text-label);
+  flex-shrink: 0;
+}
+
+.turns {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--color-text-label);
+  flex-shrink: 0;
+}
+
+.preview {
+  font-family: var(--font-serif);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-text-label);
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowSelected .preview { color: var(--color-text-muted); }
+
+.status { display: flex; align-items: center; gap: 6px; margin-top: 5px; }
+
+.dotLive,
+.dotHollow,
+.dotAccentHollow {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dotLive { background: var(--color-accent); animation: rp-pulse 1.4s infinite; }
+.dotHollow { border: 1px solid var(--color-text-dim); }
+.dotAccentHollow { border: 1px solid var(--color-accent); }
+
+.statusLive {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-accent);
+}
+
+.statusQueued {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-text-dim);
+}
+
+.statusDim {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-text-dim);
+}
+
+.gone {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-text-hint);
+  margin-top: 5px;
+}
+
+/* 未读＝一个方块，不是圆点：圆点在这一列已经是「运行中」了。 */
+.unread {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  background: var(--color-accent);
+}
+
+.removeBtn {
+  padding: 4px 9px;
+  border: 1px solid var(--color-border-input);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-text-dim);
+  flex-shrink: 0;
+}
+
+.removeBtn:hover { color: var(--color-text-primary); }
+
+.railFoot {
+  flex-shrink: 0;
+  padding: 12px 16px;
+  border-top: 1px solid var(--color-hairline);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.footLabel,
+.footValue {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.footLabel { color: var(--color-text-label); }
+.footValue { color: var(--color-text-dim); }
+
+.slots { display: flex; gap: 3px; }
+
+.slotOn,
+.slotOff { width: 14px; height: 4px; }
+
+.slotOn { background: var(--color-accent); }
+.slotOff { background: var(--rp-avatar-bg); }
+
+.spacer { flex: 1; }
+
+@keyframes rp-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dotLive { animation: none; }
+}

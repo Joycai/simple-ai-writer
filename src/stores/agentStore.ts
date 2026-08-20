@@ -60,6 +60,7 @@ import {
   CHAT_AUTO_APPROVE_KEY, grants, grantsAppend, isAutoApprovable,
   type AutoApproveKind, type AutoApproveState,
 } from "../lib/agent/autoApprove";
+import type { SurfaceTagged } from "../lib/agent/approvalRouting";
 import { createPlanGate, type LorePlan, type PlanDecision } from "../lib/agent/plan";
 import {
   createTaskWorkspace,
@@ -134,6 +135,12 @@ export interface ApprovalBinding {
    * surface does not offer 本次都批准 at all, and every card is asked.
    */
   autoApproveKey?: unknown;
+  /**
+   * Which surface renders this card. Absent = the default ones (chat + task
+   * panel), which is every caller that existed before roleplay. See
+   * lib/agent/approvalRouting for the one rule and why the default is "show".
+   */
+  surface?: string;
 }
 
 export interface PendingApproval extends ApprovalBinding {
@@ -142,7 +149,7 @@ export interface PendingApproval extends ApprovalBinding {
   runId: RunId;
 }
 
-export interface PendingPlan {
+export interface PendingPlan extends SurfaceTagged {
   plan: LorePlan;
   resolve: (decision: PlanDecision) => void;
   runId: RunId;
@@ -155,7 +162,7 @@ export interface PendingPlan {
  * grant `extension` more rounds, or let it wrap up now. At most one per run —
  * the runtime blocks on the answer, so a second can't queue behind the first.
  */
-export interface PendingRoundLimit {
+export interface PendingRoundLimit extends SurfaceTagged {
   /** Stable identity for React keys — `runId` is an opaque object. */
   id: string;
   /** Tool rounds consumed so far. */
@@ -182,7 +189,7 @@ export interface PendingRoundLimit {
  * Same shape as {@link PendingRoundLimit} and for the same reason: the loop is
  * waiting on a person, and both chat and the task panel render the card.
  */
-export interface PendingTruncation {
+export interface PendingTruncation extends SurfaceTagged {
   id: string;
   /** Recoveries the runtime already made on its own before asking. */
   recoveries: number;
@@ -327,17 +334,22 @@ interface AgentState {
   /** Called by the runtime's onRoundLimit when a run reaches its round cap. */
   requestRoundExtension: (
     roundsUsed: number, extension: number, runId: RunId, canPause: boolean,
+    surface?: string,
   ) => Promise<RoundLimitDecision>;
   /** Resolve a blocked run's round-cap question: extend, finish, or pause. */
   resolveRoundLimit: (runId: RunId, decision: RoundLimitDecision) => void;
 
   /** Called by the runtime's onTruncationLimit after repeated truncation. */
-  requestTruncationDecision: (recoveries: number, runId: RunId) => Promise<TruncationDecision>;
+  requestTruncationDecision: (
+    recoveries: number, runId: RunId, surface?: string,
+  ) => Promise<TruncationDecision>;
   /** Resolve a blocked run's truncation question: keep going, or stop here. */
   resolveTruncation: (runId: RunId, decision: TruncationDecision) => void;
 
   /** Called by propose_lore_plan (via ToolContext.requestPlanApproval). */
-  requestPlanApproval: (plan: LorePlan, runId: RunId, autoApproveKey?: unknown) => Promise<PlanDecision>;
+  requestPlanApproval: (
+    plan: LorePlan, runId: RunId, autoApproveKey?: unknown, surface?: string,
+  ) => Promise<PlanDecision>;
   /** User approved the plan — the gate records its steps and the loop resumes. */
   approvePlan: (id: string) => void;
   /** User rejected the plan: their reason goes back to the model verbatim. */
@@ -713,22 +725,24 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     item.resolve({ approved: false, reason });
   },
 
-  requestRoundExtension: (roundsUsed, extension, runId, canPause) =>
+  requestRoundExtension: (roundsUsed, extension, runId, canPause, surface) =>
     new Promise<RoundLimitDecision>((resolve) => {
       const id = `round-limit-${++roundLimitCounter}`;
       set((s) => ({
         pendingRoundLimits: [
           ...s.pendingRoundLimits,
-          { id, roundsUsed, extension, canPause, resolve, runId },
+          { id, roundsUsed, extension, canPause, resolve, runId, surface },
         ],
       }));
       notifyApproval("notify.approvalRound");
     }),
-  requestTruncationDecision: (recoveries, runId) =>
+  requestTruncationDecision: (recoveries, runId, surface) =>
     new Promise<TruncationDecision>((resolve) => {
       const id = `truncation-${++truncationCounter}`;
       set((s) => ({
-        pendingTruncations: [...s.pendingTruncations, { id, recoveries, resolve, runId }],
+        pendingTruncations: [
+          ...s.pendingTruncations, { id, recoveries, resolve, runId, surface },
+        ],
       }));
       notifyApproval("notify.approvalTruncation");
     }),
@@ -777,7 +791,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     for (const item of drainT) item.resolve({ action: "stop" });
   },
 
-  requestPlanApproval: (plan, runId, autoApproveKey) =>
+  requestPlanApproval: (plan, runId, autoApproveKey, surface) =>
     new Promise<PlanDecision>((resolve) => {
       // A standing grant skips the card, not the gate: the model still had to
       // declare its steps, and every lore write is still checked against them
@@ -786,7 +800,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         resolve({ approved: true });
         return;
       }
-      set((s) => ({ pendingPlans: [...s.pendingPlans, { plan, resolve, runId, autoApproveKey }] }));
+      set((s) => ({
+        pendingPlans: [...s.pendingPlans, { plan, resolve, runId, autoApproveKey, surface }],
+      }));
       notifyApproval("notify.approvalPlan");
     }),
 

@@ -36,6 +36,20 @@ import { LORE_PLAN_ACTIONS, type LorePlan, type PlanDecision, type PlanGate } fr
 import { editImageTool, generateImageTool } from "./imageTools";
 import { exportPptxTool } from "./pptxTools";
 import {
+  listScenesTool,
+  readSceneMemoryTool,
+  readSceneSummaryTool,
+  readSceneTool,
+  searchScenesTool,
+  type SceneReader,
+} from "../roleplay/sceneTools";
+import {
+  recallTool,
+  rememberTool,
+  reviseMemoryTool,
+  type AgentMemoryStore,
+} from "../roleplay/memoryTools";
+import {
   copyFileTool,
   createChapterTool,
   createDirectoryTool,
@@ -357,6 +371,26 @@ export interface ToolContext {
    * avoiding reverse dependencies from lib/agent into stores.
    */
   resolveSubAgent?: (kind: DelegateKind) => Promise<AiConn | { error: string }>;
+  /**
+   * A narrator's window onto the other roleplay scenes. **Reaches only
+   * transcript.md / summary.md** — another agent's wire history has no path
+   * here, which is what makes the isolation structural rather than a promise
+   * in a prompt (docs/feature/roleplay/01-overview.md, invariant 3).
+   *
+   * Absent means this surface is not a narrator, and the scene tools say so
+   * rather than quietly returning nothing.
+   */
+  scenes?: SceneReader;
+  /**
+   * 本 agent 的私有长期记忆（约定 / 待办 / 事件 / 关系）。
+   *
+   * 与 `scenes` 相反，这是**可写**的，而且是 L1：写进去不过审批卡。安全阀在
+   * lib/roleplay/memory 的三条规则——只增改不删、写前备份、没有整篇重写的工具
+   * ——所以一次坏调用的爆炸半径是一条记录。
+   *
+   * 缺席意味着当前 surface 不是扮演面板，记忆工具直接说明而不是静默无操作。
+   */
+  agentMemory?: AgentMemoryStore;
 }
 
 export interface RegisteredTool {
@@ -418,6 +452,14 @@ export type ToolId =
   | "write_note"
   | "read_note"
   | "list_notes"
+  | "list_scenes"
+  | "read_scene"
+  | "search_scenes"
+  | "read_scene_summary"
+  | "read_scene_memory"
+  | "remember"
+  | "revise_memory"
+  | "recall"
   | "delegate";
 
 function parseArgs<T>(raw: string): T {
@@ -1749,6 +1791,178 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: listNotesTool,
+  },
+
+  // ── Roleplay scenes (lib/roleplay/sceneTools) ──
+  // Narrator-only, and read-only by construction: they reach transcript.md and
+  // summary.md, never another agent's wire history. See the note on
+  // ToolContext.scenes.
+  list_scenes: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "list_scenes",
+        description:
+          "List the roleplay scenes in this project — one per character agent the author is playing with. Returns scene ids, the character's name, turn counts and a one-line gist. Call this first; every other scene tool takes an id from here. You are not in this list.",
+        parameters: { type: "object", properties: {} },
+      },
+    },
+    execute: (call, ctx) => listScenesTool(call.id, ctx),
+  },
+
+  read_scene: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "read_scene",
+        description:
+          "Read the verbatim transcript of one roleplay scene by turn range. Omit from/to to get the most recent turns. Prefer read_scene_summary first on a long scene, then read only the range that matters.",
+        parameters: {
+          type: "object",
+          properties: {
+            agent: { type: "string", description: "Scene id from list_scenes" },
+            from: { type: "integer", description: "First turn number (1-based, inclusive). Omit for the latest window." },
+            to: { type: "integer", description: "Last turn number (inclusive)." },
+          },
+          required: ["agent"],
+        },
+      },
+    },
+    execute: (call, ctx) => readSceneTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  search_scenes: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "search_scenes",
+        description:
+          "Full-text search across roleplay transcripts. Returns matching turn numbers with the matching line, so you can then read_scene the range around them. This is how you find something said long ago without reading everything.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Text to look for" },
+            agent: { type: "string", description: "Restrict to one scene. Omit to search all of them." },
+          },
+          required: ["query"],
+        },
+      },
+    },
+    execute: (call, ctx) => searchScenesTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  read_scene_summary: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "read_scene_summary",
+        description:
+          "Read a scene's rolling summary — the cheap way to catch up on a long scene before deciding which turns to read verbatim. Start here rather than pulling a whole transcript into context.",
+        parameters: {
+          type: "object",
+          properties: { agent: { type: "string", description: "Scene id from list_scenes" } },
+          required: ["agent"],
+        },
+      },
+    },
+    execute: (call, ctx) => readSceneSummaryTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  read_scene_memory: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "read_scene_memory",
+        description:
+          "Read what a character has committed to long-term memory: pacts they made, things they mean to do, events that changed them, how they feel about people. Far cheaper than the transcript, and it is where the still-binding commitments live — start here.",
+        parameters: {
+          type: "object",
+          properties: {
+            agent: { type: "string", description: "Scene id from list_scenes" },
+            include_closed: { type: "boolean", description: "Also return kept and called-off records" },
+          },
+          required: ["agent"],
+        },
+      },
+    },
+    execute: (call, ctx) => readSceneMemoryTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  // ── Agent memory (lib/roleplay/memoryTools) ──
+  // L1: applied without a card. The safety valve is that nothing can be
+  // destroyed — see lib/roleplay/memory's three write rules.
+  remember: {
+    access: "write-auto",
+    definition: {
+      type: "function",
+      function: {
+        name: "remember",
+        description:
+          "Record something that will still matter many turns from now: a pact the two of you made, something you mean to do, an event that changed things, or a shift in how you feel about someone. This is your own private long-term memory and it survives context compaction, unlike the conversation itself. Do NOT record ordinary dialogue, atmosphere, or anything the knowledge base already says — a memory full of noise pushes the real commitments out.",
+        parameters: {
+          type: "object",
+          properties: {
+            kind: {
+              type: "string",
+              enum: ["pact", "todo", "event", "bond", "note"],
+              description: "pact = agreed with someone; todo = you intend to do it; event = it happened and changed things; bond = how you regard someone; note = anything else worth keeping",
+            },
+            title: { type: "string", description: "One line. This is what you see first when you look back." },
+            body: { type: "string", description: "The detail: what exactly was agreed, what changed, why it matters." },
+            subject: { type: "string", description: "Who or what this is about, if any." },
+          },
+          required: ["kind", "title"],
+        },
+      },
+    },
+    execute: (call, ctx) => rememberTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  revise_memory: {
+    access: "write-auto",
+    definition: {
+      type: "function",
+      function: {
+        name: "revise_memory",
+        description:
+          "Update one memory record you already made — mark a pact kept (done) or called off (void), or rewrite how you now see someone. Records are never deleted; voiding one keeps its text. Call recall first if you need the ids.",
+        parameters: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "Record id, e.g. m3" },
+            body: { type: "string", description: "Replacement detail text" },
+            status: { type: "string", enum: ["open", "done", "void"] },
+          },
+          required: ["id"],
+        },
+      },
+    },
+    execute: (call, ctx) => reviseMemoryTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  recall: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "recall",
+        description:
+          "Read your own memory records. The active ones are already in your context — call this only to look further back: kept pacts, called-off agreements, or older records that did not fit.",
+        parameters: {
+          type: "object",
+          properties: {
+            kind: { type: "string", enum: ["pact", "todo", "event", "bond", "note"] },
+            include_closed: { type: "boolean", description: "Include kept (done) and called-off (void) records" },
+          },
+        },
+      },
+    },
+    execute: (call, ctx) => recallTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   delegate: {

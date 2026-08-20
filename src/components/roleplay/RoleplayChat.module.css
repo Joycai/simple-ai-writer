@@ -1,0 +1,666 @@
+/* 设计稿 08 屏 1a / 1b / 1e / 1h。 */
+
+/* 稿面 + 可收起的记事本。稿面固定 640px 是这个面板不肯让步的一条，所以记事本
+   是拉开的第三栏，不是常驻的。 */
+.pane {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  background: var(--rp-canvas);
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* ── 顶部信息带：一行小字，控件全部压扁 ── */
+.band {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 26px;
+  height: 46px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+/* 这一条带子里的每一项都不换行。挤不下时该消失的是最边缘的说明文字，而不是
+   把「绑定 1 项设定」折成两行——46px 的固定高度里换行只会被裁掉一半。 */
+.band > * { flex-shrink: 0; white-space: nowrap; }
+
+/* 记事本拉开时横向空间少了 300px：先收走那句只读的说明，再让模型选择器让步。 */
+.bandNarrow .isolation { display: none; }
+.bandNarrow .modelSlot { flex-shrink: 1; min-width: 0; overflow: hidden; }
+
+.bandName {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--color-text-primary);
+}
+
+.kindTag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--color-text-label);
+}
+
+.sep { width: 1px; height: 11px; background: var(--color-border-panel); }
+
+.bandBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--color-text-dim);
+  cursor: pointer;
+}
+
+.bandBtn:hover { color: var(--color-text-primary); }
+.bandBtnOn { color: var(--color-accent); }
+
+/* 记事本入口带计数：面板里其余控件都压成一行小字，这是唯一的例外——它不是
+   配置，是作品的一部分，作者应当一眼看到「这个角色还欠着三件事」。 */
+.memoryCount {
+  min-width: 15px;
+  padding: 2px 4px;
+  background: var(--color-accent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  text-align: center;
+  color: var(--color-on-accent);
+}
+
+.modelSlot { display: flex; align-items: center; min-width: 0; }
+.spacer { flex-shrink: 1; }
+
+.spacer { flex: 1; }
+
+.isolation {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-text-hint);
+}
+
+/* ── 绑定弹层 ── */
+.bindPopover {
+  position: absolute;
+  z-index: 20;
+  margin: 46px 0 0 120px;
+  width: 400px;
+  background: var(--rp-rail);
+  border: 1px solid var(--color-border-panel);
+  box-shadow: var(--shadow-lg);
+  padding: 12px 0 8px;
+}
+
+.bindHead {
+  padding: 0 14px 10px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-text-kbd);
+}
+
+.bindEmpty,
+.bindRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 1;
+  color: var(--color-text-soft);
+}
+
+.bindEmpty { color: var(--color-text-hint); }
+.bindRowGone { background: var(--color-hairline); }
+
+.bindDot { width: 6px; height: 6px; background: var(--color-accent); flex-shrink: 0; }
+.bindDotGone { width: 6px; height: 6px; border: 1px solid var(--color-border-emphasis); flex-shrink: 0; }
+
+.bindLabel { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bindRowGone .bindLabel { color: var(--color-text-hint); text-decoration: line-through; }
+
+.bindGoneTag {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--color-text-label);
+}
+
+/* ── 设定已更新 ── */
+.staleBar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 26px;
+  background: var(--rp-row-selected);
+  border-left: 2px solid var(--color-accent);
+}
+
+.staleDot { width: 6px; height: 6px; border-radius: 50%; background: var(--color-accent); flex-shrink: 0; }
+
+.staleText {
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-primary);
+}
+
+.staleBtn {
+  padding: 6px 13px;
+  border: none;
+  background: var(--color-accent);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--color-on-accent);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.staleBtn:hover { background: var(--color-accent-hover); }
+
+/* ── 稿面 ── 640px 居中，与编辑器正文同宽 ── */
+.scroll { flex: 1; overflow-y: auto; min-height: 0; padding: 26px 0 8px; }
+
+.column { width: 640px; max-width: calc(100% - 52px); margin: 0 auto; }
+
+/* 作者的回合：一条 2px 赭石左规 + 一个小号名标。没有气泡。 */
+.authorTurn {
+  border-left: 2px solid var(--color-border-accent);
+  padding-left: 18px;
+  margin-bottom: 26px;
+}
+
+.authorLabel {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+  margin-bottom: 9px;
+}
+
+.personaName {
+  letter-spacing: 0.1em;
+  color: var(--color-text-hint);
+}
+
+/* 角色的回合：直接落在纸上。 */
+.agentTurn { padding-left: 20px; margin-bottom: 10px; }
+
+.agentLabel {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+  margin-bottom: 9px;
+}
+
+.streamHead { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+.streamHead .agentLabel { margin-bottom: 0; }
+
+.streamDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  animation: rp-pulse 1.4s infinite;
+}
+
+.streamTime {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--color-text-label);
+}
+
+/* 「记下了：…」——很轻的一道痕迹，不打断阅读，但看得见。 */
+.memoryTrace {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 20px;
+  margin-bottom: 4px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--color-text-label);
+}
+
+.memoryDot {
+  width: 4px;
+  height: 4px;
+  flex-shrink: 0;
+  background: var(--color-accent);
+}
+
+/* 执行日志：默认折成一行小字。 */
+.logLine { padding-left: 20px; margin-bottom: 28px; }
+
+.logToggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-text-hint);
+  cursor: pointer;
+}
+
+.logToggle:hover { color: var(--color-text-dim); }
+.logToggle svg { transition: transform var(--transition-fast); }
+
+.logBody { margin-top: 10px; }
+
+/* ── 对话空态 ── */
+.chatEmpty { padding: 22px 0 34px; }
+
+.chatEmptyTitle {
+  font-family: var(--font-serif);
+  font-size: 20px;
+  line-height: 1.4;
+  color: var(--color-text-primary);
+}
+
+.chatEmptyBody {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--color-text-dim);
+  margin-top: 8px;
+  max-width: 440px;
+}
+
+.starters { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
+
+.starter {
+  padding: 7px 13px;
+  border: 1px solid var(--color-border-panel);
+  background: none;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 1;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.starter:hover { border-color: var(--color-border-accent); color: var(--color-text-primary); }
+
+/* ── 排队 ── */
+.queueCard {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 14px;
+  margin: 0 0 20px 20px;
+  background: var(--rp-rail);
+  border-left: 2px solid var(--color-border-emphasis);
+}
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--color-border-input);
+  border-top-color: var(--color-text-dim);
+  border-radius: 50%;
+  animation: rp-spin 1.1s linear infinite;
+  flex-shrink: 0;
+}
+
+.queueText {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-soft);
+}
+
+.queueHint,
+.kbd,
+.refCount {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-text-hint);
+}
+
+.queueBtn,
+.queueBtnAccent {
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.queueBtn { color: var(--color-text-dim); }
+.queueBtnAccent { color: var(--color-accent); }
+
+.errorBar {
+  margin: 0 0 20px 20px;
+  padding: 10px 13px;
+  background: var(--rp-rail);
+  border-left: 2px solid var(--color-accent);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-soft);
+}
+
+/* 阻塞中的卡片：紧贴输入框上方，和稿面同宽居中——它们讲的是稿子里的一段话，
+   不该比那段话更宽。 */
+.approvals {
+  flex-shrink: 0;
+  width: 640px;
+  max-width: calc(100% - 52px);
+  margin: 0 auto;
+  padding-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+/* ── 输入区 ── */
+.composer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--color-border-panel);
+  background: var(--rp-rail);
+  padding: 12px 26px 14px;
+}
+
+.composerHead {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 10px;
+}
+
+.personaWrap { position: relative; display: flex; align-items: center; gap: 7px; }
+
+.personaLabel,
+.personaHint {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--color-text-hint);
+}
+
+.personaChip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--color-border-panel);
+  background: var(--rp-input);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-text-soft);
+  cursor: pointer;
+}
+
+.personaMenu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  width: 300px;
+  max-height: 300px;
+  overflow-y: auto;
+  background: var(--rp-rail);
+  border: 1px solid var(--color-border-panel);
+  box-shadow: var(--shadow-lg);
+  padding: 6px 0;
+}
+
+.personaItem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border: none;
+  border-left: 2px solid transparent;
+  background: none;
+  text-align: left;
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 1;
+  color: var(--color-text-soft);
+  cursor: pointer;
+}
+
+.personaItem:hover { background: var(--rp-row-hover); }
+
+.personaItemActive {
+  background: var(--rp-row-selected);
+  border-left-color: var(--color-accent);
+  color: var(--color-text-primary);
+}
+
+.radio {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border-emphasis);
+  flex-shrink: 0;
+}
+
+.personaItemActive .radio { border: 3px solid var(--color-accent); }
+
+.personaNote {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 11px;
+  color: var(--color-text-hint);
+}
+
+.syntaxRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-text-dim);
+}
+
+.syntaxAction { font-style: italic; }
+.syntaxSpeech,
+.syntaxScene,
+.syntaxMeta { color: var(--color-text-dim); }
+
+.syntaxToggle {
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-text-label);
+  cursor: pointer;
+}
+
+.syntaxToggle:hover { color: var(--color-text-primary); }
+
+.syntaxCard {
+  background: var(--rp-input);
+  border: 1px solid var(--color-border-panel);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+
+.syntaxGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 22px; }
+
+.syntaxItem { display: flex; gap: 10px; align-items: baseline; }
+
+.syntaxMark {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-accent);
+  width: 64px;
+  flex-shrink: 0;
+}
+
+.syntaxName {
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text-soft);
+}
+
+.syntaxExample {
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text-label);
+}
+
+.inputBox {
+  position: relative;
+  border: 1px solid var(--color-border-panel);
+  background: var(--rp-input);
+  padding: 13px 15px 10px;
+}
+
+/* 镜像层与 textarea 严格同度量：字体、字号、行高、padding 全部一致，
+   只有颜色不同。差一点点，光标就和字错开。 */
+.inputStack { position: relative; }
+
+.mirror,
+.textarea {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 1.8;
+  letter-spacing: 0;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  padding: 0;
+  margin: 0;
+  border: none;
+}
+
+.mirror {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--rp-scene);
+}
+
+.mirrorAction { color: var(--rp-action); }
+.mirrorSpeech { color: var(--rp-speech); }
+.mirrorScene { color: var(--rp-scene); }
+.mirrorMeta { color: var(--color-text-dim); }
+
+.mirrorAction,
+.mirrorSpeech,
+.mirrorScene,
+.mirrorMeta { transition: color 160ms var(--ease-out); }
+
+.textarea {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 74px;
+  max-height: 220px;
+  resize: none;
+  background: transparent;
+  outline: none;
+  /* 默认透明：可见的是底下那层带色的镜像。组字期间（下面那个类）换回不透明，
+     否则中文输入法的候选文字落在一片透明上，作者看不见自己在打什么。 */
+  color: transparent;
+  caret-color: var(--color-accent);
+}
+
+.textareaVisible { color: var(--rp-speech); }
+
+.textarea::placeholder { color: var(--color-text-hint); }
+
+.inputFoot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-hairline);
+}
+
+.stopBtn {
+  padding: 7px 14px;
+  border: 1px solid var(--color-border-accent);
+  background: none;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--color-accent);
+  cursor: pointer;
+}
+
+.sendBtn {
+  padding: 7px 18px;
+  border: none;
+  background: var(--color-accent);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--color-on-accent);
+  cursor: pointer;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+
+.sendBtn:hover:not(:disabled) { background: var(--color-accent-hover); transform: translateY(-1px); }
+.sendBtn:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+
+.sendBtn:disabled {
+  background: var(--rp-avatar-bg);
+  color: var(--color-text-label);
+  cursor: default;
+}
+
+@keyframes rp-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner, .streamDot { animation: none; }
+  .mirrorAction, .mirrorSpeech, .mirrorScene, .mirrorMeta { transition: none; }
+}

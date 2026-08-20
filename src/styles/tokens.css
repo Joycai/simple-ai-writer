@@ -333,6 +333,26 @@
   --lore-density-2:       #D9B589;
   --lore-density-3:       #A0522D;
   --lore-density-now:     #2A2520;
+
+  /* ── 扮演面板 (docs/feature/roleplay) ──
+     设计稿 08 的取色。凡是与既有 token 同值的一律走别名，只有设计稿给出而
+     调色板里确实没有的四个值才写死 hex——见 design-system.md「令牌优先」。 */
+  --rp-canvas:            var(--color-bg-surface);  /* 640px 稿面 */
+  --rp-rail:              var(--color-bg-base);     /* 花名册 / composer 条 */
+  --rp-input:             #FDFBF5;                  /* 输入框内，比稿面再亮一级 */
+  --rp-row-selected:      var(--color-bg-inset);
+  --rp-row-hover:         #F3EDE0;                  /* 中性灰悬停，绝不用赭石淡染 */
+  --rp-name-selected:     var(--color-text-prose);
+  --rp-avatar-bg:         var(--color-border-panel);
+  --rp-avatar-fg:         var(--color-text-soft);
+  --rp-avatar-bg-active:  var(--color-accent-text);
+  --rp-avatar-fg-active:  var(--color-on-accent);
+  --rp-speech:            var(--color-text-prose);
+  --rp-action:            var(--color-text-label);
+  --rp-scene:             var(--color-text-soft);
+  --rp-quote:             var(--color-text-kbd);
+  --rp-meta-bg:           var(--color-bg-base);
+  --rp-meta-rule:         #C4B9A6;                  /* 元指令块的虚线左规 */
 }
 
 /* ───────── DARK · Night ───────── */
@@ -554,4 +574,22 @@
   --lore-density-2:       #6B4B2E;
   --lore-density-3:       #D9925B;
   --lore-density-now:     #E8DFD0;
+
+  /* ── 扮演面板 ── 设计稿 08 的深色取色，binding。 */
+  --rp-canvas:            var(--color-bg-base);
+  --rp-rail:              var(--color-bg-inset);
+  --rp-input:             #14100C;
+  --rp-row-selected:      var(--color-bg-selected);
+  --rp-row-hover:         var(--color-hairline);
+  --rp-name-selected:     #F0E7D9;
+  --rp-avatar-bg:         var(--color-border-input);
+  --rp-avatar-fg:         var(--color-text-soft);
+  --rp-avatar-bg-active:  var(--color-border-accent);
+  --rp-avatar-fg-active:  var(--color-text-primary);
+  --rp-speech:            var(--color-text-primary);
+  --rp-action:            var(--color-text-muted);
+  --rp-scene:             var(--color-text-dim);
+  --rp-quote:             var(--color-text-dim);
+  --rp-meta-bg:           var(--color-bg-inset);
+  --rp-meta-rule:         var(--color-border-emphasis);
 }

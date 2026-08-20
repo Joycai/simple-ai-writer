@@ -35,6 +35,7 @@ import { useImageThumbnails } from "../lore/useImageDataUrl";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectFiles, useProjectStore, useTerms } from "../../stores/projectStore";
 import { useAgentStore } from "../../stores/agentStore";
+import { cardsForSurface } from "../../lib/agent/approvalRouting";
 import { useAiStore } from "../../stores/aiStore";
 import { useAppStore } from "../../stores/appStore";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
@@ -96,10 +97,18 @@ function matchesKind(item: MentionItem, kind: PickKind): boolean {
 export function AgentChat() {
   const { t } = useTranslation();
   const {
-    turns, chatRunning, chatError, pending, pendingPlans, pendingRoundLimits,
-    pendingTruncations,
+    turns, chatRunning, chatError,
+    pending: allPending, pendingPlans: allPlans,
+    pendingRoundLimits: allRoundLimits, pendingTruncations: allTruncations,
     sendChat, stopChat,
   } = useAgentStore();
+  // 只渲染没有 surface 标记的卡片。带标记的属于扮演面板那样的独立界面——
+  // 一张出现在错误 tab 里的卡片，等于把那次运行永久挂在作者看不见的地方。
+  // 规则与理由见 lib/agent/approvalRouting。
+  const pending = cardsForSurface(allPending, null);
+  const pendingPlans = cardsForSurface(allPlans, null);
+  const pendingRoundLimits = cardsForSurface(allRoundLimits, null);
+  const pendingTruncations = cardsForSurface(allTruncations, null);
   const activeModelId = useAiStore((s) => s.activeModelId);
   const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId));
   const subAgents = useAiStore((s) => s.subAgents);
