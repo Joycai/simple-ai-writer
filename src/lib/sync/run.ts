@@ -10,9 +10,13 @@
  * already use. A knowledge base is tens of hours of the author's work and the
  * app has no undo for it; one place to look is the whole recovery story.
  *
- * **2. A pull snapshots the entire tree first.** Per-entry backups cover a
- * per-entry mistake; they do not cover "I pulled the wrong direction". The
- * whole-tree zip does, and it costs a second (docs §14.3).
+ * **2. A pull snapshots the entire tree first, outside the project.** Per-entry
+ * backups cover a per-entry mistake; they do not cover "I pulled the wrong
+ * direction". The whole-tree zip does, and it costs a second (docs §14.3). It
+ * lands in the app's data directory rather than in `.ai-writer/backups/`
+ * because the project folder is the thing being overwritten: a safety net
+ * stored inside it shares the fate of a folder restored, moved or synced by
+ * some other tool.
  *
  * **3. Every write carries a precondition, even when the author accepted the
  * warnings.** Those are different guarantees: the author accepted what the plan
@@ -134,18 +138,29 @@ export async function runSync(options: RunOptions): Promise<SyncRunResult> {
 }
 
 /**
- * Zip the whole lore tree into `.ai-writer/backups/` before a pull.
+ * Zip the whole lore tree into the app's data directory before a pull.
  *
- * Best-effort by design decision, not by oversight — but the decision is to
- * *fail the sync* if it cannot be written, which is why this throws. A pull
- * whose safety net is missing is exactly the run that should not start.
+ * Throws rather than degrading: a pull whose safety net is missing is exactly
+ * the run that should not start.
+ *
+ * Named for the project and the minute so a listing reads as a history rather
+ * than a pile of hashes. Seconds are left out — two pulls of the same project
+ * inside one minute would collide, and the second one overwriting the first is
+ * the right outcome: they describe the same pre-pull state.
  */
 async function backupLoreTree(projectPath: string, staging: string): Promise<string> {
-  await makeDir(backupsDir(projectPath));
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const dest = `${backupsDir(projectPath)}/lore-before-pull-${stamp}.zip`;
+  const { appDataDir } = await import("@tauri-apps/api/path");
+  const root = `${(await appDataDir()).replace(/\\/g, "/").replace(/\/+$/, "")}/backups`;
+  await makeDir(root);
+
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
+  const project = projectPath.replace(/\\/g, "/").replace(/\/+$/, "").split("/").pop() || "project";
+  const dest = `${root}/${stamp}-${project}.zip`;
+
   // Written via the staging directory first so a failure part-way leaves no
-  // truncated archive sitting in `backups/` looking like a usable one.
+  // truncated archive sitting among the backups looking like a usable one.
   const tmp = `${staging}/lore-backup.zip`;
   await zipEntry(loreRoot(projectPath), tmp);
   await renamePath(tmp, dest);

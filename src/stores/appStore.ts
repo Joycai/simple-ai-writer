@@ -150,7 +150,8 @@ export type SettingsTab =
   | "prompts"
   | "usage"
   | "shortcuts"
-  | "about";
+  | "about"
+  | "sync";
 export type SideTab = "files" | "outline" | "search";
 
 interface AppState {
