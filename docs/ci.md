@@ -18,7 +18,7 @@ The [`CI`](../.github/workflows/ci.yml) workflow runs on every pull request targ
 
 Notes:
 - Frontend tests run with Vitest (`src/**/*.test.ts`, config in `vitest.config.ts`) — currently smoke tests for RAG context assembly and OpenAI/Gemini SSE parsing.
-- Rust unit tests live inline in `src-tauri/src/secrets.rs` and `protocol.rs`; the sync server's live inline in `server/src/ids.rs` and `store.rs`.
+- Rust unit tests live inline in `src-tauri/src/secrets.rs` and `protocol.rs`; the sync server's live inline in `server/src/ids.rs`, `store.rs`, `session.rs`, `audit.rs` and `confedit.rs`.
 - `clippy` is enforced with `-D warnings`: any new warning fails CI.
 - Both Rust jobs install `dtolnay/rust-toolchain@stable`, i.e. **whatever stable is on the
   day the job runs** — which is often newer than the toolchain on your machine. Clippy gains
