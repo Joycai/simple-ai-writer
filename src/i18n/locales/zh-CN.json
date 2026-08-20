@@ -2130,6 +2130,12 @@
       "narratorNote": "旁白不扮演任何人 · 无身份设定"
     },
     "composer": {
+      "addLore": "设定",
+      "addDoc": "文档",
+      "addImage": "图片",
+      "removeRef": "移除这项引用",
+      "imageTooLarge": "{{name}} 太大（{{size}}MB，上限 {{max}}MB）",
+      "refUnreadable": "读不到 {{name}}",
       "placeholder": "说一句台词，或写一个动作…",
       "narratorPlaceholder": "和旁白讨论情节，或让它把某段互动整理进正文…",
       "newline": "⇧↵ 换行",

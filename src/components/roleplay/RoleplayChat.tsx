@@ -15,7 +15,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight, RotateCw } from "lucide-react";
+import { ChevronDown, ChevronRight, Image as ImageIcon, RotateCw, X } from "lucide-react";
 import { useRoleplayStore } from "../../stores/roleplayStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { listArchives, type ArchivedScene } from "../../lib/roleplay/store";
@@ -26,9 +26,16 @@ import { ApprovalCard } from "../ai/ApprovalCard";
 import { RoundLimitCard } from "../ai/RoundLimitCard";
 import { TruncationCard } from "../ai/TruncationCard";
 import { useAgentStore } from "../../stores/agentStore";
+import { useAiStore } from "../../stores/aiStore";
+import {
+  chainCanSeeImages, withSessionOverrides, type SubAgentKind,
+} from "../../lib/agent/subagent";
+import { MAX_IMAGE_BYTES, imageToDataUrl } from "../../lib/fs/images";
+import { attachedKey } from "../../lib/lore/aiTask";
 import { cardsForSurface } from "../../lib/agent/approvalRouting";
 import { ScriptText } from "./ScriptText";
 import { ArchiveViewer } from "./ArchiveViewer";
+import { SubAgentChips } from "../ai/SubAgentChips";
 import { MemoryPanel } from "./MemoryPanel";
 import {
   MentionPicker, filterMentions, mentionKey, mentionLabel,
@@ -42,6 +49,16 @@ import type {
   AuthorPersona, MemoryRecord, RoleplayAgent, SceneTurn,
 } from "../../lib/roleplay/model";
 import styles from "./RoleplayChat.module.css";
+
+/** 一个稳定的空数组：会话还没建起来时给它，省得每帧换一个新引用。 */
+const EMPTY_SUBS: SubAgentKind[] = [];
+
+/** `+ …` 三个按钮各自把选择器限制到哪一类候选。 */
+type PickKind = "lore" | "text" | "image";
+
+function matchesKind(item: MentionItem, kind: PickKind): boolean {
+  return kind === "lore" ? item.type === "lore" : item.type === "file" && item.file.kind === kind;
+}
 
 const MIRROR_CLASS: Record<string, string> = {
   action: styles.mirrorAction,
@@ -122,7 +139,7 @@ function TurnBlock({ turn, log, memories, onRewind }: {
 export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: () => void }) {
   const { t } = useTranslation();
   const {
-    sessions, running, queue, stale, send, stop, retry, rewind, dequeue, promote,
+    sessions, running, queue, stale, send, stop, retry, rewind, dequeue, promote, toggleSubAgent,
     refreshBinding, setAgentModel,
   } = useRoleplayStore();
   const session = sessions[agent.id];
@@ -135,6 +152,10 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const [showBindings, setShowBindings] = useState(false);
   const [openLog, setOpenLog] = useState<number | null>(null);
   const [refs, setRefs] = useState<AttachedItem[]>([]);
+  /** 被拒的附件（太大 / 读不到）。下一次挑选会清掉它。 */
+  const [refError, setRefError] = useState<string | null>(null);
+  /** `+ 条目 / + 文档 / + 图片` 打开选择器时把候选限制到那一类。 */
+  const [pickKind, setPickKind] = useState<PickKind | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [showMemory, setShowMemory] = useState(false);
   // 封存的旧场次。挂在对话区而不是 store 里：它只在作者往上看的时候才有意义，
@@ -160,12 +181,31 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const projectPath = useProjectStore((s) => s.projectPath);
   const mention = useMentionState();
 
+  const models = useAiStore((s) => s.models);
+  const subAgents = useAiStore((s) => s.subAgents);
+  const activeModelId = useAiStore((s) => s.activeModelId);
+  const boundModel = useMemo(
+    () => models.find((m) => m.id === (agent.modelId ?? activeModelId)),
+    [models, agent.modelId, activeModelId],
+  );
+  const disabledSubs = session?.disabledSubAgents ?? EMPTY_SUBS;
+  const effectiveSubs = useMemo(
+    () => withSessionOverrides(subAgents, disabledSubs),
+    [subAgents, disabledSubs],
+  );
+  /**
+   * 这条链看不看得见图片：本模型是多模态，或者识图子代理还开着。看不见就不把
+   * 图片放进候选——挂一个模型物理上读不到的附件，作者只会看见一个芯片，然后
+   * 角色像什么都没有一样回答。
+   */
+  const canSeeImages = chainCanSeeImages(boundModel, effectiveSubs, models);
+
   const candidates: MentionItem[] = useMemo(() => [
     ...Object.values(loreIndex).flat().map((entity): MentionItem => ({ type: "lore", entity })),
     ...projectFilesFromTree(fileTree)
-      .filter((f) => f.kind === "text")
+      .filter((f) => f.kind === "text" || (f.kind === "image" && canSeeImages))
       .map((file): MentionItem => ({ type: "file", file })),
-  ], [loreIndex, fileTree]);
+  ], [loreIndex, fileTree, canSeeImages]);
 
   // 生成中的计时，设计稿在名标旁边显示「生成中 · 4.2s」。
   useEffect(() => {
@@ -235,13 +275,37 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   };
 
   const mentionItems = useMemo(
-    () => filterMentions(candidates, mention.query),
-    [candidates, mention.query],
+    () => filterMentions(
+      pickKind ? candidates.filter((c) => matchesKind(c, pickKind)) : candidates,
+      mention.query,
+    ),
+    [candidates, mention.query, pickKind],
   );
-  const refKeys = useMemo(
-    () => new Set(refs.map((r) => (r.kind === "lore" ? `lore:${r.entity.dirPath}` : `file:${r.file.path}`))),
-    [refs],
-  );
+
+  /**
+   * `+ 条目` 这类按钮只是替作者敲了一个 `@`。
+   *
+   * 走同一条 splice，是为了只有一条代码路径：选中的东西以同样的方式落进正文，
+   * 芯片也以同样的方式出现。否则「点按钮加的」和「打 @ 加的」会长出两套语义。
+   */
+  const openMentionFor = (kind: PickKind) => {
+    const el = taRef.current;
+    const caret = el?.selectionStart ?? draft.length;
+    const before = draft.slice(0, caret);
+    // `foo@bar` 是地址不是提名——findMention 拒绝跟在 ASCII 词字符后面的 `@`，
+    // 所以这里先补一个边界，别丢下一个什么都打不开的 `@`。中文不需要。
+    const pad = /[\w@]$/.test(before) ? " " : "";
+    const at = caret + pad.length;
+    const next = `${before}${pad}@${draft.slice(caret)}`;
+    setPickKind(kind);
+    setDraft(next);
+    mention.sync(next, at + 1);
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(at + 1, at + 1);
+    });
+  };
+  const refKeys = useMemo(() => new Set(refs.map(attachedKey)), [refs]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (mention.open && mentionItems.length) {
@@ -261,17 +325,41 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   };
 
   const handlePickMention = async (item: MentionItem) => {
-    if (refKeys.has(mentionKey(item))) { mention.close(); return; }
+    if (refKeys.has(mentionKey(item))) { mention.close(); setPickKind(null); return; }
+    setRefError(null);
     setDraft((prev) => mention.accept(prev, mentionLabel(item)));
     mention.close();
+    setPickKind(null);
     if (item.type === "lore") {
       setRefs((r) => [...r, { kind: "lore", entity: item.entity }]);
+    } else if (item.file.kind === "image") {
+      try {
+        const { dataUrl, bytes } = await imageToDataUrl(item.file.path);
+        // 在**选中的这一刻**就拒绝，不留到发送时：那时作者早忘了自己挑过什么，
+        // 一条悄悄少了张图的消息从记录上根本看不出来。
+        if (bytes.length > MAX_IMAGE_BYTES) {
+          setRefError(t("roleplay.composer.imageTooLarge", {
+            name: item.file.name,
+            size: (bytes.length / 1024 / 1024).toFixed(1),
+            max: MAX_IMAGE_BYTES / 1024 / 1024,
+            defaultValue: `${item.file.name} 太大（${(bytes.length / 1024 / 1024).toFixed(1)}MB，上限 ${MAX_IMAGE_BYTES / 1024 / 1024}MB）`,
+          }));
+          return;
+        }
+        setRefs((r) => [...r, { kind: "image", file: item.file, dataUrl }]);
+      } catch {
+        setRefError(t("roleplay.composer.refUnreadable", {
+          name: item.file.name, defaultValue: `读不到 ${item.file.name}`,
+        }));
+      }
     } else if (projectPath) {
       try {
         const content = await readFile(item.file.path);
         setRefs((r) => [...r, { kind: "text", file: item.file, content }]);
       } catch {
-        // 读不到就只留字面上的 @——角色仍然知道作者提到了它。
+        setRefError(t("roleplay.composer.refUnreadable", {
+          name: item.file.name, defaultValue: `读不到 ${item.file.name}`,
+        }));
       }
     }
   };
@@ -666,16 +754,71 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               activeIndex={mention.active}
               preferAbove
               onPick={(item) => void handlePickMention(item)}
-              onDismiss={mention.close}
+              onDismiss={() => { mention.close(); setPickKind(null); }}
             />
           )}
 
-          <div className={styles.inputFoot}>
-            {refs.length > 0 && (
-              <span className={styles.refCount}>
-                {t("roleplay.composer.refs", { n: refs.length, defaultValue: `${refs.length} 项引用` })}
-              </span>
+          {/* 附件行：这条消息**带着什么**（芯片）和这一场**怎么工作**（子代理）。
+              原来只有一句「N 项引用」，删不掉任何一项——芯片本身就是删除入口。 */}
+          <div className={styles.attachRow}>
+            {refs.map((r) => {
+              const key = attachedKey(r);
+              const label = r.kind === "lore" ? r.entity.name : r.file.name;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className={styles.attachChip}
+                  onClick={() => setRefs((prev) => prev.filter((x) => attachedKey(x) !== key))}
+                  title={t("roleplay.composer.removeRef", { defaultValue: "移除这项引用" })}
+                >
+                  {/* 图片是唯一一种代价看不出名字的附件——标出它是什么。 */}
+                  {r.kind === "image" && <ImageIcon size={10} strokeWidth={2} />}
+                  @{label}
+                  <X size={10} strokeWidth={2} />
+                </button>
+              );
+            })}
+            <span className={styles.attachSpacer} />
+            {/* `@` 才是机制本身，这几个按钮只是替作者敲它——它们存在是为了让
+                作者发现 `@` 能用，而不是为了取代它。 */}
+            <button
+              type="button"
+              className={styles.attachGhost}
+              onClick={() => openMentionFor("lore")}
+              disabled={!candidates.some((c) => c.type === "lore")}
+            >
+              + {t("roleplay.composer.addLore", { defaultValue: "设定" })}
+            </button>
+            <button
+              type="button"
+              className={styles.attachGhost}
+              onClick={() => openMentionFor("text")}
+              disabled={!candidates.some((c) => matchesKind(c, "text"))}
+            >
+              + {t("roleplay.composer.addDoc", { defaultValue: "文档" })}
+            </button>
+            {/* 只在这条链看得见图片时出现：纯文本模型上它会是一个永远点不动的
+                死芯片。 */}
+            {canSeeImages && (
+              <button
+                type="button"
+                className={styles.attachGhost}
+                onClick={() => openMentionFor("image")}
+                disabled={!candidates.some((c) => matchesKind(c, "image"))}
+              >
+                + {t("roleplay.composer.addImage", { defaultValue: "图片" })}
+              </button>
             )}
+            <SubAgentChips
+              disabled={disabledSubs}
+              onToggle={(kind) => toggleSubAgent(agent.id, kind)}
+            />
+          </div>
+
+          {refError && <div className={styles.refError}>{refError}</div>}
+
+          <div className={styles.inputFoot}>
             <span className={styles.kbd}>{t("roleplay.composer.newline", { defaultValue: "⇧↵ 换行" })}</span>
             <div className={styles.spacer} />
             {isRunning && (

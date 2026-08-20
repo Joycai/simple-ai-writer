@@ -2135,6 +2135,12 @@
       "narratorNote": "The narrator plays no one · no identity needed"
     },
     "composer": {
+      "addLore": "entry",
+      "addDoc": "doc",
+      "addImage": "image",
+      "removeRef": "Remove this reference",
+      "imageTooLarge": "{{name}} is too large ({{size}}MB, max {{max}}MB)",
+      "refUnreadable": "Can't read {{name}}",
       "placeholder": "Say a line, or write an action…",
       "narratorPlaceholder": "Talk through the plot, or have it work an exchange into the manuscript…",
       "newline": "⇧↵ newline",

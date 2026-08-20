@@ -17,15 +17,26 @@ const ICONS: Record<SubAgentKind, LucideIcon> = {
  * Per-conversation switches for the subagents Settings has enabled.
  *
  * Subtractive only — a chip turns one off for this conversation; it can never
- * turn on something with no model bound. The state lives in agentStore and is
- * cleared whenever the conversation changes (new chat, or switching sessions).
+ * turn on something with no model bound. By default the state lives in
+ * agentStore and is cleared whenever the conversation changes (new chat, or
+ * switching sessions).
+ *
+ * `disabled` + `onToggle` hand that state to the caller instead. The roleplay
+ * panel needs it: the assistant and three concurrent roleplay agents are four
+ * unrelated conversations, and sharing one "turned off for this conversation"
+ * set would mean each of them silently editing the others' settings.
  */
-export function SubAgentChips() {
+export function SubAgentChips({ disabled, onToggle }: {
+  disabled?: readonly SubAgentKind[];
+  onToggle?: (kind: SubAgentKind) => void;
+} = {}) {
   const { t } = useTranslation();
   const subAgents = useAiStore((s) => s.subAgents);
   const models = useAiStore((s) => s.models);
-  const disabledSubAgents = useAgentStore((s) => s.disabledSubAgents);
-  const toggleSubAgent = useAgentStore((s) => s.toggleSubAgent);
+  const chatDisabled = useAgentStore((s) => s.disabledSubAgents);
+  const chatToggle = useAgentStore((s) => s.toggleSubAgent);
+  const disabledSubAgents = disabled ?? chatDisabled;
+  const toggleSubAgent = onToggle ?? chatToggle;
 
   // Usable, not merely enabled: a vision subagent bound to a text model, or a
   // search one whose model cannot browse, would give the author a switch that

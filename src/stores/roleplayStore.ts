@@ -119,6 +119,13 @@ export interface LiveSession {
    */
   stopped: boolean;
   /**
+   * 这一场关掉了哪些子代理。**只减不增**——芯片关不出一个没绑模型的子代理来。
+   *
+   * 存在会话上而不是 agentStore：对话助手和三个并发的扮演 agent 是四段互不相干
+   * 的对话，共用一份「本次关掉了什么」就等于互相改设置。
+   */
+  disabledSubAgents: SubAgentKind[];
+  /**
    * 任务工作区的 id，跨重启活下来。
    *
    * 存在会话上而不是 `RoleplayAgent` 上：它跟着**这一场**走，「新开会话」就该
@@ -178,6 +185,8 @@ interface RoleplayState {
    */
   setAgentPersona: (id: string, persona: AuthorPersona | null) => Promise<void>;
   setAgentModel: (id: string, modelId: string | null) => Promise<void>;
+  /** 这一场开/关一个子代理。只减不增，见 `LiveSession.disabledSubAgents`。 */
+  toggleSubAgent: (id: string, kind: SubAgentKind) => void;
 
   select: (id: string | null) => Promise<void>;
   send: (agentId: string, text: string, refs?: AttachedItem[]) => Promise<void>;
@@ -219,7 +228,8 @@ function emptySession(): LiveSession {
   return {
     turns: [], log: {}, history: null, meta: null, streaming: "", liveLog: [],
     usage: null, stalePaths: [], memory: [], memoryStale: false,
-    workspace: null, stopped: false, taskId: null, error: null, lastJob: null,
+    workspace: null, stopped: false, disabledSubAgents: [], taskId: null,
+    error: null, lastJob: null,
   };
 }
 
@@ -454,7 +464,9 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       }
 
       const preset = presetFor(agent.kind);
-      const effectiveSubs = withSessionOverrides(subAgents, [] as SubAgentKind[]);
+      const effectiveSubs = withSessionOverrides(
+      subAgents, get().sessions[job.agentId]?.disabledSubAgents ?? [],
+    );
       const routed = routeTools(preset, effectiveSubs, workspace, models);
 
       const result = await runAgent({
@@ -808,6 +820,13 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       await persistRoster();
     },
 
+    toggleSubAgent: (id, kind) => patchSession(id, (s) => ({
+      ...s,
+      disabledSubAgents: s.disabledSubAgents.includes(kind)
+        ? s.disabledSubAgents.filter((k) => k !== kind)
+        : [...s.disabledSubAgents, kind],
+    })),
+
     setAgentPersona: async (id, persona) => {
       const prev = get().agents[id];
       if (!prev) return;
@@ -893,9 +912,20 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       // 它说话，把那变成模型可以跳过的建议是在赌一件已经定了的事（见
       // lib/agent/chatRefs 的开头）。transcript 里存的仍是作者敲的那句话。
       const { buildChatMessage } = await import("../lib/agent/chatRefs");
+      // 图片能不能上线，取决于**这个 agent 绑的模型**，不是全局那个——两级
+      // 解析和 runJob 里那一句必须是同一句话（§2.14）。识图子代理开着时另外
+      // 告诉模型「图在这个路径上，可以 delegate」，那和把 base64 塞给一个读不
+      // 了图的模型是两件事（docs/subagent-lld.md §6.1）。
+      const { useAiStore } = await import("./aiStore");
+      const { models, activeModelId, subAgents } = useAiStore.getState();
+      const model = models.find((m) => m.id === (agent.modelId ?? activeModelId));
+      const subs = withSessionOverrides(
+        subAgents, get().sessions[agentId]?.disabledSubAgents ?? [],
+      );
+      const { visionSubAgentModel } = await import("../lib/agent/subagent");
       const composed = await buildChatMessage(body, undefined, refs, {
-        allowImages: false,
-        visionDelegate: false,
+        allowImages: model?.type === "multimodal",
+        visionDelegate: visionSubAgentModel(models, subs) !== null,
       });
       set((st) => ({
         queue: [...st.queue, { agentId, wire: composed.content, match: composed.text }],

@@ -809,6 +809,61 @@
 
 .textarea::placeholder { color: var(--color-text-hint); }
 
+/* 附件行：这条消息**带着什么**（芯片）+ 这一场**怎么工作**（子代理开关）。
+   在输入框下方、脚注上方——它属于「这一条消息」，不属于整个面板。 */
+.attachRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.attachSpacer { flex: 1; min-width: 0; }
+
+/* 芯片自己就是删除入口，所以整枚可点、带一个 ×。 */
+.attachChip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border: 1px solid var(--color-border-accent);
+  background: none;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-accent);
+  cursor: pointer;
+  max-width: 220px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.attachChip:hover { background: var(--rp-row-hover); }
+
+/* `+ 设定 / + 文档 / + 图片`：虚线，因为它们是邀请，不是已经带上的东西。 */
+.attachGhost {
+  flex-shrink: 0;
+  padding: 3px 7px;
+  border: 1px dashed var(--color-border-panel);
+  background: none;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.attachGhost:hover:not(:disabled) { color: var(--color-text-primary); border-color: var(--color-border-strong); }
+.attachGhost:disabled { opacity: 0.4; cursor: default; }
+
+.refError {
+  margin-top: 8px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--color-error-text-strong);
+}
+
 .inputFoot {
   display: flex;
   align-items: center;
