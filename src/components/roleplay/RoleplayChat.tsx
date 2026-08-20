@@ -490,6 +490,13 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
                 </div>
               ))}
             </div>
+            {/* 引号只在这里说清楚。稿面上 `「」` 是正解，但它在中文输入法下不是
+                一个键就能打出来的——不写这一行，作者只会看见最难打的那一种。 */}
+            <p className={styles.syntaxNote}>
+              {t("roleplay.syntax.quoteNote", {
+                defaultValue: "台词的引号 「」 『』 “” \"\" 都认，但开合要同族。中文输入法下 Shift+' 出来的 “” 最省事。",
+              })}
+            </p>
           </div>
         )}
 
