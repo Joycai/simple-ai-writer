@@ -27,6 +27,7 @@ import { RoundLimitCard } from "../ai/RoundLimitCard";
 import { TruncationCard } from "../ai/TruncationCard";
 import { useAgentStore } from "../../stores/agentStore";
 import { useAiStore } from "../../stores/aiStore";
+import { readPref, writePref } from "../../lib/prefs";
 import {
   chainCanSeeImages, withSessionOverrides, type SubAgentKind,
 } from "../../lib/agent/subagent";
@@ -148,7 +149,9 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
 
   const [draft, setDraft] = useState("");
   const [composing, setComposing] = useState(false);
-  const [showSyntax, setShowSyntax] = useState(false);
+  // 第一次进来默认展开：折起来之后它只剩四个符号，不认识的人不会去点「展开」。
+  // 作者亲手收起过一次就记住，此后一直折着。
+  const [showSyntax, setShowSyntax] = useState(() => readPref("app:roleplaySyntaxSeen") !== "1");
   const [showBindings, setShowBindings] = useState(false);
   const [openLog, setOpenLog] = useState<number | null>(null);
   const [refs, setRefs] = useState<AttachedItem[]>([]);
@@ -676,7 +679,11 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           )}
           <div className={styles.spacer} />
           {showSyntax ? (
-            <button type="button" className={styles.syntaxToggle} onClick={() => setShowSyntax(false)}>
+            <button
+              type="button"
+              className={styles.syntaxToggle}
+              onClick={() => { setShowSyntax(false); writePref("app:roleplaySyntaxSeen", "1"); }}
+            >
               {t("roleplay.syntax.collapse", { defaultValue: "收起，只留一行" })}
             </button>
           ) : (

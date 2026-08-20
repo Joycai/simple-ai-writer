@@ -18,6 +18,8 @@ import { loadPersonaCard } from "../../lib/roleplay/store";
 import { useProjectStore } from "../../stores/projectStore";
 import { avatarGlyph, type AgentKind, type RoleplayAgent } from "../../lib/roleplay/model";
 import type { LoreEntity } from "../../lib/lore/model";
+import { indexCategories } from "../../lib/lore/categories";
+import { categoryLabel } from "../../lib/profile/model";
 import styles from "./AgentComposer.module.css";
 
 /**
@@ -41,7 +43,8 @@ export function AgentComposer({
   editing: RoleplayAgent | null;
   onClose: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isZh = i18n.language.startsWith("zh");
   const loreIndex = useLoreStore((s) => s.index);
   const projectPath = useProjectStore((s) => s.projectPath);
   const { createAgent, updateAgent, removeAgent, newSession } = useRoleplayStore();
@@ -52,6 +55,8 @@ export function AgentComposer({
   const [modelId, setModelId] = useState<string | null>(editing?.modelId ?? null);
   const [instruction, setInstruction] = useState("");
   const [query, setQuery] = useState("");
+  /** 分类过滤，null = 全部。分类来自 `loreCategories()`，不是写死的六个。 */
+  const [cat, setCat] = useState<string | null>(null);
   const [openEntity, setOpenEntity] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // 「新开会话」的两段式确认。就地展开而不是弹一个模态：这一步要带一个勾选项，
@@ -68,10 +73,22 @@ export function AgentComposer({
     () => Object.values(loreIndex).flat().sort((a, b) => a.name.localeCompare(b.name)),
     [loreIndex],
   );
+  /**
+   * 分类计数。读 `loreIndex` 的键而不是 `loreCategories()`：这里要的是**这个
+   * 项目实际有条目的**分类，一个空分类的 chip 点下去只会得到一张空列表。
+   */
+  const cats = useMemo(
+    () => indexCategories(loreIndex)
+      .map((c) => ({ id: c.id, label: categoryLabel(c, isZh), n: (loreIndex[c.id] ?? []).length }))
+      .filter((c) => c.n > 0),
+    [loreIndex, isZh],
+  );
+
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? entities.filter((e) => e.name.toLowerCase().includes(q)) : entities;
-  }, [entities, query]);
+    const byCat = cat ? entities.filter((e) => e.category === cat) : entities;
+    return q ? byCat.filter((e) => e.name.toLowerCase().includes(q)) : byCat;
+  }, [entities, query, cat]);
 
   const primaryEntity = entities.find((e) => e.dirPath === primary) ?? null;
   const active = entities.find((e) => e.dirPath === openEntity) ?? visible[0] ?? null;
@@ -241,6 +258,31 @@ export function AgentComposer({
                   })}
                 />
               </div>
+              {/* 分类计数：只在真的有两类以上时出现——一个项目只有「人物」时，
+                  一排唯一的 chip 是纯装饰，还占掉一行。 */}
+              {cats.length > 1 && (
+                <div className={styles.catRow}>
+                  <button
+                    type="button"
+                    className={`${styles.catChip} ${cat === null ? styles.catChipOn : ""}`}
+                    onClick={() => setCat(null)}
+                  >
+                    {t("roleplay.composer.catAll", { defaultValue: "全部" })}
+                    <span className={styles.catN}>{entities.length}</span>
+                  </button>
+                  {cats.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className={`${styles.catChip} ${cat === c.id ? styles.catChipOn : ""}`}
+                      onClick={() => setCat(cat === c.id ? null : c.id)}
+                    >
+                      {c.label}
+                      <span className={styles.catN}>{c.n}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className={styles.pickerBody}>
                 <div className={styles.entityList}>
                   {visible.map((e) => (
