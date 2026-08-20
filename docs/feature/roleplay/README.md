@@ -1,6 +1,8 @@
 # 互动式角色扮演创作
 
 > **状态：已实现**（Beta 开关后面，Settings → 通用 → 实验功能），含角色记忆。
+> 主流程已在真实运行时验过（扮演 / 旁白 / transcript 落盘与恢复 / 压缩后不失忆），
+> 仍未验的见 `05-implementation-notes.md` §5。
 > UI 设计稿：claude.ai/design 的 `08 扮演 Roleplay.dc.html`（TURN 1，1a–1i 九屏）；
 > 记事本面板设计稿里没有，是按现有视觉语言自己定的，理由见
 > [05-implementation-notes.md](05-implementation-notes.md)。
