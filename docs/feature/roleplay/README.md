@@ -1,9 +1,9 @@
 # 互动式角色扮演创作
 
-> **状态：第一轮已实现**（Beta 开关后面，Settings → 通用 → 实验功能）。
-> UI 设计稿：claude.ai/design 的 `08 扮演 Roleplay.dc.html`（TURN 1，1a–1i 九屏）。
-> **角色记忆（约定 / 待办 / 事件 / 关系）尚未实现**——设计稿 TURN 1 里还没有记事本
-> 面板，理由与留好的接口见 [05-implementation-notes.md](05-implementation-notes.md)。
+> **状态：已实现**（Beta 开关后面，Settings → 通用 → 实验功能），含角色记忆。
+> UI 设计稿：claude.ai/design 的 `08 扮演 Roleplay.dc.html`（TURN 1，1a–1i 九屏）；
+> 记事本面板设计稿里没有，是按现有视觉语言自己定的，理由见
+> [05-implementation-notes.md](05-implementation-notes.md)。
 
 让作者以第一人称走进自己写的设定里，和笔下的角色直接对话。每个角色有自己的长期记忆（约定 / 待办 / 事件 / 关系），聊多久都不会忘；再由一个能看见全场的「旁白」和作者讨论故事、把精彩的互动梳理成正文。
 

@@ -30,8 +30,10 @@ vi.mock("../../lore/entity", () => ({
 import { buildCompactedHistory, planFold, segmentHistory } from "../../agent/compact";
 import type { StreamMessage } from "../../ai/types";
 import type { LoreEntity, LoreIndex } from "../../lore/model";
-import { buildBoundContent, seedRoleplayHistory, type RoleplaySessionMeta } from "../context";
-import type { RoleplayAgent } from "../model";
+import {
+  buildBoundContent, refreshMemoryBlock, seedRoleplayHistory, type RoleplaySessionMeta,
+} from "../context";
+import type { MemoryRecord, RoleplayAgent } from "../model";
 
 function entity(name: string, dirPath: string, facets: string[] = []): LoreEntity {
   return {
@@ -56,7 +58,7 @@ const AGENT: RoleplayAgent = {
   createdAt: 0, updatedAt: 0, turnCount: 0, boundHash: null,
 };
 
-async function seed(firstMessage = "「你还在等？」") {
+async function seed(firstMessage = "「你还在等？」", memory: MemoryRecord[] = []) {
   return seedRoleplayHistory({
     agent: AGENT,
     persona: { mode: "none", dirPath: null, prompt: "" },
@@ -66,6 +68,7 @@ async function seed(firstMessage = "「你还在等？」") {
     firstMessage,
     matchText: firstMessage,
     loreBudgetChars: 4000,
+    memory,
   });
 }
 
@@ -100,13 +103,64 @@ describe("seedRoleplayHistory", () => {
   });
 });
 
+const PACT: MemoryRecord = {
+  id: "m1", kind: "pact", title: "雪停了一起去塔下", body: "他答应了。",
+  status: "open", turn: 12, subject: null, updatedAt: 0,
+};
+
+describe("记忆块（不变量四）", () => {
+  it("sits in the prelude between the bound block and the seed block", async () => {
+    const { messages, meta } = await seed("「塔那边有消息了？」", [PACT]);
+    expect(meta.boundBlock).toBe(messages[1]);
+    expect(meta.memoryBlock).toBe(messages[2]);
+    expect(meta.seedContext).toBe(messages[3]);
+    expect(String(meta.memoryBlock?.content)).toContain("雪停了一起去塔下");
+  });
+
+  it("is absent entirely when the agent has recorded nothing", async () => {
+    const { meta } = await seed("「你还在等？」", []);
+    expect(meta.memoryBlock).toBeNull();
+  });
+
+  it("keeps only what is still live", async () => {
+    const { meta } = await seed("「你还在等？」", [
+      PACT,
+      { ...PACT, id: "m2", title: "早就兑现了", status: "done" },
+    ]);
+    const text = String(meta.memoryBlock?.content);
+    expect(text).toContain("雪停了一起去塔下");
+    expect(text).not.toContain("早就兑现了");
+  });
+
+  it("refreshes in place so the meta keeps pointing at the same message", async () => {
+    const { meta } = await seed("「你还在等？」", [PACT]);
+    const block = meta.memoryBlock;
+    refreshMemoryBlock(meta, [{ ...PACT, id: "m2", title: "后来又说定了一件事" }]);
+    expect(meta.memoryBlock).toBe(block);
+    expect(String(block?.content)).toContain("后来又说定了一件事");
+    expect(String(block?.content)).not.toContain("雪停了一起去塔下");
+  });
+
+  // 块从「有」变「没有」时不删消息：删一条 prelude 会让稳定前缀变短，白白作废
+  // 一次 prompt 缓存，而它只是一行字。
+  it("degrades to a placeholder rather than vanishing", async () => {
+    const { messages, meta } = await seed("「你还在等？」", [PACT]);
+    const before = messages.length;
+    refreshMemoryBlock(meta, []);
+    expect(meta.memoryBlock).not.toBeNull();
+    expect(messages).toHaveLength(before);
+  });
+});
+
 describe("不变量二 · 压缩之后", () => {
   it("keeps the bound block and drops the seed block", async () => {
     // 首句提到「塔」，好让自动命中真的产出一个 seed 块可供丢弃。
-    const { messages, meta } = await seed("「塔那边有消息了？」");
+    const { messages, meta } = await seed("「塔那边有消息了？」", [PACT]);
     const history: StreamMessage[] = [...messages];
     const boundBlock = meta.boundBlock;
+    const memoryBlock = meta.memoryBlock;
     expect(boundBlock).not.toBeNull();
+    expect(memoryBlock).not.toBeNull();
 
     // 攒出足够长的对话去触发折叠：每一轮都记进 turnStarts，和真实会话一样。
     for (let i = 0; i < 24; i++) {
@@ -122,13 +176,19 @@ describe("不变量二 · 压缩之后", () => {
 
     const next = buildCompactedHistory(history, meta, plan!, "到目前为止的摘要。");
 
-    // 绑定块还在，而且 meta 仍然指着历史里的同一个对象。
+    // 绑定块和记忆块都还在，而且 meta 仍然指着历史里的同一个对象。
+    // 「他答应了雪停一起去塔下」被折进摘要就等于失效——摘要会被再次摘要，三轮
+    // 之后它就变成「他们聊了一些计划」。这条断言是那件事不会发生的唯一保证。
     expect(next).toContain(boundBlock!);
+    expect(next).toContain(memoryBlock!);
     expect((meta as RoleplaySessionMeta).boundBlock).toBe(boundBlock);
+    expect((meta as RoleplaySessionMeta).memoryBlock).toBe(memoryBlock);
     // seed 块正确地消失了——它是检索输出，可复现。
     expect(meta.seedContext).toBeNull();
-    // 并且绑定块仍然在 prelude 里，不会在下一次折叠时被当成一轮对话。
-    expect(segmentHistory(next, meta).prelude).toContain(boundBlock!);
+    // 并且两块仍然在 prelude 里，不会在下一次折叠时被当成一轮对话。
+    const prelude = segmentHistory(next, meta).prelude;
+    expect(prelude).toContain(boundBlock!);
+    expect(prelude).toContain(memoryBlock!);
   });
 });
 

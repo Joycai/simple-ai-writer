@@ -65,6 +65,33 @@ export interface SceneTurn {
   text: string;
 }
 
+/**
+ * 角色记忆的五种记录。
+ *
+ * 固定枚举，而不是像知识库分类那样由能力包定义：这五种是**对话结构**的产物，
+ * 不是**领域**的产物——跑团、言情、悬疑都一样会产生约定和关系。做成可配置只会
+ * 让作者在能用之前先做一次配置，并且让模型面对一个它无法预知的枚举。
+ */
+export type MemoryKind = "pact" | "todo" | "event" | "bond" | "note";
+
+/** `void` 是作废，不是删除：正文保留（见 lib/roleplay/memory 的三条写入规则）。 */
+export type MemoryStatus = "open" | "done" | "void";
+
+export interface MemoryRecord {
+  /** `m3`。agent 内唯一，**永不复用**。 */
+  id: string;
+  kind: MemoryKind;
+  /** 一行。作者和模型都靠它扫。 */
+  title: string;
+  body: string;
+  status: MemoryStatus;
+  /** 记下时的 transcript 轮号，让作者能跳回当时的对话。0 = 不详。 */
+  turn: number;
+  /** 这条是关于谁/什么的。可空。 */
+  subject: string | null;
+  updatedAt: number;
+}
+
 /** 同时最多几个 agent 在生成。信号量，不是三个分支——改成 5 就是改这个数。 */
 export const MAX_CONCURRENT_RUNS = 3;
 

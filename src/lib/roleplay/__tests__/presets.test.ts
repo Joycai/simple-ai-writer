@@ -8,7 +8,9 @@
 import { describe, expect, it } from "vitest";
 import { NARRATOR_PRESET, ROLEPLAY_PRESET, presetFor } from "../presets";
 
-const SCENE_TOOLS = ["list_scenes", "read_scene", "search_scenes", "read_scene_summary"];
+const SCENE_TOOLS = [
+  "list_scenes", "read_scene", "search_scenes", "read_scene_summary", "read_scene_memory",
+];
 
 describe("ROLEPLAY_PRESET", () => {
   it("has no scene tools — a character cannot reach another's transcript", () => {
@@ -17,13 +19,22 @@ describe("ROLEPLAY_PRESET", () => {
     }
   });
 
-  it("has no write tools at all — roleplay never touches the manuscript or the lore", () => {
+  it("writes nothing but its own memory — not the manuscript, not the lore", () => {
     const writes = ROLEPLAY_PRESET.tools.filter(
       (t) => t.startsWith("propose_") || t.startsWith("create_") || t.startsWith("update_")
         || t.startsWith("append_") || t.startsWith("delete_") || t.startsWith("rewrite_")
         || t.startsWith("edit_") || t.startsWith("move_"),
     );
     expect(writes).toEqual([]);
+    expect(ROLEPLAY_PRESET.tools).toContain("remember");
+    expect(ROLEPLAY_PRESET.tools).toContain("revise_memory");
+  });
+
+  // 只增改不删是记忆的安全阀（L1 没有审批卡兜底）。工具集里出现一个删除工具，
+  // 就是那条不变量被绕过去了。
+  it("has no tool that can destroy a memory record", () => {
+    expect(ROLEPLAY_PRESET.tools).not.toContain("forget");
+    expect(NARRATOR_PRESET.tools).not.toContain("forget");
   });
 
   it("cannot read the manuscript — a character lives in the story, not in the files", () => {
@@ -43,6 +54,10 @@ describe("NARRATOR_PRESET", () => {
     for (const tool of SCENE_TOOLS) {
       expect(NARRATOR_PRESET.tools).toContain(tool);
     }
+  });
+
+  it("can read a character's memory — strictly less than the transcript it already reads", () => {
+    expect(NARRATOR_PRESET.tools).toContain("read_scene_memory");
   });
 
   // 「把对话写进正文」复用现有的写工具，不新建——见 01-overview §6 决策 3。

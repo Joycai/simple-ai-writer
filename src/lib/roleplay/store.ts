@@ -6,6 +6,7 @@
  *   └── <agentId>/
  *       ├── agent.md         人设卡（frontmatter + 作者手写的扮演指令）
  *       ├── transcript.md    对话记录（资产，见 ./transcript）
+ *       ├── memory.md        角色记忆：约定 / 待办 / 事件 / 关系（见 ./memory）
  *       ├── summary.md       滚动摘要（压缩时写）
  *       └── session.json     wire history + meta（缓存，可丢）
  *
@@ -39,6 +40,7 @@ export const rosterPath = (p: string) => `${roleplayDir(p)}/agents.json`;
 export const personaPath = (p: string, id: string) => `${agentDir(p, id)}/agent.md`;
 export const transcriptPath = (p: string, id: string) => `${agentDir(p, id)}/transcript.md`;
 export const summaryPath = (p: string, id: string) => `${agentDir(p, id)}/summary.md`;
+export const memoryPath = (p: string, id: string) => `${agentDir(p, id)}/memory.md`;
 export const sessionPath = (p: string, id: string) => `${agentDir(p, id)}/session.json`;
 
 export interface Roster {

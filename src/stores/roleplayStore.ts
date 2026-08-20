@@ -25,6 +25,7 @@
 
 import { create } from "zustand";
 import i18n from "../i18n";
+import { backupFile } from "../lib/agent/backup";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import { compactChatHistory, summarizeForCompaction } from "../lib/agent/compactRun";
 import { excludeDirsFor, noteTurnStart } from "../lib/agent/compact";
@@ -46,18 +47,23 @@ import { assembleTurnInjection } from "../lib/context/rag";
 import { loadApiKey } from "../lib/keyStore";
 import { notify } from "../lib/notify";
 import {
-  buildBoundContent, refreshBoundBlock, seedRoleplayHistory,
+  buildBoundContent, refreshBoundBlock, refreshMemoryBlock, seedRoleplayHistory,
   type RoleplaySessionMeta,
 } from "../lib/roleplay/context";
 import {
+  addRecord, loadMemoryDoc, reviseRecord, saveMemoryDoc, type MemoryDoc,
+} from "../lib/roleplay/memory";
+import type { AgentMemoryStore } from "../lib/roleplay/memoryTools";
+import {
   MAX_CONCURRENT_RUNS, NO_PERSONA, ROSTER_PREVIEW_CHARS, generateAgentId,
-  type AgentKind, type AuthorPersona, type RoleplayAgent, type SceneTurn,
+  type AgentKind, type AuthorPersona, type MemoryRecord, type MemoryStatus,
+  type RoleplayAgent, type SceneTurn,
 } from "../lib/roleplay/model";
 import { scriptPreview } from "../lib/roleplay/markup";
 import type { SceneInfo, SceneReader, SceneSlice } from "../lib/roleplay/sceneTools";
 import {
   deleteAgentDir, loadPersonaCard, loadRoster, loadSession, loadSummary,
-  saveRoster, savePersonaCard, saveSession, saveSummary, transcriptPath,
+  memoryPath, saveRoster, savePersonaCard, saveSession, saveSummary, transcriptPath,
 } from "../lib/roleplay/store";
 import { appendTurn, loadTranscript } from "../lib/roleplay/transcript";
 import { readEntityFile } from "../lib/lore/entity";
@@ -79,6 +85,10 @@ export interface LiveSession {
   usage: { inputTokens: number; outputTokens: number; cost: number } | null;
   /** 失效的绑定（条目/特征已删）。基线哈希在 `RoleplayAgent.boundHash` 上。 */
   stalePaths: string[];
+  /** 这个 agent 的记忆，记事本面板的数据源；写入后同步更新。 */
+  memory: MemoryRecord[];
+  /** 磁盘上的记忆已经变了，但注入块还没刷新（见 refreshMemoryBlock 的四个时刻）。 */
+  memoryStale: boolean;
   workspace: TaskWorkspaceHandle | null;
   error: string | null;
 }
@@ -128,6 +138,15 @@ interface RoleplayState {
   dequeue: (agentId: string) => void;
   promote: (agentId: string) => void;
   refreshBinding: (agentId: string) => Promise<void>;
+  /** 把磁盘上的记忆重新灌进注入块（作者手动，或改过记事本之后）。 */
+  refreshMemory: (agentId: string) => Promise<void>;
+  /** 记事本面板的编辑入口。作者和角色共同维护这一本。 */
+  addMemory: (agentId: string, rec: {
+    kind: MemoryRecord["kind"]; title: string; body: string; subject: string | null;
+  }) => Promise<void>;
+  reviseMemory: (
+    agentId: string, id: string, patch: { body?: string; status?: MemoryStatus },
+  ) => Promise<void>;
   checkBindings: () => Promise<void>;
   /** 旁白的只读通道；传给 ToolContext.scenes。 */
   sceneReader: () => SceneReader;
@@ -145,7 +164,8 @@ export interface AgentDraft {
 function emptySession(): LiveSession {
   return {
     turns: [], log: {}, history: null, meta: null, streaming: "", liveLog: [],
-    usage: null, stalePaths: [], workspace: null, error: null,
+    usage: null, stalePaths: [], memory: [], memoryStale: false,
+    workspace: null, error: null,
   };
 }
 
@@ -175,6 +195,32 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     } catch (e) {
       console.warn("[roleplay] roster save failed:", e);
     }
+  };
+
+  /**
+   * 记忆的读改写，全部经过这里。
+   *
+   * **写前必备份**（`backupFile`，与所有 L1 写工具一致）——这是 L1 唯一的安全阀。
+   * 写完不刷新注入块，只标 `memoryStale`：刷新有它自己的四个时刻（见
+   * lib/roleplay/context 的 refreshMemoryBlock），在写入的当下刷新会让每记一件
+   * 事就作废一次 prompt 缓存前缀，换来零收益。
+   */
+  const mutateMemory = async (
+    agentId: string,
+    change: (doc: MemoryDoc) => { doc: MemoryDoc; record: MemoryRecord } | null,
+  ): Promise<MemoryRecord | null> => {
+    const { projectPath } = get();
+    if (!projectPath) return null;
+    const path = memoryPath(projectPath, agentId);
+    const doc = await loadMemoryDoc(path);
+    const result = change(doc);
+    if (!result) return null;
+    await backupFile(projectPath, path);
+    await saveMemoryDoc(path, agentId, result.doc);
+    patchSession(agentId, (s) => ({
+      ...s, memory: result.doc.records, memoryStale: true,
+    }));
+    return result.record;
   };
 
   /**
@@ -228,11 +274,13 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         }
         const personaCard = await loadPersonaCard(projectPath, agent.id);
         const charsPerToken = measureCharsPerToken(job.match);
+        const memoryDoc = await loadMemoryDoc(memoryPath(projectPath, agent.id));
         const seeded = await seedRoleplayHistory({
           agent, persona, personaCard, primaryText, loreIndex,
           firstMessage: job.wire,
           matchText: job.match,
           loreBudgetChars: loreBudgetTokens * charsPerToken,
+          memory: memoryDoc.records,
         });
         history = seeded.messages;
         meta = seeded.meta;
@@ -250,6 +298,8 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           ...s,
           history, meta,
           stalePaths: seeded.bound.stalePaths,
+          memory: memoryDoc.records,
+          memoryStale: false,
           liveLog: appendAgentEventTo(s.liveLog, {
             kind: "context-seeded",
             documentName: null,
@@ -280,6 +330,14 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           if (meta.summaryText) {
             void saveSummary(projectPath, job.agentId, meta.summaryText);
           }
+          // 压缩刚刚把 `remember` 的那些工具结果折叠掉了——这正是记忆注入块
+          // 必须重新灌一遍的时刻，也是它唯一免费的时刻（历史本来就重建了，
+          // 缓存本来就作废了）。见 refreshMemoryBlock 的注释。
+          const fresh = await loadMemoryDoc(memoryPath(projectPath, job.agentId));
+          refreshMemoryBlock(meta, fresh.records);
+          patchSession(job.agentId, (s) => ({
+            ...s, memory: fresh.records, memoryStale: false,
+          }));
         }
 
         // 逐轮注入：绑定之外的新词条。账本保证已经在上下文里的不再重发。
@@ -332,6 +390,24 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           // 只有旁白拿得到这个通道，所以扮演 agent 的 scene 工具即使被硬塞
           // 进 preset 也只会得到一句「你不是旁白」。双保险，不是冗余。
           scenes: agent.kind === "narrator" ? get().sceneReader() : undefined,
+          // 每次调用都读盘：同一次运行里 remember 之后紧接着的 recall 必须
+          // 看得见刚记下的东西（ToolContext 是运行快照，见 registry 的注释）。
+          agentMemory: {
+            list: async () =>
+              (await loadMemoryDoc(memoryPath(projectPath, agent.id))).records,
+            add: async (rec) => {
+              // 正在生成的那一轮的轮号：作者轮在 send() 里已经追加过了，所以
+              // 角色轮是它的下一个。对话区据此把「记下了：…」挂在这条回复下面。
+              const turn = (get().sessions[agent.id]?.turns.length ?? 0) + 1;
+              const record = await mutateMemory(agent.id, (doc) =>
+                addRecord(doc, { ...rec, turn }, Math.floor(Date.now() / 1000)));
+              if (!record) throw new Error("memory unavailable");
+              return record;
+            },
+            revise: async (recId, patch) =>
+              mutateMemory(agent.id, (doc) =>
+                reviseRecord(doc, recId, patch, Math.floor(Date.now() / 1000))),
+          } satisfies AgentMemoryStore,
           requestApproval: async (p) => {
             const { useAgentStore } = await import("./agentStore");
             // key 用本 agent 的 controller，绝不能是 CHAT_AUTO_APPROVE_KEY 那样
@@ -618,11 +694,14 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       // 后者读不出就留空——下一次发送会重新播种，作者一个字都不会少。
       const { turns } = await loadTranscript(transcriptPath(projectPath, id));
       const stored = await loadSession(projectPath, id);
+      const doc = await loadMemoryDoc(memoryPath(projectPath, id));
       patchSession(id, (s) => ({
         ...s,
         turns,
         history: stored?.history ?? null,
         meta: (stored?.snapshot.meta as RoleplaySessionMeta | undefined) ?? null,
+        memory: doc.records,
+        memoryStale: false,
       }));
       if (stored?.snapshot.meta && stored.boundBlock) {
         patchSession(id, (s) => ({
@@ -630,6 +709,9 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           meta: { ...(stored.snapshot.meta as RoleplaySessionMeta), boundBlock: stored.boundBlock },
         }));
       }
+      // 恢复是四个刷新时刻之一：应用关着的时候作者可能手改过 memory.md。
+      const restored = get().sessions[id]?.meta;
+      if (restored) refreshMemoryBlock(restored, doc.records);
       void get().checkBindings();
     },
 
@@ -730,6 +812,29 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       void persistRoster();
     },
 
+    refreshMemory: async (agentId) => {
+      const { projectPath } = get();
+      if (!projectPath) return;
+      const doc = await loadMemoryDoc(memoryPath(projectPath, agentId));
+      const meta = get().sessions[agentId]?.meta;
+      // 没有活的历史就不用刷——下一次发送会重新播种，那时读的就是磁盘上的新内容。
+      if (meta) refreshMemoryBlock(meta, doc.records);
+      patchSession(agentId, (s) => ({ ...s, memory: doc.records, memoryStale: false }));
+    },
+
+    addMemory: async (agentId, rec) => {
+      // 作者手加的记录 `turn: 0`（＝不详），于是它不会在对话区冒出一句
+      // 「记下了：…」——那句话的意思是「角色刚刚记住了」，而这条是作者自己写的，
+      // 他不需要被告知。它只活在记事本里。
+      await mutateMemory(agentId, (doc) =>
+        addRecord(doc, { ...rec, turn: 0 }, Math.floor(Date.now() / 1000)));
+    },
+
+    reviseMemory: async (agentId, id, patch) => {
+      await mutateMemory(agentId, (doc) =>
+        reviseRecord(doc, id, patch, Math.floor(Date.now() / 1000)));
+    },
+
     /**
      * 重新比对每个 agent 的绑定内容。
      *
@@ -776,12 +881,14 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           if (!agent || agent.kind !== "character") continue;
           const { turns } = await loadTranscript(transcriptPath(projectPath, id));
           const summary = await loadSummary(projectPath, id);
+          const memory = await loadMemoryDoc(memoryPath(projectPath, id));
           const last = turns[turns.length - 1];
           out.push({
             agentId: id,
             name: agent.name,
             primary: agent.primaryDirPath?.split(/[/\\]/).pop() ?? "",
             turnCount: turns.length,
+            openMemory: memory.records.filter((r) => r.status === "open").length,
             lastAt: last?.at ?? 0,
             gist: summary.split(/\r?\n/)[0] ?? (last ? scriptPreview(last.text, ROSTER_PREVIEW_CHARS) : ""),
           });
@@ -797,6 +904,12 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       summary: async (agentId) => {
         const { projectPath } = get();
         return projectPath ? loadSummary(projectPath, agentId) : "";
+      },
+      memory: async (agentId, includeClosed) => {
+        const { projectPath } = get();
+        if (!projectPath) return [];
+        const doc = await loadMemoryDoc(memoryPath(projectPath, agentId));
+        return includeClosed ? doc.records : doc.records.filter((r) => r.status === "open");
       },
     }),
   };

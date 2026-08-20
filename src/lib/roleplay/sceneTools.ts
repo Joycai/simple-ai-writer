@@ -14,7 +14,10 @@
  */
 
 import type { ToolResult } from "../agent/tools";
-import { DEFAULT_SCENE_WINDOW, SCENE_READ_CHAR_CAP, type SceneTurn } from "./model";
+import { formatSceneMemory } from "./memoryTools";
+import {
+  DEFAULT_SCENE_WINDOW, SCENE_READ_CHAR_CAP, type MemoryRecord, type SceneTurn,
+} from "./model";
 import { sliceTurns, searchTurns, type SceneHit } from "./transcript";
 
 export interface SceneInfo {
@@ -23,6 +26,8 @@ export interface SceneInfo {
   /** 主角条目名，没有则空串。 */
   primary: string;
   turnCount: number;
+  /** 仍在生效的记忆条数——旁白扫一眼就知道哪条线还欠着东西。 */
+  openMemory: number;
   /** Unix 秒，0 表示从没说过话。 */
   lastAt: number;
   /** 摘要首句，没有摘要时是最后一轮的预览。 */
@@ -39,6 +44,8 @@ export interface SceneReader {
   list(): Promise<SceneInfo[]>;
   read(agentId: string): Promise<SceneSlice>;
   summary(agentId: string): Promise<string>;
+  /** 那个角色记下的、仍在生效的事。比读整份记录便宜得多，也更是重点。 */
+  memory(agentId: string, includeClosed: boolean): Promise<MemoryRecord[]>;
 }
 
 const NO_READER =
@@ -63,11 +70,12 @@ export async function listScenesTool(id: string, ctx: { scenes?: SceneReader }):
   }
   const lines = scenes.map((s) => {
     const primary = s.primary ? ` · ${s.primary}` : "";
-    return `- ${s.agentId} — ${s.name}${primary} · ${s.turnCount} turns${s.gist ? ` · ${s.gist}` : ""}`;
+    const memory = s.openMemory > 0 ? ` · ${s.openMemory} live memory record(s)` : "";
+    return `- ${s.agentId} — ${s.name}${primary} · ${s.turnCount} turns${memory}${s.gist ? ` · ${s.gist}` : ""}`;
   });
   return {
     toolCallId: id,
-    content: `${lines.join("\n")}\n\nUse read_scene_summary first to catch up cheaply, then read_scene for the turns that matter.`,
+    content: `${lines.join("\n")}\n\nStart with read_scene_memory (what a character is still committed to) or read_scene_summary (what happened), then read_scene only for the turns that matter.`,
   };
 }
 
@@ -167,4 +175,17 @@ export async function readSceneSummaryTool(
     };
   }
   return { toolCallId: id, content: `${scene.name} — rolling summary:\n\n${summary}` };
+}
+
+export async function readSceneMemoryTool(
+  id: string, args: { agent?: string; include_closed?: boolean }, ctx: { scenes?: SceneReader },
+): Promise<ToolResult> {
+  if (!ctx.scenes) return { toolCallId: id, content: NO_READER };
+  const agentId = (args.agent ?? "").trim();
+  const scenes = await ctx.scenes.list();
+  const scene = scenes.find((s) => s.agentId === agentId);
+  if (!scene) return { toolCallId: id, content: unknownScene(scenes, agentId) };
+
+  const records = await ctx.scenes.memory(agentId, args.include_closed === true);
+  return { toolCallId: id, content: formatSceneMemory(records, scene.name) };
 }

@@ -27,6 +27,7 @@ import { TruncationCard } from "../ai/TruncationCard";
 import { useAgentStore } from "../../stores/agentStore";
 import { cardsForSurface } from "../../lib/agent/approvalRouting";
 import { ScriptText } from "./ScriptText";
+import { MemoryPanel } from "./MemoryPanel";
 import {
   MentionPicker, filterMentions, mentionKey, mentionLabel,
   useMentionState, type MentionItem,
@@ -35,7 +36,7 @@ import { classifySegment } from "../../lib/roleplay/markup";
 import { projectFilesFromTree } from "../../lib/fs/images";
 import { readFile } from "../../lib/fs/fileio";
 import type { AttachedItem } from "../../lib/lore/aiTask";
-import type { RoleplayAgent, SceneTurn } from "../../lib/roleplay/model";
+import type { MemoryRecord, RoleplayAgent, SceneTurn } from "../../lib/roleplay/model";
 import styles from "./RoleplayChat.module.css";
 
 const MIRROR_CLASS: Record<string, string> = {
@@ -65,11 +66,16 @@ function ComposerMirror({ text }: { text: string }) {
   );
 }
 
-function TurnBlock({ turn, log }: { turn: SceneTurn; log?: React.ReactNode }) {
+function TurnBlock({ turn, log, memories }: {
+  turn: SceneTurn;
+  log?: React.ReactNode;
+  /** 这一轮里角色记下的东西。作者手加的 `turn: 0`，永远不会落在这里。 */
+  memories?: MemoryRecord[];
+}) {
   const { t } = useTranslation();
   if (turn.speaker === "author") {
     return (
-      <div className={styles.authorTurn}>
+      <div className={styles.authorTurn} id={`rp-turn-${turn.index}`}>
         <div className={styles.authorLabel}>
           {t("roleplay.me", { defaultValue: "我" })}
           {turn.speakerName && <span className={styles.personaName}>{turn.speakerName}</span>}
@@ -80,10 +86,18 @@ function TurnBlock({ turn, log }: { turn: SceneTurn; log?: React.ReactNode }) {
   }
   return (
     <>
-      <div className={styles.agentTurn}>
+      <div className={styles.agentTurn} id={`rp-turn-${turn.index}`}>
         <div className={styles.agentLabel}>{turn.speakerName}</div>
         <ScriptText text={turn.text} />
       </div>
+      {/* 很轻的一道痕迹：不能像系统通知那样打断阅读，但也不能轻到看不见——
+          作者需要知道角色**真的**记住了，这是建立信任的地方。 */}
+      {memories?.map((m) => (
+        <div key={m.id} className={styles.memoryTrace}>
+          <span className={styles.memoryDot} />
+          {t("roleplay.memory.recorded", { title: m.title, defaultValue: `记下了：${m.title}` })}
+        </div>
+      ))}
       {log}
     </>
   );
@@ -106,6 +120,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const [openLog, setOpenLog] = useState<number | null>(null);
   const [refs, setRefs] = useState<AttachedItem[]>([]);
   const [seconds, setSeconds] = useState(0);
+  const [showMemory, setShowMemory] = useState(false);
 
   const taRef = useRef<HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
@@ -145,6 +160,21 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   }, [session?.turns.length, session?.streaming]);
 
   const boundCount = agent.boundPaths.length;
+  const openMemoryCount = (session?.memory ?? []).filter((m) => m.status === "open").length;
+  const memoriesByTurn = useMemo(() => {
+    const map = new Map<number, MemoryRecord[]>();
+    for (const m of session?.memory ?? []) {
+      if (m.turn <= 0) continue;
+      const list = map.get(m.turn) ?? [];
+      list.push(m);
+      map.set(m.turn, list);
+    }
+    return map;
+  }, [session?.memory]);
+
+  const jumpToTurn = (turn: number) => {
+    document.getElementById(`rp-turn-${turn}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  };
   const canSend = draft.trim().length > 0;
 
   const doSend = () => {
@@ -225,8 +255,9 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
 
   return (
     <div className={styles.pane}>
+      <div className={styles.main}>
       {/* ── 顶部信息带 ── 一行小字，需要时才展开 ── */}
-      <div className={styles.band}>
+      <div className={`${styles.band} ${showMemory ? styles.bandNarrow : ""}`}>
         <span className={styles.bandName}>{agent.name}</span>
         {agent.kind === "narrator" && <span className={styles.kindTag}>NARRATOR</span>}
         <span className={styles.sep} />
@@ -245,6 +276,14 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
             onChange={(id) => void setAgentModel(agent.id, id)}
           />
         </div>
+        <button
+          type="button"
+          className={`${styles.bandBtn} ${showMemory ? styles.bandBtnOn : ""}`}
+          onClick={() => setShowMemory((v) => !v)}
+        >
+          {t("roleplay.memory.open", { defaultValue: "记事本" })}
+          {openMemoryCount > 0 && <span className={styles.memoryCount}>{openMemoryCount}</span>}
+        </button>
         <div className={styles.spacer} />
         <span className={styles.isolation}>
           {agent.kind === "narrator"
@@ -315,6 +354,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
             <TurnBlock
               key={turn.index}
               turn={turn}
+              memories={memoriesByTurn.get(turn.index)}
               log={
                 session.log[turn.index]?.length ? (
                   <div className={styles.logLine}>
@@ -499,6 +539,10 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           </div>
         </div>
       </div>
+      </div>
+      {showMemory && (
+        <MemoryPanel agentId={agent.id} onClose={() => setShowMemory(false)} onJump={jumpToTurn} />
+      )}
     </div>
   );
 }

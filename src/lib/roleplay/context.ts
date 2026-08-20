@@ -7,15 +7,16 @@
  *
  *   [0] system  人设 + 扮演规则 + 作者身份 + 输入语法
  *   [1] user    【绑定设定】boundPaths 的正文        ← prelude，压缩不丢
- *   [2] user    【场景】首轮自动命中的其他词条        ← meta.seedContext，压缩会丢
- *   [3] user    作者第一句                          ← meta.turnStarts[0]
+ *   [2] user    【记忆】仍在生效的约定 / 待办 / 关系  ← prelude，压缩不丢，会被刷新
+ *   [3] user    【场景】首轮自动命中的其他词条        ← meta.seedContext，压缩会丢
+ *   [4] user    作者第一句                          ← meta.turnStarts[0]
  *
  * 为什么放对位置就够、不需要给压缩加白名单：`buildCompactedHistory`
  * (lib/agent/compact) 遍历 prelude 时**只跳过** `meta.seedContext` 和
  * `meta.summary`，其余原样保留；`trimHistory` (lib/agent/runtime) 只把
  * `role:"tool"` 的内容和图片 part 换掉，不动普通 user 消息。所以 `[1]` 在
- * 两条裁剪路径下都永久存活，而 `[2]` 会在压缩时正确地消失——它是检索输出，
- * 可复现；`[1]` 是这个角色是谁，不可复现。
+ * 两条裁剪路径下都永久存活，而 `[3]` 会在压缩时正确地消失——它是检索输出，
+ * 可复现；`[1]`/`[2]` 是这个角色是谁、答应过什么，不可复现。
  *
  * ## 为什么不走 assembleContext
  *
@@ -31,7 +32,8 @@ import type { MessageContent, StreamMessage } from "../ai/types";
 import { parsePins, selectLore, type LoreActivationReport } from "../context/loreSelect";
 import { readEntityFile } from "../lore/entity";
 import type { LoreEntity, LoreIndex } from "../lore/model";
-import type { AuthorPersona, RoleplayAgent } from "./model";
+import { renderMemoryBlock } from "./memory";
+import type { AuthorPersona, MemoryRecord, RoleplayAgent } from "./model";
 
 /** 绑定块最多多少字符。超出的绑定项被点名但不展开，模型可以自己去读。 */
 export const BOUND_BLOCK_CHAR_CAP = 12_000;
@@ -39,10 +41,12 @@ export const BOUND_BLOCK_CHAR_CAP = 12_000;
 export interface RoleplaySessionMeta extends ChatSessionMeta {
   /** `[1]` 的对象身份。按身份而不是下标持有——repairToolCallPairing 会 splice。 */
   boundBlock: StreamMessage | null;
+  /** `[2]` 的对象身份，刷新记忆时定位它。 */
+  memoryBlock: StreamMessage | null;
 }
 
 export function createRoleplayMeta(): RoleplaySessionMeta {
-  return { ...createSessionMeta(), boundBlock: null };
+  return { ...createSessionMeta(), boundBlock: null, memoryBlock: null };
 }
 
 // ─── 绑定块 ──────────────────────────────────────────────────────────────────
@@ -180,6 +184,7 @@ export function buildSystemPrompt(opts: {
     parts.push(`${isZh ? "## 作者给你的指令" : "## The author's direction"}\n${opts.personaCard.trim()}`);
   }
   parts.push(i18n.t("ai.instructions.roleplaySyntax"));
+  parts.push(i18n.t("ai.instructions.roleplayMemory"));
   return parts.join("\n\n");
 }
 
@@ -202,6 +207,8 @@ export async function seedRoleplayHistory(opts: {
   /** 检索用的纯文本（`firstMessage` 可能带图片 part，图片没有词可匹配）。 */
   matchText: string;
   loreBudgetChars: number;
+  /** 这个 agent 已经记下的东西；只有 `open` 的会进上下文。 */
+  memory: readonly MemoryRecord[];
 }): Promise<SeedResult> {
   const bound = await buildBoundContent(opts.loreIndex, opts.agent.boundPaths);
   const system: StreamMessage = {
@@ -230,6 +237,13 @@ export async function seedRoleplayHistory(opts: {
     recordInjections(meta, bound.entities, block);
   }
 
+  const memoryText = renderMemoryBlock(opts.memory);
+  if (memoryText) {
+    const block: StreamMessage = { role: "user", content: memoryBlockContent(memoryText) };
+    messages.push(block);
+    meta.memoryBlock = block;
+  }
+
   // 首轮自动命中：绑定之外的词条，用作者第一句去匹配。
   const excludeDirs = new Set(bound.entities.map((e) => e.dirPath));
   const { text: snippets, report } = await selectLore(
@@ -255,6 +269,39 @@ export async function seedRoleplayHistory(opts: {
   noteTurnStart(meta, question);
 
   return { messages, meta, report, bound };
+}
+
+function memoryBlockContent(body: string): string {
+  const label = i18n.t("roleplay.section.memory", { defaultValue: "记忆" });
+  const lead = i18n.t("roleplay.section.memoryLead", {
+    defaultValue: "以下是你自己记下的、到现在仍然有效的事。它们不随对话变长而遗忘。",
+  });
+  return `【${label}】\n${lead}\n${body}`;
+}
+
+/**
+ * 刷新记忆块。
+ *
+ * **只在四个时刻调用**：播种、压缩之后、会话恢复、作者手动。绝不在 `remember`
+ * 写入的当下——那条工具结果本身就在历史里，模型这一轮、以及之后直到折叠为止的
+ * 每一轮都看得见它。真正的失效边界是**那条结果被折叠掉的时刻**，而那正是压缩
+ * 发生的时刻。所以「压缩后刷新」不是省钱的优化，**它精确地就是正确性边界**；
+ * 写入即刷新只会让每记一件事就作废一次 prompt 缓存前缀，换来零收益。
+ *
+ * 就地改 content，不换消息对象——`meta.memoryBlock` 按身份持有它。
+ *
+ * 块从「有」变「没有」时不删除消息，改成一句「暂时没有」：删一条 prelude 消息
+ * 会让历史的稳定前缀变短，等于白白作废一次缓存，而它只是一行字。
+ */
+export function refreshMemoryBlock(
+  meta: RoleplaySessionMeta,
+  records: readonly MemoryRecord[],
+): void {
+  if (!meta.memoryBlock) return;
+  const body = renderMemoryBlock(records);
+  meta.memoryBlock.content = memoryBlockContent(
+    body || i18n.t("roleplay.section.memoryNone", { defaultValue: "（暂时没有。）" }),
+  );
 }
 
 /**

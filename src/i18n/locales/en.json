@@ -657,7 +657,8 @@
       "roleplaySyntax": "## The author's notation\nFour different things are mixed into the author's messages — keep them apart:\n- `*wrapped in asterisks*` is action, expression, body language.\n- `「in corner brackets」` (or plain double quotes) is **spoken dialogue addressed to you**.\n- Unmarked bare text is environment, events, scene description — things happening, not words said to you.\n- `[in square brackets]` is the author stepping outside the story to direct you. It is **not** an event in the story. Adjust accordingly, but never acknowledge it in your reply and never write it into the scene.\n\nUse the same notation yourself: `*…*` for action, `「…」` for dialogue, bare text for description.",
       "roleplayPersonaLore": "You are speaking with {{name}}{{summary}} — another person in the story, not the author. Treat them as your own setting says you would.",
       "roleplayPersonaPrompt": "The person speaking with you: {{prompt}}",
-      "roleplayPersonaNone": "The person speaking has not given an identity. Treat them as someone in the story you do not yet know, and react as your character would."
+      "roleplayPersonaNone": "The person speaking has not given an identity. Treat them as someone in the story you do not yet know, and react as your character would.",
+      "roleplayMemory": "## Your long-term memory\nYou have a notebook that is yours alone (remember / revise_memory / recall). What goes in it is **not** forgotten as the conversation grows — that is what separates it from the conversation in your head.\n\n**When to record**:\n- `pact` you and the other person agreed on something.\n- `todo` something you intend to do but have not done.\n- `event` something that happened and will shape what comes later.\n- `bond` your view of someone changed.\n- `note` none of the above, but you will still need to know it much later.\n\n**When NOT to record** (just as important): ordinary dialogue, atmosphere, a passing thought, anything the knowledge base already states, anything settled within this exchange. When the notebook fills with noise, the commitments that are actually outstanding get pushed out of it — **better to miss one than to record everything**. One or two across a whole scene is normal; one every turn is wrong.\n\n**When something is kept or called off**, update that record with revise_memory (`done` / `void`). Do not write a new record to contradict an old one. Records are never deleted; a voided one keeps its text."
     },
     "taskDoc": {
       "untitled": "Untitled task",
@@ -2048,7 +2049,10 @@
     },
     "section": {
       "bound": "Bound setting",
-      "scene": "Scene"
+      "scene": "Scene",
+      "memory": "Memory",
+      "memoryLead": "What you have written down and that still holds. It does not fade as the conversation grows.",
+      "memoryNone": "(Nothing yet.)"
     },
     "roster": {
       "search": "Search agents",
@@ -2151,6 +2155,42 @@
     "errors": {
       "rosterRebuilt": "The roster was corrupt and has been rebuilt from the directories — bindings and model choices need to be filled in again.",
       "loadFailed": "Could not read the roleplay directory (.ai-writer/roleplay/): {{error}}"
+    },
+    "memory": {
+      "title": "Notebook",
+      "open": "Notebook",
+      "close": "Close",
+      "empty": "Nothing recorded yet.",
+      "emptyHint": "The character writes things down when you agree on something, or when its view of you shifts. You can add one by hand too.",
+      "add": "Add by hand",
+      "cancel": "Cancel",
+      "save": "Record",
+      "titlePlaceholder": "One line, e.g. “go to the tower once the snow stops”",
+      "bodyPlaceholder": "The detail: what exactly was agreed, why it matters.",
+      "jumpToTurn": "turn {{n}}",
+      "markDone": "Kept",
+      "markVoid": "Called off",
+      "reopen": "Reopen",
+      "stale": "The notebook changed; this conversation is still using the old version.",
+      "refresh": "Refresh memory",
+      "count": "{{n}} live",
+      "showClosed": "Show closed ({{n}})",
+      "hideClosed": "Hide closed",
+      "recorded": "Recorded: {{title}}",
+      "blockOverflow": "({{n}} older records not listed — use recall to read them.)",
+      "sceneEmpty": "{{name}} has not recorded anything yet.",
+      "kind": {
+        "pact": "Pact",
+        "todo": "To do",
+        "event": "Event",
+        "bond": "Bond",
+        "note": "Note"
+      },
+      "status": {
+        "open": "Open",
+        "done": "Kept",
+        "void": "Void"
+      }
     }
   }
 }
