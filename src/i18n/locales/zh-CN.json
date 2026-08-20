@@ -3,6 +3,7 @@
     "name": "Simple AI Writer"
   },
   "common": {
+    "loading": "读取中…",
     "close": "关闭",
     "cancel": "取消",
     "unsavedConfirm": "有尚未保存的更改，关闭后将丢失。确定关闭吗？",
@@ -2034,6 +2035,19 @@
     "newAgent": "新建 agent",
     "editAgent": "编辑",
     "retry": "重试",
+    "archive": {
+      "title": "{{name}} · 已封存的场次",
+      "scene": "第 {{n}} 场",
+      "bar": "此前已封存 {{n}} 场",
+      "view": "查看",
+      "blank": "这一场是空的。"
+    },
+    "newSession": {
+      "open": "新开会话",
+      "go": "新开会话",
+      "alsoMemory": "同时清空记忆",
+      "confirmHint": "封存当前 {{n}} 轮，从空白开始。对话留在 archive/，一个字都不删。"
+    },
     "editAgentTitle": "编辑 agent",
     "deleteAgent": "删除",
     "concurrency": "并发",

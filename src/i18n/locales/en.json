@@ -3,6 +3,7 @@
     "name": "Simple AI Writer"
   },
   "common": {
+    "loading": "Loading…",
     "close": "Close",
     "cancel": "Cancel",
     "unsavedConfirm": "You have unsaved changes that will be lost. Close anyway?",
@@ -2039,6 +2040,19 @@
     "newAgent": "New agent",
     "editAgent": "Edit",
     "retry": "Retry",
+    "archive": {
+      "title": "{{name}} · archived scenes",
+      "scene": "Scene {{n}}",
+      "bar": "{{n}} archived scene(s) before this",
+      "view": "View",
+      "blank": "This scene is empty."
+    },
+    "newSession": {
+      "open": "New session",
+      "go": "Start fresh",
+      "alsoMemory": "Also clear memory",
+      "confirmHint": "Archives the current {{n}} turns and starts blank. Nothing is deleted — it moves to archive/."
+    },
     "editAgentTitle": "Edit agent",
     "deleteAgent": "Delete",
     "concurrency": "Running",

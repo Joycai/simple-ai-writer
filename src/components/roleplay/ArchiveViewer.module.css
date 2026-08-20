@@ -1,0 +1,129 @@
+/* 封存场次的只读查看器。抽屉的外壳与 AgentComposer 同规格（760px、二层 z-index），
+   里面的稿面沿用对话区的排版——同一段文字在两处读起来必须是同一个东西。 */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 61;
+  width: 760px;
+  max-width: 96vw;
+  background: var(--rp-canvas);
+  border-left: 1px solid var(--color-border-panel);
+  box-shadow: var(--shadow-xl);
+  display: flex;
+  flex-direction: column;
+}
+
+.head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 26px;
+  border-bottom: 1px solid var(--color-border-panel);
+  background: var(--rp-rail);
+}
+
+.title {
+  font-family: var(--font-serif);
+  font-size: 19px;
+  line-height: 1;
+  color: var(--color-text-primary);
+}
+
+.spacer { flex: 1; }
+
+.iconBtn {
+  display: flex;
+  border: none;
+  background: none;
+  padding: 4px;
+  color: var(--color-text-dim);
+  cursor: pointer;
+}
+.iconBtn:hover { color: var(--color-text-primary); }
+
+.body { flex: 1; display: flex; min-height: 0; }
+
+/* 场次轨：新的在上。场次少的时候它只有两三行，所以不给它固定宽度之外的任何
+   装饰——它是索引，不是内容。 */
+.rail {
+  flex-shrink: 0;
+  width: 132px;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 0;
+  border-right: 1px solid var(--color-hairline);
+  overflow-y: auto;
+}
+
+.railItem {
+  text-align: left;
+  border: none;
+  border-left: 2px solid transparent;
+  background: none;
+  padding: 9px 18px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--color-text-dim);
+  cursor: pointer;
+}
+.railItem:hover { color: var(--color-text-primary); background: var(--rp-row-hover); }
+.railItemOn {
+  border-left-color: var(--color-accent);
+  color: var(--color-text-primary);
+}
+
+.scroll { flex: 1; overflow-y: auto; min-height: 0; padding: 26px 0 40px; }
+
+.column { width: 560px; max-width: calc(100% - 52px); margin: 0 auto; }
+
+/* 与对话区同一套：作者一条赭石左规，角色直接落在纸上。 */
+.authorTurn {
+  border-left: 2px solid var(--color-border-accent);
+  padding-left: 18px;
+  margin-bottom: 26px;
+}
+
+.agentTurn { padding-left: 20px; margin-bottom: 10px; }
+
+.label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--color-text-dim);
+  margin-bottom: 9px;
+}
+
+.agentTurn .label { color: var(--color-accent); }
+
+.personaName {
+  letter-spacing: 0.1em;
+  color: var(--color-text-hint);
+}
+
+.empty,
+.error {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--color-text-hint);
+}
+
+.error { color: var(--color-error-text-strong); }

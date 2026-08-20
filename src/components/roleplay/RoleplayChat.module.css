@@ -193,6 +193,28 @@
 
 .column { width: 640px; max-width: calc(100% - 52px); margin: 0 auto; }
 
+/* 「此前已封存 N 场」。稿面最上方的一条细线小字——它讲的正是这个位置的事：
+   再往上就没有了。做成整行可点，而不是只有「查看」两个字。 */
+.archiveBar {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--color-hairline);
+  background: none;
+  padding: 0 0 12px;
+  margin-bottom: 24px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--color-text-hint);
+  cursor: pointer;
+  text-align: left;
+}
+.archiveBar:hover { color: var(--color-text-soft); }
+.archiveOpen { color: var(--color-accent); }
+
 /* 作者的回合：一条 2px 赭石左规 + 一个小号名标。没有气泡。 */
 .authorTurn {
   border-left: 2px solid var(--color-border-accent);

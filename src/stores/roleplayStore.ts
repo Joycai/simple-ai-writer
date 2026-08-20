@@ -62,7 +62,7 @@ import {
 import { scriptPreview } from "../lib/roleplay/markup";
 import type { SceneInfo, SceneReader, SceneSlice } from "../lib/roleplay/sceneTools";
 import {
-  deleteAgentDir, loadPersonaCard, loadRoster, loadSession, loadSummary,
+  archiveSession, deleteAgentDir, loadPersonaCard, loadRoster, loadSession, loadSummary,
   memoryPath, saveRoster, savePersonaCard, saveSession, saveSummary, transcriptPath,
 } from "../lib/roleplay/store";
 import { appendTurn, loadTranscript } from "../lib/roleplay/transcript";
@@ -143,6 +143,11 @@ interface RoleplayState {
   createAgent: (draft: AgentDraft) => Promise<string | null>;
   updateAgent: (id: string, draft: AgentDraft) => Promise<void>;
   removeAgent: (id: string) => Promise<void>;
+  /**
+   * 新开一场：把当前 transcript / summary 封存进 `archive/`，agent 从空白开始。
+   * 设定、绑定、人设卡全部保留——「重新开始」不该等于删了重建。
+   */
+  newSession: (id: string, opts: { clearMemory: boolean }) => Promise<void>;
   setAuthorPersona: (persona: AuthorPersona) => Promise<void>;
   setAgentModel: (id: string, modelId: string | null) => Promise<void>;
 
@@ -682,6 +687,35 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       // 改了绑定也是一种「设定变了」。不直接置 true，而是重新比对一遍——把
       // 「过期与否」的判断留在唯一的一处，否则改回原样之后那条提示会赖着不走。
       void get().checkBindings();
+    },
+
+    newSession: async (id, opts) => {
+      const { projectPath } = get();
+      const agent = get().agents[id];
+      if (!projectPath || !agent) return;
+      // 跑着的时候不许开新场：正在写的那一轮会追加到一个已经被移走的文件上。
+      if (get().running.includes(id) || get().queue.some((j) => j.agentId === id)) return;
+
+      try {
+        await archiveSession(projectPath, id, opts);
+      } catch (e) {
+        patchSession(id, (s) => ({ ...s, error: String(e) }));
+        return;
+      }
+
+      // 会话整个归零。`boundHash` 一并清掉——它是「设定已更新」的基线，而这一
+      // 场还没播种过，没有基线可比；留着旧的会让提示按上一场的状态亮。
+      const memory = opts.clearMemory ? [] : get().sessions[id]?.memory ?? [];
+      set((st) => ({
+        sessions: { ...st.sessions, [id]: { ...emptySession(), memory } },
+        unread: { ...st.unread, [id]: false },
+        stale: { ...st.stale, [id]: false },
+        agents: {
+          ...st.agents,
+          [id]: { ...agent, turnCount: 0, boundHash: null, updatedAt: Math.floor(Date.now() / 1000) },
+        },
+      }));
+      await persistRoster();
     },
 
     removeAgent: async (id) => {
