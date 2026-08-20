@@ -2135,6 +2135,8 @@
       "narratorNote": "The narrator plays no one · no identity needed"
     },
     "composer": {
+      "selectionChip": "selection · {{n}} chars",
+      "detachSelection": "Don't attach the selection",
       "catAll": "All",
       "addLore": "entry",
       "addDoc": "doc",

@@ -133,6 +133,13 @@ export interface LiveSession {
    * 重启都会新建一个再也没人认领的工作区目录。）
    */
   taskId: string | null;
+  /**
+   * `history` 变过几次。
+   *
+   * 上下文构成条要靠它才知道该重算：那个数组是**就地** push 的（`runJob` 里
+   * 的注入、提问、runAgent 自己的工具轮），引用从头到尾不变，React 看不见。
+   */
+  contextVersion: number;
   error: string | null;
   /**
    * 上一次跑过的作业，重试用。重试入口只在 `error` 亮着时露出——「重试」在这里
@@ -189,7 +196,8 @@ interface RoleplayState {
   toggleSubAgent: (id: string, kind: SubAgentKind) => void;
 
   select: (id: string | null) => Promise<void>;
-  send: (agentId: string, text: string, refs?: AttachedItem[]) => Promise<void>;
+  /** `quote` = 编辑器里选中的正文，随这一条消息上线（transcript 里仍只存作者敲的字）。 */
+  send: (agentId: string, text: string, refs?: AttachedItem[], quote?: string) => Promise<void>;
   stop: (agentId: string) => void;
   /** 重跑上一次失败的作业。只在 `session.error` 亮着时有意义。 */
   retry: (agentId: string) => void;
@@ -229,7 +237,7 @@ function emptySession(): LiveSession {
     turns: [], log: {}, history: null, meta: null, streaming: "", liveLog: [],
     usage: null, stalePaths: [], memory: [], memoryStale: false,
     workspace: null, stopped: false, disabledSubAgents: [], taskId: null,
-    error: null, lastJob: null,
+    contextVersion: 0, error: null, lastJob: null,
   };
 }
 
@@ -612,6 +620,8 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       const { useAgentStore } = await import("./agentStore");
       useAgentStore.getState().rejectAll("roleplay run ended", controller);
 
+      patchSession(job.agentId, (x) => ({ ...x, contextVersion: x.contextVersion + 1 }));
+
       const s = get().sessions[job.agentId];
       if (s?.history && s.meta) {
         void saveSession(projectPath, job.agentId, {
@@ -877,7 +887,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       void get().checkBindings();
     },
 
-    send: async (agentId, text, refs = []) => {
+    send: async (agentId, text, refs = [], quote) => {
       const { projectPath } = get();
       const agent = get().agents[agentId];
       const body = text.trim();
@@ -923,7 +933,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         subAgents, get().sessions[agentId]?.disabledSubAgents ?? [],
       );
       const { visionSubAgentModel } = await import("../lib/agent/subagent");
-      const composed = await buildChatMessage(body, undefined, refs, {
+      const composed = await buildChatMessage(body, quote, refs, {
         allowImages: model?.type === "multimodal",
         visionDelegate: visionSubAgentModel(models, subs) !== null,
       });

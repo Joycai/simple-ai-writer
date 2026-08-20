@@ -28,6 +28,13 @@ import { TruncationCard } from "../ai/TruncationCard";
 import { useAgentStore } from "../../stores/agentStore";
 import { useAiStore } from "../../stores/aiStore";
 import { readPref, writePref } from "../../lib/prefs";
+import { useAppStore } from "../../stores/appStore";
+import { computeContextBreakdown } from "../../lib/agent/contextBreakdown";
+import { getToolDefinitions } from "../../lib/agent/registry";
+import { routePlannedTools } from "../../lib/agent/routing";
+import { estimateToolsTokens } from "../../lib/ai/tokenEstimate";
+import { inputCeilingFor } from "../../lib/context/budget";
+import { presetFor } from "../../lib/roleplay/presets";
 import {
   chainCanSeeImages, withSessionOverrides, type SubAgentKind,
 } from "../../lib/agent/subagent";
@@ -37,6 +44,9 @@ import { cardsForSurface } from "../../lib/agent/approvalRouting";
 import { ScriptText } from "./ScriptText";
 import { ArchiveViewer } from "./ArchiveViewer";
 import { SubAgentChips } from "../ai/SubAgentChips";
+import { ContextBar } from "../ai/ContextBar";
+import { SnippetPicker } from "../ai/SnippetPicker";
+import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { MemoryPanel } from "./MemoryPanel";
 import {
   MentionPicker, filterMentions, mentionKey, mentionLabel,
@@ -167,6 +177,13 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const [showArchive, setShowArchive] = useState(false);
   /** 待确认的回退目标轮号。回退会撤销记录，所以要问一次。 */
   const [rewindTo, setRewindTo] = useState<number | null>(null);
+  /**
+   * 作者主动摘掉了这次的选区。
+   *
+   * 默认带上——有选区几乎总意味着「我说的是这一段」。摘掉之后在编辑器里重新
+   * 划一次就会再带上（`selection` 换了新值，这个开关也跟着复位）。
+   */
+  const [detached, setDetached] = useState(false);
 
   const taRef = useRef<HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
@@ -202,6 +219,35 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
    * 角色像什么都没有一样回答。
    */
   const canSeeImages = chainCanSeeImages(boundModel, effectiveSubs, models);
+
+  const selection = useAiTaskStore((s) => s.selection);
+  useEffect(() => { setDetached(false); }, [selection]);
+  const quote = !detached && selection ? selection : undefined;
+
+  const contextUtilization = useAppStore((s) => s.contextUtilization);
+  /**
+   * 工具 schema 的开销。按**路由之后**的工具算（子代理会摘掉 read_image、补上
+   * delegate），否则这一段会和它旁边那排芯片说的不是同一回事。
+   */
+  const toolTokens = useMemo(
+    () => estimateToolsTokens(
+      getToolDefinitions(routePlannedTools(presetFor(agent.kind), effectiveSubs, models).tools),
+    ),
+    [agent.kind, effectiveSubs, models],
+  );
+  const contextVersion = session?.contextVersion ?? 0;
+  const context = useMemo(
+    () => computeContextBreakdown(
+      session?.history ?? null,
+      session?.meta ?? null,
+      toolTokens,
+      inputCeilingFor(boundModel?.contextSize, contextUtilization),
+      boundModel?.contextSize ?? 0,
+    ),
+    // `contextVersion` 才是真正的触发器：history 是就地改的，引用永远不变。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [session?.history, session?.meta, contextVersion, toolTokens, boundModel?.contextSize, contextUtilization],
+  );
 
   const candidates: MentionItem[] = useMemo(() => [
     ...Object.values(loreIndex).flat().map((entity): MentionItem => ({ type: "lore", entity })),
@@ -272,9 +318,13 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
 
   const doSend = () => {
     if (!canSend) return;
-    void send(agent.id, draft, refs);
+    void send(agent.id, draft, refs, quote);
     setDraft("");
     setRefs([]);
+    setRefError(null);
+    // 发完就摘掉：同一段选区跟着后面每一条消息一路走下去，是在替作者做一个他
+    // 只做过一次的决定。想再带上，在编辑器里重新划一次。
+    setDetached(true);
   };
 
   const mentionItems = useMemo(
@@ -765,9 +815,36 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
             />
           )}
 
+          <ContextBar context={context} />
+
           {/* 附件行：这条消息**带着什么**（芯片）和这一场**怎么工作**（子代理）。
               原来只有一句「N 项引用」，删不掉任何一项——芯片本身就是删除入口。 */}
           <div className={styles.attachRow}>
+            {/* 选区和 `@` 引用并排：两者都是「这条消息带着的材料」，拆成两行会
+                读成两套互不相干的机制。 */}
+            {quote ? (
+              <button
+                type="button"
+                className={styles.attachChip}
+                onClick={() => setDetached(true)}
+                title={t("roleplay.composer.detachSelection", { defaultValue: "不附带选区" })}
+              >
+                {t("roleplay.composer.selectionChip", {
+                  n: quote.length, defaultValue: `选区 ${quote.length} 字`,
+                })}
+                <X size={10} strokeWidth={2} />
+              </button>
+            ) : selection ? (
+              <button
+                type="button"
+                className={styles.attachGhost}
+                onClick={() => setDetached(false)}
+              >
+                + {t("roleplay.composer.selectionChip", {
+                  n: selection.length, defaultValue: `选区 ${selection.length} 字`,
+                })}
+              </button>
+            ) : null}
             {refs.map((r) => {
               const key = attachedKey(r);
               const label = r.kind === "lore" ? r.entity.name : r.file.name;
@@ -826,6 +903,10 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           {refError && <div className={styles.refError}>{refError}</div>}
 
           <div className={styles.inputFoot}>
+            {/* 插入而不是发送：片段是个开头，作者补完再发。 */}
+            <SnippetPicker
+              onPick={(c) => setDraft((prev) => (prev.trim() ? `${prev}\n${c}` : c))}
+            />
             <span className={styles.kbd}>{t("roleplay.composer.newline", { defaultValue: "⇧↵ 换行" })}</span>
             <div className={styles.spacer} />
             {isRunning && (

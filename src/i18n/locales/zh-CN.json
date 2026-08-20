@@ -2130,6 +2130,8 @@
       "narratorNote": "旁白不扮演任何人 · 无身份设定"
     },
     "composer": {
+      "selectionChip": "选区 {{n}} 字",
+      "detachSelection": "不附带选区",
       "catAll": "全部",
       "addLore": "设定",
       "addDoc": "文档",
