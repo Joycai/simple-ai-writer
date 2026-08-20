@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { formatStamp, parseTranscript, renderTurn, searchTurns, sliceTurns } from "../transcript";
+import {
+  formatStamp, parseTranscript, renderTranscript, renderTurn, searchTurns, sliceTurns,
+  truncateTurns,
+} from "../transcript";
 import type { SceneTurn } from "../model";
 
 const turn = (over: Partial<SceneTurn> = {}): SceneTurn => ({
@@ -107,5 +110,39 @@ describe("searchTurns", () => {
   it("honours the cap and ignores an empty query", () => {
     expect(searchTurns(turns, "塔", 1)).toHaveLength(1);
     expect(searchTurns(turns, "   ", 10)).toEqual([]);
+  });
+});
+
+/**
+ * 回退（`rewind`）依赖的两个函数。
+ *
+ * 这里最要紧的是**往返**：截断之后重写出来的文件必须还能被 `parseTranscript`
+ * 读回同样的轮次。这条路径上一旦出错，作者丢的是已经写下的字。
+ */
+describe("truncateTurns / renderTranscript", () => {
+  const many: SceneTurn[] = [
+    { index: 1, speaker: "author", speakerName: "桐谷萤", at: 1755000000, text: "*我推开门。*" },
+    { index: 2, speaker: "agent", speakerName: "沈砚", at: 1755000060, text: "「你来晚了。」" },
+    { index: 3, speaker: "author", speakerName: "", at: 1755000120, text: "「塔那边怎么样？」" },
+    { index: 4, speaker: "agent", speakerName: "沈砚", at: 1755000180, text: "「还在烧。」" },
+  ];
+
+  it("只留轮号小于目标的部分", () => {
+    expect(truncateTurns(many, 3).map((t) => t.index)).toEqual([1, 2]);
+    expect(truncateTurns(many, 1)).toEqual([]);
+    expect(truncateTurns(many, 99)).toHaveLength(4);
+  });
+
+  it("截断后重写的文件能被原样读回来", () => {
+    const kept = truncateTurns(many, 3);
+    const { turns, renumbered } = parseTranscript(renderTranscript("rp-a-0001", kept));
+    expect(renumbered).toBe(false);
+    expect(turns).toEqual(kept);
+  });
+
+  it("空记录也写出一个合法的文件头", () => {
+    const md = renderTranscript("rp-a-0001", []);
+    expect(md).toContain("agent=rp-a-0001");
+    expect(parseTranscript(md).turns).toEqual([]);
   });
 });

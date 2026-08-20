@@ -2040,6 +2040,11 @@
     "newAgent": "New agent",
     "editAgent": "Edit",
     "retry": "Retry",
+    "rewind": {
+      "here": "Rewind to here",
+      "go": "Rewind",
+      "confirm": "Discards this line and the {{n}} records after it; the text returns to the composer. Memories recorded since are dropped too."
+    },
     "archive": {
       "title": "{{name}} · archived scenes",
       "scene": "Scene {{n}}",

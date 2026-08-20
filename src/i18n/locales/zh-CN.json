@@ -2035,6 +2035,11 @@
     "newAgent": "新建 agent",
     "editAgent": "编辑",
     "retry": "重试",
+    "rewind": {
+      "here": "回到这里重说",
+      "go": "回退",
+      "confirm": "撤销这一句和它之后的 {{n}} 条记录，原文回到输入框。这一段之后记下的事也会一并撤销。"
+    },
     "archive": {
       "title": "{{name}} · 已封存的场次",
       "scene": "第 {{n}} 场",

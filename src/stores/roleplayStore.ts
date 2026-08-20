@@ -51,7 +51,7 @@ import {
   type RoleplaySessionMeta,
 } from "../lib/roleplay/context";
 import {
-  addRecord, loadMemoryDoc, reviseRecord, saveMemoryDoc, type MemoryDoc,
+  addRecord, dropRecordsFrom, loadMemoryDoc, reviseRecord, saveMemoryDoc, type MemoryDoc,
 } from "../lib/roleplay/memory";
 import type { AgentMemoryStore } from "../lib/roleplay/memoryTools";
 import {
@@ -63,9 +63,13 @@ import { scriptPreview } from "../lib/roleplay/markup";
 import type { SceneInfo, SceneReader, SceneSlice } from "../lib/roleplay/sceneTools";
 import {
   archiveSession, deleteAgentDir, loadPersonaCard, loadRoster, loadSession, loadSummary,
-  memoryPath, saveRoster, savePersonaCard, saveSession, saveSummary, transcriptPath,
+  memoryPath, saveRoster, savePersonaCard, saveSession, saveSummary, sessionPath,
+  summaryPath, transcriptPath,
 } from "../lib/roleplay/store";
-import { appendTurn, loadTranscript } from "../lib/roleplay/transcript";
+import {
+  appendTurn, loadTranscript, renderTranscript, truncateTurns,
+} from "../lib/roleplay/transcript";
+import { fileExists, removeFile, writeFile } from "../lib/fs/fileio";
 import { readEntityFile } from "../lib/lore/entity";
 import type { AttachedItem } from "../lib/lore/aiTask";
 import type { LoreEntity, LoreIndex } from "../lib/lore/model";
@@ -156,6 +160,11 @@ interface RoleplayState {
   stop: (agentId: string) => void;
   /** 重跑上一次失败的作业。只在 `session.error` 亮着时有意义。 */
   retry: (agentId: string) => void;
+  /**
+   * 回退到某一个作者轮：那一轮及其之后的全部记录被撤销，原文交还给调用方去
+   * 重编辑。返回被撤销的那一句，agent 不存在 / 正在跑 / 轮号不对时返回 null。
+   */
+  rewind: (agentId: string, turnIndex: number) => Promise<string | null>;
   dequeue: (agentId: string) => void;
   promote: (agentId: string) => void;
   refreshBinding: (agentId: string) => Promise<void>;
@@ -610,7 +619,22 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     stale: {},
 
     load: async (projectPath) => {
-      set({ projectPath, loaded: false, rosterError: null, sessions: {}, running: [], queue: [], aborts: {} });
+      // **同一个项目已经装好了就直接返回。**
+      //
+      // 这个方法挂在 RoleplayPanel 的 mount effect 上，而抽屉一关整棵子树就卸载
+      // （AiDrawer 是条件渲染 + AnimatePresence）。原来每次挂载都无条件重跑，
+      // 于是关一次面板就把 sessions / running / queue / aborts 全清空——正在生成
+      // 的那一轮并没有真的停下，只是界面不再认识它，`stop` 也够不到它的
+      // controller 了。对话助手没有这个毛病，因为 agentStore 不在挂载时重置。
+      if (get().projectPath === projectPath && get().loaded) return;
+
+      // 换项目才是真的要清干净：先掐断在跑的，否则那些 controller 会连同
+      // `aborts` 一起被丢掉，留下几个谁也停不了的运行往旧项目里写。
+      if (get().projectPath !== projectPath) {
+        for (const c of Object.values(get().aborts)) c.abort();
+        set({ sessions: {}, running: [], queue: [], aborts: {}, activeAgentId: null, unread: {}, stale: {} });
+      }
+      set({ projectPath, loaded: false, rosterError: null });
       try {
         const { roster, rebuilt } = await loadRoster(projectPath);
         set({
@@ -637,11 +661,15 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       }
     },
 
-    reset: () => set({
-      projectPath: null, loaded: false, rosterError: null, order: [], agents: {},
-      authorPersona: NO_PERSONA, sessions: {}, activeAgentId: null,
-      running: [], queue: [], aborts: {}, unread: {}, stale: {},
-    }),
+    // 项目关掉了。跑着的先掐断——丢掉 aborts 表等于把它们变成谁也停不了的运行。
+    reset: () => {
+      for (const c of Object.values(get().aborts)) c.abort();
+      set({
+        projectPath: null, loaded: false, rosterError: null, order: [], agents: {},
+        authorPersona: NO_PERSONA, sessions: {}, activeAgentId: null,
+        running: [], queue: [], aborts: {}, unread: {}, stale: {},
+      });
+    },
 
     createAgent: async (draft) => {
       const { projectPath } = get();
@@ -861,6 +889,85 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       patchSession(agentId, (s) => ({ ...s, error: null }));
       set((st) => ({ queue: [...st.queue, job] }));
       void pump();
+    },
+
+    /**
+     * 回退到某一个作者轮。
+     *
+     * 撤销的东西分四份，各有各的理由：
+     *
+     * 1. **transcript** —— 截到这一轮之前，先 `backupFile`。这是唯一一处重写这个
+     *    文件的地方，理由写在 `truncateTurns` 的注释里：只追加那条纪律防的是悄悄
+     *    丢字，而回退是作者指名道姓要撤销哪一轮。
+     * 2. **wire history 整个丢掉**（连同 `session.json`）。不做外科手术式的回卷——
+     *    `meta` 里挂着轮起点、注入账本、摘要，一条条往回拆很难拆对，而下一次发送
+     *    本来就会从截断后的 transcript 重新播种（§2.10 的回放）。这个功能几乎是
+     *    那次修复的免费副产品。
+     * 3. **记忆**里 `turn >= turnIndex` 的记录删掉。留着的话角色会言之凿凿地提起
+     *    一件从没发生过的事，比丢掉它更糟。见 `dropRecordsFrom`。
+     * 4. **summary.md 清掉**（先备份）。滚动摘要是散文，没法按轮号截断，而它很
+     *    可能已经把被撤销的那几轮写了进去——一份悄悄断言了不存在的事的摘要，正是
+     *    这个功能要消除的东西。代价是长对话的远期上下文，换回来的是不会撒谎。
+     */
+    rewind: async (agentId, turnIndex) => {
+      const { projectPath } = get();
+      const agent = get().agents[agentId];
+      if (!projectPath || !agent) return null;
+      if (get().running.includes(agentId) || get().queue.some((j) => j.agentId === agentId)) return null;
+
+      const turns = get().sessions[agentId]?.turns ?? [];
+      const target = turns.find((t) => t.index === turnIndex);
+      if (!target || target.speaker !== "author") return null;
+
+      const kept = truncateTurns(turns, turnIndex);
+      try {
+        const tPath = transcriptPath(projectPath, agentId);
+        await backupFile(projectPath, tPath);
+        await writeFile(tPath, renderTranscript(agentId, kept));
+
+        const mPath = memoryPath(projectPath, agentId);
+        const doc = await loadMemoryDoc(mPath);
+        const { doc: nextDoc, dropped } = dropRecordsFrom(doc, turnIndex);
+        if (dropped.length) {
+          await backupFile(projectPath, mPath);
+          await saveMemoryDoc(mPath, agentId, nextDoc);
+        }
+
+        const sPath = summaryPath(projectPath, agentId);
+        if (await fileExists(sPath)) {
+          await backupFile(projectPath, sPath);
+          await removeFile(sPath);
+        }
+        // session.json 是缓存，不备份——一段接不回任何 transcript 的 wire
+        // history 备份下来也没人读得懂。
+        const jPath = sessionPath(projectPath, agentId);
+        if (await fileExists(jPath)) await removeFile(jPath);
+
+        patchSession(agentId, (s) => ({
+          ...s,
+          turns: kept,
+          log: Object.fromEntries(Object.entries(s.log).filter(([k]) => Number(k) < turnIndex)),
+          history: null,
+          meta: null,
+          streaming: "",
+          liveLog: [],
+          error: null,
+          lastJob: null,
+          memory: nextDoc.records,
+          memoryStale: false,
+        }));
+        set((st) => ({
+          agents: {
+            ...st.agents,
+            [agentId]: { ...agent, turnCount: kept.length, boundHash: null },
+          },
+        }));
+        void persistRoster();
+        return target.text;
+      } catch (e) {
+        patchSession(agentId, (s) => ({ ...s, error: String(e) }));
+        return null;
+      }
     },
 
     dequeue: (agentId) => set((st) => ({

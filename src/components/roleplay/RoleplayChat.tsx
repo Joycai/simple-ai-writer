@@ -72,11 +72,13 @@ function ComposerMirror({ text, innerRef }: {
   );
 }
 
-function TurnBlock({ turn, log, memories }: {
+function TurnBlock({ turn, log, memories, onRewind }: {
   turn: SceneTurn;
   log?: React.ReactNode;
   /** 这一轮里角色记下的东西。作者手加的 `turn: 0`，永远不会落在这里。 */
   memories?: MemoryRecord[];
+  /** 只有作者轮、且不是最后一轮时给——回到最后一轮等于什么也没撤销。 */
+  onRewind?: () => void;
 }) {
   const { t } = useTranslation();
   if (turn.speaker === "author") {
@@ -85,6 +87,12 @@ function TurnBlock({ turn, log, memories }: {
         <div className={styles.authorLabel}>
           {t("roleplay.me", { defaultValue: "我" })}
           {turn.speakerName && <span className={styles.personaName}>{turn.speakerName}</span>}
+          {/* 悬停才出现：它是一个撤销动作，不该在稿面上一直举着手。 */}
+          {onRewind && (
+            <button type="button" className={styles.rewindBtn} onClick={onRewind}>
+              {t("roleplay.rewind.here", { defaultValue: "回到这里重说" })}
+            </button>
+          )}
         </div>
         <ScriptText text={turn.text} />
       </div>
@@ -112,7 +120,7 @@ function TurnBlock({ turn, log, memories }: {
 export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: () => void }) {
   const { t } = useTranslation();
   const {
-    sessions, running, queue, stale, send, stop, retry, dequeue, promote,
+    sessions, running, queue, stale, send, stop, retry, rewind, dequeue, promote,
     refreshBinding, setAgentModel,
   } = useRoleplayStore();
   const session = sessions[agent.id];
@@ -131,6 +139,8 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   // 而每次切 agent 重读一次目录比让 store 多背一份状态便宜。
   const [archives, setArchives] = useState<ArchivedScene[]>([]);
   const [showArchive, setShowArchive] = useState(false);
+  /** 待确认的回退目标轮号。回退会撤销记录，所以要问一次。 */
+  const [rewindTo, setRewindTo] = useState<number | null>(null);
 
   const taRef = useRef<HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
@@ -410,6 +420,12 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               key={turn.index}
               turn={turn}
               memories={memoriesByTurn.get(turn.index)}
+              onRewind={
+                turn.speaker === "author" && !isRunning && queuePos < 0
+                  && turn.index < (session?.turns.length ?? 0)
+                  ? () => setRewindTo(turn.index)
+                  : undefined
+              }
               log={
                 session.log[turn.index]?.length ? (
                   <div className={styles.logLine}>
@@ -465,6 +481,41 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               </button>
               <button type="button" className={styles.queueBtnAccent} onClick={() => promote(agent.id)}>
                 {t("roleplay.queue.promote", { defaultValue: "插到最前" })}
+              </button>
+            </div>
+          )}
+
+          {/* 回退的确认。用 transcript 里的原话做提示——作者要撤销的是**这一句**
+              和它之后的一切，而那一句自己是最准确的说明。 */}
+          {rewindTo !== null && (
+            <div className={styles.rewindBar}>
+              <span className={styles.rewindText}>
+                {t("roleplay.rewind.confirm", {
+                  n: (session?.turns.length ?? 0) - rewindTo + 1,
+                  defaultValue: `撤销这一句和它之后的 ${(session?.turns.length ?? 0) - rewindTo + 1} 条记录，原文回到输入框。这一段之后记下的事也会一并撤销。`,
+                })}
+              </span>
+              <button
+                type="button"
+                className={styles.rewindCancel}
+                onClick={() => setRewindTo(null)}
+              >
+                {t("common.cancel", { defaultValue: "取消" })}
+              </button>
+              <button
+                type="button"
+                className={styles.rewindGo}
+                onClick={() => {
+                  const at = rewindTo;
+                  setRewindTo(null);
+                  void rewind(agent.id, at).then((text) => {
+                    if (text === null) return;
+                    setDraft(text);
+                    taRef.current?.focus();
+                  });
+                }}
+              >
+                {t("roleplay.rewind.go", { defaultValue: "回退" })}
               </button>
             </div>
           )}
