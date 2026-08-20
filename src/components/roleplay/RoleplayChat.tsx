@@ -51,9 +51,13 @@ const MIRROR_CLASS: Record<string, string> = {
  * 只换颜色：字号、字重、字形一律与 textarea 相同，任何度量差异都会让光标
  * 和字错开。
  */
-function ComposerMirror({ text }: { text: string }) {
+function ComposerMirror({ text, innerRef }: {
+  text: string;
+  /** 必须挂在 `.mirror` 自己身上：滚动同步设的是**它**的 scrollTop。 */
+  innerRef: React.Ref<HTMLDivElement>;
+}) {
   return (
-    <div className={styles.mirror} aria-hidden>
+    <div ref={innerRef} className={styles.mirror} aria-hidden>
       {text.split(/\r?\n/).map((line, i) => {
         const seg = classifySegment(line, { requireClosed: true });
         return (
@@ -152,6 +156,22 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     const id = window.setInterval(() => setSeconds((Date.now() - started) / 1000), 100);
     return () => window.clearInterval(id);
   }, [isRunning]);
+
+  /**
+   * 镜像层跟着 textarea 滚。
+   *
+   * 超过可见行数之后 textarea 会自己滚（光标要跟着走），镜像层不跟就等于带色
+   * 的字停在原地、光标和真正的文本各走各的。
+   *
+   * 只挂 onScroll 不够，因为组字期间镜像层是**卸载**的（让位给原生文本），
+   * 组完字重新挂上来时 scrollTop 归零——而这中间 textarea 早滚下去了。中文
+   * 输入法下每打一个词都会撞上这条。所以 draft / composing 一变就补一次。
+   */
+  const syncMirror = () => {
+    const ta = taRef.current, mirror = mirrorRef.current;
+    if (ta && mirror) mirror.scrollTop = ta.scrollTop;
+  };
+  useLayoutEffect(syncMirror, [draft, composing]);
 
   // 新内容到达就滚到底。用 layout effect，否则会看到一帧的旧位置。
   useLayoutEffect(() => {
@@ -502,7 +522,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
 
         <div className={styles.inputBox}>
           <div className={styles.inputStack}>
-            {!composing && <div ref={mirrorRef}><ComposerMirror text={draft} /></div>}
+            {!composing && <ComposerMirror text={draft} innerRef={mirrorRef} />}
             <textarea
               ref={taRef}
               className={`${styles.textarea} ${composing ? styles.textareaVisible : ""}`}
@@ -520,8 +540,8 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               onKeyDown={onKeyDown}
               onCompositionStart={() => setComposing(true)}
               onCompositionEnd={() => setComposing(false)}
-              onScroll={(e) => {
-                if (mirrorRef.current) mirrorRef.current.scrollTop = e.currentTarget.scrollTop;
+              onScroll={() => {
+                syncMirror();
               }}
             />
           </div>
