@@ -28,6 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
+      server: ${{ steps.filter.outputs.server }}
     steps:
       - uses: actions/checkout@v4
 
@@ -37,6 +38,9 @@ jobs:
           filters: |
             rust:
               - 'src-tauri/**'
+              - '.github/workflows/ci.yml'
+            server:
+              - 'server/**'
               - '.github/workflows/ci.yml'
 
   frontend:
@@ -124,11 +128,50 @@ jobs:
         working-directory: src-tauri
         run: cargo build --locked
 
+  # The knowledge-base sync server (server/). A plain axum binary — no webview,
+  # no Tauri — so it shares nothing with the `rust` job above: no apt step, its
+  # own cargo cache, and it is gated on its own paths. Keeping them separate is
+  # what lets a server-only PR finish in well under a minute.
+  server:
+    name: Sync server (fmt, clippy, test, build)
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Rust build cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './server -> target'
+          shared-key: server
+
+      - name: Format check (cargo fmt)
+        working-directory: server
+        run: cargo fmt --all -- --check
+
+      - name: Lint (cargo clippy)
+        working-directory: server
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Test (cargo test)
+        working-directory: server
+        run: cargo test --all-features
+
+      - name: Build (cargo build)
+        working-directory: server
+        run: cargo build --locked
+
   # Single check to require in branch protection — succeeds only if all jobs above pass.
   ci-success:
     name: CI Success
     if: always()
-    needs: [changes, frontend, rust]
+    needs: [changes, frontend, rust, server]
     runs-on: ubuntu-latest
     steps:
       - name: Verify all jobs passed
@@ -136,8 +179,13 @@ jobs:
           fail=0
           [ "${{ needs.changes.result }}" = "success" ] || fail=1
           [ "${{ needs.frontend.result }}" = "success" ] || fail=1
-          # `skipped` is a pass for rust: the diff touched no Rust file.
+          # `skipped` is a pass for the two conditional jobs: the diff touched
+          # no file they are gated on.
           case "${{ needs.rust.result }}" in
+            success|skipped) ;;
+            *) fail=1 ;;
+          esac
+          case "${{ needs.server.result }}" in
             success|skipped) ;;
             *) fail=1 ;;
           esac
@@ -146,6 +194,7 @@ jobs:
             echo "  changes=${{ needs.changes.result }}"
             echo "  frontend=${{ needs.frontend.result }}"
             echo "  rust=${{ needs.rust.result }}"
+            echo "  server=${{ needs.server.result }}"
             exit 1
           fi
           echo "All CI jobs passed."

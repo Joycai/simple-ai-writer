@@ -13,21 +13,25 @@ The [`CI`](../.github/workflows/ci.yml) workflow runs on every pull request targ
 | **Detect changed areas** | `dorny/paths-filter` | Decides whether the Rust job has anything to do |
 | **Frontend** | `pnpm install --frozen-lockfile` → `tsc --noEmit` → `pnpm test` → `pnpm build` | Lockfile integrity, TypeScript type-check (the project's lint gate — strict mode, no unused locals/params), Vitest smoke tests, production bundle builds |
 | **Backend (Rust)** | `cargo fmt --check` → `cargo clippy -- -D warnings` → `cargo test` → `cargo build` | Formatting, lints (warnings fail the build), tests, backend compiles |
-| **CI Success** | aggregates the three jobs | Single status check to require in branch protection |
+| **Sync server** | the same four cargo steps, in `server/` | The knowledge-base backup server (`server/`) — a plain axum binary, so it needs none of the webview apt packages the Tauri job installs |
+| **CI Success** | aggregates the four jobs | Single status check to require in branch protection |
 
 Notes:
 - Frontend tests run with Vitest (`src/**/*.test.ts`, config in `vitest.config.ts`) — currently smoke tests for RAG context assembly and OpenAI/Gemini SSE parsing.
-- Rust unit tests live inline in `src-tauri/src/secrets.rs` and `protocol.rs`.
+- Rust unit tests live inline in `src-tauri/src/secrets.rs` and `protocol.rs`; the sync server's live inline in `server/src/ids.rs` and `store.rs`.
 - `clippy` is enforced with `-D warnings`: any new warning fails CI.
 
-### Why the Rust job is conditional
+### Why the Rust and server jobs are conditional
 
 Most PRs here are frontend-only, and the Rust job spends nearly all of its ~2–3 minutes on
 setup that proves nothing when no Rust file moved: ~30–80 s installing the webkit dev tree
 via apt, plus ~40–70 s restoring the cargo cache. So it is gated on the diff touching
 `src-tauri/**` or `.github/workflows/ci.yml`; a frontend-only PR finishes in about 35 s.
 
-`CI Success` therefore treats a **skipped** Rust job as a pass — it only fails on an actual
+`server/**` gates the sync-server job the same way, and it shares nothing with the Tauri
+job — no apt step, its own cargo cache — so a server-only PR is also about half a minute.
+
+`CI Success` therefore treats a **skipped** Rust or server job as a pass — it only fails on an actual
 non-success. Keep it that way if you add more conditional jobs: `needs: [...]` with
 `if: always()` reports skipped jobs as `skipped`, not `success`, so a naive
 `!= "success"` check would fail every frontend-only PR.
