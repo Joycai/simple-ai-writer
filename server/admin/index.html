@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>KB Admin · aiw-kb-server</title>
+<link rel="stylesheet" href="/admin/app.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23A0522D'/%3E%3Crect x='8' y='9' width='16' height='2.6' fill='%23F7F2E8'/%3E%3Crect x='8' y='15' width='16' height='2.6' fill='%23F7F2E8'/%3E%3Crect x='8' y='21' width='10' height='2.6' fill='%23F7F2E8'/%3E%3C/svg%3E">
+</head>
+<body>
+<!--
+  The whole console renders into #root from app.js. Nothing here is a template:
+  every knowledge-base name, entry path and device name in this UI is text a
+  client uploaded, so it is put on the page as a text node and never as HTML.
+-->
+<div id="root" class="booting">
+  <div class="boot">正在连接服务器…</div>
+</div>
+<div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+<script src="/admin/app.js"></script>
+</body>
+</html>

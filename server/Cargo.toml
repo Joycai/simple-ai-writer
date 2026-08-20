@@ -7,12 +7,24 @@ publish = false
 
 [dependencies]
 axum = "0.8"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "io-util", "time"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+toml = "0.8"
+getrandom = "0.2"
+tar = "0.4"
+flate2 = "1"
+toml_edit = { version = "0.22", features = ["serde"] }
+fs2 = "0.4"
+tokio-util = { version = "0.7", features = ["io", "io-util"] }
+
+# Only for two facts the standard library does not expose: the effective uid
+# (the health check's "not running as root") and the config file's mode.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3"

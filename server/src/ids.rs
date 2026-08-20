@@ -164,7 +164,13 @@ pub fn validate_hash(hash: &str) -> Result<(), InvalidName> {
 /// name. Falls back to `kb` when the name has no ASCII-slug content at all — a
 /// name like 「我的武侠世界」 is entirely legitimate and simply does not survive
 /// slugification, so the display name is kept in `meta.json` and the directory
-/// gets a generic id (the caller appends a uniquifying suffix).
+/// gets `kb-<six hex of the name's digest>`.
+///
+/// The digest suffix rather than a bare `kb`: three Chinese-named bases used to
+/// become `kb`, `kb-2`, `kb-3`, which are indistinguishable in a URL, in a
+/// backup listing and in the operator's shell — exactly the places the id exists
+/// to be read in. Derived from the name, so the same name yields the same id on
+/// any machine, and two different names never collide into a counter.
 ///
 /// Deliberately *not* the app's `slugifyEntityId`, which preserves Unicode: a kb
 /// id appears in URLs and in the operator's shell, and both are better off ASCII.
@@ -188,7 +194,9 @@ pub fn slug_for_kb_name(name: &str) -> String {
         out.pop();
     }
     if out.is_empty() {
-        "kb".into()
+        use sha2::{Digest, Sha256};
+        let digest = Sha256::digest(name.trim().as_bytes());
+        format!("kb-{}", &format!("{digest:x}")[..6])
     } else {
         out
     }
@@ -264,8 +272,19 @@ mod tests {
         assert_eq!(slug_for_kb_name("My Wuxia World"), "my-wuxia-world");
         assert_eq!(slug_for_kb_name("  a  b  "), "a-b");
         // No ASCII content at all — the display name lives in meta.json instead.
-        assert_eq!(slug_for_kb_name("我的武侠世界"), "kb");
-        assert_eq!(slug_for_kb_name(""), "kb");
-        assert!(validate_kb_id(&slug_for_kb_name("我的武侠世界")).is_ok());
+        // A name with no ASCII at all keeps a readable, *distinct* id rather
+        // than collapsing into a counter: `kb-2` and `kb-3` tell an operator
+        // nothing, and which one is which changes with creation order.
+        let wuxia = slug_for_kb_name("我的武侠世界");
+        let donghai = slug_for_kb_name("东海奇谭");
+        assert!(wuxia.starts_with("kb-"), "{wuxia}");
+        assert_ne!(wuxia, donghai);
+        assert_eq!(
+            wuxia,
+            slug_for_kb_name("我的武侠世界"),
+            "same name, same id"
+        );
+        assert!(validate_kb_id(&wuxia).is_ok());
+        assert!(validate_kb_id(&slug_for_kb_name("")).is_ok());
     }
 }
