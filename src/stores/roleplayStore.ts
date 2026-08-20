@@ -298,12 +298,25 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         const personaCard = await loadPersonaCard(projectPath, agent.id);
         const charsPerToken = measureCharsPerToken(job.match);
         const memoryDoc = await loadMemoryDoc(memoryPath(projectPath, agent.id));
+        // `session.json` 丢了（或从没写过）而 transcript 里已经有对话——把它回放
+        // 回去。不回放的话作者看着满屏的记录，角色却说它不知道之前发生过什么：
+        // **稿面完好、模型失忆**。transcript 是资产，session.json 只是缓存。
+        //
+        // 末尾那一轮是 `send` 刚刚落盘的这一问，由 `firstMessage` 承担，回放要去掉。
+        const all = get().sessions[job.agentId]?.turns ?? [];
+        const priorTurns = all.length && all[all.length - 1].speaker === "author"
+          ? all.slice(0, -1)
+          : all;
         const seeded = await seedRoleplayHistory({
           agent, persona, personaCard, primaryText, loreIndex,
           firstMessage: job.wire,
           matchText: job.match,
           loreBudgetChars: loreBudgetTokens * charsPerToken,
           memory: memoryDoc.records,
+          priorTurns,
+          priorSummary: priorTurns.length
+            ? await loadSummary(projectPath, agent.id)
+            : "",
         });
         history = seeded.messages;
         meta = seeded.meta;

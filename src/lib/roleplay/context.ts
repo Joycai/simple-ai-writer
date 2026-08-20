@@ -33,7 +33,10 @@ import { parsePins, selectLore, type LoreActivationReport } from "../context/lor
 import { readEntityFile } from "../lore/entity";
 import type { LoreEntity, LoreIndex } from "../lore/model";
 import { renderMemoryBlock } from "./memory";
-import type { AuthorPersona, MemoryRecord, RoleplayAgent } from "./model";
+import {
+  RESTORE_REPLAY_CHAR_CAP,
+  type AuthorPersona, type MemoryRecord, type RoleplayAgent, type SceneTurn,
+} from "./model";
 
 /** 绑定块最多多少字符。超出的绑定项被点名但不展开，模型可以自己去读。 */
 export const BOUND_BLOCK_CHAR_CAP = 12_000;
@@ -188,6 +191,37 @@ export function buildSystemPrompt(opts: {
   return parts.join("\n\n");
 }
 
+// ─── 从 transcript 回放 ──────────────────────────────────────────────────────
+
+/**
+ * 挑出要回放进新历史的轮次。
+ *
+ * `session.json` 是缓存，transcript 才是资产——缓存没了就用资产重建。不这么做
+ * 的话作者会看着满屏的对话，而角色说它不知道之前发生过什么：**稿面完好、模型
+ * 失忆**，这是最难自查的一种坏法。
+ *
+ * 两条约束：
+ * 1. **从作者轮开始**。轮的边界由 `noteTurnStart` 标在作者的提问上，若切片以
+ *    角色轮打头，那条 assistant 消息会落在 prelude 里（第一个 turnStart 之前），
+ *    压缩永远够不着它。
+ * 2. **按字符封顶，取最近的**。回放走播种那条路，而播种不过压缩。
+ */
+export function selectReplayTurns(
+  turns: readonly SceneTurn[],
+  charCap: number = RESTORE_REPLAY_CHAR_CAP,
+): SceneTurn[] {
+  const picked: SceneTurn[] = [];
+  let used = 0;
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const turn = turns[i];
+    if (used + turn.text.length > charCap && picked.length) break;
+    picked.unshift(turn);
+    used += turn.text.length;
+  }
+  while (picked.length && picked[0].speaker !== "author") picked.shift();
+  return picked;
+}
+
 // ─── 播种 ────────────────────────────────────────────────────────────────────
 
 export interface SeedResult {
@@ -209,6 +243,13 @@ export async function seedRoleplayHistory(opts: {
   loreBudgetChars: number;
   /** 这个 agent 已经记下的东西；只有 `open` 的会进上下文。 */
   memory: readonly MemoryRecord[];
+  /**
+   * 从 transcript 回放的过往轮次（`session.json` 丢了时才非空）。
+   * **不含**正在提的这一问——它由 `firstMessage` 承担。
+   */
+  priorTurns?: readonly SceneTurn[];
+  /** `summary.md` 里存着的滚动摘要，回放时一并接回来。 */
+  priorSummary?: string;
 }): Promise<SeedResult> {
   const bound = await buildBoundContent(opts.loreIndex, opts.agent.boundPaths);
   const system: StreamMessage = {
@@ -262,6 +303,29 @@ export async function seedRoleplayHistory(opts: {
       report.entities.flatMap((r) => byDir.get(r.dirPath) ?? []),
       seed,
     );
+  }
+
+  // 摘要接在 prelude 末尾、回放之前——`buildCompactedHistory` 也把它摆在这个
+  // 位置，保持一致，下一次压缩才不用挪它。
+  const summaryText = opts.priorSummary?.trim() ?? "";
+  if (summaryText) {
+    const block: StreamMessage = {
+      role: "user",
+      content: i18n.t("ai.instructions.chatCompactBlock", { summary: summaryText }),
+    };
+    messages.push(block);
+    meta.summary = block;
+    meta.summaryText = summaryText;
+  }
+
+  for (const turn of selectReplayTurns(opts.priorTurns ?? [])) {
+    if (turn.speaker === "author") {
+      const msg: StreamMessage = { role: "user", content: turn.text };
+      messages.push(msg);
+      noteTurnStart(meta, msg);
+    } else {
+      messages.push({ role: "assistant", content: turn.text });
+    }
   }
 
   const question: StreamMessage = { role: "user", content: opts.firstMessage };
