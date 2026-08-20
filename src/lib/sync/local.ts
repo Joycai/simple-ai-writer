@@ -1,0 +1,77 @@
+/**
+ * The local side of a sync: entry hashes, and packing/unpacking one entry.
+ *
+ * All three cross into Rust. Hashing is there because the digest is a wire
+ * format shared with the server (`src-tauri/src/lorehash.rs` documents the
+ * rules) and because an entry's gallery images should not be read through the
+ * webview to be hashed. Zipping is there because `src-tauri/src/transfer.rs`
+ * already owns the archive code, including the zip-slip guard that matters most
+ * on the *download* path.
+ */
+
+import { invoke } from "@tauri-apps/api/core";
+import type { HashMap } from "./model";
+
+interface RawEntryHash {
+  category: string;
+  id: string;
+  hash: string;
+}
+
+export function loreRoot(projectPath: string): string {
+  return `${projectPath.replace(/\\/g, "/")}/.ai-writer/lore`;
+}
+
+export function entryDir(projectPath: string, path: string): string {
+  return `${loreRoot(projectPath)}/${path}`;
+}
+
+/**
+ * Hash every entry in the project's lore tree, in one IPC hop.
+ *
+ * `isSyncable` filters what the Rust side deliberately does not: it reports
+ * every `<category>/<entity>` directory it finds, leaving the question of which
+ * category ids are real to the caller, where the workspace profile lives. Pass
+ * a predicate to skip categories this project should not be syncing; without
+ * one, everything on disk is included — which is the right default, because a
+ * category whose pack is currently disabled still holds the author's entries
+ * (the same reason `scanLore` keeps orphan categories).
+ */
+export async function localEntryHashes(
+  projectPath: string,
+  isSyncable?: (category: string, id: string) => boolean,
+): Promise<HashMap> {
+  const rows = await invoke<RawEntryHash[]>("lore_tree_hashes", { path: loreRoot(projectPath) });
+  const out: Record<string, string> = {};
+  for (const row of rows) {
+    if (isSyncable && !isSyncable(row.category, row.id)) continue;
+    out[`${row.category}/${row.id}`] = row.hash;
+  }
+  return out;
+}
+
+/** The content hash of one entry directory — used to verify what a pull wrote. */
+export async function hashEntryDir(dir: string): Promise<string> {
+  return invoke<string>("lore_entry_hash", { path: dir });
+}
+
+/** The archive subtree name. One plain component, as the Rust side requires. */
+export const ENTRY_ZIP_PREFIX = "entry";
+
+/** Pack one entry directory into `destZip`. Returns the file count. */
+export async function zipEntry(srcDir: string, destZip: string): Promise<number> {
+  return invoke<number>("zip_dir_to_path", {
+    srcDir,
+    destZip,
+    prefix: ENTRY_ZIP_PREFIX,
+  });
+}
+
+/** Unpack an entry archive into `destDir`. Returns the file count. */
+export async function unzipEntry(zipPath: string, destDir: string): Promise<number> {
+  return invoke<number>("unzip_from_path", {
+    zipPath,
+    destDir,
+    prefix: ENTRY_ZIP_PREFIX,
+  });
+}

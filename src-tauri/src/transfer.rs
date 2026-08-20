@@ -116,6 +116,28 @@ fn zip_dir(
     manifest: Option<&str>,
     excludes: &[String],
 ) -> Result<usize, String> {
+    zip_dir_opts(src_dir, dest, prefix, manifest, excludes, false)
+}
+
+/// `zip_dir` plus `skip_dotfiles`, which drops every name beginning with `.` at
+/// any depth.
+///
+/// Off for the bundle exports, which must keep `.ai-writer/` — the project's
+/// entire configuration lives under a dotted directory, so a blanket rule there
+/// would produce an archive that restores an empty project.
+///
+/// On for a knowledge-base sync upload, where it has to agree exactly with
+/// `lorehash`'s ignore rule: that module hashes an entry while skipping
+/// dotfiles, and if this archive carried them, the bytes described by a hash
+/// would not be the bytes transmitted under it.
+fn zip_dir_opts(
+    src_dir: &Path,
+    dest: &Path,
+    prefix: &str,
+    manifest: Option<&str>,
+    excludes: &[String],
+    skip_dotfiles: bool,
+) -> Result<usize, String> {
     let file = File::create(dest).map_err(|e| e.to_string())?;
     let mut zip = ZipWriter::new(file);
     let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
@@ -128,7 +150,14 @@ fn zip_dir(
 
     let mut count = 0usize;
     add_dir_entries(
-        &mut zip, src_dir, src_dir, prefix, options, excludes, &mut count,
+        &mut zip,
+        src_dir,
+        src_dir,
+        prefix,
+        options,
+        excludes,
+        skip_dotfiles,
+        &mut count,
     )?;
     zip.finish().map_err(|e| e.to_string())?;
     Ok(count)
@@ -142,6 +171,7 @@ fn add_dir_entries(
     prefix: &str,
     options: SimpleFileOptions,
     excludes: &[String],
+    skip_dotfiles: bool,
     count: &mut usize,
 ) -> Result<(), String> {
     let entries = match fs::read_dir(dir) {
@@ -151,6 +181,9 @@ fn add_dir_entries(
     };
     for entry in entries.filter_map(|e| e.ok()) {
         let path = entry.path();
+        if skip_dotfiles && entry.file_name().to_string_lossy().starts_with('.') {
+            continue;
+        }
         let rel = rel_path(base, &path)?;
         // Pruned at the directory, not per file: a backup skipping the whole
         // `.ai-writer/backups` tree should not walk it to reject each entry.
@@ -158,7 +191,16 @@ fn add_dir_entries(
             continue;
         }
         if path.is_dir() {
-            add_dir_entries(zip, base, &path, prefix, options, excludes, count)?;
+            add_dir_entries(
+                zip,
+                base,
+                &path,
+                prefix,
+                options,
+                excludes,
+                skip_dotfiles,
+                count,
+            )?;
         } else {
             let mut f = File::open(&path).map_err(|e| e.to_string())?;
             zip.start_file(format!("{prefix}/{rel}"), options)
@@ -388,6 +430,68 @@ pub async fn open_text_file_dialog(
         path: path.to_string_lossy().into_owned(),
         content,
     }))
+}
+
+// ─── Dialog-free zip, for knowledge-base sync ────────────────────────────────
+//
+// The commands above all pair a zip operation with a native dialog, because
+// their destination is wherever the *author* pointed and the webview must never
+// name that path itself. Sync has no such moment: both ends are paths inside
+// the project (an entry directory, a staging file under `.ai-writer/`), and the
+// far end is an HTTP request, not a folder someone picked. So these two do the
+// same work with `FsScope` as the only gate — which means every path they touch
+// is checked, source *and* destination, where the dialog variants only check
+// the project side.
+
+/// Zip `src_dir` into `dest_zip`, storing entries as `<prefix>/<relpath>`.
+///
+/// Dotfiles are skipped so the archive matches what `lorehash` hashed; see
+/// `zip_dir_opts`. Returns the number of files archived — zero is a legitimate
+/// answer for an entry directory that holds nothing but ignored files, and the
+/// caller (which would otherwise upload an archive describing nothing) is the
+/// right place to decide that is an error.
+#[command]
+pub fn zip_dir_to_path(
+    src_dir: String,
+    dest_zip: String,
+    prefix: String,
+    scope: State<'_, FsScope>,
+) -> Result<usize, String> {
+    scope.check(&src_dir)?;
+    scope.check(&dest_zip)?;
+    if !valid_prefix(&prefix) {
+        return Err("Invalid archive prefix".into());
+    }
+    zip_dir_opts(
+        Path::new(&src_dir),
+        Path::new(&dest_zip),
+        &prefix,
+        None,
+        &[],
+        true,
+    )
+}
+
+/// Extract the `<prefix>/` subtree of `zip_path` into `dest_dir`.
+///
+/// The zip-slip guard is `unzip_into`'s `enclosed_name()`, unchanged: this is a
+/// downloaded archive, so its entry names are the least trustworthy input in
+/// the whole sync path.
+#[command]
+pub fn unzip_from_path(
+    zip_path: String,
+    dest_dir: String,
+    prefix: String,
+    scope: State<'_, FsScope>,
+) -> Result<usize, String> {
+    scope.check(&zip_path)?;
+    scope.check(&dest_dir)?;
+    if !valid_prefix(&prefix) {
+        return Err("Invalid archive prefix".into());
+    }
+    fs::create_dir_all(&dest_dir).map_err(|e| e.to_string())?;
+    let (_, count) = unzip_into(Path::new(&zip_path), Path::new(&dest_dir), &prefix, None)?;
+    Ok(count)
 }
 
 #[cfg(test)]

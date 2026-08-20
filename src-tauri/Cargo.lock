@@ -4230,6 +4230,7 @@ dependencies = [
  "rust_xlsxwriter",
  "serde",
  "serde_json",
+ "sha2",
  "sqlx",
  "tauri",
  "tauri-build",
@@ -4238,6 +4239,7 @@ dependencies = [
  "tauri-plugin-http",
  "tauri-plugin-opener",
  "tauri-plugin-sql",
+ "tempfile",
  "tokio",
  "zip 2.4.2",
 ]
