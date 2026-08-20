@@ -70,6 +70,22 @@ import { readEntityFile } from "../lib/lore/entity";
 import type { AttachedItem } from "../lib/lore/aiTask";
 import type { LoreEntity, LoreIndex } from "../lib/lore/model";
 
+interface Job {
+  agentId: string;
+  /** 上线的内容：作者原文 + `@` 引用内联进来的材料。 */
+  wire: MessageContent;
+  /** 检索用的纯文本（图片没有词可匹配）。 */
+  match: string;
+  /**
+   * 这一问已经进过 `history` 了。
+   *
+   * 重试必须知道这件事：`runJob` 是**就地** push 进 `session.history` 的，所以
+   * 原样重跑一遍会让同一句话在上下文里出现两次。置上之后重试直接拿现有历史
+   * 开跑——失败的是模型调用，不是这一问的组装。
+   */
+  committed?: boolean;
+}
+
 /** 一个活着的会话。只有被打开过的 agent 才有。 */
 export interface LiveSession {
   /** 显示用的对话，**从 transcript 派生**——不从 session.json 来。 */
@@ -91,14 +107,12 @@ export interface LiveSession {
   memoryStale: boolean;
   workspace: TaskWorkspaceHandle | null;
   error: string | null;
-}
-
-interface Job {
-  agentId: string;
-  /** 上线的内容：作者原文 + `@` 引用内联进来的材料。 */
-  wire: MessageContent;
-  /** 检索用的纯文本（图片没有词可匹配）。 */
-  match: string;
+  /**
+   * 上一次跑过的作业，重试用。重试入口只在 `error` 亮着时露出——「重试」在这里
+   * 的含义是**这一轮压根没有回复**（网络断了、密钥不对、模型返回错误）。模型
+   * 答了、只是答得不合意，不属于这一类：那已经是 transcript 里的一轮。
+   */
+  lastJob: Job | null;
 }
 
 interface RoleplayState {
@@ -135,6 +149,8 @@ interface RoleplayState {
   select: (id: string | null) => Promise<void>;
   send: (agentId: string, text: string, refs?: AttachedItem[]) => Promise<void>;
   stop: (agentId: string) => void;
+  /** 重跑上一次失败的作业。只在 `session.error` 亮着时有意义。 */
+  retry: (agentId: string) => void;
   dequeue: (agentId: string) => void;
   promote: (agentId: string) => void;
   refreshBinding: (agentId: string) => Promise<void>;
@@ -165,7 +181,7 @@ function emptySession(): LiveSession {
   return {
     turns: [], log: {}, history: null, meta: null, streaming: "", liveLog: [],
     usage: null, stalePaths: [], memory: [], memoryStale: false,
-    workspace: null, error: null,
+    workspace: null, error: null, lastJob: null,
   };
 }
 
@@ -241,7 +257,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     const { models, providers, activeModelId, subAgents } = useAiStore.getState();
     const resolved = resolveConn(models, providers, agent.modelId ?? activeModelId);
     if (!resolved.ok) {
-      patchSession(job.agentId, (s) => ({ ...s, error: resolved.error }));
+      patchSession(job.agentId, (s) => ({ ...s, error: resolved.error, lastJob: job }));
       set((st) => ({ running: st.running.filter((x) => x !== job.agentId) }));
       void pump();
       return;
@@ -250,7 +266,10 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
 
     const controller = new AbortController();
     set((st) => ({ aborts: { ...st.aborts, [job.agentId]: controller } }));
-    patchSession(job.agentId, (s) => ({ ...s, streaming: "", liveLog: [], error: null }));
+    // 先按「还没组装」记下来：万一是压缩或检索这一步炸了，重试要整套重来。
+    patchSession(job.agentId, (s) => ({
+      ...s, streaming: "", liveLog: [], error: null, lastJob: job,
+    }));
 
     const loreIndex = useLoreStore.getState().index;
     const { loreBudgetTokens, contextUtilization } = useAppStore.getState();
@@ -262,7 +281,11 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       let history = session.history;
       let meta = session.meta;
 
-      if (!history || !meta) {
+      if (job.committed && history && meta) {
+        // 重试：这一问、这一轮的注入、这一次的压缩都已经在 history 里了。
+        // 再走一遍下面任何一支都会把它们叠第二份。
+        repairToolCallPairing(history);
+      } else if (!history || !meta) {
         // 主角条目正文进 system 层——它是「你是谁」，是唯一整轮存活的那一层。
         let primaryText = "";
         if (agent.primaryDirPath) {
@@ -362,6 +385,11 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         noteTurnStart(meta, question);
         history.push(question);
       }
+
+      // 到这里这一问已经在 history 里了。往后任何一步失败，重试都必须走上面
+      // 那条「拿现有历史开跑」的分支。
+      const committed: Job = { ...job, committed: true };
+      patchSession(job.agentId, (s) => ({ ...s, lastJob: committed }));
 
       // 子代理需要一个 workspace 才拿得到 delegate；没有它，作者一开 vision
       // 子代理，routeTools 就会把 read_image 摘掉而不给替代品——看图能力凭空
@@ -770,6 +798,22 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         );
       }
       set((st) => ({ queue: st.queue.filter((j) => j.agentId !== agentId) }));
+    },
+
+    /**
+     * 重跑上一次失败的作业。
+     *
+     * 作者轮**不重发**——它在 `send` 里就落盘了，重试是接着那一问再跑一次模型，
+     * 不是再说一遍话。committed 的作业连组装都跳过，直接用现有 history。
+     */
+    retry: (agentId) => {
+      const job = get().sessions[agentId]?.lastJob;
+      if (!job) return;
+      const { running, queue } = get();
+      if (running.includes(agentId) || queue.some((j) => j.agentId === agentId)) return;
+      patchSession(agentId, (s) => ({ ...s, error: null }));
+      set((st) => ({ queue: [...st.queue, job] }));
+      void pump();
     },
 
     dequeue: (agentId) => set((st) => ({

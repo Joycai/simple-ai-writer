@@ -2033,6 +2033,7 @@
     "pickAgent": "从左边挑一个 agent 开始说话。",
     "newAgent": "新建 agent",
     "editAgent": "编辑",
+    "retry": "重试",
     "editAgentTitle": "编辑 agent",
     "deleteAgent": "删除",
     "concurrency": "并发",
