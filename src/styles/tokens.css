@@ -275,6 +275,32 @@
   --stg-overlay:          rgba(72, 63, 48, 0.30);
   --stg-shadow-menu:      0 10px 26px rgba(60, 50, 30, 0.16);
 
+  /* Knowledge-base sync (设计稿 06). Roles the settings palette has no word
+     for — a sync screen has to say "this side gets overwritten" and "this row
+     loses something" in a palette with exactly one accent, so the distinctions
+     are carried by surface and rail rather than by hue. Consumed only by
+     src/components/sync/ and the sync settings pane. */
+  --sync-target-bg:       #F6ECDF;   /* the side about to become a mirror */
+  --sync-target-ring:     #E4C6A6;
+  --sync-risk-bg:         #F5E7D3;   /* row where BOTH sides changed */
+  --sync-risk-text:       #93431F;
+  --sync-risk-line:       #EBD9BE;
+  --sync-caution-rail:    #DCAE83;   /* one-sided loss: rail only, no fill */
+  --sync-caution-text:    #A9512B;
+  --sync-badge-ow-bg:     #EFE6D2;   /* 覆盖 */
+  --sync-badge-ow-fg:     #7A6A4C;
+  --sync-badge-del-bg:    #4A4438;   /* 删除 — the one inverted badge */
+  --sync-badge-del-fg:    #FBF7EE;
+  --sync-chip-on-bg:      #F3E3D3;
+  --sync-chip-on-fg:      #93431F;
+  --sync-chip-on-border:  #DCAE83;
+  --sync-body:            #6B6355;   /* running copy inside the modal */
+  --sync-disabled:        #D8C4AE;   /* primary button before acknowledgement */
+  --sync-track:           #EDE4CF;   /* progress groove */
+  --sync-neutral-block:   #F7F3E7;   /* the non-conflict failure group */
+  --sync-arrow:           #C9BFA8;
+  --sync-foot-shadow:     0 -4px 12px rgba(60, 40, 20, 0.05);
+
   /* ── 设定集色系 (设计稿 03) ──
      The lore surfaces (card wall, entity detail, extract/improve/facet/split/
      meta modals) read these on top of the shared manuscript palette.
@@ -474,6 +500,30 @@
   --stg-focus-ring:       rgba(217, 146, 91, 0.35);
   --stg-overlay:          rgba(0, 0, 0, 0.55);
   --stg-shadow-menu:      0 10px 26px rgba(0, 0, 0, 0.5);
+
+  /* Sync roles on the night ramp (设计稿 06 · 画板 5a). Same structure, not a
+     dimmed copy: the risk fill stays a warm brown so an accent rail still
+     reads against it, and 删除 inverts the other way (light chip on dark). */
+  --sync-target-bg:       #2A2014;
+  --sync-target-ring:     #55402A;
+  --sync-risk-bg:         #2E2013;
+  --sync-risk-text:       #E8A56F;
+  --sync-risk-line:       #3B2C19;
+  --sync-caution-rail:    #6E4E33;
+  --sync-caution-text:    #C98A55;
+  --sync-badge-ow-bg:     #3A342A;
+  --sync-badge-ow-fg:     #C9BFA8;
+  --sync-badge-del-bg:    #C9BFA8;
+  --sync-badge-del-fg:    #1F1B16;
+  --sync-chip-on-bg:      #3A2A1A;
+  --sync-chip-on-fg:      #E8A56F;
+  --sync-chip-on-border:  #6E4E33;
+  --sync-body:            #B3A794;
+  --sync-disabled:        #4A3E30;
+  --sync-track:           #2E2820;
+  --sync-neutral-block:   #2A241C;
+  --sync-arrow:           #5A5142;
+  --sync-foot-shadow:     0 -4px 12px rgba(0, 0, 0, 0.28);
 
   /* ── 设定集色系 · night ── 设计稿 03 only specifies paper; night maps each
      role onto the existing night ramp (category hues lightened for contrast). */

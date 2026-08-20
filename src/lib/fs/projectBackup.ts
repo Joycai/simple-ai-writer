@@ -16,8 +16,9 @@
  * What it deliberately leaves out:
  *   - `.ai-writer/backups/` — pre-write copies, recoverable state for *this*
  *     machine, and easily larger than the project itself.
- *   - `.ai-writer/tmp/`, `.ai-writer/lore-import-tmp/` — scratch, and the
- *     staging dir may hold a half-finished import.
+ *   - `.ai-writer/tmp/`, `.ai-writer/lore-import-tmp/`, `.ai-writer/sync-tmp/`
+ *     — scratch, and the staging dirs may hold a half-finished import or a
+ *     knowledge-base sync interrupted mid-unpack.
  *   - `project.db-wal` / `-shm` — SQLite sidecars that mean nothing beside a
  *     checkpointed database (see `checkpointDb`).
  *   - `.git`, `node_modules` — present only if the author keeps the project
@@ -46,6 +47,7 @@ export const PROJECT_BACKUP_EXCLUDES = [
   ".ai-writer/backups",
   ".ai-writer/tmp",
   ".ai-writer/lore-import-tmp",
+  ".ai-writer/sync-tmp",
   ".ai-writer/project.db-wal",
   ".ai-writer/project.db-shm",
   ".git",

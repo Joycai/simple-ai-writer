@@ -13,6 +13,7 @@ import { InlineAiBubble } from "./components/ai/InlineAiBubble";
 import { LoreWall } from "./components/lore/LoreWall";
 import { LibraryView } from "./components/library/LibraryView";
 import { CommandPalette } from "./components/command/CommandPalette";
+import { SyncPreviewModal } from "./components/sync/SyncPreviewModal";
 import { Onboarding } from "./components/onboarding/Onboarding";
 import { useAppStore } from "./stores/appStore";
 import { useAiStore } from "./stores/aiStore";
@@ -113,6 +114,10 @@ export default function App() {
       <AiDrawer />
       <InlineAiBubble />
       <CommandPalette />
+      {/* Outside the settings shell on purpose: a sync survives the settings
+          page being closed, and the run must keep its progress and its backup
+          location on screen until the author dismisses the result. */}
+      <SyncPreviewModal />
       <Onboarding />
     </div>
     </MotionConfig>

@@ -1,0 +1,471 @@
+/**
+ * 知识库同步 · 设计稿 06.
+ *
+ * The panel adopts the settings warm-paper palette rather than the app's
+ * manuscript one. Portals normally escape that remap (see design-system.md →
+ * 设置页色系), and for a generic ConfirmDialog that is right — it is app
+ * chrome. This modal is not: it is only ever reached from the sync pane, the
+ * design draws it on that paper, and the rows carry `--sync-*` roles defined
+ * against `--stg-*`. So the same one-line remap the settings shell does on
+ * `.page` is repeated here, which also keeps dark mode free.
+ */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  background: var(--stg-overlay);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: fadeIn 200ms var(--ease-out);
+}
+
+.panel {
+  /* The settings remap, repeated — see the module note above. */
+  --color-bg-base: var(--stg-bg);
+  --color-bg-surface: var(--stg-bg-input);
+  --color-bg-elevated: var(--stg-card-head);
+  --color-sienna: var(--stg-accent);
+  --color-sienna-hover: var(--stg-accent-hover);
+  --color-text-primary: var(--stg-text);
+  --color-text-secondary: var(--stg-text-secondary);
+  --color-text-muted: var(--stg-text-desc);
+  --color-text-faint: var(--stg-text-faint);
+  --color-border: var(--stg-border);
+  --color-border-soft: var(--stg-line-row);
+  --color-border-strong: var(--stg-border-mid);
+
+  display: flex;
+  flex-direction: column;
+  max-height: min(920px, 92vh);
+  background: var(--stg-bg);
+  color: var(--color-text-primary);
+  box-shadow: var(--shadow-xl);
+  animation: scaleIn 240ms var(--ease-out);
+}
+.wide { width: 960px; }
+.mid { width: 880px; }
+.narrow { width: 660px; }
+.slim { width: 560px; }
+
+.head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 16px 26px;
+  border-bottom: 1px solid var(--stg-border-soft);
+}
+.headTitle { font: 600 16px/1 var(--font-serif-settings, var(--font-serif)); }
+.spacer { flex: 1; }
+.close {
+  border: none;
+  background: none;
+  font-size: 19px;
+  line-height: 1;
+  color: var(--stg-text-secondary);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.close:hover { color: var(--stg-accent); }
+.close:active { transform: scale(0.92); }
+
+/* ── Direction band ────────────────────────────────────────────────────────
+   Local is ALWAYS on the left and remote ALWAYS on the right, whichever way
+   the sync runs; only the arrow and the tint move. Swapping the sides by
+   direction would make "which one is mine" something the author has to re-read
+   on every preview — the one impression this screen cannot afford to blur. */
+.band {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr 170px 1fr;
+  align-items: stretch;
+  padding: 20px 26px 6px;
+}
+.sideLabel {
+  font: 500 10.5px/1 var(--font-sans);
+  letter-spacing: 0.14em;
+  color: var(--stg-text-desc);
+  margin-bottom: 7px;
+}
+.sideLabelTarget { color: var(--stg-accent); }
+.card {
+  background: var(--stg-bg-input);
+  box-shadow: var(--shadow-sm);
+  padding: 13px 16px;
+}
+/* The target — the side that becomes a copy of the other — is the tinted one. */
+.cardTarget {
+  background: var(--sync-target-bg);
+  box-shadow: inset 0 0 0 1px var(--sync-target-ring);
+}
+.cardName { font: 600 15px/1.3 var(--font-serif-settings, var(--font-serif)); }
+.cardWhere {
+  font: 400 11.5px var(--font-sans);
+  color: var(--stg-text-desc);
+  margin-left: 6px;
+}
+.cardMeta {
+  margin-top: 4px;
+  font: 400 12px var(--font-mono);
+  color: var(--stg-text-desc);
+}
+.arrowCol {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 16px 0;
+}
+.arrowVerb {
+  font: 600 11px/1 var(--font-sans);
+  letter-spacing: 0.2em;
+  color: var(--stg-accent);
+}
+.arrowLine { display: flex; align-items: center; width: 100%; }
+.arrowBar { flex: 1; height: 2px; background: var(--stg-accent); }
+.arrowHeadRight {
+  width: 0; height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 9px solid var(--stg-accent);
+}
+.arrowHeadLeft {
+  width: 0; height: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-right: 9px solid var(--stg-accent);
+}
+.arrowNote { font-size: 10.5px; color: var(--stg-text-faint); }
+
+/* ── Notices ─────────────────────────────────────────────────────────────── */
+.notice {
+  margin: 14px 26px 0;
+  background: var(--stg-stat);
+  padding: 12px 16px;
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--sync-body);
+}
+.noticeMark {
+  flex: none;
+  margin-top: 1px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--stg-badge-text);
+  color: var(--stg-badge-text);
+  display: grid;
+  place-items: center;
+  font: 600 10px/1 var(--font-sans);
+}
+.noticeStrong { color: var(--stg-text); }
+
+.summary {
+  flex: none;
+  padding: 14px 26px 12px;
+  font: 400 12.5px/1 var(--font-sans);
+  color: var(--sync-body);
+}
+.summary b { font-family: var(--font-mono); }
+
+/* ── Filters ─────────────────────────────────────────────────────────────── */
+.filters {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 26px 12px;
+  flex-wrap: wrap;
+}
+.chip {
+  cursor: pointer;
+  font: 500 12px/1 var(--font-sans);
+  padding: 6px 12px;
+  background: var(--stg-bg-input);
+  color: var(--stg-text-warm);
+  border: 1px solid var(--stg-border-mid);
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+.chip:hover { border-color: var(--stg-border-menu); }
+.chip:active { transform: scale(0.96); }
+.chipOn {
+  background: var(--sync-chip-on-bg);
+  color: var(--sync-chip-on-fg);
+  border-color: var(--sync-chip-on-border);
+}
+.chip span { font-family: var(--font-mono); }
+.search {
+  width: 180px;
+  box-sizing: border-box;
+  padding: 7px 11px;
+  border: 1px solid var(--stg-border-mid);
+  background: var(--stg-bg-input);
+  color: var(--stg-text);
+  font-size: 12.5px;
+}
+.search:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--stg-focus-ring); }
+
+/* ── Table ───────────────────────────────────────────────────────────────── */
+.list { flex: 1; min-height: 0; overflow-y: auto; margin: 0 26px; }
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 60px 178px 24px 178px;
+  gap: 10px;
+  align-items: center;
+}
+.thead {
+  padding: 7px 0;
+  border-top: 1px solid var(--stg-line-section);
+  border-bottom: 1px solid var(--stg-line-section);
+  font: 500 10.5px/1.4 var(--font-sans);
+  letter-spacing: 0.08em;
+  color: var(--stg-text-faint);
+  position: sticky;
+  top: 0;
+  background: var(--stg-bg);
+  z-index: 1;
+}
+.thTarget { color: var(--stg-accent); }
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 0 7px;
+  font: 600 11px/1 var(--font-sans);
+  letter-spacing: 0.12em;
+  color: var(--stg-text-faint);
+}
+.groupHeadRisk { color: var(--sync-risk-text); padding-top: 12px; }
+.groupHead span { font-family: var(--font-mono); }
+.groupRule { flex: 1; height: 1px; background: var(--stg-line-section); }
+.groupRuleRisk { background: var(--sync-risk-line); }
+
+.row { padding: 9px 0; border-top: 1px solid var(--stg-line-row); }
+/* A risky row is pulled out of the column grid's padding so its rail sits on
+   the panel edge of the list, not inset — the rail is the scannable signal. */
+.rowRisk {
+  padding: 10px 12px 10px 14px;
+  margin: 0 -12px 0 -14px;
+  box-shadow: inset 3px 0 0 var(--sync-caution-rail);
+  border-top: 1px solid var(--stg-line-row);
+}
+/* Only a two-sided conflict gets a fill. One-sided losses get the rail alone:
+   filling those too would make most of a busy sync look alarming, and then
+   nothing looks alarming. */
+.rowConflict {
+  background: var(--sync-risk-bg);
+  box-shadow: inset 3px 0 0 var(--stg-accent);
+  border-top: 1px solid var(--sync-risk-line);
+}
+
+.entry { font: 500 13.5px/1.4 var(--font-serif-settings, var(--font-serif)); }
+.entryCat { color: var(--stg-text-desc); }
+.warn {
+  margin-top: 4px;
+  font: 400 12px/1.5 var(--font-sans);
+  color: var(--sync-caution-text);
+}
+.warnConflict { font-weight: 600; color: var(--sync-risk-text); }
+
+.badge {
+  justify-self: start;
+  font: 500 11px/1 var(--font-sans);
+  padding: 4px 8px;
+}
+.badgeCreate { border: 1px solid var(--stg-border-menu); color: var(--stg-text-warm); }
+.badgeOverwrite { background: var(--sync-badge-ow-bg); color: var(--sync-badge-ow-fg); }
+.badgeDelete { background: var(--sync-badge-del-bg); color: var(--sync-badge-del-fg); }
+
+.hash { font: 500 12px var(--font-mono); color: var(--sync-body); }
+.hashWhen { margin-top: 2px; font: 400 10.5px var(--font-mono); color: var(--stg-text-placeholder); }
+.hashNone { font: 400 12px var(--font-mono); color: var(--stg-text-placeholder); }
+.arrowCell { color: var(--sync-arrow); text-align: center; }
+
+.more {
+  padding: 12px 0;
+  border-top: 1px solid var(--stg-line-row);
+  font: 400 12px/1 var(--font-sans);
+  color: var(--stg-text-faint);
+  text-align: center;
+}
+.unchanged {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 0 16px;
+  border-top: 1px solid var(--stg-line-section);
+  cursor: pointer;
+  color: var(--stg-text-desc);
+  font: 400 12.5px/1 var(--font-sans);
+  background: none;
+  border-left: none; border-right: none; border-bottom: none;
+  width: 100%;
+  text-align: left;
+  transition: color var(--transition-fast);
+}
+.unchanged:hover { color: var(--stg-text-warm); }
+.unchanged span { font-family: var(--font-mono); }
+.caret { font-size: 10px; }
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+.foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 26px 18px;
+  border-top: 1px solid var(--stg-line-section);
+}
+.footScrolled { box-shadow: var(--sync-foot-shadow); }
+.footNote { flex: 1; font-size: 12px; line-height: 1.6; color: var(--stg-text-desc); }
+/* The acknowledgement restates the consequence in words rather than asking for
+   a typed confirmation: a phrase the author has to read is a better gate than
+   a ritual they learn to perform without reading. */
+.ack {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  cursor: pointer;
+  font: 400 12.5px/1.55 var(--font-sans);
+  color: var(--stg-text-secondary);
+}
+.ackBox {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  border: 1px solid var(--stg-border-menu);
+  background: var(--stg-bg-input);
+  display: grid;
+  place-items: center;
+  color: transparent;
+  font-size: 10px;
+  line-height: 1;
+}
+.ackBoxOn { background: var(--stg-accent); border-color: var(--stg-accent); color: var(--stg-bg); }
+.ack b { color: var(--sync-risk-text); }
+
+.btnGhost {
+  flex: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 9px 18px;
+  border: 1px solid var(--stg-border-menu);
+  background: var(--stg-bg);
+  color: var(--stg-text-warm);
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+.btnGhost:hover { border-color: var(--stg-accent); color: var(--stg-accent); }
+.btnGhost:active { transform: scale(0.98); }
+.btnPrimary {
+  flex: none;
+  border: none;
+  background: var(--stg-accent);
+  color: var(--stg-bg);
+  font-size: 13.5px;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+.btnPrimary:hover:not(:disabled) { background: var(--stg-accent-hover); transform: translateY(-1px); }
+.btnPrimary:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+.btnPrimary:disabled { background: var(--sync-disabled); cursor: not-allowed; }
+.btnLink {
+  flex: none;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 7px 12px;
+  border: none;
+  background: none;
+  color: var(--stg-text-desc);
+  text-decoration: underline;
+}
+.btnLink:hover { color: var(--stg-text-warm); }
+
+/* ── Empty / progress / result ───────────────────────────────────────────── */
+.centered { padding: 34px 40px 30px; text-align: center; }
+.centeredPath { font: 400 13px var(--font-mono); color: var(--stg-text-faint); }
+.centeredTitle { margin-top: 16px; font: 600 17px/1.4 var(--font-serif-settings, var(--font-serif)); }
+.centeredTitleWarn { color: var(--sync-risk-text); }
+.centeredBody {
+  margin-top: 9px;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--sync-body);
+  text-wrap: pretty;
+}
+.centeredBody b { color: var(--sync-risk-text); }
+.centeredBody span { font-family: var(--font-mono); }
+
+.progressBody { padding: 20px 26px 8px; }
+.backedUp {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font: 400 12.5px/1 var(--font-sans);
+  color: var(--stg-text-warm);
+}
+.backedUp em { font-style: normal; color: var(--stg-accent); font-weight: 600; }
+.backedUp span { font-family: var(--font-mono); }
+.track { margin-top: 18px; height: 6px; background: var(--sync-track); position: relative; }
+.trackFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--stg-accent);
+  transition: width var(--transition-base);
+}
+.progressNums { display: flex; align-items: baseline; margin-top: 10px; }
+.progressCount { font: 400 13px var(--font-mono); color: var(--stg-text); }
+.progressPct { font: 400 11px var(--font-mono); color: var(--stg-text-faint); }
+.progressNow {
+  margin-top: 6px;
+  font: 400 13px/1.5 var(--font-serif-settings, var(--font-serif));
+  color: var(--sync-body);
+}
+.progressNow em { font-style: normal; color: var(--stg-text); }
+
+.resultCount { padding: 18px 26px 0; font: 400 13px/1 var(--font-sans); color: var(--stg-text-secondary); }
+.resultCount b { font-family: var(--font-mono); }
+.resultCount .bad { color: var(--sync-risk-text); }
+.group { margin: 14px 26px 0; padding: 13px 16px; }
+.groupConflict { box-shadow: inset 3px 0 0 var(--stg-accent); background: var(--sync-risk-bg); }
+.groupOther { box-shadow: inset 3px 0 0 var(--sync-arrow); background: var(--sync-neutral-block); margin-top: 12px; }
+.groupTitle { font: 600 12.5px/1.5 var(--font-sans); }
+.groupConflict .groupTitle { color: var(--sync-risk-text); }
+.groupOther .groupTitle { color: var(--sync-body); }
+.groupItems {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font: 500 13px/1.4 var(--font-serif-settings, var(--font-serif));
+}
+.groupItems em { font: 400 11px var(--font-mono); font-style: normal; color: var(--stg-badge-text); }
+.groupItems i { font: 400 11.5px var(--font-sans); font-style: normal; color: var(--stg-text-desc); }
+.groupBtn { margin-top: 11px; }
+.backupRow {
+  margin: 14px 26px 0;
+  background: var(--stg-stat);
+  padding: 11px 16px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.backupTag {
+  flex: none;
+  font: 500 11px/1 var(--font-sans);
+  letter-spacing: 0.08em;
+  color: var(--stg-badge-text);
+}
+.backupPath {
+  font: 400 11.5px/1.6 var(--font-mono);
+  color: var(--sync-body);
+  word-break: break-all;
+}

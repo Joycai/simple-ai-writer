@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { X, SlidersHorizontal, Layers, MessageSquare, Info, BookOpen, Keyboard, BarChart3, Users } from "lucide-react";
+import { X, SlidersHorizontal, Layers, MessageSquare, Info, BookOpen, Keyboard, BarChart3, Users,
+  RefreshCw,
+} from "lucide-react";
 import { type SettingsTab } from "../../stores/appStore";
 import { ModalErrorBoundary } from "../common/ErrorBoundary";
 import { panelFade, overlayFadeTransition } from "../../lib/motion";
 import { GeneralPane } from "./panes/GeneralPane";
 import { WorkspacePane } from "./panes/WorkspacePane";
+import { SyncPane } from "./panes/SyncPane";
 import { UsagePane } from "./panes/UsagePane";
 import { PromptsPane } from "./panes/PromptsPane";
 import { ShortcutsPane } from "./panes/ShortcutsPane";
@@ -91,6 +94,8 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
           {navBtn("subagents", <Users size={15} />, "systemSettings.tabs.subagents")}
           {navBtn("prompts", <MessageSquare size={15} />, "systemSettings.tabs.prompts")}
           {navBtn("usage", <BarChart3 size={15} />, "systemSettings.tabs.usage")}
+          <div className={styles.navGroupLabel}>{t("systemSettings.tabs.dataGroup")}</div>
+          {navBtn("sync", <RefreshCw size={15} />, "systemSettings.tabs.sync")}
           <div className={styles.navDivider} />
           {navBtn("shortcuts", <Keyboard size={15} />, "systemSettings.tabs.shortcuts")}
           {navBtn("about", <Info size={15} />, "systemSettings.tabs.about")}
@@ -106,6 +111,7 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
             {activeTab === "subagents" && <SubAgentsPane />}
             {activeTab === "prompts" && <PromptsPane onEscapeInterceptChange={setEscIntercept} />}
             {activeTab === "usage" && <UsagePane />}
+            {activeTab === "sync" && <SyncPane />}
             {activeTab === "shortcuts" && <ShortcutsPane />}
             {activeTab === "about" && <AboutPane />}
           </div>

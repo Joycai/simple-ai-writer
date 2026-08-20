@@ -44,6 +44,10 @@ export const PREF_KEYS = [
   "app:notifyEnabled",
   "app:notifyApproval",
   "app:notifyDone",
+  // Knowledge-base sync: the server's address. An installation property, not a
+  // project one — several projects share one server. Its token lives in the OS
+  // keyring instead (see lib/sync/config).
+  "app:kbServerUrl",
   "manuscript:onboarding-done",
   "ai:activeModelId",
   "ai:activePromptId",
