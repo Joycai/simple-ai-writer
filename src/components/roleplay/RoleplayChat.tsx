@@ -527,6 +527,25 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
 
           {/* 报错 = 这一轮没有回复。作者轮已经在 transcript 里了，所以「重试」是
               接着那一问再跑一次，不是重新说一遍话。 */}
+          {/* 按停之后这一问仍孤零零留在 transcript 里，却没有回复——和报错的后果
+              一样，所以通向同一个 retry。用比错误带更轻的一行：它不是出了问题，
+              是作者自己按的。 */}
+          {session?.stopped && !session.error && session.lastJob && !isRunning && queuePos < 0 && (
+            <div className={styles.stoppedBar}>
+              <span className={styles.stoppedText}>
+                {t("roleplay.stopped", { defaultValue: "已停止，这一问还没有回复" })}
+              </span>
+              <button
+                type="button"
+                className={styles.errorRetry}
+                onClick={() => retry(agent.id)}
+              >
+                <RotateCw size={11} strokeWidth={2} />
+                {t("roleplay.retry", { defaultValue: "重试" })}
+              </button>
+            </div>
+          )}
+
           {session?.error && (
             <div className={styles.errorBar}>
               <span className={styles.errorText}>{session.error}</span>

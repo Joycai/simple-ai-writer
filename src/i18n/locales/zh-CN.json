@@ -2036,6 +2036,7 @@
     "pickAgent": "从左边挑一个 agent 开始说话。",
     "newAgent": "新建 agent",
     "editAgent": "编辑",
+    "stopped": "已停止，这一问还没有回复",
     "retry": "重试",
     "rewind": {
       "here": "回到这里重说",

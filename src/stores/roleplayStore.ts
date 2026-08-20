@@ -110,6 +110,22 @@ export interface LiveSession {
   /** 磁盘上的记忆已经变了，但注入块还没刷新（见 refreshMemoryBlock 的四个时刻）。 */
   memoryStale: boolean;
   workspace: TaskWorkspaceHandle | null;
+  /**
+   * 这一轮是被作者按停的（不是报错）。
+   *
+   * 和 `error` 分开，因为它们不是同一件事：报错是「出了问题」，按停是「我不想
+   * 要这一条了」。但**后果一样**——这一问已经在 transcript 里，却没有回复。所以
+   * 两边都通向同一个 `retry`。
+   */
+  stopped: boolean;
+  /**
+   * 任务工作区的 id，跨重启活下来。
+   *
+   * 存在会话上而不是 `RoleplayAgent` 上：它跟着**这一场**走，「新开会话」就该
+   * 换一个。（`RoleplayAgent.taskId` 曾经存在过，但从来没有人写回去，所以每次
+   * 重启都会新建一个再也没人认领的工作区目录。）
+   */
+  taskId: string | null;
   error: string | null;
   /**
    * 上一次跑过的作业，重试用。重试入口只在 `error` 亮着时露出——「重试」在这里
@@ -195,7 +211,7 @@ function emptySession(): LiveSession {
   return {
     turns: [], log: {}, history: null, meta: null, streaming: "", liveLog: [],
     usage: null, stalePaths: [], memory: [], memoryStale: false,
-    workspace: null, error: null, lastJob: null,
+    workspace: null, stopped: false, taskId: null, error: null, lastJob: null,
   };
 }
 
@@ -282,7 +298,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     set((st) => ({ aborts: { ...st.aborts, [job.agentId]: controller } }));
     // 先按「还没组装」记下来：万一是压缩或检索这一步炸了，重试要整套重来。
     patchSession(job.agentId, (s) => ({
-      ...s, streaming: "", liveLog: [], error: null, lastJob: job,
+      ...s, streaming: "", liveLog: [], error: null, stopped: false, lastJob: job,
     }));
 
     const loreIndex = useLoreStore.getState().index;
@@ -423,8 +439,10 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       // 消失。见 docs/feature/roleplay/02-design.md §8。
       let workspace = get().sessions[job.agentId]?.workspace ?? null;
       if (!workspace) {
-        workspace = createTaskWorkspace(projectPath, model.id, agent.taskId ?? undefined);
-        patchSession(job.agentId, (s) => ({ ...s, workspace }));
+        workspace = createTaskWorkspace(
+          projectPath, model.id, get().sessions[job.agentId]?.taskId ?? undefined,
+        );
+        patchSession(job.agentId, (s) => ({ ...s, workspace, taskId: workspace!.taskId }));
       }
 
       const preset = presetFor(agent.kind);
@@ -557,7 +575,11 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         }));
       }
     } catch (e) {
-      if ((e as Error).name !== "AbortError") {
+      if ((e as Error).name === "AbortError") {
+        // 按停之后这一问仍然孤零零地留在 transcript 里。给它一个重试的落点，
+        // 否则作者只能把那句话再打一遍。
+        patchSession(job.agentId, (s) => ({ ...s, stopped: true }));
+      } else {
         const msg = String(e);
         patchSession(job.agentId, (s) => ({
           ...s,
@@ -684,7 +706,6 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         boundPaths: draft.boundPaths,
         modelId: draft.modelId,
         authorPersona: null,
-        taskId: null,
         createdAt: now,
         updatedAt: now,
         turnCount: 0,
@@ -735,6 +756,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       // 场还没播种过，没有基线可比；留着旧的会让提示按上一场的状态亮。
       const memory = opts.clearMemory ? [] : get().sessions[id]?.memory ?? [];
       set((st) => ({
+        // `emptySession()` 的 `taskId: null` 正是想要的：新的一场配新的工作区。
         sessions: { ...st.sessions, [id]: { ...emptySession(), memory } },
         unread: { ...st.unread, [id]: false },
         stale: { ...st.stale, [id]: false },
@@ -803,6 +825,9 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         turns,
         history: stored?.history ?? null,
         meta: (stored?.snapshot.meta as RoleplaySessionMeta | undefined) ?? null,
+        // 认领上一次的工作区，而不是新开一个——否则每次重启都在
+        // `.ai-writer/tasks/` 里留下一个再也没人看的目录。
+        taskId: stored?.snapshot.taskId ?? null,
         memory: doc.records,
         memoryStale: false,
       }));
@@ -845,7 +870,9 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         patchSession(agentId, (s) => ({ ...s, error: String(e) }));
         return;
       }
-      patchSession(agentId, (s) => ({ ...s, turns: [...s.turns, turn], error: null }));
+      patchSession(agentId, (s) => ({
+        ...s, turns: [...s.turns, turn], error: null, stopped: false,
+      }));
 
       // `@` 引用是**内联**的，不是提名的：作者打了 @西厢 就已经决定助手该看着
       // 它说话，把那变成模型可以跳过的建议是在赌一件已经定了的事（见
@@ -886,7 +913,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       if (!job) return;
       const { running, queue } = get();
       if (running.includes(agentId) || queue.some((j) => j.agentId === agentId)) return;
-      patchSession(agentId, (s) => ({ ...s, error: null }));
+      patchSession(agentId, (s) => ({ ...s, error: null, stopped: false }));
       set((st) => ({ queue: [...st.queue, job] }));
       void pump();
     },

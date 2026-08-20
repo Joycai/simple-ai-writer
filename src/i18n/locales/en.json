@@ -2041,6 +2041,7 @@
     "pickAgent": "Pick an agent on the left to start talking.",
     "newAgent": "New agent",
     "editAgent": "Edit",
+    "stopped": "Stopped — this line has no reply yet",
     "retry": "Retry",
     "rewind": {
       "here": "Rewind to here",
