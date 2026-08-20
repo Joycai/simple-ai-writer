@@ -2124,6 +2124,10 @@
       "quoteNote": "Dialogue takes 「」 『』 “” or \"\" — any pair, as long as it matches."
     },
     "persona": {
+      "onlyHere": "this agent",
+      "scopeAll": "All chats",
+      "scopeOne": "Only {{name}}",
+      "follow": "Follow global setting ({{name}})",
       "iam": "I am",
       "none": "Nobody",
       "noneHint": "speak as an observer",

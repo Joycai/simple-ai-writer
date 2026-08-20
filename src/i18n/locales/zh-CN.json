@@ -2119,6 +2119,10 @@
       "quoteNote": "台词的引号 「」 『』 “” \"\" 都认，但开合要同族。中文输入法下 Shift+' 出来的 “” 最省事。"
     },
     "persona": {
+      "onlyHere": "仅此角色",
+      "scopeAll": "全部对话",
+      "scopeOne": "只对 {{name}}",
+      "follow": "跟随全局设置（{{name}}）",
       "iam": "我此刻是",
       "none": "不设定",
       "noneHint": "以旁观者身份说话",

@@ -38,7 +38,9 @@ import { classifySegment } from "../../lib/roleplay/markup";
 import { projectFilesFromTree } from "../../lib/fs/images";
 import { readFile } from "../../lib/fs/fileio";
 import type { AttachedItem } from "../../lib/lore/aiTask";
-import type { MemoryRecord, RoleplayAgent, SceneTurn } from "../../lib/roleplay/model";
+import type {
+  AuthorPersona, MemoryRecord, RoleplayAgent, SceneTurn,
+} from "../../lib/roleplay/model";
 import styles from "./RoleplayChat.module.css";
 
 const MIRROR_CLASS: Record<string, string> = {
@@ -582,7 +584,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               {t("roleplay.persona.narratorNote", { defaultValue: "旁白不扮演任何人 · 无身份设定" })}
             </span>
           ) : (
-            <PersonaChip />
+            <PersonaChip agent={agent} />
           )}
           <div className={styles.spacer} />
           {showSyntax ? (
@@ -709,11 +711,23 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
 }
 
 /** 「我此刻是」——作者的身份，全局设置，每个 agent 都看得到。 */
-function PersonaChip() {
+/**
+ * 「我此刻是谁」。
+ *
+ * 两级：全局一个，每个 agent 可以覆盖——作者不一定用同一个身份面对所有角色，
+ * 对甲是「桐谷萤」，对乙可能是「一个陌生人」。`runJob` 一直读的就是
+ * `agent.authorPersona ?? 全局`，这里只是把入口补上。
+ *
+ * 菜单顶部先选**作用域**再选人，而不是让两级挤在一张列表里：「这一次改的是
+ * 谁」是作者按下之前必须知道的事，事后从高亮上反推太晚了。
+ */
+function PersonaChip({ agent }: { agent: RoleplayAgent }) {
   const { t } = useTranslation();
-  const { authorPersona, setAuthorPersona } = useRoleplayStore();
+  const { authorPersona, setAuthorPersona, setAgentPersona } = useRoleplayStore();
   const loreIndex = useLoreStore((s) => s.index);
   const [open, setOpen] = useState(false);
+  const overridden = agent.authorPersona !== null;
+  const [scopeAgent, setScopeAgent] = useState(overridden);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -725,30 +739,63 @@ function PersonaChip() {
     return () => window.removeEventListener("mousedown", onDown);
   }, [open]);
 
-  const characters = Object.values(loreIndex).flat();
-  const current = authorPersona.mode === "lore" && authorPersona.dirPath
-    ? characters.find((e) => e.dirPath === authorPersona.dirPath)
-    : null;
+  // 打开时把作用域重置成当前实际生效的那一档，而不是留着上次的选择。
+  useEffect(() => { if (open) setScopeAgent(overridden); }, [open, overridden]);
 
-  const label = authorPersona.mode === "none"
+  const characters = Object.values(loreIndex).flat();
+  /** 实际生效的那一个——和 runJob 的取法必须一致。 */
+  const effective = agent.authorPersona ?? authorPersona;
+  /** 正在被编辑的那一档（可能不是生效的那一档）。 */
+  const editing = scopeAgent ? (agent.authorPersona ?? authorPersona) : authorPersona;
+
+  const nameOf = (p: AuthorPersona) => p.mode === "none"
     ? t("roleplay.persona.none", { defaultValue: "不设定" })
-    : authorPersona.mode === "prompt"
+    : p.mode === "prompt"
       ? t("roleplay.persona.custom", { defaultValue: "自定义身份" })
-      : current?.name ?? t("roleplay.persona.none", { defaultValue: "不设定" });
+      : characters.find((e) => e.dirPath === p.dirPath)?.name
+        ?? t("roleplay.persona.none", { defaultValue: "不设定" });
+
+  const apply = (p: AuthorPersona) => {
+    if (scopeAgent) void setAgentPersona(agent.id, p);
+    else void setAuthorPersona(p);
+    setOpen(false);
+  };
 
   return (
     <div className={styles.personaWrap} ref={ref}>
       <span className={styles.personaLabel}>{t("roleplay.persona.iam", { defaultValue: "我此刻是" })}</span>
       <button type="button" className={styles.personaChip} onClick={() => setOpen((v) => !v)}>
-        {label}
+        {nameOf(effective)}
+        {/* 只在被覆盖时出现：没有覆盖是常态，常态不需要标记。 */}
+        {overridden && (
+          <span className={styles.personaOnly}>
+            {t("roleplay.persona.onlyHere", { defaultValue: "仅此角色" })}
+          </span>
+        )}
         <ChevronDown size={8} strokeWidth={2.6} />
       </button>
       {open && (
         <div className={styles.personaMenu}>
+          <div className={styles.personaScope}>
+            <button
+              type="button"
+              className={`${styles.scopeTab} ${!scopeAgent ? styles.scopeTabOn : ""}`}
+              onClick={() => setScopeAgent(false)}
+            >
+              {t("roleplay.persona.scopeAll", { defaultValue: "全部对话" })}
+            </button>
+            <button
+              type="button"
+              className={`${styles.scopeTab} ${scopeAgent ? styles.scopeTabOn : ""}`}
+              onClick={() => setScopeAgent(true)}
+            >
+              {t("roleplay.persona.scopeOne", { name: agent.name, defaultValue: `只对 ${agent.name}` })}
+            </button>
+          </div>
           <button
             type="button"
-            className={`${styles.personaItem} ${authorPersona.mode === "none" ? styles.personaItemActive : ""}`}
-            onClick={() => { void setAuthorPersona({ mode: "none", dirPath: null, prompt: "" }); setOpen(false); }}
+            className={`${styles.personaItem} ${editing.mode === "none" ? styles.personaItemActive : ""}`}
+            onClick={() => apply({ mode: "none", dirPath: null, prompt: "" })}
           >
             <span className={styles.radio} />
             {t("roleplay.persona.none", { defaultValue: "不设定" })}
@@ -758,13 +805,27 @@ function PersonaChip() {
             <button
               key={e.dirPath}
               type="button"
-              className={`${styles.personaItem} ${authorPersona.dirPath === e.dirPath ? styles.personaItemActive : ""}`}
-              onClick={() => { void setAuthorPersona({ mode: "lore", dirPath: e.dirPath, prompt: "" }); setOpen(false); }}
+              className={`${styles.personaItem} ${editing.dirPath === e.dirPath ? styles.personaItemActive : ""}`}
+              onClick={() => apply({ mode: "lore", dirPath: e.dirPath, prompt: "" })}
             >
               <span className={styles.radio} />
               {e.name}
             </button>
           ))}
+          {/* 撤销覆盖的入口就在做出覆盖的地方——和模型选择器的「跟随全局设置」
+              同一条道理（§2.14）。 */}
+          {overridden && (
+            <button
+              type="button"
+              className={styles.personaFollow}
+              onClick={() => { void setAgentPersona(agent.id, null); setOpen(false); }}
+            >
+              {t("roleplay.persona.follow", {
+                name: nameOf(authorPersona),
+                defaultValue: `跟随全局设置（${nameOf(authorPersona)}）`,
+              })}
+            </button>
+          )}
         </div>
       )}
     </div>

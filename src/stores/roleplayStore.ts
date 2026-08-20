@@ -169,6 +169,14 @@ interface RoleplayState {
    */
   newSession: (id: string, opts: { clearMemory: boolean }) => Promise<void>;
   setAuthorPersona: (persona: AuthorPersona) => Promise<void>;
+  /**
+   * 只为这一个 agent 覆盖「我此刻是谁」。`null` = 撤销覆盖，跟回全局。
+   *
+   * 有这一层是因为作者不一定用同一个身份面对所有角色：对甲是「桐谷萤」，对乙
+   * 可能是「一个陌生人」。类型上一直有（`RoleplayAgent.authorPersona`，`runJob`
+   * 也一直读它），只是没有入口。
+   */
+  setAgentPersona: (id: string, persona: AuthorPersona | null) => Promise<void>;
   setAgentModel: (id: string, modelId: string | null) => Promise<void>;
 
   select: (id: string | null) => Promise<void>;
@@ -797,6 +805,13 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
 
     setAuthorPersona: async (persona) => {
       set({ authorPersona: persona });
+      await persistRoster();
+    },
+
+    setAgentPersona: async (id, persona) => {
+      const prev = get().agents[id];
+      if (!prev) return;
+      set((st) => ({ agents: { ...st.agents, [id]: { ...prev, authorPersona: persona } } }));
       await persistRoster();
     },
 
