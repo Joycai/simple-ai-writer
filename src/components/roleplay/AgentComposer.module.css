@@ -450,6 +450,21 @@
 }
 
 .dangerBtn:hover { color: var(--color-error-text-strong); border-color: var(--color-error-text-strong); }
+
+/* 「同时清空记忆」：确认条上唯一的选择项，所以它站在最左边——作者的目光落在
+   footer 上时先撞见它，而不是先撞见「新开会话」那个按钮。 */
+.checkRow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--color-text-soft);
+  cursor: pointer;
+}
+.checkRow input { accent-color: var(--color-accent); cursor: pointer; }
 .ghostBtn:hover { color: var(--color-text-primary); }
 
 .primaryBtn {

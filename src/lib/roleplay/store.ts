@@ -8,7 +8,11 @@
  *       ├── transcript.md    对话记录（资产，见 ./transcript）
  *       ├── memory.md        角色记忆：约定 / 待办 / 事件 / 关系（见 ./memory）
  *       ├── summary.md       滚动摘要（压缩时写）
- *       └── session.json     wire history + meta（缓存，可丢）
+ *       ├── session.json     wire history + meta（缓存，可丢）
+ *       └── archive/         历次「新开会话」封存的旧场次
+ *           ├── transcript-01.md
+ *           ├── summary-01.md      （有才存）
+ *           └── memory-01.md       （只在作者选了「同时清空记忆」时才有）
  *
  * 落在项目目录而不是 `chat_sessions` 表：那张表每次写入都把自己裁到最新
  * 5 个会话，对话助手的对话是缓存、删了无所谓，而攒了两周的角色互动被一次
@@ -17,7 +21,7 @@
  */
 
 import {
-  fileExists, makeDir, readDir, readFile, renamePath, writeFile,
+  fileExists, makeDir, readDir, readFile, removeFile, renamePath, writeFile,
 } from "../fs/fileio";
 import {
   deserializeChatSession, serializeChatSession, type ChatSnapshot,
@@ -272,6 +276,97 @@ export async function loadSummary(projectPath: string, agentId: string): Promise
 export async function saveSummary(projectPath: string, agentId: string, text: string): Promise<void> {
   await makeDir(agentDir(projectPath, agentId));
   await writeFile(summaryPath(projectPath, agentId), `${text.trim()}\n`);
+}
+
+// ─── 新开会话 ────────────────────────────────────────────────────────────────
+
+export const archiveDir = (p: string, id: string) => `${agentDir(p, id)}/archive`;
+
+/**
+ * 下一个存档编号。按**已有文件名解析出的最大值 + 1**，不按文件个数——作者
+ * 手动删掉中间一场之后，按个数会撞名并覆盖掉另一场的记录。
+ */
+async function nextArchiveNo(dir: string): Promise<number> {
+  if (!(await fileExists(dir))) return 1;
+  let max = 0;
+  for (const e of await readDir(dir)) {
+    const m = /^transcript-(\d+)\.md$/.exec(e.name);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return max + 1;
+}
+
+/**
+ * 「新开会话」：把当前这一场封存，让 agent 从空白重新开始。
+ *
+ * **封存靠 rename，不靠改写**——transcript 是只追加、永不改写的资产（不变量
+ * 一），移动一个文件不违反它，就地清空则会。作者攒了两周的互动必须一个字都
+ * 不少地留在盘上，只是不再是「当前这一场」。
+ *
+ * `session.json` 是唯一直接删掉的：它按定义就是缓存，而且封存它毫无意义——
+ * 一段接不回任何 transcript 的 wire history 谁也读不懂。
+ *
+ * 记忆默认**不动**。它是角色的长期知识，本就设计成能跨越压缩活下来；换一场
+ * 戏不该让角色忘掉你们约好的事。作者明确要求清空时才一并封存（同样是移动）。
+ *
+ * @returns 这一场被存成了第几号，没有任何东西可封存时返回 null。
+ */
+export async function archiveSession(
+  projectPath: string, agentId: string, opts: { clearMemory: boolean },
+): Promise<number | null> {
+  const transcript = transcriptPath(projectPath, agentId);
+  const hasTranscript = await fileExists(transcript);
+  const memory = memoryPath(projectPath, agentId);
+  const hasMemory = opts.clearMemory && (await fileExists(memory));
+  if (!hasTranscript && !hasMemory) {
+    // 没有对话也没有要清的记忆——但 session.json 仍可能挂着一段坏掉的历史。
+    await dropIfPresent(sessionPath(projectPath, agentId));
+    return null;
+  }
+
+  const dir = archiveDir(projectPath, agentId);
+  const no = String(await nextArchiveNo(dir)).padStart(2, "0");
+  await makeDir(dir);
+
+  if (hasTranscript) await renamePath(transcript, `${dir}/transcript-${no}.md`);
+  const summary = summaryPath(projectPath, agentId);
+  if (await fileExists(summary)) await renamePath(summary, `${dir}/summary-${no}.md`);
+  if (hasMemory) await renamePath(memory, `${dir}/memory-${no}.md`);
+  await dropIfPresent(sessionPath(projectPath, agentId));
+  return Number(no);
+}
+
+async function dropIfPresent(path: string): Promise<void> {
+  try {
+    if (await fileExists(path)) await removeFile(path);
+  } catch (e) {
+    console.warn("[roleplay] stale cache not removed:", path, e);
+  }
+}
+
+/** 一场封存的旧对话。`turns` 由调用方用 `parseTranscript` 解析。 */
+export interface ArchivedScene {
+  no: number;
+  path: string;
+}
+
+/**
+ * 列出封存过的场次，新的在前。
+ *
+ * 只认 `transcript-NN.md`——`summary-NN.md` / `memory-NN.md` 是它的附属品，
+ * 没有对话的一场不该在列表里冒出来。
+ */
+export async function listArchives(
+  projectPath: string, agentId: string,
+): Promise<ArchivedScene[]> {
+  const dir = archiveDir(projectPath, agentId);
+  if (!(await fileExists(dir))) return [];
+  const out: ArchivedScene[] = [];
+  for (const e of await readDir(dir)) {
+    const m = /^transcript-(\d+)\.md$/.exec(e.name);
+    if (m) out.push({ no: Number(m[1]), path: `${dir}/${e.name}` });
+  }
+  return out.sort((a, b) => b.no - a.no);
 }
 
 // ─── 删除 ────────────────────────────────────────────────────────────────────

@@ -9,8 +9,8 @@ vi.mock("../../../i18n", () => ({
 }));
 
 import {
-  MEMORY_BLOCK_CHAR_CAP, addRecord, parseMemory, renderMemory, renderMemoryBlock,
-  reviseRecord, type MemoryDoc,
+  MEMORY_BLOCK_CHAR_CAP, addRecord, dropRecordsFrom, parseMemory, renderMemory,
+  renderMemoryBlock, reviseRecord, type MemoryDoc,
 } from "../memory";
 import type { MemoryKind, MemoryRecord } from "../model";
 
@@ -179,5 +179,40 @@ describe("kinds", () => {
     const kinds: MemoryKind[] = ["pact", "todo", "event", "bond", "note"];
     const block = renderMemoryBlock(kinds.map((kind, i) => rec({ id: `m${i}`, kind, title: kind })));
     for (const kind of kinds) expect(block).toContain(kind);
+  });
+});
+
+/**
+ * 回退时丢掉在被撤销的那几轮里记下的东西。
+ *
+ * 「记忆只增改不删」防的是模型删自己不想要的记录；作者按下回退是另一回事——
+ * 一条诞生于已被撤销的对话的约定，留着会让角色言之凿凿地提起一件没发生过的事。
+ */
+describe("dropRecordsFrom", () => {
+  it("丢掉轮号 >= 目标的，留下更早的", () => {
+    const before = doc([
+      rec({ id: "m1", turn: 3 }), rec({ id: "m2", turn: 7 }), rec({ id: "m3", turn: 12 }),
+    ], 4);
+    const { doc: after, dropped } = dropRecordsFrom(before, 7);
+    expect(after.records.map((r) => r.id)).toEqual(["m1"]);
+    expect(dropped.map((r) => r.id)).toEqual(["m2", "m3"]);
+  });
+
+  it("作者自己写的（turn: 0）永远不动——它不属于任何一轮", () => {
+    const before = doc([rec({ id: "m1", turn: 0 }), rec({ id: "m2", turn: 9 })], 3);
+    const { doc: after } = dropRecordsFrom(before, 1);
+    expect(after.records.map((r) => r.id)).toEqual(["m1"]);
+  });
+
+  it("没有可丢的就原样返回同一个对象", () => {
+    const before = doc([rec({ id: "m1", turn: 3 })], 2);
+    const { doc: after, dropped } = dropRecordsFrom(before, 20);
+    expect(after).toBe(before);
+    expect(dropped).toEqual([]);
+  });
+
+  it("next 不回退——id 只增不重用", () => {
+    const before = doc([rec({ id: "m9", turn: 9 })], 10);
+    expect(dropRecordsFrom(before, 1).doc.next).toBe(10);
   });
 });

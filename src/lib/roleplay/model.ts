@@ -101,6 +101,15 @@ export const DEFAULT_SCENE_WINDOW = 20;
 /** 一次 `read_scene` 最多返回多少字符，超出按页续读。 */
 export const SCENE_READ_CHAR_CAP = 8000;
 
+/**
+ * `session.json` 丢了之后，从 transcript 回放多少字符进新历史。
+ *
+ * 有上限是因为回放走的是**播种**那条路，而播种不经过压缩——一段几万字的
+ * 对话原样灌进去会当场撑爆首次调用。回放只取最近的、够角色接上话的那一段；
+ * 更早的事由 `summary.md` 和 `memory.md` 承担，那正是它们存在的理由。
+ */
+export const RESTORE_REPLAY_CHAR_CAP = 12000;
+
 /** 花名册摘要行最多显示多少字符。 */
 export const ROSTER_PREVIEW_CHARS = 60;
 

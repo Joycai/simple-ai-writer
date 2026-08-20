@@ -185,6 +185,31 @@ export function addRecord(doc: MemoryDoc, rec: NewRecord, now: number): {
  * 静默新建会让模型以为自己改成功了，而作者会看到两条内容矛盾的记录，谁都不知道
  * 哪条在生效。
  */
+/**
+ * 回退到某一轮时丢掉在那之后记下的记录。
+ *
+ * 「记忆只增改不删」防的是**模型**删自己不想要的记录；作者按下回退是另一回事——
+ * 一条「我们约好雪停了去塔下」如果诞生在一段已经被撤销的对话里，留着它比删掉它
+ * 更糟：角色会言之凿凿地提起一件从没发生过的事。
+ *
+ * `turn: 0` 是作者自己写的，永远不动——它不属于任何一轮。
+ *
+ * **不撤销修订**：某条旧记录在被撤销的那几轮里被标成了 `done`，这里不会把它翻
+ * 回 `open`。要那样就得给每条记录存一份状态变更史，而回退是个低频动作，代价
+ * 不成比例。`next` 同样不回退，id 只增不重用。
+ */
+export function dropRecordsFrom(doc: MemoryDoc, fromTurn: number): {
+  doc: MemoryDoc;
+  dropped: MemoryRecord[];
+} {
+  const dropped = doc.records.filter((r) => r.turn > 0 && r.turn >= fromTurn);
+  if (!dropped.length) return { doc, dropped: [] };
+  return {
+    doc: { records: doc.records.filter((r) => !dropped.includes(r)), next: doc.next },
+    dropped,
+  };
+}
+
 export function reviseRecord(
   doc: MemoryDoc,
   id: string,

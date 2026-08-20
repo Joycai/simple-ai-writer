@@ -31,9 +31,10 @@ import { buildCompactedHistory, planFold, segmentHistory } from "../../agent/com
 import type { StreamMessage } from "../../ai/types";
 import type { LoreEntity, LoreIndex } from "../../lore/model";
 import {
-  buildBoundContent, refreshMemoryBlock, seedRoleplayHistory, type RoleplaySessionMeta,
+  buildBoundContent, refreshMemoryBlock, seedRoleplayHistory, selectReplayTurns,
+  type RoleplaySessionMeta,
 } from "../context";
-import type { MemoryRecord, RoleplayAgent } from "../model";
+import type { MemoryRecord, RoleplayAgent, SceneTurn } from "../model";
 
 function entity(name: string, dirPath: string, facets: string[] = []): LoreEntity {
   return {
@@ -70,6 +71,10 @@ async function seed(firstMessage = "「你还在等？」", memory: MemoryRecord
     loreBudgetChars: 4000,
     memory,
   });
+}
+
+function turn(index: number, speaker: "author" | "agent", text: string): SceneTurn {
+  return { index, speaker, speakerName: speaker === "author" ? "" : "沈砚", at: 0, text };
 }
 
 describe("seedRoleplayHistory", () => {
@@ -226,5 +231,108 @@ describe("buildBoundContent", () => {
     const a = await buildBoundContent(INDEX, pins);
     const b = await buildBoundContent(INDEX, pins);
     expect(a.text).toBe(b.text);
+  });
+});
+
+/**
+ * `session.json` 丢了之后的重建。
+ *
+ * 这一组存在的理由是一次真实的误判：设计文档写着「反序列化失败 = 从 transcript
+ * 重建」，实现里 `seedRoleplayHistory` 却只接一个 `firstMessage`，从不回放过往
+ * 轮次。症状极难自查——**稿面完好、模型失忆**：作者看着满屏的对话记录，角色说
+ * 它不知道之前发生过什么。显示层派生自 transcript，所以看上去一切正常。
+ */
+describe("从 transcript 重建", () => {
+  const PRIOR: SceneTurn[] = [
+    turn(1, "author", "*我推开门。*"),
+    turn(2, "agent", "「你来晚了。」"),
+    turn(3, "author", "「塔那边怎么样？」"),
+    turn(4, "agent", "*他没有回头。*「还在烧。」"),
+  ];
+
+  it("回放的作者轮进 user、角色轮进 assistant，且每个作者轮都是一个轮起点", async () => {
+    const { messages, meta } = await seedRoleplayHistory({
+      agent: AGENT,
+      persona: { mode: "none", dirPath: null, prompt: "" },
+      personaCard: "", primaryText: "", loreIndex: INDEX,
+      firstMessage: "「那我们走。」", matchText: "「那我们走。」",
+      loreBudgetChars: 4000, memory: [], priorTurns: PRIOR,
+    });
+    const texts = messages.map((m) => String(m.content));
+    expect(texts).toContain("*我推开门。*");
+    expect(texts).toContain("「你来晚了。」");
+    expect(messages.find((m) => String(m.content) === "「你来晚了。」")?.role).toBe("assistant");
+    // 两个回放的作者轮 + 这一问
+    expect(meta.turnStarts).toHaveLength(3);
+    expect(String(meta.turnStarts[0].content)).toBe("*我推开门。*");
+    expect(meta.turnStarts[2].content).toBe("「那我们走。」");
+  });
+
+  it("回放之后绑定块仍在 prelude 里——压缩照样够不着它", async () => {
+    const { messages, meta } = await seedRoleplayHistory({
+      agent: AGENT,
+      persona: { mode: "none", dirPath: null, prompt: "" },
+      personaCard: "", primaryText: "", loreIndex: INDEX,
+      firstMessage: "「那我们走。」", matchText: "「那我们走。」",
+      loreBudgetChars: 4000, memory: [], priorTurns: PRIOR,
+    });
+    const { prelude } = segmentHistory(messages, meta);
+    expect(prelude).toContain(meta.boundBlock as StreamMessage);
+    // 回放的轮次落在 turns 一侧，不在 prelude 里——否则压缩永远折不掉它们。
+    expect(prelude.map((m) => String(m.content))).not.toContain("*我推开门。*");
+  });
+
+  it("接回 summary.md，并把 summaryText 留给下一次压缩", async () => {
+    const { meta } = await seedRoleplayHistory({
+      agent: AGENT,
+      persona: { mode: "none", dirPath: null, prompt: "" },
+      personaCard: "", primaryText: "", loreIndex: INDEX,
+      firstMessage: "「那我们走。」", matchText: "「那我们走。」",
+      loreBudgetChars: 4000, memory: [], priorTurns: PRIOR,
+      priorSummary: "他们在西厢见过一面。",
+    });
+    expect(meta.summaryText).toBe("他们在西厢见过一面。");
+    expect(meta.summary).not.toBeNull();
+  });
+
+  it("没有过往轮次时形状与全新会话完全一致", async () => {
+    const fresh = await seed("「你还在等？」");
+    const restored = await seedRoleplayHistory({
+      agent: AGENT,
+      persona: { mode: "none", dirPath: null, prompt: "" },
+      personaCard: "说话短，从不解释动机。", primaryText: "寒露之变的幸存者。",
+      loreIndex: INDEX, firstMessage: "「你还在等？」", matchText: "「你还在等？」",
+      loreBudgetChars: 4000, memory: [], priorTurns: [], priorSummary: "",
+    });
+    expect(restored.messages.map((m) => m.role)).toEqual(fresh.messages.map((m) => m.role));
+  });
+});
+
+describe("selectReplayTurns", () => {
+  it("绝不以角色轮打头——那条 assistant 会落进 prelude，压缩够不着", () => {
+    const picked = selectReplayTurns([
+      turn(1, "agent", "「你来晚了。」"),
+      turn(2, "author", "「塔那边怎么样？」"),
+      turn(3, "agent", "「还在烧。」"),
+    ]);
+    expect(picked[0].speaker).toBe("author");
+    expect(picked).toHaveLength(2);
+  });
+
+  it("按字符封顶，留最近的", () => {
+    const many = Array.from({ length: 10 }, (_, i) =>
+      turn(i + 1, i % 2 === 0 ? "author" : "agent", "x".repeat(100)));
+    const picked = selectReplayTurns(many, 250);
+    expect(picked.length).toBeLessThan(10);
+    expect(picked[picked.length - 1]).toBe(many[many.length - 1]);
+  });
+
+  it("一轮都超上限时仍然回放那一轮——空手重建等于没重建", () => {
+    const picked = selectReplayTurns([turn(1, "author", "x".repeat(9999))], 100);
+    expect(picked).toHaveLength(1);
+  });
+
+  it("没有作者轮就什么都不回放", () => {
+    expect(selectReplayTurns([turn(1, "agent", "「你来晚了。」")])).toEqual([]);
   });
 });

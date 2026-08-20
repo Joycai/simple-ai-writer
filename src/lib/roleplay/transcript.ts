@@ -160,6 +160,26 @@ export async function appendTurn(path: string, agentId: string, turn: SceneTurn)
   await appendFile(path, renderTurn(turn));
 }
 
+/** 一份 transcript 的完整正文：文件头 + 每一轮。 */
+export function renderTranscript(agentId: string, turns: readonly SceneTurn[]): string {
+  return transcriptHeader(agentId) + turns.map(renderTurn).join("");
+}
+
+/**
+ * 回退到某一轮：只保留轮号 **小于** `keepBefore` 的部分，返回新正文。
+ *
+ * 这是这个模块里唯一一个不追加而是重写的函数，所以它值得一句解释：只追加的
+ * 那条纪律防的是**悄悄丢字**——模型跑飞、程序出错、并发写坏，作者不该为这些
+ * 付出代价。而回退是作者自己按下去的、指名道姓要撤销哪一轮的动作，它和「丢字」
+ * 是两回事。调用方仍然必须先 `backupFile`（和所有 L1 写工具一样），因为「作者
+ * 按了」不等于「作者按对了」。
+ */
+export function truncateTurns(
+  turns: readonly SceneTurn[], keepBefore: number,
+): SceneTurn[] {
+  return turns.filter((t) => t.index < keepBefore);
+}
+
 /** 按轮号闭区间切片，越界钳到有效范围。 */
 export function sliceTurns(turns: SceneTurn[], from?: number, to?: number): SceneTurn[] {
   if (!turns.length) return [];

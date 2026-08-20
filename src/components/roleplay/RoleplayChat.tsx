@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronRight, RotateCw } from "lucide-react";
 import { useRoleplayStore } from "../../stores/roleplayStore";
 import { useLoreStore } from "../../stores/loreStore";
+import { listArchives, type ArchivedScene } from "../../lib/roleplay/store";
 import { useProjectStore } from "../../stores/projectStore";
 import { ModelSelector } from "../ai/ModelSelector";
 import { AgentLog } from "../ai/AgentLog";
@@ -27,6 +28,7 @@ import { TruncationCard } from "../ai/TruncationCard";
 import { useAgentStore } from "../../stores/agentStore";
 import { cardsForSurface } from "../../lib/agent/approvalRouting";
 import { ScriptText } from "./ScriptText";
+import { ArchiveViewer } from "./ArchiveViewer";
 import { MemoryPanel } from "./MemoryPanel";
 import {
   MentionPicker, filterMentions, mentionKey, mentionLabel,
@@ -70,11 +72,13 @@ function ComposerMirror({ text, innerRef }: {
   );
 }
 
-function TurnBlock({ turn, log, memories }: {
+function TurnBlock({ turn, log, memories, onRewind }: {
   turn: SceneTurn;
   log?: React.ReactNode;
   /** 这一轮里角色记下的东西。作者手加的 `turn: 0`，永远不会落在这里。 */
   memories?: MemoryRecord[];
+  /** 只有作者轮、且不是最后一轮时给——回到最后一轮等于什么也没撤销。 */
+  onRewind?: () => void;
 }) {
   const { t } = useTranslation();
   if (turn.speaker === "author") {
@@ -83,6 +87,12 @@ function TurnBlock({ turn, log, memories }: {
         <div className={styles.authorLabel}>
           {t("roleplay.me", { defaultValue: "我" })}
           {turn.speakerName && <span className={styles.personaName}>{turn.speakerName}</span>}
+          {/* 悬停才出现：它是一个撤销动作，不该在稿面上一直举着手。 */}
+          {onRewind && (
+            <button type="button" className={styles.rewindBtn} onClick={onRewind}>
+              {t("roleplay.rewind.here", { defaultValue: "回到这里重说" })}
+            </button>
+          )}
         </div>
         <ScriptText text={turn.text} />
       </div>
@@ -110,7 +120,7 @@ function TurnBlock({ turn, log, memories }: {
 export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: () => void }) {
   const { t } = useTranslation();
   const {
-    sessions, running, queue, stale, send, stop, retry, dequeue, promote,
+    sessions, running, queue, stale, send, stop, retry, rewind, dequeue, promote,
     refreshBinding, setAgentModel,
   } = useRoleplayStore();
   const session = sessions[agent.id];
@@ -125,6 +135,12 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const [refs, setRefs] = useState<AttachedItem[]>([]);
   const [seconds, setSeconds] = useState(0);
   const [showMemory, setShowMemory] = useState(false);
+  // 封存的旧场次。挂在对话区而不是 store 里：它只在作者往上看的时候才有意义，
+  // 而每次切 agent 重读一次目录比让 store 多背一份状态便宜。
+  const [archives, setArchives] = useState<ArchivedScene[]>([]);
+  const [showArchive, setShowArchive] = useState(false);
+  /** 待确认的回退目标轮号。回退会撤销记录，所以要问一次。 */
+  const [rewindTo, setRewindTo] = useState<number | null>(null);
 
   const taRef = useRef<HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
@@ -178,6 +194,18 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [session?.turns.length, session?.streaming]);
+
+  useEffect(() => {
+    setShowArchive(false);
+    if (!projectPath) { setArchives([]); return; }
+    let alive = true;
+    void listArchives(projectPath, agent.id)
+      .then((list) => { if (alive) setArchives(list); })
+      .catch(() => { if (alive) setArchives([]); });
+    return () => { alive = false; };
+    // turnCount 变化 = 这个 agent 刚被「新开会话」（归零）或又聊了一轮，
+    // 前者会多出一场存档。
+  }, [projectPath, agent.id, agent.turnCount]);
 
   const boundCount = agent.boundPaths.length;
   const openMemoryCount = (session?.memory ?? []).filter((m) => m.status === "open").length;
@@ -349,6 +377,23 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
       {/* ── 稿面 ── */}
       <div className={styles.scroll} ref={scrollRef}>
         <div className={styles.column}>
+          {/* 「这一场之前还有几场」。放在稿面最上方而不是信息带里，因为它讲的
+              正是这个位置的事——再往上就没有了。 */}
+          {archives.length > 0 && (
+            <button
+              type="button"
+              className={styles.archiveBar}
+              onClick={() => setShowArchive(true)}
+            >
+              {t("roleplay.archive.bar", {
+                n: archives.length,
+                defaultValue: `此前已封存 ${archives.length} 场`,
+              })}
+              <span className={styles.archiveOpen}>
+                {t("roleplay.archive.view", { defaultValue: "查看" })}
+              </span>
+            </button>
+          )}
           {(session?.turns.length ?? 0) === 0 && !isRunning && (
             <div className={styles.chatEmpty}>
               <div className={styles.chatEmptyTitle}>
@@ -375,6 +420,12 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               key={turn.index}
               turn={turn}
               memories={memoriesByTurn.get(turn.index)}
+              onRewind={
+                turn.speaker === "author" && !isRunning && queuePos < 0
+                  && turn.index < (session?.turns.length ?? 0)
+                  ? () => setRewindTo(turn.index)
+                  : undefined
+              }
               log={
                 session.log[turn.index]?.length ? (
                   <div className={styles.logLine}>
@@ -430,6 +481,41 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               </button>
               <button type="button" className={styles.queueBtnAccent} onClick={() => promote(agent.id)}>
                 {t("roleplay.queue.promote", { defaultValue: "插到最前" })}
+              </button>
+            </div>
+          )}
+
+          {/* 回退的确认。用 transcript 里的原话做提示——作者要撤销的是**这一句**
+              和它之后的一切，而那一句自己是最准确的说明。 */}
+          {rewindTo !== null && (
+            <div className={styles.rewindBar}>
+              <span className={styles.rewindText}>
+                {t("roleplay.rewind.confirm", {
+                  n: (session?.turns.length ?? 0) - rewindTo + 1,
+                  defaultValue: `撤销这一句和它之后的 ${(session?.turns.length ?? 0) - rewindTo + 1} 条记录，原文回到输入框。这一段之后记下的事也会一并撤销。`,
+                })}
+              </span>
+              <button
+                type="button"
+                className={styles.rewindCancel}
+                onClick={() => setRewindTo(null)}
+              >
+                {t("common.cancel", { defaultValue: "取消" })}
+              </button>
+              <button
+                type="button"
+                className={styles.rewindGo}
+                onClick={() => {
+                  const at = rewindTo;
+                  setRewindTo(null);
+                  void rewind(agent.id, at).then((text) => {
+                    if (text === null) return;
+                    setDraft(text);
+                    taRef.current?.focus();
+                  });
+                }}
+              >
+                {t("roleplay.rewind.go", { defaultValue: "回退" })}
               </button>
             </div>
           )}
@@ -583,6 +669,14 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
         </div>
       </div>
       </div>
+      {showArchive && archives.length > 0 && (
+        <ArchiveViewer
+          scenes={archives}
+          agentName={agent.name}
+          onClose={() => setShowArchive(false)}
+        />
+      )}
+
       {showMemory && (
         <MemoryPanel agentId={agent.id} onClose={() => setShowMemory(false)} onJump={jumpToTurn} />
       )}

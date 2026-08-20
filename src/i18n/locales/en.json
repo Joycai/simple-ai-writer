@@ -3,6 +3,7 @@
     "name": "Simple AI Writer"
   },
   "common": {
+    "loading": "Loading…",
     "close": "Close",
     "cancel": "Cancel",
     "unsavedConfirm": "You have unsaved changes that will be lost. Close anyway?",
@@ -2039,6 +2040,24 @@
     "newAgent": "New agent",
     "editAgent": "Edit",
     "retry": "Retry",
+    "rewind": {
+      "here": "Rewind to here",
+      "go": "Rewind",
+      "confirm": "Discards this line and the {{n}} records after it; the text returns to the composer. Memories recorded since are dropped too."
+    },
+    "archive": {
+      "title": "{{name}} · archived scenes",
+      "scene": "Scene {{n}}",
+      "bar": "{{n}} archived scene(s) before this",
+      "view": "View",
+      "blank": "This scene is empty."
+    },
+    "newSession": {
+      "open": "New session",
+      "go": "Start fresh",
+      "alsoMemory": "Also clear memory",
+      "confirmHint": "Archives the current {{n}} turns and starts blank. Nothing is deleted — it moves to archive/."
+    },
     "editAgentTitle": "Edit agent",
     "deleteAgent": "Delete",
     "concurrency": "Running",
