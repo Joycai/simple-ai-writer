@@ -26,23 +26,59 @@
 //! mean "force"), so the guarantee is the client's to keep.
 
 use axum::body::Bytes;
-use axum::extract::{DefaultBodyLimit, Path, Request, State};
+use axum::extract::{DefaultBodyLimit, Extension, Path, Request, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use serde::Deserialize;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
+use crate::audit::AuditLog;
+use crate::config::Config;
 use crate::error::ApiError;
+use crate::session::SessionStore;
 use crate::store::{EntryWrite, KbSummary, Manifest, Precondition, PutOutcome, Store};
 
 pub struct AppState {
     pub store: Store,
-    pub tokens: Vec<String>,
-    pub allow_anonymous: bool,
+    /// The live configuration. Behind a lock because the admin console can
+    /// rewrite the file and reload it without a restart — a token added there
+    /// has to be accepted by the very next request, which is only true if the
+    /// token check reads this rather than a copy taken at startup.
+    pub config: RwLock<Config>,
+    /// The process arguments, kept so a reload can resolve `--config` the same
+    /// way the original load did.
+    pub argv: Vec<String>,
+    pub sessions: SessionStore,
+    pub audit: AuditLog,
+    pub started_at_ms: u64,
 }
+
+impl AppState {
+    pub fn config(&self) -> std::sync::RwLockReadGuard<'_, Config> {
+        self.config.read().expect("config lock poisoned")
+    }
+
+    /// Re-read the config file after the console wrote it.
+    ///
+    /// A failed reload leaves the running configuration in place and reports
+    /// why: the file has already been written by then, and swapping in a broken
+    /// configuration would take away the console that is the way to fix it.
+    pub fn reload_config(&self) -> Result<(), String> {
+        let fresh = Config::load(&self.argv)?;
+        *self.config.write().expect("config lock poisoned") = fresh;
+        Ok(())
+    }
+}
+
+/// The first characters of the token a request presented, for the activity log.
+///
+/// Inserted by the auth middleware so handlers do not each re-parse the header —
+/// and so the value they log is by construction the one that was checked.
+#[derive(Clone)]
+pub struct TokenPrefix(pub Option<String>);
 
 pub fn router(state: Arc<AppState>, max_entry_bytes: usize) -> Router {
     let api = Router::new()
@@ -62,8 +98,24 @@ pub fn router(state: Arc<AppState>, max_entry_bytes: usize) -> Router {
         // Outside the auth layer: a reverse proxy or a container runtime has to
         // be able to probe liveness without holding a token, and this answers
         // nothing about the stored data.
-        .route("/health", get(|| async { "ok" }))
+        .route("/health", get(health))
+        .with_state(Arc::clone(&state))
+        .merge(crate::admin::router(Arc::clone(&state)))
         .merge(api.with_state(state))
+}
+
+/// Liveness, plus the two facts the admin console's login screen shows before
+/// anyone has logged in: that this is the right kind of server, and whether it
+/// is running without authentication.
+async fn health(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
+    let config = state.config();
+    Json(serde_json::json!({
+        "status": "ok",
+        "service": "aiw-kb-server",
+        "version": env!("CARGO_PKG_VERSION"),
+        "anonymous": config.server.allow_anonymous,
+        "adminConfigured": config.admin.is_some(),
+    }))
 }
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
@@ -86,27 +138,54 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 
 async fn require_token(
     State(state): State<Arc<AppState>>,
-    request: Request,
+    mut request: Request,
     next: Next,
 ) -> Result<Response, ApiError> {
-    if state.allow_anonymous {
-        return Ok(next.run(request).await);
-    }
     let presented = request
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
         .map(str::trim)
-        .unwrap_or("");
+        .unwrap_or("")
+        .to_string();
 
-    // Every configured token is compared even after a match, so the time taken
-    // does not reveal which one (or how many there are).
-    let mut ok = false;
-    for token in &state.tokens {
-        ok |= constant_time_eq(token.as_bytes(), presented.as_bytes());
-    }
-    if !ok {
+    let (allow_anonymous, ok) = {
+        let config = state.config();
+        // Every configured token is compared even after a match, so the time
+        // taken does not reveal which one (or how many there are).
+        let mut ok = false;
+        for token in &config.tokens {
+            ok |= constant_time_eq(token.value.as_bytes(), presented.as_bytes());
+        }
+        (config.server.allow_anonymous, ok)
+    };
+
+    let prefix = if ok {
+        Some(presented.chars().take(6).collect::<String>())
+    } else {
+        None
+    };
+    request.extensions_mut().insert(TokenPrefix(prefix));
+
+    if !(ok || allow_anonymous) {
+        // Logged rather than only counted: "someone has been hitting this with
+        // a token that no longer works" is the question the activity page
+        // exists to answer, and a 401 never reaches a handler that could log it.
+        state.audit.record(crate::audit::AuditEvent {
+            at_ms: now_ms(),
+            action: "unauthorized".into(),
+            kb: None,
+            path: Some(request.uri().path().to_string()),
+            device: device_from(request.headers()),
+            token: None,
+            status: 401,
+            detail: if presented.is_empty() {
+                Some("请求没有带 Authorization 头".into())
+            } else {
+                Some("token 不在当前配置里".into())
+            },
+        });
         return Err(ApiError::new(
             StatusCode::UNAUTHORIZED,
             "unauthorized",
@@ -114,6 +193,13 @@ async fn require_token(
         ));
     }
     Ok(next.run(request).await)
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 // ─── Knowledge bases ─────────────────────────────────────────────────────────
@@ -134,10 +220,23 @@ struct CreateKb {
 
 async fn create_kb(
     State(state): State<Arc<AppState>>,
+    Extension(TokenPrefix(token)): Extension<TokenPrefix>,
+    headers: HeaderMap,
     Json(body): Json<CreateKb>,
 ) -> Result<(StatusCode, Json<KbSummary>), ApiError> {
+    let device = device_from(&headers);
     let store = Arc::clone(&state);
     let meta = blocking(move || store.store.create_kb(&body.name, body.id.as_deref())).await??;
+    state.audit.record(crate::audit::AuditEvent {
+        at_ms: now_ms(),
+        action: "create-kb".into(),
+        kb: Some(meta.meta.id.clone()),
+        path: None,
+        device,
+        token,
+        status: 201,
+        detail: None,
+    });
     Ok((StatusCode::CREATED, Json(meta)))
 }
 
@@ -154,10 +253,24 @@ async fn manifest(
 
 async fn get_entry(
     State(state): State<Arc<AppState>>,
+    Extension(TokenPrefix(token)): Extension<TokenPrefix>,
+    headers: HeaderMap,
     Path((kb, category, id)): Path<(String, String, String)>,
 ) -> Result<Response, ApiError> {
+    let device = device_from(&headers);
+    let label = format!("{category}/{id}");
+    let kb_id = kb.clone();
     let store = Arc::clone(&state);
     let (bytes, hash) = blocking(move || store.store.read_entry(&kb, &category, &id)).await??;
+    state.audit.entry(crate::audit::EntryLog {
+        action: "download",
+        kb: &kb_id,
+        path: &label,
+        device: device.as_deref(),
+        token: token.as_deref(),
+        status: 200,
+        detail: None,
+    });
 
     let mut headers = HeaderMap::new();
     headers.insert(
@@ -178,6 +291,7 @@ async fn get_entry(
 
 async fn put_entry(
     State(state): State<Arc<AppState>>,
+    Extension(TokenPrefix(token)): Extension<TokenPrefix>,
     Path((kb, category, id)): Path<(String, String, String)>,
     headers: HeaderMap,
     body: Bytes,
@@ -199,6 +313,9 @@ async fn put_entry(
     let precondition = precondition_from(&headers)?;
     let device = device_from(&headers);
 
+    let label = format!("{category}/{id}");
+    let kb_id = kb.clone();
+    let logged_device = device.clone();
     let store = Arc::clone(&state);
     let outcome = blocking(move || {
         store.store.put_entry(
@@ -213,28 +330,84 @@ async fn put_entry(
             },
         )
     })
-    .await??;
+    .await?;
 
-    Ok(match outcome {
-        PutOutcome::Created => StatusCode::CREATED,
-        PutOutcome::Replaced => StatusCode::NO_CONTENT,
-    })
+    // A rejected write is logged too, and it is the interesting one: a 412 is
+    // this server telling one machine that another got there first, and reading
+    // that sentence in the activity page is the whole reason the page exists.
+    let outcome = match outcome {
+        Ok(outcome) => outcome,
+        Err(e) => {
+            let error = ApiError::from(e);
+            state.audit.entry(crate::audit::EntryLog {
+                action: "replace",
+                kb: &kb_id,
+                path: &label,
+                device: logged_device.as_deref(),
+                token: token.as_deref(),
+                status: error.status.as_u16(),
+                detail: Some(error.message.clone()),
+            });
+            return Err(error);
+        }
+    };
+
+    let (action, status) = match outcome {
+        PutOutcome::Created => ("create", StatusCode::CREATED),
+        PutOutcome::Replaced => ("replace", StatusCode::NO_CONTENT),
+    };
+    state.audit.entry(crate::audit::EntryLog {
+        action,
+        kb: &kb_id,
+        path: &label,
+        device: logged_device.as_deref(),
+        token: token.as_deref(),
+        status: status.as_u16(),
+        detail: None,
+    });
+    Ok(status)
 }
 
 async fn delete_entry(
     State(state): State<Arc<AppState>>,
+    Extension(TokenPrefix(token)): Extension<TokenPrefix>,
     Path((kb, category, id)): Path<(String, String, String)>,
     headers: HeaderMap,
 ) -> Result<StatusCode, ApiError> {
     let precondition = precondition_from(&headers)?;
     let device = device_from(&headers);
+    let label = format!("{category}/{id}");
+    let kb_id = kb.clone();
+    let logged_device = device.clone();
     let store = Arc::clone(&state);
-    blocking(move || {
+    let result = blocking(move || {
         store
             .store
             .delete_entry(&kb, &category, &id, precondition, device.as_deref())
     })
-    .await??;
+    .await?;
+    if let Err(e) = result {
+        let error = ApiError::from(e);
+        state.audit.entry(crate::audit::EntryLog {
+            action: "delete",
+            kb: &kb_id,
+            path: &label,
+            device: logged_device.as_deref(),
+            token: token.as_deref(),
+            status: error.status.as_u16(),
+            detail: Some(error.message.clone()),
+        });
+        return Err(error);
+    }
+    state.audit.entry(crate::audit::EntryLog {
+        action: "delete",
+        kb: &kb_id,
+        path: &label,
+        device: logged_device.as_deref(),
+        token: token.as_deref(),
+        status: 204,
+        detail: None,
+    });
     Ok(StatusCode::NO_CONTENT)
 }
 

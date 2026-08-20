@@ -120,6 +120,44 @@ pub struct Manifest {
     pub entries: Vec<ManifestEntry>,
 }
 
+/// One stored payload file, as the maintenance scans see it.
+#[derive(Debug, Clone, Serialize)]
+pub struct PayloadFile {
+    #[serde(rename = "fileName")]
+    pub file_name: String,
+    #[serde(skip)]
+    pub path: PathBuf,
+    pub hash: String,
+    pub size: u64,
+    #[serde(rename = "updatedAtMs")]
+    pub updated_at_ms: u64,
+}
+
+/// An entry with more than one payload file — the residue of a crash between
+/// the commit rename and the sweep that removes the previous version.
+#[derive(Debug, Clone, Serialize)]
+pub struct DuplicateEntry {
+    pub kb: String,
+    pub path: String,
+    /// The one a download would return.
+    pub keeper: PayloadFile,
+    /// The superseded ones, newest first.
+    pub losers: Vec<PayloadFile>,
+}
+
+/// A file left in a knowledge base's `tmp/` by an interrupted upload.
+#[derive(Debug, Clone, Serialize)]
+pub struct StrayFile {
+    pub kb: String,
+    /// Relative to the data directory, for display.
+    pub rel: String,
+    #[serde(skip)]
+    pub path: PathBuf,
+    pub size: u64,
+    #[serde(rename = "updatedAtMs")]
+    pub updated_at_ms: u64,
+}
+
 /// What the caller believes is currently stored, if anything.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Precondition {
@@ -599,6 +637,228 @@ impl Store {
             digest: format!("{:x}", hasher.finalize()),
             entries,
         })
+    }
+
+    // ── Administration ──────────────────────────────────────────────────────
+    //
+    // Everything below exists for the admin console and has no client on the
+    // sync API. It is kept in this module rather than beside the console's
+    // handlers because it touches the same layout the rest of the file owns —
+    // a second place that knows `<id>.<hash>.zip` is a second place to get it
+    // wrong.
+
+    /// The data directory, for the maintenance scans that walk it directly.
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
+    /// One knowledge base's directory.
+    pub fn kb_path(&self, kb: &str) -> PathBuf {
+        self.kb_dir(kb)
+    }
+
+    /// Change a knowledge base's display name.
+    ///
+    /// The **id** is deliberately not changeable: it is the entry's address in
+    /// every client's binding and in every URL, and renaming it would silently
+    /// unbind every machine. The display name is the part that was always free
+    /// to change — `meta.json` is the only place it appears.
+    pub fn rename_kb(&self, kb: &str, name: &str) -> Result<KbSummary> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(StoreError::Invalid("a name is required".into()));
+        }
+        if name.chars().count() > 80 {
+            return Err(StoreError::Invalid("that name is too long".into()));
+        }
+        let lock = self.lock_for(kb);
+        let _guard = lock.lock().expect("kb lock poisoned");
+
+        let mut meta = self
+            .read_kb_meta(kb)
+            .ok_or_else(|| StoreError::NoSuchKb(kb.to_string()))?;
+        meta.name = name.to_string();
+        fs::write(
+            self.kb_dir(kb).join("meta.json"),
+            serde_json::to_vec_pretty(&meta).unwrap(),
+        )?;
+        Ok(self.summarise(meta))
+    }
+
+    /// Delete a knowledge base and everything in it.
+    ///
+    /// `meta.json` goes first, so a failure part-way through leaves a directory
+    /// that `list_kbs` already skips rather than a listed base whose entries are
+    /// half gone — the same ordering `create_kb` uses in reverse, and for the
+    /// same reason.
+    pub fn delete_kb(&self, kb: &str) -> Result<()> {
+        self.require_kb(kb)?;
+        let lock = self.lock_for(kb);
+        let _guard = lock.lock().expect("kb lock poisoned");
+
+        let dir = self.kb_dir(kb);
+        let _ = fs::remove_file(dir.join("meta.json"));
+        fs::remove_dir_all(&dir)?;
+        self.locks.lock().expect("lock map poisoned").remove(kb);
+        Ok(())
+    }
+
+    /// Total bytes of one knowledge base's stored payloads.
+    ///
+    /// Sums the payload files rather than the directory, so it answers "how much
+    /// of this is the author's work" and not "how many blocks did the filesystem
+    /// spend" — the number the console puts next to an entry count.
+    pub fn kb_bytes(&self, kb: &str) -> u64 {
+        let mut total = 0u64;
+        let entries_root = self.kb_dir(kb).join("entries");
+        let Ok(categories) = fs::read_dir(&entries_root) else {
+            return 0;
+        };
+        for category in categories.flatten() {
+            let Ok(files) = fs::read_dir(category.path()) else {
+                continue;
+            };
+            for file in files.flatten() {
+                let name = file.file_name().to_string_lossy().to_string();
+                if split_payload_name(&name).is_none() {
+                    continue;
+                }
+                if let Ok(meta) = file.metadata() {
+                    total += meta.len();
+                }
+            }
+        }
+        total
+    }
+
+    /// Every payload file that is *not* the one `find_payload` would serve.
+    ///
+    /// These are the leftovers of a crash between the commit rename and the
+    /// sweep that removes the previous version. Returned as
+    /// `(kb, path, keeper, losers)` so the console can show which file wins
+    /// before offering to delete the rest — deleting the wrong one of two files
+    /// that differ only in a hash is not a mistake anyone can see afterwards.
+    pub fn duplicate_payloads(&self) -> Vec<DuplicateEntry> {
+        let mut out = Vec::new();
+        let Ok(kbs) = fs::read_dir(self.kbs_dir()) else {
+            return out;
+        };
+        for kb_dir in kbs.flatten() {
+            let kb = kb_dir.file_name().to_string_lossy().to_string();
+            let Ok(categories) = fs::read_dir(kb_dir.path().join("entries")) else {
+                continue;
+            };
+            for category in categories.flatten() {
+                let cat_name = category.file_name().to_string_lossy().to_string();
+                let Ok(files) = fs::read_dir(category.path()) else {
+                    continue;
+                };
+                let mut by_id: HashMap<String, Vec<PayloadFile>> = HashMap::new();
+                for file in files.flatten() {
+                    let name = file.file_name().to_string_lossy().to_string();
+                    let Some((id, hash)) = split_payload_name(&name) else {
+                        continue;
+                    };
+                    let Ok(meta) = file.metadata() else { continue };
+                    by_id.entry(id).or_default().push(PayloadFile {
+                        file_name: name,
+                        path: file.path(),
+                        hash,
+                        size: meta.len(),
+                        updated_at_ms: mtime_ms(&meta),
+                    });
+                }
+                for (id, mut files) in by_id {
+                    if files.len() < 2 {
+                        continue;
+                    }
+                    // Same ordering as `find_payload`: newest mtime wins, hash
+                    // breaks the tie, so the file this reports as the keeper is
+                    // the file a download would actually return.
+                    files.sort_by(|a, b| {
+                        (b.updated_at_ms, b.hash.as_str()).cmp(&(a.updated_at_ms, a.hash.as_str()))
+                    });
+                    let keeper = files.remove(0);
+                    out.push(DuplicateEntry {
+                        kb: kb.clone(),
+                        path: format!("{cat_name}/{id}"),
+                        keeper,
+                        losers: files,
+                    });
+                }
+            }
+        }
+        out.sort_by(|a, b| (a.kb.as_str(), a.path.as_str()).cmp(&(b.kb.as_str(), b.path.as_str())));
+        out
+    }
+
+    /// Delete every superseded payload. Returns (files removed, bytes freed).
+    pub fn remove_duplicate_payloads(&self) -> (usize, u64) {
+        let mut files = 0usize;
+        let mut bytes = 0u64;
+        for duplicate in self.duplicate_payloads() {
+            // Under the base's own write lock: a concurrent upload to this entry
+            // is creating exactly the kind of second file this sweep deletes.
+            let lock = self.lock_for(&duplicate.kb);
+            let _guard = lock.lock().expect("kb lock poisoned");
+            for loser in &duplicate.losers {
+                if fs::remove_file(&loser.path).is_ok() {
+                    files += 1;
+                    bytes += loser.size;
+                }
+            }
+        }
+        (files, bytes)
+    }
+
+    /// Staged uploads left behind by a killed process.
+    pub fn stray_staging(&self) -> Vec<StrayFile> {
+        let mut out = Vec::new();
+        let Ok(kbs) = fs::read_dir(self.kbs_dir()) else {
+            return out;
+        };
+        for kb_dir in kbs.flatten() {
+            let kb = kb_dir.file_name().to_string_lossy().to_string();
+            let tmp = kb_dir.path().join("tmp");
+            let Ok(files) = fs::read_dir(&tmp) else {
+                continue;
+            };
+            for file in files.flatten() {
+                let Ok(meta) = file.metadata() else { continue };
+                if !meta.is_file() {
+                    continue;
+                }
+                out.push(StrayFile {
+                    kb: kb.clone(),
+                    rel: format!("kbs/{kb}/tmp/{}", file.file_name().to_string_lossy()),
+                    path: file.path(),
+                    size: meta.len(),
+                    updated_at_ms: mtime_ms(&meta),
+                });
+            }
+        }
+        out.sort_by(|a, b| a.rel.cmp(&b.rel));
+        out
+    }
+
+    /// Remove every staged file. Returns (files removed, bytes freed).
+    ///
+    /// Safe at any time and in any state: a staged file is only ever read by the
+    /// `rename` that commits it, and that rename happens microseconds after the
+    /// write inside one locked call. Anything still sitting there belongs to a
+    /// process that is gone.
+    pub fn clear_staging(&self) -> (usize, u64) {
+        let mut files = 0usize;
+        let mut bytes = 0u64;
+        for stray in self.stray_staging() {
+            let lock = self.lock_for(&stray.kb);
+            let _guard = lock.lock().expect("kb lock poisoned");
+            if fs::remove_file(&stray.path).is_ok() {
+                files += 1;
+                bytes += stray.size;
+            }
+        }
+        (files, bytes)
     }
 }
 
@@ -1114,9 +1374,13 @@ mod tests {
             s.create_kb("Same Name", None).unwrap().meta.id,
             "same-name-2"
         );
-        // A non-ASCII display name keeps its name but gets a generic id.
+        // A non-ASCII display name keeps its name and gets a digest-derived id,
+        // so two of them are told apart by the id rather than by which was made
+        // first (see `ids::slug_for_kb_name`).
         let cjk = s.create_kb("我的武侠世界", None).unwrap().meta;
-        assert_eq!(cjk.id, "kb");
+        assert!(cjk.id.starts_with("kb-"), "{}", cjk.id);
         assert_eq!(cjk.name, "我的武侠世界");
+        let other = s.create_kb("东海奇谭", None).unwrap().meta;
+        assert_ne!(other.id, cjk.id);
     }
 }
