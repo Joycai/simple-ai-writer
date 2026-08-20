@@ -34,6 +34,14 @@ per-agent 模型、`@` 引用、旁白 agent + 四个 scene 工具、新建/编�
 | 自动批准的 key 是本次运行的 `AbortController` | `CHAT_AUTO_APPROVE_KEY` 是对话助手专用的字面量；几个 roleplay agent 共用一个字面量会让 A 的「本次都批准」悄悄覆盖到 B。用对象身份，`autoApproveScope()` 自动把它判成 run 级。 |
 | 「把对话写进正文」没有新工具 | 旁白读完场景后自己改写成散文，再走现成的 `create_chapter` / `append_file` / `propose_edit`。新建一个 `compose_from_scene` 只会重复实现审批卡、备份和占位符校验。 |
 
+## 2.5 已知缺口（不是取舍，是漏掉的）
+
+| 缺口 | 后果 | 
+|---|---|
+| **审批卡不在扮演面板里渲染** | 旁白调 `propose_edit` / `create_chapter` / `append_file` 时，提案进的是 `agentStore.pending`，而那个队列由 `AgentChat` / `AiPanel` 渲染——卡片会出现在**「对话助手」tab 里**，扮演面板这边只看到旁白停住不动。运行不会挂死（切过去仍能批准），但旁白最重要的那条能力实际上走不通。**下一轮第一件事。** |
+| **没接 `onRoundLimit` / `onTruncationLimit`** | 扮演 agent 是刻意的（`maxRounds: 4`，撞到就 force-text 收尾是对的降级）；**旁白不是**——它 `maxRounds: 20`，读几场戏再写一段正文完全可能撞上，而撞上就直接收尾，作者没有「继续」的机会。要接，得先有能渲染 `RoundLimitCard` 的地方，和上一条是同一件事。 |
+| 「设定已更新」只对**打开过**的会话生效 | `checkBindings` 只比对有 `boundHash` 的会话，而 `boundHash` 在首次播种时才写。没打开过的 agent 即使绑定条目改了，花名册上也不会亮。 |
+
 ## 3. 与设计稿的差异（明确没做的部分）
 
 | 设计稿里的东西 | 为什么没做 |
@@ -44,6 +52,13 @@ per-agent 模型、`@` 引用、旁白 agent + 四个 scene 工具、新建/编�
 | 执行日志那行「查了 3 项设定 · 沈砚/寡言、… · 1.4s · 2.3k tok」 | 折成「执行日志 · N 步」，展开是现成的 `AgentLog`。设计稿那行要的字段散在三处，而 `AgentLog` 已经把它们都渲染好了——为一行摘要再拼一遍是重复实现。 |
 | `@` 插入后的芯片行 | 现在只在输入框脚注显示「N 项引用」。芯片要能单独移除，那是 `AgentChat` 里已有的一套 UI，值得抽出来共用而不是抄一遍——留给下一轮。 |
 | 首次使用默认展开语法提示 | 默认折成一行。「第一次」需要一个 pref，而这条提示折起来也已经写着四种标记了。 |
+
+## 3.5 对话助手有、扮演还没有的
+
+都是可以整体搬过来的既有组件，这一轮为了先把主干跑通没接：图片附件（`send` 里
+`allowImages: false`）、引用选中的正文段落、上下文构成条（`contextBreakdown`）、
+子代理的会话级开关 chips、任务工作区入口、片段插入。另外 `RoleplayAgent.authorPersona`
+（每个 agent 单独覆盖「我此刻是谁」）类型有、UI 没有，目前恒为 null，永远走全局设置。
 
 ## 4. 新增的设计令牌
 
