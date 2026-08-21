@@ -23,12 +23,19 @@
  * Pure and store-free on purpose — it takes three plain hash maps and returns a
  * plan. That is what lets the interesting cases be tested as data instead of by
  * driving a server and two filesystems.
+ *
+ * On top of that sits one editable bit per step: `decision` (`withDecisions`).
+ * The plan says what a mirror *would* do; the author says which of those steps
+ * they actually want. Skipping is expressed here and nowhere else — the
+ * executor simply never sees a skipped step, so nothing downstream has to
+ * learn a second notion of "what runs".
  */
 
 import type {
   EntryPath,
   HashMap,
   SyncAction,
+  SyncDecision,
   SyncDirection,
   SyncPlan,
   SyncStep,
@@ -51,6 +58,10 @@ export interface PlanInput {
  * alone. Leaving them would make deletions un-syncable — remove an entry on one
  * machine, push, pull on the other, and it is still there; push back and it
  * returns to the first (docs §14.1).
+ *
+ * That is the *proposal*, though, not a verdict: the author can then skip any
+ * step, and a skipped delete is exactly "keep this one, it only exists here"
+ * (docs §19).
  */
 export function planSync({ local, remote, snapshot, direction }: PlanInput): SyncPlan {
   const paths = [...new Set([...Object.keys(local), ...Object.keys(remote), ...Object.keys(snapshot)])].sort();
@@ -58,15 +69,50 @@ export function planSync({ local, remote, snapshot, direction }: PlanInput): Syn
 
   const steps = paths.map((path) => step(path, local[path], remote[path], snapshot[path], direction));
 
-  const summary = {
-    create: steps.filter((s) => s.action === "create").length,
-    overwrite: steps.filter((s) => s.action === "overwrite").length,
-    delete: steps.filter((s) => s.action === "delete").length,
-    unchanged: steps.filter((s) => s.action === "none").length,
-    warnings: steps.filter((s) => s.warning !== null).length,
-  };
+  return { direction, steps, firstSync, summary: summarize(steps) };
+}
 
-  return { direction, steps, firstSync, summary };
+/**
+ * Recount a plan. Everything but `unchanged` counts **applied** steps only —
+ * see `SyncPlan.summary`.
+ */
+function summarize(steps: readonly SyncStep[]): SyncPlan["summary"] {
+  const runs = steps.filter((s) => s.action !== "none" && s.decision === "apply");
+  return {
+    create: runs.filter((s) => s.action === "create").length,
+    overwrite: runs.filter((s) => s.action === "overwrite").length,
+    delete: runs.filter((s) => s.action === "delete").length,
+    unchanged: steps.filter((s) => s.action === "none").length,
+    warnings: runs.filter((s) => s.warning !== null).length,
+    skipped: steps.filter((s) => s.action !== "none" && s.decision === "skip").length,
+  };
+}
+
+/** Whether this step is something the author can turn off. */
+export function canDecide(step: SyncStep): boolean {
+  return step.action !== "none";
+}
+
+/**
+ * The plan with `decision` set on the named steps — the only way the preview
+ * changes a plan.
+ *
+ * Returns a new plan rather than mutating one: the summary has to be recounted
+ * alongside, and a screen that renders counts from a mutated object is how
+ * "the button still says 3 conflicts" bugs happen. Paths that do not exist, or
+ * name an unchanged entry, are ignored — there is nothing to decide about an
+ * entry both sides already agree on.
+ */
+export function withDecisions(
+  plan: SyncPlan,
+  paths: readonly EntryPath[],
+  decision: SyncDecision,
+): SyncPlan {
+  const targets = new Set(paths);
+  const steps = plan.steps.map((s) =>
+    targets.has(s.path) && canDecide(s) && s.decision !== decision ? { ...s, decision } : s,
+  );
+  return { ...plan, steps, summary: summarize(steps) };
 }
 
 function step(
@@ -97,13 +143,20 @@ function step(
   // nothing to do and nothing to warn about — even when both sides edited their
   // way here independently, and even when the snapshot disagrees with both.
   if (sourceHash === targetHash) {
-    return { ...base, action: "none", warning: null };
+    return { ...base, action: "none", decision: "apply", warning: null };
   }
 
   const action: SyncAction =
     sourceHash === undefined ? "delete" : targetHash === undefined ? "create" : "overwrite";
 
-  return { ...base, action, warning: warningFor(action, localChanged, remoteChanged, direction) };
+  return {
+    ...base,
+    action,
+    // Planned as "apply" throughout: the plan states what a mirror does, and
+    // anything the author wants left out is a decision they make on top of it.
+    decision: "apply",
+    warning: warningFor(action, localChanged, remoteChanged, direction),
+  };
 }
 
 /**
@@ -144,9 +197,21 @@ function warningFor(
   }
 }
 
-/** The steps a sync would actually execute, in a deterministic order. */
+/**
+ * The steps a sync would actually execute, in a deterministic order.
+ *
+ * Skipped steps are absent, which is what keeps the executor and the snapshot
+ * honest without either of them knowing the feature exists: a step that never
+ * runs never reports success, so `advanceSnapshot` never records it as synced
+ * and the next plan proposes it again.
+ */
 export function actionableSteps(plan: SyncPlan): SyncStep[] {
-  return plan.steps.filter((s) => s.action !== "none");
+  return plan.steps.filter((s) => s.action !== "none" && s.decision === "apply");
+}
+
+/** Every step the author could still turn on or off, skipped ones included. */
+export function decidableSteps(plan: SyncPlan): SyncStep[] {
+  return plan.steps.filter(canDecide);
 }
 
 /** True when running this plan would discard something on the receiving side. */

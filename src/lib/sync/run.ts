@@ -27,6 +27,9 @@
  * A step that fails does not abort the run: the remaining entries are still
  * worth syncing, and the snapshot advances only for the ones that landed, so a
  * retry re-plans the rest correctly instead of treating them all as conflicts.
+ * A step the author *skipped* is the same case seen from the other end — it
+ * never reaches here at all (`actionableSteps`), so the two sides stay
+ * genuinely out of sync and the next plan says so again.
  */
 
 import {
@@ -101,6 +104,20 @@ export async function runSync(options: RunOptions): Promise<SyncRunResult> {
   const succeeded: string[] = [];
   const failures: StepFailure[] = [];
   const reached: Record<string, string> = {};
+  // Entries whose snapshot value this run is entitled to move. Steps that ran
+  // are added as they land; the ones seeded here are those the plan found
+  // *already identical* on both sides — they are in sync whether or not
+  // anything executed, and leaving them out is how a snapshot ends up missing
+  // the very entries a later edit will be judged against. (Absent from the
+  // snapshot, an edit on one side reads as "both sides moved", so a push of
+  // your own work would be reported as a two-sided conflict.)
+  const settled: string[] = [];
+  for (const step of plan.steps) {
+    if (step.action !== "none") continue;
+    settled.push(step.path);
+    // Both sides agree there is nothing here: `advanceSnapshot` drops it.
+    if (step.sourceHash) reached[step.path] = step.sourceHash;
+  }
 
   for (const [index, step] of steps.entries()) {
     onProgress?.(index, steps.length, step.path);
@@ -108,6 +125,7 @@ export async function runSync(options: RunOptions): Promise<SyncRunResult> {
       if (plan.direction === "push") await pushStep(options, step, staging);
       else await pullStep(options, step, staging);
       succeeded.push(step.path);
+      settled.push(step.path);
       // The state both sides now hold. A delete leaves nothing, and
       // `advanceSnapshot` reads the missing key as "drop it".
       if (step.sourceHash) reached[step.path] = step.sourceHash;
@@ -129,7 +147,7 @@ export async function runSync(options: RunOptions): Promise<SyncRunResult> {
     backupPath,
     binding: {
       ...binding,
-      snapshot: advanceSnapshot(binding.snapshot, reached, succeeded),
+      snapshot: advanceSnapshot(binding.snapshot, reached, settled),
       // Stamped only when everything landed. A partial run leaves the previous
       // timestamp, so "last synced" never claims a completeness it lacks.
       lastSyncAt: failures.length === 0 ? new Date().toISOString() : binding.lastSyncAt,

@@ -11,6 +11,11 @@
  * A mirror in the wrong direction destroys work, and the only thing standing
  * between the author and that is being shown, per entry, what is about to
  * happen and which of those steps discards something.
+ *
+ * The mirror is the default shape, not a straitjacket: in that preview the
+ * author can turn any single step off (`SyncDecision`), which is what makes
+ * "pull the shared entries but keep my local-only drafts" expressible without
+ * giving up the direction.
  */
 
 /** An entry's identity on both sides: `<category>/<entity id>`. */
@@ -53,6 +58,22 @@ export interface SyncBinding {
 export type SyncAction = "create" | "overwrite" | "delete" | "none";
 
 /**
+ * What the author decided about a step.
+ *
+ * A whole-tree mirror is the *default*, not a law: `skip` leaves one entry
+ * untouched on both sides, which is how "keep the drafts that only exist on
+ * this machine" is expressed without abandoning the direction. Everything a
+ * selective sync needs is this one bit — keeping a local-only entry through a
+ * pull, adding without overwriting on a push, and ignoring a remote-only entry
+ * are the same decision seen from three angles (docs §19).
+ *
+ * A skip is **per run**, never remembered: the entry is genuinely out of sync
+ * afterwards, and the snapshot (`SyncBinding.snapshot`) must keep saying so or
+ * the next plan would mistake "we agreed to differ" for "we agreed".
+ */
+export type SyncDecision = "apply" | "skip";
+
+/**
  * Why a step deserves a second look. Non-null means the step **discards
  * something the receiving side gained since the last sync** — the only class of
  * outcome a one-way mirror cannot undo for you.
@@ -87,6 +108,10 @@ export interface SyncStep {
   /** Hash on the receiving side; null when it does not exist there. */
   targetHash: string | null;
   warning: SyncWarning | null;
+  /** Whether this step runs. Always `"apply"` as planned; the author turns
+   *  individual steps off in the preview. A `none` step carries `"apply"` and
+   *  ignores it — there is nothing to skip. */
+  decision: SyncDecision;
   /** True when the local copy differs from the last-sync snapshot. */
   localChanged: boolean;
   /** True when the remote copy differs from the last-sync snapshot. */
@@ -102,11 +127,24 @@ export interface SyncPlan {
    *  binding). Every difference then reads as a conflict, which is accurate but
    *  worth saying out loud rather than alarming the author with. */
   firstSync: boolean;
+  /**
+   * Counts over the steps that will **actually run** — skipped ones are
+   * excluded from `create`/`overwrite`/`delete`/`warnings` and counted in
+   * `skipped` instead.
+   *
+   * That is what makes the summary usable as the button label and the
+   * acknowledgement gate: turning a two-sided conflict off resolves it, and a
+   * screen that still demanded "I understand 3 conflicts" after the author
+   * skipped all three would be describing a run that is not going to happen.
+   * Per-action totals *including* skipped steps are a `plan.steps` filter away
+   * where a filter chip needs them.
+   */
   summary: {
     create: number;
     overwrite: number;
     delete: number;
     unchanged: number;
     warnings: number;
+    skipped: number;
   };
 }

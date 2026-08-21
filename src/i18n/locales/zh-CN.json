@@ -1908,7 +1908,7 @@
     "needProject": "先打开一个项目，再配置同步。",
     "subIntro": "把设定集备份到你自己的服务器，在另一台机器上继续写。同步是单向镜像：每次以一侧为准，覆盖另一侧。",
     "subConnected": "已连接服务器，还没有绑定知识库。",
-    "subBound": "已绑定。两个动作都会先展示预览，确认后才执行。",
+    "subBound": "已绑定。两个动作都会先展示预览，确认后才执行；预览里可以逐条跳过，不想同步的条目会原样留在两侧。",
     "sectionServer": "服务器",
     "serverAddress": "服务器地址",
     "serverAddressDesc": "你自己搭建的备份服务，支持 HTTPS 与局域网地址。",
@@ -1961,11 +1961,13 @@
     "colRemote": "远端",
     "colSource": "来源",
     "colTarget": "将被改写",
+    "colDecision": "本次执行",
     "filterAll": "全部",
     "filterRisk": "需要注意",
     "filterCreate": "新增",
     "filterOverwrite": "覆盖",
     "filterDelete": "删除",
+    "filterSkipped": "已跳过",
     "filterUnchanged": "未变化",
     "searchPlaceholder": "筛选条目名…",
     "ordinary": "常规变更",
@@ -1980,6 +1982,19 @@
       "delete": "删除",
       "none": "不变"
     },
+    "decide": {
+      "off": {
+        "create": "跳过",
+        "overwrite": "跳过",
+        "delete": "保留",
+        "none": "跳过"
+      },
+      "restore": "恢复"
+    },
+    "bulkSkip": "跳过这 {{n}} 条",
+    "bulkRestore": "恢复 {{n}} 条",
+    "skippedNote": "已跳过 {{n}} 条：这些条目两侧都保持原样，下次同步会再次列出。",
+    "nothingToRun": "没有要执行的条目",
     "warn": {
       "both-changed": "两边都改过 —— 无论往哪个方向，都会丢掉一侧的修改",
       "overwrites-newer": "对方比你新 —— 这会用你未修改的旧版本覆盖掉它",

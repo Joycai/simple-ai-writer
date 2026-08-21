@@ -1913,7 +1913,7 @@
     "needProject": "Open a project first to configure sync.",
     "subIntro": "Back the knowledge base up to your own server and carry on writing on another machine. Sync is a one-way mirror: one side wins and overwrites the other.",
     "subConnected": "Connected. No knowledge base bound yet.",
-    "subBound": "Bound. Both actions show a preview first and only run once you confirm.",
+    "subBound": "Bound. Both actions show a preview first and only run once you confirm; skip individual entries there and they stay as they are on both sides.",
     "sectionServer": "Server",
     "serverAddress": "Server address",
     "serverAddressDesc": "Your own backup server; HTTPS and LAN addresses both work.",
@@ -1966,11 +1966,13 @@
     "colRemote": "Remote",
     "colSource": "source",
     "colTarget": "will be rewritten",
+    "colDecision": "This run",
     "filterAll": "All",
     "filterRisk": "Needs attention",
     "filterCreate": "Added",
     "filterOverwrite": "Overwritten",
     "filterDelete": "Deleted",
+    "filterSkipped": "Skipped",
     "filterUnchanged": "Unchanged",
     "searchPlaceholder": "Filter by name…",
     "ordinary": "Ordinary changes",
@@ -1985,6 +1987,19 @@
       "delete": "Delete",
       "none": "Same"
     },
+    "decide": {
+      "off": {
+        "create": "Skip",
+        "overwrite": "Skip",
+        "delete": "Keep",
+        "none": "Skip"
+      },
+      "restore": "Restore"
+    },
+    "bulkSkip": "Skip these {{n}}",
+    "bulkRestore": "Restore {{n}}",
+    "skippedNote": "{{n}} skipped: those entries stay as they are on both sides, and will be listed again next time.",
+    "nothingToRun": "Nothing left to run",
     "warn": {
       "both-changed": "Changed on both sides — whichever way you go, one side's edits are lost",
       "overwrites-newer": "Theirs is newer — this replaces it with your untouched older copy",
