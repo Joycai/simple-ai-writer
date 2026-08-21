@@ -120,7 +120,10 @@ thinking block 开头、后跟 `tool_use`。缺了就是回传没生效。
 | 2.7.2 | `pause_turn` → verbatim 续跑是否成功 | 问一个会触发多次搜索的问题，看 API 日志里 `leg:2` 的请求体：应是**原样回传的块**（含 `encrypted_content`），且不被 400 拒 | 这是与 MiniMax 分叉的那条正路（§10.5/§10.7），从未走通过一次 |
 | 2.7.3 | `usage.server_tool_use.web_search_requests` 有没有 | 看响应 usage | 与 2.6.14 同一问题，官方端点上按官方文档应当存在；验到即可把搜索次数计入用量面板 |
 
-### 2.8 提示缓存（`cache_control`）
+### 2.8 提示缓存（`cache_control`）—— **暂缓，backlog**
+
+> 作者 2026-08-21 的判断：这条暂时用不上，不急着验。放在这里当待办，不是阻塞项。
+> 想做的时候，2.8.4 是收益最大的一格（MiniMax-M3 是本项目最常用的中转端点）。
 
 ④ 族的 prompt caching 是**显式**的（[`api/landscape.md`](api/landscape.md) §5）：
 不打断点就一定不缓存。1.22 起官方端点会在 `tools` 最后一项和 `system` 上各打一个
