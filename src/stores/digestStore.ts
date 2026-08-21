@@ -22,6 +22,7 @@ import { loadApiKey } from "../lib/keyStore";
 import { useAiStore } from "./aiStore";
 import { useProjectStore } from "./projectStore";
 import { useEditorStore } from "./editorStore";
+import { isSamePath } from "../lib/paths";
 
 /**
  * Collection-digest generation (library view). One run at a time, per-volume,
@@ -76,7 +77,7 @@ export const useDigestStore = create<DigestState>((set, get) => ({
       const items: DigestSourceItem[] = [];
       const chapterMeta: { rel: string; hash: string }[] = [];
       for (const ch of volume.chapters) {
-        const content = ch.path === activeFilePath
+        const content = isSamePath(ch.path, activeFilePath)
           ? useEditorStore.getState().content
           : await readFile(ch.path);
         const memory = await loadMemory(projectPath, ch.path);

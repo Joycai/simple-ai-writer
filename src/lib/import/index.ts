@@ -36,6 +36,7 @@ import { decodeText } from "./text";
 import { tidyMarkdown } from "./markdown";
 import { pptxToMarkdown } from "../fs/pptx";
 import { xlsxToMarkdown } from "./xlsx";
+import { baseName } from "../paths";
 
 /**
  * What gets converted to markdown. Legacy .doc/.xls/.ppt are left out on
@@ -96,11 +97,8 @@ export function importMode(name: string): ImportMode | null {
   return null;
 }
 
-/** Basename of a picked path, tolerant of both separator styles. */
-export function baseName(path: string): string {
-  const sep = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
-  return path.slice(sep + 1);
-}
+/** Basename of a picked path. Re-exported so importers need one import. */
+export { baseName };
 
 /** "招标文件.docx" → "招标文件.md" (source extension swapped, not appended). */
 export function markdownName(sourceName: string): string {

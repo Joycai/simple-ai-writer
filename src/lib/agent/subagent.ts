@@ -20,6 +20,7 @@ import { runAgent, type AgentRunResult } from "./runtime";
 import type { ToolContext } from "./registry";
 import type { ToolCall, ToolResult } from "./tools";
 import { writeTaskNote } from "./taskWorkspace";
+import { baseName } from "../paths";
 
 export type SubAgentKind = "search" | "vision" | "longread" | "pdf" | "imagegen";
 
@@ -147,7 +148,7 @@ async function loadProjectPdf(
   }
   return {
     dataUrl: `data:application/pdf;base64,${bytesToBase64(bytes)}`,
-    name: path.split(/[\\/]/).pop() ?? "document.pdf",
+    name: baseName(path) || "document.pdf",
   };
 }
 

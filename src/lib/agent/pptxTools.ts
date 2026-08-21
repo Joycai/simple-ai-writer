@@ -16,7 +16,7 @@
  */
 
 import { fileExists } from "../fs/fileio";
-import { isWorkspacePath } from "../paths";
+import { resolveWorkspacePath } from "../paths";
 import { pptxPathFor } from "../pptx";
 import type { PptxProposal, ToolContext } from "./registry";
 import type { ToolResult } from "./tools";
@@ -35,11 +35,12 @@ export async function exportPptxTool(
     };
   }
 
-  const source = args.html_path?.trim();
-  if (!source) {
+  const rawSource = args.html_path?.trim();
+  if (!rawSource) {
     return { toolCallId, content: "Error: 'html_path' is required — the .html page to convert." };
   }
-  if (!isWorkspacePath(ctx.projectPath, source)) {
+  const source = resolveWorkspacePath(ctx.projectPath, rawSource);
+  if (!source) {
     return { toolCallId, content: "Error: Path is outside the project (the app's .ai-writer data is off-limits)." };
   }
   if (!/\.html?$/i.test(source)) {
@@ -55,8 +56,8 @@ export async function exportPptxTool(
     };
   }
 
-  const target = args.out_path?.trim() || pptxPathFor(source);
-  if (!isWorkspacePath(ctx.projectPath, target)) {
+  const target = resolveWorkspacePath(ctx.projectPath, args.out_path?.trim() || pptxPathFor(source));
+  if (!target) {
     return { toolCallId, content: "Error: the destination is outside the project." };
   }
   if (!/\.pptx$/i.test(target)) {

@@ -7,6 +7,7 @@ import { isPptxExportEnabled } from "../../lib/pptx/flag";
 import { useEditorStore } from "../../stores/editorStore";
 import { useProjectStore } from "../../stores/projectStore";
 import styles from "./HtmlPreview.module.css";
+import { baseName, dirName } from "../../lib/paths";
 
 /**
  * Rebuilding the frame on every keystroke would restart any script in the
@@ -110,7 +111,7 @@ export function HtmlPreview({ source, filePath }: Props) {
   // restart an animation or re-run a page's scripts from the top.
   const [generation, setGeneration] = useState(0);
 
-  const baseDir = filePath ? filePath.replace(/[/\\][^/\\]*$/, "") : null;
+  const baseDir = filePath ? dirName(filePath) : null;
 
   // Both destinations read the file off disk — flush the editor's dirty
   // buffer first so they show what the author is looking at, not the last
@@ -142,7 +143,7 @@ export function HtmlPreview({ source, filePath }: Props) {
       setExportNote(
         t("editor.htmlPreview.pptxDone", {
           n: result.slides,
-          name: result.path.split(/[\\/]/).pop(),
+          name: baseName(result.path),
         }) + (result.degraded.length ? ` · ${result.degraded.length}` : ""),
       );
     } catch (e) {

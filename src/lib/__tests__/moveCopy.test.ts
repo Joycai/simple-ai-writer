@@ -9,10 +9,10 @@ import {
 const WRITING = "/project/writing";
 
 describe("parentDirOf / baseNameOf", () => {
-  it("splits on either separator", () => {
+  it("splits on either separator, answering in the POSIX spelling", () => {
     expect(parentDirOf(`${WRITING}/卷一/第1章.md`)).toBe(`${WRITING}/卷一`);
     expect(baseNameOf(`${WRITING}/卷一/第1章.md`)).toBe("第1章.md");
-    expect(parentDirOf(String.raw`C:\project\writing\第1章.md`)).toBe(String.raw`C:\project\writing`);
+    expect(parentDirOf(String.raw`C:\project\writing\第1章.md`)).toBe("C:/project/writing");
     expect(baseNameOf(String.raw`C:\project\writing\第1章.md`)).toBe("第1章.md");
   });
 });

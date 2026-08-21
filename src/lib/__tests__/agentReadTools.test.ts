@@ -217,6 +217,14 @@ describe("read_file", () => {
     expect(out).toBe("第一行\n第二行");
   });
 
+  // 【当前文件】 hands the model a project-relative path, so it answers with
+  // one; a tool that only accepted absolute paths made that file unreadable.
+  it("accepts a project-relative path", async () => {
+    fs.set(`${PROJECT}/卷一/第1章.md`, "第一行");
+
+    expect(await read({ path: "卷一/第1章.md" })).toBe("第一行");
+  });
+
   it("pages a long file on line boundaries and hands back the next start_line", async () => {
     const line = "甲".repeat(199); // 200 chars with its newline
     fs.set(`${PROJECT}/writing/ch1.md`, Array.from({ length: 50 }, () => line).join("\n"));

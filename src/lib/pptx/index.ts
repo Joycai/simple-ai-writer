@@ -23,6 +23,7 @@ import { readFile, writeBinaryFile } from "../fs/fileio";
 import { degradedSummary } from "./deck";
 import { harvestDeck } from "./harvest";
 import { deckToPptx } from "./write";
+import { dirName } from "../paths";
 
 export { isPptxExportEnabled, setPptxExportEnabled } from "./flag";
 
@@ -35,11 +36,7 @@ export interface PptxExportResult {
 }
 
 /** Directory part of a path — what its relative links resolve against. */
-function dirOf(path: string): string {
-  const norm = path.replace(/\\/g, "/");
-  const cut = norm.lastIndexOf("/");
-  return cut === -1 ? "" : norm.slice(0, cut);
-}
+const dirOf = dirName;
 
 /** "路演.html" → "路演.pptx". The default destination, not a fixed one. */
 export function pptxPathFor(htmlPath: string): string {

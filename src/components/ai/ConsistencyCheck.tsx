@@ -29,6 +29,7 @@ import { openIssues, useConsistencyStore } from "../../stores/consistencyStore";
 import { locateQuote, type ConsistencyIssue } from "../../lib/consistency/model";
 import { categoryLabel, findCategory } from "../../lib/profile";
 import styles from "./ConsistencyCheck.module.css";
+import { baseName, isSamePath } from "../../lib/paths";
 
 const ALL = "__all__";
 const TIMELINE = "timeline";
@@ -73,7 +74,7 @@ export function ConsistencyCheck() {
   // Every write path is against the document the report was made on. Once the
   // author moves to another file the findings are still worth reading, but
   // nothing here may touch the manuscript — see reportMatchesOpenDocument.
-  const onTarget = !!report && report.filePath === openFilePath;
+  const onTarget = !!report && isSamePath(report.filePath, openFilePath);
   const appliable = onTarget ? open.filter((i) => i.suggestion).length : 0;
 
   const goToEntity = (dirPath: string) => {
@@ -159,7 +160,7 @@ export function ConsistencyCheck() {
           <div className={styles.staleDoc}>
             {t("ai.consistency.otherDocument", {
               defaultValue: "这份检查针对的是《{{file}}》。切回该{{doc}}才能应用或跳转。",
-              file: (report.filePath?.split(/[\\/]/).pop() ?? "").replace(/\.md$/i, "")
+              file: baseName(report.filePath ?? "").replace(/\.md$/i, "")
                 || t("ai.consistency.untitledDoc", { defaultValue: "当前文档" }),
               doc: terms.doc,
             })}

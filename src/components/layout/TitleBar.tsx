@@ -7,16 +7,14 @@ import { IS_TAURI, MOD_K } from "../../lib/platform";
 import { ExportMenu } from "./ExportMenu";
 import { useWindowControls } from "./useWindowControls";
 import styles from "./TitleBar.module.css";
+import { baseName, toPosixPath } from "../../lib/paths";
 
 const THEME_ORDER: ThemeMode[] = ["dark", "light", "system"];
 const LANG_ORDER: Language[] = ["zh-CN", "en"];
 const VIEW_MODES: ViewMode[] = ["editor", "split", "preview"];
 
 function basename(p: string | null): string | null {
-  if (!p) return null;
-  const norm = p.replace(/\\/g, "/");
-  const tail = norm.split("/").filter(Boolean).pop();
-  return tail ?? null;
+  return p ? baseName(p) || null : null;
 }
 
 /**
@@ -27,8 +25,8 @@ function basename(p: string | null): string | null {
  */
 function volumeOf(p: string | null, projectPath: string | null): string | null {
   if (!p || !projectPath) return null;
-  const parts = p.replace(/\\/g, "/").split("/").filter(Boolean);
-  const rootDepth = projectPath.replace(/\\/g, "/").split("/").filter(Boolean).length;
+  const parts = toPosixPath(p).split("/").filter(Boolean);
+  const rootDepth = toPosixPath(projectPath).split("/").filter(Boolean).length;
   // parts between the workspace root and the file itself; only the innermost.
   if (parts.length - rootDepth <= 1) return null;
   return parts[parts.length - 2];

@@ -23,6 +23,7 @@ import { loadApiKey } from "../lib/keyStore";
 import { useAiStore } from "./aiStore";
 import { useProjectStore } from "./projectStore";
 import { getWritingFocus, useEditorStore } from "./editorStore";
+import { isSamePath } from "../lib/paths";
 
 /** Tail of the previous summary handed to the next segment for continuity. */
 const PREV_TAIL_CHARS = 400;
@@ -199,7 +200,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
   refreshFreshness: () => {
     const { memory, docPath } = get();
     const { activeFilePath } = useProjectStore.getState();
-    if (!memory || !docPath || docPath !== activeFilePath) return;
+    if (!memory || !isSamePath(docPath, activeFilePath)) return;
     const doc = useEditorStore.getState().content;
     set({ freshness: checkFreshness(doc, memory) });
   },
@@ -228,7 +229,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
       return;
     }
 
-    const existing = get().docPath === activeFilePath ? get().memory : null;
+    const existing = isSamePath(get().docPath, activeFilePath) ? get().memory : null;
     const controller = new AbortController();
     set({ isGenerating: true, progress: { done: 0, total: 0 }, error: null, notice: null, abortController: controller });
 
@@ -289,7 +290,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
     // Prefer live editor content for the open file (picks up unsaved edits).
     let content: string;
     try {
-      content = absFilePath === activeFilePath
+      content = isSamePath(absFilePath, activeFilePath)
         ? useEditorStore.getState().content
         : await readFile(absFilePath);
     } catch (e) {
@@ -329,7 +330,7 @@ export const useMemoryStore = create<MemoryState>((set, get) => ({
         recordUsage(projectPath, model, outcome.usage);
         // Keep the active-doc memory view in sync when we just regenerated it.
         if (
-          (absFilePath === activeFilePath || get().docPath === absFilePath) &&
+          (isSamePath(absFilePath, activeFilePath) || isSamePath(get().docPath, absFilePath)) &&
           get().chapterGenController === controller
         ) {
           set({

@@ -19,6 +19,7 @@
 import { readFile, writeFile, makeDir, fileExists } from "../fs/fileio";
 import { ASSETS_DIR } from "../image/assets";
 import { projectRelativePath } from "./memory";
+import { baseName, dirName, toPosixPath } from "../paths";
 import type { FileNode } from "../project";
 
 export interface Chapter {
@@ -122,7 +123,7 @@ export function naturalCompare(a: string, b: string): number {
  * skips dotfiles).
  */
 export function groupVolumes(fileTree: FileNode[], projectPath: string): Volume[] {
-  const rel = (p: string) => projectRelativePath(projectPath, p) ?? p.replace(/\\/g, "/");
+  const rel = (p: string) => projectRelativePath(projectPath, p) ?? toPosixPath(p);
   const toChapter = (c: FileNode): Chapter => ({ name: c.name, path: c.path, relPath: rel(c.path) });
   const chaptersOf = (nodes: FileNode[]): Chapter[] =>
     nodes.filter((c) => !c.is_dir && isChapterFile(c.name)).map(toChapter);
@@ -141,7 +142,7 @@ export function groupVolumes(fileTree: FileNode[], projectPath: string): Volume[
   const rootFiles = chaptersOf(fileTree);
   const rootResources = resourcesOf(fileTree);
   if (rootFiles.length > 0 || rootResources.length > 0) {
-    const rootName = projectPath.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? "";
+    const rootName = baseName(projectPath);
     volumes.push({ name: rootName, path: projectPath, relPath: "", chapters: rootFiles, resources: rootResources });
   }
 
@@ -167,10 +168,9 @@ export function groupVolumes(fileTree: FileNode[], projectPath: string): Volume[
   return volumes;
 }
 
-/** Directory portion of a path (handles both separator styles). */
+/** Directory portion of a path — the path itself when it has no directory. */
 export function parentDir(path: string): string {
-  const i = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
-  return i >= 0 ? path.slice(0, i) : path;
+  return dirName(path) || path;
 }
 
 /**
@@ -251,7 +251,7 @@ export function renameVolumeInSpine(spine: BookSpine, oldRel: string, newRel: st
 // ─── Persistence ─────────────────────────────────────────────────────────────
 
 function spinePath(projectPath: string): string {
-  return `${projectPath.replace(/\\/g, "/")}/.ai-writer/outline.json`;
+  return `${toPosixPath(projectPath)}/.ai-writer/outline.json`;
 }
 
 /** Load the book spine, or null when absent / invalid. Never throws. */
@@ -276,7 +276,7 @@ export async function loadSpine(projectPath: string): Promise<BookSpine | null> 
 
 export async function saveSpine(projectPath: string, spine: BookSpine): Promise<void> {
   const p = spinePath(projectPath);
-  await makeDir(p.slice(0, p.lastIndexOf("/")));
+  await makeDir(dirName(p));
   await writeFile(p, JSON.stringify(spine, null, 2) + "\n");
 }
 

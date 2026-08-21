@@ -35,6 +35,7 @@ import { useAgentStore, type PendingApproval } from "../../stores/agentStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import type { ResolvedTerms } from "../../lib/profile";
 import styles from "./ApprovalCard.module.css";
+import { baseName, dirName, projectRelative as projectRel, toPosixPath } from "../../lib/paths";
 
 /** Above this, a new chapter's preview is clipped behind a toggle. */
 const CLIP_CHARS = 600;
@@ -42,10 +43,7 @@ const CLIP_CHARS = 600;
 /** Drop the project prefix — the author knows which project they are in. */
 function projectRelative(path: string): string {
   const root = useProjectStore.getState().projectPath;
-  const norm = path.replace(/\\/g, "/");
-  if (!root) return norm;
-  const prefix = root.replace(/\\/g, "/").replace(/\/+$/, "") + "/";
-  return norm.startsWith(prefix) ? norm.slice(prefix.length) : norm;
+  return (root ? projectRel(root, path) : null) ?? toPosixPath(path);
 }
 
 /** Card title — what the author is being asked to authorise. */
@@ -159,7 +157,7 @@ function EditBody({ proposal }: { proposal: EditProposal }) {
 function HtmlProposalBody({ path, content }: { path: string; content: string }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
-  const baseDir = path.replace(/[/\\][^/\\]*$/, "");
+  const baseDir = dirName(path);
 
   return (
     <>
@@ -405,7 +403,7 @@ export function ApprovalCard({ item }: { item: PendingApproval }) {
   const [deciding, setDeciding] = useState(false);
 
   const { proposal, autoApproveKey } = item;
-  const fileName = proposal.path.split(/[\\/]/).pop() ?? proposal.path;
+  const fileName = baseName(proposal.path) || proposal.path;
   // Absent on a surface that cannot hold a grant, and never offered for the
   // two kinds a grant may not cover — so 删除 and 配图 cards simply don't grow
   // a third button, which needs no explaining.

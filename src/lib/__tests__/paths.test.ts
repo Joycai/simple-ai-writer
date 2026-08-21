@@ -1,13 +1,86 @@
 import { describe, it, expect } from "vitest";
 import {
+  baseName,
+  dirName,
   isPathWithin,
   isProtectedPath,
+  isSamePath,
   isStrictDescendant,
   isWorkspacePath,
+  joinPath,
   normalizePathSegments,
+  pathKey,
+  projectRelative,
   relativePathFrom,
   resolveRelativePath,
+  resolveWorkspacePath,
+  toPosixPath,
 } from "../paths";
+
+/**
+ * The two platform questions this module answers from the *shape* of a path —
+ * so one test file covers Windows and Linux/macOS without mocking a host.
+ */
+describe("platform spelling", () => {
+  it("reads a backslash as a separator on a Windows-shaped path", () => {
+    expect(toPosixPath("D:\\书\\第一章.md")).toBe("D:/书/第一章.md");
+    expect(baseName("D:\\书\\第一章.md")).toBe("第一章.md");
+    expect(dirName("D:\\书\\第一章.md")).toBe("D:/书");
+  });
+
+  it("reads a backslash as a filename character on a POSIX absolute path", () => {
+    // `a\b.md` is one legal file on Linux and macOS — splitting it would
+    // invent a directory that does not exist.
+    expect(toPosixPath("/home/me/书/a\\b.md")).toBe("/home/me/书/a\\b.md");
+    expect(baseName("/home/me/书/a\\b.md")).toBe("a\\b.md");
+    expect(dirName("/home/me/书/a\\b.md")).toBe("/home/me/书");
+  });
+
+  it("keeps a UNC share's two leading slashes", () => {
+    expect(toPosixPath("\\\\nas\\书\\第一章.md")).toBe("//nas/书/第一章.md");
+    expect(normalizePathSegments("\\\\nas\\书\\..\\第一章.md")).toBe("//nas/第一章.md");
+    expect(projectRelative("//nas/书", "//nas/书/第一章.md")).toBe("第一章.md");
+  });
+
+  it("folds case for a Windows path and keeps it everywhere else", () => {
+    expect(pathKey("D:\\Proj\\A.md")).toBe(pathKey("d:/proj/a.md"));
+    expect(pathKey("/proj/A.md")).not.toBe(pathKey("/proj/a.md"));
+  });
+
+  it("carries that rule into the comparisons", () => {
+    // Windows: one file, two spellings — the editor must not be told otherwise.
+    expect(isSamePath("D:\\Proj\\第一章.md", "d:/proj/第一章.md")).toBe(true);
+    expect(isPathWithin("D:\\Proj", "d:/proj/卷一/第一章.md")).toBe(true);
+    expect(isProtectedPath("D:\\Proj", "D:/proj/.AI-Writer/lore")).toBe(true);
+    // Linux: genuinely two files.
+    expect(isSamePath("/proj/A.md", "/proj/a.md")).toBe(false);
+    expect(isPathWithin("/proj", "/PROJ/a.md")).toBe(false);
+  });
+
+  it("treats an absent path as the same as nothing", () => {
+    expect(isSamePath(null, null)).toBe(false);
+    expect(isSamePath(undefined, "/proj/a.md")).toBe(false);
+  });
+});
+
+describe("joinPath", () => {
+  it("joins with a single separator whatever the pieces carry", () => {
+    expect(joinPath("D:\\proj\\", "/卷一/", "第1章.md")).toBe("D:/proj/卷一/第1章.md");
+    expect(joinPath("/proj", "a.md")).toBe("/proj/a.md");
+  });
+});
+
+describe("projectRelative", () => {
+  it("strips the project prefix, separators and case aside on Windows", () => {
+    expect(projectRelative("D:\\proj", "D:/PROJ/卷一/第1章.md")).toBe("卷一/第1章.md");
+  });
+
+  it("is null for anything not inside the project — the root included", () => {
+    expect(projectRelative("/proj", "/proj")).toBeNull();
+    expect(projectRelative("/proj", "/other/a.md")).toBeNull();
+    expect(projectRelative("", "/proj/a.md")).toBeNull();
+  });
+});
 
 describe("resolveRelativePath", () => {
   it("joins a simple relative path to the base dir", () => {
@@ -125,6 +198,36 @@ describe("isWorkspacePath", () => {
     // absolute path and turn the tools into a whole-disk read.
     expect(isWorkspacePath("", "/proj/a.md")).toBe(false);
     expect(isWorkspacePath("", "")).toBe(false);
+  });
+});
+
+describe("resolveWorkspacePath", () => {
+  it("rebases a project-relative path — the shape the prompt hands the model", () => {
+    expect(resolveWorkspacePath("D:\\proj", "卷一/第31章.md")).toBe("D:/proj/卷一/第31章.md");
+    expect(resolveWorkspacePath("D:\\proj", "大纲.md")).toBe("D:/proj/大纲.md");
+  });
+
+  it("leaves an absolute path where it is, whichever separator it uses", () => {
+    expect(resolveWorkspacePath("D:\\proj", "D:\\proj\\卷一\\第31章.md")).toBe("D:/proj/卷一/第31章.md");
+    expect(resolveWorkspacePath("D:\\proj", "D:/proj/卷一/第31章.md")).toBe("D:/proj/卷一/第31章.md");
+  });
+
+  it("refuses what isWorkspacePath refuses, after resolution", () => {
+    expect(resolveWorkspacePath("D:/proj", "../other/a.md")).toBeNull();
+    expect(resolveWorkspacePath("D:/proj", ".ai-writer/profile.json")).toBeNull();
+    expect(resolveWorkspacePath("D:/proj", "/etc/passwd")).toBeNull();
+    expect(resolveWorkspacePath("", "a.md")).toBeNull();
+  });
+});
+
+describe("isSamePath", () => {
+  it("sees through separators and traversal", () => {
+    expect(isSamePath("D:\\proj\\第1章.md", "D:/proj/第1章.md")).toBe(true);
+    expect(isSamePath("D:/proj/卷一/../第1章.md", "D:/proj/第1章.md")).toBe(true);
+  });
+
+  it("still tells different files apart", () => {
+    expect(isSamePath("D:/proj/第1章.md", "D:/proj/第2章.md")).toBe(false);
   });
 });
 

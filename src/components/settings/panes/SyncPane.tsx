@@ -7,6 +7,7 @@ import { Pane, PaneHeader, Section, Row, Toggle } from "./bits";
 import ui from "../settingsUi.module.css";
 import common from "../settingsCommon.module.css";
 import s from "../../sync/sync.module.css";
+import { baseName } from "../../../lib/paths";
 
 /**
  * 知识库同步（设计稿 06 · 画板 1a/1b/1c）.
@@ -307,7 +308,7 @@ function KbRow({
 }
 
 function projectName(path: string): string {
-  return path.replace(/\\/g, "/").replace(/\/+$/, "").split("/").pop() ?? "";
+  return baseName(path);
 }
 
 function hostOf(url: string): string {

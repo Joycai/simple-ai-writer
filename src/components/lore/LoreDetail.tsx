@@ -56,6 +56,7 @@ import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
 import { categoryColor } from "./catColor";
 import { Select } from "../common/Select";
 import styles from "./LoreDetail.module.css";
+import { baseName } from "../../lib/paths";
 
 interface Props {
   entity: LoreEntity;
@@ -436,7 +437,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     try {
       for (const srcPath of paths) {
         const bytes = await readBinaryFile(srcPath);
-        const basename = srcPath.split(/[\\/]/).pop() || "image";
+        const basename = baseName(srcPath) || "image";
         await addLoreImage(entity.dirPath, basename, bytes, "", slot);
       }
       await refresh();

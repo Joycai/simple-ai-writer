@@ -47,6 +47,7 @@ import type { Expect, SyncClient } from "./client";
 import { SyncConflictError } from "./client";
 import { entryDir, hashEntryDir, loreRoot, unzipEntry, zipEntry } from "./local";
 import { advanceSnapshot, syncStagingPath } from "./store";
+import { baseName, dirName, joinPath, toPosixPath } from "../paths";
 
 export interface StepFailure {
   path: string;
@@ -71,7 +72,7 @@ export interface SyncRunResult {
  * everything recoverable regardless of which feature displaced it.
  */
 function backupsDir(projectPath: string): string {
-  return `${projectPath.replace(/\\/g, "/")}/.ai-writer/backups`;
+  return `${toPosixPath(projectPath)}/.ai-writer/backups`;
 }
 
 /** A filesystem-safe stem for an entry path (`characters/爱丽丝`). */
@@ -168,13 +169,13 @@ export async function runSync(options: RunOptions): Promise<SyncRunResult> {
  */
 async function backupLoreTree(projectPath: string, staging: string): Promise<string> {
   const { appDataDir } = await import("@tauri-apps/api/path");
-  const root = `${(await appDataDir()).replace(/\\/g, "/").replace(/\/+$/, "")}/backups`;
+  const root = joinPath(await appDataDir(), "backups");
   await makeDir(root);
 
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   const stamp = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}`;
-  const project = projectPath.replace(/\\/g, "/").replace(/\/+$/, "").split("/").pop() || "project";
+  const project = baseName(projectPath) || "project";
   const dest = `${root}/${stamp}-${project}.zip`;
 
   // Written via the staging directory first so a failure part-way leaves no
@@ -247,7 +248,7 @@ async function pullStep(options: RunOptions, step: SyncStep, staging: string): P
   }
 
   const displaced = (await fileExists(target)) ? await displace(projectPath, step.path, target) : null;
-  await makeDir(target.slice(0, target.lastIndexOf("/")));
+  await makeDir(dirName(target));
   try {
     await renamePath(unpacked, target);
   } catch (err) {

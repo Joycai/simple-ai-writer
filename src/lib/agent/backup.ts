@@ -12,6 +12,7 @@
  */
 
 import { fileExists, makeDir, readFile, writeFile } from "../fs/fileio";
+import { baseName, projectRelative } from "../paths";
 
 /**
  * Snapshot `absPath` before an agent write. Returns the backup's absolute path,
@@ -25,11 +26,8 @@ export async function backupFile(projectPath: string, absPath: string): Promise<
   const backupDir = `${projectPath}/.ai-writer/backups`;
   await makeDir(backupDir);
 
-  const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
-  const proj = norm(projectPath);
-  const abs = norm(absPath);
-  const rel = abs.startsWith(proj + "/") ? abs.slice(proj.length + 1) : abs.split("/").pop() ?? "file";
-  const flat = rel.replace(/[/\\]/g, "-");
+  const rel = projectRelative(projectPath, absPath) || baseName(absPath) || "file";
+  const flat = rel.replace(/\//g, "-");
 
   const dest = `${backupDir}/agent-${Date.now()}-${flat}`;
   await writeFile(dest, await readFile(absPath));

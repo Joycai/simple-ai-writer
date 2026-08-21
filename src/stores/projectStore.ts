@@ -33,7 +33,7 @@ import { copyPath, fileExists, makeDir, removeDir, removeFile, renamePath, write
 import { projectFilesFromTree, type ProjectFile } from "../lib/fs/images";
 import { baseNameOf, resolveCopyTarget, type TransferMode } from "../lib/fs/moveCopy";
 import { discardDocumentAssets, moveDocumentAssets } from "../lib/image/assets";
-import { isStrictDescendant } from "../lib/paths";
+import { baseName, isSamePath, isStrictDescendant } from "../lib/paths";
 import { useLoreStore } from "./loreStore";
 import { useEditorStore } from "./editorStore";
 import { useAppStore, type MainView } from "./appStore";
@@ -360,7 +360,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     const editor = useEditorStore.getState();
     const editorAffected =
-      editor.filePath === from || (!!editor.filePath && isStrictDescendant(from, editor.filePath));
+      isSamePath(editor.filePath, from) || (!!editor.filePath && isStrictDescendant(from, editor.filePath));
     // Flush first: after the rename the editor still points at the old path,
     // and a pending autosave would recreate the file where it used to be.
     if (editorAffected && editor.isDirty) await editor.saveNow();
@@ -373,7 +373,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     await moveDocumentAssets(from, to);
 
     const { activeFilePath } = get();
-    if (activeFilePath === from) {
+    if (isSamePath(activeFilePath, from)) {
       set({ activeFilePath: to });
     } else if (activeFilePath && isStrictDescendant(from, activeFilePath)) {
       set({ activeFilePath: to + activeFilePath.slice(from.length) });
@@ -382,7 +382,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   copyEntry: async (from, destDir, isDir) => {
-    if (isStrictDescendant(from, destDir) || from === destDir) {
+    if (isStrictDescendant(from, destDir) || isSamePath(from, destDir)) {
       throw new Error("Cannot copy a folder into itself.");
     }
     // Flush before copying, or the copy captures the last-saved text rather
@@ -390,7 +390,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // looks wrong.
     const editor = useEditorStore.getState();
     const editorAffected =
-      editor.filePath === from || (!!editor.filePath && isStrictDescendant(from, editor.filePath));
+      isSamePath(editor.filePath, from) || (!!editor.filePath && isStrictDescendant(from, editor.filePath));
     if (editorAffected && editor.isDirty) await editor.saveNow();
 
     const to = await resolveCopyTarget(destDir, baseNameOf(from), isDir, fileExists);
@@ -402,7 +402,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   deleteEntry: async (path, isDir, opts) => {
     const { projectPath, activeFilePath } = get();
     const affected =
-      activeFilePath === path || (!!activeFilePath && isStrictDescendant(path, activeFilePath));
+      isSamePath(activeFilePath, path) || (!!activeFilePath && isStrictDescendant(path, activeFilePath));
     if (affected) {
       // Drop editor state *before* removing, or a pending autosave resurrects
       // the file moments after it is deleted.
@@ -424,7 +424,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         // backing up.
         const backupRoot = `${projectPath}/.ai-writer/backups`;
         await makeDir(backupRoot);
-        const flat = path.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? "entry";
+        const flat = baseName(path) || "entry";
         backupPath = `${backupRoot}/deleted-${Date.now()}-${flat}`;
         await renamePath(path, backupPath);
         // The document's pictures go beside the backup, so a restore brings

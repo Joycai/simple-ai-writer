@@ -11,6 +11,7 @@
 import {
   fileExists, makeDir, readBinaryFile, readFile, removeDir, renamePath, writeBinaryFile, writeFile,
 } from "../fs/fileio";
+import { baseName, dirName } from "../paths";
 
 /**
  * Folder name for a document's illustrations, beside the document itself.
@@ -20,15 +21,11 @@ import {
 export const ASSETS_DIR = "assets";
 
 /** Directory part of a file path (no trailing slash). */
-function dirOf(filePath: string): string {
-  const cut = Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"));
-  return cut === -1 ? "" : filePath.slice(0, cut);
-}
+const dirOf = dirName;
 
 /** Filename without its directory or extension. */
 function stemOf(filePath: string): string {
-  const cut = Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"));
-  const name = cut === -1 ? filePath : filePath.slice(cut + 1);
+  const name = baseName(filePath);
   const dot = name.lastIndexOf(".");
   return dot > 0 ? name.slice(0, dot) : name;
 }

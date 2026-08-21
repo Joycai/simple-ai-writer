@@ -15,6 +15,7 @@ import { imageMarkdown, saveDocumentAsset } from "../../lib/image/assets";
 import type { ImageGenTarget } from "../../lib/image/target";
 import { useEditorStore } from "../../stores/editorStore";
 import { useTerms } from "../../stores/projectStore";
+import { baseName } from "../../lib/paths";
 
 interface Props {
   onClose: () => void;
@@ -33,7 +34,7 @@ export function DocImageGenModal({ onClose }: Props) {
   const filePath = useEditorStore((s) => s.filePath);
 
   const target: ImageGenTarget = useMemo(() => {
-    const docName = filePath?.split(/[\\/]/).pop()?.replace(/\.md$/i, "") ?? terms.doc;
+    const docName = filePath ? baseName(filePath).replace(/\.md$/i, "") : terms.doc;
 
     return {
       key: filePath ?? "",
