@@ -2052,6 +2052,31 @@
     "kbFrom": "from {{device}}"
   },
   "roleplay": {
+    "areaBrowser": {
+      "count": "{{n}} entries · memory area",
+      "boundTo": "held by {{name}}",
+      "free": "free · can be inherited",
+      "former": "once {{name}}'s",
+      "search": "Search entries or keywords",
+      "markerTag": "Character memory",
+      "markerText": "What {{name}} believes. It may contradict the canon in the knowledge base; nothing here corrects it.",
+      "empty": "Still empty. At a scene change, whatever is no longer owed sinks down here.",
+      "noMatch": "No matching entries.",
+      "addManual": "Write one by hand",
+      "total": "{{n}} entries · ~{{tok}} tok",
+      "pickOne": "Pick one to read.",
+      "fromScene": "from scene {{n}} · sank at the scene change",
+      "handwritten": "written by the author",
+      "bodyLabel": "Body",
+      "bodyNote": "edits only change what {{name}} remembers — not the manuscript, not the knowledge base",
+      "keysNote": "this comes back when these words appear in the conversation",
+      "newTitle": "A new note",
+      "multi": "multi-page"
+    },
+    "recall": {
+      "one": "remembered",
+      "many": "remembered {{n}} things"
+    },
     "area": {
       "label": "Memory area",
       "labelNote": "what this character believes",
@@ -2276,6 +2301,7 @@
       "loadFailed": "Could not read the roleplay directory (.ai-writer/roleplay/): {{error}}"
     },
     "memory": {
+      "browseAll": "Browse all {{n}}",
       "tierStanding": "Standing",
       "tierStandingNote": "{{n}} · always in context",
       "tierAreaNote": "{{n}} · surfaces when relevant",
