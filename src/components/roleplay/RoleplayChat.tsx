@@ -15,7 +15,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronRight, RotateCw } from "lucide-react";
+import { ChevronDown, ChevronRight, Image as ImageIcon, RotateCw, X } from "lucide-react";
 import { useRoleplayStore } from "../../stores/roleplayStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { listArchives, type ArchivedScene } from "../../lib/roleplay/store";
@@ -26,9 +26,27 @@ import { ApprovalCard } from "../ai/ApprovalCard";
 import { RoundLimitCard } from "../ai/RoundLimitCard";
 import { TruncationCard } from "../ai/TruncationCard";
 import { useAgentStore } from "../../stores/agentStore";
+import { useAiStore } from "../../stores/aiStore";
+import { readPref, writePref } from "../../lib/prefs";
+import { useAppStore } from "../../stores/appStore";
+import { computeContextBreakdown } from "../../lib/agent/contextBreakdown";
+import { getToolDefinitions } from "../../lib/agent/registry";
+import { routePlannedTools } from "../../lib/agent/routing";
+import { estimateToolsTokens } from "../../lib/ai/tokenEstimate";
+import { inputCeilingFor } from "../../lib/context/budget";
+import { presetFor } from "../../lib/roleplay/presets";
+import {
+  chainCanSeeImages, withSessionOverrides, type SubAgentKind,
+} from "../../lib/agent/subagent";
+import { MAX_IMAGE_BYTES, imageToDataUrl } from "../../lib/fs/images";
+import { attachedKey } from "../../lib/lore/aiTask";
 import { cardsForSurface } from "../../lib/agent/approvalRouting";
 import { ScriptText } from "./ScriptText";
 import { ArchiveViewer } from "./ArchiveViewer";
+import { SubAgentChips } from "../ai/SubAgentChips";
+import { ContextBar } from "../ai/ContextBar";
+import { SnippetPicker } from "../ai/SnippetPicker";
+import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { MemoryPanel } from "./MemoryPanel";
 import {
   MentionPicker, filterMentions, mentionKey, mentionLabel,
@@ -38,8 +56,20 @@ import { classifySegment } from "../../lib/roleplay/markup";
 import { projectFilesFromTree } from "../../lib/fs/images";
 import { readFile } from "../../lib/fs/fileio";
 import type { AttachedItem } from "../../lib/lore/aiTask";
-import type { MemoryRecord, RoleplayAgent, SceneTurn } from "../../lib/roleplay/model";
+import type {
+  AuthorPersona, MemoryRecord, RoleplayAgent, SceneTurn,
+} from "../../lib/roleplay/model";
 import styles from "./RoleplayChat.module.css";
+
+/** 一个稳定的空数组：会话还没建起来时给它，省得每帧换一个新引用。 */
+const EMPTY_SUBS: SubAgentKind[] = [];
+
+/** `+ …` 三个按钮各自把选择器限制到哪一类候选。 */
+type PickKind = "lore" | "text" | "image";
+
+function matchesKind(item: MentionItem, kind: PickKind): boolean {
+  return kind === "lore" ? item.type === "lore" : item.type === "file" && item.file.kind === kind;
+}
 
 const MIRROR_CLASS: Record<string, string> = {
   action: styles.mirrorAction,
@@ -120,7 +150,7 @@ function TurnBlock({ turn, log, memories, onRewind }: {
 export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: () => void }) {
   const { t } = useTranslation();
   const {
-    sessions, running, queue, stale, send, stop, retry, rewind, dequeue, promote,
+    sessions, running, queue, stale, send, stop, retry, rewind, dequeue, promote, toggleSubAgent,
     refreshBinding, setAgentModel,
   } = useRoleplayStore();
   const session = sessions[agent.id];
@@ -129,10 +159,16 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
 
   const [draft, setDraft] = useState("");
   const [composing, setComposing] = useState(false);
-  const [showSyntax, setShowSyntax] = useState(false);
+  // 第一次进来默认展开：折起来之后它只剩四个符号，不认识的人不会去点「展开」。
+  // 作者亲手收起过一次就记住，此后一直折着。
+  const [showSyntax, setShowSyntax] = useState(() => readPref("app:roleplaySyntaxSeen") !== "1");
   const [showBindings, setShowBindings] = useState(false);
   const [openLog, setOpenLog] = useState<number | null>(null);
   const [refs, setRefs] = useState<AttachedItem[]>([]);
+  /** 被拒的附件（太大 / 读不到）。下一次挑选会清掉它。 */
+  const [refError, setRefError] = useState<string | null>(null);
+  /** `+ 条目 / + 文档 / + 图片` 打开选择器时把候选限制到那一类。 */
+  const [pickKind, setPickKind] = useState<PickKind | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [showMemory, setShowMemory] = useState(false);
   // 封存的旧场次。挂在对话区而不是 store 里：它只在作者往上看的时候才有意义，
@@ -141,6 +177,13 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const [showArchive, setShowArchive] = useState(false);
   /** 待确认的回退目标轮号。回退会撤销记录，所以要问一次。 */
   const [rewindTo, setRewindTo] = useState<number | null>(null);
+  /**
+   * 作者主动摘掉了这次的选区。
+   *
+   * 默认带上——有选区几乎总意味着「我说的是这一段」。摘掉之后在编辑器里重新
+   * 划一次就会再带上（`selection` 换了新值，这个开关也跟着复位）。
+   */
+  const [detached, setDetached] = useState(false);
 
   const taRef = useRef<HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
@@ -158,12 +201,60 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const projectPath = useProjectStore((s) => s.projectPath);
   const mention = useMentionState();
 
+  const models = useAiStore((s) => s.models);
+  const subAgents = useAiStore((s) => s.subAgents);
+  const activeModelId = useAiStore((s) => s.activeModelId);
+  const boundModel = useMemo(
+    () => models.find((m) => m.id === (agent.modelId ?? activeModelId)),
+    [models, agent.modelId, activeModelId],
+  );
+  const disabledSubs = session?.disabledSubAgents ?? EMPTY_SUBS;
+  const effectiveSubs = useMemo(
+    () => withSessionOverrides(subAgents, disabledSubs),
+    [subAgents, disabledSubs],
+  );
+  /**
+   * 这条链看不看得见图片：本模型是多模态，或者识图子代理还开着。看不见就不把
+   * 图片放进候选——挂一个模型物理上读不到的附件，作者只会看见一个芯片，然后
+   * 角色像什么都没有一样回答。
+   */
+  const canSeeImages = chainCanSeeImages(boundModel, effectiveSubs, models);
+
+  const selection = useAiTaskStore((s) => s.selection);
+  useEffect(() => { setDetached(false); }, [selection]);
+  const quote = !detached && selection ? selection : undefined;
+
+  const contextUtilization = useAppStore((s) => s.contextUtilization);
+  /**
+   * 工具 schema 的开销。按**路由之后**的工具算（子代理会摘掉 read_image、补上
+   * delegate），否则这一段会和它旁边那排芯片说的不是同一回事。
+   */
+  const toolTokens = useMemo(
+    () => estimateToolsTokens(
+      getToolDefinitions(routePlannedTools(presetFor(agent.kind), effectiveSubs, models).tools),
+    ),
+    [agent.kind, effectiveSubs, models],
+  );
+  const contextVersion = session?.contextVersion ?? 0;
+  const context = useMemo(
+    () => computeContextBreakdown(
+      session?.history ?? null,
+      session?.meta ?? null,
+      toolTokens,
+      inputCeilingFor(boundModel?.contextSize, contextUtilization),
+      boundModel?.contextSize ?? 0,
+    ),
+    // `contextVersion` 才是真正的触发器：history 是就地改的，引用永远不变。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [session?.history, session?.meta, contextVersion, toolTokens, boundModel?.contextSize, contextUtilization],
+  );
+
   const candidates: MentionItem[] = useMemo(() => [
     ...Object.values(loreIndex).flat().map((entity): MentionItem => ({ type: "lore", entity })),
     ...projectFilesFromTree(fileTree)
-      .filter((f) => f.kind === "text")
+      .filter((f) => f.kind === "text" || (f.kind === "image" && canSeeImages))
       .map((file): MentionItem => ({ type: "file", file })),
-  ], [loreIndex, fileTree]);
+  ], [loreIndex, fileTree, canSeeImages]);
 
   // 生成中的计时，设计稿在名标旁边显示「生成中 · 4.2s」。
   useEffect(() => {
@@ -227,19 +318,47 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
 
   const doSend = () => {
     if (!canSend) return;
-    void send(agent.id, draft, refs);
+    void send(agent.id, draft, refs, quote);
     setDraft("");
     setRefs([]);
+    setRefError(null);
+    // 发完就摘掉：同一段选区跟着后面每一条消息一路走下去，是在替作者做一个他
+    // 只做过一次的决定。想再带上，在编辑器里重新划一次。
+    setDetached(true);
   };
 
   const mentionItems = useMemo(
-    () => filterMentions(candidates, mention.query),
-    [candidates, mention.query],
+    () => filterMentions(
+      pickKind ? candidates.filter((c) => matchesKind(c, pickKind)) : candidates,
+      mention.query,
+    ),
+    [candidates, mention.query, pickKind],
   );
-  const refKeys = useMemo(
-    () => new Set(refs.map((r) => (r.kind === "lore" ? `lore:${r.entity.dirPath}` : `file:${r.file.path}`))),
-    [refs],
-  );
+
+  /**
+   * `+ 条目` 这类按钮只是替作者敲了一个 `@`。
+   *
+   * 走同一条 splice，是为了只有一条代码路径：选中的东西以同样的方式落进正文，
+   * 芯片也以同样的方式出现。否则「点按钮加的」和「打 @ 加的」会长出两套语义。
+   */
+  const openMentionFor = (kind: PickKind) => {
+    const el = taRef.current;
+    const caret = el?.selectionStart ?? draft.length;
+    const before = draft.slice(0, caret);
+    // `foo@bar` 是地址不是提名——findMention 拒绝跟在 ASCII 词字符后面的 `@`，
+    // 所以这里先补一个边界，别丢下一个什么都打不开的 `@`。中文不需要。
+    const pad = /[\w@]$/.test(before) ? " " : "";
+    const at = caret + pad.length;
+    const next = `${before}${pad}@${draft.slice(caret)}`;
+    setPickKind(kind);
+    setDraft(next);
+    mention.sync(next, at + 1);
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(at + 1, at + 1);
+    });
+  };
+  const refKeys = useMemo(() => new Set(refs.map(attachedKey)), [refs]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (mention.open && mentionItems.length) {
@@ -259,17 +378,41 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   };
 
   const handlePickMention = async (item: MentionItem) => {
-    if (refKeys.has(mentionKey(item))) { mention.close(); return; }
+    if (refKeys.has(mentionKey(item))) { mention.close(); setPickKind(null); return; }
+    setRefError(null);
     setDraft((prev) => mention.accept(prev, mentionLabel(item)));
     mention.close();
+    setPickKind(null);
     if (item.type === "lore") {
       setRefs((r) => [...r, { kind: "lore", entity: item.entity }]);
+    } else if (item.file.kind === "image") {
+      try {
+        const { dataUrl, bytes } = await imageToDataUrl(item.file.path);
+        // 在**选中的这一刻**就拒绝，不留到发送时：那时作者早忘了自己挑过什么，
+        // 一条悄悄少了张图的消息从记录上根本看不出来。
+        if (bytes.length > MAX_IMAGE_BYTES) {
+          setRefError(t("roleplay.composer.imageTooLarge", {
+            name: item.file.name,
+            size: (bytes.length / 1024 / 1024).toFixed(1),
+            max: MAX_IMAGE_BYTES / 1024 / 1024,
+            defaultValue: `${item.file.name} 太大（${(bytes.length / 1024 / 1024).toFixed(1)}MB，上限 ${MAX_IMAGE_BYTES / 1024 / 1024}MB）`,
+          }));
+          return;
+        }
+        setRefs((r) => [...r, { kind: "image", file: item.file, dataUrl }]);
+      } catch {
+        setRefError(t("roleplay.composer.refUnreadable", {
+          name: item.file.name, defaultValue: `读不到 ${item.file.name}`,
+        }));
+      }
     } else if (projectPath) {
       try {
         const content = await readFile(item.file.path);
         setRefs((r) => [...r, { kind: "text", file: item.file, content }]);
       } catch {
-        // 读不到就只留字面上的 @——角色仍然知道作者提到了它。
+        setRefError(t("roleplay.composer.refUnreadable", {
+          name: item.file.name, defaultValue: `读不到 ${item.file.name}`,
+        }));
       }
     }
   };
@@ -527,6 +670,25 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
 
           {/* 报错 = 这一轮没有回复。作者轮已经在 transcript 里了，所以「重试」是
               接着那一问再跑一次，不是重新说一遍话。 */}
+          {/* 按停之后这一问仍孤零零留在 transcript 里，却没有回复——和报错的后果
+              一样，所以通向同一个 retry。用比错误带更轻的一行：它不是出了问题，
+              是作者自己按的。 */}
+          {session?.stopped && !session.error && session.lastJob && !isRunning && queuePos < 0 && (
+            <div className={styles.stoppedBar}>
+              <span className={styles.stoppedText}>
+                {t("roleplay.stopped", { defaultValue: "已停止，这一问还没有回复" })}
+              </span>
+              <button
+                type="button"
+                className={styles.errorRetry}
+                onClick={() => retry(agent.id)}
+              >
+                <RotateCw size={11} strokeWidth={2} />
+                {t("roleplay.retry", { defaultValue: "重试" })}
+              </button>
+            </div>
+          )}
+
           {session?.error && (
             <div className={styles.errorBar}>
               <span className={styles.errorText}>{session.error}</span>
@@ -563,11 +725,15 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               {t("roleplay.persona.narratorNote", { defaultValue: "旁白不扮演任何人 · 无身份设定" })}
             </span>
           ) : (
-            <PersonaChip />
+            <PersonaChip agent={agent} />
           )}
           <div className={styles.spacer} />
           {showSyntax ? (
-            <button type="button" className={styles.syntaxToggle} onClick={() => setShowSyntax(false)}>
+            <button
+              type="button"
+              className={styles.syntaxToggle}
+              onClick={() => { setShowSyntax(false); writePref("app:roleplaySyntaxSeen", "1"); }}
+            >
               {t("roleplay.syntax.collapse", { defaultValue: "收起，只留一行" })}
             </button>
           ) : (
@@ -645,16 +811,102 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               activeIndex={mention.active}
               preferAbove
               onPick={(item) => void handlePickMention(item)}
-              onDismiss={mention.close}
+              onDismiss={() => { mention.close(); setPickKind(null); }}
             />
           )}
 
-          <div className={styles.inputFoot}>
-            {refs.length > 0 && (
-              <span className={styles.refCount}>
-                {t("roleplay.composer.refs", { n: refs.length, defaultValue: `${refs.length} 项引用` })}
-              </span>
+          <ContextBar context={context} />
+
+          {/* 附件行：这条消息**带着什么**（芯片）和这一场**怎么工作**（子代理）。
+              原来只有一句「N 项引用」，删不掉任何一项——芯片本身就是删除入口。 */}
+          <div className={styles.attachRow}>
+            {/* 选区和 `@` 引用并排：两者都是「这条消息带着的材料」，拆成两行会
+                读成两套互不相干的机制。 */}
+            {quote ? (
+              <button
+                type="button"
+                className={styles.attachChip}
+                onClick={() => setDetached(true)}
+                title={t("roleplay.composer.detachSelection", { defaultValue: "不附带选区" })}
+              >
+                {t("roleplay.composer.selectionChip", {
+                  n: quote.length, defaultValue: `选区 ${quote.length} 字`,
+                })}
+                <X size={10} strokeWidth={2} />
+              </button>
+            ) : selection ? (
+              <button
+                type="button"
+                className={styles.attachGhost}
+                onClick={() => setDetached(false)}
+              >
+                + {t("roleplay.composer.selectionChip", {
+                  n: selection.length, defaultValue: `选区 ${selection.length} 字`,
+                })}
+              </button>
+            ) : null}
+            {refs.map((r) => {
+              const key = attachedKey(r);
+              const label = r.kind === "lore" ? r.entity.name : r.file.name;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  className={styles.attachChip}
+                  onClick={() => setRefs((prev) => prev.filter((x) => attachedKey(x) !== key))}
+                  title={t("roleplay.composer.removeRef", { defaultValue: "移除这项引用" })}
+                >
+                  {/* 图片是唯一一种代价看不出名字的附件——标出它是什么。 */}
+                  {r.kind === "image" && <ImageIcon size={10} strokeWidth={2} />}
+                  @{label}
+                  <X size={10} strokeWidth={2} />
+                </button>
+              );
+            })}
+            <span className={styles.attachSpacer} />
+            {/* `@` 才是机制本身，这几个按钮只是替作者敲它——它们存在是为了让
+                作者发现 `@` 能用，而不是为了取代它。 */}
+            <button
+              type="button"
+              className={styles.attachGhost}
+              onClick={() => openMentionFor("lore")}
+              disabled={!candidates.some((c) => c.type === "lore")}
+            >
+              + {t("roleplay.composer.addLore", { defaultValue: "设定" })}
+            </button>
+            <button
+              type="button"
+              className={styles.attachGhost}
+              onClick={() => openMentionFor("text")}
+              disabled={!candidates.some((c) => matchesKind(c, "text"))}
+            >
+              + {t("roleplay.composer.addDoc", { defaultValue: "文档" })}
+            </button>
+            {/* 只在这条链看得见图片时出现：纯文本模型上它会是一个永远点不动的
+                死芯片。 */}
+            {canSeeImages && (
+              <button
+                type="button"
+                className={styles.attachGhost}
+                onClick={() => openMentionFor("image")}
+                disabled={!candidates.some((c) => matchesKind(c, "image"))}
+              >
+                + {t("roleplay.composer.addImage", { defaultValue: "图片" })}
+              </button>
             )}
+            <SubAgentChips
+              disabled={disabledSubs}
+              onToggle={(kind) => toggleSubAgent(agent.id, kind)}
+            />
+          </div>
+
+          {refError && <div className={styles.refError}>{refError}</div>}
+
+          <div className={styles.inputFoot}>
+            {/* 插入而不是发送：片段是个开头，作者补完再发。 */}
+            <SnippetPicker
+              onPick={(c) => setDraft((prev) => (prev.trim() ? `${prev}\n${c}` : c))}
+            />
             <span className={styles.kbd}>{t("roleplay.composer.newline", { defaultValue: "⇧↵ 换行" })}</span>
             <div className={styles.spacer} />
             {isRunning && (
@@ -690,11 +942,23 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
 }
 
 /** 「我此刻是」——作者的身份，全局设置，每个 agent 都看得到。 */
-function PersonaChip() {
+/**
+ * 「我此刻是谁」。
+ *
+ * 两级：全局一个，每个 agent 可以覆盖——作者不一定用同一个身份面对所有角色，
+ * 对甲是「桐谷萤」，对乙可能是「一个陌生人」。`runJob` 一直读的就是
+ * `agent.authorPersona ?? 全局`，这里只是把入口补上。
+ *
+ * 菜单顶部先选**作用域**再选人，而不是让两级挤在一张列表里：「这一次改的是
+ * 谁」是作者按下之前必须知道的事，事后从高亮上反推太晚了。
+ */
+function PersonaChip({ agent }: { agent: RoleplayAgent }) {
   const { t } = useTranslation();
-  const { authorPersona, setAuthorPersona } = useRoleplayStore();
+  const { authorPersona, setAuthorPersona, setAgentPersona } = useRoleplayStore();
   const loreIndex = useLoreStore((s) => s.index);
   const [open, setOpen] = useState(false);
+  const overridden = agent.authorPersona !== null;
+  const [scopeAgent, setScopeAgent] = useState(overridden);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -706,30 +970,63 @@ function PersonaChip() {
     return () => window.removeEventListener("mousedown", onDown);
   }, [open]);
 
-  const characters = Object.values(loreIndex).flat();
-  const current = authorPersona.mode === "lore" && authorPersona.dirPath
-    ? characters.find((e) => e.dirPath === authorPersona.dirPath)
-    : null;
+  // 打开时把作用域重置成当前实际生效的那一档，而不是留着上次的选择。
+  useEffect(() => { if (open) setScopeAgent(overridden); }, [open, overridden]);
 
-  const label = authorPersona.mode === "none"
+  const characters = Object.values(loreIndex).flat();
+  /** 实际生效的那一个——和 runJob 的取法必须一致。 */
+  const effective = agent.authorPersona ?? authorPersona;
+  /** 正在被编辑的那一档（可能不是生效的那一档）。 */
+  const editing = scopeAgent ? (agent.authorPersona ?? authorPersona) : authorPersona;
+
+  const nameOf = (p: AuthorPersona) => p.mode === "none"
     ? t("roleplay.persona.none", { defaultValue: "不设定" })
-    : authorPersona.mode === "prompt"
+    : p.mode === "prompt"
       ? t("roleplay.persona.custom", { defaultValue: "自定义身份" })
-      : current?.name ?? t("roleplay.persona.none", { defaultValue: "不设定" });
+      : characters.find((e) => e.dirPath === p.dirPath)?.name
+        ?? t("roleplay.persona.none", { defaultValue: "不设定" });
+
+  const apply = (p: AuthorPersona) => {
+    if (scopeAgent) void setAgentPersona(agent.id, p);
+    else void setAuthorPersona(p);
+    setOpen(false);
+  };
 
   return (
     <div className={styles.personaWrap} ref={ref}>
       <span className={styles.personaLabel}>{t("roleplay.persona.iam", { defaultValue: "我此刻是" })}</span>
       <button type="button" className={styles.personaChip} onClick={() => setOpen((v) => !v)}>
-        {label}
+        {nameOf(effective)}
+        {/* 只在被覆盖时出现：没有覆盖是常态，常态不需要标记。 */}
+        {overridden && (
+          <span className={styles.personaOnly}>
+            {t("roleplay.persona.onlyHere", { defaultValue: "仅此角色" })}
+          </span>
+        )}
         <ChevronDown size={8} strokeWidth={2.6} />
       </button>
       {open && (
         <div className={styles.personaMenu}>
+          <div className={styles.personaScope}>
+            <button
+              type="button"
+              className={`${styles.scopeTab} ${!scopeAgent ? styles.scopeTabOn : ""}`}
+              onClick={() => setScopeAgent(false)}
+            >
+              {t("roleplay.persona.scopeAll", { defaultValue: "全部对话" })}
+            </button>
+            <button
+              type="button"
+              className={`${styles.scopeTab} ${scopeAgent ? styles.scopeTabOn : ""}`}
+              onClick={() => setScopeAgent(true)}
+            >
+              {t("roleplay.persona.scopeOne", { name: agent.name, defaultValue: `只对 ${agent.name}` })}
+            </button>
+          </div>
           <button
             type="button"
-            className={`${styles.personaItem} ${authorPersona.mode === "none" ? styles.personaItemActive : ""}`}
-            onClick={() => { void setAuthorPersona({ mode: "none", dirPath: null, prompt: "" }); setOpen(false); }}
+            className={`${styles.personaItem} ${editing.mode === "none" ? styles.personaItemActive : ""}`}
+            onClick={() => apply({ mode: "none", dirPath: null, prompt: "" })}
           >
             <span className={styles.radio} />
             {t("roleplay.persona.none", { defaultValue: "不设定" })}
@@ -739,13 +1036,27 @@ function PersonaChip() {
             <button
               key={e.dirPath}
               type="button"
-              className={`${styles.personaItem} ${authorPersona.dirPath === e.dirPath ? styles.personaItemActive : ""}`}
-              onClick={() => { void setAuthorPersona({ mode: "lore", dirPath: e.dirPath, prompt: "" }); setOpen(false); }}
+              className={`${styles.personaItem} ${editing.dirPath === e.dirPath ? styles.personaItemActive : ""}`}
+              onClick={() => apply({ mode: "lore", dirPath: e.dirPath, prompt: "" })}
             >
               <span className={styles.radio} />
               {e.name}
             </button>
           ))}
+          {/* 撤销覆盖的入口就在做出覆盖的地方——和模型选择器的「跟随全局设置」
+              同一条道理（§2.14）。 */}
+          {overridden && (
+            <button
+              type="button"
+              className={styles.personaFollow}
+              onClick={() => { void setAgentPersona(agent.id, null); setOpen(false); }}
+            >
+              {t("roleplay.persona.follow", {
+                name: nameOf(authorPersona),
+                defaultValue: `跟随全局设置（${nameOf(authorPersona)}）`,
+              })}
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -1,6 +1,15 @@
 /* 设计稿 08 屏 1a / 1g。 */
 
-.split { flex: 1; display: flex; min-height: 0; }
+/* 花名册在窄面板里收成头像轨（见 RoleplayRoster 的 `@container`）。用容器查询
+   而不是媒体查询：该让位的是**这个面板**挤不挤得下，不是窗口有多宽——抽屉宽度
+   将来一改，绑在 vw 上的断点就悄悄错了。 */
+.split {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  container-type: inline-size;
+  container-name: rp-panel;
+}
 
 .blank,
 .pickPrompt {

@@ -2036,6 +2036,7 @@
     "pickAgent": "从左边挑一个 agent 开始说话。",
     "newAgent": "新建 agent",
     "editAgent": "编辑",
+    "stopped": "已停止，这一问还没有回复",
     "retry": "重试",
     "rewind": {
       "here": "回到这里重说",
@@ -2118,6 +2119,10 @@
       "quoteNote": "台词的引号 「」 『』 “” \"\" 都认，但开合要同族。中文输入法下 Shift+' 出来的 “” 最省事。"
     },
     "persona": {
+      "onlyHere": "仅此角色",
+      "scopeAll": "全部对话",
+      "scopeOne": "只对 {{name}}",
+      "follow": "跟随全局设置（{{name}}）",
       "iam": "我此刻是",
       "none": "不设定",
       "noneHint": "以旁观者身份说话",
@@ -2125,6 +2130,15 @@
       "narratorNote": "旁白不扮演任何人 · 无身份设定"
     },
     "composer": {
+      "selectionChip": "选区 {{n}} 字",
+      "detachSelection": "不附带选区",
+      "catAll": "全部",
+      "addLore": "设定",
+      "addDoc": "文档",
+      "addImage": "图片",
+      "removeRef": "移除这项引用",
+      "imageTooLarge": "{{name}} 太大（{{size}}MB，上限 {{max}}MB）",
+      "refUnreadable": "读不到 {{name}}",
       "placeholder": "说一句台词，或写一个动作…",
       "narratorPlaceholder": "和旁白讨论情节，或让它把某段互动整理进正文…",
       "newline": "⇧↵ 换行",

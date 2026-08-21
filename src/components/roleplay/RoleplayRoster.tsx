@@ -100,6 +100,8 @@ function Row({ agent }: { agent: RoleplayAgent }) {
       type="button"
       className={`${styles.row} ${selected ? styles.rowSelected : ""}`}
       onClick={() => void select(agent.id)}
+      // 窄面板收成头像轨时名字整个消失，只剩这一个悬停能认人的地方。
+      title={agent.name}
     >
       <Avatar agent={agent} active={selected} />
       <div className={styles.rowBody}>
