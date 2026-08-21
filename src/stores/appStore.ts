@@ -4,6 +4,7 @@ import { deletePref, PINNED_LORE_PREFIX, prunePrefsWithPrefix, readPref, writePr
 import { MAX_DRAFTS } from "../lib/ai/drafts";
 import { isRoleplayEnabled } from "../lib/roleplay/flag";
 import { DEFAULT_MAX_OUTPUT_KEY, DEFAULT_MAX_OUTPUT_MAX } from "../lib/ai/modelLimits";
+import { isSamePath, toPosixPath } from "../lib/paths";
 import {
   CONTEXT_UTILIZATION_DEFAULT,
   CONTEXT_UTILIZATION_MAX,
@@ -74,7 +75,18 @@ function loadRecentProjects(): string[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter((p): p is string => typeof p === "string").slice(0, RECENT_PROJECTS_MAX);
+    // Normalised on the way in rather than migrated on disk: entries written
+    // by an older build carry the host's spelling, and one of them reopened
+    // from this list becomes `projectPath` verbatim. Deduped by path identity
+    // for the same reason — otherwise the same project appears twice, once per
+    // spelling, and the cap of 10 quietly evicts an older one.
+    const seen: string[] = [];
+    for (const p of parsed) {
+      if (typeof p !== "string") continue;
+      const norm = toPosixPath(p);
+      if (!seen.some((q) => isSamePath(q, norm))) seen.push(norm);
+    }
+    return seen.slice(0, RECENT_PROJECTS_MAX);
   } catch {
     return [];
   }
@@ -397,7 +409,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   addRecentProject: (path) => {
     set((state) => {
-      const next = [path, ...state.recentProjects.filter((p) => p !== path)].slice(
+      const next = [path, ...state.recentProjects.filter((p) => !isSamePath(p, path))].slice(
         0, RECENT_PROJECTS_MAX,
       );
       writePref(RECENT_PROJECTS_KEY, JSON.stringify(next));
@@ -413,9 +425,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   // this is the moment the app learns a project is gone.
   removeRecentProject: (path) => {
     set((state) => {
-      const next = state.recentProjects.filter((p) => p !== path);
+      const next = state.recentProjects.filter((p) => !isSamePath(p, path));
       writePref(RECENT_PROJECTS_KEY, JSON.stringify(next));
-      prunePrefsWithPrefix(PINNED_LORE_PREFIX, (p) => p !== path);
+      prunePrefsWithPrefix(PINNED_LORE_PREFIX, (p) => !isSamePath(p, path));
       return { recentProjects: next };
     });
   },

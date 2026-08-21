@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
+import { toPosixPath } from "./paths";
 
 export interface FileNode {
   name: string;
@@ -13,7 +14,12 @@ export interface FileNode {
  * directory can be registered as an allowed root for the scoped fs_* commands.
  */
 export async function openProjectFolder(): Promise<string | null> {
-  return invoke<string | null>("project_open_dialog");
+  const picked = await invoke<string | null>("project_open_dialog");
+  // One of the three doors a host-spelled path enters through — see
+  // `docs/path-spelling-plan.md`. This one is the root of everything: the
+  // project path is compared against, joined onto, and persisted into the
+  // recents list, so it must have a single spelling from here on.
+  return picked === null ? null : toPosixPath(picked);
 }
 
 /**
@@ -39,8 +45,26 @@ export async function scaffoldProject(
   await invoke("scaffold_project", { projectPath, categories });
 }
 
+/**
+ * The project's file tree, with every path in the app's POSIX spelling.
+ *
+ * Normalising the project path alone would not be enough: Rust builds each
+ * child with `DirEntry::path()`, whose `PathBuf::push` uses the **host's**
+ * separator at every level regardless of what the parent was spelled with —
+ * hand it `D:/书` and it answers `D:/书\第一章.md`. So the tree is normalised
+ * here, on the way in, rather than asking the Rust side to answer in a
+ * spelling it does not itself use.
+ */
 export async function readDirRecursive(dirPath: string): Promise<FileNode[]> {
-  return invoke("read_dir_recursive", { dirPath });
+  return normalizeTree(await invoke<FileNode[]>("read_dir_recursive", { dirPath }));
+}
+
+function normalizeTree(nodes: FileNode[]): FileNode[] {
+  return nodes.map((n) => ({
+    ...n,
+    path: toPosixPath(n.path),
+    children: n.children ? normalizeTree(n.children) : n.children,
+  }));
 }
 
 // ── Per-project DB (lore, token usage, project settings) ─────────────────────

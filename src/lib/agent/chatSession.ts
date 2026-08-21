@@ -23,6 +23,7 @@ import type { StreamMessage } from "../ai/types";
 import type { AgentEvent } from "./events";
 import { createSessionMeta, type ChatSessionMeta } from "./compact";
 import { contentWithoutImages, hasImageParts } from "./imageHistory";
+import { toPosixPath } from "../paths";
 
 /**
  * Replaces a picture in the *saved* history. Restoring a session brings back
@@ -167,6 +168,9 @@ function normalizeTurns(turns: readonly PersistedTurn[]): PersistedTurn[] {
     log: Array.isArray(t.log)
       ? t.log.map(migrateLogEvent).filter((e): e is AgentEvent => e !== null)
       : [],
+    // A picture's path is absolute; a blob written by an older build carries
+    // the host's spelling, and the transcript then cannot render it.
+    images: Array.isArray(t.images) ? t.images.map(toPosixPath) : t.images,
   }));
 }
 
@@ -199,11 +203,16 @@ export function deserializeChatSession(json: string): ChatSnapshot | null {
     const [dir, version, carrierIdx] = entry;
     const carrier = at(carrierIdx);
     if (typeof dir === "string" && typeof version === "string" && carrier) {
-      meta.injected.set(dir, { version, carrier });
+      // Keyed by an absolute `LoreEntity.dirPath`, and looked up with
+      // `Map.get` — a spelling the live index no longer uses is a miss, and a
+      // miss silently re-injects every entity into the restored conversation.
+      meta.injected.set(toPosixPath(dir), { version, carrier });
     }
   }
-  meta.lastDocPath = typeof data.meta.lastDocPath === "string" ? data.meta.lastDocPath : null;
-  meta.bodyDocPath = typeof data.meta.bodyDocPath === "string" ? data.meta.bodyDocPath : null;
+  // Compared against `activeFilePath` to decide whether the open document has
+  // to be described (or re-sent) again on the next turn.
+  meta.lastDocPath = typeof data.meta.lastDocPath === "string" ? toPosixPath(data.meta.lastDocPath) : null;
+  meta.bodyDocPath = typeof data.meta.bodyDocPath === "string" ? toPosixPath(data.meta.bodyDocPath) : null;
 
   return {
     turns: normalizeTurns(data.turns),

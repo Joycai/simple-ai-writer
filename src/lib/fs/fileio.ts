@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { toPosixPath } from "../paths";
 
 export async function readFile(path: string): Promise<string> {
   return invoke("fs_read_text_file", { path });
@@ -90,7 +91,16 @@ export async function previewHtmlWindow(path: string): Promise<void> {
 
 export interface DirEntry { name: string; path: string; isDirectory: boolean; }
 
+/**
+ * One directory's entries, with their paths in the app's POSIX spelling.
+ *
+ * The Rust side answers in the host's own spelling — `D:\书\第一章.md` on
+ * Windows — and this is one of the three doors a path enters the app through
+ * (see `lib/paths.ts` and `docs/path-spelling-plan.md`). Normalising here is
+ * what makes `LoreEntity.dirPath` — a key that gets written into
+ * `agents.json` and the pinned-lore preferences — mean one thing.
+ */
 export async function readDir(path: string): Promise<DirEntry[]> {
   const raw = await invoke<{ name: string; path: string; is_dir: boolean }[]>("fs_read_dir", { path });
-  return raw.map((e) => ({ name: e.name, path: e.path, isDirectory: e.is_dir }));
+  return raw.map((e) => ({ name: e.name, path: toPosixPath(e.path), isDirectory: e.is_dir }));
 }

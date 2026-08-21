@@ -1115,9 +1115,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // the file was opened — this is where the deferred body lands when the
         // seed described the file instead of injecting it.
         if (meta) {
-          const docSwitched = !!activeFilePath && activeFilePath !== meta.lastDocPath;
+          const docSwitched = !!activeFilePath && !isSamePath(activeFilePath, meta.lastDocPath);
           const needsBody = wantsDocBody && !!activeFilePath
-            && activeFilePath !== meta.bodyDocPath;
+            && !isSamePath(activeFilePath, meta.bodyDocPath);
           const memory = needsBody && docModel().memory && activeFilePath
             ? await loadMemory(projectPath, activeFilePath)
             : null;
