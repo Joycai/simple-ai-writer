@@ -105,7 +105,17 @@ export async function runStructuredTask(args: StructuredTaskArgs): Promise<strin
       ...common,
       messages,
       tools: [args.outputTool],
-      toolChoice: { type: "function", function: { name: toolName } },
+      // "required" rather than naming the function, even though naming it is
+      // the more precise spelling: exactly one tool is offered here, so the two
+      // are the same instruction — and the named form is the one backends drop.
+      // Ollama accepts `"required"` and silently ignores `{type:"function",…}`,
+      // answering with plain prose and no tool call at all; that reached the
+      // EMPTY_TOOL_CALL path below and cost a whole wasted request before the
+      // JSON fallback ran, on exactly the local models where a request is
+      // measured in tens of seconds. The three adapters map it the same way
+      // (OpenAI `required`, Anthropic `{type:"any"}`, Gemini mode ANY without
+      // allowedFunctionNames), so nothing that worked before stops working.
+      toolChoice: "required",
       onChunk: (chunk) => {
         if ("reasoning" in chunk) {
           noteReasoning(chunk);

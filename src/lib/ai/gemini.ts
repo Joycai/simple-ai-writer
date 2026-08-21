@@ -194,6 +194,16 @@ export async function streamGemini(opts: StreamOptions): Promise<void> {
     body.safetySettings = safetySettings;
   }
 
+  // Same shared-territory merge as the thinking block below — and before it, so
+  // a dialect that ever wanted to pin a temperature would still win. Absent
+  // unless the author set one; 0 is a real value, hence the `!== undefined`.
+  if (opts.temperature !== undefined) {
+    body.generationConfig = {
+      ...(body.generationConfig as Record<string, unknown> | undefined),
+      temperature: opts.temperature,
+    };
+  }
+
   // Merged one level deep rather than assigned: `generationConfig` is shared
   // territory — JSON mode already puts `responseMimeType` there via extraBody,
   // and a plain assign in either direction would drop the other's field.

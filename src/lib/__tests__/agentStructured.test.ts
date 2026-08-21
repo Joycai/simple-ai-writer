@@ -49,7 +49,11 @@ describe("runStructuredTask", () => {
 
     expect(result).toBe('{"name":"Ava"}');
     const call = mockStream.mock.calls[0][0];
-    expect(call.toolChoice).toEqual({ type: "function", function: { name: "emit_result" } });
+    // "required", not the named form: only one tool is offered, so the two say
+    // the same thing — and ollama silently ignores the named form, answering
+    // with prose and no tool call at all (see structured.ts).
+    expect(call.toolChoice).toBe("required");
+    expect(call.tools).toHaveLength(1);
     expect((call.messages[0] as { content: string }).content).toContain("Call emit_result once.");
   });
 

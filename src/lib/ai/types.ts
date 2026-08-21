@@ -343,6 +343,16 @@ export interface StreamOptions {
    */
   maxOutput?: number;
   /**
+   * Sampling temperature, or absent to send nothing and leave the endpoint's
+   * own default alone.
+   *
+   * Sent by all three adapters, with one protocol-level exception: the Messages
+   * API allows only `temperature: 1` while extended thinking is on, so the
+   * Anthropic adapter clamps to its own ceiling of 1 and omits the field
+   * entirely on a thinking request. Nothing else about a request depends on it.
+   */
+  temperature?: number;
+  /**
    * How hard the model should think, in this app's own vocabulary. Translated
    * per protocol family by `lib/ai/reasoning.ts`; absent (and `"default"`) sends
    * nothing at all, leaving the endpoint's own default alone.

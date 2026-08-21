@@ -8,7 +8,7 @@ import {
 import { docModel, findTask, promptParams } from "../lib/profile/active";
 import { taskLabel } from "../lib/profile";
 import { notify } from "../lib/notify";
-import { presetForTools } from "../lib/agent/presets";
+import { presetForTools, toolBriefingFor } from "../lib/agent/presets";
 import { runAgent } from "../lib/agent/runtime";
 import {
   ASSUMED_INPUT_CEILING_TOKENS, fixedContextChars, measureCharsPerToken, planContextBudget,
@@ -236,9 +236,24 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const task = findTask(kind);
     if (!task) { set({ error: i18n.t("ai.errors.taskNotFound", { task: kind }) }); return; }
 
+    // Having tools *is* what makes a run agentic — see presetForTools. Resolved
+    // here rather than at the branch below because the system prompt depends on
+    // it, and the context budget measures that prompt.
+    const preset = presetForTools(task.tools);
+    const isAgentic = preset !== null;
+
     // System prompt: user-selected prompt (scene === "system"), else default
     const prompt = prompts.find((p) => p.id === activePromptId);
-    const systemPrompt = prompt?.content ?? profileSystemPrompt();
+    const basePrompt = prompt?.content ?? profileSystemPrompt();
+    // The tool briefing belongs in the SYSTEM layer for the same reason the
+    // chat's does (see agentStore): it is a standing fact about this run, not a
+    // step of the task. Empty for every tier that needs none — see
+    // toolBriefingFor for which and why.
+    const briefing = toolBriefingFor(
+      task.tools,
+      promptParams(i18n.language === "zh-CN", task.packId),
+    );
+    const systemPrompt = briefing ? `${basePrompt}\n\n${briefing}` : basePrompt;
 
     // Snapshot the writing focus and the committed selection together, here —
     // before the keyring read below and every other await further down (memory
@@ -424,9 +439,6 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
 
     const loreBudgetChars = plan.loreChars;
 
-    // Having tools *is* what makes a run agentic — see presetForTools.
-    const preset = presetForTools(task.tools);
-    const isAgentic = preset !== null;
     // Only a task that can browse the project needs to know which file it is
     // looking at; for a toolless one the block is dead weight. Project-relative,
     // because that is the shape the read tools report and accept.
