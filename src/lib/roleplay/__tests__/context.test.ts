@@ -55,7 +55,7 @@ const AGENT: RoleplayAgent = {
   id: "rp-a-0001", kind: "character", name: "沈砚",
   primaryDirPath: ELDEN.dirPath,
   boundPaths: [ELDEN.dirPath],
-  modelId: null, authorPersona: null,
+  modelId: null, areaId: null, authorPersona: null,
   createdAt: 0, updatedAt: 0, turnCount: 0, boundHash: null,
 };
 

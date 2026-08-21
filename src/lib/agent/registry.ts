@@ -1915,6 +1915,14 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             title: { type: "string", description: "One line. This is what you see first when you look back." },
             body: { type: "string", description: "The detail: what exactly was agreed, what changed, why it matters." },
             subject: { type: "string", description: "Who or what this is about, if any." },
+            keys: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "2-5 words that should bring this back to mind later: names, places, objects, " +
+                "the promise itself. Use the words as they appear in the scene. Once this scene " +
+                "ends, these are how you find this memory again.",
+            },
           },
           required: ["kind", "title"],
         },

@@ -15,6 +15,7 @@ import { useLoreStore } from "../../stores/loreStore";
 import { useRoleplayStore, type AgentDraft } from "../../stores/roleplayStore";
 import { ModelSelector } from "../ai/ModelSelector";
 import { SceneTransition } from "./SceneTransition";
+import { AreaPicker, type AreaChoice } from "./AreaPicker";
 import { listArchives, loadPersonaCard } from "../../lib/roleplay/store";
 import { useProjectStore } from "../../stores/projectStore";
 import {
@@ -53,7 +54,10 @@ export function AgentComposer({
   const isZh = i18n.language.startsWith("zh");
   const loreIndex = useLoreStore((s) => s.index);
   const projectPath = useProjectStore((s) => s.projectPath);
-  const { createAgent, updateAgent, removeAgent } = useRoleplayStore();
+  const { createAgent, updateAgent, removeAgent, bindArea, refreshAreas } = useRoleplayStore();
+  const areas = useRoleplayStore((s) => s.areas);
+  const agents = useRoleplayStore((s) => s.agents);
+  useEffect(() => { void refreshAreas(); }, [refreshAreas]);
 
   const [kind, setKind] = useState<AgentKind>(editing?.kind ?? "character");
   const [primary, setPrimary] = useState<string | null>(editing?.primaryDirPath ?? null);
@@ -68,6 +72,9 @@ export function AgentComposer({
   // 转场面板。原来是 footer 上的就地确认条——「接续」那一支要跑一次模型、还要
   // 让作者过目改稿，一行装不下了（见 SceneTransition 的头注）。
   const [transition, setTransition] = useState(false);
+  // 记忆区：新建时默认「新建一个」，编辑时保持现状。
+  const [area, setArea] = useState<AreaChoice>(editing ? editing.areaId : "new");
+  const [areaQuery, setAreaQuery] = useState("");
 
   useEffect(() => {
     if (!editing || !projectPath) return;
@@ -156,8 +163,15 @@ export function AgentComposer({
       modelId,
       instruction,
     };
-    if (editing) await updateAgent(editing.id, draft);
-    else await createAgent(draft);
+    // 记忆区的绑定走 `bindArea` 而不是塞进 draft：它要摘掉旧的、抢占新的、写两份
+    // meta.json——那是一串必须成对发生的写，属于 store 的一个动作，不属于表单。
+    if (editing) {
+      await updateAgent(editing.id, draft);
+      if (kind === "character" && area !== editing.areaId) await bindArea(editing.id, area);
+    } else {
+      const id = await createAgent({ ...draft, areaId: null });
+      if (id && kind === "character" && area !== null) await bindArea(id, area);
+    }
     setBusy(false);
     onClose();
   };
@@ -423,6 +437,19 @@ export function AgentComposer({
               />
             </div>
           </section>
+
+          {/* 记忆区。旁白没有这一节——它不扮演任何人，也就没有「它以为的事」。 */}
+          {kind === "character" && (
+            <AreaPicker
+              areas={areas}
+              value={area}
+              agentId={editing?.id ?? null}
+              nameOf={(id) => agents[id]?.name ?? null}
+              query={areaQuery}
+              onQuery={setAreaQuery}
+              onPick={setArea}
+            />
+          )}
 
           {/* 指令 */}
           <section>
