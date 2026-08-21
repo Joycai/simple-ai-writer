@@ -19,7 +19,7 @@ const AGENT = "rp-a-0001";
 function rec(over: Partial<MemoryRecord> = {}): MemoryRecord {
   return {
     id: "m1", kind: "pact", title: "雪停了一起去塔下", body: "他答应了。",
-    status: "open", turn: 12, subject: null, updatedAt: 0, ...over,
+    status: "open", turn: 12, subject: null, updatedAt: 0, keys: [], ...over,
   };
 }
 
@@ -214,5 +214,39 @@ describe("dropRecordsFrom", () => {
   it("next 不回退——id 只增不重用", () => {
     const before = doc([rec({ id: "m9", turn: 9 })], 10);
     expect(dropRecordsFrom(before, 1).doc.next).toBe(10);
+  });
+});
+
+/**
+ * 关键字往返。
+ *
+ * 它现在还没人读（记忆区是下一期），但**已经在往盘上写**——写错了要到那一期才
+ * 发现，而那时受影响的是所有已经攒下的前情。所以格式先守起来。
+ */
+describe("keys 的往返", () => {
+  it("写出去再读回来还是同一组", () => {
+    const before = doc([rec({ id: "m1", kind: "scene", keys: ["塔", "雪", "沈砚"] })], 2);
+    const after = parseMemory(renderMemory("rp-a-0001", before));
+    expect(after.records[0].keys).toEqual(["塔", "雪", "沈砚"]);
+  });
+
+  it("关键字里的分隔符被清掉，否则这一行读不回来", () => {
+    const before = doc([rec({ id: "m1", keys: ["西厢 · 夜", "塔,雪"] })], 2);
+    const after = parseMemory(renderMemory("rp-a-0001", before));
+    expect(after.records[0].keys).toEqual(["西厢 夜", "塔 雪"]);
+    expect(after.records[0].subject).toBeNull();
+  });
+
+  it("没有关键字时不写这个字段，老文件读出来是空数组", () => {
+    const md = renderMemory("rp-a-0001", doc([rec({ id: "m1", keys: [] })], 2));
+    expect(md).not.toContain("keys=");
+    expect(parseMemory(md).records[0].keys).toEqual([]);
+  });
+
+  it("带关键字时主语仍然认得出来", () => {
+    const before = doc([rec({ id: "m1", subject: "桐谷萤", keys: ["塔"] })], 2);
+    const after = parseMemory(renderMemory("rp-a-0001", before));
+    expect(after.records[0].subject).toBe("桐谷萤");
+    expect(after.records[0].keys).toEqual(["塔"]);
   });
 });

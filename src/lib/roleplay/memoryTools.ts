@@ -16,7 +16,7 @@ import type { MemoryKind, MemoryRecord, MemoryStatus } from "./model";
 export interface AgentMemoryStore {
   list(): Promise<MemoryRecord[]>;
   add(rec: {
-    kind: MemoryKind; title: string; body: string; subject: string | null;
+    kind: MemoryKind; title: string; body: string; subject: string | null; keys: string[];
   }): Promise<MemoryRecord>;
   revise(
     id: string, patch: { body?: string; status?: MemoryStatus },
@@ -41,6 +41,7 @@ interface RememberArgs {
   title?: unknown;
   body?: unknown;
   subject?: unknown;
+  keys?: unknown;
 }
 
 export async function rememberTool(
@@ -61,6 +62,13 @@ export async function rememberTool(
     title,
     body: typeof args.body === "string" ? args.body.trim() : "",
     subject: typeof args.subject === "string" && args.subject.trim() ? args.subject.trim() : null,
+    // 关键字现在是常驻层里的一个附带字段，**转场那一刻**才真正派上用场：这条
+    // 记录沉进记忆区之后，靠它被想起来（见 lib/roleplay/area）。所以要在记的
+    // 当下就收——那时模型正看着上下文，事后补要重读整场戏。
+    keys: Array.isArray(args.keys)
+      ? args.keys.filter((k): k is string => typeof k === "string" && k.trim() !== "")
+        .map((k) => k.trim()).slice(0, 8)
+      : [],
   });
   return {
     toolCallId: id,

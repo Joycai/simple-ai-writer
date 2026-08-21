@@ -17,10 +17,14 @@
  * 一个赭石），靠的是把它们整组折起来。
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus, X } from "lucide-react";
 import { useRoleplayStore } from "../../stores/roleplayStore";
+import { useProjectStore } from "../../stores/projectStore";
+import { areaEntities, loadAreaMeta, scanArea, type AreaMeta } from "../../lib/roleplay/area";
+import { AreaBrowser } from "./AreaBrowser";
+import type { LoreEntity } from "../../lib/lore/model";
 import { MEMORY_KINDS, hasDoneState, kindLabel } from "../../lib/roleplay/memory";
 import type { MemoryKind, MemoryRecord } from "../../lib/roleplay/model";
 import styles from "./MemoryPanel.module.css";
@@ -148,11 +152,30 @@ export function MemoryPanel({
   const session = useRoleplayStore((s) => s.sessions[agentId]);
   const refreshMemory = useRoleplayStore((s) => s.refreshMemory);
   const [adding, setAdding] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
+  const [areaMeta, setAreaMeta] = useState<AreaMeta | null>(null);
   const [showClosed, setShowClosed] = useState(false);
 
   const records = session?.memory ?? [];
   const open = useMemo(() => records.filter((r) => r.status === "open"), [records]);
   const closed = useMemo(() => records.filter((r) => r.status !== "open"), [records]);
+
+  // 记忆区那一层。读盘而不是进 store：它只在这个面板打开着的时候有人看，而每次
+  // 转场都会改它——让 store 背一份就得再维护一条同步路径。
+  const projectPath = useProjectStore((s) => s.projectPath);
+  const areaId = useRoleplayStore((s) => s.agents[agentId]?.areaId ?? null);
+  const agentName = useRoleplayStore((s) => s.agents[agentId]?.name ?? null);
+  const [areaItems, setAreaItems] = useState<LoreEntity[]>([]);
+  useEffect(() => {
+    if (!projectPath || !areaId) { setAreaItems([]); return; }
+    let alive = true;
+    void scanArea(projectPath, areaId)
+      .then((idx) => { if (alive) setAreaItems(areaEntities(idx)); })
+      .catch(() => { if (alive) setAreaItems([]); });
+    void loadAreaMeta(projectPath, areaId).then((m) => { if (alive) setAreaMeta(m); });
+    return () => { alive = false; };
+    // 转场之后条目会多出来一批——`turnCount` 归零正是那一刻。
+  }, [projectPath, areaId, session?.turns.length]);
 
   return (
     <aside className={styles.panel}>
@@ -202,6 +225,20 @@ export function MemoryPanel({
           </div>
         )}
 
+        {/* ── 常驻层 ── 每轮都在，不需要被提起。 */}
+        {(open.length > 0 || areaItems.length > 0) && (
+          <div className={styles.tierLabel}>
+            <span className={styles.tierName}>
+              {t("roleplay.memory.tierStanding", { defaultValue: "常驻" })}
+            </span>
+            <span className={styles.tierNote}>
+              {t("roleplay.memory.tierStandingNote", {
+                n: open.length, defaultValue: `${open.length} · 每轮都在`,
+              })}
+            </span>
+          </div>
+        )}
+
         {MEMORY_KINDS.map((kind) => {
           const group = open.filter((r) => r.kind === kind);
           if (!group.length) return null;
@@ -231,7 +268,76 @@ export function MemoryPanel({
             ))}
           </section>
         )}
+
+        {/* ── 降级分隔 ── 两层之间的关系是**上下**，不是并列：转场时常驻的东西
+            往下沉一层。所以这里画的是一支向下的箭头，不是一道普通的分节线。 */}
+        {areaId && (
+          <div className={styles.sinkRow}>
+            <span className={styles.sinkLine} />
+            <span className={styles.sinkArrow} aria-hidden />
+            <span className={styles.sinkText}>
+              {t("roleplay.memory.sink", { defaultValue: "转场时沉下去" })}
+            </span>
+            <span className={styles.sinkLine} />
+          </div>
+        )}
+
+        {/* ── 记忆区层 ── 相关时才出现。 */}
+        {areaId && (
+          <>
+            <div className={styles.tierLabel}>
+              <span className={styles.tierName}>
+                {t("roleplay.area.label", { defaultValue: "记忆区" })}
+              </span>
+              <span className={styles.tierNote}>
+                {t("roleplay.memory.tierAreaNote", {
+                  n: areaItems.length, defaultValue: `${areaItems.length} · 相关时才出现`,
+                })}
+              </span>
+            </div>
+            {areaItems.length === 0 && (
+              <div className={styles.areaEmpty}>
+                {t("roleplay.memory.areaEmpty", {
+                  defaultValue: "还是空的。这一场转场时，上面那些不再欠着的东西会沉到这里。",
+                })}
+              </div>
+            )}
+            {areaItems.length > 0 && (
+              <button
+                type="button"
+                className={styles.browseAll}
+                onClick={() => setBrowsing(true)}
+              >
+                {t("roleplay.memory.browseAll", {
+                  n: areaItems.length, defaultValue: `浏览全部 ${areaItems.length} 条`,
+                })}
+                <span className={styles.browseArrow} aria-hidden />
+              </button>
+            )}
+            {areaItems.map((e) => (
+              <div key={e.dirPath} className={styles.areaItem}>
+                <div className={styles.areaTitle}>{e.name}</div>
+                {e.summary && <div className={styles.areaSummary}>{e.summary}</div>}
+                {e.aliases.length > 0 && (
+                  <div className={styles.areaKeys}>
+                    {e.aliases.map((k) => (
+                      <span key={k} className={styles.areaKey}>{k}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </>
+        )}
       </div>
+
+      {browsing && areaMeta && (
+        <AreaBrowser
+          meta={areaMeta}
+          holderName={agentName}
+          onClose={() => setBrowsing(false)}
+        />
+      )}
     </aside>
   );
 }

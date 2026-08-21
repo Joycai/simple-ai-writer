@@ -18,12 +18,18 @@
  * 3. **A plan that destroys work needs the consequence acknowledged in words**
  *    — a sentence naming what is lost, not a typed ritual the author learns to
  *    perform without reading.
+ *
+ * The per-entry 「执行 / 跳过」 column is the fourth thing this screen is for.
+ * A mirror is the default, but the author is the one who decides whether a
+ * local-only draft survives a pull, so every actionable row carries its own
+ * off switch and the footer counts only what is still switched on.
  */
 
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ModalShell } from "../common/ModalShell";
-import type { SyncPlan, SyncStep } from "../../lib/sync/model";
+import type { EntryPath, SyncDecision, SyncPlan, SyncStep } from "../../lib/sync/model";
+import { canDecide } from "../../lib/sync/plan";
 import { useSyncStore } from "../../stores/syncStore";
 import { useProjectStore } from "../../stores/projectStore";
 import s from "./sync.module.css";
@@ -35,7 +41,7 @@ const FILTER_THRESHOLD = 12;
  *  project from mounting 3000 rows; the filters are how you reach the rest. */
 const ROW_CAP = 60;
 
-type Filter = "all" | "risk" | "create" | "overwrite" | "delete" | "unchanged";
+type Filter = "all" | "risk" | "create" | "overwrite" | "delete" | "skipped" | "unchanged";
 
 function shortHash(hash: string | null): string | null {
   return hash ? hash.slice(0, 8) : null;
@@ -54,6 +60,7 @@ export function SyncPreviewModal() {
   const error = useSyncStore((p) => p.error);
   const setAcknowledged = useSyncStore((p) => p.setAcknowledged);
   const confirmRun = useSyncStore((p) => p.confirmRun);
+  const setDecision = useSyncStore((p) => p.setDecision);
   const closeModal = useSyncStore((p) => p.closeModal);
   const startPreview = useSyncStore((p) => p.startPreview);
 
@@ -111,6 +118,7 @@ export function SyncPreviewModal() {
             setShowUnchanged={setShowUnchanged}
             acknowledged={acknowledged}
             setAcknowledged={setAcknowledged}
+            onDecide={setDecision}
             error={error}
             onCancel={close}
             onConfirm={() => projectPath && void confirmRun(projectPath)}
@@ -176,6 +184,7 @@ interface PreviewProps {
   setShowUnchanged: (on: boolean) => void;
   acknowledged: boolean;
   setAcknowledged: (on: boolean) => void;
+  onDecide: (paths: readonly EntryPath[], decision: SyncDecision) => void;
   error: string | null;
   onCancel: () => void;
   onConfirm: () => void;
@@ -185,10 +194,18 @@ interface PreviewProps {
 function PreviewBody(p: PreviewProps) {
   const { t } = useTranslation();
   const { plan, isPush } = p;
-  const { create, overwrite, delete: del, unchanged, warnings } = plan.summary;
+  // Applied-only counts (see `SyncPlan.summary`): everything the footer says is
+  // about the run that would start, not about the mirror that was proposed.
+  const { create, overwrite, delete: del, unchanged, warnings, skipped } = plan.summary;
 
   const risky = useMemo(() => plan.steps.filter((x) => x.warning !== null), [plan]);
-  const conflicts = risky.filter((x) => x.warning === "both-changed").length;
+  // A skipped conflict is not a conflict any more — nothing of it runs — so it
+  // stops driving the acknowledgement gate while still being listed, dimmed,
+  // where the author can put it back.
+  const conflicts = risky.filter(
+    (x) => x.warning === "both-changed" && x.decision === "apply",
+  ).length;
+  const willRun = create + overwrite + del;
   const ordinary = useMemo(
     () => plan.steps.filter((x) => x.action !== "none" && x.warning === null),
     [plan],
@@ -280,6 +297,7 @@ function PreviewBody(p: PreviewProps) {
         case "create": return x.action === "create";
         case "overwrite": return x.action === "overwrite";
         case "delete": return x.action === "delete";
+        case "skipped": return x.decision === "skip" && x.action !== "none";
         case "unchanged": return x.action === "none";
         default: return true;
       }
@@ -289,6 +307,21 @@ function PreviewBody(p: PreviewProps) {
   const ordinaryShown = filtered(ordinary);
   const sameShown = filtered(same);
   const showFilters = plan.steps.length - unchanged > FILTER_THRESHOLD;
+
+  // Bulk decisions act on what the filters currently select — including the
+  // rows past `ROW_CAP` that are not mounted. That is the point: "keep the 200
+  // entries only I have" is one filter and one click, not 200 toggles, and the
+  // rows the author cannot see are exactly the ones a per-row-only control
+  // would silently leave behind.
+  const bulk = [...riskyShown, ...ordinaryShown].filter(canDecide);
+  const bulkBar = (
+    <BulkBar
+      paths={bulk.map((x) => x.path)}
+      skippable={bulk.filter((x) => x.decision === "apply").length}
+      restorable={bulk.filter((x) => x.decision === "skip").length}
+      onDecide={p.onDecide}
+    />
+  );
 
   return (
     <>
@@ -314,11 +347,15 @@ function PreviewBody(p: PreviewProps) {
       {showFilters ? (
         <div className={s.filters}>
           {([
+            // Chip counts are per action across the whole plan, skipped rows
+            // included — a chip is a way to *reach* rows, so a count that
+            // shrank as you skipped would hide the rows you just turned off.
             ["all", t("sync.filterAll"), plan.steps.length],
-            ["risk", t("sync.filterRisk"), warnings],
-            ["create", t("sync.filterCreate"), create],
-            ["overwrite", t("sync.filterOverwrite"), overwrite],
-            ["delete", t("sync.filterDelete"), del],
+            ["risk", t("sync.filterRisk"), risky.length],
+            ["create", t("sync.filterCreate"), byAction(plan, "create")],
+            ["overwrite", t("sync.filterOverwrite"), byAction(plan, "overwrite")],
+            ["delete", t("sync.filterDelete"), byAction(plan, "delete")],
+            ...(skipped > 0 ? ([["skipped", t("sync.filterSkipped"), skipped]] as [Filter, string, number][]) : []),
             ["unchanged", t("sync.filterUnchanged"), unchanged],
           ] as [Filter, string, number][]).map(([id, label, n]) => (
             <button
@@ -336,6 +373,7 @@ function PreviewBody(p: PreviewProps) {
             value={p.query}
             onChange={(e) => p.setQuery(e.target.value)}
           />
+          {bulkBar}
         </div>
       ) : (
         <div className={s.summary}>
@@ -350,6 +388,14 @@ function PreviewBody(p: PreviewProps) {
                 </span>
               );
             })}
+          {skipped > 0 && (
+            <span>
+              {" · "}
+              {t("sync.filterSkipped")} <b>{skipped}</b>
+            </span>
+          )}
+          <span className={s.spacer} />
+          {bulkBar}
         </div>
       )}
 
@@ -364,6 +410,7 @@ function PreviewBody(p: PreviewProps) {
           <span className={isPush ? s.thTarget : undefined}>
             {t("sync.colRemote")} · {t(isPush ? "sync.colTarget" : "sync.colSource")}
           </span>
+          <span className={s.thDecide}>{t("sync.colDecision")}</span>
         </div>
 
         {riskyShown.length > 0 && (
@@ -373,7 +420,7 @@ function PreviewBody(p: PreviewProps) {
               <span className={`${s.groupRule} ${s.groupRuleRisk}`} />
             </div>
             {riskyShown.slice(0, ROW_CAP).map((step) => (
-              <Row key={step.path} step={step} isPush={isPush} />
+              <Row key={step.path} step={step} isPush={isPush} onDecide={p.onDecide} />
             ))}
             {riskyShown.length > ROW_CAP && (
               <div className={s.more}>{t("sync.andMore", { n: riskyShown.length - ROW_CAP })}</div>
@@ -388,7 +435,7 @@ function PreviewBody(p: PreviewProps) {
               <span className={s.groupRule} />
             </div>
             {ordinaryShown.slice(0, ROW_CAP).map((step) => (
-              <Row key={step.path} step={step} isPush={isPush} />
+              <Row key={step.path} step={step} isPush={isPush} onDecide={p.onDecide} />
             ))}
             {ordinaryShown.length > ROW_CAP && (
               <div className={s.more}>{t("sync.andMore", { n: ordinaryShown.length - ROW_CAP })}</div>
@@ -404,7 +451,7 @@ function PreviewBody(p: PreviewProps) {
             </button>
             {p.showUnchanged &&
               sameShown.slice(0, ROW_CAP).map((step) => (
-                <Row key={step.path} step={step} isPush={isPush} />
+                <Row key={step.path} step={step} isPush={isPush} onDecide={p.onDecide} />
               ))}
           </>
         )}
@@ -427,15 +474,24 @@ function PreviewBody(p: PreviewProps) {
             />
           </label>
         ) : (
-          <div className={s.footNote}>{isPush ? t("sync.pushNote") : t("sync.pullNote")}</div>
+          <div className={s.footNote}>
+            {skipped > 0
+              ? t("sync.skippedNote", { n: skipped })
+              : isPush
+                ? t("sync.pushNote")
+                : t("sync.pullNote")}
+          </div>
         )}
         <button className={s.btnGhost} onClick={p.onCancel}>{t("common.cancel")}</button>
         <button
           className={s.btnPrimary}
-          disabled={conflicts > 0 && !p.acknowledged}
+          // Nothing left switched on is not a sync: a pull would still zip the
+          // whole tree "before" writing nothing, and the run would report zero
+          // successes as if it had done its job.
+          disabled={willRun === 0 || (conflicts > 0 && !p.acknowledged)}
           onClick={p.onConfirm}
         >
-          {confirmLabel(t, isPush, create, overwrite, del)}
+          {willRun === 0 ? t("sync.nothingToRun") : confirmLabel(t, isPush, create, overwrite, del)}
         </button>
       </div>
     </>
@@ -492,19 +548,32 @@ function Band(props: {
   );
 }
 
-function Row({ step, isPush }: { step: SyncStep; isPush: boolean }) {
+function Row({
+  step,
+  isPush,
+  onDecide,
+}: {
+  step: SyncStep;
+  isPush: boolean;
+  onDecide: (paths: readonly EntryPath[], decision: SyncDecision) => void;
+}) {
   const { t } = useTranslation();
   const [category, ...rest] = step.path.split("/");
   const name = rest.join("/");
   const localHash = isPush ? step.sourceHash : step.targetHash;
   const remoteHash = isPush ? step.targetHash : step.sourceHash;
-  const conflict = step.warning === "both-changed";
+  const skip = step.decision === "skip";
+  // A skipped step keeps its warning text — it explains what it *would* have
+  // cost — but stops wearing the alarm: the row no longer describes anything
+  // that will happen, and leaving it lit would keep drawing the eye to the one
+  // decision already made.
+  const conflict = step.warning === "both-changed" && !skip;
+  const risky = step.warning !== null && !skip;
 
-  const rowClass =
-    step.warning === null ? s.row : conflict ? `${s.grid} ${s.rowConflict}` : `${s.grid} ${s.rowRisk}`;
+  const rowClass = conflict ? s.rowConflict : risky ? s.rowRisk : s.row;
 
   return (
-    <div className={step.warning === null ? `${s.grid} ${s.row}` : rowClass}>
+    <div className={`${s.grid} ${rowClass} ${skip ? s.rowSkipped : ""}`}>
       <div className={s.entry}>
         <span className={s.entryCat}>{category} / </span>
         {name}
@@ -515,12 +584,73 @@ function Row({ step, isPush }: { step: SyncStep; isPush: boolean }) {
           </div>
         )}
       </div>
-      <span className={`${s.badge} ${badgeClass(step)}`}>{t(`sync.action.${step.action}`)}</span>
+      <span className={`${s.badge} ${skip ? s.badgeSkipped : badgeClass(step)}`}>
+        {t(`sync.action.${step.action}`)}
+      </span>
       <HashCell hash={localHash} />
-      <span className={s.arrowCell}>{isPush ? "→" : "←"}</span>
+      <span className={s.arrowCell}>{skip ? "·" : isPush ? "→" : "←"}</span>
       <HashCell hash={remoteHash} />
+      {canDecide(step) ? (
+        <button
+          className={`${s.decide} ${skip ? s.decideOff : ""}`}
+          aria-pressed={!skip}
+          // The button names the verb it performs, and for a delete that verb
+          // is 「保留」 rather than 「跳过」: what the author is choosing is not
+          // an abstract step being skipped, it is this entry staying.
+          onClick={() => onDecide([step.path], skip ? "apply" : "skip")}
+        >
+          {skip ? t("sync.decide.restore") : t(`sync.decide.off.${step.action}`)}
+        </button>
+      ) : (
+        <span />
+      )}
     </div>
   );
+}
+
+/**
+ * Skip or restore everything the filters currently select.
+ *
+ * Both buttons are always present, each disabled when it has nothing to do, so
+ * the pair keeps its position instead of the row reflowing under the cursor as
+ * the selection changes.
+ */
+function BulkBar({
+  paths,
+  skippable,
+  restorable,
+  onDecide,
+}: {
+  paths: readonly EntryPath[];
+  skippable: number;
+  restorable: number;
+  onDecide: (paths: readonly EntryPath[], decision: SyncDecision) => void;
+}) {
+  const { t } = useTranslation();
+  if (paths.length === 0) return null;
+  return (
+    <div className={s.bulk}>
+      <button
+        className={s.bulkBtn}
+        disabled={skippable === 0}
+        onClick={() => onDecide(paths, "skip")}
+      >
+        {t("sync.bulkSkip", { n: skippable })}
+      </button>
+      <button
+        className={s.bulkBtn}
+        disabled={restorable === 0}
+        onClick={() => onDecide(paths, "apply")}
+      >
+        {t("sync.bulkRestore", { n: restorable })}
+      </button>
+    </div>
+  );
+}
+
+/** How many steps the plan has for one action, skipped ones included. */
+function byAction(plan: SyncPlan, action: SyncStep["action"]): number {
+  return plan.steps.filter((x) => x.action === action).length;
 }
 
 function HashCell({ hash }: { hash: string | null }) {

@@ -55,7 +55,7 @@ const AGENT: RoleplayAgent = {
   id: "rp-a-0001", kind: "character", name: "沈砚",
   primaryDirPath: ELDEN.dirPath,
   boundPaths: [ELDEN.dirPath],
-  modelId: null, authorPersona: null,
+  modelId: null, areaId: null, authorPersona: null,
   createdAt: 0, updatedAt: 0, turnCount: 0, boundHash: null,
 };
 
@@ -110,7 +110,7 @@ describe("seedRoleplayHistory", () => {
 
 const PACT: MemoryRecord = {
   id: "m1", kind: "pact", title: "雪停了一起去塔下", body: "他答应了。",
-  status: "open", turn: 12, subject: null, updatedAt: 0,
+  status: "open", turn: 12, subject: null, updatedAt: 0, keys: [],
 };
 
 describe("记忆块（不变量四）", () => {

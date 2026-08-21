@@ -249,27 +249,110 @@
 .rewindGo { color: var(--color-accent); }
 .rewindGo:hover { text-decoration: underline; }
 
-/* 「此前已封存 N 场」。稿面最上方的一条细线小字——它讲的正是这个位置的事：
-   再往上就没有了。做成整行可点，而不是只有「查看」两个字。 */
-.archiveBar {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  width: 100%;
-  border: none;
-  border-bottom: 1px solid var(--color-hairline);
-  background: none;
-  padding: 0 0 12px;
+/* ── 存档带 + 前情（设计稿 2f） ────────────────────────────────────────────
+   两者**是一件东西**：一条压在稿面顶端的带子，前情挂在它下面。它不是一轮对话，
+   所以没有左规、没有名标、不占正文的行距——靠满栏底色和上下两道细线和对话分开。 */
+.sceneBand {
+  background: var(--rp-rail);
+  border-top: 1px solid var(--color-border-panel);
+  border-bottom: 1px solid var(--color-border-panel);
   margin-bottom: 24px;
-  font-family: var(--font-sans);
-  font-size: 11px;
-  line-height: 1.6;
-  color: var(--color-text-hint);
-  cursor: pointer;
-  text-align: left;
 }
-.archiveBar:hover { color: var(--color-text-soft); }
-.archiveOpen { color: var(--color-accent); }
+
+.bandTop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.bandScene {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  color: var(--color-text-label);
+}
+
+.bandLink {
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--color-text-label);
+  cursor: pointer;
+}
+.bandLink:hover { color: var(--color-text-soft); }
+
+.recapBody { padding: 14px 16px 15px; }
+
+.recapHead { display: flex; align-items: baseline; gap: 9px; margin-bottom: 8px; }
+
+.recapTag {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+.recapNote {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--color-text-label);
+}
+
+.recapTitle {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 16px;
+  line-height: 1.4;
+  color: var(--color-text-primary);
+  margin-bottom: 6px;
+}
+
+.recapText {
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 1.85;
+  color: var(--color-text-soft);
+  text-wrap: pretty;
+}
+
+.recapActions { display: flex; align-items: center; gap: 9px; margin-top: 11px; }
+
+.recapSep { width: 1px; height: 9px; background: var(--color-border-panel); }
+
+/* 收起态：一行，标题仍然可见——收起的是正文，不是「这一场从哪儿来」。 */
+.recapFolded {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 9px 16px;
+  border: none;
+  background: none;
+  text-align: left;
+  color: var(--color-text-label);
+  cursor: pointer;
+}
+.recapFolded:hover { background: var(--rp-row-hover); }
+
+.recapFoldedTitle {
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 1;
+  color: var(--color-text-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* 作者的回合：一条 2px 赭石左规 + 一个小号名标。没有气泡。 */
 .authorTurn {
@@ -341,6 +424,44 @@
   line-height: 1.6;
   color: var(--color-text-label);
 }
+
+/* 「想起了…」——和「记下了…」同一个量级：单行、11px、不加底色、不占正文行距。
+   条目名带一道点线下划，点开是记忆区，不跳走。 */
+.recallTrace {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 20px;
+  margin-bottom: 6px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--color-text-label);
+}
+
+.traceName {
+  border: none;
+  background: none;
+  padding: 0 0 0 4px;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: var(--color-text-dim);
+  border-bottom: 1px dotted var(--color-border-strong);
+  cursor: pointer;
+}
+.traceName:hover { color: var(--color-text-primary); border-bottom-color: var(--color-accent); }
+
+/* 方向就是它和这一轮的关系：向左＝这一轮的输入，向右＝这一轮的结果。 */
+.traceArrowLeft,
+.traceArrowRight {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-top: 1.4px solid var(--color-text-label);
+}
+.traceArrowLeft { border-left: 1.4px solid var(--color-text-label); transform: rotate(-45deg); }
+.traceArrowRight { border-right: 1.4px solid var(--color-text-label); transform: rotate(45deg); }
 
 .memoryDot {
   width: 4px;

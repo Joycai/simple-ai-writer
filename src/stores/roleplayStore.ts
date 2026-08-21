@@ -47,8 +47,8 @@ import { assembleTurnInjection } from "../lib/context/rag";
 import { loadApiKey } from "../lib/keyStore";
 import { notify } from "../lib/notify";
 import {
-  buildBoundContent, refreshBoundBlock, refreshMemoryBlock, seedRoleplayHistory,
-  type RoleplaySessionMeta,
+  buildBoundContent, buildSystemPrompt, refreshBoundBlock, refreshMemoryBlock,
+  seedRoleplayHistory, type RoleplaySessionMeta,
 } from "../lib/roleplay/context";
 import {
   addRecord, dropRecordsFrom, loadMemoryDoc, reviseRecord, saveMemoryDoc, type MemoryDoc,
@@ -60,10 +60,23 @@ import {
   type RoleplayAgent, type SceneTurn,
 } from "../lib/roleplay/model";
 import { scriptPreview } from "../lib/roleplay/markup";
+
+/**
+ * 记忆区每轮最多注入多少 token。
+ *
+ * 和知识库的预算**分开**，而且小得多：一场戏聊到深处时最不该发生的事，是角色的
+ * 记忆把它自己的人设挤出去。
+ */
+const AREA_BUDGET_TOKENS = 800;
+import { runSceneRecap, type SceneRecap } from "../lib/roleplay/recap";
+import {
+  addAreaEntry, areaEntities, createArea, listAreas, loadAreaMeta, saveAreaMeta,
+  scanArea, type AreaSummary,
+} from "../lib/roleplay/area";
 import type { SceneInfo, SceneReader, SceneSlice } from "../lib/roleplay/sceneTools";
 import {
   archiveSession, deleteAgentDir, loadPersonaCard, loadRoster, loadSession, loadSummary,
-  memoryPath, saveRoster, savePersonaCard, saveSession, saveSummary, sessionPath,
+  listArchives, memoryPath, saveRoster, savePersonaCard, saveSession, saveSummary, sessionPath,
   summaryPath, transcriptPath,
 } from "../lib/roleplay/store";
 import {
@@ -119,6 +132,13 @@ export interface LiveSession {
    */
   stopped: boolean;
   /**
+   * 每一轮想起了记忆区里的哪几条。稿面上那道「想起了…」的痕迹读它。
+   *
+   * 按轮号存而不是只留最新一条：作者往回翻的时候，第 12 轮为什么那么答，要能在
+   * 第 12 轮的位置看见。
+   */
+  recalled: Record<number, { name: string; dirPath: string }[]>;
+  /**
    * 这一场关掉了哪些子代理。**只减不增**——芯片关不出一个没绑模型的子代理来。
    *
    * 存在会话上而不是 agentStore：对话助手和三个并发的扮演 agent 是四段互不相干
@@ -170,6 +190,13 @@ interface RoleplayState {
   unread: Record<string, boolean>;
   /** 绑定的设定在会话开始后被改过。 */
   stale: Record<string, boolean>;
+  /**
+   * 项目里所有的记忆区，含条目数和占用情况。绑定选择器读它。
+   *
+   * 单独一份而不是挂在 agent 上：空闲的区**不属于任何 agent**，那正是继承要用
+   * 到的那一批。
+   */
+  areas: AreaSummary[];
 
   load: (projectPath: string) => Promise<void>;
   reset: () => void;
@@ -178,10 +205,20 @@ interface RoleplayState {
   updateAgent: (id: string, draft: AgentDraft) => Promise<void>;
   removeAgent: (id: string) => Promise<void>;
   /**
-   * 新开一场：把当前 transcript / summary 封存进 `archive/`，agent 从空白开始。
-   * 设定、绑定、人设卡全部保留——「重新开始」不该等于删了重建。
+   * 转场：把当前这一场封存进 `archive/`，agent 从空白开始。设定、绑定、人设卡
+   * 全部保留——「重新开始」不该等于删了重建。
+   *
+   * 两支（`docs/feature/roleplay/06-scene-and-memory-area.md` §5）：
+   * - `fresh` 另起一场，和上一场无关，可选一并清空记忆。
+   * - `continue` 接续（客厅 → 卧室）：先让**角色自己**写一份前情，再封存。
+   *   细节不留，前情留下。
    */
-  newSession: (id: string, opts: { clearMemory: boolean }) => Promise<void>;
+  newSession: (id: string, opts: NewSessionOptions) => Promise<void>;
+  /**
+   * 只跑摘要，不封存——给「接续」的预览用。作者看过、改过，再调 `newSession`
+   * 把它带进去。返回 null 表示跑不出来（原因已经写进 `session.error`）。
+   */
+  previewRecap: (id: string, brief: string) => Promise<SceneRecap | null>;
   setAuthorPersona: (persona: AuthorPersona) => Promise<void>;
   /**
    * 只为这一个 agent 覆盖「我此刻是谁」。`null` = 撤销覆盖，跟回全局。
@@ -214,13 +251,36 @@ interface RoleplayState {
   /** 记事本面板的编辑入口。作者和角色共同维护这一本。 */
   addMemory: (agentId: string, rec: {
     kind: MemoryRecord["kind"]; title: string; body: string; subject: string | null;
+    keys?: string[];
   }) => Promise<void>;
   reviseMemory: (
     agentId: string, id: string, patch: { body?: string; status?: MemoryStatus },
   ) => Promise<void>;
   checkBindings: () => Promise<void>;
+  /** 重扫记忆区列表。建/绑/解绑之后调。 */
+  refreshAreas: () => Promise<void>;
+  /**
+   * 把一个 agent 绑到某个区上。`"new"` = 新建一个空的，`null` = 解绑。
+   *
+   * 一个区同时只能挂在一个 agent 上，所以这里会先把它从别人身上摘下来——由这一处
+   * 统一维护，比让每个调用方自己记得靠谱。
+   */
+  bindArea: (agentId: string, target: string | "new" | null) => Promise<void>;
   /** 旁白的只读通道；传给 ToolContext.scenes。 */
   sceneReader: () => SceneReader;
+}
+
+export interface NewSessionOptions {
+  mode: "fresh" | "continue";
+  /** 仅 `fresh`：连记忆一起封存。接续不给这个选项——它明摆着要保留。 */
+  clearMemory?: boolean;
+  /**
+   * 仅 `continue`：已经确认过的前情。
+   *
+   * 由调用方传进来而不是在这里现跑，是因为作者要先看一眼、能改——一份会成为
+   * 角色长期记忆的东西，不该在他没看见的时候就落盘。
+   */
+  recap?: SceneRecap;
 }
 
 export interface AgentDraft {
@@ -230,13 +290,18 @@ export interface AgentDraft {
   boundPaths: string[];
   modelId: string | null;
   instruction: string;
+  /**
+   * 绑定的记忆区。新建时传 `"new"` 表示「建一个空的」，传一个 id 表示**继承**
+   * 那一个，`null` 表示不要。编辑时 `undefined` = 不动。
+   */
+  areaId?: string | "new" | null;
 }
 
 function emptySession(): LiveSession {
   return {
     turns: [], log: {}, history: null, meta: null, streaming: "", liveLog: [],
     usage: null, stalePaths: [], memory: [], memoryStale: false,
-    workspace: null, stopped: false, disabledSubAgents: [], taskId: null,
+    workspace: null, stopped: false, recalled: {}, disabledSubAgents: [], taskId: null,
     contextVersion: 0, error: null, lastJob: null,
   };
 }
@@ -440,14 +505,67 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           loreBudgetChars: loreBudgetTokens * measureCharsPerToken(job.match),
           doc: null,
         });
+        const { recordInjections } = await import("../lib/agent/compact");
         if (inj.text) {
           const carrier: StreamMessage = { role: "user", content: inj.text };
           history.push(carrier);
           const byDir = indexByDir(loreIndex);
-          const { recordInjections } = await import("../lib/agent/compact");
           recordInjections(
             meta, inj.matchedEntities.flatMap((e) => byDir.get(e.dirPath) ?? []), carrier,
           );
+        }
+
+        // ── 记忆区：第二路检索，**独立成块** ───────────────────────────────
+        //
+        // 分块不是排版偏好：【设定】是世界的事实，【记忆】是这个角色**以为**的事，
+        // 两者可以互相矛盾（06 §4.2）。合成一块，角色会开始把自己的猜测当成公认
+        // 事实说出口。
+        //
+        // 预算也分开——一场戏聊到深处时最不该发生的事，是角色的记忆把它自己的
+        // 人设挤出去。
+        if (agent.areaId) {
+          try {
+            const areaIndex = await scanArea(projectPath, agent.areaId);
+            const { selectLore } = await import("../lib/context/loreSelect");
+            const picked = await selectLore(
+              job.match, areaIndex, [],
+              AREA_BUDGET_TOKENS * measureCharsPerToken(job.match),
+              // 账本共用一份，但记忆区的键带前缀——否则要么和项目条目撞车，
+              // 要么每轮重发。
+              { excludeDirs: excludeDirsFor(meta, areaIndex) },
+            );
+            if (picked.text) {
+              const label = i18n.t("roleplay.section.recall", { defaultValue: "记忆" });
+              const lead = i18n.t("roleplay.section.recallLead", {
+                defaultValue: "以下是你想起来的旧事。这是**你记得的**，未必和别人说的一致。",
+              });
+              const carrier: StreamMessage = {
+                role: "user",
+                content: `【${label}】\n${lead}\n${picked.text}`,
+              };
+              history.push(carrier);
+              const byDir = new Map(areaEntities(areaIndex).map((e) => [e.dirPath, e]));
+              recordInjections(
+                meta,
+                picked.report.entities.flatMap((r) => byDir.get(r.dirPath) ?? []),
+                carrier,
+              );
+              patchSession(job.agentId, (s) => ({
+                ...s,
+                recalled: {
+                  ...s.recalled,
+                  [(s.turns.length || 0) + 1]: picked.report.entities.map((r) => ({
+                    name: byDir.get(r.dirPath)?.name ?? r.dirPath,
+                    dirPath: r.dirPath,
+                  })),
+                },
+              }));
+            }
+          } catch (e) {
+            // 记忆区读不出来不该毁掉这一轮：角色少想起几件事，比这一句话发不
+            // 出去好。
+            console.warn("[roleplay] memory area not read:", e);
+          }
         }
 
         const question: StreamMessage = { role: "user", content: job.wire };
@@ -669,6 +787,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     aborts: {},
     unread: {},
     stale: {},
+    areas: [],
 
     load: async (projectPath) => {
       // **同一个项目已经装好了就直接返回。**
@@ -700,6 +819,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
               })
             : null,
         });
+        await get().refreshAreas();
       } catch (e) {
         // 这条会直接显示给作者，所以先说人话再附上原因——一串裸 TypeError
         // 只会让人以为应用坏了，而实际上多半只是目录读不出来。
@@ -735,6 +855,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         primaryDirPath: draft.kind === "narrator" ? null : draft.primaryDirPath,
         boundPaths: draft.boundPaths,
         modelId: draft.modelId,
+        areaId: draft.areaId ?? null,
         authorPersona: null,
         createdAt: now,
         updatedAt: now,
@@ -768,6 +889,53 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       void get().checkBindings();
     },
 
+    previewRecap: async (id, brief) => {
+      const { projectPath } = get();
+      const agent = get().agents[id];
+      if (!projectPath || !agent) return null;
+      const turns = get().sessions[id]?.turns ?? [];
+      if (!turns.length) return null;
+
+      const [{ useAiStore }, { useLoreStore }] = await Promise.all([
+        import("./aiStore"), import("./loreStore"),
+      ]);
+      const { models, providers, activeModelId } = useAiStore.getState();
+      const resolved = resolveConn(models, providers, agent.modelId ?? activeModelId);
+      if (!resolved.ok) {
+        patchSession(id, (s) => ({ ...s, error: resolved.error }));
+        return null;
+      }
+      const { model, provider } = resolved;
+
+      try {
+        const apiKey = (await loadApiKey(provider.id)) ?? "";
+        let primaryText = "";
+        if (agent.primaryDirPath) {
+          try { primaryText = await readEntityFile(agent.primaryDirPath, "index.md"); } catch { /* 条目没了也照写 */ }
+        }
+        const recap = await runSceneRecap({
+          ...connOptions({ provider, model, apiKey }),
+          // 角色自己的那一份 system prompt：它是**以这个角色的身份**在回忆，
+          // 不是一个通用摘要器在压缩文本。见 lib/roleplay/recap 的第 1 条。
+          systemPrompt: buildSystemPrompt({
+            agent,
+            persona: agent.authorPersona ?? get().authorPersona,
+            personaCard: await loadPersonaCard(projectPath, id),
+            primaryText,
+            loreIndex: useLoreStore.getState().index,
+          }),
+          turns,
+          brief,
+          memory: get().sessions[id]?.memory ?? [],
+        });
+        patchSession(id, (s) => ({ ...s, error: null }));
+        return recap;
+      } catch (e) {
+        patchSession(id, (s) => ({ ...s, error: String(e) }));
+        return null;
+      }
+    },
+
     newSession: async (id, opts) => {
       const { projectPath } = get();
       const agent = get().agents[id];
@@ -775,8 +943,76 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       // 跑着的时候不许开新场：正在写的那一轮会追加到一个已经被移走的文件上。
       if (get().running.includes(id) || get().queue.some((j) => j.agentId === id)) return;
 
+      const continuing = opts.mode === "continue" && !!opts.recap;
+      const now = Math.floor(Date.now() / 1000);
+
       try {
-        await archiveSession(projectPath, id, opts);
+        // **先写记忆，再封存。** 反过来的话，摘要落盘失败时上一场已经不在当前
+        // transcript 里了，作者眼前一片空白却什么也没留下（06 §5.4）。
+        const sceneNo = (await listArchives(projectPath, id)).length + 1;
+        const path = memoryPath(projectPath, id);
+        const doc = await loadMemoryDoc(path);
+        let next = doc;
+
+        // **降级只发生在转场这一刻**（06 §3.1）。规则按性质，不按预算：
+        // 欠着的约定和待办、关系留在常驻层；其余沉进记忆区，各成一条，各带自己
+        // 的关键字——合并成一段散文会把它们变成一份摘要，而那正是记忆当初要防
+        // 的东西。
+        if (agent.areaId) {
+          const sinking = doc.records.filter((r) =>
+            !((r.kind === "pact" || r.kind === "todo") && r.status === "open") && r.kind !== "bond");
+          for (const rec of sinking) {
+            const keys = rec.keys.length
+              ? rec.keys
+              // 没有关键字的旧记录（`remember` 那时还不收它）至少让标题和主语
+              // 能命中——否则它沉下去就等于消失。
+              : [rec.title, ...(rec.subject ? [rec.subject] : [])].filter(Boolean);
+            await addAreaEntry(projectPath, agent.areaId, {
+              title: rec.title,
+              body: [rec.body, rec.status !== "open" ? `（${rec.status === "done" ? "已兑现" : "已作废"}）` : ""]
+                .filter(Boolean).join("\n\n"),
+              keys,
+              scene: sceneNo,
+            }, now);
+            const revised = reviseRecord(next, rec.id, { status: "void" }, now);
+            if (revised) next = revised.doc;
+          }
+          const meta = await loadAreaMeta(projectPath, agent.areaId);
+          await saveAreaMeta(projectPath, { ...meta, lastScene: sceneNo, boundTo: id });
+        } else {
+          // 没有记忆区时退回 PR 1 的行为：上一条前情作废但正文保留，只留最新的
+          // 一条常驻。信息不丢，只是找不回来。
+          for (const old of doc.records.filter((r) => r.kind === "scene" && r.status === "open")) {
+            const revised = reviseRecord(next, old.id, { status: "void" }, now);
+            if (revised) next = revised.doc;
+          }
+        }
+
+        if (continuing) {
+          const added = addRecord(next, {
+            kind: "scene",
+            title: opts.recap!.title,
+            body: opts.recap!.body,
+            keys: opts.recap!.keys,
+            // 前情不属于任何一轮——它讲的是整整一场。
+            turn: 0,
+            subject: null,
+          }, now);
+          next = added.doc;
+        }
+
+        if (next !== doc) {
+          await backupFile(projectPath, path);
+          await saveMemoryDoc(path, id, next);
+        }
+
+        await archiveSession(projectPath, id, { clearMemory: opts.clearMemory === true });
+
+        // 封存把旧的 summary.md 一起搬走了，所以新的一场的摘要要在这之后写。
+        // 它服务的是旁白的 read_scene_summary，以及下一次压缩的 prevSummary。
+        if (continuing) {
+          await saveSummary(projectPath, id, `${opts.recap!.title}\n\n${opts.recap!.body}`);
+        }
       } catch (e) {
         patchSession(id, (s) => ({ ...s, error: String(e) }));
         return;
@@ -784,15 +1020,15 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
 
       // 会话整个归零。`boundHash` 一并清掉——它是「设定已更新」的基线，而这一
       // 场还没播种过，没有基线可比；留着旧的会让提示按上一场的状态亮。
-      const memory = opts.clearMemory ? [] : get().sessions[id]?.memory ?? [];
+      const doc = await loadMemoryDoc(memoryPath(projectPath, id));
       set((st) => ({
         // `emptySession()` 的 `taskId: null` 正是想要的：新的一场配新的工作区。
-        sessions: { ...st.sessions, [id]: { ...emptySession(), memory } },
+        sessions: { ...st.sessions, [id]: { ...emptySession(), memory: doc.records } },
         unread: { ...st.unread, [id]: false },
         stale: { ...st.stale, [id]: false },
         agents: {
           ...st.agents,
-          [id]: { ...agent, turnCount: 0, boundHash: null, updatedAt: Math.floor(Date.now() / 1000) },
+          [id]: { ...agent, turnCount: 0, boundHash: null, updatedAt: now },
         },
       }));
       await persistRoster();
@@ -1130,6 +1366,58 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
      * 条目、agent 通常是个位数个，而这个函数只在知识库重扫之后跑一次；先加缓存
      * 层，等于为一个还没量到的问题增加一处会和真相不同步的状态。
      */
+    refreshAreas: async () => {
+      const { projectPath } = get();
+      if (!projectPath) { set({ areas: [] }); return; }
+      try {
+        set({ areas: await listAreas(projectPath) });
+      } catch (e) {
+        console.warn("[roleplay] areas not listed:", e);
+      }
+    },
+
+    bindArea: async (agentId, target) => {
+      const { projectPath } = get();
+      const agent = get().agents[agentId];
+      if (!projectPath || !agent) return;
+
+      let nextId: string | null = null;
+      if (target === "new") {
+        const made = await createArea(
+          projectPath,
+          i18n.t("roleplay.area.defaultName", {
+            name: agent.name, defaultValue: `${agent.name}的旧事`,
+          }),
+          Math.floor(Date.now() / 1000),
+          Math.random(),
+        );
+        nextId = made.id;
+      } else {
+        nextId = target;
+      }
+
+      // 旧的先摘干净。一个区同时只能挂一个 agent（06 §4.1），而「摘下来」这件事
+      // 由这一处统一做，比让每个调用方自己记得靠谱。
+      if (agent.areaId && agent.areaId !== nextId) {
+        const old = await loadAreaMeta(projectPath, agent.areaId);
+        await saveAreaMeta(projectPath, { ...old, boundTo: null, formerName: agent.name });
+      }
+      if (nextId) {
+        const meta = await loadAreaMeta(projectPath, nextId);
+        // 抢占：这个区如果还挂在别人身上，那个人先失去它。UI 会挡住这种情况，
+        // 但花名册是可以手改的。
+        const holder = get().order.find((x) => x !== agentId && get().agents[x]?.areaId === nextId);
+        if (holder) {
+          set((st) => ({ agents: { ...st.agents, [holder]: { ...st.agents[holder], areaId: null } } }));
+        }
+        await saveAreaMeta(projectPath, { ...meta, boundTo: agentId });
+      }
+
+      set((st) => ({ agents: { ...st.agents, [agentId]: { ...st.agents[agentId], areaId: nextId } } }));
+      await persistRoster();
+      await get().refreshAreas();
+    },
+
     checkBindings: async () => {
       const { projectPath, order } = get();
       if (!projectPath) return;

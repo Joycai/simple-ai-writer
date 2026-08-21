@@ -1,0 +1,391 @@
+/* 记忆区浏览。设计稿 08 TURN 2 屏 2d。
+   知识库是格纸墙 + 硬阴影卡片；这里是**横格纸内页、单色、细线分行、卡片不浮起**。
+   同一套材料，两种装订——这是「它不是知识库」在视觉上的全部说法。 */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 62;
+  background: rgba(0, 0, 0, 0.36);
+}
+
+.surface {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 63;
+  width: 1180px;
+  max-width: 96vw;
+  display: flex;
+  flex-direction: column;
+  background: var(--rp-canvas);
+  border-left: 1px solid var(--color-border-panel);
+  box-shadow: var(--shadow-xl);
+}
+
+/* ── 头 ──────────────────────────────────────────────────────────────────── */
+.head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  padding: 20px 28px 16px;
+  border-bottom: 1px solid var(--color-border-panel);
+  background: var(--rp-rail);
+}
+
+.headMain { min-width: 0; }
+
+.titleRow { display: flex; align-items: baseline; gap: 12px; }
+
+.title {
+  font-family: var(--font-serif);
+  font-weight: 300;
+  font-size: 28px;
+  line-height: 1.1;
+  color: var(--color-text-primary);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-text-hint);
+}
+
+.holderRow { display: flex; align-items: center; gap: 9px; margin-top: 9px; }
+
+.glyph {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-round);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-serif);
+  font-weight: 300;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.holder {
+  font-family: var(--font-serif);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--color-text-soft);
+}
+
+.sep { width: 1px; height: 10px; background: var(--color-border-panel); }
+
+.spacer { flex: 1; }
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 230px;
+  flex-shrink: 0;
+  padding: 7px 11px;
+  background: var(--rp-input);
+  border: 1px solid var(--color-border-panel);
+  color: var(--color-text-label);
+}
+
+.search {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--color-text-soft);
+}
+.search::placeholder { color: var(--color-text-label); }
+
+.iconBtn {
+  display: flex;
+  align-self: center;
+  border: none;
+  background: none;
+  padding: 4px;
+  color: var(--color-text-dim);
+  cursor: pointer;
+}
+.iconBtn:hover { color: var(--color-text-primary); }
+
+/* ── 区隔标记 ────────────────────────────────────────────────────────────
+   斜纹是这一屏唯一张扬的东西，它要说的就是「这里不是知识库」。 */
+.marker {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 16px 28px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border-accent);
+  background: repeating-linear-gradient(
+    135deg,
+    var(--rp-row-selected),
+    var(--rp-row-selected) 6px,
+    var(--rp-rail) 6px,
+    var(--rp-rail) 12px
+  );
+}
+
+.markerTag {
+  flex-shrink: 0;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+.markerText {
+  font-family: var(--font-serif);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--color-text-soft);
+}
+
+/* ── 主体 ────────────────────────────────────────────────────────────────── */
+.body { flex: 1; display: flex; min-height: 0; padding: 16px 28px 24px; gap: 20px; }
+
+.list {
+  width: 400px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--color-border-panel);
+  overflow-y: auto;
+}
+
+.empty {
+  padding: 20px 16px;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--color-text-hint);
+}
+
+/* 细线分行，**不浮起**。 */
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  border-left: 2px solid transparent;
+  border-bottom: 1px solid var(--color-hairline);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.row:hover { background: var(--rp-row-hover); }
+.rowOn { border-left-color: var(--color-accent); background: var(--rp-row-selected); }
+
+.rowHead { display: flex; align-items: baseline; gap: 10px; }
+
+.rowName {
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.3;
+  color: var(--color-text-primary);
+}
+
+.rowScene {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-label);
+}
+
+.rowSummary {
+  font-family: var(--font-serif);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--color-text-hint);
+}
+
+.rowKeys,
+.keys { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.key {
+  padding: 2px 6px;
+  border: 1px solid var(--color-border-panel);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--color-text-label);
+}
+
+.listFoot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding: 10px 14px;
+  border-top: 1px solid var(--color-border-panel);
+  background: var(--rp-rail);
+  position: sticky;
+  bottom: 0;
+}
+
+.addBtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--color-accent);
+  cursor: pointer;
+}
+.addBtn:hover:not(:disabled) { text-decoration: underline; }
+.addBtn:disabled { opacity: 0.5; cursor: default; }
+
+/* ── 详情：横格纸内页 ───────────────────────────────────────────────────── */
+.detail {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: var(--rp-input);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent,
+    transparent 27px,
+    var(--color-hairline) 27px,
+    var(--color-hairline) 28px
+  );
+  border: 1px solid var(--color-border-panel);
+}
+
+.detailEmpty {
+  margin: auto;
+  font-family: var(--font-serif);
+  font-size: 14px;
+  color: var(--color-text-hint);
+}
+
+.detailHead { display: flex; align-items: baseline; gap: 12px; padding: 20px 30px 0; }
+
+.detailTitle {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: none;
+  outline: none;
+  padding: 0;
+  font-family: var(--font-serif);
+  font-size: 22px;
+  line-height: 1.3;
+  color: var(--color-text-primary);
+}
+.detailTitle:focus { border-bottom: 1px solid var(--color-border-accent); }
+
+.detailAction {
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-text-dim);
+  cursor: pointer;
+}
+.detailAction:hover:not(:disabled) { color: var(--color-error-text-strong); }
+.detailAction:disabled { opacity: 0.5; cursor: default; }
+
+.detailMeta {
+  padding: 8px 30px 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--color-text-label);
+}
+
+.field { padding: 20px 30px 0; }
+
+.fieldLabel {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 9px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--color-text-hint);
+}
+
+.fieldNote {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  font-size: 11px;
+  color: var(--color-text-label);
+}
+
+/* 正文贴着格线走：行高 28px 就是格子的高度。 */
+.bodyInput {
+  width: 100%;
+  min-height: 168px;
+  resize: vertical;
+  border: none;
+  background: none;
+  outline: none;
+  padding: 0;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 28px;
+  color: var(--color-text-prose);
+}
+
+.keyChip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 1px solid var(--color-border-panel);
+  background: var(--rp-canvas);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-text-soft);
+  cursor: pointer;
+}
+.keyChip:hover { border-color: var(--color-border-accent); color: var(--color-text-primary); }
+
+.keyAdd {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px dashed var(--color-border-panel);
+  color: var(--color-text-dim);
+}
+
+.keyInput {
+  width: 68px;
+  border: none;
+  background: none;
+  outline: none;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--color-text-soft);
+}
+.keyInput::placeholder { color: var(--color-text-label); }

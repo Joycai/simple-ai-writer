@@ -102,11 +102,14 @@ function ComposerMirror({ text, innerRef }: {
   );
 }
 
-function TurnBlock({ turn, log, memories, onRewind }: {
+function TurnBlock({ turn, log, memories, recalled, onOpenArea, onRewind }: {
   turn: SceneTurn;
   log?: React.ReactNode;
   /** 这一轮里角色记下的东西。作者手加的 `turn: 0`，永远不会落在这里。 */
   memories?: MemoryRecord[];
+  /** 这一轮从记忆区里想起来的东西。 */
+  recalled?: { name: string; dirPath: string }[];
+  onOpenArea?: () => void;
   /** 只有作者轮、且不是最后一轮时给——回到最后一轮等于什么也没撤销。 */
   onRewind?: () => void;
 }) {
@@ -130,6 +133,31 @@ function TurnBlock({ turn, log, memories, onRewind }: {
   }
   return (
     <>
+      {/* 「想起了…」在回复**之前**，用**向左**的箭头——它是这一轮的输入，不是
+          结果。「记下了…」在回复之后用向右的箭头。**方向就是它和这一轮的关系。** */}
+      {recalled && recalled.length > 0 && (
+        <div className={styles.recallTrace}>
+          <span className={styles.traceArrowLeft} aria-hidden />
+          {recalled.length === 1 ? (
+            <span>
+              {t("roleplay.recall.one", { defaultValue: "想起了" })}
+              <button
+                type="button"
+                className={styles.traceName}
+                onClick={onOpenArea}
+              >
+                {recalled[0].name}
+              </button>
+            </span>
+          ) : (
+            <button type="button" className={styles.traceName} onClick={onOpenArea}>
+              {t("roleplay.recall.many", {
+                n: recalled.length, defaultValue: `想起了 ${recalled.length} 条旧事`,
+              })}
+            </button>
+          )}
+        </div>
+      )}
       <div className={styles.agentTurn} id={`rp-turn-${turn.index}`}>
         <div className={styles.agentLabel}>{turn.speakerName}</div>
         <ScriptText text={turn.text} />
@@ -138,7 +166,7 @@ function TurnBlock({ turn, log, memories, onRewind }: {
           作者需要知道角色**真的**记住了，这是建立信任的地方。 */}
       {memories?.map((m) => (
         <div key={m.id} className={styles.memoryTrace}>
-          <span className={styles.memoryDot} />
+          <span className={styles.traceArrowRight} aria-hidden />
           {t("roleplay.memory.recorded", { title: m.title, defaultValue: `记下了：${m.title}` })}
         </div>
       ))}
@@ -175,6 +203,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   // 而每次切 agent 重读一次目录比让 store 多背一份状态便宜。
   const [archives, setArchives] = useState<ArchivedScene[]>([]);
   const [showArchive, setShowArchive] = useState(false);
+  const [recapFolded, setRecapFolded] = useState(false);
   /** 待确认的回退目标轮号。回退会撤销记录，所以要问一次。 */
   const [rewindTo, setRewindTo] = useState<number | null>(null);
   /**
@@ -297,6 +326,17 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     // turnCount 变化 = 这个 agent 刚被「新开会话」（归零）或又聊了一轮，
     // 前者会多出一场存档。
   }, [projectPath, agent.id, agent.turnCount]);
+
+  /**
+   * 这一场带着的前情：常驻层里那条唯一 `open` 的 `scene`。
+   *
+   * 从记忆里取而不是另存一份——它本来就是一条记忆，作者在记事本里改完，稿面顶端
+   * 立刻跟着变，不需要第二条同步路径。
+   */
+  const latestRecap = useMemo(() => {
+    const open = (session?.memory ?? []).filter((m) => m.kind === "scene" && m.status === "open");
+    return open.length ? open[open.length - 1] : null;
+  }, [session?.memory]);
 
   const boundCount = agent.boundPaths.length;
   const openMemoryCount = (session?.memory ?? []).filter((m) => m.status === "open").length;
@@ -527,20 +567,97 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
         <div className={styles.column}>
           {/* 「这一场之前还有几场」。放在稿面最上方而不是信息带里，因为它讲的
               正是这个位置的事——再往上就没有了。 */}
-          {archives.length > 0 && (
-            <button
-              type="button"
-              className={styles.archiveBar}
-              onClick={() => setShowArchive(true)}
-            >
-              {t("roleplay.archive.bar", {
-                n: archives.length,
-                defaultValue: `此前已封存 ${archives.length} 场`,
-              })}
-              <span className={styles.archiveOpen}>
-                {t("roleplay.archive.view", { defaultValue: "查看" })}
-              </span>
-            </button>
+          {/* 存档带 + 前情提要**是一件东西**（设计稿 2f）：一条压在稿面顶端的带子，
+              前情挂在它下面。它不是一轮对话——没有左规、没有名标、不占正文的行距，
+              靠满栏底色和上下两道细线把自己和对话分开。 */}
+          {(archives.length > 0 || latestRecap) && (
+            <div className={styles.sceneBand}>
+              <div className={styles.bandTop}>
+                <span className={styles.bandScene}>
+                  {latestRecap && archives.length > 0
+                    ? t("roleplay.band.sceneFrom", {
+                        n: archives.length + 1, prev: archives.length,
+                        defaultValue: `第 ${archives.length + 1} 场 · 接续自第 ${archives.length} 场`,
+                      })
+                    : t("roleplay.band.sceneNo", {
+                        n: archives.length + 1, defaultValue: `第 ${archives.length + 1} 场`,
+                      })}
+                </span>
+                <div className={styles.spacer} />
+                {archives.length > 0 && (
+                  <button
+                    type="button"
+                    className={styles.bandLink}
+                    onClick={() => setShowArchive(true)}
+                  >
+                    {t("roleplay.archive.bar", {
+                      n: archives.length, defaultValue: `已封存 ${archives.length} 场`,
+                    })}
+                    {" · "}
+                    {t("roleplay.archive.view", { defaultValue: "查看" })}
+                  </button>
+                )}
+              </div>
+
+              {latestRecap && !recapFolded && (
+                <div className={styles.recapBody}>
+                  <div className={styles.recapHead}>
+                    <span className={styles.recapTag}>
+                      {t("roleplay.memory.kind.scene", { defaultValue: "前情" })}
+                    </span>
+                    <span className={styles.recapNote}>
+                      {t("roleplay.band.recapNote", {
+                        name: agent.name, defaultValue: `${agent.name}记得的，不是你写的`,
+                      })}
+                    </span>
+                    <div className={styles.spacer} />
+                    <button
+                      type="button"
+                      className={styles.bandLink}
+                      onClick={() => setRecapFolded(true)}
+                    >
+                      {t("roleplay.band.fold", { defaultValue: "收起" })}
+                    </button>
+                  </div>
+                  <div className={styles.recapTitle}>{latestRecap.title}</div>
+                  <div className={styles.recapText}>{latestRecap.body}</div>
+                  <div className={styles.recapActions}>
+                    <button type="button" className={styles.bandLink} onClick={() => setShowMemory(true)}>
+                      {t("roleplay.band.editRecap", { defaultValue: "改这份前情" })}
+                    </button>
+                    {archives.length > 0 && (
+                      <>
+                        <span className={styles.recapSep} />
+                        <button
+                          type="button"
+                          className={styles.bandLink}
+                          onClick={() => setShowArchive(true)}
+                        >
+                          {t("roleplay.band.readPrev", {
+                            n: archives.length, defaultValue: `读第 ${archives.length} 场原文`,
+                          })}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {latestRecap && recapFolded && (
+                <button
+                  type="button"
+                  className={styles.recapFolded}
+                  onClick={() => setRecapFolded(false)}
+                >
+                  <span className={styles.recapTag}>
+                    {t("roleplay.memory.kind.scene", { defaultValue: "前情" })}
+                  </span>
+                  <span className={styles.recapFoldedTitle}>{latestRecap.title}</span>
+                  <div className={styles.spacer} />
+                  <ChevronDown size={10} strokeWidth={2.4} />
+                </button>
+              )}
+            </div>
           )}
           {(session?.turns.length ?? 0) === 0 && !isRunning && (
             <div className={styles.chatEmpty}>
@@ -568,6 +685,8 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               key={turn.index}
               turn={turn}
               memories={memoriesByTurn.get(turn.index)}
+              recalled={session.recalled[turn.index]}
+              onOpenArea={() => setShowMemory(true)}
               onRewind={
                 turn.speaker === "author" && !isRunning && queuePos < 0
                   && turn.index < (session?.turns.length ?? 0)

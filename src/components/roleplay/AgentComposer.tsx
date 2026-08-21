@@ -14,9 +14,16 @@ import { Check, Search, X } from "lucide-react";
 import { useLoreStore } from "../../stores/loreStore";
 import { useRoleplayStore, type AgentDraft } from "../../stores/roleplayStore";
 import { ModelSelector } from "../ai/ModelSelector";
-import { loadPersonaCard } from "../../lib/roleplay/store";
+import { SceneTransition } from "./SceneTransition";
+import { AreaPicker, type AreaChoice } from "./AreaPicker";
+import { listArchives, loadPersonaCard } from "../../lib/roleplay/store";
 import { useProjectStore } from "../../stores/projectStore";
-import { avatarGlyph, type AgentKind, type RoleplayAgent } from "../../lib/roleplay/model";
+import {
+  avatarGlyph, type AgentKind, type RoleplayAgent, type SceneTurn,
+} from "../../lib/roleplay/model";
+
+/** 稳定的空数组：会话还没建起来时给它，省得每帧换一个新引用。 */
+const EMPTY_TURNS: SceneTurn[] = [];
 import type { LoreEntity } from "../../lib/lore/model";
 import { indexCategories } from "../../lib/lore/categories";
 import { categoryLabel } from "../../lib/profile/model";
@@ -47,7 +54,10 @@ export function AgentComposer({
   const isZh = i18n.language.startsWith("zh");
   const loreIndex = useLoreStore((s) => s.index);
   const projectPath = useProjectStore((s) => s.projectPath);
-  const { createAgent, updateAgent, removeAgent, newSession } = useRoleplayStore();
+  const { createAgent, updateAgent, removeAgent, bindArea, refreshAreas } = useRoleplayStore();
+  const areas = useRoleplayStore((s) => s.areas);
+  const agents = useRoleplayStore((s) => s.agents);
+  useEffect(() => { void refreshAreas(); }, [refreshAreas]);
 
   const [kind, setKind] = useState<AgentKind>(editing?.kind ?? "character");
   const [primary, setPrimary] = useState<string | null>(editing?.primaryDirPath ?? null);
@@ -59,15 +69,31 @@ export function AgentComposer({
   const [cat, setCat] = useState<string | null>(null);
   const [openEntity, setOpenEntity] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // 「新开会话」的两段式确认。就地展开而不是弹一个模态：这一步要带一个勾选项，
-  // 而一个只有一句话加一个勾的模态，比它要确认的动作本身还重。
-  const [confirmNew, setConfirmNew] = useState(false);
-  const [alsoClearMemory, setAlsoClearMemory] = useState(false);
+  // 转场面板。原来是 footer 上的就地确认条——「接续」那一支要跑一次模型、还要
+  // 让作者过目改稿，一行装不下了（见 SceneTransition 的头注）。
+  const [transition, setTransition] = useState(false);
+  // 记忆区：新建时默认「新建一个」，编辑时保持现状。
+  const [area, setArea] = useState<AreaChoice>(editing ? editing.areaId : "new");
+  const [areaQuery, setAreaQuery] = useState("");
 
   useEffect(() => {
     if (!editing || !projectPath) return;
     void loadPersonaCard(projectPath, editing.id).then(setInstruction);
   }, [editing, projectPath]);
+
+  // 「当前第 N 场」＝归档数 + 1。稿面顶端那条存档带说的必须是同一个数，所以两边
+  // 都从 `listArchives` 数，而不是各记一个计数器。
+  const [archiveCount, setArchiveCount] = useState(0);
+  useEffect(() => {
+    if (!editing || !projectPath) { setArchiveCount(0); return; }
+    let alive = true;
+    void listArchives(projectPath, editing.id)
+      .then((list) => { if (alive) setArchiveCount(list.length); })
+      .catch(() => { if (alive) setArchiveCount(0); });
+    return () => { alive = false; };
+  }, [editing, projectPath]);
+  const sceneNo = archiveCount + 1;
+  const turns = useRoleplayStore((s) => (editing ? s.sessions[editing.id]?.turns : undefined)) ?? EMPTY_TURNS;
 
   const entities = useMemo(
     () => Object.values(loreIndex).flat().sort((a, b) => a.name.localeCompare(b.name)),
@@ -137,8 +163,15 @@ export function AgentComposer({
       modelId,
       instruction,
     };
-    if (editing) await updateAgent(editing.id, draft);
-    else await createAgent(draft);
+    // 记忆区的绑定走 `bindArea` 而不是塞进 draft：它要摘掉旧的、抢占新的、写两份
+    // meta.json——那是一串必须成对发生的写，属于 store 的一个动作，不属于表单。
+    if (editing) {
+      await updateAgent(editing.id, draft);
+      if (kind === "character" && area !== editing.areaId) await bindArea(editing.id, area);
+    } else {
+      const id = await createAgent({ ...draft, areaId: null });
+      if (id && kind === "character" && area !== null) await bindArea(id, area);
+    }
     setBusy(false);
     onClose();
   };
@@ -405,6 +438,19 @@ export function AgentComposer({
             </div>
           </section>
 
+          {/* 记忆区。旁白没有这一节——它不扮演任何人，也就没有「它以为的事」。 */}
+          {kind === "character" && (
+            <AreaPicker
+              areas={areas}
+              value={area}
+              agentId={editing?.id ?? null}
+              nameOf={(id) => agents[id]?.name ?? null}
+              query={areaQuery}
+              onQuery={setAreaQuery}
+              onPick={setArea}
+            />
+          )}
+
           {/* 指令 */}
           <section>
             <div className={styles.labelRow}>
@@ -424,41 +470,14 @@ export function AgentComposer({
           </section>
         </div>
 
-        {editing && confirmNew ? (
-          <footer className={styles.foot}>
-            <label className={styles.checkRow}>
-              <input
-                type="checkbox"
-                checked={alsoClearMemory}
-                onChange={(e) => setAlsoClearMemory(e.target.checked)}
-              />
-              {t("roleplay.newSession.alsoMemory", { defaultValue: "同时清空记忆" })}
-            </label>
-            <span className={styles.hint}>
-              {t("roleplay.newSession.confirmHint", {
-                n: editing.turnCount,
-                defaultValue: `封存当前 ${editing.turnCount} 轮，从空白开始。对话留在 archive/，一个字都不删。`,
-              })}
-            </span>
-            <div className={styles.spacer} />
-            <button
-              type="button"
-              className={styles.ghostBtn}
-              onClick={() => { setConfirmNew(false); setAlsoClearMemory(false); }}
-            >
-              {t("common.cancel", { defaultValue: "取消" })}
-            </button>
-            <button
-              type="button"
-              className={styles.primaryBtn}
-              onClick={() => {
-                void newSession(editing.id, { clearMemory: alsoClearMemory });
-                onClose();
-              }}
-            >
-              {t("roleplay.newSession.go", { defaultValue: "新开会话" })}
-            </button>
-          </footer>
+        {/* 转场就地替换 footer 向上展开——不居中、不遮挡（设计稿 2a）。 */}
+        {transition && editing ? (
+          <SceneTransition
+            agent={editing}
+            turns={turns}
+            sceneNo={sceneNo}
+            onClose={() => setTransition(false)}
+          />
         ) : (
         <footer className={styles.foot}>
           {editing && (
@@ -474,9 +493,9 @@ export function AgentComposer({
             <button
               type="button"
               className={styles.ghostBtn}
-              onClick={() => setConfirmNew(true)}
+              onClick={() => setTransition(true)}
             >
-              {t("roleplay.newSession.open", { defaultValue: "新开会话" })}
+              {t("roleplay.transition.open", { defaultValue: "转场" })}
             </button>
           )}
           <span className={styles.hint}>

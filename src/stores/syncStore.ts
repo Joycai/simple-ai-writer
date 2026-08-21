@@ -28,8 +28,15 @@ import {
   setServerUrl,
 } from "../lib/sync/config";
 import { deviceLabel, localEntryHashes } from "../lib/sync/local";
-import type { HashMap, SyncBinding, SyncDirection, SyncPlan } from "../lib/sync/model";
-import { planSync } from "../lib/sync/plan";
+import type {
+  EntryPath,
+  HashMap,
+  SyncBinding,
+  SyncDecision,
+  SyncDirection,
+  SyncPlan,
+} from "../lib/sync/model";
+import { actionableSteps, planSync, withDecisions } from "../lib/sync/plan";
 import { runSync, type SyncRunResult } from "../lib/sync/run";
 import { clearBinding, loadBinding, saveBinding } from "../lib/sync/store";
 import { useLoreStore } from "./loreStore";
@@ -82,6 +89,8 @@ interface SyncState {
   refreshCounts: (projectPath: string) => Promise<void>;
 
   startPreview: (projectPath: string, direction: SyncDirection) => Promise<void>;
+  /** Turn the named steps on or off in the plan on screen. */
+  setDecision: (paths: readonly EntryPath[], decision: SyncDecision) => void;
   setAcknowledged: (on: boolean) => void;
   confirmRun: (projectPath: string) => Promise<void>;
   closeModal: () => void;
@@ -258,6 +267,22 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     }
   },
 
+  /**
+   * Skip or re-enable steps.
+   *
+   * Re-summarising is `withDecisions`' job, which matters for more than the
+   * counters: the acknowledgement gate is derived from the plan, so skipping
+   * every two-sided conflict genuinely clears it — the author is no longer
+   * confirming a loss, because the loss is no longer in the run. The tick
+   * itself is cleared alongside so a re-enabled conflict has to be accepted
+   * again rather than inheriting a nod given to a different plan.
+   */
+  setDecision: (paths, decision) => {
+    const { plan } = get();
+    if (!plan) return;
+    set({ plan: withDecisions(plan, paths, decision), acknowledged: false });
+  },
+
   setAcknowledged: (on) => set({ acknowledged: on }),
 
   /**
@@ -272,6 +297,10 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   confirmRun: async (projectPath) => {
     const { binding, plan } = get();
     if (!binding || !plan) return;
+    // Every step skipped is not a sync — and for a pull it would still zip the
+    // whole tree "before" writing nothing. The button is disabled in that state;
+    // this is the guard for the paths that do not go through the button.
+    if (actionableSteps(plan).length === 0) return;
     set({ phase: "running", progress: { done: 0, total: 0, path: "" } });
     try {
       const result = await runSync({
