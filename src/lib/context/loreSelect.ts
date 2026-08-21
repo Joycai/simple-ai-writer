@@ -5,6 +5,8 @@
  * Selection runs in three layers under a single char budget:
  *   L0 summary — one-liner from frontmatter; every matched entity gets it
  *                (guaranteed even over budget: it's the floor, not a filler)
+ *   L0.5 gallery — one bounded line naming the entity's pictures and what each
+ *                one shows; never the pictures themselves (see galleryNotice)
  *   L1 core    — index.md body, paragraph-boundary truncated to fit
  *   L2 facets  — sibling md files with `facet` frontmatter, activated by
  *                secondary keys (AND with the entity match), deduplicated
@@ -22,6 +24,7 @@
  * refreshes on the next rescan.
  */
 
+import i18n from "../../i18n";
 import { FALLBACK_CHARS_PER_TOKEN } from "./budget";
 import { readFile } from "../fs/fileio";
 import { parseFrontmatter } from "../fs/markdown";
@@ -42,6 +45,21 @@ export const DEFAULT_LORE_BUDGET_CHARS = 600 * FALLBACK_CHARS_PER_TOKEN;
  * (a common alias hitting half the index) from flooding the L0 floor.
  */
 export const MAX_AUTO_LORE_ENTITIES = 20;
+
+/**
+ * Share of the whole budget the gallery notices may take **together**. A notice
+ * is bounded per entity, but a match that fires on twenty entities is not: at
+ * 180 chars each they would fill a default budget on their own and every core
+ * would be starved by metadata. Past the cap the remaining notices are dropped
+ * and reported, exactly like a facet that didn't fit.
+ */
+export const GALLERY_BUDGET_SHARE = 0.2;
+
+/** Ceiling for one entity's gallery notice, including its label. */
+const GALLERY_ENTITY_CHARS = 180;
+
+/** Ceiling for one picture's description inside the notice. */
+const GALLERY_DESC_CHARS = 48;
 
 // ─── Pin format ───────────────────────────────────────────────────────────────
 
@@ -69,7 +87,7 @@ export function parsePins(paths: string[]): LorePin[] {
 // ─── Activation report ────────────────────────────────────────────────────────
 
 export interface LoreLayerReport {
-  kind: "summary" | "core" | "facet";
+  kind: "summary" | "core" | "facet" | "gallery";
   /** Facet title (facet layers only). */
   title?: string;
   /** Facet filename (facet layers only). */
@@ -82,6 +100,8 @@ export interface LoreLayerReport {
   pinned?: boolean;
   /** True when the core was paragraph-truncated to fit the budget. */
   truncated?: boolean;
+  /** Pictures the entity has (gallery layers only) — listed or not. */
+  count?: number;
 }
 
 export type FacetDropReason = "no-key" | "group-lost" | "budget" | "manual-only";
@@ -96,6 +116,8 @@ export interface LoreEntityReport {
   reason: "auto" | "pinned";
   layers: LoreLayerReport[];
   droppedFacets: { file: string; title: string; reason: FacetDropReason }[];
+  /** Pictures this entity has when its gallery notice didn't fit the budget. */
+  droppedImages?: number;
 }
 
 export interface LoreActivationReport {
@@ -110,6 +132,77 @@ export interface LoreSelection {
   report: LoreActivationReport;
 }
 
+// ─── Gallery notice ───────────────────────────────────────────────────────────
+
+/**
+ * i18n with the Chinese wording as the built-in fallback (see docFocus).
+ *
+ * Its own namespace, not `ai.instructions.lore.*` — that path is already the
+ * lore *generator's* system prompt (a string), and a sibling object there would
+ * be a duplicate JSON key silently shadowing it.
+ */
+function loreWord(key: string, fallback: string): string {
+  return i18n.t(`ai.instructions.galleryNotice.${key}`, { defaultValue: fallback });
+}
+
+/** First line of a description, whitespace-collapsed and cut to fit. */
+function briefDesc(desc: string): string {
+  const line = desc.replace(/\s+/g, " ").trim();
+  if (line.length <= GALLERY_DESC_CHARS) return line;
+  return `${line.slice(0, GALLERY_DESC_CHARS).trimEnd()}…`;
+}
+
+/**
+ * One line naming an entity's pictures and what each one shows:
+ *
+ *     配图：avatar.png（头像）· portrait.png（银发，黑色立领窄袖…）
+ *
+ * **Words, never pixels.** Encoding a gallery into the injected block would put
+ * megabytes of base64 on every request that merely *mentions* a character, for
+ * a picture the task may not need at all — the same cost `read_lore_entity`
+ * refuses to pay (lib/agent/tools). What the line carries instead is the two
+ * things a model cannot otherwise obtain: that the pictures exist, and the
+ * filenames `read_lore_image` takes. The descriptions do double duty — they are
+ * the only visual detail a text-only model will ever get, and for a multimodal
+ * one they are what makes "is this picture worth looking at?" answerable before
+ * paying for it.
+ *
+ * The **slot** is deliberately left out. A category's image slots are authoring
+ * metadata (docs/lore-entry-type-plan.md: slots never reach the injection path),
+ * and an id whose pack is currently disabled would inject a word that means
+ * nothing to the model.
+ *
+ * Bounded on both axes — per description and per entity — because this is a
+ * pointer, not content: a gallery of thirty stills must not be able to outweigh
+ * the entity's own prose.
+ */
+export function galleryNotice(entity: LoreEntity): { text: string; count: number } {
+  const items: { file: string; desc: string }[] = [];
+  const avatar = entity.avatarPath?.split(/[\\/]/).pop();
+  if (avatar) items.push({ file: avatar, desc: loreWord("avatar", "头像") });
+  for (const img of entity.images ?? []) items.push({ file: img.file, desc: img.desc ?? "" });
+  if (items.length === 0) return { text: "", count: 0 };
+
+  const label = loreWord("label", "配图");
+  const parts: string[] = [];
+  let len = label.length + 1;
+  for (const item of items) {
+    const snippet = briefDesc(item.desc);
+    const piece = snippet ? `${item.file}（${snippet}）` : item.file;
+    const cost = piece.length + (parts.length > 0 ? 3 : 0);
+    // The first picture always goes in: a notice listing none of them would
+    // spend chars saying nothing.
+    if (parts.length > 0 && len + cost > GALLERY_ENTITY_CHARS) break;
+    parts.push(piece);
+    len += cost;
+  }
+  const rest = items.length - parts.length;
+  const more = rest > 0
+    ? ` ${i18n.t("ai.instructions.galleryNotice.more", { defaultValue: "（另有 {{n}} 张）", n: rest })}`
+    : "";
+  return { text: `${label}：${parts.join(" · ")}${more}`, count: items.length };
+}
+
 // ─── Selection ────────────────────────────────────────────────────────────────
 
 interface Selected {
@@ -117,6 +210,7 @@ interface Selected {
   reason: "auto" | "pinned";
   pinnedFacets: Set<string>;
   summaryLine: string;
+  galleryLine: string;
   coreText: string;
   coreTruncated: boolean;
   facetBlocks: { facet: LoreFacet; text: string; matchedKeys: string[]; pinned: boolean }[];
@@ -201,6 +295,7 @@ export async function selectLore(
       reason,
       pinnedFacets: pinnedFacetsByDir.get(dir) ?? new Set(),
       summaryLine: "",
+      galleryLine: "",
       coreText: "",
       coreTruncated: false,
       facetBlocks: [],
@@ -228,6 +323,29 @@ export async function selectLore(
       used += s.summaryLine.length + 1;
       s.report.layers.push({ kind: "summary", chars: summary.length });
     }
+  }
+
+  // ── L0.5: gallery notices. Filled *before* the cores, not after the facets,
+  // because the entities this matters for are exactly the ones whose prose is
+  // long enough to eat the budget: run last, the notice would be missing from
+  // every well-written entry and present only on stubs. A core is truncatable
+  // by design and pays at most a paragraph for it; the notice is not divisible
+  // and is worth more than that paragraph, since it is the only thing that
+  // makes the pictures reachable at all.
+  const galleryCap = Math.floor(budgetChars * GALLERY_BUDGET_SHARE);
+  let galleryUsed = 0;
+  for (const s of selected) {
+    const { text, count } = galleryNotice(s.entity);
+    if (count === 0) continue;
+    const cost = text.length + 1;
+    if (galleryUsed + cost > galleryCap || !fits(cost)) {
+      s.report.droppedImages = count;
+      continue;
+    }
+    s.galleryLine = text;
+    galleryUsed += cost;
+    used += cost;
+    s.report.layers.push({ kind: "gallery", chars: text.length, count });
   }
 
   // ── L1: cores, paragraph-boundary truncated to fit the remaining budget.
@@ -350,6 +468,9 @@ export async function selectLore(
   for (const s of selected) {
     const parts = [`## ${s.entity.name}`];
     if (s.summaryLine) parts.push(s.summaryLine);
+    // Above the core rather than under the last facet: the notice is about the
+    // entity, and a trailing line reads as part of whatever block precedes it.
+    if (s.galleryLine) parts.push(s.galleryLine);
     if (s.coreText) parts.push(s.coreText);
     for (const fb of s.facetBlocks) parts.push(fb.text);
     if (parts.length > 1) blocks.push(parts.join("\n"));

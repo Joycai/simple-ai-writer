@@ -295,6 +295,8 @@ A picture reaches a model exactly one way: an `image_url` part on a `role: "user
 | `read_image` tool | the model | any image file **inside the project** — document illustrations in a sibling `assets/`, reference art anywhere else |
 | chat `@`-mention | the author | any image `scanProjectFiles` found; inlined by `lib/agent/chatRefs`, ≤ `MAX_MESSAGE_IMAGES` per message |
 
+The model only *knows* a lore picture exists because the injected 【设定资料】 block says so — `selectLore` writes one bounded 配图 line per matched entity (filenames + descriptions, never pixels). See RAG → 配图在注入里 below.
+
 `read_image` is contained against the *whole project*, where `read_file` (and the other text tools) additionally exclude `.ai-writer/` (`isWorkspacePath` in `lib/paths.ts`). The text tools are narrower because a prompt-injected model could read `profile.json` or the lore back to whoever planted the instruction; an image tool decodes one file, by extension, into pixels — and lore gallery images live under `.ai-writer/lore/`, where it must still reach. Both refuse outright when there is no project path — every absolute path is "inside" an empty prefix.
 
 **Nothing keeps a picture for long.** Base64 is megabytes, and a chat history persists for the whole session, so three separate passes take pixels back out — all through `lib/agent/imageHistory`, which is the single definition of the shape, and all of which **keep the message's text**: the author's attachment rides on their question, which is a turn boundary `compact.ts` segments on.
@@ -320,10 +322,34 @@ A picture reaches a model exactly one way: an `image_url` part on a `role: "user
 An entity is a folder; any sibling `.md` with a `facet` frontmatter field (title, `keys`, `group`, `priority`, `mode: auto|always|manual`) is an independently-activatable **facet** — an outfit, a backstory arc, etc. Selection layers under one char budget (user setting in `appStore.loreBudgetTokens`, default 600 tk, range 200–128k, converted to chars by the planner's measured chars/token — presets + a free number field in `AiPanel`):
 
 1. **Summary** (frontmatter one-liner) — every matched entity, guaranteed
-2. **Core** (`index.md` body) — paragraph-boundary truncated to fit
-3. **Facets** — `auto` fires on entity match AND any key in the match target; same-`group` facets are mutually exclusive (highest priority wins; pins override); a facet that doesn't fit whole is dropped, never truncated
+2. **Gallery notice** — one bounded line naming the entity's pictures and what each one shows; see below
+3. **Core** (`index.md` body) — paragraph-boundary truncated to fit
+4. **Facets** — `auto` fires on entity match AND any key in the match target; same-`group` facets are mutually exclusive (highest priority wins; pins override); a facet that doesn't fit whole is dropped, never truncated
 
 Pins come from `AiPanel` as `dirPath` (whole entity) or `dirPath#file` (single facet; implies its entity). Facet/core content is re-read from disk each call so hand edits are never stale. AI-assisted splitting of an oversized `index.md` into facets lives in `src/lib/lore/splitter.ts` + `LoreSplitModal` (backs up to `.ai-writer/backups/` before applying). See `docs/lore-facet-plan.md` for the full design.
+
+#### 配图在注入里：一行字，不是图（`galleryNotice`）
+
+命中的条目会带上这样一行，位置在 summary 之下、正文之上：
+
+```
+## 苏红
+> 剑阁弟子，惯用左手
+配图：avatar.png（头像） · portrait.png（银发束高马尾，黑色立领窄袖劲装…） · sword.png
+剑阁第七代弟子……
+```
+
+**为什么要有这一行。** 在此之前，被 RAG 命中的条目里完全没有配图的痕迹——没有图、没有描述、也没有「这个条目有图」这句话。于是形成了一个死结：模型手里已经有这个条目的全部正文，就没有任何理由再去调 `read_lore_entity`，而**图库清单只在那个工具的返回值里**（`lib/agent/tools.ts`），所以它永远不会知道有图可看。`read_lore_image` 那条链路（先看文件名+描述，再决定要不要看图）设计得没问题，缺的只是入口。这一行就是入口。
+
+**为什么是文字，不是图。** 把图库编码进注入块，等于每一次「提到了某个人物」的请求都要付几 MB 的 base64——而那张图这次任务多半用不上。这正是 `read_lore_entity` 当初拒绝支付的成本（2026-07-31 的挂起：5 张图 / ~35MB 一次调用直接超时）。这一行只携带模型自己拿不到的两样东西：**图存在**，以及 `read_lore_image` 需要的**文件名**。描述本身一图两吃——对纯文本模型它是唯一能得到的视觉细节（`lib/lore/vision.ts` 的系统提示就是照这个前提写的），对多模态模型它是「这张值不值得花钱看」的判断依据。
+
+**为什么排在正文之前而不是特征之后。** 需要这一行的恰恰是正文长到能吃光预算的条目；放在最后填，写得好的条目一律看不到配图行，只有草稿桩子才有。正文是设计上就可截断的，最多为此少一段；这一行不可分割，而且比那一段更值——它是让图变得可达的唯一途径。
+
+**两道上限。** 单条目 180 字（描述各截 48 字，多出来的图折成「另有 N 张」），全部条目合计不超过预算的 `GALLERY_BUDGET_SHARE`（20%）——一次命中二十个条目时，元数据不能把正文挤没。超出份额的条目照 facet 的规矩处理：不注入，但记进 `LoreEntityReport.droppedImages`，在 AiPanel 的注入报告里显示为一个 dropped chip。
+
+**槽位（slot）不进这一行。** 分类的 image slot 是创作侧的元数据，`docs/lore-entry-type-plan.md` 的三条不变量之一就是 slot 绝不参与注入；而且能力包一关，那个 id 对模型就是个没有意义的词。
+
+**「可以看图」这句话不写在注入块里，写在工具简介里。** 注入块是事实（有这些图、叫这些名字、画的是这些内容），对没有工具的任务（`tools: "none"`）和纯文本模型同样成立；「需要时调 `read_lore_image`」是能力，只在真的带着那个工具时才为真——所以它落在 `ai.instructions.toolsRead`（read 档）和 `ai.instructions.agent`（full 档）里，这两处本来就只在对应工具在场时才发出。这样 `selectLore` 也不必知道模型是不是多模态、preset 带了哪些工具，省掉一路参数透传。
 
 #### Facet splitting: why the result arrives as tool calls
 

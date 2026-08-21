@@ -720,12 +720,16 @@ function LoreReportSection({
                     : undefined}
                 >
                   {l.pinned && <Pin size={8} strokeWidth={1.8} />}
-                  {l.kind === "core" ? t("ai.panel.loreCore") + (l.truncated ? "✂" : "") : l.title}
+                  {l.kind === "core"
+                    ? t("ai.panel.loreCore") + (l.truncated ? "✂" : "")
+                    : l.kind === "gallery"
+                      ? `${t("ai.panel.loreGallery")} ×${l.count ?? 0}`
+                      : l.title}
                   <span className={styles.injectedTk}>{estTk(l.chars)}</span>
                 </span>
               ))}
             </div>
-            {e.droppedFacets.length > 0 && (
+            {(e.droppedFacets.length > 0 || e.droppedImages) && (
               <div className={styles.chipRow}>
                 <span className={styles.droppedLabel}>
                   {t("ai.panel.loreDroppedTitle", { defaultValue: "超出预算未注入" })}
@@ -739,6 +743,11 @@ function LoreReportSection({
                     {d.title}
                   </span>
                 ))}
+                {e.droppedImages ? (
+                  <span className={styles.droppedChip} title={dropReason("budget")}>
+                    {`${t("ai.panel.loreGallery")} ×${e.droppedImages}`}
+                  </span>
+                ) : null}
               </div>
             )}
           </div>

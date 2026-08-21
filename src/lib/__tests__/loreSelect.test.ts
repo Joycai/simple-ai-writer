@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   selectLore,
   parsePins,
+  galleryNotice,
   DEFAULT_LORE_BUDGET_CHARS,
+  GALLERY_BUDGET_SHARE,
 } from "../context/loreSelect";
 import { parseFacetMeta, serializeFacetFrontmatter } from "../lore/entity";
 import type { LoreEntity, LoreFacet, LoreIndex } from "../lore";
@@ -206,6 +208,107 @@ describe("selectLore — layered activation", () => {
     expect(report.budgetChars).toBe(DEFAULT_LORE_BUDGET_CHARS);
     expect(report.usedChars).toBeGreaterThan(0);
     expect(report.usedChars).toBeLessThanOrEqual(DEFAULT_LORE_BUDGET_CHARS);
+  });
+});
+
+/**
+ * The gallery notice (L0.5).
+ *
+ * What it guards is a hole, not a feature: an entity used to be injected with
+ * no hint that it had pictures at all, so a model holding its whole text had no
+ * reason to call read_lore_entity again and never learned the gallery existed.
+ * The line is the only thing that closes that — and it must stay *words*, since
+ * base64 on every match is the cost read_lore_entity already refuses.
+ */
+describe("selectLore — gallery notice", () => {
+  const withImages = () => {
+    const index = makeIndex();
+    const aria = index.characters![0] as LoreEntity;
+    (aria as { avatarPath: string | null }).avatarPath = `${ARIA}/avatar.png`;
+    (aria as { images: LoreEntity["images"] }).images = [
+      { file: "portrait.png", desc: "银发，黑色立领窄袖劲装，左手按剑。", slot: "portrait", absPath: `${ARIA}/portrait.png` },
+      { file: "scar.png", desc: "", slot: null, absPath: `${ARIA}/scar.png` },
+    ] as LoreEntity["images"];
+    return index;
+  };
+
+  it("names the pictures and what they show, and never carries the pictures", async () => {
+    const { text, report } = await selectLore("Aria walked in.", withImages(), []);
+    expect(text).toMatch(/配图|Images/);
+    expect(text).toContain("avatar.png");
+    expect(text).toContain("portrait.png（银发，黑色立领窄袖劲装，左手按剑。）");
+    expect(text).toContain("scar.png"); // no description — the filename alone
+    expect(text).not.toContain("data:image"); // words, never pixels
+    const layer = report.entities[0].layers.find((l) => l.kind === "gallery")!;
+    expect(layer.count).toBe(3);
+    expect(layer.chars).toBeGreaterThan(0);
+  });
+
+  it("sits above the core, not under the last facet", async () => {
+    const { text } = await selectLore("Aria walked in.", withImages(), []);
+    expect(text.indexOf("portrait.png")).toBeLessThan(text.indexOf("Aria is a bard."));
+  });
+
+  it("says nothing at all for an entity with no pictures", async () => {
+    const { text, report } = await selectLore("Bran hammered.", makeIndex(), []);
+    expect(text).not.toMatch(/配图|Images:/);
+    const bran = report.entities.find((e) => e.name === "Bran")!;
+    expect(bran.layers.some((l) => l.kind === "gallery")).toBe(false);
+    expect(bran.droppedImages).toBeUndefined();
+  });
+
+  it("survives a core long enough to eat the whole budget", async () => {
+    files.set(`${ARIA}/index.md`, `---\nname: Aria\n---\n${"甲".repeat(5000)}`);
+    const { text } = await selectLore("Aria walked in.", withImages(), [], 600);
+    expect(text).toContain("portrait.png");
+  });
+
+  it("drops the notice — reported — once the gallery share is spent", async () => {
+    const index = makeIndex();
+    // Every entity carries an identical gallery, so the share runs out part-way.
+    for (const e of index.characters!) {
+      (e as { images: LoreEntity["images"] }).images = [
+        { file: "a.png", desc: "x".repeat(200), slot: null, absPath: `${e.dirPath}/a.png` },
+      ] as LoreEntity["images"];
+    }
+    const budget = 300;
+    const { report } = await selectLore("Aria and Bran met.", index, [], budget);
+    const injected = report.entities.filter((e) => e.layers.some((l) => l.kind === "gallery"));
+    const dropped = report.entities.filter((e) => e.droppedImages);
+    expect(injected.length).toBe(1); // one notice fits inside 20% of 300 chars
+    expect(dropped.length).toBe(1);
+    expect(dropped[0].droppedImages).toBe(1);
+    expect(dropped[0].name).toBe("Bran"); // first come, first served
+    expect(budget * GALLERY_BUDGET_SHARE).toBeLessThan(2 * 60);
+  });
+
+  it("bounds one entity's notice however big its gallery is", () => {
+    const many = entity({
+      dirPath: ARIA,
+      name: "Aria",
+      images: Array.from({ length: 30 }, (_, i) => ({
+        file: `still-${i}.png`,
+        desc: "描述".repeat(60),
+        slot: null,
+        absPath: `${ARIA}/still-${i}.png`,
+      })) as LoreEntity["images"],
+    });
+    const { text, count } = galleryNotice(many);
+    expect(count).toBe(30);
+    expect(text.length).toBeLessThanOrEqual(200);
+    expect(text).toContain("still-0.png");
+    expect(text).not.toContain("still-29.png");
+    expect(text).toMatch(/29|另有|more/);
+  });
+
+  it("leaves the image slot out of the injected text (slots never inject)", () => {
+    const { text } = galleryNotice(entity({
+      dirPath: ARIA,
+      name: "Aria",
+      images: [{ file: "p.png", desc: "银发", slot: "portrait", absPath: `${ARIA}/p.png` }] as LoreEntity["images"],
+    }));
+    expect(text).toContain("p.png");
+    expect(text).not.toContain("portrait");
   });
 });
 
