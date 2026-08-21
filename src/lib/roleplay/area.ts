@@ -193,6 +193,60 @@ export async function addAreaEntry(
   return id;
 }
 
+/** 一条的可改部分。标题也能改——它是 `name`，也就是命中时最先被匹配的那个词。 */
+export interface AreaEntryPatch {
+  title?: string;
+  body?: string;
+  keys?: string[];
+  summary?: string;
+}
+
+/**
+ * 改一条。**整份重写**，因为 frontmatter 里那几行是有序的，就地补丁比重写更容易
+ * 写出一个读不回来的文件；而一条记忆最多几百字，重写的代价可以忽略。
+ *
+ * 认不出的字段原样带过去——作者手改过这个文件是被允许的行为，和 `memory.md` 一个
+ * 规矩。
+ */
+export async function updateAreaEntry(
+  projectPath: string, areaId: string, entryId: string, patch: AreaEntryPatch,
+): Promise<void> {
+  const path = `${entriesDir(projectPath, areaId)}/${entryId}/index.md`;
+  const raw = await readFile(path);
+  const m = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(raw);
+  const front = m ? m[1].split("\n") : [];
+  const body = patch.body !== undefined ? patch.body.trim() : (m ? m[2].trim() : raw.trim());
+
+  const set = (key: string, value: string) => {
+    const i = front.findIndex((l) => l.startsWith(`${key}:`));
+    if (i >= 0) front[i] = `${key}: ${value}`;
+    else front.push(`${key}: ${value}`);
+  };
+  if (patch.title !== undefined) set("name", JSON.stringify(patch.title.trim()));
+  if (patch.keys !== undefined) set("aliases", yamlList(patch.keys.map((k) => k.trim()).filter(Boolean)));
+  if (patch.summary !== undefined || patch.body !== undefined) {
+    set("summary", JSON.stringify(patch.summary?.trim() || firstSentence(body)));
+  }
+
+  await writeFile(path, `---\n${front.join("\n")}\n---\n\n${body}\n`);
+}
+
+/**
+ * 删一条：移进 `.ai-writer/backups/`，不真删。
+ *
+ * 这里的东西是攒了很多场的，而它最可能被删的时刻，恰恰是作者以为自己不再需要它
+ * 的时刻。和删条目、删 agent 一个规矩。
+ */
+export async function deleteAreaEntry(
+  projectPath: string, areaId: string, entryId: string, now: number,
+): Promise<void> {
+  const src = `${entriesDir(projectPath, areaId)}/${entryId}`;
+  if (!(await fileExists(src))) return;
+  const backups = `${projectPath}/.ai-writer/backups`;
+  await makeDir(backups);
+  await renamePath(src, `${backups}/roleplay-entry-${now}-${areaId}-${entryId}`);
+}
+
 /**
  * 删一个区：整个目录移进 `.ai-writer/backups/`，和删 agent、删条目一致。
  *

@@ -22,7 +22,8 @@ import { useTranslation } from "react-i18next";
 import { Plus, X } from "lucide-react";
 import { useRoleplayStore } from "../../stores/roleplayStore";
 import { useProjectStore } from "../../stores/projectStore";
-import { areaEntities, scanArea } from "../../lib/roleplay/area";
+import { areaEntities, loadAreaMeta, scanArea, type AreaMeta } from "../../lib/roleplay/area";
+import { AreaBrowser } from "./AreaBrowser";
 import type { LoreEntity } from "../../lib/lore/model";
 import { MEMORY_KINDS, hasDoneState, kindLabel } from "../../lib/roleplay/memory";
 import type { MemoryKind, MemoryRecord } from "../../lib/roleplay/model";
@@ -151,6 +152,8 @@ export function MemoryPanel({
   const session = useRoleplayStore((s) => s.sessions[agentId]);
   const refreshMemory = useRoleplayStore((s) => s.refreshMemory);
   const [adding, setAdding] = useState(false);
+  const [browsing, setBrowsing] = useState(false);
+  const [areaMeta, setAreaMeta] = useState<AreaMeta | null>(null);
   const [showClosed, setShowClosed] = useState(false);
 
   const records = session?.memory ?? [];
@@ -161,6 +164,7 @@ export function MemoryPanel({
   // 转场都会改它——让 store 背一份就得再维护一条同步路径。
   const projectPath = useProjectStore((s) => s.projectPath);
   const areaId = useRoleplayStore((s) => s.agents[agentId]?.areaId ?? null);
+  const agentName = useRoleplayStore((s) => s.agents[agentId]?.name ?? null);
   const [areaItems, setAreaItems] = useState<LoreEntity[]>([]);
   useEffect(() => {
     if (!projectPath || !areaId) { setAreaItems([]); return; }
@@ -168,6 +172,7 @@ export function MemoryPanel({
     void scanArea(projectPath, areaId)
       .then((idx) => { if (alive) setAreaItems(areaEntities(idx)); })
       .catch(() => { if (alive) setAreaItems([]); });
+    void loadAreaMeta(projectPath, areaId).then((m) => { if (alive) setAreaMeta(m); });
     return () => { alive = false; };
     // 转场之后条目会多出来一批——`turnCount` 归零正是那一刻。
   }, [projectPath, areaId, session?.turns.length]);
@@ -297,6 +302,18 @@ export function MemoryPanel({
                 })}
               </div>
             )}
+            {areaItems.length > 0 && (
+              <button
+                type="button"
+                className={styles.browseAll}
+                onClick={() => setBrowsing(true)}
+              >
+                {t("roleplay.memory.browseAll", {
+                  n: areaItems.length, defaultValue: `浏览全部 ${areaItems.length} 条`,
+                })}
+                <span className={styles.browseArrow} aria-hidden />
+              </button>
+            )}
             {areaItems.map((e) => (
               <div key={e.dirPath} className={styles.areaItem}>
                 <div className={styles.areaTitle}>{e.name}</div>
@@ -313,6 +330,14 @@ export function MemoryPanel({
           </>
         )}
       </div>
+
+      {browsing && areaMeta && (
+        <AreaBrowser
+          meta={areaMeta}
+          holderName={agentName}
+          onClose={() => setBrowsing(false)}
+        />
+      )}
     </aside>
   );
 }

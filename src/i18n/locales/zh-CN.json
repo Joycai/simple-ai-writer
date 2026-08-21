@@ -2047,6 +2047,31 @@
     "kbFrom": "来自 {{device}}"
   },
   "roleplay": {
+    "areaBrowser": {
+      "count": "{{n}} 条 · 记忆区",
+      "boundTo": "当前绑定 {{name}}",
+      "free": "空闲 · 可以被继承",
+      "former": "曾属于 {{name}}",
+      "search": "搜条目或关键字",
+      "markerTag": "角色记忆",
+      "markerText": "这里写的是{{name}}以为的事。它可以和知识库的正典矛盾，不作纠正。",
+      "empty": "还是空的。转场的时候，不再欠着的东西会沉到这里。",
+      "noMatch": "没有匹配的条目。",
+      "addManual": "手写一条",
+      "total": "{{n}} 条 · 约 {{tok}} tok",
+      "pickOne": "选一条看看。",
+      "fromScene": "来自第 {{n}} 场 · 转场时沉入",
+      "handwritten": "作者手写",
+      "bodyLabel": "正文",
+      "bodyNote": "改动只影响{{name}}记得什么，不动正文和知识库",
+      "keysNote": "对话里出现这些词，这条才会被想起",
+      "newTitle": "新记的一条",
+      "multi": "多页"
+    },
+    "recall": {
+      "one": "想起了",
+      "many": "想起了 {{n}} 条旧事"
+    },
     "area": {
       "label": "记忆区",
       "labelNote": "这个角色以为的事",
@@ -2271,6 +2296,7 @@
       "loadFailed": "读不到扮演目录（.ai-writer/roleplay/）：{{error}}"
     },
     "memory": {
+      "browseAll": "浏览全部 {{n}} 条",
       "tierStanding": "常驻",
       "tierStandingNote": "{{n}} · 每轮都在",
       "tierAreaNote": "{{n}} · 相关时才出现",

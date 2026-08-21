@@ -102,11 +102,14 @@ function ComposerMirror({ text, innerRef }: {
   );
 }
 
-function TurnBlock({ turn, log, memories, onRewind }: {
+function TurnBlock({ turn, log, memories, recalled, onOpenArea, onRewind }: {
   turn: SceneTurn;
   log?: React.ReactNode;
   /** 这一轮里角色记下的东西。作者手加的 `turn: 0`，永远不会落在这里。 */
   memories?: MemoryRecord[];
+  /** 这一轮从记忆区里想起来的东西。 */
+  recalled?: { name: string; dirPath: string }[];
+  onOpenArea?: () => void;
   /** 只有作者轮、且不是最后一轮时给——回到最后一轮等于什么也没撤销。 */
   onRewind?: () => void;
 }) {
@@ -130,6 +133,31 @@ function TurnBlock({ turn, log, memories, onRewind }: {
   }
   return (
     <>
+      {/* 「想起了…」在回复**之前**，用**向左**的箭头——它是这一轮的输入，不是
+          结果。「记下了…」在回复之后用向右的箭头。**方向就是它和这一轮的关系。** */}
+      {recalled && recalled.length > 0 && (
+        <div className={styles.recallTrace}>
+          <span className={styles.traceArrowLeft} aria-hidden />
+          {recalled.length === 1 ? (
+            <span>
+              {t("roleplay.recall.one", { defaultValue: "想起了" })}
+              <button
+                type="button"
+                className={styles.traceName}
+                onClick={onOpenArea}
+              >
+                {recalled[0].name}
+              </button>
+            </span>
+          ) : (
+            <button type="button" className={styles.traceName} onClick={onOpenArea}>
+              {t("roleplay.recall.many", {
+                n: recalled.length, defaultValue: `想起了 ${recalled.length} 条旧事`,
+              })}
+            </button>
+          )}
+        </div>
+      )}
       <div className={styles.agentTurn} id={`rp-turn-${turn.index}`}>
         <div className={styles.agentLabel}>{turn.speakerName}</div>
         <ScriptText text={turn.text} />
@@ -138,7 +166,7 @@ function TurnBlock({ turn, log, memories, onRewind }: {
           作者需要知道角色**真的**记住了，这是建立信任的地方。 */}
       {memories?.map((m) => (
         <div key={m.id} className={styles.memoryTrace}>
-          <span className={styles.memoryDot} />
+          <span className={styles.traceArrowRight} aria-hidden />
           {t("roleplay.memory.recorded", { title: m.title, defaultValue: `记下了：${m.title}` })}
         </div>
       ))}
@@ -657,6 +685,8 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               key={turn.index}
               turn={turn}
               memories={memoriesByTurn.get(turn.index)}
+              recalled={session.recalled[turn.index]}
+              onOpenArea={() => setShowMemory(true)}
               onRewind={
                 turn.speaker === "author" && !isRunning && queuePos < 0
                   && turn.index < (session?.turns.length ?? 0)
