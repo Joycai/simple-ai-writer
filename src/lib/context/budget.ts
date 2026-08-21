@@ -3,6 +3,9 @@
  * per-layer char budgets for a single AI task.
  *
  * The window is spent in a fixed priority order:
+ *   0. **Tool schemas** — the agent toolset the request carries. Not a layer at
+ *      all: the model needs them to act, and no amount of trimming removes them.
+ *      Counted in tokens rather than chars — see ContextBudgetInput.
  *   1. **Output reserve** — room for the model's reply. Never handed to a layer;
  *      without it a "full" prompt leaves nowhere to write.
  *   2. **Fixed costs** — system prompt, task text, outline/knowledge extras.
@@ -157,6 +160,18 @@ export interface ContextBudgetInput {
   loreBudgetTokens: number;
   /** Chars the request spends before any planned layer — see fixedContextChars. */
   fixedChars: number;
+  /**
+   * Tokens the agent tool schemas will occupy on this request (0 for a task
+   * with no tools). See lib/agent/toolCost.
+   *
+   * Tokens rather than chars, and therefore not part of `fixedChars`: the tool
+   * schemas are English JSON at ~4 chars/token, while `fixedChars` is converted
+   * with `charsPerToken` measured from the author's own prose — ~1 for a Chinese
+   * manuscript. Billing English tokens at the CJK rate would overstate the
+   * schemas by nearly 3×, so they are subtracted in the token domain where they
+   * are actually measured.
+   */
+  toolSchemaTokens?: number;
   /** Whether this document has story memory to draw 【前情提要】 from. */
   hasMemory: boolean;
   /** Whether 【全书前情】 participates (continuation tasks only). */
@@ -192,8 +207,29 @@ export interface ContextBudgetPlan {
   recentWindowChars: number;
   /** False when the model declared no context size and constants were used. */
   dynamic: boolean;
-  /** Input-token ceiling this plan targeted (0 when static). */
+  /**
+   * The whole request's input ceiling (window × utilization − output reserve),
+   * tool schemas included (0 when static).
+   *
+   * Deliberately *not* reduced by the tool schemas: this is the denominator the
+   * AI panel's budget bar draws against, and the schemas are meant to read as
+   * space taken rather than as a ceiling that shrank. A ceiling that quietly
+   * moved can't be explained to the author; a segment on the bar can.
+   */
   inputCeilingTokens: number;
+  /**
+   * The part of that ceiling left for **messages** — `inputCeilingTokens` minus
+   * the tool schemas.
+   *
+   * This is what every consumer that measures messages must plan against:
+   * the per-layer char budgets here, `runAgent`'s history trimming, and the
+   * chat's compaction trigger. Passing `inputCeilingTokens` to those instead is
+   * how a request that measured "exactly at the ceiling" went out several
+   * thousand tokens over it.
+   */
+  messageCeilingTokens: number;
+  /** The tool-schema share, so the panel can show it as its own segment. */
+  toolSchemaTokens: number;
   /** Tokens reserved for the reply (0 when static). */
   reservedOutputTokens: number;
   /** The ratio used for every conversion here — lets callers report in tokens. */
@@ -222,6 +258,8 @@ export function planContextBudget(input: ContextBudgetInput): ContextBudgetPlan 
       recentWindowChars: recentFloor,
       dynamic: false,
       inputCeilingTokens: 0,
+      messageCeilingTokens: 0,
+      toolSchemaTokens: 0,
       reservedOutputTokens: 0,
       charsPerToken,
     };
@@ -238,8 +276,17 @@ export function planContextBudget(input: ContextBudgetInput): ContextBudgetPlan 
     0,
     Math.floor(input.contextSize * util) - reservedOutputTokens,
   );
+  // Clamped to the ceiling rather than allowed to go negative: a toolset larger
+  // than the whole window is a configuration the planner cannot fix, and the
+  // pre-flight context gate (lib/ai) is where that has to surface. All this
+  // must do is refuse to hand out char budgets it doesn't have.
+  const toolSchemaTokens = Math.min(
+    Math.max(0, input.toolSchemaTokens ?? 0),
+    inputCeilingTokens,
+  );
+  const messageCeilingTokens = inputCeilingTokens - toolSchemaTokens;
 
-  const ceilingChars = Math.floor(inputCeilingTokens * charsPerToken);
+  const ceilingChars = Math.floor(messageCeilingTokens * charsPerToken);
   const afterFixed = Math.max(0, ceilingChars - Math.max(0, input.fixedChars));
 
   // The verbatim window keeps its floor first: a summary of the last page is
@@ -284,6 +331,8 @@ export function planContextBudget(input: ContextBudgetInput): ContextBudgetPlan 
     recentWindowChars,
     dynamic: true,
     inputCeilingTokens,
+    messageCeilingTokens,
+    toolSchemaTokens,
     reservedOutputTokens,
     charsPerToken,
   };

@@ -883,3 +883,7 @@
   transition: color var(--transition-fast), border-color var(--transition-fast);
 }
 .btnSecondary:hover { color: var(--color-accent-text); border-color: var(--color-border-accent); }
+
+/* 工具 schema：每一轮都要付、又不属于任何可规划的层，所以给它一个自己的颜色，
+   而不是并进「近期」或藏在余量里——藏起来的固定开销正是这条分段存在的理由。 */
+.allocSeg_tools { background: var(--color-alloc-tools); }

@@ -26,8 +26,10 @@ const DELEGATE_TOOL = "delegate";
 export interface RoundGroup {
   round: number;
   maxRounds: number;
-  /** The round-start estimate for this round's request. */
+  /** The round-start estimate for this round's request — messages only. */
   estInputTokens: number;
+  /** The tool schemas this round carried on top of that; 0 on older logs. */
+  toolTokens: number;
   at: number;
   /**
    * Everything this round produced, in order — delegate steps included. A
@@ -172,6 +174,7 @@ export function buildLogModel(log: readonly AgentEvent[], isRunning: boolean): A
         round: event.round,
         maxRounds: event.maxRounds,
         estInputTokens: event.estInputTokens,
+        toolTokens: event.toolTokens ?? 0,
         at: event.at,
         events: [],
       });

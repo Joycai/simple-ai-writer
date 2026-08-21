@@ -308,3 +308,49 @@ describe("fixedContextChars", () => {
     ).toBe(3_160);
   });
 });
+
+describe("tool schemas as a budget layer", () => {
+  it("comes off the message ceiling, not the input ceiling", () => {
+    const plan = planContextBudget(input({ toolSchemaTokens: 8_000 }));
+    // The denominator the panel draws against is unchanged — the toolset reads
+    // as space taken, not as a ceiling that quietly shrank.
+    expect(plan.inputCeilingTokens).toBe(CEILING);
+    expect(plan.messageCeilingTokens).toBe(CEILING - 8_000);
+    expect(plan.toolSchemaTokens).toBe(8_000);
+  });
+
+  it("shrinks the plannable layers by exactly what the tools cost", () => {
+    const without = planContextBudget(input());
+    const withTools = planContextBudget(input({ toolSchemaTokens: 8_000 }));
+    const layers = (p: typeof without) =>
+      p.loreChars + p.memoryChars + p.bookPriorChars + p.recentWindowChars;
+    // charsPerToken is 1 in this fixture, so 8k tokens is 8k chars of layers.
+    expect(layers(without) - layers(withTools)).toBe(8_000);
+  });
+
+  it("defaults to zero, so a toolless task plans exactly as before", () => {
+    expect(planContextBudget(input())).toEqual(
+      planContextBudget(input({ toolSchemaTokens: 0 })),
+    );
+  });
+
+  it("clamps a toolset larger than the whole ceiling instead of going negative", () => {
+    // Not a budget this planner can fix — the pre-flight context gate is where
+    // that has to surface. All this must do is refuse to hand out char budgets
+    // it doesn't have.
+    const plan = planContextBudget(input({ toolSchemaTokens: 500_000 }));
+    expect(plan.messageCeilingTokens).toBe(0);
+    expect(plan.toolSchemaTokens).toBe(CEILING);
+    expect(plan.loreChars).toBe(0);
+    expect(plan.memoryChars).toBe(0);
+    expect(plan.bookPriorChars).toBe(0);
+    expect(plan.recentWindowChars).toBe(0);
+  });
+
+  it("reports zeros on the static fallback plan", () => {
+    const plan = planContextBudget(input({ contextSize: 0, toolSchemaTokens: 8_000 }));
+    expect(plan.dynamic).toBe(false);
+    expect(plan.messageCeilingTokens).toBe(0);
+    expect(plan.toolSchemaTokens).toBe(0);
+  });
+});

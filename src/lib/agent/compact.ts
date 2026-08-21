@@ -233,6 +233,12 @@ export interface FoldPlan {
 export function planFold(
   history: StreamMessage[],
   meta: ChatSessionMeta,
+  /**
+   * The ceiling the **messages** must fit under — the tool schemas' share is
+   * already off it (see lib/agent/toolCost). Passing the raw input ceiling here
+   * is what let the context bar stand past its own compaction mark with nothing
+   * happening: the bar counted the schemas, this did not.
+   */
   ceilingTokens: number,
 ): FoldPlan | null {
   if (ceilingTokens <= 0) return null;

@@ -39,6 +39,7 @@ import {
   type TaskWorkspaceHandle,
 } from "../lib/agent/taskWorkspace";
 import { routeTools } from "../lib/agent/routing";
+import { plannedToolTokens } from "../lib/agent/toolCost";
 import { resolveSubAgentConn } from "../lib/agent/subagent";
 
 /**
@@ -241,6 +242,13 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // it, and the context budget measures that prompt.
     const preset = presetForTools(task.tools);
     const isAgentic = preset !== null;
+    // What this run's tool schemas will cost. Not part of `fixedChars` below:
+    // that is a char count converted with the manuscript's own charsPerToken,
+    // and the schemas are English JSON on a different ratio entirely — see
+    // ContextBudgetInput.toolSchemaTokens.
+    const toolSchemaTokens = plannedToolTokens(
+      preset, useAiStore.getState().subAgents, models,
+    );
 
     // System prompt: user-selected prompt (scene === "system"), else default
     const prompt = prompts.find((p) => p.id === activePromptId);
@@ -355,6 +363,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       maxOutputTokens: effectiveMaxOutput(model, defaultMaxOutput()),
       utilization: contextUtilization,
       loreBudgetTokens,
+      toolSchemaTokens,
       fixedChars: fixedContextChars({
         systemPromptChars: systemPrompt.length,
         taskInstructionChars: instruction.length,
@@ -499,9 +508,11 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
 
         const { inputTokens, outputTokens, cachedTokens, outcome } = await runAgent({
           ...conn,
-          // `plan.inputCeilingTokens` is 0 on a static plan (model declared no
-          // context size), and a 0 ceiling disables history trimming entirely.
-          inputCeilingTokens: plan.inputCeilingTokens || ASSUMED_INPUT_CEILING_TOKENS,
+          // The **message** ceiling: the tool schemas' share is already out of
+          // it, and what the runtime trims is messages. 0 on a static plan
+          // (model declared no context size), and a 0 ceiling disables history
+          // trimming entirely — hence the fallback.
+          inputCeilingTokens: plan.messageCeilingTokens || ASSUMED_INPUT_CEILING_TOKENS,
           // Non-null on this branch — isAgentic is exactly `preset !== null`.
           preset: effectivePreset,
           messages: agentMessages,

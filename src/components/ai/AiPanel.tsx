@@ -30,6 +30,8 @@ import { useBatchStore } from "../../stores/batchStore";
 import { draftCountFor, totalUsage, useAiTaskStore, type TaskKind } from "../../stores/aiTaskStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { cardsForSurface } from "../../lib/agent/approvalRouting";
+import { presetForTools } from "../../lib/agent/presets";
+import { plannedToolTokens } from "../../lib/agent/toolCost";
 import { useComposerStore } from "../../stores/composerStore";
 import { AgentLog } from "./AgentLog";
 import { TaskPanel } from "./TaskPanel";
@@ -173,7 +175,7 @@ function SectionHead({
 
 interface ContextForecast {
   /** Ordered bar segments; `chars` sum to the request's whole input ceiling. */
-  segments: { key: "recent" | "lore" | "memory" | "free"; chars: number }[];
+  segments: { key: "tools" | "recent" | "lore" | "memory" | "free"; chars: number }[];
   charsPerToken: number;
   /** Ceiling this request may spend on input (tokens). */
   ceilingTokens: number;
@@ -209,11 +211,14 @@ function useContextForecast(opts: {
   isContinue: boolean;
   replyChars: number | undefined;
   memoryChars: number;
+  /** Tokens this task's agent toolset will occupy, 0 for a toolless task. */
+  toolSchemaTokens: number;
 }): ContextForecast | null {
   const {
     contextSize, maxOutputTokens, utilization, loreBudgetTokens, systemPromptChars,
     instructionChars, selectionChars, outlineChars, knowledgeChars, documentText,
     anchorOffset, recentWindowChars, isContinue, replyChars, memoryChars,
+    toolSchemaTokens,
   } = opts;
 
   return useMemo(() => {
@@ -232,6 +237,7 @@ function useContextForecast(opts: {
       maxOutputTokens,
       utilization,
       loreBudgetTokens,
+      toolSchemaTokens,
       fixedChars,
       recentWindowChars,
       availableRecentChars: Math.max(0, anchorOffset),
@@ -248,12 +254,19 @@ function useContextForecast(opts: {
     const lore = plan.loreChars;
     const memory = Math.min(plan.memoryChars, memoryChars) + plan.bookPriorChars;
 
-    const ceilingChars = Math.floor(plan.inputCeilingTokens * charsPerToken);
+    // The plannable layers are measured against the **message** ceiling; the
+    // tool schemas sit outside it, so the bar's full width is still the whole
+    // input ceiling and the toolset reads as space taken from the layers.
+    const ceilingChars = Math.floor(plan.messageCeilingTokens * charsPerToken);
     const free = Math.max(0, ceilingChars - fixedChars - recent - lore - memory);
     const toTokens = (chars: number) => Math.round(chars / charsPerToken);
+    // Converted for geometry only, and it round-trips exactly: the tooltip
+    // divides by the same ratio to print the token count back.
+    const toolChars = plan.toolSchemaTokens * charsPerToken;
 
     return {
       segments: [
+        { key: "tools", chars: toolChars },
         { key: "recent", chars: recent },
         { key: "lore", chars: lore },
         { key: "memory", chars: memory },
@@ -261,13 +274,14 @@ function useContextForecast(opts: {
       ],
       charsPerToken,
       ceilingTokens: plan.inputCeilingTokens,
-      usedTokens: toTokens(fixedChars + recent + lore + memory),
+      usedTokens: toTokens(fixedChars + recent + lore + memory) + plan.toolSchemaTokens,
       reservedOutputTokens: plan.reservedOutputTokens,
     };
   }, [
     contextSize, maxOutputTokens, utilization, loreBudgetTokens, systemPromptChars,
     instructionChars, selectionChars, outlineChars, knowledgeChars, documentText,
     anchorOffset, recentWindowChars, isContinue, replyChars, memoryChars,
+    toolSchemaTokens,
   ]);
 }
 
@@ -281,6 +295,7 @@ function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
   const contextSize = activeModel?.contextSize ?? 0;
 
   const LEGEND: Record<string, { labelKey: string; fallback: string }> = {
+    tools:  { labelKey: "ai.panel.allocTools",  fallback: "工具" },
     recent: { labelKey: "ai.panel.allocRecent", fallback: "近期" },
     lore:   { labelKey: "ai.panel.allocLore",   fallback: "设定" },
     memory: { labelKey: "ai.panel.allocMemory", fallback: "前情" },
@@ -1015,6 +1030,14 @@ export function AiPanel() {
 
   const isContinue = !!task.continuation;
   const supportsExtras = !!task.referenceWindow;
+  // What this task's toolset costs, so the budget bar accounts for the schemas
+  // the request will carry. Same function runTask plans with — the forecast and
+  // the run cannot disagree about the toolset's size.
+  const subAgents = useAiStore((s) => s.subAgents);
+  const toolSchemaTokens = useMemo(
+    () => plannedToolTokens(presetForTools(task.tools), subAgents, models),
+    [task.tools, subAgents, models],
+  );
 
   // The Agent 模式 toggle switches to a *different* task (its own prompt and
   // toolset), so resolve that before asking anything about what will run.
@@ -1283,6 +1306,7 @@ export function AiPanel() {
     isContinue,
     replyChars: isContinue ? continueLength : undefined,
     memoryChars,
+    toolSchemaTokens,
   });
   // Report/estimate conversions share the forecast's measured ratio when there
   // is one, so the panel never shows two different token counts for one block.

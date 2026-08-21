@@ -53,7 +53,13 @@ vi.mock("../agent/runtime", () => ({
 // presets is deliberately NOT mocked: it is pure data plus `presetForTools`'s
 // switch, and the mapping from a task's declared tools to a preset is part of
 // what these tests are checking.
-vi.mock("../agent/plan", () => ({ createPlanGate: () => ({}) }));
+// Partial: the real registry is in this store's graph now (aiTaskStore budgets
+// the run with lib/agent/toolCost, which measures the tool schemas), and the
+// registry reads LORE_PLAN_ACTIONS out of this module to build a tool's enum.
+vi.mock("../agent/plan", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../agent/plan")>()),
+  createPlanGate: () => ({}),
+}));
 
 // Context assembly is someone else's test; here it just has to be cheap and
 // identical for every draft.
@@ -72,7 +78,8 @@ vi.mock("../context/budget", async (importOriginal) => ({
   reflowMemoryBudget: () => 0,
   planContextBudget: () => ({
     loreChars: 0, memoryChars: 0, bookPriorChars: 0, recentWindowChars: 100,
-    charsPerToken: 3, dynamic: false, inputCeilingTokens: 1000,
+    charsPerToken: 3, dynamic: false,
+    inputCeilingTokens: 1000, messageCeilingTokens: 1000, toolSchemaTokens: 0,
   }),
 }));
 // Partial: runTask also pulls projectRelativePath from here to name the current

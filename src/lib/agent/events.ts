@@ -84,8 +84,22 @@ export type AgentEvent = AgentEventScope & (
       kind: "round-start";
       round: number;
       maxRounds: number;
-      /** Estimated input tokens for this round's request. */
+      /** Estimated input tokens for this round's request — messages only. */
       estInputTokens: number;
+      /**
+       * Tokens this round's tool schemas add on top of `estInputTokens`.
+       *
+       * Reported separately rather than folded in because it is the one part of
+       * the request that no amount of trimming or compaction can shrink — the
+       * author reading a log needs to see which half of a large round was the
+       * conversation and which half was the fixed cost of having tools at all.
+       * 0 on the force-text final round, where the tools are withheld.
+       *
+       * Optional because chat logs persist across releases (stores/agentStore →
+       * sessionDb): every event emitted from 1.22 on carries it, and the ones
+       * already on disk never will. Read it as `?? 0`.
+       */
+      toolTokens?: number;
       at: number;
     }
   | { kind: "tool-step"; step: ToolStep; at: number }

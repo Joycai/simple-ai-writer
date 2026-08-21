@@ -55,9 +55,7 @@ import {
   computeContextBreakdown,
 } from "../../lib/agent/contextBreakdown";
 import { AGENT_ASSIST_PRESET } from "../../lib/agent/presets";
-import { getToolDefinitions } from "../../lib/agent/registry";
-import { routePlannedTools } from "../../lib/agent/routing";
-import { estimateToolsTokens } from "../../lib/ai/tokenEstimate";
+import { plannedToolTokens } from "../../lib/agent/toolCost";
 import { inputCeilingFor } from "../../lib/context/budget";
 import { ReasoningControls } from "./ReasoningControls";
 import { SubAgentChips } from "./SubAgentChips";
@@ -407,14 +405,11 @@ export function AgentChat() {
   // (agentStore routeTools with the session's sub-agent overrides), not the raw
   // preset: routing strips read_image/generate_image and appends delegate, and
   // a 系统+工具 segment that ignored the chips it sits next to drifted from the
-  // request it claims to describe. The registry still patches lore-category
-  // enums per call, but that only swaps category names in and out — noise
-  // against several KB of schema, and not worth re-measuring per lore scan.
+  // request it claims to describe. lib/agent/toolCost does the routing and the
+  // measuring, and is the same function agentStore budgets the run with — this
+  // bar and that ceiling cannot disagree about what the tools cost.
   const toolTokens = useMemo(
-    () =>
-      estimateToolsTokens(
-        getToolDefinitions(routePlannedTools(AGENT_ASSIST_PRESET, effectiveSubs, models).tools),
-      ),
+    () => plannedToolTokens(AGENT_ASSIST_PRESET, effectiveSubs, models),
     [effectiveSubs, models],
   );
   const context = useMemo(

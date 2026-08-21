@@ -32,6 +32,7 @@ import { cloneLoreIndex } from "../lore";
 import { TOOL_ARGS_DETAIL_CHARS, TOOL_RESULT_DETAIL_CHARS } from "./logFormat";
 import type { TaskPreset } from "./presets";
 import { executeRegisteredTool, getToolDefinitions, type ToolContext } from "./registry";
+import { toolTokensOf } from "./toolCost";
 import { loadTaskDoc, parseSteps, type TaskStep } from "./taskWorkspace";
 import type { ToolCall, ToolResult } from "./tools";
 
@@ -235,9 +236,17 @@ export interface AgentRuntimeOptions extends ConnOptions {
   // The endpoint/model half comes from ConnOptions (lib/ai/conn) — build it with
   // connOptions(conn) rather than listing the fields here.
   /**
-   * Input-token ceiling from the context budget planner (lib/context/budget).
-   * Older tool results are elided to stay under it, so a long loop degrades
-   * instead of dying on a ContextSizeError several rounds in. Omit to disable.
+   * Ceiling for this run's **messages**, from the context budget planner
+   * (`ContextBudgetPlan.messageCeilingTokens`, or `messageCeilingFor` on a
+   * surface that builds no plan). Older tool results are elided to stay under
+   * it, so a long loop degrades instead of dying on a ContextSizeError several
+   * rounds in. Omit to disable.
+   *
+   * The tool schemas' share is **already subtracted by the caller** — do not
+   * subtract it again here. It is the messages this loop can trim; the schemas
+   * ride on every round whatever the history looks like, which is exactly why
+   * they have to come off the ceiling before the trimming starts rather than
+   * being discovered as overflow afterwards.
    */
   inputCeilingTokens?: number;
   /**
@@ -514,6 +523,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       round,
       maxRounds,
       estInputTokens: estimateMessagesTokens(history),
+      toolTokens: withholdTools ? 0 : toolTokensOf(preset.tools),
       at: Date.now(),
     });
 

@@ -80,7 +80,14 @@ function Marker({ state }: { state: "pending" | "running" | "done" | "error" }) 
 /** A log row plus the round it belongs to (folded in from the round marker). */
 interface Row {
   event: AgentEvent;
-  round?: { round: number; maxRounds: number; estInputTokens: number; at: number };
+  round?: {
+    round: number; maxRounds: number;
+    /** Messages only. */
+    estInputTokens: number;
+    /** Tool schemas on top of that; 0 on logs persisted before 1.22. */
+    toolTokens: number;
+    at: number;
+  };
 }
 
 /**
@@ -97,6 +104,7 @@ function toRows(log: AgentEvent[], filterTopLevel = true): Row[] {
         round: event.round,
         maxRounds: event.maxRounds,
         estInputTokens: event.estInputTokens,
+        toolTokens: event.toolTokens ?? 0,
         at: event.at,
       };
       continue;
@@ -338,7 +346,8 @@ function AgentLogRow({ row, showTime, runStatus }: {
       title={t("ai.agent.log.round", {
         round: round.round,
         max: round.maxRounds,
-        tokens: round.estInputTokens.toLocaleString(),
+        tokens: (round.estInputTokens + round.toolTokens).toLocaleString(),
+        toolTokens: round.toolTokens.toLocaleString(),
       })}
     >
       {t("ai.agent.log.roundShort", {
@@ -743,7 +752,7 @@ function RoundBlock({
         </span>
         <span className={styles.rowName}>{gist}</span>
         <span className={styles.rowMetaRight}>
-          {formatTokenCount(group.estInputTokens)} tk
+          {formatTokenCount(group.estInputTokens + group.toolTokens)} tk
         </span>
         <span className={styles.rowChevron}>
           {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}

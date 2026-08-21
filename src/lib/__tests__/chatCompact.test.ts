@@ -114,6 +114,30 @@ describe("planFold", () => {
     expect(planFold(history, meta, 10_000)).toBeNull();
   });
 
+  it("fires on a history the raw input ceiling would have left alone", () => {
+    // The regression this pins: `planFold` measures messages, and the caller
+    // used to hand it the whole input ceiling — tool schemas included. A
+    // history sitting just under the raw trigger but over it once the toolset
+    // is subtracted then never compacted, while the context bar (which counts
+    // the schemas) stood past its own compaction mark. The fix is at the
+    // caller (lib/agent/toolCost → messageCeilingFor); what this checks is that
+    // the difference between the two ceilings is the difference between
+    // compacting and not.
+    const turns: StreamMessage[][] = Array.from({ length: 6 }, (_, i) => [
+      q(`q${i}` + cjkBlock(1200)),
+      a(`a${i}` + cjkBlock(1200)),
+    ]);
+    const { history, meta } = makeSession({ turns });
+    const inputCeiling = 25_000;
+    const toolTokens = 8_500;         // ≈ the assistant preset's real toolset
+    const used = estimateMessagesTokens(history);
+    expect(used).toBeLessThan(inputCeiling * COMPACT_TRIGGER);
+    expect(used).toBeGreaterThan((inputCeiling - toolTokens) * COMPACT_TRIGGER);
+
+    expect(planFold(history, meta, inputCeiling)).toBeNull();
+    expect(planFold(history, meta, inputCeiling - toolTokens)).not.toBeNull();
+  });
+
   it("folds oldest-first down to the retain target and drops the seed", () => {
     const turns: StreamMessage[][] = Array.from({ length: 6 }, (_, i) => [
       q(`q${i}` + cjkBlock(1500)),
