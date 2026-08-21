@@ -321,6 +321,15 @@ async function nextArchiveNo(dir: string): Promise<number> {
 }
 
 /**
+ * 这一场封存时**将会**拿到的编号。转场分拣要在封存前把「来自第 N 场」写进
+ * 记忆区条目，所以编号必须和 `archiveSession` 用同一个算法算出来——按个数数
+ * （`listArchives().length + 1`）在作者手删过一场归档之后就和实际编号错开了。
+ */
+export async function peekNextArchiveNo(projectPath: string, agentId: string): Promise<number> {
+  return nextArchiveNo(archiveDir(projectPath, agentId));
+}
+
+/**
  * 「新开会话」：把当前这一场封存，让 agent 从空白重新开始。
  *
  * **封存靠 rename，不靠改写**——transcript 是只追加、永不改写的资产（不变量

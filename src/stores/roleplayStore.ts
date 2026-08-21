@@ -28,7 +28,7 @@ import i18n from "../i18n";
 import { backupFile } from "../lib/agent/backup";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import { compactChatHistory, summarizeForCompaction } from "../lib/agent/compactRun";
-import { excludeDirsFor, noteTurnStart } from "../lib/agent/compact";
+import { excludeDirsFor, noteTurnStart, recordInjections } from "../lib/agent/compact";
 import { presetFor } from "../lib/roleplay/presets";
 import { routeTools } from "../lib/agent/routing";
 import { repairToolCallPairing, runAgent } from "../lib/agent/runtime";
@@ -52,7 +52,8 @@ import {
   type BoundContent, type RoleplaySessionMeta,
 } from "../lib/roleplay/context";
 import {
-  addRecord, dropRecordsFrom, loadMemoryDoc, reviseRecord, saveMemoryDoc, type MemoryDoc,
+  addRecord, dropRecordsFrom, loadMemoryDoc, reviseRecord, saveMemoryDoc, takeSinkable,
+  type MemoryDoc,
 } from "../lib/roleplay/memory";
 import type { AgentMemoryStore } from "../lib/roleplay/memoryTools";
 import {
@@ -77,8 +78,8 @@ import {
 import type { SceneInfo, SceneReader, SceneSlice } from "../lib/roleplay/sceneTools";
 import {
   archiveSession, deleteAgentDir, loadPersonaCard, loadRoster, loadSession, loadSummary,
-  listArchives, memoryPath, saveRoster, savePersonaCard, saveSession, saveSummary, sessionPath,
-  summaryPath, transcriptPath,
+  memoryPath, peekNextArchiveNo, saveRoster, savePersonaCard, saveSession, saveSummary,
+  sessionPath, summaryPath, transcriptPath,
 } from "../lib/roleplay/store";
 import {
   appendTurn, loadTranscript, renderTranscript, truncateTurns,
@@ -380,6 +381,79 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
   };
 
   /**
+   * 记忆区：第二路检索，**独立成块**，插在 `history[insertIndex]`。
+   *
+   * 分块不是排版偏好：【设定】是世界的事实，【记忆】是这个角色**以为**的事，
+   * 两者可以互相矛盾（06 §4.2）。合成一块，角色会开始把自己的猜测当成公认
+   * 事实说出口。
+   *
+   * 预算也分开——一场戏聊到深处时最不该发生的事，是角色的记忆把它自己的
+   * 人设挤出去。
+   *
+   * 播种和续跑两条路**都**要走这里：这段检索曾经只活在续跑分支里，于是新开
+   * 会话（也包括每次重启后的重播种）的第一问永远想不起任何旧事——而转场后的
+   * 第一句恰恰是最需要「想起旧事」的时刻。
+   */
+  const injectAreaRecall = async (
+    job: Job,
+    agent: RoleplayAgent,
+    history: StreamMessage[],
+    meta: RoleplaySessionMeta,
+    insertIndex: number,
+  ) => {
+    const { projectPath } = get();
+    if (!projectPath || !agent.areaId) return;
+    try {
+      const areaIndex = await scanArea(projectPath, agent.areaId);
+      const { selectLore } = await import("../lib/context/loreSelect");
+      const picked = await selectLore(
+        job.match, areaIndex, [],
+        AREA_BUDGET_TOKENS * measureCharsPerToken(job.match),
+        // 账本共用一份；记忆区条目住在 `.ai-writer/roleplay/areas/` 下，dirPath
+        // 天然不会和项目条目撞车。
+        { excludeDirs: excludeDirsFor(meta, areaIndex) },
+      );
+      if (!picked.text) return;
+      const label = i18n.t("roleplay.section.recall", { defaultValue: "记忆" });
+      const lead = i18n.t("roleplay.section.recallLead", {
+        defaultValue: "以下是你想起来的旧事。这是**你记得的**，未必和别人说的一致。",
+      });
+      const carrier: StreamMessage = {
+        role: "user",
+        content: `【${label}】\n${lead}\n${picked.text}`,
+      };
+      history.splice(insertIndex, 0, carrier);
+      // 折叠语义：载体必须落在可折叠的一侧。续跑时它挂在上一轮的尾部；播种且
+      // 没有回放轮时它前面没有任何轮起点，会落进 prelude——永不折叠、账本条目
+      // 永不过期。此时把它自己标成轮起点（segmentHistory 按 Set 判断，不看
+      // turnStarts 的数组顺序），它就成了一个日后可被正常折叠的单消息轮。
+      const starts = new Set(meta.turnStarts);
+      if (!history.slice(0, insertIndex).some((m) => starts.has(m))) {
+        noteTurnStart(meta, carrier);
+      }
+      const byDir = new Map(areaEntities(areaIndex).map((e) => [e.dirPath, e]));
+      recordInjections(
+        meta,
+        picked.report.entities.flatMap((r) => byDir.get(r.dirPath) ?? []),
+        carrier,
+      );
+      patchSession(job.agentId, (s) => ({
+        ...s,
+        recalled: {
+          ...s.recalled,
+          [(s.turns.length || 0) + 1]: picked.report.entities.map((r) => ({
+            name: byDir.get(r.dirPath)?.name ?? r.dirPath,
+            dirPath: r.dirPath,
+          })),
+        },
+      }));
+    } catch (e) {
+      // 记忆区读不出来不该毁掉这一轮：角色少想起几件事，比这一句话发不出去好。
+      console.warn("[roleplay] memory area not read:", e);
+    }
+  };
+
+  /**
    * 起跑一个作业。
    *
    * 作者轮**已经**在 `send` 里落盘了——这里只负责跑模型和写回复。分开是因为
@@ -484,6 +558,8 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
             at: Date.now(),
           }),
         }));
+        // 播种出来的历史以这一问收尾——旧事插在它前面。
+        await injectAreaRecall(job, agent, history, meta, history.length - 1);
       } else {
         repairToolCallPairing(history);
 
@@ -522,7 +598,6 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           loreBudgetChars: loreBudgetTokens * measureCharsPerToken(job.match),
           doc: null,
         });
-        const { recordInjections } = await import("../lib/agent/compact");
         if (inj.text) {
           const carrier: StreamMessage = { role: "user", content: inj.text };
           history.push(carrier);
@@ -532,58 +607,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           );
         }
 
-        // ── 记忆区：第二路检索，**独立成块** ───────────────────────────────
-        //
-        // 分块不是排版偏好：【设定】是世界的事实，【记忆】是这个角色**以为**的事，
-        // 两者可以互相矛盾（06 §4.2）。合成一块，角色会开始把自己的猜测当成公认
-        // 事实说出口。
-        //
-        // 预算也分开——一场戏聊到深处时最不该发生的事，是角色的记忆把它自己的
-        // 人设挤出去。
-        if (agent.areaId) {
-          try {
-            const areaIndex = await scanArea(projectPath, agent.areaId);
-            const { selectLore } = await import("../lib/context/loreSelect");
-            const picked = await selectLore(
-              job.match, areaIndex, [],
-              AREA_BUDGET_TOKENS * measureCharsPerToken(job.match),
-              // 账本共用一份，但记忆区的键带前缀——否则要么和项目条目撞车，
-              // 要么每轮重发。
-              { excludeDirs: excludeDirsFor(meta, areaIndex) },
-            );
-            if (picked.text) {
-              const label = i18n.t("roleplay.section.recall", { defaultValue: "记忆" });
-              const lead = i18n.t("roleplay.section.recallLead", {
-                defaultValue: "以下是你想起来的旧事。这是**你记得的**，未必和别人说的一致。",
-              });
-              const carrier: StreamMessage = {
-                role: "user",
-                content: `【${label}】\n${lead}\n${picked.text}`,
-              };
-              history.push(carrier);
-              const byDir = new Map(areaEntities(areaIndex).map((e) => [e.dirPath, e]));
-              recordInjections(
-                meta,
-                picked.report.entities.flatMap((r) => byDir.get(r.dirPath) ?? []),
-                carrier,
-              );
-              patchSession(job.agentId, (s) => ({
-                ...s,
-                recalled: {
-                  ...s.recalled,
-                  [(s.turns.length || 0) + 1]: picked.report.entities.map((r) => ({
-                    name: byDir.get(r.dirPath)?.name ?? r.dirPath,
-                    dirPath: r.dirPath,
-                  })),
-                },
-              }));
-            }
-          } catch (e) {
-            // 记忆区读不出来不该毁掉这一轮：角色少想起几件事，比这一句话发不
-            // 出去好。
-            console.warn("[roleplay] memory area not read:", e);
-          }
-        }
+        await injectAreaRecall(job, agent, history, meta, history.length);
 
         const question: StreamMessage = { role: "user", content: job.wire };
         noteTurnStart(meta, question);
@@ -978,18 +1002,21 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       try {
         // **先写记忆，再封存。** 反过来的话，摘要落盘失败时上一场已经不在当前
         // transcript 里了，作者眼前一片空白却什么也没留下（06 §5.4）。
-        const sceneNo = (await listArchives(projectPath, id)).length + 1;
+        //
+        // 场次编号和封存编号必须出自同一个算法（最大值 + 1，不是文件个数）：
+        // 作者手删过一场归档后，按个数算的编号会和 `archiveSession` 实际用的
+        // 错开，记忆区条目的「来自第 N 场」就指错了场。
+        const sceneNo = await peekNextArchiveNo(projectPath, id);
         const path = memoryPath(projectPath, id);
         const doc = await loadMemoryDoc(path);
         let next = doc;
 
-        // **降级只发生在转场这一刻**（06 §3.1）。规则按性质，不按预算：
-        // 欠着的约定和待办、关系留在常驻层；其余沉进记忆区，各成一条，各带自己
-        // 的关键字——合并成一段散文会把它们变成一份摘要，而那正是记忆当初要防
-        // 的东西。
+        // **降级只发生在转场这一刻**（06 §3.1）。规则按性质，不按预算——分拣
+        // 本身在 `takeSinkable` 里：欠着的约定和待办、关系留在常驻层；其余**移出**
+        // 常驻层、沉进记忆区，各成一条，各带自己的关键字——合并成一段散文会把
+        // 它们变成一份摘要，而那正是记忆当初要防的东西。
         if (agent.areaId) {
-          const sinking = doc.records.filter((r) =>
-            !((r.kind === "pact" || r.kind === "todo") && r.status === "open") && r.kind !== "bond");
+          const { doc: remaining, sinking } = takeSinkable(doc);
           for (const rec of sinking) {
             const keys = rec.keys.length
               ? rec.keys
@@ -1003,9 +1030,9 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
               keys,
               scene: sceneNo,
             }, now);
-            const revised = reviseRecord(next, rec.id, { status: "void" }, now);
-            if (revised) next = revised.doc;
           }
+          // 全部写进区里才移出常驻层：中途失败最多把已沉的重复一次，绝不丢。
+          if (sinking.length) next = remaining;
           const meta = await loadAreaMeta(projectPath, agent.areaId);
           await saveAreaMeta(projectPath, { ...meta, lastScene: sceneNo, boundTo: id });
         } else {
