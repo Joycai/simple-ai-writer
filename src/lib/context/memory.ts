@@ -17,6 +17,7 @@
  */
 
 import { readFile, writeFile, makeDir, fileExists, renamePath, removeFile } from "../fs/fileio";
+import { dirName, projectRelative as projectRelativePath } from "../paths";
 
 export interface MemorySegment {
   /** Source char range [from, to) this summary covers. */
@@ -188,14 +189,14 @@ export function parseMemory(raw: string): DocMemory | null {
 
 // ─── File IO ─────────────────────────────────────────────────────────────────
 
-/** Project-relative path (forward slashes), or null when outside the project. */
-export function projectRelativePath(projectPath: string, absPath: string): string | null {
-  const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
-  const proj = norm(projectPath);
-  const abs = norm(absPath);
-  if (!abs.toLowerCase().startsWith(proj.toLowerCase() + "/")) return null;
-  return abs.slice(proj.length + 1);
-}
+/**
+ * Project-relative path (forward slashes), or null when outside the project.
+ *
+ * The name this module has always used; the rule lives in `lib/paths` now, so
+ * that it agrees with the containment checks and with `agent/backup` about
+ * separators and about when case matters.
+ */
+export { projectRelativePath };
 
 export function memoryFilePath(projectPath: string, relPath: string): string {
   return `${projectPath}/.ai-writer/memory/${relPath}`;
@@ -219,8 +220,7 @@ export async function loadMemory(
 
 export async function saveMemory(projectPath: string, mem: DocMemory): Promise<void> {
   const path = memoryFilePath(projectPath, mem.sourcePath);
-  const dir = path.slice(0, path.lastIndexOf("/"));
-  await makeDir(dir);
+  await makeDir(dirName(path));
   await writeFile(path, serializeMemory(mem));
 }
 
@@ -274,7 +274,7 @@ export async function moveMemory(
     const oldPath = memoryFilePath(projectPath, oldRel);
     if (!(await fileExists(oldPath))) return;
     const newPath = memoryFilePath(projectPath, newRel);
-    await makeDir(newPath.slice(0, newPath.lastIndexOf("/")));
+    await makeDir(dirName(newPath));
     const mem = parseMemory(await readFile(oldPath));
     if (mem) {
       // Rewrite with the corrected sourcePath, then drop the original.

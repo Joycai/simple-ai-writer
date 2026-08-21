@@ -17,6 +17,7 @@
 
 import { readFile, writeFile, makeDir, fileExists } from "../fs/fileio";
 import { hashText, type DocMemory } from "./memory";
+import { dirName, toPosixPath } from "../paths";
 
 export interface DigestChapterMeta {
   /** Chapter project-relative path. */
@@ -46,7 +47,7 @@ const MIN_ITEM_CHARS = 400;
  * sibling volume's file; the root volume ("") lands at `collections/digest.md`.
  */
 export function digestPath(projectPath: string, volumeRel: string): string {
-  const base = `${projectPath.replace(/\\/g, "/")}/.ai-writer/collections`;
+  const base = `${toPosixPath(projectPath)}/.ai-writer/collections`;
   return volumeRel ? `${base}/${volumeRel}/digest.md` : `${base}/digest.md`;
 }
 
@@ -164,6 +165,6 @@ export async function loadDigest(
 
 export async function saveDigest(projectPath: string, digest: CollectionDigest): Promise<void> {
   const p = digestPath(projectPath, digest.volume);
-  await makeDir(p.slice(0, p.lastIndexOf("/")));
+  await makeDir(dirName(p));
   await writeFile(p, serializeDigest(digest));
 }

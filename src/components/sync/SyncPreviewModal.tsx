@@ -33,6 +33,7 @@ import { canDecide } from "../../lib/sync/plan";
 import { useSyncStore } from "../../stores/syncStore";
 import { useProjectStore } from "../../stores/projectStore";
 import s from "./sync.module.css";
+import { baseName } from "../../lib/paths";
 
 /** Above this many actionable rows the list gets filter chips and a search box.
  *  Below it they are chrome around a list the eye already takes in at once. */
@@ -71,7 +72,7 @@ export function SyncPreviewModal() {
   if (phase === "idle") return null;
 
   const isPush = direction === "push";
-  const projectName = (projectPath ?? "").replace(/\\/g, "/").replace(/\/+$/, "").split("/").pop() ?? "";
+  const projectName = baseName(projectPath ?? "");
 
   const close = () => {
     setFilter("all");

@@ -11,11 +11,10 @@ import { loreEntityCount } from "../../lib/lore";
 import { MOD_K_SPACED } from "../../lib/platform";
 import { panelFade, springPanel } from "../../lib/motion";
 import styles from "./Sidebar.module.css";
+import { baseName } from "../../lib/paths";
 
 function basename(p: string | null): string | null {
-  if (!p) return null;
-  const norm = p.replace(/\\/g, "/");
-  return norm.split("/").filter(Boolean).pop() ?? null;
+  return p ? baseName(p) || null : null;
 }
 
 function countDocs(tree: { is_dir?: boolean; children?: any[]; name?: string }[]): number {

@@ -13,6 +13,8 @@
  * (`formatToolArgsDetail` / the raw result summary), bounded by the caps below.
  */
 
+import { baseName } from "../paths";
+
 /**
  * How much of a call the runtime keeps for the expanded row. Defined here, next
  * to the code that renders them, so the log can tell an at-the-cap value from a
@@ -35,7 +37,7 @@ const MAX_RESULT_CHARS = 38;
 
 /** Last path segment, with the `.md` extension dropped — chapters read better. */
 function basename(value: string): string {
-  const seg = value.split(/[\\/]/).filter(Boolean).pop() ?? value;
+  const seg = baseName(value) || value;
   return seg.replace(/\.md$/i, "");
 }
 

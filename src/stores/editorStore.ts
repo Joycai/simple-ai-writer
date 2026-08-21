@@ -5,6 +5,7 @@ import { readFile, writeFile } from "../lib/fs/fileio";
 import { isImagePath } from "../lib/fs/images";
 import type { AiTargetRange } from "../lib/editor/aiTarget";
 import { useProjectStore } from "./projectStore";
+import { isSamePath } from "../lib/paths";
 
 export type ViewMode = "split" | "editor" | "preview";
 
@@ -163,7 +164,7 @@ function deriveFocus(
   text: string,
   activeFilePath: string | null,
 ): WritingFocus {
-  const settled = !!filePath && activeFilePath === filePath;
+  const settled = isSamePath(activeFilePath, filePath);
   return {
     filePath,
     text,

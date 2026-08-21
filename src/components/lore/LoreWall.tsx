@@ -35,6 +35,7 @@ import { fillLayer, pushBackdrop, pushForward, springScreen } from "../../lib/mo
 import styles from "./LoreWall.module.css";
 
 import { categoryColor } from "./catColor";
+import { baseName } from "../../lib/paths";
 
 // Stable, deterministic small rotation per entity id
 function rotationFor(id: string): number {
@@ -375,7 +376,7 @@ export function LoreWall() {
           <div className={styles.eyebrow}>{kbEyebrow}</div>
           <div className={styles.title}>{terms.kb}</div>
           <div className={styles.subtitle}>
-            {projectPath ? `${projectPath.split(/[\\/]/).pop()} · ` : ""}
+            {projectPath ? `${baseName(projectPath)} · ` : ""}
             {t("lore.wallStats", {
               defaultValue: "{{n}} 条 · {{r}} 关系",
               n: counts.all,

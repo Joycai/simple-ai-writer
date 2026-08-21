@@ -299,6 +299,17 @@ The model only *knows* a lore picture exists because the injected 【设定资�
 
 `read_image` is contained against the *whole project*, where `read_file` (and the other text tools) additionally exclude `.ai-writer/` (`isWorkspacePath` in `lib/paths.ts`). The text tools are narrower because a prompt-injected model could read `profile.json` or the lore back to whoever planted the instruction; an image tool decodes one file, by extension, into pixels — and lore gallery images live under `.ai-writer/lore/`, where it must still reach. Both refuse outright when there is no project path — every absolute path is "inside" an empty prefix.
 
+Every model-supplied path goes through `resolveWorkspacePath` (same file) first, which rebases a **project-relative** one on the project root before the containment check. Not a convenience: the prompt's 【当前文件】 block carries a relative path (`stores/agentStore`, `stores/aiTaskStore`), so a relative path is the shape the model naturally answers in — and the absolute-only tools used to refuse it as "outside the project folder" for a file plainly inside it. `..` still cannot climb out, because containment is applied *after* resolution.
+
+### Paths across Windows and Linux/macOS
+
+`lib/paths.ts` is the **only** module that knows how the two platforms differ, and it answers both questions from the *shape of the path* rather than from the host — so the functions stay pure and one test file covers both worlds:
+
+- **Is `\` a separator?** Yes, unless the path is POSIX-absolute (`/…`, but not a `//server/share` UNC). On Linux and macOS a backslash is a legal character *inside* a filename, and splitting on it would invent directories; `D:\…`, UNC, and relative paths (which carry no shape at all) keep the Windows reading. `toPosixPath` applies the rule; everything else is built on it.
+- **Does case matter?** `pathKey` folds case for Windows-shaped paths only — `D:\Proj\A.md` and `d:/proj/a.md` are one file, while `/proj/A.md` and `/proj/a.md` are genuinely two. Every comparison (`isPathWithin`, `isStrictDescendant`, `isSamePath`, `isProtectedPath`, `projectRelative`) goes through it, so they cannot drift apart again — they had, `projectRelativePath` folding case where its neighbours did not.
+
+The vocabulary — `toPosixPath` / `baseName` / `dirName` / `joinPath` / `projectRelative` / `isSamePath` — replaced a dozen local copies of `p.split(/[\\/]/).pop()` and `p.replace(/\\/g,"/")`, one of which (the sidebar's project name) split on `/` alone and printed the whole path on Windows. Paths still enter in the host's own spelling (Rust's `to_string_lossy`, the native picker) and are answered in the POSIX one, so **never compare two paths with `===`** — a path that has been through any helper here meets one that has not, and the mismatch is silent: an approved edit writes to disk behind the open editor, whose next autosave clobbers it. Use `isSamePath` (it takes nulls).
+
 **Nothing keeps a picture for long.** Base64 is megabytes, and a chat history persists for the whole session, so three separate passes take pixels back out — all through `lib/agent/imageHistory`, which is the single definition of the shape, and all of which **keep the message's text**: the author's attachment rides on their question, which is a turn boundary `compact.ts` segments on.
 
 1. `trimHistory` (`runtime.ts`) caps a live history at the newest `MAX_IMAGE_RESULTS` (3) pictures — unconditionally, before the token check, because the token estimate charges a *flat rate* per image while the payload keeps growing.

@@ -13,10 +13,11 @@
 
 import { imageCostFor } from "../ai/configDb";
 import { fileExists } from "../fs/fileio";
-import { isWorkspacePath } from "../paths";
+import { resolveWorkspacePath } from "../paths";
 import type { IllustrateProposal, ToolContext } from "./registry";
 import { subAgentModel } from "./subagent";
 import type { ToolResult } from "./tools";
+import { baseName } from "../paths";
 
 let proposalCounter = 0;
 
@@ -121,15 +122,16 @@ export async function generateImageTool(
     });
   }
 
-  const path = args.path?.trim();
-  if (!path) {
+  const rawPath = args.path?.trim();
+  if (!rawPath) {
     return { toolCallId, content: "Error: give either 'entity' (file it in that entity's gallery) or 'path' (a document in the project)." };
   }
-  // `isWorkspacePath(base, base)` is true for the project root itself — and
+  // `resolveWorkspacePath` accepts the project root itself — and
   // `saveDocumentAsset` would then compute a group from its name and write the
   // picture to `<proj>/../assets/…`, outside the project entirely. The `.md`
   // requirement is what refuses directories, so keep it.
-  if (!isWorkspacePath(ctx.projectPath, path) || !/\.md$/i.test(path)) {
+  const path = resolveWorkspacePath(ctx.projectPath, rawPath);
+  if (!path || !/\.md$/i.test(path)) {
     return { toolCallId, content: "Error: 'path' must be a .md document inside the project folder." };
   }
   if (!(await fileExists(path))) {
@@ -138,7 +140,7 @@ export async function generateImageTool(
   return proposeIllustration(toolCallId, ctx, {
     prompt, note, aspect: args.aspect, reason: args.reason,
     dest: { kind: "document", docPath: path },
-    destination: path.split(/[\\/]/).pop() ?? path,
+    destination: baseName(path) || path,
     path,
   });
 }

@@ -14,6 +14,7 @@ import { MOD_KEY } from "../../lib/platform";
 import { isHtmlPath, isImagePath } from "../../lib/fs/images";
 import { linkScrollers } from "../../lib/editor/scrollSync";
 import styles from "./EditorArea.module.css";
+import { dirName, isSamePath } from "../../lib/paths";
 
 export function EditorArea() {
   const { t } = useTranslation();
@@ -55,7 +56,7 @@ export function EditorArea() {
   // so we must NOT read them as text — that would fill the editor with binary
   // garbage and risk overwriting the image on autosave.
   useEffect(() => {
-    if (activeFilePath && !isImage && activeFilePath !== filePath) {
+    if (activeFilePath && !isImage && !isSamePath(activeFilePath, filePath)) {
       loadFile(activeFilePath);
     }
   }, [activeFilePath, isImage, filePath, loadFile]);
@@ -120,7 +121,7 @@ export function EditorArea() {
   // fault). Render a non-editable notice instead of the CodeEditor — showing
   // it with empty content would let the very next keystroke autosave over
   // whatever is actually on disk.
-  if (loadError && loadError.path === activeFilePath) {
+  if (loadError && isSamePath(loadError.path, activeFilePath)) {
     return (
       <div className={styles.area}>
         <div className={styles.empty}>
@@ -156,7 +157,7 @@ export function EditorArea() {
           <div className={styles.previewPane} ref={previewPaneRef}>
             {isHtml
               ? <HtmlPreview source={content} filePath={filePath} />
-              : <Preview source={content} basePath={filePath ? filePath.replace(/[/\\][^/\\]*$/, "") : null} />}
+              : <Preview source={content} basePath={filePath ? dirName(filePath) : null} />}
           </div>
         )}
       </div>

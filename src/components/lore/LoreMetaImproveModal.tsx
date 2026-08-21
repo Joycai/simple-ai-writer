@@ -27,6 +27,7 @@ import { ModelPicker } from "./ai/ModelPicker";
 import { Select } from "../common/Select";
 import styles from "./LoreImproveModal.module.css";
 import extra from "./LoreMetaImproveModal.module.css";
+import { baseName } from "../../lib/paths";
 
 interface Props {
   entity: LoreEntity;
@@ -102,7 +103,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
       const supportsImages = model.type === "multimodal";
       const galleryLines: string[] = [];
       if (entity.avatarPath) {
-        const fname = entity.avatarPath.split(/[\\/]/).pop() ?? "avatar";
+        const fname = baseName(entity.avatarPath) || "avatar";
         galleryLines.push(`- ${fname}: (avatar)`);
       }
       for (const img of entity.images) {

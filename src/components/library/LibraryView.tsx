@@ -43,6 +43,7 @@ import { imageToDataUrl, isImagePath } from "../../lib/fs/images";
 import { useImeGuard } from "../../lib/ime";
 import { Select } from "../common/Select";
 import styles from "./LibraryView.module.css";
+import { isSamePath } from "../../lib/paths";
 
 /** Move an array item from one index to another (immutably). */
 function move<T>(arr: T[], from: number, to: number): T[] {
@@ -337,7 +338,7 @@ export function LibraryView() {
         const contents: { rel: string; content: string }[] = [];
         for (const ch of vol.chapters) {
           try {
-            const content = ch.path === activePath ? activeContent : await readFile(ch.path);
+            const content = isSamePath(ch.path, activePath) ? activeContent : await readFile(ch.path);
             const mem = await loadMemory(projectPath, ch.path);
             statusEntries.push([ch.path, memoryStatus(content, mem)]);
             contents.push({ rel: ch.relPath, content });

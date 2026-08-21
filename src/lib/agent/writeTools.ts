@@ -58,8 +58,15 @@ import {
   type LorePlanStep,
 } from "./plan";
 import type { ApprovalDecision, ToolContext } from "./registry";
-import { isPathWithin, isStrictDescendant, isWorkspacePath, normalizePathSegments } from "../paths";
+import {
+  isPathWithin,
+  isStrictDescendant,
+  normalizePathSegments,
+  resolveRelativePath,
+  resolveWorkspacePath,
+} from "../paths";
 import { allEntityNames, findEntityByName, type ToolResult } from "./tools";
+import { baseName, dirName } from "../paths";
 
 // ─── propose_lore_plan (the gate every lore write goes through) ──────────────
 
@@ -1095,10 +1102,14 @@ export async function deleteLoreEntityTool(
 // ─── read_memory / update_memory ─────────────────────────────────────────────
 
 function checkDocPath(toolCallId: string, ctx: ToolContext, path?: string): ToolResult | string {
-  const p = path?.trim();
-  if (!p) return { toolCallId, content: "Error: 'path' argument is required (the document's absolute path, as returned by list_files)." };
+  const raw = path?.trim();
+  if (!raw) return { toolCallId, content: "Error: 'path' argument is required (the document's path, as returned by list_files)." };
   // An empty projectPath would prefix-match every absolute path — fail closed.
-  if (!ctx.projectPath || !isPathWithin(ctx.projectPath, p)) {
+  if (!ctx.projectPath) {
+    return { toolCallId, content: "Error: Path is outside the project directory." };
+  }
+  const p = resolveRelativePath(ctx.projectPath, raw);
+  if (!isPathWithin(ctx.projectPath, p)) {
     return { toolCallId, content: "Error: Path is outside the project directory." };
   }
   return p;
@@ -1178,14 +1189,16 @@ function manuscriptTarget(
   rawPath: string | undefined,
   ctx: ToolContext,
 ): { path: string } | { refusal: ToolResult } {
-  const path = rawPath?.trim();
-  if (!path) {
+  const raw = rawPath?.trim();
+  if (!raw) {
     return { refusal: { toolCallId, content: "Error: 'path' argument is required." } };
   }
   // Project files only — .ai-writer is the app's data; lore/memory have their
   // own (L1) tools with their own approval protocols, and letting a document
-  // tool write there would bypass the lore plan gate wholesale.
-  if (!isWorkspacePath(ctx.projectPath, path)) {
+  // tool write there would bypass the lore plan gate wholesale. A relative path
+  // is rebased on the project root first (see resolveWorkspacePath).
+  const path = resolveWorkspacePath(ctx.projectPath, raw);
+  if (!path) {
     return {
       refusal: {
         toolCallId,
@@ -1210,12 +1223,11 @@ function manuscriptTarget(
  * refuse folders.
  */
 async function statEntry(path: string): Promise<{ isDir: boolean } | null> {
-  const clean = path.replace(/\\/g, "/").replace(/\/+$/, "");
-  const cut = clean.lastIndexOf("/");
-  if (cut < 0) return null;
+  const parent = dirName(path);
+  if (!parent) return null;
   try {
-    const entries = await readDir(clean.slice(0, cut));
-    const name = clean.slice(cut + 1);
+    const entries = await readDir(parent);
+    const name = baseName(path);
     const hit = entries.find((e) => e.name === name);
     return hit ? { isDir: hit.isDirectory } : null;
   } catch {
@@ -1374,11 +1386,12 @@ export async function copyFileTool(
   const target = manuscriptTarget(toolCallId, "copy_file", args.path, ctx);
   if ("refusal" in target) return target.refusal;
 
-  const destDir = args.dest_dir?.trim();
-  if (!destDir) {
+  const rawDestDir = args.dest_dir?.trim();
+  if (!rawDestDir) {
     return { toolCallId, content: "Error: 'dest_dir' argument is required (the folder the copy lands in)." };
   }
-  if (!isWorkspacePath(ctx.projectPath, destDir)) {
+  const destDir = resolveWorkspacePath(ctx.projectPath, rawDestDir);
+  if (!destDir) {
     return { toolCallId, content: "Error: the destination must be inside the project folder (not in .ai-writer)." };
   }
 
@@ -1418,11 +1431,11 @@ export async function moveChapterTool(
   const target = manuscriptTarget(toolCallId, "move_chapter", args.path, ctx);
   if ("refusal" in target) return target.refusal;
 
-  const rawDest = args.new_path?.trim();
-  if (!rawDest) {
+  if (!args.new_path?.trim()) {
     return { toolCallId, content: "Error: 'new_path' argument is required (the full destination path)." };
   }
-  if (!isWorkspacePath(ctx.projectPath, rawDest)) {
+  const dest = resolveWorkspacePath(ctx.projectPath, args.new_path.trim());
+  if (!dest) {
     return { toolCallId, content: "Error: the destination must also be inside the project folder (not in .ai-writer)." };
   }
 
@@ -1432,9 +1445,9 @@ export async function moveChapterTool(
   }
 
   // Files get their extension normalised; a volume folder keeps its bare name.
-  const destDir = parentDir(rawDest);
-  const destName = rawDest.slice(destDir.length + 1);
-  const newPath = source.isDir ? rawDest : `${destDir}/${normalizeChapterFileName(destName)}`;
+  const destDir = parentDir(dest);
+  const destName = dest.slice(destDir.length + 1);
+  const newPath = source.isDir ? dest : `${destDir}/${normalizeChapterFileName(destName)}`;
 
   if (newPath === target.path) {
     return { toolCallId, content: "Error: the destination is the same as the source." };
@@ -1585,20 +1598,14 @@ export async function proposeEditTool(
   },
   ctx: ToolContext,
 ): Promise<ToolResult> {
-  const path = args.path?.trim();
-  if (!path) return { toolCallId, content: "Error: 'path' argument is required." };
-  // Project files only — .ai-writer would be a back door into lore/profile.
-  if (!isWorkspacePath(ctx.projectPath, path)) {
-    return { toolCallId, content: "Error: propose_edit only works on files inside the project folder (the app's .ai-writer data is off-limits — use the lore/memory tools for that)." };
-  }
+  const checked = manuscriptTarget(toolCallId, "propose_edit", args.path, ctx);
+  if ("refusal" in checked) return checked.refusal;
+  const path = checked.path;
   if (typeof args.find !== "string" || !args.find) {
     return { toolCallId, content: "Error: 'find' argument is required (the exact text to replace)." };
   }
   if (typeof args.replace !== "string") {
     return { toolCallId, content: "Error: 'replace' argument is required." };
-  }
-  if (!ctx.requestApproval) {
-    return { toolCallId, content: "Error: this surface cannot review manuscript edits — do not call propose_edit here." };
   }
 
   let content: string;
@@ -1650,7 +1657,7 @@ export async function proposeEditTool(
   // out "occurrence 1 of 1".
   const target = occurrences === 1 ? undefined : all ? ("all" as const) : (nth ?? 1);
 
-  const decision = await ctx.requestApproval({
+  const decision = await ctx.requestApproval!({
     kind: "edit",
     id: `edit-${++proposalCounter}`,
     path,
@@ -1878,16 +1885,11 @@ export async function rewriteDocumentTool(
   args: { path?: string; content?: string; reason?: string },
   ctx: ToolContext,
 ): Promise<ToolResult> {
-  const path = args.path?.trim();
-  if (!path) return { toolCallId, content: "Error: 'path' argument is required." };
-  if (!isWorkspacePath(ctx.projectPath, path)) {
-    return { toolCallId, content: "Error: rewrite_document only works on files inside the project folder (the app's .ai-writer data is off-limits — use the lore/memory tools for that)." };
-  }
+  const checked = manuscriptTarget(toolCallId, "rewrite_document", args.path, ctx);
+  if ("refusal" in checked) return checked.refusal;
+  const path = checked.path;
   if (typeof args.content !== "string") {
     return { toolCallId, content: "Error: 'content' argument is required (the complete new file body)." };
-  }
-  if (!ctx.requestApproval) {
-    return { toolCallId, content: "Error: this surface cannot review manuscript edits — do not call rewrite_document here." };
   }
 
   let original: string;
@@ -1910,7 +1912,7 @@ export async function rewriteDocumentTool(
     };
   }
 
-  const decision = await ctx.requestApproval({
+  const decision = await ctx.requestApproval!({
     kind: "rewrite",
     id: `rewrite-${++proposalCounter}`,
     path,

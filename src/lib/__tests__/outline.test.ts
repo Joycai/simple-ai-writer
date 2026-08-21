@@ -198,9 +198,9 @@ describe("groupVolumes", () => {
 });
 
 describe("parentDir", () => {
-  it("returns the directory of a path with either separator", () => {
+  it("returns the directory of a path with either separator, spelled POSIX", () => {
     expect(parentDir("D:/proj/writing/a.md")).toBe("D:/proj/writing");
-    expect(parentDir("D:\\proj\\writing\\a.md")).toBe("D:\\proj\\writing");
+    expect(parentDir("D:\\proj\\writing\\a.md")).toBe("D:/proj/writing");
   });
 });
 

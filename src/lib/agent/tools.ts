@@ -16,7 +16,13 @@ import { fileExists, readFile } from "../fs/fileio";
 import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, imageToDataUrl, isImagePath } from "../fs/images";
 import { readEntityFile, slotChecklistText, type LoreEntity, type LoreIndex } from "../lore";
 import { isKnownCategory } from "../profile/active";
-import { isPathWithin, isWorkspacePath, resolveRelativePath } from "../paths";
+import {
+  baseName,
+  decodeLinkSegments,
+  isPathWithin,
+  resolveRelativePath,
+  resolveWorkspacePath,
+} from "../paths";
 import { readDirRecursive, type FileNode } from "../project";
 
 export interface ToolCall {
@@ -112,7 +118,7 @@ export async function readLoreEntity(
 
   const galleryLines: string[] = [];
   if (found.avatarPath) {
-    const fname = found.avatarPath.split(/[\\/]/).pop() ?? "avatar";
+    const fname = baseName(found.avatarPath) || "avatar";
     galleryLines.push(`- ${fname}: (avatar)`);
   }
   for (const img of found.images) {
@@ -158,7 +164,7 @@ export async function readLoreImage(
     };
   }
 
-  const avatarName = found.avatarPath?.split(/[\\/]/).pop();
+  const avatarName = found.avatarPath ? baseName(found.avatarPath) : undefined;
   const wantLower = file.trim().toLowerCase();
   const path = avatarName && avatarName.toLowerCase() === wantLower
     ? found.avatarPath
@@ -193,13 +199,7 @@ function tooLargeError(label: string, bytes: number): string {
  * — which names no file on disk. Tried *after* the path as given, since a
  * filename may legitimately contain a `%`.
  */
-function decodeLinkPath(path: string): string {
-  try {
-    return path.split("/").map(decodeURIComponent).join("/");
-  } catch {
-    return path; // malformed escape — the raw form is the only candidate
-  }
-}
+const decodeLinkPath = decodeLinkSegments;
 
 /**
  * View any image in the project as visual input — the counterpart to
@@ -265,7 +265,7 @@ export async function readProjectImage(
 
   try {
     const { dataUrl, bytes } = await imageToDataUrl(path);
-    const name = path.split(/[\\/]/).pop() ?? path;
+    const name = baseName(path) || path;
     if (bytes.length > MAX_IMAGE_BYTES) return { toolCallId, content: tooLargeError(name, bytes.length) };
     return { toolCallId, content: `Image "${name}" from ${path}.`, imageDataUrls: [dataUrl] };
   } catch (e) {
@@ -314,10 +314,11 @@ export async function listWritingFiles(
   projectPath: string,
   folder?: string,
 ): Promise<ToolResult> {
-  const target = folder ? `${projectPath}/${folder}` : projectPath;
   // The folder argument is model-controlled — reject `../` escapes and the
-  // app's own .ai-writer data; the empty-projectPath guard lives in the check.
-  if (!isWorkspacePath(projectPath, target)) {
+  // app's own .ai-writer data; relative and absolute spellings both resolve,
+  // and the empty-projectPath guard lives in the check.
+  const target = folder ? resolveWorkspacePath(projectPath, folder) : projectPath || null;
+  if (!target) {
     return { toolCallId, content: "Error: Folder is outside the project (the app's .ai-writer data is off-limits)." };
   }
 
@@ -424,10 +425,11 @@ export async function searchWritingFiles(
   const q = (query ?? "").trim();
   if (!q) return { toolCallId, content: "Error: 'query' argument is required." };
 
-  const target = folder ? `${projectPath}/${folder}` : projectPath;
   // The folder argument is model-controlled — reject `../` escapes and the
-  // app's own .ai-writer data; the empty-projectPath guard lives in the check.
-  if (!isWorkspacePath(projectPath, target)) {
+  // app's own .ai-writer data; relative and absolute spellings both resolve,
+  // and the empty-projectPath guard lives in the check.
+  const target = folder ? resolveWorkspacePath(projectPath, folder) : projectPath || null;
+  if (!target) {
     return { toolCallId, content: "Error: Folder is outside the project (the app's .ai-writer data is off-limits)." };
   }
 
@@ -508,7 +510,7 @@ const READ_MAX_CHARS = 4000;
  */
 export async function readWritingFile(
   toolCallId: string,
-  path: string,
+  rawPath: string,
   projectPath: string,
   startLine?: number,
 ): Promise<ToolResult> {
@@ -518,7 +520,8 @@ export async function readWritingFile(
   // component boundaries. Scoped to the project root minus `.ai-writer/` —
   // lore, memory, and profile.json have their own tools with their own
   // approval protocols, so a prompt-injected model can't read them here.
-  if (!isWorkspacePath(projectPath, path)) {
+  const path = resolveWorkspacePath(projectPath, rawPath);
+  if (!path) {
     return { toolCallId, content: "Error: Path is outside the project (the app's .ai-writer data is off-limits)." };
   }
 
@@ -615,11 +618,12 @@ export function formatSlideRange(range: SlideRange): string {
  */
 export async function readSlidesFile(
   toolCallId: string,
-  path: string,
+  rawPath: string,
   projectPath: string,
   startSlide?: number,
 ): Promise<ToolResult> {
-  if (!isWorkspacePath(projectPath, path)) {
+  const path = resolveWorkspacePath(projectPath, rawPath);
+  if (!path) {
     return { toolCallId, content: "Error: Path is outside the project (the app's .ai-writer data is off-limits)." };
   }
 

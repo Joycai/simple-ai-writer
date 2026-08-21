@@ -449,8 +449,9 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     const loreBudgetChars = plan.loreChars;
 
     // Only a task that can browse the project needs to know which file it is
-    // looking at; for a toolless one the block is dead weight. Project-relative,
-    // because that is the shape the read tools report and accept.
+    // looking at; for a toolless one the block is dead weight. Project-relative:
+    // shorter than the absolute path, and the tools rebase one on the project
+    // root (lib/paths → resolveWorkspacePath) rather than refusing it.
     const currentFilePath = isAgentic && activeFilePath
       ? projectRelativePath(projectPath, activeFilePath) ?? undefined
       : undefined;

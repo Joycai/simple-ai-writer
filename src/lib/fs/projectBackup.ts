@@ -35,6 +35,7 @@ import { readDir } from "./fileio";
 import { zipExportDialog, zipImportDialog } from "./transfer";
 import { activeWorkspace } from "../profile/active";
 import { getDb, openProjectFolder } from "../project";
+import { baseName } from "../paths";
 
 export const PROJECT_BUNDLE_KIND = "ai-writer-project-bundle";
 export const PROJECT_BUNDLE_VERSION = 1;
@@ -65,7 +66,7 @@ export interface ProjectBundleManifest {
 }
 
 function folderName(path: string): string {
-  return path.split(/[\\/]/).filter(Boolean).pop() ?? "project";
+  return baseName(path) || "project";
 }
 
 /**

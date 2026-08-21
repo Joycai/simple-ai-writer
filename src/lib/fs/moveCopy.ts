@@ -9,18 +9,16 @@
  * drop target lights up, so the highlight and the outcome cannot disagree.
  */
 
-import { isStrictDescendant, normalizePathSegments } from "../paths";
+import { baseName, dirName, isStrictDescendant, normalizePathSegments } from "../paths";
 
-/** The parent directory of a path (handles both separator styles). */
+/** The parent directory of a path. Re-exported under the sidebar's own name. */
 export function parentDirOf(path: string): string {
-  const sep = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
-  return sep <= 0 ? "" : path.slice(0, sep);
+  return dirName(path);
 }
 
 /** The final component of a path. */
 export function baseNameOf(path: string): string {
-  const sep = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
-  return path.slice(sep + 1);
+  return baseName(path);
 }
 
 export type TransferMode = "move" | "copy";

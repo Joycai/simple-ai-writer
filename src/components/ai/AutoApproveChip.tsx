@@ -3,6 +3,7 @@ import { ShieldOff, X } from "lucide-react";
 import { useAgentStore } from "../../stores/agentStore";
 import { autoApproveScope } from "../../lib/agent/autoApprove";
 import styles from "./AutoApproveChip.module.css";
+import { baseName } from "../../lib/paths";
 
 /**
  * "Auto-approving" indicator, shown only while a grant is live.
@@ -51,7 +52,7 @@ export function AutoApproveChip({ owner }: { owner: unknown }) {
           : t("ai.autoApprove.offAppend", {
               defaultValue: "以下文件的追加不再询问：{{files}}（点击恢复逐条审批）",
               files: autoApprove.appendPaths
-                .map((p) => p.split(/[\\/]/).pop() ?? p)
+                .map((p) => baseName(p) || p)
                 .join("、"),
             })
       }
