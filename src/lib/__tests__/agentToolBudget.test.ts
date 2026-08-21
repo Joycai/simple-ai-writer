@@ -36,7 +36,7 @@ vi.mock("../fs/fileio", () => ({
 vi.mock("../project", () => ({ readDirRecursive: vi.fn(async () => []) }));
 vi.mock("../../i18n", () => ({ default: { t: (key: string) => key } }));
 
-import { getToolDefinitions } from "../agent/registry";
+import { getToolDefinitions, partitionByGroup } from "../agent/registry";
 import { AGENT_ASSIST_PRESET, CONTINUE_PRESET } from "../agent/presets";
 import { NARRATOR_PRESET, ROLEPLAY_PRESET } from "../roleplay/presets";
 import { estimateToolsTokens } from "../ai/tokenEstimate";
@@ -60,6 +60,17 @@ describe("tool schema budget", () => {
     ["roleplay-character", ROLEPLAY_PRESET, ROLEPLAY_CAP],
   ])("%s stays within its per-request budget", (_name, preset, cap) => {
     expect(tokensOf(preset)).toBeLessThanOrEqual(cap);
+  });
+
+  it("keeps the assistant's resident half well under the full toolset", () => {
+    // What a conversation actually pays before it touches the knowledge base —
+    // which is most conversations. Measured 7,067 of 9,609 at 1.22.0.
+    const { resident } = partitionByGroup(AGENT_ASSIST_PRESET.tools);
+    const residentTokens = estimateToolsTokens(getToolDefinitions(resident));
+    expect(residentTokens).toBeLessThanOrEqual(7_400);
+    // A guard against the deferral quietly becoming a no-op: someone drops the
+    // `group` tag off a tool and the only symptom is a bigger bill.
+    expect(tokensOf(AGENT_ASSIST_PRESET) - residentTokens).toBeGreaterThan(2_000);
   });
 
   it("gives every tool a description worth its place", () => {

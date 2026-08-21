@@ -408,10 +408,27 @@ export interface ToolContext {
   agentMemory?: AgentMemoryStore;
 }
 
+/**
+ * A set of tools that is **not sent until the run has earned it**.
+ *
+ * The schemas ride on every round, so a tool the model cannot legally call yet
+ * is pure cost — and `lore_write` is exactly that: `plan.ts` refuses every one
+ * of these until the author has approved a plan, so before that moment they can
+ * only ever come back as an error telling the model to call `propose_lore_plan`
+ * first. Withholding the definitions changes nothing about what the model can
+ * do; it only stops the run paying for nine schemas it cannot use.
+ *
+ * A tool with no group is resident — the default, and what every tool was
+ * before this existed.
+ */
+export type ToolGroup = "lore_write";
+
 export interface RegisteredTool {
   definition: ToolDefinition;
   access: ToolAccess;
   execute: (call: ToolCall, ctx: ToolContext) => Promise<ToolResult>;
+  /** Deferred group this tool belongs to; absent = resident. See {@link ToolGroup}. */
+  group?: ToolGroup;
   /**
    * Parameter names whose `enum` must be filled in from the *active profile's*
    * lore categories when the definition is handed to the model.
@@ -795,6 +812,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
   },
 
   create_lore_entity: {
+    group: "lore_write",
     access: "write-auto",
     definition: {
       type: "function",
@@ -832,6 +850,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
   },
 
   update_lore_file: {
+    group: "lore_write",
     access: "write-auto",
     definition: {
       type: "function",
@@ -860,6 +879,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
   },
 
   update_lore_meta: {
+    group: "lore_write",
     access: "write-auto",
     definition: {
       type: "function",
@@ -898,6 +918,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
   },
 
   append_lore_file: {
+    group: "lore_write",
     access: "write-auto",
     definition: {
       type: "function",
@@ -929,6 +950,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
   },
 
   edit_lore_file: {
+    group: "lore_write",
     access: "write-auto",
     definition: {
       type: "function",
@@ -964,6 +986,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
   },
 
   update_facet_meta: {
+    group: "lore_write",
     access: "write-auto",
     definition: {
       type: "function",
@@ -1017,6 +1040,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
   },
 
   delete_lore_file: {
+    group: "lore_write",
     access: "write-auto",
     definition: {
       type: "function",
@@ -1045,6 +1069,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
   },
 
   move_lore_entity: {
+    group: "lore_write",
     access: "write-auto",
     definition: {
       type: "function",
@@ -1080,6 +1105,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
   },
 
   delete_lore_entity: {
+    group: "lore_write",
     access: "write-auto",
     definition: {
       type: "function",
@@ -2116,6 +2142,30 @@ function withProfileCategories(
   }
 
   return { ...definition, function: fn };
+}
+
+/**
+ * Split a toolset into what the request carries from the start and what waits
+ * for the run to earn it, preserving order within each part.
+ *
+ * Order matters twice over. It is what the model reads, and — on the Anthropic
+ * family — it is the cached prefix (`lib/ai/anthropic.ts`): keeping the
+ * resident tools in their original positions means a group loading mid-run
+ * appends to the array rather than reshuffling it, so the cached prefix
+ * covering the resident half survives the load.
+ */
+export function partitionByGroup(ids: readonly ToolId[]): {
+  resident: ToolId[];
+  deferred: Record<ToolGroup, ToolId[]>;
+} {
+  const resident: ToolId[] = [];
+  const deferred: Record<ToolGroup, ToolId[]> = { lore_write: [] };
+  for (const id of ids) {
+    const group = REGISTRY[id].group;
+    if (group) deferred[group].push(id);
+    else resident.push(id);
+  }
+  return { resident, deferred };
 }
 
 /** Resolve wire definitions for a preset's toolset, preserving order. */

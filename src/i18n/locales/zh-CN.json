@@ -902,6 +902,8 @@
         "countTools": "{{count}} 次工具调用",
         "start": "开始「{{task}}」 · {{model}}",
         "round": "第 {{round}}/{{max}} 轮 · 输入约 {{tokens}} tokens（其中工具 {{toolTokens}}）",
+        "toolsLoaded": "已装载 {{count}} 个{{group}}工具",
+        "toolGroup": { "lore_write": "知识库写入" },
         "trimmed": "为控制上下文长度，省略了 {{count}} 条较早的工具结果",
         "outputTruncated": "输出被上限截断，回答未写完 —— 调高该模型的「单次输出上限」，或缩短上下文",
         "turnResumed": "服务端在搜索后中断了本轮，已把结果交回模型继续（第 {{leg}} 次请求）",

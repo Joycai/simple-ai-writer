@@ -902,6 +902,8 @@
         "countTools": "{{count}} tool calls",
         "start": "Started {{task}} · {{model}}",
         "round": "Round {{round}}/{{max}} · ~{{tokens}} input tokens ({{toolTokens}} of them tool schemas)",
+        "toolsLoaded": "Loaded {{count}} {{group}} tools",
+        "toolGroup": { "lore_write": "knowledge-base write" },
         "trimmed": "Elided {{count}} earlier tool results to fit the context window",
         "outputTruncated": "Cut off at the output limit — the answer is unfinished. Raise this model's max-output, or shorten the context",
         "turnResumed": "The endpoint stopped after searching; results handed back to continue (request {{leg}})",

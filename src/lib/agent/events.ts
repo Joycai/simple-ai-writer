@@ -105,6 +105,21 @@ export type AgentEvent = AgentEventScope & (
   | { kind: "tool-step"; step: ToolStep; at: number }
   | {
       /**
+       * A deferred tool group entered the toolset mid-run (registry.ToolGroup).
+       *
+       * Worth a log row rather than happening silently: from this round on the
+       * request carries tools the earlier ones did not, and an author reading
+       * the log would otherwise see the agent suddenly using a tool that was
+       * not on offer a moment ago.
+       */
+      kind: "tools-loaded";
+      group: string;
+      names: string[];
+      round: number;
+      at: number;
+    }
+  | {
+      /**
        * Context the assembler injected *before* the loop started — the RAG
        * layers the model never had to ask for.
        *

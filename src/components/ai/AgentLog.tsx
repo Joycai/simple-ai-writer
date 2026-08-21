@@ -547,6 +547,19 @@ function AgentLogRow({ row, showTime, runStatus }: {
           </span>
         </li>
       );
+    case "tools-loaded":
+      return (
+        <li className={`${styles.row} ${styles.rowMeta}`}>
+          <span className={styles.rowIndent} />
+          <span className={styles.rowMetaText}>
+            {t("ai.agent.log.toolsLoaded", {
+              defaultValue: "已装载 {{count}} 个{{group}}工具",
+              count: event.names.length,
+              group: t(`ai.agent.log.toolGroup.${event.group}`, { defaultValue: "" }),
+            })}
+          </span>
+        </li>
+      );
     case "context-trimmed":
       return (
         <li className={`${styles.row} ${styles.rowMeta}`}>
@@ -684,6 +697,12 @@ function useHeadline(model: AgentLogModel): string {
         : t("ai.agent.log.reasoningLive", { defaultValue: "正在思考" });
     case "context-seeded":
       return t("ai.agent.log.seededContext", { defaultValue: "读取上下文" });
+    case "tools-loaded":
+      return t("ai.agent.log.toolsLoaded", {
+        defaultValue: "已装载 {{count}} 个{{group}}工具",
+        count: current.names.length,
+        group: t(`ai.agent.log.toolGroup.${current.group}`, { defaultValue: "" }),
+      });
     case "context-trimmed":
       return t("ai.agent.log.trimmed", { count: current.count });
     case "context-compacted":
