@@ -31,10 +31,12 @@ import { buildCompactedHistory, planFold, segmentHistory } from "../../agent/com
 import type { StreamMessage } from "../../ai/types";
 import type { LoreEntity, LoreIndex } from "../../lore/model";
 import {
-  buildBoundContent, refreshMemoryBlock, seedRoleplayHistory, selectReplayTurns,
-  type RoleplaySessionMeta,
+  buildBoundContent, contextSignature, refreshMemoryBlock, refreshSystemPrompt,
+  seedRoleplayHistory, selectReplayTurns,
+  type RoleplaySessionMeta, type SystemPromptInput,
 } from "../context";
-import type { MemoryRecord, RoleplayAgent, SceneTurn } from "../model";
+import { NO_PERSONA } from "../model";
+import type { AuthorPersona, MemoryRecord, RoleplayAgent, SceneTurn } from "../model";
 
 function entity(name: string, dirPath: string, facets: string[] = []): LoreEntity {
   return {
@@ -56,7 +58,7 @@ const AGENT: RoleplayAgent = {
   primaryDirPath: ELDEN.dirPath,
   boundPaths: [ELDEN.dirPath],
   modelId: null, areaId: null, authorPersona: null,
-  createdAt: 0, updatedAt: 0, turnCount: 0, boundHash: null,
+  createdAt: 0, updatedAt: 0, turnCount: 0, contextHash: null,
 };
 
 async function seed(firstMessage = "「你还在等？」", memory: MemoryRecord[] = []) {
@@ -194,6 +196,124 @@ describe("不变量二 · 压缩之后", () => {
     const prelude = segmentHistory(next, meta).prelude;
     expect(prelude).toContain(boundBlock!);
     expect(prelude).toContain(memoryBlock!);
+  });
+});
+
+/**
+ * system 层的刷新与基线。
+ *
+ * 存在的理由是一次真实的坏法：作者在对话中途换了「我此刻是」，chip 变了、
+ * 之后的署名也变了，而模型看到的仍然是旧身份——`buildSystemPrompt` 只在播种
+ * 那一刻跑过一次。同一个根因还盖着「改了主角条目」和「改了扮演指令」，而当时
+ * 的基线只覆盖绑定块，所以连提示都不会亮。
+ */
+describe("refreshSystemPrompt", () => {
+  const promptInput = (patch: Partial<SystemPromptInput> = {}): SystemPromptInput => ({
+    agent: AGENT,
+    persona: NO_PERSONA,
+    personaCard: "说话短，从不解释动机。",
+    primaryText: "寒露之变的幸存者。",
+    loreIndex: INDEX,
+    ...patch,
+  });
+
+  it("rewrites the prompt in place, keeping the message object", async () => {
+    const { messages } = await seed();
+    const system = messages[0];
+    const ok = refreshSystemPrompt(messages, promptInput({
+      personaCard: "改口了：话变多。",
+      primaryText: "寒露之变以后，他开口了。",
+    }));
+    expect(ok).toBe(true);
+    // 对象身份不变，否则按身份持有它的一切（压缩后的 prelude、缓存前缀）都断了。
+    expect(messages[0]).toBe(system);
+    expect(String(system.content)).toContain("寒露之变以后，他开口了");
+    expect(String(system.content)).toContain("改口了：话变多");
+    expect(String(system.content)).not.toContain("说话短，从不解释动机");
+  });
+
+  it("refuses a history whose head is not the system message", () => {
+    const history: StreamMessage[] = [{ role: "user", content: "喂" }];
+    expect(refreshSystemPrompt(history, promptInput())).toBe(false);
+    expect(history[0].content).toBe("喂");
+  });
+
+  /**
+   * 这条才是它敢按下标定位的理由：压缩重建整个数组之后，system 仍然在 0 位、
+   * 仍然是同一个对象。所以它不需要像绑定块那样在 meta 里被持有，也就不需要动
+   * `session.json` 的格式——而这件事由 lib/agent/compact 决定，不由这里决定。
+   */
+  it("still finds the system message after a real compaction", async () => {
+    const { messages, meta } = await seed("「塔那边有消息了？」");
+    const history: StreamMessage[] = [...messages];
+    const system = history[0];
+    for (let i = 0; i < 24; i++) {
+      const q: StreamMessage = { role: "user", content: `第 ${i} 轮的问题。`.repeat(60) };
+      history.push(q);
+      meta.turnStarts.push(q);
+      history.push({ role: "assistant", content: `第 ${i} 轮的回答。`.repeat(60) });
+    }
+    const plan = planFold(history, meta, 2000);
+    expect(plan).not.toBeNull();
+    const next = buildCompactedHistory(history, meta, plan!, "到目前为止的摘要。");
+
+    expect(next[0]).toBe(system);
+    expect(refreshSystemPrompt(next, promptInput({ primaryText: "他后来变了。" }))).toBe(true);
+    expect(String(next[0].content)).toContain("他后来变了");
+  });
+});
+
+describe("contextSignature", () => {
+  const base = {
+    agent: AGENT,
+    persona: NO_PERSONA,
+    personaCard: "说话短。",
+    primaryText: "寒露之变的幸存者。",
+    loreIndex: INDEX,
+    boundText: "## 沈砚\n正文",
+  };
+  const asLore = (dirPath: string): AuthorPersona => ({ mode: "lore", dirPath, prompt: "" });
+
+  it("is stable for the same inputs", () => {
+    expect(contextSignature(base)).toBe(contextSignature({ ...base }));
+  });
+
+  it.each([
+    ["the bound block", { boundText: "## 沈砚\n改过的正文" }],
+    ["the character sheet", { primaryText: "寒露之变以后，他开口了。" }],
+    ["the author's direction", { personaCard: "话变多。" }],
+    ["the author's identity", { persona: asLore(TOWER.dirPath) }],
+  ])("moves when %s changes", (_label, patch) => {
+    expect(contextSignature({ ...base, ...patch })).not.toBe(contextSignature(base));
+  });
+
+  /**
+   * 身份条目被改名 / 改摘要也算变了：system 行里写的就是这两样。漏掉它，
+   * 「设定已更新」就会在一种最容易发生的改动上保持沉默。
+   */
+  it("moves when the identity entry is renamed", () => {
+    const persona = asLore(TOWER.dirPath);
+    const renamed: LoreIndex = {
+      ...INDEX,
+      world: [{ ...TOWER, name: "黑塔", summary: "改过的一句话" }],
+    };
+    expect(contextSignature({ ...base, persona, loreIndex: renamed }))
+      .not.toBe(contextSignature({ ...base, persona }));
+  });
+
+  /**
+   * 旁白不扮演任何人，它的提示词根本不读 persona 和 primaryText。算进去只会
+   * 让「换身份」在一个与身份无关的 agent 上亮起提示。
+   */
+  it("ignores the identity and the character sheet for a narrator", () => {
+    const narrator: RoleplayAgent = { ...AGENT, kind: "narrator", primaryDirPath: null };
+    const a = contextSignature({ ...base, agent: narrator });
+    const b = contextSignature({
+      ...base, agent: narrator, persona: asLore(TOWER.dirPath), primaryText: "无关的正文",
+    });
+    expect(a).toBe(b);
+    // 但绑定块和扮演指令仍然算数——旁白一样有这两样。
+    expect(contextSignature({ ...base, agent: narrator, personaCard: "改了" })).not.toBe(a);
   });
 });
 

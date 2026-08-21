@@ -2201,7 +2201,7 @@
       "narratorScope": "可读全部角色记录"
     },
     "stale": {
-      "body": "绑定的设定被改过，本次对话用的还是旧版本。",
+      "body": "设定被改过（绑定条目、人设或身份），本次对话用的还是旧版本。",
       "refresh": "刷新设定"
     },
     "chatEmpty": {
@@ -2237,6 +2237,10 @@
       "none": "不设定",
       "noneHint": "以旁观者身份说话",
       "custom": "自定义身份",
+      "customLead": "一句话说清你是谁。知识库里没有这个人时用它。",
+      "customPlaceholder": "例如：一个刚进城的行脚商，谁也不认识。",
+      "customHint": "知识库里没有的人",
+      "customSave": "确认",
       "narratorNote": "旁白不扮演任何人 · 无身份设定"
     },
     "composer": {

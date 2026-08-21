@@ -1098,6 +1098,8 @@ function PersonaChip({ agent }: { agent: RoleplayAgent }) {
   const [open, setOpen] = useState(false);
   const overridden = agent.authorPersona !== null;
   const [scopeAgent, setScopeAgent] = useState(overridden);
+  /** 正在写「自定义身份」。菜单换成一个表单，而不是在列表底下再挤一个输入框。 */
+  const [custom, setCustom] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -1110,7 +1112,8 @@ function PersonaChip({ agent }: { agent: RoleplayAgent }) {
   }, [open]);
 
   // 打开时把作用域重置成当前实际生效的那一档，而不是留着上次的选择。
-  useEffect(() => { if (open) setScopeAgent(overridden); }, [open, overridden]);
+  // 自定义身份的草稿一并丢掉：留着上一次没确认的半句话，比空着更让人困惑。
+  useEffect(() => { if (open) { setScopeAgent(overridden); setCustom(null); } }, [open, overridden]);
 
   const characters = Object.values(loreIndex).flat();
   /** 实际生效的那一个——和 runJob 的取法必须一致。 */
@@ -1162,39 +1165,95 @@ function PersonaChip({ agent }: { agent: RoleplayAgent }) {
               {t("roleplay.persona.scopeOne", { name: agent.name, defaultValue: `只对 ${agent.name}` })}
             </button>
           </div>
-          <button
-            type="button"
-            className={`${styles.personaItem} ${editing.mode === "none" ? styles.personaItemActive : ""}`}
-            onClick={() => apply({ mode: "none", dirPath: null, prompt: "" })}
-          >
-            <span className={styles.radio} />
-            {t("roleplay.persona.none", { defaultValue: "不设定" })}
-            <span className={styles.personaNote}>{t("roleplay.persona.noneHint", { defaultValue: "以旁观者身份说话" })}</span>
-          </button>
-          {characters.map((e) => (
+          {custom !== null ? (
+            <div className={styles.personaForm}>
+              <div className={styles.personaFormLead}>
+                {t("roleplay.persona.customLead", {
+                  defaultValue: "一句话说清你是谁。知识库里没有这个人时用它。",
+                })}
+              </div>
+              <textarea
+                className={styles.personaInput}
+                value={custom}
+                autoFocus
+                placeholder={t("roleplay.persona.customPlaceholder", {
+                  defaultValue: "例如：一个刚进城的行脚商，谁也不认识。",
+                })}
+                onChange={(e) => setCustom(e.target.value)}
+                onKeyDown={(e) => {
+                  // ⌘/Ctrl+Enter 确认；单独的 Enter 留给换行，身份可能不止一行。
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && custom.trim()) {
+                    apply({ mode: "prompt", dirPath: null, prompt: custom.trim() });
+                  }
+                  if (e.key === "Escape") { e.stopPropagation(); setCustom(null); }
+                }}
+              />
+              <div className={styles.personaFormFoot}>
+                <button type="button" className={styles.personaGhost} onClick={() => setCustom(null)}>
+                  {t("common.cancel", { defaultValue: "取消" })}
+                </button>
+                <button
+                  type="button"
+                  className={styles.personaPrimary}
+                  disabled={!custom.trim()}
+                  onClick={() => apply({ mode: "prompt", dirPath: null, prompt: custom.trim() })}
+                >
+                  {t("roleplay.persona.customSave", { defaultValue: "确认" })}
+                </button>
+              </div>
+            </div>
+          ) : (
+          <>
             <button
-              key={e.dirPath}
               type="button"
-              className={`${styles.personaItem} ${editing.dirPath === e.dirPath ? styles.personaItemActive : ""}`}
-              onClick={() => apply({ mode: "lore", dirPath: e.dirPath, prompt: "" })}
+              className={`${styles.personaItem} ${editing.mode === "none" ? styles.personaItemActive : ""}`}
+              onClick={() => apply({ mode: "none", dirPath: null, prompt: "" })}
             >
               <span className={styles.radio} />
-              {e.name}
+              {t("roleplay.persona.none", { defaultValue: "不设定" })}
+              <span className={styles.personaNote}>{t("roleplay.persona.noneHint", { defaultValue: "以旁观者身份说话" })}</span>
             </button>
-          ))}
-          {/* 撤销覆盖的入口就在做出覆盖的地方——和模型选择器的「跟随全局设置」
-              同一条道理（§2.14）。 */}
-          {overridden && (
+            {/* 自定义身份：不是每个「我此刻是」都在知识库里——试写和跑团里，作者
+                常常是一个还没建条目的人。点开是一个表单，不是立刻生效。 */}
             <button
               type="button"
-              className={styles.personaFollow}
-              onClick={() => { void setAgentPersona(agent.id, null); setOpen(false); }}
+              className={`${styles.personaItem} ${editing.mode === "prompt" ? styles.personaItemActive : ""}`}
+              onClick={() => setCustom(editing.mode === "prompt" ? editing.prompt : "")}
             >
-              {t("roleplay.persona.follow", {
-                name: nameOf(authorPersona),
-                defaultValue: `跟随全局设置（${nameOf(authorPersona)}）`,
-              })}
+              <span className={styles.radio} />
+              {t("roleplay.persona.custom", { defaultValue: "自定义身份" })}
+              <span className={styles.personaNote}>
+                {editing.mode === "prompt" && editing.prompt.trim()
+                  ? editing.prompt.trim().slice(0, 18)
+                  : t("roleplay.persona.customHint", { defaultValue: "知识库里没有的人" })}
+              </span>
             </button>
+            {characters.map((e) => (
+              <button
+                key={e.dirPath}
+                type="button"
+                className={`${styles.personaItem} ${editing.dirPath === e.dirPath ? styles.personaItemActive : ""}`}
+                onClick={() => apply({ mode: "lore", dirPath: e.dirPath, prompt: "" })}
+              >
+                <span className={styles.radio} />
+                {e.name}
+              </button>
+            ))}
+            {/* 撤销覆盖的入口就在做出覆盖的地方——和模型选择器的「跟随全局设置」
+                同一条道理（§2.14）。 */}
+            {overridden && (
+              <button
+                type="button"
+                className={styles.personaFollow}
+                onClick={() => { void setAgentPersona(agent.id, null); setOpen(false); }}
+              >
+                {t("roleplay.persona.follow", {
+                  name: nameOf(authorPersona),
+                  defaultValue: `跟随全局设置（${nameOf(authorPersona)}）`,
+                })}
+              </button>
+            )}
+          </>
           )}
         </div>
       )}

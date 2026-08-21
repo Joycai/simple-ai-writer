@@ -802,6 +802,63 @@
   color: var(--color-text-hint);
 }
 
+/* 自定义身份：一个知识库里没有的人。写完再确认，不是边打字边生效——身份进的是
+   system 层，每次改动都要作者点一次「刷新设定」才落到活着的会话上，逐字生效
+   只会让那条提示闪个不停。 */
+.personaForm { padding: 10px 14px 12px; }
+
+.personaFormLead {
+  font-family: var(--font-serif);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--color-text-hint);
+  margin-bottom: 8px;
+}
+
+.personaInput {
+  width: 100%;
+  min-height: 66px;
+  resize: vertical;
+  padding: 8px 10px;
+  background: var(--rp-input);
+  border: 1px solid var(--color-border-panel);
+  outline: none;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+}
+
+.personaInput:focus { border-color: var(--color-border-accent); }
+.personaInput::placeholder { color: var(--color-text-hint); }
+
+.personaFormFoot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 9px; }
+
+.personaGhost,
+.personaPrimary {
+  padding: 6px 14px;
+  border: 1px solid var(--color-border-panel);
+  background: none;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--color-text-dim);
+  cursor: pointer;
+}
+
+.personaPrimary {
+  border-color: transparent;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.personaPrimary:disabled {
+  background: var(--rp-avatar-bg);
+  color: var(--color-text-label);
+  cursor: default;
+}
+
 .syntaxRow {
   display: flex;
   align-items: center;

@@ -2206,7 +2206,7 @@
       "narratorScope": "Reads every character's transcript"
     },
     "stale": {
-      "body": "A bound entry changed; this conversation is still using the old version.",
+      "body": "A setting changed (a bound entry, the character sheet, or your identity); this conversation is still using the old version.",
       "refresh": "Refresh"
     },
     "chatEmpty": {
@@ -2242,6 +2242,10 @@
       "none": "Nobody",
       "noneHint": "speak as an observer",
       "custom": "Custom identity",
+      "customLead": "One line on who you are. Use this when the person is not in the knowledge base.",
+      "customPlaceholder": "e.g. a pedlar who just reached town and knows no one.",
+      "customHint": "someone not in the knowledge base",
+      "customSave": "Set",
       "narratorNote": "The narrator plays no one · no identity needed"
     },
     "composer": {

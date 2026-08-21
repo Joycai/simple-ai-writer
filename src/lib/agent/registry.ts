@@ -50,6 +50,11 @@ import {
   type AgentMemoryStore,
 } from "../roleplay/memoryTools";
 import {
+  readConversationTool,
+  searchConversationTool,
+  type ConversationReader,
+} from "../roleplay/conversationTools";
+import {
   copyFileTool,
   createChapterTool,
   createDirectoryTool,
@@ -382,6 +387,16 @@ export interface ToolContext {
    */
   scenes?: SceneReader;
   /**
+   * 本 agent **自己这一场**的对话记录（`transcript.md`）。只读。
+   *
+   * 和 `scenes` 的区别是作用域，不是权限：这里没有 agent id 可传，通道由调用方
+   * 绑死在本次运行的那个 agent 上。所以给一个扮演 agent 装上它，不会让它多看见
+   * 任何别人的东西——不变量三仍然是结构性的。
+   *
+   * 缺席意味着当前 surface 不是扮演面板，工具直接说明而不是静默返回空。
+   */
+  conversation?: ConversationReader;
+  /**
    * 本 agent 的私有长期记忆（约定 / 待办 / 事件 / 关系）。
    *
    * 与 `scenes` 相反，这是**可写**的，而且是 L1：写进去不过审批卡。安全阀在
@@ -457,6 +472,8 @@ export type ToolId =
   | "search_scenes"
   | "read_scene_summary"
   | "read_scene_memory"
+  | "search_conversation"
+  | "read_conversation"
   | "remember"
   | "revise_memory"
   | "recall"
@@ -1891,6 +1908,49 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => readSceneMemoryTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  // ── This agent's own conversation (lib/roleplay/conversationTools) ──
+  // Scoped by construction: no agent id to pass, so they reach only the record
+  // of the run's own conversation. See the note on ToolContext.conversation.
+  search_conversation: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "search_conversation",
+        description:
+          "Search everything said so far in THIS conversation — your own record of it, including the early parts you no longer remember word for word. Returns matching turn numbers with the matching line; read_conversation then gives you what was actually said around them. This is how you answer \"do you remember what we said back then\" instead of guessing. Matching is literal and case-insensitive: search a distinctive word that was actually spoken.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Text to look for, as it was said" },
+          },
+          required: ["query"],
+        },
+      },
+    },
+    execute: (call, ctx) => searchConversationTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  read_conversation: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "read_conversation",
+        description:
+          "Read this conversation back, verbatim, by turn number — use it on the turns search_conversation pointed at. Omit from/to to re-read the most recent turns. The recent ones are usually still fresh in your mind; what this is for is the earlier stretch that has faded.",
+        parameters: {
+          type: "object",
+          properties: {
+            from: { type: "integer", description: "First turn number (1-based, inclusive). Omit for the latest window." },
+            to: { type: "integer", description: "Last turn number (inclusive)." },
+          },
+        },
+      },
+    },
+    execute: (call, ctx) => readConversationTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   // ── Agent memory (lib/roleplay/memoryTools) ──
