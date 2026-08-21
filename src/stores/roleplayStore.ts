@@ -72,8 +72,8 @@ import { scriptPreview } from "../lib/roleplay/markup";
 const AREA_BUDGET_TOKENS = 800;
 import { runSceneRecap, type SceneRecap } from "../lib/roleplay/recap";
 import {
-  addAreaEntry, areaEntities, createArea, listAreas, loadAreaMeta, saveAreaMeta,
-  scanArea, type AreaSummary,
+  addAreaEntry, areaEntities, createArea, isValidAreaId, listAreas, loadAreaMeta,
+  saveAreaMeta, scanArea, type AreaSummary,
 } from "../lib/roleplay/area";
 import type { SceneInfo, SceneReader, SceneSlice } from "../lib/roleplay/sceneTools";
 import {
@@ -293,10 +293,15 @@ export interface AgentDraft {
   modelId: string | null;
   instruction: string;
   /**
-   * 绑定的记忆区。新建时传 `"new"` 表示「建一个空的」，传一个 id 表示**继承**
-   * 那一个，`null` 表示不要。编辑时 `undefined` = 不动。
+   * 绑定的记忆区 id；`null` = 不要，`undefined` = 不动。
+   *
+   * 「新建一个区」**不走这里**——那是 `bindArea(id, "new")` 的事（它要摘旧的、
+   * 抢占新的、写两份 meta）。这个字段曾经在类型上允许 `"new"` 字面量而
+   * `createAgent` 原样存储，一个照类型办事的调用方会把字符串 "new" 写进花名册、
+   * 随后每一轮 `scanArea("new")` 都在无效 id 上抛异常。现在存之前过
+   * `isValidAreaId`。
    */
-  areaId?: string | "new" | null;
+  areaId?: string | null;
 }
 
 function emptySession(): LiveSession {
@@ -340,6 +345,36 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     set((st) => ({
       sessions: { ...st.sessions, [id]: patch(st.sessions[id] ?? emptySession()) },
     }));
+
+  /**
+   * transcript 的追加，按 agent 串行化；轮号在链内、追加前一刻才算出。
+   *
+   * 没有这条链时有一个窄但真实的竞态：发送在生成中是允许的（排队 UI 就是为此
+   * 存在的），作者恰好在角色回复落盘的同一瞬按下发送，两条路径各自从**还没
+   * patch 的旧 state** 读 `turns.length` 会算出同一个轮号——transcript 里出现
+   * 两条 `[N]`，解析时被重排，wire history 和稿面就此错位。
+   *
+   * 模式同 loreStore 的扫描链：失败不楔死链（存进表里的是 catch 过的），但
+   * 错误原样抛给本次调用方。
+   */
+  const appendChains: Record<string, Promise<unknown>> = {};
+  const appendTurnChained = (
+    agentId: string,
+    make: () => Omit<SceneTurn, "index">,
+  ): Promise<SceneTurn> => {
+    const prev = appendChains[agentId] ?? Promise.resolve();
+    const run = prev.then(async () => {
+      const { projectPath } = get();
+      if (!projectPath) throw new Error("project closed");
+      const turns = get().sessions[agentId]?.turns ?? [];
+      const turn: SceneTurn = { ...make(), index: turns.length + 1 };
+      await appendTurn(transcriptPath(projectPath, agentId), agentId, turn);
+      patchSession(agentId, (s) => ({ ...s, turns: [...s.turns, turn] }));
+      return turn;
+    });
+    appendChains[agentId] = run.catch(() => {});
+    return run;
+  };
 
   const persistRoster = async () => {
     const { projectPath, order, agents, authorPersona } = get();
@@ -726,18 +761,14 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
 
       const reply = get().sessions[job.agentId]?.streaming.trim() ?? "";
       if (reply) {
-        const turns = get().sessions[job.agentId]?.turns ?? [];
-        const turn: SceneTurn = {
-          index: turns.length + 1,
+        const turn = await appendTurnChained(job.agentId, () => ({
           speaker: "agent",
           speakerName: agent.name,
           at: Math.floor(Date.now() / 1000),
           text: reply,
-        };
-        await appendTurn(transcriptPath(projectPath, agent.id), agent.id, turn);
+        }));
         patchSession(job.agentId, (s) => ({
           ...s,
-          turns: [...s.turns, turn],
           log: { ...s.log, [turn.index]: s.liveLog },
           streaming: "",
           liveLog: [],
@@ -908,7 +939,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         primaryDirPath: draft.kind === "narrator" ? null : draft.primaryDirPath,
         boundPaths: draft.boundPaths,
         modelId: draft.modelId,
-        areaId: draft.areaId ?? null,
+        areaId: draft.areaId && isValidAreaId(draft.areaId) ? draft.areaId : null,
         authorPersona: null,
         createdAt: now,
         updatedAt: now,
@@ -1201,24 +1232,20 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
             indexByDir(m.useLoreStore.getState().index).get(persona.dirPath!)?.name ?? ""))
         : "";
 
-      const turns = get().sessions[agentId]?.turns ?? [];
-      const turn: SceneTurn = {
-        index: turns.length + 1,
-        speaker: "author",
-        speakerName: personaName,
-        at: Math.floor(Date.now() / 1000),
-        text: body,
-      };
       // 先落盘，再排队。模型跑不动只是一次重试，写不进去是数据丢失。
+      // 轮号由追加链在落盘前一刻算出——见 appendTurnChained。
       try {
-        await appendTurn(transcriptPath(projectPath, agentId), agentId, turn);
+        await appendTurnChained(agentId, () => ({
+          speaker: "author",
+          speakerName: personaName,
+          at: Math.floor(Date.now() / 1000),
+          text: body,
+        }));
       } catch (e) {
         patchSession(agentId, (s) => ({ ...s, error: String(e) }));
         return;
       }
-      patchSession(agentId, (s) => ({
-        ...s, turns: [...s.turns, turn], error: null, stopped: false,
-      }));
+      patchSession(agentId, (s) => ({ ...s, error: null, stopped: false }));
 
       // `@` 引用是**内联**的，不是提名的：作者打了 @西厢 就已经决定助手该看着
       // 它说话，把那变成模型可以跳过的建议是在赌一件已经定了的事（见
@@ -1331,6 +1358,11 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           ...s,
           turns: kept,
           log: Object.fromEntries(Object.entries(s.log).filter(([k]) => Number(k) < turnIndex)),
+          // recalled 也按轮号截：留着的话，被撤销轮号上的「想起了…」痕迹会错挂
+          // 到重写后同轮号的新对话上。
+          recalled: Object.fromEntries(
+            Object.entries(s.recalled).filter(([k]) => Number(k) < turnIndex),
+          ),
           history: null,
           meta: null,
           streaming: "",

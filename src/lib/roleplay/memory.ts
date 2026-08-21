@@ -168,16 +168,33 @@ function splitKeys(raw: string): string[] {
   return raw.split(",").map((k) => k.trim()).filter(Boolean);
 }
 
+/** 标题/主语和关键字同一条纪律：字段分隔符不能出现在字段里，否则这一行读不回来。 */
+function sanitizeField(s: string): string {
+  return s.replace(/·/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * 正文行不能长得像本文件的结构行——`### [m9] …` 会被解析成一条新记录，把这条
+ * 的正文劈成两半。前缀一个空格：markdown 视觉上无害，锚定 `^` 的三个正则都
+ * 认不出它，往返时正文只多一个前导空格。
+ */
+function escapeBodyLine(line: string): string {
+  return HEADER_RE.test(line) || SECTION_RE.test(line) || RECORD_RE.test(line)
+    ? ` ${line}`
+    : line;
+}
+
 function renderRecord(r: MemoryRecord): string {
   const keys = r.keys.map(sanitizeKey).filter(Boolean);
   const fields = [
-    r.title,
-    ...(r.subject ? [r.subject] : []),
+    sanitizeField(r.title),
+    ...(r.subject ? [sanitizeField(r.subject)] : []),
     r.status,
     `turn ${r.turn}`,
     ...(keys.length ? [`${KEYS_PREFIX}${keys.join(",")}`] : []),
   ];
-  return `### [${r.id}] ${fields.join(" · ")}\n${r.body.trim()}\n`;
+  const body = r.body.trim().split(/\r?\n/).map(escapeBodyLine).join("\n");
+  return `### [${r.id}] ${fields.join(" · ")}\n${body}\n`;
 }
 
 /** 把整份记忆写回规范格式。分组顺序固定，组内按 id 升序（＝记下的先后）。 */

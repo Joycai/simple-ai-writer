@@ -146,3 +146,25 @@ describe("truncateTurns / renderTranscript", () => {
     expect(parseTranscript(md).turns).toEqual([]);
   });
 });
+
+/**
+ * 无名角色轮的往返。它真实存在：整篇认不出标题时的兜底轮就是一个
+ * （speaker: "agent", speakerName: ""），回退触发的整文件重写会把它固化。
+ * renderTurn 曾把空名角色轮兜底成 `我`——读回来就成了作者轮，说话人翻转。
+ */
+describe("无名角色轮", () => {
+  it("round-trips as an agent turn, never flips into an author turn", () => {
+    const anonymous = turn({ speaker: "agent", speakerName: "", text: "……" });
+    const { turns } = parseTranscript(doc(anonymous));
+    expect(turns).toHaveLength(1);
+    expect(turns[0].speaker).toBe("agent");
+    expect(turns[0].speakerName).toBe("");
+    expect(turns[0].text).toBe("……");
+  });
+
+  it("renders with the stamp only — no borrowed author token", () => {
+    const rendered = renderTurn(turn({ speaker: "agent", speakerName: "" }));
+    expect(rendered).toContain(`## [1] ${formatStamp(1755000000)}`);
+    expect(rendered).not.toContain("我 ·");
+  });
+});

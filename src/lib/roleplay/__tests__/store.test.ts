@@ -12,6 +12,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 const files = new Map<string, string>();
+const dirs = new Set<string>();
 
 vi.mock("../../fs/fileio", () => ({
   readFile: vi.fn(async (p: string) => {
@@ -21,16 +22,26 @@ vi.mock("../../fs/fileio", () => ({
   }),
   writeFile: vi.fn(async (p: string, c: string) => { files.set(p, c); }),
   appendFile: vi.fn(),
-  makeDir: vi.fn(),
-  fileExists: vi.fn(async (p: string) => files.has(p)),
-  readDir: vi.fn(async () => []),
+  makeDir: vi.fn(async (p: string) => { dirs.add(p); }),
+  fileExists: vi.fn(async (p: string) => files.has(p) || dirs.has(p)),
+  readDir: vi.fn(async (p: string) => {
+    const kids = new Set<string>();
+    for (const d of [...dirs, ...files.keys()]) {
+      if (d.startsWith(`${p}/`)) kids.add(d.slice(p.length + 1).split("/")[0]);
+    }
+    return [...kids].map((name) => ({
+      name, path: `${p}/${name}`, isDirectory: !files.has(`${p}/${name}`),
+    }));
+  }),
   renamePath: vi.fn(),
   removeFile: vi.fn(async (p: string) => { files.delete(p); }),
 }));
 
 import { createSessionMeta } from "../../agent/compact";
 import type { StreamMessage } from "../../ai/types";
-import { loadSession, saveSession, sessionPath, type RoleplaySession } from "../store";
+import {
+  loadRoster, loadSession, rosterPath, saveSession, sessionPath, type RoleplaySession,
+} from "../store";
 
 const AGENT_ID = "rp-test-0001";
 
@@ -95,5 +106,56 @@ describe("saveSession / loadSession", () => {
     expect(loaded).not.toBeNull();
     expect(loaded!.boundBlock).toBeNull();
     expect(loaded!.memoryBlock).toBeNull();
+  });
+});
+
+/**
+ * 花名册的损坏恢复。「JSON 合法但条目全坏」曾经是盲区：一对返回相同值的死
+ * 分支让目录重建从未发生，损坏的花名册被读成「一个 agent 都没有」。
+ */
+describe("loadRoster", () => {
+  const persona = { mode: "prompt", dirPath: null, prompt: "一个路过的旅人" };
+
+  it("a valid empty roster does not trigger a rebuild", async () => {
+    files.clear(); dirs.clear();
+    files.set(rosterPath("/p"), JSON.stringify({ v: 1, authorPersona: persona, agents: [] }));
+    const { roster, rebuilt } = await loadRoster("/p");
+    expect(rebuilt).toBe(false);
+    expect(roster.agents).toEqual([]);
+    expect(roster.authorPersona.prompt).toBe("一个路过的旅人");
+  });
+
+  it("rebuilds from directories when every entry fails to coerce", async () => {
+    files.clear(); dirs.clear();
+    // 条目全坏（缺 id），但 JSON 本身合法。
+    files.set(rosterPath("/p"), JSON.stringify({
+      v: 1, authorPersona: persona, agents: [{ name: "没有 id" }, 42],
+    }));
+    dirs.add("/p/.ai-writer/roleplay");
+    dirs.add("/p/.ai-writer/roleplay/rp-abc-0001");
+    files.set(
+      "/p/.ai-writer/roleplay/rp-abc-0001/agent.md",
+      "---\nid: rp-abc-0001\nkind: character\nname: 沈砚\n---\n\n说话短。\n",
+    );
+    const { roster, rebuilt } = await loadRoster("/p");
+    expect(rebuilt).toBe(true);
+    expect(roster.agents.map((a) => a.id)).toEqual(["rp-abc-0001"]);
+    expect(roster.agents[0].name).toBe("沈砚");
+    // 条目坏了不等于 persona 也坏了——能救的都带上。
+    expect(roster.authorPersona.prompt).toBe("一个路过的旅人");
+  });
+
+  it("rebuilds when the file is not JSON at all", async () => {
+    files.clear(); dirs.clear();
+    files.set(rosterPath("/p"), "{not json");
+    dirs.add("/p/.ai-writer/roleplay");
+    dirs.add("/p/.ai-writer/roleplay/rp-abc-0001");
+    files.set(
+      "/p/.ai-writer/roleplay/rp-abc-0001/agent.md",
+      "---\nid: rp-abc-0001\nkind: narrator\nname: 旁白\n---\n",
+    );
+    const { roster, rebuilt } = await loadRoster("/p");
+    expect(rebuilt).toBe(true);
+    expect(roster.agents[0].kind).toBe("narrator");
   });
 });

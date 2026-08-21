@@ -312,3 +312,34 @@ describe("keys 的往返", () => {
     expect(after.records[0].keys).toEqual(["塔"]);
   });
 });
+
+/**
+ * 字段行与结构行的往返加固：标题/主语和关键字同一条纪律（分隔符不能出现在
+ * 字段里），正文行不能长得像本文件的结构行。
+ */
+describe("round-trip 加固", () => {
+  it("标题里的 · 被清洗，不会把这一行劈成标题+主语", () => {
+    const before = doc([rec({ id: "m1", title: "西厢 · 夜谈", subject: null })], 2);
+    const parsed = parseMemory(renderMemory(AGENT, before));
+    expect(parsed.records).toHaveLength(1);
+    expect(parsed.records[0].title).toBe("西厢 夜谈");
+    expect(parsed.records[0].subject).toBeNull();
+  });
+
+  it("主语里的 · 同样被清洗", () => {
+    const before = doc([rec({ id: "m1", subject: "林 · 桐谷萤" })], 2);
+    const parsed = parseMemory(renderMemory(AGENT, before));
+    expect(parsed.records[0].subject).toBe("林 桐谷萤");
+    expect(parsed.records[0].status).toBe("open");
+  });
+
+  it("正文里长得像记录头的行不会被解析成一条新记录", () => {
+    const before = doc([rec({ id: "m1", body: "他留了张字条：\n### [m9] 假的记录头 · open · turn 3\n下面还有一行。" })], 2);
+    const parsed = parseMemory(renderMemory(AGENT, before));
+    expect(parsed.records).toHaveLength(1);
+    expect(parsed.records[0].body).toContain("假的记录头");
+    expect(parsed.records[0].body).toContain("下面还有一行");
+    // 计数器也没被假 id 抬高。
+    expect(parsed.next).toBe(2);
+  });
+});

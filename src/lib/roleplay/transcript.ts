@@ -54,9 +54,13 @@ function parseStamp(s: string): number | null {
 }
 
 export function renderTurn(turn: SceneTurn): string {
+  // 角色轮没有名字时**省略名字字段**，绝不能兜底成 AUTHOR_TOKEN：`## [1] 我 · …`
+  // 解析回来是一个作者轮，说话人就这样翻转了。只剩时间戳的标题解析回来 names
+  // 为空 → 无名角色轮，round-trip 正确。（无名角色轮真实存在：整篇认不出标题
+  // 的兜底轮就是一个，回退触发的整文件重写会把它固化下来。）
   const fields = turn.speaker === "author"
     ? [AUTHOR_TOKEN, ...(turn.speakerName ? [turn.speakerName] : []), formatStamp(turn.at)]
-    : [turn.speakerName || AUTHOR_TOKEN, formatStamp(turn.at)];
+    : [...(turn.speakerName ? [turn.speakerName] : []), formatStamp(turn.at)];
   return `\n## [${turn.index}] ${fields.join(" · ")}\n\n${turn.text.trim()}\n`;
 }
 

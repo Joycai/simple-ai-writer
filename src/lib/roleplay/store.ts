@@ -110,13 +110,24 @@ export async function loadRoster(projectPath: string): Promise<{ roster: Roster;
   try {
     if (await fileExists(path)) {
       const raw = JSON.parse(await readFile(path)) as Record<string, unknown>;
-      const agents = Array.isArray(raw.agents)
-        ? raw.agents.map(coerceAgent).filter((a): a is RoleplayAgent => a !== null)
-        : [];
-      if (agents.length > 0 || !Array.isArray(raw.agents)) {
+      const rawList = Array.isArray(raw.agents) ? raw.agents : null;
+      const agents = (rawList ?? [])
+        .map(coerceAgent)
+        .filter((a): a is RoleplayAgent => a !== null);
+      // 合法的空花名册（新项目）不触发重建；`agents` 字段缺失/不是数组，或者
+      // 条目一个都认不出来，才算损坏。这里曾经是两个返回相同值的死分支——
+      // 于是「JSON 合法但条目全坏」这种损坏返回了空花名册，目录重建从未发生，
+      // 与本函数 docstring 的承诺相反。
+      if (rawList !== null && (agents.length > 0 || rawList.length === 0)) {
         return { roster: { authorPersona: coercePersona(raw.authorPersona), agents }, rebuilt: false };
       }
-      return { roster: { authorPersona: coercePersona(raw.authorPersona), agents }, rebuilt: false };
+      console.warn("[roleplay] agents.json entries unreadable, rebuilding from directories");
+      const rebuilt = await rebuildRoster(projectPath);
+      // 条目坏了不等于 persona 也坏了——能救的都带上。
+      return {
+        roster: { authorPersona: coercePersona(raw.authorPersona), agents: rebuilt },
+        rebuilt: rebuilt.length > 0,
+      };
     }
   } catch (e) {
     console.warn("[roleplay] agents.json unreadable, rebuilding from directories:", e);
