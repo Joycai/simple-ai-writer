@@ -220,11 +220,29 @@ PR2 是把这套已经建好的账本真正用起来。
 
 ---
 
-## 3. PR3 —— schema 字面瘦身 + 预算护栏
+## 3. PR3 —— 预算护栏（字面瘦身已量掉）
 
-**目标**：~600 token/轮，且**从此不会再悄悄涨回去**。
+> **实施结论（1.22.0）**：动手前先量了一遍，**§3.1 的三类删除不做**，PR3 只剩护栏。
+>
+> 拿真实 schema 拆开看：39 个工具的 parameters 一共 15,776 字符，其中 **8,015 是
+> 纯 JSON 结构**（`{"type":"string"}`、`required`、嵌套括号），只有 7,761 是描述文字
+> —— 也就是说**参数层有一半根本不是文字，改文案动不了它**。剩下能真正删掉的重复
+> 一共约 900 字符（≈225 token），不是原先估的 600 token：
+>
+> - `reason` 的 10 份描述缩写：省 ~170 字符。
+> - 「批准前不写入」样板句上提：schema 里省 ~430 字符，但**旁白预设也带 L2 工具
+>   （`propose_edit`/`append_file`/`create_chapter`/`rewrite_lines`）而它读的是
+>   `ai.instructions.narrator`，不是 `agent`** —— 上提就得往两份指令里各写一遍，
+>   两种语言四份副本，净收益接近零。这条是 §4.1 那条切分规则的一个真实反例：
+>   "策略放 system" 只在**所有**用到该工具的界面共享同一份 system 时才成立。
+> - 「Entity name exactly as returned by list_lore_entities」这类：`exactly as
+>   returned by` 是在干活的（它是"别自己编名字"的指令），缩写省不到 200 字符却
+>   要赌工具选择不退化。不换。
+>
+> 所以 PR3 的收益记为 **0**，§7 的汇总已按此更正。留下的是护栏——它才是这一步
+> 真正值钱的部分：schema 体积没人盯着就会涨，而涨的代价是每一轮都付。
 
-### 3.1 三类删除（`lib/agent/registry.ts`）
+### 3.1 三类删除（**不做**，理由见上）
 
 1. **样板句上提**。`"NOTHING is written until the user approves the card; the call blocks
    until they decide."` 出现在 5 个工具里（propose_edit / rewrite_document / rewrite_lines /
@@ -245,9 +263,12 @@ PR2 是把这套已经建好的账本真正用起来。
 web font 进不了 pptx——删掉省 200 token，换回来一次截断重跑就亏。在 registry 顶部
 的模块注释里加一段说明这条界线。
 
-### 3.3 护栏（本 PR 的真正价值）
+### 3.3 护栏（本 PR 的**全部**内容）
 
-`src/lib/__tests__/agentToolBudget.test.ts`（新）：
+`src/lib/__tests__/agentToolBudget.test.ts`（新）：四个预设各一个上限
+（agent-assist / continue / roleplay-narrator / roleplay-character），外加
+"每个工具的描述不得短于 40 字符、不得漏掉分类占位符替换"两条低成本不变量。
+四个而不是一个：旁白那份也在长，而它一直没人量过。
 
 ```ts
 /**
@@ -258,8 +279,8 @@ web font 进不了 pptx——删掉省 200 token，换回来一次截断重跑�
  */
 // 口径是**全预设**（39 个工具，未经 routeTools 裁剪）——路由结果随作者的子代理开关
 // 变化，拿它当棘轮会让一个开关切换看起来像一次回归。
-// 当前实测 10,648；PR3 预计降到 ~10,050，取 10,300 留 ~2.5% 余量。
-const AGENT_ASSIST_TOOL_TOKEN_CAP = 10_300;
+// 实测 9,609（estimateToolsTokens 的口径），取 10,000：够改措辞，不够加一个工具。
+const AGENT_ASSIST_CAP = 10_000;
 
 it("full toolset stays within the per-request budget", () => {
   const tokens = estimateToolsTokens(getToolDefinitions(AGENT_ASSIST_PRESET.tools));
@@ -441,13 +462,13 @@ const toolDefinitions = getToolDefinitions(active);   // ← 从 line 308 移进
 | --- | --- | --- | --- | --- |
 | 1 计量 | —（修正） | — | 小 | 无 |
 | 2 ④族缓存 | 0 | 官方端点重复头部 ≈ -90% | 小 | 无（compat 未开） |
-| 3 schema 瘦身 | ~600 | 同比例 | 小 | 无 |
+| 3 schema 护栏 | **0**（量过：可删的文字只有 ~225 token，且有反例，见 §3） | — | 小 | 无 |
 | 4 briefing 去重 | ~2,000 | 同比例 | 中（实测占大头） | **中** |
 | 5a 随方案装载 | ~2,540 | 同比例 | 中 | 低 |
 | 5b `load_tools` | ~1,600 | 同比例 | 中 | 中 |
 
-全部落地后对话助手的每轮固定头部：**~12,300 → ~6,000 token**（-51%），
-④ 族端点上这 6,000 里的绝大部分还走缓存价。
+全部落地后对话助手的每轮固定头部：**~12,300 → ~6,600 token**（-46%），
+④ 族端点上这 6,600 里的绝大部分还走缓存价。（原估 ~6,000，PR3 量掉之后更正。）
 
 > **实测数据待填**（PR1 的 `round-start.toolTokens` 上线后逐个 PR 记在这里，
 > 包括 PR4 的对照结果——不达标的那一格尤其要记，它是后人重开这个话题时唯一有用的东西）。
