@@ -16,7 +16,9 @@
 
 import i18n from "../../i18n";
 import { fetch } from "../http";
-import { dialectFor, reasoningBody, thinkingBody, type ThinkingDialect } from "./reasoning";
+import {
+  dialectFor, reasoningBody, supportsTemperature, thinkingBody, type ThinkingDialect,
+} from "./reasoning";
 import {
   anthropicServerTools,
   readServerToolError,
@@ -496,6 +498,14 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
   };
   if (system) baseBody.system = system;
   if (thinking) baseBody.thinking = thinking;
+  // Temperature, with this protocol's two constraints applied here rather than
+  // at the setting: it caps at 1 (the other families allow 2), and a thinking
+  // request refuses everything but 1 — see `supportsTemperature`, which the
+  // model editor reads too so it never renders a control this would drop.
+  // 0 is a real value, hence the `!== undefined` test.
+  if (opts.temperature !== undefined && supportsTemperature(opts.standard, opts.thinkingDialect)) {
+    baseBody.temperature = Math.max(0, Math.min(1, opts.temperature));
+  }
   // Absent unless the author set an effort on this model. Governs the whole
   // response here, not only thinking — see ANTHROPIC_EFFORT in ./reasoning.
   Object.assign(baseBody, reasoningBody(opts.standard, opts.reasoningEffort, dialect));

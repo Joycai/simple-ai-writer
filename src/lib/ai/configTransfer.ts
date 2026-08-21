@@ -214,6 +214,7 @@ export async function stageConfigImport(
       prefix: str(r.prefix) ?? undefined,
       contextSize: typeof r.contextSize === "number" ? r.contextSize : undefined,
       maxOutput: typeof r.maxOutput === "number" ? r.maxOutput : undefined,
+      temperature: typeof r.temperature === "number" ? r.temperature : undefined,
       probedAt: typeof r.probedAt === "number" ? r.probedAt : undefined,
       // Parsed rather than cast: a backup written by a newer build (or edited by
       // hand) can carry a level this build doesn't know, and an unknown level

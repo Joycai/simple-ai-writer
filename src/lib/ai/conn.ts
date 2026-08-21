@@ -65,6 +65,12 @@ export interface ConnOptions {
   contextSize?: number;
   /** Sent as `max_tokens` on the Anthropic path; planning-only elsewhere. */
   maxOutput?: number;
+  /**
+   * Sampling temperature, or absent to leave the endpoint's own default alone.
+   * Every family sends it; the Anthropic path clamps it to 1 and drops it while
+   * extended thinking is on (see ai/anthropic.ts).
+   */
+  temperature?: number;
   /** How hard to think, in this app's vocabulary — each adapter translates. */
   reasoningEffort?: ReasoningEffort;
   /** Which shape of thinking parameter this model accepts. */
@@ -96,6 +102,7 @@ export function connOptions(conn: AiConn): ConnOptions {
     // ceiling, and the one place every request is built is the one place that
     // can make the planner and the wire agree on what it is. See ./modelLimits.
     maxOutput: effectiveMaxOutput(model, defaultMaxOutput()),
+    temperature: model.temperature,
     reasoningEffort: model.reasoningEffort,
     thinkingDialect: model.thinkingDialect,
     serverTools: model.serverTools,
@@ -120,6 +127,7 @@ export function pickConnOptions(o: ConnOptions): ConnOptions {
     prefix: o.prefix,
     contextSize: o.contextSize,
     maxOutput: o.maxOutput,
+    temperature: o.temperature,
     reasoningEffort: o.reasoningEffort,
     thinkingDialect: o.thinkingDialect,
     serverTools: o.serverTools,

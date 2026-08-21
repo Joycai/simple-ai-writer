@@ -86,6 +86,11 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       messages: toWireMessages(opts.messages),
       stream: true,
       stream_options: { include_usage: true },
+      // Absent unless the author set one on this model, for the same reason as
+      // the reasoning fields below: an unset model must keep sending exactly
+      // what it sent before this setting existed. 0 is a real value here, so
+      // the test is `!== undefined` rather than truthiness.
+      ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
       ...(opts.tools ? { tools: opts.tools, tool_choice: toolChoiceFor(opts) } : {}),
       // A standing permission the author granted this model, spelled the way
       // this wire wants it (enable_search — see lib/ai/serverTools.ts). Empty

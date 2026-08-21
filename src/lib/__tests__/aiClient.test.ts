@@ -42,6 +42,7 @@ async function collect(opts: {
   reasoningEffort?: ReasoningEffort;
   thinkingDialect?: ThinkingDialect;
   serverTools?: ServerToolId[];
+  temperature?: number;
 }): Promise<{ received: StreamChunk[]; calls: { url: string; body: Record<string, unknown> }[] }> {
   const calls = mockFetch(opts.chunks);
   const received: StreamChunk[] = [];
@@ -56,6 +57,7 @@ async function collect(opts: {
     reasoningEffort: opts.reasoningEffort,
     thinkingDialect: opts.thinkingDialect,
     serverTools: opts.serverTools,
+    temperature: opts.temperature,
     tools: opts.tools,
     toolChoice: opts.toolChoice,
     onChunk: (c) => received.push(c),
@@ -2183,5 +2185,67 @@ describe("streamCompletion — compat standards reach their own adapter", () => 
       onChunk: () => {},
     });
     expect(calls[0].get("x-goog-api-key")).toBe("secret");
+  });
+});
+
+describe("streamCompletion — temperature", () => {
+  const OPENAI_DONE = [`data: [DONE]\n\n`];
+  const GEMINI_ONE = [`data: {"candidates":[{"content":{"parts":[{"text":"x"}]}}]}\n`];
+  const ANTHROPIC_ONE = [
+    `data: {"type":"message_start","message":{"usage":{"input_tokens":1,"output_tokens":0}}}\n\n`,
+    `data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}\n\n`,
+    `data: {"type":"message_stop"}\n\n`,
+  ];
+
+  it("sends nothing when unset, on every family", async () => {
+    for (const [standard, chunks] of [
+      ["openai", OPENAI_DONE], ["gemini", GEMINI_ONE], ["anthropic", ANTHROPIC_ONE],
+    ] as const) {
+      const { calls } = await collect({ standard, chunks });
+      expect(calls[0].body.temperature).toBeUndefined();
+      expect((calls[0].body.generationConfig as Record<string, unknown> | undefined)?.temperature)
+        .toBeUndefined();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("sends 0 rather than treating it as unset", async () => {
+    // The bug this guards: `opts.temperature ? {temperature} : {}` drops the one
+    // value an author picks precisely because they mean it.
+    const { calls } = await collect({ chunks: OPENAI_DONE, temperature: 0 });
+    expect(calls[0].body.temperature).toBe(0);
+  });
+
+  it("puts it in generationConfig on Gemini, beside the thinking config", async () => {
+    const { calls } = await collect({
+      standard: "gemini", chunks: GEMINI_ONE, temperature: 0.3, reasoningEffort: "medium",
+    });
+    const cfg = calls[0].body.generationConfig as Record<string, unknown>;
+    expect(cfg.temperature).toBe(0.3);
+    // The one-level merge must not have clobbered either writer.
+    expect(cfg.thinkingConfig).toBeDefined();
+  });
+
+  it("clamps to 1 on a non-thinking Anthropic request — a lower ceiling than the other families'", async () => {
+    const { calls } = await collect({
+      standard: "anthropic", chunks: ANTHROPIC_ONE, temperature: 1.8, thinkingDialect: "none",
+    });
+    expect(calls[0].body.thinking).toBeUndefined();
+    expect(calls[0].body.temperature).toBe(1);
+  });
+
+  it("omits it on an Anthropic thinking request rather than clamping it to 1", async () => {
+    // The API accepts only temperature 1 while thinking is on, so a clamp would
+    // send the opposite of what the author asked for and call it honoring them.
+    //
+    // Note which request this is: `defaultDialect` makes Anthropic *adaptive*
+    // unless the author declares otherwise, so this — not the case above — is
+    // what an ordinary Claude model sends, and the setting is inert there by
+    // protocol rather than by oversight. The model editor's hint says so.
+    const { calls } = await collect({
+      standard: "anthropic", chunks: ANTHROPIC_ONE, temperature: 0.2,
+    });
+    expect(calls[0].body.thinking).toBeDefined();
+    expect(calls[0].body.temperature).toBeUndefined();
   });
 });
