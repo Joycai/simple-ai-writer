@@ -839,7 +839,9 @@ export function AiPanel() {
   const activeDraft = drafts.find((d) => d.id === activeDraftId) ?? drafts[0] ?? null;
   const output = activeDraft?.text ?? "";
   const usage = totalUsage(drafts);
-  const { models, providers, prompts, activeModelId, activePromptId, setActivePrompt } = useAiStore();
+  const {
+    models, providers, prompts, activeModelId, activePromptId, setActivePrompt, subAgents,
+  } = useAiStore();
   // The focused document — one atomic read of "which file" + "its text", so the
   // panel can never describe one document while the run targets another.
   const focus = useWritingFocus();
@@ -1033,7 +1035,6 @@ export function AiPanel() {
   // What this task's toolset costs, so the budget bar accounts for the schemas
   // the request will carry. Same function runTask plans with — the forecast and
   // the run cannot disagree about the toolset's size.
-  const subAgents = useAiStore((s) => s.subAgents);
   const toolSchemaTokens = useMemo(
     () => plannedToolTokens(presetForTools(task.tools), subAgents, models),
     [task.tools, subAgents, models],
