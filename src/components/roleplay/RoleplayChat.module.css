@@ -874,6 +874,24 @@
 .syntaxScene,
 .syntaxMeta { color: var(--color-text-dim); }
 
+/* 收起态的图例项。负外边距让悬停底色贴着字，又不把那一行的 14px 间距挤开。 */
+.syntaxChip {
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  padding: 3px 5px;
+  margin: -3px -5px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.syntaxChip:hover {
+  background: var(--rp-row-hover);
+  color: var(--color-text-primary);
+}
+
 .syntaxToggle {
   border: none;
   background: none;
@@ -896,7 +914,27 @@
 
 .syntaxGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 22px; }
 
-.syntaxItem { display: flex; gap: 10px; align-items: baseline; }
+/* 卡片里的一项就是一个按钮：整行可点，而不是只有那个符号——符号是四个字符宽的
+   命中区，对一个「省得打标记」的入口来说太小了。 */
+.syntaxItem {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  width: 100%;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  padding: 4px 7px;
+  margin: -4px -7px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.syntaxItem:hover { background: var(--rp-row-hover); }
+.syntaxItem:hover .syntaxName { color: var(--color-text-primary); }
 
 .syntaxMark {
   font-family: var(--font-mono);
