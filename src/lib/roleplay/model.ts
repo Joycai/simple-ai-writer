@@ -125,6 +125,14 @@ export const DEFAULT_SCENE_WINDOW = 20;
 export const SCENE_READ_CHAR_CAP = 8000;
 
 /**
+ * 记忆区每轮最多注入多少 token。
+ *
+ * 和知识库的预算**分开**，而且小得多：一场戏聊到深处时最不该发生的事，是角色的
+ * 记忆把它自己的人设挤出去。
+ */
+export const AREA_BUDGET_TOKENS = 800;
+
+/**
  * `session.json` 丢了之后，从 transcript 回放多少字符进新历史。
  *
  * 有上限是因为回放走的是**播种**那条路，而播种不经过压缩——一段几万字的

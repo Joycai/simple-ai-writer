@@ -1,0 +1,202 @@
+/**
+ * `lib/roleplay/run` —— runJob 抽出来的历史准备逻辑（LLD：09-runjob-refactor-lld.md）。
+ *
+ * 这组测试的意义在于**编排本身**从此可测：区检索插在哪、折叠语义怎么标、
+ * 账本怎么防重发，这些排序原先只存在于 zustand 闭包里，第九轮的三个高严重度
+ * bug 全部出在那里。mock 风格沿用 context.test：i18n `t: k=>k`、fileio 内存表、
+ * loreSelect / compact 用真的。
+ */
+
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("../../../i18n", () => ({ default: { t: (k: string) => k, language: "zh-CN" } }));
+
+const files = new Map<string, string>();
+
+vi.mock("../../fs/fileio", () => ({
+  readFile: vi.fn(async (p: string) => {
+    const v = files.get(p);
+    if (v === undefined) throw new Error(`ENOENT ${p}`);
+    return v;
+  }),
+  writeFile: vi.fn(async (p: string, c: string) => { files.set(p, c); }),
+  appendFile: vi.fn(async (p: string, c: string) => { files.set(p, (files.get(p) ?? "") + c); }),
+  fileExists: vi.fn(async (p: string) => files.has(p)),
+  makeDir: vi.fn(),
+  readDir: vi.fn(async () => []),
+  renamePath: vi.fn(),
+  removeFile: vi.fn(),
+}));
+
+// 区索引不走真实目录扫描（那是 area.test 的领地）——这里给 scanEntityFolder
+// 固定的条目列表，让真实的 selectLore 去命中它们。
+const areaEntity = (id: string, name: string) => ({
+  id, category: "history",
+  dirPath: `/p/.ai-writer/roleplay/areas/rp-area-x/history/${id}`,
+  name, aliases: [] as string[], summary: `${name}的一句话`,
+  avatarPath: null, mdFiles: ["index.md"], images: [], facets: [],
+});
+let areaFixture: ReturnType<typeof areaEntity>[] = [];
+let scanThrows = false;
+
+vi.mock("../../lore/entity", () => ({
+  scanEntityFolder: vi.fn(async () => {
+    if (scanThrows) throw new Error("area unreadable");
+    return areaFixture;
+  }),
+  readEntityFile: vi.fn(async (dir: string, file: string) => {
+    const v = files.get(`${dir}/${file}`);
+    if (v === undefined) throw new Error(`ENOENT ${dir}/${file}`);
+    return v;
+  }),
+}));
+
+import type { StreamMessage } from "../../ai/types";
+import { createRoleplayMeta } from "../context";
+import { conversationReader, injectAreaRecall, loadStaticContext } from "../run";
+import { renderTranscript } from "../transcript";
+import type { SceneTurn } from "../model";
+
+function withTower() {
+  areaFixture = [areaEntity("e001", "塔")];
+  files.set(
+    `${areaFixture[0].dirPath}/index.md`,
+    "---\nname: 塔\n---\n\n她说雪停了就去塔下，我没有答应。",
+  );
+}
+
+function baseArgs(history: StreamMessage[], meta = createRoleplayMeta()) {
+  return {
+    projectPath: "/p",
+    areaId: "rp-area-x",
+    matchText: "「塔那边有消息了吗？」",
+    history,
+    meta: { ...meta, boundBlock: null, memoryBlock: null },
+    insertIndex: history.length,
+    budgetChars: 4000,
+  };
+}
+
+describe("injectAreaRecall", () => {
+  it("returns [] and leaves history alone when the agent has no area", async () => {
+    files.clear(); withTower();
+    const history: StreamMessage[] = [{ role: "system", content: "s" }];
+    const out = await injectAreaRecall({ ...baseArgs(history), areaId: null });
+    expect(out).toEqual([]);
+    expect(history).toHaveLength(1);
+  });
+
+  it("splices the carrier at insertIndex and reports what was recalled", async () => {
+    files.clear(); withTower();
+    const system: StreamMessage = { role: "system", content: "s" };
+    const question: StreamMessage = { role: "user", content: "「塔那边有消息了吗？」" };
+    const history = [system, question];
+    const args = { ...baseArgs(history), insertIndex: 1 };
+    const out = await injectAreaRecall(args);
+
+    expect(out).toEqual([{ name: "塔", dirPath: areaFixture[0].dirPath }]);
+    expect(history).toHaveLength(3);
+    expect(history[0]).toBe(system);
+    expect(history[2]).toBe(question);
+    const carrier = String(history[1].content);
+    expect(carrier).toContain("【roleplay.section.recall】");
+    expect(carrier).toContain("雪停了就去塔下");
+  });
+
+  it("marks the carrier as its own turn start when it would land in the prelude", async () => {
+    files.clear(); withTower();
+    const question: StreamMessage = { role: "user", content: "q" };
+    const history: StreamMessage[] = [{ role: "system", content: "s" }, question];
+    const args = { ...baseArgs(history), insertIndex: 1 };
+    // 播种且无回放：question 是唯一的轮起点，且在插入位之后。
+    args.meta.turnStarts.push(question);
+    await injectAreaRecall(args);
+    expect(args.meta.turnStarts).toContain(history[1]);
+  });
+
+  it("does not steal a turn start when a prior turn exists (continue path)", async () => {
+    files.clear(); withTower();
+    const prior: StreamMessage = { role: "user", content: "上一轮" };
+    const history: StreamMessage[] = [{ role: "system", content: "s" }, prior];
+    const args = baseArgs(history);
+    args.meta.turnStarts.push(prior);
+    await injectAreaRecall(args);
+    const carrier = history[history.length - 1];
+    expect(String(carrier.content)).toContain("roleplay.section.recall");
+    expect(args.meta.turnStarts).not.toContain(carrier);
+  });
+
+  it("does not re-send an entry the ledger already carries", async () => {
+    files.clear(); withTower();
+    const history: StreamMessage[] = [{ role: "system", content: "s" }];
+    const args = baseArgs(history);
+    const first = await injectAreaRecall(args);
+    expect(first).toHaveLength(1);
+    const again = await injectAreaRecall({ ...args, insertIndex: history.length });
+    expect(again).toEqual([]);
+    expect(history).toHaveLength(2);
+  });
+
+  it("swallows an unreadable area — a missed recall must not kill the turn", async () => {
+    files.clear(); withTower();
+    scanThrows = true;
+    try {
+      const history: StreamMessage[] = [{ role: "system", content: "s" }];
+      const out = await injectAreaRecall(baseArgs(history));
+      expect(out).toEqual([]);
+      expect(history).toHaveLength(1);
+    } finally {
+      scanThrows = false;
+    }
+  });
+});
+
+describe("conversationReader", () => {
+  const turn = (index: number, speaker: "author" | "agent", text: string): SceneTurn =>
+    ({ index, speaker, speakerName: speaker === "agent" ? "沈砚" : "", at: 0, text });
+
+  it("reads from disk on every call — a turn appended mid-run is visible", async () => {
+    files.clear();
+    const path = "/p/.ai-writer/roleplay/rp-abc-0001/transcript.md";
+    files.set(path, renderTranscript("rp-abc-0001", [turn(1, "author", "「你还在等？」")]));
+    const reader = conversationReader("/p", "rp-abc-0001");
+
+    const first = await reader.read();
+    expect(first.turns).toHaveLength(1);
+
+    files.set(path, renderTranscript("rp-abc-0001", [
+      turn(1, "author", "「你还在等？」"), turn(2, "agent", "「等谁不重要。」"),
+    ]));
+    const second = await reader.read();
+    expect(second.turns).toHaveLength(2);
+    expect(second.turns[1].speaker).toBe("agent");
+  });
+});
+
+describe("loadStaticContext", () => {
+  it("reads the primary entry and the persona card", async () => {
+    files.clear();
+    files.set("/lore/characters/elden/index.md", "寒露之变的幸存者。");
+    files.set("/p/.ai-writer/roleplay/rp-abc-0001/agent.md", "---\nid: rp-abc-0001\n---\n\n说话短。\n");
+    const out = await loadStaticContext("/p", {
+      id: "rp-abc-0001", kind: "character", name: "沈砚",
+      primaryDirPath: "/lore/characters/elden", boundPaths: [], modelId: null,
+      areaId: null, authorPersona: null, createdAt: 0, updatedAt: 0, turnCount: 0,
+      contextHash: null,
+    });
+    expect(out.primaryText).toBe("寒露之变的幸存者。");
+    expect(out.personaCard).toBe("说话短。");
+  });
+
+  it("a deleted primary entry reads as empty, not as an error", async () => {
+    files.clear();
+    files.set("/p/.ai-writer/roleplay/rp-abc-0001/agent.md", "---\nid: x\n---\n");
+    const out = await loadStaticContext("/p", {
+      id: "rp-abc-0001", kind: "character", name: "沈砚",
+      primaryDirPath: "/lore/characters/gone", boundPaths: [], modelId: null,
+      areaId: null, authorPersona: null, createdAt: 0, updatedAt: 0, turnCount: 0,
+      contextHash: null,
+    });
+    expect(out.primaryText).toBe("");
+  });
+});
