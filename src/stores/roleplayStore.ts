@@ -27,8 +27,7 @@ import { create } from "zustand";
 import i18n from "../i18n";
 import { backupFile } from "../lib/agent/backup";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
-import { compactChatHistory, summarizeForCompaction } from "../lib/agent/compactRun";
-import { excludeDirsFor, noteTurnStart, recordInjections } from "../lib/agent/compact";
+import { summarizeForCompaction } from "../lib/agent/compactRun";
 import { presetFor } from "../lib/roleplay/presets";
 import { routeTools } from "../lib/agent/routing";
 import { repairToolCallPairing, runAgent } from "../lib/agent/runtime";
@@ -43,12 +42,11 @@ import { persistUsage } from "../lib/ai/usage";
 import type { MessageContent, StreamMessage } from "../lib/ai/types";
 import { inputCeilingFor, measureCharsPerToken } from "../lib/context/budget";
 import { hashText } from "../lib/context/memory";
-import { assembleTurnInjection } from "../lib/context/rag";
 import { loadApiKey } from "../lib/keyStore";
 import { notify } from "../lib/notify";
 import {
   buildBoundContent, buildSystemPrompt, contextSignature, ensureBlocks, refreshBoundBlock,
-  refreshMemoryBlock, refreshSystemPrompt, seedRoleplayHistory,
+  refreshMemoryBlock, refreshSystemPrompt,
   type BoundContent, type RoleplaySessionMeta,
 } from "../lib/roleplay/context";
 import {
@@ -57,23 +55,20 @@ import {
 } from "../lib/roleplay/memory";
 import type { AgentMemoryStore } from "../lib/roleplay/memoryTools";
 import {
-  MAX_CONCURRENT_RUNS, NO_PERSONA, ROSTER_PREVIEW_CHARS, generateAgentId,
+  AREA_BUDGET_TOKENS, MAX_CONCURRENT_RUNS, NO_PERSONA, ROSTER_PREVIEW_CHARS, generateAgentId,
   type AgentKind, type AuthorPersona, type MemoryRecord, type MemoryStatus,
   type RoleplayAgent, type SceneTurn,
 } from "../lib/roleplay/model";
 import { scriptPreview } from "../lib/roleplay/markup";
 
-/**
- * 记忆区每轮最多注入多少 token。
- *
- * 和知识库的预算**分开**，而且小得多：一场戏聊到深处时最不该发生的事，是角色的
- * 记忆把它自己的人设挤出去。
- */
-const AREA_BUDGET_TOKENS = 800;
 import { runSceneRecap, type SceneRecap } from "../lib/roleplay/recap";
 import {
-  addAreaEntry, areaEntities, createArea, isValidAreaId, listAreas, loadAreaMeta,
-  saveAreaMeta, scanArea, type AreaSummary,
+  conversationReader, loadStaticContext, prepareContinuedHistory, prepareSeededHistory,
+  type RecalledEntity,
+} from "../lib/roleplay/run";
+import {
+  addAreaEntry, createArea, isValidAreaId, listAreas, loadAreaMeta,
+  saveAreaMeta, type AreaSummary,
 } from "../lib/roleplay/area";
 import type { SceneInfo, SceneReader, SceneSlice } from "../lib/roleplay/sceneTools";
 import {
@@ -321,24 +316,6 @@ function indexByDir(loreIndex: LoreIndex): Map<string, LoreEntity> {
   return byDir;
 }
 
-/**
- * system 层那两样住在磁盘上的输入：主角条目正文 + 人设卡里的扮演指令。
- *
- * 单独成一个函数，是因为播种、`refreshBinding` 和 `checkBindings` 必须读到
- * **同一组**输入——基线和实际内容各读各的，就是一次永远对不上的比较。
- */
-async function loadStaticContext(
-  projectPath: string,
-  agent: RoleplayAgent,
-): Promise<{ primaryText: string; personaCard: string }> {
-  let primaryText = "";
-  if (agent.primaryDirPath) {
-    // 条目被删了也照跑：角色还在，只是没有那份人设了。
-    try { primaryText = await readEntityFile(agent.primaryDirPath, "index.md"); } catch { /* 同上 */ }
-  }
-  return { primaryText, personaCard: await loadPersonaCard(projectPath, agent.id) };
-}
-
 export const useRoleplayStore = create<RoleplayState>((set, get) => {
   /** 局部更新一个会话，缺席时先建一个空的。 */
   const patchSession = (id: string, patch: (s: LiveSession) => LiveSession) =>
@@ -416,76 +393,17 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
   };
 
   /**
-   * 记忆区：第二路检索，**独立成块**，插在 `history[insertIndex]`。
-   *
-   * 分块不是排版偏好：【设定】是世界的事实，【记忆】是这个角色**以为**的事，
-   * 两者可以互相矛盾（06 §4.2）。合成一块，角色会开始把自己的猜测当成公认
-   * 事实说出口。
-   *
-   * 预算也分开——一场戏聊到深处时最不该发生的事，是角色的记忆把它自己的
-   * 人设挤出去。
-   *
-   * 播种和续跑两条路**都**要走这里：这段检索曾经只活在续跑分支里，于是新开
-   * 会话（也包括每次重启后的重播种）的第一问永远想不起任何旧事——而转场后的
-   * 第一句恰恰是最需要「想起旧事」的时刻。
+   * 把「想起了…」记进会话。轮号 = 正在生成的这条回复的轮号：`send` 已经把作者
+   * 轮追加过了，所以是 `turns.length + 1`。prepare 期间 turns 不会变——pump 保证
+   * 同 agent 不并发跑，而 `send` 的追加发生在入队之前——所以这里算和检索那一刻
+   * 算是同一个数。
    */
-  const injectAreaRecall = async (
-    job: Job,
-    agent: RoleplayAgent,
-    history: StreamMessage[],
-    meta: RoleplaySessionMeta,
-    insertIndex: number,
-  ) => {
-    const { projectPath } = get();
-    if (!projectPath || !agent.areaId) return;
-    try {
-      const areaIndex = await scanArea(projectPath, agent.areaId);
-      const { selectLore } = await import("../lib/context/loreSelect");
-      const picked = await selectLore(
-        job.match, areaIndex, [],
-        AREA_BUDGET_TOKENS * measureCharsPerToken(job.match),
-        // 账本共用一份；记忆区条目住在 `.ai-writer/roleplay/areas/` 下，dirPath
-        // 天然不会和项目条目撞车。
-        { excludeDirs: excludeDirsFor(meta, areaIndex) },
-      );
-      if (!picked.text) return;
-      const label = i18n.t("roleplay.section.recall", { defaultValue: "记忆" });
-      const lead = i18n.t("roleplay.section.recallLead", {
-        defaultValue: "以下是你想起来的旧事。这是**你记得的**，未必和别人说的一致。",
-      });
-      const carrier: StreamMessage = {
-        role: "user",
-        content: `【${label}】\n${lead}\n${picked.text}`,
-      };
-      history.splice(insertIndex, 0, carrier);
-      // 折叠语义：载体必须落在可折叠的一侧。续跑时它挂在上一轮的尾部；播种且
-      // 没有回放轮时它前面没有任何轮起点，会落进 prelude——永不折叠、账本条目
-      // 永不过期。此时把它自己标成轮起点（segmentHistory 按 Set 判断，不看
-      // turnStarts 的数组顺序），它就成了一个日后可被正常折叠的单消息轮。
-      const starts = new Set(meta.turnStarts);
-      if (!history.slice(0, insertIndex).some((m) => starts.has(m))) {
-        noteTurnStart(meta, carrier);
-      }
-      const byDir = new Map(areaEntities(areaIndex).map((e) => [e.dirPath, e]));
-      recordInjections(
-        meta,
-        picked.report.entities.flatMap((r) => byDir.get(r.dirPath) ?? []),
-        carrier,
-      );
-      patchSession(job.agentId, (s) => ({
-        ...s,
-        recalled: {
-          ...s.recalled,
-          [(s.turns.length || 0) + 1]: picked.report.entities.map((r) => ({
-            name: byDir.get(r.dirPath)?.name ?? r.dirPath,
-            dirPath: r.dirPath,
-          })),
-        },
-      }));
-    } catch (e) {
-      // 记忆区读不出来不该毁掉这一轮：角色少想起几件事，比这一句话发不出去好。
-      console.warn("[roleplay] memory area not read:", e);
-    }
+  const noteRecalled = (agentId: string, recalled: RecalledEntity[]) => {
+    if (!recalled.length) return;
+    patchSession(agentId, (s) => ({
+      ...s,
+      recalled: { ...s.recalled, [(s.turns.length || 0) + 1]: recalled },
+    }));
   };
 
   /**
@@ -535,44 +453,25 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         // 再走一遍下面任何一支都会把它们叠第二份。
         repairToolCallPairing(history);
       } else if (!history || !meta) {
-        // 主角条目正文进 system 层——它是「你是谁」，是唯一整轮存活的那一层。
-        const { primaryText, personaCard } = await loadStaticContext(projectPath, agent);
+        // 历史准备的排序住在 lib（prepareSeededHistory），这里只剩状态：基线、
+        // 会话字段、执行日志、「想起了…」。
         const charsPerToken = measureCharsPerToken(job.match);
-        const memoryDoc = await loadMemoryDoc(memoryPath(projectPath, agent.id));
-        // `session.json` 丢了（或从没写过）而 transcript 里已经有对话——把它回放
-        // 回去。不回放的话作者看着满屏的记录，角色却说它不知道之前发生过什么：
-        // **稿面完好、模型失忆**。transcript 是资产，session.json 只是缓存。
-        //
-        // 末尾那一轮是 `send` 刚刚落盘的这一问，由 `firstMessage` 承担，回放要去掉。
-        const all = get().sessions[job.agentId]?.turns ?? [];
-        const priorTurns = all.length && all[all.length - 1].speaker === "author"
-          ? all.slice(0, -1)
-          : all;
-        const seeded = await seedRoleplayHistory({
-          agent, persona, personaCard, primaryText, loreIndex,
-          firstMessage: job.wire,
+        const seeded = await prepareSeededHistory({
+          projectPath, agent, persona, loreIndex,
+          wire: job.wire,
           matchText: job.match,
           loreBudgetChars: loreBudgetTokens * charsPerToken,
-          memory: memoryDoc.records,
-          priorTurns,
-          priorSummary: priorTurns.length
-            ? await loadSummary(projectPath, agent.id)
-            : "",
+          areaBudgetChars: AREA_BUDGET_TOKENS * charsPerToken,
+          currentTurns: get().sessions[job.agentId]?.turns ?? [],
         });
-        history = seeded.messages;
+        history = seeded.history;
         meta = seeded.meta;
         // 基线进花名册而不是进内存的会话：没打开过的 agent 也要能亮起
         // 「设定已更新」，而那正是刚打开应用时最需要它的时刻。
         set((st) => ({
           agents: {
             ...st.agents,
-            [agent.id]: {
-              ...st.agents[agent.id],
-              contextHash: hashText(contextSignature({
-                agent, persona, personaCard, primaryText, loreIndex,
-                boundText: seeded.bound.text,
-              })),
-            },
+            [agent.id]: { ...st.agents[agent.id], contextHash: seeded.contextHash },
           },
           stale: { ...st.stale, [agent.id]: false },
         }));
@@ -581,7 +480,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           ...s,
           history, meta,
           stalePaths: seeded.bound.stalePaths,
-          memory: memoryDoc.records,
+          memory: seeded.memoryRecords,
           memoryStale: false,
           liveLog: appendAgentEventTo(s.liveLog, {
             kind: "context-seeded",
@@ -593,60 +492,34 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
             at: Date.now(),
           }),
         }));
-        // 播种出来的历史以这一问收尾——旧事插在它前面。
-        await injectAreaRecall(job, agent, history, meta, history.length - 1);
+        noteRecalled(job.agentId, seeded.recalled);
       } else {
-        repairToolCallPairing(history);
-
-        const compacted = await compactChatHistory({
-          history,
-          meta,
+        // 排序（修对 → 压缩 → 刷新记忆块 → 词条注入 → 区检索 → 提问）住在
+        // lib（prepareContinuedHistory），这里只剩状态：历史/事件/记事本/
+        // 「想起了…」，和摘要的 fire-and-forget 落盘。
+        const charsPerToken = measureCharsPerToken(job.match);
+        const cont = await prepareContinuedHistory({
+          projectPath, agent, loreIndex,
+          history, meta,
+          wire: job.wire,
+          matchText: job.match,
+          loreBudgetChars: loreBudgetTokens * charsPerToken,
+          areaBudgetChars: AREA_BUDGET_TOKENS * charsPerToken,
           ceilingTokens: inputCeilingFor(model.contextSize, contextUtilization),
           summarize: (input) =>
             summarizeForCompaction(connOptions({ provider, model, apiKey }), input, controller.signal),
         });
-        if (compacted) {
-          history = compacted.history;
-          patchSession(job.agentId, (s) => ({
-            ...s, history, liveLog: appendAgentEventTo(s.liveLog, compacted.event),
-          }));
-          // 折叠出来的摘要落盘：旁白的 read_scene_summary 读的就是它，而这
-          // 是它唯一被写出来的时刻——压缩本来就在生成这段文字，再要一次是白花钱。
-          if (meta.summaryText) {
-            void saveSummary(projectPath, job.agentId, meta.summaryText);
-          }
-          // 压缩刚刚把 `remember` 的那些工具结果折叠掉了——这正是记忆注入块
-          // 必须重新灌一遍的时刻，也是它唯一免费的时刻（历史本来就重建了，
-          // 缓存本来就作废了）。见 refreshMemoryBlock 的注释。
-          const fresh = await loadMemoryDoc(memoryPath(projectPath, job.agentId));
-          refreshMemoryBlock(meta, fresh.records);
-          patchSession(job.agentId, (s) => ({
-            ...s, memory: fresh.records, memoryStale: false,
-          }));
-        }
-
-        // 逐轮注入：绑定之外的新词条。账本保证已经在上下文里的不再重发。
-        const inj = await assembleTurnInjection({
-          loreIndex,
-          matchTarget: job.match,
-          excludeDirs: excludeDirsFor(meta, loreIndex),
-          loreBudgetChars: loreBudgetTokens * measureCharsPerToken(job.match),
-          doc: null,
-        });
-        if (inj.text) {
-          const carrier: StreamMessage = { role: "user", content: inj.text };
-          history.push(carrier);
-          const byDir = indexByDir(loreIndex);
-          recordInjections(
-            meta, inj.matchedEntities.flatMap((e) => byDir.get(e.dirPath) ?? []), carrier,
-          );
-        }
-
-        await injectAreaRecall(job, agent, history, meta, history.length);
-
-        const question: StreamMessage = { role: "user", content: job.wire };
-        noteTurnStart(meta, question);
-        history.push(question);
+        history = cont.history;
+        patchSession(job.agentId, (s) => ({
+          ...s,
+          history,
+          liveLog: cont.compactedEvent
+            ? appendAgentEventTo(s.liveLog, cont.compactedEvent)
+            : s.liveLog,
+          ...(cont.memoryRecords ? { memory: cont.memoryRecords, memoryStale: false } : {}),
+        }));
+        if (cont.summaryToSave) void saveSummary(projectPath, job.agentId, cont.summaryToSave);
+        noteRecalled(job.agentId, cont.recalled);
       }
 
       // 到这里这一问已经在 history 里了。往后任何一步失败，重试都必须走上面
@@ -686,16 +559,8 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           // 进 preset 也只会得到一句「你不是旁白」。双保险，不是冗余。
           scenes: agent.kind === "narrator" ? get().sceneReader() : undefined,
           // 自己这一场的记录。没有 id 参数，所以装上它不会让角色多看见任何
-          // 别人的东西。和 sceneReader 一样每次读盘：作者的这一问在 `send` 里
-          // 就落盘了，快照会让角色说刚发生的事没发生。
-          conversation: {
-            read: async () => {
-              const { turns, renumbered } = await loadTranscript(
-                transcriptPath(projectPath, agent.id),
-              );
-              return { turns, renumbered };
-            },
-          },
+          // 别人的东西。和 sceneReader 一样每次读盘（见 conversationReader）。
+          conversation: conversationReader(projectPath, agent.id),
           // 每次调用都读盘：同一次运行里 remember 之后紧接着的 recall 必须
           // 看得见刚记下的东西（ToolContext 是运行快照，见 registry 的注释）。
           agentMemory: {
