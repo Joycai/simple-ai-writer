@@ -42,6 +42,19 @@ describe("ROLEPLAY_PRESET", () => {
     expect(ROLEPLAY_PRESET.tools).not.toContain("list_files");
   });
 
+  /**
+   * `search_text` 是**稿件**检索，而且排除 `.ai-writer/`——它够不到 transcript，
+   * 所以它给不了「你还记得我们说过的话吗」；它能给的只有作者的稿子，而上一条
+   * 断言刚说过那是不该给的。加上没有 `read_file` 去接它的「路径:行号」，它还是
+   * 个死胡同。它的位置由 search_conversation / read_conversation 接替。
+   */
+  it("searches its own conversation, not the manuscript", () => {
+    expect(ROLEPLAY_PRESET.tools).not.toContain("search_text");
+    expect(ROLEPLAY_PRESET.tools).toContain("search_conversation");
+    // 检索必须有配对的读，否则又是一个指向读不了的东西的工具。
+    expect(ROLEPLAY_PRESET.tools).toContain("read_conversation");
+  });
+
   // 撞到轮数上限就 force-text 收尾，因为扮演面板不渲染那张「继续/收尾」卡。
   it("ends in prose", () => {
     expect(ROLEPLAY_PRESET.finishPolicy).toBe("force-text");

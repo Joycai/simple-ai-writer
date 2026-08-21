@@ -280,7 +280,9 @@ recordInjections(meta, boundEntities, pinnedMessage);
 
 绑定条目在知识库里被改了之后，`[1]` 是旧的。**不自动刷新**——原地重写会让 prompt 缓存前缀作废，长会话里这是真金白银。
 
-做法：`roleplayStore` 记录播种时各绑定条目的内容 hash（`hashText`，`lib/context/memory.ts:60`），与 `loreStore.index` 比对，不一致时在对话区顶部显示一条「绑定设定已更新 · 刷新」。作者点了才重写 `[1]`，并在 transcript 里记一条 `<!-- rebound at N -->`。
+做法：`roleplayStore` 记录播种时**静态上下文**的 hash（`contextSignature` + `hashText`，`lib/context/memory.ts:60`），与磁盘上的现状比对，不一致时在对话区顶部显示一条「设定已更新 · 刷新」。作者点了才重写 `[1]`，并在 transcript 里记一条 `<!-- rebound at N -->`。
+
+> 实现时这个范围扩大了：基线不只覆盖绑定块，还覆盖 system 层里全部由作者改动的输入（角色名、扮演指令、主角条目正文、作者身份），而「刷新」也会一并重写 `[0]`。原因和当初漏掉它们的后果，见 05 §2.16。
 
 ## 5. 角色记忆（agent memory）
 
@@ -475,7 +477,8 @@ export const ROLEPLAY_PRESET: TaskPreset = {
   id: "roleplay-character",
   tools: [
     "list_lore_entities", "read_lore_entity", "read_lore_image",
-    "read_image", "search_text",
+    "read_image",
+    "search_conversation", "read_conversation",
     "remember", "revise_memory", "recall",
   ],
   maxRounds: 5,
@@ -503,7 +506,13 @@ export const NARRATOR_PRESET: TaskPreset = {
 
 设计要点：
 
-- **扮演 agent 唯一能写的是自己的记忆**，碰不到稿子、碰不到知识库。也没有 `read_file`——一个角色不需要读作者的稿子，它活在故事里，不在文档里。`search_text` 留着是因为「你还记得我们在雪原上说的话吗」这类问题需要它。
+- **扮演 agent 唯一能写的是自己的记忆**，碰不到稿子、碰不到知识库。也没有 `read_file`——一个角色不需要读作者的稿子，它活在故事里，不在文档里。
+- **回看过去说过的话走 `search_conversation` / `read_conversation`，不是 `search_text`。** 这一条最初写的是「`search_text` 留着，因为『你还记得我们在雪原上说的话吗』这类问题需要它」。那个需求是真的，那个工具是错的，而且错了两层：
+
+  1. `search_text` 扫的是**工作区里的稿件**并且排除 `.ai-writer/`（见 `lib/agent/tools` 的 `searchWritingFiles`），而 transcript 就住在 `.ai-writer/roleplay/<id>/` 下——它一辈子搜不到那句话。它实际能给的只有作者的稿子，也就是上一条刚说过不该给的东西。
+  2. 它的结果是「路径:行号」，工具描述明写着接着去 `read_file`，而扮演 preset 故意没有 `read_file`。模型拿到命中之后只能去调一个不存在的工具，白烧一轮。
+
+  换成一对作用域绑死在自己身上的工具：`ToolContext.conversation` 没有 agent id 参数，所以它只够得到本次运行那个 agent 的 transcript，**不变量三不受影响**。处理器在 `lib/roleplay/conversationTools.ts`，和旁白的 scene 工具不共用渲染——那边的说话人标签和「先读摘要」的引导是写给旁白的，这边是写给一个正在戏里的角色。
 - **`maxRounds: 5`**（比只读版本多一轮，给记记忆留出空间）。扮演的期望响应是一句台词，不是一次调研。扮演面板**不接 `onRoundLimit` 回调**（不渲染那张卡），撞到上限就按 force-text 收尾——这是对的降级。
 - **旁白拿到的正文写工具就是「把对话写进稿子」这个需求**（01-overview §6 决策 3）。它读完场景，自己梳理成散文，然后走 `create_chapter` / `append_file` / `propose_edit`，审批卡、备份、占位符校验全是现成的。
 - `serverTools: "off"` 只对扮演 agent；旁白用默认的 `final-round-off`。
@@ -679,7 +688,9 @@ interface LiveSession {
 
   memory: MemoryRecord[];                   // 记忆面板的数据源，写入后同步更新
   memoryStale: boolean;                     // 磁盘变了但注入块还没刷新（§5.5）
-  boundHash: string | null;                 // 绑定内容 hash，§4.3 的过期提示
+  contextHash: string | null;               // 静态上下文 hash，§4.3 的过期提示
+                                            // （原名 boundHash，只覆盖绑定块；
+                                            //  见 05 §2.16）
   contextVersion: number;
 }
 ```

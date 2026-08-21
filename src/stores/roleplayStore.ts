@@ -47,8 +47,9 @@ import { assembleTurnInjection } from "../lib/context/rag";
 import { loadApiKey } from "../lib/keyStore";
 import { notify } from "../lib/notify";
 import {
-  buildBoundContent, buildSystemPrompt, refreshBoundBlock, refreshMemoryBlock,
-  seedRoleplayHistory, type RoleplaySessionMeta,
+  buildBoundContent, buildSystemPrompt, contextSignature, refreshBoundBlock,
+  refreshMemoryBlock, refreshSystemPrompt, seedRoleplayHistory,
+  type RoleplaySessionMeta,
 } from "../lib/roleplay/context";
 import {
   addRecord, dropRecordsFrom, loadMemoryDoc, reviseRecord, saveMemoryDoc, type MemoryDoc,
@@ -116,7 +117,7 @@ export interface LiveSession {
   /** 本轮的执行日志（还没有轮号可挂）。 */
   liveLog: AgentEvent[];
   usage: { inputTokens: number; outputTokens: number; cost: number } | null;
-  /** 失效的绑定（条目/特征已删）。基线哈希在 `RoleplayAgent.boundHash` 上。 */
+  /** 失效的绑定（条目/特征已删）。基线哈希在 `RoleplayAgent.contextHash` 上。 */
   stalePaths: string[];
   /** 这个 agent 的记忆，记事本面板的数据源；写入后同步更新。 */
   memory: MemoryRecord[];
@@ -314,6 +315,24 @@ function indexByDir(loreIndex: LoreIndex): Map<string, LoreEntity> {
   return byDir;
 }
 
+/**
+ * system 层那两样住在磁盘上的输入：主角条目正文 + 人设卡里的扮演指令。
+ *
+ * 单独成一个函数，是因为播种、`refreshBinding` 和 `checkBindings` 必须读到
+ * **同一组**输入——基线和实际内容各读各的，就是一次永远对不上的比较。
+ */
+async function loadStaticContext(
+  projectPath: string,
+  agent: RoleplayAgent,
+): Promise<{ primaryText: string; personaCard: string }> {
+  let primaryText = "";
+  if (agent.primaryDirPath) {
+    // 条目被删了也照跑：角色还在，只是没有那份人设了。
+    try { primaryText = await readEntityFile(agent.primaryDirPath, "index.md"); } catch { /* 同上 */ }
+  }
+  return { primaryText, personaCard: await loadPersonaCard(projectPath, agent.id) };
+}
+
 export const useRoleplayStore = create<RoleplayState>((set, get) => {
   /** 局部更新一个会话，缺席时先建一个空的。 */
   const patchSession = (id: string, patch: (s: LiveSession) => LiveSession) =>
@@ -408,15 +427,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         repairToolCallPairing(history);
       } else if (!history || !meta) {
         // 主角条目正文进 system 层——它是「你是谁」，是唯一整轮存活的那一层。
-        let primaryText = "";
-        if (agent.primaryDirPath) {
-          try {
-            primaryText = await readEntityFile(agent.primaryDirPath, "index.md");
-          } catch {
-            primaryText = "";
-          }
-        }
-        const personaCard = await loadPersonaCard(projectPath, agent.id);
+        const { primaryText, personaCard } = await loadStaticContext(projectPath, agent);
         const charsPerToken = measureCharsPerToken(job.match);
         const memoryDoc = await loadMemoryDoc(memoryPath(projectPath, agent.id));
         // `session.json` 丢了（或从没写过）而 transcript 里已经有对话——把它回放
@@ -446,7 +457,13 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         set((st) => ({
           agents: {
             ...st.agents,
-            [agent.id]: { ...st.agents[agent.id], boundHash: hashText(seeded.bound.text) },
+            [agent.id]: {
+              ...st.agents[agent.id],
+              contextHash: hashText(contextSignature({
+                agent, persona, personaCard, primaryText, loreIndex,
+                boundText: seeded.bound.text,
+              })),
+            },
           },
           stale: { ...st.stale, [agent.id]: false },
         }));
@@ -609,6 +626,17 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           // 只有旁白拿得到这个通道，所以扮演 agent 的 scene 工具即使被硬塞
           // 进 preset 也只会得到一句「你不是旁白」。双保险，不是冗余。
           scenes: agent.kind === "narrator" ? get().sceneReader() : undefined,
+          // 自己这一场的记录。没有 id 参数，所以装上它不会让角色多看见任何
+          // 别人的东西。和 sceneReader 一样每次读盘：作者的这一问在 `send` 里
+          // 就落盘了，快照会让角色说刚发生的事没发生。
+          conversation: {
+            read: async () => {
+              const { turns, renumbered } = await loadTranscript(
+                transcriptPath(projectPath, agent.id),
+              );
+              return { turns, renumbered };
+            },
+          },
           // 每次调用都读盘：同一次运行里 remember 之后紧接着的 recall 必须
           // 看得见刚记下的东西（ToolContext 是运行快照，见 registry 的注释）。
           agentMemory: {
@@ -646,7 +674,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         signal: controller.signal,
         // 只有旁白接这两个回调。
         //
-        // 扮演 agent 的 `maxRounds: 4` 是刻意的小：它的期望响应是一句台词，
+        // 扮演 agent 的 `maxRounds: 5` 是刻意的小：它的期望响应是一句台词，
         // 撞到上限说明模型在做错的事，force-text 收尾正是想要的降级——弹一张
         // 「要不要再给四轮」的卡片，只会训练作者为一个本就不该需要轮数的模式
         // 一再放行，顺带把一场戏切断。
@@ -860,7 +888,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         createdAt: now,
         updatedAt: now,
         turnCount: 0,
-        boundHash: null,
+        contextHash: null,
       };
       set((st) => ({ order: [...st.order, id], agents: { ...st.agents, [id]: agent } }));
       await savePersonaCard(projectPath, agent, draft.instruction);
@@ -1018,7 +1046,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         return;
       }
 
-      // 会话整个归零。`boundHash` 一并清掉——它是「设定已更新」的基线，而这一
+      // 会话整个归零。`contextHash` 一并清掉——它是「设定已更新」的基线，而这一
       // 场还没播种过，没有基线可比；留着旧的会让提示按上一场的状态亮。
       const doc = await loadMemoryDoc(memoryPath(projectPath, id));
       set((st) => ({
@@ -1028,7 +1056,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         stale: { ...st.stale, [id]: false },
         agents: {
           ...st.agents,
-          [id]: { ...agent, turnCount: 0, boundHash: null, updatedAt: now },
+          [id]: { ...agent, turnCount: 0, contextHash: null, updatedAt: now },
         },
       }));
       await persistRoster();
@@ -1064,6 +1092,10 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     setAuthorPersona: async (persona) => {
       set({ authorPersona: persona });
       await persistRoster();
+      // 换身份和改设定是同一件事：它改的是 system 层，而活着的会话读不到。
+      // **不自动重写** system——那会作废每个 agent 的 prompt 缓存前缀。亮起
+      // 提示条，让作者自己决定哪一场戏值得为此重来一次前缀。
+      void get().checkBindings();
     },
 
     toggleSubAgent: (id, kind) => patchSession(id, (s) => ({
@@ -1078,6 +1110,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       if (!prev) return;
       set((st) => ({ agents: { ...st.agents, [id]: { ...prev, authorPersona: persona } } }));
       await persistRoster();
+      void get().checkBindings();
     },
 
     setAgentModel: async (id, modelId) => {
@@ -1277,7 +1310,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         set((st) => ({
           agents: {
             ...st.agents,
-            [agentId]: { ...agent, turnCount: kept.length, boundHash: null },
+            [agentId]: { ...agent, turnCount: kept.length, contextHash: null },
           },
         }));
         void persistRoster();
@@ -1309,6 +1342,8 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       const { useLoreStore } = await import("./loreStore");
       const loreIndex = useLoreStore.getState().index;
       const session = get().sessions[agentId];
+      const persona = agent.authorPersona ?? get().authorPersona;
+      const { primaryText, personaCard } = await loadStaticContext(projectPath, agent);
 
       // 有活的历史就就地重写绑定块（对象身份不变，meta 继续指着它）；没有的
       // 话什么都不用改写——下一次发送会重新播种，那时用的自然是新内容。两条
@@ -1317,10 +1352,25 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         ? await refreshBoundBlock(loreIndex, agent, session.meta)
         : await buildBoundContent(loreIndex, agent.boundPaths);
 
+      // 绑定块之外，system 层也要一起刷：主角条目、扮演指令、作者此刻的身份
+      // 全住在那里，而它们只在播种时被读过一次。少了这一句，作者改完人设点
+      // 「刷新设定」，看到提示条消失，模型却什么都没变——比不刷新更糟，因为
+      // 现在他有理由相信已经生效了。
+      if (session?.history) {
+        refreshSystemPrompt(session.history, {
+          agent, persona, personaCard, primaryText, loreIndex,
+        });
+      }
+
       set((st) => ({
         agents: {
           ...st.agents,
-          [agentId]: { ...st.agents[agentId], boundHash: hashText(bound.text) },
+          [agentId]: {
+            ...st.agents[agentId],
+            contextHash: hashText(contextSignature({
+              agent, persona, personaCard, primaryText, loreIndex, boundText: bound.text,
+            })),
+          },
         },
         stale: { ...st.stale, [agentId]: false },
       }));
@@ -1354,7 +1404,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     /**
      * 重新比对每个 agent 的绑定内容。
      *
-     * 遍历**整个花名册**，不只是打开过的会话：基线 (`agent.boundHash`) 现在存在
+     * 遍历**整个花名册**，不只是打开过的会话：基线 (`agent.contextHash`) 现在存在
      * 花名册里，所以刚打开应用、一个会话都没打开时，攒了十个角色的项目也能立刻
      * 看出哪几个的设定变过——那正是最需要这条提示的时刻。
      *
@@ -1426,12 +1476,30 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
 
       const next: Record<string, boolean> = {};
       const stalePaths: Record<string, string[]> = {};
-      for (const id of order) {
+      // 并发而不是逐个 await：每个 agent 现在要读绑定条目 + 主角条目 + 人设卡，
+      // 攒了十几个角色的项目串起来就是几十次往返，而它们之间毫无依赖。
+      const globalPersona = get().authorPersona;
+      const rows = await Promise.all(order.map(async (id) => {
         const agent = get().agents[id];
-        if (!agent || agent.boundHash === null) continue;
-        const bound = await buildBoundContent(loreIndex, agent.boundPaths);
-        next[id] = hashText(bound.text) !== agent.boundHash;
-        stalePaths[id] = bound.stalePaths;
+        if (!agent || agent.contextHash === null) return null;
+        const [bound, statics] = await Promise.all([
+          buildBoundContent(loreIndex, agent.boundPaths),
+          loadStaticContext(projectPath, agent),
+        ]);
+        const sig = contextSignature({
+          agent,
+          persona: agent.authorPersona ?? globalPersona,
+          personaCard: statics.personaCard,
+          primaryText: statics.primaryText,
+          loreIndex,
+          boundText: bound.text,
+        });
+        return { id, stale: hashText(sig) !== agent.contextHash, stalePaths: bound.stalePaths };
+      }));
+      for (const row of rows) {
+        if (!row) continue;
+        next[row.id] = row.stale;
+        stalePaths[row.id] = row.stalePaths;
       }
       set((st) => ({ stale: { ...st.stale, ...next } }));
       for (const [id, paths] of Object.entries(stalePaths)) {

@@ -86,7 +86,15 @@ function coerceAgent(raw: unknown): RoleplayAgent | null {
     updatedAt: typeof a.updatedAt === "number" ? a.updatedAt : 0,
     turnCount: typeof a.turnCount === "number" ? a.turnCount : 0,
     // 旧花名册没有这个字段，读成 null = 「没有基线」，于是不会误报「已更新」。
-    boundHash: typeof a.boundHash === "string" ? a.boundHash : null,
+    //
+    // `boundHash` 是它的旧名（那时只覆盖绑定块）。**读旧值而不是丢掉它**：丢掉
+    // 就是基线归 null，而对一个已经有活 session.json 的 agent 来说，基线只在
+    // 重新播种时才会被重建——它会安静地再也不亮提示。迁过来的旧值算法不同、
+    // 必然对不上，于是每个 agent 会亮一次「设定已更新」，作者点一下「刷新设定」
+    // 就回到正轨；一次可解释的误报，好过一个永远不响的提示。
+    contextHash: typeof a.contextHash === "string"
+      ? a.contextHash
+      : (typeof a.boundHash === "string" ? a.boundHash : null),
   };
 }
 
@@ -137,7 +145,7 @@ async function rebuildRoster(projectPath: string): Promise<RoleplayAgent[]> {
         createdAt: 0,
         updatedAt: 0,
         turnCount: 0,
-        boundHash: null,
+        contextHash: null,
       });
     } catch {
       // 连人设卡都读不出的目录不值得猜，跳过。

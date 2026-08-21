@@ -156,6 +156,21 @@ function personaLine(persona: AuthorPersona, loreIndex: LoreIndex, isZh: boolean
 }
 
 /**
+ * system 层的全部输入。
+ *
+ * 成为一个具名类型而不是内联的对象字面量，是因为它现在有三个消费者
+ * （`buildSystemPrompt` / `refreshSystemPrompt` / `contextSignature`），而
+ * 它们必须看着**同一份**输入——基线漏算一个字段，就是一次永远不亮的提示。
+ */
+export interface SystemPromptInput {
+  agent: RoleplayAgent;
+  persona: AuthorPersona;
+  personaCard: string;
+  primaryText: string;
+  loreIndex: LoreIndex;
+}
+
+/**
  * 扮演 / 旁白的 system 提示。
  *
  * **刻意不走 `profileSystemPrompt()`**，也不套作者自定义的写作提示词模板。
@@ -163,13 +178,7 @@ function personaLine(persona: AuthorPersona, loreIndex: LoreIndex, isZh: boolean
  * 套在扮演上是灾难：角色会开始解释自己为什么这么说。扮演有自己的一份提示，
  * 自带创作主权条款（扮演比写作更容易触发模型的自我审查）。
  */
-export function buildSystemPrompt(opts: {
-  agent: RoleplayAgent;
-  persona: AuthorPersona;
-  personaCard: string;
-  primaryText: string;
-  loreIndex: LoreIndex;
-}): string {
+export function buildSystemPrompt(opts: SystemPromptInput): string {
   const isZh = i18n.language === "zh-CN";
   const parts: string[] = [];
 
@@ -189,6 +198,67 @@ export function buildSystemPrompt(opts: {
   parts.push(i18n.t("ai.instructions.roleplaySyntax"));
   parts.push(i18n.t("ai.instructions.roleplayMemory"));
   return parts.join("\n\n");
+}
+
+/**
+ * 重写 system 提示（作者点了「刷新设定」）。
+ *
+ * system 层装着**四样只在播种时读过一次**的东西：角色人设正文（`primaryText`）、
+ * 作者给的指令（`personaCard`）、作者此刻的身份（`persona`）、以及扮演规则本身。
+ * 前三样作者随时会改，而在这个函数存在之前，改完之后唯一能让模型看见的办法是
+ * 开新的一场——UI 却已经把身份 chip 和署名换掉了。作者看到的和模型看到的从此
+ * 分岔，且没有任何提示：**操作看起来生效了，其实没有**。
+ *
+ * 就地改 `content`、不换消息对象，理由和 `refreshBoundBlock` 一样。这里额外靠
+ * 一件事：system 恒在 `history[0]`——`buildCompactedHistory` 把 prelude 按对象
+ * 身份搬进新数组，`trimHistory` 不动普通消息，`repairToolCallPairing` 只 splice
+ * 配不上对的 tool 消息。所以它不需要像绑定块那样在 meta 里被持有，也就不需要
+ * 动 `session.json` 的格式。守一句 role 判断，是因为「恒在 0 位」是别处的性质，
+ * 不是这里能保证的事。
+ */
+export function refreshSystemPrompt(
+  history: StreamMessage[],
+  opts: SystemPromptInput,
+): boolean {
+  const head = history[0];
+  if (!head || head.role !== "system") return false;
+  head.content = buildSystemPrompt(opts);
+  return true;
+}
+
+/**
+ * 「设定变没变」的基线。
+ *
+ * 覆盖 system 层和绑定块里**全部**由作者改动的输入，而不只是绑定条目：改主角
+ * 条目、改「作者给你的指令」、换身份，和改一个绑定词条是同一件事——「我改了
+ * 设定，为什么角色没变」——凭什么只有最后一种能亮起提示。
+ *
+ * 取**输入**而不是取 `buildSystemPrompt` 的产物：那份产物含 i18n 文案，切一次
+ * 界面语言会把整个花名册标成「设定已更新」，而那不是作者改的东西。
+ *
+ * persona 是 `lore` 时，把条目的名字和摘要一起算进去——system 行里写的就是这
+ * 两样，改了名字而基线不动，等于漏掉一种最容易发生的改动。旁白则整段跳过
+ * persona 和 primaryText：它的提示词根本不读这两样，算进去只会让「换身份」在
+ * 一个不扮演任何人的 agent 上亮起提示。
+ */
+export function contextSignature(input: SystemPromptInput & { boundText: string }): string {
+  // 名字也算：`ai.instructions.roleplay` 把它插在「你现在扮演一个角色：{{name}}」
+  // 里，改名就是改了 system 层。
+  const parts = [input.agent.name, input.boundText, input.personaCard.trim()];
+  if (input.agent.kind !== "narrator") {
+    parts.push(input.primaryText.trim(), personaKey(input.persona, input.loreIndex));
+  }
+  // \u0001 作分隔：正文里不会出现，所以拼接不会把两个字段的边界糊掉。
+  return parts.join("\n\u0001\n");
+}
+
+function personaKey(persona: AuthorPersona, loreIndex: LoreIndex): string {
+  if (persona.mode === "lore" && persona.dirPath) {
+    const entity = indexByDir(loreIndex).get(persona.dirPath);
+    return `lore\u0000${persona.dirPath}\u0000${entity?.name ?? ""}\u0000${entity?.summary ?? ""}`;
+  }
+  if (persona.mode === "prompt") return `prompt\u0000${persona.prompt.trim()}`;
+  return "none";
 }
 
 // ─── 从 transcript 回放 ──────────────────────────────────────────────────────

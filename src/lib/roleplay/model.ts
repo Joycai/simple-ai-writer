@@ -47,7 +47,14 @@ export interface RoleplayAgent {
   /** transcript 里的轮数，花名册直接显示，避免为了一个数字去解析文件。 */
   turnCount: number;
   /**
-   * 播种（或上一次「刷新设定」）时，绑定内容的哈希。null = 还没开过口。
+   * 播种（或上一次「刷新设定」）时，**静态上下文**的哈希。null = 还没开过口。
+   *
+   * 静态上下文 = 绑定块 + system 层的全部作者可改输入（主角条目正文、人设卡的
+   * 扮演指令、作者此刻的身份）。见 `lib/roleplay/context` 的 `contextSignature`
+   * ——基线和实际内容必须由同一个函数算出，否则就是一次永远对不上的比较。
+   *
+   * 曾经只覆盖绑定块（那时它叫 `boundHash`），于是「改了主角条目」「换了身份」
+   * 这两种最常见的改动一个都不会亮提示，而作者恰好最需要在这两种时候被告知。
    *
    * 和 `turnCount` 一样，是**会话派生的事实缓存在花名册里**：花名册要在不打开
    * 会话的前提下显示「设定已更新」，而那个判断需要一个基线。放在
@@ -56,7 +63,7 @@ export interface RoleplayAgent {
    *
    * 存哈希而不是内容：这是给「变没变」用的，不是给「变成什么」用的。
    */
-  boundHash: string | null;
+  contextHash: string | null;
 }
 
 /** transcript 里的一轮。`index` 从 1 起，单调递增，是一切寻址的单位。 */
