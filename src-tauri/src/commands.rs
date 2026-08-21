@@ -350,9 +350,17 @@ pub fn open_with_default_app(
     scope: State<'_, FsScope>,
 ) -> Result<(), String> {
     scope.check(&path)?;
+    // Hand the OS its *own* spelling. The frontend normalises every path to
+    // forward slashes (see `src/lib/paths.ts`), and with the
+    // `shellexecute-on-windows` feature this ends at `ShellExecuteExW` with the
+    // string passed through verbatim as `lpFile` — the Windows shell does not
+    // parse separators the way the file APIs do, so `D:/书/稿.html` can open
+    // the wrong thing or nothing. Rebuilding from `components()` yields the
+    // host separator on both platforms and is a no-op on Linux/macOS.
+    let native: std::path::PathBuf = Path::new(&path).components().collect();
     use tauri_plugin_opener::OpenerExt;
     app.opener()
-        .open_path(&path, None::<&str>)
+        .open_path(native.to_string_lossy().into_owned(), None::<&str>)
         .map_err(|e| e.to_string())
 }
 

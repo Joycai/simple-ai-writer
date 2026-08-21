@@ -343,6 +343,15 @@
       "transferLabel": "Export / import config",
       "keysWarn": "Heads up: keys will be written to the backup file in plain text — store it carefully."
     },
+    "maintenance": {
+      "section": "Data maintenance",
+      "staleLabel": "Clear dead references",
+      "staleHint": "A few records store an absolute path: pinned knowledge-base entries, the roleplay roster's character bindings, and a conversation's injection ledger and pictures. After a project is moved, renamed, or restored from a backup elsewhere, those point at nothing — and they fail quietly (a pin stops injecting, a character reads \"entry deleted\", pictures in old conversations stop rendering). This removes only the ones that resolve to nothing; every reference that still works is left alone. Documents, the knowledge base and settings all live on the filesystem and are untouched.",
+      "sweep": "Scan and clear",
+      "sweeping": "Clearing…",
+      "sweptNone": "No dead references found.",
+      "sweptSome": "Cleared {{total}} dead reference(s): {{pins}} pinned entries, {{roster}} roleplay bindings, {{injected}} conversation injections, {{images}} pictures, {{projects}} whole-project pin records."
+    },
     "usage": {
       "section": "Usage",
       "hint": "Tokens and cost recorded for every model call in this project. Cost is derived from the prices you entered for each model; models with no price contribute tokens only.",

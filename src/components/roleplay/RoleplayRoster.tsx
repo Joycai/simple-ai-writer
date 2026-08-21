@@ -18,13 +18,14 @@ import { useImageDataUrl } from "../lore/useImageDataUrl";
 import { avatarGlyph, MAX_CONCURRENT_RUNS, ROSTER_PREVIEW_CHARS, type RoleplayAgent } from "../../lib/roleplay/model";
 import { scriptPreview } from "../../lib/roleplay/markup";
 import styles from "./RoleplayRoster.module.css";
+import { isSamePath } from "../../lib/paths";
 
 function Avatar({ agent, active }: { agent: RoleplayAgent; active: boolean }) {
   const loreIndex = useLoreStore((s) => s.index);
   const avatarPath = useMemo(() => {
     if (!agent.primaryDirPath) return null;
     for (const entities of Object.values(loreIndex)) {
-      const hit = entities.find((e) => e.dirPath === agent.primaryDirPath);
+      const hit = entities.find((e) => isSamePath(e.dirPath, agent.primaryDirPath));
       if (hit) return hit.avatarPath;
     }
     return null;
@@ -62,7 +63,7 @@ function Row({ agent }: { agent: RoleplayAgent }) {
 
   // 主角条目被删了：这个 agent 还能读、不能发，摘要行让位给一句说明。
   const primaryGone = agent.kind === "character" && agent.primaryDirPath !== null
-    && !Object.values(loreIndex).some((es) => es.some((e) => e.dirPath === agent.primaryDirPath));
+    && !Object.values(loreIndex).some((es) => es.some((e) => isSamePath(e.dirPath, agent.primaryDirPath)));
 
   // 状态存在时摘要让位给状态（设计稿 1d）。
   let statusRow: React.ReactNode = null;

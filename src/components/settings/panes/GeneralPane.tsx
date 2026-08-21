@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useAiStore } from "../../../stores/aiStore";
 import { useAppStore, type ThemeMode, type Language, type FontScheme } from "../../../stores/appStore";
+import { useProjectStore } from "../../../stores/projectStore";
 import { MARKDOWN_THEMES } from "../../../lib/theme/markdownThemes";
 import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../../lib/ai/apiLog";
 import { isPptxExportEnabled, setPptxExportEnabled } from "../../../lib/pptx/flag";
@@ -53,6 +54,48 @@ export function GeneralPane() {
   const [includeKeys, setIncludeKeys] = useState(false);
   const [backupBusy, setBackupBusy] = useState(false);
   const [backupStatus, setBackupStatus] = useState<{ ok: boolean; text: string } | null>(null);
+  const [sweeping, setSweeping] = useState(false);
+  const [sweepStatus, setSweepStatus] = useState<{ ok: boolean; text: string } | null>(null);
+
+  /**
+   * Collect the stored references that no longer point at anything.
+   *
+   * No confirmation step: every path is checked against disk first, so this
+   * cannot remove something that still resolves — there is nothing for the
+   * author to weigh. What they need is the *result*, which is why the counts
+   * are reported rather than a bare "done".
+   */
+  const handleSweepStale = async () => {
+    if (sweeping) return;
+    setSweeping(true);
+    setSweepStatus(null);
+    try {
+      const { sweepStaleRefs, sweepTotal } = await import("../../../lib/staleRefs");
+      const swept = await sweepStaleRefs(useProjectStore.getState().projectPath ?? "");
+      const total = sweepTotal(swept);
+      setSweepStatus({
+        ok: true,
+        text: total === 0
+          ? t("systemSettings.maintenance.sweptNone", {
+              defaultValue: "没有发现失效记录。",
+            })
+          : t("systemSettings.maintenance.sweptSome", {
+              defaultValue:
+                "清理了 {{total}} 条失效记录：钉住的条目 {{pins}}、扮演绑定 {{roster}}、对话注入 {{injected}}、配图 {{images}}、整项目的钉住记录 {{projects}}。",
+              total,
+              pins: swept.pinnedEntries,
+              roster: swept.rosterRefs,
+              injected: swept.sessionInjected,
+              images: swept.sessionImages,
+              projects: swept.pinnedProjects,
+            }),
+      });
+    } catch (e) {
+      setSweepStatus({ ok: false, text: String(e) });
+    } finally {
+      setSweeping(false);
+    }
+  };
 
   const togglePptx = (enabled: boolean) => {
     setPptxExportEnabled(enabled);
@@ -321,6 +364,26 @@ export function GeneralPane() {
         </Row>
         {backupStatus && (
           <div className={backupStatus.ok ? ui.statusOk : ui.statusError}>{backupStatus.text}</div>
+        )}
+      </Section>
+
+      <Section label={t("systemSettings.maintenance.section", { defaultValue: "数据维护" })}>
+        <Row
+          title={t("systemSettings.maintenance.staleLabel", { defaultValue: "清理失效数据" })}
+          desc={t("systemSettings.maintenance.staleHint", {
+            defaultValue:
+              "少数记录存的是绝对路径：钉住的知识库条目、扮演花名册里的人物绑定、对话记录里的注入账本和配图。移动、重命名或从备份恢复项目后，它们会指向不存在的位置——失效的表现是安静的（钉住的条目不再注入、角色显示「条目已删除」、旧对话里的图不显示）。这里只清掉指不到东西的那些，仍然有效的一条不动；文档、知识库和设定都在文件系统上，完全不受影响。",
+          })}
+          last
+        >
+          <button className={ui.rowBtn} onClick={handleSweepStale} disabled={sweeping}>
+            {sweeping
+              ? t("systemSettings.maintenance.sweeping", { defaultValue: "清理中…" })
+              : t("systemSettings.maintenance.sweep", { defaultValue: "扫描并清理" })}
+          </button>
+        </Row>
+        {sweepStatus && (
+          <div className={sweepStatus.ok ? ui.statusOk : ui.statusError}>{sweepStatus.text}</div>
         )}
       </Section>
     </Pane>

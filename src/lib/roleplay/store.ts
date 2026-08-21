@@ -27,6 +27,7 @@ import {
   deserializeChatSession, serializeChatSession, type ChatSnapshot,
 } from "../agent/chatSession";
 import type { StreamMessage } from "../ai/types";
+import { toPosixPath } from "../paths";
 import {
   isValidAgentId, NO_PERSONA, type AuthorPersona, type RoleplayAgent,
 } from "./model";
@@ -63,7 +64,7 @@ function coercePersona(raw: unknown): AuthorPersona {
   const mode = p.mode === "lore" || p.mode === "prompt" ? p.mode : "none";
   return {
     mode,
-    dirPath: typeof p.dirPath === "string" ? p.dirPath : null,
+    dirPath: typeof p.dirPath === "string" ? toPosixPath(p.dirPath) : null,
     prompt: typeof p.prompt === "string" ? p.prompt : "",
   };
 }
@@ -77,8 +78,14 @@ function coerceAgent(raw: unknown): RoleplayAgent | null {
     id: a.id,
     kind,
     name: typeof a.name === "string" && a.name.trim() ? a.name : a.id,
-    primaryDirPath: kind === "narrator" || typeof a.primaryDirPath !== "string" ? null : a.primaryDirPath,
-    boundPaths: Array.isArray(a.boundPaths) ? a.boundPaths.filter((x): x is string => typeof x === "string") : [],
+    // Normalised on read, not migrated: the roster is the only `.ai-writer`
+    // JSON holding absolute paths, and these are matched by identity against a
+    // live `LoreEntity.dirPath`. A stale spelling shows up as every character
+    // reporting "primary entity gone" — see docs/path-spelling-plan.md §3.
+    primaryDirPath: kind === "narrator" || typeof a.primaryDirPath !== "string" ? null : toPosixPath(a.primaryDirPath),
+    boundPaths: Array.isArray(a.boundPaths)
+      ? a.boundPaths.filter((x): x is string => typeof x === "string").map(toPosixPath)
+      : [],
     modelId: typeof a.modelId === "string" ? a.modelId : null,
     areaId: typeof a.areaId === "string" ? a.areaId : null,
     authorPersona: a.authorPersona ? coercePersona(a.authorPersona) : null,
