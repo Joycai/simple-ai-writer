@@ -655,6 +655,8 @@
       "loreSplitNudge": "You have not submitted anything yet. Call split_core now with the core card body, then split_facet once per facet. Do not print JSON in your reply, and do not just describe what you plan to do.",
       "roleplay": "You are **playing** a character: {{name}}. From now on you ARE this person — you are not describing them.\n\n## How to respond\n- First person, in character, always. Never step out to explain your choices.\n- Move one small step at a time: one or two lines, leaving room for the author. Do not write the whole scene at once.\n- You know only your own setting and what happened in THIS conversation. You cannot see what other characters said and must not pretend to.\n- Uncertain details can be dodged, deflected or admitted as unknown — but never invent facts that contradict the knowledge base.\n\n## Creative sovereignty\nThis is fiction. Dark themes, morally complex choices, violence, failure and malice are valid narrative material. A character may lie, may be cruel, may be wrong — that is the character, not you. Do not soften, moralise, add disclaimers, or refuse on the basis of content: the author decides what the story needs.",
       "narrator": "You are this work's **narrator** — a voice-over that plays no one. The author uses you to talk through where the story goes, and to gather scattered improvisation into finished prose.\n\n## What you can see\nYou can read the author's conversation with every character: list_scenes for the scenes, read_scene_summary for a scene's rolling summary, read_scene for verbatim turns, search_scenes to find something said long ago. **Read the summary first, then decide which turns to pull in** — dragging a whole transcript into context is slow and expensive. The characters cannot see each other; you can see all of them, and that is what you are for.\n\n## How to work\n- Cite specific turns when you discuss (\"that line in turn 12\"), never vaguely.\n- When the author asks you to put an exchange into the manuscript, **rewrite it into prose yourself**: a transcript is raw material, not a draft — merge action and dialogue, drop the markup, match the voice already in the manuscript. Then submit with create_chapter / append_file / propose_edit and wait for approval.\n- Do not decide for the author. Give a judgement and the reason, and let them choose.",
+      "roleplayRecap": "## Step out of character for a moment\nWrite down the memory **you** will carry out of the scene that just ended.\n- First person, in the voice you normally speak in.\n- **Only what you witnessed or were told.** What you weren't there for, and what others were thinking, you do not know.\n- Don't copy back what is already in your notebook — write what is **new** in this scene.\n- Be concrete. Too abstract is the same as forgetting: \"she said we'd go to the tower once the snow stopped\", not \"we talked about plans\".",
+      "roleplayRecapLead": "This scene is over and you are moving on. Below is what just happened — write down the part **you** take with you.",
       "roleplaySyntax": "## The author's notation\nFour different things are mixed into the author's messages — keep them apart:\n- `*wrapped in asterisks*` is action, expression, body language.\n- `「in corner brackets」` (`『』`, `“”` and plain double quotes count too, but the pair must match) is **spoken dialogue addressed to you**.\n- Unmarked bare text is environment, events, scene description — things happening, not words said to you.\n- `[in square brackets]` is the author stepping outside the story to direct you. It is **not** an event in the story. Adjust accordingly, but never acknowledge it in your reply and never write it into the scene.\n\nUse the same notation yourself: `*…*` for action, `「…」` for dialogue, bare text for description.",
       "roleplayPersonaLore": "You are speaking with {{name}}{{summary}} — another person in the story, not the author. Treat them as your own setting says you would.",
       "roleplayPersonaPrompt": "The person speaking with you: {{prompt}}",
@@ -2035,6 +2037,34 @@
     "kbFrom": "from {{device}}"
   },
   "roleplay": {
+    "recap": {
+      "untitled": "The scene before"
+    },
+    "transition": {
+      "alsoMemory": "Also clear memory",
+      "open": "New scene",
+      "title": "New scene",
+      "scale": "this scene · {{n}} turns",
+      "continue": "Continue",
+      "continueDesc": "Move somewhere else. The detail is left behind, but {{name}} remembers what just happened.",
+      "fresh": "Start over",
+      "freshDesc": "Unrelated to what came before. The whole scene is archived, nothing carried over.",
+      "briefLabel": "What to keep",
+      "briefNote": "optional",
+      "briefPlaceholder": "Focus on anything about the tower. Leave blank and the character decides.",
+      "emptyScene": "Nothing has been said in this scene yet — there is nothing to sum up.",
+      "failed": "The recap didn't come through. Retry, or start over instead.",
+      "recapLabel": "What {{name}} will remember",
+      "keys": "Keywords",
+      "keysPlaceholder": "space-separated",
+      "keysNote": "Keywords will bring this memory back later. Retrieval isn't wired up yet — this is stored for then.",
+      "clearNote": "Left unchecked, pacts, to-dos and bonds stay — a change of room shouldn't erase a promise.",
+      "archiveNote": "Nothing is deleted; the scene moves to the archive and stays readable.",
+      "running": "Remembering…",
+      "retry": "Retry",
+      "makeRecap": "Write the recap",
+      "go": "Go"
+    },
     "title": "Roleplay",
     "me": "Me",
     "noProject": "Open a project first.",
@@ -2054,12 +2084,6 @@
       "bar": "{{n}} archived scene(s) before this",
       "view": "View",
       "blank": "This scene is empty."
-    },
-    "newSession": {
-      "open": "New session",
-      "go": "Start fresh",
-      "alsoMemory": "Also clear memory",
-      "confirmHint": "Archives the current {{n}} turns and starts blank. Nothing is deleted — it moves to archive/."
     },
     "editAgentTitle": "Edit agent",
     "deleteAgent": "Delete",
@@ -2217,6 +2241,7 @@
       "blockOverflow": "({{n}} older records not listed — use recall to read them.)",
       "sceneEmpty": "{{name}} has not recorded anything yet.",
       "kind": {
+        "scene": "Previously",
         "pact": "Pact",
         "todo": "To do",
         "event": "Event",

@@ -36,17 +36,26 @@ export const MEMORY_BLOCK_CHAR_CAP = 4000;
  *
  * 约定和待办排在前面不是因为它们更重要，是因为它们**尚未了结**——一条没兑现的
  * 承诺被挤出上下文，角色就会失信；一件已经发生的事被挤出去，最多是少一点色彩。
+ *
+ * 前情紧随其后：它一场只有一条，而它被挤掉的后果是新的一场从**冷启动**开始
+ * ——角色不记得自己刚从哪儿来。
  */
-export const MEMORY_KINDS: readonly MemoryKind[] = ["pact", "todo", "bond", "event", "note"];
+export const MEMORY_KINDS: readonly MemoryKind[] =
+  ["pact", "todo", "scene", "bond", "event", "note"];
 
-/** 哪些种类有「完成」这个状态。事件和关系没有——它们不是待了结的事。 */
+/**
+ * 哪些种类有「完成」这个状态。
+ *
+ * 事件、关系、前情没有——它们不是待了结的事。前情会被**作废**（转场时上一条
+ * 让位给新的一条），但那是 `void`，不是 `done`。
+ */
 export function hasDoneState(kind: MemoryKind): boolean {
   return kind === "pact" || kind === "todo";
 }
 
 export function kindLabel(kind: MemoryKind): string {
   const fallback: Record<MemoryKind, string> = {
-    pact: "约定", todo: "待办", event: "事件", bond: "关系", note: "其他",
+    pact: "约定", todo: "待办", scene: "前情", event: "事件", bond: "关系", note: "其他",
   };
   return i18n.t(`roleplay.memory.kind.${kind}`, { defaultValue: fallback[kind] });
 }
@@ -54,7 +63,7 @@ export function kindLabel(kind: MemoryKind): string {
 // ─── 文件格式 ────────────────────────────────────────────────────────────────
 
 const HEADER_RE = /^<!--\s*roleplay-memory\s+v1\s+agent=(\S+)\s+next=(\d+)\s*-->/;
-const SECTION_RE = /^##\s+.*<!--\s*(pact|todo|event|bond|note)\s*-->\s*$/;
+const SECTION_RE = /^##\s+.*<!--\s*(pact|todo|scene|event|bond|note)\s*-->\s*$/;
 const RECORD_RE = /^###\s*\[(m\d+)\]\s*(.+?)\s*$/;
 
 const KIND_SET = new Set<string>(MEMORY_KINDS);
@@ -121,8 +130,11 @@ export function parseMemory(md: string): MemoryDoc {
       const title = fields[0] ?? "";
       const status = fields.find((f) => isStatus(f));
       const turnField = fields.find((f) => /^turn\s+\d+$/.test(f));
+      // `keys=…` 必须先于 subject 排除掉，否则它会被当成主语。
+      const keysField = fields.find((f) => f.startsWith(KEYS_PREFIX));
       const subject = fields.find(
-        (f) => f !== title && !isStatus(f) && !/^turn\s+\d+$/.test(f),
+        (f) => f !== title && !isStatus(f) && !/^turn\s+\d+$/.test(f)
+          && !f.startsWith(KEYS_PREFIX),
       );
       current = {
         id,
@@ -133,6 +145,7 @@ export function parseMemory(md: string): MemoryDoc {
         turn: turnField ? Number(turnField.split(/\s+/)[1]) : 0,
         subject: subject ?? null,
         updatedAt: 0,
+        keys: keysField ? splitKeys(keysField.slice(KEYS_PREFIX.length)) : [],
       };
       continue;
     }
@@ -144,8 +157,26 @@ export function parseMemory(md: string): MemoryDoc {
   return { records, next: Math.max(next, maxSeen + 1) };
 }
 
+const KEYS_PREFIX = "keys=";
+
+/** 关键字里不能出现字段分隔符和自己的分隔符，否则这一行读不回来。 */
+function sanitizeKey(k: string): string {
+  return k.replace(/[·,]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function splitKeys(raw: string): string[] {
+  return raw.split(",").map((k) => k.trim()).filter(Boolean);
+}
+
 function renderRecord(r: MemoryRecord): string {
-  const fields = [r.title, ...(r.subject ? [r.subject] : []), r.status, `turn ${r.turn}`];
+  const keys = r.keys.map(sanitizeKey).filter(Boolean);
+  const fields = [
+    r.title,
+    ...(r.subject ? [r.subject] : []),
+    r.status,
+    `turn ${r.turn}`,
+    ...(keys.length ? [`${KEYS_PREFIX}${keys.join(",")}`] : []),
+  ];
   return `### [${r.id}] ${fields.join(" · ")}\n${r.body.trim()}\n`;
 }
 
@@ -165,14 +196,17 @@ export function renderMemory(agentId: string, doc: MemoryDoc): string {
 
 // ─── 增 / 改 ─────────────────────────────────────────────────────────────────
 
-export type NewRecord = Pick<MemoryRecord, "kind" | "title" | "body" | "turn" | "subject">;
+export type NewRecord =
+  Pick<MemoryRecord, "kind" | "title" | "body" | "turn" | "subject"> & { keys?: string[] };
 
 /** 追加一条，分配一个**永不复用**的 id。返回新文档和那条记录。 */
 export function addRecord(doc: MemoryDoc, rec: NewRecord, now: number): {
   doc: MemoryDoc;
   record: MemoryRecord;
 } {
-  const record: MemoryRecord = { ...rec, id: `m${doc.next}`, status: "open", updatedAt: now };
+  const record: MemoryRecord = {
+    ...rec, keys: rec.keys ?? [], id: `m${doc.next}`, status: "open", updatedAt: now,
+  };
   return {
     doc: { records: [...doc.records, record], next: doc.next + 1 },
     record,

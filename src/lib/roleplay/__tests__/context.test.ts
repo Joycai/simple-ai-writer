@@ -110,7 +110,7 @@ describe("seedRoleplayHistory", () => {
 
 const PACT: MemoryRecord = {
   id: "m1", kind: "pact", title: "雪停了一起去塔下", body: "他答应了。",
-  status: "open", turn: 12, subject: null, updatedAt: 0,
+  status: "open", turn: 12, subject: null, updatedAt: 0, keys: [],
 };
 
 describe("记忆块（不变量四）", () => {

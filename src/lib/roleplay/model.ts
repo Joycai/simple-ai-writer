@@ -64,13 +64,16 @@ export interface SceneTurn {
 }
 
 /**
- * 角色记忆的五种记录。
+ * 角色记忆的六种记录。
  *
- * 固定枚举，而不是像知识库分类那样由能力包定义：这五种是**对话结构**的产物，
+ * 固定枚举，而不是像知识库分类那样由能力包定义：这几种是**对话结构**的产物，
  * 不是**领域**的产物——跑团、言情、悬疑都一样会产生约定和关系。做成可配置只会
  * 让作者在能用之前先做一次配置，并且让模型面对一个它无法预知的枚举。
+ *
+ * `scene`（前情）是唯一不由模型在对话中自发写下的一种：它只在**转场**那一刻
+ * 产生，一场一条，见 `docs/feature/roleplay/06-scene-and-memory-area.md` §5。
  */
-export type MemoryKind = "pact" | "todo" | "event" | "bond" | "note";
+export type MemoryKind = "pact" | "todo" | "scene" | "event" | "bond" | "note";
 
 /** `void` 是作废，不是删除：正文保留（见 lib/roleplay/memory 的三条写入规则）。 */
 export type MemoryStatus = "open" | "done" | "void";
@@ -88,6 +91,14 @@ export interface MemoryRecord {
   /** 这条是关于谁/什么的。可空。 */
   subject: string | null;
   updatedAt: number;
+  /**
+   * 关键字。**PR 1 只负责收下来，还没有人读它。**
+   *
+   * 记忆区（`docs/feature/roleplay/06-scene-and-memory-area.md` §7）靠它命中。
+   * 现在就存，是因为那时再回头补：整场戏得重新摘要一遍，而 transcript 早已进了
+   * archive——代价和现在顺手存下它完全不成比例。
+   */
+  keys: string[];
 }
 
 /** 同时最多几个 agent 在生成。信号量，不是三个分支——改成 5 就是改这个数。 */

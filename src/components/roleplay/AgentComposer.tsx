@@ -14,6 +14,7 @@ import { Check, Search, X } from "lucide-react";
 import { useLoreStore } from "../../stores/loreStore";
 import { useRoleplayStore, type AgentDraft } from "../../stores/roleplayStore";
 import { ModelSelector } from "../ai/ModelSelector";
+import { SceneTransition } from "./SceneTransition";
 import { loadPersonaCard } from "../../lib/roleplay/store";
 import { useProjectStore } from "../../stores/projectStore";
 import { avatarGlyph, type AgentKind, type RoleplayAgent } from "../../lib/roleplay/model";
@@ -47,7 +48,7 @@ export function AgentComposer({
   const isZh = i18n.language.startsWith("zh");
   const loreIndex = useLoreStore((s) => s.index);
   const projectPath = useProjectStore((s) => s.projectPath);
-  const { createAgent, updateAgent, removeAgent, newSession } = useRoleplayStore();
+  const { createAgent, updateAgent, removeAgent } = useRoleplayStore();
 
   const [kind, setKind] = useState<AgentKind>(editing?.kind ?? "character");
   const [primary, setPrimary] = useState<string | null>(editing?.primaryDirPath ?? null);
@@ -59,10 +60,9 @@ export function AgentComposer({
   const [cat, setCat] = useState<string | null>(null);
   const [openEntity, setOpenEntity] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // 「新开会话」的两段式确认。就地展开而不是弹一个模态：这一步要带一个勾选项，
-  // 而一个只有一句话加一个勾的模态，比它要确认的动作本身还重。
-  const [confirmNew, setConfirmNew] = useState(false);
-  const [alsoClearMemory, setAlsoClearMemory] = useState(false);
+  // 转场面板。原来是 footer 上的就地确认条——「接续」那一支要跑一次模型、还要
+  // 让作者过目改稿，一行装不下了（见 SceneTransition 的头注）。
+  const [transition, setTransition] = useState(false);
 
   useEffect(() => {
     if (!editing || !projectPath) return;
@@ -424,42 +424,6 @@ export function AgentComposer({
           </section>
         </div>
 
-        {editing && confirmNew ? (
-          <footer className={styles.foot}>
-            <label className={styles.checkRow}>
-              <input
-                type="checkbox"
-                checked={alsoClearMemory}
-                onChange={(e) => setAlsoClearMemory(e.target.checked)}
-              />
-              {t("roleplay.newSession.alsoMemory", { defaultValue: "同时清空记忆" })}
-            </label>
-            <span className={styles.hint}>
-              {t("roleplay.newSession.confirmHint", {
-                n: editing.turnCount,
-                defaultValue: `封存当前 ${editing.turnCount} 轮，从空白开始。对话留在 archive/，一个字都不删。`,
-              })}
-            </span>
-            <div className={styles.spacer} />
-            <button
-              type="button"
-              className={styles.ghostBtn}
-              onClick={() => { setConfirmNew(false); setAlsoClearMemory(false); }}
-            >
-              {t("common.cancel", { defaultValue: "取消" })}
-            </button>
-            <button
-              type="button"
-              className={styles.primaryBtn}
-              onClick={() => {
-                void newSession(editing.id, { clearMemory: alsoClearMemory });
-                onClose();
-              }}
-            >
-              {t("roleplay.newSession.go", { defaultValue: "新开会话" })}
-            </button>
-          </footer>
-        ) : (
         <footer className={styles.foot}>
           {editing && (
             <button
@@ -474,9 +438,9 @@ export function AgentComposer({
             <button
               type="button"
               className={styles.ghostBtn}
-              onClick={() => setConfirmNew(true)}
+              onClick={() => setTransition(true)}
             >
-              {t("roleplay.newSession.open", { defaultValue: "新开会话" })}
+              {t("roleplay.transition.open", { defaultValue: "转场" })}
             </button>
           )}
           <span className={styles.hint}>
@@ -494,8 +458,15 @@ export function AgentComposer({
               : t("roleplay.composer.create", { defaultValue: "创建" })}
           </button>
         </footer>
-        )}
       </aside>
+
+      {transition && editing && (
+        <SceneTransition
+          agent={editing}
+          turnCount={editing.turnCount}
+          onClose={() => { setTransition(false); onClose(); }}
+        />
+      )}
     </>
   );
 }
