@@ -84,8 +84,9 @@ import {
 } from "../lib/agent/runtime";
 import { persistUsage } from "../lib/ai/usage";
 import {
-  inputCeilingFor, measureCharsPerToken, RECENT_WINDOW_MIN_CHARS,
+  measureCharsPerToken, RECENT_WINDOW_MIN_CHARS,
 } from "../lib/context/budget";
+import { messageCeilingFor } from "../lib/agent/toolCost";
 import {
   hashText, loadMemory, MEMORY_BUDGET_CHARS, projectRelativePath,
 } from "../lib/context/memory";
@@ -951,6 +952,25 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
       // ── History: seed on first turn, append afterwards ──
       const { contextUtilization } = useAppStore.getState();
+      /**
+       * The ceiling every **message-side** decision in this turn measures
+       * against: compaction below, and the runtime's history trimming.
+       *
+       * The tool schemas' share is already taken out (lib/agent/toolCost), for
+       * the reason lib/agent/contextBreakdown spells out: the assistant preset
+       * carries a toolset worth thousands of tokens on every round, so a
+       * history trimmed to `inputCeilingFor(...)` exactly produced a request
+       * well past it. Computed once, used twice — those two used to compute it
+       * separately, and the visible symptom was the context bar standing past
+       * its own compaction mark with nothing happening.
+       */
+      const messageCeiling = messageCeilingFor(
+        model.contextSize,
+        contextUtilization,
+        AGENT_ASSIST_PRESET,
+        effectiveSubs,
+        useAiStore.getState().models,
+      );
       let history = get().chatHistory;
       if (!history) {
         const { useAiStore: aiStore2 } = await import("./aiStore");
@@ -1064,7 +1084,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           const compacted = await compactChatHistory({
             history,
             meta,
-            ceilingTokens: inputCeilingFor(model.contextSize, contextUtilization),
+            ceilingTokens: messageCeiling,
             summarize: (input) =>
               summarizeForCompaction(
                 connOptions({ provider, model, apiKey }),
@@ -1171,7 +1191,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // Never undefined: without a ceiling the tool loop's history trimming
         // is a no-op, and a chat that reads pictures accumulates base64 in a
         // history that persists across turns until the provider rejects it.
-        inputCeilingTokens: inputCeilingFor(model.contextSize, contextUtilization),
+        inputCeilingTokens: messageCeiling,
         preset: effectivePreset,
         messages: history,
         toolContext: {

@@ -483,8 +483,32 @@ type Attempt =
   | { resume: "transcript"; text: string; transcript: string };
 
 
+/**
+ * Whether to mark a cache breakpoint on this request's static prefix.
+ *
+ * This family's prompt caching is **explicit** — no `cache_control`, no cache,
+ * ever (`docs/api/landscape.md` §5). The other two families cache long prefixes
+ * on their own, so ④ was the one place where an agent loop re-paid full price
+ * for the same several-thousand-token toolset on all forty rounds.
+ *
+ * Officially-standard endpoints only. MiniMax's ④-family endpoint documents a
+ * `system` array with `cache_control` but says nothing about `tools`, and this
+ * project's standing rule for third-party ④ endpoints is that documented is not
+ * verified (docs/thinking-verification.md). A rejected field here costs the
+ * author a whole failed round at the very start of a stream — not a trade worth
+ * making blind. See docs/agent-tool-context-lld.md §2.3 for what to measure
+ * before turning the compat half on.
+ */
+function cachesPrompt(standard: StreamOptions["standard"]): boolean {
+  return standard === "anthropic";
+}
+
+/** The marker itself. 5-minute TTL, which an agent loop's rounds sit well inside. */
+const CACHE_BREAKPOINT = { type: "ephemeral" } as const;
+
 export async function streamAnthropic(opts: StreamOptions): Promise<void> {
   const url = anthropicUrl(opts.baseUrl, "/messages");
+  const caching = cachesPrompt(opts.standard);
 
   const system = extractSystem(opts.messages);
   const maxTokens = resolveMaxTokens(opts);
@@ -496,7 +520,15 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
     max_tokens: maxTokens,
     stream: true,
   };
-  if (system) baseBody.system = system;
+  // A cached breakpoint has to sit on a content block, so the plain string
+  // becomes a one-element array. The system layer is worth caching in its own
+  // right here: the agent briefing runs to thousands of tokens and is identical
+  // on every round of a run.
+  if (system) {
+    baseBody.system = caching
+      ? [{ type: "text", text: system, cache_control: CACHE_BREAKPOINT }]
+      : system;
+  }
   if (thinking) baseBody.thinking = thinking;
   // Temperature, with this protocol's two constraints applied here rather than
   // at the setting: it caps at 1 (the other families allow 2), and a thinking
@@ -515,7 +547,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
   // a standing permission on the model, not something a task opts into.
   const serverTools = anthropicServerTools(opts.serverTools);
   if (opts.tools?.length || serverTools.length) {
-    baseBody.tools = [
+    const tools: Record<string, unknown>[] = [
       ...serverTools,
       ...(opts.tools ?? []).map((t) => ({
         name: t.function.name,
@@ -523,6 +555,15 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
         input_schema: t.function.parameters,
       })),
     ];
+    // One breakpoint, on the LAST entry: this is prefix caching, so a marker
+    // caches everything *before* it. Marking each tool would spend the request's
+    // four-breakpoint allowance to buy nothing. `tools` comes before `system`
+    // and `messages` on the wire, so this covers the whole toolset while the
+    // system marker above extends the same cached prefix one block further.
+    if (caching && tools.length) {
+      tools[tools.length - 1] = { ...tools[tools.length - 1], cache_control: CACHE_BREAKPOINT };
+    }
+    baseBody.tools = tools;
     // Only when *we* declared tools. `tool_choice` governs the model's own
     // calls, and a request whose only tool is the server's has nothing to
     // choose — `{type:"auto"}` there would be an opinion about a decision the
