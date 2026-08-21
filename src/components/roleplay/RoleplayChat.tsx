@@ -102,7 +102,7 @@ function ComposerMirror({ text, innerRef }: {
   );
 }
 
-function TurnBlock({ turn, log, memories, recalled, onOpenArea, onRewind }: {
+function TurnBlock({ turn, log, memories, recalled, onOpenArea, onRewind, confirm, doomed }: {
   turn: SceneTurn;
   log?: React.ReactNode;
   /** 这一轮里角色记下的东西。作者手加的 `turn: 0`，永远不会落在这里。 */
@@ -112,11 +112,18 @@ function TurnBlock({ turn, log, memories, recalled, onOpenArea, onRewind }: {
   onOpenArea?: () => void;
   /** 只有作者轮、且不是最后一轮时给——回到最后一轮等于什么也没撤销。 */
   onRewind?: () => void;
+  /** 回退确认条。**长在被选中的那一句下面**，不在稿面底部——见下方注释。 */
+  confirm?: React.ReactNode;
+  /** 这一轮会被那次回退一起撤销：调淡，让「和它之后的 N 条」是看得见的。 */
+  doomed?: boolean;
 }) {
   const { t } = useTranslation();
   if (turn.speaker === "author") {
     return (
-      <div className={styles.authorTurn} id={`rp-turn-${turn.index}`}>
+      <div
+        className={`${styles.authorTurn} ${doomed ? styles.turnDoomed : ""}`}
+        id={`rp-turn-${turn.index}`}
+      >
         <div className={styles.authorLabel}>
           {t("roleplay.me", { defaultValue: "我" })}
           {turn.speakerName && <span className={styles.personaName}>{turn.speakerName}</span>}
@@ -128,15 +135,17 @@ function TurnBlock({ turn, log, memories, recalled, onOpenArea, onRewind }: {
           )}
         </div>
         <ScriptText text={turn.text} />
+        {confirm}
       </div>
     );
   }
+  const dim = doomed ? ` ${styles.turnDoomed}` : "";
   return (
     <>
       {/* 「想起了…」在回复**之前**，用**向左**的箭头——它是这一轮的输入，不是
           结果。「记下了…」在回复之后用向右的箭头。**方向就是它和这一轮的关系。** */}
       {recalled && recalled.length > 0 && (
-        <div className={styles.recallTrace}>
+        <div className={styles.recallTrace + dim}>
           <span className={styles.traceArrowLeft} aria-hidden />
           {recalled.length === 1 ? (
             <span>
@@ -158,14 +167,14 @@ function TurnBlock({ turn, log, memories, recalled, onOpenArea, onRewind }: {
           )}
         </div>
       )}
-      <div className={styles.agentTurn} id={`rp-turn-${turn.index}`}>
+      <div className={styles.agentTurn + dim} id={`rp-turn-${turn.index}`}>
         <div className={styles.agentLabel}>{turn.speakerName}</div>
         <ScriptText text={turn.text} />
       </div>
       {/* 很轻的一道痕迹：不能像系统通知那样打断阅读，但也不能轻到看不见——
           作者需要知道角色**真的**记住了，这是建立信任的地方。 */}
       {memories?.map((m) => (
-        <div key={m.id} className={styles.memoryTrace}>
+        <div key={m.id} className={styles.memoryTrace + dim}>
           <span className={styles.traceArrowRight} aria-hidden />
           {t("roleplay.memory.recorded", { title: m.title, defaultValue: `记下了：${m.title}` })}
         </div>
@@ -206,6 +215,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const [recapFolded, setRecapFolded] = useState(false);
   /** 待确认的回退目标轮号。回退会撤销记录，所以要问一次。 */
   const [rewindTo, setRewindTo] = useState<number | null>(null);
+  const rewindBarRef = useRef<HTMLDivElement>(null);
   /**
    * 作者主动摘掉了这次的选区。
    *
@@ -350,6 +360,47 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     }
     return map;
   }, [session?.memory]);
+
+  /* 作者点的那一句可能正贴着可视区下沿，确认条会长在折线以下——`nearest` 只在
+     真的看不见时才滚，看得见就什么也不做。 */
+  useEffect(() => {
+    if (rewindTo !== null) rewindBarRef.current?.scrollIntoView({ block: "nearest" });
+  }, [rewindTo]);
+
+  /* 回退的确认。用 transcript 里的原话做提示——作者要撤销的是**这一句**和它之后
+     的一切，而那一句自己是最准确的说明；所以它渲染在那一句下面，不在稿面底部。 */
+  const rewindConfirm = rewindTo === null ? null : (
+    <div className={styles.rewindBar} ref={rewindBarRef}>
+      <span className={styles.rewindText}>
+        {t("roleplay.rewind.confirm", {
+          n: (session?.turns.length ?? 0) - rewindTo + 1,
+          defaultValue: `撤销这一句和它之后的 ${(session?.turns.length ?? 0) - rewindTo + 1} 条记录，原文回到输入框。这一段之后记下的事也会一并撤销。`,
+        })}
+      </span>
+      <button
+        type="button"
+        className={styles.rewindCancel}
+        onClick={() => setRewindTo(null)}
+      >
+        {t("common.cancel", { defaultValue: "取消" })}
+      </button>
+      <button
+        type="button"
+        className={styles.rewindGo}
+        onClick={() => {
+          const at = rewindTo;
+          setRewindTo(null);
+          void rewind(agent.id, at).then((text) => {
+            if (text === null) return;
+            setDraft(text);
+            taRef.current?.focus();
+          });
+        }}
+      >
+        {t("roleplay.rewind.go", { defaultValue: "回退" })}
+      </button>
+    </div>
+  );
 
   const jumpToTurn = (turn: number) => {
     document.getElementById(`rp-turn-${turn}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -688,11 +739,15 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               recalled={session.recalled[turn.index]}
               onOpenArea={() => setShowMemory(true)}
               onRewind={
-                turn.speaker === "author" && !isRunning && queuePos < 0
+                rewindTo === null && turn.speaker === "author" && !isRunning && queuePos < 0
                   && turn.index < (session?.turns.length ?? 0)
                   ? () => setRewindTo(turn.index)
                   : undefined
               }
+              /* 确认长在**被选中的那一句下面**。它原先挂在稿面底部，而作者点的
+                 那一句可能在几屏之上——那等于问了一个问题却没人看见。 */
+              confirm={rewindTo === turn.index ? rewindConfirm : undefined}
+              doomed={rewindTo !== null && turn.index > rewindTo}
               log={
                 session.log[turn.index]?.length ? (
                   <div className={styles.logLine}>
@@ -748,41 +803,6 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               </button>
               <button type="button" className={styles.queueBtnAccent} onClick={() => promote(agent.id)}>
                 {t("roleplay.queue.promote", { defaultValue: "插到最前" })}
-              </button>
-            </div>
-          )}
-
-          {/* 回退的确认。用 transcript 里的原话做提示——作者要撤销的是**这一句**
-              和它之后的一切，而那一句自己是最准确的说明。 */}
-          {rewindTo !== null && (
-            <div className={styles.rewindBar}>
-              <span className={styles.rewindText}>
-                {t("roleplay.rewind.confirm", {
-                  n: (session?.turns.length ?? 0) - rewindTo + 1,
-                  defaultValue: `撤销这一句和它之后的 ${(session?.turns.length ?? 0) - rewindTo + 1} 条记录，原文回到输入框。这一段之后记下的事也会一并撤销。`,
-                })}
-              </span>
-              <button
-                type="button"
-                className={styles.rewindCancel}
-                onClick={() => setRewindTo(null)}
-              >
-                {t("common.cancel", { defaultValue: "取消" })}
-              </button>
-              <button
-                type="button"
-                className={styles.rewindGo}
-                onClick={() => {
-                  const at = rewindTo;
-                  setRewindTo(null);
-                  void rewind(agent.id, at).then((text) => {
-                    if (text === null) return;
-                    setDraft(text);
-                    taRef.current?.focus();
-                  });
-                }}
-              >
-                {t("roleplay.rewind.go", { defaultValue: "回退" })}
               </button>
             </div>
           )}
