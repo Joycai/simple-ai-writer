@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifySegment, parseScript, scriptPreview } from "../markup";
+import { applyLineKind, classifySegment, parseScript, scriptPreview } from "../markup";
 
 describe("parseScript", () => {
   it("splits the four markers, in any order, in one message", () => {
@@ -70,5 +70,42 @@ describe("scriptPreview", () => {
 
   it("is empty for empty input", () => {
     expect(scriptPreview("", 40)).toBe("");
+  });
+});
+
+describe("applyLineKind", () => {
+  it("wraps the caret's line and parks the caret inside the closing mark", () => {
+    const { text, caret } = applyLineKind("他没有回头。", 3, "action");
+    expect(text).toBe("*他没有回头。*");
+    expect(caret).toBe("*他没有回头。".length);
+  });
+
+  it("only touches the caret's line", () => {
+    const src = "屋里没有点灯。\n你还在等？\n他没有回头。";
+    // 光标在第二行。
+    const { text } = applyLineKind(src, src.indexOf("你还在等？") + 2, "speech");
+    expect(text).toBe("屋里没有点灯。\n「你还在等？」\n他没有回头。");
+  });
+
+  it("switches kind instead of nesting marks", () => {
+    expect(applyLineKind("*他没有回头。*", 1, "speech").text).toBe("「他没有回头。」");
+    expect(applyLineKind("「你还在等？」", 1, "meta").text).toBe("[你还在等？]");
+  });
+
+  it("strips back to bare text for scene", () => {
+    expect(applyLineKind("「你还在等？」", 1, "scene").text).toBe("你还在等？");
+    expect(applyLineKind("屋里没有点灯。", 1, "scene").text).toBe("屋里没有点灯。");
+  });
+
+  it("leaves an empty pair on a blank line, caret between the marks", () => {
+    expect(applyLineKind("", 0, "speech")).toEqual({ text: "「」", caret: 1 });
+    const src = "屋里没有点灯。\n";
+    expect(applyLineKind(src, src.length, "action")).toEqual({
+      text: "屋里没有点灯。\n**", caret: src.length + 1,
+    });
+  });
+
+  it("clamps a caret outside the text", () => {
+    expect(applyLineKind("你还在等？", 999, "speech").text).toBe("「你还在等？」");
   });
 });

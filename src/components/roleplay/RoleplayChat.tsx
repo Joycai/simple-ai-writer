@@ -52,7 +52,7 @@ import {
   MentionPicker, filterMentions, mentionKey, mentionLabel,
   useMentionState, type MentionItem,
 } from "../common/MentionPicker";
-import { classifySegment } from "../../lib/roleplay/markup";
+import { applyLineKind, classifySegment, type ScriptSegmentKind } from "../../lib/roleplay/markup";
 import { projectFilesFromTree } from "../../lib/fs/images";
 import { readFile } from "../../lib/fs/fileio";
 import type { AttachedItem } from "../../lib/lore/aiTask";
@@ -70,6 +70,28 @@ type PickKind = "lore" | "text" | "image";
 function matchesKind(item: MentionItem, kind: PickKind): boolean {
   return kind === "lore" ? item.type === "lore" : item.type === "file" && item.file.kind === kind;
 }
+
+/**
+ * 图例的四项。收起的一行和展开的卡片读**同一份**——它们是同一组按钮的两种
+ * 密度，拆成两份数组只会在下次改文案时悄悄分岔。
+ */
+const SYNTAX_ITEMS: {
+  kind: ScriptSegmentKind;
+  style: "syntaxAction" | "syntaxSpeech" | "syntaxScene" | "syntaxMeta";
+  /** 收起态：标记直接包着类型名。裸文本没有标记可包，两头都是空串。 */
+  open: string;
+  close: string;
+  /** 展开态左列的符号；裸文本那项是空串，渲染时换成本地化的「裸文本」。 */
+  mark: string;
+  nameKey: string;
+  name: string;
+  example: string;
+}[] = [
+  { kind: "action", style: "syntaxAction", open: "*", close: "*", mark: "*…*", nameKey: "roleplay.syntax.action", name: "动作", example: "*他没有回头。*" },
+  { kind: "speech", style: "syntaxSpeech", open: "「", close: "」", mark: "「…」", nameKey: "roleplay.syntax.speech", name: "台词", example: "「你还在等？」" },
+  { kind: "scene", style: "syntaxScene", open: "", close: "", mark: "", nameKey: "roleplay.syntax.scene", name: "场景", example: "屋里没有点灯。" },
+  { kind: "meta", style: "syntaxMeta", open: "[", close: "]", mark: "[…]", nameKey: "roleplay.syntax.meta", name: "元指令", example: "[让他更冷一点]" },
+];
 
 const MIRROR_CLASS: Record<string, string> = {
   action: styles.mirrorAction,
@@ -449,6 +471,28 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
       el?.setSelectionRange(at + 1, at + 1);
     });
   };
+  /**
+   * 图例点一下＝把光标所在的那一行改成那一类（判定与改写都在
+   * {@link applyLineKind}，这里只负责把结果送回输入框）。
+   *
+   * 走和 `openMentionFor` 同一条 `setDraft` + `mention.sync` + `setSelectionRange`：
+   * 镜像层、提名状态、光标由同一次编辑一起更新，「点出来的」和「手打的」才不会
+   * 分岔成两套行为。
+   */
+  const applyKind = (kind: ScriptSegmentKind) => {
+    const el = taRef.current;
+    const { text, caret } = applyLineKind(draft, el?.selectionStart ?? draft.length, kind);
+    setDraft(text);
+    mention.sync(text, caret);
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(caret, caret);
+    });
+  };
+
+  const applyHint = (name: string) =>
+    t("roleplay.syntax.applyHint", { name, defaultValue: `把光标所在的那一行改成${name}` });
+
   const refKeys = useMemo(() => new Set(refs.map(attachedKey)), [refs]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -877,11 +921,20 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
             </button>
           ) : (
             <>
+              {/* 收起态的那一行也是可点的：它是作者九成时间看得见的图例，
+                  「要点得展开」等于把这个入口藏起来。 */}
               <span className={styles.syntaxRow}>
-                <span className={styles.syntaxAction}>*{t("roleplay.syntax.action", { defaultValue: "动作" })}*</span>
-                <span className={styles.syntaxSpeech}>「{t("roleplay.syntax.speech", { defaultValue: "台词" })}」</span>
-                <span className={styles.syntaxScene}>{t("roleplay.syntax.scene", { defaultValue: "裸文本＝场景" })}</span>
-                <span className={styles.syntaxMeta}>[{t("roleplay.syntax.meta", { defaultValue: "元指令" })}]</span>
+                {SYNTAX_ITEMS.map((item) => (
+                  <button
+                    key={item.kind}
+                    type="button"
+                    className={`${styles.syntaxChip} ${styles[item.style]}`}
+                    onClick={() => applyKind(item.kind)}
+                    title={applyHint(t(item.nameKey, { defaultValue: item.name }))}
+                  >
+                    {item.open}{t(item.nameKey, { defaultValue: item.name })}{item.close}
+                  </button>
+                ))}
               </span>
               <button type="button" className={styles.syntaxToggle} onClick={() => setShowSyntax(true)}>
                 {t("roleplay.syntax.expand", { defaultValue: "展开" })}
@@ -893,22 +946,27 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
         {showSyntax && (
           <div className={styles.syntaxCard}>
             <div className={styles.syntaxGrid}>
-              {[
-                ["*…*", t("roleplay.syntax.action", { defaultValue: "动作" }), "*他没有回头。*"],
-                ["「…」", t("roleplay.syntax.speech", { defaultValue: "台词" }), "「你还在等？」"],
-                [t("roleplay.syntax.bare", { defaultValue: "裸文本" }), t("roleplay.syntax.scene", { defaultValue: "场景" }), "屋里没有点灯。"],
-                ["[…]", t("roleplay.syntax.meta", { defaultValue: "出戏指令" }), "[让他更冷一点]"],
-              ].map(([mark, name, example]) => (
-                <div key={mark} className={styles.syntaxItem}>
-                  <span className={styles.syntaxMark}>{mark}</span>
-                  <span className={styles.syntaxName}>{name}</span>
-                  <span className={styles.syntaxExample}>{example}</span>
-                </div>
+              {SYNTAX_ITEMS.map((item) => (
+                <button
+                  key={item.kind}
+                  type="button"
+                  className={styles.syntaxItem}
+                  onClick={() => applyKind(item.kind)}
+                  title={applyHint(t(item.nameKey, { defaultValue: item.name }))}
+                >
+                  <span className={styles.syntaxMark}>{item.mark || t("roleplay.syntax.bare", { defaultValue: "裸文本" })}</span>
+                  <span className={styles.syntaxName}>{t(item.nameKey, { defaultValue: item.name })}</span>
+                  <span className={styles.syntaxExample}>{item.example}</span>
+                </button>
               ))}
             </div>
             {/* 引号只在这里说清楚。稿面上 `「」` 是正解，但它在中文输入法下不是
                 一个键就能打出来的——不写这一行，作者只会看见最难打的那一种。 */}
             <p className={styles.syntaxNote}>
+              {t("roleplay.syntax.clickNote", {
+                defaultValue: "点任意一项，把输入框里光标所在的那一行改成这一类；「裸文本」是取消标记。",
+              })}
+              <br />
               {t("roleplay.syntax.quoteNote", {
                 defaultValue: "台词的引号 「」 『』 “” \"\" 都认，但开合要同族。中文输入法下 Shift+' 出来的 “” 最省事。",
               })}

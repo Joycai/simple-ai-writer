@@ -158,3 +158,49 @@ function renderPreview(s: ScriptSegment): string {
   if (s.kind === "action") return `*${s.plain}*`;
   return s.plain;
 }
+
+// ─── 图例点一下 ──────────────────────────────────────────────────────────────
+
+/**
+ * 三种带标记的类型各自的开合符。台词固定写回 `「」`——四种引号解析时都认，
+ * 但**写**的时候得选一种，选稿面上的正解那种。
+ */
+const MARK_PAIRS: Record<Exclude<ScriptSegmentKind, "scene">, [string, string]> = {
+  action: ["*", "*"],
+  speech: ["「", "」"],
+  meta: ["[", "]"],
+};
+
+export interface LineKindEdit {
+  text: string;
+  /** 编辑后光标该落在哪——闭合标记**之前**，作者接着往里打字。 */
+  caret: number;
+}
+
+/**
+ * 把 `caret` 所在的**那一行**改成 `kind`：套上对应标记，或者（`scene`）脱掉。
+ *
+ * 为什么是「整行改类型」而不是「在光标处插一对符号」：标记是行级的
+ * （{@link classifySegment} 按整行判定），`他说*笑了笑*然后…` 整行仍然是场景。
+ * 一个在行中间插符号的按钮会稳定地产出无效标记——看着像生效了，其实没有，
+ * 正是最难自查的那种坏法。作用于整行则永远产出一个合法的行。
+ *
+ * 也因此它先脱掉已有的标记再套新的：点「台词」在一行动作上，得到的是那句话
+ * 变成台词，而不是 `「*他没有回头。*」`。`scene` 就是这条路径只脱不套的那一支
+ * ——裸文本不是「没有按钮可点」，它是**取消标记**。
+ */
+export function applyLineKind(text: string, caret: number, kind: ScriptSegmentKind): LineKindEdit {
+  const pos = Math.max(0, Math.min(caret, text.length));
+  const start = text.lastIndexOf("\n", pos - 1) + 1;
+  const nl = text.indexOf("\n", pos);
+  const end = nl < 0 ? text.length : nl;
+
+  // 空行 classify 返回 null；其余情况 plain 就是脱了标记的正文。
+  const inner = classifySegment(text.slice(start, end), { requireClosed: true })?.plain ?? "";
+  const [open, close] = kind === "scene" ? ["", ""] : MARK_PAIRS[kind];
+
+  return {
+    text: `${text.slice(0, start)}${open}${inner}${close}${text.slice(end)}`,
+    caret: start + open.length + inner.length,
+  };
+}

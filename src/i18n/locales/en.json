@@ -2232,7 +2232,9 @@
       "metaTag": "META",
       "expand": "Expand",
       "collapse": "Collapse to one line",
-      "quoteNote": "Dialogue takes 「」 『』 “” or \"\" — any pair, as long as it matches."
+      "quoteNote": "Dialogue takes 「」 『』 “” or \"\" — any pair, as long as it matches.",
+      "applyHint": "Turn the line at the caret into {{name}}",
+      "clickNote": "Click any item to turn the line at the caret into that kind; “bare text” strips the marks off."
     },
     "persona": {
       "onlyHere": "this agent",
