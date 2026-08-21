@@ -41,7 +41,7 @@ export async function generateLore(opts: ConnOptions & {
   const cleanDesc = opts.description.replace(/@\[[^\]]*\]/g, "").trim();
 
   // Build the text portion of the prompt.
-  // 200 000 chars ≈ 50–100 k tokens — covers even large settings docs on modern
+  // 500 000 chars ≈ 125–250 k tokens — covers even large settings docs on modern
   // models (Gemini 1.5/2.0 Flash/Pro support 1 M token context windows).
   const MAX_REF_CHARS = 500_000;
   const refs = (opts.textAttachments ?? [])
@@ -114,20 +114,20 @@ export async function generateLore(opts: ConnOptions & {
     },
   });
 
-  // Extract JSON: try clean parse first, then markdown fences, then first-{-to-last-}
+  // Extract JSON: markdown fences first, then outermost braces. Sliced to the
+  // outermost braces even when the reply already starts with one — a model that
+  // appends a closing remark after the object would otherwise hand JSON.parse
+  // the remark too and fail a perfectly salvageable response (the splitter's
+  // parseSplitResponse hit exactly this and fixed it the same way).
   const trimmed = fullText.trim();
   let jsonStr: string | undefined;
-  if (trimmed.startsWith("{")) {
-    jsonStr = trimmed;
+  const fenceMatch = trimmed.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+  if (fenceMatch) {
+    jsonStr = fenceMatch[1];
   } else {
-    const fenceMatch = trimmed.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-    if (fenceMatch) {
-      jsonStr = fenceMatch[1];
-    } else {
-      const start = trimmed.indexOf("{");
-      const end = trimmed.lastIndexOf("}");
-      if (start !== -1 && end > start) jsonStr = trimmed.slice(start, end + 1);
-    }
+    const start = trimmed.indexOf("{");
+    const end = trimmed.lastIndexOf("}");
+    if (start !== -1 && end > start) jsonStr = trimmed.slice(start, end + 1);
   }
   if (!jsonStr) {
     const preview = trimmed.slice(0, 300) || "(empty response)";

@@ -1477,21 +1477,6 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         reviseRecord(doc, id, patch, Math.floor(Date.now() / 1000)));
     },
 
-    /**
-     * 重新比对每个 agent 的绑定内容。
-     *
-     * 遍历**整个花名册**，不只是打开过的会话：基线 (`agent.contextHash`) 现在存在
-     * 花名册里，所以刚打开应用、一个会话都没打开时，攒了十个角色的项目也能立刻
-     * 看出哪几个的设定变过——那正是最需要这条提示的时刻。
-     *
-     * 没有基线的 agent（还没开过口）被跳过：它没有任何已经烘进上下文的旧内容，
-     * 下一次发送就是新的，标成「已更新」是在报一件没发生的事。
-     *
-     * 每次比对要读绑定条目的正文——知识库索引里只有元数据，特征正文不在其中。
-     * 没有为此加一层「先比元数据签名、不同再读文件」的快路：绑定通常是个位数
-     * 条目、agent 通常是个位数个，而这个函数只在知识库重扫之后跑一次；先加缓存
-     * 层，等于为一个还没量到的问题增加一处会和真相不同步的状态。
-     */
     refreshAreas: async () => {
       const { projectPath } = get();
       if (!projectPath) { set({ areas: [] }); return; }
@@ -1544,6 +1529,21 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       await get().refreshAreas();
     },
 
+    /**
+     * 重新比对每个 agent 的绑定内容。
+     *
+     * 遍历**整个花名册**，不只是打开过的会话：基线 (`agent.contextHash`) 现在存在
+     * 花名册里，所以刚打开应用、一个会话都没打开时，攒了十个角色的项目也能立刻
+     * 看出哪几个的设定变过——那正是最需要这条提示的时刻。
+     *
+     * 没有基线的 agent（还没开过口）被跳过：它没有任何已经烘进上下文的旧内容，
+     * 下一次发送就是新的，标成「已更新」是在报一件没发生的事。
+     *
+     * 每次比对要读绑定条目的正文——知识库索引里只有元数据，特征正文不在其中。
+     * 没有为此加一层「先比元数据签名、不同再读文件」的快路：绑定通常是个位数
+     * 条目、agent 通常是个位数个，而这个函数只在知识库重扫之后跑一次；先加缓存
+     * 层，等于为一个还没量到的问题增加一处会和真相不同步的状态。
+     */
     checkBindings: async () => {
       const { projectPath, order } = get();
       if (!projectPath) return;

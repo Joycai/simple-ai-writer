@@ -2174,7 +2174,8 @@
       "scene": "场景",
       "memory": "记忆",
       "memoryLead": "以下是你自己记下的、到现在仍然有效的事。它们不随对话变长而遗忘。",
-      "memoryNone": "（暂时没有。）"
+      "memoryNone": "（暂时没有。）",
+      "boundNone": "（暂时没有绑定的条目。需要设定时用 read_lore_entity 去读。）"
     },
     "roster": {
       "search": "搜索 agent",

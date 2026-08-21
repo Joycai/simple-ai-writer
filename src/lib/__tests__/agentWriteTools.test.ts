@@ -215,7 +215,7 @@ describe("create_lore_entity", () => {
 
     expect(res.content).toContain("Created lore entity");
     const written = fs.get(`${PROJECT}/.ai-writer/lore/characters/kael/index.md`);
-    expect(written).toContain('name: Kael');
+    expect(written).toContain('name: "Kael"');
     expect(written).toContain('"凯尔"');
     expect(written).toContain("A rival swordsman.");
     expect(ctx.loreChanged).toBe(1);
@@ -314,7 +314,7 @@ describe("update_lore_meta", () => {
     expect(res.content).toContain("body was left untouched");
     const written = fs.get(AVA)!;
     expect(written).toContain('summary: "now a queen"');
-    expect(written).toContain("name: Ava");
+    expect(written).toContain('name: "Ava"');
     expect(written).toContain("category: characters");
     expect(written).toContain("# Ava");
     expect(fs.get(backupsOf()[0])).toBe(INDEX_MD);
@@ -763,7 +763,7 @@ describe("move_lore_entity", () => {
 
     expect(res.content).toContain('renamed to "Ava Reyne"');
     const written = fs.get(`${dirOf("characters", "ava")}/index.md`)!;
-    expect(written).toContain("name: Ava Reyne");
+    expect(written).toContain('name: "Ava Reyne"');
     expect(written).toContain('"Ava"'); // old name still matches earlier chapters
     expect(written).toContain('"阿瓦"'); // pre-existing alias survived
     expect(fs.get(backupsOf()[0])).toBe(INDEX_MD);

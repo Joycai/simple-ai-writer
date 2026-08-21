@@ -299,7 +299,9 @@ export async function createEntity(
   const dirPath = `${projectPath}/.ai-writer/lore/${category}/${entityId}`;
   await makeDir(dirPath);
 
-  const indexContent = `---\nname: ${name}\naliases: []\ncategory: ${category}\nsummary: \n---\n\n# ${name}\n\n`;
+  // name is quoted like summary/aliases: it is author input, and a newline or
+  // leading "[" written bare would corrupt the line-based frontmatter parser.
+  const indexContent = `---\nname: ${yamlQuote(name)}\naliases: []\ncategory: ${category}\nsummary: \n---\n\n# ${name}\n\n`;
   await writeFile(`${dirPath}/index.md`, indexContent);
 
   return dirPath;
@@ -335,7 +337,7 @@ export async function createEntityWithContent(
   const aliasLines = aliases.map((a) => `  - ${yamlQuote(a)}`).join("\n");
   const frontmatter = [
     "---",
-    `name: ${name}`,
+    `name: ${yamlQuote(name)}`,
     `aliases:`,
     aliasLines,
     `category: ${category}`,
@@ -361,7 +363,7 @@ export function serializeEntityFrontmatter(meta: EntityMeta): string {
     : `aliases: []`;
   return [
     "---",
-    `name: ${meta.name}`,
+    `name: ${yamlQuote(meta.name)}`,
     aliasBlock,
     `category: ${meta.category}`,
     `summary: ${yamlQuote(meta.summary)}`,

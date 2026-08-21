@@ -111,7 +111,11 @@ export async function buildBoundContent(
 
     const room = BOUND_BLOCK_CHAR_CAP - used;
     if (room <= title.length + 32) {
-      parts.push(`${title}\n[未展开——绑定内容已超出预算，需要时用 read_lore_entity 读它。]`);
+      const placeholder = `${title}\n[未展开——绑定内容已超出预算，需要时用 read_lore_entity 读它。]`;
+      parts.push(placeholder);
+      // 占位行也占字符：不计入的话，几十个超预算的绑定项能把「已封顶」的块
+      // 越顶越高。
+      used += placeholder.length;
       if (!entities.includes(entity)) entities.push(entity);
       continue;
     }

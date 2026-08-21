@@ -8,7 +8,7 @@ import {
   type LoreEntity,
   type CategoryId,
 } from "../lib/lore";
-import { removeDir } from "../lib/fs/fileio";
+import { makeDir, renamePath } from "../lib/fs/fileio";
 
 interface LoreState {
   index: LoreIndex;
@@ -209,7 +209,12 @@ export const useLoreStore = create<LoreState>((set, get) => ({
   },
 
   deleteEntity: async (projectPath, entity) => {
-    await removeDir(entity.dirPath);
+    // 目录移进 `.ai-writer/backups/`，不真删——和删 agent、删记忆区、删文档同一个
+    // 规矩。条目正文是作者写的字，而它最可能被删的时刻，恰恰是作者以为自己不再
+    // 需要它的时刻。这里曾经是整个删除纪律里唯一的硬删除。
+    const backups = `${projectPath}/.ai-writer/backups`;
+    await makeDir(backups);
+    await renamePath(entity.dirPath, `${backups}/lore-${Date.now()}-${entity.category}-${entity.id}`);
     await get().scanProject(projectPath);
     if (get().selectedEntity?.id === entity.id) {
       set({ selectedEntity: null, selectedFile: null, fileContent: "" });
