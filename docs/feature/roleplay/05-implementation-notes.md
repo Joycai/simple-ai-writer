@@ -547,3 +547,69 @@ import 它。** 配套加了 `LiveSession.contextVersion`：`history` 是就地 
 
 **旁白 5 个 scene 工具的逐个行为**同样没验，尤其是 `read_scene` 的分页续读和
 `search_scenes` 的跨场次检索。
+
+## 9. 第九轮（第二次审查）：记忆生命周期的三处塌方与一批数据完整性修复
+
+这一轮是一次全量代码审查的产物。三个高严重度问题共享同一个根因——**块的
+「存在性」没有被当成受管理的状态**——外加一批各自独立的数据完整性修复。
+
+### 9.1 块恒存在（对不变量二/四的收紧）
+
+原实现「有内容才建块」：播种时零记忆就不建记忆块、零绑定就不建绑定块。这让
+「无→有」成为一个到处接不住的状态迁移：
+
+- **零记忆开场的新角色**（最常见的情形），首场戏里 `remember` 的东西在第一次
+  压缩把工具结果折叠掉之后，`refreshMemoryBlock` 面对不存在的块只能沉默——
+  记忆从上下文里永远消失，与工具告诉模型的 "This survives context compaction"
+  直接矛盾。
+- 播种时没有绑定的 agent，作者中途加绑定点「刷新设定」：基线更新了、提示灭了、
+  块却没插进去——**操作看起来生效了，其实没有**（§2.16 警告过的同一类坏法）。
+
+现在 `seedRoleplayHistory` **无条件**创建两个块，空时只是一行占位（
+`roleplay.section.memoryNone` / `boundNone`）。所有刷新路径天然闭合，prelude
+的稳定前缀长度也不再随内容有无而变。
+
+### 9.2 memoryBlock 的身份要过序列化这一关
+
+`serializeChatSession` 只认 `ChatSessionMeta` 的字段；Roleplay 扩展的两个块
+引用一概不存。boundBlock 靠 `SerializedSession` 单独存下标救了回来，
+memoryBlock 没有——于是**重启一次，记忆块就永久失联**：`select()` 恢复出的
+meta 里它是 undefined，四个刷新时刻里除播种外全部静默 no-op，历史里那条
+【记忆】消息内容冻结在上次存盘时刻。
+
+修法照抄 boundBlock：`SerializedSession.memoryBlock` 存下标（加法字段），
+`select()` 两个都重连。对本版本之前播种的残缺历史，恢复和「刷新设定」入口
+先过 `ensureBlocks`（context.ts）补块——历史里如果还留着旧块消息，会多出一条
+几十字的惰性消息，代价有界且只发生一次，换取不用按 i18n 文案去历史里猜。
+
+### 9.3 转场沉降是「移出」，不是「标 void 留档」
+
+06 §3.1 的原文是「移出常驻层」，实现写成了标 `void` 留在 memory.md——而分拣
+过滤器对 `void` 记录**永远命中**，于是每转一场，全部历史 event/note/done/void
+记录都被再灌进记忆区一遍，条目随转场次数平方级膨胀。
+
+现在分拣是 `memory.ts` 的纯函数 `takeSinkable`（幂等有测试钉着），沉降的记录
+在全部写进记忆区之后从 doc 移除——中途失败最多把已沉的重复一次，绝不丢。
+「只增改不删」防的是模型删自己不想要的记录；转场分拣和回退（`dropRecordsFrom`）
+一样是作者按下的动作。`next` 计数器照旧不回退。
+
+### 9.4 播种轮也要想起旧事
+
+记忆区检索原来只活在 runJob 的续跑分支里，播种那条路（新开会话、以及每次
+重启后的重播种）的第一问永远想不起任何旧事——而转场后的第一句恰恰最需要。
+现在两条路共用 `injectAreaRecall`；播种且无回放时载体会落进 prelude（永不
+折叠、账本永不过期），所以那种情况下它被标成自己的轮起点——`segmentHistory`
+按 Set 判断轮起点，不看 `turnStarts` 的数组顺序，这一手是安全的。
+
+### 9.5 数据完整性小修（各自带测试）
+
+| 修的 | 曾经的坏法 |
+|---|---|
+| `loadRoster` 的死分支 | 「JSON 合法但条目全坏」返回空花名册，docstring 承诺的目录重建从未发生 |
+| `renderTurn` 空名角色轮 | 兜底成 `我`，round-trip 变成作者轮（说话人翻转）；现在省略名字字段 |
+| transcript 追加链（`appendTurnChained`） | 发送在生成中是允许的，两条路径各自从旧 state 算轮号，同一瞬能铸出重复的 `[N]` |
+| `memory.md` 字段清洗 | 标题/主语里的 `·` 劈行；正文里长得像 `### [mN]` 的行被解析成新记录、抬高计数器 |
+| `rewind` 清 `recalled` | 被撤销轮号上的「想起了…」错挂到重写后同轮号的新对话 |
+| 场次编号 | `listArchives().length + 1` 与 `archiveSession` 的 max+1 在手删归档后错开；统一走 `peekNextArchiveNo` |
+| `AgentDraft.areaId` | 类型上引导调用方传 `"new"` 而 `createAgent` 原样存储；现在类型收窄 + `isValidAreaId` 校验 |
+| lore 侧 | `generator.ts` 的 JSON 提取补上外层大括号切片（splitter 早修过的坑）；`entity.ts` 三处 `name:` 过 `yamlQuote`；`deleteEntity` 从硬删除改为移入 backups；`buildBoundContent` 的占位行计入预算 |

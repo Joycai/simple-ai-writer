@@ -2179,7 +2179,8 @@
       "scene": "Scene",
       "memory": "Memory",
       "memoryLead": "What you have written down and that still holds. It does not fade as the conversation grows.",
-      "memoryNone": "(Nothing yet.)"
+      "memoryNone": "(Nothing yet.)",
+      "boundNone": "(No bound entries yet. Use read_lore_entity when you need the setting.)"
     },
     "roster": {
       "search": "Search agents",

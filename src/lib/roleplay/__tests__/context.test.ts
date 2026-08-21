@@ -31,8 +31,8 @@ import { buildCompactedHistory, planFold, segmentHistory } from "../../agent/com
 import type { StreamMessage } from "../../ai/types";
 import type { LoreEntity, LoreIndex } from "../../lore/model";
 import {
-  buildBoundContent, contextSignature, refreshMemoryBlock, refreshSystemPrompt,
-  seedRoleplayHistory, selectReplayTurns,
+  buildBoundContent, contextSignature, createRoleplayMeta, ensureBlocks,
+  refreshMemoryBlock, refreshSystemPrompt, seedRoleplayHistory, selectReplayTurns,
   type RoleplaySessionMeta, type SystemPromptInput,
 } from "../context";
 import { NO_PERSONA } from "../model";
@@ -124,9 +124,21 @@ describe("记忆块（不变量四）", () => {
     expect(String(meta.memoryBlock?.content)).toContain("雪停了一起去塔下");
   });
 
-  it("is absent entirely when the agent has recorded nothing", async () => {
+  // 有意的行为变更：块**无条件**创建，空时只是占位一行。「有内容才建」让
+  // 「无→有」成为接不住的迁移——零记忆开场的新角色，首场戏里 remember 的
+  // 东西在第一次压缩后就永远进不了 prelude（refreshMemoryBlock 面对不存在
+  // 的块只能沉默）。
+  it("seeds a placeholder block even when nothing is recorded yet", async () => {
+    const { messages, meta } = await seed("「你还在等？」", []);
+    expect(meta.memoryBlock).not.toBeNull();
+    expect(messages[2]).toBe(meta.memoryBlock);
+    expect(String(meta.memoryBlock?.content)).toContain("roleplay.section.memoryNone");
+  });
+
+  it("fills the placeholder block on the first refresh after a record lands", async () => {
     const { meta } = await seed("「你还在等？」", []);
-    expect(meta.memoryBlock).toBeNull();
+    refreshMemoryBlock(meta, [PACT]);
+    expect(String(meta.memoryBlock?.content)).toContain("雪停了一起去塔下");
   });
 
   it("keeps only what is still live", async () => {
@@ -425,6 +437,92 @@ describe("从 transcript 重建", () => {
       loreBudgetChars: 4000, memory: [], priorTurns: [], priorSummary: "",
     });
     expect(restored.messages.map((m) => m.role)).toEqual(fresh.messages.map((m) => m.role));
+  });
+});
+
+/**
+ * 「零记忆开场」这条路曾经是不变量四的盲区：播种时没有 open 记录就不建块，
+ * 而 refreshMemoryBlock 面对不存在的块只能沉默。于是新角色首场戏里记下的
+ * 约定，第一次压缩把 remember 的工具结果折叠掉之后就从上下文里永远消失——
+ * 与工具告诉模型的 "This survives context compaction" 直接矛盾。
+ */
+describe("零记忆开场的记忆存活", () => {
+  it("empty-seeded session still carries memories through a real compaction", async () => {
+    const { messages, meta } = await seed("「你还在等？」", []);
+    const history: StreamMessage[] = [...messages];
+    const memoryBlock = meta.memoryBlock;
+    expect(memoryBlock).not.toBeNull();
+
+    for (let i = 0; i < 24; i++) {
+      const q: StreamMessage = { role: "user", content: `第 ${i} 轮的问题。`.repeat(60) };
+      history.push(q);
+      meta.turnStarts.push(q);
+      history.push({ role: "assistant", content: `第 ${i} 轮的回答。`.repeat(60) });
+    }
+    const plan = planFold(history, meta, 2000);
+    expect(plan).not.toBeNull();
+    const next = buildCompactedHistory(history, meta, plan!, "到目前为止的摘要。");
+
+    // 压缩后刷新——runJob 里正是这个顺序。占位块被灌上真实记录。
+    refreshMemoryBlock(meta, [PACT]);
+    expect(next).toContain(memoryBlock!);
+    expect(String(memoryBlock!.content)).toContain("雪停了一起去塔下");
+    expect(segmentHistory(next, meta).prelude).toContain(memoryBlock!);
+  });
+});
+
+/**
+ * 旧版本播种的历史没有这两个块（那时空内容不建块，序列化也不存 memoryBlock
+ * 的身份）。ensureBlocks 是恢复路径上的补块器。
+ */
+describe("ensureBlocks", () => {
+  it("inserts both blocks right after the system message for a legacy history", () => {
+    const system: StreamMessage = { role: "system", content: "人设。" };
+    const question: StreamMessage = { role: "user", content: "「你还在等？」" };
+    const history: StreamMessage[] = [system, question];
+    const meta = createRoleplayMeta();
+    meta.turnStarts.push(question);
+
+    ensureBlocks(history, meta);
+
+    expect(history).toHaveLength(4);
+    expect(history[0]).toBe(system);
+    expect(history[1]).toBe(meta.boundBlock);
+    expect(history[2]).toBe(meta.memoryBlock);
+    expect(history[3]).toBe(question);
+    // 补出来的块能被正常刷新——这正是补它的意义。
+    refreshMemoryBlock(meta, [PACT]);
+    expect(String(meta.memoryBlock?.content)).toContain("雪停了一起去塔下");
+    // 补进的块在 prelude 里，压缩折不掉它们。
+    const { prelude } = segmentHistory(history, meta);
+    expect(prelude).toContain(meta.boundBlock as StreamMessage);
+    expect(prelude).toContain(meta.memoryBlock as StreamMessage);
+  });
+
+  it("is a no-op when both blocks already exist", async () => {
+    const { messages, meta } = await seed();
+    const before = messages.length;
+    const bound = meta.boundBlock;
+    const memory = meta.memoryBlock;
+    ensureBlocks(messages, meta);
+    expect(messages).toHaveLength(before);
+    expect(meta.boundBlock).toBe(bound);
+    expect(meta.memoryBlock).toBe(memory);
+  });
+
+  it("only fills the missing one", async () => {
+    const { messages, meta } = await seed();
+    const bound = meta.boundBlock;
+    // 模拟旧序列化：memoryBlock 的身份丢了，消息还在历史里。
+    const stale = meta.memoryBlock;
+    meta.memoryBlock = null as StreamMessage | null;
+    ensureBlocks(messages, meta);
+    expect(meta.boundBlock).toBe(bound);
+    expect(meta.memoryBlock).not.toBe(stale);
+    expect(meta.memoryBlock).not.toBeNull();
+    // 新块紧跟在绑定块后面。
+    expect(messages.indexOf(meta.memoryBlock as StreamMessage))
+      .toBe(messages.indexOf(bound as StreamMessage) + 1);
   });
 });
 

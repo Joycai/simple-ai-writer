@@ -92,49 +92,46 @@ export function parseScript(text: string, opts: ParseScriptOptions = {}): Script
 }
 
 function classify(line: string, strict: boolean): ScriptSegment {
-  {
-
-    // 元指令：整块出戏，底色下沉 + 虚线左规 + META 角标（设计稿 1c）。
-    const metaInner = wrapped(line, "[", "]");
-    if (metaInner !== null) return seg("meta", [{ kind: "text", text: metaInner }], metaInner);
-    if (!strict && line.startsWith("[") && !line.includes("]")) {
-      const inner = line.slice(1);
-      return seg("meta", [{ kind: "text", text: inner }], inner);
-    }
-
-    // 动作：星号本身不显示。
-    const actionInner = wrapped(line, "*", "*");
-    if (actionInner !== null && !actionInner.includes("*")) {
-      return seg("action", [{ kind: "text", text: actionInner }], actionInner);
-    }
-    if (!strict && line.startsWith("*") && line.length > 1 && !line.slice(1).includes("*")) {
-      const inner = line.slice(1);
-      return seg("action", [{ kind: "text", text: inner }], inner);
-    }
-
-    // 台词：引号保留，降到弱化色。
-    for (const open of OPEN_QUOTES) {
-      const close = CLOSE_OF[open];
-      const inner = wrapped(line, open, close);
-      if (inner !== null) {
-        return seg("speech", [
-          { kind: "mark", text: open },
-          { kind: "text", text: inner },
-          { kind: "mark", text: close },
-        ], inner);
-      }
-      // 流式中的半句话：开引号已经落下，闭引号还没到。
-      if (!strict && line.startsWith(open) && !line.slice(open.length).includes(close)) {
-        const rest = line.slice(open.length);
-        return seg("speech", [
-          { kind: "mark", text: open },
-          { kind: "text", text: rest },
-        ], rest);
-      }
-    }
-
-    return seg("scene", [{ kind: "text", text: line }], line);
+  // 元指令：整块出戏，底色下沉 + 虚线左规 + META 角标（设计稿 1c）。
+  const metaInner = wrapped(line, "[", "]");
+  if (metaInner !== null) return seg("meta", [{ kind: "text", text: metaInner }], metaInner);
+  if (!strict && line.startsWith("[") && !line.includes("]")) {
+    const inner = line.slice(1);
+    return seg("meta", [{ kind: "text", text: inner }], inner);
   }
+
+  // 动作：星号本身不显示。
+  const actionInner = wrapped(line, "*", "*");
+  if (actionInner !== null && !actionInner.includes("*")) {
+    return seg("action", [{ kind: "text", text: actionInner }], actionInner);
+  }
+  if (!strict && line.startsWith("*") && line.length > 1 && !line.slice(1).includes("*")) {
+    const inner = line.slice(1);
+    return seg("action", [{ kind: "text", text: inner }], inner);
+  }
+
+  // 台词：引号保留，降到弱化色。
+  for (const open of OPEN_QUOTES) {
+    const close = CLOSE_OF[open];
+    const inner = wrapped(line, open, close);
+    if (inner !== null) {
+      return seg("speech", [
+        { kind: "mark", text: open },
+        { kind: "text", text: inner },
+        { kind: "mark", text: close },
+      ], inner);
+    }
+    // 流式中的半句话：开引号已经落下，闭引号还没到。
+    if (!strict && line.startsWith(open) && !line.slice(open.length).includes(close)) {
+      const rest = line.slice(open.length);
+      return seg("speech", [
+        { kind: "mark", text: open },
+        { kind: "text", text: rest },
+      ], rest);
+    }
+  }
+
+  return seg("scene", [{ kind: "text", text: line }], line);
 }
 
 /**
@@ -150,7 +147,9 @@ export function scriptPreview(text: string, cap: number): string {
   const source = last.kind === "speech" || last.kind === "action"
     ? renderPreview(last)
     : last.plain;
-  return source.length > cap ? `${source.slice(0, cap)}…` : source;
+  // 按码点截断——String#slice 数的是 UTF-16 单元，会把 emoji 切成半个代理对。
+  const chars = [...source];
+  return chars.length > cap ? `${chars.slice(0, cap).join("")}…` : source;
 }
 
 /** 摘要行保留标记的排版信息（台词带引号、动作带星号），设计稿 1d 的要求。 */

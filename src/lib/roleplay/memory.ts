@@ -168,16 +168,33 @@ function splitKeys(raw: string): string[] {
   return raw.split(",").map((k) => k.trim()).filter(Boolean);
 }
 
+/** 标题/主语和关键字同一条纪律：字段分隔符不能出现在字段里，否则这一行读不回来。 */
+function sanitizeField(s: string): string {
+  return s.replace(/·/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * 正文行不能长得像本文件的结构行——`### [m9] …` 会被解析成一条新记录，把这条
+ * 的正文劈成两半。前缀一个空格：markdown 视觉上无害，锚定 `^` 的三个正则都
+ * 认不出它，往返时正文只多一个前导空格。
+ */
+function escapeBodyLine(line: string): string {
+  return HEADER_RE.test(line) || SECTION_RE.test(line) || RECORD_RE.test(line)
+    ? ` ${line}`
+    : line;
+}
+
 function renderRecord(r: MemoryRecord): string {
   const keys = r.keys.map(sanitizeKey).filter(Boolean);
   const fields = [
-    r.title,
-    ...(r.subject ? [r.subject] : []),
+    sanitizeField(r.title),
+    ...(r.subject ? [sanitizeField(r.subject)] : []),
     r.status,
     `turn ${r.turn}`,
     ...(keys.length ? [`${KEYS_PREFIX}${keys.join(",")}`] : []),
   ];
-  return `### [${r.id}] ${fields.join(" · ")}\n${r.body.trim()}\n`;
+  const body = r.body.trim().split(/\r?\n/).map(escapeBodyLine).join("\n");
+  return `### [${r.id}] ${fields.join(" · ")}\n${body}\n`;
 }
 
 /** 把整份记忆写回规范格式。分组顺序固定，组内按 id 升序（＝记下的先后）。 */
@@ -241,6 +258,32 @@ export function dropRecordsFrom(doc: MemoryDoc, fromTurn: number): {
   return {
     doc: { records: doc.records.filter((r) => !dropped.includes(r)), next: doc.next },
     dropped,
+  };
+}
+
+/**
+ * 转场时的分拣：哪些记录沉进记忆区、常驻层剩下什么。
+ *
+ * 规则按性质，不按预算（06 §3.1）：欠着的约定/待办、关系留在常驻层；其余
+ * （事件、其他、旧前情、已兑现/已作废的约定）**移出**常驻层，由调用方逐条写进
+ * 记忆区。
+ *
+ * 是**移出**而不是标 `void` 留档——这半句话曾经写错过：沉降后的记录被标成
+ * `void` 留在 memory.md 里，而这个过滤器对 `void` 记录永远命中，于是每转一场，
+ * 全部历史记录都被再灌进记忆区一遍，条目随转场次数平方级膨胀。移出也正是设计
+ * 文档的原文（「移出常驻层」）；「只增改不删」那条纪律防的是模型删自己不想要的
+ * 记录，转场分拣和回退（`dropRecordsFrom`）一样，是作者按下的动作。
+ *
+ * `next` 计数器不动：id 永不复用，即使那条记录已经沉走。
+ */
+export function takeSinkable(doc: MemoryDoc): { doc: MemoryDoc; sinking: MemoryRecord[] } {
+  const sinking = doc.records.filter(
+    (r) => !((r.kind === "pact" || r.kind === "todo") && r.status === "open") && r.kind !== "bond",
+  );
+  if (!sinking.length) return { doc, sinking: [] };
+  return {
+    doc: { records: doc.records.filter((r) => !sinking.includes(r)), next: doc.next },
+    sinking,
   };
 }
 

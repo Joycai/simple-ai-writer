@@ -110,13 +110,24 @@ export async function loadRoster(projectPath: string): Promise<{ roster: Roster;
   try {
     if (await fileExists(path)) {
       const raw = JSON.parse(await readFile(path)) as Record<string, unknown>;
-      const agents = Array.isArray(raw.agents)
-        ? raw.agents.map(coerceAgent).filter((a): a is RoleplayAgent => a !== null)
-        : [];
-      if (agents.length > 0 || !Array.isArray(raw.agents)) {
+      const rawList = Array.isArray(raw.agents) ? raw.agents : null;
+      const agents = (rawList ?? [])
+        .map(coerceAgent)
+        .filter((a): a is RoleplayAgent => a !== null);
+      // 合法的空花名册（新项目）不触发重建；`agents` 字段缺失/不是数组，或者
+      // 条目一个都认不出来，才算损坏。这里曾经是两个返回相同值的死分支——
+      // 于是「JSON 合法但条目全坏」这种损坏返回了空花名册，目录重建从未发生，
+      // 与本函数 docstring 的承诺相反。
+      if (rawList !== null && (agents.length > 0 || rawList.length === 0)) {
         return { roster: { authorPersona: coercePersona(raw.authorPersona), agents }, rebuilt: false };
       }
-      return { roster: { authorPersona: coercePersona(raw.authorPersona), agents }, rebuilt: false };
+      console.warn("[roleplay] agents.json entries unreadable, rebuilding from directories");
+      const rebuilt = await rebuildRoster(projectPath);
+      // 条目坏了不等于 persona 也坏了——能救的都带上。
+      return {
+        roster: { authorPersona: coercePersona(raw.authorPersona), agents: rebuilt },
+        rebuilt: rebuilt.length > 0,
+      };
     }
   } catch (e) {
     console.warn("[roleplay] agents.json unreadable, rebuilding from directories:", e);
@@ -217,6 +228,14 @@ export interface RoleplaySession {
   snapshot: ChatSnapshot;
   /** 绑定块在 history 里的位置，刷新绑定时按它定位。null = 没有绑定块。 */
   boundBlock: StreamMessage | null;
+  /**
+   * 记忆块，同一套下标↔身份处理。它曾经不在这里——`serializeChatSession` 只认
+   * `ChatSessionMeta` 的字段，Roleplay 扩展出来的两个块引用它一概不存，于是
+   * 重启之后 `meta.memoryBlock` 永远是 undefined，四个刷新时刻（恢复、压缩后、
+   * 作者手动、播种）里前三个全部静默 no-op：历史里那条【记忆】消息内容冻结在
+   * 上次存盘的时刻，之后角色新记的约定在压缩后就从上下文里消失了。
+   */
+  memoryBlock: StreamMessage | null;
 }
 
 interface SerializedSession {
@@ -226,6 +245,8 @@ interface SerializedSession {
   chat: string;
   /** 绑定块在 history 里的下标，-1 表示没有。 */
   boundBlock: number;
+  /** 记忆块的下标。加法字段：旧文件读成 undefined，按「没有」处理，恢复时补块。 */
+  memoryBlock?: number;
 }
 
 /**
@@ -243,6 +264,7 @@ export async function saveSession(
     agentId,
     chat: serializeChatSession({ ...session.snapshot, turns: [], history: session.history }),
     boundBlock: session.boundBlock ? session.history.indexOf(session.boundBlock) : -1,
+    memoryBlock: session.memoryBlock ? session.history.indexOf(session.memoryBlock) : -1,
   };
   await makeDir(agentDir(projectPath, agentId));
   await writeFile(sessionPath(projectPath, agentId), JSON.stringify(data));
@@ -259,11 +281,16 @@ export async function loadSession(
     if (raw.v !== 1 || typeof raw.chat !== "string") return null;
     const snapshot = deserializeChatSession(raw.chat);
     if (!snapshot) return null;
-    const i = raw.boundBlock;
-    const boundBlock = Number.isInteger(i) && i >= 0 && i < snapshot.history.length
-      ? snapshot.history[i]
-      : null;
-    return { history: snapshot.history, snapshot, boundBlock };
+    const at = (i: number | undefined): StreamMessage | null =>
+      Number.isInteger(i) && (i as number) >= 0 && (i as number) < snapshot.history.length
+        ? snapshot.history[i as number]
+        : null;
+    return {
+      history: snapshot.history,
+      snapshot,
+      boundBlock: at(raw.boundBlock),
+      memoryBlock: at(raw.memoryBlock),
+    };
   } catch (e) {
     console.warn(`[roleplay] session unreadable for ${agentId}, will reseed:`, e);
     return null;
@@ -302,6 +329,15 @@ async function nextArchiveNo(dir: string): Promise<number> {
     if (m) max = Math.max(max, Number(m[1]));
   }
   return max + 1;
+}
+
+/**
+ * 这一场封存时**将会**拿到的编号。转场分拣要在封存前把「来自第 N 场」写进
+ * 记忆区条目，所以编号必须和 `archiveSession` 用同一个算法算出来——按个数数
+ * （`listArchives().length + 1`）在作者手删过一场归档之后就和实际编号错开了。
+ */
+export async function peekNextArchiveNo(projectPath: string, agentId: string): Promise<number> {
+  return nextArchiveNo(archiveDir(projectPath, agentId));
 }
 
 /**

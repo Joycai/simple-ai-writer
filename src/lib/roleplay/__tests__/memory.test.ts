@@ -10,7 +10,7 @@ vi.mock("../../../i18n", () => ({
 
 import {
   MEMORY_BLOCK_CHAR_CAP, addRecord, dropRecordsFrom, parseMemory, renderMemory,
-  renderMemoryBlock, reviseRecord, type MemoryDoc,
+  renderMemoryBlock, reviseRecord, takeSinkable, type MemoryDoc,
 } from "../memory";
 import type { MemoryKind, MemoryRecord } from "../model";
 
@@ -218,6 +218,68 @@ describe("dropRecordsFrom", () => {
 });
 
 /**
+ * 转场分拣。
+ *
+ * 最要紧的断言是**幂等**：沉降是「移出」，不是「标 void 留档」。后者曾经是实现
+ * ——而这个过滤器对 void 记录永远命中，于是每转一场，全部历史记录都被再灌进
+ * 记忆区一遍，条目随转场次数平方级膨胀。
+ */
+describe("takeSinkable", () => {
+  it("欠着的约定/待办和关系留下，其余移出", () => {
+    const before = doc([
+      rec({ id: "m1", kind: "pact", status: "open" }),          // 留
+      rec({ id: "m2", kind: "todo", status: "open" }),          // 留
+      rec({ id: "m3", kind: "bond", status: "open" }),          // 留（关系恒常驻）
+      rec({ id: "m4", kind: "pact", status: "done" }),          // 沉（已兑现）
+      rec({ id: "m5", kind: "event", status: "open" }),         // 沉
+      rec({ id: "m6", kind: "note", status: "open" }),          // 沉
+      rec({ id: "m7", kind: "scene", status: "open" }),         // 沉（旧前情）
+      rec({ id: "m8", kind: "todo", status: "void" }),          // 沉（已作废）
+    ], 9);
+    const { doc: after, sinking } = takeSinkable(before);
+    expect(after.records.map((r) => r.id)).toEqual(["m1", "m2", "m3"]);
+    expect(sinking.map((r) => r.id)).toEqual(["m4", "m5", "m6", "m7", "m8"]);
+    expect(after.next).toBe(9);
+  });
+
+  it("是幂等的：沉过一次的第二次不再出现", () => {
+    const before = doc([
+      rec({ id: "m1", kind: "pact", status: "open" }),
+      rec({ id: "m2", kind: "event" }),
+    ], 3);
+    const first = takeSinkable(before);
+    expect(first.sinking).toHaveLength(1);
+    // 第二场结束再分拣：这次没有新东西可沉。
+    const second = takeSinkable(first.doc);
+    expect(second.sinking).toEqual([]);
+    expect(second.doc).toBe(first.doc);
+  });
+
+  it("模拟三次转场，沉降总量等于记录数，不随次数增长", () => {
+    let current = doc([
+      rec({ id: "m1", kind: "event" }),
+      rec({ id: "m2", kind: "note" }),
+      rec({ id: "m3", kind: "pact", status: "open" }),
+    ], 4);
+    let sunkTotal = 0;
+    for (let i = 0; i < 3; i++) {
+      const { doc: after, sinking } = takeSinkable(current);
+      sunkTotal += sinking.length;
+      current = after;
+    }
+    expect(sunkTotal).toBe(2);
+    expect(current.records.map((r) => r.id)).toEqual(["m3"]);
+  });
+
+  it("没有可沉的就原样返回同一个对象", () => {
+    const before = doc([rec({ id: "m1", kind: "pact", status: "open" })], 2);
+    const { doc: after, sinking } = takeSinkable(before);
+    expect(after).toBe(before);
+    expect(sinking).toEqual([]);
+  });
+});
+
+/**
  * 关键字往返。
  *
  * 它现在还没人读（记忆区是下一期），但**已经在往盘上写**——写错了要到那一期才
@@ -248,5 +310,36 @@ describe("keys 的往返", () => {
     const after = parseMemory(renderMemory("rp-a-0001", before));
     expect(after.records[0].subject).toBe("桐谷萤");
     expect(after.records[0].keys).toEqual(["塔"]);
+  });
+});
+
+/**
+ * 字段行与结构行的往返加固：标题/主语和关键字同一条纪律（分隔符不能出现在
+ * 字段里），正文行不能长得像本文件的结构行。
+ */
+describe("round-trip 加固", () => {
+  it("标题里的 · 被清洗，不会把这一行劈成标题+主语", () => {
+    const before = doc([rec({ id: "m1", title: "西厢 · 夜谈", subject: null })], 2);
+    const parsed = parseMemory(renderMemory(AGENT, before));
+    expect(parsed.records).toHaveLength(1);
+    expect(parsed.records[0].title).toBe("西厢 夜谈");
+    expect(parsed.records[0].subject).toBeNull();
+  });
+
+  it("主语里的 · 同样被清洗", () => {
+    const before = doc([rec({ id: "m1", subject: "林 · 桐谷萤" })], 2);
+    const parsed = parseMemory(renderMemory(AGENT, before));
+    expect(parsed.records[0].subject).toBe("林 桐谷萤");
+    expect(parsed.records[0].status).toBe("open");
+  });
+
+  it("正文里长得像记录头的行不会被解析成一条新记录", () => {
+    const before = doc([rec({ id: "m1", body: "他留了张字条：\n### [m9] 假的记录头 · open · turn 3\n下面还有一行。" })], 2);
+    const parsed = parseMemory(renderMemory(AGENT, before));
+    expect(parsed.records).toHaveLength(1);
+    expect(parsed.records[0].body).toContain("假的记录头");
+    expect(parsed.records[0].body).toContain("下面还有一行");
+    // 计数器也没被假 id 抬高。
+    expect(parsed.next).toBe(2);
   });
 });

@@ -111,7 +111,11 @@ export async function buildBoundContent(
 
     const room = BOUND_BLOCK_CHAR_CAP - used;
     if (room <= title.length + 32) {
-      parts.push(`${title}\n[未展开——绑定内容已超出预算，需要时用 read_lore_entity 读它。]`);
+      const placeholder = `${title}\n[未展开——绑定内容已超出预算，需要时用 read_lore_entity 读它。]`;
+      parts.push(placeholder);
+      // 占位行也占字符：不计入的话，几十个超预算的绑定项能把「已封顶」的块
+      // 越顶越高。
+      used += placeholder.length;
       if (!entities.includes(entity)) entities.push(entity);
       continue;
     }
@@ -336,24 +340,25 @@ export async function seedRoleplayHistory(opts: {
   const messages: StreamMessage[] = [system];
   const meta = createRoleplayMeta();
 
-  if (bound.text) {
-    const block: StreamMessage = {
-      role: "user",
-      content: `【${i18n.t("roleplay.section.bound", { defaultValue: "绑定设定" })}】\n${bound.text}`,
-    };
-    messages.push(block);
-    meta.boundBlock = block;
-    // 账本：绑定条目已经在上下文里，逐轮注入不该再送一遍。carrier 是绑定块
-    // 本身——它永不离开历史，所以这些账本条目也永不失效。
-    recordInjections(meta, bound.entities, block);
-  }
+  // 两个 prelude 块**无条件**创建，空时只是一行占位。「有内容才建」曾经是这里
+  // 的写法，而它让「无→有」成为一个到处都接不住的状态迁移：新角色首场戏中途
+  // `remember` 的东西，压缩把工具结果折叠掉之后，`refreshMemoryBlock` 面对一个
+  // 不存在的块只能沉默——记忆块「恒在 prelude」的不变量四就这样在最常见的情形
+  // （零记忆开场的新角色）下失效。块恒存在，所有刷新路径就天然闭合，prelude 的
+  // 稳定前缀长度也不再随内容有无而变。
+  const boundBlock: StreamMessage = { role: "user", content: boundBlockContent(bound.text) };
+  messages.push(boundBlock);
+  meta.boundBlock = boundBlock;
+  // 账本：绑定条目已经在上下文里，逐轮注入不该再送一遍。carrier 是绑定块
+  // 本身——它永不离开历史，所以这些账本条目也永不失效。
+  recordInjections(meta, bound.entities, boundBlock);
 
-  const memoryText = renderMemoryBlock(opts.memory);
-  if (memoryText) {
-    const block: StreamMessage = { role: "user", content: memoryBlockContent(memoryText) };
-    messages.push(block);
-    meta.memoryBlock = block;
-  }
+  const memoryBlock: StreamMessage = {
+    role: "user",
+    content: memoryBlockContent(renderMemoryBlock(opts.memory) || memoryNoneText()),
+  };
+  messages.push(memoryBlock);
+  meta.memoryBlock = memoryBlock;
 
   // 首轮自动命中：绑定之外的词条，用作者第一句去匹配。
   const excludeDirs = new Set(bound.entities.map((e) => e.dirPath));
@@ -413,6 +418,45 @@ function memoryBlockContent(body: string): string {
   return `【${label}】\n${lead}\n${body}`;
 }
 
+function memoryNoneText(): string {
+  return i18n.t("roleplay.section.memoryNone", { defaultValue: "（暂时没有。）" });
+}
+
+/** 绑定块的完整正文。播种和刷新必须产出同一个形状，所以只有这一处拼它。 */
+function boundBlockContent(text: string): string {
+  const label = i18n.t("roleplay.section.bound", { defaultValue: "绑定设定" });
+  const body = text || i18n.t("roleplay.section.boundNone", {
+    defaultValue: "（暂时没有绑定的条目。需要设定时用 read_lore_entity 去读。）",
+  });
+  return `【${label}】\n${body}`;
+}
+
+/**
+ * 给一段**旧版本播种的**历史补上缺失的块。
+ *
+ * 播种现在无条件创建两个块，但本版本之前的 `session.json` 里躺着两类残缺历史：
+ * 播种时恰好没内容于是根本没建过块的，和序列化丢了 `memoryBlock` 身份的（旧
+ * `SerializedSession` 只存 boundBlock 下标）。对后者，如果历史里其实还留着旧的
+ * 记忆块消息，这里会再插一条新的——旧的退化成一条几十字的惰性消息，代价有界且
+ * 只发生一次；换取的是不用按 i18n 文案去历史里猜哪条消息曾经是块。
+ *
+ * 只在**恢复**（select）和「刷新设定」这两个低频入口调用，不进热路径。
+ */
+export function ensureBlocks(history: StreamMessage[], meta: RoleplaySessionMeta): void {
+  const afterSystem = history.length > 0 && history[0].role === "system" ? 1 : 0;
+  if (!meta.boundBlock) {
+    const block: StreamMessage = { role: "user", content: boundBlockContent("") };
+    history.splice(afterSystem, 0, block);
+    meta.boundBlock = block;
+  }
+  if (!meta.memoryBlock) {
+    const at = history.indexOf(meta.boundBlock) + 1;
+    const block: StreamMessage = { role: "user", content: memoryBlockContent(memoryNoneText()) };
+    history.splice(at, 0, block);
+    meta.memoryBlock = block;
+  }
+}
+
 /**
  * 刷新记忆块。
  *
@@ -432,10 +476,7 @@ export function refreshMemoryBlock(
   records: readonly MemoryRecord[],
 ): void {
   if (!meta.memoryBlock) return;
-  const body = renderMemoryBlock(records);
-  meta.memoryBlock.content = memoryBlockContent(
-    body || i18n.t("roleplay.section.memoryNone", { defaultValue: "（暂时没有。）" }),
-  );
+  meta.memoryBlock.content = memoryBlockContent(renderMemoryBlock(records) || memoryNoneText());
 }
 
 /**
@@ -452,8 +493,7 @@ export async function refreshBoundBlock(
 ): Promise<BoundContent> {
   const bound = await buildBoundContent(loreIndex, agent.boundPaths);
   if (meta.boundBlock) {
-    meta.boundBlock.content =
-      `【${i18n.t("roleplay.section.bound", { defaultValue: "绑定设定" })}】\n${bound.text}`;
+    meta.boundBlock.content = boundBlockContent(bound.text);
     recordInjections(meta, bound.entities, meta.boundBlock);
   }
   return bound;
