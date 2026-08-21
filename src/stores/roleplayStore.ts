@@ -27,8 +27,7 @@ import { create } from "zustand";
 import i18n from "../i18n";
 import { backupFile } from "../lib/agent/backup";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
-import { compactChatHistory, summarizeForCompaction } from "../lib/agent/compactRun";
-import { excludeDirsFor, noteTurnStart, recordInjections } from "../lib/agent/compact";
+import { summarizeForCompaction } from "../lib/agent/compactRun";
 import { presetFor } from "../lib/roleplay/presets";
 import { routeTools } from "../lib/agent/routing";
 import { repairToolCallPairing, runAgent } from "../lib/agent/runtime";
@@ -43,7 +42,6 @@ import { persistUsage } from "../lib/ai/usage";
 import type { MessageContent, StreamMessage } from "../lib/ai/types";
 import { inputCeilingFor, measureCharsPerToken } from "../lib/context/budget";
 import { hashText } from "../lib/context/memory";
-import { assembleTurnInjection } from "../lib/context/rag";
 import { loadApiKey } from "../lib/keyStore";
 import { notify } from "../lib/notify";
 import {
@@ -65,7 +63,7 @@ import { scriptPreview } from "../lib/roleplay/markup";
 
 import { runSceneRecap, type SceneRecap } from "../lib/roleplay/recap";
 import {
-  conversationReader, injectAreaRecall, loadStaticContext, prepareSeededHistory,
+  conversationReader, loadStaticContext, prepareContinuedHistory, prepareSeededHistory,
   type RecalledEntity,
 } from "../lib/roleplay/run";
 import {
@@ -496,64 +494,32 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         }));
         noteRecalled(job.agentId, seeded.recalled);
       } else {
-        repairToolCallPairing(history);
-
-        const compacted = await compactChatHistory({
-          history,
-          meta,
+        // 排序（修对 → 压缩 → 刷新记忆块 → 词条注入 → 区检索 → 提问）住在
+        // lib（prepareContinuedHistory），这里只剩状态：历史/事件/记事本/
+        // 「想起了…」，和摘要的 fire-and-forget 落盘。
+        const charsPerToken = measureCharsPerToken(job.match);
+        const cont = await prepareContinuedHistory({
+          projectPath, agent, loreIndex,
+          history, meta,
+          wire: job.wire,
+          matchText: job.match,
+          loreBudgetChars: loreBudgetTokens * charsPerToken,
+          areaBudgetChars: AREA_BUDGET_TOKENS * charsPerToken,
           ceilingTokens: inputCeilingFor(model.contextSize, contextUtilization),
           summarize: (input) =>
             summarizeForCompaction(connOptions({ provider, model, apiKey }), input, controller.signal),
         });
-        if (compacted) {
-          history = compacted.history;
-          patchSession(job.agentId, (s) => ({
-            ...s, history, liveLog: appendAgentEventTo(s.liveLog, compacted.event),
-          }));
-          // 折叠出来的摘要落盘：旁白的 read_scene_summary 读的就是它，而这
-          // 是它唯一被写出来的时刻——压缩本来就在生成这段文字，再要一次是白花钱。
-          if (meta.summaryText) {
-            void saveSummary(projectPath, job.agentId, meta.summaryText);
-          }
-          // 压缩刚刚把 `remember` 的那些工具结果折叠掉了——这正是记忆注入块
-          // 必须重新灌一遍的时刻，也是它唯一免费的时刻（历史本来就重建了，
-          // 缓存本来就作废了）。见 refreshMemoryBlock 的注释。
-          const fresh = await loadMemoryDoc(memoryPath(projectPath, job.agentId));
-          refreshMemoryBlock(meta, fresh.records);
-          patchSession(job.agentId, (s) => ({
-            ...s, memory: fresh.records, memoryStale: false,
-          }));
-        }
-
-        // 逐轮注入：绑定之外的新词条。账本保证已经在上下文里的不再重发。
-        const inj = await assembleTurnInjection({
-          loreIndex,
-          matchTarget: job.match,
-          excludeDirs: excludeDirsFor(meta, loreIndex),
-          loreBudgetChars: loreBudgetTokens * measureCharsPerToken(job.match),
-          doc: null,
-        });
-        if (inj.text) {
-          const carrier: StreamMessage = { role: "user", content: inj.text };
-          history.push(carrier);
-          const byDir = indexByDir(loreIndex);
-          recordInjections(
-            meta, inj.matchedEntities.flatMap((e) => byDir.get(e.dirPath) ?? []), carrier,
-          );
-        }
-
-        noteRecalled(job.agentId, await injectAreaRecall({
-          projectPath,
-          areaId: agent.areaId,
-          matchText: job.match,
-          history, meta,
-          insertIndex: history.length,
-          budgetChars: AREA_BUDGET_TOKENS * measureCharsPerToken(job.match),
+        history = cont.history;
+        patchSession(job.agentId, (s) => ({
+          ...s,
+          history,
+          liveLog: cont.compactedEvent
+            ? appendAgentEventTo(s.liveLog, cont.compactedEvent)
+            : s.liveLog,
+          ...(cont.memoryRecords ? { memory: cont.memoryRecords, memoryStale: false } : {}),
         }));
-
-        const question: StreamMessage = { role: "user", content: job.wire };
-        noteTurnStart(meta, question);
-        history.push(question);
+        if (cont.summaryToSave) void saveSummary(projectPath, job.agentId, cont.summaryToSave);
+        noteRecalled(job.agentId, cont.recalled);
       }
 
       // 到这里这一问已经在 history 里了。往后任何一步失败，重试都必须走上面

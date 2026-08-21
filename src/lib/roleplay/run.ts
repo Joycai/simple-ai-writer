@@ -11,14 +11,18 @@
 
 import i18n from "../../i18n";
 import { excludeDirsFor, noteTurnStart, recordInjections } from "../agent/compact";
+import { compactChatHistory, type SummarizeInput } from "../agent/compactRun";
+import type { AgentEvent } from "../agent/events";
+import { repairToolCallPairing } from "../agent/runtime";
 import type { MessageContent, StreamMessage } from "../ai/types";
 import { hashText } from "../context/memory";
 import { selectLore, type LoreActivationReport } from "../context/loreSelect";
+import { assembleTurnInjection } from "../context/rag";
 import { readEntityFile } from "../lore/entity";
-import type { LoreIndex } from "../lore/model";
+import type { LoreEntity, LoreIndex } from "../lore/model";
 import { areaEntities, scanArea } from "./area";
 import {
-  contextSignature, seedRoleplayHistory,
+  contextSignature, refreshMemoryBlock, seedRoleplayHistory,
   type BoundContent, type RoleplaySessionMeta,
 } from "./context";
 import type { ConversationReader } from "./conversationTools";
@@ -242,4 +246,115 @@ export async function prepareSeededHistory(opts: {
     contextHash,
     recalled,
   };
+}
+
+// ─── 续跑分支 ────────────────────────────────────────────────────────────────
+
+export interface ContinueOutcome {
+  /** 压缩可能重建数组；没压缩时就是传入的那一个。store 无条件换上。 */
+  history: StreamMessage[];
+  compactedEvent: AgentEvent | null;
+  /**
+   * 压缩产出的滚动摘要；store 负责 fire-and-forget 落盘——挪进这里同步 await
+   * 会改变失败语义（摘要写不进盘今天不毁这一轮）。
+   */
+  summaryToSave: string | null;
+  /** 压缩后从盘上重读的记忆；null = 没压缩，记事本不用动。 */
+  memoryRecords: MemoryRecord[] | null;
+  recalled: RecalledEntity[];
+}
+
+function indexByDir(loreIndex: LoreIndex): Map<string, LoreEntity> {
+  const byDir = new Map<string, LoreEntity>();
+  for (const entities of Object.values(loreIndex)) {
+    for (const e of entities ?? []) byDir.set(e.dirPath, e);
+  }
+  return byDir;
+}
+
+/**
+ * runJob 的续跑分支：有活历史时，把这一问接进去。
+ *
+ * 排序是这个函数存在的理由，逐条钉在测试里（run.test.ts）：
+ *
+ *   修对 → 压缩 →（压缩了才）刷新记忆块 → 词条注入 → 区检索 → 提问。
+ *
+ * 「压缩之后刷新记忆块」不是省钱的优化，**它精确地就是正确性边界**——压缩刚把
+ * `remember` 的工具结果折叠掉，此刻不重灌，角色欠着的约定就从上下文里消失了
+ * （refreshMemoryBlock 的注释）。**提问永远是最后一条**，且是本轮的 turnStart。
+ *
+ * `history` / `meta` 都是就地改：meta 的块身份必须跨越整个准备存活
+ * （saveSession 的下标序列化依赖它）。
+ */
+export async function prepareContinuedHistory(opts: {
+  projectPath: string;
+  agent: RoleplayAgent;
+  loreIndex: LoreIndex;
+  history: StreamMessage[];
+  meta: RoleplaySessionMeta;
+  wire: MessageContent;
+  matchText: string;
+  loreBudgetChars: number;
+  areaBudgetChars: number;
+  ceilingTokens: number;
+  /** 连接绑定的摘要器，store 用 connOptions 闭包好传进来——lib 不碰密钥。 */
+  summarize: (input: SummarizeInput) => Promise<string>;
+}): Promise<ContinueOutcome> {
+  const { projectPath, agent, loreIndex, meta } = opts;
+  let history = opts.history;
+  repairToolCallPairing(history);
+
+  let compactedEvent: AgentEvent | null = null;
+  let summaryToSave: string | null = null;
+  let memoryRecords: MemoryRecord[] | null = null;
+
+  const compacted = await compactChatHistory({
+    history, meta,
+    ceilingTokens: opts.ceilingTokens,
+    summarize: opts.summarize,
+  });
+  if (compacted) {
+    history = compacted.history;
+    compactedEvent = compacted.event;
+    // 折叠出来的摘要要落盘：旁白的 read_scene_summary 读的就是它，而这是它唯一
+    // 被写出来的时刻——压缩本来就在生成这段文字，再要一次是白花钱。
+    summaryToSave = meta.summaryText;
+    // 压缩刚刚把 `remember` 的那些工具结果折叠掉了——这正是记忆注入块必须重新
+    // 灌一遍的时刻，也是它唯一免费的时刻（历史本来就重建了，缓存本来就作废了）。
+    const fresh = await loadMemoryDoc(memoryPath(projectPath, agent.id));
+    refreshMemoryBlock(meta, fresh.records);
+    memoryRecords = fresh.records;
+  }
+
+  // 逐轮注入：绑定之外的新词条。账本保证已经在上下文里的不再重发。
+  const inj = await assembleTurnInjection({
+    loreIndex,
+    matchTarget: opts.matchText,
+    excludeDirs: excludeDirsFor(meta, loreIndex),
+    loreBudgetChars: opts.loreBudgetChars,
+    doc: null,
+  });
+  if (inj.text) {
+    const carrier: StreamMessage = { role: "user", content: inj.text };
+    history.push(carrier);
+    const byDir = indexByDir(loreIndex);
+    recordInjections(
+      meta, inj.matchedEntities.flatMap((e) => byDir.get(e.dirPath) ?? []), carrier,
+    );
+  }
+
+  const recalled = await injectAreaRecall({
+    projectPath,
+    areaId: agent.areaId,
+    matchText: opts.matchText,
+    history, meta,
+    insertIndex: history.length,
+    budgetChars: opts.areaBudgetChars,
+  });
+
+  const question: StreamMessage = { role: "user", content: opts.wire };
+  noteTurnStart(meta, question);
+  history.push(question);
+
+  return { history, compactedEvent, summaryToSave, memoryRecords, recalled };
 }

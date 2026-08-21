@@ -613,3 +613,25 @@ meta 里它是 undefined，四个刷新时刻里除播种外全部静默 no-op�
 | 场次编号 | `listArchives().length + 1` 与 `archiveSession` 的 max+1 在手删归档后错开；统一走 `peekNextArchiveNo` |
 | `AgentDraft.areaId` | 类型上引导调用方传 `"new"` 而 `createAgent` 原样存储；现在类型收窄 + `isValidAreaId` 校验 |
 | lore 侧 | `generator.ts` 的 JSON 提取补上外层大括号切片（splitter 早修过的坑）；`entity.ts` 三处 `name:` 过 `yamlQuote`；`deleteEntity` 从硬删除改为移入 backups；`buildBoundContent` 的占位行计入预算 |
+
+## 10. 第十轮：runJob 重构（LLD 09 的落地）
+
+纯结构重构，行为零变更（设计与被否掉的方案见
+[09-runjob-refactor-lld.md](09-runjob-refactor-lld.md)）。要点：
+
+- **新模块 `lib/roleplay/run.ts`**：`runJob` 的历史准备三分支里，播种和续跑各
+  成一个函数（`prepareSeededHistory` / `prepareContinuedHistory`），加上从
+  store 平移的 `loadStaticContext` / `injectAreaRecall`（改返回值风格）/
+  `conversationReader`，和抽出来的纯函数 `selectPriorTurns`。重试分支只有一行
+  `repairToolCallPairing`，留在 store 的分派处。
+- **分界**：lib 做 IO（读盘、跑压缩摘要——`summarize` 由 store 用 connOptions
+  闭包好传入，lib 不碰密钥），store 做状态（基线、会话字段、liveLog、
+  「想起了…」、摘要的 fire-and-forget 落盘）。lib 向 store 报告的事全部走
+  返回值（`SeedOutcome` / `ContinueOutcome`），不 import 任何 zustand store。
+- **编排从此有编排级测试**（`run.test.ts`，19 个用例）：压缩之后才刷新记忆块
+  （§9.1 的正确性边界）、区检索排在词条注入之后提问之前、提问永远最后一条且
+  是 turnStart、prelude 情形的载体标轮起点、账本防重发、基线由
+  `contextSignature` 对着 checkBindings 同一组输入算、块身份跨压缩存活、
+  summarize 普通失败跳过压缩而 AbortError 穿透。这些排序原先只存在于没有
+  测试的 zustand 闭包里。
+- `AREA_BUDGET_TOKENS` 归位到 `model.ts`（和其他领域预算常量一处）。

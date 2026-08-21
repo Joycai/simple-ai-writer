@@ -304,3 +304,141 @@ describe("prepareSeededHistory", () => {
     expect(restored.history.find((m) => m.content === "「等谁不重要。」")?.role).toBe("assistant");
   });
 });
+
+// ─── prepareContinuedHistory ─────────────────────────────────────────────────
+
+import { prepareContinuedHistory } from "../run";
+
+const NO_AREA_AGENT: RoleplayAgent = { ...SEED_AGENT, areaId: null };
+
+/** 一段活的短历史：播种 + 一轮已答完的对话。 */
+async function liveHistory(agent: RoleplayAgent = SEED_AGENT) {
+  const seeded = await prepareSeededHistory(seedOpts({ agent }));
+  return { history: seeded.history, meta: seeded.meta };
+}
+
+const contOpts = (
+  history: StreamMessage[], meta: Parameters<typeof prepareContinuedHistory>[0]["meta"],
+  over: Partial<Parameters<typeof prepareContinuedHistory>[0]> = {},
+) => ({
+  projectPath: "/p",
+  agent: SEED_AGENT,
+  loreIndex: {},
+  history, meta,
+  wire: "「塔那边现在怎么样了？」",
+  matchText: "「塔那边现在怎么样了？」",
+  loreBudgetChars: 4000,
+  areaBudgetChars: 4000,
+  ceilingTokens: 1_000_000,
+  summarize: async () => "到目前为止的摘要。",
+  ...over,
+});
+
+describe("prepareContinuedHistory", () => {
+  it("short history: no compaction, question lands last as a turn start", async () => {
+    seedFixture();
+    const { history, meta } = await liveHistory(NO_AREA_AGENT);
+    history.push({ role: "assistant", content: "「还没有。」" });
+
+    const out = await prepareContinuedHistory(
+      contOpts(history, meta, { agent: NO_AREA_AGENT }),
+    );
+    expect(out.history).toBe(history);           // 没压缩：同一个数组
+    expect(out.compactedEvent).toBeNull();
+    expect(out.summaryToSave).toBeNull();
+    expect(out.memoryRecords).toBeNull();
+    const last = out.history[out.history.length - 1];
+    expect(last.content).toBe("「塔那边现在怎么样了？」");
+    expect(meta.turnStarts).toContain(last);
+  });
+
+  it("area recall rides right before the question on the continue path too", async () => {
+    seedFixture();
+    // 播种那次已经想起过「塔」——换一个新条目，让续跑这轮有新东西可想。
+    areaFixture = [areaEntity("e001", "塔"), areaEntity("e002", "阿箬")];
+    files.set(
+      `${areaFixture[1].dirPath}/index.md`,
+      "---\nname: 阿箬\n---\n\n阿箬说过塔下的灯是她点的。",
+    );
+    const { history, meta } = await liveHistory();
+    history.push({ role: "assistant", content: "「还没有。」" });
+
+    const out = await prepareContinuedHistory(contOpts(history, meta, {
+      matchText: "「阿箬呢？」", wire: "「阿箬呢？」",
+    }));
+    expect(out.recalled).toEqual([{ name: "阿箬", dirPath: areaFixture[1].dirPath }]);
+    const carrier = out.history[out.history.length - 2];
+    expect(String(carrier.content)).toContain("阿箬说过塔下的灯");
+    // 载体挂在上一轮的尾部，不偷走轮起点。
+    expect(meta.turnStarts).not.toContain(carrier);
+  });
+
+  it("compaction refreshes the memory block from disk and hands back the summary", async () => {
+    seedFixture();
+    files.set(
+      "/p/.ai-writer/roleplay/rp-abc-0001/memory.md",
+      [
+        "<!-- roleplay-memory v1 agent=rp-abc-0001 next=2 -->",
+        "",
+        "## 约定 <!-- pact -->",
+        "",
+        "### [m1] 雪停了一起去塔下 · open · turn 3",
+        "他答应了。",
+        "",
+      ].join("\n"),
+    );
+    const { history, meta } = await liveHistory(NO_AREA_AGENT);
+    const boundBlock = meta.boundBlock;
+    const memoryBlock = meta.memoryBlock;
+    for (let i = 0; i < 24; i++) {
+      const q: StreamMessage = { role: "user", content: `第 ${i} 轮的问题。`.repeat(60) };
+      history.push(q);
+      meta.turnStarts.push(q);
+      history.push({ role: "assistant", content: `第 ${i} 轮的回答。`.repeat(60) });
+    }
+
+    const out = await prepareContinuedHistory(contOpts(history, meta, {
+      agent: NO_AREA_AGENT, ceilingTokens: 2000,
+    }));
+    expect(out.compactedEvent).not.toBeNull();
+    expect(out.history).not.toBe(history);       // 压缩重建了数组
+    expect(out.summaryToSave).toBe("到目前为止的摘要。");
+    // 「压缩之后刷新记忆块」——第九轮 §9.1 的正确性边界，第一次有编排级测试。
+    expect(out.memoryRecords?.map((r) => r.id)).toEqual(["m1"]);
+    expect(String(memoryBlock?.content)).toContain("雪停了一起去塔下");
+    // 两个块的对象身份跨压缩存活，且都还在新历史里。
+    expect(meta.boundBlock).toBe(boundBlock);
+    expect(meta.memoryBlock).toBe(memoryBlock);
+    expect(out.history).toContain(boundBlock!);
+    expect(out.history).toContain(memoryBlock!);
+    // 提问仍然是最后一条。
+    expect(out.history[out.history.length - 1].content).toBe("「塔那边现在怎么样了？」");
+  });
+
+  it("a summarize failure skips compaction instead of killing the turn; abort propagates", async () => {
+    seedFixture();
+    const { history, meta } = await liveHistory(NO_AREA_AGENT);
+    for (let i = 0; i < 24; i++) {
+      const q: StreamMessage = { role: "user", content: `第 ${i} 轮的问题。`.repeat(60) };
+      history.push(q);
+      meta.turnStarts.push(q);
+      history.push({ role: "assistant", content: `第 ${i} 轮的回答。`.repeat(60) });
+    }
+
+    // 普通失败：compactChatHistory 自己吞掉（返回 null），这一问照常接上。
+    const out = await prepareContinuedHistory(contOpts(history, meta, {
+      agent: NO_AREA_AGENT, ceilingTokens: 2000,
+      summarize: async () => { throw new Error("model down"); },
+    }));
+    expect(out.compactedEvent).toBeNull();
+    expect(out.history[out.history.length - 1].content).toBe("「塔那边现在怎么样了？」");
+
+    // 中止必须穿透——作者按了停止，接着组装就是违抗。
+    const abort = new Error("aborted");
+    abort.name = "AbortError";
+    await expect(prepareContinuedHistory(contOpts(out.history, meta, {
+      agent: NO_AREA_AGENT, ceilingTokens: 2000,
+      summarize: async () => { throw abort; },
+    }))).rejects.toThrow("aborted");
+  });
+});
