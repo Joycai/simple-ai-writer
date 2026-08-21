@@ -930,6 +930,73 @@ describe("streamCompletion — toolChoice", () => {
   });
 });
 
+describe("streamCompletion — Anthropic prompt caching", () => {
+  /**
+   * This family caches only where a `cache_control` breakpoint says to, and an
+   * agent loop re-sends the same system prompt and toolset on every round. The
+   * breakpoints are what stop that from being re-billed at full price.
+   */
+  const DONE = [
+    `data: {"type":"message_start","message":{"usage":{"input_tokens":4}}}\n\n`,
+    `data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}\n\n`,
+    `data: {"type":"message_stop"}\n\n`,
+  ];
+
+  const tool = (name: string): ToolDefinition => ({
+    type: "function",
+    function: { name, description: `does ${name}`, parameters: { type: "object", properties: {} } },
+  });
+
+  const SYSTEM: StreamMessage[] = [
+    { role: "system", content: "you are a writing assistant" },
+    { role: "user", content: "hi" },
+  ];
+
+  it("marks the last tool and the system block on the official standard", async () => {
+    const { calls } = await collect({
+      chunks: DONE,
+      standard: "anthropic",
+      messages: SYSTEM,
+      tools: [tool("a"), tool("b"), tool("c")],
+    });
+    const body = calls[0].body as {
+      tools: Record<string, unknown>[];
+      system: Record<string, unknown>[];
+    };
+    // Prefix caching: one marker on the LAST entry caches everything before it.
+    // Marking each tool would spend the four-breakpoint allowance for nothing.
+    expect(body.tools[0]).not.toHaveProperty("cache_control");
+    expect(body.tools[1]).not.toHaveProperty("cache_control");
+    expect(body.tools[2].cache_control).toEqual({ type: "ephemeral" });
+    expect(body.system).toEqual([
+      { type: "text", text: "you are a writing assistant", cache_control: { type: "ephemeral" } },
+    ]);
+  });
+
+  it("sends nothing of the sort on a compat endpoint", async () => {
+    // Deliberate, not an oversight: MiniMax's ④-family endpoint documents a
+    // `system` array with cache_control but nothing about `tools`, and a
+    // rejected field costs the author a whole failed round at the start of a
+    // stream. Anyone tempted to "just unify these two branches" has to delete
+    // this test first — and read docs/agent-tool-context-lld.md §2.3.
+    const { calls } = await collect({
+      chunks: DONE,
+      standard: "anthropic_compat",
+      messages: SYSTEM,
+      tools: [tool("a")],
+    });
+    const body = calls[0].body as { tools: unknown[]; system: unknown };
+    expect(body.system).toBe("you are a writing assistant");
+    expect(body.tools[0]).not.toHaveProperty("cache_control");
+  });
+
+  it("leaves a toolless request's tools field absent", async () => {
+    const { calls } = await collect({ chunks: DONE, standard: "anthropic", messages: SYSTEM });
+    expect(calls[0].body).not.toHaveProperty("tools");
+    expect(calls[0].body).toHaveProperty("system");
+  });
+});
+
 describe("streamCompletion — Anthropic SSE", () => {
   const ANTHROPIC = { standard: "anthropic" as const };
 
@@ -1074,7 +1141,11 @@ describe("streamCompletion — Anthropic SSE", () => {
       ],
     });
     expect(calls[0].url).toBe("https://api.example.com/v1/messages");
-    expect(calls[0].body.system).toBe("be terse");
+    // A block array rather than a bare string because the official standard
+    // carries a cache breakpoint here — see the prompt-caching describe above.
+    expect(calls[0].body.system).toEqual([
+      { type: "text", text: "be terse", cache_control: { type: "ephemeral" } },
+    ]);
     expect(calls[0].body.messages).toEqual([
       { role: "user", content: [{ type: "text", text: "hi" }] },
     ]);
@@ -1428,7 +1499,8 @@ describe("streamCompletion — Anthropic SSE", () => {
     // max_uses is the only brake on a tool that runs without asking and bills
     // per search — see MAX_SEARCHES_PER_REQUEST.
     expect(calls[0].body.tools).toEqual([
-      { type: "web_search_20250305", name: "web_search", max_uses: 10 },
+      // The cache breakpoint rides on the last entry whatever kind it is.
+      { type: "web_search_20250305", name: "web_search", max_uses: 10, cache_control: { type: "ephemeral" } },
     ]);
     // Nothing of ours to choose between — the endpoint decides whether to run
     // its own tool, and an opinion here would be about a decision we don't make.
@@ -1444,7 +1516,12 @@ describe("streamCompletion — Anthropic SSE", () => {
     });
     expect(calls[0].body.tools).toEqual([
       { type: "web_search_20250305", name: "web_search", max_uses: 10 },
-      { name: "get_weather", description: "Get the weather", input_schema: TOOL.function.parameters },
+      {
+        name: "get_weather",
+        description: "Get the weather",
+        input_schema: TOOL.function.parameters,
+        cache_control: { type: "ephemeral" },
+      },
     ]);
     expect(calls[0].body.tool_choice).toEqual({ type: "auto" });
   });
@@ -1949,6 +2026,7 @@ describe("streamCompletion — Anthropic SSE", () => {
         name: TOOL.function.name,
         description: TOOL.function.description,
         input_schema: TOOL.function.parameters,
+        cache_control: { type: "ephemeral" },
       },
     ]);
   });
