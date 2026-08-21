@@ -247,6 +247,43 @@
   color: var(--color-text-label);
 }
 
+/* 分类计数：搜索框之下、列表之上。横向可滚而不换行——分类数量取决于启用了
+   哪些能力包，折行会把这个头部撑成一块不定高的东西。 */
+.catRow {
+  display: flex;
+  gap: 6px;
+  padding: 7px 12px;
+  background: var(--rp-rail);
+  border-bottom: 1px solid var(--color-border-panel);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.catRow::-webkit-scrollbar { display: none; }
+
+.catChip {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--color-border-panel);
+  background: none;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.catChip:hover { color: var(--color-text-primary); }
+.catChipOn {
+  border-color: var(--color-border-accent);
+  color: var(--color-accent);
+}
+
+.catN { font-family: var(--font-mono); font-size: 10px; color: var(--color-text-hint); }
+.catChipOn .catN { color: var(--color-accent); }
+
 .pickerHead input {
   flex: 1;
   border: none;

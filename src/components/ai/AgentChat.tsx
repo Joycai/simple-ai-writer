@@ -52,10 +52,7 @@ import type { AgentEvent } from "../../lib/agent/events";
 import { foldBoundary } from "../../lib/agent/transcriptFold";
 import { splitMentions } from "../../lib/agent/mentionText";
 import {
-  CONTEXT_SEGMENT_ORDER,
   computeContextBreakdown,
-  type ContextBreakdown,
-  type ContextSegmentKey,
 } from "../../lib/agent/contextBreakdown";
 import { AGENT_ASSIST_PRESET } from "../../lib/agent/presets";
 import { getToolDefinitions } from "../../lib/agent/registry";
@@ -64,6 +61,7 @@ import { estimateToolsTokens } from "../../lib/ai/tokenEstimate";
 import { inputCeilingFor } from "../../lib/context/budget";
 import { ReasoningControls } from "./ReasoningControls";
 import { SubAgentChips } from "./SubAgentChips";
+import { ContextBar } from "./ContextBar";
 import { PlanModeChip } from "./PlanModeChip";
 import { AutoApproveChip } from "./AutoApproveChip";
 import { CHAT_AUTO_APPROVE_KEY } from "../../lib/agent/autoApprove";
@@ -76,11 +74,6 @@ function formatTime(at: number): string {
 }
 
 /** Compact token count: 200000 → "200k", 3244 → "3.2k". */
-function formatTokens(n: number): string {
-  if (n < 1000) return String(n);
-  const k = n / 1000;
-  return `${k >= 100 || Number.isInteger(k) ? Math.round(k) : k.toFixed(1)}k`;
-}
 
 /**
  * What a `+ …` chip pre-filters the picker to.
@@ -684,115 +677,6 @@ export function AgentChat() {
   );
 }
 
-// ─── Context bar ──────────────────────────────────────────────────────────────
-
-const SEGMENT_LABELS: Record<ContextSegmentKey, { key: string; fallback: string }> = {
-  system:       { key: "ai.chat.ctxSystem",       fallback: "系统+工具" },
-  summary:      { key: "ai.chat.ctxSummary",      fallback: "摘要" },
-  seed:         { key: "ai.chat.ctxSeed",         fallback: "种子" },
-  injected:     { key: "ai.chat.ctxInjected",     fallback: "注入{{entry}}" },
-  conversation: { key: "ai.chat.ctxConversation", fallback: "对话" },
-  free:         { key: "ai.chat.ctxFree",         fallback: "空余" },
-};
-
-/**
- * The composer's memory strip: what the next request's context is made of, and
- * how much room is left before compaction folds the oldest turns away.
- *
- * The legend is collapsed by default and the bar carries per-segment `title`
- * tooltips instead. Six always-on legend chips wrap to three lines in a narrow
- * rail, and this sits directly above the input — permanent chrome there costs
- * message space on every session, whether or not the author is watching memory.
- */
-function ContextBar({ context }: { context: ContextBreakdown }) {
-  const { t } = useTranslation();
-  const terms = useTerms();
-  const [showLegend, setShowLegend] = useState(false);
-
-  // No declared window means no real ceiling either — inputCeilingFor falls back
-  // to an assumed one, and drawing a precise-looking bar against a guess would
-  // be the wrong kind of confidence.
-  if (context.contextSize <= 0) return null;
-
-  const label = (key: ContextSegmentKey) =>
-    t(SEGMENT_LABELS[key].key, { defaultValue: SEGMENT_LABELS[key].fallback, entry: terms.entry });
-
-  return (
-    <div className={styles.ctx}>
-      <button
-        // Warned once past the *mark* the bar itself draws (COMPACT_TRIGGER),
-        // not once packed full — a bar standing beyond its own line while
-        // looking calm was the state 2c exists to fix.
-        className={`${styles.ctxBar} ${context.willCompact ? styles.ctxBarWarn : ""}`}
-        onClick={() => setShowLegend((v) => !v)}
-        aria-expanded={showLegend}
-        title={t("ai.chat.ctxToggle", { defaultValue: "展开/收起上下文构成" })}
-      >
-        {context.segments.map((seg) =>
-          seg.tokens > 0 ? (
-            <span
-              key={seg.key}
-              className={`${styles.ctxSeg} ${styles[`ctxSeg_${seg.key}`]}`}
-              style={{ flexGrow: seg.tokens }}
-              title={`${label(seg.key)} ≈ ${formatTokens(seg.tokens)} tk`}
-            />
-          ) : null,
-        )}
-        {/* Where compaction starts folding the oldest turns — the one threshold
-            on this bar the author can actually anticipate. */}
-        <span
-          className={styles.ctxMark}
-          style={{ left: `${context.compactMarkerPct}%` }}
-          title={t("ai.chat.ctxCompactAt", { defaultValue: "超过此处将折叠最早的对话" })}
-        />
-      </button>
-
-      <div className={styles.ctxMeter}>
-        <span>
-          {t("ai.chat.contextMeter", { defaultValue: "上下文" })}{" "}
-          <span className={context.willCompact ? styles.ctxCountWarn : undefined}>
-            {formatTokens(context.usedTokens)}
-          </span>{" "}
-          / {formatTokens(context.ceilingTokens)} tk
-        </span>
-        <span className={styles.ctxWindow}>
-          {t("ai.chat.ctxWindow", {
-            defaultValue: "窗口 {{n}}",
-            n: formatTokens(context.contextSize),
-          })}
-        </span>
-      </div>
-
-      {showLegend && (
-        <div className={styles.ctxLegend}>
-          {CONTEXT_SEGMENT_ORDER.map((key) => {
-            const seg = context.segments.find((s) => s.key === key);
-            if (!seg || seg.tokens <= 0) return null;
-            return (
-              <span key={key} className={styles.ctxLegendItem}>
-                <span className={`${styles.ctxSwatch} ${styles[`ctxSeg_${key}`]}`} />
-                {label(key)}
-                <span className={styles.ctxLegendValue}>{formatTokens(seg.tokens)}</span>
-              </span>
-            );
-          })}
-        </div>
-      )}
-
-      {/* What crossing the mark means, said once and only to someone looking:
-          the legend is the bar's opened state, and permanent chrome above the
-          input costs message space on every session (see the legend note). */}
-      {showLegend && context.willCompact && (
-        <div className={styles.ctxExplain}>
-          {t("ai.chat.ctxCompactExplain", {
-            defaultValue:
-              "越过竖线后，下一轮把最早的对话归纳成摘要——执行日志里出现「已归纳前 N 轮对话」，摘要段随之变宽。",
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
 
 /**
  * A turn's pictures, as a row of thumbnails. Shared by both turn kinds: the

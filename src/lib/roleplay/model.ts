@@ -35,8 +35,6 @@ export interface RoleplayAgent {
   modelId: string | null;
   /** null = 用花名册的全局设置。 */
   authorPersona: AuthorPersona | null;
-  /** 懒创建的 task workspace id（子代理/委派需要它落笔记）。 */
-  taskId: string | null;
   createdAt: number;
   updatedAt: number;
   /** transcript 里的轮数，花名册直接显示，避免为了一个数字去解析文件。 */

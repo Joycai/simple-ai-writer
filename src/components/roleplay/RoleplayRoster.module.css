@@ -301,3 +301,29 @@
 @media (prefers-reduced-motion: reduce) {
   .dotLive { animation: none; }
 }
+
+/* ── 窄面板：56px 头像轨（设计稿 08 屏 1a 的第二套布局） ──────────────────
+   稿面固定 640px 是这个面板不肯让步的一条，所以先让的一定是花名册。收成头像轨
+   之后仍然认得出谁是谁：头像、未读点、运行中的脉冲都还在，只是名字和预览退到
+   `title` 里。 */
+@container rp-panel (max-width: 820px) {
+  .rail { width: 56px; }
+  .railHead { padding: 12px 0; justify-content: center; }
+  .search { display: none; }
+  .groupLabel { display: none; }
+  .row {
+    justify-content: center;
+    padding: 9px 0;
+    gap: 0;
+  }
+  .rowBody { display: none; }
+  .removeBtn { display: none; }
+  /* 未读点原来贴在行尾，行里没有别的东西之后它要挪到头像的右上角，否则会盖住
+     头像本身。 */
+  .unread {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+  }
+  .row { position: relative; }
+}

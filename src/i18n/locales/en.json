@@ -2056,6 +2056,7 @@
     "pickAgent": "Pick an agent on the left to start talking.",
     "newAgent": "New agent",
     "editAgent": "Edit",
+    "stopped": "Stopped — this line has no reply yet",
     "retry": "Retry",
     "rewind": {
       "here": "Rewind to here",
@@ -2138,6 +2139,10 @@
       "quoteNote": "Dialogue takes 「」 『』 “” or \"\" — any pair, as long as it matches."
     },
     "persona": {
+      "onlyHere": "this agent",
+      "scopeAll": "All chats",
+      "scopeOne": "Only {{name}}",
+      "follow": "Follow global setting ({{name}})",
       "iam": "I am",
       "none": "Nobody",
       "noneHint": "speak as an observer",
@@ -2145,6 +2150,15 @@
       "narratorNote": "The narrator plays no one · no identity needed"
     },
     "composer": {
+      "selectionChip": "selection · {{n}} chars",
+      "detachSelection": "Don't attach the selection",
+      "catAll": "All",
+      "addLore": "entry",
+      "addDoc": "doc",
+      "addImage": "image",
+      "removeRef": "Remove this reference",
+      "imageTooLarge": "{{name}} is too large ({{size}}MB, max {{max}}MB)",
+      "refUnreadable": "Can't read {{name}}",
       "placeholder": "Say a line, or write an action…",
       "narratorPlaceholder": "Talk through the plot, or have it work an exchange into the manuscript…",
       "newline": "⇧↵ newline",

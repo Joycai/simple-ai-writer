@@ -110,6 +110,36 @@ export interface LiveSession {
   /** 磁盘上的记忆已经变了，但注入块还没刷新（见 refreshMemoryBlock 的四个时刻）。 */
   memoryStale: boolean;
   workspace: TaskWorkspaceHandle | null;
+  /**
+   * 这一轮是被作者按停的（不是报错）。
+   *
+   * 和 `error` 分开，因为它们不是同一件事：报错是「出了问题」，按停是「我不想
+   * 要这一条了」。但**后果一样**——这一问已经在 transcript 里，却没有回复。所以
+   * 两边都通向同一个 `retry`。
+   */
+  stopped: boolean;
+  /**
+   * 这一场关掉了哪些子代理。**只减不增**——芯片关不出一个没绑模型的子代理来。
+   *
+   * 存在会话上而不是 agentStore：对话助手和三个并发的扮演 agent 是四段互不相干
+   * 的对话，共用一份「本次关掉了什么」就等于互相改设置。
+   */
+  disabledSubAgents: SubAgentKind[];
+  /**
+   * 任务工作区的 id，跨重启活下来。
+   *
+   * 存在会话上而不是 `RoleplayAgent` 上：它跟着**这一场**走，「新开会话」就该
+   * 换一个。（`RoleplayAgent.taskId` 曾经存在过，但从来没有人写回去，所以每次
+   * 重启都会新建一个再也没人认领的工作区目录。）
+   */
+  taskId: string | null;
+  /**
+   * `history` 变过几次。
+   *
+   * 上下文构成条要靠它才知道该重算：那个数组是**就地** push 的（`runJob` 里
+   * 的注入、提问、runAgent 自己的工具轮），引用从头到尾不变，React 看不见。
+   */
+  contextVersion: number;
   error: string | null;
   /**
    * 上一次跑过的作业，重试用。重试入口只在 `error` 亮着时露出——「重试」在这里
@@ -153,10 +183,21 @@ interface RoleplayState {
    */
   newSession: (id: string, opts: { clearMemory: boolean }) => Promise<void>;
   setAuthorPersona: (persona: AuthorPersona) => Promise<void>;
+  /**
+   * 只为这一个 agent 覆盖「我此刻是谁」。`null` = 撤销覆盖，跟回全局。
+   *
+   * 有这一层是因为作者不一定用同一个身份面对所有角色：对甲是「桐谷萤」，对乙
+   * 可能是「一个陌生人」。类型上一直有（`RoleplayAgent.authorPersona`，`runJob`
+   * 也一直读它），只是没有入口。
+   */
+  setAgentPersona: (id: string, persona: AuthorPersona | null) => Promise<void>;
   setAgentModel: (id: string, modelId: string | null) => Promise<void>;
+  /** 这一场开/关一个子代理。只减不增，见 `LiveSession.disabledSubAgents`。 */
+  toggleSubAgent: (id: string, kind: SubAgentKind) => void;
 
   select: (id: string | null) => Promise<void>;
-  send: (agentId: string, text: string, refs?: AttachedItem[]) => Promise<void>;
+  /** `quote` = 编辑器里选中的正文，随这一条消息上线（transcript 里仍只存作者敲的字）。 */
+  send: (agentId: string, text: string, refs?: AttachedItem[], quote?: string) => Promise<void>;
   stop: (agentId: string) => void;
   /** 重跑上一次失败的作业。只在 `session.error` 亮着时有意义。 */
   retry: (agentId: string) => void;
@@ -195,7 +236,8 @@ function emptySession(): LiveSession {
   return {
     turns: [], log: {}, history: null, meta: null, streaming: "", liveLog: [],
     usage: null, stalePaths: [], memory: [], memoryStale: false,
-    workspace: null, error: null, lastJob: null,
+    workspace: null, stopped: false, disabledSubAgents: [], taskId: null,
+    contextVersion: 0, error: null, lastJob: null,
   };
 }
 
@@ -282,7 +324,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     set((st) => ({ aborts: { ...st.aborts, [job.agentId]: controller } }));
     // 先按「还没组装」记下来：万一是压缩或检索这一步炸了，重试要整套重来。
     patchSession(job.agentId, (s) => ({
-      ...s, streaming: "", liveLog: [], error: null, lastJob: job,
+      ...s, streaming: "", liveLog: [], error: null, stopped: false, lastJob: job,
     }));
 
     const loreIndex = useLoreStore.getState().index;
@@ -423,12 +465,16 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       // 消失。见 docs/feature/roleplay/02-design.md §8。
       let workspace = get().sessions[job.agentId]?.workspace ?? null;
       if (!workspace) {
-        workspace = createTaskWorkspace(projectPath, model.id, agent.taskId ?? undefined);
-        patchSession(job.agentId, (s) => ({ ...s, workspace }));
+        workspace = createTaskWorkspace(
+          projectPath, model.id, get().sessions[job.agentId]?.taskId ?? undefined,
+        );
+        patchSession(job.agentId, (s) => ({ ...s, workspace, taskId: workspace!.taskId }));
       }
 
       const preset = presetFor(agent.kind);
-      const effectiveSubs = withSessionOverrides(subAgents, [] as SubAgentKind[]);
+      const effectiveSubs = withSessionOverrides(
+      subAgents, get().sessions[job.agentId]?.disabledSubAgents ?? [],
+    );
       const routed = routeTools(preset, effectiveSubs, workspace, models);
 
       const result = await runAgent({
@@ -557,7 +603,11 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         }));
       }
     } catch (e) {
-      if ((e as Error).name !== "AbortError") {
+      if ((e as Error).name === "AbortError") {
+        // 按停之后这一问仍然孤零零地留在 transcript 里。给它一个重试的落点，
+        // 否则作者只能把那句话再打一遍。
+        patchSession(job.agentId, (s) => ({ ...s, stopped: true }));
+      } else {
         const msg = String(e);
         patchSession(job.agentId, (s) => ({
           ...s,
@@ -569,6 +619,8 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     } finally {
       const { useAgentStore } = await import("./agentStore");
       useAgentStore.getState().rejectAll("roleplay run ended", controller);
+
+      patchSession(job.agentId, (x) => ({ ...x, contextVersion: x.contextVersion + 1 }));
 
       const s = get().sessions[job.agentId];
       if (s?.history && s.meta) {
@@ -684,7 +736,6 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         boundPaths: draft.boundPaths,
         modelId: draft.modelId,
         authorPersona: null,
-        taskId: null,
         createdAt: now,
         updatedAt: now,
         turnCount: 0,
@@ -735,6 +786,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       // 场还没播种过，没有基线可比；留着旧的会让提示按上一场的状态亮。
       const memory = opts.clearMemory ? [] : get().sessions[id]?.memory ?? [];
       set((st) => ({
+        // `emptySession()` 的 `taskId: null` 正是想要的：新的一场配新的工作区。
         sessions: { ...st.sessions, [id]: { ...emptySession(), memory } },
         unread: { ...st.unread, [id]: false },
         stale: { ...st.stale, [id]: false },
@@ -778,6 +830,20 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       await persistRoster();
     },
 
+    toggleSubAgent: (id, kind) => patchSession(id, (s) => ({
+      ...s,
+      disabledSubAgents: s.disabledSubAgents.includes(kind)
+        ? s.disabledSubAgents.filter((k) => k !== kind)
+        : [...s.disabledSubAgents, kind],
+    })),
+
+    setAgentPersona: async (id, persona) => {
+      const prev = get().agents[id];
+      if (!prev) return;
+      set((st) => ({ agents: { ...st.agents, [id]: { ...prev, authorPersona: persona } } }));
+      await persistRoster();
+    },
+
     setAgentModel: async (id, modelId) => {
       const prev = get().agents[id];
       if (!prev) return;
@@ -803,6 +869,9 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         turns,
         history: stored?.history ?? null,
         meta: (stored?.snapshot.meta as RoleplaySessionMeta | undefined) ?? null,
+        // 认领上一次的工作区，而不是新开一个——否则每次重启都在
+        // `.ai-writer/tasks/` 里留下一个再也没人看的目录。
+        taskId: stored?.snapshot.taskId ?? null,
         memory: doc.records,
         memoryStale: false,
       }));
@@ -818,7 +887,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       void get().checkBindings();
     },
 
-    send: async (agentId, text, refs = []) => {
+    send: async (agentId, text, refs = [], quote) => {
       const { projectPath } = get();
       const agent = get().agents[agentId];
       const body = text.trim();
@@ -845,15 +914,28 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         patchSession(agentId, (s) => ({ ...s, error: String(e) }));
         return;
       }
-      patchSession(agentId, (s) => ({ ...s, turns: [...s.turns, turn], error: null }));
+      patchSession(agentId, (s) => ({
+        ...s, turns: [...s.turns, turn], error: null, stopped: false,
+      }));
 
       // `@` 引用是**内联**的，不是提名的：作者打了 @西厢 就已经决定助手该看着
       // 它说话，把那变成模型可以跳过的建议是在赌一件已经定了的事（见
       // lib/agent/chatRefs 的开头）。transcript 里存的仍是作者敲的那句话。
       const { buildChatMessage } = await import("../lib/agent/chatRefs");
-      const composed = await buildChatMessage(body, undefined, refs, {
-        allowImages: false,
-        visionDelegate: false,
+      // 图片能不能上线，取决于**这个 agent 绑的模型**，不是全局那个——两级
+      // 解析和 runJob 里那一句必须是同一句话（§2.14）。识图子代理开着时另外
+      // 告诉模型「图在这个路径上，可以 delegate」，那和把 base64 塞给一个读不
+      // 了图的模型是两件事（docs/subagent-lld.md §6.1）。
+      const { useAiStore } = await import("./aiStore");
+      const { models, activeModelId, subAgents } = useAiStore.getState();
+      const model = models.find((m) => m.id === (agent.modelId ?? activeModelId));
+      const subs = withSessionOverrides(
+        subAgents, get().sessions[agentId]?.disabledSubAgents ?? [],
+      );
+      const { visionSubAgentModel } = await import("../lib/agent/subagent");
+      const composed = await buildChatMessage(body, quote, refs, {
+        allowImages: model?.type === "multimodal",
+        visionDelegate: visionSubAgentModel(models, subs) !== null,
       });
       set((st) => ({
         queue: [...st.queue, { agentId, wire: composed.content, match: composed.text }],
@@ -886,7 +968,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       if (!job) return;
       const { running, queue } = get();
       if (running.includes(agentId) || queue.some((j) => j.agentId === agentId)) return;
-      patchSession(agentId, (s) => ({ ...s, error: null }));
+      patchSession(agentId, (s) => ({ ...s, error: null, stopped: false }));
       set((st) => ({ queue: [...st.queue, job] }));
       void pump();
     },
