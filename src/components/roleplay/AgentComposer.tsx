@@ -15,9 +15,14 @@ import { useLoreStore } from "../../stores/loreStore";
 import { useRoleplayStore, type AgentDraft } from "../../stores/roleplayStore";
 import { ModelSelector } from "../ai/ModelSelector";
 import { SceneTransition } from "./SceneTransition";
-import { loadPersonaCard } from "../../lib/roleplay/store";
+import { listArchives, loadPersonaCard } from "../../lib/roleplay/store";
 import { useProjectStore } from "../../stores/projectStore";
-import { avatarGlyph, type AgentKind, type RoleplayAgent } from "../../lib/roleplay/model";
+import {
+  avatarGlyph, type AgentKind, type RoleplayAgent, type SceneTurn,
+} from "../../lib/roleplay/model";
+
+/** 稳定的空数组：会话还没建起来时给它，省得每帧换一个新引用。 */
+const EMPTY_TURNS: SceneTurn[] = [];
 import type { LoreEntity } from "../../lib/lore/model";
 import { indexCategories } from "../../lib/lore/categories";
 import { categoryLabel } from "../../lib/profile/model";
@@ -68,6 +73,20 @@ export function AgentComposer({
     if (!editing || !projectPath) return;
     void loadPersonaCard(projectPath, editing.id).then(setInstruction);
   }, [editing, projectPath]);
+
+  // 「当前第 N 场」＝归档数 + 1。稿面顶端那条存档带说的必须是同一个数，所以两边
+  // 都从 `listArchives` 数，而不是各记一个计数器。
+  const [archiveCount, setArchiveCount] = useState(0);
+  useEffect(() => {
+    if (!editing || !projectPath) { setArchiveCount(0); return; }
+    let alive = true;
+    void listArchives(projectPath, editing.id)
+      .then((list) => { if (alive) setArchiveCount(list.length); })
+      .catch(() => { if (alive) setArchiveCount(0); });
+    return () => { alive = false; };
+  }, [editing, projectPath]);
+  const sceneNo = archiveCount + 1;
+  const turns = useRoleplayStore((s) => (editing ? s.sessions[editing.id]?.turns : undefined)) ?? EMPTY_TURNS;
 
   const entities = useMemo(
     () => Object.values(loreIndex).flat().sort((a, b) => a.name.localeCompare(b.name)),
@@ -424,6 +443,15 @@ export function AgentComposer({
           </section>
         </div>
 
+        {/* 转场就地替换 footer 向上展开——不居中、不遮挡（设计稿 2a）。 */}
+        {transition && editing ? (
+          <SceneTransition
+            agent={editing}
+            turns={turns}
+            sceneNo={sceneNo}
+            onClose={() => setTransition(false)}
+          />
+        ) : (
         <footer className={styles.foot}>
           {editing && (
             <button
@@ -458,15 +486,8 @@ export function AgentComposer({
               : t("roleplay.composer.create", { defaultValue: "创建" })}
           </button>
         </footer>
+        )}
       </aside>
-
-      {transition && editing && (
-        <SceneTransition
-          agent={editing}
-          turnCount={editing.turnCount}
-          onClose={() => { setTransition(false); onClose(); }}
-        />
-      )}
     </>
   );
 }
