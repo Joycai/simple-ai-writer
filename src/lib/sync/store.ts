@@ -16,6 +16,7 @@
 import { fileExists, makeDir, readFile, removeFile, writeFile } from "../fs/fileio";
 import { normalizeServerUrl } from "./config";
 import type { HashMap, SyncBinding } from "./model";
+import { dirName, toPosixPath } from "../paths";
 
 const FILE_VERSION = 1;
 
@@ -23,11 +24,11 @@ const FILE_VERSION = 1;
 export const SYNC_STAGING_DIR = "sync-tmp";
 
 function syncPath(projectPath: string): string {
-  return `${projectPath.replace(/\\/g, "/")}/.ai-writer/sync.json`;
+  return `${toPosixPath(projectPath)}/.ai-writer/sync.json`;
 }
 
 export function syncStagingPath(projectPath: string): string {
-  return `${projectPath.replace(/\\/g, "/")}/.ai-writer/${SYNC_STAGING_DIR}`;
+  return `${toPosixPath(projectPath)}/.ai-writer/${SYNC_STAGING_DIR}`;
 }
 
 interface SyncFile {
@@ -88,7 +89,7 @@ export async function loadBinding(projectPath: string): Promise<SyncBinding | nu
 
 export async function saveBinding(projectPath: string, binding: SyncBinding): Promise<void> {
   const path = syncPath(projectPath);
-  await makeDir(path.slice(0, path.lastIndexOf("/")));
+  await makeDir(dirName(path));
   const file: SyncFile = {
     version: FILE_VERSION,
     serverUrl: normalizeServerUrl(binding.serverUrl),

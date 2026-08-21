@@ -10,11 +10,12 @@
 
 import { fileExists, makeDir, readFile, writeFile } from "../fs/fileio";
 import { parseProfileFile, type ProfileSelection } from "./file";
+import { dirName, toPosixPath } from "../paths";
 
 const PROFILE_FILE_VERSION = 3;
 
 function profilePath(projectPath: string): string {
-  return `${projectPath.replace(/\\/g, "/")}/.ai-writer/profile.json`;
+  return `${toPosixPath(projectPath)}/.ai-writer/profile.json`;
 }
 
 /**
@@ -45,7 +46,7 @@ export async function loadProfileFile(projectPath: string): Promise<ProfileSelec
 
 export async function saveProfileFile(projectPath: string, selection: ProfileSelection): Promise<void> {
   const path = profilePath(projectPath);
-  await makeDir(path.slice(0, path.lastIndexOf("/")));
+  await makeDir(dirName(path));
   // Built-in packs serialise as bare ids — the file stays hand-readable and a
   // later build's improved built-ins apply without a migration. Custom packs
   // are the part nothing else can reconstruct, so they are written out in

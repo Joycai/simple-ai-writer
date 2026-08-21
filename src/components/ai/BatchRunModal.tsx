@@ -17,6 +17,7 @@ import { useBatchStore, type BatchItem } from "../../stores/batchStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { useProjectStore } from "../../stores/projectStore";
 import styles from "./BatchRunModal.module.css";
+import { baseName, dirName } from "../../lib/paths";
 
 interface Props {
   taskId: string;
@@ -26,10 +27,9 @@ interface Props {
 
 /** "…/writing/招标文件.md" → ("…/writing", "招标文件") */
 function splitPath(path: string): { dir: string; stem: string } {
-  const sep = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
-  const name = path.slice(sep + 1);
+  const name = baseName(path);
   const dot = name.lastIndexOf(".");
-  return { dir: path.slice(0, sep), stem: dot > 0 ? name.slice(0, dot) : name };
+  return { dir: dirName(path), stem: dot > 0 ? name.slice(0, dot) : name };
 }
 
 function statusGlyph(item: BatchItem): string {

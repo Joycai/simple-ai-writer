@@ -79,6 +79,7 @@ import { panelFade, springPanel } from "../../lib/motion";
 import { PINNED_LORE_PREFIX, readPref, writePref } from "../../lib/prefs";
 import { Select } from "../common/Select";
 import styles from "./AiPanel.module.css";
+import { baseName, isSamePath } from "../../lib/paths";
 
 const CONTINUE_LENGTH_OPTIONS = [200, 500, 1000, 2000];
 const CONTEXT_CHARS_OPTIONS = [0, 500, 1000, 2000];
@@ -125,7 +126,7 @@ function formatBudget(n: number): string {
 
 /** File name without its directory or `.md` extension. */
 function basename(path: string): string {
-  return (path.split(/[\\/]/).pop() ?? path).replace(/\.md$/i, "");
+  return (baseName(path) || path).replace(/\.md$/i, "");
 }
 
 /** Which paragraph (1-based, blank-line separated) an offset falls in. */
@@ -936,7 +937,7 @@ export function AiPanel() {
   // volumes, which the automatic pick (same-volume only) cannot.
   const bridgeCandidates = (() => {
     const flat = volumes.flatMap((v) => v.chapters.map((c) => ({ ...c, volume: v.name })));
-    const idx = flat.findIndex((c) => c.path === activeFilePath);
+    const idx = flat.findIndex((c) => isSamePath(c.path, activeFilePath));
     return idx < 0 ? [] : flat.slice(0, idx);
   })();
 
@@ -1058,7 +1059,7 @@ export function AiPanel() {
   // file to compare" (nothing to apply into, or the run wasn't file-scoped),
   // so only a genuine, known mismatch blocks the apply actions.
   const outputMismatched =
-    !!sourceFilePath && !!activeFilePath && sourceFilePath !== activeFilePath;
+    !!sourceFilePath && !!activeFilePath && !isSamePath(sourceFilePath, activeFilePath);
 
   const handleApply = () => {
     if (outputMismatched) return;

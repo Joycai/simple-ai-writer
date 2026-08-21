@@ -21,6 +21,7 @@ import { useAiStore } from "./aiStore";
 import { useEditorStore } from "./editorStore";
 import { useLoreStore } from "./loreStore";
 import { useMemoryStore } from "./memoryStore";
+import { baseName, isSamePath } from "../lib/paths";
 
 interface ConsistencyState {
   report: ConsistencyReport | null;
@@ -73,7 +74,7 @@ export function openIssues(
  * says so rather than offering buttons that would quietly do the wrong thing.
  */
 export function reportMatchesOpenDocument(report: ConsistencyReport | null): boolean {
-  return !!report && report.filePath === useEditorStore.getState().filePath;
+  return !!report && isSamePath(report.filePath, useEditorStore.getState().filePath);
 }
 
 export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
@@ -117,7 +118,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
         ...connOptions({ provider, model, apiKey }),
         documentText: content,
         filePath,
-        documentTitle: (filePath?.split(/[\\/]/).pop() ?? "").replace(/\.md$/i, "")
+        documentTitle: baseName(filePath ?? "").replace(/\.md$/i, "")
           || i18n.t("ai.consistency.untitledDoc", { defaultValue: "当前文档" }),
         loreIndex: useLoreStore.getState().index,
         pinnedLorePaths: [],

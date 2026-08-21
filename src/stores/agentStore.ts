@@ -105,6 +105,7 @@ import { recordRunOutcome } from "../lib/ai/modelHealth";
 import { costFor } from "../lib/ai/configDb";
 import { connOptions, resolveConn } from "../lib/ai/conn";
 import { notify } from "../lib/notify";
+import { baseName, isSamePath } from "../lib/paths";
 
 /**
  * Identifies which run created a queued approval — in practice each run's own
@@ -405,7 +406,7 @@ async function applyEdit(proposal: EditProposal): Promise<string | null> {
   const rewrite = (text: string): string =>
     applyFindReplace(text, proposal.find, proposal.replace, proposal.occurrences, proposal.target);
 
-  if (activeFilePath === proposal.path) {
+  if (isSamePath(activeFilePath, proposal.path)) {
     // The file is open — go through the editor so unsaved edits are kept
     // and the change is visible (and autosaved) immediately.
     const { useEditorStore } = await import("./editorStore");
@@ -430,7 +431,7 @@ async function applyRewrite(proposal: RewriteProposal): Promise<string | null> {
   const { projectPath, activeFilePath } = useProjectStore.getState();
   const backupPath = projectPath ? await backupFile(projectPath, proposal.path) : null;
 
-  if (activeFilePath === proposal.path) {
+  if (isSamePath(activeFilePath, proposal.path)) {
     // Same reason as applyEdit: go through the editor so the change is visible
     // and autosaved rather than being clobbered by the open buffer on next save.
     const { useEditorStore } = await import("./editorStore");
@@ -455,7 +456,7 @@ async function applyAppend(proposal: AppendProposal): Promise<string | null> {
   const { projectPath, activeFilePath } = useProjectStore.getState();
   const backupPath = projectPath ? await backupFile(projectPath, proposal.path) : null;
 
-  if (activeFilePath === proposal.path) {
+  if (isSamePath(activeFilePath, proposal.path)) {
     // Same reason as applyEdit/applyRewrite: through the editor, so the open
     // buffer doesn't overwrite the append on its next autosave.
     const { useEditorStore } = await import("./editorStore");
@@ -627,7 +628,7 @@ function notifyApproval(bodyKey: string, params?: Record<string, string>): void 
 
 /** Basename, for a notification that must fit on one line. */
 function fileLabel(path: string): string {
-  return path.split(/[\\/]/).pop() || path;
+  return baseName(path) || path;
 }
 
 export const useAgentStore = create<AgentState>((set, get) => ({

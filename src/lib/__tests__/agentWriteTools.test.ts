@@ -1399,6 +1399,25 @@ describe("chapter structure tools", () => {
       expect(dup.content).toContain("already exists");
       expect(proposals).toHaveLength(0);
     });
+
+    // The reported bug: the prompt's 【当前文件】 block carries a
+    // project-relative path, so the model answers in kind — and every write
+    // tool used to reject that as "outside the project folder".
+    it("accepts a project-relative path", async () => {
+      const res = await run(
+        "create_file",
+        { path: "资料/人物表.csv", content: "名字,身份" },
+        approving(),
+      );
+      expect(res.content).toContain("Created");
+      expect(proposals[0]).toMatchObject({ path: `${PROJECT}/资料/人物表.csv` });
+    });
+
+    it("still refuses a relative path that climbs out of the project", async () => {
+      const res = await run("create_file", { path: "../外面.md", content: "x" }, approving());
+      expect(res.content).toContain("inside the project folder");
+      expect(proposals).toHaveLength(0);
+    });
   });
 
   describe("append_file", () => {

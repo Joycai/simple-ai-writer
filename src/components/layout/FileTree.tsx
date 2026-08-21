@@ -19,7 +19,7 @@ import { insertAtCursor } from "../../lib/editor/format";
 import { imageMarkdown } from "../../lib/image/assets";
 import { baseName, importDocumentsDialog } from "../../lib/import";
 import { useImeGuard } from "../../lib/ime";
-import { relativePathFrom } from "../../lib/paths";
+import { isSamePath, relativePathFrom } from "../../lib/paths";
 import { IS_MAC } from "../../lib/platform";
 import { useEditorStore } from "../../stores/editorStore";
 import { useProjectStore } from "../../stores/projectStore";
@@ -252,7 +252,7 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
   const open = isDirOpen(stored, depth);
   const setOpen = (next: boolean) =>
     useProjectStore.getState().setDirExpanded(node.path, next);
-  const isActive = !node.is_dir && activeFilePath === node.path;
+  const isActive = !node.is_dir && isSamePath(activeFilePath, node.path);
   const isRenaming = renamingPath === node.path;
   // 设计稿 01: 卷行右侧带章数 — the documents under this folder, at any depth.
   const docCount = node.is_dir ? countDocsIn(node) : 0;
@@ -910,7 +910,7 @@ export function FileTree() {
     return items;
   };
 
-  const projectName = projectPath?.split("/").pop()?.toUpperCase() ?? "";
+  const projectName = baseName(projectPath ?? "").toUpperCase();
   const creatingAtRoot = !!projectPath && creatingIn === projectPath;
 
   const ctx: TreeCtx = {

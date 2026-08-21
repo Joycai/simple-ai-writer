@@ -11,6 +11,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import type { HashMap } from "./model";
+import { toPosixPath } from "../paths";
 
 interface RawEntryHash {
   category: string;
@@ -19,7 +20,7 @@ interface RawEntryHash {
 }
 
 export function loreRoot(projectPath: string): string {
-  return `${projectPath.replace(/\\/g, "/")}/.ai-writer/lore`;
+  return `${toPosixPath(projectPath)}/.ai-writer/lore`;
 }
 
 export function entryDir(projectPath: string, path: string): string {

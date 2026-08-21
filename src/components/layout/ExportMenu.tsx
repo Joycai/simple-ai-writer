@@ -19,16 +19,13 @@ import { exportHtml, exportMarkdown, exportPdf } from "../../lib/fs/export";
 import { useEditorStore } from "../../stores/editorStore";
 import { useProjectStore } from "../../stores/projectStore";
 import styles from "./TitleBar.module.css";
+import { baseName, dirName } from "../../lib/paths";
 
 /** How long the button shows what just happened before returning to normal. */
 const FEEDBACK_MS = 2000;
 
 /** Directory part of a path, which is what relative image links resolve against. */
-function dirOf(path: string): string {
-  const norm = path.replace(/\\/g, "/");
-  const cut = norm.lastIndexOf("/");
-  return cut === -1 ? "" : norm.slice(0, cut);
-}
+const dirOf = dirName;
 
 export function ExportMenu() {
   const { t } = useTranslation();
@@ -54,7 +51,7 @@ export function ExportMenu() {
    */
   const current = () => {
     const { content } = useEditorStore.getState();
-    const title = (activeFilePath.split(/[\\/]/).pop() ?? "document").replace(/\.md$/i, "");
+    const title = (baseName(activeFilePath) || "document").replace(/\.md$/i, "");
     return { content, title, baseDir: dirOf(activeFilePath) };
   };
 

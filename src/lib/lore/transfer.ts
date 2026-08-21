@@ -22,6 +22,7 @@ import { parseFrontmatter } from "../fs/markdown";
 import { activeWorkspace, loreCategoryIds } from "../profile/active";
 import { CATEGORY_ID_RE } from "../profile/model";
 import { uniqueEntityId } from "./entity";
+import { baseName } from "../paths";
 
 export const LORE_BUNDLE_KIND = "ai-writer-lore-bundle";
 export const LORE_BUNDLE_VERSION = 1;
@@ -129,7 +130,7 @@ export async function exportLoreBundle(projectPath: string): Promise<string | nu
     entities,
   };
 
-  const projectName = projectPath.split(/[\\/]/).filter(Boolean).pop() ?? "project";
+  const projectName = baseName(projectPath) || "project";
   const date = new Date().toISOString().slice(0, 10);
   return zipExportDialog(
     root,

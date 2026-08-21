@@ -22,6 +22,7 @@ import { create } from "zustand";
 import { useAppStore } from "./appStore";
 import { useProjectStore } from "./projectStore";
 import { useLoreStore } from "./loreStore";
+import { isSamePath } from "../lib/paths";
 
 export type NavLocation =
   | { kind: "editor"; filePath: string | null }
@@ -51,8 +52,8 @@ function readLocation(): NavLocation {
 
 function sameLocation(a: NavLocation, b: NavLocation): boolean {
   if (a.kind !== b.kind) return false;
-  if (a.kind === "editor" && b.kind === "editor") return a.filePath === b.filePath;
-  if (a.kind === "lore" && b.kind === "lore") return a.entityDir === b.entityDir;
+  if (a.kind === "editor" && b.kind === "editor") return isSamePath(a.filePath, b.filePath);
+  if (a.kind === "lore" && b.kind === "lore") return isSamePath(a.entityDir, b.entityDir);
   return true;
 }
 
