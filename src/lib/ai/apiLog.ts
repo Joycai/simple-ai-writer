@@ -202,6 +202,9 @@ export function beginApiLog(opts: StreamOptions): ApiCallLogger {
     baseUrl: opts.baseUrl,
     model: opts.modelId,
     tools: opts.tools?.map((t) => t.function.name),
+    // Logged explicitly because the OpenAI adapter has no requestBody hook —
+    // this entry is the only record of whether a temperature reached the wire.
+    temperature: opts.temperature,
     extraBody: opts.extraBody,
     safetySettings: opts.safetySettings,
     authMode: opts.authMode,

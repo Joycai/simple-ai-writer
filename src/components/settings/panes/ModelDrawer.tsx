@@ -4,13 +4,15 @@ import { X } from "lucide-react";
 import { useAiStore } from "../../../stores/aiStore";
 import { familyOf, type ImageRoute } from "../../../lib/ai/types";
 import {
-  REASONING_EFFORTS, THINKING_DIALECTS, supportsThinkingLevel,
+  REASONING_EFFORTS, THINKING_DIALECTS, supportsTemperature, supportsThinkingLevel,
   type ReasoningEffort, type ThinkingDialect,
 } from "../../../lib/ai/reasoning";
 import {
   SERVER_TOOL_IDS, supportsServerTools, type ServerToolId,
 } from "../../../lib/ai/serverTools";
-import { defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, type ModelType } from "../../../lib/ai/configDb";
+import {
+  defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, MAX_TEMPERATURE, type ModelType,
+} from "../../../lib/ai/configDb";
 import { CONTEXT_SIZE_STOPS, formatContextSize } from "../../../lib/ai/contextSize";
 import { ModelProbePanel } from "../ModelProbePanel";
 import { Chip, ChipRow } from "./bits";
@@ -54,6 +56,9 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
     prefix: existing?.prefix ?? "",
     contextSize: existing?.contextSize ? String(existing.contextSize) : "",
     maxOutput: existing?.maxOutput ? String(existing.maxOutput) : "",
+    // Not `existing.temperature ? …` — a stored 0 is a real setting and must
+    // not render as the empty field that means "send nothing".
+    temperature: existing?.temperature !== undefined ? String(existing.temperature) : "",
     pricePerImage: existing?.pricePerImage ? String(existing.pricePerImage) : "",
     capsSizes: (existing?.caps?.sizes ?? []).join(", "),
     capsRoute: existing?.caps?.route ?? "",
@@ -61,6 +66,13 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
     // "" = 未声明，按协议族推导 —— 与存储上的 undefined 一一对应。
     thinkingDialect: (existing?.thinkingDialect ?? "") as ThinkingDialect | "",
   });
+  // Whether a temperature this drawer stores would actually reach the wire.
+  // Reads the adapter's own predicate rather than re-deriving the rule, and
+  // reads it off the *form* so flipping the dialect below updates the row
+  // immediately, before anything is saved.
+  const temperatureReaches = provider
+    ? supportsTemperature(provider.apiStandard, form.thinkingDialect || undefined)
+    : true;
   // When the two limits came from a probe rather than the keyboard — kept out
   // of `form` because it is provenance, not something the author edits.
   const [probedAt, setProbedAt] = useState<number | undefined>(existing?.probedAt);
@@ -100,6 +112,12 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
       const contextSize = parsedCtx > 0 ? parsedCtx : undefined;
       const parsedOut = Math.min(MAX_OUTPUT_SIZE, Math.max(0, Math.floor(parseInt(form.maxOutput, 10) || 0)));
       const maxOutput = parsedOut > 0 ? parsedOut : undefined;
+      // Empty stays empty (send nothing); anything parseable is clamped into
+      // range. Written this way rather than `|| 0` because 0 is a value here.
+      const parsedTemp = form.temperature.trim() === "" ? NaN : Number(form.temperature);
+      const temperature = Number.isFinite(parsedTemp)
+        ? Math.max(0, Math.min(MAX_TEMPERATURE, parsedTemp))
+        : undefined;
       // Image-only settings. Cleared for other types so a model that used to be
       // an image model doesn't keep billing per image after being switched.
       const isImageModel = form.type === "image";
@@ -127,6 +145,7 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
         prefix: form.prefix.trim() || undefined,
         contextSize,
         maxOutput,
+        temperature,
         probedAt,
         // "default" is stored as absent — one representation for "send
         // nothing", so a row never distinguishes never-set from set-to-default.
@@ -388,6 +407,49 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
                     ? t("aiConfig.models.thinkingDialectHintOpenai")
                     : t("aiConfig.models.thinkingDialectHint")}
                 </div>
+              </div>
+            )}
+
+            {/* Sampling temperature — below the dialect row because it depends
+                on it. Shown only where the adapter can actually send it: the
+                Messages API accepts temperature 1 alone while thinking is on,
+                so a thinking Anthropic model would render a control that does
+                nothing, which is the same thing `supportsThinkingLevel` exists
+                to prevent. Any stored value survives while the row is hidden,
+                so flipping the dialect back brings it out unchanged.
+
+                Chips for the settings that mean something — 0 for a task that
+                must stop being creative, 1 for the loose end most endpoints
+                already default to — plus a field for an exact value. Unset
+                sends nothing, which is what every model configured before this
+                setting existed keeps doing. */}
+            {temperatureReaches && (
+              <div className={styles.fieldGroup}>
+                <label className={styles.label}>{t("aiConfig.models.temperatureLabel")}</label>
+                <ChipRow>
+                  <Chip
+                    label={t("aiConfig.models.contextSizeUnset", { defaultValue: "未设置" })}
+                    active={form.temperature === ""}
+                    onClick={() => setForm({ ...form, temperature: "" })}
+                  />
+                  {["0", "0.3", "0.7", "1"].map((n) => (
+                    <Chip
+                      key={n}
+                      label={n}
+                      active={form.temperature === n}
+                      onClick={() => setForm({ ...form, temperature: n })}
+                    />
+                  ))}
+                  <input
+                    className={hub.ctxExact}
+                    type="number" min="0" max={MAX_TEMPERATURE} step="0.1"
+                    placeholder={t("aiConfig.hub.exactValue")}
+                    value={form.temperature}
+                    onChange={(e) => setForm({ ...form, temperature: e.target.value })}
+                    aria-label={t("aiConfig.models.temperatureLabel")}
+                  />
+                </ChipRow>
+                <div className={hub.fieldHint}>{t("aiConfig.models.temperatureHint")}</div>
               </div>
             )}
 

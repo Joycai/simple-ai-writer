@@ -125,6 +125,23 @@ export interface Model {
    */
   maxOutput?: number;
   /**
+   * Sampling temperature for this model, or absent to send nothing and leave
+   * the endpoint's own default alone.
+   *
+   * Per-model and author-declared, like everything else here, but it exists for
+   * a reason the other settings don't have: a *local* endpoint's default is set
+   * by whoever packaged the weights, not by the app. ollama serves gemma4 at
+   * `temperature 1 / top_k 64 / top_p 0.95` — Gemma's own recommendation for
+   * creative writing, and a high-variance setting for picking one tool out of
+   * thirty-nine. Until this existed there was no way to lower it from inside
+   * the app at all; `extraBody` is an internal escape hatch with no UI.
+   *
+   * Absent, not 0-means-unset: 0 is a legal and useful temperature (it is the
+   * one an author reaches for when a task must stop being creative), so it
+   * cannot double as the empty value.
+   */
+  temperature?: number;
+  /**
    * When the endpoint was last probed (ms epoch), or undefined for values the
    * author typed in. Measurements age — a relay can re-route the same model
    * name to a different upstream tomorrow — so the UI dates them rather than
@@ -233,6 +250,16 @@ export const MAX_CONTEXT_SIZE = 2_000_000;
 /** Upper bound for the per-model max-output setting (tokens). */
 export const MAX_OUTPUT_SIZE = 262_144;
 
+/**
+ * Upper bound for the per-model sampling temperature.
+ *
+ * 2 rather than 1: OpenAI Chat Completions, Gemini and every OpenAI-compatible
+ * relay accept up to 2, and the Anthropic path (whose own ceiling is 1) clamps
+ * on its way to the wire rather than having the field refuse a legal value for
+ * a model configured elsewhere.
+ */
+export const MAX_TEMPERATURE = 2;
+
 export interface Prompt {
   id: string;
   name: string;
@@ -322,6 +349,7 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   await addColumn(db, modelCols, "models", "thinking_dialect", "TEXT");
   await addColumn(db, modelCols, "models", "server_tools", "TEXT");
   await addColumn(db, modelCols, "models", "pdf_input", "INTEGER");
+  await addColumn(db, modelCols, "models", "temperature", "REAL");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS prompts (
@@ -538,9 +566,9 @@ export async function listModels(
 export function modelUpsert(m: Model): SqlStatement {
   return {
     sql: `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, server_tools, pdf_input)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null],
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, server_tools, pdf_input, temperature)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null],
   };
 }
 
@@ -609,6 +637,9 @@ function rowToModel(r: Record<string, unknown>): Model {
     prefix: (r.prefix as string | null) ?? undefined,
     contextSize: (r.context_size as number | null) ?? undefined,
     maxOutput: (r.max_output as number | null) ?? undefined,
+    // Absent unless a real number is stored — see Model.temperature on why 0
+    // must survive as a value rather than collapsing into "unset".
+    temperature: typeof r.temperature === "number" ? r.temperature : undefined,
     probedAt: (r.probed_at as number | null) ?? undefined,
     pricePerImage: (r.price_per_image as number | null) ?? undefined,
     caps: parseImageCaps(r.caps),

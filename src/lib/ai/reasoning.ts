@@ -282,6 +282,27 @@ export function supportsThinkingLevel(standard: ApiStandard): boolean {
 }
 
 /**
+ * Whether a `temperature` can reach this endpoint at all.
+ *
+ * Lives here, next to `supportsThinkingLevel` and for the same reason, because
+ * the one protocol that refuses it refuses it *because of thinking*: the
+ * Messages API accepts `temperature: 1` and nothing else while extended
+ * thinking is on, and `defaultDialect` makes Anthropic thinking unless the
+ * author declares otherwise — so on an ordinary Claude model the field is
+ * unsendable. Clamping the author's 0.2 up to the one legal value would send
+ * the opposite of what they asked for under the name of honoring it, so the
+ * adapter omits it instead.
+ *
+ * The adapter and the model editor both read this, rather than each testing
+ * the condition their own way: a control the request then drops is exactly
+ * what the comment on `supportsThinkingLevel` says not to ship.
+ */
+export function supportsTemperature(standard: ApiStandard, declared?: ThinkingDialect): boolean {
+  if (familyOf(standard) !== "anthropic") return true;
+  return dialectFor(standard, declared) === "none";
+}
+
+/**
  * Whether this endpoint has a **separate** overall-effort dial, distinct from
  * the thinking level.
  *

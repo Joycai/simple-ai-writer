@@ -8,6 +8,7 @@
  * seedContext in here as the lore-side entry points migrate (PR2/PR3).
  */
 
+import i18n from "../../i18n";
 import type { TaskTools } from "../profile/model";
 import type { ToolId } from "./registry";
 
@@ -195,4 +196,30 @@ export function presetForTools(tools: TaskTools): TaskPreset | null {
     case "full":
       return AGENT_ASSIST_PRESET;
   }
+}
+
+/**
+ * The tool briefing a task of this tier needs appended to its **system** layer,
+ * or "" when it needs none.
+ *
+ * A read-tier task's prompt used to say nothing about tools at all: the task
+ * instruction covers how to write, and the tool schemas rode on the wire alone,
+ * where only a model that infers "these exist, so I should look things up" ever
+ * acted on them. Frontier models do infer it. A smaller local one writes
+ * straight from whatever RAG happened to inject — measured on gemma4:12b via
+ * ollama, 2 of 4 identical 续写 runs called a lore tool and 2 wrote from the
+ * seeded context alone, which reads to the author as the agent ignoring the
+ * knowledge base at random.
+ *
+ * Only the read tier gets one. `full` tasks already carry their own briefing in
+ * the *task* layer (`ai.instructions.agent`, `ai.instructions.htmlArtifact`),
+ * and `none` has nothing to brief — a briefing there would be paid-for tokens
+ * describing tools the request never sends.
+ *
+ * A function of the tier rather than of the task id, for the same reason
+ * `presetForTools` is: a pack can declare any number of read-tool tasks and
+ * every one of them has the same problem.
+ */
+export function toolBriefingFor(tools: TaskTools, params: Record<string, string>): string {
+  return tools === "read" ? i18n.t("ai.instructions.toolsRead", params) : "";
 }
