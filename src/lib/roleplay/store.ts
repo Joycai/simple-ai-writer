@@ -217,6 +217,14 @@ export interface RoleplaySession {
   snapshot: ChatSnapshot;
   /** 绑定块在 history 里的位置，刷新绑定时按它定位。null = 没有绑定块。 */
   boundBlock: StreamMessage | null;
+  /**
+   * 记忆块，同一套下标↔身份处理。它曾经不在这里——`serializeChatSession` 只认
+   * `ChatSessionMeta` 的字段，Roleplay 扩展出来的两个块引用它一概不存，于是
+   * 重启之后 `meta.memoryBlock` 永远是 undefined，四个刷新时刻（恢复、压缩后、
+   * 作者手动、播种）里前三个全部静默 no-op：历史里那条【记忆】消息内容冻结在
+   * 上次存盘的时刻，之后角色新记的约定在压缩后就从上下文里消失了。
+   */
+  memoryBlock: StreamMessage | null;
 }
 
 interface SerializedSession {
@@ -226,6 +234,8 @@ interface SerializedSession {
   chat: string;
   /** 绑定块在 history 里的下标，-1 表示没有。 */
   boundBlock: number;
+  /** 记忆块的下标。加法字段：旧文件读成 undefined，按「没有」处理，恢复时补块。 */
+  memoryBlock?: number;
 }
 
 /**
@@ -243,6 +253,7 @@ export async function saveSession(
     agentId,
     chat: serializeChatSession({ ...session.snapshot, turns: [], history: session.history }),
     boundBlock: session.boundBlock ? session.history.indexOf(session.boundBlock) : -1,
+    memoryBlock: session.memoryBlock ? session.history.indexOf(session.memoryBlock) : -1,
   };
   await makeDir(agentDir(projectPath, agentId));
   await writeFile(sessionPath(projectPath, agentId), JSON.stringify(data));
@@ -259,11 +270,16 @@ export async function loadSession(
     if (raw.v !== 1 || typeof raw.chat !== "string") return null;
     const snapshot = deserializeChatSession(raw.chat);
     if (!snapshot) return null;
-    const i = raw.boundBlock;
-    const boundBlock = Number.isInteger(i) && i >= 0 && i < snapshot.history.length
-      ? snapshot.history[i]
-      : null;
-    return { history: snapshot.history, snapshot, boundBlock };
+    const at = (i: number | undefined): StreamMessage | null =>
+      Number.isInteger(i) && (i as number) >= 0 && (i as number) < snapshot.history.length
+        ? snapshot.history[i as number]
+        : null;
+    return {
+      history: snapshot.history,
+      snapshot,
+      boundBlock: at(raw.boundBlock),
+      memoryBlock: at(raw.memoryBlock),
+    };
   } catch (e) {
     console.warn(`[roleplay] session unreadable for ${agentId}, will reseed:`, e);
     return null;

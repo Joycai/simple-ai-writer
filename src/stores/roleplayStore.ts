@@ -47,9 +47,9 @@ import { assembleTurnInjection } from "../lib/context/rag";
 import { loadApiKey } from "../lib/keyStore";
 import { notify } from "../lib/notify";
 import {
-  buildBoundContent, buildSystemPrompt, contextSignature, refreshBoundBlock,
+  buildBoundContent, buildSystemPrompt, contextSignature, ensureBlocks, refreshBoundBlock,
   refreshMemoryBlock, refreshSystemPrompt, seedRoleplayHistory,
-  type RoleplaySessionMeta,
+  type BoundContent, type RoleplaySessionMeta,
 } from "../lib/roleplay/context";
 import {
   addRecord, dropRecordsFrom, loadMemoryDoc, reviseRecord, saveMemoryDoc, type MemoryDoc,
@@ -774,6 +774,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           history: s.history,
           snapshot: { turns: [], history: s.history, meta: s.meta, usage: null, taskId: s.workspace?.taskId ?? null },
           boundBlock: s.meta.boundBlock,
+          memoryBlock: s.meta.memoryBlock,
         });
       }
       set((st) => {
@@ -1133,26 +1134,31 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       const { turns } = await loadTranscript(transcriptPath(projectPath, id));
       const stored = await loadSession(projectPath, id);
       const doc = await loadMemoryDoc(memoryPath(projectPath, id));
+      // meta 从 blob 反序列化回来只有 ChatSessionMeta 的字段；两个块的对象身份
+      // 由 SerializedSession 单独存下标、在这里重连。**两个都要重连**——漏掉
+      // memoryBlock 曾经让四个刷新时刻在重启后全部静默失效（恢复正是其中之一）。
+      let history: StreamMessage[] | null = null;
+      let meta: RoleplaySessionMeta | null = null;
+      if (stored) {
+        history = stored.history;
+        meta = { ...stored.snapshot.meta, boundBlock: stored.boundBlock, memoryBlock: stored.memoryBlock };
+        // 旧版本播种的历史可能缺块（那时空内容不建块、序列化也不存 memoryBlock
+        // 的身份）——先补齐，刷新才有落点。
+        ensureBlocks(history, meta);
+        // 恢复是四个刷新时刻之一：应用关着的时候作者可能手改过 memory.md。
+        refreshMemoryBlock(meta, doc.records);
+      }
       patchSession(id, (s) => ({
         ...s,
         turns,
-        history: stored?.history ?? null,
-        meta: (stored?.snapshot.meta as RoleplaySessionMeta | undefined) ?? null,
+        history,
+        meta,
         // 认领上一次的工作区，而不是新开一个——否则每次重启都在
         // `.ai-writer/tasks/` 里留下一个再也没人看的目录。
         taskId: stored?.snapshot.taskId ?? null,
         memory: doc.records,
         memoryStale: false,
       }));
-      if (stored?.snapshot.meta && stored.boundBlock) {
-        patchSession(id, (s) => ({
-          ...s,
-          meta: { ...(stored.snapshot.meta as RoleplaySessionMeta), boundBlock: stored.boundBlock },
-        }));
-      }
-      // 恢复是四个刷新时刻之一：应用关着的时候作者可能手改过 memory.md。
-      const restored = get().sessions[id]?.meta;
-      if (restored) refreshMemoryBlock(restored, doc.records);
       void get().checkBindings();
     },
 
@@ -1348,9 +1354,16 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       // 有活的历史就就地重写绑定块（对象身份不变，meta 继续指着它）；没有的
       // 话什么都不用改写——下一次发送会重新播种，那时用的自然是新内容。两条
       // 路都要把基线更新到「现在」，否则 checkBindings 下一轮又把它标成过期。
-      const bound = session?.meta
-        ? await refreshBoundBlock(loreIndex, agent, session.meta)
-        : await buildBoundContent(loreIndex, agent.boundPaths);
+      //
+      // 先补块再刷新：旧版本播种的会话可能根本没有绑定块，而「刷新了基线、清了
+      // 提示、块却没写进去」正是这个按钮最不能犯的错——作者会有理由相信已经生效。
+      let bound: BoundContent;
+      if (session?.meta && session.history) {
+        ensureBlocks(session.history, session.meta);
+        bound = await refreshBoundBlock(loreIndex, agent, session.meta);
+      } else {
+        bound = await buildBoundContent(loreIndex, agent.boundPaths);
+      }
 
       // 绑定块之外，system 层也要一起刷：主角条目、扮演指令、作者此刻的身份
       // 全住在那里，而它们只在播种时被读过一次。少了这一句，作者改完人设点
@@ -1382,9 +1395,13 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       const { projectPath } = get();
       if (!projectPath) return;
       const doc = await loadMemoryDoc(memoryPath(projectPath, agentId));
-      const meta = get().sessions[agentId]?.meta;
+      const session = get().sessions[agentId];
       // 没有活的历史就不用刷——下一次发送会重新播种，那时读的就是磁盘上的新内容。
-      if (meta) refreshMemoryBlock(meta, doc.records);
+      // 有历史先补块（旧版本播种的会话可能缺），刷新才有落点。
+      if (session?.meta && session.history) {
+        ensureBlocks(session.history, session.meta);
+        refreshMemoryBlock(session.meta, doc.records);
+      }
       patchSession(agentId, (s) => ({ ...s, memory: doc.records, memoryStale: false }));
     },
 
