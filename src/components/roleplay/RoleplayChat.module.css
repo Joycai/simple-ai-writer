@@ -215,20 +215,27 @@
 .rewindBtn:focus-visible { opacity: 1; outline: none; color: var(--color-accent); }
 .rewindBtn:hover { color: var(--color-accent); }
 
-/* 回退的确认条。与错误带同一套（细线左规 + 一行小字 + 右侧动作），因为它们在
-   稿面上扮演同一个角色：一件需要作者当场处理的事。 */
+/* 回退的确认条。**长在被选中的那一句下面**，所以不再自带左规和缩进——那一句
+   的左规就是它的左规，问题和它问的那句话贴在一起才有人看得见。 */
 .rewindBar {
   display: flex;
   align-items: flex-start;
   gap: 14px;
-  margin: 0 0 20px 20px;
-  padding: 10px 13px;
+  margin: 11px 0 0;
+  padding: 9px 12px;
   background: var(--rp-rail);
-  border-left: 2px solid var(--color-border-accent);
+  border: 1px solid var(--color-border-accent);
   font-family: var(--font-sans);
   font-size: 12px;
   line-height: 1.5;
   color: var(--color-text-soft);
+}
+
+/* 会被这次回退一起撤销的部分。「和它之后的 N 条」是一个数字，调淡是那个数字
+   在稿面上的样子——确认之前就能看见自己要丢掉什么。 */
+.turnDoomed {
+  opacity: 0.34;
+  transition: opacity 140ms var(--ease-out);
 }
 
 .rewindText { flex: 1; min-width: 0; }
