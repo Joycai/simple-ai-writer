@@ -16,8 +16,11 @@
  *    utilization` (lib/context/budget.ts → inputCeilingFor). Drawn against the
  *    raw window, compaction fires at 35% of the bar with nothing to explain it.
  * 2. **Tool schemas count.** The pre-flight `ContextSizeError` gate weighs
- *    messages *plus* tool definitions; the assistant preset carries 21 of them.
- *    Leave them out and a request can fail while the bar still looks roomy.
+ *    messages *plus* tool definitions, and the assistant preset's toolset runs
+ *    to thousands of tokens on every round. Leave them out and a request can
+ *    fail while the bar still looks roomy. (No number here on purpose — the
+ *    toolset grows, and a count written into a comment only ever goes stale.
+ *    `lib/agent/toolCost` measures it, and `agentToolBudget.test.ts` caps it.)
  * 3. **It reads the history, not the last event.** `round-start.estInputTokens`
  *    is a snapshot from mid-turn: zero on a fresh session, and between turns it
  *    describes the previous turn's last round rather than the history that has

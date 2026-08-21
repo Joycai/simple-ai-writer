@@ -80,7 +80,14 @@ function Marker({ state }: { state: "pending" | "running" | "done" | "error" }) 
 /** A log row plus the round it belongs to (folded in from the round marker). */
 interface Row {
   event: AgentEvent;
-  round?: { round: number; maxRounds: number; estInputTokens: number; at: number };
+  round?: {
+    round: number; maxRounds: number;
+    /** Messages only. */
+    estInputTokens: number;
+    /** Tool schemas on top of that; 0 on logs persisted before 1.22. */
+    toolTokens: number;
+    at: number;
+  };
 }
 
 /**
@@ -97,6 +104,7 @@ function toRows(log: AgentEvent[], filterTopLevel = true): Row[] {
         round: event.round,
         maxRounds: event.maxRounds,
         estInputTokens: event.estInputTokens,
+        toolTokens: event.toolTokens ?? 0,
         at: event.at,
       };
       continue;
@@ -338,7 +346,8 @@ function AgentLogRow({ row, showTime, runStatus }: {
       title={t("ai.agent.log.round", {
         round: round.round,
         max: round.maxRounds,
-        tokens: round.estInputTokens.toLocaleString(),
+        tokens: (round.estInputTokens + round.toolTokens).toLocaleString(),
+        toolTokens: round.toolTokens.toLocaleString(),
       })}
     >
       {t("ai.agent.log.roundShort", {
@@ -538,6 +547,19 @@ function AgentLogRow({ row, showTime, runStatus }: {
           </span>
         </li>
       );
+    case "tools-loaded":
+      return (
+        <li className={`${styles.row} ${styles.rowMeta}`}>
+          <span className={styles.rowIndent} />
+          <span className={styles.rowMetaText}>
+            {t("ai.agent.log.toolsLoaded", {
+              defaultValue: "已装载 {{count}} 个{{group}}工具",
+              count: event.names.length,
+              group: t(`ai.agent.log.toolGroup.${event.group}`, { defaultValue: "" }),
+            })}
+          </span>
+        </li>
+      );
     case "context-trimmed":
       return (
         <li className={`${styles.row} ${styles.rowMeta}`}>
@@ -675,6 +697,12 @@ function useHeadline(model: AgentLogModel): string {
         : t("ai.agent.log.reasoningLive", { defaultValue: "正在思考" });
     case "context-seeded":
       return t("ai.agent.log.seededContext", { defaultValue: "读取上下文" });
+    case "tools-loaded":
+      return t("ai.agent.log.toolsLoaded", {
+        defaultValue: "已装载 {{count}} 个{{group}}工具",
+        count: current.names.length,
+        group: t(`ai.agent.log.toolGroup.${current.group}`, { defaultValue: "" }),
+      });
     case "context-trimmed":
       return t("ai.agent.log.trimmed", { count: current.count });
     case "context-compacted":
@@ -743,7 +771,7 @@ function RoundBlock({
         </span>
         <span className={styles.rowName}>{gist}</span>
         <span className={styles.rowMetaRight}>
-          {formatTokenCount(group.estInputTokens)} tk
+          {formatTokenCount(group.estInputTokens + group.toolTokens)} tk
         </span>
         <span className={styles.rowChevron}>
           {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}

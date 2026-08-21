@@ -31,7 +31,15 @@ import { contentWithoutImages, hasImageParts } from "./imageHistory";
 import { cloneLoreIndex } from "../lore";
 import { TOOL_ARGS_DETAIL_CHARS, TOOL_RESULT_DETAIL_CHARS } from "./logFormat";
 import type { TaskPreset } from "./presets";
-import { executeRegisteredTool, getToolDefinitions, type ToolContext } from "./registry";
+import {
+  executeRegisteredTool,
+  getToolDefinitions,
+  partitionByGroup,
+  type ToolContext,
+  type ToolGroup,
+  type ToolId,
+} from "./registry";
+import { toolTokensOf } from "./toolCost";
 import { loadTaskDoc, parseSteps, type TaskStep } from "./taskWorkspace";
 import type { ToolCall, ToolResult } from "./tools";
 
@@ -235,9 +243,17 @@ export interface AgentRuntimeOptions extends ConnOptions {
   // The endpoint/model half comes from ConnOptions (lib/ai/conn) — build it with
   // connOptions(conn) rather than listing the fields here.
   /**
-   * Input-token ceiling from the context budget planner (lib/context/budget).
-   * Older tool results are elided to stay under it, so a long loop degrades
-   * instead of dying on a ContextSizeError several rounds in. Omit to disable.
+   * Ceiling for this run's **messages**, from the context budget planner
+   * (`ContextBudgetPlan.messageCeilingTokens`, or `messageCeilingFor` on a
+   * surface that builds no plan). Older tool results are elided to stay under
+   * it, so a long loop degrades instead of dying on a ContextSizeError several
+   * rounds in. Omit to disable.
+   *
+   * The tool schemas' share is **already subtracted by the caller** — do not
+   * subtract it again here. It is the messages this loop can trim; the schemas
+   * ride on every round whatever the history looks like, which is exactly why
+   * they have to come off the ceiling before the trimming starts rather than
+   * being discovered as overflow afterwards.
    */
   inputCeilingTokens?: number;
   /**
@@ -305,7 +321,17 @@ export interface AgentRuntimeOptions extends ConnOptions {
 export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResult> {
   const { preset } = opts;
   const history = opts.messages;
-  const toolDefinitions = getToolDefinitions(preset.tools);
+  /**
+   * The toolset as it stands, growing as the run earns groups (see
+   * `partitionByGroup`). Resident tools keep their original positions and
+   * loaded ones are appended, which is what lets the Anthropic cache prefix
+   * covering the resident half survive a mid-run load.
+   *
+   * An array rather than a Set precisely because that order is load-bearing.
+   */
+  const { resident, deferred } = partitionByGroup(preset.tools);
+  const activeTools: ToolId[] = [...resident];
+  const loadedGroups = new Set<ToolGroup>();
 
   // The run's own lore snapshot. The write tools patch it and resync it in
   // place (see writeTools.syncLore) — but the object callers hand in is the
@@ -359,6 +385,35 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
 
   for (let round = 1; round <= maxRounds; round++) {
     if (opts.signal.aborted) throw new DOMException("Aborted", "AbortError");
+
+    // Lore writes become legal the moment the author approves a plan, and
+    // that is exactly when they become worth sending. The gate itself is the
+    // signal — `plan.ts` is the one record of what the author signed off on,
+    // and a second flag beside it would be a second truth to keep in step.
+    //
+    // Checked at the top of the round, so the tools arrive on the round *after*
+    // the one that proposed. That costs nothing: propose_lore_plan blocks until
+    // the author decides and then ends its round with a tool result, so the
+    // model's next chance to write is that following round either way.
+    if (
+      !loadedGroups.has("lore_write") &&
+      deferred.lore_write.length > 0 &&
+      (runToolContext.lorePlan?.steps.length ?? 0) > 0
+    ) {
+      loadedGroups.add("lore_write");
+      activeTools.push(...deferred.lore_write);
+      opts.onEvent({
+        kind: "tools-loaded",
+        group: "lore_write",
+        names: [...deferred.lore_write],
+        round,
+        at: Date.now(),
+      });
+    }
+    // Rebuilt per round because `activeTools` grows. `getToolDefinitions` also
+    // re-patches the active profile's lore categories, which is free to redo
+    // and wrong to cache across a project switch.
+    const toolDefinitions = getToolDefinitions(activeTools);
 
     // On the final round of a force-text task: inject a "write now" instruction
     // and omit tools so the model must produce text without further tool calls.
@@ -514,6 +569,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       round,
       maxRounds,
       estInputTokens: estimateMessagesTokens(history),
+      toolTokens: withholdTools ? 0 : toolTokensOf(activeTools),
       at: Date.now(),
     });
 
@@ -780,9 +836,13 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         signal: opts.signal,
         onNestedEvent: opts.onEvent,
       };
+      // `activeTools`, NOT `preset.tools`: this list is the security boundary,
+      // not an optimisation. Leave it as the preset's full set and a deferred
+      // tool stays callable while its schema is being withheld — which is the
+      // gate doing nothing at all, dressed up as a saving.
       const result: ToolResult = await executeRegisteredTool(
         toolCall,
-        preset.tools,
+        activeTools,
         callContext,
       );
       const isError = result.content.startsWith("Error") || result.content.startsWith("Unknown tool");

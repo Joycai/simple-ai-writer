@@ -40,7 +40,8 @@ import { costFor } from "../lib/ai/configDb";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
 import { persistUsage } from "../lib/ai/usage";
 import type { MessageContent, StreamMessage } from "../lib/ai/types";
-import { inputCeilingFor, measureCharsPerToken } from "../lib/context/budget";
+import { measureCharsPerToken } from "../lib/context/budget";
+import { messageCeilingFor } from "../lib/agent/toolCost";
 import { hashText } from "../lib/context/memory";
 import { loadApiKey } from "../lib/keyStore";
 import { notify } from "../lib/notify";
@@ -441,6 +442,16 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     const loreIndex = useLoreStore.getState().index;
     const { loreBudgetTokens, contextUtilization } = useAppStore.getState();
     const persona = agent.authorPersona ?? get().authorPersona;
+    // 留给**消息**的上限：工具 schema 那一份已经扣掉了（lib/agent/toolCost）。
+    // 压缩和 runtime 的历史裁剪都量这个数——两边各算各的，就是上下文条越过
+    // 压缩线却什么都没发生的那种错位。这里算一次，下面用两次。
+    const messageCeiling = messageCeilingFor(
+      model.contextSize,
+      contextUtilization,
+      presetFor(agent.kind),
+      withSessionOverrides(subAgents, get().sessions[job.agentId]?.disabledSubAgents ?? []),
+      models,
+    );
 
     try {
       const apiKey = (await loadApiKey(provider.id)) ?? "";
@@ -505,7 +516,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           matchText: job.match,
           loreBudgetChars: loreBudgetTokens * charsPerToken,
           areaBudgetChars: AREA_BUDGET_TOKENS * charsPerToken,
-          ceilingTokens: inputCeilingFor(model.contextSize, contextUtilization),
+          ceilingTokens: messageCeiling,
           summarize: (input) =>
             summarizeForCompaction(connOptions({ provider, model, apiKey }), input, controller.signal),
         });
@@ -546,7 +557,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
 
       const result = await runAgent({
         ...connOptions({ provider, model, apiKey }),
-        inputCeilingTokens: inputCeilingFor(model.contextSize, contextUtilization),
+        inputCeilingTokens: messageCeiling,
         preset: { ...preset, tools: routed.tools, serverTools: routed.serverTools },
         messages: history,
         toolContext: {
