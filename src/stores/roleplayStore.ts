@@ -48,7 +48,7 @@ import { loadApiKey } from "../lib/keyStore";
 import { notify } from "../lib/notify";
 import {
   buildBoundContent, buildSystemPrompt, contextSignature, ensureBlocks, refreshBoundBlock,
-  refreshMemoryBlock, refreshSystemPrompt, seedRoleplayHistory,
+  refreshMemoryBlock, refreshSystemPrompt,
   type BoundContent, type RoleplaySessionMeta,
 } from "../lib/roleplay/context";
 import {
@@ -65,7 +65,8 @@ import { scriptPreview } from "../lib/roleplay/markup";
 
 import { runSceneRecap, type SceneRecap } from "../lib/roleplay/recap";
 import {
-  conversationReader, injectAreaRecall, loadStaticContext, type RecalledEntity,
+  conversationReader, injectAreaRecall, loadStaticContext, prepareSeededHistory,
+  type RecalledEntity,
 } from "../lib/roleplay/run";
 import {
   addAreaEntry, createArea, isValidAreaId, listAreas, loadAreaMeta,
@@ -454,44 +455,25 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         // 再走一遍下面任何一支都会把它们叠第二份。
         repairToolCallPairing(history);
       } else if (!history || !meta) {
-        // 主角条目正文进 system 层——它是「你是谁」，是唯一整轮存活的那一层。
-        const { primaryText, personaCard } = await loadStaticContext(projectPath, agent);
+        // 历史准备的排序住在 lib（prepareSeededHistory），这里只剩状态：基线、
+        // 会话字段、执行日志、「想起了…」。
         const charsPerToken = measureCharsPerToken(job.match);
-        const memoryDoc = await loadMemoryDoc(memoryPath(projectPath, agent.id));
-        // `session.json` 丢了（或从没写过）而 transcript 里已经有对话——把它回放
-        // 回去。不回放的话作者看着满屏的记录，角色却说它不知道之前发生过什么：
-        // **稿面完好、模型失忆**。transcript 是资产，session.json 只是缓存。
-        //
-        // 末尾那一轮是 `send` 刚刚落盘的这一问，由 `firstMessage` 承担，回放要去掉。
-        const all = get().sessions[job.agentId]?.turns ?? [];
-        const priorTurns = all.length && all[all.length - 1].speaker === "author"
-          ? all.slice(0, -1)
-          : all;
-        const seeded = await seedRoleplayHistory({
-          agent, persona, personaCard, primaryText, loreIndex,
-          firstMessage: job.wire,
+        const seeded = await prepareSeededHistory({
+          projectPath, agent, persona, loreIndex,
+          wire: job.wire,
           matchText: job.match,
           loreBudgetChars: loreBudgetTokens * charsPerToken,
-          memory: memoryDoc.records,
-          priorTurns,
-          priorSummary: priorTurns.length
-            ? await loadSummary(projectPath, agent.id)
-            : "",
+          areaBudgetChars: AREA_BUDGET_TOKENS * charsPerToken,
+          currentTurns: get().sessions[job.agentId]?.turns ?? [],
         });
-        history = seeded.messages;
+        history = seeded.history;
         meta = seeded.meta;
         // 基线进花名册而不是进内存的会话：没打开过的 agent 也要能亮起
         // 「设定已更新」，而那正是刚打开应用时最需要它的时刻。
         set((st) => ({
           agents: {
             ...st.agents,
-            [agent.id]: {
-              ...st.agents[agent.id],
-              contextHash: hashText(contextSignature({
-                agent, persona, personaCard, primaryText, loreIndex,
-                boundText: seeded.bound.text,
-              })),
-            },
+            [agent.id]: { ...st.agents[agent.id], contextHash: seeded.contextHash },
           },
           stale: { ...st.stale, [agent.id]: false },
         }));
@@ -500,7 +482,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           ...s,
           history, meta,
           stalePaths: seeded.bound.stalePaths,
-          memory: memoryDoc.records,
+          memory: seeded.memoryRecords,
           memoryStale: false,
           liveLog: appendAgentEventTo(s.liveLog, {
             kind: "context-seeded",
@@ -512,15 +494,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
             at: Date.now(),
           }),
         }));
-        // 播种出来的历史以这一问收尾——旧事插在它前面。
-        noteRecalled(job.agentId, await injectAreaRecall({
-          projectPath,
-          areaId: agent.areaId,
-          matchText: job.match,
-          history, meta,
-          insertIndex: history.length - 1,
-          budgetChars: AREA_BUDGET_TOKENS * measureCharsPerToken(job.match),
-        }));
+        noteRecalled(job.agentId, seeded.recalled);
       } else {
         repairToolCallPairing(history);
 

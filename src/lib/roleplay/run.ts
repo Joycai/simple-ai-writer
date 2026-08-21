@@ -11,14 +11,20 @@
 
 import i18n from "../../i18n";
 import { excludeDirsFor, noteTurnStart, recordInjections } from "../agent/compact";
-import type { StreamMessage } from "../ai/types";
-import { selectLore } from "../context/loreSelect";
+import type { MessageContent, StreamMessage } from "../ai/types";
+import { hashText } from "../context/memory";
+import { selectLore, type LoreActivationReport } from "../context/loreSelect";
 import { readEntityFile } from "../lore/entity";
+import type { LoreIndex } from "../lore/model";
 import { areaEntities, scanArea } from "./area";
-import type { RoleplaySessionMeta } from "./context";
+import {
+  contextSignature, seedRoleplayHistory,
+  type BoundContent, type RoleplaySessionMeta,
+} from "./context";
 import type { ConversationReader } from "./conversationTools";
-import type { RoleplayAgent } from "./model";
-import { loadPersonaCard, transcriptPath } from "./store";
+import { loadMemoryDoc } from "./memory";
+import type { AuthorPersona, MemoryRecord, RoleplayAgent, SceneTurn } from "./model";
+import { loadPersonaCard, loadSummary, memoryPath, transcriptPath } from "./store";
 import { loadTranscript } from "./transcript";
 
 // ─── 静态上下文 ──────────────────────────────────────────────────────────────
@@ -63,6 +69,19 @@ export function conversationReader(
       return { turns, renumbered };
     },
   };
+}
+
+// ─── 回放轮的选择 ────────────────────────────────────────────────────────────
+
+/**
+ * 从显示层的当前对话里挑出要回放的过往轮次：去掉末尾那条**刚落盘的作者问**
+ * ——它由播种的 `firstMessage` 承担，回放再带一遍就是同一句话出现两次。
+ * 末尾不是作者轮（比如上一轮的回复刚写完）就整段原样回放。
+ */
+export function selectPriorTurns(turns: readonly SceneTurn[]): readonly SceneTurn[] {
+  return turns.length && turns[turns.length - 1].speaker === "author"
+    ? turns.slice(0, -1)
+    : turns;
 }
 
 // ─── 记忆区检索 ──────────────────────────────────────────────────────────────
@@ -143,4 +162,84 @@ export async function injectAreaRecall(opts: {
     console.warn("[roleplay] memory area not read:", e);
     return [];
   }
+}
+
+// ─── 播种分支 ────────────────────────────────────────────────────────────────
+
+export interface SeedOutcome {
+  history: StreamMessage[];
+  meta: RoleplaySessionMeta;
+  /** `stalePaths` 给 UI 标灰失效的绑定。 */
+  bound: BoundContent;
+  /** context-seeded 事件里的数字。 */
+  report: LoreActivationReport | null;
+  /** 记事本面板的初始数据。 */
+  memoryRecords: MemoryRecord[];
+  /** 「设定已更新」的新基线，store 写进花名册。 */
+  contextHash: string;
+  recalled: RecalledEntity[];
+}
+
+/**
+ * runJob 的播种分支：没有活历史（新会话，或 `session.json` 读不出来）时，
+ * 从 transcript + 设定重建一段完整的历史。
+ *
+ * 排序 = 原店内代码逐条搬过来：静态上下文 → 记忆 → 回放轮 → 播种 → 基线哈希
+ * → 区检索（插在提问前一位）。**基线必须由 `contextSignature` 在这里算**——
+ * 和 `checkBindings` 是同一个函数、同一组输入，各读各的就是一次永远对不上的
+ * 比较（`RoleplayAgent.contextHash` 的注释）。
+ *
+ * `session.json` 丢了而 transcript 里已经有对话——把它回放回去。不回放的话
+ * 作者看着满屏的记录，角色却说它不知道之前发生过什么：**稿面完好、模型失忆**。
+ * transcript 是资产，session.json 只是缓存。
+ */
+export async function prepareSeededHistory(opts: {
+  projectPath: string;
+  agent: RoleplayAgent;
+  persona: AuthorPersona;
+  loreIndex: LoreIndex;
+  wire: MessageContent;
+  matchText: string;
+  loreBudgetChars: number;
+  areaBudgetChars: number;
+  /** 显示层的当前对话（store 传入），用来算回放轮。 */
+  currentTurns: readonly SceneTurn[];
+}): Promise<SeedOutcome> {
+  const { projectPath, agent, persona, loreIndex } = opts;
+  // 主角条目正文进 system 层——它是「你是谁」，是唯一整轮存活的那一层。
+  const { primaryText, personaCard } = await loadStaticContext(projectPath, agent);
+  const memoryDoc = await loadMemoryDoc(memoryPath(projectPath, agent.id));
+  const priorTurns = selectPriorTurns(opts.currentTurns);
+  const seeded = await seedRoleplayHistory({
+    agent, persona, personaCard, primaryText, loreIndex,
+    firstMessage: opts.wire,
+    matchText: opts.matchText,
+    loreBudgetChars: opts.loreBudgetChars,
+    memory: memoryDoc.records,
+    priorTurns,
+    priorSummary: priorTurns.length ? await loadSummary(projectPath, agent.id) : "",
+  });
+  const contextHash = hashText(contextSignature({
+    agent, persona, personaCard, primaryText, loreIndex,
+    boundText: seeded.bound.text,
+  }));
+  // 播种出来的历史以这一问收尾——旧事插在它前面。
+  const recalled = await injectAreaRecall({
+    projectPath,
+    areaId: agent.areaId,
+    matchText: opts.matchText,
+    history: seeded.messages,
+    meta: seeded.meta,
+    insertIndex: seeded.messages.length - 1,
+    budgetChars: opts.areaBudgetChars,
+  });
+  return {
+    history: seeded.messages,
+    meta: seeded.meta,
+    bound: seeded.bound,
+    report: seeded.report,
+    memoryRecords: memoryDoc.records,
+    contextHash,
+    recalled,
+  };
 }

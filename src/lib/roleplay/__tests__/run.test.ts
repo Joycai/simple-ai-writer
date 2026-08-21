@@ -200,3 +200,107 @@ describe("loadStaticContext", () => {
     expect(out.primaryText).toBe("");
   });
 });
+
+// ─── prepareSeededHistory ────────────────────────────────────────────────────
+
+import { hashText } from "../../context/memory";
+import { contextSignature } from "../context";
+import { prepareSeededHistory, selectPriorTurns } from "../run";
+import { NO_PERSONA, type RoleplayAgent } from "../model";
+
+const SEED_AGENT: RoleplayAgent = {
+  id: "rp-abc-0001", kind: "character", name: "沈砚",
+  primaryDirPath: "/lore/characters/elden", boundPaths: [],
+  modelId: null, areaId: "rp-area-x", authorPersona: null,
+  createdAt: 0, updatedAt: 0, turnCount: 0, contextHash: null,
+};
+
+function seedFixture() {
+  files.clear();
+  withTower();
+  files.set("/lore/characters/elden/index.md", "寒露之变的幸存者。");
+  files.set("/p/.ai-writer/roleplay/rp-abc-0001/agent.md", "---\nid: rp-abc-0001\n---\n\n说话短。\n");
+}
+
+const seedOpts = (over: Partial<Parameters<typeof prepareSeededHistory>[0]> = {}) => ({
+  projectPath: "/p",
+  agent: SEED_AGENT,
+  persona: NO_PERSONA,
+  loreIndex: {},
+  wire: "「塔那边有消息了吗？」",
+  matchText: "「塔那边有消息了吗？」",
+  loreBudgetChars: 4000,
+  areaBudgetChars: 4000,
+  currentTurns: [] as SceneTurn[],
+  ...over,
+});
+
+describe("selectPriorTurns", () => {
+  const t = (i: number, speaker: "author" | "agent"): SceneTurn =>
+    ({ index: i, speaker, speakerName: "", at: 0, text: `t${i}` });
+
+  it("drops the trailing author turn — it rides as firstMessage", () => {
+    expect(selectPriorTurns([t(1, "author"), t(2, "agent"), t(3, "author")]))
+      .toHaveLength(2);
+  });
+
+  it("keeps everything when the last turn is a reply", () => {
+    expect(selectPriorTurns([t(1, "author"), t(2, "agent")])).toHaveLength(2);
+  });
+
+  it("empty stays empty", () => {
+    expect(selectPriorTurns([])).toEqual([]);
+  });
+});
+
+describe("prepareSeededHistory", () => {
+  it("ends on the question, with the area carrier right before it", async () => {
+    seedFixture();
+    const out = await prepareSeededHistory(seedOpts());
+    const last = out.history[out.history.length - 1];
+    expect(last.content).toBe("「塔那边有消息了吗？」");
+    expect(out.meta.turnStarts).toContain(last);
+    const carrier = out.history[out.history.length - 2];
+    expect(String(carrier.content)).toContain("roleplay.section.recall");
+    expect(out.recalled).toEqual([{ name: "塔", dirPath: areaFixture[0].dirPath }]);
+    // 两个块无条件存在（第九轮 §9.1），在 system 之后。
+    expect(out.meta.boundBlock).toBe(out.history[1]);
+    expect(out.meta.memoryBlock).toBe(out.history[2]);
+  });
+
+  it("computes the baseline with contextSignature over the same inputs checkBindings reads", async () => {
+    seedFixture();
+    const out = await prepareSeededHistory(seedOpts());
+    const expected = hashText(contextSignature({
+      agent: SEED_AGENT,
+      persona: NO_PERSONA,
+      personaCard: "说话短。",
+      primaryText: "寒露之变的幸存者。",
+      loreIndex: {},
+      boundText: out.bound.text,
+    }));
+    expect(out.contextHash).toBe(expected);
+  });
+
+  it("reads summary.md only when there are turns to replay", async () => {
+    seedFixture();
+    files.set("/p/.ai-writer/roleplay/rp-abc-0001/summary.md", "他们在西厢见过一面。\n");
+
+    // 只有刚落盘的这一问：没有可回放的过往，摘要不该被接上。
+    const fresh = await prepareSeededHistory(seedOpts({
+      currentTurns: [{ index: 1, speaker: "author", speakerName: "", at: 0, text: "「塔那边有消息了吗？」" }],
+    }));
+    expect(fresh.meta.summaryText).toBeNull();
+
+    // 有过往轮：摘要接回来，回放的角色轮进 assistant。
+    const restored = await prepareSeededHistory(seedOpts({
+      currentTurns: [
+        { index: 1, speaker: "author", speakerName: "", at: 0, text: "「你还在等？」" },
+        { index: 2, speaker: "agent", speakerName: "沈砚", at: 0, text: "「等谁不重要。」" },
+        { index: 3, speaker: "author", speakerName: "", at: 0, text: "「塔那边有消息了吗？」" },
+      ],
+    }));
+    expect(restored.meta.summaryText).toBe("他们在西厢见过一面。");
+    expect(restored.history.find((m) => m.content === "「等谁不重要。」")?.role).toBe("assistant");
+  });
+});
