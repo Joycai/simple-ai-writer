@@ -130,6 +130,7 @@ Load the relevant doc **before** working in that area — don't reconstruct it f
 - **[`docs/feature/roleplay/`](docs/feature/roleplay/README.md)** — 互动式角色扮演创作：概要设计（四条不变量 / 被否掉的方案）、详细设计（transcript 格式、上下文分层、preset、旁白工具、角色记忆）、执行方案、给 Claude Design 的 UI 任务书，以及第一轮的实现记录。**改 `src/lib/roleplay/`、`stores/roleplayStore.ts` 或往扮演 preset 里加工具前先读**——尤其是「绑定块为什么不能进 seed 块」和「扮演 agent 为什么没有 scene 工具」这两条。
 - **[`docs/pptx-plan.md`](docs/pptx-plan.md)** — .pptx 两端的设计：读（Rust 解析、按页分段、`.ppt` 为什么不做）和写（HTML → PPTX：为什么转换不经过模型、沙箱里怎么量、被否掉的四个方案、验证时抓到的三个 bug）。**改 `src-tauri/src/pptx.rs`、`read_slides` 或 `src/lib/pptx/` 前先读。**
 - **[`docs/kb-admin-console.md`](docs/kb-admin-console.md)** — 知识库服务端的**管理后台**（`server/admin/`）：配置为什么从环境变量改成 TOML 文件、两套鉴权为什么不合并、token 为什么明文、活动日志为什么可以破例存在，以及与设计稿 07 的差异清单。**改 `server/src/config.rs`、`server/src/admin.rs` 或 `server/admin/*` 前先读。**
+- **[`docs/agent-tool-context.md`](docs/agent-tool-context.md)** + **[`docs/agent-tool-context-lld.md`](docs/agent-tool-context-lld.md)** — agent 每轮固定头部的**成本账**：工具 schema 与 briefing 各占多少、为什么工具 token 必须先从 ceiling 里扣掉（`lib/agent/toolCost` 是这个数字的唯一来源）、`lore_write` 为什么随已批准的方案才装载、以及 `load_tools` 那条路为什么被证据否掉。**往 `AGENT_ASSIST_PRESET` 加工具、改 `ai.instructions.agent`、或碰 `trimHistory` / `planFold` 的 ceiling 前先读**——加工具会撞上 `agentToolBudget.test.ts` 的棘轮，那不是测试坏了。
 - **[`docs/ci.md`](docs/ci.md)** — CI / PR quality gate: what the `CI` workflow checks (frontend type-check + build, Rust fmt/clippy/test/build), how to enforce it via branch protection, and how to run the same checks locally.
 
 ## Local Skills
