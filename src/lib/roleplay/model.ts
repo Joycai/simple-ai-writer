@@ -33,6 +33,13 @@ export interface RoleplayAgent {
   boundPaths: string[];
   /** null = 跟随全局 activeModelId。 */
   modelId: string | null;
+  /**
+   * 绑定的记忆区（`lib/roleplay/area`）。`null` = 还没有。
+   *
+   * 存 id 而不是把内容挂在 agent 上，正是为了**继承**：删掉这个角色，区还在；
+   * 新角色绑上同一个 id，就接上了上一个角色记得的一切。
+   */
+  areaId: string | null;
   /** null = 用花名册的全局设置。 */
   authorPersona: AuthorPersona | null;
   createdAt: number;

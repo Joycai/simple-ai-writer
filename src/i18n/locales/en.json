@@ -2052,6 +2052,25 @@
     "kbFrom": "from {{device}}"
   },
   "roleplay": {
+    "area": {
+      "label": "Memory area",
+      "labelNote": "what this character believes",
+      "lede": "Binding an existing memory area is inheritance: the new character walks on already remembering what is in it. An area can only be held by one character at a time.",
+      "makeNew": "Start a new one",
+      "makeNewDesc": "Empty. It fills up from scene one.",
+      "bindExisting": "Bind an existing one",
+      "bindExistingDesc": "Pick up what another character left behind.",
+      "search": "Search {{n}} areas",
+      "counts": "{{free}} free · {{taken}} taken",
+      "none": "No memory areas yet. Pick \"start a new one\".",
+      "entryCount": "{{n}} entries",
+      "takenBy": "held by {{name}}",
+      "pick": "Pick",
+      "picked": "Picked",
+      "former": "last used by {{name}}",
+      "lastScene": "last written scene {{n}}",
+      "defaultName": "{{name}}'s past"
+    },
     "recap": {
       "untitled": "The scene before"
     },
@@ -2126,6 +2145,8 @@
       "narrator": "Narrator"
     },
     "section": {
+      "recall": "Memory",
+      "recallLead": "Things you have just remembered. This is **what you recall** — it need not agree with what others say.",
       "bound": "Bound setting",
       "scene": "Scene",
       "memory": "Memory",
@@ -2255,6 +2276,11 @@
       "loadFailed": "Could not read the roleplay directory (.ai-writer/roleplay/): {{error}}"
     },
     "memory": {
+      "tierStanding": "Standing",
+      "tierStandingNote": "{{n}} · always in context",
+      "tierAreaNote": "{{n}} · surfaces when relevant",
+      "sink": "sinks at the next scene change",
+      "areaEmpty": "Still empty. At the next scene change, whatever is no longer owed sinks down here.",
       "title": "Notebook",
       "open": "Notebook",
       "close": "Close",

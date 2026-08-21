@@ -69,6 +69,22 @@ export async function scanLore(projectPath: string): Promise<LoreIndex> {
 }
 
 /**
+ * Every entity directory under one folder, read as `category`.
+ *
+ * Exported because the roleplay memory area (`lib/roleplay/area`) is stored in
+ * the *same format* somewhere else entirely — that is the whole trick behind
+ * "reuse the code, not the index": one flat folder scanned by this function
+ * yields a `LoreIndex` that `selectLore` can consume, without a single one of
+ * its entries ever entering the project's own index.
+ */
+export async function scanEntityFolder(
+  dirPath: string,
+  category: CategoryId,
+): Promise<LoreEntity[]> {
+  return readCategoryEntities(dirPath, category);
+}
+
+/**
  * Every entity directory under one category folder. A missing or unreadable
  * folder yields nothing rather than throwing: category directories are created
  * lazily, on the first entry.

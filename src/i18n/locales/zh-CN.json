@@ -2047,6 +2047,25 @@
     "kbFrom": "来自 {{device}}"
   },
   "roleplay": {
+    "area": {
+      "label": "记忆区",
+      "labelNote": "这个角色以为的事",
+      "lede": "绑定一个已存在的记忆区，就是继承：新角色一上场就记得里面的旧事。一个记忆区同时只能挂在一个角色身上。",
+      "makeNew": "新建一个",
+      "makeNewDesc": "空的。从第一场开始攒。",
+      "bindExisting": "绑定已存在的",
+      "bindExistingDesc": "接上一个角色留下的记忆。",
+      "search": "搜索 {{n}} 个记忆区",
+      "counts": "空闲 {{free}} · 已占用 {{taken}}",
+      "none": "还没有记忆区。选「新建一个」开始攒。",
+      "entryCount": "{{n}} 条",
+      "takenBy": "已被 {{name}} 占用",
+      "pick": "选它",
+      "picked": "已选",
+      "former": "上一个使用者：{{name}}",
+      "lastScene": "最后写入 第 {{n}} 场",
+      "defaultName": "{{name}}的旧事"
+    },
     "recap": {
       "untitled": "上一场"
     },
@@ -2121,6 +2140,8 @@
       "narrator": "旁白"
     },
     "section": {
+      "recall": "记忆",
+      "recallLead": "以下是你想起来的旧事。这是**你记得的**，未必和别人说的一致。",
       "bound": "绑定设定",
       "scene": "场景",
       "memory": "记忆",
@@ -2250,6 +2271,11 @@
       "loadFailed": "读不到扮演目录（.ai-writer/roleplay/）：{{error}}"
     },
     "memory": {
+      "tierStanding": "常驻",
+      "tierStandingNote": "{{n}} · 每轮都在",
+      "tierAreaNote": "{{n}} · 相关时才出现",
+      "sink": "转场时沉下去",
+      "areaEmpty": "还是空的。这一场转场时，上面那些不再欠着的东西会沉到这里。",
       "title": "记事本",
       "open": "记事本",
       "close": "收起",

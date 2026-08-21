@@ -80,6 +80,7 @@ function coerceAgent(raw: unknown): RoleplayAgent | null {
     primaryDirPath: kind === "narrator" || typeof a.primaryDirPath !== "string" ? null : a.primaryDirPath,
     boundPaths: Array.isArray(a.boundPaths) ? a.boundPaths.filter((x): x is string => typeof x === "string") : [],
     modelId: typeof a.modelId === "string" ? a.modelId : null,
+    areaId: typeof a.areaId === "string" ? a.areaId : null,
     authorPersona: a.authorPersona ? coercePersona(a.authorPersona) : null,
     createdAt: typeof a.createdAt === "number" ? a.createdAt : 0,
     updatedAt: typeof a.updatedAt === "number" ? a.updatedAt : 0,
@@ -131,6 +132,7 @@ async function rebuildRoster(projectPath: string): Promise<RoleplayAgent[]> {
         primaryDirPath: null,   // 只有花名册记绝对路径，人设卡里是相对的展示用值
         boundPaths: [],
         modelId: null,
+        areaId: null,
         authorPersona: null,
         createdAt: 0,
         updatedAt: 0,
