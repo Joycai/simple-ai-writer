@@ -30,7 +30,7 @@ use axum::extract::{Path, Query, Request, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, patch, post};
 use axum::{Extension, Json, Router};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -69,6 +69,15 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route(
             "/admin/api/kbs/{kb}/entries/{category}/{id}",
             get(download_entry).delete(delete_entry),
+        )
+        .route("/admin/api/configs", get(list_slots))
+        .route(
+            "/admin/api/configs/{slot}",
+            patch(rename_slot).delete(delete_slot),
+        )
+        .route(
+            "/admin/api/configs/{slot}/versions/{at}",
+            delete(delete_slot_version),
         )
         .route("/admin/api/tokens", get(list_tokens).post(create_token))
         .route(
@@ -780,6 +789,119 @@ async fn full_backup(State(state): State<Arc<AppState>>) -> Response {
     )
 }
 
+// ─── 配置备份 ────────────────────────────────────────────────────────────────
+//
+// Read and delete only. There is deliberately **no download** here: a config
+// backup is the author's credential material — encrypted whenever it carries API
+// keys, with a password this server never sees — and an operator has no task
+// that requires holding it. The whole-data-directory backup already covers
+// `configs/`, so nothing is unrecoverable; what is absent is a second, casual
+// way out of the box for the one blob on this server that is not the author's
+// prose.
+//
+// The `meta` string on each version is the client's own envelope header. It is
+// handed to the page verbatim and decoded there, not here — the server not
+// parsing it is the invariant that lets the envelope format keep moving without
+// a redeploy (`docs/feature/knowledge-base/config-backup-plan.md` §2 ①).
+
+async fn list_slots(State(state): State<Arc<AppState>>) -> Result<Json<Value>, ApiError> {
+    let handle = Arc::clone(&state);
+    let rows = blocking(move || {
+        handle
+            .store
+            .list_slots()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|slot| {
+                let versions = handle
+                    .store
+                    .list_config_versions(&slot.meta.id)
+                    .unwrap_or_default();
+                json!({
+                    "id": slot.meta.id,
+                    "name": slot.meta.name,
+                    "createdAtMs": slot.meta.created_at_ms,
+                    "bytes": versions.iter().map(|v| v.size).sum::<u64>(),
+                    "versions": versions,
+                })
+            })
+            .collect::<Vec<_>>()
+    })
+    .await?;
+    Ok(Json(json!({ "slots": rows })))
+}
+
+#[derive(Deserialize)]
+struct RenameSlotBody {
+    name: String,
+}
+
+async fn rename_slot(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<CurrentUser>,
+    Path(slot): Path<String>,
+    Json(body): Json<RenameSlotBody>,
+) -> Result<Json<Value>, ApiError> {
+    let handle = Arc::clone(&state);
+    let id = slot.clone();
+    let summary = blocking(move || handle.store.rename_slot(&id, &body.name)).await??;
+    state.audit.record(AuditEvent {
+        at_ms: now_ms(),
+        action: "config-rename".into(),
+        kb: None,
+        path: Some(format!("configs/{slot}")),
+        device: Some(format!("管理后台 · {}", user.username)),
+        token: None,
+        status: 200,
+        detail: Some(format!("改名为 {}", summary.meta.name)),
+    });
+    Ok(Json(
+        json!({ "id": summary.meta.id, "name": summary.meta.name }),
+    ))
+}
+
+async fn delete_slot(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<CurrentUser>,
+    Path(slot): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let handle = Arc::clone(&state);
+    let id = slot.clone();
+    blocking(move || handle.store.delete_slot(&id)).await??;
+    state.audit.record(AuditEvent {
+        at_ms: now_ms(),
+        action: "config-delete".into(),
+        kb: None,
+        path: Some(format!("configs/{slot}")),
+        device: Some(format!("管理后台 · {}", user.username)),
+        token: None,
+        status: 204,
+        detail: Some("整个备份档".into()),
+    });
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn delete_slot_version(
+    State(state): State<Arc<AppState>>,
+    Extension(user): Extension<CurrentUser>,
+    Path((slot, at)): Path<(String, u64)>,
+) -> Result<StatusCode, ApiError> {
+    let handle = Arc::clone(&state);
+    let id = slot.clone();
+    blocking(move || handle.store.delete_config_version(&id, at)).await??;
+    state.audit.record(AuditEvent {
+        at_ms: now_ms(),
+        action: "config-delete".into(),
+        kb: None,
+        path: Some(format!("configs/{slot}")),
+        device: Some(format!("管理后台 · {}", user.username)),
+        token: None,
+        status: 204,
+        detail: Some(format!("版本 {at}")),
+    });
+    Ok(StatusCode::NO_CONTENT)
+}
+
 // ─── Tokens ──────────────────────────────────────────────────────────────────
 
 fn token_json(token: &TokenEntry, last_used: Option<&AuditEvent>) -> Value {
@@ -999,18 +1121,20 @@ async fn maintenance(State(state): State<Arc<AppState>>) -> Result<Json<Value>, 
         .iter()
         .map(|s| (s.meta.id.clone(), s.meta.name.clone()))
         .collect();
-    let by_kb = blocking(move || {
-        ids.into_iter()
+    let (by_kb, config_bytes) = blocking(move || {
+        let by_kb = ids
+            .into_iter()
             .map(|(id, name)| {
                 let bytes = handle.store.kb_bytes(&id);
                 maint::KbUsage { id, name, bytes }
             })
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>();
+        (by_kb, handle.store.config_bytes())
     })
     .await?;
 
     let data_dir = state.config().server.data_dir.clone();
-    let mut usage = blocking(move || maint::disk_usage(&data_dir, by_kb)).await?;
+    let mut usage = blocking(move || maint::disk_usage(&data_dir, by_kb, config_bytes)).await?;
     usage.by_kb.sort_by_key(|kb| std::cmp::Reverse(kb.bytes));
 
     Ok(Json(json!({
@@ -1114,6 +1238,26 @@ async fn read_config(State(state): State<Arc<AppState>>) -> Json<Value> {
             env_var: "AIW_KB_MAX_ENTRY_MB",
             needs_restart: false,
             help: "一个条目（含配图）的上传上限，超出返回 413。调大它时记得同步调大反向代理的 body 上限。",
+        },
+        Row {
+            key: "server.config_max_mb",
+            label: "配置备份上限（MB）",
+            kind: "number",
+            value: json!(config.server.config_max_mb),
+            default: json!(config::DEFAULT_CONFIG_MAX_MB),
+            env_var: "AIW_KB_CONFIG_MAX_MB",
+            needs_restart: false,
+            help: "app 推上来的一份配置备份（供应商 / 模型 / Prompt / 偏好）的上传上限。一份通常只有几十 KB，这里给得宽只是为了不误伤。",
+        },
+        Row {
+            key: "server.config_versions",
+            label: "配置备份保留版本数",
+            kind: "number",
+            value: json!(config.server.config_versions),
+            default: json!(config::DEFAULT_CONFIG_VERSIONS),
+            env_var: "AIW_KB_CONFIG_VERSIONS",
+            needs_restart: false,
+            help: "每个备份档保留几个历史版本。旧版本在新版本落盘之后才裁掉，所以调小它不会立刻删东西——下一次上传才生效。",
         },
         Row {
             key: "server.allow_anonymous",
@@ -1234,6 +1378,20 @@ async fn write_config(
                     return Err(ApiError::bad_request("单条目上限要在 1 到 1024 之间"));
                 }
                 settings.push(Setting::Int("server.max_entry_mb", n));
+            }
+            "server.config_max_mb" => {
+                let n = as_int(value)?;
+                if !(1..=64).contains(&n) {
+                    return Err(ApiError::bad_request("配置备份上限要在 1 到 64 之间"));
+                }
+                settings.push(Setting::Int("server.config_max_mb", n));
+            }
+            "server.config_versions" => {
+                let n = as_int(value)?;
+                if !(1..=100).contains(&n) {
+                    return Err(ApiError::bad_request("保留版本数要在 1 到 100 之间"));
+                }
+                settings.push(Setting::Int("server.config_versions", n));
             }
             "server.allow_anonymous" => {
                 settings.push(Setting::Bool("server.allow_anonymous", as_bool(value)?));

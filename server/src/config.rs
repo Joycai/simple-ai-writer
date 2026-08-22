@@ -80,6 +80,15 @@ pub struct ServerSettings {
     pub bind: SocketAddr,
     pub data_dir: PathBuf,
     pub max_entry_mb: usize,
+    /// Upload cap for one application-config backup, in MiB. Separate from
+    /// `max_entry_mb` because the two resources are nothing alike: a lore entry
+    /// carries a gallery of images and is measured in tens of megabytes, while a
+    /// config envelope is a few tens of kilobytes of JSON. Sharing one number
+    /// would mean the generous limit the first one needs also decides how much
+    /// this endpoint will accept.
+    pub config_max_mb: usize,
+    /// How many versions of one config backup slot to keep.
+    pub config_versions: usize,
     pub allow_anonymous: bool,
     pub log: String,
 }
@@ -152,6 +161,10 @@ impl Config {
         self.server.max_entry_mb * 1024 * 1024
     }
 
+    pub fn max_config_bytes(&self) -> usize {
+        self.server.config_max_mb * 1024 * 1024
+    }
+
     pub fn source_of(&self, key: &str) -> Source {
         self.sources.get(key).copied().unwrap_or(Source::Default)
     }
@@ -172,6 +185,8 @@ struct RawServer {
     bind: Option<String>,
     data_dir: Option<String>,
     max_entry_mb: Option<usize>,
+    config_max_mb: Option<usize>,
+    config_versions: Option<usize>,
     allow_anonymous: Option<bool>,
     log: Option<String>,
 }
@@ -195,6 +210,8 @@ struct RawToken {
 pub const DEFAULT_BIND: &str = "127.0.0.1:8787";
 pub const DEFAULT_DATA_DIR: &str = "./data";
 pub const DEFAULT_MAX_ENTRY_MB: usize = 64;
+pub const DEFAULT_CONFIG_MAX_MB: usize = 4;
+pub const DEFAULT_CONFIG_VERSIONS: usize = 10;
 pub const DEFAULT_LOG: &str = "aiw_kb_server=info,tower_http=info";
 pub const DEFAULT_SESSION_HOURS: u64 = 168;
 
@@ -298,6 +315,42 @@ impl Config {
             return Err("`max_entry_mb` must be between 1 and 1024".into());
         }
         mark("server.max_entry_mb", max_src);
+
+        // config_max_mb
+        let env_config_max = match env("AIW_KB_CONFIG_MAX_MB") {
+            Some(raw) => Some(
+                raw.parse::<usize>()
+                    .map_err(|e| format!("AIW_KB_CONFIG_MAX_MB is not a number ({raw:?}): {e}"))?,
+            ),
+            None => None,
+        };
+        let (config_max_mb, config_max_src) = pick(
+            env_config_max,
+            file_server.config_max_mb,
+            DEFAULT_CONFIG_MAX_MB,
+        );
+        if config_max_mb == 0 || config_max_mb > 64 {
+            return Err("`config_max_mb` must be between 1 and 64".into());
+        }
+        mark("server.config_max_mb", config_max_src);
+
+        // config_versions
+        let env_versions =
+            match env("AIW_KB_CONFIG_VERSIONS") {
+                Some(raw) => Some(raw.parse::<usize>().map_err(|e| {
+                    format!("AIW_KB_CONFIG_VERSIONS is not a number ({raw:?}): {e}")
+                })?),
+                None => None,
+            };
+        let (config_versions, versions_src) = pick(
+            env_versions,
+            file_server.config_versions,
+            DEFAULT_CONFIG_VERSIONS,
+        );
+        if config_versions == 0 || config_versions > 100 {
+            return Err("`config_versions` must be between 1 and 100".into());
+        }
+        mark("server.config_versions", versions_src);
 
         // allow_anonymous
         let env_anon = env("AIW_KB_ALLOW_ANONYMOUS").map(|v| {
@@ -428,6 +481,8 @@ impl Config {
                 bind,
                 data_dir: PathBuf::from(data_dir_raw),
                 max_entry_mb,
+                config_max_mb,
+                config_versions,
                 allow_anonymous,
                 log,
             },
@@ -581,6 +636,13 @@ data_dir = "{DEFAULT_DATA_DIR}"
 
 # 单个条目（含配图）的上传上限，单位 MB。改大它时记得同步调大反向代理的 body 上限。
 max_entry_mb = {DEFAULT_MAX_ENTRY_MB}
+
+# 应用配置备份（供应商 / 模型 / Prompt / 偏好）的单次上传上限，单位 MB。
+# 一份配置只有几十 KB，这里给得宽只是为了不误伤，不是为了当上传通道用。
+config_max_mb = {DEFAULT_CONFIG_MAX_MB}
+
+# 每个配置备份档保留几个历史版本。旧版本在新版本落盘之后才裁掉。
+config_versions = {DEFAULT_CONFIG_VERSIONS}
 
 # true = 关闭同步 API 的鉴权。仅用于本机试跑——打开它，任何能访问到这台机器的人
 # 都能读写全部知识库。

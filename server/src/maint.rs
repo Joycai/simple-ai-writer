@@ -34,9 +34,17 @@ pub struct DiskUsage {
     pub total_bytes: u64,
     #[serde(rename = "availableBytes")]
     pub available_bytes: u64,
-    /// What this server's own data occupies, summed from the payloads.
+    /// What this server's own data occupies, summed from the payloads —
+    /// knowledge bases *and* config backups. Both, because the number answers
+    /// "how much of this partition is us", and a figure that quietly left out
+    /// one of the two resources would be wrong in the one direction that
+    /// matters.
     #[serde(rename = "dataBytes")]
     pub data_bytes: u64,
+    /// The config-backup share of `data_bytes`, broken out so the maintenance
+    /// page can show where it went.
+    #[serde(rename = "configBytes")]
+    pub config_bytes: u64,
     #[serde(rename = "byKb")]
     pub by_kb: Vec<KbUsage>,
 }
@@ -48,7 +56,7 @@ pub struct KbUsage {
     pub bytes: u64,
 }
 
-pub fn disk_usage(data_dir: &Path, by_kb: Vec<KbUsage>) -> DiskUsage {
+pub fn disk_usage(data_dir: &Path, by_kb: Vec<KbUsage>, config_bytes: u64) -> DiskUsage {
     let absolute = std::fs::canonicalize(data_dir).unwrap_or_else(|_| data_dir.to_path_buf());
     let total = fs2::total_space(&absolute).unwrap_or(0);
     let available = fs2::available_space(&absolute).unwrap_or(0);
@@ -56,7 +64,8 @@ pub fn disk_usage(data_dir: &Path, by_kb: Vec<KbUsage>) -> DiskUsage {
         path: absolute.display().to_string(),
         total_bytes: total,
         available_bytes: available,
-        data_bytes: by_kb.iter().map(|k| k.bytes).sum(),
+        data_bytes: by_kb.iter().map(|k| k.bytes).sum::<u64>() + config_bytes,
+        config_bytes,
         by_kb,
     }
 }

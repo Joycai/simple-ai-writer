@@ -222,6 +222,8 @@ curl -s -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
 | `server.data_dir` | `AIW_KB_DATA_DIR` | `./data` | 数据目录 |
 | `server.bind` | `AIW_KB_BIND` | `127.0.0.1:8787` | 监听地址。默认只听回环 |
 | `server.max_entry_mb` | `AIW_KB_MAX_ENTRY_MB` | `64` | 单条目请求体上限。条目含配图,图多的话调大 |
+| `server.config_max_mb` | `AIW_KB_CONFIG_MAX_MB` | `4` | 单个**应用配置备份**请求体上限。一份通常只有几十 KB,不必动 |
+| `server.config_versions` | `AIW_KB_CONFIG_VERSIONS` | `10` | 每个配置备份档保留几个历史版本。调小它不会立刻删东西,下次上传才裁 |
 | `server.allow_anonymous` | `AIW_KB_ALLOW_ANONYMOUS` | `false` | 关闭同步 API 与后台的鉴权。**仅本机试跑** |
 | `server.log` | `RUST_LOG` | `aiw_kb_server=info` | `debug` 会打印每个请求 |
 | `[[tokens]]` | `AIW_KB_TOKENS`(逗号分隔) | 无 | 同步 API 的 bearer token,每个 ≥16 字符 |
@@ -456,6 +458,9 @@ mtime 取新的那个,并在下次写入时清掉旧的 —— 不用手工处�
 | app 报 404 `no knowledge base named …` | 绑定的知识库在服务端被删了。解除绑定后重新绑 |
 | app 报 412 并提示「服务器在你确认之后又变了」 | **正常行为**,不是故障:另一台机器在你确认之后写入了。按提示重新预览 |
 | 上传报 413 | 条目(含配图)超过上限。调大 `AIW_KB_MAX_ENTRY_MB`,**并同步调大反向代理的 body 上限** |
+| 推配置备份报 413 | 那是另一个上限:`AIW_KB_CONFIG_MAX_MB`(默认 4 MB)。一份配置只有几十 KB,撞上它通常说明推错了东西 |
+| app 说「密码错误,或这个备份已损坏」 | 服务端帮不上忙:密码从不上网,这里既没有它也没有解密代码。换个密码试,或者重推一份 |
+| 想把某个配置备份下载下来看看 | 后台**故意没有这个按钮**。它是加密的凭据材料,整机备份(§6)已经覆盖了 `configs/` |
 | 上传卡住/超时 | 反向代理开了请求缓冲。nginx 加 `proxy_request_buffering off` |
 | 局域网连不上 | `AIW_KB_BIND` 还是 `127.0.0.1`,改成 `0.0.0.0:8787`;再检查防火墙 |
 | 知识库列表里没有「来自 XXX」 | 那个库还没被写过,或写它的客户端版本没有发 `X-Source-Device` |
@@ -475,5 +480,5 @@ mtime 取新的那个,并在下次写入时清掉旧的 —— 不用手工处�
 - [ ] 公网暴露的话,前面有 TLS
 - [ ] 反向代理的 body 上限 ≥ `AIW_KB_MAX_ENTRY_MB`
 - [ ] 服务不是用 root 跑的
-- [ ] 数据目录在会被备份的分区上,并且真的验证过能恢复
+- [ ] 数据目录在会被备份的分区上,并且真的验证过能恢复 —— 它现在也装着作者的**配置备份**,那里面有(加密的)API Key
 - [ ] `curl` 无 token 访问 `/v1/kbs` 确实返回 401

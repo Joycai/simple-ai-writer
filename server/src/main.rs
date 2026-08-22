@@ -11,6 +11,12 @@
 //! knows what a facet is, so the app's knowledge-base format can keep evolving
 //! without this binary having to follow.
 //!
+//! Beside the knowledge bases it holds **application-config backups** — the
+//! app's providers, models, prompts and preferences, so a second machine can
+//! pull a setup down instead of having it re-typed. Those arrive encrypted
+//! whenever they carry API keys, with a password this server never sees and
+//! cannot recover; here too it stores an opaque blob and reports a hash.
+//!
 //! It also serves an **admin console** at `/admin` — a small self-contained page
 //! that does the things `DEPLOY.md` used to describe as shell commands. That is
 //! a second HTTP surface with a second kind of credential (a password, not a
@@ -104,6 +110,7 @@ async fn run() -> Result<(), String> {
     let data_dir = config.server.data_dir.clone();
     let config_path = config.file_path.clone();
     let max_entry_bytes = config.max_entry_bytes();
+    let max_config_bytes = config.max_config_bytes();
 
     let state = Arc::new(AppState {
         store,
@@ -113,7 +120,7 @@ async fn run() -> Result<(), String> {
         audit,
         started_at_ms: now_ms(),
     });
-    let app = routes::router(Arc::clone(&state), max_entry_bytes);
+    let app = routes::router(Arc::clone(&state), max_entry_bytes, max_config_bytes);
 
     let listener = tokio::net::TcpListener::bind(bind)
         .await
