@@ -25,7 +25,7 @@
  * off switch and the footer counts only what is still switched on.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ModalShell } from "../common/ModalShell";
 import type { EntryPath, SyncDecision, SyncPlan, SyncStep } from "../../lib/sync/model";
@@ -80,6 +80,8 @@ export function SyncPreviewModal() {
     setShowUnchanged(false);
     closeModal();
   };
+  const shellCloseRef = useRef<(() => void) | null>(null);
+  const requestClose = () => (shellCloseRef.current ?? close)();
 
   return (
     <ModalShell
@@ -90,13 +92,14 @@ export function SyncPreviewModal() {
       // progress and the backup location are shown.
       closeOnBackdrop={phase !== "running"}
       closeOnEscape={phase !== "running"}
+      closeRef={shellCloseRef}
     >
       <div className={`${s.panel} ${panelWidth(phase, plan)}`}>
         <div className={s.head}>
           <div className={s.headTitle}>{headTitle(t, phase, isPush, binding?.kbName ?? "", result)}</div>
           <span className={s.spacer} />
           {phase !== "running" && (
-            <button className={s.close} onClick={close} aria-label={t("common.close")}>
+            <button className={s.close} onClick={requestClose} aria-label={t("common.close")}>
               ×
             </button>
           )}
@@ -121,7 +124,7 @@ export function SyncPreviewModal() {
             setAcknowledged={setAcknowledged}
             onDecide={setDecision}
             error={error}
-            onCancel={close}
+            onCancel={requestClose}
             onConfirm={() => projectPath && void confirmRun(projectPath)}
             onSwitchDirection={() =>
               projectPath && void startPreview(projectPath, isPush ? "pull" : "push")
@@ -163,7 +166,7 @@ export function SyncPreviewModal() {
           </>
         )}
 
-        {phase === "done" && result && <ResultBody result={result} onClose={close} />}
+        {phase === "done" && result && <ResultBody result={result} onClose={requestClose} />}
       </div>
     </ModalShell>
   );

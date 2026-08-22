@@ -199,7 +199,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
         await writeBinaryFile(`${dirPath}/avatar.${ext}`, bytes);
       }
       await scanProject(projectPath);
-      onClose();
+      requestClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -212,9 +212,12 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
   // Unsaved once the user has typed a description, attached refs, or generated.
   const dirty = phase !== "input" || description.trim().length > 0 || attached.length > 0;
 
+  const shellCloseRef = useRef<(() => void) | null>(null);
+  const requestClose = () => (shellCloseRef.current ?? onClose)();
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <ModalShell overlayClassName={styles.overlay} onClose={onClose} isDirty={dirty} closeOnBackdrop={false}>
+    <ModalShell overlayClassName={styles.overlay} onClose={onClose} isDirty={dirty} closeOnBackdrop={false} closeRef={shellCloseRef}>
       <div className={styles.panel}>
 
         {/* Header */}
@@ -225,7 +228,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
               {isZh ? "extract · 提取" : "extract"}
             </span>
             <span className={styles.spacer} />
-            <button className={styles.closeBtn} onClick={onClose}><X size={14} /></button>
+            <button className={styles.closeBtn} onClick={requestClose}><X size={14} /></button>
           </div>
           <h2 className={styles.title}>{t("lore.generator.title", { entry: terms.entry })}</h2>
           <p className={styles.subtitle}>{t("lore.generator.subtitle")}</p>
@@ -400,7 +403,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
           <span className={styles.spacer} />
           {phase === "input" && (
             <>
-              <button className={styles.btnGhost} onClick={onClose}>{t("lore.generator.cancel")}</button>
+              <button className={styles.btnGhost} onClick={requestClose}>{t("lore.generator.cancel")}</button>
               <button className={styles.btnPrimary} onClick={handleGenerate}
                 disabled={!modelId || !description.trim()}>
                 <Sparkles size={13} /> {t("lore.generator.submitBtn", { entry: terms.entry })}
@@ -415,7 +418,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
           )}
           {phase === "result" && (
             <>
-              <button className={styles.btnGhost} onClick={onClose}>{t("lore.generator.cancel")}</button>
+              <button className={styles.btnGhost} onClick={requestClose}>{t("lore.generator.cancel")}</button>
               <button className={styles.btnSecondary} onClick={handleGenerate}
                 disabled={!modelId || !description.trim()}>
                 <RotateCw size={13} /> {t("lore.generator.regenerateBtn")}

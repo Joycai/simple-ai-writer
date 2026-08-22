@@ -14,7 +14,15 @@
  * `<div className={styles.overlay}>` + createPortal and wrap the panel here.
  */
 
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type MutableRefObject,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { imeOwnsKey, type CompositionState } from "../../lib/ime";
@@ -48,6 +56,14 @@ interface ModalShellProps {
   closeOnBackdrop?: boolean;
   /** Close on the Escape key (also gated by `isDirty`). Default true. */
   closeOnEscape?: boolean;
+  /**
+   * Receives the shell's animated close. `useModalClose` only resolves in
+   * components rendered *inside* the shell; the component that renders
+   * `<ModalShell>` itself hands in a ref instead and calls
+   * `closeRef.current?.()` from its own handlers — same semantics as calling
+   * `onClose` there today (no isDirty confirm), plus the exit animation.
+   */
+  closeRef?: MutableRefObject<(() => void) | null>;
 }
 
 export function ModalShell({
@@ -58,6 +74,7 @@ export function ModalShell({
   confirmMessage,
   closeOnBackdrop = true,
   closeOnEscape = true,
+  closeRef,
 }: ModalShellProps) {
   const { t } = useTranslation();
 
@@ -67,6 +84,8 @@ export function ModalShell({
     setClosing(true);
     window.setTimeout(onClose, EXIT_MS);
   };
+  // Latest-value ref, same pattern as requestCloseRef below.
+  if (closeRef) closeRef.current = beginClose;
 
   // Register in the modal stack for the lifetime of this instance so nested
   // modals can tell who is on top (see modalStack). Every instance registers —

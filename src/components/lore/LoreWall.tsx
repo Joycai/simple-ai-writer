@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { Search, Sparkles, Plus, Camera, BookOpen, Pencil, FolderOpen, RotateCw, Trash2, FileDown, FileUp, MoreHorizontal, AlertTriangle } from "lucide-react";
@@ -596,6 +596,8 @@ function NewCategoryModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ime = useImeGuard();
+  const shellCloseRef = useRef<(() => void) | null>(null);
+  const requestClose = () => (shellCloseRef.current ?? onClose)();
 
   const handleSubmit = async () => {
     if (!label.trim() || saving) return;
@@ -611,7 +613,7 @@ function NewCategoryModal({
   };
 
   return (
-    <ModalShell overlayClassName={styles.modalBackdrop} onClose={onClose} isDirty={label.trim().length > 0} closeOnBackdrop={false}>
+    <ModalShell overlayClassName={styles.modalBackdrop} onClose={onClose} isDirty={label.trim().length > 0} closeOnBackdrop={false} closeRef={shellCloseRef}>
       <div className={styles.modal}>
         <div className={styles.modalHeader}>
           <div className={styles.modalEyebrow}>{isZh ? "新建分类" : "NEW CATEGORY"}</div>
@@ -642,7 +644,7 @@ function NewCategoryModal({
         </div>
 
         <div className={styles.modalActions}>
-          <button className={styles.btnSecondary} onClick={onClose}>
+          <button className={styles.btnSecondary} onClick={requestClose}>
             {t("lore.form.cancel", { defaultValue: isZh ? "取消" : "Cancel" })}
           </button>
           <button className={styles.btnPrimary} onClick={handleSubmit} disabled={!label.trim() || saving}>
@@ -673,6 +675,8 @@ function NewEntryModal({
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const ime = useImeGuard();
+  const shellCloseRef = useRef<(() => void) | null>(null);
+  const requestClose = () => (shellCloseRef.current ?? onClose)();
 
   const handleSubmit = async () => {
     if (!name.trim() || saving) return;
@@ -685,7 +689,7 @@ function NewEntryModal({
   };
 
   return (
-    <ModalShell overlayClassName={styles.modalBackdrop} onClose={onClose} isDirty={name.trim().length > 0} closeOnBackdrop={false}>
+    <ModalShell overlayClassName={styles.modalBackdrop} onClose={onClose} isDirty={name.trim().length > 0} closeOnBackdrop={false} closeRef={shellCloseRef}>
       <div className={styles.modal}>
         <div className={styles.modalHeader}>
           <div className={styles.modalEyebrow}>{isZh ? "新建条目" : "NEW ENTRY"}</div>
@@ -727,7 +731,7 @@ function NewEntryModal({
         </div>
 
         <div className={styles.modalActions}>
-          <button className={styles.btnSecondary} onClick={onClose}>
+          <button className={styles.btnSecondary} onClick={requestClose}>
             {t("lore.form.cancel", { defaultValue: isZh ? "取消" : "Cancel" })}
           </button>
           <button
@@ -764,6 +768,8 @@ function LoreImportModal({
   const terms = useTerms();
   const [strategy, setStrategy] = useState<ConflictStrategy>("skip");
   const [applying, setApplying] = useState(false);
+  const shellCloseRef = useRef<(() => void) | null>(null);
+  const requestClose = () => (shellCloseRef.current ?? onCancel)();
 
   const conflicts = staged.entities.filter((e) => e.conflicts);
   const strategies: { value: ConflictStrategy; label: string }[] = [
@@ -783,7 +789,7 @@ function LoreImportModal({
   };
 
   return (
-    <ModalShell overlayClassName={styles.modalBackdrop} onClose={onCancel} closeOnBackdrop={false}>
+    <ModalShell overlayClassName={styles.modalBackdrop} onClose={onCancel} closeOnBackdrop={false} closeRef={shellCloseRef}>
       <div className={styles.modal}>
         <div className={styles.modalHeader}>
           <div className={styles.modalEyebrow}>{isZh ? `导入${terms.kb}` : "IMPORT"}</div>
@@ -834,7 +840,7 @@ function LoreImportModal({
         </div>
 
         <div className={styles.modalActions}>
-          <button className={styles.btnSecondary} onClick={onCancel} disabled={applying}>
+          <button className={styles.btnSecondary} onClick={requestClose} disabled={applying}>
             {t("lore.form.cancel", { defaultValue: isZh ? "取消" : "Cancel" })}
           </button>
           <button className={styles.btnPrimary} onClick={handleApply} disabled={applying}>

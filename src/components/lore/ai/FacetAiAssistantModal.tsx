@@ -94,6 +94,8 @@ export function FacetAiAssistantModal({
 }: Props) {
   const { t } = useTranslation();
   const { projectPath } = useProjectStore();
+  const shellCloseRef = useRef<(() => void) | null>(null);
+  const requestClose = () => (shellCloseRef.current ?? onClose)();
   const { models, providers, activeModelId } = useAiStore();
   // 本次任务使用的模型 — 默认跟随全局设置，改动不写回全局 (设计稿 v4)。
   const [modelId, setModelId] = useState(activeModelId ?? "");
@@ -205,7 +207,7 @@ export function FacetAiAssistantModal({
     } else {
       onApply({ body: stripCodeFence(output) });
     }
-    onClose();
+    requestClose();
   };
 
   const multimodalModels = models.filter((m) => m.type === "multimodal" || m.type === "text");
@@ -213,7 +215,7 @@ export function FacetAiAssistantModal({
   const dirty = phase !== "input" || instruction.trim().length > 0 || attached.length > 0;
 
   return (
-    <ModalShell overlayClassName={styles.overlay} onClose={onClose} isDirty={dirty} closeOnBackdrop={false}>
+    <ModalShell overlayClassName={styles.overlay} onClose={onClose} isDirty={dirty} closeOnBackdrop={false} closeRef={shellCloseRef}>
       <div className={styles.panel}>
 
         {/* Header */}
@@ -225,7 +227,7 @@ export function FacetAiAssistantModal({
               <div className={styles.headerSub}>{facetTitle.trim() || t("lore.facet.ai.untitled", { defaultValue: "未命名特征" })}</div>
             </div>
           </div>
-          <button className={styles.closeBtn} onClick={onClose}><X size={16} /></button>
+          <button className={styles.closeBtn} onClick={requestClose}><X size={16} /></button>
         </div>
 
         {/* Body */}
@@ -330,7 +332,7 @@ export function FacetAiAssistantModal({
               onChange={setModelId}
               disabled={phase === "generating"}
             />
-            <button className={styles.btnSecondary} onClick={onClose}>
+            <button className={styles.btnSecondary} onClick={requestClose}>
               {t("common.cancel", { defaultValue: "取消" })}
             </button>
           </div>

@@ -6,6 +6,7 @@
  * logic here, just routing.
  */
 
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Sparkles } from "lucide-react";
 import { ModalShell } from "../../common/ModalShell";
@@ -24,6 +25,8 @@ interface Props {
 
 export function EntityAiHubModal({ entityName, imageGenReady = false, onPick, onClose }: Props) {
   const { t } = useTranslation();
+  const shellCloseRef = useRef<(() => void) | null>(null);
+  const requestClose = () => (shellCloseRef.current ?? onClose)();
 
   const cells: { task: EntityAiTask; name: string; desc: string; disabled?: boolean; title?: string }[] = [
     {
@@ -51,7 +54,7 @@ export function EntityAiHubModal({ entityName, imageGenReady = false, onPick, on
   ];
 
   return (
-    <ModalShell overlayClassName={styles.overlay} onClose={onClose}>
+    <ModalShell overlayClassName={styles.overlay} onClose={onClose} closeRef={shellCloseRef}>
       <div className={styles.panel} style={{ maxWidth: 660 }}>
         <div className={hub.head}>
           <Sparkles size={13} strokeWidth={1.8} color="var(--color-sienna)" />
@@ -60,7 +63,7 @@ export function EntityAiHubModal({ entityName, imageGenReady = false, onPick, on
           </span>
           <span className={hub.spacer} />
           <span className={hub.headKbd}>Esc {t("common.close", { defaultValue: "关闭" })}</span>
-          <button className={styles.closeBtn} onClick={onClose}><X size={14} /></button>
+          <button className={styles.closeBtn} onClick={requestClose}><X size={14} /></button>
         </div>
 
         <div className={hub.grid}>

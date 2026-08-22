@@ -144,6 +144,8 @@ export function ImageGenModal({ target, onClose }: Props) {
     void end(projectPath ?? "");
     onClose();
   };
+  const shellCloseRef = useRef<(() => void) | null>(null);
+  const requestClose = () => (shellCloseRef.current ?? handleClose)();
 
   const busy = building || generating || saving;
   /** What this run will actually ask for — the chat route only ever returns one. */
@@ -286,7 +288,7 @@ export function ImageGenModal({ target, onClose }: Props) {
       // editing from the same picture, and dropping the chain here would throw
       // away every earlier round the author might branch back to. The alt
       // action is the exception — an avatar replaces rather than accumulates.
-      if (alt && target.altSave?.closeAfter) handleClose();
+      if (alt && target.altSave?.closeAfter) requestClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -305,6 +307,7 @@ export function ImageGenModal({ target, onClose }: Props) {
       isDirty={turns.length > 0 || busy}
       confirmMessage={t("lore.imageGen.discardConfirm")}
       closeOnBackdrop={false}
+      closeRef={shellCloseRef}
     >
       {/* 760: footer 要放下「出图模型」选择器 + 关闭 + 最多三枚保存/生成按钮 */}
       <div className={styles.panel} style={{ maxWidth: 760 }}>
@@ -331,7 +334,7 @@ export function ImageGenModal({ target, onClose }: Props) {
               />
             </label>
           </div>
-          <button className={styles.closeBtn} onClick={handleClose}><X size={16} /></button>
+          <button className={styles.closeBtn} onClick={requestClose}><X size={16} /></button>
         </div>
 
         <div className={styles.body}>
@@ -552,7 +555,7 @@ export function ImageGenModal({ target, onClose }: Props) {
               onChange={(v) => setImageModel(v)}
               disabled={busy || imageModels.length === 0}
             />
-            <button className={styles.btnSecondary} onClick={handleClose}>{t("lore.imageGen.close")}</button>
+            <button className={styles.btnSecondary} onClick={requestClose}>{t("lore.imageGen.close")}</button>
           </div>
           <div className={styles.footerRight}>
             {currentTurn && (
