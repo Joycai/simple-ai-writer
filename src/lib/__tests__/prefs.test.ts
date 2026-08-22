@@ -312,3 +312,111 @@ describe("persistence", () => {
     expect(prefs.readPref("app:theme")).toBe("light");
   });
 });
+
+// Multi-instance: several app processes share one config.db, and each caches
+// it in memory. `writePrefMerged` is how a list row survives two instances
+// saving their own snapshots; `refreshPrefs` is how one instance's changes
+// become visible in another (on window focus — see usePrefsFocusSync).
+describe("merged writes", () => {
+  /** The database's current row for the WHERE-key select the merge runs. */
+  const dbRowIs = (value: string | null) =>
+    h.select.mockImplementation(async (sql: string) =>
+      sql.includes("WHERE key = ?")
+        ? ((value === null ? [] : [{ value }]) as unknown as { key: string; value: string }[])
+        : [],
+    );
+
+  it("combines the database's row with ours at persist time", async () => {
+    await prefs.hydratePrefs();
+    dbRowIs("theirs");
+
+    prefs.writePrefMerged("app:recentProjects", "ours", (db, v) => `${db}+${v}`);
+    // The synchronous read sees our value before the chain runs…
+    expect(prefs.readPref("app:recentProjects")).toBe("ours");
+    await prefs.flushPrefs();
+
+    // …and the merged result lands in both the database and the cache.
+    expect(upserted()).toContainEqual(["app:recentProjects", "theirs+ours"]);
+    expect(prefs.readPref("app:recentProjects")).toBe("theirs+ours");
+  });
+
+  it("hands the merge null when the row does not exist yet", async () => {
+    await prefs.hydratePrefs();
+    dbRowIs(null);
+
+    prefs.writePrefMerged("app:recentProjects", "ours", (db, v) => `${db}+${v}`);
+    await prefs.flushPrefs();
+
+    expect(upserted()).toContainEqual(["app:recentProjects", "null+ours"]);
+  });
+
+  it("does not let the merged result clobber a later write's cache value", async () => {
+    await prefs.hydratePrefs();
+    dbRowIs("theirs");
+
+    prefs.writePrefMerged("app:recentProjects", "v1", (db, v) => `${db}+${v}`);
+    prefs.writePref("app:recentProjects", "v2");
+    await prefs.flushPrefs();
+
+    // The chain persisted both in order — last-call-wins holds in the
+    // database — and the cache shows the later value, not the merge of the
+    // superseded one.
+    expect(
+      upserted().filter(([k]) => k === "app:recentProjects").map(([, v]) => v),
+    ).toEqual(["theirs+v1", "v2"]);
+    expect(prefs.readPref("app:recentProjects")).toBe("v2");
+  });
+});
+
+describe("refreshPrefs", () => {
+  it("adopts another instance's rows and reports the change", async () => {
+    h.select.mockResolvedValueOnce([{ key: "app:theme", value: "dark" }]);
+    await prefs.hydratePrefs();
+
+    h.select.mockResolvedValueOnce([
+      { key: "app:theme", value: "light" },
+      { key: "app:language", value: "en" },
+    ]);
+    await expect(prefs.refreshPrefs()).resolves.toBe(true);
+
+    expect(prefs.readPref("app:theme")).toBe("light");
+    expect(prefs.readPref("app:language")).toBe("en");
+  });
+
+  it("drops rows another instance deleted", async () => {
+    h.select.mockResolvedValueOnce([
+      { key: "app:theme", value: "dark" },
+      { key: "app:language", value: "en" },
+    ]);
+    await prefs.hydratePrefs();
+
+    h.select.mockResolvedValueOnce([{ key: "app:theme", value: "dark" }]);
+    await expect(prefs.refreshPrefs()).resolves.toBe(true);
+
+    expect(prefs.readPref("app:language")).toBeNull();
+  });
+
+  it("reports no change when the database matches the cache", async () => {
+    h.select.mockResolvedValueOnce([{ key: "app:theme", value: "dark" }]);
+    await prefs.hydratePrefs();
+
+    h.select.mockResolvedValueOnce([{ key: "app:theme", value: "dark" }]);
+    // False is what keeps a no-op focus from firing the animated repaint.
+    await expect(prefs.refreshPrefs()).resolves.toBe(false);
+    expect(prefs.readPref("app:theme")).toBe("dark");
+  });
+
+  it("keeps the cache when the re-read fails", async () => {
+    h.select.mockResolvedValueOnce([{ key: "app:theme", value: "dark" }]);
+    await prefs.hydratePrefs();
+
+    h.select.mockRejectedValueOnce(new Error("locked"));
+    await expect(prefs.refreshPrefs()).resolves.toBe(false);
+    expect(prefs.readPref("app:theme")).toBe("dark");
+  });
+
+  it("is a no-op before hydration", async () => {
+    await expect(prefs.refreshPrefs()).resolves.toBe(false);
+    expect(h.select).not.toHaveBeenCalled();
+  });
+});

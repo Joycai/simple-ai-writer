@@ -1,10 +1,11 @@
 import { create } from "zustand";
 import i18n from "../i18n";
-import { deletePref, PINNED_LORE_PREFIX, prunePrefsWithPrefix, readPref, writePref } from "../lib/prefs";
+import { deletePref, PINNED_LORE_PREFIX, prunePrefsWithPrefix, readPref, writePref, writePrefMerged } from "../lib/prefs";
+import { mergeRecentProjects, parseRecentProjects, RECENT_PROJECTS_MAX } from "../lib/recentProjects";
 import { MAX_DRAFTS } from "../lib/ai/drafts";
 import { isRoleplayEnabled } from "../lib/roleplay/flag";
 import { DEFAULT_MAX_OUTPUT_KEY, DEFAULT_MAX_OUTPUT_MAX } from "../lib/ai/modelLimits";
-import { isSamePath, toPosixPath } from "../lib/paths";
+import { isSamePath } from "../lib/paths";
 import {
   CONTEXT_UTILIZATION_DEFAULT,
   CONTEXT_UTILIZATION_MAX,
@@ -34,8 +35,6 @@ const LORE_BUDGET_KEY = "app:loreBudgetTokens";
 const CONTEXT_UTILIZATION_KEY = "app:contextUtilization";
 const AI_DRAWER_MODE_KEY = "app:aiDrawerMode";
 const DRAFT_COUNT_KEY = "app:draftCount";
-
-const RECENT_PROJECTS_MAX = 10;
 
 /**
  * Token budget bounds for the 【设定资料】 block (see lib/context/loreSelect).
@@ -69,27 +68,10 @@ function storedMarkdownTheme(): MarkdownThemeId {
   return raw && MARKDOWN_THEME_IDS.includes(raw) ? raw : DEFAULT_MARKDOWN_THEME;
 }
 
+// Normalisation, dedup and the cap live in lib/recentProjects (pure, shared
+// with the multi-instance merge that runs at persist time).
 function loadRecentProjects(): string[] {
-  try {
-    const raw = readPref(RECENT_PROJECTS_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    // Normalised on the way in rather than migrated on disk: entries written
-    // by an older build carry the host's spelling, and one of them reopened
-    // from this list becomes `projectPath` verbatim. Deduped by path identity
-    // for the same reason — otherwise the same project appears twice, once per
-    // spelling, and the cap of 10 quietly evicts an older one.
-    const seen: string[] = [];
-    for (const p of parsed) {
-      if (typeof p !== "string") continue;
-      const norm = toPosixPath(p);
-      if (!seen.some((q) => isSamePath(q, norm))) seen.push(norm);
-    }
-    return seen.slice(0, RECENT_PROJECTS_MAX);
-  } catch {
-    return [];
-  }
+  return parseRecentProjects(readPref(RECENT_PROJECTS_KEY));
 }
 
 const SIDEBAR_MIN = 160;
@@ -421,7 +403,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       const next = [path, ...state.recentProjects.filter((p) => !isSamePath(p, path))].slice(
         0, RECENT_PROJECTS_MAX,
       );
-      writePref(RECENT_PROJECTS_KEY, JSON.stringify(next));
+      // Merged, not overwritten: another instance may have opened *its*
+      // project since this one hydrated, and saving our snapshot plainly
+      // would evict that entry (see lib/recentProjects).
+      writePrefMerged(RECENT_PROJECTS_KEY, JSON.stringify(next), mergeRecentProjects);
       return { recentProjects: next };
     });
   },

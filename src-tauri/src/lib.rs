@@ -1,4 +1,5 @@
 mod commands;
+mod instance;
 mod lorehash;
 mod pptx;
 mod preview;
@@ -37,6 +38,16 @@ pub fn run() {
             // Holds the document handed to the print window (see print.rs).
             app.manage(print::PendingPrint::default());
 
+            // Multi-instance support (see instance.rs): the workspace locks
+            // this window holds, the folder argv[1] may have named, and the
+            // focus channel a sibling uses to bring this window forward when
+            // the author re-opens a workspace this window already has.
+            app.manage(instance::HeldLocks::default());
+            app.manage(instance::LaunchProject::from_args());
+            app.manage(instance::FocusPort(instance::start_focus_server(
+                app.handle(),
+            )));
+
             // Set the app icon explicitly at runtime on the window (helps show custom icon on macOS Dock / Windows taskbar during `tauri dev`)
             if let Some(window) = app.get_webview_window("main") {
                 let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/icon.png"))?;
@@ -62,6 +73,11 @@ pub fn run() {
             commands::open_with_default_app,
             scope::project_open_dialog,
             scope::project_register_root,
+            instance::project_lock_acquire,
+            instance::project_lock_release,
+            instance::project_focus_existing,
+            instance::launch_project_path,
+            instance::spawn_new_instance,
             secrets::secret_save,
             secrets::secret_load,
             secrets::secret_delete,
@@ -85,6 +101,14 @@ pub fn run() {
     let builder = protocol::register_asset_protocol(builder);
     let builder = preview::register_preview_protocol(builder);
     print::register_print_protocol(builder)
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        // `build` + `run(callback)` rather than the previous one-shot `run`:
+        // exit is when this window's workspace locks come off disk, and the
+        // frontend cannot be trusted to get there (window.destroy() skips it).
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                instance::release_all_locks(app);
+            }
+        });
 }

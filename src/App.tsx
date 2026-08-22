@@ -18,10 +18,12 @@ import { ConfigRestoreModal } from "./components/sync/ConfigRestoreModal";
 import { Onboarding } from "./components/onboarding/Onboarding";
 import { clampSidebarWidth, useAppStore } from "./stores/appStore";
 import { useAiStore } from "./stores/aiStore";
-import { useMainView } from "./stores/projectStore";
+import { useMainView, useProjectStore } from "./stores/projectStore";
 import { useGlobalShortcuts } from "./useGlobalShortcuts";
 import { useWindowCloseFlush } from "./useWindowCloseFlush";
 import { useExternalFileRefresh } from "./useExternalFileRefresh";
+import { usePrefsFocusSync } from "./usePrefsFocusSync";
+import { launchProjectPath } from "./lib/instance";
 import { installCitationNavigation } from "./lib/lore/citations";
 import { installNavigationHistory } from "./stores/navStore";
 import { fillLayer, springScreen, viewSlide } from "./lib/motion";
@@ -68,10 +70,35 @@ export default function App() {
   // there) and binds the mouse's side buttons. Keys live in useGlobalShortcuts.
   useEffect(() => installNavigationHistory(), []);
 
+  // A workspace named on the command line — how a second instance ("open in
+  // new window") lands on its project. Consumed once on the Rust side, so
+  // StrictMode's doubled run gets null and opens nothing twice.
+  useEffect(() => {
+    void (async () => {
+      const path = await launchProjectPath();
+      if (!path) return;
+      try {
+        const outcome = await useProjectStore.getState().openProject(path);
+        // `code <folder>` behaviour: the folder was already open in another
+        // window, that window has just been brought forward, and this fresh
+        // process was launched *for* that folder — it has nothing to show,
+        // so it hands off and leaves rather than lingering as a blank picker.
+        if (outcome === "focused-existing") {
+          const { getCurrentWindow } = await import("@tauri-apps/api/window");
+          await getCurrentWindow().destroy();
+        }
+      } catch (e) {
+        console.warn("[launch] could not open the workspace from the command line:", e);
+      }
+    })();
+  }, []);
+
   useGlobalShortcuts();
   useWindowCloseFlush();
   // Files added to the project folder from outside the app appear on return.
   useExternalFileRefresh();
+  // Preferences another app instance changed appear on return, the same way.
+  usePrefsFocusSync();
 
   return (
     <MotionConfig reducedMotion="user">

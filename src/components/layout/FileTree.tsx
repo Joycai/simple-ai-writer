@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import {
   Folder, FolderOpen, FolderInput, FileText, File, FileCode, FileImage, ChevronRight,
   FilePlus, FolderPlus, FileInput, RotateCw, LogOut, Pencil, Trash2,
-  Scissors, Copy, ClipboardPaste, TextCursorInput,
+  Scissors, Copy, ClipboardPaste, TextCursorInput, AppWindow,
 } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { isHtmlPath, isImagePath } from "../../lib/fs/images";
@@ -19,6 +19,7 @@ import { insertAtCursor } from "../../lib/editor/format";
 import { imageMarkdown } from "../../lib/image/assets";
 import { baseName, importDocumentsDialog } from "../../lib/import";
 import { useImeGuard } from "../../lib/ime";
+import { openInNewWindow } from "../../lib/instance";
 import { isSamePath, relativePathFrom } from "../../lib/paths";
 import { IS_MAC } from "../../lib/platform";
 import { useEditorStore } from "../../stores/editorStore";
@@ -1007,6 +1008,18 @@ export function FileTree() {
               onClick={() => void openProject()}
             >
               <FolderInput size={14} />
+            </button>
+            {/* A second workspace side by side: a sibling *process* (the
+                stores are singletons sized to one project — see lib/instance),
+                started blank on purpose — handing it the current project
+                would just bounce: the sibling finds the folder held here,
+                focuses this window and closes itself. */}
+            <button
+              className={styles.toolbarBtn}
+              title={t("project.newWindow")}
+              onClick={() => void openInNewWindow().catch((e) => console.warn("[instance]", e))}
+            >
+              <AppWindow size={14} />
             </button>
             <button
               className={styles.toolbarBtn}

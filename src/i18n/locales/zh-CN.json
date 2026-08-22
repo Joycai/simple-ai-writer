@@ -474,9 +474,15 @@
     "emptyTree": "写作目录为空，创建 .md 文件开始吧",
     "closeProject": "关闭项目",
     "switchProject": "切换项目",
+    "newWindow": "新窗口",
+    "openInNewWindow": "在新窗口打开",
     "recentTitle": "最近打开",
     "clearRecent": "清空",
-    "removeRecent": "从列表移除"
+    "removeRecent": "从列表移除",
+    "lockHeldTitle": "项目已在其他窗口打开",
+    "lockHeldBody": "「{{name}}」似乎正在另一个窗口中编辑（进程 {{pid}}）。两个窗口同时编辑同一项目会互相覆盖改动。仍要在此窗口打开吗？",
+    "lockOpenAnyway": "仍要打开",
+    "lockCancel": "取消"
   },
   "editor": {
     "placeholder": "开始写作…",
