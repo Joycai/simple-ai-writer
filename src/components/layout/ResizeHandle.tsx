@@ -3,9 +3,11 @@ import styles from "./ResizeHandle.module.css";
 
 interface Props {
   onDelta: (delta: number) => void;
+  /** Called once when a drag gesture ends — the place to commit/persist. */
+  onEnd?: () => void;
 }
 
-export function ResizeHandle({ onDelta }: Props) {
+export function ResizeHandle({ onDelta, onEnd }: Props) {
   const dragging = useRef(false);
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -25,6 +27,7 @@ export function ResizeHandle({ onDelta }: Props) {
       window.removeEventListener("mouseup", onUp);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
+      onEnd?.();
     };
 
     document.body.style.cursor = "col-resize";

@@ -1,5 +1,5 @@
 import {
-  useState, useRef, useEffect, useMemo, createContext, useContext,
+  useState, useRef, useEffect, useMemo, createContext, useContext, memo,
   type DragEvent, type KeyboardEvent, type MouseEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -93,6 +93,8 @@ interface TreeCtx {
   dragOverDir: string | null;
   /** Paths waiting to be pasted by a cut, dimmed until then. */
   cutPaths: ReadonlySet<string>;
+  /** Documents under each folder, at any depth — precomputed once per tree. */
+  docCounts: ReadonlyMap<string, number>;
   onDragStart: (e: DragEvent, node: FileNode) => void;
   onDragEnd: () => void;
   onDragOverDir: (e: DragEvent, node: FileNode) => void;
@@ -226,21 +228,16 @@ function FileIcon({ name }: { name: string }) {
 
 // ── Tree node ─────────────────────────────────────────────────────────────────
 
-function countDocsIn(node: FileNode): number {
-  let n = 0;
-  for (const child of node.children ?? []) {
-    if (child.is_dir) n += countDocsIn(child);
-    else if (/\.md$/i.test(child.name)) n++;
-  }
-  return n;
-}
-
-function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
+// memo: the tree renders one of these per visible row, and the rows all hang
+// off one context — memoizing keeps a FileTree-local state change that does
+// *not* feed the (memoized) context value, like opening the context menu,
+// from re-rendering every row in the project.
+const TreeNode = memo(function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
   const { t } = useTranslation();
   const {
     activeFilePath, selected, onRowClick, creatingIn, startCreate,
     renamingPath, renameError, openMenu,
-    draggingPaths, dragOverDir, cutPaths,
+    draggingPaths, dragOverDir, cutPaths, docCounts,
     onDragStart, onDragEnd, onDragOverDir, onDragLeaveDir, onDropInDir,
   } = useContext(TreeCtx);
   // Expansion is stored per project (projectStore.expandedDirs), not per node:
@@ -255,7 +252,7 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
   const isActive = !node.is_dir && isSamePath(activeFilePath, node.path);
   const isRenaming = renamingPath === node.path;
   // 设计稿 01: 卷行右侧带章数 — the documents under this folder, at any depth.
-  const docCount = node.is_dir ? countDocsIn(node) : 0;
+  const docCount = node.is_dir ? (docCounts.get(node.path) ?? 0) : 0;
 
   // Auto-expand when this folder becomes the target of an inline create
   // (context menu can trigger creates on collapsed folders).
@@ -362,7 +359,7 @@ function TreeNode({ node, depth }: { node: FileNode; depth: number }) {
       )}
     </div>
   );
-}
+});
 
 // ── Context menu ──────────────────────────────────────────────────────────────
 
@@ -372,10 +369,23 @@ interface CtxMenuState { x: number; y: number; node: FileNode | null }
 
 export function FileTree() {
   const { t } = useTranslation();
-  const { fileTree, expandedDirs, projectPath, refreshFileTree, activeFilePath, setActiveFilePath,
-          openProject, closeProject, createEntry, moveEntry, copyEntry, deleteEntry,
-          clipboard, setClipboard } =
-    useProjectStore();
+  // Field selectors, not a whole-store destructure: projectStore is also where
+  // the word/char counters live, and those are written on every keystroke —
+  // an unselected subscription re-rendered the entire tree per character typed.
+  const fileTree = useProjectStore((s) => s.fileTree);
+  const expandedDirs = useProjectStore((s) => s.expandedDirs);
+  const projectPath = useProjectStore((s) => s.projectPath);
+  const refreshFileTree = useProjectStore((s) => s.refreshFileTree);
+  const activeFilePath = useProjectStore((s) => s.activeFilePath);
+  const setActiveFilePath = useProjectStore((s) => s.setActiveFilePath);
+  const openProject = useProjectStore((s) => s.openProject);
+  const closeProject = useProjectStore((s) => s.closeProject);
+  const createEntry = useProjectStore((s) => s.createEntry);
+  const moveEntry = useProjectStore((s) => s.moveEntry);
+  const copyEntry = useProjectStore((s) => s.copyEntry);
+  const deleteEntry = useProjectStore((s) => s.deleteEntry);
+  const clipboard = useProjectStore((s) => s.clipboard);
+  const setClipboard = useProjectStore((s) => s.setClipboard);
 
   const [creatingIn, setCreatingIn] = useState<string | null>(null);
   const [creatingType, setCreatingType] = useState<"file" | "folder">("file");
@@ -406,6 +416,23 @@ export function FileTree() {
     () => flattenVisible(fileTree, expandedDirs),
     [fileTree, expandedDirs],
   );
+
+  // 卷行右侧的章数, one walk for the whole tree. Each directory row counting
+  // its own subtree on every render was O(nodes × depth) per tree render.
+  const docCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    const walk = (node: FileNode): number => {
+      let n = 0;
+      for (const child of node.children ?? []) {
+        if (child.is_dir) n += walk(child);
+        else if (/\.md$/i.test(child.name)) n++;
+      }
+      counts.set(node.path, n);
+      return n;
+    };
+    for (const node of fileTree) if (node.is_dir) walk(node);
+    return counts;
+  }, [fileTree]);
 
   // A selection outlives the gesture that acted on it — a move rewrites every
   // selected path, a delete removes them — so anything no longer on disk has
@@ -913,32 +940,59 @@ export function FileTree() {
   const projectName = baseName(projectPath ?? "").toUpperCase();
   const creatingAtRoot = !!projectPath && creatingIn === projectPath;
 
-  const ctx: TreeCtx = {
+  const cutPaths = useMemo<ReadonlySet<string>>(
+    () =>
+      clipboard?.mode === "move"
+        ? new Set(clipboard.entries.map((entry) => entry.path))
+        : new Set<string>(),
+    [clipboard],
+  );
+
+  // The handlers above close over fresh state each render, so putting them in
+  // the context directly would give it a new identity every render — and a new
+  // context value re-renders every row, memo or not. The context instead
+  // carries stable forwarders that read the current handlers through a ref
+  // (updated in an effect; events only ever fire after effects have run).
+  const handlers = {
+    onRowClick, startCreate, cancelCreate, confirmCreate, confirmRename,
+    cancelRename, openMenu, onDragStart, onDragEnd: endDrag,
+    onDragOverDir, onDragLeaveDir, onDropInDir,
+  };
+  const handlersRef = useRef(handlers);
+  useEffect(() => { handlersRef.current = handlers; });
+  const stableHandlers = useMemo<Pick<TreeCtx, keyof typeof handlers>>(() => ({
+    onRowClick: (e, node) => handlersRef.current.onRowClick(e, node),
+    startCreate: (parentPath, type) => handlersRef.current.startCreate(parentPath, type),
+    cancelCreate: () => handlersRef.current.cancelCreate(),
+    confirmCreate: (name) => handlersRef.current.confirmCreate(name),
+    confirmRename: (node, name) => handlersRef.current.confirmRename(node, name),
+    cancelRename: () => handlersRef.current.cancelRename(),
+    openMenu: (e, node) => handlersRef.current.openMenu(e, node),
+    onDragStart: (e, node) => handlersRef.current.onDragStart(e, node),
+    onDragEnd: () => handlersRef.current.onDragEnd(),
+    onDragOverDir: (e, node) => handlersRef.current.onDragOverDir(e, node),
+    onDragLeaveDir: (e, node) => handlersRef.current.onDragLeaveDir(e, node),
+    onDropInDir: (e, node) => handlersRef.current.onDropInDir(e, node),
+  }), []);
+
+  const ctx = useMemo<TreeCtx>(() => ({
     activeFilePath,
     selected,
-    onRowClick,
     creatingIn,
     creatingType,
-    startCreate,
-    cancelCreate,
-    confirmCreate,
     createError,
     renamingPath,
     renameError,
-    confirmRename,
-    cancelRename,
-    openMenu,
     draggingPaths,
     dragOverDir,
-    cutPaths: clipboard?.mode === "move"
-      ? new Set(clipboard.entries.map((entry) => entry.path))
-      : new Set<string>(),
-    onDragStart,
-    onDragEnd: endDrag,
-    onDragOverDir,
-    onDragLeaveDir,
-    onDropInDir,
-  };
+    cutPaths,
+    docCounts,
+    ...stableHandlers,
+  }), [
+    activeFilePath, selected, creatingIn, creatingType, createError,
+    renamingPath, renameError, draggingPaths, dragOverDir, cutPaths,
+    docCounts, stableHandlers,
+  ]);
 
   return (
     <TreeCtx.Provider value={ctx}>
