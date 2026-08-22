@@ -21,10 +21,10 @@
 | 012 | [插入到文档落点反馈](012-insert-flash.md) | LOW | DONE |
 | 013 | [剩余非壳模态表面的退出动画](013-remaining-modal-surfaces.md) | LOW | DONE |
 | 014 | [⌘K 命令面板去动画（决策变更）](014-command-palette-instant.md) | MEDIUM | DONE |
-| 015 | [右键菜单入场（006 的漏网之鱼）](015-context-menu-entrance.md) | MEDIUM | TODO |
-| 016 | [审批卡入场](016-approval-card-entrance.md) | MEDIUM | TODO |
-| 017 | [首次运行向导换步 enter-only](017-onboarding-step-enter-only.md) | LOW | TODO |
-| 018 | [导出按钮回执淡入](018-export-feedback-fade.md) | LOW | TODO |
+| 015 | [右键菜单入场（006 的漏网之鱼）](015-context-menu-entrance.md) | MEDIUM | APPLIED · 受阻断 A |
+| 016 | [审批卡入场](016-approval-card-entrance.md) | MEDIUM | APPLIED · 受阻断 A |
+| 017 | [首次运行向导换步 enter-only](017-onboarding-step-enter-only.md) | LOW | **BLOCKED · 阻断 B** |
+| 018 | [导出按钮回执淡入](018-export-feedback-fade.md) | LOW | APPLIED · 受阻断 A |
 
 > 001–005 已随 [PR #273](https://github.com/Joycai/simple-ai-writer/pull/273) 合入 main（基准 0f49132）。
 > 006–012（backlog 第二批，基准 9e16885）已于 2026-08-22 执行完毕，`pnpm tsc --noEmit` 与 `pnpm build` 通过。
@@ -74,3 +74,40 @@
 4. **017**（唯一的 TSX 结构改动，且需要触发首次运行向导才能验证，建议单独成 PR）
 
 四份互不依赖，改动文件零重叠（`ContextMenu.module.css` / `AgentChat.module.css` / `TitleBar.module.css`+`ExportMenu.tsx` / `Onboarding.tsx`），可并行执行。**均不改 `global.css`**——四份复用的 `dropIn`、`fadeIn`、`panelFade` 都已存在，任何一份若打算新增关键帧或 Motion 预设，都说明理解偏了。
+
+## ⚠ 执行 015–018 时实测到的两个既有阻断（2026-08-23，基准 36eda7b）
+
+两个都**先于第四批存在**，且都是实机跑出来的，不是读代码推的。
+
+### 阻断 A —— CSS Modules 把 keyframe 名作用域化，37 处动画引用是死的
+
+方案 006、011 以及第四批全部四份都写过同一句话：「模块引用本文件未声明的动画名会透传到全局」。**这句是错的。**
+
+`dist/assets/*.css` 里，关键帧定义是全局名，而 `.module.css` 里的引用被 Vite 加了作用域后缀，两边对不上：
+
+```
+@keyframes dropIn                              ← global.css 定义（未作用域化）
+animation:_dropIn_1by8j_1 .14s var(--ease-out) ← ContextMenu.module.css 的引用
+```
+
+全量核对构建产物：**38 处模块动画引用里 37 处没有对应定义** —— `fadeIn` 17 · `scaleIn` 11 · `dropIn` 5 · `riseIn` 3 · `slideInRight` 1。指向全局关键帧的未作用域化引用 **0 处**。唯一活着的是 `_transitionGrow_1km2h_1`，因为 `SceneTransition.module.css` **自己定义**了它。
+
+影响面远超第四批：方案 006 的四个弹出层入场、各模态的 `scaleIn`/`fadeIn` 入场**从未真正跑过**。
+**但方案 008 的退场动画是好的** —— `.modal-closing` 定义在 `global.css` 且以字符串类名套用（不经 `styles.x`），没被作用域化，构建产物里保持 `animation:fadeOut .16s`。这条差别正是判断某个动画到底活没活着的判据。
+
+修复方向：引用侧加 `:global(...)`。**但它会一次性点亮 37 个动画**，是对已发布外观的实质改动，必须单独成 PR 并做一轮外观审阅——不要顺手塞进别的改动里。**改之前先按上面的方法核对构建产物，别再凭约定断言。**
+
+### 阻断 B —— enter-only 的 keyed `motion.div` 在 reduced-motion 下停在 `initial`
+
+开着 Reduced Motion 跑起来，侧栏面板此刻在 `main` 上就是全透明的：
+
+```
+_contentFlush_1wdy8_102  →  computedOpacity "0"   239×672
+                            inline: "opacity: 0; transform: translateY(6px);"
+```
+
+切换 文件/大纲 标签、等 1.2s 后依旧是 0 —— 不是时序问题，是永久的。同一棵树里被 `AnimatePresence` 包着的 `fillLayer` 则正常收敛到 `opacity: 1`。
+
+即：**方案 004 引入的 enter-only 模式（keyed `motion.div` + `initial`/`animate`，无 `AnimatePresence`）在 `MotionConfig reducedMotion="user"` 下不会推进到 `animate`。** 侧栏对所有开启动效缩减的用户是不可见的 —— 这是无障碍缺陷，不只是动效问题。
+
+017 会把同一缺陷复制到首次运行向导（已实测确认同样停在 `opacity: 0`），所以**017 已回退、标记 BLOCKED**：让首屏对这部分用户完全不可见，比它原本的硬切更糟。修好 B 之后 017 可原样执行，方案本身不用改。

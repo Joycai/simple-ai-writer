@@ -1,6 +1,6 @@
 # 016 — 审批卡入场：循环停在这里等作者点头
 
-- **Status**: TODO
+- **Status**: APPLIED (2026-08-23) — 代码已落，但**当前不生效**：见 plans/README.md「阻断 A · keyframe 作用域」。修好引用侧后自动生效，本方案无需再改
 - **Commit**: 78160c2
 - **Severity**: MEDIUM
 - **Category**: 遗漏机会（防止突兀跳变）

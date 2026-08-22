@@ -88,9 +88,17 @@ export function ExportMenu() {
         }}
         title={t("editor.export")}
       >
-        {status ? <Check size={12} /> : null}
-        {status ?? t("editor.export")}
-        {!status && <ChevronDown size={9} strokeWidth={2} className={styles.ctrlChevron} />}
+        {status ? (
+          <span className={styles.ctrlStatus}>
+            <Check size={12} />
+            {status}
+          </span>
+        ) : (
+          <>
+            {t("editor.export")}
+            <ChevronDown size={9} strokeWidth={2} className={styles.ctrlChevron} />
+          </>
+        )}
       </button>
       {menuAt && (
         <ContextMenu x={menuAt.x} y={menuAt.y} items={items} onClose={() => setMenuAt(null)} />
