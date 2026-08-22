@@ -1,6 +1,6 @@
 # 应用配置备份到服务端（跨设备同步 + 密码保护）
 
-> 状态：`partial` — PR-1（服务端）与 PR-2（信封 + 拆分）已落地；PR-3（客户端接线 + 设置页重构 + 改名）与 PR-4（文档收尾）未做。
+> 状态：`shipped` — 四片全部落地。保留为设计记录：代码里看不到的「为什么不是另一种做法」在这里。
 >
 > 前置阅读：[`remote-knowledge-base-feasibility.md`](remote-knowledge-base-feasibility.md)（服务端为什么长这样）、[`kb-admin-console.md`](kb-admin-console.md)（后台的两套鉴权）。改 `src/lib/ai/configTransfer.ts` 或 `server/src/store.rs` 前先读本文。
 
@@ -230,14 +230,46 @@ export function parseConfigBundle(
   `X-Config-Meta` 被接受、原样发回，并且后台那一页把中文设备名和「已加密 ·
   含 API Key」渲染了出来——跨语言那一段不留给猜
 
-### PR-3 · 客户端接线 + 设置页重构 + 改名
-- `lib/configsync/client.ts` / `run.ts`、`stores/configSyncStore.ts`
-- `SyncPane` 三节重构、「配置备份」从 `GeneralPane` 搬入、上传/恢复交互、i18n（zh + en）
-- 验收：真机跑一遍两台设备的推/拉，含错密码、412 冲突、不加密档
+### PR-3 · 客户端接线 + 设置页重构 + 改名 ✅ 已落地
+- `lib/configsync/client.ts` / `password.ts` / `run.ts`、`stores/configSyncStore.ts`
+- `SyncPane` 三节重构、「配置备份」从 `GeneralPane` 整段搬入、`ConfigRestoreModal`、i18n（zh + en）
+- 实现时偏离计划的两处，都在 §9
+- 验收：`tsc` / `vitest`（2053 passed，其中本片 27 条）/ `vite build`；
+  浏览器里确认了「没有项目也能用」这条新行为、改名后的导航、以及恢复弹窗的
+  密码态与预览态。**网络那一段在浏览器里跑不了**（真实传输是 Rust 侧的 Tauri
+  fetch，而这台服务器不发 CORS 头），它由 PR-1 的 HTTP 实测和这一片的 store
+  单测共同覆盖 —— 真机上的两台设备互推仍然值得跑一遍
 
-### PR-4 · 文档收尾
+### PR-4 · 文档收尾 ✅ 已落地
 - 本文状态改 `shipped`，`docs/README.md` 索引加一行
 - `CLAUDE.md` 里 `server/` 那段和 `src/lib/` 清单补上 `configsync/`
+
+---
+
+## 9. 实现时偏离计划的地方
+
+计划写在动手之前，这几处是动手之后才知道的：
+
+**`applyConfigImport` 的参数类型从 `StagedConfigImport` 放宽成 `ParsedConfigBundle`。**
+计划说「原样复用，一行不改」。实际上它的签名要求一个 `path` 字段 —— 那是文件
+对话框的产物，而服务端恢复没有路径。函数体从来没读过它，所以这不是放宽约束，
+是把签名改成它一直以来真正需要的东西。
+
+**多了一个 `password.ts`。** 计划把「记住密码」当成 store 里的一行。它需要按
+**服务器 + 档**两级作键：同一台机器上一个工作备份和一个私人备份可以有不同密码，
+一个全局条目会安静地答错一个 —— 而那个错误的表现是「密码错误」出现在一个作者
+明明输对了的备份上。
+
+**「记住密码」的开关是推送和恢复共用的一个。** 它是一个问题的一个答案（这台
+机器要不要留着它），两个开关只会让作者勾了一个、被另一个惊到。
+
+**过期的「记住的密码」必须落回输入框，而不是报错。** 作者在另一台机器上改过
+密码之后，本机记着的那个就开不了信封了。这时候说「备份已损坏」会把人送去找一个
+不存在的坏文件，所以 `startRestore` 里那次尝试是**容错**的：只有 `bad-password`
+会被咽下并转入提示，其他失败照常报出来 —— 一个截断的下载不是换个密码能修的。
+
+**`sync.needProject` 这个 i18n 键删掉了。** 它标的是「没有项目 → 整个面板变成
+一句提示」那个状态，而那个状态正是这一片要消灭的。
 
 ---
 
