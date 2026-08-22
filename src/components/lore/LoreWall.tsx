@@ -31,7 +31,7 @@ import { NewEntryTabs, type NewEntryMode } from "./ai/NewEntryTabs";
 import { LoreDetail } from "./LoreDetail";
 import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
 import { ModalShell } from "../common/ModalShell";
-import { fillLayer, pushBackdrop, pushForward, springScreen } from "../../lib/motion";
+import { fillLayer, pushBackdrop, pushForward, springScreen, useMotionPreset } from "../../lib/motion";
 import styles from "./LoreWall.module.css";
 
 import { categoryColor } from "./catColor";
@@ -280,6 +280,9 @@ export function LoreWall() {
     ];
   };
 
+  const forwardVariants = useMotionPreset(pushForward);
+  const backdropVariants = useMotionPreset(pushBackdrop);
+
   return (
     <div style={{ position: "relative", flex: 1, minWidth: 0, height: "100%", display: "flex", overflow: "hidden" }}>
       <AnimatePresence initial={false}>
@@ -289,7 +292,7 @@ export function LoreWall() {
         {detailEntity ? (
           <motion.div
             key={`detail:${detailEntity.dirPath}`}
-            variants={pushForward}
+            variants={forwardVariants}
             initial="initial"
             animate="animate"
             exit="exit"
@@ -305,7 +308,7 @@ export function LoreWall() {
         ) : (
           <motion.div
             key="grid"
-            variants={pushBackdrop}
+            variants={backdropVariants}
             initial="initial"
             animate="animate"
             exit="exit"

@@ -78,7 +78,7 @@ import {
 import { chapterTitle, resolveVolumes } from "../../lib/context/outline";
 import { contextLabel } from "../../lib/ai/modelLabel";
 import { MOD_KEY } from "../../lib/platform";
-import { panelFade, springPanel } from "../../lib/motion";
+import { panelFade, springPanel, useMotionPreset } from "../../lib/motion";
 import { PINNED_LORE_PREFIX, readPref, writePref } from "../../lib/prefs";
 import { Select } from "../common/Select";
 import styles from "./AiPanel.module.css";
@@ -1362,6 +1362,8 @@ export function AiPanel() {
   // Results pane shows something whenever a run is in flight or has produced output.
   const hasResults = isRunning || !!output || !!error || agentLog.length > 0 || !!usage;
 
+  const sectionVariants = useMotionPreset(panelFade);
+
   return (
     <div className={styles.panel} onKeyDown={handlePanelKeyDown}>
       {/* ══════════ Config column ══════════ */}
@@ -1419,7 +1421,7 @@ export function AiPanel() {
               <motion.div
                 key={selectedTask}
                 className={styles.section}
-                variants={panelFade}
+                variants={sectionVariants}
                 initial="initial"
                 animate="animate"
                 transition={springPanel}

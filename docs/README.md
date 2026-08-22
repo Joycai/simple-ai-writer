@@ -97,6 +97,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | Doc | Status | What is open |
 |---|---|---|
 | [thinking-verification.md](issues/thinking-verification.md) | `open` | Thinking support is implemented and unit-tested across three families, but unit tests prove *what we sent*, not *what the endpoint did*. MiniMax-M3 cleared part of §2.6; the rest stands |
+| [css-modules-global-keyframes.md](issues/css-modules-global-keyframes.md) | `open` | CSS Modules hashes `animation-name` but the shared keyframes live in global.css — 40+ module-CSS entrance/spinner animations have silently never played. Confirmed by runtime probe; fix undecided (LightningCSS vs per-module keyframes) |
 
 ---
 

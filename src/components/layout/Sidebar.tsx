@@ -10,7 +10,7 @@ import { FileTree } from "./FileTree";
 import { OutlinePanel } from "../editor/OutlinePanel";
 import { loreEntityCount } from "../../lib/lore";
 import { MOD_K_SPACED } from "../../lib/platform";
-import { panelFade, springPanel } from "../../lib/motion";
+import { panelFade, springPanel, useMotionPreset } from "../../lib/motion";
 import styles from "./Sidebar.module.css";
 import { baseName } from "../../lib/paths";
 
@@ -82,6 +82,7 @@ export function Sidebar() {
   const terms = useTerms();
 
   const projectName = basename(projectPath);
+  const contentVariants = useMotionPreset(panelFade);
 
   const isTree = activeSideTab === "files";
   const isOutline = activeSideTab === "outline";
@@ -123,7 +124,7 @@ export function Sidebar() {
       <motion.div
         key={projectPath ? activeSideTab : "empty"}
         className={isTree ? styles.contentFlush : styles.content}
-        variants={panelFade}
+        variants={contentVariants}
         initial="initial"
         animate="animate"
         transition={springPanel}

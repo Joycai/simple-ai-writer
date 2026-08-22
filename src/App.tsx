@@ -24,7 +24,7 @@ import { useWindowCloseFlush } from "./useWindowCloseFlush";
 import { useExternalFileRefresh } from "./useExternalFileRefresh";
 import { installCitationNavigation } from "./lib/lore/citations";
 import { installNavigationHistory } from "./stores/navStore";
-import { fillLayer, springScreen, viewSlide } from "./lib/motion";
+import { fillLayer, springScreen, useMotionPreset, viewSlide } from "./lib/motion";
 
 export default function App() {
   const {
@@ -73,6 +73,8 @@ export default function App() {
   // Files added to the project folder from outside the app appear on return.
   useExternalFileRefresh();
 
+  const viewVariants = useMotionPreset(viewSlide);
+
   return (
     <MotionConfig reducedMotion="user">
     <div
@@ -108,7 +110,7 @@ export default function App() {
           <AnimatePresence initial={false}>
             <motion.div
               key={view}
-              variants={viewSlide}
+              variants={viewVariants}
               initial="initial"
               animate="animate"
               exit="exit"
