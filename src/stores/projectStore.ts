@@ -163,8 +163,12 @@ interface ProjectState {
     entry: { entries: { path: string; isDir: boolean }[]; mode: TransferMode } | null,
   ) => void;
   setDirExpanded: (path: string, open: boolean) => void;
-  setWordCount: (n: number) => void;
-  setCharCount: (n: number) => void;
+  /**
+   * Both counters in one `set()`: the caller (editorStore.setContent) runs on
+   * every keystroke, and two separate writes meant every subscriber of this
+   * store got notified twice per character typed.
+   */
+  setDocCounts: (words: number, chars: number) => void;
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -452,8 +456,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   setDirExpanded: (path, open) =>
     set((s) => ({ expandedDirs: { ...s.expandedDirs, [path]: open } })),
-  setWordCount: (n) => set({ wordCount: n }),
-  setCharCount: (n) => set({ charCount: n }),
+  setDocCounts: (words, chars) =>
+    set((s) => (s.wordCount === words && s.charCount === chars ? s : { wordCount: words, charCount: chars })),
 }));
 
 /**

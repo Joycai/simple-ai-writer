@@ -101,6 +101,15 @@ function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v));
 }
 
+/**
+ * The sidebar bounds, for the drag preview: while the handle is being dragged
+ * the width lives in a CSS variable (no store write per mousemove), but the
+ * live value must still respect the same bounds the committed one will.
+ */
+export function clampSidebarWidth(w: number): number {
+  return clamp(w, SIDEBAR_MIN, SIDEBAR_MAX);
+}
+
 const storedSidebarWidth = () =>
   clamp(parseInt(readPref(SIDEBAR_WIDTH_KEY) ?? "240", 10), SIDEBAR_MIN, SIDEBAR_MAX);
 const storedRightPanelWidth = () =>

@@ -34,12 +34,20 @@ function volumeOf(p: string | null, projectPath: string | null): string | null {
 
 export function TitleBar() {
   const { t } = useTranslation();
-  const {
-    theme, setTheme, language, setLanguage,
-    setShowAiDrawer,
-  } = useAppStore();
-  const { projectPath, activeFilePath, wordCount } = useProjectStore();
-  const { isDirty, viewMode, setViewMode } = useEditorStore();
+  // Field selectors: this bar shows the live word count, so it re-renders per
+  // keystroke by design — but it must not also re-render on every unrelated
+  // appStore / editorStore / projectStore write (panel widths, editor content).
+  const theme = useAppStore((s) => s.theme);
+  const setTheme = useAppStore((s) => s.setTheme);
+  const language = useAppStore((s) => s.language);
+  const setLanguage = useAppStore((s) => s.setLanguage);
+  const setShowAiDrawer = useAppStore((s) => s.setShowAiDrawer);
+  const projectPath = useProjectStore((s) => s.projectPath);
+  const activeFilePath = useProjectStore((s) => s.activeFilePath);
+  const wordCount = useProjectStore((s) => s.wordCount);
+  const isDirty = useEditorStore((s) => s.isDirty);
+  const viewMode = useEditorStore((s) => s.viewMode);
+  const setViewMode = useEditorStore((s) => s.setViewMode);
   const chrome = useWindowControls();
 
   const projectName = basename(projectPath) ?? t("titleBar.noProject");

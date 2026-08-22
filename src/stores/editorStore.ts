@@ -72,9 +72,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       const content = await readFile(path);
       const headings = extractHeadings(content);
       set({ content, filePath: path, headings, isDirty: false, saveTimer: null, loadError: null });
-      const words = countWords(content);
-      useProjectStore.getState().setWordCount(words);
-      useProjectStore.getState().setCharCount(content.length);
+      useProjectStore.getState().setDocCounts(countWords(content), content.length);
     } catch (e) {
       // filePath stays null (not `path`) — see loadError's doc comment above.
       set({
@@ -89,9 +87,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     if (saveTimer) clearTimeout(saveTimer);
     const headings = extractHeadings(content);
-    const words = countWords(content);
-    useProjectStore.getState().setWordCount(words);
-    useProjectStore.getState().setCharCount(content.length);
+    useProjectStore.getState().setDocCounts(countWords(content), content.length);
 
     const timer = filePath
       ? setTimeout(() => void get().saveNow().catch(() => {}), 2000) // saveNow logs; retried on next edit/flush

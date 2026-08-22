@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { renderMarkdown } from "../../lib/fs/markdown";
 import { imageToDataUrl } from "../../lib/fs/images";
 import { resolveLinkPath } from "../../lib/paths";
@@ -13,14 +13,39 @@ interface Props {
   basePath?: string | null;
 }
 
+/**
+ * How long typing must pause before the preview rebuilds. Same idea as
+ * HtmlPreview's REBUILD_DEBOUNCE_MS: a full markdown-it parse (linkify +
+ * typographer + KaTeX) plus an innerHTML swap of the whole document is fine
+ * once, but per keystroke it scales with document length — a novel chapter
+ * froze the editor for the parse on every character. Slightly shorter than
+ * the HTML pane's 400ms since nothing here restarts scripts.
+ */
+const TYPING_DEBOUNCE_MS = 300;
+
 export function Preview({ source, basePath }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+
+  // The source the DOM currently shows. Trails `source` by the debounce while
+  // the author types; a *different document* (basePath change) applies at once
+  // so the old document's text is never resolved against the new folder.
+  const [shown, setShown] = useState(source);
+  const [prevBase, setPrevBase] = useState(basePath);
+  if (prevBase !== basePath) {
+    setPrevBase(basePath);
+    setShown(source);
+  }
+  useEffect(() => {
+    if (shown === source) return;
+    const id = window.setTimeout(() => setShown(source), TYPING_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [source, shown]);
   /**
    * Decoded pictures, by absolute path — the value once it has landed, or the
    * in-flight read that will produce it.
    *
-   * This effect re-runs on **every keystroke** in split view (the whole DOM is
-   * rebuilt from `source`), so without a cache each character retyped meant
+   * This effect re-runs on **every debounced rebuild** in split view (the whole
+   * DOM is rebuilt from `shown`), so without a cache each rebuild meant
    * re-reading every illustration off disk and base64-encoding it again, and
    * each rebuilt `<img>` showed a broken icon until that landed — an
    * illustrated chapter visibly flickered as you wrote in it. A hit is applied
@@ -34,7 +59,7 @@ export function Preview({ source, basePath }: Props) {
 
   useEffect(() => {
     if (!ref.current) return;
-    ref.current.innerHTML = renderMarkdown(source);
+    ref.current.innerHTML = renderMarkdown(shown);
 
     // Mark lore citations that don't resolve against the current index — the
     // visible half of the grounding audit (click navigation is app-global).
@@ -108,7 +133,7 @@ export function Preview({ source, basePath }: Props) {
     // `basePath` belongs here too: two documents in different folders can hold
     // identical text (a template, a duplicated draft), and without it the
     // second one would render the first one's pictures — or none at all.
-  }, [source, basePath]);
+  }, [shown, basePath]);
 
   // data-preview-scroller marks the element that actually scrolls (the root is
   // the one carrying `overflow-y: auto`). EditorArea's split-view sync finds it

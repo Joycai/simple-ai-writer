@@ -1252,10 +1252,14 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           ),
         // Every runtime event marks a point where the history just grew (a
         // round's messages, a tool reply) or shrank (trimHistory) — which is
-        // exactly the cadence the context bar wants to redraw at.
+        // exactly the cadence the context bar wants to redraw at. Except
+        // reasoning: it is re-emitted per streamed *fragment*, and the history
+        // only takes the round's messages when the round ends — bumping here
+        // made the context bar re-walk the entire wire history (a CJK regex
+        // over every message) dozens of times per second while a model thought.
         onEvent: (event) => {
           patchAssistant((tn) => ({ ...tn, log: appendAgentEventTo(tn.log, event) }));
-          bumpContext();
+          if (event.kind !== "reasoning") bumpContext();
         },
         // Assign, not append — the runtime hands over the whole output each
         // time so it can retract a tool round's narration.

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import "./styles/global.css";
 import { TitleBar } from "./components/layout/TitleBar";
@@ -15,7 +15,7 @@ import { LibraryView } from "./components/library/LibraryView";
 import { CommandPalette } from "./components/command/CommandPalette";
 import { SyncPreviewModal } from "./components/sync/SyncPreviewModal";
 import { Onboarding } from "./components/onboarding/Onboarding";
-import { useAppStore } from "./stores/appStore";
+import { clampSidebarWidth, useAppStore } from "./stores/appStore";
 import { useAiStore } from "./stores/aiStore";
 import { useMainView } from "./stores/projectStore";
 import { useGlobalShortcuts } from "./useGlobalShortcuts";
@@ -31,6 +31,22 @@ export default function App() {
     sidebarCollapsed,
     showSettings, settingsTab, openSettings, closeSettings,
   } = useAppStore();
+
+  // Sidebar drag: the width is consumed only as a CSS variable, so the drag
+  // writes that variable directly and commits to the store (one set + one
+  // preference write) on release. Routing every mousemove through the store
+  // re-rendered the whole app tree ~120×/s and queued a SQLite write each time.
+  const layoutRef = useRef<HTMLDivElement>(null);
+  const dragWidth = useRef<number | null>(null);
+  const onResizeDelta = (d: number) => {
+    const cur = dragWidth.current ?? useAppStore.getState().sidebarWidth;
+    dragWidth.current = clampSidebarWidth(cur + d);
+    layoutRef.current?.style.setProperty("--sidebar-width", `${dragWidth.current}px`);
+  };
+  const onResizeEnd = () => {
+    if (dragWidth.current !== null) setSidebarWidth(dragWidth.current);
+    dragWidth.current = null;
+  };
   const { loadConfig } = useAiStore();
   // Not `mainView` from the store — see useMainView: a persisted view the active
   // profile has no UI for falls back to the editor.
@@ -70,6 +86,7 @@ export default function App() {
       {/* `position: relative` so the settings page can fill exactly this band —
           everything below the TitleBar, which stays put as the drag region. */}
       <div
+        ref={layoutRef}
         style={{
           display: "flex",
           flex: 1,
@@ -81,7 +98,7 @@ export default function App() {
         <IconRail onOpenSettings={() => openSettings()} />
         {view === "editor" && <Sidebar />}
         {!sidebarCollapsed && view === "editor" && (
-          <ResizeHandle onDelta={(d) => setSidebarWidth((prev) => prev + d)} />
+          <ResizeHandle onDelta={onResizeDelta} onEnd={onResizeEnd} />
         )}
 
         <div style={{ flex: 1, position: "relative", minWidth: 0, overflow: "hidden" }}>

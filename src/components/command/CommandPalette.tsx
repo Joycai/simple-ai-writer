@@ -34,10 +34,17 @@ function highlight(text: string, q: string): React.ReactNode {
 
 export function CommandPalette() {
   const { t } = useTranslation();
-  const { showCommandPalette, setShowCommandPalette, setShowAiDrawer, setMainView } = useAppStore();
-  const { index: loreIndex } = useLoreStore();
-  const { fileTree, setActiveFilePath } = useProjectStore();
-  const { content } = useEditorStore();
+  const showCommandPalette = useAppStore((s) => s.showCommandPalette);
+  const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette);
+  const setShowAiDrawer = useAppStore((s) => s.setShowAiDrawer);
+  const setMainView = useAppStore((s) => s.setMainView);
+  const loreIndex = useLoreStore((s) => s.index);
+  const setActiveFilePath = useProjectStore((s) => s.setActiveFilePath);
+  // This component is always mounted (App renders it unconditionally so the
+  // open animation can play). Subscribing to the document only while open
+  // keeps every editor keystroke from re-rendering — and re-searching — a
+  // palette nobody can see.
+  const content = useEditorStore((s) => (showCommandPalette ? s.content : ""));
   const setSelection = useAiTaskStore((s) => s.setSelection);
   const terms = useTerms();
 
@@ -65,8 +72,8 @@ export function CommandPalette() {
     return out;
   }, [loreIndex]);
 
-  // Cross-doc text search would walk fileTree; today only the active editor content is searched.
-  void fileTree;
+  // Cross-doc text search would walk projectStore.fileTree; today only the
+  // active editor content is searched.
 
   const hits = useMemo(() => {
     const q = query.trim();

@@ -29,12 +29,21 @@ const MODE_SHORTCUT: Record<Mode, string | null> = {
 
 export function AiDrawer() {
   const { t } = useTranslation();
-  const { showAiDrawer, aiDrawerMode, setShowAiDrawer } = useAppStore();
+  const showAiDrawer = useAppStore((s) => s.showAiDrawer);
+  const aiDrawerMode = useAppStore((s) => s.aiDrawerMode);
+  const setShowAiDrawer = useAppStore((s) => s.setShowAiDrawer);
 
-  const {
-    turns, chatError, chatRunning, chatSessionId, chatSessions,
-    resetChat, switchChatSession,
-  } = useAgentStore();
+  // Field selectors: this component is always mounted (the drawer animates in
+  // and out), and a whole-store subscription re-rendered it — header,
+  // ModelSelector and all — on every streamed token of a background chat,
+  // even while closed. `turns` is deliberately reduced to the one boolean the
+  // header reads, so the per-token turn patches don't reach it either.
+  const chatRunning = useAgentStore((s) => s.chatRunning);
+  const chatSessionId = useAgentStore((s) => s.chatSessionId);
+  const chatSessions = useAgentStore((s) => s.chatSessions);
+  const resetChat = useAgentStore((s) => s.resetChat);
+  const switchChatSession = useAgentStore((s) => s.switchChatSession);
+  const chatEmpty = useAgentStore((s) => s.turns.length === 0 && !s.chatError);
 
   const close = () => setShowAiDrawer(false);
   const setMode = (m: Mode) => {
@@ -171,7 +180,7 @@ export function AiDrawer() {
                   setShowTasks(false);
                   resetChat();
                 }}
-                disabled={turns.length === 0 && !chatError}
+                disabled={chatEmpty}
               >
                 {t("ai.chat.newSession")}
               </button>

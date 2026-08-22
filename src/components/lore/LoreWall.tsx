@@ -23,7 +23,7 @@ import {
 } from "../../lib/lore";
 import { appTerms, categoryLabel, defaultCategoryId, findCategory, loreCategories, loreCategoryIds, suggestCategoryId } from "../../lib/profile";
 import { useAppStore } from "../../stores/appStore";
-import { imageToDataUrl } from "../../lib/fs/images";
+import { useImageThumbnails } from "./useImageDataUrl";
 import { MOD_K_SPACED } from "../../lib/platform";
 import { useImeGuard } from "../../lib/ime";
 import { LoreGenerator } from "./LoreGenerator";
@@ -91,11 +91,6 @@ export function LoreWall() {
   const [importStaged, setImportStaged] = useState<StagedLoreImport | null>(null);
   const [transferBusy, setTransferBusy] = useState(false);
 
-  // Avatar rendering uses data URLs (see LoreDetail rationale: Webview2's strict
-  // URL parsing on Windows drive-letter paths makes the ai-writer-asset://
-  // protocol unreliable). Keyed by entity id so the lookup is stable across
-  // re-scans even if the entity object identity changes.
-  const [avatarDataUrls, setAvatarDataUrls] = useState<Record<string, string>>({});
   const [avatarBusy, setAvatarBusy] = useState<string | null>(null);
 
   // Which entity the detail view is showing. Resolved from the index on every
@@ -107,37 +102,23 @@ export function LoreWall() {
     return Object.values(index).flat().find((e) => e.dirPath === detailPath) ?? null;
   }, [detailPath, index]);
 
-  // Keyed on the avatars, not on `index`: every rescan produces a fresh index
-  // object, and re-running this would re-base64 every avatar on the wall for a
-  // change that touched none of them. With a rescan on mount and one per agent
-  // lore write, that is the difference between a free re-render and an O(images)
-  // encode pass each time.
-  const avatarKey = useMemo(
-    () => Object.values(index).flat().map((e) => `${e.id}:${e.avatarPath ?? ""}`).join("|"),
+  // Avatar rendering uses data URLs (see LoreDetail rationale: Webview2's
+  // strict URL parsing on Windows drive-letter paths makes the
+  // ai-writer-asset:// protocol unreliable) — but *thumbnails*, not the
+  // full-resolution encoder: these render at avatar size in a grid, and a wall
+  // of full-size pictures held hundreds of megabytes of base64 in state (and
+  // WebKit silently refuses to decode oversized data: URIs). The hook keys on
+  // the path list, so a rescan that changed no avatar re-encodes nothing, and
+  // a changed set only fetches the paths it doesn't already hold.
+  const avatarPaths = useMemo(
+    () =>
+      Object.values(index)
+        .flat()
+        .map((e) => e.avatarPath)
+        .filter((p): p is string => !!p),
     [index],
   );
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const next: Record<string, string> = {};
-      for (const cat of indexCategories(index)) {
-        for (const e of (index[cat.id] ?? [])) {
-          if (!e.avatarPath) continue;
-          try {
-            const { dataUrl } = await imageToDataUrl(e.avatarPath);
-            next[e.id] = dataUrl;
-          } catch {
-            // skip — fall back to letter placeholder
-          }
-        }
-      }
-      if (!cancelled) setAvatarDataUrls(next);
-    })();
-    return () => { cancelled = true; };
-    // `index` is read inside but deliberately not a dep — avatarKey is its
-    // avatar-relevant projection, and the read is always of the current render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [avatarKey]);
+  const avatarThumbs = useImageThumbnails(avatarPaths);
 
   const handleAvatarPick = async (entity: LoreEntity) => {
     if (!projectPath || avatarBusy) return;
@@ -506,9 +487,9 @@ export function LoreWall() {
                       onClick={(ev) => { ev.stopPropagation(); handleAvatarPick(e); }}
                       title={t("lore.wall.changeAvatar", { defaultValue: "更换头像" })}
                     >
-                      {avatarDataUrls[e.id] ? (
+                      {e.avatarPath && avatarThumbs[e.avatarPath] ? (
                         <img
-                          src={avatarDataUrls[e.id]}
+                          src={avatarThumbs[e.avatarPath]}
                           alt={e.name}
                           className={styles.cardAvatarImg}
                         />
