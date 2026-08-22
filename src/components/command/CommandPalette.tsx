@@ -216,8 +216,11 @@ export function CommandPalette() {
                   <div className={styles.groupLabel}>
                     {t("command.loreGroup", { entries: terms.entries, n: loreHits.length })}
                   </div>
+                  {/* `hits` is built in group order (lore, text, action), so a
+                      group's global index is its offset plus the local one —
+                      no O(n²) indexOf per row. */}
                   {loreHits.map((h, i) => {
-                    const idx = hits.indexOf(h);
+                    const idx = i;
                     return (
                       <div
                         key={h.entity.id}
@@ -247,8 +250,8 @@ export function CommandPalette() {
               {textHits.length > 0 && (
                 <div className={styles.group}>
                   <div className={styles.groupLabel}>{t("command.textGroup", { n: textHits.length })}</div>
-                  {textHits.map((h) => {
-                    const idx = hits.indexOf(h);
+                  {textHits.map((h, i) => {
+                    const idx = loreHits.length + i;
                     return (
                       <div
                         key={`${h.filePath}-${h.lineNum}`}
@@ -270,8 +273,8 @@ export function CommandPalette() {
               {actionHits.length > 0 && (
                 <div className={styles.group}>
                   <div className={styles.groupLabel}>{t("command.aiGroup")}</div>
-                  {actionHits.map((h) => {
-                    const idx = hits.indexOf(h);
+                  {actionHits.map((h, i) => {
+                    const idx = loreHits.length + textHits.length + i;
                     return (
                       <div
                         key={h.id}

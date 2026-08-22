@@ -33,6 +33,7 @@ import { recordRunOutcome } from "../lib/ai/modelHealth";
 import {
   appendAgentEventTo, createServerToolLog, type AgentEvent, type ToolStep,
 } from "../lib/agent/events";
+import { createStreamThrottle } from "../lib/agent/streamThrottle";
 import { createPlanGate } from "../lib/agent/plan";
 import {
   createTaskWorkspace, markTaskPaused, recordSourceRef,
@@ -81,14 +82,6 @@ type SetState = (fn: (state: AiTaskState) => Partial<AiTaskState>) => void;
 function patchDraft(set: SetState, id: string, patch: Partial<Draft>): void {
   set((s) => ({
     drafts: s.drafts.map((d) => (d.id === id ? { ...d, ...patch } : d)),
-  }));
-}
-
-/** Append streamed text to one draft. Separate from `patchDraft` because it has
- *  to read the previous text inside the same atomic update. */
-function appendDraftText(set: SetState, id: string, text: string): void {
-  set((s) => ({
-    drafts: s.drafts.map((d) => (d.id === id ? { ...d, text: d.text + text } : d)),
   }));
 }
 
@@ -448,6 +441,35 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
 
     const loreBudgetChars = plan.loreChars;
 
+    // Same rationale as agentStore.sendChat (lib/agent/streamThrottle): all
+    // three streaming channels buffer and land at most once per interval
+    // instead of one store write per network chunk — the agent path's whole
+    // output (latest-wins), the live reasoning fragment (replaced in place),
+    // and the simple path's per-draft text deltas (accumulated). This also
+    // covers batch runs, where AiPanel kept re-rendering per token behind the
+    // batch modal for output nobody could see.
+    let pendingOutputText: string | null = null;
+    let pendingReasoning: (AgentEvent & { kind: "reasoning" }) | null = null;
+    const pendingAppends = new Map<string, string>();
+    const stream = createStreamThrottle(() => {
+      const output = pendingOutputText;
+      const reasoning = pendingReasoning;
+      pendingOutputText = null;
+      pendingReasoning = null;
+      if (reasoning && get().abortController === controller) get().appendAgentEvent(reasoning);
+      if (output !== null) patchDraft(set, drafts[0].id, { text: output });
+      if (pendingAppends.size > 0) {
+        const appends = new Map(pendingAppends);
+        pendingAppends.clear();
+        set((s) => ({
+          drafts: s.drafts.map((d) => {
+            const add = appends.get(d.id);
+            return add ? { ...d, text: d.text + add } : d;
+          }),
+        }));
+      }
+    });
+
     // Only a task that can browse the project needs to know which file it is
     // looking at; for a toolless one the block is dead weight. Project-relative:
     // shorter than the absolute path, and the tools rebase one on the project
@@ -596,15 +618,37 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           // Unguarded, this event stream would keep appending the old run's
           // rounds/tool-steps into the new run's fresh agentLog.
           onEvent: (event) => {
-            if (get().abortController === controller) get().appendAgentEvent(event);
+            if (get().abortController !== controller) return;
+            if (event.kind === "reasoning") {
+              // Latest-wins per (parentStep, round); a fragment for a new
+              // stream flushes the buffered one first (see agentStore).
+              if (
+                pendingReasoning &&
+                (pendingReasoning.parentStep !== event.parentStep ||
+                  pendingReasoning.round !== event.round)
+              ) {
+                stream.flush();
+              }
+              pendingReasoning = event;
+              stream.schedule();
+              return;
+            }
+            // Ordering barrier: buffered reasoning/text land before this event.
+            stream.flush();
+            get().appendAgentEvent(event);
           },
           // Always the single draft — draftCountFor pins tool-using tasks to 1.
           // Assigned rather than appended: the runtime sends the whole output
           // each time so it can drop a tool round's narration. patchDraft is
           // id-keyed and already a no-op once this run's draft id is gone, so
           // it needs no separate guard.
-          onOutputText: (text) => patchDraft(set, drafts[0].id, { text }),
+          onOutputText: (text) => {
+            pendingOutputText = text;
+            stream.schedule();
+          },
         });
+        // The run is over; whatever the throttle still holds is the final text.
+        stream.flush();
 
         // The author chose 存盘暂停 at the round cap. The wire history is
         // discarded, so what survives is whatever the model wrote to disk —
@@ -679,6 +723,10 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
                     get().appendAgentEvent(logServerTool(chunk.serverTool));
                   }
                 } else if ("done" in chunk) {
+                  // Barrier: this draft's buffered text must land before its
+                  // usage/done patch, or the pane briefly shows a finished
+                  // draft missing its tail.
+                  stream.flush();
                   const { inputTokens, outputTokens, truncated, cachedTokens } = chunk;
                   const cost = costFor(model, inputTokens, outputTokens, cachedTokens);
                   patchDraft(set, draft.id, {
@@ -690,12 +738,17 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
                   // single summed row would misreport the run's shape.
                   void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, kind, cachedTokens);
                 } else if ("text" in chunk) {
-                  appendDraftText(set, draft.id, chunk.text);
+                  pendingAppends.set(draft.id, (pendingAppends.get(draft.id) ?? "") + chunk.text);
+                  stream.schedule();
                 }
               },
             });
           }),
         );
+
+        // A stream that ended without its `done` chunk (abort, mid-stream
+        // error) still delivered text worth showing.
+        stream.flush();
 
         // allSettled, not all: one draft being refused or filtered must not
         // discard the text the others already produced. Each failure is recorded
@@ -735,6 +788,8 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         }
       }
     } catch (e) {
+      // Whatever streamed before the failure is still the author's to read.
+      stream.flush();
       // Only surface errors while this task is still the current one — after
       // abort() + a quick re-run, this stale rejection must not clobber the
       // new task's state.
