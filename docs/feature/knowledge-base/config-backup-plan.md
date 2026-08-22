@@ -1,6 +1,6 @@
 # 应用配置备份到服务端（跨设备同步 + 密码保护）
 
-> 状态：`planned` — 已决定，未实现。落地后逐条改成 `shipped`。
+> 状态：`partial` — PR-1（服务端）与 PR-2（信封 + 拆分）已落地；PR-3（客户端接线 + 设置页重构 + 改名）与 PR-4（文档收尾）未做。
 >
 > 前置阅读：[`remote-knowledge-base-feasibility.md`](remote-knowledge-base-feasibility.md)（服务端为什么长这样）、[`kb-admin-console.md`](kb-admin-console.md)（后台的两套鉴权）。改 `src/lib/ai/configTransfer.ts` 或 `server/src/store.rs` 前先读本文。
 
@@ -90,12 +90,12 @@ GET    /v1/configs/{id}/versions/{at}     下载某个历史版本
 ```text
 configs/<id>/meta.json                       { id, name, createdAtMs }
 configs/<id>/versions/<atMs>.<hash>.bin      信封字节
-configs/<id>/versions/<atMs>.<hash>.json     该版本的展示元数据（客户端给的，不透明）
+configs/<id>/versions/<atMs>.<hash>.meta     该版本的展示元数据（客户端给的，不透明）
 ```
 
 - **当前版本 = `atMs` 最大的那个**，靠列目录得出，没有指针文件。和 `store.rs` 第 3 条同源：指针是第二份真相，而它和 blob 不一致时客户端看不见。
 - **保留最近 N 个版本**（`[server] config_versions`，默认 10），写入成功后裁掉最老的。配置包只有几十 KB，留几版的成本可以忽略，换来的是「昨天那次导入把我配置搞乱了」有路可退。
-- **`.json` 侧车是允许的破例，要写清楚为什么。** 知识库那边禁止侧车，是因为侧车里的 hash 一旦和 blob 不同步，客户端的三方安全栏杆就会基于错的 hash 做判断。这里的侧车装的是 `device` / `appVersion` / `counts` / `encrypted` ——纯展示，丢了或者对不上最坏就是列表少显示一行字，和已经存在的 `last-write.json` 同一档次。写入顺序：先落侧车，再 rename blob；blob 的到达是提交点，孤儿侧车由 dedupe 维护任务清理。
+- **`.meta` 侧车是允许的破例，要写清楚为什么。** 知识库那边禁止侧车，是因为侧车里的 hash 一旦和 blob 不同步，客户端的三方安全栏杆就会基于错的 hash 做判断。这里的侧车装的是 `device` / `appVersion` / `counts` / `encrypted` ——纯展示，丢了或者对不上最坏就是列表少显示一行字，和已经存在的 `last-write.json` 同一档次。写入顺序：先落侧车，再 rename blob；blob 的到达是提交点，孤儿侧车由 dedupe 维护任务清理。
 
 ### hash 由服务端算，这是和条目的**故意分歧**
 
@@ -107,7 +107,7 @@ configs/<id>/versions/<atMs>.<hash>.json     该版本的展示元数据（客�
 
 ### 展示元数据怎么进服务端
 
-客户端在 `PUT` 时带一个 `X-Config-Meta` 头：把上面那个信封头部（去掉 `payload`）压成 base64url 的 JSON。服务端**原样存进 `.json` 侧车、原样在列表里发回**，不 parse、不校验字段，只限长度（≤ 4 KiB）和字符集（base64url）。这就是不变量 ① 在这一层的落地：信封格式改了，服务端一行都不用动。
+客户端在 `PUT` 时带一个 `X-Config-Meta` 头：把上面那个信封头部（去掉 `payload`）压成 base64url 的 JSON。服务端**原样存进 `.meta` 侧车、原样在列表里发回**，不 parse、不校验字段，只限长度（≤ 4 KiB）和字符集（base64url）。这就是不变量 ① 在这一层的落地：信封格式改了，服务端一行都不用动。
 
 ### 配置项与限制
 
@@ -212,19 +212,23 @@ export function parseConfigBundle(
 
 按「一片一 PR，每片之后停下来给真机测」推进。
 
-### PR-1 · 服务端 `/v1/configs`
+### PR-1 · 服务端 `/v1/configs` ✅ 已落地
 - `store.rs`：`configs/` 布局、`list_config_slots` / `create_slot` / `put_version` / `read_version` / `list_versions` / `delete_slot` / 裁版本；单元测试覆盖「版本裁剪」「当前版本 = 最大 atMs」「孤儿侧车被忽略」
 - `routes.rs`：七条路由 + `If-Match` 复用 + `X-Config-Meta` 长度/字符集校验 + 审计
 - `config.rs` / `confedit.rs`：`config_max_mb`、`config_versions` + provenance
 - `admin.rs` + `server/admin/*`：配置备份页（只读 + 删除）
 - `server/README.md`（API 一节 + 磁盘布局一节）、`server/DEPLOY.md`（新配置项）
-- 验收：`cargo fmt` / `clippy` / `test`，curl 跑一遍七条路由
+- 验收：`cargo fmt` / `clippy` / `test`（49 passed），curl 跑过全部七条路由，
+  外加 412 冲突、413 超限、坏 `X-Config-Meta`、未知版本、未知档，以及后台那一页在浏览器里的实际渲染与删版本操作
 
-### PR-2 · 信封 + `configTransfer` 拆分（纯前端，无 UI）
+### PR-2 · 信封 + `configTransfer` 拆分（纯前端，无 UI） ✅ 已落地
 - 抽 `buildConfigBundle` / `parseConfigBundle`，两个对话框函数改成壳
 - `lib/configsync/envelope.ts` + vitest：加密往返、不加密往返、错密码报错、篡改一个字节报错、`hasKeys && !password` 抛错、旧迭代次数的包仍能开
-- **本片第一件事是验证 WebCrypto 在 Tauri webview 里可用**（见 §8 风险 1），不可用就整个方案要换实现层
-- 验收：`pnpm tsc --noEmit`、`pnpm test`
+- WebCrypto 的可用性由已有证据定死，不再实测（见 §8 风险 1）
+- 验收：`tsc --noEmit`、`vitest`（2026 passed，其中信封 16 条）、`vite build`；
+  另外把 `sealBundle` 真实产出的信封 PUT 给了跑着的服务端，确认 base64url 的
+  `X-Config-Meta` 被接受、原样发回，并且后台那一页把中文设备名和「已加密 ·
+  含 API Key」渲染了出来——跨语言那一段不留给猜
 
 ### PR-3 · 客户端接线 + 设置页重构 + 改名
 - `lib/configsync/client.ts` / `run.ts`、`stores/configSyncStore.ts`
@@ -239,8 +243,8 @@ export function parseConfigBundle(
 
 ## 8. 风险与待验证
 
-1. **WebCrypto 在 Tauri webview 里是否可用。** `crypto.subtle` 只在安全上下文里存在。Windows 上 WebView2 的源是 `http://tauri.localhost`，按规范 `*.localhost` 属于可信源，Chromium 应当判为安全上下文——但这是**推断，不是实测**。PR-2 的第一个提交就该是一行 `console.log(!!crypto.subtle)` 在真机上跑一次。不可用的话，退路是把封/开挪到 Rust（`src-tauri` 已经有 sha2 依赖链，加 `aes-gcm` + `pbkdf2` 两个 crate），信封格式不变。
-2. **310 000 次 PBKDF2 在 webview 里要多久。** 目标是 ≤ 500 ms；实测超了就下调到 210 000 并在信封里记实际值（格式已经为此留了字段）。不要为了快而换成迭代次数写死在代码里的实现。
+1. ~~**WebCrypto 在 Tauri webview 里是否可用。**~~ **已定，不需要实测。** `crypto.subtle` 只在安全上下文里存在——而 `navigator.clipboard` 的门槛**完全相同**，并且这个 app 从 AiPanel 的复制按钮到 `lib/editor/format`、`lib/fs/export` 一路都在用它，那些功能在打包版里是好的。所以这个 webview 就是安全上下文，`crypto.subtle` 必然在。已有的证据比新做一次实验更硬。`envelope.ts` 里仍留了一个 `subtle()` 守卫，作用不是怀疑这条结论，而是万一将来不成立时，作者读到的是一句人话而不是 `Cannot read properties of undefined`。
+2. ~~**310 000 次 PBKDF2 要多久。**~~ **实测 30 ms**（本机 Node，与 Chromium 共用同一套原生实现），目标是 ≤ 500 ms，富余一个数量级。不下调迭代次数。参数照旧写在信封里而不是代码里——将来上调时，今天写的备份还要能开。
 3. **两台设备推同一个档。** 靠 412 兜住，但 UI 要给出「刷新后再推」的明确出路，而不是把 412 直接当红字错误抛出来。
 4. **`app:kbServerUrl` 会跟着配置包旅行**（它不在 `MACHINE_LOCAL_PREF_KEYS` 里）。这是好事——新机器恢复完配置就已经知道服务器在哪，只差一个 token。但要在文案里说清楚 **token 不会旅行**，否则作者会以为恢复完就能直接同步。
 5. **`counts` 是自报字段。** 见 §3。确认文案必须用解密后的真实解析结果。
