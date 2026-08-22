@@ -697,9 +697,8 @@
   border: 1.5px solid var(--color-sienna);
   border-top-color: transparent;
   border-radius: 50%;
-  animation: aiPanelSpin 0.8s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
-@keyframes aiPanelSpin { to { transform: rotate(360deg); } }
 
 /* Output */
 .resultActions { display: flex; gap: var(--space-2); }
@@ -754,9 +753,8 @@
   border: 1.5px solid var(--color-border-strong);
   border-top-color: var(--color-sienna);
   border-radius: 50%;
-  animation: aiPanelDraftSpin 0.7s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
-@keyframes aiPanelDraftSpin { to { transform: rotate(360deg); } }
 
 .output {
   flex: 1;
@@ -781,10 +779,9 @@
 }
 .cursor {
   display: inline-block;
-  animation: aiPanelBlink 1s step-end infinite;
+  animation: blink 1s step-end infinite;
   color: var(--color-sienna);
 }
-@keyframes aiPanelBlink { 50% { opacity: 0; } }
 
 .resultEmpty {
   flex: 1;

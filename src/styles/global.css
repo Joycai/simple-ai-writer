@@ -72,6 +72,14 @@ body {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+/* 深谷值脉冲 — 直播状态圆点（扮演花名册/流式指示）用 */
+@keyframes pulseDeep {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
 
 /* Theme (light/dark) cross-dissolve via the View Transitions API — see
    appStore.applyThemeAnimated. The default `root` snapshot crossfades the whole

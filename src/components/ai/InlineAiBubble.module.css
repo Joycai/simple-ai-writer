@@ -5,7 +5,6 @@
   border: 1px solid var(--color-border-accent);
   box-shadow: var(--shadow-md);
   z-index: 80;
-  animation: scaleIn 160ms var(--ease-out);
   font-family: var(--font-sans);
 }
 

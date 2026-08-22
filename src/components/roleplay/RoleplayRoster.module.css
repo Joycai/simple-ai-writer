@@ -211,7 +211,7 @@
   flex-shrink: 0;
 }
 
-.dotLive { background: var(--color-accent); animation: rp-pulse 1.4s infinite; }
+.dotLive { background: var(--color-accent); animation: pulseDeep 1.4s infinite; }
 .dotHollow { border: 1px solid var(--color-text-dim); }
 .dotAccentHollow { border: 1px solid var(--color-accent); }
 
@@ -292,11 +292,6 @@
 .slotOff { background: var(--rp-avatar-bg); }
 
 .spacer { flex: 1; }
-
-@keyframes rp-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
 
 @media (prefers-reduced-motion: reduce) {
   .dotLive { animation: none; }
