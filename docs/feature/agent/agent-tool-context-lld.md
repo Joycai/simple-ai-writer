@@ -10,9 +10,9 @@
 | --- | --- |
 | **分 5 个 PR，不合并** | CI 只对 `main` 的 PR 生效、且本仓库不做 stacked PR。PR1 是后面四个的计量地基，PR4/PR5 会改模型行为，混在一起出问题无法二分定位。 |
 | **PR1 改的是 ceiling，不是 `fixedChars`** | `fixedChars` 是**字符**、按正文的 `charsPerToken`（中文 ~1.5）折算；工具 schema 是**英文 token**（~4 字符/token）。把英文 token 乘中文字符率会高估近 3 倍。工具开销的正确落点是 token 维度的 ceiling。 |
-| **PR2 只做官方 `anthropic`，`anthropic_compat` 单独排期** | 本仓库对第三方 ④ 族端点一贯的态度是"文档写了不等于验过"（见 `docs/thinking-verification.md`）。缓存打错会 400，而 400 发生在流式请求开头，作者看到的是整轮失败。 |
+| **PR2 只做官方 `anthropic`，`anthropic_compat` 单独排期** | 本仓库对第三方 ④ 族端点一贯的态度是"文档写了不等于验过"（见 `docs/issues/thinking-verification.md`）。缓存打错会 400，而 400 发生在流式请求开头，作者看到的是整轮失败。 |
 | **PR5 拆成 5a/5b，先做不需要模型配合的那一半** | `lore_write` 组由**已批准的方案**自动装载，模型不需要知道"还有工具可以要"；`load_tools` 元工具需要模型主动索取，是另一个量级的行为风险。5a 单独就吃掉分层装载 61% 的收益。 |
-| **不引入任何新的用户设置** | 缓存、分层装载都是实现细节，不是作者要决策的事。加设置就要动 `ConnOptions` + Model 表 + 设置面板三处（见 `docs/provider-layering.md`），代价远超收益。 |
+| **不引入任何新的用户设置** | 缓存、分层装载都是实现细节，不是作者要决策的事。加设置就要动 `ConnOptions` + Model 表 + 设置面板三处（见 `docs/api/provider-layering.md`），代价远超收益。 |
 
 ## 1. PR1 —— 工具 schema 进入预算，并可观测
 
@@ -154,7 +154,7 @@ PR 收益的唯一手段**，先有它再动别的。
  *
  * `anthropic_compat` 排除在外：MiniMax 文档里写了 `system` 接受带 cache_control
  * 的数组，但没写 `tools`，而本仓库对第三方 ④ 族端点的既定态度是文档不等于验过
- * （docs/thinking-verification.md）。打错的代价是 400，且发生在流式请求的开头，
+ * （docs/issues/thinking-verification.md）。打错的代价是 400，且发生在流式请求的开头，
  * 作者看到的是整轮失败——不值得为省钱赌这一下。有真端点可测时见 §2.3。
  */
 function cachesPrompt(standard: ApiStandard): boolean {
@@ -213,7 +213,7 @@ PR2 是把这套已经建好的账本真正用起来。
 
 `anthropic_compat` 的缓存需要一次真端点验证：拿 MiniMax-M3 的 ④ 族端点发一个带
 `system` 数组断点的请求，看 400 与否、看 usage 是否回报 `cache_read_input_tokens`。
-验过再开，并在 `docs/thinking-verification.md` 的清单里记一条。**这件事没做之前，
+验过再开，并在 `docs/issues/thinking-verification.md` 的清单里记一条。**这件事没做之前，
 本项目最常用的中转端点吃不到 PR2 的收益**——所以 PR2 的排序在 PR1 之后、但它不是收益最大的一个。
 
 **回滚**：`cachesPrompt` 返回 `false`。
@@ -359,7 +359,7 @@ gemma4:12b-mlx via ollama，**每格 3 次**（不是原计划的 4 次——按
 > `create_file` 的 schema，而不是把 briefing 写得更长。
 
 原始输出（每一次跑的完整调用序列）留在
-[`measurements/briefing-ab-2026-08.md`](measurements/briefing-ab-2026-08.md)——
+[`measurements/briefing-ab-2026-08.md`](./measurements/briefing-ab-2026-08.md)——
 下次有人想重开这个话题时，"当时到底测了什么"比一个汇总数字有用得多。
 
 > 台架本身踩到的两个坑写在 `scripts/prompt-ab.ts` 的注释里，都值得下一个人知道：

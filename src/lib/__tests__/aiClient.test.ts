@@ -978,7 +978,7 @@ describe("streamCompletion — Anthropic prompt caching", () => {
     // `system` array with cache_control but nothing about `tools`, and a
     // rejected field costs the author a whole failed round at the start of a
     // stream. Anyone tempted to "just unify these two branches" has to delete
-    // this test first — and read docs/agent-tool-context-lld.md §2.3.
+    // this test first — and read docs/feature/agent/agent-tool-context-lld.md §2.3.
     const { calls } = await collect({
       chunks: DONE,
       standard: "anthropic_compat",

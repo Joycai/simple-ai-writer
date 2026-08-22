@@ -109,7 +109,7 @@ export function isKnownCategory(id: string): boolean {
  * A slot only ever affects authoring, presentation and prompts. Nothing here
  * may reach the injection path: `selectLore` reads a facet's own frontmatter,
  * so disabling a pack can change what the author *sees*, never what the model
- * sees. See docs/lore-entry-type-plan.md §4.
+ * sees. See docs/feature/lore/lore-entry-type-plan.md §4.
  */
 export function categoryFacetSlots(categoryId: string): readonly FacetSlot[] {
   return findCategory(categoryId)?.slots ?? [];

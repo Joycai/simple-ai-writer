@@ -477,7 +477,7 @@ type Attempt =
   /**
    * The turn stopped on its search results without using them, and the endpoint
    * has no notion of being handed them back (it rejects its own server-tool
-   * blocks — `docs/anthropic-plan.md` §10.7). The results go back as plain
+   * blocks — `docs/api/anthropic-plan.md` §10.7). The results go back as plain
    * text instead, which no validator can object to.
    */
   | { resume: "transcript"; text: string; transcript: string };
@@ -494,9 +494,9 @@ type Attempt =
  * Officially-standard endpoints only. MiniMax's ④-family endpoint documents a
  * `system` array with `cache_control` but says nothing about `tools`, and this
  * project's standing rule for third-party ④ endpoints is that documented is not
- * verified (docs/thinking-verification.md). A rejected field here costs the
+ * verified (docs/issues/thinking-verification.md). A rejected field here costs the
  * author a whole failed round at the very start of a stream — not a trade worth
- * making blind. See docs/agent-tool-context-lld.md §2.3 for what to measure
+ * making blind. See docs/feature/agent/agent-tool-context-lld.md §2.3 for what to measure
  * before turning the compat half on.
  */
 function cachesPrompt(standard: StreamOptions["standard"]): boolean {
@@ -921,7 +921,7 @@ export async function streamAnthropic(opts: StreamOptions): Promise<void> {
      * endpoint runs the follow-through *inside* one request while MiniMax's
      * beta implementation stops after delivering results and reports
      * `end_turn`. Its symptom is an opening line as the whole visible answer,
-     * inside a well-formed success (`docs/anthropic-plan.md` §10.5) — and that
+     * inside a well-formed success (`docs/api/anthropic-plan.md` §10.5) — and that
      * same endpoint rejects its own blocks on the way back, so the results
      * return as text instead (§10.7).
      */

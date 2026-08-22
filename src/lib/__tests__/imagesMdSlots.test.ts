@@ -1,6 +1,6 @@
 /**
  * `images.md` and its **slot** line — the one storage format the type system had
- * to extend (docs/lore-entry-type-plan.md §7 坑 5).
+ * to extend (docs/feature/lore/lore-entry-type-plan.md §7 坑 5).
  *
  * The format is `## <file>` plus a description block. A picture's image slot
  * rides as a `slot: <id>` line at the very top of that block, which is the least

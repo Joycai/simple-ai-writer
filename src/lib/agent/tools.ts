@@ -383,7 +383,7 @@ const SNIPPET_MAX = 160;
  * What full-text search scans: manuscript files plus .html deliverables.
  * A separate predicate rather than widening `isChapterFile` — that one also
  * decides what enters the outline/spine, and an HTML artifact is a deliverable,
- * not a chapter (docs/html-artifact-plan.md §3 三期).
+ * not a chapter (docs/feature/html-artifact-plan.md §3 三期).
  */
 function isSearchableFile(name: string): boolean {
   return isChapterFile(name) || isHtmlPath(name);

@@ -71,7 +71,7 @@
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-panel);
   /* Severity bars are semantic marks, a documented exception to the
-     no-colored-left-border rule (docs/design-system.md). */
+     no-colored-left-border rule (docs/reference/design-system.md). */
   border-left: 3px solid var(--color-border-emphasis);
   padding: 12px 16px;
 }

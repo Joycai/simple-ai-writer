@@ -182,7 +182,7 @@
   --glass-blur:           blur(16px);
   --glass-border:         1px solid rgba(60, 40, 20, 0.08);
 
-  /* ── AI 面板设计语言 (docs/design-system.md) ──
+  /* ── AI 面板设计语言 (docs/reference/design-system.md) ──
      The dark values are the binding mockup; these are the paper equivalents,
      derived from the light inline-bubble / consistency-check screens. */
   --color-bg-inset:        #F1E8D5;   /* header/footer strips, inputs, card heads */
@@ -429,7 +429,7 @@
   --glass-blur:           blur(16px);
   --glass-border:         1px solid rgba(255, 220, 180, 0.06);
 
-  /* ── AI 面板设计语言 (docs/design-system.md) ──
+  /* ── AI 面板设计语言 (docs/reference/design-system.md) ──
      Values transcribed from the AI-panel mockup (design project, 02 AI 面板);
      the dark rendition is the acceptance reference. */
   --color-bg-inset:        #17130F;

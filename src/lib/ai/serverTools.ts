@@ -242,7 +242,7 @@ const TRANSCRIPT_CHARS = 12_000;
  * validator reads any `*_tool_result` as a *client* tool's result and looks for
  * a matching client `tool_use`, which a server tool by definition doesn't have.
  * So the one shape the protocol prescribes is the one shape that endpoint won't
- * take (`docs/anthropic-plan.md` §10.7).
+ * take (`docs/api/anthropic-plan.md` §10.7).
  *
  * Plain text has no such dependency: it is a message like any other, and it
  * works on an endpoint whose validator knows nothing about server tools. What

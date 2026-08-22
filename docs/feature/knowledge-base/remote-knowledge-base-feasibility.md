@@ -178,7 +178,7 @@ facet 是文件、元数据在 frontmatter 里,冲突不是行级 diff 能解决
 
 这是代码阅读里最值得单独拎出来的一条。
 
-`docs/unified-agent-plan.md` §3.2 的分级写策略是:L1(lore/memory)**不需要作者确认、
+`docs/feature/agent/unified-agent-plan.md` §3.2 的分级写策略是:L1(lore/memory)**不需要作者确认、
 自动落盘**,安全阀是 `lib/agent/backup.ts` 的「写前自动快照到 `.ai-writer/backups/`」。
 而 `backupFile()` 的第一行是:
 
@@ -493,7 +493,7 @@ facet 正文里可能有 `[[lore:另一个条目]]`。单条目下载后引用�
 
 ## 16. 服务端(比 §10.3 还简单)
 
-> **已实现:[`server/`](../server/README.md)** —— Rust + axum,单个静态二进制。
+> **已实现:[`server/`](../../../server/README.md)** —— Rust + axum,单个静态二进制。
 > 端点、鉴权、前置条件与磁盘布局见该目录的 README;以下是当初的设计草案,
 > 实现与它一致,并在几处收紧了(见本节末尾)。
 

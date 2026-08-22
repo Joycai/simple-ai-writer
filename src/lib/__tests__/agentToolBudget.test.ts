@@ -14,7 +14,7 @@
  *
  * If a new tool genuinely belongs in the assistant, raise the cap in the same
  * commit and say why. If several are landing at once, that is the signal to
- * read docs/agent-tool-context-lld.md §5 instead — deferred loading is the
+ * read docs/feature/agent/agent-tool-context-lld.md §5 instead — deferred loading is the
  * answer to "the toolset keeps growing", not a bigger number here.
  */
 import { describe, expect, it, vi } from "vitest";

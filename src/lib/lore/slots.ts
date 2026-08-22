@@ -1,6 +1,6 @@
 /**
  * Facet slots at work — the entity-side view of a category's type schema
- * (`ProfileCategory.slots`, see docs/lore-entry-type-plan.md).
+ * (`ProfileCategory.slots`, see docs/feature/lore/lore-entry-type-plan.md).
  *
  * The schema itself is workspace data; this module answers the questions the
  * *authoring* side asks about one entry: which slots does its category declare,

@@ -186,7 +186,7 @@ OpenAI-compatible / Gemini / 各种中转，**必须自己在客户端实现等�
 是对的（顺手做），但**不要指望字面去重解决问题**——真正贵的是 `rewrite_lines`、`export_pptx`
 这类描述里的**决策性长文**，而那些恰恰是最不该删的：`rewrite_lines` 那 979 个字符里讲的
 "长文件用它、rewrite_document 会被输出上限截断、批准后行号会移动"，每一条都是踩过的坑
-（见 `docs/pptx-plan.md` §4 里的同类记录）。删掉省 200 token，换回来一次截断重跑就亏了。
+（见 `docs/feature/pptx-plan.md` §4 里的同类记录）。删掉省 200 token，换回来一次截断重跑就亏了。
 
 **唯一值得做的字面工作**：参数层的 `description` 可以更狠地砍。`update_facet_meta` 的
 parameters 有 1,142 字符，比它的 description 还长——枚举值的解释（`mode` auto/always/manual）

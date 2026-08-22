@@ -1,6 +1,6 @@
 /**
  * Chat-history compaction — the pure bookkeeping and planning half of
- * docs/chat-memory-plan.md. This module segments the wire history into turns,
+ * docs/feature/agent/chat-memory-plan.md. This module segments the wire history into turns,
  * decides what to fold, renders folded turns for the summarizer, and rebuilds
  * the history around a summary. The impure half — actually running the
  * summarize request and wiring events — lives with the caller (agentStore).
@@ -23,7 +23,7 @@ import { estimateMessagesTokens, estimateTextTokens } from "../ai/tokenEstimate"
 import type { StreamMessage } from "../ai/types";
 import type { LoreEntity, LoreIndex } from "../lore/model";
 
-// ── Budget constants (docs/chat-memory-plan.md §6) ──────────────────
+// ── Budget constants (docs/feature/agent/chat-memory-plan.md §6) ──────────────────
 
 /** Share of the input ceiling at which compaction triggers. */
 export const COMPACT_TRIGGER = 0.7;

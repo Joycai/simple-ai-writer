@@ -175,7 +175,7 @@ Built-ins: `novel` (the default), `ttrpg` (跑团模组), `copy` (文案), `wech
 
 #### 孤儿分类 (orphan categories)
 
-`scanLore` 扫的是**磁盘上真实存在的目录**，不只是合并后的分类表：任何已启用包和用户自建分类都不声明、但里面有条目的目录，作为**孤儿分类**进入 `LoreIndex`（空目录不算——没人能往里新建的幽灵分类只会碍事；大小写不同的同一目录也只进一次，因为大小写不敏感的文件系统会把它报成另一个名字）。于是关掉一个能力包是**降级**而不是消失：条目照常出现在知识库墙、命令面板、AI 面板的清单里，照常被注入；失去的是分类的显示名（退回目录名）、类型 schema（`slots`/`imageSlots`，见 [`lore-entry-type-plan.md`](lore-entry-type-plan.md)），以及作为新建目标的资格。
+`scanLore` 扫的是**磁盘上真实存在的目录**，不只是合并后的分类表：任何已启用包和用户自建分类都不声明、但里面有条目的目录，作为**孤儿分类**进入 `LoreIndex`（空目录不算——没人能往里新建的幽灵分类只会碍事；大小写不同的同一目录也只进一次，因为大小写不敏感的文件系统会把它报成另一个名字）。于是关掉一个能力包是**降级**而不是消失：条目照常出现在知识库墙、命令面板、AI 面板的清单里，照常被注入；失去的是分类的显示名（退回目录名）、类型 schema（`slots`/`imageSlots`，见 [`lore-entry-type-plan.md`](../feature/lore/lore-entry-type-plan.md)），以及作为新建目标的资格。
 
 两个问题必须分开问——`src/lib/lore/categories.ts` 就是为此存在的：
 
@@ -326,7 +326,7 @@ The vocabulary — `toPosixPath` / `baseName` / `dirName` / `joinPath` / `projec
   3. Recent document context (last 2400 chars before selection)
   4. Task instruction (continue/polish/rewrite/summary/custom)
 - **Output** → `ContextBundle` → formatted to messages via `bundleToMessages()`; carries a `loreReport` (what was injected/dropped and why) rendered in `AiPanel`
-- **The chat is the exception to layer 3.** A writing task is invoked *on* the open document, so it gets the window. The conversational assistant is not: it defaults to a **brief** of the open file (path, title, length, heading outline, plus a line saying the text was withheld and which path to `read_file`), and injects the window only when the turn points at the document — a pinned selection, or wording like 这一段 / 本章 / 全文 / 继续写 / `this chapter`. Decision layer in `src/lib/context/docFocus.ts`, wiring in `agentStore.sendChat`, rationale in `docs/chat-memory-plan.md` §5a. The body can arrive on any later turn (`ChatSessionMeta.bodyDocPath` remembers whether it already did)
+- **The chat is the exception to layer 3.** A writing task is invoked *on* the open document, so it gets the window. The conversational assistant is not: it defaults to a **brief** of the open file (path, title, length, heading outline, plus a line saying the text was withheld and which path to `read_file`), and injects the window only when the turn points at the document — a pinned selection, or wording like 这一段 / 本章 / 全文 / 继续写 / `this chapter`. Decision layer in `src/lib/context/docFocus.ts`, wiring in `agentStore.sendChat`, rationale in `docs/feature/agent/chat-memory-plan.md` §5a. The body can arrive on any later turn (`ChatSessionMeta.bodyDocPath` remembers whether it already did)
 
 #### Facet-aware lore selection (`loreSelect.ts`)
 
@@ -337,7 +337,7 @@ An entity is a folder; any sibling `.md` with a `facet` frontmatter field (title
 3. **Core** (`index.md` body) — paragraph-boundary truncated to fit
 4. **Facets** — `auto` fires on entity match AND any key in the match target; same-`group` facets are mutually exclusive (highest priority wins; pins override); a facet that doesn't fit whole is dropped, never truncated
 
-Pins come from `AiPanel` as `dirPath` (whole entity) or `dirPath#file` (single facet; implies its entity). Facet/core content is re-read from disk each call so hand edits are never stale. AI-assisted splitting of an oversized `index.md` into facets lives in `src/lib/lore/splitter.ts` + `LoreSplitModal` (backs up to `.ai-writer/backups/` before applying). See `docs/lore-facet-plan.md` for the full design.
+Pins come from `AiPanel` as `dirPath` (whole entity) or `dirPath#file` (single facet; implies its entity). Facet/core content is re-read from disk each call so hand edits are never stale. AI-assisted splitting of an oversized `index.md` into facets lives in `src/lib/lore/splitter.ts` + `LoreSplitModal` (backs up to `.ai-writer/backups/` before applying). See `docs/feature/lore/lore-facet-plan.md` for the full design.
 
 #### 配图在注入里：一行字，不是图（`galleryNotice`）
 
@@ -358,7 +358,7 @@ Pins come from `AiPanel` as `dirPath` (whole entity) or `dirPath#file` (single f
 
 **两道上限。** 单条目 180 字（描述各截 48 字，多出来的图折成「另有 N 张」），全部条目合计不超过预算的 `GALLERY_BUDGET_SHARE`（20%）——一次命中二十个条目时，元数据不能把正文挤没。超出份额的条目照 facet 的规矩处理：不注入，但记进 `LoreEntityReport.droppedImages`，在 AiPanel 的注入报告里显示为一个 dropped chip。
 
-**槽位（slot）不进这一行。** 分类的 image slot 是创作侧的元数据，`docs/lore-entry-type-plan.md` 的三条不变量之一就是 slot 绝不参与注入；而且能力包一关，那个 id 对模型就是个没有意义的词。
+**槽位（slot）不进这一行。** 分类的 image slot 是创作侧的元数据，`docs/feature/lore/lore-entry-type-plan.md` 的三条不变量之一就是 slot 绝不参与注入；而且能力包一关，那个 id 对模型就是个没有意义的词。
 
 **「可以看图」这句话不写在注入块里，写在工具简介里。** 注入块是事实（有这些图、叫这些名字、画的是这些内容），对没有工具的任务（`tools: "none"`）和纯文本模型同样成立；「需要时调 `read_lore_image`」是能力，只在真的带着那个工具时才为真——所以它落在 `ai.instructions.toolsRead`（read 档）和 `ai.instructions.agent`（full 档）里，这两处本来就只在对应工具在场时才发出。这样 `selectLore` 也不必知道模型是不是多模态、preset 带了哪些工具，省掉一路参数透传。
 
@@ -495,7 +495,7 @@ Per-document rolling summary so long manuscripts don't lose early plot in AI tas
 
 Story Memory is *per-document*, so a chapter is its own file and knows nothing of its siblings. The book spine adds an explicit chapter *order* so continuing a fresh chapter can see what came before it.
 
-- **Location** — `src/lib/context/outline.ts` (order resolution, spine IO) + `src/lib/context/bookContext.ts` (book-context assembly); the **library view** (文库, `MainView` id `library`, `src/components/library/LibraryView.tsx` — formerly 大纲·全图/OutlineFullView) is the editor (drag-to-reorder). Plan & naming rationale: `docs/library-plan.md`
+- **Location** — `src/lib/context/outline.ts` (order resolution, spine IO) + `src/lib/context/bookContext.ts` (book-context assembly); the **library view** (文库, `MainView` id `library`, `src/components/library/LibraryView.tsx` — formerly 大纲·全图/OutlineFullView) is the editor (drag-to-reorder). Plan & naming rationale: `docs/feature/library-plan.md`
 - **Storage** — `.ai-writer/outline.json`: `{ version, order: { <volume relPath>: [<chapter relPath>, …] }, volumes: [<volume relPath>, …] }`. A **volume** = a book: chapter files at the workspace root form a default volume (relPath `""`), each folder — at any depth, `assets/` excluded — is its own. `volumes` orders the columns themselves with the same overlay semantics (absent in older files → traversal order, exactly what they had)
 - **Order is an overlay, not a rigid list** — `applySpine()` applies the manifest order, drops entries whose file vanished, and appends un-listed files by **natural (numeric-aware) sort** (`naturalCompare` — so 第2章 < 第10章, 6-1 < 6-2 < 7). Creating/deleting files outside the outline UI never breaks ordering; the backend's byte-sort no longer decides chapter order
 - **Chapter files** — `.md` / `.markdown` / `.txt` (the outline view previously dropped `.txt`)
@@ -563,7 +563,7 @@ Story Memory is *per-document*, so a chapter is its own file and knows nothing o
   - **Windows/Linux** — hidden iframe, render HTML, `window.print()`, remove iframe after 2s. The webview is Chromium (WebView2) / WebKitGTK, where printing a detached iframe just works, and the dialog owns the paper margins.
   - **macOS** — `window.print()` is a silent no-op (WebKit forwards JS print to the host's `WKUIDelegate`; wry implements no print callback), so the frontend calls `invoke("print_document")` instead. `src-tauri/src/print.rs` stages the HTML behind a custom `ai-writer-print://` scheme (single-use, nothing on disk), opens a print-preview window on it, and runs its own `NSPrintOperation` on the WKWebView. It does **not** use wry's `print()`/tauri's `WebviewWindow::print()`, because wry zeroes all four margins on the process-wide *shared* `NSPrintInfo` — text flush against the paper edge, and the mutated defaults leak into later print jobs. `print_with_margins` copies the shared print info and sets 0.5in margins (the print CSS zeroes the body's own padding so the two don't stack). macOS has no virtual PDF printer — the export exit is the print dialog's easily-missed "PDF ▾ → Save as PDF" menu — so the preview window carries a bottom banner (`editor.exportPdfHint`, hidden under `@media print`) pointing at it.
 
-> Theming/design tokens live in `docs/design-system.md`.
+> Theming/design tokens live in `docs/reference/design-system.md`.
 
 ## Important Notes
 
@@ -609,7 +609,7 @@ The workspace is the **whole project directory** — documents live wherever the
 `@` 在聊天与三个设定 AI 弹窗里给出的**文件**候选，来自 `projectStore.fileTree`——即侧栏那棵树——经 `projectFilesFromTree`（`lib/fs/images`）按扩展名分类，`useProjectFiles()` 是唯一入口。
 
 - **为什么不再各扫各的**：原先每个界面在项目打开时各调一次 `scanProjectFiles(projectPath)`，自己存一份快照。之后新增的文件（agent 写的、Finder 里拷进来的）在侧栏看得见、`@` 里选不到，屏幕上没有任何东西解释这个差异。一棵树、一条刷新路径，这类不一致就没有藏身处。
-- **哪些算文本**：`md` / `markdown` / `txt` / `html` / `htm`。`.html` 是交付物不是章节（`docs/html-artifact-plan.md` D6，`isChapterFile` 不动），但**读**它没有任何理由排除——`search_text` 早就扫它（`isSearchableFile`），写这个页面的助手正是作者接着要它改页面的那个助手。图片候选另外还要模型链看得见图（`chainCanSeeImages`），否则挂上去的附件这条消息物理上带不走。
+- **哪些算文本**：`md` / `markdown` / `txt` / `html` / `htm`。`.html` 是交付物不是章节（`docs/feature/html-artifact-plan.md` D6，`isChapterFile` 不动），但**读**它没有任何理由排除——`search_text` 早就扫它（`isSearchableFile`），写这个页面的助手正是作者接着要它改页面的那个助手。图片候选另外还要模型链看得见图（`chainCanSeeImages`），否则挂上去的附件这条消息物理上带不走。
 - **外部改动怎么进来**：`useExternalFileRefresh`（`src/useExternalFileRefresh.ts`）在**窗口重新获得焦点**时 `refreshFileTree()`，1.5s 内不重复。焦点正好是这件事的形状——作者去了文件管理器又回来。不上目录监听：对任意项目目录做 watch 是新的权限面，事件流最后还是要 UI 自己去抖，收益只有"应用在前台时别人改了文件"这一种边角情形。
 - **不覆盖的**：知识库条目仍只在项目打开 / 写操作后扫（`loreStore.scanProject`）；外部直接往 `.ai-writer/lore/` 里塞条目仍需重开项目。
 
@@ -629,7 +629,7 @@ The workspace is the **whole project directory** — documents live wherever the
 - **超大 deck 的最后一道防线是 subagent**：`read_slides` 在 `longread` 的工具集里，几百页丢给它，主上下文只收摘要 + note 路径。
 - **`.ppt`（97-2003）读不了，也不打算读**：OLE 复合二进制，不是 zip。与 `.doc`/`.xls` 同一条判断——半乱码的结果和成功的长得一模一样。导入器不收它，`read_slides` 直接说明要先另存为 .pptx。
 
-设计与被否掉的方案：`docs/pptx-plan.md`。
+设计与被否掉的方案：`docs/feature/pptx-plan.md`。
 
 ### HTML → PPTX 导出（Beta）
 
@@ -647,10 +647,10 @@ The workspace is the **whole project directory** — documents live wherever the
 - **入口两个**，都要作者点头：`export_pptx` 工具（L2 审批卡，说明「哪个页面 → 哪个文件」；转换在 `applyProposal` 里跑，因为那里才有 DOM）和 `.html` 预览工具栏的导出按钮。
 - **Beta 开关**（Settings → 通用 → 实验功能，`lib/pptx/flag.ts`）关着时 `routeTools` 把 `export_pptx` 从工具列表里**删掉**而不是让它报错——同 imagegen 未绑定时删掉画图工具。
 - **会降级的**：内联 SVG 和 `<canvas>` 变图片，渐变背景变色标平均色，CSS 滤镜/混合模式/文字阴影/动画丢掉。每次导出把降级项列给作者。
-- **SVG 栅格化前必须内联计算样式**：序列化出来的 `<svg>` 是独立文档，页面样式表一条都不跟着走，靠 CSS 上色的图示和 `currentColor` 会整块变黑——而且栅格化"成功"，没有异常也没有降级提示。见 `docs/pptx-plan.md` D19。
+- **SVG 栅格化前必须内联计算样式**：序列化出来的 `<svg>` 是独立文档，页面样式表一条都不跟着走，靠 CSS 上色的图示和 `currentColor` 会整块变黑——而且栅格化"成功"，没有异常也没有降级提示。见 `docs/feature/pptx-plan.md` D19。
 - **最大的风险不是冷门 CSS，是字体和文本回流**：HTML 的换行引擎不是 PowerPoint 的，web font 也进不了 pptx。对策是按字形而不是容器测量文本框、四周留 6% 对称余量、多行允许自动缩字号，外加工具描述里要求用系统字体。
 
-设计、被否掉的方案（让模型写 Python 转换、slides markdown、模型直接调 pptx 工具、整页截图）、以及验证时抓到的三个 bug：`docs/pptx-plan.md` §4。
+设计、被否掉的方案（让模型写 Python 转换、slides markdown、模型直接调 pptx 工具、整页截图）、以及验证时抓到的三个 bug：`docs/feature/pptx-plan.md` §4。
 
 ### Export / Import (lore bundles & config backup)
 - **Lore bundle** (`src/lib/lore/transfer.ts`, UI in `LoreWall`): a zip with root `manifest.json` + the whole on-disk `.ai-writer/lore/` tree under `lore/…` — *all* categories on disk, not just the active profile's, so bundles survive profile switches. Import is two-phase: `stageLoreImport` extracts into `.ai-writer/lore-import-tmp` and reports conflicts; `applyLoreImport` moves entity dirs in under a user-chosen strategy (skip / overwrite / keep-both via `uniqueEntityId`), then deletes the staging dir. **Overwrite displaces rather than deletes**: the entity being replaced is renamed into `.ai-writer/backups/replaced-<ts>-<category>-<id>` (the same directory `delete_lore_entity` uses), and if the move-in then fails it is renamed back. The previous `removeDir`-then-`rename` both destroyed an entry — gallery images included — with no undo, and left a window where a failed rename lost the folder from both places. Categories that fail `CATEGORY_ID_RE` are ignored.
@@ -693,7 +693,7 @@ pooled handle, and `sqltx.rs`'s own tests cover the commit/rollback behaviour.
 - **Two path scopes exist, and they do not agree.** Projects can live anywhere on disk, so neither can be a static allowlist:
   - `src-tauri/src/scope.rs` (`FsScope`) guards every custom `fs_*` command. Roots are registered only from trusted sources (the Rust-side folder picker, or a recents entry with an on-disk `.ai-writer` marker). Containment is component-wise with `..` and symlinks resolved — no special case for dot-directories.
   - `tauri-plugin-fs`'s own scope guards the handful of **binary image reads** the frontend does directly (`src/lib/fs/images.ts`, `LoreDetail`/`LoreWall`, `lib/import`). `allow_for_plugin_fs` extends it to a registered root; dialog-picked files are auto-scoped by the dialog plugin for that session.
-- **The plugin's scope is glob-based, and on unix a wildcard will not match a leading dot.** Its runtime scope is built from `FsScope::default()`, which means `require_literal_leading_dot: true` — so `<root>/**` covers `<root>/writing/…` but *not* `<root>/.ai-writer/…`, and the `requireLiteralLeadingDot` config knob cannot reach it (that value only feeds the per-call scope built from static capability entries). Since every generated picture lives under `.ai-writer/`, `allow_for_plugin_fs` grants `<root>/.ai-writer` a second time with the dot spelled out. Symptom when this is missing: `forbidden path: …` on image reads while documents load fine — see `docs/image-generation-plan.md` §8. Adding another dot-directory the frontend must read means adding another grant; the durable fix is routing project-internal binary reads through the custom `fs_*` commands too.
+- **The plugin's scope is glob-based, and on unix a wildcard will not match a leading dot.** Its runtime scope is built from `FsScope::default()`, which means `require_literal_leading_dot: true` — so `<root>/**` covers `<root>/writing/…` but *not* `<root>/.ai-writer/…`, and the `requireLiteralLeadingDot` config knob cannot reach it (that value only feeds the per-call scope built from static capability entries). Since every generated picture lives under `.ai-writer/`, `allow_for_plugin_fs` grants `<root>/.ai-writer` a second time with the dot spelled out. Symptom when this is missing: `forbidden path: …` on image reads while documents load fine — see `docs/feature/image-generation-plan.md` §8. Adding another dot-directory the frontend must read means adding another grant; the durable fix is routing project-internal binary reads through the custom `fs_*` commands too.
 
 ### Window chrome（自定义标题栏，方案 B 混合）
 

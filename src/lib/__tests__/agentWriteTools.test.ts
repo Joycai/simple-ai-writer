@@ -515,7 +515,7 @@ describe("update_facet_meta", () => {
    * `slot` — the facet's place in its category's type schema. Checked against
    * *this entity's* category rather than a global enum: tool schemas are built
    * per preset, not per run, so no wire enum can know which category is in play
-   * (docs/lore-entry-type-plan.md phase 3).
+   * (docs/feature/lore/lore-entry-type-plan.md phase 3).
    */
   it("sets a declared slot, normalised to the schema's casing", async () => {
     const res = await run(

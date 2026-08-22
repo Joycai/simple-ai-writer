@@ -1,5 +1,5 @@
 /**
- * The seam these tests guard is `docs/provider-layering.md` §6 偏离一: the L2×L3
+ * The seam these tests guard is `docs/api/provider-layering.md` §6 偏离一: the L2×L3
  * → request flattening used to be hand-written at sixteen call sites, and every
  * field involved is optional — so a forgotten one is not a type error, it is a
  * silent behaviour difference on one screen.

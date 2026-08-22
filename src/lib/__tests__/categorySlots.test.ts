@@ -1,6 +1,6 @@
 /**
  * Category type schemas — the `slots` / `imageSlots` a capability pack may
- * declare on one of its knowledge-base categories (docs/lore-entry-type-plan.md
+ * declare on one of its knowledge-base categories (docs/feature/lore/lore-entry-type-plan.md
  * phase 1).
  *
  * Three things are worth pinning down, and all three are quiet when broken:

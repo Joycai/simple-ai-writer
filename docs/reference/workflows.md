@@ -4,7 +4,7 @@
 
 ## Add a new AI task type
 
-Tasks are pack data (`docs/architecture.md` → Tasks), so this is an edit to one pack — not to a union, the panel, or the run loop. A pack's `tasks` list carries only its *own* tasks (and any overrides of a base-menu id); the base 续写/润色/… menu is app-level (`DEFAULT_TASKS`) and needs no declaring.
+Tasks are pack data (`docs/reference/architecture.md` → Tasks), so this is an edit to one pack — not to a union, the panel, or the run loop. A pack's `tasks` list carries only its *own* tasks (and any overrides of a base-menu id); the base 续写/润色/… menu is app-level (`DEFAULT_TASKS`) and needs no declaring.
 
 1. Add a `TaskDef` to the pack's `tasks` in `src/lib/profile/model.ts`:
    - `instructionKey` — an `ai.instructions.*` key holding the prompt (or `freeform: true` to let the author type it)
@@ -22,7 +22,7 @@ Task ids are used as prompt `scene` keys and as the `token_usage.task` value, so
 
 ## Add a new capability pack (新的写作类型)
 
-A pack is data — reach for this instead of adding branches for a new kind of writing (文案 / 周报 / 报告 …). See `docs/architecture.md` → Capability packs. A pack is **purely additive**: it contributes tasks and knowledge-base categories, and may reword the 【…】 labels *for its own tasks*. It does not set the UI vocabulary, the document model, or the AI's persona — those are app-level; domain rules belong in the pack tasks' instruction texts (see how `bidRespond` carries the deviation discipline).
+A pack is data — reach for this instead of adding branches for a new kind of writing (文案 / 周报 / 报告 …). See `docs/reference/architecture.md` → Capability packs. A pack is **purely additive**: it contributes tasks and knowledge-base categories, and may reword the 【…】 labels *for its own tasks*. It does not set the UI vocabulary, the document model, or the AI's persona — those are app-level; domain rules belong in the pack tasks' instruction texts (see how `bidRespond` carries the deviation discipline).
 
 1. Add a `WorkspaceProfile` const in `src/lib/profile/model.ts` and append it to `BUILTIN_PROFILES`:
    - `categories` — knowledge-base folders. Ids must match `[A-Za-z0-9][A-Za-z0-9_-]*` and be ≤40 chars (they become directory names, and `scaffold_project` re-checks the same rule in Rust); order matters, the first is the "new entity" default. Don't declare `custom` — the misc bucket is app-level and always present
@@ -40,7 +40,7 @@ Tasks are pack data too — see **Add a new AI task type** above.
 
 Draft count is a user setting (`appStore.draftCount`, chip row in the AI panel), not something a task declares. To make a *task* fan out or stop fanning out, edit `draftCountFor` in `src/stores/aiTaskStore.ts` — the single place that rule lives, so the panel's control and the run agree.
 
-Before lifting the clamp on `agent` or `continue`, read the table in `docs/architecture.md` → Multi-draft output: `agent` is a correctness limit (concurrent disk writes + racing approval cards), and `continue` needs per-draft `agentLog`s first or the execution log becomes unreadable.
+Before lifting the clamp on `agent` or `continue`, read the table in `docs/reference/architecture.md` → Multi-draft output: `agent` is a correctness limit (concurrent disk writes + racing approval cards), and `continue` needs per-draft `agentLog`s first or the execution log becomes unreadable.
 
 Tests: `src/lib/__tests__/aiTaskDrafts.test.ts` covers the clamp, the fan-out count, per-draft failure isolation, shared-abort, and one usage row per draft.
 

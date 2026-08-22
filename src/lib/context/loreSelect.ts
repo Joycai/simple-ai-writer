@@ -168,7 +168,7 @@ function briefDesc(desc: string): string {
  * paying for it.
  *
  * The **slot** is deliberately left out. A category's image slots are authoring
- * metadata (docs/lore-entry-type-plan.md: slots never reach the injection path),
+ * metadata (docs/feature/lore/lore-entry-type-plan.md: slots never reach the injection path),
  * and an id whose pack is currently disabled would inject a word that means
  * nothing to the model.
  *

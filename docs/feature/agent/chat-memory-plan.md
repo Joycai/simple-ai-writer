@@ -1,7 +1,7 @@
 # 对话助手记忆系统方案（chat context compaction）
 
 > **状态：三期全部实现**（PR1 结构 / PR2 压缩 / PR3 每轮注入，见 §7）。
-> 纯逻辑落在 [`lib/agent/compact.ts`](../src/lib/agent/compact.ts)，编排落在
+> 纯逻辑落在 [`lib/agent/compact.ts`](../../../src/lib/agent/compact.ts)，编排落在
 > `compactRun.ts`，接入点是 `agentStore.sendChat`。
 >
 > 目标：把对话助手的上下文管理从「只挖不补」升级为**分层记忆**——
@@ -219,7 +219,7 @@ assistant/tool 配对；`MIN_KEEP_TURNS` 恒成立;插桩后边界仍然正确�
 - `context-compacted` 行留在它先于的那一轮轮体内（不上提为带间分隔）：设计稿
   就把「已归纳前 N 轮对话」画作轮体内的一行，落在哪一轮只是压缩何时发生的
   记录。与之相对，`round-limit` 在 logModel 里上提为手风琴收尾行——它发生在
-  两轮**之间**，是对整个手风琴的注脚（见 `docs/design-system.md` → AI 面板
+  两轮**之间**，是对整个手风琴的注脚（见 `docs/reference/design-system.md` → AI 面板
   设计语言）。
 
 ## 9. 非目标

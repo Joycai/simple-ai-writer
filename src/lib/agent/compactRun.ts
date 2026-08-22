@@ -4,7 +4,7 @@
  * pure module next door (./compact); the caller (stores/agentStore.sendChat)
  * provides the provider plumbing and decides where the event lands.
  *
- * Failure semantics (docs/chat-memory-plan.md §4): compaction is best-effort.
+ * Failure semantics (docs/feature/agent/chat-memory-plan.md §4): compaction is best-effort.
  * A failed or empty summarize request returns null and leaves history *and*
  * meta untouched — the turn proceeds uncompacted and the threshold triggers
  * again next turn. Only an abort propagates, because it means the author

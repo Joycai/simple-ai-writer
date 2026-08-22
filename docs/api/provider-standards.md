@@ -6,7 +6,7 @@
 
 > 本文隐含的分层（协议族 / 端点 / 模型）后来被显式写成
 > [`provider-layering.md`](provider-layering.md)。**新增字段该放哪一层，以那份
-> 为准**；本文只负责这次重构本身的来龙去脉。协议事实见 [`api/`](api/README.md)。
+> 为准**；本文只负责这次重构本身的来龙去脉。协议事实见 [`api/`](README.md)。
 
 > 目标：把 `ApiStandard` 从今天的 4 个值（其中一对是空壳）重构成
 > **3 个协议族 × official/compat = 6 个值**，让 official 有明确契约（地址锁定、

@@ -14,8 +14,8 @@
 > 前置阅读：[`provider-standards.md`](provider-standards.md)（6 个 `ApiStandard`
 > 值、official/compat 契约）—— 本文的每一条"默认不发"都源自那里的 compat 契约。
 >
-> 协议事实已迁至 [`api/reasoning.md`](api/reasoning.md)、
-> [`api/tools.md`](api/tools.md) 与 [`api/structured.md`](api/structured.md)；
+> 协议事实已迁至 [`api/reasoning.md`](reasoning.md)、
+> [`api/tools.md`](tools.md) 与 [`api/structured.md`](structured.md)；
 > §2 / §3 的对比表保留为速查，以那三份为准。本文其余部分是**本项目的取舍**。
 
 ---
@@ -328,7 +328,7 @@ interface NativeReasoning { field: string; text: string }
 （SDK 文档写在 `extra_body`，落到 wire 就是顶层字段），且文档写明与
 `reasoning_effort` **互斥**；默认值按模型代分裂（Qwen3.5+ 默认开，
 Qwen3-Max/Plus 等商业款默认关——后者不发开关就永远不思考）。协议事实见
-[`api/landscape.md`](api/landscape.md) §7 第六个样本。三个决定：
+[`api/landscape.md`](landscape.md) §7 第六个样本。三个决定：
 
 1. **复用 `switch` 方言值，不新增。** `ThinkingDialect` 的值是跨族的
    "参数形状"词汇（`extended` 同时描述 Claude 4.5 与 Gemini 2.5），而
@@ -356,7 +356,7 @@ Qwen3-Max/Plus 等商业款默认关——后者不发开关就永远不思考�
 UI 侧选项按族给：anthropic 族四个形状照旧，openai 族只有「自动」与「开关式」
 ——给 openai 族显示 `adaptive`/`extended` 就是"按了没反应的控件"。
 新款 Qwen3.7+ 直接接受标准 `reasoning_effort`（未实测，见
-[`thinking-verification.md`](thinking-verification.md) §4），保持「自动」即可。
+[`thinking-verification.md`](../issues/thinking-verification.md) §4），保持「自动」即可。
 
 ---
 
@@ -365,7 +365,7 @@ UI 侧选项按族给：anthropic 族四个形状照旧，openai 族只有「自
 放在本文而不是单开一份，是因为触发它的正是思考模式：`agent/structured.ts` 的
 降级判据里就写着 `"thinking mode"` —— **推理模型是走上那条兜底路径的主力**。
 
-协议事实见 [`api/structured.md`](api/structured.md)。本项目的取舍：
+协议事实见 [`api/structured.md`](structured.md)。本项目的取舍：
 
 1. **兜底路径此前是零约束。** 强制工具调用被拒后退回的那条 JSON 路径完全不发
    `response_format`，纯 prompt + 从散文里抠 JSON。也就是说，**恰恰在最不容易
@@ -432,7 +432,7 @@ UI 侧选项按族给：anthropic 族四个形状照旧，openai 族只有「自
 - **兼容中继的思维链字段名**到底有几种？已实现三种（`reasoning_content` /
   `reasoning` / 内联 `<think>`），但**穷尽性未验证** —— 多一种没覆盖的写法等于
   那家的思维链全部丢失，且不报错。见
-  [`thinking-verification.md`](thinking-verification.md) §1.3。
+  [`thinking-verification.md`](../issues/thinking-verification.md) §1.3。
   内联标签的剥离已实现，只在响应最开头识别，避免误伤正文里合法的 `<think>`。
 - **是否给 `endpointProbe` 加一次"支持哪些档位"的探测**？现在的探测测的是
   上下文窗口与输出上限（见 `architecture.md` → Endpoint probing）。档位探测需要
@@ -441,4 +441,4 @@ UI 侧选项按族给：anthropic 族四个形状照旧，openai 族只有「自
   **已解决**：`thinkingFor` 把 budget 夹在 `[1024, min(常量, maxTokens/2)]`
   之间，两者共用一个上限，谁也不能饿死对方。
 
-其余实测项见 [`thinking-verification.md`](thinking-verification.md) §4。
+其余实测项见 [`thinking-verification.md`](../issues/thinking-verification.md) §4。

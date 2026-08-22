@@ -1,5 +1,5 @@
 /**
- * PR3 of chat-memory compaction (docs/chat-memory-plan.md §5): per-turn
+ * PR3 of chat-memory compaction (docs/feature/agent/chat-memory-plan.md §5): per-turn
  * retrieval with the injection ledger — dedup, content-change re-injection,
  * carrier-based eviction on fold, and the summary render skipping carriers.
  */

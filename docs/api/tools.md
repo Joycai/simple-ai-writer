@@ -152,7 +152,7 @@ header** —— 普通 `/v1/messages` 直接声明即可（2026-08 复核官方�
 新款模型（Opus 4.6+ / Sonnet 4.6+ / Sonnet 5 / Opus 5）支持
 `web_search_20260209`（带动态过滤；Vertex AI 上只有基础版），以及
 `web_fetch_20250910` / `_20260209`。本项目均暂未采用，取舍见
-[`../anthropic-plan.md`](../anthropic-plan.md) §10.10。
+[`../anthropic-plan.md`](anthropic-plan.md) §10.10。
 
 **两条会静默毁掉功能的规则：**
 

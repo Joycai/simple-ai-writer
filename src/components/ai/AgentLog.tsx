@@ -20,7 +20,7 @@
  * The shape is computed by `lib/agent/logModel` (pure, tested); everything here
  * is presentation. The task plan is a fourth band, owned by the session rather
  * than by one turn, and lives outside this component — it is on disk, not in
- * this stream (docs/subagent-lld.md §3.3).
+ * this stream (docs/feature/agent/subagent-lld.md §3.3).
  *
  * Three presentations, same bands:
  *   boxed (default)   — bordered card. Used where the log appears without

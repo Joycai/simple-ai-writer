@@ -233,7 +233,7 @@ export function withSessionOverrides(
  * For enabling UI that depends on images being *understood* somewhere. It is
  * NOT the answer to "may I put base64 in this request": that stays
  * `ToolContext.multimodal`, a property of the one model being called (see
- * docs/subagent-lld.md §6.1).
+ * docs/feature/agent/subagent-lld.md §6.1).
  */
 export function chainCanSeeImages(
   mainModel: Model | undefined,

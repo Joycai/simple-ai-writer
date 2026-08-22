@@ -20,7 +20,7 @@
  *   - Write serialization: all writes serialize through a shared writeChain
  *   - No approval gate / No auto-backup (agent's private scratchpad)
  *
- * See docs/subagent-lld.md §3.3 for details.
+ * See docs/feature/agent/subagent-lld.md §3.3 for details.
  */
 
 import i18n from "../../i18n";

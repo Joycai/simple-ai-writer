@@ -1130,7 +1130,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       // 图片能不能上线，取决于**这个 agent 绑的模型**，不是全局那个——两级
       // 解析和 runJob 里那一句必须是同一句话（§2.14）。识图子代理开着时另外
       // 告诉模型「图在这个路径上，可以 delegate」，那和把 base64 塞给一个读不
-      // 了图的模型是两件事（docs/subagent-lld.md §6.1）。
+      // 了图的模型是两件事（docs/feature/agent/subagent-lld.md §6.1）。
       const { useAiStore } = await import("./aiStore");
       const { models, activeModelId, subAgents } = useAiStore.getState();
       const model = models.find((m) => m.id === (agent.modelId ?? activeModelId));

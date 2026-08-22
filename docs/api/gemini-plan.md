@@ -54,14 +54,14 @@ thoughts in the response"*，也就是说思考仍然随响应回来，只是**�
   *"You MUST always resend all `thought` blocks exactly as they were received
   from the model."* 任何"把 part 归一化成自己的结构"的重构都会打破它。
 - **`thoughtsTokenCount` 手动折进 output。** ③ 是四族里唯一一个
-  `candidatesTokenCount` **不含**思考的，见 [`api/usage.md`](api/usage.md) §2.2。
+  `candidatesTokenCount` **不含**思考的，见 [`api/usage.md`](usage.md) §2.2。
   （Interactions 那边字段名换成了 `total_thought_tokens`。）
 - **`safetySettings` 请求级配置**。③ 族独有，与思考正交。
 
 ### 2.3 采样参数：③ 族没有 ④ 族那条禁令
 
 `generationConfig` 的 `temperature` / `topP` / `topK` 在 ③ 族**始终可用**，
-不因思考而禁用。这与 ①④ 相反（见 [`api/reasoning.md`](api/reasoning.md) §1.8）。
+不因思考而禁用。这与 ①④ 相反（见 [`api/reasoning.md`](reasoning.md) §1.8）。
 本 app 从不发送这些，所以只是记录，不影响实现。
 
 ### 2.4 目标范围：Gemini 3+（作者决定）
@@ -78,7 +78,7 @@ thoughts in the response"*，也就是说思考仍然随响应回来，只是**�
 
 ### 2.5 ③ 族有两套 surface —— 本轮只做经典那套
 
-协议事实见 [`api/landscape.md`](api/landscape.md) §4.1。要点：
+协议事实见 [`api/landscape.md`](landscape.md) §4.1。要点：
 
 - Interactions API（`POST /v1beta/interactions`，`input` + `steps`）是官方
   推荐给新开发的 surface，**结构与经典 `generateContent` 不兼容**。
@@ -147,7 +147,7 @@ an error."* —— 反过来说，3+ 上发 `thinkingLevel` 就够了。
 
 ## 5. 需要实测才能定论的
 
-汇总在 [`thinking-verification.md`](thinking-verification.md) §1.2 与 §3。
+汇总在 [`thinking-verification.md`](../issues/thinking-verification.md) §1.2 与 §3。
 **最要紧的一条**是 §1.2：`includeThoughts` 打开之后 `part.thought` 的实际形态
 —— 参考页没定义它，而第 3 刀的写法建立在对它的假设上。
 

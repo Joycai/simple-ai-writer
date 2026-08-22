@@ -5,8 +5,8 @@
 这份文档记录**为什么后台长成现在这样**，以及哪些地方和设计稿不一样、为什么。
 
 - 界面本身：设计稿 `07 服务端管理后台 KB Admin`（claude.ai/design，12 屏）
-- 服务端是什么、API 长什么样：[`../server/README.md`](../server/README.md)
-- 怎么部署运维：[`../server/DEPLOY.md`](../server/DEPLOY.md)
+- 服务端是什么、API 长什么样：[`../server/README.md`](../../../server/README.md)
+- 怎么部署运维：[`../server/DEPLOY.md`](../../../server/DEPLOY.md)
 - 这个服务端为什么是这个形态：[`remote-knowledge-base-feasibility.md`](remote-knowledge-base-feasibility.md) §13–§18
 
 ---

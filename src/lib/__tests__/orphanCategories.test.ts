@@ -7,7 +7,7 @@
  * They are now scanned and listed, and the pinned-down part is the asymmetry:
  * an orphan is an answer to "what is there?" and never to "where may this go?".
  *
- * See docs/lore-entry-type-plan.md §5 and lib/lore/categories.
+ * See docs/feature/lore/lore-entry-type-plan.md §5 and lib/lore/categories.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

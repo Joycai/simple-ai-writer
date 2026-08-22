@@ -10,7 +10,7 @@
  * One entry point for both generation and editing: every provider expresses an
  * edit as "the same endpoint, with input images attached", so a second function
  * would only push provider branching out to the callers. `req.images` being
- * non-empty *is* the edit request. See docs/image-generation-plan.md §2.
+ * non-empty *is* the edit request. See docs/feature/image-generation-plan.md §2.
  */
 
 import { fetch } from "../http";
@@ -513,7 +513,7 @@ async function parseOpenAiImagePayload(raw: unknown, signal?: AbortSignal): Prom
  * plugin-http's fetch only copies browser-generated headers the caller did not
  * declare. Setting it by hand replaces a value containing the boundary with
  * one that doesn't, and every such request fails to parse server-side.
- * (Transport verified in docs/image-generation-plan.md §2.3.)
+ * (Transport verified in docs/feature/image-generation-plan.md §2.3.)
  */
 async function openaiEdit(conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
   const url = openaiUrl(conn.baseUrl, "/images/edits");

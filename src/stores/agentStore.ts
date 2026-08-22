@@ -37,7 +37,7 @@
  * close the cycle, so every store this file touches — aiStore, projectStore,
  * loreStore, appStore, editorStore, memoryStore — is loaded lazily at the call
  * site. Plain `src/lib/**` modules carry no such constraint and are imported
- * normally above. See docs/architecture.md → Circular Dependencies.
+ * normally above. See docs/reference/architecture.md → Circular Dependencies.
  */
 
 import { create } from "zustand";
@@ -831,7 +831,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
     // Stores are reached lazily throughout this module: aiTaskStore imports
     // *this* one at the top level, so agentStore must stay free of static store
-    // imports or the cycle closes. See docs/architecture.md → Circular deps.
+    // imports or the cycle closes. See docs/reference/architecture.md → Circular deps.
     const { useAiStore } = await import("./aiStore");
     const { useProjectStore } = await import("./projectStore");
     const { useLoreStore } = await import("./loreStore");
@@ -886,7 +886,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // editor, so the default is now the path plus a *brief* (title, length,
     // outline) and the assistant reads the file itself when it judges it
     // relevant. See lib/context/docFocus for what counts as pointing at the
-    // document, and docs/chat-memory-plan.md §5a for why the line is drawn
+    // document, and docs/feature/agent/chat-memory-plan.md §5a for why the line is drawn
     // where it is.
     const { documentBrief, wantsDocumentBody } = await import("../lib/context/docFocus");
     const docRelPath = activeFilePath ? projectRelativePath(projectPath, activeFilePath) : null;
@@ -1022,7 +1022,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         );
         // Three messages, not two: the seeded context and the question are
         // separate so the compaction pass can later drop the former without
-        // the latter (docs/chat-memory-plan.md §3). The meta records which
+        // the latter (docs/feature/agent/chat-memory-plan.md §3). The meta records which
         // message is which — by identity, because indices don't survive
         // repairToolCallPairing's splices.
         const seed = bundleToChatMessages(bundle, wireContent);
@@ -1073,7 +1073,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // but every turn after it. Repair before adding to it.
         repairToolCallPairing(history);
 
-        // ── Compaction (docs/chat-memory-plan.md §4) ──
+        // ── Compaction (docs/feature/agent/chat-memory-plan.md §4) ──
         // Between turns, before this turn's question goes in: if the history
         // has outgrown the trigger, fold the oldest turns into the rolling
         // summary. Best-effort — a failed summarize returns null and the turn
@@ -1101,7 +1101,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           }
         }
 
-        // ── Per-turn injection (docs/chat-memory-plan.md §5) ──
+        // ── Per-turn injection (docs/feature/agent/chat-memory-plan.md §5) ──
         // The seed's retrieval, re-run against *this* question, minus what the
         // ledger says is already in the conversation. Nothing net-new appends
         // nothing: the history stays append-only, so the prompt-cache prefix

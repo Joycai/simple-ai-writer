@@ -16,7 +16,7 @@
 //! a second HTTP surface with a second kind of credential (a password, not a
 //! token); see `admin` for why the two never meet.
 //!
-//! Design and rationale: `docs/remote-knowledge-base-feasibility.md` §13–§18.
+//! Design and rationale: `docs/feature/knowledge-base/remote-knowledge-base-feasibility.md` §13–§18.
 //! Deployment and the full API: `server/README.md`.
 
 mod admin;

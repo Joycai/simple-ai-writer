@@ -2,8 +2,8 @@
 
 > **状态：六刀全部实现。** 剩下的是 §7 那几条只能靠真实请求定论的验证。
 >
-> 协议事实见 [`api/reasoning.md`](api/reasoning.md)、[`api/tools.md`](api/tools.md)、
-> [`api/landscape.md`](api/landscape.md) §5 —— 本文只写"我们现在是什么样、
+> 协议事实见 [`api/reasoning.md`](reasoning.md)、[`api/tools.md`](tools.md)、
+> [`api/landscape.md`](landscape.md) §5 —— 本文只写"我们现在是什么样、
 > 该怎么改、为什么"。分层裁决依据见
 > [`provider-layering.md`](provider-layering.md)。
 >
@@ -156,7 +156,7 @@ Gemini 有**一模一样的分裂**：新代 `thinkingConfig.thinkingLevel` vs 2
 ### 3.5 ④ 族兼容层的三处实测（MiniMax，2026-08）
 
 MiniMax 的 `/anthropic/v1/messages` 是第二个 ④ 族兼容层样本（协议事实见
-[`api/landscape.md`](api/landscape.md) §7）。逐条对照本实现：
+[`api/landscape.md`](landscape.md) §7）。逐条对照本实现：
 
 | 它的差异 | 我们受影响吗 |
 | --- | --- |
@@ -186,7 +186,7 @@ MiniMax 的 `/anthropic/v1/messages` 是第二个 ④ 族兼容层样本（协�
 **`effort` 能不能到达上游**。
 
 New API 的 Anthropic 格式端点（见
-[`api/landscape.md`](api/landscape.md) §7）请求体清单里有 `thinking`，
+[`api/landscape.md`](landscape.md) §7）请求体清单里有 `thinking`，
 **但没有 `output_config`** —— 而 4.6+ 的 `effort` 就住在那里面。
 
 不能据此判定它不支持：那份文档同样没画 `thinking` / `redacted_thinking` /
@@ -383,7 +383,7 @@ Fable 5 / Mythos 5 / Mythos Preview 无条件拒绝 `disabled`；Opus 5 在 xhig
 
 ## 8. 需要实测才能定论的
 
-汇总在 [`thinking-verification.md`](thinking-verification.md) §1.1 与 §2 ——
+汇总在 [`thinking-verification.md`](../issues/thinking-verification.md) §1.1 与 §2 ——
 三族的实测项放在一处，因为它们只在同一次动手时才会被真正执行。**最要紧的一条**
 是 §1.1：不回传 thinking block 时响应里还有没有 thinking block，那是判断
 §4.2 那条"静默降级"是否正在发生的唯一手段。
@@ -439,7 +439,7 @@ API 自己会做的事（它按模型决定保留策略）。
 由此三件事一起定下来：
 
 1. **不发 `display`。** 文档没写的字段一律不发 —— 兼容层"忽略未知键"与"严格
-   校验后 400"两种都常见（[`api/landscape.md`](api/landscape.md) §7），赌哪一种
+   校验后 400"两种都常见（[`api/landscape.md`](landscape.md) §7），赌哪一种
    都不如不赌。代价：这个端点的思考文本能不能显示，取决于它自己的默认，未实测。
 2. **不发 `output_config`。** §3.6 担心的"按了没反应的拨盘"在这里有了确定答案：
    这个端点确实没有该字段。于是「力度」在 `switch` 下只保留唯一还有意义的
@@ -470,7 +470,7 @@ API 自己会做的事（它按模型决定保留策略）。
 ### 10.3 服务端工具：`serverTools`，per-model 声明
 
 `web_search` 由服务端在同一次请求里跑完（协议事实见
-[`api/landscape.md`](api/landscape.md) §7）。落在 `lib/ai/serverTools.ts`，
+[`api/landscape.md`](landscape.md) §7）。落在 `lib/ai/serverTools.ts`，
 四个决定：
 
 1. **不进 agent 注册表。** 注册表里的工具是"模型请求 → 我们执行 → 回传结果"，
@@ -528,7 +528,7 @@ API 自己会做的事（它按模型决定保留策略）。
 #### 先前的错误推断，留在这里
 
 第一版补丁按 `pause_turn` 实现 —— 官方 ④ 族确实有这个机制（协议事实见
-[`api/tools.md`](api/tools.md) §6.1：turn 被挂起、必须把 assistant 消息原样
+[`api/tools.md`](tools.md) §6.1：turn 被挂起、必须把 assistant 消息原样
 送回），症状描述也对得上，MiniMax 文档没写但"没列 ≠ 不支持"。
 
 **推断错了**：日志里是 `end_turn`。但补丁的主体是对的 —— 需要的那趟往返一模
@@ -651,7 +651,7 @@ invalid params, tool result's tool id(call_019ffefc181f7c61ae839314) not found (
 3. §10.7 —— 以为续跑按协议原样回传，**形状也被拒了**。
 
 每一层都是"照着官方协议推断兼容层"，每一层都对了一半。
-[`api/landscape.md`](api/landscape.md) 那条"不能把兼容层文档当能力清单"应当
+[`api/landscape.md`](landscape.md) 那条"不能把兼容层文档当能力清单"应当
 再加一句对称的：**也不能把官方文档当兼容层的行为说明书**。而这三层没有一层是
 单元测试能发现的 —— 全靠 API 日志里那一行真实报文。
 
@@ -718,7 +718,7 @@ MiniMax 的问题，是本项目自己的形状问题 —— 只是服务端搜�
 #### 一、`role:"user"` 承载了两种东西
 
 Anthropic 把工具结果放进 `role:"user"` 消息，而作者自己的发言也是这个角色，
-再加上相邻同角色必须合并（[`api/tools.md`](api/tools.md) §2 第三点），于是：
+再加上相邻同角色必须合并（[`api/tools.md`](tools.md) §2 第三点），于是：
 
 **一次中途死掉的工具轮**（结果已追加、assistant 还没来得及说话）**后面跟着作者
 敲的任何一句话，都会被并进同一条消息**。实测拿到的是：
@@ -776,7 +776,7 @@ browse"，`serverTools` 恰好把这条写下来的不变量破坏了。
 
 **一、官方确实有同一能力，而且现有实现已经覆盖它。**
 `web_search_20250305` 在 api.anthropic.com 上是 GA 工具，不需要任何
-`anthropic-beta` header（协议事实记在 [`api/tools.md`](api/tools.md) §6.1）——
+`anthropic-beta` header（协议事实记在 [`api/tools.md`](tools.md) §6.1）——
 MiniMax 的声明格式本就是照抄官方的。核对逐层成立：
 
 - `supportsServerTools()` 当初刻意按**整个 anthropic 协议族**判断而不限于
@@ -804,4 +804,4 @@ MiniMax Beta）"。
 **三、未经真机验证。** 以上"预期走正路"仍是推断：官方端点的
 `pause_turn` → verbatim 续跑、`encrypted_content` 回传被接受、
 `usage.server_tool_use.web_search_requests` 是否存在，都没有对 api.anthropic.com
-实测过。验证项在 [`thinking-verification.md`](thinking-verification.md) §2.7。
+实测过。验证项在 [`thinking-verification.md`](../issues/thinking-verification.md) §2.7。

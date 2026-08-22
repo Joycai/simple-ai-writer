@@ -4,7 +4,7 @@
  *
  * What it edits is the **active model's own setting** (`Model.reasoningEffort`),
  * not a per-run override — thinking depth is a property of the model
- * (`docs/provider-layering.md` L3), so the same value shows here and in
+ * (`docs/api/provider-layering.md` L3), so the same value shows here and in
  * Settings › 模型, and switching models switches the value with it.
  *
  * **One dial, not two.** The design sketched a second "effort" dial beside the

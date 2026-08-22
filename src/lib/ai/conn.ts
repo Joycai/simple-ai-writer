@@ -1,7 +1,7 @@
 /**
  * The seam between the config layers and one request.
  *
- * `docs/provider-layering.md` splits provider configuration into three layers:
+ * `docs/api/provider-layering.md` splits provider configuration into three layers:
  * L1 the protocol family, L2 the configured endpoint (`Provider`), L3 the model
  * (`Model`). Every AI call needs the L2 and L3 halves flattened into the
  * transport fields of `StreamOptions` — and before this module existed, all

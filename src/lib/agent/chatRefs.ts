@@ -140,7 +140,7 @@ export function withDirective(content: MessageContent, directive: string): Messa
  * notice from an apology into an instruction: the path is exactly what
  * `delegate(vision, refs)` takes. Kept separate from `allowImages` on purpose —
  * base64 still must not go to a model that cannot read it, however capable the
- * chain is as a whole (docs/subagent-lld.md §6.1).
+ * chain is as a whole (docs/feature/agent/subagent-lld.md §6.1).
  */
 export async function buildChatMessage(
   message: string,

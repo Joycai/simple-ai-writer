@@ -1,6 +1,6 @@
 /**
  * `lib/lore/slots` — the authoring side of a category's type schema
- * (docs/lore-entry-type-plan.md phase 3).
+ * (docs/feature/lore/lore-entry-type-plan.md phase 3).
  *
  * What is worth pinning: an entry knows which of its category's slots are
  * covered and which are expected-and-empty; a slot value nothing declares is

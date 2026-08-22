@@ -114,7 +114,7 @@ Rules of the road:
 #### 类型系统 · 槽位分段与降级（设计稿屏 19–23）
 
 分类可以带一份**类型 schema**（特征槽位 + 配图槽位，数据侧见
-[`lore-entry-type-plan.md`](lore-entry-type-plan.md)）。这五屏的共同前提写在屏 19 自己的
+[`lore-entry-type-plan.md`](../feature/lore/lore-entry-type-plan.md)）。这五屏的共同前提写在屏 19 自己的
 说明里：**面只是归类与提示，注入仍由每条特征自定**。所以这一整套语汇里没有一处颜色表示
 「错误」——没有红、没有警告黄，缺口是邀请，降级是陈述。
 

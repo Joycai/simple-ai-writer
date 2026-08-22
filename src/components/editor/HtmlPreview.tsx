@@ -32,7 +32,7 @@ interface FrameProps {
  * The app's ONE containment boundary for AI-written HTML: every surface that
  * renders a project page — the editor's preview pane and the approval card —
  * goes through this component, so the sandbox parameters exist in exactly one
- * place (docs/html-artifact-plan.md §4).
+ * place (docs/feature/html-artifact-plan.md §4).
  *
  * The document goes in through a `blob:` URL, and that choice is load-bearing:
  *   - `srcdoc` (and any same-origin injection) inherits the app window's CSP,

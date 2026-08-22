@@ -13,7 +13,7 @@
 >
 > 相关：[`lore-facet-plan.md`](lore-facet-plan.md)（特征系统本体）·
 > [`lore-granularity-research.md`](lore-granularity-research.md)（粒度调研）·
-> [`architecture.md`](architecture.md) → Capability packs / Facet-aware lore selection
+> [`architecture.md`](../../reference/architecture.md) → Capability packs / Facet-aware lore selection
 
 ---
 
@@ -57,12 +57,12 @@
 现状里三件事需要先说清：
 
 - **分类不是 tag**。它是 `.ai-writer/lore/<category>/` 的目录名，一个条目有且只有一个分类，
-  改分类会真的搬目录（[`entity.ts` `saveEntityMetaAndBody`](../src/lib/lore/entity.ts)）。
+  改分类会真的搬目录（[`entity.ts` `saveEntityMetaAndBody`](../../../src/lib/lore/entity.ts)）。
   也就是说「单值 + 能力包声明」这两条它已经满足了。
 - **特征已经足够表达「面」**，缺的只是「这一面是什么」——`LoreFacet` 有 keys/group/priority/mode，
   没有语义归类。
 - **关掉能力包，条目现在会从 UI 里整个消失**（`scanLore` 只扫 `loreCategories()`）。
-  [`WorkspacePane`](../src/components/settings/panes/WorkspacePane.tsx) 已经为此专门算了一个
+  [`WorkspacePane`](../../../src/components/settings/panes/WorkspacePane.tsx) 已经为此专门算了一个
   parked 计数告诉作者「数据停在那儿了」。需求 3 等于要求它从「停车」变成「还能用」。
 
 ---
@@ -221,7 +221,7 @@ mode: auto
 所以 schema 消失后文件依然自带完整的注入语义。
 
 **三、降级只发生在读取侧，绝不回写磁盘。**
-房规已经存在：[`scanLore` 的注释](../src/lib/lore/entity.ts)明确「切换 profile 只是隐藏，
+房规已经存在：[`scanLore` 的注释](../../../src/lib/lore/entity.ts)明确「切换 profile 只是隐藏，
 目录留在磁盘上，切回来就回来」。作者主动「迁移」是显式动作，不是自动的。
 
 三条都要有测试钉住，前两条尤其：它们坏掉时不报错，只是上下文悄悄变了。
@@ -244,7 +244,7 @@ mode: auto
 
 配套的第二个坑见 §7 坑 1——这两件事必须同一个 PR 改完。
 
-**落地口径**（第 2 期，运行时说明记在 [`architecture.md`](architecture.md) →
+**落地口径**（第 2 期，运行时说明记在 [`architecture.md`](../../reference/architecture.md) →
 孤儿分类）：
 
 - 两个问题分家到 `src/lib/lore/categories.ts`：`indexCategories(index)` 答「有些什么」，
@@ -270,7 +270,7 @@ mode: auto
 | **1** | **槽位骨架**：`FacetSlot`/`ImageSlot` 类型与校验、`ResolvedCategory` 并集合并、facet frontmatter `slot` 解析/序列化、写入路径保值、novel 包的槽位表、单测。零 UI、零行为变化。 | ✅ 已实现 |
 | **2** | **孤儿分类**（§5）+ §7 坑 1 的那批循环 + `lib/lore/categories.ts` 的两问分家。 | ✅ 已实现 |
 | **3** | **创作侧接线**：`lib/lore/slots.ts`（`slotStatuses` / `unslottedFacets` / `slotChecklistText` / `withSlotDefaults`）；拆分整理与「生成新特征」的 prompt 带清单；`split_facet`、`update_facet_meta`、`draft_lore_facet` 加 `slot`（**不带 enum**，改为执行时按分类校验——见 §3.4）；`read_lore_entity` 多一段槽位清单；ttrpg/copy/wechat/bid 的槽位表。 | ✅ 已实现 |
-| **4** | **UI 呈现**（设计稿屏 19–23）：详情页特征栏按槽位分段、缺口邀请、类型行与覆盖小结、特征编辑的归属槽位与预填、配图按 imageSlot 分段（含 `images.md` 的 `slot:` 行）、降级条与「启用 <包>」。落地口径记在 [`design-system.md`](design-system.md) → 设定集设计语言 → 类型系统。 | ✅ 已实现 |
+| **4** | **UI 呈现**（设计稿屏 19–23）：详情页特征栏按槽位分段、缺口邀请、类型行与覆盖小结、特征编辑的归属槽位与预填、配图按 imageSlot 分段（含 `images.md` 的 `slot:` 行）、降级条与「启用 <包>」。落地口径记在 [`design-system.md`](../../reference/design-system.md) → 设定集设计语言 → 类型系统。 | ✅ 已实现 |
 | 5 | `subtypes`（§2 末）——等真有一个能力包需要再说。 | 不做 |
 
 其余内置包的槽位表放到第 3 期、和消费它的提示词一起给：第 1 期只有 novel 有槽位，
@@ -357,7 +357,7 @@ mode: auto
 ```
 
 设计稿落地后，把口径（尤其是"设计稿要求但数据模型没接"的部分）记进
-[`design-system.md`](design-system.md) → 设定集设计语言，与前四轮 v1~v4 的记法一致——
+[`design-system.md`](../../reference/design-system.md) → 设定集设计语言，与前四轮 v1~v4 的记法一致——
 提交信息和代码注释不算记录。
 
 ---
