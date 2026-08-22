@@ -1,13 +1,14 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { motion } from "motion/react";
-import { Search as SearchIcon, X } from "lucide-react";
+import { ExternalLink, Search as SearchIcon, X } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { FileTree } from "./FileTree";
 import { OutlinePanel } from "../editor/OutlinePanel";
+import { openInNewWindow } from "../../lib/instance";
 import { loreEntityCount } from "../../lib/lore";
 import { MOD_K_SPACED } from "../../lib/platform";
 import { panelFade, springPanel } from "../../lib/motion";
@@ -163,6 +164,16 @@ export function Sidebar() {
                       >
                         <span className={styles.recentName}>{basename(path)}</span>
                         <span className={styles.recentPath}>{path}</span>
+                      </button>
+                      {/* A sibling instance straight onto this project — the
+                          multi-open path for "several workspaces at once". */}
+                      <button
+                        className={styles.recentAction}
+                        onClick={() => void openInNewWindow(path).catch((e) => console.warn("[instance]", e))}
+                        title={t("project.openInNewWindow")}
+                        aria-label={t("project.openInNewWindow")}
+                      >
+                        <ExternalLink size={12} strokeWidth={1.8} />
                       </button>
                       <button
                         className={styles.recentRemove}

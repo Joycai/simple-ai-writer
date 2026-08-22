@@ -474,9 +474,15 @@
     "emptyTree": "Writing directory is empty, create a .md file to start",
     "closeProject": "Close Project",
     "switchProject": "Open Another Folder",
+    "newWindow": "New Window",
+    "openInNewWindow": "Open in new window",
     "recentTitle": "Recent",
     "clearRecent": "Clear",
-    "removeRecent": "Remove from list"
+    "removeRecent": "Remove from list",
+    "lockHeldTitle": "Project open in another window",
+    "lockHeldBody": "\"{{name}}\" appears to be open in another window (process {{pid}}). Editing the same project from two windows can overwrite each other's changes. Open it here anyway?",
+    "lockOpenAnyway": "Open Anyway",
+    "lockCancel": "Cancel"
   },
   "editor": {
     "placeholder": "Start writing…",

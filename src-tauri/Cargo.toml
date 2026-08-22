@@ -73,6 +73,14 @@ quick-xml = "0.41"
 # of numbers — see `fs_write_binary_file`.
 base64 = "0.22"
 
+# instance.rs asks the OS whether a workspace lock's holder PID is still alive
+# (the advisory multi-open guard). std has no process-liveness call; both
+# probes below are one syscall over crates already in the tree transitively.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_System_Threading"] }
+
 # print.rs runs its own NSPrintOperation instead of wry's `print()`, because
 # wry zeroes all four margins on the *shared* NSPrintInfo (wry 0.55 wkwebview
 # print_with_options) — the saved PDF has text flush against the paper edge and
