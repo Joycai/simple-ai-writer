@@ -79,6 +79,7 @@ const ICON = {
   activity: 'M3 12h4l3 7 4-14 3 7h4',
   wrench: 'M14.5 4a5 5 0 00-6.2 6.2L3 15.5 8.5 21l5.3-5.3A5 5 0 0020 9.5l-3 3-2.5-2.5 3-3A5 5 0 0014.5 4z',
   config: 'M12 15a3 3 0 100-6 3 3 0 000 6z|M4.6 15.5a1.6 1.6 0 00-1.5-1.1H3a2 2 0 010-4h.1a1.6 1.6 0 001.5-1.1 1.6 1.6 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.6 1.6 0 001.8.3 1.6 1.6 0 001.1-1.5V3a2 2 0 014 0v.1a1.6 1.6 0 001.1 1.5 1.6 1.6 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.6 1.6 0 00-.3 1.8 1.6 1.6 0 001.5 1.1H21a2 2 0 010 4h-.1a1.6 1.6 0 00-1.5 1.1 1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-1.8-.3 1.6 1.6 0 00-1.1 1.5V21a2 2 0 01-4 0v-.1a1.6 1.6 0 00-1.1-1.5 1.6 1.6 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.6 1.6 0 00.3-1.8z',
+  configs: 'M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3z|M4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7|M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
   logout: 'M9 20H5a2 2 0 01-2-2V6a2 2 0 012-2h4|M16 17l5-5-5-5|M21 12H9',
   refresh: 'M21 12a9 9 0 11-2.6-6.4|M21 3v6h-6',
   copy: 'M9 9h10v10H9z|M5 15V5h10',
@@ -140,6 +141,11 @@ const ACTIONS = {
   'delete': ['删除', 'warn'],
   'download': ['下载', 'muted'],
   'create-kb': ['建库', 'ok'],
+  'config-create': ['建配置档', 'ok'],
+  'config-upload': ['推配置', 'ok'],
+  'config-download': ['拉配置', 'muted'],
+  'config-rename': ['配置改名', 'muted'],
+  'config-delete': ['删配置', 'bad'],
   'delete-kb': ['删库', 'bad'],
   'rename-kb': ['改名', 'muted'],
   'unauthorized': ['被拒', 'bad'],
@@ -336,6 +342,7 @@ const VIEWS = [
   { id: 'kbs', label: '知识库', icon: ICON.kbs },
   { id: 'tokens', label: 'Token', icon: ICON.token },
   { id: 'activity', label: '活动日志', icon: ICON.activity },
+  { id: 'configs', label: '配置备份', icon: ICON.configs },
   { id: 'maintenance', label: '维护与备份', icon: ICON.wrench },
   { id: 'config', label: '配置', icon: ICON.config },
 ];
@@ -1404,6 +1411,201 @@ async function renderActivity(body) {
     el('span.mono', null, '<data>/audit.log'), '，超过 8 MB 自动轮转。'));
 }
 
+// ── 07-7 配置备份 ──────────────────────────────────────────────────────────
+//
+// app 推上来的应用配置（供应商 / 模型 / Prompt / 偏好）。这一页只读和删除：
+// 带 API Key 的备份是在作者的机器上加密的，密码这台服务器从来没见过、也没有任何
+// 路径能拿到，所以运维在这里能做的只有「看它占了多少地方」和「删掉不要的」。
+// 故意不提供下载——整机备份已经覆盖了 configs/，不需要第二个随手的出口。
+
+/**
+ * 版本的展示元数据 = 客户端信封头部的 base64url。
+ *
+ * 服务端从不解析它（那正是信封格式能自己往前走、不用重新部署服务器的原因），
+ * 所以解码在这里做——并且必须当成不可信输入：它是另一台机器上传的字符串，坏了
+ * 就当没有，绝不能让整页塌掉。
+ */
+function slotMeta(raw) {
+  if (!raw) return null;
+  try {
+    let b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    const binary = atob(b64);
+    const buf = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i);
+    const parsed = JSON.parse(new TextDecoder().decode(buf));
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch { return null; }
+}
+
+/** 元数据里的一个字段，限长、去掉控制字符——它会被放进 DOM 文本节点。 */
+function metaText(value, max = 40) {
+  if (typeof value !== 'string' || !value) return null;
+  const cleaned = [...value].filter((c) => c >= ' ').slice(0, max).join('').trim();
+  return cleaned || null;
+}
+
+async function renderConfigs(body) {
+  const data = await api('/configs');
+  S.refreshedAt = clockNow();
+  clear(body);
+
+  const totalBytes = data.slots.reduce((sum, s) => sum + (s.bytes || 0), 0);
+  const head = pageHead('配置备份',
+    el('span.tag', { text: `${data.slots.length} 档 · ${bytes(totalBytes)}` }),
+    ...refreshButton(() => route()));
+  body.parentNode.insertBefore(head, body);
+
+  if (!data.slots.length) {
+    body.appendChild(el('div.empty', null,
+      el('b', null, '还没有任何配置备份'),
+      el('div.steps', null,
+        el('div.step', null, el('i', null, '1'), '在 Simple AI Writer 里打开 设置 → 同步与备份，连上这台服务器'),
+        el('div.step', null, el('i', null, '2'), '在「应用配置」里新建一个备份档，把这台机器的配置推上来'),
+        el('div.step', null, el('i', null, '3'), '换一台设备连上同一个服务器，就能把它拉下去')),
+      el('p', null, '带 API Key 的备份必须设密码，加密在作者的机器上完成。'
+        + '这台服务器存的是一段它读不懂的字节——密码它没有，也没有任何办法找回。')));
+    return;
+  }
+
+  for (const slot of data.slots) body.appendChild(slotPanel(slot));
+
+  body.appendChild(el('p.note', { style: 'margin-top:14px' },
+    '这一页不提供下载：整机备份（维护与备份 → 下载 data.tar.gz）已经覆盖了 configs/，'
+    + '而配置备份是作者的凭据材料，不该有第二个随手的出口。'));
+}
+
+function slotPanel(slot) {
+  const current = slot.versions[0];
+  const meta = current ? slotMeta(current.meta) : null;
+  const encrypted = meta ? meta.encrypted !== false : null;
+
+  const panel = el('div.panel', null,
+    el('h3', null,
+      el('span', { text: slot.name }),
+      el('span.id', { style: 'margin-left:8px', text: slot.id }),
+      el('span.grow'),
+      el('span.faint', {
+        style: 'font-weight:400; font-size:11px',
+        text: `${slot.versions.length} 个版本 · ${bytes(slot.bytes)}`,
+      })),
+    el('div.meta', { style: 'margin-top:2px' },
+      el('span', null, '建于 ', el('span.mono', { text: stamp(slot.createdAtMs) })),
+      current
+        ? el('span', null, '最后推送 ', el('span.mono', { text: stamp(current.atMs) }))
+        : el('span.faint', null, '还没有推送过'),
+      meta && metaText(meta.device)
+        ? el('span', { text: '来自 ' + metaText(meta.device) })
+        : el('span.faint', null, '设备未上报'),
+      meta && metaText(meta.appVersion)
+        ? el('span', { text: 'v' + metaText(meta.appVersion, 16) })
+        : null,
+      encrypted === null
+        ? null
+        : encrypted
+          ? el('span', { style: 'color:var(--ok)', text: '已加密' })
+          // 不加密的备份不含 Key（客户端拒绝那个组合），但它仍然装着这台机器的
+          // 供应商地址和全部 Prompt，值得在运维面前标出来。
+          : el('span', { style: 'color:var(--muted)', text: '未加密（不含 Key）' })));
+
+  const grid = 'grid-template-columns:150px 84px minmax(0,1fr) 96px';
+  const table = el('div.table', { style: 'margin-top:14px' },
+    el('div.th', { style: grid },
+      el('span', null, '时间'), el('span', null, '大小'),
+      el('span', null, '设备 / 内容'), el('span.right', null, '操作')));
+
+  for (const version of slot.versions) {
+    const vmeta = slotMeta(version.meta);
+    const counts = vmeta && vmeta.counts && typeof vmeta.counts === 'object' ? vmeta.counts : null;
+    // counts 是客户端自报的，加密之后没有人能核对——所以它只出现在这种纯展示的
+    // 位置，永远不参与任何判断。
+    const summary = [
+      metaText(vmeta && vmeta.device),
+      counts ? `${Number(counts.providers) || 0} 供应商 · ${Number(counts.models) || 0} 模型` : null,
+      vmeta && vmeta.hasKeys ? '含 API Key' : null,
+    ].filter(Boolean).join(' · ');
+
+    table.appendChild(el('div.tr', { style: grid },
+      el('span.mono', { style: 'font-size:11.5px', text: stamp(version.atMs, true) }),
+      el('span.mono.faint', { style: 'font-size:11.5px', text: bytes(version.size) }),
+      el('span', {
+        style: 'overflow:hidden; text-overflow:ellipsis; white-space:nowrap',
+        text: summary || '—',
+      }),
+      el('span.right', null,
+        slot.versions.length > 1
+          ? el('button.btn', { text: '删除', onClick: () => deleteVersionModal(slot, version) })
+          : el('span.faint', { style: 'font-size:11px', text: '仅此一版' }))));
+  }
+  panel.appendChild(table);
+
+  panel.appendChild(el('div.btn-row', { style: 'margin-top:14px' },
+    el('button.btn', { text: '重命名', onClick: () => renameSlotModal(slot) }),
+    el('button.btn.btn-danger', { text: '删除整个备份档', onClick: () => deleteSlotModal(slot) })));
+  return panel;
+}
+
+function deleteVersionModal(slot, version) {
+  confirmDanger({
+    title: '删除这一个版本？',
+    body: el('span', null,
+      el('b', { text: slot.name }), ' 在 ',
+      el('span.mono', { text: stamp(version.atMs, true) }), ' 推上来的那一版会被永久删除。',
+      '其他版本不受影响——但这台服务器上没有第二份，删掉就没了。'),
+    confirmLabel: '删除这一版',
+    onConfirm: async () => {
+      await api(`/configs/${encodeURIComponent(slot.id)}/versions/${version.atMs}`, { method: 'DELETE' });
+      toast('已删除该版本');
+      route();
+    },
+  });
+}
+
+function renameSlotModal(slot) {
+  modal((close) => {
+    const name = el('input', { type: 'text', value: slot.name });
+    return el('div', null,
+      el('h3', null, '重命名备份档'),
+      el('p', null, '只改显示名。', el('b', null, 'id 不能改'),
+        '——它是每台设备记住的地址，改掉等于让已经在用这个档的机器再也找不到它。'),
+      el('div.field', null, el('label', null, '显示名'), name),
+      el('div.field', null, el('label', null, 'ID（不可改）'),
+        el('div.mono.faint', { text: slot.id })),
+      el('div.foot', null,
+        el('button.btn', { text: '取消', onClick: close }),
+        el('button.btn.btn-primary', {
+          text: '保存',
+          onClick: async () => {
+            try {
+              await api('/configs/' + encodeURIComponent(slot.id), {
+                method: 'PATCH', body: { name: name.value },
+              });
+              close();
+              toast('已改名');
+              route();
+            } catch (e) { reportError(e); }
+          },
+        })));
+  });
+}
+
+function deleteSlotModal(slot) {
+  confirmDanger({
+    title: `删除「${slot.name}」？`,
+    body: el('span', null,
+      '这个备份档的全部 ', el('b', { text: String(slot.versions.length) }), ' 个版本（',
+      el('b', { text: bytes(slot.bytes) }), '）会被永久删除，', el('b', null, '没有回收站'),
+      '。每台机器上的本地配置不受影响——但还在用这个档的设备下次拉取会失败，需要重新推一份。'),
+    typeToConfirm: slot.id,
+    confirmLabel: '永久删除',
+    onConfirm: async () => {
+      await api('/configs/' + encodeURIComponent(slot.id), { method: 'DELETE' });
+      toast(`已删除「${slot.name}」`);
+      route();
+    },
+  });
+}
+
 // ── 07-8 维护与备份 ────────────────────────────────────────────────────────
 
 async function renderMaintenance(body) {
@@ -1437,6 +1639,12 @@ async function renderMaintenance(body) {
           el('div.bar', { style: 'flex:1' }, el('i', { style: `width:${Math.round(kb.bytes / biggest * 100)}%` })),
           el('span.mono.faint', { style: 'flex:none; width:70px; text-align:right', text: bytes(kb.bytes) })))
       : el('p.note', { style: 'margin-top:8px' }, '还没有任何知识库。'),
+    disk.configBytes
+      ? el('div', { style: 'display:flex; align-items:center; gap:10px; margin-top:9px; font-size:11.5px' },
+          el('span.faint', { style: 'flex:none; width:130px', text: '配置备份' }),
+          el('div.bar', { style: 'flex:1' }, el('i', { style: `width:${Math.round(disk.configBytes / Math.max(biggest, disk.configBytes) * 100)}%` })),
+          el('span.mono.faint', { style: 'flex:none; width:70px; text-align:right', text: bytes(disk.configBytes) }))
+      : null,
     el('p.note', { style: 'margin-top:14px' },
       '「已用 / 剩余」是整个分区的，不只是这个服务的数据——写满的是分区，不是目录。'));
 
@@ -1731,6 +1939,7 @@ const RENDERERS = {
   kbs: (body) => (S.param ? renderKbDetail(body) : renderKbs(body)),
   tokens: renderTokens,
   activity: renderActivity,
+  configs: renderConfigs,
   maintenance: renderMaintenance,
   config: renderConfig,
 };

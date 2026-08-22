@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useProjectStore } from "../../../stores/projectStore";
 import { useSyncStore } from "../../../stores/syncStore";
 import type { RemoteKb } from "../../../lib/sync/client";
+import { ConfigBackupSection } from "./ConfigBackupSection";
 import { Pane, PaneHeader, Section, Row, Toggle } from "./bits";
 import ui from "../settingsUi.module.css";
 import common from "../settingsCommon.module.css";
@@ -10,16 +11,21 @@ import s from "../../sync/sync.module.css";
 import { baseName } from "../../../lib/paths";
 
 /**
- * 知识库同步（设计稿 06 · 画板 1a/1b/1c）.
+ * 同步与备份 —— 一台服务器，两件互不相干的东西。
  *
- * Three states in one pane, in the order the author meets them: not connected →
- * connected but unbound → bound. Project-scoped like WorkspacePane, so it shows
- * an explicit "open a project first" state rather than controls with nothing to
- * act on.
+ * 服务器（地址 + token）和**应用配置**都是装机级的：不需要打开任何项目。
+ * **知识库同步**是按项目走的。这三节按作者遇到它们的顺序排。
  *
- * Neither sync button syncs. Both open the preview
- * (`components/sync/SyncPreviewModal`), because a one-way mirror the author did
- * not read is the failure this whole feature exists to prevent.
+ * The project gate used to be the pane's first statement — no project, no pane.
+ * That was right when the pane only did knowledge-base sync and is wrong now:
+ * a freshly installed machine with no project yet is exactly when an author
+ * wants their providers back. So the gate moved down into the section it
+ * actually governs, and the two above it work from a cold start.
+ *
+ * Neither sync button syncs, and neither restore button restores. Both open a
+ * preview (`components/sync/SyncPreviewModal`, `ConfigRestoreModal`), because
+ * work overwritten by something the author did not read is the failure both
+ * halves of this pane exist to prevent.
  */
 export function SyncPane() {
   const { t } = useTranslation();
@@ -31,20 +37,13 @@ export function SyncPane() {
   const [autoBackup, setAutoBackup] = useState(true);
 
   useEffect(() => {
-    if (projectPath) void sync.hydrate(projectPath);
-    // Hydration is per project; the store holds the rest.
+    // Without a project this still has to run: it is what loads the saved
+    // address and its token, which the server section needs from a cold start.
+    void sync.hydrate(projectPath ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectPath]);
 
-  if (!projectPath) {
-    return (
-      <Pane>
-        <PaneHeader title={t("sync.paneTitle")} sub={t("sync.needProject")} />
-      </Pane>
-    );
-  }
-
-  const bound = sync.binding;
+  const bound = projectPath ? sync.binding : null;
   const connected = sync.connection === "connected";
 
   return (
@@ -94,7 +93,9 @@ export function SyncPane() {
         )}
       </Section>
 
-      {connected && !bound && (
+      <ConfigBackupSection connected={connected} />
+
+      {connected && projectPath && !bound && (
         <Section
           label={t("sync.sectionRemoteKbs")}
           action={
@@ -159,7 +160,13 @@ export function SyncPane() {
         </Section>
       )}
 
-      {bound && (
+      {connected && !projectPath && (
+        <Section label={t("sync.sectionKb")}>
+          <Row desc={t("sync.kbNeedProject")} last />
+        </Section>
+      )}
+
+      {bound && projectPath && (
         <>
           <Section label={t("sync.sectionBinding")}>
             <div className={s.band} style={{ padding: "18px 0 16px" }}>

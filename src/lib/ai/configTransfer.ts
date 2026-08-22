@@ -68,10 +68,15 @@ async function configDb() {
 }
 
 /**
- * Export the whole AI config as a JSON file via the native save dialog.
- * Returns the saved path, or null when the user cancelled.
+ * Collect the whole configuration into one bundle.
+ *
+ * Split out of `exportAiConfig` because the file dialog is not the only way out
+ * any more: `lib/configsync` seals this same bundle into an envelope and pushes
+ * it to the sync server. Keeping one builder means the two routes can never
+ * disagree about what "my configuration" is — the failure mode would be a
+ * server backup that quietly carries less than the file export does.
  */
-export async function exportAiConfig(includeKeys: boolean): Promise<string | null> {
+export async function buildConfigBundle(includeKeys: boolean): Promise<ConfigBackup> {
   const db = await configDb();
   const [providers, models, prompts] = await Promise.all([
     listProviders(db),
@@ -94,7 +99,7 @@ export async function exportAiConfig(includeKeys: boolean): Promise<string | nul
     appVersion = await getVersion();
   } catch {}
 
-  const bundle: ConfigBackup = {
+  return {
     kind: CONFIG_BACKUP_KIND,
     version: CONFIG_BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
@@ -104,7 +109,14 @@ export async function exportAiConfig(includeKeys: boolean): Promise<string | nul
     prompts,
     prefs: portablePrefEntries(),
   };
+}
 
+/**
+ * Export the whole AI config as a JSON file via the native save dialog.
+ * Returns the saved path, or null when the user cancelled.
+ */
+export async function exportAiConfig(includeKeys: boolean): Promise<string | null> {
+  const bundle = await buildConfigBundle(includeKeys);
   const date = new Date().toISOString().slice(0, 10);
   return saveTextFileDialog(
     JSON.stringify(bundle, null, 2),
@@ -114,14 +126,18 @@ export async function exportAiConfig(includeKeys: boolean): Promise<string | nul
   );
 }
 
-export interface StagedConfigImport {
-  path: string;
+/** A validated bundle, whatever it arrived in — a file, or a server envelope. */
+export interface ParsedConfigBundle {
   providers: ProviderBackup[];
   models: Model[];
   prompts: Prompt[];
   prefs: [string, string][];
   /** How many imported providers carry an embedded API key. */
   keyCount: number;
+}
+
+export interface StagedConfigImport extends ParsedConfigBundle {
+  path: string;
 }
 
 const API_STANDARDS: ApiStandard[] = [
@@ -142,23 +158,23 @@ function num(v: unknown, fallback = 0): number {
 }
 
 /**
- * Phase 1 of restore: pick a backup file and validate it. Returns null when
- * the user cancelled; throws `Error("invalid-backup")` when the file is not a
- * config backup. Malformed individual entries are dropped, and models whose
- * provider is neither in the backup nor already configured are dropped too.
+ * Validate a parsed backup into something `applyConfigImport` can merge.
+ *
+ * Throws `Error("invalid-backup")` when this is not a config backup at all.
+ * Malformed individual entries are dropped, and models whose provider is
+ * neither in the backup nor already configured are dropped too.
+ *
+ * Separate from the file dialog because a bundle now also arrives from the sync
+ * server, and both routes must apply *this* validation — it is where the
+ * hard-won degradations live (an unknown `reasoningEffort` must reach the wire
+ * as nothing; an unknown `translateFormat` must degrade to an ordinary model
+ * rather than hide it from every picker). A second validator written for the
+ * server route would drift from these within one release.
  */
-export async function stageConfigImport(
+export function parseConfigBundle(
+  raw: unknown,
   existingProviderIds: string[],
-): Promise<StagedConfigImport | null> {
-  const picked = await openTextFileDialog("JSON", ["json"]);
-  if (!picked) return null;
-
-  let raw: unknown;
-  try {
-    raw = JSON.parse(picked.content);
-  } catch {
-    throw new Error("invalid-backup");
-  }
+): ParsedConfigBundle {
   const root = raw as Record<string, unknown>;
   if (!root || root.kind !== CONFIG_BACKUP_KIND || num(root.version, 0) > CONFIG_BACKUP_VERSION) {
     throw new Error("invalid-backup");
@@ -256,13 +272,32 @@ export async function stageConfigImport(
   }
 
   return {
-    path: picked.path,
     providers,
     models,
     prompts,
     prefs,
     keyCount: providers.filter((p) => p.apiKey).length,
   };
+}
+
+/**
+ * Phase 1 of restore: pick a backup file and validate it. Returns null when
+ * the user cancelled; throws `Error("invalid-backup")` when the file is not a
+ * config backup.
+ */
+export async function stageConfigImport(
+  existingProviderIds: string[],
+): Promise<StagedConfigImport | null> {
+  const picked = await openTextFileDialog("JSON", ["json"]);
+  if (!picked) return null;
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(picked.content);
+  } catch {
+    throw new Error("invalid-backup");
+  }
+  return { path: picked.path, ...parseConfigBundle(raw, existingProviderIds) };
 }
 
 /**
@@ -288,7 +323,7 @@ export async function stageConfigImport(
  * Providers are written before the models that reference them: sqlx connects
  * with `foreign_keys = ON`, and `models.provider_id` is a real foreign key.
  */
-export async function applyConfigImport(staged: StagedConfigImport): Promise<void> {
+export async function applyConfigImport(staged: ParsedConfigBundle): Promise<void> {
   // Not for the writes below — this is what guarantees the tables and their
   // added columns exist before the transaction's own connection touches them.
   await configDb();

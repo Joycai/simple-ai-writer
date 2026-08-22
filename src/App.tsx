@@ -14,6 +14,7 @@ import { LoreWall } from "./components/lore/LoreWall";
 import { LibraryView } from "./components/library/LibraryView";
 import { CommandPalette } from "./components/command/CommandPalette";
 import { SyncPreviewModal } from "./components/sync/SyncPreviewModal";
+import { ConfigRestoreModal } from "./components/sync/ConfigRestoreModal";
 import { Onboarding } from "./components/onboarding/Onboarding";
 import { clampSidebarWidth, useAppStore } from "./stores/appStore";
 import { useAiStore } from "./stores/aiStore";
@@ -137,6 +138,7 @@ export default function App() {
           page being closed, and the run must keep its progress and its backup
           location on screen until the author dismisses the result. */}
       <SyncPreviewModal />
+      <ConfigRestoreModal />
       <Onboarding />
     </div>
     </MotionConfig>

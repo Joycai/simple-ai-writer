@@ -58,8 +58,11 @@ impl From<StoreError> for ApiError {
     fn from(e: StoreError) -> Self {
         let message = e.to_string();
         match e {
-            StoreError::NoSuchKb(_) | StoreError::NoSuchEntry(_) => ApiError::not_found(message),
-            StoreError::KbExists(_) => {
+            StoreError::NoSuchKb(_)
+            | StoreError::NoSuchEntry(_)
+            | StoreError::NoSuchSlot(_)
+            | StoreError::NoSuchVersion(_) => ApiError::not_found(message),
+            StoreError::KbExists(_) | StoreError::SlotExists(_) => {
                 ApiError::new(StatusCode::CONFLICT, "already_exists", message)
             }
             StoreError::Invalid(_) => ApiError::bad_request(message),

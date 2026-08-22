@@ -131,6 +131,46 @@ pub fn validate_category(id: &str) -> Result<(), InvalidName> {
     validate_slug("category", id, 40)
 }
 
+/// An application-config backup slot id. Same slug shape as a knowledge base
+/// id, and for the same reason: it is a URL path segment and a directory name
+/// the operator will read in a shell.
+pub fn validate_slot_id(id: &str) -> Result<(), InvalidName> {
+    validate_slug("config backup id", id, 64)
+}
+
+/// Validate the opaque display metadata a client attaches to a config version.
+///
+/// The server never decodes this — it is the client's envelope header, base64url
+/// of some JSON, and what is *in* it is the client's business (that is the whole
+/// point: the envelope format can keep moving without redeploying the server).
+/// All that is checked is what has to be true for the server to store it in a
+/// file and hand it back in a header: a bounded length, and an alphabet that
+/// survives a round trip through both.
+pub fn validate_slot_meta(meta: &str) -> Result<(), InvalidName> {
+    if meta.is_empty() {
+        return Err(InvalidName("the config metadata is empty".into()));
+    }
+    if meta.len() > MAX_SLOT_META_BYTES {
+        return Err(InvalidName(format!(
+            "the config metadata is longer than {MAX_SLOT_META_BYTES} bytes"
+        )));
+    }
+    if !meta
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '=')
+    {
+        return Err(InvalidName(
+            "the config metadata must be base64url (A–Z a–z 0–9 - _ =)".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// 4 KiB. Enough for a device name, an app version and a handful of counts;
+/// small enough that it can never become a second upload channel beside the
+/// payload the size limit actually governs.
+pub const MAX_SLOT_META_BYTES: usize = 4096;
+
 pub fn validate_entity_id(id: &str) -> Result<(), InvalidName> {
     validate_segment("entity id", id)
 }

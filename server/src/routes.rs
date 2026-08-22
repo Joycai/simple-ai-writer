@@ -8,6 +8,14 @@
 //! GET    /v1/kbs/{kb}/entries/{category}/{id}        download one entry (zip)
 //! PUT    /v1/kbs/{kb}/entries/{category}/{id}        upload one entry (zip)
 //! DELETE /v1/kbs/{kb}/entries/{category}/{id}        remove one entry (mirror semantics)
+//!
+//! GET    /v1/configs                                 list application-config backup slots
+//! POST   /v1/configs                                 create one
+//! GET    /v1/configs/{slot}                          download the newest version
+//! PUT    /v1/configs/{slot}                          upload a new version
+//! DELETE /v1/configs/{slot}                          remove a slot and its history
+//! GET    /v1/configs/{slot}/versions                 list the retained versions
+//! GET    /v1/configs/{slot}/versions/{at}            download one of them
 //! ```
 //!
 //! Two things about this API are deliberate and easy to undo by accident:
@@ -24,6 +32,13 @@
 //! exactly the failure the client-side rail exists to prevent, reintroduced one
 //! layer down. A request with neither header is accepted (some flows genuinely
 //! mean "force"), so the guarantee is the client's to keep.
+//!
+//! **The config endpoints store an opaque envelope.** What the app uploads there
+//! is encrypted on the author's machine whenever it carries API keys, and this
+//! server has no way to decrypt it and no code that tries. The `X-Config-Meta`
+//! header is the client's own display header, stored verbatim and handed back —
+//! never parsed here, so the envelope format can keep moving without this binary
+//! following it (`docs/feature/knowledge-base/config-backup-plan.md` §2 ①).
 
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, Extension, Path, Request, State};
@@ -39,7 +54,10 @@ use crate::audit::AuditLog;
 use crate::config::Config;
 use crate::error::ApiError;
 use crate::session::SessionStore;
-use crate::store::{EntryWrite, KbSummary, Manifest, Precondition, PutOutcome, Store};
+use crate::store::{
+    ConfigWrite, EntryWrite, KbSummary, Manifest, Precondition, PutOutcome, SlotSummary,
+    SlotVersion, Store,
+};
 
 pub struct AppState {
     pub store: Store,
@@ -80,15 +98,32 @@ impl AppState {
 #[derive(Clone)]
 pub struct TokenPrefix(pub Option<String>);
 
-pub fn router(state: Arc<AppState>, max_entry_bytes: usize) -> Router {
-    let api = Router::new()
+pub fn router(state: Arc<AppState>, max_entry_bytes: usize, max_config_bytes: usize) -> Router {
+    let kb_api = Router::new()
         .route("/v1/kbs", get(list_kbs).post(create_kb))
         .route("/v1/kbs/{kb}/manifest", get(manifest))
         .route(
             "/v1/kbs/{kb}/entries/{category}/{id}",
             get(get_entry).put(put_entry).delete(delete_entry),
         )
-        .layer(DefaultBodyLimit::max(max_entry_bytes))
+        // Its own body limit, and the config router below has its own too: a
+        // knowledge-base entry is a gallery of images and a config envelope is a
+        // few tens of kilobytes of JSON. One shared cap would let the generous
+        // limit the first one needs decide what the second one accepts.
+        .layer(DefaultBodyLimit::max(max_entry_bytes));
+
+    let config_api = Router::new()
+        .route("/v1/configs", get(list_slots).post(create_slot))
+        .route(
+            "/v1/configs/{slot}",
+            get(get_config).put(put_config).delete(delete_slot),
+        )
+        .route("/v1/configs/{slot}/versions", get(list_versions))
+        .route("/v1/configs/{slot}/versions/{at}", get(get_config_version))
+        .layer(DefaultBodyLimit::max(max_config_bytes));
+
+    let api = kb_api
+        .merge(config_api)
         .layer(middleware::from_fn_with_state(
             Arc::clone(&state),
             require_token,
@@ -404,6 +439,224 @@ async fn delete_entry(
         kb: &kb_id,
         path: &label,
         device: logged_device.as_deref(),
+        token: token.as_deref(),
+        status: 204,
+        detail: None,
+    });
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ─── Application-config backups ──────────────────────────────────────────────
+
+async fn list_slots(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Vec<SlotSummary>>, ApiError> {
+    let handle = Arc::clone(&state);
+    let slots = blocking(move || handle.store.list_slots()).await??;
+    Ok(Json(slots))
+}
+
+#[derive(Deserialize)]
+struct CreateSlot {
+    name: String,
+    id: Option<String>,
+}
+
+async fn create_slot(
+    State(state): State<Arc<AppState>>,
+    Extension(TokenPrefix(token)): Extension<TokenPrefix>,
+    headers: HeaderMap,
+    Json(body): Json<CreateSlot>,
+) -> Result<(StatusCode, Json<SlotSummary>), ApiError> {
+    let device = device_from(&headers);
+    let handle = Arc::clone(&state);
+    let slot = blocking(move || handle.store.create_slot(&body.name, body.id.as_deref())).await??;
+    state.audit.entry(crate::audit::EntryLog {
+        action: "config-create",
+        kb: "",
+        path: &format!("configs/{}", slot.meta.id),
+        device: device.as_deref(),
+        token: token.as_deref(),
+        status: 201,
+        detail: None,
+    });
+    Ok((StatusCode::CREATED, Json(slot)))
+}
+
+async fn list_versions(
+    State(state): State<Arc<AppState>>,
+    Path(slot): Path<String>,
+) -> Result<Json<Vec<SlotVersion>>, ApiError> {
+    let handle = Arc::clone(&state);
+    let versions = blocking(move || handle.store.list_config_versions(&slot)).await??;
+    Ok(Json(versions))
+}
+
+async fn get_config(
+    State(state): State<Arc<AppState>>,
+    Extension(token): Extension<TokenPrefix>,
+    headers: HeaderMap,
+    Path(slot): Path<String>,
+) -> Result<Response, ApiError> {
+    read_config_version(state, token, &headers, slot, None).await
+}
+
+async fn get_config_version(
+    State(state): State<Arc<AppState>>,
+    Extension(token): Extension<TokenPrefix>,
+    headers: HeaderMap,
+    Path((slot, at)): Path<(String, u64)>,
+) -> Result<Response, ApiError> {
+    read_config_version(state, token, &headers, slot, Some(at)).await
+}
+
+async fn read_config_version(
+    state: Arc<AppState>,
+    TokenPrefix(token): TokenPrefix,
+    headers: &HeaderMap,
+    slot: String,
+    at_ms: Option<u64>,
+) -> Result<Response, ApiError> {
+    let device = device_from(headers);
+    let label = format!("configs/{slot}");
+    let handle = Arc::clone(&state);
+    let (bytes, version) = blocking(move || handle.store.read_config(&slot, at_ms)).await??;
+    state.audit.entry(crate::audit::EntryLog {
+        action: "config-download",
+        kb: "",
+        path: &label,
+        device: device.as_deref(),
+        token: token.as_deref(),
+        status: 200,
+        detail: None,
+    });
+
+    let mut out = HeaderMap::new();
+    // Not `application/json` even though the envelope is JSON: an encrypted one
+    // is JSON wrapping base64 ciphertext, and labelling it as JSON invites a
+    // proxy or a browser to treat it as something a human might want rendered.
+    out.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/octet-stream"),
+    );
+    if let Ok(v) = HeaderValue::from_str(&version.hash) {
+        out.insert("x-config-hash", v);
+    }
+    if let Ok(v) = HeaderValue::from_str(&format!("\"{}\"", version.hash)) {
+        out.insert(header::ETAG, v);
+    }
+    if let Ok(v) = HeaderValue::from_str(&version.at_ms.to_string()) {
+        out.insert("x-config-at", v);
+    }
+    // Validated on the way in and re-validated on the way out: this string is
+    // going into a response header, and a stored file is not a trusted source
+    // just because this process wrote it.
+    if let Some(meta) = version.meta.as_deref() {
+        if let Ok(v) = HeaderValue::from_str(meta) {
+            out.insert("x-config-meta", v);
+        }
+    }
+    Ok((out, bytes).into_response())
+}
+
+async fn put_config(
+    State(state): State<Arc<AppState>>,
+    Extension(TokenPrefix(token)): Extension<TokenPrefix>,
+    Path(slot): Path<String>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<Response, ApiError> {
+    if body.is_empty() {
+        return Err(ApiError::bad_request("the request body is empty"));
+    }
+    let precondition = precondition_from(&headers)?;
+    let device = device_from(&headers);
+    let meta = headers
+        .get("x-config-meta")
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|m| !m.is_empty())
+        .map(str::to_string);
+    if let Some(meta) = meta.as_deref() {
+        crate::ids::validate_slot_meta(meta).map_err(|e| ApiError::bad_request(e.to_string()))?;
+    }
+    let keep = state.config().server.config_versions;
+
+    let label = format!("configs/{slot}");
+    let logged_device = device.clone();
+    let handle = Arc::clone(&state);
+    let written = blocking(move || {
+        handle.store.put_config(
+            &slot,
+            ConfigWrite {
+                bytes: &body,
+                meta: meta.as_deref(),
+                precondition,
+                keep,
+            },
+        )
+    })
+    .await?;
+
+    // A 412 here is this server telling one machine that another pushed its
+    // configuration first — the same sentence the entry endpoints exist to say,
+    // and the same reason it is logged rather than only returned.
+    let (outcome, hash) = match written {
+        Ok(v) => v,
+        Err(e) => {
+            let error = ApiError::from(e);
+            state.audit.entry(crate::audit::EntryLog {
+                action: "config-upload",
+                kb: "",
+                path: &label,
+                device: logged_device.as_deref(),
+                token: token.as_deref(),
+                status: error.status.as_u16(),
+                detail: Some(error.message.clone()),
+            });
+            return Err(error);
+        }
+    };
+
+    let status = match outcome {
+        PutOutcome::Created => StatusCode::CREATED,
+        PutOutcome::Replaced => StatusCode::NO_CONTENT,
+    };
+    state.audit.entry(crate::audit::EntryLog {
+        action: "config-upload",
+        kb: "",
+        path: &label,
+        device: logged_device.as_deref(),
+        token: token.as_deref(),
+        status: status.as_u16(),
+        detail: None,
+    });
+
+    let mut out = HeaderMap::new();
+    if let Ok(v) = HeaderValue::from_str(&hash) {
+        out.insert("x-config-hash", v);
+    }
+    if let Ok(v) = HeaderValue::from_str(&format!("\"{hash}\"")) {
+        out.insert(header::ETAG, v);
+    }
+    Ok((status, out).into_response())
+}
+
+async fn delete_slot(
+    State(state): State<Arc<AppState>>,
+    Extension(TokenPrefix(token)): Extension<TokenPrefix>,
+    Path(slot): Path<String>,
+    headers: HeaderMap,
+) -> Result<StatusCode, ApiError> {
+    let device = device_from(&headers);
+    let label = format!("configs/{slot}");
+    let handle = Arc::clone(&state);
+    blocking(move || handle.store.delete_slot(&slot)).await??;
+    state.audit.entry(crate::audit::EntryLog {
+        action: "config-delete",
+        kb: "",
+        path: &label,
+        device: device.as_deref(),
         token: token.as_deref(),
         status: 204,
         detail: None,
