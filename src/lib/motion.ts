@@ -69,10 +69,10 @@ export const fillLayer: CSSProperties = {
   minWidth: 0,
 };
 
-/* ── Overlay surfaces (modals, palettes, drawers) — enter *and* exit ────────
+/* ── Overlay surfaces (modals, drawers) — enter *and* exit ────────
    These pair with <AnimatePresence> so a dismissed surface animates out
    instead of snapping. Replaces the mount-only CSS `animation:` on the
-   corresponding .backdrop/.overlay/.drawer/.palette/.modal classes. */
+   corresponding .backdrop/.overlay/.drawer/.modal classes. */
 
 /** Backdrop / scrim fade. */
 export const overlayFade: Variants = {
@@ -95,7 +95,7 @@ export const springDrawer: Transition = {
   mass: 0.9,
 };
 
-/** Centered modal / command-palette pop — scale + fade + slight rise. */
+/** Centered modal pop — scale + fade + slight rise. */
 export const modalPop: Variants = {
   initial: { opacity: 0, scale: 0.96, y: 8 },
   animate: { opacity: 1, scale: 1, y: 0 },

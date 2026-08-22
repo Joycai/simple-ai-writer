@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { Search, Sparkles, CheckCircle2, BookOpen } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
@@ -10,7 +9,6 @@ import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { indexCategories, type LoreEntity } from "../../lib/lore";
 import { MOD_KEY } from "../../lib/platform";
 import { useImeGuard } from "../../lib/ime";
-import { modalPop, overlayFade, overlayFadeTransition, springPanel } from "../../lib/motion";
 import styles from "./CommandPalette.module.css";
 
 interface LoreHit { kind: "lore"; entity: LoreEntity; }
@@ -169,27 +167,12 @@ export function CommandPalette() {
   const actionHits = hits.filter((h): h is ActionHit => h.kind === "action");
 
   return (
-    <AnimatePresence>
-      {showCommandPalette && (
-      <motion.div
-        key="cmd-backdrop"
+    showCommandPalette && (
+      <div
         className={styles.backdrop}
         onClick={() => setShowCommandPalette(false)}
-        variants={overlayFade}
-        initial="initial"
-        animate="animate"
-        exit="exit"
-        transition={overlayFadeTransition}
       >
-        <motion.div
-          className={styles.palette}
-          onClick={(e) => e.stopPropagation()}
-          variants={modalPop}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          transition={springPanel}
-        >
+        <div className={styles.palette} onClick={(e) => e.stopPropagation()}>
         <div className={styles.inputRow}>
           <Search size={16} color="var(--color-sienna)" strokeWidth={1.6} />
           <input
@@ -316,9 +299,8 @@ export function CommandPalette() {
             {t("command.prefixBefore")} <span style={{ color: "var(--color-sienna)", fontFamily: "var(--font-mono)" }}>/ ?</span> {t("command.prefixAfter")}
           </span>
         </div>
-        </motion.div>
-      </motion.div>
-      )}
-    </AnimatePresence>
+        </div>
+      </div>
+    )
   );
 }

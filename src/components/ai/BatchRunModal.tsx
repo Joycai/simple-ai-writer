@@ -9,13 +9,14 @@
  * results either way.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ListChecks, Square, X } from "lucide-react";
 import { splitClauses } from "../../lib/batch/clauses";
 import { useBatchStore, type BatchItem } from "../../stores/batchStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { useProjectStore } from "../../stores/projectStore";
+import { ModalShell } from "../common/ModalShell";
 import styles from "./BatchRunModal.module.css";
 import { baseName, dirName } from "../../lib/paths";
 
@@ -66,6 +67,9 @@ export function BatchRunModal({ taskId, taskLabel, onClose }: Props) {
   const doneCount = items.filter((i) => i.status === "done").length;
   const failedCount = items.filter((i) => i.status === "failed").length;
 
+  const shellCloseRef = useRef<(() => void) | null>(null);
+  const requestClose = () => (shellCloseRef.current ?? handleClose)();
+
   const handleStart = () => {
     if (!filePath || running || selected.length === 0) return;
     const { dir, stem } = splitPath(filePath);
@@ -77,7 +81,7 @@ export function BatchRunModal({ taskId, taskLabel, onClose }: Props) {
 
   const handleOpenOutput = () => {
     if (outputPath) setActiveFilePath(outputPath);
-    onClose();
+    requestClose();
   };
 
   const handleClose = () => {
@@ -86,8 +90,8 @@ export function BatchRunModal({ taskId, taskLabel, onClose }: Props) {
   };
 
   return (
-    <div className={styles.overlay} onClick={handleClose}>
-      <div className={styles.panel} onClick={(e) => e.stopPropagation()}>
+    <ModalShell overlayClassName={styles.overlay} onClose={handleClose} closeRef={shellCloseRef}>
+      <div className={styles.panel}>
         <div className={styles.header}>
           <div className={styles.headerLeft}>
             <ListChecks size={18} className={styles.headerIcon} />
@@ -110,7 +114,7 @@ export function BatchRunModal({ taskId, taskLabel, onClose }: Props) {
               </div>
             </div>
           </div>
-          <button className={styles.iconBtn} onClick={handleClose} title={t("common.close", { defaultValue: "关闭" })}>
+          <button className={styles.iconBtn} onClick={requestClose} title={t("common.close", { defaultValue: "关闭" })}>
             <X size={16} />
           </button>
         </div>
@@ -193,6 +197,6 @@ export function BatchRunModal({ taskId, taskLabel, onClose }: Props) {
           )}
         </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }
