@@ -111,6 +111,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
+  transition: background var(--transition-base);
 }
 .saveDotSaved { background: var(--color-success); }
 .saveDotDirty { background: var(--color-warning); }

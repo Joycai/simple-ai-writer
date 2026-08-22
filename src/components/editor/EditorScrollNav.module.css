@@ -26,7 +26,8 @@
     color var(--transition-fast),
     border-color var(--transition-fast),
     opacity var(--transition-fast),
-    background var(--transition-fast);
+    background var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .btn:hover {

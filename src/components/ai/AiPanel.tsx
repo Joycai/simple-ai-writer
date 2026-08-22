@@ -57,6 +57,7 @@ import {
   type TaskExtras,
 } from "../../lib/context/rag";
 import { clearTarget } from "../../lib/editor/aiTarget";
+import { flashInserted } from "../../lib/editor/insertFlash";
 import { parsePins, type LoreActivationReport } from "../../lib/context/loreSelect";
 import { indexCategories, type LoreFacet } from "../../lib/lore";
 import {
@@ -451,7 +452,7 @@ function MemorySection({ detailSpan, appendMode }: { detailSpan: number; appendM
       <div className={styles.progressTrack}>
         <span
           className={`${styles.progressFill} ${staleCount > 0 ? styles.progressFillStale : ""}`}
-          style={{ width: `${pct}%` }}
+          style={{ transform: `scaleX(${pct / 100})` }}
         />
       </div>
 
@@ -1094,15 +1095,40 @@ export function AiPanel() {
   const outputMismatched =
     !!sourceFilePath && !!activeFilePath && !isSamePath(sourceFilePath, activeFilePath);
 
+  /**
+   * Flash the just-landed span once CodeMirror actually shows it.
+   *
+   * `setContent` lands in the store synchronously, but the doc only reaches
+   * the editor once React re-renders `CodeEditor` with the new `value` prop
+   * and its (passive, not layout) sync effect dispatches the change — a tick
+   * this call stack hasn't reached yet. Flashing before then would paint a
+   * range on the *old* document. rAF runs after that effect has committed.
+   */
+  const scheduleFlash = (from: number, to: number) => {
+    requestAnimationFrame(() => {
+      const view = useEditorStore.getState().editorView;
+      if (view) flashInserted(view, from, to);
+    });
+  };
+
   const handleApply = () => {
     if (outputMismatched) return;
     const { setContent } = useEditorStore.getState();
     if (replaceRange) {
       setContent(content.slice(0, replaceRange.from) + output + content.slice(replaceRange.to));
+      scheduleFlash(replaceRange.from, replaceRange.from + output.length);
       clearOutput();
       return;
     }
-    setContent(spliceContinuation(content, continueAnchor ?? content.length, output));
+    const at = continueAnchor ?? content.length;
+    setContent(spliceContinuation(content, at, output));
+    // spliceContinuation may insert a 0/1/2-newline separator before the
+    // passage itself (see rag.ts); the flashed span is the passage, not the
+    // separator, so mirror its lead calculation to land on the real offset.
+    const before = content.slice(0, at);
+    const lead = !before || before.endsWith("\n\n") ? 0 : before.endsWith("\n") ? 1 : 2;
+    const from = at + lead;
+    scheduleFlash(from, from + output.length);
     clearOutput();
   };
 
@@ -1921,7 +1947,7 @@ export function AiPanel() {
                 messages={lastMessages}
               />
             ) : output ? (
-              <div className={styles.output} ref={outputRef}>
+              <div className={styles.output} ref={outputRef} key={activeDraft?.id}>
                 {output}
                 {isRunning && !activeDraft?.done && <span className={styles.cursor}>▌</span>}
               </div>

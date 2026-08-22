@@ -23,11 +23,15 @@
   border: 1px solid var(--color-border);
   background: var(--color-card);
   cursor: pointer;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast),
+    transform var(--transition-fast);
 }
 .handle:hover {
   background: var(--color-bg-elevated);
   border-color: var(--color-border-strong);
+}
+.handle:active {
+  transform: rotate(180deg) scale(0.95);
 }
 
 .spacer { flex: 1; }

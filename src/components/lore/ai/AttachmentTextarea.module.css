@@ -17,7 +17,6 @@
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   overflow-y: auto;
-  animation: slideUp 160ms var(--ease-out);
   max-height: 240px;
 }
 

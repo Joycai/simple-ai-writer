@@ -29,6 +29,7 @@
   font: 500 11px/1 var(--font-sans);
   cursor: pointer;
   white-space: nowrap;
+  transition: transform var(--transition-fast);
 }
 .btn:hover:not(:disabled) {
   color: var(--color-text-primary);

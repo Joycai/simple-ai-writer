@@ -63,10 +63,11 @@
   color: var(--color-text-label);
   cursor: pointer;
   flex-shrink: 0;
-  transition: color var(--transition-fast), border-color var(--transition-fast);
+  transition: color var(--transition-fast), border-color var(--transition-fast),
+    transform var(--transition-fast);
 }
 .closeBtn:hover { color: var(--color-text-primary); border-color: var(--color-border-strong); }
-.closeBtn:active { transform: scale(0.94); }
+.closeBtn:active { transform: scale(0.95); }
 
 /* ── Form (single column) ── */
 .form {
@@ -330,7 +331,8 @@
   cursor: pointer;
   flex-shrink: 0;
   white-space: nowrap;
-  transition: color var(--transition-fast), border-color var(--transition-fast);
+  transition: color var(--transition-fast), border-color var(--transition-fast),
+    transform var(--transition-fast);
 }
 .btn:hover:not(:disabled) { color: var(--color-text-primary); border-color: var(--color-border-strong); }
 .btn:active:not(:disabled) { transform: scale(0.97); }

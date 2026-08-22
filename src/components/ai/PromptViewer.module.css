@@ -54,7 +54,7 @@
   color: var(--color-sienna);
   font: 400 var(--font-size-sm)/1.5 var(--font-sans);
   cursor: pointer;
-  transition: color var(--transition-fast);
+  transition: color var(--transition-fast), transform var(--transition-fast);
 }
 .headerBtn:hover { color: var(--color-sienna-hover); }
 .headerBtn:active { transform: scale(0.96); }
@@ -69,10 +69,10 @@
   border: none;
   color: var(--color-text-muted);
   cursor: pointer;
-  transition: color var(--transition-fast);
+  transition: color var(--transition-fast), transform var(--transition-fast);
 }
 .closeBtn:hover { color: var(--color-text-primary); }
-.closeBtn:active { transform: scale(0.92); }
+.closeBtn:active { transform: scale(0.95); }
 
 .body {
   flex: 1;

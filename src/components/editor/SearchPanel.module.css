@@ -107,7 +107,8 @@
   transition:
     color var(--transition-fast),
     background var(--transition-fast),
-    border-color var(--transition-fast);
+    border-color var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .iconBtn:hover,
@@ -121,7 +122,7 @@
 .iconBtn:active,
 .opt:active,
 .textBtn:active,
-.toggle:active { transform: scale(0.94); }
+.toggle:active { transform: scale(0.95); }
 
 .iconBtn {
   width: 26px;

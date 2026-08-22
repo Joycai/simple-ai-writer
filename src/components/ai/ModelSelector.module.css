@@ -137,22 +137,16 @@
   background: var(--color-bg-inset);
   border: 1px solid var(--color-border-input);
   box-shadow: var(--shadow-xl);
-  animation: modelPickerIn 140ms var(--ease-out);
-}
-@keyframes modelPickerIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: none; }
+  animation: dropIn 140ms var(--ease-out);
+  transform-origin: top left;
 }
 
 /* footer 里的实例向上展开 (设计稿 03 v4 屏 10 的上拉菜单) */
 .popoverUp {
   top: auto;
   bottom: calc(100% + 6px);
-  animation-name: modelPickerInUp;
-}
-@keyframes modelPickerInUp {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: none; }
+  animation-name: riseIn;
+  transform-origin: bottom left;
 }
 
 .searchRow {

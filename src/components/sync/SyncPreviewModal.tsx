@@ -140,7 +140,7 @@ export function SyncPreviewModal() {
               <div className={s.track}>
                 <div
                   className={s.trackFill}
-                  style={{ width: `${progress && progress.total ? Math.round((progress.done / progress.total) * 100) : 0}%` }}
+                  style={{ transform: `scaleX(${(progress && progress.total ? Math.round((progress.done / progress.total) * 100) : 0) / 100})` }}
                 />
               </div>
               <div className={s.progressNums}>

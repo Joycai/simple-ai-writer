@@ -67,14 +67,15 @@
   width: 26px;
   height: 26px;
   color: var(--color-text-muted);
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast),
+    transform var(--transition-fast);
 }
 .iconBtn:hover {
   background: var(--color-bg-hover);
   color: var(--color-text-primary);
 }
 .iconBtn:active {
-  transform: scale(0.94);
+  transform: scale(0.95);
 }
 
 /* ── Body: clause list ── */

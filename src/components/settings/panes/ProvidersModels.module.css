@@ -175,7 +175,8 @@
   color: var(--color-text-secondary);
   font-size: var(--font-size-xs);
   white-space: nowrap;
-  transition: color var(--transition-fast), border-color var(--transition-fast);
+  transition: color var(--transition-fast), border-color var(--transition-fast),
+    transform var(--transition-fast);
 }
 .groupBtn:hover { color: var(--color-accent); border-color: var(--color-accent); }
 .groupBtn:active { transform: scale(0.96); }
@@ -186,10 +187,11 @@
   padding: var(--space-1);
   border-radius: var(--radius-sm);
   color: var(--color-text-muted);
-  transition: color var(--transition-fast), background var(--transition-fast);
+  transition: color var(--transition-fast), background var(--transition-fast),
+    transform var(--transition-fast);
 }
 .iconBtn:hover { color: var(--color-accent); background: var(--color-accent-tint); }
-.iconBtn:active { transform: scale(0.92); }
+.iconBtn:active { transform: scale(0.95); }
 
 .iconBtnDanger:hover { color: var(--color-error); background: var(--color-error-bg); }
 

@@ -44,7 +44,8 @@
   color: var(--color-text-hint);
   font: 400 11px/1.5 var(--font-sans);
   cursor: pointer;
-  transition: color var(--transition-fast), border-color var(--transition-fast);
+  transition: color var(--transition-fast), border-color var(--transition-fast),
+    transform var(--transition-fast);
 }
 .foldBar:hover { color: var(--color-accent-text); border-color: var(--color-border-accent); }
 .foldBar:active { transform: scale(0.96); }
@@ -313,7 +314,6 @@
 .ctxSeg {
   display: block;
   min-width: 1px;
-  transition: flex-grow var(--transition-base);
 }
 /* Mockup mapping, read off 2c's own segment/legend hexes: 系统+工具 grey ·
    摘要 mid ochre · 种子 deep ochre · 注入设定 green · 对话 sienna ·
@@ -543,4 +543,13 @@
 @keyframes shimmer {
   from { background-position: 200% 0; }
   to   { background-position: -200% 0; }
+}
+
+/* reduced-motion 下加载指示仍需转动——静止的残环与卡死无法区分。
+   本地类 + !important 压过 global.css 的一刀切兜底（specificity 0,1,0 > 0,0,0）。 */
+@media (prefers-reduced-motion: reduce) {
+  .thinkingSpinner {
+    animation-duration: 1.6s !important;
+    animation-iteration-count: infinite !important;
+  }
 }

@@ -35,10 +35,10 @@
   cursor: pointer;
   border: none;
   text-align: left;
-  transition: background var(--transition-fast);
+  transition: background var(--transition-fast), transform var(--transition-fast);
 }
 .cell:hover:not(:disabled) { background: var(--color-bg-base); }
-.cell:active:not(:disabled) { transform: scale(0.99); }
+.cell:active:not(:disabled) { transform: scale(0.98); }
 .cell:disabled { cursor: not-allowed; }
 .cell:disabled .name,
 .cell:disabled .desc { opacity: 0.45; }

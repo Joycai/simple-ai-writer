@@ -371,9 +371,11 @@
 }
 .progressFill {
   display: block;
+  width: 100%;
   height: 100%;
   background: var(--color-success-bar);
-  transition: width var(--transition-base);
+  transform-origin: left;
+  transition: transform var(--transition-base);
 }
 .progressFillStale { background: var(--color-warning); }
 
@@ -574,10 +576,11 @@
   color: var(--color-on-accent);
   font: 500 14px/1 var(--font-sans);
   cursor: pointer;
-  transition: background var(--transition-fast), opacity var(--transition-fast);
+  transition: background var(--transition-fast), opacity var(--transition-fast),
+    transform var(--transition-fast);
 }
 .runBtn:hover:not(:disabled) { background: var(--color-sienna-hover); }
-.runBtn:active:not(:disabled) { transform: scale(0.99); }
+.runBtn:active:not(:disabled) { transform: scale(0.98); }
 .runBtn:disabled { opacity: 0.35; cursor: not-allowed; }
 .runKbd {
   font: 400 10px/1 var(--font-mono);
@@ -724,7 +727,7 @@
   color: var(--color-text-dim);
   cursor: pointer;
   transition: border-color var(--transition-fast), color var(--transition-fast),
-    background var(--transition-fast);
+    background var(--transition-fast), transform var(--transition-fast);
 }
 .draftTab:hover:not(.draftTabActive) {
   border-color: var(--color-border-accent);
@@ -771,6 +774,7 @@
      paragraph out of it needs the mouse. */
   -webkit-user-select: text;
   user-select: text;
+  animation: fadeIn 120ms var(--ease-out);
 }
 .output::selection,
 .output ::selection {
@@ -884,3 +888,13 @@
 /* 工具 schema：每一轮都要付、又不属于任何可规划的层，所以给它一个自己的颜色，
    而不是并进「近期」或藏在余量里——藏起来的固定开销正是这条分段存在的理由。 */
 .allocSeg_tools { background: var(--color-alloc-tools); }
+
+/* reduced-motion 下加载指示仍需转动——静止的残环与卡死无法区分。
+   本地类 + !important 压过 global.css 的一刀切兜底（specificity 0,1,0 > 0,0,0）。 */
+@media (prefers-reduced-motion: reduce) {
+  .spinner,
+  .draftSpinner {
+    animation-duration: 1.6s !important;
+    animation-iteration-count: infinite !important;
+  }
+}

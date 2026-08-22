@@ -57,7 +57,12 @@
   box-shadow: var(--shadow-lg);
   overflow-y: auto;
   overscroll-behavior: contain;
-  animation: slideUp 160ms var(--ease-out);
+  animation: dropIn 160ms var(--ease-out);
+  transform-origin: top center;
+}
+.menuUp {
+  animation-name: riseIn;
+  transform-origin: bottom center;
 }
 
 /* Wrapper exists only to pair a group header with its first option; it must
