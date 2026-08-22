@@ -1,0 +1,132 @@
+import { describe, expect, it } from "vitest";
+import type { LoreEntity, LoreIndex } from "../../lore/model";
+import {
+  collectGlossary,
+  enforceGlossary,
+  formatGlossary,
+  MAX_GLOSSARY_ENTRIES,
+  type GlossaryEntry,
+} from "../glossary";
+
+function entity(name: string, aliases: string[], summary = ""): LoreEntity {
+  return {
+    id: name,
+    category: "characters",
+    dirPath: `/p/.ai-writer/lore/characters/${name}`,
+    name,
+    aliases,
+    summary,
+    avatarPath: null,
+    mdFiles: [],
+    images: [],
+    facets: [],
+  };
+}
+
+const INDEX: LoreIndex = {
+  characters: [
+    entity("芙美香", ["文香", "ふみちん"], "主人公，白山学院的学生会长，成绩优秀"),
+    entity("小芙", []),
+  ],
+  world: [entity("白山学院", ["白山学園"], "  故事发生的学校  ")],
+};
+
+describe("collectGlossary", () => {
+  it("只收本块命中的别名", () => {
+    const entries = collectGlossary(INDEX, "文香は扉を開けた。");
+    expect(entries.map((e) => `${e.src}->${e.dst}`)).toEqual(["文香->芙美香"]);
+  });
+
+  it("命中判定顺带筛掉了中文别名 —— 不需要靠字符集去猜哪个是源词", () => {
+    // 一段日文原文里不会出现作者写的中文译名，所以 includes 就是筛子本身。
+    const entries = collectGlossary(INDEX, "彼女は扉を開けた。");
+    expect(entries).toEqual([]);
+  });
+
+  it("按源词长度降序 —— 取舍时留下更特指的那个，顺序也和强制替换一致", () => {
+    const entries = collectGlossary(INDEX, "文香とふみちんは白山学園にいる。");
+    // 同长的两个按码元比，不按 locale —— 同一份知识库在两台机器上必须切出同一张表。
+    expect(entries.map((e) => e.src)).toEqual(["ふみちん", "白山学園", "文香"]);
+  });
+
+  it("备注取自条目摘要，压成一行并去掉首尾空白", () => {
+    const [e] = collectGlossary(INDEX, "白山学園。");
+    expect(e.note).toBe("故事发生的学校");
+  });
+
+  it("长摘要被截断 —— 备注是给模型的一句提示，不是条目正文", () => {
+    const long = "主人公，白山学院的学生会长，成绩优秀运动万能，同时也是守护世界的魔法爱姬";
+    const idx: LoreIndex = { characters: [entity("芙美香", ["文香"], long)] };
+    const [e] = collectGlossary(idx, "文香。");
+    expect(e.note).toBe(long.slice(0, 24) + "…");
+    expect(e.note!.length).toBeLessThan(long.length);
+  });
+
+  it("摘要为空时不留一个空 #", () => {
+    const idx: LoreIndex = { characters: [entity("译名", ["原名"])] };
+    expect(collectGlossary(idx, "原名")[0].note).toBeUndefined();
+    expect(formatGlossary(collectGlossary(idx, "原名"))).toBe("原名->译名");
+  });
+
+  it("别名与条目名相同的词条不进表 —— 它什么都不表达，只占一行", () => {
+    const idx: LoreIndex = { characters: [entity("文香", ["文香"])] };
+    expect(collectGlossary(idx, "文香は。")).toEqual([]);
+  });
+
+  it("同一个源词只出现一次", () => {
+    const idx: LoreIndex = {
+      characters: [entity("甲", ["原名"]), entity("乙", ["原名"])],
+    };
+    expect(collectGlossary(idx, "原名")).toHaveLength(1);
+  });
+
+  it("有上限 —— 术语表要占上下文，而这个模型的窗口本来就不打算塞满", () => {
+    const many = Array.from({ length: 60 }, (_, i) => entity(`译${i}`, [`原名${i}`]));
+    const text = many.map((e) => e.aliases[0]).join("、");
+    expect(collectGlossary({ characters: many }, text)).toHaveLength(MAX_GLOSSARY_ENTRIES);
+  });
+});
+
+describe("formatGlossary", () => {
+  it("一行一条 src->dst #备注", () => {
+    expect(formatGlossary([{ src: "文香", dst: "芙美香", note: "主人公" }, { src: "ふみちん", dst: "小芙" }])).toBe(
+      "文香->芙美香 #主人公\nふみちん->小芙",
+    );
+  });
+});
+
+describe("enforceGlossary", () => {
+  const entries: GlossaryEntry[] = [
+    { src: "文香", dst: "芙美香" },
+    { src: "文香さん", dst: "芙美香小姐" },
+  ];
+
+  it("补上模型漏替的地方 —— 术语表只是软提示，实测漏了一半", () => {
+    expect(enforceGlossary("文香拿出了粉饼盒。", entries)).toBe("芙美香拿出了粉饼盒。");
+  });
+
+  it("最长词优先", () => {
+    // 短词先跑会把 `文香さん` 吃成 `芙美香さん`，再也拼不回来。
+    expect(enforceGlossary("文香さん、こんにちは。", entries)).toBe("芙美香小姐、こんにちは。");
+  });
+
+  it("已经译对的地方不动", () => {
+    expect(enforceGlossary("芙美香拿出了粉饼盒。", entries)).toBe("芙美香拿出了粉饼盒。");
+  });
+
+  it("不碰 URL、链接目标和行内代码 —— 那里面改一个字就是坏链接", () => {
+    const g: GlossaryEntry[] = [{ src: "assets", dst: "资源" }, { src: "文香", dst: "芙美香" }];
+    const src = "![文香](assets/文香.png) 见 https://x.test/assets/文香 与 `assets/文香`，文香在此。";
+    const out = enforceGlossary(src, g);
+    expect(out).toContain("](assets/文香.png)");
+    expect(out).toContain("https://x.test/assets/文香");
+    expect(out).toContain("`assets/文香`");
+    // 图片的 alt 文本在保护区之外，是正文，照常替换。
+    expect(out).toContain("![芙美香]");
+    expect(out.endsWith("芙美香在此。")).toBe(true);
+  });
+
+  it("空表原样返回", () => {
+    expect(enforceGlossary("原样", [])).toBe("原样");
+  });
+});

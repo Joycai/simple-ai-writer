@@ -84,7 +84,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 |---|---|---|
 | [roleplay/](feature/roleplay/README.md) | `shipped` (Beta flag) | Interactive roleplay: transcript as asset, context layering, character memory, the narrator's isolation |
 | [translate/00-sakura-feasibility.html](feature/translate/00-sakura-feasibility.html) | `research` | Can SakuraLLM (日→中) be integrated, and where it lands. Twelve live tests against a local LM Studio — chunk sizes, degeneration, the glossary's real behaviour |
-| [translate/01-execution-plan.md](feature/translate/01-execution-plan.md) | `planned` | The four PR slices, the six invariants, and why `top_p`/`frequency_penalty` belong to `StreamOptions` rather than `ConnOptions` |
+| [translate/01-execution-plan.md](feature/translate/01-execution-plan.md) | `partial` | The four PR slices, the six invariants, and why `top_p`/`frequency_penalty` belong to `StreamOptions` rather than `ConnOptions` |
 | [pptx-plan.md](feature/pptx-plan.md) | `shipped` (write side Beta) | Reading .pptx in Rust; HTML → PPTX without a model in the loop |
 | [image-generation-plan.md](feature/image-generation-plan.md) | `shipped` | Generation/editing as the `imagegen` subagent |
 | [html-artifact-plan.md](feature/html-artifact-plan.md) | `shipped` | AI-authored `.html` deliverables and their in-app preview |
