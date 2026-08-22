@@ -2104,30 +2104,46 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
   },
 
   translate: {
-    access: "read",
+    // The `path` form writes a file, so it blocks on the author's approval like
+    // every other L2 tool. The `text` form writes nothing — but a tool's tier is
+    // its *ceiling*, and splitting one capability across two tiers to save an
+    // approval on half of it is how a write tool ends up reachable without one.
+    access: "write-approval",
     definition: {
       type: "function",
       function: {
         name: "translate",
         description:
-          "Translate Japanese text into Chinese with the author's dedicated translation model. " +
-          "ONLY Japanese to Chinese — it cannot translate in any other direction or between any " +
-          "other languages, and given Chinese it will hand the text back barely changed rather " +
-          "than fail. It reads no instructions: pass the source text verbatim and nothing else, " +
-          "because any wording you add to it comes back translated as if it were part of the " +
-          "passage. Line structure is preserved, so quote the passage as it appears. Prefer this " +
-          "over translating Japanese yourself — the model is trained on light novels and is " +
-          "markedly better at them.",
+          "Translate Japanese into Chinese with the author's dedicated translation model. " +
+          "Give either `text` (a short passage — the translation comes back to you) or `path` " +
+          "(a document in the project — it is translated chunk by chunk and saved as a NEW " +
+          "<name>.zh.md beside it, which the author approves on a card; the original is never " +
+          "touched). ONLY Japanese to Chinese — it cannot translate in any other direction or " +
+          "between any other languages, and given Chinese it hands the text back barely changed " +
+          "rather than failing. It reads no instructions: pass the source verbatim and nothing " +
+          "else, because any wording you add comes back translated as part of the passage. Line " +
+          "structure is preserved. Prefer this over translating Japanese yourself — the model is " +
+          "trained on light novels and is markedly better at them.",
         parameters: {
           type: "object",
           properties: {
             text: {
               type: "string",
               description:
-                "The Japanese source text, verbatim. No instructions, no preamble, no framing.",
+                "A short Japanese passage, verbatim. No instructions, no preamble, no framing. " +
+                "Use `path` instead for anything longer than a page.",
+            },
+            path: {
+              type: "string",
+              description:
+                "Full path of a Japanese document in the project. The translation is saved " +
+                "beside it as <name>.zh.md; the call fails if that file already exists.",
+            },
+            reason: {
+              type: "string",
+              description: "One-line justification shown on the approval card (path form only).",
             },
           },
-          required: ["text"],
         },
       },
     },

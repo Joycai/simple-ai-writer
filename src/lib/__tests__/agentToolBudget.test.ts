@@ -80,11 +80,16 @@ describe("tool schema budget", () => {
     // pinned here instead. Without this, "append in routing" would be a way to
     // add tools that no ratchet ever measures.
     //
-    // Measured 504 — delegate 287, translate 217. Note these are not additive
+    // Measured 634 — delegate 287, translate 347. Note these are not additive
     // with the caps above in practice: a conversation carries at most the ones
     // its author has switched on.
+    //
+    // translate was 217 when it only took `text`; the whole-file form added
+    // `path` + `reason` and the sentences that keep the model from reaching for
+    // the wrong one. Paid deliberately: the alternative — two tools — costs a
+    // second schema and a second name for one capability.
     const appended = estimateToolsTokens(getToolDefinitions(["delegate", "translate"]));
-    expect(appended).toBeLessThanOrEqual(600);
+    expect(appended).toBeLessThanOrEqual(720);
   });
 
   it("gives every tool a description worth its place", () => {
