@@ -772,11 +772,7 @@
   align-items: center;
   justify-content: center;
   padding: 40px 80px;
-  animation: fadeIn 120ms ease-out;
-}
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  animation: fadeIn 120ms var(--ease-out);
 }
 .lightboxStage {
   margin: 0;
@@ -993,7 +989,7 @@
   font: 400 11px/1.4 var(--font-serif);
   color: var(--color-text-secondary);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 .imgSlotChip:hover {
   border-color: var(--color-border-strong);

@@ -426,9 +426,8 @@
 }
 .memoSpin {
   color: var(--color-sienna);
-  animation: memoSpin 0.9s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
-@keyframes memoSpin { to { transform: rotate(360deg); } }
 .memoCancel {
   display: flex;
   align-items: center;

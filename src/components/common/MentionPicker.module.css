@@ -7,13 +7,7 @@
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   overflow-y: auto;
-  animation: slideUp 160ms var(--ease-out);
   max-height: 240px;
-}
-
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
 }
 
 .pickerItem {

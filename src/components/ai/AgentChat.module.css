@@ -185,9 +185,8 @@
   border: 1.5px solid var(--color-sienna);
   border-top-color: transparent;
   border-radius: 50%;
-  animation: chatSpin 0.8s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
-@keyframes chatSpin { to { transform: rotate(360deg); } }
 
 .error {
   font: 400 12px/1.65 var(--font-sans);

@@ -188,9 +188,9 @@
   width: 14px;
   height: 14px;
   background: var(--stg-knob);
-  transition: left var(--transition-fast), background var(--transition-fast);
+  transition: transform var(--transition-fast), background var(--transition-fast);
 }
-.toggleOn .toggleKnob { left: 24px; background: var(--stg-bg-input); }
+.toggleOn .toggleKnob { transform: translateX(21px); background: var(--stg-bg-input); }
 
 /* ─── Selectable cards (font scheme, markdown theme, workspace profile) ──── */
 

@@ -41,9 +41,11 @@ export default function App() {
   const onResizeDelta = (d: number) => {
     const cur = dragWidth.current ?? useAppStore.getState().sidebarWidth;
     dragWidth.current = clampSidebarWidth(cur + d);
+    layoutRef.current?.setAttribute("data-resizing", "");
     layoutRef.current?.style.setProperty("--sidebar-width", `${dragWidth.current}px`);
   };
   const onResizeEnd = () => {
+    layoutRef.current?.removeAttribute("data-resizing");
     if (dragWidth.current !== null) setSidebarWidth(dragWidth.current);
     dragWidth.current = null;
   };

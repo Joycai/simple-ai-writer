@@ -238,10 +238,9 @@
   border: 2px solid var(--color-border-panel);
   border-top-color: var(--color-accent);
   border-radius: var(--radius-round);
-  animation: transitionSpin 0.9s linear infinite;
+  animation: spin 0.8s linear infinite;
   flex-shrink: 0;
 }
-@keyframes transitionSpin { to { transform: rotate(360deg); } }
 
 .runTitle {
   font-family: var(--font-serif);
@@ -270,10 +269,9 @@
   margin: 0 2px;
   border-radius: var(--radius-round);
   background: var(--color-accent);
-  animation: transitionPulse 1.4s infinite;
+  animation: pulseDeep 1.4s infinite;
   flex-shrink: 0;
 }
-@keyframes transitionPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
 .stepText,
 .stepTextLive {

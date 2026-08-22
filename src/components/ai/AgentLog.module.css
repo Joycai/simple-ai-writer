@@ -11,8 +11,6 @@
    is the timeline spine its list draws (see .bare > .list). */
 .bare { display: block; }
 
-@keyframes agentLogSpin { to { transform: rotate(360deg); } }
-
 /* ── ① Header ────────────────────────────────────────────────────── */
 /* One line for the whole run. It is the card's first row, not a bar above it —
    a title strip saying 「执行日志」 spends a line to repeat what the surrounding
@@ -322,7 +320,7 @@
   border: 1.5px solid var(--color-sienna);
   border-top-color: transparent;
   border-radius: 50%;
-  animation: agentLogSpin 0.7s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
 
 /* ── A round's thinking ────────────────────────────────────────────────────

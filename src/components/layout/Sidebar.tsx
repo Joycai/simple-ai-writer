@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { AnimatePresence, motion } from "motion/react";
+import { motion } from "motion/react";
 import { Search as SearchIcon, X } from "lucide-react";
 import { useAppStore } from "../../stores/appStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
@@ -118,14 +118,14 @@ export function Sidebar() {
         </div>
       )}
 
-      <AnimatePresence mode="wait" initial={false}>
+      {/* Enter-only（照 AiPanel.tsx:1384 的注释与先例）：标签切换是直接操纵，
+          新面板应立即落位；keyed motion.div 仍会重置子树。 */}
       <motion.div
         key={projectPath ? activeSideTab : "empty"}
         className={isTree ? styles.contentFlush : styles.content}
         variants={panelFade}
         initial="initial"
         animate="animate"
-        exit="exit"
         transition={springPanel}
       >
         {!projectPath ? (
@@ -190,7 +190,6 @@ export function Sidebar() {
           </>
         )}
       </motion.div>
-      </AnimatePresence>
     </div>
   );
 }
