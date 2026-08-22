@@ -774,6 +774,15 @@
   padding: 40px 80px;
   animation: fadeIn 120ms var(--ease-out);
 }
+/* role="dialog" wrapper inside the ModalShell overlay. Generates no box, so
+   the nav/close buttons stay absolutely positioned against .lightbox and a
+   click on the empty backdrop still targets the overlay itself (the shell's
+   mousedown-origin guard needs that). Trade-off: global.css's
+   `.modal-closing > *` scaleOut can't render on it — the lightbox exits on
+   the overlay fadeOut alone, which suits a full-bleed dark surface. */
+.lightboxDialog {
+  display: contents;
+}
 .lightboxStage {
   margin: 0;
   display: flex;
