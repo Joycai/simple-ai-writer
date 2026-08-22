@@ -15,7 +15,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, ChevronDown, Search, ShieldAlert } from "lucide-react";
-import type { Model, Provider } from "../../lib/ai/configDb";
+import { conversationalModels, type Model, type Provider } from "../../lib/ai/configDb";
 import { useAiStore } from "../../stores/aiStore";
 import { useAppStore } from "../../stores/appStore";
 import { blockedModelIds, noteModelUsed, recentModelIds } from "../../lib/ai/modelHealth";
@@ -103,7 +103,18 @@ export function ModelSelector({
   // Controlled = the caller owns the selection (and the global side effects —
   // ⌘M, the "open the picker" nonce, 管理供应商 — stay with the header instance).
   const controlled = onChange !== undefined;
-  const models = modelsOverride ?? allModels;
+  /**
+   * 翻译模型在**每一个** picker 里都被排除，包括调用方自己传进来的列表。
+   *
+   * 过滤放在这里而不是八个调用点，是因为这个组件就是"挑一个模型来对话"这件
+   * 事本身 —— 而一个专用翻译模型不能对话（见 lib/ai/configDb 的
+   * `conversationalModels`）。放到调用点去，这条不变量就变成一份每次新增
+   * picker 都要记得抄的清单。
+   */
+  const models = useMemo(
+    () => conversationalModels(modelsOverride ?? allModels),
+    [modelsOverride, allModels],
+  );
   /**
    * 没绑模型、但这个 picker 会回落到全局 —— 那就照实显示全局的那一个。
    * 空态（「选择模型」+ 灰点）在这里是**假话**：跑起来用的正是全局模型。

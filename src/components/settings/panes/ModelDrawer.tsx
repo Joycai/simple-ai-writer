@@ -11,7 +11,8 @@ import {
   SERVER_TOOL_IDS, supportsServerTools, type ServerToolId,
 } from "../../../lib/ai/serverTools";
 import {
-  defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, MAX_TEMPERATURE, type ModelType,
+  defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, MAX_TEMPERATURE, TRANSLATE_FORMATS,
+  type ModelType, type TranslateFormat,
 } from "../../../lib/ai/configDb";
 import { CONTEXT_SIZE_STOPS, formatContextSize } from "../../../lib/ai/contextSize";
 import { ModelProbePanel } from "../ModelProbePanel";
@@ -65,6 +66,8 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
     reasoningEffort: existing?.reasoningEffort ?? ("default" as ReasoningEffort),
     // "" = 未声明，按协议族推导 —— 与存储上的 undefined 一一对应。
     thinkingDialect: (existing?.thinkingDialect ?? "") as ThinkingDialect | "",
+    // 同样的 "" ↔ undefined 对应关系：空 = 一个普通模型。
+    translateFormat: (existing?.translateFormat ?? "") as TranslateFormat | "",
   });
   // Whether a temperature this drawer stores would actually reach the wire.
   // Reads the adapter's own predicate rather than re-deriving the rule, and
@@ -162,6 +165,14 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
         // a spelling for it (the OpenAI-family file content part), and only on
         // a model type that converses. False stores as absent.
         pdfInput: family === "openai" && !isImageModel && pdfInput ? true : undefined,
+        // Cleared on the same rule, and the stakes are higher here than for the
+        // two above: this one *removes* the model from every other picker, so a
+        // declaration left behind on a model the author moved to another
+        // protocol would hide it from the app with nothing on screen to say why.
+        translateFormat:
+          family === "openai" && !isImageModel && form.translateFormat
+            ? form.translateFormat
+            : undefined,
         pricePerImage,
         caps,
       };
@@ -494,6 +505,45 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
                   {t("aiConfig.models.pdfInputLabel")}
                 </label>
                 <div className={hub.fieldHint}>{t("aiConfig.models.pdfInputHint")}</div>
+              </div>
+            )}
+
+            {/* Dedicated translation models (Sakura). Family-gated for the same
+                reason as the PDF checkbox — they are served by local
+                OpenAI-compatible endpoints and nothing else — and hidden for
+                image models, which have nothing to translate.
+
+                This is the one control in this drawer that takes a capability
+                *away*: a model declared here is a fixed 日→中 function that does
+                not read instructions, so it stops being offered as the main
+                model or as any other subagent's model. The hint has to say so —
+                an author who ticks it and then cannot find their model in the
+                chat picker would otherwise read that as a bug.
+
+                Image models are already excluded by the enclosing block. */}
+            {family === "openai" && (
+              <div className={styles.fieldGroup}>
+                <label className={styles.label}>{t("aiConfig.models.translateFormatLabel")}</label>
+                <ChipRow>
+                  <Chip
+                    label={t("aiConfig.models.translateFormatNone")}
+                    active={form.translateFormat === ""}
+                    onClick={() => setForm({ ...form, translateFormat: "" })}
+                  />
+                  {TRANSLATE_FORMATS.map((f) => (
+                    <Chip
+                      key={f}
+                      label={t(`aiConfig.models.translateFormat_${f}`)}
+                      active={form.translateFormat === f}
+                      onClick={() => setForm({ ...form, translateFormat: f })}
+                    />
+                  ))}
+                </ChipRow>
+                <div className={hub.fieldHint}>
+                  {form.translateFormat
+                    ? t("aiConfig.models.translateFormatHintOn")
+                    : t("aiConfig.models.translateFormatHint")}
+                </div>
               </div>
             )}
 

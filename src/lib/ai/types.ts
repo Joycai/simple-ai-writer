@@ -353,6 +353,28 @@ export interface StreamOptions {
    */
   temperature?: number;
   /**
+   * Nucleus sampling cutoff, or absent to leave the endpoint's own default
+   * alone. **OpenAI wire only** — the Gemini and Anthropic adapters ignore it.
+   *
+   * Deliberately here and not on `ConnOptions`, unlike `temperature`: this is a
+   * property of the *task*, not of the model the author configured. The one
+   * caller that sets it is the Sakura translation engine, for which 0.3 is part
+   * of the prompt format itself (`lib/translate/sakura.ts`), not a preference
+   * anyone would tune per endpoint. See docs/feature/translate/01-execution-plan.md §1.
+   */
+  topP?: number;
+  /**
+   * Penalty on already-emitted tokens, or absent to send nothing. **OpenAI wire
+   * only**, same as `topP`.
+   *
+   * A task input in the strongest sense: the translation engine *varies it
+   * between retries of the same chunk* (0.1 → 0.2) because that is Sakura's
+   * documented — and measured — remedy for degeneration. A per-model config
+   * field could not express that, which is why neither this nor `topP` belongs
+   * in `ConnOptions`.
+   */
+  frequencyPenalty?: number;
+  /**
    * How hard the model should think, in this app's own vocabulary. Translated
    * per protocol family by `lib/ai/reasoning.ts`; absent (and `"default"`) sends
    * nothing at all, leaving the endpoint's own default alone.

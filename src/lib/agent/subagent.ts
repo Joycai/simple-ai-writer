@@ -10,7 +10,7 @@
 
 import i18n from "../../i18n";
 import type { ContentPart, MessageContent, StreamMessage } from "../ai/types";
-import { costFor, type Model, type Provider } from "../ai/configDb";
+import { costFor, isTranslateOnly, type Model, type Provider } from "../ai/configDb";
 import { connOptions, type AiConn } from "../ai/conn";
 import { persistUsage } from "../ai/usage";
 import { fileExists, readBinaryFile } from "../fs/fileio";
@@ -22,9 +22,10 @@ import type { ToolCall, ToolResult } from "./tools";
 import { writeTaskNote } from "./taskWorkspace";
 import { baseName } from "../paths";
 
-export type SubAgentKind = "search" | "vision" | "longread" | "pdf" | "imagegen";
+export type SubAgentKind = "search" | "vision" | "longread" | "pdf" | "imagegen" | "translate";
 
-export const SUBAGENT_KINDS: readonly SubAgentKind[] = ["search", "vision", "longread", "pdf", "imagegen"];
+export const SUBAGENT_KINDS: readonly SubAgentKind[] =
+  ["search", "vision", "longread", "pdf", "imagegen", "translate"];
 
 /**
  * The kinds `delegate` can dispatch to — a *conversational* sub-run on the
@@ -34,8 +35,16 @@ export const SUBAGENT_KINDS: readonly SubAgentKind[] = ["search", "vision", "lon
  * generation, see lib/agent/imageTools.ts), and `routeTools` is what makes the
  * binding matter — those tools exist only while this subagent is usable, and
  * they draw with its model.
+ *
+ * `translate` is excluded for exactly the same reason, and the evidence is
+ * blunter than for images: asked "你是什么模型", Sakura paraphrases the question
+ * back instead of answering; handed a task description it translates it. A
+ * `subagentTask` prompt would come back as its own Chinese translation. So the
+ * assistant's interface to it is the `translate` tool, and `lib/translate/`
+ * calls the endpoint directly rather than through `runAgent` — it has no tool
+ * calling to loop over. See docs/feature/translate/01-execution-plan.md §1.
  */
-export type DelegateKind = Exclude<SubAgentKind, "imagegen">;
+export type DelegateKind = Exclude<SubAgentKind, "imagegen" | "translate">;
 
 export const DELEGATE_KINDS: readonly DelegateKind[] = ["search", "vision", "longread", "pdf"];
 
@@ -195,6 +204,13 @@ export function subAgentModel(
   if (kind === "search" && !model.serverTools?.includes("web_search")) return null;
   if (kind === "pdf" && !model.pdfInput) return null;
   if (kind === "imagegen" && model.type !== "image") return null;
+  // The mirror of the image check: that one refuses a model that cannot draw,
+  // this one refuses a model that has not been *declared* a translation model —
+  // and here the failure is silent rather than loud, which is why it is checked
+  // at all. A general model handed Sakura's fixed template answers something
+  // plausible; nothing errors, and the author reads a worse translation as the
+  // feature working.
+  if (kind === "translate" && !isTranslateOnly(model)) return null;
   return model;
 }
 

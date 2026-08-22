@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Globe, Eye, BookOpen, FileText, ImagePlus, type LucideIcon } from "lucide-react";
+import { Globe, Eye, BookOpen, FileText, ImagePlus, Languages, type LucideIcon } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { subAgentModel, SUBAGENT_KINDS, type SubAgentKind } from "../../lib/agent/subagent";
@@ -11,6 +11,7 @@ const ICONS: Record<SubAgentKind, LucideIcon> = {
   longread: BookOpen,
   pdf: FileText,
   imagegen: ImagePlus,
+  translate: Languages,
 };
 
 /**

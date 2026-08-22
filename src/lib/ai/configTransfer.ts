@@ -23,6 +23,7 @@ import {
   listPrompts,
   listProviders,
   modelUpsert,
+  parseTranslateFormat,
   promptUpsert,
   providerUpsert,
   type Model,
@@ -223,6 +224,10 @@ export async function stageConfigImport(
       thinkingDialect: parseThinkingDialect(r.thinkingDialect),
       serverTools: parseServerTools(r.serverTools),
       pdfInput: r.pdfInput === true ? true : undefined,
+      // Same reason as the reasoning fields above: an unknown format from a
+      // newer build must degrade to "an ordinary model" rather than mark a
+      // usable model translation-only and hide it from every picker.
+      translateFormat: parseTranslateFormat(r.translateFormat),
       pricePerImage: typeof r.pricePerImage === "number" ? r.pricePerImage : undefined,
       caps: r.caps && typeof r.caps === "object" ? (r.caps as Model["caps"]) : undefined,
     });

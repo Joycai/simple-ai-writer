@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAiStore } from "../../../stores/aiStore";
@@ -10,7 +11,8 @@ import {
   type DelegateKind,
   type SubAgentKind,
 } from "../../../lib/agent/subagent";
-import type { Model } from "../../../lib/ai/configDb";
+import { conversationalModels, isTranslateOnly, type Model } from "../../../lib/ai/configDb";
+import { isTranslateLoreEnabled, setTranslateLoreEnabled } from "../../../lib/translate/flag";
 import { Pane, Toggle } from "./bits";
 import { Select } from "../../common/Select";
 import ui from "../settingsUi.module.css";
@@ -32,6 +34,7 @@ import css from "./SubAgents.module.css";
  */
 export function SubAgentsPane() {
   const { t } = useTranslation();
+  const [useLore, setUseLore] = useState(isTranslateLoreEnabled());
   const models = useAiStore((s) => s.models);
   const subAgents = useAiStore((s) => s.subAgents);
   const setSubAgent = useAiStore((s) => s.setSubAgent);
@@ -39,10 +42,20 @@ export function SubAgentsPane() {
   // Image models can't hold a conversation, so the conversational kinds never
   // offer them — and the imagegen kind offers nothing else: it exists to draw,
   // and binding it to a text model would be the mirror image of the mistake.
-  const textCandidates = models.filter((m) => m.enabled && m.type !== "image");
-  const imageCandidates = models.filter((m) => m.enabled && m.type === "image");
+  //
+  // Translation models are the third case and the one with teeth: `Sakura` is
+  // a text model by type, so without `conversationalModels` it would appear in
+  // every list here — and binding it to, say, longread produces no error at
+  // all, just a subagent that hands back a Chinese paraphrase of its own
+  // instructions (see lib/ai/configDb, and 01-execution-plan.md §1 不变量 2).
+  const conversational = conversationalModels(models);
+  const textCandidates = conversational.filter((m) => m.enabled && m.type !== "image");
+  const imageCandidates = conversational.filter((m) => m.enabled && m.type === "image");
+  const translateCandidates = models.filter((m) => m.enabled && isTranslateOnly(m));
   const candidatesFor = (kind: SubAgentKind): Model[] =>
-    kind === "imagegen" ? imageCandidates : textCandidates;
+    kind === "imagegen" ? imageCandidates
+    : kind === "translate" ? translateCandidates
+    : textCandidates;
 
   /**
    * Why a bound model can't do this job, if it can't.
@@ -67,12 +80,16 @@ export function SubAgentsPane() {
     if (kind === "imagegen" && model.type !== "image") {
       return t("systemSettings.subagents.warnNotImage");
     }
+    if (kind === "translate" && !isTranslateOnly(model)) {
+      return t("systemSettings.subagents.warnNotTranslate");
+    }
     return undefined;
   };
 
   /** The preset's own numbers, so this line can't drift from what runs. */
   const metaFor = (kind: SubAgentKind): string => {
     if (kind === "imagegen") return t("systemSettings.subagents.imagegenMeta");
+    if (kind === "translate") return t("systemSettings.subagents.translateMeta");
     const preset = SUB_PRESETS[kind as DelegateKind];
     const parts = [
       preset.maxRounds === 1
@@ -180,6 +197,23 @@ export function SubAgentsPane() {
                       />
                       <span className={css.meta}>{metaFor(kind)}</span>
                     </div>
+
+                    {/* 术语表开关只属于这一张卡片，所以就长在这里，而不是把
+                        "每个 kind 可以有额外控件"抽象成一个通用槽位——目前只有
+                        一个 kind 需要它，抽象出来的只会是一个空框架。 */}
+                    {kind === "translate" && (
+                      <label className={css.bind}>
+                        <input
+                          type="checkbox"
+                          checked={useLore}
+                          onChange={(e) => {
+                            setTranslateLoreEnabled(e.target.checked);
+                            setUseLore(e.target.checked);
+                          }}
+                        />
+                        <span className={css.desc}>{t("systemSettings.subagents.translateUseLore")}</span>
+                      </label>
+                    )}
                   </div>
 
                   {warn && (

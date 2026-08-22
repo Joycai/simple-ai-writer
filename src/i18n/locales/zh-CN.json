@@ -321,7 +321,9 @@
       "paneSub": "外观、语言与本地数据",
       "apiLogLocation": "日志保存在本地目录",
       "roleplayLabel": "互动式角色扮演创作",
-      "roleplayHint": "在 AI 助手里多出「扮演」一栏：绑定知识库人物，以第一人称和他们对话；旁白 agent 能读到全部对话并把互动整理进正文。对话记录存在项目的 .ai-writer/roleplay/ 下。"
+      "roleplayHint": "在 AI 助手里多出「扮演」一栏：绑定知识库人物，以第一人称和他们对话；旁白 agent 能读到全部对话并把互动整理进正文。对话记录存在项目的 .ai-writer/roleplay/ 下。",
+      "translateLabel": "日中翻译（Sakura）",
+      "translateHint": "接入本地部署的专用日中翻译模型（Sakura，经 LM Studio / Ollama 等 OpenAI 兼容端点）。开启后需在 子代理 里绑定一个已声明翻译格式的模型，助手才会获得 translate 工具。"
     },
     "backup": {
       "section": "配置备份",
@@ -435,6 +437,12 @@
       "imagegen": "图片生成",
       "imagegenSub": "为文档和知识库条目生成插图。绑定后助手获得 generate_image / edit_image 工具，用此模型作画。",
       "warnNotImage": "该模型不是图像模型，无法生成图片。",
+      "translate": "日中翻译",
+      "translateSub": "用专用翻译模型把日文译成中文。绑定后助手获得 translate 工具；它只做日→中，也不读指令，因此不参与对话委托。",
+      "translateReq": "需翻译模型格式",
+      "translateMeta": "逐块请求 · 退化自动重试",
+      "translateUseLore": "从知识库提取术语表（人名、地名的译名会强制统一；项目没有知识库时自动跳过）",
+      "warnNotTranslate": "该模型没有声明翻译模型格式（在 供应商与模型 的模型设置里选），子代理无法使用。",
       "searchReq": "需 web_search",
       "visionReq": "需多模态",
       "longreadReq": "大窗口优先",
@@ -444,8 +452,8 @@
       "summaryAttention": "{{n}} 项需要处理",
       "groupDelegate": "对话委托",
       "groupDelegateHint": "助手在对话中通过 delegate 工具调用，在独立上下文里执行，结果落盘为任务笔记",
-      "groupTool": "绘图工具",
-      "groupToolHint": "不参与对话委托——图像模型无法对话，助手通过工具直接调用",
+      "groupTool": "直接工具",
+      "groupToolHint": "不参与对话委托——这些模型无法对话，助手通过工具直接调用",
       "statusReady": "就绪",
       "statusOff": "已停用",
       "statusAttention": "需要处理",
@@ -918,7 +926,9 @@
         "start": "开始「{{task}}」 · {{model}}",
         "round": "第 {{round}}/{{max}} 轮 · 输入约 {{tokens}} tokens（其中工具 {{toolTokens}}）",
         "toolsLoaded": "已装载 {{count}} 个{{group}}工具",
-        "toolGroup": { "lore_write": "知识库写入" },
+        "toolGroup": {
+          "lore_write": "知识库写入"
+        },
         "trimmed": "为控制上下文长度，省略了 {{count}} 条较早的工具结果",
         "outputTruncated": "输出被上限截断，回答未写完 —— 调高该模型的「单次输出上限」，或缩短上下文",
         "turnResumed": "服务端在搜索后中断了本轮，已把结果交回模型继续（第 {{leg}} 次请求）",
@@ -1384,6 +1394,11 @@
       "serverToolsHintOpenai": "由「服务端」在同一次请求里执行的工具，本机不参与、也无法逐次批准——开启即等于允许该模型每次回答都可以自行联网检索。OpenAI 兼容端点上按千问 (DashScope 兼容模式) 的方式发送 enable_search: true；其他兼容端点开了通常不会生效，官方 api.openai.com 不接受该字段（本设置对官方端点不显示）。注意：该协议下搜索过程与命中网页不会返回，执行日志里看不到搜索明细，答案直接吸收检索结果。",
       "pdfInputLabel": "PDF 文件输入",
       "pdfInputHint": "声明该模型接受整份 PDF 作为消息内容（OpenAI file 内容块；千问 DashScope 兼容模式目前仅 qwen3.8-max 支持，单文件 ≤150MB / ≤500 页，另按页计费）。勾选后它才能被绑定为 PDF 理解子代理。",
+      "translateFormatLabel": "翻译模型格式 (可选)",
+      "translateFormatNone": "普通模型",
+      "translateFormat_sakura": "Sakura（日→中）",
+      "translateFormatHint": "如果这是一个专用翻译模型（提示词格式在训练时就固定了），在这里声明它的格式。普通模型保持「普通模型」不动。",
+      "translateFormatHintOn": "已声明为专用翻译模型：它只做日译中、不读指令，因此不会再出现在主模型和其它子代理的模型列表里，只能绑定给「日中翻译」子代理。",
       "effortLabelAnthropic": "力度"
     },
     "probe": {

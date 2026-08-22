@@ -73,10 +73,29 @@ describe("tool schema budget", () => {
     expect(tokensOf(AGENT_ASSIST_PRESET) - residentTokens).toBeGreaterThan(2_000);
   });
 
+  it("prices the tools that routing appends, which this file's preset caps cannot see", () => {
+    // `delegate` and `translate` are added by `routeTools`, not listed in any
+    // preset — they depend on the author's switches, which the preset layer
+    // cannot know. That keeps them outside the caps above, so their cost is
+    // pinned here instead. Without this, "append in routing" would be a way to
+    // add tools that no ratchet ever measures.
+    //
+    // Measured 634 — delegate 287, translate 347. Note these are not additive
+    // with the caps above in practice: a conversation carries at most the ones
+    // its author has switched on.
+    //
+    // translate was 217 when it only took `text`; the whole-file form added
+    // `path` + `reason` and the sentences that keep the model from reaching for
+    // the wrong one. Paid deliberately: the alternative — two tools — costs a
+    // second schema and a second name for one capability.
+    const appended = estimateToolsTokens(getToolDefinitions(["delegate", "translate"]));
+    expect(appended).toBeLessThanOrEqual(720);
+  });
+
   it("gives every tool a description worth its place", () => {
     // A tool the model can see but can't tell apart from its neighbours is
     // worse than no tool: it costs schema tokens *and* buys a wrong call.
-    for (const def of getToolDefinitions(AGENT_ASSIST_PRESET.tools)) {
+    for (const def of getToolDefinitions([...AGENT_ASSIST_PRESET.tools, "delegate", "translate"])) {
       expect(def.function.description.trim().length).toBeGreaterThan(40);
       // The category placeholder is substituted per call — one that survives
       // into the wire means the model is being shown literal `{{…}}`.

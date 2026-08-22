@@ -8,6 +8,7 @@ import { MARKDOWN_THEMES } from "../../../lib/theme/markdownThemes";
 import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../../lib/ai/apiLog";
 import { isPptxExportEnabled, setPptxExportEnabled } from "../../../lib/pptx/flag";
 import { isRoleplayEnabled, setRoleplayEnabled } from "../../../lib/roleplay/flag";
+import { isTranslateEnabled, setTranslateEnabled } from "../../../lib/translate/flag";
 import {
   isNotifyEnabled, isNotifyKindEnabled, requestNotifyPermission,
   sendTestNotification, setNotifyEnabled, setNotifyKindEnabled,
@@ -49,6 +50,7 @@ export function GeneralPane() {
   const [notifyStatus, setNotifyStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [pptxOn, setPptxOn] = useState(isPptxExportEnabled());
   const [roleplayOn, setRoleplayOn] = useState(isRoleplayEnabled());
+  const [translateOn, setTranslateOn] = useState(isTranslateEnabled());
   const providers = useAiStore((s) => s.providers);
   const loadConfig = useAiStore((s) => s.loadConfig);
   const [includeKeys, setIncludeKeys] = useState(false);
@@ -105,6 +107,11 @@ export function GeneralPane() {
   const toggleRoleplay = (enabled: boolean) => {
     setRoleplayEnabled(enabled);
     setRoleplayOn(enabled);
+  };
+
+  const toggleTranslate = (enabled: boolean) => {
+    setTranslateEnabled(enabled);
+    setTranslateOn(enabled);
   };
 
   const toggleNotify = (enabled: boolean) => {
@@ -314,12 +321,22 @@ export function GeneralPane() {
           desc={t("systemSettings.general.roleplayHint", {
             defaultValue: "在 AI 助手里多出「扮演」一栏：绑定知识库人物，以第一人称和他们对话；旁白 agent 能读到全部对话并把互动整理进正文。对话记录存在项目的 .ai-writer/roleplay/ 下。",
           })}
-          last
         >
           <Toggle
             on={roleplayOn}
             onChange={toggleRoleplay}
             label={t("systemSettings.general.roleplayLabel", { defaultValue: "互动式角色扮演创作" })}
+          />
+        </Row>
+        <Row
+          title={t("systemSettings.general.translateLabel")}
+          desc={t("systemSettings.general.translateHint")}
+          last
+        >
+          <Toggle
+            on={translateOn}
+            onChange={toggleTranslate}
+            label={t("systemSettings.general.translateLabel")}
           />
         </Row>
       </Section>
