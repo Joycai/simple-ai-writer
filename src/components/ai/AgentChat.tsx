@@ -12,7 +12,7 @@
  * relying on the agent to guess which passage 这一段 means.
  */
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowUp, ChevronDown, ChevronRight, Image as ImageIcon, X } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -34,7 +34,7 @@ import { chainCanSeeImages, withSessionOverrides } from "../../lib/agent/subagen
 import { useImageThumbnails } from "../lore/useImageDataUrl";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectFiles, useProjectStore, useTerms } from "../../stores/projectStore";
-import { useAgentStore } from "../../stores/agentStore";
+import { useAgentStore, type ChatTurn } from "../../stores/agentStore";
 import { cardsForSurface } from "../../lib/agent/approvalRouting";
 import { useAiStore } from "../../stores/aiStore";
 import { useAppStore } from "../../stores/appStore";
@@ -87,12 +87,18 @@ function matchesKind(item: MentionItem, kind: PickKind): boolean {
 
 export function AgentChat() {
   const { t } = useTranslation();
-  const {
-    turns, chatRunning, chatError,
-    pending: allPending, pendingPlans: allPlans,
-    pendingRoundLimits: allRoundLimits, pendingTruncations: allTruncations,
-    sendChat, stopChat,
-  } = useAgentStore();
+  // Field selectors — the store is written on every streamed flush, and a
+  // whole-store subscription would also re-render this on writes it never
+  // reads (usage totals, other surfaces' bookkeeping).
+  const turns = useAgentStore((s) => s.turns);
+  const chatRunning = useAgentStore((s) => s.chatRunning);
+  const chatError = useAgentStore((s) => s.chatError);
+  const allPending = useAgentStore((s) => s.pending);
+  const allPlans = useAgentStore((s) => s.pendingPlans);
+  const allRoundLimits = useAgentStore((s) => s.pendingRoundLimits);
+  const allTruncations = useAgentStore((s) => s.pendingTruncations);
+  const sendChat = useAgentStore((s) => s.sendChat);
+  const stopChat = useAgentStore((s) => s.stopChat);
   // 只渲染没有 surface 标记的卡片。带标记的属于扮演面板那样的独立界面——
   // 一张出现在错误 tab 里的卡片，等于把那次运行永久挂在作者看不见的地方。
   // 规则与理由见 lib/agent/approvalRouting。
@@ -448,22 +454,7 @@ export function AgentChat() {
         )}
         {turns.slice(foldAt).map((turn) =>
           turn.role === "user" ? (
-            <div key={turn.id} className={styles.userBlock}>
-              {turn.quote && (
-                <div className={styles.quote}>
-                  <div className={styles.quoteLabel}>
-                    {t("ai.chat.quotedSelection", { defaultValue: "引用选区" })}
-                  </div>
-                  <div className={styles.quoteBody}>{turn.quote}</div>
-                </div>
-              )}
-              <div className={styles.userTurn}><MentionText text={turn.text} /></div>
-              {/* Below the words, unlike an assistant turn's pictures: there the
-                  prose is a caption for the image, here it is the instruction
-                  the image came with. */}
-              <TurnImages paths={turn.images} align="end" />
-              <div className={styles.turnTime}>{formatTime(turn.at)}</div>
-            </div>
+            <UserTurn key={turn.id} turn={turn} />
           ) : (
             <AssistantTurn
               key={turn.id}
@@ -721,7 +712,36 @@ function MentionText({ text }: { text: string }) {
   );
 }
 
-function AssistantTurn({ text, log, images, isLive }: {
+/**
+ * memo: the transcript re-renders on every streamed flush (the turns array is
+ * rebuilt per store write), but only the *patched* turn gets a new object —
+ * every earlier turn keeps its identity, so memoized turns skip entirely and
+ * a stream only ever re-renders the one turn it is writing into.
+ */
+const UserTurn = memo(function UserTurn({ turn }: { turn: ChatTurn }) {
+  const { t } = useTranslation();
+  return (
+    <div className={styles.userBlock}>
+      {turn.quote && (
+        <div className={styles.quote}>
+          <div className={styles.quoteLabel}>
+            {t("ai.chat.quotedSelection", { defaultValue: "引用选区" })}
+          </div>
+          <div className={styles.quoteBody}>{turn.quote}</div>
+        </div>
+      )}
+      <div className={styles.userTurn}><MentionText text={turn.text} /></div>
+      {/* Below the words, unlike an assistant turn's pictures: there the
+          prose is a caption for the image, here it is the instruction
+          the image came with. */}
+      <TurnImages paths={turn.images} align="end" />
+      <div className={styles.turnTime}>{formatTime(turn.at)}</div>
+    </div>
+  );
+});
+
+/** Same memo contract as {@link UserTurn} — props are the turn's own fields. */
+const AssistantTurn = memo(function AssistantTurn({ text, log, images, isLive }: {
   text: string;
   log: AgentEvent[];
   images?: string[];
@@ -758,4 +778,4 @@ function AssistantTurn({ text, log, images, isLive }: {
       </div>
     </div>
   );
-}
+});

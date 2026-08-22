@@ -27,6 +27,7 @@ import { create } from "zustand";
 import i18n from "../i18n";
 import { backupFile } from "../lib/agent/backup";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
+import { createStreamThrottle } from "../lib/agent/streamThrottle";
 import { summarizeForCompaction } from "../lib/agent/compactRun";
 import { presetFor } from "../lib/roleplay/presets";
 import { routeTools } from "../lib/agent/routing";
@@ -453,6 +454,25 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       models,
     );
 
+    // 同 agentStore.sendChat：流式的输出文本和 reasoning 片段都是
+    // latest-wins，缓冲后按节拍落一次 store；别的事件照旧即时写、写前先
+    // flush 保序（见 lib/agent/streamThrottle）。声明在 try 外，失败路径
+    // 也能把最后一截冲出去。
+    let pendingText: string | null = null;
+    let pendingReasoning: (AgentEvent & { kind: "reasoning" }) | null = null;
+    const stream = createStreamThrottle(() => {
+      const text = pendingText;
+      const reasoning = pendingReasoning;
+      pendingText = null;
+      pendingReasoning = null;
+      if (text === null && reasoning === null) return;
+      patchSession(job.agentId, (s) => ({
+        ...s,
+        ...(reasoning ? { liveLog: appendAgentEventTo(s.liveLog, reasoning) } : {}),
+        ...(text !== null ? { streaming: text } : {}),
+      }));
+    });
+
     try {
       const apiKey = (await loadApiKey(provider.id)) ?? "";
       let session = get().sessions[job.agentId] ?? emptySession();
@@ -630,10 +650,29 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
               .requestTruncationDecision(recoveries, controller, agent.id);
           },
         } : {}),
-        onEvent: (event) =>
-          patchSession(job.agentId, (s) => ({ ...s, liveLog: appendAgentEventTo(s.liveLog, event) })),
-        onOutputText: (text) => patchSession(job.agentId, (s) => ({ ...s, streaming: text })),
+        onEvent: (event) => {
+          if (event.kind === "reasoning") {
+            if (
+              pendingReasoning &&
+              (pendingReasoning.parentStep !== event.parentStep ||
+                pendingReasoning.round !== event.round)
+            ) {
+              stream.flush();
+            }
+            pendingReasoning = event;
+            stream.schedule();
+            return;
+          }
+          stream.flush();
+          patchSession(job.agentId, (s) => ({ ...s, liveLog: appendAgentEventTo(s.liveLog, event) }));
+        },
+        onOutputText: (text) => {
+          pendingText = text;
+          stream.schedule();
+        },
       });
+      // 下一行就要读 streaming 收全文——缓冲里最后一截必须先落下去。
+      stream.flush();
 
       const reply = get().sessions[job.agentId]?.streaming.trim() ?? "";
       if (reply) {
@@ -680,6 +719,8 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         }));
       }
     } catch (e) {
+      // 失败前已经流出来的内容仍然是作者该看到的。
+      stream.flush();
       if ((e as Error).name === "AbortError") {
         // 按停之后这一问仍然孤零零地留在 transcript 里。给它一个重试的落点，
         // 否则作者只能把那句话再打一遍。

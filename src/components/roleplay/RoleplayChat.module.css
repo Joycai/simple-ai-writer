@@ -193,6 +193,24 @@
 
 .column { width: 640px; max-width: calc(100% - 52px); margin: 0 auto; }
 
+/* 「更早的 N 轮」折叠条。样式同对话助手的 foldBar；.column 是块级布局，
+   所以用 margin 居中而不是 align-self。 */
+.foldBar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 auto 18px;
+  padding: 4px 11px;
+  background: transparent;
+  border: 1px dashed var(--color-border-muted);
+  color: var(--color-text-hint);
+  font: 400 11px/1.5 var(--font-sans);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.foldBar:hover { color: var(--color-accent-text); border-color: var(--color-border-accent); }
+.foldBar:active { transform: scale(0.96); }
+
 /* 「回到这里重说」。挂在作者轮的名标行上，平时隐形——它是一个撤销动作，不该
    在稿面上一直举着手。 */
 .rewindBtn {

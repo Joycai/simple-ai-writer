@@ -17,7 +17,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { FileText, Image as ImageIcon } from "lucide-react";
 import { useImageDataUrl } from "../lore/useImageDataUrl";
-import { imageToDataUrl, isHtmlPath, type ProjectFile } from "../../lib/fs/images";
+import { imageToThumbnailDataUrl, isHtmlPath, type ProjectFile } from "../../lib/fs/images";
 import type { LoreEntity } from "../../lib/lore";
 // The pure vocabulary function, not stores/projectStore's useTerms hook: this
 // module's helpers (findMention, filterMentions) are imported by node-side
@@ -159,8 +159,10 @@ function FileThumb({ file }: { file: ProjectFile }) {
     // Cancellation flag, same as useImageDataUrl: the picker unmounts the
     // moment an item is chosen, and a large image can still be decoding.
     let cancelled = false;
-    imageToDataUrl(file.path)
-      .then(({ dataUrl }) => { if (!cancelled) setUrl(dataUrl); })
+    // Thumbnail tier — this renders at pickerThumb size; a full photo inlined
+    // as base64 is megabytes of string for a 24px square (lib/fs/images).
+    imageToThumbnailDataUrl(file.path, 96)
+      .then((dataUrl) => { if (!cancelled) setUrl(dataUrl); })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [file.path, file.kind]);
