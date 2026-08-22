@@ -34,6 +34,7 @@ import { projectFilesFromTree, type ProjectFile } from "../lib/fs/images";
 import { baseNameOf, resolveCopyTarget, type TransferMode } from "../lib/fs/moveCopy";
 import { discardDocumentAssets, moveDocumentAssets } from "../lib/image/assets";
 import { baseName, isSamePath, isStrictDescendant } from "../lib/paths";
+import { acquireProjectLock, focusExistingInstance, releaseProjectLock } from "../lib/instance";
 import { useLoreStore } from "./loreStore";
 import { useEditorStore } from "./editorStore";
 import { useAppStore, type MainView } from "./appStore";
@@ -55,6 +56,46 @@ export async function flushDirtyDocuments(): Promise<void> {
   const lore = useLoreStore.getState();
   if (lore.saveTimer) clearTimeout(lore.saveTimer);
   if (lore.isDirty && lore.selectedEntity && lore.selectedFile) await lore.saveNow();
+}
+
+/**
+ * How `openProject` ended. Callers that care are rare — the launch-argument
+ * path in App.tsx closes its fresh window on `"focused-existing"`, the way
+ * `code <folder>` hands off to the window that already has the folder.
+ */
+export type OpenProjectOutcome = "opened" | "cancelled" | "focused-existing";
+
+/**
+ * The advisory multi-instance guard: claim the workspace, and when a live
+ * sibling process already holds it, resolve it the VS Code way — bring that
+ * window forward and back out of this open. Only when the holder cannot be
+ * reached (a crashed instance's recycled PID, a pre-focus-channel lock, a
+ * lock from another machine) does it fall back to asking the author. Lock
+ * machinery that *fails* counts as claimed (see lib/instance): the guard is a
+ * courtesy, the project opening is the point.
+ */
+async function claimWorkspace(target: string): Promise<"claimed" | "focused-existing" | "declined"> {
+  const lock = await acquireProjectLock(target);
+  if (lock.status !== "held") return "claimed";
+  if (await focusExistingInstance(target)) return "focused-existing";
+  // Lazy, like agentStore's import above: the dialog plugin and i18n are only
+  // needed on this rare path, and vitest's store tests never reach it.
+  const [{ ask }, { default: i18n }] = await Promise.all([
+    import("@tauri-apps/plugin-dialog"),
+    import("../i18n"),
+  ]);
+  const proceed = await ask(
+    i18n.t("project.lockHeldBody", { name: baseName(target) || target, pid: lock.pid }),
+    {
+      title: i18n.t("project.lockHeldTitle"),
+      kind: "warning",
+      okLabel: i18n.t("project.lockOpenAnyway"),
+      cancelLabel: i18n.t("project.lockCancel"),
+    },
+  );
+  if (!proceed) return "declined";
+  await acquireProjectLock(target, true);
+  return "claimed";
 }
 
 /** Reset the in-memory editor + lore state so stale content can't leak across projects. */
@@ -111,7 +152,7 @@ interface ProjectState {
   charCount: number;
   isLoading: boolean;
 
-  openProject: (path?: string) => Promise<void>;
+  openProject: (path?: string) => Promise<OpenProjectOutcome>;
   closeProject: () => Promise<void>;
   refreshFileTree: () => Promise<void>;
   /**
@@ -187,17 +228,29 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   openProject: async (path) => {
     // `path` is passed when reopening from the recent-projects list; otherwise prompt.
     const target = typeof path === "string" ? path : await openProjectFolder();
-    if (!target) return;
+    if (!target) return "cancelled";
 
     // Persist unsaved edits from the currently open project before switching away.
     await flushDirtyDocuments();
 
     set({ isLoading: true });
+    // Whether this open claims a workspace it didn't already hold — reopening
+    // the current project must neither re-warn nor release its own lock.
+    const previous = get().projectPath;
+    const freshClaim = !previous || !isSamePath(previous, target);
     try {
       // Paths from the recents list weren't registered by the dialog — the
       // scoped fs commands reject them until the Rust side verifies the
       // on-disk .ai-writer marker and allows the root.
       if (typeof path === "string") await registerProjectRoot(target);
+      // The multi-instance guard, after registration (the lock commands are
+      // scope-checked) and before anything is torn down: a handed-off or
+      // declined open leaves the previous project exactly as it was.
+      if (freshClaim) {
+        const claim = await claimWorkspace(target);
+        if (claim === "focused-existing") return "focused-existing";
+        if (claim === "declined") return "cancelled";
+      }
       // Resolve the pack selection before the scaffold, which creates the
       // folders it names — but don't *activate* it until the open can no
       // longer fail. Activating early would leave the still-open previous
@@ -218,13 +271,23 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       await get().refreshFileTree();
       await useLoreStore.getState().scanProject(target);
       useAppStore.getState().addRecentProject(target);
+      // Only now that the switch cannot fail: hand the previous workspace's
+      // lock back, so a sibling instance opening it warns no longer.
+      if (previous && freshClaim) void releaseProjectLock(previous);
       // Chat sessions are project-scoped: drop the previous project's from
       // view and restore this one's newest. Lazy import — agentStore reaches
       // back into this store (see its module doc on circular deps).
       const { useAgentStore } = await import("./agentStore");
       await useAgentStore.getState().resetChatForProject(target);
       useComposerStore.getState().resetAll();
+      return "opened";
     } catch (err) {
+      // The claim on a project that failed to open would otherwise linger
+      // until exit, warning a sibling about a window that isn't there.
+      // Harmless if never acquired — release only removes our own lock. The
+      // projectPath check covers a throw from the post-switch steps above:
+      // by then the project *is* open here, and its claim must stand.
+      if (freshClaim && !isSamePath(get().projectPath, target)) void releaseProjectLock(target);
       // A recent path that no longer opens (moved/deleted) should drop out of the list.
       if (typeof path === "string") useAppStore.getState().removeRecentProject(path);
       throw err;
@@ -234,6 +297,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   closeProject: async () => {
+    const closing = get().projectPath;
     await flushDirtyDocuments();
     resetDocuments();
     const { useAgentStore } = await import("./agentStore");
@@ -244,6 +308,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // the active workspace must not still see the closed project's categories.
     resetActiveWorkspace();
     set({ projectPath: null, workspace: DEFAULT_WORKSPACE, customPacks: [], customCategories: [], activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null, wordCount: 0, charCount: 0 });
+    if (closing) void releaseProjectLock(closing);
   },
 
   setPacks: async (enabledIds) => {

@@ -221,3 +221,11 @@
 }
 .recentItem:hover .recentRemove { opacity: 1; }
 .recentRemove:hover { color: var(--color-error); }
+
+/* Open-in-new-window: same reveal as the remove button, but a neutral hover —
+   it launches something, it doesn't destroy anything. */
+.recentAction {
+  composes: recentRemove;
+}
+.recentItem:hover .recentAction { opacity: 1; }
+.recentAction:hover { color: var(--color-text-primary); }

@@ -169,6 +169,41 @@ export function writePref(key: string, value: string): void {
   );
 }
 
+/**
+ * Write `value`, but let another app instance's concurrent write survive.
+ *
+ * `writePref` is last-writer-wins over the *whole* row, which is right for a
+ * scalar (a theme, a width) and wrong for a row holding a list two instances
+ * both append to: each writes the full list from its own startup snapshot, so
+ * whichever saves second silently drops the other's addition — the
+ * recent-projects list was the real casualty. This variant keeps the
+ * synchronous cache write (the caller's next read must see its own value) and
+ * does the persistence as read-merge-write inside the ordinary write chain,
+ * with `merge` deciding how the database's current row and ours combine. The
+ * cache picks up the merged result afterwards unless a later write for the
+ * same key has already superseded this one.
+ */
+export function writePrefMerged(
+  key: string,
+  value: string,
+  merge: (dbValue: string | null, value: string) => string,
+): void {
+  if (!hydrated) {
+    // Pre-hydration there is no shared database to race over.
+    lsSet(key, value);
+    return;
+  }
+  cache.set(key, value);
+  enqueue(async (db) => {
+    const rows =
+      (await db.select<{ value: string }[]>(`SELECT value FROM ${TABLE} WHERE key = ?`, [key])) ?? [];
+    const dbValue = typeof rows[0]?.value === "string" ? rows[0].value : null;
+    const merged = merge(dbValue, value);
+    if (cache.get(key) === value) cache.set(key, merged);
+    await db.execute(`INSERT OR REPLACE INTO ${TABLE} (key, value) VALUES (?, ?)`, [key, merged]);
+  });
+}
+
 export function deletePref(key: string): void {
   if (!hydrated) {
     lsRemove(key);
@@ -230,7 +265,10 @@ export function applyPrefEntries(entries: [string, string][]): number {
 
 // ─── Persistence ─────────────────────────────────────────────────────────────
 
-type Db = { execute: (sql: string, args?: unknown[]) => Promise<unknown> };
+type Db = {
+  execute: (sql: string, args?: unknown[]) => Promise<unknown>;
+  select: <T>(sql: string, args?: unknown[]) => Promise<T>;
+};
 
 /**
  * Loaded lazily so that importing this module never pulls in the Tauri SQL
@@ -269,6 +307,51 @@ export async function flushPrefs(): Promise<void> {
   await writeChain;
 }
 
+/**
+ * Re-read every row and make the cache match the database.
+ *
+ * Multi-instance support: several app processes share one `config.db`, and
+ * after hydration each treats its in-memory cache as the store — so a
+ * preference changed in one window simply never reaches another until
+ * restart. Window focus is the moment that gap becomes visible (the author
+ * just came *from* the other window), so `usePrefsFocusSync` calls this
+ * there, mirroring the file-tree's focus refresh. Own pending writes are
+ * flushed first so re-reading cannot roll them back. Returns whether anything
+ * changed, so callers repaint (an animated theme transition among them) only
+ * when there is something to show.
+ */
+export async function refreshPrefs(): Promise<boolean> {
+  if (!hydrated) return false;
+  await flushPrefs();
+  let rows: { key: string; value: string }[];
+  try {
+    rows =
+      (await (await openDb()).select<{ key: string; value: string }[]>(
+        `SELECT key, value FROM ${TABLE}`,
+      )) ?? [];
+  } catch (e) {
+    console.warn("[prefs] could not re-read the preference store:", e);
+    return false;
+  }
+  const next = new Map<string, string>();
+  for (const r of rows) {
+    if (typeof r?.key === "string" && typeof r?.value === "string") next.set(r.key, r.value);
+  }
+  let changed = next.size !== cache.size;
+  if (!changed) {
+    for (const [k, v] of next) {
+      if (cache.get(k) !== v) {
+        changed = true;
+        break;
+      }
+    }
+  }
+  if (!changed) return false;
+  cache.clear();
+  for (const [k, v] of next) cache.set(k, v);
+  return true;
+}
+
 // ─── Hydration ───────────────────────────────────────────────────────────────
 
 /**
@@ -285,9 +368,8 @@ export async function hydratePrefs(): Promise<void> {
   let db: Db;
   try {
     db = await openDb();
-    const rows = (await (db as unknown as {
-      select: (sql: string) => Promise<{ key: string; value: string }[]>;
-    }).select(`SELECT key, value FROM ${TABLE}`)) ?? [];
+    const rows =
+      (await db.select<{ key: string; value: string }[]>(`SELECT key, value FROM ${TABLE}`)) ?? [];
     for (const r of rows) {
       if (typeof r?.key === "string" && typeof r?.value === "string") cache.set(r.key, r.value);
     }

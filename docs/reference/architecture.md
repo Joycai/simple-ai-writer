@@ -84,6 +84,62 @@ should cost the author their preferences syncing, not their app starting.
   key (a slider being dragged) land in call order rather than in whichever
   order the driver finishes them.
 
+### Multi-instance (多开 — `src/lib/instance.ts` + `src-tauri/src/instance.rs`)
+
+The app runs as **several processes, each on its own workspace** (VS
+Code-style) — there is deliberately no single-instance plugin, and "new
+window" means a new *process*: every store (and `lib/profile/active`) is a
+module singleton sized to one project, so a second window inside one process
+has nowhere to put its state. What multi-open actually needs is four small
+pieces; everything project-scoped (`project.db`, the lore tree, the editor)
+was per-process already.
+
+- **The workspace lock** — `.ai-writer/window.lock` (`{pid, since, port}`),
+  an *advisory* guard against the one dangerous case: two windows opening the
+  **same** folder, i.e. two autosaving editors over one set of files.
+  `projectStore.openProject` claims it after root registration (the commands
+  are `FsScope`-checked). A live *other* holder resolves the VS Code way
+  first: `port` is the holder's loopback **focus channel** (a TCP listener
+  where *connecting is the whole message* — nothing read, nothing granted
+  beyond "raise your window", which any local process has via OS APIs
+  anyway), so `project_focus_existing` brings the existing window forward and
+  the second open backs out (`openProject` returns `"focused-existing"`; the
+  launch-argument path in App.tsx then closes its fresh window, like
+  `code <folder>` handing off). Only an unreachable holder — a crashed
+  instance's recycled PID, a pre-channel lock, a foreign machine's lock on a
+  network share — falls back to the 「仍要打开吗」dialog; never a hard block.
+  Staleness is PID liveness (one syscall at open time), not heartbeats — a
+  crash leaves a lock that reads as free. Release happens on project
+  switch/close and, for everything the frontend can't reach
+  (`window.destroy()`, kill), in the `RunEvent::Exit` sweep in `lib.rs`.
+  Every lock failure counts as acquired: the guard is a courtesy, the
+  project opening is the point.
+- **The shared preference cache** — all instances share `config.db`, and
+  after hydration each treats its in-memory `Map` as truth. Two repairs:
+  `refreshPrefs()` re-reads the table on window focus (`usePrefsFocusSync`,
+  mirroring the file tree's focus refresh) and repaints via
+  `reloadFromPrefs()` only when something changed; and the recent-projects
+  row — the one *list* every instance rewrites whole — persists through
+  `writePrefMerged`, a read-merge-write on the ordinary write chain with the
+  union logic in `lib/recentProjects.ts` (ours-first, capped; a raced
+  *removal* can resurface from the other side's copy, which is why the
+  remove/clear paths stay plain overwrites). Providers/models/prompts
+  (`configDb` tables, loaded once by `aiStore.loadConfig`) still need a
+  restart to appear in a sibling — a known, accepted gap.
+- **The launch argument** — `simple-ai-writer <folder>` opens that workspace
+  at startup: parsed in `instance.rs` under the same trust rule as
+  `project_register_root` (absolute + on-disk `.ai-writer` marker, so argv
+  can't aim the fs scope at an arbitrary directory), consumed exactly once
+  (`take()` — StrictMode's doubled effect run gets `null`), and fed through
+  the normal `openProject(path)` flow in `App.tsx`.
+- **Spawning a sibling** — `spawn_new_instance` runs `current_exe()` again,
+  optionally with that argument. Two affordances: the file tree toolbar's
+  新窗口 button (blank on purpose — handing it the current project would just
+  bounce off the focus handoff back to this window) and 在新窗口打开 on each
+  recents entry in the sidebar's empty state. macOS Dock/Finder still
+  focuses the running instance (`open -n` from a shell works); the in-app
+  buttons are the supported path there.
+
 ### The AI target (选区) and where a task acts
 
 Every AI task acts *somewhere*, and getting that spot wrong is the failure mode
