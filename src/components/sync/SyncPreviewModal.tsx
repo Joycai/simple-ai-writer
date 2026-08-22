@@ -68,6 +68,7 @@ export function SyncPreviewModal() {
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [showUnchanged, setShowUnchanged] = useState(false);
+  const shellCloseRef = useRef<(() => void) | null>(null);
 
   if (phase === "idle") return null;
 
@@ -80,7 +81,6 @@ export function SyncPreviewModal() {
     setShowUnchanged(false);
     closeModal();
   };
-  const shellCloseRef = useRef<(() => void) | null>(null);
   const requestClose = () => (shellCloseRef.current ?? close)();
 
   return (
