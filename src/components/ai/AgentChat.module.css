@@ -209,6 +209,16 @@
   gap: var(--space-2);
 }
 
+/* 卡片从上方的助手轮次「落下来」——方向与上面那条注释里的空间说法一致
+   （缩进在助手内容轨上，读作从上一轮长出来）。挂在子元素上而不是容器上：
+   容器在已有卡片的情况下追加第二张时不会重挂载，动画就不会播。
+   流式记录行仍然刻意零入场动画（见 plans/003）——审批卡是相反的东西：
+   一次运行里出现个位数次，到达即意味着流停了、必须等一次人工输入。 */
+.approvals > * {
+  animation: dropIn 200ms var(--ease-out);
+  transform-origin: top left;
+}
+
 /* Band ④ — the task plan, between the transcript and the composer. It vanishes
    entirely when the agent hasn't split the work: TaskPanel renders null then,
    and a padded wrapper left standing would be a gap that says nothing. */

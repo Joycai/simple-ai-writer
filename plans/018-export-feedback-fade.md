@@ -1,6 +1,6 @@
 # 018 — 导出按钮回执：淡入 + 消除宽度跳动
 
-- **Status**: TODO
+- **Status**: APPLIED (2026-08-23) — 代码已落，但**当前不生效**：见 plans/README.md「阻断 A · keyframe 作用域」。修好引用侧后自动生效，本方案无需再改
 - **Commit**: 78160c2
 - **Severity**: LOW（加法项）
 - **Category**: 遗漏机会（状态呈现）

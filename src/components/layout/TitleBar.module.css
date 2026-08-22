@@ -176,6 +176,15 @@
   color: var(--color-text-muted);
 }
 
+/* 全应用唯一的成功回执（见 ExportMenu.tsx 头注释）——淡入让它不至于被余光漏掉。
+   只做入场：2000ms 后的复位不携带信息，给它淡出只会把视线拉回一个已经没话说的按钮。 */
+.ctrlStatus {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  animation: fadeIn var(--transition-base);
+}
+
 /* Caption buttons (undecorated Windows) — full-height hit targets, zero
    radius per the global rule; close turns the platform's warning red. */
 .captions {
