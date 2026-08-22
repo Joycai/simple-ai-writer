@@ -22,6 +22,7 @@ import { listArchives, type ArchivedScene } from "../../lib/roleplay/store";
 import { useProjectStore } from "../../stores/projectStore";
 import { ModelSelector } from "../ai/ModelSelector";
 import { AgentLog } from "../ai/AgentLog";
+import { foldBoundary } from "../../lib/agent/transcriptFold";
 import { ApprovalCard } from "../ai/ApprovalCard";
 import { RoundLimitCard } from "../ai/RoundLimitCard";
 import { TruncationCard } from "../ai/TruncationCard";
@@ -208,13 +209,21 @@ function TurnBlock({ turn, log, memories, recalled, onOpenArea, onRewind, confir
 
 export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: () => void }) {
   const { t } = useTranslation();
-  const {
-    sessions, running, queue, stale, send, stop, retry, rewind, dequeue, promote, toggleSubAgent,
-    refreshBinding, setAgentModel,
-  } = useRoleplayStore();
-  const session = sessions[agent.id];
-  const isRunning = running.includes(agent.id);
-  const queuePos = queue.findIndex((j) => j.agentId === agent.id);
+  // 字段级订阅，且只订阅**自己**的会话：最多三个 agent 并发生成，整库订阅
+  // 意味着别人的每个流式落库都在重渲染这个稿面。
+  const session = useRoleplayStore((s) => s.sessions[agent.id]);
+  const isRunning = useRoleplayStore((s) => s.running.includes(agent.id));
+  const queuePos = useRoleplayStore((s) => s.queue.findIndex((j) => j.agentId === agent.id));
+  const isStale = useRoleplayStore((s) => !!s.stale[agent.id]);
+  const send = useRoleplayStore((s) => s.send);
+  const stop = useRoleplayStore((s) => s.stop);
+  const retry = useRoleplayStore((s) => s.retry);
+  const rewind = useRoleplayStore((s) => s.rewind);
+  const dequeue = useRoleplayStore((s) => s.dequeue);
+  const promote = useRoleplayStore((s) => s.promote);
+  const toggleSubAgent = useRoleplayStore((s) => s.toggleSubAgent);
+  const refreshBinding = useRoleplayStore((s) => s.refreshBinding);
+  const setAgentModel = useRoleplayStore((s) => s.setAgentModel);
 
   const [draft, setDraft] = useState("");
   const [composing, setComposing] = useState(false);
@@ -249,6 +258,37 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const taRef = useRef<HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // ── 稿面折叠（规则同对话助手的 transcriptFold，纯显示层）──
+  // 一场长戏的每一轮都渲染着逐行解析的 ScriptText，没有折叠时整场戏的 DOM
+  // 都陪着最新一轮重渲染。transcript 资产和 wire history 都不动。
+  const [showAllTurns, setShowAllTurns] = useState(false);
+  const foldableAt = useMemo(
+    () =>
+      foldBoundary(
+        (session?.turns ?? []).map((tn) => (tn.speaker === "author" ? "user" : "assistant")),
+      ),
+    [session?.turns],
+  );
+  const foldAt = showAllTurns ? 0 : foldableAt;
+  const hiddenTurns = useMemo(
+    () => (session?.turns ?? []).slice(0, foldAt).filter((tn) => tn.speaker === "author").length,
+    [session?.turns, foldAt],
+  );
+  // 展开/收起会在视口**上方**增删内容，不补偿的话稿面会瞬移（同 AgentChat）。
+  const foldAdjust = useRef<{ height: number; top: number } | null>(null);
+  const toggleFold = () => {
+    const el = scrollRef.current;
+    if (el) foldAdjust.current = { height: el.scrollHeight, top: el.scrollTop };
+    setShowAllTurns((v) => !v);
+  };
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const prev = foldAdjust.current;
+    if (!el || !prev) return;
+    foldAdjust.current = null;
+    el.scrollTop = Math.max(0, prev.top + (el.scrollHeight - prev.height));
+  }, [showAllTurns]);
 
   // 被这个 agent 阻塞住的卡片。按 surface 取，而不是把 agentStore 的队列整个
   // 渲染出来——三个 agent 并发时，不区分就等于每个面板都显示别人的卡片，而
@@ -644,7 +684,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
         </div>
       )}
 
-      {stale[agent.id] && (
+      {isStale && (
         <div className={styles.staleBar}>
           <span className={styles.staleDot} />
           <span className={styles.staleText}>
@@ -775,7 +815,17 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
             </div>
           )}
 
-          {session?.turns.map((turn) => (
+          {foldableAt > 0 && (
+            <button type="button" className={styles.foldBar} onClick={toggleFold} aria-expanded={showAllTurns}>
+              {showAllTurns
+                ? <ChevronDown size={10} strokeWidth={2.4} />
+                : <ChevronRight size={10} strokeWidth={2.4} />}
+              {showAllTurns
+                ? t("roleplay.fold.collapse", { defaultValue: "收起早前对话" })
+                : t("roleplay.fold.show", { n: hiddenTurns, defaultValue: `更早的 ${hiddenTurns} 轮` })}
+            </button>
+          )}
+          {(session?.turns ?? []).slice(foldAt).map((turn) => (
             <TurnBlock
               key={turn.index}
               turn={turn}

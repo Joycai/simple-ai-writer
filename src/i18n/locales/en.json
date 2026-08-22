@@ -2253,6 +2253,10 @@
       "cancel": "Leave queue",
       "promote": "Move to front"
     },
+    "fold": {
+      "show": "{{n}} earlier exchanges",
+      "collapse": "Collapse earlier exchanges"
+    },
     "log": {
       "line": "Execution log · {{n}} steps"
     },

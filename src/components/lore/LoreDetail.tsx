@@ -42,7 +42,7 @@ import { chainCanSeeImages, resolveVisionConn } from "../../lib/agent/subagent";
 import { describeLoreImage } from "../../lib/lore/vision";
 import { readFile, removeFile } from "../../lib/fs/fileio";
 import { imageToDataUrl } from "../../lib/fs/images";
-import { useImageDataUrl } from "./useImageDataUrl";
+import { useImageDataUrl, useImageThumbnails } from "./useImageDataUrl";
 import { useImeGuard } from "../../lib/ime";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { MarkdownPreview } from "../common/MarkdownPreview";
@@ -209,26 +209,19 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     }
   }, [entity.images.length, previewIndex]);
 
-  // Gallery rendering: load each image file as a base64 data URL. Bypasses the
-  // `ai-writer-asset://` custom protocol entirely — Webview2's strict URL
-  // parsing on Windows drive-letter paths made that path fragile.
-  const [imageDataUrls, setImageDataUrls] = useState<Record<string, string>>({});
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const next: Record<string, string> = {};
-      for (const img of entity.images) {
-        try {
-          const { dataUrl } = await imageToDataUrl(img.absPath);
-          next[img.absPath] = dataUrl;
-        } catch {
-          // skip — broken-image placeholder will render
-        }
-      }
-      if (!cancelled) setImageDataUrls(next);
-    })();
-    return () => { cancelled = true; };
-  }, [entity.images]);
+  // Gallery rendering: data URLs (the `ai-writer-asset://` protocol is
+  // unreliable on Windows drive-letter paths), at *thumbnail* tier — the grid
+  // renders cards, and inlining every full-size picture held the whole gallery
+  // as base64 in state. The hook keys on the path list, so the rescan after
+  // every mutation (which rebuilds `entity.images` with fresh identity)
+  // re-encodes nothing when no path actually changed — the exact failure mode
+  // LoreWall's avatar loading was already written to avoid.
+  const galleryPaths = useMemo(() => entity.images.map((img) => img.absPath), [entity.images]);
+  const imageDataUrls = useImageThumbnails(galleryPaths, 480);
+  // Full resolution only for the open lightbox slide — that surface exists to
+  // review pixels. Falls back to the thumbnail while the full read is landing.
+  const lightboxPath = previewIndex !== null ? entity.images[previewIndex]?.absPath ?? null : null;
+  const lightboxUrl = useImageDataUrl(lightboxPath);
 
   const [contentLoaded, setContentLoaded] = useState(false);
   // True when the read above failed (permissions, non-UTF-8, a transient I/O
@@ -491,9 +484,10 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     setAiDescFile(img.file);
     startEdit(img.file, img.desc);
     try {
-      // Reuse the already-loaded gallery data URL; fall back to a fresh read
-      // if that load failed (broken thumbnail but readable file).
-      const dataUrl = imageDataUrls[img.absPath] ?? (await imageToDataUrl(img.absPath)).dataUrl;
+      // Always a fresh full-resolution read: the gallery map now holds
+      // thumbnails, and a vision model describing a downscaled copy would
+      // miss exactly the details the description exists to capture.
+      const dataUrl = (await imageToDataUrl(img.absPath)).dataUrl;
       const text = await describeLoreImage({
         dataUrl,
         entityName: entity.name,
@@ -850,7 +844,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
           </button>
           <figure className={styles.lightboxStage} onClick={(ev) => ev.stopPropagation()}>
             <img
-              src={imageDataUrls[previewImg.absPath] ?? ""}
+              src={lightboxUrl ?? imageDataUrls[previewImg.absPath] ?? ""}
               alt={previewImg.desc || previewImg.file}
               className={styles.lightboxImg}
             />

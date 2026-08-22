@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Sparkles, ChevronUp, ChevronDown, ChevronsUp, ChevronsDown, ChevronLeft, ChevronRight,
@@ -40,7 +40,7 @@ import {
 import { matchEntitiesInText, type LoreEntity } from "../../lib/lore";
 import { readFile, makeDir, removeDir, renamePath, fileExists } from "../../lib/fs/fileio";
 import { ASSETS_DIR } from "../../lib/image/assets";
-import { imageToDataUrl, isImagePath } from "../../lib/fs/images";
+import { imageToThumbnailDataUrl, isImagePath } from "../../lib/fs/images";
 import { useImeGuard } from "../../lib/ime";
 import { Select } from "../common/Select";
 import styles from "./LibraryView.module.css";
@@ -135,8 +135,11 @@ function ResourceRow({ resource, onOpen }: { resource: ResourceFile; onOpen: () 
     let cancelled = false;
     setThumb(null);
     setBroken(false);
-    imageToDataUrl(resource.path)
-      .then(({ dataUrl }) => { if (!cancelled) setThumb(dataUrl); })
+    // Thumbnail tier, not the full-resolution encoder: this renders at
+    // resourceThumb size, and a full-size photo inlined as base64 is megabytes
+    // of string in state for a 26px-tall row (see lib/fs/images).
+    imageToThumbnailDataUrl(resource.path, 160)
+      .then((dataUrl) => { if (!cancelled) setThumb(dataUrl); })
       .catch(() => { if (!cancelled) setBroken(true); });
     return () => { cancelled = true; };
   }, [resource.path, isImage]);
@@ -257,10 +260,17 @@ function DigestCard({ volume, meta }: { volume: Volume; meta?: VolumeMeta }) {
 
 export function LibraryView() {
   const { t } = useTranslation();
-  const {
-    fileTree, projectPath, activeFilePath, setActiveFilePath, wordCount, refreshFileTree,
-    createEntry, moveEntry, deleteEntry,
-  } = useProjectStore();
+  // Field selectors — the whole-store subscription re-rendered this view on
+  // every projectStore write, including the counters typed into the editor.
+  const fileTree = useProjectStore((s) => s.fileTree);
+  const projectPath = useProjectStore((s) => s.projectPath);
+  const activeFilePath = useProjectStore((s) => s.activeFilePath);
+  const setActiveFilePath = useProjectStore((s) => s.setActiveFilePath);
+  const wordCount = useProjectStore((s) => s.wordCount);
+  const refreshFileTree = useProjectStore((s) => s.refreshFileTree);
+  const createEntry = useProjectStore((s) => s.createEntry);
+  const moveEntry = useProjectStore((s) => s.moveEntry);
+  const deleteEntry = useProjectStore((s) => s.deleteEntry);
   const setMainView = useAppStore((s) => s.setMainView);
   const terms = useTerms();
   const docs = useDocModel();
@@ -320,6 +330,19 @@ export function LibraryView() {
     });
   }, [volumes]);
 
+  // Mount-lifetime caches for the effect below. While this view is mounted the
+  // editor is hidden (App renders one main view at a time), so a chapter's
+  // text cannot change under the cache — the only paths that could are the
+  // active file (read live from editorStore each pass, never cached) and a
+  // renamed/created chapter, which arrives as a new path. Without these, every
+  // trigger — a tree refresh, a lore rescan, a saved digest — re-read the
+  // whole manuscript: two serialized IPC round-trips per chapter.
+  const chapterCache = useRef(new Map<string, string>());
+  const memoryCache = useRef(new Map<string, Awaited<ReturnType<typeof loadMemory>>>());
+  useEffect(() => { chapterCache.current.clear(); }, [projectPath]);
+  // A finished generation is exactly a memory file changing on disk.
+  useEffect(() => { memoryCache.current.clear(); }, [projectPath, chapterGen]);
+
   // One read of every chapter drives all derived state: the per-chapter memory
   // badge, and per volume the digest freshness + referenced lore entities.
   // Recomputed when the chapter set changes, a memory generation starts/
@@ -339,8 +362,23 @@ export function LibraryView() {
         const contents: { rel: string; content: string }[] = [];
         for (const ch of vol.chapters) {
           try {
-            const content = isSamePath(ch.path, activePath) ? activeContent : await readFile(ch.path);
-            const mem = await loadMemory(projectPath, ch.path);
+            let content: string;
+            if (isSamePath(ch.path, activePath)) {
+              content = activeContent;
+            } else {
+              const hit = chapterCache.current.get(ch.path);
+              if (hit !== undefined) {
+                content = hit;
+              } else {
+                content = await readFile(ch.path);
+                chapterCache.current.set(ch.path, content);
+              }
+            }
+            let mem = memoryCache.current.get(ch.path);
+            if (mem === undefined) {
+              mem = await loadMemory(projectPath, ch.path);
+              memoryCache.current.set(ch.path, mem);
+            }
             statusEntries.push([ch.path, memoryStatus(content, mem)]);
             contents.push({ rel: ch.relPath, content });
           } catch {
@@ -366,12 +404,21 @@ export function LibraryView() {
     return () => { cancelled = true; };
   }, [volumes, projectPath, chapterGen, loreIndex, digestVersion]);
 
-  const allChaptersCount = volumes.reduce((s, v) => s + v.chapters.length, 0);
-  const activeVolumeIdx = volumes.findIndex((v) => v.chapters.some((c) => c.path === activeFilePath));
+  const allChaptersCount = useMemo(
+    () => volumes.reduce((s, v) => s + v.chapters.length, 0),
+    [volumes],
+  );
+  const activeVolumeIdx = useMemo(
+    () => volumes.findIndex((v) => v.chapters.some((c) => c.path === activeFilePath)),
+    [volumes, activeFilePath],
+  );
   const enabledModels = conversationalModels(models).filter((m) => m.enabled);
   const memoModelValue = memoryModelId ?? activeModelId ?? "";
   const isWriting = (ch: Chapter) => spine?.status?.[ch.relPath] === "writing";
-  const writingCount = volumes.reduce((n, v) => n + v.chapters.filter(isWriting).length, 0);
+  const writingCount = useMemo(
+    () => volumes.reduce((n, v) => n + v.chapters.filter((ch) => spine?.status?.[ch.relPath] === "writing").length, 0),
+    [volumes, spine],
+  );
 
   const persistSpine = (next: BookSpine) => {
     setSpine(next);

@@ -56,6 +56,7 @@ import {
   listChatSessions, loadChatSession, upsertChatSession, type ChatSessionRow,
 } from "../lib/agent/sessionDb";
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
+import { createStreamThrottle } from "../lib/agent/streamThrottle";
 import {
   CHAT_AUTO_APPROVE_KEY, grants, grantsAppend, isAutoApprovable,
   type AutoApproveKind, type AutoApproveState,
@@ -931,6 +932,26 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         turns: s.turns.map((tn) => (tn.id === assistantTurn.id ? patch(tn) : tn)),
       }));
 
+    // Streaming arrives per network chunk — far above reading speed — and each
+    // store write re-renders the transcript. Output text and the live round's
+    // reasoning are both latest-wins, so they buffer here and land at most
+    // once per interval (see streamThrottle). Everything else (tool steps,
+    // run-done) still writes immediately, behind a flush() ordering barrier.
+    let pendingText: string | null = null;
+    let pendingReasoning: (AgentEvent & { kind: "reasoning" }) | null = null;
+    const stream = createStreamThrottle(() => {
+      const text = pendingText;
+      const reasoning = pendingReasoning;
+      pendingText = null;
+      pendingReasoning = null;
+      if (text === null && reasoning === null) return;
+      patchAssistant((tn) => ({
+        ...tn,
+        ...(reasoning ? { log: appendAgentEventTo(tn.log, reasoning) } : {}),
+        ...(text !== null ? { text } : {}),
+      }));
+    });
+
     /** Tell the context bar the history changed under it (see chatContextVersion). */
     const bumpContext = () => set((s) => ({ chatContextVersion: s.chatContextVersion + 1 }));
 
@@ -1258,13 +1279,36 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // made the context bar re-walk the entire wire history (a CJK regex
         // over every message) dozens of times per second while a model thought.
         onEvent: (event) => {
+          if (event.kind === "reasoning") {
+            // Latest-wins per (parentStep, round) — a fragment for a *new*
+            // stream must not overwrite a buffered one from the previous, so
+            // flush across the boundary (in practice a round-start or
+            // tool-step always sits between, but this doesn't rely on it).
+            if (
+              pendingReasoning &&
+              (pendingReasoning.parentStep !== event.parentStep ||
+                pendingReasoning.round !== event.round)
+            ) {
+              stream.flush();
+            }
+            pendingReasoning = event;
+            stream.schedule();
+            return;
+          }
+          // Ordering barrier: buffered text/reasoning land before this event.
+          stream.flush();
           patchAssistant((tn) => ({ ...tn, log: appendAgentEventTo(tn.log, event) }));
-          if (event.kind !== "reasoning") bumpContext();
+          bumpContext();
         },
         // Assign, not append — the runtime hands over the whole output each
         // time so it can retract a tool round's narration.
-        onOutputText: (text) => patchAssistant((tn) => ({ ...tn, text })),
+        onOutputText: (text) => {
+          pendingText = text;
+          stream.schedule();
+        },
       });
+      // The turn is over; whatever the throttle still holds is the final text.
+      stream.flush();
 
       if (outcome === "paused") {
         const pausedId = get().chatTaskWorkspace?.taskId;
@@ -1306,6 +1350,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       recordRunOutcome(model.id, null);
       void persistUsage(projectPath, model.id, inputTokens, outputTokens, cost, "chat", cachedTokens);
     } catch (e) {
+      // Whatever streamed before the failure is still the author's to read.
+      stream.flush();
       if ((e as Error).name !== "AbortError" && get().chatAbort === controller) {
         const msg = String(e);
         set({ chatError: msg });
