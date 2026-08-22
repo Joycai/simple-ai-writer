@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, Sparkles, FolderOpen, ExternalLink, FileText, Plus, Pencil, Trash2, Check, X, Camera, ChevronLeft, ChevronRight, Layers, MoreHorizontal } from "lucide-react";
-import { createPortal } from "react-dom";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
@@ -44,6 +43,7 @@ import { readFile, removeFile } from "../../lib/fs/fileio";
 import { imageToDataUrl } from "../../lib/fs/images";
 import { useImageDataUrl, useImageThumbnails } from "./useImageDataUrl";
 import { useImeGuard } from "../../lib/ime";
+import { ModalShell } from "../common/ModalShell";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { MarkdownPreview } from "../common/MarkdownPreview";
 import { LoreImproveModal } from "./LoreImproveModal";
@@ -183,6 +183,11 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   // entity.images), or null when the lightbox is closed.
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
 
+  // Every close of the lightbox goes through the shell's animated close; the
+  // fallback hard-close only runs if the ref is read before the shell mounts.
+  const lightboxCloseRef = useRef<(() => void) | null>(null);
+  const closeLightbox = () => (lightboxCloseRef.current ?? (() => setPreviewIndex(null)))();
+
   // Wire keyboard nav for the lightbox: Esc closes, ←/→ flip between images.
   // Effect only attaches a listener while open, so it doesn't intercept keys
   // during normal browsing.
@@ -190,7 +195,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     if (previewIndex === null) return;
     const onKey = (ev: KeyboardEvent) => {
       if (ev.key === "Escape") {
-        setPreviewIndex(null);
+        closeLightbox();
       } else if (ev.key === "ArrowRight" && entity.images.length > 1) {
         setPreviewIndex((i) => (i === null ? null : (i + 1) % entity.images.length));
       } else if (ev.key === "ArrowLeft" && entity.images.length > 1) {
@@ -816,64 +821,69 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         />
       )}
 
-      {previewImg && createPortal(
-        <div
-          className={styles.lightbox}
-          onClick={() => setPreviewIndex(null)}
-          role="dialog"
-          aria-label={previewImg.desc || previewImg.file}
+      {previewImg && (
+        // Escape stays with the component's own keydown listener above (it
+        // also owns ←/→), routed through closeLightbox for the exit animation.
+        <ModalShell
+          overlayClassName={styles.lightbox}
+          onClose={() => setPreviewIndex(null)}
+          closeOnEscape={false}
+          closeRef={lightboxCloseRef}
         >
-          {entity.images.length > 1 && (
-            <button
-              className={`${styles.lightboxNav} ${styles.lightboxPrev}`}
-              onClick={(ev) => {
-                ev.stopPropagation();
-                setPreviewIndex((i) => (i === null ? null : (i - 1 + entity.images.length) % entity.images.length));
-              }}
-              title={t("lore.detail.previewPrev", { defaultValue: "上一张" })}
-            >
-              <ChevronLeft size={28} strokeWidth={1.5} />
-            </button>
-          )}
-          <button
-            className={styles.lightboxClose}
-            onClick={(ev) => { ev.stopPropagation(); setPreviewIndex(null); }}
-            title={t("common.close", { defaultValue: "关闭" })}
+          <div
+            className={styles.lightboxDialog}
+            role="dialog"
+            aria-label={previewImg.desc || previewImg.file}
           >
-            <X size={20} strokeWidth={1.8} />
-          </button>
-          <figure className={styles.lightboxStage} onClick={(ev) => ev.stopPropagation()}>
-            <img
-              src={lightboxUrl ?? imageDataUrls[previewImg.absPath] ?? ""}
-              alt={previewImg.desc || previewImg.file}
-              className={styles.lightboxImg}
-            />
-            <figcaption className={styles.lightboxCaption}>
-              <div className={styles.lightboxFile}>
-                {previewImg.file}
-                {entity.images.length > 1 && (
-                  <span className={styles.lightboxCounter}>
-                    {(previewIndex ?? 0) + 1} / {entity.images.length}
-                  </span>
-                )}
-              </div>
-              {previewImg.desc && <div className={styles.lightboxDesc}>{previewImg.desc}</div>}
-            </figcaption>
-          </figure>
-          {entity.images.length > 1 && (
+            {entity.images.length > 1 && (
+              <button
+                className={`${styles.lightboxNav} ${styles.lightboxPrev}`}
+                onClick={() => {
+                  setPreviewIndex((i) => (i === null ? null : (i - 1 + entity.images.length) % entity.images.length));
+                }}
+                title={t("lore.detail.previewPrev", { defaultValue: "上一张" })}
+              >
+                <ChevronLeft size={28} strokeWidth={1.5} />
+              </button>
+            )}
             <button
-              className={`${styles.lightboxNav} ${styles.lightboxNext}`}
-              onClick={(ev) => {
-                ev.stopPropagation();
-                setPreviewIndex((i) => (i === null ? null : (i + 1) % entity.images.length));
-              }}
-              title={t("lore.detail.previewNext", { defaultValue: "下一张" })}
+              className={styles.lightboxClose}
+              onClick={closeLightbox}
+              title={t("common.close", { defaultValue: "关闭" })}
             >
-              <ChevronRight size={28} strokeWidth={1.5} />
+              <X size={20} strokeWidth={1.8} />
             </button>
-          )}
-        </div>,
-        document.body,
+            <figure className={styles.lightboxStage}>
+              <img
+                src={lightboxUrl ?? imageDataUrls[previewImg.absPath] ?? ""}
+                alt={previewImg.desc || previewImg.file}
+                className={styles.lightboxImg}
+              />
+              <figcaption className={styles.lightboxCaption}>
+                <div className={styles.lightboxFile}>
+                  {previewImg.file}
+                  {entity.images.length > 1 && (
+                    <span className={styles.lightboxCounter}>
+                      {(previewIndex ?? 0) + 1} / {entity.images.length}
+                    </span>
+                  )}
+                </div>
+                {previewImg.desc && <div className={styles.lightboxDesc}>{previewImg.desc}</div>}
+              </figcaption>
+            </figure>
+            {entity.images.length > 1 && (
+              <button
+                className={`${styles.lightboxNav} ${styles.lightboxNext}`}
+                onClick={() => {
+                  setPreviewIndex((i) => (i === null ? null : (i + 1) % entity.images.length));
+                }}
+                title={t("lore.detail.previewNext", { defaultValue: "下一张" })}
+              >
+                <ChevronRight size={28} strokeWidth={1.5} />
+              </button>
+            )}
+          </div>
+        </ModalShell>
       )}
 
       <div className={styles.crumbBar}>
