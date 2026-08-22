@@ -15,7 +15,7 @@
  * Pure and synchronous so it can be tested without a renderer; every display
  * decision (how many rounds to show, what is collapsed) stays in the component.
  * The task plan is deliberately NOT here — it lives on disk, not in the stream
- * (see docs/subagent-lld.md §3.3).
+ * (see docs/feature/agent/subagent-lld.md §3.3).
  */
 
 import type { AgentEvent, ToolStep, ToolStepStatus } from "./events";

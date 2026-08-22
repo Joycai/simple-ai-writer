@@ -6,11 +6,11 @@
 > 什么"，这份清单验的是"对面怎么理解"。
 >
 > 第一次实测就抓到一个静默缺陷（服务端搜索之后 turn 停在半路，
-> [`anthropic-plan.md`](anthropic-plan.md) §10.5）—— 这正是本文存在的理由，
+> [`anthropic-plan.md`](../api/anthropic-plan.md) §10.5）—— 这正是本文存在的理由，
 > 也说明"通过单元测试"与"真的能用"之间的距离有多大。
 >
-> 分散在 [`reasoning-plan.md`](reasoning-plan.md)、[`anthropic-plan.md`](anthropic-plan.md)、
-> [`gemini-plan.md`](gemini-plan.md) 三份文档里的实测项汇总在此，因为它们只在
+> 分散在 [`reasoning-plan.md`](../api/reasoning-plan.md)、[`anthropic-plan.md`](../api/anthropic-plan.md)、
+> [`gemini-plan.md`](../api/gemini-plan.md) 三份文档里的实测项汇总在此，因为它们只在
 > 同一次动手时才会被真正执行。**验完请回原文档更新对应结论**，本文只是索引。
 
 ## 怎么验
@@ -31,7 +31,7 @@
 ### 1.1 ④ Anthropic：思考真的开着吗
 
 **为什么最重要**：Anthropic 对"思考配置不合法"的反应是**静默关闭思考**而非
-报错（[`api/reasoning.md`](api/reasoning.md) §3.1）。所以"我们发了 `adaptive`"
+报错（[`api/reasoning.md`](../api/reasoning.md) §3.1）。所以"我们发了 `adaptive`"
 不等于"它在思考"。
 
 **怎么验**：配一个 Claude 4.6+ 模型，跑一次**带工具的**运行（续写的 agent 模式、
@@ -46,7 +46,7 @@ thinking block 开头、后跟 `tool_use`。缺了就是回传没生效。
 ### 1.2 ③ Gemini：`includeThoughts` 之后拿到了什么
 
 **为什么重要**：`includeThoughts` 默认关闭，我们刚把它打开
-（[`gemini-plan.md`](gemini-plan.md) §3 第 2 刀）。而 `part.thought` 的实际形态
+（[`gemini-plan.md`](../api/gemini-plan.md) §3 第 2 刀）。而 `part.thought` 的实际形态
 只在指南页出现过，参考页没定义。
 
 **怎么验**：配一个 Gemini 3+ 模型跑一次续写，看响应的 `parts`：
@@ -70,11 +70,11 @@ thinking block 开头、后跟 `tool_use`。缺了就是回传没生效。
 
 | # | 验什么 | 怎么验 | 影响 |
 | --- | --- | --- | --- |
-| 2.1 | `display:"summarized"` 返回的文本量，与计费 token 的差距 | 对比响应里 thinking 文本长度与 `usage.output_tokens_details.thinking_tokens` | 用量面板是否需要一句说明（[`anthropic-plan.md`](anthropic-plan.md) §5.4） |
+| 2.1 | `display:"summarized"` 返回的文本量，与计费 token 的差距 | 对比响应里 thinking 文本长度与 `usage.output_tokens_details.thinking_tokens` | 用量面板是否需要一句说明（[`anthropic-plan.md`](../api/anthropic-plan.md) §5.4） |
 | 2.2 | `DEFAULT_MAX_TOKENS` 从 8k 提到 32k 后，上下文预算的实际变化 | 看 AiPanel 的上下文分配条：`maxOutput` 未配置的模型，预留是否明显变多 | `lib/context/budget.ts` 拿它做规划，这个常量不孤立（§5.1） |
 | 2.3 | 中继是否透传 `output_config` | 同一中继模型分别发 `effort: "low"` 与 `"max"`，比较输出 token 量 | 决定 Claude 上的力度拨盘在中继上是不是按了没反应（§3.6） |
 | 2.4 | 中继上 `adaptive` 被拒时的 400 措辞 | 故意给一个 4.5 模型发 `adaptive`，看报错原文 | 是否会被 `structured.ts` 的 `TOOL_CAPABILITY_ERROR` 误判成"不支持工具调用"（推断为不会，值得验） |
-| 2.5 | MiniMax ④ 族端点是否接受 `display` 字段 | 配 MiniMax 的 `/anthropic` 端点，思考方言选**「自动」**（即发 `display`）跑一次 | 已不再是阻塞项：方言选「开关式」就不发这个字段（[`anthropic-plan.md`](anthropic-plan.md) §10.1）。仍值得一验，因为答案决定「自动」档在该端点上能不能用 |
+| 2.5 | MiniMax ④ 族端点是否接受 `display` 字段 | 配 MiniMax 的 `/anthropic` 端点，思考方言选**「自动」**（即发 `display`）跑一次 | 已不再是阻塞项：方言选「开关式」就不发这个字段（[`anthropic-plan.md`](../api/anthropic-plan.md) §10.1）。仍值得一验，因为答案决定「自动」档在该端点上能不能用 |
 
 ### 2.6 MiniMax-M3 专项（`switch` 方言 + 服务端工具）
 
@@ -91,7 +91,7 @@ thinking block 开头、后跟 `tool_use`。缺了就是回传没生效。
 | 2.6.6 | ✅ 服务端 `web_search` 声明被接受，块名与文档一致（`server_tool_use` / `web_search_tool_result`） |
 | 2.6.7 | ✅ 结果字段读得出（8 次搜索 × 10 条命中，标题与 URL 都有） |
 | 2.6.8 | ✅ 服务端工具与我们自己的 22 个工具同处一个 `tools` 数组，未被拒 |
-| 2.6.9 | ✅ **不发 `pause_turn`，报 `end_turn`** —— 但 turn 确实停在半路，见 [`anthropic-plan.md`](anthropic-plan.md) §10.5 |
+| 2.6.9 | ✅ **不发 `pause_turn`，报 `end_turn`** —— 但 turn 确实停在半路，见 [`anthropic-plan.md`](../api/anthropic-plan.md) §10.5 |
 
 **仍未验**：
 
@@ -110,7 +110,7 @@ thinking block 开头、后跟 `tool_use`。缺了就是回传没生效。
 
 ### 2.7 官方端点服务端工具（api.anthropic.com，全部未验）
 
-现有实现对官方端点是"预期走正路"的推断（[`anthropic-plan.md`](anthropic-plan.md)
+现有实现对官方端点是"预期走正路"的推断（[`anthropic-plan.md`](../api/anthropic-plan.md)
 §10.10）：声明格式与官方一致、`pause_turn` 的 verbatim 续跑本就按官方行为实现，
 但没有对 api.anthropic.com 实测过。配一个官方供应商、给模型勾上 web_search 即可验。
 
@@ -125,7 +125,7 @@ thinking block 开头、后跟 `tool_use`。缺了就是回传没生效。
 > 作者 2026-08-21 的判断：这条暂时用不上，不急着验。放在这里当待办，不是阻塞项。
 > 想做的时候，2.8.4 是收益最大的一格（MiniMax-M3 是本项目最常用的中转端点）。
 
-④ 族的 prompt caching 是**显式**的（[`api/landscape.md`](api/landscape.md) §5）：
+④ 族的 prompt caching 是**显式**的（[`api/landscape.md`](../api/landscape.md) §5）：
 不打断点就一定不缓存。1.22 起官方端点会在 `tools` 最后一项和 `system` 上各打一个
 断点（`lib/ai/anthropic.ts` → `cachesPrompt`），把 agent 循环每一轮重发的那几千
 token 固定头部变成缓存读。**第三方 ④ 族端点一律不打**——这一节就是解开它的条件。
@@ -138,7 +138,7 @@ token 固定头部变成缓存读。**第三方 ④ 族端点一律不打**—�
 | 2.8.4 | MiniMax-M3：`tools` 上的 `cache_control` 是否被接受 | 同上，断点改打在最后一个工具上 | 文档**没写**。这是本项目最常用的中转端点，通过了才是收益最大的一格 |
 | 2.8.5 | 其它 ④ 族中继（New API 一类）对未知字段的态度 | 同 2.8.3 | 若静默忽略而非 400，可以按"打了不亏"放开；若 400 则必须按 standard 分档 |
 
-> 验完记得回 [`agent-tool-context-lld.md`](agent-tool-context-lld.md) §2.3 更新结论。
+> 验完记得回 [`agent-tool-context-lld.md`](../feature/agent/agent-tool-context-lld.md) §2.3 更新结论。
 
 ## 3. ③ Gemini
 
@@ -146,7 +146,7 @@ token 固定头部变成缓存读。**第三方 ④ 族端点一律不打**—�
 | --- | --- | --- | --- |
 | 3.1 | 3.1 Pro 是否拒绝 `MINIMAL` | 该模型 + 思考档位设「关闭」 | 它的档位是 `low/medium/high`；若拒绝，「关闭」在该模型上要另映射 |
 | 3.2 | 档位是否真的生效 | 对比 `MINIMAL` 与 `HIGH` 的 `thoughtsTokenCount` | 验证映射不是白发 |
-| 3.3 | 中继的 camelCase 假设 | 配一个 ③ 族中继，发一张图，看模型是否真的看见了 | 我们刚从 snake_case 改过来（[`api/landscape.md`](api/landscape.md) §7）；错了的表现是图片被静默忽略 |
+| 3.3 | 中继的 camelCase 假设 | 配一个 ③ 族中继，发一张图，看模型是否真的看见了 | 我们刚从 snake_case 改过来（[`api/landscape.md`](../api/landscape.md) §7）；错了的表现是图片被静默忽略 |
 | 3.4 | 中继的 Bearer 鉴权 | 同上，`authMode` 选 `bearer` 后模型列表能否拉到 | 四条路径（聊天/列表/探测/图像）都要通 |
 
 ## 4. ① OpenAI 系
@@ -168,7 +168,7 @@ token 固定头部变成缓存读。**第三方 ④ 族端点一律不打**—�
 ## 5. 验完之后
 
 - **回原文档更新结论** —— 本文只是索引，判断依据要留在各自的方案文档里。
-- **新发现的兼容层差异**记进 [`api/landscape.md`](api/landscape.md) §7 的样本
+- **新发现的兼容层差异**记进 [`api/landscape.md`](../api/landscape.md) §7 的样本
   清单，那里已经有六个样本和四条通用规律。
 - **本文验完即可删**。它存在的理由是"这些事只在同一次动手时才会被执行"，
   执行完就没有价值了。

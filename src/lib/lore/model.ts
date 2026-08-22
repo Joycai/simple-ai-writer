@@ -61,7 +61,7 @@ export interface LoreFacet {
    * slot no enabled pack declares is simply unclassified *for now* and is kept
    * verbatim: the pack coming back must restore the grouping, which a scan that
    * "cleaned up" the value could not do. See `findFacetSlot` and
-   * docs/lore-entry-type-plan.md §4.
+   * docs/feature/lore/lore-entry-type-plan.md §4.
    */
   slot: string | null;
   /** Secondary activation keywords. Empty + mode "auto" ⇒ never auto-fires. */

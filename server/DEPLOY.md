@@ -9,7 +9,7 @@
 
 > 这份文档只讲**怎么部署和运维**。API 细节和设计取舍见
 > [`README.md`](README.md);为什么是这个形态见
-> [`../docs/remote-knowledge-base-feasibility.md`](../docs/remote-knowledge-base-feasibility.md) §13–§18。
+> [`../docs/feature/knowledge-base/remote-knowledge-base-feasibility.md`](../docs/feature/knowledge-base/remote-knowledge-base-feasibility.md) §13–§18。
 
 ---
 

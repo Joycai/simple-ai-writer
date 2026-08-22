@@ -4,7 +4,7 @@
  * Each AI feature is expressed as a preset: which tools the model may call, how
  * many loop rounds it gets, and how the run must end. PR1 keeps presets thin —
  * prompt/seed-context assembly still lives with the callers (aiTaskStore); the
- * migration plan (docs/unified-agent-plan.md §3.3) moves systemPrompt and
+ * migration plan (docs/feature/agent/unified-agent-plan.md §3.3) moves systemPrompt and
  * seedContext in here as the lore-side entry points migrate (PR2/PR3).
  */
 

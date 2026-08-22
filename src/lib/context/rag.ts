@@ -520,7 +520,7 @@ export function bundleToMessages(
   ];
 }
 
-/** What one turn's automatic retrieval produced (docs/chat-memory-plan.md §5). */
+/** What one turn's automatic retrieval produced (docs/feature/agent/chat-memory-plan.md §5). */
 export interface TurnInjection {
   /** The 【…】 blocks to append as one user message; "" when nothing net-new. */
   text: string;
@@ -651,7 +651,7 @@ export interface ChatSeedMessages {
  * lore/memory/window is welded to the first question for the life of the
  * session — it can never be dropped without also dropping what the author
  * asked. Split, the context block is an independent unit the compaction pass
- * (docs/chat-memory-plan.md §4) can discard, because it is retrieval output
+ * (docs/feature/agent/chat-memory-plan.md §4) can discard, because it is retrieval output
  * and reproducible; the question is conversation and is not.
  *
  * `questionContent` overrides what the question message carries on the wire,

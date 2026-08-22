@@ -1,7 +1,7 @@
 /**
  * L1 ("write-auto") tool handlers: lore + story-memory writes.
  *
- * Policy (docs/unified-agent-plan.md §3.2): these writes apply automatically
+ * Policy (docs/feature/agent/unified-agent-plan.md §3.2): these writes apply automatically
  * but every overwrite is preceded by a backup into `.ai-writer/backups/`
  * (backup.ts), and each handler validates the model's payload against the
  * file's structural contract before touching disk — a malformed write comes

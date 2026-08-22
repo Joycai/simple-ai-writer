@@ -310,7 +310,7 @@ describe("generateImage · editing", () => {
   it("uploads to /images/edits as multipart, without setting Content-Type", async () => {
     // The header must come from the webview's FormData serialization, boundary
     // included — declaring it by hand breaks every such request. See
-    // docs/image-generation-plan.md §2.3.
+    // docs/feature/image-generation-plan.md §2.3.
     const calls = mockMultipart({ data: [{ b64_json: "aGk=" }] });
     await generateImage(OPENAI, { prompt: "make it blue", images: [SOURCE] });
 

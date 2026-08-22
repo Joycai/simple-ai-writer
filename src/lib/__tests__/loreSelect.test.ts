@@ -378,7 +378,7 @@ describe("parseFacetMeta", () => {
 
 /**
  * The facet `slot` field — a facet's place in its category's type schema
- * (docs/lore-entry-type-plan.md). Two things are being pinned here: the value
+ * (docs/feature/lore/lore-entry-type-plan.md). Two things are being pinned here: the value
  * survives a round-trip *including* one no enabled pack declares, and it changes
  * nothing about injection. The second is the invariant the whole "disabling a
  * pack degrades an entry instead of altering it" promise rests on, and it is the

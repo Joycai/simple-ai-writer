@@ -4,7 +4,7 @@
 > 加新协议族、加新能力字段（思考强度、多模态开关…）时的裁决依据。
 >
 > 与相邻文档的关系：
-> - [`api/README.md`](api/README.md) + [`api/landscape.md`](api/landscape.md) —
+> - [`api/README.md`](README.md) + [`api/landscape.md`](landscape.md) —
 >   **协议事实**（四个族各自长什么样），换个项目也成立，本文引用它不复制。
 > - [`provider-standards.md`](provider-standards.md) — 2025 年那次把 `ApiStandard`
 >   重构成 6 个值的**具体方案**（已实现）。本文是它隐含的分层的显式说法。
@@ -27,9 +27,9 @@ L3，但它不是作者填的，因此不属于配置层。
 ### L1 协议族
 
 四种：OpenAI Chat Completions、OpenAI Responses、Google GenAI、
-Anthropic Messages。定义见 [`api/landscape.md`](api/landscape.md)。
+Anthropic Messages。定义见 [`api/landscape.md`](landscape.md)。
 
-**身份**：wire format 本身。判据是 [`api/README.md`](api/README.md) 里那条——
+**身份**：wire format 本身。判据是 [`api/README.md`](README.md) 里那条——
 *能不能只改 URL 与鉴权头就跑通？能，就不是新族。*
 
 一个族对应一个 adapter。**这是唯一允许存在"每族一份代码"的层。**

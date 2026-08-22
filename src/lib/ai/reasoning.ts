@@ -8,7 +8,7 @@
  * stored on a model is **this app's own six-value vocabulary**, and each adapter
  * translates. Never let a provider's own spelling reach the config layer.
  *
- * See `docs/api/landscape.md` for the protocol facts and `docs/reasoning-plan.md`
+ * See `docs/api/landscape.md` for the protocol facts and `docs/api/reasoning-plan.md`
  * for why the mapping is shaped this way.
  *
  * Only the OpenAI Chat Completions family is wired up so far; the others return
@@ -49,7 +49,7 @@ export function parseReasoningEffort(v: unknown): ReasoningEffort | undefined {
  * not recoverable from the model id** on a relay, where that id is free text the
  * author typed (`特价kiro | claude-opus-4-6-thinking`). So the author declares
  * it — they picked the relay and know what they bought; it is the code that
- * can't tell. See `docs/anthropic-plan.md` §3.
+ * can't tell. See `docs/api/anthropic-plan.md` §3.
  *
  *   - `adaptive`  — the model decides when and how deeply to think; depth comes
  *                   from an effort level. Claude 4.6+.

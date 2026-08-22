@@ -290,7 +290,7 @@ mod tests {
         dir
     }
 
-    // Symlink APIs (and CI) are Unix-only today — see docs/ci.md, the Rust CI
+    // Symlink APIs (and CI) are Unix-only today — see docs/reference/ci.md, the Rust CI
     // job runs on ubuntu-latest — so these are gated rather than also reached
     // for on Windows via `std::os::windows::fs::symlink_dir`, which needs
     // elevated privileges to create.

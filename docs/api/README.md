@@ -106,14 +106,14 @@ Chat Completions 和 Responses 同属 OpenAI 却分成两族，是因为它们�
 
 相关的本项目方案文档：
 
-- [`../provider-layering.md`](../provider-layering.md) — 本项目的分层模型
+- [`../provider-layering.md`](provider-layering.md) — 本项目的分层模型
   （协议族 / 端点 / 模型 + 探测维）与"新参数放哪一层"的裁决依据
-- [`../provider-standards.md`](../provider-standards.md) — 本项目怎么把协议族 ×
+- [`../provider-standards.md`](provider-standards.md) — 本项目怎么把协议族 ×
   official/compat 落成 6 个 `ApiStandard` 值
-- [`../reasoning-plan.md`](../reasoning-plan.md) — 本项目怎么加思考强度与思维链（① 族，已实现）
-- [`../anthropic-plan.md`](../anthropic-plan.md) — ④ 族的审计与接入（已实现）
-- [`../gemini-plan.md`](../gemini-plan.md) — ③ 族的盘点与接入（已实现）
-- [`../thinking-verification.md`](../thinking-verification.md) — 三族思考支持的**实测清单**（全部未验证）
+- [`../reasoning-plan.md`](reasoning-plan.md) — 本项目怎么加思考强度与思维链（① 族，已实现）
+- [`../anthropic-plan.md`](anthropic-plan.md) — ④ 族的审计与接入（已实现）
+- [`../gemini-plan.md`](gemini-plan.md) — ③ 族的盘点与接入（已实现）
+- [`../thinking-verification.md`](../issues/thinking-verification.md) — 三族思考支持的**实测清单**（全部未验证）
 
 ## 写作约定
 

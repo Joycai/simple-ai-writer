@@ -147,7 +147,7 @@
 ```ts
 // 可委托的种类。`image` 有意不在其中 —— 它要花钱、必须逐次审批，
 // 与「子代理默默干活再交报告」的形态相反，继续走既有的 illustrate 提案链路。
-// 详见 docs/subagent-lld.md §5.5。
+// 详见 docs/feature/agent/subagent-lld.md §5.5。
 type SubAgentKind = "search" | "vision" | "longread";
 
 interface SubAgent {

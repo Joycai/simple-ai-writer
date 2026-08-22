@@ -28,7 +28,7 @@ import css from "./SubAgents.module.css";
  * this work?" in a glance: a status dot, the capability the model must have,
  * the switch, the binding, and the caution it has earned (设计稿 04). What a
  * subagent *does* (its tool set, round budget, output contract) is code, not
- * configuration; see `lib/agent/subagent.ts` and docs/subagent-lld.md §5.2.
+ * configuration; see `lib/agent/subagent.ts` and docs/feature/agent/subagent-lld.md §5.2.
  */
 export function SubAgentsPane() {
   const { t } = useTranslation();

@@ -1,0 +1,815 @@
+<title>What the Character Remembers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:wght@600;700;900&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+:root{
+  --ground:#EDF1F2; --surface:#FFFFFF; --surface-2:#E3EAEC; --sunk:#E7ECEE;
+  --ink:#132229; --ink-2:#4C6069; --ink-3:#7A9098;
+  --rule:#CDD9DD; --rule-2:#DFE7E9;
+  --accent:#0C6E73; --accent-ink:#0A5155; --accent-soft:#D6EAEA;
+  --keep:#A64B08; --keep-soft:#F7E6D8;
+  --drop:#788790; --drop-soft:#E1E7E9;
+  --shadow:0 1px 1px rgba(19,34,41,.05), 0 10px 30px -22px rgba(19,34,41,.55);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0C1316; --surface:#141E22; --surface-2:#1B282D; --sunk:#101A1E;
+    --ink:#DEE9EC; --ink-2:#9CB0B8; --ink-3:#71858E;
+    --rule:#26343A; --rule-2:#1E2B31;
+    --accent:#5CC0C2; --accent-ink:#8FD8D8; --accent-soft:#123137;
+    --keep:#E28C48; --keep-soft:#33231A;
+    --drop:#7C8A93; --drop-soft:#1C282D;
+    --shadow:0 1px 1px rgba(0,0,0,.4), 0 12px 34px -24px rgba(0,0,0,.9);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0C1316; --surface:#141E22; --surface-2:#1B282D; --sunk:#101A1E;
+  --ink:#DEE9EC; --ink-2:#9CB0B8; --ink-3:#71858E;
+  --rule:#26343A; --rule-2:#1E2B31;
+  --accent:#5CC0C2; --accent-ink:#8FD8D8; --accent-soft:#123137;
+  --keep:#E28C48; --keep-soft:#33231A;
+  --drop:#7C8A93; --drop-soft:#1C282D;
+  --shadow:0 1px 1px rgba(0,0,0,.4), 0 12px 34px -24px rgba(0,0,0,.9);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:"Source Serif 4","Iowan Old Style",Georgia,serif;
+  font-size:17px; line-height:1.62; -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{font-family:Chivo,"Helvetica Neue",Arial,sans-serif;}
+code,kbd,.mono{font-family:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;}
+
+.wrap{max-width:76rem;margin:0 auto;padding:0 clamp(1.1rem,4vw,3.2rem);}
+.prose{max-width:65ch;}
+.prose p{margin:0 0 1.05em;}
+
+a{color:var(--accent-ink); text-underline-offset:3px; text-decoration-thickness:1px;}
+a:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px;}
+
+header.top{
+  border-bottom:1px solid var(--rule);
+  background:linear-gradient(180deg,var(--surface),var(--ground));
+}
+.masthead{display:flex;flex-direction:column;gap:1.5rem;padding:clamp(2.6rem,7vw,5rem) 0 clamp(2rem,5vw,3.2rem);}
+.eyebrow{
+  font-family:"JetBrains Mono",monospace; font-size:.72rem; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--ink-3); margin:0;
+}
+h1{
+  font-size:clamp(2.4rem,6.4vw,4.4rem); line-height:1.03; letter-spacing:-.025em;
+  font-weight:900; margin:0; text-wrap:balance; max-width:15ch;
+}
+.deck{font-size:clamp(1.05rem,2.2vw,1.3rem); color:var(--ink-2); max-width:58ch; margin:0;}
+.deck strong{color:var(--ink);font-weight:600;}
+.srcline{
+  font-family:"JetBrains Mono",monospace;font-size:.75rem;color:var(--ink-3);
+  border-top:1px solid var(--rule);padding-top:.9rem;margin:0;
+  display:flex;flex-wrap:wrap;gap:.35rem 1.1rem;
+}
+
+nav.toc{position:sticky;top:0;z-index:20;background:var(--ground);
+  border-bottom:1px solid var(--rule);}
+nav.toc ol{list-style:none;margin:0;padding:.6rem 0;display:flex;gap:.35rem;overflow-x:auto;}
+nav.toc a{
+  display:block;white-space:nowrap;text-decoration:none;color:var(--ink-2);
+  font-family:Chivo,sans-serif;font-size:.8rem;font-weight:600;
+  padding:.34rem .7rem;border-radius:999px;border:1px solid transparent;
+}
+nav.toc a:hover{color:var(--ink);background:var(--surface-2);border-color:var(--rule-2);}
+nav.toc .n{font-family:"JetBrains Mono",monospace;color:var(--accent);font-size:.74rem;margin-right:.4rem;}
+
+section{padding:clamp(3rem,7vw,5rem) 0;border-bottom:1px solid var(--rule);}
+section:last-of-type{border-bottom:0;}
+.shead{display:flex;gap:1.1rem;align-items:baseline;margin:0 0 1.5rem;}
+.shead .num{
+  font-family:"JetBrains Mono",monospace;font-size:.95rem;font-weight:700;color:var(--accent);
+  border:1px solid var(--accent);border-radius:5px;padding:.1rem .45rem;flex:none;
+}
+h2{font-size:clamp(1.6rem,3.6vw,2.25rem);line-height:1.14;letter-spacing:-.02em;margin:0;font-weight:700;text-wrap:balance;}
+h3{font-size:1.16rem;letter-spacing:-.005em;margin:2.4rem 0 .7rem;font-weight:700;text-wrap:balance;}
+h4{font-size:.76rem;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);
+   font-weight:700;margin:0 0 .7rem;font-family:"JetBrains Mono",monospace;}
+
+figure{margin:2.2rem 0;}
+.figbox{background:var(--surface);border:1px solid var(--rule);border-radius:10px;
+  padding:clamp(1rem,2.4vw,1.6rem);box-shadow:var(--shadow);overflow-x:auto;}
+figure svg{display:block;width:100%;min-width:660px;height:auto;color:var(--ink);}
+/* The two semantic hues in the diagrams are written as literal hex presentation
+   attributes so the drawings stay readable on their own; these rules re-bind them
+   to the theme tokens, and an author rule always beats a presentation attribute. */
+figure svg [fill="#A64B08"]{fill:var(--keep);}
+figure svg [stroke="#A64B08"]{stroke:var(--keep);}
+figure svg [color="#A64B08"]{color:var(--keep);}
+figure svg [fill="#0C6E73"]{fill:var(--accent);}
+figure svg [stroke="#0C6E73"]{stroke:var(--accent);}
+figure svg [color="#0C6E73"]{color:var(--accent);}
+figcaption{margin-top:.85rem;font-size:.9rem;color:var(--ink-2);max-width:72ch;}
+figcaption b{color:var(--ink);font-weight:600;}
+
+.tblwrap{overflow-x:auto;border:1px solid var(--rule);border-radius:10px;background:var(--surface);
+  box-shadow:var(--shadow);margin:2rem 0;}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:.9rem;}
+th,td{text-align:left;padding:.62rem .9rem;border-bottom:1px solid var(--rule-2);vertical-align:top;}
+thead th{font-family:Chivo,sans-serif;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-3);background:var(--surface-2);border-bottom:1px solid var(--rule);}
+tbody tr:last-child td{border-bottom:0;}
+td.mono,.num-cell{font-family:"JetBrains Mono",monospace;font-size:.8rem;font-variant-numeric:tabular-nums;}
+.pill{display:inline-block;font-family:"JetBrains Mono",monospace;font-size:.7rem;font-weight:500;
+  padding:.12rem .48rem;border-radius:4px;white-space:nowrap;}
+.pill.keep{background:var(--keep-soft);color:var(--keep);border:1px solid var(--keep);}
+.pill.drop{background:var(--drop-soft);color:var(--drop);border:1px solid var(--drop);}
+.pill.acc{background:var(--accent-soft);color:var(--accent-ink);border:1px solid var(--accent);}
+
+code{font-size:.85em;background:var(--surface-2);border:1px solid var(--rule-2);
+  border-radius:4px;padding:.06em .34em;color:var(--ink);}
+.prose ul,.prose ol{max-width:64ch;padding-left:1.25rem;display:flex;flex-direction:column;gap:.5rem;margin:1.1rem 0;}
+.prose li::marker{color:var(--accent);}
+
+.callout{border-left:3px solid var(--keep);background:var(--keep-soft);padding:1rem 1.2rem;
+  border-radius:0 8px 8px 0;margin:1.8rem 0;max-width:70ch;}
+.callout.acc{border-left-color:var(--accent);background:var(--accent-soft);}
+.callout h4{color:var(--keep);margin-bottom:.45rem;}
+.callout.acc h4{color:var(--accent-ink);}
+.callout p{margin:0;font-size:.95rem;}
+.callout p + p{margin-top:.7rem;}
+
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap:1rem;margin:1.9rem 0;}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:1.1rem 1.2rem;box-shadow:var(--shadow);}
+.card h4{margin-bottom:.5rem;}
+.card p{margin:0;font-size:.92rem;color:var(--ink-2);}
+.card p strong{color:var(--ink);font-weight:600;}
+.card .k{font-family:"JetBrains Mono",monospace;font-size:1.5rem;font-weight:700;color:var(--keep);
+  display:block;line-height:1.1;margin-bottom:.15rem;font-variant-numeric:tabular-nums;}
+
+.tree{background:var(--sunk);border:1px solid var(--rule);border-radius:10px;padding:1.1rem 1.3rem;
+  font-family:"JetBrains Mono",monospace;font-size:.79rem;line-height:1.85;overflow-x:auto;
+  white-space:pre;color:var(--ink-2);margin:1.8rem 0;}
+.tree b{color:var(--ink);font-weight:500;}
+.tree i{color:var(--keep);font-style:normal;}
+.tree u{color:var(--drop);text-decoration:none;}
+
+.steps{list-style:none;padding:0;margin:1.8rem 0;counter-reset:s;max-width:68ch;}
+.steps li{display:grid;grid-template-columns:2.3rem 1fr;gap:1rem;padding:.8rem 0;border-bottom:1px solid var(--rule-2);align-items:start;}
+.steps li:last-child{border-bottom:0;}
+.steps li::before{counter-increment:s;content:counter(s);font-family:"JetBrains Mono",monospace;
+  font-size:.78rem;font-weight:700;color:var(--accent);border:1px solid var(--rule);border-radius:5px;
+  text-align:center;padding:.15rem 0;background:var(--surface);}
+.steps b{font-family:Chivo,sans-serif;font-size:.95rem;display:block;}
+.steps span{font-size:.92rem;color:var(--ink-2);}
+
+footer{padding:2.6rem 0 4rem;color:var(--ink-3);font-size:.85rem;}
+</style>
+
+<header class="top">
+  <div class="wrap masthead">
+    <p class="eyebrow">simple-ai-writer &middot; src/lib/roleplay</p>
+    <h1>What the Character Remembers</h1>
+    <p class="deck">The roleplay agent runs four kinds of memory at once, on four different clocks. Two of them <strong>never leave the context window</strong>. One is <strong>rebuilt whenever the history gets too long</strong>. One lives on disk and is <strong>retrieved like a search index</strong>. This is the map of which is which, and when each one moves.</p>
+    <p class="srcline">
+      <span>context.ts</span><span>memory.ts</span><span>memoryTools.ts</span><span>run.ts</span><span>area.ts</span><span>recap.ts</span><span>presets.ts</span><span>agent/compact.ts</span><span>roleplayStore.ts</span>
+    </p>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <ol>
+      <li><a href="#always"><span class="n">01</span>Always in context</a></li>
+      <li><a href="#compact"><span class="n">02</span>When compaction fires</a></li>
+      <li><a href="#private"><span class="n">03</span>The private notebook</a></li>
+      <li><a href="#scene"><span class="n">04</span>Scene change &amp; memory area</a></li>
+      <li><a href="#rest"><span class="n">05</span>Everything else that matters</a></li>
+    </ol>
+  </div>
+</nav>
+
+<main>
+
+<!-- ══ 01 ══════════════════════════════════════════════ -->
+<section id="always">
+  <div class="wrap">
+    <div class="shead"><span class="num">01</span><h2>What is always kept in context</h2></div>
+
+    <div class="prose">
+      <p>A roleplay session seeds a wire history with a <em>fixed shape</em>. Position in that shape is the whole permanence mechanism &mdash; there is no whitelist anywhere in the compaction code. Three things survive forever because of <em>where they sit</em>:</p>
+    </div>
+
+    <figure>
+      <div class="figbox">
+        <svg viewBox="0 0 900 470" role="img" aria-label="The seeded roleplay history: system, bound-lore block and memory block live in the prelude and survive both trimming paths; the scene seed block, the rolling summary and older turns are dropped or folded.">
+          <!-- column headers -->
+          <text x="24" y="26" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="currentColor" opacity=".55">SEEDED WIRE HISTORY</text>
+          <text x="556" y="26" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="currentColor" opacity=".55">PER-ROUND trimHistory</text>
+          <text x="748" y="26" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="currentColor" opacity=".55">COMPACTION</text>
+          <line x1="24" y1="36" x2="876" y2="36" stroke="currentColor" stroke-opacity=".2"/>
+
+          <!-- prelude bracket -->
+          <path d="M 16 52 L 8 52 L 8 196 L 16 196" fill="none" stroke="#A64B08" stroke-width="1.5"/>
+          <text x="12" y="128" font-family="JetBrains Mono, monospace" font-size="10" font-weight="700" fill="#A64B08" transform="rotate(-90 12 128)" text-anchor="middle">PRELUDE</text>
+
+          <!-- rows -->
+          <g font-family="Chivo, sans-serif" font-size="12.5">
+            <!-- 0 system -->
+            <rect x="24" y="48" width="500" height="42" rx="6" fill="#A64B08" fill-opacity=".1" stroke="#A64B08" stroke-width="1.5"/>
+            <text x="38" y="66" fill="currentColor" font-weight="700">[0] system</text>
+            <text x="38" y="82" fill="currentColor" font-size="11" opacity=".72">persona &middot; roleplay rules &middot; author identity &middot; markup syntax &middot; memory rules</text>
+            <text x="556" y="72" font-family="JetBrains Mono, monospace" font-size="11" fill="#A64B08" font-weight="500">untouched</text>
+            <text x="748" y="72" font-family="JetBrains Mono, monospace" font-size="11" fill="#A64B08" font-weight="500">kept, rewritable</text>
+
+            <!-- 1 bound -->
+            <rect x="24" y="96" width="500" height="42" rx="6" fill="#A64B08" fill-opacity=".1" stroke="#A64B08" stroke-width="1.5"/>
+            <text x="38" y="114" fill="currentColor" font-weight="700">[1] user &#12304;&#32465;&#23450;&#35774;&#23450;&#12305; bound lore</text>
+            <text x="38" y="130" fill="currentColor" font-size="11" opacity=".72">pinned entity / facet bodies, capped at 12 000 chars</text>
+            <text x="556" y="120" font-family="JetBrains Mono, monospace" font-size="11" fill="#A64B08" font-weight="500">untouched</text>
+            <text x="748" y="120" font-family="JetBrains Mono, monospace" font-size="11" fill="#A64B08" font-weight="500">kept</text>
+
+            <!-- 2 memory -->
+            <rect x="24" y="144" width="500" height="42" rx="6" fill="#A64B08" fill-opacity=".1" stroke="#A64B08" stroke-width="1.5"/>
+            <text x="38" y="162" fill="currentColor" font-weight="700">[2] user &#12304;&#35760;&#24518;&#12305; open memory records</text>
+            <text x="38" y="178" fill="currentColor" font-size="11" opacity=".72">pacts, todos, bonds &hellip; capped at 4 000 chars</text>
+            <text x="556" y="168" font-family="JetBrains Mono, monospace" font-size="11" fill="#A64B08" font-weight="500">untouched</text>
+            <text x="748" y="168" font-family="JetBrains Mono, monospace" font-size="11" fill="#A64B08" font-weight="500">kept + refreshed</text>
+
+            <!-- 3 seed -->
+            <rect x="24" y="192" width="500" height="42" rx="6" fill="currentColor" fill-opacity=".045" stroke="currentColor" stroke-opacity=".35" stroke-dasharray="5 3"/>
+            <text x="38" y="210" fill="currentColor" font-weight="700" opacity=".75">[3] user &#12304;&#22330;&#26223;&#12305; first-turn lore hits</text>
+            <text x="38" y="226" fill="currentColor" font-size="11" opacity=".6">meta.seedContext &mdash; reproducible retrieval output</text>
+            <text x="556" y="216" font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor" opacity=".6">untouched</text>
+            <text x="748" y="216" font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor" opacity=".6" font-weight="500">DROPPED</text>
+
+            <!-- 4 summary -->
+            <rect x="24" y="240" width="500" height="42" rx="6" fill="currentColor" fill-opacity=".045" stroke="currentColor" stroke-opacity=".35" stroke-dasharray="5 3"/>
+            <text x="38" y="258" fill="currentColor" font-weight="700" opacity=".75">[4] user &#12304;&#21382;&#21490;&#25671;&#35201;&#12305; rolling summary</text>
+            <text x="38" y="274" fill="currentColor" font-size="11" opacity=".6">meta.summary &mdash; only exists after the first compaction</text>
+            <text x="556" y="264" font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor" opacity=".6">untouched</text>
+            <text x="748" y="264" font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor" opacity=".6" font-weight="500">REPLACED</text>
+
+            <!-- divider -->
+            <line x1="24" y1="296" x2="876" y2="296" stroke="currentColor" stroke-opacity=".2"/>
+            <text x="24" y="314" font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" fill="currentColor" opacity=".5">TURNS &mdash; boundary = the author question object (meta.turnStarts)</text>
+
+            <!-- 5 old turns -->
+            <rect x="24" y="326" width="500" height="38" rx="6" fill="currentColor" fill-opacity=".045" stroke="currentColor" stroke-opacity=".35" stroke-dasharray="5 3"/>
+            <text x="38" y="350" fill="currentColor" opacity=".75" font-weight="700">oldest turns + their injection carriers</text>
+            <text x="556" y="350" font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor" opacity=".6">tool results elided</text>
+            <text x="748" y="350" font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor" opacity=".6" font-weight="500">FOLDED &#8594; summary</text>
+
+            <!-- 6 recent -->
+            <rect x="24" y="372" width="500" height="38" rx="6" fill="#0C6E73" fill-opacity=".1" stroke="#0C6E73" stroke-width="1.5"/>
+            <text x="38" y="396" fill="currentColor" font-weight="700">last 2 turns verbatim (MIN_KEEP_TURNS)</text>
+            <text x="556" y="396" font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor" opacity=".6">tool results elided</text>
+            <text x="748" y="396" font-family="JetBrains Mono, monospace" font-size="11" fill="#0C6E73" font-weight="500">kept</text>
+
+            <!-- 7 question -->
+            <rect x="24" y="418" width="500" height="38" rx="6" fill="#0C6E73" fill-opacity=".1" stroke="#0C6E73" stroke-width="1.5"/>
+            <text x="38" y="442" fill="currentColor" font-weight="700">this turn: lore hits &#8594; area recall &#8594; the question</text>
+            <text x="556" y="442" font-family="JetBrains Mono, monospace" font-size="11" fill="currentColor" opacity=".6">&mdash;</text>
+            <text x="748" y="442" font-family="JetBrains Mono, monospace" font-size="11" fill="#0C6E73" font-weight="500">kept</text>
+          </g>
+
+          <line x1="540" y1="42" x2="540" y2="462" stroke="currentColor" stroke-opacity=".15"/>
+          <line x1="732" y1="42" x2="732" y2="462" stroke="currentColor" stroke-opacity=".15"/>
+        </svg>
+      </div>
+      <figcaption><b>The prelude is the permanence mechanism.</b> <code>buildCompactedHistory</code> walks the prelude and skips exactly two objects &mdash; <code>meta.seedContext</code> and <code>meta.summary</code>. Everything else in the prelude is copied into the new array untouched. <code>trimHistory</code> only ever swaps the content of <code>role:"tool"</code> messages and image parts. So blocks [0]&ndash;[2] survive both paths permanently, and no special-casing was needed to make that true.</figcaption>
+    </figure>
+
+    <h3>The three permanent blocks, and why each one is there</h3>
+
+    <div class="grid2">
+      <div class="card">
+        <h4>[0] system</h4>
+        <p><strong>Who the character is.</strong> Persona body, the author&rsquo;s own direction, who the author is playing, markup syntax, and the memory rules. Deliberately <em>not</em> built from <code>profileSystemPrompt()</code> &mdash; the writing-collaborator persona would make the character explain itself.</p>
+      </div>
+      <div class="card">
+        <h4>[1] &#12304;&#32465;&#23450;&#35774;&#23450;&#12305;</h4>
+        <p><strong>Pinned lore, verbatim.</strong> Entity or facet bodies for <code>agent.boundPaths</code>, up to <span class="num-cell">12 000</span> chars; overflow is named but not expanded, with a note to use <code>read_lore_entity</code>. A pin to a deleted facet goes to <code>stalePaths</code> &mdash; it never silently degrades into &ldquo;inject the whole entity&rdquo;.</p>
+      </div>
+      <div class="card">
+        <h4>[2] &#12304;&#35760;&#24518;&#12305;</h4>
+        <p><strong>What the character has written down.</strong> Only <code>open</code> records, up to <span class="num-cell">4 000</span> chars, grouped pact &rarr; todo &rarr; scene &rarr; bond &rarr; event &rarr; note. Overflow becomes &ldquo;N more &mdash; use <code>recall</code>&rdquo;.</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <h4>The invariant that makes it work</h4>
+      <p>The bound block must be <b>its own message in the prelude</b>, never merged into the seed block. Merged, it inherits <code>meta.seedContext</code> and dies at the first compaction &mdash; the character forgets its own character sheet mid-scene. <code>__tests__/context.test.ts</code> runs real compaction over a seeded history to hold this down.</p>
+      <p>Both prelude blocks are created <b>unconditionally</b>, even when empty (they render a one-line placeholder). Creating them lazily made &ldquo;none &rarr; some&rdquo; a state transition nothing could catch: a brand-new character that called <code>remember</code> mid-scene had no memory block for <code>refreshMemoryBlock</code> to write into.</p>
+    </div>
+
+    <h3>What is <em>not</em> permanent, and why that is correct</h3>
+    <div class="prose">
+      <ul>
+        <li><b>&#12304;&#22330;&#26223;&#12305; the seed retrieval block</b> is dropped at the first compaction. It is retrieval output &mdash; reproducible from the lore index at any time. The bound block is not: it is who this character is.</li>
+        <li><b>Per-turn lore injections</b> ride inside their turn and fold with it. The injection ledger (<code>meta.injected</code>) holds each entity keyed by <em>the message that carried it</em>; when that carrier leaves the history the ledger entry is evicted, so a later mention re-injects.</li>
+        <li><b>Tool results</b> &mdash; including <code>remember</code>&rsquo;s confirmation &mdash; are the first thing <code>trimHistory</code> throws away, replaced by an elision marker. This is precisely why the memory block exists.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 02 ══════════════════════════════════════════════ -->
+<section id="compact">
+  <div class="wrap">
+    <div class="shead"><span class="num">02</span><h2>When compaction fires</h2></div>
+
+    <div class="prose">
+      <p>Compaction is checked <b>once per author message, on the continue branch only</b> &mdash; inside <code>prepareContinuedHistory</code>, before this turn&rsquo;s retrieval and before the question is appended. A freshly seeded session never compacts (there is nothing to fold yet), which is also why replay from transcript has its own hard char cap.</p>
+      <p>The trigger is a share of the <em>message ceiling</em>, not of the model&rsquo;s context size. Two subtractions stand between them, and both matter:</p>
+    </div>
+
+    <figure>
+      <div class="figbox">
+        <svg viewBox="0 0 900 300" role="img" aria-label="The message ceiling is the model context size times the utilization setting, minus the tool schema tokens; compaction triggers at seventy percent of it and folds down to forty-five percent.">
+          <g font-family="JetBrains Mono, monospace" font-size="11">
+            <!-- row 1: context size -->
+            <text x="24" y="34" fill="currentColor" opacity=".6" font-weight="700">model.contextSize</text>
+            <rect x="24" y="44" width="852" height="28" rx="4" fill="currentColor" fill-opacity=".07" stroke="currentColor" stroke-opacity=".3"/>
+            <text x="450" y="63" text-anchor="middle" fill="currentColor" opacity=".7">128 000 tokens (worked example)</text>
+
+            <!-- arrow -->
+            <line x1="450" y1="76" x2="450" y2="96" stroke="currentColor" stroke-opacity=".45" marker-end="url(#ar2)"/>
+            <defs>
+              <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+              </marker>
+            </defs>
+            <text x="462" y="92" fill="currentColor" opacity=".6">&#215; contextUtilization (default 0.5)</text>
+
+            <!-- row 2: input ceiling -->
+            <text x="24" y="120" fill="currentColor" opacity=".6" font-weight="700">input ceiling</text>
+            <rect x="24" y="130" width="426" height="28" rx="4" fill="currentColor" fill-opacity=".07" stroke="currentColor" stroke-opacity=".3"/>
+            <rect x="450" y="130" width="426" height="28" rx="4" fill="currentColor" fill-opacity=".025" stroke="currentColor" stroke-opacity=".15" stroke-dasharray="4 3"/>
+            <text x="237" y="149" text-anchor="middle" fill="currentColor" opacity=".8">64 000</text>
+            <text x="663" y="149" text-anchor="middle" fill="currentColor" opacity=".45">reserved for output + slack</text>
+
+            <line x1="237" y1="162" x2="237" y2="182" stroke="currentColor" stroke-opacity=".45" marker-end="url(#ar2)"/>
+            <text x="249" y="178" fill="currentColor" opacity=".6">&#8722; plannedToolTokens (routed toolset, ~2k for the character preset)</text>
+
+            <!-- row 3: message ceiling with bands -->
+            <text x="24" y="206" fill="#A64B08" font-weight="700">messageCeiling &mdash; what the history is measured against</text>
+            <rect x="24" y="216" width="400" height="34" rx="4" fill="#A64B08" fill-opacity=".1" stroke="#A64B08" stroke-width="1.5"/>
+            <rect x="424" y="216" width="26" height="34" rx="4" fill="currentColor" fill-opacity=".12" stroke="currentColor" stroke-opacity=".3"/>
+            <text x="437" y="238" text-anchor="middle" fill="currentColor" font-size="9" opacity=".6">tools</text>
+
+            <!-- retain target mark -->
+            <line x1="204" y1="210" x2="204" y2="264" stroke="#0C6E73" stroke-width="1.5" stroke-dasharray="4 3"/>
+            <text x="204" y="280" text-anchor="middle" fill="#0C6E73" font-weight="700">RETAIN_TARGET 0.45</text>
+            <text x="204" y="293" text-anchor="middle" fill="currentColor" opacity=".55" font-size="10">fold down to ~27 900</text>
+
+            <!-- trigger mark -->
+            <line x1="304" y1="210" x2="304" y2="264" stroke="#A64B08" stroke-width="2"/>
+            <text x="304" y="280" text-anchor="middle" fill="#A64B08" font-weight="700">COMPACT_TRIGGER 0.7</text>
+            <text x="304" y="293" text-anchor="middle" fill="currentColor" opacity=".55" font-size="10">fires above ~43 400</text>
+
+            <text x="30" y="238" fill="currentColor" opacity=".8">0</text>
+            <text x="414" y="238" text-anchor="end" fill="currentColor" opacity=".8">~62 000</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption><b>The tool schemas come off the ceiling first.</b> They ride on every round unchanged, and for a while nothing that <em>planned</em> a request knew they were there &mdash; that is how the context bar could sit past its own compaction mark with nothing happening. <code>messageCeilingFor()</code> is now the single definition, and the same number is passed to both <code>planFold</code> and the runtime&rsquo;s <code>inputCeilingTokens</code>.</figcaption>
+    </figure>
+
+    <h3>The fold decision</h3>
+    <ol class="steps">
+      <li><b>Is it due?</b><span><code>estimateMessagesTokens(history) &gt; ceiling &times; 0.7</code>. No &rarr; return <code>null</code>, nothing happens.</span></li>
+      <li><b>Is there anything foldable?</b><span>Segment at <code>meta.turnStarts</code>. The last <code>MIN_KEEP_TURNS = 2</code> turns are never folded; if that leaves nothing, return <code>null</code>.</span></li>
+      <li><b>How much?</b><span>Start from the largest legal fold, then walk backwards un-folding turns while the projection still fits under <code>ceiling &times; 0.45</code>. The projection charges the summary at its full <span class="num-cell">1 000</span>-token budget, so the estimate is pessimistic on purpose.</span></li>
+      <li><b>Summarize.</b><span>One no-tools completion on the session&rsquo;s own model. Injection carriers are skipped from the summarizer input &mdash; retrieval blocks are reproducible, and summarizing them would spend the budget on what the lore index already holds. Tool traffic is clipped to <span class="num-cell">200</span> chars per result, prose to <span class="num-cell">2 000</span>.</span></li>
+      <li><b>Rebuild.</b><span>New array: prelude minus seed &amp; old summary &rarr; new summary right after the prelude (maximal stable prefix for prompt caching) &rarr; kept turns verbatim. <code>meta.turnStarts</code> is reset; ledger entries whose carrier just left are evicted.</span></li>
+    </ol>
+
+    <div class="callout acc">
+      <h4>Failure is a no-op, by contract</h4>
+      <p>A failed or empty summarize request returns <code>null</code> and leaves both history <em>and</em> meta untouched &mdash; the turn proceeds uncompacted and the threshold fires again next turn. Only an <code>AbortError</code> propagates, because that means the author cancelled the whole send. Compaction must never turn a network hiccup into a damaged session.</p>
+    </div>
+
+    <h3>Why the gap between 0.7 and 0.45 is wide</h3>
+    <div class="prose">
+      <p>A tight gap would compact almost every turn, and every compaction invalidates the prompt-cache prefix. One multi-tool turn can add thousands of tokens, so the retain target has to leave real headroom below the trigger.</p>
+    </div>
+
+    <h3>The other trimmer: <code>trimHistory</code>, every round</h3>
+    <div class="prose">
+      <p>Separate mechanism, separate clock. Inside the agent loop, before each round:</p>
+      <ul>
+        <li><b>Images are elided unconditionally</b>, regardless of the ceiling. The token estimate charges a flat rate per picture because that is what providers bill &mdash; but the payload is megabytes of base64, and a roleplay session persists across turns.</li>
+        <li>Then, only if still over the ceiling, tool results are replaced with an elision marker one at a time until it fits.</li>
+      </ul>
+      <p>Note what it never touches: plain <code>user</code> and <code>assistant</code> messages. That is the second half of why the three prelude blocks are permanent.</p>
+    </div>
+
+    <h3>Ordering inside one continued turn</h3>
+    <figure>
+      <div class="figbox">
+        <svg viewBox="0 0 900 200" role="img" aria-label="The six ordered steps of preparing a continued turn: repair tool pairing, compact, refresh the memory block only if compaction happened, inject lore, recall from the memory area, then append the question last.">
+          <defs>
+            <marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <g font-family="Chivo, sans-serif" font-size="11.5">
+            <rect x="16" y="70" width="118" height="46" rx="6" fill="currentColor" fill-opacity=".05" stroke="currentColor" stroke-opacity=".35"/>
+            <text x="75" y="90" text-anchor="middle" fill="currentColor" font-weight="700">repair</text>
+            <text x="75" y="105" text-anchor="middle" fill="currentColor" font-size="9.5" opacity=".65">tool_call pairing</text>
+
+            <line x1="138" y1="93" x2="160" y2="93" stroke="currentColor" stroke-opacity=".5" marker-end="url(#ar3)"/>
+
+            <rect x="164" y="70" width="118" height="46" rx="6" fill="#A64B08" fill-opacity=".1" stroke="#A64B08" stroke-width="1.5"/>
+            <text x="223" y="90" text-anchor="middle" fill="currentColor" font-weight="700">compact?</text>
+            <text x="223" y="105" text-anchor="middle" fill="currentColor" font-size="9.5" opacity=".65">planFold at 0.7</text>
+
+            <line x1="286" y1="93" x2="308" y2="93" stroke="#A64B08" stroke-width="1.5" marker-end="url(#ar3)" color="#A64B08"/>
+            <text x="297" y="82" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8.5" fill="#A64B08" font-weight="700">only if</text>
+
+            <rect x="312" y="70" width="150" height="46" rx="6" fill="#A64B08" fill-opacity=".1" stroke="#A64B08" stroke-width="1.5"/>
+            <text x="387" y="90" text-anchor="middle" fill="currentColor" font-weight="700">refreshMemoryBlock</text>
+            <text x="387" y="105" text-anchor="middle" fill="currentColor" font-size="9.5" opacity=".65">re-read memory.md</text>
+
+            <line x1="466" y1="93" x2="488" y2="93" stroke="currentColor" stroke-opacity=".5" marker-end="url(#ar3)"/>
+
+            <rect x="492" y="70" width="118" height="46" rx="6" fill="currentColor" fill-opacity=".05" stroke="currentColor" stroke-opacity=".35"/>
+            <text x="551" y="90" text-anchor="middle" fill="currentColor" font-weight="700">lore inject</text>
+            <text x="551" y="105" text-anchor="middle" fill="currentColor" font-size="9.5" opacity=".65">minus the ledger</text>
+
+            <line x1="614" y1="93" x2="636" y2="93" stroke="currentColor" stroke-opacity=".5" marker-end="url(#ar3)"/>
+
+            <rect x="640" y="70" width="118" height="46" rx="6" fill="#0C6E73" fill-opacity=".1" stroke="#0C6E73" stroke-width="1.5"/>
+            <text x="699" y="90" text-anchor="middle" fill="currentColor" font-weight="700">area recall</text>
+            <text x="699" y="105" text-anchor="middle" fill="currentColor" font-size="9.5" opacity=".65">800-token budget</text>
+
+            <line x1="762" y1="93" x2="784" y2="93" stroke="currentColor" stroke-opacity=".5" marker-end="url(#ar3)"/>
+
+            <rect x="788" y="70" width="96" height="46" rx="6" fill="#0C6E73" fill-opacity=".18" stroke="#0C6E73" stroke-width="1.5"/>
+            <text x="836" y="90" text-anchor="middle" fill="currentColor" font-weight="700">question</text>
+            <text x="836" y="105" text-anchor="middle" fill="currentColor" font-size="9.5" opacity=".65">= turnStart</text>
+
+            <text x="16" y="150" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#A64B08" font-weight="700">Compaction just folded away the remember() tool results.</text>
+            <text x="16" y="166" font-family="JetBrains Mono, monospace" font-size="10.5" fill="currentColor" opacity=".65">Refreshing here is not an optimisation &mdash; it is exactly the correctness boundary.</text>
+            <text x="16" y="182" font-family="JetBrains Mono, monospace" font-size="10.5" fill="currentColor" opacity=".65">It is also the only free moment: the history was rebuilt anyway, the cache was voided anyway.</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption><b>The question is always last, and is always the turn start.</b> Everything injected for this turn sits in front of it, so the fold unit stays a whole turn and no <code>assistant</code>/<code>tool</code> pair can ever be split &mdash; a split pair is rejected by every provider, and a broken history is permanent because it <em>is</em> the session.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ══ 03 ══════════════════════════════════════════════ -->
+<section id="private">
+  <div class="wrap">
+    <div class="shead"><span class="num">03</span><h2>The character&rsquo;s private notebook</h2></div>
+
+    <div class="prose">
+      <p>This is the part that is <em>not</em> a summary, and the distinction is the whole design. A rolling summary is lossy and gets summarized again: &ldquo;he promised to go to the tower when the snow stops&rdquo; folds once into the summary, and three turns later it has become &ldquo;they discussed some plans&rdquo;. But that was never <em>an event that happened</em> &mdash; it is <b>an unresolved state</b>, and it has to survive verbatim until it is kept or called off.</p>
+      <p>So memory gets its own storage, its own injection slot, and its own lifecycle.</p>
+    </div>
+
+    <h3>Three tools, scoped structurally</h3>
+    <div class="tblwrap">
+      <table>
+        <thead><tr><th>Tool</th><th>Does</th><th>Refuses to</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">remember</td><td>Append one record: <code>kind</code>, <code>title</code>, <code>body</code>, <code>subject</code>, up to 8 <code>keys</code>. Gets an id that is <b>never reused</b>.</td><td>Accept an unknown <code>kind</code>, or an empty <code>title</code>.</td></tr>
+          <tr><td class="mono">revise_memory</td><td>Change one record&rsquo;s <code>body</code> and/or <code>status</code> by id.</td><td>Create anything. An unknown id returns the list of real ids and changes nothing &mdash; silently creating would leave the author with two contradictory records.</td></tr>
+          <tr><td class="mono">recall</td><td>List records, optionally filtered by kind, optionally including closed ones.</td><td>&mdash;</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="prose">
+      <p>They are named <code>remember</code> / <code>revise_memory</code> / <code>recall</code> and not <code>read_memory</code> / <code>update_memory</code> on purpose: those two already exist for a <em>document</em>&rsquo;s story memory (a rolling summary keyed by source-text ranges). Same word, different thing.</p>
+      <p>The store is handed in as <code>ToolContext.agentMemory</code> and <b>takes no agent id</b> &mdash; there is no parameter through which a character could reach another character&rsquo;s notebook. It also <b>re-reads the file on every call</b>, because <code>ToolContext</code> is a snapshot taken when the run started, and a <code>recall</code> right after a <code>remember</code> in the same run has to see what was just written.</p>
+    </div>
+
+    <h3>Six kinds, three statuses</h3>
+    <div class="tblwrap">
+      <table>
+        <thead><tr><th>Kind</th><th>Meaning</th><th>Has a &ldquo;done&rdquo; state</th><th>At scene change</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">pact</td><td>Something promised to the other person</td><td><span class="pill acc">yes</span></td><td><span class="pill keep">stays if open</span></td></tr>
+          <tr><td class="mono">todo</td><td>Something intended, not done yet</td><td><span class="pill acc">yes</span></td><td><span class="pill keep">stays if open</span></td></tr>
+          <tr><td class="mono">bond</td><td>How this character feels about someone</td><td><span class="pill drop">no</span></td><td><span class="pill keep">always stays</span></td></tr>
+          <tr><td class="mono">scene</td><td>The previous scene&rsquo;s recap &mdash; one per scene, written only at a transition</td><td><span class="pill drop">no</span></td><td><span class="pill drop">sinks</span></td></tr>
+          <tr><td class="mono">event</td><td>Something that happened and will matter later</td><td><span class="pill drop">no</span></td><td><span class="pill drop">sinks</span></td></tr>
+          <tr><td class="mono">note</td><td>Anything else worth knowing later</td><td><span class="pill drop">no</span></td><td><span class="pill drop">sinks</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="prose">
+      <p>The enum is fixed rather than pack-defined, unlike knowledge-base categories: these are products of <em>conversation structure</em>, not of a domain. Tabletop, romance and mystery all generate pacts and bonds.</p>
+      <p>Status is <code>open</code> / <code>done</code> / <code>void</code>. <b>Only <code>open</code> records are injected</b> &mdash; a kept or called-off promise is no longer a live state, and injecting it both costs budget and misleads the model into thinking the matter is still hanging. Closed records are reachable only through <code>recall({include_closed: true})</code>.</p>
+    </div>
+
+    <h3>Three write rules that make an unapproved write tool safe</h3>
+    <div class="prose">
+      <p>These are L1 auto-write tools: no approval card stands behind them. The only safety valve is making <b>the worst case &ldquo;extra noise&rdquo;, never &ldquo;something lost&rdquo;</b>.</p>
+      <ol>
+        <li><b>Add and revise only, never delete.</b> There is no <code>forget</code>. Calling something off means setting <code>status: "void"</code> and keeping the text.</li>
+        <li><b>Back up before every write</b>, same as every other L1 write tool.</li>
+        <li><b>No whole-file rewrite tool exists.</b> The model can add one record and patch one record &mdash; so the blast radius of one bad call is one record.</li>
+      </ol>
+      <p>Ids follow from rule 1: the <code>next=</code> counter in the file&rsquo;s machine header never rolls back, even when a record leaves, because a reference to <code>m7</code> in the transcript must always point at the same thing.</p>
+      <p>The parser <b>never throws</b> &mdash; hand-editing <code>memory.md</code> is a supported thing for the author to do. A block it cannot recognise is not discarded: it degrades into a <code>note</code> carrying the original text, so the next normalising write still contains what the author typed.</p>
+    </div>
+
+    <h3>The four refresh moments &mdash; and the one that looks obvious but is wrong</h3>
+
+    <figure>
+      <div class="figbox">
+        <svg viewBox="0 0 900 330" role="img" aria-label="A remember call writes memory.md and marks the injection block stale; the block is only re-rendered at four moments: seeding, after compaction, session restore, and a manual refresh. It is deliberately not refreshed at write time.">
+          <defs>
+            <marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <g font-family="Chivo, sans-serif" font-size="12">
+            <!-- write path -->
+            <rect x="20" y="30" width="150" height="44" rx="6" fill="currentColor" fill-opacity=".05" stroke="currentColor" stroke-opacity=".35"/>
+            <text x="95" y="50" text-anchor="middle" fill="currentColor" font-weight="700">remember()</text>
+            <text x="95" y="65" text-anchor="middle" fill="currentColor" font-size="10" opacity=".65">during a turn</text>
+
+            <line x1="174" y1="52" x2="212" y2="52" stroke="currentColor" stroke-opacity=".5" marker-end="url(#ar4)"/>
+            <text x="193" y="43" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="currentColor" opacity=".6">backup + write</text>
+
+            <rect x="216" y="30" width="160" height="44" rx="6" fill="#A64B08" fill-opacity=".1" stroke="#A64B08" stroke-width="1.5"/>
+            <text x="296" y="50" text-anchor="middle" fill="currentColor" font-weight="700">memory.md</text>
+            <text x="296" y="65" text-anchor="middle" fill="currentColor" font-size="10" opacity=".65">on disk &mdash; the truth</text>
+
+            <line x1="380" y1="52" x2="418" y2="52" stroke="currentColor" stroke-opacity=".5" marker-end="url(#ar4)"/>
+            <rect x="422" y="30" width="170" height="44" rx="6" fill="currentColor" fill-opacity=".05" stroke="currentColor" stroke-opacity=".35" stroke-dasharray="5 3"/>
+            <text x="507" y="50" text-anchor="middle" fill="currentColor" font-weight="700">memoryStale = true</text>
+            <text x="507" y="65" text-anchor="middle" fill="currentColor" font-size="10" opacity=".65">a flag only &mdash; no re-render</text>
+
+            <!-- the visible-anyway note -->
+            <path d="M 296 78 L 296 104" stroke="currentColor" stroke-opacity=".4" stroke-dasharray="3 3"/>
+            <text x="306" y="100" font-family="JetBrains Mono, monospace" font-size="10" fill="currentColor" opacity=".7">the tool result is right there in the history &mdash; the model can already see it</text>
+
+            <!-- four moments -->
+            <line x1="20" y1="126" x2="880" y2="126" stroke="currentColor" stroke-opacity=".2"/>
+            <text x="20" y="148" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#0C6E73">THE FOUR MOMENTS refreshMemoryBlock() RUNS</text>
+
+            <g>
+              <rect x="20" y="162" width="204" height="62" rx="6" fill="#0C6E73" fill-opacity=".1" stroke="#0C6E73" stroke-width="1.5"/>
+              <text x="34" y="182" fill="currentColor" font-weight="700">1 &middot; seeding</text>
+              <text x="34" y="199" fill="currentColor" font-size="10" opacity=".7">new session, or session.json</text>
+              <text x="34" y="213" fill="currentColor" font-size="10" opacity=".7">was unreadable</text>
+
+              <rect x="238" y="162" width="204" height="62" rx="6" fill="#0C6E73" fill-opacity=".1" stroke="#0C6E73" stroke-width="1.5"/>
+              <text x="252" y="182" fill="currentColor" font-weight="700">2 &middot; after compaction</text>
+              <text x="252" y="199" fill="currentColor" font-size="10" opacity=".7">the fold just removed the</text>
+              <text x="252" y="213" fill="currentColor" font-size="10" opacity=".7">tool results</text>
+
+              <rect x="456" y="162" width="204" height="62" rx="6" fill="#0C6E73" fill-opacity=".1" stroke="#0C6E73" stroke-width="1.5"/>
+              <text x="470" y="182" fill="currentColor" font-weight="700">3 &middot; session restore</text>
+              <text x="470" y="199" fill="currentColor" font-size="10" opacity=".7">the author may have edited</text>
+              <text x="470" y="213" fill="currentColor" font-size="10" opacity=".7">memory.md while closed</text>
+
+              <rect x="674" y="162" width="206" height="62" rx="6" fill="#0C6E73" fill-opacity=".1" stroke="#0C6E73" stroke-width="1.5"/>
+              <text x="688" y="182" fill="currentColor" font-weight="700">4 &middot; manual refresh</text>
+              <text x="688" y="199" fill="currentColor" font-size="10" opacity=".7">the author edited a record</text>
+              <text x="688" y="213" fill="currentColor" font-size="10" opacity=".7">in the notebook panel</text>
+            </g>
+
+            <!-- why not on write -->
+            <rect x="20" y="244" width="860" height="66" rx="6" fill="#A64B08" fill-opacity=".08" stroke="#A64B08" stroke-width="1.5"/>
+            <text x="36" y="266" font-family="JetBrains Mono, monospace" font-size="11" font-weight="700" fill="#A64B08">NOT at write time.</text>
+            <text x="36" y="285" fill="currentColor" font-size="11.5">The expiry boundary is the moment the tool result is folded away &mdash; and that moment is exactly compaction.</text>
+            <text x="36" y="302" fill="currentColor" font-size="11.5">Refreshing on write would void the prompt-cache prefix once per recorded fact, for zero gain.</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption><b>The refresh schedule is a correctness argument, not a cost optimisation.</b> Between a <code>remember</code> call and the next compaction, the model can see what it recorded in its own tool result. The information only becomes unreachable when that result is folded &mdash; so the refresh is placed at exactly that instant, and it is also the only free instant, since the history was rebuilt and the cache voided anyway.</figcaption>
+    </figure>
+
+    <div class="prose">
+      <p>Both refreshes mutate <code>content</code> <b>in place</b> and never swap the message object: <code>meta.memoryBlock</code> and <code>meta.boundBlock</code> hold those messages <em>by identity</em>, and replacing the object would cut the injection ledger loose from the thing it points at. When memory goes from &ldquo;some&rdquo; to &ldquo;none&rdquo;, the block is not deleted &mdash; it becomes a one-line placeholder, because removing a prelude message shortens the stable prefix and voids the cache for the sake of one line of text.</p>
+    </div>
+
+    <h3>What the model is told about when to write</h3>
+    <div class="grid2">
+      <div class="card">
+        <h4>record</h4>
+        <p>A promise made to the other person &middot; something intended but not yet done &middot; something that happened and will matter later &middot; a change in how it feels about someone &middot; anything that will need to be known later.</p>
+      </div>
+      <div class="card">
+        <h4>do not record</h4>
+        <p>Ordinary conversation &middot; the character&rsquo;s own passing thoughts &middot; things already written in the lore &middot; anything already recorded. <strong>Over-recording is cheaper than missing something</strong> &mdash; an unrecorded promise gets forgotten.</p>
+      </div>
+    </div>
+
+    <div class="prose">
+      <p>Each record carries the transcript turn number it was written at, so the notebook panel can jump the author back to the moment. The store computes it as <code>turns.length + 1</code> &mdash; the author&rsquo;s turn is already on disk by then, so the character&rsquo;s reply is the next one. A record the <em>author</em> adds by hand gets <code>turn: 0</code>, which keeps it out of the &ldquo;just recorded&hellip;&rdquo; line under the reply and out of rollback.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 04 ══════════════════════════════════════════════ -->
+<section id="scene">
+  <div class="wrap">
+    <div class="shead"><span class="num">04</span><h2>Scene change, and the memory area</h2></div>
+
+    <div class="prose">
+      <p>Standing memory cannot grow forever &mdash; but nothing may be thrown away either. The resolution is a <b>second tier</b>: at a scene change, records that are no longer live sink out of the injected block into a searchable store, and come back only when something in the conversation matches them.</p>
+    </div>
+
+    <figure>
+      <div class="figbox">
+        <svg viewBox="0 0 900 360" role="img" aria-label="At a scene change, open pacts, todos and bonds stay in standing memory while events, notes, old recaps and closed pacts sink into the memory area as lore-shaped entries; the area is later searched by keyword and injected as its own separate block.">
+          <defs>
+            <marker id="ar5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
+            </marker>
+          </defs>
+          <g font-family="Chivo, sans-serif" font-size="12">
+            <text x="20" y="24" font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" fill="currentColor" opacity=".55">AT THE TRANSITION &mdash; takeSinkable()</text>
+
+            <!-- source -->
+            <rect x="20" y="40" width="200" height="120" rx="8" fill="#A64B08" fill-opacity=".08" stroke="#A64B08" stroke-width="1.5"/>
+            <text x="34" y="62" fill="currentColor" font-weight="700">memory.md</text>
+            <text x="34" y="80" fill="currentColor" font-size="10.5" opacity=".7">standing layer, always injected</text>
+            <line x1="34" y1="90" x2="206" y2="90" stroke="currentColor" stroke-opacity=".2"/>
+            <text x="34" y="108" font-family="JetBrains Mono, monospace" font-size="10.5" fill="currentColor" opacity=".85">pact / todo / bond / scene</text>
+            <text x="34" y="126" font-family="JetBrains Mono, monospace" font-size="10.5" fill="currentColor" opacity=".85">event / note</text>
+            <text x="34" y="148" font-size="10.5" fill="currentColor" opacity=".6">sorted by nature, not by budget</text>
+
+            <!-- stays -->
+            <path d="M 224 78 L 300 78" stroke="#A64B08" stroke-width="1.8" fill="none" marker-end="url(#ar5)" color="#A64B08"/>
+            <text x="262" y="70" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="#A64B08" font-weight="700">stays</text>
+            <rect x="304" y="52" width="230" height="52" rx="6" fill="#A64B08" fill-opacity=".12" stroke="#A64B08" stroke-width="1.5"/>
+            <text x="318" y="72" fill="currentColor" font-weight="700">open pact &middot; open todo &middot; bond</text>
+            <text x="318" y="90" fill="currentColor" font-size="10.5" opacity=".7">still unresolved, or still a relationship</text>
+
+            <!-- sinks -->
+            <path d="M 224 122 L 300 122" stroke="currentColor" stroke-opacity=".55" fill="none" marker-end="url(#ar5)"/>
+            <text x="262" y="114" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9.5" fill="currentColor" opacity=".6" font-weight="700">sinks</text>
+            <rect x="304" y="112" width="230" height="52" rx="6" fill="currentColor" fill-opacity=".05" stroke="currentColor" stroke-opacity=".35" stroke-dasharray="5 3"/>
+            <text x="318" y="132" fill="currentColor" font-weight="700" opacity=".8">event &middot; note &middot; old scene &middot; done/void</text>
+            <text x="318" y="150" fill="currentColor" font-size="10.5" opacity=".6">moved out, one area entry each</text>
+
+            <!-- area -->
+            <path d="M 538 138 L 596 138" stroke="#0C6E73" stroke-width="1.8" fill="none" marker-end="url(#ar5)" color="#0C6E73"/>
+            <rect x="600" y="96" width="280" height="94" rx="8" fill="#0C6E73" fill-opacity=".1" stroke="#0C6E73" stroke-width="1.5"/>
+            <text x="616" y="118" fill="currentColor" font-weight="700">the memory area</text>
+            <text x="616" y="136" font-family="JetBrains Mono, monospace" font-size="10" fill="currentColor" opacity=".75">areas/&lt;areaId&gt;/history/eNNN/index.md</text>
+            <text x="616" y="154" font-size="10.5" fill="currentColor" opacity=".7">lore-shaped: name = title,</text>
+            <text x="616" y="169" font-size="10.5" fill="currentColor" opacity=".7">aliases = keys, plus &ldquo;from scene N&rdquo;</text>
+            <text x="616" y="184" font-size="10.5" fill="#0C6E73" font-weight="700">never merged into the project lore index</text>
+
+            <!-- retrieval -->
+            <line x1="20" y1="216" x2="880" y2="216" stroke="currentColor" stroke-opacity=".2"/>
+            <text x="20" y="238" font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" fill="currentColor" opacity=".55">ON A LATER TURN &mdash; injectAreaRecall(), both the seed and the continue branch</text>
+
+            <rect x="20" y="252" width="200" height="46" rx="6" fill="currentColor" fill-opacity=".05" stroke="currentColor" stroke-opacity=".35"/>
+            <text x="120" y="272" text-anchor="middle" fill="currentColor" font-weight="700">the author&rsquo;s message</text>
+            <text x="120" y="288" text-anchor="middle" fill="currentColor" font-size="10" opacity=".65">match text</text>
+
+            <line x1="224" y1="275" x2="262" y2="275" stroke="currentColor" stroke-opacity=".5" marker-end="url(#ar5)"/>
+            <rect x="266" y="252" width="212" height="46" rx="6" fill="#0C6E73" fill-opacity=".1" stroke="#0C6E73" stroke-width="1.5"/>
+            <text x="372" y="272" text-anchor="middle" fill="currentColor" font-weight="700">selectLore over the area</text>
+            <text x="372" y="288" text-anchor="middle" fill="currentColor" font-size="10" opacity=".65">separate 800-token budget</text>
+
+            <line x1="482" y1="275" x2="520" y2="275" stroke="#0C6E73" stroke-width="1.5" marker-end="url(#ar5)" color="#0C6E73"/>
+            <rect x="524" y="248" width="356" height="54" rx="6" fill="#0C6E73" fill-opacity=".14" stroke="#0C6E73" stroke-width="1.5"/>
+            <text x="540" y="268" fill="currentColor" font-weight="700">&#12304;&#35760;&#24518;&#12305; its own block, right before the question</text>
+            <text x="540" y="286" fill="currentColor" font-size="10.5" opacity=".75">&ldquo;this is what <tspan font-weight="700">you</tspan> remember &mdash; it may not match what others say&rdquo;</text>
+
+            <text x="20" y="330" font-family="JetBrains Mono, monospace" font-size="10.5" fill="#A64B08" font-weight="700">Kept apart from &#12304;&#35774;&#23450;&#12305; deliberately: lore is what is true, this is what the character believes.</text>
+            <text x="20" y="348" font-family="JetBrains Mono, monospace" font-size="10.5" fill="currentColor" opacity=".65">Merged into one block, the character starts stating its own guesses as established fact.</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption><b>Two tiers, sorted by nature rather than by budget.</b> An unresolved promise never sinks, however old it is; a thing that merely happened always does. The area is reused <em>code</em> &mdash; the same entity folder format, the same <code>selectLore</code>, the same detail view &mdash; but never the same index.</figcaption>
+    </figure>
+
+    <h3>The transition, in order</h3>
+    <ol class="steps">
+      <li><b>Compute the scene number first</b><span><code>peekNextArchiveNo</code> &mdash; max existing number + 1, never the file count. After the author hand-deletes one archived scene, counting files would make &ldquo;from scene N&rdquo; point at the wrong scene.</span></li>
+      <li><b>Write the memories, then archive</b><span>The reverse order loses a scene: if the recap fails to save after the transcript was already moved away, the author is looking at a blank screen with nothing kept.</span></li>
+      <li><b>Sink, one entry per record</b><span>Each sunk record becomes its own area entry with its own keys. Merging them into one prose block would turn them back into a summary &mdash; the exact thing the memory tier exists to avoid. Records only leave standing memory after every entry is written, so a mid-way failure duplicates at worst.</span></li>
+      <li><b>Optionally write the recap</b><span>If the author chose &ldquo;continue&rdquo;, the generated recap is added as the one <code>scene</code> record. With no memory area configured, the previous <code>scene</code> record is voided instead &mdash; text kept, just no longer findable.</span></li>
+      <li><b>Archive by rename</b><span><code>transcript.md</code> &rarr; <code>archive/transcript-NN.md</code>. A rename, never a truncation &mdash; the transcript is append-only and must not lose a character. <code>session.json</code> is the one file simply deleted: it is a cache, and a wire history that reconnects to no transcript is unreadable to anyone.</span></li>
+    </ol>
+
+    <div class="callout acc">
+      <h4>The recap is written by the character, in first person</h4>
+      <p>Not by an outside summarizer &mdash; and this is an isolation requirement, not a style preference. A third-person omniscient summary would write down things the character was not present for. Asking it &ldquo;what will <em>you</em> remember&rdquo; naturally contains only what it can know. It runs as a structured single-shot on the character&rsquo;s <b>own</b> system prompt, and lands in neither the transcript nor the wire history &mdash; stepping out of the scene is not a turn of it.</p>
+    </div>
+
+    <div class="prose">
+      <h3>Why the area is never merged into the project&rsquo;s lore index</h3>
+      <p>The area holds what a character <em>believes</em>, which may contradict the manuscript. Merging it would turn isolation from &ldquo;it is not in there&rdquo; into a filter that has to be right in six places at once: per-turn injection, the lore read tools, the <b>consistency check</b> (which would report a character&rsquo;s mistaken belief as a contradiction in the prose), the knowledge wall, sync export, and the narrator&rsquo;s context. Missing one is a silent leak.</p>
+      <p>The area also belongs to <em>itself</em>, not to an agent &mdash; <code>areas/&lt;areaId&gt;/</code>, not <code>&lt;agentId&gt;/</code>. Delete the character and the area survives; bind a new character to it and the knowledge reconnects. One area may be bound to only one agent at a time, because two characters sharing a memory is isolation not existing.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 05 ══════════════════════════════════════════════ -->
+<section id="rest">
+  <div class="wrap">
+    <div class="shead"><span class="num">05</span><h2>Everything else that matters</h2></div>
+
+    <h3>Where it all lives</h3>
+    <div class="tree"><b>.ai-writer/roleplay/</b>
+├── agents.json          roster: order, metadata, author persona
+├── <b>areas/&lt;areaId&gt;/</b>      <i>the memory area &mdash; survives its character</i>
+│   ├── meta.json        name, boundTo, lastScene
+│   └── history/eNNN/index.md
+└── <b>&lt;agentId&gt;/</b>
+    ├── agent.md         persona card (frontmatter + the author's direction)
+    ├── transcript.md    <i>ASSET &mdash; append-only, never rewritten</i>
+    ├── memory.md        <i>ASSET &mdash; the private notebook</i>
+    ├── summary.md       rolling summary, written at each compaction
+    ├── <u>session.json     CACHE &mdash; wire history + meta, safe to lose</u>
+    └── archive/         transcript-01.md, summary-01.md, memory-01.md</div>
+
+    <div class="prose">
+      <p>It sits in the project directory rather than the <code>chat_sessions</code> table because that table truncates itself to the newest five sessions &mdash; fine for assistant chats, unacceptable for two weeks of character interaction. Living under <code>.ai-writer/</code> also means <code>projectBackup</code> carries it along for free.</p>
+    </div>
+
+    <h3>Asset versus cache &mdash; and what happens when the cache is gone</h3>
+    <div class="prose">
+      <p>If <code>session.json</code> cannot be read, the next send re-seeds from disk and <b>replays the transcript</b> back into the new history. Without the replay the author would be staring at a full screen of conversation while the character says it does not know what happened &mdash; <em>the page intact, the model amnesiac</em>, which is the hardest failure mode to notice.</p>
+      <p>Two constraints on the replay, both load-bearing:</p>
+      <ul>
+        <li><b>It must start at an author turn.</b> Turn boundaries are marked on author questions; a slice starting with a character reply would leave that reply in the prelude, where compaction can never reach it.</li>
+        <li><b>It is capped at <span class="num-cell">12 000</span> chars, most recent first.</b> Replay goes through the seeding path, and seeding does not compact &mdash; an unbounded replay would blow the first request. Everything earlier is carried by <code>summary.md</code> and <code>memory.md</code>, which is exactly why they exist.</li>
+      </ul>
+    </div>
+
+    <h3>Isolation is structural, not prompted</h3>
+    <div class="grid2">
+      <div class="card">
+        <h4>the character preset</h4>
+        <p>Nine tools. No <code>read_file</code>, no <code>search_text</code>, <strong>no scene tools at all</strong>, and no write tool that touches the manuscript or the knowledge base. Characters cannot read each other because there is no code path, not because we asked them not to.</p>
+      </div>
+      <div class="card">
+        <h4>looking back at itself</h4>
+        <p><code>search_conversation</code> / <code>read_conversation</code> go through <code>ToolContext.conversation</code>, which <strong>takes no agent id</strong>. They replaced <code>search_text</code>, which scanned the manuscript and excluded <code>.ai-writer/</code> &mdash; so it could never find a transcript, and what it <em>could</em> do was the one thing the design forbids.</p>
+      </div>
+      <div class="card">
+        <h4>the narrator</h4>
+        <p>A different preset with <code>list_scenes</code> / <code>read_scene</code> / <code>search_scenes</code> / <code>read_scene_summary</code> / <code>read_scene_memory</code>, plus manuscript write tools. The channel is only handed to it when <code>agent.kind === "narrator"</code> &mdash; belt and braces on top of the preset.</p>
+      </div>
+      <div class="card">
+        <h4>round limits</h4>
+        <p>Character: <span class="num-cell">5</span> rounds, <code>force-text</code>, and deliberately <strong>no round-limit card</strong> &mdash; that card would cut a scene in half and train the author to wave it through. Narrator: <span class="num-cell">20</span>, since reading several scenes before writing prose can legitimately need them.</p>
+      </div>
+    </div>
+
+    <h3>&ldquo;Your setup changed&rdquo; &mdash; the staleness baseline</h3>
+    <div class="prose">
+      <p>The system layer holds four things read exactly once at seeding: the persona body, the author&rsquo;s direction, who the author is playing, and the roleplay rules. The first three change whenever the author edits them, so <code>refreshSystemPrompt</code> rewrites <code>history[0]</code> in place, and <code>contextSignature</code> is the baseline for the &ldquo;setup changed&rdquo; hint.</p>
+      <p>The signature covers <b>all</b> of those inputs, not just the bound text &mdash; it once covered only the bound block, so the two most common edits (changing the persona entry, switching identity) never lit the hint at all. It hashes the <em>inputs</em> rather than the rendered prompt, because the rendered prompt contains i18n copy and switching UI language would mark every character stale. The hash lives on the roster, not on the live session, so a project with ten characters lights the right ones the moment the app opens.</p>
+      <p><b>If you add anything author-editable to the system layer, add it to that signature too</b> &mdash; otherwise the hint never lights, and the author has every reason to believe an edit took effect.</p>
+    </div>
+
+    <h3>Rollback: the one place records are actually removed</h3>
+    <div class="prose">
+      <p>&ldquo;Never delete&rdquo; guards against the <em>model</em> deleting records it dislikes. An author rewinding to turn N is a different act: a pact born in a stretch of conversation that has been undone is worse kept than dropped, because the character will confidently bring up something that never happened. So <code>dropRecordsFrom</code> removes records with <code>turn &gt;= N</code>; <code>turn: 0</code> (author-written) is never touched, revisions are not un-done, and the id counter does not roll back.</p>
+      <p>Every other removal is a <b>move into <code>.ai-writer/backups/</code></b> &mdash; deleting an area, an area entry, or a whole character. The moment something is most likely to be deleted is the moment the author believes they no longer need it.</p>
+    </div>
+
+    <h3>Every cap in one place</h3>
+    <div class="tblwrap">
+      <table>
+        <thead><tr><th>Constant</th><th>Value</th><th>Governs</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">BOUND_BLOCK_CHAR_CAP</td><td class="num-cell">12 000 chars</td><td>The &#12304;&#32465;&#23450;&#35774;&#23450;&#12305; block. Overflow is named, not expanded.</td></tr>
+          <tr><td class="mono">MEMORY_BLOCK_CHAR_CAP</td><td class="num-cell">4 000 chars</td><td>The &#12304;&#35760;&#24518;&#12305; block. Overflow becomes &ldquo;N more &mdash; use recall&rdquo;.</td></tr>
+          <tr><td class="mono">AREA_BUDGET_TOKENS</td><td class="num-cell">800 tokens</td><td>Memory-area recall per turn. Small and separate so a character&rsquo;s recollections can never crowd out its own persona.</td></tr>
+          <tr><td class="mono">COMPACT_TRIGGER</td><td class="num-cell">0.70</td><td>Share of the message ceiling above which compaction runs.</td></tr>
+          <tr><td class="mono">RETAIN_TARGET</td><td class="num-cell">0.45</td><td>Share to fold down to. The wide gap protects the prompt cache.</td></tr>
+          <tr><td class="mono">MIN_KEEP_TURNS</td><td class="num-cell">2</td><td>Turns kept verbatim no matter how far over budget.</td></tr>
+          <tr><td class="mono">SUMMARY_BUDGET_TOKENS</td><td class="num-cell">1 000</td><td>Soft cap on the rolling summary; also what the fold projection charges.</td></tr>
+          <tr><td class="mono">RESTORE_REPLAY_CHAR_CAP</td><td class="num-cell">12 000 chars</td><td>Transcript replay when <code>session.json</code> is lost.</td></tr>
+          <tr><td class="mono">RECAP_INPUT_CHAR_CAP</td><td class="num-cell">24 000 chars</td><td>How much of a scene is fed to the recap, most recent first.</td></tr>
+          <tr><td class="mono">CONTEXT_UTILIZATION</td><td class="num-cell">0.5 default</td><td>Share of the model&rsquo;s context window used as the input ceiling.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Five things that will bite you</h3>
+    <div class="prose">
+      <ol>
+        <li><b>Merging the bound block into the seed block</b> makes the character forget its own sheet at the first compaction. Keep it a separate prelude message.</li>
+        <li><b>Adding an author-editable input to the system layer</b> without adding it to <code>contextSignature</code> means the &ldquo;setup changed&rdquo; hint never lights again for that input.</li>
+        <li><b>Refreshing the memory block on write</b> looks obviously right and is wrong: it voids the cache prefix per recorded fact and buys nothing, because the tool result is still visible.</li>
+        <li><b>Marking sunk records <code>void</code> instead of moving them out</b> makes the sink filter match them forever, re-flooding the area on every transition &mdash; entries grow quadratically in scene count.</li>
+        <li><b>Passing the raw input ceiling to <code>planFold</code></b> instead of <code>messageCeilingFor</code> silently ignores the tool schemas, and the context bar sails past its own compaction mark with nothing happening.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Mapped from the worktree at <code>claude/roleplay-memory-system-graph</code>. Design rationale and rejected alternatives live in <code>docs/feature/roleplay/</code> &mdash; particularly <code>02-design.md</code> (context layering, presets), <code>05-implementation-notes.md</code> &sect;2.16 (the system-layer signature) and <code>06-scene-and-memory-area.md</code> &sect;3&ndash;5 (sinking, recap, the area).</p>
+  </div>
+</footer>

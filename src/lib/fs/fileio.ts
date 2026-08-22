@@ -96,7 +96,7 @@ export interface DirEntry { name: string; path: string; isDirectory: boolean; }
  *
  * The Rust side answers in the host's own spelling — `D:\书\第一章.md` on
  * Windows — and this is one of the three doors a path enters the app through
- * (see `lib/paths.ts` and `docs/path-spelling-plan.md`). Normalising here is
+ * (see `lib/paths.ts` and `docs/feature/path-spelling-plan.md`). Normalising here is
  * what makes `LoreEntity.dirPath` — a key that gets written into
  * `agents.json` and the pinned-lore preferences — mean one thing.
  */

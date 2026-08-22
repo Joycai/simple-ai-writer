@@ -5,7 +5,7 @@
 //! value that changes when any of that changes and does not change otherwise —
 //! that is what `hash_entry_dir` produces, and it is the identity the server
 //! stores and the client's three-way comparison runs on
-//! (`docs/remote-knowledge-base-feasibility.md` §14.2, §15).
+//! (`docs/feature/knowledge-base/remote-knowledge-base-feasibility.md` §14.2, §15).
 //!
 //! ## The hash is a wire format
 //!

@@ -2,7 +2,7 @@
  * Knowledge-base sync: the shared vocabulary.
  *
  * A project can be **bound** to one named knowledge base on a backup server
- * (`server/`, see `docs/remote-knowledge-base-feasibility.md` §13–§18). Syncing
+ * (`server/`, see `docs/feature/knowledge-base/remote-knowledge-base-feasibility.md` §13–§18). Syncing
  * is one-directional and whole-tree: push the local `.ai-writer/lore/` up, or
  * pull the remote down. There is no merge — the author picks a direction and
  * the other side becomes a mirror of it.

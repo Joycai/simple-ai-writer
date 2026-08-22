@@ -12,7 +12,7 @@
 | `search_text` | 只扫 `isChapterFile ∪ isHtmlPath`，与 .pptx 无关 |
 | Rust 依赖 | `zip`（deflate，lore bundle 在用）是直接依赖；`quick-xml` 已在树里（calamine 的传递依赖），提为直接依赖不增加任何构建产物 |
 | 分页先例 | `read_file` 已有按行分页（4000 字符/次，尾注给出下一个 `start_line`），`lib/agent/tools.ts` |
-| 大材料先例 | `longread` / `pdf` subagent：独立上下文读完，主对话只收摘要（`docs/subagent-lld.md`） |
+| 大材料先例 | `longread` / `pdf` subagent：独立上下文读完，主对话只收摘要（`docs/feature/agent/subagent-lld.md`） |
 
 结论：**读取端缺的只是一个解析器和一个工具**，分页协议和大文件兜底都是现成的。
 
@@ -62,7 +62,7 @@
 
 ### D7 超大文件的最后一道防线是 subagent，不是更大的预算
 
-`read_slides` 进 `longread` 的工具集。三百页的 deck 丢给它，主上下文只收回摘要 + note 路径——这条纪律 `docs/subagent-lld.md` 已经立好，不需要为 pptx 新发明一套。
+`read_slides` 进 `longread` 的工具集。三百页的 deck 丢给它，主上下文只收回摘要 + note 路径——这条纪律 `docs/feature/agent/subagent-lld.md` 已经立好，不需要为 pptx 新发明一套。
 
 ### D8 `.ppt`（PowerPoint 97-2003）不支持
 
@@ -121,7 +121,7 @@ docx/xlsx/pdf 的转换器都在 `lib/import/`，因为它们只有导入这一�
 
 ### 4.1 起点：作者已经在用 HTML
 
-规划生成端时的实际情况是：作者早就在让助手写 `.html` 交付物，而且**结果很好**——HTML 是模型真正擅长的排版语言，这个 app 又已经能预览它、审批它、让作者接着改它（`docs/html-artifact-plan.md`）。
+规划生成端时的实际情况是：作者早就在让助手写 `.html` 交付物，而且**结果很好**——HTML 是模型真正擅长的排版语言，这个 app 又已经能预览它、审批它、让作者接着改它（`docs/feature/html-artifact-plan.md`）。
 
 所以问题不是"怎么让模型生成 pptx"，而是"**怎么把已经很好的 HTML 变成 pptx**"。这两个问题的答案完全不同。
 
@@ -155,7 +155,7 @@ docx/xlsx/pdf 的转换器都在 `lib/import/`，因为它们只有导入这一�
 
 一期发出去的版本**在 app 里根本跑不起来**：每次导出都是 20 秒静默超时，任何页面都一样，包括空白页。
 
-原因是 `docs/html-artifact-plan.md` D2 写错了一条事实（现已更正）：`blob:` 文档不是"opaque origin 所以不受主窗 CSP 约束"——`blob:` 是 local scheme，**继承创建它的页面的 CSP**。app 的 `script-src` 是 `'self'`，于是注进去的采集脚本一行都没执行。真浏览器对照实验（加不加 `sandbox` 各一次）两次都是 `Executing inline script violates ... 'script-src 'self''`。
+原因是 `docs/feature/html-artifact-plan.md` D2 写错了一条事实（现已更正）：`blob:` 文档不是"opaque origin 所以不受主窗 CSP 约束"——`blob:` 是 local scheme，**继承创建它的页面的 CSP**。app 的 `script-src` 是 `'self'`，于是注进去的采集脚本一行都没执行。真浏览器对照实验（加不加 `sandbox` 各一次）两次都是 `Executing inline script violates ... 'script-src 'self''`。
 
 修法是 CSP hash——正是它存在的理由：
 

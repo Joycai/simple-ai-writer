@@ -1,8 +1,8 @@
 # 长任务工作区与子代理 详细设计文档（Low-Level Design）
 
 > **状态**：PR-A~PR-E 全部实现。`imageModelId` 的配置归口已在 PR #178（`feat(agent): 图片生成成为子代理`，commit `a785584`）完成——`imagegen` 成为独立 `SubAgentKind`，绑定模型迁移进 `ai:subagent:imagegen:*` 前缀，`SubAgentsPane.tsx` 提供配置 UI；本文 §8 的文件改动清单止于 PR-E，未覆盖该次追加。
-> **关联 High-Level Design**：[`docs/subagent-plan.md`](subagent-plan.md)
-> **基建依赖**：[`unified-agent-plan.md`](unified-agent-plan.md)（统一 Agent Runtime）、[`chat-memory-plan.md`](chat-memory-plan.md)（会话折叠压缩）、[`anthropic-plan.md`](anthropic-plan.md) §10（服务端工具）
+> **关联 High-Level Design**：[`docs/feature/agent/subagent-plan.md`](subagent-plan.md)
+> **基建依赖**：[`unified-agent-plan.md`](unified-agent-plan.md)（统一 Agent Runtime）、[`chat-memory-plan.md`](chat-memory-plan.md)（会话折叠压缩）、[`anthropic-plan.md`](../../api/anthropic-plan.md) §10（服务端工具）
 > **分支**：`feat/task-workspace-and-subagents`
 
 ---
@@ -645,7 +645,7 @@ serverTools: withholdTools ? undefined : opts.serverTools,   // runtime.ts:340
  *
  *  - "final-round-off"（默认）—— 允许，但 force-text 的收尾轮撤掉。
  *      收尾轮的唯一任务是把已有信息写成文；在那里放一次搜索，会重新触发
- *      整个「搜索 → 续跑」循环（docs/anthropic-plan.md §10.8）。
+ *      整个「搜索 → 续跑」循环（docs/api/anthropic-plan.md §10.8）。
  *  - "off"      —— 从不。结构化 JSON 任务用它。
  *  - "always"   —— 每轮都允许，含最后一轮。只有搜索子代理该用。
  */
@@ -1219,7 +1219,7 @@ src/
 
 ## 11. 测试计划
 
-CI 是 PR 门禁（`docs/ci.md`：tsc + vitest + build，Rust fmt/clippy/test）。至少覆盖：
+CI 是 PR 门禁（`docs/reference/ci.md`：tsc + vitest + build，Rust fmt/clippy/test）。至少覆盖：
 
 | 测试 | 位置 | 断言 |
 | :--- | :--- | :--- |

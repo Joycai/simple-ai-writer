@@ -1,10 +1,10 @@
 # CI / PR Quality Gate
 
-The [`CI`](../.github/workflows/ci.yml) workflow runs on every pull request targeting `main`
+The [`CI`](../../.github/workflows/ci.yml) workflow runs on every pull request targeting `main`
 (and on pushes to `main`). It is the merge gate: a PR may only be merged once CI is green.
 
 > Release builds (signed installers for macOS/Windows/Linux) are produced separately by the
-> manually-triggered [`Release`](../.github/workflows/release.yml) workflow — not by CI.
+> manually-triggered [`Release`](../../.github/workflows/release.yml) workflow — not by CI.
 
 ## What it checks
 

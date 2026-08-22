@@ -1,5 +1,5 @@
 /**
- * Chat-session persistence — the serialization half (docs/chat-memory-plan.md's
+ * Chat-session persistence — the serialization half (docs/feature/agent/chat-memory-plan.md's
  * deferred last item). A session is display turns + wire history + the
  * ChatSessionMeta bookkeeping + cumulative usage, flattened to one JSON blob
  * for the project DB (lib/agent/sessionDb).

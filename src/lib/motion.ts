@@ -5,7 +5,7 @@ import type { Transition, Variants } from "motion/react";
  * Shared Motion presets for screen / panel transitions.
  *
  * Motion (framer-motion) is the one sanctioned exception to the "pure CSS
- * motion" rule in docs/design-system.md: it is the only way to animate a view
+ * motion" rule in docs/reference/design-system.md: it is the only way to animate a view
  * *out* while the next one animates *in* (AnimatePresence), which is what makes
  * the switch read as a real iOS-like transition instead of a hard cut.
  *

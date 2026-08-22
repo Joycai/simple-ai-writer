@@ -3,7 +3,7 @@
 > **状态：已实现**（PR-1~4 均已落地：`loreSelect.ts` 分层预算注入 /
 > `FacetEditModal` 管理 UI / `splitter.ts` + `LoreSplitModal` AI 拆解 /
 > `AiPanel` 的 facet 级 pin）。设计与
-> [`architecture.md`](architecture.md)「Facet-aware lore selection」一致，
+> [`architecture.md`](../../reference/architecture.md)「Facet-aware lore selection」一致，
 > 本文保留作为设计决策记录。方向 2（状态跟踪）与方向 4/6（递归激活/向量兜底）
 > 未实现，见 [`lore-granularity-research.md`](lore-granularity-research.md)。
 >
@@ -271,7 +271,7 @@ LoreWall 可加"检测可拆分条目"入口（正文超长且无 facet 的实�
 | 旧版 app 打开新项目 | facet 文件被当普通附件忽略，index.md 照常工作（核心卡自足性由拆解提示词保证：core 必须独立成立） |
 | 旧 pin 数据（纯 dirPath） | 原样有效 = pin 整实体 |
 
-无 schema 迁移、无一次性脚本。`docs/architecture.md`（RAG 节）与 `docs/workflows.md`（新增"添加/拆分特征"recipe）随 PR 更新。
+无 schema 迁移、无一次性脚本。`docs/reference/architecture.md`（RAG 节）与 `docs/reference/workflows.md`（新增"添加/拆分特征"recipe）随 PR 更新。
 
 ---
 

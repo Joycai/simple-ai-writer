@@ -81,7 +81,7 @@ function coerceAgent(raw: unknown): RoleplayAgent | null {
     // Normalised on read, not migrated: the roster is the only `.ai-writer`
     // JSON holding absolute paths, and these are matched by identity against a
     // live `LoreEntity.dirPath`. A stale spelling shows up as every character
-    // reporting "primary entity gone" — see docs/path-spelling-plan.md §3.
+    // reporting "primary entity gone" — see docs/feature/path-spelling-plan.md §3.
     primaryDirPath: kind === "narrator" || typeof a.primaryDirPath !== "string" ? null : toPosixPath(a.primaryDirPath),
     boundPaths: Array.isArray(a.boundPaths)
       ? a.boundPaths.filter((x): x is string => typeof x === "string").map(toPosixPath)

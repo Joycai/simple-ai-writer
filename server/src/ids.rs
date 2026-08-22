@@ -138,7 +138,7 @@ pub fn validate_entity_id(id: &str) -> Result<(), InvalidName> {
 /// Validate a client-supplied content hash.
 ///
 /// The server never computes this: the client hashes the entry *directory's*
-/// contents (see `docs/remote-knowledge-base-feasibility.md` §15), which is not
+/// contents (see `docs/feature/knowledge-base/remote-knowledge-base-feasibility.md` §15), which is not
 /// recoverable from the zip it uploads — zip bytes carry compression choices and
 /// timestamps and are not deterministic for the same input. So the hash is an
 /// opaque token here, and all this checks is that it is a plausible hex digest

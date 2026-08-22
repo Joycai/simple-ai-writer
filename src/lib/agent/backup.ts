@@ -1,7 +1,7 @@
 /**
  * Automatic pre-write backups for L1 ("write-auto") agent tools.
  *
- * The tiered write policy (docs/unified-agent-plan.md §3.2) lets the agent
+ * The tiered write policy (docs/feature/agent/unified-agent-plan.md §3.2) lets the agent
  * apply lore/memory writes without a confirmation step — the safety valve is
  * that every overwrite first snapshots the original into
  * `.ai-writer/backups/`, the same flat directory LoreSplitModal already uses,

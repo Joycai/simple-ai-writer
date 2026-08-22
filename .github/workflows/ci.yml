@@ -1,7 +1,7 @@
 name: CI
 
 # Pull-request quality gate. Every PR targeting `main` must pass this workflow
-# before it can be merged (enforce via branch protection — see docs/ci.md).
+# before it can be merged (enforce via branch protection — see docs/reference/ci.md).
 # Also runs on pushes to `main` so the default branch always has a status.
 
 on:

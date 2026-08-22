@@ -8,8 +8,8 @@ app 把一个项目绑定到其中一个,然后把本地 `.ai-writer/lore/` **�
 磁盘与备份、配置编辑,以及一份对着 `DEPLOY.md` §9 的健康自检。
 见下面的 [管理后台](#管理后台)。
 
-设计与取舍见 [`../docs/remote-knowledge-base-feasibility.md`](../docs/remote-knowledge-base-feasibility.md) §13–§18,
-管理后台自己的取舍见 [`../docs/kb-admin-console.md`](../docs/kb-admin-console.md)。
+设计与取舍见 [`../docs/feature/knowledge-base/remote-knowledge-base-feasibility.md`](../docs/feature/knowledge-base/remote-knowledge-base-feasibility.md) §13–§18,
+管理后台自己的取舍见 [`../docs/feature/knowledge-base/kb-admin-console.md`](../docs/feature/knowledge-base/kb-admin-console.md)。
 **部署、生成密钥、systemd / Docker / 反向代理、轮换与排错见
 [`DEPLOY.md`](DEPLOY.md)** —— 这里只讲它是什么和 API 长什么样。
 

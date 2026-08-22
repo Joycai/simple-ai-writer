@@ -1,6 +1,11 @@
 # 转场与记忆区
 
-> **状态：设计，未实现。** 上游是 `05-implementation-notes.md` §3.6 里挂着的「场」
+> **状态：已实现。**（这一行原本写着「设计，未实现」，在 2026-08-22 的文档整理里核对
+> 代码后更正：分拣在 `lib/roleplay/memory.ts` 的 `takeSinkable`，记忆区在
+> `lib/roleplay/area.ts`，前情摘要在 `recap.ts`，检索在 `run.ts` 的 `injectAreaRecall`，
+> 编排在 `stores/roleplayStore.ts` 的 `newSession` / `previewRecap`。）
+>
+> 上游是 `05-implementation-notes.md` §3.6 里挂着的「场」
 > 数据模型。这份设计的结论是：**不需要「场」这根轴**——转场就是新开会话，而让历史
 > 不被遗忘的是一个可检索的记忆区。
 
@@ -178,7 +183,7 @@ agent 于是变成一个「壳」——人设卡 + 绑定 + 模型 + 记忆区�
 
 ## 8. 被否掉的方案
 
-- **给 lore 加一根 `area` 轴。** 类型系统那份设计（`docs/lore-entry-type-plan.md`）明确
+- **给 lore 加一根 `area` 轴。** 类型系统那份设计（`docs/feature/lore/lore-entry-type-plan.md`）明确
   否掉过第二根轴，并留话说真需要跨切面归组时那是 `tags`、是第三样东西。而且 tags
   也给不了 §4 那六条隔离。
 - **记忆区做成用户自定义分类。** 机制上可行（`projectStore.setCustomCategories`），

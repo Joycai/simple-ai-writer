@@ -47,7 +47,7 @@ export interface ProfileCategory {
  * only facet fields `selectLore` reads are the file's own `keys` / `group` /
  * `priority` / `mode`, so a slot whose declaring pack got disabled costs the
  * author the grouping and the nudges — and changes what the model sees by not
- * one character. See `docs/lore-entry-type-plan.md` §4 for the invariants.
+ * one character. See `docs/feature/lore/lore-entry-type-plan.md` §4 for the invariants.
  */
 export interface FacetSlot {
   /**
@@ -362,7 +362,7 @@ export const DEFAULT_TASKS: readonly TaskDef[] = [
   },
   {
     // HTML 工件：图示/架构图/宣传页 as a self-contained .html deliverable —
-    // the one-click entry the plan's 三期 promised (docs/html-artifact-plan.md).
+    // the one-click entry the plan's 三期 promised (docs/feature/html-artifact-plan.md).
     // Freeform + full toolset: the author describes the page, the agent reads
     // the material and proposes it via create_file (L2 approval).
     id: "htmlArtifact",
@@ -469,7 +469,7 @@ export const NOVEL_PROFILE: WorkspaceProfile = {
   // the format proves itself on one real domain first, and the other packs get
   // their slot tables in phase 3 together with the prompts that consume them —
   // a checklist nothing reads yet is a half-built thing to show an author.
-  // See docs/lore-entry-type-plan.md §6.
+  // See docs/feature/lore/lore-entry-type-plan.md §6.
   categories: [
     {
       id: "characters",

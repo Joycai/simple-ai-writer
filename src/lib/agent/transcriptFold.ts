@@ -1,5 +1,5 @@
 /**
- * Display-layer folding for the chat transcript (docs/chat-memory-plan.md §8's
+ * Display-layer folding for the chat transcript (docs/feature/agent/chat-memory-plan.md §8's
  * deferred item). Pure presentation: the wire history and its compaction are
  * untouched — this only decides how many of the *rendered* turns collapse
  * behind a "show earlier" bar, keeping a long session's transcript short and

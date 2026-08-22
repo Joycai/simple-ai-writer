@@ -1,4 +1,4 @@
-//! Standalone HTML preview window (HTML 工件三期 — docs/html-artifact-plan.md).
+//! Standalone HTML preview window (HTML 工件三期 — docs/feature/html-artifact-plan.md).
 //!
 //! The in-app preview is a sandboxed iframe inside the editor pane — right for
 //! iterating, wrong for judging a promo page at its real viewport size. This

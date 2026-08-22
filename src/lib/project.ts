@@ -16,7 +16,7 @@ export interface FileNode {
 export async function openProjectFolder(): Promise<string | null> {
   const picked = await invoke<string | null>("project_open_dialog");
   // One of the three doors a host-spelled path enters through — see
-  // `docs/path-spelling-plan.md`. This one is the root of everything: the
+  // `docs/feature/path-spelling-plan.md`. This one is the root of everything: the
   // project path is compared against, joined onto, and persisted into the
   // recents list, so it must have a single spelling from here on.
   return picked === null ? null : toPosixPath(picked);

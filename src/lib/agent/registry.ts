@@ -14,7 +14,7 @@
  *                        lands (manuscript edits, PR4)
  * The runtime itself only executes; enforcement of the write policies lives
  * with the write tools' executors + the approval queue (see
- * docs/unified-agent-plan.md §3.2).
+ * docs/feature/agent/unified-agent-plan.md §3.2).
  */
 
 import type { ToolDefinition } from "../ai/types";

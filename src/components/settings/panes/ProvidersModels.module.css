@@ -287,7 +287,7 @@
 
 /* Absolute, not fixed: the drawer belongs to this pane, and the settings page
    sits inside a Motion-animated subtree whose transform would otherwise become
-   the containing block for a fixed child (see docs/design-system.md). */
+   the containing block for a fixed child (see docs/reference/design-system.md). */
 .scrim {
   position: absolute;
   inset: 0;

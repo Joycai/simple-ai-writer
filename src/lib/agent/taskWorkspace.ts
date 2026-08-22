@@ -7,7 +7,7 @@
  *     ├── task.md        ← Machine status in 3-line comment header + author-editable Markdown
  *     └── notes/         ← Intermediate scratchpad notes (search findings, vision, digests)
  *
- * See docs/subagent-lld.md §3 for full design specification.
+ * See docs/feature/agent/subagent-lld.md §3 for full design specification.
  */
 
 import i18n from "../../i18n";

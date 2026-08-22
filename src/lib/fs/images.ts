@@ -24,7 +24,7 @@ const IMAGE_EXTS = new Set(["png", "jpg", "jpeg", "webp", "gif"]);
  * and the import's copy-as-is list both key off this.
  *
  * `.html`/`.htm` belong here even though they are deliverables rather than
- * chapters (docs/html-artifact-plan.md D6): the assistant that wrote the page
+ * chapters (docs/feature/html-artifact-plan.md D6): the assistant that wrote the page
  * is the one the author then asks to change it, and `search_text` already
  * scans them (`isSearchableFile`), so leaving them out of `@` only meant the
  * author had to describe a file the model could have been handed. Kept in

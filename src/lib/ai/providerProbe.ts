@@ -7,7 +7,7 @@
  * compatible relays implement only the completion endpoint, though — for them a
  * missing `/models` says nothing about whether the provider works, so on a
  * compat standard that case falls through to `probeCompletionEndpoint` rather
- * than being reported as a failure. See docs/provider-standards.md §5.
+ * than being reported as a failure. See docs/api/provider-standards.md §5.
  */
 
 import i18n from "../../i18n";
