@@ -6,7 +6,7 @@ import { X, SlidersHorizontal, Layers, MessageSquare, Info, BookOpen, Keyboard, 
 } from "lucide-react";
 import { type SettingsTab } from "../../stores/appStore";
 import { ModalErrorBoundary } from "../common/ErrorBoundary";
-import { panelFade, overlayFadeTransition } from "../../lib/motion";
+import { panelFade, overlayFadeTransition, useMotionPreset } from "../../lib/motion";
 import { GeneralPane } from "./panes/GeneralPane";
 import { WorkspacePane } from "./panes/WorkspacePane";
 import { SyncPane } from "./panes/SyncPane";
@@ -56,6 +56,8 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  const pageVariants = useMotionPreset(panelFade);
+
   const navBtn = (id: SettingsTab, icon: React.ReactNode, labelKey: string) => (
     <button
       key={id}
@@ -70,7 +72,7 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
   return (
     <motion.div
       className={styles.page}
-      variants={panelFade}
+      variants={pageVariants}
       initial="initial"
       animate="animate"
       exit="exit"

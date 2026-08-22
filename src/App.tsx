@@ -26,7 +26,7 @@ import { usePrefsFocusSync } from "./usePrefsFocusSync";
 import { launchProjectPath } from "./lib/instance";
 import { installCitationNavigation } from "./lib/lore/citations";
 import { installNavigationHistory } from "./stores/navStore";
-import { fillLayer, springScreen, viewSlide } from "./lib/motion";
+import { fillLayer, springScreen, useMotionPreset, viewSlide } from "./lib/motion";
 
 export default function App() {
   const {
@@ -100,6 +100,8 @@ export default function App() {
   // Preferences another app instance changed appear on return, the same way.
   usePrefsFocusSync();
 
+  const viewVariants = useMotionPreset(viewSlide);
+
   return (
     <MotionConfig reducedMotion="user">
     <div
@@ -135,7 +137,7 @@ export default function App() {
           <AnimatePresence initial={false}>
             <motion.div
               key={view}
-              variants={viewSlide}
+              variants={viewVariants}
               initial="initial"
               animate="animate"
               exit="exit"

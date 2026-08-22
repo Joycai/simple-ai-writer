@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronRight, Pencil, Search, X } from "lucide-react";
 import { useAiStore } from "../../../stores/aiStore";
@@ -45,15 +45,41 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
   const [typeFilter, setTypeFilter] = useState<ModelType | "all">("all");
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [drawer, setDrawer] = useState<Drawer>(null);
+  const [drawerClosing, setDrawerClosing] = useState(false);
   const [pending, setPending] = useState<Pending>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // 关闭走 160ms 退场（scrim 淡出、抽屉滑回）再卸载 — 与 ModalShell 的
+  // modal-closing 同一节奏（进 220ms / 出 160ms）。计时器进 ref：重复的关闭
+  // 请求只认第一次，而关闭中又打开新目标要能取消掉未决的卸载。
+  const drawerCloseTimer = useRef<number | null>(null);
+  const closeDrawer = () => {
+    if (drawerCloseTimer.current !== null) return;
+    setDrawerClosing(true);
+    drawerCloseTimer.current = window.setTimeout(() => {
+      drawerCloseTimer.current = null;
+      setDrawerClosing(false);
+      setDrawer(null);
+    }, 160);
+  };
+  const openDrawer = (next: NonNullable<Drawer>) => {
+    if (drawerCloseTimer.current !== null) {
+      window.clearTimeout(drawerCloseTimer.current);
+      drawerCloseTimer.current = null;
+      setDrawerClosing(false);
+    }
+    setDrawer(next);
+  };
+  useEffect(() => () => {
+    if (drawerCloseTimer.current !== null) window.clearTimeout(drawerCloseTimer.current);
+  }, []);
 
   useEffect(() => {
     // While the confirm dialog is up, ModalShell's own Escape listener closes
     // it. Both listeners sit on `window`, so the page's would otherwise fire
     // too and take the whole settings page down with the dialog — claiming the
     // key with a no-op is what keeps one press to one layer.
-    const handler = pending ? () => {} : drawer ? () => setDrawer(null) : null;
+    const handler = pending ? () => {} : drawer ? closeDrawer : null;
     onEscapeInterceptChange(handler);
     return () => onEscapeInterceptChange(null);
   }, [drawer, pending, onEscapeInterceptChange]);
@@ -107,7 +133,7 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
         return;
       }
     }
-    setDrawer({ kind: "provider", providerId, apiKey });
+    openDrawer({ kind: "provider", providerId, apiKey });
   };
 
   const confirmPending = () => {
@@ -223,7 +249,7 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
                     <button
                       className={hub.groupBtn}
                       title={t("aiConfig.hub.addModelTitle")}
-                      onClick={(e) => { e.stopPropagation(); setDrawer({ kind: "model", providerId: g.id, modelId: null }); }}
+                      onClick={(e) => { e.stopPropagation(); openDrawer({ kind: "model", providerId: g.id, modelId: null }); }}
                     >
                       + {t("aiConfig.hub.addModel")}
                     </button>
@@ -254,13 +280,13 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
                     <div
                       key={m.id}
                       className={hub.modelRow}
-                      onClick={() => !isOrphan && setDrawer({ kind: "model", providerId: m.providerId, modelId: m.id })}
+                      onClick={() => !isOrphan && openDrawer({ kind: "model", providerId: m.providerId, modelId: m.id })}
                       role="button"
                       tabIndex={0}
                       onKeyDown={(e) => {
                         if ((e.key === "Enter" || e.key === " ") && !isOrphan) {
                           e.preventDefault();
-                          setDrawer({ kind: "model", providerId: m.providerId, modelId: m.id });
+                          openDrawer({ kind: "model", providerId: m.providerId, modelId: m.id });
                         }
                       }}
                     >
@@ -290,7 +316,7 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
                       {t("aiConfig.hub.noModels")}{" "}
                       <button
                         className={hub.linkBtn}
-                        onClick={() => setDrawer({ kind: "model", providerId: g.id, modelId: null })}
+                        onClick={() => openDrawer({ kind: "model", providerId: g.id, modelId: null })}
                       >
                         {t("aiConfig.hub.addFirstModel")}
                       </button>
@@ -316,25 +342,25 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
       </div>
 
       {drawer && (
-        <>
-          <div className={hub.scrim} onClick={() => setDrawer(null)} />
+        <div className={`${hub.drawerLayer} ${drawerClosing ? hub.drawerLayerClosing : ""}`}>
+          <div className={hub.scrim} onClick={closeDrawer} />
           {drawer.kind === "provider" ? (
             <ProviderDrawer
               // Remount per target so the form seeds from the right provider.
               key={drawer.providerId ?? "new"}
               providerId={drawer.providerId}
               initialApiKey={drawer.apiKey}
-              onClose={() => setDrawer(null)}
+              onClose={closeDrawer}
             />
           ) : (
             <ModelDrawer
               key={drawer.modelId ?? `new:${drawer.providerId}`}
               providerId={drawer.providerId}
               modelId={drawer.modelId}
-              onClose={() => setDrawer(null)}
+              onClose={closeDrawer}
             />
           )}
-        </>
+        </div>
       )}
 
       {pending && (

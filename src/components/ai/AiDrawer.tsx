@@ -13,7 +13,7 @@ import { isRoleplayEnabled } from "../../lib/roleplay/flag";
 import { useRoleplayStore } from "../../stores/roleplayStore";
 import { TaskWorkspaceView } from "./TaskWorkspaceView";
 import { MOD_KEY } from "../../lib/platform";
-import { drawerSlide, overlayFade, overlayFadeTransition, springDrawer } from "../../lib/motion";
+import { drawerSlide, overlayFade, overlayFadeTransition, springDrawer, useMotionPreset } from "../../lib/motion";
 import styles from "./AiDrawer.module.css";
 
 type Mode = AiDrawerMode;
@@ -86,6 +86,7 @@ export function AiDrawer() {
         : t("ai.drawer.generateTitle", { defaultValue: "AI 助手" });
 
   const shortcut = MODE_SHORTCUT[aiDrawerMode];
+  const drawerVariants = useMotionPreset(drawerSlide);
 
   return (
     <AnimatePresence>
@@ -108,7 +109,7 @@ export function AiDrawer() {
         role="dialog"
         aria-modal
         data-ai-surface
-        variants={drawerSlide}
+        variants={drawerVariants}
         initial="initial"
         animate="animate"
         exit="exit"

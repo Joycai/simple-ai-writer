@@ -314,6 +314,41 @@
   animation: slideInRight 220ms var(--ease-out);
 }
 
+/* CSS Modules 会把 animation-name 一并哈希化，而 global.css 不是模块——从模块里
+   引用它的 keyframes 会悬空、动画根本不播（docs/issues/css-modules-global-keyframes.md）。
+   在本模块内重新声明同名 keyframes，声明和引用一起被哈希，才真正解析得到。 */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes fadeOut {
+  to { opacity: 0; }
+}
+@keyframes slideOutRight {
+  to { opacity: 0; transform: translateX(24px); }
+}
+
+/* Wrapper so the pane can put both scrim and drawer into a closing state with
+   one class. display: contents keeps it out of layout — the two children stay
+   absolutely positioned against the pane, exactly as before. */
+.drawerLayer {
+  display: contents;
+}
+/* 关闭中：进 220ms / 出 160ms，与 ModalShell 的 modal-closing 同一节奏；
+   期间吞掉输入。 */
+.drawerLayerClosing .scrim {
+  animation: fadeOut 160ms var(--ease-out) forwards;
+  pointer-events: none;
+}
+.drawerLayerClosing .drawer {
+  animation: slideOutRight 160ms var(--ease-out) forwards;
+  pointer-events: none;
+}
+
 .drawerHead {
   display: flex;
   align-items: flex-start;
