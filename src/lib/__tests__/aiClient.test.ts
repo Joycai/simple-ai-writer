@@ -43,6 +43,8 @@ async function collect(opts: {
   thinkingDialect?: ThinkingDialect;
   serverTools?: ServerToolId[];
   temperature?: number;
+  topP?: number;
+  frequencyPenalty?: number;
 }): Promise<{ received: StreamChunk[]; calls: { url: string; body: Record<string, unknown> }[] }> {
   const calls = mockFetch(opts.chunks);
   const received: StreamChunk[] = [];
@@ -58,6 +60,8 @@ async function collect(opts: {
     thinkingDialect: opts.thinkingDialect,
     serverTools: opts.serverTools,
     temperature: opts.temperature,
+    topP: opts.topP,
+    frequencyPenalty: opts.frequencyPenalty,
     tools: opts.tools,
     toolChoice: opts.toolChoice,
     onChunk: (c) => received.push(c),
@@ -2325,5 +2329,44 @@ describe("streamCompletion — temperature", () => {
     });
     expect(calls[0].body.thinking).toBeDefined();
     expect(calls[0].body.temperature).toBeUndefined();
+  });
+});
+
+describe("streamCompletion — top_p / frequency_penalty", () => {
+  const OPENAI_DONE = [`data: [DONE]
+
+`];
+  const GEMINI_ONE = [`data: {"candidates":[{"content":{"parts":[{"text":"x"}]}}]}
+`];
+
+  it("sends neither field when unset — an untouched request stays byte-identical", async () => {
+    const { calls } = await collect({ chunks: OPENAI_DONE });
+    expect("top_p" in calls[0].body).toBe(false);
+    expect("frequency_penalty" in calls[0].body).toBe(false);
+  });
+
+  it("sends both when the task asks for them", async () => {
+    // Sakura's documented sampling: temperature 0.1 / top_p 0.3, with the
+    // frequency penalty carrying the degeneration remedy.
+    const { calls } = await collect({
+      chunks: OPENAI_DONE, temperature: 0.1, topP: 0.3, frequencyPenalty: 0.2,
+    });
+    expect(calls[0].body.top_p).toBe(0.3);
+    expect(calls[0].body.frequency_penalty).toBe(0.2);
+  });
+
+  it("sends frequency_penalty 0 rather than treating it as unset", async () => {
+    // Same trap as temperature above, and it bites harder here: 0 is the
+    // vendor's own default and the first rung of the retry ladder's baseline,
+    // so `opts.frequencyPenalty ? … : {}` would silently send nothing.
+    const { calls } = await collect({ chunks: OPENAI_DONE, frequencyPenalty: 0 });
+    expect(calls[0].body.frequency_penalty).toBe(0);
+  });
+
+  it("stays off the Gemini wire — these two are OpenAI-only by declaration", async () => {
+    const { calls } = await collect({ standard: "gemini", chunks: GEMINI_ONE, topP: 0.3, frequencyPenalty: 0.2 });
+    const cfg = calls[0].body.generationConfig as Record<string, unknown> | undefined;
+    expect(cfg?.topP).toBeUndefined();
+    expect(calls[0].body.top_p).toBeUndefined();
   });
 });

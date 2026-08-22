@@ -918,7 +918,9 @@
         "start": "Started {{task}} · {{model}}",
         "round": "Round {{round}}/{{max}} · ~{{tokens}} input tokens ({{toolTokens}} of them tool schemas)",
         "toolsLoaded": "Loaded {{count}} {{group}} tools",
-        "toolGroup": { "lore_write": "knowledge-base write" },
+        "toolGroup": {
+          "lore_write": "knowledge-base write"
+        },
         "trimmed": "Elided {{count}} earlier tool results to fit the context window",
         "outputTruncated": "Cut off at the output limit — the answer is unfinished. Raise this model's max-output, or shorten the context",
         "turnResumed": "The endpoint stopped after searching; results handed back to continue (request {{leg}})",
@@ -1389,6 +1391,11 @@
       "serverToolsHintOpenai": "Tools the *endpoint* runs inside the same request. Nothing happens locally and there is no per-call approval — turning one on grants this model standing permission to search the open web whenever it answers. On OpenAI-compatible endpoints this is sent the Qwen (DashScope compatible-mode) way, as enable_search: true; other compat endpoints will usually ignore it, and the official api.openai.com rejects the field (this setting is hidden there). Note: on this protocol the search leaves no trace — no sources or citations come back, so the execution log shows nothing; the answer simply absorbs what was found.",
       "pdfInputLabel": "PDF file input",
       "pdfInputHint": "Declares that this model accepts whole PDF files as message content (the OpenAI file content part; on Qwen's DashScope compatible-mode currently qwen3.8-max only, ≤150MB / ≤500 pages per file, billed per page on top of tokens). Required before it can be bound as the PDF digest subagent.",
+      "translateFormatLabel": "Translation format (optional)",
+      "translateFormatNone": "Ordinary model",
+      "translateFormat_sakura": "Sakura (JA→ZH)",
+      "translateFormatHint": "Declare the prompt format if this is a dedicated translation model whose template was fixed at training time. Leave it on “Ordinary model” otherwise.",
+      "translateFormatHintOn": "Declared as a dedicated translation model: it only translates Japanese into Chinese and does not read instructions, so it no longer appears in the main-model or other subagent pickers — only the JA→ZH translation subagent can use it.",
       "effortLabelAnthropic": "Effort"
     },
     "probe": {
@@ -1921,8 +1928,8 @@
     "failedTitle": "Run failed",
     "chatDone": "The assistant finished its reply",
     "chatFailed": "The assistant stopped: {{error}}",
-    "taskDone": "\u201c{{task}}\u201d finished",
-    "taskFailed": "\u201c{{task}}\u201d failed: {{error}}",
+    "taskDone": "“{{task}}” finished",
+    "taskFailed": "“{{task}}” failed: {{error}}",
     "batchDone": "Batch run finished: {{done}} done, {{failed}} failed",
     "testTitle": "Notification test",
     "testBody": "System notifications are getting through."

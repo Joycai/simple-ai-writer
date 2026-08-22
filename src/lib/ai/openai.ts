@@ -91,6 +91,13 @@ export async function streamOpenAI(opts: StreamOptions): Promise<void> {
       // what it sent before this setting existed. 0 is a real value here, so
       // the test is `!== undefined` rather than truthiness.
       ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+      // Same `!== undefined` rule, and for the same reason: 0 is a real value
+      // for both (frequency_penalty 0 is the vendor's own default). These two
+      // come from the task rather than from the model's config — today only the
+      // Sakura translation engine sets them — so a request that doesn't ask for
+      // them is byte-identical to one from before they existed.
+      ...(opts.topP !== undefined ? { top_p: opts.topP } : {}),
+      ...(opts.frequencyPenalty !== undefined ? { frequency_penalty: opts.frequencyPenalty } : {}),
       ...(opts.tools ? { tools: opts.tools, tool_choice: toolChoiceFor(opts) } : {}),
       // A standing permission the author granted this model, spelled the way
       // this wire wants it (enable_search — see lib/ai/serverTools.ts). Empty

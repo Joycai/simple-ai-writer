@@ -18,6 +18,17 @@ import { migrateLegacyStandard } from "./urls";
 export type ModelType = "text" | "multimodal" | "image" | "video";
 
 /**
+ * The fixed prompt format a dedicated translation model was trained on.
+ *
+ * A union rather than a boolean because the format *is* the identity: Sakura's
+ * system message and user template are frozen at training time, so "this is a
+ * translation model" and "these exact strings" are the same fact. A second
+ * entry here (GalTransl, say) would arrive as a second template in
+ * `lib/translate/`, not as a new branch anywhere else.
+ */
+export type TranslateFormat = "sakura";
+
+/**
  * What an image model's endpoint can actually do. Declared rather than probed:
  * a capability probe against an image endpoint costs a real generation, so the
  * author states it once (defaults guessed from the API standard) and the
@@ -193,6 +204,24 @@ export interface Model {
    */
   pdfInput?: boolean;
   /**
+   * Which fixed translation prompt format this model was trained on, if it is a
+   * dedicated translation model rather than a general one.
+   *
+   * Declared rather than derived, same as `serverTools` and `pdfInput` above:
+   * it is a property of the weights the author loaded, the model id behind a
+   * local endpoint is free text they typed, and no probe can ask.
+   *
+   * Setting it is a *narrowing*, not a capability: `sakura` is one-way 日→中
+   * and does not read instructions at all — asked a question it paraphrases it
+   * back — so a model carrying this must never appear as a candidate for the
+   * main model, or for any subagent other than `translate`. See
+   * docs/feature/translate/01-execution-plan.md §1 不变量 2.
+   *
+   * Absent means "an ordinary model", which is what every row configured
+   * before this existed reads as.
+   */
+  translateFormat?: TranslateFormat;
+  /**
    * USD per generated image. The billing shape image endpoints usually use;
    * token pricing (priceIn/priceOut) still applies on top for the providers
    * that bill image generation as tokens. See `imageCostFor`.
@@ -350,6 +379,7 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   await addColumn(db, modelCols, "models", "server_tools", "TEXT");
   await addColumn(db, modelCols, "models", "pdf_input", "INTEGER");
   await addColumn(db, modelCols, "models", "temperature", "REAL");
+  await addColumn(db, modelCols, "models", "translate_format", "TEXT");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS prompts (
@@ -566,9 +596,9 @@ export async function listModels(
 export function modelUpsert(m: Model): SqlStatement {
   return {
     sql: `INSERT OR REPLACE INTO models
-      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, server_tools, pdf_input, temperature)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null],
+      (id, provider_id, model_id, name, type, price_in, price_cached_in, price_out, enabled, prefix, context_size, max_output, probed_at, price_per_image, caps, reasoning_effort, thinking_dialect, server_tools, pdf_input, temperature, translate_format)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    values: [m.id, m.providerId, m.modelId, m.name, m.type, m.priceIn, m.priceCachedIn, m.priceOut, m.enabled ? 1 : 0, m.prefix ?? null, m.contextSize ?? null, m.maxOutput ?? null, m.probedAt ?? null, m.pricePerImage ?? null, m.caps ? JSON.stringify(m.caps) : null, m.reasoningEffort ?? null, m.thinkingDialect ?? null, m.serverTools?.length ? JSON.stringify(m.serverTools) : null, m.pdfInput ? 1 : null, m.temperature ?? null, m.translateFormat ?? null],
   };
 }
 
@@ -649,6 +679,7 @@ function rowToModel(r: Record<string, unknown>): Model {
     // Absent for anything but an explicit 1 — the column is free-typed like
     // the rest, and "no declaration" must stay one representation.
     pdfInput: r.pdf_input === 1 ? true : undefined,
+    translateFormat: parseTranslateFormat(r.translate_format),
   };
 }
 
@@ -663,6 +694,19 @@ const MODEL_TYPES: ModelType[] = ["text", "multimodal", "image", "video"];
  */
 function parseModelType(raw: unknown): ModelType {
   return MODEL_TYPES.includes(raw as ModelType) ? (raw as ModelType) : "text";
+}
+
+/** Every declared format, for the settings drawer to render. */
+export const TRANSLATE_FORMATS: readonly TranslateFormat[] = ["sakura"];
+
+/**
+ * Narrow a stored `translate_format`, same as `parseModelType` next door — but
+ * the fallback is the opposite direction. An unrecognised value must read as
+ * "not a translation model", never as a guess: getting it wrong the other way
+ * would silently exclude an ordinary model from every picker in the app.
+ */
+export function parseTranslateFormat(raw: unknown): TranslateFormat | undefined {
+  return TRANSLATE_FORMATS.includes(raw as TranslateFormat) ? (raw as TranslateFormat) : undefined;
 }
 
 function parseImageCaps(raw: unknown): ImageCaps | undefined {
