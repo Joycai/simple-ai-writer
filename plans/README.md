@@ -19,6 +19,8 @@
 | 010 | [仪表条合成层化](010-meters-composite.md) | MEDIUM | DONE |
 | 011 | [状态变化软化（保存/视图/草稿）](011-state-change-softening.md) | LOW | DONE |
 | 012 | [插入到文档落点反馈](012-insert-flash.md) | LOW | DONE |
+| 013 | [剩余非壳模态表面的退出动画](013-remaining-modal-surfaces.md) | LOW | DONE |
+| 014 | [⌘K 命令面板去动画（决策变更）](014-command-palette-instant.md) | MEDIUM | DONE |
 
 > 001–005 已随 [PR #273](https://github.com/Joycai/simple-ai-writer/pull/273) 合入 main（基准 0f49132）。
 > 006–012（backlog 第二批，基准 9e16885）已于 2026-08-22 执行完毕，`pnpm tsc --noEmit` 与 `pnpm build` 通过。
@@ -41,7 +43,10 @@
 
 **008 的收尾已完成**：ModalShell 增补 `closeRef` prop 作为轻量接入通道（复杂模态无需拆组件），其余 10 个消费者（LoreWall ×3、LoreGenerator、LoreSplitModal、LoreMetaImproveModal、FacetEditModal、LoreImproveModal、FacetAiAssistantModal、EntityAiHubModal、SyncPreviewModal、ImageGenModal）的按钮关闭与成功后关闭全部走退出动画。
 
-## 已记录但暂不立案
+## 第三批（013–014，基准 7b95145）
 
-- ⌘K 命令面板的进出场动画与「键盘高频动作零动画」准则相悖，但 `docs/reference/design-system.md` 将其列为既定设计——保持现状，除非产品侧改主意。
-- 未走 ModalShell 的模态表面（ErrorBoundary、Onboarding、BatchRunModal、PromptViewer、sync 入口层）的退出动画：等 008 的模式落地验证后，逐个迁入 ModalShell 或复用 `modal-closing` 类，届时再补方案。
+原「暂不立案」两项均已立案：
+- **013**：BatchRunModal / PromptViewer 迁入 ModalShell（各带特殊语义保全），Onboarding 复用 `modal-closing` 做谢幕淡出；ErrorBoundary 明确不做（崩溃表面，理由在方案内）。sync 经核实无剩余工作。
+- **014**：⌘K 面板去动画是对 design-system.md 既定决策的**显式变更**，方案含文档同步步骤。建议 014 单独审阅——它改的是产品决策，不只是代码。
+
+执行中的计划外发现（未处理，留档）：`LoreDetail.tsx:819` 的图片灯箱是最后一个手卷 portal 对话框（role="dialog"，点击即关）——013 的排查步骤发现但不在其范围内；若想让它也有退出动画，同样是 `closeRef` 迁壳的一小步。

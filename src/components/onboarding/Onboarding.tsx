@@ -44,6 +44,9 @@ export function Onboarding() {
   const { openProject } = useProjectStore();
 
   const [step, setStep] = useState(1);
+  // First-run curtain call — not a dismissible-by-backdrop modal, but the
+  // one moment where a 160ms fade beats a hard cut into the main UI.
+  const [closing, setClosing] = useState(false);
   const [selected, setSelected] = useState<Provider>("anthropic");
   const [apiKey, setApiKey] = useState("");
   const [saving, setSaving] = useState(false);
@@ -66,6 +69,11 @@ export function Onboarding() {
   const dismiss = () => {
     writePref(ONBOARDING_DONE_KEY, "true");
     setShowOnboarding(false);
+  };
+  const beginDismiss = () => {
+    if (closing) return;
+    setClosing(true);
+    window.setTimeout(dismiss, 160);
   };
 
   const handleSaveProvider = async () => {
@@ -296,7 +304,7 @@ export function Onboarding() {
           <span className={styles.shortcutDesc}>{t("onboarding.shortcutBrackets")}</span>
         </div>
         <span className={styles.spacer} />
-        <button className={styles.nextBtn} onClick={dismiss} style={{ marginTop: 24 }}>
+        <button className={styles.nextBtn} onClick={beginDismiss} style={{ marginTop: 24 }}>
           {t("onboarding.start")} <ArrowRight size={12} />
         </button>
       </div>
@@ -304,7 +312,7 @@ export function Onboarding() {
   };
 
   return (
-    <div className={styles.backdrop}>
+    <div className={`${styles.backdrop} ${closing ? "modal-closing" : ""}`}>
       <div className={styles.modal}>
         <div className={styles.brandBand}>
           <span className={styles.brandLogo}>
@@ -315,7 +323,7 @@ export function Onboarding() {
           <span className={styles.brandName}>Manuscript</span>
           <span className={styles.brandVer}>{t("onboarding.brandLocal")}</span>
           <span className={styles.brandSpacer} />
-          <button className={styles.brandSkip} onClick={dismiss}>
+          <button className={styles.brandSkip} onClick={beginDismiss}>
             {t("onboarding.skip")}
           </button>
         </div>

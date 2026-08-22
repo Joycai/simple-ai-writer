@@ -7,7 +7,7 @@
   align-items: flex-start;
   justify-content: center;
   padding-top: 14vh;
-  /* enter/exit handled by Motion (AnimatePresence) — see CommandPalette.tsx */
+  animation: fadeIn 80ms var(--ease-out);
 }
 
 .palette {

@@ -10,11 +10,11 @@
  * Nothing here is editable: the request has already gone out.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { createPortal } from "react-dom";
 import { Copy, X } from "lucide-react";
 import type { StreamMessage } from "../../lib/ai/types";
+import { ModalShell } from "../common/ModalShell";
 import styles from "./PromptViewer.module.css";
 
 /** One message as plain text — image parts are counted, never inlined. */
@@ -48,6 +48,13 @@ export function PromptViewer({
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
+  const shellCloseRef = useRef<(() => void) | null>(null);
+  const requestClose = () => (shellCloseRef.current ?? onClose)();
+  // Latest-value ref so the mount-only listener below always calls the
+  // current requestClose (which itself reads shellCloseRef.current fresh).
+  const requestCloseRef = useRef(requestClose);
+  requestCloseRef.current = requestClose;
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
@@ -55,11 +62,11 @@ export function PromptViewer({
       // is the one the key belongs to.
       e.preventDefault();
       e.stopPropagation();
-      onClose();
+      requestCloseRef.current();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
+  }, []);
 
   const copyAll = () => {
     void navigator.clipboard.writeText(asPlainText(messages)).then(
@@ -70,15 +77,14 @@ export function PromptViewer({
 
   const totalChars = messages.reduce((n, m) => n + messageText(m).length, 0);
 
-  return createPortal(
-    <div className={styles.overlay} onMouseDown={onClose}>
-      <div
-        className={styles.modal}
-        role="dialog"
-        aria-modal
-        data-ai-surface
-        onMouseDown={(e) => e.stopPropagation()}
-      >
+  return (
+    <ModalShell
+      overlayClassName={styles.overlay}
+      onClose={onClose}
+      closeOnEscape={false}
+      closeRef={shellCloseRef}
+    >
+      <div className={styles.modal} role="dialog" aria-modal data-ai-surface>
         <div className={styles.header}>
           <span className={styles.title}>
             {t("ai.panel.promptViewerTitle", { defaultValue: "完整提示" })}
@@ -97,7 +103,7 @@ export function PromptViewer({
               ? t("ai.panel.copied", { defaultValue: "已复制" })
               : t("ai.panel.promptViewerCopy", { defaultValue: "复制全部" })}
           </button>
-          <button className={styles.closeBtn} onClick={onClose} aria-label="Close">
+          <button className={styles.closeBtn} onClick={requestClose} aria-label="Close">
             <X size={14} strokeWidth={1.6} />
           </button>
         </div>
@@ -127,7 +133,6 @@ export function PromptViewer({
           })}
         </div>
       </div>
-    </div>,
-    document.body,
+    </ModalShell>
   );
 }
