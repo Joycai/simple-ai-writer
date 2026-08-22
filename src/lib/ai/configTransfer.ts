@@ -323,7 +323,7 @@ export async function stageConfigImport(
  * Providers are written before the models that reference them: sqlx connects
  * with `foreign_keys = ON`, and `models.provider_id` is a real foreign key.
  */
-export async function applyConfigImport(staged: StagedConfigImport): Promise<void> {
+export async function applyConfigImport(staged: ParsedConfigBundle): Promise<void> {
   // Not for the writes below — this is what guarantees the tables and their
   // added columns exist before the transaction's own connection touches them.
   await configDb();

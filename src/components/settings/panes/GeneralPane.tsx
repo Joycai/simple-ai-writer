@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { useAiStore } from "../../../stores/aiStore";
 import { useAppStore, type ThemeMode, type Language, type FontScheme } from "../../../stores/appStore";
 import { useProjectStore } from "../../../stores/projectStore";
 import { MARKDOWN_THEMES } from "../../../lib/theme/markdownThemes";
@@ -13,7 +12,6 @@ import {
   isNotifyEnabled, isNotifyKindEnabled, requestNotifyPermission,
   sendTestNotification, setNotifyEnabled, setNotifyKindEnabled,
 } from "../../../lib/notify";
-import { applyConfigImport, exportAiConfig, stageConfigImport } from "../../../lib/ai/configTransfer";
 import { Pane, PaneHeader, Section, Row, Chip, ChipRow, Toggle } from "./bits";
 import ui from "../settingsUi.module.css";
 
@@ -51,11 +49,6 @@ export function GeneralPane() {
   const [pptxOn, setPptxOn] = useState(isPptxExportEnabled());
   const [roleplayOn, setRoleplayOn] = useState(isRoleplayEnabled());
   const [translateOn, setTranslateOn] = useState(isTranslateEnabled());
-  const providers = useAiStore((s) => s.providers);
-  const loadConfig = useAiStore((s) => s.loadConfig);
-  const [includeKeys, setIncludeKeys] = useState(false);
-  const [backupBusy, setBackupBusy] = useState(false);
-  const [backupStatus, setBackupStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [sweeping, setSweeping] = useState(false);
   const [sweepStatus, setSweepStatus] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -150,55 +143,6 @@ export function GeneralPane() {
     try {
       await revealItemInDir(await getApiLogRevealTarget());
     } catch { /* best-effort */ }
-  };
-
-  const handleExportConfig = async () => {
-    if (backupBusy) return;
-    setBackupBusy(true);
-    setBackupStatus(null);
-    try {
-      const saved = await exportAiConfig(includeKeys);
-      if (saved) setBackupStatus({ ok: true, text: t("systemSettings.backup.exported", { path: saved }) });
-    } catch (e) {
-      setBackupStatus({ ok: false, text: `${t("systemSettings.backup.exportFailed")} ${e}` });
-    } finally {
-      setBackupBusy(false);
-    }
-  };
-
-  const handleImportConfig = async () => {
-    if (backupBusy) return;
-    setBackupBusy(true);
-    setBackupStatus(null);
-    try {
-      const staged = await stageConfigImport(providers.map((p) => p.id));
-      if (!staged) return;
-      let confirmMsg = t("systemSettings.backup.importConfirm", {
-        providers: staged.providers.length,
-        models: staged.models.length,
-        prompts: staged.prompts.length,
-      });
-      if (staged.keyCount > 0) {
-        confirmMsg += `\n${t("systemSettings.backup.importKeysNote", { count: staged.keyCount })}`;
-      }
-      if (staged.prefs.length > 0) {
-        confirmMsg += `\n${t("systemSettings.backup.importPrefsNote", { count: staged.prefs.length })}`;
-      }
-      if (!window.confirm(confirmMsg)) return;
-      await applyConfigImport(staged);
-      await loadConfig();
-      // Imported preferences are in the store but not yet on screen.
-      useAppStore.getState().reloadFromPrefs();
-      setBackupStatus({ ok: true, text: t("systemSettings.backup.imported") });
-    } catch (e) {
-      const invalid = e instanceof Error && e.message === "invalid-backup";
-      setBackupStatus({
-        ok: false,
-        text: invalid ? t("systemSettings.backup.invalidFile") : `${t("systemSettings.backup.importFailed")} ${e}`,
-      });
-    } finally {
-      setBackupBusy(false);
-    }
   };
 
   return (
@@ -356,31 +300,6 @@ export function GeneralPane() {
               {t("systemSettings.general.openApiLogs")}
             </button>
           </Row>
-        )}
-      </Section>
-
-      <Section label={t("systemSettings.backup.section")}>
-        <Row title={t("systemSettings.backup.transferLabel")} desc={t("systemSettings.backup.hint")}>
-          <button className={ui.rowBtn} onClick={handleExportConfig} disabled={backupBusy}>
-            {t("systemSettings.backup.export")}
-          </button>
-          <button className={ui.rowBtn} onClick={handleImportConfig} disabled={backupBusy}>
-            {t("systemSettings.backup.import")}
-          </button>
-        </Row>
-        <Row
-          title={t("systemSettings.backup.keysLabel")}
-          desc={t("systemSettings.backup.keysHint")}
-          warn={includeKeys ? t("systemSettings.backup.keysWarn") : undefined}
-          last
-        >
-          <ChipRow>
-            <Chip label={t("systemSettings.backup.keysOff")} active={!includeKeys} onClick={() => setIncludeKeys(false)} />
-            <Chip label={t("systemSettings.backup.keysOn")} active={includeKeys} onClick={() => setIncludeKeys(true)} />
-          </ChipRow>
-        </Row>
-        {backupStatus && (
-          <div className={backupStatus.ok ? ui.statusOk : ui.statusError}>{backupStatus.text}</div>
         )}
       </Section>
 
