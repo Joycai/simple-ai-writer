@@ -11,6 +11,7 @@
 import { create } from "zustand";
 import i18n from "../i18n";
 import { runConsistencyScan } from "../lib/consistency/scan";
+import { createStreamThrottle } from "../lib/agent/streamThrottle";
 import {
   applySuggestions, locateQuote, type ConsistencyIssue, type ConsistencyReport,
 } from "../lib/consistency/model";
@@ -107,6 +108,26 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
       report: null, resolved: new Set(), abortController: controller,
     });
 
+    // Both streams hand over the whole accumulated string per chunk —
+    // latest-wins, so they buffer and land at most once per interval instead
+    // of one store write (and one panel re-render) per network chunk.
+    let pendingProgress: string | null = null;
+    let pendingReasoning: string | null = null;
+    const stream = createStreamThrottle(() => {
+      // A stale flush (fired after abort or completion) must not resurrect
+      // old progress text — the controller check is the same guard the
+      // callbacks themselves use.
+      if (get().abortController !== controller) {
+        pendingProgress = null;
+        pendingReasoning = null;
+        return;
+      }
+      const patch: { progress?: string; reasoning?: string } = {};
+      if (pendingProgress !== null) { patch.progress = pendingProgress; pendingProgress = null; }
+      if (pendingReasoning !== null) { patch.reasoning = pendingReasoning; pendingReasoning = null; }
+      if (patch.progress !== undefined || patch.reasoning !== undefined) set(patch);
+    });
+
     try {
       const apiKey = (await loadApiKey(provider.id)) ?? "";
       // The drawer renders one tab at a time, so opening straight onto this one
@@ -128,12 +149,21 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
         onText: (text) => {
           // Guarded like every other streaming callback in the app: an aborted
           // scan's stream can still deliver a chunk after a new one started.
-          if (get().abortController === controller) set({ progress: text });
+          if (get().abortController === controller) {
+            pendingProgress = text;
+            stream.schedule();
+          }
         },
         onReasoning: (text) => {
-          if (get().abortController === controller) set({ reasoning: text });
+          if (get().abortController === controller) {
+            pendingReasoning = text;
+            stream.schedule();
+          }
         },
       });
+      // Consume any armed timer now — after the final set below resets
+      // `progress`, a late flush would put stale text back on screen.
+      stream.flush();
       if (get().abortController !== controller) return;
       set({ report, isScanning: false, abortController: null, progress: "" });
     } catch (e) {

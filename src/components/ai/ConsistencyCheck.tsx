@@ -43,10 +43,21 @@ export function ConsistencyCheck() {
   const content = useEditorStore((s) => s.content);
   const openFilePath = useEditorStore((s) => s.filePath);
 
-  const {
-    report, isScanning, progress, reasoning, error, resolved,
-    scan, abort, ignore, ignoreAll, apply, applyAll, locate,
-  } = useConsistencyStore();
+  // Field selectors — `progress` is written per streamed chunk during a scan,
+  // and a whole-store subscription re-rendered the issue list with it.
+  const report = useConsistencyStore((s) => s.report);
+  const isScanning = useConsistencyStore((s) => s.isScanning);
+  const progress = useConsistencyStore((s) => s.progress);
+  const reasoning = useConsistencyStore((s) => s.reasoning);
+  const error = useConsistencyStore((s) => s.error);
+  const resolved = useConsistencyStore((s) => s.resolved);
+  const scan = useConsistencyStore((s) => s.scan);
+  const abort = useConsistencyStore((s) => s.abort);
+  const ignore = useConsistencyStore((s) => s.ignore);
+  const ignoreAll = useConsistencyStore((s) => s.ignoreAll);
+  const apply = useConsistencyStore((s) => s.apply);
+  const applyAll = useConsistencyStore((s) => s.applyAll);
+  const locate = useConsistencyStore((s) => s.locate);
   const open = useMemo(() => openIssues(report, resolved), [report, resolved]);
 
   const [showReasoning, setShowReasoning] = useState(false);

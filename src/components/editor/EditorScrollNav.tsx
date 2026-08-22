@@ -27,14 +27,13 @@ export function EditorScrollNav() {
     const update = () => {
       const max = scroller.scrollHeight - scroller.clientHeight;
       // A doc that fits the viewport has nothing to jump to — treat as both edges.
-      if (max <= EDGE) {
-        setState({ atTop: true, atBottom: true });
-        return;
-      }
-      setState({
-        atTop: scroller.scrollTop <= EDGE,
-        atBottom: scroller.scrollTop >= max - EDGE,
-      });
+      const atTop = max <= EDGE || scroller.scrollTop <= EDGE;
+      const atBottom = max <= EDGE || scroller.scrollTop >= max - EDGE;
+      // Bail on unchanged values: this runs per scroll event, and a fresh
+      // object every time re-rendered the control for the whole scroll.
+      setState((prev) =>
+        prev.atTop === atTop && prev.atBottom === atBottom ? prev : { atTop, atBottom },
+      );
     };
 
     update();

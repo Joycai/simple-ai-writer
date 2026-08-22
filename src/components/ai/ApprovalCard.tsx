@@ -10,7 +10,7 @@
  * kind means adding a body and a case to each switch, not reshaping the frame.
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { ArrowRight, ChevronDown, ChevronRight } from "lucide-react";
@@ -185,6 +185,9 @@ function RewriteBody({ proposal }: { proposal: RewriteProposal }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const delta = proposal.content.length - proposal.originalChars;
+  // A whole chapter's markdown — parsed once, not on every parent re-render
+  // (approvals sit next to surfaces that re-render while other runs stream).
+  const html = useMemo(() => renderMarkdown(proposal.content), [proposal.content]);
 
   return (
     <>
@@ -200,7 +203,7 @@ function RewriteBody({ proposal }: { proposal: RewriteProposal }) {
       ) : (
         <div
           className={expanded ? styles.previewBlock : styles.previewBlockClipped}
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(proposal.content) }}
+          dangerouslySetInnerHTML={{ __html: html }}
         />
       )}
       {!isHtmlPath(proposal.path) && proposal.content.length > CLIP_CHARS && (
@@ -222,6 +225,15 @@ function CreateBody({ proposal }: { proposal: CreateProposal }) {
   const { t } = useTranslation();
   const terms = useTerms();
   const [expanded, setExpanded] = useState(false);
+  // Before the early returns (hooks are unconditional); empty for the branches
+  // that never render markdown so their proposals don't pay for a parse.
+  const html = useMemo(
+    () =>
+      proposal.isDir || !proposal.content.trim() || isHtmlPath(proposal.path)
+        ? ""
+        : renderMarkdown(proposal.content),
+    [proposal.isDir, proposal.content, proposal.path],
+  );
 
   if (proposal.isDir) {
     return <div className={styles.emptyNote}>{t("ai.approval.emptyFolder")}</div>;
@@ -236,7 +248,7 @@ function CreateBody({ proposal }: { proposal: CreateProposal }) {
     <>
       <div
         className={expanded ? styles.previewBlock : styles.previewBlockClipped}
-        dangerouslySetInnerHTML={{ __html: renderMarkdown(proposal.content) }}
+        dangerouslySetInnerHTML={{ __html: html }}
       />
       {proposal.content.length > CLIP_CHARS && (
         <button className={styles.originalToggle} onClick={() => setExpanded((v) => !v)}>

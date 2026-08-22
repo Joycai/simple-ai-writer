@@ -209,19 +209,28 @@ export function CodeEditor({ value, onChange }: Props) {
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
+    // Cheap ref check first: the common case is the editor's own edit arriving
+    // back through the store, and the old order serialized the whole document
+    // (`doc.toString()`) on every keystroke just to conclude nothing external
+    // changed — a full-doc string allocation per character at novel sizes.
+    if (externalValueRef.current === value) return;
     const current = view.state.doc.toString();
-    if (current !== value && externalValueRef.current !== value) {
+    if (current === value) {
+      // The store caught up with what the editor already shows (a user edit
+      // round-tripping). Remember it so the next run stops at the ref check.
       externalValueRef.current = value;
-      isSyncingRef.current = true;
-      view.dispatch({
-        changes: { from: 0, to: current.length, insert: value },
-        // This replaces the whole document (a file switch, or an AI insert), so
-        // there is nothing meaningful to map the marked range onto — offsets
-        // would survive as numbers pointing at unrelated prose. Drop it.
-        effects: clearAiTarget.of(null),
-      });
-      isSyncingRef.current = false;
+      return;
     }
+    externalValueRef.current = value;
+    isSyncingRef.current = true;
+    view.dispatch({
+      changes: { from: 0, to: current.length, insert: value },
+      // This replaces the whole document (a file switch, or an AI insert), so
+      // there is nothing meaningful to map the marked range onto — offsets
+      // would survive as numbers pointing at unrelated prose. Drop it.
+      effects: clearAiTarget.of(null),
+    });
+    isSyncingRef.current = false;
   }, [value]);
 
   return (
