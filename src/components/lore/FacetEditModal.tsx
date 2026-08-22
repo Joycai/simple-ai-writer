@@ -63,6 +63,8 @@ export function FacetEditModal({ entity, file, initialSlot = null, onClose }: Pr
   const isZh = i18n.language.startsWith("zh");
   const { projectPath } = useProjectStore();
   const scanProject = useLoreStore((s) => s.scanProject);
+  const shellCloseRef = useRef<(() => void) | null>(null);
+  const requestClose = () => (shellCloseRef.current ?? onClose)();
 
   const [title, setTitle] = useState("");
   const [keys, setKeys] = useState<string[]>([]);
@@ -231,7 +233,7 @@ export function FacetEditModal({ entity, file, initialSlot = null, onClose }: Pr
         await createFacetFile(entity.dirPath, meta, body);
       }
       await scanProject(projectPath);
-      onClose();
+      requestClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setBusy(false);
@@ -253,7 +255,7 @@ export function FacetEditModal({ entity, file, initialSlot = null, onClose }: Pr
 
   return (
     <>
-    <ModalShell overlayClassName={styles.overlay} onClose={onClose} isDirty={dirty} closeOnBackdrop={false}>
+    <ModalShell overlayClassName={styles.overlay} onClose={onClose} isDirty={dirty} closeOnBackdrop={false} closeRef={shellCloseRef}>
       <div className={styles.panel}>
         <div className={styles.header}>
           <span className={styles.headerTitle}>
@@ -263,7 +265,7 @@ export function FacetEditModal({ entity, file, initialSlot = null, onClose }: Pr
           </span>
           <span className={styles.headerFile}>{file ?? `${entity.id}/*.md`}</span>
           <span className={styles.spacer} />
-          <button className={styles.closeBtn} onClick={onClose} title={t("common.close", { defaultValue: "关闭" })}>
+          <button className={styles.closeBtn} onClick={requestClose} title={t("common.close", { defaultValue: "关闭" })}>
             <X size={14} />
           </button>
         </div>
@@ -477,7 +479,7 @@ export function FacetEditModal({ entity, file, initialSlot = null, onClose }: Pr
             {t("lore.facet.ai.linkLabel", { defaultValue: "AI 助手 · 就这个特征提问或改写" })}
           </button>
           <span className={styles.spacer} />
-          <button className={styles.btn} onClick={onClose} disabled={busy}>
+          <button className={styles.btn} onClick={requestClose} disabled={busy}>
             {t("common.cancel", { defaultValue: "取消" })}
           </button>
           {/* btnPrimary 只带覆盖色，基础皮在 btn 上 (与其他模态一致) */}

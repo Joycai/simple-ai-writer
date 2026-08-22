@@ -124,6 +124,7 @@ function ConfirmDialogPanel({ ... }: Props) {
 ## Boundaries
 
 - 本方案**只**改 ModalShell、global.css、ConfirmDialog 三个文件。其余 ModalShell 消费者（LoreSplitModal 等）的按钮仍直接调 `onClose`（立即关闭，无回归）。后续迁移**必须**按上面 ConfirmDialog 的嵌套形态做：钩子只在 `<ModalShell>` 的子组件里调用——直接写在渲染壳的组件体里会静默拿到 `null`、无声退化为立即关闭。
+- **后记（已完成的收尾）**：为免复杂模态被迫拆组件，壳后来补了第二条接入通道 `closeRef` prop——渲染壳的组件递一个 ref 进去，壳把 `beginClose` 写进 `closeRef.current`，外层处理函数直接调用（语义同旧的直调 `onClose`，只多退出动画、不引入 isDirty 确认）。其余 10 个消费者已全部经此通道接入。
 - 不迁移未走 ModalShell 的表面（ErrorBoundary、Onboarding、BatchRunModal、PromptViewer、sync 的入口层）——那是后续方案。
 - 不动各模态的入场动画（fadeIn/scaleIn 保留原值）。
 - 若 ModalShell 的代码与摘录不符（相对 9e16885 有漂移），停下报告。

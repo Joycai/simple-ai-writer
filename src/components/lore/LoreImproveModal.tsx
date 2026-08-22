@@ -46,6 +46,8 @@ export function LoreImproveModal({ entity, onClose }: Props) {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
   const { projectPath } = useProjectStore();
+  const shellCloseRef = useRef<(() => void) | null>(null);
+  const requestClose = () => (shellCloseRef.current ?? onClose)();
   const { models, providers, activeModelId } = useAiStore();
   // 本次任务使用的模型 — 默认跟随全局设置，改动不写回全局 (设计稿 v4)。
   const [modelId, setModelId] = useState(activeModelId ?? "");
@@ -321,7 +323,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
           mode: draftMode,
         }, entity.category), body);
         await scanProject(projectPath);
-        onClose();
+        requestClose();
         return;
       }
       if (isFacet) {
@@ -336,7 +338,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
         await writeEntityFile(entity.dirPath, "index.md", body);
       }
       await scanProject(projectPath);
-      onClose();
+      requestClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -350,7 +352,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
   const dirty = phase !== "input" || instruction.trim().length > 0 || attached.length > 0;
 
   return (
-    <ModalShell overlayClassName={styles.overlay} onClose={onClose} isDirty={dirty} closeOnBackdrop={false}>
+    <ModalShell overlayClassName={styles.overlay} onClose={onClose} isDirty={dirty} closeOnBackdrop={false} closeRef={shellCloseRef}>
       <div className={`${styles.panel} ${styles.panelWide}`}>
 
         {/* ── Header: 头像 + 「名 · 改写」 + 斜体元数据 ── */}
@@ -372,7 +374,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
               </div>
             </div>
           </div>
-          <button className={styles.closeBtn} onClick={onClose}><X size={14} /></button>
+          <button className={styles.closeBtn} onClick={requestClose}><X size={14} /></button>
         </div>
 
         {/* ── Body: 左 GOAL 栏 + 右对照区 ── */}
@@ -619,7 +621,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
             </span>
           </div>
           <div className={styles.footerRight}>
-            <button className={styles.btnGhost} onClick={onClose}>{t("lore.improve.cancel")}</button>
+            <button className={styles.btnGhost} onClick={requestClose}>{t("lore.improve.cancel")}</button>
             {phase === "input" && (
               <button className={styles.btnPrimary} onClick={handleGenerate} disabled={!modelId}>
                 <Sparkles size={13} /> {t("lore.improve.generate")}

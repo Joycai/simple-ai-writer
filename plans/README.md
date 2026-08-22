@@ -37,7 +37,9 @@
 6. **011**（加法项，三个小软化）
 7. **012**(加法项，唯一的新功能件，建议单独成 PR)
 
-依赖关系：006 与 009 都会动 `global.css` 的关键帧块和若干相同模块文件（追加行，不冲突，但**不要并行执行**，按序即可）。其余互不依赖。008 完成后，其余 ModalShell 消费者把按钮 `onClose` 换成 `useModalClose() ?? onClose` 即得退出动画（后续随手迁移，无需新方案）。
+依赖关系：006 与 009 都会动 `global.css` 的关键帧块和若干相同模块文件（追加行，不冲突，但**不要并行执行**，按序即可）。其余互不依赖。
+
+**008 的收尾已完成**：ModalShell 增补 `closeRef` prop 作为轻量接入通道（复杂模态无需拆组件），其余 10 个消费者（LoreWall ×3、LoreGenerator、LoreSplitModal、LoreMetaImproveModal、FacetEditModal、LoreImproveModal、FacetAiAssistantModal、EntityAiHubModal、SyncPreviewModal、ImageGenModal）的按钮关闭与成功后关闭全部走退出动画。
 
 ## 已记录但暂不立案
 

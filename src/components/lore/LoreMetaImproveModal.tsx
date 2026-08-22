@@ -226,7 +226,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
       };
       await saveEntityMetaAndBody(projectPath, entity, meta, body);
       await scanProject(projectPath);
-      onClose();
+      requestClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -262,8 +262,11 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
   // Unsaved once the user has typed an instruction or a proposal was generated.
   const dirty = phase !== "input" || instruction.trim().length > 0;
 
+  const shellCloseRef = useRef<(() => void) | null>(null);
+  const requestClose = () => (shellCloseRef.current ?? onClose)();
+
   return (
-    <ModalShell overlayClassName={styles.overlay} onClose={onClose} isDirty={dirty} closeOnBackdrop={false}>
+    <ModalShell overlayClassName={styles.overlay} onClose={onClose} isDirty={dirty} closeOnBackdrop={false} closeRef={shellCloseRef}>
       <div className={styles.panel}>
         {/* Header */}
         <div className={styles.header}>
@@ -290,7 +293,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
               )}
             </div>
           </div>
-          <button className={styles.closeBtn} onClick={onClose}><X size={16} /></button>
+          <button className={styles.closeBtn} onClick={requestClose}><X size={16} /></button>
         </div>
 
         {/* Body */}
@@ -455,7 +458,7 @@ summary: ${entity.summary}
             </span>
           </div>
           <div className={styles.footerRight}>
-            <button className={styles.btnGhost} onClick={onClose}>
+            <button className={styles.btnGhost} onClick={requestClose}>
               {t("common.cancel", { defaultValue: "取消" })}
             </button>
             {phase === "input" && (

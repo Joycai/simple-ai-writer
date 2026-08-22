@@ -271,7 +271,7 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
 
       await scanProject(projectPath);
       onApplied?.();
-      onClose();
+      requestClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setSaving(false);
@@ -283,6 +283,9 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
   const generating = phase === "generating";
   const dirty = phase === "review" || instruction.trim().length > 0;
 
+  const shellCloseRef = useRef<(() => void) | null>(null);
+  const requestClose = () => (shellCloseRef.current ?? onClose)();
+
   return (
     <ModalShell
       overlayClassName={styles.overlay}
@@ -290,6 +293,7 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
       isDirty={dirty}
       closeOnBackdrop={false}
       closeOnEscape={!generating}
+      closeRef={shellCloseRef}
     >
       <div className={styles.panel}>
         {/* Header */}
@@ -309,7 +313,7 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
               {t("lore.split.reason", { defaultValue: "条目过长会稀释检索命中 · 建议拆分" })}
             </span>
           </div>
-          <button className={styles.closeBtn} onClick={onClose} disabled={phase === "generating"}>
+          <button className={styles.closeBtn} onClick={requestClose} disabled={phase === "generating"}>
             <X size={16} />
           </button>
         </div>
@@ -485,7 +489,7 @@ export function LoreSplitModal({ entity, onClose, onApplied }: Props) {
           {phase === "input" && (
             <>
               <span className={styles.footerSpacer} />
-              <button className={styles.btn} onClick={onClose}>
+              <button className={styles.btn} onClick={requestClose}>
                 {t("common.cancel", { defaultValue: "取消" })}
               </button>
               <button
