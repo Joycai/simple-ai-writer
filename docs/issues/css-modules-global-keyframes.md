@@ -65,9 +65,10 @@ keyframes」（机械、40+ 处重复、新代码照踩）或「全局工具类�
   `css.transformer: "lightningcss"` 是稳定 API。
 - **`animation: false` 的语义**是「`@keyframes` 与 `animation(-name)` 都不再
   哈希」——代价是**模块内 keyframes 与 global.css 共用一个全局命名空间**。
-  落地时全库只有两个模块内 keyframes（AgentChat 的 `shimmer`、SceneTransition
-  的 `transitionGrow`），与 global.css 的 12 个名字零冲突。**以后在模块里写
-  `@keyframes` 要起全局唯一的名字**（vite.config.ts 的注释也记了这条）。
+  落地时全库只有三个模块内 keyframes（AgentChat 的 `shimmer`、SceneTransition
+  的 `transitionGrow`、ProvidersModels 的 `slideOutRight`），与 global.css 的
+  12 个名字零冲突。**以后在模块里写 `@keyframes` 要起全局唯一的名字**
+  （vite.config.ts 的注释也记了这条）。
 - 其余 CSS Modules 特性核查过兼容：全部 `composes` 都是同文件的（LightningCSS
   支持），`:global(...)` 选择器、`@container` 均正常；没有 grid 命名区域 /
   `@property` / `counter-style` 这类会被 custom-ident 哈希波及的用法。
@@ -91,10 +92,10 @@ keyframes」（机械、40+ 处重复、新代码照踩）或「全局工具类�
 **未做**：全量真机目检。40+ 个从未播过的入场动画一起苏醒，本身就是一次视觉
 变更 —— 需要一轮真机走查确认没有哪处入场动画在如今的布局里显得突兀。
 
-## 遗留
+## 收尾（随修复一并完成）
 
-- `claude/motion-review-fixes` 分支曾在 `ProvidersModels.module.css` 头部
-  重声明过四个 keyframes 作为局部修法（当时的对照组）。那份副本在本修复
-  落地后是冗余的：LightningCSS 下它们不再被哈希，会与 global.css 同名共存
-  （后声明者赢，内容相同所以无害）。该分支合并时应删掉那段模块内副本，
-  改回引用全局 keyframes。
+- `claude/motion-review-fixes`（PR #284）曾在 `ProvidersModels.module.css` 头部
+  重声明过 `fadeIn` / `slideInRight` / `fadeOut` 作为局部修法（当时的对照组）。
+  LightningCSS 下它们不再被哈希、与 global.css 同名共存，副本冗余——合并 main
+  时已删掉，改回引用全局 keyframes。该模块自己的 `slideOutRight`（global.css
+  没有的退场 keyframes）保留在模块内。
