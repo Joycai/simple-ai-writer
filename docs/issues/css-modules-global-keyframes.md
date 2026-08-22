@@ -1,16 +1,17 @@
 # 模块 CSS 引用全局 keyframes 会悬空 —— 大部分 CSS 入场动画从未播放
 
-> **状态：已确认（实测），未修复。** 本文记录的是一个**全应用范围**的静默缺陷：
-> `.module.css` 里凡是 `animation: fadeIn / scaleIn / dropIn / riseIn / slideUp /
-> slideInRight …` 这种引用 `global.css` keyframes 的声明，动画名会被 CSS Modules
-> 哈希化（`fadeIn` → `_fadeIn_<hash>_1`），而 keyframes 本身留在 global.css 里、
-> 名字没变 —— 引用悬空，**动画一帧都没播过**。没有任何报错：computed style 照样
-> 报出（哈希后的）动画名，只有 `element.getAnimations()` 是空的。
+> **状态：已修复（2026-08-23，切换 LightningCSS）。** 本文记录的是一个曾经
+> **全应用范围**的静默缺陷：`.module.css` 里凡是 `animation: fadeIn / scaleIn /
+> dropIn / riseIn / slideUp / slideInRight …` 这种引用 `global.css` keyframes 的
+> 声明，动画名会被 CSS Modules 哈希化（`fadeIn` → `_fadeIn_<hash>_1`），而
+> keyframes 本身留在 global.css 里、名字没变 —— 引用悬空，**动画一帧都没播过**。
+> 没有任何报错：computed style 照样报出（哈希后的）动画名，只有
+> `element.getAnimations()` 是空的。
 >
 > 发现于 2026-08-23 的动画审查（motion-review PR）：给供应商抽屉补退场动画时，
 > 实测发现它的入场动画也从来没动过。
 
-## 证据（Vite dev server 实测）
+## 证据（Vite dev server 实测，修复前）
 
 1. 打开 设置 → 供应商与模型 → 添加供应商，抽屉挂载后立即采样：
    - `getComputedStyle(drawer).animationName` → `_slideInRight_1tyu1_1`（模块哈希名）
@@ -26,7 +27,7 @@
 对应的 `@keyframes` 声明。`:global(fadeIn)` 写在 animation 值里不是合法语法
 （postcss 直接报 "Double colon" 解析错误），此路不通。
 
-## 影响面
+## 影响面（修复前）
 
 `grep -rn "animation:\s*(fadeIn|scaleIn|slideUp|slideInRight|dropIn|riseIn|pulse|pulseDeep|blink|spin|fadeOut|scaleOut)" src/components src/lib --include="*.module.css"`
 当时命中 **40+ 处**，全部失效。包括：所有模态的 fadeIn/scaleIn 入场
@@ -43,24 +44,58 @@ SceneTransition 的 transitionGrow）、global.css 全局类走全局 keyframes 
 transition 驱动的动画 —— 这也是为什么这个缺陷能一直没被注意到：模态的
 **退场**（modal-closing，全局类）一直在动，入场不动反而像"打开很快"。
 
-## 候选修法（未决策）
+## 采用的修法：LightningCSS + `cssModules.animation: false`
 
-1. **切到 LightningCSS**：`vite.config.ts` 里 `css: { transformer: "lightningcss",
-   lightningcss: { cssModules: { animation: false } } }` —— 一处配置让 40+ 处全部
-   复活，且以后新写的代码不会再踩。代价：整条 CSS 管线换实现，需要一轮全面的
-   视觉回归（对本项目主要是确认嵌套/前缀/取值序列化无差异）。
-2. **每个模块重新声明它用到的 keyframes**：已在 `ProvidersModels.module.css` 里
-   做了一份（见文件头部注释），可当范本。机械、安全、无管线风险，代价是
-   40+ 处小重复，且新代码还会踩坑。
-3. **改用全局工具类**（`.modal-closing` 模式）：动画挂在 global.css 的全局类上，
-   组件按状态挂类。适合退场这种"状态类"，不适合 mount 即播的入场。
+`vite.config.ts` 里一处配置：
 
-倾向 1（根治 + 防再犯），但要配一次真机全量目检 —— 40 多个从未播过的入场动画
-一起苏醒，本身就是一次视觉变更。
+```ts
+css: {
+  transformer: "lightningcss",
+  lightningcss: {
+    cssModules: { animation: false },
+  },
+},
+```
 
-## 修完之后
+40+ 处引用全部复活，且以后新写的模块 CSS 不会再踩。选它而不是「每模块重声明
+keyframes」（机械、40+ 处重复、新代码照踩）或「全局工具类」（只适合退场那种
+状态类）的理由和落地时的核查：
 
-- 删掉本文档或把状态改为已修复，并把 `ProvidersModels.module.css` 里的
-  模块内 keyframes 副本换回全局引用（若选修法 1）。
-- global.css 的 "Reusable entrance animations" 注释要改口：在修复落地前，
-  那些 keyframes 实际上只服务于 global.css 自己的全局类。
+- **零新增依赖**：Vite 8 把 `lightningcss` 列为直接依赖（`^1.32.0`），
+  `css.transformer: "lightningcss"` 是稳定 API。
+- **`animation: false` 的语义**是「`@keyframes` 与 `animation(-name)` 都不再
+  哈希」——代价是**模块内 keyframes 与 global.css 共用一个全局命名空间**。
+  落地时全库只有三个模块内 keyframes（AgentChat 的 `shimmer`、SceneTransition
+  的 `transitionGrow`、ProvidersModels 的 `slideOutRight`），与 global.css 的
+  12 个名字零冲突。**以后在模块里写 `@keyframes` 要起全局唯一的名字**
+  （vite.config.ts 的注释也记了这条）。
+- 其余 CSS Modules 特性核查过兼容：全部 `composes` 都是同文件的（LightningCSS
+  支持），`:global(...)` 选择器、`@container` 均正常；没有 grid 命名区域 /
+  `@property` / `counter-style` 这类会被 custom-ident 哈希波及的用法。
+- 类名哈希格式从 postcss 的 `_local_hash_n` 变为 LightningCSS 的
+  `hash_local`（如 `RD2o8G_panel`）——纯运行时映射，没有代码依赖类名形状。
+
+## 修复验证（2026-08-23，Vite dev server 实测）
+
+对编译后的模块做端到端采样（动态导入模块 CSS 拿哈希类名 → 挂载元素 →
+`getAnimations()`）：
+
+- ConfirmDialog `.panel`（scaleIn）→ `[{ name: "scaleIn", playState: "running" }]`
+- Select `.menu`（dropIn）→ `[{ name: "dropIn", playState: "running" }]`
+- AgentLog `.markerSpinner`（spin）→ `[{ name: "spin", playState: "running" }]`
+
+真实交互：打开设置页后 `document.getAnimations()` 报出 `fadeIn` + `scaleIn`
+在播（修复前为空）。构建产物抽查：`dist/assets/*.css` 里 animation 引用与
+`@keyframes` 声明都保持原名。`pnpm exec tsc --noEmit`、`pnpm test`（2070 通过）、
+`pnpm build` 全绿，dev 控制台与 server 日志无 CSS 相关报错。
+
+**未做**：全量真机目检。40+ 个从未播过的入场动画一起苏醒，本身就是一次视觉
+变更 —— 需要一轮真机走查确认没有哪处入场动画在如今的布局里显得突兀。
+
+## 收尾（随修复一并完成）
+
+- `claude/motion-review-fixes`（PR #284）曾在 `ProvidersModels.module.css` 头部
+  重声明过 `fadeIn` / `slideInRight` / `fadeOut` 作为局部修法（当时的对照组）。
+  LightningCSS 下它们不再被哈希、与 global.css 同名共存，副本冗余——合并 main
+  时已删掉，改回引用全局 keyframes。该模块自己的 `slideOutRight`（global.css
+  没有的退场 keyframes）保留在模块内。

@@ -314,20 +314,9 @@
   animation: slideInRight 220ms var(--ease-out);
 }
 
-/* CSS Modules 会把 animation-name 一并哈希化，而 global.css 不是模块——从模块里
-   引用它的 keyframes 会悬空、动画根本不播（docs/issues/css-modules-global-keyframes.md）。
-   在本模块内重新声明同名 keyframes，声明和引用一起被哈希，才真正解析得到。 */
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-@keyframes slideInRight {
-  from { opacity: 0; transform: translateX(24px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-@keyframes fadeOut {
-  to { opacity: 0; }
-}
+/* fadeIn/slideInRight/fadeOut 来自 global.css——LightningCSS 关掉了 keyframes
+   哈希（vite.config.ts），模块可以直接引用全局 keyframes。模块内声明的
+   keyframes 与全局共用一个命名空间，起名要全局唯一。 */
 @keyframes slideOutRight {
   to { opacity: 0; transform: translateX(24px); }
 }
