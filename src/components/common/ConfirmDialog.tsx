@@ -14,7 +14,7 @@
 
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { ModalShell } from "./ModalShell";
+import { ModalShell, useModalClose } from "./ModalShell";
 import styles from "./ConfirmDialog.module.css";
 
 interface Props {
@@ -39,7 +39,40 @@ export function ConfirmDialog({
   onConfirm,
   onClose,
 }: Props) {
+  return (
+    <ModalShell overlayClassName={styles.overlay} onClose={onClose}>
+      <ConfirmDialogPanel
+        title={title}
+        message={message}
+        confirmLabel={confirmLabel}
+        cancelLabel={cancelLabel}
+        danger={danger}
+        onConfirm={onConfirm}
+        onClose={onClose}
+      />
+    </ModalShell>
+  );
+}
+
+/**
+ * Split out from `ConfirmDialog` so `useModalClose()` resolves correctly: the
+ * `ModalCloseContext.Provider` lives *inside* `ModalShell`, i.e. below it in
+ * the tree, so a hook call made directly in `ConfirmDialog`'s own body (the
+ * component that renders `<ModalShell>`) would look for a provider among its
+ * own ancestors and always miss it. Rendered as `ModalShell`'s child, this
+ * component sits under the provider and picks up `beginClose` correctly.
+ */
+function ConfirmDialogPanel({
+  title,
+  message,
+  confirmLabel,
+  cancelLabel,
+  danger,
+  onConfirm,
+  onClose,
+}: Omit<Props, "danger"> & { danger: boolean }) {
   const { t } = useTranslation();
+  const requestClose = useModalClose() ?? onClose;
 
   // Focus the safe option, not the destructive one: Enter should never be the
   // key that deletes something the author only glanced at.
@@ -49,25 +82,23 @@ export function ConfirmDialog({
   }, []);
 
   return (
-    <ModalShell overlayClassName={styles.overlay} onClose={onClose}>
-      <div className={styles.panel} role="alertdialog" aria-modal="true" aria-label={title}>
-        <div className={styles.title}>{title}</div>
-        <div className={styles.message}>{message}</div>
-        <div className={styles.actions}>
-          <button ref={cancelRef} className={styles.cancelBtn} onClick={onClose}>
-            {cancelLabel ?? t("common.cancel")}
-          </button>
-          <button
-            className={`${styles.confirmBtn} ${danger ? styles.confirmBtnDanger : ""}`}
-            onClick={() => {
-              onConfirm();
-              onClose();
-            }}
-          >
-            {confirmLabel}
-          </button>
-        </div>
+    <div className={styles.panel} role="alertdialog" aria-modal="true" aria-label={title}>
+      <div className={styles.title}>{title}</div>
+      <div className={styles.message}>{message}</div>
+      <div className={styles.actions}>
+        <button ref={cancelRef} className={styles.cancelBtn} onClick={requestClose}>
+          {cancelLabel ?? t("common.cancel")}
+        </button>
+        <button
+          className={`${styles.confirmBtn} ${danger ? styles.confirmBtnDanger : ""}`}
+          onClick={() => {
+            onConfirm();
+            requestClose();
+          }}
+        >
+          {confirmLabel}
+        </button>
       </div>
-    </ModalShell>
+    </div>
   );
 }

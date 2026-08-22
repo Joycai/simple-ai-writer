@@ -65,10 +65,10 @@
   line-height: 1;
   color: var(--stg-text-secondary);
   cursor: pointer;
-  transition: color var(--transition-fast);
+  transition: color var(--transition-fast), transform var(--transition-fast);
 }
 .close:hover { color: var(--stg-accent); }
-.close:active { transform: scale(0.92); }
+.close:active { transform: scale(0.95); }
 
 /* ── Direction band ────────────────────────────────────────────────────────
    Local is ALWAYS on the left and remote ALWAYS on the right, whichever way
@@ -195,7 +195,8 @@
   background: var(--stg-bg-input);
   color: var(--stg-text-warm);
   border: 1px solid var(--stg-border-mid);
-  transition: border-color var(--transition-fast), color var(--transition-fast);
+  transition: border-color var(--transition-fast), color var(--transition-fast),
+    transform var(--transition-fast);
 }
 .chip:hover { border-color: var(--stg-border-menu); }
 .chip:active { transform: scale(0.96); }
@@ -317,7 +318,7 @@
   border: 1px solid transparent;
   color: var(--stg-text-desc);
   transition: color var(--transition-fast), border-color var(--transition-fast),
-    background-color var(--transition-fast);
+    background-color var(--transition-fast), transform var(--transition-fast);
 }
 .decide:hover { color: var(--stg-accent); border-color: var(--stg-border-mid); }
 .decide:active { transform: scale(0.96); }
@@ -336,7 +337,8 @@
   background: none;
   border: 1px solid var(--stg-border-mid);
   color: var(--stg-text-warm);
-  transition: color var(--transition-fast), border-color var(--transition-fast);
+  transition: color var(--transition-fast), border-color var(--transition-fast),
+    transform var(--transition-fast);
 }
 .bulkBtn:hover:not(:disabled) { color: var(--stg-accent); border-color: var(--sync-chip-on-border); }
 .bulkBtn:active:not(:disabled) { transform: scale(0.96); }
@@ -421,7 +423,8 @@
   border: 1px solid var(--stg-border-menu);
   background: var(--stg-bg);
   color: var(--stg-text-warm);
-  transition: border-color var(--transition-fast), color var(--transition-fast);
+  transition: border-color var(--transition-fast), color var(--transition-fast),
+    transform var(--transition-fast);
 }
 .btnGhost:hover { border-color: var(--stg-accent); color: var(--stg-accent); }
 .btnGhost:active { transform: scale(0.98); }
@@ -479,8 +482,10 @@
 .trackFill {
   position: absolute;
   inset: 0 auto 0 0;
+  width: 100%;
   background: var(--stg-accent);
-  transition: width var(--transition-base);
+  transform-origin: left;
+  transition: transform var(--transition-base);
 }
 .progressNums { display: flex; align-items: baseline; margin-top: 10px; }
 .progressCount { font: 400 13px var(--font-mono); color: var(--stg-text); }

@@ -14,7 +14,7 @@
  * `<div className={styles.overlay}>` + createPortal and wrap the panel here.
  */
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { imeOwnsKey, type CompositionState } from "../../lib/ime";
@@ -26,6 +26,13 @@ import { ModalErrorBoundary } from "./ErrorBoundary";
  * closes the wrong one. Only the top of the stack reacts to Escape.
  */
 const modalStack: object[] = [];
+
+/** 子组件用它关闭模态即可获得退出动画；直接调 onClose 则立即关闭（旧行为）。 */
+const ModalCloseContext = createContext<(() => void) | null>(null);
+export function useModalClose(): (() => void) | null {
+  return useContext(ModalCloseContext);
+}
+const EXIT_MS = 160;
 
 interface ModalShellProps {
   /** The modal's own overlay class — carries backdrop blur, centering, z-index. */
@@ -54,6 +61,13 @@ export function ModalShell({
 }: ModalShellProps) {
   const { t } = useTranslation();
 
+  const [closing, setClosing] = useState(false);
+  const beginClose = () => {
+    if (closing) return;
+    setClosing(true);
+    window.setTimeout(onClose, EXIT_MS);
+  };
+
   // Register in the modal stack for the lifetime of this instance so nested
   // modals can tell who is on top (see modalStack). Every instance registers —
   // even a non-Escape-closable one still blocks Escape from the modal beneath.
@@ -76,7 +90,7 @@ export function ModalShell({
       });
       if (!window.confirm(msg)) return;
     }
-    onClose();
+    beginClose();
   };
 
   // Did the current mouse gesture start on the backdrop itself?
@@ -130,8 +144,14 @@ export function ModalShell({
   // free: a crash inside the panel leaves the overlay (and the whole app behind
   // it) intact, and the recovery card's only action is this modal's `onClose`.
   return createPortal(
-    <div className={overlayClassName} onMouseDown={onMouseDown} onMouseUp={onMouseUp}>
-      <ModalErrorBoundary onClose={onClose}>{children}</ModalErrorBoundary>
+    <div
+      className={`${overlayClassName} ${closing ? "modal-closing" : ""}`}
+      onMouseDown={onMouseDown}
+      onMouseUp={onMouseUp}
+    >
+      <ModalCloseContext.Provider value={beginClose}>
+        <ModalErrorBoundary onClose={onClose}>{children}</ModalErrorBoundary>
+      </ModalCloseContext.Provider>
     </div>,
     document.body,
   );

@@ -557,3 +557,12 @@
   color: var(--color-text-muted);
   font: italic 400 14px/1.7 var(--font-serif);
 }
+
+/* reduced-motion 下加载指示仍需转动——静止的残环与卡死无法区分。
+   本地类 + !important 压过 global.css 的一刀切兜底（specificity 0,1,0 > 0,0,0）。 */
+@media (prefers-reduced-motion: reduce) {
+  .memoSpin {
+    animation-duration: 1.6s !important;
+    animation-iteration-count: infinite !important;
+  }
+}

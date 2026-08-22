@@ -30,6 +30,7 @@ import {
   markTargetEnd,
   markTargetStart,
 } from "../../lib/editor/aiTarget";
+import { insertFlashExtension } from "../../lib/editor/insertFlash";
 import {
   toggleBold,
   toggleItalic,
@@ -164,6 +165,7 @@ export function CodeEditor({ value, onChange }: Props) {
         themedSearch(),
         keymap.of([...aiTargetKeymap, ...formatKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap]),
         aiTargetExtension(styles.aiTarget),
+        insertFlashExtension,
         markdown({
           base: markdownLanguage,
           codeLanguages: languages,

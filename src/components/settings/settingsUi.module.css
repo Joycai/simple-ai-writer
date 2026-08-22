@@ -141,7 +141,7 @@
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
   transition: background var(--transition-fast), color var(--transition-fast),
-    border-color var(--transition-fast);
+    border-color var(--transition-fast), transform var(--transition-fast);
 }
 .chip:hover {
   background: var(--color-bg-elevated);
@@ -212,10 +212,11 @@
   border-radius: var(--radius-md);
   background: var(--color-bg-surface);
   color: var(--color-text-primary);
-  transition: background var(--transition-fast), border-color var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast),
+    transform var(--transition-fast);
 }
 .card:hover:not(:disabled) { border-color: var(--color-border-strong); }
-.card:active:not(:disabled) { transform: scale(0.99); }
+.card:active:not(:disabled) { transform: scale(0.98); }
 .card:disabled { opacity: 0.5; cursor: default; }
 
 .cardActive,
@@ -346,7 +347,8 @@
   background: var(--color-bg-surface);
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
-  transition: color var(--transition-fast), border-color var(--transition-fast);
+  transition: color var(--transition-fast), border-color var(--transition-fast),
+    transform var(--transition-fast);
 }
 .rowBtn:hover:not(:disabled) { color: var(--color-accent); border-color: var(--color-accent); }
 .rowBtn:active:not(:disabled) { transform: scale(0.97); }
@@ -619,7 +621,7 @@
   background: var(--color-bg-surface);
   color: var(--color-accent);
   font-size: var(--font-size-sm);
-  transition: background var(--transition-fast);
+  transition: background var(--transition-fast), transform var(--transition-fast);
 }
 .overrideBtn:hover { background: var(--color-accent-tint); }
 .overrideBtn:active { transform: scale(0.97); }
@@ -660,10 +662,11 @@
   padding: var(--space-1);
   border-radius: var(--radius-sm);
   color: var(--color-text-muted);
-  transition: color var(--transition-fast), background var(--transition-fast);
+  transition: color var(--transition-fast), background var(--transition-fast),
+    transform var(--transition-fast);
 }
 .iconBtn:hover { color: var(--color-error); background: var(--color-error-bg); }
-.iconBtn:active { transform: scale(0.92); }
+.iconBtn:active { transform: scale(0.95); }
 
 /* ─── About ──────────────────────────────────────────────────────────────── */
 

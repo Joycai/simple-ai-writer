@@ -190,7 +190,8 @@
   transition:
     color var(--transition-fast),
     background var(--transition-fast),
-    border-color var(--transition-fast);
+    border-color var(--transition-fast),
+    transform var(--transition-fast);
 }
 .wrap :global(.cm-button):hover {
   color: var(--color-sienna);

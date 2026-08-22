@@ -55,6 +55,7 @@ export function Select({
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
+  const [openUp, setOpenUp] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
@@ -69,6 +70,7 @@ export function Select({
     // Open upward only when the space below can't fit the list and above can
     // do better — a menu that fits stays below regardless of position.
     const up = below < wanted && above > below;
+    setOpenUp(up);
     setMenuStyle({
       left: rect.left,
       width: rect.width,
@@ -184,7 +186,13 @@ export function Select({
       </button>
       {open &&
         createPortal(
-          <div ref={menuRef} id={menuId} role="listbox" className={styles.menu} style={menuStyle}>
+          <div
+            ref={menuRef}
+            id={menuId}
+            role="listbox"
+            className={`${styles.menu} ${openUp ? styles.menuUp : ""}`}
+            style={menuStyle}
+          >
             {options.map((o, i) => (
               <div key={`${o.value}-${i}`} className={styles.optionWrap}>
                 {o.group && o.group !== options[i - 1]?.group && (

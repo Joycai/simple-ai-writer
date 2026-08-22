@@ -83,13 +83,14 @@
   justify-content: center;
   border-radius: var(--radius-sm);
   color: var(--color-text-muted);
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast),
+    transform var(--transition-fast);
 }
 .dismiss:hover {
   background: var(--color-bg-elevated);
   color: var(--color-text-primary);
 }
-.dismiss:active { transform: scale(0.92); }
+.dismiss:active { transform: scale(0.95); }
 
 /* ─── Error message + component stack ────────────────────────────────────── */
 
@@ -126,7 +127,8 @@
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast),
+    transform var(--transition-fast);
 }
 .disclosure:hover,
 .copyBtn:hover {
