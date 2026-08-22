@@ -19,6 +19,23 @@ export default defineConfig(async () => ({
     alias: [{ find: /^katex$/, replacement: "katex/dist/katex.mjs" }],
   },
 
+  // CSS Modules hash every animation-name by default, but the shared entrance/
+  // spinner keyframes live in src/styles/global.css (non-module) — so the hashed
+  // reference (`_fadeIn_<hash>_1`) matched no @keyframes rule and 40+ module-CSS
+  // animations silently never played (computed style still reports the name;
+  // only element.getAnimations() reveals the miss). postcss-modules cannot opt
+  // out per-property (`:global(fadeIn)` inside an animation value is a parse
+  // error), so switch the pipeline to LightningCSS and turn keyframes hashing
+  // off. Consequence: module-local @keyframes now share ONE global namespace
+  // with global.css — keep their names unique (currently: shimmer,
+  // transitionGrow). See docs/issues/css-modules-global-keyframes.md.
+  css: {
+    transformer: "lightningcss",
+    lightningcss: {
+      cssModules: { animation: false },
+    },
+  },
+
   // Pre-bundle every heavy dependency up front — including the LAZILY imported
   // ones (mermaid, the agent/lore modules pull several of these dynamically).
   // Without this, vite discovers them mid-session, logs "new dependencies
