@@ -8,6 +8,10 @@ import { describe, expect, it, vi } from "vitest";
 const beta = { on: false };
 vi.mock("../../pptx/flag", () => ({ isPptxExportEnabled: () => beta.on }));
 
+/** Same, for the translation Beta. */
+const translateBeta = { on: false };
+vi.mock("../../translate/flag", () => ({ isTranslateEnabled: () => translateBeta.on }));
+
 import { routePlannedTools, routeTools } from "../routing";
 import type { TaskWorkspaceHandle } from "../taskWorkspace";
 
@@ -21,6 +25,8 @@ const MODELS = [
     priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true },
   { id: "m-image", providerId: "p", modelId: "i", name: "I", type: "image",
     priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true },
+  { id: "m-sakura", providerId: "p", modelId: "sakura", name: "Sakura", type: "text",
+    priceIn: 0, priceCachedIn: 0, priceOut: 0, enabled: true, translateFormat: "sakura" },
 ] as never;
 
 /** Stand-in handle: routeTools only tests it for presence. */
@@ -35,6 +41,7 @@ describe("routeTools", () => {
     longread: { kind: "longread", modelId: null, enabled: false },
     pdf: { kind: "pdf", modelId: null, enabled: false },
     imagegen: { kind: "imagegen", modelId: null, enabled: false },
+    translate: { kind: "translate", modelId: null, enabled: false },
   };
   /**
    * The preset as it routes with nothing enabled: no drawing arm, no image
@@ -233,6 +240,7 @@ describe("the PPTX export Beta gate", () => {
     longread: { kind: "longread", modelId: null, enabled: false },
     pdf: { kind: "pdf", modelId: null, enabled: false },
     imagegen: { kind: "imagegen", modelId: null, enabled: false },
+    translate: { kind: "translate", modelId: null, enabled: false },
   };
 
   it("withholds export_pptx entirely while the switch is off", () => {
@@ -253,5 +261,70 @@ describe("the PPTX export Beta gate", () => {
     } finally {
       beta.on = false;
     }
+  });
+});
+
+
+describe("the translation gate", () => {
+  const allDisabled: Record<SubAgentKind, SubAgentConfig> = {
+    search: { kind: "search", modelId: null, enabled: false },
+    vision: { kind: "vision", modelId: null, enabled: false },
+    longread: { kind: "longread", modelId: null, enabled: false },
+    pdf: { kind: "pdf", modelId: null, enabled: false },
+    imagegen: { kind: "imagegen", modelId: null, enabled: false },
+    translate: { kind: "translate", modelId: null, enabled: false },
+  };
+  const bound: Record<SubAgentKind, SubAgentConfig> = {
+    ...allDisabled,
+    translate: { kind: "translate", modelId: "m-sakura", enabled: true },
+  };
+
+  const withBeta = (on: boolean, run: () => void) => {
+    translateBeta.on = on;
+    try { run(); } finally { translateBeta.on = false; }
+  };
+
+  it("needs BOTH the Beta switch and a binding — neither alone offers the tool", () => {
+    withBeta(false, () => {
+      expect(routeTools(AGENT_ASSIST_PRESET, bound, WS, MODELS).tools).not.toContain("translate");
+    });
+    withBeta(true, () => {
+      expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS).tools).not.toContain("translate");
+    });
+  });
+
+  it("offers it when both are in place", () => {
+    withBeta(true, () => {
+      expect(routeTools(AGENT_ASSIST_PRESET, bound, WS, MODELS).tools).toContain("translate");
+      // The estimator must predict the same toolset, or the context meter
+      // disagrees with the request that follows it.
+      expect(routePlannedTools(AGENT_ASSIST_PRESET, bound, MODELS).tools).toContain("translate");
+    });
+  });
+
+  it("ignores a binding to an ordinary model", () => {
+    // The failure this prevents is silent: a general model handed Sakura's
+    // fixed template answers something plausible, so nothing errors and the
+    // author reads a worse translation as the feature working.
+    withBeta(true, () => {
+      const subs: Record<SubAgentKind, SubAgentConfig> = {
+        ...allDisabled,
+        translate: { kind: "translate", modelId: "m-long", enabled: true },
+      };
+      expect(routeTools(AGENT_ASSIST_PRESET, subs, WS, MODELS).tools).not.toContain("translate");
+    });
+  });
+
+  it("never adds delegate for translate alone — it holds no conversation", () => {
+    withBeta(true, () => {
+      expect(routeTools(AGENT_ASSIST_PRESET, bound, WS, MODELS).tools).not.toContain("delegate");
+    });
+  });
+
+  it("needs no task workspace — nothing is written to one", () => {
+    // Unlike `delegate`, whose findings have to land in a note somewhere.
+    withBeta(true, () => {
+      expect(routeTools(AGENT_ASSIST_PRESET, bound, undefined, MODELS).tools).toContain("translate");
+    });
   });
 });

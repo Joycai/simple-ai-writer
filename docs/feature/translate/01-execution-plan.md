@@ -1,6 +1,6 @@
 # Sakura 日中翻译 · 执行方案
 
-> 状态：`partial` · 四个开放问题已由作者拍板 · **PR 1 / PR 2 已完成**，PR 3 / PR 4 未动工
+> 状态：`partial` · 四个开放问题已由作者拍板 · **PR 1 / PR 2 / PR 3 已完成**，PR 4 未动工
 > 前置阅读：[`00-sakura-feasibility.html`](00-sakura-feasibility.html)（可行性分析 + 实机实测记录，浏览器打开）
 
 分析文档回答"能不能做、落在哪"，这一份回答"按什么顺序做、每片交付什么、怎么算做完"。
@@ -214,6 +214,34 @@ export function judgeChunk(r: {
 ### 验收
 
 对话里让助手翻一段日文，拿到译文；关掉 Beta 后助手看不到这个工具。
+
+### 实现记录（PR 3 已完成）
+
+**不变量 2 的落点比计划里干净**：过滤没有散在八个调用点，而是收在 `ModelSelector`
+里 —— 那个组件**就是**"挑一个模型来对话"这件事，而一个专用翻译模型不能对话。
+它对 `modelsOverride` 也过滤，所以六个 lore 模态、文库、助手头部一次全覆盖。
+`lib/ai/configDb` 里新增 `isTranslateOnly` / `conversationalModels` 作为这条不变量
+可被引用的名字，`SubAgentsPane` 和 `LibraryView` 各调一次。
+
+其余出入：
+
+| 出入 | 结果 |
+|---|---|
+| 多了 `lib/translate/run.ts` | 计划把 run 层整个放在 PR 4，但短文本工具也要走"请求 → 判定 → 重试阶梯"这条路。所以 PR 3 就落了单块的 `runChunk`（含对半切的递归），PR 4 只加**整文件的编排**（逐块推进、进度事件、审批卡片、记账） |
+| 对半切时不往下传 carry | 后半段的上文是前半段，而不是原来那一块。传下去会让它带上一段与它不相邻的文本 |
+| 一半失败即整块失败 | 半份译文配半份原文，读起来比整块原文更难收拾 |
+| 术语表在判定**之后**落实 | 判定算的是模型交回来的东西；强制替换只改字面不改行数，放在后面才不会让判定看到一份被我们动过的输出 |
+| 空 API key 是合法的 | 别的子代理把"没有 key"当配置错误报出来，这里不能 —— LM Studio / Ollama 这条主线本来就没有 key |
+| `translateMeta` / `translateUseLore` 等文案 | 术语表开关直接长在 translate 卡片里，没有抽象成"每个 kind 可以有额外控件"的通用槽位 —— 只有一个 kind 需要它 |
+
+**tool budget**：`translate` 实测 **217 token**，`delegate` 287，合计 504。两者都由
+`routeTools` 追加、不进 preset，所以 `agentToolBudget.test.ts` 的 preset 上限看不见
+它们 —— 该文件因此多了一条**针对追加集合**的断言（上限 600），不让"在 routing 里
+追加"成为一条绕开棘轮的路。
+
+**实机验证**：mock 掉 aiStore 的绑定后端到端跑了一次 `translateTool`，五行输入
+（含一个空行和一条 URL）→ 五行输出，空行与 URL 原位不动，1.1 秒。设置两页在
+dev server 里渲染正常、无 console 错误。
 
 ---
 

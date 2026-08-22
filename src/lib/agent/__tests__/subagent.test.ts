@@ -29,9 +29,12 @@ vi.mock("../../fs/fileio", () => ({
 
 import {
   chainCanSeeImages,
+  DELEGATE_KINDS,
   executeDelegate,
   resolveSubAgentConn,
   resolveVisionConn,
+  subAgentModel,
+  SUBAGENT_KINDS,
   type SubAgentConfig,
   type SubAgentKind,
 } from "../subagent";
@@ -91,6 +94,7 @@ describe("subagent", () => {
     longread: { kind: "longread", modelId: "m-text", enabled: true },
     pdf: { kind: "pdf", modelId: null, enabled: false },
     imagegen: { kind: "imagegen", modelId: null, enabled: false },
+    translate: { kind: "translate", modelId: null, enabled: false },
   };
 
   beforeEach(() => {
@@ -103,6 +107,63 @@ describe("subagent", () => {
     longread: { kind: "longread", modelId: null, enabled: false },
   } as Record<SubAgentKind, SubAgentConfig>;
   const ALL_MODELS = [dummyVisionModel, dummyTextModel];
+
+
+  describe("the translate kind", () => {
+    const sakura: Model = {
+      ...dummyTextModel,
+      id: "m-sakura",
+      name: "Sakura 14B",
+      serverTools: undefined,
+      translateFormat: "sakura",
+    };
+    const bound = (modelId: string | null): Record<SubAgentKind, SubAgentConfig> => ({
+      ...defaultSubs,
+      translate: { kind: "translate", modelId, enabled: modelId !== null },
+    });
+
+    it("is a subagent but never a delegate kind", () => {
+      // 不变量 1 的守卫。Sakura holds no conversation: asked "你是什么模型" it
+      // paraphrases the question back instead of answering, and a delegated
+      // task description would come back as its own translation. Putting it in
+      // DELEGATE_KINDS would compile and fail only at run time, quietly.
+      expect(SUBAGENT_KINDS).toContain("translate");
+      expect(DELEGATE_KINDS).not.toContain("translate" as never);
+    });
+
+    it("resolves only a model that declares a translation format", () => {
+      expect(subAgentModel("translate", [sakura], bound("m-sakura"))).toBe(sakura);
+      // The same binding pointed at an ordinary model resolves to nothing —
+      // the failure it prevents is silent, not loud: a general model handed
+      // Sakura's fixed template answers something plausible.
+      expect(subAgentModel("translate", [dummyTextModel], bound("m-text"))).toBeNull();
+    });
+
+    it("is not resolvable while disabled or unbound", () => {
+      expect(subAgentModel("translate", [sakura], bound(null))).toBeNull();
+      expect(
+        subAgentModel("translate", [sakura], {
+          ...defaultSubs,
+          translate: { kind: "translate", modelId: "m-sakura", enabled: false },
+        }),
+      ).toBeNull();
+    });
+
+    it("does not leak into the other kinds' resolution", () => {
+      // A Sakura model is `type: "text"`, so nothing about its type stops it
+      // being bound to longread — only the declaration does, and only via
+      // conversationalModels in the UI. Here we assert the runtime half: the
+      // kinds keep their own preconditions and translate's does not travel.
+      const subs: Record<SubAgentKind, SubAgentConfig> = {
+        ...defaultSubs,
+        longread: { kind: "longread", modelId: "m-sakura", enabled: true },
+      };
+      // longread has no capability gate, so this DOES resolve — which is
+      // exactly why the pickers must never offer it (01-execution-plan.md §1
+      // 不变量 2). Documented here so the gap is deliberate, not forgotten.
+      expect(subAgentModel("longread", [sakura], subs)).toBe(sakura);
+    });
+  });
 
   describe("chainCanSeeImages", () => {
     it("returns true if main model is multimodal", () => {

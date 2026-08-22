@@ -42,6 +42,7 @@ export const PREF_KEYS = [
   "app:apiLogEnabled",
   "app:pptxExportBeta",
   "app:roleplayBeta",
+  "app:translateBeta",
   // 扮演的输入语法提示是否已经被作者收起过。四种标记要在第一次就看见——
   // 折成一行之后它只是四个符号，不认识的人不会去点「展开」。
   "app:roleplaySyntaxSeen",
@@ -69,6 +70,10 @@ export const PREF_KEYS = [
   "ai:subagent:pdf:enabled",
   "ai:subagent:imagegen:modelId",
   "ai:subagent:imagegen:enabled",
+  "ai:subagent:translate:modelId",
+  "ai:subagent:translate:enabled",
+  // 翻译时要不要从知识库抽术语表。默认开——没有知识库时它自然抽不到东西。
+  "ai:translate:useLore",
 ] as const;
 
 /**

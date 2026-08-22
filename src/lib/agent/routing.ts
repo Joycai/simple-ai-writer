@@ -6,6 +6,7 @@
  * - If vision subagent is active: strip read_image and read_lore_image from main agent
  * - If the imagegen subagent is NOT active: strip generate_image and edit_image
  * - If the PPTX export Beta is off: strip export_pptx
+ * - If the translation Beta is on AND a translation model is bound: append translate
  * - If any delegate-capable subagent is active and workspace exists: append delegate tool
  */
 
@@ -14,6 +15,7 @@ import type { TaskPreset } from "./presets";
 import type { TaskWorkspaceHandle } from "./taskWorkspace";
 import { subAgentModel, DELEGATE_KINDS, type SubAgentConfig, type SubAgentKind } from "./subagent";
 import { isPptxExportEnabled } from "../pptx/flag";
+import { isTranslateEnabled } from "../translate/flag";
 import type { Model } from "../ai/configDb";
 
 export interface RoutedTools {
@@ -97,6 +99,16 @@ function route(
   // it would add a tool with no valid kind to call.
   if (DELEGATE_KINDS.some(live) && hasWorkspace && !tools.includes("delegate")) {
     tools.push("delegate");
+  }
+
+  // Appended rather than stripped from a preset, like `delegate` above and
+  // unlike `export_pptx`: it needs BOTH a Beta flag and a bound model, and
+  // neither is knowable where the presets are declared. Two consequences worth
+  // naming — a preset that lists it explicitly would still get it withheld
+  // here, and `agentToolBudget.test.ts` (which measures the raw preset) cannot
+  // see it, which is why that file gains its own assertion on the routed set.
+  if (isTranslateEnabled() && live("translate") && !tools.includes("translate")) {
+    tools.push("translate");
   }
 
   // Search subagent takes over web search: withhold serverTools from main agent.

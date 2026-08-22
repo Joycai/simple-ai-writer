@@ -52,6 +52,7 @@ const NO_SUBS: Record<SubAgentKind, SubAgentConfig> = {
   longread: { kind: "longread", modelId: null, enabled: false },
   pdf: { kind: "pdf", modelId: null, enabled: false },
   imagegen: { kind: "imagegen", modelId: null, enabled: false },
+  translate: { kind: "translate", modelId: null, enabled: false },
 };
 
 describe("toolTokensOf", () => {

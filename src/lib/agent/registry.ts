@@ -89,6 +89,7 @@ import {
 } from "./scratchpadTools";
 import { splitCoreCall, splitFacetCall, type SplitSink } from "./splitTools";
 import { executeDelegate, type DelegateKind } from "./subagent";
+import { translateTool } from "../translate/tool";
 import type { AgentEvent } from "./events";
 import type { AiConn } from "../ai/conn";
 
@@ -494,7 +495,8 @@ export type ToolId =
   | "remember"
   | "revise_memory"
   | "recall"
-  | "delegate";
+  | "delegate"
+  | "translate";
 
 function parseArgs<T>(raw: string): T {
   return JSON.parse(raw || "{}") as T;
@@ -2099,6 +2101,37 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: executeDelegate,
+  },
+
+  translate: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "translate",
+        description:
+          "Translate Japanese text into Chinese with the author's dedicated translation model. " +
+          "ONLY Japanese to Chinese — it cannot translate in any other direction or between any " +
+          "other languages, and given Chinese it will hand the text back barely changed rather " +
+          "than fail. It reads no instructions: pass the source text verbatim and nothing else, " +
+          "because any wording you add to it comes back translated as if it were part of the " +
+          "passage. Line structure is preserved, so quote the passage as it appears. Prefer this " +
+          "over translating Japanese yourself — the model is trained on light novels and is " +
+          "markedly better at them.",
+        parameters: {
+          type: "object",
+          properties: {
+            text: {
+              type: "string",
+              description:
+                "The Japanese source text, verbatim. No instructions, no preamble, no framing.",
+            },
+          },
+          required: ["text"],
+        },
+      },
+    },
+    execute: (call, ctx) => translateTool(call.id, parseArgs(call.arguments), ctx),
   },
 };
 

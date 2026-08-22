@@ -10,6 +10,7 @@ import { appTerms } from "../../lib/profile";
 import { useEditorStore } from "../../stores/editorStore";
 import { useMemoryStore } from "../../stores/memoryStore";
 import { useAiStore } from "../../stores/aiStore";
+import { conversationalModels } from "../../lib/ai/configDb";
 import { useLoreStore } from "../../stores/loreStore";
 import { useDigestStore } from "../../stores/digestStore";
 import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
@@ -367,7 +368,7 @@ export function LibraryView() {
 
   const allChaptersCount = volumes.reduce((s, v) => s + v.chapters.length, 0);
   const activeVolumeIdx = volumes.findIndex((v) => v.chapters.some((c) => c.path === activeFilePath));
-  const enabledModels = models.filter((m) => m.enabled);
+  const enabledModels = conversationalModels(models).filter((m) => m.enabled);
   const memoModelValue = memoryModelId ?? activeModelId ?? "";
   const isWriting = (ch: Chapter) => spine?.status?.[ch.relPath] === "writing";
   const writingCount = volumes.reduce((n, v) => n + v.chapters.filter(isWriting).length, 0);

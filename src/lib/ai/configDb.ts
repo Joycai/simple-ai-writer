@@ -232,6 +232,31 @@ export interface Model {
 }
 
 /**
+ * 这个模型是不是一个只会翻译的模型。
+ *
+ * 一个函数而不是散在各处的 `!m.translateFormat`，因为它是一条**不变量**的
+ * 判据（见 docs/feature/translate/01-execution-plan.md §1 第 2 条），而不变量
+ * 需要一个可以被引用的名字。
+ */
+export function isTranslateOnly(m: Model): boolean {
+  return m.translateFormat !== undefined;
+}
+
+/**
+ * 能拿来对话的模型 —— 任何"选一个模型来干活"的列表都该走这里。
+ *
+ * 翻译模型被排除掉，而且**排除是无条件的**：Sakura 问它「你是什么模型」会把
+ * 问题改写一遍还回来（实测 E1），给它中译日会输出中文（E2）——都不报错，
+ * 都看起来像结果。绑错它的代价不是一次失败，是一批看不出问题的坏输出。
+ *
+ * 不含 `enabled` 过滤：调用方对"停用的模型要不要出现"各有各的答案（设置里
+ * 要，选择器里不要），而这个函数只回答"它能不能对话"这一个问题。
+ */
+export function conversationalModels(models: readonly Model[]): Model[] {
+  return models.filter((m) => !isTranslateOnly(m));
+}
+
+/**
  * USD cost of one completion, accounting for the model's cheaper cached-input
  * rate. `cachedTokens` is a subset of `inputTokens` — both OpenAI's and
  * Gemini's usage reporting count it that way — so only the uncached
