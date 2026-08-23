@@ -88,6 +88,7 @@ import {
   measureCharsPerToken, RECENT_WINDOW_MIN_CHARS,
 } from "../lib/context/budget";
 import { messageCeilingFor } from "../lib/agent/toolCost";
+import { workflowBriefingSection } from "../lib/workflow";
 import {
   hashText, loadMemory, MEMORY_BUDGET_CHARS, projectRelativePath,
 } from "../lib/context/memory";
@@ -1005,7 +1006,14 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // as a task-layer instruction it decayed after turn one — the author's
         // "去执行" then landed in a context whose only standing instruction was a
         // prose-writing prompt, and the assistant kept answering with plans.
-        const systemPrompt = `${writingPrompt}\n\n${i18n.t("ai.instructions.agent", promptParams(i18n.language === "zh-CN"))}`;
+        //
+        // The workflow roster rides with the briefing (same layer, same
+        // stability) and is read once per session, like the rest of the seed:
+        // a card edited mid-session is picked up by the next session.
+        const workflowSection = await workflowBriefingSection(projectPath);
+        const systemPrompt =
+          `${writingPrompt}\n\n${i18n.t("ai.instructions.agent", promptParams(i18n.language === "zh-CN"))}` +
+          (workflowSection ? `\n\n${workflowSection}` : "");
         const documentText = focus.text;
         // Follows the profile, like the panel's tasks do: a project whose
         // documents don't use rolling memory has none to inject. Loaded only

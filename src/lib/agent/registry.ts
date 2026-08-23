@@ -90,6 +90,7 @@ import {
 import { splitCoreCall, splitFacetCall, type SplitSink } from "./splitTools";
 import { executeDelegate, type DelegateKind } from "./subagent";
 import { translateTool } from "../translate/tool";
+import { activeWorkflows, findWorkflow, scanWorkflows } from "../workflow";
 import type { AgentEvent } from "./events";
 import type { AiConn } from "../ai/conn";
 
@@ -453,6 +454,7 @@ export type ToolId =
   | "read_slides"
   | "search_text"
   | "read_memory"
+  | "read_workflow"
   | "propose_lore_plan"
   | "create_lore_entity"
   | "update_lore_file"
@@ -759,6 +761,42 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => readMemoryTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  read_workflow: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "read_workflow",
+        description:
+          "Read the step-by-step procedure of one workflow card from the 可用工作流 list in your instructions. When the author's request matches a card's description, call this FIRST and follow the steps. Cards are house procedure, advisory: the author's explicit instructions in chat always win over a card.",
+        parameters: {
+          type: "object",
+          properties: {
+            name: {
+              type: "string",
+              description: "The card's name exactly as it appears in the list",
+            },
+          },
+          required: ["name"],
+        },
+      },
+    },
+    execute: async (call, ctx) => {
+      const args = parseArgs<{ name?: string }>(call.arguments);
+      if (!args.name) return { toolCallId: call.id, content: "Error: 'name' argument is required." };
+      const cards = await scanWorkflows(ctx.projectPath);
+      const card = findWorkflow(cards, args.name);
+      if (!card) {
+        const names = activeWorkflows(cards).map((c) => c.name).join("、");
+        return {
+          toolCallId: call.id,
+          content: `Error: no workflow card named "${args.name}". Available: ${names || "(none)"}. Copy a name from the 可用工作流 list.`,
+        };
+      }
+      return { toolCallId: call.id, content: `# ${card.name}\n\n${card.body}` };
+    },
   },
 
   propose_lore_plan: {

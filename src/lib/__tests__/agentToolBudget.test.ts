@@ -41,8 +41,13 @@ import { AGENT_ASSIST_PRESET, CONTINUE_PRESET } from "../agent/presets";
 import { NARRATOR_PRESET, ROLEPLAY_PRESET } from "../roleplay/presets";
 import { estimateToolsTokens } from "../ai/tokenEstimate";
 
-/** Measured 9,609 at 1.22.0. Headroom for wording, not for a new tool. */
-const AGENT_ASSIST_CAP = 10_000;
+/**
+ * Measured 9,609 at 1.22.0; 9,743 after read_workflow landed (134 tokens —
+ * the price of the workflow-cards feature's second disclosure level, decided
+ * in docs/feature/agent/workflow-cards-plan.md §3). Headroom for wording,
+ * not for a new tool.
+ */
+const AGENT_ASSIST_CAP = 10_150;
 /** The read tier a 续写 carries. Measured 1,738. */
 const CONTINUE_CAP = 2_000;
 /** 旁白 reads other scenes and can write back; 扮演 is deliberately tiny. */
@@ -64,10 +69,12 @@ describe("tool schema budget", () => {
 
   it("keeps the assistant's resident half well under the full toolset", () => {
     // What a conversation actually pays before it touches the knowledge base —
-    // which is most conversations. Measured 7,067 of 9,609 at 1.22.0.
+    // which is most conversations. Measured 7,067 of 9,609 at 1.22.0;
+    // 7,201 of 9,743 with read_workflow (resident on purpose: the roster it
+    // serves sits in the briefing from round one).
     const { resident } = partitionByGroup(AGENT_ASSIST_PRESET.tools);
     const residentTokens = estimateToolsTokens(getToolDefinitions(resident));
-    expect(residentTokens).toBeLessThanOrEqual(7_400);
+    expect(residentTokens).toBeLessThanOrEqual(7_500);
     // A guard against the deferral quietly becoming a no-op: someone drops the
     // `group` tag off a tool and the only symptom is a bigger bill.
     expect(tokensOf(AGENT_ASSIST_PRESET) - residentTokens).toBeGreaterThan(2_000);

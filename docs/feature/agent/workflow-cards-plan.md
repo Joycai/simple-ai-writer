@@ -95,6 +95,12 @@ Settings → 工作台（已是项目级 pane）加一节「工作流」：列�
 |---|---|---|
 | PR 1 | `src/lib/workflow/`：内置卡、目录扫描、frontmatter 解析、覆盖合并、清单拼装、限长/停用规则。纯逻辑 + vitest | 测试即验证 |
 | PR 2 | briefing 注入 + `read_workflow` 工具 + preset 接线 + toolCost/棘轮 | 真机：建一个卡，观察模型在匹配任务时加载 |
+
+PR 1 / PR 2 实现记录：
+
+- **注入点是两处，不是一处**：chat 的 system 层（`agentStore.sendChat`，与 briefing 同层同稳定性，**每会话播种一次**——会话中改卡下个会话生效）和 AiPanel 的任务 instruction 尾部（`aiTaskStore`，条件是 `task.tools === "full"`——按声明的工具档位匹配，绝不按任务 id）。
+- `read_workflow` 是**常驻**工具（不进 `lore_write` 那种延迟装载组）：它服务的清单从第一轮就在 briefing 里，工具却要等装载就自相矛盾。实测 134 token，棘轮 10,000 → 10,150、常驻 7,400 → 7,500（`agentToolBudget.test.ts` 同 commit 抬）。
+- 名字打错时工具回**可用卡清单**而不是干巴巴的失败——模型下一轮自己就能修正。
 | PR 3 | Settings → 工作台 的管理节 + i18n | 真机：增删改停 |
 
 每片一个 PR，片间停下等真机验证（老规矩）。

@@ -10,3 +10,4 @@ export {
 } from "./cards";
 export { BUILTIN_WORKFLOWS } from "./builtins";
 export { scanWorkflows } from "./scan";
+export { workflowBriefingSection } from "./briefing";
