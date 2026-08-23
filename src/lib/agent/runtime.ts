@@ -34,6 +34,7 @@ import type { TaskPreset } from "./presets";
 import {
   executeRegisteredTool,
   getToolDefinitions,
+  isParallelSafeTool,
   partitionByGroup,
   type ToolContext,
   type ToolGroup,
@@ -74,6 +75,63 @@ function argumentsUsable(raw: string): boolean {
 /** Stand-in left behind where an earlier picture was dropped to reclaim room. */
 const ELIDED_IMAGE =
   "[earlier image dropped to stay within the model's context window]";
+
+/**
+ * Most read-tier calls one round runs at once. The number matters for
+ * `delegate`: each delegation is a whole sub-run against some endpoint, and a
+ * round that fans out into many should not open them all simultaneously —
+ * providers rate-limit, and every lane past the author's patience is still a
+ * paid request. Local reads finish in milliseconds either way.
+ */
+const MAX_PARALLEL_TOOLS = 4;
+
+/** One stretch of a round's tool calls that may (or must not) overlap. */
+interface ToolSegment {
+  parallel: boolean;
+  calls: AccumulatedToolCall[];
+}
+
+/**
+ * Split one round's calls into segments, preserving the model's order:
+ * consecutive read-tier calls form one parallel segment; every write call is a
+ * segment of its own — a barrier that runs only after everything before it has
+ * settled. See {@link isParallelSafeTool} for why the write tiers must not
+ * overlap anything, including each other.
+ */
+function partitionParallelSegments(calls: readonly AccumulatedToolCall[]): ToolSegment[] {
+  const segments: ToolSegment[] = [];
+  for (const tc of calls) {
+    const parallel = isParallelSafeTool(tc.name);
+    const last = segments[segments.length - 1];
+    if (parallel && last?.parallel) last.calls.push(tc);
+    else segments.push({ parallel, calls: [tc] });
+  }
+  return segments;
+}
+
+/**
+ * Run `worker` over every item with at most `limit` in flight.
+ *
+ * Workers must not throw — each lane is a plain while-loop, so a throw would
+ * reject the whole pool and strand the other lanes' items. The runtime's
+ * worker guarantees that (it records a result for every item, error text
+ * included), which is also what keeps the tool_call/reply pairing whole.
+ */
+async function runLanes<T>(
+  items: readonly T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<void>,
+): Promise<void> {
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (next < items.length) {
+        const i = next++;
+        await worker(items[i], i);
+      }
+    }),
+  );
+}
 
 /**
  * Context utilization threshold (fraction of input ceiling) at which the agent
@@ -795,25 +853,35 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       });
     }
 
-    // Execute each tool call and append results. Re-checked per call, not just
-    // per round: the model can emit several tool calls in one round (e.g. a
-    // propose_edit followed by write-auto lore calls), and an abort mid-round
-    // — including one that arrives *as* rejectAll() resolves a blocked
-    // approval — must stop the remaining calls in this same array rather than
-    // only taking effect at the next round's top-of-loop check.
-    // An abort part-way through must still leave every tool_call answered —
-    // the assistant message naming N of them is already in `history`, and
-    // `history` IS the chat session's history. Stopping with k < N replies
-    // used to wedge the conversation permanently: the next turn appended a
-    // user message onto a malformed transcript and every provider rejected it.
+    // Execute the round's tool calls and append results.
+    //
+    // *Execution* order is no longer strictly the model's: consecutive
+    // read-tier calls (`delegate` included) run concurrently, because each is
+    // pure IO against its own inputs and a round of three delegations used to
+    // pay for them end to end. Every write call is a barrier — it runs alone,
+    // after everything before it has settled (see isParallelSafeTool for why
+    // that is correctness, not caution). *History* order is unchanged: a
+    // segment's results are appended in the model's call order however its
+    // lanes settled, so the transcript reads exactly as it did when the loop
+    // was serial.
+    //
+    // Abort is re-checked per call, not just per round: the model can emit
+    // several tool calls in one round, and an abort mid-round — including one
+    // that arrives *as* rejectAll() resolves a blocked approval — must stop
+    // the calls not yet dispatched rather than only taking effect at the next
+    // round's top-of-loop check. (A call already in flight when the abort
+    // lands runs to its own end — it holds the same signal and cuts itself
+    // short.) An abort part-way through must still leave every tool_call
+    // answered — the assistant message naming N of them is already in
+    // `history`, and `history` IS the chat session's history. Stopping with
+    // k < N replies used to wedge the conversation permanently: the next turn
+    // appended a user message onto a malformed transcript and every provider
+    // rejected it.
     let abortedMidRound = false;
     let touchedChecklist = false;
-    for (const tc of roundToolCalls) {
-      if (abortedMidRound || opts.signal.aborted) {
-        abortedMidRound = true;
-        history.push({ role: "tool", tool_call_id: tc.id, content: ABORTED_TOOL_RESULT });
-        continue;
-      }
+
+    /** Execute one call, emitting its running/done log steps. Never throws. */
+    const runOneToolCall = async (tc: AccumulatedToolCall): Promise<ToolResult> => {
       const toolCall: ToolCall = { id: tc.id, name: tc.name, arguments: tc.arguments };
       // Kept as valid JSON rather than pre-truncated: the log formats these for
       // display (lib/agent/logFormat), and it can only pull out the identifying
@@ -865,19 +933,51 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         },
         at: Date.now(),
       });
+      return result;
+    };
 
-      // Text result: role "tool" satisfies the tool_call_id protocol
-      history.push({ role: "tool", tool_call_id: tc.id, content: result.content });
+    for (const segment of partitionParallelSegments(roundToolCalls)) {
+      // Indexed by position, not a Map keyed on id: a confused model can emit
+      // two calls sharing an id, and both still need their own reply.
+      const results: ToolResult[] = new Array(segment.calls.length);
+      const dispatch = async (tc: AccumulatedToolCall, i: number): Promise<void> => {
+        if (abortedMidRound || opts.signal.aborted) {
+          abortedMidRound = true;
+          results[i] = { toolCallId: tc.id, content: ABORTED_TOOL_RESULT };
+          return;
+        }
+        try {
+          results[i] = await runOneToolCall(tc);
+        } catch (e) {
+          // executeRegisteredTool never throws; this guards the surrounding
+          // event plumbing so one lane's surprise cannot reject the pool and
+          // leave a sibling's tool_call unanswered.
+          results[i] = { toolCallId: tc.id, content: `Error: ${String(e)}` };
+        }
+      };
+      if (segment.parallel && segment.calls.length > 1) {
+        await runLanes(segment.calls, MAX_PARALLEL_TOOLS, dispatch);
+      } else {
+        for (let i = 0; i < segment.calls.length; i++) await dispatch(segment.calls[i], i);
+      }
 
-      // Image result: follow-up user message (OpenAI role:"tool" only allows string content)
-      if (result.imageDataUrls?.length) {
-        const imageParts: ContentPart[] = [
-          { type: "text", text: `Visual reference for ${tc.name}:\n${result.content}` },
-          ...result.imageDataUrls.map(
-            (url): ContentPart => ({ type: "image_url", image_url: { url } }),
-          ),
-        ];
-        history.push({ role: "user", content: imageParts });
+      for (let i = 0; i < segment.calls.length; i++) {
+        const tc = segment.calls[i];
+        const result = results[i];
+
+        // Text result: role "tool" satisfies the tool_call_id protocol
+        history.push({ role: "tool", tool_call_id: tc.id, content: result.content });
+
+        // Image result: follow-up user message (OpenAI role:"tool" only allows string content)
+        if (result.imageDataUrls?.length) {
+          const imageParts: ContentPart[] = [
+            { type: "text", text: `Visual reference for ${tc.name}:\n${result.content}` },
+            ...result.imageDataUrls.map(
+              (url): ContentPart => ({ type: "image_url", image_url: { url } }),
+            ),
+          ];
+          history.push({ role: "user", content: imageParts });
+        }
       }
     }
     roundsSinceTaskTouch = touchedChecklist ? 0 : roundsSinceTaskTouch + 1;

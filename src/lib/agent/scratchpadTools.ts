@@ -257,37 +257,40 @@ export async function writeNoteTool(call: ToolCall, ctx: ToolContext): Promise<T
     };
   }
 
-  return serializeWrite(async () => {
-    try {
-      // A note is a legitimate first artefact — the checkpoint nudge asks for
-      // one by name, and refusing it until a plan exists would make that nudge
-      // a dead end. But the workspace is titled generically, NOT after this
-      // note: the task's name is the plan's business, and letting whichever
-      // note happened to come first name the whole task made it a lottery.
-      const { taskId } = await ctx.taskWorkspace!.ensure(i18n.t("ai.taskDoc.untitled"));
+  // No serializeWrite wrapper of its own: `writeTaskNote` runs on the shared
+  // write chain internally (it must — parallel delegations write notes too,
+  // see agent/runtime), and chaining here again would deadlock, the outer
+  // entry waiting on an inner one queued behind it. `ensure` needs no chain:
+  // its taskId assignment is synchronous, so a double-create cannot happen.
+  try {
+    // A note is a legitimate first artefact — the checkpoint nudge asks for
+    // one by name, and refusing it until a plan exists would make that nudge
+    // a dead end. But the workspace is titled generically, NOT after this
+    // note: the task's name is the plan's business, and letting whichever
+    // note happened to come first name the whole task made it a lottery.
+    const { taskId } = await ctx.taskWorkspace!.ensure(i18n.t("ai.taskDoc.untitled"));
 
-      // Containment needs no check here: `writeTaskNote` runs the slug through
-      // `sanitizeSlug`, which admits only letters, digits and dashes — a name
-      // with no separator in it cannot leave the folder it is joined to.
-      const note = await writeTaskNote(ctx.projectPath, taskId, {
-        slug,
-        title,
-        content,
-        sources,
-        origin: "main",
-      });
+    // Containment needs no check here: `writeTaskNote` runs the slug through
+    // `sanitizeSlug`, which admits only letters, digits and dashes — a name
+    // with no separator in it cannot leave the folder it is joined to.
+    const note = await writeTaskNote(ctx.projectPath, taskId, {
+      slug,
+      title,
+      content,
+      sources,
+      origin: "main",
+    });
 
-      const renamed = note.renamedFrom
-        ? ` (a note called "${note.renamedFrom}" already existed, so this one was filed as "${note.slug}")`
-        : "";
-      return {
-        toolCallId: call.id,
-        content: `Note saved to '${note.path}' (${note.chars} chars)${renamed}. Read it back any time with read_note.`,
-      };
-    } catch (e) {
-      return { toolCallId: call.id, content: `Error writing note: ${(e as Error).message}` };
-    }
-  });
+    const renamed = note.renamedFrom
+      ? ` (a note called "${note.renamedFrom}" already existed, so this one was filed as "${note.slug}")`
+      : "";
+    return {
+      toolCallId: call.id,
+      content: `Note saved to '${note.path}' (${note.chars} chars)${renamed}. Read it back any time with read_note.`,
+    };
+  } catch (e) {
+    return { toolCallId: call.id, content: `Error writing note: ${(e as Error).message}` };
+  }
 }
 
 // ─── read_note ───────────────────────────────────────────────────────────────

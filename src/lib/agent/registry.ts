@@ -2255,6 +2255,26 @@ export function partitionByGroup(ids: readonly ToolId[]): {
   return { resident, deferred };
 }
 
+/**
+ * May one round's call to this tool run concurrently with its neighbours?
+ *
+ * The read tier — `delegate` included — is pure IO against its own inputs:
+ * nothing it touches is mutated by another read, so a round of several may
+ * overlap. Every write tool says no, and for two different reasons that both
+ * matter: the L2 tools block on an approval card (two in flight is two stacked
+ * cards, and editApply's occurrence count assumes the document does not move
+ * between proposal and apply), and the L1 auto tools mutate the run's lore
+ * snapshot and the disk under it. `access` is already the exact boundary, so
+ * the answer is derived from it rather than kept as a second list to drift.
+ *
+ * Unknown names are safe by construction: `executeRegisteredTool` answers them
+ * with error text without executing anything.
+ */
+export function isParallelSafeTool(name: string): boolean {
+  const tool = (REGISTRY as Record<string, RegisteredTool | undefined>)[name];
+  return !tool || tool.access === "read";
+}
+
 /** Resolve wire definitions for a preset's toolset, preserving order. */
 export function getToolDefinitions(ids: readonly ToolId[]): ToolDefinition[] {
   return ids.map((id) => {
