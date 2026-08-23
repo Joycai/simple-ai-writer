@@ -232,6 +232,23 @@
       "renameCategory": "Rename",
       "newCategoryPlaceholder": "New category name, e.g. Meeting notes"
     },
+    "workflows": {
+      "section": "Workflows",
+      "hint": "Pin down the routine for a kind of task: the AI assistant's instructions always carry a name — description roster, and when a request matches a card's description it reads that card's steps before acting. Cards are advisory — what you say in chat always wins. Stored under the project's .ai-writer/workflows/; built-in cards can be overridden, disabled, and restored.",
+      "builtin": "Built-in",
+      "overridden": "Overridden",
+      "custom": "Project",
+      "edit": "Edit (a built-in card is saved as a project copy)",
+      "restore": "Restore the built-in version",
+      "delete": "Delete",
+      "deleteConfirm": "Click again to confirm deletion",
+      "enableCard": "Enable {{card}}",
+      "disableCard": "Disable {{card}}",
+      "newCard": "+ New workflow",
+      "namePlaceholder": "Name (shown in the roster)",
+      "descPlaceholder": "One line — the only thing the AI judges \"should I use this card\" by",
+      "bodyPlaceholder": "Steps (markdown): order, format samples, and the don'ts"
+    },
     "shortcuts": {
       "categories": {
         "global": "Global",

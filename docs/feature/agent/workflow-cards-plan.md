@@ -1,6 +1,6 @@
 # 工作流卡 · 概要设计
 
-> **Status: planned** · 2026-08-23 审定
+> **Status: shipped** · 2026-08-23 审定，三片当日落地（PR #289/#290/PR 3）
 > 方向与设计已定（A 类：提示词式、best-effort）。审定时的追加：**内置卡随 app 发布，
 > 开箱即用；项目目录里同 id 的文件整张覆盖内置**（见 §2）。
 
@@ -101,6 +101,13 @@ PR 1 / PR 2 实现记录：
 - **注入点是两处，不是一处**：chat 的 system 层（`agentStore.sendChat`，与 briefing 同层同稳定性，**每会话播种一次**——会话中改卡下个会话生效）和 AiPanel 的任务 instruction 尾部（`aiTaskStore`，条件是 `task.tools === "full"`——按声明的工具档位匹配，绝不按任务 id）。
 - `read_workflow` 是**常驻**工具（不进 `lore_write` 那种延迟装载组）：它服务的清单从第一轮就在 briefing 里，工具却要等装载就自相矛盾。实测 134 token，棘轮 10,000 → 10,150、常驻 7,400 → 7,500（`agentToolBudget.test.ts` 同 commit 抬）。
 - 名字打错时工具回**可用卡清单**而不是干巴巴的失败——模型下一轮自己就能修正。
+
+PR 3 实现记录：
+
+- 管理节落在 Settings → 工作台（`WorkspacePane.tsx` 的 `WorkflowCardsSection`），列表 + 启停 + 内联编辑器（name/description/正文），无独立 store——每次动作后 `scanWorkflows` 重扫，文件就是真相。
+- **停用内置卡 = 写全量副本**（`lib/workflow/write.ts`）：只写一行 `disabled: true` 的"薄覆盖"会按整张替换规则合并出一张没名字没正文的卡。代价是停用期间冻结了内置内容的更新，换来的是文件里就是界面上显示的东西；「还原为内置」= 删覆盖文件。
+- 徽章三态：内置 / 已覆盖（项目文件撞内置 id）/ 项目。纯项目卡可删（两击确认），覆盖卡只能还原——两个按钮互斥。
+- id 由名字导出（`suggestWorkflowId`，中文直接可用，剥路径敌意字符，冲突加号），创建后不变；改名改的是 frontmatter 的 name。
 | PR 3 | Settings → 工作台 的管理节 + i18n | 真机：增删改停 |
 
 每片一个 PR，片间停下等真机验证（老规矩）。
