@@ -18,13 +18,13 @@ import { X, Sparkles, Image as ImageIcon, Wand2, UserRound } from "lucide-react"
 import { ModalShell } from "../common/ModalShell";
 import { imageCostFor } from "../../lib/ai/configDb";
 import { resolveImageRoute } from "../../lib/ai/image";
+import { imageDialect } from "../../lib/ai/imageDialects";
 import { imageToDataUrl } from "../../lib/fs/images";
 import {
   generateImagePrompt,
-  sizeForAspect,
+  imageRequestParams,
   specToPrompt,
   IMAGE_ASPECTS,
-  type ImageAspect,
 } from "../../lib/image";
 import { resolveConn } from "../../lib/ai/conn";
 import { loadApiKey } from "../../lib/keyStore";
@@ -76,6 +76,13 @@ export function ImageGenModal({ target, onClose }: Props) {
    */
   const chatRoute = !!imageModel && !!imageProvider
     && resolveImageRoute(imageProvider.apiStandard, imageModel.caps?.route) === "chat";
+  /**
+   * The model's declared parameter dialect (lib/ai/imageDialects). With one,
+   * the framing controls come from the dialect's own vocabulary — its aspect
+   * list, resolution tiers and quality tiers — and the free-text size box
+   * disappears, because the dialect computes the exact wire value itself.
+   */
+  const dialectSpec = imageDialect(imageModel?.caps?.dialect);
 
   // Which model drafts the prompt. Separate from the image model and from the
   // app-wide active model: the author may want a strong writer here without
@@ -92,14 +99,30 @@ export function ImageGenModal({ target, onClose }: Props) {
   const [prompt, setPrompt] = useState("");
   const [style, setStyle] = useState("");
   const [negative, setNegative] = useState("");
-  const [aspect, setAspect] = useState<ImageAspect>("3:4");
+  const [aspect, setAspect] = useState<string>("3:4");
   const [count, setCount] = useState(1);
   /**
    * Explicit pixel size. Empty means "let the model's declared sizes decide",
    * which is also the only correct request for endpoints that reject the
-   * parameter (xAI) or take a ratio instead (Gemini).
+   * parameter (xAI) or take a ratio instead (Gemini). Generic models only —
+   * a dialect computes the size itself and this box is hidden.
    */
   const [size, setSize] = useState("");
+  /** Resolution tier from the dialect's list ("" = the dialect default). */
+  const [resolution, setResolution] = useState("");
+  /** Quality tier from the dialect's list ("" = send nothing). */
+  const [quality, setQuality] = useState("");
+
+  const aspectChoices: readonly string[] = dialectSpec?.aspects ?? IMAGE_ASPECTS;
+  // Keep the selections legal when the author switches to a model whose
+  // dialect speaks a different vocabulary mid-session.
+  const dialectId = dialectSpec?.id ?? "";
+  useEffect(() => {
+    setResolution(dialectSpec?.resolutions[0] ?? "");
+    setQuality("");
+    setAspect((a) => (aspectChoices.includes(a) ? a : aspectChoices.includes("3:4") ? "3:4" : aspectChoices[0]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dialectId]);
   /** One line saying what the picture shows — alt text, and the gallery
    *  description where the target keeps one. */
   const [note, setNote] = useState("");
@@ -208,10 +231,10 @@ export function ImageGenModal({ target, onClose }: Props) {
       provider,
       apiKey: (await loadApiKey(provider.id)) ?? "",
       n: effectiveCount,
-      // A size typed here wins; otherwise fall back to whatever the model
-      // declared as supported, and to nothing at all if it declared none.
-      size: size.trim() || sizeForAspect(aspect, imageModel.caps?.sizes),
-      aspect,
+      // The dialect resolver turns the form's choices into the fields this
+      // model's endpoint actually takes; without a dialect, a size typed here
+      // wins, else the closest declared size, else no size at all.
+      ...imageRequestParams(imageModel.caps, { aspect, resolution, quality, size }),
       signal: ctrl.signal,
     };
   };
@@ -277,7 +300,11 @@ export function ImageGenModal({ target, onClose }: Props) {
         prompt: chain.prompt,
         edits: chain.edits,
         model: imageModel?.modelId ?? "",
-        size: size.trim() || undefined,
+        // The size that actually went to the wire — a dialect computes it, so
+        // the empty size box must not record as "no size".
+        size: imageModel
+          ? imageRequestParams(imageModel.caps, { aspect, resolution, quality, size }).size
+          : size.trim() || undefined,
         aspect,
         ...(currentTurn.degraded ? { degraded: true } : {}),
         createdAt: Date.now(),
@@ -397,10 +424,40 @@ export function ImageGenModal({ target, onClose }: Props) {
                 <div className={gen.fieldNarrow}>
                   <label className={styles.label}>{t("lore.imageGen.aspectLabel")}</label>
                   <Select className={gen.selectInput} value={aspect} disabled={busy}
-                    onChange={(v) => setAspect(v as ImageAspect)}
-                    options={IMAGE_ASPECTS.map((a) => ({ value: a, label: a }))}
+                    onChange={(v) => setAspect(v)}
+                    options={aspectChoices.map((a) => ({ value: a, label: a }))}
                     ariaLabel={t("lore.imageGen.aspectLabel")} />
                 </div>
+                {/* With a dialect the resolution/quality tiers replace the
+                    free-text size box: the dialect computes the exact wire
+                    value, so offering both would invite contradictions. */}
+                {dialectSpec && (
+                  <div className={gen.fieldNarrow}>
+                    <label className={styles.label}>{t("lore.imageGen.resolutionLabel")}</label>
+                    <Select className={gen.selectInput} value={resolution} disabled={busy}
+                      onChange={(v) => setResolution(v)}
+                      options={dialectSpec.resolutions.map((r) => ({
+                        value: r,
+                        label: r || t("lore.imageGen.tierDefault"),
+                      }))}
+                      ariaLabel={t("lore.imageGen.resolutionLabel")} />
+                  </div>
+                )}
+                {dialectSpec?.qualities && (
+                  <div className={gen.fieldNarrow}>
+                    <label className={styles.label}>{t("lore.imageGen.qualityLabel")}</label>
+                    <Select className={gen.selectInput} value={quality} disabled={busy}
+                      onChange={(v) => setQuality(v)}
+                      options={[
+                        { value: "", label: t("lore.imageGen.tierDefault") },
+                        ...dialectSpec.qualities.map((q) => ({
+                          value: q,
+                          label: t(`lore.imageGen.quality_${q}`, { defaultValue: q }),
+                        })),
+                      ]}
+                      ariaLabel={t("lore.imageGen.qualityLabel")} />
+                  </div>
+                )}
                 <div className={gen.fieldNarrow}>
                   <label className={styles.label}>{t("lore.imageGen.countLabel")}</label>
                   <Select className={gen.selectInput} value={String(effectiveCount)} disabled={busy || chatRoute}
@@ -411,23 +468,25 @@ export function ImageGenModal({ target, onClose }: Props) {
                     }))}
                     ariaLabel={t("lore.imageGen.countLabel")} />
                 </div>
-                <div className={gen.field}>
-                  <label className={styles.label}>{t("lore.imageGen.sizeLabel")}</label>
-                  <input
-                    className={gen.input}
-                    list="image-size-options"
-                    placeholder={t("lore.imageGen.sizePlaceholder")}
-                    value={size}
-                    onChange={(e) => setSize(e.target.value)}
-                    disabled={busy}
-                  />
-                  {/* A datalist, not a select: the accepted sizes differ per
-                      model and per relay, so the common ones are suggestions
-                      rather than the only options. */}
-                  <datalist id="image-size-options">
-                    {(imageModel?.caps?.sizes ?? COMMON_SIZES).map((s) => <option key={s} value={s} />)}
-                  </datalist>
-                </div>
+                {!dialectSpec && (
+                  <div className={gen.field}>
+                    <label className={styles.label}>{t("lore.imageGen.sizeLabel")}</label>
+                    <input
+                      className={gen.input}
+                      list="image-size-options"
+                      placeholder={t("lore.imageGen.sizePlaceholder")}
+                      value={size}
+                      onChange={(e) => setSize(e.target.value)}
+                      disabled={busy}
+                    />
+                    {/* A datalist, not a select: the accepted sizes differ per
+                        model and per relay, so the common ones are suggestions
+                        rather than the only options. */}
+                    <datalist id="image-size-options">
+                      {(imageModel?.caps?.sizes ?? COMMON_SIZES).map((s) => <option key={s} value={s} />)}
+                    </datalist>
+                  </div>
+                )}
                 {estimatedCost > 0 && (
                   <div className={gen.costHint}>{t("lore.imageGen.costHint", { cost: estimatedCost.toFixed(3) })}</div>
                 )}

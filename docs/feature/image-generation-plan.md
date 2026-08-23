@@ -462,6 +462,43 @@ payload：新增 `imageToThumbnailDataUrl`（`lib/fs/images.ts`）用 `<canvas>`
 `fs_*` 命令，只把对话框选中的项目外文件留给插件）；以及**猜测型根因必须标注为
 猜测**——上一段如果当时写成「WebKit 上限（未验证）」，第二轮就不会从零开始。
 
+### PR6 · 参数方言（nanoBanana / GPT Image 2）与生成参考图 — ✅ 已实现
+
+此前的参数模型是为 Gemini 设计的：画幅固定 5 选 1（`IMAGE_ASPECTS`）+
+自由文本 `caps.sizes` 列表。GPT-Image 系模型在这个模型里没法被正确描述——
+它没有 aspect 参数、size 有自己的整除与比例规则、还有一根 quality 轴。
+解法是**参数方言**（对 2026-08 官方文档校准，协议事实收在
+`docs/api/landscape.md` → 出图参数的两套方言）：
+
+- `lib/ai/imageDialects.ts` 是方言表：每个方言声明画幅候选、分辨率档位、
+  质量档位，以及把作者选择翻成 wire 字段的 `params()`。现有两个方言：
+  - **nanobanana**：十档画幅 + `imageSize` `1K/2K/4K`（默认档发空——
+    gemini-2.5-flash-image 没有该参数，省略是人人都收的请求）；
+  - **gpt-image-2**：同十档画幅（都在 1:3~3:1 内），`size` 由
+    `gptImageSize()` 按档位算出（短边 1024/1440/2160，两边取整到 16 的
+    倍数，长边 3840 封顶时缩短边保比例；1K 档恰好复现三个官方预设，
+    2K/4K 档在 16:9 恰好落在 2560x1440 / 3840x2160 两个文档上限），
+    另有 `quality` `low/medium/high`。**编辑请求不带 size**
+    （`omitSizeOnEdit`——/images/edits 文档只列预设值，且编辑默认跟随
+    原图画幅）。
+- `ImageCaps.dialect` 声明（ModelDrawer 下拉：通用 / Nano Banana /
+  GPT Image 2）。选了方言就隐藏自由文本尺寸框——方言自己知道尺寸；
+  「通用」完全保留旧行为，已有配置零迁移。
+- `ImageRequest` 增加 `imageSize`（gemini route 并进 `imageConfig`）与
+  `quality`（openai 两个端点都发）；chat route 把 imageSize 折进 prose，
+  与 aspect/size 同理。
+- 统一入口 `imageRequestParams(caps, sel)`（`lib/image/index.ts`）：
+  有方言走方言表，没有走旧的 explicit size → sizeForAspect 链。
+  弹窗、agent 审批（illustrate.ts）、会话 store 三个调用方共用。
+
+**同期：`generate_image` 支持参考图。** 工具新增 `references[]`——
+工作区路径或图库文件名皆可（裸文件名先在目标实体图库找，再全库唯一匹配，
+歧义即报错让模型给全路径）。参考图作为输入图与提示词一起发
+（`IllustrateProposal.refPaths`，与 `sourcePath` 走同一条 image-conditioned
+通道和同一个 `caps.edit` 门），审批卡片上显示缩略图——靠参考图的提示词
+只有摆在参考图旁边才审得了。声明不收输入图的模型（`caps.edit === false`）
+在提案前就报错，`caps.maxRefs` 超限同理——都不花一次调用去证明。
+
 ## 9. 风险与对策
 
 | 风险 | 影响 | 对策 |

@@ -13,6 +13,7 @@
 
 import { imageCostFor } from "../ai/configDb";
 import { fileExists } from "../fs/fileio";
+import { IMAGE_EXT_LIST, isImagePath } from "../fs/images";
 import { resolveWorkspacePath } from "../paths";
 import type { IllustrateProposal, ToolContext } from "./registry";
 import { subAgentModel } from "./subagent";
@@ -53,6 +54,7 @@ async function proposeIllustration(
     path: string;
     aspect?: string;
     sourcePath?: string;
+    refPaths?: string[];
     reason?: string;
   },
 ): Promise<ToolResult> {
@@ -83,8 +85,25 @@ async function proposeIllustration(
     costUsd: imageCostFor(model, 1),
     aspect: spec.aspect,
     sourcePath: spec.sourcePath,
+    ...(spec.refPaths?.length ? { refPaths: spec.refPaths } : {}),
     reason: spec.reason,
   };
+
+  // A model declared incapable of taking input images cannot honour a
+  // reference — say so before the card, not after the money.
+  if (spec.refPaths?.length && model.caps?.edit === false) {
+    return {
+      toolCallId,
+      content: `Error: the image model "${model.name}" is declared as not accepting input images, so references cannot be used. Call generate_image without references, describing the reference's look in the prompt instead.`,
+    };
+  }
+  const maxRefs = model.caps?.maxRefs;
+  if (maxRefs && spec.refPaths && spec.refPaths.length > maxRefs) {
+    return {
+      toolCallId,
+      content: `Error: the image model "${model.name}" takes at most ${maxRefs} reference image(s); ${spec.refPaths.length} were given. Keep the most important one(s).`,
+    };
+  }
 
   const decision = await ctx.requestApproval(proposal);
   if (!decision.approved) {
@@ -99,10 +118,73 @@ async function proposeIllustration(
   return { toolCallId, content: decision.backupPath ?? "Image generated and saved." };
 }
 
+/**
+ * Resolve one `references` entry to an absolute image path.
+ *
+ * Two spellings are accepted, because they are the two ways the agent learns
+ * that a picture exists: a workspace path (list_files, a document asset), or a
+ * bare gallery filename (read_lore_entity lists those without paths). A bare
+ * name is looked up in the destination entity's gallery first, then across
+ * every gallery — refusing an ambiguous match rather than picking one, since a
+ * wrong reference quietly steers the whole generation.
+ */
+async function resolveReference(
+  ctx: ToolContext,
+  raw: string,
+  destEntityDir: string | undefined,
+): Promise<{ path?: string; error?: string }> {
+  const name = raw.trim();
+  if (!name) return { error: "Error: 'references' contains an empty entry." };
+  if (!isImagePath(name)) {
+    return { error: `Error: reference "${name}" is not an image file (accepted: ${IMAGE_EXT_LIST}).` };
+  }
+
+  // A workspace path wins when it exists — it is the unambiguous spelling.
+  const asPath = resolveWorkspacePath(ctx.projectPath, name);
+  if (asPath && (await fileExists(asPath))) return { path: asPath };
+
+  // Bare gallery filename. `file` fields never contain separators, so a path
+  // that failed the existence check cannot accidentally match here.
+  const base = name.replace(/\\/g, "/").split("/").pop() ?? name;
+  const wanted = base.toLowerCase();
+  const hits: { entityName: string; absPath: string }[] = [];
+  for (const entity of Object.values(ctx.loreIndex).flat()) {
+    const img = entity.images.find((i) => i.file.toLowerCase() === wanted);
+    if (img) hits.push({ entityName: entity.name, absPath: img.absPath });
+  }
+  const inDest = destEntityDir ? hits.find((h) => h.absPath.startsWith(destEntityDir)) : undefined;
+  if (inDest) return { path: inDest.absPath };
+  if (hits.length === 1) return { path: hits[0].absPath };
+  if (hits.length > 1) {
+    return {
+      error: `Error: reference "${name}" exists in more than one gallery (${hits.map((h) => h.entityName).join(", ")}). Give the full path instead.`,
+    };
+  }
+  return { error: `Error: no image "${name}" found — give a project path, or a gallery filename from read_lore_entity.` };
+}
+
+/** Resolve the whole `references` list, or explain the first failure. */
+async function resolveReferences(
+  ctx: ToolContext,
+  refs: string[] | undefined,
+  destEntityDir?: string,
+): Promise<{ paths: string[]; error?: string }> {
+  const paths: string[] = [];
+  for (const raw of refs ?? []) {
+    const { path, error } = await resolveReference(ctx, raw, destEntityDir);
+    if (error) return { paths: [], error };
+    if (path && !paths.includes(path)) paths.push(path);
+  }
+  return { paths };
+}
+
 /** Draw a new picture for a lore entity or a manuscript document. */
 export async function generateImageTool(
   toolCallId: string,
-  args: { prompt?: string; note?: string; entity?: string; path?: string; aspect?: string; reason?: string },
+  args: {
+    prompt?: string; note?: string; entity?: string; path?: string;
+    references?: string[]; aspect?: string; reason?: string;
+  },
   ctx: ToolContext,
 ): Promise<ToolResult> {
   const prompt = args.prompt?.trim();
@@ -114,8 +196,11 @@ export async function generateImageTool(
     if (!entity) {
       return { toolCallId, content: entityLookupError(args.entity, categories) };
     }
+    const refs = await resolveReferences(ctx, args.references, entity.dirPath);
+    if (refs.error) return { toolCallId, content: refs.error };
     return proposeIllustration(toolCallId, ctx, {
       prompt, note, aspect: args.aspect, reason: args.reason,
+      refPaths: refs.paths,
       dest: { kind: "lore", entityName: entity.name, entityDir: entity.dirPath },
       destination: entity.name,
       path: entity.dirPath,
@@ -137,8 +222,11 @@ export async function generateImageTool(
   if (!(await fileExists(path))) {
     return { toolCallId, content: `Error: no document at "${path}". Call list_files to see the real paths.` };
   }
+  const refs = await resolveReferences(ctx, args.references);
+  if (refs.error) return { toolCallId, content: refs.error };
   return proposeIllustration(toolCallId, ctx, {
     prompt, note, aspect: args.aspect, reason: args.reason,
+    refPaths: refs.paths,
     dest: { kind: "document", docPath: path },
     destination: baseName(path) || path,
     path,

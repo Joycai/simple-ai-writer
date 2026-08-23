@@ -476,6 +476,28 @@ qwen-image / wan / z-image 系列**不经过** `compatible-mode` —— 出图�
   `Throttling`（429）、`DataInspectionFailed`（内容审核拒绝——是"理解了但
   拒绝"，不是"端点不存在"，不能触发降级重生成）。
 
+#### 出图参数的两套方言（2026-08 对官方文档校准）
+
+同一件事——"这张图多大、什么画幅"——两大家族用完全不同的参数说：
+
+- **Gemini 图像系（Nano Banana）**：`generationConfig.imageConfig` 里
+  `aspectRatio` ∈ `1:1 2:3 3:2 3:4 4:3 4:5 5:4 9:16 16:9 21:9`（十档），
+  `imageSize` ∈ `"1K"/"2K"/"4K"`（**必须大写 K**；gemini-2.5-flash-image 没有
+  该参数，只有 1024px 一档——省略即人人都收）。没有像素尺寸参数。
+- **OpenAI GPT-Image 系（gpt-image-1 / 1-mini / 1.5 / 2）**：
+  `/images/generations` 收 `size` ∈ `1024x1024 / 1536x1024 / 1024x1536 / auto`，
+  **gpt-image-2 额外接受任意 `宽x高`**——两边都要被 16 整除、比例限
+  1:3~3:1、上限 3840x2160（2560x1440 以上官方标注 experimental）；
+  `quality` ∈ `low/medium/high/auto`（价差极大：1024² 约 $0.006 / $0.053 /
+  $0.211）；另有 `output_format`（png/jpeg/webp）、`output_compression`、
+  `background`（transparent/opaque/auto）、`moderation`（low/auto）。
+  **不收 `response_format`**（恒返回 b64）。`/images/edits` 文档只列预设
+  size（auto + 三档），编辑另收 `input_fidelity` ∈ `high/low`。
+
+本项目把这两套各自封成一个「参数方言」（`lib/ai/imageDialects.ts`，
+`ImageCaps.dialect` 声明），UI 按方言给出画幅/分辨率/质量选项，请求侧由
+方言算出该端点真正认识的字段。
+
 ### 兼容层文档的通用规律（六个样本的共同点）
 
 1. **结构照抄，扩展在响应侧。**

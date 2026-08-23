@@ -8,6 +8,7 @@ import Database from "@tauri-apps/plugin-sql";
 import type { SqlStatement } from "../sqlTx";
 import type { GeminiSafetySettings } from "./safety";
 import { authModesFor, type ApiStandard, type AuthMode, type ImageRoute } from "./types";
+import type { ImageDialect } from "./imageDialects";
 import {
   parseReasoningEffort, parseThinkingDialect,
   type ReasoningEffort, type ThinkingDialect,
@@ -37,6 +38,13 @@ export type TranslateFormat = "sakura";
 export interface ImageCaps {
   /** Accepts input images — editing / img2img. False for generate-only endpoints. */
   edit?: boolean;
+  /**
+   * Which parameter language the model speaks (lib/ai/imageDialects.ts):
+   * "nanobanana" = Gemini's aspectRatio/imageSize, "gpt-image-2" = OpenAI's
+   * size/quality. Absent = generic — the free-form `sizes` list below, which a
+   * declared dialect supersedes.
+   */
+  dialect?: ImageDialect;
   /** Sizes the endpoint accepts (e.g. ["1024x1024"]). Empty ⇒ send no size at all. */
   sizes?: string[];
   /** How many reference images one edit request may carry. */

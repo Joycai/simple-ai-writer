@@ -1,0 +1,140 @@
+/**
+ * Image-model parameter dialects.
+ *
+ * An image endpoint's framing controls are not one vocabulary: the Gemini
+ * image models (Nano Banana) take an aspect *ratio* plus a resolution tier
+ * (`imageConfig.aspectRatio` / `imageConfig.imageSize`), while the OpenAI
+ * GPT-Image models take pixel dimensions plus a quality tier (`size` /
+ * `quality`). Declaring which language a model speaks — the same move as a
+ * database dialect — is what lets the UI offer exactly the choices the model
+ * accepts and the request carry exactly the fields the endpoint understands,
+ * instead of one lowest-common-denominator control set.
+ *
+ * A dialect is a *parameter* fact, deliberately separate from `ImageRoute`
+ * (which endpoint shape to call): a relay can serve Nano Banana behind an
+ * OpenAI-shaped URL, and each adapter already sends only the fields its wire
+ * has a spelling for.
+ *
+ * Official parameter surfaces (calibrated 2026-08 against the vendors' docs):
+ *
+ * - Gemini image models: `aspectRatio` ∈ 1:1 2:3 3:2 3:4 4:3 4:5 5:4 9:16
+ *   16:9 21:9; `imageSize` ∈ "1K"|"2K"|"4K" (uppercase K; tier support varies
+ *   by model — omitted means the model default). No pixel-size parameter.
+ * - GPT-Image models: `size` ∈ 1024x1024 | 1536x1024 | 1024x1536 | auto, and
+ *   gpt-image-2 additionally accepts arbitrary WIDTHxHEIGHT with both sides
+ *   divisible by 16, ratio within 1:3..3:1, at most 3840x2160 (above
+ *   2560x1440 is documented as experimental). `quality` ∈ low|medium|high|auto.
+ *   The *edits* endpoint documents only the preset sizes, hence
+ *   `omitSizeOnEdit` — an edit defaults to matching its input image anyway.
+ */
+
+/** The declared dialect ids. Absent = generic (free-form size list). */
+export type ImageDialect = "nanobanana" | "gpt-image-2";
+
+/** The generic wire fields a dialect resolves the author's choices into. */
+export interface ImageWireParams {
+  /** OpenAI-shaped pixel size, e.g. "1536x1024". */
+  size?: string;
+  /** Gemini-shaped aspect ratio, e.g. "3:4". */
+  aspect?: string;
+  /** Gemini resolution tier ("1K" | "2K" | "4K"). */
+  imageSize?: string;
+  /** OpenAI quality tier ("low" | "medium" | "high"). */
+  quality?: string;
+}
+
+/** What the author picked in the UI; the dialect turns it into wire fields. */
+export interface ImageParamSelection {
+  aspect: string;
+  /** Resolution tier from the dialect's own list. "" = the dialect default. */
+  resolution?: string;
+  /** Quality tier from the dialect's own list. "" = send nothing. */
+  quality?: string;
+}
+
+export interface ImageDialectSpec {
+  id: ImageDialect;
+  /** Aspect ratios this dialect's models accept, in display order. */
+  aspects: readonly string[];
+  /** Resolution tiers offered. "" renders as "default" and sends nothing. */
+  resolutions: readonly string[];
+  /** Quality tiers offered, when the dialect has that axis at all. */
+  qualities?: readonly string[];
+  /**
+   * The edits endpoint documents a narrower size set than generations
+   * (gpt-image-2's arbitrary sizes are a generations-only fact), and an edit
+   * defaults to its input image's framing — so this dialect's edit requests
+   * drop `size` rather than gamble on a value the endpoint may reject.
+   */
+  omitSizeOnEdit?: boolean;
+  /** Turn the author's choices into the fields the wire should carry. */
+  params(sel: ImageParamSelection): ImageWireParams;
+}
+
+/** The one aspect list both current dialects accept in full (Gemini's ten). */
+const WIDE_ASPECTS = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"] as const;
+
+/**
+ * Short-side pixels per GPT-Image resolution tier. 1K reproduces the three
+ * documented presets exactly; 2K tops out at the documented non-experimental
+ * ceiling (2560x1440 at 16:9); 4K at the hard maximum (3840x2160 at 16:9).
+ */
+const GPT_SHORT_SIDE: Record<string, number> = { "1K": 1024, "2K": 1440, "4K": 2160 };
+const GPT_MAX_LONG = 3840;
+
+const round16 = (n: number): number => Math.max(16, Math.round(n / 16) * 16);
+
+/**
+ * Compute the gpt-image-2 pixel size for an aspect ratio and tier.
+ *
+ * Both sides divisible by 16 (the endpoint's own rule), long side capped at
+ * 3840 — when the cap bites (21:9 at 4K), the short side shrinks to keep the
+ * requested ratio rather than silently changing the framing.
+ */
+export function gptImageSize(aspect: string, tier: string): string {
+  const [aw, ah] = aspect.split(":").map(Number);
+  if (!aw || !ah) return "1024x1024";
+  const ratio = Math.max(aw, ah) / Math.min(aw, ah);
+  let short = GPT_SHORT_SIDE[tier] ?? GPT_SHORT_SIDE["1K"];
+  let long = round16(short * ratio);
+  if (long > GPT_MAX_LONG) {
+    long = GPT_MAX_LONG;
+    short = round16(GPT_MAX_LONG / ratio);
+  }
+  return aw >= ah ? `${long}x${short}` : `${short}x${long}`;
+}
+
+const NANOBANANA: ImageDialectSpec = {
+  id: "nanobanana",
+  aspects: WIDE_ASPECTS,
+  // "" first: the model default (1K-class) is right for most runs, and older
+  // revisions (gemini-2.5-flash-image) have no imageSize parameter at all —
+  // sending nothing is the one request every revision accepts.
+  resolutions: ["", "1K", "2K", "4K"],
+  params: (sel) => ({
+    aspect: sel.aspect,
+    ...(sel.resolution ? { imageSize: sel.resolution } : {}),
+  }),
+};
+
+const GPT_IMAGE_2: ImageDialectSpec = {
+  id: "gpt-image-2",
+  aspects: WIDE_ASPECTS,
+  resolutions: ["1K", "2K", "4K"],
+  qualities: ["low", "medium", "high"],
+  omitSizeOnEdit: true,
+  params: (sel) => ({
+    // The aspect rides along untouched: the images route ignores it, but the
+    // chat route (relay-hosted models) folds it into the prompt.
+    aspect: sel.aspect,
+    size: gptImageSize(sel.aspect, sel.resolution || "1K"),
+    ...(sel.quality ? { quality: sel.quality } : {}),
+  }),
+};
+
+export const IMAGE_DIALECTS: readonly ImageDialectSpec[] = [NANOBANANA, GPT_IMAGE_2];
+
+/** The spec for a declared dialect, or null for generic / unknown values. */
+export function imageDialect(id: string | undefined): ImageDialectSpec | null {
+  return IMAGE_DIALECTS.find((d) => d.id === id) ?? null;
+}
