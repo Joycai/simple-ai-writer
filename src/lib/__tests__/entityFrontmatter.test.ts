@@ -50,4 +50,20 @@ describe("serializeEntityFrontmatter / parseFrontmatter round-trip", () => {
     const data = roundTrip(meta);
     expect(data.aliases).toEqual(['Bob "The Bear"']);
   });
+
+  it("dict: true round-trips; unmarked entities don't carry the line at all", () => {
+    const marked: EntityMeta = {
+      name: "词典·人名", aliases: [], category: "custom", summary: "", dict: true,
+    };
+    // The line-based parser yields the string "true" — the same value
+    // readEntity accepts (see entity.ts).
+    expect(roundTrip(marked).dict).toBe("true");
+
+    const plain: EntityMeta = {
+      name: "Ava", aliases: [], category: "characters", summary: "",
+    };
+    // Absent, not `dict: false`: every pre-existing entity's frontmatter must
+    // stay byte-identical to what it was before the field existed.
+    expect(serializeEntityFrontmatter(plain)).not.toContain("dict");
+  });
 });

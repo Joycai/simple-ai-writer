@@ -224,7 +224,8 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
         category: pCategory,
         summary: pSummary.trim(),
       };
-      await saveEntityMetaAndBody(projectPath, entity, meta, body);
+      // dict 原样带过去：AI 的元数据建议不该顺手抹掉词典标记。
+      await saveEntityMetaAndBody(projectPath, entity, { ...meta, dict: entity.dict }, body);
       await scanProject(projectPath);
       requestClose();
     } catch (e) {

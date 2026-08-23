@@ -45,20 +45,16 @@ function shortNote(summary: string): string | undefined {
 }
 
 /**
- * 「翻译词典」条目的标记名。
+ * 这个条目是不是一本翻译词典。
  *
  * 别名通道一个条目只能表达一个译名；作者手里现成的对照词表需要一个整批的家。
- * **名字或任一别名**等于这个词的条目（任何分类下，可以有多个）的**正文**按
- * {@link parseDictBody} 解析成词条，和别名通道合并。走别名是让条目名保持
- * 自由——「词典·人名」「词典·地名」各挂一个「翻译词典」别名即可。精确匹配
- * 而不是靠格式嗅探：一段碰巧含 `A->B` 的普通条目正文不该悄悄变成词典。
+ * 判据是条目编辑表单里作者**显式勾选**的开关（frontmatter `dict: true`，见
+ * `LoreEntity.dict`），不是名字约定、不是格式嗅探——识别永远不会误判，条目
+ * 名也保持自由（「词典·人名」「词典·地名」随便起）。任何分类下都行，可以有
+ * 多本，正文按 {@link parseDictBody} 解析成词条，和别名通道合并。
  */
-export const DICT_ENTITY_NAME = "翻译词典";
-
-/** 这个条目是不是一本翻译词典。 */
-export function isDictEntity(e: Pick<LoreEntity, "name" | "aliases">): boolean {
-  if (e.name.trim() === DICT_ENTITY_NAME) return true;
-  return (e.aliases ?? []).some((a) => a.trim() === DICT_ENTITY_NAME);
+export function isDictEntity(e: Pick<LoreEntity, "dict">): boolean {
+  return e.dict === true;
 }
 
 /**

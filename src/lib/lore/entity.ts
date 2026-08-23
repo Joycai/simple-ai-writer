@@ -115,6 +115,7 @@ async function readEntity(
   let name = id;
   let aliases: string[] = [];
   let summary = "";
+  let dict = false;
 
   try {
     const raw = await readFile(indexPath);
@@ -122,6 +123,9 @@ async function readEntity(
     if (typeof data.name === "string") name = data.name;
     if (Array.isArray(data.aliases)) aliases = data.aliases as string[];
     if (typeof data.summary === "string") summary = data.summary;
+    // The line-based frontmatter parser yields the string "true"; a real
+    // boolean would mean the parser grew types, so accept both.
+    dict = data.dict === true || data.dict === "true";
   } catch {
     // index.md missing — entity still listed with defaults
   }
@@ -177,7 +181,7 @@ async function readEntity(
     }
   }
 
-  return { id, category, dirPath, name, aliases, summary, avatarPath, mdFiles, images, facets };
+  return { id, category, dirPath, name, aliases, summary, dict, avatarPath, mdFiles, images, facets };
 }
 
 /**
@@ -367,6 +371,9 @@ export function serializeEntityFrontmatter(meta: EntityMeta): string {
     aliasBlock,
     `category: ${meta.category}`,
     `summary: ${yamlQuote(meta.summary)}`,
+    // Only marked dictionaries carry the line — every other entity's
+    // frontmatter stays exactly what it was before the field existed.
+    ...(meta.dict ? ["dict: true"] : []),
     "---",
     "",
   ].join("\n");

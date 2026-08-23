@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { LoreEntity, LoreIndex } from "../../lore/model";
 import {
   collectGlossary,
-  DICT_ENTITY_NAME,
   enforceGlossary,
   formatGlossary,
   MAX_GLOSSARY_ENTRIES,
@@ -10,7 +9,7 @@ import {
   type GlossaryEntry,
 } from "../glossary";
 
-function entity(name: string, aliases: string[], summary = ""): LoreEntity {
+function entity(name: string, aliases: string[], summary = "", dict = false): LoreEntity {
   return {
     id: name,
     category: "characters",
@@ -18,6 +17,7 @@ function entity(name: string, aliases: string[], summary = ""): LoreEntity {
     name,
     aliases,
     summary,
+    dict,
     avatarPath: null,
     mdFiles: [],
     images: [],
@@ -142,19 +142,20 @@ describe("collectGlossary + 翻译词典", () => {
     expect(entries).toEqual([{ src: "文香", dst: "文乃", note: "词典指定" }]);
   });
 
-  it("词典条目自身不进别名通道", () => {
+  it("勾了开关的条目不进别名通道 —— 它的名字/别名是给作者找条目用的，不是译名", () => {
     const idx: LoreIndex = {
-      custom: [entity(DICT_ENTITY_NAME, ["じしょ"], "词表条目")],
+      custom: [entity("词典·人名", ["じしょ"], "词表条目", true)],
     };
     expect(collectGlossary(idx, "じしょ", [])).toEqual([]);
   });
 
-  it("别名挂「翻译词典」也算词典条目 —— 条目名保持自由", () => {
+  it("没勾开关的条目就算叫「翻译词典」也只是普通条目 —— 判据是开关，不是名字", () => {
     const idx: LoreIndex = {
-      custom: [entity("词典·人名", [DICT_ENTITY_NAME, "じんめい"], "")],
+      custom: [entity("翻译词典", ["じしょ"], "")],
     };
-    // 被认成词典后不进别名通道，别名 じんめい 也不再是源词。
-    expect(collectGlossary(idx, `じんめい、${DICT_ENTITY_NAME}`, [])).toEqual([]);
+    expect(collectGlossary(idx, "じしょ", [])).toEqual([
+      { src: "じしょ", dst: "翻译词典", note: undefined },
+    ]);
   });
 
   it("上限对两个通道合并计数", () => {

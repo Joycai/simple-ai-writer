@@ -706,6 +706,21 @@
 }
 .eTextarea { resize: vertical; }
 
+/* 翻译词典开关：编辑表单网格里的一格，复选框 + 说明一行。 */
+.eCheck {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding-top: 5px;
+  font: 400 12.5px/1.5 var(--font-sans);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.eCheck input {
+  margin-top: 2px;
+  accent-color: var(--color-sienna);
+}
+
 /* eInput's skin for the shared Select trigger — doubled to outrank the base
    class deterministically (see common/Select). */
 .eSelect.eSelect {

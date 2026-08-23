@@ -537,7 +537,9 @@ export async function updateLoreMetaTool(
   await saveEntityMetaAndBody(
     ctx.projectPath,
     entity,
-    { name, aliases, category: entity.category, summary },
+    // dict is carried through, never set here: marking a dictionary is the
+    // author's explicit act in the entity editor (see EntityMeta.dict).
+    { name, aliases, category: entity.category, summary, dict: entity.dict },
     body,
   );
   entity.aliases = aliases;
@@ -1036,7 +1038,7 @@ export async function moveLoreEntityTool(
   const moved = await saveEntityMetaAndBody(
     ctx.projectPath,
     entity,
-    { name: newName ?? entity.name, aliases, category: newCategory ?? entity.category, summary },
+    { name: newName ?? entity.name, aliases, category: newCategory ?? entity.category, summary, dict: entity.dict },
     body,
   );
   relocateInSnapshot(ctx.loreIndex, entity, moved);
