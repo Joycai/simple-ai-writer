@@ -16,6 +16,7 @@ import {
 } from "../lib/context/budget";
 import { BOOK_PREV_TAIL_CHARS, buildBookContext } from "../lib/context/bookContext";
 import { hashText, loadMemory, projectRelativePath } from "../lib/context/memory";
+import { workflowBriefingSection } from "../lib/workflow";
 import type { LoreActivationReport } from "../lib/context/loreSelect";
 import type { StreamMessage } from "../lib/ai/types";
 import { useAgentStore } from "./agentStore";
@@ -309,6 +310,13 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       instruction = builtIn ? `${builtIn}\n\n${ask}` : ask;
     } else {
       instruction = builtIn;
+    }
+    // The workflow roster goes to every full-toolset task (the capability the
+    // read_workflow tool ships with, per presets) — matched on the declared
+    // tool tier, never on the task id.
+    if (task.tools === "full") {
+      const workflowSection = await workflowBriefingSection(projectPath);
+      if (workflowSection) instruction += `\n\n${workflowSection}`;
     }
     // An empty document has no 【近期内容】 for the model to continue, so the last
     // prose in the prompt is whatever bridge got injected — and "continue from

@@ -453,7 +453,11 @@ describe("runTask — instruction", () => {
 
   it("treats a freeform task's built-in text as a prefix to the author's ask", async () => {
     // This is how a domain task gets its briefing without losing the request.
-    expect(await instructionOf("agent", "整理设定")).toBe("ai.instructions.agent\n\n整理设定");
+    // The workflow roster rides at the end of every full-toolset task (the
+    // tier read_workflow ships with); i18n echoes the section's key here.
+    expect(await instructionOf("agent", "整理设定")).toBe(
+      "ai.instructions.agent\n\n整理设定\n\nai.instructions.workflows",
+    );
   });
 
   it("sends only the ask when a freeform task has no built-in text", async () => {
@@ -473,6 +477,10 @@ describe("runTask — instruction", () => {
     useAiStore.setState({
       prompts: [{ id: "p", name: "mine", scene: "agent", content: "MY BRIEFING" }] as never,
     });
-    expect(await instructionOf("agent", "整理设定")).toBe("MY BRIEFING\n\n整理设定");
+    // The override swaps the briefing; the workflow roster still applies — it
+    // is tied to the tool tier, not to the briefing text.
+    expect(await instructionOf("agent", "整理设定")).toBe(
+      "MY BRIEFING\n\n整理设定\n\nai.instructions.workflows",
+    );
   });
 });

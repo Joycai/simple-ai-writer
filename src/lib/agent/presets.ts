@@ -140,6 +140,7 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "read_slides",
     "search_text",
     "read_memory",
+    "read_workflow",
     "propose_lore_plan",
     "create_lore_entity",
     "update_lore_file",
