@@ -6,6 +6,7 @@ import { MAX_DRAFTS } from "../lib/ai/drafts";
 import { isRoleplayEnabled } from "../lib/roleplay/flag";
 import { DEFAULT_MAX_OUTPUT_KEY, DEFAULT_MAX_OUTPUT_MAX } from "../lib/ai/modelLimits";
 import { isSamePath } from "../lib/paths";
+import { docModel } from "../lib/profile/active";
 import {
   CONTEXT_UTILIZATION_DEFAULT,
   CONTEXT_UTILIZATION_MAX,
@@ -166,6 +167,17 @@ export type SettingsTab =
   | "sync";
 export type SideTab = "files" | "outline" | "search";
 
+/**
+ * A *screen* — one destination of the icon rail, and what the ⌘1‥⌘5 shortcuts
+ * switch between (see `showScreen`).
+ *
+ * Deliberately not `MainView`: two of the five are sidebar panels sharing the
+ * editor view and one is the settings overlay, which is not a MainView at all.
+ * The rail's own vocabulary is the one the author sees, so it is the one the
+ * shortcuts speak.
+ */
+export type AppScreen = "files" | "outline" | "knowledge" | "library" | "settings";
+
 interface AppState {
   theme: ThemeMode;
   language: Language;
@@ -246,6 +258,14 @@ interface AppState {
   reloadFromPrefs: () => void;
 
   setMainView: (v: MainView) => void;
+  /**
+   * Go to one screen — the keyboard's equivalent of clicking an icon-rail
+   * button, minus the rail's click-to-collapse toggle: a shortcut that
+   * sometimes lands somewhere and sometimes closes the panel is a shortcut
+   * nobody trusts. Settings is an overlay over everything else, so every other
+   * screen closes it on the way past.
+   */
+  showScreen: (screen: AppScreen) => void;
   setShowCommandPalette: (v: boolean) => void;
   setShowAiDrawer: (v: boolean, mode?: AiDrawerMode) => void;
   /** Open the assistant header's model picker (see `modelPickerNonce`). */
@@ -444,6 +464,36 @@ export const useAppStore = create<AppState>((set, get) => ({
   setActiveSideTab: (tab) => set({ activeSideTab: tab }),
 
   setMainView: (v) => set({ mainView: v }),
+
+  showScreen: (screen) => {
+    const s = get();
+    // The palette is modal — whatever it was asked to find, the answer was
+    // "go here", and leaving it up would cover the screen it just reached.
+    // The AI drawer is a companion panel, not a modal: it stays.
+    if (s.showCommandPalette) s.setShowCommandPalette(false);
+    if (screen === "settings") {
+      s.openSettings();
+      return;
+    }
+    if (s.showSettings) s.closeSettings();
+    if (screen === "knowledge") {
+      s.setMainView("lore-wall");
+      return;
+    }
+    if (screen === "library") {
+      // Same gate the rail applies: without the ordered spine there is no
+      // library to show, and `useMainView` would bounce it back to the editor
+      // anyway — leaving a stored view no rail icon is lit for.
+      if (!docModel().ordered) return;
+      s.setMainView("library");
+      return;
+    }
+    // files / outline: sidebar panels, so the workbench has to be showing and
+    // the sidebar unfolded for the switch to be visible at all.
+    s.setMainView("editor");
+    s.setActiveSideTab(screen);
+    s.setSidebarCollapsed(false);
+  },
   setShowCommandPalette: (v) => set({ showCommandPalette: v }),
   // Omitting `mode` means "just open it" — the drawer comes back on whichever
   // tab was last used. Only the mode-specific entry points (Ctrl+J/Ctrl+L, the

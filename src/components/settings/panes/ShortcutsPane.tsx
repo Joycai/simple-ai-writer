@@ -3,7 +3,7 @@ import { SHORTCUTS, comboLabel, type ShortcutCategory, type ShortcutDef } from "
 import { Pane, PaneHeader, Section } from "./bits";
 import ui from "../settingsUi.module.css";
 
-const SHORTCUT_CATEGORY_ORDER: ShortcutCategory[] = ["global", "file", "ai", "editor", "contextual"];
+const SHORTCUT_CATEGORY_ORDER: ShortcutCategory[] = ["global", "view", "file", "ai", "editor", "contextual"];
 
 /**
  * One key box per binding. `combosLabel` joins alternates with " / " (⌘[ / ⌘←),

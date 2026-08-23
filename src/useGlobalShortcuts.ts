@@ -11,6 +11,7 @@ import {
   matchesCombo,
   NAV_BACK_COMBOS,
   NAV_FORWARD_COMBOS,
+  SCREEN_COMBOS,
   type Combo,
 } from "./lib/shortcuts";
 import { navBack, navForward } from "./stores/navStore";
@@ -60,6 +61,15 @@ export function useGlobalShortcuts() {
       if (matchesCombo(e, { mod: true, key: "," })) {
         e.preventDefault();
         useAppStore.getState().openSettings();
+        return;
+      }
+      // ⌘1‥⌘5 — the icon rail from the keyboard. Ahead of the AI block and
+      // free of any caret guard: a modifier+digit is not text input, so these
+      // work with the cursor sitting in the manuscript.
+      for (const { screen, combo } of SCREEN_COMBOS) {
+        if (!matchesCombo(e, combo)) continue;
+        e.preventDefault();
+        useAppStore.getState().showScreen(screen);
         return;
       }
       if (matchesCombo(e, { mod: true, key: "s" })) {

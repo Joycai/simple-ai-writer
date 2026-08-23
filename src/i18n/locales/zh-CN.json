@@ -252,6 +252,7 @@
     "shortcuts": {
       "categories": {
         "global": "全局",
+        "view": "视图切换",
         "file": "文件",
         "ai": "AI",
         "editor": "编辑器",
@@ -263,6 +264,10 @@
         "aiGenerateDrawer": "切换 AI 生成任务面板",
         "closeOverlays": "关闭命令面板 / AI 抽屉",
         "openSettings": "打开设置",
+        "viewFiles": "切换到文档树（工作台）",
+        "viewOutline": "切换到大纲",
+        "viewKnowledge": "切换到知识库",
+        "viewLibrary": "切换到文库",
         "navBack": "后退（上一个位置）",
         "navForward": "前进（下一个位置）",
         "saveFile": "保存当前文件",

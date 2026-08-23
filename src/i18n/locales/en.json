@@ -252,6 +252,7 @@
     "shortcuts": {
       "categories": {
         "global": "Global",
+        "view": "Screens",
         "file": "File",
         "ai": "AI",
         "editor": "Editor",
@@ -263,6 +264,10 @@
         "aiGenerateDrawer": "Toggle the AI generate-task panel",
         "closeOverlays": "Close the command palette / AI drawer",
         "openSettings": "Open Settings",
+        "viewFiles": "Go to Files (workbench)",
+        "viewOutline": "Go to Outline",
+        "viewKnowledge": "Go to Knowledge Base",
+        "viewLibrary": "Go to Library",
         "navBack": "Back (previous location)",
         "navForward": "Forward (next location)",
         "saveFile": "Save the current file",
