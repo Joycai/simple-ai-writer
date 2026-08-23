@@ -61,3 +61,44 @@ describe("checkPlan", () => {
     expect(check.ok).toBe(false);
   });
 });
+
+// update_facet_meta and delete_lore_file are the other two facet-level write
+// tools (writeTools.ts) — both gate through this same checkPlan, with the same
+// (entity.name, file) shape update_lore_file uses. These pin down that each
+// gets the outcome its own gate() call actually needs, not just that the
+// fallback exists in the abstract.
+describe("checkPlan — update_facet_meta and delete_lore_file's own gate() calls", () => {
+  // update_facet_meta gates as "update" (writeTools.ts) exactly like
+  // update_lore_file, so a plan step for a facet the author approved as
+  // "create" must also let the model set that facet's slot/keys/etc.
+  // afterwards — without this it could write the facet's body but never
+  // classify it.
+  it("lets update_facet_meta's gate() call satisfy a 'create' plan step", () => {
+    const gate = gateWith([
+      { action: "create", entity: "早乙女文香", file: "outfit_battle.md", detail: "new facet" },
+    ]);
+    const check = checkPlan(gate, emptyIndex, "update", "早乙女文香", "outfit_battle.md");
+    expect(check.ok).toBe(true);
+  });
+
+  // delete_lore_file gates as "delete" — there is no create/update naming
+  // ambiguity to paper over here (a plan author has no reason to call removing
+  // a facet "create"), so it must NOT pick up the fallback: a plan that only
+  // approved creating/updating this file still must not authorise deleting it.
+  it("does NOT let delete_lore_file's gate() call ride the create/update fallback", () => {
+    const gate = gateWith([
+      { action: "create", entity: "早乙女文香", file: "outfit_battle.md", detail: "new facet" },
+      { action: "update", entity: "早乙女文香", file: "outfit_battle.md", detail: "later edit" },
+    ]);
+    const check = checkPlan(gate, emptyIndex, "delete", "早乙女文香", "outfit_battle.md");
+    expect(check.ok).toBe(false);
+  });
+
+  it("still passes delete_lore_file's gate() call against a matching 'delete' step", () => {
+    const gate = gateWith([
+      { action: "delete", entity: "早乙女文香", file: "outfit_old.md", detail: "superseded" },
+    ]);
+    const check = checkPlan(gate, emptyIndex, "delete", "早乙女文香", "outfit_old.md");
+    expect(check.ok).toBe(true);
+  });
+});
