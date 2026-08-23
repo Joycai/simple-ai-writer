@@ -106,6 +106,20 @@ describe("parseDictBody", () => {
     ]);
   });
 
+  it("= 和 ＝ 也是分隔符 —— GalTransl 等工具词表的惯用格式，实机踩过被静默跳过", () => {
+    const body = "文香=芙美香 #主人公\nふみちん＝小芙";
+    expect(parseDictBody(body)).toEqual([
+      { src: "文香", dst: "芙美香", note: "主人公" },
+      { src: "ふみちん", dst: "小芙" },
+    ]);
+  });
+
+  it("同一行里箭头优先于 = —— src 懒匹配切在第一个分隔符上", () => {
+    // 备注里出现 = 不该把词条切错。
+    const [e] = parseDictBody("文香->芙美香 #罗马字 fumika=ka");
+    expect(e).toEqual({ src: "文香", dst: "芙美香", note: "罗马字 fumika=ka" });
+  });
+
   it("标题、说明文字、空行静默跳过 —— 正文允许夹杂说明", () => {
     const body = "# 术语\n\n这是给翻译用的词表。\n\n文香->芙美香";
     expect(parseDictBody(body)).toEqual([{ src: "文香", dst: "芙美香" }]);

@@ -14,6 +14,7 @@
  */
 
 import { readPref, writePref } from "../prefs";
+import { DEFAULT_LINES_PER_CHUNK } from "./chunk";
 
 const KEY = "app:translateBeta";
 
@@ -42,4 +43,34 @@ export function isTranslateLoreEnabled(): boolean {
 
 export function setTranslateLoreEnabled(enabled: boolean): void {
   writePref(LORE_KEY, enabled ? "1" : "0");
+}
+
+const CHUNK_KEY = "ai:translate:linesPerChunk";
+
+/**
+ * 块大小的合法化：1–100 之间的整数，解析不出来就回默认。
+ *
+ * 独立出来是为了可测——pref 的读写在单测里碰不得，夹取规则可以。
+ */
+export function clampChunkLines(raw: string | number | undefined | null): number {
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n)) return DEFAULT_LINES_PER_CHUNK;
+  return Math.min(100, Math.max(1, n));
+}
+
+/**
+ * 每块送多少行（设置 → 子代理 → 日中翻译）。
+ *
+ * 默认 50 是在一台 14B/LM Studio 上实测的安全区（chunk.ts 文件头第 3 条），但
+ * 它只对那类部署成立——更小的模型或更小的上下文窗口在 50 行上会当场退化甚至
+ * 挂掉，而这不是重试阶梯救得回来的（阶梯的前提是请求能回来）。所以它必须是
+ * 作者可调的：模型不稳就调小，1 就是逐行翻。
+ */
+export function translateLinesPerChunk(): number {
+  const raw = readPref(CHUNK_KEY);
+  return raw === undefined || raw === null || raw === "" ? DEFAULT_LINES_PER_CHUNK : clampChunkLines(raw);
+}
+
+export function setTranslateLinesPerChunk(n: number): void {
+  writePref(CHUNK_KEY, String(clampChunkLines(n)));
 }

@@ -26,7 +26,7 @@ import type { ToolResult } from "../agent/tools";
 import { subAgentModel } from "../agent/subagent";
 import { parseFrontmatter } from "../fs/markdown";
 import { splitDocument } from "./chunk";
-import { isTranslateLoreEnabled } from "./flag";
+import { isTranslateLoreEnabled, translateLinesPerChunk } from "./flag";
 import { isDictEntity, parseDictBody, type GlossaryEntry } from "./glossary";
 import { runChunk, runDocument, type DocProgress } from "./run";
 
@@ -60,27 +60,41 @@ async function resolveTranslateConn(): Promise<AiConn | { error: string }> {
 }
 
 /**
- * 读「翻译词典」条目的正文，解析成词条。
+ * 读勾了「翻译词典」开关的条目正文，解析成词条。
  *
- * 别名通道一个条目只能表达一个译名；名叫「翻译词典」的条目（任何分类下）用
- * 正文整批装 `原文->译文 #备注`。正文不在 LoreIndex 里（懒加载），所以一次
- * 运行开始时读一遍——词表属于整份文档，逐块命中筛选仍在 `collectGlossary`。
+ * 别名通道一个条目只能表达一个译名；词典条目用正文整批装 `原文->译文 #备注`
+ * （`=`/`→` 也认，见 parseDictBody）。正文不在 LoreIndex 里（懒加载），所以
+ * 一次运行开始时读一遍——词表属于整份文档，逐块命中筛选仍在 `collectGlossary`。
+ *
+ * `warning`：词典条目**存在**却一条都没解析出来，几乎必然是格式没对上（比如
+ * 每行写成了表格或散文）。这曾是静默的——作者以为词典在生效，其实一条都没
+ * 送出去，且没有任何信号。现在把它说出来。
  */
-async function loadTranslateDict(ctx: ToolContext): Promise<GlossaryEntry[]> {
-  if (!isTranslateLoreEnabled() || !ctx.loreIndex) return [];
-  const out: GlossaryEntry[] = [];
+async function loadTranslateDict(
+  ctx: ToolContext,
+): Promise<{ entries: GlossaryEntry[]; warning?: string }> {
+  if (!isTranslateLoreEnabled() || !ctx.loreIndex) return { entries: [] };
+  const entries: GlossaryEntry[] = [];
+  let dictEntities = 0;
   for (const list of Object.values(ctx.loreIndex)) {
     for (const e of list) {
       if (!isDictEntity(e)) continue;
+      dictEntities++;
       try {
         const raw = await readFile(`${e.dirPath}/index.md`);
-        out.push(...parseDictBody(parseFrontmatter(raw).content));
+        entries.push(...parseDictBody(parseFrontmatter(raw).content));
       } catch {
         // 条目可能正被删或还没有 index.md——词典缺席只是少一批词条，不是错误。
       }
     }
   }
-  return out;
+  const warning =
+    dictEntities > 0 && entries.length === 0
+      ? `WARNING: ${dictEntities} dictionary entr${dictEntities > 1 ? "ies are" : "y is"} marked 翻译词典 but ZERO term pairs parsed from their bodies. ` +
+        "Each line must be `原文->译文` (`=` and `→` also accepted, optional ` #note`). " +
+        "Tell the author their dictionary is currently having no effect."
+      : undefined;
+  return { entries, warning };
 }
 
 export interface TranslateArgs {
@@ -175,7 +189,7 @@ async function translatePassage(
 ): Promise<ToolResult> {
   const fail = (msg: string): ToolResult => ({ toolCallId, content: `Error: ${msg}` });
 
-  const { allLines, chunks } = splitDocument(text);
+  const { allLines, chunks } = splitDocument(text, { linesPerChunk: translateLinesPerChunk() });
   if (!chunks.length) {
     return fail(
       "nothing to translate — no Japanese was found in that text. This model only translates Japanese into Chinese.",
@@ -188,10 +202,11 @@ async function translatePassage(
     );
   }
 
+  const dict = await loadTranslateDict(ctx);
   const outcome = await runChunk(chunks[0], {
     conn: connOptions(conn),
     loreIndex: isTranslateLoreEnabled() ? ctx.loreIndex : undefined,
-    dict: await loadTranslateDict(ctx),
+    dict: dict.entries,
     signal: ctx.signal,
   });
   await recordUsage(ctx, conn, outcome.usage);
@@ -208,7 +223,12 @@ async function translatePassage(
   // 按行号装回，于是空行和 URL 保持原位——原文的形状就是译文的形状。
   const out = [...allLines];
   for (const l of outcome.lines) out[l.index] = l.text;
-  return { toolCallId, content: out.join("\n") };
+  // 词典报警放译文后面、明确括开：这段 content 的主体是译文本身，警告只能
+  // 作为附注出现，避免模型把它当译文的一部分抄进文档。
+  return {
+    toolCallId,
+    content: out.join("\n") + (dict.warning ? `\n\n[${dict.warning}]` : ""),
+  };
 }
 
 /** 项目里的一份文档。分块跑完，产物走审批卡片。 */
@@ -242,11 +262,13 @@ async function translateFile(
   }
 
   const original = await readFile(source);
+  const dict = await loadTranslateDict(ctx);
   const outcome = await runDocument(original, {
     conn: connOptions(conn),
     loreIndex: isTranslateLoreEnabled() ? ctx.loreIndex : undefined,
-    dict: await loadTranslateDict(ctx),
+    dict: dict.entries,
     signal: ctx.signal,
+    linesPerChunk: translateLinesPerChunk(),
     onProgress: progressReporter(ctx, toolCallId, baseName(source)),
   });
   // 记在账上，无论成败：失败的那些请求也真的发出去了。
@@ -291,6 +313,7 @@ async function translateFile(
     toolCallId,
     content: [
       `Saved to ${dest}. ${summary}`,
+      ...(dict.warning ? [dict.warning] : []),
       ...(outcome.failed.length
         ? [
             `${outcome.failed.length} chunk(s) could not be translated and are left as the ORIGINAL Japanese, ` +
