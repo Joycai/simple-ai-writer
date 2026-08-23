@@ -484,45 +484,52 @@ export async function writeTaskNote(
   taskId: string,
   opts: { slug: string; title: string; content: string; sources?: string[]; origin?: NoteOrigin },
 ): Promise<TaskNoteHeader> {
-  const base = sanitizeSlug(opts.slug);
-  const notesDir = taskNotesDir(projectPath, taskId);
-  await makeDir(notesDir);
+  // Under the shared write chain: the slug probe below is check-then-write,
+  // and two notes landing concurrently — a round's delegations now run in
+  // parallel (agent/runtime) — could both see the same name free and one
+  // would silently overwrite the other, which is exactly the loss this
+  // function's no-overwrite rule exists to prevent.
+  return serializeTaskWrite(async () => {
+    const base = sanitizeSlug(opts.slug);
+    const notesDir = taskNotesDir(projectPath, taskId);
+    await makeDir(notesDir);
 
-  // Never overwrite. Two findings that happen to share a slug are two
-  // findings; silently replacing the first is the same data loss the notes
-  // directory exists to prevent, and the model has no way to notice it
-  // happened. `renamedFrom` lets the tool tell it what the file ended up called.
-  let slug = base;
-  for (let n = 2; n <= MAX_SLUG_ATTEMPTS; n++) {
-    if (!(await fileExists(`${notesDir}/${slug}.md`))) break;
-    slug = `${base}-${n}`;
-  }
+    // Never overwrite. Two findings that happen to share a slug are two
+    // findings; silently replacing the first is the same data loss the notes
+    // directory exists to prevent, and the model has no way to notice it
+    // happened. `renamedFrom` lets the tool tell it what the file ended up called.
+    let slug = base;
+    for (let n = 2; n <= MAX_SLUG_ATTEMPTS; n++) {
+      if (!(await fileExists(`${notesDir}/${slug}.md`))) break;
+      slug = `${base}-${n}`;
+    }
 
-  const meta: NoteMeta = {
-    ...(opts.origin ? { origin: opts.origin } : {}),
-    ...(opts.sources && opts.sources.length > 0 ? { sources: opts.sources.length } : {}),
-  };
+    const meta: NoteMeta = {
+      ...(opts.origin ? { origin: opts.origin } : {}),
+      ...(opts.sources && opts.sources.length > 0 ? { sources: opts.sources.length } : {}),
+    };
 
-  let body = "";
-  if (Object.keys(meta).length > 0) {
-    body += `<!-- ai-writer-note ${JSON.stringify(meta)} -->\n`;
-  }
-  body += `# ${opts.title.trim()}\n\n`;
-  if (opts.sources && opts.sources.length > 0) {
-    body += `> ${i18n.t("ai.taskDoc.sources")}\n${opts.sources.map((s) => `> - ${s}`).join("\n")}\n\n`;
-  }
-  body += opts.content.trim() + "\n";
+    let body = "";
+    if (Object.keys(meta).length > 0) {
+      body += `<!-- ai-writer-note ${JSON.stringify(meta)} -->\n`;
+    }
+    body += `# ${opts.title.trim()}\n\n`;
+    if (opts.sources && opts.sources.length > 0) {
+      body += `> ${i18n.t("ai.taskDoc.sources")}\n${opts.sources.map((s) => `> - ${s}`).join("\n")}\n\n`;
+    }
+    body += opts.content.trim() + "\n";
 
-  await writeFile(`${notesDir}/${slug}.md`, body);
+    await writeFile(`${notesDir}/${slug}.md`, body);
 
-  return {
-    slug,
-    title: opts.title.trim(),
-    path: `.ai-writer/tasks/${taskId}/notes/${slug}.md`,
-    chars: body.length,
-    ...meta,
-    ...(slug === base ? {} : { renamedFrom: base }),
-  };
+    return {
+      slug,
+      title: opts.title.trim(),
+      path: `.ai-writer/tasks/${taskId}/notes/${slug}.md`,
+      chars: body.length,
+      ...meta,
+      ...(slug === base ? {} : { renamedFrom: base }),
+    };
+  });
 }
 
 const NOTE_PAGE_CHARS = 4000;
