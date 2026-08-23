@@ -1,7 +1,8 @@
 # 工作流卡 · 概要设计
 
-> **Status: proposal** · 2026-08-23
-> 方向已定（作者拍板要 A 类：提示词式、best-effort），具体设计待审。审过后此行改 `planned`。
+> **Status: planned** · 2026-08-23 审定
+> 方向与设计已定（A 类：提示词式、best-effort）。审定时的追加：**内置卡随 app 发布，
+> 开箱即用；项目目录里同 id 的文件整张覆盖内置**（见 §2）。
 
 ## 1. 问题
 
@@ -39,6 +40,11 @@ description: 作者要翻译日文文档时，先确认输出格式再动手
 - frontmatter：`name`（清单里显示）、`description`（一行，模型判断"该不该加载"的唯一
   依据，限长 ~60 字）、`disabled: true`（可选，停用但保留）。复用 `parseFrontmatter`。
 - 正文：自由 markdown——步骤、样例、格式模板。给模型看的，不注入任何正文写作上下文。
+  内置卡正文不走 i18n：读者是模型，不是 UI。
+- **内置 + 项目覆盖**（审定追加）：app 自带一组内置卡（`lib/workflow/builtins.ts`），
+  开箱即用；`.ai-writer/workflows/<id>.md` 与内置同 id 时**整张替换**（含 `disabled: true`
+  时隐藏该内置卡），不同 id 则是项目新增。覆盖是整张而不是逐字段合并——半张来自文件
+  半张来自内置的卡没法讲清楚是谁的。第一张内置卡：「翻译输出格式」（§6 的 dogfood）。
 - **项目级**。工作流描述的是"这个项目里的活怎么干"，跟着项目走。
 
 ## 3. 注入机制：两级渐进披露
@@ -87,7 +93,7 @@ Settings → 工作台（已是项目级 pane）加一节「工作流」：列�
 
 | 片 | 内容 | 验证 |
 |---|---|---|
-| PR 1 | `src/lib/workflow/`：目录扫描、frontmatter 解析、清单拼装、限长/停用规则。纯逻辑 + vitest | 测试即验证 |
+| PR 1 | `src/lib/workflow/`：内置卡、目录扫描、frontmatter 解析、覆盖合并、清单拼装、限长/停用规则。纯逻辑 + vitest | 测试即验证 |
 | PR 2 | briefing 注入 + `read_workflow` 工具 + preset 接线 + toolCost/棘轮 | 真机：建一个卡，观察模型在匹配任务时加载 |
 | PR 3 | Settings → 工作台 的管理节 + i18n | 真机：增删改停 |
 
