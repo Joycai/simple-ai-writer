@@ -273,11 +273,11 @@
 .groupHead:focus-within .orderCaret,
 .orderSlotOpen .orderCaret { opacity: 1; }
 
+/* Portaled to <body> (fixed, coordinates inline) so the list's scroll
+   container can't clip it — same treatment as the Select menu. */
 .orderMenu {
-  position: absolute;
-  top: 30px;
-  right: 0;
-  z-index: 30;
+  position: fixed;
+  z-index: 1000;
   width: 186px;
   padding: var(--space-1) 0;
   background: var(--color-bg-surface);
@@ -285,6 +285,10 @@
   box-shadow: var(--shadow-lg);
   animation: dropIn 160ms var(--ease-out);
   transform-origin: top right;
+}
+.orderMenuUp {
+  animation-name: riseIn;
+  transform-origin: bottom right;
 }
 .orderItem {
   display: flex;
