@@ -232,3 +232,27 @@ assistant/tool 配对；`MIN_KEEP_TURNS` 恒成立;插桩后边界仍然正确�
 - ~~**展示层 `turns` 的折叠 UI**~~（已另行完成 — `lib/agent/transcriptFold.ts`
   + AgentChat 的「更早的 N 轮对话」条：纯展示，边界永不切开一问一答，
   展开/收起用高度差补偿滚动位置，与 wire 历史无关）。
+
+## 10. 手动归纳（主动 compact，2026-08-23）
+
+§4 的压缩只在阈值处自动发生；这一节给作者一个**现在就压**的把手——
+`agentStore.compactChatNow()`，UI 是 ContextBar 计量行右端的「立即归纳」按钮
+（仅 chat 接线；扮演面板的压缩不走这个 store，不传 handler 就没有按钮）。
+
+- **同一套机器，force 档**：`planFold(history, meta, ceiling, {force:true})`
+  跳过 0.70 触发检查，并且**跳过回退循环**、折叠到只留 `MIN_KEEP_TURNS`
+  逐字——回退循环存在的理由是「预算还不需要的空间不必腾」，而作者按下按钮
+  恰恰就是在说「我要空间胜过要逐字」。少于 `MIN_KEEP_TURNS + 1` 轮仍然拒绝
+  （按钮也据此隐藏：AgentChat 用 `segmentHistory` 判断有没有可折叠的轮）。
+- **天花板同源**：`messageCeilingFor` 按当前会话的子代理开关重算，与 sendChat
+  用的是同一个函数——手动折叠和自动折叠不能对预算各执一词。
+- **忙时互斥**：新状态 `chatCompacting`。归纳期间 send / 切换会话都等它
+  （store 守卫 + composer 的 `canSend`）；反过来 `chatRunning` 时按钮不出现。
+  stopChat / resetChat 会中止在途的归纳请求（module 级 AbortController），
+  免得一次挂起的请求永久扣住发送。
+- **失败要出声**：自动压缩失败可以沉默（下轮重试），按钮按下去没反应不行。
+  store 先自己跑一遍 force `planFold` 确认有得折，之后 `compactChatHistory`
+  返回 null 就只可能是归纳请求失败——报 `ai.chat.compactFailed`。
+- **事件落在最近的 assistant 轮**：复用 `context-compacted`。§8 已写明这行
+  落在哪一轮只是「压缩何时发生」的记录，手动压缩发生在上一轮之后，就记在
+  上一轮。成功后立即 `persistChat`——历史刚换形，崩溃不会提前打招呼。

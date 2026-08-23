@@ -148,6 +148,28 @@ describe("compactChatHistory", () => {
     expect(meta.seedContext).not.toBeNull();
   });
 
+  it("force compacts a session the trigger would have left alone", async () => {
+    const meta = createSessionMeta();
+    const history: StreamMessage[] = [{ role: "system", content: "sys" }];
+    for (let i = 0; i < 4; i++) {
+      const turn = [q(`q${i}`), a(`a${i}`)];
+      noteTurnStart(meta, turn[0]);
+      history.push(...turn);
+    }
+    const summarize = vi.fn().mockResolvedValue("手动归纳的摘要");
+    expect(
+      await compactChatHistory({ history, meta, ceilingTokens: CEILING, summarize }),
+    ).toBeNull();
+
+    const out = await compactChatHistory({
+      history, meta, ceilingTokens: CEILING, force: true, summarize,
+    });
+    expect(out).not.toBeNull();
+    expect(out!.history[1].content).toBe("[block] 手动归纳的摘要");
+    // Maximal fold: only the verbatim floor survives.
+    expect(segmentHistory(out!.history, meta).turns.length).toBe(2);
+  });
+
   it("propagates an abort — the author cancelled the send itself", async () => {
     const { history, meta } = bigSession();
     await expect(

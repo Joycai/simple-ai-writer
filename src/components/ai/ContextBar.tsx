@@ -45,7 +45,17 @@ const SEGMENT_LABELS: Record<ContextSegmentKey, { key: string; fallback: string 
  * rail, and this sits directly above the input — permanent chrome there costs
  * message space on every session, whether or not the author is watching memory.
  */
-export function ContextBar({ context }: { context: ContextBreakdown }) {
+export function ContextBar({ context, onCompact, compacting }: {
+  context: ContextBreakdown;
+  /**
+   * Author-requested compaction ("立即归纳"). Absent = no button — the chat
+   * passes its handler only when something is actually foldable; the roleplay
+   * panel, whose compaction is not on this store, passes nothing.
+   */
+  onCompact?: () => void;
+  /** True while that request is in flight — the button waits, disabled. */
+  compacting?: boolean;
+}) {
   const { t } = useTranslation();
   const terms = useTerms();
   const [showLegend, setShowLegend] = useState(false);
@@ -102,6 +112,20 @@ export function ContextBar({ context }: { context: ContextBreakdown }) {
             n: formatTokens(context.contextSize),
           })}
         </span>
+        {(onCompact || compacting) && (
+          <button
+            className={styles.ctxCompactBtn}
+            onClick={onCompact}
+            disabled={compacting || !onCompact}
+            title={t("ai.chat.ctxCompactNowTitle", {
+              defaultValue: "现在就把较早的对话归纳成摘要，腾出上下文空间",
+            })}
+          >
+            {compacting
+              ? t("ai.chat.ctxCompacting", { defaultValue: "归纳中…" })
+              : t("ai.chat.ctxCompactNow", { defaultValue: "立即归纳" })}
+          </button>
+        )}
       </div>
 
       {showLegend && (
