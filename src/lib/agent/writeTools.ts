@@ -847,6 +847,9 @@ export async function updateFacetMetaTool(
     next.mode = args.mode;
   }
 
+  // Gated as "update" like update_lore_file — same tool-vs-plan-wording gap,
+  // same fix: checkPlan also accepts a "create" step here when this is metadata
+  // for a facet the plan called newly-created (plan.ts).
   const gated = gate(toolCallId, ctx, "update", entity.name, file);
   if ("refusal" in gated) return gated.refusal;
 
@@ -897,6 +900,9 @@ export async function deleteLoreFileTool(
   if (typeof checked !== "string") return checked;
   const file = checked;
 
+  // "delete" has no create/update ambiguity to paper over (unlike the write
+  // tools above) — an exact match is correct here, deliberately not routed
+  // through the same fallback.
   const gated = gate(toolCallId, ctx, "delete", entity.name, file);
   if ("refusal" in gated) return gated.refusal;
 
