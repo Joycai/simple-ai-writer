@@ -352,6 +352,77 @@ describe("generateImage · editing", () => {
     expect(form.get("image")).toBeInstanceOf(Blob);
   });
 
+  it("retries a rejected edit size with the closest documented preset", async () => {
+    // gpt-image-2 edits get the same computed sizes generations do; an
+    // endpoint that enforces the documented presets answers 400 (unbilled),
+    // and the one retry falls back to the nearest preset ratio.
+    const calls: { form: FormData }[] = [];
+    let first = true;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        calls.push({ form: init.body as FormData });
+        if (first) {
+          first = false;
+          return new Response(
+            JSON.stringify({ error: { message: "Invalid value for size", param: "size" } }),
+            { status: 400, headers: { "content-type": "application/json" } },
+          );
+        }
+        return new Response(JSON.stringify({ data: [{ b64_json: "aGk=" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }),
+    );
+
+    const res = await generateImage(OPENAI, { prompt: "recompose", images: [SOURCE], size: "1440x2160" });
+    expect(calls).toHaveLength(2);
+    expect(calls[0].form.get("size")).toBe("1440x2160");
+    expect(calls[1].form.get("size")).toBe("1024x1536");
+    expect(res.images).toHaveLength(1);
+  });
+
+  it("drops size on the retry when the rejected size already was a preset", async () => {
+    const calls: { form: FormData }[] = [];
+    let first = true;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        calls.push({ form: init.body as FormData });
+        if (first) {
+          first = false;
+          return new Response(
+            JSON.stringify({ error: { message: "size is not supported", param: "size" } }),
+            { status: 400, headers: { "content-type": "application/json" } },
+          );
+        }
+        return new Response(JSON.stringify({ data: [{ b64_json: "aGk=" }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }),
+    );
+
+    await generateImage(OPENAI, { prompt: "x", images: [SOURCE], size: "1024x1536" });
+    expect(calls).toHaveLength(2);
+    expect(calls[1].form.get("size")).toBeNull();
+  });
+
+  it("does not size-retry an error about something else", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({ error: { message: "image file size exceeds the limit", param: "image" } }),
+          { status: 400, headers: { "content-type": "application/json" } },
+        )),
+    );
+    await expect(
+      generateImage(OPENAI, { prompt: "x", images: [SOURCE], size: "1440x2160" }),
+    ).rejects.toThrow(/file size exceeds/);
+  });
+
   it("switches to the plural field name for several inputs", async () => {
     // `image` for one, `image[]` for many — older endpoints only know the
     // singular form, so sending the plural always would break them.

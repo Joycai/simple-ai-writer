@@ -519,6 +519,36 @@ async function parseOpenAiImagePayload(raw: unknown, signal?: AbortSignal): Prom
   return { images, usage, ...(revised ? { text: revised } : {}) };
 }
 
+/** The sizes the GPT-Image edits endpoint documents (besides "auto"). */
+const EDIT_PRESET_SIZES = ["1024x1024", "1536x1024", "1024x1536"] as const;
+
+/** The documented edit preset whose aspect ratio is closest to `size`'s. */
+function nearestEditPreset(size: string): string | undefined {
+  const [w, h] = size.toLowerCase().split(/[x*×]/).map(Number);
+  if (!w || !h) return undefined;
+  let best: string | undefined;
+  let delta = Infinity;
+  for (const preset of EDIT_PRESET_SIZES) {
+    const [pw, ph] = preset.split("x").map(Number);
+    const d = Math.abs(Math.log(pw / ph) - Math.log(w / h));
+    if (d < delta) { delta = d; best = preset; }
+  }
+  return best;
+}
+
+/**
+ * True when an error is specifically about the `size` field's value.
+ *
+ * Deliberately narrow on the prose side: "size" also appears in complaints
+ * about *file* size, and retrying with a different dimension cannot fix those.
+ */
+function namesSizeValue(err: ImageHttpError): boolean {
+  if (err.param === "size") return true;
+  if (err.param) return false;
+  return /\bsize\b[^.]{0,60}(invalid|unsupported|not\s+supported)|(invalid|unsupported|not\s+supported)[^.]{0,40}\bsize\b/i
+    .test(err.body);
+}
+
 /**
  * `POST /images/edits` — multipart, the only place in the app that uploads a
  * file body.
@@ -530,7 +560,18 @@ async function parseOpenAiImagePayload(raw: unknown, signal?: AbortSignal): Prom
  * one that doesn't, and every such request fails to parse server-side.
  * (Transport verified in docs/feature/image-generation-plan.md §2.3.)
  */
-async function openaiEdit(conn: ImageConn, req: ImageRequest): Promise<ImageResult> {
+async function openaiEdit(
+  conn: ImageConn,
+  req: ImageRequest,
+  /**
+   * One shot at recovering from a rejected `size`. gpt-image-2's generations
+   * take arbitrary dimensions and the dialect sends the same on edits — the
+   * official doc lists only presets there, and endpoints that enforce that
+   * answer 400 (unbilled). The retry swaps in the closest documented preset,
+   * or drops the field entirely if a preset was already what got rejected.
+   */
+  sizeRetry = true,
+): Promise<ImageResult> {
   const url = openaiUrl(conn.baseUrl, "/images/edits");
   const form = new FormData();
   form.append("model", conn.modelId);
@@ -567,7 +608,15 @@ async function openaiEdit(conn: ImageConn, req: ImageRequest): Promise<ImageResu
       body: form,
       signal: deadline.signal,
     });
-    if (!res.ok) throw new ImageHttpError("Image edit error", res.status, await res.text());
+    if (!res.ok) {
+      const err = new ImageHttpError("Image edit error", res.status, await res.text());
+      if (sizeRetry && req.size && namesSizeValue(err)) {
+        const preset = nearestEditPreset(req.size);
+        // A preset that already failed means the endpoint wants no size at all.
+        return openaiEdit(conn, { ...req, size: preset !== req.size ? preset : undefined }, false);
+      }
+      throw err;
+    }
     return await parseOpenAiImagePayload(await readJson(res, "Image edit error"), req.signal);
   } finally {
     deadline.done();

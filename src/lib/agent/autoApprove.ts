@@ -18,6 +18,13 @@
  * rule is checkable in one place — and the approval card simply doesn't render
  * the button for them, which needs no explaining to the author.
  *
+ * Illustrations do get their own, deliberately different thing: a **counted**
+ * grant (`illustrateLeft`), made on an illustrate card for the next 1–5
+ * pictures. Counted rather than boolean because each auto-approval spends
+ * money — the author authorises an amount, not a mode — and it dies with the
+ * run that created it, so a budget granted for "these five scene pictures"
+ * cannot leak into next week's conversation.
+ *
  * Scope belongs to whoever owns the run, not to this module: chat means the
  * whole conversation, a task panel run means that run. Callers say which by the
  * key they pass (see agentStore.AutoApproveState).
@@ -56,7 +63,23 @@ export interface AutoApproveState {
    * kind: everything else still asks.
    */
   appendPaths: string[];
+  /**
+   * How many more illustrate proposals apply without a card. A budget, not a
+   * mode: each auto-approval decrements it, 0 means back to asking, and the
+   * card's control caps it at {@link ILLUSTRATE_GRANT_MAX}.
+   */
+  illustrateLeft: number;
+  /**
+   * The run that created the illustrate budget. Unlike the boolean grants —
+   * which chat keeps for the whole conversation — the budget is voided when
+   * this run ends (agentStore.rejectAll), so leftover authorisation to spend
+   * money never carries into a turn the author hasn't seen yet.
+   */
+  illustrateRun?: unknown;
 }
+
+/** Most pictures one press of 批准并连批 may cover. */
+export const ILLUSTRATE_GRANT_MAX = 5;
 
 /** What a grant can cover. One flag per card kind that offers the button. */
 export type AutoApproveKind = "proposals" | "plans";
@@ -96,6 +119,17 @@ export function grants(
 ): boolean {
   if (!state || key === undefined) return false;
   return state.key === key && state[what];
+}
+
+/**
+ * Whether an illustrate proposal is covered by the counted grant.
+ *
+ * Same key rule as {@link grants}; the count itself is decremented by the
+ * store at the moment of auto-approval, not here — this only answers.
+ */
+export function grantsIllustrate(state: AutoApproveState | null, key: unknown): boolean {
+  if (!state || key === undefined) return false;
+  return state.key === key && state.illustrateLeft > 0;
 }
 
 /**

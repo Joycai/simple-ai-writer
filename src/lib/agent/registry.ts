@@ -1657,12 +1657,12 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             resolution: {
               type: "string",
               enum: ["1K", "2K", "4K"],
-              description: "Resolution tier. Default 1K; higher tiers cost more and render slower.",
+              description: "Resolution tier; default 1K. Higher costs more.",
             },
             quality: {
               type: "string",
               enum: ["low", "medium", "high"],
-              description: "Quality tier (GPT-Image models only; large price difference). Omit for the endpoint default.",
+              description: "Quality tier (GPT-Image only; big price difference). Omit for default.",
             },
             reason: {
               type: "string",
@@ -1700,15 +1700,20 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
               type: "string",
               description: "What to change about the picture.",
             },
+            aspect: {
+              type: "string",
+              enum: ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "16:9", "9:16", "21:9"],
+              description: "Recompose to this framing; omit to keep the original's.",
+            },
             resolution: {
               type: "string",
               enum: ["1K", "2K", "4K"],
-              description: "Resolution tier for the edited output. Omit to keep the default.",
+              description: "Resolution tier; omit for default.",
             },
             quality: {
               type: "string",
               enum: ["low", "medium", "high"],
-              description: "Quality tier (GPT-Image models only). Omit for the endpoint default.",
+              description: "Quality tier (GPT-Image only); omit for default.",
             },
             note: {
               type: "string",

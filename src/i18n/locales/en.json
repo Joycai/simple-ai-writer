@@ -1092,13 +1092,17 @@
       "reject": "Reject",
       "rejectPlaceholder": "Reason (optional, fed back to the AI)",
       "appendAlways": "Always append to this file",
-      "appendAlwaysHint": "Further appends to this file apply without asking; every other change still asks"
+      "appendAlwaysHint": "Further appends to this file apply without asking; every other change still asks",
+      "illustrateBatch": "Approve + next {{n}}",
+      "illustrateBatchCount": "Batch size",
+      "illustrateBatchHint": "The next {{n}} picture(s) apply without asking (each still billed); reviewing resumes when the run ends or the count runs out"
     },
     "autoApprove": {
       "chipSession": "Auto-approving this conversation",
       "chipRun": "Auto-approving this run",
       "off": "Click to review each change again",
       "chipAppend": "auto-appending to {{n}} file(s)",
+      "chipIllustrate": "image batch · {{n}} left",
       "offAppend": "Appends to these files no longer ask: {{files}} (click to go back to asking)"
     },
     "roundLimit": {

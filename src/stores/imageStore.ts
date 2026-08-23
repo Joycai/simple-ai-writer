@@ -257,7 +257,7 @@ function callModel(ctx: RunContext, prompt: string, images: string[]): Promise<I
       n: ctx.n ?? 1,
       ...imageRequestParams(
         ctx.model.caps,
-        { aspect: ctx.aspect ?? "1:1", resolution: ctx.resolution, quality: ctx.quality, size: ctx.size },
+        { aspect: ctx.aspect, resolution: ctx.resolution, quality: ctx.quality, size: ctx.size },
         { edit: images.length > 0 },
       ),
       signal: ctx.signal,

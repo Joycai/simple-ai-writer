@@ -71,14 +71,25 @@ describe("dialect params", () => {
     expect(spec.params({ aspect: "1:1" }).quality).toBeUndefined();
   });
 
-  it("gpt-image-2 drops size on edits (the edits endpoint documents presets only)", () => {
+  it("gpt-image-2 edits: computed size when a framing is asked for, none otherwise", () => {
     const spec = imageDialect("gpt-image-2")!;
-    expect(spec.params({ aspect: "3:2" }, { edit: true }).size).toBeUndefined();
+    // An explicit aspect means "recompose" — same computed size as a
+    // generation, tier included (the adapter falls back to a preset if the
+    // endpoint enforces the documented edit sizes).
+    expect(spec.params({ aspect: "2:3" }, { edit: true }).size).toBe("1024x1536");
+    expect(spec.params({ aspect: "16:9", resolution: "2K" }, { edit: true }).size).toBe("2560x1440");
+    // No aspect means "follow the input image" — no size at all.
+    expect(spec.params({}, { edit: true }).size).toBeUndefined();
     // nanobanana resolves identically either way — Gemini edits take the
     // same imageConfig as generations.
     const nb = imageDialect("nanobanana")!;
     expect(nb.params({ aspect: "3:2", resolution: "2K" }, { edit: true }))
       .toEqual(nb.params({ aspect: "3:2", resolution: "2K" }));
+  });
+
+  it("an absent aspect stays absent — an edit must be able to follow its input", () => {
+    expect(imageDialect("nanobanana")!.params({ resolution: "2K" })).toEqual({ imageSize: "2K" });
+    expect(imageDialect("wan2.7")!.params({}, { edit: true })).toEqual({ size: "1K" });
   });
 
   it("wan2.7 speaks 宽*高 on generation and the tier shorthand on edits", () => {
