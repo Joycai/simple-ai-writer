@@ -14,6 +14,7 @@ import {
   defaultImageCaps, MAX_CONTEXT_SIZE, MAX_OUTPUT_SIZE, MAX_TEMPERATURE, TRANSLATE_FORMATS,
   type ModelType, type TranslateFormat,
 } from "../../../lib/ai/configDb";
+import type { ImageDialect } from "../../../lib/ai/imageDialects";
 import { CONTEXT_SIZE_STOPS, formatContextSize } from "../../../lib/ai/contextSize";
 import { ModelProbePanel } from "../ModelProbePanel";
 import { Chip, ChipRow } from "./bits";
@@ -63,6 +64,8 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
     pricePerImage: existing?.pricePerImage ? String(existing.pricePerImage) : "",
     capsSizes: (existing?.caps?.sizes ?? []).join(", "),
     capsRoute: existing?.caps?.route ?? "",
+    // "" = generic (the free-form sizes list); otherwise a declared dialect.
+    capsDialect: (existing?.caps?.dialect ?? "") as ImageDialect | "",
     reasoningEffort: existing?.reasoningEffort ?? ("default" as ReasoningEffort),
     // "" = 未声明，按协议族推导 —— 与存储上的 undefined 一一对应。
     thinkingDialect: (existing?.thinkingDialect ?? "") as ThinkingDialect | "",
@@ -130,6 +133,9 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
       const caps = isImageModel
         ? {
             edit: capsEdit,
+            ...(form.capsDialect ? { dialect: form.capsDialect as ImageDialect } : {}),
+            // A dialect supersedes the free-form list, but an existing list is
+            // kept so switching back to 通用 restores it untouched.
             ...(sizes.length ? { sizes } : {}),
             ...(form.capsRoute ? { route: form.capsRoute as ImageRoute } : {}),
             // Only meaningful on the dashscope route; dropped elsewhere so a
@@ -253,10 +259,15 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
                 label={t(`aiConfig.modelTypes.${type}`)}
                 active={form.type === type}
                 onClick={() => {
-                  setForm({ ...form, type });
-                  // Seed the edit capability from the provider's protocol the
-                  // first time this becomes an image model, so the common case
-                  // needs no thought and the odd one is still overridable.
+                  // Seed from the provider's protocol the first time this
+                  // becomes an image model, so the common case needs no
+                  // thought and the odd one is still overridable. The Gemini
+                  // wire only serves Gemini image models, so the dialect is
+                  // known there; elsewhere (dall-e vs gpt-image vs a relay)
+                  // it stays the author's call.
+                  const seedDialect =
+                    type === "image" && !existing && !form.capsDialect && family === "gemini";
+                  setForm({ ...form, type, ...(seedDialect ? { capsDialect: "nanobanana" as const } : {}) });
                   if (type === "image" && !existing && provider) {
                     setCapsEdit(defaultImageCaps(provider.apiStandard).edit ?? false);
                   }
@@ -286,6 +297,24 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
 
         {form.type === "image" && (
           <>
+            <div className={styles.fieldGroup}>
+              <label className={styles.label}>{t("aiConfig.models.capsDialectLabel")}</label>
+              <Select value={form.capsDialect}
+                options={[
+                  { value: "", label: t("aiConfig.models.capsDialectGeneric") },
+                  { value: "nanobanana", label: t("aiConfig.models.capsDialectNanobanana") },
+                  { value: "gpt-image-2", label: t("aiConfig.models.capsDialectGptImage2") },
+                ]}
+                ariaLabel={t("aiConfig.models.capsDialectLabel")}
+                onChange={(v) => {
+                  setForm((f) => ({ ...f, capsDialect: v as ImageDialect | "" }));
+                  // Both declared dialects belong to models that take input
+                  // images (Nano Banana natively, GPT-Image via /images/edits)
+                  // — seed the capability so the common case needs no thought.
+                  if (v) setCapsEdit(true);
+                }} />
+              <div className={hub.fieldHint}>{t("aiConfig.models.capsDialectHint")}</div>
+            </div>
             <div className={styles.formRow}>
               <div className={styles.fieldGroup}>
                 <label className={styles.label}>{t("aiConfig.models.pricePerImageLabel")}</label>
@@ -294,13 +323,17 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
                   onChange={(e) => setForm({ ...form, pricePerImage: e.target.value })} />
                 <div className={hub.fieldHint}>{t("aiConfig.models.pricePerImageHint")}</div>
               </div>
-              <div className={styles.fieldGroup}>
-                <label className={styles.label}>{t("aiConfig.models.capsSizesLabel")}</label>
-                <input className={styles.input} placeholder="1024x1024, 1536x1024"
-                  value={form.capsSizes}
-                  onChange={(e) => setForm({ ...form, capsSizes: e.target.value })} />
-                <div className={hub.fieldHint}>{t("aiConfig.models.capsSizesHint")}</div>
-              </div>
+              {/* A declared dialect knows its sizes — the free-form list only
+                  exists for the generic case, so it hides rather than compete. */}
+              {!form.capsDialect && (
+                <div className={styles.fieldGroup}>
+                  <label className={styles.label}>{t("aiConfig.models.capsSizesLabel")}</label>
+                  <input className={styles.input} placeholder="1024x1024, 1536x1024"
+                    value={form.capsSizes}
+                    onChange={(e) => setForm({ ...form, capsSizes: e.target.value })} />
+                  <div className={hub.fieldHint}>{t("aiConfig.models.capsSizesHint")}</div>
+                </div>
+              )}
             </div>
             <div className={styles.fieldGroup}>
               <label className={styles.label}>{t("aiConfig.models.capsRouteLabel")}</label>

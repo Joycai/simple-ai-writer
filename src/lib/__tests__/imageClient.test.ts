@@ -282,6 +282,36 @@ describe("generateImage · aspect ratio", () => {
     expect(cfg.imageConfig).toEqual({ aspectRatio: "9:16" });
     expect(calls[0].body).not.toHaveProperty("size");
   });
+
+  it("sends the resolution tier as imageConfig.imageSize alongside the ratio", async () => {
+    const calls = mockJson({
+      candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: "aGk=" } }] } }],
+    });
+    await generateImage(GEMINI, { prompt: "x", aspect: "16:9", imageSize: "2K" });
+    const cfg = calls[0].body.generationConfig as Record<string, unknown>;
+    expect(cfg.imageConfig).toEqual({ aspectRatio: "16:9", imageSize: "2K" });
+  });
+
+  it("omits imageConfig entirely when neither field is set", async () => {
+    const calls = mockJson({
+      candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: "aGk=" } }] } }],
+    });
+    await generateImage(GEMINI, { prompt: "x" });
+    const cfg = calls[0].body.generationConfig as Record<string, unknown>;
+    expect(cfg).not.toHaveProperty("imageConfig");
+  });
+});
+
+describe("generateImage · quality tier", () => {
+  it("sends `quality` on the OpenAI route only when set", async () => {
+    let calls = mockJson({ data: [{ b64_json: "aGk=" }] });
+    await generateImage(OPENAI, { prompt: "x", quality: "high" });
+    expect(calls[0].body.quality).toBe("high");
+
+    calls = mockJson({ data: [{ b64_json: "aGk=" }] });
+    await generateImage(OPENAI, { prompt: "x" });
+    expect(calls[0].body).not.toHaveProperty("quality");
+  });
 });
 
 describe("generateImage · editing", () => {

@@ -66,6 +66,18 @@ export interface ImageRequest {
    * as pixel dimensions; the OpenAI-shaped routes ignore it and use `size`.
    */
   aspect?: string;
+  /**
+   * Gemini resolution tier — "1K" | "2K" | "4K", sent as
+   * `imageConfig.imageSize`. Only the gemini route has a spelling for it; the
+   * chat route folds it into the prompt like the other framing fields.
+   */
+  imageSize?: string;
+  /**
+   * OpenAI quality tier — "low" | "medium" | "high". GPT-Image models only;
+   * omitted means the endpoint's own default ("auto"). The other routes have
+   * no such field and ignore it.
+   */
+  quality?: string;
   /** Extra top-level request fields, mirroring StreamOptions.extraBody. */
   extraBody?: Record<string, unknown>;
   signal?: AbortSignal;
@@ -211,6 +223,8 @@ export async function generateImage(conn: ImageConn, req: ImageRequest): Promise
     n: req.n,
     size: req.size,
     aspect: req.aspect,
+    imageSize: req.imageSize,
+    quality: req.quality,
     inputImages: req.images?.length ?? 0,
     extraBody: req.extraBody,
   });
@@ -438,6 +452,7 @@ async function openaiImage(
         // sending nothing means 1 everywhere. Same rule as the other routes.
         ...(req.n && req.n > 1 ? { n: req.n } : {}),
         ...(req.size ? { size: req.size } : {}),
+        ...(req.quality ? { quality: req.quality } : {}),
         ...req.extraBody,
       }),
       signal: deadline.signal,
@@ -534,6 +549,7 @@ async function openaiEdit(conn: ImageConn, req: ImageRequest): Promise<ImageResu
     form.append("mask", new Blob([bytes], { type: mime }), `mask.${extForMime(mime)}`);
   }
   if (req.size) form.append("size", req.size);
+  if (req.quality) form.append("quality", req.quality);
   if (req.n && req.n > 1) form.append("n", String(req.n));
   // Carried like every other route does — a relay that needs an extra field to
   // accept an edit had no way to get one here, with nothing saying why.
@@ -582,6 +598,7 @@ async function chatImage(conn: ImageConn, req: ImageRequest): Promise<ImageResul
   const framing = [
     req.aspect ? `aspect ratio ${req.aspect}` : "",
     req.size ? `output size ${req.size}` : "",
+    req.imageSize ? `resolution ${req.imageSize}` : "",
   ].filter(Boolean).join(", ");
   const prompt = framing ? `${req.prompt}\n\n(Render at ${framing}.)` : req.prompt;
 
@@ -699,6 +716,14 @@ async function geminiImage(conn: ImageConn, req: ImageRequest): Promise<ImageRes
   ]);
 
   const safetySettings = toSafetySettingsArray(conn.safetySettings);
+  // Gemini takes framing as a ratio, not pixel dimensions — `size` is
+  // meaningless here. The resolution tier ("1K"/"2K"/"4K") lives in the same
+  // config object; both are omitted when unset, which is the one request every
+  // model revision accepts (gemini-2.5-flash-image has no imageSize at all).
+  const imageConfig = {
+    ...(req.aspect ? { aspectRatio: req.aspect } : {}),
+    ...(req.imageSize ? { imageSize: req.imageSize } : {}),
+  };
   const deadline = withDeadline(req.signal, GENERATE_TIMEOUT_MS);
   let res: Response;
   try {
@@ -711,9 +736,7 @@ async function geminiImage(conn: ImageConn, req: ImageRequest): Promise<ImageRes
           // TEXT stays in the list: the image models refuse an IMAGE-only
           // modality set on some revisions, and the text part is useful anyway.
           responseModalities: ["TEXT", "IMAGE"],
-          // Gemini takes framing as a ratio, not pixel dimensions — `size` is
-          // meaningless here and `aspect` is the only control that lands.
-          ...(req.aspect ? { imageConfig: { aspectRatio: req.aspect } } : {}),
+          ...(Object.keys(imageConfig).length ? { imageConfig } : {}),
           ...(req.n && req.n > 1 ? { candidateCount: req.n } : {}),
         },
         ...(safetySettings.length ? { safetySettings } : {}),

@@ -4,11 +4,34 @@
  * the other provider adapters.
  */
 
-import { imageCostFor, type Model } from "../ai/configDb";
+import { imageCostFor, type ImageCaps, type Model } from "../ai/configDb";
+import { imageDialect, type ImageWireParams } from "../ai/imageDialects";
 import { getDb } from "../project";
 import type { ImageAspect } from "./promptGen";
 
 export * from "./promptGen";
+
+/**
+ * Resolve the author's framing choices into the wire fields one request should
+ * carry, honouring the model's declared parameter dialect.
+ *
+ * With a dialect declared, the dialect table decides (Gemini's ratio +
+ * imageSize, or GPT-Image's computed pixel size + quality). Without one, the
+ * pre-dialect behaviour stands: an explicit size wins, else the closest of the
+ * model's declared sizes, else no size at all — and the aspect rides along for
+ * the routes that can express it.
+ */
+export function imageRequestParams(
+  caps: ImageCaps | undefined,
+  sel: { aspect: string; resolution?: string; quality?: string; size?: string },
+): ImageWireParams {
+  const spec = imageDialect(caps?.dialect);
+  if (spec) return spec.params(sel);
+  return {
+    aspect: sel.aspect,
+    size: sel.size?.trim() || sizeForAspect(sel.aspect, caps?.sizes),
+  };
+}
 
 /**
  * Pick the declared size closest to the requested aspect ratio.

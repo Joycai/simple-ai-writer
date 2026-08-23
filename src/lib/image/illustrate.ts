@@ -9,12 +9,13 @@
 
 import { generateImage, isEditUnsupportedError } from "../ai/image";
 import { imageCostFor } from "../ai/configDb";
+import { imageDialect } from "../ai/imageDialects";
 import type { IllustrateProposal } from "../agent/registry";
 import { dataUrlToBytes, imageToDataUrl } from "../fs/images";
 import { loadApiKey } from "../keyStore";
 import { addLoreImage } from "../lore";
 import { imageMarkdown, saveDocumentAsset } from "./assets";
-import { recordImageUsage, sizeForAspect } from "./index";
+import { imageRequestParams, recordImageUsage } from "./index";
 import { recordGeneration } from "./session";
 
 /** What an applied illustration reports back to the model. */
@@ -64,23 +65,39 @@ export async function runIllustration(
     route: model.caps?.route,
     asyncTask: model.caps?.asyncTask,
   };
+  // The model's declared dialect turns the proposal's aspect into whatever
+  // fields its endpoint actually takes (Gemini ratio, GPT-Image pixel size…).
+  const params = imageRequestParams(model.caps, { aspect: proposal.aspect ?? "1:1" });
   const req = {
     prompt: proposal.prompt,
     n: 1,
-    size: sizeForAspect(proposal.aspect ?? "1:1", model.caps?.sizes),
-    aspect: proposal.aspect,
+    ...params,
     signal,
   };
+  // The edits endpoint documents a narrower size set than generations on some
+  // dialects, and an edit defaults to its input's framing — see ImageDialectSpec.
+  const editReq = imageDialect(model.caps?.dialect)?.omitSizeOnEdit
+    ? { ...req, size: undefined }
+    : req;
+
+  // Input images: the picture being edited, plus any references a generation
+  // leans on. Either kind makes the call image-conditioned, so both ride the
+  // same field and the same capability gate.
+  const inputPaths = [
+    ...(proposal.sourcePath ? [proposal.sourcePath] : []),
+    ...(proposal.refPaths ?? []),
+  ];
 
   // Same two-layer fallback the interactive session uses: a model that
   // declares no edit support doesn't get a wasted call, and one that turns out
   // not to support it is retried as a plain generation rather than failing.
   let degraded = false;
   let result;
-  if (proposal.sourcePath && model.caps?.edit !== false) {
-    const source = (await imageToDataUrl(proposal.sourcePath)).dataUrl;
+  if (inputPaths.length && model.caps?.edit !== false) {
+    const images: string[] = [];
+    for (const p of inputPaths) images.push((await imageToDataUrl(p)).dataUrl);
     try {
-      result = await generateImage(conn, { ...req, images: [source] });
+      result = await generateImage(conn, { ...editReq, images });
     } catch (err) {
       if (!isEditUnsupportedError(err)) throw err;
       result = await generateImage(conn, req);
@@ -88,7 +105,7 @@ export async function runIllustration(
     }
   } else {
     result = await generateImage(conn, req);
-    degraded = !!proposal.sourcePath;
+    degraded = inputPaths.length > 0;
   }
 
   const image = result.images[0];

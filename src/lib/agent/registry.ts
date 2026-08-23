@@ -257,6 +257,14 @@ export interface IllustrateProposal extends ProposalBase {
    * reviewable when you can see the picture.
    */
   sourcePath?: string;
+  /**
+   * Reference images for a generation, as absolute paths — sent to the model
+   * alongside the prompt ("draw her in this outfit", "match this style").
+   * Unlike `sourcePath` the result is still a new picture, not a variation of
+   * one; the card shows them, since a prompt that leans on a reference is only
+   * reviewable next to it.
+   */
+  refPaths?: string[];
 }
 
 /**
@@ -1611,7 +1619,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "generate_image",
         description:
-          "Draw a NEW picture and file it. Give either `entity` (goes into that lore entity's gallery) or `path` (a document in the project — the image is saved beside it and the markdown to place it comes back in the result, which you then position with propose_edit). The author reviews the prompt and its cost on a card before anything is generated, so write the prompt you actually want. Write prompts in concrete visual nouns — appearance, clothing, pose, setting, lighting, framing — never the subject's name, which the image model does not know. Read the entity or the passage first so the picture matches what is written.",
+          "Draw a NEW picture and file it. Give either `entity` (goes into that lore entity's gallery) or `path` (a document in the project — the image is saved beside it and the markdown to place it comes back in the result, which you then position with propose_edit). The author reviews the prompt and its cost on a card before anything is generated, so write the prompt you actually want. Write prompts in concrete visual nouns — appearance, clothing, pose, setting, lighting, framing — never the subject's name, which the image model does not know. Read the entity or the passage first so the picture matches what is written. To keep a character or style consistent with existing pictures, pass their paths in `references` — the image model then sees them alongside the prompt.",
         parameters: {
           type: "object",
           properties: {
@@ -1627,13 +1635,19 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
               type: "string",
               description: "Full path of a .md document in the project, when the picture illustrates the text rather than an entity.",
             },
+            references: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "Existing images to send as visual references — a project path, or a gallery filename from read_lore_entity. Use for character/style consistency. Only works if the image model accepts input images.",
+            },
             note: {
               type: "string",
               description: "One line saying what the picture shows, in the author's language. Becomes the alt text / gallery description — this is all a text-only model will ever see of it.",
             },
             aspect: {
               type: "string",
-              enum: ["1:1", "3:4", "4:3", "16:9", "9:16"],
+              enum: ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "16:9", "9:16", "21:9"],
               description: "Framing. Portraits lean vertical, scenes and banners horizontal.",
             },
             reason: {

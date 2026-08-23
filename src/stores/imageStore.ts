@@ -18,6 +18,7 @@ import { create } from "zustand";
 import { nanoid } from "nanoid";
 
 import { generateImage, isEditUnsupportedError, type ImageResult } from "../lib/ai/image";
+import { imageDialect } from "../lib/ai/imageDialects";
 import type { Model, Provider } from "../lib/ai/configDb";
 import { imageToDataUrl } from "../lib/fs/images";
 import { recordImageUsage } from "../lib/image";
@@ -50,6 +51,10 @@ export interface RunContext {
   apiKey: string;
   size?: string;
   aspect?: string;
+  /** Gemini resolution tier ("1K"/"2K"/"4K") — dialect models only. */
+  imageSize?: string;
+  /** OpenAI quality tier ("low"/"medium"/"high") — dialect models only. */
+  quality?: string;
   n?: number;
   signal?: AbortSignal;
 }
@@ -245,8 +250,13 @@ function callModel(ctx: RunContext, prompt: string, images: string[]): Promise<I
       prompt,
       ...(images.length ? { images } : {}),
       n: ctx.n ?? 1,
-      size: ctx.size,
+      // Some dialects document a narrower size set for edits than for
+      // generations, and an edit defaults to its input's framing anyway —
+      // see ImageDialectSpec.omitSizeOnEdit.
+      size: images.length && imageDialect(ctx.model.caps?.dialect)?.omitSizeOnEdit ? undefined : ctx.size,
       aspect: ctx.aspect,
+      imageSize: ctx.imageSize,
+      quality: ctx.quality,
       signal: ctx.signal,
     },
   );

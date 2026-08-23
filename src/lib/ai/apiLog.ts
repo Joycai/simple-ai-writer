@@ -132,6 +132,8 @@ export function beginImageApiLog(req: {
   n?: number;
   size?: string;
   aspect?: string;
+  imageSize?: string;
+  quality?: string;
   inputImages: number;
   extraBody?: Record<string, unknown>;
 }): ImageCallLogger {

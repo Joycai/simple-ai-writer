@@ -30,7 +30,7 @@ import type {
   Proposal,
 } from "../../lib/agent/registry";
 import { autoApproveScope, isAutoApprovable } from "../../lib/agent/autoApprove";
-import { useImageDataUrl } from "../lore/useImageDataUrl";
+import { useImageDataUrl, useImageThumbnails } from "../lore/useImageDataUrl";
 import { useAgentStore, type PendingApproval } from "../../stores/agentStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
 import type { ResolvedTerms } from "../../lib/profile";
@@ -337,6 +337,7 @@ function DeleteBody({ proposal }: { proposal: DeleteProposal }) {
 function IllustrateBody({ proposal }: { proposal: IllustrateProposal }) {
   const { t } = useTranslation();
   const sourceUrl = useImageDataUrl(proposal.sourcePath);
+  const refUrls = useImageThumbnails(proposal.refPaths ?? []);
 
   return (
     <div className={styles.illustrateBlock}>
@@ -344,6 +345,14 @@ function IllustrateBody({ proposal }: { proposal: IllustrateProposal }) {
         <div className={styles.illustrateSource}>
           {sourceUrl && <img src={sourceUrl} alt="" />}
           <span className={styles.emptyNote}>{t("ai.approval.imageSource")}</span>
+        </div>
+      )}
+      {/* References ride the same visual slot as an edit's source: a prompt
+          that leans on them is only reviewable next to them. */}
+      {(proposal.refPaths?.length ?? 0) > 0 && (
+        <div className={styles.illustrateSource}>
+          {proposal.refPaths!.map((p) => refUrls[p] && <img key={p} src={refUrls[p]} alt="" />)}
+          <span className={styles.emptyNote}>{t("ai.approval.imageRefs")}</span>
         </div>
       )}
       <pre className={styles.replaceBlock}>{proposal.prompt}</pre>

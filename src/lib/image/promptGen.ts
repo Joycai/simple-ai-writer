@@ -173,7 +173,10 @@ export async function generateImagePrompt(opts: ImagePromptOptions): Promise<Ima
  * Negative prompts have no portable wire field across OpenAI/Gemini/xAI, so
  * they ride along as an explicit clause rather than being silently dropped.
  */
-export function specToPrompt(spec: ImagePromptSpec): string {
+// Loosely typed on `aspect` because callers with a dialect-driven aspect list
+// (wider than IMAGE_ASPECTS) pass their own string — and this function never
+// reads the field anyway.
+export function specToPrompt(spec: Omit<ImagePromptSpec, "aspect"> & { aspect: string }): string {
   return [
     spec.prompt,
     spec.style ? `Style: ${spec.style}` : "",
