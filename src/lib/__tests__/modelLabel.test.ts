@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contextLabel, parseModelLabel } from "../ai/modelLabel";
+import { contextLabel, parseModelLabel, parseProviderLabel } from "../ai/modelLabel";
 
 describe("parseModelLabel", () => {
   it("passes a plain model name through untouched", () => {
@@ -70,6 +70,41 @@ describe("parseModelLabel", () => {
 
   it("never returns an empty title, even if the name is only a qualifier", () => {
     expect(parseModelLabel("[特价]").title).toBe("[特价]");
+  });
+});
+
+describe("parseProviderLabel", () => {
+  it("passes a plain provider name through untouched", () => {
+    expect(parseProviderLabel("DeepSeek")).toEqual({ title: "DeepSeek", badges: [] });
+  });
+
+  it("lifts bracketed qualifiers out as badges", () => {
+    expect(parseProviderLabel("[特价kiro量]沉默")).toEqual({
+      title: "沉默",
+      badges: ["特价kiro量"],
+    });
+  });
+
+  it("handles full-width brackets and piped segments", () => {
+    expect(parseProviderLabel("通义千问【PLAN】")).toEqual({
+      title: "通义千问",
+      badges: ["PLAN"],
+    });
+    expect(parseProviderLabel("官转 | aihubmix")).toEqual({
+      title: "aihubmix",
+      badges: ["官转"],
+    });
+  });
+
+  it("never splits a slash — a provider name is not a namespaced id", () => {
+    expect(parseProviderLabel("aihubmix/官转")).toEqual({
+      title: "aihubmix/官转",
+      badges: [],
+    });
+  });
+
+  it("never returns an empty title, even if the name is only a qualifier", () => {
+    expect(parseProviderLabel("[特价]").title).toBe("[特价]");
   });
 });
 

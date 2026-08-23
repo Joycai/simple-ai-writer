@@ -220,6 +220,9 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
                 placeholder={t("aiConfig.models.selectOption")}
                 options={fetchedList.map((m) => ({ value: m.id, label: m.name }))}
                 ariaLabel={t("aiConfig.models.selectOption")}
+                searchable
+                searchPlaceholder={t("ai.modelPicker.search", { defaultValue: "搜索模型…" })}
+                noResultsText={t("ai.modelPicker.noMatch", { defaultValue: "没有匹配的模型" })}
                 onChange={(v) => {
                   const m = fetchedList.find((x) => x.id === v);
                   if (m) setForm((f) => ({ ...f, modelId: m.id, name: m.name }));

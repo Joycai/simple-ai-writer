@@ -19,7 +19,7 @@ import { conversationalModels, type Model, type Provider } from "../../lib/ai/co
 import { useAiStore } from "../../stores/aiStore";
 import { useAppStore } from "../../stores/appStore";
 import { blockedModelIds, noteModelUsed, recentModelIds } from "../../lib/ai/modelHealth";
-import { contextLabel, parseModelLabel } from "../../lib/ai/modelLabel";
+import { contextLabel, parseModelLabel, parseProviderLabel } from "../../lib/ai/modelLabel";
 import { MOD_KEY } from "../../lib/platform";
 import styles from "./ModelSelector.module.css";
 
@@ -179,6 +179,9 @@ export function ModelSelector({
   }, [allRows, query, filter, recent]);
 
   // ── Grouping by provider, in the providers' own order ──────────────────────
+  // The order is the provider list's (which the author arranges in Settings →
+  // 供应商与模型), not first-model-appearance order — insertion order of the
+  // map below follows the model list, which is sorted by model name.
   const groups = useMemo(() => {
     const byProvider = new Map<string, { provider: Provider | undefined; rows: Row[] }>();
     for (const row of rows) {
@@ -186,8 +189,13 @@ export function ModelSelector({
       if (!byProvider.has(key)) byProvider.set(key, { provider: row.provider, rows: [] });
       byProvider.get(key)!.rows.push(row);
     }
-    return [...byProvider.values()];
-  }, [rows]);
+    const rank = new Map(providers.map((p, i) => [p.id, i]));
+    // Stable sort: providerless rows tie at Infinity and keep their order, last.
+    return [...byProvider.values()].sort(
+      (a, b) =>
+        (rank.get(a.provider?.id ?? "") ?? Infinity) - (rank.get(b.provider?.id ?? "") ?? Infinity),
+    );
+  }, [rows, providers]);
 
   /** Flattened order, so ↑/↓ walk the list as it reads. */
   const flat = useMemo(() => groups.flatMap((g) => g.rows), [groups]);
@@ -280,7 +288,13 @@ export function ModelSelector({
         <span className={`${styles.dot} ${activeModel ? styles.dotOn : ""}`} />
         {activeModel ? (
           <>
-            {activeProvider && <span className={styles.triggerProvider}>{activeProvider.name}</span>}
+            {/* Qualifiers stay out of the trigger — it is deliberately quiet;
+                the full raw name lives in the button's title tooltip. */}
+            {activeProvider && (
+              <span className={styles.triggerProvider}>
+                {parseProviderLabel(activeProvider.name).title}
+              </span>
+            )}
             <span className={styles.triggerSep}>/</span>
             <span className={styles.triggerModel}>{triggerLabel?.title}</span>
             {triggerContext && <span className={styles.ctxBadge}>{triggerContext}</span>}
@@ -341,17 +355,21 @@ export function ModelSelector({
             ) : (
               groups.map((group) => {
                 const local = group.provider && isLocalProvider(group.provider);
+                const providerLabel = group.provider ? parseProviderLabel(group.provider.name) : null;
                 return (
                   <div key={group.provider?.id ?? "__none__"} className={styles.group}>
                     <div className={styles.groupHead}>
                       <span className={styles.groupName}>
-                        {group.provider?.name ?? t("ai.modelPicker.ungrouped", { defaultValue: "其他" })}
+                        {providerLabel?.title ?? t("ai.modelPicker.ungrouped", { defaultValue: "其他" })}
                         {local && (
                           <span className={styles.groupTag}>
                             · {t("ai.modelPicker.localTag", { defaultValue: "本地" })}
                           </span>
                         )}
                       </span>
+                      {providerLabel?.badges.map((b) => (
+                        <span key={b} className={styles.groupBadge}>{b}</span>
+                      ))}
                       <span className={styles.groupRule} />
                       <span className={styles.groupCount}>{group.rows.length}</span>
                     </div>
