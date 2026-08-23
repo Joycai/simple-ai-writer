@@ -58,8 +58,8 @@ import {
 import { appendAgentEventTo, type AgentEvent } from "../lib/agent/events";
 import { createStreamThrottle } from "../lib/agent/streamThrottle";
 import {
-  CHAT_AUTO_APPROVE_KEY, grants, grantsAppend, isAutoApprovable,
-  type AutoApproveKind, type AutoApproveState,
+  CHAT_AUTO_APPROVE_KEY, ILLUSTRATE_GRANT_MAX, grants, grantsAppend, grantsIllustrate,
+  isAutoApprovable, type AutoApproveKind, type AutoApproveState,
 } from "../lib/agent/autoApprove";
 import type { SurfaceTagged } from "../lib/agent/approvalRouting";
 import { createPlanGate, type LorePlan, type PlanDecision } from "../lib/agent/plan";
@@ -328,6 +328,13 @@ interface AgentState {
    * that one path apply without a card, for as long as the grant lives.
    */
   grantAppendPath: (key: unknown, path: string) => void;
+  /**
+   * Author pressed 批准并连批 on an illustrate card: the next `count` (1–5)
+   * image proposals from the same surface apply without a card, each one
+   * still spending real money. The budget dies with `runId` — see
+   * AutoApproveState.illustrateRun.
+   */
+  grantIllustrations: (key: unknown, runId: RunId, count: number) => void;
   /** Author dismissed the indicator chip — back to asking every time. */
   clearAutoApprove: () => void;
 
@@ -691,6 +698,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           proposals: what === "proposals" || !!held?.proposals,
           plans: what === "plans" || !!held?.plans,
           appendPaths: held?.appendPaths ?? [],
+          illustrateLeft: held?.illustrateLeft ?? 0,
+          illustrateRun: held?.illustrateRun,
         },
       };
     }),
@@ -708,6 +717,25 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           appendPaths: held?.appendPaths.includes(path)
             ? held.appendPaths
             : [...(held?.appendPaths ?? []), path],
+          illustrateLeft: held?.illustrateLeft ?? 0,
+          illustrateRun: held?.illustrateRun,
+        },
+      };
+    }),
+
+  grantIllustrations: (key, runId, count) =>
+    set((s) => {
+      const held = s.autoApprove?.key === key ? s.autoApprove : null;
+      return {
+        autoApprove: {
+          key,
+          proposals: !!held?.proposals,
+          plans: !!held?.plans,
+          appendPaths: held?.appendPaths ?? [],
+          // Replaces rather than adds: the author picked a number off the
+          // card just now, and that number is the whole authorisation.
+          illustrateLeft: Math.max(1, Math.min(ILLUSTRATE_GRANT_MAX, Math.floor(count))),
+          illustrateRun: runId,
         },
       };
     }),
@@ -726,6 +754,17 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         || (proposal.kind === "append"
           && grantsAppend(get().autoApprove, item.autoApproveKey, proposal.path));
       if (covered) {
+        void settleApproval(item, set, true);
+        return;
+      }
+      // The counted illustrate budget — spent *before* the apply starts, so a
+      // second proposal arriving while the first still renders cannot ride
+      // the same remaining count twice.
+      if (proposal.kind === "illustrate"
+        && grantsIllustrate(get().autoApprove, item.autoApproveKey)) {
+        set((s) => s.autoApprove
+          ? { autoApprove: { ...s.autoApprove, illustrateLeft: s.autoApprove.illustrateLeft - 1 } }
+          : {});
         void settleApproval(item, set, true);
         return;
       }
@@ -790,6 +829,15 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // "chat", never a controller, so it is untouched here — resetChat and
     // switchChatSession are what end it.
     if (get().autoApprove?.key === runId) set({ autoApprove: null });
+    // The illustrate budget dies with the run that granted it, even in chat,
+    // where the boolean grants live on: it is authorisation to spend money,
+    // given for the pictures of THIS run, and any remainder must not sit
+    // armed across turns the author hasn't read yet.
+    else if (get().autoApprove?.illustrateRun === runId) {
+      set((s) => s.autoApprove
+        ? { autoApprove: { ...s.autoApprove, illustrateLeft: 0, illustrateRun: undefined } }
+        : {});
+    }
 
     const { pending, pendingPlans, pendingRoundLimits, pendingTruncations } = get();
     const drainP = pending.filter((p) => p.runId === runId);

@@ -24,8 +24,9 @@
  *   gpt-image-2 additionally accepts arbitrary WIDTHxHEIGHT with both sides
  *   divisible by 16, ratio within 1:3..3:1, at most 3840x2160 (above
  *   2560x1440 is documented as experimental). `quality` ∈ low|medium|high|auto.
- *   The *edits* endpoint documents only the preset sizes, so this dialect's
- *   edit requests carry no size — an edit defaults to matching its input.
+ *   The *edits* endpoint documents only auto + the three presets, so an edit
+ *   that requests a framing sends the closest preset, and one that doesn't
+ *   sends no size — which the endpoint reads as "match the input image".
  * - Wan 2.7 (DashScope): `parameters.size` takes the square shorthands
  *   "1K"|"2K"|"4K" (1024²/2048²/4096²) or a custom `宽*高` with each side in
  *   768..4096 (wan2.7-image tops out at 2K; -pro reaches 4K; the endpoint
@@ -54,7 +55,14 @@ export interface ImageWireParams {
 
 /** What the author picked in the UI; the dialect turns it into wire fields. */
 export interface ImageParamSelection {
-  aspect: string;
+  /**
+   * Requested aspect ratio, or undefined when nobody asked for one. The
+   * difference matters most on edits: an explicit aspect means "recompose to
+   * this framing" and gets encoded, while absence means "follow the input
+   * image" and must stay absent — a defaulted "1:1" here would silently
+   * square-crop every edit of a portrait.
+   */
+  aspect?: string;
   /** Resolution tier from the dialect's own list. "" = the dialect default. */
   resolution?: string;
   /** Quality tier from the dialect's own list. "" = send nothing. */
@@ -122,7 +130,9 @@ const NANOBANANA: ImageDialectSpec = {
   // sending nothing is the one request every revision accepts.
   resolutions: ["", "1K", "2K", "4K"],
   params: (sel) => ({
-    aspect: sel.aspect,
+    // No aspect requested ⇒ no aspectRatio: a generation falls to the model
+    // default, and an edit follows its input image's framing.
+    ...(sel.aspect ? { aspect: sel.aspect } : {}),
     ...(sel.resolution ? { imageSize: sel.resolution } : {}),
   }),
 };
@@ -135,10 +145,18 @@ const GPT_IMAGE_2: ImageDialectSpec = {
   params: (sel, opts) => ({
     // The aspect rides along untouched: the images route ignores it, but the
     // chat route (relay-hosted models) folds it into the prompt.
-    aspect: sel.aspect,
-    // The edits endpoint documents only the preset sizes, and an edit
-    // defaults to matching its input image — so no size there.
-    ...(opts?.edit ? {} : { size: gptImageSize(sel.aspect, sel.resolution || "1K") }),
+    ...(sel.aspect ? { aspect: sel.aspect } : {}),
+    // A requested framing gets the exact computed size on edits too — the
+    // official doc lists only presets for /images/edits, but live endpoints
+    // commonly take the arbitrary sizes generations do, and the adapter
+    // retries with the closest documented preset if this one is rejected
+    // (see openaiEdit). An edit with NO requested aspect sends no size at
+    // all, which the endpoint reads as "follow the input image" — learned
+    // from a live run where an explicit "recompose to 2:3" came back in the
+    // input's framing because size was dropped wholesale.
+    ...(opts?.edit && !sel.aspect
+      ? {}
+      : { size: gptImageSize(sel.aspect ?? "1:1", sel.resolution || "1K") }),
     ...(sel.quality ? { quality: sel.quality } : {}),
   }),
 };
@@ -184,12 +202,13 @@ const WAN_2_7: ImageDialectSpec = {
   resolutions: ["1K", "2K", "4K"],
   params: (sel, opts) => {
     const tier = sel.resolution || "1K";
+    const aspect = sel.aspect ? { aspect: sel.aspect } : {};
     if (opts?.edit) {
       // Editing accepts only 1K/2K, and the output's aspect ratio follows the
       // last input image — the tier shorthand is the whole vocabulary here.
-      return { aspect: sel.aspect, size: tier === "4K" ? "2K" : tier };
+      return { ...aspect, size: tier === "4K" ? "2K" : tier };
     }
-    return { aspect: sel.aspect, size: wanImageSize(sel.aspect, tier) };
+    return { ...aspect, size: wanImageSize(sel.aspect ?? "1:1", tier) };
   },
 };
 

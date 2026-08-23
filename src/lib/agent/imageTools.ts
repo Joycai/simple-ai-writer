@@ -119,7 +119,13 @@ async function proposeIllustration(
   // The applied outcome rides back on backupPath — see agentStore's
   // illustrate case, which puts the report there rather than inventing a
   // second channel through ApprovalDecision.
-  return { toolCallId, content: decision.backupPath ?? "Image generated and saved." };
+  return {
+    toolCallId,
+    content: (decision.backupPath ?? "Image generated and saved.")
+      // Same wording the write tools use: "approved" must not read as "the
+      // author checked my work" when a counted batch grant skipped the card.
+      + (decision.auto ? "\nApplied under a standing grant — nobody read it." : ""),
+  };
 }
 
 /**
@@ -257,7 +263,7 @@ export async function editImageTool(
   toolCallId: string,
   args: {
     entity?: string; file?: string; instruction?: string;
-    resolution?: string; quality?: string; note?: string; reason?: string;
+    aspect?: string; resolution?: string; quality?: string; note?: string; reason?: string;
   },
   ctx: ToolContext,
 ): Promise<ToolResult> {
@@ -281,6 +287,7 @@ export async function editImageTool(
   return proposeIllustration(toolCallId, ctx, {
     prompt: instruction,
     note: args.note?.trim() || image.desc || instruction.slice(0, 80),
+    aspect: args.aspect,
     resolution: tierOf(args.resolution, RESOLUTION_TIERS),
     quality: tierOf(args.quality, QUALITY_TIERS),
     reason: args.reason,

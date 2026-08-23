@@ -29,7 +29,7 @@ import type {
   MoveProposal,
   Proposal,
 } from "../../lib/agent/registry";
-import { autoApproveScope, isAutoApprovable } from "../../lib/agent/autoApprove";
+import { ILLUSTRATE_GRANT_MAX, autoApproveScope, isAutoApprovable } from "../../lib/agent/autoApprove";
 import { useImageDataUrl, useImageThumbnails } from "../lore/useImageDataUrl";
 import { useAgentStore, type PendingApproval } from "../../stores/agentStore";
 import { useProjectStore, useTerms } from "../../stores/projectStore";
@@ -427,9 +427,11 @@ function ProposalBody({ proposal }: { proposal: Proposal }) {
 export function ApprovalCard({ item }: { item: PendingApproval }) {
   const { t } = useTranslation();
   const terms = useTerms();
-  const { approve, reject, enableAutoApprove, grantAppendPath } = useAgentStore();
+  const { approve, reject, enableAutoApprove, grantAppendPath, grantIllustrations } = useAgentStore();
   const [rejectReason, setRejectReason] = useState("");
   const [deciding, setDeciding] = useState(false);
+  /** How many follow-up pictures 批准并连批 covers. */
+  const [batchCount, setBatchCount] = useState(3);
 
   const { proposal, autoApproveKey } = item;
   const fileName = baseName(proposal.path) || proposal.path;
@@ -485,6 +487,39 @@ export function ApprovalCard({ item }: { item: PendingApproval }) {
           >
             {t("ai.approval.appendAlways", { defaultValue: "本文件都追加" })}
           </button>
+        )}
+        {/* The counted grant an illustrate card gets INSTEAD of 本次都批准:
+            approving a picture spends money, so the author authorises an
+            amount — the next N pictures of this run — never a mode. */}
+        {proposal.kind === "illustrate" && autoApproveKey !== undefined && (
+          <div className={styles.batchGroup}>
+            <select
+              className={styles.batchCount}
+              value={batchCount}
+              onChange={(e) => setBatchCount(parseInt(e.target.value, 10))}
+              disabled={deciding}
+              aria-label={t("ai.approval.illustrateBatchCount", { defaultValue: "连批张数" })}
+            >
+              {Array.from({ length: ILLUSTRATE_GRANT_MAX }, (_, i) => (
+                <option key={i + 1} value={i + 1}>{i + 1}</option>
+              ))}
+            </select>
+            <button
+              className={styles.btnApproveAlways}
+              onClick={() => {
+                setDeciding(true);
+                grantIllustrations(autoApproveKey, item.runId, batchCount);
+                void approve(proposal.id);
+              }}
+              disabled={deciding}
+              title={t("ai.approval.illustrateBatchHint", {
+                defaultValue: "接下来 {{n}} 张配图不再逐张询问（每张仍会计费）；本轮结束或次数用完即恢复审批",
+                n: batchCount,
+              })}
+            >
+              {t("ai.approval.illustrateBatch", { defaultValue: "批准并连批 {{n}} 张", n: batchCount })}
+            </button>
+          </div>
         )}
         {canGrant && (
           <button

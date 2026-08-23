@@ -133,7 +133,7 @@ describe("本次都批准 grants", () => {
     store.enableAutoApprove(RUN, "plans");
 
     expect(useAgentStore.getState().autoApprove).toEqual({
-      key: RUN, proposals: false, plans: true, appendPaths: [],
+      key: RUN, proposals: false, plans: true, appendPaths: [], illustrateLeft: 0,
     });
   });
 
@@ -143,7 +143,7 @@ describe("本次都批准 grants", () => {
     store.enableAutoApprove(CHAT_AUTO_APPROVE_KEY, "plans");
 
     expect(useAgentStore.getState().autoApprove).toEqual({
-      key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: true, appendPaths: [],
+      key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: true, appendPaths: [], illustrateLeft: 0,
     });
   });
 
@@ -193,19 +193,21 @@ describe("本次都批准 grants", () => {
 
     expect(useAgentStore.getState().autoApprove).toEqual({
       key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: false,
-      appendPaths: ["/proj/page.html"],
+      appendPaths: ["/proj/page.html"], illustrateLeft: 0,
     });
   });
 
   it("ends chat's grant on a new conversation", () => {
-    useAgentStore.setState({ autoApprove: { key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: true, appendPaths: [] } });
+    useAgentStore.setState({
+      autoApprove: { key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: true, appendPaths: [], illustrateLeft: 0 },
+    });
     useAgentStore.getState().resetChat();
     expect(useAgentStore.getState().autoApprove).toBeNull();
   });
 
   it("ends chat's grant when switching to another saved conversation", async () => {
     useAgentStore.setState({
-      autoApprove: { key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: false, appendPaths: [] },
+      autoApprove: { key: CHAT_AUTO_APPROVE_KEY, proposals: true, plans: false, appendPaths: [], illustrateLeft: 0 },
       chatSessionId: 1, chatRunning: false, turns: [],
     });
 
