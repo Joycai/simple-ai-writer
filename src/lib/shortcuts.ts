@@ -5,6 +5,7 @@
  * just documented here for the shortcuts list in Settings).
  */
 import { IS_MAC } from "./platform";
+import type { AppScreen } from "../stores/appStore";
 
 export interface Combo {
   /** metaKey (Mac) or ctrlKey (other platforms) — the app's one "mod" key. */
@@ -81,12 +82,36 @@ export function combosLabel(combos: Combo[]): string {
   return combos.map(comboLabel).join(" / ");
 }
 
+/**
+ * Screen switching — ⌘1‥⌘5 / Ctrl+1‥Ctrl+5, in the order the icon rail shows
+ * them: the three workbench panels, then the two full-window views, then
+ * settings.
+ *
+ * Digits rather than letters because every letter worth having is already
+ * spoken for (⌘K/⌘L/⌘J/⌘S, and CodeMirror's markdown keymap), and because a
+ * modifier+digit means nothing to a text field — so these fire while the caret
+ * sits in the manuscript, which is exactly when the author wants them.
+ */
+export const SCREEN_COMBOS: { screen: AppScreen; combo: Combo }[] = [
+  { screen: "files", combo: { mod: true, key: "1" } },
+  { screen: "outline", combo: { mod: true, key: "2" } },
+  { screen: "knowledge", combo: { mod: true, key: "3" } },
+  { screen: "library", combo: { mod: true, key: "4" } },
+  { screen: "settings", combo: { mod: true, key: "5" } },
+];
+
+/** Settings answers to its own ⌘, as well as its screen digit. */
+export const SETTINGS_COMBOS: Combo[] = [
+  { mod: true, key: "," },
+  { mod: true, key: "5" },
+];
+
 /** "dispatch" = wired into useGlobalShortcuts; "info" = implemented locally
  *  (CodeMirror keymap, a component's own listener, a form's Enter/Esc), only
  *  listed here so the Settings shortcuts tab is complete. */
 export type ShortcutScope = "dispatch" | "info";
 
-export type ShortcutCategory = "global" | "file" | "ai" | "editor" | "contextual";
+export type ShortcutCategory = "global" | "view" | "file" | "ai" | "editor" | "contextual";
 
 export interface ShortcutDef {
   id: string;
@@ -107,9 +132,15 @@ export const SHORTCUTS: ShortcutDef[] = [
   { id: "aiChatDrawer", category: "global", combo: { mod: true, key: "l" }, labelKey: "aiChatDrawer", scope: "dispatch" },
   { id: "aiGenerateDrawer", category: "global", combo: { mod: true, key: "j" }, labelKey: "aiGenerateDrawer", scope: "dispatch" },
   { id: "closeOverlays", category: "global", combo: { key: "Escape" }, labelKey: "closeOverlays", scope: "dispatch" },
-  { id: "openSettings", category: "global", combo: { mod: true, key: "," }, labelKey: "openSettings", scope: "dispatch" },
   { id: "navBack", category: "global", keysLabel: combosLabel(NAV_BACK_COMBOS), labelKey: "navBack", scope: "dispatch" },
   { id: "navForward", category: "global", keysLabel: combosLabel(NAV_FORWARD_COMBOS), labelKey: "navForward", scope: "dispatch" },
+
+  // ─── View (screen switching — see SCREEN_COMBOS) ──────────────────────
+  { id: "viewFiles", category: "view", combo: { mod: true, key: "1" }, labelKey: "viewFiles", scope: "dispatch" },
+  { id: "viewOutline", category: "view", combo: { mod: true, key: "2" }, labelKey: "viewOutline", scope: "dispatch" },
+  { id: "viewKnowledge", category: "view", combo: { mod: true, key: "3" }, labelKey: "viewKnowledge", scope: "dispatch" },
+  { id: "viewLibrary", category: "view", combo: { mod: true, key: "4" }, labelKey: "viewLibrary", scope: "dispatch" },
+  { id: "openSettings", category: "view", keysLabel: combosLabel(SETTINGS_COMBOS), labelKey: "openSettings", scope: "dispatch" },
 
   // ─── File ─────────────────────────────────────────────────────────────
   { id: "saveFile", category: "file", combo: { mod: true, key: "s" }, labelKey: "saveFile", scope: "dispatch" },

@@ -6,6 +6,7 @@ import { useAppStore, type SideTab, type MainView } from "../../stores/appStore"
 import { useDocModel, useMainView, useTerms } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { loreEntityCount } from "../../lib/lore";
+import { comboLabel } from "../../lib/shortcuts";
 
 import styles from "./IconRail.module.css";
 
@@ -18,23 +19,33 @@ interface SideItem {
   id: SideTab;
   icon: React.ReactNode;
   labelKey: string;
+  /** Shown after the label in the tooltip — where else would the author find it? */
+  keys: string;
 }
 interface ViewItem {
   kind: "view";
   id: MainView;
   icon: React.ReactNode;
   labelKey: string;
+  keys: string;
+}
+
+/** Tooltip text for one rail button: "大纲 ⌘2". */
+function railTitle(label: string, keys: string): string {
+  return `${label}  ${keys}`;
 }
 
 const SIDE_ITEMS: SideItem[] = [
-  { kind: "side", id: "files", icon: <FolderTree size={17} strokeWidth={1.5} />, labelKey: "sidebar.files" },
-  { kind: "side", id: "outline", icon: <ListTree size={17} strokeWidth={1.5} />, labelKey: "sidebar.outline" },
-  { kind: "side", id: "search", icon: <Search size={17} strokeWidth={1.5} />, labelKey: "sidebar.search" },
+  { kind: "side", id: "files", icon: <FolderTree size={17} strokeWidth={1.5} />, labelKey: "sidebar.files", keys: comboLabel({ mod: true, key: "1" }) },
+  { kind: "side", id: "outline", icon: <ListTree size={17} strokeWidth={1.5} />, labelKey: "sidebar.outline", keys: comboLabel({ mod: true, key: "2" }) },
+  // Search *is* the command palette (see handleSideClick), so it shows the
+  // palette's own binding rather than a screen digit it doesn't have.
+  { kind: "side", id: "search", icon: <Search size={17} strokeWidth={1.5} />, labelKey: "sidebar.search", keys: comboLabel({ mod: true, key: "k" }) },
 ];
 
 const VIEW_ITEMS: ViewItem[] = [
-  { kind: "view", id: "lore-wall", icon: <LayoutGrid size={17} strokeWidth={1.5} />, labelKey: "sidebar.lore" },
-  { kind: "view", id: "library", icon: <Library size={17} strokeWidth={1.5} />, labelKey: "sidebar.library" },
+  { kind: "view", id: "lore-wall", icon: <LayoutGrid size={17} strokeWidth={1.5} />, labelKey: "sidebar.lore", keys: comboLabel({ mod: true, key: "3" }) },
+  { kind: "view", id: "library", icon: <Library size={17} strokeWidth={1.5} />, labelKey: "sidebar.library", keys: comboLabel({ mod: true, key: "4" }) },
 ];
 
 /**
@@ -101,7 +112,7 @@ export function IconRail({ onOpenSettings }: Props) {
             key={it.id}
             className={`${styles.item} ${active ? styles.itemActive : ""}`}
             onClick={() => handleSideClick(it.id)}
-            title={t(it.labelKey)}
+            title={railTitle(t(it.labelKey), it.keys)}
           >
             {it.icon}
           </button>
@@ -117,7 +128,7 @@ export function IconRail({ onOpenSettings }: Props) {
             key={it.id}
             className={`${styles.item} ${active ? styles.itemActive : ""}`}
             onClick={() => handleViewClick(it.id)}
-            title={it.id === "lore-wall" ? terms.kb : t(it.labelKey)}
+            title={railTitle(it.id === "lore-wall" ? terms.kb : t(it.labelKey), it.keys)}
           >
             {it.icon}
             {it.id === "lore-wall" && loreCount > 0 && (
@@ -130,7 +141,7 @@ export function IconRail({ onOpenSettings }: Props) {
       <button
         className={styles.item}
         onClick={onOpenSettings}
-        title={t("sidebar.settings")}
+        title={railTitle(t("sidebar.settings"), comboLabel({ mod: true, key: "," }))}
       >
         <Settings size={17} strokeWidth={1.5} />
       </button>
