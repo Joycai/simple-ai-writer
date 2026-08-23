@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import {
   ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, ChevronUp, Pencil, Search, X,
@@ -52,8 +53,30 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
   const [drawerClosing, setDrawerClosing] = useState(false);
   const [pending, setPending] = useState<Pending>(null);
   const [error, setError] = useState<string | null>(null);
-  /** Which provider's 更多排序 (置顶/置底) menu is open. One at a time. */
-  const [orderMenu, setOrderMenu] = useState<string | null>(null);
+  /**
+   * The open 更多排序 (置顶/置底) menu: which provider, and where. Portaled to
+   * <body> with fixed coordinates — like the Select menu, and for the same
+   * reason: an absolutely-positioned menu inside the group row gets clipped by
+   * the list's own scroll container. `up` flips it above the trigger when the
+   * viewport below can't fit it (the last rows of a full list).
+   */
+  const [orderMenu, setOrderMenu] = useState<
+    { id: string; left: number; top?: number; bottom?: number; up: boolean } | null
+  >(null);
+
+  const openOrderMenu = (id: string, trigger: HTMLElement) => {
+    const r = trigger.getBoundingClientRect();
+    const MENU_W = 186, MENU_H = 84, GAP = 4, MARGIN = 8;
+    const up = r.bottom + GAP + MENU_H > window.innerHeight - MARGIN;
+    setOrderMenu({
+      id,
+      left: Math.max(MARGIN, r.right - MENU_W),
+      ...(up
+        ? { bottom: window.innerHeight - r.top + GAP }
+        : { top: r.bottom + GAP }),
+      up,
+    });
+  };
   /** Row that just moved — its band flashes once so the eye can follow it. */
   const [flashId, setFlashId] = useState<string | null>(null);
   const flashTimer = useRef<number | null>(null);
@@ -76,13 +99,21 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
   }, []);
 
   // The 更多排序 menu closes like every other popup: outside click (mousedown
-  // inside the slot is stopped before it reaches this listener) or Escape
-  // (routed through the page's intercept chain below).
+  // inside the slot or the portaled menu is stopped before it reaches this
+  // listener), Escape (routed through the page's intercept chain below), or
+  // any scroll/resize — the menu is position:fixed, so scrolling the list
+  // would leave it floating over the wrong row, as with the Select menu.
   useEffect(() => {
     if (!orderMenu) return;
-    const onDown = () => setOrderMenu(null);
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
+    const close = () => setOrderMenu(null);
+    document.addEventListener("mousedown", close);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
   }, [orderMenu]);
 
   // 关闭走 160ms 退场（scrim 淡出、抽屉滑回）再卸载 — 与 ModalShell 的
@@ -303,7 +334,7 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
                   const idx = providers.findIndex((p) => p.id === g.id);
                   const first = idx <= 0;
                   const last = idx < 0 || idx >= providers.length - 1;
-                  const menuOpen = orderMenu === g.id;
+                  const menuOpen = orderMenu?.id === g.id;
                   return (
                     <div
                       className={`${hub.orderSlot} ${menuOpen ? hub.orderSlotOpen : ""}`}
@@ -336,36 +367,14 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
                           title={t("aiConfig.hub.moreOrder")}
                           aria-haspopup="menu"
                           aria-expanded={menuOpen}
-                          onClick={() => setOrderMenu(menuOpen ? null : g.id)}
+                          onClick={(e) =>
+                            menuOpen ? setOrderMenu(null) : openOrderMenu(g.id, e.currentTarget)
+                          }
                         >
                           <span className={hub.orderNum}>{String(idx + 1).padStart(2, "0")}</span>
                           <span className={hub.orderCaret}>▾</span>
                         </button>
                       </div>
-                      {menuOpen && (
-                        <div className={hub.orderMenu} role="menu">
-                          <button
-                            className={hub.orderItem}
-                            role="menuitem"
-                            disabled={first}
-                            onClick={() => doMove(g.id, "top")}
-                          >
-                            <ChevronsUp size={12} strokeWidth={2.2} />
-                            <span>{t("aiConfig.hub.moveTop")}</span>
-                            <span className={hub.orderKbd}>{MOD_KEY}⇧↑</span>
-                          </button>
-                          <button
-                            className={hub.orderItem}
-                            role="menuitem"
-                            disabled={last}
-                            onClick={() => doMove(g.id, "bottom")}
-                          >
-                            <ChevronsDown size={12} strokeWidth={2.2} />
-                            <span>{t("aiConfig.hub.moveBottom")}</span>
-                            <span className={hub.orderKbd}>{MOD_KEY}⇧↓</span>
-                          </button>
-                        </div>
-                      )}
                     </div>
                   );
                 })()}
@@ -468,6 +477,42 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
         )}
         </div>
       </div>
+
+      {orderMenu && (() => {
+        const idx = providers.findIndex((p) => p.id === orderMenu.id);
+        const first = idx <= 0;
+        const last = idx < 0 || idx >= providers.length - 1;
+        return createPortal(
+          <div
+            className={`${hub.orderMenu} ${orderMenu.up ? hub.orderMenuUp : ""}`}
+            style={{ left: orderMenu.left, top: orderMenu.top, bottom: orderMenu.bottom }}
+            role="menu"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <button
+              className={hub.orderItem}
+              role="menuitem"
+              disabled={first}
+              onClick={() => doMove(orderMenu.id, "top")}
+            >
+              <ChevronsUp size={12} strokeWidth={2.2} />
+              <span>{t("aiConfig.hub.moveTop")}</span>
+              <span className={hub.orderKbd}>{MOD_KEY}⇧↑</span>
+            </button>
+            <button
+              className={hub.orderItem}
+              role="menuitem"
+              disabled={last}
+              onClick={() => doMove(orderMenu.id, "bottom")}
+            >
+              <ChevronsDown size={12} strokeWidth={2.2} />
+              <span>{t("aiConfig.hub.moveBottom")}</span>
+              <span className={hub.orderKbd}>{MOD_KEY}⇧↓</span>
+            </button>
+          </div>,
+          document.body,
+        );
+      })()}
 
       {drawer && (
         <div className={`${hub.drawerLayer} ${drawerClosing ? hub.drawerLayerClosing : ""}`}>
