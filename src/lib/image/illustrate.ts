@@ -68,8 +68,10 @@ export async function runIllustration(
   // fields its endpoint actually takes (Gemini ratio, GPT-Image pixel size…).
   // Edits get their own resolution: several dialects speak a narrower size
   // vocabulary there — see ImageDialectSpec.params.
+  // The aspect stays absent when the proposal never named one — on an edit
+  // that is the difference between "recompose" and "follow the input image".
   const sel = {
-    aspect: proposal.aspect ?? "1:1",
+    aspect: proposal.aspect,
     resolution: proposal.resolution,
     quality: proposal.quality,
   };

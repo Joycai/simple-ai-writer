@@ -26,20 +26,27 @@ export function AutoApproveChip({ owner }: { owner: unknown }) {
 
   const blanket = autoApprove.proposals || autoApprove.plans;
   const appendCount = autoApprove.appendPaths.length;
-  if (!blanket && appendCount === 0) return null;
+  const illustrateLeft = autoApprove.illustrateLeft;
+  if (!blanket && appendCount === 0 && illustrateLeft === 0) return null;
 
   const scope = autoApproveScope(owner);
   // A per-file append grant is real authorisation and must be visible — but it
   // is not 本次都批准, and wearing that label would overstate what the author
-  // agreed to on a card that said "this file".
-  const label = blanket
-    ? scope === "session"
-      ? t("ai.autoApprove.chipSession", { defaultValue: "本次对话自动批准中" })
-      : t("ai.autoApprove.chipRun", { defaultValue: "本次任务自动批准中" })
-    : t("ai.autoApprove.chipAppend", {
-        defaultValue: "自动追加 {{n}} 个文件",
-        n: appendCount,
-      });
+  // agreed to on a card that said "this file". The illustrate budget is money
+  // authorisation, so its remaining count rides along whatever else is shown.
+  const parts = [
+    blanket
+      ? scope === "session"
+        ? t("ai.autoApprove.chipSession", { defaultValue: "本次对话自动批准中" })
+        : t("ai.autoApprove.chipRun", { defaultValue: "本次任务自动批准中" })
+      : appendCount > 0
+        ? t("ai.autoApprove.chipAppend", { defaultValue: "自动追加 {{n}} 个文件", n: appendCount })
+        : "",
+    illustrateLeft > 0
+      ? t("ai.autoApprove.chipIllustrate", { defaultValue: "配图连批 · 剩 {{n}} 张", n: illustrateLeft })
+      : "",
+  ].filter(Boolean);
+  const label = parts.join(" · ");
 
   return (
     <button

@@ -246,6 +246,22 @@
 .btnApproveAlways:hover:not(:disabled) { color: var(--color-sienna); border-color: var(--color-sienna); }
 .btnApproveAlways:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* 连批控件：张数选择挨着按钮，视觉上是一个分体控件。 */
+.batchGroup { display: flex; align-items: stretch; }
+
+.batchCount {
+  padding: 8px 6px;
+  background: transparent;
+  border: 1px solid var(--color-border-panel);
+  border-right: none;
+  color: var(--color-text-secondary);
+  font: 400 11px/1.6 var(--font-sans);
+  cursor: pointer;
+  outline: none;
+}
+.batchCount:focus { border-color: var(--color-sienna); }
+.batchCount:disabled { opacity: 0.4; cursor: not-allowed; }
+
 .btnApprove {
   padding: 8px 16px;
   background: var(--color-sienna);

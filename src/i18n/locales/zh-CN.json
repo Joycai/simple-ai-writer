@@ -1092,13 +1092,17 @@
       "reject": "拒绝",
       "rejectPlaceholder": "拒绝原因（可选，会反馈给 AI）",
       "appendAlways": "本文件都追加",
-      "appendAlwaysHint": "之后追加到这个文件都直接应用，其它改动照常询问"
+      "appendAlwaysHint": "之后追加到这个文件都直接应用，其它改动照常询问",
+      "illustrateBatch": "批准并连批 {{n}} 张",
+      "illustrateBatchCount": "连批张数",
+      "illustrateBatchHint": "接下来 {{n}} 张配图不再逐张询问（每张仍会计费）；本轮结束或次数用完即恢复审批"
     },
     "autoApprove": {
       "chipSession": "本次对话自动批准中",
       "chipRun": "本次任务自动批准中",
       "off": "点击恢复逐条审批",
       "chipAppend": "自动追加 {{n}} 个文件",
+      "chipIllustrate": "配图连批 · 剩 {{n}} 张",
       "offAppend": "以下文件的追加不再询问：{{files}}（点击恢复逐条审批）"
     },
     "roundLimit": {

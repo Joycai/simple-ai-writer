@@ -23,7 +23,7 @@ export * from "./promptGen";
  */
 export function imageRequestParams(
   caps: ImageCaps | undefined,
-  sel: { aspect: string; resolution?: string; quality?: string; size?: string },
+  sel: { aspect?: string; resolution?: string; quality?: string; size?: string },
   /** `edit` marks an image-conditioned call — see ImageDialectSpec.params. */
   opts?: { edit?: boolean },
 ): ImageWireParams {
@@ -31,7 +31,7 @@ export function imageRequestParams(
   if (spec) return spec.params(sel, opts);
   return {
     aspect: sel.aspect,
-    size: sel.size?.trim() || sizeForAspect(sel.aspect, caps?.sizes),
+    size: sel.size?.trim() || sizeForAspect(sel.aspect ?? "1:1", caps?.sizes),
   };
 }
 
