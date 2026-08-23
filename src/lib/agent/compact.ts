@@ -229,6 +229,13 @@ export interface FoldPlan {
  * always keeping the last {@link MIN_KEEP_TURNS} turns verbatim; when even the
  * maximum fold misses the target it still returns that best effort, because
  * freeing most of the room beats freeing none.
+ *
+ * `force` is the author's "compact now" button: the trigger check is skipped
+ * (they asked, however full the bar is) and the fold is maximal — everything
+ * but the last {@link MIN_KEEP_TURNS} turns. The walk-back that normally
+ * un-folds turns while there is room exists to keep verbatim conversation the
+ * budget doesn't need reclaimed yet; an explicit request is precisely the
+ * statement that the author wants the room more than the verbatim turns.
  */
 export function planFold(
   history: StreamMessage[],
@@ -240,9 +247,11 @@ export function planFold(
    * happening: the bar counted the schemas, this did not.
    */
   ceilingTokens: number,
+  opts?: { force?: boolean },
 ): FoldPlan | null {
+  const force = opts?.force ?? false;
   if (ceilingTokens <= 0) return null;
-  if (estimateMessagesTokens(history) <= ceilingTokens * COMPACT_TRIGGER) return null;
+  if (!force && estimateMessagesTokens(history) <= ceilingTokens * COMPACT_TRIGGER) return null;
 
   const { prelude, turns } = segmentHistory(history, meta);
   const foldable = turns.length - MIN_KEEP_TURNS;
@@ -265,7 +274,8 @@ export function planFold(
   let foldCount = foldable;
   // Walk backwards from the largest fold: un-fold turns while there is room,
   // so the model keeps as much verbatim conversation as the target allows.
-  while (foldCount > 1) {
+  // A forced fold skips this — maximal is the point (see the doc above).
+  while (!force && foldCount > 1) {
     const candidate = estimateMessagesTokens(turns[foldCount - 1].messages);
     if (kept + candidate > target) break;
     kept += candidate;

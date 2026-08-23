@@ -177,6 +177,31 @@ describe("planFold", () => {
     expect(plan!.keep).toHaveLength(MIN_KEEP_TURNS);
     expect(plan!.projectedTokens).toBeGreaterThan(20_000 * RETAIN_TARGET);
   });
+
+  it("force: folds under the trigger, maximally", () => {
+    // Small enough that the normal path declines, and the walk-back would
+    // un-fold everything — the author's button must override both.
+    const turns: StreamMessage[][] = Array.from({ length: 5 }, (_, i) => [
+      q(`q${i}`),
+      a(`a${i}`),
+    ]);
+    const { history, meta } = makeSession({ seed: "seeded lore", turns });
+    expect(planFold(history, meta, 100_000)).toBeNull();
+
+    const plan = planFold(history, meta, 100_000, { force: true });
+    expect(plan).not.toBeNull();
+    // Maximal: everything but the verbatim floor is folded.
+    expect(plan!.keep).toHaveLength(MIN_KEEP_TURNS);
+    expect(plan!.fold).toHaveLength(5 - MIN_KEEP_TURNS);
+    expect(plan!.dropSeed).toBe(true);
+  });
+
+  it("force: still refuses when only MIN_KEEP_TURNS turns exist", () => {
+    const { history, meta } = makeSession({
+      turns: [[q("hi"), a("hello")], [q("more"), a("sure")]],
+    });
+    expect(planFold(history, meta, 100_000, { force: true })).toBeNull();
+  });
 });
 
 describe("renderTurnsForSummary", () => {

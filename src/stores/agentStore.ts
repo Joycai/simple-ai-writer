@@ -45,7 +45,7 @@ import i18n from "../i18n";
 import { backupFile } from "../lib/agent/backup";
 import { applyFindReplace } from "../lib/agent/editApply";
 import {
-  createSessionMeta, excludeDirsFor, noteTurnStart, recordInjections,
+  createSessionMeta, excludeDirsFor, noteTurnStart, planFold, recordInjections,
   type ChatSessionMeta,
 } from "../lib/agent/compact";
 import { compactChatHistory, summarizeForCompaction } from "../lib/agent/compactRun";
@@ -253,6 +253,12 @@ interface AgentState {
   // ── Chat session ──
   turns: ChatTurn[];
   chatRunning: boolean;
+  /**
+   * True while an author-requested compaction (compactChatNow) is summarizing.
+   * Separate from chatRunning: no turn is in flight, but the history is about
+   * to be swapped, so sends and session switches hold until it settles.
+   */
+  chatCompacting: boolean;
   chatError: string | null;
   /** Session-cumulative usage across all turns. */
   chatUsage: ChatUsage | null;
@@ -378,6 +384,13 @@ interface AgentState {
   abortTask: (taskId: string) => Promise<void>;
   stopChat: () => void;
   resetChat: () => void;
+  /**
+   * Author-requested compaction ("主动 compact"): fold the older turns into the
+   * rolling summary right now, without waiting for the COMPACT_TRIGGER. Same
+   * machinery as the between-turns pass, forced (docs/feature/agent/chat-memory-plan.md §10).
+   * No-op while a turn is running or nothing is foldable.
+   */
+  compactChatNow: () => Promise<void>;
 
   /** Save the live session to the project DB (best-effort, never throws). */
   persistChat: () => Promise<void>;
@@ -393,6 +406,12 @@ interface AgentState {
 let turnCounter = 0;
 let roundLimitCounter = 0;
 let truncationCounter = 0;
+/**
+ * The in-flight manual compaction's abort handle (compactChatNow). Module-level
+ * rather than state: nothing renders from it — stopChat/resetChat just need a
+ * way to cancel a summarize request that would otherwise hold chatCompacting.
+ */
+let compactAbort: AbortController | null = null;
 
 // ─── Applying an approved proposal ───────────────────────────────────────────
 
@@ -650,6 +669,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   turns: [],
   chatRunning: false,
+  chatCompacting: false,
   chatError: null,
   chatUsage: null,
   chatAbort: null,
@@ -876,7 +896,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   sendChat: async (text, quote, refs = [], opts) => {
     const message = text.trim();
-    if (!message || get().chatRunning) return;
+    // chatCompacting too: a manual compaction is about to swap the history
+    // this send would append onto.
+    if (!message || get().chatRunning || get().chatCompacting) return;
     const quoted = quote?.trim();
 
     // Stores are reached lazily throughout this module: aiTaskStore imports
@@ -1442,8 +1464,97 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   stopChat: () => {
     const controller = get().chatAbort;
     controller?.abort();
+    // A hanging manual compaction holds chatCompacting (and with it every
+    // send) until its request settles — stop covers it too.
+    compactAbort?.abort();
     get().rejectAll("aborted by user", controller);
     set({ chatRunning: false, chatAbort: null });
+  },
+
+  compactChatNow: async () => {
+    if (get().chatRunning || get().chatCompacting) return;
+    const history = get().chatHistory;
+    const meta = get().chatMeta;
+    if (!history || !meta) return;
+
+    const { useAiStore } = await import("./aiStore");
+    const { useAppStore } = await import("./appStore");
+    const { models, providers, activeModelId } = useAiStore.getState();
+    const resolved = resolveConn(models, providers, activeModelId);
+    if (!resolved.ok) { set({ chatError: resolved.error }); return; }
+    const { model, provider } = resolved;
+
+    // The same ceiling sendChat measures against — computed the same way, so a
+    // manual fold and the automatic one can never disagree about the budget.
+    const effectiveSubs = withSessionOverrides(
+      useAiStore.getState().subAgents, get().disabledSubAgents,
+    );
+    const messageCeiling = messageCeilingFor(
+      model.contextSize,
+      useAppStore.getState().contextUtilization,
+      AGENT_ASSIST_PRESET,
+      effectiveSubs,
+      models,
+    );
+
+    // Same repair sendChat does before touching an inherited history: a turn
+    // that was stopped mid-tool-call leaves a pairing the fold must not build on.
+    repairToolCallPairing(history);
+    // Foldability check up front, so a null from compactChatHistory below can
+    // only mean the summarize request failed — the author pressed a button and
+    // deserves an error over silence.
+    if (!planFold(history, meta, messageCeiling, { force: true })) return;
+
+    const controller = new AbortController();
+    compactAbort = controller;
+    set({ chatCompacting: true, chatError: null });
+    try {
+      const apiKey = (await loadApiKey(provider.id)) ?? "";
+      const compacted = await compactChatHistory({
+        history,
+        meta,
+        ceilingTokens: messageCeiling,
+        force: true,
+        summarize: (input) =>
+          summarizeForCompaction(
+            connOptions({ provider, model, apiKey }),
+            input,
+            controller.signal,
+          ),
+      });
+      if (!compacted) {
+        set({ chatError: i18n.t("ai.chat.compactFailed") });
+        return;
+      }
+      set((s) => {
+        // The event lands on the newest assistant turn's log — per the context
+        // bar's own rule (contextBreakdown §8), where a context-compacted row
+        // sits only records *when* the fold happened, and "right after that
+        // turn" is exactly when this one did.
+        const lastAssistant = [...s.turns].reverse().find((tn) => tn.role === "assistant");
+        return {
+          chatHistory: compacted.history,
+          chatContextVersion: s.chatContextVersion + 1,
+          turns: lastAssistant
+            ? s.turns.map((tn) =>
+                tn === lastAssistant
+                  ? { ...tn, log: appendAgentEventTo(tn.log, compacted.event) }
+                  : tn,
+              )
+            : s.turns,
+        };
+      });
+      // The history just changed shape — the crash that loses a session never
+      // announces itself first (see sendChat's finally).
+      void get().persistChat();
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") {
+        set({ chatError: String(e) });
+      }
+    } finally {
+      if (compactAbort === controller) compactAbort = null;
+      set({ chatCompacting: false });
+    }
   },
 
   resetChat: () => {
@@ -1491,7 +1602,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   },
 
   switchChatSession: async (id) => {
-    if (get().chatRunning || id === get().chatSessionId) return;
+    if (get().chatRunning || get().chatCompacting || id === get().chatSessionId) return;
     const { useProjectStore } = await import("./projectStore");
     const { projectPath } = useProjectStore.getState();
     if (!projectPath) return;

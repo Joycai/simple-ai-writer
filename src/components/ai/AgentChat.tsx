@@ -54,6 +54,7 @@ import { splitMentions } from "../../lib/agent/mentionText";
 import {
   computeContextBreakdown,
 } from "../../lib/agent/contextBreakdown";
+import { MIN_KEEP_TURNS, segmentHistory } from "../../lib/agent/compact";
 import { AGENT_ASSIST_PRESET } from "../../lib/agent/presets";
 import { plannedToolTokens } from "../../lib/agent/toolCost";
 import { inputCeilingFor } from "../../lib/context/budget";
@@ -99,6 +100,8 @@ export function AgentChat() {
   const allTruncations = useAgentStore((s) => s.pendingTruncations);
   const sendChat = useAgentStore((s) => s.sendChat);
   const stopChat = useAgentStore((s) => s.stopChat);
+  const chatCompacting = useAgentStore((s) => s.chatCompacting);
+  const compactChatNow = useAgentStore((s) => s.compactChatNow);
   // 只渲染没有 surface 标记的卡片。带标记的属于扮演面板那样的独立界面——
   // 一张出现在错误 tab 里的卡片，等于把那次运行永久挂在作者看不见的地方。
   // 规则与理由见 lib/agent/approvalRouting。
@@ -312,7 +315,9 @@ export function AgentChat() {
   const taskTokens = useMemo(() => sumTokens(turnLogs), [turnLogs]);
 
   const attachedQuote = !detached && selection ? selection : undefined;
-  const canSend = !!draft.trim() && !chatRunning && !!activeModelId;
+  // chatCompacting too: a manual compaction is swapping the history a send
+  // would append onto, so the composer waits it out (agentStore guards as well).
+  const canSend = !!draft.trim() && !chatRunning && !chatCompacting && !!activeModelId;
 
   const handleSend = () => {
     if (!canSend) return;
@@ -432,6 +437,17 @@ export function AgentChat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [chatHistory, chatMeta, chatContextVersion, toolTokens, activeModel?.contextSize, contextUtilization],
   );
+  // The 立即归纳 affordance appears only when a forced fold would actually fold
+  // something — planFold keeps the last MIN_KEEP_TURNS verbatim no matter what,
+  // so fewer turns than that means a button that does nothing.
+  const canCompact = useMemo(
+    () =>
+      !!chatHistory && !!chatMeta
+      && segmentHistory(chatHistory, chatMeta).turns.length > MIN_KEEP_TURNS,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- same in-place
+    // mutation story as the breakdown above: the version is the real trigger.
+    [chatHistory, chatMeta, chatContextVersion],
+  );
 
   return (
     <div className={styles.chat}>
@@ -504,7 +520,11 @@ export function AgentChat() {
       </div>
 
       <div className={styles.composer}>
-        <ContextBar context={context} />
+        <ContextBar
+          context={context}
+          onCompact={canCompact && !chatRunning ? () => void compactChatNow() : undefined}
+          compacting={chatCompacting}
+        />
 
         <div className={styles.attachRow}>
           {attachedQuote ? (

@@ -362,6 +362,20 @@
   margin-left: auto;
   color: var(--color-text-hint);
 }
+
+/* Author-requested compaction — a text affordance on the meter row, quiet like
+   the figures beside it until hovered. Disabled while the summarize runs. */
+.ctxCompactBtn {
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  color: var(--color-text-hint);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.ctxCompactBtn:hover:not(:disabled) { color: var(--color-accent-text); }
+.ctxCompactBtn:disabled { cursor: default; opacity: 0.7; }
 /* The used-token figure, once past the mark. */
 .ctxCountWarn { color: var(--color-error-text-strong); }
 
