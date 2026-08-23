@@ -53,6 +53,8 @@ async function proposeIllustration(
     destination: string;
     path: string;
     aspect?: string;
+    resolution?: string;
+    quality?: string;
     sourcePath?: string;
     refPaths?: string[];
     reason?: string;
@@ -84,6 +86,8 @@ async function proposeIllustration(
     modelName: model.name,
     costUsd: imageCostFor(model, 1),
     aspect: spec.aspect,
+    resolution: spec.resolution,
+    quality: spec.quality,
     sourcePath: spec.sourcePath,
     ...(spec.refPaths?.length ? { refPaths: spec.refPaths } : {}),
     reason: spec.reason,
@@ -163,6 +167,17 @@ async function resolveReference(
   return { error: `Error: no image "${name}" found — give a project path, or a gallery filename from read_lore_entity.` };
 }
 
+/**
+ * Keep only tier values the dialects actually speak. The schema enum already
+ * constrains a well-behaved model; this is the backstop for one that ad-libs
+ * ("2048x2048" as a resolution), which would otherwise ride into the wire.
+ */
+function tierOf(value: string | undefined, allowed: readonly string[]): string | undefined {
+  return value && allowed.includes(value) ? value : undefined;
+}
+const RESOLUTION_TIERS = ["1K", "2K", "4K"] as const;
+const QUALITY_TIERS = ["low", "medium", "high"] as const;
+
 /** Resolve the whole `references` list, or explain the first failure. */
 async function resolveReferences(
   ctx: ToolContext,
@@ -183,13 +198,17 @@ export async function generateImageTool(
   toolCallId: string,
   args: {
     prompt?: string; note?: string; entity?: string; path?: string;
-    references?: string[]; aspect?: string; reason?: string;
+    references?: string[]; aspect?: string; resolution?: string; quality?: string; reason?: string;
   },
   ctx: ToolContext,
 ): Promise<ToolResult> {
   const prompt = args.prompt?.trim();
   if (!prompt) return { toolCallId, content: "Error: 'prompt' is required — describe what is visible in the picture." };
   const note = args.note?.trim() || prompt.slice(0, 80);
+  const tiers = {
+    resolution: tierOf(args.resolution, RESOLUTION_TIERS),
+    quality: tierOf(args.quality, QUALITY_TIERS),
+  };
 
   if (args.entity) {
     const { entity, categories } = findEntity(ctx, args.entity);
@@ -199,7 +218,7 @@ export async function generateImageTool(
     const refs = await resolveReferences(ctx, args.references, entity.dirPath);
     if (refs.error) return { toolCallId, content: refs.error };
     return proposeIllustration(toolCallId, ctx, {
-      prompt, note, aspect: args.aspect, reason: args.reason,
+      prompt, note, aspect: args.aspect, ...tiers, reason: args.reason,
       refPaths: refs.paths,
       dest: { kind: "lore", entityName: entity.name, entityDir: entity.dirPath },
       destination: entity.name,
@@ -225,7 +244,7 @@ export async function generateImageTool(
   const refs = await resolveReferences(ctx, args.references);
   if (refs.error) return { toolCallId, content: refs.error };
   return proposeIllustration(toolCallId, ctx, {
-    prompt, note, aspect: args.aspect, reason: args.reason,
+    prompt, note, aspect: args.aspect, ...tiers, reason: args.reason,
     refPaths: refs.paths,
     dest: { kind: "document", docPath: path },
     destination: baseName(path) || path,
@@ -236,7 +255,10 @@ export async function generateImageTool(
 /** Redraw one of an entity's existing pictures with a change applied. */
 export async function editImageTool(
   toolCallId: string,
-  args: { entity?: string; file?: string; instruction?: string; note?: string; reason?: string },
+  args: {
+    entity?: string; file?: string; instruction?: string;
+    resolution?: string; quality?: string; note?: string; reason?: string;
+  },
   ctx: ToolContext,
 ): Promise<ToolResult> {
   const instruction = args.instruction?.trim();
@@ -259,6 +281,8 @@ export async function editImageTool(
   return proposeIllustration(toolCallId, ctx, {
     prompt: instruction,
     note: args.note?.trim() || image.desc || instruction.slice(0, 80),
+    resolution: tierOf(args.resolution, RESOLUTION_TIERS),
+    quality: tierOf(args.quality, QUALITY_TIERS),
     reason: args.reason,
     // The result is a NEW gallery entry: the original may already be referenced
     // elsewhere, and overwriting it would be a destructive act nobody approved.

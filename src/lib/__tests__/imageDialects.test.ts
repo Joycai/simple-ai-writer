@@ -8,7 +8,7 @@
  * into paid-for failures.
  */
 import { describe, it, expect } from "vitest";
-import { gptImageSize, imageDialect, IMAGE_DIALECTS } from "../ai/imageDialects";
+import { gptImageSize, imageDialect, wanImageSize, IMAGE_DIALECTS } from "../ai/imageDialects";
 import { imageRequestParams } from "../image";
 
 describe("gptImageSize", () => {
@@ -72,8 +72,41 @@ describe("dialect params", () => {
   });
 
   it("gpt-image-2 drops size on edits (the edits endpoint documents presets only)", () => {
-    expect(imageDialect("gpt-image-2")!.omitSizeOnEdit).toBe(true);
-    expect(imageDialect("nanobanana")!.omitSizeOnEdit).toBeUndefined();
+    const spec = imageDialect("gpt-image-2")!;
+    expect(spec.params({ aspect: "3:2" }, { edit: true }).size).toBeUndefined();
+    // nanobanana resolves identically either way — Gemini edits take the
+    // same imageConfig as generations.
+    const nb = imageDialect("nanobanana")!;
+    expect(nb.params({ aspect: "3:2", resolution: "2K" }, { edit: true }))
+      .toEqual(nb.params({ aspect: "3:2", resolution: "2K" }));
+  });
+
+  it("wan2.7 speaks 宽*高 on generation and the tier shorthand on edits", () => {
+    const spec = imageDialect("wan2.7")!;
+    // Square tiers reproduce the documented shorthand meanings exactly.
+    expect(spec.params({ aspect: "1:1", resolution: "1K" }).size).toBe("1024*1024");
+    expect(spec.params({ aspect: "1:1", resolution: "2K" }).size).toBe("2048*2048");
+    expect(spec.params({ aspect: "1:1", resolution: "4K" }).size).toBe("4096*4096");
+    // Edits: only the 1K/2K tier goes out — the output's framing follows the
+    // input image, and the edit range caps at 2048*2048 (4K clamps down).
+    expect(spec.params({ aspect: "16:9", resolution: "2K" }, { edit: true }).size).toBe("2K");
+    expect(spec.params({ aspect: "16:9", resolution: "4K" }, { edit: true }).size).toBe("2K");
+    expect(spec.params({ aspect: "3:4" }, { edit: true }).size).toBe("1K");
+  });
+
+  it("wanImageSize keeps every side inside the documented 768..4096 range", () => {
+    const spec = imageDialect("wan2.7")!;
+    for (const aspect of spec.aspects) {
+      for (const tier of spec.resolutions) {
+        const [w, h] = wanImageSize(aspect, tier).split("*").map(Number);
+        expect(w, `${aspect}@${tier} width`).toBeGreaterThanOrEqual(768);
+        expect(h, `${aspect}@${tier} height`).toBeGreaterThanOrEqual(768);
+        expect(Math.max(w, h)).toBeLessThanOrEqual(4096);
+      }
+    }
+    // The clamp keeps the framing: 21:9 at 1K would put the short side at
+    // ~670 — it rises to the 768 floor and the long side follows the ratio.
+    expect(wanImageSize("21:9", "1K")).toBe("1792*768");
   });
 
   it("every dialect's aspect list stays within the shared vocabulary", () => {
@@ -110,5 +143,13 @@ describe("imageRequestParams", () => {
   it("ignores the free-form size box when a dialect is declared", () => {
     const params = imageRequestParams({ dialect: "gpt-image-2" }, { aspect: "1:1", size: "999x999" });
     expect(params.size).toBe("1024x1024");
+  });
+
+  it("passes the edit flag through to the dialect", () => {
+    expect(imageRequestParams({ dialect: "wan2.7" }, { aspect: "16:9", resolution: "2K" }, { edit: true }).size)
+      .toBe("2K");
+    // Generic models resolve identically for edits — the pre-dialect behaviour.
+    expect(imageRequestParams({ sizes: ["1024x1024"] }, { aspect: "1:1" }, { edit: true }))
+      .toEqual({ aspect: "1:1", size: "1024x1024" });
   });
 });

@@ -491,6 +491,26 @@ payload：新增 `imageToThumbnailDataUrl`（`lib/fs/images.ts`）用 `<canvas>`
   有方言走方言表，没有走旧的 explicit size → sizeForAspect 链。
   弹窗、agent 审批（illustrate.ts）、会话 store 三个调用方共用。
 
+**后续增补（同一机制的第三个方言）：wan2.7。** 对官方文档校准
+（`landscape.md` → 出图参数的三套方言）：生成发 `宽*高`（档位面积制——
+1K/2K/4K 指该面积的正方形，非正方形按比例摊开，边长钳在 768~4096，
+正方形恰好复现 `1024*1024` 等官方简写含义）；**改图只发 `1K`/`2K` 档位**
+（4K 钳到 2K）——改图的输出画幅跟随最后一张输入图，算出来的 `宽*高` 只会
+和它打架。为此把方言接口从 `omitSizeOnEdit` 布尔泛化成
+`params(sel, {edit})`——编辑时的参数缩窄是每个方言自己的事实，不是一个
+开关说得清的。顺手修的计费陷阱：**wan2.7 的 `n` 默认是 4**，dashscope
+route 从「n>1 才发」改成恒显式发 `n`（qwen-image 等收 `n:1` 无害）。
+ModelDrawer 选 wan2.7 方言时自动把空着的出图接口设为 DashScope 原生。
+
+**后续修补：agent 通道原来根本控制不了档位。** `generate_image` /
+`edit_image` 最初只有 `aspect` 一个参数——分辨率与质量在交互式弹窗里有
+选择器，在 agent 提案里却没有对应入参，审批执行永远落在方言默认值上
+（1K、不发 quality）。两个工具补上 `resolution`（1K/2K/4K）与 `quality`
+（low/medium/high）枚举参数，穿透 `IllustrateProposal` 到
+`runIllustration` 的方言解析；白名单清洗兜住模型自创的值（"2048x2048"
+当 resolution 传进来就丢弃而不是上线）。审批卡片的 meta 行同时显示
+画幅/档位——quality 档位间价差一个数量级，批的是什么必须可见。
+
 **同期：`generate_image` 支持参考图。** 工具新增 `references[]`——
 工作区路径或图库文件名皆可（裸文件名先在目标实体图库找，再全库唯一匹配，
 歧义即报错让模型给全路径）。参考图作为输入图与提示词一起发

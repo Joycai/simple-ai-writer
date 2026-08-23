@@ -476,9 +476,9 @@ qwen-image / wan / z-image 系列**不经过** `compatible-mode` —— 出图�
   `Throttling`（429）、`DataInspectionFailed`（内容审核拒绝——是"理解了但
   拒绝"，不是"端点不存在"，不能触发降级重生成）。
 
-#### 出图参数的两套方言（2026-08 对官方文档校准）
+#### 出图参数的三套方言（2026-08 对官方文档校准）
 
-同一件事——"这张图多大、什么画幅"——两大家族用完全不同的参数说：
+同一件事——"这张图多大、什么画幅"——各家族用完全不同的参数说：
 
 - **Gemini 图像系（Nano Banana）**：`generationConfig.imageConfig` 里
   `aspectRatio` ∈ `1:1 2:3 3:2 3:4 4:3 4:5 5:4 9:16 16:9 21:9`（十档），
@@ -493,8 +493,18 @@ qwen-image / wan / z-image 系列**不经过** `compatible-mode` —— 出图�
   `background`（transparent/opaque/auto）、`moderation`（low/auto）。
   **不收 `response_format`**（恒返回 b64）。`/images/edits` 文档只列预设
   size（auto + 三档），编辑另收 `input_fidelity` ∈ `high/low`。
+- **万相 Wan 2.7（DashScope 原生）**：`parameters.size` 收正方形简写
+  `"1K"/"2K"/"4K"`（1024²/2048²/4096²）或自定义 `宽*高`，边长限 768~4096
+  （`wan2.7-image` 只到 2K，`-pro` 到 4K），**省略时默认 2K**；
+  **`n` 默认 4（！）**——不显式发 n 就出四张收四张的钱，1~4 张
+  （enable_sequential 时 1~12）；2.7 **不支持 `negative_prompt` /
+  `prompt_extend`**（2.6 支持）。**改图**（输入图 0~9 张、≤20MB、比例
+  1:8~8:1）的 size 只收 `1K`/`2K` 或 [768*768, 2048*2048] 内的宽高，
+  且**输出画幅跟随最后一张输入图**——改图发档位而不是算出的 `宽*高`。
+  同步/异步两个端点都在（wan2.7 文生图两者皆可，与 PR5 时"文生图仅异步"
+  的口径已不同）。
 
-本项目把这两套各自封成一个「参数方言」（`lib/ai/imageDialects.ts`，
+本项目把这几套各自封成一个「参数方言」（`lib/ai/imageDialects.ts`，
 `ImageCaps.dialect` 声明），UI 按方言给出画幅/分辨率/质量选项，请求侧由
 方言算出该端点真正认识的字段。
 

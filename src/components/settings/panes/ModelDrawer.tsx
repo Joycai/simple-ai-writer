@@ -304,13 +304,22 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
                   { value: "", label: t("aiConfig.models.capsDialectGeneric") },
                   { value: "nanobanana", label: t("aiConfig.models.capsDialectNanobanana") },
                   { value: "gpt-image-2", label: t("aiConfig.models.capsDialectGptImage2") },
+                  { value: "wan2.7", label: t("aiConfig.models.capsDialectWan27") },
                 ]}
                 ariaLabel={t("aiConfig.models.capsDialectLabel")}
                 onChange={(v) => {
-                  setForm((f) => ({ ...f, capsDialect: v as ImageDialect | "" }));
-                  // Both declared dialects belong to models that take input
-                  // images (Nano Banana natively, GPT-Image via /images/edits)
-                  // — seed the capability so the common case needs no thought.
+                  setForm((f) => ({
+                    ...f,
+                    capsDialect: v as ImageDialect | "",
+                    // Wan only exists behind DashScope's native protocol, so
+                    // picking the dialect answers the route question too.
+                    // Only fills a blank — an explicit route choice stands.
+                    ...(v === "wan2.7" && !f.capsRoute ? { capsRoute: "dashscope" } : {}),
+                  }));
+                  // Every declared dialect belongs to models that take input
+                  // images (Nano Banana natively, GPT-Image via /images/edits,
+                  // Wan up to 9 refs) — seed the capability so the common
+                  // case needs no thought.
                   if (v) setCapsEdit(true);
                 }} />
               <div className={hub.fieldHint}>{t("aiConfig.models.capsDialectHint")}</div>

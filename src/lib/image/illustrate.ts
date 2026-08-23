@@ -9,7 +9,6 @@
 
 import { generateImage, isEditUnsupportedError } from "../ai/image";
 import { imageCostFor } from "../ai/configDb";
-import { imageDialect } from "../ai/imageDialects";
 import type { IllustrateProposal } from "../agent/registry";
 import { dataUrlToBytes, imageToDataUrl } from "../fs/images";
 import { loadApiKey } from "../keyStore";
@@ -67,18 +66,15 @@ export async function runIllustration(
   };
   // The model's declared dialect turns the proposal's aspect into whatever
   // fields its endpoint actually takes (Gemini ratio, GPT-Image pixel size…).
-  const params = imageRequestParams(model.caps, { aspect: proposal.aspect ?? "1:1" });
-  const req = {
-    prompt: proposal.prompt,
-    n: 1,
-    ...params,
-    signal,
+  // Edits get their own resolution: several dialects speak a narrower size
+  // vocabulary there — see ImageDialectSpec.params.
+  const sel = {
+    aspect: proposal.aspect ?? "1:1",
+    resolution: proposal.resolution,
+    quality: proposal.quality,
   };
-  // The edits endpoint documents a narrower size set than generations on some
-  // dialects, and an edit defaults to its input's framing — see ImageDialectSpec.
-  const editReq = imageDialect(model.caps?.dialect)?.omitSizeOnEdit
-    ? { ...req, size: undefined }
-    : req;
+  const req = { prompt: proposal.prompt, n: 1, ...imageRequestParams(model.caps, sel), signal };
+  const editReq = { prompt: proposal.prompt, n: 1, ...imageRequestParams(model.caps, sel, { edit: true }), signal };
 
   // Input images: the picture being edited, plus any references a generation
   // leans on. Either kind makes the call image-conditioned, so both ride the

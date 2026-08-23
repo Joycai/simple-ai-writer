@@ -77,6 +77,25 @@ describe("generate_image", () => {
     expect(seen[0].modelName).toBe("Nano");
   });
 
+  it("carries the framing tiers into the proposal — the agent's only channel to them", async () => {
+    const { ctx, seen } = ctxWith();
+    await generateImageTool("c1", {
+      prompt: "x", entity: "艾尔登", aspect: "16:9", resolution: "2K", quality: "high",
+    }, ctx);
+    expect(seen[0].aspect).toBe("16:9");
+    expect(seen[0].resolution).toBe("2K");
+    expect(seen[0].quality).toBe("high");
+  });
+
+  it("drops tier values no dialect speaks instead of letting them ride to the wire", async () => {
+    const { ctx, seen } = ctxWith();
+    await generateImageTool("c1", {
+      prompt: "x", entity: "艾尔登", resolution: "2048x2048", quality: "ultra",
+    }, ctx);
+    expect(seen[0].resolution).toBeUndefined();
+    expect(seen[0].quality).toBeUndefined();
+  });
+
   it("hands a rejection back with the author's reason", async () => {
     const { ctx } = ctxWith({ approved: false, reason: "太暗了" });
     const res = await generateImageTool("c1", { prompt: "x", entity: "艾尔登" }, ctx);
