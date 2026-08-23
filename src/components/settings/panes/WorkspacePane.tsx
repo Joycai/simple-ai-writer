@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { X } from "lucide-react";
+import { Pencil, RotateCcw, X } from "lucide-react";
 import { flushDirtyDocuments, useProjectStore } from "../../../stores/projectStore";
 import { exportProjectBundle, restoreProjectBundle } from "../../../lib/fs/projectBackup";
 import {
@@ -13,6 +13,14 @@ import {
   type WorkspaceProfile,
 } from "../../../lib/profile";
 import { fileExists, readDir } from "../../../lib/fs/fileio";
+import {
+  BUILTIN_WORKFLOWS,
+  deleteWorkflowCard,
+  saveWorkflowCard,
+  scanWorkflows,
+  suggestWorkflowId,
+  type WorkflowCard,
+} from "../../../lib/workflow";
 import { useImeGuard } from "../../../lib/ime";
 import { Pane, PaneHeader, Section, Row, Toggle } from "./bits";
 import ui from "../settingsUi.module.css";
@@ -177,8 +185,223 @@ export function WorkspacePane() {
       </Section>
 
       <CustomCategoriesSection />
+      <WorkflowCardsSection />
       <ProjectBackupSection />
     </Pane>
+  );
+}
+
+// ─── Workflow cards ──────────────────────────────────────────────────────────
+
+/** What the inline editor is holding: an existing card's id, or "new". */
+interface WorkflowDraft {
+  id: string | null;
+  name: string;
+  description: string;
+  body: string;
+}
+
+/**
+ * 工作流卡（docs/feature/agent/workflow-cards-plan.md）：内置 + 项目文件的
+ * 合并清单，启停、编辑、新建、还原。所有改动都是写/删
+ * `.ai-writer/workflows/<id>.md` —— 这个 section 没有自己的持久状态，
+ * 每次动作后重扫一遍就是真相。
+ */
+function WorkflowCardsSection() {
+  const { t } = useTranslation();
+  const projectPath = useProjectStore((s) => s.projectPath);
+  const [cards, setCards] = useState<WorkflowCard[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [draft, setDraft] = useState<WorkflowDraft | null>(null);
+  /** Two-click delete: first click arms this id, second deletes. */
+  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
+
+  const rescan = async (path: string) => setCards(await scanWorkflows(path));
+
+  useEffect(() => {
+    if (!projectPath) {
+      setCards([]);
+      return;
+    }
+    let cancelled = false;
+    void scanWorkflows(projectPath).then((c) => {
+      if (!cancelled) setCards(c);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectPath]);
+
+  const run = async (action: () => Promise<void>) => {
+    if (!projectPath || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      await rescan(projectPath);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * 启停。项目卡改写自己的文件；内置卡的「停用」写一份带 disabled 的全量
+   * 副本（薄覆盖会合并出一张空卡——整张替换是刻意的，见 lib/workflow/write）。
+   */
+  const toggleCard = (card: WorkflowCard, on: boolean) =>
+    run(() =>
+      saveWorkflowCard(projectPath!, card.id, {
+        name: card.name,
+        description: card.description,
+        body: card.body,
+        disabled: !on,
+      }),
+    );
+
+  const saveDraft = () =>
+    run(async () => {
+      if (!draft || !draft.name.trim()) return;
+      const id = draft.id ?? suggestWorkflowId(draft.name, cards.map((c) => c.id));
+      await saveWorkflowCard(projectPath!, id, {
+        name: draft.name.trim(),
+        description: draft.description.trim(),
+        body: draft.body,
+        disabled: false,
+      });
+      setDraft(null);
+    });
+
+  if (!projectPath) return null;
+
+  const isBuiltinId = (id: string) => BUILTIN_WORKFLOWS.some((b) => b.id === id);
+
+  return (
+    <Section label={t("systemSettings.workflows.section")}>
+      <div className={`${ui.rowStacked} ${ui.rowLast}`}>
+        <div className={ui.rowDesc}>{t("systemSettings.workflows.hint")}</div>
+
+        <div style={{ marginTop: "var(--space-3)" }}>
+          {cards.map((card) => (
+            <div key={card.id} className={ui.customRow}>
+              <span className={ui.badge}>
+                {card.builtin
+                  ? t("systemSettings.workflows.builtin")
+                  : isBuiltinId(card.id)
+                    ? t("systemSettings.workflows.overridden")
+                    : t("systemSettings.workflows.custom")}
+              </span>
+              <span className={ui.customName} style={card.disabled ? { opacity: 0.5 } : undefined}>
+                {card.name}
+                {card.description && (
+                  <span style={{ color: "var(--color-text-muted)" }}>{` — ${card.description}`}</span>
+                )}
+              </span>
+              <span className={ui.spacer} />
+              <button
+                className={ui.iconBtn}
+                title={t("systemSettings.workflows.edit")}
+                onClick={() =>
+                  setDraft({ id: card.id, name: card.name, description: card.description, body: card.body })
+                }
+              >
+                <Pencil size={14} />
+              </button>
+              {/* 覆盖过的内置卡回得去；纯项目卡只能删。二者互斥。 */}
+              {!card.builtin && isBuiltinId(card.id) && (
+                <button
+                  className={ui.iconBtn}
+                  title={t("systemSettings.workflows.restore")}
+                  onClick={() => void run(() => deleteWorkflowCard(projectPath, card.id))}
+                >
+                  <RotateCcw size={14} />
+                </button>
+              )}
+              {!card.builtin && !isBuiltinId(card.id) && (
+                <button
+                  className={ui.iconBtn}
+                  title={
+                    confirmingDelete === card.id
+                      ? t("systemSettings.workflows.deleteConfirm")
+                      : t("systemSettings.workflows.delete")
+                  }
+                  style={confirmingDelete === card.id ? { color: "var(--color-error)" } : undefined}
+                  onClick={() => {
+                    if (confirmingDelete !== card.id) {
+                      setConfirmingDelete(card.id);
+                      return;
+                    }
+                    setConfirmingDelete(null);
+                    void run(() => deleteWorkflowCard(projectPath, card.id));
+                  }}
+                  onBlur={() => setConfirmingDelete(null)}
+                >
+                  <X size={14} />
+                </button>
+              )}
+              <Toggle
+                on={!card.disabled}
+                onChange={(next) => void toggleCard(card, next)}
+                label={t(
+                  card.disabled
+                    ? "systemSettings.workflows.enableCard"
+                    : "systemSettings.workflows.disableCard",
+                  { card: card.name },
+                )}
+              />
+            </div>
+          ))}
+        </div>
+
+        {draft ? (
+          <div style={{ marginTop: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+            <input
+              className={common.input}
+              value={draft.name}
+              maxLength={40}
+              placeholder={t("systemSettings.workflows.namePlaceholder")}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            />
+            <input
+              className={common.input}
+              value={draft.description}
+              maxLength={60}
+              placeholder={t("systemSettings.workflows.descPlaceholder")}
+              onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+            />
+            <textarea
+              className={common.textarea}
+              rows={10}
+              value={draft.body}
+              placeholder={t("systemSettings.workflows.bodyPlaceholder")}
+              onChange={(e) => setDraft({ ...draft, body: e.target.value })}
+              spellCheck={false}
+            />
+            <div style={{ display: "flex", gap: "var(--space-2)" }}>
+              <button className={ui.rowBtn} onClick={() => void saveDraft()} disabled={busy || !draft.name.trim()}>
+                {t("common.save")}
+              </button>
+              <button className={ui.rowBtn} onClick={() => setDraft(null)} disabled={busy}>
+                {t("common.cancel")}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ marginTop: "var(--space-3)" }}>
+            <button
+              className={ui.rowBtn}
+              onClick={() => setDraft({ id: null, name: "", description: "", body: "" })}
+              disabled={busy}
+            >
+              {t("systemSettings.workflows.newCard")}
+            </button>
+          </div>
+        )}
+        {error && <div className={ui.statusError}>{error}</div>}
+      </div>
+    </Section>
   );
 }
 

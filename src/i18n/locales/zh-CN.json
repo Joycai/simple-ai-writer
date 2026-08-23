@@ -232,6 +232,23 @@
       "renameCategory": "重命名",
       "newCategoryPlaceholder": "新分类名称，如：会议纪要"
     },
+    "workflows": {
+      "section": "工作流",
+      "hint": "固定某类任务的对话套路：AI 助手的说明里恒挂一份「名字 — 描述」清单，请求匹配某条描述时它会先读出该卡的步骤再动手。工作流是流程建议，你在对话里的明确要求永远优先。存放在项目的 .ai-writer/workflows/ 下，内置卡可覆盖、可停用、可还原。",
+      "builtin": "内置",
+      "overridden": "已覆盖",
+      "custom": "项目",
+      "edit": "编辑（内置卡将保存为项目副本）",
+      "restore": "还原为内置版本",
+      "delete": "删除",
+      "deleteConfirm": "再点一次确认删除",
+      "enableCard": "启用 {{card}}",
+      "disableCard": "停用 {{card}}",
+      "newCard": "+ 新建工作流",
+      "namePlaceholder": "名字（清单里显示）",
+      "descPlaceholder": "一行描述——AI 判断「该不该用这张卡」的唯一依据",
+      "bodyPlaceholder": "步骤正文（markdown）：写清顺序、格式样例和禁令"
+    },
     "shortcuts": {
       "categories": {
         "global": "全局",

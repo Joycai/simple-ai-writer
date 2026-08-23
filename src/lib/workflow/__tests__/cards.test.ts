@@ -1,5 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// write.ts touches fileio at import time via saveWorkflowCard's imports; the
+// round-trip tests below only use the pure serializer.
+vi.mock("../../fs/fileio", () => ({
+  readFile: vi.fn(async () => ""),
+  writeFile: vi.fn(async () => {}),
+  makeDir: vi.fn(async () => {}),
+  removeFile: vi.fn(async () => {}),
+  readDir: vi.fn(async () => []),
+}));
+
 import { BUILTIN_WORKFLOWS } from "../builtins";
+import { serializeWorkflowFile, suggestWorkflowId } from "../write";
 import {
   activeWorkflows,
   findWorkflow,
@@ -100,6 +112,52 @@ describe("workflowRoster", () => {
     const many = Array.from({ length: ROSTER_LIMIT + 5 }, (_, i) => card(`w${i}`));
     const roster = workflowRoster(many);
     expect(roster.split("\n")).toHaveLength(ROSTER_LIMIT);
+  });
+});
+
+describe("serializeWorkflowFile / parseWorkflowFile round-trip", () => {
+  it("三个字段 + 正文原样回来", () => {
+    const raw = serializeWorkflowFile({
+      name: "翻译输出格式",
+      description: "翻译前先确认格式",
+      body: "1. 先问作者。\n2. 再动手。",
+      disabled: false,
+    });
+    const c = parseWorkflowFile("translate-output", raw);
+    expect(c.name).toBe("翻译输出格式");
+    expect(c.description).toBe("翻译前先确认格式");
+    expect(c.body).toBe("1. 先问作者。\n2. 再动手。");
+    expect(c.disabled).toBe(false);
+    expect(raw).not.toContain("disabled");
+  });
+
+  it("停用副本带 disabled 行且往返成立 —— 这就是「停用内置卡」写下的东西", () => {
+    const raw = serializeWorkflowFile({ name: "X", description: "", body: "步骤", disabled: true });
+    expect(parseWorkflowFile("x", raw).disabled).toBe(true);
+  });
+
+  it("name 里的引号和换行不打坏行式 frontmatter —— 和 lore 的 yamlQuote 同款", () => {
+    const raw = serializeWorkflowFile({
+      name: '带"引号"\n和换行',
+      description: "d",
+      body: "b",
+      disabled: false,
+    });
+    const c = parseWorkflowFile("x", raw);
+    expect(c.name).toBe('带"引号"\n和换行');
+    expect(c.description).toBe("d");
+  });
+});
+
+describe("suggestWorkflowId", () => {
+  it("中文名直接可用，只剥路径敌意字符", () => {
+    expect(suggestWorkflowId("翻译流程", [])).toBe("翻译流程");
+    expect(suggestWorkflowId('a/b\\c:d"e', [])).toBe("abcde");
+  });
+
+  it("冲突时加序号，空名有兜底", () => {
+    expect(suggestWorkflowId("流程", ["流程", "流程-2"])).toBe("流程-3");
+    expect(suggestWorkflowId("///", [])).toBe("workflow");
   });
 });
 
