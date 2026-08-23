@@ -12,7 +12,13 @@ import {
   type SubAgentKind,
 } from "../../../lib/agent/subagent";
 import { conversationalModels, isTranslateOnly, type Model } from "../../../lib/ai/configDb";
-import { isTranslateLoreEnabled, setTranslateLoreEnabled } from "../../../lib/translate/flag";
+import {
+  clampChunkLines,
+  isTranslateLoreEnabled,
+  setTranslateLoreEnabled,
+  setTranslateLinesPerChunk,
+  translateLinesPerChunk,
+} from "../../../lib/translate/flag";
 import { Pane, Toggle } from "./bits";
 import { Select } from "../../common/Select";
 import ui from "../settingsUi.module.css";
@@ -35,6 +41,7 @@ import css from "./SubAgents.module.css";
 export function SubAgentsPane() {
   const { t } = useTranslation();
   const [useLore, setUseLore] = useState(isTranslateLoreEnabled());
+  const [chunkLines, setChunkLines] = useState(translateLinesPerChunk());
   const models = useAiStore((s) => s.models);
   const subAgents = useAiStore((s) => s.subAgents);
   const setSubAgent = useAiStore((s) => s.setSubAgent);
@@ -201,7 +208,7 @@ export function SubAgentsPane() {
                     {/* 术语表开关只属于这一张卡片，所以就长在这里，而不是把
                         "每个 kind 可以有额外控件"抽象成一个通用槽位——目前只有
                         一个 kind 需要它，抽象出来的只会是一个空框架。 */}
-                    {kind === "translate" && (
+                    {kind === "translate" && (<>
                       <label className={css.bind}>
                         <input
                           type="checkbox"
@@ -213,7 +220,24 @@ export function SubAgentsPane() {
                         />
                         <span className={css.desc}>{t("systemSettings.subagents.translateUseLore")}</span>
                       </label>
-                    )}
+                      {/* 块大小：默认 50 是一台 14B/LM Studio 上的实测安全区，
+                          换个部署就未必成立，所以必须可调。1 = 逐行。 */}
+                      <label className={css.bind}>
+                        <input
+                          type="number"
+                          min={1}
+                          max={100}
+                          value={chunkLines}
+                          style={{ width: 64 }}
+                          onChange={(e) => {
+                            const n = clampChunkLines(e.target.value);
+                            setTranslateLinesPerChunk(n);
+                            setChunkLines(n);
+                          }}
+                        />
+                        <span className={css.desc}>{t("systemSettings.subagents.translateChunk")}</span>
+                      </label>
+                    </>)}
                   </div>
 
                   {warn && (

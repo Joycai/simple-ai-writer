@@ -61,14 +61,17 @@ export function isDictEntity(e: Pick<LoreEntity, "dict">): boolean {
  * 把「翻译词典」条目的正文解析成词条。
  *
  * 一行一条 `原文->译文 #备注`（就是 Sakura 的术语表格式，作者写下的即模型看到
- * 的）。宽容三件事：`→` 当 `->` 用、行首的 markdown 列表符号、`#备注` 可省。
- * 其余行（标题、说明文字、空行）静默跳过——正文允许夹杂说明。
+ * 的）。宽容四件事：`→`、`=`、`＝` 都当 `->` 用（`=` 是 GalTransl 等工具词表的
+ * 惯用分隔符，作者手里的现成词表多半长这样——实机踩过：一份 `=` 词表在这里
+ * 被静默跳过了每一行，词典等于不存在且无任何报警）、行首的 markdown 列表符号、
+ * `#备注` 可省。其余行（标题、说明文字、空行）静默跳过——正文允许夹杂说明。
+ * 发给模型的永远重新格式化为官方的 `->`（见 formatGlossary），与来源分隔符无关。
  */
 export function parseDictBody(body: string): GlossaryEntry[] {
   const out: GlossaryEntry[] = [];
   for (const raw of body.split("\n")) {
     const line = raw.trim().replace(/^(?:[-*+]|\d+[.、])\s+/, "");
-    const m = line.match(/^(.+?)\s*(?:->|→)\s*(.+)$/);
+    const m = line.match(/^(.+?)\s*(?:->|→|=|＝)\s*(.+)$/);
     if (!m) continue;
     const src = m[1].trim();
     let rest = m[2];
