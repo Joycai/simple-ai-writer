@@ -62,6 +62,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [agent-tool-context.md](feature/agent/agent-tool-context.md) | `proposal` | Measurement of what tool schemas + briefing actually cost per round |
 | [agent-tool-context-lld.md](feature/agent/agent-tool-context-lld.md) | `planned` | The PR-by-PR execution plan for the above |
 | [measurements/briefing-ab-2026-08.md](feature/agent/measurements/briefing-ab-2026-08.md) | `research` | briefing A/B on gemma4:12b-mlx, 2026-08-21 |
+| [workflow-cards-plan.md](feature/agent/workflow-cards-plan.md) | `proposal` | 工作流卡：作者用纯数据固定任务套路（best-effort 提示注入，两级渐进披露）；与 B 类"流水线进工具"的分工 |
 
 ### feature/lore/ — the knowledge base
 
