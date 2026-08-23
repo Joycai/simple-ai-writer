@@ -11,7 +11,9 @@
  *   propose_lore_plan  → blocks on the author's decision (one card, N steps)
  *   approved           → the steps are recorded in this run's gate
  *   create/update/move/delete_lore_entity → refused unless a recorded step
- *                        covers that exact action on that exact entity
+ *                        covers that entity (and, for a file-scoped write,
+ *                        that file) — see checkPlan for the one deliberate
+ *                        exception, "create" vs "update" on a facet file
  *
  * One card for a whole housekeeping pass, and the writes that follow are
  * provably the ones on it. What the gate can check is *which entity, which
@@ -123,7 +125,16 @@ export function checkPlan(
 
   const at = gate.steps.findIndex(
     (s) =>
-      s.action === action &&
+      // update_lore_file is the only tool that ever lands a file — including a
+      // facet that doesn't exist yet on an entity that does (create_lore_entity
+      // refuses that; it only makes brand-new entities). Its call is always
+      // gated as "update" (writeTools.ts), but a plan author has no way to tell
+      // "new facet" from "edit existing facet" apart except by writing "create"
+      // — and that's a sensible word for genuinely new content. So for a
+      // file-scoped call, accept either label; only the entity-level actions
+      // (create_lore_entity/move/delete, all called with no `file`) still need
+      // an exact match.
+      (s.action === action || (action === "update" && !!file && s.action === "create")) &&
       sameEntity(loreIndex, s.entity, entity) &&
       // A step that names a file pins the write to exactly that file; a step
       // that doesn't covers any file in that entity. A file-scoped step must
