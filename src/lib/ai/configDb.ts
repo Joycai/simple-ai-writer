@@ -104,6 +104,14 @@ export interface Provider {
    * scheme, so an upgrade never changes how an existing provider authenticates.
    */
   authMode?: AuthMode;
+  /**
+   * Position in the provider list, written by the reorder buttons (see
+   * `lib/ai/providerOrder`). Undefined — every provider never explicitly
+   * moved — sorts *after* all ordered rows, by `createdAt`: a new provider
+   * appends at the bottom without any write, and a pre-feature config keeps
+   * its familiar order. The first move rewrites positions for the whole list.
+   */
+  sortOrder?: number;
   createdAt: number;
 }
 
@@ -375,6 +383,7 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
   const providerCols = await db.select<{ name: string }[]>(`PRAGMA table_info(providers)`);
   await addColumn(db, providerCols, "providers", "safety_settings", "TEXT");
   await addColumn(db, providerCols, "providers", "auth_mode", "TEXT");
+  await addColumn(db, providerCols, "providers", "sort_order", "INTEGER");
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS models (
@@ -483,8 +492,10 @@ export async function dropLegacyKeyTable(
 }
 
 export async function listProviders(db: Awaited<ReturnType<typeof Database.load>>): Promise<Provider[]> {
+  // Explicitly ordered rows first, in their order; never-moved rows (NULL)
+  // after them, oldest first — see Provider.sortOrder.
   const rows = await db.select<Record<string, unknown>[]>(
-    "SELECT id, name, base_url, api_standard, safety_settings, auth_mode, created_at FROM providers ORDER BY created_at ASC"
+    "SELECT id, name, base_url, api_standard, safety_settings, auth_mode, sort_order, created_at FROM providers ORDER BY (sort_order IS NULL) ASC, sort_order ASC, created_at ASC"
   );
   return rows.map((r) => {
     const baseUrl = r.base_url as string;
@@ -498,6 +509,7 @@ export async function listProviders(db: Awaited<ReturnType<typeof Database.load>
       apiStandard,
       safetySettings: parseSafetySettings(r.safety_settings),
       authMode: parseAuthMode(r.auth_mode, apiStandard),
+      sortOrder: typeof r.sort_order === "number" ? r.sort_order : undefined,
       createdAt: r.created_at as number,
     };
   });
@@ -564,14 +576,15 @@ export function providerUpsert(p: Provider): SqlStatement {
   // take every model configured under it with it. `created_at` is deliberately
   // left out of the update: editing a provider must not re-date it.
   return {
-    sql: `INSERT INTO providers (id, name, base_url, api_standard, safety_settings, auth_mode, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    sql: `INSERT INTO providers (id, name, base_url, api_standard, safety_settings, auth_mode, sort_order, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        name = excluded.name,
        base_url = excluded.base_url,
        api_standard = excluded.api_standard,
        safety_settings = excluded.safety_settings,
-       auth_mode = excluded.auth_mode`,
+       auth_mode = excluded.auth_mode,
+       sort_order = excluded.sort_order`,
     values: [
       p.id,
       p.name,
@@ -579,8 +592,21 @@ export function providerUpsert(p: Provider): SqlStatement {
       p.apiStandard,
       p.safetySettings ? JSON.stringify(p.safetySettings) : null,
       p.authMode ?? null,
+      p.sortOrder ?? null,
       p.createdAt,
     ],
+  };
+}
+
+/**
+ * One provider's new list position. The reorder actions batch these — one per
+ * provider, whole list at once — through `sqlTransaction`, so a crash mid-way
+ * can't leave two providers claiming one slot.
+ */
+export function providerOrderUpdate(id: string, sortOrder: number): SqlStatement {
+  return {
+    sql: `UPDATE providers SET sort_order = ? WHERE id = ?`,
+    values: [sortOrder, id],
   };
 }
 
