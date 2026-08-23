@@ -1256,7 +1256,7 @@
       "prompts": "Prompts"
     },
     "hub": {
-      "summary": "{{providers}} providers · {{models}} models",
+      "summary": "{{providers}} providers · {{models}} models · order sets the model picker's grouping",
       "searchPlaceholder": "Search models / model ID / provider…",
       "filterAll": "All",
       "modelCount": "{{count}} models",
@@ -1265,6 +1265,11 @@
       "addModel": "Model",
       "addModelTitle": "Add a model to this provider",
       "editProvider": "Edit provider",
+      "moveTop": "Move to top",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "moveBottom": "Move to bottom",
+      "moreOrder": "More ordering",
       "deleteProvider": "Delete provider",
       "deleteModel": "Delete model",
       "deleteProviderConfirm": "Delete provider “{{name}}”? Its {{count}} models will be removed too.",

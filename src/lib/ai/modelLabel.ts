@@ -61,14 +61,7 @@ function tidy(s: string): string {
   return s.replace(/\s+/g, " ").replace(/^[\s\-_·/|]+|[\s\-_·/|]+$/g, "").trim();
 }
 
-/**
- * @param name    The author-facing model name (`Model.name`).
- * @param modelId The wire id, used as a fallback when the name is blank.
- */
-export function parseModelLabel(name: string, modelId = ""): ModelLabel {
-  const raw = (name || "").trim() || (modelId || "").trim();
-  if (!raw) return { title: "", badges: [], subtitle: null };
-
+function stripQualifiers(raw: string): { body: string; badges: string[] } {
   const { rest, badges } = stripBrackets(raw);
 
   // Piped segments: everything before the last segment is a route qualifier.
@@ -82,7 +75,19 @@ export function parseModelLabel(name: string, modelId = ""): ModelLabel {
     }
   }
 
-  body = tidy(body);
+  return { body: tidy(body), badges };
+}
+
+/**
+ * @param name    The author-facing model name (`Model.name`).
+ * @param modelId The wire id, used as a fallback when the name is blank.
+ */
+export function parseModelLabel(name: string, modelId = ""): ModelLabel {
+  const raw = (name || "").trim() || (modelId || "").trim();
+  if (!raw) return { title: "", badges: [], subtitle: null };
+
+  const { body: stripped, badges } = stripQualifiers(raw);
+  let body = stripped;
 
   // Namespace / tag. The tag is only split off when it follows the namespaced
   // form — a bare "gpt-4:0613" keeps its colon, since there is no publisher to
@@ -103,6 +108,22 @@ export function parseModelLabel(name: string, modelId = ""): ModelLabel {
     title: body || raw,
     badges: badges.map((b) => tidy(b)).filter(Boolean),
     subtitle,
+  };
+}
+
+/**
+ * Provider display labels — the same bracket/pipe qualifier extraction as
+ * model names, but **no** namespace/tag split: a provider name is a free-form
+ * label, not a wire id, so a slash in it ("aihubmix/官转") is part of the name
+ * and splitting it would silently drop half of it.
+ */
+export function parseProviderLabel(name: string): { title: string; badges: string[] } {
+  const raw = (name || "").trim();
+  if (!raw) return { title: "", badges: [] };
+  const { body, badges } = stripQualifiers(raw);
+  return {
+    title: body || raw,
+    badges: badges.map((b) => tidy(b)).filter(Boolean),
   };
 }
 

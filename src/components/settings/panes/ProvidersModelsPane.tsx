@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronRight, Pencil, Search, X } from "lucide-react";
+import {
+  ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, ChevronUp, Pencil, Search, X,
+} from "lucide-react";
 import { useAiStore } from "../../../stores/aiStore";
 import { useAppStore } from "../../../stores/appStore";
 import type { Model, ModelType } from "../../../lib/ai/configDb";
+import type { ProviderMove } from "../../../lib/ai/providerOrder";
+import { MOD_KEY } from "../../../lib/platform";
 import { ConfirmDialog } from "../../common/ConfirmDialog";
 import { ProviderDrawer } from "./ProviderDrawer";
 import { ModelDrawer } from "./ModelDrawer";
@@ -37,7 +41,7 @@ interface Props {
 
 export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
   const { t } = useTranslation();
-  const { providers, models, removeProvider, removeModel, getApiKey } = useAiStore();
+  const { providers, models, removeProvider, removeModel, moveProvider, getApiKey } = useAiStore();
   const defaultMaxOutput = useAppStore((s) => s.defaultMaxOutput);
   const setDefaultMaxOutput = useAppStore((s) => s.setDefaultMaxOutput);
 
@@ -48,6 +52,38 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
   const [drawerClosing, setDrawerClosing] = useState(false);
   const [pending, setPending] = useState<Pending>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Which provider's 更多排序 (置顶/置底) menu is open. One at a time. */
+  const [orderMenu, setOrderMenu] = useState<string | null>(null);
+  /** Row that just moved — its band flashes once so the eye can follow it. */
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const flashTimer = useRef<number | null>(null);
+
+  const doMove = (id: string, move: ProviderMove) => {
+    setOrderMenu(null);
+    void moveProvider(id, move).then(() => {
+      if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
+      // Null first so moving the same row twice restarts the animation.
+      setFlashId(null);
+      requestAnimationFrame(() => setFlashId(id));
+      flashTimer.current = window.setTimeout(() => {
+        flashTimer.current = null;
+        setFlashId(null);
+      }, 520);
+    });
+  };
+  useEffect(() => () => {
+    if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
+  }, []);
+
+  // The 更多排序 menu closes like every other popup: outside click (mousedown
+  // inside the slot is stopped before it reaches this listener) or Escape
+  // (routed through the page's intercept chain below).
+  useEffect(() => {
+    if (!orderMenu) return;
+    const onDown = () => setOrderMenu(null);
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [orderMenu]);
 
   // 关闭走 160ms 退场（scrim 淡出、抽屉滑回）再卸载 — 与 ModalShell 的
   // modal-closing 同一节奏（进 220ms / 出 160ms）。计时器进 ref：重复的关闭
@@ -79,10 +115,16 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
     // it. Both listeners sit on `window`, so the page's would otherwise fire
     // too and take the whole settings page down with the dialog — claiming the
     // key with a no-op is what keeps one press to one layer.
-    const handler = pending ? () => {} : drawer ? closeDrawer : null;
+    const handler = pending
+      ? () => {}
+      : orderMenu
+        ? () => setOrderMenu(null)
+        : drawer
+          ? closeDrawer
+          : null;
     onEscapeInterceptChange(handler);
     return () => onEscapeInterceptChange(null);
-  }, [drawer, pending, onEscapeInterceptChange]);
+  }, [drawer, pending, orderMenu, onEscapeInterceptChange]);
 
   const q = query.trim().toLowerCase();
 
@@ -221,11 +263,22 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
           return (
             <div key={g.id} className={hub.group}>
               <div
-                className={hub.groupHead}
+                className={`${hub.groupHead} ${flashId === g.id ? hub.groupFlash : ""}`}
                 onClick={() => setCollapsed((c) => ({ ...c, [g.id]: open }))}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
+                  // ⌘⇧↑ / ⌘⇧↓ (Ctrl on Windows): 置顶/置底 without opening the
+                  // 更多排序 menu — the keyboard path the menu hints advertise.
+                  if (
+                    !isOrphan &&
+                    (e.metaKey || e.ctrlKey) && e.shiftKey &&
+                    (e.key === "ArrowUp" || e.key === "ArrowDown")
+                  ) {
+                    e.preventDefault();
+                    doMove(g.id, e.key === "ArrowUp" ? "top" : "bottom");
+                    return;
+                  }
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
                     setCollapsed((c) => ({ ...c, [g.id]: open }));
@@ -241,6 +294,81 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
                   <span className={hub.groupUrl}>{g.url ?? t("aiConfig.providers.defaultEndpoint")}</span>
                 )}
                 <span className={hub.groupSpacer} />
+                {/* 排序控件（design 09）：序号常驻，上移/下移 hover 浮现，
+                    置顶/置底收进序号旁的溢出菜单。Reorder against the FULL
+                    provider list, not the filtered view — the edges and the
+                    ordinal are the real list's, so a search can't lie about
+                    where a row sits. */}
+                {!isOrphan && (() => {
+                  const idx = providers.findIndex((p) => p.id === g.id);
+                  const first = idx <= 0;
+                  const last = idx < 0 || idx >= providers.length - 1;
+                  const menuOpen = orderMenu === g.id;
+                  return (
+                    <div
+                      className={`${hub.orderSlot} ${menuOpen ? hub.orderSlotOpen : ""}`}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      <div className={hub.orderCtl}>
+                        <div className={hub.orderReveal}>
+                          <button
+                            className={hub.orderCell}
+                            title={t("aiConfig.hub.moveUp")}
+                            disabled={first}
+                            onClick={() => doMove(g.id, "up")}
+                          >
+                            <ChevronUp size={11} strokeWidth={2.4} />
+                          </button>
+                          <span className={hub.orderDivider} />
+                          <button
+                            className={hub.orderCell}
+                            title={t("aiConfig.hub.moveDown")}
+                            disabled={last}
+                            onClick={() => doMove(g.id, "down")}
+                          >
+                            <ChevronDown size={11} strokeWidth={2.4} />
+                          </button>
+                          <span className={hub.orderDivider} />
+                        </div>
+                        <button
+                          className={hub.orderOrd}
+                          title={t("aiConfig.hub.moreOrder")}
+                          aria-haspopup="menu"
+                          aria-expanded={menuOpen}
+                          onClick={() => setOrderMenu(menuOpen ? null : g.id)}
+                        >
+                          <span className={hub.orderNum}>{String(idx + 1).padStart(2, "0")}</span>
+                          <span className={hub.orderCaret}>▾</span>
+                        </button>
+                      </div>
+                      {menuOpen && (
+                        <div className={hub.orderMenu} role="menu">
+                          <button
+                            className={hub.orderItem}
+                            role="menuitem"
+                            disabled={first}
+                            onClick={() => doMove(g.id, "top")}
+                          >
+                            <ChevronsUp size={12} strokeWidth={2.2} />
+                            <span>{t("aiConfig.hub.moveTop")}</span>
+                            <span className={hub.orderKbd}>{MOD_KEY}⇧↑</span>
+                          </button>
+                          <button
+                            className={hub.orderItem}
+                            role="menuitem"
+                            disabled={last}
+                            onClick={() => doMove(g.id, "bottom")}
+                          >
+                            <ChevronsDown size={12} strokeWidth={2.2} />
+                            <span>{t("aiConfig.hub.moveBottom")}</span>
+                            <span className={hub.orderKbd}>{MOD_KEY}⇧↓</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 {g.all.length > 0 && (
                   <span className={hub.groupCount}>{t("aiConfig.hub.modelCount", { count: g.all.length })}</span>
                 )}

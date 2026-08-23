@@ -181,6 +181,141 @@
 .groupBtn:hover { color: var(--color-accent); border-color: var(--color-accent); }
 .groupBtn:active { transform: scale(0.96); }
 
+/* ─── Provider reorder（design 09 供应商排序）───────────────────────────────
+   序号常驻，按钮浮现：a fixed 96px slot so rest and hover never shift layout.
+   The ordinal is always readable; arrows, chrome and the caret fade in on row
+   hover (or focus, or while the overflow menu is open). */
+
+.orderSlot {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 96px;
+  height: 26px;
+  cursor: default;
+}
+.orderCtl {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  border: 1px solid transparent;
+  background: transparent;
+  transition: border-color 180ms var(--ease-out), background 180ms var(--ease-out);
+}
+.groupHead:hover .orderCtl,
+.groupHead:focus-within .orderCtl,
+.orderSlotOpen .orderCtl {
+  border-color: var(--color-border);
+  background: var(--color-bg-surface);
+}
+.orderReveal {
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms var(--ease-out);
+}
+.groupHead:hover .orderReveal,
+.groupHead:focus-within .orderReveal,
+.orderSlotOpen .orderReveal {
+  opacity: 1;
+  pointer-events: auto;
+}
+.orderCell {
+  width: 24px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.orderCell:not(:disabled):hover { background: var(--color-bg-elevated); }
+.orderCell:disabled { color: var(--color-text-ghost); cursor: default; }
+.orderDivider {
+  width: 1px;
+  height: 14px;
+  background: var(--color-border);
+}
+.orderOrd {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 7px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--color-text-kbd);
+  transition: color 180ms var(--ease-out), background var(--transition-fast);
+}
+.orderOrd:hover { background: var(--color-bg-elevated); }
+.groupHead:hover .orderOrd,
+.groupHead:focus-within .orderOrd,
+.orderSlotOpen .orderOrd { color: var(--color-text-dim); }
+.orderNum {
+  font: 500 11px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+}
+.orderCaret {
+  font-size: 9px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 180ms var(--ease-out);
+}
+.groupHead:hover .orderCaret,
+.groupHead:focus-within .orderCaret,
+.orderSlotOpen .orderCaret { opacity: 1; }
+
+.orderMenu {
+  position: absolute;
+  top: 30px;
+  right: 0;
+  z-index: 30;
+  width: 186px;
+  padding: var(--space-1) 0;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-strong);
+  box-shadow: var(--shadow-lg);
+  animation: dropIn 160ms var(--ease-out);
+  transform-origin: top right;
+}
+.orderItem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: none;
+  font-size: var(--font-size-md);
+  font-family: inherit;
+  color: var(--color-text-secondary);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.orderItem:not(:disabled):hover { background: var(--color-bg-elevated); }
+.orderItem:disabled { color: var(--color-text-ghost); cursor: default; }
+.orderKbd {
+  margin-left: auto;
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-kbd);
+}
+
+/* 移动后该行底色闪一下再回常态，让眼睛跟得上换位。`from` only: the end
+   state is the row's own background, hover or not. */
+.groupFlash { animation: orderFlash 400ms var(--ease-out); }
+@keyframes orderFlash {
+  from { background-color: var(--color-amber-soft); }
+}
+
 .iconBtn {
   flex: none;
   display: flex;
@@ -190,10 +325,11 @@
   transition: color var(--transition-fast), background var(--transition-fast),
     transform var(--transition-fast);
 }
-.iconBtn:hover { color: var(--color-accent); background: var(--color-accent-tint); }
-.iconBtn:active { transform: scale(0.95); }
+.iconBtn:not(:disabled):hover { color: var(--color-accent); background: var(--color-accent-tint); }
+.iconBtn:not(:disabled):active { transform: scale(0.95); }
+.iconBtn:disabled { opacity: 0.3; cursor: default; }
 
-.iconBtnDanger:hover { color: var(--color-error); background: var(--color-error-bg); }
+.iconBtnDanger:not(:disabled):hover { color: var(--color-error); background: var(--color-error-bg); }
 
 /* ─── Model rows ──────────────────────────────────────────────────────────── */
 

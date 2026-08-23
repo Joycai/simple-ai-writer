@@ -204,6 +204,9 @@ export function parseConfigBundle(
       authMode: authModesFor(migrated).includes(r.authMode as AuthMode)
         ? (r.authMode as AuthMode)
         : undefined,
+      // Absent stays absent — "never moved" must survive a backup round-trip
+      // rather than becoming position 0.
+      sortOrder: typeof r.sortOrder === "number" ? r.sortOrder : undefined,
       createdAt: num(r.createdAt, Date.now()),
       ...(str(r.apiKey) ? { apiKey: r.apiKey as string } : {}),
     });

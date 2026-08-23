@@ -1,15 +1,17 @@
 import { create } from "zustand";
 import { nanoid } from "nanoid";
 import {
-  listProviders, saveProvider, deleteProvider,
+  listProviders, saveProvider, deleteProvider, providerOrderUpdate,
   listModels, saveModel, deleteModel,
   listPrompts, savePrompt, deletePrompt,
   ensureAiSchema,
   type Provider, type Model, type Prompt,
 } from "../lib/ai/configDb";
+import { moveId, type ProviderMove } from "../lib/ai/providerOrder";
 import { fetchRemoteModels } from "../lib/ai/providerProbe";
 import { saveApiKey, loadApiKey, deleteApiKey, migrateLegacyKeys } from "../lib/keyStore";
-import { getGlobalDb } from "../lib/project";
+import { getGlobalDb, getGlobalDbPath } from "../lib/project";
+import { sqlTransaction } from "../lib/sqlTx";
 import { deletePref, readPref, writePref } from "../lib/prefs";
 import {
   SUBAGENT_KINDS,
@@ -134,6 +136,8 @@ interface AiState {
   addProvider: (p: Omit<Provider, "id" | "createdAt">, apiKey: string) => Promise<string>;
   updateProvider: (p: Provider, apiKey?: string) => Promise<void>;
   removeProvider: (id: string) => Promise<void>;
+  /** 置顶/上移/下移/置底 — reorders the provider list and persists it. */
+  moveProvider: (id: string, move: ProviderMove) => Promise<void>;
   getApiKey: (providerId: string) => Promise<string | null>;
 
   addModel: (m: Omit<Model, "id">) => Promise<void>;
@@ -246,6 +250,28 @@ export const useAiStore = create<AiState>((set, get) => ({
         subAgents: cleanSubs,
       };
     });
+  },
+
+  moveProvider: async (id, move) => {
+    const cur = get().providers;
+    const order = moveId(cur.map((p) => p.id), id, move);
+    if (!order) return;
+    const byId = new Map(cur.map((p) => [p.id, p]));
+    // Positions are rewritten for the WHOLE list, not just the moved row:
+    // never-moved providers carry no sortOrder and sort after all ordered ones
+    // (see Provider.sortOrder), so moving one row "above" an unordered row
+    // would otherwise not actually place it there.
+    const providers = order.map((pid, i) => ({ ...byId.get(pid)!, sortOrder: i }));
+    if (isTauri) {
+      // db() first: it runs the schema migration that adds sort_order — a
+      // first move right after an upgrade must not race the ALTER TABLE.
+      await db();
+      await sqlTransaction(
+        await getGlobalDbPath(),
+        providers.map((p) => providerOrderUpdate(p.id, p.sortOrder)),
+      );
+    }
+    set({ providers });
   },
 
   getApiKey: (providerId) => loadApiKey(providerId),
