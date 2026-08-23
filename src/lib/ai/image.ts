@@ -849,7 +849,10 @@ function dashscopeBody(conn: ImageConn, req: ImageRequest): Record<string, unkno
       }],
     },
     parameters: {
-      ...(req.n && req.n > 1 ? { n: req.n } : {}),
+      // Always explicit, unlike the other routes: wan2.7's documented default
+      // is n = 4 — omitting the field there would draw (and bill) four
+      // pictures when the author asked for one.
+      n: req.n ?? 1,
       ...(req.size ? { size: normalizeDashscopeSize(req.size) } : {}),
       ...req.extraBody,
     },

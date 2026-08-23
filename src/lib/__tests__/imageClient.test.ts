@@ -450,10 +450,11 @@ describe("generateImage · dashscope route", () => {
     expect(input.messages[0].content).toEqual([{ text: "a cat" }]);
     const params = calls[0].body.parameters as Record<string, unknown>;
     // The size reaches the wire in DashScope's spelling regardless of how the
-    // author wrote it, n is omitted at the default, and extraBody lands in
-    // `parameters` — DashScope's knob namespace, not the top level.
+    // author wrote it, n is ALWAYS explicit — wan2.7's documented default is
+    // n = 4, so omitting it would bill four pictures for one — and extraBody
+    // lands in `parameters`, DashScope's knob namespace, not the top level.
     expect(params.size).toBe("1024*1024");
-    expect(params).not.toHaveProperty("n");
+    expect(params.n).toBe(1);
     expect(params.watermark).toBe(false);
     expect(res.images[0].dataUrl).toBe("data:image/png;base64,aGk=");
   });

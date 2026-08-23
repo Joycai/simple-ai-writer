@@ -251,6 +251,10 @@ export interface IllustrateProposal extends ProposalBase {
   /** Estimated USD for this run. Zero when the model has no price configured. */
   costUsd: number;
   aspect?: string;
+  /** Resolution tier ("1K"/"2K"/"4K") — resolved through the model's dialect. */
+  resolution?: string;
+  /** Quality tier ("low"/"medium"/"high") — GPT-Image dialect only. */
+  quality?: string;
   /**
    * Existing picture this one edits, as an absolute path. Present makes the
    * run an edit; the card shows it, since "change this picture" is only
@@ -1650,6 +1654,16 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
               enum: ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "16:9", "9:16", "21:9"],
               description: "Framing. Portraits lean vertical, scenes and banners horizontal.",
             },
+            resolution: {
+              type: "string",
+              enum: ["1K", "2K", "4K"],
+              description: "Resolution tier. Default 1K; higher tiers cost more and render slower.",
+            },
+            quality: {
+              type: "string",
+              enum: ["low", "medium", "high"],
+              description: "Quality tier (GPT-Image models only; large price difference). Omit for the endpoint default.",
+            },
             reason: {
               type: "string",
               description: "One line for the approval card: why this picture, now.",
@@ -1685,6 +1699,16 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             instruction: {
               type: "string",
               description: "What to change about the picture.",
+            },
+            resolution: {
+              type: "string",
+              enum: ["1K", "2K", "4K"],
+              description: "Resolution tier for the edited output. Omit to keep the default.",
+            },
+            quality: {
+              type: "string",
+              enum: ["low", "medium", "high"],
+              description: "Quality tier (GPT-Image models only). Omit for the endpoint default.",
             },
             note: {
               type: "string",

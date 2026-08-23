@@ -24,12 +24,21 @@
  *   gpt-image-2 additionally accepts arbitrary WIDTHxHEIGHT with both sides
  *   divisible by 16, ratio within 1:3..3:1, at most 3840x2160 (above
  *   2560x1440 is documented as experimental). `quality` ∈ low|medium|high|auto.
- *   The *edits* endpoint documents only the preset sizes, hence
- *   `omitSizeOnEdit` — an edit defaults to matching its input image anyway.
+ *   The *edits* endpoint documents only the preset sizes, so this dialect's
+ *   edit requests carry no size — an edit defaults to matching its input.
+ * - Wan 2.7 (DashScope): `parameters.size` takes the square shorthands
+ *   "1K"|"2K"|"4K" (1024²/2048²/4096²) or a custom `宽*高` with each side in
+ *   768..4096 (wan2.7-image tops out at 2K; -pro reaches 4K; the endpoint
+ *   default is 2K). Editing (0–9 input images) accepts only "1K"|"2K" or
+ *   sizes within 768*768..2048*2048, and the output's aspect ratio follows
+ *   the last input image — so an edit sends the tier shorthand, never a
+ *   computed 宽*高 that would fight the input's framing. No negative_prompt
+ *   on 2.7, and the endpoint's default n is 4 (!) — the dashscope route
+ *   always sends n explicitly for exactly that reason.
  */
 
 /** The declared dialect ids. Absent = generic (free-form size list). */
-export type ImageDialect = "nanobanana" | "gpt-image-2";
+export type ImageDialect = "nanobanana" | "gpt-image-2" | "wan2.7";
 
 /** The generic wire fields a dialect resolves the author's choices into. */
 export interface ImageWireParams {
@@ -61,14 +70,15 @@ export interface ImageDialectSpec {
   /** Quality tiers offered, when the dialect has that axis at all. */
   qualities?: readonly string[];
   /**
-   * The edits endpoint documents a narrower size set than generations
-   * (gpt-image-2's arbitrary sizes are a generations-only fact), and an edit
-   * defaults to its input image's framing — so this dialect's edit requests
-   * drop `size` rather than gamble on a value the endpoint may reject.
+   * Turn the author's choices into the fields the wire should carry.
+   *
+   * `opts.edit` marks an image-conditioned call — several dialects document a
+   * narrower size vocabulary there (gpt-image-2's arbitrary sizes and Wan's
+   * 宽*高 are generation-only facts), and an edit's framing follows its input
+   * image anyway, so the edit variant sends less rather than gamble on a
+   * value the endpoint may reject or fight over.
    */
-  omitSizeOnEdit?: boolean;
-  /** Turn the author's choices into the fields the wire should carry. */
-  params(sel: ImageParamSelection): ImageWireParams;
+  params(sel: ImageParamSelection, opts?: { edit?: boolean }): ImageWireParams;
 }
 
 /** The one aspect list both current dialects accept in full (Gemini's ten). */
@@ -122,17 +132,68 @@ const GPT_IMAGE_2: ImageDialectSpec = {
   aspects: WIDE_ASPECTS,
   resolutions: ["1K", "2K", "4K"],
   qualities: ["low", "medium", "high"],
-  omitSizeOnEdit: true,
-  params: (sel) => ({
+  params: (sel, opts) => ({
     // The aspect rides along untouched: the images route ignores it, but the
     // chat route (relay-hosted models) folds it into the prompt.
     aspect: sel.aspect,
-    size: gptImageSize(sel.aspect, sel.resolution || "1K"),
+    // The edits endpoint documents only the preset sizes, and an edit
+    // defaults to matching its input image — so no size there.
+    ...(opts?.edit ? {} : { size: gptImageSize(sel.aspect, sel.resolution || "1K") }),
     ...(sel.quality ? { quality: sel.quality } : {}),
   }),
 };
 
-export const IMAGE_DIALECTS: readonly ImageDialectSpec[] = [NANOBANANA, GPT_IMAGE_2];
+/**
+ * Side length of the square each Wan tier names (1K = 1024², …). Non-square
+ * aspects keep the tier's *area*: that is what the shorthand means, and a
+ * short-side rule would push 4K landscape past the 4096-per-side hard limit.
+ */
+const WAN_TIER_SIDE: Record<string, number> = { "1K": 1024, "2K": 2048, "4K": 4096 };
+const WAN_MIN_SIDE = 768;
+const WAN_MAX_SIDE = 4096;
+
+/**
+ * Compute the Wan `宽*高` for an aspect ratio and tier: the tier's pixel area
+ * at the requested ratio, both sides clamped into the documented 768..4096
+ * range — clamping recomputes the other side so the framing survives.
+ */
+export function wanImageSize(aspect: string, tier: string): string {
+  const [aw, ah] = aspect.split(":").map(Number);
+  if (!aw || !ah) return `${WAN_TIER_SIDE[tier] ?? 1024}*${WAN_TIER_SIDE[tier] ?? 1024}`;
+  const side = WAN_TIER_SIDE[tier] ?? WAN_TIER_SIDE["1K"];
+  const ratio = Math.max(aw, ah) / Math.min(aw, ah);
+  let long = round16(side * Math.sqrt(ratio));
+  let short = round16(side / Math.sqrt(ratio));
+  if (long > WAN_MAX_SIDE) {
+    long = WAN_MAX_SIDE;
+    short = round16(WAN_MAX_SIDE / ratio);
+  }
+  if (short < WAN_MIN_SIDE) {
+    short = WAN_MIN_SIDE;
+    long = Math.min(WAN_MAX_SIDE, round16(WAN_MIN_SIDE * ratio));
+  }
+  return aw >= ah ? `${long}*${short}` : `${short}*${long}`;
+}
+
+const WAN_2_7: ImageDialectSpec = {
+  id: "wan2.7",
+  aspects: WIDE_ASPECTS,
+  // 1K first as the cost-safe default; the endpoint's own default is 2K, and
+  // 4K only exists on wan2.7-image-pro — a plain wan2.7-image answers a 4K
+  // request with its own explicit error, per the caps philosophy.
+  resolutions: ["1K", "2K", "4K"],
+  params: (sel, opts) => {
+    const tier = sel.resolution || "1K";
+    if (opts?.edit) {
+      // Editing accepts only 1K/2K, and the output's aspect ratio follows the
+      // last input image — the tier shorthand is the whole vocabulary here.
+      return { aspect: sel.aspect, size: tier === "4K" ? "2K" : tier };
+    }
+    return { aspect: sel.aspect, size: wanImageSize(sel.aspect, tier) };
+  },
+};
+
+export const IMAGE_DIALECTS: readonly ImageDialectSpec[] = [NANOBANANA, GPT_IMAGE_2, WAN_2_7];
 
 /** The spec for a declared dialect, or null for generic / unknown values. */
 export function imageDialect(id: string | undefined): ImageDialectSpec | null {

@@ -18,10 +18,9 @@ import { create } from "zustand";
 import { nanoid } from "nanoid";
 
 import { generateImage, isEditUnsupportedError, type ImageResult } from "../lib/ai/image";
-import { imageDialect } from "../lib/ai/imageDialects";
 import type { Model, Provider } from "../lib/ai/configDb";
 import { imageToDataUrl } from "../lib/fs/images";
-import { recordImageUsage } from "../lib/image";
+import { imageRequestParams, recordImageUsage } from "../lib/image";
 import { discardSession, sweepScratch, writeCandidates } from "../lib/image/session";
 
 export interface ImageTurn {
@@ -49,11 +48,17 @@ export interface RunContext {
   model: Model;
   provider: Provider;
   apiKey: string;
-  size?: string;
+  /**
+   * The author's raw framing choices — resolved into wire fields per call by
+   * `imageRequestParams`, because an edit and a generation resolve
+   * differently on several dialects (see ImageDialectSpec.params).
+   */
   aspect?: string;
-  /** Gemini resolution tier ("1K"/"2K"/"4K") — dialect models only. */
-  imageSize?: string;
-  /** OpenAI quality tier ("low"/"medium"/"high") — dialect models only. */
+  /** Explicit pixel size the author typed — generic (dialect-less) models only. */
+  size?: string;
+  /** Resolution tier from the model's dialect ("1K"/"2K"/"4K"…). */
+  resolution?: string;
+  /** Quality tier from the model's dialect ("low"/"medium"/"high"). */
   quality?: string;
   n?: number;
   signal?: AbortSignal;
@@ -250,13 +255,11 @@ function callModel(ctx: RunContext, prompt: string, images: string[]): Promise<I
       prompt,
       ...(images.length ? { images } : {}),
       n: ctx.n ?? 1,
-      // Some dialects document a narrower size set for edits than for
-      // generations, and an edit defaults to its input's framing anyway —
-      // see ImageDialectSpec.omitSizeOnEdit.
-      size: images.length && imageDialect(ctx.model.caps?.dialect)?.omitSizeOnEdit ? undefined : ctx.size,
-      aspect: ctx.aspect,
-      imageSize: ctx.imageSize,
-      quality: ctx.quality,
+      ...imageRequestParams(
+        ctx.model.caps,
+        { aspect: ctx.aspect ?? "1:1", resolution: ctx.resolution, quality: ctx.quality, size: ctx.size },
+        { edit: images.length > 0 },
+      ),
       signal: ctx.signal,
     },
   );

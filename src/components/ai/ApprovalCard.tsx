@@ -361,6 +361,14 @@ function IllustrateBody({ proposal }: { proposal: IllustrateProposal }) {
           destination: proposal.destination,
           model: proposal.modelName,
         })}
+        {/* The framing/tier being paid for — quality tiers differ in price by
+            an order of magnitude, so they belong on the card, not in a log. */}
+        {(() => {
+          const params = [proposal.aspect, proposal.resolution, proposal.quality]
+            .filter(Boolean)
+            .join(" · ");
+          return params ? ` · ${params}` : "";
+        })()}
       </div>
     </div>
   );

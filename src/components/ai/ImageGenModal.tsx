@@ -231,10 +231,12 @@ export function ImageGenModal({ target, onClose }: Props) {
       provider,
       apiKey: (await loadApiKey(provider.id)) ?? "",
       n: effectiveCount,
-      // The dialect resolver turns the form's choices into the fields this
-      // model's endpoint actually takes; without a dialect, a size typed here
-      // wins, else the closest declared size, else no size at all.
-      ...imageRequestParams(imageModel.caps, { aspect, resolution, quality, size }),
+      // Raw choices — the store resolves them per call (an edit and a
+      // generation resolve differently on several dialects).
+      aspect,
+      resolution,
+      quality,
+      size,
       signal: ctrl.signal,
     };
   };

@@ -25,7 +25,12 @@ vi.mock("../image/session", () => ({
   sweepScratch: vi.fn(async () => {}),
   recordGeneration: vi.fn(async () => {}),
 }));
-vi.mock("../image", () => ({ recordImageUsage: vi.fn(async () => {}) }));
+// Partial mock: the store now also pulls imageRequestParams (pure) from this
+// module — only the I/O (usage rows) is stubbed out.
+vi.mock("../image", async () => {
+  const actual = await vi.importActual<typeof import("../image")>("../image");
+  return { ...actual, recordImageUsage: vi.fn(async () => {}) };
+});
 vi.mock("../fs/images", () => ({
   imageToDataUrl: vi.fn(async () => ({ dataUrl: "data:image/png;base64,SRC", ext: "png", bytes: new Uint8Array() })),
 }));
