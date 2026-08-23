@@ -24,8 +24,10 @@ import { baseName, resolveWorkspacePath } from "../paths";
 import type { ToolContext } from "../agent/registry";
 import type { ToolResult } from "../agent/tools";
 import { subAgentModel } from "../agent/subagent";
+import { parseFrontmatter } from "../fs/markdown";
 import { splitDocument } from "./chunk";
 import { isTranslateLoreEnabled } from "./flag";
+import { isDictEntity, parseDictBody, type GlossaryEntry } from "./glossary";
 import { runChunk, runDocument, type DocProgress } from "./run";
 
 let proposalCounter = 0;
@@ -55,6 +57,30 @@ async function resolveTranslateConn(): Promise<AiConn | { error: string }> {
   // 当成配置错误报出去，否则 LM Studio / Ollama 这条主线永远走不通。
   const apiKey = (await loadApiKey(provider.id)) ?? "";
   return { provider, model, apiKey };
+}
+
+/**
+ * 读「翻译词典」条目的正文，解析成词条。
+ *
+ * 别名通道一个条目只能表达一个译名；名叫「翻译词典」的条目（任何分类下）用
+ * 正文整批装 `原文->译文 #备注`。正文不在 LoreIndex 里（懒加载），所以一次
+ * 运行开始时读一遍——词表属于整份文档，逐块命中筛选仍在 `collectGlossary`。
+ */
+async function loadTranslateDict(ctx: ToolContext): Promise<GlossaryEntry[]> {
+  if (!isTranslateLoreEnabled() || !ctx.loreIndex) return [];
+  const out: GlossaryEntry[] = [];
+  for (const list of Object.values(ctx.loreIndex)) {
+    for (const e of list) {
+      if (!isDictEntity(e)) continue;
+      try {
+        const raw = await readFile(`${e.dirPath}/index.md`);
+        out.push(...parseDictBody(parseFrontmatter(raw).content));
+      } catch {
+        // 条目可能正被删或还没有 index.md——词典缺席只是少一批词条，不是错误。
+      }
+    }
+  }
+  return out;
 }
 
 export interface TranslateArgs {
@@ -165,6 +191,7 @@ async function translatePassage(
   const outcome = await runChunk(chunks[0], {
     conn: connOptions(conn),
     loreIndex: isTranslateLoreEnabled() ? ctx.loreIndex : undefined,
+    dict: await loadTranslateDict(ctx),
     signal: ctx.signal,
   });
   await recordUsage(ctx, conn, outcome.usage);
@@ -218,6 +245,7 @@ async function translateFile(
   const outcome = await runDocument(original, {
     conn: connOptions(conn),
     loreIndex: isTranslateLoreEnabled() ? ctx.loreIndex : undefined,
+    dict: await loadTranslateDict(ctx),
     signal: ctx.signal,
     onProgress: progressReporter(ctx, toolCallId, baseName(source)),
   });

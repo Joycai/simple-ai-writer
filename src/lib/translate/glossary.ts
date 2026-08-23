@@ -16,7 +16,7 @@
  *    改一个字就是坏链接。
  */
 
-import type { LoreIndex } from "../lore/model";
+import type { LoreEntity, LoreIndex } from "../lore/model";
 
 export interface GlossaryEntry {
   /** 原文里出现的写法（日文）。 */
@@ -45,18 +45,78 @@ function shortNote(summary: string): string | undefined {
 }
 
 /**
+ * 这个条目是不是一本翻译词典。
+ *
+ * 别名通道一个条目只能表达一个译名；作者手里现成的对照词表需要一个整批的家。
+ * 判据是条目编辑表单里作者**显式勾选**的开关（frontmatter `dict: true`，见
+ * `LoreEntity.dict`），不是名字约定、不是格式嗅探——识别永远不会误判，条目
+ * 名也保持自由（「词典·人名」「词典·地名」随便起）。任何分类下都行，可以有
+ * 多本，正文按 {@link parseDictBody} 解析成词条，和别名通道合并。
+ */
+export function isDictEntity(e: Pick<LoreEntity, "dict">): boolean {
+  return e.dict === true;
+}
+
+/**
+ * 把「翻译词典」条目的正文解析成词条。
+ *
+ * 一行一条 `原文->译文 #备注`（就是 Sakura 的术语表格式，作者写下的即模型看到
+ * 的）。宽容三件事：`→` 当 `->` 用、行首的 markdown 列表符号、`#备注` 可省。
+ * 其余行（标题、说明文字、空行）静默跳过——正文允许夹杂说明。
+ */
+export function parseDictBody(body: string): GlossaryEntry[] {
+  const out: GlossaryEntry[] = [];
+  for (const raw of body.split("\n")) {
+    const line = raw.trim().replace(/^(?:[-*+]|\d+[.、])\s+/, "");
+    const m = line.match(/^(.+?)\s*(?:->|→)\s*(.+)$/);
+    if (!m) continue;
+    const src = m[1].trim();
+    let rest = m[2];
+    let note: string | undefined;
+    const hash = rest.indexOf("#");
+    if (hash >= 0) {
+      note = shortNote(rest.slice(hash + 1));
+      rest = rest.slice(0, hash);
+    }
+    const dst = rest.trim();
+    if (!src || !dst || src === dst) continue;
+    out.push(note ? { src, dst, note } : { src, dst });
+  }
+  return out;
+}
+
+/**
  * 这一块用得上的词条。
  *
  * 方向是**别名（原文写法）→ 条目名（作者的译名）**：作者翻一本日文小说时，
  * 条目名是他定的中文名，别名里放着原文写法。所以只有在原文里真的出现过的别名
  * 才是源词，而这正好就是"命中"。
+ *
+ * `dict` 是「翻译词典」条目正文里解析出的词条（调用方在运行开始时读一次，
+ * 见 `tool.loadTranslateDict`），命中筛选和别名通道同一条规则。同一个源词
+ * 两边都有时**词典赢**——那一行是作者专门为翻译写下的对应关系，别名只是顺带的。
  */
-export function collectGlossary(index: LoreIndex, text: string): GlossaryEntry[] {
+export function collectGlossary(
+  index: LoreIndex,
+  text: string,
+  dict: readonly GlossaryEntry[] = [],
+): GlossaryEntry[] {
   const seen = new Set<string>();
   const entries: GlossaryEntry[] = [];
 
+  for (const e of dict) {
+    const src = e.src.trim();
+    const dst = e.dst.trim();
+    if (!src || !dst || src === dst || seen.has(src)) continue;
+    if (!text.includes(src)) continue;
+    seen.add(src);
+    entries.push({ src, dst, note: e.note });
+  }
+
   for (const list of Object.values(index)) {
     for (const entity of list) {
+      // 词典条目自身不进别名通道：它的名字和别名是给作者找条目用的，不是译名。
+      if (isDictEntity(entity)) continue;
       const dst = entity.name.trim();
       if (!dst) continue;
       for (const raw of entity.aliases ?? []) {

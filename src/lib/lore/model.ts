@@ -103,6 +103,14 @@ export interface LoreEntity {
   aliases: string[];   // from frontmatter
   summary: string;     // from frontmatter
   avatarPath: string | null;  // abs path if avatar.png/jpg exists
+  /**
+   * Frontmatter `dict: true` — this entry is a **translation dictionary**: its
+   * body holds `原文->译文 #备注` lines that feed the JA→ZH glossary
+   * (`lib/translate/glossary.isDictEntity`). An explicit author-set switch in
+   * the entity editor, deliberately not a name/format heuristic. Absent =
+   * false.
+   */
+  dict?: boolean;
   mdFiles: string[];   // list of *.md filenames in the folder
   /** Parsed from images.md (each `## filename` heading + following paragraph). */
   images: LoreImage[];
@@ -164,4 +172,11 @@ export interface EntityMeta {
   aliases: string[];
   category: CategoryId;
   summary: string;
+  /**
+   * Translation-dictionary switch (see `LoreEntity.dict`). Optional so plain
+   * metadata writers compile, but every caller saving an **existing** entity
+   * must carry `entity.dict` through — omitting it silently un-marks the
+   * dictionary on the next save, the same trap `FacetMeta.slot` documents.
+   */
+  dict?: boolean;
 }

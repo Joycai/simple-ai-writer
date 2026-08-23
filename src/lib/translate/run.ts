@@ -61,6 +61,12 @@ export interface RunChunkOptions {
   conn: ConnOptions;
   /** 术语表来源。不给就走无术语表模板。 */
   loreIndex?: LoreIndex;
+  /**
+   * 「翻译词典」条目正文里的词条，整份文档一次解析（正文不在 LoreIndex 里，
+   * 读它要碰盘——见 `tool.loadTranslateDict`）。逐块命中筛选仍在
+   * `collectGlossary` 里做，所以这里传的是全量。
+   */
+  dict?: readonly GlossaryEntry[];
   /** 上一块的尾巴。 */
   carry?: CarrySource | null;
   signal?: AbortSignal;
@@ -115,7 +121,10 @@ async function requestOnce(
  */
 export async function runChunk(chunk: TranslateChunk, o: RunChunkOptions): Promise<ChunkOutcome> {
   const source = chunkSource(chunk);
-  const entries: GlossaryEntry[] = o.loreIndex ? collectGlossary(o.loreIndex, source) : [];
+  const entries: GlossaryEntry[] =
+    o.loreIndex || o.dict?.length
+      ? collectGlossary(o.loreIndex ?? {}, source, o.dict)
+      : [];
   const glossary = formatGlossary(entries);
 
   const attempts: ChunkAttempt[] = [];

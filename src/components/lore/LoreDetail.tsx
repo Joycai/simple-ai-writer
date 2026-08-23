@@ -43,6 +43,7 @@ import { readFile, removeFile } from "../../lib/fs/fileio";
 import { imageToDataUrl } from "../../lib/fs/images";
 import { useImageDataUrl, useImageThumbnails } from "./useImageDataUrl";
 import { useImeGuard } from "../../lib/ime";
+import { isTranslateEnabled } from "../../lib/translate/flag";
 import { ModalShell } from "../common/ModalShell";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { MarkdownPreview } from "../common/MarkdownPreview";
@@ -154,6 +155,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   const [aliasInput, setAliasInput] = useState("");
   const [dCategory, setDCategory] = useState<CategoryId>(initialEntity.category);
   const [dSummary, setDSummary] = useState("");
+  const [dDict, setDDict] = useState(false);
   const [dBody, setDBody] = useState("");
 
   // Gallery edit state
@@ -367,6 +369,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     setAliasInput("");
     setDCategory(entity.category);
     setDSummary(entity.summary);
+    setDDict(entity.dict === true);
     setDBody(content);
     setEditing(true);
   };
@@ -402,6 +405,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         aliases: dAliases.map((a) => a.trim()).filter(Boolean),
         category: dCategory,
         summary: dSummary.trim(),
+        dict: dDict,
       }, dBody);
       await scanProject(projectPath);
       // Follow the entity to its (possibly new) folder, and refresh the local
@@ -1028,6 +1032,26 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                 value={dSummary}
                 onChange={(e) => setDSummary(e.target.value)}
               />
+
+              {/* 翻译词典开关只在翻译 Beta 打开时露面；关着时 dDict 仍随
+                  entity.dict 初始化并原样保存，隐藏不等于丢标记。 */}
+              {isTranslateEnabled() && (<>
+                <label className={styles.eLabel}>
+                  {t("lore.detail.fieldDict", { defaultValue: isZh ? "翻译词典" : "Dictionary" })}
+                </label>
+                <label className={styles.eCheck}>
+                  <input
+                    type="checkbox"
+                    checked={dDict}
+                    onChange={(e) => setDDict(e.target.checked)}
+                  />
+                  {t("lore.detail.dictHint", {
+                    defaultValue: isZh
+                      ? "日中翻译的术语表来源：正文一行一条「原文->译文 #备注」"
+                      : "JA→ZH glossary source: one 原文->译文 #note per body line",
+                  })}
+                </label>
+              </>)}
             </div>
 
             <div className={styles.editBodyBlock}>

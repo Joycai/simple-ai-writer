@@ -5,10 +5,11 @@ import {
   enforceGlossary,
   formatGlossary,
   MAX_GLOSSARY_ENTRIES,
+  parseDictBody,
   type GlossaryEntry,
 } from "../glossary";
 
-function entity(name: string, aliases: string[], summary = ""): LoreEntity {
+function entity(name: string, aliases: string[], summary = "", dict = false): LoreEntity {
   return {
     id: name,
     category: "characters",
@@ -16,6 +17,7 @@ function entity(name: string, aliases: string[], summary = ""): LoreEntity {
     name,
     aliases,
     summary,
+    dict,
     avatarPath: null,
     mdFiles: [],
     images: [],
@@ -84,6 +86,86 @@ describe("collectGlossary", () => {
     const many = Array.from({ length: 60 }, (_, i) => entity(`译${i}`, [`原名${i}`]));
     const text = many.map((e) => e.aliases[0]).join("、");
     expect(collectGlossary({ characters: many }, text)).toHaveLength(MAX_GLOSSARY_ENTRIES);
+  });
+});
+
+describe("parseDictBody", () => {
+  it("一行一条 src->dst #备注，就是 Sakura 的格式", () => {
+    expect(parseDictBody("文香->芙美香 #主人公\nふみちん->小芙")).toEqual([
+      { src: "文香", dst: "芙美香", note: "主人公" },
+      { src: "ふみちん", dst: "小芙" },
+    ]);
+  });
+
+  it("宽容 → 箭头和 markdown 列表符号 —— 作者在条目正文里多半写成列表", () => {
+    const body = "- 文香→芙美香\n* ふみちん -> 小芙\n1. 白山学園->白山学院";
+    expect(parseDictBody(body).map((e) => `${e.src}->${e.dst}`)).toEqual([
+      "文香->芙美香",
+      "ふみちん->小芙",
+      "白山学園->白山学院",
+    ]);
+  });
+
+  it("标题、说明文字、空行静默跳过 —— 正文允许夹杂说明", () => {
+    const body = "# 术语\n\n这是给翻译用的词表。\n\n文香->芙美香";
+    expect(parseDictBody(body)).toEqual([{ src: "文香", dst: "芙美香" }]);
+  });
+
+  it("src === dst 的行不进表", () => {
+    expect(parseDictBody("文香->文香")).toEqual([]);
+  });
+
+  it("备注走和摘要相同的截断预算", () => {
+    const long = "主人公，白山学院的学生会长，成绩优秀运动万能，同时也是守护世界的魔法爱姬";
+    const [e] = parseDictBody(`文香->芙美香 #${long}`);
+    expect(e.note).toBe(long.slice(0, 24) + "…");
+  });
+
+  it("# 后面为空时不留一个空备注", () => {
+    expect(parseDictBody("文香->芙美香 #")).toEqual([{ src: "文香", dst: "芙美香" }]);
+  });
+});
+
+describe("collectGlossary + 翻译词典", () => {
+  const dict: GlossaryEntry[] = [
+    { src: "文香", dst: "文乃", note: "词典指定" },
+    { src: "スケルトン", dst: "骷髅" },
+  ];
+
+  it("词典行同样只收本块命中的", () => {
+    const entries = collectGlossary({}, "スケルトンが来た。", dict);
+    expect(entries).toEqual([{ src: "スケルトン", dst: "骷髅", note: undefined }]);
+  });
+
+  it("同一个源词词典赢过别名 —— 那一行是作者专门为翻译写的", () => {
+    const entries = collectGlossary(INDEX, "文香は扉を開けた。", dict);
+    expect(entries).toEqual([{ src: "文香", dst: "文乃", note: "词典指定" }]);
+  });
+
+  it("勾了开关的条目不进别名通道 —— 它的名字/别名是给作者找条目用的，不是译名", () => {
+    const idx: LoreIndex = {
+      custom: [entity("词典·人名", ["じしょ"], "词表条目", true)],
+    };
+    expect(collectGlossary(idx, "じしょ", [])).toEqual([]);
+  });
+
+  it("没勾开关的条目就算叫「翻译词典」也只是普通条目 —— 判据是开关，不是名字", () => {
+    const idx: LoreIndex = {
+      custom: [entity("翻译词典", ["じしょ"], "")],
+    };
+    expect(collectGlossary(idx, "じしょ", [])).toEqual([
+      { src: "じしょ", dst: "翻译词典", note: undefined },
+    ]);
+  });
+
+  it("上限对两个通道合并计数", () => {
+    const many = Array.from({ length: 40 }, (_, i) => entity(`译${i}`, [`原名${i}`]));
+    const dictMany: GlossaryEntry[] = Array.from({ length: 40 }, (_, i) => ({
+      src: `辞書${i}`,
+      dst: `词${i}`,
+    }));
+    const text = [...many.map((e) => e.aliases[0]), ...dictMany.map((e) => e.src)].join("、");
+    expect(collectGlossary({ characters: many }, text, dictMany)).toHaveLength(MAX_GLOSSARY_ENTRIES);
   });
 });
 
