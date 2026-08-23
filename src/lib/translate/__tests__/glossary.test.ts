@@ -149,6 +149,14 @@ describe("collectGlossary + 翻译词典", () => {
     expect(collectGlossary(idx, "じしょ", [])).toEqual([]);
   });
 
+  it("别名挂「翻译词典」也算词典条目 —— 条目名保持自由", () => {
+    const idx: LoreIndex = {
+      custom: [entity("词典·人名", [DICT_ENTITY_NAME, "じんめい"], "")],
+    };
+    // 被认成词典后不进别名通道，别名 じんめい 也不再是源词。
+    expect(collectGlossary(idx, `じんめい、${DICT_ENTITY_NAME}`, [])).toEqual([]);
+  });
+
   it("上限对两个通道合并计数", () => {
     const many = Array.from({ length: 40 }, (_, i) => entity(`译${i}`, [`原名${i}`]));
     const dictMany: GlossaryEntry[] = Array.from({ length: 40 }, (_, i) => ({

@@ -441,7 +441,7 @@
       "translateSub": "Translate Japanese into Chinese with a dedicated translation model. Binding one gives the assistant a translate tool; it only goes Japanese→Chinese and reads no instructions, so it takes no delegated conversations.",
       "translateReq": "Needs a translation format",
       "translateMeta": "Chunk by chunk · retries on degeneration",
-      "translateUseLore": "Build a glossary from the knowledge base (names and places get one consistent translation; entry aliases are the source words, and an entry named 「翻译词典」 can hold a word list — one 原文->译文 #note per line; skipped when the project has none)",
+      "translateUseLore": "Build a glossary from the knowledge base (names and places get one consistent translation; entry aliases are the source words, and an entry whose name or alias is 「翻译词典」 can hold a word list — one 原文->译文 #note per line; skipped when the project has none)",
       "warnNotTranslate": "This model declares no translation format (set it in Providers & models), so the subagent cannot use it.",
       "searchReq": "Needs web_search",
       "visionReq": "Needs multimodal",
