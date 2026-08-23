@@ -235,6 +235,14 @@
   letter-spacing: 0.1em;
   color: var(--color-text-hint);
 }
+.groupBadge {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border: 1px solid var(--color-border-muted);
+  color: var(--color-text-dim);
+  font: 400 9px/1.4 var(--font-sans);
+  white-space: nowrap;
+}
 .groupRule {
   flex: 1;
   height: 1px;

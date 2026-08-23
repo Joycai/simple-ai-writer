@@ -65,6 +65,46 @@
   transform-origin: bottom center;
 }
 
+/* Pinned above the options while they scroll. The negative margins/top undo
+   the menu's own padding so the row hugs the border with no gap for options
+   to peek through. */
+.searchRow {
+  position: sticky;
+  top: calc(-1 * var(--space-1));
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: calc(-1 * var(--space-1)) calc(-1 * var(--space-1)) var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+.searchIcon {
+  flex: none;
+  color: var(--color-text-muted);
+}
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: var(--font-size-md);
+  font-family: inherit;
+  color: var(--color-text-primary);
+}
+.searchInput::placeholder {
+  color: var(--color-text-muted);
+}
+
+.noResults {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-size-md);
+  color: var(--color-text-muted);
+}
+
 /* Wrapper exists only to pair a group header with its first option; it must
    not affect layout. */
 .optionWrap {
