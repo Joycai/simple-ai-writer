@@ -4,6 +4,8 @@ import {
   appendSnippet, buildSections, chipCounts, countPlaceholders, defaultSnippetName,
   flatten, frequentSnippets, groupNames, hitSlice, previewLine, snippetsOf,
   splitPlaceholders,
+  groupPickerOptions,
+  NEW_GROUP,
 } from "../ai/snippets";
 
 function snip(name: string, over: Partial<Prompt> = {}): Prompt {
@@ -164,5 +166,21 @@ describe("defaultSnippetName", () => {
   it("is the body's opening, trimmed", () => {
     expect(defaultSnippetName("把这段改写得更冷一点，保留对话")).toBe("把这段改写得更冷");
     expect(defaultSnippetName("短")).toBe("短");
+  });
+});
+
+describe("groupPickerOptions", () => {
+  it("offers 「新建分组…」 even with no groups yet", () => {
+    // The shipped bug: an option list built from `groups` alone is empty on a
+    // fresh install, so the picker renders a menu with no rows — indistinguishable
+    // from a clipped popover, and the inbox can never be filed.
+    const opts = groupPickerOptions([]);
+    expect(opts).toEqual([{ value: NEW_GROUP, isNew: true }]);
+  });
+
+  it("keeps the new-group entry last, after every existing group", () => {
+    const opts = groupPickerOptions(["改写", "标书"]);
+    expect(opts.map((o) => o.value)).toEqual(["改写", "标书", NEW_GROUP]);
+    expect(opts.filter((o) => o.isNew)).toHaveLength(1);
   });
 });
