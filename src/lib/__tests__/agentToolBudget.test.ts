@@ -44,10 +44,14 @@ import { estimateToolsTokens } from "../ai/tokenEstimate";
 /**
  * Measured 9,609 at 1.22.0; 9,743 after read_workflow landed (134 tokens —
  * the price of the workflow-cards feature's second disclosure level, decided
- * in docs/feature/agent/workflow-cards-plan.md §3). Headroom for wording,
- * not for a new tool.
+ * in docs/feature/agent/workflow-cards-plan.md §3). 11,237 after the gallery
+ * tier landed (update_lore_image / delete_lore_image / set_lore_avatar /
+ * copy_lore_file — the lore-management review's F3/F4): ~1,4k tokens, ALL in
+ * the deferred `lore_write` group, so a run pays them only once the author has
+ * approved a lore plan — the exact moment they become callable. Headroom for
+ * wording, not for a new tool.
  */
-const AGENT_ASSIST_CAP = 10_150;
+const AGENT_ASSIST_CAP = 11_400;
 /** The read tier a 续写 carries. Measured 1,738. */
 const CONTINUE_CAP = 2_000;
 /** 旁白 reads other scenes and can write back; 扮演 is deliberately tiny. */
@@ -71,10 +75,13 @@ describe("tool schema budget", () => {
     // What a conversation actually pays before it touches the knowledge base —
     // which is most conversations. Measured 7,067 of 9,609 at 1.22.0;
     // 7,201 of 9,743 with read_workflow (resident on purpose: the roster it
-    // serves sits in the briefing from round one).
+    // serves sits in the briefing from round one); 7,554 with the gallery tier
+    // — the resident share of that feature is only generate_image's `slot`
+    // parameter and the read-side wording (image slots in read_lore_entity),
+    // the four new write tools themselves are all deferred.
     const { resident } = partitionByGroup(AGENT_ASSIST_PRESET.tools);
     const residentTokens = estimateToolsTokens(getToolDefinitions(resident));
-    expect(residentTokens).toBeLessThanOrEqual(7_500);
+    expect(residentTokens).toBeLessThanOrEqual(7_700);
     // A guard against the deferral quietly becoming a no-op: someone drops the
     // `group` tag off a tool and the only symptom is a bigger bill.
     expect(tokensOf(AGENT_ASSIST_PRESET) - residentTokens).toBeGreaterThan(2_000);

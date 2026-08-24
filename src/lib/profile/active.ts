@@ -135,6 +135,13 @@ export function findFacetSlot(categoryId: string, slotId: string): FacetSlot | n
   return categoryFacetSlots(categoryId).find((slot) => slot.id.toLowerCase() === key) ?? null;
 }
 
+/** Resolve one image slot — same contract and same null semantics as {@link findFacetSlot}. */
+export function findImageSlot(categoryId: string, slotId: string): ImageSlot | null {
+  const key = slotId.trim().toLowerCase();
+  if (!key) return null;
+  return categoryImageSlots(categoryId).find((slot) => slot.id.toLowerCase() === key) ?? null;
+}
+
 /**
  * Where an entity goes when the requested category is unusable — a model that
  * invented an id, or an entity whose folder no longer matches any enabled

@@ -447,3 +447,42 @@ N 个结构相同的 `<section class="slide">`，表格里同一句话出现在�
 `rewrite_document` 保留：短文件一张卡片看完整个新版本，仍然是最诚实的审批单位。
 它的描述改成了「只在整份新内容能舒服地放进一次回复时用」，并指向 `rewrite_lines`；
 输出被截断时那条系统提示（`truncatedToolCall`）也补了同一句——那正是模型撞上这件事的时刻。
+
+## 9. 知识库工具评审补丁（2026-08-24 · claude/lore-management-tools-review）
+
+对「agent 管理知识库」的一次系统评审（重组 / 合并拆分 / 元数据三类操作 + 工具标准统一）落下的六个修复。逐条记录**为什么**，实现细节看 `writeTools.ts` 对应函数的注释。
+
+### 9.1 update_lore_file 不再是绕过通道（评审发现 1）
+
+整篇重写 index.md 曾经可以顺手改 `name`、加冲突别名、翻 `dict` 开关——三件事各自有守门的专用工具（`move_lore_entity` 的重名检查 + 旧名转别名、`update_lore_meta` 的别名冲突检查、条目编辑器里作者亲手设的词典标记），全量写把它们全部旁路。现在 index.md 的结构校验多三条：`name` 不许变（指向 move_lore_entity）、`dict` 不许翻、**新引入的**别名过同一套冲突检查（既有冲突不拦无关编辑，与 update_lore_meta 同规）。
+
+### 9.2 合并的顺序是固定的，错误信息负责教学（评审发现 2）
+
+合并两个条目的自然顺序（拷贝 → 加别名 → 删除）会在第二步撞上别名冲突检查——败者还活着，它的名字还在解析。旧错误信息说「Drop it, or merge the two entities」，在合并进行中读到这句是循环建议。现在：`delete_lore_entity` 的描述写明三步固定顺序（拷贝 → **删除** → 才加别名），所有别名冲突错误共用 `MERGE_ALIAS_HINT` 教同一个顺序，agent briefing（zh/en）同步。没有做「计划里有 delete 步骤就放行别名」的豁免：运行中断在加别名之后、删除之前，会留下一个持久的二义性解析，教顺序比开后门稳。
+
+### 9.3 配图子项进入 agent 能力面（评审发现 3）
+
+此前 images.md 对 agent 只读，配图只能加（generate_image）不能改描述/槽位、不能删、不能设头像——而描述是纯文本模型看到的全部，槽位正是类型系统 imageSlots 的落点。新增三个 L1 工具（都在 `lore_write` 延迟组、都过 plan 门控、都有备份）：
+
+- `update_lore_image`（desc / slot，槽位按 category 的 imageSlots 校验，空串清除——与 update_facet_meta 同一套约定）
+- `delete_lore_image`（二进制**搬进** backups 而不是 unlink——`backupFileByMove`，文本备份救不了二进制，搬移本身就是备份）
+- `set_lore_avatar`（从本条目 gallery 或项目内图片提升；旧头像先搬 backups）
+
+读侧同步：`read_lore_entity` 的 gallery 行带 `[slot: …]`，新增 `=== image slots ===` 清单（`imageSlotChecklistText`）；`generate_image` 新增 `slot` 参数、`edit_image` 的重绘继承原图槽位（`IllustrateProposal.dest.slot` → `illustrate.ts` 落盘）。
+
+### 9.4 copy_lore_file：逐字节搬运，不经模型的手（评审发现 4）
+
+合并与「特征升格为独立条目」此前必须读出→由模型在工具参数里重发正文，这正是外科手术工具族一直防的悄悄改写。`copy_lore_file` 把一个特征 .md（连 frontmatter）或一张 gallery 图（连描述和槽位）逐字节复制到另一个条目；源不动，「移动」= 复制 + 源侧 delete_lore_file/delete_lore_image（各自的计划步骤）。槽位跨分类原样携带（与 facet 的 slot 同一条降级规则）。
+
+### 9.5 分类没有工具，错误信息说明去哪建（评审发现 5）
+
+分类 CRUD 留在 UI（能力包 + 作者自定义）是有意的边界；补的是**说明**：所有「未知分类」错误和 create/move 的 category 参数描述都指明「请作者在 设置 → 工作台 或知识库墙上创建」，briefing 同步，模型不再靠撞 enum 猜。
+
+### 9.6 改名连目录一起改（评审发现 6）
+
+`saveEntityMetaAndBody` 现在在**名字变化**时按新名重新 slug 目录（同分类内 rename；爆炸半径与换分类搬目录完全一致：`[[lore:分类/id]]` 路径引文和 facet pin 失效，两者本就容忍——引文回退到按名解析，失效 pin 被跳过）。只在名字变时才重 slug：slug(name) 与存量 id 常年不相等（冲突后缀、历史 id），逐次保存都重排目录会把无关保存变成搬家。UI 与 agent 共用这一个函数，行为一致。
+
+### 9.7 标准统一
+
+- 读工具参数 `name` → `entity`（写工具从来是 `entity`；en briefing 早已按 `entity` 写，此前是潜在错位）。执行层兼容旧拼写。
+- 工具预算棘轮上调有账：整套 9,743 → 11,237（新工具 ~1.4k token **全部在延迟组**，方案批准后才上线）；常驻 7,201 → 7,554（只涨了 generate_image 的 slot 参数和读侧措辞）。见 `agentToolBudget.test.ts` 注释。

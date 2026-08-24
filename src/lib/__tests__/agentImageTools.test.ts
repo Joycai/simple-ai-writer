@@ -67,7 +67,7 @@ describe("generate_image", () => {
     expect(seen).toHaveLength(1);
     expect(seen[0].kind).toBe("illustrate");
     expect(seen[0].prompt).toBe("a knight in the rain");
-    expect(seen[0].dest).toEqual({ kind: "lore", entityName: "艾尔登", entityDir: ENTITY.dirPath });
+    expect(seen[0].dest).toEqual({ kind: "lore", entityName: "艾尔登", entityDir: ENTITY.dirPath, slot: null });
   });
 
   it("prices the run so the card can show what is being agreed to", async () => {
@@ -165,7 +165,7 @@ describe("edit_image", () => {
     expect(seen[0].sourcePath).toBe(ENTITY.images[0].absPath);
     // Destination is the gallery, not the source file: overwriting a picture
     // that may already be referenced is a destructive act nobody approved.
-    expect(seen[0].dest).toEqual({ kind: "lore", entityName: "艾尔登", entityDir: ENTITY.dirPath });
+    expect(seen[0].dest).toEqual({ kind: "lore", entityName: "艾尔登", entityDir: ENTITY.dirPath, slot: undefined });
     expect(seen[0].path).not.toBe(ENTITY.images[0].absPath);
   });
 

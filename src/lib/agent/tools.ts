@@ -14,7 +14,7 @@ import { isPptxPath, readPptxSlides, type SlideRange } from "../fs/pptx";
 import { readHtmlSlideRange, splitHtmlSlides } from "../pptx/htmlSlides";
 import { fileExists, readFile } from "../fs/fileio";
 import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, imageToDataUrl, isImagePath } from "../fs/images";
-import { readEntityFile, slotChecklistText, type LoreEntity, type LoreIndex } from "../lore";
+import { imageSlotChecklistText, readEntityFile, slotChecklistText, type LoreEntity, type LoreIndex } from "../lore";
 import { isKnownCategory } from "../profile/active";
 import {
   baseName,
@@ -122,11 +122,12 @@ export async function readLoreEntity(
     galleryLines.push(`- ${fname}: (avatar)`);
   }
   for (const img of found.images) {
-    galleryLines.push(`- ${img.file}: ${img.desc || "(no description)"}`);
+    const slot = img.slot ? ` [slot: ${img.slot}]` : "";
+    galleryLines.push(`- ${img.file}: ${img.desc || "(no description)"}${slot}`);
   }
   if (galleryLines.length) {
     const header = multimodal
-      ? `=== images === (descriptions; call read_lore_image(name: "${name}", file: ...) to view one)`
+      ? `=== images === (descriptions; call read_lore_image(entity: "${name}", file: ...) to view one)`
       : "=== images === (text descriptions only — current model is text-only)";
     parts.push(`${header}\n${galleryLines.join("\n")}`);
   }
@@ -135,9 +136,13 @@ export async function readLoreEntity(
   // files above already show their own `slot:` frontmatter; what they cannot show
   // is which slots exist and which are still empty — and that is exactly what
   // `update_facet_meta`'s `slot` argument needs. Empty for a category with no
-  // schema, which is a normal state and prints nothing at all.
+  // schema, which is a normal state and prints nothing at all. Image slots get
+  // the same treatment: they are what `update_lore_image` / `generate_image`'s
+  // `slot` argument names.
   const checklist = slotChecklistText(found);
   if (checklist) parts.push(`=== facet slots ===\n${checklist}`);
+  const imageChecklist = imageSlotChecklistText(found);
+  if (imageChecklist) parts.push(`=== image slots ===\n${imageChecklist}`);
 
   return { toolCallId, content: parts.join("\n\n") || "(no content)" };
 }

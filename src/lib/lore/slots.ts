@@ -220,6 +220,36 @@ export function slotChecklistText(entity: LoreEntity): string {
 }
 
 /**
+ * The image-slot counterpart to {@link slotChecklistText}: which image slots the
+ * entry's category declares, what fills each, which are expected and empty.
+ * Same contract — `""` when the category declares none, bilingual labels.
+ */
+export function imageSlotChecklistText(entity: LoreEntity): string {
+  const sections = imageSections(entity);
+  if (sections.length === 0) return "";
+
+  const lines = sections.map(({ slot, images, missing }) => {
+    if (!slot) {
+      return `- (unclassified images, no slot: ${images.map((i) => i.file).join(", ")})`;
+    }
+    const labels = slot.labelZh === slot.labelEn ? slot.labelZh : `${slot.labelZh} / ${slot.labelEn}`;
+    const hint = slot.hintZh || slot.hintEn ? ` — ${[slot.hintZh, slot.hintEn].filter(Boolean).join(" / ")}` : "";
+    const state = images.length
+      ? ` · already covered by: ${images.map((i) => i.file).join(", ")}`
+      : missing
+        ? " · EXPECTED BUT MISSING"
+        : " · empty";
+    return `- ${slot.id} (${labels})${slot.expected ? " [expected]" : ""}${hint}${state}`;
+  });
+
+  return [
+    `IMAGE SLOTS for category "${entity.category}" — the pictures entries of this category are expected to have.`,
+    "Pass the slot id as the `slot` argument of update_lore_image or generate_image; omit it when a picture fits none of them.",
+    ...lines,
+  ].join("\n");
+}
+
+/**
  * Materialise a slot's defaults into a **new** facet's metadata.
  *
  * Only fields still at their neutral value are filled — empty `keys`, null

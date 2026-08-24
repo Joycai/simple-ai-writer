@@ -113,7 +113,13 @@ export async function runIllustration(
   let path: string;
   let markdown = "";
   if (proposal.dest.kind === "lore") {
-    const file = await addLoreImage(proposal.dest.entityDir, `ai-${Date.now()}.${ext}`, bytes, proposal.note);
+    const file = await addLoreImage(
+      proposal.dest.entityDir,
+      `ai-${Date.now()}.${ext}`,
+      bytes,
+      proposal.note,
+      proposal.dest.slot ?? null,
+    );
     path = `${proposal.dest.entityDir}/${file}`;
   } else {
     const saved = await saveDocumentAsset(proposal.dest.docPath, bytes, ext);
