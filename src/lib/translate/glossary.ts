@@ -140,6 +140,23 @@ export function collectGlossary(
   return entries.slice(0, MAX_GLOSSARY_ENTRIES);
 }
 
+/**
+ * 词典**条目正文**的规范形态：一行一条 `src->dst #备注`。
+ *
+ * 与 {@link formatGlossary} 的区别只有一处却是本质的：备注**不截断**。发给模型
+ * 的术语表是每次请求都付费的上下文，备注才有 24 字预算；条目正文是作者的资产，
+ * 截断它就是丢数据。AI 标准化（LoreDictNormalizeModal）用它渲染整理结果——
+ * 格式的正确性由这段代码保证，模型只负责从自由格式里**搬运**词对。
+ */
+export function formatDictBody(entries: readonly GlossaryEntry[]): string {
+  return entries
+    .map((e) => {
+      const note = e.note?.replace(/\s+/g, " ").trim();
+      return note ? `${e.src}->${e.dst} #${note}` : `${e.src}->${e.dst}`;
+    })
+    .join("\n");
+}
+
 /** Sakura 的术语表格式：一行一条 `src->dst #备注`。 */
 export function formatGlossary(entries: readonly GlossaryEntry[]): string {
   return entries

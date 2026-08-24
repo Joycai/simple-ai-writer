@@ -3,6 +3,7 @@ import type { LoreEntity, LoreIndex } from "../../lore/model";
 import {
   collectGlossary,
   enforceGlossary,
+  formatDictBody,
   formatGlossary,
   MAX_GLOSSARY_ENTRIES,
   parseDictBody,
@@ -137,6 +138,19 @@ describe("parseDictBody", () => {
 
   it("# 后面为空时不留一个空备注", () => {
     expect(parseDictBody("文香->芙美香 #")).toEqual([{ src: "文香", dst: "芙美香" }]);
+  });
+});
+
+describe("formatDictBody", () => {
+  it("一行一条，备注不截断 —— 条目正文是作者的资产，截断属于发给模型的清单", () => {
+    const long = "主人公，白山学院的学生会长，成绩优秀运动万能，同时也是守护世界的魔法爱姬";
+    const body = formatDictBody([
+      { src: "文香", dst: "芙美香", note: long },
+      { src: "ふみちん", dst: "小芙" },
+    ]);
+    expect(body).toBe(`文香->芙美香 #${long}\nふみちん->小芙`);
+    // 渲染出的正文必须能被自己的解析器读回来——AI 标准化的闭环就靠这条。
+    expect(parseDictBody(body).map((e) => e.src)).toEqual(["文香", "ふみちん"]);
   });
 });
 

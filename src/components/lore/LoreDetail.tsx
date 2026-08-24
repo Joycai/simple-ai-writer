@@ -49,6 +49,7 @@ import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { MarkdownPreview } from "../common/MarkdownPreview";
 import { LoreImproveModal } from "./LoreImproveModal";
 import { LoreMetaImproveModal } from "./LoreMetaImproveModal";
+import { LoreDictNormalizeModal } from "./LoreDictNormalizeModal";
 import { FacetEditModal } from "./FacetEditModal";
 import { LoreSplitModal } from "./LoreSplitModal";
 import { EntityAiHubModal } from "./ai/EntityAiHubModal";
@@ -129,6 +130,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   const [showAiHub, setShowAiHub] = useState(false);
   const [showImprove, setShowImprove] = useState(false);
   const [showMetaImprove, setShowMetaImprove] = useState(false);
+  const [showDictNormalize, setShowDictNormalize] = useState(false);
   // Facet form modal: { file: null } → create, { file } → edit/convert.
   const [facetModal, setFacetModal] = useState<{ file: string | null; slot?: string | null } | null>(null);
   const [showSplit, setShowSplit] = useState(false);
@@ -780,12 +782,14 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         <EntityAiHubModal
           entityName={entity.name}
           imageGenReady={imageGenReady}
+          dictEntry={entity.dict === true}
           onClose={() => setShowAiHub(false)}
           onPick={(task) => {
             setShowAiHub(false);
             if (task === "meta") setShowMetaImprove(true);
             else if (task === "improve") setShowImprove(true);
             else if (task === "image") setShowImageGen(true);
+            else if (task === "dict") setShowDictNormalize(true);
             else setShowSplit(true);
           }}
         />
@@ -800,6 +804,13 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
       )}
       {showMetaImprove && (
         <LoreMetaImproveModal entity={entity} onClose={() => setShowMetaImprove(false)} />
+      )}
+      {showDictNormalize && (
+        <LoreDictNormalizeModal
+          entity={entity}
+          // 应用会重写 index.md 的正文，关掉时重读一次；取消时重读无害。
+          onClose={() => { setShowDictNormalize(false); setContentVersion((v) => v + 1); }}
+        />
       )}
       {facetModal && (
         <FacetEditModal
