@@ -9,7 +9,7 @@
  */
 
 import {
-  fileExists, makeDir, readBinaryFile, readFile, removeDir, renamePath, writeBinaryFile, writeFile,
+  copyPath, fileExists, makeDir, readBinaryFile, readFile, removeDir, renamePath, writeBinaryFile, writeFile,
 } from "../fs/fileio";
 import { baseName, dirName } from "../paths";
 
@@ -207,6 +207,41 @@ export async function moveDocumentAssets(from: string, to: string): Promise<void
     await rewriteAssetLinks(to, stemOf(from), stemOf(to));
   } catch (e) {
     console.warn(`[assets] could not move illustrations for ${from}:`, e);
+  }
+}
+
+/**
+ * Give a copied document its own copy of the source's illustration folder, and
+ * point the copy's links at it.
+ *
+ * The copy counterpart of {@link moveDocumentAssets}, and it exists for the
+ * same reason: links are relative and the folder is named after the document.
+ * Without this, a cross-folder copy has every picture broken (nothing sits
+ * beside it), and a same-folder copy silently SHARES the original's folder —
+ * which turns deleting the original into deleting the copy's pictures too
+ * (discardDocumentAssets takes the shared folder away with the backup).
+ *
+ * Call **after** the document has been copied. Best-effort, like the move.
+ */
+export async function copyDocumentAssets(from: string, to: string): Promise<void> {
+  if (from === to || !ownsAssets(from) || !ownsAssets(to)) return;
+  const fromDir = assetDirFor(from);
+  const toDir = assetDirFor(to);
+  if (fromDir === toDir) return;
+
+  try {
+    if (!(await fileExists(fromDir))) return;
+    if (await fileExists(toDir)) {
+      // Same reasoning as the move: merging galleries could overwrite the
+      // destination document's own pictures. Leave both alone and say so.
+      console.warn(`[assets] ${toDir} already exists; copy keeps its links on ${fromDir}`);
+      return;
+    }
+    await makeDir(dirOf(toDir));
+    await copyPath(fromDir, toDir);
+    await rewriteAssetLinks(to, stemOf(from), stemOf(to));
+  } catch (e) {
+    console.warn(`[assets] could not copy illustrations for ${from}:`, e);
   }
 }
 

@@ -32,7 +32,7 @@ import { normalizeChapterFileName } from "../lib/context/outline";
 import { copyPath, fileExists, makeDir, removeDir, removeFile, renamePath, writeFile } from "../lib/fs/fileio";
 import { projectFilesFromTree, type ProjectFile } from "../lib/fs/images";
 import { baseNameOf, resolveCopyTarget, type TransferMode } from "../lib/fs/moveCopy";
-import { discardDocumentAssets, moveDocumentAssets } from "../lib/image/assets";
+import { copyDocumentAssets, discardDocumentAssets, moveDocumentAssets } from "../lib/image/assets";
 import { baseName, isSamePath, isStrictDescendant } from "../lib/paths";
 import { acquireProjectLock, focusExistingInstance, releaseProjectLock } from "../lib/instance";
 import { useLoreStore } from "./loreStore";
@@ -185,9 +185,11 @@ interface ProjectState {
   /**
    * Copy a file/folder into `destDir` and return the new path. Unlike a move,
    * a name collision is not an error — the copy is numbered (`稿 (1).md`), so
-   * duplicating an entry into its own folder works.
+   * duplicating an entry into its own folder works. `newName` names the copy
+   * (default: the source's name); a copied document's illustration folder is
+   * duplicated alongside it, links rewritten, so the copy owns its pictures.
    */
-  copyEntry: (from: string, destDir: string, isDir: boolean) => Promise<string>;
+  copyEntry: (from: string, destDir: string, isDir: boolean, newName?: string) => Promise<string>;
   /**
    * Delete a file or folder. With `backup`, the entry is snapshotted into
    * `.ai-writer/backups/` first; returns the backup path, or null when none
@@ -450,7 +452,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     await get().refreshFileTree();
   },
 
-  copyEntry: async (from, destDir, isDir) => {
+  copyEntry: async (from, destDir, isDir, newName) => {
     if (isStrictDescendant(from, destDir) || isSamePath(from, destDir)) {
       throw new Error("Cannot copy a folder into itself.");
     }
@@ -462,8 +464,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       isSamePath(editor.filePath, from) || (!!editor.filePath && isStrictDescendant(from, editor.filePath));
     if (editorAffected && editor.isDirty) await editor.saveNow();
 
-    const to = await resolveCopyTarget(destDir, baseNameOf(from), isDir, fileExists);
+    const to = await resolveCopyTarget(destDir, newName?.trim() || baseNameOf(from), isDir, fileExists);
     await copyPath(from, to);
+    // The copy owns its pictures from the start — sharing the original's
+    // asset folder would make deleting the original delete the copy's images.
+    if (!isDir) await copyDocumentAssets(from, to);
     await get().refreshFileTree();
     return to;
   },

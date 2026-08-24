@@ -12,6 +12,7 @@ const dirs: string[] = [];
 let existing = new Set<string>();
 
 const renames: { from: string; to: string }[] = [];
+const copies: { from: string; to: string }[] = [];
 const removed: string[] = [];
 const texts = new Map<string, string>();
 
@@ -22,6 +23,10 @@ vi.mock("../fs/fileio", () => ({
   renamePath: vi.fn(async (from: string, to: string) => {
     renames.push({ from, to });
     existing.delete(from);
+    existing.add(to);
+  }),
+  copyPath: vi.fn(async (from: string, to: string) => {
+    copies.push({ from, to });
     existing.add(to);
   }),
   removeDir: vi.fn(async (p: string) => void removed.push(p)),
@@ -35,13 +40,14 @@ vi.mock("../fs/fileio", () => ({
 
 const {
   saveDocumentAsset, importDocumentAsset, imageMarkdown, assetDirFor, safeAssetName,
-  moveDocumentAssets, discardDocumentAssets,
+  moveDocumentAssets, copyDocumentAssets, discardDocumentAssets,
 } = await import("../image/assets");
 
 beforeEach(() => {
   written.length = 0;
   dirs.length = 0;
   renames.length = 0;
+  copies.length = 0;
   removed.length = 0;
   texts.clear();
   existing = new Set();
@@ -137,6 +143,52 @@ describe("moveDocumentAssets", () => {
   it("does nothing when the document has no illustrations", async () => {
     await moveDocumentAssets("/proj/writing/a.md", "/proj/writing/b.md");
     expect(renames).toEqual([]);
+  });
+});
+
+describe("copyDocumentAssets", () => {
+  it("duplicates the folder for a same-folder numbered copy, rewriting the copy's links", async () => {
+    // Without this the copy would SHARE the original's assets folder — and
+    // deleting the original later would take the copy's pictures with it.
+    existing.add("/proj/writing/assets/ch1");
+    texts.set("/proj/writing/ch1 (1).md", "![图](assets/ch1/img-1.png)");
+
+    await copyDocumentAssets("/proj/writing/ch1.md", "/proj/writing/ch1 (1).md");
+
+    expect(copies).toEqual([{
+      from: "/proj/writing/assets/ch1",
+      to: "/proj/writing/assets/ch1 (1)",
+    }]);
+    expect(renames).toEqual([]); // the original keeps its own folder
+    expect(texts.get("/proj/writing/ch1 (1).md")).toContain("img-1.png");
+    expect(texts.get("/proj/writing/ch1 (1).md")).not.toContain("assets/ch1/");
+  });
+
+  it("duplicates the folder across directories, links untouched when the name survives", async () => {
+    // Cross-folder copy under the same name: the relative `assets/ch1/…`
+    // links are correct once a folder of that name sits beside the copy.
+    existing.add("/proj/writing/assets/ch1");
+    texts.set("/proj/backup/ch1.md", "![图](assets/ch1/img-1.png)");
+
+    await copyDocumentAssets("/proj/writing/ch1.md", "/proj/backup/ch1.md");
+
+    expect(copies).toEqual([{
+      from: "/proj/writing/assets/ch1",
+      to: "/proj/backup/assets/ch1",
+    }]);
+    expect(texts.get("/proj/backup/ch1.md")).toBe("![图](assets/ch1/img-1.png)");
+  });
+
+  it("leaves both galleries alone rather than merging them", async () => {
+    existing.add("/proj/writing/assets/a");
+    existing.add("/proj/writing/assets/b");
+    await copyDocumentAssets("/proj/writing/a.md", "/proj/writing/b.md");
+    expect(copies).toEqual([]);
+  });
+
+  it("does nothing when the source document has no illustrations", async () => {
+    await copyDocumentAssets("/proj/writing/a.md", "/proj/writing/b.md");
+    expect(copies).toEqual([]);
   });
 });
 

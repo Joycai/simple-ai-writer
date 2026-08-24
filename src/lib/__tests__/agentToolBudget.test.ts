@@ -44,10 +44,13 @@ import { estimateToolsTokens } from "../ai/tokenEstimate";
 /**
  * Measured 9,609 at 1.22.0; 9,743 after read_workflow landed (134 tokens —
  * the price of the workflow-cards feature's second disclosure level, decided
- * in docs/feature/agent/workflow-cards-plan.md §3). Headroom for wording,
- * not for a new tool.
+ * in docs/feature/agent/workflow-cards-plan.md §3); 10,173 after the file-tools
+ * review (copy_file's `new_name`, and the move/copy/delete descriptions now
+ * stating their real scope + the extension and illustration-folder rules —
+ * wording that replaces wrong-tool calls and broken-image surprises, priced
+ * deliberately). Headroom for wording, not for a new tool.
  */
-const AGENT_ASSIST_CAP = 10_150;
+const AGENT_ASSIST_CAP = 10_300;
 /** The read tier a 续写 carries. Measured 1,738. */
 const CONTINUE_CAP = 2_000;
 /** 旁白 reads other scenes and can write back; 扮演 is deliberately tiny. */
@@ -71,10 +74,12 @@ describe("tool schema budget", () => {
     // What a conversation actually pays before it touches the knowledge base —
     // which is most conversations. Measured 7,067 of 9,609 at 1.22.0;
     // 7,201 of 9,743 with read_workflow (resident on purpose: the roster it
-    // serves sits in the briefing from round one).
+    // serves sits in the briefing from round one); 7,631 after the file-tools
+    // review — the manuscript tools are resident, so their scope/extension
+    // wording lands here in full.
     const { resident } = partitionByGroup(AGENT_ASSIST_PRESET.tools);
     const residentTokens = estimateToolsTokens(getToolDefinitions(resident));
-    expect(residentTokens).toBeLessThanOrEqual(7_500);
+    expect(residentTokens).toBeLessThanOrEqual(7_750);
     // A guard against the deferral quietly becoming a no-op: someone drops the
     // `group` tag off a tool and the only symptom is a bigger bill.
     expect(tokensOf(AGENT_ASSIST_PRESET) - residentTokens).toBeGreaterThan(2_000);

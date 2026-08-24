@@ -113,7 +113,7 @@ async function proposeIllustration(
   if (!decision.approved) {
     return {
       toolCallId,
-      content: `The user REJECTED this image${decision.reason ? ` — reason: ${decision.reason}` : "."} Do not retry the same prompt; adjust per the reason or move on.`,
+      content: `The author REJECTED this image${decision.reason ? ` — reason: ${decision.reason}` : "."} Do not retry the same prompt; adjust per the reason or move on.`,
     };
   }
   // The applied outcome rides back on backupPath — see agentStore's

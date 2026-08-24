@@ -545,7 +545,10 @@ async function applyProposal(proposal: Proposal, signal?: AbortSignal): Promise<
     case "copy":
       // The source is untouched; the interesting fact is where the copy
       // landed, which collision auto-numbering decides only now.
-      return { report: null, resultPath: await copyEntry(proposal.path, proposal.destDir, proposal.isDir) };
+      return {
+        report: null,
+        resultPath: await copyEntry(proposal.path, proposal.destDir, proposal.isDir, proposal.newName),
+      };
 
     case "delete":
       // The backup is what makes an approved deletion recoverable, so it is

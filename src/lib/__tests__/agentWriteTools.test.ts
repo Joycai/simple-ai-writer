@@ -1309,6 +1309,36 @@ describe("chapter structure tools", () => {
       expect(res.content).toContain("into itself");
     });
 
+    it("defaults .md only for manuscript sources — a data file's bare destination is refused", async () => {
+      fs.set(`${PROJECT}/资料/数据.csv`, "a,b");
+
+      // Manuscript source + extensionless destination: .md appended, as ever.
+      await run(
+        "move_chapter",
+        { path: CH1, new_path: `${PROJECT}/writing/卷一/开篇` },
+        approving(),
+      );
+      expect(proposals[0]).toMatchObject({ newPath: `${PROJECT}/writing/卷一/开篇.md` });
+
+      // Non-manuscript source + extensionless destination: refused, not
+      // silently rewritten into 数据.md (that would change the file's kind).
+      const bare = await run(
+        "move_chapter",
+        { path: `${PROJECT}/资料/数据.csv`, new_path: `${PROJECT}/资料/数据2` },
+        approving(),
+      );
+      expect(bare.content).toContain("no file extension");
+      expect(proposals).toHaveLength(1);
+
+      // With the extension spelled out, the same move goes through untouched.
+      await run(
+        "move_chapter",
+        { path: `${PROJECT}/资料/数据.csv`, new_path: `${PROJECT}/资料/数据2.csv` },
+        approving(),
+      );
+      expect(proposals[1]).toMatchObject({ newPath: `${PROJECT}/资料/数据2.csv` });
+    });
+
     it("refuses a missing source, a same-path move, and a destination in .ai-writer", async () => {
       const missing = await run(
         "move_chapter",
@@ -1384,6 +1414,13 @@ describe("chapter structure tools", () => {
       const res = await run("create_file", { path: `${PROJECT}/资料/备注`, content: "x" }, approving());
       expect(res.content).toContain("no file extension");
       expect(res.content).toContain("create_chapter");
+      expect(proposals).toHaveLength(0);
+    });
+
+    it("names the real reason a dotfile is refused", async () => {
+      const res = await run("create_file", { path: `${PROJECT}/.gitignore`, content: "x" }, approving());
+      expect(res.content).toContain("hidden file");
+      expect(res.content).not.toContain("no file extension");
       expect(proposals).toHaveLength(0);
     });
 
@@ -1540,6 +1577,36 @@ describe("chapter structure tools", () => {
         approving(),
       );
       expect(res.content).toContain("into itself");
+    });
+
+    it("renames the copy in the same step through new_name", async () => {
+      await run(
+        "copy_file",
+        { path: CH1, dest_dir: `${PROJECT}/writing/卷一`, new_name: "第1章-底稿.md" },
+        approving(),
+      );
+      expect(proposals[0]).toMatchObject({
+        kind: "copy",
+        newName: "第1章-底稿.md",
+        destDir: `${PROJECT}/writing/卷一`,
+      });
+    });
+
+    it("vets new_name: no paths, and a file copy must keep a full extension", async () => {
+      const pathy = await run(
+        "copy_file",
+        { path: CH1, dest_dir: PROJECT, new_name: "卷二/第1章.md" },
+        approving(),
+      );
+      expect(pathy.content).toContain("no paths");
+
+      const bare = await run(
+        "copy_file",
+        { path: CH1, dest_dir: PROJECT, new_name: "底稿" },
+        approving(),
+      );
+      expect(bare.content).toContain("extension");
+      expect(proposals).toHaveLength(0);
     });
   });
 
