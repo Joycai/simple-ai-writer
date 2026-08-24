@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import { ArrowUp, ChevronDown, ChevronRight, Image as ImageIcon, X } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { SnippetPicker } from "./SnippetPicker";
+import { useSnippetSave, type SnippetSave } from "./SnippetSaveMenu";
 import {
   MentionPicker,
   filterMentions,
@@ -148,6 +149,21 @@ export function AgentChat() {
   const setRefs = useComposerStore((s) => s.setChatRefs);
   const clearComposer = useComposerStore((s) => s.clearChatComposer);
   const mention = useMentionState();
+  // Right-click → 存为片段, shared by the composer and every turn on screen.
+  const snippetSave = useSnippetSave();
+  /* After an insert the caret belongs at the very end and the box scrolled to
+     it. Deferred a frame because the value React just received has not been
+     written to the DOM yet — measuring before that lands puts the caret at the
+     end of the *old* text. */
+  const focusEndOfInput = () => {
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+      el.scrollTop = el.scrollHeight;
+    });
+  };
   const inputRef = useRef<HTMLTextAreaElement>(null);
   // Set only when the picker was opened from a `+ 设定` / `+ 章节` chip: the
   // author has already said which kind they want, so the list shouldn't make
@@ -470,7 +486,7 @@ export function AgentChat() {
         )}
         {turns.slice(foldAt).map((turn) =>
           turn.role === "user" ? (
-            <UserTurn key={turn.id} turn={turn} />
+            <UserTurn key={turn.id} turn={turn} onCtx={snippetSave.onMessageContextMenu} />
           ) : (
             <AssistantTurn
               key={turn.id}
@@ -478,6 +494,7 @@ export function AgentChat() {
               log={turn.log}
               images={turn.images}
               isLive={chatRunning && turn.id === turns[turns.length - 1]?.id}
+              onCtx={snippetSave.onMessageContextMenu}
             />
           ),
         )}
@@ -626,6 +643,7 @@ export function AgentChat() {
             value={draft}
             onChange={handleDraftChange}
             onKeyDown={handleKeyDown}
+            onContextMenu={snippetSave.onTextareaContextMenu}
             {...ime.imeProps}
             placeholder={activeModelId ? t("ai.chat.placeholder", { kb: terms.kb }) : t("ai.errors.noModel")}
             disabled={!activeModelId}
@@ -648,7 +666,9 @@ export function AgentChat() {
             {/* Insert (not send): a snippet is a starting point the author
                 completes before sending. */}
             <SnippetPicker
-              onPick={(c) => setDraft((prev) => (prev.trim() ? `${prev}\n${c}` : c))}
+              value={draft}
+              onInsert={setDraft}
+              onAfterInsert={focusEndOfInput}
             />
             {chatRunning && (
               <span className={styles.runningNote}>
@@ -679,6 +699,8 @@ export function AgentChat() {
           </div>
         </div>
       </div>
+      {/* The right-click menu / naming popover for every surface in this panel. */}
+      {snippetSave.node}
     </div>
   );
 }
@@ -738,10 +760,13 @@ function MentionText({ text }: { text: string }) {
  * every earlier turn keeps its identity, so memoized turns skip entirely and
  * a stream only ever re-renders the one turn it is writing into.
  */
-const UserTurn = memo(function UserTurn({ turn }: { turn: ChatTurn }) {
+const UserTurn = memo(function UserTurn({ turn, onCtx }: {
+  turn: ChatTurn;
+  onCtx: SnippetSave["onMessageContextMenu"];
+}) {
   const { t } = useTranslation();
   return (
-    <div className={styles.userBlock}>
+    <div className={styles.userBlock} onContextMenu={(e) => onCtx(e, turn.text)}>
       {turn.quote && (
         <div className={styles.quote}>
           <div className={styles.quoteLabel}>
@@ -761,11 +786,12 @@ const UserTurn = memo(function UserTurn({ turn }: { turn: ChatTurn }) {
 });
 
 /** Same memo contract as {@link UserTurn} — props are the turn's own fields. */
-const AssistantTurn = memo(function AssistantTurn({ text, log, images, isLive }: {
+const AssistantTurn = memo(function AssistantTurn({ text, log, images, isLive, onCtx }: {
   text: string;
   log: AgentEvent[];
   images?: string[];
   isLive: boolean;
+  onCtx: SnippetSave["onMessageContextMenu"];
 }) {
   const { t } = useTranslation();
   // Markdown render is cheap at chat sizes; memo keeps streaming smooth anyway.
@@ -775,7 +801,7 @@ const AssistantTurn = memo(function AssistantTurn({ text, log, images, isLive }:
     // Marker gutter + one content column: the execution log, the prose and any
     // cards are siblings in the same grid track, so they cannot drift out of
     // alignment with each other no matter what each one contains.
-    <div className={styles.assistantTurn}>
+    <div className={styles.assistantTurn} onContextMenu={(e) => onCtx(e, text)}>
       <span className={`${styles.turnMarker} ${isLive ? styles.turnMarkerLive : ""}`} />
       <div className={styles.turnContent}>
         {log.length > 0 && <AgentLog log={log} isRunning={isLive} compact />}

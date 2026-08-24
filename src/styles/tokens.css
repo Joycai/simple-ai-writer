@@ -239,6 +239,19 @@
   /* Chrome details (设计稿 01) */
   --color-traffic:         #D9C7A5;   /* titlebar traffic-light dots */
 
+  /* ── 提示词库 (设计稿 10 提示词库) ──
+     The snippet picker floats over the AI drawer, so it lives in the main
+     token space rather than --stg-*. Light is not dark with a swapped ground:
+     the selected rule warms to #A9512B, the preview drops two tiers so it
+     cannot compete with the name, and the popover's shadow points *up* in
+     warm brown instead of black. */
+  --snip-rule:            #A9512B;   /* 2px left rule on the selected row */
+  --snip-row-hover:       #F3EBD9;   /* neutral hover — never the accent */
+  --snip-hit-bg:          #F0E2CC;   /* search-match wash, name and preview */
+  --snip-preview:         #A79D88;   /* the one preview line */
+  --snip-shadow:          0 -8px 30px rgba(120, 80, 40, 0.10);
+  --snip-menu-shadow:     0 6px 24px rgba(60, 40, 20, 0.14);
+
   /* ── 设置页色系 (设计稿 04) ──
      The settings surface keeps its own warm-paper family — same hues as the
      workspace but one step lighter, with its own sienna. Components under
@@ -579,6 +592,14 @@
   --lore-density-2:       #6B4B2E;
   --lore-density-3:       #D9925B;
   --lore-density-now:     #E8DFD0;
+
+  /* ── 提示词库 (设计稿 10 提示词库) —— dark rendition is the reference ── */
+  --snip-rule:            #D9925B;
+  --snip-row-hover:       #241F19;
+  --snip-hit-bg:          #3A2A1C;
+  --snip-preview:         #5E564A;
+  --snip-shadow:          0 -8px 30px rgba(0, 0, 0, 0.45);
+  --snip-menu-shadow:     0 6px 24px rgba(0, 0, 0, 0.45);
 
   /* ── 扮演面板 ── 设计稿 08 的深色取色，binding。 */
   --rp-canvas:            var(--color-bg-base);

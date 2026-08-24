@@ -340,6 +340,19 @@ export interface Prompt {
    * boxes offer for quick insertion — never auto-applied to anything).
    */
   scene: string;
+  /**
+   * Snippets only: the one section this snippet files under, or "" for the
+   * 「未分组」 inbox that right-click saves land in. A *single* group rather
+   * than tags — the picker reuses the model selector's section list, so the
+   * organising axis costs no chip row, and the author answers one question
+   * ("which shelf") instead of inventing a taxonomy. See
+   * `docs/feature/prompt-snippets-ui-brief.md` → 开放问题 1.
+   */
+  group?: string;
+  /** Snippets only: how many times it has been inserted (drives 「常用」). */
+  useCount?: number;
+  /** Snippets only: epoch ms of the last insertion; 0 / absent = never used. */
+  lastUsedAt?: number;
 }
 
 /**
@@ -431,6 +444,13 @@ export async function ensureAiSchema(db: Awaited<ReturnType<typeof Database.load
       scene TEXT NOT NULL DEFAULT 'system'
     )
   `);
+
+  // Migration: the snippet library's three columns. `group` is a SQL keyword,
+  // hence `grp` — the app-side field keeps the readable name.
+  const promptCols = await db.select<{ name: string }[]>(`PRAGMA table_info(prompts)`);
+  await addColumn(db, promptCols, "prompts", "grp", "TEXT");
+  await addColumn(db, promptCols, "prompts", "use_count", "INTEGER");
+  await addColumn(db, promptCols, "prompts", "last_used_at", "INTEGER");
 
 }
 
@@ -680,20 +700,24 @@ export async function listPrompts(
   db: Awaited<ReturnType<typeof Database.load>>
 ): Promise<Prompt[]> {
   const rows = await db.select<Record<string, unknown>[]>(
-    "SELECT id, name, content, scene FROM prompts ORDER BY name ASC"
+    "SELECT id, name, content, scene, grp, use_count, last_used_at FROM prompts ORDER BY name ASC"
   );
   return rows.map((r) => ({
     id: r.id as string,
     name: r.name as string,
     content: r.content as string,
     scene: r.scene as string,
+    group: (r.grp as string | null) ?? "",
+    useCount: (r.use_count as number | null) ?? 0,
+    lastUsedAt: (r.last_used_at as number | null) ?? 0,
   }));
 }
 
 export function promptUpsert(p: Prompt): SqlStatement {
   return {
-    sql: `INSERT OR REPLACE INTO prompts (id, name, content, scene) VALUES (?, ?, ?, ?)`,
-    values: [p.id, p.name, p.content, p.scene],
+    sql: `INSERT OR REPLACE INTO prompts (id, name, content, scene, grp, use_count, last_used_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    values: [p.id, p.name, p.content, p.scene, p.group ?? "", p.useCount ?? 0, p.lastUsedAt ?? 0],
   };
 }
 

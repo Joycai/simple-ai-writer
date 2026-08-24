@@ -259,7 +259,15 @@ export function parseConfigBundle(
     const name = str(r.name);
     const scene = str(r.scene);
     if (!id || !name || !scene || typeof r.content !== "string") continue;
-    prompts.push({ id, name, content: r.content, scene });
+    // The snippet fields are optional: a bundle written before the snippet
+    // library existed has none, and a restored snippet with no group simply
+    // lands in 「未分组」 — the same place a fresh right-click save lands.
+    prompts.push({
+      id, name, content: r.content, scene,
+      group: str(r.grp) || str(r.group) || "",
+      useCount: typeof r.useCount === "number" ? r.useCount : 0,
+      lastUsedAt: typeof r.lastUsedAt === "number" ? r.lastUsedAt : 0,
+    });
   }
 
   // Shape-checked here; which keys are actually allowed through is `lib/prefs`'

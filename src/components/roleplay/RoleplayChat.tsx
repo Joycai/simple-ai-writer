@@ -47,6 +47,7 @@ import { ArchiveViewer } from "./ArchiveViewer";
 import { SubAgentChips } from "../ai/SubAgentChips";
 import { ContextBar } from "../ai/ContextBar";
 import { SnippetPicker } from "../ai/SnippetPicker";
+import { useSnippetSave } from "../ai/SnippetSaveMenu";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { MemoryPanel } from "./MemoryPanel";
 import {
@@ -256,6 +257,8 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const [detached, setDetached] = useState(false);
 
   const taRef = useRef<HTMLTextAreaElement>(null);
+  // 右键 → 存为片段：输入框和每条气泡共用。
+  const snippetSave = useSnippetSave();
   const mirrorRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -1042,6 +1045,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
                 mention.sync(e.target.value, e.target.selectionStart);
               }}
               onKeyDown={onKeyDown}
+              onContextMenu={snippetSave.onTextareaContextMenu}
               onCompositionStart={() => setComposing(true)}
               onCompositionEnd={() => setComposing(false)}
               onScroll={() => {
@@ -1152,7 +1156,15 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           <div className={styles.inputFoot}>
             {/* 插入而不是发送：片段是个开头，作者补完再发。 */}
             <SnippetPicker
-              onPick={(c) => setDraft((prev) => (prev.trim() ? `${prev}\n${c}` : c))}
+              value={draft}
+              onInsert={setDraft}
+              onAfterInsert={() => requestAnimationFrame(() => {
+                const el = taRef.current;
+                if (!el) return;
+                el.focus();
+                el.setSelectionRange(el.value.length, el.value.length);
+                el.scrollTop = el.scrollHeight;
+              })}
             />
             <span className={styles.kbd}>{t("roleplay.composer.newline", { defaultValue: "⇧↵ 换行" })}</span>
             <div className={styles.spacer} />
@@ -1184,6 +1196,8 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
       {showMemory && (
         <MemoryPanel agentId={agent.id} onClose={() => setShowMemory(false)} onJump={jumpToTurn} />
       )}
+      {/* 右键 → 存为片段 的菜单与命名浮层。 */}
+      {snippetSave.node}
     </div>
   );
 }

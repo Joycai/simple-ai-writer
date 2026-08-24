@@ -1,20 +1,320 @@
-.snippetBtn {
+/* 提示词库 · 取用侧 (设计稿 10 提示词库 · 1a/1b/1d/1e/1k)
+
+   Every value here is transcribed from the mockup's 1k spec sheet, which
+   introduces no new scale: 9/13 row padding (the @ mention picker's), 11/13 for
+   the search and chip rows, 13px sans for names, 12px serif for the one preview
+   line — serif because that text is the author's own writing, not a UI label. */
+
+.root {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  min-width: 0;
+}
+
+/* ── The entry ───────────────────────────────────────────────────────────────
+   Same weight as the button it replaces (11px / 5×9 / 1px hairline). It is the
+   one control that operates *the input box itself*, which is why it sits in the
+   composer's own footer cell and not in the 「+ 设定 / + 章节」 row — that row
+   adds material to the message. */
+.entry {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  align-self: flex-start;
+  flex-shrink: 0;
   padding: 5px 9px;
   background: transparent;
   border: 1px solid var(--color-border-muted);
   color: var(--color-text-soft);
   font: 400 11px/1.4 var(--font-sans);
   cursor: pointer;
-  transition: color var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+  transition: color var(--transition-fast), border-color var(--transition-fast),
+              background var(--transition-fast), box-shadow var(--transition-fast);
 }
-.snippetBtn:hover {
-  color: var(--color-accent-text);
+.entry:hover { color: var(--color-accent-text); border-color: var(--color-border-accent); }
+.entry:active { transform: scale(0.96); }
+.entryChevron { opacity: 0.7; }
+
+/* Open: the only state that fills. It has to read as "this button owns the
+   thing floating above it". */
+.entryOpen,
+.entryOpen:hover {
   border-color: var(--color-border-accent);
+  background: var(--color-bg-accent-wash);
+  color: var(--color-accent-text);
 }
-.snippetBtn:active {
-  transform: scale(0.96);
+
+/* Zero snippets: dropped to the faintest tier but **never disabled** — a
+   greyed-out entry is a hidden one, and the empty popover is the feature's only
+   introduction (设计稿 1e). The 1px border stays: one hairline is a cheap price
+   for the feature being discoverable at all. */
+.entryEmpty {
+  color: var(--color-text-hint);
+  border-color: var(--color-border-panel);
 }
+.entryEmpty:hover { color: var(--color-accent-text); border-color: var(--color-border-accent); }
+
+/* The save/insert trace: one accent hairline under the entry, nothing more. */
+.entryTraced { box-shadow: inset 0 -1px 0 var(--snip-rule); }
+
+.trace {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  animation: traceIn 240ms var(--ease-out);
+}
+.tracePlus {
+  font: 500 10px/1 var(--font-mono);
+  color: var(--color-accent-text);
+  flex-shrink: 0;
+}
+.traceText {
+  font: 400 10px/1.5 var(--font-sans);
+  color: var(--color-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.traceUndo {
+  font: 400 10px/1.5 var(--font-mono);
+  color: var(--color-text-kbd);
+  flex-shrink: 0;
+}
+@keyframes traceIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* ── The popover ─────────────────────────────────────────────────────────────
+   520 wide, left-aligned on the entry, opening *upward* — it lives at the
+   bottom of a full-height drawer, so downward would leave the window. */
+.popover {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  width: 520px;
+  max-width: min(520px, calc(100vw - 64px));
+  max-height: 480px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-bg-stream);
+  border: 1px solid var(--color-border-input);
+  box-shadow: var(--snip-shadow);
+  transform-origin: bottom left;
+  animation: snipRise 160ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+@keyframes snipRise {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.searchRow {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--color-hairline);
+}
+.searchIcon { color: var(--color-text-hint); flex-shrink: 0; }
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  color: var(--color-text-primary);
+  font: 400 13px/1.4 var(--font-sans);
+}
+.searchInput::placeholder { color: var(--color-text-hint); }
+.searchCount {
+  flex-shrink: 0;
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-kbd);
+}
+
+.filterRow {
+  flex-shrink: 0;
+  display: flex;
+  gap: 6px;
+  padding: 10px 13px;
+  border-bottom: 1px solid var(--color-hairline);
+}
+.chip {
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid var(--color-border-panel);
+  color: var(--color-text-dim);
+  font: 400 11px/1 var(--font-mono);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--transition-fast), border-color var(--transition-fast),
+              background var(--transition-fast);
+}
+.chip:hover { color: var(--color-accent-text); border-color: var(--color-border-accent); }
+.chipActive,
+.chipActive:hover {
+  border-color: var(--color-border-accent);
+  background: var(--color-bg-accent-wash);
+  color: var(--color-accent-text);
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.section { display: flex; flex-direction: column; }
+
+/* Sticky so a 34-row library never scrolls a row out from under its own
+   heading. Opaque for the same reason. */
+.sectionHead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 14px 13px 7px;
+  background: var(--color-bg-stream);
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-text-label);
+}
+/* 「未分组」 is an inbox, not a category — it drops one tier so it does not
+   read as a peer of the author's own groups. */
+.sectionHeadWeak { color: var(--color-text-hint); }
+.sectionName { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sectionCount {
+  flex-shrink: 0;
+  font: 400 10px/1 var(--font-mono);
+  letter-spacing: 0;
+  color: var(--color-text-dim);
+}
+
+/* ── Rows ────────────────────────────────────────────────────────────────────
+   Hover fills with neutral grey and draws no rule; the cursor draws a rule and
+   fills nothing. Both can be on screen at once and still be told apart —
+   tinting the hover with the accent is what would make them ambiguous. */
+.item {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  padding: 9px 13px 9px 15px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+}
+.item:hover {
+  background: var(--snip-row-hover);
+  transition: background 120ms var(--ease-out);
+}
+.itemActive {
+  /* Inset so the 2px rule eats the extra left padding instead of shifting the
+     text — a row that jogs sideways under ↑↓ is unreadable at speed. */
+  box-shadow: inset 2px 0 0 var(--snip-rule);
+  padding-left: 13px;
+}
+.itemActive .name { color: var(--color-text-primary); }
+
+.name {
+  flex: 0 1 auto;
+  max-width: 40%;
+  min-width: 0;
+  font: 400 13px/1.4 var(--font-sans);
+  color: var(--color-text-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Exactly one line, always — a consistent row height is worth more than a few
+   more characters (设计稿 1d④). */
+.preview {
+  flex: 1;
+  min-width: 0;
+  font: 400 12px/1.4 var(--font-serif);
+  color: var(--snip-preview);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* `{{…}}` is literal text the author deletes and fills by hand. A dashed
+   underline is enough to spot it and little enough that it still reads as
+   ordinary prose rather than a control. */
+.ph {
+  border-bottom: 1px dashed var(--color-border-emphasis);
+  color: var(--color-text-soft);
+}
+
+.hit {
+  background: var(--snip-hit-bg);
+  color: var(--color-text-soft);
+}
+
+.uses {
+  flex-shrink: 0;
+  font: 400 11px/1 var(--font-mono);
+  color: var(--color-text-dim);
+}
+
+/* ── Empty / no-match ────────────────────────────────────────────────────── */
+.introBody { padding: 22px 20px 18px; }
+.introTitle {
+  font: 400 15.5px/1.5 var(--font-serif);
+  color: var(--color-text-primary);
+  margin-bottom: 10px;
+}
+.introText {
+  margin: 0 0 16px;
+  font: 400 12.5px/1.8 var(--font-sans);
+  color: var(--color-text-dim);
+}
+.introHow {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-text-label);
+  margin-bottom: 9px;
+}
+
+.noMatch {
+  padding: 26px 20px;
+  font: 400 12.5px/1.8 var(--font-sans);
+  color: var(--color-text-dim);
+}
+.noMatchHow { margin-top: 8px; color: var(--color-text-hint); }
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+.footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: 11px 13px;
+  border-top: 1px solid var(--color-hairline);
+  background: var(--color-bg-inset);
+}
+.hint {
+  font: 400 10px/1.5 var(--font-mono);
+  color: var(--color-text-kbd);
+  white-space: nowrap;
+}
+.manageBtn {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  padding: 0;
+  font: 400 11px/1.5 var(--font-sans);
+  color: var(--color-text-dim);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+.manageBtn:hover { color: var(--color-accent-text); }
