@@ -524,6 +524,24 @@
       "split": "分栏",
       "preview": "预览"
     },
+    "toolbar": {
+      "label": "格式工具栏",
+      "undo": "撤销",
+      "redo": "重做",
+      "heading": "标题级别",
+      "paragraph": "正文",
+      "orderedList": "有序列表",
+      "taskList": "任务列表",
+      "codeBlock": "代码块",
+      "table": "表格",
+      "horizontalRule": "分隔线"
+    },
+    "zoom": {
+      "label": "预览缩放",
+      "in": "放大（⌘/Ctrl + 滚轮）",
+      "out": "缩小（⌘/Ctrl + 滚轮）",
+      "reset": "恢复 100%"
+    },
     "htmlPreview": {
       "title": "HTML 预览",
       "refresh": "刷新",
@@ -577,6 +595,7 @@
       "heading1": "一级标题",
       "heading2": "二级标题",
       "heading3": "三级标题",
+      "heading4": "四级标题",
       "quote": "引用",
       "bulletList": "无序列表"
     }

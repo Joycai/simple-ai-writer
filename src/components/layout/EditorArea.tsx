@@ -149,7 +149,7 @@ export function EditorArea() {
       <div className={styles.panes}>
         {showEditor && (
           <div className={styles.editorPane}>
-            <CodeEditor value={content} onChange={setContent} />
+            <CodeEditor value={content} onChange={setContent} toolbar={!isHtml} />
             <EditorScrollNav />
           </div>
         )}

@@ -20,6 +20,7 @@ import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language"
 import { useEditorStore } from "../../stores/editorStore";
 import { useAiTaskStore } from "../../stores/aiTaskStore";
 import { EditorContextMenu } from "./EditorContextMenu";
+import { EditorToolbar } from "./EditorToolbar";
 import { DocImageGenModal } from "./DocImageGenModal";
 import { useAiStore } from "../../stores/aiStore";
 import {
@@ -71,9 +72,15 @@ const aiTargetKeymap = [
 interface Props {
   value: string;
   onChange: (value: string) => void;
+  /**
+   * Show the markdown formatting strip. Off for documents the markdown
+   * commands don't describe — an .html page is edited here too, and a bar
+   * offering `**bold**` above it would be wrong rather than merely unused.
+   */
+  toolbar?: boolean;
 }
 
-export function CodeEditor({ value, onChange }: Props) {
+export function CodeEditor({ value, onChange, toolbar = true }: Props) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -84,6 +91,8 @@ export function CodeEditor({ value, onChange }: Props) {
   const [illustrating, setIllustrating] = useState(false);
   const hasImageModel = useAiStore((s) => s.models.some((m) => m.type === "image"));
   const filePath = useEditorStore((s) => s.filePath);
+  // The live view, as the store learns about it — see the toolbar's `view` prop.
+  const editorView = useEditorStore((s) => s.editorView);
   /** A failed 插入图片, shown until the next attempt. */
   const [insertError, setInsertError] = useState<string | null>(null);
 
@@ -236,17 +245,26 @@ export function CodeEditor({ value, onChange }: Props) {
   }, [value]);
 
   return (
-    <div
-      ref={containerRef}
-      className={styles.wrap}
-      data-ai-selection
-      onContextMenu={(e) => {
-        // Replace the webview's native menu with our own markdown/edit menu.
-        e.preventDefault();
-        viewRef.current?.focus();
-        setMenu({ x: e.clientX, y: e.clientY });
-      }}
-    >
+    <div className={styles.wrap} data-ai-selection>
+      {toolbar && (
+        <EditorToolbar
+          // Read from the store rather than viewRef: the view is built in an
+          // effect, so the ref is still null on the render that mounts this,
+          // and nothing about a ref would schedule the second one.
+          view={editorView}
+          onInsertImage={filePath ? () => void handleInsertImage() : undefined}
+        />
+      )}
+      <div
+        ref={containerRef}
+        className={styles.host}
+        onContextMenu={(e) => {
+          // Replace the webview's native menu with our own markdown/edit menu.
+          e.preventDefault();
+          viewRef.current?.focus();
+          setMenu({ x: e.clientX, y: e.clientY });
+        }}
+      />
       {menu && viewRef.current && (
         <EditorContextMenu
           x={menu.x}

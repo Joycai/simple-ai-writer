@@ -4,6 +4,16 @@
    pane, the lore previews and exported documents can't drift apart.
    See lib/theme/markdownThemes.ts. */
 
+/* Holds the scroller and the zoom pill. The pill has to live outside the
+   scrolling element to stay put while the page moves under it. */
+.wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
 .preview {
   flex: 1;
   overflow-y: auto;
@@ -41,11 +51,87 @@
   border: 3px solid transparent;
 }
 
-/* The measure. Themes set type; the pane sets how wide a line may run. */
+/* The measure. Themes set type; the pane sets how wide a line may run.
+
+   Zoom is `zoom`, not a font-size bump: the author asked for the *page* to
+   get bigger, and illustrations, tables and code blocks are sized in px or in
+   percentages of the measure — scaling type alone leaves every picture the
+   size it was. `zoom` also lays the page out at the new scale instead of
+   painting a transform over it, so text stays crisp and the scrollbar reports
+   the real height.
+
+   The max-width divides by the same factor because `zoom` scales the used
+   width too: without the compensation a zoomed-in page would be wider than
+   its pane and the manuscript would scroll sideways. Dividing first means the
+   measure lands back on --editor-max-width in screen pixels, so what zoom
+   changes is how large the type is, not how far a line runs. */
 .page {
-  max-width: var(--editor-max-width);
+  zoom: var(--preview-zoom, 1);
+  max-width: calc(var(--editor-max-width) / var(--preview-zoom, 1));
   margin: 0 auto;
 }
+
+/* ── Zoom control ────────────────────────────────────────────────────────
+   Bottom-right of the pane, faint until the pointer is in the neighbourhood:
+   it is a reading adjustment made once, not a control the eye should keep
+   landing on while reading. */
+.zoom {
+  position: absolute;
+  right: 18px;
+  bottom: 16px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-md);
+  opacity: 0.35;
+  transition: opacity var(--transition-base);
+}
+.wrap:hover .zoom,
+.zoom:focus-within {
+  opacity: 1;
+}
+
+.zoomBtn,
+.zoomValue {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast),
+    transform var(--transition-fast);
+}
+.zoomBtn { width: 26px; }
+.zoomValue {
+  min-width: 46px;
+  padding: 0 4px;
+  font: 500 11px/1 var(--font-mono);
+  color: var(--color-text-secondary);
+  border-left: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
+}
+
+.zoomBtn:hover:not(:disabled),
+.zoomValue:hover:not(:disabled) {
+  color: var(--color-sienna);
+  background: var(--color-bg-hover);
+}
+.zoomBtn:active:not(:disabled) { transform: scale(0.92); }
+.zoomBtn:disabled,
+.zoomValue:disabled {
+  color: var(--color-text-ghost);
+  cursor: default;
+}
+/* 100% is the resting state, so the label being unclickable there must not
+   read as broken — it keeps the ordinary text colour. */
+.zoomValue:disabled { color: var(--color-text-muted); }
 
 /* An illustration that has no `src` yet — either being decoded off disk, or
    pointing at a file that isn't there. Both need a box: an <img> with no source
