@@ -79,13 +79,22 @@ export async function listScenesTool(id: string, ctx: { scenes?: SceneReader }):
   };
 }
 
-interface ReadArgs { agent?: string; from?: number; to?: number }
+/**
+ * 场景寻址一律用 `scene`（`list_scenes` 给出的 id）。`agent` 是 1.28 之前的
+ * 拼法，仍然接受：模型面对的词汇是「场景」（工具名、list_scenes 的输出、
+ * 每个参数说明都这么说），只有线上参数名曾经说 agent，那个错位已经修掉。
+ * 值本身仍是 agent id —— 一个角色一场，两者同一。
+ */
+interface SceneArg { scene?: string; agent?: string }
+const sceneId = (args: SceneArg): string => (args.scene ?? args.agent ?? "").trim();
+
+interface ReadArgs extends SceneArg { from?: number; to?: number }
 
 export async function readSceneTool(
   id: string, args: ReadArgs, ctx: { scenes?: SceneReader },
 ): Promise<ToolResult> {
   if (!ctx.scenes) return { toolCallId: id, content: NO_READER };
-  const agentId = (args.agent ?? "").trim();
+  const agentId = sceneId(args);
   const scenes = await ctx.scenes.list();
   if (!scenes.some((s) => s.agentId === agentId)) {
     return { toolCallId: id, content: unknownScene(scenes, agentId) };
@@ -125,7 +134,7 @@ export async function readSceneTool(
   return { toolCallId: id, content: `${body}\n\n(${notes.join(" ")})` };
 }
 
-interface SearchArgs { query?: string; agent?: string }
+interface SearchArgs extends SceneArg { query?: string }
 
 export async function searchScenesTool(
   id: string, args: SearchArgs, ctx: { scenes?: SceneReader },
@@ -135,9 +144,10 @@ export async function searchScenesTool(
   if (!query) return { toolCallId: id, content: "Provide a non-empty query." };
 
   const scenes = await ctx.scenes.list();
-  const targets = args.agent ? scenes.filter((s) => s.agentId === args.agent) : scenes;
-  if (args.agent && !targets.length) {
-    return { toolCallId: id, content: unknownScene(scenes, args.agent) };
+  const only = sceneId(args);
+  const targets = only ? scenes.filter((s) => s.agentId === only) : scenes;
+  if (only && !targets.length) {
+    return { toolCallId: id, content: unknownScene(scenes, only) };
   }
 
   const lines: string[] = [];
@@ -159,10 +169,10 @@ export async function searchScenesTool(
 }
 
 export async function readSceneSummaryTool(
-  id: string, args: { agent?: string }, ctx: { scenes?: SceneReader },
+  id: string, args: SceneArg, ctx: { scenes?: SceneReader },
 ): Promise<ToolResult> {
   if (!ctx.scenes) return { toolCallId: id, content: NO_READER };
-  const agentId = (args.agent ?? "").trim();
+  const agentId = sceneId(args);
   const scenes = await ctx.scenes.list();
   const scene = scenes.find((s) => s.agentId === agentId);
   if (!scene) return { toolCallId: id, content: unknownScene(scenes, agentId) };
@@ -178,10 +188,10 @@ export async function readSceneSummaryTool(
 }
 
 export async function readSceneMemoryTool(
-  id: string, args: { agent?: string; include_closed?: boolean }, ctx: { scenes?: SceneReader },
+  id: string, args: SceneArg & { include_closed?: boolean }, ctx: { scenes?: SceneReader },
 ): Promise<ToolResult> {
   if (!ctx.scenes) return { toolCallId: id, content: NO_READER };
-  const agentId = (args.agent ?? "").trim();
+  const agentId = sceneId(args);
   const scenes = await ctx.scenes.list();
   const scene = scenes.find((s) => s.agentId === agentId);
   if (!scene) return { toolCallId: id, content: unknownScene(scenes, agentId) };

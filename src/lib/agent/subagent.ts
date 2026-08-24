@@ -347,7 +347,10 @@ export async function executeDelegate(
     return fail("this surface cannot run subagents — do not call this tool here.");
   }
 
-  const args = parseArgs<{ kind?: string; task?: string; refs?: string[] }>(call.arguments);
+  // `refs` is the parameter's pre-1.28 spelling, still accepted.
+  const args = parseArgs<{ kind?: string; task?: string; references?: string[]; refs?: string[] }>(
+    call.arguments,
+  );
   const kind = args.kind as DelegateKind;
   if (!DELEGATE_KINDS.includes(kind)) {
     if ((args.kind as SubAgentKind) === "imagegen") {
@@ -387,7 +390,7 @@ export async function executeDelegate(
     );
   }
 
-  const refs = (args.refs ?? []).filter((r) => typeof r === "string" && r.trim());
+  const refs = ((args.references ?? args.refs) ?? []).filter((r) => typeof r === "string" && r.trim());
   const preset = SUB_PRESETS[kind];
 
   // Two templates, not one with an interpolated blank: the refs-bearing key
