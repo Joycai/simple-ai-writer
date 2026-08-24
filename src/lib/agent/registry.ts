@@ -806,25 +806,27 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
         parameters: {
           type: "object",
           properties: {
-            name: {
+            workflow: {
               type: "string",
               description: "The card's name exactly as it appears in the list",
             },
           },
-          required: ["name"],
+          required: ["workflow"],
         },
       },
     },
     execute: async (call, ctx) => {
-      const args = parseArgs<{ name?: string }>(call.arguments);
-      if (!args.name) return { toolCallId: call.id, content: "Error: 'name' argument is required." };
+      // `name` accepted as a fallback — the parameter's pre-1.28 spelling.
+      const args = parseArgs<{ workflow?: string; name?: string }>(call.arguments);
+      const wanted = args.workflow ?? args.name;
+      if (!wanted) return { toolCallId: call.id, content: "Error: 'workflow' argument is required." };
       const cards = await scanWorkflows(ctx.projectPath);
-      const card = findWorkflow(cards, args.name);
+      const card = findWorkflow(cards, wanted);
       if (!card) {
         const names = activeWorkflows(cards).map((c) => c.name).join("、");
         return {
           toolCallId: call.id,
-          content: `Error: no workflow card named "${args.name}". Available: ${names || "(none)"}. Copy a name from the 可用工作流 list.`,
+          content: `Error: no workflow card named "${wanted}". Available: ${names || "(none)"}. Copy a name from the 可用工作流 list.`,
         };
       }
       return { toolCallId: call.id, content: `# ${card.name}\n\n${card.body}` };
@@ -1806,9 +1808,9 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
               description:
                 "Existing images to send as visual references — a project path, or a gallery filename from read_lore_entity. Use for character/style consistency. Only works if the image model accepts input images.",
             },
-            note: {
+            desc: {
               type: "string",
-              description: "One line saying what the picture shows, in the author's language. Becomes the alt text / gallery description — this is all a text-only model will ever see of it.",
+              description: "One line saying what the picture shows, in the author's language. Becomes the gallery description (or a document's alt text) — this is all a text-only model will ever see of it, and update_lore_image edits the same field later.",
             },
             slot: {
               type: "string",
@@ -1881,9 +1883,9 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
               enum: ["low", "medium", "high"],
               description: "Quality tier (GPT-Image only); omit for default.",
             },
-            note: {
+            desc: {
               type: "string",
-              description: "One line describing the new picture, for its gallery description.",
+              description: "One line describing the new picture, for its gallery description — the same field update_lore_image edits.",
             },
             reason: {
               type: "string",
@@ -2114,11 +2116,11 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
         parameters: {
           type: "object",
           properties: {
-            agent: { type: "string", description: "Scene id from list_scenes" },
+            scene: { type: "string", description: "Scene id from list_scenes" },
             from: { type: "integer", description: "First turn number (1-based, inclusive). Omit for the latest window." },
             to: { type: "integer", description: "Last turn number (inclusive)." },
           },
-          required: ["agent"],
+          required: ["scene"],
         },
       },
     },
@@ -2132,12 +2134,12 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "search_scenes",
         description:
-          "Full-text search across roleplay transcripts. Returns matching turn numbers with the matching line, so you can then read_scene the range around them. This is how you find something said long ago without reading everything.",
+          "Full-text search across roleplay transcripts. Returns matching turn numbers with the matching line, so you can then read_scene the range around them. This is how you find something said long ago without reading everything. Matching is literal and case-insensitive: search a distinctive word that was actually spoken.",
         parameters: {
           type: "object",
           properties: {
             query: { type: "string", description: "Text to look for" },
-            agent: { type: "string", description: "Restrict to one scene. Omit to search all of them." },
+            scene: { type: "string", description: "Restrict to one scene (id from list_scenes). Omit to search all of them." },
           },
           required: ["query"],
         },
@@ -2156,8 +2158,8 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
           "Read a scene's rolling summary — the cheap way to catch up on a long scene before deciding which turns to read verbatim. Start here rather than pulling a whole transcript into context.",
         parameters: {
           type: "object",
-          properties: { agent: { type: "string", description: "Scene id from list_scenes" } },
-          required: ["agent"],
+          properties: { scene: { type: "string", description: "Scene id from list_scenes" } },
+          required: ["scene"],
         },
       },
     },
@@ -2175,10 +2177,13 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
         parameters: {
           type: "object",
           properties: {
-            agent: { type: "string", description: "Scene id from list_scenes" },
-            include_closed: { type: "boolean", description: "Also return kept and called-off records" },
+            scene: { type: "string", description: "Scene id from list_scenes" },
+            include_closed: {
+              type: "boolean",
+              description: "Include kept (done) and called-off (void) records",
+            },
           },
-          required: ["agent"],
+          required: ["scene"],
         },
       },
     },
@@ -2337,7 +2342,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
                 "A complete, self-contained instruction. The subagent cannot see this " +
                 "conversation, so state everything it needs to know.",
             },
-            refs: {
+            references: {
               type: "array",
               items: { type: "string" },
               description: "Paths the subagent should work on (documents, images, or PDF files).",
@@ -2483,6 +2488,16 @@ export function isParallelSafeTool(name: string): boolean {
   const tool = (REGISTRY as Record<string, RegisteredTool | undefined>)[name];
   return !tool || tool.access === "read";
 }
+
+/**
+ * Every tool id in the registry, in declaration order.
+ *
+ * Derived from `REGISTRY` rather than written out, so a sweep over "all tools"
+ * cannot silently miss a new one — which is the whole value of the convention
+ * checks in `agentToolConventions.test.ts`: a hand-copied list would be a list
+ * that stops covering the tool added the day after it was written.
+ */
+export const ALL_TOOL_IDS = Object.keys(REGISTRY) as ToolId[];
 
 /** Resolve wire definitions for a preset's toolset, preserving order. */
 export function getToolDefinitions(ids: readonly ToolId[]): ToolDefinition[] {

@@ -486,3 +486,42 @@ N 个结构相同的 `<section class="slide">`，表格里同一句话出现在�
 
 - 读工具参数 `name` → `entity`（写工具从来是 `entity`；en briefing 早已按 `entity` 写，此前是潜在错位）。执行层兼容旧拼写。
 - 工具预算棘轮上调有账：整套 9,743 → 11,237（新工具 ~1.4k token **全部在延迟组**，方案批准后才上线）；常驻 7,201 → 7,554（只涨了 generate_image 的 slot 参数和读侧措辞）。见 `agentToolBudget.test.ts` 注释。
+
+## 10. 工具面约定（2026-08-24 · claude/agent-tool-standards-alignment）
+
+§9 修的是知识库工具、`docs/reference/architecture.md` → Organising files 记的是文件工具。第三轮扫的是**其余 24 个**（发现/门控、生图、拆分收集器、任务工作区、扮演、委托/流水线），但结论不是又一批修复清单——三轮下来，找到的缺陷是**同一个形状**：不是某个工具坏了，而是**一样东西有两个名字**。
+
+- 读工具用 `name` 寻址条目，写工具用 `entity`（§9.7 已修）
+- 一张图的说明对造它的工具叫 `note`，对改它的工具叫 `desc`（本轮修）
+- 一个场景在 schema 里叫 `agent`，而工具名、`list_scenes` 的输出、每一句参数说明都叫它 "scene id"（本轮修）
+
+每一处的代价都是一次错误调用，而且**没有一处会让任何测试失败**——审阅者拿一个工具去比另外四十个，正是那个看不出来的读者。所以这轮的产出主要不是改名，是把约定变成机器检查：`src/lib/__tests__/agentToolConventions.test.ts`。
+
+### 10.1 钉住的约定
+
+| 约定 | 内容 |
+|---|---|
+| 寻址参数以**被寻址物**命名 | `entity` / `scene` / `workflow` / `path`。裸 `name` 一律不行——它什么也没说。`create_lore_entity({name})` 例外且保留：那是**要给的名字**，不是被寻址的东西 |
+| 一个概念一个拼法 | `desc`（不是 note/caption/alt）、`references`（不是 refs）、`query`、`folder`、`scene`（不是 agent） |
+| 翻页 vs 读范围 | 往后翻用 `start_line`/`start_slide`（工具自己在尾注给下一个游标），读**命名范围**用 `from`/`to`。两种是不同的访问模式、各留各的名字；不许出现第三种拼法（`offset`/`begin`/`first`/`since` 直接报错），也不许有 `to` 没有 `from` |
+| 卡片对面的人是 **the author** | 不是 the user。半数手稿工具原先说 user、知识库工具说 author，对模型读起来是两个人 |
+| 检索工具必须自报匹配语义 | 「literal、case-insensitive」——不写模型就会开始写正则 |
+
+`ALL_TOOL_IDS` 因此从注册表**派生**而不是手抄：手抄的清单必然在它写下的第二天就停止覆盖新工具，而那种失败是静默的。测试自己带一条计数守卫（>40 个工具 + 抽查五个家族 + 确认参数真的解析出来了），因为这一整个文件是对全集的循环——集合空了的话，每条断言都会变成真的。
+
+### 10.2 本轮的改名（全部接受旧拼法）
+
+| 工具 | 旧 | 新 | 为什么 |
+|---|---|---|---|
+| `read_scene` / `search_scenes` / `read_scene_summary` / `read_scene_memory` | `agent` | `scene` | 模型面对的词汇从来是「场景」；值仍是 agent id（一角色一场，两者同一），改的只是线上的名字 |
+| `generate_image` / `edit_image` | `note` | `desc` | 写的就是 images.md 的 `desc` 字段，`update_lore_image`（§9.3）改的也是它 |
+| `read_workflow` | `name` | `workflow` | 让「没有寻址参数叫裸 name」成为可检查的不变量 |
+| `delegate` | `refs` | `references` | 与 `generate_image.references` 同名，且这个代码库不用缩写 |
+
+改名当天在飞的会话仍会发旧参数，所以**每一处都接受旧拼法**（`args.scene ?? args.agent`），并在 `sceneTools.ts` / `imageTools.ts` / `subagent.ts` 就地注明这是 1.28 之前的拼法。`workflowTool.test.ts` 与新增的 `sceneTools.test.ts` 各有一条用例专门跑兼容路径——改名的症状会是「旁白突然说不认识这个场景」，那是要被测试挡住的东西。
+
+### 10.3 顺带修掉的措辞漂移
+
+- `search_scenes` 缺「literal / case-insensitive」那句（`search_text` 和 `search_conversation` 都有）。
+- `include_closed` 在 `read_scene_memory` 和 `recall` 上是两句不同的说明；统一到指名状态值的那句（"kept (done) and called-off (void)"）。
+- `translate` 的拒绝文案还是 "The user REJECTED"——#305 扫了 registry / writeTools / imageTools，漏了 `lib/translate/tool.ts`。现在由 10.1 的测试覆盖，不会再漏。

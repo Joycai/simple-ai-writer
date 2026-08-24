@@ -204,14 +204,16 @@ async function resolveReferences(
 export async function generateImageTool(
   toolCallId: string,
   args: {
-    prompt?: string; note?: string; entity?: string; path?: string; slot?: string;
+    // `note` is the parameter's pre-1.28 spelling; `desc` is the name the
+    // gallery field actually has (images.md, update_lore_image).
+    prompt?: string; desc?: string; note?: string; entity?: string; path?: string; slot?: string;
     references?: string[]; aspect?: string; resolution?: string; quality?: string; reason?: string;
   },
   ctx: ToolContext,
 ): Promise<ToolResult> {
   const prompt = args.prompt?.trim();
   if (!prompt) return { toolCallId, content: "Error: 'prompt' is required — describe what is visible in the picture." };
-  const note = args.note?.trim() || prompt.slice(0, 80);
+  const note = (args.desc ?? args.note)?.trim() || prompt.slice(0, 80);
   const tiers = {
     resolution: tierOf(args.resolution, RESOLUTION_TIERS),
     quality: tierOf(args.quality, QUALITY_TIERS),
@@ -285,7 +287,7 @@ export async function editImageTool(
   toolCallId: string,
   args: {
     entity?: string; file?: string; instruction?: string;
-    aspect?: string; resolution?: string; quality?: string; note?: string; reason?: string;
+    aspect?: string; resolution?: string; quality?: string; desc?: string; note?: string; reason?: string;
   },
   ctx: ToolContext,
 ): Promise<ToolResult> {
@@ -308,7 +310,7 @@ export async function editImageTool(
 
   return proposeIllustration(toolCallId, ctx, {
     prompt: instruction,
-    note: args.note?.trim() || image.desc || instruction.slice(0, 80),
+    note: (args.desc ?? args.note)?.trim() || image.desc || instruction.slice(0, 80),
     aspect: args.aspect,
     resolution: tierOf(args.resolution, RESOLUTION_TIERS),
     quality: tierOf(args.quality, QUALITY_TIERS),

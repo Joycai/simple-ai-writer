@@ -41,12 +41,15 @@ import { BUILTIN_WORKFLOWS, workflowBriefingSection } from "../../workflow";
 
 const ctx = { projectPath: "/p", loreIndex: {}, multimodal: false } as ToolContext;
 
-const readWorkflow = async (name?: string) =>
+const call = async (args: object) =>
   executeRegisteredTool(
-    { id: "c1", name: "read_workflow", arguments: JSON.stringify(name === undefined ? {} : { name }) },
+    { id: "c1", name: "read_workflow", arguments: JSON.stringify(args) },
     ["read_workflow"],
     ctx,
   );
+
+const readWorkflow = async (workflow?: string) =>
+  call(workflow === undefined ? {} : { workflow });
 
 beforeEach(() => files.clear());
 
@@ -74,8 +77,16 @@ describe("read_workflow", () => {
     expect(r.content).toContain(BUILTIN_WORKFLOWS[0].name);
   });
 
-  it("缺 name 参数是参数错误", async () => {
-    expect((await readWorkflow()).content).toContain("'name' argument is required");
+  it("缺 workflow 参数是参数错误", async () => {
+    expect((await readWorkflow()).content).toContain("'workflow' argument is required");
+  });
+
+  // 参数在 1.28 改名 name → workflow（与「寻址参数一律以被寻址物命名」对齐）。
+  // 旧拼法仍然接受：改名当天在飞的会话不该因此开始报错。
+  it("旧拼法 name 仍然读得到同一张卡", async () => {
+    const r = await call({ name: BUILTIN_WORKFLOWS[0].name });
+    expect(r.content).toContain(BUILTIN_WORKFLOWS[0].name);
+    expect(r.content).not.toContain("Error");
   });
 });
 

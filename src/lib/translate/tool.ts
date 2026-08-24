@@ -304,7 +304,7 @@ async function translateFile(
     return {
       toolCallId,
       content:
-        `The user REJECTED the translation${decision.reason ? ` — reason: ${decision.reason}` : "."} ` +
+        `The author REJECTED the translation${decision.reason ? ` — reason: ${decision.reason}` : "."} ` +
         "Nothing was written. Do not re-run the same translation; ask what they want changed.",
     };
   }
