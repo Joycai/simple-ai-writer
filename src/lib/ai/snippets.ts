@@ -126,6 +126,36 @@ export function buildSections(snips: Prompt[], opts: SectionOptions = {}): Snipp
   return sections;
 }
 
+/** Below this size the picker renders as a bare list: no search box, no chips,
+ *  no section headers (设计稿 1b). */
+export function isSimpleLibrary(snips: Prompt[]): boolean {
+  return snips.length <= SIMPLE_MAX;
+}
+
+/**
+ * The picker's sections — `buildSections` plus the two things that follow from
+ * a library small enough to render bare.
+ *
+ * 「常用」 is dropped there, and that is not a size optimisation: the repeated
+ * rows only read as "a shortcut section above the list" *because of the header
+ * above them*. With the headers gone the same rows read as the list showing one
+ * snippet twice — and permanently, since `lastUsedAt` never expires, so the
+ * duplicate arrives the moment a snippet is first inserted and never leaves.
+ * The search and the chips are likewise inert below the threshold, so the
+ * picker's own state must not reach `buildSections`.
+ */
+export function pickerSections(
+  snips: Prompt[],
+  opts: { filter?: SnippetFilter; query?: string } = {},
+): SnippetSection[] {
+  const simple = isSimpleLibrary(snips);
+  return buildSections(snips, {
+    filter: simple ? "all" : (opts.filter ?? "all"),
+    query: simple ? "" : (opts.query ?? ""),
+    frequentSection: !simple,
+  });
+}
+
 /** Chip counts. Always computed over the whole library, never over the current
  *  filter — a chip that renumbered itself when picked would be unreadable. */
 export function chipCounts(snips: Prompt[]): Record<SnippetFilter, number> {

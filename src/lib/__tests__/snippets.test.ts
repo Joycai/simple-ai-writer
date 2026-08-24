@@ -5,6 +5,7 @@ import {
   findSnippetByName, flatten, frequentSnippets, groupNames, hitSlice, previewLine,
   snippetsOf, splitPlaceholders,
   groupPickerOptions,
+  isSimpleLibrary, pickerSections,
   NEW_GROUP,
 } from "../ai/snippets";
 
@@ -98,6 +99,54 @@ describe("buildSections", () => {
   it("omits the 常用 section for the settings pane", () => {
     const secs = buildSections(library, { frequentSection: false });
     expect(secs.some((s) => s.kind === "frequent")).toBe(false);
+  });
+});
+
+describe("pickerSections", () => {
+  const big = [
+    snip("冷处理改写", { group: "改写", lastUsedAt: 500, useCount: 41 }),
+    snip("视角收束", { group: "改写" }),
+    snip("条款偏差核查", { group: "标书", lastUsedAt: 400, useCount: 33 }),
+    snip("别写成新闻稿"),
+    snip("补一段环境", { group: "改写" }),
+    snip("压缩到三百字", { group: "改写" }),
+  ];
+  const small = [
+    snip("生图", { lastUsedAt: 700, useCount: 1 }),
+    snip("生图中间文件"),
+    snip("Lore提取", { lastUsedAt: 600, useCount: 1 }),
+  ];
+
+  it("is simple only at or below the threshold", () => {
+    expect(isSimpleLibrary(small)).toBe(true);
+    expect(isSimpleLibrary(big)).toBe(false);
+  });
+
+  it("never repeats a row in a simple library", () => {
+    // The reported bug: with no section headers, 「常用」's deliberate repeat
+    // reads as the same snippet listed twice — and permanently, since
+    // `lastUsedAt` never expires, so it arrives on the first insert and stays.
+    const rows = flatten(pickerSections(small));
+    expect(rows.map((s) => s.name)).toEqual(["生图", "生图中间文件", "Lore提取"]);
+  });
+
+  it("ignores the picker's own search and chips below the threshold", () => {
+    // Both controls are unrendered there, so their state must not reach the
+    // sections — a stale query would empty a list the author cannot search.
+    const rows = flatten(pickerSections(small, { filter: "ungrouped", query: "没有这个词" }));
+    expect(rows).toHaveLength(3);
+  });
+
+  it("keeps 常用 — repeats included — once the library is big enough for headers", () => {
+    const secs = pickerSections(big);
+    expect(secs[0].kind).toBe("frequent");
+    expect(flatten(secs).filter((s) => s.name === "冷处理改写")).toHaveLength(2);
+  });
+
+  it("passes the search and the chip through above the threshold", () => {
+    expect(flatten(pickerSections(big, { query: "偏差" })).map((s) => s.name))
+      .toEqual(["条款偏差核查", "条款偏差核查"]);
+    expect(pickerSections(big, { filter: "ungrouped" }).map((s) => s.kind)).toEqual(["ungrouped"]);
   });
 });
 
