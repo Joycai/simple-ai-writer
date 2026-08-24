@@ -997,7 +997,7 @@ export async function deleteLoreFileTool(
   };
 }
 
-// ─── update_lore_image / delete_lore_image / set_lore_avatar ─────────────────
+// ─── add_lore_image / update_lore_image / delete_lore_image / set_lore_avatar ─
 //
 // The gallery half of an entity, closed to the agent until these existed:
 // images.md is refused as a file write (its format is app-managed), so without
@@ -1028,6 +1028,86 @@ function checkImageFilename(toolCallId: string, file: string | undefined): ToolR
 /** The entity's gallery filenames, for "which images are there?" error text. */
 function galleryFileList(entity: LoreEntity): string {
   return (entity.images ?? []).map((i) => i.file).join(", ") || "none";
+}
+
+export async function addLoreImageTool(
+  toolCallId: string,
+  args: { entity?: string; path?: string; desc?: string; slot?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const found = requireEntity(toolCallId, ctx, args.entity);
+  if ("toolCallId" in found) return found;
+  const entity = found;
+
+  const raw = args.path?.trim();
+  if (!raw) {
+    return {
+      toolCallId,
+      content:
+        "Error: 'path' argument is required — the path of an image already in the project (list_files shows them). " +
+        "To draw a NEW picture instead, use generate_image.",
+    };
+  }
+  const source = resolveWorkspacePath(ctx.projectPath, raw);
+  if (!source || !isImagePath(source)) {
+    return {
+      toolCallId,
+      content: `Error: "${raw}" is not an image file inside the project folder (accepted: ${IMAGE_EXT_LIST}).`,
+    };
+  }
+  if (!(await fileExists(source))) {
+    return { toolCallId, content: `Error: no file at "${source}". Check the path with list_files.` };
+  }
+
+  // Same slot contract as update_lore_image: only one this entity's category
+  // declares, refused rather than dropped, normalised to the declared casing.
+  let slot: string | null = null;
+  const wanted = args.slot?.trim();
+  if (wanted) {
+    const match = findImageSlot(entity.category, wanted);
+    if (!match) {
+      const declared = categoryImageSlots(entity.category);
+      return {
+        toolCallId,
+        content: declared.length === 0
+          ? `Error: category "${entity.category}" declares no image slots, so 'slot' cannot be set here — omit it.`
+          : `Error: "${wanted}" is not an image slot of category "${entity.category}". Its image slots are: ${declared.map((sl) => sl.id).join(", ")}. Omit 'slot' if none of them fits.`,
+      };
+    }
+    slot = match.id;
+  }
+
+  const landing = baseName(source) || "image";
+  const gated = gate(toolCallId, ctx, "update", entity.name, landing);
+  if ("refusal" in gated) return gated.refusal;
+
+  let bytes: Uint8Array;
+  try {
+    bytes = await readBinaryFile(source);
+  } catch {
+    return { toolCallId, content: `Error: could not read "${source}" — check the path with list_files.` };
+  }
+
+  const backupPath = await backupFile(ctx.projectPath, `${entity.dirPath}/images.md`);
+  const desc = args.desc?.trim() ?? "";
+  // Copied, not moved: the picture may be a document illustration or reference
+  // art the author still wants where it is. addLoreImage auto-numbers a name
+  // already taken in the entity dir, so the file always lands.
+  const saved = await addLoreImage(entity.dirPath, landing, bytes, desc, slot);
+  (entity.images ??= []).push({ file: saved, desc, slot, absPath: `${entity.dirPath}/${saved}` });
+
+  await syncLore(ctx);
+  return {
+    toolCallId,
+    content:
+      `Filed ${source} into the gallery of entity "${entity.name}" as ${saved}${slot ? ` (slot ${slot})` : ""}. ` +
+      "The source file is untouched." +
+      (desc
+        ? ""
+        : " NOTE: it has no description, so a text-only model will only ever see its filename — add one with update_lore_image.") +
+      (backupPath ? ` Previous images.md backed up to ${backupPath}.` : "") +
+      ` Plan step: ${gated.step.detail}.`,
+  };
 }
 
 export async function updateLoreImageTool(

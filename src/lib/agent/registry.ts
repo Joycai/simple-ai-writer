@@ -56,6 +56,7 @@ import {
 } from "../roleplay/conversationTools";
 import {
   copyFileTool,
+  addLoreImageTool,
   copyLoreFileTool,
   createChapterTool,
   createDirectoryTool,
@@ -487,6 +488,7 @@ export type ToolId =
   | "edit_lore_file"
   | "update_facet_meta"
   | "delete_lore_file"
+  | "add_lore_image"
   | "update_lore_image"
   | "delete_lore_image"
   | "set_lore_avatar"
@@ -1143,6 +1145,45 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
     execute: (call, ctx) => deleteLoreFileTool(call.id, parseArgs(call.arguments), ctx),
   },
 
+  add_lore_image: {
+    group: "lore_write",
+    access: "write-auto",
+    definition: {
+      type: "function",
+      function: {
+        name: "add_lore_image",
+        description:
+          "File a picture that ALREADY EXISTS in the project into a lore entity's gallery — art the author imported, a document illustration, a reference image list_files shows. This is the tool for \"add this picture to that entry\": generate_image DRAWS a new one and costs money, so it is the wrong answer when the picture is already there. The source file is copied, not moved, and stays where it is. To bring a picture over from ANOTHER entity's gallery use copy_lore_file; to make it the entity's portrait use set_lore_avatar.",
+        parameters: {
+          type: "object",
+          properties: {
+            entity: {
+              type: "string",
+              description: "Entity name exactly as returned by list_lore_entities",
+            },
+            path: {
+              type: "string",
+              description:
+                "Full path of the image in the project — a list_files folder line + \"/\" + the filename.",
+            },
+            desc: {
+              type: "string",
+              description:
+                "One line saying what the picture shows, in the author's language. This is all a text-only model will ever see of it, so write one unless you genuinely cannot tell (read_image will show you).",
+            },
+            slot: {
+              type: "string",
+              description:
+                "Which image slot of the entity's category this picture fills, by id (read_lore_entity lists them). Omit when it fits none — update_lore_image can classify it later.",
+            },
+          },
+          required: ["entity", "path"],
+        },
+      },
+    },
+    execute: (call, ctx) => addLoreImageTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
   update_lore_image: {
     group: "lore_write",
     access: "write-auto",
@@ -1786,7 +1827,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "generate_image",
         description:
-          "Draw a NEW picture and file it. Give either `entity` (goes into that lore entity's gallery) or `path` (a document in the project — the image is saved beside it and the markdown to place it comes back in the result, which you then position with propose_edit). The author reviews the prompt and its cost on a card before anything is generated, so write the prompt you actually want. Write prompts in concrete visual nouns — appearance, clothing, pose, setting, lighting, framing — never the subject's name, which the image model does not know. Read the entity or the passage first so the picture matches what is written. To keep a character or style consistent with existing pictures, pass their paths in `references` — the image model then sees them alongside the prompt.",
+          "Draw a NEW picture and file it. This COSTS MONEY and is only for a picture that does not exist yet — to file one the project already has into an entity's gallery, use add_lore_image instead. Give either `entity` (goes into that lore entity's gallery) or `path` (a document in the project — the image is saved beside it and the markdown to place it comes back in the result, which you then position with propose_edit). The author reviews the prompt and its cost on a card before anything is generated, so write the prompt you actually want. Write prompts in concrete visual nouns — appearance, clothing, pose, setting, lighting, framing — never the subject's name, which the image model does not know. Read the entity or the passage first so the picture matches what is written. To keep a character or style consistent with existing pictures, pass their paths in `references` — the image model then sees them alongside the prompt.",
         parameters: {
           type: "object",
           properties: {

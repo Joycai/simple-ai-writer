@@ -1053,6 +1053,7 @@
         "edit_lore_file": "Edit {{entry}}",
         "update_facet_meta": "Tune Facet",
         "delete_lore_file": "Delete Facet",
+        "add_lore_image": "Add {{entry}} Image",
         "update_lore_image": "Tune {{entry}} Image",
         "delete_lore_image": "Delete {{entry}} Image",
         "set_lore_avatar": "Set {{entry}} Avatar",

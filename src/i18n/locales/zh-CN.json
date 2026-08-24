@@ -1053,6 +1053,7 @@
         "edit_lore_file": "编辑{{entry}}",
         "update_facet_meta": "调整特征",
         "delete_lore_file": "删除特征",
+        "add_lore_image": "添加{{entry}}配图",
         "update_lore_image": "调整{{entry}}配图",
         "delete_lore_image": "删除{{entry}}配图",
         "set_lore_avatar": "设置{{entry}}头像",
