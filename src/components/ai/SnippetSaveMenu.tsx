@@ -36,8 +36,8 @@ import { IS_MAC } from "../../lib/platform";
 import {
   taCopy, taCut, taHasSelection, taPaste, taSelectAll,
 } from "../../lib/editor/textareaFormat";
-import { SNIPPET_SCENE } from "../../lib/ai/configDb";
-import { defaultSnippetName } from "../../lib/ai/snippets";
+import { SNIPPET_SCENE, type Prompt } from "../../lib/ai/configDb";
+import { defaultSnippetName, findSnippetByName, previewLine, snippetsOf } from "../../lib/ai/snippets";
 import { useAiStore } from "../../stores/aiStore";
 import { showSnippetTrace } from "./snippetTrace";
 import styles from "./SnippetSaveMenu.module.css";
@@ -61,6 +61,9 @@ interface Pending {
 type State =
   | { phase: "menu"; x: number; y: number; items: ContextMenuEntry[] }
   | { phase: "name"; pending: Pending }
+  /** ⏎/存 hit a name that already exists — same spot, same width, the
+   *  popover itself asks instead of silently forking into a second record. */
+  | { phase: "confirm"; pending: Pending; name: string; existing: Prompt }
   | null;
 
 export interface SnippetSave {
@@ -79,7 +82,9 @@ export interface SnippetSave {
 
 export function useSnippetSave(): SnippetSave {
   const { t } = useTranslation();
+  const prompts = useAiStore((s) => s.prompts);
   const addPrompt = useAiStore((s) => s.addPrompt);
+  const updatePrompt = useAiStore((s) => s.updatePrompt);
   const removePrompt = useAiStore((s) => s.removePrompt);
   const [state, setState] = useState<State>(null);
 
@@ -157,9 +162,27 @@ export function useSnippetSave(): SnippetSave {
     setState({ phase: "menu", x, y, items });
   }, [t, saveItem]);
 
-  const commit = async (name: string) => {
+  /**
+   * ⏎/存 from the name field. A name that exactly matches an existing
+   * snippet does **not** silently fork into a second record — that was the
+   * shipped bug (see the session notes): insert grows the box, a re-save
+   * under the same name looked like "editing" but was always `addPrompt`,
+   * so the library grew a same-named duplicate with never-quite-the-same
+   * body every time. Detecting it here means the check runs on the one path
+   * that can create the collision — no schema-level unique constraint,
+   * because renames must stay free.
+   */
+  const trySave = (name: string) => {
     if (state?.phase !== "name") return;
-    const body = state.pending.body;
+    const clash = findSnippetByName(snippetsOf(prompts), name);
+    if (clash) {
+      setState({ phase: "confirm", pending: state.pending, name, existing: clash });
+      return;
+    }
+    void commitNew(name, state.pending.body);
+  };
+
+  const commitNew = async (name: string, body: string) => {
     setState(null);
     const id = await addPrompt({
       name: name.trim() || defaultSnippetName(body),
@@ -177,6 +200,22 @@ export function useSnippetSave(): SnippetSave {
     });
   };
 
+  /** Overwrite keeps the existing row's id, group and usage history — only the
+   *  body (and the name, in case casing/whitespace changed) move. Undo restores
+   *  the exact prior body rather than deleting the row, since the row predates
+   *  this save. */
+  const commitOverwrite = async (existing: Prompt, name: string, body: string) => {
+    setState(null);
+    const before = existing.content;
+    await updatePrompt({ ...existing, name: name.trim() || existing.name, content: body });
+    showSnippetTrace({
+      kind: "saved",
+      name: name.trim() || existing.name,
+      group: existing.group?.trim() || t("ai.snippets.ungrouped", { defaultValue: "未分组" }),
+      undo: () => void updatePrompt({ ...existing, content: before }),
+    });
+  };
+
   const node = state?.phase === "menu" ? (
     <ContextMenu x={state.x} y={state.y} items={state.items} onClose={() => {
       // A pick switches us to the naming phase inside the item's own action,
@@ -188,7 +227,16 @@ export function useSnippetSave(): SnippetSave {
     <NamePopover
       pending={state.pending}
       onCancel={() => setState(null)}
-      onSave={(n) => void commit(n)}
+      onSave={trySave}
+    />
+  ) : state?.phase === "confirm" ? (
+    <ConfirmPopover
+      pending={state.pending}
+      name={state.name}
+      existing={state.existing}
+      onCancel={() => setState(null)}
+      onOverwrite={() => void commitOverwrite(state.existing, state.name, state.pending.body)}
+      onSaveAsNew={() => void commitNew(state.name, state.pending.body)}
     />
   ) : null;
 
@@ -255,6 +303,73 @@ function NamePopover({
           <button type="button" className={styles.nameSave} onClick={() => onSave(name)}>
             {t("ai.snippets.save", { defaultValue: "存" })} ⏎
           </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * Same shell, same spot: the name field is not re-anchored, it just switches
+ * what it is asking. Two ways out (覆盖 / 另存为新) plus esc, no third state —
+ * a "back to editing the name" affordance was cut on purpose, since Escape
+ * already gets there in one step by cancelling the whole save.
+ */
+function ConfirmPopover({
+  pending, name, existing, onCancel, onOverwrite, onSaveAsNew,
+}: {
+  pending: Pending;
+  name: string;
+  existing: Prompt;
+  onCancel: () => void;
+  onOverwrite: () => void;
+  onSaveAsNew: () => void;
+}) {
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+
+  const WIDTH = 320;
+  const left = Math.min(pending.x, window.innerWidth - WIDTH - 8);
+  const top = Math.min(pending.y, window.innerHeight - 190);
+
+  return createPortal(
+    <div className={styles.overlay} onMouseDown={onCancel}>
+      <div
+        className={styles.namePop}
+        style={{ left, top, width: WIDTH }}
+        onMouseDown={(e) => e.stopPropagation()}
+        role="dialog"
+      >
+        <div className={styles.nameHead}>
+          <span className={styles.nameTitle}>{t("ai.snippets.saveAs", { defaultValue: "存为片段" })}</span>
+        </div>
+        <div className={styles.warnBody}>
+          {t("ai.snippets.duplicateWarn", { defaultValue: "已存在同名片段「{{name}}」", name })}
+        </div>
+        <div className={styles.warnPreview} title={previewLine(existing.content)}>
+          {previewLine(existing.content)}
+        </div>
+        <div className={styles.nameFoot}>
+          <button type="button" className={styles.nameCancel} onClick={onCancel}>
+            esc {t("aiConfig.prompts.cancel")}
+          </button>
+          {/* .nameSave's own margin-left:auto is what pushes NamePopover's lone
+              right button — here two buttons must move together, so the push
+              lives on this wrapper instead of relying on that rule twice. */}
+          <div style={{ marginLeft: "auto", display: "flex", gap: "8px" }}>
+            <button type="button" className={styles.nameSaveNew} onClick={onSaveAsNew}>
+              {t("ai.snippets.saveAsNew", { defaultValue: "另存为新" })}
+            </button>
+            <button type="button" className={`${styles.nameSave} ${styles.nameSaveInGroup}`} onClick={onOverwrite}>
+              {t("ai.snippets.overwrite", { defaultValue: "覆盖" })}
+            </button>
+          </div>
         </div>
       </div>
     </div>,

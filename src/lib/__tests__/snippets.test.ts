@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { SNIPPET_SCENE, type Prompt } from "../ai/configDb";
 import {
   appendSnippet, buildSections, chipCounts, countPlaceholders, defaultSnippetName,
-  flatten, frequentSnippets, groupNames, hitSlice, previewLine, snippetsOf,
-  splitPlaceholders,
+  findSnippetByName, flatten, frequentSnippets, groupNames, hitSlice, previewLine,
+  snippetsOf, splitPlaceholders,
   groupPickerOptions,
   NEW_GROUP,
 } from "../ai/snippets";
@@ -182,5 +182,27 @@ describe("groupPickerOptions", () => {
     const opts = groupPickerOptions(["改写", "标书"]);
     expect(opts.map((o) => o.value)).toEqual(["改写", "标书", NEW_GROUP]);
     expect(opts.filter((o) => o.isNew)).toHaveLength(1);
+  });
+});
+
+describe("findSnippetByName", () => {
+  const mk = (id: string, name: string): Prompt =>
+    ({ id, name, content: `body of ${id}`, scene: SNIPPET_SCENE });
+
+  it("finds an exact (trimmed) match", () => {
+    const snips = [mk("a", "冷处理改写"), mk("b", "条款偏差核查")];
+    expect(findSnippetByName(snips, "  冷处理改写  ")?.id).toBe("a");
+  });
+
+  it("is case-sensitive — 'Lore' and 'lore' are different snippets", () => {
+    const snips = [mk("a", "Lore扫描")];
+    expect(findSnippetByName(snips, "lore扫描")).toBeUndefined();
+  });
+
+  it("returns undefined for an empty name and for no match", () => {
+    const snips = [mk("a", "冷处理改写")];
+    expect(findSnippetByName(snips, "")).toBeUndefined();
+    expect(findSnippetByName(snips, "   ")).toBeUndefined();
+    expect(findSnippetByName(snips, "不存在")).toBeUndefined();
   });
 });

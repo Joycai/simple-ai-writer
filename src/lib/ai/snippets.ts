@@ -233,3 +233,16 @@ export function groupPickerOptions(groups: string[]): { value: string; isNew: bo
     { value: NEW_GROUP, isNew: true },
   ];
 }
+
+/**
+ * The exact-name lookup the right-click save flow uses to detect a collision
+ * before it forks a same-named duplicate (see `SnippetSaveMenu.commit`).
+ * Trimmed, case-sensitive: two names differing only by trailing whitespace are
+ * the same collision, but "Lore" and "lore" are deliberately allowed to
+ * coexist rather than silently merged.
+ */
+export function findSnippetByName(snips: Prompt[], name: string): Prompt | undefined {
+  const target = name.trim();
+  if (!target) return undefined;
+  return snips.find((s) => s.name.trim() === target);
+}

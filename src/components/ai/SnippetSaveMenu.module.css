@@ -85,3 +85,37 @@
   transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 .nameSave:hover { border-color: var(--color-accent); }
+
+.warnBody {
+  padding: 11px 13px 0;
+  font: 400 12px/1.6 var(--font-sans);
+  color: var(--color-text-prose);
+}
+.warnBody b { color: var(--color-accent-text); font-weight: 500; }
+.warnPreview {
+  margin: 8px 13px 0;
+  padding: 8px 9px;
+  background: var(--color-bg-inset);
+  border-left: 2px solid var(--color-border-muted);
+  font: 400 11.5px/1.5 var(--font-serif);
+  color: var(--color-text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nameSaveNew {
+  padding: 5px 12px;
+  background: transparent;
+  border: 1px solid var(--color-border-muted);
+  color: var(--color-text-soft);
+  font: 400 11px/1.4 var(--font-sans);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.nameSaveNew:hover { color: var(--color-text-primary); border-color: var(--color-border-emphasis); }
+
+/* .nameSave's own margin-left:auto only makes sense as NamePopover's lone
+   right-hand button; inside ConfirmPopover's two-button group the wrapper div
+   already provides that push, so cancel it here. */
+.nameSaveInGroup { margin-left: 0; }
