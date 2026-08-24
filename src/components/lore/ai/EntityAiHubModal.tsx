@@ -13,17 +13,19 @@ import { ModalShell } from "../../common/ModalShell";
 import styles from "../LoreImproveModal.module.css";
 import hub from "./EntityAiHubModal.module.css";
 
-export type EntityAiTask = "meta" | "improve" | "image" | "split";
+export type EntityAiTask = "meta" | "improve" | "image" | "split" | "dict";
 
 interface Props {
   entityName: string;
   /** Whether an image model is configured — gates the 生成配图 cell. */
   imageGenReady?: boolean;
+  /** This entry is a 翻译词典 (LoreEntity.dict) — shows the 词典标准化 cell. */
+  dictEntry?: boolean;
   onPick: (task: EntityAiTask) => void;
   onClose: () => void;
 }
 
-export function EntityAiHubModal({ entityName, imageGenReady = false, onPick, onClose }: Props) {
+export function EntityAiHubModal({ entityName, imageGenReady = false, dictEntry = false, onPick, onClose }: Props) {
   const { t } = useTranslation();
   const shellCloseRef = useRef<(() => void) | null>(null);
   const requestClose = () => (shellCloseRef.current ?? onClose)();
@@ -51,6 +53,15 @@ export function EntityAiHubModal({ entityName, imageGenReady = false, onPick, on
       name: t("lore.aiHub.splitName", { defaultValue: "拆分整理" }),
       desc: t("lore.aiHub.splitDesc", { defaultValue: "把条目内容重新整理并拆分为特征" }),
     },
+    // 只有勾了「翻译词典」开关的条目才有这一格：别的条目没有"Sakura 词典格式"
+    // 这个概念，摆在那里只会让人点出一个空结果。
+    ...(dictEntry
+      ? [{
+          task: "dict" as const,
+          name: t("lore.aiHub.dictName"),
+          desc: t("lore.aiHub.dictDesc"),
+        }]
+      : []),
   ];
 
   return (

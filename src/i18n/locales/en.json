@@ -1942,10 +1942,27 @@
       "notePlaceholder": "One line saying what the picture shows…",
       "generatingShort": "Generating"
     },
+    "dict": {
+      "title": "Normalize dictionary",
+      "subtitle": "Reshape a word list in any format into the Sakura dictionary format: one 原文->译文 #note per line",
+      "currentLabel": "Current body",
+      "parsedNote": "{{count}} parseable",
+      "generate": "Normalize",
+      "resultLabel": "Result (editable before applying)",
+      "resultCount": "{{count}} pairs",
+      "unverified": "{{count}} pair(s) whose source or translation cannot be found verbatim in the original body — the model may have rewritten them; check those lines before applying",
+      "footerNote": "Apply REPLACES the entry body with the normalized list; the AI only moves pairs — the format is rendered by code and no translation is changed",
+      "applyNeedsEntries": "The result contains no parseable pairs",
+      "stepRead": "Read the dictionary body",
+      "stepDraft": "Extract pairs · verbatim",
+      "stepConfirm": "You review, then it is written back"
+    },
     "aiHub": {
       "title": "AI Edit Assistant",
       "metaName": "Refine metadata",
       "metaDesc": "Rewrite name, aliases, category & summary",
+      "dictName": "Normalize dictionary",
+      "dictDesc": "Reshape the body into the Sakura dictionary format (one 原文->译文 per line)",
       "improveName": "Update entry",
       "improveDesc": "Update with references/images — write to the headword, a facet, or draft a new facet",
       "splitName": "Split & organize",

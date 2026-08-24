@@ -1937,10 +1937,27 @@
       "notePlaceholder": "一句话说明这张图画的是什么…",
       "generatingShort": "生成中"
     },
+    "dict": {
+      "title": "词典标准化",
+      "subtitle": "把任意格式的词表整理成 Sakura 词典格式：一行一条 原文->译文 #备注",
+      "currentLabel": "当前正文",
+      "parsedNote": "可解析 {{count}} 条",
+      "generate": "整理为词典格式",
+      "resultLabel": "整理结果（应用前可编辑）",
+      "resultCount": "共 {{count}} 条",
+      "unverified": "{{count}} 条的原文或译文在原正文里逐字找不到，可能被模型改写——应用前请核对这些行",
+      "footerNote": "「应用」会用整理后的词表替换条目正文；AI 只搬运词对，格式由代码渲染，不改任何译名",
+      "applyNeedsEntries": "整理结果里没有可解析的词条",
+      "stepRead": "读取词典正文",
+      "stepDraft": "提取词对 · 原样搬运",
+      "stepConfirm": "交给你核对后写回条目"
+    },
     "aiHub": {
       "title": "AI 编辑助手",
       "metaName": "优化元数据",
       "metaDesc": "重写名称、别名、分类与概要",
+      "dictName": "词典标准化",
+      "dictDesc": "把正文整理成 Sakura 词典格式（一行一条 原文->译文）",
       "improveName": "更新条目",
       "improveDesc": "结合资料/图片更新内容，可写入主词条、指定特征或生成新特征",
       "splitName": "拆分整理",
