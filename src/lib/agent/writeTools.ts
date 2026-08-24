@@ -1672,7 +1672,7 @@ function reportDecision(
     return {
       toolCallId,
       content:
-        `The user REJECTED this change${decision.reason ? ` — reason: ${decision.reason}` : "."} ` +
+        `The author REJECTED this change${decision.reason ? ` — reason: ${decision.reason}` : "."} ` +
         "Do not retry the same change; adjust per the reason or move on.",
     };
   }
@@ -1749,6 +1749,15 @@ export async function createFileTool(
 
   const dir = parentDir(target.path);
   const name = target.path.slice(dir.length + 1);
+  // The two refusals are different problems and deserve different words: a
+  // dotfile is unsupported by design (hidden from the tree, invisible to the
+  // author), a bare name means the model has not decided what it is making.
+  if (name.startsWith(".")) {
+    return {
+      toolCallId,
+      content: `Error: "${name}" is a hidden file (dotfile) — those are not shown in the project tree and cannot be created here. Pick a visible filename.`,
+    };
+  }
   if (!/^[^.].*\.[^./\\]+$/.test(name)) {
     return {
       toolCallId,
@@ -1801,13 +1810,14 @@ export async function createDirectoryTool(
 
 /**
  * Duplicate a file or folder into a destination directory. The copy keeps the
- * source's name — a collision is auto-numbered by the apply step, and the
- * final path comes back on the decision (`resultPath`), so the report tells
- * the model where the copy actually landed.
+ * source's name unless `new_name` renames it in the same step — a collision is
+ * auto-numbered by the apply step either way, and the final path comes back on
+ * the decision (`resultPath`), so the report tells the model where the copy
+ * actually landed.
  */
 export async function copyFileTool(
   toolCallId: string,
-  args: { path?: string; dest_dir?: string; reason?: string },
+  args: { path?: string; dest_dir?: string; new_name?: string; reason?: string },
   ctx: ToolContext,
 ): Promise<ToolResult> {
   const target = manuscriptTarget(toolCallId, "copy_file", args.path, ctx);
@@ -1826,6 +1836,22 @@ export async function copyFileTool(
   if (!source) {
     return { toolCallId, content: `Error: "${target.path}" does not exist. Check the path with list_files.` };
   }
+
+  // Optional rename-in-the-same-step. The extension requirement mirrors
+  // create_file's: a copy that silently changed or dropped its extension would
+  // change what kind of file it is.
+  const newName = args.new_name?.trim();
+  if (newName) {
+    if (!/^[^/\\]+$/.test(newName) || newName.includes("..")) {
+      return { toolCallId, content: "Error: 'new_name' must be a plain name (no paths)." };
+    }
+    if (!source.isDir && !/^[^.].*\.[^./\\]+$/.test(newName)) {
+      return {
+        toolCallId,
+        content: `Error: 'new_name' ("${newName}") must be the full filename including its extension — omit it to keep the source's name.`,
+      };
+    }
+  }
   // The project root always exists but has no parent listing for statEntry to
   // find it in — accept it without stat. Anything else must be a real folder.
   if (normalizePathSegments(destDir) !== normalizePathSegments(ctx.projectPath)) {
@@ -1843,6 +1869,7 @@ export async function copyFileTool(
     id: `copy-${++proposalCounter}`,
     path: target.path,
     destDir,
+    ...(newName ? { newName } : {}),
     isDir: source.isDir,
     reason: args.reason?.trim() || undefined,
   });
@@ -1871,10 +1898,27 @@ export async function moveChapterTool(
     return { toolCallId, content: `Error: "${target.path}" does not exist. Check the path with list_files.` };
   }
 
-  // Files get their extension normalised; a volume folder keeps its bare name.
+  // Only a manuscript file gets its extension defaulted; for any other file a
+  // bare destination is refused rather than silently rewritten into `.md` —
+  // that would change what kind of file it is (数据.csv moved to 数据 must not
+  // become 数据.md). A volume folder keeps its bare name.
   const destDir = parentDir(dest);
   const destName = dest.slice(destDir.length + 1);
-  const newPath = source.isDir ? dest : `${destDir}/${normalizeChapterFileName(destName)}`;
+  const sourceName = baseName(target.path) ?? "";
+  let destLeaf = destName;
+  if (!source.isDir) {
+    if (isChapterFile(sourceName)) {
+      destLeaf = normalizeChapterFileName(destName);
+    } else if (!destName.includes(".")) {
+      return {
+        toolCallId,
+        content:
+          `Error: the destination "${destName}" has no file extension, and "${sourceName}" is not a manuscript file, so nothing is appended for you. ` +
+          "Give the full destination filename including its extension.",
+      };
+    }
+  }
+  const newPath = source.isDir ? dest : `${destDir}/${destLeaf}`;
 
   if (newPath === target.path) {
     return { toolCallId, content: "Error: the destination is the same as the source." };
@@ -2098,7 +2142,7 @@ export async function proposeEditTool(
   if (!decision.approved) {
     return {
       toolCallId,
-      content: `The user REJECTED this edit${decision.reason ? ` — reason: ${decision.reason}` : "."} Do not retry the same change; adjust per the reason or move on.`,
+      content: `The author REJECTED this edit${decision.reason ? ` — reason: ${decision.reason}` : "."} Do not retry the same change; adjust per the reason or move on.`,
     };
   }
   const scope = describeEditTarget(occurrences, target);
@@ -2209,7 +2253,7 @@ export async function rewriteLinesTool(
   if (!decision.approved) {
     return {
       toolCallId,
-      content: `The user REJECTED this rewrite${decision.reason ? ` — reason: ${decision.reason}` : "."} Do not resend the same content; adjust per the reason or move on.`,
+      content: `The author REJECTED this rewrite${decision.reason ? ` — reason: ${decision.reason}` : "."} Do not resend the same content; adjust per the reason or move on.`,
     };
   }
   const grew = replacement.length - slice.text.length;
@@ -2295,7 +2339,7 @@ export async function appendFileTool(
   if (!decision.approved) {
     return {
       toolCallId,
-      content: `The user REJECTED this addition${decision.reason ? ` — reason: ${decision.reason}` : "."} Do not resend the same text; adjust per the reason or move on.`,
+      content: `The author REJECTED this addition${decision.reason ? ` — reason: ${decision.reason}` : "."} Do not resend the same text; adjust per the reason or move on.`,
     };
   }
   return {
@@ -2351,7 +2395,7 @@ export async function rewriteDocumentTool(
   if (!decision.approved) {
     return {
       toolCallId,
-      content: `The user REJECTED this rewrite${decision.reason ? ` — reason: ${decision.reason}` : "."} Do not resend the same content; adjust per the reason or move on.`,
+      content: `The author REJECTED this rewrite${decision.reason ? ` — reason: ${decision.reason}` : "."} Do not resend the same content; adjust per the reason or move on.`,
     };
   }
   return {

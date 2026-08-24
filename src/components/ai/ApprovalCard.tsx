@@ -301,7 +301,11 @@ function PptxBody({ proposal }: { proposal: PptxProposal }) {
 function CopyBody({ proposal }: { proposal: CopyProposal }) {
   const { t } = useTranslation();
   const from = projectRelative(proposal.path);
-  const to = projectRelative(proposal.destDir);
+  // A renamed copy shows its full landing path — the rename is part of what
+  // the author is approving, not a detail to discover afterwards.
+  const to = projectRelative(
+    proposal.newName ? `${proposal.destDir}/${proposal.newName}` : proposal.destDir,
+  );
   return (
     <>
       <div className={styles.moveBlock}>

@@ -216,14 +216,16 @@ export interface DeleteProposal extends ProposalBase {
 
 /**
  * Duplicate a file (or folder) into a destination directory. The copy keeps
- * the source's name; a collision is auto-numbered ("稿 (1).md") by the apply
- * step, and the actual landing path travels back on the decision so the model
- * can refer to the file it just made.
+ * the source's name unless `newName` renames it; a collision is auto-numbered
+ * ("稿 (1).md") by the apply step, and the actual landing path travels back on
+ * the decision so the model can refer to the file it just made.
  */
 export interface CopyProposal extends ProposalBase {
   kind: "copy";
   /** Directory the copy lands in. */
   destDir: string;
+  /** Name for the copy; absent = the source's own name. */
+  newName?: string;
   /** True when `path` is a folder — the copy carries everything in it. */
   isDir: boolean;
 }
@@ -364,7 +366,7 @@ export interface ToolContext {
   /** Same, for story-memory writes (memoryStore refresh). */
   onMemoryChanged?: () => void;
   /**
-   * L2 approval channel: propose_edit blocks on this until the user approves
+   * L2 approval channel: propose_edit blocks on this until the author approves
    * (the resolver applies the edit before resolving) or rejects. Absent when
    * the surface can't render an approval card — the tool then errors.
    */
@@ -1448,7 +1450,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "propose_edit",
         description:
-          "Propose a change to a document file in the project. NOTHING is written until the user approves the proposal on a review card; the call blocks until they decide, and a rejection (with their reason) comes back so you can adjust. 'find' must be the EXACT text currently in the file. When it occurs more than once you have three ways to say which one you mean: make 'find' unique by including surrounding text, pass 'occurrence' to target the Nth (read_slides numbers an .html deck's slides for exactly this), or pass replace_all=true to change every one — that last is how a document-wide substitution is done WITHOUT rewrite_document. Propose one focused edit per call.",
+          "Propose a change to a document file in the project. NOTHING is written until the author approves the proposal on a review card; the call blocks until they decide, and a rejection (with their reason) comes back so you can adjust. 'find' must be the EXACT text currently in the file. When it occurs more than once you have three ways to say which one you mean: make 'find' unique by including surrounding text, pass 'occurrence' to target the Nth (read_slides numbers an .html deck's slides for exactly this), or pass replace_all=true to change every one — that last is how a document-wide substitution is done WITHOUT rewrite_document. Propose one focused edit per call.",
         parameters: {
           type: "object",
           properties: {
@@ -1472,7 +1474,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             },
             reason: {
               type: "string",
-              description: "One-line justification shown to the user on the review card",
+              description: "One-line justification shown to the author on the review card",
             },
           },
           required: ["path", "find", "replace"],
@@ -1489,7 +1491,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "rewrite_document",
         description:
-          "Replace the ENTIRE contents of a document file in the project. Use this for whole-document work that propose_edit cannot express — reformatting, normalising punctuation or indentation, restructuring headings — i.e. changes that touch text repeated throughout the file, and ONLY when the whole new body comfortably fits in one reply. For a long document use rewrite_lines instead, region by region: this tool carries the entire file as one argument, so on a long one the call is truncated and writes nothing. Also the way to overhaul an .html deliverable (keep it self-contained: inline CSS/JS, inline SVG, no external dependencies). For a single localised change, use propose_edit instead. You MUST read the whole file first (call read_file repeatedly until it stops reporting more lines): 'content' replaces everything, so anything you did not read is deleted. NOTHING is written until the user approves the card; the call blocks until they decide, and the previous version is backed up on approval.",
+          "Replace the ENTIRE contents of a document file in the project. Use this for whole-document work that propose_edit cannot express — reformatting, normalising punctuation or indentation, restructuring headings — i.e. changes that touch text repeated throughout the file, and ONLY when the whole new body comfortably fits in one reply. For a long document use rewrite_lines instead, region by region: this tool carries the entire file as one argument, so on a long one the call is truncated and writes nothing. Also the way to overhaul an .html deliverable (keep it self-contained: inline CSS/JS, inline SVG, no external dependencies). For a single localised change, use propose_edit instead. You MUST read the whole file first (call read_file repeatedly until it stops reporting more lines): 'content' replaces everything, so anything you did not read is deleted. NOTHING is written until the author approves the card; the call blocks until they decide, and the previous version is backed up on approval.",
         parameters: {
           type: "object",
           properties: {
@@ -1503,7 +1505,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             },
             reason: {
               type: "string",
-              description: "One-line justification shown to the user on the review card",
+              description: "One-line justification shown to the author on the review card",
             },
           },
           required: ["path", "content"],
@@ -1520,7 +1522,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "rewrite_lines",
         description:
-          "Replace a RANGE OF LINES of a document with new text, leaving the rest of the file untouched. This is how a long file gets restructured or re-laid-out: read a region with read_file, send back only its replacement, repeat for the next region. Use it instead of rewrite_document whenever the file is long — rewrite_document carries the WHOLE new body in one call, so on a long document it runs past the output cap and a call cut off there writes nothing at all, losing everything you generated. You do NOT quote the old lines: give start_line and end_line (the numbers read_file and search_text report) and the tool reads that range itself. end_line past the last line means 'to the end of the file'; an empty 'content' deletes the range. NOTHING is written until the user approves the card; the call blocks until they decide. After each approved call the line numbers below the region have moved — re-read before naming the next range, or work from the bottom of the file upwards.",
+          "Replace a RANGE OF LINES of a document with new text, leaving the rest of the file untouched. This is how a long file gets restructured or re-laid-out: read a region with read_file, send back only its replacement, repeat for the next region. Use it instead of rewrite_document whenever the file is long — rewrite_document carries the WHOLE new body in one call, so on a long document it runs past the output cap and a call cut off there writes nothing at all, losing everything you generated. You do NOT quote the old lines: give start_line and end_line (the numbers read_file and search_text report) and the tool reads that range itself. end_line past the last line means 'to the end of the file'; an empty 'content' deletes the range. NOTHING is written until the author approves the card; the call blocks until they decide. After each approved call the line numbers below the region have moved — re-read before naming the next range, or work from the bottom of the file upwards.",
         parameters: {
           type: "object",
           properties: {
@@ -1543,7 +1545,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             },
             reason: {
               type: "string",
-              description: "One-line justification shown to the user on the review card",
+              description: "One-line justification shown to the author on the review card",
             },
           },
           required: ["path", "start_line", "end_line", "content"],
@@ -1560,7 +1562,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "append_file",
         description:
-          "Add text to the END of an existing file, leaving everything already in it untouched. This is how you write a file too large to emit in one reply: create_file the skeleton first, then append_file one section at a time — each call only has to carry its own section, so the file can grow past what a single response could ever hold. Nothing before the appended text is re-sent or re-read, so it cannot be damaged by a partial write. Use propose_edit to change text that is already there, and rewrite_document only when the whole file must be re-laid-out. NOTHING is written until the user approves the card; the call blocks until they decide. The card offers the author a per-file grant, so a long build does not mean a click per section.",
+          "Add text to the END of an existing file, leaving everything already in it untouched. This is how you write a file too large to emit in one reply: create_file the skeleton first, then append_file one section at a time — each call only has to carry its own section, so the file can grow past what a single response could ever hold. Nothing before the appended text is re-sent or re-read, so it cannot be damaged by a partial write. Use propose_edit to change text that is already there, and rewrite_document only when the whole file must be re-laid-out. NOTHING is written until the author approves the card; the call blocks until they decide. The card offers the author a per-file grant, so a long build does not mean a click per section.",
         parameters: {
           type: "object",
           properties: {
@@ -1575,7 +1577,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             },
             reason: {
               type: "string",
-              description: "One-line justification shown to the user on the review card",
+              description: "One-line justification shown to the author on the review card",
             },
           },
           required: ["path", "content"],
@@ -1592,7 +1594,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "create_chapter",
         description:
-          "Propose a NEW chapter file anywhere in the project, with its opening text. NOTHING is written until the user approves the card; the call blocks until they decide. Give the full destination path — a subfolder that does not exist yet is created with it, which is how a new volume comes into being. Fails if something is already at that path: use propose_edit to change an existing chapter. A chapter created here lands at the end of its volume's order, which the author can rearrange in the outline view.",
+          "Propose a NEW chapter file anywhere in the project, with its opening text. NOTHING is written until the author approves the card; the call blocks until they decide. Give the full destination path — a subfolder that does not exist yet is created with it, which is how a new volume comes into being. Fails if something is already at that path: use propose_edit to change an existing chapter. A chapter created here lands at the end of its volume's order, which the author can rearrange in the outline view.",
         parameters: {
           type: "object",
           properties: {
@@ -1607,7 +1609,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             },
             reason: {
               type: "string",
-              description: "One-line justification shown to the user on the review card",
+              description: "One-line justification shown to the author on the review card",
             },
           },
           required: ["path", "content"],
@@ -1624,7 +1626,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "create_file",
         description:
-          "Propose a NEW file of any type — notes, data, config (e.g. .json, .csv, .txt), anywhere in the project. NOTHING is written until the user approves the card; the call blocks until they decide. The filename MUST carry an explicit extension: for manuscript text use create_chapter instead, which defaults to .md and enters the outline. Fails if something is already at that path. Parent folders that do not exist yet are created with the file. For a visual deliverable — a diagram, an architecture chart, a promo or landing page — write a SELF-CONTAINED .html file: all CSS and JS inline, graphics drawn as inline SVG, no external CDN or network dependencies. The approval card and the app preview render it live in a sandboxed offline frame, and the author can open it in their system browser. Relative <img> links resolve against the file's own folder.",
+          "Propose a NEW file of any type — notes, data, config (e.g. .json, .csv, .txt), anywhere in the project. NOTHING is written until the author approves the card; the call blocks until they decide. The filename MUST carry an explicit extension: for manuscript text use create_chapter instead, which defaults to .md and enters the outline. Fails if something is already at that path. Parent folders that do not exist yet are created with the file. For a visual deliverable — a diagram, an architecture chart, a promo or landing page — write a SELF-CONTAINED .html file: all CSS and JS inline, graphics drawn as inline SVG, no external CDN or network dependencies. The approval card and the app preview render it live in a sandboxed offline frame, and the author can open it in their system browser. Relative <img> links resolve against the file's own folder.",
         parameters: {
           type: "object",
           properties: {
@@ -1638,7 +1640,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             },
             reason: {
               type: "string",
-              description: "One-line justification shown to the user on the review card",
+              description: "One-line justification shown to the author on the review card",
             },
           },
           required: ["path", "content"],
@@ -1655,7 +1657,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "create_directory",
         description:
-          "Propose a NEW empty folder anywhere in the project — a volume, a materials directory, any grouping. NOTHING is created until the user approves the card; the call blocks until they decide. Note that create_chapter/create_file already create missing parent folders on the way to a file — reach for this only when the folder itself is the point (e.g. preparing a structure before filling it).",
+          "Propose a NEW empty folder anywhere in the project — a volume, a materials directory, any grouping. NOTHING is created until the author approves the card; the call blocks until they decide. Note that create_chapter/create_file already create missing parent folders on the way to a file — reach for this only when the folder itself is the point (e.g. preparing a structure before filling it).",
         parameters: {
           type: "object",
           properties: {
@@ -1665,7 +1667,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             },
             reason: {
               type: "string",
-              description: "One-line justification shown to the user on the review card",
+              description: "One-line justification shown to the author on the review card",
             },
           },
           required: ["path"],
@@ -1682,13 +1684,13 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "move_chapter",
         description:
-          "Propose renaming a chapter, or moving it into a different volume folder — both are the same operation, expressed as a new full path. Works on a volume folder too, which renames the volume and carries its chapters along. NOTHING is moved until the user approves the card. Fails if the destination already exists, so a rename can never overwrite another chapter. Propose one move per call.",
+          "Propose renaming or moving ANY project file — a chapter, a note, a data file — or a whole folder; both are the same operation, expressed as a new full path. Renaming a folder carries everything inside it, and a document's illustration folder follows automatically. NOTHING is moved until the author approves the card. Fails if the destination already exists, so a move can never overwrite. Only manuscript files (.md/.markdown/.txt) default to .md when the destination has no extension — any other file's destination must spell out its extension. Propose one move per call.",
         parameters: {
           type: "object",
           properties: {
             path: {
               type: "string",
-              description: "Current full path of the chapter (or volume folder) to move",
+              description: "Current full path of the file (or folder) to move",
             },
             new_path: {
               type: "string",
@@ -1697,7 +1699,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             },
             reason: {
               type: "string",
-              description: "One-line justification shown to the user on the review card",
+              description: "One-line justification shown to the author on the review card",
             },
           },
           required: ["path", "new_path"],
@@ -1714,7 +1716,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "copy_file",
         description:
-          "Propose duplicating a file (or a whole folder) into a destination directory — e.g. drafting a variant of a chapter, or snapshotting material before a heavy edit. NOTHING is copied until the user approves the card. The copy keeps the source's name; if that name is taken in the destination, it is auto-numbered (\"稿 (1).md\") and the result reports where the copy actually landed. The destination directory must already exist (create_directory first if not).",
+          "Propose duplicating a file (or a whole folder) into a destination directory — e.g. drafting a variant of a chapter, or snapshotting material before a heavy edit. NOTHING is copied until the author approves the card. The copy keeps the source's name unless new_name renames it in the same step; if the name is taken in the destination, it is auto-numbered (\"稿 (1).md\") and the result reports where the copy actually landed. A copied document's illustration folder is duplicated with it, so the copy's pictures are its own. The destination directory must already exist (create_directory first if not).",
         parameters: {
           type: "object",
           properties: {
@@ -1726,9 +1728,14 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
               type: "string",
               description: "Full path of the existing destination folder the copy lands in (the project folder itself is allowed)",
             },
+            new_name: {
+              type: "string",
+              description:
+                "Name for the copy (no paths). For a file it must carry the full filename including its extension; omit to keep the source's name.",
+            },
             reason: {
               type: "string",
-              description: "One-line justification shown to the user on the review card",
+              description: "One-line justification shown to the author on the review card",
             },
           },
           required: ["path", "dest_dir"],
@@ -1745,7 +1752,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "export_pptx",
         description:
-          "Turn a project .html page into a PowerPoint file (.pptx) beside it. NOTHING is written until the user approves the card. Write the deck as HTML first with create_file, then call this — the conversion is deterministic code, not a model: it lays the page out in a browser and writes every box it measures as a PowerPoint shape, so text stays real editable text. Rules for an .html that converts well: ONE `<section class=\"slide\">` per slide, every slide the same fixed pixel size (1280x720 for 16:9); lay out however you like inside it (absolute, flex, grid all work — only the final measured layout matters); use SYSTEM fonts (PingFang SC / Microsoft YaHei / Arial / Helvetica / Georgia) because a web font cannot travel into a .pptx and PowerPoint will substitute it and shift the layout; keep text in real text elements rather than drawing it inside an SVG. What degrades: inline SVG becomes a picture (fine for diagrams), a gradient background becomes its average solid colour, and CSS filters, blend modes, shadows on text and animation are dropped. Put `data-pptx-skip` on anything decorative that should not become a shape. The result reports the slide count and everything that degraded — pass that on to the author.",
+          "Turn a project .html page into a PowerPoint file (.pptx) beside it. NOTHING is written until the author approves the card. Write the deck as HTML first with create_file, then call this — the conversion is deterministic code, not a model: it lays the page out in a browser and writes every box it measures as a PowerPoint shape, so text stays real editable text. Rules for an .html that converts well: ONE `<section class=\"slide\">` per slide, every slide the same fixed pixel size (1280x720 for 16:9); lay out however you like inside it (absolute, flex, grid all work — only the final measured layout matters); use SYSTEM fonts (PingFang SC / Microsoft YaHei / Arial / Helvetica / Georgia) because a web font cannot travel into a .pptx and PowerPoint will substitute it and shift the layout; keep text in real text elements rather than drawing it inside an SVG. What degrades: inline SVG becomes a picture (fine for diagrams), a gradient background becomes its average solid colour, and CSS filters, blend modes, shadows on text and animation are dropped. Put `data-pptx-skip` on anything decorative that should not become a shape. The result reports the slide count and everything that degraded — pass that on to the author.",
         parameters: {
           type: "object",
           properties: {
@@ -1760,7 +1767,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             },
             reason: {
               type: "string",
-              description: "One-line justification shown to the user on the review card",
+              description: "One-line justification shown to the author on the review card",
             },
           },
           required: ["html_path"],
@@ -1898,7 +1905,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "delete_chapter",
         description:
-          "Propose deleting ONE chapter file. NOTHING is removed until the user approves the card, and on approval the file is moved into .ai-writer/backups rather than erased, so it stays recoverable. Folders are refused — use delete_directory for those. When merging two chapters, propose_edit the surviving one FIRST, then delete the other.",
+          "Propose deleting ONE file — a chapter or any other project file. NOTHING is removed until the author approves the card, and on approval the file (with a document's illustration folder) is moved into .ai-writer/backups rather than erased, so it stays recoverable. Folders are refused — use delete_directory for those. When merging two chapters, propose_edit the surviving one FIRST, then delete the other.",
         parameters: {
           type: "object",
           properties: {
