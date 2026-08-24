@@ -1,0 +1,344 @@
+/* 设置 → Prompt (设计稿 10 提示词库 · 1g/1h)
+
+   Two regions on one page, deliberately not two tabs: tabs would set "my
+   sticky notes" and "rewrite the AI's底层指令" side by side as peers, which is
+   exactly the hierarchy this page has to communicate. The snippet library owns
+   the page; the override region is a collapsed strip at the foot of it. */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-4) 0 var(--space-3);
+}
+.search {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 11px;
+  background: var(--stg-bg-input);
+  border: 1px solid var(--stg-border-mid);
+  outline: none;
+  color: var(--stg-text);
+  font: 400 13px/1.4 var(--font-sans);
+}
+.search:focus { border-color: var(--stg-accent); }
+.search::placeholder { color: var(--stg-text-placeholder); }
+.sortWrap { flex-shrink: 0; width: 148px; }
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: var(--space-4);
+}
+.chip {
+  padding: 5px 11px;
+  background: var(--stg-bg-input);
+  border: 1px solid var(--stg-border-mid);
+  color: var(--stg-text-secondary);
+  font: 400 11px/1.4 var(--font-mono);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--transition-fast), border-color var(--transition-fast),
+              background var(--transition-fast);
+}
+.chip:hover { color: var(--stg-accent); border-color: var(--stg-accent); }
+.chipActive,
+.chipActive:hover {
+  border-color: var(--stg-accent);
+  background: var(--stg-card-head);
+  color: var(--stg-accent);
+}
+
+/* ── Sections ────────────────────────────────────────────────────────────────
+   The same sectioning the picker renders, so learning one teaches the other.
+   Only the order differs: here 「未分组」 leads, because filing the inbox is
+   what this page is for. */
+.sectionLabel {
+  font: 400 10.5px/1 var(--font-sans);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--stg-text-faint);
+  margin: 22px 0 9px;
+}
+.sectionNote {
+  margin-left: 8px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--stg-text-whisper);
+}
+
+.list {
+  border: 1px solid var(--stg-border-mid);
+  background: var(--stg-card);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--stg-line-row);
+}
+.row:first-child { border-top: none; }
+.row:hover { background: var(--snip-row-hover); }
+.rowChecked, .rowChecked:hover { background: var(--stg-card-head); }
+
+.check {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border: 1px solid var(--stg-border-menu);
+  background: var(--stg-bg-input);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--stg-accent);
+}
+.checkOn { background: var(--stg-card-head); }
+
+.name {
+  width: 170px;
+  flex: none;
+  font: 400 14px/1.3 var(--font-sans);
+  color: var(--stg-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preview {
+  flex: 1;
+  min-width: 0;
+  font: 400 12.5px/1.4 var(--font-serif);
+  color: var(--stg-text-desc);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ph {
+  border-bottom: 1px dashed var(--stg-border-warn);
+  color: var(--stg-text-secondary);
+}
+.hit { background: var(--snip-hit-bg); color: var(--stg-text); }
+
+.groupCell { width: 118px; flex: none; }
+.groupChip {
+  display: inline-block;
+  padding: 4px 8px;
+  background: var(--stg-badge-bg);
+  color: var(--stg-badge-text);
+  font: 400 11px/1 var(--font-mono);
+}
+/* Only the 「未分组」 section makes this column interactive — that is the one
+   daily action this page exists for. Elsewhere it is a static label. */
+.groupPick {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font: 400 12px/1 var(--font-sans);
+  color: var(--stg-text-placeholder);
+  cursor: pointer;
+}
+.groupPick:hover { color: var(--stg-accent); }
+
+.uses {
+  width: 104px;
+  flex: none;
+  text-align: right;
+  font: 400 11.5px/1 var(--font-mono);
+  color: var(--stg-text-desc);
+}
+.rowActions {
+  width: 40px;
+  flex: none;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  color: var(--stg-text-desc);
+}
+.rowBtn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  transition: color var(--transition-fast);
+}
+.rowBtn:hover { color: var(--stg-accent); }
+
+/* ── Batch bar ───────────────────────────────────────────────────────────── */
+.batchBar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: 10px 16px;
+  background: var(--stg-card-head);
+  border: 1px solid var(--stg-border-mid);
+}
+.batchCount { font: 400 12px/1 var(--font-sans); color: var(--stg-text); }
+.batchSpacer { flex: 1; }
+.batchSelect { width: 150px; }
+.batchBtn {
+  background: transparent;
+  border: 1px solid var(--stg-border-mid);
+  padding: 5px 11px;
+  font: 400 11.5px/1.4 var(--font-sans);
+  color: var(--stg-text-secondary);
+  cursor: pointer;
+}
+.batchBtn:hover { border-color: var(--stg-accent); color: var(--stg-accent); }
+.batchDanger:hover { border-color: var(--color-error); color: var(--color-error); }
+
+/* ── 内置指令覆盖 ────────────────────────────────────────────────────────────
+   "More dangerous" is built from five things and not one new colour: it sits
+   at the foot of the page, it is collapsed by default, the whole region is
+   boxed (the snippet list has only section rules), its header carries a grey
+   strip stating the consequence, and 2px accent bars mark only the entries
+   actually overridden. */
+.ovRegion {
+  margin: 40px 0 12px;
+  border: 1px solid var(--stg-border-mid);
+  background: var(--stg-card);
+}
+.ovHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13px 16px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+.ovChevron {
+  display: flex;
+  color: var(--stg-text-desc);
+  transition: transform 200ms var(--ease-out);
+}
+.ovChevronOpen { transform: rotate(90deg); }
+.ovTitle { font: 400 13.5px/1 var(--font-sans); color: var(--stg-text); }
+.ovCount { font: 400 11px/1 var(--font-mono); color: var(--stg-text-desc); }
+.ovSpacer { flex: 1; }
+.ovResetAll {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font: 400 11.5px/1.4 var(--font-sans);
+  color: var(--stg-text-desc);
+  cursor: pointer;
+}
+.ovResetAll:hover { color: var(--stg-accent); }
+
+/* The consequence, stated once, in the grey band — not in a warning colour. */
+.ovWarn {
+  padding: 9px 16px;
+  background: var(--stg-card-head);
+  border-top: 1px solid var(--stg-line-row);
+  border-bottom: 1px solid var(--stg-line-row);
+  font: 400 11.5px/1.6 var(--font-sans);
+  color: var(--stg-text-warm);
+}
+
+.ovRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--stg-line-row);
+  cursor: pointer;
+}
+.ovRow:hover { background: var(--snip-row-hover); }
+/* 2px accent bar: overridden entries only. */
+.ovRowOn { box-shadow: inset 2px 0 0 var(--stg-accent); }
+
+/* Circles are reserved for status dots app-wide — this is one. Filled =
+   overridden, hollow = still the built-in default. */
+.ovDot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--stg-accent);
+}
+.ovDotOn { background: var(--stg-accent); }
+.ovName { width: 96px; flex: none; font: 400 13.5px/1.3 var(--font-sans); color: var(--stg-text); }
+.ovBadge {
+  flex: none;
+  padding: 3px 7px;
+  background: var(--stg-badge-bg);
+  color: var(--stg-badge-text);
+  font: 400 10.5px/1 var(--font-mono);
+}
+.ovPreview {
+  flex: 1;
+  min-width: 0;
+  font: 400 12.5px/1.4 var(--font-serif);
+  color: var(--stg-text-desc);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ovAction {
+  flex: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+  font: 400 11.5px/1.4 var(--font-sans);
+  color: var(--stg-text-desc);
+  cursor: pointer;
+}
+.ovAction:hover { color: var(--stg-accent); }
+
+/* Expanded: your version and the built-in default side by side. Whatever the
+   author changed has to be visible as a difference, not as a claim. */
+.ovBody {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--stg-line-row);
+  border-top: 1px solid var(--stg-line-row);
+}
+.ovCol { background: var(--stg-bg); padding: 13px 16px; }
+.ovColHead {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--stg-text-faint);
+  margin-bottom: 9px;
+}
+.ovColHeadLive { color: var(--stg-accent); }
+.ovText {
+  font: 400 12.5px/1.8 var(--font-serif);
+  color: var(--stg-text-secondary);
+  white-space: pre-wrap;
+  max-height: 190px;
+  overflow-y: auto;
+}
+.ovFoot {
+  grid-column: 1 / -1;
+  background: var(--stg-bg);
+  padding: 0 16px 14px;
+}
+.ovEditBtn {
+  padding: 6px 13px;
+  background: transparent;
+  border: 1px solid var(--stg-border-mid);
+  font: 400 12px/1.4 var(--font-sans);
+  color: var(--stg-text-secondary);
+  cursor: pointer;
+}
+.ovEditBtn:hover { border-color: var(--stg-accent); color: var(--stg-accent); }
+
+.empty {
+  padding: 34px 20px;
+  text-align: center;
+  border: 1px dashed var(--stg-border-mid);
+  font: 400 12.5px/1.9 var(--font-sans);
+  color: var(--stg-text-desc);
+}

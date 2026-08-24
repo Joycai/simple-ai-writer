@@ -145,7 +145,10 @@ interface AiState {
   removeModel: (id: string) => Promise<void>;
   fetchAndImportModels: (providerId: string) => Promise<{ id: string; name: string }[]>;
 
-  addPrompt: (p: Omit<Prompt, "id">) => Promise<void>;
+  addPrompt: (p: Omit<Prompt, "id">) => Promise<string>;
+  /** Records one insertion (drives the picker's 「常用」 section). Fire and
+   *  forget — a failed bookkeeping write must never block the insert. */
+  noteSnippetUsed: (id: string) => Promise<void>;
   updatePrompt: (p: Prompt) => Promise<void>;
   removePrompt: (id: string) => Promise<void>;
 
@@ -330,6 +333,22 @@ export const useAiStore = create<AiState>((set, get) => ({
       await savePrompt(d, prompt);
     }
     set((s) => ({ prompts: [...s.prompts, prompt] }));
+    return prompt.id;
+  },
+
+  noteSnippetUsed: async (id) => {
+    const prompt = get().prompts.find((p) => p.id === id);
+    if (!prompt) return;
+    const next: Prompt = {
+      ...prompt,
+      useCount: (prompt.useCount ?? 0) + 1,
+      lastUsedAt: Date.now(),
+    };
+    set((s) => ({ prompts: s.prompts.map((p) => (p.id === id ? next : p)) }));
+    if (isTauri) {
+      const d = await db();
+      await savePrompt(d, next);
+    }
   },
 
   // `savePrompt` is an INSERT OR REPLACE, so an edit is the same write as an

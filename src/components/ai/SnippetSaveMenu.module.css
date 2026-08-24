@@ -1,0 +1,87 @@
+/* 存为片段 · 命名浮层 (设计稿 1c④ / 1j)
+
+   The menu itself is the app's shared ContextMenu — only the naming step needs
+   styles of its own, and it inherits that menu's vocabulary so the swap reads
+   as one surface changing its mind rather than two different popovers. */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+.namePop {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg-stream);
+  border: 1px solid var(--color-border-input);
+  box-shadow: var(--snip-menu-shadow);
+  animation: nameIn 160ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+@keyframes nameIn { from { opacity: 0; } to { opacity: 1; } }
+
+.nameHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 11px 13px 0;
+}
+.nameTitle {
+  font: 500 12px/1 var(--font-sans);
+  color: var(--color-text-primary);
+}
+.nameCount {
+  margin-left: auto;
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-text-kbd);
+}
+
+.nameInput {
+  margin: 10px 13px 0;
+  padding: 7px 9px;
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border-input);
+  outline: none;
+  color: var(--color-text-primary);
+  font: 400 13px/1.4 var(--font-sans);
+}
+.nameInput:focus { border-color: var(--color-border-accent); }
+.nameInput::placeholder { color: var(--color-text-hint); }
+
+.nameHint {
+  padding: 7px 13px 0;
+  font: 400 10px/1.6 var(--font-sans);
+  color: var(--color-text-hint);
+}
+
+.nameFoot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: 11px;
+  padding: 9px 13px;
+  border-top: 1px solid var(--color-hairline);
+  background: var(--color-bg-inset);
+}
+.nameCancel {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font: 400 10px/1.5 var(--font-mono);
+  color: var(--color-text-kbd);
+  cursor: pointer;
+}
+.nameCancel:hover { color: var(--color-text-dim); }
+
+.nameSave {
+  margin-left: auto;
+  padding: 5px 12px;
+  background: var(--color-bg-accent-wash);
+  border: 1px solid var(--color-border-accent);
+  color: var(--color-accent-text);
+  font: 400 11px/1.4 var(--font-sans);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.nameSave:hover { border-color: var(--color-accent); }

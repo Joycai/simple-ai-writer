@@ -26,6 +26,7 @@ import { PromptViewer } from "./PromptViewer";
 import type { StreamMessage } from "../../lib/ai/types";
 import { BatchRunModal } from "./BatchRunModal";
 import { SnippetPicker } from "./SnippetPicker";
+import { useSnippetSave } from "./SnippetSaveMenu";
 import { useBatchStore } from "../../stores/batchStore";
 import { draftCountFor, totalUsage, useAiTaskStore, type TaskKind } from "../../stores/aiTaskStore";
 import { useAgentStore } from "../../stores/agentStore";
@@ -1001,6 +1002,9 @@ export function AiPanel() {
 
   const customInstr = useComposerStore((s) => s.panelInstruction);
   const setCustomInstr = useComposerStore((s) => s.setPanelInstruction);
+  const instrRef = useRef<HTMLTextAreaElement>(null);
+  // Right-click → 存为片段 on the custom-instruction box.
+  const snippetSave = useSnippetSave();
   const [agentMode, setAgentMode] = useState(false);
   // 同 AgentChat：只渲染没有 surface 标记的卡片（lib/agent/approvalRouting）。
   const pendingApprovals = cardsForSurface(useAgentStore((s) => s.pending), null);
@@ -1514,6 +1518,7 @@ export function AiPanel() {
                   {task.freeform ? (
                     <>
                       <textarea
+                        ref={instrRef}
                         className={styles.textarea}
                         rows={4}
                         placeholder={t(
@@ -1522,11 +1527,20 @@ export function AiPanel() {
                         )}
                         value={customInstr}
                         onChange={(e) => setCustomInstr(e.target.value)}
+                        onContextMenu={snippetSave.onTextareaContextMenu}
                       />
                       {/* Insert (not send): a snippet is a starting point the
                           author completes before running. */}
                       <SnippetPicker
-                        onPick={(c) => setCustomInstr((prev) => (prev.trim() ? `${prev}\n${c}` : c))}
+                        value={customInstr}
+                        onInsert={setCustomInstr}
+                        onAfterInsert={() => requestAnimationFrame(() => {
+                          const el = instrRef.current;
+                          if (!el) return;
+                          el.focus();
+                          el.setSelectionRange(el.value.length, el.value.length);
+                          el.scrollTop = el.scrollHeight;
+                        })}
                       />
                       {/* Only where the task names one to switch to — a profile
                           can offer a freeform task with no agent counterpart. */}
@@ -2031,6 +2045,8 @@ export function AiPanel() {
           onClose={() => setShowBatch(false)}
         />
       )}
+      {/* 右键 → 存为片段 的菜单与命名浮层。 */}
+      {snippetSave.node}
     </div>
   );
 }
