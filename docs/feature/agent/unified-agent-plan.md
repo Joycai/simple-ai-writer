@@ -525,3 +525,29 @@ N 个结构相同的 `<section class="slide">`，表格里同一句话出现在�
 - `search_scenes` 缺「literal / case-insensitive」那句（`search_text` 和 `search_conversation` 都有）。
 - `include_closed` 在 `read_scene_memory` 和 `recall` 上是两句不同的说明；统一到指名状态值的那句（"kept (done) and called-off (void)"）。
 - `translate` 的拒绝文案还是 "The user REJECTED"——#305 扫了 registry / writeTools / imageTools，漏了 `lib/translate/tool.ts`。现在由 10.1 的测试覆盖，不会再漏。
+
+## 11. add_lore_image：把已有的图归档进条目（2026-08-24）
+
+作者的报告：**「让 agent 把某张图加进某个条目,它做不到,反而去调生图工具。」**
+
+不是模型判断失误。§9.3 补配图工具时，补的是「改一张**已经在** gallery 里的图」——描述、槽位、删除、设头像。**「让一张图进到 gallery 里」这件事本身**当时没补，而能做到它的四条路径里，三条是 UI 或生成：
+
+| 路径 | 谁 | 图从哪来 |
+|---|---|---|
+| `LoreDetail.tsx` | 作者在界面里选 | 磁盘任意文件 |
+| `LoreImageGenModal.tsx` | 作者在界面里生成 | 模型画的 |
+| `illustrate.ts`（`generate_image` / `edit_image`） | agent | **只能是模型画的** |
+| `copy_lore_file`（§9.4） | agent | **只能来自另一个条目** |
+
+于是对 agent 来说，「一张图出现在这个条目的 gallery 里」这个**结果**只有一扇门，就是 `generate_image`。模型去够它是唯一够得着的东西，代价是画了一张作者没要的图并且**收了钱**。
+
+同一轮里还留下一处刺眼的不对称：`set_lore_avatar` 是收项目路径的。也就是说 agent 能把项目里的一张图设成条目头像，却不能把同一张图放进那个条目的 gallery。
+
+`add_lore_image(entity, path, desc?, slot?)` 补上这扇门。几处刻意的选择：
+
+- **复制而不是移动**。那张图很可能是文档插图或作者留着的参考图，它在原地还有用途——和 `set_lore_avatar` 同一条规矩。
+- **没写 `desc` 会警告**。文字模型看得见的只有描述，一张没有描述的图对它等于一个文件名。和 `update_facet_meta` 警告「这个特征永远不会被注入」是同一类：写入成功，但成果是哑的，那就得说出来。
+- **`generate_image` 的描述里加一句指路**（「这会花钱，只用于还不存在的图；项目里已有的用 `add_lore_image`」）。这 69 token 是常驻的、也是这次唯一的常驻涨幅——工具本体在 `lore_write` 延迟组里。缺口补上了，但让模型**别再走错门**的是这句话。
+- 重名不覆盖，`addLoreImage` 自动编号（`portrait-2.png`）。
+
+留下的教训，与 §10 是同一条：能力面上的缺口不会表现为报错，而是表现为**模型去够旁边那个最像的工具**。§10 的约定测试查的是「一个概念两个名字」，查不出「一件事没有门」。这一处是靠作者撞上才发现的。

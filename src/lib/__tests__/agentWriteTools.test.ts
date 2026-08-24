@@ -104,7 +104,7 @@ const ALL_TOOLS: ToolId[] = [
   "read_memory", "list_lore_entities", "read_lore_entity",
   "propose_lore_plan", "create_lore_entity", "update_lore_file",
   "update_lore_meta", "append_lore_file", "edit_lore_file",
-  "update_facet_meta", "delete_lore_file", "update_lore_image", "delete_lore_image",
+  "update_facet_meta", "delete_lore_file", "add_lore_image", "update_lore_image", "delete_lore_image",
   "set_lore_avatar", "copy_lore_file", "move_lore_entity", "delete_lore_entity",
   "update_memory", "propose_edit", "append_file", "rewrite_lines",
   "create_chapter", "create_file", "create_directory", "move_chapter", "copy_file", "delete_chapter",
@@ -681,6 +681,73 @@ function withGallery(ctx: ReturnType<typeof makeCtx>) {
   ];
   return ctx;
 }
+
+describe("add_lore_image", () => {
+  // The gap this tool exists to close: before it, the ONLY agent path that
+  // ended with a picture in an entity's gallery was generate_image — so asked
+  // to file a picture the project already had, the model reached for the tool
+  // that draws one (and charges for it).
+  it("copies a project image into the gallery with its description and slot", async () => {
+    const ctx = withGallery(makeCtx());
+    fs.set(`${PROJECT}/素材/立绘.png`, "NEWPNG");
+
+    const res = await run("add_lore_image", {
+      entity: "Ava", path: `${PROJECT}/素材/立绘.png`, desc: "新画的立绘", slot: "Portrait",
+    }, ctx);
+
+    expect(res.content).toContain("立绘.png");
+    expect(res.content).toContain("slot portrait"); // normalised to declared casing
+    expect(fs.get(`${AVA_DIR}/立绘.png`)).toBe("NEWPNG");
+    expect(fs.get(`${PROJECT}/素材/立绘.png`)).toBe("NEWPNG"); // source untouched
+    const md = fs.get(`${AVA_DIR}/images.md`)!;
+    expect(md).toContain("## 立绘.png");
+    expect(md).toContain("新画的立绘");
+    expect(fs.get(backupsOf()[0])).toBe(IMAGES_MD);
+    expect(ctx.loreIndex.characters[0].images.map((i) => i.file)).toContain("立绘.png");
+    expect(ctx.loreChanged).toBe(1);
+  });
+
+  it("warns when no description was given — a text-only model would see only a filename", async () => {
+    const ctx = withGallery(makeCtx());
+    fs.set(`${PROJECT}/素材/无名.png`, "X");
+    const res = await run("add_lore_image", { entity: "Ava", path: `${PROJECT}/素材/无名.png` }, ctx);
+    expect(res.content).toContain("no description");
+    expect(res.content).toContain("update_lore_image");
+  });
+
+  it("auto-numbers a name the entity already uses, rather than overwriting", async () => {
+    const ctx = withGallery(makeCtx());
+    fs.set(`${PROJECT}/素材/portrait.png`, "OTHER");
+    await run("add_lore_image", { entity: "Ava", path: `${PROJECT}/素材/portrait.png` }, ctx);
+    expect(fs.get(`${AVA_DIR}/portrait.png`)).toBe("PNG1"); // the original survives
+    expect(fs.get(`${AVA_DIR}/portrait-2.png`)).toBe("OTHER");
+  });
+
+  it("refuses a missing file, a non-image, and an undeclared slot", async () => {
+    const ctx = withGallery(makeCtx());
+    const missing = await run("add_lore_image", { entity: "Ava", path: `${PROJECT}/无.png` }, ctx);
+    expect(missing.content).toContain("no file at");
+
+    fs.set(`${PROJECT}/素材/说明.txt`, "x");
+    const notImage = await run("add_lore_image", { entity: "Ava", path: `${PROJECT}/素材/说明.txt` }, ctx);
+    expect(notImage.content).toContain("not an image file");
+
+    fs.set(`${PROJECT}/素材/图.png`, "X");
+    const badSlot = await run("add_lore_image", {
+      entity: "Ava", path: `${PROJECT}/素材/图.png`, slot: "nope",
+    }, ctx);
+    expect(badSlot.content).toContain("not an image slot");
+
+    expect(fs.get(`${AVA_DIR}/images.md`)).toBe(IMAGES_MD);
+    expect(ctx.loreChanged).toBe(0);
+  });
+
+  it("points at generate_image when no path was given, and vice versa", async () => {
+    const ctx = withGallery(makeCtx());
+    const res = await run("add_lore_image", { entity: "Ava" }, ctx);
+    expect(res.content).toContain("generate_image");
+  });
+});
 
 describe("update_lore_image", () => {
   it("updates the description, carrying the slot through, with a backup", async () => {

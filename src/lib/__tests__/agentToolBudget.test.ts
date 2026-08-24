@@ -59,9 +59,18 @@ import { estimateToolsTokens } from "../ai/tokenEstimate";
  * Measured together rather than added: each half was 11,237 / 10,173 alone,
  * which sums 279 over the truth — the estimator is not linear in description
  * text, so a cap derived by arithmetic would be quietly wrong. Re-measure.
+ *
+ * 11,790 with `add_lore_image` (+402: ~330 for the tool, ~70 for the sentence
+ * on generate_image that points at it). Bought to close a real hole rather
+ * than to add a capability: filing a picture the project ALREADY has into an
+ * entity's gallery had no tool at all, so the model reached for the one tool
+ * whose effect was "a picture ends up in that gallery" — generate_image, which
+ * draws a new one and charges for it. A wrong call every time, and the pointer
+ * sentence is what stops it recurring.
+ *
  * Headroom for wording, not for a new tool.
  */
-const AGENT_ASSIST_CAP = 11_800;
+const AGENT_ASSIST_CAP = 12_300;
 /** The read tier a 续写 carries. Measured 1,738. */
 const CONTINUE_CAP = 2_000;
 /** 旁白 reads other scenes and can write back; 扮演 is deliberately tiny. */
@@ -89,7 +98,10 @@ describe("tool schema budget", () => {
     // the tool-surface review in. The gallery tier's resident share is only
     // generate_image's `slot` parameter and the read-side wording — its four
     // new write tools are all deferred — whereas the file-tools wording is
-    // resident in full, because the manuscript tools are.
+    // resident in full, because the manuscript tools are. 7,774 with
+    // add_lore_image: the tool itself is deferred, so all this half pays is
+    // the sentence on generate_image telling it not to draw what already
+    // exists — 69 tokens against a wrong, billable call.
     const { resident } = partitionByGroup(AGENT_ASSIST_PRESET.tools);
     const residentTokens = estimateToolsTokens(getToolDefinitions(resident));
     expect(residentTokens).toBeLessThanOrEqual(8_100);
