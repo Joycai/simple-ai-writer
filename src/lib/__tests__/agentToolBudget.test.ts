@@ -68,9 +68,21 @@ import { estimateToolsTokens } from "../ai/tokenEstimate";
  * draws a new one and charges for it. A wrong call every time, and the pointer
  * sentence is what stops it recurring.
  *
- * Headroom for wording, not for a new tool.
+ * The cap is **11,790 measured, 15,000 pinned** — deliberately loose, on the
+ * author's call. The tight cap was costing a commit of its own every time a
+ * description gained a clarifying sentence, which is the change this file most
+ * wants to be cheap: a sentence that stops a wrong call is worth more than the
+ * tokens it costs, and making it expensive to write was the wrong incentive.
+ *
+ * What the ratchet is still for is the thing it was always for — a NEW TOOL, or
+ * a run of them, slipping in unpriced. At 15,000 that signal is weaker, so the
+ * measured numbers above matter more, not less: record what you measured when
+ * you change this surface, even when the assertion did not fail. If a change
+ * pushes past 15,000, do not raise it again by reflex — read
+ * docs/feature/agent/agent-tool-context-lld.md §5 first, because at that size
+ * deferred loading is the answer and a bigger number is not.
  */
-const AGENT_ASSIST_CAP = 12_300;
+const AGENT_ASSIST_CAP = 15_000;
 /** The read tier a 续写 carries. Measured 1,738. */
 const CONTINUE_CAP = 2_000;
 /** 旁白 reads other scenes and can write back; 扮演 is deliberately tiny. */
