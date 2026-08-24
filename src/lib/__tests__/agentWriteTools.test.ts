@@ -14,7 +14,13 @@ vi.mock("../fs/fileio", () => ({
   }),
   writeFile: vi.fn(async (p: string, c: string) => void fs.set(p, c)),
   appendFile: vi.fn(async (p: string, c: string) => void fs.set(p, (fs.get(p) ?? "") + c)),
-  writeBinaryFile: vi.fn(async () => {}),
+  // Binary rides the same string map — content equality is all the tests need.
+  readBinaryFile: vi.fn(async (p: string) => {
+    if (!fs.has(p)) throw new Error(`ENOENT: ${p}`);
+    return new TextEncoder().encode(fs.get(p)!);
+  }),
+  writeBinaryFile: vi.fn(async (p: string, data: Uint8Array) =>
+    void fs.set(p, new TextDecoder().decode(data))),
   makeDir: vi.fn(async () => {}),
   fileExists: vi.fn(async (p: string) => fs.has(p)),
   removeDir: vi.fn(async () => {}),
@@ -98,7 +104,8 @@ const ALL_TOOLS: ToolId[] = [
   "read_memory", "list_lore_entities", "read_lore_entity",
   "propose_lore_plan", "create_lore_entity", "update_lore_file",
   "update_lore_meta", "append_lore_file", "edit_lore_file",
-  "update_facet_meta", "delete_lore_file", "move_lore_entity", "delete_lore_entity",
+  "update_facet_meta", "delete_lore_file", "update_lore_image", "delete_lore_image",
+  "set_lore_avatar", "copy_lore_file", "move_lore_entity", "delete_lore_entity",
   "update_memory", "propose_edit", "append_file", "rewrite_lines",
   "create_chapter", "create_file", "create_directory", "move_chapter", "copy_file", "delete_chapter",
   "delete_directory",
@@ -617,6 +624,229 @@ const dirOf = (cat: string, id: string) => `${PROJECT}/.ai-writer/lore/${cat}/${
 const AVA_INDEX = `${dirOf("characters", "ava")}/index.md`;
 const NEW_INDEX = `---\nname: Ava\naliases: []\ncategory: characters\nsummary: "now a queen"\n---\n\n# Ava\n`;
 
+// ─── update_lore_file guards: rename / dict / alias hijack ───────────────────
+
+describe("update_lore_file frontmatter guards", () => {
+  it("refuses a rename through a whole-file write, pointing at move_lore_entity", async () => {
+    const ctx = makeCtx();
+    const res = await run("update_lore_file", {
+      entity: "Ava",
+      content: `---\nname: Eve\naliases: []\ncategory: characters\nsummary: "x"\n---\n\n# Eve\n`,
+    }, ctx);
+    expect(res.content).toContain("renaming");
+    expect(res.content).toContain("move_lore_entity");
+    expect(fs.get(AVA_INDEX)).toBe(INDEX_MD);
+  });
+
+  it("refuses flipping the author-owned dict flag", async () => {
+    const ctx = makeCtx();
+    const res = await run("update_lore_file", {
+      entity: "Ava",
+      content: `---\nname: Ava\naliases: []\ncategory: characters\nsummary: "x"\ndict: true\n---\n\n# Ava\n`,
+    }, ctx);
+    expect(res.content).toContain("dict");
+    expect(res.content).toContain("author");
+    expect(fs.get(AVA_INDEX)).toBe(INDEX_MD);
+  });
+
+  it("refuses an alias another entity answers to, teaching the merge order", async () => {
+    const ctx = makeCtx();
+    ctx.loreIndex.characters.push({
+      ...ctx.loreIndex.characters[0], id: "kael", name: "Kael", aliases: ["凯尔"],
+      dirPath: dirOf("characters", "kael"),
+    });
+    const res = await run("update_lore_file", {
+      entity: "Ava",
+      content: `---\nname: Ava\naliases:\n  - "凯尔"\ncategory: characters\nsummary: "x"\n---\n\n# Ava\n`,
+    }, ctx);
+    expect(res.content).toContain('already resolves to entity "Kael"');
+    expect(res.content).toContain("delete the losing entity");
+    expect(fs.get(AVA_INDEX)).toBe(INDEX_MD);
+  });
+});
+
+// ─── gallery & avatar tools ──────────────────────────────────────────────────
+
+const AVA_DIR = dirOf("characters", "ava");
+const IMAGES_MD = `## portrait.png\nslot: portrait\n正装肖像\n\n## battle.png\n战斗场景\n`;
+
+/** Give Ava a two-image gallery, on disk and in the run snapshot. */
+function withGallery(ctx: ReturnType<typeof makeCtx>) {
+  fs.set(`${AVA_DIR}/images.md`, IMAGES_MD);
+  fs.set(`${AVA_DIR}/portrait.png`, "PNG1");
+  fs.set(`${AVA_DIR}/battle.png`, "PNG2");
+  ctx.loreIndex.characters[0].images = [
+    { file: "portrait.png", desc: "正装肖像", slot: "portrait", absPath: `${AVA_DIR}/portrait.png` },
+    { file: "battle.png", desc: "战斗场景", slot: null, absPath: `${AVA_DIR}/battle.png` },
+  ];
+  return ctx;
+}
+
+describe("update_lore_image", () => {
+  it("updates the description, carrying the slot through, with a backup", async () => {
+    const ctx = withGallery(makeCtx());
+    const res = await run("update_lore_image", {
+      entity: "Ava", file: "portrait.png", desc: "新版正装肖像",
+    }, ctx);
+    expect(res.content).toContain('desc="新版正装肖像"');
+    expect(res.content).toContain("slot=portrait"); // carried, not dropped
+    const md = fs.get(`${AVA_DIR}/images.md`)!;
+    expect(md).toContain("slot: portrait");
+    expect(md).toContain("新版正装肖像");
+    expect(fs.get(backupsOf()[0])).toBe(IMAGES_MD);
+    expect(ctx.loreIndex.characters[0].images[0].desc).toBe("新版正装肖像");
+    expect(ctx.loreChanged).toBe(1);
+  });
+
+  it("sets a declared slot (normalised) and clears it on an empty string", async () => {
+    const ctx = withGallery(makeCtx());
+    const set = await run("update_lore_image", { entity: "Ava", file: "battle.png", slot: "Expression" }, ctx);
+    expect(set.content).toContain("slot=expression");
+    expect(fs.get(`${AVA_DIR}/images.md`)).toContain("slot: expression");
+
+    const clear = await run("update_lore_image", { entity: "Ava", file: "portrait.png", slot: "" }, ctx);
+    expect(clear.content).toContain("slot=none");
+    expect(fs.get(`${AVA_DIR}/images.md`)).not.toContain("slot: portrait");
+  });
+
+  it("refuses an undeclared slot, an unknown file, and an empty edit", async () => {
+    const ctx = withGallery(makeCtx());
+    const badSlot = await run("update_lore_image", { entity: "Ava", file: "portrait.png", slot: "nope" }, ctx);
+    expect(badSlot.content).toContain("not an image slot");
+    expect(badSlot.content).toContain("portrait"); // teaches the declared ids
+
+    const ghost = await run("update_lore_image", { entity: "Ava", file: "ghost.png", desc: "x" }, ctx);
+    expect(ghost.content).toContain("not in the gallery");
+    expect(ghost.content).toContain("portrait.png, battle.png");
+
+    const empty = await run("update_lore_image", { entity: "Ava", file: "portrait.png" }, ctx);
+    expect(empty.content).toContain("pass 'desc'");
+    expect(fs.get(`${AVA_DIR}/images.md`)).toBe(IMAGES_MD);
+    expect(ctx.loreChanged).toBe(0);
+  });
+});
+
+describe("delete_lore_image", () => {
+  it("moves the binary into backups, drops the entry, and patches the snapshot", async () => {
+    const ctx = withGallery(makeCtx());
+    const res = await run("delete_lore_image", { entity: "Ava", file: "battle.png", reason: "重复" }, ctx);
+    expect(res.content).toContain("Deleted gallery image battle.png");
+    expect(fs.has(`${AVA_DIR}/battle.png`)).toBe(false);
+    // Both recovery pieces exist: the moved binary and the images.md snapshot.
+    expect(backupsOf().some((p) => fs.get(p) === "PNG2")).toBe(true);
+    expect(backupsOf().some((p) => fs.get(p) === IMAGES_MD)).toBe(true);
+    expect(fs.get(`${AVA_DIR}/images.md`)).not.toContain("battle.png");
+    expect(ctx.loreIndex.characters[0].images.map((i) => i.file)).toEqual(["portrait.png"]);
+    expect(ctx.loreChanged).toBe(1);
+  });
+
+  it("errors on a file that is not in the gallery", async () => {
+    const ctx = withGallery(makeCtx());
+    const res = await run("delete_lore_image", { entity: "Ava", file: "ghost.png" }, ctx);
+    expect(res.content).toContain("not in the gallery");
+    expect(fs.get(`${AVA_DIR}/images.md`)).toBe(IMAGES_MD);
+    expect(ctx.loreChanged).toBe(0);
+  });
+});
+
+describe("set_lore_avatar", () => {
+  it("promotes a gallery image, moving the old avatar into backups first", async () => {
+    const ctx = withGallery(makeCtx());
+    fs.set(`${AVA_DIR}/avatar.png`, "OLD_AVATAR");
+    ctx.loreIndex.characters[0].avatarPath = `${AVA_DIR}/avatar.png`;
+
+    const res = await run("set_lore_avatar", { entity: "Ava", file: "portrait.png" }, ctx);
+    expect(res.content).toContain('Set the avatar of entity "Ava"');
+    expect(fs.get(`${AVA_DIR}/avatar.png`)).toBe("PNG1"); // copied, source kept
+    expect(fs.get(`${AVA_DIR}/portrait.png`)).toBe("PNG1");
+    expect(backupsOf().some((p) => fs.get(p) === "OLD_AVATAR")).toBe(true);
+    expect(ctx.loreIndex.characters[0].avatarPath).toBe(`${AVA_DIR}/avatar.png`);
+    expect(ctx.loreChanged).toBe(1);
+  });
+
+  it("refuses an unknown source and a format avatars cannot use", async () => {
+    const ctx = withGallery(makeCtx());
+    const ghost = await run("set_lore_avatar", { entity: "Ava", file: "ghost.png" }, ctx);
+    expect(ghost.content).toContain("neither a gallery image");
+
+    fs.set(`${PROJECT}/anim.gif`, "GIF");
+    const gif = await run("set_lore_avatar", { entity: "Ava", file: "anim.gif" }, ctx);
+    expect(gif.content).toContain("png/jpg/jpeg/webp");
+    expect(ctx.loreChanged).toBe(0);
+  });
+});
+
+// ─── copy_lore_file ──────────────────────────────────────────────────────────
+
+describe("copy_lore_file", () => {
+  /** Ava with a gallery, plus an empty-ish Kael to receive copies. */
+  function mergeCtx() {
+    const ctx = withGallery(makeCtx());
+    fs.set(`${dirOf("characters", "kael")}/index.md`, `---\nname: Kael\naliases: []\ncategory: characters\nsummary: "the rival"\n---\n\n# Kael\n`);
+    ctx.loreIndex.characters.push({
+      ...makeLoreIndexEntity("kael", "Kael"),
+    });
+    ctx.lorePlan!.steps.push({ action: "update", entity: "Kael", detail: "receive Ava's material" });
+    return ctx;
+  }
+  const makeLoreIndexEntity = (id: string, name: string) => ({
+    id, category: "characters", dirPath: dirOf("characters", id), name,
+    aliases: [], summary: "", avatarPath: null, mdFiles: ["index.md"], images: [], facets: [],
+  }) as unknown as LoreIndex[string][number];
+
+  it("copies a facet .md byte for byte and patches the target snapshot", async () => {
+    const ctx = mergeCtx();
+    const res = await run("copy_lore_file", { from_entity: "Ava", file: "armor.md", to_entity: "Kael" }, ctx);
+    expect(res.content).toContain('Copied armor.md from "Ava" to "Kael"');
+    expect(fs.get(`${dirOf("characters", "kael")}/armor.md`)).toBe(FACET_MD); // verbatim
+    expect(fs.get(`${AVA_DIR}/armor.md`)).toBe(FACET_MD); // source untouched
+    const kael = ctx.loreIndex.characters.find((e) => e.name === "Kael")!;
+    expect(kael.mdFiles).toContain("armor.md");
+    expect(kael.facets.map((f) => f.title)).toContain("战甲");
+    expect(ctx.loreChanged).toBe(1);
+  });
+
+  it("copies a gallery image with its description and slot", async () => {
+    const ctx = mergeCtx();
+    const res = await run("copy_lore_file", { from_entity: "Ava", file: "portrait.png", to_entity: "Kael" }, ctx);
+    expect(res.content).toContain("Copied gallery image portrait.png");
+    expect(fs.get(`${dirOf("characters", "kael")}/portrait.png`)).toBe("PNG1");
+    const md = fs.get(`${dirOf("characters", "kael")}/images.md`)!;
+    expect(md).toContain("## portrait.png");
+    expect(md).toContain("slot: portrait");
+    expect(md).toContain("正装肖像");
+  });
+
+  it("refuses a colliding target name until new_file resolves it", async () => {
+    const ctx = mergeCtx();
+    fs.set(`${dirOf("characters", "kael")}/armor.md`, "already here");
+    const clash = await run("copy_lore_file", { from_entity: "Ava", file: "armor.md", to_entity: "Kael" }, ctx);
+    expect(clash.content).toContain("already exists");
+    expect(clash.content).toContain("new_file");
+    expect(fs.get(`${dirOf("characters", "kael")}/armor.md`)).toBe("already here");
+
+    const renamed = await run("copy_lore_file", {
+      from_entity: "Ava", file: "armor.md", to_entity: "Kael", new_file: "old-armor.md",
+    }, ctx);
+    expect(renamed.content).toContain("as old-armor.md");
+    expect(fs.get(`${dirOf("characters", "kael")}/old-armor.md`)).toBe(FACET_MD);
+  });
+
+  it("refuses the same entity, reserved files, and a missing source", async () => {
+    const ctx = mergeCtx();
+    const same = await run("copy_lore_file", { from_entity: "Ava", file: "armor.md", to_entity: "阿瓦" }, ctx);
+    expect(same.content).toContain("same entity");
+
+    const reserved = await run("copy_lore_file", { from_entity: "Ava", file: "index.md", to_entity: "Kael" }, ctx);
+    expect(reserved.content).toContain("app-managed");
+
+    const ghost = await run("copy_lore_file", { from_entity: "Ava", file: "ghost.md", to_entity: "Kael" }, ctx);
+    expect(ghost.content).toContain("does not exist");
+    expect(ghost.content).toContain("gallery images");
+    expect(ctx.loreChanged).toBe(0);
+  });
+});
+
 describe("lore plan gate", () => {
   /** A context whose author has approved nothing yet. */
   const unplanned = (overrides: Partial<ToolContext> = {}) =>
@@ -757,15 +987,21 @@ describe("lore plan gate", () => {
 // ─── move_lore_entity ────────────────────────────────────────────────────────
 
 describe("move_lore_entity", () => {
-  it("renames in place, keeps the old name as an alias, and backs up index.md", async () => {
+  it("renames with a folder re-slug, keeps the old name as an alias, and backs up index.md", async () => {
     const ctx = makeCtx();
     const res = await run("move_lore_entity", { entity: "Ava", new_name: "Ava Reyne" }, ctx);
 
     expect(res.content).toContain('renamed to "Ava Reyne"');
-    const written = fs.get(`${dirOf("characters", "ava")}/index.md`)!;
+    // The folder follows the name (saveEntityMetaAndBody re-slugs on rename),
+    // and the result says where the entity now lives.
+    expect(res.content).toContain(dirOf("characters", "ava_reyne"));
+    expect(fs.has(`${dirOf("characters", "ava")}/index.md`)).toBe(false);
+    const written = fs.get(`${dirOf("characters", "ava_reyne")}/index.md`)!;
     expect(written).toContain('name: "Ava Reyne"');
     expect(written).toContain('"Ava"'); // old name still matches earlier chapters
     expect(written).toContain('"阿瓦"'); // pre-existing alias survived
+    expect(fs.get(`${dirOf("characters", "ava_reyne")}/armor.md`)).toBe(FACET_MD); // siblings travelled
+    expect(ctx.loreIndex.characters[0].dirPath).toBe(dirOf("characters", "ava_reyne"));
     expect(fs.get(backupsOf()[0])).toBe(INDEX_MD);
     expect(ctx.loreChanged).toBe(1);
   });
@@ -775,7 +1011,7 @@ describe("move_lore_entity", () => {
     await run("move_lore_entity", {
       entity: "Ava", new_name: "Ada", keep_old_name_as_alias: false,
     }, ctx);
-    expect(fs.get(`${dirOf("characters", "ava")}/index.md`)).not.toContain('"Ava"');
+    expect(fs.get(`${dirOf("characters", "ada")}/index.md`)).not.toContain('"Ava"');
   });
 
   it("moves the whole folder on a category change and keeps the run's snapshot usable", async () => {
