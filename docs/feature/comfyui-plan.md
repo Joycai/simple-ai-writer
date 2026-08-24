@@ -1,6 +1,6 @@
 # 本地 ComfyUI 生图接入方案
 
-> **状态：PR1 已实现（生成链路 + Beta 开关）；PR2（参考图/图生图）、PR3（人设校准循环）待做。**
+> **状态：PR1（生成链路 + Beta 开关）、PR2（参考图/图生图 + 负面提示词）已实现；PR3（人设校准循环）待做。**
 >
 > 目标：让一台本地 ComfyUI 实例成为应用的第五条出图路由——作者在 ComfyUI 里
 > 搭好并跑通工作流，导出 API 格式 JSON，在应用里登记成一个「模型」；应用只做
@@ -91,10 +91,8 @@ POST {base}/queue {"delete":[id]} / POST {base}/interrupt   （取消）
   `exception_message`——都原样进 `ImageHttpError`，提示作者「先在 ComfyUI
   里跑通再导出」。
 
-PR1 明确不做：`req.images`（参考图/图生图，调用即报错——与生图 PR1 对
-`ImageRequest.images` 的处理完全一致）；负面提示词的运行期注入（工作流模板
-里作者烤好的负面原样生效，这已是正确的默认）；WebSocket 进度（轮询够用，
-进度条不值一个新依赖）。
+PR1 明确不做（PR2 已兑现前两条）：`req.images`（参考图/图生图）；负面提示词
+的运行期注入；WebSocket 进度（轮询够用，进度条不值一个新依赖——仍不做）。
 
 ## 3. Beta 开关
 
@@ -108,8 +106,9 @@ PR1 明确不做：`req.images`（参考图/图生图，调用即报错——与
 
 - 本地出图免费：`pricePerImage` 留空即 0，用量照记 `token_usage`
   （`task = "image-gen"`，cost 0）——链路统一，作者在用量页看得到张数。
-- `caps.edit` 强制 false（PR1）：审批卡/会话的降级逻辑因此自动把改图请求
-  变成带累积指令的重新生成，不需要任何新分支。
+- `caps.edit`/`maxRefs`（PR2 起）：保存时从工作流的 LoadImage 数**推导**，
+  不是作者声明。没有槽位的工作流 edit=false，审批卡/会话的降级逻辑自动把
+  改图请求变成带累积指令的重新生成，不需要任何新分支。
 - 方言不参与：comfyui 路由走 generic 的自由尺寸表（`caps.sizes`），
   `req.size` 解析成 width/height 注入 latent 节点；没有 latent 节点就忽略。
 
@@ -129,11 +128,24 @@ PR1 明确不做：`req.images`（参考图/图生图，调用即报错——与
 验收：本地 ComfyUI 跑通的工作流导出导入后，在图集/正文/agent 三个入口出图,
 落盘、入库、记用量，与云端模型无异。
 
-### PR2 · 参考图与图生图
-- `POST /upload/image`（multipart，约束同 §2.3：不得手动设 Content-Type）
-- LoadImage 占位注入：`references[]`/`sourcePath` → 上传 → 文件名写进节点
-- `caps.edit` 放开；负面提示词字段（`ImageRequest.negative`）从 promptGen
-  穿透到注入
+### PR2 · 参考图与图生图 — ✅
+- `POST /upload/image`（multipart，约束同生图方案 §2.3：不得手动设
+  Content-Type）。上传名**每次随机 + overwrite**：文件名和字节都重复的
+  LoadImage 会命中节点缓存——和 seed 随机化是同一件事的另一半
+- LoadImage 槽位注入：输入图按槽位顺序逐个填入，**标题带 ref/参考/source/
+  输入 的槽位排最前**（作者显式指定哪个槽吃应用的图），没喂到的槽位保持
+  模板默认。槽位数在**上传前**核对，超了直接报错（普通 Error，刻意不进
+  `isEditUnsupportedError` 的降级——对同一张图重试一次生成不会更好）
+- **`caps.edit`/`maxRefs` 从工作流推导，不是复选框**：有没有 LoadImage 是
+  导入的图的事实，声明会和图漂移，推导不会。没有 LoadImage 的工作流
+  edit=false，改图请求自动走既有的累积指令降级重生成
+- 负面提示词：`ImageRequest.negative` 只有 comfyui 路由消费（唯一有该
+  wire 字段的路由）；弹窗对 comfy 模型**不再**把负面折进 prose——SD 会画
+  出它读到的东西，正面里的 "Avoid: watermark" 反而招来水印。工作流没有
+  负面节点时静默丢弃（导入摘要里可见 负面 ✓/—），绝不折回正面
+- **comfy 的图生图编辑发累积描述，不发增量指令**（`imageStore.edit` 的
+  一处路由分支）：SD 提示词描述的是结果不是修改动作，「把头发改成银色」
+  单独作为完整正面提示词只会画出一撮头发；对话式云端模型仍收增量
 
 ### PR3 · 人设校准循环
 - 从实体 facets 结构化生成可判定检查清单（发色/瞳色/服装：是/否）

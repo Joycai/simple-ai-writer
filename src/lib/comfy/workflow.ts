@@ -87,7 +87,11 @@ export interface ComfyAnalysis {
   seedNodes: string[];
   /** 带数值 width/height 的 latent 类节点（尺寸与 batch_size 的落点）。 */
   latent: { nodeId: string } | null;
-  /** LoadImage 节点——PR2 参考图的入口，PR1 仅报告。 */
+  /**
+   * LoadImage 节点——参考图 / 图生图的入口，按注入顺序排列：标题带
+   * ref/参考/source/输入 的排最前（作者显式指定哪个槽位吃应用的图），
+   * 其余按 node id 数值序，保证同一张图每次落进同一个节点。
+   */
   loadImageNodes: string[];
 }
 
@@ -146,24 +150,47 @@ export function analyzeComfyWorkflow(graph: ComfyGraph): ComfyAnalysis {
   );
   const latentId = sized.find((id) => typeof graph[id].inputs.batch_size === "number") ?? sized[0];
 
+  const REF_TITLE = /ref|参考|source|输入/i;
+  const byNumericId = (a: string, b: string) => Number(a) - Number(b) || a.localeCompare(b);
+  const loadImageNodes = ids
+    .filter((id) => graph[id].class_type === "LoadImage")
+    .sort((a, b) => {
+      const ra = REF_TITLE.test(graph[a]._meta?.title ?? "");
+      const rb = REF_TITLE.test(graph[b]._meta?.title ?? "");
+      if (ra !== rb) return ra ? -1 : 1;
+      return byNumericId(a, b);
+    });
+
   return {
     nodeCount: ids.length,
     positive,
     negative,
     seedNodes,
     latent: latentId ? { nodeId: latentId } : null,
-    loadImageNodes: ids.filter((id) => graph[id].class_type === "LoadImage"),
+    loadImageNodes,
   };
 }
 
 export interface ComfyInjection {
   prompt: string;
+  /**
+   * 负面提示词，落进识别到的负面节点。没有负面节点就**静默丢弃**而不是折进
+   * 正面 prose——SD 的正面提示词里出现 "Avoid: watermark" 反而会招来水印，
+   * 丢弃是两害相权的正确侧；模板里作者烤好的负面照常生效。
+   */
+  negative?: string;
   /** 注入所有 seed 节点。不给则调用方应自己随机化（缓存问题见 plan §2）。 */
   seed?: number;
   width?: number;
   height?: number;
   /** 出图张数，落到 latent 节点的 batch_size 上；没有 latent 节点则忽略。 */
   batch?: number;
+  /**
+   * 已上传到 ComfyUI 的图片名（`/upload/image` 的返回），按
+   * `loadImageNodes` 的顺序逐个落进 LoadImage 的 `image` 输入。
+   * 数量超过槽位是调用方的错误——这里不报，由 adapter 在上传前拦截。
+   */
+  imageNames?: string[];
 }
 
 /**
@@ -179,6 +206,17 @@ export function injectComfyInputs(graph: ComfyGraph, inj: ComfyInjection): Comfy
 
   const next: ComfyGraph = structuredClone(graph);
   next[analysis.positive.nodeId].inputs.text = inj.prompt;
+
+  if (inj.negative && analysis.negative) {
+    next[analysis.negative.nodeId].inputs.text = inj.negative;
+  }
+
+  if (inj.imageNames?.length) {
+    inj.imageNames.forEach((name, i) => {
+      const nodeId = analysis.loadImageNodes[i];
+      if (nodeId) next[nodeId].inputs.image = name;
+    });
+  }
 
   if (inj.seed !== undefined) {
     for (const id of analysis.seedNodes) {

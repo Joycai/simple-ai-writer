@@ -60,6 +60,12 @@ export interface RunContext {
   resolution?: string;
   /** Quality tier from the model's dialect ("low"/"medium"/"high"). */
   quality?: string;
+  /**
+   * Negative prompt, comfyui-routed models only — the one wire with a field
+   * for it. Cloud routes keep receiving it folded into the prompt string by
+   * the modal (specToPrompt), so this stays unset there.
+   */
+  negative?: string;
   n?: number;
   signal?: AbortSignal;
 }
@@ -171,7 +177,13 @@ export const useImageStore = create<ImageSessionState>((set, get) => ({
         degraded = true;
       } else {
         try {
-          result = await callModel(ctx, instruction, [source]);
+          // ComfyUI carries the image but not the conversation: an SD prompt
+          // describes the *result*, it doesn't follow instructions — "把头发改
+          // 成银色" alone as the whole positive prompt draws hair and nothing
+          // else. So the img2img call gets the accumulated description; the
+          // conversational providers keep getting just the delta.
+          const comfy = ctx.model.caps?.route === "comfyui";
+          result = await callModel(ctx, comfy ? accumulated : instruction, [source]);
         } catch (err) {
           if (!isEditUnsupportedError(err)) throw err;
           result = await callModel(ctx, accumulated, []);
@@ -254,6 +266,7 @@ function callModel(ctx: RunContext, prompt: string, images: string[]): Promise<I
     },
     {
       prompt,
+      ...(ctx.negative ? { negative: ctx.negative } : {}),
       ...(images.length ? { images } : {}),
       n: ctx.n ?? 1,
       ...imageRequestParams(

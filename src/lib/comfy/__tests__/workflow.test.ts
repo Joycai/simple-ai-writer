@@ -100,6 +100,33 @@ describe("injectComfyInputs", () => {
     expect(g["3"].inputs.seed).toBe(5);
   });
 
+  it("fills the negative node when asked, and never folds a negative into the positive", () => {
+    const g = clone();
+    const out = injectComfyInputs(g, { prompt: "a cat", negative: "blurry, watermark" });
+    expect(out!["7"].inputs.text).toBe("blurry, watermark");
+    expect(out!["6"].inputs.text).toBe("a cat");
+
+    // 没有负面节点：静默丢弃——正面里绝不能出现 "Avoid:"（SD 会画出它读到的东西）。
+    // 双连线没了，回溯失效，正面靠标题约定兜底——这正是该约定存在的场合。
+    const noNeg = clone();
+    delete noNeg["3"].inputs.negative;
+    delete noNeg["7"];
+    noNeg["6"]._meta = { title: "positive" };
+    const out2 = injectComfyInputs(noNeg, { prompt: "a cat", negative: "watermark" });
+    expect(out2!["6"].inputs.text).toBe("a cat");
+  });
+
+  it("fills LoadImage slots in order, titled ref slots first", () => {
+    const g = clone();
+    g["10"] = { class_type: "LoadImage", inputs: { image: "default-a.png" } };
+    g["11"] = { class_type: "LoadImage", inputs: { image: "default-b.png" }, _meta: { title: "参考图" } };
+    // 标题带「参考」的槽位排最前，所以第一张图落进 11 而不是 id 更小的 10。
+    expect(analyzeComfyWorkflow(g).loadImageNodes).toEqual(["11", "10"]);
+    const out = injectComfyInputs(g, { prompt: "x", imageNames: ["up-1.png"] });
+    expect(out!["11"].inputs.image).toBe("up-1.png");
+    expect(out!["10"].inputs.image).toBe("default-a.png"); // 没喂到的槽位保持模板默认
+  });
+
   it("returns null when no positive-prompt node can be located", () => {
     const g = clone();
     delete g["3"].inputs.positive;

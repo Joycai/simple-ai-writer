@@ -14,7 +14,8 @@
  */
 
 import {
-  injectComfyInputs, parseComfySize, parseComfyWorkflow, type ComfyWorkflowConfig,
+  analyzeComfyWorkflow, injectComfyInputs, parseComfySize, parseComfyWorkflow,
+  type ComfyWorkflowConfig,
 } from "../comfy/workflow";
 import { fetch } from "../http";
 import { beginImageApiLog, type ImageCallLogger } from "./apiLog";
@@ -64,6 +65,14 @@ export interface ImageRequest {
   mask?: string;
   /** How many images to return. Providers cap this; the caller should too. */
   n?: number;
+  /**
+   * Negative prompt — what must not appear. Only the comfyui route has a wire
+   * spelling for it (the workflow's negative node); every other route ignores
+   * it, and callers there keep folding it into the prompt via `specToPrompt`.
+   * Never folded into a ComfyUI positive prompt: SD attracts what it reads,
+   * so "Avoid: watermark" in the positive *invites* watermarks.
+   */
+  negative?: string;
   /** e.g. "1024x1024". Omitted when the model declares no supported sizes. */
   size?: string;
   /**
@@ -1167,12 +1176,32 @@ async function cancelComfyTask(base: string, promptId: string): Promise<void> {
   }
 }
 
+/**
+ * Upload one input image to ComfyUI's input store, returning the name a
+ * LoadImage node's `image` input takes.
+ *
+ * A fresh random filename per upload, `overwrite` on: reusing a name would be
+ * exactly the input-hash collision the seed randomization exists to avoid —
+ * a LoadImage whose filename *and* bytes both repeat resolves from cache.
+ *
+ * **`Content-Type` must not be set here** — same multipart rule as
+ * `openaiEdit`: the webview generates the boundary-bearing header only for
+ * headers the caller did not declare.
+ */
+async function uploadComfyImage(base: string, dataUrl: string, signal: AbortSignal): Promise<string> {
+  const { bytes, mime } = decodeDataUrl(dataUrl);
+  const form = new FormData();
+  const name = `aiwriter-${Math.random().toString(36).slice(2, 10)}.${extForMime(mime)}`;
+  form.append("image", new Blob([bytes], { type: mime }), name);
+  form.append("overwrite", "true");
+  const res = await fetch(`${base}/upload/image`, { method: "POST", body: form, signal });
+  if (!res.ok) throw new ImageHttpError("ComfyUI upload error", res.status, await res.text());
+  const json = (await readJson(res, "ComfyUI upload error")) as { name?: string; subfolder?: string };
+  if (!json.name) throw new ImageHttpError("ComfyUI upload error", 200, JSON.stringify(json).slice(0, 400));
+  return json.subfolder ? `${json.subfolder}/${json.name}` : json.name;
+}
+
 async function comfyImage(conn: ImageConn, req: ImageRequest, log: ImageCallLogger): Promise<ImageResult> {
-  if (req.images?.length) {
-    // Same posture as PR1 of the image client itself: a loud refusal now, the
-    // real path (upload/image + LoadImage injection) in a later slice.
-    throw new Error("The ComfyUI route cannot take input images yet — reference images and img2img arrive in a later version.");
-  }
   const raw = conn.comfy?.workflow;
   if (!raw) {
     throw new Error("This model has no ComfyUI workflow imported — import an API-format export in Settings → 供应商与模型.");
@@ -1182,17 +1211,18 @@ async function comfyImage(conn: ImageConn, req: ImageRequest, log: ImageCallLogg
     throw new Error(`The stored ComfyUI workflow no longer parses (${parsed.error}) — re-import it in Settings.`);
   }
 
-  const explicitSeed = req.extraBody?.seed;
-  const size = parseComfySize(req.size);
-  const graph = injectComfyInputs(parsed.graph, {
-    prompt: req.prompt,
-    seed: typeof explicitSeed === "number" ? explicitSeed : randomComfySeed(),
-    ...(size ?? {}),
-    batch: req.n,
-  });
-  if (!graph) {
+  // Input images ride the workflow's own LoadImage nodes — checked before any
+  // upload so a mismatch costs nothing. A plain Error on purpose: it stays out
+  // of isEditUnsupportedError (which only reads ImageHttpError), so the
+  // no-slots case surfaces as configuration advice instead of triggering the
+  // degrade-to-regeneration retry against the same graph.
+  const inputImages = req.images ?? [];
+  const slots = analyzeComfyWorkflow(parsed.graph).loadImageNodes.length;
+  if (inputImages.length > slots) {
     throw new Error(
-      "No positive-prompt node could be located in this workflow — in ComfyUI, title a text node \"positive\"（正面） and re-export the API format.",
+      slots === 0
+        ? "This workflow has no LoadImage node, so it cannot take input images — img2img and references need a workflow with one."
+        : `This workflow has ${slots} image input(s) (LoadImage) but ${inputImages.length} were supplied — drop some references or export a workflow with more slots.`,
     );
   }
 
@@ -1200,6 +1230,27 @@ async function comfyImage(conn: ImageConn, req: ImageRequest, log: ImageCallLogg
   const deadline = withDeadline(req.signal, COMFY_TASK_TIMEOUT_MS);
   let promptId: string | undefined;
   try {
+    // Uploads share the run's deadline — a stalled 8MB transfer to a hung
+    // instance should die with the run, not hold its own timer.
+    const explicitSeed = req.extraBody?.seed;
+    const size = parseComfySize(req.size);
+    const imageNames: string[] = [];
+    for (const dataUrl of inputImages) {
+      imageNames.push(await uploadComfyImage(base, dataUrl, deadline.signal));
+    }
+    const graph = injectComfyInputs(parsed.graph, {
+      prompt: req.prompt,
+      negative: req.negative,
+      seed: typeof explicitSeed === "number" ? explicitSeed : randomComfySeed(),
+      ...(size ?? {}),
+      batch: req.n,
+      ...(imageNames.length ? { imageNames } : {}),
+    });
+    if (!graph) {
+      throw new Error(
+        "No positive-prompt node could be located in this workflow — in ComfyUI, title a text node \"positive\"（正面） and re-export the API format.",
+      );
+    }
     const res = await fetch(`${base}/prompt`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
