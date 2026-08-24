@@ -25,13 +25,13 @@ import { useTranslation } from "react-i18next";
 import { ChevronDown, Search, Zap } from "lucide-react";
 import type { Prompt } from "../../lib/ai/configDb";
 import {
-  SIMPLE_MAX,
   appendSnippet,
-  buildSections,
   chipCounts,
   countPlaceholders,
   flatten,
   hitSlice,
+  isSimpleLibrary,
+  pickerSections,
   previewLine,
   snippetsOf,
   splitPlaceholders,
@@ -111,13 +111,26 @@ export function SnippetPicker({ value, onInsert, onAfterInsert }: Props) {
   const snippets = useMemo(() => snippetsOf(prompts), [prompts]);
   /* ≤5 snippets: no search box, no chips, no section headers. Three rows that
      still demand a search box is ceremony added to a list (设计稿 1b). */
-  const simple = snippets.length <= SIMPLE_MAX;
+  const simple = isSimpleLibrary(snippets);
   const counts = useMemo(() => chipCounts(snippets), [snippets]);
+  /* `pickerSections`, not `buildSections`: what simple mode does to the search,
+     the chips and 「常用」 is one decision, and it belongs beside the rule it
+     follows from rather than re-derived at this call site. */
   const sections = useMemo(
-    () => buildSections(snippets, { filter: simple ? "all" : filter, query: simple ? "" : query }),
-    [snippets, filter, query, simple],
+    () => pickerSections(snippets, { filter, query }),
+    [snippets, filter, query],
   );
   const flat = useMemo(() => flatten(sections), [sections]);
+  /* Where each section starts in `flat`. Walked rather than `flat.indexOf(s)`:
+     a snippet repeated by 「常用」 is the *same object* in both sections, so
+     indexOf hands both rows the first copy's index — one ↑↓ cursor would light
+     two rows at once and the lower copy would be unreachable by keyboard. */
+  const offsets = useMemo(() => {
+    const out: number[] = [];
+    let n = 0;
+    for (const sec of sections) { out.push(n); n += sec.items.length; }
+    return out;
+  }, [sections]);
 
   useEffect(() => { if (!open) { setQuery(""); setFilter("all"); } }, [open]);
   useEffect(() => { setActive(0); }, [query, filter]);
@@ -279,7 +292,7 @@ export function SnippetPicker({ value, onInsert, onAfterInsert }: Props) {
                     </div>
                   </div>
                 ) : (
-                  sections.map((sec) => (
+                  sections.map((sec, si) => (
                     <div key={sec.key} className={styles.section}>
                       {!simple && (
                         <div className={`${styles.sectionHead} ${sec.kind === "ungrouped" ? styles.sectionHeadWeak : ""}`}>
@@ -293,8 +306,8 @@ export function SnippetPicker({ value, onInsert, onAfterInsert }: Props) {
                           )}
                         </div>
                       )}
-                      {sec.items.map((s) => {
-                        const idx = flat.indexOf(s);
+                      {sec.items.map((s, i) => {
+                        const idx = offsets[si] + i;
                         return (
                           <button
                             key={`${sec.key}:${s.id}`}
