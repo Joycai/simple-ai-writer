@@ -31,6 +31,7 @@ export const PREF_KEYS = [
   "app:language",
   "app:fontScheme",
   "app:markdownTheme",
+  "app:previewZoom",
   "app:sidebarWidth",
   "app:rightPanelWidth",
   "app:recentProjects",

@@ -1,0 +1,74 @@
+/* The markdown formatting strip above the editor.
+
+   Quiet by construction: icon-only, muted until hovered, one hairline below.
+   It sits over a manuscript, so it must not read as chrome competing with the
+   prose — the same weight as the HTML preview's action bar. */
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--color-border-soft);
+  background: var(--color-bg-surface);
+  flex-shrink: 0;
+  /* A narrow split pane can't hold every group. Scrolling keeps the strip one
+     line tall — wrapping would change the editor's height as the pane is
+     dragged, which reads as the manuscript jumping. */
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.bar::-webkit-scrollbar { display: none; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 24px;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast),
+    transform var(--transition-fast);
+}
+.btn:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  background: var(--color-bg-hover);
+}
+.btn:active:not(:disabled) { transform: scale(0.92); }
+.btn:disabled {
+  color: var(--color-text-ghost);
+  cursor: default;
+}
+
+/* The heading trigger carries a caret, so it needs the extra few pixels. */
+.btnWide {
+  width: 34px;
+  gap: 1px;
+}
+.caret {
+  opacity: 0.7;
+}
+
+.sep {
+  flex-shrink: 0;
+  width: 1px;
+  height: 14px;
+  margin: 0 5px;
+  background: var(--color-border);
+}
+
+/* H1‥H4 in the dropdown: the lucide set has one glyph per level, but four
+   near-identical icons read worse than the four labels themselves. */
+.hIcon {
+  display: inline-block;
+  width: 13px;
+  font: 600 10px/1 var(--font-mono);
+  color: var(--color-text-muted);
+  text-align: center;
+}

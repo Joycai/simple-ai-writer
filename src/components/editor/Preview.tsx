@@ -1,5 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useTranslation } from "react-i18next";
+import { ZoomIn, ZoomOut } from "lucide-react";
 import { renderMarkdown } from "../../lib/fs/markdown";
+import { useAppStore } from "../../stores/appStore";
+import {
+  formatPreviewZoom,
+  PREVIEW_ZOOM_DEFAULT,
+  PREVIEW_ZOOM_MAX,
+  PREVIEW_ZOOM_MIN,
+} from "../../lib/editor/previewZoom";
 import { imageToDataUrl } from "../../lib/fs/images";
 import { resolveLinkPath } from "../../lib/paths";
 import { annotateCitations } from "../../lib/lore/citations";
@@ -24,7 +33,31 @@ interface Props {
 const TYPING_DEBOUNCE_MS = 300;
 
 export function Preview({ source, basePath }: Props) {
+  const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const zoom = useAppStore((s) => s.previewZoom);
+  const setZoom = useAppStore((s) => s.setPreviewZoom);
+  const stepZoom = useAppStore((s) => s.stepPreviewZoom);
+
+  // ⌘/Ctrl + wheel over the page, the gesture every reader already knows.
+  //
+  // A native listener with `passive: false` rather than React's `onWheel`:
+  // React registers wheel handlers on the root as passive, so `preventDefault`
+  // there is ignored — and without it the webview runs its own page zoom on
+  // top of ours, scaling the whole app chrome along with the manuscript.
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      if (e.deltaY === 0) return;
+      useAppStore.getState().stepPreviewZoom(e.deltaY < 0 ? 1 : -1);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
 
   // The source the DOM currently shows. Trails `source` by the debounce while
   // the author types; a *different document* (basePath change) applies at once
@@ -135,17 +168,61 @@ export function Preview({ source, basePath }: Props) {
     // second one would render the first one's pictures — or none at all.
   }, [shown, basePath]);
 
-  // data-preview-scroller marks the element that actually scrolls (the root is
-  // the one carrying `overflow-y: auto`). EditorArea's split-view sync finds it
-  // by this attribute rather than by firstElementChild, so adding a sibling or
-  // a wrapper in here can't silently break scroll linking.
+  // data-preview-scroller marks the element that actually scrolls (the one
+  // carrying `overflow-y: auto` — no longer this component's root since the
+  // zoom control moved outside it). EditorArea's split-view sync finds it by
+  // this attribute rather than by firstElementChild, which is exactly why
+  // adding that wrapper couldn't silently break scroll linking.
   //
   // The inner element holds the measure (max-width + auto margins) and the
   // markdown theme: themes set element margins outright, so centring each
   // rendered child individually would be a specificity fight the theme wins.
   return (
-    <div className={styles.preview} data-preview-scroller>
-      <div ref={ref} className={`${styles.page} ${MD_BODY_CLASS}`} data-ai-selection />
+    // The wrapper exists so the zoom control can sit *outside* the scrolling
+    // element: an absolutely positioned child of a scroller is placed against
+    // its content, so the pill would drift away on the first scroll.
+    <div className={styles.wrap}>
+      <div
+        className={styles.preview}
+        data-preview-scroller
+        ref={scrollerRef}
+        // Consumed by .page for both the scale and the max-width that cancels
+        // it out — see Preview.module.css.
+        style={{ "--preview-zoom": zoom } as CSSProperties}
+      >
+        <div ref={ref} className={`${styles.page} ${MD_BODY_CLASS}`} data-ai-selection />
+      </div>
+      <div className={styles.zoom} role="group" aria-label={t("editor.zoom.label")}>
+        <button
+          type="button"
+          className={styles.zoomBtn}
+          onClick={() => stepZoom(-1)}
+          disabled={zoom <= PREVIEW_ZOOM_MIN}
+          title={t("editor.zoom.out")}
+          aria-label={t("editor.zoom.out")}
+        >
+          <ZoomOut size={13} />
+        </button>
+        <button
+          type="button"
+          className={styles.zoomValue}
+          onClick={() => setZoom(PREVIEW_ZOOM_DEFAULT)}
+          disabled={zoom === PREVIEW_ZOOM_DEFAULT}
+          title={t("editor.zoom.reset")}
+        >
+          {formatPreviewZoom(zoom)}
+        </button>
+        <button
+          type="button"
+          className={styles.zoomBtn}
+          onClick={() => stepZoom(1)}
+          disabled={zoom >= PREVIEW_ZOOM_MAX}
+          title={t("editor.zoom.in")}
+          aria-label={t("editor.zoom.in")}
+        >
+          <ZoomIn size={13} />
+        </button>
+      </div>
     </div>
   );
 }

@@ -98,27 +98,45 @@ export function toggleHeading(view: EditorView, level: number): boolean {
   return true;
 }
 
-/** Add or remove a line prefix (e.g. `> ` for quotes, `- ` for bullets) per line. */
-export function toggleLinePrefix(view: EditorView, prefix: string): boolean {
+/**
+ * Add or remove a per-line marker across every touched line.
+ *
+ * `detect` matches the marker already sitting at the start of a line (it is
+ * what "already on" means, and what gets replaced when turning off), and
+ * `make` builds the marker to add, taking the line's index within the
+ * selection so an ordered list can count. Turning off happens only when
+ * *every* touched line is already marked — a half-marked block completes
+ * rather than clears, which is what makes dragging over a ragged region do
+ * the obvious thing.
+ */
+export function toggleLineMarker(
+  view: EditorView,
+  detect: RegExp,
+  make: (index: number) => string,
+): boolean {
   const { state } = view;
   const tr = state.changeByRange((range) => {
     const startLine = state.doc.lineAt(range.from);
     const endLine = state.doc.lineAt(range.to);
     const lines = [];
     for (let n = startLine.number; n <= endLine.number; n++) lines.push(state.doc.line(n));
-    const allPrefixed = lines.every((l) => l.text.startsWith(prefix));
+    const allMarked = lines.every((l) => detect.test(l.text));
 
-    const changes = [];
+    const changes: { from: number; to: number; insert: string }[] = [];
     let headDelta = 0;
     let anchorDelta = 0;
-    for (const line of lines) {
-      const insert = allPrefixed ? "" : prefix;
-      const to = allPrefixed ? line.from + prefix.length : line.from;
+    lines.forEach((line, i) => {
+      const existing = detect.exec(line.text)?.[0] ?? "";
+      // Turning on *replaces* any marker already there rather than skipping the
+      // line, so numbering a block that already holds `5.` renumbers it from
+      // the top instead of leaving one item counting from somewhere else.
+      const insert = allMarked ? "" : make(i);
+      const to = line.from + existing.length;
       changes.push({ from: line.from, to, insert });
       const delta = insert.length - (to - line.from);
       if (line.from <= range.head) headDelta += delta;
       if (line.from <= range.anchor) anchorDelta += delta;
-    }
+    });
     return {
       changes,
       range: EditorSelection.range(
@@ -132,8 +150,35 @@ export function toggleLinePrefix(view: EditorView, prefix: string): boolean {
   return true;
 }
 
+/** Escape a literal string for use inside a RegExp. */
+function reEscape(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Add or remove a line prefix (e.g. `> ` for quotes, `- ` for bullets) per line. */
+export function toggleLinePrefix(view: EditorView, prefix: string): boolean {
+  return toggleLineMarker(view, new RegExp(`^${reEscape(prefix)}`), () => prefix);
+}
+
 export const toggleQuote = (view: EditorView) => toggleLinePrefix(view, "> ");
 export const toggleBulletList = (view: EditorView) => toggleLinePrefix(view, "- ");
+
+/**
+ * `1. `, `2. `, … across the touched lines; strips the numbering again when
+ * every line already carries one. The count restarts at the top of the
+ * selection rather than continuing a list above it — markdown renumbers an
+ * ordered list from its own first item anyway, so the visible result is the
+ * same and the source stays legible.
+ */
+export const toggleOrderedList = (view: EditorView) =>
+  toggleLineMarker(view, /^\d+[.)] /, (i) => `${i + 1}. `);
+
+/**
+ * GitHub-style task list. `detect` accepts a ticked box too, so turning a
+ * finished checklist back into prose doesn't leave `[x]` behind.
+ */
+export const toggleTaskList = (view: EditorView) =>
+  toggleLineMarker(view, /^[-*+] \[[ xX]\] /, () => "- [ ] ");
 
 /** Insert a markdown link, wrapping the selection as the label and selecting `url`. */
 export function insertLink(view: EditorView): boolean {
@@ -150,6 +195,126 @@ export function insertLink(view: EditorView): boolean {
   view.dispatch(state.update(tr, { scrollIntoView: true, userEvent: "input.format" }));
   view.focus();
   return true;
+}
+
+/* ---- Block insertion --------------------------------------------------- */
+
+/** A line that is a fence, opening or closing, with any info string. */
+const FENCE = /^\s*(```|~~~)/;
+
+/**
+ * Fence the touched lines as a code block, or unfence them when they already
+ * are.
+ *
+ * Unlike the inline toggles this works on the primary range only: a fenced
+ * block is a single structure, and applying one per cursor in a multi-cursor
+ * selection would interleave fences rather than produce N blocks.
+ */
+export function toggleCodeBlock(view: EditorView, lang = ""): boolean {
+  const { state } = view;
+  const range = state.selection.main;
+  const startLine = state.doc.lineAt(range.from);
+  const endLine = state.doc.lineAt(range.to);
+
+  // Already fenced, with the fences *inside* the touched lines.
+  if (
+    endLine.number > startLine.number &&
+    FENCE.test(startLine.text) &&
+    FENCE.test(endLine.text)
+  ) {
+    const inner = state.sliceDoc(state.doc.line(startLine.number + 1).from,
+                                 state.doc.line(endLine.number - 1).to);
+    view.dispatch(state.update({
+      changes: { from: startLine.from, to: endLine.to, insert: inner },
+      selection: EditorSelection.range(startLine.from, startLine.from + inner.length),
+      scrollIntoView: true,
+      userEvent: "input.format",
+    }));
+    view.focus();
+    return true;
+  }
+
+  // Already fenced, with the fences on the lines just outside — the ordinary
+  // case when the caret is sitting inside a code block.
+  const before = startLine.number > 1 ? state.doc.line(startLine.number - 1) : null;
+  const after = endLine.number < state.doc.lines ? state.doc.line(endLine.number + 1) : null;
+  if (before && after && FENCE.test(before.text) && FENCE.test(after.text)) {
+    const body = state.sliceDoc(startLine.from, endLine.to);
+    view.dispatch(state.update({
+      changes: { from: before.from, to: after.to, insert: body },
+      selection: EditorSelection.range(before.from, before.from + body.length),
+      scrollIntoView: true,
+      userEvent: "input.format",
+    }));
+    view.focus();
+    return true;
+  }
+
+  const body = state.sliceDoc(startLine.from, endLine.to);
+  const open = "```" + lang + "\n";
+  view.dispatch(state.update({
+    changes: { from: startLine.from, to: endLine.to, insert: open + body + "\n```" },
+    // The body stays selected (or, when it was empty, the caret lands on the
+    // blank line between the fences ready to type).
+    selection: EditorSelection.range(startLine.from + open.length,
+                                     startLine.from + open.length + body.length),
+    scrollIntoView: true,
+    userEvent: "input.format",
+  }));
+  view.focus();
+  return true;
+}
+
+/**
+ * Put `text` in as a block of its own, separated from its neighbours by blank
+ * lines, and leave the caret after it.
+ *
+ * Blocks that markdown only recognises at the start of a line — a table, a
+ * thematic break — are broken by landing mid-paragraph, so this never inserts
+ * at the raw cursor offset: it takes over the caret's line if that line is
+ * blank, and otherwise opens a new paragraph below it.
+ */
+export function insertBlock(view: EditorView, text: string): boolean {
+  const { state } = view;
+  const line = state.doc.lineAt(state.selection.main.to);
+  const head = line.text.trim() === "" ? "" : line.text + "\n\n";
+  const next = line.number < state.doc.lines ? state.doc.line(line.number + 1) : null;
+  // A block butted up against the next paragraph would swallow it (a table
+  // keeps eating rows); no next line means end of document, nothing to part from.
+  const tail = next && next.text.trim() !== "" ? "\n" : "";
+  const insert = head + text + tail;
+  const caret = line.from + head.length + text.length;
+  view.dispatch(state.update({
+    changes: { from: line.from, to: line.to, insert },
+    selection: EditorSelection.cursor(caret),
+    scrollIntoView: true,
+    userEvent: "input.insert",
+  }));
+  view.focus();
+  return true;
+}
+
+/** `---` on its own line. */
+export const insertHorizontalRule = (view: EditorView) => insertBlock(view, "---");
+
+/**
+ * A markdown table skeleton: a header row, the alignment rule, and `rows`
+ * empty body rows. `header` labels the columns (`列` → `列 1`, `列 2`, …) —
+ * passed in because the caller is the only side that knows the UI language.
+ */
+export function insertTable(view: EditorView, cols = 3, rows = 2, header = "Column"): boolean {
+  const n = Math.max(1, Math.min(10, Math.round(cols)));
+  const r = Math.max(1, Math.min(50, Math.round(rows)));
+  const cells = Array.from({ length: n }, (_, i) => `${header} ${i + 1}`);
+  const widths = cells.map((c) => Math.max(3, c.length));
+  const row = (values: string[]) =>
+    `| ${values.map((v, i) => v.padEnd(widths[i], " ")).join(" | ")} |`;
+  const table = [
+    row(cells),
+    row(widths.map((w) => "-".repeat(w))),
+    ...Array.from({ length: r }, () => row(widths.map(() => ""))),
+  ].join("\n");
+  return insertBlock(view, table);
 }
 
 /**

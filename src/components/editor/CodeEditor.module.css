@@ -8,6 +8,17 @@
   position: relative;
 }
 
+/* CodeMirror's parent element. Split out from .wrap when the formatting strip
+   moved in above it: the view must fill what is left over, and `min-height: 0`
+   is what stops a long document from pushing the toolbar off the top instead
+   of scrolling inside its own box. */
+.host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 /* A failed insert has nowhere else to be reported: the menu it came from is
    gone by then and the document is unchanged, so without this the click simply
    appears to do nothing. Floats over the text, dismissed by clicking it. */

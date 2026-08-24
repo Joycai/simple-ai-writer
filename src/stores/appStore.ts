@@ -13,6 +13,13 @@ import {
   CONTEXT_UTILIZATION_MIN,
 } from "../lib/context/budget";
 import {
+  PREVIEW_ZOOM_DEFAULT,
+  PREVIEW_ZOOM_MAX,
+  PREVIEW_ZOOM_MIN,
+  snapPreviewZoom,
+  stepPreviewZoom,
+} from "../lib/editor/previewZoom";
+import {
   DEFAULT_MARKDOWN_THEME,
   MARKDOWN_THEME_IDS,
   MD_THEME_ATTR,
@@ -29,6 +36,7 @@ const THEME_KEY = "app:theme";
 const LANG_KEY = "app:language";
 const FONT_KEY = "app:fontScheme";
 const MD_THEME_KEY = "app:markdownTheme";
+const PREVIEW_ZOOM_KEY = "app:previewZoom";
 const SIDEBAR_WIDTH_KEY = "app:sidebarWidth";
 const RIGHT_PANEL_WIDTH_KEY = "app:rightPanelWidth";
 const RECENT_PROJECTS_KEY = "app:recentProjects";
@@ -67,6 +75,10 @@ function storedFontScheme(): FontScheme {
 function storedMarkdownTheme(): MarkdownThemeId {
   const raw = readPref(MD_THEME_KEY) as MarkdownThemeId | null;
   return raw && MARKDOWN_THEME_IDS.includes(raw) ? raw : DEFAULT_MARKDOWN_THEME;
+}
+function storedPreviewZoom(): number {
+  const raw = parseFloat(readPref(PREVIEW_ZOOM_KEY) ?? "");
+  return raw ? snapPreviewZoom(raw) : PREVIEW_ZOOM_DEFAULT;
 }
 
 // Normalisation, dedup and the cap live in lib/recentProjects (pure, shared
@@ -140,6 +152,7 @@ function prefBackedState() {
     language: storedLang(),
     fontScheme: storedFontScheme(),
     markdownTheme: storedMarkdownTheme(),
+    previewZoom: storedPreviewZoom(),
     sidebarWidth: storedSidebarWidth(),
     rightPanelWidth: storedRightPanelWidth(),
     recentProjects: loadRecentProjects(),
@@ -183,6 +196,13 @@ interface AppState {
   language: Language;
   fontScheme: FontScheme;
   markdownTheme: MarkdownThemeId;
+  /**
+   * How large the rendered preview draws, as a factor on the ladder in
+   * `lib/editor/previewZoom`. An appearance preference like the markdown
+   * theme — one setting for every document, kept across restarts, and carried
+   * in a config backup.
+   */
+  previewZoom: number;
   sidebarCollapsed: boolean;
   rightPanelCollapsed: boolean;
   sidebarWidth: number;
@@ -233,6 +253,10 @@ interface AppState {
   setLanguage: (lang: Language) => void;
   setFontScheme: (scheme: FontScheme) => void;
   setMarkdownTheme: (id: MarkdownThemeId) => void;
+  /** Set the preview zoom, snapped to the ladder. */
+  setPreviewZoom: (zoom: number) => void;
+  /** Step one rung in (+1) or out (-1); no-op at the ends. */
+  stepPreviewZoom: (dir: 1 | -1) => void;
   toggleSidebar: () => void;
   toggleRightPanel: () => void;
   setSidebarCollapsed: (v: boolean) => void;
@@ -365,6 +389,21 @@ export const useAppStore = create<AppState>((set, get) => ({
     writePref(MD_THEME_KEY, markdownTheme);
     set({ markdownTheme });
     applyMarkdownTheme(markdownTheme);
+  },
+
+  setPreviewZoom: (zoom) => {
+    const snapped = snapPreviewZoom(clamp(zoom, PREVIEW_ZOOM_MIN, PREVIEW_ZOOM_MAX));
+    writePref(PREVIEW_ZOOM_KEY, String(snapped));
+    set({ previewZoom: snapped });
+  },
+
+  stepPreviewZoom: (dir) => {
+    set((state) => {
+      const next = stepPreviewZoom(state.previewZoom, dir);
+      if (next === state.previewZoom) return state;
+      writePref(PREVIEW_ZOOM_KEY, String(next));
+      return { previewZoom: next };
+    });
   },
 
   toggleSidebar: () =>
