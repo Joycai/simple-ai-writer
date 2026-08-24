@@ -147,22 +147,38 @@ export async function addLoreImage(
 }
 
 /**
- * Update one image's description. No-op if the file is not listed in images.md.
+ * Patch one image's entry — description and/or slot — in a single write.
+ * Returns the updated entry, or null when the file is not listed in images.md.
  *
- * The slot is carried through rather than rewritten — the same discipline every
- * facet write follows: an edit that only means to touch the description must not
- * silently unclassify the image.
+ * Omitted fields are carried through rather than rewritten — the same
+ * discipline every facet write follows: an edit that only means to touch the
+ * description must not silently unclassify the image, and vice versa.
  */
+export async function updateLoreImageEntry(
+  dirPath: string,
+  file: string,
+  patch: { desc?: string; slot?: string | null },
+): Promise<ImageEntry | null> {
+  const existing = await readImagesMdAsList(dirPath);
+  const idx = existing.findIndex((i) => i.file === file);
+  if (idx === -1) return null;
+  const next: ImageEntry = {
+    ...existing[idx],
+    ...("desc" in patch && patch.desc !== undefined ? { desc: patch.desc } : {}),
+    ...("slot" in patch && patch.slot !== undefined ? { slot: patch.slot } : {}),
+  };
+  existing[idx] = next;
+  await writeImagesMd(dirPath, existing);
+  return next;
+}
+
+/** Update one image's description. No-op if the file is not listed in images.md. */
 export async function updateLoreImageDesc(
   dirPath: string,
   file: string,
   desc: string,
 ): Promise<void> {
-  const existing = await readImagesMdAsList(dirPath);
-  const idx = existing.findIndex((i) => i.file === file);
-  if (idx === -1) return;
-  existing[idx] = { ...existing[idx], desc };
-  await writeImagesMd(dirPath, existing);
+  await updateLoreImageEntry(dirPath, file, { desc });
 }
 
 /**
@@ -174,11 +190,20 @@ export async function updateLoreImageSlot(
   file: string,
   slot: string | null,
 ): Promise<void> {
+  await updateLoreImageEntry(dirPath, file, { slot });
+}
+
+/**
+ * Drop one image's entry from images.md WITHOUT touching the binary on disk.
+ * Returns whether the entry was listed. The caller owns the file's fate — the
+ * agent's delete tool moves it into backups, `removeLoreImage` erases it.
+ */
+export async function dropLoreImageEntry(dirPath: string, file: string): Promise<boolean> {
   const existing = await readImagesMdAsList(dirPath);
-  const idx = existing.findIndex((i) => i.file === file);
-  if (idx === -1) return;
-  existing[idx] = { ...existing[idx], slot };
-  await writeImagesMd(dirPath, existing);
+  const next = existing.filter((i) => i.file !== file);
+  if (next.length === existing.length) return false;
+  await writeImagesMd(dirPath, next);
+  return true;
 }
 
 /**

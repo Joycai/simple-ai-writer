@@ -44,13 +44,24 @@ import { estimateToolsTokens } from "../ai/tokenEstimate";
 /**
  * Measured 9,609 at 1.22.0; 9,743 after read_workflow landed (134 tokens —
  * the price of the workflow-cards feature's second disclosure level, decided
- * in docs/feature/agent/workflow-cards-plan.md §3); 10,173 after the file-tools
- * review (copy_file's `new_name`, and the move/copy/delete descriptions now
- * stating their real scope + the extension and illustration-folder rules —
- * wording that replaces wrong-tool calls and broken-image surprises, priced
- * deliberately). Headroom for wording, not for a new tool.
+ * in docs/feature/agent/workflow-cards-plan.md §3). Then one review of the
+ * agent's tool surface landed in two halves, and both are priced here —
+ * **11,388 measured with both in**:
+ *   - the knowledge base's gallery tier (update_lore_image /
+ *     delete_lore_image / set_lore_avatar / copy_lore_file, the lore review's
+ *     F3/F4): ~1.4k tokens, ALL in the deferred `lore_write` group, so a run
+ *     pays them only once the author has approved a lore plan — the exact
+ *     moment they become callable.
+ *   - the file tools (copy_file's `new_name`, and move/copy/delete now stating
+ *     their real scope plus the extension and illustration-folder rules):
+ *     ~430 tokens of pure wording, bought to stop wrong-tool calls and
+ *     broken-image surprises.
+ * Measured together rather than added: each half was 11,237 / 10,173 alone,
+ * which sums 279 over the truth — the estimator is not linear in description
+ * text, so a cap derived by arithmetic would be quietly wrong. Re-measure.
+ * Headroom for wording, not for a new tool.
  */
-const AGENT_ASSIST_CAP = 10_300;
+const AGENT_ASSIST_CAP = 11_800;
 /** The read tier a 续写 carries. Measured 1,738. */
 const CONTINUE_CAP = 2_000;
 /** 旁白 reads other scenes and can write back; 扮演 is deliberately tiny. */
@@ -74,12 +85,14 @@ describe("tool schema budget", () => {
     // What a conversation actually pays before it touches the knowledge base —
     // which is most conversations. Measured 7,067 of 9,609 at 1.22.0;
     // 7,201 of 9,743 with read_workflow (resident on purpose: the roster it
-    // serves sits in the briefing from round one); 7,631 after the file-tools
-    // review — the manuscript tools are resident, so their scope/extension
-    // wording lands here in full.
+    // serves sits in the briefing from round one); 7,705 with both halves of
+    // the tool-surface review in. The gallery tier's resident share is only
+    // generate_image's `slot` parameter and the read-side wording — its four
+    // new write tools are all deferred — whereas the file-tools wording is
+    // resident in full, because the manuscript tools are.
     const { resident } = partitionByGroup(AGENT_ASSIST_PRESET.tools);
     const residentTokens = estimateToolsTokens(getToolDefinitions(resident));
-    expect(residentTokens).toBeLessThanOrEqual(7_750);
+    expect(residentTokens).toBeLessThanOrEqual(8_100);
     // A guard against the deferral quietly becoming a no-op: someone drops the
     // `group` tag off a tool and the only symptom is a bigger bill.
     expect(tokensOf(AGENT_ASSIST_PRESET) - residentTokens).toBeGreaterThan(2_000);

@@ -383,8 +383,13 @@ export function serializeEntityFrontmatter(meta: EntityMeta): string {
  * Persist metadata + body to the entity's index.md. When the category changed,
  * the whole entity folder is moved into the new category directory — the
  * scanner derives an entity's category from its folder location, so writing
- * the frontmatter alone would silently revert on the next scan.
- * Returns where the entity now lives (unchanged when the category stayed).
+ * the frontmatter alone would silently revert on the next scan. A **rename**
+ * relocates too: the folder is re-slugged from the new name, so the directory
+ * an author (or a backup listing) reads keeps saying what is inside it. Same
+ * blast radius as a category move — `[[lore:category/id]]` path citations and
+ * facet pins to the old folder go stale (both already tolerate that: citations
+ * fall back to name matching, stale pins are skipped).
+ * Returns where the entity now lives (unchanged when neither moved it).
  */
 export async function saveEntityMetaAndBody(
   projectPath: string,
@@ -395,10 +400,16 @@ export async function saveEntityMetaAndBody(
   const content = serializeEntityFrontmatter(meta) + "\n" + body.trimStart();
   await writeFile(`${entity.dirPath}/index.md`, content);
 
-  if (meta.category === entity.category) {
+  // Re-slug only when the *name* changed: slugifyEntityId(name) rarely equals
+  // the stored id even for an unchanged name (collision suffixes, legacy ids),
+  // and re-slugging on every save would shuffle folders under saves that never
+  // touched the name.
+  const desiredId =
+    meta.name !== entity.name ? slugifyEntityId(meta.name) : entity.id;
+  if (meta.category === entity.category && desiredId === entity.id) {
     return { dirPath: entity.dirPath, category: entity.category, id: entity.id };
   }
-  const newId = await uniqueEntityId(projectPath, meta.category, entity.id);
+  const newId = await uniqueEntityId(projectPath, meta.category, desiredId);
   const newDir = `${projectPath}/.ai-writer/lore/${meta.category}/${newId}`;
   await renamePath(entity.dirPath, newDir);
   return { dirPath: newDir, category: meta.category, id: newId };

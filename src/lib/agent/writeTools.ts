@@ -19,17 +19,27 @@
  * L2 and go through the propose→diff→approve flow below.
  */
 
-import { categoryFacetSlots, findFacetSlot, loreCategoryIds } from "../profile/active";
+import {
+  categoryFacetSlots,
+  categoryImageSlots,
+  findFacetSlot,
+  findImageSlot,
+  loreCategoryIds,
+} from "../profile/active";
 import {
   RESERVED_ENTITY_FILES,
+  addLoreImage,
   cloneLoreIndex,
   createEntityWithContent,
+  dropLoreImageEntry,
   parseFacetMeta,
   readEntityFile,
   saveEntityMetaAndBody,
   saveFacetFile,
+  setEntityAvatar,
   slugifyEntityId,
   uniqueEntityId,
+  updateLoreImageEntry,
   writeEntityFile,
   type CategoryId,
   type FacetMeta,
@@ -45,9 +55,10 @@ import {
 } from "../context/memory";
 import { isChapterFile, normalizeChapterFileName, parentDir } from "../context/outline";
 import { parseFrontmatter } from "../fs/markdown";
-import { makeDir, readDir, readFile, removeFile, renamePath } from "../fs/fileio";
+import { fileExists, makeDir, readBinaryFile, readDir, readFile, removeFile, renamePath } from "../fs/fileio";
+import { IMAGE_EXT_LIST, isImagePath } from "../fs/images";
 import { readDirRecursive, type FileNode } from "../project";
-import { backupFile } from "./backup";
+import { backupFile, backupFileByMove } from "./backup";
 import { countLines, describeEditTarget, findOccurrences, occurrenceAt, sliceLines } from "./editApply";
 import {
   LORE_PLAN_ACTIONS,
@@ -180,6 +191,24 @@ async function syncLore(ctx: ToolContext): Promise<void> {
 }
 
 /**
+ * How to get past an alias clash when it is a merge in progress. Every alias
+ * clash refusal ends with this, because the natural merge order (copy → alias →
+ * delete) hits the clash while the losing entity still resolves — the error
+ * must teach the working order, not send the model in a circle.
+ */
+const MERGE_ALIAS_HINT =
+  'If you are merging the two, finish the merge in this order: copy what is worth keeping, delete the losing entity, and only THEN add its name as an alias — the check clears once the name no longer resolves. Otherwise drop the alias.';
+
+/**
+ * There is deliberately no tool that creates, renames or deletes a knowledge
+ * base category: categories come from the enabled capability packs plus the
+ * author's own list, both managed in the app. Every "unknown category" error
+ * ends with this so the model asks instead of retrying invented ids.
+ */
+const NO_CATEGORY_TOOL_HINT =
+  "Categories cannot be created by tools — if a new one is needed, ask the author to add it (Settings → 工作台, or the lore wall's 新建分类) and re-run.";
+
+/**
  * Gate helper for the write tools: returns the refusal result to hand straight
  * back, or the covering step whose `detail` gets echoed into the success
  * message (so the log shows intent and outcome together).
@@ -210,7 +239,7 @@ export async function createLoreEntityTool(
   if (!category || !categoryIds.includes(category)) {
     return {
       toolCallId,
-      content: `Error: 'category' must be one of: ${categoryIds.join(", ")}.`,
+      content: `Error: 'category' must be one of: ${categoryIds.join(", ")}. ${NO_CATEGORY_TOOL_HINT}`,
     };
   }
 
@@ -281,7 +310,8 @@ function checkEntityFilename(toolCallId: string, raw: unknown): ToolResult | str
   if (REFUSED_FILES.has(file)) {
     return {
       toolCallId,
-      content: "Error: images.md is managed by the app's gallery UI and cannot be written by the agent.",
+      content:
+        "Error: images.md is app-managed and cannot be written directly — change the gallery with update_lore_image / delete_lore_image / copy_lore_file / generate_image instead.",
     };
   }
   return file;
@@ -326,6 +356,43 @@ export async function updateLoreFileTool(
         toolCallId,
         content: `Error: changing the category (${entity.category} → ${data.category}) is not supported by this tool — keep \`category: ${entity.category}\`.`,
       };
+    }
+    // A rename through a whole-file write would bypass everything
+    // move_lore_entity does on purpose: the clash check against other entities'
+    // names/aliases, keeping the old name as an alias, and relocating the
+    // folder. Same funnel discipline as the category line above.
+    if (data.name.trim() !== entity.name) {
+      return {
+        toolCallId,
+        content: `Error: renaming (${entity.name} → ${data.name.trim()}) is not supported by this tool — keep \`name: ${entity.name}\` and use move_lore_entity to rename (it checks name clashes and keeps the old name as an alias).`,
+      };
+    }
+    // The dict flag marks a translation dictionary — the author's own switch in
+    // the entry editor, which no agent write may flip (same policy as
+    // update_lore_meta, which carries it through untouched).
+    const wantsDict = data.dict === true || data.dict === "true";
+    if (wantsDict !== !!entity.dict) {
+      return {
+        toolCallId,
+        content: `Error: the \`dict\` flag is set by the author in the entry editor and cannot be changed by the agent — ${entity.dict ? "keep `dict: true`" : "omit the `dict` line"}.`,
+      };
+    }
+    // Same rule as update_lore_meta: only the aliases this write introduces are
+    // vetted, so a pre-existing collision never blocks an unrelated edit.
+    if (Array.isArray(data.aliases)) {
+      const nextAliases = data.aliases.map((a) => String(a).trim()).filter(Boolean);
+      const added = nextAliases.filter(
+        (a) => !(entity.aliases ?? []).some((b) => b.toLowerCase() === a.toLowerCase()),
+      );
+      for (const alias of added) {
+        const clash = findEntityByName(ctx.loreIndex, alias);
+        if (clash && clash !== entity) {
+          return {
+            toolCallId,
+            content: `Error: the alias "${alias}" already resolves to entity "${clash.name}" (category: ${clash.category}) — both would become unresolvable by name. ${MERGE_ALIAS_HINT}`,
+          };
+        }
+      }
     }
   } else if (entity.facets.some((f) => f.file === file)) {
     // Existing facet must remain a parseable facet.
@@ -525,7 +592,7 @@ export async function updateLoreMetaTool(
     if (clash && clash !== entity) {
       return {
         toolCallId,
-        content: `Error: the alias "${alias}" already resolves to entity "${clash.name}" (category: ${clash.category}) — both would become unresolvable by name. Drop it, or merge the two entities.`,
+        content: `Error: the alias "${alias}" already resolves to entity "${clash.name}" (category: ${clash.category}) — both would become unresolvable by name. ${MERGE_ALIAS_HINT}`,
       };
     }
   }
@@ -722,7 +789,7 @@ function checkFacetFilename(toolCallId: string, file: string | undefined): ToolR
   if (RESERVED_ENTITY_FILES.includes(f)) {
     return {
       toolCallId,
-      content: `Error: ${f} is app-managed and not a facet — use update_lore_file for index.md, and the gallery UI for images.md.`,
+      content: `Error: ${f} is app-managed and not a facet — use update_lore_file for index.md, and update_lore_image / delete_lore_image for the gallery.`,
     };
   }
   return f;
@@ -930,6 +997,351 @@ export async function deleteLoreFileTool(
   };
 }
 
+// ─── update_lore_image / delete_lore_image / set_lore_avatar ─────────────────
+//
+// The gallery half of an entity, closed to the agent until these existed:
+// images.md is refused as a file write (its format is app-managed), so without
+// dedicated tools the agent could ADD pictures (generate_image) but never
+// retitle, reclassify, retire or transfer one — which is exactly the metadata
+// the type system's imageSlots are made of. Same tier and same discipline as
+// the facet tools: L1, plan-gated, every removal recoverable from backups.
+
+/**
+ * Validate a model-supplied gallery filename: a plain image filename inside the
+ * entity dir, no navigation. The counterpart to checkFacetFilename for the
+ * gallery tools.
+ */
+function checkImageFilename(toolCallId: string, file: string | undefined): ToolResult | string {
+  const f = file?.trim();
+  if (!f) {
+    return { toolCallId, content: "Error: 'file' argument is required (the image filename exactly as listed by read_lore_entity)." };
+  }
+  if (!/^[^/\\]+$/.test(f) || f.includes("..")) {
+    return { toolCallId, content: "Error: 'file' must be a plain filename inside the entity directory (no paths)." };
+  }
+  if (!isImagePath(f)) {
+    return { toolCallId, content: `Error: "${f}" is not an image file (accepted: ${IMAGE_EXT_LIST}).` };
+  }
+  return f;
+}
+
+/** The entity's gallery filenames, for "which images are there?" error text. */
+function galleryFileList(entity: LoreEntity): string {
+  return (entity.images ?? []).map((i) => i.file).join(", ") || "none";
+}
+
+export async function updateLoreImageTool(
+  toolCallId: string,
+  args: { entity?: string; file?: string; desc?: string; slot?: string | null },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const found = requireEntity(toolCallId, ctx, args.entity);
+  if ("toolCallId" in found) return found;
+  const entity = found;
+
+  const checked = checkImageFilename(toolCallId, args.file ?? undefined);
+  if (typeof checked !== "string") return checked;
+  const file = checked;
+
+  const touches = ["desc", "slot"].filter((k) => k in args);
+  if (touches.length === 0) {
+    return {
+      toolCallId,
+      content:
+        "Error: pass 'desc' (the caption a text-only model reads), 'slot' (the image slot it fills), or both. To replace the picture itself use edit_image; to remove it use delete_lore_image.",
+    };
+  }
+  if ("desc" in args && typeof args.desc !== "string") {
+    return { toolCallId, content: "Error: 'desc' must be a string." };
+  }
+
+  const listed = (entity.images ?? []).find((i) => i.file.toLowerCase() === file.toLowerCase());
+  if (!listed) {
+    return {
+      toolCallId,
+      content: `Error: "${file}" is not in the gallery of entity "${entity.name}". Its gallery images are: ${galleryFileList(entity)}.`,
+    };
+  }
+
+  const patch: { desc?: string; slot?: string | null } = {};
+  if ("desc" in args) patch.desc = (args.desc as string).trim();
+  if ("slot" in args) {
+    const wanted = typeof args.slot === "string" ? args.slot.trim() : "";
+    if (!wanted) {
+      patch.slot = null; // explicit "" clears the classification
+    } else {
+      // Same contract as update_facet_meta's slot: only a slot the entity's own
+      // category declares, normalised to the declared casing, and the error is
+      // where the model learns which ones exist.
+      const slot = findImageSlot(entity.category, wanted);
+      if (!slot) {
+        const declared = categoryImageSlots(entity.category);
+        return {
+          toolCallId,
+          content: declared.length === 0
+            ? `Error: category "${entity.category}" declares no image slots, so 'slot' cannot be set here. Pass an empty string to clear it, or omit it.`
+            : `Error: "${wanted}" is not an image slot of category "${entity.category}". Its image slots are: ${declared.map((sl) => sl.id).join(", ")}. Pass an empty string to clear the slot instead.`,
+        };
+      }
+      patch.slot = slot.id;
+    }
+  }
+
+  const gated = gate(toolCallId, ctx, "update", entity.name, listed.file);
+  if ("refusal" in gated) return gated.refusal;
+
+  const backupPath = await backupFile(ctx.projectPath, `${entity.dirPath}/images.md`);
+  const updated = await updateLoreImageEntry(entity.dirPath, listed.file, patch);
+  if (!updated) {
+    return {
+      toolCallId,
+      content: `Error: "${listed.file}" is no longer listed in images.md — call read_lore_entity to see the current gallery.`,
+    };
+  }
+
+  const at = (entity.images ?? []).findIndex((i) => i.file === listed.file);
+  if (at >= 0) entity.images[at] = { ...entity.images[at], desc: updated.desc, slot: updated.slot };
+
+  await syncLore(ctx);
+  return {
+    toolCallId,
+    content:
+      `Updated gallery image ${listed.file} of entity "${entity.name}": ` +
+      `desc="${updated.desc}", slot=${updated.slot ?? "none"}. The picture itself is unchanged.` +
+      (backupPath ? ` Previous images.md backed up to ${backupPath}.` : "") +
+      ` Plan step: ${gated.step.detail}.`,
+  };
+}
+
+export async function deleteLoreImageTool(
+  toolCallId: string,
+  args: { entity?: string; file?: string; reason?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const found = requireEntity(toolCallId, ctx, args.entity);
+  if ("toolCallId" in found) return found;
+  const entity = found;
+
+  const checked = checkImageFilename(toolCallId, args.file ?? undefined);
+  if (typeof checked !== "string") return checked;
+  const file = checked;
+
+  const listed = (entity.images ?? []).find((i) => i.file.toLowerCase() === file.toLowerCase());
+  if (!listed) {
+    return {
+      toolCallId,
+      content: `Error: "${file}" is not in the gallery of entity "${entity.name}". Its gallery images are: ${galleryFileList(entity)}.`,
+    };
+  }
+
+  const gated = gate(toolCallId, ctx, "delete", entity.name, listed.file);
+  if ("refusal" in gated) return gated.refusal;
+
+  // The binary cannot ride the text backup, so the move IS its backup — the
+  // same trick delete_lore_entity plays with the whole folder. images.md gets
+  // the ordinary text snapshot before the entry is dropped.
+  const mdBackup = await backupFile(ctx.projectPath, `${entity.dirPath}/images.md`);
+  const binBackup = await backupFileByMove(ctx.projectPath, `${entity.dirPath}/${listed.file}`);
+  await dropLoreImageEntry(entity.dirPath, listed.file);
+  entity.images = (entity.images ?? []).filter((i) => i.file !== listed.file);
+
+  await syncLore(ctx);
+  return {
+    toolCallId,
+    content:
+      `Deleted gallery image ${listed.file} from entity "${entity.name}".` +
+      (binBackup ? ` The picture was moved to ${binBackup} and can be restored.` : "") +
+      (mdBackup ? ` Previous images.md backed up to ${mdBackup}.` : "") +
+      ` Plan step: ${gated.step.detail}.`,
+  };
+}
+
+/** Extensions an avatar file may carry — mirrors lib/lore/gallery's AVATAR_EXTS. */
+const AVATAR_EXTS = ["png", "jpg", "jpeg", "webp"];
+
+export async function setLoreAvatarTool(
+  toolCallId: string,
+  args: { entity?: string; file?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const found = requireEntity(toolCallId, ctx, args.entity);
+  if ("toolCallId" in found) return found;
+  const entity = found;
+
+  const raw = args.file?.trim();
+  if (!raw) {
+    return {
+      toolCallId,
+      content: "Error: 'file' argument is required — a gallery filename of this entity, or the path of an image in the project.",
+    };
+  }
+
+  // A bare gallery filename of this entity wins; otherwise a workspace path.
+  const inGallery = (entity.images ?? []).find((i) => i.file.toLowerCase() === raw.toLowerCase());
+  const source = inGallery
+    ? `${entity.dirPath}/${inGallery.file}`
+    : resolveWorkspacePath(ctx.projectPath, raw);
+  if (!source || !isImagePath(source) || !(await fileExists(source))) {
+    return {
+      toolCallId,
+      content:
+        `Error: "${raw}" is neither a gallery image of "${entity.name}" (its gallery: ${galleryFileList(entity)}) ` +
+        "nor the path of an image that exists inside the project folder.",
+    };
+  }
+  const ext = source.slice(source.lastIndexOf(".") + 1).toLowerCase();
+  if (!AVATAR_EXTS.includes(ext)) {
+    return { toolCallId, content: `Error: an avatar must be one of ${AVATAR_EXTS.join("/")} — "${raw}" is .${ext}.` };
+  }
+
+  const gated = gate(toolCallId, ctx, "update", entity.name, "avatar");
+  if ("refusal" in gated) return gated.refusal;
+
+  let bytes: Uint8Array;
+  try {
+    bytes = await readBinaryFile(source);
+  } catch {
+    return { toolCallId, content: `Error: could not read "${source}" — check the path with list_files or read_lore_entity.` };
+  }
+
+  // The old avatar is moved into backups before setEntityAvatar would erase it
+  // — the recoverability every other L1 write already guarantees.
+  let previous: string | null = null;
+  for (const e of AVATAR_EXTS) {
+    previous ??= await backupFileByMove(ctx.projectPath, `${entity.dirPath}/avatar.${e}`);
+  }
+  await setEntityAvatar(entity.dirPath, bytes, ext);
+  entity.avatarPath = `${entity.dirPath}/avatar.${ext}`;
+
+  await syncLore(ctx);
+  return {
+    toolCallId,
+    content:
+      `Set the avatar of entity "${entity.name}" from ${inGallery ? `gallery image ${inGallery.file}` : source}.` +
+      (previous ? ` The previous avatar was moved to ${previous} and can be restored.` : "") +
+      ` Plan step: ${gated.step.detail}.`,
+  };
+}
+
+// ─── copy_lore_file (verbatim transport between entities) ────────────────────
+
+/**
+ * Copy one facet/attachment .md or one gallery image from one entity to
+ * another, byte for byte.
+ *
+ * This exists because the merge and promote flows used to force the content
+ * through the model: read the source, re-emit it as update_lore_file's
+ * `content` — paying for every character twice and risking the silent
+ * paraphrase the surgical tools were built to avoid. A copy the model never
+ * re-types cannot reword anything.
+ */
+export async function copyLoreFileTool(
+  toolCallId: string,
+  args: { from_entity?: string; file?: string; to_entity?: string; new_file?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const foundFrom = requireEntity(toolCallId, ctx, args.from_entity);
+  if ("toolCallId" in foundFrom) return foundFrom;
+  const source = foundFrom;
+  const foundTo = requireEntity(toolCallId, ctx, args.to_entity);
+  if ("toolCallId" in foundTo) return foundTo;
+  const target = foundTo;
+  if (source === target) {
+    return { toolCallId, content: "Error: 'from_entity' and 'to_entity' are the same entity — nothing to transfer." };
+  }
+
+  const file = args.file?.trim();
+  if (!file) {
+    return { toolCallId, content: "Error: 'file' argument is required — a facet .md filename or a gallery image filename of the source entity." };
+  }
+
+  // ── Gallery image: binary copy + carried desc/slot ──
+  const img = (source.images ?? []).find((i) => i.file.toLowerCase() === file.toLowerCase());
+  if (img) {
+    const requested = args.new_file?.trim() || img.file;
+    const checkedName = checkImageFilename(toolCallId, requested);
+    if (typeof checkedName !== "string") return checkedName;
+
+    const gated = gate(toolCallId, ctx, "update", target.name, checkedName);
+    if ("refusal" in gated) return gated.refusal;
+
+    let bytes: Uint8Array;
+    try {
+      bytes = await readBinaryFile(`${source.dirPath}/${img.file}`);
+    } catch {
+      return { toolCallId, content: `Error: could not read "${img.file}" from entity "${source.name}" — its file may have been moved.` };
+    }
+    const backupPath = await backupFile(ctx.projectPath, `${target.dirPath}/images.md`);
+    // addLoreImage auto-numbers a colliding name, so the copy always lands.
+    const saved = await addLoreImage(target.dirPath, checkedName, bytes, img.desc, img.slot);
+    (target.images ??= []).push({ file: saved, desc: img.desc, slot: img.slot, absPath: `${target.dirPath}/${saved}` });
+
+    // The slot rides verbatim, like a facet's does across categories: it shows
+    // as unclassified until a schema declares it, and comes back if one does.
+    const slotNote =
+      img.slot && !findImageSlot(target.category, img.slot)
+        ? ` Note: its slot "${img.slot}" is not declared by category "${target.category}", so it shows as unclassified there.`
+        : "";
+    await syncLore(ctx);
+    return {
+      toolCallId,
+      content:
+        `Copied gallery image ${img.file} from "${source.name}" to "${target.name}" as ${saved}, with its description${img.slot ? " and slot" : ""} carried over.` +
+        ` The source is untouched — delete it with delete_lore_image (its own plan step) if this was a move.${slotNote}` +
+        (backupPath ? ` Previous images.md of the target backed up to ${backupPath}.` : "") +
+        ` Plan step: ${gated.step.detail}.`,
+    };
+  }
+
+  // ── Facet / attachment .md: verbatim text copy ──
+  const checkedSource = checkFacetFilename(toolCallId, file);
+  if (typeof checkedSource !== "string") return checkedSource;
+
+  let raw: string;
+  try {
+    raw = await readEntityFile(source.dirPath, checkedSource);
+  } catch {
+    return {
+      toolCallId,
+      content:
+        `Error: "${file}" does not exist in entity "${source.name}". ` +
+        `Its facet files are: ${facetFileList(source)}; its gallery images are: ${galleryFileList(source)}.`,
+    };
+  }
+
+  const requested = args.new_file?.trim() || checkedSource;
+  const checkedTarget = checkFacetFilename(toolCallId, requested);
+  if (typeof checkedTarget !== "string") return checkedTarget;
+
+  if (await fileExists(`${target.dirPath}/${checkedTarget}`)) {
+    return {
+      toolCallId,
+      content: `Error: "${checkedTarget}" already exists on entity "${target.name}" — pass 'new_file' to copy under another name, or edit that file instead.`,
+    };
+  }
+
+  const gated = gate(toolCallId, ctx, "update", target.name, checkedTarget);
+  if ("refusal" in gated) return gated.refusal;
+
+  await writeEntityFile(target.dirPath, checkedTarget, raw);
+  (target.mdFiles ??= []).push(checkedTarget);
+  const facet = parseFacetMeta(raw, checkedTarget);
+  if (facet) (target.facets ??= []).push(facet);
+
+  const slotNote =
+    facet?.slot && !findFacetSlot(target.category, facet.slot)
+      ? ` Note: its slot "${facet.slot}" is not declared by category "${target.category}", so it shows as unclassified there.`
+      : "";
+  await syncLore(ctx);
+  return {
+    toolCallId,
+    content:
+      `Copied ${checkedSource} from "${source.name}" to "${target.name}" as ${checkedTarget}, byte for byte (${raw.length} chars).` +
+      ` The source is untouched — retire it with delete_lore_file (its own plan step) if this was a move.${slotNote}` +
+      ` Plan step: ${gated.step.detail}.`,
+  };
+}
+
 // ─── move_lore_entity / delete_lore_entity ───────────────────────────────────
 
 /**
@@ -1002,7 +1414,10 @@ export async function moveLoreEntityTool(
 
   const categoryIds = loreCategoryIds();
   if (newCategory && !categoryIds.includes(newCategory)) {
-    return { toolCallId, content: `Error: 'new_category' must be one of: ${categoryIds.join(", ")}.` };
+    return {
+      toolCallId,
+      content: `Error: 'new_category' must be one of: ${categoryIds.join(", ")}. ${NO_CATEGORY_TOOL_HINT}`,
+    };
   }
   if (newName) {
     // A rename onto a name/alias another entity already answers to would make
@@ -1040,6 +1455,7 @@ export async function moveLoreEntityTool(
   }
 
   const previousCategory = entity.category;
+  const previousDir = entity.dirPath;
   const backupPath = await backupFile(ctx.projectPath, `${entity.dirPath}/index.md`);
   const moved = await saveEntityMetaAndBody(
     ctx.projectPath,
@@ -1055,8 +1471,11 @@ export async function moveLoreEntityTool(
   const changes = [
     newName && newName !== entityName ? `renamed to "${newName}"` : null,
     newCategory && newCategory !== previousCategory
-      ? `moved ${previousCategory} → ${newCategory} (now at ${moved.dirPath})`
+      ? `moved ${previousCategory} → ${newCategory}`
       : null,
+    // A rename re-slugs the folder too (saveEntityMetaAndBody), so the model
+    // must learn the new location either way.
+    moved.dirPath !== previousDir ? `folder now at ${moved.dirPath}` : null,
   ].filter(Boolean);
   return {
     toolCallId,

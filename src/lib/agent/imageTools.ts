@@ -15,6 +15,7 @@ import { imageCostFor } from "../ai/configDb";
 import { fileExists } from "../fs/fileio";
 import { IMAGE_EXT_LIST, isImagePath } from "../fs/images";
 import { resolveWorkspacePath } from "../paths";
+import { categoryImageSlots, findImageSlot } from "../profile/active";
 import type { IllustrateProposal, ToolContext } from "./registry";
 import { subAgentModel } from "./subagent";
 import type { ToolResult } from "./tools";
@@ -203,7 +204,7 @@ async function resolveReferences(
 export async function generateImageTool(
   toolCallId: string,
   args: {
-    prompt?: string; note?: string; entity?: string; path?: string;
+    prompt?: string; note?: string; entity?: string; path?: string; slot?: string;
     references?: string[]; aspect?: string; resolution?: string; quality?: string; reason?: string;
   },
   ctx: ToolContext,
@@ -221,15 +222,36 @@ export async function generateImageTool(
     if (!entity) {
       return { toolCallId, content: entityLookupError(args.entity, categories) };
     }
+    // Same contract as update_lore_image's slot: only one the entity's own
+    // category declares, refused (not dropped) otherwise — a silently discarded
+    // slot would file the picture as unclassified with nothing saying why.
+    let slot: string | null = null;
+    const wantedSlot = args.slot?.trim();
+    if (wantedSlot) {
+      const match = findImageSlot(entity.category, wantedSlot);
+      if (!match) {
+        const declared = categoryImageSlots(entity.category);
+        return {
+          toolCallId,
+          content: declared.length === 0
+            ? `Error: category "${entity.category}" declares no image slots — omit 'slot'.`
+            : `Error: "${wantedSlot}" is not an image slot of category "${entity.category}". Its image slots are: ${declared.map((s) => s.id).join(", ")}. Omit 'slot' if none fits.`,
+        };
+      }
+      slot = match.id;
+    }
     const refs = await resolveReferences(ctx, args.references, entity.dirPath);
     if (refs.error) return { toolCallId, content: refs.error };
     return proposeIllustration(toolCallId, ctx, {
       prompt, note, aspect: args.aspect, ...tiers, reason: args.reason,
       refPaths: refs.paths,
-      dest: { kind: "lore", entityName: entity.name, entityDir: entity.dirPath },
+      dest: { kind: "lore", entityName: entity.name, entityDir: entity.dirPath, slot },
       destination: entity.name,
       path: entity.dirPath,
     });
+  }
+  if (args.slot?.trim()) {
+    return { toolCallId, content: "Error: 'slot' only applies with 'entity' — a document illustration has no gallery slot." };
   }
 
   const rawPath = args.path?.trim();
@@ -293,7 +315,9 @@ export async function editImageTool(
     reason: args.reason,
     // The result is a NEW gallery entry: the original may already be referenced
     // elsewhere, and overwriting it would be a destructive act nobody approved.
-    dest: { kind: "lore", entityName: entity.name, entityDir: entity.dirPath },
+    // It inherits the original's slot — a redrawn portrait is still a portrait;
+    // update_lore_image reclassifies it if not.
+    dest: { kind: "lore", entityName: entity.name, entityDir: entity.dirPath, slot: image.slot },
     destination: entity.name,
     path: entity.dirPath,
     sourcePath: image.absPath,

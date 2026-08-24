@@ -56,6 +56,7 @@ import {
 } from "../roleplay/conversationTools";
 import {
   copyFileTool,
+  copyLoreFileTool,
   createChapterTool,
   createDirectoryTool,
   createFileTool,
@@ -66,9 +67,12 @@ import {
   deleteDirectoryTool,
   deleteLoreEntityTool,
   deleteLoreFileTool,
+  deleteLoreImageTool,
   moveChapterTool,
   moveLoreEntityTool,
+  setLoreAvatarTool,
   updateFacetMetaTool,
+  updateLoreImageTool,
   proposeEditTool,
   appendFileTool,
   rewriteDocumentTool,
@@ -242,7 +246,13 @@ export interface IllustrateProposal extends ProposalBase {
   /** Where the picture lands, in words the author recognises. */
   destination: string;
   dest:
-    | { kind: "lore"; entityName: string; entityDir: string }
+    | {
+        kind: "lore";
+        entityName: string;
+        entityDir: string;
+        /** Image slot the new picture files into; null/absent = unclassified. */
+        slot?: string | null;
+      }
     | { kind: "document"; docPath: string };
   /** One line describing the picture — alt text / gallery description. */
   note: string;
@@ -477,6 +487,10 @@ export type ToolId =
   | "edit_lore_file"
   | "update_facet_meta"
   | "delete_lore_file"
+  | "update_lore_image"
+  | "delete_lore_image"
+  | "set_lore_avatar"
+  | "copy_lore_file"
   | "move_lore_entity"
   | "delete_lore_entity"
   | "update_memory"
@@ -551,23 +565,25 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "read_lore_entity",
         description:
-          "Read the full detail of a lore entity including its index.md and all supplementary .md files. The entity may also have a gallery (avatar + images.md listing additional pictures with descriptions) — this only returns filenames and text descriptions, never the images themselves. Call read_lore_image afterwards for any specific picture you actually need to see. Call list_lore_entities first to get the exact entity names.",
+          "Read the full detail of a lore entity including its index.md and all supplementary .md files. The entity may also have a gallery (avatar + images.md listing additional pictures with descriptions and image slots) — this only returns filenames and text descriptions, never the images themselves. Call read_lore_image afterwards for any specific picture you actually need to see. Call list_lore_entities first to get the exact entity names.",
         parameters: {
           type: "object",
           properties: {
-            name: {
+            entity: {
               type: "string",
-              description: "The entity name exactly as returned by list_lore_entities",
+              description: "Entity name exactly as returned by list_lore_entities",
             },
           },
-          required: ["name"],
+          required: ["entity"],
         },
       },
     },
     execute: async (call, ctx) => {
-      const args = JSON.parse(call.arguments || "{}") as { name?: string };
-      if (!args.name) return { toolCallId: call.id, content: "Error: 'name' argument is required." };
-      return readLoreEntity(call.id, args.name, ctx.loreIndex, ctx.multimodal);
+      // `name` accepted as a fallback — the parameter's pre-1.28 spelling.
+      const args = JSON.parse(call.arguments || "{}") as { entity?: string; name?: string };
+      const entity = args.entity ?? args.name;
+      if (!entity) return { toolCallId: call.id, content: "Error: 'entity' argument is required." };
+      return readLoreEntity(call.id, entity, ctx.loreIndex, ctx.multimodal);
     },
   },
 
@@ -582,25 +598,27 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
         parameters: {
           type: "object",
           properties: {
-            name: {
+            entity: {
               type: "string",
-              description: "The entity name exactly as returned by list_lore_entities",
+              description: "Entity name exactly as returned by list_lore_entities",
             },
             file: {
               type: "string",
               description: "The image filename exactly as listed in read_lore_entity's gallery block",
             },
           },
-          required: ["name", "file"],
+          required: ["entity", "file"],
         },
       },
     },
     execute: async (call, ctx) => {
-      const args = JSON.parse(call.arguments || "{}") as { name?: string; file?: string };
-      if (!args.name || !args.file) {
-        return { toolCallId: call.id, content: "Error: 'name' and 'file' arguments are required." };
+      // `name` accepted as a fallback — the parameter's pre-1.28 spelling.
+      const args = JSON.parse(call.arguments || "{}") as { entity?: string; name?: string; file?: string };
+      const entity = args.entity ?? args.name;
+      if (!entity || !args.file) {
+        return { toolCallId: call.id, content: "Error: 'entity' and 'file' arguments are required." };
       }
-      return readLoreImage(call.id, args.name, args.file, ctx.loreIndex, ctx.multimodal);
+      return readLoreImage(call.id, entity, args.file, ctx.loreIndex, ctx.multimodal);
     },
   },
 
@@ -846,7 +864,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
                   file: {
                     type: "string",
                     description:
-                      "'update' only: the .md file inside the entity dir. Omit to leave the file open.",
+                      "update/delete only: the target inside the entity dir — a .md filename, a gallery image filename, or `avatar`. Omit to leave the file open.",
                   },
                   detail: {
                     type: "string",
@@ -882,7 +900,8 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
               type: "string",
               // Filled from the active profile — see profileCategoryParams below.
               enum: [],
-              description: "Entity category",
+              description:
+                "Entity category — must be one that already exists. No tool creates categories; a new one is the author's act (Settings → 工作台 or the lore wall).",
             },
             summary: { type: "string", description: "One-line summary shown in listings and used for activation" },
             aliases: {
@@ -911,7 +930,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "update_lore_file",
         description:
-          "Overwrite one .md file of an existing lore entity with complete new content (send the WHOLE file, not a diff). Reach for it only when the whole file must be re-laid-out, or to create a new facet file: to change metadata use update_lore_meta / update_facet_meta, to add a section use append_lore_file, and to fix a sentence use edit_lore_file — none of which make you re-emit the rest of the entry. index.md must include full frontmatter (name/aliases/category/summary) and may not change the category. A facet file must keep its facet frontmatter. images.md cannot be written. Read the current content with read_lore_entity first. The previous version is backed up automatically before writing.",
+          "Overwrite one .md file of an existing lore entity with complete new content (send the WHOLE file, not a diff). Reach for it only when the whole file must be re-laid-out, or to create a new facet file: to change metadata use update_lore_meta / update_facet_meta, to add a section use append_lore_file, and to fix a sentence use edit_lore_file — none of which make you re-emit the rest of the entry. index.md must include full frontmatter (name/aliases/category/summary) and may not change the name, the category or the dict flag (renames go through move_lore_entity). A facet file must keep its facet frontmatter. images.md cannot be written — the gallery has its own tools. Read the current content with read_lore_entity first. The previous version is backed up automatically before writing.",
         parameters: {
           type: "object",
           properties: {
@@ -1122,6 +1141,140 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
     execute: (call, ctx) => deleteLoreFileTool(call.id, parseArgs(call.arguments), ctx),
   },
 
+  update_lore_image: {
+    group: "lore_write",
+    access: "write-auto",
+    definition: {
+      type: "function",
+      function: {
+        name: "update_lore_image",
+        description:
+          "Retune ONE gallery image's metadata — its description and/or its image slot — without touching the picture itself. The gallery counterpart of update_facet_meta: the description is all a text-only model ever sees of the picture, and the slot is how it fills the category's image checklist. read_lore_entity lists the gallery and the category's image slots. To change the picture use edit_image; to remove it use delete_lore_image. The fields you omit keep their current values.",
+        parameters: {
+          type: "object",
+          properties: {
+            entity: {
+              type: "string",
+              description: "Entity name exactly as returned by list_lore_entities",
+            },
+            file: {
+              type: "string",
+              description: "The image filename exactly as listed in read_lore_entity's gallery block",
+            },
+            desc: {
+              type: "string",
+              description: "New description — one line saying what the picture shows, in the author's language",
+            },
+            slot: {
+              type: "string",
+              description:
+                "Which image slot of the entity's category this picture fills, by id. An id the category doesn't declare is refused; pass an empty string to leave the picture unclassified.",
+            },
+          },
+          required: ["entity", "file"],
+        },
+      },
+    },
+    execute: (call, ctx) => updateLoreImageTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  delete_lore_image: {
+    group: "lore_write",
+    access: "write-auto",
+    definition: {
+      type: "function",
+      function: {
+        name: "delete_lore_image",
+        description:
+          "Remove ONE picture from an entity's gallery. The image file is moved into .ai-writer/backups/ rather than erased, and its images.md entry is dropped, so the author can restore both. The avatar cannot be removed this way — set_lore_avatar replaces it.",
+        parameters: {
+          type: "object",
+          properties: {
+            entity: {
+              type: "string",
+              description: "Entity name exactly as returned by list_lore_entities",
+            },
+            file: {
+              type: "string",
+              description: "The image filename exactly as listed in read_lore_entity's gallery block",
+            },
+            reason: {
+              type: "string",
+              description: "One line on why it is being removed, shown to the author in the log",
+            },
+          },
+          required: ["entity", "file"],
+        },
+      },
+    },
+    execute: (call, ctx) => deleteLoreImageTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  set_lore_avatar: {
+    group: "lore_write",
+    access: "write-auto",
+    definition: {
+      type: "function",
+      function: {
+        name: "set_lore_avatar",
+        description:
+          "Set an entity's avatar (its card portrait) from a picture that already exists — one of its own gallery filenames, or the path of an image in the project. The source is copied, not moved, and the previous avatar goes into .ai-writer/backups/ first. To draw a brand-new portrait, generate_image into the gallery first, then promote it with this.",
+        parameters: {
+          type: "object",
+          properties: {
+            entity: {
+              type: "string",
+              description: "Entity name exactly as returned by list_lore_entities",
+            },
+            file: {
+              type: "string",
+              description:
+                "A gallery filename of this entity (as listed by read_lore_entity), or a project image path. Must be png/jpg/jpeg/webp.",
+            },
+          },
+          required: ["entity", "file"],
+        },
+      },
+    },
+    execute: (call, ctx) => setLoreAvatarTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  copy_lore_file: {
+    group: "lore_write",
+    access: "write-auto",
+    definition: {
+      type: "function",
+      function: {
+        name: "copy_lore_file",
+        description:
+          "Copy one file from one lore entity to another, byte for byte — a facet/attachment .md (frontmatter and all), or a gallery image (picture plus its description and slot). THE tool for merging entities and for promoting a facet into its own entry, because the content never passes through you: reading a file and re-sending it with update_lore_file risks silently reworded prose, a copy cannot. The source entity is untouched — when the copy was really a move, retire the source file with delete_lore_file / delete_lore_image under its own plan step. index.md and images.md themselves cannot be copied.",
+        parameters: {
+          type: "object",
+          properties: {
+            from_entity: {
+              type: "string",
+              description: "Source entity name exactly as returned by list_lore_entities",
+            },
+            file: {
+              type: "string",
+              description: "The filename to copy — a facet .md or a gallery image of the source entity",
+            },
+            to_entity: {
+              type: "string",
+              description: "Target entity name exactly as returned by list_lore_entities",
+            },
+            new_file: {
+              type: "string",
+              description: "Filename on the target (default: same as the source). Required when the name is already taken there.",
+            },
+          },
+          required: ["from_entity", "file", "to_entity"],
+        },
+      },
+    },
+    execute: (call, ctx) => copyLoreFileTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
   move_lore_entity: {
     group: "lore_write",
     access: "write-auto",
@@ -1130,7 +1283,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "move_lore_entity",
         description:
-          "Rename a lore entity and/or move it to a different category. This is the ONLY way to change an entity's category — update_lore_file refuses category changes because the folder location is what the scanner trusts. On a rename the old name is kept as an alias by default so it still matches in already-written chapters; pass keep_old_name_as_alias=false when the old name was simply wrong. The previous index.md is backed up automatically.",
+          "Rename a lore entity and/or move it to a different category. This is the ONLY way to change an entity's name or category — update_lore_file refuses both because the folder location is what the scanner trusts. On a rename the old name is kept as an alias by default so it still matches in already-written chapters (pass keep_old_name_as_alias=false when the old name was simply wrong), and the entity's folder is re-slugged to match — the result reports where it now lives. The previous index.md is backed up automatically.",
         parameters: {
           type: "object",
           properties: {
@@ -1143,7 +1296,8 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
               type: "string",
               // Filled from the active profile — see profileCategoryParams below.
               enum: [],
-              description: "Category to move the entity into (omit to keep the current one)",
+              description:
+                "Category to move the entity into — must be one that already exists (no tool creates categories). Omit to keep the current one.",
             },
             keep_old_name_as_alias: {
               type: "boolean",
@@ -1166,7 +1320,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "delete_lore_entity",
         description:
-          "Remove a lore entity from the project. The entity's whole folder (including its images) is moved into .ai-writer/backups/ rather than erased, so the author can restore it. Use this for duplicates and abandoned entries — when merging, copy anything worth keeping into the surviving entity with update_lore_file FIRST, then delete the loser.",
+          "Remove a lore entity from the project. The entity's whole folder (including its images) is moved into .ai-writer/backups/ rather than erased, so the author can restore it. Use this for duplicates and abandoned entries. When MERGING two entities, the working order is: 1. carry everything worth keeping into the survivor (copy_lore_file for facet files and gallery images, edit/append for index.md content), 2. delete the loser, 3. only THEN add its name and aliases to the survivor with update_lore_meta add_aliases — the alias check refuses names that still resolve to a living entity, so aliases must come after the deletion.",
         parameters: {
           type: "object",
           properties: {
@@ -1655,6 +1809,11 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             note: {
               type: "string",
               description: "One line saying what the picture shows, in the author's language. Becomes the alt text / gallery description — this is all a text-only model will ever see of it.",
+            },
+            slot: {
+              type: "string",
+              description:
+                "With `entity` only: which image slot of its category the picture files into, by id (read_lore_entity lists them). Omit when it fits none — update_lore_image can classify it later.",
             },
             aspect: {
               type: "string",
