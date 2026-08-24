@@ -5,6 +5,7 @@
 
 import Database from "@tauri-apps/plugin-sql";
 
+import type { ComfyWorkflowConfig } from "../comfy/workflow";
 import type { SqlStatement } from "../sqlTx";
 import type { GeminiSafetySettings } from "./safety";
 import { authModesFor, type ApiStandard, type AuthMode, type ImageRoute } from "./types";
@@ -62,6 +63,14 @@ export interface ImageCaps {
    * sniffed from the model id — same rule as every other capability here.
    */
   asyncTask?: boolean;
+  /**
+   * "comfyui" route only: the author's imported API-format workflow. Lives in
+   * caps rather than its own column so it rides the existing JSON storage and
+   * the config backup/sync path with zero migration. One Model row = one
+   * workflow — placeholder nodes are re-identified from this JSON at request
+   * time, never resolved to node ids at import (lib/comfy/workflow.ts).
+   */
+  comfy?: ComfyWorkflowConfig;
 }
 
 /**

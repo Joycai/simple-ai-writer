@@ -44,6 +44,7 @@ export const PREF_KEYS = [
   "app:pptxExportBeta",
   "app:roleplayBeta",
   "app:translateBeta",
+  "app:comfyuiBeta",
   // 扮演的输入语法提示是否已经被作者收起过。四种标记要在第一次就看见——
   // 折成一行之后它只是四个符号，不认识的人不会去点「展开」。
   "app:roleplaySyntaxSeen",

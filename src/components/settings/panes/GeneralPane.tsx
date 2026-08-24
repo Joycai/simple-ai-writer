@@ -8,6 +8,7 @@ import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../
 import { isPptxExportEnabled, setPptxExportEnabled } from "../../../lib/pptx/flag";
 import { isRoleplayEnabled, setRoleplayEnabled } from "../../../lib/roleplay/flag";
 import { isTranslateEnabled, setTranslateEnabled } from "../../../lib/translate/flag";
+import { isComfyUiEnabled, setComfyUiEnabled } from "../../../lib/comfy/flag";
 import {
   isNotifyEnabled, isNotifyKindEnabled, requestNotifyPermission,
   sendTestNotification, setNotifyEnabled, setNotifyKindEnabled,
@@ -49,6 +50,7 @@ export function GeneralPane() {
   const [pptxOn, setPptxOn] = useState(isPptxExportEnabled());
   const [roleplayOn, setRoleplayOn] = useState(isRoleplayEnabled());
   const [translateOn, setTranslateOn] = useState(isTranslateEnabled());
+  const [comfyOn, setComfyOn] = useState(isComfyUiEnabled());
   const [sweeping, setSweeping] = useState(false);
   const [sweepStatus, setSweepStatus] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -105,6 +107,11 @@ export function GeneralPane() {
   const toggleTranslate = (enabled: boolean) => {
     setTranslateEnabled(enabled);
     setTranslateOn(enabled);
+  };
+
+  const toggleComfy = (enabled: boolean) => {
+    setComfyUiEnabled(enabled);
+    setComfyOn(enabled);
   };
 
   const toggleNotify = (enabled: boolean) => {
@@ -275,12 +282,22 @@ export function GeneralPane() {
         <Row
           title={t("systemSettings.general.translateLabel")}
           desc={t("systemSettings.general.translateHint")}
-          last
         >
           <Toggle
             on={translateOn}
             onChange={toggleTranslate}
             label={t("systemSettings.general.translateLabel")}
+          />
+        </Row>
+        <Row
+          title={t("systemSettings.general.comfyuiLabel")}
+          desc={t("systemSettings.general.comfyuiHint")}
+          last
+        >
+          <Toggle
+            on={comfyOn}
+            onChange={toggleComfy}
+            label={t("systemSettings.general.comfyuiLabel")}
           />
         </Row>
       </Section>

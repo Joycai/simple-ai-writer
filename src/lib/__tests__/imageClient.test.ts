@@ -689,6 +689,174 @@ describe("generateImage · dashscope route", () => {
   });
 });
 
+describe("generateImage · ComfyUI route", () => {
+  // 一张最小 txt2img 工作流：KSampler 连着正/负 CLIPTextEncode 和 latent。
+  const WORKFLOW = {
+    "3": {
+      class_type: "KSampler",
+      inputs: { seed: 5, positive: ["6", 0], negative: ["7", 0], latent_image: ["5", 0] },
+    },
+    "5": { class_type: "EmptyLatentImage", inputs: { width: 1024, height: 1024, batch_size: 1 } },
+    "6": { class_type: "CLIPTextEncode", inputs: { text: "old" } },
+    "7": { class_type: "CLIPTextEncode", inputs: { text: "bad hands" } },
+    "9": { class_type: "SaveImage", inputs: { images: ["8", 0] } },
+  };
+
+  const COMFY = {
+    baseUrl: "http://127.0.0.1:8188",
+    apiKey: "",
+    standard: "openai_compat" as const,
+    modelId: "sdxl-portrait",
+    route: "comfyui" as const,
+    comfy: { workflow: JSON.stringify(WORKFLOW) },
+  };
+
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+
+  afterEach(() => vi.useRealTimers());
+
+  /** submit → history(挂起 N 次) → history(完成) → view 的整条链路。 */
+  function mockComfy(entry: unknown, pendingPolls = 1) {
+    const calls: { url: string; method: string; body?: Record<string, unknown> }[] = [];
+    let polls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      const u = String(url);
+      calls.push({
+        url: u,
+        method: init?.method ?? "GET",
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      });
+      if (u.endsWith("/prompt")) {
+        return new Response(JSON.stringify({ prompt_id: "p1", number: 0 }), {
+          status: 200, headers: { "content-type": "application/json" },
+        });
+      }
+      if (u.includes("/history/p1")) {
+        polls++;
+        // 完成前 history 是 {}——条目缺席即"仍在跑"。
+        return new Response(JSON.stringify(polls <= pendingPolls ? {} : { p1: entry }), {
+          status: 200, headers: { "content-type": "application/json" },
+        });
+      }
+      if (u.includes("/view")) {
+        return new Response(png, { status: 200, headers: { "content-type": "image/png" } });
+      }
+      return new Response(JSON.stringify({ queue_running: [], queue_pending: [] }), {
+        status: 200, headers: { "content-type": "application/json" },
+      });
+    }));
+    return calls;
+  }
+
+  it("injects the prompt into the graph, polls history and fetches the files", async () => {
+    vi.useFakeTimers();
+    const calls = mockComfy({
+      status: { status_str: "success", completed: true },
+      outputs: { "9": { images: [{ filename: "ComfyUI_0001.png", subfolder: "", type: "output" }] } },
+    });
+
+    const pending = generateImage(COMFY, { prompt: "a cat", size: "832x1216", n: 2, extraBody: { seed: 42 } });
+    pending.catch(() => {});
+    await vi.advanceTimersByTimeAsync(1_000); // → poll 1: 还没好
+    await vi.advanceTimersByTimeAsync(1_000); // → poll 2: 完成 → view
+    const res = await pending;
+
+    expect(calls[0].url).toBe("http://127.0.0.1:8188/prompt");
+    const graph = calls[0].body!.prompt as typeof WORKFLOW;
+    expect(graph["6"].inputs.text).toBe("a cat");
+    expect(graph["7"].inputs.text).toBe("bad hands"); // 模板负面原样照发
+    expect(graph["3"].inputs.seed).toBe(42);           // extraBody.seed 显式覆盖
+    expect(graph["5"].inputs).toMatchObject({ width: 832, height: 1216, batch_size: 2 });
+    expect(calls[calls.length - 1].url).toContain("/view?filename=ComfyUI_0001.png");
+    expect(res.images[0].dataUrl.startsWith("data:image/png;base64,")).toBe(true);
+  });
+
+  it("randomizes the seed when none is given — an unchanged graph re-executes nothing", async () => {
+    vi.useFakeTimers();
+    const calls = mockComfy({
+      status: { status_str: "success", completed: true },
+      outputs: { "9": { images: [{ filename: "x.png", subfolder: "", type: "output" }] } },
+    }, 0);
+    const pending = generateImage(COMFY, { prompt: "x" });
+    pending.catch(() => {});
+    await vi.advanceTimersByTimeAsync(1_000);
+    await pending;
+    const graph = calls[0].body!.prompt as typeof WORKFLOW;
+    expect(typeof graph["3"].inputs.seed).toBe("number");
+    expect(graph["3"].inputs.seed).not.toBe(5); // 1/2^32 的碰撞概率可以接受
+  });
+
+  it("keeps only SaveImage outputs when preview temps are present", async () => {
+    vi.useFakeTimers();
+    const calls = mockComfy({
+      status: { status_str: "success", completed: true },
+      outputs: {
+        "8": { images: [{ filename: "preview.png", subfolder: "", type: "temp" }] },
+        "9": { images: [{ filename: "final.png", subfolder: "sub", type: "output" }] },
+      },
+    }, 0);
+    const pending = generateImage(COMFY, { prompt: "x" });
+    pending.catch(() => {});
+    await vi.advanceTimersByTimeAsync(1_000);
+    const res = await pending;
+    expect(res.images).toHaveLength(1);
+    const view = calls.find((c) => c.url.includes("/view"))!;
+    expect(view.url).toContain("filename=final.png");
+    expect(view.url).toContain("subfolder=sub");
+  });
+
+  it("surfaces a run's execution_error with the failing node named", async () => {
+    vi.useFakeTimers();
+    mockComfy({
+      status: {
+        status_str: "error", completed: false,
+        messages: [["execution_start", {}], ["execution_error", {
+          node_id: "4", node_type: "CheckpointLoaderSimple",
+          exception_message: "Model not found: sdxl.safetensors",
+        }]],
+      },
+    }, 0);
+    const pending = generateImage(COMFY, { prompt: "x" });
+    pending.catch(() => {});
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expect(pending).rejects.toThrow(/CheckpointLoaderSimple: Model not found/);
+  });
+
+  it("passes a submit rejection (node_errors) through verbatim", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ error: { type: "invalid_prompt", message: "Cannot execute because a node is missing" } }),
+      { status: 400, headers: { "content-type": "application/json" } },
+    )));
+    await expect(generateImage(COMFY, { prompt: "x" })).rejects.toThrow(/node is missing/);
+  });
+
+  it("refuses input images loudly — img2img is a later slice", async () => {
+    await expect(
+      generateImage(COMFY, { prompt: "x", images: ["data:image/png;base64,aGk="] }),
+    ).rejects.toThrow(/cannot take input images/);
+  });
+
+  it("refuses to run without an imported workflow", async () => {
+    await expect(
+      generateImage({ ...COMFY, comfy: undefined }, { prompt: "x" }),
+    ).rejects.toThrow(/no ComfyUI workflow/);
+  });
+
+  it("cancels the queued job when the caller aborts", async () => {
+    vi.useFakeTimers();
+    const ctrl = new AbortController();
+    const calls = mockComfy({}, 99);
+    const pending = generateImage(COMFY, { prompt: "x", signal: ctrl.signal });
+    pending.catch(() => {});
+    await vi.advanceTimersByTimeAsync(1_000);
+    ctrl.abort(new DOMException("stopped", "AbortError"));
+    await expect(pending).rejects.toThrow();
+    await vi.advanceTimersByTimeAsync(0);
+    const cancel = calls.find((c) => c.url.endsWith("/queue") && c.method === "POST");
+    expect(cancel?.body).toEqual({ delete: ["p1"] });
+  });
+});
+
 describe("isEditUnsupportedError", () => {
   // Drives the visible fallback to regeneration — a second, separately billed
   // call — so it must fire on a missing route and stay quiet on anything the

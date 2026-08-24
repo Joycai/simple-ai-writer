@@ -63,6 +63,7 @@ export async function runIllustration(
     safetySettings: provider.safetySettings,
     route: model.caps?.route,
     asyncTask: model.caps?.asyncTask,
+    comfy: model.caps?.comfy,
   };
   // The model's declared dialect turns the proposal's aspect into whatever
   // fields its endpoint actually takes (Gemini ratio, GPT-Image pixel size…).
