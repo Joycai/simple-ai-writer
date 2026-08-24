@@ -213,3 +213,23 @@ export function defaultSnippetName(body: string, max = 8): string {
   const line = previewLine(body);
   return line.length > max ? line.slice(0, max) : line;
 }
+
+/** Sentinel the group pickers use for "start a new group". */
+export const NEW_GROUP = "__new__";
+
+/**
+ * The entries the 未分组 row's group picker offers.
+ *
+ * 「新建分组…」 is appended **unconditionally**, and that is the whole point: on
+ * a fresh install `groups` is empty, and a picker built from it alone renders a
+ * menu with no rows at all — an empty bordered sliver that looks like a clipped
+ * popover. The author then cannot file the inbox from the one page whose stated
+ * daily job is filing the inbox (设计稿 1g). Shipped that way once; this function
+ * exists so the option list has somewhere to be tested.
+ */
+export function groupPickerOptions(groups: string[]): { value: string; isNew: boolean }[] {
+  return [
+    ...groups.map((g) => ({ value: g, isNew: false })),
+    { value: NEW_GROUP, isNew: true },
+  ];
+}

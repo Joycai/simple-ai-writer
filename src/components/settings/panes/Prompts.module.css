@@ -130,6 +130,19 @@
   color: var(--stg-badge-text);
   font: 400 11px/1 var(--font-mono);
 }
+/* The cell turned into a text field, for naming the first group inline. Sized
+   to the column so the row does not reflow while typing. */
+.groupInput {
+  width: 100%;
+  padding: 5px 7px;
+  background: var(--stg-bg-input);
+  border: 1px solid var(--stg-accent);
+  color: var(--stg-text);
+  font: 400 12px/1.2 var(--font-sans);
+  outline: none;
+}
+.groupInput::placeholder { color: var(--stg-text-placeholder); }
+
 /* Only the 「未分组」 section makes this column interactive — that is the one
    daily action this page exists for. Elsewhere it is a static label. */
 .groupPick {
