@@ -1,8 +1,14 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useAiStore } from "../../../stores/aiStore";
 import { familyOf, type ImageRoute } from "../../../lib/ai/types";
+import { isComfyUiEnabled } from "../../../lib/comfy/flag";
+import {
+  analyzeComfyWorkflow, parseComfyWorkflow, type ComfyParseError,
+} from "../../../lib/comfy/workflow";
+import { readFile } from "../../../lib/fs/fileio";
 import {
   REASONING_EFFORTS, THINKING_DIALECTS, supportsTemperature, supportsThinkingLevel,
   type ReasoningEffort, type ThinkingDialect,
@@ -23,6 +29,14 @@ import styles from "../settingsCommon.module.css";
 import hub from "./ProvidersModels.module.css";
 
 const MODEL_TYPES: ModelType[] = ["text", "multimodal", "image", "video"];
+
+/** i18n key per workflow-import parse failure (lib/comfy/workflow.ts). */
+const COMFY_ERR_KEYS: Record<ComfyParseError, string> = {
+  "not-json": "aiConfig.models.comfyErrNotJson",
+  "ui-format": "aiConfig.models.comfyErrUiFormat",
+  "empty": "aiConfig.models.comfyErrEmpty",
+  "not-api-format": "aiConfig.models.comfyErrNotApi",
+};
 
 interface Props {
   /** The group this drawer was opened from — a model cannot change hands. */
@@ -87,6 +101,11 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
   const [capsEdit, setCapsEdit] = useState(existing?.caps?.edit ?? false);
   // dashscope route only: the async submit-and-poll flow (wan text-to-image).
   const [capsAsync, setCapsAsync] = useState(existing?.caps?.asyncTask ?? false);
+  // comfyui route only: the imported API-format workflow JSON, verbatim.
+  const [comfyWorkflow, setComfyWorkflow] = useState(existing?.caps?.comfy?.workflow ?? "");
+  // Import feedback — errors only; a healthy import renders its summary from
+  // the workflow itself, so the two can never disagree.
+  const [comfyError, setComfyError] = useState<string | null>(null);
   // Same reason — a list is not a string. Endpoint-run tools the author grants
   // this model (lib/ai/serverTools).
   const [serverTools, setServerTools] = useState<ServerToolId[]>(existing?.serverTools ?? []);
@@ -109,6 +128,49 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
     }
   };
 
+  const handleImportWorkflow = async () => {
+    setComfyError(null);
+    try {
+      const picked = await openDialog({
+        multiple: false,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!picked || typeof picked !== "string") return;
+      const text = await readFile(picked);
+      const parsed = parseComfyWorkflow(text);
+      if ("error" in parsed) {
+        setComfyError(t(COMFY_ERR_KEYS[parsed.error]));
+        return;
+      }
+      // Refused at import rather than at run time: a workflow the app cannot
+      // put a prompt into would only fail later with a wordier error.
+      if (!analyzeComfyWorkflow(parsed.graph).positive) {
+        setComfyError(t("aiConfig.models.comfyNoPositive"));
+        return;
+      }
+      setComfyWorkflow(text);
+    } catch (e) {
+      setComfyError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  /** What the stored workflow contains — recomputed from the JSON each render. */
+  const comfySummary = (): string | null => {
+    if (!comfyWorkflow) return null;
+    const parsed = parseComfyWorkflow(comfyWorkflow);
+    if ("error" in parsed) return t(COMFY_ERR_KEYS[parsed.error]);
+    const a = analyzeComfyWorkflow(parsed.graph);
+    return t("aiConfig.models.comfySummary", {
+      nodes: a.nodeCount,
+      via: a.positive
+        ? t(a.positive.via === "title" ? "aiConfig.models.comfyViaTitle" : "aiConfig.models.comfyViaSampler")
+        : "—",
+      seeds: a.seedNodes.length,
+      latent: a.latent ? "✓" : "—",
+      negative: a.negative ? "✓" : "—",
+    });
+  };
+
   const handleSave = async () => {
     if (!form.modelId) return;
     setSaving(true);
@@ -127,13 +189,24 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
       // Image-only settings. Cleared for other types so a model that used to be
       // an image model doesn't keep billing per image after being switched.
       const isImageModel = form.type === "image";
+      const isComfy = isImageModel && form.capsRoute === "comfyui";
+      // A comfyui model without its workflow cannot generate anything — refuse
+      // here with the fix named, rather than at the first run with less context.
+      if (isComfy && !comfyWorkflow) {
+        setError(t("aiConfig.models.comfyMissing"));
+        return;
+      }
       const parsedPerImage = parseFloat(form.pricePerImage);
       const pricePerImage = isImageModel && parsedPerImage > 0 ? parsedPerImage : undefined;
       const sizes = form.capsSizes.split(",").map((s) => s.trim()).filter(Boolean);
       const caps = isImageModel
         ? {
-            edit: capsEdit,
-            ...(form.capsDialect ? { dialect: form.capsDialect as ImageDialect } : {}),
+            // comfyui cannot take input images yet (PR1) — forced false so the
+            // existing degrade-to-regeneration path handles edit requests.
+            edit: isComfy ? false : capsEdit,
+            // A dialect belongs to cloud parameter vocabularies; on comfyui
+            // the free-form sizes list is the whole story.
+            ...(!isComfy && form.capsDialect ? { dialect: form.capsDialect as ImageDialect } : {}),
             // A dialect supersedes the free-form list, but an existing list is
             // kept so switching back to 通用 restores it untouched.
             ...(sizes.length ? { sizes } : {}),
@@ -141,6 +214,9 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
             // Only meaningful on the dashscope route; dropped elsewhere so a
             // route change can't leave a stale flag steering the wrong client.
             ...(form.capsRoute === "dashscope" && capsAsync ? { asyncTask: true } : {}),
+            // The workflow travels only while the route is comfyui — same
+            // clearing rule as asyncTask above.
+            ...(isComfy ? { comfy: { workflow: comfyWorkflow } } : {}),
           }
         : undefined;
       const shared = {
@@ -297,6 +373,9 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
 
         {form.type === "image" && (
           <>
+            {/* Cloud parameter dialects mean nothing to a local workflow — the
+                free-form sizes list is comfyui's whole vocabulary. */}
+            {form.capsRoute !== "comfyui" && (
             <div className={styles.fieldGroup}>
               <label className={styles.label}>{t("aiConfig.models.capsDialectLabel")}</label>
               <Select value={form.capsDialect}
@@ -324,6 +403,7 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
                 }} />
               <div className={hub.fieldHint}>{t("aiConfig.models.capsDialectHint")}</div>
             </div>
+            )}
             <div className={styles.formRow}>
               <div className={styles.fieldGroup}>
                 <label className={styles.label}>{t("aiConfig.models.pricePerImageLabel")}</label>
@@ -333,8 +413,9 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
                 <div className={hub.fieldHint}>{t("aiConfig.models.pricePerImageHint")}</div>
               </div>
               {/* A declared dialect knows its sizes — the free-form list only
-                  exists for the generic case, so it hides rather than compete. */}
-              {!form.capsDialect && (
+                  exists for the generic case, so it hides rather than compete.
+                  comfyui is always generic: a stored dialect is ignored there. */}
+              {(!form.capsDialect || form.capsRoute === "comfyui") && (
                 <div className={styles.fieldGroup}>
                   <label className={styles.label}>{t("aiConfig.models.capsSizesLabel")}</label>
                   <input className={styles.input} placeholder="1024x1024, 1536x1024"
@@ -353,6 +434,12 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
                   { value: "chat", label: t("aiConfig.models.capsRouteChat") },
                   { value: "gemini", label: t("aiConfig.models.capsRouteGemini") },
                   { value: "dashscope", label: t("aiConfig.models.capsRouteDashscope") },
+                  // Behind the Beta flag — but a model already declared onto
+                  // this route keeps its option, so flipping the flag off never
+                  // turns an imported workflow into unviewable dead data.
+                  ...(isComfyUiEnabled() || form.capsRoute === "comfyui"
+                    ? [{ value: "comfyui", label: t("aiConfig.models.capsRouteComfyui") }]
+                    : []),
                 ]}
                 ariaLabel={t("aiConfig.models.capsRouteLabel")}
                 onChange={(capsRoute) => {
@@ -370,6 +457,9 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
                 }} />
               <div className={hub.fieldHint}>{t("aiConfig.models.capsRouteHint")}</div>
             </div>
+            {/* PR1 of the comfyui route cannot take input images — the
+                declaration is forced false on save, so the checkbox would lie. */}
+            {form.capsRoute !== "comfyui" && (
             <div className={styles.fieldGroup}>
               <label className={hub.checkLabel}>
                 <input type="checkbox" checked={capsEdit} onChange={(e) => setCapsEdit(e.target.checked)} />
@@ -377,6 +467,25 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
               </label>
               <div className={hub.fieldHint}>{t("aiConfig.models.capsEditHint")}</div>
             </div>
+            )}
+            {form.capsRoute === "comfyui" && (
+              <div className={styles.fieldGroup}>
+                <label className={styles.label}>{t("aiConfig.models.comfyWorkflowLabel")}</label>
+                <div>
+                  <button className={styles.btnSecondary} onClick={handleImportWorkflow}>
+                    {comfyWorkflow
+                      ? t("aiConfig.models.comfyReimportBtn")
+                      : t("aiConfig.models.comfyImportBtn")}
+                  </button>
+                </div>
+                {comfyError ? (
+                  <div className={styles.errorNote}>{comfyError}</div>
+                ) : comfyWorkflow ? (
+                  <div className={hub.fieldHint}>{comfySummary()}</div>
+                ) : null}
+                <div className={hub.fieldHint}>{t("aiConfig.models.comfyWorkflowHint")}</div>
+              </div>
+            )}
             {form.capsRoute === "dashscope" && (
               <div className={styles.fieldGroup}>
                 <label className={hub.checkLabel}>

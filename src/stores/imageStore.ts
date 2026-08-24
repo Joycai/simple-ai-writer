@@ -250,6 +250,7 @@ function callModel(ctx: RunContext, prompt: string, images: string[]): Promise<I
       safetySettings: ctx.provider.safetySettings,
       route: ctx.model.caps?.route,
       asyncTask: ctx.model.caps?.asyncTask,
+      comfy: ctx.model.caps?.comfy,
     },
     {
       prompt,

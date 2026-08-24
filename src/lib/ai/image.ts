@@ -13,6 +13,9 @@
  * non-empty *is* the edit request. See docs/feature/image-generation-plan.md §2.
  */
 
+import {
+  injectComfyInputs, parseComfySize, parseComfyWorkflow, type ComfyWorkflowConfig,
+} from "../comfy/workflow";
 import { fetch } from "../http";
 import { beginImageApiLog, type ImageCallLogger } from "./apiLog";
 import { convertToGeminiContents } from "./gemini";
@@ -20,7 +23,7 @@ import { toSafetySettingsArray } from "./safety";
 import type { GeminiSafetySettings } from "./safety";
 import { geminiAuthHeaders } from "./gemini";
 import { familyOf, type ApiStandard, type AuthMode, type ImageRoute } from "./types";
-import { geminiUrl, openaiUrl } from "./urls";
+import { geminiUrl, openaiUrl, trimBase } from "./urls";
 
 /** The provider coordinates every image call needs. */
 export interface ImageConn {
@@ -35,6 +38,8 @@ export interface ImageConn {
   route?: ImageRoute;
   /** dashscope route only: submit-and-poll instead of one synchronous call. */
   asyncTask?: boolean;
+  /** comfyui route only: the model's imported workflow (ImageCaps.comfy). */
+  comfy?: ComfyWorkflowConfig;
 }
 
 /**
@@ -252,6 +257,10 @@ function dispatchImage(route: ImageRoute, conn: ImageConn, req: ImageRequest, lo
       // task, everything else answers in the request. The split is a declared
       // capability (caps.asyncTask), not a model-id guess.
       return conn.asyncTask ? dashscopeAsyncImage(conn, req, log) : dashscopeImage(conn, req);
+    case "comfyui":
+      // A local instance running the model's imported workflow — submit the
+      // injected graph, poll history, fetch the files. Never a derived route.
+      return comfyImage(conn, req, log);
     default:
       // The OpenAI protocol is the odd one out: editing is a different URL
       // with a different encoding (multipart), not the same call with extra
@@ -1074,6 +1083,186 @@ async function dashscopeAsyncImage(conn: ImageConn, req: ImageRequest, log: Imag
       // message live inside `output`, which parseErrorBody reads top-level.
       throw new ImageHttpError("Image task error", 200, JSON.stringify(json.output ?? json));
     }
+  } finally {
+    deadline.done();
+  }
+}
+
+// ─── ComfyUI (local instance, imported workflow) ─────────────────────────────
+//
+// The one route with no model id: the whole "model" is an API-format workflow
+// the author exported from ComfyUI and imported in Settings (ImageCaps.comfy).
+// This adapter only injects the request's values into the graph's placeholder
+// nodes (lib/comfy/workflow.ts) and drives submit → poll → fetch; it never
+// constructs nodes itself. Design: docs/feature/comfyui-plan.md §2.
+
+/** Wall-clock cap on one workflow run — local SD on a weak GPU takes minutes. */
+const COMFY_TASK_TIMEOUT_MS = 600_000;
+/** Constant cadence: a loopback GET is nearly free, so no backoff needed. */
+const COMFY_POLL_MS = 1_000;
+
+/**
+ * A fresh random seed per submission. ComfyUI caches node outputs by input
+ * hash, so resubmitting a byte-identical graph re-executes nothing and can
+ * complete without producing a new image — "retry" only means anything if the
+ * seed moves. An explicit `extraBody.seed` overrides for reproducible runs.
+ */
+function randomComfySeed(): number {
+  return Math.floor(Math.random() * 0xffff_ffff);
+}
+
+interface ComfyHistoryEntry {
+  status?: { status_str?: string; completed?: boolean; messages?: [string, Record<string, unknown>][] };
+  outputs?: Record<string, { images?: { filename?: string; subfolder?: string; type?: string }[] }>;
+}
+
+/**
+ * The files a finished run produced. SaveImage nodes emit `type: "output"`,
+ * PreviewImage emits `"temp"` — when both exist only the outputs count, so an
+ * author's debugging preview nodes don't leak into the result.
+ */
+function collectComfyFiles(entry: ComfyHistoryEntry): { filename: string; subfolder: string; type: string }[] {
+  const all: { filename: string; subfolder: string; type: string }[] = [];
+  for (const out of Object.values(entry.outputs ?? {})) {
+    for (const img of out.images ?? []) {
+      if (img.filename) all.push({ filename: img.filename, subfolder: img.subfolder ?? "", type: img.type ?? "output" });
+    }
+  }
+  const saved = all.filter((f) => f.type === "output");
+  return saved.length ? saved : all;
+}
+
+/** A failed run's detail, shaped so parseErrorBody surfaces the message. */
+function comfyErrorDetail(status: NonNullable<ComfyHistoryEntry["status"]>): string {
+  for (const [name, data] of status.messages ?? []) {
+    if (name === "execution_error") {
+      const nodeType = typeof data.node_type === "string" ? data.node_type : "node";
+      const msg = typeof data.exception_message === "string" ? data.exception_message : "execution failed";
+      return JSON.stringify({ message: `${nodeType}: ${msg}` });
+    }
+  }
+  return JSON.stringify({ message: status.status_str ?? "the workflow run failed" });
+}
+
+/**
+ * Best-effort cancel after the author's 停止 (or the deadline): drop the job
+ * from the queue, and only if it is confirmed to be the one *running* send an
+ * interrupt — a blind /interrupt would kill whatever the author's own ComfyUI
+ * tab happens to be rendering.
+ */
+async function cancelComfyTask(base: string, promptId: string): Promise<void> {
+  try {
+    await fetch(`${base}/queue`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ delete: [promptId] }),
+    });
+    const res = await fetch(`${base}/queue`);
+    if (!res.ok) return;
+    const q = (await res.json()) as { queue_running?: unknown[][] };
+    const running = q.queue_running?.some((item) => Array.isArray(item) && item[1] === promptId);
+    if (running) await fetch(`${base}/interrupt`, { method: "POST" });
+  } catch {
+    // The job at worst renders into ComfyUI's own output folder unobserved.
+  }
+}
+
+async function comfyImage(conn: ImageConn, req: ImageRequest, log: ImageCallLogger): Promise<ImageResult> {
+  if (req.images?.length) {
+    // Same posture as PR1 of the image client itself: a loud refusal now, the
+    // real path (upload/image + LoadImage injection) in a later slice.
+    throw new Error("The ComfyUI route cannot take input images yet — reference images and img2img arrive in a later version.");
+  }
+  const raw = conn.comfy?.workflow;
+  if (!raw) {
+    throw new Error("This model has no ComfyUI workflow imported — import an API-format export in Settings → 供应商与模型.");
+  }
+  const parsed = parseComfyWorkflow(raw);
+  if ("error" in parsed) {
+    throw new Error(`The stored ComfyUI workflow no longer parses (${parsed.error}) — re-import it in Settings.`);
+  }
+
+  const explicitSeed = req.extraBody?.seed;
+  const size = parseComfySize(req.size);
+  const graph = injectComfyInputs(parsed.graph, {
+    prompt: req.prompt,
+    seed: typeof explicitSeed === "number" ? explicitSeed : randomComfySeed(),
+    ...(size ?? {}),
+    batch: req.n,
+  });
+  if (!graph) {
+    throw new Error(
+      "No positive-prompt node could be located in this workflow — in ComfyUI, title a text node \"positive\"（正面） and re-export the API format.",
+    );
+  }
+
+  const base = trimBase(conn.baseUrl);
+  const deadline = withDeadline(req.signal, COMFY_TASK_TIMEOUT_MS);
+  let promptId: string | undefined;
+  try {
+    const res = await fetch(`${base}/prompt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: graph }),
+      signal: deadline.signal,
+    });
+    // A 400 here carries node_errors — missing custom nodes, renamed
+    // checkpoints — which is exactly what the author needs to see verbatim.
+    if (!res.ok) throw new ImageHttpError("ComfyUI error", res.status, await res.text());
+    const submitted = (await readJson(res, "ComfyUI error")) as { prompt_id?: string };
+    if (!submitted.prompt_id) {
+      throw new ImageHttpError("ComfyUI error", 200, JSON.stringify(submitted).slice(0, 400));
+    }
+    promptId = submitted.prompt_id;
+    // Same rule as the DashScope task id: the one fact a hung poll would
+    // otherwise take with it.
+    log.note({ taskId: promptId });
+
+    let misses = 0;
+    for (;;) {
+      await sleep(COMFY_POLL_MS, deadline.signal);
+
+      let entry: ComfyHistoryEntry | undefined;
+      try {
+        const poll = await fetch(`${base}/history/${promptId}`, { signal: deadline.signal });
+        if (!poll.ok) throw new ImageHttpError("ComfyUI task error", poll.status, await poll.text());
+        const json = (await readJson(poll, "ComfyUI task error")) as Record<string, ComfyHistoryEntry>;
+        entry = json[promptId];
+      } catch (e) {
+        // A loopback blip is rare but a restarting ComfyUI is not — ride out a
+        // few misses before calling it real, like the DashScope poll does.
+        if (deadline.signal.aborted || ++misses >= 3) throw e;
+        continue;
+      }
+      misses = 0;
+
+      // History only records finished runs — absent means still queued/running.
+      if (!entry) continue;
+      if (entry.status?.status_str === "error") {
+        throw new ImageHttpError("ComfyUI task error", 200, comfyErrorDetail(entry.status));
+      }
+
+      const files = collectComfyFiles(entry);
+      if (!files.length) {
+        throw new NoImageError(
+          "the workflow completed without producing an image — does it end in a SaveImage node? (An unchanged graph also re-executes nothing; the app randomizes the seed to avoid this.)",
+        );
+      }
+      const images: GeneratedImage[] = [];
+      for (const f of files) {
+        const query =
+          `filename=${encodeURIComponent(f.filename)}` +
+          `&subfolder=${encodeURIComponent(f.subfolder)}` +
+          `&type=${encodeURIComponent(f.type)}`;
+        images.push(await urlToDataUrl(`${base}/view?${query}`, deadline.signal));
+      }
+      // No usage and no text: ComfyUI meters nothing, and billing stays on
+      // pricePerImage (normally 0 — it is the author's own GPU).
+      return { images };
+    }
+  } catch (e) {
+    if (promptId && deadline.signal.aborted) void cancelComfyTask(base, promptId);
+    throw e;
   } finally {
     deadline.done();
   }

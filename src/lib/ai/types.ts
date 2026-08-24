@@ -118,8 +118,13 @@ export function authModesFor(standard: ApiStandard): AuthMode[] {
  *                    or the async task flow when `ImageCaps.asyncTask` is set.
  *                    Never a default — the DashScope provider preset is
  *                    `openai_compat`, whose derived route must stay "images-api".
+ *   - "comfyui"    — a local ComfyUI instance: POST {base}/prompt with the
+ *                    model's imported workflow graph (`ImageCaps.comfy`), then
+ *                    poll {base}/history/{id} and fetch via {base}/view. Never
+ *                    a default either — only an explicit declaration selects it.
+ *                    See docs/feature/comfyui-plan.md.
  */
-export type ImageRoute = "images-api" | "chat" | "gemini" | "dashscope";
+export type ImageRoute = "images-api" | "chat" | "gemini" | "dashscope" | "comfyui";
 
 /** A single part inside a multimodal user message. */
 export type ContentPart =
