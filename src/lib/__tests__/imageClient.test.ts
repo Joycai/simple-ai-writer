@@ -717,15 +717,24 @@ describe("generateImage · ComfyUI route", () => {
 
   /** submit → history(挂起 N 次) → history(完成) → view 的整条链路。 */
   function mockComfy(entry: unknown, pendingPolls = 1) {
-    const calls: { url: string; method: string; body?: Record<string, unknown> }[] = [];
+    const calls: { url: string; method: string; body?: Record<string, unknown>; form?: FormData }[] = [];
     let polls = 0;
+    let uploads = 0;
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
       const u = String(url);
       calls.push({
         url: u,
         method: init?.method ?? "GET",
-        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+        // multipart 上传的 body 是 FormData，不能当 JSON 解析。
+        body: typeof init?.body === "string" ? JSON.parse(init.body) : undefined,
+        form: init?.body instanceof FormData ? init.body : undefined,
       });
+      if (u.endsWith("/upload/image")) {
+        uploads++;
+        return new Response(JSON.stringify({ name: `up-${uploads}.png`, subfolder: "" }), {
+          status: 200, headers: { "content-type": "application/json" },
+        });
+      }
       if (u.endsWith("/prompt")) {
         return new Response(JSON.stringify({ prompt_id: "p1", number: 0 }), {
           status: 200, headers: { "content-type": "application/json" },
@@ -830,10 +839,51 @@ describe("generateImage · ComfyUI route", () => {
     await expect(generateImage(COMFY, { prompt: "x" })).rejects.toThrow(/node is missing/);
   });
 
-  it("refuses input images loudly — img2img is a later slice", async () => {
+  it("uploads input images and fills the LoadImage slot, negative included", async () => {
+    vi.useFakeTimers();
+    const wf = {
+      ...WORKFLOW,
+      "10": { class_type: "LoadImage", inputs: { image: "default.png" } },
+    };
+    const conn = { ...COMFY, comfy: { workflow: JSON.stringify(wf) } };
+    const calls = mockComfy({
+      status: { status_str: "success", completed: true },
+      outputs: { "9": { images: [{ filename: "x.png", subfolder: "", type: "output" }] } },
+    }, 0);
+
+    const pending = generateImage(conn, {
+      prompt: "a cat", negative: "blurry", images: ["data:image/png;base64,aGk="],
+    });
+    pending.catch(() => {});
+    await vi.advanceTimersByTimeAsync(1_000);
+    const res = await pending;
+
+    const upload = calls.find((c) => c.url.endsWith("/upload/image"))!;
+    expect(upload.method).toBe("POST");
+    expect(upload.form).toBeInstanceOf(FormData); // multipart，绝不能手动设 Content-Type
+    const submit = calls.find((c) => c.url.endsWith("/prompt"))!;
+    const graph = submit.body!.prompt as typeof wf;
+    expect(graph["10"].inputs.image).toBe("up-1.png");
+    expect(graph["7"].inputs.text).toBe("blurry");   // 负面进负面节点
+    expect(graph["6"].inputs.text).toBe("a cat");    // 正面里没有 "Avoid:"
+    expect(res.images).toHaveLength(1);
+  });
+
+  it("refuses input images when the workflow has no LoadImage slot — before any upload", async () => {
+    const calls = mockComfy({}, 0);
     await expect(
       generateImage(COMFY, { prompt: "x", images: ["data:image/png;base64,aGk="] }),
-    ).rejects.toThrow(/cannot take input images/);
+    ).rejects.toThrow(/no LoadImage node/);
+    expect(calls.some((c) => c.url.endsWith("/upload/image"))).toBe(false);
+  });
+
+  it("refuses more images than the workflow has slots", async () => {
+    const wf = { ...WORKFLOW, "10": { class_type: "LoadImage", inputs: { image: "d.png" } } };
+    const conn = { ...COMFY, comfy: { workflow: JSON.stringify(wf) } };
+    mockComfy({}, 0);
+    await expect(
+      generateImage(conn, { prompt: "x", images: ["data:a;base64,aGk=", "data:a;base64,aGk="] }),
+    ).rejects.toThrow(/1 image input/);
   });
 
   it("refuses to run without an imported workflow", async () => {

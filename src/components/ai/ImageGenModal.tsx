@@ -77,6 +77,13 @@ export function ImageGenModal({ target, onClose }: Props) {
   const chatRoute = !!imageModel && !!imageProvider
     && resolveImageRoute(imageProvider.apiStandard, imageModel.caps?.route) === "chat";
   /**
+   * ComfyUI is the one route with a real negative-prompt field, and the one
+   * where folding the negative into the prompt would *hurt*: SD attracts what
+   * it reads, so "Avoid: watermark" in the positive invites watermarks. The
+   * negative therefore travels separately there and stays folded elsewhere.
+   */
+  const comfyRoute = imageModel?.caps?.route === "comfyui";
+  /**
    * The model's declared parameter dialect (lib/ai/imageDialects). With one,
    * the framing controls come from the dialect's own vocabulary — its aspect
    * list, resolution tiers and quality tiers — and the free-text size box
@@ -237,6 +244,7 @@ export function ImageGenModal({ target, onClose }: Props) {
       resolution,
       quality,
       size,
+      ...(comfyRoute && negative.trim() ? { negative: negative.trim() } : {}),
       signal: ctrl.signal,
     };
   };
@@ -249,7 +257,12 @@ export function ImageGenModal({ target, onClose }: Props) {
     try {
       const ctx = await runContext(ctrl);
       if (!ctx) { setError(t("ai.errors.noModel")); return; }
-      await generate(ctx, specToPrompt({ prompt, style, negative, aspect, note: "" }));
+      // ComfyUI: the negative rides RunContext into its own wire field, and
+      // the style joins without the "Style:" label prose SD would read
+      // literally. Everywhere else the flattened spec stays the request.
+      await generate(ctx, comfyRoute
+        ? [prompt, style].map((s) => s.trim()).filter(Boolean).join("\n")
+        : specToPrompt({ prompt, style, negative, aspect, note: "" }));
     } catch (e) {
       // `runContext` awaits the keyring, which can reject before the store is
       // ever reached — without this the button looks dead and the only trace

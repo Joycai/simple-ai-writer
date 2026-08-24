@@ -168,6 +168,7 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
       seeds: a.seedNodes.length,
       latent: a.latent ? "✓" : "—",
       negative: a.negative ? "✓" : "—",
+      refs: a.loadImageNodes.length,
     });
   };
 
@@ -199,11 +200,19 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
       const parsedPerImage = parseFloat(form.pricePerImage);
       const pricePerImage = isImageModel && parsedPerImage > 0 ? parsedPerImage : undefined;
       const sizes = form.capsSizes.split(",").map((s) => s.trim()).filter(Boolean);
+      // comfyui: input-image support is a fact of the imported workflow — the
+      // LoadImage count — not a declaration. Derived here instead of a
+      // checkbox, so it cannot disagree with the graph it describes.
+      const comfySlots = isComfy
+        ? (() => {
+            const parsed = parseComfyWorkflow(comfyWorkflow);
+            return "graph" in parsed ? analyzeComfyWorkflow(parsed.graph).loadImageNodes.length : 0;
+          })()
+        : 0;
       const caps = isImageModel
         ? {
-            // comfyui cannot take input images yet (PR1) — forced false so the
-            // existing degrade-to-regeneration path handles edit requests.
-            edit: isComfy ? false : capsEdit,
+            edit: isComfy ? comfySlots > 0 : capsEdit,
+            ...(isComfy && comfySlots > 0 ? { maxRefs: comfySlots } : {}),
             // A dialect belongs to cloud parameter vocabularies; on comfyui
             // the free-form sizes list is the whole story.
             ...(!isComfy && form.capsDialect ? { dialect: form.capsDialect as ImageDialect } : {}),
