@@ -26,7 +26,12 @@ import {
   specToPrompt,
   IMAGE_ASPECTS,
 } from "../../lib/image";
-import { resolveConn } from "../../lib/ai/conn";
+import { connOptions, resolveConn } from "../../lib/ai/conn";
+import { resolveVisionConn } from "../../lib/agent/subagent";
+import { isComfyUiEnabled } from "../../lib/comfy/flag";
+import {
+  buildImageChecklist, reviewImageAgainstChecklist, runCalibration,
+} from "../../lib/image/calibrate";
 import { loadApiKey } from "../../lib/keyStore";
 import { recordGeneration } from "../../lib/image/session";
 import type { ImageGenTarget } from "../../lib/image/target";
@@ -59,7 +64,7 @@ const COMMON_SIZES = ["1024x1024", "1024x1536", "1536x1024", "2048x2048"];
 export function ImageGenModal({ target, onClose }: Props) {
   const { t } = useTranslation();
   const projectPath = useProjectStore((s) => s.projectPath);
-  const { models, providers, activeModelId, imageModelId, setImageModel } = useAiStore();
+  const { models, providers, activeModelId, imageModelId, setImageModel, subAgents } = useAiStore();
 
   const imageModels = useMemo(() => models.filter((m) => m.type === "image"), [models]);
   // Fall back to the first configured image model rather than leaving the
@@ -139,11 +144,18 @@ export function ImageGenModal({ target, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
 
+  // 人设校准循环 (lib/image/calibrate)。跟着 ComfyUI 的 Beta 伞走——机制本身
+  // 与路由无关，但免费重试的成本结构是本地出图才有的。
+  const calibrateAvailable = isComfyUiEnabled();
+  const [calibrating, setCalibrating] = useState(false);
+  const [calibrateRounds, setCalibrateRounds] = useState(3);
+  const [calibrateStatus, setCalibrateStatus] = useState<string | null>(null);
+
   // The edit chain lives in its own store: it outlives individual renders,
   // survives branching back to an earlier round, and is what PR4's agent tools
   // will drive instead of this component.
   const {
-    turns, running, begin, generate, edit, end, goTo, choose,
+    turns, running, begin, generate, edit, end, goTo, choose, annotateTurn,
     currentTurn: getCurrentTurn, currentImagePath, instructionChain,
   } = useImageStore();
   const storeError = useImageStore((s) => s.error);
@@ -177,7 +189,7 @@ export function ImageGenModal({ target, onClose }: Props) {
   const shellCloseRef = useRef<(() => void) | null>(null);
   const requestClose = () => (shellCloseRef.current ?? handleClose)();
 
-  const busy = building || generating || saving;
+  const busy = building || generating || saving || calibrating;
   /** What this run will actually ask for — the chat route only ever returns one. */
   const effectiveCount = chatRoute ? 1 : count;
   const estimatedCost = imageModel ? imageCostFor(imageModel, effectiveCount) : 0;
@@ -249,6 +261,15 @@ export function ImageGenModal({ target, onClose }: Props) {
     };
   };
 
+  // ComfyUI: the negative rides RunContext into its own wire field, and the
+  // style joins without the "Style:" label prose SD would read literally.
+  // Everywhere else the flattened spec is the request. Shared by 生成 and the
+  // calibration loop, whose base prompt must be exactly what 生成 would send.
+  const builtPrompt = () =>
+    comfyRoute
+      ? [prompt, style].map((s) => s.trim()).filter(Boolean).join("\n")
+      : specToPrompt({ prompt, style, negative, aspect, note: "" });
+
   const handleGenerate = async () => {
     if (!imageModel || !prompt.trim()) return;
     const ctrl = new AbortController();
@@ -257,12 +278,7 @@ export function ImageGenModal({ target, onClose }: Props) {
     try {
       const ctx = await runContext(ctrl);
       if (!ctx) { setError(t("ai.errors.noModel")); return; }
-      // ComfyUI: the negative rides RunContext into its own wire field, and
-      // the style joins without the "Style:" label prose SD would read
-      // literally. Everywhere else the flattened spec stays the request.
-      await generate(ctx, comfyRoute
-        ? [prompt, style].map((s) => s.trim()).filter(Boolean).join("\n")
-        : specToPrompt({ prompt, style, negative, aspect, note: "" }));
+      await generate(ctx, builtPrompt());
     } catch (e) {
       // `runContext` awaits the keyring, which can reject before the store is
       // ever reached — without this the button looks dead and the only trace
@@ -291,6 +307,106 @@ export function ImageGenModal({ target, onClose }: Props) {
       if ((e as Error).name !== "AbortError") setError(e instanceof Error ? e.message : String(e));
     } finally {
       abort.current = null;
+    }
+  };
+
+  /**
+   * The calibration loop: checklist from the subject's material (once), then
+   * generate → vision review → revise, until every criterion passes or the
+   * round cap hits — at which point the best round wins, not the last one.
+   * Each round is an ordinary turn in the session tree, so the author can
+   * branch from any of them afterwards exactly like manual rounds.
+   */
+  const handleCalibrate = async () => {
+    if (!imageModel || !prompt.trim()) return;
+    const ctrl = new AbortController();
+    abort.current = ctrl;
+    setCalibrating(true);
+    setError(null);
+    setCalibrateStatus(null);
+    try {
+      // The reviewer: the vision subagent when usable, else a multimodal
+      // active model — resolveVisionConn is the one answer to "who reads
+      // images here", same as the gallery's AI 描述.
+      const vision = await resolveVisionConn(models, providers, activeModelId, subAgents, loadApiKey);
+      if ("error" in vision) { setError(vision.error); return; }
+      const visionConn = connOptions(vision);
+
+      // The checklist builder: the same model that drafts prompts here.
+      const resolved = resolveConn(models, providers, promptModelId);
+      if (!resolved.ok) { setError(resolved.error); return; }
+      const checklistKey = (await loadApiKey(resolved.provider.id)) ?? "";
+
+      setCalibrateStatus(t("lore.imageGen.calibrateChecklist"));
+      const checklist = await buildImageChecklist({
+        ...connOptions({ provider: resolved.provider, model: resolved.model, apiKey: checklistKey }),
+        subject: target.subject,
+        subjectKind: target.subjectKind,
+        material: await target.material(),
+        language: i18n.language,
+        signal: ctrl.signal,
+      });
+
+      const ctx = await runContext(ctrl);
+      if (!ctx) { setError(t("ai.errors.noModel")); return; }
+
+      // Round → turn id, for jumping to the best round when the loop ends.
+      const roundTurnIds: string[] = [];
+      const run = await runCalibration({
+        basePrompt: builtPrompt(),
+        maxRounds: calibrateRounds,
+        signal: ctrl.signal,
+        generate: async (p, i) => {
+          setCalibrateStatus(t("lore.imageGen.calibrateGenerating", { round: i + 1, total: calibrateRounds }));
+          // Round 1 also appends when a chain already exists — calibration
+          // continues the author's session, it doesn't wipe it.
+          await generate(ctx, p, { append: i > 0 || turns.length > 0 });
+          const store = useImageStore.getState();
+          if (store.error) return null;
+          const path = store.currentImagePath();
+          if (path && store.currentId) roundTurnIds.push(store.currentId);
+          return path;
+        },
+        review: async (image, p) => {
+          setCalibrateStatus(t("lore.imageGen.calibrateReviewing", { total: calibrateRounds }));
+          const { dataUrl } = await imageToDataUrl(image);
+          return reviewImageAgainstChecklist({
+            ...visionConn,
+            dataUrl,
+            checklist,
+            prompt: p,
+            language: i18n.language,
+            signal: ctrl.signal,
+          });
+        },
+        onRound: (r) => {
+          const turnId = roundTurnIds[r.round];
+          if (turnId) {
+            annotateTurn(turnId, {
+              passCount: r.passCount,
+              total: r.total,
+              failed: r.review.results.filter((x) => !x.pass).map((x) => x.criterion),
+            });
+          }
+        },
+      });
+
+      if (run.bestIndex >= 0 && roundTurnIds[run.rounds[run.bestIndex].round]) {
+        goTo(roundTurnIds[run.rounds[run.bestIndex].round]);
+      }
+      const best = run.bestIndex >= 0 ? run.rounds[run.bestIndex] : null;
+      setCalibrateStatus(
+        run.passed
+          ? t("lore.imageGen.calibrateDone", { rounds: run.rounds.length })
+          : best
+            ? t("lore.imageGen.calibrateBest", { pass: best.passCount, total: best.total, rounds: run.rounds.length })
+            : null,
+      );
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      abort.current = null;
+      setCalibrating(false);
     }
   };
 
@@ -522,6 +638,38 @@ export function ImageGenModal({ target, onClose }: Props) {
                 />
               </div>
 
+              {/* 人设校准：生成 → vision 评审 → 修正重试。清单由主题资料提炼，
+                  每轮都是会话树里的普通一轮，到上限时跳到最佳轮。 */}
+              {calibrateAvailable && (
+                <div className={styles.section}>
+                  <label className={styles.label}>
+                    {t("lore.imageGen.calibrateLabel")}
+                    <span className={gen.hintInline}> · {t("lore.imageGen.calibrateHint")}</span>
+                  </label>
+                  <div className={gen.editRow}>
+                    <Select
+                      className={gen.selectInput}
+                      value={String(calibrateRounds)}
+                      disabled={busy}
+                      onChange={(v) => setCalibrateRounds(parseInt(v, 10))}
+                      options={[2, 3, 4, 5].map((n) => ({
+                        value: String(n),
+                        label: t("lore.imageGen.calibrateRounds", { count: n }),
+                      }))}
+                      ariaLabel={t("lore.imageGen.calibrateLabel")}
+                    />
+                    <button
+                      className={styles.btnSecondary}
+                      onClick={calibrating ? () => abort.current?.abort() : handleCalibrate}
+                      disabled={!calibrating && (busy || !imageModel || !prompt.trim())}
+                    >
+                      {calibrating ? t("lore.imageGen.calibrateStop") : t("lore.imageGen.calibrateBtn")}
+                    </button>
+                  </div>
+                  {calibrateStatus && <div className={gen.hint}>{calibrateStatus}</div>}
+                </div>
+              )}
+
               {chatRoute && <div className={gen.hint}>{t("lore.imageGen.chatRouteLimits")}</div>}
 
               {(error || storeError) && <div className={styles.error}>{error ?? storeError}</div>}
@@ -558,6 +706,19 @@ export function ImageGenModal({ target, onClose }: Props) {
                       the instruction. */}
                   {currentTurn.degraded && (
                     <div className={gen.degraded}>{t("lore.imageGen.degradedNote")}</div>
+                  )}
+
+                  {/* Calibration verdict for this round: the score, and which
+                      criteria failed — in the checklist's own words. */}
+                  {currentTurn.review && (
+                    <div className={gen.hint}>
+                      {t("lore.imageGen.reviewScore", {
+                        pass: currentTurn.review.passCount,
+                        total: currentTurn.review.total,
+                      })}
+                      {currentTurn.review.failed.length > 0 &&
+                        ` · ${t("lore.imageGen.reviewFailed")}：${currentTurn.review.failed.join("；")}`}
+                    </div>
                   )}
 
                   <div className={gen.hint}>{t("lore.imageGen.resultsHint")}</div>
