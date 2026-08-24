@@ -29,7 +29,8 @@ import { useAiStore } from "../../../stores/aiStore";
 import { useProjectStore } from "../../../stores/projectStore";
 import { SNIPPET_SCENE, type Prompt } from "../../../lib/ai/configDb";
 import {
-  buildSections, groupNames, hitSlice, previewLine, snippetsOf, splitPlaceholders,
+  buildSections, groupNames, groupPickerOptions, hitSlice, NEW_GROUP, previewLine,
+  snippetsOf, splitPlaceholders,
 } from "../../../lib/ai/snippets";
 import { findTask, promptParams } from "../../../lib/profile";
 import { Select } from "../../common/Select";
@@ -93,6 +94,10 @@ export function PromptsPane({ onEscapeInterceptChange }: Props) {
 
   const snippets = useMemo(() => snippetsOf(prompts), [prompts]);
   const groups = useMemo(() => groupNames(snippets), [snippets]);
+  /** The 未分组 row currently typing its first group name, if any. A row-local
+   *  input rather than a modal: filing the inbox is this page's main daily
+   *  action (设计稿 1g), so it must not cost a drawer round-trip. */
+  const [namingGroup, setNamingGroup] = useState<string | null>(null);
 
   const sorted = useMemo(() => {
     const by: Record<SortId, (a: Prompt, b: Prompt) => number> = {
@@ -283,13 +288,44 @@ export function PromptsPane({ onEscapeInterceptChange }: Props) {
                   <span className={styles.name} title={s.name}>{s.name}</span>
                   <Body content={s.content} query={query} />
                   <span className={styles.groupCell}>
-                    {sec.kind === "ungrouped" ? (
+                    {sec.kind === "ungrouped" && namingGroup === s.id ? (
+                      /* First group of a fresh install: there is nothing to pick
+                         from yet, so the cell becomes the name field. */
+                      <input
+                        className={styles.groupInput}
+                        autoFocus
+                        placeholder={t("aiConfig.prompts.newGroupPlaceholder", { defaultValue: "新分组的名字" })}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") { setNamingGroup(null); return; }
+                          if (e.key !== "Enter") return;
+                          const name = e.currentTarget.value.trim();
+                          setNamingGroup(null);
+                          if (name) void updatePrompt({ ...s, group: name });
+                        }}
+                        onBlur={(e) => {
+                          const name = e.currentTarget.value.trim();
+                          setNamingGroup(null);
+                          if (name) void updatePrompt({ ...s, group: name });
+                        }}
+                      />
+                    ) : sec.kind === "ungrouped" ? (
                       <Select
                         value=""
-                        onChange={(v) => void updatePrompt({ ...s, group: v === "__none__" ? "" : v })}
+                        onChange={(v) => {
+                          if (v === NEW_GROUP) { setNamingGroup(s.id); return; }
+                          void updatePrompt({ ...s, group: v });
+                        }}
                         placeholder={t("aiConfig.prompts.pickGroup", { defaultValue: "选择分组" })}
                         ariaLabel={t("aiConfig.prompts.pickGroup", { defaultValue: "选择分组" })}
-                        options={groups.map((g) => ({ value: g, label: g }))}
+                        /* 「新建分组…」 is always offered, and on a fresh install
+                           it is the *only* entry — without it the menu renders
+                           empty and the inbox can never be filed from here. */
+                        options={groupPickerOptions(groups).map((o) => ({
+                          value: o.value,
+                          label: o.isNew
+                            ? t("aiConfig.prompts.newGroup", { defaultValue: "新建分组…" })
+                            : o.value,
+                        }))}
                       />
                     ) : (
                       <span className={styles.groupChip}>{s.group}</span>
