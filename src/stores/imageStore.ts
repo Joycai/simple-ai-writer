@@ -23,6 +23,14 @@ import { imageToDataUrl } from "../lib/fs/images";
 import { imageRequestParams, recordImageUsage } from "../lib/image";
 import { discardSession, sweepScratch, writeCandidates } from "../lib/image/session";
 
+/** One calibration verdict attached to a turn (lib/image/calibrate.ts). */
+export interface TurnReview {
+  passCount: number;
+  total: number;
+  /** The criteria that failed, verbatim — what the author reads. */
+  failed: string[];
+}
+
 export interface ImageTurn {
   id: string;
   /** The turn this one edits. Null for the opening generation. */
@@ -40,6 +48,8 @@ export interface ImageTurn {
   degraded: boolean;
   /** Model commentary, when the provider returned any. */
   text?: string;
+  /** Calibration verdict, when this turn was a calibration round. */
+  review?: TurnReview;
 }
 
 /** Everything a run needs that lives outside this store. */
@@ -90,10 +100,16 @@ interface ImageSessionState {
 
   /** Start a fresh session, discarding whatever the last one left behind. */
   begin: (projectPath: string) => Promise<string>;
-  /** The opening generation. Replaces any existing chain. */
-  generate: (ctx: RunContext, prompt: string) => Promise<void>;
+  /**
+   * A generation. By default it replaces the chain (the author's 重新生成);
+   * `append` chains it under the current turn instead — how a calibration
+   * round joins the same tree the manual rounds live in.
+   */
+  generate: (ctx: RunContext, prompt: string, opts?: { append?: boolean }) => Promise<void>;
   /** Edit the current turn's chosen candidate. */
   edit: (ctx: RunContext, instruction: string) => Promise<void>;
+  /** Attach a calibration verdict to a turn after its review lands. */
+  annotateTurn: (turnId: string, review: TurnReview) => void;
   /** Look at another turn — this is what branching off an earlier round is. */
   goTo: (turnId: string) => void;
   /** Pick a different candidate within a turn. */
@@ -133,20 +149,23 @@ export const useImageStore = create<ImageSessionState>((set, get) => ({
     return sessionId;
   },
 
-  generate: async (ctx, prompt) => {
+  generate: async (ctx, prompt, opts) => {
     const sessionId = get().sessionId ?? (await get().begin(ctx.projectPath));
+    // Resolved before the await: the parent must be the turn on screen when
+    // the round started, not whatever the state holds when the result lands.
+    const parent = opts?.append ? get().currentTurn() : null;
     const token = ++runSeq;
     set({ runToken: token, running: true, error: null });
     try {
       const result = await callModel(ctx, prompt, []);
       if (get().runToken !== token) return void bill(ctx, "image-gen", result);
       const turn = await materialize(ctx, sessionId, {
-        parentId: null,
+        parentId: parent?.id ?? null,
         instruction: prompt,
         degraded: false,
       }, result);
       if (get().runToken !== token) return;
-      set({ turns: [turn], currentId: turn.id });
+      set((s) => ({ turns: parent ? [...s.turns, turn] : [turn], currentId: turn.id }));
     } catch (e) {
       if ((e as Error).name !== "AbortError" && get().runToken === token) set({ error: messageOf(e) });
     } finally {
@@ -207,6 +226,11 @@ export const useImageStore = create<ImageSessionState>((set, get) => ({
   },
 
   goTo: (turnId) => set({ currentId: turnId }),
+
+  annotateTurn: (turnId, review) =>
+    set((s) => ({
+      turns: s.turns.map((t) => (t.id === turnId ? { ...t, review } : t)),
+    })),
 
   choose: (turnId, index) =>
     set((s) => ({
