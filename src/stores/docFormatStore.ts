@@ -75,6 +75,14 @@ export function nextCustomId(presets: readonly DocFormatPreset[]): string {
   }
 }
 
+/**
+ * 从一份 .docx 读来的格式在本次会话里的 id。用路径而不是内容哈希：同一份文件
+ * 再读一次应该覆盖上一次的结果，而不是攒出两条。
+ */
+export function imitatedIdFor(path: string): string {
+  return `imitated:${path}`;
+}
+
 export const useDocFormatStore = create<DocFormatState>((set, get) => ({
   presets: BUILTIN_FORMATS,
   defaultId: reconcile(BUILTIN_FORMATS, savedDefault()),

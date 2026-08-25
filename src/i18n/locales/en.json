@@ -2781,6 +2781,34 @@
       "discardAsk": "Discard unsaved changes?",
       "keepEditing": "Keep editing",
       "discard": "Discard"
+    },
+    "import": {
+      "title": "Read format from a Word file",
+      "sub": "Reads that file's style definitions. No text is imported.",
+      "pick": "Choose a Word file",
+      "onlyDocx": ".docx / .dotx only",
+      "reading": "Reading {{file}}…",
+      "cannotRead": "Cannot read {{file}}",
+      "wrongKind": "Only .docx (Word 2007 and later) can be read. This is a .{{ext}} — open it in Word, save as .docx, and try again.",
+      "alsoUnreadable": "Also unreadable: .doc · .pages · .odt · .rtf · .pdf",
+      "pickAgain": "Choose another file",
+      "another": "Change",
+      "readSpec": "What it says",
+      "declaredCount": "{{n}} of {{total}} pinned down by this file",
+      "colItem": "Item",
+      "colValue": "Value read",
+      "colSource": "Source",
+      "source_declared": "stated",
+      "source_default": "Word default",
+      "source_absent": "not present",
+      "nothingPinnedTitle": "This file pins nothing down",
+      "nothingPinned": "The file read fine, but every style in it is Word's factory setting — each row below says so. That is not an error; it means this file cannot serve as a format requirement. The built-in \"{{name}}\" is close to the same thing.",
+      "next": "Next",
+      "presetName": "Name this format",
+      "saveAsPreset": "Save as preset",
+      "alsoDefault": "Also make it the default — used when the assistant names no format",
+      "useOnce": "Use it once, don't save",
+      "useOnceHint": "Lives in this session only; stays out of the preset list"
     }
   }
 }

@@ -37,7 +37,7 @@ import {
 import { LORE_PLAN_ACTIONS, type LorePlan, type PlanDecision, type PlanGate } from "./plan";
 import { editImageTool, generateImageTool, redrawLoreImageTool } from "./imageTools";
 import { exportPptxTool } from "./pptxTools";
-import { exportDocxTool } from "./docxTools";
+import { exportDocxTool, readDocFormatTool } from "./docxTools";
 import {
   listScenesTool,
   readSceneMemoryTool,
@@ -553,6 +553,7 @@ export type ToolId =
   | "delete_directory"
   | "export_pptx"
   | "export_docx"
+  | "read_doc_format"
   | "generate_image"
   | "edit_image"
   | "redraw_lore_image"
@@ -1912,6 +1913,29 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => exportDocxTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  read_doc_format: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "read_doc_format",
+        description:
+          "Look up one layout format in full — margins, per-level headings, document grid — beyond the one-line summary in your briefing. Pass a preset id to inspect it, or the path of a .docx/.dotx the author wants copied: reading a Word file registers its layout as a format id you hand straight to export_docx. Use it when they name a template ('照这份来') or when a requirement the summary omits has to be checked. Only .docx/.dotx — a PDF or screenshot would be a guess.",
+        parameters: {
+          type: "object",
+          properties: {
+            target: {
+              type: "string",
+              description: "A format preset id, or the full path of a .docx/.dotx in the project",
+            },
+          },
+          required: ["target"],
+        },
+      },
+    },
+    execute: (call, ctx) => readDocFormatTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   generate_image: {

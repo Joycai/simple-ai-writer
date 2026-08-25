@@ -95,7 +95,8 @@ function route(
     tools = tools.filter((t) => t !== "export_pptx");
   }
   if (!isDocxExportEnabled()) {
-    tools = tools.filter((t) => t !== "export_docx");
+    const wordTools = new Set<ToolId>(["export_docx", "read_doc_format"]);
+    tools = tools.filter((t) => !wordTools.has(t));
   }
 
   // If any delegate-capable subagent is enabled and we have an

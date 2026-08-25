@@ -2776,6 +2776,34 @@
       "discardAsk": "有未保存的改动，放弃吗？",
       "keepEditing": "继续编辑",
       "discard": "放弃改动"
+    },
+    "import": {
+      "title": "从 Word 文件读取格式",
+      "sub": "读的是这份文件的样式定义，不导入任何文字内容。",
+      "pick": "选一个 Word 文件",
+      "onlyDocx": "只能读 .docx / .dotx",
+      "reading": "正在读 {{file}}…",
+      "cannotRead": "读不了 {{file}}",
+      "wrongKind": "只能读 .docx（Word 2007 以后的格式）。这个文件是 .{{ext}} —— 在 Word 里打开、另存为 .docx 再试。",
+      "alsoUnreadable": "同样读不了：.doc · .pages · .odt · .rtf · .pdf",
+      "pickAgain": "重新选择文件",
+      "another": "换一个",
+      "readSpec": "读到的规格",
+      "declaredCount": "{{n}} / {{total}} 项由这份文件写死",
+      "colItem": "项目",
+      "colValue": "读到的值",
+      "colSource": "来源",
+      "source_declared": "显式声明",
+      "source_default": "Word 默认",
+      "source_absent": "未出现",
+      "nothingPinnedTitle": "这份文件本身没有写死格式",
+      "nothingPinned": "文件读成功了，但它的样式全部沿用 Word 的出厂设置——下面每一行的来源都是「Word 默认」。这不是错误，只是说明这份文件不能当格式要求用；内置的「{{name}}」和它差不多。",
+      "next": "接下来",
+      "presetName": "给这套格式起个名字",
+      "saveAsPreset": "存为预设",
+      "alsoDefault": "同时设为默认 —— 以后 AI 不指定格式时用它",
+      "useOnce": "这次就用它，不保存",
+      "useOnceHint": "只挂在本次会话里，不进预设列表"
     }
   }
 }

@@ -55,7 +55,8 @@ describe("routeTools", () => {
   const BASELINE_TOOLS = AGENT_ASSIST_PRESET.tools.filter(
     (t) => !["generate_image", "edit_image", "redraw_lore_image"].includes(t)
       && t !== "export_pptx"
-      && t !== "export_docx",
+      && t !== "export_docx"
+      && t !== "read_doc_format",
   );
 
   it("keeps everything except the image tools when no subagents are active", () => {
@@ -274,15 +275,20 @@ describe("the PPTX export Beta gate", () => {
     }
   });
 
-  it("withholds export_docx entirely while its own switch is off", () => {
+  it("withholds both Word tools entirely while its own switch is off", () => {
+    // read_doc_format goes too: on its own it can only answer about formats
+    // nobody can export, which reads as the assistant being broken.
     docxBeta.on = false;
-    expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS).tools).not.toContain("export_docx");
+    const tools = routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS).tools;
+    expect(tools).not.toContain("export_docx");
+    expect(tools).not.toContain("read_doc_format");
   });
 
   it("offers export_docx once the author turns it on", () => {
     docxBeta.on = true;
     try {
       expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS).tools).toContain("export_docx");
+      expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS).tools).toContain("read_doc_format");
       expect(routePlannedTools(AGENT_ASSIST_PRESET, allDisabled, MODELS).tools).toContain("export_docx");
     } finally {
       docxBeta.on = false;

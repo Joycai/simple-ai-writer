@@ -14,12 +14,13 @@
  */
 
 import { fileExists, readFile } from "../fs/fileio";
-import { resolveWorkspacePath } from "../paths";
+import { baseName, resolveWorkspacePath } from "../paths";
 import { docxPathFor } from "../docx";
-import { eastAsiaFontsOf, formatSpecRows } from "../docx/format";
+import { eastAsiaFontsOf, formatSpecRows, formatSummary } from "../docx/format";
 import { missingFonts } from "../docx/fontCheck";
+import { readDocFormat } from "../docx/read";
 import { describeOrigin, FormatResolveError, resolveFormat, type DocFormatOverrides } from "../docx/resolve";
-import { currentFormats } from "../../stores/docFormatStore";
+import { currentFormats, imitatedIdFor, useDocFormatStore } from "../../stores/docFormatStore";
 import type { DocxProposal, ToolContext } from "./registry";
 import type { ToolResult } from "./tools";
 
@@ -131,4 +132,88 @@ function originNote(origin: ReturnType<typeof resolveFormat>["origin"], _total: 
         ? origin.base.presetLabel
         : undefined;
   }
+}
+
+
+/**
+ * `read_doc_format` —— 「这套格式到底是什么」和「照这份文件来」两件事的同一个
+ * 入口。
+ *
+ * 返回的是**人话摘要**，不是 `DocFormat` 的 JSON：模型只需要能**指认**一套
+ * 格式，不需要能写出一套（01-agent-design I2）。读文件时顺手把它挂成一个会话
+ * 内的临时预设，把 id 一并给回去——模型下一步就能拿它调 `export_docx`。
+ */
+export async function readDocFormatTool(
+  toolCallId: string,
+  args: { target?: string },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const target = args.target?.trim();
+  if (!target) {
+    return { toolCallId, content: "Error: 'target' is required — a format preset id, or the path of a .docx to copy." };
+  }
+
+  // 先当预设 id 认。作者说「用公文那套」时模型抄的就是清单里的 id，走这条路
+  // 不碰盘。
+  const { presets, defaultId } = currentFormats();
+  const preset = presets.find((p) => p.id === target);
+  if (preset) {
+    return {
+      toolCallId,
+      content: [
+        `Format "${preset.id}" (${preset.label})${preset.id === defaultId ? " — the author's default" : ""}:`,
+        ...formatSummary(preset.format).map((line) => `- ${line}`),
+        `Use it with export_docx format_id="${preset.id}".`,
+      ].join("\n"),
+    };
+  }
+
+  const path = resolveWorkspacePath(ctx.projectPath, target);
+  if (!path) {
+    return { toolCallId, content: "Error: that path is outside the project, and it is not a known format id." };
+  }
+  if (!/\.(docx|dotx)$/i.test(path)) {
+    return {
+      toolCallId,
+      content: `Error: "${target}" is neither a format preset id nor a .docx/.dotx file. Only Word files carry the exact numbers a format needs — a PDF or a screenshot would be a guess.`,
+    };
+  }
+  if (!(await fileExists(path))) {
+    return { toolCallId, content: `Error: there is no file at ${path}.` };
+  }
+
+  let result;
+  try {
+    result = await readDocFormat(path);
+  } catch (e) {
+    return { toolCallId, content: `Error: could not read the layout of ${path} — ${e instanceof Error ? e.message : String(e)}` };
+  }
+
+  const file = baseName(path);
+  const id = imitatedIdFor(path);
+  useDocFormatStore.getState().addImitated({
+    id,
+    label: file,
+    builtin: false,
+    imitatedFrom: file,
+    format: result.format,
+  });
+
+  return {
+    toolCallId,
+    content: [
+      `Read the layout of ${file}:`,
+      ...formatSummary(result.format).map((line) => `- ${line}`),
+      // 「它写死了什么」和「它长什么样」是两件事：一份全用 Word 默认值的文件
+      // 也会给出一份完整的规格，但那份规格不是它要求的，是我们填的。
+      result.declaredCount > 0
+        ? `Of those, ${result.declaredCount} are pinned down by the file itself: ${result.rows
+            .filter((r) => r.source === "declared")
+            .map((r) => `${r.label} ${r.value}`)
+            .join("; ")}.`
+        : "NOTE: that file pins down nothing — every value above is a Word default we filled in, not a requirement it states. Say so before the author treats it as a template.",
+      ...result.notes.map((n) => `NOTE: ${n}`),
+      `Use it with export_docx format_id="${id}". It lives for this session only until the author saves it as a preset.`,
+    ].join("\n"),
+  };
 }

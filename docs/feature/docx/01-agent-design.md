@@ -1,9 +1,8 @@
 # Agent 产出 .docx（Beta）——设计方案
 
-> 状态：`partial` —— **一期已实施**：转换内核（`src/lib/docx/`）、`export_docx` 工具与
-> Beta 门、导出审批卡、设置 → 排版格式（预设列表 + 纸样示意图 + 选默认）。
-> **未实施**：预设编辑抽屉（设计稿 1f/1g）、从 Word 文件读取格式（1h/1i，要 Rust 端）、
-> 自建预设的落盘。可行性与实测在 [00-feasibility.md](00-feasibility.md)，UI 任务书在 [02-ui-brief.md](02-ui-brief.md)。
+> 状态：`shipped`（一期 + 二期，PR #325）。整条链闭合：作者建/改/读格式 → 模型在
+> briefing 里看得见清单 → `export_docx` 出稿 → 审批卡逐项核对 → 回读断言钉住产出。
+> **三期仍未做**：页眉页脚与页码、多级自动编号、预设进应用配置备份。可行性与实测在 [00-feasibility.md](00-feasibility.md)，UI 任务书在 [02-ui-brief.md](02-ui-brief.md)。
 > 目标已从"导出菜单多一个格式"改为**「agent 能产出 docx，并且按照要求的样式 / 格式 / 版式」**。
 
 ## 0. 需求与一处读法
@@ -242,8 +241,7 @@ src-tauri/src/docx.rs             # 二期：读一份 .docx 的排版参数
 | 期 | 内容 |
 |---|---|
 | **一期 · 已实施** | `flag.ts` · `format.ts` · `blocks.ts` · `write.ts` · `resolve.ts` · `fontCheck.ts` · `index.ts` · `export_docx`（L2）+ 路由门 + 预算棘轮 · `DocxProposal` 卡 · 设置「排版格式」pane（预设列表 + 纸样示意图 + 选默认）· 通用页的 Beta 开关 |
-| **一期 · 待实施** | briefing 里的格式清单（模型现在只能靠默认或 id 猜，还看不到有哪些预设） |
-| **二期** | `read_doc_format` + `src-tauri/src/docx.rs`（参考模仿）+ 预设编辑器（完整表单 + 纸样预览）+ 「存为预设」+ `overrides` |
+| **二期 · 已实施** | `briefing.ts` 格式清单 · `presets.ts` 自建预设落 `config.db` · `DocFormatDrawer`（1f/1g）· `src-tauri/src/docx.rs` + `read.ts`（参考模仿）· `read_doc_format` 工具 · `DocxImportModal`（1h/1i） |
 | **三期** | 预设进应用配置备份；目录 / 页眉页脚 / 一级标题分页；多级自动编号 |
 
 ## 10. 明确不做
@@ -281,3 +279,52 @@ src-tauri/src/docx.rs             # 二期：读一份 .docx 的排版参数
 和 `export_pptx` 同一条路），`agentToolBudget.test.ts` 的棘轮相应从 8,600 抬到 8,950。
 省下来的 138 token 来自把 `overrides` 六个属性各自的描述合并成一句——完整的 `DocFormat`
 从头到尾没有进过任何 schema（I2）。
+
+
+## 12. 二期实现记（TURN 1 设计稿 1f–1i）
+
+### 12.1 读格式的分工：Rust 只报，TS 才判
+
+`docx.rs` 报的是「XML 里写着什么」，单位一律原样（twip、半磅、百分之一字符）；
+换算和「缺了就继承」的判断全在 `read.ts`。理由和 pptx 那条链同构（`harvester.js`
+只量、`deck.ts` 才判断）：单位表只有一份，在 Rust 里再写一份必然漂。
+
+样式继承只解一层——读到的是每个样式**自己**声明的属性，`w:basedOn` 链不追。追下去
+要实现 Word 的整套样式解析，而这个功能要回答的问题是「这份文件把什么写死了」，没写死
+的本来就该落回默认。
+
+### 12.2 来源那一列才是这张表的重点
+
+`layoutToFormat` 返回的不是一套格式，而是**逐项的 `{ 值, 来源 }`**：`declared`（这份
+文件自己写死的）/ `default`（Word 出厂值补的）/ `absent`（文件里根本没出现，比如没用过
+的标题级别）。
+
+因为一份 .docx **总能**读出一整套完整规格——问题从来不是「读没读到」，而是「读到的
+是不是它的要求」。全是 `default` 的文件读取并没有失败，它只是不能当格式要求用，而这
+句话必须在作者点「存为预设」之前说出来（设计稿 1i）。同一个信号也回给模型：
+`read_doc_format` 在这种情况下回的是一句 NOTE，而不是一份看起来很像要求的规格。
+
+### 12.3 两个入口读同一份文件，因为授权来源不同
+
+- `docx_read_layout(path)` —— agent 工具走这条，路径过 `FsScope`。
+- `docx_layout_from_bytes(data)` —— 作者从系统对话框挑的模板走这条。那个文件**在
+  工作区外面**，`FsScope` 不会也不该为它背书：授权来自那个原生对话框本身。
+
+和 `pptx_to_markdown`（字节）/ `pptx_read_slides`（路径）完全同一条分工，不是特例。
+
+### 12.4 生成端和读取端互为逆运算，并且有测试钉住
+
+网格换算在两侧各写了一遍（`gridToDocx` 写出去，`layoutToFormat` 读回来）。
+`read.test.ts` 里有一条断言把它们钉成一对：公文预设 → `gridToDocx` → 喂回
+`layoutToFormat` → 必须还原成 `22 × 28`。任何一边改了换算，那条就红。
+
+顺带钉住的一件事：公文那套里「每页 22 行」和「行距固定值 28 磅」**本来就不相等**
+（28 磅 = 560 twip，而 225mm 版心 ÷ 22 行 = 580）。写出去时网格赢。第一版测试拿
+560 当输入，读回来得到 23 行——不是 bug，是夹具自己不自洽，注释里记下了。
+
+### 12.5 工具预算
+
+`read_doc_format` 是 182 token，棘轮 8,950 → 9,150。这是 I2 那笔交易的另一半：
+一个 string 参数同时买下「告诉我这套预设的页边距」和「照这份 .docx 来」，两者都以
+散文作答——完整的 `DocFormat` 因此从头到尾没有进过任何 schema，模型也就不会被引诱
+去写一份回来。

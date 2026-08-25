@@ -20,7 +20,8 @@ import { FileDown, Plus } from "lucide-react";
 import { Pane, PaneHeader } from "./bits";
 import { PaperPreview } from "./PaperPreview";
 import { DocFormatDrawer } from "./DocFormatDrawer";
-import { nextCustomId, useDocFormatStore } from "../../../stores/docFormatStore";
+import { DocxImportModal } from "./DocxImportModal";
+import { imitatedIdFor, nextCustomId, useDocFormatStore } from "../../../stores/docFormatStore";
 import {
   BUILTIN_FORMATS,
   bodyRegionMm,
@@ -53,15 +54,18 @@ export function DocFormatPane({
   const removeFormat = useDocFormatStore((s) => s.removeFormat);
   const duplicate = useDocFormatStore((s) => s.duplicate);
   const [editing, setEditing] = useState<DocFormatPreset | null>(null);
+  const [importing, setImporting] = useState(false);
+  const addImitated = useDocFormatStore((s) => s.addImitated);
 
   // 自建预设住在 config.db，第一次进这一页才读——设置页多数时候根本不会被打开。
   useEffect(() => { void hydrate(); }, [hydrate]);
 
   // 抽屉自己接管 Esc（它可能要先问「放弃改动吗」），所以设置页这一层要让开。
   useEffect(() => {
-    onEscapeInterceptChange?.(editing ? () => {} : null);
+    const layered = editing || importing;
+    onEscapeInterceptChange?.(layered ? () => setImporting(false) : null);
     return () => onEscapeInterceptChange?.(null);
-  }, [editing, onEscapeInterceptChange]);
+  }, [editing, importing, onEscapeInterceptChange]);
 
   const selected = presets.find((p) => p.id === selectedId) ?? presets[0];
   const builtin = presets.filter((p) => p.builtin);
@@ -83,13 +87,32 @@ export function DocFormatPane({
     <Pane
       width="wide"
       drawer={
-        editing && (
-          <DocFormatDrawer
-            preset={editing}
-            onClose={() => setEditing(null)}
-            onSave={async (next) => { await saveFormat(next); setEditing(null); }}
-          />
-        )
+        <>
+          {editing && (
+            <DocFormatDrawer
+              preset={editing}
+              onClose={() => setEditing(null)}
+              onSave={async (next) => { await saveFormat(next); setEditing(null); }}
+            />
+          )}
+          {importing && (
+            <DocxImportModal
+              onClose={() => setImporting(false)}
+              onAdopt={async ({ file, path, result, name, save, makeDefault }) => {
+                // 存成预设＝落盘、进列表；「这次就用它」只挂进本次会话，和
+                // read_doc_format 从模型那边读来的走同一条路。
+                const preset: DocFormatPreset = save
+                  ? { id: nextCustomId(presets), label: name, builtin: false, imitatedFrom: file, format: result.format }
+                  : { id: imitatedIdFor(path), label: file, builtin: false, imitatedFrom: file, format: result.format };
+                if (save) await saveFormat(preset);
+                else addImitated(preset);
+                if (makeDefault) setDefault(preset.id);
+                setImporting(false);
+                select(preset.id);
+              }}
+            />
+          )}
+        </>
       }
     >
       <PaneHeader
@@ -98,7 +121,7 @@ export function DocFormatPane({
         action={
           <div className={styles.headActions}>
             <span className={styles.betaTag}>BETA</span>
-            <button className={styles.outlineBtn} disabled title={t("docxFormat.readDocxLater")}>
+            <button className={styles.outlineBtn} onClick={() => setImporting(true)}>
               <FileDown size={13} />
               {t("docxFormat.readDocx")}
             </button>
