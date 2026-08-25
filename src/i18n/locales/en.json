@@ -1252,6 +1252,7 @@
       "queuedHint": "Queued · sends after this run",
       "showEarlier": "{{n}} earlier exchanges",
       "collapseEarlier": "Collapse earlier turns",
+      "jumpToLatest": "Jump to latest",
       "history": "Session history",
       "untitledSession": "(empty session)",
       "imagesNotSentDelegate": "(These images could not travel with this message directly, but a vision subagent is available — call delegate(kind:\"vision\", refs:[path]) to have it read them, then use its findings in your answer:\n{{list}})",

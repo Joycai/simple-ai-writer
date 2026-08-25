@@ -14,7 +14,7 @@
 
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowUp, ChevronDown, ChevronRight, Image as ImageIcon, X } from "lucide-react";
+import { ArrowUp, ChevronDown, ChevronRight, ChevronsDown, Image as ImageIcon, X } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { SnippetPicker } from "./SnippetPicker";
 import { useSnippetSave, type SnippetSave } from "./SnippetSaveMenu";
@@ -26,6 +26,7 @@ import {
   useMentionState,
   type MentionItem,
 } from "../common/MentionPicker";
+import { useStickToBottom } from "../common/useStickToBottom";
 import { renderMarkdown } from "../../lib/fs/markdown";
 import {
   MAX_IMAGE_BYTES, readTextFileContent,
@@ -139,6 +140,8 @@ export function AgentChat() {
   // click; re-selecting in the editor re-attaches.
   const [detached, setDetached] = useState(false);
   const messagesRef = useRef<HTMLDivElement>(null);
+  // Auto-scroll is a mode, not a reflex — see useStickToBottom.
+  const stick = useStickToBottom(messagesRef);
 
   // ── @ references ──
   const projectPath = useProjectStore((s) => s.projectPath);
@@ -313,17 +316,18 @@ export function AgentChat() {
   // the least useful end of it. Layout effect so the jump happens before paint
   // rather than as a visible scroll from the top.
   useLayoutEffect(() => {
-    if (messagesRef.current) {
-      messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
-    }
+    stick.toBottom();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only
   }, []);
 
-  // Follow the newest content while a turn is streaming.
-  useEffect(() => {
-    if (chatRunning && messagesRef.current) {
-      messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
-    }
-  }, [turns, chatRunning]);
+  // Follow the newest content while a turn is streaming — but only while the
+  // reader is still at the live end. Scrolling up during a run (to re-read what
+  // the question was, or what the agent did three tools ago) used to be undone
+  // by the next chunk; now it disarms the follow and raises the jump button
+  // instead. Layout effect so the transcript never paints a frame behind.
+  useLayoutEffect(() => {
+    if (chatRunning) stick.follow();
+  }, [turns, chatRunning, stick]);
 
   // ── Task plan (band ④) ──
   // The handle's `taskId` is a getter on a stable object, so it is read through
@@ -348,6 +352,9 @@ export function AgentChat() {
     // rarely about the same files, and the material stays in the conversation
     // history anyway.
     clearComposer();
+    // Asking a question is an intent to watch the answer: re-arm the follow even
+    // if the author had scrolled back into history to write it.
+    stick.toBottom();
     void sendChat(text, attachedQuote, sending);
   };
 
@@ -471,36 +478,53 @@ export function AgentChat() {
 
   return (
     <div className={styles.chat}>
-      <div ref={messagesRef} className={styles.messages}>
-        {turns.length === 0 && (
-          <div className={styles.emptyHint}>
-            {t("ai.chat.emptyHint", { doc: terms.doc, docs: terms.docs, kb: terms.kb })}
-          </div>
-        )}
-        {foldableAt > 0 && (
-          <button className={styles.foldBar} onClick={toggleFold} aria-expanded={showAll}>
-            {showAll ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-            {showAll
-              ? t("ai.chat.collapseEarlier", { defaultValue: "收起早前对话" })
-              : t("ai.chat.showEarlier", {
-                  defaultValue: "更早的 {{n}} 轮对话",
-                  n: hiddenExchanges,
-                })}
+      {/* The transcript and its jump button share a positioning box: the button
+          belongs to the bottom of the *scroller*, and the chrome below it
+          (approval cards, task band, composer) changes height constantly. */}
+      <div className={styles.viewport}>
+        <div ref={messagesRef} className={styles.messages}>
+          {turns.length === 0 && (
+            <div className={styles.emptyHint}>
+              {t("ai.chat.emptyHint", { doc: terms.doc, docs: terms.docs, kb: terms.kb })}
+            </div>
+          )}
+          {foldableAt > 0 && (
+            <button className={styles.foldBar} onClick={toggleFold} aria-expanded={showAll}>
+              {showAll ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+              {showAll
+                ? t("ai.chat.collapseEarlier", { defaultValue: "收起早前对话" })
+                : t("ai.chat.showEarlier", {
+                    defaultValue: "更早的 {{n}} 轮对话",
+                    n: hiddenExchanges,
+                  })}
+            </button>
+          )}
+          {turns.slice(foldAt).map((turn) =>
+            turn.role === "user" ? (
+              <UserTurn key={turn.id} turn={turn} onCtx={snippetSave.onMessageContextMenu} />
+            ) : (
+              <AssistantTurn
+                key={turn.id}
+                text={turn.text}
+                log={turn.log}
+                images={turn.images}
+                isLive={chatRunning && turn.id === turns[turns.length - 1]?.id}
+                onCtx={snippetSave.onMessageContextMenu}
+              />
+            ),
+          )}
+        </div>
+
+        {!stick.pinned && (
+          <button
+            type="button"
+            className={styles.jumpLatest}
+            onClick={stick.toBottom}
+            title={t("ai.chat.jumpToLatest", { defaultValue: "回到最新" })}
+          >
+            <ChevronsDown size={13} />
+            {t("ai.chat.jumpToLatest", { defaultValue: "回到最新" })}
           </button>
-        )}
-        {turns.slice(foldAt).map((turn) =>
-          turn.role === "user" ? (
-            <UserTurn key={turn.id} turn={turn} onCtx={snippetSave.onMessageContextMenu} />
-          ) : (
-            <AssistantTurn
-              key={turn.id}
-              text={turn.text}
-              log={turn.log}
-              images={turn.images}
-              isLive={chatRunning && turn.id === turns[turns.length - 1]?.id}
-              onCtx={snippetSave.onMessageContextMenu}
-            />
-          ),
         )}
       </div>
 
