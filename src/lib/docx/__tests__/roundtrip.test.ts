@@ -116,3 +116,110 @@ describe("换一套格式，XML 跟着换", () => {
     expect(zip.get("word/styles.xml")!).toContain('w:lineRule="auto"');
   });
 });
+
+describe("页眉页脚（三期）", () => {
+  it("什么都没设就一个分片都不发——空页眉在 Word 里会占着一行", async () => {
+    const clean = BUILTIN_FORMATS.find((p) => p.id === "clean")!.format;
+    const bare = { ...clean, headerFooter: { ...clean.headerFooter, pageNumber: "none" as const } };
+    const zip = await build(bare);
+    expect([...zip.keys()].some((k) => /word\/(header|footer)\d*\.xml/.test(k))).toBe(false);
+  });
+
+  it("公文的页码是一字线的「— 1 —」，落成域而不是死字", async () => {
+    const zip = await build();
+    const footers = [...zip.entries()].filter(([k]) => /word\/footer\d*\.xml/.test(k));
+    expect(footers.length).toBeGreaterThan(0);
+    const xml = footers.map(([, v]) => v).join("");
+    expect(xml).toContain("— ");
+    expect(xml).toContain(" —");
+    // PAGE 域：Word 打开时才算出页码。写成死字的话第二页还是 1。
+    expect(xml).toContain("PAGE");
+  });
+
+  it("奇偶页不同要在文档层开，否则偶数页那半安静地不出现", async () => {
+    const zip = await build();
+    expect(zip.get("word/settings.xml")).toContain("evenAndOddHeaders");
+    // 单双两个页脚分片都要在
+    expect([...zip.keys()].filter((k) => /word\/footer\d*\.xml/.test(k)).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("偶数页的对齐左右互换——装订后页码落在订口外侧", async () => {
+    const zip = await build();
+    const footers = [...zip.entries()]
+      .filter(([k]) => /word\/footer\d*\.xml/.test(k))
+      .map(([, v]) => v);
+    const alignments = footers.flatMap((x) => [...x.matchAll(/<w:jc w:val="(\w+)"\/>/g)].map((m) => m[1]));
+    expect(new Set(alignments)).toEqual(new Set(["right", "left"]));
+  });
+
+  it("页眉文字为空就不发页眉，只发页脚", async () => {
+    const zip = await build();
+    expect([...zip.keys()].some((k) => /word\/header\d*\.xml/.test(k))).toBe(false);
+  });
+});
+
+describe("标题自动编号（三期）", () => {
+  it("公文那套是 一、（一）1.（1）", async () => {
+    const numbering = (await build()).get("word/numbering.xml")!;
+    expect(numbering).toContain("chineseCounting");
+    expect(numbering).toContain('w:val="%1、"');
+    expect(numbering).toContain('w:val="（%2）"');
+    expect(numbering).toContain('w:val="%3."');
+  });
+
+  it("序号和标题之间不插制表位", async () => {
+    // Word 的默认 tab 会把标题推到一个和正文对不齐的位置上。
+    const numbering = (await build()).get("word/numbering.xml")!;
+    expect(numbering).toContain('<w:suff w:val="nothing"/>');
+  });
+
+  it("标题段落引用编号，正文段落不引用", async () => {
+    const doc = (await build()).get("word/document.xml")!;
+    const headings = [...doc.matchAll(/<w:p><w:pPr><w:pStyle w:val="Heading\d"\/>(.*?)<\/w:pPr>/g)];
+    expect(headings.length).toBeGreaterThan(0);
+    expect(headings.every((m) => m[1].includes("<w:numPr>"))).toBe(true);
+  });
+
+  it("标题引用的确实是标题那份定义，不是列表的", async () => {
+    // numId → abstractNumId → 那份定义的 lvlText。三份 numbering 定义同处一份
+    // numbering.xml，而 numId 由 docx 自己分配——「标题指到列表的编号上」只会
+    // 表现为序号变成了圆点，不会报任何错。
+    const zip = await build();
+    const numbering = zip.get("word/numbering.xml")!;
+    const doc = zip.get("word/document.xml")!;
+
+    const numToAbstract = new Map(
+      [...numbering.matchAll(/<w:num w:numId="(\d+)"[^>]*>\s*<w:abstractNumId w:val="(\d+)"/g)]
+        .map((m) => [m[1], m[2]] as const),
+    );
+    const abstractText = new Map(
+      [...numbering.matchAll(/<w:abstractNum w:abstractNumId="(\d+)"[\s\S]*?<w:lvlText w:val="([^"]*)"/g)]
+        .map((m) => [m[1], m[2]] as const),
+    );
+
+    const h1 = doc.match(/<w:pStyle w:val="Heading1"\/><w:numPr><w:ilvl w:val="0"\/><w:numId w:val="(\d+)"\/>/);
+    expect(h1).not.toBeNull();
+    expect(abstractText.get(numToAbstract.get(h1![1])!)).toBe("%1、");
+  });
+
+  it("关掉编号就不发这份定义，标题也不引用它", async () => {
+    const clean = BUILTIN_FORMATS.find((p) => p.id === "clean")!.format;
+    const zip = await build(clean);
+    const doc = zip.get("word/document.xml")!;
+    const headings = [...doc.matchAll(/<w:pStyle w:val="Heading\d"\/>(.*?)<\/w:pPr>/g)];
+    expect(headings.every((m) => !m[1].includes("<w:numPr>"))).toBe(true);
+  });
+
+  it("写法是 none 的那一级不挂空编号", async () => {
+    // 挂一个空编号，Word 仍会为它留出制表位，标题就莫名其妙地缩进了。
+    const gongwen = BUILTIN_FORMATS.find((p) => p.id === "gongwen")!.format;
+    const partial = {
+      ...gongwen,
+      headingNumbering: { enabled: true, levels: ["chinese", "none", "none", "none"] as const },
+    };
+    const doc = (await build(partial as typeof gongwen)).get("word/document.xml")!;
+    const h2 = doc.match(/<w:pStyle w:val="Heading2"\/>(.*?)<\/w:pPr>/);
+    expect(h2).not.toBeNull();
+    expect(h2![1]).not.toContain("<w:numPr>");
+  });
+});

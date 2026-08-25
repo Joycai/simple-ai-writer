@@ -166,6 +166,40 @@ export interface PageSetup {
   grid?: { linesPerPage: number; charsPerLine: number };
 }
 
+/** 页码的写法。`dashed` 是公文那种「— 1 —」。 */
+export type PageNumberStyle = "none" | "plain" | "dashed" | "ofTotal";
+
+export interface HeaderFooter {
+  /** 页眉文字。空串＝不写页眉——**留空就什么都不写**，绝不填一个默认值：作者
+   *  看到页眉里有字会以为自己设过。 */
+  headerText: string;
+  headerAlign: Align;
+  pageNumber: PageNumberStyle;
+  pageNumberAlign: Align;
+  /**
+   * 奇偶页不同。为真时**偶数页的对齐左右互换**——装订成册时页码落在订口外
+   * 侧，这是一条规则而不是两个字段；居中的页码不受影响。
+   */
+  differentOddEven: boolean;
+}
+
+/**
+ * 标题自动编号的写法，一级一种。
+ * 公文那套是 `一、` / `（一）` / `1.` / `（1）`。
+ */
+export type HeadingNumberFormat =
+  | "none"
+  | "chinese"        // 一、二、三、
+  | "chineseParen"   // （一）（二）
+  | "decimal"        // 1. 2. 3.
+  | "decimalParen"   // （1）（2）
+  | "decimalDotted"; // 1.1  1.1.1（含上级序号）
+
+export interface HeadingNumbering {
+  enabled: boolean;
+  levels: [HeadingNumberFormat, HeadingNumberFormat, HeadingNumberFormat, HeadingNumberFormat];
+}
+
 export interface DocFormat {
   page: PageSetup;
   body: BlockStyle;
@@ -185,7 +219,23 @@ export interface DocFormat {
     /** 表格跨页时在每一页重复表头行。长表格没有它就读不下去。 */
     repeatHeader: boolean;
   };
+  headerFooter: HeaderFooter;
+  headingNumbering: HeadingNumbering;
 }
+
+/** 什么都不写的页眉页脚。默认就该是这个：没设过就不该出现任何东西。 */
+export const NO_HEADER_FOOTER: HeaderFooter = {
+  headerText: "",
+  headerAlign: "center",
+  pageNumber: "none",
+  pageNumberAlign: "center",
+  differentOddEven: false,
+};
+
+export const NO_HEADING_NUMBERING: HeadingNumbering = {
+  enabled: false,
+  levels: ["none", "none", "none", "none"],
+};
 
 export interface DocFormatPreset {
   id: string;
@@ -256,6 +306,8 @@ const MANUSCRIPT: DocFormat = {
   code: { fontAscii: "Consolas", sizePt: 10.5, shaded: true },
   list: { indentChars: 2 },
   table: { headerBold: true, borders: true, repeatHeader: true },
+  headerFooter: { ...NO_HEADER_FOOTER, pageNumber: "plain" },
+  headingNumbering: NO_HEADING_NUMBERING,
 };
 
 /** 素雅：报告、周报、文档。无缩进，段间距代替缩进。 */
@@ -276,6 +328,8 @@ const CLEAN: DocFormat = {
   code: { fontAscii: "Consolas", sizePt: 10, shaded: true },
   list: { indentChars: 2 },
   table: { headerBold: true, borders: true, repeatHeader: true },
+  headerFooter: NO_HEADER_FOOTER,
+  headingNumbering: NO_HEADING_NUMBERING,
 };
 
 /**
@@ -303,6 +357,16 @@ const GONGWEN: DocFormat = {
   code: { fontAscii: "Consolas", sizePt: 12, shaded: false },
   list: { indentChars: 2 },
   table: { headerBold: true, borders: true, repeatHeader: true },
+  // 公文的页码是「— 1 —」，且奇偶页分居订口外侧。
+  headerFooter: {
+    headerText: "",
+    headerAlign: "center",
+    pageNumber: "dashed",
+    pageNumberAlign: "right",
+    differentOddEven: true,
+  },
+  // 一、（一）1. （1）——党政机关公文的层级写法。
+  headingNumbering: { enabled: true, levels: ["chinese", "chineseParen", "decimal", "decimalParen"] },
 };
 
 /** 论文：宋体小四，1.5 倍行距，标题黑体分级。 */
@@ -323,6 +387,8 @@ const THESIS: DocFormat = {
   code: { fontAscii: "Consolas", sizePt: 10.5, shaded: true },
   list: { indentChars: 2 },
   table: { headerBold: true, borders: true, repeatHeader: true },
+  headerFooter: { ...NO_HEADER_FOOTER, pageNumber: "ofTotal" },
+  headingNumbering: { enabled: true, levels: ["chinese", "decimalDotted", "decimalDotted", "decimalDotted"] },
 };
 
 /** 投标：仿宋四号，行距固定 24 磅，标题不分页（评标要连续翻）。 */
@@ -343,6 +409,8 @@ const BID: DocFormat = {
   code: { fontAscii: "Consolas", sizePt: 12, shaded: false },
   list: { indentChars: 2 },
   table: { headerBold: true, borders: true, repeatHeader: true },
+  headerFooter: { ...NO_HEADER_FOOTER, pageNumber: "ofTotal" },
+  headingNumbering: { enabled: true, levels: ["chinese", "chineseParen", "decimal", "decimalParen"] },
 };
 
 export const BUILTIN_FORMATS: DocFormatPreset[] = [
@@ -445,3 +513,124 @@ export function formatSpecRows(f: DocFormat): SpecRow[] {
 export function eastAsiaFontsOf(f: DocFormat): string[] {
   return [...new Set([f.body.font.eastAsia, ...f.headings.map((h) => h.font.eastAsia)])];
 }
+
+// ─── 校验 / 归一 ──────────────────────────────────────────────────────────────
+
+/**
+ * 把一份来路不明的 JSON 归一成一套 `DocFormat`。
+ *
+ * 三个入口都要它：从 `config.db` 读回作者的自建预设、从应用配置备份里导入、
+ * 以后从任何别的地方。**归一而不是拒绝**——一份预设里有一个字段坏了就整套消失，
+ * 对作者来说是「我的格式不见了」，而缺的那一项本来就该落回默认。
+ *
+ * 也是新增字段的兼容层：三期之前存下来的预设没有 `headerFooter` /
+ * `headingNumbering`，读回来时在这里补上，不需要写一次数据迁移。
+ */
+export function parseDocFormat(raw: unknown, base: DocFormat = BUILTIN_FORMATS[1].format): DocFormat {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object" ? v as Record<string, unknown> : {});
+  const num = (v: unknown, fallback: number, min: number, max: number): number =>
+    typeof v === "number" && Number.isFinite(v) && v >= min && v <= max ? v : fallback;
+  const str = (v: unknown, fallback: string): string => (typeof v === "string" && v.trim() ? v : fallback);
+  const bool = (v: unknown, fallback: boolean): boolean => (typeof v === "boolean" ? v : fallback);
+  const oneOf = <T extends string>(v: unknown, allowed: readonly T[], fallback: T): T =>
+    allowed.includes(v as T) ? (v as T) : fallback;
+
+  const align = (v: unknown, fallback: Align) => oneOf(v, ALIGNS, fallback);
+
+  const line = (v: unknown, fallback: LineSpacing | undefined): LineSpacing | undefined => {
+    const o = obj(v);
+    if (!o.rule && !o.value) return fallback;
+    const rule = oneOf(o.rule, LINE_RULES, fallback?.rule ?? "auto");
+    return { rule, value: num(o.value, fallback?.value ?? 1, 0.01, 2000) };
+  };
+
+  const block = (v: unknown, fb: BlockStyle): BlockStyle => {
+    const o = obj(v);
+    const font = obj(o.font);
+    const l = line(o.line, fb.line);
+    return {
+      font: { eastAsia: str(font.eastAsia, fb.font.eastAsia), ascii: str(font.ascii, fb.font.ascii) },
+      sizePt: num(o.sizePt, fb.sizePt, 1, 1638),
+      bold: bool(o.bold, fb.bold),
+      align: align(o.align, fb.align),
+      ...(l ? { line: l } : {}),
+      spaceBeforePt: num(o.spaceBeforePt, fb.spaceBeforePt, 0, 2000),
+      spaceAfterPt: num(o.spaceAfterPt, fb.spaceAfterPt, 0, 2000),
+      firstLineChars: num(o.firstLineChars, fb.firstLineChars, 0, 20),
+      ...(bool(o.pageBreakBefore, !!fb.pageBreakBefore) ? { pageBreakBefore: true } : {}),
+    };
+  };
+
+  const pageRaw = obj(r.page);
+  const marginsRaw = obj(pageRaw.margins);
+  const gridRaw = pageRaw.grid === undefined || pageRaw.grid === null ? null : obj(pageRaw.grid);
+  const hfRaw = obj(r.headerFooter);
+  const numberingRaw = obj(r.headingNumbering);
+  const levelsRaw = Array.isArray(numberingRaw.levels) ? numberingRaw.levels : [];
+
+  const headings = [0, 1, 2, 3].map((i) =>
+    block(Array.isArray(r.headings) ? r.headings[i] : undefined, base.headings[i]),
+  ) as DocFormat["headings"];
+
+  return {
+    page: {
+      size: oneOf(pageRaw.size, Object.keys(PAGE_SIZES) as PageSizeName[], base.page.size),
+      ...(bool(pageRaw.landscape, !!base.page.landscape) ? { landscape: true } : {}),
+      margins: {
+        top: num(marginsRaw.top, base.page.margins.top, 0, 200),
+        right: num(marginsRaw.right, base.page.margins.right, 0, 200),
+        bottom: num(marginsRaw.bottom, base.page.margins.bottom, 0, 200),
+        left: num(marginsRaw.left, base.page.margins.left, 0, 200),
+      },
+      ...(gridRaw
+        ? {
+            grid: {
+              linesPerPage: Math.round(num(gridRaw.linesPerPage, 22, 1, 200)),
+              charsPerLine: Math.round(num(gridRaw.charsPerLine, 28, 1, 200)),
+            },
+          }
+        : {}),
+    },
+    body: block(r.body, base.body),
+    headings,
+    quote: {
+      indentChars: num(obj(r.quote).indentChars, base.quote.indentChars, 0, 20),
+      italic: bool(obj(r.quote).italic, base.quote.italic),
+      ...(typeof obj(r.quote).sizePt === "number"
+        ? { sizePt: num(obj(r.quote).sizePt, base.body.sizePt, 1, 1638) }
+        : {}),
+    },
+    code: {
+      fontAscii: str(obj(r.code).fontAscii, base.code.fontAscii),
+      sizePt: num(obj(r.code).sizePt, base.code.sizePt, 1, 1638),
+      shaded: bool(obj(r.code).shaded, base.code.shaded),
+    },
+    list: { indentChars: num(obj(r.list).indentChars, base.list.indentChars, 0, 20) },
+    table: {
+      headerBold: bool(obj(r.table).headerBold, base.table.headerBold),
+      borders: bool(obj(r.table).borders, base.table.borders),
+      repeatHeader: bool(obj(r.table).repeatHeader, base.table.repeatHeader),
+    },
+    headerFooter: {
+      headerText: typeof hfRaw.headerText === "string" ? hfRaw.headerText : base.headerFooter.headerText,
+      headerAlign: align(hfRaw.headerAlign, base.headerFooter.headerAlign),
+      pageNumber: oneOf(hfRaw.pageNumber, PAGE_NUMBER_STYLES, base.headerFooter.pageNumber),
+      pageNumberAlign: align(hfRaw.pageNumberAlign, base.headerFooter.pageNumberAlign),
+      differentOddEven: bool(hfRaw.differentOddEven, base.headerFooter.differentOddEven),
+    },
+    headingNumbering: {
+      enabled: bool(numberingRaw.enabled, base.headingNumbering.enabled),
+      levels: [0, 1, 2, 3].map((i) =>
+        oneOf(levelsRaw[i], HEADING_NUMBER_FORMATS, base.headingNumbering.levels[i]),
+      ) as HeadingNumbering["levels"],
+    },
+  };
+}
+
+const ALIGNS: readonly Align[] = ["left", "center", "right", "justify"];
+const LINE_RULES: readonly LineRule[] = ["exact", "atLeast", "auto"];
+export const PAGE_NUMBER_STYLES: readonly PageNumberStyle[] = ["none", "plain", "dashed", "ofTotal"];
+export const HEADING_NUMBER_FORMATS: readonly HeadingNumberFormat[] = [
+  "none", "chinese", "chineseParen", "decimal", "decimalParen", "decimalDotted",
+];

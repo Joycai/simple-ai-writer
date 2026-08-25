@@ -2356,7 +2356,8 @@
     "cfgRestoreDoneNote": "供应商、模型和 Prompt 已经按 ID 合并，界面偏好已经生效。",
     "cfgRestoreClose": "完成",
     "cfgVersionPick": "换一个版本",
-    "cfgVersionCurrent": "当前版本"
+    "cfgVersionCurrent": "当前版本",
+    "cfgRestoreFormatsNote": "还带着 {{count}} 套自建的排版格式（导出 Word 用的版式），同 ID 的会被覆盖。内置那几套随版本走，不受备份影响。"
   },
   "roleplay": {
     "areaBrowser": {
@@ -2768,14 +2769,33 @@
       "repeatHeader": "跨页重复表头",
       "groupHeader": "页眉页脚",
       "phaseThree": "三期",
-      "headerLater": "页码位置与格式、页眉文字、奇偶页不同——三期做。这一期导出时页眉页脚留空，不写任何默认内容，免得作者以为设过。",
+      "headerLater": "页眉页脚只在设了内容时才写进文件——留空就一行都不发，免得作者以为自己设过。首页不同、页眉横线、章节各自编号仍未做。",
       "previewTitle": "纸样",
       "previewLive": "改一个字段就重画",
       "regionLine": "版心 {{w}} × {{h}}{{grid}}",
       "saveHint": "保存后对以后的导出生效 · 已有的 .docx 不动",
       "discardAsk": "有未保存的改动，放弃吗？",
       "keepEditing": "继续编辑",
-      "discard": "放弃改动"
+      "discard": "放弃改动",
+      "groupNumbering": "标题编号",
+      "numbering": "自动编号",
+      "numberingOff": "关",
+      "numberingHint": "由 Word 自己编号，正文里不要手写序号",
+      "num_none": "不编号",
+      "num_chinese": "一、二、三、",
+      "num_chineseParen": "（一）（二）",
+      "num_decimal": "1. 2. 3.",
+      "num_decimalParen": "（1）（2）",
+      "num_decimalDotted": "1.1.1（含上级）",
+      "headerText": "页眉文字",
+      "headerTextPlaceholder": "留空＝不写页眉",
+      "pageNumber": "页码",
+      "pn_none": "不写页码",
+      "pn_plain": "1",
+      "pn_dashed": "— 1 —（公文）",
+      "pn_ofTotal": "1 / 12",
+      "oddEven": "奇偶页不同",
+      "oddEvenHint": "偶数页的左右对齐互换，装订后页码落在订口外侧"
     },
     "import": {
       "title": "从 Word 文件读取格式",
