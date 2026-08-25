@@ -4284,12 +4284,13 @@ checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
 name = "simple-ai-writer"
-version = "1.30.1"
+version = "1.30.2"
 dependencies = [
  "base64 0.22.1",
  "calamine",
  "gethostname",
  "keyring",
+ "keyring-core",
  "libc",
  "objc2",
  "objc2-app-kit",
