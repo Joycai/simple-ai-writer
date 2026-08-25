@@ -10,7 +10,8 @@
 import { generateImage, isEditUnsupportedError } from "../ai/image";
 import { imageCostFor } from "../ai/configDb";
 import type { IllustrateProposal } from "../agent/registry";
-import { dataUrlToBytes, imageToDataUrl } from "../fs/images";
+import { dataUrlToBytes } from "../fs/images";
+import { imageForModel } from "./normalize";
 import { loadApiKey } from "../keyStore";
 import { addLoreImage } from "../lore";
 import { imageMarkdown, saveDocumentAsset, saveImageInFolder } from "./assets";
@@ -94,7 +95,7 @@ export async function runIllustration(
   let result;
   if (inputPaths.length && model.caps?.edit !== false) {
     const images: string[] = [];
-    for (const p of inputPaths) images.push((await imageToDataUrl(p)).dataUrl);
+    for (const p of inputPaths) images.push((await imageForModel(p)).dataUrl);
     try {
       result = await generateImage(conn, { ...editReq, images });
     } catch (err) {

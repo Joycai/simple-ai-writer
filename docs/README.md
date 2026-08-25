@@ -91,6 +91,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [translate/01-execution-plan.md](feature/translate/01-execution-plan.md) | `shipped` (Beta flag) | The four PR slices, the six invariants, and why `top_p`/`frequency_penalty` belong to `StreamOptions` rather than `ConnOptions` |
 | [pptx-plan.md](feature/pptx-plan.md) | `shipped` (write side Beta) | Reading .pptx in Rust; HTML → PPTX without a model in the loop |
 | [image-generation-plan.md](feature/image-generation-plan.md) | `shipped` | Generation/editing as the `imagegen` subagent |
+| [image-normalize-plan.md](feature/image-normalize-plan.md) | `partial` | 入模图片规范化：超 4096 长边的图在**发送前**降采样（已发），HEIC 转码**明确不做**（LGPL，§3.0）。为什么阈值是 4096 而不是 2048、为什么没有 per-provider 上限表，以及三个读图函数按去向分开的理由 |
 | [comfyui-plan.md](feature/comfyui-plan.md) | `shipped` (Beta flag) | 本地 ComfyUI 作为第五条出图路由：一个 Model = 一张导出的 API 格式工作流，占位注入而非构图；参考图/图生图走 LoadImage 槽位，edit 能力从图推导；人设校准循环（清单 → vision 评审 → 修正重试，历史最佳兜底） |
 | [html-artifact-plan.md](feature/html-artifact-plan.md) | `shipped` | AI-authored `.html` deliverables and their in-app preview |
 | [library-plan.md](feature/library-plan.md) | `shipped` | 文库: book-spine ordering, per-collection resources |

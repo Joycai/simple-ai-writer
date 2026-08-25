@@ -20,6 +20,7 @@ import { imageCostFor } from "../../lib/ai/configDb";
 import { resolveImageRoute } from "../../lib/ai/image";
 import { imageDialect } from "../../lib/ai/imageDialects";
 import { imageToDataUrl } from "../../lib/fs/images";
+import { imageForModel } from "../../lib/image/normalize";
 import {
   generateImagePrompt,
   imageRequestParams,
@@ -369,7 +370,7 @@ export function ImageGenModal({ target, onClose }: Props) {
         },
         review: async (image, p) => {
           setCalibrateStatus(t("lore.imageGen.calibrateReviewing", { total: calibrateRounds }));
-          const { dataUrl } = await imageToDataUrl(image);
+          const { dataUrl } = await imageForModel(image);
           return reviewImageAgainstChecklist({
             ...visionConn,
             dataUrl,
@@ -418,6 +419,13 @@ export function ImageGenModal({ target, onClose }: Props) {
     try {
       // Read back from scratch rather than holding the bytes in state — see
       // lib/image/session.ts for why candidates live on disk.
+      //
+      // `imageToDataUrl` and NOT `imageForModel`, even though the line above
+      // this one uses the latter: these bytes are about to be *written to
+      // disk* as the author's kept picture, and a re-encode here would be
+      // permanent damage to it rather than a transport detail. The dataUrl
+      // rides along for targets that show the saved image to a model, and must
+      // describe the same pixels that landed on disk.
       const { dataUrl, bytes, ext } = await imageToDataUrl(sourcePath);
       const input = { bytes, ext, dataUrl, note };
       const savedPath = await (alt ? target.altSave!.run(input) : target.save.run(input));

@@ -347,7 +347,11 @@
       "translateLabel": "JA→ZH translation (Sakura)",
       "translateHint": "Use a locally served translation model (Sakura, through an OpenAI-compatible endpoint such as LM Studio or Ollama). Bind a model with a declared translation format under Subagents; the assistant gets the translate tool only then.",
       "comfyuiLabel": "Local ComfyUI image generation",
-      "comfyuiHint": "Use a local ComfyUI instance as an image route: build a workflow in ComfyUI, export it as API-format JSON, and register it as an image model under Providers & Models (endpoint: \"ComfyUI (local)\"). The app only fills in the prompt / seed / size; your checkpoint, LoRAs and sampler settings go out exactly as you tuned them. Turning this off only hides the setup entry — configured models keep working."
+      "comfyuiHint": "Use a local ComfyUI instance as an image route: build a workflow in ComfyUI, export it as API-format JSON, and register it as an image model under Providers & Models (endpoint: \"ComfyUI (local)\"). The app only fills in the prompt / seed / size; your checkpoint, LoRAs and sampler settings go out exactly as you tuned them. Turning this off only hides the setup entry — configured models keep working.",
+      "imageSection": "Images",
+      "imageLongEdgeLabel": "Max long edge sent to a model",
+      "imageLongEdgeHint": "Pictures larger than this are scaled down before they are sent. The file on disk is untouched. Empty / 0 = send as-is.",
+      "imageLongEdgeOff": "No limit"
     },
     "backup": {
       "section": "Config Backup",
@@ -1268,7 +1272,8 @@
         "imagegen": "Draw",
         "imagegenActive": "Image-generation subagent active (click to disable for this session)",
         "imagegenDisabled": "Image-generation subagent disabled for this session (click to enable)"
-      }
+      },
+      "imageDownscaled": "Scaled down to fit the send limit ({{detail}})"
     },
     "drawer": {
       "tabGenerate": "Generate",
@@ -2584,7 +2589,8 @@
       "instructionPlaceholder": "Speaks in short sentences, never explains their motives. Deflects questions about that night, but does not lie.",
       "create": "Create",
       "narratorHint": "A narrator has no character entry; everything else is the same",
-      "deleteHint": "Deleting moves the transcript into .ai-writer/backups — recoverable"
+      "deleteHint": "Deleting moves the transcript into .ai-writer/backups — recoverable",
+      "imageDownscaled": "Scaled down to fit the send limit ({{detail}})"
     },
     "empty": {
       "title": "Talk to the people you wrote, in first person.",

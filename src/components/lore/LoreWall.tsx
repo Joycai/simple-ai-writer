@@ -21,6 +21,7 @@ import {
   type LoreEntity,
   type StagedLoreImport,
 } from "../../lib/lore";
+import { IMAGE_EXTENSIONS } from "../../lib/fs/images";
 import { appTerms, categoryLabel, defaultCategoryId, findCategory, loreCategories, loreCategoryIds, suggestCategoryId } from "../../lib/profile";
 import { useAppStore } from "../../stores/appStore";
 import { useImageThumbnails } from "./useImageDataUrl";
@@ -124,7 +125,7 @@ export function LoreWall() {
     if (!projectPath || avatarBusy) return;
     const picked = await openDialog({
       multiple: false,
-      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] }],
+      filters: [{ name: "Images", extensions: [...IMAGE_EXTENSIONS] }],
     });
     if (typeof picked !== "string") return;
     setAvatarBusy(entity.id);

@@ -63,13 +63,16 @@ vi.mock("../project", () => ({
 }));
 
 /**
- * Real classification and limits, fake decoding: `imageToDataUrl` reads bytes
- * through the Tauri fs plugin, which is not there in a node test. Sizes come
- * from the in-memory content's length so the ceiling can be exercised.
+ * Real classification and limits, fake reading: `imageForModel` goes through
+ * the Tauri fs plugin and then a canvas, neither of which exists in a node
+ * test. Sizes come from the in-memory content's length so the tool's own
+ * ceiling can still be exercised — what that ceiling now means is "even after
+ * downscaling", and the downscaling itself is tested in imageDownscale.test.
+ * Partial so `downscaleNote` stays real, since the tool result quotes it.
  */
-vi.mock("../fs/images", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../fs/images")>()),
-  imageToDataUrl: vi.fn(async (p: string) => {
+vi.mock("../image/normalize", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../image/normalize")>()),
+  imageForModel: vi.fn(async (p: string) => {
     if (!fs.has(p)) throw new Error(`ENOENT: ${p}`);
     const bytes = new Uint8Array(fs.get(p)!.length);
     return { dataUrl: `data:image/png;base64,${p}`, ext: "png", bytes };

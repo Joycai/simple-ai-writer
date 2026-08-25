@@ -20,7 +20,8 @@ import {
   useMentionState,
   type MentionItem,
 } from "../../common/MentionPicker";
-import { imageToDataUrl, readTextFileContent, type ProjectFile } from "../../../lib/fs/images";
+import { readTextFileContent, type ProjectFile } from "../../../lib/fs/images";
+import { imageForModel } from "../../../lib/image/normalize";
 import { attachedKey, type AttachedItem } from "../../../lib/lore/aiTask";
 import type { LoreEntity } from "../../../lib/lore";
 import styles from "./AttachmentTextarea.module.css";
@@ -86,7 +87,7 @@ export function AttachmentTextarea({
         // to the array this closure captured would drop a chip attached while
         // the read was in flight.
         const attachment: AttachedItem = item.file.kind === "image"
-          ? { kind: "image", file: item.file, dataUrl: (await imageToDataUrl(item.file.path)).dataUrl }
+          ? { kind: "image", file: item.file, dataUrl: (await imageForModel(item.file.path)).dataUrl }
           : { kind: "text", file: item.file, content: await readTextFileContent(item.file.path) };
         if (latest.current.attached.some((a) => attachedKey(a) === mentionKey(item))) {
           mention.close();

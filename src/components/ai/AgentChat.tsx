@@ -28,8 +28,9 @@ import {
 } from "../common/MentionPicker";
 import { renderMarkdown } from "../../lib/fs/markdown";
 import {
-  MAX_IMAGE_BYTES, imageToDataUrl, readTextFileContent,
+  MAX_IMAGE_BYTES, readTextFileContent,
 } from "../../lib/fs/images";
+import { downscaleNote, imageForModel } from "../../lib/image/normalize";
 import { attachedKey } from "../../lib/lore/aiTask";
 import { chainCanSeeImages, withSessionOverrides } from "../../lib/agent/subagent";
 import { useImageThumbnails } from "../lore/useImageDataUrl";
@@ -232,7 +233,10 @@ export function AgentChat() {
       setRefs((prev) => [...prev, { kind: "lore", entity: item.entity }]);
     } else if (item.file.kind === "image") {
       try {
-        const { dataUrl, bytes } = await imageToDataUrl(item.file.path);
+        // May come back re-encoded: an oversized picture is shrunk to fit
+        // rather than refused, and only a picture that survives even that is
+        // turned away below.
+        const { dataUrl, bytes, downscaled } = await imageForModel(item.file.path);
         // Refused here rather than at send time: the author is choosing the
         // picture *now*, and a message that quietly loses one of its
         // attachments minutes later is unexplainable from the transcript.
@@ -245,7 +249,7 @@ export function AgentChat() {
           }));
           return;
         }
-        setRefs((prev) => [...prev, { kind: "image", file: item.file, dataUrl }]);
+        setRefs((prev) => [...prev, { kind: "image", file: item.file, dataUrl, downscaled }]);
       } catch {
         setRefError(t("ai.chat.refUnreadable", {
           defaultValue: "读不到 {{name}}",
@@ -574,12 +578,21 @@ export function AgentChat() {
           {refs.map((r) => {
             const key = attachedKey(r);
             const label = r.kind === "lore" ? r.entity.name : r.file.name;
+            // Silently sending a shrunken picture is how an author ends up
+            // unable to explain why the model can't read the fine print in
+            // their screenshot. The chip is the only place they'd look.
+            const shrunk = r.kind === "image" && r.downscaled
+              ? t("ai.chat.imageDownscaled", {
+                  defaultValue: "已缩小以适应发送上限（{{detail}}）",
+                  detail: downscaleNote(r.downscaled),
+                })
+              : null;
             return (
               <button
                 key={key}
                 className={styles.attachChip}
                 onClick={() => setRefs((prev) => prev.filter((x) => attachedKey(x) !== key))}
-                title={t("ai.chat.removeRef")}
+                title={shrunk ? `${shrunk} · ${t("ai.chat.removeRef")}` : t("ai.chat.removeRef")}
               >
                 {/* A picture is the one attachment whose cost the author can't
                     read off its name — mark it as what it is. */}
