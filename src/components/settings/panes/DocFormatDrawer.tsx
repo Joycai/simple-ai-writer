@@ -401,6 +401,14 @@ export function DocFormatDrawer({
                 />
               )}
             </Field>
+            <Field label={t("docxFormat.drawer.headerRule")}>
+              <Switch
+                on={format.headerFooter.headerRule}
+                label={t("docxFormat.drawer.headerRule")}
+                onChange={(headerRule) => patch({ headerFooter: { ...format.headerFooter, headerRule } })}
+              />
+              <span className={styles.echo}>{t("docxFormat.drawer.headerRuleHint")}</span>
+            </Field>
             {format.headerFooter.pageNumber !== "none" && (
               <Field label={t("docxFormat.drawer.oddEven")}>
                 <Switch
@@ -409,6 +417,28 @@ export function DocFormatDrawer({
                   onChange={(differentOddEven) => patch({ headerFooter: { ...format.headerFooter, differentOddEven } })}
                 />
                 <span className={styles.echo}>{t("docxFormat.drawer.oddEvenHint")}</span>
+              </Field>
+            )}
+            {(format.headerFooter.pageNumber !== "none" ||
+              format.headerFooter.headerText.trim() ||
+              format.headerFooter.headerRule) && (
+              <Field label={t("docxFormat.drawer.firstPage")}>
+                <Switch
+                  on={format.headerFooter.differentFirstPage}
+                  label={t("docxFormat.drawer.firstPage")}
+                  onChange={(differentFirstPage) => patch({ headerFooter: { ...format.headerFooter, differentFirstPage } })}
+                />
+                <span className={styles.echo}>{t("docxFormat.drawer.firstPageHint")}</span>
+              </Field>
+            )}
+            {format.headerFooter.pageNumber !== "none" && (
+              <Field label={t("docxFormat.drawer.restartChapter")}>
+                <Switch
+                  on={format.headerFooter.restartEachChapter}
+                  label={t("docxFormat.drawer.restartChapter")}
+                  onChange={(restartEachChapter) => patch({ headerFooter: { ...format.headerFooter, restartEachChapter } })}
+                />
+                <span className={styles.echo}>{t("docxFormat.drawer.restartChapterHint")}</span>
               </Field>
             )}
             <div className={styles.laterNote}>{t("docxFormat.drawer.headerLater")}</div>
@@ -683,5 +713,8 @@ function headerFooterSummary(format: DocFormat, t: (k: string) => string): strin
   if (hf.headerText.trim()) parts.push(`${t("docxFormat.drawer.headerText")} ${hf.headerText}`);
   parts.push(hf.pageNumber === "none" ? t("docxFormat.drawer.pn_none") : t(`docxFormat.drawer.pn_${hf.pageNumber}`));
   if (hf.pageNumber !== "none" && hf.differentOddEven) parts.push(t("docxFormat.drawer.oddEven"));
+  if (hf.headerRule) parts.push(t("docxFormat.drawer.headerRule"));
+  if (hf.differentFirstPage) parts.push(t("docxFormat.drawer.firstPage"));
+  if (hf.restartEachChapter) parts.push(t("docxFormat.drawer.restartChapter"));
   return parts.join(" · ");
 }

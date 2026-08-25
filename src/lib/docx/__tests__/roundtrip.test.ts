@@ -223,3 +223,63 @@ describe("标题自动编号（三期）", () => {
     expect(h2![1]).not.toContain("<w:numPr>");
   });
 });
+
+describe("首页不同 / 页眉横线 / 每章页码重来", () => {
+  const withHF = (over: Partial<(typeof GONGWEN)["headerFooter"]>) => ({
+    ...GONGWEN,
+    headerFooter: { ...GONGWEN.headerFooter, ...over },
+  });
+
+  it("首页不同要发一个空的首页页脚——不发的话 Word 拿 default 顶上", async () => {
+    const zip = await build(withHF({ differentFirstPage: true }));
+    expect(zip.get("word/document.xml")).toContain("<w:titlePg/>");
+    // default + even + first = 三个页脚分片
+    expect([...zip.keys()].filter((k) => /word\/footer\d*\.xml/.test(k))).toHaveLength(3);
+    // 其中一个是空的：首页什么都不写
+    const empties = [...zip.entries()]
+      .filter(([k]) => /word\/footer\d*\.xml/.test(k))
+      .filter(([, v]) => !v.includes("PAGE"));
+    expect(empties).toHaveLength(1);
+  });
+
+  it("关掉首页不同就不发 titlePg", async () => {
+    const zip = await build(withHF({ differentFirstPage: false }));
+    expect(zip.get("word/document.xml")).not.toContain("<w:titlePg/>");
+  });
+
+  it("页眉横线可以单独存在——有些模板就只要一条线", async () => {
+    const zip = await build(withHF({ headerText: "", headerRule: true, differentFirstPage: false }));
+    const headers = [...zip.entries()].filter(([k]) => /word\/header\d*\.xml/.test(k));
+    expect(headers.length).toBeGreaterThan(0);
+    expect(headers[0][1]).toContain("<w:pBdr>");
+  });
+
+  it("既没文字也没横线就一个页眉都不发", async () => {
+    const zip = await build(withHF({ headerText: "", headerRule: false }));
+    expect([...zip.keys()].some((k) => /word\/header\d*\.xml/.test(k))).toBe(false);
+  });
+
+  it("每章页码从 1 开始：一章一节，且每节都声明 start=1", async () => {
+    const zip = await build(withHF({ restartEachChapter: true }));
+    const doc = zip.get("word/document.xml")!;
+    // 源文里只有一个一级标题，所以是一节；start 仍要写死，否则第二章接着数
+    expect(doc).toContain('<w:pgNumType w:start="1"/>');
+  });
+
+  it("分节时一级标题让开 pageBreakBefore——否则每章前多一张白纸", async () => {
+    const restart = await build(withHF({ restartEachChapter: true }));
+    const plain = await build(withHF({ restartEachChapter: false }));
+    const h1Of = (zip: Map<string, string>) =>
+      zip.get("word/styles.xml")!.match(/<w:style [^>]*w:styleId="Heading1".*?<\/w:style>/s)![0];
+    // 公文的一级标题本来不分页，所以拿手稿那套来验：它的 H1 是 pageBreakBefore
+    expect(h1Of(plain).includes("pageBreakBefore")).toBe(h1Of(restart).includes("pageBreakBefore"));
+    const manuscript = BUILTIN_FORMATS.find((p) => p.id === "manuscript")!.format;
+    const on = await build({
+      ...manuscript,
+      headerFooter: { ...manuscript.headerFooter, restartEachChapter: true },
+    });
+    const off = await build(manuscript);
+    expect(h1Of(off)).toContain("pageBreakBefore");
+    expect(h1Of(on)).not.toContain("pageBreakBefore");
+  });
+});

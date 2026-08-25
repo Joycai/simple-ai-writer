@@ -2774,7 +2774,7 @@
       "repeatHeader": "Repeat header across pages",
       "groupHeader": "Header & footer",
       "phaseThree": "phase three",
-      "headerLater": "Headers and footers are written only when you give them content — leave them empty and not a single line is emitted, so nobody thinks they set one. A distinct first page, a header rule, and per-section numbering are still not done.",
+      "headerLater": "Headers and footers are written only when you give them content — leave them empty and not a single line is emitted, so nobody thinks they set one.",
       "previewTitle": "Schematic",
       "previewLive": "redrawn on every change",
       "regionLine": "text area {{w}} × {{h}}{{grid}}",
@@ -2800,7 +2800,13 @@
       "pn_dashed": "— 1 — (Chinese official)",
       "pn_ofTotal": "1 / 12",
       "oddEven": "Different odd & even",
-      "oddEvenHint": "mirrors the alignment on even pages, so the number sits away from the binding"
+      "oddEvenHint": "mirrors the alignment on even pages, so the number sits away from the binding",
+      "headerRule": "Header rule",
+      "headerRuleHint": "a thin line under the header; works with no header text too",
+      "firstPage": "Different first page",
+      "firstPageHint": "the first page carries nothing — a cover should not wear a header or a page number",
+      "restartChapter": "Restart each chapter",
+      "restartChapterHint": "every level-1 heading starts a section and the page number returns to 1; the section break paginates, so the heading's own page break stands down"
     },
     "import": {
       "title": "Read format from a Word file",

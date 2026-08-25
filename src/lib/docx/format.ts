@@ -181,6 +181,19 @@ export interface HeaderFooter {
    * 侧，这是一条规则而不是两个字段；居中的页码不受影响。
    */
   differentOddEven: boolean;
+  /**
+   * 首页不同。为真时第一页**什么都不写**——封面、公文的版头那一页不该顶着
+   * 页眉和页码。不是「首页写别的」：那是两套内容，而作者要的从来是「这一页
+   * 空着」。
+   */
+  differentFirstPage: boolean;
+  /** 页眉下面那条横线。没有页眉文字时它也能单独存在——有些模板就只要一条线。 */
+  headerRule: boolean;
+  /**
+   * 每章页码从 1 开始。为真时每个一级标题另起一节，而**分节符本身就分页**，
+   * 所以一级标题的「另起一页」会被让开，否则每章前面多一张白纸。
+   */
+  restartEachChapter: boolean;
 }
 
 /**
@@ -230,6 +243,9 @@ export const NO_HEADER_FOOTER: HeaderFooter = {
   pageNumber: "none",
   pageNumberAlign: "center",
   differentOddEven: false,
+  differentFirstPage: false,
+  headerRule: false,
+  restartEachChapter: false,
 };
 
 export const NO_HEADING_NUMBERING: HeadingNumbering = {
@@ -359,11 +375,12 @@ const GONGWEN: DocFormat = {
   table: { headerBold: true, borders: true, repeatHeader: true },
   // 公文的页码是「— 1 —」，且奇偶页分居订口外侧。
   headerFooter: {
-    headerText: "",
-    headerAlign: "center",
+    ...NO_HEADER_FOOTER,
     pageNumber: "dashed",
     pageNumberAlign: "right",
     differentOddEven: true,
+    // 公文的第一页是版头，不该顶着页码。
+    differentFirstPage: true,
   },
   // 一、（一）1. （1）——党政机关公文的层级写法。
   headingNumbering: { enabled: true, levels: ["chinese", "chineseParen", "decimal", "decimalParen"] },
@@ -387,7 +404,14 @@ const THESIS: DocFormat = {
   code: { fontAscii: "Consolas", sizePt: 10.5, shaded: true },
   list: { indentChars: 2 },
   table: { headerBold: true, borders: true, repeatHeader: true },
-  headerFooter: { ...NO_HEADER_FOOTER, pageNumber: "ofTotal" },
+  headerFooter: {
+    ...NO_HEADER_FOOTER,
+    pageNumber: "plain",
+    // 论文的章从新页开始、页码逐章重来，页眉挂一条横线。
+    restartEachChapter: true,
+    headerRule: true,
+    differentFirstPage: true,
+  },
   headingNumbering: { enabled: true, levels: ["chinese", "decimalDotted", "decimalDotted", "decimalDotted"] },
 };
 
@@ -618,6 +642,9 @@ export function parseDocFormat(raw: unknown, base: DocFormat = BUILTIN_FORMATS[1
       pageNumber: oneOf(hfRaw.pageNumber, PAGE_NUMBER_STYLES, base.headerFooter.pageNumber),
       pageNumberAlign: align(hfRaw.pageNumberAlign, base.headerFooter.pageNumberAlign),
       differentOddEven: bool(hfRaw.differentOddEven, base.headerFooter.differentOddEven),
+      differentFirstPage: bool(hfRaw.differentFirstPage, base.headerFooter.differentFirstPage),
+      headerRule: bool(hfRaw.headerRule, base.headerFooter.headerRule),
+      restartEachChapter: bool(hfRaw.restartEachChapter, base.headerFooter.restartEachChapter),
     },
     headingNumbering: {
       enabled: bool(numberingRaw.enabled, base.headingNumbering.enabled),

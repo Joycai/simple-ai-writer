@@ -20,7 +20,7 @@ import {
   type DocFormat,
   type HeadingNumberFormat,
 } from "./format";
-import type { DocBlock, DocRun } from "./blocks";
+import { splitChapters, type DocBlock, type DocRun } from "./blocks";
 
 /** 一张已经读进内存、量过尺寸的插图。 */
 export interface ResolvedImage {
@@ -113,8 +113,9 @@ export async function blocksToDocx(
         ...(format.headingNumbering.enabled ? [headingNumberConfig(d, format)] : []),
       ],
     },
-    sections: [
-      {
+    // 一节，除非「每章页码从 1 开始」——那时每个一级标题起一节。
+    sections: (format.headerFooter.restartEachChapter ? splitChapters(blocks) : [blocks]).map(
+      (chapter, index) => ({
         ...headersAndFooters(d, format),
         properties: {
           page: {
@@ -131,12 +132,16 @@ export async function blocksToDocx(
               bottom: mmToTwip(m.bottom),
               left: mmToTwip(m.left),
             },
+            ...(format.headerFooter.restartEachChapter ? { pageNumbers: { start: 1 } } : {}),
           },
           grid: gridToDocx(format.page, format.body.sizePt),
+          // 第一节不发 type：那会在文稿最前面多插一个分节符。
+          ...(index > 0 ? { type: d.SectionType.NEXT_PAGE } : {}),
+          ...(format.headerFooter.differentFirstPage ? { titlePage: true } : {}),
         },
-        children: blocks.flatMap((b) => renderBlock(d, b, format, images, bodyWidthPx)),
-      },
-    ],
+        children: chapter.flatMap((b) => renderBlock(d, b, format, images, bodyWidthPx)),
+      }),
+    ),
   });
 
   // `toBuffer` 在浏览器里没有 Buffer，`toBlob` 要 DOM——base64 是两边都有的那条
@@ -180,11 +185,14 @@ function paraProps(d: Docx, s: BlockStyle, body: BlockStyle) {
 
 function headingStyle(d: Docx, format: DocFormat, index: number) {
   const s = format.headings[index];
+  // 每章一节时，分节符本身就分页——再叠一个 pageBreakBefore，每章前面会多出
+  // 一张白纸。让开的是一级标题，因为节正是按它切的。
+  const sectionBreaks = index === 0 && format.headerFooter.restartEachChapter;
   return {
     run: runProps(d, s),
     paragraph: {
       ...paraProps(d, s, format.body),
-      ...(s.pageBreakBefore ? { pageBreakBefore: true } : {}),
+      ...(s.pageBreakBefore && !sectionBreaks ? { pageBreakBefore: true } : {}),
     },
   };
 }
@@ -375,23 +383,36 @@ function base64ToBytes(b64: string): Uint8Array {
  */
 function headersAndFooters(d: Docx, format: DocFormat) {
   const hf = format.headerFooter;
+  type H = InstanceType<Docx["Header"]>;
+  type F = InstanceType<Docx["Footer"]>;
   const out: {
-    headers?: { default: InstanceType<Docx["Header"]>; even?: InstanceType<Docx["Header"]> };
-    footers?: { default: InstanceType<Docx["Footer"]>; even?: InstanceType<Docx["Footer"]> };
+    headers?: { default: H; even?: H; first?: H };
+    footers?: { default: F; even?: F; first?: F };
   } = {};
 
-  if (hf.headerText.trim()) {
+  // 横线可以单独存在：有些模板就只要一条线，不要字。
+  if (hf.headerText.trim() || hf.headerRule) {
     const header = () =>
       new d.Header({
         children: [
           new d.Paragraph({
             alignment: alignOf(d, hf.headerAlign),
             indent: { firstLine: 0 },
-            children: [new d.TextRun({ text: hf.headerText })],
+            ...(hf.headerRule
+              ? { border: { bottom: { style: d.BorderStyle.SINGLE, size: 6, color: "auto", space: 1 } } }
+              : {}),
+            children: hf.headerText.trim() ? [new d.TextRun({ text: hf.headerText })] : [],
           }),
         ],
       });
-    out.headers = hf.differentOddEven ? { default: header(), even: header() } : { default: header() };
+    out.headers = {
+      default: header(),
+      ...(hf.differentOddEven ? { even: header() } : {}),
+      // 首页不同＝首页**什么都不写**。不是「首页写别的」：那是两套内容，而作者
+      // 要的从来是「封面这一页空着」。空的 Header 是必须发的——不发的话 Word
+      // 会拿 default 顶上，titlePage 就等于没设。
+      ...(hf.differentFirstPage ? { first: new d.Header({ children: [] }) } : {}),
+    };
   }
 
   if (hf.pageNumber !== "none") {
@@ -405,9 +426,11 @@ function headersAndFooters(d: Docx, format: DocFormat) {
           }),
         ],
       });
-    out.footers = hf.differentOddEven
-      ? { default: footer(hf.pageNumberAlign), even: footer(mirror(hf.pageNumberAlign)) }
-      : { default: footer(hf.pageNumberAlign) };
+    out.footers = {
+      default: footer(hf.pageNumberAlign),
+      ...(hf.differentOddEven ? { even: footer(mirror(hf.pageNumberAlign)) } : {}),
+      ...(hf.differentFirstPage ? { first: new d.Footer({ children: [] }) } : {}),
+    };
   }
 
   return out;
