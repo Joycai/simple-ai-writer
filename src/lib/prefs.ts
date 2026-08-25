@@ -40,6 +40,9 @@ export const PREF_KEYS = [
   "app:aiDrawerMode",
   "app:draftCount",
   "app:defaultMaxOutput",
+  // Longest edge a picture may have when it is sent to a model; anything
+  // over it is downscaled first. 0 = never resize. See lib/image/downscalePlan.
+  "app:imageMaxLongEdge",
   "app:apiLogEnabled",
   "app:pptxExportBeta",
   "app:roleplayBeta",

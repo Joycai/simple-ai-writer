@@ -13,6 +13,7 @@ import type { ContentPart, MessageContent, StreamMessage } from "../ai/types";
 import { costFor, isTranslateOnly, type Model, type Provider } from "../ai/configDb";
 import { connOptions, type AiConn } from "../ai/conn";
 import { persistUsage } from "../ai/usage";
+import { bytesToBase64 } from "../fs/images";
 import { fileExists, readBinaryFile } from "../fs/fileio";
 import { isWorkspacePath, resolveRelativePath } from "../paths";
 import type { TaskPreset } from "./presets";
@@ -105,23 +106,6 @@ export const MAX_PDF_BYTES = 150 * 1024 * 1024;
  * that a refusal reads as "split the job", not as an arbitrary wall.
  */
 export const MAX_PDF_FILES = 3;
-
-/**
- * Uint8Array → base64, linear in the input.
- *
- * Not `imageToDataUrl`'s accumulator loop: that `binary +=` is quadratic in
- * chunk count, which a 12MB image cap keeps invisible and a 150MB PDF turns
- * into minutes of copying. Chunked `fromCharCode` still, for the call-stack
- * limit; joined once at the end.
- */
-function bytesToBase64(u8: Uint8Array): string {
-  const chunk = 8192;
-  const pieces: string[] = [];
-  for (let i = 0; i < u8.length; i += chunk) {
-    pieces.push(String.fromCharCode(...u8.subarray(i, i + chunk)));
-  }
-  return btoa(pieces.join(""));
-}
 
 /**
  * Read one project PDF for a delegation, or say exactly why not.

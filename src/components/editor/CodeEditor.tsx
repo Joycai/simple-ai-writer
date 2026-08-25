@@ -43,6 +43,7 @@ import {
   insertLink,
   insertAtCursor,
 } from "../../lib/editor/format";
+import { IMAGE_EXTENSIONS } from "../../lib/fs/images";
 import { imageMarkdown, importDocumentAsset } from "../../lib/image/assets";
 import styles from "./CodeEditor.module.css";
 
@@ -111,7 +112,7 @@ export function CodeEditor({ value, onChange, toolbar = true }: Props) {
     setInsertError(null);
     const picked = await openDialog({
       multiple: false,
-      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "gif"] }],
+      filters: [{ name: "Images", extensions: [...IMAGE_EXTENSIONS] }],
     });
     if (typeof picked !== "string") return;
     try {

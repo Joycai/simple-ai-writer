@@ -13,7 +13,8 @@ import { isHtmlPath } from "../fs/images";
 import { isPptxPath, readPptxSlides, type SlideRange } from "../fs/pptx";
 import { readHtmlSlideRange, splitHtmlSlides } from "../pptx/htmlSlides";
 import { fileExists, readFile } from "../fs/fileio";
-import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, imageToDataUrl, isImagePath } from "../fs/images";
+import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, isImagePath } from "../fs/images";
+import { downscaleNote, imageForModel, type Downscaled } from "../image/normalize";
 import { imageSlotChecklistText, readEntityFile, slotChecklistText, type LoreEntity, type LoreIndex } from "../lore";
 import { isKnownCategory } from "../profile/active";
 import {
@@ -184,9 +185,13 @@ export async function readLoreImage(
   }
 
   try {
-    const { dataUrl, bytes } = await imageToDataUrl(path);
+    const { dataUrl, bytes, downscaled } = await imageForModel(path);
     if (bytes.length > MAX_IMAGE_BYTES) return { toolCallId, content: tooLargeError(file, bytes.length) };
-    return { toolCallId, content: `Image "${file}" from ${name}.`, imageDataUrls: [dataUrl] };
+    return {
+      toolCallId,
+      content: `Image "${file}" from ${name}.${shrunkNote(downscaled)}`,
+      imageDataUrls: [dataUrl],
+    };
   } catch (e) {
     return { toolCallId, content: `Error reading "${file}": ${String(e)}` };
   }
@@ -194,6 +199,15 @@ export async function readLoreImage(
 
 function tooLargeError(label: string, bytes: number): string {
   return `Error: "${label}" is too large to attach (${(bytes / 1024 / 1024).toFixed(1)}MB, limit ${MAX_IMAGE_BYTES / 1024 / 1024}MB).`;
+}
+
+/**
+ * Told to the model, not just to the author: a picture that arrived downscaled
+ * is one whose fine print may no longer be legible, and a model that reads a
+ * blurred label confidently is worse than one that says it cannot.
+ */
+function shrunkNote(downscaled: Downscaled | undefined): string {
+  return downscaled ? ` Downscaled to fit the size limit (${downscaleNote(downscaled)}).` : "";
 }
 
 /**
@@ -269,10 +283,14 @@ export async function readProjectImage(
   }
 
   try {
-    const { dataUrl, bytes } = await imageToDataUrl(path);
+    const { dataUrl, bytes, downscaled } = await imageForModel(path);
     const name = baseName(path) || path;
     if (bytes.length > MAX_IMAGE_BYTES) return { toolCallId, content: tooLargeError(name, bytes.length) };
-    return { toolCallId, content: `Image "${name}" from ${path}.`, imageDataUrls: [dataUrl] };
+    return {
+      toolCallId,
+      content: `Image "${name}" from ${path}.${shrunkNote(downscaled)}`,
+      imageDataUrls: [dataUrl],
+    };
   } catch (e) {
     return { toolCallId, content: `Error reading "${path}": ${String(e)}` };
   }

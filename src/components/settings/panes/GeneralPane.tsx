@@ -13,8 +13,12 @@ import {
   isNotifyEnabled, isNotifyKindEnabled, requestNotifyPermission,
   sendTestNotification, setNotifyEnabled, setNotifyKindEnabled,
 } from "../../../lib/notify";
+import {
+  IMAGE_LONG_EDGE_MAX, IMAGE_LONG_EDGE_MIN,
+} from "../../../lib/image/downscalePlan";
 import { Pane, PaneHeader, Section, Row, Chip, ChipRow, Toggle } from "./bits";
 import ui from "../settingsUi.module.css";
+import common from "../settingsCommon.module.css";
 
 const THEMES: { value: ThemeMode; labelKey: string }[] = [
   { value: "dark", labelKey: "settings.dark" },
@@ -43,6 +47,18 @@ export function GeneralPane() {
   const markdownTheme = useAppStore((s) => s.markdownTheme);
   const setMarkdownTheme = useAppStore((s) => s.setMarkdownTheme);
   const [apiLogOn, setApiLogOn] = useState(isApiLogEnabled());
+  const imageMaxLongEdge = useAppStore((s) => s.imageMaxLongEdge);
+  const setImageMaxLongEdge = useAppStore((s) => s.setImageMaxLongEdge);
+  const [edgeDraft, setEdgeDraft] = useState(imageMaxLongEdge ? String(imageMaxLongEdge) : "");
+  const commitEdge = () => {
+    const n = parseInt(edgeDraft, 10);
+    const next = Number.isFinite(n) && n > 0
+      ? Math.min(Math.max(n, IMAGE_LONG_EDGE_MIN), IMAGE_LONG_EDGE_MAX)
+      : 0;
+    setImageMaxLongEdge(next);
+    setEdgeDraft(next ? String(next) : "");
+  };
+
   const [notifyOn, setNotifyOn] = useState(isNotifyEnabled());
   const [notifyApproval, setNotifyApprovalOn] = useState(isNotifyKindEnabled("approval"));
   const [notifyDone, setNotifyDoneOn] = useState(isNotifyKindEnabled("done"));
@@ -213,6 +229,36 @@ export function GeneralPane() {
               <Chip key={lang.value} label={lang.label} active={language === lang.value} onClick={() => setLanguage(lang.value)} />
             ))}
           </ChipRow>
+        </Row>
+      </Section>
+
+      {/* Sits before 通知 rather than in 实验功能: downscaling is not a feature
+          to switch on, it is what the app now does with every picture — this
+          field only moves where the line is. */}
+      <Section label={t("systemSettings.general.imageSection", { defaultValue: "图片" })}>
+        <Row
+          title={t("systemSettings.general.imageLongEdgeLabel", { defaultValue: "发送给模型的最大长边" })}
+          desc={t("systemSettings.general.imageLongEdgeHint", {
+            defaultValue:
+              "超过这个尺寸的图片会在发送前等比缩小，原文件不受影响。留空 / 0 = 原样发送。",
+          })}
+          last
+        >
+          <input
+            className={`${common.input} ${common.rowNumber}`}
+            type="number"
+            min={IMAGE_LONG_EDGE_MIN}
+            max={IMAGE_LONG_EDGE_MAX}
+            step={256}
+            placeholder={t("systemSettings.general.imageLongEdgeOff", { defaultValue: "不缩" })}
+            value={edgeDraft}
+            onChange={(e) => setEdgeDraft(e.target.value)}
+            // Committed on blur, not per keystroke: clamping as the author
+            // types means the first digit of "4096" becomes 256 and the rest
+            // has nowhere to go.
+            onBlur={commitEdge}
+            onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+          />
         </Row>
       </Section>
 

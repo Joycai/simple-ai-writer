@@ -15,7 +15,7 @@ import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { ModalShell } from "../common/ModalShell";
 import { parseFrontmatter } from "../../lib/fs/markdown";
 import { loadApiKey } from "../../lib/keyStore";
-import { imageToDataUrl } from "../../lib/fs/images";
+import { imageForModel } from "../../lib/image/normalize";
 import { useImeGuard } from "../../lib/ime";
 import { runStructuredTask } from "../../lib/agent/structured";
 import type { ToolDefinition } from "../../lib/ai";
@@ -118,7 +118,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
         ];
         for (const p of paths) {
           try {
-            const { dataUrl } = await imageToDataUrl(p);
+            const { dataUrl } = await imageForModel(p);
             imageDataUrls.push(dataUrl);
           } catch { /* skip unreadable image */ }
         }
