@@ -34,6 +34,7 @@ Two axes, encoded differently on purpose.
 | [design-system.md](reference/design-system.md) | `living` | Building or restyling **any** UI |
 | [workflows.md](reference/workflows.md) | `living` | Adding an AI task type, a provider, a language, a capability pack |
 | [ci.md](reference/ci.md) | `living` | Changing the build, or wondering what the merge gate runs |
+| [macos-signing.md](reference/macos-signing.md) | `planned` | Cutting a macOS release, or the Keychain starts asking for the login password again |
 
 ## api/ — the wire-protocol domain
 
