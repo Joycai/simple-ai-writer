@@ -17,6 +17,8 @@ import {
 import { BOOK_PREV_TAIL_CHARS, buildBookContext } from "../lib/context/bookContext";
 import { hashText, loadMemory, projectRelativePath } from "../lib/context/memory";
 import { workflowBriefingSection } from "../lib/workflow";
+import { docxBriefingSection } from "../lib/docx/briefing";
+import { currentFormats } from "./docFormatStore";
 import type { LoreActivationReport } from "../lib/context/loreSelect";
 import type { StreamMessage } from "../lib/ai/types";
 import { useAgentStore } from "./agentStore";
@@ -316,7 +318,13 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     // tool tier, never on the task id.
     if (task.tools === "full") {
       const workflowSection = await workflowBriefingSection(projectPath);
+      // Same layer, same reason: without the roster the model knows export_docx
+      // exists but not which formats it may name — so it would either always
+      // take the default or guess an id and eat an error.
+      const docxFormats = currentFormats();
+      const docxSection = docxBriefingSection(docxFormats.presets, docxFormats.defaultId);
       if (workflowSection) instruction += `\n\n${workflowSection}`;
+      if (docxSection) instruction += `\n\n${docxSection}`;
     }
     // An empty document has no 【近期内容】 for the model to continue, so the last
     // prose in the prompt is whatever bridge got injected — and "continue from

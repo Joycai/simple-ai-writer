@@ -14,18 +14,21 @@
  * 所以这一页现在**不摆那两个按钮**——一个点了没反应的按钮比没有更糟。
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { FileDown, Plus } from "lucide-react";
 import { Pane, PaneHeader } from "./bits";
 import { PaperPreview } from "./PaperPreview";
-import { useDocFormatStore } from "../../../stores/docFormatStore";
+import { DocFormatDrawer } from "./DocFormatDrawer";
+import { nextCustomId, useDocFormatStore } from "../../../stores/docFormatStore";
 import {
+  BUILTIN_FORMATS,
   bodyRegionMm,
   eastAsiaFontsOf,
   formatLineSpacing,
   formatOneLine,
   formatSize,
-  PAGE_SIZES,
+  paperMm,
   type DocFormatPreset,
 } from "../../../lib/docx/format";
 import { missingFonts } from "../../../lib/docx/fontCheck";
@@ -34,24 +37,77 @@ import styles from "./DocFormat.module.css";
 
 const MM_PER_PT = 25.4 / 72;
 
-export function DocFormatPane() {
+export function DocFormatPane({
+  onEscapeInterceptChange,
+}: {
+  onEscapeInterceptChange?: (handler: (() => void) | null) => void;
+}) {
   const { t } = useTranslation();
   const presets = useDocFormatStore((s) => s.presets);
   const defaultId = useDocFormatStore((s) => s.defaultId);
   const selectedId = useDocFormatStore((s) => s.selectedId);
   const setDefault = useDocFormatStore((s) => s.setDefault);
   const select = useDocFormatStore((s) => s.select);
+  const hydrate = useDocFormatStore((s) => s.hydrate);
+  const saveFormat = useDocFormatStore((s) => s.saveFormat);
+  const removeFormat = useDocFormatStore((s) => s.removeFormat);
+  const duplicate = useDocFormatStore((s) => s.duplicate);
+  const [editing, setEditing] = useState<DocFormatPreset | null>(null);
+
+  // 自建预设住在 config.db，第一次进这一页才读——设置页多数时候根本不会被打开。
+  useEffect(() => { void hydrate(); }, [hydrate]);
+
+  // 抽屉自己接管 Esc（它可能要先问「放弃改动吗」），所以设置页这一层要让开。
+  useEffect(() => {
+    onEscapeInterceptChange?.(editing ? () => {} : null);
+    return () => onEscapeInterceptChange?.(null);
+  }, [editing, onEscapeInterceptChange]);
 
   const selected = presets.find((p) => p.id === selectedId) ?? presets[0];
   const builtin = presets.filter((p) => p.builtin);
   const custom = presets.filter((p) => !p.builtin);
 
+  const create = () => {
+    // 新预设从「素雅」起步而不是一张空表：三十个字段的空白表单没有人填得完，
+    // 而从一套能用的格式改两处是作者真正会做的事。
+    const base = BUILTIN_FORMATS.find((p) => p.id === "clean") ?? BUILTIN_FORMATS[0];
+    setEditing({
+      id: nextCustomId(presets),
+      label: t("docxFormat.newName"),
+      builtin: false,
+      format: structuredClone(base.format),
+    });
+  };
+
   return (
-    <Pane width="wide">
+    <Pane
+      width="wide"
+      drawer={
+        editing && (
+          <DocFormatDrawer
+            preset={editing}
+            onClose={() => setEditing(null)}
+            onSave={async (next) => { await saveFormat(next); setEditing(null); }}
+          />
+        )
+      }
+    >
       <PaneHeader
         title={t("docxFormat.title")}
         sub={t("docxFormat.sub")}
-        action={<span className={styles.betaTag}>BETA</span>}
+        action={
+          <div className={styles.headActions}>
+            <span className={styles.betaTag}>BETA</span>
+            <button className={styles.outlineBtn} disabled title={t("docxFormat.readDocxLater")}>
+              <FileDown size={13} />
+              {t("docxFormat.readDocx")}
+            </button>
+            <button className={styles.primaryBtn} onClick={create}>
+              <Plus size={13} />
+              {t("docxFormat.newPreset")}
+            </button>
+          </div>
+        }
       />
 
       <div className={styles.split}>
@@ -71,6 +127,7 @@ export function DocFormatPane() {
                 isSelected={p.id === selected?.id}
                 onSelect={() => select(p.id)}
                 onMakeDefault={() => setDefault(p.id)}
+                onDuplicate={() => void duplicate(p.id)}
               />
             ))}
 
@@ -86,6 +143,9 @@ export function DocFormatPane() {
                   isSelected={p.id === selected?.id}
                   onSelect={() => select(p.id)}
                   onMakeDefault={() => setDefault(p.id)}
+                  onEdit={() => setEditing(p)}
+                  onDuplicate={() => void duplicate(p.id)}
+                  onDelete={() => void removeFormat(p.id)}
                 />
               ))
             )}
@@ -114,14 +174,21 @@ function PresetRow({
   isSelected,
   onSelect,
   onMakeDefault,
+  onEdit,
+  onDuplicate,
+  onDelete,
 }: {
   preset: DocFormatPreset;
   isDefault: boolean;
   isSelected: boolean;
   onSelect: () => void;
   onMakeDefault: () => void;
+  onEdit?: () => void;
+  onDuplicate?: () => void;
+  onDelete?: () => void;
 }) {
   const { t } = useTranslation();
+  const [confirmDelete, setConfirmDelete] = useState(false);
   // 每次渲染都问一遍不值当，但预设列表短、字体探测是同步的一次 check——放
   // memo 里是为了别在滚动时重复问，不是为了性能悬崖。
   const missing = useMemo(() => missingFonts(eastAsiaFontsOf(preset.format)), [preset]);
@@ -161,6 +228,41 @@ function PresetRow({
         </div>
         <div className={styles.rowSummary}>{formatOneLine(preset.format)}</div>
       </div>
+      <div className={styles.rowActions} onClick={(e) => e.stopPropagation()}>
+        {confirmDelete ? (
+          <>
+            {/* 删掉的正好是默认时，store 会把默认落回内置的那一套——所以这里
+                只问一句，不必再解释一遍「然后会怎样」。 */}
+            <span className={styles.echo}>
+              {isDefault ? t("docxFormat.deleteDefaultAsk") : t("docxFormat.deleteAsk")}
+            </span>
+            <button className={styles.rowAction} onClick={() => setConfirmDelete(false)}>
+              {t("common.cancel", { defaultValue: "取消" })}
+            </button>
+            <button className={`${styles.rowAction} ${styles.rowActionStrong}`} onClick={onDelete}>
+              {t("docxFormat.deleteConfirm")}
+            </button>
+          </>
+        ) : (
+          <>
+            {onEdit && (
+              <button className={`${styles.rowAction} ${styles.rowActionStrong}`} onClick={onEdit}>
+                {t("docxFormat.edit")}
+              </button>
+            )}
+            {onDuplicate && (
+              <button className={styles.rowAction} onClick={onDuplicate}>{t("docxFormat.duplicate")}</button>
+            )}
+            {/* 内置的没有删除按钮——不是禁用，是不出现。禁用的按钮只会让人一直
+                想弄明白怎么才能点。 */}
+            {onDelete && (
+              <button className={styles.rowAction} onClick={() => setConfirmDelete(true)}>
+                {t("docxFormat.delete")}
+              </button>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -169,7 +271,7 @@ function PresetRow({
 function PageSpec({ preset }: { preset: DocFormatPreset }) {
   const { t } = useTranslation();
   const f = preset.format;
-  const size = PAGE_SIZES[f.page.size];
+  const size = paperMm(f.page);
   const region = bodyRegionMm(f.page);
   const m = f.page.margins;
 
@@ -192,7 +294,10 @@ function PageSpec({ preset }: { preset: DocFormatPreset }) {
   return (
     <div className={styles.spec}>
       <span className={styles.specLabel}>{t("docxFormat.specPaper")}</span>
-      <span className={styles.specValue}>{`${f.page.size} · ${size.widthMm} × ${size.heightMm} mm`}</span>
+      <span className={styles.specValue}>
+        {`${f.page.size} · ${round1(size.widthMm)} × ${round1(size.heightMm)} mm`}
+        {f.page.landscape ? ` · ${t("docxFormat.drawer.landscape")}` : ""}
+      </span>
       <span className={styles.specLabel}>{t("docxFormat.specMargins")}</span>
       <span className={styles.specValue}>{`上 ${m.top} · 右 ${m.right} · 下 ${m.bottom} · 左 ${m.left} mm`}</span>
       <span className={styles.specLabel}>{t("docxFormat.specRegion")}</span>

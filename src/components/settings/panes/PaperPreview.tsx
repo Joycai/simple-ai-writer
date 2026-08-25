@@ -17,14 +17,18 @@
 import { useTranslation } from "react-i18next";
 import {
   bodyRegionMm,
-  PAGE_SIZES,
+  paperMm,
   type BlockStyle,
   type DocFormat,
 } from "../../../lib/docx/format";
 import styles from "./DocFormat.module.css";
 
-/** 纸样宽度（px）。高度按纸张比例来，所以只需要一个基准。 */
+/**
+ * 纸样宽度（px）。高度按纸张比例来，所以只需要一个基准。
+ * 抽屉里那张是同一张图缩了尺——不是另画一张，否则两处会各自漂。
+ */
 const PAGE_PX = 300;
+const PAGE_PX_COMPACT = 188;
 const MM_PER_PT = 25.4 / 72;
 
 /** 画出来的一根条子。 */
@@ -117,10 +121,11 @@ interface Mark {
   label: string;
 }
 
-export function PaperPreview({ format }: { format: DocFormat }) {
+export function PaperPreview({ format, compact = false }: { format: DocFormat; compact?: boolean }) {
   const { t } = useTranslation();
-  const page = PAGE_SIZES[format.page.size];
-  const scale = PAGE_PX / page.widthMm;
+  const page = paperMm(format.page);
+  const pagePx = compact ? PAGE_PX_COMPACT : PAGE_PX;
+  const scale = pagePx / page.widthMm;
   const region = bodyRegionMm(format.page);
   const m = format.page.margins;
   const { bars, indentCell, marks } = layout(format);
@@ -142,7 +147,10 @@ export function PaperPreview({ format }: { format: DocFormat }) {
     <div className={styles.previewFrame}>
       <div
         className={styles.previewStage}
-        style={{ width: `${PAGE_PX + 158}px`, height: `${page.heightMm * scale + 28}px` }}
+        style={{
+          width: `${pagePx + (compact ? 34 : 158)}px`,
+          height: `${page.heightMm * scale + 28}px`,
+        }}
       >
         {/* 顶边尺：左右页边距各一段，中间是版心宽 */}
         <div className={styles.rulerTop} style={{ left: "26px", width: px(page.widthMm) }}>
@@ -227,7 +235,9 @@ export function PaperPreview({ format }: { format: DocFormat }) {
           <span className={styles.schematic}>SCHEMATIC</span>
         </div>
 
-        {/* 右侧引线标注 */}
+        {/* 右侧引线标注。紧凑模式不画：188px 的图旁边挂五行小字只是噪音，
+            抽屉里那几个值本来就在左边的表单里。 */}
+        {!compact && (
         <div className={styles.marks} style={{ left: `${26 + page.widthMm * scale}px`, top: "28px" }}>
           {marks.map((mk, i) => (
             <div key={i} className={styles.mark} style={{ top: px(m.top + mk.y) }}>
@@ -236,14 +246,17 @@ export function PaperPreview({ format }: { format: DocFormat }) {
             </div>
           ))}
         </div>
+        )}
       </div>
 
+      {!compact && (
       <div className={styles.legend}>
         <span className={styles.legendItem}><span className={styles.legendHeading} />{t("docxFormat.preview.legendHeading")}</span>
         <span className={styles.legendItem}><span className={styles.legendBody} />{t("docxFormat.preview.legendBody")}</span>
         <span className={styles.legendItem}><span className={styles.legendMargin} />{t("docxFormat.preview.legendMargin")}</span>
         <span className={styles.legendItem}><span className={styles.legendRegion} />{t("docxFormat.preview.legendRegion")}</span>
       </div>
+      )}
     </div>
   );
 }

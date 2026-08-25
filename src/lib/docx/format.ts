@@ -155,6 +155,8 @@ export type PageSizeName = keyof typeof PAGE_SIZES;
 
 export interface PageSetup {
   size: PageSizeName;
+  /** 横向。纸张的长短边对调，版心和网格跟着一起变。 */
+  landscape?: boolean;
   /** 毫米。 */
   margins: { top: number; right: number; bottom: number; left: number };
   /**
@@ -169,10 +171,20 @@ export interface DocFormat {
   body: BlockStyle;
   /** 一到四级标题。第五、六级沿用第四级——再深的层级 Word 里也没人排版。 */
   headings: [BlockStyle, BlockStyle, BlockStyle, BlockStyle];
-  quote: { indentChars: number; italic: boolean };
-  code: { fontAscii: string; sizePt: number };
+  quote: {
+    indentChars: number;
+    italic: boolean;
+    /** 省略 = 同正文字号。 */
+    sizePt?: number;
+  };
+  code: { fontAscii: string; sizePt: number; shaded: boolean };
   list: { indentChars: number };
-  table: { headerBold: boolean; borders: boolean };
+  table: {
+    headerBold: boolean;
+    borders: boolean;
+    /** 表格跨页时在每一页重复表头行。长表格没有它就读不下去。 */
+    repeatHeader: boolean;
+  };
 }
 
 export interface DocFormatPreset {
@@ -196,9 +208,9 @@ export function gridToDocx(page: PageSetup, bodySizePt: number):
   | { type: "linesAndChars"; linePitch: number; charSpace: number }
   | undefined {
   if (!page.grid) return undefined;
-  const { widthMm, heightMm } = PAGE_SIZES[page.size];
-  const bodyH = mmToTwip(heightMm - page.margins.top - page.margins.bottom);
-  const bodyW = mmToTwip(widthMm - page.margins.left - page.margins.right);
+  const body = bodyRegionMm(page);
+  const bodyH = mmToTwip(body.heightMm);
+  const bodyW = mmToTwip(body.widthMm);
   const linePitch = Math.round(bodyH / page.grid.linesPerPage);
   const charSpace = Math.round(bodyW / page.grid.charsPerLine - ptToTwip(bodySizePt));
   return { type: "linesAndChars", linePitch, charSpace };
@@ -241,9 +253,9 @@ const MANUSCRIPT: DocFormat = {
     heading({ font: SOURCE_SONG, sizePt: 12, bold: true }),
   ],
   quote: { indentChars: 2, italic: false },
-  code: { fontAscii: "Consolas", sizePt: 10.5 },
+  code: { fontAscii: "Consolas", sizePt: 10.5, shaded: true },
   list: { indentChars: 2 },
-  table: { headerBold: true, borders: true },
+  table: { headerBold: true, borders: true, repeatHeader: true },
 };
 
 /** 素雅：报告、周报、文档。无缩进，段间距代替缩进。 */
@@ -261,9 +273,9 @@ const CLEAN: DocFormat = {
     heading({ font: SOURCE_HEI, sizePt: 12, bold: true }),
   ],
   quote: { indentChars: 2, italic: false },
-  code: { fontAscii: "Consolas", sizePt: 10 },
+  code: { fontAscii: "Consolas", sizePt: 10, shaded: true },
   list: { indentChars: 2 },
-  table: { headerBold: true, borders: true },
+  table: { headerBold: true, borders: true, repeatHeader: true },
 };
 
 /**
@@ -288,9 +300,9 @@ const GONGWEN: DocFormat = {
     heading({ font: FANGSONG, sizePt: 16, firstLineChars: 2, line: { rule: "exact", value: 28 } }),
   ],
   quote: { indentChars: 4, italic: false },
-  code: { fontAscii: "Consolas", sizePt: 12 },
+  code: { fontAscii: "Consolas", sizePt: 12, shaded: false },
   list: { indentChars: 2 },
-  table: { headerBold: true, borders: true },
+  table: { headerBold: true, borders: true, repeatHeader: true },
 };
 
 /** 论文：宋体小四，1.5 倍行距，标题黑体分级。 */
@@ -308,9 +320,9 @@ const THESIS: DocFormat = {
     heading({ font: SONG, sizePt: 12, bold: true }),
   ],
   quote: { indentChars: 2, italic: false },
-  code: { fontAscii: "Consolas", sizePt: 10.5 },
+  code: { fontAscii: "Consolas", sizePt: 10.5, shaded: true },
   list: { indentChars: 2 },
-  table: { headerBold: true, borders: true },
+  table: { headerBold: true, borders: true, repeatHeader: true },
 };
 
 /** 投标：仿宋四号，行距固定 24 磅，标题不分页（评标要连续翻）。 */
@@ -328,9 +340,9 @@ const BID: DocFormat = {
     heading({ font: FANGSONG_ARIAL, sizePt: 14, bold: true }),
   ],
   quote: { indentChars: 4, italic: false },
-  code: { fontAscii: "Consolas", sizePt: 12 },
+  code: { fontAscii: "Consolas", sizePt: 12, shaded: false },
   list: { indentChars: 2 },
-  table: { headerBold: true, borders: true },
+  table: { headerBold: true, borders: true, repeatHeader: true },
 };
 
 export const BUILTIN_FORMATS: DocFormatPreset[] = [
@@ -352,7 +364,7 @@ export const DEFAULT_FORMAT_ID = "manuscript";
  * 「校对规格表而不是校对产出」（00-feasibility §7.3）唯一的载体。
  */
 export function formatSummary(f: DocFormat): string[] {
-  const { widthMm, heightMm } = PAGE_SIZES[f.page.size];
+  const { widthMm, heightMm } = paperMm(f.page);
   const m = f.page.margins;
   const h1 = f.headings[0];
   const lines = [
@@ -370,9 +382,18 @@ export function formatSummary(f: DocFormat): string[] {
   return lines;
 }
 
+/**
+ * 纸张的实际长宽（毫米），横向时长短边对调。**所有**用到纸张尺寸的地方都要走
+ * 这里——直接读 `PAGE_SIZES` 会在横向时算错版心，而那是不会报错的那种错。
+ */
+export function paperMm(page: PageSetup): { widthMm: number; heightMm: number } {
+  const { widthMm, heightMm } = PAGE_SIZES[page.size];
+  return page.landscape ? { widthMm: heightMm, heightMm: widthMm } : { widthMm, heightMm };
+}
+
 /** 版心（页面减去页边距），毫米。纸样预览和网格换算都用它。 */
 export function bodyRegionMm(page: PageSetup): { widthMm: number; heightMm: number } {
-  const { widthMm, heightMm } = PAGE_SIZES[page.size];
+  const { widthMm, heightMm } = paperMm(page);
   return {
     widthMm: widthMm - page.margins.left - page.margins.right,
     heightMm: heightMm - page.margins.top - page.margins.bottom,
@@ -402,7 +423,7 @@ export interface SpecRow {
  */
 export function formatSpecRows(f: DocFormat): SpecRow[] {
   const m = f.page.margins;
-  const { widthMm, heightMm } = PAGE_SIZES[f.page.size];
+  const { widthMm, heightMm } = paperMm(f.page);
   return [
     { key: "font", label: "中 / 西文", value: `${f.body.font.eastAsia} / ${f.body.font.ascii}` },
     { key: "size", label: "字号", value: formatSize(f.body.sizePt) },

@@ -89,6 +89,8 @@ import {
 } from "../lib/context/budget";
 import { messageCeilingFor } from "../lib/agent/toolCost";
 import { workflowBriefingSection } from "../lib/workflow";
+import { docxBriefingSection } from "../lib/docx/briefing";
+import { currentFormats } from "./docFormatStore";
 import {
   hashText, loadMemory, MEMORY_BUDGET_CHARS, projectRelativePath,
 } from "../lib/context/memory";
@@ -1117,9 +1119,15 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // stability) and is read once per session, like the rest of the seed:
         // a card edited mid-session is picked up by the next session.
         const workflowSection = await workflowBriefingSection(projectPath);
+        // Same layer, same reason: without the roster the model knows export_docx
+        // exists but not which formats it may name — so it would either always
+        // take the default or guess an id and eat an error.
+        const docxFormats = currentFormats();
+        const docxSection = docxBriefingSection(docxFormats.presets, docxFormats.defaultId);
         const systemPrompt =
           `${writingPrompt}\n\n${i18n.t("ai.instructions.agent", promptParams(i18n.language === "zh-CN"))}` +
-          (workflowSection ? `\n\n${workflowSection}` : "");
+          (workflowSection ? `\n\n${workflowSection}` : "") +
+          (docxSection ? `\n\n${docxSection}` : "");
         const documentText = focus.text;
         // Follows the profile, like the panel's tasks do: a project whose
         // documents don't use rolling memory has none to inject. Loaded only

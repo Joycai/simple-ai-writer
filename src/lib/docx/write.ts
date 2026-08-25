@@ -13,7 +13,7 @@ import {
   gridToDocx,
   lineSpacingToTwip,
   mmToTwip,
-  PAGE_SIZES,
+  paperMm,
   ptToHalfPt,
   ptToTwip,
   type BlockStyle,
@@ -42,7 +42,9 @@ export async function blocksToDocx(
   images: Map<string, ResolvedImage>,
 ): Promise<Uint8Array> {
   const d = await import("docx");
-  const { widthMm, heightMm } = PAGE_SIZES[format.page.size];
+  // 横向时长短边已经在 paperMm 里对调过——这里再读一次 PAGE_SIZES 就会把版心
+  // 算错，而那是不会报错的那种错。
+  const { widthMm, heightMm } = paperMm(format.page);
   const m = format.page.margins;
   // 版心宽度，插图按它等比缩放：一张比版心宽的图 Word 会撑破页面。
   const bodyWidthPx = Math.round(((widthMm - m.left - m.right) / 25.4) * 96);
@@ -68,7 +70,10 @@ export async function blocksToDocx(
           name: "SAW Quote",
           basedOn: "Normal",
           quickFormat: false,
-          run: { italics: format.quote.italic },
+          run: {
+            italics: format.quote.italic,
+            ...(format.quote.sizePt ? { size: ptToHalfPt(format.quote.sizePt) } : {}),
+          },
           paragraph: {
             indent: {
               start: ptToTwip(format.body.sizePt * format.quote.indentChars),
@@ -87,6 +92,11 @@ export async function blocksToDocx(
           paragraph: {
             spacing: { line: 240, lineRule: "auto", before: 0, after: 0 },
             indent: { firstLine: 0 },
+            // 底纹画在**段落**上而不是 run 上：run 级的只染到字后面，一行代码
+            // 的行尾会缺一块，长短不一的代码块看起来像被咬过。
+            ...(format.code.shaded
+              ? { shading: { type: d.ShadingType.CLEAR, fill: "F2F0EC" } }
+              : {}),
           },
         },
       ],
@@ -96,7 +106,13 @@ export async function blocksToDocx(
       {
         properties: {
           page: {
-            size: { width: mmToTwip(widthMm), height: mmToTwip(heightMm) },
+            size: {
+              width: mmToTwip(widthMm),
+              height: mmToTwip(heightMm),
+              orientation: format.page.landscape
+                ? d.PageOrientation.LANDSCAPE
+                : d.PageOrientation.PORTRAIT,
+            },
             margin: {
               top: mmToTwip(m.top),
               right: mmToTwip(m.right),
@@ -278,7 +294,8 @@ function renderBlock(
           ...(format.table.borders ? {} : { borders: d.TableBorders.NONE }),
           rows: block.rows.map((row, rowIndex) =>
             new d.TableRow({
-              tableHeader: rowIndex < block.headerRows,
+              // 跨页时在每一页重复这一行——长表格没有它就读不下去。
+              tableHeader: format.table.repeatHeader && rowIndex < block.headerRows,
               children: row.map(
                 (cell) =>
                   new d.TableCell({

@@ -116,7 +116,7 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
           <div className={styles.paneHost}>
             {activeTab === "general" && <GeneralPane />}
             {activeTab === "workspace" && <WorkspacePane />}
-            {activeTab === "docx-format" && docxOn && <DocFormatPane />}
+            {activeTab === "docx-format" && docxOn && <DocFormatPane onEscapeInterceptChange={setEscIntercept} />}
             {activeTab === "providers-models" && <ProvidersModelsPane onEscapeInterceptChange={setEscIntercept} />}
             {activeTab === "subagents" && <SubAgentsPane />}
             {activeTab === "prompts" && <PromptsPane onEscapeInterceptChange={setEscIntercept} />}

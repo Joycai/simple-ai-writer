@@ -14,6 +14,7 @@ import { blocksToDocx, type ResolvedImage } from "./write";
 import type { DocFormat } from "./format";
 
 export * from "./blocks";
+export * from "./briefing";
 export * from "./flag";
 export * from "./format";
 export * from "./resolve";
