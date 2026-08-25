@@ -33,7 +33,7 @@ import {
   type ToolResult,
 } from "./tools";
 import { LORE_PLAN_ACTIONS, type LorePlan, type PlanDecision, type PlanGate } from "./plan";
-import { editImageTool, generateImageTool } from "./imageTools";
+import { editImageTool, generateImageTool, redrawLoreImageTool } from "./imageTools";
 import { exportPptxTool } from "./pptxTools";
 import {
   listScenesTool,
@@ -254,7 +254,17 @@ export interface IllustrateProposal extends ProposalBase {
         /** Image slot the new picture files into; null/absent = unclassified. */
         slot?: string | null;
       }
-    | { kind: "document"; docPath: string };
+    | { kind: "document"; docPath: string }
+    /**
+     * Beside an existing picture, in the folder it already lives in.
+     *
+     * The destination for an edit that names no home — the author handed the
+     * agent a project image and asked for a change. Its own folder is the one
+     * place that needs no guessing: a document's asset folder is named after
+     * the document through a lossy `safeAssetName`, so a picture's path cannot
+     * be reversed into the document that owns it.
+     */
+    | { kind: "file"; dir: string };
   /** One line describing the picture — alt text / gallery description. */
   note: string;
   /** Config-row id of the image model, resolved at apply time. */
@@ -512,6 +522,7 @@ export type ToolId =
   | "export_pptx"
   | "generate_image"
   | "edit_image"
+  | "redraw_lore_image"
   | "task_plan"
   | "task_progress"
   | "write_note"
@@ -1192,7 +1203,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "update_lore_image",
         description:
-          "Retune ONE gallery image's metadata — its description and/or its image slot — without touching the picture itself. The gallery counterpart of update_facet_meta: the description is all a text-only model ever sees of the picture, and the slot is how it fills the category's image checklist. read_lore_entity lists the gallery and the category's image slots. To change the picture use edit_image; to remove it use delete_lore_image. The fields you omit keep their current values.",
+          "Retune ONE gallery image's metadata — its description and/or its image slot — without touching the picture itself. The gallery counterpart of update_facet_meta: the description is all a text-only model ever sees of the picture, and the slot is how it fills the category's image checklist. read_lore_entity lists the gallery and the category's image slots. To change the picture use redraw_lore_image; to remove it use delete_lore_image. The fields you omit keep their current values.",
         parameters: {
           type: "object",
           properties: {
@@ -1893,21 +1904,27 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "edit_image",
         description:
-          "Redraw one of a lore entity's existing gallery pictures with a change applied — 'silver hair', 'three-quarter view'. Call read_lore_entity first for the exact filename. The result is saved as a NEW gallery image; the original is never overwritten. Blocks on the author's approval, and costs money once approved. If the image model cannot edit, the result is regenerated from the instruction instead and the author is told — so prefer generate_image when you want a genuinely new picture rather than a variation.",
+          "Redraw an existing image FILE in the project with a change applied — 'silver hair', 'three-quarter view', 'remove the background'. `source` is that file's path, as list_files spells it: a document illustration, reference art the author dropped in, anything on disk. A knowledge-base entry's gallery picture is NOT a file path — it belongs to an entry, so redraw_lore_image handles that one and this tool refuses it. The result is saved as a NEW file beside the source (or beside a document, with `path`) and the original is never overwritten. Blocks on the author's approval and costs money once approved. If the image model cannot edit, the result is regenerated from the instruction instead and the author is told — so prefer generate_image when you want a genuinely new picture rather than a variation of this one.",
         parameters: {
           type: "object",
           properties: {
-            entity: {
+            source: {
               type: "string",
-              description: "The entity that owns the picture, exactly as listed by list_lore_entities.",
-            },
-            file: {
-              type: "string",
-              description: "Gallery filename, exactly as listed by read_lore_entity.",
+              description: "Path of the image file to change, exactly as list_files spells it.",
             },
             instruction: {
               type: "string",
               description: "What to change about the picture.",
+            },
+            path: {
+              type: "string",
+              description: "File the result beside this .md document instead of beside the source — the markdown to place it comes back in the result, which you then position with propose_edit.",
+            },
+            references: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "Extra images to send alongside the source — 'put her in this outfit', 'match this style'. A project path, or a gallery filename from read_lore_entity.",
             },
             aspect: {
               type: "string",
@@ -1926,7 +1943,73 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             },
             desc: {
               type: "string",
-              description: "One line describing the new picture, for its gallery description — the same field update_lore_image edits.",
+              description: "One line describing the new picture, used as its alt text when it is placed in a document.",
+            },
+            reason: {
+              type: "string",
+              description: "One line for the approval card: why this change.",
+            },
+          },
+          required: ["source", "instruction"],
+        },
+      },
+    },
+    execute: async (call, ctx) =>
+      editImageTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  // Deliberately NOT in the `lore_write` group, unlike every other tool that
+  // writes to an entity: that group is deferred until a lore *plan* is
+  // approved, and a plan is the gate on changing what an entry SAYS. What this
+  // one spends is the author's money, so its gate is the illustrate card —
+  // exactly like generate_image filing a picture into the same gallery.
+  redraw_lore_image: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "redraw_lore_image",
+        description:
+          "Redraw one picture in a knowledge-base entry's gallery with a change applied — 'silver hair', 'three-quarter view'. Call read_lore_entity first for the exact filename; a gallery picture is addressed by its entry plus that filename, never by a path. The result is filed as a NEW gallery picture inheriting the original's image slot, and the original is never overwritten. This is the gallery counterpart of edit_image, which takes a file path and handles every OTHER image in the project. To change only a picture's description or slot use update_lore_image — it draws nothing and costs nothing. Blocks on the author's approval and costs money once approved.",
+        parameters: {
+          type: "object",
+          properties: {
+            entity: {
+              type: "string",
+              description: "The entry that owns the picture, exactly as listed by list_lore_entities.",
+            },
+            file: {
+              type: "string",
+              description: "Gallery filename, exactly as listed by read_lore_entity. A bare name, never a path.",
+            },
+            instruction: {
+              type: "string",
+              description: "What to change about the picture.",
+            },
+            references: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "Extra images to send alongside the picture being changed — 'put her in this outfit', 'match this style'. A project path, or another gallery filename.",
+            },
+            aspect: {
+              type: "string",
+              enum: ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "16:9", "9:16", "21:9"],
+              description: "Recompose to this framing; omit to keep the original's.",
+            },
+            resolution: {
+              type: "string",
+              enum: ["1K", "2K", "4K"],
+              description: "Resolution tier; omit for default.",
+            },
+            quality: {
+              type: "string",
+              enum: ["low", "medium", "high"],
+              description: "Quality tier (GPT-Image only); omit for default.",
+            },
+            desc: {
+              type: "string",
+              description: "One line describing the new picture, for its gallery description — the same field update_lore_image edits. Defaults to the original's.",
             },
             reason: {
               type: "string",
@@ -1938,7 +2021,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: async (call, ctx) =>
-      editImageTool(call.id, parseArgs(call.arguments), ctx),
+      redrawLoreImageTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   delete_chapter: {

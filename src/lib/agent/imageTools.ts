@@ -14,7 +14,8 @@
 import { imageCostFor } from "../ai/configDb";
 import { fileExists } from "../fs/fileio";
 import { IMAGE_EXT_LIST, isImagePath } from "../fs/images";
-import { resolveWorkspacePath } from "../paths";
+import { dirName, resolveWorkspacePath } from "../paths";
+import type { LoreEntity, LoreImage } from "../lore";
 import { categoryImageSlots, findImageSlot } from "../profile/active";
 import type { IllustrateProposal, ToolContext } from "./registry";
 import { subAgentModel } from "./subagent";
@@ -143,11 +144,13 @@ async function resolveReference(
   ctx: ToolContext,
   raw: string,
   destEntityDir: string | undefined,
+  /** Parameter being resolved, so the error names what the model actually wrote. */
+  field: "references" | "source" = "references",
 ): Promise<{ path?: string; error?: string }> {
   const name = raw.trim();
-  if (!name) return { error: "Error: 'references' contains an empty entry." };
+  if (!name) return { error: `Error: '${field}' contains an empty entry.` };
   if (!isImagePath(name)) {
-    return { error: `Error: reference "${name}" is not an image file (accepted: ${IMAGE_EXT_LIST}).` };
+    return { error: `Error: ${field === "source" ? "'source'" : `reference "${name}"`} is not an image file (accepted: ${IMAGE_EXT_LIST}).` };
   }
 
   // A workspace path wins when it exists — it is the unambiguous spelling.
@@ -168,10 +171,34 @@ async function resolveReference(
   if (hits.length === 1) return { path: hits[0].absPath };
   if (hits.length > 1) {
     return {
-      error: `Error: reference "${name}" exists in more than one gallery (${hits.map((h) => h.entityName).join(", ")}). Give the full path instead.`,
+      error: `Error: "${name}" exists in more than one gallery (${hits.map((h) => h.entityName).join(", ")}). Give the full path instead.`,
     };
   }
   return { error: `Error: no image "${name}" found — give a project path, or a gallery filename from read_lore_entity.` };
+}
+
+/**
+ * The gallery a name belongs to, if any — matched on the filename alone.
+ *
+ * Only ever used to write a better error: `edit_image` cannot reach a gallery
+ * picture (they live under `.ai-writer/`, which `resolveWorkspacePath`
+ * refuses), so when its `source` resolves to nothing, "you meant the other
+ * tool, and here is the call" is the answer far more often than "that path is
+ * wrong". A first match is enough for that — this decides wording, never
+ * where a picture is filed, so the ambiguity `resolveReference` has to refuse
+ * does not arise.
+ */
+function galleryImageNamed(
+  ctx: ToolContext,
+  raw: string,
+): { entity: LoreEntity; image: LoreImage } | null {
+  const wanted = (raw.replace(/\\/g, "/").split("/").pop() ?? raw).trim().toLowerCase();
+  if (!wanted) return null;
+  for (const entity of Object.values(ctx.loreIndex).flat()) {
+    const image = entity.images.find((i) => i.file.toLowerCase() === wanted);
+    if (image) return { entity, image };
+  }
+  return null;
 }
 
 /**
@@ -282,11 +309,123 @@ export async function generateImageTool(
   });
 }
 
-/** Redraw one of an entity's existing pictures with a change applied. */
+/**
+ * Redraw an image FILE in the project.
+ *
+ * The other half of this pair is `redrawLoreImageTool`, and the split is the
+ * point. For a long time there was one tool, `edit_image`, whose schema only
+ * accepted an entity plus a gallery filename — so "change this picture", said
+ * about a picture the author had in the project, reached the one editor the
+ * model could see and came back refused with an error about lore galleries.
+ * Widening that tool to cover both was tried and rejected: it needed a
+ * destination ladder and an inference about what the source turned out to be,
+ * which is a second way to be wrong rather than a fix. Two tools, each
+ * refusing the other's input BY NAME, is what makes the choice checkable —
+ * a gallery picture has an entry and a bare filename, a file has a path.
+ *
+ * The result lands beside the source, or beside the document named by `path`.
+ * The source is never overwritten: it may already be referenced elsewhere, and
+ * replacing it is a destructive act nobody approved.
+ */
 export async function editImageTool(
   toolCallId: string,
   args: {
-    entity?: string; file?: string; instruction?: string;
+    source?: string; path?: string; instruction?: string; references?: string[];
+    aspect?: string; resolution?: string; quality?: string; desc?: string; note?: string; reason?: string;
+  },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const instruction = args.instruction?.trim();
+  if (!instruction) return { toolCallId, content: "Error: 'instruction' is required — say what to change." };
+
+  const rawSource = args.source?.trim();
+  if (!rawSource) {
+    return {
+      toolCallId,
+      content: "Error: 'source' is required — the path of the image file to change, as list_files spells it. For a picture in an entry's gallery use redraw_lore_image instead.",
+    };
+  }
+  if (!isImagePath(rawSource)) {
+    return { toolCallId, content: `Error: 'source' must be an image file (accepted: ${IMAGE_EXT_LIST}).` };
+  }
+  const sourcePath = resolveWorkspacePath(ctx.projectPath, rawSource);
+  // A gallery picture is unreachable here by construction —
+  // `resolveWorkspacePath` refuses `.ai-writer/` — so a name that fails is
+  // worth one lookup before the error, because "it is a gallery picture" is by
+  // far the likeliest reason and the fix is a different tool, not a better
+  // path. Naming that tool is what turns a dead end into one wasted round.
+  if (!sourcePath || !(await fileExists(sourcePath))) {
+    const gallery = galleryImageNamed(ctx, rawSource);
+    if (gallery) {
+      return {
+        toolCallId,
+        content: `Error: "${gallery.image.file}" is a picture in ${gallery.entity.name}'s gallery, not a file this tool can take. Call redraw_lore_image(entity: "${gallery.entity.name}", file: "${gallery.image.file}") instead.`,
+      };
+    }
+    return { toolCallId, content: `Error: no image at "${rawSource}". Call list_files to see the real paths.` };
+  }
+
+  let dest: IllustrateProposal["dest"];
+  let destination: string;
+  let destPath: string;
+  const rawDoc = args.path?.trim();
+  if (rawDoc) {
+    const docPath = resolveWorkspacePath(ctx.projectPath, rawDoc);
+    if (!docPath || !/\.md$/i.test(docPath)) {
+      return {
+        toolCallId,
+        content: "Error: 'path' must be a .md document inside the project folder — it says where the RESULT is filed, not which picture to change ('source' does that).",
+      };
+    }
+    if (!(await fileExists(docPath))) {
+      return { toolCallId, content: `Error: no document at "${docPath}". Call list_files to see the real paths.` };
+    }
+    dest = { kind: "document", docPath };
+    destination = baseName(docPath) || docPath;
+    destPath = docPath;
+  } else {
+    // Beside the source: the destination that needs no guessing, and the
+    // reason the author can hand over a loose image without first deciding
+    // where the result belongs.
+    const dir = dirName(sourcePath);
+    dest = { kind: "file", dir };
+    destination = baseName(dir) || dir;
+    destPath = dir;
+  }
+
+  const refs = await resolveReferences(ctx, args.references);
+  if (refs.error) return { toolCallId, content: refs.error };
+
+  return proposeIllustration(toolCallId, ctx, {
+    prompt: instruction,
+    note: (args.desc ?? args.note)?.trim() || instruction.slice(0, 80),
+    aspect: args.aspect,
+    resolution: tierOf(args.resolution, RESOLUTION_TIERS),
+    quality: tierOf(args.quality, QUALITY_TIERS),
+    reason: args.reason,
+    // The source already rides as an input image; listing it again as a
+    // reference would send the same picture twice and spend one of the model's
+    // `maxRefs` slots on it.
+    refPaths: refs.paths.filter((p) => p !== sourcePath),
+    dest,
+    destination,
+    path: destPath,
+    sourcePath,
+  });
+}
+
+/**
+ * Redraw one picture in an entry's gallery, back into the same gallery.
+ *
+ * The gallery half of the pair (see `editImageTool` for why there are two).
+ * The result is a NEW gallery entry inheriting the original's slot — a
+ * redrawn portrait is still a portrait, and update_lore_image reclassifies it
+ * if not.
+ */
+export async function redrawLoreImageTool(
+  toolCallId: string,
+  args: {
+    entity?: string; file?: string; instruction?: string; references?: string[];
     aspect?: string; resolution?: string; quality?: string; desc?: string; note?: string; reason?: string;
   },
   ctx: ToolContext,
@@ -294,7 +433,19 @@ export async function editImageTool(
   const instruction = args.instruction?.trim();
   if (!instruction) return { toolCallId, content: "Error: 'instruction' is required — say what to change." };
   if (!args.entity || !args.file) {
-    return { toolCallId, content: "Error: 'entity' and 'file' are required. Call read_lore_entity to see the gallery." };
+    return {
+      toolCallId,
+      content: "Error: 'entity' and 'file' are required — read_lore_entity lists an entry's gallery. To change an image file elsewhere in the project use edit_image with its path.",
+    };
+  }
+  // A path here is the mirror of a gallery filename in edit_image's `source`,
+  // and gets the same treatment: name the other tool rather than fail on a
+  // filename lookup that was never going to match.
+  if (/[\\/]/.test(args.file)) {
+    return {
+      toolCallId,
+      content: `Error: 'file' is a gallery filename, not a path. If "${args.file}" is an image file in the project, call edit_image(source: "${args.file}") instead.`,
+    };
   }
   const { entity, categories } = findEntity(ctx, args.entity);
   if (!entity) {
@@ -304,9 +455,12 @@ export async function editImageTool(
   if (!image) {
     return {
       toolCallId,
-      content: `Error: "${args.entity}" has no gallery image named "${args.file}". Call read_lore_entity for the exact filenames.`,
+      content: `Error: "${entity.name}" has no gallery image named "${args.file}". Call read_lore_entity for the exact filenames.`,
     };
   }
+
+  const refs = await resolveReferences(ctx, args.references, entity.dirPath);
+  if (refs.error) return { toolCallId, content: refs.error };
 
   return proposeIllustration(toolCallId, ctx, {
     prompt: instruction,
@@ -315,10 +469,7 @@ export async function editImageTool(
     resolution: tierOf(args.resolution, RESOLUTION_TIERS),
     quality: tierOf(args.quality, QUALITY_TIERS),
     reason: args.reason,
-    // The result is a NEW gallery entry: the original may already be referenced
-    // elsewhere, and overwriting it would be a destructive act nobody approved.
-    // It inherits the original's slot — a redrawn portrait is still a portrait;
-    // update_lore_image reclassifies it if not.
+    refPaths: refs.paths.filter((p) => p !== image.absPath),
     dest: { kind: "lore", entityName: entity.name, entityDir: entity.dirPath, slot: image.slot },
     destination: entity.name,
     path: entity.dirPath,

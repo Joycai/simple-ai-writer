@@ -4,7 +4,7 @@
  * Rewrites the tool list and serverTools policy for the main agent:
  * - If search subagent is active: withhold serverTools from main agent
  * - If vision subagent is active: strip read_image and read_lore_image from main agent
- * - If the imagegen subagent is NOT active: strip generate_image and edit_image
+ * - If the imagegen subagent is NOT active: strip the three image tools
  * - If the PPTX export Beta is off: strip export_pptx
  * - If the translation Beta is on AND a translation model is bound: append translate
  * - If any delegate-capable subagent is active and workspace exists: append delegate tool
@@ -82,7 +82,8 @@ function route(
   // reads to the author as the assistant being broken rather than a feature
   // being off.
   if (!live("imagegen")) {
-    tools = tools.filter((t) => t !== "generate_image" && t !== "edit_image");
+    const drawing = new Set<ToolId>(["generate_image", "edit_image", "redraw_lore_image"]);
+    tools = tools.filter((t) => !drawing.has(t));
   }
 
   // A Beta feature is off by default, and off means *absent* rather than

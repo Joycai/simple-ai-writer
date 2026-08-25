@@ -592,10 +592,12 @@ ai:subagent:pdf:modelId       ai:subagent:pdf:enabled
 `imagegen` 是唯一**非会话型**的种类：图像模型开不了 `runAgent` 的子回合，所以
 它不走 `delegate`（`DELEGATE_KINDS = SubAgentKind \ {imagegen}`，`executeDelegate`
 对 `kind:"imagegen"` 直接拒绝并把模型指回图片工具）。它的接口是既有的
-`generate_image` / `edit_image` 工具对（L2 审批卡：提案→出示提示词与价格→同意
-才生成，`lib/agent/imageTools.ts` + `lib/image/illustrate.ts`），绑定让开关有了
+`generate_image` / `edit_image` / `redraw_lore_image` 三个工具（L2 审批卡：
+提案→出示提示词与价格→同意才生成，`lib/agent/imageTools.ts` +
+`lib/image/illustrate.ts`；后两个是改图的一对——按图存在哪里分工，见
+`docs/feature/image-generation-plan.md` §8），绑定让开关有了
 实义：`routeTools` 只在 `subAgentModel("imagegen")` 可用（启用 + 绑到
-`type:"image"` 模型）时保留这两个工具，工具解析模型也只认这份绑定——不再回退
+`type:"image"` 模型）时保留这三个工具，工具解析模型也只认这份绑定——不再回退
 到"随便哪个图像模型"。与 `vision` 的分工：vision 接管**读**图，imagegen 提供
 **画**图，二者在路由里互不干涉。会话芯片对它同样生效（本次对话关掉 ⇒ 工具被
 剥掉）。迁移：`ai:subagent:imagegen:*` 两个 pref 都缺席时，从旧的

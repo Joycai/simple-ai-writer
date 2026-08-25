@@ -106,6 +106,26 @@ export async function saveDocumentAsset(
 }
 
 /**
+ * Write an image into a folder that already exists, without a document.
+ *
+ * The landing place for an edit of a project image file (`edit_image` with a
+ * `source` and no destination): the new picture belongs next to the one it was
+ * made from, and there is no document to hang an `assets/` group off. Shares
+ * `uniqueAssetName`, so it can never overwrite what is already there — the
+ * source included.
+ */
+export async function saveImageInFolder(
+  dir: string,
+  bytes: Uint8Array,
+  ext: string,
+): Promise<string> {
+  const name = await uniqueAssetName(dir, `img-${Date.now()}`, ext);
+  const absPath = `${dir}/${name}`;
+  await writeBinaryFile(absPath, bytes);
+  return absPath;
+}
+
+/**
  * Copy a picture the author already has into the document's asset folder.
  *
  * Same destination and the same relative link as a generated one — so a
