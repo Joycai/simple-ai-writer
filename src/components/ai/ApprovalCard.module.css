@@ -297,3 +297,140 @@
   border: 1px solid var(--color-border-panel);
   flex: none;
 }
+
+/* ── 导出 Word ─────────────────────────────────────────────────────────────
+   格式来源那条带子是这张卡唯一的新东西：作者会连续批准很多张卡，「用默认导
+   的」和「照甲方模板导的」必须在扫一眼时就分得开。默认最常见，所以最安静；
+   其余三种都带一条赭石竖条，因为它们都是这一次特意要的。 */
+
+.docxOrigin {
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-elevated);
+}
+
+.docxOriginMarked {
+  border-left: 2px solid var(--color-accent);
+  background: var(--color-accent-tint);
+}
+
+/* 斜纹＝这套格式是外来的，不是这个 app 里的哪一套预设 */
+.docxOriginImitated {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--color-accent-tint) 0 5px,
+    var(--color-bg-elevated) 5px 11px
+  );
+}
+
+.docxOriginTop {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.docxOriginLabel {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  color: var(--color-text-hint);
+  flex: none;
+}
+
+.docxOriginName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.docxOriginNameQuiet {
+  font-size: 12.5px;
+  color: var(--color-text-secondary);
+}
+
+.docxOriginNote {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-hint);
+  margin-left: auto;
+}
+
+.docxChangedChip {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--color-on-accent);
+  background: var(--color-accent);
+  padding: 4px 7px;
+}
+
+.docxChanges {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  row-gap: 7px;
+  column-gap: var(--space-2);
+  align-items: baseline;
+  margin-top: var(--space-2);
+}
+
+.docxChange { display: contents; }
+
+.docxChangeMark {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--color-accent);
+}
+
+.docxChangeLabel {
+  font-size: 10.5px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.docxChangeValue {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+/* 划掉旧值而不是只写新值：作者要看见自己偏离了预设多少 */
+.docxChangeFrom { color: var(--color-text-hint); text-decoration: line-through; }
+.docxChangeArrow { color: var(--color-text-hint); }
+.docxChangeTo { color: var(--color-text-primary); }
+
+.docxSpec {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  row-gap: 8px;
+  column-gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-3) 0 var(--space-1);
+}
+
+.docxSpecLabel {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--color-text-hint);
+}
+
+.docxSpecValue,
+.docxSpecValueChanged {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* 这次被改过的那一行提亮——「和平常不一样的是哪两条」要在表里也看得见 */
+.docxSpecValueChanged { color: var(--color-text-primary); }
+
+.docxFontNote {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--color-text-hint);
+  padding-bottom: var(--space-1);
+}

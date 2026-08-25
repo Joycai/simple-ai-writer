@@ -128,9 +128,21 @@ describe("tool schema budget", () => {
     // edit_image / redraw_lore_image pair: both are resident, because neither
     // is gated on an approved lore plan — what they spend is money, so their
     // gate is the illustrate card, the same one generate_image goes through.
+    // 8,896 with export_docx: +296, and it is resident because routing — not
+    // the preset — is what withholds it while the Beta switch is off, exactly
+    // like export_pptx. The overrides object is where that money went, so it
+    // is capped at five fields with one shared sentence instead of six
+    // per-property descriptions (that phrasing alone was another 138). The
+    // full DocFormat never enters a schema at all: the model names a preset id
+    // and the app resolves it — see docs/feature/docx/01-agent-design.md I2.
+    // 9,078 with read_doc_format: +182 for the other half of that trade. It is
+    // what keeps the full format OUT of every schema — one string parameter
+    // buys "tell me this preset's margins" and "copy that .docx's layout",
+    // both answered as prose rather than as a JSON object the model would then
+    // be tempted to write back.
     const { resident } = partitionByGroup(AGENT_ASSIST_PRESET.tools);
     const residentTokens = estimateToolsTokens(getToolDefinitions(resident));
-    expect(residentTokens).toBeLessThanOrEqual(8_600);
+    expect(residentTokens).toBeLessThanOrEqual(9_150);
     // A guard against the deferral quietly becoming a no-op: someone drops the
     // `group` tag off a tool and the only symptom is a bigger bill.
     expect(tokensOf(AGENT_ASSIST_PRESET) - residentTokens).toBeGreaterThan(2_000);

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { X, SlidersHorizontal, Layers, MessageSquare, Info, BookOpen, Keyboard, BarChart3, Users,
-  RefreshCw,
+  RefreshCw, FileType,
 } from "lucide-react";
 import { type SettingsTab } from "../../stores/appStore";
 import { ModalErrorBoundary } from "../common/ErrorBoundary";
@@ -16,6 +16,8 @@ import { ShortcutsPane } from "./panes/ShortcutsPane";
 import { AboutPane } from "./panes/AboutPane";
 import { ProvidersModelsPane } from "./panes/ProvidersModelsPane";
 import { SubAgentsPane } from "./panes/SubAgentsPane";
+import { DocFormatPane } from "./panes/DocFormatPane";
+import { isDocxExportEnabled } from "../../lib/docx/flag";
 import styles from "./SettingsPage.module.css";
 
 interface Props {
@@ -37,6 +39,10 @@ interface Props {
 export function SettingsPage({ onClose, initialTab = "general" }: Props) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
+  // Beta off means the item is *absent*, not disabled — the nav below it moves
+  // up, nothing greys out. Read once per open: the switch lives two panes away
+  // and toggling it mid-session re-renders this page anyway.
+  const docxOn = isDocxExportEnabled();
 
   // A pane with its own dismissable layer (the provider/model drawer) claims
   // Escape while it is up, so one press peels off one layer.
@@ -91,6 +97,7 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
         <nav className={styles.nav}>
           {navBtn("general", <SlidersHorizontal size={15} />, "systemSettings.tabs.general")}
           {navBtn("workspace", <BookOpen size={15} />, "systemSettings.tabs.workspace")}
+          {docxOn && navBtn("docx-format", <FileType size={15} />, "systemSettings.tabs.docxFormat")}
           <div className={styles.navGroupLabel}>{t("systemSettings.tabs.aiGroup")}</div>
           {navBtn("providers-models", <Layers size={15} />, "systemSettings.tabs.providersModels")}
           {navBtn("subagents", <Users size={15} />, "systemSettings.tabs.subagents")}
@@ -109,6 +116,7 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
           <div className={styles.paneHost}>
             {activeTab === "general" && <GeneralPane />}
             {activeTab === "workspace" && <WorkspacePane />}
+            {activeTab === "docx-format" && docxOn && <DocFormatPane onEscapeInterceptChange={setEscIntercept} />}
             {activeTab === "providers-models" && <ProvidersModelsPane onEscapeInterceptChange={setEscIntercept} />}
             {activeTab === "subagents" && <SubAgentsPane />}
             {activeTab === "prompts" && <PromptsPane onEscapeInterceptChange={setEscIntercept} />}

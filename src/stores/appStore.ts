@@ -192,6 +192,7 @@ export type AiDrawerMode = "generate" | "chat" | "consistency" | "roleplay";
 export type SettingsTab =
   | "general"
   | "workspace"
+  | "docx-format"
   | "providers-models"
   | "subagents"
   | "prompts"

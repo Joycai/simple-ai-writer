@@ -89,6 +89,8 @@ import {
 } from "../lib/context/budget";
 import { messageCeilingFor } from "../lib/agent/toolCost";
 import { workflowBriefingSection } from "../lib/workflow";
+import { docxBriefingSection } from "../lib/docx/briefing";
+import { currentFormats } from "./docFormatStore";
 import {
   hashText, loadMemory, MEMORY_BUDGET_CHARS, projectRelativePath,
 } from "../lib/context/memory";
@@ -618,6 +620,32 @@ async function applyProposal(proposal: Proposal, signal?: AbortSignal): Promise<
         ].filter(Boolean).join("\n"),
       };
     }
+
+    case "docx": {
+      // Same reason as the pptx case: the work needs something the tool loop
+      // does not have — here it is a 1 MB library that must stay out of the
+      // startup bundle, and a binary write.
+      const { exportMarkdownToDocx } = await import("../lib/docx");
+      const outcome = await exportMarkdownToDocx(proposal.sourcePath, proposal.format, proposal.path);
+      // Written with the raw byte writer, which the file tree knows nothing
+      // about — without this the new file is invisible until something else
+      // refreshes.
+      await useProjectStore.getState().refreshFileTree();
+      return {
+        resultPath: outcome.path,
+        report: [
+          `Exported ${outcome.blocks} block(s) to ${outcome.path}, laid out by ${proposal.originLabel}.`,
+          outcome.degraded.length
+            ? `These fell back to a simpler form — state them plainly to the author, they are facts rather than errors:\n- ${outcome.degraded.join("\n- ")}`
+            : "Nothing degraded.",
+          // Naming it here is the only way the assistant knows not to promise a
+          // preview that matches the author's screen.
+          proposal.missingFonts.length
+            ? `NOTE: ${proposal.missingFonts.join("、")} is not installed on this machine. The file is still correct — it will render properly wherever the font exists — but the author's own preview will substitute it.`
+            : "",
+        ].filter(Boolean).join("\n"),
+      };
+    }
   }
 }
 
@@ -1091,9 +1119,15 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // stability) and is read once per session, like the rest of the seed:
         // a card edited mid-session is picked up by the next session.
         const workflowSection = await workflowBriefingSection(projectPath);
+        // Same layer, same reason: without the roster the model knows export_docx
+        // exists but not which formats it may name — so it would either always
+        // take the default or guess an id and eat an error.
+        const docxFormats = currentFormats();
+        const docxSection = docxBriefingSection(docxFormats.presets, docxFormats.defaultId);
         const systemPrompt =
           `${writingPrompt}\n\n${i18n.t("ai.instructions.agent", promptParams(i18n.language === "zh-CN"))}` +
-          (workflowSection ? `\n\n${workflowSection}` : "");
+          (workflowSection ? `\n\n${workflowSection}` : "") +
+          (docxSection ? `\n\n${docxSection}` : "");
         const documentText = focus.text;
         // Follows the profile, like the panel's tasks do: a project whose
         // documents don't use rolling memory has none to inject. Loaded only

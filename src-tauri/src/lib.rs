@@ -1,4 +1,5 @@
 mod commands;
+mod docx;
 mod instance;
 mod lorehash;
 mod pptx;
@@ -92,6 +93,8 @@ pub fn run() {
             transfer::save_text_file_dialog,
             transfer::open_text_file_dialog,
             xlsx::xlsx_to_markdown,
+            docx::docx_read_layout,
+            docx::docx_layout_from_bytes,
             pptx::pptx_to_markdown,
             pptx::pptx_read_slides,
             print::print_document,

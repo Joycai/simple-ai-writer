@@ -10,7 +10,7 @@
  * kind means adding a body and a case to each switch, not reshaping the frame.
  */
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { ArrowRight, ChevronDown, ChevronRight } from "lucide-react";
@@ -26,6 +26,7 @@ import type {
   RewriteProposal,
   IllustrateProposal,
   PptxProposal,
+  DocxProposal,
   MoveProposal,
   Proposal,
 } from "../../lib/agent/registry";
@@ -70,6 +71,8 @@ function headerTitle(proposal: Proposal, t: TFunction, terms: ResolvedTerms): st
         : t("ai.approval.titleIllustrate");
     case "pptx":
       return t("ai.approval.titlePptx");
+    case "docx":
+      return t("ai.approval.titleDocx");
   }
 }
 
@@ -106,7 +109,17 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
       // Nothing to weigh in advance: the slide count is only known once the
       // page has been rendered, which is what approving sets off.
       return "";
+    case "docx":
+      // Page count would need Word's own layout, so the honest metric is the
+      // size of what is being converted. The *format* is the thing to weigh
+      // here, and it gets the band below rather than this one line.
+      return `${kilo(proposal.sourceChars)} ${chars}`;
   }
+}
+
+/** 9412 → "9.4k"；小于一千就写原数。 */
+function kilo(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
 }
 
 /**
@@ -293,6 +306,86 @@ function PptxBody({ proposal }: { proposal: PptxProposal }) {
   );
 }
 
+
+/**
+ * 导出 Word。
+ *
+ * 和 pptx 卡的关键差别：那张卡批准前没什么可权衡的（页数要渲染完才知道），这
+ * 张**恰恰相反——可权衡的东西就是格式，而且它在批准前完全已知**。所以卡上有
+ * 两样 pptx 没有的东西：一条说清「这次用的是哪来的格式」的带子，和一张写着
+ * 最终值的规格表。
+ *
+ * 「默认格式」是最常见的一种，所以它最安静（没有竖条）；其余三种都带赭石竖
+ * 条，因为它们都是作者这一次特意要的东西。
+ */
+function DocxBody({ proposal }: { proposal: DocxProposal }) {
+  const { t } = useTranslation();
+  const changedKeys = new Set((proposal.changed ?? []).map((c) => c.key));
+  const quiet = proposal.originKind === "default";
+
+  return (
+    <>
+      <div className={styles.moveBlock}>
+        <span className={styles.movePath}>{projectRelative(proposal.sourcePath)}</span>
+        <ArrowRight size={12} className={styles.moveArrow} />
+        <span className={styles.movePath}>{projectRelative(proposal.path)}</span>
+      </div>
+
+      <div
+        className={`${styles.docxOrigin} ${quiet ? "" : styles.docxOriginMarked} ${
+          proposal.originKind === "imitated" ? styles.docxOriginImitated : ""
+        }`}
+      >
+        <div className={styles.docxOriginTop}>
+          <span className={styles.docxOriginLabel}>{t("ai.approval.docxOrigin")}</span>
+          <span className={quiet ? styles.docxOriginNameQuiet : styles.docxOriginName}>
+            {proposal.originLabel}
+          </span>
+          {proposal.changed && proposal.changed.length > 0 && (
+            <span className={styles.docxChangedChip}>
+              {t("ai.approval.docxChanged", { count: proposal.changed.length })}
+            </span>
+          )}
+          {proposal.originNote && <span className={styles.docxOriginNote}>{proposal.originNote}</span>}
+        </div>
+        {proposal.changed && proposal.changed.length > 0 && (
+          <div className={styles.docxChanges}>
+            {proposal.changed.map((c, i) => (
+              <div key={i} className={styles.docxChange}>
+                <span className={styles.docxChangeMark}>{t("ai.approval.docxChangeMark")}</span>
+                <span className={styles.docxChangeLabel}>{c.label}</span>
+                <span className={styles.docxChangeValue}>
+                  <span className={styles.docxChangeFrom}>{c.from}</span>
+                  <span className={styles.docxChangeArrow}> → </span>
+                  <span className={styles.docxChangeTo}>{c.to}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className={styles.docxSpec}>
+        {proposal.spec.map((row) => (
+          <Fragment key={row.key}>
+            <span className={styles.docxSpecLabel}>{row.label}</span>
+            <span className={changedKeys.has(row.key) ? styles.docxSpecValueChanged : styles.docxSpecValue}>
+              {row.value}
+            </span>
+          </Fragment>
+        ))}
+      </div>
+
+      {/* 字体没装不是错误：文件仍然是对的，只是本机预览会替换。中性一句话。 */}
+      {proposal.missingFonts.length > 0 && (
+        <div className={styles.docxFontNote}>
+          {t("ai.approval.docxFontMissing", { fonts: proposal.missingFonts.join("、") })}
+        </div>
+      )}
+    </>
+  );
+}
+
 /**
  * Source → destination folder. The copy's decision is only "should this exist
  * twice" — no content to weigh, so the card stays two lines plus the note
@@ -425,6 +518,8 @@ function ProposalBody({ proposal }: { proposal: Proposal }) {
       return <IllustrateBody proposal={proposal} />;
     case "pptx":
       return <PptxBody proposal={proposal} />;
+    case "docx":
+      return <DocxBody proposal={proposal} />;
   }
 }
 
