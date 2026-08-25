@@ -242,17 +242,30 @@ function startReconnect() {
 
 // ── toast / 模态 ───────────────────────────────────────────────────────────
 
+/**
+ * 带退场地移走一个浮层：加 `.closing`，动画/过渡放完再从 DOM 里摘掉。
+ *
+ * 收尾**不能**用一个写死的 setTimeout 对齐 CSS 里的时长：`prefers-reduced-motion`
+ * 把全站动画压到 .01ms（app.css 末尾那条覆盖），那时候固定等待会让一个已经
+ * 看不见的节点又挡上几百毫秒。所以听 animationend / transitionend，
+ * 另留一个兜底 —— 标签页在后台时动画根本不跑，那两个事件一个都不会来。
+ */
+function dismiss(node) {
+  if (node.classList.contains('closing')) return;
+  node.classList.add('closing');
+  const done = () => node.remove();
+  node.addEventListener('animationend', done, { once: true });
+  node.addEventListener('transitionend', done, { once: true });
+  setTimeout(done, 400);
+}
+
 function toast(message, bad) {
   const host = document.getElementById('toasts');
   const node = el('div.toast' + (bad ? '.bad' : ''), null,
     icon(bad ? ICON.warn : ICON.ok, 14),
     el('span', { text: message }));
   host.appendChild(node);
-  setTimeout(() => {
-    node.style.transition = 'opacity 200ms';
-    node.style.opacity = '0';
-    setTimeout(() => node.remove(), 220);
-  }, 4000);
+  setTimeout(() => dismiss(node), 4000);
 }
 
 function reportError(e) {
@@ -263,7 +276,7 @@ function reportError(e) {
 /** 一个模态。`build(close)` 返回内容节点。 */
 function modal(build, wide) {
   const backdrop = el('div.backdrop');
-  const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
+  const close = () => { dismiss(backdrop); document.removeEventListener('keydown', onKey); };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   const panel = el('div.modal' + (wide ? '.wide' : ''));
   append(panel, [build(close)]);
@@ -1081,7 +1094,7 @@ function emptyKb(kb) {
 
 function entryDrawer(kb, entry) {
   const wrap = el('div.drawer-wrap');
-  const close = () => { wrap.remove(); document.removeEventListener('keydown', onKey); };
+  const close = () => { dismiss(wrap); document.removeEventListener('keydown', onKey); };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   wrap.addEventListener('click', (e) => { if (e.target === wrap) close(); });
   document.addEventListener('keydown', onKey);
