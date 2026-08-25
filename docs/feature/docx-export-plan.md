@@ -100,11 +100,14 @@ RTF 有一个真实优点：**纯字符串**，零依赖，走现成的 `saveTex
 export interface DocFormat {
   id: string;
   label: { zh: string; en: string };
-  page: { size: "A4" | "Letter" | "B5"; margins: { top; right; bottom; left } /* mm */ };
+  page: {
+    size: "A4" | "Letter" | "B5"; margins: { top; right; bottom; left } /* mm */;
+    grid?: { linesPerPage: number; charsPerLine: number };   // 公文的「每页22行每行28字」
+  };
   body: {
     fontAscii: string; fontEastAsia: string;   // 中西文分开
-    sizePt: number;
-    lineSpacing: number;                        // 倍数，1.5 / 1.75 …
+    sizePt: number;                             // 由中文号数换算而来（三号 = 16），UI 两个都显示
+    line: { rule: "exact" | "atLeast" | "auto"; value: number };  // 固定值 / 最小值 / 倍数——见 §7.2
     firstLineChars: number;                     // 首行缩进「字符数」，中文默认 2
     spaceBeforePt: number; spaceAfterPt: number;
   };
@@ -151,16 +154,89 @@ src/lib/docx/
 | 嵌套列表 | 支持，但需要为每层建 numbering level；三层以上不保证与预览一致 |
 | 目录 | 二期。`TableOfContents` 插的是**域**，Word 打开后要按 F9 才刷新——这一点必须在 UI 上说，否则作者看到空目录会以为坏了 |
 
-## 7. 分期
+## 7. 严格格式规格：能表达吗，怎么校对
+
+投标文件、公文、期刊投稿对字体字号缩进标题有逐条要求。两个不同的问题，分开答。
+
+### 7.1 表达力：够（实测一份公文级规格）
+
+OOXML 里的 `w:rPr` / `w:pPr` / `w:sectPr` **就是** Word「字体」「段落」「页面设置」三个对话框本身——Word 自己存的也是这些。第二轮实测按党政机关公文的常见规格生成，逐项解包核对：
+
+| 规格 | 声明 | 落到 XML |
+|---|---|---|
+| 版心 上37 下35 左28 右26 mm | `margin: { top: mm(37), … }` | `<w:pgMar w:top="2097" w:bottom="1984" w:left="1587" w:right="1474"/>` |
+| 正文 仿宋_GB2312 三号 | `font.eastAsia` + `size: 32` | `<w:rFonts w:eastAsia="仿宋_GB2312" w:hint="eastAsia"/><w:sz w:val="32"/>` |
+| 行距 固定值 28 磅 | `line: 560, lineRule: EXACT` | `<w:spacing w:line="560" w:lineRule="exact"/>` |
+| 首行缩进 2 **字符** | `indent: { firstLineChars: 200 }` | `<w:ind w:firstLineChars="200"/>` |
+| 每页 22 行 / 每行 28 字 | `grid: { type, linePitch, charSpace }` | `<w:docGrid w:type="linesAndChars" w:linePitch="560" w:charSpace="318"/>` |
+| 一级标题 黑体 二号 居中 | `styles.default.heading1` | 单个 `w:styleId="Heading1"`，含 `w:jc w:val="center"` |
+| 字间距紧缩 0.5 磅 | `characterSpacing: -10` | `<w:spacing w:val="-10"/>`（run 级） |
+| 页脚页码 | `Footer` + `PageNumber.CURRENT` | `<w:footerReference>` + 域 |
+
+`format.ts` 因此要带两张表，它们是这个模块的主要内容，也是唯一容易写错的地方：
+
+- **中文字号 ↔ 磅**：初号=42、小初=36、一号=26、二号=22、小二=18、三号=16、小三=15、四号=14、小四=12、五号=10.5、小五=9。`w:sz` 是**半磅**，所以三号 → 32。
+- **单位**：twip = 磅 × 20 = 毫米 × 56.6929；行距/段距用 twip，字号用半磅，缩进用「字符 × 100」。
+
+### 7.2 四个"看起来对、其实不合规"的细节
+
+全部实测过，写进 `format.ts` 的注释里：
+
+1. **`w:hint="eastAsia"` 不能省。** 没有它，半角标点、数字和拉丁字母按西文字体走，中文按中文字体走——屏幕上像回事，但校对到"标点也必须是仿宋"那一条就挂了。
+2. **`firstLineChars` 而不是 `firstLine`。** 中文规格说的是"缩进 2 字符"，按磅写死的话作者一改字号缩进就错位。
+3. **`lineRule` 三态不能混。** `exact`=固定值、`atLeast`=最小值、`auto`=倍数。规格写"固定值 28 磅"而实现给了 `auto`，行距会随字号浮动——是那种打印出来才发现的错。（附带风险：`exact` 小于字号时 Word 会**截掉字的上半部分**，UI 应该在这里给一句提示。）
+4. **覆盖内置标题走 `styles.default.heading1`，不要走 `paragraphStyles`。** 后者产出两个 `w:styleId="Heading1"`（§2.1），Word 大概率认后一个，但那是运气不是保证。
+
+### 7.3 校对该发生在哪里：规格表，不是产出
+
+关键的一条，也是 docx 和 pptx 那条链的根本差别：
+
+> **生成端是确定性的一张表 → XML 的映射。** 没有渲染、没有测量、没有降级判断（对比 `pptx-plan.md` §4：那边必须把页面渲染出来量，所以产出天然需要事后检查）。只要 `DocFormat` 那张表对，产出必然对。
+
+所以校对的对象应该是**那张表**，UI 要把最终值显性化——写「三号（16 磅）」而不是「16」，写「固定值 28 磅」而不是「28」，让作者对着甲方的要求逐条核对**一次**，而不是每次导出后打开 Word 拿标尺量。
+
+配套一条施工纪律：**回读断言测试**。生成 → 解包 → 断言 `styles.xml` / `document.xml` 里的值等于声明值。原型已经跑通（§7.4 的报告就是它打出来的），成本是几十行；它钉住的是**库升级带来的静默漂移**——§2.1 那个重复 `styleId` 的坑正是这样发现的。
+
+### 7.4 顺带一个可能更值钱的能力：格式体检
+
+投标/公文场景里，作者拿到的常常是**甲方给的模板或范文**，要求"照这个来"。读一份 docx 的**格式**比读它的**全文**便宜一个量级——不碰修订、域、内容控件、编号继承，只读 `pPr`/`rPr` 的少数字段。原型 50 行、零依赖，对 §7.1 生成的文件跑出来是：
+
+```
+纸张      210 × 297 mm
+页边距    上37 下35 左28 右26 mm
+文档网格  每行行距28磅 字间距0
+
+正文默认  中文=仿宋_GB2312 西文=Times New Roman hint=eastAsia · 字号=16磅
+          行距=固定值 28磅 · 首行缩进=2字符
+
+Heading1  中文=黑体 hint=eastAsia · 字号=22磅 · 不加粗
+          行距=固定值 36磅 · 段前=0磅 段后=24磅 · 首行缩进=0字符 · 居中
+```
+
+在这个 app 里它天然落在 **Rust**（`zip` + `quick-xml` 都已是直接依赖，`pptx.rs` 就是同一套做法）——这次和 §D5 不冲突，因为读格式不需要 markdown 方言。
+
+两个用法，第二个才是重点：
+
+1. **体检自己的产出**（可选，作者要安心时用）。
+2. **把甲方的模板读成一个 `DocFormat` 预设**——一键得到"照这个来"，比人肉抄十二条规格可靠得多。
+
+### 7.5 保证不了的三件事（说在前面）
+
+1. **字体缺失时 Word 会替换。** mac 上没有仿宋_GB2312，文件里写的仍然是它、拿到 Windows 上打印也仍然对，但作者本机看到的是替换字体。app 管不了，也不该假装管——UI 可以在预设里标一句"该字体本机未安装"。
+2. **我们保证"文件里写的是什么"，保证不了"Word 怎么渲染"。** 交付前在 Word 里过一眼这一步删不掉。
+3. **复杂的公文构件不在一期**：多级自动编号（一、(一)、1.）、发文机关标志与红头线、奇偶页不同的页码、版记表格。都能做，但是逐项工程，不该压在第一个 PR 里。
+
+## 8. 分期
 
 | 期 | 内容 | 大小 |
 |---|---|---|
 | 一期 | `docx` 依赖（懒加载）+ `save_binary_file_dialog` + `format.ts` 内置五套预设 + `blocks.ts` + `write.ts` + 导出菜单加「Word (.docx)…」 | 一个 PR，主要工作量在 `blocks.ts`/`write.ts` 的纯逻辑与测试 |
 | 二期 | 导出前的排版对话框（预设下拉 + 页边距/字号/行距/首行缩进可调）+ "上次用的"偏好 | UI 为主，复用 `settingsCommon.module.css` 的表单控件 |
 | 三期 | 项目级排版预设（`.ai-writer/`）+ 能力包默认预设 + 目录 / 页眉页脚 / 一级标题分页 | 与 `WorkspaceProfile` 打通 |
+| 四期（可独立） | 格式体检：Rust 侧读一份 .docx 的排版参数，报出来 / 转成 `DocFormat` 预设（§7.4） | 与生成端无依赖，可以先做 |
 
 RTF 若仍要（个别投稿系统只收 .rtf），作为**独立小模块**追加：`src/lib/rtf/`，纯字符串，复用同一个 `DocBlock[]` 和同一份 `DocFormat`——它的价值在于它不是 docx 的替代品，而是同一条流水线的第二个出口。
 
-## 8. 一句话结论
+## 9. 一句话结论
 
-可行，且应该直接做 docx：**写 docx 比写 RTF 便宜，产出还好得多**；.pptx 那条链路上最贵的"量版面"在这里不存在；已有的 base64 写盘通道、懒加载 chunk 先例、纯逻辑分层先例全部对得上，真正的新代码只有一个 markdown → 段落的映射层和一个排版模型。
+可行，且应该直接做 docx：**写 docx 比写 RTF 便宜，产出还好得多**，严格规格逐条都能表达（§7.1 实测），校对的对象是那张规格表而不是产出——因为这条链上没有渲染、没有测量、没有降级；.pptx 那条链路上最贵的"量版面"在这里不存在；已有的 base64 写盘通道、懒加载 chunk 先例、纯逻辑分层先例全部对得上，真正的新代码只有一个 markdown → 段落的映射层和一个排版模型。
