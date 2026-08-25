@@ -3,8 +3,10 @@
 The [`CI`](../../.github/workflows/ci.yml) workflow runs on every pull request targeting `main`
 (and on pushes to `main`). It is the merge gate: a PR may only be merged once CI is green.
 
-> Release builds (signed installers for macOS/Windows/Linux) are produced separately by the
+> Release builds (installers for macOS/Windows/Linux) are produced separately by the
 > manually-triggered [`Release`](../../.github/workflows/release.yml) workflow — not by CI.
+> They are **not code-signed** today; [macos-signing.md](macos-signing.md) is the manual for
+> changing that on macOS, and says what it does and doesn't buy.
 
 ## What it checks
 
