@@ -48,7 +48,8 @@ describe("routeTools", () => {
    * tools, and no PPTX export (a Beta feature is off until the author says so).
    */
   const BASELINE_TOOLS = AGENT_ASSIST_PRESET.tools.filter(
-    (t) => t !== "generate_image" && t !== "edit_image" && t !== "export_pptx",
+    (t) => !["generate_image", "edit_image", "redraw_lore_image"].includes(t)
+      && t !== "export_pptx",
   );
 
   it("keeps everything except the image tools when no subagents are active", () => {
@@ -132,6 +133,9 @@ describe("routeTools", () => {
     const res = routeTools(AGENT_ASSIST_PRESET, subs, WS, MODELS);
     expect(res.tools).toContain("generate_image");
     expect(res.tools).toContain("edit_image");
+    // Both editors, or neither: they are one capability split across two names
+    // so the model can tell a gallery picture from a file.
+    expect(res.tools).toContain("redraw_lore_image");
   });
 
   it("does not add delegate for imagegen alone — it has no conversational sub-run", () => {
@@ -211,6 +215,7 @@ describe("routeTools", () => {
     );
     expect(off.tools).not.toContain("generate_image");
     expect(off.tools).not.toContain("edit_image");
+    expect(off.tools).not.toContain("redraw_lore_image");
   });
 
   // ── Planned routing (estimation before the run) ──────────────────────────

@@ -108,7 +108,7 @@ export async function saveDocumentAsset(
 /**
  * Write an image into a folder that already exists, without a document.
  *
- * The landing place for an edit of a loose project image (`edit_image` with a
+ * The landing place for an edit of a project image file (`edit_image` with a
  * `source` and no destination): the new picture belongs next to the one it was
  * made from, and there is no document to hang an `assets/` group off. Shares
  * `uniqueAssetName`, so it can never overwrite what is already there — the

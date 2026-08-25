@@ -1128,7 +1128,7 @@ export async function updateLoreImageTool(
     return {
       toolCallId,
       content:
-        "Error: pass 'desc' (the caption a text-only model reads), 'slot' (the image slot it fills), or both. To replace the picture itself use edit_image; to remove it use delete_lore_image.",
+        "Error: pass 'desc' (the caption a text-only model reads), 'slot' (the image slot it fills), or both. To replace the picture itself use redraw_lore_image; to remove it use delete_lore_image.",
     };
   }
   if ("desc" in args && typeof args.desc !== "string") {

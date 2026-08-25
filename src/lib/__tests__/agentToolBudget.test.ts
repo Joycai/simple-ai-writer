@@ -68,6 +68,17 @@ import { estimateToolsTokens } from "../ai/tokenEstimate";
  * draws a new one and charges for it. A wrong call every time, and the pointer
  * sentence is what stops it recurring.
  *
+ * 12,452 after `edit_image` was split in two (+662). One tool named
+ * `edit_image` accepted only an entity plus a gallery filename, so every
+ * request to change an ordinary project image reached it and was refused with
+ * an error about lore galleries — a wrong call every time, like add_lore_image
+ * above. The fix is a PAIR (`edit_image` takes a file path,
+ * `redraw_lore_image` takes an entry plus a filename) rather than one widened
+ * tool, because one tool would have to infer from the source what the author
+ * meant, and an inference is a second way to be wrong. Two names cost a second
+ * schema (~510) and buy a choice the model can actually check, plus the errors
+ * that name the sibling when it picks wrong.
+ *
  * The cap is **11,790 measured, 15,000 pinned** — deliberately loose, on the
  * author's call. The tight cap was costing a commit of its own every time a
  * description gained a clarifying sentence, which is the change this file most
@@ -113,10 +124,13 @@ describe("tool schema budget", () => {
     // resident in full, because the manuscript tools are. 7,774 with
     // add_lore_image: the tool itself is deferred, so all this half pays is
     // the sentence on generate_image telling it not to draw what already
-    // exists — 69 tokens against a wrong, billable call.
+    // exists — 69 tokens against a wrong, billable call. 8,435 with the
+    // edit_image / redraw_lore_image pair: both are resident, because neither
+    // is gated on an approved lore plan — what they spend is money, so their
+    // gate is the illustrate card, the same one generate_image goes through.
     const { resident } = partitionByGroup(AGENT_ASSIST_PRESET.tools);
     const residentTokens = estimateToolsTokens(getToolDefinitions(resident));
-    expect(residentTokens).toBeLessThanOrEqual(8_100);
+    expect(residentTokens).toBeLessThanOrEqual(8_600);
     // A guard against the deferral quietly becoming a no-op: someone drops the
     // `group` tag off a tool and the only symptom is a bigger bill.
     expect(tokensOf(AGENT_ASSIST_PRESET) - residentTokens).toBeGreaterThan(2_000);

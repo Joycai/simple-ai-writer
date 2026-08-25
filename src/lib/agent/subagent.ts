@@ -31,7 +31,7 @@ export const SUBAGENT_KINDS: readonly SubAgentKind[] =
  * The kinds `delegate` can dispatch to — a *conversational* sub-run on the
  * bound model. `imagegen` is deliberately not one of them: an image model
  * cannot hold a conversation, so the assistant's interface to that specialist
- * is the `generate_image` / `edit_image` tool pair (proposal → approval card →
+ * is the `generate_image` / `edit_image` / `redraw_lore_image` tools (proposal → approval card →
  * generation, see lib/agent/imageTools.ts), and `routeTools` is what makes the
  * binding matter — those tools exist only while this subagent is usable, and
  * they draw with its model.
@@ -354,7 +354,7 @@ export async function executeDelegate(
   const kind = args.kind as DelegateKind;
   if (!DELEGATE_KINDS.includes(kind)) {
     if ((args.kind as SubAgentKind) === "imagegen") {
-      return fail("images are not delegated — call generate_image or edit_image directly.");
+      return fail("images are not delegated — call generate_image, edit_image or redraw_lore_image directly.");
     }
     return fail(`unknown subagent kind "${args.kind}". Must be one of: search, vision, longread, pdf.`);
   }

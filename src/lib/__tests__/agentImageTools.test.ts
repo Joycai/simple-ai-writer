@@ -32,7 +32,7 @@ vi.mock("../../stores/aiStore", () => ({
   },
 }));
 
-const { generateImageTool, editImageTool } = await import("../agent/imageTools");
+const { generateImageTool, editImageTool, redrawLoreImageTool } = await import("../agent/imageTools");
 
 const IMAGE_MODEL = {
   id: "m1", providerId: "p1", modelId: "img-1", name: "Nano", type: "image",
@@ -168,40 +168,14 @@ describe("generate_image", () => {
 });
 
 describe("edit_image", () => {
-  it("carries the source picture and files the result as a new one", async () => {
-    const { ctx, seen } = ctxWith();
-    await editImageTool("c1", { entity: "艾尔登", file: "a.png", instruction: "银白色头发" }, ctx);
-
-    expect(seen[0].sourcePath).toBe(ENTITY.images[0].absPath);
-    // Destination is the gallery, not the source file: overwriting a picture
-    // that may already be referenced is a destructive act nobody approved.
-    expect(seen[0].dest).toEqual({ kind: "lore", entityName: "艾尔登", entityDir: ENTITY.dirPath, slot: undefined });
-    expect(seen[0].path).not.toBe(ENTITY.images[0].absPath);
-  });
-
-  it("inherits the old description when no new one is given", async () => {
-    const { ctx, seen } = ctxWith();
-    await editImageTool("c1", { entity: "艾尔登", file: "a.png", instruction: "银白色头发" }, ctx);
-    expect(seen[0].note).toBe("旧立绘");
-  });
-
-  it("refuses a filename that isn't in the gallery", async () => {
-    const { ctx, seen } = ctxWith();
-    const res = await editImageTool("c1", { entity: "艾尔登", file: "nope.png", instruction: "x" }, ctx);
-    expect(res.content).toMatch(/no gallery image/i);
-    expect(seen).toHaveLength(0);
-  });
-
-  // The bug this tool shipped with: the author hands over a project image and
-  // a prompt, and the only editor the model can see answers with an error about
-  // lore galleries. There is one `edit_image`, so it has to edit any picture.
   it("edits a project image, filing the result beside it", async () => {
     const { ctx, seen } = ctxWith();
-    const res = await editImageTool("c1", { source: "插图/参考.png", instruction: "银白色头发" }, ctx);
+    await editImageTool("c1", { source: "插图/参考.png", instruction: "银白色头发" }, ctx);
 
-    expect(res.content).not.toMatch(/lore|gallery/i);
     expect(seen[0].sourcePath).toBe("/proj/插图/参考.png");
     expect(seen[0].dest).toEqual({ kind: "file", dir: "/proj/插图" });
+    // Never over the source: it may already be linked from a document.
+    expect(seen[0].path).not.toBe("/proj/插图/参考.png");
   });
 
   it("files the result beside a document when one is named", async () => {
@@ -220,29 +194,29 @@ describe("edit_image", () => {
     expect(seen).toHaveLength(0);
   });
 
-  it("keeps a gallery picture in its gallery when it is addressed as a source", async () => {
-    // Not the `file` dest: a gallery folder lives under .ai-writer, and an
-    // unregistered file dropped there would be invisible to the entity view.
+  // The whole point of splitting the two tools: a mis-pick has to cost one
+  // round and name its own fix, not read as "that picture does not exist".
+  it("sends a gallery picture to redraw_lore_image, with the call spelled out", async () => {
     const { ctx, seen } = ctxWith();
-    await editImageTool("c1", { source: "a.png", instruction: "银白色头发" }, ctx);
-    expect(seen[0].sourcePath).toBe(ENTITY.images[0].absPath);
-    expect(seen[0].dest).toEqual({ kind: "lore", entityName: "艾尔登", entityDir: ENTITY.dirPath, slot: undefined });
-    expect(seen[0].note).toBe("旧立绘");
+    const res = await editImageTool("c1", { source: "a.png", instruction: "银白色头发" }, ctx);
+    expect(res.content).toMatch(/redraw_lore_image/);
+    expect(res.content).toMatch(/艾尔登/);
+    expect(seen).toHaveLength(0);
   });
 
-  it("does not carry a slot across entities", async () => {
-    // Slots are declared per category, so a slot inherited from another
-    // entity's picture can only be a value the destination never declared.
-    const { ctx, seen } = ctxWith();
-    await editImageTool("c1", { source: "插图/参考.png", entity: "艾尔登", instruction: "x" }, ctx);
-    expect(seen[0].dest).toEqual({ kind: "lore", entityName: "艾尔登", entityDir: ENTITY.dirPath, slot: undefined });
+  it("does the same for a gallery picture spelled as a full path", async () => {
+    // .ai-writer is outside every workspace path, so this can only ever fail —
+    // the question is whether it fails usefully.
+    const { ctx } = ctxWith();
+    const res = await editImageTool("c1", { source: ENTITY.images[0].absPath, instruction: "x" }, ctx);
+    expect(res.content).toMatch(/redraw_lore_image/);
   });
 
-  it("names both spellings when no picture was given", async () => {
+  it("names the other tool when no source was given at all", async () => {
     const { ctx, seen } = ctxWith();
     const res = await editImageTool("c1", { instruction: "x" }, ctx);
     expect(res.content).toMatch(/source/);
-    expect(res.content).toMatch(/entity/);
+    expect(res.content).toMatch(/redraw_lore_image/);
     expect(seen).toHaveLength(0);
   });
 
@@ -260,5 +234,52 @@ describe("edit_image", () => {
     }, ctx);
     expect(seen[0].sourcePath).toBe("/proj/插图/参考.png");
     expect(seen[0].refPaths).toEqual([ENTITY.images[0].absPath]);
+  });
+});
+
+describe("redraw_lore_image", () => {
+  it("carries the source picture and files the result as a new gallery entry", async () => {
+    const { ctx, seen } = ctxWith();
+    await redrawLoreImageTool("c1", { entity: "艾尔登", file: "a.png", instruction: "银白色头发" }, ctx);
+
+    expect(seen[0].sourcePath).toBe(ENTITY.images[0].absPath);
+    // Destination is the gallery, not the source file: overwriting a picture
+    // that may already be referenced is a destructive act nobody approved.
+    expect(seen[0].dest).toEqual({ kind: "lore", entityName: "艾尔登", entityDir: ENTITY.dirPath, slot: undefined });
+    expect(seen[0].path).not.toBe(ENTITY.images[0].absPath);
+  });
+
+  it("inherits the old description when no new one is given", async () => {
+    const { ctx, seen } = ctxWith();
+    await redrawLoreImageTool("c1", { entity: "艾尔登", file: "a.png", instruction: "银白色头发" }, ctx);
+    expect(seen[0].note).toBe("旧立绘");
+  });
+
+  it("refuses a filename that isn't in the gallery", async () => {
+    const { ctx, seen } = ctxWith();
+    const res = await redrawLoreImageTool("c1", { entity: "艾尔登", file: "nope.png", instruction: "x" }, ctx);
+    expect(res.content).toMatch(/no gallery image/i);
+    expect(seen).toHaveLength(0);
+  });
+
+  it("sends a path to edit_image rather than looking it up as a filename", async () => {
+    const { ctx, seen } = ctxWith();
+    const res = await redrawLoreImageTool("c1", { entity: "艾尔登", file: "插图/参考.png", instruction: "x" }, ctx);
+    expect(res.content).toMatch(/edit_image/);
+    expect(seen).toHaveLength(0);
+  });
+
+  it("names edit_image when the entry is missing", async () => {
+    const { ctx, seen } = ctxWith();
+    const res = await redrawLoreImageTool("c1", { file: "a.png", instruction: "x" }, ctx);
+    expect(res.content).toMatch(/edit_image/);
+    expect(seen).toHaveLength(0);
+  });
+
+  it("refuses an unknown entry", async () => {
+    const { ctx, seen } = ctxWith();
+    const res = await redrawLoreImageTool("c1", { entity: "无此人", file: "a.png", instruction: "x" }, ctx);
+    expect(res.content).toMatch(/no lore entity/i);
+    expect(seen).toHaveLength(0);
   });
 });
