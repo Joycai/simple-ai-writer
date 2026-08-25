@@ -618,6 +618,32 @@ async function applyProposal(proposal: Proposal, signal?: AbortSignal): Promise<
         ].filter(Boolean).join("\n"),
       };
     }
+
+    case "docx": {
+      // Same reason as the pptx case: the work needs something the tool loop
+      // does not have — here it is a 1 MB library that must stay out of the
+      // startup bundle, and a binary write.
+      const { exportMarkdownToDocx } = await import("../lib/docx");
+      const outcome = await exportMarkdownToDocx(proposal.sourcePath, proposal.format, proposal.path);
+      // Written with the raw byte writer, which the file tree knows nothing
+      // about — without this the new file is invisible until something else
+      // refreshes.
+      await useProjectStore.getState().refreshFileTree();
+      return {
+        resultPath: outcome.path,
+        report: [
+          `Exported ${outcome.blocks} block(s) to ${outcome.path}, laid out by ${proposal.originLabel}.`,
+          outcome.degraded.length
+            ? `These fell back to a simpler form — state them plainly to the author, they are facts rather than errors:\n- ${outcome.degraded.join("\n- ")}`
+            : "Nothing degraded.",
+          // Naming it here is the only way the assistant knows not to promise a
+          // preview that matches the author's screen.
+          proposal.missingFonts.length
+            ? `NOTE: ${proposal.missingFonts.join("、")} is not installed on this machine. The file is still correct — it will render properly wherever the font exists — but the author's own preview will substitute it.`
+            : "",
+        ].filter(Boolean).join("\n"),
+      };
+    }
   }
 }
 

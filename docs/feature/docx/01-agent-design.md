@@ -1,7 +1,9 @@
 # Agent 产出 .docx（Beta）——设计方案
 
-> 状态：`partial` —— **一期的转换内核已实施**（`src/lib/docx/`，44 个测试，含回读断言）；
-> agent 工具接线与全部 UI **未实施**，等设计稿。可行性与实测在 [00-feasibility.md](00-feasibility.md)，UI 任务书在 [02-ui-brief.md](02-ui-brief.md)。
+> 状态：`partial` —— **一期已实施**：转换内核（`src/lib/docx/`）、`export_docx` 工具与
+> Beta 门、导出审批卡、设置 → 排版格式（预设列表 + 纸样示意图 + 选默认）。
+> **未实施**：预设编辑抽屉（设计稿 1f/1g）、从 Word 文件读取格式（1h/1i，要 Rust 端）、
+> 自建预设的落盘。可行性与实测在 [00-feasibility.md](00-feasibility.md)，UI 任务书在 [02-ui-brief.md](02-ui-brief.md)。
 > 目标已从"导出菜单多一个格式"改为**「agent 能产出 docx，并且按照要求的样式 / 格式 / 版式」**。
 
 ## 0. 需求与一处读法
@@ -239,8 +241,8 @@ src-tauri/src/docx.rs             # 二期：读一份 .docx 的排版参数
 
 | 期 | 内容 |
 |---|---|
-| **一期 · 已实施** | `flag.ts` + `format.ts` + `blocks.ts` + `write.ts` + `resolve.ts` + `index.ts` + 回读断言测试 |
-| **一期 · 待实施** | `export_docx`（L2）+ `DocxProposal` 卡 + briefing 清单 + 设置「排版格式」pane（内置预设 + 选默认） |
+| **一期 · 已实施** | `flag.ts` · `format.ts` · `blocks.ts` · `write.ts` · `resolve.ts` · `fontCheck.ts` · `index.ts` · `export_docx`（L2）+ 路由门 + 预算棘轮 · `DocxProposal` 卡 · 设置「排版格式」pane（预设列表 + 纸样示意图 + 选默认）· 通用页的 Beta 开关 |
+| **一期 · 待实施** | briefing 里的格式清单（模型现在只能靠默认或 id 猜，还看不到有哪些预设） |
 | **二期** | `read_doc_format` + `src-tauri/src/docx.rs`（参考模仿）+ 预设编辑器（完整表单 + 纸样预览）+ 「存为预设」+ `overrides` |
 | **三期** | 预设进应用配置备份；目录 / 页眉页脚 / 一级标题分页；多级自动编号 |
 
@@ -252,3 +254,30 @@ src-tauri/src/docx.rs             # 二期：读一份 .docx 的排版参数
 - **让模型看完整的 `DocFormat` JSON。** 它看摘要。看得见全量就会想改全量。
 - **从 PDF / 截图"模仿格式"。** 二期的模仿只读 .docx/.dotx —— 那里面有确切数值；从一张图里推断磅值是猜。
 - **保证 Word 的渲染。** 我们保证文件里写的是什么（00-feasibility §7.5）。
+
+
+## 11. 实现与设计稿的出入（TURN 1）
+
+设计稿：`11 Word 排版格式 Word Format.dc.html`（1a–1n）。照着做了 1a/1b/1c/1d/1e 的
+呈现部分、1j 的四种格式来源、1n 的开关行。三处有意的出入：
+
+1. **内置预设的数值取了设计稿的，不是我自己那版。** 手稿改成思源宋体 1.75 倍、素雅
+   改成无缩进小四、投标改成四号固定值 24 磅。设计稿里那几行摘要是作者真正会读到的
+   东西，让代码去将就它比反过来省事，也更不容易出「文档写一套、界面显示另一套」。
+2. **「+ 新建预设」和「从 Word 文件读取格式」两个按钮没有摆上去。** 它们要的编辑抽屉
+   （1f）和读取模态（1h/1i）在二期——一个点了没反应的按钮比没有更糟。自建那一组用一句
+   说明占位，讲清楚它们会来。
+3. **字体是否安装用量宽度，不用 `document.fonts.check`。** 后者看起来正是干这个的，
+   实际上家族缺失时浏览器用后备字体照样能排，于是它对一个根本没装的字体也回答 true。
+   改成「候选 + 后备」和「后备」各排一次比宽度，三个后备都判一样宽才认定没装；探测不
+   了（node、老 webview）一律回答「装了」——宁可不提示，也不要在一台其实装了字体的机器
+   上到处挂警告。
+
+一处设计稿逼出来的模型改动：审批卡④要求把「固定值 28 磅 → 1.5 倍」原样摆出来，所以
+`FormatOrigin.overridden.changed` 从 `string[]` 改成了带 `from`/`to` 的结构体
+（`FormatChange`）。只说「改了行距」等于什么都没说。
+
+工具预算：`export_docx` 的 schema 是 296 token，常驻（关掉 Beta 时由 `routing.ts` 摘掉，
+和 `export_pptx` 同一条路），`agentToolBudget.test.ts` 的棘轮相应从 8,600 抬到 8,950。
+省下来的 138 token 来自把 `overrides` 六个属性各自的描述合并成一句——完整的 `DocFormat`
+从头到尾没有进过任何 schema（I2）。

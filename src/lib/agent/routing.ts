@@ -15,6 +15,7 @@ import type { TaskPreset } from "./presets";
 import type { TaskWorkspaceHandle } from "./taskWorkspace";
 import { subAgentModel, DELEGATE_KINDS, type SubAgentConfig, type SubAgentKind } from "./subagent";
 import { isPptxExportEnabled } from "../pptx/flag";
+import { isDocxExportEnabled } from "../docx/flag";
 import { isTranslateEnabled } from "../translate/flag";
 import type { Model } from "../ai/configDb";
 
@@ -92,6 +93,9 @@ function route(
   // wastes a round finding out. Same argument as the image tools above.
   if (!isPptxExportEnabled()) {
     tools = tools.filter((t) => t !== "export_pptx");
+  }
+  if (!isDocxExportEnabled()) {
+    tools = tools.filter((t) => t !== "export_docx");
   }
 
   // If any delegate-capable subagent is enabled and we have an

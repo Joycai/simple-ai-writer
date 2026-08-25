@@ -18,6 +18,8 @@
  */
 
 import type { ToolDefinition } from "../ai/types";
+import type { DocFormat, SpecRow } from "../docx/format";
+import type { FormatChange, FormatOrigin } from "../docx/resolve";
 import { type LoreIndex } from "../lore";
 import { loreCategoryIds } from "../profile/active";
 import {
@@ -35,6 +37,7 @@ import {
 import { LORE_PLAN_ACTIONS, type LorePlan, type PlanDecision, type PlanGate } from "./plan";
 import { editImageTool, generateImageTool, redrawLoreImageTool } from "./imageTools";
 import { exportPptxTool } from "./pptxTools";
+import { exportDocxTool } from "./docxTools";
 import {
   listScenesTool,
   readSceneMemoryTool,
@@ -313,6 +316,34 @@ export interface PptxProposal extends ProposalBase {
 }
 
 /**
+ * Turn a markdown document into a Word file.
+ *
+ * Unlike the pptx card, this one has something to weigh **before** approving,
+ * and it is the whole point: the format. So the proposal carries the already
+ * resolved spec rather than an id — re-resolving at apply time would silently
+ * use a different preset if the author changed their default in between.
+ */
+export interface DocxProposal extends ProposalBase {
+  kind: "docx";
+  /** The `.md` the document is converted from. `path` is where the .docx lands. */
+  sourcePath: string;
+  /** Exactly what will be applied. Resolved once, at proposal time. */
+  format: DocFormat;
+  /** Where that format came from — the card's headline, see `describeOrigin`. */
+  originKind: FormatOrigin["kind"];
+  originLabel: string;
+  /** The quiet right-hand note: 内置 · 未改动 / 未存为预设 / the preset's name. */
+  originNote?: string;
+  /** Only when the preset was overridden this once: which fields, from → to. */
+  changed?: FormatChange[];
+  /** The five-row spec table, already in final values. */
+  spec: SpecRow[];
+  /** Fonts this format names that are not installed here. Not an error. */
+  missingFonts: string[];
+  sourceChars: number;
+}
+
+/**
  * Something the agent wants done that only the author may authorise. Nothing
  * happens until the card is approved, and the tool call stays blocked until it
  * is decided either way.
@@ -330,7 +361,8 @@ export type Proposal =
   | DeleteProposal
   | CopyProposal
   | IllustrateProposal
-  | PptxProposal;
+  | PptxProposal
+  | DocxProposal;
 
 export type ApprovalDecision =
   | {
@@ -520,6 +552,7 @@ export type ToolId =
   | "delete_chapter"
   | "delete_directory"
   | "export_pptx"
+  | "export_docx"
   | "generate_image"
   | "edit_image"
   | "redraw_lore_image"
@@ -1829,6 +1862,56 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => exportPptxTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  export_docx: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "export_docx",
+        description:
+          "Turn a project markdown document into a Word file (.docx). NOTHING is written until the author approves the card. Write the document with create_file first, then call this: the conversion runs no model — headings, lists, quotes, tables and pictures are laid out by Word from a named format preset. NEVER put formatting in the markdown (no inline HTML, no '设成三号仿宋' notes, no manual page breaks): structure comes from the markdown, appearance from the preset. Omit `format_id` for the author's default — right unless they named a format. Maths, mermaid, lore citations and .webp/.svg pictures fall back to simpler forms; the result lists what did, so pass it on.",
+        parameters: {
+          type: "object",
+          properties: {
+            source_path: {
+              type: "string",
+              description: "Full path of the .md document to convert",
+            },
+            out_path: {
+              type: "string",
+              description:
+                "Full path for the .docx. Omit to write it beside the document under the same name.",
+            },
+            format_id: {
+              type: "string",
+              description:
+                "Id of a format preset. Omit for the author's default, which is almost always right.",
+            },
+            overrides: {
+              type: "object",
+              description:
+                "ONLY for a change the author named for this one export; anything larger belongs in a preset. bodySize takes 三号 or 16; lineSpacing takes 固定值28磅 / 最小值20磅 / 1.5倍; firstLineChars is CHARACTERS (2 is the Chinese norm); marginsMm is [top, right, bottom, left].",
+              properties: {
+                bodyFontEastAsia: { type: "string" },
+                bodyFontAscii: { type: "string" },
+                bodySize: { type: "string" },
+                lineSpacing: { type: "string" },
+                firstLineChars: { type: "number" },
+                marginsMm: { type: "array", items: { type: "number" } },
+              },
+            },
+            reason: {
+              type: "string",
+              description: "One-line justification shown to the author on the review card",
+            },
+          },
+          required: ["source_path"],
+        },
+      },
+    },
+    execute: (call, ctx) => exportDocxTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   generate_image: {

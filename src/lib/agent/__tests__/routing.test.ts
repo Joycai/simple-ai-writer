@@ -8,6 +8,10 @@ import { describe, expect, it, vi } from "vitest";
 const beta = { on: false };
 vi.mock("../../pptx/flag", () => ({ isPptxExportEnabled: () => beta.on }));
 
+/** Same, for the Word-export Beta. */
+const docxBeta = { on: false };
+vi.mock("../../docx/flag", () => ({ isDocxExportEnabled: () => docxBeta.on }));
+
 /** Same, for the translation Beta. */
 const translateBeta = { on: false };
 vi.mock("../../translate/flag", () => ({ isTranslateEnabled: () => translateBeta.on }));
@@ -45,11 +49,13 @@ describe("routeTools", () => {
   };
   /**
    * The preset as it routes with nothing enabled: no drawing arm, no image
-   * tools, and no PPTX export (a Beta feature is off until the author says so).
+   * tools, and neither Beta export (a Beta feature is off until the author
+   * says so — and off means the tool is absent, not refused).
    */
   const BASELINE_TOOLS = AGENT_ASSIST_PRESET.tools.filter(
     (t) => !["generate_image", "edit_image", "redraw_lore_image"].includes(t)
-      && t !== "export_pptx",
+      && t !== "export_pptx"
+      && t !== "export_docx",
   );
 
   it("keeps everything except the image tools when no subagents are active", () => {
@@ -263,6 +269,34 @@ describe("the PPTX export Beta gate", () => {
       // The estimator has to predict the same toolset, or the context meter
       // disagrees with the request that follows it.
       expect(routePlannedTools(AGENT_ASSIST_PRESET, allDisabled, MODELS).tools).toContain("export_pptx");
+    } finally {
+      beta.on = false;
+    }
+  });
+
+  it("withholds export_docx entirely while its own switch is off", () => {
+    docxBeta.on = false;
+    expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS).tools).not.toContain("export_docx");
+  });
+
+  it("offers export_docx once the author turns it on", () => {
+    docxBeta.on = true;
+    try {
+      expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS).tools).toContain("export_docx");
+      expect(routePlannedTools(AGENT_ASSIST_PRESET, allDisabled, MODELS).tools).toContain("export_docx");
+    } finally {
+      docxBeta.on = false;
+    }
+  });
+
+  it("the two Beta exports are independent switches", () => {
+    // One Beta turning on must not drag the other in: they are separate
+    // features and an author who wants slides has not asked for Word.
+    beta.on = true;
+    try {
+      const tools = routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS).tools;
+      expect(tools).toContain("export_pptx");
+      expect(tools).not.toContain("export_docx");
     } finally {
       beta.on = false;
     }

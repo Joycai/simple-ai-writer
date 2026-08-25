@@ -16,6 +16,8 @@
 import {
   type DocFormat,
   type DocFormatPreset,
+  formatLineSpacing,
+  formatSize,
   parseLineSpacing,
   parseSize,
 } from "./format";
@@ -39,11 +41,22 @@ export interface DocFormatOverrides {
   marginsMm?: [number, number, number, number];
 }
 
+/**
+ * 一处临时改动。**必须带 from/to**：审批卡要把「固定值 28 磅 → 1.5 倍」原样
+ * 摆出来，只说「改了行距」等于什么都没说。
+ */
+export interface FormatChange {
+  key: "font" | "size" | "line" | "indent" | "page";
+  label: string;
+  from: string;
+  to: string;
+}
+
 export type FormatOrigin =
   | { kind: "default"; presetId: string; presetLabel: string }
   | { kind: "preset"; presetId: string; presetLabel: string }
   | { kind: "imitated"; presetId: string; sourceFile: string }
-  | { kind: "overridden"; base: FormatOrigin; changed: string[] };
+  | { kind: "overridden"; base: FormatOrigin; changed: FormatChange[] };
 
 /** 解析不下去时抛这个，让工具把原话回给模型而不是崩在半路。 */
 export class FormatResolveError extends Error {}
@@ -91,24 +104,26 @@ export function resolveFormat(
 function applyOverrides(
   base: DocFormat,
   ov: DocFormatOverrides,
-): { format: DocFormat; changed: string[] } {
-  const changed: string[] = [];
+): { format: DocFormat; changed: FormatChange[] } {
+  const changed: FormatChange[] = [];
   const body = { ...base.body, font: { ...base.body.font } };
   const page = { ...base.page, margins: { ...base.page.margins } };
 
-  if (ov.bodyFontEastAsia?.trim()) {
+  if (ov.bodyFontEastAsia?.trim() && ov.bodyFontEastAsia.trim() !== base.body.font.eastAsia) {
     body.font.eastAsia = ov.bodyFontEastAsia.trim();
-    changed.push(`正文中文字体 → ${body.font.eastAsia}`);
+    changed.push({ key: "font", label: "中文字体", from: base.body.font.eastAsia, to: body.font.eastAsia });
   }
-  if (ov.bodyFontAscii?.trim()) {
+  if (ov.bodyFontAscii?.trim() && ov.bodyFontAscii.trim() !== base.body.font.ascii) {
     body.font.ascii = ov.bodyFontAscii.trim();
-    changed.push(`正文西文字体 → ${body.font.ascii}`);
+    changed.push({ key: "font", label: "西文字体", from: base.body.font.ascii, to: body.font.ascii });
   }
   if (ov.bodySize?.trim()) {
     const pt = parseSize(ov.bodySize);
     if (pt === null) throw new FormatResolveError(`看不懂字号 "${ov.bodySize}"——写「三号」或「16磅」。`);
-    body.sizePt = pt;
-    changed.push(`正文字号 → ${ov.bodySize.trim()}`);
+    if (pt !== base.body.sizePt) {
+      body.sizePt = pt;
+      changed.push({ key: "size", label: "字号", from: formatSize(base.body.sizePt), to: formatSize(pt) });
+    }
   }
   if (ov.lineSpacing?.trim()) {
     const ls = parseLineSpacing(ov.lineSpacing);
@@ -117,16 +132,20 @@ function applyOverrides(
         `看不懂行距 "${ov.lineSpacing}"——写「固定值28磅」「最小值20磅」或「1.5倍」。`,
       );
     }
-    body.line = ls;
-    changed.push(`行距 → ${ov.lineSpacing.trim()}`);
+    const before = base.body.line ? formatLineSpacing(base.body.line) : "单倍行距";
+    if (formatLineSpacing(ls) !== before) {
+      body.line = ls;
+      changed.push({ key: "line", label: "行距", from: before, to: formatLineSpacing(ls) });
+    }
   }
   if (ov.firstLineChars !== undefined) {
     if (!Number.isFinite(ov.firstLineChars) || ov.firstLineChars < 0 || ov.firstLineChars > 10) {
       throw new FormatResolveError(`首行缩进 ${ov.firstLineChars} 不合理——填 0 到 10 之间的字符数。`);
     }
     if (ov.firstLineChars !== base.body.firstLineChars) {
+      const say = (n: number) => (n > 0 ? `${n} 字符` : "无");
+      changed.push({ key: "indent", label: "首行缩进", from: say(base.body.firstLineChars), to: say(ov.firstLineChars) });
       body.firstLineChars = ov.firstLineChars;
-      changed.push(`首行缩进 → ${ov.firstLineChars} 字符`);
     }
   }
   if (ov.marginsMm) {
@@ -136,8 +155,12 @@ function applyOverrides(
         throw new FormatResolveError(`页边距 ${v}mm 不合理——填 0 到 100 之间的毫米数（顺序是 上 右 下 左）。`);
       }
     }
-    page.margins = { top, right, bottom, left };
-    changed.push(`页边距 → 上${top} 右${right} 下${bottom} 左${left}mm`);
+    const say = (m: { top: number; right: number; bottom: number; left: number }) =>
+      `上${m.top} 右${m.right} 下${m.bottom} 左${m.left} mm`;
+    if (say({ top, right, bottom, left }) !== say(base.page.margins)) {
+      changed.push({ key: "page", label: "页边距", from: say(base.page.margins), to: say({ top, right, bottom, left }) });
+      page.margins = { top, right, bottom, left };
+    }
   }
 
   return { format: { ...base, body, page }, changed };

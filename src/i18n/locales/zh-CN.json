@@ -214,7 +214,8 @@
       "usage": "用量",
       "subagents": "子代理",
       "dataGroup": "数据",
-      "sync": "同步与备份"
+      "sync": "同步与备份",
+      "docxFormat": "排版格式"
     },
     "workspace": {
       "profileSection": "能力包",
@@ -351,7 +352,10 @@
       "imageSection": "图片",
       "imageLongEdgeLabel": "发送给模型的最大长边",
       "imageLongEdgeHint": "超过这个尺寸的图片会在发送前等比缩小，原文件不受影响。留空 / 0 = 原样发送。",
-      "imageLongEdgeOff": "不缩"
+      "imageLongEdgeOff": "不缩",
+      "docxLabel": "Word 排版导出（Beta）",
+      "docxHint": "AI 助手可以把文档导出成 .docx，并按「排版格式」页里的预设排版。结构来自 markdown，字体字号行距页边距全部来自预设。",
+      "docxOffHint": "关掉后左侧导航里没有「排版格式」这一项，AI 助手的工具清单里也没有导出 Word——它不会提出一次自己无法执行的导出。已建的预设留在盘上，重新打开就回到原样。"
     },
     "backup": {
       "section": "配置备份",
@@ -1166,7 +1170,13 @@
       "appendAlwaysHint": "之后追加到这个文件都直接应用，其它改动照常询问",
       "illustrateBatch": "批准并连批 {{n}} 张",
       "illustrateBatchCount": "连批张数",
-      "illustrateBatchHint": "接下来 {{n}} 张配图不再逐张询问（每张仍会计费）；本轮结束或次数用完即恢复审批"
+      "illustrateBatchHint": "接下来 {{n}} 张配图不再逐张询问（每张仍会计费）；本轮结束或次数用完即恢复审批",
+      "titleDocx": "导出 Word",
+      "docxOrigin": "格式来源",
+      "docxChanged": "改了 {{count}} 项",
+      "docxChangeMark": "改",
+      "docxFontMissing": "{{fonts}} 本机未装（不影响导出：文件里写的就是它，在装了这个字体的机器上会正常排版）",
+      "docxNote": "转换不经过模型：结构来自 markdown，字体字号行距页边距全部来自这套格式。"
     },
     "autoApprove": {
       "chipSession": "本次对话自动批准中",
@@ -2647,6 +2657,40 @@
         "done": "已兑现",
         "void": "已作废"
       }
+    }
+  },
+  "docxFormat": {
+    "title": "排版格式",
+    "sub": "导出 .docx 时套用的版式。AI 助手不特别指定格式时，用下面设为「默认」的那一套。",
+    "defaultCol": "默认",
+    "listHint": "{{count}} 套预设 · 圆点标的那一套 AI 会自动用",
+    "groupBuiltin": "内置 · 不可删",
+    "groupCustom": "自建",
+    "customEmpty": "还没有自建的预设。二期会开放「新建」和「从 Word 文件读取格式」——后者把甲方模板直接读成一套预设，不用人肉抄十二条要求。",
+    "defaultChip": "默认",
+    "makeDefault": "设为默认：{{name}}",
+    "readFrom": "读自 {{file}}",
+    "fontMissing": "{{font}} 本机未装",
+    "previewTitle": "纸样预览 · {{name}}",
+    "schematicTag": "示意图 · 不是所见即所得",
+    "specPaper": "纸张",
+    "specMargins": "页边距",
+    "specRegion": "版心",
+    "specGrid": "网格",
+    "gridValue": "{{lines}} 行 × {{chars}} 字",
+    "gridOff": "未设",
+    "gridAgrees": "与 {{size}} / {{line}} 相符",
+    "gridDiffers": "网格行高 {{pitch}} 磅，与声明的 {{line}} 不一致",
+    "preview": {
+      "markH1": "H1 {{font}} {{size}} 磅",
+      "markIndent": "首行缩进 {{chars}} 字符 = {{mm}} mm",
+      "markBody": "正文 {{font}} {{size}} 磅",
+      "markH2": "H2 {{font}} {{size}} 磅",
+      "markH3": "H3 {{font}} {{size}} 磅",
+      "legendHeading": "标题",
+      "legendBody": "正文行",
+      "legendMargin": "页边距",
+      "legendRegion": "版心"
     }
   }
 }

@@ -92,7 +92,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [pptx-plan.md](feature/pptx-plan.md) | `shipped` (write side Beta) | Reading .pptx in Rust; HTML → PPTX without a model in the loop |
 | [docx/00-feasibility.md](feature/docx/00-feasibility.md) | `proposal` | 为什么「难的是读 docx，不是写 docx」；RTF / HTML-塞进-.doc / pandoc sidecar / Rust `docx-rs` 四条弃用理由；严格格式规格（公文级）的实测表达力，以及「校对规格表而不是校对产出」（§7） |
 | [docx/01-agent-design.md](feature/docx/01-agent-design.md) | `partial` | agent 产出 .docx（Beta）：四条不变量（模型只写 markdown · **格式是引用不是参数** · 三级来源纯函数解析 · Beta 关=工具缺席）、`export_docx` / `read_doc_format` 的工具形状、`DocxProposal` 卡为什么要显示格式来源、预设为什么落装机级 |
-| [docx/02-ui-brief.md](feature/docx/02-ui-brief.md) | `proposal` | 给 Claude Design 的 UI 任务书（自包含）：排版格式设置页、预设编辑抽屉、从 Word 读取格式、导出审批卡 |
+| [docx/02-ui-brief.md](feature/docx/02-ui-brief.md) | `shipped` | 给 Claude Design 的 UI 任务书（自包含）。设计稿已回（TURN 1，1a–1n），实现出入记在 01 的 §11 |
 | [image-generation-plan.md](feature/image-generation-plan.md) | `shipped` | Generation/editing as the `imagegen` subagent |
 | [image-normalize-plan.md](feature/image-normalize-plan.md) | `partial` | 入模图片规范化：超 4096 长边的图在**发送前**降采样（已发），HEIC 转码**明确不做**（LGPL，§3.0）。为什么阈值是 4096 而不是 2048、为什么没有 per-provider 上限表，以及三个读图函数按去向分开的理由 |
 | [comfyui-plan.md](feature/comfyui-plan.md) | `shipped` (Beta flag) | 本地 ComfyUI 作为第五条出图路由：一个 Model = 一张导出的 API 格式工作流，占位注入而非构图；参考图/图生图走 LoadImage 槽位，edit 能力从图推导；人设校准循环（清单 → vision 评审 → 修正重试，历史最佳兜底） |

@@ -207,7 +207,10 @@ export function gridToDocx(page: PageSetup, bodySizePt: number):
 // ─── 内置预设 ─────────────────────────────────────────────────────────────────
 
 const SONG = { eastAsia: "宋体", ascii: "Times New Roman" };
+const SOURCE_SONG = { eastAsia: "思源宋体", ascii: "Source Serif 4" };
+const SOURCE_HEI = { eastAsia: "思源黑体", ascii: "Inter" };
 const FANGSONG = { eastAsia: "仿宋_GB2312", ascii: "Times New Roman" };
+const FANGSONG_ARIAL = { eastAsia: "仿宋_GB2312", ascii: "Arial" };
 const HEI = (ascii = "Times New Roman") => ({ eastAsia: "黑体", ascii });
 
 function heading(over: Partial<BlockStyle>): BlockStyle {
@@ -223,19 +226,19 @@ function heading(over: Partial<BlockStyle>): BlockStyle {
   };
 }
 
-/** 手稿：小说。宋体正文，标题居中，首行缩进两字。 */
+/** 手稿：小说。宋体正文，标题居中，首行缩进两字。页边距是 Word 的默认版心。 */
 const MANUSCRIPT: DocFormat = {
-  page: { size: "A4", margins: { top: 25, right: 25, bottom: 25, left: 25 } },
+  page: { size: "A4", margins: { top: 25.4, right: 31.8, bottom: 25.4, left: 31.8 } },
   body: {
-    font: SONG, sizePt: 12, bold: false, align: "justify",
-    line: { rule: "auto", value: 1.5 },
+    font: SOURCE_SONG, sizePt: 12, bold: false, align: "justify",
+    line: { rule: "auto", value: 1.75 },
     spaceBeforePt: 0, spaceAfterPt: 0, firstLineChars: 2,
   },
   headings: [
-    heading({ font: HEI(), sizePt: 22, align: "center", spaceBeforePt: 24, spaceAfterPt: 18, pageBreakBefore: true }),
-    heading({ font: HEI(), sizePt: 16, align: "center", spaceBeforePt: 18, spaceAfterPt: 12 }),
-    heading({ font: SONG, sizePt: 14, bold: true }),
-    heading({ font: SONG, sizePt: 12, bold: true }),
+    heading({ font: HEI("Source Serif 4"), sizePt: 22, align: "center", spaceBeforePt: 24, spaceAfterPt: 18, pageBreakBefore: true }),
+    heading({ font: HEI("Source Serif 4"), sizePt: 16, align: "center", spaceBeforePt: 18, spaceAfterPt: 12 }),
+    heading({ font: SOURCE_SONG, sizePt: 14, bold: true }),
+    heading({ font: SOURCE_SONG, sizePt: 12, bold: true }),
   ],
   quote: { indentChars: 2, italic: false },
   code: { fontAscii: "Consolas", sizePt: 10.5 },
@@ -247,15 +250,15 @@ const MANUSCRIPT: DocFormat = {
 const CLEAN: DocFormat = {
   page: { size: "A4", margins: { top: 25, right: 25, bottom: 25, left: 25 } },
   body: {
-    font: { eastAsia: "微软雅黑", ascii: "Calibri" }, sizePt: 11, bold: false, align: "left",
+    font: SOURCE_HEI, sizePt: 12, bold: false, align: "left",
     line: { rule: "auto", value: 1.5 },
     spaceBeforePt: 0, spaceAfterPt: 6, firstLineChars: 0,
   },
   headings: [
-    heading({ font: { eastAsia: "微软雅黑", ascii: "Calibri" }, sizePt: 18, bold: true, spaceBeforePt: 18, spaceAfterPt: 10 }),
-    heading({ font: { eastAsia: "微软雅黑", ascii: "Calibri" }, sizePt: 15, bold: true, spaceBeforePt: 14, spaceAfterPt: 8 }),
-    heading({ font: { eastAsia: "微软雅黑", ascii: "Calibri" }, sizePt: 13, bold: true }),
-    heading({ font: { eastAsia: "微软雅黑", ascii: "Calibri" }, sizePt: 11, bold: true }),
+    heading({ font: SOURCE_HEI, sizePt: 18, bold: true, spaceBeforePt: 18, spaceAfterPt: 10 }),
+    heading({ font: SOURCE_HEI, sizePt: 15, bold: true, spaceBeforePt: 14, spaceAfterPt: 8 }),
+    heading({ font: SOURCE_HEI, sizePt: 13, bold: true }),
+    heading({ font: SOURCE_HEI, sizePt: 12, bold: true }),
   ],
   quote: { indentChars: 2, italic: false },
   code: { fontAscii: "Consolas", sizePt: 10 },
@@ -310,19 +313,19 @@ const THESIS: DocFormat = {
   table: { headerBold: true, borders: true },
 };
 
-/** 投标：仿宋三号，行距固定 28 磅，标题不分页（评标要连续翻）。 */
+/** 投标：仿宋四号，行距固定 24 磅，标题不分页（评标要连续翻）。 */
 const BID: DocFormat = {
   page: { size: "A4", margins: { top: 25, right: 25, bottom: 25, left: 30 } },
   body: {
-    font: FANGSONG, sizePt: 16, bold: false, align: "justify",
-    line: { rule: "exact", value: 28 },
+    font: FANGSONG_ARIAL, sizePt: 14, bold: false, align: "justify",
+    line: { rule: "exact", value: 24 },
     spaceBeforePt: 0, spaceAfterPt: 0, firstLineChars: 2,
   },
   headings: [
-    heading({ font: HEI(), sizePt: 22, align: "center", spaceBeforePt: 12, spaceAfterPt: 18 }),
-    heading({ font: HEI(), sizePt: 16, spaceBeforePt: 12, spaceAfterPt: 6 }),
-    heading({ font: { eastAsia: "楷体_GB2312", ascii: "Times New Roman" }, sizePt: 16, bold: true }),
-    heading({ font: FANGSONG, sizePt: 16, bold: true }),
+    heading({ font: HEI("Arial"), sizePt: 22, align: "center", spaceBeforePt: 12, spaceAfterPt: 18 }),
+    heading({ font: HEI("Arial"), sizePt: 16, spaceBeforePt: 12, spaceAfterPt: 6 }),
+    heading({ font: { eastAsia: "楷体_GB2312", ascii: "Arial" }, sizePt: 14, bold: true }),
+    heading({ font: FANGSONG_ARIAL, sizePt: 14, bold: true }),
   ],
   quote: { indentChars: 4, italic: false },
   code: { fontAscii: "Consolas", sizePt: 12 },
@@ -338,7 +341,7 @@ export const BUILTIN_FORMATS: DocFormatPreset[] = [
   { id: "bid", label: "投标", builtin: true, format: BID },
 ];
 
-export const DEFAULT_FORMAT_ID = "clean";
+export const DEFAULT_FORMAT_ID = "manuscript";
 
 // ─── 摘要 ─────────────────────────────────────────────────────────────────────
 
@@ -365,4 +368,59 @@ export function formatSummary(f: DocFormat): string[] {
     lines.push(`文档网格 每页 ${f.page.grid.linesPerPage} 行 · 每行 ${f.page.grid.charsPerLine} 字`);
   }
   return lines;
+}
+
+/** 版心（页面减去页边距），毫米。纸样预览和网格换算都用它。 */
+export function bodyRegionMm(page: PageSetup): { widthMm: number; heightMm: number } {
+  const { widthMm, heightMm } = PAGE_SIZES[page.size];
+  return {
+    widthMm: widthMm - page.margins.left - page.margins.right,
+    heightMm: heightMm - page.margins.top - page.margins.bottom,
+  };
+}
+
+/** 预设列表一行里的那句摘要：中西文 · 字号 · 行距 · 缩进。 */
+export function formatOneLine(f: DocFormat): string {
+  return [
+    `${f.body.font.eastAsia} / ${f.body.font.ascii}`,
+    formatSize(f.body.sizePt),
+    f.body.line ? formatLineSpacing(f.body.line) : "单倍行距",
+    f.body.firstLineChars > 0 ? `首行缩进 ${trimNum(f.body.firstLineChars)} 字符` : "无缩进",
+  ].join(" · ");
+}
+
+/** 规格表的一行。`key` 让调用方能标出「这一行这次被改过」。 */
+export interface SpecRow {
+  key: "font" | "size" | "line" | "indent" | "page";
+  label: string;
+  value: string;
+}
+
+/**
+ * 审批卡和设置页共用的那张规格表——五行，写的全是**最终值**。
+ * 号数和磅一起写、行距带三态的名字，是这张表存在的全部理由。
+ */
+export function formatSpecRows(f: DocFormat): SpecRow[] {
+  const m = f.page.margins;
+  const { widthMm, heightMm } = PAGE_SIZES[f.page.size];
+  return [
+    { key: "font", label: "中 / 西文", value: `${f.body.font.eastAsia} / ${f.body.font.ascii}` },
+    { key: "size", label: "字号", value: formatSize(f.body.sizePt) },
+    { key: "line", label: "行距", value: f.body.line ? formatLineSpacing(f.body.line) : "单倍行距" },
+    {
+      key: "indent",
+      label: "首行缩进",
+      value: f.body.firstLineChars > 0 ? `${trimNum(f.body.firstLineChars)} 字符` : "无",
+    },
+    {
+      key: "page",
+      label: "纸张 / 边距",
+      value: `${f.page.size}（${trimNum(widthMm)}×${trimNum(heightMm)}mm）· 上${trimNum(m.top)} 右${trimNum(m.right)} 下${trimNum(m.bottom)} 左${trimNum(m.left)} mm`,
+    },
+  ];
+}
+
+/** 这套格式点名了哪些中文字体——用来提示「本机未装」。 */
+export function eastAsiaFontsOf(f: DocFormat): string[] {
+  return [...new Set([f.body.font.eastAsia, ...f.headings.map((h) => h.font.eastAsia)])];
 }

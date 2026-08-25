@@ -17,7 +17,7 @@ describe("三级来源", () => {
   it("什么都不给就是默认预设——模型不需要做任何事", () => {
     const { format, origin } = resolveFormat(PRESETS, "clean");
     expect(origin).toEqual({ kind: "default", presetId: "clean", presetLabel: "素雅" });
-    expect(format.body.font.eastAsia).toBe("微软雅黑");
+    expect(format.body.font.eastAsia).toBe("思源黑体");
   });
 
   it("点名一个预设就用它", () => {
@@ -55,6 +55,10 @@ describe("overrides", () => {
     expect(origin.kind).toBe("overridden");
     if (origin.kind === "overridden") {
       expect(origin.changed).toHaveLength(2);
+      // 卡上要摆出「固定值 28 磅 → 1.5 倍」，只说「改了行距」等于什么都没说
+      expect(origin.changed).toContainEqual({
+        key: "line", label: "行距", from: "固定值 28 磅", to: "1.5 倍行距",
+      });
       expect(describeOrigin(origin)).toBe("预设：公文（改了 2 项）");
     }
   });
