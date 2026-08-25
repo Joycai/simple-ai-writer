@@ -742,6 +742,20 @@ select.compact { width: auto; }
 @keyframes pop { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
 @keyframes slide-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 
+/* 退场。三条独立的关键帧，而不是给上面三条加 `reverse` —— 那样动画名不变，
+   浏览器把它当成"同一个已经跑完的动画改了参数"，可能直接落到终点，于是浮层
+   还是"啪"地消失。退场比进场短：进场是在介绍一个东西，退场只是让路。 */
+@keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes pop-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(.97); } }
+@keyframes slide-out { from { transform: none; opacity: 1; } to { transform: translateX(24px); opacity: 0; } }
+
+/* 一对遮罩/面板的退场时长必须相等：dismiss() 听的是第一个冒泡上来的
+   animationend，不相等就会被短的那条提前掐掉。 */
+.backdrop.closing { animation: fade-out 160ms var(--ease) forwards; pointer-events: none; }
+.backdrop.closing .modal { animation: pop-out 160ms var(--ease) forwards; }
+.drawer-wrap.closing { animation: fade-out 200ms var(--ease) forwards; pointer-events: none; }
+.drawer-wrap.closing .drawer { animation: slide-out 200ms var(--ease) forwards; }
+
 /* ── 横幅与 toast ───────────────────────────────────────────────────────── */
 
 .offline {
@@ -782,6 +796,13 @@ select.compact { width: auto; }
   animation: slide-in 320ms var(--ease);
 }
 .toast.bad { border-left-color: var(--err); }
+/* 进场是从右边滑进来的，退场就不能原地淡掉 —— 来路和去路不一致，读起来像
+   两个不同的东西。 */
+.toast.closing {
+  transform: translateX(24px);
+  opacity: 0;
+  transition: transform 200ms var(--ease), opacity 200ms var(--ease);
+}
 
 /* ── 配置页 ─────────────────────────────────────────────────────────────── */
 
@@ -814,6 +835,8 @@ select.compact { width: auto; }
 .src.file { background: var(--raised); color: var(--ink-2); }
 .src.env { background: var(--accent); color: var(--on-accent); }
 
+/* 这条栏出现的那一刻，视线在刚编辑的那一行上，而它在视口底缘 —— 它是整页
+   从"在看"切到"有未保存改动"的唯一信号，硬切等于没信号。 */
 .save-bar {
   position: sticky;
   bottom: 0;
@@ -824,6 +847,16 @@ select.compact { width: auto; }
   align-items: center;
   gap: 12px;
   margin-top: 18px;
+  transform: translateY(0);
+  opacity: 1;
+  transition: transform 240ms var(--ease), opacity 160ms var(--ease);
+}
+/* 用 @starting-style 而不是 JS：className 从 hidden 换成 save-bar 就是一次
+   display:none → flex，正是它的触发条件。之后每敲一个键 drawSaveBar() 都会
+   重设同一个 className，display 没变，所以动画不会跟着重播。写在规则之后 ——
+   起始样式的层叠是独立的，放在前面不生效。不支持的浏览器退化成今天的硬切。 */
+@starting-style {
+  .save-bar { transform: translateY(100%); opacity: 0; }
 }
 
 .toggle {
