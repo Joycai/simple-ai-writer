@@ -771,6 +771,15 @@ select.compact { width: auto; }
   gap: 10px;
   font-size: 12.5px;
 }
+/* 只在 setOffline(true) 的那一刻挂 .arriving —— 动画标记的是"断线这件事刚发生"，
+   不是"横幅在这里"。用 @starting-style 就做不到这个区分：它对一个初次渲染就
+   可见的元素同样生效，于是断线期间每点一次导航（shell 会整个重建）都重播一遍。
+   没有退场：服务器回来时 startReconnect() 紧接着 route()，整个 shell 连同横幅
+   一起被重建，给一个马上要被销毁的节点做退场没有意义。
+   横幅占流内空间，所以下方内容仍会一次性下移它的高度 —— 动效让它读成"一条
+   告警到达了"而不是"页面重排了"，消不掉那次位移（消掉要动 height，不划算）。 */
+.offline.arriving { animation: drop-in 200ms var(--ease); }
+@keyframes drop-in { from { transform: translateY(-100%); opacity: 0; } to { transform: none; opacity: 1; } }
 
 .toasts {
   position: fixed;
@@ -893,6 +902,11 @@ select.compact { width: auto; }
 .check-row .body { flex: 1; min-width: 0; }
 .check-row .body p { margin: 5px 0 0; font-size: 11.5px; color: var(--muted); line-height: 1.7; }
 .check-row .state { font-size: 11px; color: var(--muted); flex: none; }
+/* 重新检查时整块就地变暗，而不是塌回骨架屏：新一版通常和上一版一模一样，
+   把一屏高的面板收成 40px 再弹回来，会把下面所有东西推上去又推下来。
+   pointer-events 一并关掉 —— 旧结果里的「复制」按钮此刻已经是过期的。 */
+.check-list { transition: opacity 160ms var(--ease); }
+.check-list.loading { opacity: .45; pointer-events: none; }
 
 .sheet-nav { display: none; }
 
@@ -910,7 +924,22 @@ select.compact { width: auto; }
     box-shadow: var(--shadow-lg);
   }
   .nav.open { transform: none; }
-  .nav-scrim { position: fixed; inset: 0; background: rgba(60, 40, 20, .3); z-index: 45; }
+  /* 240ms 是抄侧栏的，不是随手挑的：遮罩先于侧栏消失，就会有一瞬间侧栏悬在
+     一张没有遮罩的页面上滑走。这里的 @starting-style 不会重播 —— 遮罩每次打开
+     都是新建的节点。 */
+  .nav-scrim {
+    position: fixed;
+    inset: 0;
+    background: rgba(60, 40, 20, .3);
+    z-index: 45;
+    opacity: 1;
+    transition: opacity 240ms var(--ease);
+  }
+  @starting-style {
+    .nav-scrim { opacity: 0; }
+  }
+  /* 正在离场的遮罩不该再吞掉一次点击 —— 和 .backdrop.closing 同一条规矩。 */
+  .nav-scrim.closing { opacity: 0; pointer-events: none; }
   .sheet-nav {
     display: flex;
     align-items: center;
