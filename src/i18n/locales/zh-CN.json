@@ -1251,6 +1251,7 @@
       "queuedHint": "已排队 · 本轮结束后发送",
       "showEarlier": "更早的 {{n}} 轮对话",
       "collapseEarlier": "收起早前对话",
+      "jumpToLatest": "回到最新",
       "history": "历史会话",
       "untitledSession": "（空会话）",
       "imagesNotSentDelegate": "（以下图片未能直接随本条消息发送，但已启用图像理解子代理——需要看图时用 delegate(kind:\"vision\", refs:[路径]) 让它读，并把结论用于回答：\n{{list}}）",
