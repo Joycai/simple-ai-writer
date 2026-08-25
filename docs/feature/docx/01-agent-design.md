@@ -1,6 +1,7 @@
 # Agent 产出 .docx（Beta）——设计方案
 
-> 状态：`proposal`（未决定，未实施）。可行性与实测在 [00-feasibility.md](00-feasibility.md)，UI 任务书在 [02-ui-brief.md](02-ui-brief.md)。
+> 状态：`partial` —— **一期的转换内核已实施**（`src/lib/docx/`，44 个测试，含回读断言）；
+> agent 工具接线与全部 UI **未实施**，等设计稿。可行性与实测在 [00-feasibility.md](00-feasibility.md)，UI 任务书在 [02-ui-brief.md](02-ui-brief.md)。
 > 目标已从"导出菜单多一个格式"改为**「agent 能产出 docx，并且按照要求的样式 / 格式 / 版式」**。
 
 ## 0. 需求与一处读法
@@ -238,7 +239,8 @@ src-tauri/src/docx.rs             # 二期：读一份 .docx 的排版参数
 
 | 期 | 内容 |
 |---|---|
-| **一期** | `flag.ts` + `format.ts`/`blocks.ts`/`write.ts`/`resolve.ts` + `export_docx`（L2）+ `DocxProposal` 卡 + briefing 清单 + 设置「排版格式」pane（内置预设 + 选默认，只读不可编辑）+ 回读断言测试 |
+| **一期 · 已实施** | `flag.ts` + `format.ts` + `blocks.ts` + `write.ts` + `resolve.ts` + `index.ts` + 回读断言测试 |
+| **一期 · 待实施** | `export_docx`（L2）+ `DocxProposal` 卡 + briefing 清单 + 设置「排版格式」pane（内置预设 + 选默认） |
 | **二期** | `read_doc_format` + `src-tauri/src/docx.rs`（参考模仿）+ 预设编辑器（完整表单 + 纸样预览）+ 「存为预设」+ `overrides` |
 | **三期** | 预设进应用配置备份；目录 / 页眉页脚 / 一级标题分页；多级自动编号 |
 

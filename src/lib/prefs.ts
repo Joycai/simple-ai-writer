@@ -45,6 +45,10 @@ export const PREF_KEYS = [
   "app:imageMaxLongEdge",
   "app:apiLogEnabled",
   "app:pptxExportBeta",
+  "app:docxExportBeta",
+  // Which 排版格式 preset an export uses when the model names none. An id, and
+  // an installation property: one 公文 format is reused across every project.
+  "app:docxDefaultFormat",
   "app:roleplayBeta",
   "app:translateBeta",
   "app:comfyuiBeta",

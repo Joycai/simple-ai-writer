@@ -1,4 +1,5 @@
 import MarkdownIt from "markdown-it";
+import type Token from "markdown-it/lib/token.mjs";
 import katex from "katex";
 import katexImport from "@vscode/markdown-it-katex";
 // KaTeX emits `<span class="katex">` markup that is meaningless without this
@@ -71,6 +72,20 @@ md.renderer.rules.lore_cite = (tokens, idx) => {
 
 export function renderMarkdown(source: string): string {
   return md.render(source);
+}
+
+/**
+ * The same configured parser's token stream, for consumers that map markdown
+ * onto something other than HTML (today: `lib/docx`).
+ *
+ * Deliberately this instance rather than a second `MarkdownIt`: the app has
+ * exactly one markdown dialect — `[[lore:…]]` citations, KaTeX, typographer —
+ * and a private copy would drift from what the preview shows on the first
+ * plugin change. Tokens are also what makes that layer testable at all, since
+ * vitest runs on `environment: "node"` with no DOM to walk.
+ */
+export function parseMarkdown(source: string): Token[] {
+  return md.parse(source, {});
 }
 
 export interface HeadingNode {

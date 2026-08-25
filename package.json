@@ -33,6 +33,7 @@
     "@tauri-apps/plugin-sql": "^2.4.0",
     "@vscode/markdown-it-katex": "^1.1.2",
     "codemirror": "^6.0.2",
+    "docx": "^9.7.1",
     "gray-matter": "^4.0.3",
     "i18next": "^26.3.6",
     "katex": "^0.16.47",
