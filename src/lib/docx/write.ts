@@ -18,8 +18,9 @@ import {
   ptToTwip,
   type BlockStyle,
   type DocFormat,
+  type HeadingNumberFormat,
 } from "./format";
-import type { DocBlock, DocRun } from "./blocks";
+import { splitChapters, type DocBlock, type DocRun } from "./blocks";
 
 /** 一张已经读进内存、量过尺寸的插图。 */
 export interface ResolvedImage {
@@ -31,6 +32,7 @@ export interface ResolvedImage {
 
 const BULLET = "saw-bullet";
 const ORDERED = "saw-ordered";
+const HEADING_NUM = "saw-heading";
 const QUOTE_STYLE = "SawQuote";
 const CODE_STYLE = "SawCode";
 /** numbering / 引用缩进的层数上限。再深 Word 里也没人排版。 */
@@ -101,9 +103,20 @@ export async function blocksToDocx(
         },
       ],
     },
-    numbering: { config: [bulletConfig(d, format), orderedConfig(d, format)] },
-    sections: [
-      {
+    // 奇偶页不同要在**文档**层开，不是在节里——只设节属性的话 Word 会照单页
+    // 的页脚排满全篇，偶数页那半安静地不出现。
+    ...(format.headerFooter.differentOddEven ? { evenAndOddHeaderAndFooters: true } : {}),
+    numbering: {
+      config: [
+        bulletConfig(d, format),
+        orderedConfig(d, format),
+        ...(format.headingNumbering.enabled ? [headingNumberConfig(d, format)] : []),
+      ],
+    },
+    // 一节，除非「每章页码从 1 开始」——那时每个一级标题起一节。
+    sections: (format.headerFooter.restartEachChapter ? splitChapters(blocks) : [blocks]).map(
+      (chapter, index) => ({
+        ...headersAndFooters(d, format),
         properties: {
           page: {
             size: {
@@ -119,12 +132,16 @@ export async function blocksToDocx(
               bottom: mmToTwip(m.bottom),
               left: mmToTwip(m.left),
             },
+            ...(format.headerFooter.restartEachChapter ? { pageNumbers: { start: 1 } } : {}),
           },
           grid: gridToDocx(format.page, format.body.sizePt),
+          // 第一节不发 type：那会在文稿最前面多插一个分节符。
+          ...(index > 0 ? { type: d.SectionType.NEXT_PAGE } : {}),
+          ...(format.headerFooter.differentFirstPage ? { titlePage: true } : {}),
         },
-        children: blocks.flatMap((b) => renderBlock(d, b, format, images, bodyWidthPx)),
-      },
-    ],
+        children: chapter.flatMap((b) => renderBlock(d, b, format, images, bodyWidthPx)),
+      }),
+    ),
   });
 
   // `toBuffer` 在浏览器里没有 Buffer，`toBlob` 要 DOM——base64 是两边都有的那条
@@ -168,11 +185,14 @@ function paraProps(d: Docx, s: BlockStyle, body: BlockStyle) {
 
 function headingStyle(d: Docx, format: DocFormat, index: number) {
   const s = format.headings[index];
+  // 每章一节时，分节符本身就分页——再叠一个 pageBreakBefore，每章前面会多出
+  // 一张白纸。让开的是一级标题，因为节正是按它切的。
+  const sectionBreaks = index === 0 && format.headerFooter.restartEachChapter;
   return {
     run: runProps(d, s),
     paragraph: {
       ...paraProps(d, s, format.body),
-      ...(s.pageBreakBefore ? { pageBreakBefore: true } : {}),
+      ...(s.pageBreakBefore && !sectionBreaks ? { pageBreakBefore: true } : {}),
     },
   };
 }
@@ -226,7 +246,18 @@ function renderBlock(
         d.HeadingLevel.HEADING_3,
         d.HeadingLevel.HEADING_4,
       ];
-      return [new d.Paragraph({ heading: headings[level - 1], children: textRuns(d, block.runs) })];
+      // 自动编号只挂在写法不是 none 的那几级上：给一级挂一个空编号，Word 仍会
+      // 为它留出一个制表位，标题就莫名其妙地缩进了。
+      const numbered =
+        format.headingNumbering.enabled &&
+        format.headingNumbering.levels[level - 1] !== "none";
+      return [
+        new d.Paragraph({
+          heading: headings[level - 1],
+          ...(numbered ? { numbering: { reference: HEADING_NUM, level: level - 1 } } : {}),
+          children: textRuns(d, block.runs),
+        }),
+      ];
     }
     case "paragraph":
       return [
@@ -338,4 +369,130 @@ function base64ToBytes(b64: string): Uint8Array {
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
+}
+
+
+// ─── 页眉页脚 ─────────────────────────────────────────────────────────────────
+
+/**
+ * 一节的页眉页脚。**什么都没设就一个都不发**——发一个空页眉，Word 里那一行
+ * 就占着位置，作者会以为自己设过。
+ *
+ * `differentOddEven` 为真时偶数页的对齐左右互换：装订成册后页码落在订口外侧。
+ * 居中的页码不受影响，所以这是一条规则而不是两套字段。
+ */
+function headersAndFooters(d: Docx, format: DocFormat) {
+  const hf = format.headerFooter;
+  type H = InstanceType<Docx["Header"]>;
+  type F = InstanceType<Docx["Footer"]>;
+  const out: {
+    headers?: { default: H; even?: H; first?: H };
+    footers?: { default: F; even?: F; first?: F };
+  } = {};
+
+  // 横线可以单独存在：有些模板就只要一条线，不要字。
+  if (hf.headerText.trim() || hf.headerRule) {
+    const header = () =>
+      new d.Header({
+        children: [
+          new d.Paragraph({
+            alignment: alignOf(d, hf.headerAlign),
+            indent: { firstLine: 0 },
+            ...(hf.headerRule
+              ? { border: { bottom: { style: d.BorderStyle.SINGLE, size: 6, color: "auto", space: 1 } } }
+              : {}),
+            children: hf.headerText.trim() ? [new d.TextRun({ text: hf.headerText })] : [],
+          }),
+        ],
+      });
+    out.headers = {
+      default: header(),
+      ...(hf.differentOddEven ? { even: header() } : {}),
+      // 首页不同＝首页**什么都不写**。不是「首页写别的」：那是两套内容，而作者
+      // 要的从来是「封面这一页空着」。空的 Header 是必须发的——不发的话 Word
+      // 会拿 default 顶上，titlePage 就等于没设。
+      ...(hf.differentFirstPage ? { first: new d.Header({ children: [] }) } : {}),
+    };
+  }
+
+  if (hf.pageNumber !== "none") {
+    const footer = (align: BlockStyle["align"]) =>
+      new d.Footer({
+        children: [
+          new d.Paragraph({
+            alignment: alignOf(d, align),
+            indent: { firstLine: 0 },
+            children: [new d.TextRun({ children: pageNumberRun(d, format) })],
+          }),
+        ],
+      });
+    out.footers = {
+      default: footer(hf.pageNumberAlign),
+      ...(hf.differentOddEven ? { even: footer(mirror(hf.pageNumberAlign)) } : {}),
+      ...(hf.differentFirstPage ? { first: new d.Footer({ children: [] }) } : {}),
+    };
+  }
+
+  return out;
+}
+
+/** 左右互换，居中和两端不动。 */
+function mirror(align: BlockStyle["align"]): BlockStyle["align"] {
+  if (align === "left") return "right";
+  if (align === "right") return "left";
+  return align;
+}
+
+function pageNumberRun(d: Docx, format: DocFormat) {
+  switch (format.headerFooter.pageNumber) {
+    case "dashed":
+      // 公文的一字线页码。用 U+2014 而不是连字符——规范里那是一字线。
+      return ["— ", d.PageNumber.CURRENT, " —"];
+    case "ofTotal":
+      return [d.PageNumber.CURRENT, " / ", d.PageNumber.TOTAL_PAGES];
+    default:
+      return [d.PageNumber.CURRENT];
+  }
+}
+
+// ─── 标题自动编号 ─────────────────────────────────────────────────────────────
+
+/**
+ * 一、（一）1. （1）——把每一级的写法翻成 OOXML 的编号定义。
+ *
+ * `decimalDotted` 含上级序号（1.1.1），所以它的 text 要把前面每一级的占位符都
+ * 串上；其余写法只用本级的。
+ */
+function headingLevelText(format: HeadingNumberFormat, level: number): string {
+  const self = `%${level + 1}`;
+  switch (format) {
+    case "chinese": return `${self}、`;
+    case "chineseParen": return `（${self}）`;
+    case "decimal": return `${self}.`;
+    case "decimalParen": return `（${self}）`;
+    case "decimalDotted":
+      return Array.from({ length: level + 1 }, (_, i) => `%${i + 1}`).join(".");
+    default: return "";
+  }
+}
+
+function headingNumberConfig(d: Docx, format: DocFormat) {
+  return {
+    reference: HEADING_NUM,
+    levels: format.headingNumbering.levels.map((kind, level) => ({
+      level,
+      format: kind === "chinese" || kind === "chineseParen"
+        ? d.LevelFormat.CHINESE_COUNTING
+        : d.LevelFormat.DECIMAL,
+      text: headingLevelText(kind, level),
+      alignment: d.AlignmentType.LEFT,
+      // 序号和标题之间不插制表位：公文的「一、总体要求」是连着的，而 Word 的
+      // 默认 tab 会把标题推到一个和正文对不齐的位置上。
+      suffix: d.LevelSuffix.NOTHING,
+      style: {
+        // 缩进交给标题样式的 firstLineChars —— 编号自己再加一层就会双重缩进。
+        paragraph: { indent: { left: 0, hanging: 0 } },
+      },
+    })),
+  };
 }

@@ -134,6 +134,11 @@ export function ConfigRestoreModal() {
                   {t("sync.cfgRestoreKeysNote", { count: prepared.bundle.keyCount })}
                 </div>
               )}
+              {prepared.bundle.docFormats.length > 0 && (
+                <div className={s.footNote} style={{ marginTop: 10 }}>
+                  {t("sync.cfgRestoreFormatsNote", { count: prepared.bundle.docFormats.length })}
+                </div>
+              )}
               {prepared.bundle.prefs.length > 0 && (
                 <div className={s.footNote} style={{ marginTop: 10 }}>
                   {t("sync.cfgRestorePrefsNote", { count: prepared.bundle.prefs.length })}

@@ -15,7 +15,7 @@
  */
 
 import { getGlobalDb } from "../project";
-import type { DocFormat, DocFormatPreset } from "./format";
+import { parseDocFormat, type DocFormatPreset } from "./format";
 
 const TABLE = "doc_format";
 
@@ -56,7 +56,9 @@ export async function loadCustomFormats(): Promise<DocFormatPreset[]> {
         label: r.label,
         builtin: false,
         ...(r.imitated_from ? { imitatedFrom: r.imitated_from } : {}),
-        format: JSON.parse(r.format) as DocFormat,
+        // 归一而不是直接当 DocFormat 用：一个坏字段不该让整套预设消失，三期
+        // 之前存下的行也在这里补上新增的两块（见 parseDocFormat）。
+        format: parseDocFormat(JSON.parse(r.format)),
       }];
     } catch (e) {
       // 一行坏了不该让整页打不开——它被跳过，其余照常。
