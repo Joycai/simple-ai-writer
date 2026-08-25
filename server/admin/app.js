@@ -222,7 +222,13 @@ function setOffline(value) {
   if (S.offline === value) return;
   S.offline = value;
   const banner = document.getElementById('offline-banner');
-  if (banner) banner.classList.toggle('hidden', !value);
+  if (banner) {
+    banner.classList.toggle('hidden', !value);
+    // .arriving 只在"刚刚断线"这一刻挂上（回线时摘掉，好让下一次断线重新播）。
+    // 挂在 CSS 的 .offline 上就会变成"横幅存在就播"，于是断线期间每点一次
+    // 导航都重播一遍 —— shell 是整个重建的。
+    banner.classList.toggle('arriving', value);
+  }
   if (value) startReconnect();
 }
 
@@ -421,7 +427,9 @@ function mobileBar(nav) {
     el('button.icon-btn', {
       onClick: () => {
         nav.classList.add('open');
-        const scrim = el('div.nav-scrim', { onClick: () => { nav.classList.remove('open'); scrim.remove(); } });
+        // 关的时候两件事要一起发生：侧栏滑出去（CSS 里 240ms），遮罩淡掉（同样 240ms）。
+        // 原来遮罩是同步 remove 的，于是侧栏最后那 240ms 是悬在一张亮着的页面上滑走的。
+        const scrim = el('div.nav-scrim', { onClick: () => { nav.classList.remove('open'); dismiss(scrim); } });
         document.body.appendChild(scrim);
       },
     }, icon(ICON.menu, 18)),
@@ -1750,11 +1758,20 @@ async function renderMaintenance(body) {
 async function loadChecks(panel) {
   const slot = panel.querySelector('.check-list') || el('div.check-list');
   if (!slot.parentNode) panel.appendChild(slot);
-  clear(slot);
-  slot.appendChild(el('div.skeleton', { style: 'height:40px' }));
+  // 「重新检查」不塌回骨架屏：已经有结果时就地变暗，等新的一版换上。塌一次的代价
+  // 是一屏高的面板收成 40px 再弹回来，而九成情况下新一版和旧的一模一样。
+  // 骨架屏留给真正空手的那一次（首次加载、上一次自检报错）。
+  const hasRows = !!slot.querySelector('.check-row');
+  if (hasRows) {
+    slot.classList.add('loading');
+  } else {
+    clear(slot);
+    slot.appendChild(el('div.skeleton', { style: 'height:40px' }));
+  }
   try {
     const data = await api('/checks');
     clear(slot);
+    slot.classList.remove('loading');
     for (const check of data.checks) {
       const tone = { pass: 'ok', warn: 'warn', fail: 'err', unknown: '' }[check.state] || '';
       slot.appendChild(el('div.check-row', null,
@@ -1770,6 +1787,7 @@ async function loadChecks(panel) {
     }
   } catch (e) {
     clear(slot);
+    slot.classList.remove('loading');
     slot.appendChild(el('p.note', { text: '自检没跑起来：' + (e.message || e) }));
   }
 }
