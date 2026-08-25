@@ -52,6 +52,14 @@
   width: 236px;
 }
 
+/* Same job for a number field in a row: `.input` is full-width because it
+   lives in a drawer's stacked form, and a pixel count needs far less. */
+.rowNumber {
+  width: 110px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ─── Buttons ─────────────────────────────────────────────────────────────── */
 
 .btnPrimary {

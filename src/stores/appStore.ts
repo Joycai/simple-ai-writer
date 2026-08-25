@@ -5,6 +5,9 @@ import { mergeRecentProjects, parseRecentProjects, RECENT_PROJECTS_MAX } from ".
 import { MAX_DRAFTS } from "../lib/ai/drafts";
 import { isRoleplayEnabled } from "../lib/roleplay/flag";
 import { DEFAULT_MAX_OUTPUT_KEY, DEFAULT_MAX_OUTPUT_MAX } from "../lib/ai/modelLimits";
+import {
+  DEFAULT_IMAGE_LONG_EDGE, IMAGE_LONG_EDGE_KEY, IMAGE_LONG_EDGE_MAX, IMAGE_LONG_EDGE_MIN,
+} from "../lib/image/downscalePlan";
 import { isSamePath } from "../lib/paths";
 import { docModel } from "../lib/profile/active";
 import {
@@ -132,6 +135,23 @@ const storedDefaultMaxOutput = () =>
   clamp(parseInt(readPref(DEFAULT_MAX_OUTPUT_KEY) ?? "0", 10) || 0, 0, DEFAULT_MAX_OUTPUT_MAX);
 
 /**
+ * Longest edge a picture may carry to a model. Same arrangement as the output
+ * cap above: this copy exists for the settings field to bind to, and the
+ * authority is `lib/image/downscalePlan.imageMaxLongEdge()`, read at the
+ * moment a picture is actually sent.
+ *
+ * Zero is a real value here, not an empty one — an author who clears the field
+ * is asking for the pre-downscaling behaviour back, and must not have the
+ * default handed to them instead.
+ */
+const storedImageMaxLongEdge = () => {
+  const raw = readPref(IMAGE_LONG_EDGE_KEY);
+  if (raw === null) return DEFAULT_IMAGE_LONG_EDGE;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? clamp(n, IMAGE_LONG_EDGE_MIN, IMAGE_LONG_EDGE_MAX) : 0;
+};
+
+/**
  * Which assistant tab the drawer reopens on — persisted like the panel widths.
  *
  * `roleplay` is downgraded when its Beta switch is off: the tab is *absent*
@@ -160,6 +180,7 @@ function prefBackedState() {
     contextUtilization: storedContextUtilization(),
     draftCount: storedDraftCount(),
     defaultMaxOutput: storedDefaultMaxOutput(),
+    imageMaxLongEdge: storedImageMaxLongEdge(),
     aiDrawerMode: storedAiDrawerMode(),
   };
 }
@@ -217,6 +238,7 @@ interface AppState {
    * the built-in table (`lib/ai/modelLimits`). 0 = leave it to each protocol.
    */
   defaultMaxOutput: number;
+  imageMaxLongEdge: number;
   /**
    * How many drafts a generative task should produce (1–`MAX_DRAFTS`).
    *
@@ -267,6 +289,7 @@ interface AppState {
   setContextUtilization: (ratio: number) => void;
   setDraftCount: (n: number) => void;
   setDefaultMaxOutput: (tokens: number) => void;
+  setImageMaxLongEdge: (px: number) => void;
   addRecentProject: (path: string) => void;
   removeRecentProject: (path: string) => void;
   clearRecentProjects: () => void;
@@ -455,6 +478,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     const clamped = clamp(Math.round(tokens) || 0, 0, DEFAULT_MAX_OUTPUT_MAX);
     writePref(DEFAULT_MAX_OUTPUT_KEY, String(clamped));
     set({ defaultMaxOutput: clamped });
+  },
+
+  setImageMaxLongEdge: (px) => {
+    const n = Math.round(px) || 0;
+    const clamped = n > 0 ? clamp(n, IMAGE_LONG_EDGE_MIN, IMAGE_LONG_EDGE_MAX) : 0;
+    writePref(IMAGE_LONG_EDGE_KEY, String(clamped));
+    set({ imageMaxLongEdge: clamped });
   },
 
   addRecentProject: (path) => {

@@ -79,6 +79,28 @@ const MIME: Record<string, string> = {
   gif:  "image/gif",
 };
 
+/** The mime type an extension implies, defaulting to PNG for the unknown. */
+export function imageMimeFor(ext: string): string {
+  return MIME[ext.toLowerCase()] ?? "image/png";
+}
+
+/**
+ * Uint8Array → base64, linear in the input.
+ *
+ * Chunked `fromCharCode` for the call-stack limit, joined once at the end —
+ * an accumulating `binary +=` is quadratic in chunk count, which a 12MB image
+ * hides and a 150MB PDF turns into minutes of copying (see lib/agent/subagent,
+ * which found that out and now shares this).
+ */
+export function bytesToBase64(u8: Uint8Array): string {
+  const chunk = 8192;
+  const pieces: string[] = [];
+  for (let i = 0; i < u8.length; i += chunk) {
+    pieces.push(String.fromCharCode(...u8.subarray(i, i + chunk)));
+  }
+  return btoa(pieces.join(""));
+}
+
 /**
  * The pickable files in an already-read project tree, depth-first.
  *
@@ -105,25 +127,41 @@ export function projectFilesFromTree(nodes: FileNode[]): ProjectFile[] {
   return out;
 }
 
-/** Read an image file and return a base64 data URL. */
+/**
+ * Read an image file and return a base64 data URL of it, **unchanged**.
+ *
+ * This is the *rendering* reader: previews, the exported HTML's inlined
+ * `<img>`, a lore gallery tile. Whatever is on disk is what comes back.
+ *
+ * It is deliberately not the reader for a picture on its way to a model —
+ * that is `lib/image/normalize.imageForModel`, which may re-encode an
+ * oversized one first. The two used to be the same call, and the difference
+ * matters in both directions: rendering a downscaled copy loses detail the
+ * author is looking at, and `ImageGenModal`'s save path reads bytes here to
+ * *write them to disk*, where a re-encode would be permanent damage.
+ * When only the bytes are wanted, use {@link readImageBytes}.
+ */
 export async function imageToDataUrl(imagePath: string): Promise<{ dataUrl: string; ext: string; bytes: Uint8Array }> {
+  const { bytes, ext } = await readImageBytes(imagePath);
+  return { dataUrl: `data:${imageMimeFor(ext)};base64,${bytesToBase64(bytes)}`, ext, bytes };
+}
+
+/**
+ * An image file's bytes and extension, with no encoding step.
+ *
+ * For the paths that write a picture somewhere — an entity's avatar, a
+ * document's `assets/` folder — where building a data URL only to discard it
+ * was wasted work, and where reaching for the model-bound reader instead
+ * would silently re-encode what lands on disk.
+ */
+export async function readImageBytes(imagePath: string): Promise<{ bytes: Uint8Array<ArrayBuffer>; ext: string }> {
   // plugin-fs `readFile` already hands back a Uint8Array<ArrayBuffer>. The old
   // `new Uint8Array(bytes as ArrayBuffer)` round-trip was a no-op that copied
   // the whole image: the cast silenced the mismatch (TS 6 rejects it outright,
   // since Uint8Array and ArrayBuffer don't overlap) while the constructor
   // treated the view as array-like and duplicated it element by element.
-  const u8 = await readBinaryFile(imagePath);
-  const ext = imagePath.split(".").pop()?.toLowerCase() ?? "png";
-  const mime = MIME[ext] ?? "image/png";
-
-  // Uint8Array → base64 in chunks to avoid call-stack overflow on large images
-  let binary = "";
-  const chunk = 8192;
-  for (let i = 0; i < u8.length; i += chunk) {
-    binary += String.fromCharCode(...u8.subarray(i, i + chunk));
-  }
-  const base64 = btoa(binary);
-  return { dataUrl: `data:${mime};base64,${base64}`, ext, bytes: u8 };
+  const bytes = await readBinaryFile(imagePath);
+  return { bytes, ext: imagePath.split(".").pop()?.toLowerCase() ?? "png" };
 }
 
 /**

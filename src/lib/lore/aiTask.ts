@@ -9,6 +9,7 @@
  * `streamLoreTask`, gaining tool use and execution-log events.
  */
 
+import type { Downscaled } from "../image/normalize";
 import { readEntityFile } from "./entity";
 import type { LoreEntity } from "./model";
 import type { ProjectFile } from "../fs/images";
@@ -17,7 +18,17 @@ import type { ContentPart } from "../ai/types";
 // ── Attachments ──────────────────────────────────────────────────────────────
 
 export type AttachedLore  = { kind: "lore";  entity: LoreEntity };
-export type AttachedImage = { kind: "image"; file: ProjectFile; dataUrl: string };
+/**
+ * `downscaled` is set when the picture was re-encoded on its way in
+ * (lib/image/normalize) — carried so the composer can say so on the chip.
+ * Nothing on the wire reads it: `dataUrl` is already the shrunken payload.
+ */
+export type AttachedImage = {
+  kind: "image";
+  file: ProjectFile;
+  dataUrl: string;
+  downscaled?: Downscaled;
+};
 export type AttachedText  = { kind: "text";  file: ProjectFile; content: string };
 export type AttachedItem  = AttachedLore | AttachedImage | AttachedText;
 

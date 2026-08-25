@@ -31,8 +31,11 @@ vi.mock("../image", async () => {
   const actual = await vi.importActual<typeof import("../image")>("../image");
   return { ...actual, recordImageUsage: vi.fn(async () => {}) };
 });
-vi.mock("../fs/images", () => ({
-  imageToDataUrl: vi.fn(async () => ({ dataUrl: "data:image/png;base64,SRC", ext: "png", bytes: new Uint8Array() })),
+// The source image is read through the model-bound reader, which decodes and
+// re-encodes on a canvas there is none of here. What this test is about is
+// which requests the edit chain issues, so the reader is stubbed whole.
+vi.mock("../image/normalize", () => ({
+  imageForModel: vi.fn(async () => ({ dataUrl: "data:image/png;base64,SRC", ext: "png", bytes: new Uint8Array() })),
 }));
 
 const { useImageStore } = await import("../../stores/imageStore");

@@ -40,7 +40,8 @@ import { loadApiKey } from "../../lib/keyStore";
 import { chainCanSeeImages, resolveVisionConn } from "../../lib/agent/subagent";
 import { describeLoreImage } from "../../lib/lore/vision";
 import { readFile, removeFile } from "../../lib/fs/fileio";
-import { imageToDataUrl } from "../../lib/fs/images";
+import { IMAGE_EXTENSIONS } from "../../lib/fs/images";
+import { imageForModel } from "../../lib/image/normalize";
 import { useImageDataUrl, useImageThumbnails } from "./useImageDataUrl";
 import { useImeGuard } from "../../lib/ime";
 import { isTranslateEnabled } from "../../lib/translate/flag";
@@ -346,7 +347,11 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     if (!projectPath || busy) return;
     const picked = await openDialog({
       multiple: false,
-      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp"] }],
+      // `IMAGE_EXTENSIONS` rather than a list written out here: four pickers
+      // each kept their own, no two the same, and adding a format meant
+      // finding all four — the one that got missed would not error, it would
+      // just quietly fail to offer the file.
+      filters: [{ name: "Images", extensions: [...IMAGE_EXTENSIONS] }],
     });
     if (typeof picked !== "string") return;
     setBusy(true);
@@ -432,7 +437,7 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     if (busy) return;
     const picked = await openDialog({
       multiple: true,
-      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "gif"] }],
+      filters: [{ name: "Images", extensions: [...IMAGE_EXTENSIONS] }],
     });
     if (!picked) return;
     const paths = Array.isArray(picked) ? picked : [picked];
@@ -495,10 +500,13 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
     setAiDescFile(img.file);
     startEdit(img.file, img.desc);
     try {
-      // Always a fresh full-resolution read: the gallery map now holds
-      // thumbnails, and a vision model describing a downscaled copy would
-      // miss exactly the details the description exists to capture.
-      const dataUrl = (await imageToDataUrl(img.absPath)).dataUrl;
+      // Always a fresh read of the file rather than the gallery map, which
+      // now holds ~320px thumbnails: a vision model describing one of those
+      // would miss exactly the details the description exists to capture.
+      // `imageForModel` is not that — it leaves anything within the author's
+      // ceiling untouched, and a gallery image past it could not have been
+      // sent at all.
+      const dataUrl = (await imageForModel(img.absPath)).dataUrl;
       const text = await describeLoreImage({
         dataUrl,
         entityName: entity.name,

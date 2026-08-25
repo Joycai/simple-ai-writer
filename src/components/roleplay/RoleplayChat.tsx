@@ -39,7 +39,8 @@ import { presetFor } from "../../lib/roleplay/presets";
 import {
   chainCanSeeImages, withSessionOverrides, type SubAgentKind,
 } from "../../lib/agent/subagent";
-import { MAX_IMAGE_BYTES, imageToDataUrl } from "../../lib/fs/images";
+import { MAX_IMAGE_BYTES } from "../../lib/fs/images";
+import { downscaleNote, imageForModel } from "../../lib/image/normalize";
 import { attachedKey } from "../../lib/lore/aiTask";
 import { cardsForSurface } from "../../lib/agent/approvalRouting";
 import { ScriptText } from "./ScriptText";
@@ -565,7 +566,8 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
       setRefs((r) => [...r, { kind: "lore", entity: item.entity }]);
     } else if (item.file.kind === "image") {
       try {
-        const { dataUrl, bytes } = await imageToDataUrl(item.file.path);
+        // 可能是缩过的：超上限的图先缩再发，只有缩完仍超的才在下面被拒。
+        const { dataUrl, bytes, downscaled } = await imageForModel(item.file.path);
         // 在**选中的这一刻**就拒绝，不留到发送时：那时作者早忘了自己挑过什么，
         // 一条悄悄少了张图的消息从记录上根本看不出来。
         if (bytes.length > MAX_IMAGE_BYTES) {
@@ -577,7 +579,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
           }));
           return;
         }
-        setRefs((r) => [...r, { kind: "image", file: item.file, dataUrl }]);
+        setRefs((r) => [...r, { kind: "image", file: item.file, dataUrl, downscaled }]);
       } catch {
         setRefError(t("roleplay.composer.refUnreadable", {
           name: item.file.name, defaultValue: `读不到 ${item.file.name}`,
@@ -1099,13 +1101,22 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
             {refs.map((r) => {
               const key = attachedKey(r);
               const label = r.kind === "lore" ? r.entity.name : r.file.name;
+              // 悄悄发一张缩过的图，作者事后无从解释模型为什么看不清截图里的
+              // 小字——chip 是他们唯一会看的地方。
+              const remove = t("roleplay.composer.removeRef", { defaultValue: "移除这项引用" });
+              const shrunk = r.kind === "image" && r.downscaled
+                ? t("roleplay.composer.imageDownscaled", {
+                    defaultValue: "已缩小以适应发送上限（{{detail}}）",
+                    detail: downscaleNote(r.downscaled),
+                  })
+                : null;
               return (
                 <button
                   key={key}
                   type="button"
                   className={styles.attachChip}
                   onClick={() => setRefs((prev) => prev.filter((x) => attachedKey(x) !== key))}
-                  title={t("roleplay.composer.removeRef", { defaultValue: "移除这项引用" })}
+                  title={shrunk ? `${shrunk} · ${remove}` : remove}
                 >
                   {/* 图片是唯一一种代价看不出名字的附件——标出它是什么。 */}
                   {r.kind === "image" && <ImageIcon size={10} strokeWidth={2} />}

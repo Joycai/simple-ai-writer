@@ -19,7 +19,7 @@ import { nanoid } from "nanoid";
 
 import { generateImage, isEditUnsupportedError, type ImageResult } from "../lib/ai/image";
 import type { Model, Provider } from "../lib/ai/configDb";
-import { imageToDataUrl } from "../lib/fs/images";
+import { imageForModel } from "../lib/image/normalize";
 import { imageRequestParams, recordImageUsage } from "../lib/image";
 import { discardSession, sweepScratch, writeCandidates } from "../lib/image/session";
 
@@ -181,7 +181,7 @@ export const useImageStore = create<ImageSessionState>((set, get) => ({
     set({ runToken: token, running: true, error: null });
     try {
       const sourcePath = get().currentImagePath();
-      const source = sourcePath ? (await imageToDataUrl(sourcePath)).dataUrl : null;
+      const source = sourcePath ? (await imageForModel(sourcePath)).dataUrl : null;
       const chain = get().instructionChain(currentId);
       // The prompt a regeneration would need: the original brief with every
       // instruction since folded in, so a fallback still lands near the

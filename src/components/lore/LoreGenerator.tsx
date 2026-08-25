@@ -7,7 +7,7 @@ import { useLoreStore } from "../../stores/loreStore";
 import { connOptions } from "../../lib/ai/conn";
 import { slugifyEntityId, uniqueEntityId, readEntityFile, type CategoryId } from "../../lib/lore";
 import { categoryLabel, defaultCategoryId, loreCategories } from "../../lib/profile";
-import { imageToDataUrl } from "../../lib/fs/images";
+import { readImageBytes } from "../../lib/fs/images";
 import { generateLore } from "../../lib/lore/generator";
 import { type AttachedImage, type AttachedText, type AttachedLore, type AttachedItem } from "../../lib/lore/aiTask";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
@@ -195,7 +195,9 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
       await writeEntityFile(dirPath, "index.md", full);
       const firstImage = attached.find((a): a is AttachedImage => a.kind === "image");
       if (firstImage) {
-        const { bytes, ext } = await imageToDataUrl(firstImage.file.path);
+        // The bytes go straight to disk as the entity's avatar, so this is
+        // the plain reader — not `imageForModel`, which may re-encode.
+        const { bytes, ext } = await readImageBytes(firstImage.file.path);
         await writeBinaryFile(`${dirPath}/avatar.${ext}`, bytes);
       }
       await scanProject(projectPath);
