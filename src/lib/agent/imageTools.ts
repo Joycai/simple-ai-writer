@@ -14,7 +14,8 @@
 import { imageCostFor } from "../ai/configDb";
 import { fileExists } from "../fs/fileio";
 import { IMAGE_EXT_LIST, isImagePath } from "../fs/images";
-import { resolveWorkspacePath } from "../paths";
+import { dirName, resolveWorkspacePath } from "../paths";
+import type { LoreEntity, LoreImage } from "../lore";
 import { categoryImageSlots, findImageSlot } from "../profile/active";
 import type { IllustrateProposal, ToolContext } from "./registry";
 import { subAgentModel } from "./subagent";
@@ -143,11 +144,13 @@ async function resolveReference(
   ctx: ToolContext,
   raw: string,
   destEntityDir: string | undefined,
+  /** Parameter being resolved, so the error names what the model actually wrote. */
+  field: "references" | "source" = "references",
 ): Promise<{ path?: string; error?: string }> {
   const name = raw.trim();
-  if (!name) return { error: "Error: 'references' contains an empty entry." };
+  if (!name) return { error: `Error: '${field}' contains an empty entry.` };
   if (!isImagePath(name)) {
-    return { error: `Error: reference "${name}" is not an image file (accepted: ${IMAGE_EXT_LIST}).` };
+    return { error: `Error: ${field === "source" ? "'source'" : `reference "${name}"`} is not an image file (accepted: ${IMAGE_EXT_LIST}).` };
   }
 
   // A workspace path wins when it exists — it is the unambiguous spelling.
@@ -168,10 +171,29 @@ async function resolveReference(
   if (hits.length === 1) return { path: hits[0].absPath };
   if (hits.length > 1) {
     return {
-      error: `Error: reference "${name}" exists in more than one gallery (${hits.map((h) => h.entityName).join(", ")}). Give the full path instead.`,
+      error: `Error: "${name}" exists in more than one gallery (${hits.map((h) => h.entityName).join(", ")}). Give the full path instead.`,
     };
   }
   return { error: `Error: no image "${name}" found — give a project path, or a gallery filename from read_lore_entity.` };
+}
+
+/**
+ * The gallery entry for a picture already resolved to an absolute path.
+ *
+ * A gallery picture can be named by its path as readily as by its filename,
+ * and an edit addressed the long way must not lose the description and slot
+ * the short way would have kept — nor land an unregistered file inside the
+ * entity's folder (see `editImageTool`'s destination ladder).
+ */
+function galleryImageAt(
+  ctx: ToolContext,
+  absPath: string,
+): { entity: LoreEntity; image: LoreImage } | null {
+  for (const entity of Object.values(ctx.loreIndex).flat()) {
+    const image = entity.images.find((i) => i.absPath === absPath);
+    if (image) return { entity, image };
+  }
+  return null;
 }
 
 /**
@@ -282,47 +304,145 @@ export async function generateImageTool(
   });
 }
 
-/** Redraw one of an entity's existing pictures with a change applied. */
+/**
+ * Redraw an existing picture with a change applied.
+ *
+ * The picture is named either as `source` — a project path, or a gallery
+ * filename, the same two spellings `references` takes — or as the legacy
+ * `entity` + `file` pair. It was *only* the pair for a long time, and that is
+ * a bug the author hit rather than a design: the model sees one tool called
+ * `edit_image`, labelled 修改图片, so "change this picture" lands here whatever
+ * the picture is — and every project image came back refused with an error
+ * about lore galleries.
+ *
+ * The destination is a ladder, most explicit first, and every rung is a place
+ * the picture is properly *filed* rather than merely written:
+ *
+ *   `entity`              that entity's gallery (registered via addLoreImage)
+ *   `path`                beside that .md document, with the markdown to place
+ *   source is a gallery   back into the gallery it came from
+ *   otherwise             the folder the source already lives in
+ *
+ * The third rung is what keeps the fourth safe: a gallery picture's folder is
+ * inside `.ai-writer/`, and dropping an unregistered file there would leave it
+ * invisible to the entity view. Every other source resolves through
+ * `resolveWorkspacePath`, which refuses `.ai-writer/` outright — so the last
+ * rung can only ever be an ordinary project folder.
+ *
+ * The source is never overwritten on any rung: it may already be referenced
+ * elsewhere, and replacing it is a destructive act nobody approved.
+ */
 export async function editImageTool(
   toolCallId: string,
   args: {
-    entity?: string; file?: string; instruction?: string;
+    entity?: string; file?: string; source?: string; path?: string; instruction?: string;
+    references?: string[];
     aspect?: string; resolution?: string; quality?: string; desc?: string; note?: string; reason?: string;
   },
   ctx: ToolContext,
 ): Promise<ToolResult> {
   const instruction = args.instruction?.trim();
   if (!instruction) return { toolCallId, content: "Error: 'instruction' is required — say what to change." };
-  if (!args.entity || !args.file) {
-    return { toolCallId, content: "Error: 'entity' and 'file' are required. Call read_lore_entity to see the gallery." };
+
+  // Resolved first, so a name that matches nothing fails on its own terms
+  // rather than as a puzzling error about the source picture.
+  let entity: LoreEntity | null = null;
+  if (args.entity) {
+    const found = findEntity(ctx, args.entity);
+    if (!found.entity) return { toolCallId, content: entityLookupError(args.entity, found.categories) };
+    entity = found.entity;
   }
-  const { entity, categories } = findEntity(ctx, args.entity);
-  if (!entity) {
-    return { toolCallId, content: entityLookupError(args.entity, categories) };
-  }
-  const image = entity.images.find((i) => i.file === args.file);
-  if (!image) {
+
+  // ── Which picture ─────────────────────────────────────────────────────────
+  let sourcePath: string;
+  const rawSource = args.source?.trim();
+  if (rawSource) {
+    const resolved = await resolveReference(ctx, rawSource, entity?.dirPath, "source");
+    if (resolved.error || !resolved.path) {
+      return { toolCallId, content: resolved.error ?? `Error: no image "${rawSource}".` };
+    }
+    sourcePath = resolved.path;
+  } else if (entity && args.file) {
+    const image = entity.images.find((i) => i.file === args.file);
+    if (!image) {
+      return {
+        toolCallId,
+        content: `Error: "${entity.name}" has no gallery image named "${args.file}". Call read_lore_entity for the exact filenames.`,
+      };
+    }
+    sourcePath = image.absPath;
+  } else {
     return {
       toolCallId,
-      content: `Error: "${args.entity}" has no gallery image named "${args.file}". Call read_lore_entity for the exact filenames.`,
+      content: "Error: say which picture to change — 'source' (a path to any image in the project, or a gallery filename), or 'entity' plus 'file' for a gallery picture. read_lore_entity lists a gallery; list_files lists the project.",
     };
   }
+  const owner = galleryImageAt(ctx, sourcePath);
+
+  // ── Where the result goes ─────────────────────────────────────────────────
+  // An explicit document beats the source's own gallery: "改这张立绘，配到第三章"
+  // is a real request, and only `path` can express it.
+  const destEntity = entity ?? (args.path?.trim() ? null : owner?.entity ?? null);
+  let dest: IllustrateProposal["dest"];
+  let destination: string;
+  let destPath: string;
+  if (destEntity) {
+    dest = {
+      kind: "lore",
+      entityName: destEntity.name,
+      entityDir: destEntity.dirPath,
+      // A redrawn portrait is still a portrait, so the new picture inherits the
+      // original's slot — but only when it is filed back into the gallery it
+      // came from. Slots are declared per category, so carrying one across
+      // entities can only produce a value the destination's category never
+      // declared. update_lore_image reclassifies either way.
+      slot: owner?.entity === destEntity ? owner.image.slot : undefined,
+    };
+    destination = destEntity.name;
+    destPath = destEntity.dirPath;
+  } else if (args.path?.trim()) {
+    const docPath = resolveWorkspacePath(ctx.projectPath, args.path.trim());
+    if (!docPath || !/\.md$/i.test(docPath)) {
+      return {
+        toolCallId,
+        content: "Error: 'path' must be a .md document inside the project folder — it says where the RESULT is filed, not which picture to change ('source' does that).",
+      };
+    }
+    if (!(await fileExists(docPath))) {
+      return { toolCallId, content: `Error: no document at "${docPath}". Call list_files to see the real paths.` };
+    }
+    dest = { kind: "document", docPath };
+    destination = baseName(docPath) || docPath;
+    destPath = docPath;
+  } else {
+    // Beside the source: the one destination that needs no guessing, and the
+    // reason the author can hand over a loose reference image without first
+    // deciding where the result belongs.
+    const dir = dirName(sourcePath);
+    dest = { kind: "file", dir };
+    destination = baseName(dir) || dir;
+    destPath = dir;
+  }
+
+  const refs = await resolveReferences(ctx, args.references, destEntity?.dirPath);
+  if (refs.error) return { toolCallId, content: refs.error };
+  // The source already rides as an input image, so listing it again as a
+  // reference would send the same picture twice and spend one of the model's
+  // `maxRefs` slots on it.
+  const refPaths = refs.paths.filter((p) => p !== sourcePath);
 
   return proposeIllustration(toolCallId, ctx, {
     prompt: instruction,
-    note: (args.desc ?? args.note)?.trim() || image.desc || instruction.slice(0, 80),
+    note: (args.desc ?? args.note)?.trim() || owner?.image.desc || instruction.slice(0, 80),
     aspect: args.aspect,
     resolution: tierOf(args.resolution, RESOLUTION_TIERS),
     quality: tierOf(args.quality, QUALITY_TIERS),
     reason: args.reason,
-    // The result is a NEW gallery entry: the original may already be referenced
-    // elsewhere, and overwriting it would be a destructive act nobody approved.
-    // It inherits the original's slot — a redrawn portrait is still a portrait;
-    // update_lore_image reclassifies it if not.
-    dest: { kind: "lore", entityName: entity.name, entityDir: entity.dirPath, slot: image.slot },
-    destination: entity.name,
-    path: entity.dirPath,
-    sourcePath: image.absPath,
+    refPaths,
+    dest,
+    destination,
+    path: destPath,
+    sourcePath,
   });
 }
 

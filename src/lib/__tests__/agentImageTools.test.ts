@@ -14,6 +14,15 @@ import type { LoreIndex } from "../lore";
 const generateImage = vi.fn();
 vi.mock("../ai/image", () => ({ generateImage: (...a: unknown[]) => generateImage(...a) }));
 
+// The project's files, as far as the tools can tell. `edit_image` resolves a
+// `source` against the real filesystem, so the set of what exists is part of
+// every case below.
+let onDisk = new Set<string>();
+vi.mock("../fs/fileio", async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  fileExists: async (p: string) => onDisk.has(p),
+}));
+
 // The tools reach for their model through the imagegen subagent's binding.
 let storeModels: unknown[] = [];
 let storeSubAgents: Record<string, unknown> = {};
@@ -55,6 +64,7 @@ beforeEach(() => {
   generateImage.mockReset();
   storeModels = [IMAGE_MODEL];
   storeSubAgents = { imagegen: { kind: "imagegen", modelId: "m1", enabled: true } };
+  onDisk = new Set(["/proj/插图/参考.png", "/proj/第一章.md"]);
 });
 
 describe("generate_image", () => {
@@ -180,5 +190,75 @@ describe("edit_image", () => {
     const res = await editImageTool("c1", { entity: "艾尔登", file: "nope.png", instruction: "x" }, ctx);
     expect(res.content).toMatch(/no gallery image/i);
     expect(seen).toHaveLength(0);
+  });
+
+  // The bug this tool shipped with: the author hands over a project image and
+  // a prompt, and the only editor the model can see answers with an error about
+  // lore galleries. There is one `edit_image`, so it has to edit any picture.
+  it("edits a project image, filing the result beside it", async () => {
+    const { ctx, seen } = ctxWith();
+    const res = await editImageTool("c1", { source: "插图/参考.png", instruction: "银白色头发" }, ctx);
+
+    expect(res.content).not.toMatch(/lore|gallery/i);
+    expect(seen[0].sourcePath).toBe("/proj/插图/参考.png");
+    expect(seen[0].dest).toEqual({ kind: "file", dir: "/proj/插图" });
+  });
+
+  it("files the result beside a document when one is named", async () => {
+    const { ctx, seen } = ctxWith();
+    await editImageTool("c1", { source: "插图/参考.png", path: "第一章.md", instruction: "x" }, ctx);
+    expect(seen[0].dest).toEqual({ kind: "document", docPath: "/proj/第一章.md" });
+    // Still an edit, not a fresh drawing: the source rides along as the input
+    // image, which is the whole difference from generate_image.
+    expect(seen[0].sourcePath).toBe("/proj/插图/参考.png");
+  });
+
+  it("refuses a document that isn't one, naming which parameter is which", async () => {
+    const { ctx, seen } = ctxWith();
+    const res = await editImageTool("c1", { source: "插图/参考.png", path: "插图/参考.png", instruction: "x" }, ctx);
+    expect(res.content).toMatch(/\.md document/);
+    expect(seen).toHaveLength(0);
+  });
+
+  it("keeps a gallery picture in its gallery when it is addressed as a source", async () => {
+    // Not the `file` dest: a gallery folder lives under .ai-writer, and an
+    // unregistered file dropped there would be invisible to the entity view.
+    const { ctx, seen } = ctxWith();
+    await editImageTool("c1", { source: "a.png", instruction: "银白色头发" }, ctx);
+    expect(seen[0].sourcePath).toBe(ENTITY.images[0].absPath);
+    expect(seen[0].dest).toEqual({ kind: "lore", entityName: "艾尔登", entityDir: ENTITY.dirPath, slot: undefined });
+    expect(seen[0].note).toBe("旧立绘");
+  });
+
+  it("does not carry a slot across entities", async () => {
+    // Slots are declared per category, so a slot inherited from another
+    // entity's picture can only be a value the destination never declared.
+    const { ctx, seen } = ctxWith();
+    await editImageTool("c1", { source: "插图/参考.png", entity: "艾尔登", instruction: "x" }, ctx);
+    expect(seen[0].dest).toEqual({ kind: "lore", entityName: "艾尔登", entityDir: ENTITY.dirPath, slot: undefined });
+  });
+
+  it("names both spellings when no picture was given", async () => {
+    const { ctx, seen } = ctxWith();
+    const res = await editImageTool("c1", { instruction: "x" }, ctx);
+    expect(res.content).toMatch(/source/);
+    expect(res.content).toMatch(/entity/);
+    expect(seen).toHaveLength(0);
+  });
+
+  it("refuses a source outside the project instead of drawing from nothing", async () => {
+    const { ctx, seen } = ctxWith();
+    const res = await editImageTool("c1", { source: "/etc/secret.png", instruction: "x" }, ctx);
+    expect(res.content).toMatch(/no image/i);
+    expect(seen).toHaveLength(0);
+  });
+
+  it("sends extra references alongside the picture being changed", async () => {
+    const { ctx, seen } = ctxWith();
+    await editImageTool("c1", {
+      source: "插图/参考.png", instruction: "换成这套衣服", references: ["a.png"],
+    }, ctx);
+    expect(seen[0].sourcePath).toBe("/proj/插图/参考.png");
+    expect(seen[0].refPaths).toEqual([ENTITY.images[0].absPath]);
   });
 });

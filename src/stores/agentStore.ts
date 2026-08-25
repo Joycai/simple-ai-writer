@@ -568,6 +568,13 @@ async function applyProposal(proposal: Proposal, signal?: AbortSignal): Promise<
         // an unawaited scan makes "saved" race the index that proves it.
         const { useLoreStore } = await import("./loreStore");
         if (root) await useLoreStore.getState().scanProject(root);
+      } else {
+        // Same reason the pptx case below refreshes: the picture is written
+        // with the raw byte writer, which the file tree knows nothing about, so
+        // without this it stays invisible in the sidebar until something else
+        // happens to refresh — and the author is told a file exists that they
+        // cannot see.
+        await useProjectStore.getState().refreshFileTree();
       }
       // Reported back to the model through backupPath (see the shared apply
       // contract): the document case needs the markdown to place next, and

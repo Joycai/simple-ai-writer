@@ -13,7 +13,7 @@ import type { IllustrateProposal } from "../agent/registry";
 import { dataUrlToBytes, imageToDataUrl } from "../fs/images";
 import { loadApiKey } from "../keyStore";
 import { addLoreImage } from "../lore";
-import { imageMarkdown, saveDocumentAsset } from "./assets";
+import { imageMarkdown, saveDocumentAsset, saveImageInFolder } from "./assets";
 import { imageRequestParams, recordImageUsage } from "./index";
 import { recordGeneration } from "./session";
 
@@ -122,10 +122,16 @@ export async function runIllustration(
       proposal.dest.slot ?? null,
     );
     path = `${proposal.dest.entityDir}/${file}`;
-  } else {
+  } else if (proposal.dest.kind === "document") {
     const saved = await saveDocumentAsset(proposal.dest.docPath, bytes, ext);
     path = saved.absPath;
     markdown = imageMarkdown(saved.relPath, proposal.note);
+  } else {
+    // No document to hang an `assets/` group off, so no relative link either:
+    // the picture lands beside the one it was made from and the model gets a
+    // path. Where it should go in the text is the author's call, and the agent
+    // can still place it with propose_edit once they say.
+    path = await saveImageInFolder(proposal.dest.dir, bytes, ext);
   }
 
   await recordImageUsage(projectPath, model, proposal.sourcePath ? "image-edit" : "image-gen", 1, result.usage);

@@ -14,8 +14,12 @@ const runIllustration = vi.fn(async () => ({ path: "/proj/w/assets/pic.png", mar
 vi.mock("../image/illustrate", () => ({
   runIllustration: () => runIllustration(),
 }));
+// `refreshFileTree` is part of the stub because applying a non-lore
+// illustration calls it: the picture is written with the raw byte writer, so
+// without a refresh it stays invisible in the sidebar.
+const refreshFileTree = vi.fn(async () => {});
 vi.mock("../../stores/projectStore", () => ({
-  useProjectStore: { getState: () => ({ projectPath: "/proj" }) },
+  useProjectStore: { getState: () => ({ projectPath: "/proj", refreshFileTree }) },
 }));
 
 import { useAgentStore } from "../../stores/agentStore";

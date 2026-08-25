@@ -254,7 +254,17 @@ export interface IllustrateProposal extends ProposalBase {
         /** Image slot the new picture files into; null/absent = unclassified. */
         slot?: string | null;
       }
-    | { kind: "document"; docPath: string };
+    | { kind: "document"; docPath: string }
+    /**
+     * Beside an existing picture, in the folder it already lives in.
+     *
+     * The destination for an edit that names no home — the author handed the
+     * agent a project image and asked for a change. Its own folder is the one
+     * place that needs no guessing: a document's asset folder is named after
+     * the document through a lossy `safeAssetName`, so a picture's path cannot
+     * be reversed into the document that owns it.
+     */
+    | { kind: "file"; dir: string };
   /** One line describing the picture — alt text / gallery description. */
   note: string;
   /** Config-row id of the image model, resolved at apply time. */
@@ -1893,21 +1903,35 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "edit_image",
         description:
-          "Redraw one of a lore entity's existing gallery pictures with a change applied — 'silver hair', 'three-quarter view'. Call read_lore_entity first for the exact filename. The result is saved as a NEW gallery image; the original is never overwritten. Blocks on the author's approval, and costs money once approved. If the image model cannot edit, the result is regenerated from the instruction instead and the author is told — so prefer generate_image when you want a genuinely new picture rather than a variation.",
+          "Redraw an EXISTING picture with a change applied — 'silver hair', 'three-quarter view', 'remove the background'. Works on any image in the project, not only a lore gallery: name it with `source` (a project path from list_files, or a gallery filename from read_lore_entity). The result is saved as a NEW picture and the original is never overwritten. By default it is filed where the source lives — beside it, or back into its gallery; give `entity` to file it in that entity's gallery instead, or `path` to file it beside a document and get the markdown to place it. Blocks on the author's approval and costs money once approved. If the image model cannot edit, the result is regenerated from the instruction instead and the author is told — so prefer generate_image when you want a genuinely new picture rather than a variation of this one.",
         parameters: {
           type: "object",
           properties: {
+            source: {
+              type: "string",
+              description: "The picture to change: a project path (list_files), or a gallery filename (read_lore_entity). Give this or `entity` + `file`.",
+            },
             entity: {
               type: "string",
-              description: "The entity that owns the picture, exactly as listed by list_lore_entities.",
+              description: "File the result in this lore entity's gallery, exactly as listed by list_lore_entities. With `file` and no `source`, also names the picture being changed.",
             },
             file: {
               type: "string",
-              description: "Gallery filename, exactly as listed by read_lore_entity.",
+              description: "With `entity`: the gallery filename to change, exactly as listed by read_lore_entity. The older spelling of `source`.",
+            },
+            path: {
+              type: "string",
+              description: "File the result beside this .md document instead — the markdown to place it comes back in the result, which you then position with propose_edit. Ignored when `entity` is given.",
             },
             instruction: {
               type: "string",
               description: "What to change about the picture.",
+            },
+            references: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "Extra images to send alongside the source — 'put her in this outfit', 'match this style'. A project path, or a gallery filename from read_lore_entity.",
             },
             aspect: {
               type: "string",
@@ -1926,14 +1950,14 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             },
             desc: {
               type: "string",
-              description: "One line describing the new picture, for its gallery description — the same field update_lore_image edits.",
+              description: "One line describing the new picture — its gallery description (the field update_lore_image edits) or a document's alt text. Defaults to the source's own description.",
             },
             reason: {
               type: "string",
               description: "One line for the approval card: why this change.",
             },
           },
-          required: ["entity", "file", "instruction"],
+          required: ["instruction"],
         },
       },
     },

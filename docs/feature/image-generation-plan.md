@@ -541,6 +541,37 @@ ModelDrawer 选 wan2.7 方言时自动把空着的出图接口设为 DashScope �
 只有摆在参考图旁边才审得了。声明不收输入图的模型（`caps.edit === false`）
 在提案前就报错，`caps.maxRefs` 超限同理——都不花一次调用去证明。
 
+**后续修补：`edit_image` 只会改图集，而它是模型唯一的改图工具。** 作者给
+一张项目里的参考图加一句提示词让 agent 改图，模型调 `edit_image`，收到的是
+一句关于 lore 图集的报错。**模型没有选错工具——它没有别的工具可选**：应用里
+只有一个叫 `edit_image` 的工具，UI 标签写着「修改图片」，schema 却把
+`entity` + `file` 列为必填、`dest` 恒为 `{kind:"lore"}`。§4.1 定的是「基于
+会话中的当前图修改」，落地时窄化成了图集专用——`generate_image` 的 `path`
+分支落了，`edit_image` 的那一半没落。
+
+底层其实一直是全的：`illustrate.ts` 把 `sourcePath` 与 `refPaths` 合进同一条
+image-conditioned 通道，`dest.kind === "document"` 早就会存盘并回传 markdown，
+审批卡片对 dest 无感。缺的只有工具 schema 这一层。修法是给 `edit_image` 补
+`source`（项目路径**或**图集文件名——与 `references` 同两种拼法，共用
+`resolveReference`，所以「模型怎么知道一张图存在」在两个工具里是同一件事）、
+`path`（落点文档）和 `references[]`（改图同样会有「换成这套衣服」），
+`required` 收缩到 `["instruction"]`。
+
+落点是一根**阶梯**，显式优先：`entity` → `path` → 源图所属的图集 →
+源图所在的文件夹。第三级看着多余，实际是第四级成立的前提：图集文件夹在
+`.ai-writer/` 下，往那里丢一个没进 `images.md` 的文件，条目视图就永远看不到
+它；而其余来源都经 `resolveWorkspacePath`，那里对 `.ai-writer/` 直接拒绝——
+于是最后一级只可能落在普通项目目录里。为此新增第三种 dest
+`{kind:"file", dir}`（`saveImageInFolder`，复用 `uniqueAssetName`，永不覆盖
+包括源图在内的任何既有文件）。**没有走「从图片路径反推它属于哪个文档」**：
+`assetDirFor` 经 `safeAssetName` 做过转义、长名还加哈希，是有损的，反推只能
+靠猜——落点宁可由参数明说。槽位只在「原样存回同一图集」时继承：槽位按分类
+声明，跨条目搬运只会产生目的分类从没声明过的值。
+
+顺手补的老洞：非 lore 落点在批准后**不刷新文件树**。图片走的是裸字节写入，
+文件树对此一无所知（与 pptx 导出那条同因），所以 PR3 以来文档插图落盘后在
+侧栏是看不见的——模型却已经告诉作者文件存在了。
+
 ## 9. 风险与对策
 
 | 风险 | 影响 | 对策 |
