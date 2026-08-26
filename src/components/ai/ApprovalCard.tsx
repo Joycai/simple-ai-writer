@@ -453,6 +453,14 @@ function IllustrateBody({ proposal }: { proposal: IllustrateProposal }) {
         </div>
       )}
       <pre className={styles.replaceBlock}>{proposal.prompt}</pre>
+      {/* Only ever present for a ComfyUI model (the proposal drops it
+          otherwise), and shown as its own line rather than appended to the
+          prompt — it is the half the author is most likely to want to veto,
+          and reading it inside the positive prompt is exactly the confusion
+          that makes someone approve a picture of what they excluded. */}
+      {proposal.negative && (
+        <pre className={styles.replaceBlock}>{t("ai.approval.imageNegative", { text: proposal.negative })}</pre>
+      )}
       <div className={styles.emptyNote}>
         {t("ai.approval.imageMeta", {
           destination: proposal.destination,

@@ -11,7 +11,7 @@ import {
   type GeminiSafetySettings,
   type GeminiHarmCategory,
 } from "../../../lib/ai/safety";
-import { testProviderConnection } from "../../../lib/ai/providerProbe";
+import { testComfyUiConnection, testProviderConnection } from "../../../lib/ai/providerProbe";
 import { Select } from "../../common/Select";
 import styles from "../settingsCommon.module.css";
 import hub from "./ProvidersModels.module.css";
@@ -36,6 +36,12 @@ interface ProviderPreset {
   name: string;
   apiStandard: ApiStandard;
   baseUrl: string;
+  /**
+   * ComfyUI: not a protocol but a local render server, reached through
+   * `caps.route = "comfyui"` on the model. The preset exists because every
+   * field on this form is a formality for it — see the drawer's comfyMode.
+   */
+  comfy?: true;
 }
 
 const PROVIDER_PRESETS: ProviderPreset[] = [
@@ -59,6 +65,10 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
   // prefix, which anthropicRoot leaves alone (it only trims a trailing
   // /v1 and /messages).
   { name: "MiniMax (Claude 格式)", apiStandard: "anthropic_compat", baseUrl: "https://api.minimaxi.com/anthropic" },
+  // Local render server, not an LLM endpoint. The standard is stored only
+  // because the column is NOT NULL — dispatch reads the model's caps.route
+  // (lib/ai/image.ts), never this. See docs/feature/comfyui-plan.md §7.
+  { name: "ComfyUI", apiStandard: "openai_compat", baseUrl: "http://127.0.0.1:8188", comfy: true },
 ];
 
 /** A server on the local machine (Ollama, LM Studio) — these need no API key. */
@@ -73,11 +83,19 @@ interface Props {
    *  render a half-populated form while the keyring call is in flight. */
   initialApiKey: string;
   onClose: () => void;
+  /**
+   * Called instead of onClose when a brand-new ComfyUI provider is saved, so
+   * the pane can open the model drawer on it right away. A provider row alone
+   * generates nothing — the workflow import is the step that matters, and
+   * leaving the author to find it is what made this route feel unconfigurable
+   * (docs/feature/comfyui-plan.md §7.2).
+   */
+  onComfyCreated?: (providerId: string) => void;
 }
 
-export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
+export function ProviderDrawer({ providerId, initialApiKey, onClose, onComfyCreated }: Props) {
   const { t } = useTranslation();
-  const { providers, addProvider, updateProvider } = useAiStore();
+  const { providers, models, addProvider, updateProvider } = useAiStore();
   const existing = providerId ? providers.find((p) => p.id === providerId) : undefined;
 
   const [form, setForm] = useState({
@@ -93,6 +111,17 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
     authMode: existing?.authMode ?? ("default" as AuthMode),
     safetySettings: existing?.safetySettings ?? defaultSafetySettings(),
   });
+  /**
+   * "This row is a ComfyUI instance" — a form mode, never a stored field.
+   *
+   * For a new provider it comes from the preset the author clicked. For an
+   * existing one it is derived from its models: a comfyui route on any of them
+   * is the fact, and deriving it costs nothing where a `providers.kind` column
+   * would have to ride configTransfer and the backup envelope too (§7.3).
+   */
+  const [comfyMode, setComfyMode] = useState(
+    () => !!providerId && models.some((m) => m.providerId === providerId && m.caps?.route === "comfyui"),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
@@ -104,7 +133,8 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
 
   // Local servers (Ollama, LM Studio) authenticate no requests, so the API key
   // is optional for them but required for everything else.
-  const keyRequired = !isLocalEndpoint(form.baseUrl);
+  // ComfyUI authenticates nothing at all, wherever it is reached from.
+  const keyRequired = !comfyMode && !isLocalEndpoint(form.baseUrl);
   const endpointLocked = !isCompatStandard(form.apiStandard);
   // One entry means the protocol has no choice to offer — don't render a
   // dropdown whose only option is "the way it already works".
@@ -118,12 +148,14 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
     setTesting(true);
     setTestResult(null);
     try {
-      const result = await testProviderConnection(
-        form.baseUrl,
-        form.apiKey,
-        form.apiStandard,
-        form.authMode,
-      );
+      const result = comfyMode
+        ? await testComfyUiConnection(form.baseUrl)
+        : await testProviderConnection(
+            form.baseUrl,
+            form.apiKey,
+            form.apiStandard,
+            form.authMode,
+          );
       setTestResult({ ok: result.ok, message: result.ok ? result.message : result.error });
     } catch (e) {
       setTestResult({ ok: false, message: e instanceof Error ? e.message : String(e) });
@@ -151,10 +183,14 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
           form.apiKey,
         );
       } else {
-        await addProvider(
+        const newId = await addProvider(
           { name: form.name, baseUrl, apiStandard: form.apiStandard, safetySettings, authMode },
           form.apiKey,
         );
+        if (comfyMode && onComfyCreated) {
+          onComfyCreated(newId);
+          return;
+        }
       }
       onClose();
     } catch (e) {
@@ -194,7 +230,11 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
                 <button
                   key={preset.name}
                   className={styles.btnSecondary}
-                  onClick={() => setForm({ ...form, name: preset.name, apiStandard: preset.apiStandard, baseUrl: preset.baseUrl })}
+                  onClick={() => {
+                    setComfyMode(!!preset.comfy);
+                    setTestResult(null);
+                    setForm({ ...form, name: preset.name, apiStandard: preset.apiStandard, baseUrl: preset.baseUrl });
+                  }}
                 >
                   {preset.name}
                 </button>
@@ -209,6 +249,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
             <input className={styles.input} placeholder="OpenAI" value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </div>
+          {!comfyMode && (
           <div className={styles.fieldGroup}>
             <label className={styles.label}>{t("aiConfig.providers.apiStandardLabel")}</label>
             <Select value={form.apiStandard} options={apiStandardOptions}
@@ -226,6 +267,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
                 });
               }} />
           </div>
+          )}
         </div>
 
         <div className={styles.fieldGroup}>
@@ -237,23 +279,33 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
           {endpointLocked && (
             <div className={styles.hint}>{t("aiConfig.providers.baseUrlOfficialHint")}</div>
           )}
+          {comfyMode && (
+            <div className={styles.hint}>{t("aiConfig.providers.comfyBaseUrlHint")}</div>
+          )}
         </div>
 
         <div className={styles.fieldGroup}>
+          {/* ComfyUI has no key and no standard to pick, so the row collapses to
+              the one control that still means something here — and it means more
+              than usual: its 403 branch is the only place that can tell a running
+              ComfyUI refusing us apart from a stopped one (§7.1). */}
           <label className={styles.label}>
-            {t("aiConfig.providers.apiKeyLabel")}
-            {!keyRequired && <span className={styles.hint}> · {t("aiConfig.providers.apiKeyOptional")}</span>}
+            {comfyMode ? t("aiConfig.providers.comfyCheckLabel") : t("aiConfig.providers.apiKeyLabel")}
+            {!comfyMode && !keyRequired && <span className={styles.hint}> · {t("aiConfig.providers.apiKeyOptional")}</span>}
           </label>
           <div className={styles.keyRow}>
-            <input className={styles.input} type="password"
-              placeholder={keyRequired ? "sk-…" : t("aiConfig.providers.apiKeyLocalPlaceholder")}
-              value={form.apiKey}
-              onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
+            {!comfyMode && (
+              <input className={styles.input} type="password"
+                placeholder={keyRequired ? "sk-…" : t("aiConfig.providers.apiKeyLocalPlaceholder")}
+                value={form.apiKey}
+                onChange={(e) => setForm({ ...form, apiKey: e.target.value })} />
+            )}
             <button className={`${styles.btnSecondary} ${styles.testBtn}`} onClick={handleTest}
               disabled={!form.baseUrl || (keyRequired && !form.apiKey) || testing}>
               {testing ? t("aiConfig.providers.testing") : t("aiConfig.providers.testConnection")}
             </button>
           </div>
+          {comfyMode && <div className={styles.hint}>{t("aiConfig.providers.comfyCheckHint")}</div>}
           {testResult && (
             <div className={testResult.ok ? styles.testResultOk : styles.testResultError}>
               {testResult.ok
@@ -264,7 +316,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
           )}
         </div>
 
-        {authModes.length > 1 && (
+        {!comfyMode && authModes.length > 1 && (
           <div className={styles.fieldGroup}>
             <label className={styles.label}>{t("aiConfig.providers.authModeLabel")}</label>
             <Select value={form.authMode}
@@ -275,7 +327,7 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
           </div>
         )}
 
-        {familyOf(form.apiStandard) === "gemini" && (
+        {!comfyMode && familyOf(form.apiStandard) === "gemini" && (
           <GeminiSafetyEditor
             value={form.safetySettings}
             onChange={(safetySettings) => setForm({ ...form, safetySettings })}
@@ -291,7 +343,11 @@ export function ProviderDrawer({ providerId, initialApiKey, onClose }: Props) {
           disabled={!form.name || (keyRequired && !form.apiKey) || saving}>
           {saving
             ? (existing ? t("aiConfig.providers.editing") : t("aiConfig.providers.saving"))
-            : (existing ? t("aiConfig.providers.edit") : t("aiConfig.providers.save"))}
+            : existing
+              ? t("aiConfig.providers.edit")
+              : comfyMode
+                ? t("aiConfig.providers.saveAndAddWorkflow")
+                : t("aiConfig.providers.save")}
         </button>
       </div>
     </div>

@@ -43,13 +43,27 @@ interface Props {
   providerId: string;
   /** null = add a new model under `providerId`. */
   modelId: string | null;
+  /**
+   * Seed a NEW row as a ComfyUI one — image type, comfyui route, straight to
+   * the workflow import. Set by the provider drawer's hand-off; ignored when
+   * editing, where the stored caps are the truth.
+   */
+  comfy?: boolean;
   onClose: () => void;
 }
 
-export function ModelDrawer({ providerId, modelId, onClose }: Props) {
+export function ModelDrawer({ providerId, modelId, comfy, onClose }: Props) {
   const { t } = useTranslation();
   const { providers, models, addModel, updateModel, fetchAndImportModels } = useAiStore();
   const existing = modelId ? models.find((m) => m.id === modelId) : undefined;
+  /**
+   * A second, cheaper source of the same seed: the provider already has a
+   * ComfyUI model. An author adding their second workflow to the same instance
+   * shouldn't have to re-find the route dropdown — and this needs no new state
+   * anywhere (docs/feature/comfyui-plan.md §7.4).
+   */
+  const comfySeed = !existing
+    && (comfy || models.some((m) => m.providerId === providerId && m.caps?.route === "comfyui"));
   const provider = providers.find((p) => p.id === providerId);
   const family = provider ? familyOf(provider.apiStandard) : undefined;
   // Which dialects this family can be *offered*: Anthropic has four shapes
@@ -63,9 +77,12 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
     : null;
 
   const [form, setForm] = useState({
-    modelId: existing?.modelId ?? "",
-    name: existing?.name ?? "",
-    type: existing?.type ?? ("text" as ModelType),
+    // ComfyUI takes no model id on the wire (it takes a whole node graph), but
+    // the column is required and the save button gates on it — so seed it
+    // rather than making the author invent a value that is never sent.
+    modelId: existing?.modelId ?? (comfySeed ? "comfyui" : ""),
+    name: existing?.name ?? (comfySeed ? t("aiConfig.models.comfyDefaultName") : ""),
+    type: existing?.type ?? ((comfySeed ? "image" : "text") as ModelType),
     priceIn: existing?.priceIn ? String(existing.priceIn) : "",
     priceCachedIn: existing?.priceCachedIn ? String(existing.priceCachedIn) : "",
     priceOut: existing?.priceOut ? String(existing.priceOut) : "",
@@ -77,7 +94,7 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
     temperature: existing?.temperature !== undefined ? String(existing.temperature) : "",
     pricePerImage: existing?.pricePerImage ? String(existing.pricePerImage) : "",
     capsSizes: (existing?.caps?.sizes ?? []).join(", "),
-    capsRoute: existing?.caps?.route ?? "",
+    capsRoute: existing?.caps?.route ?? (comfySeed ? "comfyui" : ""),
     // "" = generic (the free-form sizes list); otherwise a declared dialect.
     capsDialect: (existing?.caps?.dialect ?? "") as ImageDialect | "",
     reasoningEffort: existing?.reasoningEffort ?? ("default" as ReasoningEffort),
@@ -300,7 +317,7 @@ export function ModelDrawer({ providerId, modelId, onClose }: Props) {
       <div className={hub.drawerBody}>
         {error && <div className={styles.errorNote}>{error}</div>}
 
-        {!existing && (
+        {!existing && form.capsRoute !== "comfyui" && (
           <div className={styles.fetchRow}>
             <button className={styles.fetchBtn} onClick={handleFetch} disabled={fetching}>
               {fetching ? t("aiConfig.models.fetching") : t("aiConfig.models.fetchBtn")}
