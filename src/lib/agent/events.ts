@@ -13,6 +13,7 @@
  */
 
 import { summarizeSearchResults, type ServerToolEvent } from "../ai/serverTools";
+import type { HandoffBrief } from "./handoff";
 
 /**
  * What the author chose when a run hit its round cap.
@@ -267,11 +268,18 @@ export type AgentEvent = AgentEventScope & (
       kind: "handoff";
       /** Log-tree id the writer's nested events carry as `parentStep`. */
       step: string;
-      /** One-line goal from the brief, for the collapsed row. */
-      goal: string;
-      briefKind: "prose" | "analysis" | "answer";
-      /** How many paths the brief pointed the writer at. */
-      refs: number;
+      /**
+       * The whole work order, not a summary of it.
+       *
+       * The card the author opens renders every section from here, so the brief
+       * has to survive a reload — and the summary line above it is derived from
+       * the same object rather than stored beside it, because two copies of
+       * "how many materials" is how a card comes to disagree with its own
+       * heading. It is the one event that carries verbatim prose (the style
+       * anchors), which is the point: those are what the author checks when the
+       * voice comes back wrong.
+       */
+      brief: HandoffBrief;
       /**
        * True when the forced tool call did not arrive and the brief was
        * reconstructed from the model's prose (handoff.fallbackBrief).
@@ -282,8 +290,12 @@ export type AgentEvent = AgentEventScope & (
        * but the author should know the work order was inferred.
        */
       degraded?: true;
-      /** Set when the brief asked for the output to land on disk. */
-      deliverTo?: { path: string; mode: string };
+      /**
+       * Display name of the model that is writing. Absent only when the binding
+       * could not be resolved at all — the turn then renders as an app notice
+       * rather than as prose, so there is no signature to put a name on.
+       */
+      model?: string;
       at: number;
     }
   | {
@@ -291,6 +303,11 @@ export type AgentEvent = AgentEventScope & (
       kind: "handoff-done";
       step: string;
       chars: number;
+      /** Wall time the writer took, for the signature's hover line. */
+      elapsedMs?: number;
+      inputTokens?: number;
+      outputTokens?: number;
+      cost?: number;
       /** Present when `deliverTo` was attempted: did the author approve it? */
       delivered?: { path: string; approved: boolean };
       /** Set when the writer could not run at all; the main model's text stands. */

@@ -1,0 +1,411 @@
+/* 写手署名与工单（设计稿 12 · 写手 Writer）。
+ *
+ * 一条回复是不是写手写的，答案不在回复上，在回复**左边那条槽**里：13px 横刻度
+ * 起头，1px 竖线的长度正好等于写手写的那段字。线在读区之外，读小说时眼睛不会
+ * 经过它；但它是可量的——线到哪里，写手的字就到哪里，日志里助手说的话在线之上。
+ * 徽章做不到这件事（它标不出边界），换底色/字色也做不到（那是隐形的第二强调色，
+ * 正文一变色就读起来像引用）。 */
+
+/* ── 左槽 ─────────────────────────────────────────────────────────── */
+
+/* 加在 AgentChat 的 `.assistantTurn` 上的第二个类，只为当悬停根用（见下）。 */
+.turn { /* hover root only */ }
+
+.gutter {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+}
+
+/* 交接点。宽度就是 --writer-tick 这个名字的由来，改它等于改这套记号的字号。 */
+.tick {
+  width: 13px;
+  height: 1px;
+  margin-top: 9px;
+  background: var(--writer-tick);
+  transition: background var(--transition-fast);
+}
+
+.rule {
+  width: 1px;
+  flex: 1;
+  min-height: 0;
+  background: var(--writer-rule);
+  transition: background var(--transition-fast);
+}
+
+/* 降级：只有顶端 16px 变虚，其余照旧——写手确实写了这段字，被推断的只有工单。
+   虚的那一截正好落在交接处，它标的是**接缝**可疑，不是正文可疑。 */
+.ruleDashed {
+  width: 1px;
+  height: 16px;
+  flex-shrink: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--writer-rule) 0 3px,
+    transparent 3px 6px
+  );
+}
+
+/* 悬停整段回复：刻度与线短暂换成赭石，名字淡入。这是赭石唯一参与署名的时刻。
+ *
+ * 悬停根是**整条回复**（`.turn` 加在 AgentChat 的 `.assistantTurn` 上），不是写手
+ * 那一块：左槽和正文是同一个网格里的两个兄弟单元格，CSS 的 :hover 跨不过兄弟，
+ * 而且「悬停任意处」本来就是设计要的——作者的手停在这段回复上，问的就是这段。 */
+.turn:hover .tick,
+.turn:hover .rule {
+  background: var(--color-accent);
+}
+
+/* ── 交接行 ───────────────────────────────────────────────────────── */
+
+.body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.orderRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: none;
+  border: none;
+  padding: 0;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+
+.orderChevron {
+  flex-shrink: 0;
+  color: var(--writer-tick);
+  display: flex;
+}
+.orderOpen .orderChevron { color: var(--color-accent); }
+
+.orderLabel {
+  font: 400 11.5px/1 var(--font-sans);
+  color: var(--color-text-soft);
+  white-space: nowrap;
+}
+.orderOpen .orderLabel { color: var(--color-text-primary); }
+
+.orderMeta {
+  font: 400 11px/1 var(--font-mono);
+  color: var(--color-text-hint);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.orderSpacer { flex: 1; }
+
+/* 模型名只在会话第一轮常驻；之后靠悬停叫回来。名字退场，边界留下。 */
+.signature {
+  font: 400 9.5px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+  color: var(--writer-tick);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.signatureHover {
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+.turn:hover .signatureHover { opacity: 1; }
+
+/* ── 降级说明 ─────────────────────────────────────────────────────── */
+
+/* padding-left 对齐到 chevron 之后的文字列，不是对齐到 chevron。 */
+.degradedNote {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-left: 19px;
+  font: 400 11.5px/1.65 var(--font-sans);
+  color: var(--color-text-dim);
+}
+
+.degradedAction {
+  font: 400 11.5px/1 var(--font-sans);
+  color: var(--color-accent);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* 同一会话第三次起，说明退成一行——这个模型就是这样，不需要每轮解释一遍。 */
+.degradedTerse {
+  margin-top: var(--space-2);
+  padding-left: 19px;
+  font: 400 11px/1 var(--font-mono);
+  color: var(--color-text-dim);
+}
+
+/* ── 正文 ─────────────────────────────────────────────────────────── */
+
+.prose { margin-top: var(--space-4); }
+
+/* 悬停时出现的耗时／用量。移开就没有——单轮的代价不该常驻。 */
+.cost {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  font: 400 10.5px/1 var(--font-mono);
+  color: var(--color-text-hint);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+.turn:hover .cost { opacity: 1; }
+
+.costFaint { color: var(--color-text-faint); }
+
+/* ── 工单卡 ───────────────────────────────────────────────────────── */
+
+.card {
+  margin-top: var(--space-3);
+  border: 1px solid var(--color-border-panel);
+  background: var(--color-bg-stream);
+}
+
+.cardSection { padding: 14px 20px; }
+.cardHead { padding: 16px 20px 0; }
+.cardHeadTight { padding: 16px 20px 18px; }
+
+.hair { height: 1px; background: var(--color-hairline); }
+.hairTop { margin-top: 18px; }
+
+.kicker {
+  font: 400 9.5px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  color: var(--color-text-dim);
+}
+
+.kickerRow {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.kickerValue { font: 400 11px/1 var(--font-mono); color: var(--color-text-soft); }
+.kickerRight { font: 400 11px/1 var(--font-mono); color: var(--color-text-hint); }
+
+/* 卡上只有两处衬线：目标那一句和文风锚点的原文——它们本来就是给人读的话。
+   其余全部等宽与无衬线。衬线一断，读者就知道下面是清单，不是文章。 */
+.goal {
+  margin-top: var(--space-3);
+  font: 400 16px/1.7 var(--font-serif);
+  color: var(--color-text-primary);
+  text-wrap: pretty;
+}
+
+.listLabel {
+  font: 400 9.5px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  color: var(--color-text-dim);
+  margin-bottom: 10px;
+}
+
+.refs { display: flex; flex-direction: column; gap: 7px; }
+.refRow { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
+.refPath {
+  font: 400 11.5px/1.5 var(--font-mono);
+  color: var(--color-text-soft);
+  overflow-wrap: anywhere;
+}
+.refTail { font: 400 10.5px/1.5 var(--font-mono); color: var(--color-text-hint); flex-shrink: 0; }
+
+.constraints { display: flex; flex-direction: column; gap: var(--space-2); }
+.constraintRow { display: flex; gap: 11px; }
+.constraintNo {
+  font: 400 10.5px/1.7 var(--font-mono);
+  color: var(--writer-tick);
+  flex-shrink: 0;
+}
+.constraintText { font: 400 12.5px/1.7 var(--font-sans); color: var(--color-text-soft); }
+
+/* 唯一的文学内容，所以是唯一的第二处衬线，并且换一个更深的底。 */
+.anchors { padding: 16px 20px; background: var(--color-bg-inset); }
+.anchorQuote { display: flex; gap: 14px; }
+.anchorQuote + .anchorQuote { margin-top: var(--space-3); }
+.anchorRule { width: 1px; background: var(--color-border-panel); flex-shrink: 0; }
+.anchorText {
+  flex: 1;
+  font: 400 14.5px/2 var(--font-serif);
+  color: var(--color-text-soft);
+  text-wrap: pretty;
+  white-space: pre-wrap;
+}
+
+.forbid { display: flex; flex-wrap: wrap; gap: 7px; }
+.forbidChip {
+  font: 400 11.5px/1 var(--font-sans);
+  color: var(--color-text-dim);
+  border: 1px solid var(--color-border-panel);
+  padding: 6px 9px;
+}
+
+.deliver {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: 12px 20px;
+  background: var(--color-bg-accent-wash);
+  border-top: 1px solid var(--color-border-panel);
+}
+.deliverKicker {
+  font: 400 9.5px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  color: var(--writer-tick);
+}
+.deliverPath { font: 400 11px/1 var(--font-mono); color: var(--color-text-soft); }
+.deliverMode { font: 400 11px/1 var(--font-mono); color: var(--color-text-dim); }
+.deliverNote { font: 400 10.5px/1 var(--font-sans); color: var(--color-text-hint); }
+
+.cardFoot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: 11px;
+}
+.cardFootBtn {
+  font: 400 11px/1 var(--font-sans);
+  color: var(--color-text-dim);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.cardFootBtn:hover { color: var(--color-text-soft); }
+.cardFootNote {
+  margin-left: auto;
+  font: 400 10.5px/1.6 var(--font-mono);
+  color: var(--color-text-faint);
+}
+
+/* 「推断」徽标——卡里唯一一处需要说明这张工单不是助手填的。 */
+.inferredBadge {
+  font: 400 10.5px/1 var(--font-mono);
+  color: var(--writer-tick);
+  border: 1px solid var(--color-border-accent);
+  padding: 3px 7px;
+}
+
+.inferredNote {
+  padding: 13px 20px;
+  font: 400 11.5px/1.75 var(--font-sans);
+  color: var(--color-text-dim);
+}
+
+/* ── 写手没跑起来 ─────────────────────────────────────────────────── */
+
+/* 不是一条回复：没有左槽、没有署名线。应用在解释一个配置问题，所以它长得必须
+   和一段正文明显不同——2px 左边框 + 一个 应用 标签。 */
+.unavailable {
+  align-self: stretch;
+  border-left: 2px solid var(--writer-tick);
+  background: var(--color-bg-inset);
+  padding: 15px 18px;
+}
+.unavailHead { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.unavailTag {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: 0.2em;
+  color: var(--writer-tick);
+  text-transform: uppercase;
+}
+.unavailTitle { font: 400 13px/1.4 var(--font-sans); color: var(--color-text-primary); }
+.unavailWhy {
+  margin-top: 9px;
+  font: 400 11.5px/1.7 var(--font-sans);
+  color: var(--color-text-dim);
+}
+.unavailActions { display: flex; align-items: center; gap: var(--space-2); margin-top: 13px; flex-wrap: wrap; }
+
+/* ── 输入框上方那条线 ─────────────────────────────────────────────── */
+
+/* 前六个芯片是「这个能力可用」——一排等大的方框。写手是「从现在起每句话都由它
+   写」，所以它从方框里出来，变成输入框上边那条分隔线本身：无框、贯通整宽、位置
+   固定在芯片行之上。密度不同，层级也就不同。 */
+.strip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 13px 0 12px;
+  min-width: 0;
+}
+
+.stripTick { width: 13px; height: 1px; background: var(--writer-tick); flex-shrink: 0; }
+.stripTickOff { background: var(--color-text-faint); }
+.stripTickLive { background: var(--color-accent); }
+
+.stripLabel { font: 400 11.5px/1 var(--font-sans); color: var(--color-text-soft); white-space: nowrap; }
+.stripLabelOff { color: var(--color-text-dim); }
+.stripLabelLive { color: var(--color-text-primary); }
+
+.stripModel { font: 400 11px/1 var(--font-mono); color: var(--writer-tick); white-space: nowrap; }
+.stripCost { font: 400 11px/1 var(--font-mono); color: var(--color-text-hint); white-space: nowrap; }
+.stripCostOff { font: 400 11px/1 var(--font-mono); color: var(--color-text-faint); white-space: nowrap; }
+
+.stripFill { flex: 1; height: 1px; background: var(--color-border-panel); min-width: 12px; }
+.stripFillOff {
+  flex: 1;
+  height: 1px;
+  min-width: 12px;
+  background: repeating-linear-gradient(
+    to right,
+    var(--color-border-panel) 0 4px,
+    transparent 4px 8px
+  );
+}
+
+.stripAction {
+  font: 400 11px/1 var(--font-sans);
+  color: var(--color-text-dim);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.stripAction:hover { color: var(--color-text-soft); }
+.stripActionAccent { color: var(--color-accent); }
+.stripActionAccent:hover { color: var(--color-accent-hover); }
+
+.stripPulse {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-round);
+  background: var(--color-accent);
+  animation: writerPulse 1.4s infinite;
+  flex-shrink: 0;
+}
+@keyframes writerPulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+/* ── 首次引导 ─────────────────────────────────────────────────────── */
+
+/* 不是模态，不压暗背景，不挡任何东西：它长在刚刚变了的那条线上面，与线共享同一
+   个刻度起头，所以「说明」和「被说明的东西」在同一列。 */
+.intro { border-bottom: 1px solid var(--color-border-panel); padding: 16px 0 15px; }
+.introHead { display: flex; align-items: center; gap: var(--space-3); }
+.introTitle { font: 400 13px/1.4 var(--font-serif); color: var(--color-text-primary); }
+.introOnce { margin-left: auto; font: 400 11px/1 var(--font-mono); color: var(--color-text-faint); }
+.introList { margin-top: 14px; display: flex; flex-direction: column; gap: 11px; }
+.introItem { display: flex; gap: var(--space-3); }
+.introNo { font: 400 10.5px/1.7 var(--font-mono); color: var(--writer-tick); flex-shrink: 0; }
+.introText { font: 400 12.5px/1.7 var(--font-sans); color: var(--color-text-soft); }
+.introMono { font: 400 11.5px/1 var(--font-mono); color: var(--color-text-primary); }
+.introActions { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-4); }

@@ -20,6 +20,7 @@ import {
   setTranslateLinesPerChunk,
   translateLinesPerChunk,
 } from "../../../lib/translate/flag";
+import { writePref } from "../../../lib/prefs";
 import { Pane, Toggle } from "./bits";
 import { Select } from "../../common/Select";
 import ui from "../settingsUi.module.css";
@@ -42,10 +43,13 @@ import css from "./SubAgents.module.css";
 export function SubAgentsPane() {
   const { t } = useTranslation();
   const [useLore, setUseLore] = useState(isTranslateLoreEnabled());
+  /** Bumped so the 再看一次说明 button can confirm it did something. */
+  const [introReset, setIntroReset] = useState(0);
   const [chunkLines, setChunkLines] = useState(translateLinesPerChunk());
   const models = useAiStore((s) => s.models);
   const subAgents = useAiStore((s) => s.subAgents);
   const setSubAgent = useAiStore((s) => s.setSubAgent);
+  const activeModelId = useAiStore((s) => s.activeModelId);
 
   // Image models can't hold a conversation, so the conversational kinds never
   // offer them — and the imagegen kind offers nothing else: it exists to draw,
@@ -108,11 +112,12 @@ export function SubAgentsPane() {
   const metaFor = (kind: SubAgentKind): string => {
     if (kind === "imagegen") return t("systemSettings.subagents.imagegenMeta");
     if (kind === "translate") return t("systemSettings.subagents.translateMeta");
+    // Only the round budget here. What this binding *costs* is a bigger fact
+    // than a trailing note on a picker row, so it gets the line of its own
+    // below — and repeating it in both places was the first thing that looked
+    // wrong when the pane was rendered.
     if (kind === "writer") {
-      return [
-        t("systemSettings.subagents.rounds", { n: WRITER_PRESET.maxRounds }),
-        t("systemSettings.subagents.writerMeta"),
-      ].join(" · ");
+      return t("systemSettings.subagents.rounds", { n: WRITER_PRESET.maxRounds });
     }
     const preset = SUB_PRESETS[kind as DelegateKind];
     const parts = [
@@ -131,6 +136,9 @@ export function SubAgentsPane() {
     if (preset.serverTools === "always") parts.push(t("systemSettings.subagents.searchAlways"));
     return parts.join(" · ");
   };
+
+  /** The model the assistant itself is on — the one-click answer to an unbound writer. */
+  const assistantModel = proseCandidates.find((m) => m.id === activeModelId);
 
   const state = SUBAGENT_KINDS.map((kind) => {
     const cfg = subAgents[kind];
@@ -177,11 +185,22 @@ export function SubAgentsPane() {
 
       {groups.map((group) => (
         <div key={group.id} className={css.group}>
-          <div className={css.groupHead}>
-            <span className={css.groupLabel}>{t(`systemSettings.subagents.group${group.id}`)}</span>
-            <span className={css.groupHint}>{t(`systemSettings.subagents.group${group.id}Hint`)}</span>
-          </div>
-          <div className={css.groupRule} />
+          {/* 只有一位成员的那一组不套普通组头——见 SubAgents.module.css 的
+              .finishHead。刻度线本身就是这一组和上面两组的分界。 */}
+          {group.id === "Finish" ? (
+            <div className={css.finishHead}>
+              <span className={css.finishTick} />
+              <span className={css.finishLabel}>{t("systemSettings.subagents.groupFinish")}</span>
+              <span className={css.groupHint}>{t("systemSettings.subagents.groupFinishHint")}</span>
+              <span className={css.finishFill} />
+            </div>
+          ) : (<>
+            <div className={css.groupHead}>
+              <span className={css.groupLabel}>{t(`systemSettings.subagents.group${group.id}`)}</span>
+              <span className={css.groupHint}>{t(`systemSettings.subagents.group${group.id}Hint`)}</span>
+            </div>
+            <div className={css.groupRule} />
+          </>)}
 
           <div className={css.cards}>
             {group.kinds.map((kind) => {
@@ -200,7 +219,11 @@ export function SubAgentsPane() {
                         className={`${css.dot} ${!cfg.enabled ? "" : bad ? css.dotWarn : css.dotReady}`}
                       />
                       <span className={css.name}>{name}</span>
-                      <span className={css.req}>{t(`systemSettings.subagents.${kind}Req`)}</span>
+                      {/* 写手没有前置条件，所以那格改成一句等宽小字而不是一个
+                          芯片：空着会像漏了，写清楚反而是个卖点。 */}
+                      <span className={kind === "writer" ? css.reqPlain : css.req}>
+                        {t(`systemSettings.subagents.${kind}Req`)}
+                      </span>
                       <span className={css.spacer} />
                       <span
                         className={`${css.status} ${!cfg.enabled ? "" : bad ? css.statusWarn : css.statusReady}`}
@@ -230,6 +253,30 @@ export function SubAgentsPane() {
                       />
                       <span className={css.meta}>{metaFor(kind)}</span>
                     </div>
+
+                    {/* 写手多出来的两样：一条元信息行（含把一次性说明叫回来的
+                        入口）和一节适用范围。别的子代理到处都生效，它只作用于
+                        对话助手——不说清楚，作者会以为角色扮演也变了。 */}
+                    {kind === "writer" && (<>
+                      <div className={css.metaRow}>
+                        <span className={css.meta}>{t("systemSettings.subagents.writerMeta")}</span>
+                        <span className={css.metaSep} />
+                        <span className={css.meta}>{t("systemSettings.subagents.writerCostNote")}</span>
+                        <button
+                          type="button"
+                          className={css.metaAction}
+                          onClick={() => { writePref("ai:writerIntroSeen", "0"); setIntroReset((n) => n + 1); }}
+                        >
+                          {introReset > 0
+                            ? t("systemSettings.subagents.writerIntroReset")
+                            : t("systemSettings.subagents.writerSeeIntro")}
+                        </button>
+                      </div>
+                      <div className={css.scope}>
+                        <span className={css.scopeKicker}>{t("systemSettings.subagents.writerScopeLabel")}</span>
+                        <span className={css.scopeText}>{t("systemSettings.subagents.writerScope")}</span>
+                      </div>
+                    </>)}
 
                     {/* 术语表开关只属于这一张卡片，所以就长在这里，而不是把
                         "每个 kind 可以有额外控件"抽象成一个通用槽位——目前只有
@@ -266,7 +313,23 @@ export function SubAgentsPane() {
                     </>)}
                   </div>
 
-                  {warn && (
+                  {/* 写手绑空时给一条**行动**条而不是纯警告：这里有一步到位的
+                      出路（借助手正在用的那个模型），而一条只说坏消息的横幅会
+                      让作者去别处找答案。 */}
+                  {kind === "writer" && warn && !cfg.modelId && assistantModel ? (
+                    <div className={css.unbound}>
+                      <span className={css.unboundText}>
+                        {t("systemSettings.subagents.writerUnbound")}
+                      </span>
+                      <button
+                        type="button"
+                        className={css.unboundAction}
+                        onClick={() => setSubAgent("writer", { modelId: assistantModel.id })}
+                      >
+                        {t("systemSettings.subagents.writerUseAssistant", { model: assistantModel.name })}
+                      </button>
+                    </div>
+                  ) : warn && (
                     <div className={css.warn}>
                       <AlertTriangle size={13} className={css.warnIcon} />
                       <span>{warn}</span>

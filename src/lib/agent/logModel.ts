@@ -42,7 +42,7 @@ export interface RoundGroup {
 export interface SubAgentRun {
   /** The delegate call's id — also the `parentStep` its nested events carry. */
   toolCallId: string;
-  /** search / vision / longread / writer, or null when truncated arguments hid it. */
+  /** search / vision / longread, or null when truncated arguments hid it. */
   kind: string | null;
   /** The delegated instruction, best effort — empty when it didn't survive. */
   task: string;
@@ -50,16 +50,7 @@ export interface SubAgentRun {
   /** Which round of the parent loop delegated this. */
   round: number;
   at: number;
-  /**
-   * The tool call behind this run — absent for the writer, which is reached by
-   * no tool at all (it takes over the run's final round; see
-   * lib/agent/handoff). The card reads `handoff`/`handoffDone` instead, so the
-   * two shapes share one section without pretending the writer was a tool call.
-   */
-  step?: ToolStep;
-  /** Set instead of `step` for a writer handoff. */
-  handoff?: Extract<AgentEvent, { kind: "handoff" }>;
-  handoffDone?: Extract<AgentEvent, { kind: "handoff-done" }>;
+  step: ToolStep;
   /** The subagent's own execution log, forwarded with `parentStep` set. */
   events: AgentEvent[];
 }
@@ -188,37 +179,6 @@ export function buildLogModel(log: readonly AgentEvent[], isRunning: boolean): A
         events: [],
       });
       continue;
-    }
-
-    // The writer's handoff earns a card in the same section as a delegation:
-    // both are a whole run on another model, and both are the step whose cost
-    // and internals the author has the most reason to open. It is *not* counted
-    // as a tool call — nothing called it.
-    if (event.kind === "handoff") {
-      const existing = subIndex.get(event.step);
-      const run: SubAgentRun = {
-        toolCallId: event.step,
-        kind: "writer",
-        task: event.goal,
-        status: "running",
-        round: rounds.length,
-        at: event.at,
-        handoff: event,
-        events: log.filter((e) => e.parentStep === event.step),
-      };
-      if (existing) Object.assign(existing, run);
-      else {
-        subIndex.set(run.toolCallId, run);
-        subagents.push(run);
-      }
-    }
-    if (event.kind === "handoff-done") {
-      const run = subIndex.get(event.step);
-      if (run) {
-        run.status = event.error ? "error" : "done";
-        run.handoffDone = event;
-        run.events = log.filter((e) => e.parentStep === event.step);
-      }
     }
 
     if (event.kind === "tool-step") {
@@ -386,6 +346,10 @@ export function roundRows(group: RoundGroup): AgentEvent[] {
   return group.events.filter(
     (e) =>
       !(e.kind === "tool-step" && e.step.name === DELEGATE_TOOL) &&
+      // The handoff has no row here at all: it is not a step inside the run,
+      // it is the seam where the run changes hands, so it renders on the turn
+      // itself (components/ai/WriterTurn) with the work order attached to it.
+      // 设计稿 12 · 屏 3a：「执行日志里不再有工单卡」。
       e.kind !== "handoff" &&
       e.kind !== "handoff-done",
   );

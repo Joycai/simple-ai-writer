@@ -36,10 +36,9 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
 import { findTask, taskLabel, taskPackLabel } from "../../lib/profile";
 import { useTerms } from "../../stores/projectStore";
-import { ChevronDown, ChevronRight, Bot, Eye, FileText, Globe, PenLine, ScrollText } from "lucide-react";
+import { ChevronDown, ChevronRight, Bot, Eye, FileText, Globe, ScrollText } from "lucide-react";
 import type { AgentEvent, ToolStep } from "../../lib/agent/events";
 import {
   buildLogModel,
@@ -723,6 +722,8 @@ function useHeadline(model: AgentLogModel): string {
       return t("ai.agent.log.outputTruncated", { defaultValue: "输出被上限截断，回答未写完" });
     case "handoff":
       return t("ai.agent.log.handoffRunning", { defaultValue: "写手正在成文" });
+    case "handoff-done":
+      return t("ai.agent.log.handoffDone", { defaultValue: "写手已成文" });
     default:
       return t("ai.agent.log.thinking", { defaultValue: "思考中…" });
   }
@@ -809,55 +810,7 @@ const SUB_ICONS: Record<string, typeof Bot> = {
   vision: Eye,
   longread: ScrollText,
   pdf: FileText,
-  writer: PenLine,
 };
-
-/**
- * The work order, as one readable block.
- *
- * Deliberately short: the brief's own sections are already in the writer's
- * request, and this is the author's answer to "what was it actually told, and
- * did the model choose to say it or did the endpoint force our hand" — the
- * degraded line matters most, since a silently downgraded tool_choice is
- * otherwise invisible from the outside (lib/agent/handoff.fallbackBrief).
- */
-function handoffSummary(run: SubAgentRun, t: TFunction): string {
-  const h = run.handoff!;
-  const lines = [h.goal || t("ai.agent.log.handoffNoGoal", { defaultValue: "（未写明目标）" })];
-  lines.push(
-    t("ai.agent.log.handoffMeta", {
-      defaultValue: "形态 {{kind}} · 材料 {{refs}} 项",
-      kind: t(`ai.agent.log.handoffKind.${h.briefKind}`, { defaultValue: h.briefKind }),
-      refs: h.refs,
-    }),
-  );
-  if (h.deliverTo) {
-    lines.push(
-      t("ai.agent.log.handoffDeliver", {
-        defaultValue: "写入 {{path}}（{{mode}}）",
-        path: h.deliverTo.path,
-        mode: h.deliverTo.mode,
-      }),
-    );
-  }
-  if (h.degraded) {
-    lines.push(t("ai.agent.log.handoffDegraded", {
-      defaultValue: "⚠ 主模型没有交出工单（端点可能降级了强制工具调用），本工单由它这一轮的正文推得。",
-    }));
-  }
-  const done = run.handoffDone;
-  if (done?.error) {
-    lines.push(t("ai.agent.log.handoffError", { defaultValue: "失败：{{msg}}", msg: done.error }));
-  }
-  if (done?.delivered) {
-    lines.push(
-      done.delivered.approved
-        ? t("ai.agent.log.handoffWritten", { defaultValue: "已写入 {{path}}", path: done.delivered.path })
-        : t("ai.agent.log.handoffNotWritten", { defaultValue: "未写入 {{path}}", path: done.delivered.path }),
-    );
-  }
-  return lines.join("\n");
-}
 
 /**
  * One delegation, with the specialist's own execution log inside it.
@@ -919,12 +872,7 @@ function SubAgentCard({
               />
             ))}
           </ul>
-          {/* A delegation's footer is what it returned. The writer's return
-              value is the answer already on screen above, so repeating it here
-              would be the same text twice and a much heavier session blob —
-              what the author cannot see anywhere else is the work order it was
-              given, so that is what this shows. */}
-          {run.status !== "running" && run.step && (
+          {run.status !== "running" && (
             <div className={styles.subResult}>
               <DetailBlock
                 label={
@@ -935,14 +883,6 @@ function SubAgentCard({
                 body={run.step.resultSummary || t("ai.agent.log.detailNoResult", { defaultValue: "（无返回内容）" })}
                 cap={run.step.resultSummary ? TOOL_RESULT_DETAIL_CHARS : undefined}
                 truncated={run.step.resultSummary ? run.step.resultTruncated : false}
-              />
-            </div>
-          )}
-          {run.handoff && (
-            <div className={styles.subResult}>
-              <DetailBlock
-                label={t("ai.agent.log.handoffBrief", { defaultValue: "工单" })}
-                body={handoffSummary(run, t)}
               />
             </div>
           )}

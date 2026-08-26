@@ -216,10 +216,13 @@ describe("runAgent — writer handoff", () => {
   });
 
   /**
-   * A misconfigured writer must not swallow the turn: the author needs the
-   * reason, and an empty bubble is the least useful place to put it.
+   * A misconfigured writer produces no reply — and the runtime must NOT invent
+   * one. App text pushed into the turn would be the one thing the signature
+   * design forbids: a paragraph in the reading column that nobody's model
+   * wrote. The reason travels on the event, and the surface renders it outside
+   * the prose (设计稿 12 · 屏 1a 轮 4).
    */
-  it("reports the reason in the turn when the writer cannot run", async () => {
+  it("leaves the turn empty when the writer cannot run, and reports why on the event", async () => {
     queueRound([handoffCall({ goal: "g", kind: "prose" }), done]);
     const h = makeOptions({
       toolContext: {
@@ -231,9 +234,12 @@ describe("runAgent — writer handoff", () => {
     });
     await runAgent(h.opts);
 
-    expect(last(h.output)).toContain("没有绑定模型");
+    expect(last(h.output) ?? "").toBe("");
     const ev = h.events.find((e) => e.kind === "handoff-done");
     expect(ev && "error" in ev && ev.error).toBe("没有绑定模型");
+    // Nothing was said, so nothing joins the transcript — an empty assistant
+    // message is also what Anthropic rejects outright.
+    expect(h.history.some((m) => m.role === "assistant")).toBe(false);
   });
 
   it("still runs its ordinary tool rounds first", async () => {

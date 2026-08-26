@@ -846,19 +846,6 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
           : fallbackBrief(roundText, await collectRunNotes(runToolContext));
         const stepId = `handoff-${round}`;
 
-        opts.onEvent({
-          kind: "handoff",
-          step: stepId,
-          goal: brief.goal,
-          briefKind: brief.kind,
-          refs: brief.notes.length,
-          ...(degraded ? { degraded: true as const } : {}),
-          ...(brief.deliverTo
-            ? { deliverTo: { path: brief.deliverTo.path, mode: brief.deliverTo.mode } }
-            : {}),
-          at: Date.now(),
-        });
-
         // Whatever this round said before handing off was narration, exactly as
         // on a tool round. Roll the display back before the writer's text
         // starts arriving on top of it.
@@ -881,31 +868,25 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         // What the author ends up reading. The writer's text when there is one;
         // failing that the main model's own prose, which exists only on the
         // degraded path — and there it is a real answer rather than narration,
-        // since the model wrote it instead of calling the tool. Failing both,
-        // the reason: an empty turn tells the author nothing about a subagent
-        // that is merely misconfigured.
+        // since the model wrote it instead of calling the tool.
+        //
+        // Failing both, **nothing**: a writer that could not run has produced
+        // no reply, and app text pushed into the turn would be the one thing
+        // the whole署名 design forbids — a paragraph in the reading column that
+        // nobody's model wrote. The reason travels on `handoff-done` instead,
+        // and the surface renders it as an app notice outside the prose
+        // (设计稿 12 · 屏 1a 轮 4).
         const finalText =
-          res.text.trim() ||
-          (degraded && roundText.trim() ? roundText : "") ||
-          i18n.t("ai.errors.writerFailed", { reason: res.error ?? "" });
-
-        opts.onEvent({
-          kind: "handoff-done",
-          step: stepId,
-          chars: finalText.length,
-          ...(res.delivered
-            ? { delivered: { path: res.delivered.path, approved: res.delivered.approved } }
-            : {}),
-          ...(res.error ? { error: res.error } : {}),
-          at: Date.now(),
-        });
+          res.text.trim() || (degraded && roundText.trim() ? roundText : "");
 
         committedText += finalText;
         opts.onOutputText(committedText);
         // The transcript gets the writer's words, because those are the words
         // the author read and is replying to. The work order is not in here at
-        // all — neither the call nor its result was ever appended.
-        history.push({ role: "assistant", content: finalText });
+        // all — neither the call nor its result was ever appended. An empty
+        // turn appends nothing: Anthropic rejects empty content blocks, and a
+        // turn where nothing was said should not claim otherwise.
+        if (finalText) history.push({ role: "assistant", content: finalText });
         return {
           rounds: round,
           inputTokens: totalInputTokens,

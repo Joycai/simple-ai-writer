@@ -167,11 +167,20 @@
 /* A status gutter plus a single content track. Everything the turn renders —
    execution log, prose, suggestion cards — is a child of `.turnContent`, which
    is what keeps their left and right edges identical. */
+/* 13px, not 8: the gutter is now two marks wide, not one. The 7px dot says
+   "a turn starts here"; the 13px tick says "the author changes here" (see
+   WriterTurn.module.css). The tick's width is the design's own unit — narrowing
+   the column would crop the very mark it exists to carry — so the dot centres
+   inside it instead. `row-gap` is what separates the assistant's own row from
+   the writer's, which is a second row of this same grid rather than a child of
+   the first: both must sit in the SAME gutter column and start at the SAME
+   left edge. */
 .assistantTurn {
   align-self: stretch;
   display: grid;
-  grid-template-columns: 8px minmax(0, 1fr);
+  grid-template-columns: 13px minmax(0, 1fr);
   column-gap: var(--space-3);
+  row-gap: var(--space-3);
   align-items: start;
 }
 
@@ -181,6 +190,7 @@
   width: 7px;
   height: 7px;
   margin-top: 9px;
+  margin-left: 3px;
   background: var(--color-sienna);
 }
 .turnMarkerLive { background: var(--color-border-accent); }

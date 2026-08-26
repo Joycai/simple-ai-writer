@@ -1,18 +1,21 @@
 import { useTranslation } from "react-i18next";
-import { Globe, Eye, BookOpen, FileText, ImagePlus, Languages, PenLine, type LucideIcon } from "lucide-react";
+import { Globe, Eye, BookOpen, FileText, ImagePlus, Languages, type LucideIcon } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { subAgentModel, SUBAGENT_KINDS, type SubAgentKind } from "../../lib/agent/subagent";
 import styles from "./toggleChip.module.css";
 
-const ICONS: Record<SubAgentKind, LucideIcon> = {
+/** Every kind that is a chip — i.e. all of them except the writer. See below. */
+type ChipKind = Exclude<SubAgentKind, "writer">;
+const CHIP_KINDS = SUBAGENT_KINDS.filter((k): k is ChipKind => k !== "writer");
+
+const ICONS: Record<ChipKind, LucideIcon> = {
   search: Globe,
   vision: Eye,
   longread: BookOpen,
   pdf: FileText,
   imagegen: ImagePlus,
   translate: Languages,
-  writer: PenLine,
 };
 
 /**
@@ -28,17 +31,18 @@ const ICONS: Record<SubAgentKind, LucideIcon> = {
  * unrelated conversations, and sharing one "turned off for this conversation"
  * set would mean each of them silently editing the others' settings.
  *
- * `kinds` narrows which switches this surface shows at all. Not cosmetic: a
- * subagent whose surface never consults it would be a chip that changes nothing
- * when pressed — the same "enabled but does nothing" failure the whole
- * usable-not-merely-enabled rule below exists to prevent. Roleplay passes this
- * to leave out `writer`, whose handoff only the chat assistant opts into
- * (lib/agent/routing RouteOptions).
+ * **The writer is never one of these**, on any surface. Every chip here says
+ * "this ability is available" — a switch among equals, and turning one off
+ * changes what the assistant *can reach*. The writer says "from now on every
+ * sentence is written by it": it always takes effect, and it changes the cost
+ * and the wait of every turn. A seventh identical box would file the most
+ * consequential switch in the row under the least consequential shape. It gets
+ * the composer's own separator line instead — see WriterStrip
+ * (设计稿 12 · 屏 5a「写手不是第七个芯片」).
  */
-export function SubAgentChips({ disabled, onToggle, kinds = SUBAGENT_KINDS }: {
+export function SubAgentChips({ disabled, onToggle }: {
   disabled?: readonly SubAgentKind[];
   onToggle?: (kind: SubAgentKind) => void;
-  kinds?: readonly SubAgentKind[];
 } = {}) {
   const { t } = useTranslation();
   const subAgents = useAiStore((s) => s.subAgents);
@@ -51,7 +55,7 @@ export function SubAgentChips({ disabled, onToggle, kinds = SUBAGENT_KINDS }: {
   // Usable, not merely enabled: a vision subagent bound to a text model, or a
   // search one whose model cannot browse, would give the author a switch that
   // changes nothing — every other surface has already decided it is off.
-  const configuredKinds = kinds.filter(
+  const configuredKinds = CHIP_KINDS.filter(
     (k) => subAgentModel(k, models, subAgents) !== null,
   );
 
@@ -72,7 +76,6 @@ export function SubAgentChips({ disabled, onToggle, kinds = SUBAGENT_KINDS }: {
             : kind === "vision" ? "识图"
             : kind === "pdf" ? "PDF"
             : kind === "imagegen" ? "绘图"
-            : kind === "writer" ? "写手"
             : "长文",
         });
         const title = isDisabledThisSession

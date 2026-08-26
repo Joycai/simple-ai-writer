@@ -221,7 +221,8 @@ MiniMax 的 `switch` thinking dialect 上，forced `tool_choice` 被**降级成 
 | `lib/agent/routing.ts` | writer 不摘主模型任何工具（没有对应能力可摘）；只把 preset 的 `finishPolicy` 在"可用"时改成 `"handoff"` |
 | `lib/agent/events.ts` | 新事件 kind（`handoff`：交接单摘要 + 写手模型名 + `degraded?`），供 `AgentLog` 渲染 |
 | `lib/prefs.ts` | `ai:subagent:writer:modelId` / `ai:subagent:writer:enabled` 进 `PREF_KEYS` |
-| `lib/agent/logModel.ts` + `components/ai/AgentLog.tsx` | 写手在执行日志里占 band ③ 的一张卡（同 delegate）：`SubAgentRun.step` 变可选，写手改带 `handoff`/`handoffDone`。卡底显示**工单**而不是"返回结果"——写手的返回值就是上面那段答案，再抄一遍只是同一段文字两份，外加一个更重的会话 blob |
+| `components/ai/WriterTurn.tsx` + `WriterStrip.tsx` + `WriterTurn.module.css` | 署名（左槽的刻度与竖线）、工单收起行与展开卡、降级说明、「应用」通知块、输入框上那条线、首次引导。设计口径见 [`writer-subagent-ui-brief.md`](writer-subagent-ui-brief.md) 的「设计稿回来之后」 |
+| `lib/agent/logModel.ts` | `roundRows` 把 `handoff` / `handoff-done` 滤出执行日志——**工单不在日志里**：它不是运行内部的一步，是运行换手的那道接缝，所以挂在那一轮上 |
 | `components/ai/SubAgentChips.tsx` | 加 `kinds?: readonly SubAgentKind[]` 参数（默认全量）；**roleplay 传一个排除 writer 的列表**，见 §8 |
 | `components/settings/panes/SubAgentsPane.tsx` | writer 卡；分组不是 delegate/工具两档了，writer 是第三档「收尾」 |
 | `i18n/locales/*` | 写手成文指令（三支：prose / analysis / answer）、交接单模板、卡片与芯片文案 |
@@ -270,8 +271,10 @@ MiniMax 的 `switch` thinking dialect 上，forced `tool_choice` 被**降级成 
 1. **PR-1（已落地）**：`finishPolicy: "handoff"` + `WRITER_PRESET` + 交接单 schema +
    透传 + 发出即撤 + §5.1 兜底。
 2. **PR-2（已落地）**：`deliverTo` → Proposal → 审批卡（引用式写入）。
-3. **PR-3（已落地，随前两片一起）**：设置页第三组「收尾成文」、会话芯片、执行日志
-   band ③ 的写手卡、i18n、roleplay 侧的芯片排除。
+3. **PR-3（已落地，随前两片一起）**：设置页第三组「收尾成文」、i18n。
+4. **PR-4（设计稿落地）**：拿到 `12 写手 Writer.dc.html` 之后按稿重做界面。它推翻了
+   PR-3 的三处：工单搬出执行日志、写手不再是第七个芯片（变成输入框上那条线）、写手
+   跑不起来时不再往阅读列里塞应用文案。差异清单在 UI 任务书文末。
 
 三片一起落地，因为 §3.1 那次返工把 PR-1 的边界重画了：`handoff` 每轮挂载之后，
 "这一轮的回复由写手出"和"落到哪个文件里"共用同一条返回路径，拆开反而要写两遍。

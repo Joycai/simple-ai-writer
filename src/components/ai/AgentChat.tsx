@@ -33,7 +33,7 @@ import {
 } from "../../lib/fs/images";
 import { downscaleNote, imageForModel } from "../../lib/image/normalize";
 import { attachedKey } from "../../lib/lore/aiTask";
-import { chainCanSeeImages, withSessionOverrides } from "../../lib/agent/subagent";
+import { chainCanSeeImages, subAgentModel, withSessionOverrides } from "../../lib/agent/subagent";
 import { useImageThumbnails } from "../lore/useImageDataUrl";
 import { useLoreStore } from "../../stores/loreStore";
 import { useProjectFiles, useProjectStore, useTerms } from "../../stores/projectStore";
@@ -63,6 +63,12 @@ import { plannedToolTokens } from "../../lib/agent/toolCost";
 import { inputCeilingFor } from "../../lib/context/budget";
 import { ReasoningControls } from "./ReasoningControls";
 import { SubAgentChips } from "./SubAgentChips";
+import {
+  findHandoff, handoffFailed, WorkOrder, WriterGutter, WriterUnavailable,
+  type TurnHandoff,
+} from "./WriterTurn";
+import { markWriterIntroSeen, WriterIntro, WriterStrip, writerIntroSeen } from "./WriterStrip";
+import writer from "./WriterTurn.module.css";
 import { ContextBar } from "./ContextBar";
 import { ScopeBand, ScopeMenu, type ScopeMenuAnchor } from "../lore/collections/ScopePicker";
 import { PlanModeChip } from "./PlanModeChip";
@@ -104,6 +110,9 @@ export function AgentChat() {
   const allTruncations = useAgentStore((s) => s.pendingTruncations);
   const sendChat = useAgentStore((s) => s.sendChat);
   const stopChat = useAgentStore((s) => s.stopChat);
+  const toggleSubAgent = useAgentStore((s) => s.toggleSubAgent);
+  const openSettings = useAppStore((s) => s.openSettings);
+  const openModelPicker = useAppStore((s) => s.openModelPicker);
   const chatCompacting = useAgentStore((s) => s.chatCompacting);
   const compactChatNow = useAgentStore((s) => s.compactChatNow);
   // 只渲染没有 surface 标记的卡片。带标记的属于扮演面板那样的独立界面——
@@ -381,6 +390,64 @@ export function AgentChat() {
     stopChat();
   };
 
+  /**
+   * Everything the signature needs that a single turn cannot know on its own.
+   *
+   * Two of the three are session-scoped by design: the model name is spelled
+   * out **once** (first turn) and afterwards only on hover — "名字退场，边界留下"
+   * — and the degraded explanation collapses to one line from the third
+   * occurrence, because by then it is a property of the model, not of the turn.
+   */
+  const handoffs = useMemo(() => {
+    const byTurn = new Map<string, TurnHandoff>();
+    const degradedOrdinal = new Map<string, number>();
+    let firstTurnId: string | null = null;
+    let degradedSoFar = 0;
+    for (const turn of turns) {
+      if (turn.role !== "assistant") continue;
+      const h = findHandoff(turn.log);
+      if (!h) continue;
+      byTurn.set(turn.id, h);
+      if (firstTurnId === null) firstTurnId = turn.id;
+      if (h.open.degraded) degradedOrdinal.set(turn.id, ++degradedSoFar);
+    }
+    return { byTurn, firstTurnId, degradedOrdinal };
+  }, [turns]);
+
+  /**
+   * When the live turn is in the writer's hands — the strip's "正在成文" state.
+   * An open handoff with no close is exactly that window.
+   */
+  const composingSince = (() => {
+    if (!chatRunning) return null;
+    const last = turns[turns.length - 1];
+    if (!last || last.role !== "assistant") return null;
+    const h = findHandoff(last.log);
+    return h && !h.done ? h.open.at : null;
+  })();
+
+  /**
+   * The one-time explanation, armed the moment a usable writer first exists.
+   *
+   * State, not a bare pref read: dismissing it has to repaint this component,
+   * and the settings pane's 再看一次说明 has to be able to bring it back — the
+   * pref is where it persists, this is where it lives while the panel is open.
+   */
+  const writerLive = subAgentModel("writer", models, subAgents) !== null;
+  const [writerIntroDone, setWriterIntroDone] = useState(writerIntroSeen);
+  useEffect(() => {
+    if (writerLive && !writerIntroSeen()) setWriterIntroDone(false);
+  }, [writerLive]);
+  const showWriterIntro = writerLive && !writerIntroDone;
+  const dismissWriterIntro = () => {
+    markWriterIntroSeen(true);
+    setWriterIntroDone(true);
+  };
+
+  const disableWriterForSession = () => {
+    if (!useAgentStore.getState().disabledSubAgents.includes("writer")) toggleSubAgent("writer");
+  };
+
   // 2d: 正在生成 · mm:ss — timed from when this run started.
   const [runSeconds, setRunSeconds] = useState(0);
   useEffect(() => {
@@ -542,6 +609,12 @@ export function AgentChat() {
                 images={turn.images}
                 isLive={chatRunning && turn.id === turns[turns.length - 1]?.id}
                 onCtx={snippetSave.onMessageContextMenu}
+                handoff={handoffs.byTurn.get(turn.id) ?? null}
+                firstHandoff={handoffs.firstTurnId === turn.id}
+                degradedOrdinal={handoffs.degradedOrdinal.get(turn.id) ?? 0}
+                onDisableWriter={disableWriterForSession}
+                onOpenSettings={() => openSettings("subagents")}
+                onChangeModel={openModelPicker}
               />
             ),
           )}
@@ -602,6 +675,11 @@ export function AgentChat() {
           onCompact={canCompact && !chatRunning ? () => void compactChatNow() : undefined}
           compacting={chatCompacting}
         />
+
+        {/* 「接下来谁写」——常驻，在芯片行之上，因为它不是一项能力而是一道工序。
+            设置里没开写手时整条不存在（角色扮演面板同理，它根本不渲染这个组件）。 */}
+        {showWriterIntro && <WriterIntro onDismiss={dismissWriterIntro} />}
+        <WriterStrip composingSince={composingSince} />
 
         <div className={styles.attachRow}>
           {attachedQuote ? (
@@ -855,29 +933,51 @@ const UserTurn = memo(function UserTurn({ turn, onCtx }: {
 });
 
 /** Same memo contract as {@link UserTurn} — props are the turn's own fields. */
-const AssistantTurn = memo(function AssistantTurn({ text, log, images, isLive, onCtx }: {
+const AssistantTurn = memo(function AssistantTurn({
+  text, log, images, isLive, onCtx, handoff, firstHandoff, degradedOrdinal,
+  onDisableWriter, onOpenSettings, onChangeModel,
+}: {
   text: string;
   log: AgentEvent[];
   images?: string[];
   isLive: boolean;
   onCtx: SnippetSave["onMessageContextMenu"];
+  /** This turn's handoff, when the writer produced its text. */
+  handoff: TurnHandoff | null;
+  /** True on the session's first handoff — the one turn that spells the name out. */
+  firstHandoff: boolean;
+  degradedOrdinal: number;
+  onDisableWriter: () => void;
+  onOpenSettings: () => void;
+  /** 降级说明里唯一可点的东西：换掉**助手**的模型，不是写手的。 */
+  onChangeModel: () => void;
 }) {
   const { t } = useTranslation();
   // Markdown render is cheap at chat sizes; memo keeps streaming smooth anyway.
   const html = useMemo(() => renderMarkdown(text), [text]);
+  const failed = handoff ? handoffFailed(handoff) : false;
 
   return (
     // Marker gutter + one content column: the execution log, the prose and any
     // cards are siblings in the same grid track, so they cannot drift out of
     // alignment with each other no matter what each one contains.
-    <div className={styles.assistantTurn} onContextMenu={(e) => onCtx(e, text)}>
+    //
+    // A writer turn adds a SECOND row to the same two-column grid rather than
+    // nesting inside the first: its rule has to live in the very same gutter as
+    // the dot above it, and its prose has to start at the very same left edge.
+    // Nested, one of those two would be indented — and the rule's whole claim is
+    // that it measures the writer's text exactly.
+    <div
+      className={`${styles.assistantTurn} ${handoff ? writer.turn : ""}`}
+      onContextMenu={(e) => onCtx(e, text)}
+    >
       <span className={`${styles.turnMarker} ${isLive ? styles.turnMarkerLive : ""}`} />
       <div className={styles.turnContent}>
         {log.length > 0 && <AgentLog log={log} isRunning={isLive} compact />}
         {/* Pictures this turn produced, above the prose: the assistant's text
             is a caption for them, and reading the caption first is backwards. */}
         <TurnImages paths={images} />
-        {text ? (
+        {!handoff && (text ? (
           <div className={styles.assistantBody} dangerouslySetInnerHTML={{ __html: html }} />
         ) : (
           // Only until the log exists. Once it does, its in-flight round is
@@ -889,8 +989,39 @@ const AssistantTurn = memo(function AssistantTurn({ text, log, images, isLive, o
               {t("ai.chat.thinking")}
             </div>
           )
+        ))}
+        {/* The writer could not run: an app notice, not a reply. It gets no
+            gutter and no rule — nothing was authored, so there is no boundary
+            to mark. See lib/agent/runtime, which deliberately leaves the turn's
+            text empty rather than putting app prose in the reading column. */}
+        {failed && (
+          <WriterUnavailable
+            reason={handoff!.done!.error!}
+            onOpenSettings={onOpenSettings}
+            onDisable={onDisableWriter}
+          />
         )}
       </div>
+
+      {handoff && !failed && (
+        <>
+          <WriterGutter degraded={handoff.open.degraded} />
+          <div className={writer.body}>
+            <WorkOrder
+              handoff={handoff}
+              first={firstHandoff}
+              degradedOrdinal={degradedOrdinal}
+              onChangeModel={onChangeModel}
+            />
+            {text && (
+              <div
+                className={`${styles.assistantBody} ${writer.prose}`}
+                dangerouslySetInnerHTML={{ __html: html }}
+              />
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 });

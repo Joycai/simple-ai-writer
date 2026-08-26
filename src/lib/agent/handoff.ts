@@ -318,14 +318,55 @@ export interface WriterHandoffResult {
  * are watching, plus a `token_usage` row tagged `subagent:writer`.
  */
 export async function runWriterHandoff(args: WriterHandoffArgs): Promise<WriterHandoffResult> {
-  const { brief, ctx, signal, onEvent, onText, stepId } = args;
+  const { brief, degraded, ctx, signal, onEvent, onText, stepId } = args;
   const empty = { text: "", inputTokens: 0, outputTokens: 0, cachedTokens: 0 };
+  const startedAt = Date.now();
+
+  /**
+   * Both bracket events are emitted here rather than by the caller, because the
+   * open one carries the writer's model name and only this function has
+   * resolved it by then — and the author needs that name while the text is
+   * still streaming, not after.
+   */
+  const open = (model?: string) =>
+    onEvent({
+      kind: "handoff",
+      step: stepId,
+      brief,
+      ...(degraded ? { degraded: true as const } : {}),
+      ...(model ? { model } : {}),
+      at: Date.now(),
+    });
+  const close = (
+    extra: { chars: number } & Partial<{
+      error: string;
+      inputTokens: number;
+      outputTokens: number;
+      cost: number;
+      delivered: { path: string; approved: boolean };
+    }>,
+  ) =>
+    onEvent({
+      kind: "handoff-done",
+      step: stepId,
+      elapsedMs: Date.now() - startedAt,
+      ...extra,
+      at: Date.now(),
+    });
 
   if (!ctx.resolveSubAgent) {
-    return { ...empty, error: i18n.t("ai.errors.writerUnavailable") };
+    const error = i18n.t("ai.errors.writerUnavailable");
+    open();
+    close({ chars: 0, error });
+    return { ...empty, error };
   }
   const conn = await ctx.resolveSubAgent("writer");
-  if ("error" in conn) return { ...empty, error: conn.error };
+  if ("error" in conn) {
+    open();
+    close({ chars: 0, error: conn.error });
+    return { ...empty, error: conn.error };
+  }
+  open(conn.model.name);
 
   const messages: StreamMessage[] = [
     { role: "system", content: writerSystemPrompt(brief, args.inheritedSystem) },
@@ -359,7 +400,9 @@ export async function runWriterHandoff(args: WriterHandoffArgs): Promise<WriterH
     });
   } catch (e) {
     if ((e as Error).name === "AbortError") throw e;
-    return { ...empty, text, error: (e as Error).message };
+    const error = (e as Error).message;
+    close({ chars: text.length, error });
+    return { ...empty, text, error };
   }
 
   onEvent({
@@ -386,14 +429,27 @@ export async function runWriterHandoff(args: WriterHandoffArgs): Promise<WriterH
     cachedTokens: result.cachedTokens,
   };
 
+  const accounted = {
+    inputTokens: result.inputTokens,
+    outputTokens: result.outputTokens,
+    cost,
+  };
+
   if (!text.trim()) {
-    return { ...usage, text, error: i18n.t("ai.errors.writerEmpty") };
+    const error = i18n.t("ai.errors.writerEmpty");
+    close({ chars: 0, error, ...accounted });
+    return { ...usage, text, error };
   }
 
   const delivered = brief.deliverTo
     ? await deliverWriterOutput(brief.deliverTo, text, ctx)
     : undefined;
 
+  close({
+    chars: text.length,
+    ...accounted,
+    ...(delivered ? { delivered: { path: delivered.path, approved: delivered.approved } } : {}),
+  });
   return { ...usage, text, ...(delivered ? { delivered } : {}) };
 }
 
@@ -416,9 +472,11 @@ async function deliverWriterOutput(
   if (!path) return fail(i18n.t("ai.errors.writerPathOutside", { path: deliverTo.path }));
 
   const id = `writer-${Date.now()}`;
+  // See ProposalBase.fromWriter — this function is the only place it is true.
+  const fromWriterFlag = { fromWriter: true as const };
   try {
     if (deliverTo.mode === "create") {
-      const decision = await ctx.requestApproval({ kind: "create", id, path, content: text });
+      const decision = await ctx.requestApproval({ kind: "create", id, path, content: text, ...fromWriterFlag });
       return { path, approved: decision.approved, ...(decision.approved ? {} : { detail: decision.reason }) };
     }
 
@@ -426,13 +484,13 @@ async function deliverWriterOutput(
 
     if (deliverTo.mode === "append") {
       const decision = await ctx.requestApproval({
-        kind: "append", id, path, content: text, originalChars: original.length,
+        kind: "append", id, path, content: text, originalChars: original.length, ...fromWriterFlag,
       });
       return { path, approved: decision.approved, ...(decision.approved ? {} : { detail: decision.reason }) };
     }
     if (deliverTo.mode === "rewrite") {
       const decision = await ctx.requestApproval({
-        kind: "rewrite", id, path, content: text, originalChars: original.length,
+        kind: "rewrite", id, path, content: text, originalChars: original.length, ...fromWriterFlag,
       });
       return { path, approved: decision.approved, ...(decision.approved ? {} : { detail: decision.reason }) };
     }
@@ -456,6 +514,7 @@ async function deliverWriterOutput(
       occurrences,
       target: occurrences === 1 ? undefined : index,
       range: { from, to: slice.to },
+      ...fromWriterFlag,
     });
     return { path, approved: decision.approved, ...(decision.approved ? {} : { detail: decision.reason }) };
   } catch (e) {
