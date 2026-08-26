@@ -95,6 +95,7 @@ describe("subagent", () => {
     pdf: { kind: "pdf", modelId: null, enabled: false },
     imagegen: { kind: "imagegen", modelId: null, enabled: false },
     translate: { kind: "translate", modelId: null, enabled: false },
+    writer: { kind: "writer", modelId: null, enabled: false },
   };
 
   beforeEach(() => {

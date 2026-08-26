@@ -27,6 +27,10 @@ import {
 // Re-exported: callers reach the round-cap contract through the runtime that
 // enforces it, not through the event module that only has to describe it.
 export type { RoundLimitDecision, TruncationDecision };
+import {
+  collectRunNotes, fallbackBrief, handoffToolDefinition, HANDOFF_TOOL_NAME,
+  parseHandoffBrief, runWriterHandoff, type HandoffBrief,
+} from "./handoff";
 import { contentWithoutImages, hasImageParts } from "./imageHistory";
 import { stepTarget } from "./plan";
 import { cloneLoreIndex } from "../lore";
@@ -41,7 +45,7 @@ import {
   type ToolGroup,
   type ToolId,
 } from "./registry";
-import { toolTokensOf } from "./toolCost";
+import { handoffToolTokens, toolTokensOf } from "./toolCost";
 import { loadTaskDoc, parseSteps, type TaskStep } from "./taskWorkspace";
 import type { ToolCall, ToolResult } from "./tools";
 
@@ -375,6 +379,19 @@ export interface AgentRuntimeOptions extends ConnOptions {
    * so nothing is actually lost.
    */
   onOutputText: (fullText: string) => void;
+  /**
+   * System-layer text the writer subagent inherits on a `handoff` finish.
+   *
+   * Named by the caller rather than lifted from `history[0]`, because that
+   * message is not one thing: chat's system layer is the author's writing
+   * prompt *plus* the agent briefing, the workflow roster and the docx presets.
+   * The first part is exactly what the writer needs — it is where the project's
+   * vocabulary lives — and the rest is tool-loop machinery that would have a
+   * writer with no tools talking about capabilities it does not have.
+   *
+   * Ignored unless the run actually hands off.
+   */
+  writerSystem?: string;
 }
 
 export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResult> {
@@ -441,6 +458,16 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
   let checkpointArmed = false;
   /** Tool rounds since the model last wrote to the checklist — see TASK_NUDGE_ROUNDS. */
   let roundsSinceTaskTouch = 0;
+  /**
+   * Whether a `handoff` preset must now be *made* to produce a work order.
+   *
+   * Armed when a round ended in prose instead: on this preset prose is not a
+   * valid ending, because the author turned the writer on precisely so the
+   * final text would not come from this model. One retry, and then the degraded
+   * path takes whatever it said as the work order — see the handoff branch
+   * below and lib/agent/handoff.fallbackBrief.
+   */
+  let handoffForced = false;
 
   for (let round = 1; round <= maxRounds; round++) {
     if (opts.signal.aborted) throw new DOMException("Aborted", "AbortError");
@@ -493,7 +520,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     if (
       isLastRound &&
       round > 1 &&
-      preset.finishPolicy === "force-text" &&
+      (preset.finishPolicy === "force-text" || preset.finishPolicy === "handoff") &&
       preset.tools.length > 0 &&
       opts.onRoundLimit
     ) {
@@ -519,10 +546,32 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       }
     }
 
+    /**
+     * This run ends by handing a work order to the writer rather than by
+     * writing anything itself (lib/agent/handoff).
+     *
+     * `handoff` is therefore on the table from round 1, not saved for the round
+     * cap: the model finishes its research whenever it finishes, and calling
+     * the tool is simply what "I am done, here is the job" looks like. What
+     * makes the author's switch deterministic is not that the tool is forced
+     * on every round — it is that **prose is not an accepted ending** on this
+     * preset (see the handoff branch after the request).
+     */
+    const handoffPreset = preset.finishPolicy === "handoff";
+    /**
+     * …and this is the round where it stops being a choice: the retry after a
+     * prose round, or the round cap. One tool on the wire and `tool_choice`
+     * pinned to it — the model has had its whole run to read and think, and
+     * leaving `read_file` on the table here only buys research the cap has
+     * already ended.
+     */
+    const forceHandoff = handoffPreset && (handoffForced || isLastRound);
     const withholdTools =
-      preset.tools.length === 0 || (isLastRound && preset.finishPolicy === "force-text");
+      !handoffPreset &&
+      (preset.tools.length === 0 || (isLastRound && preset.finishPolicy === "force-text"));
     const serverToolPolicy = preset.serverTools ?? "final-round-off";
     const withholdServerTools =
+      forceHandoff ||
       serverToolPolicy === "off" ||
       (serverToolPolicy === "final-round-off" && isLastRound && preset.finishPolicy === "force-text");
     /**
@@ -539,6 +588,15 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         role: "user",
         content: i18n.t("ai.instructions.roundCapReached"),
       };
+      history.push(forcedTextNotice);
+    }
+    // Injected and retracted like the notice above, and for chat with more
+    // force behind it: left in a persistent history, "hand your work to the
+    // writer now" becomes a standing order, gets folded into the next
+    // compaction's summary, and trains the model to answer every later turn
+    // with a work order instead of an answer.
+    if (forceHandoff) {
+      forcedTextNotice = { role: "user", content: i18n.t("ai.instructions.handoffRound") };
       history.push(forcedTextNotice);
     }
 
@@ -634,7 +692,13 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       round,
       maxRounds,
       estInputTokens: estimateMessagesTokens(history),
-      toolTokens: withholdTools ? 0 : toolTokensOf(activeTools),
+      // The handoff round carries one hand-written definition rather than the
+      // preset's toolset, so the run's usual figure would overstate it wildly.
+      toolTokens: forceHandoff
+        ? handoffToolTokens()
+        : withholdTools
+          ? 0
+          : toolTokensOf(activeTools) + (handoffPreset ? handoffToolTokens() : 0),
       at: Date.now(),
     });
 
@@ -643,7 +707,19 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         ...pickConnOptions(opts),
         messages: history,
         extraBody: opts.extraBody,
-        tools: withholdTools ? undefined : toolDefinitions,
+        tools: forceHandoff
+          ? [handoffToolDefinition()]
+          : withholdTools
+            ? undefined
+            : handoffPreset ? [...toolDefinitions, handoffToolDefinition()] : toolDefinitions,
+        // Forced — but never *relied* upon: some endpoints downgrade a forced
+        // choice to "auto" without saying so (lib/ai/openai.ts toolChoiceFor,
+        // lib/ai/anthropic.ts toolChoiceBody, both on the `switch` thinking
+        // dialect). The handoff below therefore runs whether or not the call
+        // arrives; see handoff.fallbackBrief.
+        ...(forceHandoff
+          ? { toolChoice: { type: "function" as const, function: { name: HANDOFF_TOOL_NAME } } }
+          : {}),
         // Governed by preset.serverTools (final-round-off | off | always).
         // Separate from local tools because search subagent has no local tools
         // (preset.tools: []) but requires serverTools enabled on every round.
@@ -738,6 +814,88 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         const at = history.indexOf(taskNudgeNotice);
         if (at >= 0) history.splice(at, 1);
       }
+    }
+
+    // ── The handoff: this model does not write the answer ──
+    //
+    // Placed ahead of both the prose branch and the tool-execution path,
+    // because a `handoff` call is in neither: it is not a registered tool
+    // (executing it would be an "unknown tool" error), and the round that made
+    // it is not a prose round. Returning from here is also what keeps the work
+    // order out of the history — nothing below ever builds the assistant
+    // message that would have carried it.
+    if (handoffPreset) {
+      const call = roundToolCalls.find((c) => c.name === HANDOFF_TOOL_NAME);
+
+      // Prose where a work order was required. Not an answer: on this preset
+      // the author has said the final text comes from the writer, so accepting
+      // it here would turn a deterministic switch back into the model's choice.
+      // One retry with the tool pinned; if that round still comes back as prose
+      // the endpoint is downgrading the forced choice (lib/ai/openai.ts
+      // toolChoiceFor), and we hand off anyway with its words as the order.
+      if (!call && roundToolCalls.length === 0 && !forceHandoff) {
+        handoffForced = true;
+        opts.onOutputText(committedText);
+        continue;
+      }
+
+      if (call || roundToolCalls.length === 0) {
+        const degraded = !call;
+        const brief: HandoffBrief = call
+          ? parseHandoffBrief(call.arguments)
+          : fallbackBrief(roundText, await collectRunNotes(runToolContext));
+        const stepId = `handoff-${round}`;
+
+        // Whatever this round said before handing off was narration, exactly as
+        // on a tool round. Roll the display back before the writer's text
+        // starts arriving on top of it.
+        opts.onOutputText(committedText);
+
+        const res = await runWriterHandoff({
+          brief,
+          degraded,
+          ctx: runToolContext,
+          inheritedSystem: opts.writerSystem,
+          signal: opts.signal,
+          onEvent: opts.onEvent,
+          onText: (full) => opts.onOutputText(committedText + full),
+          stepId,
+        });
+        totalInputTokens += res.inputTokens;
+        totalOutputTokens += res.outputTokens;
+        totalCachedTokens += res.cachedTokens;
+
+        // What the author ends up reading. The writer's text when there is one;
+        // failing that the main model's own prose, which exists only on the
+        // degraded path — and there it is a real answer rather than narration,
+        // since the model wrote it instead of calling the tool.
+        //
+        // Failing both, **nothing**: a writer that could not run has produced
+        // no reply, and app text pushed into the turn would be the one thing
+        // the whole署名 design forbids — a paragraph in the reading column that
+        // nobody's model wrote. The reason travels on `handoff-done` instead,
+        // and the surface renders it as an app notice outside the prose
+        // (设计稿 12 · 屏 1a 轮 4).
+        const finalText =
+          res.text.trim() || (degraded && roundText.trim() ? roundText : "");
+
+        committedText += finalText;
+        opts.onOutputText(committedText);
+        // The transcript gets the writer's words, because those are the words
+        // the author read and is replying to. The work order is not in here at
+        // all — neither the call nor its result was ever appended. An empty
+        // turn appends nothing: Anthropic rejects empty content blocks, and a
+        // turn where nothing was said should not claim otherwise.
+        if (finalText) history.push({ role: "assistant", content: finalText });
+        return {
+          rounds: round,
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+          cachedTokens: totalCachedTokens,
+          outcome: "completed",
+        };
+      }
+      // Anything else this round called is an ordinary tool round; fall through.
     }
 
     // No tool calls → the model produced prose → that prose is the answer.

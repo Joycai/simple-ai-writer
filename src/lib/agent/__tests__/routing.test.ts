@@ -46,6 +46,7 @@ describe("routeTools", () => {
     pdf: { kind: "pdf", modelId: null, enabled: false },
     imagegen: { kind: "imagegen", modelId: null, enabled: false },
     translate: { kind: "translate", modelId: null, enabled: false },
+    writer: { kind: "writer", modelId: null, enabled: false },
   };
   /**
    * The preset as it routes with nothing enabled: no drawing arm, no image
@@ -253,6 +254,7 @@ describe("the PPTX export Beta gate", () => {
     pdf: { kind: "pdf", modelId: null, enabled: false },
     imagegen: { kind: "imagegen", modelId: null, enabled: false },
     translate: { kind: "translate", modelId: null, enabled: false },
+    writer: { kind: "writer", modelId: null, enabled: false },
   };
 
   it("withholds export_pptx entirely while the switch is off", () => {
@@ -318,6 +320,7 @@ describe("the translation gate", () => {
     pdf: { kind: "pdf", modelId: null, enabled: false },
     imagegen: { kind: "imagegen", modelId: null, enabled: false },
     translate: { kind: "translate", modelId: null, enabled: false },
+    writer: { kind: "writer", modelId: null, enabled: false },
   };
   const bound: Record<SubAgentKind, SubAgentConfig> = {
     ...allDisabled,
@@ -371,5 +374,75 @@ describe("the translation gate", () => {
     withBeta(true, () => {
       expect(routeTools(AGENT_ASSIST_PRESET, bound, undefined, MODELS).tools).toContain("translate");
     });
+  });
+});
+
+
+/**
+ * The writer is the one subagent that changes no tool at all — it changes how
+ * the run *ends*. So the whole of its routing is one field, and every way of
+ * getting that field wrong is a switch that silently does nothing.
+ */
+describe("routeTools — writer handoff", () => {
+  const allDisabled: Record<SubAgentKind, SubAgentConfig> = {
+    search: { kind: "search", modelId: null, enabled: false },
+    vision: { kind: "vision", modelId: null, enabled: false },
+    longread: { kind: "longread", modelId: null, enabled: false },
+    pdf: { kind: "pdf", modelId: null, enabled: false },
+    imagegen: { kind: "imagegen", modelId: null, enabled: false },
+    translate: { kind: "translate", modelId: null, enabled: false },
+    writer: { kind: "writer", modelId: null, enabled: false },
+  };
+  const bound: Record<SubAgentKind, SubAgentConfig> = {
+    ...allDisabled,
+    writer: { kind: "writer", modelId: "m-long", enabled: true },
+  };
+
+  it("keeps the preset's own ending when the surface has not opted in", () => {
+    // Roleplay and the AiPanel run presets that never asked for this, and one
+    // of them shares its preset object with the chat assistant.
+    const res = routeTools(AGENT_ASSIST_PRESET, bound, WS, MODELS);
+    expect(res.finishPolicy).toBe(AGENT_ASSIST_PRESET.finishPolicy);
+  });
+
+  it("keeps it when the surface opted in but nothing is bound", () => {
+    const res = routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS, { handoff: true });
+    expect(res.finishPolicy).toBe("force-text");
+  });
+
+  it("hands off when the surface opted in and a usable writer is bound", () => {
+    const res = routeTools(AGENT_ASSIST_PRESET, bound, WS, MODELS, { handoff: true });
+    expect(res.finishPolicy).toBe("handoff");
+  });
+
+  it("ignores a binding to a model that cannot write prose", () => {
+    // Enabled-but-unusable is the failure `subAgentModel` exists to catch, and
+    // here it would leave the run with no ending anyone can produce.
+    for (const modelId of ["m-image", "m-sakura"]) {
+      const subs: Record<SubAgentKind, SubAgentConfig> = {
+        ...allDisabled,
+        writer: { kind: "writer", modelId, enabled: true },
+      };
+      expect(routeTools(AGENT_ASSIST_PRESET, subs, WS, MODELS, { handoff: true }).finishPolicy)
+        .toBe("force-text");
+    }
+  });
+
+  it("changes nothing about the toolset", () => {
+    const off = routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS, { handoff: true });
+    const on = routeTools(AGENT_ASSIST_PRESET, bound, WS, MODELS, { handoff: true });
+    expect(on.tools).toEqual(off.tools);
+    expect(on.serverTools).toBe(off.serverTools);
+  });
+
+  it("is switched off for this conversation by the session chip, like every other kind", () => {
+    const subs = withSessionOverrides(bound, ["writer"]);
+    expect(routeTools(AGENT_ASSIST_PRESET, subs, WS, MODELS, { handoff: true }).finishPolicy)
+      .toBe("force-text");
+  });
+
+  it("needs no task workspace — the writer writes no notes", () => {
+    expect(routeTools(AGENT_ASSIST_PRESET, bound, undefined, MODELS, { handoff: true }).finishPolicy)
+      .toBe("handoff");
   });
 });

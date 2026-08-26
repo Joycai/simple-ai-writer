@@ -344,6 +344,13 @@ export function sumTokens(logs: readonly (readonly AgentEvent[])[]): TokenTotals
  */
 export function roundRows(group: RoundGroup): AgentEvent[] {
   return group.events.filter(
-    (e) => !(e.kind === "tool-step" && e.step.name === DELEGATE_TOOL),
+    (e) =>
+      !(e.kind === "tool-step" && e.step.name === DELEGATE_TOOL) &&
+      // The handoff has no row here at all: it is not a step inside the run,
+      // it is the seam where the run changes hands, so it renders on the turn
+      // itself (components/ai/WriterTurn) with the work order attached to it.
+      // 设计稿 12 · 屏 3a：「执行日志里不再有工单卡」。
+      e.kind !== "handoff" &&
+      e.kind !== "handoff-done",
   );
 }

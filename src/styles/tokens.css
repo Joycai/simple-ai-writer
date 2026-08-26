@@ -202,6 +202,15 @@
   --color-accent-text:     #A0522D;   /* text on selected segments/chips */
   --color-accent-mid:      #B3764A;   /* ochre ramp mid step — see dark block */
   --color-accent-deep:     #A0522D;   /* chip ×, 暂停于此, mid-ochre notes */
+
+  /* 写手署名（设计稿 12 · 写手 Writer）。一段回复是不是写手写的，答案不在回复
+     上，在回复左边那条槽里：13px 横刻度起头，1px 竖线的长度**正好等于**写手写
+     的那段字。所以这两个值必须比正文暗、比 hairline 亮——它要可量，但眼睛读小说
+     时不会经过它。悬停时两者都换成 --color-accent，这是赭石唯一参与的时刻。
+     不能复用 --color-border-accent：那是控件边框的语义，改一次控件就会连带改掉
+     署名的可读性，而这条线是内容的一部分。 */
+  --writer-tick:           #C08A5E;   /* 13px 横刻度 · 交接点 */
+  --writer-rule:           #D8B48F;   /* 1px 竖线 · 作者边界 */
   --color-on-accent:       #FBF8F0;   /* text on solid sienna buttons */
   --color-text-prose:      #2A2520;   /* generated body (Spectral reading/1.85) */
   --color-text-soft:       #5C5346;   /* secondary UI text */
@@ -481,6 +490,11 @@
      border tone. (Precedent: --color-success-text is likewise shared.) */
   --color-accent-mid:      #B3764A;
   --color-accent-deep:     #8E6540;
+
+  /* 见浅色块的说明。暗色下刻度落在 accent-deep 上、竖线落在 border-accent 上，
+     纸面则各降一档——守的是「线比正文暗、比分隔线亮」这条关系，不是 hex。 */
+  --writer-tick:           #8E6540;
+  --writer-rule:           #6B4B2E;
   --color-on-accent:       #17130F;
   --color-text-prose:      #D9CFC0;
   --color-text-soft:       #B3A794;

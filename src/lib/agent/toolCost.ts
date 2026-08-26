@@ -18,12 +18,13 @@
  */
 
 import { estimateToolsTokens } from "../ai/tokenEstimate";
+import { handoffToolDefinition } from "./handoff";
 import type { Model } from "../ai/configDb";
 import { loreCategoryIds } from "../profile/active";
 import { inputCeilingFor } from "../context/budget";
 import type { TaskPreset } from "./presets";
 import { getToolDefinitions, type ToolId } from "./registry";
-import { routePlannedTools } from "./routing";
+import { routePlannedTools, type RouteOptions } from "./routing";
 import type { SubAgentConfig, SubAgentKind } from "./subagent";
 
 /**
@@ -49,6 +50,20 @@ export function toolTokensOf(ids: readonly ToolId[]): number {
 }
 
 /**
+ * What the `handoff` tool adds to every round of a run that ends in one.
+ *
+ * Measured separately because it is not a registry tool: it never appears in a
+ * preset's `tools`, so `toolTokensOf` cannot see it, and leaving it out would
+ * repeat exactly the defect this module was written to fix — a ceiling that
+ * silently assumes a schema the request actually carries.
+ */
+let handoffTokens = 0;
+export function handoffToolTokens(): number {
+  if (!handoffTokens) handoffTokens = estimateToolsTokens([handoffToolDefinition()]);
+  return handoffTokens;
+}
+
+/**
  * Tokens the next request under `preset` will spend on tool schemas.
  *
  * Measured off the *routed* toolset — what the run will actually put on the
@@ -61,9 +76,14 @@ export function plannedToolTokens(
   preset: TaskPreset | null,
   subs: Record<SubAgentKind, SubAgentConfig>,
   models: Model[],
+  options?: RouteOptions,
 ): number {
   if (!preset) return 0;
-  return toolTokensOf(routePlannedTools(preset, subs, models).tools);
+  const routed = routePlannedTools(preset, subs, models, options);
+  return (
+    toolTokensOf(routed.tools) +
+    (routed.finishPolicy === "handoff" ? handoffToolTokens() : 0)
+  );
 }
 
 /**
@@ -84,12 +104,14 @@ export function messageCeilingFor(
   preset: TaskPreset | null,
   subs: Record<SubAgentKind, SubAgentConfig>,
   models: Model[],
+  options?: RouteOptions,
 ): number {
   const ceiling = inputCeilingFor(contextSize, utilization);
-  return Math.max(0, ceiling - plannedToolTokens(preset, subs, models));
+  return Math.max(0, ceiling - plannedToolTokens(preset, subs, models, options));
 }
 
 /** Test seam — the memo is keyed on live profile state. */
 export function __resetToolCostCache(): void {
   cache.clear();
+  handoffTokens = 0;
 }
