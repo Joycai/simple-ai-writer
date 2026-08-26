@@ -41,13 +41,34 @@ export default function App() {
   // re-rendered the whole app tree ~120×/s and queued a SQLite write each time.
   const layoutRef = useRef<HTMLDivElement>(null);
   const dragWidth = useRef<number | null>(null);
+  // And the write itself is coalesced to one per frame: `mousemove` is dispatched
+  // at the mouse's sampling rate, not the display's, while every write of
+  // `--sidebar-width` invalidates style for the whole layout subtree and forces
+  // the editor column (CodeMirror included) to relayout. Only one of those per
+  // frame can ever be seen, so the rest are pure waste.
+  const rafId = useRef<number | null>(null);
+  const flushWidth = () => {
+    rafId.current = null;
+    if (dragWidth.current === null) return;
+    layoutRef.current?.style.setProperty("--sidebar-width", `${dragWidth.current}px`);
+  };
+  const onResizeStart = () => {
+    layoutRef.current?.setAttribute("data-resizing", "");
+  };
   const onResizeDelta = (d: number) => {
     const cur = dragWidth.current ?? useAppStore.getState().sidebarWidth;
     dragWidth.current = clampSidebarWidth(cur + d);
-    layoutRef.current?.setAttribute("data-resizing", "");
-    layoutRef.current?.style.setProperty("--sidebar-width", `${dragWidth.current}px`);
+    if (rafId.current === null) rafId.current = requestAnimationFrame(flushWidth);
   };
   const onResizeEnd = () => {
+    // The last move's frame may not have run yet, and the next line puts the
+    // 320ms collapse transition back — leaving the gap unwritten would let the
+    // sidebar drift on for a third of a second after the button came up.
+    if (rafId.current !== null) {
+      cancelAnimationFrame(rafId.current);
+      rafId.current = null;
+    }
+    flushWidth();
     layoutRef.current?.removeAttribute("data-resizing");
     if (dragWidth.current !== null) setSidebarWidth(dragWidth.current);
     dragWidth.current = null;
@@ -130,7 +151,7 @@ export default function App() {
         <IconRail onOpenSettings={() => openSettings()} />
         {view === "editor" && <Sidebar />}
         {!sidebarCollapsed && view === "editor" && (
-          <ResizeHandle onDelta={onResizeDelta} onEnd={onResizeEnd} />
+          <ResizeHandle onDelta={onResizeDelta} onStart={onResizeStart} onEnd={onResizeEnd} />
         )}
 
         <div style={{ flex: 1, position: "relative", minWidth: 0, overflow: "hidden" }}>

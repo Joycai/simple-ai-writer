@@ -3,16 +3,19 @@ import styles from "./ResizeHandle.module.css";
 
 interface Props {
   onDelta: (delta: number) => void;
+  /** Called once when a drag gesture starts — the place to flag the drag. */
+  onStart?: () => void;
   /** Called once when a drag gesture ends — the place to commit/persist. */
   onEnd?: () => void;
 }
 
-export function ResizeHandle({ onDelta, onEnd }: Props) {
+export function ResizeHandle({ onDelta, onStart, onEnd }: Props) {
   const dragging = useRef(false);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
     dragging.current = true;
+    onStart?.();
     let prevX = e.clientX;
 
     const onMove = (ev: MouseEvent) => {
