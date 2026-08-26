@@ -442,3 +442,76 @@ describe("prepareContinuedHistory", () => {
     }))).rejects.toThrow("aborted");
   });
 });
+
+/**
+ * 绑定粒度在**续跑**这条路上（PR-3）。播种那条路由 context.test 守着；这里守的是
+ * 「第一句能想起特征、之后就不行」那种只在续跑分支漏掉一个入参的坏法。
+ */
+describe("prepareContinuedHistory — 绑定粒度", () => {
+  const ELDEN_DIR = "/lore/characters/elden";
+  const TOWER_DIR = "/lore/world/tower";
+
+  const HERO_IDX = {
+    characters: [{
+      id: "elden", category: "characters", dirPath: ELDEN_DIR, name: "沈砚",
+      aliases: [], summary: "沈砚的一句话", collections: [],
+      avatarPath: null, mdFiles: ["index.md"], images: [],
+      facets: [{
+        file: "scar.md", title: "伤疤", slot: null, keys: ["伤疤"],
+        group: null, priority: 0, mode: "auto", charCount: 100,
+      }],
+    }],
+    world: [{
+      id: "tower", category: "world", dirPath: TOWER_DIR, name: "塔",
+      aliases: [], summary: "塔的一句话", collections: [],
+      avatarPath: null, mdFiles: ["index.md"], images: [], facets: [],
+    }],
+  } as unknown as Parameters<typeof prepareContinuedHistory>[0]["loreIndex"];
+
+  async function live() {
+    seedFixture();
+    files.set(`${ELDEN_DIR}/scar.md`, "那道疤是寒露之变留下的。");
+    files.set(`${TOWER_DIR}/index.md`, "塔在城北，夜里亮着一盏灯。");
+    const seeded = await prepareSeededHistory(seedOpts({
+      agent: NO_AREA_AGENT, loreIndex: HERO_IDX,
+      wire: "「你还在等？」", matchText: "「你还在等？」",
+    }));
+    seeded.history.push({ role: "assistant", content: "「还在。」" });
+    return { history: seeded.history, meta: seeded.meta };
+  }
+
+  it("主角恒参与匹配：不写名字也能补进特征，正文不重发", async () => {
+    const { history, meta } = await live();
+    const out = await prepareContinuedHistory(contOpts(history, meta, {
+      agent: NO_AREA_AGENT, loreIndex: HERO_IDX,
+      wire: "「你那道伤疤呢？」", matchText: "「你那道伤疤呢？」",
+    }));
+    const injected = String(out.history[out.history.length - 2].content);
+    expect(injected).toContain("那道疤是寒露之变留下的。"); // pin 进候选 → keys 激活
+    expect(injected).not.toContain("寒露之变的幸存者。");    // 正文在 system 层
+  });
+
+  it("`@` 引用过的条目，这一轮不再被检索送第二份", async () => {
+    // A/B：同样一句话，只差 refDirs。
+    const a = await live();
+    const withoutRefs = await prepareContinuedHistory(contOpts(a.history, a.meta, {
+      agent: NO_AREA_AGENT, loreIndex: HERO_IDX,
+      wire: "「塔那边呢？」", matchText: "「塔那边呢？」",
+    }));
+    expect(String(withoutRefs.history[withoutRefs.history.length - 2].content))
+      .toContain("塔在城北");
+
+    const b = await live();
+    const withRefs = await prepareContinuedHistory(contOpts(b.history, b.meta, {
+      agent: NO_AREA_AGENT, loreIndex: HERO_IDX,
+      wire: "「塔那边呢？」", matchText: "「塔那边呢？」",
+      refDirs: [TOWER_DIR],
+    }));
+    const last = withRefs.history[withRefs.history.length - 1];
+    expect(last.content).toBe("「塔那边呢？」");
+    expect(String(withRefs.history[withRefs.history.length - 2].content))
+      .not.toContain("塔在城北");
+    // 记在问句上：那一轮折叠掉，它才会重新注入。
+    expect(b.meta.injected.get(TOWER_DIR)?.coreCarrier).toBe(last);
+  });
+});

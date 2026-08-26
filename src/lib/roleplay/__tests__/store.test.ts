@@ -145,6 +145,45 @@ describe("loadRoster", () => {
     expect(roster.authorPersona.prompt).toBe("一个路过的旅人");
   });
 
+  /**
+   * 迁移（PR-4）：主角条目的裸 pin 在**读取时**剥掉。它的正文住在 system 层的
+   * 「## 你是谁」里，再绑一次就是同一个文件在同一次请求里出现两遍——而绑定器
+   * 从这一版起也不让选它了，这道过滤管的是早于那次改动的花名册。
+   */
+  it("strips a bound pin that duplicates the primary entry", async () => {
+    files.clear(); dirs.clear();
+    files.set(rosterPath("/p"), JSON.stringify({
+      v: 1, authorPersona: persona, agents: [{
+        id: "rp-abc-0001", kind: "character", name: "沈砚",
+        primaryDirPath: "/p/.ai-writer/lore/characters/elden",
+        boundPaths: [
+          "/p/.ai-writer/lore/characters/elden",            // 整条——重复，剥掉
+          "/p/.ai-writer/lore/characters/elden#speech.md",  // 一段特征——留着
+          "/p/.ai-writer/lore/world/tower",                 // 别的条目——留着
+        ],
+      }],
+    }));
+    const { roster } = await loadRoster("/p");
+    expect(roster.agents[0].boundPaths).toEqual([
+      "/p/.ai-writer/lore/characters/elden#speech.md",
+      "/p/.ai-writer/lore/world/tower",
+    ]);
+  });
+
+  it("keeps a narrator's pins untouched — it has no primary entry", async () => {
+    files.clear(); dirs.clear();
+    files.set(rosterPath("/p"), JSON.stringify({
+      v: 1, authorPersona: persona, agents: [{
+        id: "rp-abc-0002", kind: "narrator", name: "旁白",
+        primaryDirPath: "/p/.ai-writer/lore/characters/elden", // 旁白读成 null
+        boundPaths: ["/p/.ai-writer/lore/characters/elden"],
+      }],
+    }));
+    const { roster } = await loadRoster("/p");
+    expect(roster.agents[0].primaryDirPath).toBeNull();
+    expect(roster.agents[0].boundPaths).toEqual(["/p/.ai-writer/lore/characters/elden"]);
+  });
+
   it("rebuilds when the file is not JSON at all", async () => {
     files.clear(); dirs.clear();
     files.set(rosterPath("/p"), "{not json");

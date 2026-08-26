@@ -18,6 +18,14 @@
  * LoreActivationReport so the UI can show *why* something was or wasn't
  * injected — the author's main feedback loop for tuning facet keys.
  *
+ * Two of the caller's options say "this is already in the conversation, don't
+ * send it twice", at the two granularities that exist: `coreDone` for an
+ * entity's summary + gallery + core, `excludeFacets` for one facet. Neither
+ * removes the entity from selection — it still matches, still activates facets,
+ * still reports. That separation is what lets a roleplay agent keep its own
+ * entry permanently in the system layer while its facets keep arriving turn by
+ * turn (docs/feature/roleplay/11-lore-binding-lld.md).
+ *
  * Facet/core content is re-read from disk on every call rather than cached
  * at scan time, so hand edits are never served stale. Facet *metadata*
  * (keys/group/priority/mode) comes from the scan (entity.facets) and
@@ -73,6 +81,15 @@ export interface LorePin {
   facetFile: string | null;
 }
 
+/**
+ * The one spelling of "this facet, of this entity" — the key `excludeFacets`
+ * takes and the injection ledger stores. Same shape as a facet pin, on purpose:
+ * one string format for "a facet, named from outside the entity".
+ */
+export function facetKey(dirPath: string, file: string): string {
+  return `${dirPath}#${file}`;
+}
+
 /** Parse persisted pin strings (backwards compatible with bare dirPaths). */
 export function parsePins(paths: string[]): LorePin[] {
   return paths.map((p) => {
@@ -104,7 +121,16 @@ export interface LoreLayerReport {
   count?: number;
 }
 
-export type FacetDropReason = "no-key" | "group-lost" | "budget" | "manual-only";
+/**
+ * Why a facet the entity owns did not get injected.
+ *
+ * `resident` is not a failure: the facet is already in the conversation on a
+ * layer that persists (a roleplay agent's bound block, an earlier turn that has
+ * not been folded), so sending it again would be a duplicate. It is reported
+ * beside the real drops because the author's question is the same one — "why is
+ * this not in there?" — and "it already is" has to be an answer the UI can give.
+ */
+export type FacetDropReason = "no-key" | "group-lost" | "budget" | "manual-only" | "resident";
 
 export interface LoreEntityReport {
   name: string;
@@ -114,6 +140,12 @@ export interface LoreEntityReport {
   aliases: string;
   dirPath: string;
   reason: "auto" | "pinned";
+  /**
+   * The entity's summary + core were already in context, so this selection
+   * contributed facets only (see `coreDone`). Without this flag the report
+   * reads as "matched, injected nothing" — the one reading that is wrong.
+   */
+  coreResident?: boolean;
   layers: LoreLayerReport[];
   droppedFacets: { file: string; title: string; reason: FacetDropReason }[];
   /** Pictures this entity has when its gallery notice didn't fit the budget. */
@@ -124,6 +156,19 @@ export interface LoreActivationReport {
   entities: LoreEntityReport[];
   budgetChars: number;
   usedChars: number;
+}
+
+/**
+ * The entities that actually put text in a selection.
+ *
+ * `report.entities` is everything that was *considered* — and since `coreDone`
+ * an entity can be selected, matched and reported while contributing nothing at
+ * all, because everything it owns is already in the conversation. Counting the
+ * raw list in a log line would tell the author "3 entries injected" on a turn
+ * that injected one.
+ */
+export function contributingEntities(report: LoreActivationReport): LoreEntityReport[] {
+  return report.entities.filter((e) => e.layers.length > 0);
 }
 
 export interface LoreSelection {
@@ -208,6 +253,10 @@ export function galleryNotice(entity: LoreEntity): { text: string; count: number
 interface Selected {
   entity: LoreEntity;
   reason: "auto" | "pinned";
+  /** Summary + gallery + core are already in context; only facets may be added. */
+  coreResident: boolean;
+  /** Whether `## Name` has been charged against the budget yet. */
+  headerCharged: boolean;
   pinnedFacets: Set<string>;
   summaryLine: string;
   galleryLine: string;
@@ -224,10 +273,21 @@ interface Selected {
  * @param loreIndex    Full lore index from loreStore
  * @param pinPaths     Persisted pin strings (dirPath or dirPath#facetFile)
  * @param budgetChars  Total char budget for the assembled block
- * @param opts.excludeDirs  Entity dirs to skip during *auto*-matching — used by
- *                     the chat's per-turn injection to not re-send entities
- *                     already in the conversation (lib/agent/compact ledger).
- *                     Pins are exempt: an explicit pin is the author insisting.
+ * @param opts.excludeDirs  Entity dirs to skip during *auto*-matching — the
+ *                     whole entity, every layer. Pins are exempt: an explicit
+ *                     pin is the author insisting.
+ * @param opts.coreDone  Entity dirs whose summary + gallery + core are already
+ *                     in the conversation on a layer that persists. They skip
+ *                     L0/L0.5/L1 and contribute **facets only** — the entity
+ *                     still matches, still activates facets, still counts as
+ *                     selected. This is the difference between "the model has
+ *                     already been told who this is" and "do not mention this
+ *                     entity", which `excludeDirs` cannot tell apart.
+ * @param opts.excludeFacets  `dirPath#facetFile` keys ({@link facetKey}) whose
+ *                     text is already in the conversation. Such a facet is
+ *                     treated as **activated and holding its mutual-exclusion
+ *                     group** — it just contributes no text. A pinned facet is
+ *                     exempt, same rule as `excludeDirs`.
  * @param opts.scope   The author's 取材范围 — a collection name, or null for
  *                     the whole knowledge base (lib/lore/collections). Like
  *                     `excludeDirs` it narrows **auto-matching only**: an entry
@@ -241,9 +301,16 @@ export async function selectLore(
   loreIndex: LoreIndex,
   pinPaths: string[],
   budgetChars: number = DEFAULT_LORE_BUDGET_CHARS,
-  opts?: { excludeDirs?: ReadonlySet<string>; scope?: LoreScope },
+  opts?: {
+    excludeDirs?: ReadonlySet<string>;
+    coreDone?: ReadonlySet<string>;
+    excludeFacets?: ReadonlySet<string>;
+    scope?: LoreScope;
+  },
 ): Promise<LoreSelection> {
   const lower = matchTarget.toLowerCase();
+  const coreDone = opts?.coreDone;
+  const residentFacets = opts?.excludeFacets;
 
   // Index entities by dirPath for pin resolution.
   const byDir = new Map<string, LoreEntity>();
@@ -298,9 +365,12 @@ export async function selectLore(
   const selected: Selected[] = [...pinnedDirs, ...autoDirs].map((dir) => {
     const entity = byDir.get(dir)!;
     const reason: "auto" | "pinned" = pinnedFacetsByDir.has(dir) ? "pinned" : "auto";
+    const coreResident = coreDone?.has(dir) ?? false;
     return {
       entity,
       reason,
+      coreResident,
+      headerCharged: false,
       pinnedFacets: pinnedFacetsByDir.get(dir) ?? new Set(),
       summaryLine: "",
       galleryLine: "",
@@ -312,6 +382,7 @@ export async function selectLore(
         aliases: (entity.aliases ?? []).join(" · "),
         dirPath: dir,
         reason,
+        ...(coreResident ? { coreResident: true } : {}),
         layers: [],
         droppedFacets: [],
       },
@@ -320,11 +391,20 @@ export async function selectLore(
 
   let used = 0;
   const fits = (len: number) => used + len <= budgetChars;
+  const headerCost = (e: LoreEntity) => `## ${e.name}`.length + 1;
 
   // ── L0: summaries + headers. Guaranteed for every matched entity — they are
   // the floor the layering stands on, so they count against but ignore the cap.
+  //
+  // A core-resident entity is charged for **nothing** here, its header included:
+  // it may well contribute no block at all this turn, and twenty resident
+  // entities paying for headers of blocks that are never emitted would eat a
+  // default budget between them. Its header is charged in the fill loop below,
+  // on the first facet that actually survives.
   for (const s of selected) {
-    used += `## ${s.entity.name}`.length + 1;
+    if (s.coreResident) continue;
+    s.headerCharged = true;
+    used += headerCost(s.entity);
     const summary = (s.entity.summary ?? "").trim();
     if (summary) {
       s.summaryLine = `> ${summary}`;
@@ -343,6 +423,10 @@ export async function selectLore(
   const galleryCap = Math.floor(budgetChars * GALLERY_BUDGET_SHARE);
   let galleryUsed = 0;
   for (const s of selected) {
+    // The notice rides with the core: it is entity-level metadata, and a
+    // core-resident entity was given it when the core went in. Repeating it
+    // would spend the gallery share on a line the model already has.
+    if (s.coreResident) continue;
     const { text, count } = galleryNotice(s.entity);
     if (count === 0) continue;
     const cost = text.length + 1;
@@ -357,7 +441,9 @@ export async function selectLore(
   }
 
   // ── L1: cores, paragraph-boundary truncated to fit the remaining budget.
+  // Skipped entirely for a core-resident entity — that is what `coreDone` is.
   for (const s of selected) {
+    if (s.coreResident) continue;
     const body = await readEntityBody(s.entity.dirPath);
     if (!body) continue;
     if (fits(body.length)) {
@@ -386,6 +472,8 @@ export async function selectLore(
     facet: LoreFacet;
     matchedKeys: string[];
     pinned: boolean;
+    /** Already in the conversation: holds its group, contributes no text. */
+    resident: boolean;
     entityIdx: number;
   }
   const candidates: Candidate[] = [];
@@ -395,7 +483,16 @@ export async function selectLore(
     for (const facet of s.entity.facets ?? []) {
       const pinned = s.pinnedFacets.has(facet.file);
       if (pinned) {
-        active.push({ sel: s, facet, matchedKeys: [], pinned: true, entityIdx });
+        active.push({ sel: s, facet, matchedKeys: [], pinned: true, resident: false, entityIdx });
+        continue;
+      }
+      // Resident is checked before mode and keys, deliberately. The facet IS in
+      // the conversation, so its group slot is taken whether or not this turn's
+      // words would have activated it — test the keys first and on a turn the
+      // resident facet doesn't match, the group's runner-up walks in and the
+      // model reads two outfits for one character.
+      if (residentFacets?.has(facetKey(s.entity.dirPath, facet.file))) {
+        active.push({ sel: s, facet, matchedKeys: [], pinned: false, resident: true, entityIdx });
         continue;
       }
       if (facet.mode === "manual") {
@@ -403,25 +500,38 @@ export async function selectLore(
         continue;
       }
       if (facet.mode === "always") {
-        active.push({ sel: s, facet, matchedKeys: [], pinned: false, entityIdx });
+        active.push({ sel: s, facet, matchedKeys: [], pinned: false, resident: false, entityIdx });
         continue;
       }
       const matchedKeys = facet.keys.filter((k) => k && lower.includes(k.toLowerCase()));
       if (matchedKeys.length > 0) {
-        active.push({ sel: s, facet, matchedKeys, pinned: false, entityIdx });
+        active.push({ sel: s, facet, matchedKeys, pinned: false, resident: false, entityIdx });
       } else {
         s.report.droppedFacets.push({ file: facet.file, title: facet.title, reason: "no-key" });
       }
     }
 
+    // A winner either goes to the budget fill or, if it is already in the
+    // conversation, is reported and contributes nothing. Both count as "this
+    // group is served" — which is the whole point of letting a resident facet
+    // compete at all.
+    const take = (c: Candidate) => {
+      if (c.resident) {
+        c.sel.report.droppedFacets.push({ file: c.facet.file, title: c.facet.title, reason: "resident" });
+      } else {
+        candidates.push(c);
+      }
+    };
+
     // Mutual exclusion within each named group: pinned facets always survive
     // (pinning two same-group facets injects both — deliberate override for
-    // e.g. mid-scene outfit changes); otherwise the highest priority wins,
-    // ties broken by filename for determinism.
+    // e.g. mid-scene outfit changes); then a resident member, which occupies
+    // the slot it already fills; otherwise the highest priority wins, ties
+    // broken by filename for determinism.
     const byGroup = new Map<string, Candidate[]>();
     for (const c of active) {
       if (!c.facet.group) {
-        candidates.push(c);
+        take(c);
         continue;
       }
       if (!byGroup.has(c.facet.group)) byGroup.set(c.facet.group, []);
@@ -429,13 +539,16 @@ export async function selectLore(
     }
     for (const members of byGroup.values()) {
       const pinnedMembers = members.filter((m) => m.pinned);
+      const residentMembers = members.filter((m) => m.resident);
       const winners = pinnedMembers.length > 0
         ? pinnedMembers
-        : [members.slice().sort((a, b) =>
-            b.facet.priority - a.facet.priority || a.facet.file.localeCompare(b.facet.file))[0]];
+        : residentMembers.length > 0
+          ? residentMembers
+          : [members.slice().sort((a, b) =>
+              b.facet.priority - a.facet.priority || a.facet.file.localeCompare(b.facet.file))[0]];
       for (const m of members) {
         if (winners.includes(m)) {
-          candidates.push(m);
+          take(m);
         } else {
           m.sel.report.droppedFacets.push({ file: m.facet.file, title: m.facet.title, reason: "group-lost" });
         }
@@ -454,11 +567,15 @@ export async function selectLore(
     const content = await readFacetBody(c.sel.entity.dirPath, c.facet.file);
     if (!content) continue;
     const block = `### ${c.facet.title}\n${content}`;
-    if (!fits(block.length + 2)) {
+    // The header a core-resident entity did not pay for in L0 — charged here,
+    // once, on the first of its facets that actually fits.
+    const header = c.sel.headerCharged ? 0 : headerCost(c.sel.entity);
+    if (!fits(block.length + 2 + header)) {
       c.sel.report.droppedFacets.push({ file: c.facet.file, title: c.facet.title, reason: "budget" });
       continue;
     }
-    used += block.length + 2;
+    used += block.length + 2 + header;
+    c.sel.headerCharged = true;
     c.sel.facetBlocks.push({ facet: c.facet, text: block, matchedKeys: c.matchedKeys, pinned: c.pinned });
     c.sel.report.layers.push({
       kind: "facet",

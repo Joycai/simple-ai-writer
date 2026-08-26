@@ -118,10 +118,18 @@ export function AgentComposer({
 
   const primaryEntity = entities.find((e) => e.dirPath === primary) ?? null;
   const active = entities.find((e) => e.dirPath === openEntity) ?? visible[0] ?? null;
+  /** 主角条目的正文常驻在 system 层，所以它的「整条」在这里不是一个可选项。 */
+  const activeIsPrimary = !!active && active.dirPath === primary;
   const boundSet = new Set(bound);
 
   const toggle = (pin: string) =>
     setBound((prev) => (prev.includes(pin) ? prev.filter((p) => p !== pin) : [...prev, pin]));
+
+  /** 选定主角：顺手摘掉它的裸 pin，否则同一份正文会在上下文里出现两遍。 */
+  const choosePrimary = (dirPath: string) => {
+    setPrimary(dirPath);
+    setBound((prev) => prev.filter((p) => p !== dirPath));
+  };
 
   const boundTokens = useMemo(() => {
     let total = 0;
@@ -143,9 +151,11 @@ export function AgentComposer({
   const nameFor = (e: LoreEntity) => e.name;
   const countFor = (e: LoreEntity) => {
     const facets = e.facets ?? [];
+    // 主角条目的主词条不算一个可选项——它常驻，分母里没有它。
+    const isPrimary = e.dirPath === primary;
     const picked = facets.filter((f) => boundSet.has(pinFor(e, f.file))).length
-      + (boundSet.has(pinFor(e)) ? 1 : 0);
-    return `${picked}/${facets.length + 1}`;
+      + (!isPrimary && boundSet.has(pinFor(e)) ? 1 : 0);
+    return `${picked}/${facets.length + (isPrimary ? 0 : 1)}`;
   };
 
   const canSave = kind === "narrator" || primary !== null;
@@ -159,7 +169,9 @@ export function AgentComposer({
         ? (editing?.name ?? t("roleplay.kind.narrator", { defaultValue: "旁白" }))
         : primaryEntity?.name ?? "",
       primaryDirPath: kind === "narrator" ? null : primary,
-      boundPaths: bound,
+      // 主角条目的正文住在 system 层；再绑一次就是同一个文件进两遍上下文。
+      // 读花名册时也有同样一道过滤（lib/roleplay/store），管的是这次改动之前的数据。
+      boundPaths: kind === "narrator" || !primary ? bound : bound.filter((p) => p !== primary),
       modelId,
       instruction,
     };
@@ -249,7 +261,7 @@ export function AgentComposer({
               ) : (
                 <div className={styles.primaryPick}>
                   {visible.slice(0, 12).map((e) => (
-                    <button key={e.dirPath} type="button" className={styles.pickChip} onClick={() => setPrimary(e.dirPath)}>
+                    <button key={e.dirPath} type="button" className={styles.pickChip} onClick={() => choosePrimary(e.dirPath)}>
                       <span className={styles.pickAvatar}>{avatarGlyph(e.name)}</span>
                       {e.name}
                     </button>
@@ -343,21 +355,32 @@ export function AgentComposer({
                           })}
                         </span>
                         <div className={styles.spacer} />
-                        <button type="button" className={styles.linkBtn} onClick={() => toggle(pinFor(active))}>
-                          {boundSet.has(pinFor(active))
-                            ? t("roleplay.composer.unpickWhole", { defaultValue: "取消整条" })
-                            : t("roleplay.composer.pickWhole", { defaultValue: "整条绑定" })}
-                        </button>
+                        {!activeIsPrimary && (
+                          <button type="button" className={styles.linkBtn} onClick={() => toggle(pinFor(active))}>
+                            {boundSet.has(pinFor(active))
+                              ? t("roleplay.composer.unpickWhole", { defaultValue: "取消整条" })
+                              : t("roleplay.composer.pickWhole", { defaultValue: "整条绑定" })}
+                          </button>
+                        )}
                       </div>
                       <button
                         type="button"
-                        className={`${styles.facetRow} ${boundSet.has(pinFor(active)) ? styles.facetRowOn : ""}`}
-                        onClick={() => toggle(pinFor(active))}
+                        className={`${styles.facetRow} ${boundSet.has(pinFor(active)) ? styles.facetRowOn : ""} ${activeIsPrimary ? styles.facetRowResident : ""}`}
+                        onClick={() => { if (!activeIsPrimary) toggle(pinFor(active)); }}
+                        disabled={activeIsPrimary}
                       >
-                        <span className={styles.check}>{boundSet.has(pinFor(active)) && <Check size={9} strokeWidth={3} />}</span>
+                        <span className={styles.check}>
+                          {(activeIsPrimary || boundSet.has(pinFor(active))) && <Check size={9} strokeWidth={3} />}
+                        </span>
                         <div className={styles.facetBody}>
                           <div className={styles.facetTitle}>{t("roleplay.composer.core", { defaultValue: "主词条（index.md）" })}</div>
-                          <div className={styles.facetDesc}>{active.summary}</div>
+                          <div className={styles.facetDesc}>
+                            {activeIsPrimary
+                              ? t("roleplay.composer.primaryResident", {
+                                  defaultValue: "已常驻——主角条目的正文一直在上下文里，不用再绑一次",
+                                })
+                              : active.summary}
+                          </div>
                         </div>
                       </button>
                       {(active.facets ?? []).map((f) => {

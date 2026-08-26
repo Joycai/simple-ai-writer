@@ -83,8 +83,16 @@ function coerceAgent(raw: unknown): RoleplayAgent | null {
     // live `LoreEntity.dirPath`. A stale spelling shows up as every character
     // reporting "primary entity gone" — see docs/feature/path-spelling-plan.md §3.
     primaryDirPath: kind === "narrator" || typeof a.primaryDirPath !== "string" ? null : toPosixPath(a.primaryDirPath),
+    // 主角条目的裸 pin 在**读取时**剥掉：它的正文住在 system 层的「## 你是谁」里，
+    // 再绑一次就是同一个文件在同一次请求里出现两遍。绑定器现在也不让选它了，这一行
+    // 是给早于那次改动的花名册用的——迁移做在读取侧，不重写作者的文件。
+    // 特征 pin（`<dirPath>#<facet>`）不受影响：那是主角条目里的一段，常驻它是有意义的。
     boundPaths: Array.isArray(a.boundPaths)
-      ? a.boundPaths.filter((x): x is string => typeof x === "string").map(toPosixPath)
+      ? a.boundPaths
+          .filter((x): x is string => typeof x === "string")
+          .map(toPosixPath)
+          .filter((pin) => kind === "narrator" || typeof a.primaryDirPath !== "string"
+            || pin !== toPosixPath(a.primaryDirPath))
       : [],
     modelId: typeof a.modelId === "string" ? a.modelId : null,
     areaId: typeof a.areaId === "string" ? a.areaId : null,

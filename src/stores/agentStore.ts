@@ -45,7 +45,8 @@ import i18n from "../i18n";
 import { backupFile } from "../lib/agent/backup";
 import { applyFindReplace } from "../lib/agent/editApply";
 import {
-  createSessionMeta, excludeDirsFor, noteTurnStart, planFold, recordInjections,
+  coreDoneFor, createSessionMeta, injectedFacetsFor, noteTurnStart, planFold,
+  recordInjectionsFromReport,
   type ChatSessionMeta,
 } from "../lib/agent/compact";
 import { compactChatHistory, summarizeForCompaction } from "../lib/agent/compactRun";
@@ -94,6 +95,7 @@ import { currentFormats } from "./docFormatStore";
 import {
   hashText, loadMemory, MEMORY_BUDGET_CHARS, projectRelativePath,
 } from "../lib/context/memory";
+import { contributingEntities } from "../lib/context/loreSelect";
 import { parentDir } from "../lib/context/outline";
 import {
   assembleContext, assembleTurnInjection, bundleToChatMessages, profileSystemPrompt,
@@ -1182,15 +1184,12 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         noteTurnStart(meta, seed.question);
         // The seeded lore goes in the injection ledger, carried by the seed
         // block — otherwise turn 2's retrieval would re-inject everything the
-        // model was just given.
+        // model was just given. Recorded from the report, so what is booked is
+        // what was actually emitted: an entity whose body lost to the budget
+        // stays eligible for it, and its facets are booked one by one.
         if (seed.seedContext) {
-          const byDir = new Map(
-            Object.values(useLoreStore.getState().index).flat().map((e) => [e.dirPath, e]),
-          );
-          recordInjections(
-            meta,
-            bundle.loreReport.entities.flatMap((r) => byDir.get(r.dirPath) ?? []),
-            seed.seedContext,
+          recordInjectionsFromReport(
+            meta, bundle.loreReport, useLoreStore.getState().index, seed.seedContext,
           );
         }
         set({ chatHistory: history, chatMeta: meta });
@@ -1276,7 +1275,12 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             // Same match targets as the seed: the question (with its quote and
             // @refs inlined) plus the document's tail neighborhood.
             matchTarget: wireMessage + focus.text.slice(-500),
-            excludeDirs: excludeDirsFor(meta, loreIdx),
+            // Per layer, not per entity: an entity already introduced keeps
+            // its body out of the wire and still brings a facet the author
+            // has just asked about ("他那件外套") — which entity-level
+            // exclusion made unreachable for the rest of the session.
+            coreDone: coreDoneFor(meta, loreIdx),
+            excludeFacets: injectedFacetsFor(meta, loreIdx),
             scope: useLoreStore.getState().scope,
             loreBudgetChars: loreBudgetTokens * measureCharsPerToken(focus.text),
             doc: (docSwitched || needsBody) && activeFilePath
@@ -1300,7 +1304,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           if (inj.text) {
             const injMsg: StreamMessage = { role: "user", content: inj.text };
             history.push(injMsg);
-            recordInjections(meta, inj.matchedEntities, injMsg);
+            recordInjectionsFromReport(meta, inj.loreReport, loreIdx, injMsg);
             if (docSwitched) meta.lastDocPath = activeFilePath;
             if (needsBody) meta.bodyDocPath = activeFilePath;
             patchAssistant((tn) => ({
@@ -1312,7 +1316,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
                   : null,
                 recentChars: inj.docChars,
                 memoryChars: inj.memoryChars,
-                loreEntities: inj.loreReport.entities.length,
+                // 只数真的贡献了文字的条目：正文已常驻、这一轮又没有新特征的
+                // 条目照样会进报告，把它们算进去等于告诉作者注入了并不存在的东西。
+                loreEntities: contributingEntities(inj.loreReport).length,
                 loreChars: inj.loreReport.usedChars,
                 at: Date.now(),
               }),

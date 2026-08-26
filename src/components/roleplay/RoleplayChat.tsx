@@ -36,6 +36,7 @@ import { routePlannedTools } from "../../lib/agent/routing";
 import { estimateToolsTokens } from "../../lib/ai/tokenEstimate";
 import { inputCeilingFor } from "../../lib/context/budget";
 import { presetFor } from "../../lib/roleplay/presets";
+import { residentCoreDirs } from "../../lib/roleplay/context";
 import {
   chainCanSeeImages, withSessionOverrides, type SubAgentKind,
 } from "../../lib/agent/subagent";
@@ -538,6 +539,16 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     t("roleplay.syntax.applyHint", { name, defaultValue: `把光标所在的那一行改成${name}` });
 
   const refKeys = useMemo(() => new Set(refs.map(attachedKey)), [refs]);
+
+  /**
+   * 正文已经常驻在上下文里的条目——`@` 它们不会再内联第二份（`roleplayStore.send`
+   * 也照这个集合过滤），列表里标一句「已常驻」把这件事说清楚，否则作者只会看到
+   * 「我引用了它，可它好像没被当回事」。
+   */
+  const resident = useMemo(
+    () => residentCoreDirs(agent, session?.meta ?? null, loreIndex),
+    [agent, session?.meta, loreIndex],
+  );
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (mention.open && mentionItems.length) {
@@ -1063,6 +1074,9 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               usedKeys={refKeys}
               activeIndex={mention.active}
               preferAbove
+              noteFor={(item) => (item.type === "lore" && resident.has(item.entity.dirPath)
+                ? t("roleplay.composer.refResident", { defaultValue: "已常驻" })
+                : null)}
               onPick={(item) => void handlePickMention(item)}
               onDismiss={() => { mention.close(); setPickKind(null); }}
             />

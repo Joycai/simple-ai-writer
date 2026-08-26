@@ -432,3 +432,116 @@ describe("facet slot (type schema)", () => {
     expect(withSlots.report).toEqual(plain.report);
   });
 });
+
+/**
+ * 「这东西已经在上下文里了」的两种粒度：`coreDone`（整条的摘要+配图行+正文）
+ * 和 `excludeFacets`（一段特征）。设计与理由：
+ * docs/feature/roleplay/11-lore-binding-lld.md §4.2。
+ *
+ * 两者都**不**把条目从选择里拿掉——它照常命中、照常激活特征、照常进报告。
+ * 这正是和 `excludeDirs` 的分界：后者说「别提这个条目」，前者说「它是谁已经
+ * 说过了，接着往下补就行」。分不清这两件事，就只能在「主角正文重复一份」和
+ * 「主角的特征永远进不来」之间二选一。
+ */
+describe("selectLore — 已在上下文（coreDone / excludeFacets）", () => {
+  const BRAN = "/proj/.ai-writer/lore/characters/bran";
+
+  it("coreDone：只补特征——摘要、配图行、正文全部不再发", async () => {
+    const index = makeIndex();
+    (index.characters![0] as { avatarPath: string | null }).avatarPath = `${ARIA}/avatar.png`;
+    const { text, report } = await selectLore(
+      "Aria drew her sword for battle.", index, [], undefined,
+      { coreDone: new Set([ARIA]) },
+    );
+    expect(text).toContain("## Aria");
+    expect(text).toContain("Silver plate armor."); // 特征照常进来
+    expect(text).not.toContain("北境骑士团副团长"); // L0 摘要
+    expect(text).not.toContain("avatar.png");      // L0.5 配图行
+    expect(text).not.toContain("Aria is a bard."); // L1 正文
+    const aria = report.entities.find((e) => e.name === "Aria")!;
+    expect(aria.coreResident).toBe(true);
+    expect(aria.layers.map((l) => l.kind)).not.toContain("summary");
+    expect(aria.layers.map((l) => l.kind)).not.toContain("core");
+    expect(aria.layers.map((l) => l.kind)).not.toContain("gallery");
+  });
+
+  it("coreDone：没有新东西可补的条目，一个字都不占", async () => {
+    const { text, report } = await selectLore(
+      "Bran hammered.", makeIndex(), [], undefined, { coreDone: new Set([BRAN]) },
+    );
+    expect(text).toBe("");
+    // header 也不能计：二十个常驻条目光标题就能吃掉一整份预算。
+    expect(report.usedChars).toBe(0);
+    expect(report.entities.find((e) => e.name === "Bran")!.coreResident).toBe(true);
+  });
+
+  it("coreDone：`## 名字` 只在真的落了特征时计一次费", async () => {
+    const { report } = await selectLore(
+      "Aria 回想童年。", makeIndex(), [], undefined, { coreDone: new Set([ARIA]) },
+    );
+    // 命中的是 backstory（关键词「童年」）和 voice（mode: always）。
+    const header = "## Aria".length + 1;
+    const backstory = "### 背景故事\nOrphaned young.".length + 2;
+    const voice = "### 语言习惯\nSpeaks tersely.".length + 2;
+    expect(report.usedChars).toBe(header + backstory + voice);
+  });
+
+  it("excludeFacets：常驻的那一段被报告，而不是被重发", async () => {
+    const { text, report } = await selectLore(
+      "Aria 回想童年。", makeIndex(), [], undefined,
+      { excludeFacets: new Set([`${ARIA}#backstory.md`]) },
+    );
+    expect(text).toContain("Aria is a bard."); // 条目本身照常
+    expect(text).not.toContain("Orphaned young.");
+    const aria = report.entities.find((e) => e.name === "Aria")!;
+    expect(aria.droppedFacets).toContainEqual({
+      file: "backstory.md", title: "背景故事", reason: "resident",
+    });
+  });
+
+  it("excludeFacets：常驻的一段占住它的互斥组", async () => {
+    // 「战甲」常驻着 outfit 这个槽位——同一句里「便装」也命中了，但它不能进来，
+    // 否则上下文里会同时存在两套形象。
+    const { text, report } = await selectLore(
+      "Aria left the tavern for battle.", makeIndex(), [], undefined,
+      { excludeFacets: new Set([`${ARIA}#outfit-armor.md`]) },
+    );
+    expect(text).not.toContain("Silver plate armor."); // 已经在上下文里
+    expect(text).not.toContain("Linen dress.");        // 亚军也不得递补
+    const aria = report.entities.find((e) => e.name === "Aria")!;
+    expect(aria.droppedFacets).toContainEqual({
+      file: "outfit-armor.md", title: "战甲形象", reason: "resident",
+    });
+    expect(aria.droppedFacets).toContainEqual({
+      file: "outfit-casual.md", title: "便装形象", reason: "group-lost",
+    });
+  });
+
+  it("excludeFacets：这一轮的字面没命中它，它照样占着组", async () => {
+    // 只提了「便装」。常驻判断如果排在关键词之后，casual 就会在这种轮次里溜进来。
+    const { text, report } = await selectLore(
+      "Aria left the tavern.", makeIndex(), [], undefined,
+      { excludeFacets: new Set([`${ARIA}#outfit-armor.md`]) },
+    );
+    expect(text).not.toContain("Linen dress.");
+    const aria = report.entities.find((e) => e.name === "Aria")!;
+    expect(aria.droppedFacets).toContainEqual({
+      file: "outfit-casual.md", title: "便装形象", reason: "group-lost",
+    });
+  });
+
+  it("pin 压过 resident：作者明确钉住的那一段照发不误", async () => {
+    const { text } = await selectLore(
+      "A quiet morning.", makeIndex(), [`${ARIA}#outfit-armor.md`], undefined,
+      { excludeFacets: new Set([`${ARIA}#outfit-armor.md`]) },
+    );
+    expect(text).toContain("Silver plate armor.");
+  });
+
+  it("不传这两个选项时，行为和从前完全一致", async () => {
+    const before = await selectLore("Aria rode to battle.", makeIndex(), []);
+    const after = await selectLore("Aria rode to battle.", makeIndex(), [], undefined, {});
+    expect(after.text).toBe(before.text);
+    expect(after.report).toEqual(before.report);
+  });
+});

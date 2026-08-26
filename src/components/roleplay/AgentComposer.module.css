@@ -376,6 +376,12 @@
 .facetRow:hover { background: var(--rp-row-hover); }
 .facetRowOn { background: var(--rp-row-selected); }
 
+/* 主角条目的主词条：常驻在 system 层，不是一个可选项。留在列上而不是删掉，
+   是因为作者要看见「它在」——一行凭空消失只会让人以为是漏了。 */
+.facetRowResident { cursor: default; opacity: 0.62; }
+.facetRowResident:hover { background: none; }
+.facetRowResident .check { border-style: dashed; }
+
 .check {
   width: 13px;
   height: 13px;

@@ -14,9 +14,13 @@ import {
   type ChatSnapshot,
   type PersistedTurn,
 } from "../agent/chatSession";
-import { createSessionMeta, noteTurnStart, recordInjections, segmentHistory } from "../agent/compact";
+import {
+  createSessionMeta, noteTurnStart, recordInjection, recordInjections, segmentHistory,
+} from "../agent/compact";
 import type { LoreEntity } from "../lore";
 import type { StreamMessage } from "../ai/types";
+
+const ARIA = { name: "Aria", aliases: [], dirPath: "/lore/aria", summary: "" } as unknown as LoreEntity;
 
 function makeSnapshot(): ChatSnapshot {
   const meta = createSessionMeta();
@@ -46,11 +50,7 @@ function makeSnapshot(): ChatSnapshot {
   meta.lastDocPath = "/proj/writing/ch2.md";
   noteTurnStart(meta, q1);
   noteTurnStart(meta, q2);
-  recordInjections(
-    meta,
-    [{ name: "Aria", aliases: [], dirPath: "/lore/aria", summary: "" } as unknown as LoreEntity],
-    injMsg,
-  );
+  recordInjections(meta, [ARIA], injMsg);
 
   const turns: PersistedTurn[] = [
     { id: "t3", role: "user", text: "q1", log: [], at: 1 },
@@ -72,7 +72,7 @@ describe("chat session round-trip", () => {
     expect(restored.meta.seedContext).toBe(h[1]);
     expect(restored.meta.summary).toBe(h[2]);
     expect(restored.meta.turnStarts).toEqual([h[3], h[8]]);
-    expect(restored.meta.injected.get("/lore/aria")!.carrier).toBe(h[7]);
+    expect(restored.meta.injected.get("/lore/aria")!.coreCarrier).toBe(h[7]);
     expect(restored.meta.summaryText).toBe("早前摘要");
     expect(restored.meta.lastDocPath).toBe("/proj/writing/ch2.md");
     expect(restored.usage).toEqual(snap.usage);
@@ -94,6 +94,42 @@ describe("chat session round-trip", () => {
     const restored = deserializeChatSession(JSON.stringify(data))!;
     expect(restored.meta.turnStarts).toHaveLength(1);
     expect(restored.meta.injected.size).toBe(0);
+  });
+
+  it("round-trips the ledger per layer — body and facets keep their own carriers", () => {
+    const snap = makeSnapshot();
+    // 正文由 prelude 里的块带进来，一段特征由后面那条注入消息带进来——两个
+    // carrier 的寿命不同，这正是账本要分层记的理由。
+    recordInjection(snap.meta, ARIA, snap.history[1], { core: true });
+    recordInjection(snap.meta, ARIA, snap.history[7], { facets: ["outfit.md"] });
+
+    const restored = deserializeChatSession(serializeChatSession(snap))!;
+    const rec = restored.meta.injected.get("/lore/aria")!;
+    expect(rec.coreCarrier).toBe(restored.history[1]);
+    expect(rec.facetCarriers.get("outfit.md")).toBe(restored.history[7]);
+  });
+
+  it("reads a session written before the ledger knew about facets as body-only", () => {
+    const snap = makeSnapshot();
+    const data = JSON.parse(serializeChatSession(snap));
+    // 旧格式：[dir, version, carrierIdx]。它记的就是「整条进过上下文」。
+    data.meta.injected = [["/lore/aria", data.meta.injected[0][1], 7]];
+
+    const restored = deserializeChatSession(JSON.stringify(data))!;
+    const rec = restored.meta.injected.get("/lore/aria")!;
+    expect(rec.coreCarrier).toBe(restored.history[7]);
+    expect(rec.facetCarriers.size).toBe(0);
+  });
+
+  it("drops a row whose facet carrier no longer resolves, keeping the body", () => {
+    const snap = makeSnapshot();
+    recordInjection(snap.meta, ARIA, snap.history[7], { facets: ["outfit.md"] });
+    const data = JSON.parse(serializeChatSession(snap));
+    data.meta.injected[0][3] = [["outfit.md", 999]]; // 指不到的下标
+    const restored = deserializeChatSession(JSON.stringify(data))!;
+    const rec = restored.meta.injected.get("/lore/aria")!;
+    expect(rec.coreCarrier).toBe(restored.history[7]);
+    expect(rec.facetCarriers.size).toBe(0);
   });
 
   it("saves a question's words but not the picture attached to it", () => {

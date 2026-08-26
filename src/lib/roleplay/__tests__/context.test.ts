@@ -27,12 +27,18 @@ vi.mock("../../lore/entity", () => ({
   readEntityFile: vi.fn(async (dir: string, file: string) => `${dir}/${file} 的正文`),
 }));
 
-import { buildCompactedHistory, planFold, segmentHistory } from "../../agent/compact";
+import {
+  buildCompactedHistory, injectedFacetsFor, planFold, segmentHistory,
+} from "../../agent/compact";
+import { readEntityFile } from "../../lore/entity";
 import type { StreamMessage } from "../../ai/types";
 import type { LoreEntity, LoreIndex } from "../../lore/model";
 import {
+  BOUND_BLOCK_CHAR_CAP,
   buildBoundContent, contextSignature, createRoleplayMeta, ensureBlocks,
-  refreshMemoryBlock, refreshSystemPrompt, seedRoleplayHistory, selectReplayTurns,
+  refreshBoundBlock, refreshMemoryBlock, refreshSystemPrompt, residentCoreDirs,
+  seedRoleplayHistory,
+  selectReplayTurns,
   type RoleplaySessionMeta, type SystemPromptInput,
 } from "../context";
 import { NO_PERSONA } from "../model";
@@ -61,18 +67,28 @@ const AGENT: RoleplayAgent = {
   createdAt: 0, updatedAt: 0, turnCount: 0, contextHash: null,
 };
 
-async function seed(firstMessage = "「你还在等？」", memory: MemoryRecord[] = []) {
+async function seedWith(
+  agent: RoleplayAgent,
+  firstMessage: string,
+  loreIndex: LoreIndex = INDEX,
+  extra: { memory?: MemoryRecord[]; refDirs?: string[] } = {},
+) {
   return seedRoleplayHistory({
-    agent: AGENT,
+    agent,
     persona: { mode: "none", dirPath: null, prompt: "" },
     personaCard: "说话短，从不解释动机。",
     primaryText: "寒露之变的幸存者。",
-    loreIndex: INDEX,
+    loreIndex,
     firstMessage,
     matchText: firstMessage,
     loreBudgetChars: 4000,
-    memory,
+    memory: extra.memory ?? [],
+    refDirs: extra.refDirs,
   });
+}
+
+async function seed(firstMessage = "「你还在等？」", memory: MemoryRecord[] = []) {
+  return seedWith(AGENT, firstMessage, INDEX, { memory });
 }
 
 function turn(index: number, speaker: "author" | "agent", text: string): SceneTurn {
@@ -96,10 +112,18 @@ describe("seedRoleplayHistory", () => {
     expect(String(messages[0].content)).toContain("说话短，从不解释动机");
   });
 
-  it("records the bound entities in the injection ledger so they are not re-sent", async () => {
-    const { meta } = await seed();
-    expect(meta.injected.has(ELDEN.dirPath)).toBe(true);
-    expect(meta.injected.get(ELDEN.dirPath)?.carrier).toBe(meta.boundBlock);
+  it("records what the bound block actually holds, carried by the block itself", async () => {
+    // 绑一个不是主角的条目：它的正文只可能来自绑定块。
+    const agent = { ...AGENT, boundPaths: [TOWER.dirPath] };
+    const { meta } = await seedWith(agent, "「你还在等？」");
+    expect(meta.injected.get(TOWER.dirPath)?.coreCarrier).toBe(meta.boundBlock);
+  });
+
+  it("records the primary entry's core against the system message", async () => {
+    // 主角的正文住在 system 层的「## 你是谁」里，不在绑定块里——记在 system 上
+    // 才对：作者取消绑定、刷新设定时清的是绑定块那一版的账，而它仍然在 system 里。
+    const { messages, meta } = await seed();
+    expect(meta.injected.get(ELDEN.dirPath)?.coreCarrier).toBe(messages[0]);
   });
 
   it("keeps the bound block out of the auto-match pass", async () => {
@@ -552,5 +576,140 @@ describe("selectReplayTurns", () => {
 
   it("没有作者轮就什么都不回放", () => {
     expect(selectReplayTurns([turn(1, "agent", "「你来晚了。」")])).toEqual([]);
+  });
+});
+
+/**
+ * 绑定粒度（docs/feature/roleplay/11-lore-binding-lld.md，PR-3）。
+ *
+ * 作者的两条期望：主条目的正文常驻、它的特征在对话里按关键词自动补进来；勾中的
+ * 特征常驻，**同一条目没勾的特征照常自动注入**。从前这两条都不成立——账本按条目
+ * 记，绑一段等于整条失联；而自动匹配要先命中条目名，扮演里作者写「你」不写名字。
+ */
+describe("绑定粒度（PR-3）", () => {
+  const HERO: LoreEntity = {
+    ...entity("沈砚", ELDEN.dirPath),
+    facets: [
+      { file: "outfit.md", title: "外套", slot: null, keys: ["外套"], group: null, priority: 0, mode: "auto", charCount: 100 },
+      { file: "scar.md", title: "伤疤", slot: null, keys: ["伤疤"], group: null, priority: 0, mode: "auto", charCount: 100 },
+    ],
+  };
+  const MOON = entity("月", "/p/.ai-writer/lore/world/moon");
+  const IDX: LoreIndex = { characters: [HERO], world: [TOWER, MOON] };
+  const facetOf = (file: string) => `${HERO.dirPath}#${file}`;
+  const sceneOf = (meta: RoleplaySessionMeta) => String(meta.seedContext?.content ?? "");
+
+  it("勾了一段特征，同一条目没勾的那些照常自动注入", async () => {
+    const agent = { ...AGENT, boundPaths: [facetOf("outfit.md")] };
+    const { meta } = await seedWith(agent, "「你那道伤疤是怎么来的？」", IDX);
+    const scene = sceneOf(meta);
+    expect(scene).toContain("scar.md");     // 没勾的这段补进来了
+    expect(scene).not.toContain("outfit.md"); // 勾了的这段已经在绑定块里
+  });
+
+  it("绑了整条：正文不再重发，特征照常补", async () => {
+    const agent = { ...AGENT, boundPaths: [HERO.dirPath] };
+    const { meta } = await seedWith(agent, "「你那道伤疤是怎么来的？」", IDX);
+    const scene = sceneOf(meta);
+    expect(scene).toContain("scar.md");
+    expect(scene).not.toContain(`正文：${HERO.dirPath}/index.md`);
+  });
+
+  it("作者不写角色名，主角的特征照样按关键词激活（主角恒参与匹配）", async () => {
+    // 这一句里没有「沈砚」两个字——从前条目根本进不了候选，特征也就无从谈起。
+    const agent = { ...AGENT, boundPaths: [] };
+    const { meta } = await seedWith(agent, "「你那道伤疤是怎么来的？」", IDX);
+    expect(sceneOf(meta)).toContain("scar.md");
+  });
+
+  it("主角条目的正文只在 system 层，检索不送第二份", async () => {
+    const agent = { ...AGENT, boundPaths: [] };
+    const { messages, meta } = await seedWith(agent, "沈砚，你那道伤疤呢？", IDX);
+    expect(String(messages[0].content)).toContain("寒露之变的幸存者");
+    const scene = sceneOf(meta);
+    expect(scene).not.toContain(`正文：${HERO.dirPath}/index.md`);
+    expect(scene).not.toContain("沈砚的一句话"); // 连摘要行也不重发
+  });
+
+  it("超预算而只写了占位的绑定项不算常驻——检索会把它补上", async () => {
+    // 第一个 pin 就把 12k 预算吃光，第二个只剩一行占位。占位不是正文：
+    // 把它当成已注入，条目就两头落空（块里没有、检索也不来）。
+    vi.mocked(readEntityFile).mockImplementationOnce(async () => "巨".repeat(BOUND_BLOCK_CHAR_CAP));
+    const agent = { ...AGENT, boundPaths: [TOWER.dirPath, MOON.dirPath] };
+    const { meta } = await seedWith(agent, "月亮出来了。", IDX);
+    const boundText = String(meta.boundBlock?.content);
+    expect(boundText).toContain("## 月");                                  // 只有标题
+    expect(boundText).not.toContain(`${MOON.dirPath}/index.md 的正文`);     // 正文没进块
+    expect(sceneOf(meta)).toContain(`正文：${MOON.dirPath}/index.md`);      // 于是检索补上了
+  });
+
+  it("取消勾选 + 刷新设定：那一段回到自动池", async () => {
+    const agent = { ...AGENT, boundPaths: [facetOf("outfit.md")] };
+    const { meta } = await seedWith(agent, "「你还在等？」", IDX);
+    expect([...injectedFacetsFor(meta, IDX)]).toContain(facetOf("outfit.md"));
+
+    await refreshBoundBlock(IDX, { ...agent, boundPaths: [] }, meta);
+    expect([...injectedFacetsFor(meta, IDX)]).not.toContain(facetOf("outfit.md"));
+    expect(String(meta.boundBlock?.content)).not.toContain("outfit.md");
+  });
+
+  it("`@` 引用过的条目，这一轮的检索不再送第二份", async () => {
+    const agent = { ...AGENT, boundPaths: [] };
+    const { messages, meta } = await seedWith(agent, "「塔那边有消息了？」", IDX, {
+      refDirs: [TOWER.dirPath],
+    });
+    expect(sceneOf(meta)).not.toContain(`正文：${TOWER.dirPath}/index.md`);
+    // 记在问句上：那一轮被折叠时这笔账跟着走，之后再提到它才会重新注入。
+    expect(meta.injected.get(TOWER.dirPath)?.coreCarrier).toBe(messages[messages.length - 1]);
+  });
+
+  it("压缩之后：折叠掉的特征可以重新注入，绑定块里的那段不会", async () => {
+    const agent = { ...AGENT, boundPaths: [facetOf("outfit.md")] };
+    const { messages, meta } = await seedWith(agent, "「你那道伤疤是怎么来的？」", IDX);
+    const history: StreamMessage[] = [...messages];
+    expect([...injectedFacetsFor(meta, IDX)].sort()).toEqual([facetOf("outfit.md"), facetOf("scar.md")]);
+
+    for (let i = 0; i < 24; i++) {
+      const q: StreamMessage = { role: "user", content: `第 ${i} 轮的问题。`.repeat(60) };
+      history.push(q);
+      meta.turnStarts.push(q);
+      history.push({ role: "assistant", content: `第 ${i} 轮的回答。`.repeat(60) });
+    }
+    const plan = planFold(history, meta, 2000)!;
+    expect(plan.dropSeed).toBe(true);
+    buildCompactedHistory(history, meta, plan, "到目前为止的摘要。");
+
+    // scar 是 seed 块带来的，块被丢了 → 账目逐出，下次提到伤疤会重新注入。
+    // outfit 在绑定块里，块还在 → 仍算常驻，永远不重发。
+    expect([...injectedFacetsFor(meta, IDX)]).toEqual([facetOf("outfit.md")]);
+  });
+});
+
+/**
+ * 「这个条目还需要再 `@` 一次吗」——绑定器和输入框的 `@` 列表都问这个函数（PR-4）。
+ */
+describe("residentCoreDirs", () => {
+  it("有活会话时以账本为准：只绑了一段特征的条目，正文并不常驻", async () => {
+    const agent = {
+      ...AGENT,
+      boundPaths: [TOWER.dirPath, `${ELDEN.dirPath}#speech.md`],
+    };
+    const { meta } = await seedWith(agent, "「你还在等？」");
+    const resident = residentCoreDirs(agent, meta, INDEX);
+    expect(resident.has(ELDEN.dirPath)).toBe(true);  // 主角：正文在 system 层
+    expect(resident.has(TOWER.dirPath)).toBe(true);  // 整条绑定：正文在绑定块里
+    // 只绑了特征的条目，正文哪一层都没有——所以 `@` 它仍然该内联。
+    const facetOnly = { ...AGENT, primaryDirPath: null, boundPaths: [`${TOWER.dirPath}#none.md`] };
+    const seeded = await seedWith(facetOnly, "「你还在等？」");
+    expect(residentCoreDirs(facetOnly, seeded.meta, INDEX).has(TOWER.dirPath)).toBe(false);
+  });
+
+  it("还没有会话时按配置推：主角 + 裸 pin，特征 pin 不算", () => {
+    const agent = {
+      ...AGENT,
+      boundPaths: [TOWER.dirPath, `${ELDEN.dirPath}#speech.md`, "/p/.ai-writer/lore/gone"],
+    };
+    const resident = residentCoreDirs(agent, null, INDEX);
+    expect([...resident].sort()).toEqual([ELDEN.dirPath, TOWER.dirPath].sort());
   });
 });

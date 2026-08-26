@@ -84,6 +84,19 @@ export interface ChatSnapshot {
   taskId: string | null;
 }
 
+/**
+ * One ledger row on disk.
+ *
+ * The triple is what every session written before the ledger learned about
+ * facets carries; it restores as "the body is in, nothing itemised", which is
+ * exactly what it recorded. New rows are quadruples, and `v` deliberately does
+ * **not** move for them: bumping it would throw away every existing
+ * conversation to gain a field that degrades to "re-inject once".
+ */
+type SerializedInjection =
+  | [dir: string, version: string, carrierIdx: number]
+  | [dir: string, version: string, coreIdx: number, facets: [file: string, idx: number][]];
+
 /** On-disk shape. Bump `v` on breaking changes; old versions restore as null. */
 interface SerializedChat {
   v: 1;
@@ -94,8 +107,8 @@ interface SerializedChat {
     summary: number;
     summaryText: string | null;
     turnStarts: number[];
-    /** [dirPath, version, carrierIndex] triples. */
-    injected: [string, string, number][];
+    /** See {@link SerializedInjection}. `coreIdx` -1 = the body is not in. */
+    injected: SerializedInjection[];
     lastDocPath: string | null;
     /** Additive since 1.18.8 — an older row restores as "body never injected". */
     bodyDocPath?: string | null;
@@ -120,8 +133,17 @@ export function serializeChatSession(snap: ChatSnapshot): string {
         .map((m) => snap.history.indexOf(m))
         .filter((i) => i >= 0),
       injected: [...snap.meta.injected].flatMap(([dir, rec]) => {
-        const i = snap.history.indexOf(rec.carrier);
-        return i >= 0 ? [[dir, rec.version, i] as [string, string, number]] : [];
+        const coreIdx = rec.coreCarrier ? snap.history.indexOf(rec.coreCarrier) : -1;
+        const facets: [string, number][] = [];
+        for (const [file, carrier] of rec.facetCarriers) {
+          const i = snap.history.indexOf(carrier);
+          if (i >= 0) facets.push([file, i]);
+        }
+        // A record whose every carrier is off-history says nothing worth
+        // restoring — and restoring it would suppress an entity that is not
+        // actually in the conversation.
+        if (coreIdx < 0 && facets.length === 0) return [];
+        return [[dir, rec.version, coreIdx, facets] as SerializedInjection];
       }),
       lastDocPath: snap.meta.lastDocPath,
       bodyDocPath: snap.meta.bodyDocPath,
@@ -199,15 +221,28 @@ export function deserializeChatSession(json: string): ChatSnapshot | null {
     .map(at)
     .filter((m): m is StreamMessage => m !== null);
   for (const entry of data.meta.injected) {
-    if (!Array.isArray(entry) || entry.length !== 3) continue;
-    const [dir, version, carrierIdx] = entry;
-    const carrier = at(carrierIdx);
-    if (typeof dir === "string" && typeof version === "string" && carrier) {
-      // Keyed by an absolute `LoreEntity.dirPath`, and looked up with
-      // `Map.get` — a spelling the live index no longer uses is a miss, and a
-      // miss silently re-injects every entity into the restored conversation.
-      meta.injected.set(toPosixPath(dir), { version, carrier });
+    if (!Array.isArray(entry) || entry.length < 3) continue;
+    const [dir, version, coreIdx] = entry;
+    if (typeof dir !== "string" || typeof version !== "string") continue;
+    const coreCarrier = typeof coreIdx === "number" ? at(coreIdx) : null;
+    const facetCarriers = new Map<string, StreamMessage>();
+    const rawFacets: unknown = entry.length > 3 ? entry[3] : undefined;
+    if (Array.isArray(rawFacets)) {
+      for (const pair of rawFacets) {
+        if (!Array.isArray(pair) || pair.length !== 2) continue;
+        const [file, idx] = pair as [unknown, unknown];
+        const carrier = typeof idx === "number" ? at(idx) : null;
+        if (typeof file === "string" && carrier) facetCarriers.set(file, carrier);
+      }
     }
+    // Nothing resolvable — drop it rather than guess. Suppressing an entity
+    // that is not in the restored history is the one failure the model cannot
+    // recover from on its own.
+    if (!coreCarrier && facetCarriers.size === 0) continue;
+    // Keyed by an absolute `LoreEntity.dirPath`, and looked up with
+    // `Map.get` — a spelling the live index no longer uses is a miss, and a
+    // miss silently re-injects every entity into the restored conversation.
+    meta.injected.set(toPosixPath(dir), { version, coreCarrier, facetCarriers });
   }
   // Compared against `activeFilePath` to decide whether the open document has
   // to be described (or re-sent) again on the next turn.
