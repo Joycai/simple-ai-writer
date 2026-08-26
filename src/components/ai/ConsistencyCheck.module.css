@@ -67,6 +67,16 @@
   gap: 12px;
 }
 
+/* 扫描要跑好几秒，结果一次性砸下来太硬。逐张按自己的 mount 落位一次。
+   挂在直接子元素上（同 AgentChat.module.css:307，方案 016），IssueCard 因此
+   不必接 className 或 style。
+   **刻意不做错峰**：忽略一条发现会把它从 openIssues 里移除，其后每张卡的
+   nth-child 位次前移，任何基于位次的 animation-delay 都会让并未重挂载的卡片
+   集体重放——同方案 025 第 2 步的撤回理由。统一取值不随位次变化，无此问题。 */
+.issueList > * {
+  animation: slideUp 200ms var(--ease-out);
+}
+
 .issue {
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border-panel);

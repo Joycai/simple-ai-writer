@@ -618,6 +618,19 @@
 .abortBtn:hover { background: var(--color-error-bg); }
 
 /* ── Results column ──────────────────────────────────────────────── */
+/* 阻塞中的卡片成组：彼此 8px，与上下的结果小节仍保持 .resultScroll 的 20px。
+   动画挂在子元素上而不是容器上——容器在已有卡片的情况下追加第二张时不会
+   重挂载，挂容器上动画就不会播（同 AgentChat.module.css:307）。 */
+.approvals {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.approvals > * {
+  animation: dropIn 200ms var(--ease-out);
+  transform-origin: top left;
+}
+
 .resultSection {
   display: flex;
   flex-direction: column;
