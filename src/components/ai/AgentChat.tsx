@@ -12,7 +12,7 @@
  * relying on the agent to guess which passage 这一段 means.
  */
 
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowUp, ChevronDown, ChevronRight, ChevronsDown, Image as ImageIcon, X } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -398,6 +398,15 @@ export function AgentChat() {
    * out **once** (first turn) and afterwards only on hover — "名字退场，边界留下"
    * — and the degraded explanation collapses to one line from the third
    * occurrence, because by then it is a property of the model, not of the turn.
+   *
+   * The map holds the two **events**, not the `TurnHandoff` wrapper
+   * `findHandoff` builds: `turns` is a fresh array on every streamed chunk, so
+   * this memo re-runs per chunk and a wrapper allocated here would be a new
+   * object identity every time — which is enough on its own to defeat
+   * `AssistantTurn`'s memo for the whole transcript. The events themselves are
+   * appended once and never replaced (lib/agent/events.appendAgentEventTo only
+   * supersedes tool-step and reasoning), so they *are* stable, and the turn
+   * reassembles the wrapper from them.
    */
   const handoffs = useMemo(() => {
     const byTurn = new Map<string, TurnHandoff>();
@@ -445,9 +454,14 @@ export function AgentChat() {
     setWriterIntroDone(true);
   };
 
-  const disableWriterForSession = () => {
+  // The three below are handed to every AssistantTurn, which is memo'd — and
+  // this component re-renders on every streamed chunk. A fresh closure here is
+  // a changed prop there, i.e. the whole transcript reconciling per chunk, so
+  // these have to be stable even though each is a one-liner.
+  const disableWriterForSession = useCallback(() => {
     if (!useAgentStore.getState().disabledSubAgents.includes("writer")) toggleSubAgent("writer");
-  };
+  }, [toggleSubAgent]);
+  const openSubAgentSettings = useCallback(() => openSettings("subagents"), [openSettings]);
 
   // 2d: 正在生成 · mm:ss — timed from when this run started.
   const [runSeconds, setRunSeconds] = useState(0);
@@ -610,11 +624,12 @@ export function AgentChat() {
                 images={turn.images}
                 isLive={chatRunning && turn.id === turns[turns.length - 1]?.id}
                 onCtx={snippetSave.onMessageContextMenu}
-                handoff={handoffs.byTurn.get(turn.id) ?? null}
+                handoffOpen={handoffs.byTurn.get(turn.id)?.open ?? null}
+                handoffDone={handoffs.byTurn.get(turn.id)?.done ?? null}
                 firstHandoff={handoffs.firstTurnId === turn.id}
                 degradedOrdinal={handoffs.degradedOrdinal.get(turn.id) ?? 0}
                 onDisableWriter={disableWriterForSession}
-                onOpenSettings={() => openSettings("subagents")}
+                onOpenSettings={openSubAgentSettings}
                 onChangeModel={openModelPicker}
               />
             ),
@@ -933,9 +948,18 @@ const UserTurn = memo(function UserTurn({ turn, onCtx }: {
   );
 });
 
-/** Same memo contract as {@link UserTurn} — props are the turn's own fields. */
+/**
+ * Same memo contract as {@link UserTurn} — props are the turn's own fields.
+ *
+ * "Own fields" is load-bearing, not descriptive: the parent re-renders on every
+ * streamed chunk, so anything passed here that is freshly allocated per render
+ * — an inline arrow, a wrapper object — re-renders the entire transcript per
+ * chunk and silently turns this memo into a no-op. Hence the handoff arriving
+ * as its two stable events rather than as a `TurnHandoff`, and the three
+ * callbacks being `useCallback`'d up there.
+ */
 const AssistantTurn = memo(function AssistantTurn({
-  text, log, images, isLive, onCtx, handoff, firstHandoff, degradedOrdinal,
+  text, log, images, isLive, onCtx, handoffOpen, handoffDone, firstHandoff, degradedOrdinal,
   onDisableWriter, onOpenSettings, onChangeModel,
 }: {
   text: string;
@@ -943,8 +967,9 @@ const AssistantTurn = memo(function AssistantTurn({
   images?: string[];
   isLive: boolean;
   onCtx: SnippetSave["onMessageContextMenu"];
-  /** This turn's handoff, when the writer produced its text. */
-  handoff: TurnHandoff | null;
+  /** This turn's handoff events, when the writer produced its text. */
+  handoffOpen: TurnHandoff["open"] | null;
+  handoffDone: TurnHandoff["done"] | null;
   /** True on the session's first handoff — the one turn that spells the name out. */
   firstHandoff: boolean;
   degradedOrdinal: number;
@@ -954,6 +979,12 @@ const AssistantTurn = memo(function AssistantTurn({
   onChangeModel: () => void;
 }) {
   const { t } = useTranslation();
+  // Reassembled here so the wrapper is allocated once per *actual* change
+  // rather than once per chunk — see the memo note above.
+  const handoff = useMemo<TurnHandoff | null>(
+    () => (handoffOpen ? { open: handoffOpen, ...(handoffDone ? { done: handoffDone } : {}) } : null),
+    [handoffOpen, handoffDone],
+  );
   const failed = handoff ? handoffFailed(handoff) : false;
 
   return (
@@ -1061,13 +1092,37 @@ function AssistantBody({ text, className }: { text: string; className?: string }
    * in-flight read that will produce it. A live turn rebuilds this DOM on
    * every streamed chunk, so without it each chunk re-read and re-encoded
    * every picture already on screen, and each one blinked out while it did.
+   *
+   * A landed value is kept for the life of the turn, with no staleness check,
+   * because nothing this app writes can invalidate one: every generated
+   * picture goes through `uniqueAssetName` (lib/image/assets), so it lands on a
+   * path that was free — the bytes under a path the chat has already rendered
+   * never change. A *failed* read is forgotten instead, and that asymmetry is
+   * the point: the file may not exist yet.
    */
   const decoded = useRef(new Map<string, string | Promise<string>>());
-  useEffect(() => { decoded.current.clear(); }, [projectPath]);
+  const cachedFor = useRef(projectPath);
 
-  useEffect(() => {
+  // Layout, not passive: this writes the DOM the render it belongs to was
+  // supposed to produce. As a `useEffect` it lands after paint, so every
+  // streamed chunk paints the *previous* chunk's prose first and the text
+  // visibly trails the stream by a frame.
+  useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
+
+    // A path only means anything relative to a project. Replaced rather than
+    // `.clear()`ed, and reset in here rather than in an effect of its own:
+    // a read still in flight resolves into the map it started in (now
+    // unreachable) instead of seeding the new project's cache with the old
+    // project's path, and one effect cannot run in the wrong order against
+    // itself.
+    if (cachedFor.current !== projectPath) {
+      decoded.current = new Map();
+      cachedFor.current = projectPath;
+    }
+    const cache = decoded.current;
+
     el.innerHTML = renderMarkdown(text);
 
     el.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
@@ -1076,7 +1131,7 @@ function AssistantBody({ text, className }: { text: string; className?: string }
       if (src.kind === "skip") return;
       if (src.kind === "refuse") { markBroken(img, raw); return; }
 
-      const hit = decoded.current.get(src.path);
+      const hit = cache.get(src.path);
       if (typeof hit === "string") { img.src = hit; return; }
       // The `src` the renderer wrote is a path this webview cannot load. Drop
       // it now, or the browser spends the wait showing its own broken-image
@@ -1085,14 +1140,14 @@ function AssistantBody({ text, className }: { text: string; className?: string }
       img.setAttribute("data-loading", "true");
 
       const pending = hit ?? imageToThumbnailDataUrl(src.path, BODY_IMAGE_MAX_DIM)
-        .then((url) => { decoded.current.set(src.path, url); return url; });
-      if (!hit) decoded.current.set(src.path, pending);
+        .then((url) => { cache.set(src.path, url); return url; });
+      if (!hit) cache.set(src.path, pending);
       pending
         .then((url) => { img.removeAttribute("data-loading"); img.src = url; })
         .catch(() => {
           // Forgotten rather than remembered as broken: the file may be about
           // to be written by a tool call in this very run.
-          decoded.current.delete(src.path);
+          cache.delete(src.path);
           markBroken(img, raw);
         });
     });

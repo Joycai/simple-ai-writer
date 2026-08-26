@@ -24,8 +24,13 @@ const mockStream = vi.mocked(streamCompletion);
 vi.mock("../ai/usage", () => ({ persistUsage: vi.fn(async () => {}) }));
 
 /** The one file `deliver_to` reads, to size an append and locate a range. */
-const FILE = { text: "第一行\n第二行\n第三行\n" };
-vi.mock("../fs/fileio", () => ({ readFile: vi.fn(async () => FILE.text) }));
+const FILE = { text: "第一行\n第二行\n第三行\n", exists: false };
+vi.mock("../fs/fileio", () => ({
+  readFile: vi.fn(async () => FILE.text),
+  // `create` refuses a path that is already taken, so the default here is the
+  // ordinary case: nothing there yet.
+  fileExists: vi.fn(async () => FILE.exists),
+}));
 
 const LORE_INDEX = { characters: [], world: [] } as unknown as LoreIndex;
 
@@ -110,6 +115,7 @@ const last = (snapshots: string[]) => snapshots[snapshots.length - 1];
 beforeEach(() => {
   mockStream.mockReset();
   sent.length = 0;
+  FILE.exists = false;
 });
 
 describe("runAgent — writer handoff", () => {
@@ -207,12 +213,30 @@ describe("runAgent — writer handoff", () => {
     expect(last(h.output)).toBe("雪停了。");
   });
 
-  it("counts the writer's tokens into the run's total", async () => {
+  /**
+   * The writer runs on the author's *other* model at its own price, and this
+   * result is priced with the **main** model's rate by the caller
+   * (agentStore.sendChat → `costFor(model, …)` → one `chat` row). Adding the
+   * two bills together here would charge the writer's tokens twice: once on
+   * the `subagent:writer` row runWriterHandoff already wrote, and again at the
+   * assistant's price. Settings → 用量 sums every row, so that inflation lands
+   * squarely on the number the author uses to judge whether the writer is
+   * worth it.
+   *
+   * Same rule as executeDelegate, and the separated figure is not lost — it
+   * rides the nested `run-done`, which is exactly where logModel.sumTokens
+   * looks for a subagent's share.
+   */
+  it("keeps the writer's tokens out of the run's total, on their own run-done", async () => {
     queueRound([handoffCall({ goal: "g", kind: "prose" }), { done: true, inputTokens: 100, outputTokens: 20 }]);
     queueRound([{ text: "x" }, { done: true, inputTokens: 7, outputTokens: 3 }]);
-    const res = await runAgent(makeOptions().opts);
-    expect(res.inputTokens).toBe(107);
-    expect(res.outputTokens).toBe(23);
+    const h = makeOptions();
+    const res = await runAgent(h.opts);
+    expect(res.inputTokens).toBe(100);
+    expect(res.outputTokens).toBe(20);
+
+    const nested = h.events.find((e) => e.kind === "run-done" && e.parentStep);
+    expect(nested).toMatchObject({ inputTokens: 7, outputTokens: 3 });
   });
 
   /**
@@ -290,6 +314,71 @@ describe("runAgent — writer handoff", () => {
     });
     const ev = h.events.find((e) => e.kind === "handoff-done");
     expect(ev && "delivered" in ev && ev.delivered).toEqual({ path: "/p/chapters/12.md", approved: true });
+  });
+
+  /**
+   * `createEntry` throws on a name that is taken, so a card offered for one is
+   * a card the author approves and then watches fail. Refused before it is
+   * shown instead — and the writer's text still stands as the turn's reply,
+   * which is what makes refusing cheap.
+   */
+  it("refuses a create onto an existing path instead of offering a doomed card", async () => {
+    FILE.exists = true;
+    queueRound([
+      handoffCall({ goal: "g", kind: "prose", deliver_to: { path: "chapters/12.md", mode: "create" } }),
+      done,
+    ]);
+    queueRound([{ text: "雪停了。" }, done]);
+    const proposals: unknown[] = [];
+    const h = makeOptions({
+      toolContext: {
+        projectPath: "/p",
+        loreIndex: LORE_INDEX,
+        multimodal: false,
+        resolveSubAgent: async () => CONN,
+        requestApproval: async (proposal) => {
+          proposals.push(proposal);
+          return { approved: true };
+        },
+      },
+    });
+    await runAgent(h.opts);
+
+    expect(proposals).toHaveLength(0);
+    expect(last(h.output)).toBe("雪停了。");
+    const ev = h.events.find((e) => e.kind === "handoff-done");
+    expect(ev && "delivered" in ev && ev.delivered).toEqual({
+      path: "chapters/12.md", approved: false,
+    });
+  });
+
+  /**
+   * `createEntry` normalizes an extensionless name to `.md`. Doing it before
+   * the proposal is what stops the card, the collision check and the file that
+   * lands from naming three different paths.
+   */
+  it("normalizes an extensionless create path the way createEntry will", async () => {
+    queueRound([
+      handoffCall({ goal: "g", kind: "prose", deliver_to: { path: "chapters/第五章", mode: "create" } }),
+      done,
+    ]);
+    queueRound([{ text: "雪停了。" }, done]);
+    const proposals: unknown[] = [];
+    const h = makeOptions({
+      toolContext: {
+        projectPath: "/p",
+        loreIndex: LORE_INDEX,
+        multimodal: false,
+        resolveSubAgent: async () => CONN,
+        requestApproval: async (proposal) => {
+          proposals.push(proposal);
+          return { approved: true };
+        },
+      },
+    });
+    await runAgent(h.opts);
+
+    expect(proposals[0]).toMatchObject({ kind: "create", path: "/p/chapters/第五章.md" });
   });
 
   it("sizes an append from the file on disk", async () => {

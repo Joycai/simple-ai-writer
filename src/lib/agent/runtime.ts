@@ -839,6 +839,17 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         continue;
       }
 
+      // A `handoff` alongside other calls in the same round ends the run and
+      // those siblings are never executed. Deliberate, and it has to be: the
+      // work order is this model's answer, so once it exists there is nothing
+      // left for a read to inform — the brief was written without it either
+      // way. The alternative costs more than it buys: running the siblings
+      // means appending an assistant message carrying the `handoff` call too,
+      // and every call in a message needs a paired result or the next request
+      // is malformed — the only result available for a tool that is not in the
+      // registry is "unknown tool", which is a lie the model would then act on.
+      // Nothing is lost that the writer cannot recover: material travels as
+      // paths, and the writer reads them itself.
       if (call || roundToolCalls.length === 0) {
         const degraded = !call;
         const brief: HandoffBrief = call
@@ -861,9 +872,20 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
           onText: (full) => opts.onOutputText(committedText + full),
           stepId,
         });
-        totalInputTokens += res.inputTokens;
-        totalOutputTokens += res.outputTokens;
-        totalCachedTokens += res.cachedTokens;
+        // The writer's tokens are deliberately NOT added to this run's totals,
+        // exactly as `executeDelegate` keeps a delegate's out of them. These
+        // totals are the *main model's* bill: the caller prices them with
+        // `costFor(mainModel, …)` and writes one `chat` row from them
+        // (stores/agentStore.sendChat), so folding a second model's tokens in
+        // would bill them twice — once at the writer's price on the
+        // `subagent:writer` row `runWriterHandoff` already wrote, and again at
+        // the assistant's price here. Settings → 用量 sums every row, so the
+        // author would be reading an inflated number while deciding whether
+        // the writer is worth its cost.
+        //
+        // Nothing is lost by leaving them out: the nested `run-done` carries
+        // them under `parentStep`, which is precisely how `logModel.sumTokens`
+        // separates 「子代理花的」 from 「主模型花的」.
 
         // What the author ends up reading. The writer's text when there is one;
         // failing that the main model's own prose, which exists only on the

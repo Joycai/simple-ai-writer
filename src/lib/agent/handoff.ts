@@ -25,8 +25,9 @@ import type { StreamMessage, ToolDefinition } from "../ai/types";
 import { costFor } from "../ai/configDb";
 import { connOptions } from "../ai/conn";
 import { persistUsage } from "../ai/usage";
-import { readFile } from "../fs/fileio";
-import { resolveWorkspacePath } from "../paths";
+import { fileExists, readFile } from "../fs/fileio";
+import { normalizeChapterFileName } from "../context/outline";
+import { baseName, dirName, joinPath, resolveWorkspacePath } from "../paths";
 import type { AgentEvent } from "./events";
 import { occurrenceAt, sliceLines } from "./editApply";
 import { WRITER_PRESET } from "./presets";
@@ -303,6 +304,16 @@ export interface WriterHandoffResult {
   text: string;
   /** Set when the handoff could not run; the caller reports it to the author. */
   error?: string;
+  /**
+   * What the **writer's** model spent — already persisted here as a
+   * `subagent:writer` row and already on the nested `run-done`.
+   *
+   * Reported, never added to the parent run's totals. Those are priced with the
+   * *main* model's rate by the caller and written as one `chat` row, so folding
+   * these in bills the same tokens twice at two different prices, and Settings
+   * → 用量 sums every row. `executeDelegate` keeps its sub-run out for exactly
+   * this reason; the writer is no different.
+   */
   inputTokens: number;
   outputTokens: number;
   cachedTokens: number;
@@ -468,14 +479,32 @@ async function deliverWriterOutput(
   const fail = (detail: string) => ({ path: deliverTo.path, approved: false, detail });
 
   if (!ctx.requestApproval) return fail(i18n.t("ai.errors.writerNoApproval"));
-  const path = resolveWorkspacePath(ctx.projectPath, deliverTo.path);
-  if (!path) return fail(i18n.t("ai.errors.writerPathOutside", { path: deliverTo.path }));
+  const resolved = resolveWorkspacePath(ctx.projectPath, deliverTo.path);
+  if (!resolved) return fail(i18n.t("ai.errors.writerPathOutside", { path: deliverTo.path }));
+
+  // `createEntry` runs the name through `normalizeChapterFileName`, so an
+  // extensionless "第五章" lands at "第五章.md". Applying it here as well is what
+  // keeps the card, the collision check below and the file that actually
+  // appears from being three different paths — the same thing `create_chapter`
+  // does before it proposes (lib/agent/writeTools).
+  const path =
+    deliverTo.mode === "create"
+      ? joinPath(dirName(resolved), normalizeChapterFileName(baseName(resolved)))
+      : resolved;
 
   const id = `writer-${Date.now()}`;
   // See ProposalBase.fromWriter — this function is the only place it is true.
   const fromWriterFlag = { fromWriter: true as const };
   try {
     if (deliverTo.mode === "create") {
+      // Checked *before* the card, not left to the apply: `createEntry` throws
+      // on a collision, so without this the author reads the writer's text,
+      // approves a create, and gets an error where the file should be. The
+      // text is already in the conversation either way — reporting the clash
+      // here costs nothing and asks nothing.
+      if (await fileExists(path)) {
+        return fail(i18n.t("ai.errors.writerExists", { path: deliverTo.path }));
+      }
       const decision = await ctx.requestApproval({ kind: "create", id, path, content: text, ...fromWriterFlag });
       return { path, approved: decision.approved, ...(decision.approved ? {} : { detail: decision.reason }) };
     }
