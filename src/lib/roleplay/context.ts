@@ -223,6 +223,32 @@ export function recordInlinedRefs(
   }
 }
 
+/**
+ * 此刻**正文已经常驻在上下文里**的条目——UI 用它回答「这个条目还需要再 `@` 一次吗」。
+ *
+ * 有活会话就问账本（`coreDoneFor`）：它记的是块里实际有什么，是真相。没有活会话
+ * （作者还没发第一句，块正要被建出来）才退回配置去推——主角条目 + 裸 pin 绑的条目。
+ * 反过来只信配置是不行的：作者改了绑定却还没点「刷新设定」时，配置说常驻、上下文里
+ * 其实没有，于是那一段既不会被内联、也不会被检索——正是这次返工要消灭的那种失联。
+ *
+ * 特征 pin 不进这个集合：常驻的是那一段特征，条目正文并不在上下文里。
+ */
+export function residentCoreDirs(
+  agent: RoleplayAgent,
+  meta: RoleplaySessionMeta | null,
+  loreIndex: LoreIndex,
+): Set<string> {
+  if (meta) return coreDoneFor(meta, loreIndex);
+  const byDir = indexByDir(loreIndex);
+  const out = new Set<string>();
+  if (agent.primaryDirPath && byDir.has(agent.primaryDirPath)) out.add(agent.primaryDirPath);
+  for (const raw of agent.boundPaths) {
+    // `byDir` 命中就是裸 pin——即使路径里带 `#`（和 selectLore 的 pin 解析同一条规则）。
+    if (byDir.has(raw)) out.add(raw);
+  }
+  return out;
+}
+
 // ─── system 层 ───────────────────────────────────────────────────────────────
 
 function personaLine(persona: AuthorPersona, loreIndex: LoreIndex, isZh: boolean): string {

@@ -2853,6 +2853,8 @@
       "unpickWhole": "Unbind whole entry",
       "whole": "whole entry",
       "core": "Core card (index.md)",
+      "primaryResident": "Already in context — the lead entry's body is always there; no need to bind it again",
+      "refResident": "already in context",
       "noEntities": "The knowledge base is empty.",
       "model": "Model",
       "instruction": "Direction",

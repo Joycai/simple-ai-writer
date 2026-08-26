@@ -201,12 +201,22 @@ interface MentionPickerProps {
    * being typed in.
    */
   preferAbove?: boolean;
+  /**
+   * A word about *this composer's* relationship with the row — today
+   * 「已常驻」 in the roleplay composer, where an entry the character already
+   * carries is still pickable but will not be inlined a second time.
+   *
+   * A callback rather than a set of keys, so the shared picker learns no
+   * vocabulary from any one host: the roleplay drawer, the lore modals and the
+   * chat composer all render the same list and mean different things by it.
+   */
+  noteFor?: (item: MentionItem) => string | null;
   onPick: (item: MentionItem) => void;
   onDismiss: () => void;
 }
 
 export function MentionPicker({
-  anchorRef, items, usedKeys, activeIndex = 0, preferAbove = false, onPick, onDismiss,
+  anchorRef, items, usedKeys, activeIndex = 0, preferAbove = false, noteFor, onPick, onDismiss,
 }: MentionPickerProps) {
   const { t, i18n } = useTranslation();
   const terms = appTerms(i18n.language.startsWith("zh"));
@@ -269,6 +279,7 @@ export function MentionPicker({
               ? <EntityThumb avatarPath={item.entity.avatarPath} />
               : <FileThumb file={item.file} />}
             <span className={styles.pickerName}>{mentionLabel(item)}</span>
+            {noteFor?.(item) && <span className={styles.pickerNote}>{noteFor(item)}</span>}
             {/* Lore keeps its category verbatim — that is the author's own
                 vocabulary. File kinds are ours and get the workspace's words:
                 terms.doc rather than 章节, because the workspace is a free file

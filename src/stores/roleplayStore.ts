@@ -48,7 +48,7 @@ import { loadApiKey } from "../lib/keyStore";
 import { notify } from "../lib/notify";
 import {
   buildBoundContent, buildSystemPrompt, contextSignature, ensureBlocks,
-  recordPrimaryCore, refreshBoundBlock,
+  recordPrimaryCore, refreshBoundBlock, residentCoreDirs,
   refreshMemoryBlock, refreshSystemPrompt,
   type BoundContent, type RoleplaySessionMeta,
 } from "../lib/roleplay/context";
@@ -1195,7 +1195,16 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         subAgents, get().sessions[agentId]?.disabledSubAgents ?? [],
       );
       const { visionSubAgentModel } = await import("../lib/agent/subagent");
-      const composed = await buildChatMessage(body, quote, refs, {
+      // 正文已经常驻在上下文里的条目**不再内联第二份**：绑定块（或 system 层）
+      // 一份、【引用资料】一份，是同一段文字在同一次请求里出现两遍，而且会一直
+      // 留到那一轮被折叠。作者敲的 `@名字` 仍在正文里，模型照样知道他在说谁——
+      // 那段设定本来就在它眼前。芯片也保留：作者说过要带上，界面不该偷偷抹掉。
+      const resident = residentCoreDirs(
+        agent, get().sessions[agentId]?.meta ?? null,
+        (await import("./loreStore")).useLoreStore.getState().index,
+      );
+      const inlined = refs.filter((r) => !(r.kind === "lore" && resident.has(r.entity.dirPath)));
+      const composed = await buildChatMessage(body, quote, inlined, {
         allowImages: model?.type === "multimodal",
         visionDelegate: visionSubAgentModel(models, subs) !== null,
       });
@@ -1204,7 +1213,9 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           agentId,
           wire: composed.content,
           match: composed.text,
-          refDirs: refs.flatMap((r) => (r.kind === "lore" ? [r.entity.dirPath] : [])),
+          // 只记**真的内联了**的那些：常驻的早已在账本里，重复记一笔只会把
+          // carrier 换成这条问句，等它折叠掉，绑定块里还在的正文就被当成没了。
+          refDirs: inlined.flatMap((r) => (r.kind === "lore" ? [r.entity.dirPath] : [])),
         }],
       }));
       void pump();

@@ -90,7 +90,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 
 | Doc | Status | What it settles |
 |---|---|---|
-| [roleplay/](feature/roleplay/README.md) | `shipped` (Beta flag) | Interactive roleplay: transcript as asset, context layering, character memory, the narrator's isolation. 绑定粒度的返工设计（[11-lore-binding-lld.md](feature/roleplay/11-lore-binding-lld.md)）是 `partial`（PR-1~3 已实现） |
+| [roleplay/](feature/roleplay/README.md) | `shipped` (Beta flag) | Interactive roleplay: transcript as asset, context layering, character memory, the narrator's isolation. 绑定粒度的返工（[11-lore-binding-lld.md](feature/roleplay/11-lore-binding-lld.md)）：主角正文常驻、勾中的特征常驻、其余照常自动注入 |
 | [translate/00-sakura-feasibility.html](feature/translate/00-sakura-feasibility.html) | `research` | Can SakuraLLM (日→中) be integrated, and where it lands. Twelve live tests against a local LM Studio — chunk sizes, degeneration, the glossary's real behaviour |
 | [translate/01-execution-plan.md](feature/translate/01-execution-plan.md) | `shipped` (Beta flag) | The four PR slices, the six invariants, and why `top_p`/`frequency_penalty` belong to `StreamOptions` rather than `ConnOptions` |
 | [pptx-plan.md](feature/pptx-plan.md) | `shipped` (write side Beta) | Reading .pptx in Rust; HTML → PPTX without a model in the loop |

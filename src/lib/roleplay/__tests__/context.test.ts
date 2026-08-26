@@ -36,7 +36,8 @@ import type { LoreEntity, LoreIndex } from "../../lore/model";
 import {
   BOUND_BLOCK_CHAR_CAP,
   buildBoundContent, contextSignature, createRoleplayMeta, ensureBlocks,
-  refreshBoundBlock, refreshMemoryBlock, refreshSystemPrompt, seedRoleplayHistory,
+  refreshBoundBlock, refreshMemoryBlock, refreshSystemPrompt, residentCoreDirs,
+  seedRoleplayHistory,
   selectReplayTurns,
   type RoleplaySessionMeta, type SystemPromptInput,
 } from "../context";
@@ -681,5 +682,34 @@ describe("绑定粒度（PR-3）", () => {
     // scar 是 seed 块带来的，块被丢了 → 账目逐出，下次提到伤疤会重新注入。
     // outfit 在绑定块里，块还在 → 仍算常驻，永远不重发。
     expect([...injectedFacetsFor(meta, IDX)]).toEqual([facetOf("outfit.md")]);
+  });
+});
+
+/**
+ * 「这个条目还需要再 `@` 一次吗」——绑定器和输入框的 `@` 列表都问这个函数（PR-4）。
+ */
+describe("residentCoreDirs", () => {
+  it("有活会话时以账本为准：只绑了一段特征的条目，正文并不常驻", async () => {
+    const agent = {
+      ...AGENT,
+      boundPaths: [TOWER.dirPath, `${ELDEN.dirPath}#speech.md`],
+    };
+    const { meta } = await seedWith(agent, "「你还在等？」");
+    const resident = residentCoreDirs(agent, meta, INDEX);
+    expect(resident.has(ELDEN.dirPath)).toBe(true);  // 主角：正文在 system 层
+    expect(resident.has(TOWER.dirPath)).toBe(true);  // 整条绑定：正文在绑定块里
+    // 只绑了特征的条目，正文哪一层都没有——所以 `@` 它仍然该内联。
+    const facetOnly = { ...AGENT, primaryDirPath: null, boundPaths: [`${TOWER.dirPath}#none.md`] };
+    const seeded = await seedWith(facetOnly, "「你还在等？」");
+    expect(residentCoreDirs(facetOnly, seeded.meta, INDEX).has(TOWER.dirPath)).toBe(false);
+  });
+
+  it("还没有会话时按配置推：主角 + 裸 pin，特征 pin 不算", () => {
+    const agent = {
+      ...AGENT,
+      boundPaths: [TOWER.dirPath, `${ELDEN.dirPath}#speech.md`, "/p/.ai-writer/lore/gone"],
+    };
+    const resident = residentCoreDirs(agent, null, INDEX);
+    expect([...resident].sort()).toEqual([ELDEN.dirPath, TOWER.dirPath].sort());
   });
 });

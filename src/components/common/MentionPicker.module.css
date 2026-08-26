@@ -63,6 +63,17 @@
   flex-shrink: 0;
 }
 
+/* A host's note about this row ("already in context"). Sits left of the badge
+   and takes the auto margin, so the pair stays flush right as one group. */
+.pickerNote {
+  font-size: 10px;
+  color: var(--color-text-hint);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.pickerNote + .pickerBadge { margin-left: 8px; }
+
 /* The ↑/↓ highlight. A left bar rather than only a fill, so it stays legible
    over the hover state and reads as "this is what Enter will take". */
 .pickerItemActive {

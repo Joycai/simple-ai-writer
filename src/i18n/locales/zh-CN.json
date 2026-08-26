@@ -2848,6 +2848,8 @@
       "unpickWhole": "取消整条",
       "whole": "整条",
       "core": "主词条（index.md）",
+      "primaryResident": "已常驻——主角条目的正文一直在上下文里，不用再绑一次",
+      "refResident": "已常驻",
       "noEntities": "知识库里还没有条目。",
       "model": "模型",
       "instruction": "扮演指令",
