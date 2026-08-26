@@ -1291,7 +1291,8 @@
       "docxChanged": "{{count}} changed",
       "docxChangeMark": "≠",
       "docxFontMissing": "{{fonts}} is not installed here (the export is unaffected — the file names that font and will lay out correctly wherever it exists)",
-      "docxNote": "No model runs in the conversion: structure comes from the markdown, every font, size, line spacing and margin comes from this format."
+      "docxNote": "No model runs in the conversion: structure comes from the markdown, every font, size, line spacing and margin comes from this format.",
+      "imageNegative": "Avoid: {{text}}"
     },
     "autoApprove": {
       "chipSession": "Auto-approving this conversation",

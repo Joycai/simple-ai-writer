@@ -150,9 +150,20 @@ describe("tool schema budget", () => {
     // `target` telling the model to write ONE step per collection rather than
     // one per entry — delete that and the schema gets cheaper while the card
     // gets useless.
+    // 9,457 with `negative` on the three drawing tools: +189, paid by every
+    // conversation including the ones with no ComfyUI model bound — which is
+    // the honest price of the alternative being worse. Only the comfyui route
+    // has negative conditioning on the wire, and folding "no watermark" into
+    // the positive prompt instead is not a degraded version of the feature but
+    // the opposite of it: SD draws what it reads. Three tools rather than one
+    // because img2img runs the same sampler — a negative that works on
+    // generate_image and silently does nothing on redraw_lore_image is a bug
+    // report waiting to happen. The wording is the compact one on purpose;
+    // the first draft explained the drop-for-other-models rule twice over and
+    // cost 50 more for nothing.
     const { resident } = partitionByGroup(AGENT_ASSIST_PRESET.tools);
     const residentTokens = estimateToolsTokens(getToolDefinitions(resident));
-    expect(residentTokens).toBeLessThanOrEqual(9_300);
+    expect(residentTokens).toBeLessThanOrEqual(9_500);
     // A guard against the deferral quietly becoming a no-op: someone drops the
     // `group` tag off a tool and the only symptom is a bigger bill.
     expect(tokensOf(AGENT_ASSIST_PRESET) - residentTokens).toBeGreaterThan(2_000);

@@ -57,6 +57,7 @@ async function proposeIllustration(
     aspect?: string;
     resolution?: string;
     quality?: string;
+    negative?: string;
     sourcePath?: string;
     refPaths?: string[];
     reason?: string;
@@ -76,6 +77,9 @@ async function proposeIllustration(
     };
   }
 
+  const negative = spec.negative?.trim();
+  const comfyRoute = model.caps?.route === "comfyui";
+
   const proposal: IllustrateProposal = {
     kind: "illustrate",
     id: `illustrate-${++proposalCounter}`,
@@ -90,6 +94,12 @@ async function proposeIllustration(
     aspect: spec.aspect,
     resolution: spec.resolution,
     quality: spec.quality,
+    // Only the comfyui route has a negative-conditioning field on the wire.
+    // Filtered here rather than at apply time so the card cannot show the
+    // author a line that is about to be discarded — and never folded into the
+    // prompt for the other routes, which is the mistake that draws the very
+    // thing being excluded.
+    ...(negative && comfyRoute ? { negative } : {}),
     sourcePath: spec.sourcePath,
     ...(spec.refPaths?.length ? { refPaths: spec.refPaths } : {}),
     reason: spec.reason,
@@ -126,7 +136,13 @@ async function proposeIllustration(
     content: (decision.backupPath ?? "Image generated and saved.")
       // Same wording the write tools use: "approved" must not read as "the
       // author checked my work" when a counted batch grant skipped the card.
-      + (decision.auto ? "\nApplied under a standing grant — nobody read it." : ""),
+      + (decision.auto ? "\nApplied under a standing grant — nobody read it." : "")
+      // Silence here would have the model keep spending tokens on a field that
+      // reaches nothing — and, worse, trusting that the picture excludes what
+      // it listed.
+      + (negative && !comfyRoute
+        ? `\nNote: 'negative' was ignored — "${model.name}" is not a local ComfyUI model, so it has no negative conditioning. Put what matters into the prompt itself.`
+        : ""),
   };
 }
 
@@ -234,7 +250,8 @@ export async function generateImageTool(
     // `note` is the parameter's pre-1.28 spelling; `desc` is the name the
     // gallery field actually has (images.md, update_lore_image).
     prompt?: string; desc?: string; note?: string; entity?: string; path?: string; slot?: string;
-    references?: string[]; aspect?: string; resolution?: string; quality?: string; reason?: string;
+    references?: string[]; aspect?: string; resolution?: string; quality?: string; negative?: string;
+    reason?: string;
   },
   ctx: ToolContext,
 ): Promise<ToolResult> {
@@ -272,7 +289,7 @@ export async function generateImageTool(
     const refs = await resolveReferences(ctx, args.references, entity.dirPath);
     if (refs.error) return { toolCallId, content: refs.error };
     return proposeIllustration(toolCallId, ctx, {
-      prompt, note, aspect: args.aspect, ...tiers, reason: args.reason,
+      prompt, note, aspect: args.aspect, ...tiers, negative: args.negative, reason: args.reason,
       refPaths: refs.paths,
       dest: { kind: "lore", entityName: entity.name, entityDir: entity.dirPath, slot },
       destination: entity.name,
@@ -301,7 +318,7 @@ export async function generateImageTool(
   const refs = await resolveReferences(ctx, args.references);
   if (refs.error) return { toolCallId, content: refs.error };
   return proposeIllustration(toolCallId, ctx, {
-    prompt, note, aspect: args.aspect, ...tiers, reason: args.reason,
+    prompt, note, aspect: args.aspect, ...tiers, negative: args.negative, reason: args.reason,
     refPaths: refs.paths,
     dest: { kind: "document", docPath: path },
     destination: baseName(path) || path,
@@ -331,7 +348,8 @@ export async function editImageTool(
   toolCallId: string,
   args: {
     source?: string; path?: string; instruction?: string; references?: string[];
-    aspect?: string; resolution?: string; quality?: string; desc?: string; note?: string; reason?: string;
+    aspect?: string; resolution?: string; quality?: string; negative?: string;
+    desc?: string; note?: string; reason?: string;
   },
   ctx: ToolContext,
 ): Promise<ToolResult> {
@@ -402,6 +420,7 @@ export async function editImageTool(
     aspect: args.aspect,
     resolution: tierOf(args.resolution, RESOLUTION_TIERS),
     quality: tierOf(args.quality, QUALITY_TIERS),
+    negative: args.negative,
     reason: args.reason,
     // The source already rides as an input image; listing it again as a
     // reference would send the same picture twice and spend one of the model's
@@ -426,7 +445,8 @@ export async function redrawLoreImageTool(
   toolCallId: string,
   args: {
     entity?: string; file?: string; instruction?: string; references?: string[];
-    aspect?: string; resolution?: string; quality?: string; desc?: string; note?: string; reason?: string;
+    aspect?: string; resolution?: string; quality?: string; negative?: string;
+    desc?: string; note?: string; reason?: string;
   },
   ctx: ToolContext,
 ): Promise<ToolResult> {
@@ -468,6 +488,7 @@ export async function redrawLoreImageTool(
     aspect: args.aspect,
     resolution: tierOf(args.resolution, RESOLUTION_TIERS),
     quality: tierOf(args.quality, QUALITY_TIERS),
+    negative: args.negative,
     reason: args.reason,
     refPaths: refs.paths.filter((p) => p !== image.absPath),
     dest: { kind: "lore", entityName: entity.name, entityDir: entity.dirPath, slot: image.slot },

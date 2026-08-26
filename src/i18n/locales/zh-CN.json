@@ -1291,7 +1291,8 @@
       "docxChanged": "改了 {{count}} 项",
       "docxChangeMark": "改",
       "docxFontMissing": "{{fonts}} 本机未装（不影响导出：文件里写的就是它，在装了这个字体的机器上会正常排版）",
-      "docxNote": "转换不经过模型：结构来自 markdown，字体字号行距页边距全部来自这套格式。"
+      "docxNote": "转换不经过模型：结构来自 markdown，字体字号行距页边距全部来自这套格式。",
+      "imageNegative": "不要出现：{{text}}"
     },
     "autoApprove": {
       "chipSession": "本次对话自动批准中",
