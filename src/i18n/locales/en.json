@@ -948,6 +948,7 @@
       "loreDropNoKey": "no key matched",
       "loreDropGroupLost": "lost group exclusion",
       "loreDropBudget": "over budget",
+      "loreDropResident": "already in context",
       "loreDropManual": "manual-only",
       "agentModeLabel": "Agent mode (may read/write the {{kb}} & memory; document edits need approval)",
       "agentModeHint": "The AI consults the {{kb}} and {{docs}} as needed, maintains the {{kb}} and memory automatically (backed up before every write), and proposes document changes as review cards — nothing lands until you approve.",

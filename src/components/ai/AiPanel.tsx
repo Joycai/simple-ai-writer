@@ -678,6 +678,7 @@ function LoreReportSection({
     reason === "no-key" ? t("ai.panel.loreDropNoKey")
     : reason === "group-lost" ? t("ai.panel.loreDropGroupLost")
     : reason === "budget" ? t("ai.panel.loreDropBudget")
+    : reason === "resident" ? t("ai.panel.loreDropResident")
     : t("ai.panel.loreDropManual");
 
   const overBudget = report.entities.some((e) =>

@@ -948,6 +948,7 @@
       "loreDropNoKey": "未命中关键词",
       "loreDropGroupLost": "互斥组落选",
       "loreDropBudget": "超出预算",
+      "loreDropResident": "已在上下文",
       "loreDropManual": "仅手动",
       "agentModeLabel": "Agent 模式（可读写{{kb}}与记忆，正文修改需确认）",
       "agentModeHint": "AI 将按需查阅{{kb}}与{{docs}}、自动维护{{kb}}和相关记忆（写入前自动备份），并以「待确认修改」卡片的形式提出正文改动——批准后才会落盘。",

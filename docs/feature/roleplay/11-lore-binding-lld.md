@@ -1,6 +1,6 @@
 # 绑定与自动注入的粒度 · 详细设计（LLD）
 
-> 状态：**planned**。背景：第十轮审查确认，扮演 agent 的「绑定词条」语义与作者的
+> 状态：**partial** —— PR-1 已实现（§6），PR-2~4 未做。背景：第十轮审查确认，扮演 agent 的「绑定词条」语义与作者的
 > 预期存在 6 个 gap，其中两个是**粒度错配**（账本按条目、期望按特征），一个是
 > **匹配门槛**（特征要先命中条目名才可能激活，而扮演里作者对着角色说话不写名字）。
 > 本文档是把现状改成 §1 那两条预期的执行设计。
@@ -280,7 +280,7 @@ recordInjectionsFromReport(meta, report, byDir, seedBlock);
 
 ## 6. PR 切分与验收
 
-### PR-1 · `selectLore` 的两个入参（纯层，无调用点改动）
+### PR-1 · `selectLore` 的两个入参（纯层，无调用点改动）· ✅ 已实现
 
 改：`lib/context/loreSelect.ts`、`components/ai/AiPanel.tsx`（一条 `dropReason`
 分支）、两份 i18n。
@@ -294,6 +294,21 @@ recordInjectionsFromReport(meta, report, byDir, seedBlock);
 - e. pin 的特征即使在 `excludeFacets` 里也照常注入
 
 **不做**：不改两级匹配规则、不改预算算法、不动任何调用点。
+
+**实现出入**（三处，都是加法）：
+
+1. 多导出了一个 `facetKey(dirPath, file)`——`dirPath#facetFile` 这个拼法从此只有
+   一处，PR-2 的账本和 PR-3 的绑定块都从它拿 key。设计里只写了格式，没写由谁拼；
+   两边各拼一次迟早写岔。
+2. 「resident 先于 keys 判断」写进了代码注释和一条独立测试：常驻的那一段**这一轮
+   字面没命中也照样占组**。设计 §4.2.4 只说了它参与互斥组，没说清判断顺序，而顺序
+   反了就会在「只提了便装」的那种轮次里放亚军进来。
+3. 测试比清单多两条：一条钉住 header 只计一次费（`usedChars` 精确等值），一条钉住
+   两个选项都不传时 `text` / `report` 与从前逐字相同——PR-2 改调用点时，这条是
+   「纯层没走样」的锚。
+
+验收状态：`pnpm vitest run` 190 文件 2580 例全绿（含新增 8 例），`pnpm build`
+（tsc + vite）通过。
 
 ### PR-2 · 账本下沉到特征级
 
