@@ -63,7 +63,9 @@
   font: 400 11px/1.5 var(--font-sans);
   box-shadow: var(--shadow-md);
   cursor: pointer;
-  animation: jumpLatestIn 140ms var(--ease-out);
+  /* 入场动画刻意没有：这个气泡由 useStickToBottom 的单阈值判定驱动（EDGE=40，
+     无滞回，另挂一个 ResizeObserver），边界附近的惯性滚动和拖窗口都会让它反复
+     重挂载，而关键帧每次挂载都从零重放。同 InlineAiBubble（见 plans/003）。 */
   transition: color var(--transition-fast), border-color var(--transition-fast),
     background var(--transition-fast);
 }
@@ -73,11 +75,6 @@
   background: var(--color-bg-elevated);
 }
 .jumpLatest:active { transform: translate(-50%, 1px); }
-
-@keyframes jumpLatestIn {
-  from { opacity: 0; transform: translate(-50%, 6px); }
-  to { opacity: 1; transform: translate(-50%, 0); }
-}
 
 /* "Show earlier turns" bar — quiet, ghost-chip styling like .attachChipGhost:
    it stands for absent content, not an action the author is urged toward. */
