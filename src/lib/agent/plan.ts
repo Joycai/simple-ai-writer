@@ -27,21 +27,68 @@
  * so "also fix Kael while you're there" doesn't silently revoke the first.
  */
 
-import type { LoreIndex } from "../lore";
+import { sameCollection, type LoreIndex } from "../lore";
 import { findEntityByName } from "./tools";
 
 export type LorePlanAction = "create" | "update" | "move" | "delete";
 
 export const LORE_PLAN_ACTIONS: LorePlanAction[] = ["create", "update", "move", "delete"];
 
+/**
+ * What kind of thing a step acts on. Absent means `"entity"` — every plan
+ * written before collections existed, and the overwhelming majority since.
+ *
+ * The second and third kinds exist for one reason: **a reorganisation pass is
+ * not reviewable one entry at a time.** 「把 200 条按作品归类」 as 200 entity
+ * steps is a wall of text, and an author who cannot read the card does not
+ * really approve it — the gate degrades into a rubber stamp, which is worse
+ * than no gate because it looks like one. One step per *collection*, carrying
+ * the entries that move, is both readable and the actual unit of the decision
+ * the author is making.
+ *
+ * The four actions are reused rather than extended (no "file"/"rename" verbs):
+ * filing changes a collection's membership, so it is an `update` **of the
+ * collection**; renaming one relocates its identity, so it is a `move`. That
+ * keeps the schema enum — which rides resident on every round — from growing.
+ */
+export type LorePlanTarget = "entity" | "collection" | "category";
+
+export const LORE_PLAN_TARGETS: LorePlanTarget[] = ["entity", "collection", "category"];
+
 export interface LorePlanStep {
   action: LorePlanAction;
-  /** Entity the step acts on — the name the author will recognise. */
+  /**
+   * What this step acts on: absent = an entity (the default), otherwise the
+   * collection or category named by `entity`.
+   */
+  target?: LorePlanTarget;
+  /**
+   * The name the author will recognise: an entity name, or — when `target` is
+   * collection/category — that collection's or category's name.
+   *
+   * One field rather than three, because the gate's question is always the
+   * same ("which named thing does this touch?") and a resident schema pays for
+   * every property it declares.
+   */
   entity: string;
+  /**
+   * Collection steps only: which entries move in or out. Empty/absent means the
+   * step is about the collection itself (create / rename / delete), not its
+   * membership.
+   *
+   * This is the authorisation boundary for a filing pass: a `file_lore_entries`
+   * call may only touch entries this list names.
+   */
+  members?: string[];
   /** "update" only: which file in the entity dir. Omitted = any file. */
   file?: string;
   /** What the change is, in the author's language. Shown on the card. */
   detail: string;
+}
+
+/** A step's target, with the default applied. */
+export function stepTarget(step: LorePlanStep): LorePlanTarget {
+  return step.target ?? "entity";
 }
 
 export interface LorePlan {
@@ -87,6 +134,11 @@ function sameEntity(loreIndex: LoreIndex, planned: string, called: string): bool
 
 /** One-line rendering of a step, for the error text the model has to act on. */
 export function describeStep(step: LorePlanStep): string {
+  const kind = stepTarget(step);
+  if (kind !== "entity") {
+    const members = step.members?.length ? ` [${step.members.join(", ")}]` : "";
+    return `${step.action} ${kind} "${step.entity}"${members} — ${step.detail}`;
+  }
   const target = step.file ? `${step.entity} / ${step.file}` : step.entity;
   return `${step.action} ${target} — ${step.detail}`;
 }
@@ -106,6 +158,16 @@ export function checkPlan(
   action: LorePlanAction,
   entity: string,
   file?: string,
+  opts?: {
+    /** Which kind of thing the call touches. Default "entity". */
+    target?: LorePlanTarget;
+    /**
+     * Collection steps: the entry being filed. Checked against the step's
+     * `members`, so a filing pass can only touch the entries the author saw
+     * listed on the card.
+     */
+    member?: string;
+  },
 ): PlanCheck {
   if (!gate) {
     return {
@@ -123,8 +185,42 @@ export function checkPlan(
     };
   }
 
+  const target = opts?.target ?? "entity";
+
+  // Collection / category steps match on their own terms: no file scoping, and
+  // — when the step listed members — the entry being filed must be one of them.
+  if (target !== "entity") {
+    const idx = gate.steps.findIndex(
+      (s) =>
+        stepTarget(s) === target &&
+        s.action === action &&
+        (target === "collection"
+          ? sameCollection(s.entity, entity)
+          : s.entity.trim().toLowerCase() === entity.trim().toLowerCase()) &&
+        (!opts?.member ||
+          !s.members?.length ||
+          s.members.some((m) => sameEntity(loreIndex, m, opts.member!))),
+    );
+    if (idx < 0) {
+      return {
+        ok: false,
+        message:
+          `Error: the approved plan does not cover "${action}" on the ${target} "${entity}"` +
+          `${opts?.member ? ` for "${opts.member}"` : ""}. ` +
+          `Approved steps are:\n${gate.steps.map((s) => `  - ${describeStep(s)}`).join("\n")}\n` +
+          "Do not improvise beyond them. If the plan really should change, call propose_lore_plan again with the revised steps and wait for the author.",
+      };
+    }
+    gate.fulfilled.add(idx);
+    return { ok: true, step: gate.steps[idx] };
+  }
+
   const at = gate.steps.findIndex(
     (s) =>
+      // Entity calls never match a collection/category step, and vice versa —
+      // otherwise "update 《漕运纪》" (the collection) would authorise rewriting
+      // an entity that happens to share the name.
+      stepTarget(s) === "entity" &&
       // update_lore_file is the only tool that ever lands a file — including a
       // facet that doesn't exist yet on an entity that does (create_lore_entity
       // refuses that; it only makes brand-new entities). Its call is always

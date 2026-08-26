@@ -1211,7 +1211,13 @@
         "update": "修改",
         "move": "移动",
         "delete": "删除"
-      }
+      },
+      "target": {
+        "collection": "集合",
+        "category": "分类"
+      },
+      "members": "{{count}} 条",
+      "membersMore": " 等 {{n}} 条"
     },
     "mention": {
       "badgeImage": "图片"

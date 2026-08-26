@@ -15,7 +15,7 @@ import { readHtmlSlideRange, splitHtmlSlides } from "../pptx/htmlSlides";
 import { fileExists, readFile } from "../fs/fileio";
 import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, isImagePath } from "../fs/images";
 import { downscaleNote, imageForModel, type Downscaled } from "../image/normalize";
-import { imageSlotChecklistText, outOfScopeCount, readEntityFile, scopeLoreIndex, slotChecklistText, type LoreEntity, type LoreIndex } from "../lore";
+import { collectionViews, entityCollections, imageSlotChecklistText, outOfScopeCount, readEntityFile, scopeLoreIndex, slotChecklistText, type LoreEntity, type LoreIndex } from "../lore";
 import { isKnownCategory } from "../profile/active";
 import {
   baseName,
@@ -50,7 +50,11 @@ export interface ToolResult {
  * say "there are others outside the current collection — name one and I can
  * still read it", which is exactly what the fence allows.
  */
-export function formatLoreIndex(loreIndex: LoreIndex, scope?: string | null): string {
+export function formatLoreIndex(
+  loreIndex: LoreIndex,
+  scope?: string | null,
+  declared?: readonly string[],
+): string {
   const scoped = scopeLoreIndex(loreIndex, scope ?? null);
   const hidden = outOfScopeCount(loreIndex, scope ?? null);
   const fence = scope
@@ -58,6 +62,18 @@ export function formatLoreIndex(loreIndex: LoreIndex, scope?: string | null): st
       `${hidden} further ${hidden === 1 ? "entry is" : "entries are"} filed elsewhere and left out of this list — ` +
       `you can still read one by name if the author asks for it, but do not go looking through them on your own.)`
     : "";
+  // 集合：先报有哪些，再在每条后面标它归在哪。没有集合的项目一个字都不多花。
+  //
+  // 这一段是**结果文本**、不是 schema——只在模型真的调用时计费，不吃每轮常驻的
+  // 工具预算。而少了它，模型要归档就得先把条目一条条读一遍才知道现有的归档长什么
+  // 样，那才是真的贵。
+  const views = collectionViews(loreIndex, [...(declared ?? [])]);
+  const filed = views.length > 0;
+  const catalogue = filed
+    ? `Collections: ${views.map((v) => `${v.name} (${v.count})`).join(" · ")}` +
+      `\nAn entry belongs to any number of them, or none. They are the author's own filing scheme — file into an existing one rather than inventing a name.\n`
+    : "";
+
   const lines: string[] = [];
   for (const [category, entities] of Object.entries(scoped)) {
     if (!entities.length) continue;
@@ -70,7 +86,11 @@ export function formatLoreIndex(loreIndex: LoreIndex, scope?: string | null): st
       : "  (no enabled capability pack declares this category — you can read and edit these entries, but you cannot create or move entries into it)";
     lines.push(`[${category}]${orphan}`);
     for (const e of entities) {
-      lines.push(`  - ${e.name}: ${e.summary || "(no summary)"}`);
+      // 归属跟在名字后面，未归集的什么都不写——「没有方括号」就是未归集，比写一个
+      // "(unfiled)" 便宜，而且让一眼扫下去哪些还没分家变得显眼。
+      const cols = filed ? entityCollections(e) : [];
+      const tag = cols.length > 0 ? ` [${cols.join(", ")}]` : "";
+      lines.push(`  - ${e.name}${tag}: ${e.summary || "(no summary)"}`);
     }
   }
   if (lines.length === 0) {
@@ -78,7 +98,7 @@ export function formatLoreIndex(loreIndex: LoreIndex, scope?: string | null): st
       ? `No lore entities in the collection "${scope}".${fence}`
       : "No lore entities found in this project.";
   }
-  return lines.join("\n") + fence;
+  return catalogue + lines.join("\n") + fence;
 }
 
 /** Case-insensitive entity lookup by name or alias across all categories. */

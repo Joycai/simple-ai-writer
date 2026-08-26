@@ -639,10 +639,34 @@ describe("formatLoreIndex", () => {
       ] as never[],
     };
     const out = formatLoreIndex(index, "小说A");
-    expect(out).toContain("  - Aria: 骑士");
+    expect(out).toContain("  - Aria [小说A]: 骑士");
     expect(out).not.toContain("Bran");
     expect(out).toContain('collection "小说A"');
     expect(out).toContain("2 further entries are filed elsewhere");
+  });
+
+  /**
+   * 归属要出现在清单里。模型要归档得**一致**，就得先看得见现有的归档长什么样——
+   * 否则它只能一条条 read_lore_entity 读过去，那才是真的贵。
+   */
+  it("lists the collections and tags each entry with its own", () => {
+    const index = {
+      characters: [
+        { name: "Aria", summary: "骑士", collections: ["小说A", "出版方案"] },
+        { name: "Dorn", summary: "", collections: [] },
+      ] as never[],
+    };
+    const out = formatLoreIndex(index, null, ["小说A", "出版方案", "空集合"]);
+    expect(out).toContain("Collections: 小说A (1) · 出版方案 (1) · 空集合 (0)");
+    expect(out).toContain("  - Aria [小说A, 出版方案]: 骑士");
+    // 未归集什么都不标：「没有方括号」就是答案，比写一个 (unfiled) 便宜，而且让
+    // 还没分家的条目一眼扫得出来。
+    expect(out).toContain("  - Dorn: (no summary)");
+  });
+
+  it("costs a project with no collections nothing at all", () => {
+    const index = { characters: [{ name: "Aria", summary: "骑士", collections: [] }] as never[] };
+    expect(formatLoreIndex(index)).not.toContain("Collections:");
   });
 
   it("says so when the active collection is empty rather than looking like an empty project", () => {

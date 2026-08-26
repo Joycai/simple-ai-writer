@@ -30,7 +30,7 @@ import { connOptions, resolveConn } from "../lib/ai/conn";
 import { defaultMaxOutput, effectiveMaxOutput } from "../lib/ai/modelLimits";
 import { useAppStore } from "./appStore";
 import { useLoreStore } from "./loreStore";
-import { useProjectStore } from "./projectStore";
+import { loreOrganizer, useProjectStore } from "./projectStore";
 import { loadApiKey } from "../lib/keyStore";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
 import {
@@ -564,6 +564,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             projectPath,
             loreIndex,
             loreScope,
+            organize: loreOrganizer(),
             multimodal: model.type === "multimodal",
             // Write-auto tools call these after touching disk so the panels
             // reflect agent edits immediately (no-ops for read-only presets).

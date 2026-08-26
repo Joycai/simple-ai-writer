@@ -34,9 +34,14 @@ import {
   type ToolCall,
   type ToolResult,
 } from "./tools";
-import { LORE_PLAN_ACTIONS, type LorePlan, type PlanDecision, type PlanGate } from "./plan";
+import { LORE_PLAN_ACTIONS, LORE_PLAN_TARGETS, type LorePlan, type PlanDecision, type PlanGate } from "./plan";
 import { editImageTool, generateImageTool, redrawLoreImageTool } from "./imageTools";
 import { exportPptxTool } from "./pptxTools";
+import {
+  createLoreCategoryTool,
+  fileLoreEntriesTool,
+  manageCollectionTool,
+} from "./organizeTools";
 import { exportDocxTool, readDocFormatTool } from "./docxTools";
 import {
   listScenesTool,
@@ -384,6 +389,24 @@ export type ApprovalDecision =
     }
   | { approved: false; reason?: string };
 
+/**
+ * 重整知识库组织结构的能力（见 `ToolContext.organize`）。
+ *
+ * `collections` 随上下文带上而不是让工具再去要一次：验证「这个集合存不存在」是每
+ * 一次调用的第一步，而模型给的名字有一半会是它自己编的。
+ */
+export interface LoreOrganizer {
+  /** 当前声明的集合，按作者排的顺序。 */
+  collections: string[];
+  createCollection: (name: string) => Promise<void>;
+  renameCollection: (from: string, to: string) => Promise<void>;
+  deleteCollection: (name: string) => Promise<void>;
+  /** 把条目（按 dirPath）归入 / 移出集合。 */
+  file: (dirPaths: string[], add: string[], remove: string[]) => Promise<void>;
+  /** 新建分类，传作者能读的标签，返回真正落成的 id。 */
+  createCategory: (label: string) => Promise<string>;
+}
+
 /** Everything an executor may need about the running project. */
 export interface ToolContext {
   projectPath: string;
@@ -401,6 +424,18 @@ export interface ToolContext {
    * 集合，否则模型刚建好的东西立刻从它自己看得见的那份清单里消失。
    */
   loreScope?: string | null;
+  /**
+   * 重整知识库的能力：建/改名/删集合、把条目归入或移出、新建分类。
+   *
+   * 是一个**能力对象**而不是三个回调，因为它们要么一起有要么一起没有——缺席意味着
+   * 「当前 surface 不能重整知识库」，工具据此直接说明而不是静默无操作。
+   *
+   * 方法体都薄薄地转交给 projectStore 已有的那四条路径（UI 走的也是它们），而不是
+   * 在 agent 层重写一遍：集合改名要改写所有成员的 frontmatter、删除要解除归属、
+   * 新建分类要落盘 profile.json 并 scaffold 目录——同一件事有两份实现，迟早会有
+   * 一份忘了做其中一步。
+   */
+  organize?: LoreOrganizer;
   /** Whether the active model accepts image inputs (controls lore gallery payloads). */
   multimodal: boolean;
   /**
@@ -503,7 +538,7 @@ export interface ToolContext {
  * A tool with no group is resident — the default, and what every tool was
  * before this existed.
  */
-export type ToolGroup = "lore_write";
+export type ToolGroup = "lore_write" | "lore_organize";
 
 export interface RegisteredTool {
   definition: ToolDefinition;
@@ -546,6 +581,9 @@ export type ToolId =
   | "add_lore_image"
   | "update_lore_image"
   | "delete_lore_image"
+  | "manage_collection"
+  | "file_lore_entries"
+  | "create_lore_category"
   | "set_lore_avatar"
   | "copy_lore_file"
   | "move_lore_entity"
@@ -614,7 +652,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
     },
     execute: async (call, ctx) => ({
       toolCallId: call.id,
-      content: formatLoreIndex(ctx.loreIndex, ctx.loreScope),
+      content: formatLoreIndex(ctx.loreIndex, ctx.loreScope, ctx.organize?.collections),
     }),
   },
 
@@ -921,7 +959,20 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
                   },
                   entity: {
                     type: "string",
-                    description: "Entity name — for 'create', the name you will give the new entry",
+                    description:
+                      "What this step acts on: an entity name (for 'create', the name you will give it), or — when 'target' says collection/category — that collection's or category's name",
+                  },
+                  target: {
+                    type: "string",
+                    enum: LORE_PLAN_TARGETS,
+                    description:
+                      "What kind of thing this step acts on. Omit for an entity (the usual case). Use 'collection' to create/rename/delete a collection or to move entries in or out of one, 'category' to create a new category. A reorganisation belongs in ONE collection step per collection, not one step per entry — the author has to be able to read the card.",
+                  },
+                  members: {
+                    type: "array",
+                    items: { type: "string" },
+                    description:
+                      "collection steps only: the entries this step moves in or out. Naming them here is what authorises filing them — file_lore_entries refuses any entry the step did not list.",
                   },
                   file: {
                     type: "string",
@@ -1277,6 +1328,78 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => updateLoreImageTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  // ── 重整组织结构（deferred: "lore_organize"，见 ./organizeTools） ──────────
+  manage_collection: {
+    access: "write-auto",
+    group: "lore_organize",
+    definition: {
+      type: "function",
+      function: {
+        name: "manage_collection",
+        description:
+          "Create, rename or delete a knowledge-base COLLECTION — the second axis, which body of work an entry belongs to (a novel, a client's report). Not a category: a category is what an entry IS (character / location), a collection is which project it is FOR, and an entry has exactly one category but any number of collections. Requires an approved plan step with target 'collection'. Deleting never deletes entries — it only removes that membership.",
+        parameters: {
+          type: "object",
+          properties: {
+            op: { type: "string", enum: ["create", "rename", "delete"], description: "What to do" },
+            collection: { type: "string", description: "The collection to act on — for 'create', the name you are giving it" },
+            new_name: { type: "string", description: "rename only: the new name" },
+          },
+          required: ["op", "collection"],
+        },
+      },
+    },
+    execute: (call, ctx) => manageCollectionTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  file_lore_entries: {
+    access: "write-auto",
+    group: "lore_organize",
+    definition: {
+      type: "function",
+      function: {
+        name: "file_lore_entries",
+        description:
+          "File entries into and/or out of collections — the bulk move that reorganising a knowledge base is made of. Pass every entry that goes to the same collection in ONE call. Membership is additive: 'add' never removes the collections an entry is already in, so use 'remove' to take it out of one. Requires an approved plan step with target 'collection' whose 'members' name the entries — anything not on that list is refused. The collections in 'add' must already exist (create them with manage_collection first).",
+        parameters: {
+          type: "object",
+          properties: {
+            entities: {
+              type: "array",
+              items: { type: "string" },
+              description: "Entity names exactly as returned by list_lore_entities",
+            },
+            add: { type: "array", items: { type: "string" }, description: "Collections these entries join" },
+            remove: { type: "array", items: { type: "string" }, description: "Collections these entries leave" },
+          },
+          required: ["entities"],
+        },
+      },
+    },
+    execute: (call, ctx) => fileLoreEntriesTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  create_lore_category: {
+    access: "write-auto",
+    group: "lore_organize",
+    definition: {
+      type: "function",
+      function: {
+        name: "create_lore_category",
+        description:
+          "Create a new knowledge-base CATEGORY — what an entry IS (人物 / 地点 / 合同), which is also its folder on disk. Reach for it only when existing categories genuinely cannot hold a kind of entry; to group by project use a collection instead. Requires an approved plan step with target 'category'. There is deliberately no rename or delete counterpart: those would relocate every member entry's folder.",
+        parameters: {
+          type: "object",
+          properties: {
+            label: { type: "string", description: "What the author will see this category called; the folder id is derived from it" },
+          },
+          required: ["label"],
+        },
+      },
+    },
+    execute: (call, ctx) => createLoreCategoryTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   delete_lore_image: {
@@ -2704,7 +2827,7 @@ export function partitionByGroup(ids: readonly ToolId[]): {
   deferred: Record<ToolGroup, ToolId[]>;
 } {
   const resident: ToolId[] = [];
-  const deferred: Record<ToolGroup, ToolId[]> = { lore_write: [] };
+  const deferred: Record<ToolGroup, ToolId[]> = { lore_write: [], lore_organize: [] };
   for (const id of ids) {
     const group = REGISTRY[id].group;
     if (group) deferred[group].push(id);

@@ -14,11 +14,14 @@
 
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { LorePlanAction } from "../../lib/agent/plan";
+import { stepTarget, type LorePlanAction } from "../../lib/agent/plan";
 import { autoApproveScope } from "../../lib/agent/autoApprove";
 import { useAgentStore, type PendingPlan } from "../../stores/agentStore";
 import { useTerms } from "../../stores/projectStore";
 import styles from "./PlanCard.module.css";
+
+/** How many member names a collection step shows before folding the rest. */
+const MEMBER_PREVIEW = 6;
 
 const ACTION_STYLE: Record<LorePlanAction, string> = {
   create: styles.actionCreate,
@@ -48,18 +51,40 @@ export function PlanCard({ item }: { item: PendingPlan }) {
       <div className={styles.body}>
         {plan.summary && <div className={styles.summary}>{plan.summary}</div>}
         <ol className={styles.steps}>
-          {plan.steps.map((step, i) => (
-            <li key={i} className={styles.step}>
-              <span className={`${styles.action} ${ACTION_STYLE[step.action]}`}>
-                {t(`ai.plan.action.${step.action}`)}
-              </span>
-              <span className={styles.entity}>
-                {step.entity}
-                {step.file && <span className={styles.file}> / {step.file}</span>}
-              </span>
-              <span className={styles.detail}>{step.detail}</span>
-            </li>
-          ))}
+          {plan.steps.map((step, i) => {
+            const kind = stepTarget(step);
+            const members = step.members ?? [];
+            return (
+              <li key={i} className={styles.step}>
+                <span className={`${styles.action} ${ACTION_STYLE[step.action]}`}>
+                  {t(`ai.plan.action.${step.action}`)}
+                </span>
+                <span className={styles.entity}>
+                  {/* 目标类型只在不是「条目」时才出现——条目是默认，给它挂个徽标
+                      等于让每一行都多一个恒定不变的词。 */}
+                  {kind !== "entity" && (
+                    <span className={styles.kind}>{t(`ai.plan.target.${kind}`)}</span>
+                  )}
+                  {step.entity}
+                  {step.file && <span className={styles.file}> / {step.file}</span>}
+                </span>
+                <span className={styles.detail}>
+                  {step.detail}
+                  {/* 一条集合一行、条目列在行内：这正是「200 条按作品归类」还能读的
+                      原因——作者读 5 行看完一次重整，而不是 200 行。 */}
+                  {members.length > 0 && (
+                    <span className={styles.members}>
+                      {t("ai.plan.members", { count: members.length })}
+                      {"："}
+                      {members.slice(0, MEMBER_PREVIEW).join("、")}
+                      {members.length > MEMBER_PREVIEW &&
+                        t("ai.plan.membersMore", { n: members.length - MEMBER_PREVIEW })}
+                    </span>
+                  )}
+                </span>
+              </li>
+            );
+          })}
         </ol>
       </div>
 

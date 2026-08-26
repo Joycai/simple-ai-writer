@@ -62,11 +62,13 @@ import { backupFile, backupFileByMove } from "./backup";
 import { countLines, describeEditTarget, findOccurrences, occurrenceAt, sliceLines } from "./editApply";
 import {
   LORE_PLAN_ACTIONS,
+  LORE_PLAN_TARGETS,
   checkPlan,
   describeStep,
   outstandingSteps,
   type LorePlanAction,
   type LorePlanStep,
+  type LorePlanTarget,
 } from "./plan";
 import type { ApprovalDecision, ToolContext } from "./registry";
 import {
@@ -123,7 +125,34 @@ export async function proposeLorePlanTool(
       };
     }
     const file = typeof s.file === "string" && s.file.trim() ? s.file.trim() : undefined;
-    steps.push({ action, entity, file, detail });
+
+    // 目标类型：缺省是条目（集合出现之前的每一份方案，以及之后绝大多数）。
+    const rawTarget = String(s.target ?? "entity").trim() as LorePlanTarget;
+    if (!LORE_PLAN_TARGETS.includes(rawTarget)) {
+      return {
+        toolCallId,
+        content: `Error: step ${i + 1} has target "${s.target}" — must be one of: ${LORE_PLAN_TARGETS.join(", ")}.`,
+      };
+    }
+    const members = Array.isArray(s.members)
+      ? s.members.map((m) => String(m).trim()).filter(Boolean)
+      : undefined;
+    if (members?.length && rawTarget !== "collection") {
+      return {
+        toolCallId,
+        content:
+          `Error: step ${i + 1} lists 'members' but its target is "${rawTarget}". ` +
+          "Only a collection step moves entries in or out; an entity step acts on the one entry it names.",
+      };
+    }
+    steps.push({
+      action,
+      target: rawTarget === "entity" ? undefined : rawTarget,
+      entity,
+      members: members?.length ? members : undefined,
+      file,
+      detail,
+    });
   }
 
   ctx.lorePlan.asked = true;
@@ -200,13 +229,26 @@ const MERGE_ALIAS_HINT =
   'If you are merging the two, finish the merge in this order: copy what is worth keeping, delete the losing entity, and only THEN add its name as an alias — the check clears once the name no longer resolves. Otherwise drop the alias.';
 
 /**
- * There is deliberately no tool that creates, renames or deletes a knowledge
- * base category: categories come from the enabled capability packs plus the
- * author's own list, both managed in the app. Every "unknown category" error
- * ends with this so the model asks instead of retrying invented ids.
+ * What to tell the model when it names a category that does not exist.
+ *
+ * This used to say "categories cannot be created by tools" full stop. That was
+ * right while the only question was "may the agent invent structure on its own"
+ * — the answer is still no — but it broke down the moment the author *delegates*
+ * a reorganisation: reporting a list of category names in chat and asking them
+ * to go create each one by hand is pushing the work back.
+ *
+ * So creation exists now, and it goes through the plan card
+ * (`organizeTools.createLoreCategoryTool`): the agent may **propose** a new
+ * category, the author approves it in the same pass they approve everything
+ * else. What is still missing on purpose is rename and delete — a category is a
+ * folder on disk, so either would relocate every member entry and stale its
+ * `[[lore:分类/id]]` path citations.
+ *
+ * Every "unknown category" error ends with this, so the model reaches for the
+ * plan rather than retrying invented ids.
  */
 const NO_CATEGORY_TOOL_HINT =
-  "Categories cannot be created by tools — if a new one is needed, ask the author to add it (Settings → 工作台, or the lore wall's 新建分类) and re-run.";
+  "Categories are not invented on the fly — if a new one is genuinely needed, put a plan step with target 'category' in propose_lore_plan and create it with create_lore_category once the author approves. To group entries by which project they serve, use a collection instead (manage_collection / file_lore_entries).";
 
 /**
  * Gate helper for the write tools: returns the refusal result to hand straight

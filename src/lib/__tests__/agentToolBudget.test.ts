@@ -140,9 +140,19 @@ describe("tool schema budget", () => {
     // buys "tell me this preset's margins" and "copy that .docx's layout",
     // both answered as prose rather than as a JSON object the model would then
     // be tempted to write back.
+    // 9,268 with the plan's second axis (`target` + `members` on a step, see
+    // lib/agent/plan): +190, and it is the whole resident cost of collection
+    // organising — the two tools that act on the plan sit in the deferred
+    // `lore_organize` group and cost nothing until the author approves. What
+    // the 190 buys is the difference between a reorganisation the author can
+    // read and one they can only rubber-stamp: without a collection target,
+    // 「把 200 条按作品归类」 is 200 entity steps. Most of it is the sentence on
+    // `target` telling the model to write ONE step per collection rather than
+    // one per entry — delete that and the schema gets cheaper while the card
+    // gets useless.
     const { resident } = partitionByGroup(AGENT_ASSIST_PRESET.tools);
     const residentTokens = estimateToolsTokens(getToolDefinitions(resident));
-    expect(residentTokens).toBeLessThanOrEqual(9_150);
+    expect(residentTokens).toBeLessThanOrEqual(9_300);
     // A guard against the deferral quietly becoming a no-op: someone drops the
     // `group` tag off a tool and the only symptom is a bigger bill.
     expect(tokensOf(AGENT_ASSIST_PRESET) - residentTokens).toBeGreaterThan(2_000);

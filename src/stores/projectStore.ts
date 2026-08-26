@@ -21,6 +21,8 @@ import {
   DEFAULT_DOC_MODEL,
   DEFAULT_SECTION_LABELS,
   NOVEL_PROFILE,
+  loreCategoryIds,
+  suggestCategoryId,
   type DocModel,
   type ProfileCategory,
   type ResolvedTerms,
@@ -29,6 +31,7 @@ import {
   type WorkspaceProfile,
 } from "../lib/profile";
 import { normalizeChapterFileName } from "../lib/context/outline";
+import type { LoreOrganizer } from "../lib/agent/registry";
 import {
   fileEntities,
   normalizeCollections,
@@ -262,6 +265,50 @@ interface ProjectState {
    * store got notified twice per character typed.
    */
   setDocCounts: (words: number, chars: number) => void;
+}
+
+/**
+ * 交给 agent 运行的**重整能力**（`ToolContext.organize`）。
+ *
+ * 方法体只是转交给下面那四条 store 动作——UI 走的也是它们。agent 层不能反向 import
+ * store，所以由调用方在这里注入，和 `resolveSubAgent` 同一种做法。
+ *
+ * `collections` 写成 getter 而不是一个数组快照：`ToolContext` 是一次运行的快照，
+ * 模型刚用 manage_collection 建的集合，下一句 file_lore_entries 就要能查到它存在。
+ * 存成数组的话那次查询会说「没有这个集合」，而错误信息还会理直气壮地把刚建好的
+ * 那个漏在列表外。
+ */
+export function loreOrganizer(): LoreOrganizer {
+  const st = () => useProjectStore.getState();
+  return {
+    get collections() {
+      return st().collections;
+    },
+    createCollection: async (name) => {
+      await st().setCollections([...st().collections, name]);
+    },
+    renameCollection: (from, to) => st().renameCollection(from, to),
+    deleteCollection: (name) => st().deleteCollection(name),
+    file: async (dirPaths, add, remove) => {
+      const index = useLoreStore.getState().index;
+      const byDir = new Map<string, LoreEntity>();
+      for (const list of Object.values(index)) for (const e of list ?? []) byDir.set(e.dirPath, e);
+      const entities = dirPaths
+        .map((d) => byDir.get(d))
+        .filter((e): e is LoreEntity => !!e);
+      await st().fileIntoCollections(entities, add, remove);
+    },
+    createCategory: async (label) => {
+      // 和知识库墙的「新建分类」同一条路：作者给标签，文件夹 id 推导出来，
+      // 于是这个工具永远不必向模型解释文件夹名的规则。
+      const id = suggestCategoryId(label, loreCategoryIds());
+      await st().setCustomCategories([
+        ...st().customCategories,
+        { id, labelZh: label, labelEn: label },
+      ]);
+      return id;
+    },
+  };
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
