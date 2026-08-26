@@ -21,6 +21,7 @@
 | [08-verification-checklist.md](08-verification-checklist.md) | 给作者试用的验证清单——**问法比条目重要** | 交给作者试之前 |
 | [09-runjob-refactor-lld.md](09-runjob-refactor-lld.md) | `runJob` 的历史准备路径抽进 `lib/roleplay/run.ts`：只动形状，不动行为 | 改 `runJob` 的排序前 |
 | [10-memory-system.html](10-memory-system.html) | **记忆系统全景图**（浏览器打开）：五张图讲清哪三块永不出上下文、压缩在什么时刻按什么阈值触发、角色私有记忆的四个刷新时刻、转场沉降与记忆区检索 | 想一次看懂记忆系统时；改 `context.ts` / `memory.ts` / `compact.ts` 之前 |
+| [11-lore-binding-lld.md](11-lore-binding-lld.md) | **绑定与自动注入的粒度**（`planned`）：主角条目正文常驻、勾中的特征常驻、**其余照常自动注入**——账本下沉到特征级、`selectLore` 的 `coreDone` / `excludeFacets`、四片 PR 与逐条验收 | 改绑定语义、`selectLore` 的入参、或 `lib/agent/compact.ts` 的注入账本之前 |
 
 ## 一分钟版本
 
