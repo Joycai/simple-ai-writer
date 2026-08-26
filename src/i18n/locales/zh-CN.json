@@ -1238,6 +1238,7 @@
       "writerFailed": "【系统提示】写手子代理没能完成这一次成文：{{reason}}\n\n主模型已经把工单准备好了，处理完上面的问题后再发一次即可。",
       "writerNoApproval": "当前界面无法审批正文写入，本次产出只留在对话里。",
       "writerPathOutside": "「{{path}}」不在项目文档目录内，没有写入。",
+      "writerExists": "「{{path}}」已经存在，没有写入。正文留在对话里。",
       "writerRangeGone": "第 {{from}}-{{to}} 行在这次运行期间已经不在了，没有写入。"
     },
     "approval": {

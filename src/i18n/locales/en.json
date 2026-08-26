@@ -1238,6 +1238,7 @@
       "writerFailed": "[SYSTEM] The writer subagent could not produce this turn's text: {{reason}}\n\nThe main model's work order is ready — fix the above and send again.",
       "writerNoApproval": "This surface cannot review manuscript writes, so the output stayed in the conversation.",
       "writerPathOutside": "\"{{path}}\" is outside the project's documents — nothing was written.",
+      "writerExists": "\"{{path}}\" already exists — nothing was written. The text is in the conversation.",
       "writerRangeGone": "Lines {{from}}-{{to}} are no longer there — nothing was written."
     },
     "approval": {
