@@ -169,9 +169,16 @@ export async function readLoreEntity(
     galleryLines.push(`- ${img.file}: ${img.desc || "(no description)"}${slot}`);
   }
   if (galleryLines.length) {
+    // The folder comes with the listing, because the listing is filenames and
+    // a filename is not enough to *show* one of these to the author: the chat
+    // resolves a picture link against the project root and inlines it only if
+    // it lands inside the project (lib/agent/chatImages), so a bare filename
+    // resolves to nothing and renders as an empty box. Once in the header, not
+    // once per line — they are all files in the same directory.
+    const where = `they are files in ${found.dirPath}, and embedding one in a reply needs that full path`;
     const header = multimodal
-      ? `=== images === (descriptions; call read_lore_image(entity: "${name}", file: ...) to view one)`
-      : "=== images === (text descriptions only — current model is text-only)";
+      ? `=== images === (descriptions; call read_lore_image(entity: "${name}", file: ...) to view one; ${where})`
+      : `=== images === (text descriptions only — current model is text-only; ${where})`;
     parts.push(`${header}\n${galleryLines.join("\n")}`);
   }
 
