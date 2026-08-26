@@ -28,7 +28,7 @@ import i18n from "../../i18n";
 import { FALLBACK_CHARS_PER_TOKEN } from "./budget";
 import { readFile } from "../fs/fileio";
 import { parseFrontmatter } from "../fs/markdown";
-import type { LoreEntity, LoreFacet, LoreIndex } from "../lore";
+import { inScope, type LoreEntity, type LoreFacet, type LoreIndex, type LoreScope } from "../lore";
 
 /**
  * Default total budget for the 【设定资料】 block, used only when no caller
@@ -228,13 +228,20 @@ interface Selected {
  *                     the chat's per-turn injection to not re-send entities
  *                     already in the conversation (lib/agent/compact ledger).
  *                     Pins are exempt: an explicit pin is the author insisting.
+ * @param opts.scope   The author's 取材范围 — a collection name, or null for
+ *                     the whole knowledge base (lib/lore/collections). Like
+ *                     `excludeDirs` it narrows **auto-matching only**: an entry
+ *                     the author pinned is injected whether or not it is filed
+ *                     in the active collection, because the fence exists to
+ *                     stop the wrong material drifting in on its own, not to
+ *                     overrule a deliberate act.
  */
 export async function selectLore(
   matchTarget: string,
   loreIndex: LoreIndex,
   pinPaths: string[],
   budgetChars: number = DEFAULT_LORE_BUDGET_CHARS,
-  opts?: { excludeDirs?: ReadonlySet<string> },
+  opts?: { excludeDirs?: ReadonlySet<string>; scope?: LoreScope },
 ): Promise<LoreSelection> {
   const lower = matchTarget.toLowerCase();
 
@@ -279,6 +286,7 @@ export async function selectLore(
     for (const entity of entities ?? []) {
       if (pinnedFacetsByDir.has(entity.dirPath)) continue; // already pinned
       if (opts?.excludeDirs?.has(entity.dirPath)) continue; // already in context
+      if (!inScope(entity, opts?.scope ?? null)) continue;  // outside 取材范围
       const terms = [entity.name, ...(entity.aliases ?? [])];
       if (terms.some((t) => t && lower.includes(t.toLowerCase()))) {
         autoDirs.push(entity.dirPath);

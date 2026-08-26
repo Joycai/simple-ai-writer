@@ -14,7 +14,7 @@
 
 import i18n from "../../i18n";
 import type { MessageContent } from "../ai/types";
-import type { LoreEntity, LoreIndex } from "../lore";
+import type { LoreEntity, LoreIndex, LoreScope } from "../lore";
 import { promptParams, sectionLabel } from "../profile/active";
 import { RECENT_WINDOW_MIN_CHARS } from "./budget";
 import { selectLore, type LoreActivationReport } from "./loreSelect";
@@ -38,6 +38,15 @@ export interface TaskExtras {
   packId?: string;
   /** dirPaths of manually pinned lore entities — merged with auto-matched. */
   manualLorePaths?: string[];
+  /**
+   * 作者当前的**取材范围**：一个知识库集合名，或 null / 缺席＝全部
+   * （见 lib/lore/collections）。
+   *
+   * 和 `manualLorePaths` 放在同一个字段袋里是有道理的——它们是同一件事的两面：
+   * 范围收窄自动匹配的候选池，置顶则**穿过**这个围栏。两者一起构成「这次运行从
+   * 哪里取材」。
+   */
+  loreScope?: LoreScope;
   /** Outline or writing direction the model should follow ("continue" only). */
   outline?: string;
   /** Free-form background knowledge not captured in the Lore system ("continue" only). */
@@ -384,6 +393,7 @@ export async function assembleContext(
     loreIndex,
     extras?.manualLorePaths ?? [],
     loreBudgetChars,
+    { scope: extras?.loreScope ?? null },
   );
 
   // Layer 4: recent context — the text immediately *before* the selection, used
@@ -552,6 +562,8 @@ export async function assembleTurnInjection(opts: {
   /** Question + quote + current document tail — same targets the seed used. */
   matchTarget: string;
   excludeDirs: ReadonlySet<string>;
+  /** 取材范围，见 `TaskExtras.loreScope`。 */
+  scope?: LoreScope;
   loreBudgetChars?: number;
   doc?: {
     filePath: string;
@@ -579,7 +591,7 @@ export async function assembleTurnInjection(opts: {
     opts.loreIndex,
     [],
     opts.loreBudgetChars,
-    { excludeDirs: opts.excludeDirs },
+    { excludeDirs: opts.excludeDirs, scope: opts.scope ?? null },
   );
 
   // Same section order as the seed (bundleContextSections): file → lore →

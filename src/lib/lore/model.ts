@@ -111,6 +111,14 @@ export interface LoreEntity {
    * false.
    */
   dict?: boolean;
+  /**
+   * 这条属于哪些**集合** —— 知识库的第二根轴，与分类正交，一条可属于任意多个
+   * （见 lib/lore/collections）。frontmatter `collections`，缺席即空数组
+   * ＝「未归集」，这也是集合出现之前所有条目的状态。
+   *
+   * 和 `dict` 一样是显式的作者开关，不是从名字或分类猜出来的。
+   */
+  collections: string[];
   mdFiles: string[];   // list of *.md filenames in the folder
   /** Parsed from images.md (each `## filename` heading + following paragraph). */
   images: LoreImage[];
@@ -142,13 +150,13 @@ export function loreEntityCount(index: LoreIndex): number {
  * `loreStore` state object — mutating that would edit store state behind
  * zustand's back, on arrays React is rendering from. Entities are copied too,
  * because those patches rewrite `id`/`dirPath`/`category` on the entity
- * itself, and so are the four arrays they splice or reassign. Facet and image
+ * itself, and so are the five arrays they splice or reassign. Facet and image
  * objects are only ever replaced wholesale, so they stay shared.
  *
  * Hand-written rather than `structuredClone`: this has to work in every
  * webview and in jsdom, and the shape is small and known.
  *
- * The four arrays are defaulted rather than assumed. `scanLore` always fills
+ * The five arrays are defaulted rather than assumed. `scanLore` always fills
  * them, but entities also arrive from hand-built fixtures and callers that
  * only need identity — the same reason `readLoreEntity` guards `mdFiles?.length`
  * — and a clone is the wrong place to start throwing about it.
@@ -159,6 +167,7 @@ export function cloneLoreIndex(index: LoreIndex): LoreIndex {
     out[category] = list.map((e) => ({
       ...e,
       aliases: [...(e.aliases ?? [])],
+      collections: [...(e.collections ?? [])],
       mdFiles: [...(e.mdFiles ?? [])],
       facets: [...(e.facets ?? [])],
       images: [...(e.images ?? [])],
@@ -179,4 +188,13 @@ export interface EntityMeta {
    * dictionary on the next save, the same trap `FacetMeta.slot` documents.
    */
   dict?: boolean;
+  /**
+   * 集合归属（见 `LoreEntity.collections`）。
+   *
+   * 和 `dict` 不同，这个字段**缺席即「保持原样」**：`saveEntityMetaAndBody` 从它
+   * 手上那份 entity 补默认值。`dict` 那条「每个写入方都得自己带上」的纪律有六个
+   * 写入点要守，与其再加一条同样的纪律，不如让默认值本身正确——真要清空归属就显式
+   * 传 `[]`，那和 undefined 是分得开的。
+   */
+  collections?: string[];
 }

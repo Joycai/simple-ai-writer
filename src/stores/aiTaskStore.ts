@@ -218,9 +218,14 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
     if (get().isRunning) return; // one task at a time — UI disables triggers, this guards races
     const { activeModelId, activePromptId, models, providers, prompts } = useAiStore.getState();
     const { projectPath } = useProjectStore.getState();
-    const { index: loreIndex } = useLoreStore.getState();
+    const { index: loreIndex, scope: loreScope } = useLoreStore.getState();
 
     if (!projectPath) { set({ error: i18n.t("ai.errors.noProject") }); return; }
+
+    // 取材范围折进 extras 一次，而不是在下面三个 assembleContext 调用点各写一遍：
+    // 漏掉任何一个，围栏就在那条路径上安静地失效（而失效是看不见的——上下文里只是
+    // 多了几条别的设定）。
+    extras = { ...extras, loreScope };
 
     const resolved = resolveConn(models, providers, activeModelId);
     if (!resolved.ok) { set({ error: resolved.error }); return; }
@@ -558,6 +563,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
           toolContext: {
             projectPath,
             loreIndex,
+            loreScope,
             multimodal: model.type === "multimodal",
             // Write-auto tools call these after touching disk so the panels
             // reflect agent edits immediately (no-ops for read-only presets).

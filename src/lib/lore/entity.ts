@@ -7,6 +7,7 @@ import { fileExists, makeDir, readDir, readFile, renamePath, writeBinaryFile, wr
 import { parseFrontmatter } from "../fs/markdown";
 import { parseImagesMd } from "./gallery";
 import { loreCategories } from "../profile/active";
+import { addCollection, normalizeCollections, removeCollection, renameCollection, sameCollection } from "./collections";
 import {
   RESERVED_ENTITY_FILES,
   type CategoryId,
@@ -116,6 +117,7 @@ async function readEntity(
   let aliases: string[] = [];
   let summary = "";
   let dict = false;
+  let collections: string[] = [];
 
   try {
     const raw = await readFile(indexPath);
@@ -126,6 +128,10 @@ async function readEntity(
     // The line-based frontmatter parser yields the string "true"; a real
     // boolean would mean the parser grew types, so accept both.
     dict = data.dict === true || data.dict === "true";
+    // Absent = 未归集, which is every entry that predates collections. The value
+    // is kept verbatim (only trimmed/deduped): a collection nothing declares is
+    // still a real collection — see lib/lore/collections.
+    collections = normalizeCollections(data.collections);
   } catch {
     // index.md missing — entity still listed with defaults
   }
@@ -181,7 +187,7 @@ async function readEntity(
     }
   }
 
-  return { id, category, dirPath, name, aliases, summary, dict, avatarPath, mdFiles, images, facets };
+  return { id, category, dirPath, name, aliases, summary, dict, collections, avatarPath, mdFiles, images, facets };
 }
 
 /**
@@ -293,20 +299,32 @@ function coerceStringList(v: unknown): string[] {
   return [];
 }
 
-/** Create a new entity directory with a template index.md. */
+/**
+ * Create a new entity directory with a template index.md.
+ *
+ * `collections` is what a **scoped** knowledge base needs: creating an entry
+ * while the author has narrowed the working set to one collection must file it
+ * there, or the new entry lands 未归集 and is invisible from the very view it
+ * was created in (see lib/lore/collections).
+ */
 export async function createEntity(
   projectPath: string,
   category: CategoryId,
   entityId: string,
   name: string,
+  collections: string[] = [],
 ): Promise<string> {
   const dirPath = `${projectPath}/.ai-writer/lore/${category}/${entityId}`;
   await makeDir(dirPath);
 
-  // name is quoted like summary/aliases: it is author input, and a newline or
-  // leading "[" written bare would corrupt the line-based frontmatter parser.
-  const indexContent = `---\nname: ${yamlQuote(name)}\naliases: []\ncategory: ${category}\nsummary: \n---\n\n# ${name}\n\n`;
-  await writeFile(`${dirPath}/index.md`, indexContent);
+  // Built by the one serializer rather than by hand: it is the only place that
+  // knows which optional lines (dict, collections) exist and how author input
+  // gets quoted — a newline or a leading "[" written bare would corrupt the
+  // line-based frontmatter parser.
+  const frontmatter = serializeEntityFrontmatter({
+    name, aliases: [], category, summary: "", collections,
+  });
+  await writeFile(`${dirPath}/index.md`, `${frontmatter}\n# ${name}\n\n`);
 
   return dirPath;
 }
@@ -324,7 +342,14 @@ function yamlQuote(s: string): string {
   return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")}"`;
 }
 
-/** Create an entity with full content and optional avatar image bytes. */
+/**
+ * Create an entity with full content, optionally an avatar and a collection
+ * filing (see `createEntity` for why the latter matters).
+ *
+ * Shares `serializeEntityFrontmatter` with every other writer — the hand-rolled
+ * block this replaced also emitted a blank line inside the frontmatter whenever
+ * `aliases` was empty.
+ */
 export async function createEntityWithContent(
   projectPath: string,
   category: CategoryId,
@@ -333,24 +358,17 @@ export async function createEntityWithContent(
   aliases: string[],
   summary: string,
   content: string,
-  avatarBytes?: { data: Uint8Array; ext: string },
+  opts?: { avatarBytes?: { data: Uint8Array; ext: string }; collections?: string[] },
 ): Promise<string> {
   const dirPath = `${projectPath}/.ai-writer/lore/${category}/${entityId}`;
   await makeDir(dirPath);
 
-  const aliasLines = aliases.map((a) => `  - ${yamlQuote(a)}`).join("\n");
-  const frontmatter = [
-    "---",
-    `name: ${yamlQuote(name)}`,
-    `aliases:`,
-    aliasLines,
-    `category: ${category}`,
-    `summary: ${yamlQuote(summary)}`,
-    "---",
-    "",
-  ].join("\n");
+  const frontmatter = serializeEntityFrontmatter({
+    name, aliases, category, summary, collections: opts?.collections,
+  });
   await writeFile(`${dirPath}/index.md`, frontmatter + content);
 
+  const avatarBytes = opts?.avatarBytes;
   if (avatarBytes) {
     await writeBinaryFile(`${dirPath}/avatar.${avatarBytes.ext}`, avatarBytes.data);
   }
@@ -358,10 +376,110 @@ export async function createEntityWithContent(
   return dirPath;
 }
 
+// ─── Collections ─────────────────────────────────────────────────────────────
+
+/**
+ * 把索引里所有归入 `from` 的条目改归 `to`（`to` 为 null ＝ 取消归属），返回改写了
+ * 几条。
+ *
+ * 集合的 id 就是它的名字（见 ./collections 的说明），所以重命名和删除是**改写成员
+ * 条目的 frontmatter**，不是改一行声明。这是那个取舍的代价，而它买到的是作者手改
+ * 的文件里写着 `collections: ["小说A"]` 而不是 `["kb-2"]`。
+ *
+ * 只碰 frontmatter：正文原样读进来再写回去（`saveEntityMetaAndBody` 走的是同一条
+ * 路，所以引号转义、dict 标记、分类不变时不搬家这些行为都自动一致）。单条失败不
+ * 中断整批——批量改写中途抛出会留下一半改完一半没改，而这里每一条都是独立且可重跑
+ * 的，跑第二遍只会跳过已经改好的。
+ */
+export async function refileCollection(
+  projectPath: string,
+  index: LoreIndex,
+  from: string,
+  to: string | null,
+): Promise<number> {
+  let touched = 0;
+  for (const entities of Object.values(index)) {
+    for (const entity of entities ?? []) {
+      const current = entity.collections ?? [];
+      if (!current.some((c) => sameCollection(c, from))) continue;
+      const next = to ? renameCollection(current, from, to) : removeCollection(current, from);
+      try {
+        const raw = await readFile(`${entity.dirPath}/index.md`);
+        const { content } = parseFrontmatter(raw);
+        await saveEntityMetaAndBody(
+          projectPath,
+          entity,
+          {
+            name: entity.name,
+            aliases: entity.aliases ?? [],
+            category: entity.category,
+            summary: entity.summary,
+            // 显式带上——`dict` 的那条纪律在这里同样适用。
+            dict: entity.dict,
+            collections: next,
+          },
+          content,
+        );
+        touched++;
+      } catch (e) {
+        console.warn(`[lore] could not refile ${entity.dirPath}:`, e);
+      }
+    }
+  }
+  return touched;
+}
+
+/**
+ * 改一批条目的集合归属：加入 `add`、移出 `remove`，正文原样保留。
+ *
+ * 加与减是两个独立的列表而不是「设成这一份」，因为批量归集的语义是**只加不减**
+ * ——勾一个集合的意思是「这批都进去」，不是「这批的归属变成这一个」。后者会在作者
+ * 只想补一个标签时静静抹掉别的归属，而那种丢失既没有提示也不容易发现。
+ *
+ * 返回真的改动过的条目数（已经是那个状态的会被跳过，所以重复点不会白写一遍磁盘）。
+ */
+export async function fileEntities(
+  projectPath: string,
+  entities: readonly LoreEntity[],
+  add: readonly string[],
+  remove: readonly string[],
+): Promise<number> {
+  let touched = 0;
+  for (const entity of entities) {
+    let next = entity.collections ?? [];
+    for (const name of add) next = addCollection(next, name);
+    for (const name of remove) next = removeCollection(next, name);
+    const before = entity.collections ?? [];
+    if (next.length === before.length && next.every((c, i) => c === before[i])) continue;
+    try {
+      const raw = await readFile(`${entity.dirPath}/index.md`);
+      const { content } = parseFrontmatter(raw);
+      await saveEntityMetaAndBody(
+        projectPath,
+        entity,
+        {
+          name: entity.name,
+          aliases: entity.aliases ?? [],
+          category: entity.category,
+          summary: entity.summary,
+          dict: entity.dict,
+          collections: next,
+        },
+        content,
+      );
+      touched++;
+    } catch (e) {
+      console.warn(`[lore] could not file ${entity.dirPath}:`, e);
+    }
+  }
+  return touched;
+}
+
 // ─── Entity metadata persistence ─────────────────────────────────────────────
 
 /** Serialize entity metadata to the index.md YAML frontmatter block. */
 export function serializeEntityFrontmatter(meta: EntityMeta): string {
+  const collections = normalizeCollections(meta.collections);
   const aliasBlock = meta.aliases.length
     ? `aliases:\n${meta.aliases.map((a) => `  - ${yamlQuote(a)}`).join("\n")}`
     : `aliases: []`;
@@ -374,6 +492,13 @@ export function serializeEntityFrontmatter(meta: EntityMeta): string {
     // Only marked dictionaries carry the line — every other entity's
     // frontmatter stays exactly what it was before the field existed.
     ...(meta.dict ? ["dict: true"] : []),
+    // Same rule for collections: 未归集 writes no line at all, so an existing
+    // knowledge base is byte-identical until the author actually files an entry.
+    // Written as a JSON-quoted inline array so names with commas or brackets
+    // round-trip through the line-based parser.
+    ...(collections.length
+      ? [`collections: [${collections.map((c) => JSON.stringify(c)).join(", ")}]`]
+      : []),
     "---",
     "",
   ].join("\n");
@@ -397,7 +522,12 @@ export async function saveEntityMetaAndBody(
   meta: EntityMeta,
   body: string,
 ): Promise<{ dirPath: string; category: CategoryId; id: string }> {
-  const content = serializeEntityFrontmatter(meta) + "\n" + body.trimStart();
+  // `collections` defaults to what the entity already has, rather than being a
+  // field every caller must remember to carry (the trap `dict` documents, with
+  // six write sites to get wrong). Omitting it means "leave the filing alone";
+  // clearing it is an explicit `[]`, which is distinguishable from undefined.
+  const filed: EntityMeta = { ...meta, collections: meta.collections ?? entity.collections };
+  const content = serializeEntityFrontmatter(filed) + "\n" + body.trimStart();
   await writeFile(`${entity.dirPath}/index.md`, content);
 
   // Re-slug only when the *name* changed: slugifyEntityId(name) rarely equals

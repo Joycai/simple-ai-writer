@@ -202,6 +202,8 @@ export async function prepareSeededHistory(opts: {
   agent: RoleplayAgent;
   persona: AuthorPersona;
   loreIndex: LoreIndex;
+  /** 取材范围（见 lib/lore/collections）；绑定条目不受它限制。 */
+  loreScope?: string | null;
   wire: MessageContent;
   matchText: string;
   loreBudgetChars: number;
@@ -290,6 +292,8 @@ export async function prepareContinuedHistory(opts: {
   projectPath: string;
   agent: RoleplayAgent;
   loreIndex: LoreIndex;
+  /** 取材范围（见 lib/lore/collections）；绑定条目不受它限制。 */
+  loreScope?: string | null;
   history: StreamMessage[];
   meta: RoleplaySessionMeta;
   wire: MessageContent;
@@ -331,6 +335,7 @@ export async function prepareContinuedHistory(opts: {
     loreIndex,
     matchTarget: opts.matchText,
     excludeDirs: excludeDirsFor(meta, loreIndex),
+    scope: opts.loreScope,
     loreBudgetChars: opts.loreBudgetChars,
     doc: null,
   });

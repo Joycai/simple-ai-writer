@@ -1,0 +1,192 @@
+/* 集合管理（设计稿 03 屏 29）。沿用设定集模态的纸面外壳。 */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(42, 37, 32, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+.panel {
+  width: 620px;
+  max-width: 92vw;
+  max-height: 84vh;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--lore-shadow-modal);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.head {
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid var(--color-border-soft);
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.title { font: 300 22px/1.1 var(--font-serif); color: var(--color-text-primary); }
+.subtitle { font: italic 400 12px/1 var(--font-serif); color: var(--color-text-muted); }
+.headEn { font: 400 10px/1 var(--font-mono); color: var(--color-text-faint); }
+
+.list { padding: 8px 0; overflow-y: auto; min-height: 0; }
+.row {
+  padding: 12px 22px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid transparent;
+  border-bottom: 1px solid transparent;
+}
+.row:hover { background: var(--lore-sub-bg); }
+.rowEditing {
+  background: var(--lore-sub-bg);
+  border-top-color: var(--color-border-soft);
+  border-bottom-color: var(--color-border-soft);
+}
+.grip { color: var(--lore-neutral-line); cursor: grab; flex-shrink: 0; }
+.rowMain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.rowName { font: 400 16px/1.2 var(--font-serif); color: var(--color-text-primary); }
+.rowMeta { font: 400 10px/1.5 var(--font-mono); color: var(--color-text-faint); }
+.rowAction {
+  font: 500 11px/1 var(--font-sans);
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 2px;
+  flex-shrink: 0;
+}
+.rowAction:hover:not(:disabled) { color: var(--color-accent); }
+.rowAction:disabled { opacity: 0.4; cursor: default; }
+.rowDanger:hover:not(:disabled) { color: var(--color-error); }
+
+.renameInput {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--color-accent);
+  background: var(--color-bg-raised);
+  font: 400 15px/1.2 var(--font-serif);
+  color: var(--color-text-primary);
+  outline: none;
+}
+.renameHint { font: 400 10px/1 var(--font-mono); color: var(--color-text-faint); flex-shrink: 0; }
+
+.createRow {
+  padding: 12px 22px;
+  border-top: 1px dashed var(--color-border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.createInput {
+  flex: 1;
+  padding: 8px 11px;
+  border: 1px dashed var(--color-border-accent);
+  background: var(--lore-sub-bg);
+  font: 400 13px/1 var(--font-serif);
+  color: var(--color-text-primary);
+  outline: none;
+}
+.createInput::placeholder { font-style: italic; color: var(--color-text-faint); }
+.createBtn {
+  padding: 8px 14px;
+  background: var(--color-accent);
+  color: var(--color-card);
+  border: none;
+  font: 500 12px/1 var(--font-sans);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.createBtn:disabled { opacity: 0.45; cursor: default; }
+
+.error {
+  padding: 8px 22px;
+  font: 400 12px/1.5 var(--font-serif);
+  color: var(--color-error);
+  background: var(--color-error-bg, transparent);
+}
+
+.foot {
+  padding: 11px 22px;
+  border-top: 1px solid var(--color-border-soft);
+  background: var(--color-bg-base);
+  font: 400 11px/1.7 var(--font-serif);
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+.footEn { font: 400 10px/1.7 var(--font-mono); color: var(--color-text-faint); }
+
+/* ── 删除确认：不恐吓，把删完之后的样子算出来 ─────────────────────────── */
+.confirmLayer {
+  position: fixed;
+  inset: 0;
+  background: rgba(42, 37, 32, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 210;
+}
+.confirmPanel {
+  width: 520px;
+  max-width: 92vw;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--lore-shadow-modal);
+  display: flex;
+  flex-direction: column;
+}
+.confirmTitle {
+  padding: 16px 22px 12px;
+  border-bottom: 1px solid var(--color-border-soft);
+  font: 400 19px/1.2 var(--font-serif);
+  color: var(--color-text-primary);
+}
+.confirmBody { padding: 16px 22px; display: flex; flex-direction: column; gap: 12px; }
+.confirmRow { display: flex; gap: 12px; align-items: flex-start; }
+.confirmDot { width: 7px; height: 7px; background: var(--color-accent); margin-top: 7px; flex-shrink: 0; }
+.confirmText { font: 400 14px/1.6 var(--font-serif); color: var(--color-text-primary); }
+.confirmEn { font: 400 10px/1.5 var(--font-mono); color: var(--color-text-muted); padding-left: 19px; }
+.confirmAfter {
+  padding: 12px 14px;
+  background: var(--lore-bind-bg);
+  border: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.confirmAfterTitle {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: 0.14em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+.confirmAfterBody { font: 400 12px/1.6 var(--font-serif); color: var(--color-text-secondary); }
+.confirmFoot {
+  padding: 13px 22px;
+  border-top: 1px solid var(--color-border-soft);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.confirmCancel {
+  padding: 8px 14px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-raised);
+  color: var(--color-text-secondary);
+  font: 500 12px/1 var(--font-sans);
+  cursor: pointer;
+}
+.confirmDelete {
+  padding: 8px 14px;
+  background: var(--color-accent);
+  color: var(--color-card);
+  border: none;
+  font: 500 12px/1 var(--font-sans);
+  cursor: pointer;
+}
+.confirmDelete:disabled { opacity: 0.45; cursor: default; }

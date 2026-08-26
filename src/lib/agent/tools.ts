@@ -15,7 +15,7 @@ import { readHtmlSlideRange, splitHtmlSlides } from "../pptx/htmlSlides";
 import { fileExists, readFile } from "../fs/fileio";
 import { IMAGE_EXT_LIST, MAX_IMAGE_BYTES, isImagePath } from "../fs/images";
 import { downscaleNote, imageForModel, type Downscaled } from "../image/normalize";
-import { imageSlotChecklistText, readEntityFile, slotChecklistText, type LoreEntity, type LoreIndex } from "../lore";
+import { imageSlotChecklistText, outOfScopeCount, readEntityFile, scopeLoreIndex, slotChecklistText, type LoreEntity, type LoreIndex } from "../lore";
 import { isKnownCategory } from "../profile/active";
 import {
   baseName,
@@ -40,9 +40,26 @@ export interface ToolResult {
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
-export function formatLoreIndex(loreIndex: LoreIndex): string {
+/**
+ * The lore index as the model sees it, narrowed to the author's 取材范围 when
+ * one is set (see lib/lore/collections).
+ *
+ * The out-of-scope count is reported rather than hidden. A silently shortened
+ * list reads as "this project has six entries", and the model then confidently
+ * tells the author their character does not exist; the honest version lets it
+ * say "there are others outside the current collection — name one and I can
+ * still read it", which is exactly what the fence allows.
+ */
+export function formatLoreIndex(loreIndex: LoreIndex, scope?: string | null): string {
+  const scoped = scopeLoreIndex(loreIndex, scope ?? null);
+  const hidden = outOfScopeCount(loreIndex, scope ?? null);
+  const fence = scope
+    ? `\n\n(The author has narrowed the working set to the collection "${scope}". ` +
+      `${hidden} further ${hidden === 1 ? "entry is" : "entries are"} filed elsewhere and left out of this list — ` +
+      `you can still read one by name if the author asks for it, but do not go looking through them on your own.)`
+    : "";
   const lines: string[] = [];
-  for (const [category, entities] of Object.entries(loreIndex)) {
+  for (const [category, entities] of Object.entries(scoped)) {
     if (!entities.length) continue;
     // An orphan category — no enabled pack declares it (see lib/lore/categories).
     // Its entries read and edit like any other, but `create_lore_entity` and
@@ -56,7 +73,12 @@ export function formatLoreIndex(loreIndex: LoreIndex): string {
       lines.push(`  - ${e.name}: ${e.summary || "(no summary)"}`);
     }
   }
-  return lines.length > 0 ? lines.join("\n") : "No lore entities found in this project.";
+  if (lines.length === 0) {
+    return scope
+      ? `No lore entities in the collection "${scope}".${fence}`
+      : "No lore entities found in this project.";
+  }
+  return lines.join("\n") + fence;
 }
 
 /** Case-insensitive entity lookup by name or alias across all categories. */

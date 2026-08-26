@@ -15,6 +15,7 @@ const loreRef = (id: string): AttachedLore => ({
   entity: {
     id, category: "characters", dirPath: `/p/.ai-writer/lore/characters/${id}`,
     name: id, aliases: [], summary: "", avatarPath: null,
+    collections: [],
     mdFiles: ["index.md"], images: [], facets: [],
   } as LoreEntity,
 });

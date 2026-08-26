@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import i18n from "../i18n";
-import { deletePref, PINNED_LORE_PREFIX, prunePrefsWithPrefix, readPref, writePref, writePrefMerged } from "../lib/prefs";
+import { deletePref, LORE_SCOPE_PREFIX, PINNED_LORE_PREFIX, prunePrefsWithPrefix, readPref, writePref, writePrefMerged } from "../lib/prefs";
 import { mergeRecentProjects, parseRecentProjects, RECENT_PROJECTS_MAX } from "../lib/recentProjects";
 import { MAX_DRAFTS } from "../lib/ai/drafts";
 import { isRoleplayEnabled } from "../lib/roleplay/flag";
@@ -512,6 +512,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const next = state.recentProjects.filter((p) => !isSamePath(p, path));
       writePref(RECENT_PROJECTS_KEY, JSON.stringify(next));
       prunePrefsWithPrefix(PINNED_LORE_PREFIX, (p) => !isSamePath(p, path));
+      prunePrefsWithPrefix(LORE_SCOPE_PREFIX, (p) => !isSamePath(p, path));
       return { recentProjects: next };
     });
   },
@@ -519,6 +520,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   clearRecentProjects: () => {
     deletePref(RECENT_PROJECTS_KEY);
     prunePrefsWithPrefix(PINNED_LORE_PREFIX, () => false);
+    prunePrefsWithPrefix(LORE_SCOPE_PREFIX, () => false);
     set({ recentProjects: [] });
   },
 

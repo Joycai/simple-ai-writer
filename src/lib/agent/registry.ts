@@ -388,6 +388,19 @@ export type ApprovalDecision =
 export interface ToolContext {
   projectPath: string;
   loreIndex: LoreIndex;
+  /**
+   * 作者当前设定的**取材范围**：一个集合名，或 null / 缺席＝不设围栏
+   * （见 lib/lore/collections）。
+   *
+   * 这里存的是范围本身而不是一份过滤过的索引，因为围栏挡的是**自动发现**，不是
+   * 访问：`list_lore_entities` 按它收窄并如实说明挡掉了多少，而
+   * `findEntityByName` 一路不设防——作者点名要改范围外的某一条时，运行不该假装
+   * 那条不存在。同一条规则在注入侧的样子是 `selectLore` 里 pin 豁免围栏。
+   *
+   * 顺带也是新建条目的归属：范围生效时 `create_lore_entity` 把新条目直接归进这个
+   * 集合，否则模型刚建好的东西立刻从它自己看得见的那份清单里消失。
+   */
+  loreScope?: string | null;
   /** Whether the active model accepts image inputs (controls lore gallery payloads). */
   multimodal: boolean;
   /**
@@ -601,7 +614,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
     },
     execute: async (call, ctx) => ({
       toolCallId: call.id,
-      content: formatLoreIndex(ctx.loreIndex),
+      content: formatLoreIndex(ctx.loreIndex, ctx.loreScope),
     }),
   },
 

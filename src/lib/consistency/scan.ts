@@ -123,6 +123,12 @@ export interface ScanArgs extends ConnOptions {
   documentTitle: string;
 
   loreIndex: LoreIndex;
+  /**
+   * 取材范围（见 lib/lore/collections）。一致性检查必须和写作用同一个围栏：范围
+   * 外的条目在这里被当成正文的矛盾报出来，等于把「另一本小说的设定」说成本篇的
+   * 错误。
+   */
+  loreScope?: string | null;
   /** Entities the author pinned in the panel; always included. */
   pinnedLorePaths: string[];
   /** Lore category ids from the active profile — the `category` enum. */
@@ -157,7 +163,9 @@ export async function runConsistencyScan(args: ScanArgs): Promise<ConsistencyRep
   const truncated = args.documentText.length > MAX_DOC_CHARS;
   const doc = truncated ? args.documentText.slice(-MAX_DOC_CHARS) : args.documentText;
 
-  const lore = await selectLore(doc, args.loreIndex, args.pinnedLorePaths, SCAN_LORE_BUDGET_CHARS);
+  const lore = await selectLore(doc, args.loreIndex, args.pinnedLorePaths, SCAN_LORE_BUDGET_CHARS, {
+    scope: args.loreScope ?? null,
+  });
   const recap = (args.memory?.segments ?? []).map((s) => s.summary).join("\n").trim();
 
   const userText = [

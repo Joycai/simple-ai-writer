@@ -64,6 +64,7 @@ import { inputCeilingFor } from "../../lib/context/budget";
 import { ReasoningControls } from "./ReasoningControls";
 import { SubAgentChips } from "./SubAgentChips";
 import { ContextBar } from "./ContextBar";
+import { ScopeBand, ScopeMenu, type ScopeMenuAnchor } from "../lore/collections/ScopePicker";
 import { PlanModeChip } from "./PlanModeChip";
 import { AutoApproveChip } from "./AutoApproveChip";
 import { CHAT_AUTO_APPROVE_KEY } from "../../lib/agent/autoApprove";
@@ -146,6 +147,10 @@ export function AgentChat() {
   // ── @ references ──
   const projectPath = useProjectStore((s) => s.projectPath);
   const loreIndex = useLoreStore((s) => s.index);
+  const loreScope = useLoreStore((s) => s.scope);
+  const setLoreScope = useLoreStore((s) => s.setScope);
+  const collections = useProjectStore((s) => s.collections);
+  const [scopeMenu, setScopeMenu] = useState<ScopeMenuAnchor | null>(null);
   // From the sidebar's tree, so a file that appeared after the project opened
   // is pickable as soon as the tree knows about it — no separate snapshot.
   const projectFiles = useProjectFiles();
@@ -478,6 +483,30 @@ export function AgentChat() {
 
   return (
     <div className={styles.chat}>
+      {/* 取材范围的骑缝带（设计稿 03 屏 26-B）。围栏在**运行发生的地方**必须看得见
+          ——知识库墙上写着一遍不够，作者写作时看的是这一栏。同一个控件的窄栏形态：
+          省掉分类分布，只留条目数。 */}
+      {loreScope !== null && (
+        <ScopeBand
+          index={loreIndex}
+          scope={loreScope}
+          variant="narrow"
+          onSwitch={setScopeMenu}
+          onReset={() => setLoreScope(projectPath, null)}
+        />
+      )}
+      {scopeMenu && (
+        <ScopeMenu
+          index={loreIndex}
+          declared={collections}
+          scope={loreScope}
+          anchor={scopeMenu}
+          variant="narrow"
+          onPick={(next) => setLoreScope(projectPath, next)}
+          onClose={() => setScopeMenu(null)}
+        />
+      )}
+
       {/* The transcript and its jump button share a positioning box: the button
           belongs to the bottom of the *scroller*, and the chrome below it
           (approval cards, task band, composer) changes height constantly. */}

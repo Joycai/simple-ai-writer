@@ -311,6 +311,8 @@ export async function seedRoleplayHistory(opts: {
   personaCard: string;
   primaryText: string;
   loreIndex: LoreIndex;
+  /** 取材范围（见 lib/lore/collections）；绑定条目不受它限制。 */
+  loreScope?: string | null;
   firstMessage: MessageContent;
   /** 检索用的纯文本（`firstMessage` 可能带图片 part，图片没有词可匹配）。 */
   matchText: string;
@@ -363,7 +365,8 @@ export async function seedRoleplayHistory(opts: {
   // 首轮自动命中：绑定之外的词条，用作者第一句去匹配。
   const excludeDirs = new Set(bound.entities.map((e) => e.dirPath));
   const { text: snippets, report } = await selectLore(
-    opts.matchText, opts.loreIndex, [], opts.loreBudgetChars, { excludeDirs },
+    opts.matchText, opts.loreIndex, [], opts.loreBudgetChars,
+    { excludeDirs, scope: opts.loreScope ?? null },
   );
   if (snippets) {
     const seed: StreamMessage = {

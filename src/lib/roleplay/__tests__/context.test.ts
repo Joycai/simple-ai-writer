@@ -40,7 +40,7 @@ import type { AuthorPersona, MemoryRecord, RoleplayAgent, SceneTurn } from "../m
 
 function entity(name: string, dirPath: string, facets: string[] = []): LoreEntity {
   return {
-    id: name, category: "characters", dirPath, name, aliases: [], summary: `${name}的一句话`,
+    id: name, category: "characters", dirPath, name, aliases: [], summary: `${name}的一句话`, collections: [],
     avatarPath: null, mdFiles: ["index.md"], images: [],
     facets: facets.map((file) => ({
       file, title: file.replace(/\.md$/, ""), slot: null, keys: [], group: null,

@@ -266,8 +266,13 @@ export async function createLoreEntityTool(
   const aliases = (args.aliases ?? []).map((a) => String(a).trim()).filter(Boolean);
   const summary = args.summary?.trim() ?? "";
   const entityId = await uniqueEntityId(ctx.projectPath, category, slugifyEntityId(name));
+  // Filed into the active 取材范围 when there is one: an entry created inside a
+  // narrowed working set that lands 未归集 would vanish from the very list the
+  // model just read (see ToolContext.loreScope).
+  const collections = ctx.loreScope ? [ctx.loreScope] : [];
   const dirPath = await createEntityWithContent(
     ctx.projectPath, category, entityId, name, aliases, summary, content,
+    { collections },
   );
 
   // Insert into the run snapshot before resyncing, mirroring what
@@ -275,7 +280,7 @@ export async function createLoreEntityTool(
   // truth a line later on any surface that can rescan — this is what keeps the
   // new entity resolvable on one that cannot, or when the rescan fails.
   (ctx.loreIndex[category] ??= []).push({
-    id: entityId, category, dirPath, name, aliases, summary,
+    id: entityId, category, dirPath, name, aliases, summary, collections,
     avatarPath: null, mdFiles: ["index.md"], images: [], facets: [],
   });
   await syncLore(ctx);

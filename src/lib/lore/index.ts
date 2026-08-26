@@ -11,3 +11,5 @@ export * from "./slots";
 export * from "./gallery";
 export * from "./transfer";
 export * from "./match";
+export * from "./collections";
+export * from "./pins";

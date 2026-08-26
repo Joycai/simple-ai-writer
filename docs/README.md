@@ -72,6 +72,8 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 |---|---|---|
 | [lore-facet-plan.md](feature/lore/lore-facet-plan.md) | `shipped` | Facets: sub-entity granularity so injection isn't all-or-nothing |
 | [lore-entry-type-plan.md](feature/lore/lore-entry-type-plan.md) | `partial` | Entry types as a category schema. Phases 1–4 built; `subtypes` deliberately dropped (§6) |
+| [lore-collection-plan.md](feature/lore/lore-collection-plan.md) | `shipped` | Collections: the second axis (which body of work an entry belongs to) + the 取材范围 fence |
+| [lore-collection-ui-brief.md](feature/lore/lore-collection-ui-brief.md) | `shipped` | The Claude Design brief for the collections UI turn (screens 24–31) |
 | [lore-granularity-research.md](feature/lore/lore-granularity-research.md) | `research` | Six directions surveyed. 1+3 became the facet plan; 2, 4, 6 are still open |
 
 ### feature/knowledge-base/ — the sync server

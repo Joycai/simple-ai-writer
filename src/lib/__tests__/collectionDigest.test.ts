@@ -162,6 +162,7 @@ describe("matchEntitiesInText", () => {
     aliases,
     summary: "",
     avatarPath: null,
+    collections: [],
     mdFiles: [],
     images: [],
     facets: [],

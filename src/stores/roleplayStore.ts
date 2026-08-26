@@ -489,6 +489,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         const charsPerToken = measureCharsPerToken(job.match);
         const seeded = await prepareSeededHistory({
           projectPath, agent, persona, loreIndex,
+          loreScope: useLoreStore.getState().scope,
           wire: job.wire,
           matchText: job.match,
           loreBudgetChars: loreBudgetTokens * charsPerToken,
@@ -531,6 +532,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         const charsPerToken = measureCharsPerToken(job.match);
         const cont = await prepareContinuedHistory({
           projectPath, agent, loreIndex,
+          loreScope: useLoreStore.getState().scope,
           history, meta,
           wire: job.wire,
           matchText: job.match,
@@ -583,6 +585,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         toolContext: {
           projectPath,
           loreIndex,
+          loreScope: useLoreStore.getState().scope,
           multimodal: model.type === "multimodal",
           taskWorkspace: workspace,
           signal: controller.signal,

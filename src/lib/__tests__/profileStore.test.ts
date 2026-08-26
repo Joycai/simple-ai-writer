@@ -120,6 +120,7 @@ describe("saveProfileFile", () => {
       enabled: [TTRPG_PROFILE, BID_PROFILE],
       customPacks: [],
       customCategories: [],
+      collections: [],
       issues: [],
     });
     expect(makeDir).toHaveBeenCalledWith(`${ROOT}/.ai-writer`);
@@ -132,6 +133,7 @@ describe("saveProfileFile", () => {
       enabled: [NOVEL_PROFILE],
       customPacks: [],
       customCategories: [{ id: "meetings", labelZh: "会议纪要", labelEn: "Meetings" }],
+      collections: [],
       issues: [],
     });
     const body = JSON.parse(files.get(PROFILE_PATH)!);
@@ -147,6 +149,7 @@ describe("saveProfileFile", () => {
       enabled: [],
       customPacks: [],
       customCategories: [],
+      collections: [],
       issues: [],
     });
     const selection = await loadProfileFile(ROOT);
@@ -169,6 +172,7 @@ describe("saveProfileFile", () => {
       enabled: [custom, NOVEL_PROFILE],
       customPacks: [custom],
       customCategories: [],
+      collections: [],
       issues: [],
     });
     const selection = await loadProfileFile(ROOT);
@@ -189,6 +193,7 @@ describe("saveProfileFile", () => {
       enabled: [NOVEL_PROFILE],
       customPacks: [custom],
       customCategories: [],
+      collections: [],
       issues: [],
     });
     const selection = await loadProfileFile(ROOT);

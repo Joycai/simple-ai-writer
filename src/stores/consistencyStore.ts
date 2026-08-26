@@ -142,6 +142,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
         documentTitle: baseName(filePath ?? "").replace(/\.md$/i, "")
           || i18n.t("ai.consistency.untitledDoc", { defaultValue: "当前文档" }),
         loreIndex: useLoreStore.getState().index,
+        loreScope: useLoreStore.getState().scope,
         pinnedLorePaths: [],
         categoryIds: loreCategoryIds(),
         memory: useMemoryStore.getState().memory,

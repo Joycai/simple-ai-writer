@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { Search, Sparkles, Plus, Camera, BookOpen, Pencil, FolderOpen, RotateCw, Trash2, FileDown, FileUp, MoreHorizontal, AlertTriangle } from "lucide-react";
+import { Search, Sparkles, Plus, Camera, BookOpen, Pencil, FolderOpen, RotateCw, Trash2, FileDown, FileUp, MoreHorizontal, AlertTriangle, Layers, Pin } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { readFile as readBinaryFile } from "@tauri-apps/plugin-fs";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -10,17 +10,32 @@ import { useProjectStore, useTerms } from "../../stores/projectStore";
 import {
   applyLoreImport,
   cancelLoreImport,
+  entityCollections,
   exportLoreBundle,
   indexCategories,
+  inScope,
+  loadPinnedLore,
+  passesFilter,
+  pinnedEntityDirs,
+  savePinnedLore,
   setEntityAvatar,
   slugifyEntityId,
   stageLoreImport,
+  ungroupedCount,
   uniqueEntityId,
+  UNGROUPED,
   type CategoryId,
+  type CollectionFilter,
   type ConflictStrategy,
   type LoreEntity,
   type StagedLoreImport,
 } from "../../lib/lore";
+import { CollectionRail } from "./collections/CollectionRail";
+import { BindingEdge } from "./collections/BindingEdge";
+import { CollectionAssignMenu, type AssignMode } from "./collections/CollectionAssignMenu";
+import { CollectionsManageModal } from "./collections/CollectionsManageModal";
+import { ScopeBand, ScopeButton, ScopeMenu, type ScopeMenuAnchor } from "./collections/ScopePicker";
+import cs from "./collections/collections.module.css";
 import { IMAGE_EXTENSIONS } from "../../lib/fs/images";
 import { appTerms, categoryLabel, defaultCategoryId, findCategory, loreCategories, loreCategoryIds, suggestCategoryId } from "../../lib/profile";
 import { useAppStore } from "../../stores/appStore";
@@ -50,7 +65,11 @@ export function LoreWall() {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language.startsWith("zh");
   const { index, scanProject, createNewEntity, deleteEntity, detailPath, detailEditing, openDetail } = useLoreStore();
+  const scope = useLoreStore((s) => s.scope);
+  const setScope = useLoreStore((s) => s.setScope);
   const { projectPath } = useProjectStore();
+  const collections = useProjectStore((s) => s.collections);
+  const fileIntoCollections = useProjectStore((s) => s.fileIntoCollections);
   const terms = useTerms();
   // The eyebrow is decorative English regardless of UI language (matching
   // "DOCUMENTS · 文档"), so it resolves the en term explicitly.
@@ -67,6 +86,25 @@ export function LoreWall() {
   }, [projectPath, scanProject]);
 
   const [filter, setFilter] = useState<string>("all");
+  /**
+   * 装订栏的筛选——**只影响眼睛**，和取材范围是两件事。
+   *
+   * 两者共用一份状态会省几行代码，代价是「我只想看看这一摊」和「让 AI 只用这一摊」
+   * 变成同一个动作：作者筛着筛着忘了，下一次运行就在他不知情的情况下换了取材范围。
+   */
+  const [colFilter, setColFilter] = useState<CollectionFilter>(null);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  /** ⇧ 连选的锚点：上一次「非连选」点中的那一张。 */
+  const anchorRef = useRef<string | null>(null);
+  const [scopeMenu, setScopeMenu] = useState<ScopeMenuAnchor | null>(null);
+  const [assign, setAssign] = useState<
+    { mode: AssignMode; anchor: { x: number; y: number; above?: boolean }; entities: LoreEntity[] } | null
+  >(null);
+  const [showManage, setShowManage] = useState(false);
+  const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const cardRefs = useRef(new Map<string, HTMLElement>());
+  const gridRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState("");
   const [showNewCategory, setShowNewCategory] = useState(false);
   // Unified new-entry flow: null = closed, else which mode the modal opens in.
@@ -164,6 +202,9 @@ export function LoreWall() {
   const filtered = useMemo(() => {
     let list = allEntities;
     if (filter !== "all") list = list.filter((e) => e.category === filter);
+    // 集合筛选和分类筛选是两根轴，所以是**与**关系：「《漕运纪》的人物」是一个
+    // 正常的问题，而它需要两个筛选同时成立。
+    list = list.filter((e) => passesFilter(e, colFilter));
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter(
@@ -174,9 +215,139 @@ export function LoreWall() {
       );
     }
     return list;
-  }, [allEntities, filter, search]);
+  }, [allEntities, filter, colFilter, search]);
 
   const totalRelations = 0; // future
+
+  /**
+   * 置顶的条目（AI 面板里勾的那份）。围栏生效时它们**越栏**——显式指定＝作者坚持
+   * ——所以墙上不能把它们翻面，否则界面在说 AI 看不见，而 AI 其实看得见。
+   *
+   * 依赖里带上 `index` 是有意的：置顶存在 prefs 里（不是 React 状态），扫描是这个
+   * 组件能观察到的、离「作者刚在别处改过东西」最近的一个信号。
+   */
+  const pinnedDirs = useMemo(
+    () => pinnedEntityDirs(loadPinnedLore(projectPath)),
+    [projectPath, index],
+  );
+
+  const unfiled = useMemo(() => ungroupedCount(index), [index]);
+
+  /** 这一张卡此刻在围栏外吗？ */
+  const isOut = (e: LoreEntity) =>
+    scope !== null && !inScope(e, scope) && !pinnedDirs.has(e.dirPath);
+  const outOfScopeVisible = filtered.filter(isOut).length;
+
+  const selectedEntities = useMemo(
+    () => allEntities.filter((e) => selected.has(e.dirPath)),
+    [allEntities, selected],
+  );
+  const selectedBreakdown = useMemo(() => {
+    const byCat = new Map<string, number>();
+    for (const e of selectedEntities) byCat.set(e.category, (byCat.get(e.category) ?? 0) + 1);
+    return [...byCat.entries()]
+      .map(([id, n]) => {
+        const cat = findCategory(id);
+        return `${cat ? categoryLabel(cat, isZh) : id} ${n}`;
+      })
+      .join(" · ");
+  }, [selectedEntities, isZh]);
+
+  const exitSelect = () => {
+    setSelectMode(false);
+    setSelected(new Set());
+    anchorRef.current = null;
+  };
+
+  // 多选中 Esc 退出。挂在 document 上而不是墙的 div 上：墙没有焦点，作者刚刚点的是
+  // 一张卡片。
+  useEffect(() => {
+    if (!selectMode) return;
+    const onKey = (ev: KeyboardEvent) => { if (ev.key === "Escape") exitSelect(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [selectMode]);
+
+  /**
+   * 三种进入多选的方式共用这一个：勾选框、⇧ 点卡身连选、框选。
+   * ⇧ 的锚点是上一次**非连选**点中的那张——连选之后再连选，作者期望的是从同一个
+   * 锚点重新拉一段，而不是从上一段的末端接着拉。
+   */
+  const toggleSelect = (entity: LoreEntity, ev: React.MouseEvent) => {
+    setSelectMode(true);
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (ev.shiftKey && anchorRef.current) {
+        const order = filtered.map((e) => e.dirPath);
+        const a = order.indexOf(anchorRef.current);
+        const b = order.indexOf(entity.dirPath);
+        if (a >= 0 && b >= 0) {
+          for (let i = Math.min(a, b); i <= Math.max(a, b); i++) next.add(order[i]);
+          return next;
+        }
+      }
+      if (next.has(entity.dirPath)) next.delete(entity.dirPath);
+      else next.add(entity.dirPath);
+      anchorRef.current = entity.dirPath;
+      return next;
+    });
+  };
+
+  const openAssign = (ev: React.MouseEvent, mode: AssignMode, entities?: LoreEntity[]) => {
+    const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+    setAssign({
+      mode,
+      anchor: { x: r.left, y: r.top - 8, above: true },
+      entities: entities ?? selectedEntities,
+    });
+  };
+
+  const commitAssign = async (entities: LoreEntity[], add: string[], remove: string[]) => {
+    try {
+      await fileIntoCollections(entities, add, remove);
+    } catch (e) {
+      console.warn("[lore] filing failed:", e);
+    }
+  };
+
+  /** 墙底那颗「把未归集的都归进当前范围」——围栏生效时最常见的一次性收尾。 */
+  const fileUnfiledIntoScope = async () => {
+    if (!scope) return;
+    const targets = allEntities.filter((e) => entityCollections(e).length === 0);
+    if (targets.length === 0) return;
+    await commitAssign(targets, [scope], []);
+  };
+
+  /**
+   * 框选：在格纸空白处按下才开始（按在卡片上是拖拽/点击），移动时按矩形相交挑卡片。
+   * 相交而不是包含——半张卡进了框，作者的意思显然是要它。
+   */
+  const onGridPointerDown = (ev: React.PointerEvent) => {
+    if (ev.button !== 0) return;
+    if ((ev.target as HTMLElement).closest("[data-lore-card]")) return;
+    const start = { x: ev.clientX, y: ev.clientY };
+    let moved = false;
+    const onMove = (m: PointerEvent) => {
+      if (!moved && Math.abs(m.clientX - start.x) + Math.abs(m.clientY - start.y) < 6) return;
+      moved = true;
+      const rect = { x0: Math.min(start.x, m.clientX), y0: Math.min(start.y, m.clientY), x1: Math.max(start.x, m.clientX), y1: Math.max(start.y, m.clientY) };
+      setMarquee(rect);
+      const hit = new Set<string>();
+      for (const [dir, el] of cardRefs.current) {
+        const b = el.getBoundingClientRect();
+        if (b.right >= rect.x0 && b.left <= rect.x1 && b.bottom >= rect.y0 && b.top <= rect.y1) hit.add(dir);
+      }
+      setSelectMode(true);
+      setSelected(hit);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      setMarquee(null);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
 
   const handleDeleteEntity = async (e: LoreEntity) => {
     if (!projectPath) return;
@@ -273,9 +444,32 @@ export function LoreWall() {
         action: () => openDetail(e.dirPath, true) },
       { kind: "item", icon: <Camera size={13} />, label: t("lore.wall.changeAvatar", { defaultValue: "更换头像" }),
         action: () => void handleAvatarPick(e) },
+      { kind: "divider" },
+      // 不进多选也能改一条：右键 → 归入集合。菜单项本身弹出同一个勾选清单，
+      // 所以「多选一条」和「右键一条」得到的是同一个界面。
+      { kind: "item", icon: <Layers size={13} />, label: t("lore.collections.assign.menuLabel"),
+        action: () => setAssign({
+          mode: "single",
+          anchor: { x: menu?.x ?? 0, y: (menu?.y ?? 0) + 4 },
+          entities: [e],
+        }) },
+      // 越栏：把这一条置顶，于是围栏外它照样进上下文。写成一个动词而不是一个
+      // 「例外开关」——作者要的是「这次也带上它」，不是在管理围栏的例外表。
+      ...(scope !== null && !inScope(e, scope)
+        ? [{
+            kind: "item" as const,
+            icon: <Pin size={13} />,
+            label: t("lore.collections.assign.makeVisible"),
+            action: () => {
+              const cur = loadPinnedLore(projectPath);
+              if (!cur.includes(e.dirPath)) savePinnedLore(projectPath, [...cur, e.dirPath]);
+              void scanProject(projectPath!);
+            },
+          }]
+        : []),
+      { kind: "divider" },
       { kind: "item", icon: <FolderOpen size={13} />, label: t("lore.panel.showInBrowser"),
         action: () => { revealItemInDir(e.dirPath).catch(() => { /* best-effort */ }); } },
-      { kind: "divider" },
       { kind: "item", icon: <Trash2 size={13} />, label: t("lore.panel.deleteEntity"), danger: true,
         action: () => void handleDeleteEntity(e) },
     ];
@@ -356,18 +550,50 @@ export function LoreWall() {
         />
       )}
 
+      {/* 骑缝带常驻，不是一个可关掉的提示：范围指向一个空集合、或者作者忘了自己
+          上次切过，这两种情况下 AI 一条设定也找不到，而唯一的止损就是界面上始终
+          写着当前生效的是哪一个。 */}
+      {scope !== null && !selectMode && (
+        <ScopeBand
+          index={index}
+          scope={scope}
+          onSwitch={setScopeMenu}
+          onReset={() => setScope(projectPath, null)}
+        />
+      )}
+
+      {selectMode && (
+        <div className={cs.selectHead}>
+          <span className={cs.bandEyebrow}>{t("lore.collections.select.mode")}</span>
+          <span className={cs.bandRule} />
+          <span className={cs.bandExplainZh}>{t("lore.collections.select.how")}</span>
+          <span style={{ flex: 1 }} />
+          <span className={cs.wallFootMono}>{t("lore.collections.select.esc")}</span>
+        </div>
+      )}
+
       <div className={styles.header}>
         <div className={styles.headerRow}>
           <div className={styles.eyebrow}>{kbEyebrow}</div>
           <div className={styles.title}>{terms.kb}</div>
           <div className={styles.subtitle}>
             {projectPath ? `${baseName(projectPath)} · ` : ""}
-            {t("lore.wallStats", {
-              defaultValue: "{{n}} 条 · {{r}} 关系",
-              n: counts.all,
-              r: totalRelations,
-              entries: terms.entries,
-            })}
+            {scope !== null
+              ? t("lore.collections.wallStatsScoped", {
+                  entries: counts.all,
+                  inScope: counts.all - allEntities.filter(isOut).length,
+                })
+              : collections.length > 0
+                ? t("lore.collections.wallStats", {
+                    entries: counts.all,
+                    collections: collections.length,
+                  })
+                : t("lore.wallStats", {
+                    defaultValue: "{{n}} 条 · {{r}} 关系",
+                    n: counts.all,
+                    r: totalRelations,
+                    entries: terms.entries,
+                  })}
           </div>
           <span className={styles.spacer} />
 
@@ -381,6 +607,8 @@ export function LoreWall() {
             />
             <span className={styles.searchKey} onClick={() => setShowCommandPalette(true)} style={{ cursor: "pointer" }}>{MOD_K_SPACED}</span>
           </div>
+
+          <ScopeButton scope={scope} onOpen={setScopeMenu} />
 
           <button
             className={styles.btnSecondary}
@@ -408,151 +636,378 @@ export function LoreWall() {
           </button>
         </div>
 
-        <div className={styles.filters}>
-          <span
-            className={`${styles.chip} ${filter === "all" ? styles.chipActive : ""}`}
-            onClick={() => setFilter("all")}
-          >
-            {isZh ? "全部" : "All"}
-            <span className={styles.chipCount}>{counts.all}</span>
-          </span>
-          {cats.map((cat) => (
-            <span
-              key={cat.id}
-              className={`${styles.chip} ${filter === cat.id ? styles.chipActive : ""}`}
-              onClick={() => setFilter(cat.id)}
-              // Orphans look like any other chip on purpose: their entries are
-              // intact, so an alarming treatment would misreport the state. The
-              // dedicated presentation is 设计稿 03 屏 23 (plan phase 4).
-              title={cat.orphan
-                ? (isZh
-                    ? "这个分类来自未启用的能力包 · 条目完好，只是不能在这里新建"
-                    : "From a pack that isn't enabled — entries are intact, but nothing new can be created here")
-                : undefined}
+      </div>
+
+      {/* 两根轴的分工写在布局里：**装订栏在左**（集合＝这条属于哪一摊活），
+          **分类 chips 在右上**（分类＝这条是什么）。墙本身从不按集合分区——
+          一个条目属于几个集合，墙上都只出现一次（设计稿 03 屏 24 的 Q1）。 */}
+      <div className={styles.body}>
+        <CollectionRail
+          index={index}
+          declared={collections}
+          filter={colFilter}
+          scope={scope}
+          onFilter={setColFilter}
+          onScope={(next) => setScope(projectPath, next)}
+          onManage={() => setShowManage(true)}
+          onCreate={() => setShowManage(true)}
+        />
+
+        <div className={styles.main}>
+            <div className={styles.filters}>
+              <span
+                className={`${styles.chip} ${filter === "all" ? styles.chipActive : ""}`}
+                onClick={() => setFilter("all")}
+              >
+                {isZh ? "全部" : "All"}
+                <span className={styles.chipCount}>{counts.all}</span>
+              </span>
+              {cats.map((cat) => (
+                <span
+                  key={cat.id}
+                  className={`${styles.chip} ${filter === cat.id ? styles.chipActive : ""}`}
+                  style={filter === cat.id ? undefined : { borderLeft: `3px solid ${categoryColor(cat.id)}` }}
+                  onClick={() => setFilter(cat.id)}
+                  // Orphans look like any other chip on purpose: their entries are
+                  // intact, so an alarming treatment would misreport the state. The
+                  // dedicated presentation is 设计稿 03 屏 23 (plan phase 4).
+                  title={cat.orphan
+                    ? (isZh
+                        ? "这个分类来自未启用的能力包 · 条目完好，只是不能在这里新建"
+                        : "From a pack that isn't enabled — entries are intact, but nothing new can be created here")
+                    : undefined}
+                >
+                  {categoryLabel(cat, isZh)}
+                  <span className={styles.chipCount}>{counts[cat.id] ?? 0}</span>
+                </span>
+              ))}
+              <span
+                className={styles.chip}
+                onClick={() => setShowNewCategory(true)}
+                title={t("lore.newCategory.hint", { defaultValue: isZh ? "新建一个知识库分类" : "Create a knowledge-base category" })}
+              >
+                <Plus size={11} strokeWidth={2.2} />
+                {t("lore.newCategory.cta", { defaultValue: isZh ? "新建分类" : "New category" })}
+              </span>
+              <span style={{ flex: 1 }} />
+              {selectMode ? (
+                <span
+                  className={cs.railFootLink}
+                  onClick={() => {
+                    setSelected(new Set(filtered.map((e) => e.dirPath)));
+                    anchorRef.current = null;
+                  }}
+                >
+                  {t("lore.collections.select.selectAll", { n: filtered.length })}
+                </span>
+              ) : (
+                <span className={cs.chipsNote}>
+                  {scope !== null
+                    ? t("lore.collections.scope.chipsNote")
+                    : t("lore.collections.axisNote")}
+                </span>
+              )}
+            </div>
+          <div className={styles.gridArea}>
+        <div
+          ref={gridRef}
+          className={styles.gridWrap}
+          onPointerDown={onGridPointerDown}
+          onContextMenu={(ev) => {
+            ev.preventDefault();
+            setMenu({ x: ev.clientX, y: ev.clientY, entity: null });
+          }}
+        >
+          {colFilter === UNGROUPED && filtered.length > 0 && (
+          <div className={cs.ungroupedHint}>
+            {t("lore.collections.ungroupedFilteredN", { n: filtered.length })}
+          </div>
+        )}
+        {filtered.length === 0 ? (
+            <div className={styles.empty}>
+              {search.trim()
+                ? t("lore.wallNoMatch", { defaultValue: "未找到匹配的{{entry}}", entry: terms.entry })
+                : t("lore.wallEmpty", {
+                    defaultValue: "{{kb}}为空 — 用 AI 提取或新建条目开始积累",
+                    kb: terms.kb,
+                  })}
+            </div>
+          ) : (
+            <div className={styles.grid}>
+              {filtered.map((e, idx) => {
+                const featured = idx === 0 && filter === "all";
+                const rot = rotationFor(e.id);
+                const cat = findCategory(e.category);
+                const cols = entityCollections(e);
+                const out = isOut(e);
+                const pinnedOverFence =
+                  scope !== null && !inScope(e, scope) && pinnedDirs.has(e.dirPath);
+
+                // 围栏外的条目**翻面**而不是消失：作者仍然看得见、点得开、搜得到，
+                // 只是这次运行 AI 不会自己找到它。筛选让卡片消失，围栏让卡片翻面
+                // ——两者永远不长成一个样子（设计稿 03 屏 25 的 Q2）。
+                if (out) {
+                  return (
+                    <div
+                      key={e.id}
+                      data-lore-card
+                      ref={(el) => { if (el) cardRefs.current.set(e.dirPath, el); else cardRefs.current.delete(e.dirPath); }}
+                      className={cs.flip}
+                      style={{ transform: `rotate(${rot}deg)` }}
+                      onClick={() => openDetail(e.dirPath)}
+                      onContextMenu={(ev) => {
+                        ev.preventDefault();
+                        ev.stopPropagation();
+                        setMenu({ x: ev.clientX, y: ev.clientY, entity: e });
+                      }}
+                    >
+                      <div className={cs.flipName}>{e.name}</div>
+                      <div className={cs.flipMeta}>
+                        {t("lore.collections.scope.cardOut", {
+                          name: cols.length > 0 ? cols.join(" · ") : t("lore.collections.ungrouped"),
+                        })}
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={e.id}
+                    data-lore-card
+                    ref={(el) => { if (el) cardRefs.current.set(e.dirPath, el); else cardRefs.current.delete(e.dirPath); }}
+                    className={`${styles.card} ${cs.edgeHost} ${featured ? styles.cardFeatured : ""} ${pinnedOverFence ? styles.cardPinned : ""} ${selected.has(e.dirPath) ? styles.cardSelected : ""}`}
+                    style={{ transform: `rotate(${rot}deg)` }}
+                    onClick={(ev) => {
+                      // 多选中（或按住 ⇧）时，卡身是「选中」而不是「打开」。
+                      if (selectMode || ev.shiftKey) { toggleSelect(e, ev); return; }
+                      openDetail(e.dirPath);
+                    }}
+                    onContextMenu={(ev) => {
+                      ev.preventDefault();
+                      ev.stopPropagation();
+                      setMenu({ x: ev.clientX, y: ev.clientY, entity: e });
+                    }}
+                  >
+                    <BindingEdge
+                      collections={cols}
+                      scope={scope}
+                      selectMode={selectMode}
+                      selected={selected.has(e.dirPath)}
+                      onToggleSelect={(ev) => toggleSelect(e, ev)}
+                    />
+                    <div className={styles.cardBody}>
+                      {pinnedOverFence && (
+                        <div className={cs.pinnedBadgeRow}>
+                          <span className={cs.pinnedBadge}>{t("lore.collections.scope.pinned")}</span>
+                          <span className={cs.pinnedNote}>{t("lore.collections.scope.pinnedNote")}</span>
+                        </div>
+                      )}
+
+                      <div className={styles.cardTop}>
+                        <span className={styles.cardLabel}>
+                          {cat ? categoryLabel(cat, isZh) : e.category}
+                        </span>
+                      </div>
+                      <div className={styles.cardHeader}>
+                        <div
+                          className={styles.cardAvatarWrap}
+                          onClick={(ev) => { ev.stopPropagation(); handleAvatarPick(e); }}
+                          title={t("lore.wall.changeAvatar", { defaultValue: "更换头像" })}
+                        >
+                          {e.avatarPath && avatarThumbs[e.avatarPath] ? (
+                            <img
+                              src={avatarThumbs[e.avatarPath]}
+                              alt={e.name}
+                              className={styles.cardAvatarImg}
+                            />
+                          ) : (
+                            <div
+                              className={styles.cardAvatar}
+                              style={{ background: categoryColor(e.category) }}
+                            >
+                              {e.name.charAt(0)}
+                            </div>
+                          )}
+                          <div className={styles.cardAvatarOverlay}>
+                            <Camera size={14} strokeWidth={1.8} />
+                          </div>
+                        </div>
+                        <div>
+                          <div className={styles.cardName}>{e.name}</div>
+                          {e.aliases.length > 0 && (
+                          <div className={styles.cardMeta}>
+                            {t("lore.detail.fieldAliases", { defaultValue: "别名" })}：{e.aliases.slice(0, 3).join(" · ")}
+                          </div>
+                        )}
+                        </div>
+                      </div>
+                      <div className={styles.cardSummary}>
+                        {e.summary || "—"}
+                      </div>
+                      {/* 屏 14: the chips are the entry's 特征 — the aliases already
+                          sit under the name, and repeating them said nothing. */}
+                      {e.facets.length > 0 && (
+                        <div className={styles.cardTags}>
+                          {e.facets.slice(0, featured ? 5 : 3).map((f) => (
+                            <span key={f.file} className={styles.cardTag}>◈ {f.title}</span>
+                          ))}
+                          {e.facets.length > (featured ? 5 : 3) && (
+                            <span className={styles.cardTagMore}>+{e.facets.length - (featured ? 5 : 3)}</span>
+                          )}
+                        </div>
+                      )}
+                      <div className={styles.cardFoot}>
+                        {t("lore.wall.cardCounts", {
+                          facets: e.facets.length,
+                          images: e.images.length,
+                          defaultValue: `${e.facets.length} 特征 · ${e.images.length} 配图`,
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* + new card */}
+              <div className={styles.newCard} onClick={() => setNewMode("manual")}>
+                <Plus size={22} color="var(--color-sienna)" strokeWidth={1.6} />
+                <div className={styles.newCardLabel}>{t("lore.panel.newEntry")}</div>
+                <div className={styles.newCardHint}>{isZh ? "手填或从手稿提取" : "Fill in, or extract from the manuscript"}</div>
+              </div>
+            </div>
+          )}
+
+          {marquee && (
+            <div
+              className={cs.marquee}
+              style={{
+                left: marquee.x0,
+                top: marquee.y0,
+                width: marquee.x1 - marquee.x0,
+                height: marquee.y1 - marquee.y0,
+              }}
             >
-              <span className={styles.chipDot} style={{ background: categoryColor(cat.id) }} />
-              {categoryLabel(cat, isZh)}
-              <span className={styles.chipCount}>{counts[cat.id] ?? 0}</span>
-            </span>
-          ))}
-          <span
-            className={styles.chip}
-            onClick={() => setShowNewCategory(true)}
-            title={t("lore.newCategory.hint", { defaultValue: isZh ? "新建一个知识库分类" : "Create a knowledge-base category" })}
-          >
-            <Plus size={11} strokeWidth={2.2} />
-            {t("lore.newCategory.cta", { defaultValue: isZh ? "新建分类" : "New category" })}
-          </span>
+              <span className={cs.marqueeNote}>{t("lore.collections.select.marquee")}</span>
+            </div>
+          )}
+        </div>
+
+            {/* 页边的围栏标注：围栏生效时右侧多出的那一条骑缝。它和顶部的带子
+                是同一件事说两遍——一次在你进来时，一次在你视线离开卡片时。 */}
+            {scope !== null && (
+              <div className={cs.pageEdge}>
+                <span className={cs.pageEdgeText}>
+                  {t("lore.collections.scope.fence", { name: scope })}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {selectMode ? (
+            <div className={cs.selectBar}>
+              <span className={cs.selectCount}>
+                {t("lore.collections.select.selected", { n: selected.size })}
+              </span>
+              <span className={cs.selectBreakdown}>{selectedBreakdown}</span>
+              <span style={{ flex: 1 }} />
+              <button
+                type="button"
+                className={cs.selectBtn}
+                disabled={selected.size === 0}
+                onClick={(ev) => openAssign(ev, "add")}
+              >
+                {t("lore.collections.select.fileInto")}
+              </button>
+              <button
+                type="button"
+                className={`${cs.selectBtn} ${cs.selectBtnSecondary}`}
+                disabled={selected.size === 0}
+                onClick={(ev) => openAssign(ev, "remove")}
+              >
+                {t("lore.collections.select.removeFrom")}
+              </button>
+              <button type="button" className={`${cs.selectBtn} ${cs.selectBtnGhost}`} onClick={exitSelect}>
+                {t("lore.collections.select.cancel")}
+              </button>
+            </div>
+          ) : scope !== null ? (
+            <div className={cs.wallFoot}>
+              <span className={cs.wallFootSwatch} />
+              <span className={cs.wallFootZh}>
+                {t("lore.collections.scope.outNote", { n: outOfScopeVisible })}
+              </span>
+              <span style={{ flex: 1 }} />
+              {unfiled > 0 && (
+                <>
+                  <span className={cs.wallFootMono}>
+                    {t("lore.collections.scope.ungroupedOut", { n: unfiled })}
+                  </span>
+                  <button type="button" className={cs.wallFootBtn} onClick={fileUnfiledIntoScope}>
+                    {t("lore.collections.scope.fileInto", { name: scope })}
+                  </button>
+                </>
+              )}
+            </div>
+          ) : collections.length === 0 && counts.all > 0 ? (
+            // 一个集合都还没建：墙底说的是「装订边现在都空着」，并给出唯一的下一步。
+            <div className={cs.wallFoot}>
+              <span className={cs.wallFootZh}>
+                {t("lore.collections.emptyBindingNote", { n: counts.all })}
+              </span>
+              <span className={cs.wallFootEn}>{t("lore.collections.emptyBindingNoteEn")}</span>
+              <span style={{ flex: 1 }} />
+              <button type="button" className={cs.wallFootBtn} onClick={() => setSelectMode(true)}>
+                {t("lore.collections.startBatch")}
+              </button>
+            </div>
+          ) : (
+            <div className={cs.wallFoot}>
+              <span className={cs.wallFootMono}>{t("lore.collections.wallFootLegend")}</span>
+              <span className={cs.wallFootRule} />
+              <span className={cs.wallFootZh}>{t("lore.collections.wallFootNote")}</span>
+              <span className={cs.wallFootEn}>{t("lore.collections.wallFootNoteEn")}</span>
+            </div>
+          )}
         </div>
       </div>
 
-      <div
-        className={styles.gridWrap}
-        onContextMenu={(ev) => {
-          ev.preventDefault();
-          setMenu({ x: ev.clientX, y: ev.clientY, entity: null });
-        }}
-      >
-        {filtered.length === 0 ? (
-          <div className={styles.empty}>
-            {search.trim()
-              ? t("lore.wallNoMatch", { defaultValue: "未找到匹配的{{entry}}", entry: terms.entry })
-              : t("lore.wallEmpty", {
-                  defaultValue: "{{kb}}为空 — 用 AI 提取或新建条目开始积累",
-                  kb: terms.kb,
-                })}
-          </div>
-        ) : (
-          <div className={styles.grid}>
-            {filtered.map((e, idx) => {
-              const featured = idx === 0 && filter === "all";
-              const rot = rotationFor(e.id);
-              const cat = findCategory(e.category);
-              return (
-                <div
-                  key={e.id}
-                  className={`${styles.card} ${featured ? styles.cardFeatured : ""}`}
-                  style={{ transform: `rotate(${rot}deg)` }}
-                  onClick={() => openDetail(e.dirPath)}
-                  onContextMenu={(ev) => {
-                    ev.preventDefault();
-                    ev.stopPropagation();
-                    setMenu({ x: ev.clientX, y: ev.clientY, entity: e });
-                  }}
-                >
-                  <div className={styles.cardTop}>
-                    <span className={styles.cardLabel}>
-                      {cat ? categoryLabel(cat, isZh) : e.category}
-                    </span>
-                  </div>
-                  <div className={styles.cardHeader}>
-                    <div
-                      className={styles.cardAvatarWrap}
-                      onClick={(ev) => { ev.stopPropagation(); handleAvatarPick(e); }}
-                      title={t("lore.wall.changeAvatar", { defaultValue: "更换头像" })}
-                    >
-                      {e.avatarPath && avatarThumbs[e.avatarPath] ? (
-                        <img
-                          src={avatarThumbs[e.avatarPath]}
-                          alt={e.name}
-                          className={styles.cardAvatarImg}
-                        />
-                      ) : (
-                        <div
-                          className={styles.cardAvatar}
-                          style={{ background: categoryColor(e.category) }}
-                        >
-                          {e.name.charAt(0)}
-                        </div>
-                      )}
-                      <div className={styles.cardAvatarOverlay}>
-                        <Camera size={14} strokeWidth={1.8} />
-                      </div>
-                    </div>
-                    <div>
-                      <div className={styles.cardName}>{e.name}</div>
-                      {e.aliases.length > 0 && (
-                      <div className={styles.cardMeta}>
-                        {t("lore.detail.fieldAliases", { defaultValue: "别名" })}：{e.aliases.slice(0, 3).join(" · ")}
-                      </div>
-                    )}
-                    </div>
-                  </div>
-                  <div className={styles.cardSummary}>
-                    {e.summary || "—"}
-                  </div>
-                  {/* 屏 14: the chips are the entry's 特征 — the aliases already
-                      sit under the name, and repeating them said nothing. */}
-                  {e.facets.length > 0 && (
-                    <div className={styles.cardTags}>
-                      {e.facets.slice(0, featured ? 5 : 3).map((f) => (
-                        <span key={f.file} className={styles.cardTag}>◈ {f.title}</span>
-                      ))}
-                      {e.facets.length > (featured ? 5 : 3) && (
-                        <span className={styles.cardTagMore}>+{e.facets.length - (featured ? 5 : 3)}</span>
-                      )}
-                    </div>
-                  )}
-                  <div className={styles.cardFoot}>
-                    {t("lore.wall.cardCounts", {
-                      facets: e.facets.length,
-                      images: e.images.length,
-                      defaultValue: `${e.facets.length} 特征 · ${e.images.length} 配图`,
-                    })}
-                  </div>
-                </div>
-              );
-            })}
+      {scopeMenu && (
+        <ScopeMenu
+          index={index}
+          declared={collections}
+          scope={scope}
+          anchor={scopeMenu}
+          onPick={(next) => setScope(projectPath, next)}
+          onManage={() => setShowManage(true)}
+          onClose={() => setScopeMenu(null)}
+        />
+      )}
 
-            {/* + new card */}
-            <div className={styles.newCard} onClick={() => setNewMode("manual")}>
-              <Plus size={22} color="var(--color-sienna)" strokeWidth={1.6} />
-              <div className={styles.newCardLabel}>{t("lore.panel.newEntry")}</div>
-              <div className={styles.newCardHint}>{isZh ? "手填或从手稿提取" : "Fill in, or extract from the manuscript"}</div>
-            </div>
-          </div>
-        )}
-      </div>
+      {assign && (
+        <CollectionAssignMenu
+          index={index}
+          declared={collections}
+          entities={assign.entities}
+          mode={assign.mode}
+          anchor={assign.anchor}
+          onCommit={(add, remove) => void commitAssign(assign.entities, add, remove)}
+          onClose={() => setAssign(null)}
+        />
+      )}
+
+      {showManage && (
+        <CollectionsManageModal
+          index={index}
+          declared={collections}
+          scope={scope}
+          onClose={() => setShowManage(false)}
+          onReorder={(next) => useProjectStore.getState().setCollections(next)}
+          onCreate={(name) => useProjectStore.getState().setCollections([...collections, name])}
+          onRename={(from, to) => useProjectStore.getState().renameCollection(from, to)}
+          onDelete={(name) => useProjectStore.getState().deleteCollection(name)}
+        />
+      )}
 
       {menu && (
         <ContextMenu

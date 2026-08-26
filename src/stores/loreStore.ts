@@ -8,7 +8,9 @@ import {
   type LoreEntity,
   type CategoryId,
 } from "../lib/lore";
+import type { LoreScope } from "../lib/lore";
 import { makeDir, renamePath } from "../lib/fs/fileio";
+import { deletePref, LORE_SCOPE_PREFIX, readPref, writePref } from "../lib/prefs";
 
 interface LoreState {
   index: LoreIndex;
@@ -38,8 +40,18 @@ interface LoreState {
    * LoreWall the moment it opens the generator; null the rest of the time.
    */
   pendingExtract: string | null;
+  /**
+   * 生效中的**取材范围**：一个集合名，或 null ＝ 全部（见 lib/lore/collections）。
+   *
+   * 按项目持久化（`lore:scope:<projectPath>`）。住在 loreStore 而不是 appStore，
+   * 因为它说的是知识库的一个子集是哪些；每个 AI 入口在组装上下文时读它，而不是
+   * 各自记一份。
+   */
+  scope: LoreScope;
 
   scanProject: (projectPath: string) => Promise<void>;
+  /** 切换取材范围并记住（null ＝ 全部）。 */
+  setScope: (projectPath: string | null, scope: LoreScope) => void;
   /** Ask the lore wall to open AI-extract seeded with this passage. */
   requestExtract: (text: string) => void;
   /** Read the staged passage exactly once. */
@@ -90,6 +102,7 @@ export const useLoreStore = create<LoreState>((set, get) => ({
   detailPath: null,
   detailEditing: false,
   pendingExtract: null,
+  scope: null,
 
   requestExtract: (text) => set({ pendingExtract: text }),
   takePendingExtract: () => {
@@ -113,7 +126,11 @@ export const useLoreStore = create<LoreState>((set, get) => ({
       // from now on, so a caller arriving later must schedule its own.
       if (queuedToken === token) { queued = null; queuedToken = null; queuedPath = null; }
       try {
-        set({ index: await scanLore(projectPath) });
+        // 范围随索引一起装载：扫描是「换项目了」唯一必经的地方，而范围是按项目存的。
+        // 反复扫描同一个项目读到的是同一个值（setScope 同时写盘与写 state），所以
+        // 这里不会把会话中途的切换覆盖掉。
+        const scope = readPref(`${LORE_SCOPE_PREFIX}${projectPath}`)?.trim() || null;
+        set({ index: await scanLore(projectPath), scope });
       } finally {
         if (--activeScans === 0) set({ isLoading: false });
       }
@@ -128,6 +145,17 @@ export const useLoreStore = create<LoreState>((set, get) => ({
     queuedToken = token;
     queuedPath = projectPath;
     return promise;
+  },
+
+  setScope: (projectPath, scope) => {
+    const next = scope?.trim() ? scope.trim() : null;
+    set({ scope: next });
+    if (!projectPath) return;
+    const key = `${LORE_SCOPE_PREFIX}${projectPath}`;
+    // 「全部」写成删除这一行，而不是存一个空串：缺席本来就是默认值，留一行空的只会
+    // 让项目被删掉之后的清理工作多认一种形态。
+    if (next) writePref(key, next);
+    else deletePref(key);
   },
 
   selectEntity: async (entity) => {
@@ -202,7 +230,10 @@ export const useLoreStore = create<LoreState>((set, get) => ({
   },
 
   createNewEntity: async (projectPath, category, id, name) => {
-    await createEntity(projectPath, category, id, name);
+    // 归进当前取材范围：范围生效时新建的条目若落成「未归集」，它会立刻从作者刚刚
+    // 建它的那面墙上消失（agent 侧同理，见 writeTools 的 create_lore_entity）。
+    const { scope } = get();
+    await createEntity(projectPath, category, id, name, scope ? [scope] : []);
     await get().scanProject(projectPath);
     const entity = get().index[category]?.find((e) => e.id === id);
     if (entity) get().selectEntity(entity);

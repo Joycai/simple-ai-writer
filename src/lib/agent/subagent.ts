@@ -426,6 +426,9 @@ export async function executeDelegate(
       toolContext: {
         projectPath: ctx.projectPath,
         loreIndex: ctx.loreIndex,
+        // 围栏跟着子对话走。不继承的话，把活派给子代理就成了绕过取材范围的方法
+        // ——而那正是「委派」最不该有的副作用。
+        loreScope: ctx.loreScope,
         multimodal: conn.model.type === "multimodal",
         // Threaded through so this stays correct if a delegate preset ever
         // gains a lore write tool (none has one today). runAgent clones the
