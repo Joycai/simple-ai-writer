@@ -24,6 +24,7 @@ import { writePref } from "../../../lib/prefs";
 import { Pane, Toggle } from "./bits";
 import { Select } from "../../common/Select";
 import ui from "../settingsUi.module.css";
+import common from "../settingsCommon.module.css";
 import css from "./SubAgents.module.css";
 
 /**
@@ -301,7 +302,7 @@ export function SubAgentsPane() {
                           min={1}
                           max={100}
                           value={chunkLines}
-                          style={{ width: 64 }}
+                          className={`${common.input} ${css.chunkInput}`}
                           onChange={(e) => {
                             const n = clampChunkLines(e.target.value);
                             setTranslateLinesPerChunk(n);
