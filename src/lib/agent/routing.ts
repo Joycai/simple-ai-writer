@@ -8,10 +8,11 @@
  * - If the PPTX export Beta is off: strip export_pptx
  * - If the translation Beta is on AND a translation model is bound: append translate
  * - If any delegate-capable subagent is active and workspace exists: append delegate tool
+ * - If the surface opts in AND a usable writer is bound: finishPolicy → "handoff"
  */
 
 import type { ToolId } from "./registry";
-import type { TaskPreset } from "./presets";
+import type { FinishPolicy, TaskPreset } from "./presets";
 import type { TaskWorkspaceHandle } from "./taskWorkspace";
 import { subAgentModel, DELEGATE_KINDS, type SubAgentConfig, type SubAgentKind } from "./subagent";
 import { isPptxExportEnabled } from "../pptx/flag";
@@ -23,6 +24,27 @@ export interface RoutedTools {
   tools: ToolId[];
   /** Whether the main model is still allowed server-side search. */
   serverTools: "final-round-off" | "off" | "always";
+  /**
+   * The preset's finish policy as routing leaves it — `"handoff"` when this
+   * surface opted in and a usable writer is bound, the preset's own value
+   * otherwise. Spread it like `tools`; a caller that ignores it silently keeps
+   * the main model writing.
+   */
+  finishPolicy: FinishPolicy;
+}
+
+/**
+ * Per-surface routing choices that are not derivable from the preset.
+ *
+ * `handoff` is one of these rather than a field on the preset because
+ * `AGENT_ASSIST_PRESET` is shared: the chat assistant and the AiPanel's Agent
+ * mode run the very same object, and only one of them is in scope today. A
+ * surface opts in explicitly, which also makes "who has the writer" greppable
+ * instead of inferred.
+ */
+export interface RouteOptions {
+  /** May this surface end a run by handing off to the writer subagent? */
+  handoff?: boolean;
 }
 
 /**
@@ -38,8 +60,9 @@ export function routeTools(
   subs: Record<SubAgentKind, SubAgentConfig>,
   workspace: TaskWorkspaceHandle | undefined,
   models: Model[],
+  options?: RouteOptions,
 ): RoutedTools {
-  return route(preset, subs, workspace !== undefined, models);
+  return route(preset, subs, workspace !== undefined, models, options);
 }
 
 /**
@@ -53,8 +76,9 @@ export function routePlannedTools(
   preset: TaskPreset,
   subs: Record<SubAgentKind, SubAgentConfig>,
   models: Model[],
+  options?: RouteOptions,
 ): RoutedTools {
-  return route(preset, subs, true, models);
+  return route(preset, subs, true, models, options);
 }
 
 function route(
@@ -62,6 +86,7 @@ function route(
   subs: Record<SubAgentKind, SubAgentConfig>,
   hasWorkspace: boolean,
   models: Model[],
+  options?: RouteOptions,
 ): RoutedTools {
   let tools = [...preset.tools];
   // Usable, not merely enabled. A search subagent bound to a model without
@@ -122,8 +147,17 @@ function route(
     ? "off"
     : (preset.serverTools ?? "final-round-off");
 
+  // The writer takes over the final round rather than a tool: it is the one
+  // subagent no model chooses to use, so there is nothing to strip and nothing
+  // to append — only the run's ending changes. `live` matters for the usual
+  // reason: an enabled-but-unbound writer would leave the main model with no
+  // ending at all.
+  const finishPolicy: FinishPolicy =
+    options?.handoff && live("writer") ? "handoff" : preset.finishPolicy;
+
   return {
     tools,
     serverTools: serverToolsPolicy,
+    finishPolicy,
   };
 }

@@ -434,3 +434,12 @@
   color: var(--color-text-hint);
   padding-bottom: var(--space-1);
 }
+
+/* 写手写的那段字，一字不差地到了这张卡上（ProposalBase.fromWriter）。等宽小字、
+   按钮行开头，不抢焦点——它是一句陈述，不是一个卖点。 */
+.verbatim {
+  flex: none;
+  font: 400 10.5px/1 var(--font-mono);
+  color: var(--color-text-hint);
+  white-space: nowrap;
+}

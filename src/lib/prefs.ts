@@ -81,6 +81,10 @@ export const PREF_KEYS = [
   "ai:subagent:imagegen:enabled",
   "ai:subagent:translate:modelId",
   "ai:subagent:translate:enabled",
+  "ai:subagent:writer:modelId",
+  "ai:subagent:writer:enabled",
+  // 写手的一次性说明看过没有。设置卡上的「再看一次说明」清掉它。
+  "ai:writerIntroSeen",
   // 翻译时要不要从知识库抽术语表。默认开——没有知识库时它自然抽不到东西。
   "ai:translate:useLore",
 ] as const;

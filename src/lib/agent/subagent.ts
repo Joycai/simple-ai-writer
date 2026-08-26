@@ -23,10 +23,11 @@ import type { ToolCall, ToolResult } from "./tools";
 import { writeTaskNote } from "./taskWorkspace";
 import { baseName } from "../paths";
 
-export type SubAgentKind = "search" | "vision" | "longread" | "pdf" | "imagegen" | "translate";
+export type SubAgentKind =
+  | "search" | "vision" | "longread" | "pdf" | "imagegen" | "translate" | "writer";
 
 export const SUBAGENT_KINDS: readonly SubAgentKind[] =
-  ["search", "vision", "longread", "pdf", "imagegen", "translate"];
+  ["search", "vision", "longread", "pdf", "imagegen", "translate", "writer"];
 
 /**
  * The kinds `delegate` can dispatch to — a *conversational* sub-run on the
@@ -37,7 +38,15 @@ export const SUBAGENT_KINDS: readonly SubAgentKind[] =
  * binding matter — those tools exist only while this subagent is usable, and
  * they draw with its model.
  *
- * `translate` is excluded for exactly the same reason, and the evidence is
+ * `writer` is excluded for a third reason, and it is the sharpest of the three:
+ * it is not called at all. The whole point of the writer switch is that no model
+ * decides whether to use it — a tool would put that decision back in the
+ * model's hands. It runs as the run's **finish stage** instead
+ * (`finishPolicy: "handoff"`, lib/agent/handoff.ts), which is also why its
+ * output is not summarised into a note the way a delegate's is: it *is* the
+ * turn's answer, and a delegate's contract is the opposite of that.
+ *
+ * `translate` is excluded for exactly the same reason as imagegen, and the evidence is
  * blunter than for images: asked "你是什么模型", Sakura paraphrases the question
  * back instead of answering; handed a task description it translates it. A
  * `subagentTask` prompt would come back as its own Chinese translation. So the
@@ -45,7 +54,7 @@ export const SUBAGENT_KINDS: readonly SubAgentKind[] =
  * calls the endpoint directly rather than through `runAgent` — it has no tool
  * calling to loop over. See docs/feature/translate/01-execution-plan.md §1.
  */
-export type DelegateKind = Exclude<SubAgentKind, "imagegen" | "translate">;
+export type DelegateKind = Exclude<SubAgentKind, "imagegen" | "translate" | "writer">;
 
 export const DELEGATE_KINDS: readonly DelegateKind[] = ["search", "vision", "longread", "pdf"];
 
@@ -195,6 +204,14 @@ export function subAgentModel(
   // plausible; nothing errors, and the author reads a worse translation as the
   // feature working.
   if (kind === "translate" && !isTranslateOnly(model)) return null;
+  // The writer is the one kind with no capability to test for — any text model
+  // can write — so the check runs the other way, excluding what cannot: an
+  // image/video model has no prose to give, and a translation-only model is the
+  // silent failure of the set. Sakura bound here reports no error at all; it
+  // just returns the work order back, translated. That is a worse outcome than
+  // an unset switch, so it is refused rather than warned about.
+  if (kind === "writer" && (model.type === "image" || model.type === "video")) return null;
+  if (kind === "writer" && isTranslateOnly(model)) return null;
   return model;
 }
 

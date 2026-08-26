@@ -18,8 +18,16 @@ import type { ToolId } from "./registry";
  *                        instructed to produce text (writing tasks must end in prose)
  *   - "allow-tool-end" — the run may end on a tool round (future write-back
  *                        tasks whose last action *is* the tool call)
+ *   - "handoff"        — the final round is not written by this model at all: it
+ *                        is forced to hand a brief to the writer subagent, whose
+ *                        output becomes the run's output. See lib/agent/handoff.
+ *
+ * `handoff` is never declared on a preset literal. It is applied by `routeTools`
+ * when the surface opts in AND a usable writer is bound — which is what makes
+ * the settings switch mean something, and what makes turning it off restore
+ * today's behaviour exactly (same argument as `scratchpad: "off"`).
  */
-export type FinishPolicy = "force-text" | "allow-tool-end";
+export type FinishPolicy = "force-text" | "allow-tool-end" | "handoff";
 
 export interface TaskPreset {
   id: string;
@@ -186,6 +194,28 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
   maxRounds: 40,
   finishPolicy: "force-text",
   scratchpad: "required",
+};
+
+/**
+ * 写手子代理的子跑 preset —— 一次运行的**收尾**，不是一个可以被调用的任务。
+ *
+ * 只读工具，而且是**索引式**的那几个：交接单给的是路径，写手自己去读（材料本来
+ * 就在任务工作区的 note 里，让主模型抄一遍花的是它最贵的那半 token）。没有任何
+ * 写工具——落盘由运行时组提案、父 surface 审批，见 `handoff.deliverWriterOutput`。
+ * 隔离因此是结构性的，不是提示词里的一句话。
+ *
+ * `serverTools: "off"`：写手是来成文的，不是来查资料的。真需要查，那是主模型在
+ * 交接之前该做完的事——`search` 子代理就在它手边。
+ *
+ * maxRounds 是「读几个 note 再写」的量：真正的一轮是最后那次成文，前面几轮只用来
+ * 把交接单点到的东西读进来。
+ */
+export const WRITER_PRESET: TaskPreset = {
+  id: "writer",
+  tools: ["read_note", "list_notes", "read_file", "list_lore_entities", "read_lore_entity", "search_text"],
+  maxRounds: 6,
+  finishPolicy: "force-text",
+  serverTools: "off",
 };
 
 /**

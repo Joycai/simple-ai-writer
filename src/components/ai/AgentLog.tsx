@@ -610,6 +610,13 @@ function AgentLogRow({ row, showTime, runStatus }: {
           {time}
         </li>
       );
+    // Both get a card of their own in band ③ (logModel.roundRows filters them
+    // out here), so a row would be the same handoff printed twice. Cased
+    // rather than left to fall through: this switch returns nothing for an
+    // unhandled kind, and React treats that as a render error.
+    case "handoff":
+    case "handoff-done":
+      return null;
     case "run-error":
       return (
         <ExpandableRow
@@ -713,6 +720,10 @@ function useHeadline(model: AgentLogModel): string {
       });
     case "output-truncated":
       return t("ai.agent.log.outputTruncated", { defaultValue: "输出被上限截断，回答未写完" });
+    case "handoff":
+      return t("ai.agent.log.handoffRunning", { defaultValue: "写手正在成文" });
+    case "handoff-done":
+      return t("ai.agent.log.handoffDone", { defaultValue: "写手已成文" });
     default:
       return t("ai.agent.log.thinking", { defaultValue: "思考中…" });
   }

@@ -175,3 +175,121 @@
   .bindSelect { width: 100%; flex: 1; }
   .meta { flex-basis: 100%; text-align: left; }
 }
+
+/* ─── 第三组「收尾成文」（设计稿 12 · 屏 6a） ─────────────────────────────── */
+
+/* 上两组是「一堆能力」，用普通组头 + 双列网格。这一组只有一位成员——套同样的
+   组头会显得很空，所以改成一条贯通的刻度线：13px 横刻度起头、标题嵌在线上、
+   卡片满宽。它读起来像页脚的一条附则，不像第三个货架。刻度与对话里那道署名线
+   是同一个记号（--writer-tick）。 */
+.finishHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.finishTick {
+  flex: none;
+  width: 13px;
+  height: 1px;
+  background: var(--writer-tick);
+}
+
+.finishLabel {
+  flex: none;
+  font-size: var(--font-size-base);
+  color: var(--stg-text);
+}
+
+.finishFill {
+  flex: 1;
+  height: 1px;
+  background: var(--stg-line-section);
+}
+
+/* 别人那格是「需多模态」这类前置条件芯片。写手没有前置条件——空着会像漏了，
+   所以写成一句等宽小字：写清楚反而是个卖点。 */
+.reqPlain {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--stg-text-faint);
+}
+
+.metaRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) 0 var(--space-6);
+}
+
+.metaSep {
+  width: 1px;
+  height: 10px;
+  background: var(--stg-border);
+}
+
+.metaAction {
+  margin-left: auto;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--font-size-sm);
+  color: var(--stg-text-faint);
+  cursor: pointer;
+}
+.metaAction:hover { color: var(--stg-text-warm); }
+
+/* 写手多出来的第二样：适用范围。别的子代理到处都生效，它只作用于一个面板——
+   不说清楚，作者会以为角色扮演也变了。 */
+.scope {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin: var(--space-4) var(--space-4) 0 var(--space-6);
+  border-top: 1px solid var(--stg-line-row);
+  padding: var(--space-3) 0 var(--space-4);
+}
+
+.scopeKicker {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  letter-spacing: 0.14em;
+  color: var(--writer-tick);
+}
+
+.scopeText {
+  font-size: var(--font-size-sm);
+  line-height: 1.7;
+  color: var(--stg-text-whisper);
+}
+
+/* 开着但没绑模型：卡底的一条行动条。不是 .warn 那种纯陈述——这里有一个一步
+   到位的出路（借助手正在用的模型），所以它带一个按钮。 */
+.unbound {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  border-top: 1px solid var(--stg-border);
+  background: var(--stg-card-head);
+  padding: var(--space-3) var(--space-4);
+}
+
+.unboundText {
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--stg-text-warm);
+}
+
+.unboundAction {
+  margin-left: auto;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--font-size-sm);
+  color: var(--stg-accent);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.unboundAction:hover { color: var(--stg-accent-hover); }

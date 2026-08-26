@@ -5,7 +5,11 @@ import { useAgentStore } from "../../stores/agentStore";
 import { subAgentModel, SUBAGENT_KINDS, type SubAgentKind } from "../../lib/agent/subagent";
 import styles from "./toggleChip.module.css";
 
-const ICONS: Record<SubAgentKind, LucideIcon> = {
+/** Every kind that is a chip — i.e. all of them except the writer. See below. */
+type ChipKind = Exclude<SubAgentKind, "writer">;
+const CHIP_KINDS = SUBAGENT_KINDS.filter((k): k is ChipKind => k !== "writer");
+
+const ICONS: Record<ChipKind, LucideIcon> = {
   search: Globe,
   vision: Eye,
   longread: BookOpen,
@@ -26,6 +30,15 @@ const ICONS: Record<SubAgentKind, LucideIcon> = {
  * panel needs it: the assistant and three concurrent roleplay agents are four
  * unrelated conversations, and sharing one "turned off for this conversation"
  * set would mean each of them silently editing the others' settings.
+ *
+ * **The writer is never one of these**, on any surface. Every chip here says
+ * "this ability is available" — a switch among equals, and turning one off
+ * changes what the assistant *can reach*. The writer says "from now on every
+ * sentence is written by it": it always takes effect, and it changes the cost
+ * and the wait of every turn. A seventh identical box would file the most
+ * consequential switch in the row under the least consequential shape. It gets
+ * the composer's own separator line instead — see WriterStrip
+ * (设计稿 12 · 屏 5a「写手不是第七个芯片」).
  */
 export function SubAgentChips({ disabled, onToggle }: {
   disabled?: readonly SubAgentKind[];
@@ -42,7 +55,7 @@ export function SubAgentChips({ disabled, onToggle }: {
   // Usable, not merely enabled: a vision subagent bound to a text model, or a
   // search one whose model cannot browse, would give the author a switch that
   // changes nothing — every other surface has already decided it is off.
-  const configuredKinds = SUBAGENT_KINDS.filter(
+  const configuredKinds = CHIP_KINDS.filter(
     (k) => subAgentModel(k, models, subAgents) !== null,
   );
 

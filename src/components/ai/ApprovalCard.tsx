@@ -553,6 +553,13 @@ export function ApprovalCard({ item }: { item: PendingApproval }) {
       </div>
 
       <div className={styles.footer}>
+        {/* 信任靠的是几何上的连续，不是一句承诺：对话里那道署名线一路穿过正文
+            走到这张卡旁边，而这一行小字说的是同一件事——这段字没有经过任何模型
+            转手。**如果哪天它被转写了，这一行必须消失**（ProposalBase.fromWriter
+            就是那个开关）。放在按钮行开头、等宽小字，不抢焦点。 */}
+        {proposal.fromWriter && (
+          <span className={styles.verbatim}>{t("ai.approval.verbatimFromWriter")}</span>
+        )}
         <input
           className={styles.rejectInput}
           value={rejectReason}
