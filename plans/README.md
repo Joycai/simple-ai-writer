@@ -32,6 +32,10 @@
 | 023 | [阻断 B 重新归因](023-blocker-b-reattribute.md) | HIGH | DONE — 结论「不是缺陷」，走分支 A |
 | 024 | [「回到最新」气泡去掉入场动画](024-jump-latest-no-entrance.md) | LOW | DONE |
 | 025 | [取材范围切换的墙面软化（加法项）](025-wall-scope-switch-softening.md) | LOW | DONE（第 2 步已按判据撤回） |
+| 026 | [审批卡入场：补齐 016 漏掉的两个挂载点](026-approval-card-entrance-remaining.md) | MEDIUM | DONE |
+| 027 | [一致性检查结果统一淡入落位](027-consistency-findings-stagger.md) | MEDIUM | DONE |
+| 028 | [生成图落位时淡入显影](028-generated-image-reveal.md) | LOW | DONE |
+| 029 | [提示词库痕迹行补上退场淡出](029-snippet-trace-exit.md) | MEDIUM | DONE |
 
 > 001–005 已随 [PR #273](https://github.com/Joycai/simple-ai-writer/pull/273) 合入 main（基准 0f49132）。
 > 006–012（backlog 第二批，基准 9e16885）已于 2026-08-22 执行完毕，`pnpm tsc --noEmit` 与 `pnpm build` 通过。
@@ -257,3 +261,117 @@
 
 至此第五批（019–025）全部落地并验收完毕。每份方案的 Verification 一节保留了
 具体步骤，以后回归照跑。
+
+## 第六批（026–029，基准 1a72e2e）
+
+来源与第四批同类：一次 `find-animation-opportunities` 勘察（找「该动而没动」的
+地方）。勘察扫了全部动效接缝，**只提了 4 条**——前五批已经把明显的问题清干净，
+剩下的都是新代码没接上既有约定，或既有约定只落实了一部分。
+
+- **026**：**016 的漏网之鱼。** 那四张审批卡有三个挂载点（`AgentChat` /
+  `AiPanel` / `RoleplayChat`），016 的 scope 写的是「1 个 CSS 文件，1 条新规则」，
+  只覆盖了 `AgentChat`。另外两处至今一帧硬切。处方和理由 016 已定死，本方案逐字
+  沿用，不重新论证。性质同 015（006 的漏网之鱼）、022（005 的漏网之鱼）。
+  **杠杆最高，建议先做。**
+- **027**：一致性检查跑完数秒后，N 张发现卡同时硬切出现。**本方案不做错峰**——
+  起草时的错峰拟案已在立案阶段自我否决，理由写在方案正文里：`ignore()` 会把
+  发现从 `openIssues` 移除，其后每张卡 `nth-child` 位次前移，任何基于位次的
+  `animation-delay` 都会让并未重挂载的卡片集体重放。**与 025 第 2 步的撤回是同一
+  个失败模式**，且触发器比 025 更主要（025 是搜索打字，此处是列表的主操作之一）。
+- **028**：生成图等了 20–60 秒，data URL 一到直接弹出。全应用最稀有、情绪最高的
+  一个瞬间，表现和报错弹窗没区别。**只覆盖生成结果的候选图**，不推广到头像/图库
+  （频次不对，且知识库墙已有整墙 `fadeIn`，再叠一层会双重淡入）。
+- **029**：提示词库的确认痕迹**有进场没退场**——淡入 240ms，然后计时器到点整行被
+  切掉。该功能的设计意图是「不用 toast，就地出现、一秒半后消失」
+  （`snippetTrace.ts:12-13`），而「消失」被实现成了「被切掉」。唯一一份要动
+  TypeScript 的，也是唯一一份修**已有**动效缺陷的。
+
+### 推荐执行顺序与依赖
+
+1. **026**（3 个文件，但只是把 016 已定案的规则补到两处；杠杆最高）
+2. **029**（唯一的 TS 改动；验证时务必跑「淡出途中被新痕迹打断」那条回归）
+3. **027**（1 条 CSS 规则；验证时务必跑「忽略一条后幸存卡片不重放」那条回归）
+4. **028**（1 行 CSS；需要开生图 Beta 开关 + 配好图像模型才能验证）
+
+**四份互不依赖，改动文件零重叠**，可并行执行：
+
+| 方案 | 触碰的文件 |
+|---|---|
+| 026 | `ai/AiPanel.module.css`、`ai/AiPanel.tsx`、`roleplay/RoleplayChat.module.css` |
+| 027 | `ai/ConsistencyCheck.module.css` |
+| 028 | `ai/ImageGenModal.module.css` |
+| 029 | `ai/snippetTrace.ts`、`ai/SnippetPicker.module.css`、`ai/SnippetPicker.tsx` |
+
+**均不新增 `global.css` 的关键帧，也不新增 Motion 预设。** 四份复用的 `dropIn`、
+`slideUp`、`fadeIn`、`fadeOut` 都已存在；任何一份若打算新增关键帧，都说明理解偏了，
+且会撞上方案 019 的 `cssKeyframeNames.test.ts`。
+
+**唯一允许新增 `prefers-reduced-motion` 媒体查询的地方：没有。** 四份最终都不带
+`animation-delay`（027 的错峰已撤），全局规则（`global.css:122-129`）足够。
+
+### 勘察时明确**否掉**的候选（不要「顺手补上」）
+
+- **`CommandPalette`** —— 键盘触发、100+/天。方案 014 的既定决策，design-system.md §247 已同步。
+- **`AgentChat` 的「回到最新」气泡** —— 方案 024 刚**删掉**它的入场动画。不要加回来。
+- **`AgentLog` 流式记录行** —— 方案 003 的既定结论。
+- **`LoreWall` 卡片错峰** —— 方案 025 第 2 步已按实测判据撤回。
+- **`FileTree` 展开/折叠** —— 100+/天的核心导航；chevron 本身已有 transition。
+- **`ConfirmDialog` 改长按确认** —— 已是模态 + 焦点默认落在取消键，再加摩擦有害。
+- **全局 `<img>` 淡入** —— 频次不对；028 因此只覆盖生成结果。
+
+### 一处未解决的观察（不构成方案）
+
+`global.css:122-129` 在 `prefers-reduced-motion` 下用 `!important` 把所有动画压到
+`0.001ms`，即**归零而非变柔**。`src/lib/motion.ts` 的 `useMotionPreset` 在 JS 侧做的
+是正确的那种降级（剥掉 transform、保留 opacity 淡入），CSS 侧没有对应物。
+
+第六批四份都以 opacity 为主，归零对它们是可接受的降级，所以没有一份去对抗这条
+全局规则。但**如果以后要加位移较大的 CSS 动效**，这个缺口会开始咬人——届时该讨论
+的是全局策略，不是在单个组件里打补丁。
+
+### 执行记录（2026-08-26，基准 1a72e2e）
+
+026–029 已全部落地。改动 8 个源文件、72 行新增 / 14 行删除，四份方案的 Steps 逐条
+照做，**无一处即兴发挥**——四份方案引用的所有 verbatim 摘录（含行号）都与工作树精确
+吻合，执行者报告零 mismatch。
+
+门禁：`pnpm exec tsc --noEmit` 无诊断 · `pnpm test` 190 文件 / 2563 用例全绿（含方案
+019 的 `cssKeyframeNames.test.ts`，四份均未新增关键帧）· `pnpm build` 成功。
+
+**按「阻断 A」的判据核验了构建产物**——这是本仓库唯一能在不跑应用的情况下证明动画
+真的会播的检查：
+
+```
+$ grep -ohE "animation:[^;}]+" dist/assets/*.css | grep -cE "dropIn"          →  8（原 6 处 + 026 的 2 处）
+                                                          "slideUp"           →  1（027）
+                                                          "fadeIn (.32s|320ms)" →  1（028）
+                                                          "fadeOut (.16s|160ms)" →  3（含 029）
+带作用域后缀（_dropIn_<hash>_1 那种）的引用                                    →  0 处
+```
+
+**一条执行者报告需要更正的观察**：执行者称「`pnpm tsc --noEmit` 在 pnpm 11.12.0 上
+会静默跑成 install 而不是 tsc，CLAUDE.md 记的调用方式是 no-op」。**该结论不成立。**
+用一个故意写错类型的探针文件实测，两种调用形式都能捕获并以 exit 1 失败：
+
+```
+$ echo 'export const probe: number = "nope";' > src/__tsc_probe.ts
+$ pnpm tsc --noEmit        →  src/__tsc_probe.ts(1,14): error TS2322 ... EXIT=1
+$ pnpm exec tsc --noEmit   →  src/__tsc_probe.ts(1,14): error TS2322 ... EXIT=1
+```
+
+执行者那次看到的 install 输出是 pnpm 的一次性自动安装，与 tsc 是否运行无关。
+**CLAUDE.md 的 `pnpm tsc --noEmit` 无需修改。**
+
+**目检已完成**（2026-08-26，作者在真 Tauri 窗口里跑过 `pnpm tauri dev`）。三条最
+关键的回归全部通过：
+
+1. **026** —— 第一张审批卡还在等待时让运行再产生一张，确认**新那张**播动画、
+   **已在场的那张不重播**（这是「挂 `> *` 而非容器」唯一能验出来的地方）。
+2. **027** —— 在一份 5 条以上发现的报告里点第 2 条的「忽略」，确认其余卡片**只是
+   向上补位、没有任何一张重新淡入或位移**。若看到重放，说明有人加回了基于位次的
+   delay。
+3. **029** —— 在痕迹**正在淡出**的那 160ms 里再触发一次存入，确认新痕迹立刻以全
+   不透明淡入接管，不卡半透明、不闪烁、不叠行。
+
+至此第六批（026–029）全部落地并验收完毕。每份方案的 Verification 一节保留了具体
+步骤，以后回归照跑。

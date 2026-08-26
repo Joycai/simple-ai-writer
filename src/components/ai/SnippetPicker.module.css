@@ -66,6 +66,11 @@
   min-width: 0;
   animation: fadeIn 240ms var(--ease-out);
 }
+/* 退场：进场有淡入，退场就不能是切掉。160ms 与 global.css 的 .modal-closing
+   同档——全 app「先标记退场、播完再卸载」用的是同一个数。 */
+.trace.traceLeaving {
+  animation: fadeOut 160ms var(--ease-out) forwards;
+}
 .tracePlus {
   font: 500 10px/1 var(--font-mono);
   color: var(--color-accent-text);
