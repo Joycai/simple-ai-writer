@@ -1572,7 +1572,14 @@
         "BLOCK_ONLY_HIGH": "Only high",
         "BLOCK_MEDIUM_AND_ABOVE": "Medium & above",
         "BLOCK_LOW_AND_ABOVE": "Low & above"
-      }
+      },
+      "saveAndAddWorkflow": "Save and import workflow",
+      "comfyBaseUrlHint": "Your ComfyUI address — http://127.0.0.1:8188 by default. ComfyUI uses no API standard and no key: images come from the workflow stored on the model row, not from a protocol.",
+      "comfyCheckLabel": "Connection check",
+      "comfyCheckHint": "Checks whether ComfyUI is running, and whether it accepts requests from this app.",
+      "comfyTestOk": "Connected — ComfyUI {{version}}.",
+      "comfyTestForbidden": "ComfyUI is running but refused this app's request (403). By default it blocks requests whose Origin differs from its own address, which is exactly what this app sends. Restart ComfyUI with --enable-cors-header and try again.",
+      "comfyTestUnreachable": "Cannot reach ComfyUI — check that it is running and that the address and port are right (http://127.0.0.1:8188 by default). {{detail}}"
     },
     "models": {
       "configured": "Configured Models",
@@ -1669,7 +1676,8 @@
       "translateFormat_sakura": "Sakura (JA→ZH)",
       "translateFormatHint": "Declare the prompt format if this is a dedicated translation model whose template was fixed at training time. Leave it on “Ordinary model” otherwise.",
       "translateFormatHintOn": "Declared as a dedicated translation model: it only translates Japanese into Chinese and does not read instructions, so it no longer appears in the main-model or other subagent pickers — only the JA→ZH translation subagent can use it.",
-      "effortLabelAnthropic": "Effort"
+      "effortLabelAnthropic": "Effort",
+      "comfyDefaultName": "ComfyUI workflow"
     },
     "probe": {
       "title": "Probe real limits",

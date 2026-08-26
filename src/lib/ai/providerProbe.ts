@@ -94,6 +94,54 @@ function modelsFetchError(status: number, standard: ApiStandard, label: string):
   return new Error(`${label ? `${label} ` : ""}models fetch failed: ${status}`);
 }
 
+/**
+ * Connectivity test for a ComfyUI instance.
+ *
+ * A separate entry point rather than a branch inside `testProviderConnection`,
+ * because ComfyUI answers none of the questions that one asks: it has no
+ * `/models`, no completion endpoint and no key. `/system_stats` is its cheapest
+ * "are you there" and it names its own version, so a success can say something
+ * the author can act on.
+ *
+ * The 403 branch is the whole reason this exists. ComfyUI runs an
+ * anti-DNS-rebinding middleware by default (whenever it is started without
+ * `--enable-cors-header`) that rejects any request whose Origin host differs
+ * from its Host header — *before routing*, so every path answers 403 and
+ * nothing about the request body can change it. `lib/http` attaches such an
+ * Origin to every local request (it has to: Ollama's allowlist rejects the
+ * webview's own). Without this message the author sees a reachable, healthy
+ * ComfyUI refuse everything and has no way to learn why — see
+ * docs/feature/comfyui-plan.md §7.1.
+ */
+export async function testComfyUiConnection(
+  baseUrl: string,
+): Promise<{ ok: true; message: string } | { ok: false; error: string }> {
+  const base = baseUrl.trim().replace(/\/+$/, "");
+  if (!base) return { ok: false, error: i18n.t("aiConfig.providers.testMissingFields") };
+  try {
+    const res = await fetch(`${base}/system_stats`);
+    if (res.status === 403) {
+      return { ok: false, error: i18n.t("aiConfig.providers.comfyTestForbidden") };
+    }
+    if (!res.ok) {
+      return { ok: false, error: `API error ${res.status} (${base}/system_stats)` };
+    }
+    const data = (await res.json()) as { system?: { comfyui_version?: string } };
+    const version = data.system?.comfyui_version;
+    return {
+      ok: true,
+      message: version
+        ? i18n.t("aiConfig.providers.comfyTestOk", { version })
+        : i18n.t("aiConfig.providers.testOk"),
+    };
+  } catch (e) {
+    // A refused connection is the other half of the diagnosis: the middleware
+    // answers, a stopped ComfyUI does not.
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: i18n.t("aiConfig.providers.comfyTestUnreachable", { detail: msg }) };
+  }
+}
+
 export async function testProviderConnection(
   baseUrl: string,
   apiKey: string,

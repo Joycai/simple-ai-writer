@@ -25,7 +25,9 @@ const ORPHAN_ID = "__orphan__";
 
 type Drawer =
   | { kind: "provider"; providerId: string | null; apiKey: string }
-  | { kind: "model"; providerId: string; modelId: string | null }
+  /** `comfy` seeds a brand-new model row as a ComfyUI one — set only by the
+   *  provider drawer's hand-off, never persisted. */
+  | { kind: "model"; providerId: string; modelId: string | null; comfy?: boolean }
   | null;
 
 /** A pending deletion, held until the author confirms it. */
@@ -524,12 +526,16 @@ export function ProvidersModelsPane({ onEscapeInterceptChange }: Props) {
               providerId={drawer.providerId}
               initialApiKey={drawer.apiKey}
               onClose={closeDrawer}
+              // A ComfyUI provider row on its own draws nothing; the workflow
+              // import is the real step, so go straight there.
+              onComfyCreated={(id) => openDrawer({ kind: "model", providerId: id, modelId: null, comfy: true })}
             />
           ) : (
             <ModelDrawer
               key={drawer.modelId ?? `new:${drawer.providerId}`}
               providerId={drawer.providerId}
               modelId={drawer.modelId}
+              comfy={drawer.comfy}
               onClose={closeDrawer}
             />
           )}
