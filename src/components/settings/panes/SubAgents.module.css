@@ -125,6 +125,15 @@
   padding: var(--space-3) var(--space-4) 14px 36px;
 }
 
+/* 原生复选框，只染上设置页自己的强调色——和这一屏的开关是同一支橙。不自绘
+   方框：原生控件自带焦点环、键盘操作和高对比度模式的适配，重画一个就要把这些
+   全部补回来，而这里只是一个开关。 */
+.bind input[type="checkbox"] {
+  flex: none;
+  accent-color: var(--stg-accent);
+  cursor: pointer;
+}
+
 .bindLabel {
   flex: none;
   font-size: var(--font-size-sm);
@@ -134,6 +143,18 @@
 .bindSelect {
   flex: none;
   width: 300px;
+}
+
+/* 块大小的数字框：借设置页通用的 `.input` 外观（同一套底色/描边/圆角），只在
+   这里收窄成一个两位数的宽度并右对齐。写成 `input.chunkInput` 是为了不依赖两个
+   CSS Module 文件在产物里的先后顺序——同名特异性下谁后出现谁赢，靠不住。 */
+input.chunkInput {
+  flex: none;
+  width: 72px;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-size-sm);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Round budget / per-request limits — fixed by the preset, not editable, so
