@@ -1,6 +1,6 @@
 # 绑定与自动注入的粒度 · 详细设计（LLD）
 
-> 状态：**partial** —— PR-1 / PR-2 已实现（§6），PR-3~4 未做。背景：第十轮审查确认，扮演 agent 的「绑定词条」语义与作者的
+> 状态：**partial** —— PR-1 / PR-2 / PR-3 已实现（§6），PR-4（UI 与花名册迁移）未做。背景：第十轮审查确认，扮演 agent 的「绑定词条」语义与作者的
 > 预期存在 6 个 gap，其中两个是**粒度错配**（账本按条目、期望按特征），一个是
 > **匹配门槛**（特征要先命中条目名才可能激活，而扮演里作者对着角色说话不写名字）。
 > 本文档是把现状改成 §1 那两条预期的执行设计。
@@ -352,7 +352,7 @@ recordInjectionsFromReport(meta, report, byDir, seedBlock);
 
 验收状态：`pnpm vitest run` 190 文件 2588 例全绿（新增 8 例），`pnpm build` 通过。
 
-### PR-3 · 扮演的绑定语义
+### PR-3 · 扮演的绑定语义 · ✅ 已实现
 
 改：`lib/roleplay/context.ts`（`BoundContent.resident`、播种记账、刷新清账、
 pin 主角）、`lib/roleplay/run.ts`（三个入参 + `refDirs`）、`stores/roleplayStore.ts`
@@ -370,6 +370,30 @@ pin 主角）、`lib/roleplay/run.ts`（三个入参 + `refDirs`）、`stores/ro
 - h. 压缩之后：折叠掉的特征可重新注入，绑定块承载的不重复（P7）
 
 **验收**：`context.test.ts` / `run.test.ts` 既有断言一条不改地全绿。
+
+**实现出入**（六处）：
+
+1. `BoundContent.resident.facets` 是 `{ dirPath, file }[]`，不是设计里写的 `dir#file`
+   字符串数组。账本要的就是这两半，拼成一个 key 再拆回来，等于把「dirPath 里含 `#`」
+   那个坑重新挖一遍——而 `buildBoundContent` 刚刚才把它解析清楚。
+2. 多了一个导出的 `recordPrimaryCore`，而且**「刷新设定」里也要调一次**：system 层
+   刚被重写，主角条目的指纹也跟着换了，不重记这一笔，检索就会把刚写进 system 的
+   同一份正文再注入一遍。设计里只写了播种那一次。
+3. **记账顺序**：主角（carrier = system 消息）排在绑定块之后，于是同一条目两处都有
+   正文时 system 那份赢。它活得更久——「刷新设定」清的是绑定块那一版的账，system
+   里的那份不该跟着失效。这条写进了代码注释和一条测试。
+4. `contributingEntities`（PR-2 加的）也接到了扮演的 `context-seeded` 事件上：主角
+   每轮都在候选里，正文常驻、这轮没有新特征时它什么都不贡献，计数不该把它算进去。
+5. `run.ts` 里那个只剩一个调用点的 `indexByDir` 删掉了。
+6. 测试比清单多两条，都在**续跑**这条路上（`run.test.ts`）：主角 pin 生效、`@` 引用
+   的 A/B。播种对了而续跑漏传一个入参，症状是「第一句能想起特征、之后再也不行」，
+   而那是最难自查的一类。
+
+**迁移**（新增的一条风险）：升级前就存在的 `session.json`，账本里绑定条目仍记着
+「整条 core」。所以「勾一段 = 整条失联」在**那些正在进行的会话**里会保留到作者点一次
+「刷新设定」（`clearCarrier` + 按新语义重记）或开新的一场。新会话立即生效。
+
+验收状态：`pnpm vitest run` 190 文件 2599 例全绿（新增 11 例），`pnpm build` 通过。
 
 ### PR-4 · UI 与花名册迁移
 

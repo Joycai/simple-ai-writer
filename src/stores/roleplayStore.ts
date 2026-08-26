@@ -47,7 +47,8 @@ import { hashText } from "../lib/context/memory";
 import { loadApiKey } from "../lib/keyStore";
 import { notify } from "../lib/notify";
 import {
-  buildBoundContent, buildSystemPrompt, contextSignature, ensureBlocks, refreshBoundBlock,
+  buildBoundContent, buildSystemPrompt, contextSignature, ensureBlocks,
+  recordPrimaryCore, refreshBoundBlock,
   refreshMemoryBlock, refreshSystemPrompt,
   type BoundContent, type RoleplaySessionMeta,
 } from "../lib/roleplay/context";
@@ -82,6 +83,7 @@ import {
   appendTurn, loadTranscript, renderTranscript, truncateTurns,
 } from "../lib/roleplay/transcript";
 import { fileExists, removeFile, writeFile } from "../lib/fs/fileio";
+import { contributingEntities } from "../lib/context/loreSelect";
 import { readEntityFile } from "../lib/lore/entity";
 import type { AttachedItem } from "../lib/lore/aiTask";
 import type { LoreEntity, LoreIndex } from "../lib/lore/model";
@@ -92,6 +94,13 @@ interface Job {
   wire: MessageContent;
   /** 检索用的纯文本（图片没有词可匹配）。 */
   match: string;
+  /**
+   * `@` 引用把正文内联进 `wire` 的知识库条目（dirPath）。
+   *
+   * 引用块和自动检索是两条各自独立的路：不告诉后者「这一份已经在问句里了」，
+   * 同一条 index.md 会在同一次请求里出现两遍。
+   */
+  refDirs: string[];
   /**
    * 这一问已经进过 `history` 了。
    *
@@ -492,6 +501,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           loreScope: useLoreStore.getState().scope,
           wire: job.wire,
           matchText: job.match,
+          refDirs: job.refDirs,
           loreBudgetChars: loreBudgetTokens * charsPerToken,
           areaBudgetChars: AREA_BUDGET_TOKENS * charsPerToken,
           currentTurns: get().sessions[job.agentId]?.turns ?? [],
@@ -519,7 +529,9 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
             documentName: null,
             recentChars: 0,
             memoryChars: 0,
-            loreEntities: seeded.report?.entities.length ?? 0,
+            // 只数真的贡献了文字的：主角每轮都在候选里（pin），正文常驻、这一轮
+            // 又没有新特征时它什么都不贡献——算进去等于报一个不存在的注入。
+            loreEntities: seeded.report ? contributingEntities(seeded.report).length : 0,
             loreChars: seeded.report?.usedChars ?? 0,
             at: Date.now(),
           }),
@@ -536,6 +548,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           history, meta,
           wire: job.wire,
           matchText: job.match,
+          refDirs: job.refDirs,
           loreBudgetChars: loreBudgetTokens * charsPerToken,
           areaBudgetChars: AREA_BUDGET_TOKENS * charsPerToken,
           ceilingTokens: messageCeiling,
@@ -1187,7 +1200,12 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         visionDelegate: visionSubAgentModel(models, subs) !== null,
       });
       set((st) => ({
-        queue: [...st.queue, { agentId, wire: composed.content, match: composed.text }],
+        queue: [...st.queue, {
+          agentId,
+          wire: composed.content,
+          match: composed.text,
+          refDirs: refs.flatMap((r) => (r.kind === "lore" ? [r.entity.dirPath] : [])),
+        }],
       }));
       void pump();
     },
@@ -1352,6 +1370,14 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         refreshSystemPrompt(session.history, {
           agent, persona, personaCard, primaryText, loreIndex,
         });
+        // system 层刚被重写，里面那份主角正文也就换成了新的——账本要按新的
+        // 指纹重记一笔。不重记的话，条目的指纹已经变了、账目还是旧的，检索会
+        // 把刚刚写进 system 的同一份正文再注入一遍。
+        if (session.meta) {
+          recordPrimaryCore(
+            session.meta, loreIndex, agent.primaryDirPath, primaryText, session.history[0],
+          );
+        }
       }
 
       set((st) => ({

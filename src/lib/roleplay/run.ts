@@ -10,7 +10,10 @@
  */
 
 import i18n from "../../i18n";
-import { excludeDirsFor, noteTurnStart, recordInjections } from "../agent/compact";
+import {
+  coreDoneFor, excludeDirsFor, injectedFacetsFor, noteTurnStart, recordInjections,
+  recordInjectionsFromReport,
+} from "../agent/compact";
 import { compactChatHistory, type SummarizeInput } from "../agent/compactRun";
 import type { AgentEvent } from "../agent/events";
 import { repairToolCallPairing } from "../agent/runtime";
@@ -19,10 +22,10 @@ import { hashText } from "../context/memory";
 import { selectLore, type LoreActivationReport } from "../context/loreSelect";
 import { assembleTurnInjection } from "../context/rag";
 import { readEntityFile } from "../lore/entity";
-import type { LoreEntity, LoreIndex } from "../lore/model";
+import type { LoreIndex } from "../lore/model";
 import { areaEntities, scanArea } from "./area";
 import {
-  contextSignature, refreshMemoryBlock, seedRoleplayHistory,
+  contextSignature, recordInlinedRefs, refreshMemoryBlock, seedRoleplayHistory,
   type BoundContent, type RoleplaySessionMeta,
 } from "./context";
 import type { ConversationReader } from "./conversationTools";
@@ -206,6 +209,8 @@ export async function prepareSeededHistory(opts: {
   loreScope?: string | null;
   wire: MessageContent;
   matchText: string;
+  /** `@` 引用已经把正文内联进 `wire` 的条目（dirPath），不再由检索送第二份。 */
+  refDirs?: readonly string[];
   loreBudgetChars: number;
   areaBudgetChars: number;
   /** 显示层的当前对话（store 传入），用来算回放轮。 */
@@ -220,6 +225,7 @@ export async function prepareSeededHistory(opts: {
     agent, persona, personaCard, primaryText, loreIndex,
     firstMessage: opts.wire,
     matchText: opts.matchText,
+    refDirs: opts.refDirs,
     loreBudgetChars: opts.loreBudgetChars,
     memory: memoryDoc.records,
     priorTurns,
@@ -266,14 +272,6 @@ export interface ContinueOutcome {
   recalled: RecalledEntity[];
 }
 
-function indexByDir(loreIndex: LoreIndex): Map<string, LoreEntity> {
-  const byDir = new Map<string, LoreEntity>();
-  for (const entities of Object.values(loreIndex)) {
-    for (const e of entities ?? []) byDir.set(e.dirPath, e);
-  }
-  return byDir;
-}
-
 /**
  * runJob 的续跑分支：有活历史时，把这一问接进去。
  *
@@ -298,6 +296,8 @@ export async function prepareContinuedHistory(opts: {
   meta: RoleplaySessionMeta;
   wire: MessageContent;
   matchText: string;
+  /** `@` 引用已经把正文内联进 `wire` 的条目（dirPath），不再由检索送第二份。 */
+  refDirs?: readonly string[];
   loreBudgetChars: number;
   areaBudgetChars: number;
   ceilingTokens: number;
@@ -330,11 +330,19 @@ export async function prepareContinuedHistory(opts: {
     memoryRecords = fresh.records;
   }
 
-  // 逐轮注入：绑定之外的新词条。账本保证已经在上下文里的不再重发。
+  // 逐轮注入：还没进过上下文的那些层。账本按层记，所以「绑了一段特征」不再等于
+  // 「整条失联」——条目其余的特征照常按 keys 补进来。
+  //
+  // 主角条目当 pin：作者对着角色说话，一整场戏都未必写出它的名字，而自动匹配要先
+  // 命中条目名才轮得到特征（`coreDone` 挡着它的正文不重发）。
+  const coreDone = coreDoneFor(meta, loreIndex);
+  for (const dir of opts.refDirs ?? []) coreDone.add(dir);
   const inj = await assembleTurnInjection({
     loreIndex,
     matchTarget: opts.matchText,
-    excludeDirs: excludeDirsFor(meta, loreIndex),
+    pinPaths: agent.primaryDirPath ? [agent.primaryDirPath] : [],
+    coreDone,
+    excludeFacets: injectedFacetsFor(meta, loreIndex),
     scope: opts.loreScope,
     loreBudgetChars: opts.loreBudgetChars,
     doc: null,
@@ -342,10 +350,7 @@ export async function prepareContinuedHistory(opts: {
   if (inj.text) {
     const carrier: StreamMessage = { role: "user", content: inj.text };
     history.push(carrier);
-    const byDir = indexByDir(loreIndex);
-    recordInjections(
-      meta, inj.matchedEntities.flatMap((e) => byDir.get(e.dirPath) ?? []), carrier,
-    );
+    recordInjectionsFromReport(meta, inj.loreReport, loreIndex, carrier);
   }
 
   const recalled = await injectAreaRecall({
@@ -360,6 +365,7 @@ export async function prepareContinuedHistory(opts: {
   const question: StreamMessage = { role: "user", content: opts.wire };
   noteTurnStart(meta, question);
   history.push(question);
+  recordInlinedRefs(meta, loreIndex, opts.refDirs, question);
 
   return { history, compactedEvent, summaryToSave, memoryRecords, recalled };
 }

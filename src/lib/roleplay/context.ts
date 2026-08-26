@@ -27,7 +27,10 @@
  */
 
 import i18n from "../../i18n";
-import { createSessionMeta, noteTurnStart, recordInjections, type ChatSessionMeta } from "../agent/compact";
+import {
+  clearCarrier, coreDoneFor, createSessionMeta, injectedFacetsFor, noteTurnStart,
+  recordInjection, recordInjectionsFromReport, type ChatSessionMeta,
+} from "../agent/compact";
 import type { MessageContent, StreamMessage } from "../ai/types";
 import { parsePins, selectLore, type LoreActivationReport } from "../context/loreSelect";
 import { readEntityFile } from "../lore/entity";
@@ -57,10 +60,22 @@ export function createRoleplayMeta(): RoleplaySessionMeta {
 export interface BoundContent {
   /** 渲染好的正文；没有任何有效绑定时是空串。 */
   text: string;
-  /** 解析成功的条目，用于写注入账本（防止逐轮注入重复注入它们）。 */
+  /** 解析成功的条目。 */
   entities: LoreEntity[];
   /** 失效的绑定（条目或特征已被删除），UI 用来标灰 + 一键移除。 */
   stalePaths: string[];
+  /**
+   * 块里**真的装着正文**的那些层——写进注入账本的就是这一份，不是 `entities`。
+   *
+   * 超预算而只写了一行占位的绑定项**不在这里**：那一行只有标题，正文并不在
+   * 上下文里。把它算成已注入，条目就两头落空——块里没有，检索也不会去补。
+   */
+  resident: {
+    /** 整条绑定（裸 pin）且正文写进去了的条目。 */
+    coreDirs: string[];
+    /** 特征绑定且正文写进去了的那几段。 */
+    facets: { dirPath: string; file: string }[];
+  };
 }
 
 function indexByDir(loreIndex: LoreIndex): Map<string, LoreEntity> {
@@ -86,6 +101,8 @@ export async function buildBoundContent(
   const parts: string[] = [];
   const entities: LoreEntity[] = [];
   const stalePaths: string[] = [];
+  const coreDirs: string[] = [];
+  const facets: { dirPath: string; file: string }[] = [];
   let used = 0;
 
   for (const raw of boundPaths) {
@@ -123,9 +140,87 @@ export async function buildBoundContent(
     parts.push(`${title}\n${clipped}`);
     used += title.length + clipped.length;
     if (!entities.includes(entity)) entities.push(entity);
+    // 截断过的也算常驻：块里已经有它的绝大部分，检索再送一份完整的就是重复，
+    // 而剩下的那点模型可以 read_lore_entity 自己去拿。
+    if (pin.facetFile) facets.push({ dirPath: entity.dirPath, file: pin.facetFile });
+    else coreDirs.push(entity.dirPath);
   }
 
-  return { text: parts.join("\n\n"), entities, stalePaths };
+  return { text: parts.join("\n\n"), entities, stalePaths, resident: { coreDirs, facets } };
+}
+
+/**
+ * 绑定块里**实际**装着的东西进账本，carrier 是块本身——它永不离场，所以这些
+ * 账目也永不失效（不变量二）。
+ *
+ * 按层记而不是按条目记，是整件事的支点：绑了「战甲」这一段，条目的其余部分
+ * 必须继续参与自动检索。整条记账等于「勾一段 = 整条失联」。
+ */
+function recordBoundLayers(
+  meta: ChatSessionMeta,
+  loreIndex: LoreIndex,
+  bound: BoundContent,
+  carrier: StreamMessage,
+): void {
+  const byDir = indexByDir(loreIndex);
+  const facetsByDir = new Map<string, string[]>();
+  for (const f of bound.resident.facets) {
+    const list = facetsByDir.get(f.dirPath) ?? [];
+    list.push(f.file);
+    facetsByDir.set(f.dirPath, list);
+  }
+  const coreDirs = new Set(bound.resident.coreDirs);
+  for (const dir of new Set([...coreDirs, ...facetsByDir.keys()])) {
+    const entity = byDir.get(dir);
+    if (!entity) continue;
+    recordInjection(meta, entity, carrier, {
+      core: coreDirs.has(dir),
+      facets: facetsByDir.get(dir) ?? [],
+    });
+  }
+}
+
+/**
+ * 主角条目的正文住在 system 层的「## 你是谁」里——这件事也要进账本，否则第一次
+ * 提到角色名时检索会把同一份正文再注入一遍。
+ *
+ * carrier 是 system 消息：它恒在 `history[0]`，压缩重建 prelude 时按对象身份搬过去
+ * （`refreshSystemPrompt` 也是就地改 content，不换对象），所以这笔账和绑定块的一样
+ * 永不失效。
+ *
+ * `primaryText` 为空就不记：条目读不出来时 system 层里根本没有它，记了只会让检索
+ * 也不去补，条目就彻底不在上下文里。
+ */
+export function recordPrimaryCore(
+  meta: ChatSessionMeta,
+  loreIndex: LoreIndex,
+  primaryDirPath: string | null,
+  primaryText: string,
+  system: StreamMessage,
+): void {
+  if (!primaryDirPath || !primaryText.trim()) return;
+  const entity = indexByDir(loreIndex).get(primaryDirPath);
+  if (entity) recordInjection(meta, entity, system, { core: true });
+}
+
+/**
+ * 作者用 `@` 引用、正文已经被内联进问句的条目（`lib/agent/chatRefs`）。
+ *
+ * 记在**问句**上：那一轮被折叠时这笔账跟着走，之后再提到它才会重新注入。不记的话
+ * 同一轮的自动检索会把它再送一份——【引用资料】一份、【设定资料】一份，一模一样。
+ */
+export function recordInlinedRefs(
+  meta: ChatSessionMeta,
+  loreIndex: LoreIndex,
+  dirPaths: readonly string[] | undefined,
+  carrier: StreamMessage,
+): void {
+  if (!dirPaths?.length) return;
+  const byDir = indexByDir(loreIndex);
+  for (const dir of dirPaths) {
+    const entity = byDir.get(dir);
+    if (entity) recordInjection(meta, entity, carrier, { core: true });
+  }
 }
 
 // ─── system 层 ───────────────────────────────────────────────────────────────
@@ -316,6 +411,11 @@ export async function seedRoleplayHistory(opts: {
   firstMessage: MessageContent;
   /** 检索用的纯文本（`firstMessage` 可能带图片 part，图片没有词可匹配）。 */
   matchText: string;
+  /**
+   * `@` 引用已经把正文内联进 `firstMessage` 的条目（dirPath）。它们这一轮不再
+   * 由检索送第二份，见 {@link recordInlinedRefs}。
+   */
+  refDirs?: readonly string[];
   loreBudgetChars: number;
   /** 这个 agent 已经记下的东西；只有 `open` 的会进上下文。 */
   memory: readonly MemoryRecord[];
@@ -351,9 +451,14 @@ export async function seedRoleplayHistory(opts: {
   const boundBlock: StreamMessage = { role: "user", content: boundBlockContent(bound.text) };
   messages.push(boundBlock);
   meta.boundBlock = boundBlock;
-  // 账本：绑定条目已经在上下文里，逐轮注入不该再送一遍。carrier 是绑定块
-  // 本身——它永不离开历史，所以这些账本条目也永不失效。
-  recordInjections(meta, bound.entities, boundBlock);
+  // 账本：绑定块里**真的装着**的那些层已经在上下文里，逐轮注入不该再送一遍。
+  // carrier 是绑定块本身——它永不离开历史，所以这些账本条目也永不失效。
+  recordBoundLayers(meta, opts.loreIndex, bound, boundBlock);
+  // 主角条目的正文住在 system 层，同样记一笔。**排在绑定块之后**是有意的：
+  // 作者若把主角也绑了整条（PR-4 之前的老数据正是如此），两处都有它的正文，
+  // 而 system 那份活得更久——「刷新设定」清掉的是绑定块那一版的账，system
+  // 里的那份不该跟着失效。
+  recordPrimaryCore(meta, opts.loreIndex, opts.agent.primaryDirPath, opts.primaryText, system);
 
   const memoryBlock: StreamMessage = {
     role: "user",
@@ -362,11 +467,24 @@ export async function seedRoleplayHistory(opts: {
   messages.push(memoryBlock);
   meta.memoryBlock = memoryBlock;
 
-  // 首轮自动命中：绑定之外的词条，用作者第一句去匹配。
-  const excludeDirs = new Set(bound.entities.map((e) => e.dirPath));
+  // 首轮自动命中：已经在上下文里的那些层之外，用作者第一句去匹配。
+  //
+  // **主角条目当 pin 传进去**：作者是第一人称对着角色说话，一整场戏都未必写出它
+  // 的名字，而自动匹配要先命中条目名才轮得到特征。pin 让它每轮都在候选里（正文
+  // 由 `coreDone` 挡着不重发），它的特征才可能按 keys 激活——「绑定主条目 + 特征
+  // 自动注入」这条期望，靠的就是这一行。
+  const coreDone = coreDoneFor(meta, opts.loreIndex);
+  for (const dir of opts.refDirs ?? []) coreDone.add(dir);
   const { text: snippets, report } = await selectLore(
-    opts.matchText, opts.loreIndex, [], opts.loreBudgetChars,
-    { excludeDirs, scope: opts.loreScope ?? null },
+    opts.matchText,
+    opts.loreIndex,
+    opts.agent.primaryDirPath ? [opts.agent.primaryDirPath] : [],
+    opts.loreBudgetChars,
+    {
+      coreDone,
+      excludeFacets: injectedFacetsFor(meta, opts.loreIndex),
+      scope: opts.loreScope ?? null,
+    },
   );
   if (snippets) {
     const seed: StreamMessage = {
@@ -375,12 +493,7 @@ export async function seedRoleplayHistory(opts: {
     };
     messages.push(seed);
     meta.seedContext = seed;
-    const byDir = indexByDir(opts.loreIndex);
-    recordInjections(
-      meta,
-      report.entities.flatMap((r) => byDir.get(r.dirPath) ?? []),
-      seed,
-    );
+    recordInjectionsFromReport(meta, report, opts.loreIndex, seed);
   }
 
   // 摘要接在 prelude 末尾、回放之前——`buildCompactedHistory` 也把它摆在这个
@@ -409,6 +522,7 @@ export async function seedRoleplayHistory(opts: {
   const question: StreamMessage = { role: "user", content: opts.firstMessage };
   messages.push(question);
   noteTurnStart(meta, question);
+  recordInlinedRefs(meta, opts.loreIndex, opts.refDirs, question);
 
   return { messages, meta, report, bound };
 }
@@ -497,7 +611,10 @@ export async function refreshBoundBlock(
   const bound = await buildBoundContent(loreIndex, agent.boundPaths);
   if (meta.boundBlock) {
     meta.boundBlock.content = boundBlockContent(bound.text);
-    recordInjections(meta, bound.entities, meta.boundBlock);
+    // 先忘掉这块上一版带来的账目：作者刚取消勾选的那一段既不在新块里了，也不该
+    // 继续被当成「已经在上下文里」——否则它从此两头落空，块里没有、检索也不补。
+    clearCarrier(meta, meta.boundBlock);
+    recordBoundLayers(meta, loreIndex, bound, meta.boundBlock);
   }
   return bound;
 }
