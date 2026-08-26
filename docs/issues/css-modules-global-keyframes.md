@@ -65,10 +65,14 @@ keyframes」（机械、40+ 处重复、新代码照踩）或「全局工具类�
   `css.transformer: "lightningcss"` 是稳定 API。
 - **`animation: false` 的语义**是「`@keyframes` 与 `animation(-name)` 都不再
   哈希」——代价是**模块内 keyframes 与 global.css 共用一个全局命名空间**。
-  落地时全库只有三个模块内 keyframes（AgentChat 的 `shimmer`、SceneTransition
-  的 `transitionGrow`、ProvidersModels 的 `slideOutRight`），与 global.css 的
-  12 个名字零冲突。**以后在模块里写 `@keyframes` 要起全局唯一的名字**
-  （vite.config.ts 的注释也记了这条）。
+  落地时（2026-08-23）全库只有三个模块内 keyframes；到 2026-08-26 已是十个
+  （`drawerIn` · `orderFlash` · `slideOutRight` · `traceIn` · `snipRise` ·
+  `writerPulse` · `nameIn` · `jumpLatestIn` · `shimmer` · `transitionGrow`），
+  与 global.css 的 12 个名字仍然零冲突。**以后在模块里写 `@keyframes` 要起全局
+  唯一的名字**——重名不会报错，只是后出现的那条静默赢掉，症状和本文记的原缺陷
+  一样只有肉眼看得见。所以这条不再靠记性：
+  `src/lib/__tests__/cssKeyframeNames.test.ts` 同时守着「名字全库唯一」和
+  「引用找得到定义」（后者就是本文这个缺陷的回归测试）。
 - 其余 CSS Modules 特性核查过兼容：全部 `composes` 都是同文件的（LightningCSS
   支持），`:global(...)` 选择器、`@container` 均正常；没有 grid 命名区域 /
   `@property` / `counter-style` 这类会被 custom-ident 哈希波及的用法。

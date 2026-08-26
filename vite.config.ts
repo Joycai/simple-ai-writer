@@ -27,8 +27,10 @@ export default defineConfig(async () => ({
   // out per-property (`:global(fadeIn)` inside an animation value is a parse
   // error), so switch the pipeline to LightningCSS and turn keyframes hashing
   // off. Consequence: module-local @keyframes now share ONE global namespace
-  // with global.css — keep their names unique (currently: shimmer,
-  // transitionGrow). See docs/issues/css-modules-global-keyframes.md.
+  // with global.css — keep their names unique. A collision is silent (the later
+  // rule simply wins), so the rule is enforced by
+  // src/lib/__tests__/cssKeyframeNames.test.ts rather than by this comment.
+  // See docs/issues/css-modules-global-keyframes.md.
   css: {
     transformer: "lightningcss",
     lightningcss: {

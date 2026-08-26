@@ -39,6 +39,7 @@
   gap: 12px;
   border-top: 1px solid transparent;
   border-bottom: 1px solid transparent;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 .row:hover { background: var(--lore-sub-bg); }
 .rowEditing {
@@ -58,6 +59,7 @@
   cursor: pointer;
   padding: 4px 2px;
   flex-shrink: 0;
+  transition: color var(--transition-fast);
 }
 .rowAction:hover:not(:disabled) { color: var(--color-accent); }
 .rowAction:disabled { opacity: 0.4; cursor: default; }

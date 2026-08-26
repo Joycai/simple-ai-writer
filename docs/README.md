@@ -111,6 +111,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 |---|---|---|
 | [thinking-verification.md](issues/thinking-verification.md) | `open` | Thinking support is implemented and unit-tested across three families, but unit tests prove *what we sent*, not *what the endpoint did*. MiniMax-M3 cleared part of §2.6; the rest stands |
 | [css-modules-global-keyframes.md](issues/css-modules-global-keyframes.md) | `fixed` | CSS Modules 哈希化 animation-name、global.css 的 keyframes 悬空 —— 40+ 处入场/spinner 动画从未播过。已切 LightningCSS（`cssModules.animation: false`）修复；待一轮真机目检 |
+| [motion-enter-only-hidden-tab.md](issues/motion-enter-only-hidden-tab.md) | `clarified` | 「enter-only 的 keyed `motion.div` 在 reduced-motion 下停在 `initial`」是**测量产物**：预览面板标签页 `visibilityState === 'hidden'`，rAF 不派发。代码无缺陷，实测读数与正确的验动画方法记在文内 |
 | [tiered-pricing.md](issues/tiered-pricing.md) | `open` | 千问按输入长度分档计价（顶档 3×），平价 `priceIn/Out` 表达不了；显式缓存写入价同缺。只失真成本统计，典型任务不跨 256K 门槛，故仅留档 + 设计草案 |
 
 ---

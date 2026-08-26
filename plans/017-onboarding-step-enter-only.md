@@ -1,6 +1,6 @@
 # 017 — 首次运行向导换步：enter-only 淡入
 
-- **Status**: BLOCKED (2026-08-23) — 实测 enter-only 的 keyed motion.div 在 prefers-reduced-motion 下停在 initial（opacity:0）。照本方案实施会让首屏对开启动效缩减的用户完全不可见。见 plans/README.md「阻断 B」，修好后再执行
+- **Status**: TODO（2026-08-26 解除阻断）。曾因「阻断 B」回退并标记 BLOCKED；该阻断经实测证明是测量产物而非缺陷，见 `docs/issues/motion-enter-only-hidden-tab.md`。**本方案内容无需修改，可原样执行**
 - **Commit**: 78160c2
 - **Severity**: LOW（加法项）
 - **Category**: 遗漏机会（空间连续性）

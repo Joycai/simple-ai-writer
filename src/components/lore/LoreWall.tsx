@@ -733,7 +733,10 @@ export function LoreWall() {
                   })}
             </div>
           ) : (
-            <div className={styles.grid}>
+            // key 只跟取材范围走：换围栏是一次换幕（它同时改的是 AI 的视野），
+            // 值得一次淡入；而搜索/分类筛选每次按键都会改 filtered，跟着重挂载
+            // 就会变成在打字时闪烁。
+            <div key={scope ?? "all"} className={styles.grid}>
               {filtered.map((e, idx) => {
                 const featured = idx === 0 && filter === "all";
                 const rot = rotationFor(e.id);

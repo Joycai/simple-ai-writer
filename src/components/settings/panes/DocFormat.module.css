@@ -104,14 +104,17 @@
   box-sizing: border-box;
   padding: 0;
   cursor: pointer;
-  transition: border-width 120ms ease, border-color 120ms ease;
+  /* 选中态用内阴影加厚而不是加粗边框：border-width 会触发布局，box-shadow 只
+     重绘。1px 边 + 3px 内阴影 = 原来的 4px 边，几何逐像素一致。 */
+  transition: box-shadow var(--transition-fast), border-color var(--transition-fast);
 }
 
 .radio:hover { border-color: var(--stg-accent-soft); }
 
 .radioOn,
 .radioOn:hover {
-  border: 4px solid var(--stg-accent);
+  border-color: var(--stg-accent);
+  box-shadow: inset 0 0 0 3px var(--stg-accent);
   background: var(--stg-bg-input);
 }
 
@@ -379,12 +382,7 @@
   box-shadow: var(--shadow-xl);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  animation: drawerIn 220ms var(--ease-out, cubic-bezier(0.32, 0.72, 0, 1));
-}
-
-@keyframes drawerIn {
-  from { transform: translateX(18px); opacity: 0; }
-  to { transform: none; opacity: 1; }
+  animation: slideInRight 220ms var(--ease-out);
 }
 
 @media (prefers-reduced-motion: reduce) {
