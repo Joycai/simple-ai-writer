@@ -65,6 +65,8 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [measurements/briefing-ab-2026-08.md](feature/agent/measurements/briefing-ab-2026-08.md) | `research` | briefing A/B on gemma4:12b-mlx, 2026-08-21 |
 | [workflow-cards-plan.md](feature/agent/workflow-cards-plan.md) | `shipped` | 工作流卡：内置开箱即用、项目文件可覆盖的任务套路（best-effort 提示注入，两级渐进披露）；与 B 类"流水线进工具"的分工 |
 | [parallel-tools-plan.md](feature/agent/parallel-tools-plan.md) | `shipped` | 同轮工具调用并行执行：read 层（含 delegate）并发、写工具作屏障；history 顺序/配对不变量与 writeChain 的重入禁令 |
+| [writer-subagent-plan.md](feature/agent/writer-subagent-plan.md) | `shipped` `unverified` | 写手子代理：收尾成文交给作者另绑的模型（`finishPolicy: "handoff"`），开关式硬委托、交接单、引用式写入；只做对话助手，roleplay/AiPanel 不在第一期 |
+| [writer-subagent-ui-brief.md](feature/agent/writer-subagent-ui-brief.md) | `proposal` | 写手的 UI 任务书（给 Claude Design）：署名 vs 安静的取舍、工单卡、降级提示、芯片行的两个版本 |
 
 ### feature/lore/ — the knowledge base
 

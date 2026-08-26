@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Globe, Eye, BookOpen, FileText, ImagePlus, Languages, type LucideIcon } from "lucide-react";
+import { Globe, Eye, BookOpen, FileText, ImagePlus, Languages, PenLine, type LucideIcon } from "lucide-react";
 import { useAiStore } from "../../stores/aiStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { subAgentModel, SUBAGENT_KINDS, type SubAgentKind } from "../../lib/agent/subagent";
@@ -12,6 +12,7 @@ const ICONS: Record<SubAgentKind, LucideIcon> = {
   pdf: FileText,
   imagegen: ImagePlus,
   translate: Languages,
+  writer: PenLine,
 };
 
 /**
@@ -26,10 +27,18 @@ const ICONS: Record<SubAgentKind, LucideIcon> = {
  * panel needs it: the assistant and three concurrent roleplay agents are four
  * unrelated conversations, and sharing one "turned off for this conversation"
  * set would mean each of them silently editing the others' settings.
+ *
+ * `kinds` narrows which switches this surface shows at all. Not cosmetic: a
+ * subagent whose surface never consults it would be a chip that changes nothing
+ * when pressed — the same "enabled but does nothing" failure the whole
+ * usable-not-merely-enabled rule below exists to prevent. Roleplay passes this
+ * to leave out `writer`, whose handoff only the chat assistant opts into
+ * (lib/agent/routing RouteOptions).
  */
-export function SubAgentChips({ disabled, onToggle }: {
+export function SubAgentChips({ disabled, onToggle, kinds = SUBAGENT_KINDS }: {
   disabled?: readonly SubAgentKind[];
   onToggle?: (kind: SubAgentKind) => void;
+  kinds?: readonly SubAgentKind[];
 } = {}) {
   const { t } = useTranslation();
   const subAgents = useAiStore((s) => s.subAgents);
@@ -42,7 +51,7 @@ export function SubAgentChips({ disabled, onToggle }: {
   // Usable, not merely enabled: a vision subagent bound to a text model, or a
   // search one whose model cannot browse, would give the author a switch that
   // changes nothing — every other surface has already decided it is off.
-  const configuredKinds = SUBAGENT_KINDS.filter(
+  const configuredKinds = kinds.filter(
     (k) => subAgentModel(k, models, subAgents) !== null,
   );
 
@@ -63,6 +72,7 @@ export function SubAgentChips({ disabled, onToggle }: {
             : kind === "vision" ? "识图"
             : kind === "pdf" ? "PDF"
             : kind === "imagegen" ? "绘图"
+            : kind === "writer" ? "写手"
             : "长文",
         });
         const title = isDisabledThisSession

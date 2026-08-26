@@ -1101,6 +1101,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         AGENT_ASSIST_PRESET,
         effectiveSubs,
         useAiStore.getState().models,
+        // The handoff schema rides on every round of a writer run — the whole
+        // point of this module is that a ceiling must not assume a schema the
+        // request carries. See lib/agent/toolCost.
+        { handoff: true },
       );
       let history = get().chatHistory;
       if (!history) {
@@ -1323,14 +1327,35 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       }
 
       const tw = taskWorkspace();
+      // The chat assistant is the one surface that hands its ending to the
+      // writer today (docs/feature/agent/writer-subagent-plan.md). Opting in
+      // here rather than on the preset is what keeps AiPanel's Agent mode —
+      // which runs the very same preset object — out of it.
       const routed = routeTools(
         AGENT_ASSIST_PRESET, effectiveSubs, tw, useAiStore.getState().models,
+        { handoff: true },
       );
       const effectivePreset = {
         ...AGENT_ASSIST_PRESET,
         tools: routed.tools,
         serverTools: routed.serverTools,
+        finishPolicy: routed.finishPolicy,
       };
+      /**
+       * The slice of the system layer the writer inherits — the author's own
+       * writing prompt, which is where the project's vocabulary lives.
+       *
+       * Recomputed per turn rather than reused from the seed above: that branch
+       * only runs on the first turn of a session, and the author can switch
+       * prompts at any point. Deliberately NOT the seeded `systemPrompt`, which
+       * also carries the agent briefing, the workflow roster and the docx
+       * presets — tool-loop machinery a writer with no tools would only be
+       * confused by.
+       */
+      const writerSystem = (() => {
+        const { prompts, activePromptId } = useAiStore.getState();
+        return prompts.find((pr) => pr.id === activePromptId)?.content ?? profileSystemPrompt();
+      })();
 
       // 和这个文件里其它每一处一样动态取——agentStore ↔ projectStore 是一个循环，
       // 静态 import 会在模块求值期炸掉。
@@ -1344,6 +1369,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         inputCeilingTokens: messageCeiling,
         preset: effectivePreset,
         messages: history,
+        writerSystem,
         toolContext: {
           projectPath,
           // Live index — a lore write in turn N is visible to turn N+1 because
@@ -1547,6 +1573,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       AGENT_ASSIST_PRESET,
       effectiveSubs,
       models,
+      // Same as sendChat's: this is the chat, so a writer run carries the
+      // handoff schema on every round and the ceiling must know it.
+      { handoff: true },
     );
 
     // Same repair sendChat does before touching an inherited history: a turn

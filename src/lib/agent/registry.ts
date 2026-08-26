@@ -101,7 +101,7 @@ import {
   writeNoteTool,
 } from "./scratchpadTools";
 import { splitCoreCall, splitFacetCall, type SplitSink } from "./splitTools";
-import { executeDelegate, type DelegateKind } from "./subagent";
+import { executeDelegate, type SubAgentKind } from "./subagent";
 import { translateTool } from "../translate/tool";
 import { activeWorkflows, findWorkflow, scanWorkflows } from "../workflow";
 import type { AgentEvent } from "./events";
@@ -491,8 +491,14 @@ export interface ToolContext {
   /**
    * Resolver for child agent connections. Injected by the caller from aiStore,
    * avoiding reverse dependencies from lib/agent into stores.
+   *
+   * Typed on the full `SubAgentKind` rather than `DelegateKind`: the writer is
+   * resolved through here too (lib/agent/handoff), and it is deliberately not a
+   * delegate. `delegate` still validates its own argument against
+   * `DELEGATE_KINDS` before calling, so widening the resolver does not widen
+   * what that tool can dispatch to.
    */
-  resolveSubAgent?: (kind: DelegateKind) => Promise<AiConn | { error: string }>;
+  resolveSubAgent?: (kind: SubAgentKind) => Promise<AiConn | { error: string }>;
   /**
    * A narrator's window onto the other roleplay scenes. **Reaches only
    * transcript.md / summary.md** — another agent's wire history has no path

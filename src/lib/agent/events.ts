@@ -256,6 +256,47 @@ export type AgentEvent = AgentEventScope & (
       decision: TruncationDecision;
       at: number;
     }
+  | {
+      /**
+       * The run handed its ending to the writer subagent (finishPolicy:
+       * "handoff"). Its own nested events arrive under `parentStep: step`, so
+       * this row is what they hang from — and it is the only place the author
+       * can see that the text they are reading was not written by the model
+       * named at the top of the log.
+       */
+      kind: "handoff";
+      /** Log-tree id the writer's nested events carry as `parentStep`. */
+      step: string;
+      /** One-line goal from the brief, for the collapsed row. */
+      goal: string;
+      briefKind: "prose" | "analysis" | "answer";
+      /** How many paths the brief pointed the writer at. */
+      refs: number;
+      /**
+       * True when the forced tool call did not arrive and the brief was
+       * reconstructed from the model's prose (handoff.fallbackBrief).
+       *
+       * Surfaced rather than swallowed because the cause is invisible from the
+       * outside: some endpoints silently downgrade a forced tool_choice to
+       * "auto" (lib/ai/openai.ts toolChoiceFor). The handoff still happens —
+       * but the author should know the work order was inferred.
+       */
+      degraded?: true;
+      /** Set when the brief asked for the output to land on disk. */
+      deliverTo?: { path: string; mode: string };
+      at: number;
+    }
+  | {
+      /** The handoff finished — the writer's own run-done arrives separately. */
+      kind: "handoff-done";
+      step: string;
+      chars: number;
+      /** Present when `deliverTo` was attempted: did the author approve it? */
+      delivered?: { path: string; approved: boolean };
+      /** Set when the writer could not run at all; the main model's text stands. */
+      error?: string;
+      at: number;
+    }
   | { kind: "run-done"; inputTokens: number; outputTokens: number; at: number }
   | { kind: "run-error"; message: string; at: number });
 

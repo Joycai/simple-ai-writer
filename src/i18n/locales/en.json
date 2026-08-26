@@ -489,6 +489,12 @@
       "groupDelegateHint": "The assistant calls these with the delegate tool; each runs in its own context and its findings land in a task note",
       "groupTool": "Direct tools",
       "groupToolHint": "No delegated conversations — these models cannot converse; the assistant calls them through a tool",
+      "writer": "Writer",
+      "writerSub": "With this on, the chat assistant stops writing the final text itself: it gathers material and makes the calls, then hands a work order to this model to write from. Bind a model that writes well. Applies to the AI assistant only — roleplay is unchanged.",
+      "writerReq": "Any text model",
+      "writerMeta": "one extra request per turn",
+      "groupFinish": "Finishing",
+      "groupFinishHint": "No model chooses this one — with the switch on, every turn's final text is written here",
       "statusReady": "Ready",
       "statusOff": "Disabled",
       "statusAttention": "Needs attention",
@@ -733,6 +739,23 @@
         "vision": "You are an image analysis specialist. Your role is to examine and interpret reference images, extract visual traits, appearance details, or composition elements, and produce clear descriptive summaries.",
         "longread": "You are a document digest specialist. Your role is to read the specified documents thoroughly, extract outlines, core worldbuilding, or plotlines, and compile a checklist of essential details.",
         "pdf": "You are a PDF digest specialist. The user message carries one or more PDF files. Your role is to read them thoroughly, extract their structure, key content and details as the task requires, and produce a clear structured summary; cite page numbers or sections where identifiable."
+      },
+      "handoffRound": "[SYSTEM] Your work stops here. **Do not write the deliverable and do not answer the author** — call handoff now, turning what must be delivered, what must not be contradicted, and where the material lives into one work order for the writer. The writer cannot see this conversation or anything you read, so the order must stand on its own; but reference material by PATH, never by pasting its contents. Style anchors must be verbatim excerpts, not adjectives.",
+      "handoffBrief": {
+        "goal": "[WHAT TO DELIVER]",
+        "goalMissing": "(The main model left the goal blank — deliver the most reasonable result from the material and constraints below.)",
+        "constraints": "Must not contradict",
+        "styleAnchors": "Style anchors (verbatim excerpts — match this voice)",
+        "notes": "Material (read it yourself with read_note / read_file / read_lore_entity)",
+        "forbid": "Avoid",
+        "length": "Length"
+      },
+      "writer": {
+        "base": "You are the **writer**. The text the author reads this turn is yours — what you produce IS the deliverable, and nobody edits it after you. So do not hand back an outline, an explanation, or a restatement of the work order.\n\nWhat follows is a **work order** written for you by another model on the same team, not something the reader should ever see: its wording, numbering and headings must not appear in your output. Read the material it points to with your tools, then write.\n\nNo preamble like \"Sure, here goes\", and no closing offer to revise — just the finished thing.",
+        "prose": "This turn calls for **manuscript text**. Match the voice of the style anchors and write something that can go straight into the work.",
+        "analysis": "This turn calls for **analysis**, not prose. Give the judgement and the grounds for it; use structure where it helps, and do not pad for literary effect.",
+        "answer": "This turn calls for a **direct answer**. The author asked something specific — answer it head-on, and do not turn a one-sentence reply into an essay.",
+        "inheritedHeading": "Project and role (from the main conversation)"
       },
       "subagentTask": "Task objective:\n{{task}}",
       "subagentTaskWithRefs": "Task objective:\n{{task}}\n\nReferences:\n{{refs}}",
@@ -1028,6 +1051,20 @@
         },
         "trimmed": "Elided {{count}} earlier tool results to fit the context window",
         "outputTruncated": "Cut off at the output limit — the answer is unfinished. Raise this model's max-output, or shorten the context",
+        "handoffBrief": "Work order",
+        "handoffNoGoal": "(no goal stated)",
+        "handoffMeta": "{{kind}} · {{refs}} reference(s)",
+        "handoffDeliver": "Write to {{path}} ({{mode}})",
+        "handoffDegraded": "⚠ The main model did not produce a work order (the endpoint likely downgraded the forced tool call); this one was inferred from its prose.",
+        "handoffError": "Failed: {{msg}}",
+        "handoffWritten": "Written to {{path}}",
+        "handoffNotWritten": "Not written to {{path}}",
+        "handoffRunning": "Writer is composing",
+        "handoffKind": {
+          "prose": "prose",
+          "analysis": "analysis",
+          "answer": "answer"
+        },
         "turnResumed": "The endpoint stopped after searching; results handed back to continue (request {{leg}})",
         "turnResumedFinal": "Stopped again — the model was told to wrap up with what it has (request {{leg}}, the last of this turn)",
         "done": "Done · {{input}} in / {{output}} out tokens",
@@ -1129,7 +1166,13 @@
       "contextExceeded": "This request is roughly {{estimated}} tokens, exceeding the model's configured context size ({{limit}} tokens), so it was not sent. Trim the document or referenced content, or raise the context size in Settings → Models; for local models (e.g. Ollama) also raise the server-side context limit (num_ctx), otherwise the request gets silently truncated.",
       "focusNotReady": "The editor has not loaded the current document yet — try again in a moment",
       "noVisionModel": "No model here can read images. Switch the active model to a multimodal one, or enable Image analysis in Settings → Subagents and bind a multimodal model to it.",
-      "noApiKey": "No API key stored for \"{{provider}}\" — add it in Settings → Providers & Models."
+      "noApiKey": "No API key stored for \"{{provider}}\" — add it in Settings → Providers & Models.",
+      "writerUnavailable": "This surface cannot run the writer subagent.",
+      "writerEmpty": "The writer returned nothing.",
+      "writerFailed": "[SYSTEM] The writer subagent could not produce this turn's text: {{reason}}\n\nThe main model's work order is ready — fix the above and send again.",
+      "writerNoApproval": "This surface cannot review manuscript writes, so the output stayed in the conversation.",
+      "writerPathOutside": "\"{{path}}\" is outside the project's documents — nothing was written.",
+      "writerRangeGone": "Lines {{from}}-{{to}} are no longer there — nothing was written."
     },
     "approval": {
       "title": "Pending edit",
@@ -1292,7 +1335,10 @@
         "pdfDisabled": "PDF subagent disabled for this session (click to enable)",
         "imagegen": "Draw",
         "imagegenActive": "Image-generation subagent active (click to disable for this session)",
-        "imagegenDisabled": "Image-generation subagent disabled for this session (click to enable)"
+        "imagegenDisabled": "Image-generation subagent disabled for this session (click to enable)",
+        "writer": "Writer",
+        "writerActive": "Writer subagent on — it produces this conversation's final text (click to disable)",
+        "writerDisabled": "Writer subagent disabled for this session (click to enable)"
       },
       "imageDownscaled": "Scaled down to fit the send limit ({{detail}})"
     },

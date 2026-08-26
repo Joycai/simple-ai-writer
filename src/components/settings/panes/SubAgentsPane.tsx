@@ -12,6 +12,7 @@ import {
   type SubAgentKind,
 } from "../../../lib/agent/subagent";
 import { conversationalModels, isTranslateOnly, type Model } from "../../../lib/ai/configDb";
+import { WRITER_PRESET } from "../../../lib/agent/presets";
 import {
   clampChunkLines,
   isTranslateLoreEnabled,
@@ -59,9 +60,19 @@ export function SubAgentsPane() {
   const textCandidates = conversational.filter((m) => m.enabled && m.type !== "image");
   const imageCandidates = conversational.filter((m) => m.enabled && m.type === "image");
   const translateCandidates = models.filter((m) => m.enabled && isTranslateOnly(m));
+  // The writer is the fourth case, and the only one defined by exclusion: any
+  // text model can write, so there is no capability to require — the list is
+  // narrowed by what provably *cannot*. `video` matters here and nowhere else
+  // above: it survives `textCandidates` (which only drops `image`), and a
+  // writer bound to one is refused at run time, which would read as the switch
+  // doing nothing at all.
+  const proseCandidates = textCandidates.filter(
+    (m) => m.type === "text" || m.type === "multimodal",
+  );
   const candidatesFor = (kind: SubAgentKind): Model[] =>
     kind === "imagegen" ? imageCandidates
     : kind === "translate" ? translateCandidates
+    : kind === "writer" ? proseCandidates
     : textCandidates;
 
   /**
@@ -97,6 +108,12 @@ export function SubAgentsPane() {
   const metaFor = (kind: SubAgentKind): string => {
     if (kind === "imagegen") return t("systemSettings.subagents.imagegenMeta");
     if (kind === "translate") return t("systemSettings.subagents.translateMeta");
+    if (kind === "writer") {
+      return [
+        t("systemSettings.subagents.rounds", { n: WRITER_PRESET.maxRounds }),
+        t("systemSettings.subagents.writerMeta"),
+      ].join(" · ");
+    }
     const preset = SUB_PRESETS[kind as DelegateKind];
     const parts = [
       preset.maxRounds === 1
@@ -130,11 +147,20 @@ export function SubAgentsPane() {
     ...(broken ? [t("systemSettings.subagents.summaryAttention", { n: broken })] : []),
   ].join(" · ");
 
-  // Two groups, and the split is the one the runtime makes: `delegate` can
-  // dispatch to a conversation, `imagegen` is reached as a tool instead.
+  // Three groups, and the split is the one the runtime makes: `delegate`
+  // dispatches to a conversation, `imagegen`/`translate` are reached as tools,
+  // and the writer is reached by nobody — it takes over the run's last round
+  // (finishPolicy "handoff"), which is why it cannot sit under either heading.
+  const FINISH_KINDS: SubAgentKind[] = ["writer"];
   const groups: { id: string; kinds: SubAgentKind[] }[] = [
     { id: "Delegate", kinds: [...DELEGATE_KINDS] },
-    { id: "Tool", kinds: SUBAGENT_KINDS.filter((k) => !DELEGATE_KINDS.includes(k as DelegateKind)) },
+    {
+      id: "Tool",
+      kinds: SUBAGENT_KINDS.filter(
+        (k) => !DELEGATE_KINDS.includes(k as DelegateKind) && !FINISH_KINDS.includes(k),
+      ),
+    },
+    { id: "Finish", kinds: FINISH_KINDS },
   ];
 
   return (

@@ -46,6 +46,8 @@ import { cardsForSurface } from "../../lib/agent/approvalRouting";
 import { ScriptText } from "./ScriptText";
 import { ArchiveViewer } from "./ArchiveViewer";
 import { SubAgentChips } from "../ai/SubAgentChips";
+import { SUBAGENT_KINDS } from "../../lib/agent/subagent";
+
 import { ContextBar } from "../ai/ContextBar";
 import { SnippetPicker } from "../ai/SnippetPicker";
 import { useSnippetSave } from "../ai/SnippetSaveMenu";
@@ -63,6 +65,15 @@ import type {
   AuthorPersona, MemoryRecord, RoleplayAgent, SceneTurn,
 } from "../../lib/roleplay/model";
 import styles from "./RoleplayChat.module.css";
+
+/**
+ * 扮演面板能显示的子代理开关。
+ *
+ * 排掉 `writer`：扮演的 preset 没有打开 handoff（`RouteOptions.handoff` 只有
+ * 对话助手传），所以那个芯片按下去什么都不会变——正是"启用了却什么都不发生"
+ * 那类失败。为什么扮演暂时不接写手，见 docs/feature/agent/writer-subagent-plan.md §7。
+ */
+const ROLEPLAY_SUBAGENT_KINDS = SUBAGENT_KINDS.filter((k) => k !== "writer");
 
 /** 一个稳定的空数组：会话还没建起来时给它，省得每帧换一个新引用。 */
 const EMPTY_SUBS: SubAgentKind[] = [];
@@ -1159,6 +1170,9 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
             <SubAgentChips
               disabled={disabledSubs}
               onToggle={(kind) => toggleSubAgent(agent.id, kind)}
+              // 写手不在这里：扮演的 preset 没有打开 handoff，芯片会是一个
+              // 按下去什么都不发生的开关。见 writer-subagent-plan.md §7。
+              kinds={ROLEPLAY_SUBAGENT_KINDS}
             />
           </div>
 

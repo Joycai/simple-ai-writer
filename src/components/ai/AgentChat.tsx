@@ -452,7 +452,10 @@ export function AgentChat() {
   // measuring, and is the same function agentStore budgets the run with — this
   // bar and that ceiling cannot disagree about what the tools cost.
   const toolTokens = useMemo(
-    () => plannedToolTokens(AGENT_ASSIST_PRESET, effectiveSubs, models),
+    // `{ handoff: true }` for the same reason agentStore passes it: this bar
+    // reports what the *next* request will carry, and on a writer run that
+    // includes the handoff schema.
+    () => plannedToolTokens(AGENT_ASSIST_PRESET, effectiveSubs, models, { handoff: true }),
     [effectiveSubs, models],
   );
   const context = useMemo(
