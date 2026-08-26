@@ -104,7 +104,8 @@ const ALL_TOOLS: ToolId[] = [
   "read_memory", "list_lore_entities", "read_lore_entity",
   "propose_lore_plan", "create_lore_entity", "update_lore_file",
   "update_lore_meta", "append_lore_file", "edit_lore_file",
-  "update_facet_meta", "delete_lore_file", "add_lore_image", "update_lore_image", "delete_lore_image",
+  "create_lore_facet", "update_facet_meta", "delete_lore_file",
+  "add_lore_image", "update_lore_image", "delete_lore_image",
   "set_lore_avatar", "copy_lore_file", "move_lore_entity", "delete_lore_entity",
   "update_memory", "propose_edit", "append_file", "rewrite_lines",
   "create_chapter", "create_file", "create_directory", "move_chapter", "copy_file", "delete_chapter",
@@ -474,6 +475,102 @@ describe("edit_lore_file", () => {
 
     expect(fs.get(AVA)).toBe(INDEX_MD);
     expect(backupsOf()).toHaveLength(0);
+    expect(ctx.loreChanged).toBe(0);
+  });
+});
+
+// ─── create_lore_facet ───────────────────────────────────────────────────────
+
+/**
+ * The tool exists because its absence was silent: every other write tool sends
+ * the model's bytes through untouched, so a "new facet" written with
+ * update_lore_file arrived with no `facet:` frontmatter, scanned as an inert
+ * attachment, and was reported back as a successful write. These tests pin the
+ * frontmatter it generates, the promotion path that rescues a file already in
+ * that state, and the warning update_lore_file now emits instead of nothing.
+ */
+describe("create_lore_facet", () => {
+  const DIR = `${PROJECT}/.ai-writer/lore/characters/ava`;
+
+  it("writes facet frontmatter, so the new file scans as a facet", async () => {
+    const res = await run("create_lore_facet", {
+      entity: "Ava",
+      title: "战甲形象",
+      content: "通体漆黑的板甲。",
+      keys: ["战甲", "板甲"],
+      slot: "outfit",
+      mode: "auto",
+    }, makeRescanCtx());
+
+    // Named after the title, not after anything the model had to invent.
+    const file = res.content.match(/Created (\S+\.md)/)![1];
+    const written = fs.get(`${DIR}/${file}`)!;
+    expect(written).toContain('facet: "战甲形象"');
+    expect(written).toContain('slot: "outfit"');
+    expect(written).toContain('keys: ["战甲", "板甲"]');
+    // The slot's default group lands because the model left it neutral.
+    expect(written).toContain('group: "outfit"');
+    expect(written).toContain("通体漆黑的板甲。");
+    // The whole point: the scanner has to agree it is a facet.
+    const scanned = await scanLore(PROJECT);
+    const ava = scanned.characters[0];
+    expect(ava.facets.map((f) => f.title)).toContain("战甲形象");
+    expect(backupsOf()).toHaveLength(0); // nothing existed to back up
+  });
+
+  it("promotes an existing attachment, keeping its text byte-for-byte", async () => {
+    const ctx = makeRescanCtx();
+    fs.set(`${DIR}/变身形态.md`, "变身后是18岁体型。\n");
+
+    const res = await run("create_lore_facet", {
+      entity: "Ava", title: "变身形态", file: "变身形态.md", keys: ["变身", "棱镜天使"],
+    }, ctx);
+
+    expect(res.content).toContain("Promoted the attachment");
+    expect(res.content).toContain("carried through unchanged");
+    const written = fs.get(`${DIR}/变身形态.md`)!;
+    expect(written).toContain('facet: "变身形态"');
+    expect(written).toContain("变身后是18岁体型。");
+    expect(fs.get(backupsOf()[0])).toBe("变身后是18岁体型。\n");
+    const scanned = await scanLore(PROJECT);
+    expect(scanned.characters[0].facets.map((f) => f.file)).toContain("变身形态.md");
+  });
+
+  it("warns when the new facet can never fire", async () => {
+    const res = await run("create_lore_facet", {
+      entity: "Ava", title: "杂记", content: "一些无关的话。",
+    }, makeCtx());
+    expect(res.content).toContain("will never be injected");
+  });
+
+  it("refuses a file that is already a facet, and points at the right tool", async () => {
+    const res = await run("create_lore_facet", {
+      entity: "Ava", title: "银甲", file: "armor.md", content: "x",
+    }, makeCtx());
+    expect(res.content).toContain("already a facet");
+    expect(res.content).toContain("update_facet_meta");
+    expect(fs.get(`${DIR}/armor.md`)).toBe(FACET_MD);
+  });
+
+  it("refuses a missing title, a missing body, a bad slot and a path escape", async () => {
+    const ctx = makeCtx();
+    const noTitle = await run("create_lore_facet", { entity: "Ava", content: "x" }, ctx);
+    expect(noTitle.content).toContain("'title' argument is required");
+
+    const noBody = await run("create_lore_facet", { entity: "Ava", title: "空的" }, ctx);
+    expect(noBody.content).toContain("'content' argument is required");
+
+    const badSlot = await run("create_lore_facet", {
+      entity: "Ava", title: "数值", content: "x", slot: "stats",
+    }, ctx);
+    expect(badSlot.content).toContain("is not a facet slot");
+    expect(badSlot.content).toContain("appearance");
+
+    const escape = await run("create_lore_facet", {
+      entity: "Ava", title: "x", content: "y", file: "../evil.md",
+    }, ctx);
+    expect(escape.content).toContain("plain .md filename");
+
     expect(ctx.loreChanged).toBe(0);
   });
 });
@@ -923,6 +1020,7 @@ describe("lore plan gate", () => {
     const ctx = unplanned();
     const calls: [ToolId, object][] = [
       ["create_lore_entity", { name: "Kael", category: "characters", summary: "x", content: "y" }],
+      ["create_lore_facet", { entity: "Ava", title: "战甲形象", content: "x" }],
       ["update_lore_file", { entity: "Ava", content: NEW_INDEX }],
       ["update_lore_meta", { entity: "Ava", summary: "queen" }],
       ["append_lore_file", { entity: "Ava", content: "另一段" }],
