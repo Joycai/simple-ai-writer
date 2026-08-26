@@ -1382,671 +1382,676 @@ export function AiPanel() {
           onClose={() => setScopeMenu(null)}
         />
       )}
-      {/* ══════════ Config column ══════════ */}
-      <div className={styles.configCol}>
-        <div className={styles.configScroll}>
-          {!hasConfig ? (
-            <div className={styles.emptyHint}>{t("ai.panel.noProvider")}</div>
-          ) : (
-            <>
-              {/* ── Task ── */}
-              <div className={styles.section}>
-                <SectionHead label={t("ai.panel.taskLabel", { defaultValue: "任务" })} />
-                {/* Whatever the enabled packs offer, however many — 自定义 is
-                    an ordinary entry in that list, not a hardcoded extra
-                    button. The base menu (`pack: null`) renders flat — it is
-                    the row every project has; each pack's own tasks follow as
-                    their own labelled row, so a bid task is findable without
-                    diluting the everyday writing row. */}
-                {taskGroups.map((group) => {
-                  const renderSegment = (opt: ResolvedTask) => (
-                    <button
-                      key={opt.id}
-                      className={`${styles.taskSegment} ${task.id === opt.id ? styles.taskSegmentActive : ""}`}
-                      onClick={() => setSelectedTask(opt.id)}
-                      disabled={isRunning}
-                      title={taskDesc(opt, isZh, t) || undefined}
-                    >
-                      {taskLabel(opt, isZh, t)}
-                    </button>
-                  );
-                  return group.pack === null ? (
-                    <div key="base" className={styles.taskSegmented}>
-                      {group.tasks.map(renderSegment)}
-                    </div>
-                  ) : (
-                    <div key={group.pack.id} className={styles.packTaskGroup}>
-                      <span className={styles.packTaskEyebrow}>{profileLabel(group.pack, isZh)}</span>
-                      <div className={styles.taskSegmented}>
+      {/* 两栏在带子**下面**一层：骑缝带横跨整个面板，而 `.panel` 因此是列。
+          直接把带子塞进行 flex 里，它的 width:100% 会变成第三个栏位，把真正的
+          两栏挤出 overflow:hidden——面板上就只剩一条带子。 */}
+      <div className={styles.cols}>
+        {/* ══════════ Config column ══════════ */}
+        <div className={styles.configCol}>
+          <div className={styles.configScroll}>
+            {!hasConfig ? (
+              <div className={styles.emptyHint}>{t("ai.panel.noProvider")}</div>
+            ) : (
+              <>
+                {/* ── Task ── */}
+                <div className={styles.section}>
+                  <SectionHead label={t("ai.panel.taskLabel", { defaultValue: "任务" })} />
+                  {/* Whatever the enabled packs offer, however many — 自定义 is
+                      an ordinary entry in that list, not a hardcoded extra
+                      button. The base menu (`pack: null`) renders flat — it is
+                      the row every project has; each pack's own tasks follow as
+                      their own labelled row, so a bid task is findable without
+                      diluting the everyday writing row. */}
+                  {taskGroups.map((group) => {
+                    const renderSegment = (opt: ResolvedTask) => (
+                      <button
+                        key={opt.id}
+                        className={`${styles.taskSegment} ${task.id === opt.id ? styles.taskSegmentActive : ""}`}
+                        onClick={() => setSelectedTask(opt.id)}
+                        disabled={isRunning}
+                        title={taskDesc(opt, isZh, t) || undefined}
+                      >
+                        {taskLabel(opt, isZh, t)}
+                      </button>
+                    );
+                    return group.pack === null ? (
+                      <div key="base" className={styles.taskSegmented}>
                         {group.tasks.map(renderSegment)}
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    ) : (
+                      <div key={group.pack.id} className={styles.packTaskGroup}>
+                        <span className={styles.packTaskEyebrow}>{profileLabel(group.pack, isZh)}</span>
+                        <div className={styles.taskSegmented}>
+                          {group.tasks.map(renderSegment)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
 
-              {/* ── Target + instruction ──
-                  Enter-only animation, deliberately: an AnimatePresence
-                  `mode="wait"` crossfade would hold the outgoing branch on
-                  screen for the length of its exit before the new one appears,
-                  and a task switch is a direct manipulation that should land
-                  under the cursor immediately. `key` still resets the subtree,
-                  so anything in here must keep its state in AiPanel or a store —
-                  a local useState inside these branches would be wiped on every
-                  task switch. */}
-              <motion.div
-                key={selectedTask}
-                className={styles.section}
-                variants={sectionVariants}
-                initial="initial"
-                animate="animate"
-                transition={springPanel}
-              >
-                  {/* Continue has a target too — it just isn't a selection. Name
-                      the file and the spot the passage will be written from and
-                      inserted at, so "where does this land?" is never a guess. */}
-                  {isContinue && focus.filePath && (
-                    <div className={styles.targetCard}>
-                      <span className={styles.targetLabel}>
-                        {continueMode === "opening"
-                          ? t("ai.panel.continueTargetOpening", {
-                              defaultValue: "续写目标 · 从开头写起 · {{file}}",
-                              file: basename(focus.filePath),
-                            })
-                          : continueMode === "end"
-                          ? t("ai.panel.continueTargetEnd", {
-                              defaultValue: "续写目标 · 文末 · {{file}}",
-                              file: basename(focus.filePath),
-                            })
-                          : continueAnchor === null
-                          ? t("ai.panel.continueTargetLost", {
-                              defaultValue: "续写目标 · 选区已失效，请重新标记",
-                            })
-                          : t("ai.panel.continueTargetPara", {
-                              defaultValue: "续写目标 · 第 {{para}} 段之后 · {{file}}",
-                              para: paragraphIndexAt(content, continueAnchor),
-                              file: basename(focus.filePath),
-                            })}
-                      </span>
-                      <button className={styles.linkBtn} onClick={locateAnchor}>
-                        <Crosshair size={10} strokeWidth={1.8} />
-                        {t("ai.panel.locateAnchor", { defaultValue: "定位插入点" })}
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Selected text — the edit target, shown explicitly. Hidden for
-                      continue, which has its own target card above. */}
-                  {!isContinue && selection && (
-                    <div className={styles.targetCard}>
-                      <span className={styles.targetLabel}>
-                        {/* Naming the source ties the card to the band painted
-                            in the document, so a highlight is never unexplained. */}
-                        {t(selectionSource === "marker"
-                          ? "ai.panel.targetSummaryMarked"
-                          : "ai.panel.targetSummary", {
-                          defaultValue: "{{task}}选区 · 第 {{para}} 段, {{chars}} 字",
-                          task: currentTaskLabel,
-                          para: paragraphIndexAt(content, selectionRange?.from ?? 0),
-                          chars: selection.length,
-                        })}
-                      </span>
-                      {selectionRange && (
-                        <button className={styles.linkBtn} onClick={locateSelection}>
+                {/* ── Target + instruction ──
+                    Enter-only animation, deliberately: an AnimatePresence
+                    `mode="wait"` crossfade would hold the outgoing branch on
+                    screen for the length of its exit before the new one appears,
+                    and a task switch is a direct manipulation that should land
+                    under the cursor immediately. `key` still resets the subtree,
+                    so anything in here must keep its state in AiPanel or a store —
+                    a local useState inside these branches would be wiped on every
+                    task switch. */}
+                <motion.div
+                  key={selectedTask}
+                  className={styles.section}
+                  variants={sectionVariants}
+                  initial="initial"
+                  animate="animate"
+                  transition={springPanel}
+                >
+                    {/* Continue has a target too — it just isn't a selection. Name
+                        the file and the spot the passage will be written from and
+                        inserted at, so "where does this land?" is never a guess. */}
+                    {isContinue && focus.filePath && (
+                      <div className={styles.targetCard}>
+                        <span className={styles.targetLabel}>
+                          {continueMode === "opening"
+                            ? t("ai.panel.continueTargetOpening", {
+                                defaultValue: "续写目标 · 从开头写起 · {{file}}",
+                                file: basename(focus.filePath),
+                              })
+                            : continueMode === "end"
+                            ? t("ai.panel.continueTargetEnd", {
+                                defaultValue: "续写目标 · 文末 · {{file}}",
+                                file: basename(focus.filePath),
+                              })
+                            : continueAnchor === null
+                            ? t("ai.panel.continueTargetLost", {
+                                defaultValue: "续写目标 · 选区已失效，请重新标记",
+                              })
+                            : t("ai.panel.continueTargetPara", {
+                                defaultValue: "续写目标 · 第 {{para}} 段之后 · {{file}}",
+                                para: paragraphIndexAt(content, continueAnchor),
+                                file: basename(focus.filePath),
+                              })}
+                        </span>
+                        <button className={styles.linkBtn} onClick={locateAnchor}>
                           <Crosshair size={10} strokeWidth={1.8} />
-                          {t("ai.panel.locateSelection", { defaultValue: "在正文中定位" })}
+                          {t("ai.panel.locateAnchor", { defaultValue: "定位插入点" })}
                         </button>
-                      )}
-                      <button className={styles.linkBtn} onClick={dismissTarget}>
-                        <X size={10} strokeWidth={1.8} />
-                        {t("ai.panel.clearTarget", { defaultValue: "取消目标" })}
-                      </button>
-                    </div>
-                  )}
-                  {needsAnchor && (
-                    <div className={styles.warnLine}>
-                      {t("ai.panel.expandNeedsTarget", {
-                        defaultValue: "「扩写选区」需要一段可定位的选区 —— 请标记，或改用文末续写",
-                      })}
-                    </div>
-                  )}
-                  {needsSelection && (
-                    <div className={styles.warnLine}>{t("ai.panel.selectFirstHint")}</div>
-                  )}
-                  {task.batch && (
-                    <button
-                      className={styles.batchBtn}
-                      disabled={!hasConfig || isRunning || batchRunning}
-                      onClick={() => setShowBatch(true)}
-                    >
-                      <ListChecks size={12} strokeWidth={1.8} />
-                      {batchRunning
-                        ? t("ai.batch.runningShort")
-                        : t("ai.batch.open", { task: currentTaskLabel })}
-                    </button>
-                  )}
+                      </div>
+                    )}
 
-                  {/* Custom instruction (+ Agent 模式) */}
-                  {task.freeform ? (
-                    <>
-                      <textarea
-                        ref={instrRef}
-                        className={styles.textarea}
-                        rows={4}
-                        placeholder={t(
-                          agentMode ? "ai.panel.agentInstruction" : "ai.panel.customInstruction",
-                          { doc: terms.doc, kb: terms.kb },
+                    {/* Selected text — the edit target, shown explicitly. Hidden for
+                        continue, which has its own target card above. */}
+                    {!isContinue && selection && (
+                      <div className={styles.targetCard}>
+                        <span className={styles.targetLabel}>
+                          {/* Naming the source ties the card to the band painted
+                              in the document, so a highlight is never unexplained. */}
+                          {t(selectionSource === "marker"
+                            ? "ai.panel.targetSummaryMarked"
+                            : "ai.panel.targetSummary", {
+                            defaultValue: "{{task}}选区 · 第 {{para}} 段, {{chars}} 字",
+                            task: currentTaskLabel,
+                            para: paragraphIndexAt(content, selectionRange?.from ?? 0),
+                            chars: selection.length,
+                          })}
+                        </span>
+                        {selectionRange && (
+                          <button className={styles.linkBtn} onClick={locateSelection}>
+                            <Crosshair size={10} strokeWidth={1.8} />
+                            {t("ai.panel.locateSelection", { defaultValue: "在正文中定位" })}
+                          </button>
                         )}
-                        value={customInstr}
-                        onChange={(e) => setCustomInstr(e.target.value)}
-                        onContextMenu={snippetSave.onTextareaContextMenu}
-                      />
-                      {/* Insert (not send): a snippet is a starting point the
-                          author completes before running. */}
-                      <SnippetPicker
-                        value={customInstr}
-                        onInsert={setCustomInstr}
-                        onAfterInsert={() => requestAnimationFrame(() => {
-                          const el = instrRef.current;
-                          if (!el) return;
-                          el.focus();
-                          el.setSelectionRange(el.value.length, el.value.length);
-                          el.scrollTop = el.scrollHeight;
+                        <button className={styles.linkBtn} onClick={dismissTarget}>
+                          <X size={10} strokeWidth={1.8} />
+                          {t("ai.panel.clearTarget", { defaultValue: "取消目标" })}
+                        </button>
+                      </div>
+                    )}
+                    {needsAnchor && (
+                      <div className={styles.warnLine}>
+                        {t("ai.panel.expandNeedsTarget", {
+                          defaultValue: "「扩写选区」需要一段可定位的选区 —— 请标记，或改用文末续写",
                         })}
-                      />
-                      {/* Only where the task names one to switch to — a profile
-                          can offer a freeform task with no agent counterpart. */}
-                      {agentTask && (
-                        <label className={styles.toggleRow}>
-                          <input
-                            type="checkbox"
-                            checked={agentMode}
-                            onChange={(e) => setAgentMode(e.target.checked)}
-                          />
-                          <span>{t("ai.panel.agentModeLabel", { kb: terms.kb })}</span>
-                        </label>
-                      )}
-                      {agentMode && agentTask && (
-                        <div className={styles.hintLine}>
-                          {t("ai.panel.agentModeHint", { kb: terms.kb, docs: terms.docs })}
-                        </div>
-                      )}
-                    </>
-                  ) : isContinue ? (
-                    <>
-                      <div className={styles.controlRow}>
-                        <span className={styles.controlLabel}>{t("ai.panel.continueLength")}</span>
-                        <div className={styles.chipGroup}>
-                          {CONTINUE_LENGTH_OPTIONS.map((len) => (
-                            <button
-                              key={len}
-                              className={`${styles.chip} ${continueLength === len ? styles.chipActive : ""}`}
-                              onClick={() => setContinueLength(len)}
-                            >
-                              {len >= 1000 ? `${len / 1000}k` : len}
-                            </button>
-                          ))}
-                        </div>
-                        <span className={styles.controlUnit}>
-                          {t("ai.panel.unitChars", { defaultValue: "字" })}
-                        </span>
                       </div>
+                    )}
+                    {needsSelection && (
+                      <div className={styles.warnLine}>{t("ai.panel.selectFirstHint")}</div>
+                    )}
+                    {task.batch && (
+                      <button
+                        className={styles.batchBtn}
+                        disabled={!hasConfig || isRunning || batchRunning}
+                        onClick={() => setShowBatch(true)}
+                      >
+                        <ListChecks size={12} strokeWidth={1.8} />
+                        {batchRunning
+                          ? t("ai.batch.runningShort")
+                          : t("ai.batch.open", { task: currentTaskLabel })}
+                      </button>
+                    )}
 
-                      {/* Where the continuation attaches. Explicit, because the
-                          three answers are not inferable from document state —
-                          and because the panel promises this spot on the card
-                          above and then writes there. */}
-                      <div className={styles.controlRow}>
-                        <span className={styles.controlLabel}>
-                          {t("ai.panel.continuePosition", { defaultValue: "续写位置" })}
-                        </span>
-                        <div className={styles.chipGroup}>
-                          {([
-                            ["opening", "modeOpening", "开篇", "从本{{doc}}开头写起，插在现有正文之前"],
-                            ["end", "modeEnd", "文末", "接在本{{doc}}结尾，传统续写"],
-                            ["expand", "modeExpand", "扩写选区", "从选区末尾往下写，插在该段之后"],
-                          ] as const).map(([mode, key, label, hint]) => (
-                            <button
-                              key={mode}
-                              className={`${styles.chip} ${continueMode === mode ? styles.chipActive : ""}`}
-                              onClick={() => setPickedMode(mode)}
-                              title={t(`ai.panel.${key}Hint`, { defaultValue: hint, doc: terms.doc })}
-                            >
-                              {t(`ai.panel.${key}`, { defaultValue: label })}
-                            </button>
-                          ))}
+                    {/* Custom instruction (+ Agent 模式) */}
+                    {task.freeform ? (
+                      <>
+                        <textarea
+                          ref={instrRef}
+                          className={styles.textarea}
+                          rows={4}
+                          placeholder={t(
+                            agentMode ? "ai.panel.agentInstruction" : "ai.panel.customInstruction",
+                            { doc: terms.doc, kb: terms.kb },
+                          )}
+                          value={customInstr}
+                          onChange={(e) => setCustomInstr(e.target.value)}
+                          onContextMenu={snippetSave.onTextareaContextMenu}
+                        />
+                        {/* Insert (not send): a snippet is a starting point the
+                            author completes before running. */}
+                        <SnippetPicker
+                          value={customInstr}
+                          onInsert={setCustomInstr}
+                          onAfterInsert={() => requestAnimationFrame(() => {
+                            const el = instrRef.current;
+                            if (!el) return;
+                            el.focus();
+                            el.setSelectionRange(el.value.length, el.value.length);
+                            el.scrollTop = el.scrollHeight;
+                          })}
+                        />
+                        {/* Only where the task names one to switch to — a profile
+                            can offer a freeform task with no agent counterpart. */}
+                        {agentTask && (
+                          <label className={styles.toggleRow}>
+                            <input
+                              type="checkbox"
+                              checked={agentMode}
+                              onChange={(e) => setAgentMode(e.target.checked)}
+                            />
+                            <span>{t("ai.panel.agentModeLabel", { kb: terms.kb })}</span>
+                          </label>
+                        )}
+                        {agentMode && agentTask && (
+                          <div className={styles.hintLine}>
+                            {t("ai.panel.agentModeHint", { kb: terms.kb, docs: terms.docs })}
+                          </div>
+                        )}
+                      </>
+                    ) : isContinue ? (
+                      <>
+                        <div className={styles.controlRow}>
+                          <span className={styles.controlLabel}>{t("ai.panel.continueLength")}</span>
+                          <div className={styles.chipGroup}>
+                            {CONTINUE_LENGTH_OPTIONS.map((len) => (
+                              <button
+                                key={len}
+                                className={`${styles.chip} ${continueLength === len ? styles.chipActive : ""}`}
+                                onClick={() => setContinueLength(len)}
+                              >
+                                {len >= 1000 ? `${len / 1000}k` : len}
+                              </button>
+                            ))}
+                          </div>
+                          <span className={styles.controlUnit}>
+                            {t("ai.panel.unitChars", { defaultValue: "字" })}
+                          </span>
                         </div>
-                      </div>
 
-                      {/* How this chapter opens — only a question while it is
-                          still (nearly) empty, and only when something precedes
-                          it in the book. Independent of the position above: a
-                          chapter with nothing in it lacks continuity of its own
-                          wherever you write. */}
-                      {wantsOpeningChoice && bridgeCandidates.length > 0 && (
+                        {/* Where the continuation attaches. Explicit, because the
+                            three answers are not inferable from document state —
+                            and because the panel promises this spot on the card
+                            above and then writes there. */}
                         <div className={styles.controlRow}>
                           <span className={styles.controlLabel}>
-                            {t("ai.panel.openingMode", { defaultValue: "开篇方式" })}
+                            {t("ai.panel.continuePosition", { defaultValue: "续写位置" })}
                           </span>
                           <div className={styles.chipGroup}>
-                            <button
-                              className={`${styles.chip} ${openingMode === "standalone" ? styles.chipActive : ""}`}
-                              onClick={() => setOpeningMode("standalone")}
-                              title={t("ai.panel.openingStandaloneHint", {
-                                defaultValue: "不注入上一{{doc}}原文，本{{doc}}独立开头（{{priorAll}}与{{priorRecap}}照常提供）",
-                                doc: terms.doc,
-                                priorAll: priorAllLabel,
-                                priorRecap: priorRecapLabel,
-                              })}
-                            >
-                              {t("ai.panel.openingStandalone", { defaultValue: "独立开篇" })}
-                            </button>
-                            <button
-                              className={`${styles.chip} ${openingMode === "bridge" ? styles.chipActive : ""}`}
-                              onClick={() => setOpeningMode("bridge")}
-                              title={t("ai.panel.openingBridgeHint", {
-                                defaultValue: "注入所选{{doc}}的结尾原文，用来衔接文风与内容",
-                                doc: terms.doc,
-                              })}
-                            >
-                              {t("ai.panel.openingBridge", { defaultValue: "承接前一{{doc}}", doc: terms.doc })}
-                            </button>
+                            {([
+                              ["opening", "modeOpening", "开篇", "从本{{doc}}开头写起，插在现有正文之前"],
+                              ["end", "modeEnd", "文末", "接在本{{doc}}结尾，传统续写"],
+                              ["expand", "modeExpand", "扩写选区", "从选区末尾往下写，插在该段之后"],
+                            ] as const).map(([mode, key, label, hint]) => (
+                              <button
+                                key={mode}
+                                className={`${styles.chip} ${continueMode === mode ? styles.chipActive : ""}`}
+                                onClick={() => setPickedMode(mode)}
+                                title={t(`ai.panel.${key}Hint`, { defaultValue: hint, doc: terms.doc })}
+                              >
+                                {t(`ai.panel.${key}`, { defaultValue: label })}
+                              </button>
+                            ))}
                           </div>
-                          {openingMode === "bridge" && (
-                            <Select
-                              className={styles.select}
-                              value={bridgePath ?? ""}
-                              onChange={(v) => setBridgePath(v || null)}
-                              ariaLabel={t("ai.panel.openingBridge", { defaultValue: "承接前一{{doc}}", doc: terms.doc })}
-                              options={volumes.flatMap((v) =>
-                                v.chapters
-                                  .filter((c) => bridgeCandidates.some((b) => b.path === c.path))
-                                  .map((c) => ({ value: c.path, label: c.title, group: v.name })),
-                              )}
-                            />
-                          )}
                         </div>
-                      )}
 
-                      <ExtraSection
-                        label={t("ai.panel.continueOutline")}
-                        badge={outline.trim() ? "✓" : undefined}
-                      >
-                        <textarea
-                          className={styles.extraTextarea}
-                          rows={4}
-                          placeholder={t("ai.panel.continueOutlinePlaceholder", { doc: terms.doc })}
-                          value={outline}
-                          onChange={(e) => setOutline(e.target.value)}
-                        />
-                      </ExtraSection>
-                      <ExtraSection
-                        label={t("ai.panel.continueExtraKnowledge")}
-                        badge={additionalKnowledge.trim() ? "✓" : undefined}
-                      >
-                        <textarea
-                          className={styles.extraTextarea}
-                          rows={4}
-                          placeholder={t("ai.panel.continueExtraKnowledgePlaceholder", { kb: terms.kb })}
-                          value={additionalKnowledge}
-                          onChange={(e) => setAdditionalKnowledge(e.target.value)}
-                        />
-                      </ExtraSection>
-                    </>
-                  ) : (
-                    <textarea
-                      className={styles.textarea}
-                      rows={3}
-                      placeholder={t("ai.panel.taskRequirementPlaceholder")}
-                      value={requirement}
-                      onChange={(e) => setRequirement(e.target.value)}
+                        {/* How this chapter opens — only a question while it is
+                            still (nearly) empty, and only when something precedes
+                            it in the book. Independent of the position above: a
+                            chapter with nothing in it lacks continuity of its own
+                            wherever you write. */}
+                        {wantsOpeningChoice && bridgeCandidates.length > 0 && (
+                          <div className={styles.controlRow}>
+                            <span className={styles.controlLabel}>
+                              {t("ai.panel.openingMode", { defaultValue: "开篇方式" })}
+                            </span>
+                            <div className={styles.chipGroup}>
+                              <button
+                                className={`${styles.chip} ${openingMode === "standalone" ? styles.chipActive : ""}`}
+                                onClick={() => setOpeningMode("standalone")}
+                                title={t("ai.panel.openingStandaloneHint", {
+                                  defaultValue: "不注入上一{{doc}}原文，本{{doc}}独立开头（{{priorAll}}与{{priorRecap}}照常提供）",
+                                  doc: terms.doc,
+                                  priorAll: priorAllLabel,
+                                  priorRecap: priorRecapLabel,
+                                })}
+                              >
+                                {t("ai.panel.openingStandalone", { defaultValue: "独立开篇" })}
+                              </button>
+                              <button
+                                className={`${styles.chip} ${openingMode === "bridge" ? styles.chipActive : ""}`}
+                                onClick={() => setOpeningMode("bridge")}
+                                title={t("ai.panel.openingBridgeHint", {
+                                  defaultValue: "注入所选{{doc}}的结尾原文，用来衔接文风与内容",
+                                  doc: terms.doc,
+                                })}
+                              >
+                                {t("ai.panel.openingBridge", { defaultValue: "承接前一{{doc}}", doc: terms.doc })}
+                              </button>
+                            </div>
+                            {openingMode === "bridge" && (
+                              <Select
+                                className={styles.select}
+                                value={bridgePath ?? ""}
+                                onChange={(v) => setBridgePath(v || null)}
+                                ariaLabel={t("ai.panel.openingBridge", { defaultValue: "承接前一{{doc}}", doc: terms.doc })}
+                                options={volumes.flatMap((v) =>
+                                  v.chapters
+                                    .filter((c) => bridgeCandidates.some((b) => b.path === c.path))
+                                    .map((c) => ({ value: c.path, label: c.title, group: v.name })),
+                                )}
+                              />
+                            )}
+                          </div>
+                        )}
+
+                        <ExtraSection
+                          label={t("ai.panel.continueOutline")}
+                          badge={outline.trim() ? "✓" : undefined}
+                        >
+                          <textarea
+                            className={styles.extraTextarea}
+                            rows={4}
+                            placeholder={t("ai.panel.continueOutlinePlaceholder", { doc: terms.doc })}
+                            value={outline}
+                            onChange={(e) => setOutline(e.target.value)}
+                          />
+                        </ExtraSection>
+                        <ExtraSection
+                          label={t("ai.panel.continueExtraKnowledge")}
+                          badge={additionalKnowledge.trim() ? "✓" : undefined}
+                        >
+                          <textarea
+                            className={styles.extraTextarea}
+                            rows={4}
+                            placeholder={t("ai.panel.continueExtraKnowledgePlaceholder", { kb: terms.kb })}
+                            value={additionalKnowledge}
+                            onChange={(e) => setAdditionalKnowledge(e.target.value)}
+                          />
+                        </ExtraSection>
+                      </>
+                    ) : (
+                      <textarea
+                        className={styles.textarea}
+                        rows={3}
+                        placeholder={t("ai.panel.taskRequirementPlaceholder")}
+                        value={requirement}
+                        onChange={(e) => setRequirement(e.target.value)}
+                      />
+                    )}
+                </motion.div>
+
+                <hr className={styles.divider} />
+
+                {/* ── Context allocation ── */}
+                <ContextAllocation forecast={forecast} />
+
+                <hr className={styles.divider} />
+
+                {/* ── Draft count ──
+                    Hidden for the tasks that can't fan out (agent writes to disk;
+                    continue shares one execution log) rather than shown disabled —
+                    a control that never applies is just noise. See draftCountFor. */}
+                {maxDrafts > 1 && (
+                  <div className={styles.controlRow}>
+                    <span className={styles.controlLabel}>
+                      {t("ai.panel.draftCount", { defaultValue: "生成版本" })}
+                    </span>
+                    <div className={styles.chipGroup}>
+                      {DRAFT_COUNT_OPTIONS.map((n) => (
+                        <button
+                          key={n}
+                          className={`${styles.chip} ${draftCount === n ? styles.chipActive : ""}`}
+                          onClick={() => setDraftCount(n)}
+                          title={t("ai.panel.draftCountHint", {
+                            defaultValue: "并行生成多个版本，每个都是一次独立请求（费用相应增加）",
+                          })}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                    <span className={styles.controlUnit}>
+                      {t("ai.panel.unitDrafts", { defaultValue: "版" })}
+                    </span>
+                  </div>
+                )}
+
+                {/* ── Reference window (edit tasks only — continue has no picker) ── */}
+                {supportsExtras && (
+                  <div className={styles.controlRow}>
+                    <span className={styles.controlLabel}>{t("ai.panel.contextRange")}</span>
+                    <div className={styles.chipGroup}>
+                      {CONTEXT_CHARS_OPTIONS.map((n) => (
+                        <button
+                          key={n}
+                          className={`${styles.chip} ${contextChars === n ? styles.chipActive : ""}`}
+                          onClick={() => setContextChars(n)}
+                          title={t("ai.panel.contextRangeHint")}
+                        >
+                          {n === 0 ? t("ai.panel.contextRangeNone") : n >= 1000 ? `${n / 1000}k` : n}
+                        </button>
+                      ))}
+                    </div>
+                    <span className={styles.controlUnit}>
+                      {t("ai.panel.unitChars", { defaultValue: "字" })}
+                    </span>
+                  </div>
+                )}
+
+                {/* ── Story memory (only where the profile's documents use it) ── */}
+                {usesMemory && (
+                  <>
+                    <MemorySection
+                      detailSpan={supportsExtras ? contextChars : DEFAULT_DETAIL_SPAN}
+                      appendMode={isContinue}
                     />
-                  )}
-              </motion.div>
+                    <hr className={styles.divider} />
+                  </>
+                )}
 
-              <hr className={styles.divider} />
+                {/* ── Lore ── */}
+                <LoreSection
+                  entities={filteredLoreEntities}
+                  search={loreSearch}
+                  setSearch={setLoreSearch}
+                  selectedPaths={selectedLorePaths}
+                  toggle={toggleLorePath}
+                  charsPerToken={charsPerToken}
+                />
 
-              {/* ── Context allocation ── */}
-              <ContextAllocation forecast={forecast} />
-
-              <hr className={styles.divider} />
-
-              {/* ── Draft count ──
-                  Hidden for the tasks that can't fan out (agent writes to disk;
-                  continue shares one execution log) rather than shown disabled —
-                  a control that never applies is just noise. See draftCountFor. */}
-              {maxDrafts > 1 && (
-                <div className={styles.controlRow}>
-                  <span className={styles.controlLabel}>
-                    {t("ai.panel.draftCount", { defaultValue: "生成版本" })}
-                  </span>
-                  <div className={styles.chipGroup}>
-                    {DRAFT_COUNT_OPTIONS.map((n) => (
-                      <button
-                        key={n}
-                        className={`${styles.chip} ${draftCount === n ? styles.chipActive : ""}`}
-                        onClick={() => setDraftCount(n)}
-                        title={t("ai.panel.draftCountHint", {
-                          defaultValue: "并行生成多个版本，每个都是一次独立请求（费用相应增加）",
-                        })}
-                      >
-                        {n}
-                      </button>
-                    ))}
+                {/* System-prompt override lives at the bottom: set once, rarely touched. */}
+                {prompts.some((p) => p.scene === "system") && (
+                  <div className={styles.controlRow}>
+                    <span className={styles.controlLabel}>
+                      {t("ai.panel.systemPromptLabel", { defaultValue: "系统提示" })}
+                    </span>
+                    <Select
+                      className={styles.select}
+                      value={activePromptId ?? ""}
+                      onChange={(v) => setActivePrompt(v)}
+                      options={[
+                        { value: "", label: t("ai.panel.defaultSystemPrompt") },
+                        ...prompts
+                          .filter((p) => p.scene === "system")
+                          .map((p) => ({ value: p.id, label: p.name })),
+                      ]}
+                      ariaLabel={t("ai.panel.defaultSystemPrompt")}
+                    />
                   </div>
-                  <span className={styles.controlUnit}>
-                    {t("ai.panel.unitDrafts", { defaultValue: "版" })}
-                  </span>
-                </div>
-              )}
+                )}
+              </>
+            )}
+          </div>
 
-              {/* ── Reference window (edit tasks only — continue has no picker) ── */}
-              {supportsExtras && (
-                <div className={styles.controlRow}>
-                  <span className={styles.controlLabel}>{t("ai.panel.contextRange")}</span>
-                  <div className={styles.chipGroup}>
-                    {CONTEXT_CHARS_OPTIONS.map((n) => (
-                      <button
-                        key={n}
-                        className={`${styles.chip} ${contextChars === n ? styles.chipActive : ""}`}
-                        onClick={() => setContextChars(n)}
-                        title={t("ai.panel.contextRangeHint")}
-                      >
-                        {n === 0 ? t("ai.panel.contextRangeNone") : n >= 1000 ? `${n / 1000}k` : n}
-                      </button>
-                    ))}
-                  </div>
-                  <span className={styles.controlUnit}>
-                    {t("ai.panel.unitChars", { defaultValue: "字" })}
-                  </span>
-                </div>
-              )}
+          {/* Focus not settled: the editor still holds the previous document, so
+              say what is being waited on rather than silently disabling Run. */}
+          {hasConfig && !focus.settled && (
+            <div className={styles.focusNotice}>
+              {focusBlockedByImage(focus)
+                ? t("ai.panel.focusImage", { defaultValue: "当前打开的是图片，请先打开一个文档" })
+                : focus.pendingPath
+                  ? t("ai.panel.focusLoading", {
+                      defaultValue: "正在载入 {{name}}…",
+                      name: basename(focus.pendingPath),
+                    })
+                  : t("ai.panel.focusNone", { defaultValue: "未打开文档" })}
+            </div>
+          )}
 
-              {/* ── Story memory (only where the profile's documents use it) ── */}
-              {usesMemory && (
-                <>
-                  <MemorySection
-                    detailSpan={supportsExtras ? contextChars : DEFAULT_DETAIL_SPAN}
-                    appendMode={isContinue}
-                  />
-                  <hr className={styles.divider} />
-                </>
+          {/* Sticky action footer — cost forecast + Run/Stop, always reachable */}
+          {hasConfig && (
+            <div className={styles.configFooter}>
+              <div className={styles.estimate}>
+                <span>
+                  {t("ai.panel.estInput", { defaultValue: "预计输入" })}{" "}
+                  <strong>{forecast ? `${formatBudget(forecast.usedTokens)} tk` : "—"}</strong>
+                </span>
+                <span>
+                  {t("ai.panel.estOutput", { defaultValue: "输出上限" })}{" "}
+                  <strong>
+                    {forecast ? forecast.reservedOutputTokens.toLocaleString() : "—"}
+                    {forecast ? " tk" : ""}
+                  </strong>
+                </span>
+              </div>
+              {isRunning ? (
+                <button className={styles.abortBtn} onClick={abort}>
+                  <Square size={11} fill="currentColor" />
+                  {t("ai.panel.stop")}
+                </button>
+              ) : (
+                <button className={styles.runBtn} disabled={!canRun} onClick={handleRun}>
+                  <Play size={12} fill="currentColor" />
+                  {t("ai.panel.runTask", { defaultValue: "执行{{task}}", task: currentTaskLabel })}
+                  <kbd className={styles.runKbd}>{MOD_KEY === "⌘" ? "⌘↵" : "Ctrl ↵"}</kbd>
+                </button>
               )}
-
-              {/* ── Lore ── */}
-              <LoreSection
-                entities={filteredLoreEntities}
-                search={loreSearch}
-                setSearch={setLoreSearch}
-                selectedPaths={selectedLorePaths}
-                toggle={toggleLorePath}
-                charsPerToken={charsPerToken}
-              />
-
-              {/* System-prompt override lives at the bottom: set once, rarely touched. */}
-              {prompts.some((p) => p.scene === "system") && (
-                <div className={styles.controlRow}>
-                  <span className={styles.controlLabel}>
-                    {t("ai.panel.systemPromptLabel", { defaultValue: "系统提示" })}
-                  </span>
-                  <Select
-                    className={styles.select}
-                    value={activePromptId ?? ""}
-                    onChange={(v) => setActivePrompt(v)}
-                    options={[
-                      { value: "", label: t("ai.panel.defaultSystemPrompt") },
-                      ...prompts
-                        .filter((p) => p.scene === "system")
-                        .map((p) => ({ value: p.id, label: p.name })),
-                    ]}
-                    ariaLabel={t("ai.panel.defaultSystemPrompt")}
-                  />
-                </div>
-              )}
-            </>
+            </div>
           )}
         </div>
 
-        {/* Focus not settled: the editor still holds the previous document, so
-            say what is being waited on rather than silently disabling Run. */}
-        {hasConfig && !focus.settled && (
-          <div className={styles.focusNotice}>
-            {focusBlockedByImage(focus)
-              ? t("ai.panel.focusImage", { defaultValue: "当前打开的是图片，请先打开一个文档" })
-              : focus.pendingPath
-                ? t("ai.panel.focusLoading", {
-                    defaultValue: "正在载入 {{name}}…",
-                    name: basename(focus.pendingPath),
-                  })
-                : t("ai.panel.focusNone", { defaultValue: "未打开文档" })}
-          </div>
-        )}
-
-        {/* Sticky action footer — cost forecast + Run/Stop, always reachable */}
-        {hasConfig && (
-          <div className={styles.configFooter}>
-            <div className={styles.estimate}>
-              <span>
-                {t("ai.panel.estInput", { defaultValue: "预计输入" })}{" "}
-                <strong>{forecast ? `${formatBudget(forecast.usedTokens)} tk` : "—"}</strong>
-              </span>
-              <span>
-                {t("ai.panel.estOutput", { defaultValue: "输出上限" })}{" "}
-                <strong>
-                  {forecast ? forecast.reservedOutputTokens.toLocaleString() : "—"}
-                  {forecast ? " tk" : ""}
-                </strong>
-              </span>
-            </div>
-            {isRunning ? (
-              <button className={styles.abortBtn} onClick={abort}>
-                <Square size={11} fill="currentColor" />
-                {t("ai.panel.stop")}
-              </button>
-            ) : (
-              <button className={styles.runBtn} disabled={!canRun} onClick={handleRun}>
-                <Play size={12} fill="currentColor" />
-                {t("ai.panel.runTask", { defaultValue: "执行{{task}}", task: currentTaskLabel })}
-                <kbd className={styles.runKbd}>{MOD_KEY === "⌘" ? "⌘↵" : "Ctrl ↵"}</kbd>
-              </button>
+        {/* ══════════ Results column ══════════ */}
+        <div className={styles.resultCol}>
+          <div className={styles.resultScroll}>
+            {/* Injection transparency: what lore went into this run and why */}
+            {loreReport && (
+              <LoreReportSection
+                report={loreReport}
+                charsPerToken={charsPerToken}
+                onRaiseBudget={raiseLoreBudget}
+              />
             )}
-          </div>
-        )}
-      </div>
 
-      {/* ══════════ Results column ══════════ */}
-      <div className={styles.resultCol}>
-        <div className={styles.resultScroll}>
-          {/* Injection transparency: what lore went into this run and why */}
-          {loreReport && (
-            <LoreReportSection
-              report={loreReport}
-              charsPerToken={charsPerToken}
-              onRaiseBudget={raiseLoreBudget}
-            />
-          )}
+            {/* Only while 本次任务都批准 is live. Keyed to the running task's own
+                controller, which is exactly what aiTaskStore passed as the grant
+                key — so the chip goes out by itself when the run ends. */}
+            <AutoApproveChip owner={taskAbortController} />
 
-          {/* Only while 本次任务都批准 is live. Keyed to the running task's own
-              controller, which is exactly what aiTaskStore passed as the grant
-              key — so the chip goes out by itself when the run ends. */}
-          <AutoApproveChip owner={taskAbortController} />
+            {/* Pending lore plans + manuscript edits + round-cap questions — the
+                loop is blocked on these */}
+            {pendingPlans.map((p) => (
+              <PlanCard key={p.plan.id} item={p} />
+            ))}
+            {pendingApprovals.map((p) => (
+              <ApprovalCard key={p.proposal.id} item={p} />
+            ))}
+            {pendingTruncations.map((p) => (
+              <TruncationCard key={p.id} item={p} />
+            ))}
+            {pendingRoundLimits.map((p) => (
+              <RoundLimitCard key={p.id} item={p} />
+            ))}
 
-          {/* Pending lore plans + manuscript edits + round-cap questions — the
-              loop is blocked on these */}
-          {pendingPlans.map((p) => (
-            <PlanCard key={p.plan.id} item={p} />
-          ))}
-          {pendingApprovals.map((p) => (
-            <ApprovalCard key={p.proposal.id} item={p} />
-          ))}
-          {pendingTruncations.map((p) => (
-            <TruncationCard key={p.id} item={p} />
-          ))}
-          {pendingRoundLimits.map((p) => (
-            <RoundLimitCard key={p.id} item={p} />
-          ))}
+            {/* Execution log: run lifecycle, rounds, tool calls */}
+            {(agentLog.length > 0 || error) && (
+              <div className={styles.resultSection}>
+                <SectionHead
+                  label={t("ai.panel.runSection", { defaultValue: "运行" })}
+                  meta={t("ai.panel.runCount", { defaultValue: "{{n}} 条", n: agentLog.length })}
+                />
+                {agentLog.length > 0 && <AgentLog log={agentLog} isRunning={isRunning} flat />}
+                {/* Band ④ — the plan, when the agent split the work. Read off
+                    disk (see TaskPanel.tsx), so it also shows a task resumed
+                    from an earlier session. */}
+                <TaskPanel
+                  projectPath={projectPath}
+                  taskId={taskWorkspace?.taskId}
+                  revision={taskDocRevision([agentLog])}
+                  tokens={sumTokens([agentLog])}
+                />
+                {error && (
+                  <ErrorBlock
+                    message={error}
+                    onRetry={canRun ? handleRun : null}
+                    onSwitchModel={switchModelAndRetry}
+                    messages={lastMessages}
+                  />
+                )}
+              </div>
+            )}
 
-          {/* Execution log: run lifecycle, rounds, tool calls */}
-          {(agentLog.length > 0 || error) && (
-            <div className={styles.resultSection}>
+            {/* Waiting for the first token */}
+            {isRunning && !output && !agentLog.some((e) => e.kind === "tool-step") && (
+              <div className={styles.thinking}>
+                <span className={styles.spinner} />
+                {t("ai.panel.thinking")}
+              </div>
+            )}
+
+            {/* Result */}
+            <div className={`${styles.resultSection} ${styles.resultSectionGrow}`}>
               <SectionHead
-                label={t("ai.panel.runSection", { defaultValue: "运行" })}
-                meta={t("ai.panel.runCount", { defaultValue: "{{n}} 条", n: agentLog.length })}
+                label={t("ai.panel.resultSection", { defaultValue: "结果" })}
+                action={output ? (
+                  <span className={styles.resultActions}>
+                    <button className={styles.btnSecondary} onClick={clearOutput}>
+                      {t("ai.panel.clear")}
+                    </button>
+                    <button
+                      className={styles.btnPrimary}
+                      onClick={handleApply}
+                      disabled={outputMismatched}
+                      title={outputMismatched ? t("ai.panel.outputMismatchedTitle") : undefined}
+                    >
+                      {replaceRange ? t("ai.panel.replaceSelection") : t("ai.panel.insertToDoc")}
+                    </button>
+                  </span>
+                ) : undefined}
               />
-              {agentLog.length > 0 && <AgentLog log={agentLog} isRunning={isRunning} flat />}
-              {/* Band ④ — the plan, when the agent split the work. Read off
-                  disk (see TaskPanel.tsx), so it also shows a task resumed
-                  from an earlier session. */}
-              <TaskPanel
-                projectPath={projectPath}
-                taskId={taskWorkspace?.taskId}
-                revision={taskDocRevision([agentLog])}
-                tokens={sumTokens([agentLog])}
-              />
-              {error && (
+              {/* Draft tabs — only when there is a choice to make. A single-draft
+                  run keeps the pane exactly as it was. */}
+              {drafts.length > 1 && (
+                <div className={styles.draftTabs} role="tablist">
+                  {drafts.map((d) => (
+                    <button
+                      key={d.id}
+                      role="tab"
+                      aria-selected={d.id === activeDraft?.id}
+                      className={`${styles.draftTab} ${d.id === activeDraft?.id ? styles.draftTabActive : ""} ${d.error ? styles.draftTabFailed : ""}`}
+                      onClick={() => setActiveDraft(d.id)}
+                      title={d.error ?? undefined}
+                    >
+                      {t("ai.panel.draftLabel", { n: d.index, defaultValue: `版本 ${d.index}` })}
+                      {/* Per-draft state, because they finish at different times and
+                          an empty tab is otherwise indistinguishable from a failed one. */}
+                      {d.error ? (
+                        <span className={styles.draftTabMark}>!</span>
+                      ) : !d.done ? (
+                        <span className={styles.draftSpinner} />
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {activeDraft?.error ? (
                 <ErrorBlock
-                  message={error}
+                  message={activeDraft.error}
                   onRetry={canRun ? handleRun : null}
                   onSwitchModel={switchModelAndRetry}
                   messages={lastMessages}
                 />
+              ) : output ? (
+                <div className={styles.output} ref={outputRef} key={activeDraft?.id}>
+                  {output}
+                  {isRunning && !activeDraft?.done && <span className={styles.cursor}>▌</span>}
+                </div>
+              ) : (
+                <div className={styles.resultEmpty}>
+                  <span>{t("ai.panel.resultsPlaceholder")}</span>
+                  <span className={styles.resultEmptySub}>
+                    {t("ai.panel.resultsPlaceholderSub", {
+                      defaultValue: "可对比、替换或插入到文档",
+                    })}
+                  </span>
+                </div>
               )}
             </div>
-          )}
 
-          {/* Waiting for the first token */}
-          {isRunning && !output && !agentLog.some((e) => e.kind === "tool-step") && (
-            <div className={styles.thinking}>
-              <span className={styles.spinner} />
-              {t("ai.panel.thinking")}
-            </div>
-          )}
+            {/* The model hit its max-output length rather than finishing on its
+                own — the text above is real, but may stop mid-thought. */}
+            {activeDraft?.truncated && !activeDraft.error && (
+              <div className={styles.truncatedNotice}>{t("ai.panel.truncatedNotice")}</div>
+            )}
 
-          {/* Result */}
-          <div className={`${styles.resultSection} ${styles.resultSectionGrow}`}>
-            <SectionHead
-              label={t("ai.panel.resultSection", { defaultValue: "结果" })}
-              action={output ? (
-                <span className={styles.resultActions}>
-                  <button className={styles.btnSecondary} onClick={clearOutput}>
-                    {t("ai.panel.clear")}
-                  </button>
-                  <button
-                    className={styles.btnPrimary}
-                    onClick={handleApply}
-                    disabled={outputMismatched}
-                    title={outputMismatched ? t("ai.panel.outputMismatchedTitle") : undefined}
-                  >
-                    {replaceRange ? t("ai.panel.replaceSelection") : t("ai.panel.insertToDoc")}
-                  </button>
-                </span>
-              ) : undefined}
-            />
-            {/* Draft tabs — only when there is a choice to make. A single-draft
-                run keeps the pane exactly as it was. */}
-            {drafts.length > 1 && (
-              <div className={styles.draftTabs} role="tablist">
-                {drafts.map((d) => (
-                  <button
-                    key={d.id}
-                    role="tab"
-                    aria-selected={d.id === activeDraft?.id}
-                    className={`${styles.draftTab} ${d.id === activeDraft?.id ? styles.draftTabActive : ""} ${d.error ? styles.draftTabFailed : ""}`}
-                    onClick={() => setActiveDraft(d.id)}
-                    title={d.error ?? undefined}
-                  >
-                    {t("ai.panel.draftLabel", { n: d.index, defaultValue: `版本 ${d.index}` })}
-                    {/* Per-draft state, because they finish at different times and
-                        an empty tab is otherwise indistinguishable from a failed one. */}
-                    {d.error ? (
-                      <span className={styles.draftTabMark}>!</span>
-                    ) : !d.done ? (
-                      <span className={styles.draftSpinner} />
-                    ) : null}
-                  </button>
-                ))}
+            {/* This result was generated against a different document than the
+                one now open — applying it here would splice one chapter's
+                output into another. Switch back to insert it. */}
+            {outputMismatched && sourceFilePath && (
+              <div className={styles.truncatedNotice}>
+                {t("ai.panel.outputMismatched", { file: basename(sourceFilePath) })}
               </div>
             )}
-            {activeDraft?.error ? (
-              <ErrorBlock
-                message={activeDraft.error}
-                onRetry={canRun ? handleRun : null}
-                onSwitchModel={switchModelAndRetry}
-                messages={lastMessages}
-              />
-            ) : output ? (
-              <div className={styles.output} ref={outputRef} key={activeDraft?.id}>
-                {output}
-                {isRunning && !activeDraft?.done && <span className={styles.cursor}>▌</span>}
-              </div>
-            ) : (
-              <div className={styles.resultEmpty}>
-                <span>{t("ai.panel.resultsPlaceholder")}</span>
-                <span className={styles.resultEmptySub}>
-                  {t("ai.panel.resultsPlaceholderSub", {
-                    defaultValue: "可对比、替换或插入到文档",
-                  })}
-                </span>
+
+            {/* Token usage for the finished run */}
+            {usage && hasResults && (
+              <div className={styles.usageBar}>
+                <span>{t("ai.panel.inputTokens", { tokens: usage.inputTokens.toLocaleString() })}</span>
+                <span>{t("ai.panel.outputTokens", { tokens: usage.outputTokens.toLocaleString() })}</span>
+                <span>≈ ${usage.cost.toFixed(5)}</span>
               </div>
             )}
           </div>
 
-          {/* The model hit its max-output length rather than finishing on its
-              own — the text above is real, but may stop mid-thought. */}
-          {activeDraft?.truncated && !activeDraft.error && (
-            <div className={styles.truncatedNotice}>{t("ai.panel.truncatedNotice")}</div>
-          )}
-
-          {/* This result was generated against a different document than the
-              one now open — applying it here would splice one chapter's
-              output into another. Switch back to insert it. */}
-          {outputMismatched && sourceFilePath && (
-            <div className={styles.truncatedNotice}>
-              {t("ai.panel.outputMismatched", { file: basename(sourceFilePath) })}
-            </div>
-          )}
-
-          {/* Token usage for the finished run */}
-          {usage && hasResults && (
-            <div className={styles.usageBar}>
-              <span>{t("ai.panel.inputTokens", { tokens: usage.inputTokens.toLocaleString() })}</span>
-              <span>{t("ai.panel.outputTokens", { tokens: usage.outputTokens.toLocaleString() })}</span>
-              <span>≈ ${usage.cost.toFixed(5)}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Status bar — names the focused document, so which file the assistant
-            is working on is never something you have to infer. */}
-        <div className={styles.statusBar}>
-          <span className={styles.statusFocus} title={focus.filePath ?? undefined}>
-            {focus.filePath ? basename(focus.filePath) : t("ai.panel.focusNone", { defaultValue: "未打开文档" })}
-          </span>
-          <span className={styles.statusSep}>|</span>
-          <span>
-            {t("ai.panel.chapterChars", {
-              defaultValue: "本{{doc}} {{chars}} 字",
-              doc: terms.doc,
-              chars: content.length.toLocaleString(),
-            })}
-          </span>
-          {pinnedCount > 0 && (
-            <>
-              <span className={styles.statusSep}>|</span>
-              <span>
-                {t("ai.panel.pinnedLoreCount", {
-                  defaultValue: "引用 {{n}} {{entry}}",
-                  n: pinnedCount,
-                  entry: terms.entry,
-                })}
-              </span>
-            </>
-          )}
-          {activeModel && activeProvider && (
-            <span className={styles.statusModel}>
-              {activeProvider.name} · {activeModel.name}
+          {/* Status bar — names the focused document, so which file the assistant
+              is working on is never something you have to infer. */}
+          <div className={styles.statusBar}>
+            <span className={styles.statusFocus} title={focus.filePath ?? undefined}>
+              {focus.filePath ? basename(focus.filePath) : t("ai.panel.focusNone", { defaultValue: "未打开文档" })}
             </span>
-          )}
+            <span className={styles.statusSep}>|</span>
+            <span>
+              {t("ai.panel.chapterChars", {
+                defaultValue: "本{{doc}} {{chars}} 字",
+                doc: terms.doc,
+                chars: content.length.toLocaleString(),
+              })}
+            </span>
+            {pinnedCount > 0 && (
+              <>
+                <span className={styles.statusSep}>|</span>
+                <span>
+                  {t("ai.panel.pinnedLoreCount", {
+                    defaultValue: "引用 {{n}} {{entry}}",
+                    n: pinnedCount,
+                    entry: terms.entry,
+                  })}
+                </span>
+              </>
+            )}
+            {activeModel && activeProvider && (
+              <span className={styles.statusModel}>
+                {activeProvider.name} · {activeModel.name}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

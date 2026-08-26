@@ -1,10 +1,23 @@
 /* ── Two-column workspace ─────────────────────────────────────────
    Left: scrollable request builder with a sticky forecast/run footer.
-   Right: results — injected lore, execution log, streamed output.   */
+   Right: results — injected lore, execution log, streamed output.
+
+   The shell is a *column*, and the two columns live one level down in
+   `.cols`: the 取材范围 band spans the whole panel above them. Put the band
+   straight into a row flex — as it was — and its `width: 100%` makes it a
+   third column wide enough to push both real ones past `overflow: hidden`,
+   which is a panel that renders nothing but the band.                */
 .panel {
   display: flex;
-  align-items: stretch;
+  flex-direction: column;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.cols {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
   min-height: 0;
   overflow: hidden;
 }
@@ -57,7 +70,7 @@
 
 /* Stack to one column when the drawer is squeezed onto a small viewport. */
 @media (max-width: 860px) {
-  .panel { flex-direction: column; }
+  .cols { flex-direction: column; }
   .configCol {
     flex: 0 0 auto;
     max-width: none;
