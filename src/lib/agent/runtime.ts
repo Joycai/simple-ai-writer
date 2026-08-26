@@ -715,8 +715,10 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
         // Forced — but never *relied* upon: some endpoints downgrade a forced
         // choice to "auto" without saying so (lib/ai/openai.ts toolChoiceFor,
         // lib/ai/anthropic.ts toolChoiceBody, both on the `switch` thinking
-        // dialect). The handoff below therefore runs whether or not the call
-        // arrives; see handoff.fallbackBrief.
+        // dialect), and some reject it outright with a 400, after which
+        // lib/ai/toolChoice.ts resends this same round with "auto". The handoff
+        // below therefore runs whether or not the call arrives; see
+        // handoff.fallbackBrief.
         ...(forceHandoff
           ? { toolChoice: { type: "function" as const, function: { name: HANDOFF_TOOL_NAME } } }
           : {}),

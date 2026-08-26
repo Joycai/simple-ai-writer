@@ -54,11 +54,17 @@ function toWireMessages(messages: StreamMessage[]): Record<string, unknown>[] {
  * models this dialect exists for default thinking to off, so both leave
  * forcing legal).
  *
- * Same safety argument as the Anthropic adapter's `toolChoiceBody`: the only
- * caller that forces is `agent/structured.ts`, which already treats "the model
- * declined to call the tool" as its cue to fall back to JSON mode. The worst
- * case is that fallback firing one turn earlier; not downgrading is a
+ * Same safety argument as the Anthropic adapter's `toolChoiceBody`: neither
+ * caller that forces relies on it — `agent/structured.ts` treats "the model
+ * declined to call the tool" as its cue to fall back to JSON mode, and the
+ * agent runtime's handoff round hands off on the round's prose instead. The
+ * worst case is that fallback firing one turn earlier; not downgrading is a
  * guaranteed failed request followed by the same fallback.
+ *
+ * This is the *predictable* half of the problem — an endpoint whose declared
+ * dialect says forcing is illegal. Endpoints that refuse it with nothing in
+ * the config to warn us (DeepSeek V4) are learned from their own 400 instead;
+ * see `lib/ai/toolChoice.ts`.
  */
 function toolChoiceFor(opts: StreamOptions): StreamOptions["toolChoice"] {
   const tc = opts.toolChoice ?? "auto";

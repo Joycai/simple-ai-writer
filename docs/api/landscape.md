@@ -237,6 +237,7 @@ vLLM / llama.cpp。Google 与 Anthropic 也各自提供了一层 OpenAI 兼容�
 | **usage 缺失** | 不认 `stream_options.include_usage`，或返回全零 usage |
 | **`/models` 不可信** | 返回空、返回全量目录、或返回该 key 无权访问的模型 |
 | **工具调用降级** | 声明支持但实际不返回 `tool_calls`，或 `arguments` 不是合法 JSON |
+| **强制 `tool_choice` 被拒** | DeepSeek V4（flash/pro）恒在思考模式，`required` 与具名工具一律 400 `Thinking mode does not support this tool_choice`；请求里**没有任何字段**能提前判断，只能从它自己的 400 学（`src/lib/ai/toolChoice.ts`） |
 | **HTTP 200 + SSE 内错误** | 余额不足、上游故障、内容审核以 `data: {"error":…}` 事件送达，而非错误状态码 |
 | **静默截断 prompt** | 本地栈（ollama 等）超出上下文时从头部丢弃，system 指令先没 |
 | **`<think>` 内联** | 部分中继把思维链混进正文，用 `<think>…</think>` 包裹 |
