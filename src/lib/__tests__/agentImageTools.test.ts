@@ -283,3 +283,50 @@ describe("redraw_lore_image", () => {
     expect(seen).toHaveLength(0);
   });
 });
+
+describe("negative prompt", () => {
+  const COMFY_MODEL = { ...IMAGE_MODEL, id: "m2", name: "SDXL 立绘", caps: { route: "comfyui" } };
+
+  it("reaches the card when the bound model is a ComfyUI one", async () => {
+    storeModels = [COMFY_MODEL];
+    storeSubAgents = { imagegen: { kind: "imagegen", modelId: "m2", enabled: true } };
+    const { ctx, seen } = ctxWith();
+    await generateImageTool("c1", { prompt: "a knight", negative: " watermark, blurry ", entity: "艾尔登" }, ctx);
+
+    // Trimmed, and carried separately — never appended to the prompt, which is
+    // what would make the sampler draw the watermark it was told to avoid.
+    expect(seen[0].negative).toBe("watermark, blurry");
+    expect(seen[0].prompt).toBe("a knight");
+  });
+
+  it("is dropped from the proposal for every other route, and the model is told", async () => {
+    // Silently keeping it would put a line on the approval card that changes
+    // nothing about the picture — the author would read an exclusion that was
+    // never requested of the endpoint.
+    const { ctx, seen } = ctxWith();
+    const res = await generateImageTool("c1", { prompt: "a knight", negative: "watermark", entity: "艾尔登" }, ctx);
+
+    expect(seen[0].negative).toBeUndefined();
+    expect(res.content).toContain("'negative' was ignored");
+    expect(res.content).toContain("Nano");
+  });
+
+  it("says nothing extra when no negative was written", async () => {
+    const { ctx } = ctxWith();
+    const res = await generateImageTool("c1", { prompt: "a knight", entity: "艾尔登" }, ctx);
+    expect(res.content).not.toContain("negative");
+  });
+
+  it("rides the two edit tools too — img2img runs the same sampler", async () => {
+    storeModels = [COMFY_MODEL];
+    storeSubAgents = { imagegen: { kind: "imagegen", modelId: "m2", enabled: true } };
+
+    const edit = ctxWith();
+    await editImageTool("c1", { source: "/proj/插图/参考.png", instruction: "silver hair", negative: "extra fingers" }, edit.ctx);
+    expect(edit.seen[0].negative).toBe("extra fingers");
+
+    const redraw = ctxWith();
+    await redrawLoreImageTool("c2", { entity: "艾尔登", file: "a.png", instruction: "silver hair", negative: "extra fingers" }, redraw.ctx);
+    expect(redraw.seen[0].negative).toBe("extra fingers");
+  });
+});

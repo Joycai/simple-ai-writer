@@ -1291,7 +1291,8 @@
       "docxChanged": "改了 {{count}} 项",
       "docxChangeMark": "改",
       "docxFontMissing": "{{fonts}} 本机未装（不影响导出：文件里写的就是它，在装了这个字体的机器上会正常排版）",
-      "docxNote": "转换不经过模型：结构来自 markdown，字体字号行距页边距全部来自这套格式。"
+      "docxNote": "转换不经过模型：结构来自 markdown，字体字号行距页边距全部来自这套格式。",
+      "imageNegative": "不要出现：{{text}}"
     },
     "autoApprove": {
       "chipSession": "本次对话自动批准中",
@@ -1567,7 +1568,14 @@
         "BLOCK_ONLY_HIGH": "仅拦截高风险",
         "BLOCK_MEDIUM_AND_ABOVE": "拦截中及以上",
         "BLOCK_LOW_AND_ABOVE": "拦截低及以上"
-      }
+      },
+      "saveAndAddWorkflow": "保存并导入工作流",
+      "comfyBaseUrlHint": "ComfyUI 的地址，默认 http://127.0.0.1:8188。ComfyUI 不使用 API 标准与密钥——出图走的是这个模型行里的工作流，不是某个协议。",
+      "comfyCheckLabel": "连接检查",
+      "comfyCheckHint": "检查 ComfyUI 是否在跑、以及它是否接受本应用的请求。",
+      "comfyTestOk": "连接成功，ComfyUI {{version}}。",
+      "comfyTestForbidden": "ComfyUI 在跑，但拒绝了本应用的请求（403）。它默认会拦下 Origin 与自身地址不一致的请求，本应用发的正是这样的请求。请给 ComfyUI 的启动命令加上 --enable-cors-header 后重启，再试一次。",
+      "comfyTestUnreachable": "连不上 ComfyUI——确认它已启动、地址和端口正确（默认 http://127.0.0.1:8188）。{{detail}}"
     },
     "models": {
       "configured": "已配置模型",
@@ -1664,7 +1672,8 @@
       "translateFormat_sakura": "Sakura（日→中）",
       "translateFormatHint": "如果这是一个专用翻译模型（提示词格式在训练时就固定了），在这里声明它的格式。普通模型保持「普通模型」不动。",
       "translateFormatHintOn": "已声明为专用翻译模型：它只做日译中、不读指令，因此不会再出现在主模型和其它子代理的模型列表里，只能绑定给「日中翻译」子代理。",
-      "effortLabelAnthropic": "力度"
+      "effortLabelAnthropic": "力度",
+      "comfyDefaultName": "ComfyUI 工作流"
     },
     "probe": {
       "title": "探测真实上限",

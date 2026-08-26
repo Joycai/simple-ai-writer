@@ -1,7 +1,9 @@
 # 本地 ComfyUI 生图接入方案
 
-> **状态：三期全部实施完毕**——PR1（生成链路 + Beta 开关）、PR2（参考图/
-> 图生图 + 负面提示词）、PR3（人设校准循环）。
+> **状态：PR1~PR5 已实施**——PR1（生成链路 + Beta 开关）、PR2（参考图/
+> 图生图 + 负面提示词）、PR3（人设校准循环）、PR4（配置流程，§7）、
+> PR5（负面提示词打通 agent 链路，§8）。§8.2 的第 4 条（校准循环的负面
+> 诊断）仍未做。
 >
 > 目标：让一台本地 ComfyUI 实例成为应用的第五条出图路由——作者在 ComfyUI 里
 > 搭好并跑通工作流，导出 API 格式 JSON，在应用里登记成一个「模型」；应用只做
@@ -183,3 +185,134 @@ PR1 明确不做（PR2 已兑现前两条）：`req.images`（参考图/图生�
 | 盲发 /interrupt 打断作者自己的任务 | 先 queue delete，再核对 queue_running 里的 prompt_id 才 interrupt |
 | 识别错节点（把词填进负面） | 导入时展示识别结果；标题约定可显式覆盖；测试锁住负面先于正面的判定顺序 |
 | 长渲染超时 | 600s 任务级 deadline（与 DashScope 异步一致），UI 的停止按钮全程有效 |
+
+---
+
+## 7. PR4 · 配置这条路本身（2026-08-26）
+
+> 状态：本节为 PR4 的设计，随 PR4 实施。
+
+三期落地后暴露的不是功能缺口，而是**配置流程**的缺口：作者知道 ComfyUI 在
+本机跑着，却配不出一个能出图的模型行。原因有三条，都不在 ComfyUI 一侧。
+
+### 7.1 症状：这条路由上的反馈全是假阴性
+
+实测（作者机器，ComfyUI 默认参数启动于 `127.0.0.1:8188`）：
+
+| 请求 | 结果 |
+| --- | --- |
+| `GET /system_stats`，不带 Origin | 200 |
+| `GET /system_stats`，`Origin: http://localhost` | **403** |
+| `GET /system_stats`，`Origin: http://127.0.0.1:8188` | 200 |
+| `POST /prompt`，不带 Origin | 400（handler 跑到了，空 body 被拒） |
+| `POST /prompt`，`Origin: http://localhost` | **403** |
+| `GET /不存在的路径`，`Origin: http://localhost` | **403**（不带 Origin 是 404） |
+
+最后一行是判据：**不存在的路径也 403，说明拒绝发生在路由之前**。ComfyUI 默认
+挂 `origin_only_middleware`（未传 `--enable-cors-header` 时启用的防 DNS
+rebinding 检查）：Origin 的 host 与 Host 头不一致就 403。而 `lib/http.ts`
+对所有本地地址强制附一个 `Origin: http://localhost`——那是为 Ollama 在打包
+Windows 版上的白名单写的（见该文件顶部注释）。
+
+后果不只是失败，是**失败得毫无信息**：请求根本没到 `/prompt`，所以改提示词、
+去掉 `quality` / 2K 这类参数全都不会有任何变化，作者会一路怀疑到提示词和模型
+参数上去。叠加上另外两个必然失败的按钮（「测试连接」探 OpenAI 式 `/models`、
+「拉取模型列表」同理），作者拿到的每一个信号都指向「我配错了」，而实际上
+ComfyUI 一直好好地跑着。
+
+**处置：不改 `lib/http.ts`。** 曾评估过把 Origin 镜像成目标自身的 origin
+（实测可行，见上表第三行），作者决定不做——那条改动的验证成本落在打包 Windows
+版 + 一台没设 `OLLAMA_ORIGINS` 的干净 Ollama 上，而收益只是省掉一个启动参数。
+于是 **`--enable-cors-header` 是这条路由的正式前置条件**，这句话必须出现在
+作者会看到的地方（测试连接的 403 分支 + 预设说明），而不是只躺在文档里。
+
+### 7.2 症状：配置顺序是反的
+
+- ComfyUI 借用「供应商 = 一个 LLM 端点」的抽象，但表单里三个必填项对它全是
+  空仪式：API 标准不参与分派（`image.ts` 按 `caps.route` 分派）、模型 ID 从不
+  上线、API Key 不存在。
+- 唯一那句说明（`comfyWorkflowHint` 的「供应商地址填 ComfyUI 的地址」）写在
+  **模型抽屉**里——作者必须先猜对供应商怎么建，才能看到告诉他供应商怎么建的
+  那句话。
+
+### 7.3 决策：不升格为第七个 `apiStandard`
+
+诱人，但错。`ApiStandard` 有 70 余处引用、背后是三个 `ProtocolFamily`，
+`familyOf` / `authModesFor` / `conn` / 探测都要多一个永远不说话的分支；而
+ComfyUI 根本不是一个协议族——它没有 chat、没有 embedding，只有出图。
+**怪的是流程顺序，不是标志位放错了地方。** `caps.route` 保持不动，改流程。
+
+同理不给 `providers` 表加 `kind` 列：那要连带改 `configTransfer` 与配置备份
+信封，而"这个供应商是 ComfyUI"这件事在需要它的两个时刻都能免费推出来。
+
+### 7.4 形状：预设 chip + 保存直通 + 一次性提示
+
+1. **`PROVIDER_PRESETS` 加一行 `ComfyUI（本地）`** → `http://127.0.0.1:8188`，
+   `openai_compat`（不参与分派，仅为让表单有个合法值）。选中后表单**收缩**：
+   API 标准与 API Key 两行折叠成一句说明，Base URL 保留（端口会变）。
+2. **保存后直通模型抽屉**：新建成功即以新供应商 id 打开 ModelDrawer，预置
+   `type = image`、`caps.route = "comfyui"`，作者落在「导入工作流 JSON」上。
+   全程两个动作：点预设、导入工作流。这条是 UI 流程状态（`Drawer` 类型多一个
+   可选 `comfy` 位），**不落盘**。
+3. **测试连接改探 `GET /system_stats`**：仅当供应商是 comfy 预设时。403 翻成
+   人话并点名 `--enable-cors-header`；200 报 ComfyUI 版本。这是整条路上唯一
+   能把「服务在跑但拒绝了我们」和「服务没跑」分开的地方。
+4. **后续新建模型默认同路由**：该供应商下**已有** comfyui 模型时，新模型默认
+   `type=image` + `route=comfyui`。读现成的 models 即可，零新状态。
+
+### 7.5 明确不做
+
+- 不改 `lib/http.ts` 的 Origin（见 7.1）。
+- 不自动探测 ComfyUI 是否在跑、不做端口扫描——一个按钮按下去才发请求。
+- 不做「按名字拉取工作流 + UI→API 自动转换」，理由同 §1.1，未变。
+
+## 8. PR5 · 负面提示词打通 agent 链路
+
+> 状态：已实施（§8.2 第 4 条除外）。
+
+负面提示词不是「不支持」，是**半支持**——弹窗有、工具没有：
+
+| 环节 | 现状 |
+| --- | --- |
+| 工作流识别 + 注入负面节点（`comfy/workflow.ts`） | ✅ |
+| wire 字段 `ImageRequest.negative`（仅 comfyui 路由消费） | ✅ |
+| 交互式弹窗的负面输入框（`ImageGenModal`） | ✅ |
+| `generate_image` / `edit_image` / `redraw_lore_image` 的 schema | ❌ |
+| `IllustrateProposal` | ❌ |
+| `illustrate.ts` 组 request | ❌ |
+| 校准循环的评审诊断（`calibrate.ts`） | ❌ 只改正面 |
+
+即：**作者从弹窗画图有负面词，助手替作者画图恒定没有**——工作流模板里的默认
+负面还在跑，但模型和作者都够不着它。
+
+### 8.1 作用域：只服务 comfyui 路由
+
+作者拍板：负面提示词只在 comfyui 路由上存在，**不为其他路由折进正文**。
+（弹窗对非 comfy 模型仍走它自己既有的 `specToPrompt` 折叠，那是既有行为，
+PR5 不动它。）这条把 PR5 的表面积压到最小：新字段只有一个消费者，没有第二种
+语义要维护。
+
+### 8.2 落点
+
+1. **三个绘图工具**都增加 `negative` 参数——`generate_image` 之外，两个改图
+   工具也要，因为 img2img 跑的是同一个采样器：一个在 `generate_image` 上有效、
+   在 `redraw_lore_image` 上静默失效的字段就是一份等着被提的 bug。
+   **撞了 `agentToolBudget.test.ts` 的棘轮**——不是整套 preset 的上限
+   （14,108 / 15,000，没碰到），是常驻那一半：9,300 → **9,500**（实测
+   9,457，三个参数共 +189）。这 189 由每一次对话付，包括根本没绑 ComfyUI
+   模型的那些；写进测试注释里的理由是：另一条路更糟——把「不要水印」折进
+   正面提示词不是功能的降级版而是它的反面。第一版措辞把「其它模型会丢弃」
+   解释了两遍，白花 50，压成一句。
+2. `IllustrateProposal.negative` + 审批卡显示：作者要看得见这张图在「避免」
+   什么，否则这个字段就是一个模型能写而作者看不见的隐藏参数。
+3. `illustrate.ts` 组 req 时带上——**仅 comfyui 路由**，其余路由丢弃（不折回
+   正面：SD 会画出它读到的东西，这条在 §5 PR2 已经付过一次学费）。
+
+   **两道闸而不是一道**：提案时按绑定模型过滤（卡片上绝不出现一条即将被
+   丢弃的行），落盘时按*真正要作画的那个模型*再过滤一次——子代理绑定可以
+   在看卡片和点批准之间被改掉，而解析模型是在后一个时刻发生的。另外，提案
+   时被丢弃的负面会**在工具结果里告诉模型**（"'negative' was ignored —
+   … is not a local ComfyUI model"）：沉默会让模型继续为一个到不了任何地方
+   的字段花 token，更糟的是让它以为这张图真的排除了它列出的东西。
+4. 校准循环的双诊断加 `revisedNegative`：评审员报「有水印」「多余的手」时，
+   负面词正是唯一该写的地方。（可选，PR5 落地后再评估值不值。）

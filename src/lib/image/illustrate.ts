@@ -77,8 +77,15 @@ export async function runIllustration(
     resolution: proposal.resolution,
     quality: proposal.quality,
   };
-  const req = { prompt: proposal.prompt, n: 1, ...imageRequestParams(model.caps, sel), signal };
-  const editReq = { prompt: proposal.prompt, n: 1, ...imageRequestParams(model.caps, sel, { edit: true }), signal };
+  // The proposal only carries a negative when it was made against a comfyui
+  // model (see proposeIllustration), and only comfyImage reads the field — but
+  // the binding can change between the card and the approval, so the route is
+  // re-checked here against the model actually about to draw.
+  const negative = model.caps?.route === "comfyui" && proposal.negative?.trim()
+    ? { negative: proposal.negative.trim() }
+    : {};
+  const req = { prompt: proposal.prompt, n: 1, ...negative, ...imageRequestParams(model.caps, sel), signal };
+  const editReq = { prompt: proposal.prompt, n: 1, ...negative, ...imageRequestParams(model.caps, sel, { edit: true }), signal };
 
   // Input images: the picture being edited, plus any references a generation
   // leans on. Either kind makes the call image-conditioned, so both ride the

@@ -297,6 +297,16 @@ export interface IllustrateProposal extends ProposalBase {
   /** Quality tier ("low"/"medium"/"high") — GPT-Image dialect only. */
   quality?: string;
   /**
+   * What must NOT appear — the sampler's own negative conditioning.
+   *
+   * Only ever set when the bound model runs the comfyui route, because it is
+   * the only route with a wire field for it. Filtered at proposal time rather
+   * than at apply time so the card never shows the author a line that will be
+   * dropped — and never folded into `prompt` for the routes that lack it: SD
+   * attracts what it reads, so "no watermark" in the positive invites one.
+   */
+  negative?: string;
+  /**
    * Existing picture this one edits, as an absolute path. Present makes the
    * run an edit; the card shows it, since "change this picture" is only
    * reviewable when you can see the picture.
@@ -2143,6 +2153,11 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
               enum: ["low", "medium", "high"],
               description: "Quality tier (GPT-Image only; big price difference). Omit for default.",
             },
+            negative: {
+              type: "string",
+              description:
+                "What must NOT appear — 'watermark, extra fingers, blurry'. Comma-separated tags, never phrased as an instruction ('avoid X' draws X). Local ComfyUI models only; dropped for every other image model.",
+            },
             reason: {
               type: "string",
               description: "One line for the approval card: why this picture, now.",
@@ -2207,6 +2222,11 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             reason: {
               type: "string",
               description: "One line for the approval card: why this change.",
+            },
+            negative: {
+              type: "string",
+              description:
+                "What must NOT appear in the result — 'watermark, extra fingers, blurry'. Comma-separated tags, never phrased as an instruction ('avoid X' draws X). Local ComfyUI models only; dropped for every other image model.",
             },
           },
           required: ["source", "instruction"],
@@ -2273,6 +2293,11 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             reason: {
               type: "string",
               description: "One line for the approval card: why this change.",
+            },
+            negative: {
+              type: "string",
+              description:
+                "What must NOT appear in the result — 'watermark, extra fingers, blurry'. Comma-separated tags, never phrased as an instruction ('avoid X' draws X). Local ComfyUI models only; dropped for every other image model.",
             },
           },
           required: ["entity", "file", "instruction"],
