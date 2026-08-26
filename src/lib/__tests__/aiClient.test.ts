@@ -4,6 +4,7 @@ import {
   type ApiStandard, type AuthMode, type StreamChunk, type StreamMessage, type ToolDefinition,
 } from "../ai";
 import type { ReasoningEffort, ThinkingDialect } from "../ai/reasoning";
+import { __resetForcedToolChoiceMemo } from "../ai/toolChoice";
 import type { ServerToolId } from "../ai/serverTools";
 
 /** Build a fetch Response whose body streams the given raw chunks. */
@@ -77,6 +78,10 @@ const text = (received: StreamChunk[]) =>
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  // Session-scoped by design (lib/ai/toolChoice.ts), so one test teaching it
+  // that this endpoint refuses forcing would silently rewrite the next test's
+  // request body.
+  __resetForcedToolChoiceMemo();
 });
 
 describe("streamCompletion — context size guard", () => {
@@ -625,6 +630,94 @@ describe("streamCompletion — forced tool_choice under the OpenAI switch dialec
       reasoningEffort: "high",
     });
     expect(calls[0].body.tool_choice).toEqual(forced);
+  });
+});
+
+describe("streamCompletion — endpoints that reject a forced tool_choice", () => {
+  const done = ['data: {"choices":[{"delta":{"content":"ok"}}]}\n', "data: [DONE]\n"];
+  const tool: ToolDefinition = {
+    type: "function",
+    function: { name: "emit", description: "d", parameters: { type: "object", properties: {} } },
+  };
+  const forced = { type: "function" as const, function: { name: "emit" } };
+  const REJECTION =
+    '{"error":{"message":"Thinking mode does not support this tool_choice",' +
+    '"type":"invalid_request_error","param":null,"code":"invalid_request_error"}}';
+
+  /** 400s the first `failures` requests, then streams `done`. */
+  function mockRejectingFetch(failures: number) {
+    const calls: { url: string; body: Record<string, unknown> }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        calls.push({ url: String(url), body: JSON.parse(String(init.body)) });
+        return calls.length <= failures
+          ? new Response(REJECTION, { status: 400 })
+          : sseResponse(done);
+      })
+    );
+    return calls;
+  }
+
+  function run(toolChoice: "required" | typeof forced | "auto", received: StreamChunk[] = []) {
+    return streamCompletion({
+      baseUrl: "https://api.deepseek.example",
+      apiKey: "k",
+      standard: "openai_compat",
+      modelId: "deepseek-v4-flash",
+      messages: [{ role: "user", content: "hi" }],
+      tools: [tool],
+      toolChoice,
+      onChunk: (c) => received.push(c),
+    });
+  }
+
+  it("retries the same request once with auto", async () => {
+    const calls = mockRejectingFetch(1);
+    const received: StreamChunk[] = [];
+
+    await run(forced, received);
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0].body.tool_choice).toEqual(forced);
+    // Same request otherwise — the tools stay on the wire, only the order to
+    // use one is dropped.
+    expect(calls[1].body.tool_choice).toBe("auto");
+    expect(calls[1].body.tools).toEqual(calls[0].body.tools);
+    expect(calls[1].body.messages).toEqual(calls[0].body.messages);
+    expect(text(received)).toBe("ok");
+  });
+
+  it("stops forcing on that endpoint for the rest of the session", async () => {
+    const calls = mockRejectingFetch(1);
+
+    await run(forced);
+    await run("required");
+
+    // Three requests, not four: the second call never asks again.
+    expect(calls).toHaveLength(3);
+    expect(calls[2].body.tool_choice).toBe("auto");
+  });
+
+  it("surfaces the error when the retry fails too", async () => {
+    mockRejectingFetch(2);
+    await expect(run(forced)).rejects.toThrow("400");
+  });
+
+  it("does not retry an unrelated 400", async () => {
+    // A second, differently-shaped request would hide the real problem and
+    // double the cost of finding it (same argument as structured.ts's regex).
+    const calls: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        calls.push(1);
+        return new Response('{"error":{"message":"context length exceeded"}}', { status: 400 });
+      })
+    );
+
+    await expect(run(forced)).rejects.toThrow("context length exceeded");
+    expect(calls).toHaveLength(1);
   });
 });
 
