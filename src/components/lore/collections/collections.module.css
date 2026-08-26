@@ -1,0 +1,724 @@
+/*
+ * 集合的视觉语汇（设计稿 03 屏 24–31）。
+ *
+ * 一句话：**分类用颜色，集合用装订**。分类六色已经占满了墙面（还兼着头像底色与
+ * 候选徽标），集合再引入一套彩色，两套颜色会在同一张卡片上互相打架。所以归属由
+ * 装订边、竖排短名、翻面和骑缝双线来说——全部中性。
+ */
+
+/* ── 骑缝带：取材范围生效时，墙顶/面板顶多出来的那一条 ─────────────────── */
+.band {
+  padding: 13px 28px;
+  background: var(--color-bg-base);
+  /* 3px double 是这条带子唯一的身份标记：普通筛选永远不产生双线。 */
+  border-bottom: 3px double var(--color-border-accent);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+.bandNarrow { padding: 10px 16px; gap: 8px; }
+
+.bandEyebrow {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: 0.2em;
+  color: var(--color-accent);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.bandNarrow .bandEyebrow { font-size: 9px; letter-spacing: 0.16em; }
+
+.bandRule { width: 1px; height: 16px; background: var(--lore-bind-line); flex-shrink: 0; }
+
+.bandName {
+  font: 400 17px/1 var(--font-serif);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+.bandNarrow .bandName { font-size: 13px; }
+
+.bandCount { font: 400 11px/1 var(--font-mono); color: var(--color-text-muted); white-space: nowrap; }
+
+.bandExplain { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.bandExplainZh { font: 400 12px/1.35 var(--font-serif); color: var(--color-text-secondary); }
+.bandExplainEn { font: 400 10px/1.3 var(--font-mono); color: var(--color-text-faint); }
+
+.bandLink {
+  font: 500 11px/1 var(--font-sans);
+  color: var(--color-accent);
+  cursor: pointer;
+  border-bottom: 1px solid var(--color-border-accent);
+  white-space: nowrap;
+  background: none;
+  border-left: none; border-right: none; border-top: none;
+  padding: 0;
+}
+.bandReset {
+  font: 500 11px/1 var(--font-sans);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  background: none; border: none; padding: 0;
+}
+.bandReset:hover { color: var(--color-accent); }
+
+/* ── 头部的取材范围按钮 ─────────────────────────────────────────────── */
+.scopeButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 11px;
+  /* 「全部」＝虚线（没立起来的围栏），生效＝实线赭石。 */
+  border: 1px dashed var(--lore-neutral-line);
+  background: var(--lore-sub-bg);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.scopeButtonActive {
+  border: 1px solid var(--color-accent);
+  background: var(--color-bg-raised);
+}
+.scopeButtonLabel {
+  font: 500 9px/1 var(--font-sans);
+  letter-spacing: 0.16em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+.scopeButtonActive .scopeButtonLabel { color: var(--color-accent); }
+.scopeButtonValue { font: 500 13px/1 var(--font-serif); color: var(--color-text-primary); }
+.scopeButtonCaret { font: 400 10px/1 var(--font-mono); color: var(--color-text-faint); }
+.scopeButtonActive .scopeButtonCaret { color: var(--color-accent); }
+
+/* ── 切换器弹层 ─────────────────────────────────────────────────────── */
+.menu {
+  position: fixed;
+  z-index: 400;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--lore-shadow-modal);
+  display: flex;
+  flex-direction: column;
+  max-height: 70vh;
+}
+.menuHead {
+  padding: 13px 16px;
+  background: var(--color-bg-base);
+  border-bottom: 3px double var(--color-border-accent);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.menuHeadRow { display: flex; align-items: center; gap: 8px; }
+.menuHint { font: italic 400 11px/1.45 var(--font-serif); color: var(--color-text-muted); }
+
+.menuFilter {
+  padding: 10px 15px;
+  border-bottom: 1px solid var(--color-border-soft);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.menuFilterInput {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  font: 400 11px/1 var(--font-mono);
+  color: var(--color-text-primary);
+}
+.menuFilterInput::placeholder { color: var(--color-text-faint); }
+
+.menuList { padding: 6px 0; overflow-y: auto; display: flex; flex-direction: column; }
+
+.row {
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  text-align: left;
+  width: 100%;
+}
+.row:hover { background: var(--lore-sub-bg); }
+.rowActive {
+  background: var(--color-bg-base);
+  border-top: 1px solid var(--color-border-soft);
+  border-bottom: 1px solid var(--color-border-soft);
+}
+.rowActive:hover { background: var(--color-bg-base); }
+.rowNarrow { padding: 9px 16px; gap: 9px; }
+
+/* 方点：实心＝生效中，空心＝可选，虚线＝未归集。刻意不是圆点——全局零圆角。 */
+.dot { width: 8px; height: 8px; border: 1px solid var(--lore-neutral-line); flex-shrink: 0; }
+.dotOn { background: var(--color-accent); border-color: var(--color-accent); }
+.dotDashed { border-style: dashed; }
+.rowNarrow .dot { width: 7px; height: 7px; }
+
+.rowMain { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.rowName {
+  font: 400 15px/1.2 var(--font-serif);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rowActive .rowName { font-weight: 500; }
+.rowNarrow .rowName { font-size: 13px; }
+.rowNameGhost { font-style: italic; color: var(--color-text-secondary); }
+.rowBreakdown {
+  font: 400 9px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+  color: var(--color-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rowActive .rowBreakdown { color: var(--color-text-muted); }
+.rowHint { font: italic 400 10px/1.3 var(--font-serif); color: var(--color-text-faint); }
+.rowTail { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+.rowCount { font: 400 11px/1 var(--font-mono); color: var(--color-text-muted); }
+.rowActive .rowCount { color: var(--color-accent); }
+.rowBadge {
+  font: 500 9px/1 var(--font-sans);
+  letter-spacing: 0.14em;
+  color: var(--color-accent);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.menuDivider { height: 1px; background: var(--color-border-soft); margin: 6px 16px; }
+
+.menuFold {
+  padding: 9px 16px;
+  border-top: 1px dashed var(--color-border);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font: 500 11px/1 var(--font-sans);
+  color: var(--color-accent);
+  cursor: pointer;
+  background: none;
+  border-left: none; border-right: none; border-bottom: none;
+  width: 100%;
+  text-align: left;
+}
+.menuFoldNote { font: 400 10px/1 var(--font-mono); color: var(--color-text-faint); }
+
+.menuNote {
+  padding: 11px 16px;
+  border-top: 1px dashed var(--color-border);
+  background: var(--lore-sub-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.menuNoteZh { font: 400 11px/1.6 var(--font-serif); color: var(--color-text-secondary); }
+.menuNoteEn { font: 400 9px/1.4 var(--font-mono); color: var(--color-text-faint); }
+.menuNoteMono { font: 400 10px/1.55 var(--font-mono); color: var(--color-text-faint); white-space: pre-line; }
+
+.menuFoot {
+  padding: 10px 16px;
+  border-top: 1px solid var(--color-border-soft);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.menuFootLink {
+  font: 500 11px/1 var(--font-sans);
+  color: var(--color-accent);
+  cursor: pointer;
+  background: none; border: none; padding: 0;
+}
+.menuFootLink.muted { color: var(--color-text-muted); }
+.menuFootLink.muted:hover { color: var(--color-accent); }
+
+/* ── 装订栏（墙左侧 212px） ──────────────────────────────────────────── */
+.rail {
+  width: 212px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--color-border-soft);
+  background: var(--lore-bind-bg);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.railHead { padding: 18px 18px 12px; display: flex; align-items: center; gap: 8px; }
+.railEyebrow {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: 0.2em;
+  color: var(--color-accent);
+  text-transform: uppercase;
+}
+.railAdd {
+  font: 500 13px/1 var(--font-sans);
+  color: var(--color-accent);
+  cursor: pointer;
+  background: none; border: none; padding: 0;
+}
+.railList { display: flex; flex-direction: column; overflow-y: auto; min-height: 0; }
+
+.railRow {
+  padding: 9px 18px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
+  text-align: left;
+  width: 100%;
+}
+.railRow:hover { background: var(--lore-sub-bg); }
+/* 筛选中＝左侧赭石实心边 + 卡面底。眼睛的状态，不是围栏。 */
+.railRowOn {
+  border-left-color: var(--color-accent);
+  background: var(--color-bg-raised);
+  padding-left: 15px;
+}
+.railRowOn:hover { background: var(--color-bg-raised); }
+.railRowName { font: 400 14px/1.2 var(--font-serif); color: var(--color-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.railRowOn .railRowName { font-weight: 500; }
+.railRowGhost { font-style: italic; color: var(--color-text-muted); }
+.railRowCount { font: 400 11px/1 var(--font-mono); color: var(--color-text-muted); flex-shrink: 0; }
+
+/* 围栏生效的那一行：上下细线夹住 + 方点 + 一行 mono 说明。 */
+.railRowScoped {
+  background: var(--lore-sub-bg);
+  border-top: 1px solid var(--color-border-soft);
+  border-bottom: 1px solid var(--color-border-soft);
+  align-items: center;
+}
+.railScopeDot { width: 7px; height: 7px; background: var(--color-accent); flex-shrink: 0; }
+.railScopeNote {
+  padding: 0 18px 9px 33px;
+  background: var(--lore-sub-bg);
+  font: 400 9px/1.5 var(--font-mono);
+  letter-spacing: 0.04em;
+  color: var(--color-accent);
+  border-bottom: 1px solid var(--color-border-soft);
+}
+
+/* 悬停才出现的「设为取材范围」：它改的是 AI 视野，不该和筛选一样随手可点。 */
+.railSetScope {
+  display: none;
+  padding: 0 18px 9px 18px;
+  background: var(--lore-sub-bg);
+}
+.railRowWrap:hover .railSetScope { display: block; }
+.railSetScopeLink {
+  font: 500 10px/1 var(--font-sans);
+  color: var(--color-accent);
+  cursor: pointer;
+  border-bottom: 1px solid var(--color-border-accent);
+  background: none; border-left: none; border-right: none; border-top: none; padding: 0;
+}
+
+.railDivider { height: 1px; background: var(--color-border-soft); margin: 8px 18px; }
+.railNote {
+  padding: 12px 18px;
+  font: 400 10px/1.7 var(--font-mono);
+  color: var(--color-text-faint);
+  white-space: pre-line;
+}
+.railSpacer { flex: 1; }
+.railFoot {
+  padding: 14px 18px;
+  border-top: 1px dashed var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.railFootLink {
+  font: 500 11px/1 var(--font-sans);
+  color: var(--color-accent);
+  cursor: pointer;
+  background: none; border: none; padding: 0;
+  text-align: left;
+}
+.railFootHint { font: italic 400 11px/1.55 var(--font-serif); color: var(--color-text-muted); }
+
+/* 围栏说明卡（墙左栏底部，只在围栏生效时出现） */
+.railFence {
+  margin: 14px;
+  padding: 12px 13px;
+  border: 1px dashed var(--color-border-accent);
+  background: var(--lore-sub-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.railFenceTitle {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: 0.16em;
+  color: var(--color-accent);
+  text-transform: uppercase;
+}
+.railFenceBody { font: 400 11px/1.6 var(--font-serif); color: var(--color-text-secondary); }
+
+/* 空态：一个集合都还没有 */
+.railEmpty { padding: 4px 18px 16px; display: flex; flex-direction: column; gap: 10px; }
+.railEmptyZh { font: 400 12px/1.65 var(--font-serif); color: var(--color-text-secondary); }
+.railEmptyEn { font: 400 9px/1.4 var(--font-mono); color: var(--color-text-faint); }
+.railEmptyCta {
+  padding: 8px 0;
+  background: var(--color-accent);
+  color: var(--color-card);
+  border: none;
+  font: 500 12px/1 var(--font-sans);
+  cursor: pointer;
+}
+.railEmptyAfter { font: italic 400 11px/1.5 var(--font-serif); color: var(--color-text-faint); }
+
+/* ── 卡片装订边 ─────────────────────────────────────────────────────── */
+.edge {
+  width: 22px;
+  flex-shrink: 0;
+  border-right: 1px dashed var(--lore-bind-line);
+  background: var(--lore-bind-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0;
+  gap: 10px;
+}
+/* 空边就是答案：未归集不写字，只留一条比卡面还淡的边。 */
+.edgeEmpty { background: var(--color-bg-raised); justify-content: center; }
+.edgeSelectable { width: 24px; border-right-style: solid; border-right-color: var(--lore-edge-inner); background: var(--color-bg-base); gap: 9px; padding: 10px 0; }
+
+.edgeMark {
+  writing-mode: vertical-rl;
+  font: 500 9px/1 var(--font-mono);
+  letter-spacing: 0.12em;
+  color: var(--lore-bind-mark);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.edgeMarkGhost { font-weight: 400; color: var(--lore-neutral-line); }
+.edgeMarkIn { color: var(--color-accent); }
+.edgeMarkOut { color: var(--lore-neutral-line); }
+.edgeRule { width: 10px; height: 1px; background: var(--lore-flip-border); flex-shrink: 0; }
+
+/* 勾选框只在悬停时浮出——装订边平时只讲归属。 */
+.edgeCheck {
+  width: 11px;
+  height: 11px;
+  border: 1px solid var(--lore-neutral-line);
+  background: var(--lore-sub-bg);
+  flex-shrink: 0;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.edgeHost:hover .edgeCheck, .edgeCheck:focus-visible { opacity: 1; }
+.edgeCheckOn {
+  opacity: 1;
+  width: 12px;
+  height: 12px;
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-card);
+  font: 500 9px/1 var(--font-sans);
+}
+
+/* ── 翻面卡片：围栏外的条目 ─────────────────────────────────────────── */
+.flip {
+  background: var(--lore-flip-bg);
+  border: 1px dashed var(--lore-flip-border);
+  padding: 13px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 78px;
+  justify-content: center;
+  cursor: pointer;
+}
+.flip:hover { border-color: var(--color-border-accent); }
+.flipName { font: 400 14px/1.25 var(--font-serif); color: var(--lore-flip-text); }
+.flipMeta { font: 400 9px/1.4 var(--font-mono); letter-spacing: 0.05em; color: var(--color-text-faint); }
+
+/* 置顶越栏：唯一一处让围栏外的卡片保持正面的情形。 */
+.pinnedBadgeRow { display: flex; align-items: center; gap: 6px; margin-bottom: 7px; }
+.pinnedBadge {
+  padding: 3px 7px;
+  background: var(--lore-density-1);
+  color: var(--color-text-prose);
+  font: 500 10px/1 var(--font-sans);
+}
+.pinnedNote { font: 400 9px/1.3 var(--font-mono); color: var(--color-accent); }
+
+/* ── 右页边的围栏标注 ───────────────────────────────────────────────── */
+.pageEdge {
+  width: 26px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--color-border-accent);
+  box-shadow: inset 3px 0 0 -1px var(--lore-edge-inner);
+  background: var(--color-bg-base);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pageEdgeText {
+  writing-mode: vertical-rl;
+  font: 500 9px/1 var(--font-mono);
+  letter-spacing: 0.3em;
+  color: var(--color-border-accent);
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* ── 归集勾选清单（单条 / 批量共用） ────────────────────────────────── */
+.assign {
+  position: fixed;
+  z-index: 420;
+  width: 250px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--lore-flip-border);
+  box-shadow: var(--lore-shadow-modal);
+  display: flex;
+  flex-direction: column;
+  max-height: 70vh;
+}
+.assignHead {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--color-border-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.assignTitle {
+  font: 500 9px/1 var(--font-sans);
+  letter-spacing: 0.18em;
+  color: var(--color-accent);
+  text-transform: uppercase;
+}
+.assignHint { font: italic 400 10px/1.35 var(--font-serif); color: var(--color-text-faint); }
+.assignHintMono { font: 400 10px/1.4 var(--font-mono); color: var(--color-text-faint); }
+.assignList { padding: 4px 0; display: flex; flex-direction: column; overflow-y: auto; }
+.assignRow {
+  padding: 9px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  text-align: left;
+  width: 100%;
+}
+.assignRow:hover { background: var(--lore-sub-bg); }
+.assignName { font: 400 13px/1.2 var(--font-serif); color: var(--color-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.assignCount { font: 400 10px/1 var(--font-mono); color: var(--color-text-faint); flex-shrink: 0; }
+.assignCountSome { color: var(--color-text-muted); }
+
+.check {
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--lore-neutral-line);
+  background: var(--lore-sub-bg);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.checkOn { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-card); font: 500 9px/1 var(--font-sans); }
+/* 部分已在＝短横。勾和空都会骗人：勾说「全都在」，空说「都不在」。 */
+.checkSome { background: var(--color-accent); border-color: var(--color-accent); }
+.checkDash { width: 6px; height: 1px; background: var(--color-card); }
+
+.assignNew {
+  padding: 9px 14px;
+  border-top: 1px dashed var(--color-border);
+  font: 500 11px/1 var(--font-sans);
+  color: var(--color-accent);
+  cursor: pointer;
+  background: none;
+  border-left: none; border-right: none; border-bottom: none;
+  text-align: left;
+  width: 100%;
+}
+.assignNewRow { padding: 8px 12px; border-top: 1px dashed var(--color-border); display: flex; gap: 7px; align-items: center; }
+.assignNewInput {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px dashed var(--color-border-accent);
+  background: var(--lore-sub-bg);
+  font: 400 12px/1 var(--font-serif);
+  color: var(--color-text-primary);
+  outline: none;
+}
+.assignNewInput::placeholder { font-style: italic; color: var(--color-text-faint); }
+
+.assignFoot {
+  padding: 11px 14px;
+  border-top: 1px solid var(--color-border-soft);
+  background: var(--color-bg-base);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.assignFootHint { font: italic 400 11px/1.4 var(--font-serif); color: var(--color-text-muted); }
+.assignApply {
+  padding: 6px 12px;
+  background: var(--color-accent);
+  color: var(--color-card);
+  border: none;
+  font: 500 11px/1 var(--font-sans);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* ── 多选条 ─────────────────────────────────────────────────────────── */
+.selectHead {
+  padding: 11px 28px;
+  background: var(--color-bg-base);
+  border-bottom: 1px solid var(--color-border-soft);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+.selectBar {
+  padding: 12px 26px;
+  /* 同一条骑缝双线：多选和围栏都是「这一刻墙的规则变了」。 */
+  border-top: 3px double var(--color-border-accent);
+  background: var(--color-bg-base);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+.selectCount { font: 400 20px/1 var(--font-serif); color: var(--color-text-primary); }
+.selectBreakdown { font: 400 11px/1 var(--font-mono); color: var(--color-text-muted); }
+.selectBtn {
+  padding: 8px 14px;
+  background: var(--color-accent);
+  color: var(--color-card);
+  border: none;
+  font: 500 12px/1 var(--font-sans);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.selectBtnSecondary { background: var(--color-bg-raised); color: var(--color-accent); border: 1px solid var(--color-border-accent); }
+.selectBtnGhost { background: var(--color-bg-raised); color: var(--color-text-secondary); border: 1px solid var(--color-border); }
+
+/* ── 墙底说明条 ─────────────────────────────────────────────────────── */
+.wallFoot {
+  padding: 11px 28px;
+  border-top: 1px solid var(--color-border-soft);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+.wallFootMono { font: 400 10px/1.5 var(--font-mono); color: var(--color-text-muted); }
+.wallFootRule { width: 1px; height: 12px; background: var(--color-border); flex-shrink: 0; }
+.wallFootZh { font: italic 400 12px/1.4 var(--font-serif); color: var(--color-text-secondary); }
+.wallFootEn { font: 400 10px/1.5 var(--font-mono); color: var(--color-text-faint); }
+.wallFootSwatch { width: 14px; height: 10px; background: var(--lore-flip-bg); border: 1px dashed var(--lore-flip-border); flex-shrink: 0; }
+.wallFootBtn {
+  padding: 6px 12px;
+  border: 1px solid var(--color-border-accent);
+  background: var(--color-bg-raised);
+  color: var(--color-accent);
+  font: 500 11px/1 var(--font-sans);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* ── 详情页主词条栏的集合区 ─────────────────────────────────────────── */
+.detailBlock { display: flex; flex-direction: column; gap: 8px; }
+.detailHead { display: flex; align-items: center; gap: 8px; }
+.detailLabel {
+  font: 500 10px/1 var(--font-sans);
+  letter-spacing: 0.14em;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+.detailHint { font: 400 10px/1 var(--font-mono); color: var(--color-text-faint); }
+.detailChange {
+  font: 500 11px/1 var(--font-sans);
+  color: var(--color-accent);
+  cursor: pointer;
+  background: none; border: none; padding: 0;
+}
+.detailList { display: flex; flex-direction: column; gap: 6px; }
+/* 2px 中性左边——同一条「装订」语汇的最小形态。 */
+.detailItem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  background: var(--lore-bind-bg);
+  border-left: 2px solid var(--lore-bind-mark);
+}
+.detailItemName { font: 400 13px/1.2 var(--font-serif); color: var(--color-text-primary); overflow: hidden; text-overflow: ellipsis; }
+.detailItemTail { font: 400 10px/1 var(--font-mono); color: var(--color-text-faint); flex-shrink: 0; }
+.detailItemScope { font: 400 9px/1 var(--font-mono); color: var(--color-accent); flex-shrink: 0; }
+.detailNone { font: italic 400 12px/1.5 var(--font-serif); color: var(--color-text-faint); }
+.detailNote { font: italic 400 11px/1.5 var(--font-serif); color: var(--color-text-muted); }
+
+/* 「显式 > 围栏」——点开的条目一定进上下文 */
+.detailFence {
+  margin-top: 8px;
+  padding: 11px 15px;
+  background: var(--lore-sub-bg);
+  border: 1px dashed var(--color-border-accent);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.detailFenceZh { font: 400 12px/1.5 var(--font-serif); color: var(--color-text-secondary); }
+.detailFenceEn { font: 400 10px/1 var(--font-mono); color: var(--color-accent); white-space: nowrap; }
+
+/* 面包屑上的「来自筛选」 */
+.crumbChip {
+  padding: 3px 9px;
+  background: var(--lore-bind-bg);
+  border-left: 2px solid var(--lore-bind-mark);
+  font: 400 12px/1 var(--font-serif);
+  color: var(--color-text-secondary);
+}
+
+/* 悬停才浮出「设为取材范围」，所以每一行要有自己的悬停宿主。 */
+.railRowWrap { display: flex; flex-direction: column; }
+
+/* 框选矩形。fixed 定位，因为坐标直接来自 pointer 事件的视口坐标——换算成格纸的
+   局部坐标要跟着滚动位置走，而滚动在拖拽中随时会变。 */
+.marquee {
+  position: fixed;
+  border: 1px dashed var(--color-accent);
+  background: var(--color-accent-tint);
+  pointer-events: none;
+  z-index: 5;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 6px 8px;
+}
+.marqueeNote { font: 400 10px/1 var(--font-mono); color: var(--color-accent); }
+
+/* 未归集筛选下的一句话。它是**陈述**不是警告：未归集不是错误态，所以没有黄、
+   没有图标，只有一句「归集它们，或者就这样放着」。 */
+.ungroupedHint {
+  margin-bottom: 16px;
+  font: italic 400 13px/1.6 var(--font-serif);
+  color: var(--color-text-muted);
+}
+
+/* 分类行右端那句话。它只是脚注，任何时候都该先让位给 chips。 */
+.chipsNote {
+  font: italic 400 11px/1 var(--font-serif);
+  color: var(--color-text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}

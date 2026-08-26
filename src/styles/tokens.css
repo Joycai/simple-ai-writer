@@ -345,6 +345,19 @@
   --lore-split-b:         #E4E9F0;   /* split: new entry B */
 
   /* Appearance-density timeline, 4 steps + current chapter */
+  /* ── 集合（设计稿 03 屏 24–31）：分类用颜色，集合用**装订** ──
+     集合这根轴刻意不引入第二套彩色——分类六色已经占满了墙面，还兼着头像底色。
+     所以归属由装订边、翻面和骑缝线来说，全部是中性色阶。 */
+  --lore-bind-bg:         #F8F3E6;   /* 装订栏与卡片装订边：比卡面暗半步＝凹进去 */
+  --lore-bind-line:       #DFD5BE;   /* 装订边的虚线 */
+  --lore-bind-mark:       #736A5C;   /* 装订边上的竖排集合名 */
+  --lore-flip-bg:         #F0E9D7;   /* 翻面卡片：比墙底再暗一点，退进墙里 */
+  --lore-flip-border:     #D9CFB8;
+  --lore-flip-text:       #9A8F7D;
+  --lore-edge-inner:      #EBD9BC;   /* 页边围栏标注的内侧线（骑缝的第二道） */
+  --lore-sub-bg:          #FDFBF5;   /* 比卡面再亮半步：悬停行、菜单脚注 */
+  --lore-neutral-line:    #C9BFA8;   /* 中性线：未勾的勾选框、虚线控件边、空装订标 */
+
   --lore-density-0:       #F1E8D5;
   --lore-density-1:       #F1E0BD;
   --lore-density-2:       #D9B589;
@@ -586,6 +599,18 @@
   --lore-split-keep:      rgba(201, 150, 106, 0.14);
   --lore-split-a:         rgba(76, 92, 63, 0.22);
   --lore-split-b:         rgba(140, 173, 191, 0.16);
+
+  /* 集合 · 夜间：同样是「装订＝中性」，只是明暗方向反过来推导——装订边仍要比
+     卡面暗（凹进去），翻面卡仍要比墙底亮一点点（退后但没消失）。 */
+  --lore-bind-bg:         #221D17;
+  --lore-bind-line:       #3A3128;
+  --lore-bind-mark:       #9A8E7A;
+  --lore-flip-bg:         #201B15;
+  --lore-flip-border:     #352D24;
+  --lore-flip-text:       #6E6355;
+  --lore-edge-inner:      #4A3826;
+  --lore-sub-bg:          #2F2820;
+  --lore-neutral-line:    #4A4136;
 
   --lore-density-0:       #241F19;
   --lore-density-1:       #2A211A;

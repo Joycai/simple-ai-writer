@@ -625,4 +625,28 @@ describe("formatLoreIndex", () => {
     // An empty category is still not listed, orphan or not.
     expect(out).not.toContain("[world]");
   });
+
+  /**
+   * 取材范围（lib/lore/collections）。被挡掉的条目要**报出数量**：一份安静缩短过的
+   * 清单读起来就是「这个项目只有这几条」，模型于是理直气壮地告诉作者他的人物不存在。
+   */
+  it("narrows to the active collection and says how many it left out", () => {
+    const index = {
+      characters: [
+        { name: "Aria", summary: "骑士", collections: ["小说A"] },
+        { name: "Bran", summary: "游侠", collections: ["小说B"] },
+        { name: "Dorn", summary: "", collections: [] },
+      ] as never[],
+    };
+    const out = formatLoreIndex(index, "小说A");
+    expect(out).toContain("  - Aria: 骑士");
+    expect(out).not.toContain("Bran");
+    expect(out).toContain('collection "小说A"');
+    expect(out).toContain("2 further entries are filed elsewhere");
+  });
+
+  it("says so when the active collection is empty rather than looking like an empty project", () => {
+    const index = { characters: [{ name: "Aria", summary: "", collections: ["小说A"] }] as never[] };
+    expect(formatLoreIndex(index, "小说B")).toContain('No lore entities in the collection "小说B"');
+  });
 });

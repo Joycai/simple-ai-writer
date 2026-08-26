@@ -27,6 +27,11 @@ export interface LoreAgentTaskArgs extends AiConn {
   /** Extra top-level request fields (JSON mode etc.) — single-shot presets only. */
   extraBody?: Record<string, unknown>;
   signal?: AbortSignal;
+  /**
+   * 取材范围（见 lib/lore/collections）。这些模态也要认围栏：一次「改进条目」
+   * 若把别的集合的材料织进本条，正是集合要解决的那个串味问题。
+   */
+  loreScope?: string | null;
   /** Called on every text chunk with the full accumulated text so far. */
   onText: (accumulated: string) => void;
   /** Structured progress for an execution-log display. */
@@ -42,6 +47,7 @@ export async function runLoreAgentTask(args: LoreAgentTaskArgs): Promise<string>
   const toolContext: ToolContext = {
     projectPath: args.projectPath,
     loreIndex: args.loreIndex,
+    loreScope: args.loreScope,
     multimodal: args.model.type === "multimodal",
   };
 

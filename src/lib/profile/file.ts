@@ -21,6 +21,7 @@
  * readable by old builds until they opt in.
  */
 
+import { normalizeCollections } from "../lore/collections";
 import {
   builtinProfile,
   NOVEL_PROFILE,
@@ -41,6 +42,18 @@ export interface ProfileSelection {
   customPacks: WorkspaceProfile[];
   /** The project's user-defined knowledge-base categories, in file order. */
   customCategories: ProfileCategory[];
+  /**
+   * The project's declared knowledge-base **collections**, in file order
+   * (see lib/lore/collections).
+   *
+   * Only the *declaration* lives here — membership is on each entry, so this
+   * list exists for the two things membership cannot express: the order the
+   * author put the collections in, and a collection that exists while still
+   * empty (you file entries into it after creating it, not before). A
+   * collection appearing only in some entry's frontmatter still works
+   * everywhere; it just sorts after the declared ones.
+   */
+  collections: string[];
   /** Human-readable problems found while parsing; empty when the file is clean. */
   issues: string[];
 }
@@ -89,13 +102,15 @@ function parseV1(data: unknown): ProfileSelection {
     enabled: [profile],
     customPacks: isCustom ? [profile] : [],
     customCategories: [],
+    collections: [],
     issues,
   };
 }
 
 /**
  * v2 and v3 share everything but two details: v2 has a `primary` (normalised
- * to "first enabled"), v3 has top-level `categories` (the user-defined ones).
+ * to "first enabled"), v3 has the top-level `categories` (the user-defined
+ * ones) and `collections`.
  */
 function parseSelection(rec: Record<string, unknown>, version: 2 | 3): ProfileSelection {
   const issues: string[] = [];
@@ -180,6 +195,12 @@ function parseSelection(rec: Record<string, unknown>, version: 2 | 3): ProfileSe
 
   const customCategories =
     version === 3 ? parseCategoryList(rec.categories, issues) : [];
+  // Read from any v3 file, including one written by a build that predates
+  // collections (absent = none). Normalised rather than validated-and-rejected:
+  // a collection name is author prose, and the only unusable value is an empty
+  // one, which `normalizeCollections` drops.
+  const collections =
+    version === 3 ? normalizeCollections(rec.collections) : [];
 
-  return { enabled, customPacks, customCategories, issues };
+  return { enabled, customPacks, customCategories, collections, issues };
 }

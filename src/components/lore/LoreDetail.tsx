@@ -11,6 +11,10 @@ import {
   type LoreImage,
   addLoreImage,
   assignableCategories,
+  collectionViews,
+  entityCollections,
+  inScope,
+  sameCollection,
   categoryTypeName,
   facetSections,
   imageSections,
@@ -48,6 +52,8 @@ import { isTranslateEnabled } from "../../lib/translate/flag";
 import { ModalShell } from "../common/ModalShell";
 import { MarkdownTextarea } from "../common/MarkdownTextarea";
 import { MarkdownPreview } from "../common/MarkdownPreview";
+import { CollectionAssignMenu } from "./collections/CollectionAssignMenu";
+import cs from "./collections/collections.module.css";
 import { LoreImproveModal } from "./LoreImproveModal";
 import { LoreMetaImproveModal } from "./LoreMetaImproveModal";
 import { LoreDictNormalizeModal } from "./LoreDictNormalizeModal";
@@ -108,6 +114,10 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   const openDetail = useLoreStore((s) => s.openDetail);
   const setMainView = useAppStore((s) => s.setMainView);
   const terms = useTerms();
+  const scope = useLoreStore((st) => st.scope);
+  const collections = useProjectStore((st) => st.collections);
+  const fileIntoCollections = useProjectStore((st) => st.fileIntoCollections);
+  const [assignAnchor, setAssignAnchor] = useState<{ x: number; y: number } | null>(null);
 
   // Where the entity currently lives. Normally this is where it was opened
   // from, but saving an edit with a changed category moves the folder — the
@@ -282,6 +292,12 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
   }, [entity.dirPath, contentVersion, loreIndex]);
 
   const cat = findCategory(entity.category);
+  const cols = entityCollections(entity);
+  /** 每个集合各有多少条——右侧那个小数字。全项目的计数，不是这一条的。 */
+  const collectionCounts = useMemo(
+    () => new Map(collectionViews(loreIndex, collections).map((v) => [v.name, v.count])),
+    [loreIndex, collections],
+  );
 
   // ── The category's type schema, as this entry sees it (设计稿 03 屏 19–23) ──
   // Facets grouped per slot, gallery grouped per image slot, and the coverage
@@ -1176,6 +1192,60 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
                 {cat ? categoryLabel(cat, isZh) : entity.category}
               </button>
             </div>
+            {/* 集合落在元信息区，**不做面包屑**：多归属没有单一路径，把两条归属
+                串成一行面包屑会读成一条层级，而它们是并列的（设计稿 03 屏 30）。 */}
+            <div className={cs.detailBlock}>
+              <div className={cs.detailHead}>
+                <span className={cs.detailLabel}>
+                  {cols.length > 0
+                    ? t("lore.collections.detail.label", { n: cols.length })
+                    : t("lore.collections.detail.labelEmpty")}
+                </span>
+                <span className={cs.detailHint}>{t("lore.collections.detail.anyNumber")}</span>
+                <span style={{ flex: 1 }} />
+                <button
+                  type="button"
+                  className={cs.detailChange}
+                  onClick={(ev) => {
+                    const r = (ev.currentTarget as HTMLElement).getBoundingClientRect();
+                    setAssignAnchor({ x: r.left - 180, y: r.bottom + 4 });
+                  }}
+                >
+                  {t("lore.collections.detail.change")}
+                </button>
+              </div>
+              {cols.length === 0 ? (
+                <span className={cs.detailNone}>{t("lore.collections.detail.none")}</span>
+              ) : (
+                <div className={cs.detailList}>
+                  {cols.map((name) => (
+                    <div key={name} className={cs.detailItem}>
+                      <span className={cs.detailItemName}>{name}</span>
+                      <span style={{ flex: 1 }} />
+                      {scope !== null && sameCollection(name, scope) ? (
+                        <span className={cs.detailItemScope}>
+                          {t("lore.collections.scope.current")}
+                        </span>
+                      ) : (
+                        <span className={cs.detailItemTail}>{collectionCounts.get(name) ?? 0}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <span className={cs.detailNote}>{t("lore.collections.detail.fileNote")}</span>
+            </div>
+
+            {/* 打开的条目一定进上下文——不管围栏是哪个集合。只在它**确实**在围栏外时
+                才说这句：范围内的条目说这句等于在解释一件没发生的事。 */}
+            {scope !== null && !inScope(entity, scope) && (
+              <div className={cs.detailFence}>
+                <span className={cs.detailFenceZh}>{t("lore.collections.scope.detailNote")}</span>
+                <span style={{ flex: 1 }} />
+                <span className={cs.detailFenceEn}>{t("lore.collections.scope.detailNoteEn")}</span>
+              </div>
+            )}
+
             {/* 屏 19's mono type line: which type this entry has, and how much of
                 it exists at all. Absent when no pack declares the category —
                 there is no type to name then. */}
@@ -1485,6 +1555,18 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         </div>
       </div>
       </>)}
+
+      {assignAnchor && (
+        <CollectionAssignMenu
+          index={loreIndex}
+          declared={collections}
+          entities={[entity]}
+          mode="single"
+          anchor={assignAnchor}
+          onCommit={(add, remove) => void fileIntoCollections([entity], add, remove)}
+          onClose={() => setAssignAnchor(null)}
+        />
+      )}
     </div>
   );
 }

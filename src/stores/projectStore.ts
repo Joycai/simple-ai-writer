@@ -29,6 +29,17 @@ import {
   type WorkspaceProfile,
 } from "../lib/profile";
 import { normalizeChapterFileName } from "../lib/context/outline";
+import {
+  fileEntities,
+  normalizeCollections,
+  refileCollection,
+  // 起别名，因为 store 上有同名的 action：`renameCollection(list, …)` 这种写法在
+  // action 体内读起来像递归调用自己，而它其实是那个纯函数。
+  removeCollection as removeFromList,
+  renameCollection as renameInList,
+  sameCollection,
+  type LoreEntity,
+} from "../lib/lore";
 import { copyPath, fileExists, makeDir, removeDir, removeFile, renamePath, writeFile } from "../lib/fs/fileio";
 import { projectFilesFromTree, type ProjectFile } from "../lib/fs/images";
 import { baseNameOf, resolveCopyTarget, type TransferMode } from "../lib/fs/moveCopy";
@@ -130,6 +141,16 @@ interface ProjectState {
    * them; this is the editable source list `setCustomCategories` works from.
    */
   customCategories: ProfileCategory[];
+  /**
+   * The project's declared knowledge-base **collections**, in profile.json
+   * order (see lib/lore/collections).
+   *
+   * Declaration only. What is actually filed where lives on the entries, so
+   * `collectionViews(loreIndex, collections)` is the merged view every surface
+   * renders — this list contributes the order and the ones that are still
+   * empty. Same split as `customCategories` vs `workspace.categories`.
+   */
+  collections: string[];
   activeFilePath: string | null;
   fileTree: FileNode[];
   /**
@@ -169,6 +190,35 @@ interface ProjectState {
    * — removing a category only hides its directory, never deletes it.
    */
   setCustomCategories: (categories: ProfileCategory[]) => Promise<void>;
+  /**
+   * Replace the project's declared collections: persist to profile.json and,
+   * when a collection was renamed or removed, rewrite the membership of every
+   * entry that carried it.
+   *
+   * Rewriting membership is the price of the id being the name itself, which
+   * is what keeps `collections: ["小说A"]` readable in the frontmatter the
+   * author edits by hand (see lib/lore/collections). Removing a collection
+   * **never deletes an entry** — it only unfiles it.
+   */
+  setCollections: (next: string[]) => Promise<void>;
+  /**
+   * File entries into / out of collections. Any name that is not declared yet is
+   * declared first, so 「新建集合并归入」 is one action rather than two the author
+   * has to remember to do in order.
+   */
+  fileIntoCollections: (
+    entities: readonly LoreEntity[],
+    add: readonly string[],
+    remove: readonly string[],
+  ) => Promise<void>;
+  /** Rename a collection: the declaration and every member entry's frontmatter. */
+  renameCollection: (from: string, to: string) => Promise<void>;
+  /**
+   * Delete a collection: drop the declaration and unfile every member.
+   * **No entry is ever deleted** — they become 未归集 (or keep their other
+   * collections, since membership is a list).
+   */
+  deleteCollection: (name: string) => Promise<void>;
 
   /**
    * Create a file (or folder) under `parentDir` and return its absolute path.
@@ -219,6 +269,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   workspace: DEFAULT_WORKSPACE,
   customPacks: [],
   customCategories: [],
+  collections: [],
   activeFilePath: null,
   fileTree: [],
   expandedDirs: {},
@@ -269,7 +320,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       resetDocuments();
       await getDb(target);
       setActiveWorkspace(workspace);
-      set({ projectPath: target, workspace, customPacks: selection?.customPacks ?? [], customCategories: selection?.customCategories ?? [], activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null, wordCount: 0, charCount: 0 });
+      set({ projectPath: target, workspace, customPacks: selection?.customPacks ?? [], customCategories: selection?.customCategories ?? [], collections: selection?.collections ?? [], activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null, wordCount: 0, charCount: 0 });
       await get().refreshFileTree();
       await useLoreStore.getState().scanProject(target);
       useAppStore.getState().addRecentProject(target);
@@ -309,7 +360,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // Back to the default workspace: with no project open, anything that reads
     // the active workspace must not still see the closed project's categories.
     resetActiveWorkspace();
-    set({ projectPath: null, workspace: DEFAULT_WORKSPACE, customPacks: [], customCategories: [], activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null, wordCount: 0, charCount: 0 });
+    set({ projectPath: null, workspace: DEFAULT_WORKSPACE, customPacks: [], customCategories: [], collections: [], activeFilePath: null, fileTree: [], expandedDirs: {}, clipboard: null, wordCount: 0, charCount: 0 });
     if (closing) void releaseProjectLock(closing);
   },
 
@@ -345,7 +396,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     // Persist first: if writing profile.json fails, nothing else has moved and
     // the next open still resolves the previous selection.
-    await saveProfileFile(projectPath, { enabled: next.enabled, customPacks, customCategories, issues: [] });
+    await saveProfileFile(projectPath, { enabled: next.enabled, customPacks, customCategories, collections: get().collections, issues: [] });
     setActiveWorkspace(next);
     set({ workspace: next });
     await scaffoldProject(projectPath, next.categories.map((c) => c.id));
@@ -379,13 +430,86 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     const next = resolveWorkspace(workspace.enabled, cleaned);
     // Persist first, same contract as setPacks.
-    await saveProfileFile(projectPath, { enabled: workspace.enabled, customPacks, customCategories: cleaned, issues: [] });
+    await saveProfileFile(projectPath, { enabled: workspace.enabled, customPacks, customCategories: cleaned, collections: get().collections, issues: [] });
     setActiveWorkspace(next);
     set({ workspace: next, customCategories: cleaned });
     await scaffoldProject(projectPath, next.categories.map((c) => c.id));
     await get().refreshFileTree();
     // A removed category hides its entities; an added one may reveal parked
     // ones — either way the index is stale.
+    await useLoreStore.getState().scanProject(projectPath);
+  },
+
+  setCollections: async (next) => {
+    const { projectPath, workspace, customPacks, customCategories, collections } = get();
+    if (!projectPath) throw new Error("Open a project before changing its collections.");
+    const cleaned = normalizeCollections(next);
+    if (cleaned.length === collections.length && cleaned.every((c, i) => c === collections[i])) return;
+    // Declaration only — nothing on disk moves. A collection dropped from this
+    // list but still named by some entry keeps working; it just stops carrying
+    // an author-chosen position (see collectionViews). Unfiling is
+    // `deleteCollection`, which is a different intent and says so.
+    await saveProfileFile(projectPath, {
+      enabled: workspace.enabled, customPacks, customCategories, collections: cleaned, issues: [],
+    });
+    set({ collections: cleaned });
+  },
+
+  fileIntoCollections: async (entities, add, remove) => {
+    const { projectPath, workspace, customPacks, customCategories, collections } = get();
+    if (!projectPath) throw new Error("Open a project before filing entries.");
+    if (entities.length === 0 || (add.length === 0 && remove.length === 0)) return;
+
+    // 先补声明再写条目：声明只贡献顺序与空集合，但少了它，作者刚建的集合会在管理
+    // 面板里缺席，而它明明已经有成员了。
+    const fresh = add.filter((name) => !collections.some((c) => sameCollection(c, name)));
+    if (fresh.length > 0) {
+      const next = normalizeCollections([...collections, ...fresh]);
+      await saveProfileFile(projectPath, {
+        enabled: workspace.enabled, customPacks, customCategories, collections: next, issues: [],
+      });
+      set({ collections: next });
+    }
+
+    await fileEntities(projectPath, entities, add, remove);
+    await useLoreStore.getState().scanProject(projectPath);
+  },
+
+  renameCollection: async (from, to) => {
+    const { projectPath, workspace, customPacks, customCategories, collections } = get();
+    if (!projectPath) throw new Error("Open a project before changing its collections.");
+    const target = to.trim();
+    if (!target || sameCollection(from, target)) return;
+
+    const loreStore = useLoreStore.getState();
+    await refileCollection(projectPath, loreStore.index, from, target);
+    const next = renameInList(collections, from, target);
+    await saveProfileFile(projectPath, {
+      enabled: workspace.enabled, customPacks, customCategories, collections: next, issues: [],
+    });
+    set({ collections: next });
+    // 取材范围指着旧名字就一起跟过去——不跟的话围栏会指向一个不再存在的集合，
+    // 而那个状态下 AI 一条设定也看不见，且界面上没有任何地方说得出为什么。
+    if (loreStore.scope && sameCollection(loreStore.scope, from)) {
+      loreStore.setScope(projectPath, target);
+    }
+    await useLoreStore.getState().scanProject(projectPath);
+  },
+
+  deleteCollection: async (name) => {
+    const { projectPath, workspace, customPacks, customCategories, collections } = get();
+    if (!projectPath) throw new Error("Open a project before changing its collections.");
+
+    const loreStore = useLoreStore.getState();
+    await refileCollection(projectPath, loreStore.index, name, null);
+    const next = removeFromList(collections, name);
+    await saveProfileFile(projectPath, {
+      enabled: workspace.enabled, customPacks, customCategories, collections: next, issues: [],
+    });
+    set({ collections: next });
+    if (loreStore.scope && sameCollection(loreStore.scope, name)) {
+      loreStore.setScope(projectPath, null);
+    }
     await useLoreStore.getState().scanProject(projectPath);
   },
 

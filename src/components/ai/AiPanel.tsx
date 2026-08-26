@@ -48,6 +48,7 @@ import { useAppStore, LORE_BUDGET_MIN, LORE_BUDGET_MAX } from "../../stores/appS
 import { MAX_DRAFTS } from "../../lib/ai/drafts";
 import { focusBlockedByImage, useEditorStore, useWritingFocus } from "../../stores/editorStore";
 import { useLoreStore } from "../../stores/loreStore";
+import { ScopeBand, ScopeMenu, type ScopeMenuAnchor } from "../lore/collections/ScopePicker";
 import { useMemoryStore } from "../../stores/memoryStore";
 import { useDocModel, useProjectStore, useSectionLabel, useTerms } from "../../stores/projectStore";
 import {
@@ -60,7 +61,12 @@ import {
 import { clearTarget } from "../../lib/editor/aiTarget";
 import { flashInserted } from "../../lib/editor/insertFlash";
 import { parsePins, type LoreActivationReport } from "../../lib/context/loreSelect";
-import { indexCategories, type LoreFacet } from "../../lib/lore";
+import {
+  indexCategories,
+  loadPinnedLore,
+  savePinnedLore,
+  type LoreFacet,
+} from "../../lib/lore";
 import {
   MEMORY_MIN_DOC_CHARS,
   MEMORY_SUGGEST_THRESHOLD_CHARS,
@@ -80,7 +86,6 @@ import { chapterTitle, resolveVolumes } from "../../lib/context/outline";
 import { contextLabel } from "../../lib/ai/modelLabel";
 import { MOD_KEY } from "../../lib/platform";
 import { panelFade, springPanel, useMotionPreset } from "../../lib/motion";
-import { PINNED_LORE_PREFIX, readPref, writePref } from "../../lib/prefs";
 import { Select } from "../common/Select";
 import styles from "./AiPanel.module.css";
 import { baseName, isSamePath } from "../../lib/paths";
@@ -101,25 +106,6 @@ const LORE_BUDGET_OPTIONS = [600, 2000, 8000, 32000];
 
 /** Context-window utilization presets (see lib/context/budget). */
 const UTILIZATION_OPTIONS = [0.25, 0.5, 0.75, 0.9];
-
-// Pinned-lore selection is persisted per project (keyed by project path) so the
-// user doesn't have to re-check the same entities on every reload / task. The
-// key carries an absolute path, so it stops matching the moment the author
-// moves the folder — `lib/prefs` collects the leftovers (PINNED_LORE_PREFIX).
-function loadPinnedLore(projectPath: string | null): string[] {
-  if (!projectPath) return [];
-  try {
-    const raw = readPref(`${PINNED_LORE_PREFIX}${projectPath}`);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
-  } catch {
-    return [];
-  }
-}
-function savePinnedLore(projectPath: string | null, paths: string[]): void {
-  if (!projectPath) return;
-  writePref(`${PINNED_LORE_PREFIX}${projectPath}`, JSON.stringify(paths));
-}
 
 /** Compact token count: 1000000 → "1M", 32000 → "32k", 600 → "600".
  *  Shares contextLabel's scale so a window reads the same here and in the
@@ -860,6 +846,10 @@ export function AiPanel() {
   const content = focus.text;
   const activeFilePath = focus.filePath;
   const { index: loreIndex } = useLoreStore();
+  const loreScope = useLoreStore((s) => s.scope);
+  const setLoreScope = useLoreStore((s) => s.setScope);
+  const collections = useProjectStore((s) => s.collections);
+  const [scopeMenu, setScopeMenu] = useState<ScopeMenuAnchor | null>(null);
   const projectPath = useProjectStore((s) => s.projectPath);
   const fileTree = useProjectStore((s) => s.fileTree);
   const memory = useMemoryStore((s) => s.memory);
@@ -1370,6 +1360,28 @@ export function AiPanel() {
 
   return (
     <div className={styles.panel} onKeyDown={handlePanelKeyDown}>
+      {/* 取材范围的骑缝带。任务面板和对话共用同一个控件与同一份状态——两处各存一份
+          会让作者在一处切了范围、另一处仍按旧范围跑（设计稿 03 屏 26-B）。 */}
+      {loreScope !== null && (
+        <ScopeBand
+          index={loreIndex}
+          scope={loreScope}
+          variant="narrow"
+          onSwitch={setScopeMenu}
+          onReset={() => setLoreScope(projectPath, null)}
+        />
+      )}
+      {scopeMenu && (
+        <ScopeMenu
+          index={loreIndex}
+          declared={collections}
+          scope={loreScope}
+          anchor={scopeMenu}
+          variant="narrow"
+          onPick={(next) => setLoreScope(projectPath, next)}
+          onClose={() => setScopeMenu(null)}
+        />
+      )}
       {/* ══════════ Config column ══════════ */}
       <div className={styles.configCol}>
         <div className={styles.configScroll}>

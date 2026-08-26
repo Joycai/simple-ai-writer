@@ -285,6 +285,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
         userContent: buildUserContent(textContent, images),
         projectPath: projectPath ?? "",
         loreIndex: index,
+        loreScope: useLoreStore.getState().scope,
         signal: ctrl.signal,
         onText: setOutput,
         onEvent: (e) => {

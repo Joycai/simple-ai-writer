@@ -1157,6 +1157,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             // left to match lore against — and it was always the better
             // target for a conversation anyway.
             extraMatchText: wireMessage,
+            loreScope: useLoreStore.getState().scope,
           },
           null,
           memory,
@@ -1272,6 +1273,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             // @refs inlined) plus the document's tail neighborhood.
             matchTarget: wireMessage + focus.text.slice(-500),
             excludeDirs: excludeDirsFor(meta, loreIdx),
+            scope: useLoreStore.getState().scope,
             loreBudgetChars: loreBudgetTokens * measureCharsPerToken(focus.text),
             doc: (docSwitched || needsBody) && activeFilePath
               ? {
@@ -1344,6 +1346,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           // onLoreChanged below *awaits* its rescan. runAgent clones this for
           // the run, so the tools' in-place patches never reach store state.
           loreIndex: useLoreStore.getState().index,
+          loreScope: useLoreStore.getState().scope,
           multimodal: model.type === "multimodal",
           onLoreChanged: async () => {
             await useLoreStore.getState().scanProject(projectPath);

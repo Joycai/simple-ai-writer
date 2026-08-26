@@ -93,7 +93,14 @@ export const PREF_KEYS = [
  * moves the folder, and nothing was ever removing the leftovers.
  */
 export const PINNED_LORE_PREFIX = "ai:pinnedLore:";
-export const PREF_KEY_PREFIXES = [PINNED_LORE_PREFIX] as const;
+/**
+ * 这个项目的**取材范围**（知识库集合名，见 lib/lore/collections）。
+ *
+ * 按项目一行，和置顶同一个理由：范围是「我现在在写哪一摊活」，跨项目共用一个值
+ * 只会让打开另一个项目时围栏莫名其妙地还立着。空值/缺席＝全部。
+ */
+export const LORE_SCOPE_PREFIX = "lore:scope:";
+export const PREF_KEY_PREFIXES = [PINNED_LORE_PREFIX, LORE_SCOPE_PREFIX] as const;
 
 /**
  * Preferences that describe *this machine* rather than the author's taste, and

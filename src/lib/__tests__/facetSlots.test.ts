@@ -28,7 +28,7 @@ const facet = (partial: Partial<LoreFacet> & { file: string; title: string }): L
 
 const entity = (category: string, facets: LoreFacet[]): LoreEntity => ({
   id: "aria", category, dirPath: `/p/.ai-writer/lore/${category}/aria`, name: "Aria",
-  aliases: [], summary: "", avatarPath: null, mdFiles: [], images: [], facets,
+  aliases: [], summary: "", collections: [], avatarPath: null, mdFiles: [], images: [], facets,
 });
 
 const meta = (partial: Partial<FacetMeta> = {}): FacetMeta => ({

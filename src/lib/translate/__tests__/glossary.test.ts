@@ -20,6 +20,7 @@ function entity(name: string, aliases: string[], summary = "", dict = false): Lo
     summary,
     dict,
     avatarPath: null,
+    collections: [],
     mdFiles: [],
     images: [],
     facets: [],

@@ -109,7 +109,7 @@ const activePackIds = () => activeWorkspace().enabled.map((p) => p.id);
 
 /** A selection, as loadProfileFile would return it. */
 function selectionOf(...packs: (typeof NOVEL_PROFILE)[]): ProfileSelection {
-  return { enabled: packs, customPacks: [], customCategories: [], issues: [] };
+  return { enabled: packs, customPacks: [], customCategories: [], collections: [], issues: [] };
 }
 
 beforeEach(() => {
@@ -117,7 +117,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   h.loadProfileFileMock.mockResolvedValue(null);
   h.getDb.mockResolvedValue({});
-  useProjectStore.setState({ projectPath: null, customPacks: [], customCategories: [] });
+  useProjectStore.setState({ projectPath: null, customPacks: [], customCategories: [], collections: [] });
   resetActiveWorkspace();
 });
 
@@ -156,6 +156,7 @@ describe("openProject", () => {
       enabled: [NOVEL_PROFILE],
       customPacks: [],
       customCategories: [{ id: "meetings", labelZh: "会议纪要", labelEn: "Meetings" }],
+      collections: [],
       issues: [],
     } satisfies ProfileSelection);
 
@@ -316,6 +317,7 @@ describe("setCustomCategories", () => {
       "D:/projects/book",
       expect.objectContaining({
         customCategories: [{ id: "meetings", labelZh: "会议纪要", labelEn: "Meetings" }],
+        collections: [],
       }),
     );
     expect(lastScaffoldCategories()).toContain("meetings");
