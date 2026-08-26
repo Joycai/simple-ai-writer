@@ -389,7 +389,7 @@ function SnippetTraceLine() {
       : t("ai.snippets.traceInserted", { defaultValue: "已插入「{{n}}」", n: trace.name });
 
   return (
-    <span className={styles.trace}>
+    <span className={`${styles.trace} ${trace.leaving ? styles.traceLeaving : ""}`}>
       {trace.kind === "saved" && <span className={styles.tracePlus}>+1</span>}
       <span className={styles.traceText}>{text}</span>
       {trace.undo && <span className={styles.traceUndo}>⌘Z {t("ai.snippets.undo", { defaultValue: "撤销" })}</span>}
