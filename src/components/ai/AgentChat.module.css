@@ -220,6 +220,41 @@
 }
 .assistantBody code { font-family: var(--font-mono); font-size: 0.95em; }
 .assistantBody :is(table, img) { max-width: 100%; }
+.assistantBody img { display: block; border-radius: var(--radius-md); }
+
+/* A picture still being read off disk, or a link pointing nowhere. An <img>
+   with no src collapses to nothing, so a path the model got wrong would leave
+   no trace at all in the reply — the same reason the editor preview marks the
+   gap, and deliberately the same vocabulary (Preview.module.css). */
+.assistantBody img[data-loading],
+.assistantBody img[data-broken] {
+  width: 100%;
+  max-width: 280px;
+  aspect-ratio: 4 / 3;
+  margin: var(--space-3) 0;
+  border: 1px dashed var(--color-border-strong);
+}
+.assistantBody img[data-loading] { background: var(--color-bg-elevated); }
+/* Broken says so in words: a dashed box alone reads as "still loading", and
+   the author needs to know the link is wrong, not slow. */
+.assistantBody img[data-broken] {
+  position: relative;
+  border-color: var(--color-error);
+  background: var(--color-error-bg);
+}
+.assistantBody img[data-broken]::after {
+  content: attr(alt);
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3);
+  font: 400 11px/1.6 var(--font-sans);
+  color: var(--color-error);
+  text-align: center;
+  word-break: break-word;
+}
 
 .thinking {
   display: flex;

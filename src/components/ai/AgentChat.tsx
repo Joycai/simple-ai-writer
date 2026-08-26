@@ -29,8 +29,9 @@ import {
 import { useStickToBottom } from "../common/useStickToBottom";
 import { renderMarkdown } from "../../lib/fs/markdown";
 import {
-  MAX_IMAGE_BYTES, readTextFileContent,
+  MAX_IMAGE_BYTES, imageToThumbnailDataUrl, readTextFileContent,
 } from "../../lib/fs/images";
+import { chatImageSource } from "../../lib/agent/chatImages";
 import { downscaleNote, imageForModel } from "../../lib/image/normalize";
 import { attachedKey } from "../../lib/lore/aiTask";
 import { chainCanSeeImages, withSessionOverrides } from "../../lib/agent/subagent";
@@ -860,8 +861,6 @@ const AssistantTurn = memo(function AssistantTurn({ text, log, images, isLive, o
   onCtx: SnippetSave["onMessageContextMenu"];
 }) {
   const { t } = useTranslation();
-  // Markdown render is cheap at chat sizes; memo keeps streaming smooth anyway.
-  const html = useMemo(() => renderMarkdown(text), [text]);
 
   return (
     // Marker gutter + one content column: the execution log, the prose and any
@@ -875,7 +874,7 @@ const AssistantTurn = memo(function AssistantTurn({ text, log, images, isLive, o
             is a caption for them, and reading the caption first is backwards. */}
         <TurnImages paths={images} />
         {text ? (
-          <div className={styles.assistantBody} dangerouslySetInnerHTML={{ __html: html }} />
+          <AssistantBody text={text} />
         ) : (
           // Only until the log exists. Once it does, its in-flight round is
           // already a 思考中 line carrying the round count — a second one right
@@ -891,3 +890,89 @@ const AssistantTurn = memo(function AssistantTurn({ text, log, images, isLive, o
     </div>
   );
 });
+
+/**
+ * How wide a picture in a reply is decoded, in pixels of its longest side.
+ *
+ * Thumbnails rather than the file's own pixels, for the reason {@link
+ * TurnImages} gives: a generated picture can be 4096², which WebKit silently
+ * refuses to decode as a `data:` URI past a certain size — and this column is
+ * a few hundred CSS pixels wide. Larger than TurnImages' tiles, since this one
+ * renders at the full width of the column rather than as a strip of tiles.
+ */
+const BODY_IMAGE_MAX_DIM = 640;
+
+/**
+ * The assistant's prose, with any picture it embedded actually shown.
+ *
+ * A markdown `![](…)` in a reply is the one image link in the app that comes
+ * from the *model* rather than from a file the author is editing, which is why
+ * this cannot just be `dangerouslySetInnerHTML` (as it was — and every such
+ * picture rendered as the webview's broken-image glyph):
+ *
+ * - The webview cannot load a filesystem path at all — `img-src` allows only
+ *   `'self' data: blob: ai-writer-asset:`, and the app stopped emitting that
+ *   protocol itself (see lib/lore/entity.ts). So the bytes are read off disk
+ *   and inlined, the same as `Preview` and `MarkdownPreview` already do.
+ * - Which folder a link is relative to, and which are refused outright, is
+ *   `lib/agent/chatImages` — the policy is model-facing, so it is pure and
+ *   tested rather than inlined here.
+ */
+function AssistantBody({ text }: { text: string }) {
+  const projectPath = useProjectStore((s) => s.projectPath);
+  const ref = useRef<HTMLDivElement>(null);
+
+  /**
+   * Decoded pictures by absolute path — the value once it has landed, or the
+   * in-flight read that will produce it. A live turn rebuilds this DOM on
+   * every streamed chunk, so without it each chunk re-read and re-encoded
+   * every picture already on screen, and each one blinked out while it did.
+   */
+  const decoded = useRef(new Map<string, string | Promise<string>>());
+  useEffect(() => { decoded.current.clear(); }, [projectPath]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.innerHTML = renderMarkdown(text);
+
+    el.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
+      const raw = img.getAttribute("src") ?? "";
+      const src = chatImageSource(projectPath ?? "", raw);
+      if (src.kind === "skip") return;
+      if (src.kind === "refuse") { markBroken(img, raw); return; }
+
+      const hit = decoded.current.get(src.path);
+      if (typeof hit === "string") { img.src = hit; return; }
+      // The `src` the renderer wrote is a path this webview cannot load. Drop
+      // it now, or the browser spends the wait showing its own broken-image
+      // icon — which is exactly what this whole component is here to stop.
+      img.removeAttribute("src");
+      img.setAttribute("data-loading", "true");
+
+      const pending = hit ?? imageToThumbnailDataUrl(src.path, BODY_IMAGE_MAX_DIM)
+        .then((url) => { decoded.current.set(src.path, url); return url; });
+      if (!hit) decoded.current.set(src.path, pending);
+      pending
+        .then((url) => { img.removeAttribute("data-loading"); img.src = url; })
+        .catch(() => {
+          // Forgotten rather than remembered as broken: the file may be about
+          // to be written by a tool call in this very run.
+          decoded.current.delete(src.path);
+          markBroken(img, raw);
+        });
+    });
+  }, [text, projectPath]);
+
+  return <div ref={ref} className={styles.assistantBody} />;
+}
+
+/** Mark a picture that isn't coming, and say which one it was. */
+function markBroken(img: HTMLImageElement, raw: string) {
+  img.removeAttribute("src");
+  img.removeAttribute("data-loading");
+  // The alt text is what the CSS prints inside the box, and a bare `![](…)`
+  // carries none — a blank dashed rectangle is not a diagnosis, the path is.
+  if (!img.getAttribute("alt")) img.setAttribute("alt", raw);
+  img.setAttribute("data-broken", "true");
+}

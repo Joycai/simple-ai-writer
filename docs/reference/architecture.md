@@ -357,6 +357,21 @@ The model only *knows* a lore picture exists because the injected 【设定资�
 
 Every model-supplied path goes through `resolveWorkspacePath` (same file) first, which rebases a **project-relative** one on the project root before the containment check. Not a convenience: the prompt's 【当前文件】 block carries a relative path (`stores/agentStore`, `stores/aiTaskStore`), so a relative path is the shape the model naturally answers in — and the absolute-only tools used to refuse it as "outside the project folder" for a file plainly inside it. `..` still cannot climb out, because containment is applied *after* resolution.
 
+#### 反过来：模型自己写的图片链接
+
+同一条 `![](…)` 也会**从模型那边回来**——助手在回复里插一张图。这是全应用唯一一处图片链接不是作者写的，两件事都由此决定（`lib/agent/chatImages.ts`，纯逻辑 + 测试；DOM 那半在 `components/ai/AgentChat.tsx` 的 `AssistantBody`）：
+
+- **相对谁**：文档的链接相对于文档所在目录（`Preview` 的 `basePath`），条目预览相对于条目目录（`MarkdownPreview`）。**一轮对话不是一个文件，没有目录**，所以相对链接一律相对**项目根**解析。代价是文档里 `assets/…` 那种写法在聊天里只有当文档就在根目录时才对——所以模型被要求写完整路径（见下）。
+- **拒绝什么**：这个字符串是模型控制的，落在项目外就**根本不读**。`src-tauri/src/protocol.rs` 早就对 `ai-writer-asset://` 给过同一个答案（"crafted `![](ai-writer-asset://localhost/etc/passwd)` in imported/shared markdown"），这里是同形的威胁。`.ai-writer/` 在这条路上**是**放行的，与 `isWorkspacePath` 相反——那条禁令是为了写工具不成为进入知识库的后门，而条目图集正住在里面，把它显示出来本来就是知识库面板每天在做的事。
+
+三条附带的实现事实，都不是可有可无的：
+
+1. **必须内联成 data URL**，不能直接给路径：CSP 的 `img-src` 只有 `'self' data: blob: ai-writer-asset:`，而 `ai-writer-asset://` 因 Webview2 的 URL 解析已被弃用（`lib/lore/entity.ts`）。这也是编辑器预览和 `MarkdownPreview` 早就在做的事。
+2. **走缩略图（`imageToThumbnailDataUrl`，长边 640）而不是原图**：理由和同文件里的 `TurnImages` 一样——生成图可以是 4096²，超过某个大小 WebKit 会**无声地**拒绝解码 `data:` URI，而这一栏只有几百 CSS 像素宽。
+3. **解析前要 percent-decode**：markdown-it 把每个链接过一遍 `encodeURI`，所以中文条目名到这里已经是 `%E7%99%BD…`。用 `resolveLinkPath`（逐段 `decodeURIComponent`）而不是 `decodeURI`，与预览和导出同一条规则。
+
+**还得让模型有路径可写。** 它看到的图集本来只有文件名（`read_lore_entity` 的 `=== images ===` 块、注入块里的「配图：文件名（描述）」），照抄下来就是一个解析不到任何地方的裸文件名——这正是这条路最初坏掉的样子。所以工具结果的图集标题带上条目目录（一次，不是每行一遍），`ai.instructions.agent` 的「配图」一节要求回复里插图写完整路径。没找到的图不是消失，而是一个虚线框，框里印着那条路径（`alt` 兜底成原始链接）——错的链接要看得见，否则作者只会看到助手少说了一段话。
+
 ### Paths across Windows and Linux/macOS
 
 `lib/paths.ts` is the **only** module that knows how the two platforms differ, and it answers both questions from the *shape of the path* rather than from the host — so the functions stay pure and one test file covers both worlds:
