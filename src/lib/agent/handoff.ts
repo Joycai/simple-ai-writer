@@ -135,8 +135,10 @@ export function parseHandoffBrief(raw: string): HandoffBrief {
  * 这条路**必须存在**，而且必须仍然委托。MiniMax 的 `switch` thinking dialect 上
  * forced tool_choice 会被静默降级成 `auto`（lib/ai/openai.ts 的 `toolChoiceFor`、
  * lib/ai/anthropic.ts 的 `toolChoiceBody`，两处注释都论证过那对 `structured.ts`
- * 是安全的——对本设计不是）。降级之后若退回「主模型自己写」，作者开了开关、
- * 看到的却是主模型的输出，而且没有任何报错：开关形同虚设。
+ * 是安全的——对本设计不是）；DeepSeek V4 那种直接 400 拒掉强制档的端点则由
+ * lib/ai/toolChoice.ts 用 `auto` 重发同一轮，落到这里的形状完全一样。降级之后
+ * 若退回「主模型自己写」，作者开了开关、看到的却是主模型的输出，而且没有任何
+ * 报错：开关形同虚设。
  *
  * 所以把主模型这一轮吐出的文本当作工单正文，材料取本次运行写过的全部 note。
  */

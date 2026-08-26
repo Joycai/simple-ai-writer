@@ -354,12 +354,16 @@ function thinkingFor(
  * §7 第四个样本). Forcing there is a 400 before a single token is generated, so
  * a forced choice is downgraded to `auto` rather than sent to fail.
  *
- * Downgrading is safe because forcing was never load-bearing on its own: the
- * only caller that forces is `agent/structured.ts`, which already treats "the
- * model declined to call the tool" as its cue to re-run in JSON mode. The worst
- * case here is that fallback firing one turn earlier than it would have; the
- * alternative — a guaranteed failed request first — costs the same fallback
- * plus a wasted round trip.
+ * Downgrading is safe because forcing was never load-bearing on its own:
+ * `agent/structured.ts` treats "the model declined to call the tool" as its cue
+ * to re-run in JSON mode, and the agent runtime's handoff round hands off on
+ * the round's prose instead. The worst case here is that fallback firing one
+ * turn earlier than it would have; the alternative — a guaranteed failed
+ * request first — costs the same fallback plus a wasted round trip.
+ *
+ * Endpoints that refuse a forced choice with nothing in the config to predict
+ * it are handled the other way round, from their own 400 — see
+ * `lib/ai/toolChoice.ts`.
  */
 function toolChoiceBody(
   opts: StreamOptions,
