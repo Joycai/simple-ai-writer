@@ -17,6 +17,8 @@
  */
 
 import { getVersion } from "@tauri-apps/api/app";
+import { loadCustomFormats, saveCustomFormat } from "../docx/presets";
+import { parseDocFormat, type DocFormatPreset } from "../docx/format";
 import {
   ensureAiSchema,
   listModels,
@@ -59,6 +61,12 @@ export interface ConfigBackup {
   prompts: Prompt[];
   /** Portable preferences as `[key, value]` pairs. Absent in v1 backups written before they were included. */
   prefs?: [string, string][];
+  /**
+   * The author's own 排版格式 presets. Absent in backups written before Word
+   * export shipped — the same forward-compatible shape `prefs` uses, so an old
+   * backup restores without them rather than failing.
+   */
+  docFormats?: DocFormatPreset[];
 }
 
 async function configDb() {
@@ -78,10 +86,14 @@ async function configDb() {
  */
 export async function buildConfigBundle(includeKeys: boolean): Promise<ConfigBackup> {
   const db = await configDb();
-  const [providers, models, prompts] = await Promise.all([
+  const [providers, models, prompts, docFormats] = await Promise.all([
     listProviders(db),
     listModels(db),
     listPrompts(db),
+    // Installation-level like everything else here: one 公文 format is reused
+    // across every project, so it belongs in the thing you carry to a new
+    // machine. Failing to read them must not sink the whole backup.
+    loadCustomFormats().catch(() => [] as DocFormatPreset[]),
   ]);
 
   const providerBackups: ProviderBackup[] = [];
@@ -108,6 +120,7 @@ export async function buildConfigBundle(includeKeys: boolean): Promise<ConfigBac
     models,
     prompts,
     prefs: portablePrefEntries(),
+    docFormats,
   };
 }
 
@@ -132,6 +145,7 @@ export interface ParsedConfigBundle {
   models: Model[];
   prompts: Prompt[];
   prefs: [string, string][];
+  docFormats: DocFormatPreset[];
   /** How many imported providers carry an embedded API key. */
   keyCount: number;
 }
@@ -278,7 +292,31 @@ export function parseConfigBundle(
         Array.isArray(e) && e.length === 2 && typeof e[0] === "string" && typeof e[1] === "string",
     );
 
-  if (providers.length === 0 && models.length === 0 && prompts.length === 0 && prefs.length === 0) {
+  // 排版格式：`parseDocFormat` 归一而不是拒绝——一个字段坏了不该让整套预设
+  // 消失，而缺的那一项本来就该落回默认。只有 id/名字都没有的条目才丢掉。
+  const docFormats: DocFormatPreset[] = [];
+  for (const item of Array.isArray(root.docFormats) ? root.docFormats : []) {
+    const r = item as Record<string, unknown>;
+    const id = str(r.id);
+    const label = str(r.label);
+    if (!id || !label) continue;
+    docFormats.push({
+      id,
+      label,
+      // 备份里的一律当自建：内置那几套随版本走，不该被一份旧备份改写。
+      builtin: false,
+      ...(str(r.imitatedFrom) ? { imitatedFrom: r.imitatedFrom as string } : {}),
+      format: parseDocFormat(r.format),
+    });
+  }
+
+  if (
+    providers.length === 0 &&
+    models.length === 0 &&
+    prompts.length === 0 &&
+    prefs.length === 0 &&
+    docFormats.length === 0
+  ) {
     throw new Error("invalid-backup");
   }
 
@@ -287,6 +325,7 @@ export function parseConfigBundle(
     models,
     prompts,
     prefs,
+    docFormats,
     keyCount: providers.filter((p) => p.apiKey).length,
   };
 }
@@ -349,6 +388,17 @@ export async function applyConfigImport(staged: ParsedConfigBundle): Promise<voi
   // it: they are the cosmetic half of the restore, and a failure here must not
   // roll back the configuration that already succeeded.
   applyPrefEntries(staged.prefs);
+
+  // Same reasoning, plus one of its own: 排版格式 has no foreign key into
+  // anything above, so putting it inside that transaction would only widen the
+  // window in which a locked database can undo a restore that had succeeded.
+  for (const preset of staged.docFormats) {
+    try {
+      await saveCustomFormat(preset);
+    } catch (e) {
+      console.warn(`[config] 排版格式 ${preset.id} 没能写入：`, e);
+    }
+  }
 
   const failed: string[] = [];
   for (const { id, name, apiKey } of staged.providers) {

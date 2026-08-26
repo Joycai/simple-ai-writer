@@ -255,3 +255,27 @@ function inlineRuns(token: Token, deg: Degradations): { runs: DocRun[]; imageOnl
   }
   return { runs };
 }
+
+/**
+ * 按一级标题切成若干「章」，给「每章页码从 1 开始」用。
+ *
+ * 纯函数，所以这条判断可以单测——而它有两个只会静默出错的边界：
+ *
+ * - **第一个一级标题之前的内容自成一节**（封面、前言）。把它并进第一章，页码
+ *   就从封面开始数，第一章的第 1 页会是第 3 页。
+ * - **没有一级标题时返回一整节**，不是零节。返回空数组的话整份文稿会消失，
+ *   而且是安静地消失。
+ */
+export function splitChapters(blocks: readonly DocBlock[]): DocBlock[][] {
+  const out: DocBlock[][] = [];
+  let current: DocBlock[] = [];
+  for (const block of blocks) {
+    if (block.kind === "heading" && block.level === 1 && current.length > 0) {
+      out.push(current);
+      current = [];
+    }
+    current.push(block);
+  }
+  if (current.length > 0) out.push(current);
+  return out.length > 0 ? out : [[]];
+}

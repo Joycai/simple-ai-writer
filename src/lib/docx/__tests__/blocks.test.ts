@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { markdownToBlocks } from "../blocks";
+import { markdownToBlocks, splitChapters } from "../blocks";
 
 describe("结构", () => {
   it("标题带级别，正文成段", () => {
@@ -95,5 +95,39 @@ describe("降级", () => {
   it("干净的文档没有降级", () => {
     const { degraded } = markdownToBlocks("# 标题\n\n正文。\n");
     expect(degraded).toEqual([]);
+  });
+});
+
+describe("按章分节（每章页码从 1 开始）", () => {
+  it("每个一级标题起一节", () => {
+    const { blocks } = markdownToBlocks("# 一章\n\n正文\n\n# 二章\n\n正文\n\n## 小节\n");
+    const chapters = splitChapters(blocks);
+    expect(chapters).toHaveLength(2);
+    expect(chapters[0][0]).toMatchObject({ kind: "heading", level: 1 });
+    expect(chapters[1]).toHaveLength(3);
+  });
+
+  it("第一个一级标题之前的内容自成一节", () => {
+    // 并进第一章的话，页码就从封面开始数——第一章的第 1 页会是第 3 页。
+    const { blocks } = markdownToBlocks("封面一段\n\n# 一章\n\n正文\n");
+    const chapters = splitChapters(blocks);
+    expect(chapters).toHaveLength(2);
+    expect(chapters[0]).toHaveLength(1);
+    expect(chapters[0][0]).toMatchObject({ kind: "paragraph" });
+  });
+
+  it("没有一级标题时是一整节，不是零节", () => {
+    // 返回空数组的话整份文稿会消失，而且是安静地消失。
+    const { blocks } = markdownToBlocks("## 只有二级\n\n正文\n");
+    expect(splitChapters(blocks)).toEqual([blocks]);
+  });
+
+  it("空文档也给一节", () => {
+    expect(splitChapters([])).toEqual([[]]);
+  });
+
+  it("二级三级标题不切", () => {
+    const { blocks } = markdownToBlocks("# 一章\n\n## 甲\n\n### 乙\n\n## 丙\n");
+    expect(splitChapters(blocks)).toHaveLength(1);
   });
 });

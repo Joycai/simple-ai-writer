@@ -32,6 +32,10 @@ import {
   type LineRule,
   type LineSpacing,
   type PageSizeName,
+  HEADING_NUMBER_FORMATS,
+  PAGE_NUMBER_STYLES,
+  type HeadingNumberFormat,
+  type PageNumberStyle,
 } from "../../../lib/docx/format";
 import styles from "./DocFormat.module.css";
 
@@ -320,8 +324,123 @@ export function DocFormatDrawer({
               <span className={styles.echo}>{t("docxFormat.drawer.repeatHeader")}</span>
             </Field>
 
-            {/* ── 页眉页脚（三期） ───────────────────────────────────── */}
-            <GroupHead label={t("docxFormat.drawer.groupHeader")} summary={t("docxFormat.drawer.phaseThree")} />
+            {/* ── 标题自动编号 ───────────────────────────────────────── */}
+            <GroupHead
+              label={t("docxFormat.drawer.groupNumbering")}
+              summary={
+                format.headingNumbering.enabled
+                  ? format.headingNumbering.levels
+                      .map((lv, i) => (lv === "none" ? "—" : numberingSample(lv, i)))
+                      .join("  ")
+                  : t("docxFormat.drawer.numberingOff")
+              }
+            />
+            <Field label={t("docxFormat.drawer.numbering")}>
+              <Switch
+                on={format.headingNumbering.enabled}
+                label={t("docxFormat.drawer.numbering")}
+                onChange={(enabled) => patch({ headingNumbering: { ...format.headingNumbering, enabled } })}
+              />
+              <span className={styles.echo}>{t("docxFormat.drawer.numberingHint")}</span>
+            </Field>
+            {format.headingNumbering.enabled &&
+              format.headingNumbering.levels.map((lv, i) => (
+                <Field key={i} label={`H${i + 1}`}>
+                  <select
+                    className={styles.select}
+                    value={lv}
+                    onChange={(e) => {
+                      const levels = [...format.headingNumbering.levels] as DocFormat["headingNumbering"]["levels"];
+                      levels[i] = e.target.value as HeadingNumberFormat;
+                      patch({ headingNumbering: { ...format.headingNumbering, levels } });
+                    }}
+                  >
+                    {HEADING_NUMBER_FORMATS.map((k) => (
+                      <option key={k} value={k}>{t(`docxFormat.drawer.num_${k}`)}</option>
+                    ))}
+                  </select>
+                  {/* 写法名认不出来，样子一眼就认得——所以样例始终在旁边 */}
+                  <span className={styles.echo}>{lv === "none" ? "—" : numberingSample(lv, i)}</span>
+                </Field>
+              ))}
+
+            {/* ── 页眉页脚 ───────────────────────────────────────────── */}
+            <GroupHead
+              label={t("docxFormat.drawer.groupHeader")}
+              summary={headerFooterSummary(format, t)}
+            />
+            <Field label={t("docxFormat.drawer.headerText")}>
+              <input
+                className={styles.textInput}
+                value={format.headerFooter.headerText}
+                placeholder={t("docxFormat.drawer.headerTextPlaceholder")}
+                onChange={(e) => patch({ headerFooter: { ...format.headerFooter, headerText: e.target.value } })}
+                aria-label={t("docxFormat.drawer.headerText")}
+              />
+              {format.headerFooter.headerText.trim() && (
+                <AlignSeg
+                  value={format.headerFooter.headerAlign}
+                  onChange={(headerAlign) => patch({ headerFooter: { ...format.headerFooter, headerAlign } })}
+                />
+              )}
+            </Field>
+            <Field label={t("docxFormat.drawer.pageNumber")}>
+              <select
+                className={styles.select}
+                value={format.headerFooter.pageNumber}
+                onChange={(e) => patch({ headerFooter: { ...format.headerFooter, pageNumber: e.target.value as PageNumberStyle } })}
+              >
+                {PAGE_NUMBER_STYLES.map((k) => (
+                  <option key={k} value={k}>{t(`docxFormat.drawer.pn_${k}`)}</option>
+                ))}
+              </select>
+              {format.headerFooter.pageNumber !== "none" && (
+                <AlignSeg
+                  value={format.headerFooter.pageNumberAlign}
+                  onChange={(pageNumberAlign) => patch({ headerFooter: { ...format.headerFooter, pageNumberAlign } })}
+                />
+              )}
+            </Field>
+            <Field label={t("docxFormat.drawer.headerRule")}>
+              <Switch
+                on={format.headerFooter.headerRule}
+                label={t("docxFormat.drawer.headerRule")}
+                onChange={(headerRule) => patch({ headerFooter: { ...format.headerFooter, headerRule } })}
+              />
+              <span className={styles.echo}>{t("docxFormat.drawer.headerRuleHint")}</span>
+            </Field>
+            {format.headerFooter.pageNumber !== "none" && (
+              <Field label={t("docxFormat.drawer.oddEven")}>
+                <Switch
+                  on={format.headerFooter.differentOddEven}
+                  label={t("docxFormat.drawer.oddEven")}
+                  onChange={(differentOddEven) => patch({ headerFooter: { ...format.headerFooter, differentOddEven } })}
+                />
+                <span className={styles.echo}>{t("docxFormat.drawer.oddEvenHint")}</span>
+              </Field>
+            )}
+            {(format.headerFooter.pageNumber !== "none" ||
+              format.headerFooter.headerText.trim() ||
+              format.headerFooter.headerRule) && (
+              <Field label={t("docxFormat.drawer.firstPage")}>
+                <Switch
+                  on={format.headerFooter.differentFirstPage}
+                  label={t("docxFormat.drawer.firstPage")}
+                  onChange={(differentFirstPage) => patch({ headerFooter: { ...format.headerFooter, differentFirstPage } })}
+                />
+                <span className={styles.echo}>{t("docxFormat.drawer.firstPageHint")}</span>
+              </Field>
+            )}
+            {format.headerFooter.pageNumber !== "none" && (
+              <Field label={t("docxFormat.drawer.restartChapter")}>
+                <Switch
+                  on={format.headerFooter.restartEachChapter}
+                  label={t("docxFormat.drawer.restartChapter")}
+                  onChange={(restartEachChapter) => patch({ headerFooter: { ...format.headerFooter, restartEachChapter } })}
+                />
+                <span className={styles.echo}>{t("docxFormat.drawer.restartChapterHint")}</span>
+              </Field>
+            )}
             <div className={styles.laterNote}>{t("docxFormat.drawer.headerLater")}</div>
           </div>
 
@@ -575,3 +694,27 @@ function Switch({ on, label, onChange }: { on: boolean; label: string; onChange:
 }
 
 const round1 = (n: number): number => Math.round(n * 10) / 10;
+
+/** 「一、」「（一）」「1.1」——写法名认不出来，样子一眼就认得。 */
+function numberingSample(kind: HeadingNumberFormat, level: number): string {
+  switch (kind) {
+    case "chinese": return "一、";
+    case "chineseParen": return "（一）";
+    case "decimal": return "1.";
+    case "decimalParen": return "（1）";
+    case "decimalDotted": return Array.from({ length: level + 1 }, () => "1").join(".");
+    default: return "";
+  }
+}
+
+function headerFooterSummary(format: DocFormat, t: (k: string) => string): string {
+  const hf = format.headerFooter;
+  const parts: string[] = [];
+  if (hf.headerText.trim()) parts.push(`${t("docxFormat.drawer.headerText")} ${hf.headerText}`);
+  parts.push(hf.pageNumber === "none" ? t("docxFormat.drawer.pn_none") : t(`docxFormat.drawer.pn_${hf.pageNumber}`));
+  if (hf.pageNumber !== "none" && hf.differentOddEven) parts.push(t("docxFormat.drawer.oddEven"));
+  if (hf.headerRule) parts.push(t("docxFormat.drawer.headerRule"));
+  if (hf.differentFirstPage) parts.push(t("docxFormat.drawer.firstPage"));
+  if (hf.restartEachChapter) parts.push(t("docxFormat.drawer.restartChapter"));
+  return parts.join(" · ");
+}

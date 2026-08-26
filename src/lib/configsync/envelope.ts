@@ -71,6 +71,8 @@ export interface EnvelopeCounts {
   models: number;
   prompts: number;
   prefs: number;
+  /** Absent in headers written before Word export shipped. */
+  docFormats?: number;
 }
 
 export interface EnvelopeHeader {
@@ -226,6 +228,7 @@ function countsOf(bundle: ConfigBackup): EnvelopeCounts {
     models: bundle.models.length,
     prompts: bundle.prompts.length,
     prefs: bundle.prefs?.length ?? 0,
+    docFormats: bundle.docFormats?.length ?? 0,
   };
 }
 

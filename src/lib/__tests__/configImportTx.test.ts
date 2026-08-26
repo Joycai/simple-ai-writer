@@ -55,6 +55,7 @@ const staged = (over: Partial<StagedConfigImport> = {}): StagedConfigImport => (
   ],
   prompts: [{ id: "s1", name: "系统", content: "hi", scene: "system" }],
   prefs: [],
+  docFormats: [],
   keyCount: 0,
   ...over,
 });
