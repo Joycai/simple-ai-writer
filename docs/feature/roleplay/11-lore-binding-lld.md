@@ -1,6 +1,6 @@
 # 绑定与自动注入的粒度 · 详细设计（LLD）
 
-> 状态：**partial** —— PR-1 已实现（§6），PR-2~4 未做。背景：第十轮审查确认，扮演 agent 的「绑定词条」语义与作者的
+> 状态：**partial** —— PR-1 / PR-2 已实现（§6），PR-3~4 未做。背景：第十轮审查确认，扮演 agent 的「绑定词条」语义与作者的
 > 预期存在 6 个 gap，其中两个是**粒度错配**（账本按条目、期望按特征），一个是
 > **匹配门槛**（特征要先命中条目名才可能激活，而扮演里作者对着角色说话不写名字）。
 > 本文档是把现状改成 §1 那两条预期的执行设计。
@@ -310,7 +310,7 @@ recordInjectionsFromReport(meta, report, byDir, seedBlock);
 验收状态：`pnpm vitest run` 190 文件 2580 例全绿（含新增 8 例），`pnpm build`
 （tsc + vite）通过。
 
-### PR-2 · 账本下沉到特征级
+### PR-2 · 账本下沉到特征级 · ✅ 已实现
 
 改：`lib/agent/compact.ts`、`lib/agent/chatSession.ts`、`lib/context/rag.ts`
 （`assembleTurnInjection` 增 `pinPaths` / `coreDone` / `excludeFacets` 三个透传参数）、
@@ -327,6 +327,30 @@ recordInjectionsFromReport(meta, report, byDir, seedBlock);
 
 **验收**：主聊天除「特征可后续补注入」之外行为不变；旧 blob 能读。
 **不做**：不碰 `lib/roleplay/*`。
+
+**实现出入**（六处）：
+
+1. `recordInjectionsFromReport` 收 `loreIndex` 而不是设计里写的 `byDir` map——三个
+   调用点手上都有 index，让每处各建一次 map 只是把同一段代码抄三遍。
+2. **`core` 只认 `core` 层，不认 `summary` 层。** L0 摘要是预算耗尽也会进的保底层，
+   把它当成「这条已经给过了」，那份被预算挤掉的正文就永远到不了模型面前。代价是
+   预算长期紧张时每轮重发一行摘要，换来的是正文终究会到——一条测试钉住了这个选择。
+3. 多了一个 `contributingEntities(report)`：拿掉 `excludeDirs` 之后，报告里会出现
+   「命中了但什么都没贡献」的条目（正文常驻、这轮没有新特征），执行日志那句
+   「注入 N 个条目」会因此虚高。日志改数它。
+4. `excludeDirsFor` 保留成 `coreDoneFor` 的同义实现，注释写明两者今天算出同一个集合
+   但问的是两个问题——记忆区是整条注入，不该悄悄继承知识库的特征规则。
+5. `assembleTurnInjection` 的 `excludeDirs` 由必填改可选（新增 `pinPaths` / `coreDone` /
+   `excludeFacets` 三个可选参数，PR-3 用得上 `pinPaths`）。
+6. 两个测试文件里 `.carrier` → `.coreCarrier` 的机械改名，其中一个在
+   `lib/roleplay/__tests__/context.test.ts`——是断言字段名，不是行为改动，扮演侧的
+   代码一行未动（它仍走 `recordInjections` + `excludeDirsFor`，行为与从前逐字相同）。
+
+顺带修掉的（本来是 PR-3 的账，落在共享层就一起好了）：主聊天里第 2 轮提过某条目、
+第 8 轮问它某段特征时那段特征**再也拿不到**——`chatInject.test.ts` 的第一条新测试就是
+这个场景。
+
+验收状态：`pnpm vitest run` 190 文件 2588 例全绿（新增 8 例），`pnpm build` 通过。
 
 ### PR-3 · 扮演的绑定语义
 

@@ -158,6 +158,19 @@ export interface LoreActivationReport {
   usedChars: number;
 }
 
+/**
+ * The entities that actually put text in a selection.
+ *
+ * `report.entities` is everything that was *considered* — and since `coreDone`
+ * an entity can be selected, matched and reported while contributing nothing at
+ * all, because everything it owns is already in the conversation. Counting the
+ * raw list in a log line would tell the author "3 entries injected" on a turn
+ * that injected one.
+ */
+export function contributingEntities(report: LoreActivationReport): LoreEntityReport[] {
+  return report.entities.filter((e) => e.layers.length > 0);
+}
+
 export interface LoreSelection {
   /** Assembled 【设定资料】 content ("" when nothing activated). */
   text: string;

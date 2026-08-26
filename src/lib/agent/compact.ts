@@ -22,6 +22,7 @@
 import { estimateMessagesTokens, estimateTextTokens } from "../ai/tokenEstimate";
 import type { StreamMessage } from "../ai/types";
 import type { LoreEntity, LoreIndex } from "../lore/model";
+import { facetKey, type LoreActivationReport } from "../context/loreSelect";
 
 // ── Budget constants (docs/feature/agent/chat-memory-plan.md §6) ──────────────────
 
@@ -52,16 +53,36 @@ export const FOLD_TEXT_CLIP = 2000;
  * Per-session records the flat `chatHistory` array cannot carry itself.
  * Mutable alongside the history it describes; reset with it (`resetChat`).
  */
-/** One lore entity's entry in the injection ledger. */
+/**
+ * One lore entity's entry in the injection ledger.
+ *
+ * Kept per **layer**, not per entity, because the two halves arrive separately
+ * and leave separately: an entity's body can sit in a permanent block (a
+ * roleplay agent's bound settings) while its facets keep arriving on ordinary
+ * turns that will one day be folded. One shared carrier could only be right for
+ * one of them — and the wrong half then either re-injects while it is still on
+ * screen, or stays suppressed after it is gone.
+ */
 export interface InjectionRecord {
   /** Fingerprint of the entity as injected — {@link entityVersion}. */
   version: string;
   /**
-   * The message that carried it into the conversation. When that message
-   * leaves the history (its turn folded, or the seed block dropped), the
-   * entry is evicted — mention the entity again and it re-injects.
+   * The message that carried the summary + body. Null when only facets have
+   * gone in. When that message leaves the history (its turn folded, or the seed
+   * block dropped), this drops to null — mention the entity again and the body
+   * re-injects.
    */
-  carrier: StreamMessage;
+  coreCarrier: StreamMessage | null;
+  /** Facet file → the message that carried that facet's text. Same eviction. */
+  facetCarriers: Map<string, StreamMessage>;
+}
+
+/** Which layers of one entity a carrier brought in. */
+export interface InjectedLayers {
+  /** The entity's **body** went in. A summary-only injection is not core. */
+  core?: boolean;
+  /** Facet filenames whose text went in. */
+  facets?: readonly string[];
 }
 
 export interface ChatSessionMeta {
@@ -130,36 +151,152 @@ export function entityVersion(entity: LoreEntity): string {
   ]);
 }
 
-/** Record entities carried into the conversation by `carrier`. */
+/**
+ * Record what `carrier` brought in for one entity — **merging** with what is
+ * already on the books rather than replacing it.
+ *
+ * Merging is the whole point: the body may have arrived in a permanent block on
+ * turn 1 and a facet on an ordinary turn 5. Overwriting would leave the body's
+ * ledger entry pointing at turn 5's message, and folding that turn would
+ * re-inject a body that never left.
+ *
+ * An entity whose fingerprint changed is a different entity as far as the
+ * ledger is concerned: the old layers describe text the author has since
+ * rewritten, so the record starts over.
+ */
+export function recordInjection(
+  meta: ChatSessionMeta,
+  entity: LoreEntity,
+  carrier: StreamMessage,
+  layers: InjectedLayers,
+): void {
+  const version = entityVersion(entity);
+  const prev = meta.injected.get(entity.dirPath);
+  const rec: InjectionRecord = prev && prev.version === version
+    ? prev
+    : { version, coreCarrier: null, facetCarriers: new Map() };
+  if (layers.core) rec.coreCarrier = carrier;
+  for (const file of layers.facets ?? []) rec.facetCarriers.set(file, carrier);
+  if (rec.coreCarrier || rec.facetCarriers.size > 0) meta.injected.set(entity.dirPath, rec);
+}
+
+/** Record whole entities carried in by `carrier` — body and nothing itemised. */
 export function recordInjections(
   meta: ChatSessionMeta,
   entities: LoreEntity[],
   carrier: StreamMessage,
 ): void {
-  for (const e of entities) {
-    meta.injected.set(e.dirPath, { version: entityVersion(e), carrier });
-  }
+  for (const e of entities) recordInjection(meta, e, carrier, { core: true });
 }
 
 /**
- * The dirs the per-turn retrieval should skip: ledger entries whose entity is
- * unchanged since injection. A changed entity is *not* excluded — it matches
- * again, re-injects, and its ledger entry is overwritten with the new version.
+ * Record a selection from its own activation report, so what goes on the books
+ * is what {@link selectLore} actually emitted — layer by layer, per entity.
+ *
+ * `core` follows the **body**, not the summary line: the L0 summary is a floor
+ * that survives even an exhausted budget, and treating it as "this entity is
+ * delivered" would mean the body it lost to budget never arrives at all.
  */
-export function excludeDirsFor(meta: ChatSessionMeta, loreIndex: LoreIndex): Set<string> {
+export function recordInjectionsFromReport(
+  meta: ChatSessionMeta,
+  report: LoreActivationReport,
+  loreIndex: LoreIndex,
+  carrier: StreamMessage,
+): void {
+  const byDir = new Map<string, LoreEntity>();
+  for (const entities of Object.values(loreIndex)) {
+    for (const e of entities ?? []) byDir.set(e.dirPath, e);
+  }
+  for (const r of report.entities) {
+    const entity = byDir.get(r.dirPath);
+    if (!entity) continue;
+    const core = r.layers.some((l) => l.kind === "core");
+    const facets = r.layers.flatMap((l) => (l.kind === "facet" && l.file ? [l.file] : []));
+    if (!core && facets.length === 0) continue;
+    recordInjection(meta, entity, carrier, { core, facets });
+  }
+}
+
+/** A ledger record that still describes the entity as the author has it now. */
+function liveRecord(meta: ChatSessionMeta, entity: LoreEntity): InjectionRecord | null {
+  const rec = meta.injected.get(entity.dirPath);
+  return rec && rec.version === entityVersion(entity) ? rec : null;
+}
+
+/**
+ * Entities whose **body** is already in the conversation — `selectLore`'s
+ * `coreDone`. They still match and still contribute facets; they just do not
+ * repeat what the model has already read. An entity the author has edited
+ * since is absent, so the rewritten body goes in again.
+ */
+export function coreDoneFor(meta: ChatSessionMeta, loreIndex: LoreIndex): Set<string> {
   const out = new Set<string>();
   for (const entities of Object.values(loreIndex)) {
     for (const e of entities ?? []) {
-      const rec = meta.injected.get(e.dirPath);
-      if (rec && rec.version === entityVersion(e)) out.add(e.dirPath);
+      if (liveRecord(meta, e)?.coreCarrier) out.add(e.dirPath);
     }
   }
   return out;
 }
 
+/** Facets already in the conversation — `selectLore`'s `excludeFacets`. */
+export function injectedFacetsFor(meta: ChatSessionMeta, loreIndex: LoreIndex): Set<string> {
+  const out = new Set<string>();
+  for (const entities of Object.values(loreIndex)) {
+    for (const e of entities ?? []) {
+      const rec = liveRecord(meta, e);
+      if (!rec) continue;
+      for (const file of rec.facetCarriers.keys()) out.add(facetKey(e.dirPath, file));
+    }
+  }
+  return out;
+}
+
+/**
+ * Dirs to skip **entirely** — the memory-area pass, which injects an area entry
+ * as one unit and has no facet-level story to tell.
+ *
+ * Today it computes the same set as {@link coreDoneFor}, and that is not an
+ * accident worth collapsing: the two answer different questions ("was this
+ * entry delivered?" versus "may I skip this entity's body?"), and the area pass
+ * must not silently inherit a facet rule written for the knowledge base.
+ */
+export function excludeDirsFor(meta: ChatSessionMeta, loreIndex: LoreIndex): Set<string> {
+  return coreDoneFor(meta, loreIndex);
+}
+
+/**
+ * Drop every ledger entry whose carrier `keep` rejects, and forget any entity
+ * left holding nothing. Both callers are "these messages are gone": compaction
+ * folding turns away, and a block being rebuilt from scratch.
+ */
+function pruneLedger(meta: ChatSessionMeta, keep: (carrier: StreamMessage) => boolean): void {
+  for (const [dir, rec] of meta.injected) {
+    if (rec.coreCarrier && !keep(rec.coreCarrier)) rec.coreCarrier = null;
+    for (const [file, carrier] of rec.facetCarriers) {
+      if (!keep(carrier)) rec.facetCarriers.delete(file);
+    }
+    if (!rec.coreCarrier && rec.facetCarriers.size === 0) meta.injected.delete(dir);
+  }
+}
+
+/**
+ * Forget everything one message carried — for a permanent block that is being
+ * rewritten. Without this, unbinding a facet would leave it on the books
+ * forever: absent from the rebuilt block, yet still suppressed in retrieval.
+ */
+export function clearCarrier(meta: ChatSessionMeta, carrier: StreamMessage): void {
+  pruneLedger(meta, (c) => c !== carrier);
+}
+
 /** The messages currently carrying injections — for the summary render skip. */
 export function injectionCarriers(meta: ChatSessionMeta): Set<StreamMessage> {
-  return new Set([...meta.injected.values()].map((r) => r.carrier));
+  const out = new Set<StreamMessage>();
+  for (const rec of meta.injected.values()) {
+    if (rec.coreCarrier) out.add(rec.coreCarrier);
+    for (const carrier of rec.facetCarriers.values()) out.add(carrier);
+  }
+  return out;
 }
 
 /** Record `msg` as the start of a new turn. Call right before pushing it. */
@@ -373,11 +510,11 @@ export function buildCompactedHistory(
   meta.seedContext = null;
   meta.summary = summaryMsg;
   meta.turnStarts = plan.keep.map((t) => t.start);
-  // Evict ledger entries whose carrier just left the history — those entities
-  // are no longer in the conversation, so a later mention must re-inject.
+  // Evict ledger entries whose carrier just left the history — that text is no
+  // longer in the conversation, so a later mention must re-inject it. Per
+  // layer: a folded turn takes its facets with it and leaves a body that lives
+  // in the prelude exactly where it is.
   const live = new Set(next);
-  for (const [dir, rec] of meta.injected) {
-    if (!live.has(rec.carrier)) meta.injected.delete(dir);
-  }
+  pruneLedger(meta, (carrier) => live.has(carrier));
   return next;
 }

@@ -99,7 +99,7 @@ describe("seedRoleplayHistory", () => {
   it("records the bound entities in the injection ledger so they are not re-sent", async () => {
     const { meta } = await seed();
     expect(meta.injected.has(ELDEN.dirPath)).toBe(true);
-    expect(meta.injected.get(ELDEN.dirPath)?.carrier).toBe(meta.boundBlock);
+    expect(meta.injected.get(ELDEN.dirPath)?.coreCarrier).toBe(meta.boundBlock);
   });
 
   it("keeps the bound block out of the auto-match pass", async () => {

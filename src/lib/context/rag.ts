@@ -561,7 +561,19 @@ export async function assembleTurnInjection(opts: {
   loreIndex: LoreIndex;
   /** Question + quote + current document tail — same targets the seed used. */
   matchTarget: string;
-  excludeDirs: ReadonlySet<string>;
+  /**
+   * Entities forced into this turn's selection regardless of the words in it
+   * (see `selectLore`'s pins). A roleplay agent passes the entry it is playing:
+   * the author talks *to* the character and rarely types their name, so
+   * matching on words alone would keep that character's own facets out.
+   */
+  pinPaths?: string[];
+  /** Skip these entities entirely (memory-area style, whole-unit injection). */
+  excludeDirs?: ReadonlySet<string>;
+  /** Their body is already in context: facets only. See `selectLore`. */
+  coreDone?: ReadonlySet<string>;
+  /** `dirPath#facetFile` keys already in context. See `selectLore`. */
+  excludeFacets?: ReadonlySet<string>;
   /** 取材范围，见 `TaskExtras.loreScope`。 */
   scope?: LoreScope;
   loreBudgetChars?: number;
@@ -589,9 +601,14 @@ export async function assembleTurnInjection(opts: {
   const { text: loreSnippets, report } = await selectLore(
     opts.matchTarget,
     opts.loreIndex,
-    [],
+    opts.pinPaths ?? [],
     opts.loreBudgetChars,
-    { excludeDirs: opts.excludeDirs, scope: opts.scope ?? null },
+    {
+      excludeDirs: opts.excludeDirs,
+      coreDone: opts.coreDone,
+      excludeFacets: opts.excludeFacets,
+      scope: opts.scope ?? null,
+    },
   );
 
   // Same section order as the seed (bundleContextSections): file → lore →
