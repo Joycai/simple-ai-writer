@@ -153,3 +153,25 @@
 }
 .btnApprove:hover:not(:disabled) { background: var(--color-sienna-hover); }
 .btnApprove:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* 目标类型徽标：只在步骤作用于集合/分类时出现（条目是默认，不标）。 */
+.kind {
+  font: 500 9px/1.5 var(--font-sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+  padding: 1px 5px;
+  margin-right: 6px;
+  white-space: nowrap;
+}
+
+/* 一条集合步骤搬动的条目，列在 detail 之后。列出来是有代价的（行会变长），但
+   不列的话作者批的就是一个数字——而这一行正是他要审的东西。 */
+.members {
+  display: block;
+  margin-top: 3px;
+  font: 400 11px/1.6 var(--font-serif);
+  color: var(--color-text-secondary);
+  word-break: break-word;
+}

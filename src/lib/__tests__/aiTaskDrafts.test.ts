@@ -129,6 +129,16 @@ vi.mock("../../stores/projectStore", () => ({
     // focused file changes; not under test here, so the unsubscribe is a no-op.
     subscribe: () => () => {},
   },
+  // The agentic ToolContext asks for one of these; a bare stub is enough since
+  // no test here reorganises the knowledge base.
+  loreOrganizer: () => ({
+    collections: [],
+    createCollection: async () => {},
+    renameCollection: async () => {},
+    deleteCollection: async () => {},
+    file: async () => {},
+    createCategory: async () => "",
+  }),
 }));
 // Real task definitions, since runTask now resolves the task through the profile
 // and branches on its `tools`/`continuation` rather than on its id.

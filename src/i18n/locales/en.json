@@ -1212,7 +1212,13 @@
         "update": "Update",
         "move": "Move",
         "delete": "Delete"
-      }
+      },
+      "target": {
+        "collection": "collection",
+        "category": "category"
+      },
+      "members": "{{count}} entries",
+      "membersMore": " +{{n}} more"
     },
     "mention": {
       "badgeImage": "image"

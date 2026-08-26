@@ -28,6 +28,7 @@ import {
 // enforces it, not through the event module that only has to describe it.
 export type { RoundLimitDecision, TruncationDecision };
 import { contentWithoutImages, hasImageParts } from "./imageHistory";
+import { stepTarget } from "./plan";
 import { cloneLoreIndex } from "../lore";
 import { TOOL_ARGS_DETAIL_CHARS, TOOL_RESULT_DETAIL_CHARS } from "./logFormat";
 import type { TaskPreset } from "./presets";
@@ -453,17 +454,23 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     // the one that proposed. That costs nothing: propose_lore_plan blocks until
     // the author decides and then ends its round with a tool result, so the
     // model's next chance to write is that following round either way.
-    if (
-      !loadedGroups.has("lore_write") &&
-      deferred.lore_write.length > 0 &&
-      (runToolContext.lorePlan?.steps.length ?? 0) > 0
-    ) {
-      loadedGroups.add("lore_write");
-      activeTools.push(...deferred.lore_write);
+    // 装载是**按方案形状**分的，不是全有全无：批准一份「改写条目正文」的方案不该
+    // 顺手把集合工具也塞进来，反过来也一样。同一个信号（已批准的步骤）回答两个
+    // 不同的问题——「有没有条目要写」和「有没有组织结构要动」。
+    const steps = runToolContext.lorePlan?.steps ?? [];
+    const wantsWrite = steps.some((s) => stepTarget(s) === "entity");
+    const wantsOrganize = steps.some((s) => stepTarget(s) !== "entity");
+    for (const [group, wanted] of [
+      ["lore_write", wantsWrite],
+      ["lore_organize", wantsOrganize],
+    ] as const) {
+      if (!wanted || loadedGroups.has(group) || deferred[group].length === 0) continue;
+      loadedGroups.add(group);
+      activeTools.push(...deferred[group]);
       opts.onEvent({
         kind: "tools-loaded",
-        group: "lore_write",
-        names: [...deferred.lore_write],
+        group,
+        names: [...deferred[group]],
         round,
         at: Date.now(),
       });

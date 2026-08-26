@@ -1,6 +1,6 @@
 # 知识库集合（Collections）——第二根轴
 
-> 状态：**已实施**（数据层 + 设计稿 03 屏 24–31 的全部 UI）。设计任务书见
+> 状态：**已实施**（数据层 + 设计稿 03 屏 24–31 的全部 UI + agent 的整理工具，见 §8）。设计任务书见
 > [`lore-collection-ui-brief.md`](./lore-collection-ui-brief.md)，视觉口径见
 > [`design-system.md`](../../reference/design-system.md) → 设定集设计语言 → 集合。
 > 相关：[`lore-entry-type-plan.md`](./lore-entry-type-plan.md)（分类的类型 schema）、[`lore-facet-plan.md`](./lore-facet-plan.md)（条目内的粒度）。
@@ -178,7 +178,63 @@ AI 模态。
 - **详情页不做集合面包屑**（稿子自己也否了）：多归属没有单一路径，两条归属串成一行
   面包屑会读成一条层级。集合落在主词条栏的元信息区。
 
-## 8. 已知边界
+## 8. Agent 侧：让 agent 帮你整理
+
+条目一多，「帮我把资料按各自的作品归类」就是最自然的一句话。它需要 agent 能建集合、
+能归档——而 `writeTools` 顶上原本写着「没有任何工具能建/改名/删分类」。
+
+那条规矩没被推翻，是**被限定了适用范围**：它回答的是「agent 能不能自己发明组织结构」
+（不能），而不是「作者委派的批量整理该怎么做」。让后者成立的机制本来就在——
+`propose_lore_plan` → 方案卡 → 作者逐行批准。所以 agent 只能**提议**建集合，批准的是人。
+
+### 8.1 方案步骤的第二根轴
+
+`LorePlanStep` 加了 `target`（`entity` 缺省 / `collection` / `category`）和 `members`。
+原因是**粒度**：「把 200 条按作品归类」写成 200 条条目步骤，卡片是一面墙，作者的批准
+就退化成盖章——那比没有门更糟，因为它看起来像有门。一条 step = 一个集合、条目列在
+行内，作者读 5 行看完一次重整，而这 5 行正是他真正在做的那个决定。
+
+四个动作**没有扩充**（没有 file / rename 动词）：归档改的是集合的成员，所以是对**集合**
+的 `update`；改名是身份的迁移，所以是 `move`。schema 的 enum 每轮常驻，能不涨就不涨。
+
+`members` 同时是授权边界：`file_lore_entries` 只能动步骤里列到的条目——批准「归入
+12 条」不等于批准归入第 13 条。
+
+### 8.2 三个工具，全部 deferred
+
+| 工具 | 作用 |
+|---|---|
+| `manage_collection` | `op: create / rename / delete` |
+| `file_lore_entries` | `entities[]` + `add[]` / `remove[]`，一次一批 |
+| `create_lore_category` | 只有 create |
+
+**分类只给 create** 是唯一保留的不对称，不是嘴硬：分类是磁盘上的文件夹，新建只是建
+目录，而改名/删除会让每个成员条目的文件夹搬家，并让 `[[lore:分类/id]]` 路径引用和特征
+置顶失效。集合三个都给，因为它只是 frontmatter 上的一个字段，可逆且便宜。
+
+`add`/`remove` 两个数组而不是一个 `set`：set 语义会在只想补一个标签时静静抹掉别的归属。
+
+### 8.3 按方案形状装载
+
+三个工具挂 `group: "lore_organize"`，方案批准前不下发。而且装载是**按形状**分的：
+批准一份「改写条目正文」的方案不会带出集合工具，反过来也一样
+（`runtime.ts`，测试在 `agentRuntimeToolGroups.test.ts`）。
+
+这条路是 [`agent-tool-context-lld.md`](../agent/agent-tool-context-lld.md) §6 认可的那一条
+——**由运行状态自动装载，不需要模型自己开口要工具**。让模型主动索取（`load_tools`）
+那条路在那份文档里被实测否掉了：gemma4:12b 在工具就摆在眼前时，3 次里 0 次走通两步
+流程，再加一层间接只会让一类任务从「做得差」变成「做不了」。
+
+### 8.4 成本
+
+唯一的常驻开销是 `propose_lore_plan` 的 schema 加了 `target` + `members`：**+190 token**，
+棘轮从 9,150 抬到 9,300（账记在 `agentToolBudget.test.ts` 的注释里）。三个工具本身是
+deferred，批准之前一分不花。
+
+`list_lore_entities` 也补上了归属（集合目录 + 每条后面的 `[…]`）——那是**结果文本**、
+不是 schema，只在模型真的调用时计费。没有它，模型要归得一致就得把条目一条条读过去。
+
+## 9. 已知边界
 
 - **取材范围指向一个不存在的集合**：重命名和删除会把范围一起带走或清掉，但手改
   profile.json / frontmatter 造出这个状态是可能的。此时 AI 一条设定也看不见，唯一

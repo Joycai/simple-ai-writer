@@ -33,12 +33,15 @@ const PRESET: TaskPreset = {
     "create_lore_entity",
     "update_lore_meta",
     "delete_lore_entity",
+    "manage_collection",
+    "file_lore_entries",
   ],
   maxRounds: 6,
   finishPolicy: "force-text",
 };
 
 const LORE_WRITE = ["create_lore_entity", "update_lore_meta", "delete_lore_entity"];
+const LORE_ORGANIZE = ["manage_collection", "file_lore_entries"];
 
 /** Tool names offered on each round, in wire order. */
 const offered: (string[] | undefined)[] = [];
@@ -131,10 +134,50 @@ describe("lore_write is withheld until a plan is approved", () => {
     await runAgent(makeOptions(gate));
 
     expect(offered[0]).toEqual(["list_lore_entities", "propose_lore_plan"]);
+    // 只装载 lore_write：批准的是一条**条目**步骤，集合工具不该顺路进来。
     expect(offered[1]).toEqual(["list_lore_entities", "propose_lore_plan", ...LORE_WRITE]);
     // The resident half keeps its positions: on the Anthropic family that array
     // is the cached prefix, and a reshuffle would throw the cache away.
     expect(offered[1]!.slice(0, 2)).toEqual(offered[0]);
+  });
+
+  /**
+   * 装载是**按方案形状**分的，不是全有全无。这一对测试是那条设计的守卫：批准一份
+   * 「改写条目正文」的方案不该顺手把集合工具塞进来，反过来也一样——否则「渐进式
+   * 披露」就退化成「批准任何东西都把整箱工具倒出来」。
+   */
+  it("a collection step loads only the organize group", async () => {
+    const gate = createPlanGate();
+    queueRound([
+      { toolCalls: [{ index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" }] },
+      done,
+    ], () => {
+      gate.steps.push({ target: "collection", action: "create", entity: "《雪原书》", detail: "新集合" });
+    });
+    queueRound([{ text: "done" }, done]);
+    await runAgent(makeOptions(gate));
+
+    expect(offered[1]).toEqual(["list_lore_entities", "propose_lore_plan", ...LORE_ORGANIZE]);
+  });
+
+  it("a plan with both shapes loads both groups", async () => {
+    const gate = createPlanGate();
+    queueRound([
+      { toolCalls: [{ index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" }] },
+      done,
+    ], () => {
+      gate.steps.push({ action: "create", entity: "Ava", detail: "新建" });
+      gate.steps.push({ target: "collection", action: "update", entity: "小说A", members: ["Ava"], detail: "归入" });
+    });
+    queueRound([{ text: "done" }, done]);
+    await runAgent(makeOptions(gate));
+
+    expect(offered[1]).toEqual([
+      "list_lore_entities",
+      "propose_lore_plan",
+      ...LORE_WRITE,
+      ...LORE_ORGANIZE,
+    ]);
   });
 
   it("announces the load once, not on every round after it", async () => {

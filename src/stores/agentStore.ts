@@ -1332,6 +1332,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         serverTools: routed.serverTools,
       };
 
+      // 和这个文件里其它每一处一样动态取——agentStore ↔ projectStore 是一个循环，
+      // 静态 import 会在模块求值期炸掉。
+      const { loreOrganizer } = await import("./projectStore");
+
       const { inputTokens, outputTokens, cachedTokens, outcome } = await runAgent({
         ...connOptions({ provider, model, apiKey }),
         // Never undefined: without a ceiling the tool loop's history trimming
@@ -1347,6 +1351,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           // the run, so the tools' in-place patches never reach store state.
           loreIndex: useLoreStore.getState().index,
           loreScope: useLoreStore.getState().scope,
+          organize: loreOrganizer(),
           multimodal: model.type === "multimodal",
           onLoreChanged: async () => {
             await useLoreStore.getState().scanProject(projectPath);
