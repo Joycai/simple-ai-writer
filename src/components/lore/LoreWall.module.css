@@ -179,6 +179,10 @@
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 16px;
   align-items: start;
+  /* 换取材范围＝换幕：整墙淡入一次。key 只绑 scope（LoreWall.tsx），所以搜索、
+     换分类、换集合筛选都不会重挂载、不会重放。只淡不移——卡片自带 id 哈希出来的
+     ±0.4deg 内联 transform，带 transform 的关键帧会在播放期间把它盖掉。 */
+  animation: fadeIn var(--transition-base);
 }
 
 /* 卡片＝装订边 + 卡身。padding 移到卡身上，装订边才贴得住卡片的左沿。 */

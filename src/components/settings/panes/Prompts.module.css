@@ -232,7 +232,7 @@
 .ovChevron {
   display: flex;
   color: var(--stg-text-desc);
-  transition: transform 200ms var(--ease-out);
+  transition: transform var(--transition-fast);
 }
 .ovChevronOpen { transform: rotate(90deg); }
 .ovTitle { font: 400 13.5px/1 var(--font-sans); color: var(--stg-text); }

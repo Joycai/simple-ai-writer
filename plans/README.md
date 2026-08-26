@@ -21,10 +21,17 @@
 | 012 | [插入到文档落点反馈](012-insert-flash.md) | LOW | DONE |
 | 013 | [剩余非壳模态表面的退出动画](013-remaining-modal-surfaces.md) | LOW | DONE |
 | 014 | [⌘K 命令面板去动画（决策变更）](014-command-palette-instant.md) | MEDIUM | DONE |
-| 015 | [右键菜单入场（006 的漏网之鱼）](015-context-menu-entrance.md) | MEDIUM | APPLIED · 受阻断 A |
-| 016 | [审批卡入场](016-approval-card-entrance.md) | MEDIUM | APPLIED · 受阻断 A |
-| 017 | [首次运行向导换步 enter-only](017-onboarding-step-enter-only.md) | LOW | **BLOCKED · 阻断 B** |
-| 018 | [导出按钮回执淡入](018-export-feedback-fade.md) | LOW | APPLIED · 受阻断 A |
+| 015 | [右键菜单入场（006 的漏网之鱼）](015-context-menu-entrance.md) | MEDIUM | DONE（阻断 A 已解除） |
+| 016 | [审批卡入场](016-approval-card-entrance.md) | MEDIUM | DONE（阻断 A 已解除） |
+| 017 | [首次运行向导换步 enter-only](017-onboarding-step-enter-only.md) | LOW | TODO（阻断 B 已澄清解除） |
+| 018 | [导出按钮回执淡入](018-export-feedback-fade.md) | LOW | DONE（阻断 A 已解除） |
+| 019 | [模块内 @keyframes 的全局唯一性守卫](019-keyframe-namespace-guard.md) | LOW | DONE |
+| 020 | [集合/装订子系统补齐悬停过渡](020-collections-transitions.md) | MEDIUM | DONE |
+| 021 | [侧栏拖拽按帧合并写入](021-sidebar-drag-raf.md) | MEDIUM | DONE |
+| 022 | [令牌归位与关键帧去重（005 的漏网之鱼）](022-token-and-keyframe-cleanup.md) | LOW | DONE |
+| 023 | [阻断 B 重新归因](023-blocker-b-reattribute.md) | HIGH | DONE — 结论「不是缺陷」，走分支 A |
+| 024 | [「回到最新」气泡去掉入场动画](024-jump-latest-no-entrance.md) | LOW | DONE |
+| 025 | [取材范围切换的墙面软化（加法项）](025-wall-scope-switch-softening.md) | LOW | DONE（第 2 步已按判据撤回） |
 
 > 001–005 已随 [PR #273](https://github.com/Joycai/simple-ai-writer/pull/273) 合入 main（基准 0f49132）。
 > 006–012（backlog 第二批，基准 9e16885）已于 2026-08-22 执行完毕，`pnpm tsc --noEmit` 与 `pnpm build` 通过。
@@ -79,35 +86,141 @@
 
 两个都**先于第四批存在**，且都是实机跑出来的，不是读代码推的。
 
-### 阻断 A —— CSS Modules 把 keyframe 名作用域化，37 处动画引用是死的
+### 阻断 A —— **已解决**（2026-08-23 切 LightningCSS）
 
-方案 006、011 以及第四批全部四份都写过同一句话：「模块引用本文件未声明的动画名会透传到全局」。**这句是错的。**
+> **原文所述缺陷已修复，本节保留为记录。** 当时的诊断是对的：CSS Modules 会把
+> `.module.css` 里的动画名哈希掉，而 keyframes 定义留在非 module 的 `global.css`
+> 里名字没变，38 处模块动画引用有 37 处悬空、一帧没播过。
+>
+> 修法落在 `vite.config.ts:26-35`（改用 LightningCSS + `cssModules: { animation: false }`
+> 关掉动画名哈希），并写进了 `docs/issues/css-modules-global-keyframes.md`。
+>
+> **2026-08-26 复核（基准 93eb7de）**，按原文自己给的判据核对构建产物：
+>
+> ```
+> $ grep -ohE "@keyframes [a-zA-Z_]+" dist/assets/*.css | sort -u   →  22 个，全部未作用域化
+> $ grep -ohE "animation:[^;}]+"      dist/assets/*.css             →  全部形如 animation:fadeIn .2s var(--ease-out)
+> 带作用域后缀（_fadeIn_<hash>_1 那种）的引用                        →  0 处
+> ```
+>
+> 即：**方案 006 的四个弹出层入场、各模态的 `scaleIn`/`fadeIn` 入场现在都真的在
+> 播。** 原文里「修复方向：引用侧加 `:global(...)`，会一次性点亮 37 个动画，
+> 必须单独成 PR」那段已经作废——不要再按它动手。
+>
+> 代价是那次修复引入了一条新的、当时只靠注释约定守着的不变量：模块内的
+> `@keyframes` 也不再作用域化，与 `global.css` **共用一个全局命名空间**，重名会
+> 静默覆盖。落地时全库 3 个模块内 keyframes，到 93eb7de 已是 10 个。
+> **方案 019 把这条约定变成测试。**
 
-`dist/assets/*.css` 里，关键帧定义是全局名，而 `.module.css` 里的引用被 Vite 加了作用域后缀，两边对不上：
+### 阻断 B —— **已澄清：不是缺陷**（2026-08-26 实测）
 
-```
-@keyframes dropIn                              ← global.css 定义（未作用域化）
-animation:_dropIn_1by8j_1 .14s var(--ease-out) ← ContextMenu.module.css 的引用
-```
+> 原记录：开着 Reduced Motion 跑起来，侧栏面板内容永久停在 `opacity: 0`，
+> 结论是「enter-only 的 keyed `motion.div` 在 `MotionConfig reducedMotion="user"`
+> 下不会推进到 `animate`」，并据此把方案 017 回退。
+>
+> **归因是错的。** 那次读数里内联样式带着 `transform: translateY(6px)`，而
+> `useMotionPreset()`（`src/lib/motion.ts:41-54`）在减动效下的唯一职责就是剥掉
+> 它——若减动效那条路径真的生效了，那串样式不可能存在。真正的成因是**测量环境**：
+> 浏览器预览面板的标签页 `visibilityState === 'hidden'`，rAF 不派发、动画时间轴
+> 根本不推进，于是任何 `motion.div` 都会永久停在它的 `initial` 值上。
+>
+> 2026-08-26 在一个**可见**页面里用 CDP + Web Animations API 重测，两种模式都
+> 收敛：
+>
+> ```
+> 基线（reduced:false）→ inline "opacity: 1; transform: translateY(0px);"  opacity 1
+> 减动效（reduced:true）→ inline "opacity: 1;"（transform 已被剥掉）        opacity 1
+> ```
+>
+> 完整读数、方法、以及仍未覆盖的一格（真 Tauri 窗口 + 系统「减弱动态效果」）
+> 见 **`docs/issues/motion-enter-only-hidden-tab.md`**。
+>
+> **方案 017 的 BLOCKED 已解除**（状态改回 TODO，方案内容不用改）。
+> `Sidebar.tsx` / `AiPanel.tsx` 未做任何改动。
 
-全量核对构建产物：**38 处模块动画引用里 37 处没有对应定义** —— `fadeIn` 17 · `scaleIn` 11 · `dropIn` 5 · `riseIn` 3 · `slideInRight` 1。指向全局关键帧的未作用域化引用 **0 处**。唯一活着的是 `_transitionGrow_1km2h_1`，因为 `SceneTransition.module.css` **自己定义**了它。
+## 第五批（019–025，基准 93eb7de）
 
-影响面远超第四批：方案 006 的四个弹出层入场、各模态的 `scaleIn`/`fadeIn` 入场**从未真正跑过**。
-**但方案 008 的退场动画是好的** —— `.modal-closing` 定义在 `global.css` 且以字符串类名套用（不经 `styles.x`），没被作用域化，构建产物里保持 `animation:fadeOut .16s`。这条差别正是判断某个动画到底活没活着的判据。
+来源是 2026-08-26 的一轮完整复核 + 增量审计。前三批把明显的问题清干净了：全库
+**无** `transition: all`、**无** `ease-in`、**无** `scale(0)`、**无**动画布局属性
+（除 022 的 E 项）、67 处 `:active` 按压反馈、锚定浮层的 `transform-origin` 全部
+就位、`springScreen`/`springPanel`/`springDrawer` 三个弹簧全部处于临界阻尼或过
+阻尼（无弹跳，符合手稿气质）。**新发现集中在第四批基线之后新增的代码**——新代码
+没接上既有约定，而不是既有约定错了。
 
-修复方向：引用侧加 `:global(...)`。**但它会一次性点亮 37 个动画**，是对已发布外观的实质改动，必须单独成 PR 并做一轮外观审阅——不要顺手塞进别的改动里。**改之前先按上面的方法核对构建产物，别再凭约定断言。**
+复核结论另有两条，写在上面的「阻断」两节里：**阻断 A 已解决**（构建产物核验通过，
+原文的修复方向已作废），**阻断 B 归因存疑**（方案 023 的第一步是重新测量）。
 
-### 阻断 B —— enter-only 的 keyed `motion.div` 在 reduced-motion 下停在 `initial`
+- **019**：阻断 A 的修法把模块内 `@keyframes` 并进了全局命名空间，`vite.config.ts`
+  和 issue 文档都还写着「目前只有 3 个」，实际已是 10 个。重名会**静默**覆盖全局
+  关键帧——和原缺陷一样无症状。把约定变成测试。**纯加法，零风险，先做。**
+- **020**：集合/装订（设计稿屏 24–31）是最新落地的一整套 UI，两个 CSS 文件
+  **零 `transition:` 声明**，17 处悬停/选中全是硬切，紧挨着的分类栏却是 120ms
+  淡入。量最大但模式单一。
+- **021**：方案 001 关掉了拖拽期间的过渡，没碰**写入频率**——`mousemove` 跟随鼠标
+  采样率直通，每次都在布局根节点写 `--sidebar-width`，一帧之内可能重复做好几次
+  「样式重算 + 编辑器整列回流」。合并到 rAF。
+- **022**：方案 005 那批的漏网之鱼，六处，同一类修法：两处手写 `cubic-bezier`
+  复刻 `--ease-out`、两个 `fadeIn` 的逐字克隆、一个 `slideInRight` 的近似克隆 +
+  冗余令牌回退、一处同款控件两个时长、一处动画 `border-width`。
+- **023**：见阻断 B。**第一步是测量，不是修复**；它也是方案 017 解锁的前提。
+- **024**：「回到最新」气泡有入场无退场，且由 `useStickToBottom` 的单阈值判定
+  （`EDGE=40`，无滞回，另挂一个 `ResizeObserver`）驱动，边界附近会反复重挂载、
+  关键帧每次从零重放。修法是**删掉入场**（同方案 003 对 `InlineAiBubble` 的判断）。
+- **025**：唯一的加法项。第 2 步（卡片错峰）是**条件性**的，带三条实测判据，
+  不成立必须撤回——照方案 018 第 3 步的体例。
 
-开着 Reduced Motion 跑起来，侧栏面板此刻在 `main` 上就是全透明的：
+### 推荐执行顺序与依赖
 
-```
-_contentFlush_1wdy8_102  →  computedOpacity "0"   239×672
-                            inline: "opacity: 0; transform: translateY(6px);"
-```
+1. **019**（纯加法：一个测试 + 两处注释更新，零风险；它守的不变量后面几份都会碰到）
+2. **020**（机械，量大模式单一，改动集中在 `collections/` 两个文件）
+3. **021**（一处 rAF 合并 + `ResizeHandle` 加一个可选回调，收益直接落在拖拽手感上）
+4. **022**（机械批量；**若 019 已落地，022 删掉三个克隆关键帧后跑一次那个测试**）
+5. **023**（**先测量**。结论可能是「不是缺陷」，那就只改文档 + 解锁 017）
+6. **024**（删 1 行 + 删 1 个关键帧）
+7. **025**（加法项，两步，第 2 步条件性；建议单独成 PR）
 
-切换 文件/大纲 标签、等 1.2s 后依旧是 0 —— 不是时序问题，是永久的。同一棵树里被 `AnimatePresence` 包着的 `fillLayer` 则正常收敛到 `opacity: 1`。
+依赖关系：
 
-即：**方案 004 引入的 enter-only 模式（keyed `motion.div` + `initial`/`animate`，无 `AnimatePresence`）在 `MotionConfig reducedMotion="user"` 下不会推进到 `animate`。** 侧栏对所有开启动效缩减的用户是不可见的 —— 这是无障碍缺陷，不只是动效问题。
+- **019 → 022 / 024**：这两份都会删关键帧定义，019 的测试正好是它们的回归网。
+  反过来也成立——019 必须在删除之前落地，才能证明它真的会报错。顺序即可，
+  不必合并。
+- **023 → 017**：017 的 BLOCKED 只能由 023 解除。**023 出结论前不要执行 017。**
+- 其余互不依赖，改动文件零重叠（`019` 新建测试 + `vite.config.ts` 注释 /
+  `020` `collections/*.module.css` / `021` `App.tsx`+`ResizeHandle.tsx` /
+  `022` 四个 CSS / `024` `AgentChat.module.css` / `025` `LoreWall.*`），可并行。
+- **均不新增 `global.css` 的关键帧，也不新增 Motion 预设。** 020/022/024/025 复用的
+  `fadeIn`、`slideInRight` 都已存在；任何一份若打算新增，都说明理解偏了。
 
-017 会把同一缺陷复制到首次运行向导（已实测确认同样停在 `opacity: 0`），所以**017 已回退、标记 BLOCKED**：让首屏对这部分用户完全不可见，比它原本的硬切更糟。修好 B 之后 017 可原样执行，方案本身不用改。
+### 执行记录（2026-08-26，基准 93eb7de）
+
+019–025 已全部执行完毕。`pnpm tsc --noEmit` / `pnpm test`（188 文件 · 2551 用例）/
+`pnpm build` 全绿。
+
+- **019** 新增 `src/lib/__tests__/cssKeyframeNames.test.ts`（2 条断言），并做了两次
+  **反向验证**：临时给 `SnippetSaveMenu.module.css` 加一个重名 `@keyframes fadeIn`
+  → 第一条如实报出 `fadeIn — …SnippetSaveMenu.module.css / …global.css`；临时把
+  `dropIn` 拼成 `dropInn` → 第二条如实报出悬空引用。两次都已还原。
+  `vite.config.ts` 与 `docs/issues/css-modules-global-keyframes.md` 的过期计数一并更新。
+- **020** 13 处过渡，全部落在**基态**选择器上、全部逐属性列出、零 `all`。
+  三条判断按方案执行：`.railRowOn` 的 `padding-left` 未进过渡（3px 边框 + 15px
+  padding = 18px，内容不位移）、`.scopeButton` 的虚线→实线接受硬切、
+  collections 的 `.rowActive` 边框未进过渡（会改行高）。
+- **021** `mousemove` 合并到 rAF，`data-resizing` 改为 `onStart` 时设一次；
+  `onResizeEnd` 里同步补写最后一帧后再移除属性。`ResizeHandle` 增 `onStart?`。
+- **022** 六处全清。`grep cubic-bezier`（tokens.css 除外）、
+  `grep "transition:.*border-width"` 均归零；`nameIn`/`traceIn`/`drawerIn` 三个
+  克隆关键帧已删。**一处保守偏离**：`.radioOn` 保留了原有的
+  `background: var(--stg-bg-input)`（与基态同值、删掉是安全的，但保留可保证声明
+  集合不变）。构建产物核对：`slideInRight .22s` 现在有 2 处（供应商抽屉 + 文档格式
+  抽屉，如期共用）。
+- **023** 结论是**分支 A：不是缺陷**，未改任何组件代码。见「阻断 B」一节与
+  `docs/issues/motion-enter-only-hidden-tab.md`。方案 017 已解锁为 TODO。
+- **024** 删 1 行 + 删 1 个关键帧，原位留下「为什么没有入场」的注释。
+- **025** 第 1 步落地；**第 2 步按判据 2 撤回**，撤回依据是实测而非判断——单张
+  新挂载的卡片确实会跑 `fadeIn`（`freshOpacity: "0"`），而只有第 1 步时卡片身上
+  零动画（`step1CardAnims: 0`）。读数抄在方案 025 里。
+
+**仍未做的目检**（需要真窗口 + 真项目，代码验证覆盖不到）：020 的悬停手感与
+「文字一像素都不许动」、021 的 Performance 面板一帧一次 Layout、022 的单选点
+逐像素比对、024 的边界处来回蹭不闪烁、025 的换范围整墙淡入 / 打字零动画。
+每份方案的 Verification 一节列了具体步骤。

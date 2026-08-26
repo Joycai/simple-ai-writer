@@ -64,7 +64,7 @@
   align-items: baseline;
   gap: 6px;
   min-width: 0;
-  animation: traceIn 240ms var(--ease-out);
+  animation: fadeIn 240ms var(--ease-out);
 }
 .tracePlus {
   font: 500 10px/1 var(--font-mono);
@@ -83,7 +83,6 @@
   color: var(--color-text-kbd);
   flex-shrink: 0;
 }
-@keyframes traceIn { from { opacity: 0; } to { opacity: 1; } }
 
 /* ── The popover ─────────────────────────────────────────────────────────────
    520 wide, left-aligned on the entry, opening *upward* — it lives at the
@@ -103,7 +102,7 @@
   border: 1px solid var(--color-border-input);
   box-shadow: var(--snip-shadow);
   transform-origin: bottom left;
-  animation: snipRise 160ms cubic-bezier(0.32, 0.72, 0, 1);
+  animation: snipRise 160ms var(--ease-out);
 }
 @keyframes snipRise {
   from { opacity: 0; transform: translateY(2px); }
