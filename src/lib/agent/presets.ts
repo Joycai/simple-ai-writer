@@ -151,6 +151,7 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "read_workflow",
     "propose_lore_plan",
     "create_lore_entity",
+    "create_lore_facet",
     "update_lore_file",
     "update_lore_meta",
     "append_lore_file",

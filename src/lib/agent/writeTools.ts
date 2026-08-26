@@ -32,6 +32,7 @@ import {
   cloneLoreIndex,
   createEntityWithContent,
   dropLoreImageEntry,
+  facetFileName,
   parseFacetMeta,
   readEntityFile,
   saveEntityMetaAndBody,
@@ -40,6 +41,7 @@ import {
   slugifyEntityId,
   uniqueEntityId,
   updateLoreImageEntry,
+  withSlotDefaults,
   writeEntityFile,
   type CategoryId,
   type FacetMeta,
@@ -464,10 +466,19 @@ export async function updateLoreFileTool(
   const suffix = backupPath
     ? `Previous version backed up to ${backupPath}.`
     : "This is a new file (no backup needed).";
+  // A new .md that is not a facet is an attachment, and an attachment is never
+  // injected. Reporting that plainly is the difference between the model fixing
+  // it in the next round and the author finding it on the entry page weeks
+  // later — which is exactly how this tool used to swallow "split into facets".
+  const inert =
+    !backupPath && file !== "index.md" && !parseFacetMeta(content, file)
+      ? ` NOTE: ${file} has no \`facet\` frontmatter, so it is an inert ATTACHMENT and will never be injected. ` +
+        `If it was meant to be a facet, call create_lore_facet(entity, title, file: "${file}") — it keeps this text and adds the frontmatter.`
+      : "";
   return {
     toolCallId,
     content:
-      `Wrote ${file} of entity "${entity.name}". ${suffix} ` +
+      `Wrote ${file} of entity "${entity.name}". ${suffix}` + inert + " " +
       `Plan step: ${gated.step.detail}. The lore index has been refreshed.`,
   };
 }
@@ -848,6 +859,179 @@ function forgetFileInSnapshot(entity: LoreEntity, file: string): void {
   entity.facets = (entity.facets ?? []).filter((f) => f.file !== file);
 }
 
+/**
+ * Resolve a model-supplied slot id against *this entity's* category schema.
+ *
+ * Checked per entity rather than as a global enum because a slot only means
+ * anything inside the schema that declares it, and the error is where the model
+ * learns which ones those are — no per-entity enum can reach the wire, since
+ * tool schemas are built per preset, not per run.
+ *
+ * Returns the declared id (casing normalised), `null` for "no slot", or the
+ * refusal to hand straight back.
+ */
+function resolveFacetSlotArg(
+  toolCallId: string,
+  entity: LoreEntity,
+  raw: unknown,
+): ToolResult | string | null {
+  const wanted = typeof raw === "string" ? raw.trim() : "";
+  if (!wanted) return null;
+  const slot = findFacetSlot(entity.category, wanted);
+  if (slot) return slot.id;
+  const declared = categoryFacetSlots(entity.category);
+  return {
+    toolCallId,
+    content: declared.length === 0
+      ? `Error: category "${entity.category}" declares no facet slots, so 'slot' cannot be set here. Pass an empty string to clear it, or omit it.`
+      : `Error: "${wanted}" is not a facet slot of category "${entity.category}". Its slots are: ${declared.map((sl) => sl.id).join(", ")}. Pass an empty string to clear the slot instead.`,
+  };
+}
+
+/**
+ * create_lore_facet — the only tool that brings a facet into existence.
+ *
+ * It exists because the alternative was silent. A facet IS its frontmatter: a
+ * `facet` title is what parseFacetMeta looks for, and a file without one is an
+ * inert attachment that never reaches the injector. Every other write tool
+ * either refuses a new file or writes exactly the bytes the model sent, so
+ * "split this entry into facets" ran through update_lore_file, arrived without
+ * that frontmatter, came back as `Wrote 变身形态.md`, and injected nothing —
+ * a failure the author meets on the entry page weeks later, not in the run.
+ * Generating the frontmatter here is what makes the outcome match the request.
+ *
+ * Two shapes, decided by `file`:
+ *   - omitted — a brand-new facet, named after its title (collision-safe)
+ *   - given   — promote an existing attachment, the agent's counterpart to the
+ *               entry page's 「转为特征」 button. Its body is carried through
+ *               verbatim when `content` is omitted: the text is already the
+ *               author's, and re-sending it through the model is the one way to
+ *               have it quietly paraphrased.
+ */
+export async function createLoreFacetTool(
+  toolCallId: string,
+  args: {
+    entity?: string;
+    title?: string;
+    content?: string;
+    file?: string;
+    slot?: string;
+    keys?: string[];
+    group?: string;
+    priority?: number;
+    mode?: string;
+  },
+  ctx: ToolContext,
+): Promise<ToolResult> {
+  const entityName = args.entity?.trim();
+  if (!entityName) return { toolCallId, content: "Error: 'entity' argument is required." };
+  const entity = findEntityByName(ctx.loreIndex, entityName);
+  if (!entity) {
+    return {
+      toolCallId,
+      content: `Error: entity "${entityName}" not found. Available: ${allEntityNames(ctx.loreIndex) || "none"}`,
+    };
+  }
+
+  const title = args.title?.trim();
+  if (!title) {
+    return {
+      toolCallId,
+      content: "Error: 'title' argument is required — what this facet is (an outfit, a form, a stretch of backstory). It names the file and heads the card the author reads.",
+    };
+  }
+
+  // The filename is settled before anything is written: the plan gate below may
+  // authorise exactly one file, and it has to be told which.
+  let file: string;
+  let existingBody: string | null = null;
+  if (args.file !== undefined) {
+    const checked = checkFacetFilename(toolCallId, args.file);
+    if (typeof checked !== "string") return checked;
+    file = checked;
+    try {
+      const raw = await readEntityFile(entity.dirPath, file);
+      if (parseFacetMeta(raw, file)) {
+        return {
+          toolCallId,
+          content:
+            `Error: "${file}" of entity "${entity.name}" is already a facet — this tool only creates one. ` +
+            `Retune its metadata with update_facet_meta, rewrite its body with update_lore_file, or omit 'file' to add a separate facet.`,
+        };
+      }
+      existingBody = parseFrontmatter(raw).content; // an attachment: promote it
+    } catch {
+      // Nothing there yet — a plain create under the name the model chose.
+    }
+  } else {
+    file = await facetFileName(entity.dirPath, title);
+  }
+
+  const body = args.content?.trim() ? args.content : existingBody;
+  if (body === null || !body.trim()) {
+    return {
+      toolCallId,
+      content: existingBody === null
+        ? "Error: 'content' argument is required — the facet's body markdown (no frontmatter; it is generated from the other arguments)."
+        : `Error: "${file}" has no text to promote — pass 'content' with the facet's body.`,
+    };
+  }
+
+  if ("keys" in args && !Array.isArray(args.keys)) {
+    return { toolCallId, content: "Error: 'keys' must be an array of strings." };
+  }
+  const keys = (args.keys ?? []).map((k) => String(k).trim()).filter(Boolean);
+
+  const slot = resolveFacetSlotArg(toolCallId, entity, args.slot);
+  if (slot !== null && typeof slot !== "string") return slot;
+
+  const priority = "priority" in args ? Number(args.priority) : 0;
+  if (!Number.isFinite(priority)) {
+    return { toolCallId, content: "Error: 'priority' must be a number." };
+  }
+  const mode = args.mode ?? "auto";
+  if (mode !== "auto" && mode !== "always" && mode !== "manual") {
+    return { toolCallId, content: "Error: 'mode' must be one of: auto, always, manual." };
+  }
+
+  // Only what the model left neutral is filled from the slot's defaults, so a
+  // decision it actually made survives (see withSlotDefaults).
+  const meta: FacetMeta = withSlotDefaults(
+    { title, slot, keys, group: args.group?.trim() || null, priority, mode },
+    entity.category,
+  );
+
+  // Gated as "update" on the entity — the entity itself already exists — and a
+  // plan that said "create the outfit facet" satisfies it too (plan.ts).
+  const gated = gate(toolCallId, ctx, "update", entity.name, file);
+  if ("refusal" in gated) return gated.refusal;
+
+  // Only a promotion has a previous version to keep.
+  const backupPath = existingBody === null
+    ? null
+    : await backupFile(ctx.projectPath, `${entity.dirPath}/${file}`);
+  await saveFacetFile(entity.dirPath, file, meta, body);
+
+  if (!(entity.mdFiles ?? []).includes(file)) (entity.mdFiles ??= []).push(file);
+  const snapshot: LoreFacet = { file, ...meta, slot: meta.slot ?? null, charCount: body.length };
+  const at = (entity.facets ?? []).findIndex((f) => f.file === file);
+  if (at >= 0) entity.facets[at] = snapshot;
+  else (entity.facets ??= []).push(snapshot);
+
+  await syncLore(ctx);
+  const inert = meta.mode === "auto" && meta.keys.length === 0;
+  return {
+    toolCallId,
+    content:
+      `${existingBody === null ? "Created" : "Promoted the attachment"} ${file} on entity "${entity.name}" as facet "${meta.title}": ` +
+      `slot=${meta.slot ?? "none"}, keys=[${meta.keys.join(", ")}], group=${meta.group ?? "none"}, priority=${meta.priority}, mode=${meta.mode}.` +
+      (existingBody !== null && !args.content?.trim() ? " Its text was carried through unchanged." : "") +
+      (inert ? " NOTE: with mode=auto and no keys this facet will never be injected — give it trigger words with update_facet_meta." : "") +
+      (backupPath ? ` Previous version backed up to ${backupPath}.` : "") +
+      ` Plan step: ${gated.step.detail}. The lore index has been refreshed.`,
+  };
+}
+
 export async function updateFacetMetaTool(
   toolCallId: string,
   args: {
@@ -888,7 +1072,7 @@ export async function updateFacetMetaTool(
     const known = (entity.mdFiles ?? []).filter((f) => !RESERVED_ENTITY_FILES.includes(f));
     return {
       toolCallId,
-      content: `Error: "${file}" does not exist in entity "${entity.name}". Its facet files are: ${known.join(", ") || "none"}. Create one with update_lore_file.`,
+      content: `Error: "${file}" does not exist in entity "${entity.name}". Its facet files are: ${known.join(", ") || "none"}. Create one with create_lore_facet.`,
     };
   }
 
@@ -896,7 +1080,9 @@ export async function updateFacetMetaTool(
   if (!current) {
     return {
       toolCallId,
-      content: `Error: "${file}" is not a facet — it has no \`facet\` field in its frontmatter, so it is an inert attachment. Use update_lore_file to rewrite it wholesale.`,
+      content:
+        `Error: "${file}" is not a facet — it has no \`facet\` field in its frontmatter, so it is an inert attachment that is never injected. ` +
+        `Turn it into one with create_lore_facet(entity, title, file: "${file}"), which keeps its text; use update_lore_file to rewrite the text itself.`,
     };
   }
 
@@ -918,26 +1104,11 @@ export async function updateFacetMetaTool(
     mode: current.mode,
   };
   if ("slot" in args) {
-    const wanted = typeof args.slot === "string" ? args.slot.trim() : "";
-    if (!wanted) {
-      next.slot = null; // explicit "" clears the classification
-    } else {
-      // Checked against *this entity's* category rather than a global enum: a
-      // slot only means anything inside the schema that declares it, and the
-      // error is where the model learns which ones those are (no per-entity
-      // enum can reach the wire — tool schemas are built per preset, not per run).
-      const slot = findFacetSlot(entity.category, wanted);
-      if (!slot) {
-        const declared = categoryFacetSlots(entity.category);
-        return {
-          toolCallId,
-          content: declared.length === 0
-            ? `Error: category "${entity.category}" declares no facet slots, so 'slot' cannot be set here. Pass an empty string to clear it, or omit it.`
-            : `Error: "${wanted}" is not a facet slot of category "${entity.category}". Its slots are: ${declared.map((sl) => sl.id).join(", ")}. Pass an empty string to clear the slot instead.`,
-        };
-      }
-      next.slot = slot.id; // normalised to the declared casing
-    }
+    // "" clears the classification; anything else is normalised to the casing
+    // the entity's own category declares.
+    const slot = resolveFacetSlotArg(toolCallId, entity, args.slot);
+    if (slot !== null && typeof slot !== "string") return slot;
+    next.slot = slot;
   }
   if ("keys" in args) {
     if (!Array.isArray(args.keys)) {

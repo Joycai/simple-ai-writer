@@ -258,6 +258,23 @@ export async function saveFacetFile(
 }
 
 /**
+ * The filename a facet with this title gets: slugified, collision-safe, never
+ * a reserved name. Split out from {@link createFacetFile} because a caller that
+ * must know the name *before* the write exists — the agent's create_lore_facet
+ * gates on the approved plan, and a plan step may name the file it authorises.
+ */
+export async function facetFileName(dirPath: string, title: string): Promise<string> {
+  // '#' is stripped because facet pins are stored as "dirPath#file" strings.
+  let base = slugifyEntityId(title).replace(/#/g, "");
+  if (!base || RESERVED_ENTITY_FILES.includes(`${base}.md`)) base = `facet-${base}`;
+  let file = `${base}.md`;
+  for (let i = 2; await fileExists(`${dirPath}/${file}`); i++) {
+    file = `${base}-${i}.md`;
+  }
+  return file;
+}
+
+/**
  * Create a new facet file named after the title (slugified, collision-safe,
  * never a reserved name). Returns the filename actually used.
  */
@@ -266,13 +283,7 @@ export async function createFacetFile(
   meta: FacetMeta,
   body: string,
 ): Promise<string> {
-  // '#' is stripped because facet pins are stored as "dirPath#file" strings.
-  let base = slugifyEntityId(meta.title).replace(/#/g, "");
-  if (!base || RESERVED_ENTITY_FILES.includes(`${base}.md`)) base = `facet-${base}`;
-  let file = `${base}.md`;
-  for (let i = 2; await fileExists(`${dirPath}/${file}`); i++) {
-    file = `${base}-${i}.md`;
-  }
+  const file = await facetFileName(dirPath, meta.title);
   await saveFacetFile(dirPath, file, meta, body);
   return file;
 }

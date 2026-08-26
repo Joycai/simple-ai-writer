@@ -224,6 +224,33 @@ Apply             写文件 + 备份 + rescan
 
 LoreWall 可加"检测可拆分条目"入口（正文超长且无 facet 的实体列表，逐个走单实体流程）。不做全自动批量 Apply——review 是质量底线。
 
+### 3.5 对话助手里的拆分：`create_lore_facet`（2026-08-26 补）
+
+**上面这条链路（拆分按钮 → `splitter.ts` → `createFacetFile`）是当时唯一会写出
+facet frontmatter 的路径，而对话助手/Agent 模式走不到它。** 于是"帮我整理这份资料、
+建成条目并拆成几面"在助手里的结局是：模型用 `update_lore_file` 写出若干新 `.md`，
+里面是干净的 markdown、没有 `facet:` 头，`readEntity` 把它们判成**附件**，条目页
+「特征 · 0」而附件区躺着六个文件。工具返回的是 `Wrote 变身形态.md`，没有任何异常——
+作者要到打开条目页才发现，模型则从头到尾以为自己成功了。
+
+补上的是**一个工具**，不是一段校验：
+
+- `create_lore_facet`（`lib/agent/writeTools.ts` · `lore_write` 组，随已批准方案装载）
+  接 title/content/keys/slot/group/priority/mode，frontmatter 由 `saveFacetFile` 生成，
+  文件名由 `facetFileName`（从 `createFacetFile` 拆出来的）从 title 推导——**模型不再
+  经手 frontmatter，也就不会漏写它**。slot 按条目自己的分类校验，`withSlotDefaults`
+  补上作者没决定的字段。
+- 传 `file` 则是**把已有附件转正**（正文原样保留，除非另给 content）——这既是 agent
+  侧的「转为特征」按钮，也是已经踩进坑里的条目的出路。
+- 三处指路同时改掉：`update_lore_file` 的描述不再自称能建特征、并明说新文件会变成
+  附件；`update_facet_meta` 遇到非 facet 文件时指向 `create_lore_facet(file:)`；
+  `slotChecklistText` 那句「Pass the slot id as the `slot` argument of a facet」终于
+  有一个真的接受 `slot` 的创建工具可指。
+- `update_lore_file` 写出新的非 facet `.md` 时，结果里追加一句"这是附件、不参与注入"。
+  沉默是这个 bug 的一半——模型有机会当场改正，代价只有一句话。
+
+代价 ~613 token，全在 deferred 组（`agentToolBudget.test.ts` 记了测量值）。
+
 ---
 
 ## 4. UI 更新清单

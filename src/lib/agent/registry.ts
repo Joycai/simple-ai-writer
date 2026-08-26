@@ -70,6 +70,7 @@ import {
   createDirectoryTool,
   createFileTool,
   createLoreEntityTool,
+  createLoreFacetTool,
   appendLoreFileTool,
   editLoreFileTool,
   deleteChapterTool,
@@ -598,6 +599,7 @@ export type ToolId =
   | "read_workflow"
   | "propose_lore_plan"
   | "create_lore_entity"
+  | "create_lore_facet"
   | "update_lore_file"
   | "update_lore_meta"
   | "append_lore_file"
@@ -1061,6 +1063,61 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
     execute: (call, ctx) => createLoreEntityTool(call.id, parseArgs(call.arguments), ctx),
   },
 
+  create_lore_facet: {
+    group: "lore_write",
+    access: "write-auto",
+    definition: {
+      type: "function",
+      function: {
+        name: "create_lore_facet",
+        description:
+          "Add a NEW facet to an existing entity — one aspect of it (an outfit, a form, a stretch of backstory, one set of relationships) kept in its own file so it is injected only when the manuscript is actually about that aspect. THE tool for 'split this entry into facets' and for filling an empty facet slot: writing a new .md through update_lore_file instead produces an inert attachment that is never injected, because a facet is its frontmatter and only this tool generates it. 'content' is the body markdown alone (no frontmatter). 'keys' are the trigger words the injector matches against the manuscript — without any, a mode=auto facet never fires. Facets sharing a 'group' compete, so only the highest 'priority' one is injected. read_lore_entity lists the category's facet slots and what already covers them.",
+        parameters: {
+          type: "object",
+          properties: {
+            entity: {
+              type: "string",
+              description: "Entity name exactly as returned by list_lore_entities",
+            },
+            title: {
+              type: "string",
+              description: "What this facet is, e.g. \"战甲形象\" — heads the author's card and names the file",
+            },
+            content: {
+              type: "string",
+              description: "The facet's body markdown, no frontmatter. Omit it only when promoting an attachment (see 'file'), to keep that text verbatim.",
+            },
+            keys: {
+              type: "array",
+              items: { type: "string" },
+              description: "4-8 trigger words the injector matches against the manuscript — each specific enough that its appearance really means this facet is relevant; no pronouns or common verbs. Without any, a mode=auto facet never fires.",
+            },
+            slot: {
+              type: "string",
+              description: "The facet slot this fills, from read_lore_entity's facet-slot list. Omit when it fits none.",
+            },
+            group: {
+              type: "string",
+              description: "Mutual-exclusion group: facets that cannot both be true (all outfits, all forms) share one, e.g. \"outfit\" — only the highest 'priority' one is injected.",
+            },
+            priority: { type: "number", description: "Within a group, higher wins. Default 0." },
+            mode: {
+              type: "string",
+              enum: ["auto", "always", "manual"],
+              description: "auto = injected when a key matches (default), always = every time, manual = only when the author pins it",
+            },
+            file: {
+              type: "string",
+              description: "Only to promote an EXISTING attachment of this entity into a facet — the .md filename read_lore_entity showed. Omit for a new facet: the filename comes from the title.",
+            },
+          },
+          required: ["entity", "title"],
+        },
+      },
+    },
+    execute: (call, ctx) => createLoreFacetTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
   update_lore_file: {
     group: "lore_write",
     access: "write-auto",
@@ -1069,7 +1126,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "update_lore_file",
         description:
-          "Overwrite one .md file of an existing lore entity with complete new content (send the WHOLE file, not a diff). Reach for it only when the whole file must be re-laid-out, or to create a new facet file: to change metadata use update_lore_meta / update_facet_meta, to add a section use append_lore_file, and to fix a sentence use edit_lore_file — none of which make you re-emit the rest of the entry. index.md must include full frontmatter (name/aliases/category/summary) and may not change the name, the category or the dict flag (renames go through move_lore_entity). A facet file must keep its facet frontmatter. images.md cannot be written — the gallery has its own tools. Read the current content with read_lore_entity first. The previous version is backed up automatically before writing.",
+          "Overwrite one .md file of an existing lore entity with complete new content (send the WHOLE file, not a diff). Reach for it only when a whole file must be re-laid-out: to change metadata use update_lore_meta / update_facet_meta, to add a section use append_lore_file, to fix a sentence use edit_lore_file, and to add a facet use create_lore_facet — none of which make you re-emit the rest of the entry. NOT the tool for a new facet: a new filename here becomes an inert ATTACHMENT that is never injected, because a facet is defined by frontmatter this tool does not generate. index.md must include full frontmatter (name/aliases/category/summary) and may not change the name, the category or the dict flag (renames go through move_lore_entity). An existing facet file must keep its facet frontmatter. images.md cannot be written — the gallery has its own tools. Read the current content with read_lore_entity first. The previous version is backed up automatically before writing.",
         parameters: {
           type: "object",
           properties: {
@@ -1079,7 +1136,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             },
             file: {
               type: "string",
-              description: "Filename inside the entity directory (default: index.md). A new filename creates a new facet/attachment file.",
+              description: "Filename inside the entity directory (default: index.md). A filename that does not exist yet creates an inert attachment, NOT a facet — use create_lore_facet for that.",
             },
             content: { type: "string", description: "The complete new file content" },
           },
@@ -1205,7 +1262,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "update_facet_meta",
         description:
-          "Retune ONE facet's activation metadata — its title, slot, keys, group, priority or mode — without touching its body text. This is the right tool for 'this facet never fires' or 'these two outfits should exclude each other': update_lore_file would make you resend the whole file, risking silent edits to the prose. `keys` are the trigger words the injector matches against the manuscript; facets sharing a `group` compete so only the highest `priority` one is injected; `mode` auto = key-matched, always = every time, manual = pinned only. Read the file with read_lore_entity first — the fields you omit keep their current values.",
+          "Retune ONE facet's activation metadata — its title, slot, keys, group, priority or mode — without touching its body text. This is the right tool for 'this facet never fires' or 'these two outfits should exclude each other': update_lore_file would make you resend the whole file, risking silent edits to the prose. The file must ALREADY be a facet — create one with create_lore_facet. `keys` are the trigger words the injector matches against the manuscript; facets sharing a `group` compete so only the highest `priority` one is injected; `mode` auto = key-matched, always = every time, manual = pinned only. Read the file with read_lore_entity first — the fields you omit keep their current values.",
         parameters: {
           type: "object",
           properties: {

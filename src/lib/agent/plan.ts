@@ -221,10 +221,11 @@ export function checkPlan(
       // otherwise "update 《漕运纪》" (the collection) would authorise rewriting
       // an entity that happens to share the name.
       stepTarget(s) === "entity" &&
-      // update_lore_file is the only tool that ever lands a file — including a
-      // facet that doesn't exist yet on an entity that does (create_lore_entity
-      // refuses that; it only makes brand-new entities). Its call is always
-      // gated as "update" (writeTools.ts), but a plan author has no way to tell
+      // create_lore_facet and update_lore_file both land a file on an entity
+      // that already exists (create_lore_entity refuses that; it only makes
+      // brand-new entities). Both are gated as "update" (writeTools.ts) —
+      // including create_lore_facet, whose whole subject is a file that does
+      // not exist yet — but a plan author has no way to tell
       // "new facet" from "edit existing facet" apart except by writing "create"
       // — and that's a sensible word for genuinely new content. So for a
       // file-scoped call, accept either label; only the entity-level actions
