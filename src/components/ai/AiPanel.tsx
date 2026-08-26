@@ -1873,18 +1873,23 @@ export function AiPanel() {
 
           {/* Pending lore plans + manuscript edits + round-cap questions — the
               loop is blocked on these */}
-          {pendingPlans.map((p) => (
-            <PlanCard key={p.plan.id} item={p} />
-          ))}
-          {pendingApprovals.map((p) => (
-            <ApprovalCard key={p.proposal.id} item={p} />
-          ))}
-          {pendingTruncations.map((p) => (
-            <TruncationCard key={p.id} item={p} />
-          ))}
-          {pendingRoundLimits.map((p) => (
-            <RoundLimitCard key={p.id} item={p} />
-          ))}
+          {(pendingPlans.length > 0 || pendingApprovals.length > 0
+            || pendingTruncations.length > 0 || pendingRoundLimits.length > 0) && (
+            <div className={styles.approvals}>
+              {pendingPlans.map((p) => (
+                <PlanCard key={p.plan.id} item={p} />
+              ))}
+              {pendingApprovals.map((p) => (
+                <ApprovalCard key={p.proposal.id} item={p} />
+              ))}
+              {pendingTruncations.map((p) => (
+                <TruncationCard key={p.id} item={p} />
+              ))}
+              {pendingRoundLimits.map((p) => (
+                <RoundLimitCard key={p.id} item={p} />
+              ))}
+            </div>
+          )}
 
           {/* Execution log: run lifecycle, rounds, tool calls */}
           {(agentLog.length > 0 || error) && (

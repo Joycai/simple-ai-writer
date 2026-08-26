@@ -669,6 +669,13 @@
   overflow-y: auto;
 }
 
+/* 卡片落下来。挂在子元素上而不是容器上——容器在已有卡片的情况下追加第二张
+   时不会重挂载，挂容器上动画就不会播（同 AgentChat.module.css:307）。 */
+.approvals > * {
+  animation: dropIn 200ms var(--ease-out);
+  transform-origin: top left;
+}
+
 /* ── 输入区 ── */
 .composer {
   flex-shrink: 0;
