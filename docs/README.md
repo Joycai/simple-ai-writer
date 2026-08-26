@@ -104,6 +104,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [library-plan.md](feature/library-plan.md) | `shipped` | 文库: book-spine ordering, per-collection resources |
 | [prompt-snippets-ui-brief.md](feature/prompt-snippets-ui-brief.md) | `shipped` | 提示词库（快捷片段）：右键存入、模型选择器同款的取用浮层、设置页重做，以及五件明确没做的事 |
 | [path-spelling-plan.md](feature/path-spelling-plan.md) | `shipped` `unverified` | Normalise at the door, one spelling app-wide. §6 needs a real Windows machine |
+| [web-access-plan.md](feature/web-access-plan.md) | `research` `stale` | 局域网 Web 访问：桌面进程里嵌 axum、前端 transport 三态、绝对路径不上网线、API key 不下发浏览器。结论仍成立，但数字基于 v1.17.0——文首有复核表 |
 
 ## issues/ — open and unconfirmed
 
