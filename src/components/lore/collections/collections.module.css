@@ -277,11 +277,14 @@
   transition: background var(--transition-fast), border-left-color var(--transition-fast);
 }
 .railRow:hover { background: var(--lore-sub-bg); }
-/* 筛选中＝左侧赭石实心边 + 卡面底。眼睛的状态，不是围栏。 */
+/* 筛选中＝左侧赭石实心边 + 卡面底。眼睛的状态，不是围栏。
+   刻意不调 padding：基态的 `border-left: 3px solid transparent` 已经把那 3px
+   占住了，内容左沿本来就是 3+18=21px。这里再补一次 `padding-left: 15px` 是
+   重复补偿，会把行内文字往左拽 3px（实测 21 → 18）——加了颜色过渡之后，那一跳
+   反而更显眼：颜色 120ms 渐变，文字瞬间位移。 */
 .railRowOn {
   border-left-color: var(--color-accent);
   background: var(--color-bg-raised);
-  padding-left: 15px;
 }
 .railRowOn:hover { background: var(--color-bg-raised); }
 .railRowName { font: 400 14px/1.2 var(--font-serif); color: var(--color-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
