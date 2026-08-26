@@ -214,7 +214,7 @@ export function slotChecklistText(entity: LoreEntity): string {
 
   return [
     `FACET SLOTS for category "${entity.category}" — the aspects entries of this category are expected to have.`,
-    "Pass the slot id as the `slot` argument of a facet; omit it when a facet genuinely fits none of them.",
+    "Pass the slot id as the `slot` argument of create_lore_facet (a new facet) or update_facet_meta (an existing one); omit it when a facet genuinely fits none of them.",
     ...lines,
   ].join("\n");
 }

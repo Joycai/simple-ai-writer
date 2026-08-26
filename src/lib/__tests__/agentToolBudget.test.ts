@@ -85,6 +85,18 @@ import { estimateToolsTokens } from "../ai/tokenEstimate";
  * wants to be cheap: a sentence that stops a wrong call is worth more than the
  * tokens it costs, and making it expensive to write was the wrong incentive.
  *
+ * 14,799 with `create_lore_facet` (+691 over the 14,108 measured just before
+ * it: ~613 for the tool, ~78 for the sentences on update_lore_file and
+ * update_facet_meta that now point at it). All of it deferred — the resident
+ * half is unmoved at 9,457 — and bought to close a hole of the same shape as
+ * add_lore_image's, only quieter: no tool created a facet, so "split this entry
+ * into facets" reached update_lore_file, whose new .md arrives without `facet:`
+ * frontmatter, scans as an inert attachment, and is reported back as a
+ * successful write. A wrong call every time, with no error to learn from.
+ * Note the headroom this leaves: ~200. The next tool to land here should be
+ * read against docs/feature/agent/agent-tool-context-lld.md §5 rather than
+ * against a bigger number.
+ *
  * What the ratchet is still for is the thing it was always for — a NEW TOOL, or
  * a run of them, slipping in unpriced. At 15,000 that signal is weaker, so the
  * measured numbers above matter more, not less: record what you measured when
