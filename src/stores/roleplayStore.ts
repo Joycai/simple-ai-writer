@@ -118,6 +118,15 @@ interface Job {
 export interface LiveSession {
   /** 显示用的对话，**从 transcript 派生**——不从 session.json 来。 */
   turns: SceneTurn[];
+  /**
+   * 当前这一场是第几场（`peekNextArchiveNo` 的口径：最大归档号 + 1）。
+   *
+   * **不按 `listArchives().length + 1` 数**——作者手删过一场归档之后两者就错开，
+   * 而记忆记录里的场号是按前者写下的。存在会话上而不是每处现算，是因为记事本
+   * 面板要用它判断「这条记忆是不是本场记的」：不是本场的，那个「第 14 轮」的
+   * 跳转按钮指向的是**另一场**的第 14 轮，点下去只会跳到一段不相干的对话。
+   */
+  sceneNo: number;
   /** 本次运行的执行日志，按轮号。只在内存：它是调试信息，不是作品。 */
   log: Record<number, AgentEvent[]>;
   history: StreamMessage[] | null;
@@ -342,7 +351,7 @@ export interface AgentDraft {
 
 function emptySession(): LiveSession {
   return {
-    turns: [], log: {}, history: null, meta: null, streaming: "", liveLog: [],
+    turns: [], sceneNo: 1, log: {}, history: null, meta: null, streaming: "", liveLog: [],
     usage: null, stalePaths: [], memory: [], memoryStale: false,
     workspace: null, stopped: false, contextTrace: {}, disabledSubAgents: [], taskId: null,
     contextVersion: 0, error: null, lastJob: null,
@@ -697,8 +706,11 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
               // 正在生成的那一轮的轮号：作者轮在 send() 里已经追加过了，所以
               // 角色轮是它的下一个。对话区据此把「记下了：…」挂在这条回复下面。
               const turn = (get().sessions[agent.id]?.turns.length ?? 0) + 1;
+              // 场号在**记下的当下**取，和转场分拣用的是同一个函数——不然
+              // 「另起一场」就分不清哪几条是本场记的。多一次 readDir，目录很小。
+              const scene = await peekNextArchiveNo(projectPath, agent.id);
               const record = await mutateMemory(agent.id, (doc) =>
-                addRecord(doc, { ...rec, turn }, Math.floor(Date.now() / 1000)));
+                addRecord(doc, { ...rec, turn, scene }, Math.floor(Date.now() / 1000)));
               if (!record) throw new Error("memory unavailable");
               return record;
             },
@@ -946,14 +958,43 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       if (!projectPath) return null;
       const now = Math.floor(Date.now() / 1000);
       const id = generateAgentId(Date.now(), Math.random());
+      const name = draft.name.trim()
+        || i18n.t("roleplay.kind.narrator", { defaultValue: "旁白" });
+
+      // **没表态的角色默认就有记忆区。** 它不是可选增强：没有区，转场分拣无处
+      // 可去，上一场的前情只能标 `void`——那个角色两场之后就永久失忆，而那正是
+      // 这套记忆设计要防的事（13 §5）。
+      //
+      // 判据是 `undefined`（调用方没表态）而**不是** `null`（明确不要）：
+      // `AgentComposer` 走的是「先 `areaId: null` 建出来，再 `bindArea` 建区并
+      // 写两份 meta」那条路，把 `null` 也当成没表态就会在那条路上多建一个区，
+      // 而它随即被 `bindArea` 摘掉，变成一个谁也不认识的孤儿目录。
+      // 旁白不需要区：它不扮演任何人，也就没有「它以为的事」。
+      let areaId = draft.areaId && isValidAreaId(draft.areaId) ? draft.areaId : null;
+      if (draft.areaId === undefined && draft.kind === "character") {
+        try {
+          const made = await createArea(
+            projectPath,
+            i18n.t("roleplay.area.defaultName", { name, defaultValue: `${name}的旧事` }),
+            now,
+            Math.random(),
+          );
+          await saveAreaMeta(projectPath, { ...made, boundTo: id });
+          areaId = made.id;
+        } catch (e) {
+          // 建区失败不该挡住建角色——退回没有区的老行为，作者能在编辑抽屉里补。
+          console.warn("[roleplay] default memory area not created:", e);
+        }
+      }
+
       const agent: RoleplayAgent = {
         id,
         kind: draft.kind,
-        name: draft.name.trim() || i18n.t("roleplay.kind.narrator", { defaultValue: "旁白" }),
+        name,
         primaryDirPath: draft.kind === "narrator" ? null : draft.primaryDirPath,
         boundPaths: draft.boundPaths,
         modelId: draft.modelId,
-        areaId: draft.areaId && isValidAreaId(draft.areaId) ? draft.areaId : null,
+        areaId,
         authorPersona: null,
         createdAt: now,
         updatedAt: now,
@@ -963,6 +1004,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       set((st) => ({ order: [...st.order, id], agents: { ...st.agents, [id]: agent } }));
       await savePersonaCard(projectPath, agent, draft.instruction);
       await persistRoster();
+      if (areaId) await get().refreshAreas();
       await get().select(id);
       return id;
     },
@@ -1097,6 +1139,11 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
             keys: opts.recap!.keys,
             // 前情不属于任何一轮——它讲的是整整一场。
             turn: 0,
+            // 它讲的是**刚刚结束的那一场**，所以带的是那一场的号，不是即将
+            // 开始的这一场。两个后果都要的：作者/模型能据此读回 `#sceneNo`
+            // 的原文；而下一次「另起一场」丢的是它自己那一场记的东西，不会
+            // 把这条讲上一场的前情一起丢掉。
+            scene: sceneNo,
             subject: null,
           }, now);
           next = added.doc;
@@ -1122,9 +1169,15 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       // 会话整个归零。`contextHash` 一并清掉——它是「设定已更新」的基线，而这一
       // 场还没播种过，没有基线可比；留着旧的会让提示按上一场的状态亮。
       const doc = await loadMemoryDoc(memoryPath(projectPath, id));
+      // 刚封存完，所以这一场的号是上面那个 `sceneNo` 的下一个。重读一次而不是
+      // 写 `sceneNo + 1`：封存要么成功要么整个中止，但真相在盘上，不在算式里。
+      const nextSceneNo = await peekNextArchiveNo(projectPath, id);
       set((st) => ({
         // `emptySession()` 的 `taskId: null` 正是想要的：新的一场配新的工作区。
-        sessions: { ...st.sessions, [id]: { ...emptySession(), memory: doc.records } },
+        sessions: {
+          ...st.sessions,
+          [id]: { ...emptySession(), sceneNo: nextSceneNo, memory: doc.records },
+        },
         unread: { ...st.unread, [id]: false },
         stale: { ...st.stale, [id]: false },
         agents: {
@@ -1206,6 +1259,8 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       const { turns } = await loadTranscript(transcriptPath(projectPath, id));
       const stored = await loadSession(projectPath, id);
       const doc = await loadMemoryDoc(memoryPath(projectPath, id));
+      // 和写记忆时取的是同一个函数，所以「这条是不是本场记的」这个比较两边同口径。
+      const sceneNo = await peekNextArchiveNo(projectPath, id);
       // meta 从 blob 反序列化回来只有 ChatSessionMeta 的字段；两个块的对象身份
       // 由 SerializedSession 单独存下标、在这里重连。**两个都要重连**——漏掉
       // memoryBlock 曾经让四个刷新时刻在重启后全部静默失效（恢复正是其中之一）。
@@ -1223,6 +1278,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       patchSession(id, (s) => ({
         ...s,
         turns,
+        sceneNo,
         history,
         meta,
         // 认领上一次的工作区，而不是新开一个——否则每次重启都在
@@ -1516,11 +1572,16 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     },
 
     addMemory: async (agentId, rec) => {
+      const { projectPath } = get();
+      if (!projectPath) return;
+      // 场号照常记：作者手写的一条也属于某一场，「另起一场」丢弃它是对的——
+      // 那一场既然作废，作者在那一场里补的笔记也跟着作废。
+      const scene = await peekNextArchiveNo(projectPath, agentId);
       // 作者手加的记录 `turn: 0`（＝不详），于是它不会在对话区冒出一句
       // 「记下了：…」——那句话的意思是「角色刚刚记住了」，而这条是作者自己写的，
       // 他不需要被告知。它只活在记事本里。
       await mutateMemory(agentId, (doc) =>
-        addRecord(doc, { ...rec, turn: 0 }, Math.floor(Date.now() / 1000)));
+        addRecord(doc, { ...rec, turn: 0, scene }, Math.floor(Date.now() / 1000)));
     },
 
     reviseMemory: async (agentId, id, patch) => {

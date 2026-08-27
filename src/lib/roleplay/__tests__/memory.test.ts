@@ -19,7 +19,7 @@ const AGENT = "rp-a-0001";
 function rec(over: Partial<MemoryRecord> = {}): MemoryRecord {
   return {
     id: "m1", kind: "pact", title: "雪停了一起去塔下", body: "他答应了。",
-    status: "open", turn: 12, subject: null, updatedAt: 0, keys: [], ...over,
+    status: "open", turn: 12, scene: 0, subject: null, updatedAt: 0, keys: [], ...over,
   };
 }
 
@@ -44,6 +44,44 @@ describe("parseMemory / renderMemory", () => {
     const parsed = parseMemory(renderMemory(AGENT, source));
     expect(parsed.records[0].status).toBe("void");
     expect(parsed.records[0].turn).toBe(19);
+  });
+
+  it("keeps the scene number across a round-trip", () => {
+    const source = doc([rec({ scene: 3, turn: 19 })], 2);
+    const parsed = parseMemory(renderMemory(AGENT, source));
+    expect(parsed.records[0].scene).toBe(3);
+    expect(parsed.records[0].turn).toBe(19);
+  });
+
+  /**
+   * subject 是「剩下那个字段」，所以每加一个具名字段都要同时加进它的排除表。
+   * `keys=` 踩过一次；`scene N` 是第二个。装错的样子是一条记忆的主语变成
+   * 「scene 3」——不报错，只是从此再也匹配不上任何人。
+   */
+  it("does not mistake the scene field for a subject", () => {
+    const parsed = parseMemory(renderMemory(AGENT, doc([rec({ scene: 3, subject: null })], 2)));
+    expect(parsed.records[0].subject).toBeNull();
+    expect(parsed.records[0].scene).toBe(3);
+  });
+
+  it("still reads the subject when a scene number is present", () => {
+    const source = doc([rec({ scene: 5, subject: "林", keys: ["塔", "雪"] })], 2);
+    const parsed = parseMemory(renderMemory(AGENT, source));
+    expect(parsed.records[0].subject).toBe("林");
+    expect(parsed.records[0].scene).toBe(5);
+    expect(parsed.records[0].keys).toEqual(["塔", "雪"]);
+  });
+
+  /**
+   * 改动之前的文件没有这个字段。读回来是 0，重写之后**逐字相同**——不迁移、
+   * 也不会因为多出一个 `scene 0` 而显得被动过。
+   */
+  it("reads a pre-scene file as scene 0 and rewrites it byte-identically", () => {
+    const before = "<!-- roleplay-memory v1 agent=rp-a-0001 next=2 -->\n\n"
+      + "## 约定 <!-- pact -->\n\n### [m1] 雪停了一起去塔下 · open · turn 12\n他答应了。\n";
+    const parsed = parseMemory(before);
+    expect(parsed.records[0].scene).toBe(0);
+    expect(renderMemory(AGENT, parsed)).toBe(before);
   });
 
   /**

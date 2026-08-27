@@ -129,11 +129,14 @@ export function parseMemory(md: string): MemoryDoc {
       const fields = rec[2].split("·").map((f) => f.trim());
       const title = fields[0] ?? "";
       const status = fields.find((f) => isStatus(f));
-      const turnField = fields.find((f) => /^turn\s+\d+$/.test(f));
-      // `keys=…` 必须先于 subject 排除掉，否则它会被当成主语。
+      const turnField = fields.find((f) => TURN_FIELD_RE.test(f));
+      const sceneField = fields.find((f) => SCENE_FIELD_RE.test(f));
+      // `keys=…` 必须先于 subject 排除掉，否则它会被当成主语。`scene N` 同理——
+      // subject 是「剩下那个字段」，每加一个具名字段就要同时加进这份排除表。
       const keysField = fields.find((f) => f.startsWith(KEYS_PREFIX));
       const subject = fields.find(
-        (f) => f !== title && !isStatus(f) && !/^turn\s+\d+$/.test(f)
+        (f) => f !== title && !isStatus(f) && !TURN_FIELD_RE.test(f)
+          && !SCENE_FIELD_RE.test(f)
           && !f.startsWith(KEYS_PREFIX),
       );
       current = {
@@ -143,6 +146,8 @@ export function parseMemory(md: string): MemoryDoc {
         body: "",
         status: status && isStatus(status) ? status : "open",
         turn: turnField ? Number(turnField.split(/\s+/)[1]) : 0,
+        // 字段缺席 = 不详（0）。旧文件因此原样读回，不需要迁移也不会被重写。
+        scene: sceneField ? Number(sceneField.split(/\s+/)[1]) : 0,
         subject: subject ?? null,
         updatedAt: 0,
         keys: keysField ? splitKeys(keysField.slice(KEYS_PREFIX.length)) : [],
@@ -158,6 +163,8 @@ export function parseMemory(md: string): MemoryDoc {
 }
 
 const KEYS_PREFIX = "keys=";
+const TURN_FIELD_RE = /^turn\s+\d+$/;
+const SCENE_FIELD_RE = /^scene\s+\d+$/;
 
 /** 关键字里不能出现字段分隔符和自己的分隔符，否则这一行读不回来。 */
 function sanitizeKey(k: string): string {
@@ -190,6 +197,9 @@ function renderRecord(r: MemoryRecord): string {
     sanitizeField(r.title),
     ...(r.subject ? [sanitizeField(r.subject)] : []),
     r.status,
+    // 场号为 0（不详）时**整个字段省略**，和 subject 一个规矩：改动之前的文件
+    // 重写之后仍然逐字相同，不会因为多出一个 `scene 0` 而显得被动过。
+    ...(r.scene > 0 ? [`scene ${r.scene}`] : []),
     `turn ${r.turn}`,
     ...(keys.length ? [`${KEYS_PREFIX}${keys.join(",")}`] : []),
   ];
@@ -214,7 +224,8 @@ export function renderMemory(agentId: string, doc: MemoryDoc): string {
 // ─── 增 / 改 ─────────────────────────────────────────────────────────────────
 
 export type NewRecord =
-  Pick<MemoryRecord, "kind" | "title" | "body" | "turn" | "subject"> & { keys?: string[] };
+  Pick<MemoryRecord, "kind" | "title" | "body" | "turn" | "subject">
+  & { keys?: string[]; scene?: number };
 
 /** 追加一条，分配一个**永不复用**的 id。返回新文档和那条记录。 */
 export function addRecord(doc: MemoryDoc, rec: NewRecord, now: number): {
@@ -222,7 +233,12 @@ export function addRecord(doc: MemoryDoc, rec: NewRecord, now: number): {
   record: MemoryRecord;
 } {
   const record: MemoryRecord = {
-    ...rec, keys: rec.keys ?? [], id: `m${doc.next}`, status: "open", updatedAt: now,
+    ...rec,
+    keys: rec.keys ?? [],
+    scene: rec.scene ?? 0,
+    id: `m${doc.next}`,
+    status: "open",
+    updatedAt: now,
   };
   return {
     doc: { records: [...doc.records, record], next: doc.next + 1 },
