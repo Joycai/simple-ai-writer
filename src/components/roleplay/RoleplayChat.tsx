@@ -1366,11 +1366,13 @@ function PersonaChip({ agent }: { agent: RoleplayAgent }) {
   const editing = scopeAgent ? (agent.authorPersona ?? authorPersona) : authorPersona;
 
   const nameOf = (p: AuthorPersona) => p.mode === "none"
-    ? t("roleplay.persona.none", { defaultValue: "不设定" })
-    : p.mode === "prompt"
-      ? t("roleplay.persona.custom", { defaultValue: "自定义身份" })
-      : characters.find((e) => e.dirPath === p.dirPath)?.name
-        ?? t("roleplay.persona.none", { defaultValue: "不设定" });
+    ? t("roleplay.persona.none", { defaultValue: "导演" })
+    : p.mode === "stranger"
+      ? t("roleplay.persona.stranger", { defaultValue: "陌生人" })
+      : p.mode === "prompt"
+        ? t("roleplay.persona.custom", { defaultValue: "自定义身份" })
+        : characters.find((e) => e.dirPath === p.dirPath)?.name
+          ?? t("roleplay.persona.none", { defaultValue: "导演" });
 
   const apply = (p: AuthorPersona) => {
     if (scopeAgent) void setAgentPersona(agent.id, p);
@@ -1454,8 +1456,23 @@ function PersonaChip({ agent }: { agent: RoleplayAgent }) {
               onClick={() => apply({ mode: "none", dirPath: null, prompt: "" })}
             >
               <span className={styles.radio} />
-              {t("roleplay.persona.none", { defaultValue: "不设定" })}
-              <span className={styles.personaNote}>{t("roleplay.persona.noneHint", { defaultValue: "以旁观者身份说话" })}</span>
+              {t("roleplay.persona.none", { defaultValue: "导演" })}
+              <span className={styles.personaNote}>
+                {t("roleplay.persona.noneHint", { defaultValue: "你不在戏里，写场面和指令" })}
+              </span>
+            </button>
+            {/* 「陌生人」是改动之前「不设定」的行为：作者**在戏里**，只是角色还
+                不知道他是谁。它和导演是两件事——导演出戏，陌生人在场。 */}
+            <button
+              type="button"
+              className={`${styles.personaItem} ${editing.mode === "stranger" ? styles.personaItemActive : ""}`}
+              onClick={() => apply({ mode: "stranger", dirPath: null, prompt: "" })}
+            >
+              <span className={styles.radio} />
+              {t("roleplay.persona.stranger", { defaultValue: "陌生人" })}
+              <span className={styles.personaNote}>
+                {t("roleplay.persona.strangerHint", { defaultValue: "你在戏里，角色还不认识你" })}
+              </span>
             </button>
             {/* 自定义身份：不是每个「我此刻是」都在知识库里——试写和跑团里，作者
                 常常是一个还没建条目的人。点开是一个表单，不是立刻生效。 */}

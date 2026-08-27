@@ -8,9 +8,22 @@
 /** 扮演（演一个人物）/ 旁白（不演人，看得见全场）。 */
 export type AgentKind = "character" | "narrator";
 
-/** 作者此刻在故事里是谁。 */
+/**
+ * 作者此刻是谁。
+ *
+ * 四档，而**默认（`none`）是导演视角**：作者不扮演任何人，他描述场面、下剧情
+ * 指令，角色据此演下去。这曾经是「陌生人」——「把他当成故事里一个你还不认识的
+ * 人」——于是作者写「天开始下雨，她推门进来」，角色会把它当成一个陌生人在对它
+ * 说话。那一档现在有了自己的名字（`stranger`），措辞原样搬过去。
+ *
+ * 加一档就要同时改 `personaLine`（system 那一行）**和 `personaKey`**
+ * （`contextSignature` 的输入）。漏掉后者的样子是：作者在导演和陌生人之间切换，
+ * 「设定已更新」永远不亮——一次看起来生效了、其实没有的操作。
+ */
+export type PersonaMode = "lore" | "prompt" | "stranger" | "none";
+
 export interface AuthorPersona {
-  mode: "lore" | "prompt" | "none";
+  mode: PersonaMode;
   /** mode === "lore" 时有效，指向人物条目目录。 */
   dirPath: string | null;
   /** mode === "prompt" 时有效。 */
