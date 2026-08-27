@@ -1002,7 +1002,8 @@
       "continueTargetPara": "续写目标 · 第 {{para}} 段之后 · {{file}}",
       "locateAnchor": "定位插入点",
       "contextAllocation": "上下文分配",
-      "allocTools": "工具",
+      "allocSystem": "系统+工具",
+      "allocInput": "选区/附加",
       "allocRecent": "近期",
       "allocLore": "{{entry}}",
       "allocMemory": "前情",
@@ -1045,7 +1046,8 @@
       "thinkingLabel": "思考",
       "effortLabel": "力度",
       "thinkingHint": "推理模型的思考深度。「跟随默认」不发送任何字段，由服务端决定——这是对所有中转都安全的选择。并非每个模型都支持全部档位；部分模型（如 Gemini）无法真正关闭思考，此时「关闭」等于该模型允许的最低档。",
-      "effortHint": "这一档控制整个回复花多少力气——正文、工具调用与思考都算在内，不只是思考深度。「关闭」在 Claude 上等于最低档而非真正关掉：部分模型不接受关闭思考，官方也建议用降低力度来省成本。"
+      "effortHint": "这一档控制整个回复花多少力气——正文、工具调用与思考都算在内，不只是思考深度。「关闭」在 Claude 上等于最低档而非真正关掉：部分模型不接受关闭思考，官方也建议用降低力度来省成本。",
+      "allocOver": "这次请求预计 {{used}} tk，超过上限 {{ceiling}} tk——可以缩小选区、调高「窗口占用」，或换一个上下文更大的模型。"
     },
     "bubble": {
       "drawer": "抽屉",
