@@ -15,10 +15,16 @@
  *    `compactChatHistory` and `runAgent` plan against `contextSize ×
  *    utilization` (lib/context/budget.ts → inputCeilingFor). Drawn against the
  *    raw window, compaction fires at 35% of the bar with nothing to explain it.
- * 2. **Tool schemas count.** The pre-flight `ContextSizeError` gate weighs
- *    messages *plus* tool definitions, and the assistant preset's toolset runs
- *    to thousands of tokens on every round. Leave them out and a request can
- *    fail while the bar still looks roomy. (No number here on purpose — the
+ * 2. **Tool schemas count — for the axis, but not for the trigger.** The
+ *    pre-flight `ContextSizeError` gate weighs messages *plus* tool definitions,
+ *    and the assistant preset's toolset runs to thousands of tokens on every
+ *    round. Leave them out of the bar and a request can fail while it still
+ *    looks roomy. But compaction is the other way round: `planFold` weighs
+ *    messages alone against a ceiling the schemas have already been taken off
+ *    (`messageCeilingFor`). So the schemas belong in `usedTokens`/`over` and
+ *    belong *off both sides* of `willCompact`/`compactMarkerPct` — a bar that
+ *    charges them once and draws its own 70% line as the trigger is describing
+ *    a fold that happens somewhere else. (No number here on purpose — the
  *    toolset grows, and a count written into a comment only ever goes stale.
  *    `lib/agent/toolCost` measures it, and `agentToolBudget.test.ts` caps it.)
  * 3. **It reads the history, not the last event.** `round-start.estInputTokens`
@@ -66,9 +72,14 @@ export interface ContextBreakdown {
   compactMarkerPct: number;
   /**
    * True once the estimate has crossed the compaction trigger — the threshold
-   * mark the bar draws. This is what the warning visuals key on: the mark sits
-   * at `COMPACT_TRIGGER` (70% of the ceiling), and warning only at 100% meant
-   * the bar could stand well past its own line while looking perfectly calm.
+   * mark the bar draws. This is what the warning visuals key on: warning only
+   * at 100% meant the bar could stand well past its own line while looking
+   * perfectly calm.
+   *
+   * **Measured the way `planFold` measures**, which is not simply
+   * `COMPACT_TRIGGER` of this bar's own width: compaction weighs the *messages*
+   * against the *messages'* ceiling, and the tool schemas are off both sides of
+   * that comparison (lib/agent/toolCost). See {@link computeContextBreakdown}.
    */
   willCompact: boolean;
   /**
@@ -122,8 +133,37 @@ export function computeContextBreakdown(
   const ceiling = Math.max(0, ceilingTokens);
   const free = Math.max(0, ceiling - usedTokens);
   // Past the ceiling the bar packs full and the scale becomes `used`, so the
-  // trigger mark slides left instead of pinning at 70% of a bar it's behind.
+  // trigger mark slides left instead of pinning to a bar it's already behind.
   const span = Math.max(usedTokens + free, 1);
+
+  // Where compaction *actually* fires, expressed on this bar's axis.
+  //
+  // `planFold` compares the **messages** against the **messages' ceiling**, and
+  // the tool schemas are off both sides of that comparison (`messageCeilingFor`
+  // in lib/agent/toolCost subtracts them; `estimateMessagesTokens` never counted
+  // them). This bar's axis is the whole request, schemas included. So the
+  // trigger is not `COMPACT_TRIGGER` of the bar — it is `COMPACT_TRIGGER` of the
+  // part of the bar that lies *after* the schemas:
+  //
+  //     compactAt = T + τ·(C − T)      instead of   τ·C
+  //
+  // Drawn the naive way the mark sat at a flat 70% while the real trigger was at
+  // 70 + 30·T/C percent — on a 1M window a rounding error, on an 8k local model
+  // fifteen points of bar. Both the line and the warning were early, so the bar
+  // would go yellow and cross its own "past here the oldest turns get folded"
+  // mark with nothing happening. `planFold`'s own `ceilingTokens` comment
+  // records the first half of that symptom; this is the other side of it.
+  const messageTokens = Math.max(0, usedTokens - toolTokens);
+  const messageCeiling = Math.max(0, ceiling - toolTokens);
+  const compactAtTokens = toolTokens + messageCeiling * COMPACT_TRIGGER;
+  // Schemas alone at or over the ceiling: `planFold` bails on a non-positive
+  // ceiling, so compaction cannot fire however long the conversation gets. The
+  // `over` disjunct keeps `over ⇒ willCompact` true in that corner — everything
+  // else the bar says is already wrong there, and a calm bar past its ceiling is
+  // the exact state the warning exists to prevent.
+  const over = usedTokens > ceiling;
+  const willCompact =
+    over || (messageCeiling > 0 && messageTokens > messageCeiling * COMPACT_TRIGGER);
 
   return {
     segments: [
@@ -137,8 +177,8 @@ export function computeContextBreakdown(
     usedTokens,
     ceilingTokens: ceiling,
     contextSize,
-    compactMarkerPct: Math.min(100, (ceiling * COMPACT_TRIGGER * 100) / span),
-    willCompact: usedTokens > ceiling * COMPACT_TRIGGER,
-    over: usedTokens > ceiling,
+    compactMarkerPct: Math.min(100, (compactAtTokens * 100) / span),
+    willCompact,
+    over,
   };
 }
