@@ -45,6 +45,7 @@ import {
 import { routeTools } from "../lib/agent/routing";
 import { plannedToolTokens } from "../lib/agent/toolCost";
 import { resolveSubAgentConn } from "../lib/agent/subagent";
+import { expandAuthorIntent } from "../lib/context/expand";
 
 /**
  * A task id, as declared by the active profile's `tasks` (see lib/profile).
@@ -216,7 +217,7 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
 
   runTask: async (kind, customInstruction, continueLength, extras) => {
     if (get().isRunning) return; // one task at a time — UI disables triggers, this guards races
-    const { activeModelId, activePromptId, models, providers, prompts } = useAiStore.getState();
+    const { activeModelId, activePromptId, models, providers, prompts, subAgents } = useAiStore.getState();
     const { projectPath } = useProjectStore.getState();
     const { index: loreIndex, scope: loreScope } = useLoreStore.getState();
 
@@ -486,6 +487,29 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       },
       abortController: controller,
     });
+
+    // 查询扩展：把作者这句话扩成知识库自己的词，并进同一个靶子。
+    //
+    // 上面那一步让「写渚的变身场景」能召来〈渚〉、能激活「变身」；这一步补的是
+    // 「星辉之杖」——那根杖这场戏要用，但正文里还没有它，因为写它就是这次的活儿。
+    // 扩展词走的仍是 substring 匹配，所以注入报告照旧说得出「由「星辉之杖」命中」。
+    //
+    // 三条防线，缺一条它就会从「锦上添花」变成「首字延迟涨了、还偶尔整次失败」：
+    // 没绑模型就整段不跑（默认如此）、意图为空就不跑、超时和任何错误都退回上一行
+    // 的行为。见 docs/feature/lore/lore-retrieval-plan.md §5.3
+    if (authorIntent && subAgents.retrieval?.enabled && subAgents.retrieval.modelId) {
+      const conn = await resolveSubAgentConn(
+        "retrieval", models, providers, subAgents, loadApiKey,
+      );
+      if (!("error" in conn)) {
+        const terms = await expandAuthorIntent({
+          intent: authorIntent, loreIndex, scope: loreScope, conn, signal: controller.signal,
+        });
+        if (terms.length > 0) {
+          extras = { ...extras, extraMatchText: `${authorIntent}\n${terms.join(" ")}` };
+        }
+      }
+    }
 
     const loreBudgetChars = plan.loreChars;
 

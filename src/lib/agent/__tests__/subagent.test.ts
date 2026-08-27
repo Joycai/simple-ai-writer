@@ -96,6 +96,7 @@ describe("subagent", () => {
     imagegen: { kind: "imagegen", modelId: null, enabled: false },
     translate: { kind: "translate", modelId: null, enabled: false },
     writer: { kind: "writer", modelId: null, enabled: false },
+    retrieval: { kind: "retrieval", modelId: null, enabled: false },
   };
 
   beforeEach(() => {
@@ -130,6 +131,14 @@ describe("subagent", () => {
       // DELEGATE_KINDS would compile and fail only at run time, quietly.
       expect(SUBAGENT_KINDS).toContain("translate");
       expect(DELEGATE_KINDS).not.toContain("translate" as never);
+    });
+
+    it("retrieval is a subagent but never a delegate kind either", () => {
+      // 同一条不变量的第二个例子，理由不同：翻译模型是「不会对话」，取材扩展是
+      // 「轮不到它被调用」——请求还没组装它就已经跑完了。放进 DELEGATE_KINDS 会
+      // 编译通过、只在运行时安静地错。
+      expect(SUBAGENT_KINDS).toContain("retrieval");
+      expect(DELEGATE_KINDS).not.toContain("retrieval" as never);
     });
 
     it("resolves only a model that declares a translation format", () => {

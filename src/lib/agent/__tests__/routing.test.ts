@@ -47,6 +47,7 @@ describe("routeTools", () => {
     imagegen: { kind: "imagegen", modelId: null, enabled: false },
     translate: { kind: "translate", modelId: null, enabled: false },
     writer: { kind: "writer", modelId: null, enabled: false },
+    retrieval: { kind: "retrieval", modelId: null, enabled: false },
   };
   /**
    * The preset as it routes with nothing enabled: no drawing arm, no image
@@ -255,6 +256,7 @@ describe("the PPTX export Beta gate", () => {
     imagegen: { kind: "imagegen", modelId: null, enabled: false },
     translate: { kind: "translate", modelId: null, enabled: false },
     writer: { kind: "writer", modelId: null, enabled: false },
+    retrieval: { kind: "retrieval", modelId: null, enabled: false },
   };
 
   it("withholds export_pptx entirely while the switch is off", () => {
@@ -321,6 +323,7 @@ describe("the translation gate", () => {
     imagegen: { kind: "imagegen", modelId: null, enabled: false },
     translate: { kind: "translate", modelId: null, enabled: false },
     writer: { kind: "writer", modelId: null, enabled: false },
+    retrieval: { kind: "retrieval", modelId: null, enabled: false },
   };
   const bound: Record<SubAgentKind, SubAgentConfig> = {
     ...allDisabled,
@@ -392,10 +395,12 @@ describe("routeTools — writer handoff", () => {
     imagegen: { kind: "imagegen", modelId: null, enabled: false },
     translate: { kind: "translate", modelId: null, enabled: false },
     writer: { kind: "writer", modelId: null, enabled: false },
+    retrieval: { kind: "retrieval", modelId: null, enabled: false },
   };
   const bound: Record<SubAgentKind, SubAgentConfig> = {
     ...allDisabled,
     writer: { kind: "writer", modelId: "m-long", enabled: true },
+    retrieval: { kind: "retrieval", modelId: null, enabled: false },
   };
 
   it("keeps the preset's own ending when the surface has not opted in", () => {
@@ -422,6 +427,7 @@ describe("routeTools — writer handoff", () => {
       const subs: Record<SubAgentKind, SubAgentConfig> = {
         ...allDisabled,
         writer: { kind: "writer", modelId, enabled: true },
+        retrieval: { kind: "retrieval", modelId: null, enabled: false },
       };
       expect(routeTools(AGENT_ASSIST_PRESET, subs, WS, MODELS, { handoff: true }).finishPolicy)
         .toBe("force-text");

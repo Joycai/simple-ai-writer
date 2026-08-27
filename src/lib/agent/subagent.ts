@@ -24,10 +24,11 @@ import { writeTaskNote } from "./taskWorkspace";
 import { baseName } from "../paths";
 
 export type SubAgentKind =
-  | "search" | "vision" | "longread" | "pdf" | "imagegen" | "translate" | "writer";
+  | "search" | "vision" | "longread" | "pdf" | "imagegen" | "translate" | "writer"
+  | "retrieval";
 
 export const SUBAGENT_KINDS: readonly SubAgentKind[] =
-  ["search", "vision", "longread", "pdf", "imagegen", "translate", "writer"];
+  ["search", "vision", "longread", "pdf", "imagegen", "translate", "writer", "retrieval"];
 
 /**
  * The kinds `delegate` can dispatch to — a *conversational* sub-run on the
@@ -53,8 +54,18 @@ export const SUBAGENT_KINDS: readonly SubAgentKind[] =
  * assistant's interface to it is the `translate` tool, and `lib/translate/`
  * calls the endpoint directly rather than through `runAgent` — it has no tool
  * calling to loop over. See docs/feature/translate/01-execution-plan.md §1.
+ *
+ * `retrieval` is excluded on the writer's grounds rather than the other two's:
+ * it is not called, and by the time any model is looking at the conversation it
+ * has already run. It expands the author's own words into knowledge-base terms
+ * *before* the request is assembled, so that retrieval can match on 「星辉之杖」
+ * on a turn where the author only wrote 「变身场景」. Its output is a word list
+ * fed back through the ordinary substring matcher — deliberately, because that
+ * keeps the injection report saying 「由「星辉之杖」命中」 instead of a score the
+ * author cannot act on. See docs/feature/lore/lore-retrieval-plan.md §5.
  */
-export type DelegateKind = Exclude<SubAgentKind, "imagegen" | "translate" | "writer">;
+export type DelegateKind =
+  Exclude<SubAgentKind, "imagegen" | "translate" | "writer" | "retrieval">;
 
 export const DELEGATE_KINDS: readonly DelegateKind[] = ["search", "vision", "longread", "pdf"];
 

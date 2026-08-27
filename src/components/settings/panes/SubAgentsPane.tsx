@@ -120,6 +120,7 @@ export function SubAgentsPane() {
     if (kind === "writer") {
       return t("systemSettings.subagents.rounds", { n: WRITER_PRESET.maxRounds });
     }
+    if (kind === "retrieval") return t("systemSettings.subagents.retrievalMeta");
     const preset = SUB_PRESETS[kind as DelegateKind];
     const parts = [
       preset.maxRounds === 1
@@ -161,12 +162,20 @@ export function SubAgentsPane() {
   // and the writer is reached by nobody — it takes over the run's last round
   // (finishPolicy "handoff"), which is why it cannot sit under either heading.
   const FINISH_KINDS: SubAgentKind[] = ["writer"];
+  // A fourth group, and it goes first because the order is the pipeline's:
+  // retrieval runs *before* the request the other three serve. It cannot sit
+  // under 直接工具 — that heading says 「助手通过工具直接调用」 and no model calls
+  // this one, the app does, before any model has seen the turn.
+  const RETRIEVAL_KINDS: SubAgentKind[] = ["retrieval"];
   const groups: { id: string; kinds: SubAgentKind[] }[] = [
+    { id: "Retrieval", kinds: RETRIEVAL_KINDS },
     { id: "Delegate", kinds: [...DELEGATE_KINDS] },
     {
       id: "Tool",
       kinds: SUBAGENT_KINDS.filter(
-        (k) => !DELEGATE_KINDS.includes(k as DelegateKind) && !FINISH_KINDS.includes(k),
+        (k) => !DELEGATE_KINDS.includes(k as DelegateKind)
+          && !FINISH_KINDS.includes(k)
+          && !RETRIEVAL_KINDS.includes(k),
       ),
     },
     { id: "Finish", kinds: FINISH_KINDS },
