@@ -85,7 +85,7 @@ CLAUDE.md 里已经写了这条纪律的一半——「UI 词汇是应用级且�
 
 | 英文 | 取 | 说明 |
 |---|---|---|
-| Thinking（折叠区标题） | 思考过程 | 弃「思维链」——那是模型侧行话 |
+| Thinking（折叠区标题） | 思考过程 | 弃「思维链」——那是模型侧行话。**只退 UI**：`docs/api/` 里 chain-of-thought 照旧叫思维链，那是协议域的正确译法 |
 | Thinking…（进行时） | 思考中… | 弃「正在思考」 |
 | Prompt（模板 / 配置层） | Prompt | 既成事实，17 处，保留英文 |
 | prompt（发给模型的文本） | 提示词 | 于是「系统提示」→「系统提示词」 |
@@ -258,3 +258,51 @@ A → B → C 是作者能直接感知的三批，先落这三批就解掉了盘
 第 5 节的测试**在 A 落地之后再加**，一次性把 B/C/E 的退役词也写进 `RETIRED` 表——先有护栏再改文案，会让 A 那个 PR 自己踩自己。
 
 改完任意一批，同步更新两处：本文档第 3 节的词表，以及 `CLAUDE.md` 里 Workspace Packs 一节的「UI 词汇是应用级且统一的」那段（它现在只点名了 文档/分组/知识库/条目 四个词）。
+
+## 8. 文档侧的口径
+
+第 4 节管的是 i18n 文案。`.md` 文档里同样有这批词——全项目 104 个 md 文件里，「设定」出现 246 次、「词条」51 次、「思维链」50 次——但**不能照着第 4 节一把改过去**，因为文档的三种身份要用三条不同的规则。
+
+### 三条规则
+
+1. **`living` 文档与 `CLAUDE.md`：文档和代码不一致，错的是文档。** 立刻改。
+2. **`shipped` / `research` 设计记录：不重写正文，加一行更正。** 那些文档存在的理由是「当时为什么这么选」，把措辞刷成今天的样子会让「后来改过名」这个事实从记录里消失。仓库里已经有这个先例（`web-access-plan.md` 的复核表、`remote-knowledge-base-feasibility.md` 在索引里的那句「the file's own status line predates that」）。
+3. **文档准确描述了今天的 UI，而那个 UI 用的是退役词：不动，等它所属的批次。** 现在改，文档就先于代码错了——这恰好违反规则 1。
+
+规则 3 是这一节的重点：**每个批次的完成定义里必须包含它要同步改的文档**，否则 A 落地当天，`design-system.md` 就开始说假话。
+
+### 已按规则 1 改掉的（本次）
+
+| 位置 | 原文 | 现在 | 为什么是文档的错 |
+|---|---|---|---|
+| `reference/architecture.md` | injected 【设定资料】 block | injected 【知识库】 block | 注入块在能力包上线时就改名了，`sectionLabel("knowledge")` 是唯一不许被包改名的那个 |
+| `reference/architecture.md` | 三个设定 AI 弹窗 | 三个知识库 AI 弹窗 | UI 上没有「设定」这个面 |
+| `reference/design-system.md` | ### 设定集设计语言 | ### 知识库设计语言 | 同上；设计稿文件名 `03 设定集 Lore` 是外部产物，保留原样 |
+| `reference/design-system.md` | 设定/摘要 bar segments · 注入设定 `--color-success` | 注入条目/… | 这条 bar 上的字今天是 `ai.chat.ctxInjected` =「注入条目」 |
+| `CLAUDE.md` | → 词条注入 → | → 条目注入 → | 应用级词汇是「条目」 |
+| `CLAUDE.md` | 前情摘要由角色第一人称自己写 | 前情由角色第一人称自己写 | 扮演转场的那份东西，UI 上就叫「前情」 |
+
+顺带修了两处**代码注释**（同一个错，不是 md 但同源）：`stores/appStore.ts` 的两条注释把 lore 注入预算说成「【设定资料】 block」。
+
+### 已按规则 2 加更正的
+
+- `feature/lore/lore-facet-plan.md` —— 正文三处【设定资料】保留，状态块里加了一行说明它后来改叫【知识库】，并给出该搜什么。
+
+### 按规则 3 押后的（各批次的文档尾巴）
+
+| 批次 | 落地时必须同步改的文档 |
+|---|---|
+| A（主词条 → 主条目） | `reference/design-system.md` ×8 · `feature/lore/lore-entry-type-plan.md` ×6 · `feature/lore/lore-collection-ui-brief.md` ×2 · `feature/lore/lore-collection-plan.md` ×1 · `feature/roleplay/11-lore-binding-lld.md` ×1 |
+| B（前情记忆 → 前情提要） | `reference/architecture.md` 的 `### Story Memory (前情记忆)` 标题 ×1 · `feature/agent/unified-agent-plan.md` ×3 · `feature/library-plan.md` ×2 · `feature/agent/chat-memory-plan.md` ×2 · `feature/pptx-plan.md` ×1 · `feature/html-artifact-plan.md` ×1 |
+| E（思维链 → 思考过程） | `reference/design-system.md` ×3（屏 17「AI 执行进度 · 思维链」与 `ThinkingPanel` 的头行）。**`docs/api/` 的 40 处不动** |
+
+改 `### Story Memory` 那个标题前先 `grep -rn "architecture.md →"`：本文档写作时没有源码注释引用它，但这类标题是被当接口引用的。
+
+### 两处明确不动
+
+- **扮演的 【设定】 / 【记忆】 / 【场景】 块名。** 这三个是 `lib/roleplay/context.ts` 和 `run.ts` 里真实存在的 wire 块名——发给模型的字面量。文档里写【设定】是**准确的**。要改它得走批次 F（改提示词），在那之前谁把文档里的【设定】改成【知识库】，谁就制造了一个不存在的块名。
+- **`lib/profile/model.ts` 里那条讲「为什么 sections 是层叠不是替换」的注释**（约 1975 行，举例用了【上一章结尾】/【设定资料】）。它描述的是一个**被否掉的方案**当年会产生什么后果，属于「why not the other way」的记录。它对今天的默认标签集确实已经不准，但按规则 2，改它等于删掉理由。留档在此，要动请当作一次独立的判断。
+
+### `design/` 与 `plans/` 整体不动
+
+`design/PRD.md` 一个文件就有 44 处「设定」——那是应用只做小说、知识库还叫设定集时的原始需求文档。`plans/` 是 29 份一次性的动效执行记录。两者都是历史，不是「今天的系统」，校准它们没有收益且会毁掉时间线。

@@ -49,7 +49,7 @@ const AI_DRAWER_MODE_KEY = "app:aiDrawerMode";
 const DRAFT_COUNT_KEY = "app:draftCount";
 
 /**
- * Token budget bounds for the 【设定资料】 block (see lib/context/loreSelect).
+ * Token budget bounds for the 【知识库】 block (see lib/context/loreSelect).
  * The ceiling is sized for large-context models (128k-class) — the block still
  * has to share the window with the document, memory and the model's reply, so
  * spending the whole budget on lore is the author's call, not the default.
@@ -230,7 +230,7 @@ interface AppState {
   sidebarWidth: number;
   rightPanelWidth: number;
   recentProjects: string[];
-  /** Token budget for lore injection (【设定资料】 block). */
+  /** Token budget for lore injection (the 【知识库】 block). */
   loreBudgetTokens: number;
   /** Share of the model's context window one request may occupy (0–1). */
   contextUtilization: number;
