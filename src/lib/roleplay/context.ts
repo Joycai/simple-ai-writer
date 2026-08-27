@@ -8,7 +8,7 @@
  *   [0] system  人设 + 扮演规则 + 作者身份 + 输入语法
  *   [1] user    【绑定设定】boundPaths 的正文        ← prelude，压缩不丢
  *   [2] user    【记忆】仍在生效的约定 / 待办 / 关系  ← prelude，压缩不丢，会被刷新
- *   [3] user    【场景】首轮自动命中的其他词条        ← meta.seedContext，压缩会丢
+ *   [3] user    【场景】首轮自动命中的其他条目        ← meta.seedContext，压缩会丢
  *   [4] user    作者第一句                          ← meta.turnStarts[0]
  *
  * 为什么放对位置就够、不需要给压缩加白名单：`buildCompactedHistory`
@@ -355,7 +355,7 @@ export function refreshSystemPrompt(
  * 「设定变没变」的基线。
  *
  * 覆盖 system 层和绑定块里**全部**由作者改动的输入，而不只是绑定条目：改主角
- * 条目、改「作者给你的指令」、换身份，和改一个绑定词条是同一件事——「我改了
+ * 条目、改「作者给你的指令」、换身份，和改一个绑定条目是同一件事——「我改了
  * 设定，为什么角色没变」——凭什么只有最后一种能亮起提示。
  *
  * 取**输入**而不是取 `buildSystemPrompt` 的产物：那份产物含 i18n 文案，切一次
@@ -567,9 +567,9 @@ function memoryNoneText(): string {
 
 /** 绑定块的完整正文。播种和刷新必须产出同一个形状，所以只有这一处拼它。 */
 function boundBlockContent(text: string): string {
-  const label = i18n.t("roleplay.section.bound", { defaultValue: "绑定设定" });
+  const label = i18n.t("roleplay.section.bound", { defaultValue: "绑定条目" });
   const body = text || i18n.t("roleplay.section.boundNone", {
-    defaultValue: "（暂时没有绑定的条目。需要设定时用 read_lore_entity 去读。）",
+    defaultValue: "（暂时没有绑定的条目。需要资料时用 read_lore_entity 去读。）",
   });
   return `【${label}】\n${body}`;
 }

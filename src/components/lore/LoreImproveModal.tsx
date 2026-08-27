@@ -382,7 +382,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
         <div className={styles.improveCols}>
 
           <div className={styles.goalRail}>
-            {/* 写入目标 (设计稿 09): 主词条 / 各特征 / + 生成新特征 */}
+            {/* 写入目标 (设计稿 09): 主条目 / 各特征 / + 生成新特征 */}
             <div>
               <div className={styles.label} style={{ marginBottom: 10 }}>
                 {t("lore.improve.targetLabel", { defaultValue: "写入目标" })}
@@ -393,7 +393,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
                   disabled={phase === "generating"}
                   onClick={() => { setTarget(INDEX); setOutput(""); setPhase("input"); }}
                 >
-                  {t("lore.improve.targetIndex", { defaultValue: "主词条 · 概要（index.md）" })}
+                  {t("lore.improve.targetIndex", { defaultValue: "主条目 · 概要（index.md）" })}
                 </button>
                 {entity.facets.map((f) => (
                   <button

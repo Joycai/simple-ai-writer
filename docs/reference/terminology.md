@@ -1,6 +1,6 @@
 # 词表与措辞校准
 
-> 状态：第 1–3 节 `living`（今天要遵守的取词规则和词表，写任何面向作者的字符串之前读它）；第 4 节 `planned`（六个批次一个都没落，PR 未开）；第 5 节 `planned`（防回潮的护栏测试还不存在）。
+> 状态：第 1–3 节 `living`（今天要遵守的取词规则和词表，写任何面向作者的字符串之前读它）；第 4 节 `partial`（**批次 A 已落**，B–F 未开）；第 5 节 `planned`（防回潮的护栏测试还不存在）。
 >
 > 起因：2026-08 对全量文案做了一次盘点——`en.json` / `zh-CN.json` 共 2775 个键，加上 `lib/profile/model.ts` 的能力包 / 分类 / 特征槽位、`lib/agent/subagent.ts` 的子代理种类。机械比对短标签（≤20 字符、不含插值）后发现 **78 处一词多译**、**49 处一译多词**。本文档是那次盘点的结论 + 收敛计划。
 >
@@ -101,18 +101,20 @@ CLAUDE.md 里已经写了这条纪律的一半——「UI 词汇是应用级且�
 
 六批，按「改一处的爆炸半径」从小到大排。每批都是一个独立 PR，互不依赖，可以任意顺序落。
 
-**每一批都要改两个地方。** 组件里有 **845 处硬编码中文 `defaultValue`**（`t("key", { defaultValue: "…" })`），其中 **29 处**含本文要退役的词。`defaultValue` 只在键缺失时才渲染，而 `localeParity.test.ts` 保证键不缺——所以它是**休眠的第二份副本**：改了 JSON 不改它，退役词就活在源码里，下一个人照着抄。第 5 节的护栏测试同时扫这两处，就是为这件事。
+**每一批要改三个地方。** 前两个是文案的两份副本：`zh-CN.json` / `en.json`，以及组件里 **845 处硬编码中文 `defaultValue`**（`t("key", { defaultValue: "…" })`）。`defaultValue` 只在键缺失时才渲染，而 `localeParity.test.ts` 保证键不缺——所以它是**休眠的第二份副本**：改了 JSON 不改它，退役词就活在源码里，下一个人照着抄。批次 A 实测里它已经漂过一次：`RoleplayChat.tsx` 的 `roleplay.stale.body` 兜底写的是「绑定的设定被改过」，JSON 里却是「设定被改过（绑定条目、人设或身份）」——两句话，一个键。
 
-### 批次 A —— 知识库的名字（最大，24 + 14 键）
+第三个是**代码注释**，A 做完才发现它必须进批次：改完 UI 的「主词条 → 主条目」，注释里还留着 20 处旧词，下一个人照着注释写新文案就退回去了。第 5 节的护栏测试扫前两处（注释太容易误伤），注释靠批次自己扫干净。
 
-`设定` 34 键（含 `ai.instructions.*` 10 键，见批次 F）、`词条` 14 键。
+### 批次 A —— 知识库的名字 ✅ 已落地
+
+`设定` 34 键（含 `ai.instructions.*` 10 键，见批次 F）、`词条` 14 键。落地实测：i18n 41 处（zh 32 / en 10，含删两个死键）、组件 `defaultValue` 21 处、代码注释 20 处、文档 20 处。`pnpm tsc --noEmit` 0 错，`pnpm test` 190 文件 / 2603 用例全绿。
 
 设定 → 知识库 / 条目：
 
 | 键 | 现在 | 改成 |
 |---|---|---|
 | `ai.bubble.extractLore` | Extract as lore / 提取为设定 | Extract as an entry / 提取为条目 |
-| `editorStrip.refs` | `{{n}} lore refs` / 引用 {{n}} 设定 | `{{n}} {{entries}} referenced` / 引用 {{n}} {{entry}} |
+| ~~`editorStrip.refs`~~ | `{{n}} lore refs` / 引用 {{n}} 设定 | **删除**——落地时才查出它和 `ai.tasks.lore` 一样没有调用点（`EditorBottomStrip` 直接渲染 `refsCount` 数字）。删掉比改写一个没人渲染的串好 |
 | `lore.improve.atHint` | 引用其他设定条目 | 引用其他条目 |
 | `lore.newEntry.aiHint` | 从手稿或描述中提取设定 | 从手稿或描述中提取条目 |
 | `ai.writer.intro1a` | 助手照常读文件、查设定、思考 | …查知识库、思考 |
@@ -130,16 +132,18 @@ CLAUDE.md 里已经写了这条纪律的一半——「UI 词汇是应用级且�
 
 - `systemSettings.maintenance.staleHint` 结尾「文档、知识库和设定都在文件系统上」——英文原文是 *settings*，这是**翻译 bug**，应作「设置」。
 - `roleplay.persona.none`「不设定」、`roleplay.persona.narratorNote`「无身份设定」——动词，不动。
-- `roleplay.roster.stale`「设定已更新」、`roleplay.stale.body`「设定被改过（绑定条目、人设或身份）」、`roleplay.stale.refresh`「刷新设定」——这里的「设定」覆盖的是 system 层的全部输入（角色名 / 主角条目正文 / 扮演指令 / 作者身份），比「条目」大。建议统一成 **「绑定内容」**（绑定内容已更新 / 绑定内容被改过 / 刷新绑定），但这三处**需要一次拍板**，不是机械替换。
+- `roleplay.roster.stale`「设定已更新」、`roleplay.stale.body`「设定被改过（绑定条目、人设或身份）」、`roleplay.stale.refresh`「刷新设定」——这里的「设定」覆盖的是 system 层的全部输入（角色名 / 主角条目正文 / 扮演指令 / 作者身份），比「条目」大。已按 **「绑定内容」** 落地（绑定内容已更新 / 绑定内容被改过（条目、人设或身份）/ 刷新绑定），英文侧同步 `setting updated` → `binding updated`、`A setting changed` → `A binding changed`。
 - `roleplay.empty.body`「他按自己的设定回你」——散文，读起来自然。改不改都行，倾向不动。
 
 词条 → 条目（全部机械替换，无例外）：`lore.detail.colIndex`、`lore.generator.stepExtract`、`lore.facet.modeAutoHint`、`lore.facet.modeAlwaysHint`、`lore.improve.targetIndex`、`lore.meta.title` / `currentLabel` / `stepRead` / `footerNote`、`lore.aiHub.improveDesc`、`roleplay.composer.bound` / `core` / `boundEmpty`。
 
-一个例外：`lore.dict.applyNeedsEntries`「没有可解析的词条」——这里的「词条」是**翻译词典的词对**，不是知识库条目。英文原文就是 *pairs*。改成「词对」，正好把「词条」这个词彻底腾空。
+一个例外：`lore.dict.applyNeedsEntries`「没有可解析的词条」——这里的「词条」是**翻译词典的词对**，不是知识库条目。英文原文就是 *pairs*。改成「词对」，正好把「词条」这个词彻底腾空。落地时把这条推到了 `lib/translate/`：`glossary.ts` / `tool.ts` / `run.ts` 和工作流卡里的 9 处「词条」一并改成「词对」，于是**全代码库「词条」归零**——留一半反而更难分辨哪个是哪个意思。
 
 英文侧同批修：`lore.detail.colIndex` 的 `Entry · index.md` → `Headword · index.md`；`roleplay.composer.core` 的 `Core card (index.md)` → `Headword (index.md)`。
 
-顺手清一个死键：**`ai.tasks.lore`（Lore extraction / 设定提取）全代码库无人引用**，可直接删——`ai.tasks.extract`（提取入库）才是活的那个。
+顺手清死键：**`ai.tasks.lore`（Lore extraction / 设定提取）和 `editorStrip.refs` 全代码库无人引用**，两个都删了——`ai.tasks.extract`（提取入库）才是活的那个。同类的 `editorStrip.cumulative` 也没有调用点，但它不含退役词，留给别的清理去处理。
+
+**留在原地的三处「设定」**（都不是知识库义）：`roleplay.persona.none`「不设定」、`roleplay.persona.narratorNote`「无身份设定」是动词；`roleplay.empty.body`「他按自己的设定回你」是散文，中文读起来自然。
 
 ### 批次 B —— 前情四词分工（9 键）
 
@@ -292,7 +296,7 @@ A → B → C 是作者能直接感知的三批，先落这三批就解掉了盘
 
 | 批次 | 落地时必须同步改的文档 |
 |---|---|
-| A（主词条 → 主条目） | `reference/design-system.md` ×8 · `feature/lore/lore-entry-type-plan.md` ×6 · `feature/lore/lore-collection-ui-brief.md` ×2 · `feature/lore/lore-collection-plan.md` ×1 · `feature/roleplay/11-lore-binding-lld.md` ×1 |
+| A（主词条 → 主条目）✅ | 已随批次改完，共 20 处：`reference/design-system.md` ×9 · `feature/lore/lore-entry-type-plan.md` ×7 · `feature/lore/lore-collection-ui-brief.md` ×2 · `feature/lore/lore-collection-plan.md` ×1 · `feature/roleplay/11-lore-binding-lld.md` ×1。（原先按「行数」估的 ×8/×6 偏低——有的行含两处，按 occurrence 数才对） |
 | B（前情记忆 → 前情提要） | `reference/architecture.md` 的 `### Story Memory (前情记忆)` 标题 ×1 · `feature/agent/unified-agent-plan.md` ×3 · `feature/library-plan.md` ×2 · `feature/agent/chat-memory-plan.md` ×2 · `feature/pptx-plan.md` ×1 · `feature/html-artifact-plan.md` ×1 |
 | E（思维链 → 思考过程） | `reference/design-system.md` ×3（屏 17「AI 执行进度 · 思维链」与 `ThinkingPanel` 的头行）。**`docs/api/` 的 40 处不动** |
 

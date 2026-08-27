@@ -248,9 +248,9 @@ export function FacetEditModal({ entity, file, initialSlot = null, onClose }: Pr
         : t("lore.facet.modeManualShort", { defaultValue: "手动" });
   const modeHint = (m: FacetMeta["mode"]) =>
     m === "auto"
-      ? t("lore.facet.modeAutoHint", { defaultValue: "主词条命中 + 出现任一触发词" })
+      ? t("lore.facet.modeAutoHint", { defaultValue: "主条目命中 + 出现任一触发词" })
       : m === "always"
-        ? t("lore.facet.modeAlwaysHint", { defaultValue: "主词条命中即注入" })
+        ? t("lore.facet.modeAlwaysHint", { defaultValue: "主条目命中即注入" })
         : t("lore.facet.modeManualHint", { defaultValue: "仅在对话中手动引用时注入" });
 
   return (

@@ -688,7 +688,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
             {t("roleplay.band.boundList", { n: boundCount, defaultValue: `本次对话注入的设定 · ${boundCount}` })}
           </div>
           {boundEntries.length === 0 && (
-            <div className={styles.bindEmpty}>{t("roleplay.band.boundNone", { defaultValue: "没有绑定任何设定" })}</div>
+            <div className={styles.bindEmpty}>{t("roleplay.band.boundNone", { defaultValue: "没有绑定任何条目" })}</div>
           )}
           {boundEntries.map((b) => (
             <div key={b.raw} className={`${styles.bindRow} ${b.gone ? styles.bindRowGone : ""}`}>
@@ -704,11 +704,11 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
         <div className={styles.staleBar}>
           <span className={styles.staleDot} />
           <span className={styles.staleText}>
-            {t("roleplay.stale.body", { defaultValue: "绑定的设定被改过，本次对话用的还是旧版本。" })}
+            {t("roleplay.stale.body", { defaultValue: "绑定内容被改过（条目、人设或身份），本次对话用的还是旧版本。" })}
           </span>
           <div className={styles.spacer} />
           <button type="button" className={styles.staleBtn} onClick={() => void refreshBinding(agent.id)}>
-            {t("roleplay.stale.refresh", { defaultValue: "刷新设定" })}
+            {t("roleplay.stale.refresh", { defaultValue: "刷新绑定" })}
           </button>
         </div>
       )}
@@ -1148,7 +1148,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               onClick={() => openMentionFor("lore")}
               disabled={!candidates.some((c) => c.type === "lore")}
             >
-              + {t("roleplay.composer.addLore", { defaultValue: "设定" })}
+              + {t("roleplay.composer.addLore", { defaultValue: "条目" })}
             </button>
             <button
               type="button"

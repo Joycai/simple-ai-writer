@@ -7,7 +7,7 @@
  *   - ThinkingPanel  — 思维链折叠面板：实时流式 · 不入库，运行中默认展开、结束后收起
  *
  * agent 工具流（改写 / 特征助手）仍由 AgentLog 承担步骤+思维链的细粒度展示，
- * 这里只补状态行；单发流（提取 / 拆分 / 主词条补全）用全套。
+ * 这里只补状态行；单发流（提取 / 拆分 / 主条目补全）用全套。
  */
 
 import { useEffect, useRef, useState } from "react";

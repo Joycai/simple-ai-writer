@@ -224,7 +224,7 @@ export function InlineAiBubble() {
         </button>
         <button className={styles.action} onClick={extractToLore}>
           <span className={styles.actionIcon}><BookmarkPlus size={13} strokeWidth={1.6} /></span>
-          <span className={styles.actionLabel}>{t("ai.bubble.extractLore", { defaultValue: "提取为设定" })}</span>
+          <span className={styles.actionLabel}>{t("ai.bubble.extractLore", { defaultValue: "提取为条目" })}</span>
         </button>
         <button className={styles.action} onClick={() => openDrawer("consistency")}>
           <span className={styles.actionIcon}><CircleCheck size={13} strokeWidth={1.6} /></span>

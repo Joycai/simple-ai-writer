@@ -151,7 +151,7 @@ export function AgentComposer({
   const nameFor = (e: LoreEntity) => e.name;
   const countFor = (e: LoreEntity) => {
     const facets = e.facets ?? [];
-    // 主角条目的主词条不算一个可选项——它常驻，分母里没有它。
+    // 主角条目的主条目不算一个可选项——它常驻，分母里没有它。
     const isPrimary = e.dirPath === primary;
     const picked = facets.filter((f) => boundSet.has(pinFor(e, f.file))).length
       + (!isPrimary && boundSet.has(pinFor(e)) ? 1 : 0);
@@ -274,10 +274,10 @@ export function AgentComposer({
             </section>
           )}
 
-          {/* 绑定词条 */}
+          {/* 绑定条目 */}
           <section>
             <div className={styles.labelRow}>
-              <span className={styles.label}>{t("roleplay.composer.bound", { defaultValue: "绑定词条" })}</span>
+              <span className={styles.label}>{t("roleplay.composer.bound", { defaultValue: "绑定条目" })}</span>
               <span className={styles.labelNote}>
                 {t("roleplay.composer.boundNote", { defaultValue: "整条或其中一段特征" })}
               </span>
@@ -373,7 +373,7 @@ export function AgentComposer({
                           {(activeIsPrimary || boundSet.has(pinFor(active))) && <Check size={9} strokeWidth={3} />}
                         </span>
                         <div className={styles.facetBody}>
-                          <div className={styles.facetTitle}>{t("roleplay.composer.core", { defaultValue: "主词条（index.md）" })}</div>
+                          <div className={styles.facetTitle}>{t("roleplay.composer.core", { defaultValue: "主条目（index.md）" })}</div>
                           <div className={styles.facetDesc}>
                             {activeIsPrimary
                               ? t("roleplay.composer.primaryResident", {
@@ -438,7 +438,7 @@ export function AgentComposer({
                 })}
                 {bound.length === 0 && (
                   <span className={styles.hint}>
-                    {t("roleplay.composer.boundEmpty", { defaultValue: "没有绑定任何设定——角色只会知道主词条里写的东西。" })}
+                    {t("roleplay.composer.boundEmpty", { defaultValue: "没有绑定任何条目——角色只会知道主条目里写的东西。" })}
                   </span>
                 )}
               </div>

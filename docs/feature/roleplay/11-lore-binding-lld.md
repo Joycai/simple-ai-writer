@@ -246,7 +246,7 @@ recordInjectionsFromReport(meta, report, byDir, seedBlock);
 
 ### 4.5 UI 与花名册
 
-- **`AgentComposer.tsx`**：`active.dirPath === primary` 时，「主词条（index.md）」
+- **`AgentComposer.tsx`**：`active.dirPath === primary` 时，「主条目（index.md）」
   行禁用并标「已常驻（主条目）」，「整条绑定 / 取消整条」按钮隐藏；`countFor`
   对主条目用 `picked/facets.length`（分母不含 index）；`save()` 前
   `bound.filter((p) => p !== primary)`。

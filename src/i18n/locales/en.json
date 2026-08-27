@@ -111,8 +111,7 @@
     "markClear": "Clear",
     "markClearHint": "Clear the AI range ({{mod}}+Shift+\\)",
     "paragraph": "Paragraph {{p}} · sentence {{s}}",
-    "cumulative": "Total {{n}} words",
-    "refs": "{{n}} lore refs"
+    "cumulative": "Total {{n}} words"
   },
   "editorNav": {
     "toTop": "Jump to top",
@@ -670,8 +669,7 @@
       "hookDesc": "Draft several openings for the current article",
       "compliance": "Compliance",
       "complianceDesc": "Check the current article line by line for platform risk",
-      "system": "System identity",
-      "lore": "Lore extraction"
+      "system": "System identity"
     },
     "instructions": {
       "continue": "Continue writing the next passage from where the text ends.\n- Source fidelity: Any names, facts, or established rules appearing in 【{{knowledge}}】 must be followed exactly — do not invent contradictory details.\n- Style matching: Preserve the sentence rhythm, vocabulary level, and narrative manner of the preceding text.\n- Length: Approximately {{length}} characters, adjusted to match the author's natural paragraph length.\n- Output only the continuation — no headings, no commentary.",
@@ -1020,7 +1018,7 @@
     "bubble": {
       "drawer": "Drawer",
       "ask": "Ask AI",
-      "extractLore": "Extract as lore",
+      "extractLore": "Extract as an entry",
       "checkConsistency": "Check consistency",
       "customPlaceholder": "Custom instruction…"
     },
@@ -1217,7 +1215,7 @@
       "stripComposing": "Writer is composing",
       "introTitle": "From your next message on, the writer writes the text",
       "introOnce": "said once",
-      "intro1a": "The assistant still reads files, checks lore and thinks — it just stops writing the final text. Every turn's prose is written by ",
+      "intro1a": "The assistant still reads files, checks the knowledge base and thinks — it just stops writing the final text. Every turn's prose is written by ",
       "intro1b": " in a clean context; it cannot see this conversation.",
       "intro2": "The work order it was given sits on the line just above each reply. Click to open it.",
       "intro3": "Not right now: \"off for this session\" at the right end of the line above the composer. Each turn costs one extra request and takes a little longer.",
@@ -1938,7 +1936,7 @@
       "noContent": "No content",
       "addTagHint": "Add aliases / tags in edit mode",
       "moreActions": "More actions",
-      "colIndex": "Entry · index.md",
+      "colIndex": "Headword · index.md",
       "colImages": "Images · images.md",
       "summaryHead": "Summary · injected on match",
       "summaryEmpty": "(No summary — click to write one)",
@@ -2049,7 +2047,7 @@
     },
     "improve": {
       "instructionLabel": "Instruction",
-      "atHint": "type @ to reference another lore entry",
+      "atHint": "type @ to reference another entry",
       "instructionPlaceholder": "e.g. Add more backstory, expand her abilities section, fix inconsistencies…",
       "currentContent": "Current index.md",
       "charCount": "{{count}} chars",
@@ -2174,7 +2172,7 @@
     "newEntry": {
       "manual": "Manual",
       "ai": "AI Generate",
-      "aiHint": "Extract lore from the manuscript or a description"
+      "aiHint": "Extract an entry from the manuscript or a description"
     },
     "form": {
       "title": "Create New Entry",
@@ -2740,19 +2738,19 @@
     "section": {
       "recall": "Memory",
       "recallLead": "Things you have just remembered. This is **what you recall** — it need not agree with what others say.",
-      "bound": "Bound setting",
+      "bound": "Bound entries",
       "scene": "Scene",
       "memory": "Memory",
       "memoryLead": "What you have written down and that still holds. It does not fade as the conversation grows.",
       "memoryNone": "(Nothing yet.)",
-      "boundNone": "(No bound entries yet. Use read_lore_entity when you need the setting.)"
+      "boundNone": "(No bound entries yet. Use read_lore_entity when you need the material.)"
     },
     "roster": {
       "search": "Search agents",
       "turns": "{{n}} turns",
       "generating": "generating",
       "queuedAt": "queued · #{{n}}",
-      "stale": "setting updated",
+      "stale": "binding updated",
       "primaryGone": "character entry deleted",
       "remove": "Remove"
     },
@@ -2772,7 +2770,7 @@
       "narratorScope": "Reads every character's transcript"
     },
     "stale": {
-      "body": "A setting changed (a bound entry, the character sheet, or your identity); this conversation is still using the old version.",
+      "body": "A binding changed (an entry, the character sheet, or your identity); this conversation is still using the old version.",
       "refresh": "Refresh"
     },
     "chatEmpty": {
@@ -2852,7 +2850,7 @@
       "pickWhole": "Bind whole entry",
       "unpickWhole": "Unbind whole entry",
       "whole": "whole entry",
-      "core": "Core card (index.md)",
+      "core": "Headword (index.md)",
       "primaryResident": "Already in context — the lead entry's body is always there; no need to bind it again",
       "refResident": "already in context",
       "noEntities": "The knowledge base is empty.",

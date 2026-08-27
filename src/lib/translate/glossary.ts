@@ -1,5 +1,5 @@
 /**
- * 术语表：从知识库里挑出这一块用得上的词条，再在译文上强制落实。
+ * 术语表：从知识库里挑出这一块用得上的词对，再在译文上强制落实。
  *
  * 四条：
  *
@@ -51,14 +51,14 @@ function shortNote(summary: string): string | undefined {
  * 判据是条目编辑表单里作者**显式勾选**的开关（frontmatter `dict: true`，见
  * `LoreEntity.dict`），不是名字约定、不是格式嗅探——识别永远不会误判，条目
  * 名也保持自由（「词典·人名」「词典·地名」随便起）。任何分类下都行，可以有
- * 多本，正文按 {@link parseDictBody} 解析成词条，和别名通道合并。
+ * 多本，正文按 {@link parseDictBody} 解析成词对，和别名通道合并。
  */
 export function isDictEntity(e: Pick<LoreEntity, "dict">): boolean {
   return e.dict === true;
 }
 
 /**
- * 把「翻译词典」条目的正文解析成词条。
+ * 把「翻译词典」条目的正文解析成词对。
  *
  * 一行一条 `原文->译文 #备注`（就是 Sakura 的术语表格式，作者写下的即模型看到
  * 的）。宽容四件事：`→`、`=`、`＝` 都当 `->` 用（`=` 是 GalTransl 等工具词表的
@@ -89,13 +89,13 @@ export function parseDictBody(body: string): GlossaryEntry[] {
 }
 
 /**
- * 这一块用得上的词条。
+ * 这一块用得上的词对。
  *
  * 方向是**别名（原文写法）→ 条目名（作者的译名）**：作者翻一本日文小说时，
  * 条目名是他定的中文名，别名里放着原文写法。所以只有在原文里真的出现过的别名
  * 才是源词，而这正好就是"命中"。
  *
- * `dict` 是「翻译词典」条目正文里解析出的词条（调用方在运行开始时读一次，
+ * `dict` 是「翻译词典」条目正文里解析出的词对（调用方在运行开始时读一次，
  * 见 `tool.loadTranslateDict`），命中筛选和别名通道同一条规则。同一个源词
  * 两边都有时**词典赢**——那一行是作者专门为翻译写下的对应关系，别名只是顺带的。
  */
@@ -182,7 +182,7 @@ function replaceOutside(text: string, apply: (s: string) => string): string {
 /**
  * 在译文上落实术语表 —— 模型漏替的地方由这里补上。
  *
- * 词条按源词长度降序处理（`collectGlossary` 已经排好），见文件头第 3 条。
+ * 词对按源词长度降序处理（`collectGlossary` 已经排好），见文件头第 3 条。
  */
 export function enforceGlossary(out: string, entries: readonly GlossaryEntry[]): string {
   if (!entries.length) return out;
