@@ -2563,7 +2563,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "list_scenes",
         description:
-          "List the roleplay scenes in this project — one per character agent the author is playing with. Returns scene ids, the character's name, turn counts and a one-line gist. Call this first; every other scene tool takes an id from here. You are not in this list.",
+          "List the roleplay scenes in this project. Each character the author plays with has a *history* of scenes, not just a current one: this returns the current scene plus the archived ones, with their titles and dates. Call this first; every other scene tool takes an address from here. Addresses are <id> for the current scene or <id>#<n> for scene n. You are not in this list.",
         parameters: { type: "object", properties: {} },
       },
     },
@@ -2577,11 +2577,11 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "read_scene",
         description:
-          "Read the verbatim transcript of one roleplay scene by turn range. Omit from/to to get the most recent turns. Prefer read_scene_summary first on a long scene, then read only the range that matters.",
+          "Read the verbatim transcript of one roleplay scene by turn range. Pass <id>#<n> to read an archived scene, or a bare <id> for the current one. Omit from/to to get the most recent turns. Prefer read_scene_summary first on a long scene, then read only the range that matters.",
         parameters: {
           type: "object",
           properties: {
-            scene: { type: "string", description: "Scene id from list_scenes" },
+            scene: { type: "string", description: "Scene address from list_scenes: <id> (current scene) or <id>#<n> (scene n)" },
             from: { type: "integer", description: "First turn number (1-based, inclusive). Omit for the latest window." },
             to: { type: "integer", description: "Last turn number (inclusive)." },
           },
@@ -2599,12 +2599,12 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "search_scenes",
         description:
-          "Full-text search across roleplay transcripts. Returns matching turn numbers with the matching line, so you can then read_scene the range around them. This is how you find something said long ago without reading everything. Matching is literal and case-insensitive: search a distinctive word that was actually spoken.",
+          "Search every scene of every character — current and archived — in two layers at once. The verbatim layer searches transcript lines; the index layer searches scene recaps and the characters' memory areas, which is what finds an event the author is paraphrasing in their own words rather than quoting. Matching in both layers is literal and case-insensitive, so pass a distinctive word rather than a sentence. Both layers answer with a scene address you can hand to read_scene. This is how you find something from an earlier scene without reading everything.",
         parameters: {
           type: "object",
           properties: {
             query: { type: "string", description: "Text to look for" },
-            scene: { type: "string", description: "Restrict to one scene (id from list_scenes). Omit to search all of them." },
+            scene: { type: "string", description: "Restrict to one character (address from list_scenes; the #n part is ignored here). Omit to search all of them." },
           },
           required: ["query"],
         },
@@ -2620,10 +2620,10 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "read_scene_summary",
         description:
-          "Read a scene's rolling summary — the cheap way to catch up on a long scene before deciding which turns to read verbatim. Start here rather than pulling a whole transcript into context.",
+          "Read one scene's summary — the cheap way to catch up before deciding which turns to read verbatim. Works on archived scenes too: pass <id>#<n>. Start here rather than pulling a whole transcript into context.",
         parameters: {
           type: "object",
-          properties: { scene: { type: "string", description: "Scene id from list_scenes" } },
+          properties: { scene: { type: "string", description: "Scene address from list_scenes: <id> or <id>#<n>" } },
           required: ["scene"],
         },
       },
@@ -2638,11 +2638,11 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "read_scene_memory",
         description:
-          "Read what a character has committed to long-term memory: pacts they made, things they mean to do, events that changed them, how they feel about people. Far cheaper than the transcript, and it is where the still-binding commitments live — start here.",
+          "Read what a character remembers, in two tiers: what is still binding on them right now (pacts, to-dos, events, bonds), and what has settled into their memory area from earlier scenes. Far cheaper than the transcript. Note that this is what the character *believes* — it can disagree with the manuscript, and it is not a source of fact for anything you write.",
         parameters: {
           type: "object",
           properties: {
-            scene: { type: "string", description: "Scene id from list_scenes" },
+            scene: { type: "string", description: "Address from list_scenes; memory belongs to the character, so the #n part is ignored here" },
             include_closed: {
               type: "boolean",
               description: "Include kept (done) and called-off (void) records",
