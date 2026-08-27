@@ -354,6 +354,17 @@ export function reviseRecord(
  * **只放 `open` 的记录**：已经兑现或作废的约定不再是「现在生效的状态」，把它们
  * 也送进去既费预算又误导——模型会以为那件事还悬着。`done` / `void` 只能通过
  * `recall({include_closed: true})` 读到。
+ *
+ * ## 两级：这里只放标题，细节由 `recall` 展开
+ *
+ * 正文曾经和标题一起进这一块，只有一个总的字符上限兜着，超出的记录**整条不列**。
+ * 那样的两级是「列出 / 完全不列」，不是「摘要 / 展开」：一条重大事件的细节很长
+ * 时，要么整条塞进去把别的记录挤掉，要么整条消失——而后者的意思是角色连这件事
+ * 发生过都不知道，比读不到细节严重得多。
+ *
+ * 现在同样的预算能装下多得多的条数，「还有 N 条」几乎不再发生。代价是模型要多
+ * 一次工具调用才能拿到细节，所以**有正文的记录行尾带一个 `…`**——不给标记的话
+ * 它无从判断哪条值得展开。
  */
 export function renderMemoryBlock(records: readonly MemoryRecord[], cap = MEMORY_BLOCK_CHAR_CAP): string {
   const open = records.filter((r) => r.status === "open");
@@ -370,8 +381,8 @@ export function renderMemoryBlock(records: readonly MemoryRecord[], cap = MEMORY
     let headed = false;
     for (const r of group) {
       const subject = r.subject ? `对 ${r.subject}：` : "";
-      const body = r.body ? `：${r.body.replace(/\s*\n\s*/g, " ")}` : "";
-      const line = `- (${r.id}) ${subject}${r.title}${body}`;
+      // 正文不进这一块，只留一个「还有细节」的记号。
+      const line = `- (${r.id}) ${subject}${r.title}${r.body.trim() ? "…" : ""}`;
       const cost = line.length + (headed ? 0 : heading.length + 1);
       if (used + cost > cap) { dropped += 1; continue; }
       if (!headed) { lines.push(heading); headed = true; used += heading.length + 1; }
@@ -381,6 +392,13 @@ export function renderMemoryBlock(records: readonly MemoryRecord[], cap = MEMORY
   }
 
   if (!lines.length) return "";
+  // 「细节在哪」只说一次，而且只在真有细节可展开时说——没有一条带正文的记录时
+  // 这句话是纯粹的噪音，而它每一轮都在上下文里。
+  if (open.some((r) => r.body.trim())) {
+    lines.push(i18n.t("roleplay.memory.blockDetail", {
+      defaultValue: "（标了 … 的还有细节，需要时用 recall 加那条的 id 展开。）",
+    }));
+  }
   if (dropped > 0) {
     // 和 read_file 分页读同一套话术——模型已经学会了这个形状。
     lines.push(i18n.t("roleplay.memory.blockOverflow", {

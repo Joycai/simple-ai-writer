@@ -178,12 +178,13 @@ describe("renderMemoryBlock", () => {
    * 承诺被挤出上下文，角色就会失信；一件已发生的事被挤出去，最多是少一点色彩。
    */
   it("spends the budget on unfinished business first", () => {
-    // 预算刚好装得下两条，装不下三条——于是排序决定谁被挤出去。
+    // 预算刚好装得下两条，装不下三条——于是排序决定谁被挤出去。正文已经不进
+    // 这一块了，所以能撑爆预算的只剩标题本身。
     const long = "凑字数".repeat(100);
     const block = renderMemoryBlock([
-      rec({ id: "m1", kind: "event", title: "早先的事", body: long }),
-      rec({ id: "m2", kind: "pact", title: "还欠着的承诺", body: long }),
-      rec({ id: "m3", kind: "todo", title: "打算做的事", body: long }),
+      rec({ id: "m1", kind: "event", title: `早先的事${long}` }),
+      rec({ id: "m2", kind: "pact", title: `还欠着的承诺${long}` }),
+      rec({ id: "m3", kind: "todo", title: `打算做的事${long}` }),
     ], 800);
     expect(block).toContain("还欠着的承诺");
     expect(block).toContain("打算做的事");
@@ -206,9 +207,31 @@ describe("renderMemoryBlock", () => {
     expect(block.length).toBeLessThan(MEMORY_BLOCK_CHAR_CAP + 200);
   });
 
-  it("folds a multi-line body onto one line so the block stays scannable", () => {
-    const block = renderMemoryBlock([rec({ body: "第一行\n第二行" })]);
-    expect(block).toContain("第一行 第二行");
+  /**
+   * 两级：这一块只放标题。正文曾经和标题一起进来，只有一个总上限兜着，超出的
+   * 记录整条不列——那样的两级是「列出 / 完全不列」，而一条重大事件整条消失的
+   * 意思是角色连它发生过都不知道。
+   */
+  it("carries titles only, never the body", () => {
+    const block = renderMemoryBlock([rec({ title: "雪停就去塔下", body: "她说了三遍。" })]);
+    expect(block).toContain("雪停就去塔下");
+    expect(block).not.toContain("她说了三遍");
+  });
+
+  // 不给记号，模型无从判断哪条值得多花一次工具调用去展开。
+  it("marks the records that still have detail", () => {
+    const block = renderMemoryBlock([
+      rec({ id: "m1", title: "有细节的", body: "很长的正文" }),
+      rec({ id: "m2", title: "没细节的", body: "" }),
+    ]);
+    expect(block).toContain("有细节的…");
+    expect(block).toContain("没细节的\n");
+  });
+
+  // 一条带正文的都没有时，「细节在哪」那句话是纯噪音——而它每一轮都在上下文里。
+  it("stays silent about recall when nothing has detail", () => {
+    expect(renderMemoryBlock([rec({ body: "" })])).not.toMatch(/recall/);
+    expect(renderMemoryBlock([rec({ body: "有" })])).toMatch(/recall/);
   });
 });
 
