@@ -25,7 +25,16 @@ function entity(dirPath: string): LoreEntity {
   } as unknown as LoreEntity;
 }
 
-function session() {
+/**
+ * @param turns how many turns the session has had.
+ *
+ * The default of 1 is what the composition tests want (one turn is enough to
+ * have a conversation segment). Anything asking about the **compaction mark**
+ * has to pass more than `MIN_KEEP_TURNS`: `planFold` keeps the last two
+ * verbatim however full the bar is, so below that there is nothing to fold and
+ * the bar deliberately draws no line at all.
+ */
+function session(turns = 1) {
   const meta = createSessionMeta();
   const system: StreamMessage = { role: "system", content: "系统提示".repeat(20) };
   const seed: StreamMessage = { role: "user", content: "【知识库】".repeat(40) };
@@ -33,9 +42,18 @@ function session() {
   const answer: StreamMessage = { role: "assistant", content: "好的".repeat(30) };
   meta.seedContext = seed;
   recordInjections(meta, [entity("lore/characters/a")], seed);
-  noteTurnStart(meta, question);
-  return { meta, system, seed, question, answer, history: [system, seed, question, answer] };
+  const history: StreamMessage[] = [system, seed];
+  for (let i = 0; i < turns; i++) {
+    const q = i === 0 ? question : { role: "user" as const, content: "再写" };
+    const a = i === 0 ? answer : { role: "assistant" as const, content: "好的".repeat(30) };
+    noteTurnStart(meta, q);
+    history.push(q, a);
+  }
+  return { meta, system, seed, question, answer, history };
 }
+
+/** More turns than `planFold` keeps verbatim — i.e. compaction is possible. */
+const FOLDABLE_TURNS = 3;
 
 describe("computeContextBreakdown", () => {
   it("splits the history by the identities chatMeta records", () => {
@@ -78,7 +96,7 @@ describe("computeContextBreakdown", () => {
   });
 
   it("puts the compaction mark where compaction actually fires", () => {
-    const { meta, history } = session();
+    const { meta, history } = session(FOLDABLE_TURNS);
     const b = computeContextBreakdown(history, meta, 0, 100_000, 128_000);
     // Under the ceiling the bar spans the ceiling, so the mark sits at the raw
     // trigger share — not at some fraction of the model's whole window.
@@ -87,7 +105,7 @@ describe("computeContextBreakdown", () => {
   });
 
   it("packs full and slides the mark left once the history outgrows the ceiling", () => {
-    const { meta, history } = session();
+    const { meta, history } = session(FOLDABLE_TURNS);
     const ceiling = 10;
     const b = computeContextBreakdown(history, meta, 0, ceiling, 128_000);
     expect(b.usedTokens).toBeGreaterThan(ceiling);
@@ -103,7 +121,7 @@ describe("computeContextBreakdown", () => {
   });
 
   it("warns the moment the mark is crossed, not once the bar is packed", () => {
-    const { meta, history } = session();
+    const { meta, history } = session(FOLDABLE_TURNS);
     const used = computeContextBreakdown(history, meta, 0, 100_000, 128_000).usedTokens;
 
     // Below the trigger: calm on both counts.
@@ -120,10 +138,12 @@ describe("computeContextBreakdown", () => {
     expect(warned.willCompact).toBe(true);
     expect(warned.over).toBe(false);
 
-    // Past the ceiling both hold — over implies willCompact.
+    // Past the ceiling both hold — here compaction genuinely is the next step,
+    // so the bar says so *and* the fold is real (planFold agrees below).
     const packed = computeContextBreakdown(history, meta, 0, 10, 128_000);
     expect(packed.willCompact).toBe(true);
     expect(packed.over).toBe(true);
+    expect(planFold(history, meta, 10)).not.toBeNull();
   });
 
   it("stays calm on an empty session with no ceiling to cross", () => {
@@ -189,11 +209,12 @@ describe("折叠线 vs planFold 的真实触发点", () => {
     expect(bar.willCompact).toBe(false);
     expect(planFold(history, meta, C - TOOLS)).toBeNull();
     // 竖线也跟着挪到了真实触发点，不再是死板的 70%。
-    expect(bar.compactMarkerPct).toBeCloseTo(70 + 30 * (TOOLS / C), 5);
+    const markPct = bar.compactMarkerPct!;
+    expect(markPct).toBeCloseTo(70 + 30 * (TOOLS / C), 5);
     // 旧口径下 used 已经越过 0.7C——条会变黄、线会被越过，而上面刚证明不折。
     expect(bar.usedTokens).toBeGreaterThan(COMPACT_TRIGGER * C);
     // 新口径下它还没够到那条线。
-    expect(bar.usedTokens).toBeLessThan((bar.compactMarkerPct / 100) * C);
+    expect(bar.usedTokens).toBeLessThan((markPct / 100) * C);
   });
 
   it("没有工具的界面上，线仍然正好在 70%——这次改动不动它们", () => {
@@ -205,13 +226,91 @@ describe("折叠线 vs planFold 的真实触发点", () => {
   /**
    * schema 自己就吃光了上限。`planFold` 遇到非正的 ceiling 直接退出，所以压缩
    * 帮不上任何忙——但条**不能**因此一脸平静：那正是警示存在的理由。
+   *
+   * 报警的是 `over` 而不是 `willCompact`（2026-08-27 拆开）。两者原来是并起来的
+   * （`willCompact = over || …`），于是条会在这里画出折叠竖线、并说「下一轮把最早
+   * 的对话归纳成摘要」——把作者支去等一次永远不会发生的归纳。
    */
   it("工具 schema 吃光上限时压缩救不了，可条不能装作没事", () => {
     const { history, meta } = conversation(4, 50);
     const bar = computeContextBreakdown(history, meta, 9_000, 8_000, 128_000);
-    expect(bar.over).toBe(true);
-    expect(bar.willCompact).toBe(true);
     expect(planFold(history, meta, 8_000 - 9_000)).toBeNull();
+    expect(bar.over).toBe(true);          // 仍然警示
+    expect(bar.willCompact).toBe(false);  // 但不是「就要归纳了」
+    expect(bar.compactMarkerPct).toBeNull(); // 也不画那条线
+  });
+});
+
+/**
+ * 折不动的时候，那条线不能画。
+ *
+ * 竖线的意思是「越过此处，下一轮把最早的对话折走」。`planFold` 有两处会直接
+ * 拒绝：非正的消息上限（schema 自己吃光了窗口），以及**轮数不够**——它恒保最后
+ * `MIN_KEEP_TURNS` 轮不折。这两种情况下画那条线，就是画一个不会发生的后果。
+ *
+ * 这不是理论上的角落。32k 的本地模型上，助手工具集就占掉 11k+，消息上限只剩
+ * 四千出头、阈值不到三千——**第一轮的种子块就能撑过去**。旧口径下条会变黄、
+ * 越过自己那条线、展开还会读到一句「下一轮会归纳」，而下一轮什么都不会发生。
+ *
+ * `AgentChat` 早就算出了这个条件（`canCompact`，管着「立即归纳」按钮的显隐）：
+ * 按钮消失了，线还在，框还是黄的。
+ */
+describe("没有可折的东西时不画线", () => {
+  function turnsOf(n: number) {
+    const meta = createSessionMeta();
+    const history: StreamMessage[] = [{ role: "system", content: "系统提示" }];
+    for (let i = 0; i < n; i++) {
+      const q: StreamMessage = { role: "user", content: "问".repeat(400) };
+      noteTurnStart(meta, q);
+      history.push(q, { role: "assistant", content: "答".repeat(400) });
+    }
+    return { history, meta };
+  }
+
+  it("轮数不够时：条已经撑过阈值，planFold 仍然什么都不折", () => {
+    for (const n of [1, 2]) {
+      const { history, meta } = turnsOf(n);
+      const messages = estimateMessagesTokens(history);
+      // 先证明这份历史确实撑过了阈值——否则下面两条断言只是碰巧成立。
+      const ceiling = Math.floor(messages / COMPACT_TRIGGER) - 1;
+      expect(messages).toBeGreaterThan(ceiling * COMPACT_TRIGGER);
+
+      const bar = computeContextBreakdown(history, meta, 0, ceiling, 128_000);
+      expect(planFold(history, meta, ceiling)).toBeNull();
+      expect(bar.willCompact).toBe(false);
+      expect(bar.compactMarkerPct).toBeNull();
+    }
+  });
+
+  it("够了一轮就画得出来——门开在 MIN_KEEP_TURNS 上，不是「有历史就行」", () => {
+    const { history, meta } = turnsOf(3);
+    const messages = estimateMessagesTokens(history);
+    const ceiling = Math.floor(messages / COMPACT_TRIGGER) - 1;
+    const bar = computeContextBreakdown(history, meta, 0, ceiling, 128_000);
+    expect(planFold(history, meta, ceiling)).not.toBeNull();
+    expect(bar.willCompact).toBe(true);
+    expect(bar.compactMarkerPct).not.toBeNull();
+  });
+
+  /**
+   * 全新会话：`history` 是 null，实测只量得出工具 schema。它落进同一道门，所以
+   * 不需要自己的分支——而这正是它值得有一条用例的理由（设计稿 13 · 2h 给扮演
+   * 面板解决的就是这件事，助手这边从来没享受到）。
+   */
+  it("全新会话不画线", () => {
+    const b = computeContextBreakdown(null, null, 11_800, 16_000, 32_000);
+    expect(b.compactMarkerPct).toBeNull();
+    expect(b.willCompact).toBe(false);
+    expect(b.usedTokens).toBe(11_800);
+  });
+
+  /** 只有 meta 没 history（不该出现，但两个字段各自可空）——同样按「折不动」处理。 */
+  it("meta 缺失时按折不动处理", () => {
+    const { history } = turnsOf(5);
+    const b = computeContextBreakdown(history, null, 0, 100, 128_000);
+    expect(b.compactMarkerPct).toBeNull();
+    expect(b.willCompact).toBe(false);
+    expect(b.over).toBe(true);
   });
 });
 

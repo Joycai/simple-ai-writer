@@ -1405,6 +1405,7 @@
       "ctxToggle": "展开/收起上下文构成",
       "ctxCompactAt": "超过此处将折叠最早的对话",
       "ctxCompactExplain": "越过竖线后，下一轮把最早的对话归纳成摘要——执行日志里出现「已归纳前 N 轮对话」，摘要段随之变宽。",
+      "ctxOverExplain": "已经超出这次请求的上限，而归纳帮不上忙——最近两轮对话不会被折叠，工具说明也撤不掉。可以调高「窗口占用」，或开一个新会话。",
       "ctxCompactNow": "立即归纳",
       "ctxCompacting": "归纳中…",
       "ctxCompactNowTitle": "现在就把较早的对话归纳成摘要，腾出上下文空间",
