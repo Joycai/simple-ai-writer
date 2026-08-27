@@ -119,6 +119,8 @@ export async function reviseMemoryTool(
 interface RecallArgs {
   kind?: unknown;
   include_closed?: unknown;
+  /** 点名展开某一条（注入块里只有标题）。给了它，其余筛选参数一概不看。 */
+  id?: unknown;
 }
 
 export async function recallTool(
@@ -126,6 +128,23 @@ export async function recallTool(
 ): Promise<ToolResult> {
   if (!ctx.agentMemory) return { toolCallId: id, content: NO_STORE };
   const all = await ctx.agentMemory.list();
+
+  // 按 id 取一条：注入块里只有标题，展开某一条的细节是最常见的一次调用，而它
+  // 不该顺带把整本记事本再拉进上下文一遍。**不受 include_closed 约束**——点名
+  // 要某一条的模型已经知道自己在找什么，一条已兑现的约定的细节照给。
+  const wanted = typeof args.id === "string" ? args.id.trim() : "";
+  if (wanted) {
+    const one = all.find((r) => r.id === wanted);
+    if (!one) {
+      const ids = all.map((r) => r.id).join(", ");
+      return {
+        toolCallId: id,
+        content: `No memory record with id "${wanted}". Existing ids: ${ids || "none"}.`,
+      };
+    }
+    return { toolCallId: id, content: describe(one) };
+  }
+
   const includeClosed = args.include_closed === true;
   const kind = isKind(args.kind) ? args.kind : null;
 

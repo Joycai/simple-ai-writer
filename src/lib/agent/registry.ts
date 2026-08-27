@@ -2765,10 +2765,14 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "recall",
         description:
-          "Read your own memory records. The active ones are already in your context — call this only to look further back: kept pacts, called-off agreements, or older records that did not fit.",
+          "Read your own memory records. The titles of the active ones are already in your context; the ones marked with an ellipsis have detail you have not been shown. Pass id to expand exactly one of them — that is the common case. Without an id it lists records, which is how you look further back: kept pacts, called-off agreements, or older ones that did not fit.",
         parameters: {
           type: "object",
           properties: {
+            id: {
+              type: "string",
+              description: "Expand one record by its id (the (m3) in your memory block). Everything else is ignored when this is given.",
+            },
             kind: { type: "string", enum: ["pact", "todo", "event", "bond", "note"] },
             include_closed: { type: "boolean", description: "Include kept (done) and called-off (void) records" },
           },
