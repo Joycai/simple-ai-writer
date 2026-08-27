@@ -19,6 +19,7 @@ import { ChevronDown, ChevronRight, Image as ImageIcon, RotateCw, X } from "luci
 import { useRoleplayStore } from "../../stores/roleplayStore";
 import { useLoreStore } from "../../stores/loreStore";
 import { listArchives, type ArchivedScene } from "../../lib/roleplay/store";
+import { currentSceneNo } from "../../lib/roleplay/scene";
 import { useProjectStore } from "../../stores/projectStore";
 import { ModelSelector } from "../ai/ModelSelector";
 import { AgentLog } from "../ai/AgentLog";
@@ -303,6 +304,9 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   // 封存的旧场次。挂在对话区而不是 store 里：它只在作者往上看的时候才有意义，
   // 而每次切 agent 重读一次目录比让 store 多背一份状态便宜。
   const [archives, setArchives] = useState<ArchivedScene[]>([]);
+  // 「第 N 场」＝**最大编号 + 1**，不是归档数 + 1（同 AgentComposer 的注释）：
+  // 记忆里写的场号走 `peekNextArchiveNo`，稿面必须说同一个数。
+  const sceneNo = currentSceneNo(archives.map((a) => a.no));
   const [showArchive, setShowArchive] = useState(false);
   const [recapFolded, setRecapFolded] = useState(false);
   /** 待确认的回退目标轮号。回退会撤销记录，所以要问一次。 */
@@ -823,11 +827,11 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
                 <span className={styles.bandScene}>
                   {latestRecap && archives.length > 0
                     ? t("roleplay.band.sceneFrom", {
-                        n: archives.length + 1, prev: archives.length,
-                        defaultValue: `第 ${archives.length + 1} 场 · 接续自第 ${archives.length} 场`,
+                        n: sceneNo, prev: sceneNo - 1,
+                        defaultValue: `第 ${sceneNo} 场 · 接续自第 ${sceneNo - 1} 场`,
                       })
                     : t("roleplay.band.sceneNo", {
-                        n: archives.length + 1, defaultValue: `第 ${archives.length + 1} 场`,
+                        n: sceneNo, defaultValue: `第 ${sceneNo} 场`,
                       })}
                 </span>
                 <div className={styles.spacer} />
@@ -881,7 +885,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
                           onClick={() => setShowArchive(true)}
                         >
                           {t("roleplay.band.readPrev", {
-                            n: archives.length, defaultValue: `读第 ${archives.length} 场原文`,
+                            n: sceneNo - 1, defaultValue: `读第 ${sceneNo - 1} 场原文`,
                           })}
                         </button>
                       </>

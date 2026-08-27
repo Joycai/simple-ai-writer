@@ -53,7 +53,8 @@ import {
   type BoundContent, type RoleplaySessionMeta,
 } from "../lib/roleplay/context";
 import {
-  addRecord, dropRecordsFrom, loadMemoryDoc, reviseRecord, saveMemoryDoc, takeSinkable,
+  addRecord, dropRecordsFrom, dropSceneRecords, loadMemoryDoc, reviseRecord, saveMemoryDoc,
+  takeSinkable,
   type MemoryDoc,
 } from "../lib/roleplay/memory";
 import type { AgentMemoryStore } from "../lib/roleplay/memoryTools";
@@ -1084,6 +1085,14 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       if (get().running.includes(id) || get().queue.some((j) => j.agentId === id)) return;
 
       const continuing = opts.mode === "continue" && !!opts.recap;
+      /**
+       * 「另起一场」＝ 这一场是试验性的，**作废**（13 §2）。
+       *
+       * 判据是 `mode === "fresh"` 而**不是** `!continuing`：`mode: "continue"`
+       * 却没带 recap（类型允许，UI 不会产生）落在两者之间，此时照常封存但既不
+       * 分拣也不丢弃——把它当成「丢弃」，一次调用方的疏忽就会删掉作者的记忆。
+       */
+      const discarding = opts.mode === "fresh";
       const now = Math.floor(Date.now() / 1000);
 
       try {
@@ -1102,7 +1111,17 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         // 本身在 `takeSinkable` 里：欠着的约定和待办、关系留在常驻层；其余**移出**
         // 常驻层、沉进记忆区，各成一条，各带自己的关键字——合并成一段散文会把
         // 它们变成一份摘要，而那正是记忆当初要防的东西。
-        if (agent.areaId) {
+        //
+        // **分拣只在正史转场时跑。** 它曾经在这里无条件执行，于是「另起一场」
+        // 没有丢弃任何东西：一个试验场里记下的事件照样沉进记忆区、带着关键字，
+        // 三场之后被某个关键字命中，角色就把它说出来了——恰好是作者选这一支时
+        // 想避免的事（13 §1.2 差异 F）。
+        if (discarding) {
+          // 这一场作废：它记下的东西一并作废，不进记忆区，也不留在常驻层。
+          // 备份在下面那次写入之前统一做——物理上一个字都没丢，只是不再是记忆。
+          const { doc: survivors } = dropSceneRecords(doc, sceneNo);
+          next = survivors;
+        } else if (agent.areaId) {
           const { doc: remaining, sinking } = takeSinkable(doc);
           for (const rec of sinking) {
             const keys = rec.keys.length
@@ -1154,7 +1173,10 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           await saveMemoryDoc(path, id, next);
         }
 
-        await archiveSession(projectPath, id, { clearMemory: opts.clearMemory === true });
+        await archiveSession(projectPath, id, {
+          clearMemory: opts.clearMemory === true,
+          discard: discarding,
+        });
 
         // 封存把旧的 summary.md 一起搬走了，所以新的一场的摘要要在这之后写。
         // 它服务的是旁白的 read_scene_summary，以及下一次压缩的 prevSummary。

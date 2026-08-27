@@ -65,6 +65,13 @@ export function ArchiveViewer({ scenes, agentName, onClose }: {
                 onClick={() => setActive(s.no)}
               >
                 {t("roleplay.archive.scene", { n: s.no, defaultValue: `第 ${s.no} 场` })}
+                {/* 作废的一场：文件一个字都没删，作者仍然能读——但它不属于故事，
+                    角色和旁白都读不到它。这个标记是那句话唯一被说出来的地方。 */}
+                {s.discarded && (
+                  <span className={styles.railTag}>
+                    {t("roleplay.archive.discarded", { defaultValue: "作废" })}
+                  </span>
+                )}
               </button>
             ))}
           </nav>

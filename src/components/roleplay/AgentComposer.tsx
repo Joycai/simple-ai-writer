@@ -17,6 +17,7 @@ import { ModelSelector } from "../ai/ModelSelector";
 import { SceneTransition } from "./SceneTransition";
 import { AreaPicker, type AreaChoice } from "./AreaPicker";
 import { listArchives, loadPersonaCard } from "../../lib/roleplay/store";
+import { currentSceneNo } from "../../lib/roleplay/scene";
 import { useProjectStore } from "../../stores/projectStore";
 import {
   avatarGlyph, type AgentKind, type RoleplayAgent, type SceneTurn,
@@ -81,18 +82,20 @@ export function AgentComposer({
     void loadPersonaCard(projectPath, editing.id).then(setInstruction);
   }, [editing, projectPath]);
 
-  // 「当前第 N 场」＝归档数 + 1。稿面顶端那条存档带说的必须是同一个数，所以两边
-  // 都从 `listArchives` 数，而不是各记一个计数器。
-  const [archiveCount, setArchiveCount] = useState(0);
+  // 「当前第 N 场」＝**已有编号的最大值 + 1**，不是归档数 + 1。稿面顶端那条存档带、
+  // 这里、以及写进每条记忆的场号必须是同一个数，而记忆那边走的是
+  // `peekNextArchiveNo`（max + 1）——按个数数，作者手删过中间一场之后两者就错开，
+  // 于是「另起一场」会照着一个错的场号去丢弃记录。`currentSceneNo` 是那个口径的
+  // 纯函数版本。
+  const [sceneNo, setSceneNo] = useState(1);
   useEffect(() => {
-    if (!editing || !projectPath) { setArchiveCount(0); return; }
+    if (!editing || !projectPath) { setSceneNo(1); return; }
     let alive = true;
     void listArchives(projectPath, editing.id)
-      .then((list) => { if (alive) setArchiveCount(list.length); })
-      .catch(() => { if (alive) setArchiveCount(0); });
+      .then((list) => { if (alive) setSceneNo(currentSceneNo(list.map((x) => x.no))); })
+      .catch(() => { if (alive) setSceneNo(1); });
     return () => { alive = false; };
   }, [editing, projectPath]);
-  const sceneNo = archiveCount + 1;
   const turns = useRoleplayStore((s) => (editing ? s.sessions[editing.id]?.turns : undefined)) ?? EMPTY_TURNS;
 
   const entities = useMemo(

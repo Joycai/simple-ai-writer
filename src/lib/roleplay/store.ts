@@ -377,10 +377,16 @@ export async function peekNextArchiveNo(projectPath: string, agentId: string): P
  * 记忆默认**不动**。它是角色的长期知识，本就设计成能跨越压缩活下来；换一场
  * 戏不该让角色忘掉你们约好的事。作者明确要求清空时才一并封存（同样是移动）。
  *
+ * `discard`（「另起一场」）在文件名上留一个 `.discarded` 后缀：这一场是试验性的，
+ * **不属于故事**。标记编码进那次 rename 本身，因为封存本来就是一次 rename——零
+ * 额外状态、作者在文件管理器里一眼看得懂、改主意就是再 rename 一次。只有
+ * transcript 带这个后缀，`summary-NN.md` / `memory-NN.md` 是它的附属品，由
+ * `listArchives` 按场号带出 `discarded` 供调用方判断。
+ *
  * @returns 这一场被存成了第几号，没有任何东西可封存时返回 null。
  */
 export async function archiveSession(
-  projectPath: string, agentId: string, opts: { clearMemory: boolean },
+  projectPath: string, agentId: string, opts: { clearMemory: boolean; discard?: boolean },
 ): Promise<number | null> {
   const transcript = transcriptPath(projectPath, agentId);
   const hasTranscript = await fileExists(transcript);
@@ -396,7 +402,8 @@ export async function archiveSession(
   const no = String(await nextArchiveNo(dir)).padStart(2, "0");
   await makeDir(dir);
 
-  if (hasTranscript) await renamePath(transcript, `${dir}/transcript-${no}.md`);
+  const suffix = opts.discard ? ".discarded" : "";
+  if (hasTranscript) await renamePath(transcript, `${dir}/transcript-${no}${suffix}.md`);
   const summary = summaryPath(projectPath, agentId);
   if (await fileExists(summary)) await renamePath(summary, `${dir}/summary-${no}.md`);
   if (hasMemory) await renamePath(memory, `${dir}/memory-${no}.md`);

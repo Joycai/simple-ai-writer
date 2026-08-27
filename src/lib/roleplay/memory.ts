@@ -278,6 +278,30 @@ export function dropRecordsFrom(doc: MemoryDoc, fromTurn: number): {
 }
 
 /**
+ * 「另起一场」时丢掉这一场记下的全部记录。
+ *
+ * 和 `dropRecordsFrom` 同一条纪律：「只增改不删」防的是**模型**悄悄删掉自己不
+ * 想要的记录，而这是作者自己按下去、指名道姓要作废整整一场的动作。调用方仍然
+ * 必须先 `backupFile`——「作者按了」不等于「作者按对了」。
+ *
+ * **`scene: 0`（不详）永不命中。** 场号是这个字段出现之前的记录读回来的默认值，
+ * 而 `scene` 参数恒 ≥ 1，所以比较天然把它们排除在外——那些记录属于哪一场谁也
+ * 不知道，猜一个「就是本场」等于替作者删掉他没打算删的东西。
+ */
+export function dropSceneRecords(doc: MemoryDoc, scene: number): {
+  doc: MemoryDoc;
+  dropped: MemoryRecord[];
+} {
+  const dropped = doc.records.filter((r) => r.scene === scene);
+  if (!dropped.length) return { doc, dropped: [] };
+  return {
+    // `next` 不回退：id 只增不重用，哪怕这一场整个作废了。
+    doc: { records: doc.records.filter((r) => !dropped.includes(r)), next: doc.next },
+    dropped,
+  };
+}
+
+/**
  * 转场时的分拣：哪些记录沉进记忆区、常驻层剩下什么。
  *
  * 规则按性质，不按预算（06 §3.1）：欠着的约定/待办、关系留在常驻层；其余
