@@ -56,7 +56,7 @@ HTML 预览工具栏加「在浏览器打开」按钮。实施时对原方案（
 - 编辑：CodeMirror 打开、2s autosave——现状已通，不动。
 - 预览：blob 随编辑内容 debounce 重建，节奏与 markdown 预览一致；编辑/分屏/预览三态复用 `viewMode`。
 - FileTree 给 `.html`/`.htm` 专属图标（如 `FileCode`）。
-- **不变式**：`.html` 不进 spine、不进 bookContext、不进 RAG/前情记忆——它是交付物，不是章节。`isChapterFile` 不动。
+- **不变式**：`.html` 不进 spine、不进 bookContext、不进 RAG/前情提要——它是交付物，不是章节。`isChapterFile` 不动。
 - `@` 引用：`.html` 是 `@` 选择器的文本候选（`lib/fs/images` 的 `TEXT_EXTS`，徽标显示 HTML），与 `search_text` 的覆盖面对齐——读一个交付物从来没有理由被拦住，改它的正是写它的那个助手。见 `docs/reference/architecture.md` →「`@` 引用的候选文件」。
 
 ### D6.1 后续：`.html` 可以变成 `.pptx`（Beta）

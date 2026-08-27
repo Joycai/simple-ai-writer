@@ -369,7 +369,7 @@ function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
 // ─── Story memory ─────────────────────────────────────────────────────────────
 
 /**
- * 前情摘要 strip: coverage as a progress bar, plus the checkpoint warning when
+ * 前情提要 strip: coverage as a progress bar, plus the checkpoint warning when
  * the request is about to skip a large uncovered stretch of the document.
  */
 function MemorySection({ detailSpan, appendMode }: { detailSpan: number; appendMode: boolean }) {
@@ -806,7 +806,7 @@ function ErrorBlock({
         {messages && messages.length > 0 && (
           <button className={styles.btnSecondary} onClick={() => setShowPrompt(true)}>
             <FileSearch size={10} strokeWidth={1.8} />
-            {t("ai.panel.viewPrompt", { defaultValue: "查看完整提示" })}
+            {t("ai.panel.viewPrompt", { defaultValue: "查看完整提示词" })}
           </button>
         )}
         <button className={styles.btnSecondary} onClick={copy}>
@@ -1792,7 +1792,7 @@ export function AiPanel() {
                 {prompts.some((p) => p.scene === "system") && (
                   <div className={styles.controlRow}>
                     <span className={styles.controlLabel}>
-                      {t("ai.panel.systemPromptLabel", { defaultValue: "系统提示" })}
+                      {t("ai.panel.systemPromptLabel", { defaultValue: "系统提示词" })}
                     </span>
                     <Select
                       className={styles.select}

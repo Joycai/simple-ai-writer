@@ -1,5 +1,5 @@
 /**
- * 转场时的前情摘要。
+ * 转场时的前情。
  *
  * 设计见 `docs/feature/roleplay/06-scene-and-memory-area.md` §5。三条不能改的：
  *
@@ -75,7 +75,7 @@ export function recapInput(turns: readonly SceneTurn[], cap = RECAP_INPUT_CHAR_C
 }
 
 /**
- * 跑一次前情摘要。
+ * 跑一次前情。
  *
  * `systemPrompt` 传角色自己的那一份（`buildSystemPrompt` 的产物），这样它是**以
  * 这个角色的身份**在回忆，而不是一个通用摘要器在压缩文本。

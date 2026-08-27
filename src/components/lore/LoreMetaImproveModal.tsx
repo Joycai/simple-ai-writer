@@ -339,7 +339,7 @@ summary: ${entity.summary}
             />
           </div>
 
-          {/* 运行进度: 状态行 + 步骤列 + 思维链 (设计稿 17) */}
+          {/* 运行进度: 状态行 + 步骤列 + 思考过程 (设计稿 17) */}
           {phase === "generating" && (
             <div className={styles.section}>
               <div className={styles.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>

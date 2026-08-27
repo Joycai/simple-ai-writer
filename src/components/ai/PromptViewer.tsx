@@ -87,7 +87,7 @@ export function PromptViewer({
       <div className={styles.modal} role="dialog" aria-modal data-ai-surface>
         <div className={styles.header}>
           <span className={styles.title}>
-            {t("ai.panel.promptViewerTitle", { defaultValue: "完整提示" })}
+            {t("ai.panel.promptViewerTitle", { defaultValue: "完整提示词" })}
           </span>
           <span className={styles.meta}>
             {t("ai.panel.promptViewerMeta", {

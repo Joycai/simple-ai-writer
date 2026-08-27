@@ -732,7 +732,7 @@ export const NOVEL_PROFILE: WorkspaceProfile = {
       ],
     },
     // 风格 is a bucket for tone samples, not a thing with parts — no schema.
-    { id: "style", labelZh: "风格", labelEn: "Style" },
+    { id: "style", labelZh: "文风", labelEn: "Style" },
   ],
   sections: {
     priorAll: "全书前情",

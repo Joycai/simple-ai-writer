@@ -4,9 +4,9 @@
  * 三个可独立取用的积木，六个 lore AI 流共用：
  *   - RunStatusLine  — 状态行：旋转圈/绿点 + 「生成中/完成」 + `Ns · X tok` 等宽计数
  *   - LoreRunSteps   — 语义步骤列：✓ 圆标 / 脉冲圆 / 灰圆 + 连接线 + 右侧等宽注记
- *   - ThinkingPanel  — 思维链折叠面板：实时流式 · 不入库，运行中默认展开、结束后收起
+ *   - ThinkingPanel  — 思考过程折叠面板：实时流式 · 不入库，运行中默认展开、结束后收起
  *
- * agent 工具流（改写 / 特征助手）仍由 AgentLog 承担步骤+思维链的细粒度展示，
+ * agent 工具流（改写 / 特征助手）仍由 AgentLog 承担步骤+思考过程的细粒度展示，
  * 这里只补状态行；单发流（提取 / 拆分 / 主条目补全）用全套。
  */
 
@@ -188,7 +188,7 @@ export function ThinkingPanel({ text, running }: { text: string; running: boolea
           <path d="M9 6 L15 12 L9 18" />
         </svg>
         <span className={styles.thinkingTitle}>
-          {t("lore.run.thinking", { defaultValue: "思维链" })}
+          {t("lore.run.thinking", { defaultValue: "思考过程" })}
         </span>
         <span className={styles.thinkingNote}>
           {t("lore.run.thinkingNote", { defaultValue: "实时流式 · 不入库" })}

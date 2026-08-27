@@ -489,7 +489,7 @@ export function LoreImproveModal({ entity, onClose }: Props) {
                 </div>
               )}
 
-              {/* 新特征: 步骤列 + 思维链 + 草稿条 (设计稿 17) */}
+              {/* 新特征: 步骤列 + 思考过程 + 草稿条 (设计稿 17) */}
               {isNewFacet && phase === "generating" && (
                 <>
                   <LoreRunSteps steps={newFacetSteps} />

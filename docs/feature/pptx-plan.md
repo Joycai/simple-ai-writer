@@ -297,7 +297,7 @@ currentColor  rgb(0,0,0)   ❌   rgb(34,197,94)     ✅
 
 ## 5. 不变式与风险
 
-- **`.pptx` 不是章节**：不进 spine、不进 bookContext、不进 RAG/前情记忆，`isChapterFile` 不动。导入后的 `.md` 是普通文档。
+- **`.pptx` 不是章节**：不进 spine、不进 bookContext、不进 RAG/前情提要，`isChapterFile` 不动。导入后的 `.md` 是普通文档。
 - **分页永远在页边界**：任何让 `read_slides` 返回半页的改动都会破坏"尾注给出的 `start_slide` 能续上"这个契约。
 - **`.html` 的分页与导出的分页同源**：`htmlSlides.ts` 的选择器表和 `harvester.js` 的 `SLIDE_SELECTORS` 必须逐条一致——不一致的那天，作者审的「第 7 页」和导出的第 7 页不是同一页。`htmlSlides.test.ts` 把这份列表从 harvester 源码里解析回来对比，所以动 `harvester.js` 要同时看两处：D18 的 `sha256-`，和这张表。
 - **截断必须发声**：单页 4000 字符顶、整份导入 500 页顶、导出的每一处降级，三处都写进输出。

@@ -555,7 +555,7 @@ So the setting stays as a **local-endpoint escape hatch**, not as a tuning knob 
 
 Two related gaps stay open on purpose, both bigger than a setting: the full toolset ships **39 schemas ≈ 9k tokens on every request** with no tiering, and `discoverOllama` reads limits out of `/api/show` but not its `capabilities` array (`tools` / `vision` / `thinking`), so `model.type` remains author-declared.
 
-### Story Memory (前情记忆)
+### Story Memory (前情提要)
 
 Per-document rolling summary so long manuscripts don't lose early plot in AI tasks — the assembled context carries a `【前情提要】` layer (compacted summaries of everything before the verbatim window) ahead of `【近期内容】`.
 

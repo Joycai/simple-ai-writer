@@ -1,6 +1,6 @@
 # 词表与措辞校准
 
-> 状态：第 1–3 节 `living`（今天要遵守的取词规则和词表，写任何面向作者的字符串之前读它）；第 4 节 `partial`（**批次 A 已落**，B–F 未开）；第 5 节 `planned`（防回潮的护栏测试还不存在）。
+> 状态：第 1–3 节 `living`（今天要遵守的取词规则和词表，写任何面向作者的字符串之前读它）；第 4 节 `partial`（**A–E 已落**，只剩批次 F —— 它改的是发给模型的提示词，需要单独拍板）；第 5 节 `shipped`（`src/lib/__tests__/localeTerms.test.ts`）。
 >
 > 起因：2026-08 对全量文案做了一次盘点——`en.json` / `zh-CN.json` 共 2775 个键，加上 `lib/profile/model.ts` 的能力包 / 分类 / 特征槽位、`lib/agent/subagent.ts` 的子代理种类。机械比对短标签（≤20 字符、不含插值）后发现 **78 处一词多译**、**49 处一译多词**。本文档是那次盘点的结论 + 收敛计划。
 >
@@ -145,7 +145,7 @@ CLAUDE.md 里已经写了这条纪律的一半——「UI 词汇是应用级且�
 
 **留在原地的三处「设定」**（都不是知识库义）：`roleplay.persona.none`「不设定」、`roleplay.persona.narratorNote`「无身份设定」是动词；`roleplay.empty.body`「他按自己的设定回你」是散文，中文读起来自然。
 
-### 批次 B —— 前情四词分工（9 键）
+### 批次 B —— 前情四词分工 ✅ 已落地
 
 | 键 | 现在 | 改成 |
 |---|---|---|
@@ -155,9 +155,11 @@ CLAUDE.md 里已经写了这条纪律的一半——「UI 词汇是应用级且�
 | `library.summaryModelHint` | 用于生成前情摘要的模型 | 用于生成前情提要的模型 |
 | `ai.memory.systemPrompt` | 你是前情摘要助手 | 你是前情提要助手 |
 
+扮演侧的 recap 同批归位：`lib/roleplay/recap.ts` 及其测试、`writer-subagent-plan.md` 里的「转场前情摘要」按 §3 词表改成 **前情**（它不是 story memory）。
+
 不动：`systemSettings.usage.kinds.memory`（已经是「前情提要」）、`ai.panel.allocMemory`（「前情」是紧凑位的合法缩写）、`lore.detail.fieldSummary`（概要）、`ai.agent.log.detailSummary`（历史摘要）、`ai.tasks.summary`（总结）、`systemSettings.usage.kinds.digest`（分组摘要）。
 
-### 批次 C —— 撞车词（8 + 15 键）
+### 批次 C —— 撞车词 ✅ 已落地
 
 **工作台**（8 键，2 个在 `ai.instructions.*` 见批次 F）：
 
@@ -179,7 +181,7 @@ CLAUDE.md 里已经写了这条纪律的一半——「UI 词汇是应用级且�
 
 **方案 / 计划**：现状已经基本正确（`ai.plan.*` 是方案、`ai.chat.planMode` 是计划模式、`task_plan` 是拟定任务计划），本批只把这条界线写进本文档，代码不动。
 
-### 批次 D —— 英文侧的歧义（7 键，中文不动）
+### 批次 D —— 英文侧的歧义 ✅ 已落地
 
 中文分得清、英文糊在一起的地方。改英文比改中文安全，因为中文用户看不到。
 
@@ -195,7 +197,7 @@ CLAUDE.md 里已经写了这条纪律的一半——「UI 词汇是应用级且�
 
 `SCOPE` 那条尤其值得改：知识库的 scope 是取材围栏，写手的 scope 是适用范围，英文界面上现在是同一个词。
 
-### 批次 E —— 图片与小分歧（21 + 5 键）
+### 批次 E —— 图片与小分歧 ✅ 已落地
 
 **图像 → 图片**（面向作者的部分，`aiConfig.models.comfy*` 与供应商专有名词不动）：
 
@@ -208,7 +210,9 @@ CLAUDE.md 里已经写了这条纪律的一半——「UI 词汇是应用级且�
 | `systemSettings.subagents.imagegenReq` | 需图像模型 | 需图片模型 |
 | `lore.imageGen.noImageModel` / `lore.detail.aiGenImageNeedModel` | 「图像生成」类型的模型 | 「图片生成」类型的模型 |
 
-`systemSettings.subagents.vision`（Image analysis / 图像理解）**保留「图像理解」**——它是能力名不是动作名，且「图片理解」读起来更差。这是规则 6 唯一的豁免，写在这里免得下次又被「统一」掉。
+`systemSettings.subagents.vision`（Image analysis / 图像理解）**保留「图像理解」**——它是能力名不是动作名，且「图片理解」读起来更差。这是规则 6 唯一的豁免，写在这里免得下次又被「统一」掉；`localeTerms.test.ts` 的 `RETIRED` 里因此只禁「图像生成」这个组合，不禁「图像」二字。
+
+落地时多改了一处 `model.ts`：小说包 `style` 分类的 `labelZh` 从「风格」改成「文风」。`resolveWorkspace.test.ts` 有两条断言写死了「风格」——它们测的是「同 id 时第一个声明者的标签赢」，字面值是附带的，跟着改了期望值。
 
 **其余小分歧**：
 
@@ -233,18 +237,22 @@ CLAUDE.md 里已经写了这条纪律的一半——「UI 词汇是应用级且�
 
 单独开一个 PR，理由是验证方式不同：文案改动看截图就够，提示词改动要跑一遍 `src/lib/__tests__/rag.test.ts` + 真机对话确认模型行为没变。风险低但不为零——「设定」在中文里对模型是个信息量很足的词，换成「条目」可能让它对知识库的态度变淡。**如果只想落一批就跳过这批**：它是六批里唯一一个作者根本看不见的。
 
-## 5. 防回潮：`localeTerms.test.ts`
+## 5. 防回潮：`localeTerms.test.ts` ✅ 已落地
 
-护栏必须扫**两处**，否则半年后退役词从 `defaultValue` 爬回来：
+`src/lib/__tests__/localeTerms.test.ts`。一张 `RETIRED` 表（词 → 该用什么 → 豁免键清单），命中即失败，报错直接把替代词和命中的键打出来。
 
-```
-src/i18n/locales/zh-CN.json      ← 所有值
-src/**/*.{ts,tsx}                ← t(…, { defaultValue: "…" }) 的字面量
-```
+扫**两个**面，因为文案有两份副本：
 
-形状照 `localeParity.test.ts` 和 `agentToolBudget.test.ts` 的棘轮写：一张 `RETIRED` 表（词 → 该用什么 → 豁免键清单），命中即失败，报错里直接给出替代词。豁免清单是这个测试的关键——「设定」有四处合法用法（见批次 A），把它们写进清单比放宽正则安全，因为清单会逼下一个人解释自己为什么要豁免。
+1. `zh-CN.json` 的全部值；
+2. 组件里 `t(key, { defaultValue: "…" })` 的字面量——豁免按「调用点前 120 字符里出现豁免键名」判定，因为键就写在同一次调用里。
 
-初版 `RETIRED`：`词条`（→ 条目，豁免 `lore.dict.*` 的词对）、`前情记忆`、`前情摘要`、`思维链`、`底稿`、`生成插图` / `修改插图`。**「设定」暂不进表**——它在 `ai.instructions.*` 和扮演散文里还有活的用法，等批次 A 和 F 都落完再加，否则测试一上来就是红的。
+**代码注释故意不扫。** 注释里有设计记录和引用的设计稿屏名（`设计稿 03 · 屏 17「AI 执行进度 · 思维链」`），对散文做禁词就是个误报机器。注释由各批次自己扫干净。
+
+初版 `RETIRED`：`词条`、`主词条`、`前情记忆`、`前情摘要`、`思维链`、`底稿`、`生成插图`、`修改插图`、`图像生成`，加上带四条豁免的 `设定`（`roleplay.persona.none` / `narratorNote` / `empty.body` 是动词或散文；`ai.instructions.` 整段豁免，因为那是**批次 F**，还没做）。
+
+**一处计划没说对的**：原计划写「测试在 A 落地之后再加」，理由是先有护栏会让 A 那个 PR 自己踩自己。同样的道理对 B–E 也成立——护栏只能加在**所有要退的词都归零之后**，所以它实际排在最后。落地时按 A → B → C → D → E → 测试的顺序走。
+
+护栏本身验过两次红：往 `zh-CN.json` 塞回一个「前情记忆」、往 `AiPanel.tsx` 的 `defaultValue` 塞回一个「思维链」，两个面各失败一次，报错指到具体的键和文件。一个从没红过的守卫测试不算守卫。
 
 ## 6. 明确不改的
 
@@ -255,13 +263,15 @@ src/**/*.{ts,tsx}                ← t(…, { defaultValue: "…" }) 的字面�
 - **5 个缺中文的复数键**（`ai.plan.stepCount_other`、`aiConfig.hub.modelCount_one/_other`、`deleteProviderConfirm_one/_other`）。中文无复数形态，`localeParity.test.ts` 已经把这条豁免写进注释了。
 - **动词的措辞差异**：Save 保存/存、Clear 清除/清空、Close 关闭/收起、Add 添加/新增/归入。这些随位置长度和语气变化是正常的，统一它们只会让短按钮变长。
 
-## 7. 落地顺序建议
+## 7. 落地记录
 
-A → B → C 是作者能直接感知的三批，先落这三批就解掉了盘点里的大头。D 只动英文，可以随时插队。E 面广但每条都极浅。F 单独走，且是唯一可以不做的一批。
+实际顺序：**A → B → C → D → E → 护栏测试**，A 单独一个提交，B–E 合成一个（它们互不相交，且都要等护栏才能定型），护栏最后。F 未做。
 
-第 5 节的测试**在 A 落地之后再加**，一次性把 B/C/E 的退役词也写进 `RETIRED` 表——先有护栏再改文案，会让 A 那个 PR 自己踩自己。
+每批的验证都是同一套：`pnpm tsc --noEmit` + `pnpm test`。最终 191 文件 / 2623 用例全绿（护栏测试贡献 20 条）。全程只有一次真实失败：E 改了小说包 `style` 的 `labelZh`，`resolveWorkspace.test.ts` 两条断言写死了旧字面值。
 
-改完任意一批，同步更新两处：本文档第 3 节的词表，以及 `CLAUDE.md` 里 Workspace Packs 一节的「UI 词汇是应用级且统一的」那段（它现在只点名了 文档/分组/知识库/条目 四个词）。
+**剩下的**：批次 F（`ai.instructions.*` 的 12 处）。它改的是发给模型的提示词，验证方式和前五批不同——看截图不够，要跑 `rag.test.ts` 加真机对话确认模型行为没变。风险低但不为零：「设定」在中文里对模型信息量很足，换成「条目」可能让它对知识库的态度变淡。这是六批里唯一作者根本看不见的一批，也是唯一可以不做的。
+
+改完任意一批，同步更新三处：本文档第 3 节的词表、第 5 节的 `RETIRED` 表，以及 `CLAUDE.md` 里 Workspace Packs 一节的「UI 词汇是应用级且统一的」那段（它现在只点名了 文档/分组/知识库/条目 四个词）。
 
 ## 8. 文档侧的口径
 
@@ -273,7 +283,7 @@ A → B → C 是作者能直接感知的三批，先落这三批就解掉了盘
 2. **`shipped` / `research` 设计记录：不重写正文，加一行更正。** 那些文档存在的理由是「当时为什么这么选」，把措辞刷成今天的样子会让「后来改过名」这个事实从记录里消失。仓库里已经有这个先例（`web-access-plan.md` 的复核表、`remote-knowledge-base-feasibility.md` 在索引里的那句「the file's own status line predates that」）。
 3. **文档准确描述了今天的 UI，而那个 UI 用的是退役词：不动，等它所属的批次。** 现在改，文档就先于代码错了——这恰好违反规则 1。
 
-规则 3 是这一节的重点：**每个批次的完成定义里必须包含它要同步改的文档**，否则 A 落地当天，`design-system.md` 就开始说假话。
+规则 3 是这一节的重点：**每个批次的完成定义里必须包含它要同步改的文档**，否则 A 落地当天，`design-system.md` 就开始说假话。A–E 都是这么落的，下表已按实际结果更新。
 
 ### 已按规则 1 改掉的（本次）
 
@@ -297,8 +307,8 @@ A → B → C 是作者能直接感知的三批，先落这三批就解掉了盘
 | 批次 | 落地时必须同步改的文档 |
 |---|---|
 | A（主词条 → 主条目）✅ | 已随批次改完，共 20 处：`reference/design-system.md` ×9 · `feature/lore/lore-entry-type-plan.md` ×7 · `feature/lore/lore-collection-ui-brief.md` ×2 · `feature/lore/lore-collection-plan.md` ×1 · `feature/roleplay/11-lore-binding-lld.md` ×1。（原先按「行数」估的 ×8/×6 偏低——有的行含两处，按 occurrence 数才对） |
-| B（前情记忆 → 前情提要） | `reference/architecture.md` 的 `### Story Memory (前情记忆)` 标题 ×1 · `feature/agent/unified-agent-plan.md` ×3 · `feature/library-plan.md` ×2 · `feature/agent/chat-memory-plan.md` ×2 · `feature/pptx-plan.md` ×1 · `feature/html-artifact-plan.md` ×1 |
-| E（思维链 → 思考过程） | `reference/design-system.md` ×3（屏 17「AI 执行进度 · 思维链」与 `ThinkingPanel` 的头行）。**`docs/api/` 的 40 处不动** |
+| B（前情记忆 → 前情提要）✅ | 已随批次改完共 10 处：`reference/architecture.md` 的 `### Story Memory` 标题 ×1 · `feature/agent/unified-agent-plan.md` ×3 · `feature/library-plan.md` ×2 · `feature/agent/chat-memory-plan.md` ×2 · `feature/pptx-plan.md` ×1 · `feature/html-artifact-plan.md` ×1；另有 4 处「前情摘要」按语境分流到 前情提要 / 前情 |
+| E（思维链 → 思考过程）✅ | `reference/design-system.md` ×2 已改（`ThinkingPanel` 的名字与头行、`AgentLog` 那句分工）；引用设计稿屏名的那处「屏 17『AI 执行进度 · 思维链』」保留，它是外部产物的名字。**`docs/api/` 的 40 处不动** |
 
 改 `### Story Memory` 那个标题前先 `grep -rn "architecture.md →"`：本文档写作时没有源码注释引用它，但这类标题是被当接口引用的。
 

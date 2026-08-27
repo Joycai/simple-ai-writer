@@ -294,7 +294,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
           {/* Error */}
           {error && <div className={styles.error}><AlertTriangle size={13} style={{ flexShrink: 0 }} /> {error}</div>}
 
-          {/* ── Generating: 步骤列 + 思维链 (设计稿 17) ── */}
+          {/* ── Generating: 步骤列 + 思考过程 (设计稿 17) ── */}
           {phase === "generating" && (
             <>
               <div className={styles.statusRow}>
