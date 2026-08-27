@@ -305,10 +305,28 @@ function personaLine(persona: AuthorPersona, loreIndex: LoreIndex, isZh: boolean
         : `The person speaking with you: ${persona.prompt.trim()}`,
     });
   }
+  if (persona.mode === "stranger") {
+    // 这段话是改动之前 `none` 的原文，原样搬过来——它描述的是一个真实存在、
+    // 而且有人在用的状态（作者临时演一个还没建条目的人），不该被悄悄改掉。
+    return i18n.t("ai.instructions.roleplayPersonaStranger", {
+      defaultValue: isZh
+        ? "与你对话的人没有给出身份，把他当成故事里一个你还不认识的人。"
+        : "The person speaking has not given an identity — treat them as someone in the story you do not yet know.",
+    });
+  }
+  // 默认：导演视角。**必须说清三件事**，少一件模型就退回去把作者当角色——
+  // 「他不是故事里的人」「他写的是场面和指令」「你演下去，不要回应他本人」。
   return i18n.t("ai.instructions.roleplayPersonaNone", {
     defaultValue: isZh
-      ? "与你对话的人没有给出身份，把他当成故事里一个你还不认识的人。"
-      : "The person speaking has not given an identity — treat them as someone in the story you do not yet know.",
+      ? "与你对话的**不是故事里的人**，是这部作品的作者。他写下的是场面描述和剧情指令"
+        + "——「天开始下雨」「她推门进来」「让这段冷下来」——**不是有人在对你说话**。"
+        + "你据此把这一段演下去：该发生的事让它发生，该说的话说出来。不要回应作者本人，"
+        + "不要向他确认，也不要在正文里承认他的存在。"
+      : "The person on the other side is **not someone in the story** — they are this work's author. "
+        + "What they write is stage direction and scene description (\"it starts to rain\", \"she comes "
+        + "through the door\", \"let this cool off\"), **not someone speaking to you**. Play the scene "
+        + "forward from it: let what should happen happen, say what should be said. Do not answer the "
+        + "author, do not check with them, and never acknowledge them in the prose.",
   });
 }
 
@@ -353,6 +371,18 @@ export function buildSystemPrompt(opts: SystemPromptInput): string {
     parts.push(`${isZh ? "## 作者给你的指令" : "## The author's direction"}\n${opts.personaCard.trim()}`);
   }
   parts.push(i18n.t("ai.instructions.roleplaySyntax"));
+  // 裸文本的含义随身份而变，所以这一句必须跟着分岔：导演模式下它不是「故事里
+  // 某个人在描述场景」，而是作者在下指令。两种模式共用一套语法说明会互相打架
+  // ——一边说「不是对你说的话」，另一边整篇都是对你说的话。
+  if (opts.agent.kind !== "narrator" && opts.persona.mode === "none") {
+    parts.push(i18n.t("ai.instructions.roleplaySyntaxDirector", {
+      defaultValue: isZh
+        ? "（作者此刻是导演，所以裸文本是**他给你的场面指令**，不是故事里某个人在描述环境。"
+          + "照它演，别把它当成有人在说话。）"
+        : "(The author is directing right now, so unmarked text is **their instruction for the scene**, "
+          + "not someone in the story describing the surroundings. Play it; do not treat it as speech.)",
+    }));
+  }
   parts.push(i18n.t("ai.instructions.roleplayMemory"));
   return parts.join("\n\n");
 }
@@ -415,7 +445,10 @@ function personaKey(persona: AuthorPersona, loreIndex: LoreIndex): string {
     return `lore\u0000${persona.dirPath}\u0000${entity?.name ?? ""}\u0000${entity?.summary ?? ""}`;
   }
   if (persona.mode === "prompt") return `prompt\u0000${persona.prompt.trim()}`;
-  return "none";
+  // 导演和陌生人**必须给出不同的键**：它们在 system 层是完全不同的两段话，而这个
+  // 函数是「设定变没变」的唯一判据。两档共用一个 "none" 的样子是——作者在它们之间
+  // 切换，「设定已更新」永远不亮，操作看起来生效了、其实没有。
+  return persona.mode === "stranger" ? "stranger" : "none";
 }
 
 // ─── 从 transcript 回放 ──────────────────────────────────────────────────────

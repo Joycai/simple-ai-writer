@@ -35,7 +35,7 @@ import type { StreamMessage } from "../../ai/types";
 import type { LoreEntity, LoreIndex } from "../../lore/model";
 import {
   BOUND_BLOCK_CHAR_CAP,
-  buildBoundContent, contextSignature, createRoleplayMeta, ensureBlocks,
+  buildBoundContent, buildSystemPrompt, contextSignature, createRoleplayMeta, ensureBlocks,
   refreshBoundBlock, refreshMemoryBlock, refreshSystemPrompt, residentCoreDirs,
   seedRoleplayHistory,
   selectReplayTurns,
@@ -299,6 +299,54 @@ describe("refreshSystemPrompt", () => {
   });
 });
 
+describe("作者身份的四档", () => {
+  const system = (persona: AuthorPersona) => buildSystemPrompt({
+    agent: AGENT, persona, personaCard: "", primaryText: "", loreIndex: INDEX,
+  });
+
+  // 这个文件的 i18n mock 回的是键名，所以断言的是**分支选了哪一段**——措辞本身
+  // 由 localeParity 和人眼守着，而这里要钉的正好是分支。
+
+  /**
+   * 默认档是**导演**，不是陌生人。改之前 `none` 说的是「把他当成故事里一个你还
+   * 不认识的人」——于是作者写「天开始下雨，她推门进来」，角色会把这句舞台指示
+   * 当成一个陌生人在对它说话。
+   */
+  it("默认档走导演那一段", () => {
+    const text = system({ mode: "none", dirPath: null, prompt: "" });
+    expect(text).toContain("ai.instructions.roleplayPersonaNone");
+    expect(text).not.toContain("ai.instructions.roleplayPersonaStranger");
+  });
+
+  it("陌生人是自己的一档，不再和默认档共用一段话", () => {
+    const text = system({ mode: "stranger", dirPath: null, prompt: "" });
+    expect(text).toContain("ai.instructions.roleplayPersonaStranger");
+    expect(text).not.toContain("ai.instructions.roleplayPersonaNone");
+  });
+
+  /**
+   * 裸文本的含义随身份而变：导演模式下它是**指令**，其余模式下是「故事里某个人
+   * 在描述环境」。两种模式共用一套语法说明会互相打架。
+   */
+  it("只有导演模式补那句「裸文本＝指令」", () => {
+    const key = "ai.instructions.roleplaySyntaxDirector";
+    expect(system({ mode: "none", dirPath: null, prompt: "" })).toContain(key);
+    expect(system({ mode: "stranger", dirPath: null, prompt: "" })).not.toContain(key);
+    expect(system({ mode: "prompt", dirPath: null, prompt: "一个行脚商" })).not.toContain(key);
+  });
+
+  // 旁白不扮演任何人，这一整套对它没有意义。
+  it("旁白不带任何身份段", () => {
+    const narrator: RoleplayAgent = { ...AGENT, kind: "narrator", primaryDirPath: null };
+    const text = buildSystemPrompt({
+      agent: narrator, persona: { mode: "none", dirPath: null, prompt: "" },
+      personaCard: "", primaryText: "", loreIndex: INDEX,
+    });
+    expect(text).not.toContain("ai.instructions.roleplayPersonaNone");
+    expect(text).not.toContain("ai.instructions.roleplaySyntaxDirector");
+  });
+});
+
 describe("contextSignature", () => {
   const base = {
     agent: AGENT,
@@ -321,6 +369,19 @@ describe("contextSignature", () => {
     ["the author's identity", { persona: asLore(TOWER.dirPath) }],
   ])("moves when %s changes", (_label, patch) => {
     expect(contextSignature({ ...base, ...patch })).not.toBe(contextSignature(base));
+  });
+
+  /**
+   * 导演和陌生人在 system 层是**完全不同的两段话**（一个出戏下指令，一个在戏
+   * 里但角色不认识他）。`personaKey` 曾经对这两档一律返回 "none"，那时的样子是：
+   * 作者切换身份、UI 立刻改了，而「设定已更新」永远不亮——一次看起来生效了、
+   * 其实没有的操作。往身份里加档就要同时加进这个签名。
+   */
+  it("tells the director apart from a stranger", () => {
+    const director: AuthorPersona = { mode: "none", dirPath: null, prompt: "" };
+    const stranger: AuthorPersona = { mode: "stranger", dirPath: null, prompt: "" };
+    expect(contextSignature({ ...base, persona: stranger }))
+      .not.toBe(contextSignature({ ...base, persona: director }));
   });
 
   /**

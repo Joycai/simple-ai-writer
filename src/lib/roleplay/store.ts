@@ -61,7 +61,9 @@ export const EMPTY_ROSTER: Roster = { authorPersona: NO_PERSONA, agents: [] };
 function coercePersona(raw: unknown): AuthorPersona {
   if (!raw || typeof raw !== "object") return NO_PERSONA;
   const p = raw as Record<string, unknown>;
-  const mode = p.mode === "lore" || p.mode === "prompt" ? p.mode : "none";
+  // 认不出的 mode 一律读成 `none`（导演）——那是默认档，也是最不会说错话的一档。
+  const mode: AuthorPersona["mode"] =
+    p.mode === "lore" || p.mode === "prompt" || p.mode === "stranger" ? p.mode : "none";
   return {
     mode,
     dirPath: typeof p.dirPath === "string" ? toPosixPath(p.dirPath) : null,
