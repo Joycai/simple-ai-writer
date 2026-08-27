@@ -28,8 +28,31 @@ const TURNS: SceneTurn[] = [
   turn(4, "agent", "「说定了。」"),
 ];
 
+/** 上一场（已封存，可读）。 */
+const PAST: SceneTurn[] = [
+  turn(1, "author", "「雪原上冷得很。」"),
+  turn(2, "agent", "「我记得。」"),
+];
+
 const reader = (turns: SceneTurn[] = TURNS, renumbered = false) => ({
-  conversation: { read: async () => ({ turns, renumbered }) },
+  conversation: {
+    scenes: async () => ({ current: 1, past: [] }),
+    read: async () => ({ turns, renumbered }),
+  },
+});
+
+/**
+ * 一个转过场的角色：当前是第 3 场，第 1 场可读，**第 2 场被作者作废**——
+ * 它压根不出现在 `past` 里，所以工具够不到它。
+ */
+const multiScene = () => ({
+  conversation: {
+    scenes: async () => ({ current: 3, past: [1] }),
+    read: async (scene: number) => ({
+      turns: scene === 3 ? TURNS : PAST,
+      renumbered: false,
+    }),
+  },
 });
 
 describe("searchConversationTool", () => {
@@ -101,5 +124,57 @@ describe("readConversationTool", () => {
   it("says so when there is no channel", async () => {
     const r = await readConversationTool("c2", {}, {});
     expect(r.content).toContain("roleplay conversation");
+  });
+});
+
+/**
+ * 转场之后，「你还记得我们在雪原上说的话吗」问的多半**不是这一场**。这一组钉的
+ * 是：角色够得到自己的旧场次，而且**只有自己的**、**不含作废的**。
+ */
+describe("自己的旧场次", () => {
+  it("省略 scene 时搜自己的每一场", async () => {
+    const r = await searchConversationTool("c1", { query: "雪原" }, multiScene());
+    expect(r.content).toContain("scene 1");
+    expect(r.content).toContain("turn 1");
+  });
+
+  it("当前这一场的命中不加场次前缀", async () => {
+    const r = await searchConversationTool("c1", { query: "塔下" }, multiScene());
+    expect(r.content).toContain("turn 3");
+    expect(r.content).not.toContain("scene 3 ·");
+  });
+
+  it("能按场号读回旧场次的原文", async () => {
+    const r = await readConversationTool("c2", { scene: 1 }, multiScene());
+    expect(r.content).toContain("雪原上冷得很");
+    expect(r.content).toContain("Scene 1 (an earlier one of yours)");
+  });
+
+  it("省略 scene 读的是当前这一场", async () => {
+    const r = await readConversationTool("c2", {}, multiScene());
+    expect(r.content).toContain("等谁不重要");
+  });
+
+  /**
+   * 作废的场次**连显式点名都够不到**：它不在 `scenes().past` 里，所以工具只能
+   * 回一句「你没有第 2 场」。对角色来说那一场确实没有发生过——多说一句「你不能
+   * 读它」反而是在告诉它有一段它不该知道的历史。
+   */
+  it("作废的那一场不存在，而不是「不能读」", async () => {
+    const r = await readConversationTool("c2", { scene: 2 }, multiScene());
+    expect(r.content).toContain("no scene 2");
+    expect(r.content).toContain("1, 3");
+    expect(r.content).not.toContain("雪原");
+  });
+
+  it("搜索也够不到作废的那一场", async () => {
+    const r = await searchConversationTool("c1", { query: "雪原", scene: 2 }, multiScene());
+    expect(r.content).toContain("no scene 2");
+  });
+
+  it("场号完全不存在时报出自己有哪几场", async () => {
+    const r = await readConversationTool("c2", { scene: 99 }, multiScene());
+    expect(r.content).toContain("no scene 99");
+    expect(r.content).toContain("3 is the one you are in now");
   });
 });
