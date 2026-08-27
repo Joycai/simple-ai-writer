@@ -653,6 +653,33 @@ describe("绑定粒度（PR-3）", () => {
     expect(String(meta.boundBlock?.content)).not.toContain("outfit.md");
   });
 
+  /**
+   * 姊妹条已经守着 `refreshMemoryBlock` 和 `refreshSystemPrompt`；这一条补上
+   * 三块里唯一没人守的绑定块。
+   *
+   * 换掉对象身份会同时切断三样东西：`meta.boundBlock`（刷新的落点）、账本里以
+   * 它为 carrier 的那些条目（`clearCarrier` 找不到旧块就清不掉旧账），以及
+   * `saveSession` 按下标序列化的那份身份。而这一切都**不会报错**——只会让绑定
+   * 的设定在下一次压缩后安静地失联。
+   *
+   * 还顺带守住调用方那半：块就地改意味着 `history` / `meta` 的引用都不动，所以
+   * `roleplayStore.refreshBinding` 必须自己 `contextVersion + 1`，否则上下文
+   * 构成条画的还是刷新之前的尺寸。
+   */
+  it("就地改 content，不换消息对象——一换，三样按身份持有它的东西同时断", async () => {
+    const agent = { ...AGENT, boundPaths: [facetOf("outfit.md")] };
+    const { messages, meta } = await seedWith(agent, "「你还在等？」", IDX);
+    const block = meta.boundBlock;
+    const at = messages.indexOf(block!);
+
+    await refreshBoundBlock(IDX, { ...agent, boundPaths: [facetOf("scar.md")] }, meta);
+
+    expect(meta.boundBlock).toBe(block);
+    expect(messages[at]).toBe(block);
+    expect(String(block?.content)).toContain("scar.md");
+    expect(String(block?.content)).not.toContain("outfit.md");
+  });
+
   it("`@` 引用过的条目，这一轮的检索不再送第二份", async () => {
     const agent = { ...AGENT, boundPaths: [] };
     const { messages, meta } = await seedWith(agent, "「塔那边有消息了？」", IDX, {
