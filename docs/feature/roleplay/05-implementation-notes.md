@@ -706,7 +706,12 @@ meta 里它是 undefined，四个刷新时刻里除播种外全部静默 no-op�
   system 层、绑定块、记忆块、首轮检索块一样都还没装配。旁白（无主角、通常无绑定）
   看着还合理，绑了满额条目的角色则是条上 4.9k、发出去 20k+。1M 窗口下只是难看，
   接一个 8k 窗口的本地模型就是「条还是绿的，请求已经炸了」。
-- **分母与运行时差 `0.3 × 工具token`。** 构成条算 `(messages+tools)/inputCeiling`，
-  而 `compactChatHistory` 算 `messages/messageCeilingFor(...)`，两边的 0.7 触发点
-  并不重合，**条永远比压缩晚警告**。这条对话助手一样有，改在
-  `lib/agent/contextBreakdown.ts`，一处改两处对。
+- **折叠标记画错了位置，差 `0.3 × 工具token`。** 构成条按
+  `messages + tools > 0.7 × inputCeiling` 判断，而 `planFold` 按
+  `messages > 0.7 × (inputCeiling − tools)` 触发。展开成对 messages 的阈值是
+  `0.7C − 1.0T` 对 `0.7C − 0.7T`——**条的阈值更小，所以它比压缩早警告**，那道
+  竖线也画得偏左（真实触发点在 `0.7 + 0.3×T/C` 处，而线固定画在 0.7）。方向是
+  虚报不是漏报，但条上写着「越过此处将折叠最早的对话」，而它指的位置什么都不会
+  发生——`planFold` 的 `ceilingTokens` 注释里记的正是这个症状的前一半，那次只
+  修了它自己那一侧。这条对话助手一样有，改在 `lib/agent/contextBreakdown.ts`，
+  一处改两处对。
