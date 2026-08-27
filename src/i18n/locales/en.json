@@ -1448,7 +1448,8 @@
       "preUnknown": "retrieval — known only after sending",
       "preResident": "includes {{name}}'s sheet",
       "preUnexpanded": "{{n}} title-only",
-      "preFloorTitle": "Lower bound: at least this far; retrieval adds to the right"
+      "preFloorTitle": "Lower bound: at least this far; retrieval adds to the right",
+      "preWas": "was estimated ≥ {{n}}"
     },
     "drawer": {
       "tabGenerate": "Generate",

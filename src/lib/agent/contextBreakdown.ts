@@ -90,6 +90,23 @@ export interface ContextBreakdown {
   over: boolean;
 }
 
+/**
+ * Where a token count falls on the **measured** bar, as a percentage.
+ *
+ * Exists for the hand-off afterimage: the bar jumps the moment the first reply
+ * lands (estimate → measurement), and the old lower-bound rule is left behind
+ * for a beat so the jump has a provenance. The two bars are drawn to different
+ * scales — the estimate spans the ceiling, the measurement spans `used` once it
+ * is over — so the old mark cannot keep its old percentage. It has to be
+ * re-placed against the scale it is now sitting on, or it would point at a
+ * number that never existed.
+ */
+export function floorMarkPct(context: ContextBreakdown, floorTokens: number): number {
+  const free = context.segments.find((s) => s.key === "free")?.tokens ?? 0;
+  const span = Math.max(context.usedTokens + free, 1);
+  return Math.max(0, Math.min(100, (floorTokens * 100) / span));
+}
+
 // ── Pre-flight ───────────────────────────────────────────────────────────────
 
 /**

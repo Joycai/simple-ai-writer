@@ -464,6 +464,34 @@
 
 .ctxCountFloor { color: var(--color-text-soft); }
 
+/* 「预估 → 实测」那一跳的来处（设计稿 2h ④）。
+   同一根 1px 线，最淡的一档——它是**上一个**说法的痕迹，不该和现行的那两根
+   （折叠竖线 / 下界刻线）争。停 400ms 之后淡出：跳变有了来处，就不像 bug 了。
+   全局的 prefers-reduced-motion 会把这次 transition 压成瞬时，那正是它该有的
+   降级——这道残影是信息，不是装饰，撤掉动画不该撤掉它出现过这件事。 */
+.ctxFloorGhost {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 1px;
+  background: var(--color-text-hint);
+  /* 时长和缓动分开写：`--transition-*` 是 `<时长> <缓动>` 的简写，塞进
+     `animation` 会展开成两个 timing function，整条声明作废。 */
+  animation: ctxGhostOut 200ms var(--ease-out) 400ms forwards;
+}
+
+.ctxWasEstimate {
+  /* 和 `.ctxWindow` 一样靠 auto 边距推到右端——它替换的就是那一段，位置不能变。
+     漏掉这一行，交接那 400ms 里读数会整个塌到左边，而那正是要解释跳变的时刻。 */
+  margin-left: auto;
+  color: var(--color-text-kbd);
+  animation: ctxGhostOut 200ms var(--ease-out) 400ms forwards;
+}
+
+@keyframes ctxGhostOut {
+  to { opacity: 0; }
+}
+
 .ctxLegendNote { color: var(--color-text-hint); }
 .ctxLegendWarn { color: var(--color-warning); }
 

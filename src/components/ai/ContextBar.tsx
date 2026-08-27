@@ -11,12 +11,13 @@
  * 就压在输入框上方——常驻的装饰在这里是每一条消息都要付的代价。
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useTerms } from "../../stores/projectStore";
 import {
   CONTEXT_SEGMENT_ORDER,
   PREFLIGHT_SEGMENT_ORDER,
+  floorMarkPct,
   type ContextBreakdown,
   type ContextSegmentKey,
   type PreflightBreakdown,
@@ -165,6 +166,42 @@ function PreflightBar({ pre, resident, unexpanded, stale }: {
   );
 }
 
+/** 残影停留多久之后淡出。设计稿 2h ④。 */
+const HANDOFF_GHOST_MS = 400;
+
+/**
+ * 「预估 → 实测」那一跳的来处。
+ *
+ * 第一条回复落地的那一刻，这条会**一次跳过去**：读数从一个下界换成一个实测值，
+ * 竖线从「至少到这里」换成「到这里就要归纳」，位置还差着一截。不解释的话，那一
+ * 跳看起来就像个 bug。
+ *
+ * 所以把旧的下界留成一道灰残影、右侧读数写一句「刚才预估 ≥ N」，停 400ms 再一起
+ * 淡出——**跳变有了来处，就不像 bug 了**。
+ *
+ * 状态住在组件里而不是调用方：这是一次纯粹的显示层过渡，调用方只是照常把
+ * `preflight` 从有变成无，不该为了一道残影多记一样东西。
+ */
+function useHandoffGhost(pre: PreflightBreakdown | null): number | null {
+  const [ghost, setGhost] = useState<number | null>(null);
+  const last = useRef<number | null>(null);
+  useEffect(() => {
+    if (pre) {
+      last.current = pre.lowerBoundTokens;
+      // 还在预估态：如果上一次的残影还挂着（作者退回了新会话），撤掉它。
+      setGhost(null);
+      return;
+    }
+    const was = last.current;
+    last.current = null;
+    if (was === null) return;   // 本来就是实测态，没有可交接的东西
+    setGhost(was);
+    const id = window.setTimeout(() => setGhost(null), HANDOFF_GHOST_MS);
+    return () => window.clearTimeout(id);
+  }, [pre]);
+  return ghost;
+}
+
 export function ContextBar({ context, preflight, onCompact, compacting }: {
   context: ContextBreakdown;
   /**
@@ -190,6 +227,7 @@ export function ContextBar({ context, preflight, onCompact, compacting }: {
   const { t } = useTranslation();
   const terms = useTerms();
   const [showLegend, setShowLegend] = useState(false);
+  const ghost = useHandoffGhost(preflight?.pre ?? null);
 
   // No declared window means no real ceiling either — inputCeilingFor falls back
   // to an assumed one, and drawing a precise-looking bar against a guess would
@@ -231,6 +269,16 @@ export function ContextBar({ context, preflight, onCompact, compacting }: {
             />
           ) : null,
         )}
+        {/* 刚才那个下界的残影。它按**这条**的刻度重新定位——两条画在不同的尺上
+            （预估铺满上限，实测超出后改按 used 缩放），照搬旧百分比会指向一个
+            从来不存在的数。 */}
+        {ghost !== null && (
+          <span
+            className={styles.ctxFloorGhost}
+            style={{ left: `${floorMarkPct(context, ghost)}%` }}
+            aria-hidden
+          />
+        )}
         {/* Where compaction starts folding the oldest turns — the one threshold
             on this bar the author can actually anticipate. */}
         <span
@@ -248,11 +296,15 @@ export function ContextBar({ context, preflight, onCompact, compacting }: {
           </span>{" "}
           / {formatTokens(context.ceilingTokens)} tk
         </span>
-        <span className={styles.ctxWindow}>
-          {t("ai.chat.ctxWindow", {
-            defaultValue: "窗口 {{n}}",
-            n: formatTokens(context.contextSize),
-          })}
+        <span className={ghost !== null ? styles.ctxWasEstimate : styles.ctxWindow}>
+          {ghost !== null
+            ? t("ai.chat.preWas", {
+                n: formatTokens(ghost), defaultValue: `刚才预估 ≥ ${formatTokens(ghost)}`,
+              })
+            : t("ai.chat.ctxWindow", {
+                defaultValue: "窗口 {{n}}",
+                n: formatTokens(context.contextSize),
+              })}
         </span>
         {(onCompact || compacting) && (
           <button

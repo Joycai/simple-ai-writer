@@ -8,7 +8,7 @@ import {
   createSessionMeta, noteTurnStart, planFold, recordInjections, COMPACT_TRIGGER,
 } from "../agent/compact";
 import {
-  computeContextBreakdown, computePreflightBreakdown,
+  computeContextBreakdown, computePreflightBreakdown, floorMarkPct,
 } from "../agent/contextBreakdown";
 import { estimateMessagesTokens } from "../ai/tokenEstimate";
 import type { StreamMessage } from "../ai/types";
@@ -270,5 +270,34 @@ describe("computePreflightBreakdown", () => {
     const b = computePreflightBreakdown(null, 4_900, 524_000, 1_049_000);
     expect(b.lowerBoundTokens).toBe(4_900);
     expect(b.over).toBe(false);
+  });
+});
+
+/**
+ * 「预估 → 实测」交接时那道残影的落点（设计稿 2h ④）。
+ *
+ * 两条画在**不同的尺**上：预估铺满上限，实测超出之后改按 `used` 缩放。照搬旧的
+ * 百分比，残影就会指向一个从来不存在的数——而它存在的全部理由是给那一跳一个来处。
+ */
+describe("floorMarkPct", () => {
+  const measured = (used: number, ceiling: number) =>
+    computeContextBreakdown(null, null, used, ceiling, 128_000);
+
+  it("条没满时按上限定位——和预估条同一把尺", () => {
+    const c = measured(20_000, 100_000);
+    expect(floorMarkPct(c, 15_000)).toBeCloseTo(15, 5);
+  });
+
+  /** 实测超出上限之后条按 used 缩放，残影必须跟着改尺，否则它指的位置是假的。 */
+  it("条满了改按 used 定位", () => {
+    const c = measured(200_000, 100_000);
+    expect(c.over).toBe(true);
+    expect(floorMarkPct(c, 100_000)).toBeCloseTo(50, 5);
+  });
+
+  it("夹在 0–100 之间，不画到条外面去", () => {
+    const c = measured(20_000, 100_000);
+    expect(floorMarkPct(c, 999_999)).toBe(100);
+    expect(floorMarkPct(c, -5)).toBe(0);
   });
 });
