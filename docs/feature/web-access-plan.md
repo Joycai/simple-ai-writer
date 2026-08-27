@@ -153,7 +153,7 @@
 
 ## 6. 图片通道顺便变优
 
-现状所有头像/图库/插图都通过读文件 → base64 data URL 渲染（单图上限 12MB）。Web 化时加 `GET /api/asset` 直出后，`useImageDataUrl` 在 bridge 模式下可以直接返回该 URL，省内存、省 33% 体积、可被浏览器缓存——这一块 Web 端体验反而好于照搬 base64。
+现状所有头像/图库/配图都通过读文件 → base64 data URL 渲染（单图上限 12MB）。Web 化时加 `GET /api/asset` 直出后，`useImageDataUrl` 在 bridge 模式下可以直接返回该 URL，省内存、省 33% 体积、可被浏览器缓存——这一块 Web 端体验反而好于照搬 base64。
 
 ---
 

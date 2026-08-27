@@ -15,7 +15,7 @@
 
 今天的链路（`stores/agentStore.ts` sendChat）：
 
-- 首轮 `assembleContext` → `bundleToMessages`，把设定/前情/正文窗口**和第一个
+- 首轮 `assembleContext` → `bundleToMessages`，把知识库/前情/正文窗口**和第一个
   问题拼成一条 user 消息**；之后每轮只 `history.push({role:"user"})`。
 - 唯一的长度控制是 `trimHistory`（`lib/agent/runtime.ts`）：超过
   `inputCeilingTokens` 时把最老的 `role:"tool"` 结果换成占位符。用户消息、
@@ -23,7 +23,7 @@
 
 三个后果：
 
-1. **检索只发生一次**。作者中途换文档、换话题，注入的还是开场那批设定，
+1. **检索只发生一次**。作者中途换文档、换话题，注入的还是开场那批条目，
    新材料只能靠模型自己调工具。
 2. **首轮上下文是永久占用**。它和第一个问题焊在同一条消息里，`trimHistory`
    够不着（只认 `role:"tool"`），无法单独淘汰。
@@ -38,7 +38,7 @@
 (tools)     工具定义（请求字段，占 token、占缓存前缀）          ── 稳定
 [user] ①    【历史摘要】被折叠轮次的滚动归纳                   ── 仅压缩时改写
 […turns…]   最近 K 轮逐字：user / assistant / tool 配对原样    ── 只追加
-[user] ②    【本轮注入】新命中的设定、切换后的文档窗口（可选）    ── 每轮按需追加
+[user] ②    【本轮注入】新命中的条目、切换后的文档窗口（可选）    ── 每轮按需追加
 [user]      用户问题（+选区 +@引用，即现有 wireMessage）        ── 追加
 ```
 
@@ -184,7 +184,7 @@ wire 历史本就分离，聊天记录的显示不受压缩影响。
   `excludeDirsFor` / `recordInjections`，折叠时按 carrier 存活性驱逐）；
   `selectLore` 增加 `excludeDirs`（只影响自动匹配，pin 豁免）；
   `assembleTurnInjection`（`lib/context/rag.ts`）产出净增量块，文档切换补注
-  窗口+前情；播种的设定在首轮就入账本；归纳输入跳过注入块；实际注入时复用
+  窗口+前情；播种的条目在首轮就入账本；归纳输入跳过注入块；实际注入时复用
   `context-seeded` 事件进当轮日志。指纹来自索引（name/aliases/summary/facets
   元数据），只改正文不改摘要的编辑不触发重注——模型仍可用工具读到最新内容。
 - 顺序即依赖序；PR2/PR3 互不依赖，可并行。

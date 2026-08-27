@@ -239,9 +239,9 @@ export async function seedRoleplayHistory(opts: {
               + 主角条目的 index.md 正文
               + 作者身份说明
               + 输入语法约定
-[1] user    = 【绑定设定】<boundPaths 解析出的正文>     ← prelude，恒存活，很少变
+[1] user    = 【绑定条目】<boundPaths 解析出的正文>     ← prelude，恒存活，很少变
 [2] user    = 【记忆】<活跃记录，按 kind 分组>          ← prelude，恒存活，按 §5.5 刷新
-[3] user    = 【场景】<首轮自动命中的其他词条>          ← meta.seedContext，压缩会丢，正确
+[3] user    = 【场景】<首轮自动命中的其他条目>          ← meta.seedContext，压缩会丢，正确
 [4] user    = 作者第一句                              ← meta.turnStarts[0]
 ```
 
@@ -280,7 +280,7 @@ recordInjections(meta, boundEntities, pinnedMessage);
 
 绑定条目在知识库里被改了之后，`[1]` 是旧的。**不自动刷新**——原地重写会让 prompt 缓存前缀作废，长会话里这是真金白银。
 
-做法：`roleplayStore` 记录播种时**静态上下文**的 hash（`contextSignature` + `hashText`，`lib/context/memory.ts:60`），与磁盘上的现状比对，不一致时在对话区顶部显示一条「设定已更新 · 刷新」。作者点了才重写 `[1]`，并在 transcript 里记一条 `<!-- rebound at N -->`。
+做法：`roleplayStore` 记录播种时**静态上下文**的 hash（`contextSignature` + `hashText`，`lib/context/memory.ts:60`），与磁盘上的现状比对，不一致时在对话区顶部显示一条「绑定内容已更新 · 刷新」。作者点了才重写 `[1]`，并在 transcript 里记一条 `<!-- rebound at N -->`。
 
 > 实现时这个范围扩大了：基线不只覆盖绑定块，还覆盖 system 层里全部由作者改动的输入（角色名、扮演指令、主角条目正文、作者身份），而「刷新」也会一并重写 `[0]`。原因和当初漏掉它们的后果，见 05 §2.16。
 
@@ -378,9 +378,9 @@ if (compacted) {
 
 ### 5.7 与知识库的关系：记忆不进正典
 
-记忆**不自动、也不半自动地写进 lore**。理由：知识库是作品的正典，作者对它有完全的所有权和信任；角色记忆是一次扮演里长出来的，可能作废、可能只属于某条被放弃的支线。让它自动流进正典，等于让一场即兴演出改写作品设定。
+记忆**不自动、也不半自动地写进 lore**。理由：知识库是作品的正典，作者对它有完全的所有权和信任；角色记忆是一次扮演里长出来的，可能作废、可能只属于某条被放弃的支线。让它自动流进正典，等于让一场即兴演出改写作品正典。
 
-要沉淀，路径是显式的：作者看到某条记忆值得进设定 → 切到旁白 → 让它走现有的知识库写入路径（`propose_lore_plan` 闸门 + 审批卡）。v1 不做（01-overview §8），但路径是通的，不需要新机制。
+要沉淀，路径是显式的：作者看到某条记忆值得进知识库 → 切到旁白 → 让它走现有的知识库写入路径（`propose_lore_plan` 闸门 + 审批卡）。v1 不做（01-overview §8），但路径是通的，不需要新机制。
 
 ### 5.8 隔离
 

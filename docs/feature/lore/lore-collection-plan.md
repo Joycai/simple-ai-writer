@@ -2,7 +2,7 @@
 
 > 状态：**已实施**（数据层 + 设计稿 03 屏 24–31 的全部 UI + agent 的整理工具，见 §8）。设计任务书见
 > [`lore-collection-ui-brief.md`](./lore-collection-ui-brief.md)，视觉口径见
-> [`design-system.md`](../../reference/design-system.md) → 设定集设计语言 → 集合。
+> [`design-system.md`](../../reference/design-system.md) → 知识库设计语言 → 集合。
 > 相关：[`lore-entry-type-plan.md`](./lore-entry-type-plan.md)（分类的类型 schema）、[`lore-facet-plan.md`](./lore-facet-plan.md)（条目内的粒度）。
 
 ## 1. 问题
@@ -53,7 +53,7 @@
 同步的逐条内容哈希。加一层目录等于同时作废这四样并做一次有丢失风险的迁移。
 
 而且**多归属根本没法用目录表达**——一条共享世界观要同时在两本小说下面，目录只能靠
-复制或符号链接，两条路都会让「同一条设定」在墙上变成两条命运不同的文件。
+复制或符号链接，两条路都会让「同一条条目」在墙上变成两条命运不同的文件。
 
 frontmatter 是纯追加：缺席即「未归集」，老项目一个字节不用改，同步和导出白搭车
 （内容哈希本来就覆盖 frontmatter）。
@@ -237,7 +237,7 @@ deferred，批准之前一分不花。
 ## 9. 已知边界
 
 - **取材范围指向一个不存在的集合**：重命名和删除会把范围一起带走或清掉，但手改
-  profile.json / frontmatter 造出这个状态是可能的。此时 AI 一条设定也看不见，唯一
+  profile.json / frontmatter 造出这个状态是可能的。此时 AI 一条条目也看不见，唯一
   的止损是界面上必须**始终显示当前生效的范围**（任务书里把这一屏标为最重要的一屏，
   就是为了这个）。刻意没有做「自动重置」：一个声明过但还空着的集合，作为范围时本来
   就该是「什么都看不见」。

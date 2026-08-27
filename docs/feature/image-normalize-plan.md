@@ -50,7 +50,7 @@
 | `lore/LoreDetail.tsx:501` 图集描述（vision） | `fs/htmlDoc.ts:26` HTML 内嵌 |
 | `lore/LoreMetaImproveModal.tsx:121` | `library/LibraryView.tsx` 书脊缩略图 |
 | `ai/ImageGenModal.tsx:372` 校准复审（vision） | **`ai/ImageGenModal.tsx:421`**（读回字节**写盘**，不是发送） |
-| `image/illustrate.ts:97` 插图参考图 | **`lore/LoreGenerator.tsx:198`**（把附件写成条目头像） |
+| `image/illustrate.ts:97` 配图参考图 | **`lore/LoreGenerator.tsx:198`**（把附件写成条目头像） |
 | `stores/imageStore.ts:184` 改图源图 | |
 
 右列最后两行值得单独标出来。`ImageGenModal.tsx:421` 长得和同文件的 `:372`
@@ -66,7 +66,7 @@
 ### 1.3 四个选择器各写各的扩展名
 
 `LoreDetail:347`（头像）、`LoreDetail:433`（图集）、`LoreWall:125`（头像）、
-`CodeEditor:112`（正文插图）四处各自硬编码 `["png","jpg","jpeg","webp"]` 或
+`CodeEditor:112`（正文配图）四处各自硬编码 `["png","jpg","jpeg","webp"]` 或
 带 `gif` 的版本，没有一个读 `IMAGE_EXTENSIONS`。加一个扩展名要改五个地方，
 而漏掉的那个不会报错，只是那条路选不到新格式 —— **已把这四处收回
 `IMAGE_EXTENSIONS`**。附带效果：两个头像选择器以前少一个 `gif`，现在也能选了，
@@ -283,7 +283,7 @@ export async function ingestImageFile(src: string): Promise<{ bytes: Uint8Array;
 ```
 
 `lib/import`、`LoreDetail`（头像 / 图集）、`LoreWall`（头像）、
-`assets.importDocumentAsset`（正文插图）全部改调它。
+`assets.importDocumentAsset`（正文配图）全部改调它。
 
 ### 3.3 为什么是入口而不是「发送前」
 

@@ -24,7 +24,7 @@ function entity(dirPath: string): LoreEntity {
 function session() {
   const meta = createSessionMeta();
   const system: StreamMessage = { role: "system", content: "系统提示".repeat(20) };
-  const seed: StreamMessage = { role: "user", content: "【设定资料】".repeat(40) };
+  const seed: StreamMessage = { role: "user", content: "【知识库】".repeat(40) };
   const question: StreamMessage = { role: "user", content: "接着写" };
   const answer: StreamMessage = { role: "assistant", content: "好的".repeat(30) };
   meta.seedContext = seed;
@@ -48,7 +48,7 @@ describe("computeContextBreakdown", () => {
 
   it("counts a later turn's injection block separately from the conversation", () => {
     const { meta, history } = session();
-    const inj: StreamMessage = { role: "user", content: "【设定资料】".repeat(50) };
+    const inj: StreamMessage = { role: "user", content: "【知识库】".repeat(50) };
     history.push(inj);
     recordInjections(meta, [entity("lore/characters/b")], inj);
 

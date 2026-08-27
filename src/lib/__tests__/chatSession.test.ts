@@ -24,7 +24,7 @@ const ARIA = { name: "Aria", aliases: [], dirPath: "/lore/aria", summary: "" } a
 
 function makeSnapshot(): ChatSnapshot {
   const meta = createSessionMeta();
-  const seed: StreamMessage = { role: "user", content: "【设定资料】…" };
+  const seed: StreamMessage = { role: "user", content: "【知识库】…" };
   const summaryMsg: StreamMessage = { role: "user", content: "【历史摘要】…" };
   const q1: StreamMessage = { role: "user", content: "q1" };
   const injMsg: StreamMessage = { role: "user", content: "inj" };

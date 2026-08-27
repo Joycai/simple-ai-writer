@@ -6,7 +6,7 @@
  * 播种出来的历史**必须**是这个形状：
  *
  *   [0] system  人设 + 扮演规则 + 作者身份 + 输入语法
- *   [1] user    【绑定设定】boundPaths 的正文        ← prelude，压缩不丢
+ *   [1] user    【绑定条目】boundPaths 的正文        ← prelude，压缩不丢
  *   [2] user    【记忆】仍在生效的约定 / 待办 / 关系  ← prelude，压缩不丢，会被刷新
  *   [3] user    【场景】首轮自动命中的其他条目        ← meta.seedContext，压缩会丢
  *   [4] user    作者第一句                          ← meta.turnStarts[0]
@@ -207,7 +207,7 @@ export function recordPrimaryCore(
  * 作者用 `@` 引用、正文已经被内联进问句的条目（`lib/agent/chatRefs`）。
  *
  * 记在**问句**上：那一轮被折叠时这笔账跟着走，之后再提到它才会重新注入。不记的话
- * 同一轮的自动检索会把它再送一份——【引用资料】一份、【设定资料】一份，一模一样。
+ * 同一轮的自动检索会把它再送一份——【引用资料】一份、【知识库】一份，一模一样。
  */
 export function recordInlinedRefs(
   meta: ChatSessionMeta,

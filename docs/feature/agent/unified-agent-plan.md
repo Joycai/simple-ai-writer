@@ -2,7 +2,7 @@
 
 > 目标：把目前分散在编辑器侧与 lore 侧的所有 AI 功能，统一到**一套 agent runtime**
 > 上运行 —— 该 runtime 提供 tool loop，模型可以按需发现 lore、阅读章节文本、
-> 更新记忆/设定，或依据文本与用户输入修改、新增 lore。
+> 更新记忆/知识库，或依据文本与用户输入修改、新增 lore。
 >
 > 交互形态采用**两阶段演进**：第一阶段统一底层 runtime（现有 UI 入口全部改为
 > 调用它，行为对用户基本无感）；第二阶段把 AiRail 长成对话式统一助手。
@@ -69,12 +69,12 @@ lib/ai/*（streamCompletion 等，不动） · lib/context/*（预算化注入�
 
 | 工具 | 读/写 | 说明 |
 | --- | --- | --- |
-| `list_lore_entities` / `read_lore_entity` | 读 | 设定侧只读，原样迁入 |
+| `list_lore_entities` / `read_lore_entity` | 读 | 知识库侧只读，原样迁入 |
 | `list_files` | 读 | 递归列出工作区全树（含子目录；`.ai-writer/` 除外），按 `ls -R` 分组输出：绝对目录路径一行，其下文件名缩进。不逐行重复项目前缀是为了省 context——几百章各带一遍长前缀，光目录就能吃掉几千 token |
 | `read_file` | 读 | 单次上限 4000 字符，**按行边界切**；截断时回报 `lines a-b of N` 与下一个 `start_line`，长章节可顺序翻页。分页坐标用行号而非字符偏移，因为 `search_text` 给的就是行号（`L34`），「从第 34 行读」是直接的后续动作 |
 | `search_text` | 读 | 在工作区内全文检索：递归扫所有章节文件（`.ai-writer/` 除外），返回 `路径 + 行号 + 片段`。字面匹配、大小写不敏感，**不支持正则**（模型给的病态正则会卡死 UI 线程且无法中断）。结果有上限（全局 40 行 / 单文件 8 行），长段落按命中位置开窗截断——否则一个常用词就能吃光整个上下文 |
 | `read_memory` | 读 | 读当前文档的前情提要 |
-| `propose_lore_plan` | 写·审批 | 提交设定改动方案（步骤 = action + entity + detail），阻塞等作者批准；**四个 lore 写工具的准入门槛** |
+| `propose_lore_plan` | 写·审批 | 提交知识库改动方案（步骤 = action + entity + detail），阻塞等作者批准；**四个 lore 写工具的准入门槛** |
 | `create_lore_entity` | 写·L1 | 新建实体（name/category/summary/content），落盘前校验 frontmatter |
 | `update_lore_file` | 写·L1 | 改写实体的 index.md 或特征 md（整文件替换，沿用 splitter 的逐字校验思路）。**兜底手段**：整篇重排或新建特征文件才用它，小改动见下面三个 |
 | `update_lore_meta` | 写·L1 | 只改实体 index.md 的 summary / aliases，正文原样带过。`aliases` 整表替换、`add_aliases` 追加；**改名与换分类不在这里**（都要搬文件夹，走 `move_lore_entity`） |
@@ -92,7 +92,7 @@ lib/ai/*（streamCompletion 等，不动） · lib/context/*（预算化注入�
 | `move_chapter` | 写·L2 | 改名 / 移到别的卷（同一个操作，表达为新的完整路径），也可作用于分卷文件夹。目标已存在则拒绝，移进自己的子树则拒绝 |
 | `delete_chapter` | 写·L2 | 删**单个**章节文件，批准后移入 `.ai-writer/backups` 可恢复。**分卷文件夹一律拒绝**——删整卷的爆炸半径是作者自己的决定，不该在运行中间用一张卡片批掉 |
 
-> 结构类操作全部走 L2 而非 lore 那样的 L1 自动应用：正文的所有权感比设定强得多，删一章的破坏性也远大于改一个设定文件。也**没有**对应的 `propose_chapter_plan` 前置门——每个操作各自一张卡，大改结构就是好几张，换来的是每一步都看得见、可单独拒绝。真觉得烦了再加门比反过来容易。
+> 结构类操作全部走 L2 而非 lore 那样的 L1 自动应用：正文的所有权感比知识库强得多，删一章的破坏性也远大于改一个条目文件。也**没有**对应的 `propose_chapter_plan` 前置门——每个操作各自一张卡，大改结构就是好几张，换来的是每一步都看得见、可单独拒绝。真觉得烦了再加门比反过来容易。
 >
 > **为什么在 `propose_edit` 之外还要 `rewrite_document`（2026-08-16 补充）：** 排版类工作（统一空行、首行缩进、引号、标题层级）改的恰恰是**全篇重复**的文本，而 `propose_edit` 要求 `find` 在文件里唯一——每一处都会被「occurs N 次」顶回去，模型只能不断加上下文把单条编辑撑大，还是一次只修一处。整篇跑下来既撞轮次上限，也变成几十张卡片。所以补一个整文件替换工具，仍是 L2、仍然一张卡，只是审批单位从「一处」变成「这个文件」——这才是排版这件事诚实的审批粒度。
 >
@@ -200,7 +200,7 @@ PR1–PR2 合并前不动任何用户可见行为，随时可发版；0.3.0 在 
     `streamLoreTask` 从 aiTask.ts 删除；执行日志抽成共享组件
     `components/ai/AgentLog.tsx`（AiPanel 与 lore modal 共用）。
   - **LoreImproveModal / FacetAiAssistantModal**：迁到 LORE_IMPROVE / FACET_ASSIST
-    preset（带 list/read lore 只读工具，maxRounds 4），modal 内嵌执行日志——AI 改设定
+    preset（带 list/read lore 只读工具，maxRounds 4），modal 内嵌执行日志——AI 改知识库
     前可以自己查阅其它条目了。审阅后保存的 UX 不变（modal 落盘），未直接用
     update_lore_file 自动写：审阅式 modal 里静默改盘反而降低可控性。
   - **generator.ts / splitter.ts**：等价迁到 runtime 单发 preset（runtime 新增
@@ -228,7 +228,7 @@ PR1–PR2 合并前不动任何用户可见行为，随时可发版；0.3.0 在 
     `components/ai/AgentChat.tsx`。会话状态入 agentStore：`chatHistory` 就是 runtime
     原地追加的 wire 协议数组——前一轮的工具调用与结果留在上下文里，后续轮次可以指代
     （「把刚才那条也改了」）；展示层 turns 单独维护（每个 assistant 轮内嵌自己的
-    AgentLog）。首轮经 assembleContext 注入设定/记忆/正文窗口，后续轮只追加 user
+    AgentLog）。首轮经 assembleContext 注入知识库/记忆/正文窗口，后续轮只追加 user
     消息；inputCeiling 由 contextSize×utilization 直接给出，超限靠 runtime 的
     trimHistory 淘汰旧工具结果。走 AGENT_ASSIST_PRESET 全工具集，审批卡片渲染在
     输入框上方；停止/新会话/会话累计用量齐备；usage 以 task="chat" 记账。
@@ -251,7 +251,7 @@ generator/splitter 换 runStructuredTask、对话会话持久化（重启后恢�
 
 ### 8.1 后续修正（2026-07-28）：对话助手「只给方案不动手」
 
-作者要求对话助手整理设定，它反复输出方案、明确命令也不执行。两个原因叠加：
+作者要求对话助手整理知识库，它反复输出方案、明确命令也不执行。两个原因叠加：
 
 1. **Agent 指令活不过第一轮。** `ai.instructions.agent` 被拼进首轮 task 层，
    而第二轮起 agentStore 只往 history 追加裸 user 消息。全程唯一常驻的
@@ -273,7 +273,7 @@ generator/splitter 换 runStructuredTask、对话会话持久化（重启后恢�
 
 ### 8.2 方案门控（`lib/agent/plan.ts`）
 
-上一节让 agent 肯动手之后，作者提的第二个要求是「改设定必须先出方案、经我同意，
+上一节让 agent 肯动手之后，作者提的第二个要求是「改知识库必须先出方案、经我同意，
 且落盘的必须就是方案里那几条」。做法不是把 lore 写工具升到 L2（逐次弹 diff 卡片，
 整理十个条目要点十次），而是把审批提前到**方案**这一层：
 
@@ -320,7 +320,7 @@ generator/splitter 换 runStructuredTask、对话会话持久化（重启后恢�
 是两条互不越权的步骤，`PlanCard` 上也分别显示为 `DELETE Ava / armor.md` 与
 `DELETE Ava`。
 
-### 8.4 手术刀级的设定编辑（2026-08-19）
+### 8.4 手术刀级的条目编辑（2026-08-19）
 
 8.3 只给特征开了「不必整篇重发」的口子，实体本身没有。作者盘的是同一件事的另外三种形态：
 **只改一个 metadata、只搬一下分类、只追加一段**，凭什么都要重写整个条目。
@@ -336,14 +336,14 @@ generator/splitter 换 runStructuredTask、对话会话持久化（重启后恢�
   而文件夹位置才是扫描器认的真相——同一件事有两个入口，迟早有一个是错的。
   别名冲突照 `move_lore_entity` 改名时的规矩拒绝（两个条目都会变得按名字解析不出来）。
 - **追加内容：以前没有任何途径。** 正文侧的 `append_file` / `propose_edit` 都被
-  `manuscriptTarget` 挡在 `.ai-writer/` 外（挡得对：那会绕过方案门控），设定侧就只剩
+  `manuscriptTarget` 挡在 `.ai-writer/` 外（挡得对：那会绕过方案门控），知识库侧就只剩
   整文件替换。→ `append_lore_file`，只发新增的那一段，前面的字节既不重发也不重读，
   因而**不可能被这次写坏**。与正文侧的 `append_file` 有一处故意不同：分隔的空行由工具补，
   不让模型自己拼——正文里那个接缝是作者的决定，而这里的载荷是 markdown 结构
   （一个新的 `##`、又一条列表项），少一个空行就会静默焊到上一段末尾。
   开头是 `---` 的 content 直接拒绝：那是模型把整份文件当增量发了，追加进去会在正文中间
   留一块游离的 frontmatter。
-- **改错一句话：以前得整篇重发。** → `edit_lore_file`，正文侧 `propose_edit` 的设定版
+- **改错一句话：以前得整篇重发。** → `edit_lore_file`，正文侧 `propose_edit` 的知识库版
   （唯一 find + 替换），只是它是 L1：方案覆盖到了就直接落盘 + 备份。
 
 三个工具都用 `splitFrontmatter` 把文件切成「frontmatter 原始字节 + 正文」，写回时 head 原样拼回。
@@ -545,7 +545,7 @@ N 个结构相同的 `<section class="slide">`，表格里同一句话出现在�
 
 `add_lore_image(entity, path, desc?, slot?)` 补上这扇门。几处刻意的选择：
 
-- **复制而不是移动**。那张图很可能是文档插图或作者留着的参考图，它在原地还有用途——和 `set_lore_avatar` 同一条规矩。
+- **复制而不是移动**。那张图很可能是文档配图或作者留着的参考图，它在原地还有用途——和 `set_lore_avatar` 同一条规矩。
 - **没写 `desc` 会警告**。文字模型看得见的只有描述，一张没有描述的图对它等于一个文件名。和 `update_facet_meta` 警告「这个特征永远不会被注入」是同一类：写入成功，但成果是哑的，那就得说出来。
 - **`generate_image` 的描述里加一句指路**（「这会花钱，只用于还不存在的图；项目里已有的用 `add_lore_image`」）。这 69 token 是常驻的、也是这次唯一的常驻涨幅——工具本体在 `lore_write` 延迟组里。缺口补上了，但让模型**别再走错门**的是这句话。
 - 重名不覆盖，`addLoreImage` 自动编号（`portrait-2.png`）。

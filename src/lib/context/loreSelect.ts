@@ -39,7 +39,7 @@ import { parseFrontmatter } from "../fs/markdown";
 import { inScope, type LoreEntity, type LoreFacet, type LoreIndex, type LoreScope } from "../lore";
 
 /**
- * Default total budget for the 【设定资料】 block, used only when no caller
+ * Default total budget for the 【知识库】 block, used only when no caller
  * passes a planned budget. Converted with the *same* conservative ratio the
  * budget planner falls back to, so the codebase has exactly one token↔char rule
  * — an optimistic local constant here would silently plan a block the pre-flight
@@ -172,7 +172,7 @@ export function contributingEntities(report: LoreActivationReport): LoreEntityRe
 }
 
 export interface LoreSelection {
-  /** Assembled 【设定资料】 content ("" when nothing activated). */
+  /** Assembled 【知识库】 content ("" when nothing activated). */
   text: string;
   report: LoreActivationReport;
 }

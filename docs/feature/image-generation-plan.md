@@ -6,7 +6,7 @@
 >
 > 目标：让写作过程中「需要一张图」这件事留在应用内 —— 由模型读人设/场景/正文
 > 自动写出图像提示词，调用生图模型出图，不满意就继续对话改，满意的图落进
-> 设定库图集或正文插图。
+> 知识库图集或正文配图。
 >
 > 适用域不限于小说：`novel` 用它出角色立绘与场景图，`wechat`/`copy` 出配图与
 > 封面，`bid`/`weekly` 出示意图 —— 与工作台 profile 一致，靠数据而非分支扩展。
@@ -34,10 +34,10 @@
    JSON + base64（甚至 multipart），塞不进去，需要平级的兄弟入口。
 2. **Gemini 侧的 contents 装配**要与流式适配器共用（`convertToGeminiContents`
    已经会把 `image_url` 转成 `inline_data`），避免两份实现各自漂移。
-3. **提示词生成** —— 从设定/正文到图像提示词的那一步任务。
+3. **提示词生成** —— 从知识库/正文到图片提示词的那一步任务。
 4. **会话式改图** —— 「当前图」的会话状态，以及生成/编辑的分派。
 5. **按张计价** —— `costFor()` 与 `token_usage` 全是 token 口径。
-6. **正文插图落盘** —— 图集之外的第二个落点（`writing/assets/`）。
+6. **正文配图落盘** —— 图集之外的第二个落点（`writing/assets/`）。
 
 ---
 
@@ -158,7 +158,7 @@ JS 耗时。这反而支持选 multipart：同一张图走 base64-in-JSON 先膨
 
 上下文来源分两类，都复用现有装配：
 
-- **设定类**（角色立绘/场景图）：实体 `index.md` + 勾选的特征文件；已有图集
+- **知识库类**（角色立绘/场景图）：实体 `index.md` + 勾选的特征文件；已有图集
   图片的描述作为「保持一致」的参考（这正是 `vision.ts` 写的描述的用武之地）。
 - **正文类**（配图/封面）：编辑器选区 + `assembleContext()` 出的 RAG bundle。
 
@@ -218,9 +218,9 @@ ImageTurn = { prompt, instruction?, parentId?, results: dataUrl[], chosen?: numb
 
 | 场景 | 落点 | 引用方式 |
 | --- | --- | --- |
-| 设定实体图 | 实体目录，走 `addLoreImage()` | `images.md` 条目（已有格式，不改） |
+| 条目配图 | 实体目录，走 `addLoreImage()` | `images.md` 条目（已有格式，不改） |
 | 实体头像 | `avatar.<ext>`，走 `setEntityAvatar()` | 扫描器自动识别（已有） |
-| 正文插图 | `writing/assets/<文档名>/<slug>.png` | 相对路径 `![note](assets/…/x.png)`，预览已能内联 |
+| 正文配图 | `writing/assets/<文档名>/<slug>.png` | 相对路径 `![note](assets/…/x.png)`，预览已能内联 |
 
 **入库即描述**：图落进图集后自动调 `describeLoreImage()` 写描述。生成提示词
 不能替代描述 —— 提示词是「我要什么」，描述是「实际画出了什么」，且纯文本模型
@@ -265,7 +265,7 @@ model, params, parentPath, createdAt, costUsd }`。理由有三：改图链在�
 
 ## 8. 分阶段实施
 
-### PR1 · 打通一条最短链路（设定立绘）— ✅ 已实现
+### PR1 · 打通一条最短链路（条目立绘）— ✅ 已实现
 
 - ~~验证 multipart 传输可行性~~ —— 结论见 §2.3：可发，约束是不得手动设
   `Content-Type`
@@ -288,7 +288,7 @@ model, params, parentPath, createdAt, costUsd }`。理由有三：改图链在�
   自动跑 `describeLoreImage` 写描述
 - 用量写 `token_usage`（`task = "image-gen"`）
 
-**验收**：在设定库里给一个角色出一张立绘，落进图集并带自动描述，费用可查。
+**验收**：在知识库里给一个角色出一张立绘，落进图集并带自动描述，费用可查。
 自动化覆盖：`imageClient.test.ts`（三种响应形状 + size 参数取舍 + 安全拦截）、
 `imageDomain.test.ts`（尺寸匹配、两种计费、data URL 解码）。
 
@@ -316,7 +316,7 @@ PR1 刻意留给 PR2 的：`ImageRequest.images`（占位，调用即报错）�
 **PR1 的占位全部兑现**：`ImageRequest.images` 从「调用即报错」变成三条真实
 路径，`ImageCaps.edit` 从「可配置但无消费方」变成降级开关。
 
-### PR3 · 正文插图 — ✅ 已实现
+### PR3 · 正文配图 — ✅ 已实现
 
 - **弹窗抽成 target 驱动**（`lib/image/target.ts` + `components/ai/ImageGenModal.tsx`）：
   素材从哪来、参考哪些已有图、存到哪去，由 `ImageGenTarget` 描述。
@@ -447,7 +447,7 @@ payload：新增 `imageToThumbnailDataUrl`（`lib/fs/images.ts`）用 `<canvas>`
    `<root>/.ai-writer/任何东西`。
 
 也就是说：**macOS / Linux 上，`.ai-writer/` 下的每一张图片，经插件读都是
-`forbidden path`**——lore 图集与头像、对话历史里的插图、生图候选，全都在里面。
+`forbidden path`**——lore 图集与头像、对话历史里的配图、生图候选，全都在里面。
 文档正文不受影响，因为那些走的是自己的 `fs_*` 命令（`FsScope` 没有点目录特例）。
 之所以拖到现在才现形，是因为图片读取的失败一路被 `.catch()` 吞掉，只留一个空
 白框；生图工作台是第一个把这个错误显示出来的地方。
@@ -589,7 +589,7 @@ image-conditioned 通道，`dest.kind === "document"` 早就会存盘并回传 m
 原图旁边。
 
 顺手补的老洞：非 lore 落点在批准后**不刷新文件树**。图片走的是裸字节写入，
-文件树对此一无所知（与 pptx 导出那条同因），所以 PR3 以来文档插图落盘后在
+文件树对此一无所知（与 pptx 导出那条同因），所以 PR3 以来文档配图落盘后在
 侧栏是看不见的——模型却已经告诉作者文件存在了。
 
 工具预算：整份 assistant preset 11,790 → 12,452（新工具 ~510），常驻部分
@@ -607,7 +607,7 @@ image-conditioned 通道，`dest.kind === "document"` 早就会存盘并回传 m
 | base64 大图撑爆内存 | 多轮改图后卡顿 | 结果即时落临时文件，store 只存路径（§4.2） |
 | 出图费用失控 | 一次误点烧掉几十次调用 | 张数上限（默认 1，最大 4）+ 审批卡片前置显示预估费用 |
 | 模型 id 命名随平台变动 | 硬编码模型名很快过时 | 全程不硬编码：模型 id 由作者在设置里填，能力由 `caps` 声明 |
-| **`tauri-plugin-fs` 的 glob scope 不匹配 `.ai-writer`**（2026-08 发现，见 §8 第二轮诊断） | unix 上 `.ai-writer/` 下所有图片经插件读一律 `forbidden path`——lore 图集/头像、对话插图、生图候选全部空白；文档正文不受影响，掩盖了问题 | `allow_for_plugin_fs` 额外显式授予 `<root>/.ai-writer`（点段字面写出，绕开 `require_literal_leading_dot`）；根治方向是项目内二进制读取收回自己的 `fs_*` 命令 |
+| **`tauri-plugin-fs` 的 glob scope 不匹配 `.ai-writer`**（2026-08 发现，见 §8 第二轮诊断） | unix 上 `.ai-writer/` 下所有图片经插件读一律 `forbidden path`——lore 图集/头像、对话配图、生图候选全部空白；文档正文不受影响，掩盖了问题 | `allow_for_plugin_fs` 额外显式授予 `<root>/.ai-writer`（点段字面写出，绕开 `require_literal_leading_dot`）；根治方向是项目内二进制读取收回自己的 `fs_*` 命令 |
 | 超大图作为缩略图的完整 data URL 塞进 `<img src>` | 148px 的格子内联 5.5MB 原图，纯属浪费内存（**注**：曾被误判为上一行那个 bug 的成因，见 §8） | 小尺寸展示位改用 `useImageThumbnails`（`imageToThumbnailDataUrl`：`<canvas>` 降采样后再编码）；读取失败额外 `console.warn`，不再纯静默 |
 
 ## 10. 明确不做
