@@ -77,6 +77,14 @@ export interface TurnContextTrace {
   area: LoreActivationReport | null;
   /** 作者 `@` 引用、正文被内联进问句的条目。已常驻的不在这里（send 会滤掉）。 */
   refs: { name: string; dirPath: string }[];
+  /**
+   * 这一轮估算预算时用的字符/token 比。
+   *
+   * 存下来而不是显示时现算：取材条上每个 tk 数都该用**当时那一轮**规划预算所用
+   * 的同一个比值。事后按别的文本重算一遍，条上的「6.4k / 6.4k 已满」就会和真正
+   * 把那一条挡在外面的那次判断对不上——而那正是作者点「提高预算」的依据。
+   */
+  charsPerToken: number;
 }
 
 /**
@@ -96,8 +104,8 @@ export interface PreflightEstimate {
   stalePaths: string[];
 }
 
-export function emptyTrace(): TurnContextTrace {
-  return { resident: [], stalePaths: [], lore: null, area: null, refs: [] };
+export function emptyTrace(charsPerToken = 1): TurnContextTrace {
+  return { resident: [], stalePaths: [], lore: null, area: null, refs: [], charsPerToken };
 }
 
 /** `dirPath → 条目` 的一张表。索引是按分类分桶的，这里要的是按目录找。 */

@@ -596,6 +596,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           lore: seeded.report,
           area: seeded.recall,
           refs: namedRefs(loreIndex, job.refDirs),
+          charsPerToken,
         });
       } else {
         // 排序（修对 → 压缩 → 刷新记忆块 → 条目注入 → 区检索 → 提问）住在
@@ -643,6 +644,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           lore: cont.loreReport,
           area: cont.recall,
           refs: namedRefs(loreIndex, job.refDirs),
+          charsPerToken,
         });
       }
 

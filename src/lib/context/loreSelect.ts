@@ -117,6 +117,14 @@ export interface LoreLayerReport {
   pinned?: boolean;
   /** True when the core was paragraph-truncated to fit the budget. */
   truncated?: boolean;
+  /**
+   * The core's size **before** truncation (truncated cores only).
+   *
+   * `truncated: true` alone says a cut happened but not how deep. "正文 · 截断"
+   * is a shrug; "2,840 → 1,200 字" is a number the author can act on — it is the
+   * difference between suspecting the budget and knowing it.
+   */
+  sourceChars?: number;
   /** Pictures the entity has (gallery layers only) — listed or not. */
   count?: number;
 }
@@ -132,6 +140,27 @@ export interface LoreLayerReport {
  */
 export type FacetDropReason = "no-key" | "group-lost" | "budget" | "manual-only" | "resident";
 
+/** One facet that did not make it in, and the detail that makes the reason usable. */
+export interface FacetDrop {
+  file: string;
+  title: string;
+  reason: FacetDropReason;
+  /**
+   * `group-lost` only: the facet that took the slot.
+   *
+   * "被同组挤掉" without naming the winner is not an explanation — the author
+   * cannot tell whether the right one won.
+   */
+  winner?: string;
+  /**
+   * `budget` only: how many chars this facet needed (block + header).
+   *
+   * Turns "超预算" into "差 0.6k" — i.e. into an estimate of what raising the
+   * budget would buy back.
+   */
+  neededChars?: number;
+}
+
 export interface LoreEntityReport {
   name: string;
   /** Frontmatter aliases, joined — the other names this entity answers to.
@@ -141,13 +170,22 @@ export interface LoreEntityReport {
   dirPath: string;
   reason: "auto" | "pinned";
   /**
+   * The name/alias occurrences that put this entity in the selection
+   * (`reason: "auto"` only — a pin needs no justification).
+   *
+   * An entry answers to its name *and* every alias, so "it matched" leaves the
+   * author guessing which spelling their sentence hit — and that guess is
+   * exactly what they came to tune.
+   */
+  matchedTerms?: string[];
+  /**
    * The entity's summary + core were already in context, so this selection
    * contributed facets only (see `coreDone`). Without this flag the report
    * reads as "matched, injected nothing" — the one reading that is wrong.
    */
   coreResident?: boolean;
   layers: LoreLayerReport[];
-  droppedFacets: { file: string; title: string; reason: FacetDropReason }[];
+  droppedFacets: FacetDrop[];
   /** Pictures this entity has when its gallery notice didn't fit the budget. */
   droppedImages?: number;
 }
@@ -262,6 +300,8 @@ interface Selected {
   galleryLine: string;
   coreText: string;
   coreTruncated: boolean;
+  /** Pre-truncation size of the core, for the report. */
+  coreSourceChars?: number;
   facetBlocks: { facet: LoreFacet; text: string; matchedKeys: string[]; pinned: boolean }[];
   report: LoreEntityReport;
 }
@@ -349,14 +389,22 @@ export async function selectLore(
 
   // Auto-match entities by name/alias substring (CJK-friendly), capped.
   const autoDirs: string[] = [];
+  // Which term actually fired, not just that one did. `some` → `filter` is the
+  // whole change, and it is what lets the UI say 「由「铁鳞」命中」 instead of
+  // just listing the entity: an entry answers to its name *and* every alias, so
+  // "it matched" leaves the author guessing which spelling their sentence hit —
+  // and that guess is exactly what they are trying to tune.
+  const autoTerms = new Map<string, string[]>();
   outer: for (const entities of Object.values(loreIndex)) {
     for (const entity of entities ?? []) {
       if (pinnedFacetsByDir.has(entity.dirPath)) continue; // already pinned
       if (opts?.excludeDirs?.has(entity.dirPath)) continue; // already in context
       if (!inScope(entity, opts?.scope ?? null)) continue;  // outside 取材范围
       const terms = [entity.name, ...(entity.aliases ?? [])];
-      if (terms.some((t) => t && lower.includes(t.toLowerCase()))) {
+      const hit = terms.filter((t) => t && lower.includes(t.toLowerCase()));
+      if (hit.length > 0) {
         autoDirs.push(entity.dirPath);
+        autoTerms.set(entity.dirPath, hit);
         if (autoDirs.length >= MAX_AUTO_LORE_ENTITIES) break outer;
       }
     }
@@ -383,6 +431,7 @@ export async function selectLore(
         dirPath: dir,
         reason,
         ...(coreResident ? { coreResident: true } : {}),
+        ...(autoTerms.has(dir) ? { matchedTerms: autoTerms.get(dir) } : {}),
         layers: [],
         droppedFacets: [],
       },
@@ -460,9 +509,15 @@ export async function selectLore(
       if (kept.length === 0) continue; // no room at all — core omitted
       s.coreText = kept.join("\n\n");
       s.coreTruncated = true;
+      s.coreSourceChars = body.length;
     }
     used += s.coreText.length + 1;
-    s.report.layers.push({ kind: "core", chars: s.coreText.length, truncated: s.coreTruncated || undefined });
+    s.report.layers.push({
+      kind: "core",
+      chars: s.coreText.length,
+      truncated: s.coreTruncated || undefined,
+      sourceChars: s.coreSourceChars,
+    });
   }
 
   // ── L2: facets. Per entity: activate → resolve groups → collect candidates;
@@ -546,11 +601,17 @@ export async function selectLore(
           ? residentMembers
           : [members.slice().sort((a, b) =>
               b.facet.priority - a.facet.priority || a.facet.file.localeCompare(b.facet.file))[0]];
+      // Name the winner on every loser: "被同组挤掉" without it is not an
+      // explanation — the author cannot tell whether the right one won. Several
+      // pinned members can win at once; the first is the one to point at.
+      const winnerTitle = winners[0]?.facet.title;
       for (const m of members) {
         if (winners.includes(m)) {
           take(m);
         } else {
-          m.sel.report.droppedFacets.push({ file: m.facet.file, title: m.facet.title, reason: "group-lost" });
+          m.sel.report.droppedFacets.push({
+            file: m.facet.file, title: m.facet.title, reason: "group-lost", winner: winnerTitle,
+          });
         }
       }
     }
@@ -571,7 +632,10 @@ export async function selectLore(
     // once, on the first of its facets that actually fits.
     const header = c.sel.headerCharged ? 0 : headerCost(c.sel.entity);
     if (!fits(block.length + 2 + header)) {
-      c.sel.report.droppedFacets.push({ file: c.facet.file, title: c.facet.title, reason: "budget" });
+      c.sel.report.droppedFacets.push({
+        file: c.facet.file, title: c.facet.title, reason: "budget",
+        neededChars: block.length + 2 + header,
+      });
       continue;
     }
     used += block.length + 2 + header;

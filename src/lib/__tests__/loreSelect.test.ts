@@ -119,7 +119,11 @@ describe("selectLore — layered activation", () => {
     expect(text).toContain("Silver plate armor.");
     expect(text).not.toContain("Linen dress.");
     const aria = report.entities.find((e) => e.name === "Aria")!;
-    expect(aria.droppedFacets).toContainEqual({ file: "outfit-casual.md", title: "便装形象", reason: "group-lost" });
+    // 赢的那一条要写在输的那一条上——「被同组挤掉」不点名等于没解释，作者
+    // 无从判断赢的是不是该赢的那个。
+    expect(aria.droppedFacets).toContainEqual({
+      file: "outfit-casual.md", title: "便装形象", reason: "group-lost", winner: "战甲形象",
+    });
   });
 
   it("lets pins override group exclusion — two pinned same-group facets both inject", async () => {
@@ -512,8 +516,9 @@ describe("selectLore — 已在上下文（coreDone / excludeFacets）", () => {
     expect(aria.droppedFacets).toContainEqual({
       file: "outfit-armor.md", title: "战甲形象", reason: "resident",
     });
+    // 常驻的那一段就是占住组的那一条，所以它是这里的赢家。
     expect(aria.droppedFacets).toContainEqual({
-      file: "outfit-casual.md", title: "便装形象", reason: "group-lost",
+      file: "outfit-casual.md", title: "便装形象", reason: "group-lost", winner: "战甲形象",
     });
   });
 
@@ -526,7 +531,7 @@ describe("selectLore — 已在上下文（coreDone / excludeFacets）", () => {
     expect(text).not.toContain("Linen dress.");
     const aria = report.entities.find((e) => e.name === "Aria")!;
     expect(aria.droppedFacets).toContainEqual({
-      file: "outfit-casual.md", title: "便装形象", reason: "group-lost",
+      file: "outfit-casual.md", title: "便装形象", reason: "group-lost", winner: "战甲形象",
     });
   });
 

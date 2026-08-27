@@ -58,6 +58,15 @@ export const LORE_BUDGET_MIN = 200;
 export const LORE_BUDGET_MAX = 128_000;
 export const LORE_BUDGET_DEFAULT = 600;
 
+/**
+ * 预算的档位。**「提高预算」跨的就是这一档。**
+ *
+ * 住在这里而不是某个面板里：写作面板的注入报告和扮演的取材条各有一个同名的
+ * 「提高预算」入口，两处点下去必须跨同样的步长——同一句话跨不同的步子，是最容易
+ * 让作者对不上账的一种不一致。
+ */
+export const LORE_BUDGET_OPTIONS = [600, 2000, 8000, 32000] as const;
+
 
 /**
  * Read as functions rather than computed once into consts: the same values

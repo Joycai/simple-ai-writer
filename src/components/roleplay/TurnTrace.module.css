@@ -1,0 +1,463 @@
+/* 本轮取材条（设计稿 13）。装订语汇见 TurnTrace.tsx 的开头。
+ *
+ * 全部取色走 token：设计稿的暗色 hex 与本仓 dark 调色板逐个相同（#241F19 =
+ * --color-hairline、#2E2820 = --color-border-panel、#3A332A = --color-border-input、
+ * #6B4B2E = --color-border-accent、#8E8271 = --color-text-dim …），所以这里没有
+ * 一个写死的颜色，浅色主题自动跟着翻。 */
+
+/* 容器落在**整条取材条**上，不是只落在展开的正文上。
+   收起行的「tk」和展开里的 tk 列必须同进同退，而收起行在 `.body` 之外——把容器
+   放在 `.body` 上，容器查询根本管不到它，窄栏下收起行会固执地留着单位。 */
+.ledger { container-type: inline-size; container-name: rp-trace; }
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: left;
+  color: var(--color-text-hint);
+  cursor: pointer;
+}
+.toggle:hover { color: var(--color-text-dim); }
+.caret { flex-shrink: 0; transition: transform var(--transition-fast); }
+
+.tkSeg { color: var(--color-text-kbd); }
+.dimSeg { color: var(--color-text-kbd); }
+.warnSeg { color: var(--color-error); }
+
+/* 无记录：整个组件里唯一不可交互的形态，所以版式上就要看起来点不动——没有三角、
+   没有任何数字、起笔是破折号、上方一道虚线（页被撕掉的样子），颜色降到最底一档。 */
+.noRecord {
+  padding-top: 10px;
+  border-top: 1px dashed var(--color-border-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-text-kbd);
+}
+
+/* ── 展开态 ── */
+
+.body {
+  margin-top: 14px;
+  padding: 14px 16px 16px;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-panel);
+}
+
+.body section { position: relative; padding-left: 17px; }
+.body section + section { margin-top: 20px; }
+
+/* ── 四种装订 ──
+   一条 3px 宽的骑缝：两条 1px 竖线之间是书脊。**上下出血**（top/bottom 为负）
+   ——线不在段内起笔也不在段内收笔，它从上一场穿进来、往下一轮穿出去，这就是
+   「不随轮次变」的字面画法。 */
+.bindResident {
+  position: absolute;
+  left: 0;
+  top: -6px;
+  bottom: -6px;
+  width: 3px;
+  border-left: 1px solid var(--color-border-input);
+  border-right: 1px solid var(--color-border-input);
+}
+
+/* 单线 + 两端止笔：把这一段封成闭合区间——这些是这一轮才来的，下一轮很可能换
+   一批。和常驻并排时，出血与止笔的差别在 320px 下也看得清。 */
+.bindHit {
+  position: absolute;
+  left: 1px;
+  top: 4px;
+  bottom: 4px;
+  width: 1px;
+  background: var(--color-border-input);
+}
+.bindHit::before,
+.bindHit::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 6px;
+  height: 1px;
+  background: var(--color-border-input);
+}
+.bindHit::before { top: 0; }
+.bindHit::after { bottom: 0; }
+
+/* 点线：线断开＝不是实证。配合斜体与下沉底色，三件事一起做才够重。 */
+.bindArea {
+  position: absolute;
+  left: 1px;
+  top: 4px;
+  bottom: 4px;
+  width: 1px;
+  background: repeating-linear-gradient(
+    var(--color-border-input) 0 2px,
+    transparent 2px 5px
+  );
+}
+
+/* 作者轮那道 2px 赭石线。四段里唯一带强调色的装订，因为它唯一由作者负责。 */
+.bindRef {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--color-border-accent);
+}
+
+/* 「没进去」不是第五种来源，是一种状态——没有装订线，只有一条通栏细线，
+   整组降到最淡一档。装订线在这一稿里只表示「进了上下文」。 */
+.drops {
+  padding-left: 0 !important;
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-hairline);
+}
+
+/* ── 段头 ── */
+
+.head { display: flex; align-items: baseline; gap: 9px; }
+
+.headLabel {
+  flex-shrink: 0;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 9.5px;
+  line-height: 1;
+  letter-spacing: 0.22em;
+  color: var(--color-text-dim);
+  text-transform: uppercase;
+}
+
+.headRule { flex: 1; height: 1px; background: var(--color-hairline); }
+
+.headRight {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--color-text-hint);
+}
+
+/* 页边注：段头下那句解释。它是这个组件存在的理由之一，窄栏也不许省。 */
+.marginNote {
+  margin-top: 8px;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--color-text-label);
+  text-wrap: pretty;
+}
+
+.emptyLine {
+  margin-top: 9px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--color-text-kbd);
+}
+
+.spacer { flex: 1; }
+
+.rowTop { display: flex; align-items: baseline; gap: 8px; }
+
+/* ── 常驻的行 ── */
+
+.residentRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 0 3px;
+}
+
+.residentName {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--color-text-primary);
+}
+
+.residentTk {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--color-text-kbd);
+}
+
+.staleRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-hairline);
+}
+
+/* 失效条目留着删除线，不悄悄抹掉——作者得看见他绑过它。 */
+.staleName {
+  font-family: var(--font-serif);
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--color-text-dim);
+  text-decoration: line-through;
+  text-decoration-color: var(--color-error);
+}
+
+.staleChip {
+  padding: 1.5px 6px;
+  border: 1px solid var(--color-error);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  line-height: 1.5;
+  color: var(--color-error);
+}
+
+/* ── 层芯片 ── */
+
+.chip {
+  flex-shrink: 0;
+  padding: 1.5px 6px;
+  border: 1px solid var(--color-border-muted);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  line-height: 1.5;
+  color: var(--color-text-dim);
+}
+.chipGhost { border-style: dashed; color: var(--color-text-kbd); }
+
+.chipRow { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+
+.note {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--color-text-hint);
+}
+
+/* ── 本轮命中的一条 ── */
+
+.hit { margin-top: 12px; }
+.hit + .hit { margin-top: 14px; }
+
+.hitName {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--color-text-primary);
+}
+
+.alias {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--color-text-kbd);
+}
+
+.hitTk {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--color-text-hint);
+}
+
+/* ── 激活词那一行 ──
+   一行正文，不是悬停提示：它是作者调关键词的唯一反馈回路。10px 等宽，比条目名
+   淡两档，不抢戏；词本身带点线下划。 */
+.keys,
+.keysFlat {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.75;
+  color: var(--color-text-hint);
+}
+.keysFlat { color: var(--color-text-kbd); }
+
+.key {
+  margin: 0 2px;
+  color: var(--color-text-soft);
+  border-bottom: 1px dotted var(--color-border-accent);
+  padding-bottom: 1px;
+}
+
+/* 「+2」是行内展开，不是浮层——点开就地续写，行高不跳。 */
+.keyMore {
+  margin: 0 3px;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--color-text-label);
+  border-bottom: 1px dotted var(--color-border-input);
+  cursor: pointer;
+}
+.keyMore:hover { color: var(--color-text-soft); }
+
+/* ── 特征子行 ── */
+
+.facets { margin-top: 8px; padding-left: 11px; border-left: 1px solid var(--color-hairline); }
+.facet + .facet { margin-top: 8px; }
+
+.facetName {
+  font-family: var(--font-serif);
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--color-text-soft);
+}
+
+.facetTk {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--color-text-kbd);
+}
+
+.more {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-text-label);
+  cursor: pointer;
+}
+.more:hover { color: var(--color-text-dim); }
+
+/* ── 记忆区 ──
+   斜体：这是他的口径，和稿面上的旁白同一个字形。底色再沉一格＝另一张纸上抄来的。 */
+.area { padding-top: 2px; }
+.areaRow { margin-top: 10px; }
+
+.areaName {
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--color-text-soft);
+  border-bottom: 1px dotted var(--color-border-accent);
+  cursor: pointer;
+}
+.areaName:hover { color: var(--color-text-primary); }
+
+/* ── 你 @ 的 ── */
+
+.refRow { display: flex; align-items: baseline; gap: 8px; margin-top: 9px; }
+
+/* ── 没进去 ──
+   整组只有原因芯片是有边框的，条目名反而降一档：落选组里「为什么」比「谁」重要。 */
+.drop {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 0;
+}
+.drop + .drop { border-top: 1px solid var(--color-hairline); }
+
+.reasonChip {
+  flex-shrink: 0;
+  padding: 1.5px 6px;
+  border: 1px solid var(--color-border-muted);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  line-height: 1.5;
+  color: var(--color-text-dim);
+}
+/* 「超预算」是五种里唯一比同侪亮一档的，因为它唯一有解。 */
+.reasonWarn { border-color: var(--color-border-accent); color: var(--color-accent-text); }
+
+.dropName {
+  font-family: var(--font-serif);
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--color-text-hint);
+}
+
+.dropDetail {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--color-text-kbd);
+}
+
+/* ── 预算条 ── */
+
+.budget {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--color-bg-base);
+  border-left: 2px solid var(--color-border-accent);
+}
+
+.budgetText { flex: 1; min-width: 0; }
+
+.budgetLine {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--color-text-dim);
+}
+
+.budgetSub {
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--color-text-kbd);
+}
+
+.budgetBtn {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  line-height: 1;
+  color: var(--color-accent);
+  border-bottom: 1px solid var(--color-border-accent);
+  cursor: pointer;
+}
+.budgetBtn:hover { border-bottom-color: var(--color-accent); }
+
+/* ── 窄栏 ──
+   先掉 tk 单位，再掉特征行的 tk。**条目行的 tk 永远留着**——它是判断「真的读到
+   了吗」的那个数，也是这一整条存在的理由。
+   
+   断点按**容器**写，而 `container-type: inline-size` 量的是容器的**内容盒**——
+   这一条挂在 `.logLine` 上，它自带 20px 稿面缩进，所以容器尺寸 = 面板内宽 − 20。
+   设计稿说的面板 400 / 340 因此写成 380 / 320。照抄稿面那两个数会让 420px 的面板
+   一上来就把 tk 单位藏掉（实测容器 400 < 400），那正是这两行第一版的错。 */
+@container rp-trace (max-width: 380px) {
+  .tkUnit { display: none; }
+}
+
+@container rp-trace (max-width: 320px) {
+  .facetTk { display: none; }
+  .body { padding: 12px 12px 14px; }
+  .facets { padding-left: 8px; }
+}

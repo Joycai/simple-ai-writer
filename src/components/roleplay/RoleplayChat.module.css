@@ -496,8 +496,12 @@
   background: var(--color-accent);
 }
 
-/* 执行日志：默认折成一行小字。 */
+/* 回复末尾那两本账。取材条和执行日志并排一行，中间一道 1px 竖线——它们是同一
+   类东西（账目，用三角），和「想起了 / 记下了」那两条事件（用箭头）分开。 */
 .logLine { padding-left: 20px; margin-bottom: 28px; }
+
+.ledgerRow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ledgerSep { width: 1px; height: 10px; background: var(--color-border-muted); }
 
 .logToggle {
   display: flex;
