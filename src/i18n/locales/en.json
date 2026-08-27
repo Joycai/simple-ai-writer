@@ -1015,6 +1015,7 @@
       "draftLabel": "Draft {{n}}",
       "loreFacetCount": "{{n}} facets",
       "loreDroppedTitle": "Dropped (over budget)",
+      "loreAutoCapped": "{{n}} more matches left out (max {{cap}} per run, ranked by matched-term length)",
       "loreRaiseBudget": "Raise budget",
       "retry": "Retry",
       "copyError": "Copy error",

@@ -3,8 +3,10 @@ import {
   selectLore,
   parsePins,
   galleryNotice,
+  rankAutoMatches,
   DEFAULT_LORE_BUDGET_CHARS,
   GALLERY_BUDGET_SHARE,
+  MAX_AUTO_LORE_ENTITIES,
 } from "../context/loreSelect";
 import { parseFacetMeta, serializeFacetFrontmatter } from "../lore/entity";
 import type { LoreEntity, LoreFacet, LoreIndex } from "../lore";
@@ -548,5 +550,74 @@ describe("selectLore — 已在上下文（coreDone / excludeFacets）", () => {
     const after = await selectLore("Aria rode to battle.", makeIndex(), [], undefined, {});
     expect(after.text).toBe(before.text);
     expect(after.report).toEqual(before.report);
+  });
+});
+
+describe("rankAutoMatches — 上限砍谁", () => {
+  const m = (dirPath: string, ...terms: string[]) => ({ dirPath, terms });
+
+  it("长命中词排在短命中词前面", () => {
+    const out = rankAutoMatches([m("/a", "渚"), m("/b", "星辉之杖")]);
+    expect(out.map((x) => x.dirPath)).toEqual(["/b", "/a"]);
+  });
+
+  it("同长度时命中词多的在前", () => {
+    const out = rankAutoMatches([m("/a", "铁鳞"), m("/b", "铁鳞", "鳞甲")]);
+    expect(out.map((x) => x.dirPath)).toEqual(["/b", "/a"]);
+  });
+
+  it("完全打平时按 dirPath 定序，不依赖扫描顺序", () => {
+    const forward = rankAutoMatches([m("/b", "甲"), m("/a", "乙")]);
+    const reverse = rankAutoMatches([m("/a", "乙"), m("/b", "甲")]);
+    expect(forward).toEqual(reverse);
+    expect(forward.map((x) => x.dirPath)).toEqual(["/a", "/b"]);
+  });
+
+  it("不按出现次数加权：同一个名字写十遍还是一件事", () => {
+    // terms 是「哪些词命中了」，不是「命中了几次」——这条测试守着这个契约。
+    const out = rankAutoMatches([m("/a", "长长长长的名字"), m("/b", "短")]);
+    expect(out[0].dirPath).toBe("/a");
+  });
+});
+
+describe("selectLore — 自动匹配上限", () => {
+  /** cap + extra 个都能命中「共同词」的条目，各自还有一个专名。 */
+  function crowdedIndex(extra: number): LoreIndex {
+    const all: LoreEntity[] = [];
+    for (let i = 0; i < MAX_AUTO_LORE_ENTITIES + extra; i++) {
+      const dir = `/proj/.ai-writer/lore/characters/e${String(i).padStart(2, "0")}`;
+      files.set(`${dir}/index.md`, `body ${i}`);
+      all.push(entity({ dirPath: dir, name: "共同词", aliases: [`专名${i}`] }));
+    }
+    return { characters: all };
+  }
+
+  it("命中超过上限时截断，并把砍掉的条数报出来", async () => {
+    const { report } = await selectLore("共同词", crowdedIndex(5), []);
+    expect(report.entities).toHaveLength(MAX_AUTO_LORE_ENTITIES);
+    expect(report.autoCapped).toBe(5);
+  });
+
+  it("没砍过就不写这个字段", async () => {
+    const { report } = await selectLore("Aria walked in.", makeIndex(), []);
+    expect(report.autoCapped).toBeUndefined();
+  });
+
+  it("砍的是弱证据：靶子里点名的那条一定活下来", async () => {
+    // 「专名29」比「共同词」长，所以哪怕它在分类里排最后也不该被砍掉——
+    // 从前是遍历到第 20 条就 break，e29 连参与的机会都没有。
+    const { report } = await selectLore("共同词 专名29", crowdedIndex(10), []);
+    const names = report.entities.map((e) => e.dirPath);
+    expect(names.some((d) => d.endsWith("e29"))).toBe(true);
+    expect(report.entities).toHaveLength(MAX_AUTO_LORE_ENTITIES);
+  });
+
+  it("置顶不占自动匹配的名额", async () => {
+    const index = crowdedIndex(0);
+    const pinned = "/proj/.ai-writer/lore/characters/e00";
+    const { report } = await selectLore("共同词", index, [pinned]);
+    expect(report.entities).toHaveLength(MAX_AUTO_LORE_ENTITIES);
+    expect(report.autoCapped).toBeUndefined();
+    expect(report.entities.find((e) => e.dirPath === pinned)?.reason).toBe("pinned");
   });
 });

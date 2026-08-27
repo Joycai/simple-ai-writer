@@ -331,6 +331,33 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
       if (workflowSection) instruction += `\n\n${workflowSection}`;
       if (docxSection) instruction += `\n\n${docxSection}`;
     }
+    // 作者意图进匹配靶，折进 extras 一次，同上面的 loreScope。
+    //
+    // 在此之前，面板任务的取材靶子只有「选中文本 + 锚点前 500 字」——作者在指令框
+    // 打的字、填的大纲、写的附加要求，一个字都不参与知识库匹配（`extraMatchText`
+    // 全仓只有 agentStore 传）。于是「写渚的变身场景」这句话既召不来〈渚〉，也激活
+    // 不了她那条 keys 里写着「变身」的特征，而作者看到的只是一个空的【知识库】块。
+    //
+    // **只收作者亲手打的字**，绝不传拼好的 `instruction`。后者里有两样东西必须挡在
+    // 靶子外：内置模板（应用自己的字，它命中的条目是每次运行都稳定复现的噪声），以及
+    // `tools: "full"` 任务尾部挂的工作流卡清单 + docx 格式清单——那两份清单里全是
+    // 名词短语，跟条目名撞车只是时间问题，撞上之后的样子是「某个条目莫名其妙每次都进」。
+    //
+    // customInstruction 只在 freeform 任务里算数，理由同上面 `instruction` 的分支：
+    // 非 freeform 任务根本不会把它发给模型，那它也就不该左右取材。
+    // 见 docs/feature/lore/lore-retrieval-plan.md §3
+    const authorIntent = [
+      task.freeform ? customInstruction : null,
+      extras?.outline,
+      extras?.requirement,
+      extras?.additionalKnowledge,
+    ]
+      .map((s) => s?.trim())
+      .filter(Boolean)
+      .join("\n");
+    // 空串不覆盖调用方自己传的值——面板不传，但 runTask 是公开入口。
+    if (authorIntent) extras = { ...extras, extraMatchText: authorIntent };
+
     // An empty document has no 【近期内容】 for the model to continue, so the last
     // prose in the prompt is whatever bridge got injected — and "continue from
     // where the text ends" then means "continue the previous chapter". Nothing in
