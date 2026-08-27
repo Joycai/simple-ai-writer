@@ -124,6 +124,25 @@ export interface LoreEntity {
   images: LoreImage[];
   /** Facet metadata parsed from sibling md frontmatter (content loads lazily). */
   facets: LoreFacet[];
+  /**
+   * The `[[lore:…]]` targets this entry's own prose cites — index.md and every
+   * facet body, deduplicated, **unresolved** (see `collectCiteTargets`).
+   *
+   * The author writing `[[lore:星辉之杖]]` inside a character is an explicit
+   * declaration that the two belong together, and it is worth more than any
+   * similarity score: it survives the staff never being named in the passage
+   * being written, which is exactly the case substring matching cannot reach
+   * (docs/feature/lore/lore-retrieval-plan.md §4).
+   *
+   * Raw targets, not paths — resolution needs the finished index, and a name
+   * survives the entry moving between categories where a path would not.
+   *
+   * Optional for the same reason `dict` is: `scanLore` always fills it, but
+   * entities also arrive from hand-built fixtures and from callers that only
+   * need identity. Absent reads as "no citations", which is the honest answer
+   * for an entity nobody scanned.
+   */
+  refs?: string[];
 }
 
 export interface LoreIndex {
@@ -150,13 +169,13 @@ export function loreEntityCount(index: LoreIndex): number {
  * `loreStore` state object — mutating that would edit store state behind
  * zustand's back, on arrays React is rendering from. Entities are copied too,
  * because those patches rewrite `id`/`dirPath`/`category` on the entity
- * itself, and so are the five arrays they splice or reassign. Facet and image
+ * itself, and so are the six arrays they splice or reassign. Facet and image
  * objects are only ever replaced wholesale, so they stay shared.
  *
  * Hand-written rather than `structuredClone`: this has to work in every
  * webview and in jsdom, and the shape is small and known.
  *
- * The five arrays are defaulted rather than assumed. `scanLore` always fills
+ * The six arrays are defaulted rather than assumed. `scanLore` always fills
  * them, but entities also arrive from hand-built fixtures and callers that
  * only need identity — the same reason `readLoreEntity` guards `mdFiles?.length`
  * — and a clone is the wrong place to start throwing about it.
@@ -171,6 +190,7 @@ export function cloneLoreIndex(index: LoreIndex): LoreIndex {
       mdFiles: [...(e.mdFiles ?? [])],
       facets: [...(e.facets ?? [])],
       images: [...(e.images ?? [])],
+      refs: [...(e.refs ?? [])],
     }));
   }
   return out;

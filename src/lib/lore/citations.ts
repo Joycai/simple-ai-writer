@@ -38,6 +38,49 @@ export function parseCiteBody(body: string): ParsedCitation | null {
   return { target, label: label || target };
 }
 
+/** The opener the renderer recognises; kept here so both scanners agree. */
+const CITE_OPEN = "[[lore:";
+
+/**
+ * Every `[[lore:…]]` target in a markdown body, in order, deduplicated.
+ *
+ * The scanner is a hand loop rather than a regex because it has to agree with
+ * the renderer's inline rule (lib/fs/markdown) character for character: the
+ * first `]]` closes, and a lone `]` inside the body is legal — `[[lore:route]7]]`
+ * is one citation there, and a `[^\]]` regex would silently make it none here.
+ * Two scanners disagreeing is invisible: the author sees a rendered link and
+ * wonders why the entry never rides along.
+ *
+ * Targets are returned **raw**, unresolved. Resolution needs the whole index,
+ * which does not exist yet while `scanLore` is building it one entity at a
+ * time — and storing the name rather than a path is what survives the entry
+ * being moved between categories (`resolveCitation` falls back through
+ * name → alias → `category/id`).
+ */
+export function collectCiteTargets(markdown: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  let pos = 0;
+  for (;;) {
+    const open = markdown.indexOf(CITE_OPEN, pos);
+    if (open < 0) break;
+    const bodyStart = open + CITE_OPEN.length;
+    const close = markdown.indexOf("]]", bodyStart);
+    if (close < 0) break;
+    const body = markdown.slice(bodyStart, close);
+    pos = close + 2;
+    // A citation is one inline reference; a newline means an unclosed opener.
+    if (body.includes("\n")) continue;
+    const parsed = parseCiteBody(body);
+    if (!parsed) continue;
+    const key = parsed.target.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(parsed.target);
+  }
+  return out;
+}
+
 /** All entities of an index, flattened. */
 function allEntities(index: LoreIndex): LoreEntity[] {
   return Object.values(index).flat();

@@ -105,7 +105,7 @@ vi.mock("../fs/pptx", async (importOriginal) => ({
 }));
 
 import { executeRegisteredTool, type ToolContext, type ToolId } from "../agent/registry";
-import { formatLoreIndex, type ToolResult } from "../agent/tools";
+import { formatLoreIndex, readLoreEntity, type ToolResult } from "../agent/tools";
 import { MAX_IMAGE_BYTES } from "../fs/images";
 
 const PROJECT = "/proj";
@@ -672,5 +672,48 @@ describe("formatLoreIndex", () => {
   it("says so when the active collection is empty rather than looking like an empty project", () => {
     const index = { characters: [{ name: "Aria", summary: "", collections: ["小说A"] }] as never[] };
     expect(formatLoreIndex(index, "小说B")).toContain('No lore entities in the collection "小说B"');
+  });
+});
+
+describe("read_lore_entity — 互斥组标注", () => {
+  /**
+   * 注入路径一组只挑一条（lib/context/loreSelect 的 group 互斥）；这条路径做不到，
+   * 因为「读一条条目」就是读它的全部。少了这句话，模型拿到一个角色的两套服装、
+   * 地位相同，然后写出一场混搭——看起来像模型的毛病，其实是少了一句提示。
+   */
+  const KAEL = "/proj/.ai-writer/lore/characters/kael";
+  const index = {
+    characters: [{
+      name: "Kael",
+      dirPath: KAEL,
+      mdFiles: ["index.md", "outfit-armor.md", "outfit-casual.md", "backstory.md"],
+      images: [],
+      facets: [
+        { file: "outfit-armor.md", title: "战甲", group: "outfit" },
+        { file: "outfit-casual.md", title: "便装", group: "outfit" },
+        { file: "backstory.md", title: "背景", group: null },
+      ],
+    }],
+  } as never;
+
+  beforeEach(() => {
+    fs.set(KAEL + "/index.md", "A knight.");
+    fs.set(KAEL + "/outfit-armor.md", "Silver plate.");
+    fs.set(KAEL + "/outfit-casual.md", "Linen dress.");
+    fs.set(KAEL + "/backstory.md", "Orphaned young.");
+  });
+
+  it("给同组的特征标出互斥，不给无组的加噪声", async () => {
+    const { content } = await readLoreEntity("c1", "Kael", index, false);
+    expect(content).toContain("=== outfit-armor.md === [group: outfit —");
+    expect(content).toContain("=== outfit-casual.md === [group: outfit —");
+    expect(content).toContain("=== backstory.md ===\nOrphaned young.");
+    expect(content).not.toContain("=== index.md === [group");
+  });
+
+  it("两套服装照旧都读得到——标注是提示，不是过滤", async () => {
+    const { content } = await readLoreEntity("c1", "Kael", index, false);
+    expect(content).toContain("Silver plate.");
+    expect(content).toContain("Linen dress.");
   });
 });
