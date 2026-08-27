@@ -47,10 +47,15 @@ export function useGlobalShortcuts() {
         else setShowAiDrawer(true, "chat");
         return;
       }
+      // ⌘J is the panel's own switch, not a tab's: it names no mode, so the
+      // drawer comes back on whichever tab the author left it on — the same
+      // thing the icon rail's and title bar's buttons already do. Dropping the
+      // mode costs no reachability: ⌘L still lands on 对话 from any tab, and
+      // the command palette opens 生成 (with the query as the selection) and
+      // 一致性检查 by name.
       if (matchesCombo(e, { mod: true, key: "j" })) {
         e.preventDefault();
-        if (showAiDrawer && aiDrawerMode === "generate") setShowAiDrawer(false);
-        else setShowAiDrawer(true, "generate");
+        setShowAiDrawer(!showAiDrawer);
         return;
       }
       if (matchesCombo(e, { key: "Escape" })) {

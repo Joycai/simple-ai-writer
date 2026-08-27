@@ -263,7 +263,7 @@
       "items": {
         "commandPalette": "打开/关闭命令面板",
         "aiChatDrawer": "切换 AI 对话抽屉",
-        "aiGenerateDrawer": "切换 AI 生成任务面板",
+        "aiPanel": "切换 AI 面板（回到上次的标签页）",
         "closeOverlays": "关闭命令面板 / AI 抽屉",
         "openSettings": "打开设置",
         "viewFiles": "切换到文档树",

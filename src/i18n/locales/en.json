@@ -263,7 +263,7 @@
       "items": {
         "commandPalette": "Open/close the command palette",
         "aiChatDrawer": "Toggle the AI chat drawer",
-        "aiGenerateDrawer": "Toggle the AI generate-task panel",
+        "aiPanel": "Toggle the AI panel (on the tab you left it on)",
         "closeOverlays": "Close the command palette / AI drawer",
         "openSettings": "Open Settings",
         "viewFiles": "Go to Files",

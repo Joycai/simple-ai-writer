@@ -622,6 +622,16 @@ Story Memory is *per-document*, so a chapter is its own file and knows nothing o
 - **Boundaries** — a blocking overlay (settings, palette, onboarding) suspends both directions; opening another project clears the history, since another project's files aren't places in this one. Depth caps at 100.
 - **Prerequisite** — the wall's open lore entry lives in `loreStore.detailPath` (not LoreWall local state) precisely so history can read and restore it; an unresolvable path just renders the grid, which also covers "entry deleted since you visited it".
 
+### AI 面板的标签页记忆（⌘J / ⌘L）
+
+- **位置** — 标签页本身在 `components/ai/AiDrawer.tsx`（生成 / 对话 / 一致性检查 / 扮演），当前那一个存在 `appStore.aiDrawerMode`，落盘到偏好 `app:aiDrawerMode`。
+- **`setShowAiDrawer(v, mode?)` 的 `mode` 是可选的，这就是记忆的全部机制。** 传了 tab 就**记住**它（`writePref`，且只在真的换了 tab 时写），不传就是「照原样打开」——回到作者上次停在的那一个。
+- **⌘J 是面板的开关，不是某个标签页的入口。** 它不指定 mode，所以和图标栏、标题栏的按钮行为一致：抽屉回到上次的 tab。以前它写死 `"generate"`，于是作者在「对话」里按 ⌘J 关掉、再按 ⌘J，回来的是「生成」——面板记住了 tab，快捷键却每次把它覆盖掉。
+- **⌘L 保留 mode，是有意的不对称。** 一个「无论现在在哪个 tab 都直达对话」的键有独立价值；⌘J 则是「把面板收起来 / 拿回来」。同理，⌘⇧E/L/M 和内联气泡仍然强制 `"generate"`——它们要跑的就是生成任务，落错 tab 等于什么都没发生。
+- **没有因此丢掉可达性** — 命令面板仍能按名字打开「生成」（并把查询串当作选区）和「一致性检查」，扮演有自己的 tab。
+- **降级只在读取侧** — `storedAiDrawerMode()` 在读到 `"roleplay"` 而 Beta 开关已关时退回 `"generate"`；偏好里那一行不改写，开关重新打开时记忆还在。
+- **回归测试** — `src/lib/__tests__/aiDrawerMode.test.ts`：连续多次「不指定 tab 地打开」必须不漂移回第一个标签页。
+
 ### 系统通知 (OS notifications)
 
 - **Location** — `src/lib/notify.ts` (switches + gating), `tauri-plugin-notification` on the Rust side, Settings → 通用 → 系统通知.

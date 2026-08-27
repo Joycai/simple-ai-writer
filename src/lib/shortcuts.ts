@@ -130,7 +130,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   // ─── Global ───────────────────────────────────────────────────────────
   { id: "commandPalette", category: "global", combo: { mod: true, key: "k" }, labelKey: "commandPalette", scope: "dispatch" },
   { id: "aiChatDrawer", category: "global", combo: { mod: true, key: "l" }, labelKey: "aiChatDrawer", scope: "dispatch" },
-  { id: "aiGenerateDrawer", category: "global", combo: { mod: true, key: "j" }, labelKey: "aiGenerateDrawer", scope: "dispatch" },
+  { id: "aiPanel", category: "global", combo: { mod: true, key: "j" }, labelKey: "aiPanel", scope: "dispatch" },
   { id: "closeOverlays", category: "global", combo: { key: "Escape" }, labelKey: "closeOverlays", scope: "dispatch" },
   { id: "navBack", category: "global", keysLabel: combosLabel(NAV_BACK_COMBOS), labelKey: "navBack", scope: "dispatch" },
   { id: "navForward", category: "global", keysLabel: combosLabel(NAV_FORWARD_COMBOS), labelKey: "navForward", scope: "dispatch" },
