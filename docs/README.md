@@ -33,6 +33,7 @@ Two axes, encoded differently on purpose.
 | [architecture.md](reference/architecture.md) | `living` | Touching any subsystem: DB schema, RAG, SSE, key storage, export, IPC, CodeMirror |
 | [design-system.md](reference/design-system.md) | `living` | Building or restyling **any** UI |
 | [workflows.md](reference/workflows.md) | `living` | Adding an AI task type, a provider, a language, a capability pack |
+| [terminology.md](reference/terminology.md) | `living` (词表) · `planned` (校准批次) | Writing **any** user-facing string, or wondering which of 条目/词条/设定 to use. Also holds the six-batch plan for the 78 一词多译 / 49 一译多词 found in the 2026-08 sweep |
 | [ci.md](reference/ci.md) | `living` | Changing the build, or wondering what the merge gate runs |
 | [macos-signing.md](reference/macos-signing.md) | `planned` | Cutting a macOS release, or the Keychain starts asking for the login password again |
 
