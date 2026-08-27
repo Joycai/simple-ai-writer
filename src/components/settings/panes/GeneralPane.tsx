@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useAppStore, type ThemeMode, type Language, type FontScheme } from "../../../stores/appStore";
@@ -17,6 +17,7 @@ import {
 import {
   IMAGE_LONG_EDGE_MAX, IMAGE_LONG_EDGE_MIN,
 } from "../../../lib/image/downscalePlan";
+import { ResetAppDialog } from "../ResetAppDialog";
 import { Pane, PaneHeader, Section, Row, Chip, ChipRow, Toggle } from "./bits";
 import ui from "../settingsUi.module.css";
 import common from "../settingsCommon.module.css";
@@ -41,7 +42,12 @@ const FONT_SCHEMES: { value: FontScheme; labelKey: string; sample: string; previ
   { value: "kai", labelKey: "systemSettings.general.fontKai", sample: "文字 Aa", previewFont: '"Iowan Old Style", Georgia, "Kaiti SC", STKaiti, KaiTi, "Noto Serif CJK SC", serif' },
 ];
 
-export function GeneralPane() {
+interface Props {
+  /** Lets this pane claim Escape while the reset dialog is up — see below. */
+  onEscapeInterceptChange: (handler: (() => void) | null) => void;
+}
+
+export function GeneralPane({ onEscapeInterceptChange }: Props) {
   const { t, i18n: i18nInst } = useTranslation();
   const isZh = i18nInst.language.startsWith("zh");
   const { theme, setTheme, language, setLanguage, fontScheme, setFontScheme } = useAppStore();
@@ -71,6 +77,16 @@ export function GeneralPane() {
   const [comfyOn, setComfyOn] = useState(isComfyUiEnabled());
   const [sweeping, setSweeping] = useState(false);
   const [sweepStatus, setSweepStatus] = useState<{ ok: boolean; text: string } | null>(null);
+  const [resetting, setResetting] = useState(false);
+
+  useEffect(() => {
+    // While the reset dialog is up, ModalShell's own Escape listener closes it.
+    // Both listeners sit on `window`, so the settings page's would otherwise
+    // fire too and take the whole page down with the dialog — claiming the key
+    // with a no-op is what keeps one press to one layer (same as 供应商与模型).
+    onEscapeInterceptChange(resetting ? () => {} : null);
+    return () => onEscapeInterceptChange(null);
+  }, [resetting, onEscapeInterceptChange]);
 
   /**
    * Collect the stored references that no longer point at anything.
@@ -398,6 +414,22 @@ export function GeneralPane() {
           <div className={sweepStatus.ok ? ui.statusOk : ui.statusError}>{sweepStatus.text}</div>
         )}
       </Section>
+
+      {/* 最后一节，也是唯一不可撤销的一节。放在「导出配置」之后是有意的：
+          作者先走过留一份副本的门，才会走到这一扇。 */}
+      <Section label={t("systemSettings.reset.section")}>
+        <Row
+          title={t("systemSettings.reset.label")}
+          desc={t("systemSettings.reset.hint")}
+          last
+        >
+          <button className={ui.rowBtn} onClick={() => setResetting(true)}>
+            {t("systemSettings.reset.button")}
+          </button>
+        </Row>
+      </Section>
+
+      {resetting && <ResetAppDialog onClose={() => setResetting(false)} />}
     </Pane>
   );
 }

@@ -82,6 +82,7 @@ pub fn run() {
             secrets::secret_save,
             secrets::secret_load,
             secrets::secret_delete,
+            secrets::secret_clear_all,
             sqltx::sqlite_transaction,
             transfer::zip_export_dialog,
             transfer::zip_import_dialog,

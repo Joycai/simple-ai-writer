@@ -84,6 +84,37 @@ pub async fn secret_delete(provider_id: String) -> Result<(), String> {
     blocking(move || store::delete(&provider_id)).await
 }
 
+/// What a wholesale wipe managed to remove.
+///
+/// A count rather than `()` because the caller has to *decide* on it: the
+/// frontend wipes `config.db` only when `failed` is zero, since those rows are
+/// the only record of which keyring accounts exist. Dropping them over a
+/// keyring that refused would strand every secret it still holds under a name
+/// nothing can reproduce.
+#[derive(Debug, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SecretWipe {
+    /// Secrets actually removed.
+    pub removed: usize,
+    /// Secrets the platform store refused to delete. A missing entry is not one
+    /// of these — "already gone" is the outcome that was asked for.
+    pub failed: usize,
+}
+
+/// Delete every secret this app stores. Behind 设置 → 数据维护 → 重置应用配置.
+///
+/// `provider_ids` is what the frontend can *name* — the provider rows, the sync
+/// server's token, any backup password it knows about. That list is the whole
+/// scope on Windows and Linux, where each secret is its own credential and
+/// nothing here can enumerate them; on macOS every secret is folded into one
+/// keychain item, so the item is cleared outright and the argument is a floor
+/// rather than the list. The asymmetry is the storage shape's, not a policy —
+/// see the two `store` modules.
+#[command]
+pub async fn secret_clear_all(provider_ids: Vec<String>) -> Result<SecretWipe, String> {
+    blocking(move || store::clear_all(&provider_ids)).await
+}
+
 /// One credential per id.
 ///
 /// The shape every platform used before macOS grew a bundle, and still the
@@ -94,7 +125,7 @@ pub async fn secret_delete(provider_id: String) -> Result<(), String> {
 /// anything to gain from a bundle and Windows has something to lose.
 #[cfg(not(target_os = "macos"))]
 mod store {
-    use super::entry;
+    use super::{entry, validate_provider_id, SecretWipe};
 
     pub fn save(provider_id: &str, api_key: &str) -> Result<(), String> {
         entry(provider_id)?
@@ -115,6 +146,36 @@ mod store {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
             Err(e) => Err(e.to_string()),
         }
+    }
+
+    /// Delete each named credential, and report rather than stop.
+    ///
+    /// One store failure must not hide the rest: a Secret Service that refuses
+    /// one item will usually refuse them all, and the caller needs the *count*
+    /// to decide whether the wipe may continue — so every id is attempted and
+    /// the tally comes back whole.
+    pub fn clear_all(provider_ids: &[String]) -> Result<SecretWipe, String> {
+        let mut wipe = SecretWipe::default();
+        for id in provider_ids {
+            if validate_provider_id(id).is_err() {
+                continue;
+            }
+            match entry(id).and_then(|e| match e.delete_credential() {
+                Ok(()) => Ok(true),
+                // Nothing stored under that id — the asked-for outcome, not a
+                // failure, and not something that was removed either.
+                Err(keyring::Error::NoEntry) => Ok(false),
+                Err(e) => Err(e.to_string()),
+            }) {
+                Ok(true) => wipe.removed += 1,
+                Ok(false) => {}
+                Err(e) => {
+                    eprintln!("[secrets] could not delete {id:?}: {e}");
+                    wipe.failed += 1;
+                }
+            }
+        }
+        Ok(wipe)
     }
 }
 
@@ -139,7 +200,7 @@ mod store {
     use std::collections::{BTreeMap, HashMap};
     use std::sync::Mutex;
 
-    use super::{entry, validate_provider_id, SERVICE};
+    use super::{entry, validate_provider_id, SecretWipe, SERVICE};
 
     /// Account name of the one item that holds them all.
     pub(super) const BUNDLE_ACCOUNT: &str = "all-secrets";
@@ -274,6 +335,23 @@ mod store {
             write_bundle(bundle)
         })
     }
+
+    /// Empty the bundle, which deletes the item holding it.
+    ///
+    /// The caller's id list is ignored on purpose: `with_bundle` has just
+    /// folded any pre-bundle items in, so what is in hand is *every* secret
+    /// this app stores — including the ones the frontend could not have named
+    /// (a remembered backup password for a slot it never listed). An item the
+    /// migration could not read is the one exception, and it has already
+    /// reported itself on stderr.
+    pub fn clear_all(_provider_ids: &[String]) -> Result<SecretWipe, String> {
+        with_bundle(|bundle| {
+            let removed = bundle.len();
+            bundle.clear();
+            write_bundle(bundle)?;
+            Ok(SecretWipe { removed, failed: 0 })
+        })
+    }
 }
 
 #[cfg(test)]
@@ -306,5 +384,27 @@ mod tests {
     #[test]
     fn rejects_the_reserved_bundle_account() {
         assert!(validate_provider_id(store::BUNDLE_ACCOUNT).is_err());
+    }
+
+    /// Where secrets are one credential each, an empty list must reach the
+    /// platform store zero times — the reset flow calls this even on a machine
+    /// that never configured a provider, and a headless CI runner has no
+    /// Secret Service to dial. (macOS cannot make the same promise and should
+    /// not: it has to read its one item to know what is in it.)
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn clearing_nothing_touches_no_store() {
+        let wipe = store::clear_all(&[]).expect("an empty wipe cannot fail");
+        assert_eq!((wipe.removed, wipe.failed), (0, 0));
+    }
+
+    /// An id the guard rejects is skipped, not counted as a failure: the caller
+    /// assembles the list from stored rows, and one malformed row must not be
+    /// what makes the frontend refuse to wipe the database.
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn skips_ids_the_guard_rejects() {
+        let wipe = store::clear_all(&[String::new()]).expect("an invalid id is not a store error");
+        assert_eq!((wipe.removed, wipe.failed), (0, 0));
     }
 }

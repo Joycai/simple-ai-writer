@@ -176,3 +176,39 @@ export async function deleteApiKey(providerId: string): Promise<void> {
     await deleteLegacyKeyFromDb(db, providerId);
   } catch {}
 }
+
+/** What `clearAllSecrets` managed to remove. Mirrors the Rust `SecretWipe`. */
+export interface SecretWipe {
+  /** Secrets actually removed. */
+  removed: number;
+  /** Secrets the OS keyring refused to delete. "Already gone" is not one. */
+  failed: number;
+}
+
+/**
+ * Delete every secret this app stores — the keyring half of 重置应用配置.
+ *
+ * `accounts` is what the caller can *name*: one entry per provider row, the
+ * knowledge-base server's token, any remembered backup password it knows of.
+ * That list is the whole scope on Windows and Linux (one credential per id,
+ * nothing to enumerate); macOS holds every secret in a single keychain item and
+ * empties it outright, so there the list is a floor rather than the reach. The
+ * asymmetry belongs to the storage shape — see `src-tauri/src/secrets.rs`.
+ *
+ * Errors from individual entries come back as `failed` rather than a rejection,
+ * because the caller has to weigh the count: `lib/appReset` drops the config
+ * rows only when nothing was refused, since those rows are the only record of
+ * which accounts exist.
+ */
+export async function clearAllSecrets(accounts: string[]): Promise<SecretWipe> {
+  if (!isTauri) {
+    let removed = 0;
+    for (const id of accounts) {
+      const key = sessionKey(id);
+      if (sessionStorage.getItem(key) != null) removed++;
+      sessionStorage.removeItem(key);
+    }
+    return { removed, failed: 0 };
+  }
+  return await invoke<SecretWipe>("secret_clear_all", { providerIds: accounts });
+}
