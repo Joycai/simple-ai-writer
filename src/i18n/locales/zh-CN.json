@@ -1447,7 +1447,8 @@
       "preUnknown": "检索 —— 发送后才知道",
       "preResident": "含 {{name}} 人设",
       "preUnexpanded": "{{n}} 条只进了标题",
-      "preFloorTitle": "下界：至少到这里，检索还会往右加"
+      "preFloorTitle": "下界：至少到这里，检索还会往右加",
+      "preWas": "刚才预估 ≥ {{n}}"
     },
     "drawer": {
       "tabGenerate": "生成",
