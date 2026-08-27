@@ -247,6 +247,29 @@ export function prunePrefsWithPrefix(prefix: string, keep: (suffix: string) => b
   return doomed;
 }
 
+/**
+ * Drop every preference — the prefs half of 重置应用配置 (`lib/appReset`).
+ *
+ * Awaited rather than fire-and-forget, unlike every other write here: the
+ * caller reloads the window straight afterwards, and a `DELETE` still sitting
+ * in the write chain when the webview tears down is a reset that silently did
+ * not happen. It goes *through* the chain all the same, so a preference written
+ * a moment earlier cannot land after the wipe.
+ *
+ * `localStorage` is swept too. It is the pre-hydration store, and any copy left
+ * there would be migrated back into the database on the next launch — the reset
+ * would appear to work and then undo itself on restart.
+ */
+export async function clearAllPrefs(): Promise<void> {
+  for (const key of lsKeys()) {
+    if (isPrefKey(key)) lsRemove(key);
+  }
+  if (!hydrated) return;
+  cache.clear();
+  enqueue((db) => db.execute(`DELETE FROM ${TABLE}`));
+  await flushPrefs();
+}
+
 /** Every stored key, for the config backup and for diagnostics. */
 export function prefEntries(): [string, string][] {
   if (hydrated) return [...cache.entries()];

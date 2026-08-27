@@ -114,7 +114,7 @@ export function SettingsPage({ onClose, initialTab = "general" }: Props) {
             nav and the close button alive so the author can get out. */}
         <ModalErrorBoundary onClose={onClose}>
           <div className={styles.paneHost}>
-            {activeTab === "general" && <GeneralPane />}
+            {activeTab === "general" && <GeneralPane onEscapeInterceptChange={setEscIntercept} />}
             {activeTab === "workspace" && <WorkspacePane />}
             {activeTab === "docx-format" && docxOn && <DocFormatPane onEscapeInterceptChange={setEscIntercept} />}
             {activeTab === "providers-models" && <ProvidersModelsPane onEscapeInterceptChange={setEscIntercept} />}

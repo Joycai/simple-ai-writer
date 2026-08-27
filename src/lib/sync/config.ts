@@ -23,7 +23,7 @@ import { deleteApiKey, loadApiKey, saveApiKey } from "../keyStore";
  * side (`Entry::new(SERVICE, provider_id)`), so a prefix is all the separation
  * this needs.
  */
-function tokenAccount(serverUrl: string): string {
+export function syncTokenAccount(serverUrl: string): string {
   return `kbsync:${normalizeServerUrl(serverUrl)}`;
 }
 
@@ -47,13 +47,13 @@ export function setServerUrl(url: string): void {
 }
 
 export async function loadToken(serverUrl: string): Promise<string | null> {
-  return loadApiKey(tokenAccount(serverUrl));
+  return loadApiKey(syncTokenAccount(serverUrl));
 }
 
 export async function saveToken(serverUrl: string, token: string): Promise<void> {
-  await saveApiKey(tokenAccount(serverUrl), token);
+  await saveApiKey(syncTokenAccount(serverUrl), token);
 }
 
 export async function deleteToken(serverUrl: string): Promise<void> {
-  await deleteApiKey(tokenAccount(serverUrl));
+  await deleteApiKey(syncTokenAccount(serverUrl));
 }

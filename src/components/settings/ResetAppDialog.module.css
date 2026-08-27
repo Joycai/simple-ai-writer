@@ -1,0 +1,136 @@
+/* 重置应用配置的确认框。模态层（200），压在设置页（60）之上。
+   面板尺寸和节奏跟 ConfirmDialog 一致——它是同一类东西的加长版，
+   长出来的是清单和那行必须手打的字。 */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: var(--color-bg-overlay);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: fadeIn 200ms var(--ease-out);
+}
+
+.panel {
+  width: 100%;
+  max-width: 460px;
+  box-sizing: border-box;
+  padding: var(--space-6);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  animation: scaleIn 240ms var(--ease-out);
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--color-text-primary);
+}
+
+.titleIcon { color: var(--color-error); flex: none; }
+
+.body {
+  margin-top: var(--space-3);
+  font-size: var(--font-size-md);
+  line-height: 1.7;
+  color: var(--color-text-secondary);
+  user-select: text;
+}
+
+/* 清单：一行一件将要消失的东西。数字从库里数出来，不是文案。 */
+.list {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3) var(--space-4);
+  list-style: none;
+  background: var(--color-error-bg);
+  border-radius: var(--radius-sm);
+}
+
+.item {
+  font-size: var(--font-size-md);
+  line-height: 1.9;
+  color: var(--color-error-text-strong);
+}
+
+.item::before {
+  content: "—";
+  margin-right: var(--space-2);
+  opacity: 0.5;
+}
+
+.keep {
+  margin-top: var(--space-4);
+  font-size: var(--font-size-sm);
+  line-height: 1.7;
+  color: var(--color-text-muted);
+}
+
+.keepLabel { color: var(--color-text-secondary); font-weight: 500; }
+
+.input {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  background: var(--stg-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-md);
+  color: var(--color-text-primary);
+  transition: border-color var(--transition-fast);
+}
+
+.input:focus { outline: none; border-color: var(--color-error); }
+
+.error {
+  margin-top: var(--space-4);
+  font-size: var(--font-size-sm);
+  line-height: 1.7;
+  color: var(--color-error);
+  user-select: text;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-6);
+}
+
+.cancelBtn,
+.confirmBtn {
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-md);
+  transition: background var(--transition-fast), transform var(--transition-fast),
+    box-shadow var(--transition-fast), border-color var(--transition-fast);
+}
+
+.cancelBtn {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+.cancelBtn:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
+.cancelBtn:active { transform: scale(0.98); }
+
+.confirmBtn {
+  border: none;
+  background: var(--color-error);
+  color: var(--color-bg-base);
+  font-weight: 500;
+}
+.confirmBtn:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.confirmBtn:active:not(:disabled) { transform: translateY(0) scale(0.98); box-shadow: none; }
+.confirmBtn:disabled { opacity: 0.4; cursor: not-allowed; }
