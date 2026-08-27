@@ -9,7 +9,7 @@ vi.mock("../../../i18n", () => ({
 }));
 
 import {
-  MEMORY_BLOCK_CHAR_CAP, addRecord, dropRecordsFrom, parseMemory, renderMemory,
+  MEMORY_BLOCK_CHAR_CAP, addRecord, dropRecordsFrom, dropSceneRecords, parseMemory, renderMemory,
   renderMemoryBlock, reviseRecord, takeSinkable, type MemoryDoc,
 } from "../memory";
 import type { MemoryKind, MemoryRecord } from "../model";
@@ -262,6 +262,44 @@ describe("dropRecordsFrom", () => {
  * ——而这个过滤器对 void 记录永远命中，于是每转一场，全部历史记录都被再灌进
  * 记忆区一遍，条目随转场次数平方级膨胀。
  */
+describe("dropSceneRecords", () => {
+  it("drops exactly the records from that scene", () => {
+    const source = doc([
+      rec({ id: "m1", scene: 1, title: "第一场记的" }),
+      rec({ id: "m2", scene: 2, title: "第二场记的" }),
+      rec({ id: "m3", scene: 2, title: "第二场也记的" }),
+    ], 4);
+    const { doc: kept, dropped } = dropSceneRecords(source, 2);
+    expect(dropped.map((r) => r.id)).toEqual(["m2", "m3"]);
+    expect(kept.records.map((r) => r.id)).toEqual(["m1"]);
+  });
+
+  /**
+   * 这一条是「另起一场」不会误伤的保证。`scene: 0` 是这个字段出现之前记下的
+   * 记录，属于哪一场谁也不知道——猜一个「就是本场」，等于替作者删掉他没打算
+   * 删的东西，而记忆里删掉的东西是找不回来的。
+   */
+  it("never touches records with an unknown scene", () => {
+    const source = doc([rec({ id: "m1", scene: 0 }), rec({ id: "m2", scene: 3 })], 3);
+    const { doc: kept, dropped } = dropSceneRecords(source, 3);
+    expect(dropped.map((r) => r.id)).toEqual(["m2"]);
+    expect(kept.records.map((r) => r.id)).toEqual(["m1"]);
+  });
+
+  // id 只增不重用，哪怕整整一场作废了。
+  it("does not rewind the id counter", () => {
+    const source = doc([rec({ id: "m1", scene: 1 }), rec({ id: "m2", scene: 1 })], 3);
+    expect(dropSceneRecords(source, 1).doc.next).toBe(3);
+  });
+
+  it("returns the same document when nothing matches", () => {
+    const source = doc([rec({ id: "m1", scene: 1 })], 2);
+    const out = dropSceneRecords(source, 9);
+    expect(out.doc).toBe(source);
+    expect(out.dropped).toEqual([]);
+  });
+});
+
 describe("takeSinkable", () => {
   it("欠着的约定/待办和关系留下，其余移出", () => {
     const before = doc([

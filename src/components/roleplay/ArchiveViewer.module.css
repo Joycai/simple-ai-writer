@@ -127,3 +127,13 @@
 }
 
 .error { color: var(--color-error-text-strong); }
+
+/* 「作废」角标。不用颜色也不用图标——它是一句陈述，不是一次警告；
+   这一场是作者自己标的，他知道自己做了什么。 */
+.railTag {
+  margin-left: 6px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--color-text-label);
+}

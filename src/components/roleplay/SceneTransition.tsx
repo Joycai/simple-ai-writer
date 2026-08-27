@@ -77,11 +77,25 @@ export function SceneTransition({ agent, turns, sceneNo, onClose }: {
     setRecap(result);
   };
 
-  /** 「不要前情」不等于取消转场——它按另起一场落地（设计稿 2b 的注解）。 */
-  const commit = (withRecap: boolean) => {
+  /** 「另起一场」：这一场作废。本场记下的东西一并丢弃，归档打废弃标记。 */
+  const commitFresh = () => {
+    void newSession(agent.id, { mode: "fresh", clearMemory });
+    onClose();
+  };
+
+  /**
+   * 预览态的两个出口。**都是接续**——作者点进这里的时候已经选了「这一场算数」。
+   *
+   * 设计稿 2b 的注解说「不要前情」按另起一场落地，那在当时是对的：那时两支的
+   * 差别只是「留不留前情」。现在「另起一场」＝**这一场作废**，再让一个「这份
+   * 摘要写得不好」的按钮落到那条路上，就是拿一次文字上的不满意去删掉整整一场。
+   * 所以它走的是接续里不带 recap 的那一支：照常分拣、照常算正史，只是常驻层
+   * 不多一条前情。
+   */
+  const commitContinue = (withRecap: boolean) => {
     void newSession(agent.id, withRecap && recap
       ? { mode: "continue", recap }
-      : { mode: "fresh", clearMemory: withRecap ? false : clearMemory });
+      : { mode: "continue" });
     onClose();
   };
 
@@ -242,10 +256,10 @@ export function SceneTransition({ agent, turns, sceneNo, onClose }: {
           </span>
           <div className={styles.spacer} />
           {/* 不是「取消转场」——它按另起一场落地。 */}
-          <button type="button" className={styles.ghostBtn} onClick={() => commit(false)}>
+          <button type="button" className={styles.ghostBtn} onClick={() => commitContinue(false)}>
             {t("roleplay.transition.noRecap", { defaultValue: "不要前情" })}
           </button>
-          <button type="button" className={styles.primaryBtn} onClick={() => commit(true)}>
+          <button type="button" className={styles.primaryBtn} onClick={() => commitContinue(true)}>
             {t("roleplay.transition.commit", { defaultValue: "封存并开始" })}
           </button>
         </div>
@@ -281,11 +295,13 @@ export function SceneTransition({ agent, turns, sceneNo, onClose }: {
             <span className={styles.markStop} />
             <span className={styles.spacer} />
             <span className={styles.markLabel}>
-              {t("roleplay.transition.freshMark", { defaultValue: "不留前情" })}
+              {t("roleplay.transition.freshMark", { defaultValue: "这一场作废" })}
             </span>
           </span>
           <span className={styles.modeDesc}>
-            {t("roleplay.transition.freshDesc", { defaultValue: "和上一场无关。整场封存，角色从零开始。" })}
+            {t("roleplay.transition.freshDesc", {
+              defaultValue: "试的、演砸的。这一场不算数：角色不会记得，旁白也不会读到。",
+            })}
           </span>
         </button>
 
@@ -310,7 +326,9 @@ export function SceneTransition({ agent, turns, sceneNo, onClose }: {
             </span>
           </span>
           <span className={styles.modeDesc}>
-            {t("roleplay.transition.continueDesc", { defaultValue: "换了个地方继续。细节封存，前情跟着走。" })}
+            {t("roleplay.transition.continueDesc", {
+              defaultValue: "这一场算数。换个地方继续：细节封存，前情跟着走。",
+            })}
           </span>
         </button>
       </div>
@@ -348,11 +366,11 @@ export function SceneTransition({ agent, turns, sceneNo, onClose }: {
               checked={clearMemory}
               onChange={(e) => setClearMemory(e.target.checked)}
             />
-            {t("roleplay.transition.alsoMemory", { defaultValue: "同时清空记忆" })}
+            {t("roleplay.transition.alsoMemory", { defaultValue: "连更早的记忆一起清空" })}
           </label>
           <div className={styles.checkNote}>
             {t("roleplay.transition.clearNote", {
-              defaultValue: "清掉常驻的约定、待办、关系和最后一条前情。",
+              defaultValue: "这一场记下的东西本来就会作废。勾上它，连更早的约定、待办和关系也一并清掉——推倒重来。",
             })}
           </div>
         </div>
@@ -361,10 +379,17 @@ export function SceneTransition({ agent, turns, sceneNo, onClose }: {
       <div className={styles.archiveNote}>
         <span className={styles.boxIcon} aria-hidden />
         <span>
-          {t("roleplay.transition.archiveNote", {
-            n: turns.length,
-            defaultValue: `对话不会被删除。这 ${turns.length} 轮移进存档，随时可以翻回来读。`,
-          })}
+          {/* 「作废」是语义上的，不是物理上的：文件一个字都不删，作者随时能翻回来读。
+              这一句是那个区别唯一被说出来的地方，所以两支各说各的。 */}
+          {mode === "fresh"
+            ? t("roleplay.transition.archiveNoteFresh", {
+              n: turns.length,
+              defaultValue: `对话不会被删除。这 ${turns.length} 轮移进存档并标为作废——你仍然能翻回来读，只是角色和旁白不会。`,
+            })
+            : t("roleplay.transition.archiveNote", {
+              n: turns.length,
+              defaultValue: `对话不会被删除。这 ${turns.length} 轮移进存档，随时可以翻回来读。`,
+            })}
         </span>
       </div>
 
@@ -372,7 +397,7 @@ export function SceneTransition({ agent, turns, sceneNo, onClose }: {
         <span className={styles.mono}>
           {mode === "continue"
             ? t("roleplay.transition.nextStep", { defaultValue: "下一步：生成前情 · 你可以改" })
-            : t("roleplay.transition.freshStep", { defaultValue: "不生成前情 · 直接开始" })}
+            : t("roleplay.transition.freshStep", { defaultValue: "不生成前情 · 这一场作废" })}
         </span>
         <div className={styles.spacer} />
         <button type="button" className={styles.ghostBtn} onClick={onClose}>
@@ -381,7 +406,7 @@ export function SceneTransition({ agent, turns, sceneNo, onClose }: {
         <button
           type="button"
           className={styles.primaryBtn}
-          onClick={() => (mode === "continue" ? void run() : commit(false))}
+          onClick={() => (mode === "continue" ? void run() : commitFresh())}
           disabled={mode === "continue" && empty}
         >
           {mode === "continue"
