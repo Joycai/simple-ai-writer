@@ -66,9 +66,12 @@ import { scriptPreview } from "../lib/roleplay/markup";
 
 import { runSceneRecap, type SceneRecap } from "../lib/roleplay/recap";
 import {
-  conversationReader, loadStaticContext, prepareContinuedHistory, prepareSeededHistory,
-  type RecalledEntity,
+  conversationReader, inspectAgent, loadStaticContext, prepareContinuedHistory,
+  prepareSeededHistory,
 } from "../lib/roleplay/run";
+import {
+  namedRefs, type PreflightEstimate, type TurnContextTrace,
+} from "../lib/roleplay/trace";
 import {
   addAreaEntry, createArea, isValidAreaId, listAreas, loadAreaMeta,
   saveAreaMeta, type AreaSummary,
@@ -140,12 +143,21 @@ export interface LiveSession {
    */
   stopped: boolean;
   /**
-   * 每一轮想起了记忆区里的哪几条。稿面上那道「想起了…」的痕迹读它。
+   * 每一轮的取材事实：常驻了哪些条目、检索命中了什么、想起了记忆区里的哪几条、
+   * 作者 `@` 了什么。稿面上那道「想起了…」的痕迹和取材条都读它。
    *
-   * 按轮号存而不是只留最新一条：作者往回翻的时候，第 12 轮为什么那么答，要能在
-   * 第 12 轮的位置看见。
+   * **按轮号存而不是只留最新一条**：作者往回翻的时候，第 12 轮为什么那么答，
+   * 要能在第 12 轮的位置看见。`log` 也是这么存的，`rewind` 一起按轮号截断。
+   *
+   * 曾经这里只有一个 `recalled`（每轮想起了哪几条）。它现在是
+   * `contextTrace[n].area` 的一部分——两份真相迟早会对不上，而它们本来就是同
+   * 一次检索的产物。
+   *
+   * 和 `log` 一样**只在内存**：它是「为什么这么答」的旁证，不是作品。代价是
+   * 重启后历史轮次没有痕迹，界面必须把「本次运行之前没有记录」和「这一轮什么
+   * 都没命中」说成两句话——后者是有价值的信息，不能被前者吞掉。
    */
-  recalled: Record<number, { name: string; dirPath: string }[]>;
+  contextTrace: Record<number, TurnContextTrace>;
   /**
    * 这一场关掉了哪些子代理。**只减不增**——芯片关不出一个没绑模型的子代理来。
    *
@@ -204,6 +216,18 @@ interface RoleplayState {
   unread: Record<string, boolean>;
   /** 绑定的设定在会话开始后被改过。 */
   stale: Record<string, boolean>;
+  /**
+   * 每个 agent 的**首轮预估**：还没开口之前，下一次发送会带上多大的 system 层 /
+   * 绑定块 / 记忆块，以及哪些条目会常驻。
+   *
+   * 放在 store 级而不是 `LiveSession` 上，理由和 `stale` 一样：`checkBindings`
+   * 跑遍整个花名册，而没打开过的 agent 根本没有会话。**没有基线的 agent 也在
+   * 这里**——它恰恰是最需要预估的那个（见 `checkBindings` 的注释）。
+   *
+   * 不含检索：那取决于作者还没打出来的那句话。少一段已知的未知，好过多一段
+   * 编出来的确定。
+   */
+  preflight: Record<string, PreflightEstimate>;
   /**
    * 项目里所有的记忆区，含条目数和占用情况。绑定选择器读它。
    *
@@ -320,7 +344,7 @@ function emptySession(): LiveSession {
   return {
     turns: [], log: {}, history: null, meta: null, streaming: "", liveLog: [],
     usage: null, stalePaths: [], memory: [], memoryStale: false,
-    workspace: null, stopped: false, recalled: {}, disabledSubAgents: [], taskId: null,
+    workspace: null, stopped: false, contextTrace: {}, disabledSubAgents: [], taskId: null,
     contextVersion: 0, error: null, lastJob: null,
   };
 }
@@ -410,16 +434,39 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
   };
 
   /**
-   * 把「想起了…」记进会话。轮号 = 正在生成的这条回复的轮号：`send` 已经把作者
-   * 轮追加过了，所以是 `turns.length + 1`。prepare 期间 turns 不会变——pump 保证
-   * 同 agent 不并发跑，而 `send` 的追加发生在入队之前——所以这里算和检索那一刻
-   * 算是同一个数。
+   * 把这一轮的取材事实记进会话。轮号 = 正在生成的这条回复的轮号：`send` 已经把
+   * 作者轮追加过了，所以是 `turns.length + 1`。prepare 期间 turns 不会变——pump
+   * 保证同 agent 不并发跑，而 `send` 的追加发生在入队之前——所以这里算和检索那
+   * 一刻算是同一个数。
+   *
+   * **空的取材事实也记**（和 `noteRecalled` 那时的「没想起就不记」不同）：一轮
+   * 什么都没命中，和这一轮根本没有记录，是两件事。前者要显示成「0 条」，后者
+   * 要显示成「本次运行之前的轮次没有记录」，而只有「这个键在不在」分得清。
    */
-  const noteRecalled = (agentId: string, recalled: RecalledEntity[]) => {
-    if (!recalled.length) return;
+  /**
+   * 重算一个 agent 的首轮预估。
+   *
+   * `checkBindings` 会顺带刷新全部 agent 的，但它只在**知识库重扫**之后跑——
+   * 而改人设卡、改身份、手改 memory.md 都不会重扫知识库。这两条路（刷新绑定 /
+   * 刷新记忆）是作者显式改动静态上下文的入口，各自补一次。
+   */
+  const refreshPreflight = async (agentId: string) => {
+    const { projectPath } = get();
+    const agent = get().agents[agentId];
+    if (!projectPath || !agent) return;
+    const { useLoreStore } = await import("./loreStore");
+    const { preflight } = await inspectAgent({
+      projectPath, agent,
+      persona: agent.authorPersona ?? get().authorPersona,
+      loreIndex: useLoreStore.getState().index,
+    });
+    set((st) => ({ preflight: { ...st.preflight, [agentId]: preflight } }));
+  };
+
+  const noteTrace = (agentId: string, trace: TurnContextTrace) => {
     patchSession(agentId, (s) => ({
       ...s,
-      recalled: { ...s.recalled, [(s.turns.length || 0) + 1]: recalled },
+      contextTrace: { ...s.contextTrace, [(s.turns.length || 0) + 1]: trace },
     }));
   };
 
@@ -542,7 +589,14 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
             at: Date.now(),
           }),
         }));
-        noteRecalled(job.agentId, seeded.recalled);
+        noteTrace(job.agentId, {
+          // 常驻层：system 里的主角那份 + 绑定块里逐项的实况（含只写了标题的）。
+          resident: seeded.resident,
+          stalePaths: seeded.bound.stalePaths,
+          lore: seeded.report,
+          area: seeded.recall,
+          refs: namedRefs(loreIndex, job.refDirs),
+        });
       } else {
         // 排序（修对 → 压缩 → 刷新记忆块 → 条目注入 → 区检索 → 提问）住在
         // lib（prepareContinuedHistory），这里只剩状态：历史/事件/记事本/
@@ -571,7 +625,25 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           ...(cont.memoryRecords ? { memory: cont.memoryRecords, memoryStale: false } : {}),
         }));
         if (cont.summaryToSave) void saveSummary(projectPath, job.agentId, cont.summaryToSave);
-        noteRecalled(job.agentId, cont.recalled);
+        // 常驻层这一轮没有重算——它只在播种和「刷新绑定」时变。沿用上一轮的那
+        // 份，而不是留空：作者翻到第 12 轮，绑定条目当时确实在上下文里。
+        //
+        // 上一轮也没有的情形是**重启**：`session.json` 把 wire 历史接了回来，而
+        // 取材事实只在内存里，于是一段活得好好的会话会从此每一轮都报「零常驻」。
+        // 这时退回配置推出来的那一份（`preflight`，`select` 时已经算好）。它是
+        // **推断而不是实测**——作者如果在两次运行之间改了绑定却没刷新，配置和
+        // 块里的内容会不一致；但那种不一致正是 `stale` 那条提示在管的事，而
+        // 「什么都不显示」在任何情况下都更糟。
+        const prevTrace = get().sessions[job.agentId]?.contextTrace ?? {};
+        const turnNos = Object.keys(prevTrace).map(Number);
+        const lastTrace = turnNos.length ? prevTrace[Math.max(...turnNos)] : undefined;
+        noteTrace(job.agentId, {
+          resident: lastTrace?.resident ?? get().preflight[job.agentId]?.resident ?? [],
+          stalePaths: get().sessions[job.agentId]?.stalePaths ?? [],
+          lore: cont.loreReport,
+          area: cont.recall,
+          refs: namedRefs(loreIndex, job.refDirs),
+        });
       }
 
       // 到这里这一问已经在 history 里了。往后任何一步失败，重试都必须走上面
@@ -810,6 +882,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
     aborts: {},
     unread: {},
     stale: {},
+    preflight: {},
     areas: [],
 
     load: async (projectPath) => {
@@ -862,7 +935,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       set({
         projectPath: null, loaded: false, rosterError: null, order: [], agents: {},
         authorPersona: NO_PERSONA, sessions: {}, activeAgentId: null,
-        running: [], queue: [], aborts: {}, unread: {}, stale: {},
+        running: [], queue: [], aborts: {}, unread: {}, stale: {}, preflight: {},
       });
     },
 
@@ -1313,10 +1386,10 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
           ...s,
           turns: kept,
           log: Object.fromEntries(Object.entries(s.log).filter(([k]) => Number(k) < turnIndex)),
-          // recalled 也按轮号截：留着的话，被撤销轮号上的「想起了…」痕迹会错挂
-          // 到重写后同轮号的新对话上。
-          recalled: Object.fromEntries(
-            Object.entries(s.recalled).filter(([k]) => Number(k) < turnIndex),
+          // 取材事实也按轮号截：留着的话，被撤销轮号上的痕迹会错挂到重写后同
+          // 轮号的新对话上——那是一条看起来完全正常、内容却属于另一段对话的记录。
+          contextTrace: Object.fromEntries(
+            Object.entries(s.contextTrace).filter(([k]) => Number(k) < turnIndex),
           ),
           history: null,
           meta: null,
@@ -1418,6 +1491,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       patchSession(agentId, (s) => ({
         ...s, stalePaths: bound.stalePaths, contextVersion: s.contextVersion + 1,
       }));
+      void refreshPreflight(agentId);
       void persistRoster();
     },
 
@@ -1436,6 +1510,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       patchSession(agentId, (s) => ({
         ...s, memory: doc.records, memoryStale: false, contextVersion: s.contextVersion + 1,
       }));
+      void refreshPreflight(agentId);
     },
 
     addMemory: async (agentId, rec) => {
@@ -1510,13 +1585,17 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
      * 花名册里，所以刚打开应用、一个会话都没打开时，攒了十个角色的项目也能立刻
      * 看出哪几个的设定变过——那正是最需要这条提示的时刻。
      *
-     * 没有基线的 agent（还没开过口）被跳过：它没有任何已经烘进上下文的旧内容，
-     * 下一次发送就是新的，标成「已更新」是在报一件没发生的事。
-     *
      * 每次比对要读绑定条目的正文——知识库索引里只有元数据，特征正文不在其中。
      * 没有为此加一层「先比元数据签名、不同再读文件」的快路：绑定通常是个位数
      * 条目、agent 通常是个位数个，而这个函数只在知识库重扫之后跑一次；先加缓存
      * 层，等于为一个还没量到的问题增加一处会和真相不同步的状态。
+     *
+     * **顺带刷新每个 agent 的首轮预估**（`preflight`）。读的是同一组文件，所以
+     * 是白捡的；而它的**适用范围比比对宽**：没有基线的 agent（还没开过口）被
+     * 排除在「设定已更新」之外——它没有任何已经烘进上下文的旧内容，标成「已更新」
+     * 是在报一件没发生的事（05 §2.6）——可它恰恰是最需要预估的那一个，因为上下文
+     * 构成条这时只画得出工具 schema。所以这里的跳过**只跳过 `stale` 那半边**，
+     * 早先那句 `if (contextHash === null) return null` 会把预估一起吞掉。
      */
     checkBindings: async () => {
       const { projectPath, order } = get();
@@ -1525,33 +1604,35 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       const loreIndex = useLoreStore.getState().index;
 
       const next: Record<string, boolean> = {};
+      const preflight: Record<string, PreflightEstimate> = {};
       const stalePaths: Record<string, string[]> = {};
-      // 并发而不是逐个 await：每个 agent 现在要读绑定条目 + 主角条目 + 人设卡，
+      // 并发而不是逐个 await：每个 agent 要读绑定条目 + 主角条目 + 人设卡 + 记忆，
       // 攒了十几个角色的项目串起来就是几十次往返，而它们之间毫无依赖。
       const globalPersona = get().authorPersona;
       const rows = await Promise.all(order.map(async (id) => {
         const agent = get().agents[id];
-        if (!agent || agent.contextHash === null) return null;
-        const [bound, statics] = await Promise.all([
-          buildBoundContent(loreIndex, agent.boundPaths),
-          loadStaticContext(projectPath, agent),
-        ]);
-        const sig = contextSignature({
-          agent,
+        if (!agent) return null;
+        const { signature, preflight: pre } = await inspectAgent({
+          projectPath, agent, loreIndex,
           persona: agent.authorPersona ?? globalPersona,
-          personaCard: statics.personaCard,
-          primaryText: statics.primaryText,
-          loreIndex,
-          boundText: bound.text,
         });
-        return { id, stale: hashText(sig) !== agent.contextHash, stalePaths: bound.stalePaths };
+        return {
+          id,
+          preflight: pre,
+          // 没有基线 = 不参与比对，但预估照给。
+          stale: agent.contextHash === null ? null : hashText(signature) !== agent.contextHash,
+        };
       }));
       for (const row of rows) {
         if (!row) continue;
-        next[row.id] = row.stale;
-        stalePaths[row.id] = row.stalePaths;
+        if (row.stale !== null) next[row.id] = row.stale;
+        preflight[row.id] = row.preflight;
+        stalePaths[row.id] = row.preflight.stalePaths;
       }
-      set((st) => ({ stale: { ...st.stale, ...next } }));
+      set((st) => ({
+        stale: { ...st.stale, ...next },
+        preflight: { ...st.preflight, ...preflight },
+      }));
       for (const [id, paths] of Object.entries(stalePaths)) {
         if (get().sessions[id]) patchSession(id, (s) => ({ ...s, stalePaths: paths }));
       }

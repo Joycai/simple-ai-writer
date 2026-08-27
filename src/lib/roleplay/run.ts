@@ -25,13 +25,16 @@ import { readEntityFile } from "../lore/entity";
 import type { LoreIndex } from "../lore/model";
 import { areaEntities, scanArea } from "./area";
 import {
-  contextSignature, recordInlinedRefs, refreshMemoryBlock, seedRoleplayHistory,
-  type BoundContent, type RoleplaySessionMeta,
+  blockSizes, buildBoundContent, contextSignature, recordInlinedRefs, refreshMemoryBlock,
+  seedRoleplayHistory, type BoundContent, type RoleplaySessionMeta,
 } from "./context";
 import type { ConversationReader } from "./conversationTools";
 import { loadMemoryDoc } from "./memory";
 import type { AuthorPersona, MemoryRecord, RoleplayAgent, SceneTurn } from "./model";
 import { loadPersonaCard, loadSummary, memoryPath, transcriptPath } from "./store";
+import {
+  primaryPiece, residentPieces, type PreflightEstimate, type ResidentPiece,
+} from "./trace";
 import { loadTranscript } from "./transcript";
 
 // ─── 静态上下文 ──────────────────────────────────────────────────────────────
@@ -57,6 +60,48 @@ export async function loadStaticContext(
     try { primaryText = await readEntityFile(agent.primaryDirPath, "index.md"); } catch { /* 同上 */ }
   }
   return { primaryText, personaCard: await loadPersonaCard(projectPath, agent.id) };
+}
+
+/**
+ * 一个 agent 的**静态**上下文全貌：下一次发送会带上什么，以及「设定变没变」的
+ * 那个签名。
+ *
+ * 两件事一次读完，是因为它们读的是同一组文件（绑定条目正文 + 主角条目 + 人设卡
+ * + 记忆），而这个函数会被 `checkBindings` 对每个 agent 各跑一次。分成两个函数
+ * 就是把每次知识库重扫的磁盘往返翻倍，去换一个没人需要的分离。
+ *
+ * **签名的适用范围比预估窄**：没有基线的 agent（还没开过口）不参与「设定已更新」
+ * 的比对——它没有任何已经烘进上下文的旧内容，标成「已更新」是在报一件没发生的
+ * 事（05 §2.6）。但它**恰恰是最需要预估的那一个**：上下文构成条这时只画得出工具
+ * schema。所以调用方拿走 `signature` 时要自己判断，拿走 `preflight` 时不必。
+ */
+export async function inspectAgent(opts: {
+  projectPath: string;
+  agent: RoleplayAgent;
+  persona: AuthorPersona;
+  loreIndex: LoreIndex;
+}): Promise<{ signature: string; preflight: PreflightEstimate }> {
+  const { projectPath, agent, persona, loreIndex } = opts;
+  const [bound, statics, memoryDoc] = await Promise.all([
+    buildBoundContent(loreIndex, agent.boundPaths),
+    loadStaticContext(projectPath, agent),
+    loadMemoryDoc(memoryPath(projectPath, agent.id)),
+  ]);
+  const system = {
+    agent, persona, personaCard: statics.personaCard,
+    primaryText: statics.primaryText, loreIndex,
+  };
+  return {
+    signature: contextSignature({ ...system, boundText: bound.text }),
+    preflight: {
+      ...blockSizes({ system, boundText: bound.text, memory: memoryDoc.records }),
+      resident: residentPieces(
+        primaryPiece(loreIndex, agent.primaryDirPath, statics.primaryText),
+        bound.pieces,
+      ),
+      stalePaths: bound.stalePaths,
+    },
+  };
 }
 
 // ─── 角色回看自己这一场的通道 ────────────────────────────────────────────────
@@ -93,10 +138,7 @@ export function selectPriorTurns(turns: readonly SceneTurn[]): readonly SceneTur
 
 // ─── 记忆区检索 ──────────────────────────────────────────────────────────────
 
-export interface RecalledEntity {
-  name: string;
-  dirPath: string;
-}
+
 
 /**
  * 记忆区：第二路检索，**独立成块**，插在 `history[insertIndex]`。
@@ -112,9 +154,11 @@ export interface RecalledEntity {
  * 会话（也包括每次重启后的重播种）的第一问永远想不起任何旧事——而转场后的
  * 第一句恰恰是最需要「想起旧事」的时刻。
  *
- * 返回想起的条目（稿面上那道「想起了…」痕迹的数据），`[]` = 没想起任何事
- * ——区为空、没命中、或读不出来。读不出来不该毁掉这一轮：角色少想起几件事，
- * 比这一句话发不出去好。
+ * 返回**整份检索报告**，不只是想起的条目名。稿面上那道「想起了…」痕迹只要
+ * 名字，而取材条要回答的是「为什么是这几条」——命中的层、激活它的关键字、
+ * 命中了却没进去的和原因，全在报告里，丢掉就再也算不回来。`null` = 什么都
+ * 没想起（区为空、没命中、或读不出来）。读不出来不该毁掉这一轮：角色少想起
+ * 几件事，比这一句话发不出去好。
  */
 export async function injectAreaRecall(opts: {
   projectPath: string;
@@ -126,9 +170,9 @@ export async function injectAreaRecall(opts: {
   meta: RoleplaySessionMeta;
   insertIndex: number;
   budgetChars: number;
-}): Promise<RecalledEntity[]> {
+}): Promise<LoreActivationReport | null> {
   const { projectPath, areaId, matchText, history, meta, insertIndex, budgetChars } = opts;
-  if (!areaId) return [];
+  if (!areaId) return null;
   try {
     const areaIndex = await scanArea(projectPath, areaId);
     const picked = await selectLore(
@@ -137,7 +181,7 @@ export async function injectAreaRecall(opts: {
       // 天然不会和项目条目撞车。
       { excludeDirs: excludeDirsFor(meta, areaIndex) },
     );
-    if (!picked.text) return [];
+    if (!picked.text) return null;
     const label = i18n.t("roleplay.section.recall", { defaultValue: "记忆" });
     const lead = i18n.t("roleplay.section.recallLead", {
       defaultValue: "以下是你想起来的旧事。这是**你记得的**，未必和别人说的一致。",
@@ -161,13 +205,10 @@ export async function injectAreaRecall(opts: {
       picked.report.entities.flatMap((r) => byDir.get(r.dirPath) ?? []),
       carrier,
     );
-    return picked.report.entities.map((r) => ({
-      name: byDir.get(r.dirPath)?.name ?? r.dirPath,
-      dirPath: r.dirPath,
-    }));
+    return picked.report;
   } catch (e) {
     console.warn("[roleplay] memory area not read:", e);
-    return [];
+    return null;
   }
 }
 
@@ -184,7 +225,16 @@ export interface SeedOutcome {
   memoryRecords: MemoryRecord[];
   /** 「设定已更新」的新基线，store 写进花名册。 */
   contextHash: string;
-  recalled: RecalledEntity[];
+  /** 本轮记忆区检索报告；`null` = 什么都没想起。 */
+  recall: LoreActivationReport | null;
+  /**
+   * 常驻层的实况：system 里的主角那一份 + 绑定块里逐项的真实形状。
+   *
+   * 在这里装配而不是把 `primaryText` 抛给 store 自己拼：主角正文住在 system
+   * 层这件事是**这个函数**刚刚做的决定，让调用方再推导一遍，就是把一条不变量
+   * 复制成两份。
+   */
+  resident: ResidentPiece[];
 }
 
 /**
@@ -236,7 +286,7 @@ export async function prepareSeededHistory(opts: {
     boundText: seeded.bound.text,
   }));
   // 播种出来的历史以这一问收尾——旧事插在它前面。
-  const recalled = await injectAreaRecall({
+  const recall = await injectAreaRecall({
     projectPath,
     areaId: agent.areaId,
     matchText: opts.matchText,
@@ -252,7 +302,11 @@ export async function prepareSeededHistory(opts: {
     report: seeded.report,
     memoryRecords: memoryDoc.records,
     contextHash,
-    recalled,
+    recall,
+    resident: residentPieces(
+      primaryPiece(loreIndex, agent.primaryDirPath, primaryText),
+      seeded.bound.pieces,
+    ),
   };
 }
 
@@ -269,7 +323,15 @@ export interface ContinueOutcome {
   summaryToSave: string | null;
   /** 压缩后从盘上重读的记忆；null = 没压缩，记事本不用动。 */
   memoryRecords: MemoryRecord[] | null;
-  recalled: RecalledEntity[];
+  /**
+   * 本轮的知识库检索报告。
+   *
+   * 在这个字段存在之前，`assembleTurnInjection` 的报告**在这个函数内部就被
+   * 丢掉了**——记完账就没人再看它一眼。于是第 2 轮往后的取材事实永远算不
+   * 回来：播种轮好歹还有 `SeedOutcome.report`，续跑轮什么都没有。
+   */
+  loreReport: LoreActivationReport | null;
+  recall: LoreActivationReport | null;
 }
 
 /**
@@ -353,7 +415,7 @@ export async function prepareContinuedHistory(opts: {
     recordInjectionsFromReport(meta, inj.loreReport, loreIndex, carrier);
   }
 
-  const recalled = await injectAreaRecall({
+  const recall = await injectAreaRecall({
     projectPath,
     areaId: agent.areaId,
     matchText: opts.matchText,
@@ -367,5 +429,11 @@ export async function prepareContinuedHistory(opts: {
   history.push(question);
   recordInlinedRefs(meta, loreIndex, opts.refDirs, question);
 
-  return { history, compactedEvent, summaryToSave, memoryRecords, recalled };
+  return {
+    history, compactedEvent, summaryToSave, memoryRecords,
+    // 报告无条件带出去，`inj.text` 为空时也带：一次「什么都没命中」和一次
+    // 「没跑过检索」在界面上是两句话，而只有这里分得清。
+    loreReport: inj.loreReport,
+    recall,
+  };
 }

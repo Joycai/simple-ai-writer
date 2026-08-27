@@ -40,6 +40,8 @@ import {
   RESTORE_REPLAY_CHAR_CAP,
   type AuthorPersona, type MemoryRecord, type RoleplayAgent, type SceneTurn,
 } from "./model";
+// 方向只有这一条：context → trace。trace 是纯类型 + 纯装配，不认识这个文件。
+import { indexByDir, type ResidentPiece } from "./trace";
 
 /** 绑定块最多多少字符。超出的绑定项被点名但不展开，模型可以自己去读。 */
 export const BOUND_BLOCK_CHAR_CAP = 12_000;
@@ -76,14 +78,35 @@ export interface BoundContent {
     /** 特征绑定且正文写进去了的那几段。 */
     facets: { dirPath: string; file: string }[];
   };
+  /**
+   * 同一件事的**显示**一侧：块里每一项各占多少字符，超预算的那些标出来。
+   *
+   * 和 `resident` 分开而不是合并，是因为两者的成员**不同**：`resident` 是给
+   * 账本的，只收真的装了正文的层；`pieces` 是给作者看的，必须**同时**列出
+   * 那些只写了一行标题的项——「它在清单里但正文没进去」正是作者最需要看见
+   * 的一种状态，而把它塞进 `resident` 会让检索不再去补它（那是这个字段的
+   * 注释里已经写死的一条）。
+   */
+  pieces: ResidentPiece[];
 }
 
-function indexByDir(loreIndex: LoreIndex): Map<string, LoreEntity> {
-  const byDir = new Map<string, LoreEntity>();
-  for (const entities of Object.values(loreIndex)) {
-    for (const e of entities ?? []) byDir.set(e.dirPath, e);
-  }
-  return byDir;
+/** 绑定块里的一项，按它在块里的真实形状描述。 */
+function piece(
+  entity: LoreEntity,
+  facetFile: string | null,
+  chars: number,
+  unexpanded: boolean,
+): ResidentPiece {
+  return {
+    kind: facetFile ? "bound-facet" : "bound-core",
+    name: entity.name,
+    dirPath: entity.dirPath,
+    facetTitle: facetFile
+      ? (entity.facets ?? []).find((f) => f.file === facetFile)?.title ?? facetFile
+      : null,
+    chars,
+    unexpanded,
+  };
 }
 
 /**
@@ -103,6 +126,7 @@ export async function buildBoundContent(
   const stalePaths: string[] = [];
   const coreDirs: string[] = [];
   const facets: { dirPath: string; file: string }[] = [];
+  const pieces: ResidentPiece[] = [];
   let used = 0;
 
   for (const raw of boundPaths) {
@@ -134,6 +158,9 @@ export async function buildBoundContent(
       // 越顶越高。
       used += placeholder.length;
       if (!entities.includes(entity)) entities.push(entity);
+      // 清单里有它，但正文没进去。`resident` 刻意不收它（那会让检索也不去补），
+      // 而作者恰恰需要看见这个状态。
+      pieces.push(piece(entity, pin.facetFile, title.length, true));
       continue;
     }
     const clipped = body.length <= room ? body : `${body.slice(0, room)}\n[……余下部分用 read_lore_entity 读。]`;
@@ -144,9 +171,13 @@ export async function buildBoundContent(
     // 而剩下的那点模型可以 read_lore_entity 自己去拿。
     if (pin.facetFile) facets.push({ dirPath: entity.dirPath, file: pin.facetFile });
     else coreDirs.push(entity.dirPath);
+    pieces.push(piece(entity, pin.facetFile, title.length + clipped.length, false));
   }
 
-  return { text: parts.join("\n\n"), entities, stalePaths, resident: { coreDirs, facets } };
+  return {
+    text: parts.join("\n\n"), entities, stalePaths, pieces,
+    resident: { coreDirs, facets },
+  };
 }
 
 /**
@@ -551,6 +582,32 @@ export async function seedRoleplayHistory(opts: {
   recordInlinedRefs(meta, opts.loreIndex, opts.refDirs, question);
 
   return { messages, meta, report, bound };
+}
+
+/**
+ * 首次请求会带上的三个固定块各有多大。
+ *
+ * 存在的理由和 `contextSignature` 一样：**估的那一份和真的那一份必须由同一段
+ * 代码算出来**。首轮之前 `session.history` 是 `null`，上下文构成条只画得出工具
+ * schema——而首次请求真正会带上的 system 层、绑定块、记忆块一样都还没装配。
+ * 在别处照着拼一遍块的形状，就是让一个「预估」在下次有人改动块头文案时安静
+ * 地失准，而它恰恰无法被任何测试发现（估值本来就不精确）。
+ *
+ * 三块都用真的构造函数，含 `【…】` 块头和那句引导语——少算四十个字符事小，
+ * 让两份代码各自演化事大。检索块不在这里：它取决于作者还没打出来的那句话。
+ */
+export function blockSizes(opts: {
+  system: SystemPromptInput;
+  boundText: string;
+  memory: readonly MemoryRecord[];
+}): { systemChars: number; boundChars: number; memoryChars: number } {
+  return {
+    systemChars: buildSystemPrompt(opts.system).length,
+    boundChars: boundBlockContent(opts.boundText).length,
+    memoryChars: memoryBlockContent(
+      renderMemoryBlock(opts.memory) || memoryNoneText(),
+    ).length,
+  };
 }
 
 function memoryBlockContent(body: string): string {

@@ -54,6 +54,7 @@ vi.mock("../../lore/entity", () => ({
 import type { StreamMessage } from "../../ai/types";
 import { createRoleplayMeta } from "../context";
 import { conversationReader, injectAreaRecall, loadStaticContext } from "../run";
+import { recalledNames } from "../trace";
 import { renderTranscript } from "../transcript";
 import type { SceneTurn } from "../model";
 
@@ -78,11 +79,11 @@ function baseArgs(history: StreamMessage[], meta = createRoleplayMeta()) {
 }
 
 describe("injectAreaRecall", () => {
-  it("returns [] and leaves history alone when the agent has no area", async () => {
+  it("returns null and leaves history alone when the agent has no area", async () => {
     files.clear(); withTower();
     const history: StreamMessage[] = [{ role: "system", content: "s" }];
     const out = await injectAreaRecall({ ...baseArgs(history), areaId: null });
-    expect(out).toEqual([]);
+    expect(out).toBeNull();
     expect(history).toHaveLength(1);
   });
 
@@ -94,7 +95,7 @@ describe("injectAreaRecall", () => {
     const args = { ...baseArgs(history), insertIndex: 1 };
     const out = await injectAreaRecall(args);
 
-    expect(out).toEqual([{ name: "塔", dirPath: areaFixture[0].dirPath }]);
+    expect(recalledNames(out)).toEqual([{ name: "塔", dirPath: areaFixture[0].dirPath }]);
     expect(history).toHaveLength(3);
     expect(history[0]).toBe(system);
     expect(history[2]).toBe(question);
@@ -131,9 +132,9 @@ describe("injectAreaRecall", () => {
     const history: StreamMessage[] = [{ role: "system", content: "s" }];
     const args = baseArgs(history);
     const first = await injectAreaRecall(args);
-    expect(first).toHaveLength(1);
+    expect(recalledNames(first)).toHaveLength(1);
     const again = await injectAreaRecall({ ...args, insertIndex: history.length });
-    expect(again).toEqual([]);
+    expect(again).toBeNull();
     expect(history).toHaveLength(2);
   });
 
@@ -143,7 +144,7 @@ describe("injectAreaRecall", () => {
     try {
       const history: StreamMessage[] = [{ role: "system", content: "s" }];
       const out = await injectAreaRecall(baseArgs(history));
-      expect(out).toEqual([]);
+      expect(out).toBeNull();
       expect(history).toHaveLength(1);
     } finally {
       scanThrows = false;
@@ -262,7 +263,7 @@ describe("prepareSeededHistory", () => {
     expect(out.meta.turnStarts).toContain(last);
     const carrier = out.history[out.history.length - 2];
     expect(String(carrier.content)).toContain("roleplay.section.recall");
-    expect(out.recalled).toEqual([{ name: "塔", dirPath: areaFixture[0].dirPath }]);
+    expect(recalledNames(out.recall)).toEqual([{ name: "塔", dirPath: areaFixture[0].dirPath }]);
     // 两个块无条件存在（第九轮 §9.1），在 system 之后。
     expect(out.meta.boundBlock).toBe(out.history[1]);
     expect(out.meta.memoryBlock).toBe(out.history[2]);
@@ -334,6 +335,55 @@ const contOpts = (
   ...over,
 });
 
+/** 项目知识库里的一个条目（区条目走 areaEntity，那是另一套 mock）。 */
+function loreEntity(name: string, dirPath: string) {
+  return {
+    id: name, category: "world", dirPath, name, aliases: [], summary: `${name}的一句话`,
+    collections: [], avatarPath: null, mdFiles: ["index.md"], images: [], facets: [],
+  };
+}
+
+/**
+ * 检索报告要活着走出这个函数。
+ *
+ * 在 `ContinueOutcome.loreReport` 存在之前，`assembleTurnInjection` 的报告**在
+ * 函数内部就被丢掉了**——记完账就没人再看它一眼。播种轮好歹还有
+ * `SeedOutcome.report`，续跑轮什么都没有，于是第 2 轮往后的取材事实永远算不
+ * 回来。这类故障不报错、不崩，只是让界面什么都答不上来。
+ */
+describe("prepareContinuedHistory 的报告出口", () => {
+  it("命中了什么，报告里就有什么", async () => {
+    seedFixture();
+    const tower = loreEntity("石塔", "/p/.ai-writer/lore/world/stone-tower");
+    files.set(`${tower.dirPath}/index.md`, "---\nname: 石塔\n---\n\n石塔在城北。");
+    const { history, meta } = await liveHistory(NO_AREA_AGENT);
+    history.push({ role: "assistant", content: "「还没有。」" });
+
+    const out = await prepareContinuedHistory(contOpts(history, meta, {
+      agent: NO_AREA_AGENT,
+      loreIndex: { world: [tower] },
+      wire: "「石塔那边现在怎么样了？」",
+      matchText: "「石塔那边现在怎么样了？」",
+    }));
+    expect(out.loreReport?.entities.map((e) => e.name)).toContain("石塔");
+  });
+
+  /**
+   * 「跑了检索但一条都没命中」和「这一轮根本没跑过检索」在界面上是两句话，
+   * 而只有 `null` 与非 `null` 分得清。所以报告**无条件**带出去，`inj.text`
+   * 为空时也带。
+   */
+  it("一条都没命中时报告仍然非空——那和「没跑过」是两回事", async () => {
+    seedFixture();
+    const { history, meta } = await liveHistory(NO_AREA_AGENT);
+    history.push({ role: "assistant", content: "「还没有。」" });
+
+    const out = await prepareContinuedHistory(contOpts(history, meta, { agent: NO_AREA_AGENT }));
+    expect(out.loreReport).not.toBeNull();
+    expect(out.loreReport?.entities).toEqual([]);
+  });
+});
+
 describe("prepareContinuedHistory", () => {
   it("short history: no compaction, question lands last as a turn start", async () => {
     seedFixture();
@@ -366,7 +416,7 @@ describe("prepareContinuedHistory", () => {
     const out = await prepareContinuedHistory(contOpts(history, meta, {
       matchText: "「阿箬呢？」", wire: "「阿箬呢？」",
     }));
-    expect(out.recalled).toEqual([{ name: "阿箬", dirPath: areaFixture[1].dirPath }]);
+    expect(recalledNames(out.recall)).toEqual([{ name: "阿箬", dirPath: areaFixture[1].dirPath }]);
     const carrier = out.history[out.history.length - 2];
     expect(String(carrier.content)).toContain("阿箬说过塔下的灯");
     // 载体挂在上一轮的尾部，不偷走轮起点。
