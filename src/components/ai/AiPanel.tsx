@@ -62,7 +62,10 @@ import {
 } from "../../lib/context/rag";
 import { clearTarget } from "../../lib/editor/aiTarget";
 import { flashInserted } from "../../lib/editor/insertFlash";
-import { parsePins, MAX_AUTO_LORE_ENTITIES, type LoreActivationReport } from "../../lib/context/loreSelect";
+import {
+  parsePins, MAX_AUTO_LORE_ENTITIES, MAX_REFS_PER_ENTITY, MAX_REF_ENTITIES,
+  type LoreActivationReport,
+} from "../../lib/context/loreSelect";
 import {
   indexCategories,
   loadPinnedLore,
@@ -612,6 +615,17 @@ function LoreReportSection({
               {e.reason === "pinned" && <Pin size={10} strokeWidth={1.8} />}
               {e.name}
               {e.aliases && <span className={styles.injectedAlias}>{e.aliases}</span>}
+              {/* Naming who cited it, not just that something did — the author's
+                  next move is to open that entry and edit the citation, and
+                  「被引用带入」 alone does not tell them which one. */}
+              {e.reason === "ref" && e.refFrom && (
+                <span className={styles.injectedAlias}>
+                  {t("ai.panel.loreRefFrom", {
+                    name: e.refFrom,
+                    defaultValue: "← 由〈{{name}}〉引用带入（仅摘要）",
+                  })}
+                </span>
+              )}
             </div>
             <div className={styles.chipRow}>
               {e.layers.filter((l) => l.kind !== "summary").map((l, i) => (
@@ -661,6 +675,24 @@ function LoreReportSection({
           that matched" — and the author goes off tuning an entry that was
           never in the running. Raising the budget does not buy these back
           (the cap counts entities, not chars), so no action link. */}
+      {report.refCapped ? (
+        <div className={styles.hintLine}>
+          {t("ai.panel.loreRefCapped", {
+            n: report.refCapped,
+            per: MAX_REFS_PER_ENTITY,
+            total: MAX_REF_ENTITIES,
+            defaultValue: "另有 {{n}} 条被引用的条目未列入（每条最多带 {{per}} 条、全局最多 {{total}} 条）",
+          })}
+        </div>
+      ) : null}
+      {report.refOutOfScope ? (
+        <div className={styles.hintLine}>
+          {t("ai.panel.loreRefOutOfScope", {
+            n: report.refOutOfScope,
+            defaultValue: "另有 {{n}} 条被引用的条目在取材范围之外，未带入",
+          })}
+        </div>
+      ) : null}
       {report.autoCapped ? (
         <div className={styles.hintLine}>
           {t("ai.panel.loreAutoCapped", {

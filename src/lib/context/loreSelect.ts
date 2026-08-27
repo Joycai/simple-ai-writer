@@ -37,6 +37,9 @@ import { FALLBACK_CHARS_PER_TOKEN } from "./budget";
 import { readFile } from "../fs/fileio";
 import { parseFrontmatter } from "../fs/markdown";
 import { inScope, type LoreEntity, type LoreFacet, type LoreIndex, type LoreScope } from "../lore";
+// Direct, not through the barrel: `citations` also carries the click delegate
+// and the DOM annotator, and the barrel is imported by node-side callers.
+import { resolveCitation } from "../lore/citations";
 
 /**
  * Default total budget for the 【知识库】 block, used only when no caller
@@ -62,6 +65,18 @@ export const MAX_AUTO_LORE_ENTITIES = 20;
  * and reported, exactly like a facet that didn't fit.
  */
 export const GALLERY_BUDGET_SHARE = 0.2;
+
+/**
+ * How many `[[lore:…]]` citations one selected entry may pull in, and how many
+ * the whole selection may.
+ *
+ * Both caps exist for the same reason `MAX_AUTO_LORE_ENTITIES` does, and the
+ * per-source one matters more: a well-linked hub entry ("魔法体系") can cite
+ * thirty things, and without a per-source limit one such entry decides the
+ * whole expansion. Overflow is reported, never silent.
+ */
+export const MAX_REFS_PER_ENTITY = 5;
+export const MAX_REF_ENTITIES = 10;
 
 /** Ceiling for one entity's gallery notice, including its label. */
 const GALLERY_ENTITY_CHARS = 180;
@@ -168,7 +183,23 @@ export interface LoreEntityReport {
    *  nickname is recognisable in the injection report. "" when it has none. */
   aliases: string;
   dirPath: string;
-  reason: "auto" | "pinned";
+  /**
+   * How this entry got in.
+   *
+   * `ref` is the demoted third channel: nothing in the text named it, but an
+   * entry that *was* named cites it with `[[lore:…]]`. It rides along with its
+   * summary and gallery line only — never its body, never its facets — so
+   * "the staff exists and here is what it is" costs one line instead of a
+   * chapter (docs/feature/lore/lore-retrieval-plan.md §4.2 ①).
+   */
+  reason: "auto" | "pinned" | "ref";
+  /**
+   * `ref` only: the entry whose prose cited this one.
+   *
+   * Same rule as a `group-lost` drop naming its winner — "被引用带入" without
+   * saying by whom is not something the author can act on.
+   */
+  refFrom?: string;
   /**
    * The name/alias occurrences that put this entity in the selection
    * (`reason: "auto"` only — a pin needs no justification).
@@ -203,6 +234,17 @@ export interface LoreActivationReport {
    * and let them judge.
    */
   autoCapped?: number;
+  /** Citations left out by {@link MAX_REFS_PER_ENTITY} / {@link MAX_REF_ENTITIES}. */
+  refCapped?: number;
+  /**
+   * Citations that resolved to an entry outside the active 取材范围.
+   *
+   * Counted rather than injected, and counted rather than hidden: the fence
+   * narrows *automatic discovery*, and following a citation is discovery. The
+   * author who set the fence still deserves to know it bit — otherwise
+   * "why didn't the staff come in" has two indistinguishable answers.
+   */
+  refOutOfScope?: number;
 }
 
 /**
@@ -333,7 +375,15 @@ export function galleryNotice(entity: LoreEntity): { text: string; count: number
 
 interface Selected {
   entity: LoreEntity;
-  reason: "auto" | "pinned";
+  reason: "auto" | "pinned" | "ref";
+  /**
+   * Brought in by a citation: summary + gallery only, no core, no facets.
+   *
+   * Deliberately a flag rather than `reason === "ref"` at every use site — the
+   * three layers that have to skip it are far from the selection code, and a
+   * string comparison there reads as a display concern.
+   */
+  refOnly: boolean;
   /** Summary + gallery + core are already in context; only facets may be added. */
   coreResident: boolean;
   /** Whether `## Name` has been charged against the budget yet. */
@@ -456,13 +506,17 @@ export async function selectLore(
   const autoDirs = kept.map((m) => m.dirPath);
   const autoTerms = new Map(kept.map((m) => [m.dirPath, m.terms]));
 
-  const selected: Selected[] = [...pinnedDirs, ...autoDirs].map((dir) => {
-    const entity = byDir.get(dir)!;
-    const reason: "auto" | "pinned" = pinnedFacetsByDir.has(dir) ? "pinned" : "auto";
+  const make = (
+    entity: LoreEntity,
+    reason: "auto" | "pinned" | "ref",
+    extra?: { refFrom?: string },
+  ): Selected => {
+    const dir = entity.dirPath;
     const coreResident = coreDone?.has(dir) ?? false;
     return {
       entity,
       reason,
+      refOnly: reason === "ref",
       coreResident,
       headerCharged: false,
       pinnedFacets: pinnedFacetsByDir.get(dir) ?? new Set(),
@@ -478,11 +532,62 @@ export async function selectLore(
         reason,
         ...(coreResident ? { coreResident: true } : {}),
         ...(autoTerms.has(dir) ? { matchedTerms: autoTerms.get(dir) } : {}),
+        ...(extra?.refFrom ? { refFrom: extra.refFrom } : {}),
         layers: [],
         droppedFacets: [],
       },
     };
-  });
+  };
+
+  const selected: Selected[] = [...pinnedDirs, ...autoDirs].map((dir) =>
+    make(byDir.get(dir)!, pinnedFacetsByDir.has(dir) ? "pinned" : "auto"));
+
+  // ── Citation expansion. The author writing `[[lore:星辉之杖]]` inside a
+  // character is an explicit statement that the two belong together, and it
+  // reaches the one case substring matching structurally cannot: the staff has
+  // not been written into the passage yet, because writing it is the job.
+  //
+  // Four rules, and each one is load-bearing:
+  //   • **one hop.** The staff cites 魔法结社, which cites 魔法体系, which cites
+  //     世界观 — two hops is "everything is related", which is the same as no
+  //     retrieval at all. Only entries selected by pin or by match expand.
+  //   • **demoted.** Appended *after* every matched entry, so the budget fill
+  //     can never let a citation displace something the text actually named.
+  //   • **fenced.** 取材范围 narrows automatic discovery, and following a
+  //     citation is discovery. (A pin is not: an author pinning an entry is
+  //     insisting, and it crosses the fence — that asymmetry is the fence's
+  //     whole definition.)
+  //   • **capped, and the overflow is reported.**
+  // See docs/feature/lore/lore-retrieval-plan.md §4.2.
+  let refCapped = 0;
+  let refOutOfScope = 0;
+  if (selected.length > 0) {
+    const inSelection = new Set(selected.map((s) => s.entity.dirPath));
+    const refs: Selected[] = [];
+    // Snapshot the sources first: `selected` is appended to below, and iterating
+    // it live is exactly how one hop turns into transitive closure.
+    for (const source of selected.slice()) {
+      let taken = 0;
+      for (const target of source.entity.refs ?? []) {
+        const cited = resolveCitation(target, loreIndex);
+        // Unresolvable targets are the renderer's problem (it marks them
+        // data-missing); silently skipping here keeps a typo from costing a
+        // slot in the cap.
+        if (!cited) continue;
+        if (inSelection.has(cited.dirPath)) continue;
+        // Already in the conversation on a layer that persists: adding it would
+        // be a duplicate, and it is not a drop worth reporting either — the
+        // model has the entry.
+        if (opts?.excludeDirs?.has(cited.dirPath) || coreDone?.has(cited.dirPath)) continue;
+        if (!inScope(cited, opts?.scope ?? null)) { refOutOfScope++; continue; }
+        if (taken >= MAX_REFS_PER_ENTITY || refs.length >= MAX_REF_ENTITIES) { refCapped++; continue; }
+        inSelection.add(cited.dirPath);
+        taken++;
+        refs.push(make(cited, "ref", { refFrom: source.entity.name }));
+      }
+    }
+    selected.push(...refs);
+  }
 
   let used = 0;
   const fits = (len: number) => used + len <= budgetChars;
@@ -498,6 +603,13 @@ export async function selectLore(
   // on the first facet that actually survives.
   for (const s of selected) {
     if (s.coreResident) continue;
+    // Citations are not part of the floor. The floor exists so an entity the
+    // text *named* never ends up contributing nothing at all; an entry nobody
+    // named contributing nothing is a correct outcome, not a failure — and
+    // since this layer ignores the cap, letting ten citations onto it would
+    // spend a matched entity's core on entries the author never mentioned.
+    // They get their own budget-checked pass, last (see below).
+    if (s.refOnly) continue;
     s.headerCharged = true;
     used += headerCost(s.entity);
     const summary = (s.entity.summary ?? "").trim();
@@ -522,6 +634,7 @@ export async function selectLore(
     // core-resident entity was given it when the core went in. Repeating it
     // would spend the gallery share on a line the model already has.
     if (s.coreResident) continue;
+    if (s.refOnly) continue; // same pass as their summaries, last
     const { text, count } = galleryNotice(s.entity);
     if (count === 0) continue;
     const cost = text.length + 1;
@@ -539,6 +652,7 @@ export async function selectLore(
   // Skipped entirely for a core-resident entity — that is what `coreDone` is.
   for (const s of selected) {
     if (s.coreResident) continue;
+    if (s.refOnly) continue; // cited, not named — a pointer, not a retelling
     const body = await readEntityBody(s.entity.dirPath);
     if (!body) continue;
     if (fits(body.length)) {
@@ -580,6 +694,11 @@ export async function selectLore(
   const candidates: Candidate[] = [];
 
   selected.forEach((s, entityIdx) => {
+    // Same rule as the core above, and it matters more here: a citation is a
+    // pointer to an entry, never an activation of its interior. Letting an
+    // `always` facet ride in on a citation would put a character's voice
+    // sample into a scene that merely mentions the weapon they carry.
+    if (s.refOnly) return;
     const active: Candidate[] = [];
     for (const facet of s.entity.facets ?? []) {
       const pinned = s.pinnedFacets.has(facet.file);
@@ -697,6 +816,46 @@ export async function selectLore(
     });
   }
 
+  // ── L3: cited entries. Dead last, and budget-checked at every line.
+  //
+  // Everything above was named by the text or pinned by the author. These were
+  // only pointed at, so they get what is left and no more — including the right
+  // to get nothing. That is the whole of the "a citation may never displace a
+  // match" rule: not a lower sort key, an actual last-in-line.
+  //
+  // Summary and gallery only. No core (see L1), no facets (see L2) — this is a
+  // pointer to an entry, and the model has `read_lore_entity` the moment it
+  // decides it wants the rest.
+  for (const s of selected) {
+    if (!s.refOnly || s.coreResident) continue;
+    const summary = (s.entity.summary ?? "").trim();
+    if (summary) {
+      const line = `> ${summary}`;
+      const cost = headerCost(s.entity) + line.length + 1;
+      if (fits(cost)) {
+        s.headerCharged = true;
+        s.summaryLine = line;
+        used += cost;
+        s.report.layers.push({ kind: "summary", chars: summary.length });
+      }
+    }
+    const { text, count } = galleryNotice(s.entity);
+    if (count === 0) continue;
+    const notice = text.length + 1;
+    // The header, if the summary above didn't already pay for it — a cited
+    // entry with no summary but a gallery is still worth one line.
+    const header = s.headerCharged ? 0 : headerCost(s.entity);
+    if (galleryUsed + notice > galleryCap || !fits(notice + header)) {
+      s.report.droppedImages = count;
+      continue;
+    }
+    s.galleryLine = text;
+    s.headerCharged = true;
+    galleryUsed += notice;
+    used += notice + header;
+    s.report.layers.push({ kind: "gallery", chars: text.length, count });
+  }
+
   // ── Assemble. Entities that ended up with no content at all (unreadable
   // index.md, no facets) are omitted from the text but stay in the report.
   const blocks: string[] = [];
@@ -718,6 +877,8 @@ export async function selectLore(
       budgetChars,
       usedChars: used,
       ...(autoCapped > 0 ? { autoCapped } : {}),
+      ...(refCapped > 0 ? { refCapped } : {}),
+      ...(refOutOfScope > 0 ? { refOutOfScope } : {}),
     },
   };
 }

@@ -325,7 +325,10 @@ export async function createLoreEntityTool(
   // new entity resolvable on one that cannot, or when the rescan fails.
   (ctx.loreIndex[category] ??= []).push({
     id: entityId, category, dirPath, name, aliases, summary, collections,
-    avatarPath: null, mdFiles: ["index.md"], images: [], facets: [],
+    // refs stays empty even if the body the model just wrote cites something:
+    // syncLore's rescan is what fills it, same as facets. Guessing here would
+    // be a second parser to keep in step with `readEntity`'s.
+    avatarPath: null, mdFiles: ["index.md"], images: [], facets: [], refs: [],
   });
   await syncLore(ctx);
   return {

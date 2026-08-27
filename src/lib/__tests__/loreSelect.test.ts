@@ -7,7 +7,9 @@ import {
   DEFAULT_LORE_BUDGET_CHARS,
   GALLERY_BUDGET_SHARE,
   MAX_AUTO_LORE_ENTITIES,
+  MAX_REFS_PER_ENTITY,
 } from "../context/loreSelect";
+import { collectCiteTargets } from "../lore/citations";
 import { parseFacetMeta, serializeFacetFrontmatter } from "../lore/entity";
 import type { LoreEntity, LoreFacet, LoreIndex } from "../lore";
 
@@ -619,5 +621,147 @@ describe("selectLore — 自动匹配上限", () => {
     expect(report.entities).toHaveLength(MAX_AUTO_LORE_ENTITIES);
     expect(report.autoCapped).toBeUndefined();
     expect(report.entities.find((e) => e.dirPath === pinned)?.reason).toBe("pinned");
+  });
+});
+
+describe("collectCiteTargets", () => {
+  it("收集全部 [[lore:…]] 目标，去重、保序、剥掉显示文字", () => {
+    expect(collectCiteTargets("她握着 [[lore:星辉之杖|那根杖]]，又想起 [[lore:魔法结社]]。再提一次 [[lore:星辉之杖]]。"))
+      .toEqual(["星辉之杖", "魔法结社"]);
+  });
+
+  it("与渲染器一致：body 里的单个 ] 合法，第一个 ]] 收口", () => {
+    // lib/fs/markdown 的 inline rule 用 indexOf("]]") 找收口，所以 [[lore:route]7]]
+    // 在正文里渲染成一个引用。两边扫描器不一致是看不见的——作者看到一个可点的
+    // 链接，却怎么也想不通那条为什么从不随行。
+    expect(collectCiteTargets("走到 [[lore:route]7]] 的尽头")).toEqual(["route]7"]);
+  });
+
+  it("不闭合的开括号和跨行的 body 都不算引用", () => {
+    expect(collectCiteTargets("[[lore:未闭合")).toEqual([]);
+    expect(collectCiteTargets("[[lore:跨\n行]]")).toEqual([]);
+  });
+
+  it("空目标不算引用", () => {
+    expect(collectCiteTargets("[[lore:]] [[lore:  |标签]]")).toEqual([]);
+  });
+});
+
+describe("selectLore — 引用扩展", () => {
+  const STAFF = "/proj/.ai-writer/lore/items/staff";
+  const GUILD = "/proj/.ai-writer/lore/items/guild";
+
+  /** Aria 引用星辉之杖；星辉之杖再引用魔法结社（用来验证只走一跳）。 */
+  function refIndex(): LoreIndex {
+    const index = makeIndex();
+    index.items = [
+      entity({ dirPath: STAFF, category: "items", name: "星辉之杖", summary: "变身时召唤的法杖" }),
+      entity({ dirPath: GUILD, category: "items", name: "魔法结社", summary: "掌管法杖的组织" }),
+    ];
+    index.characters[0].refs = ["星辉之杖"];
+    index.items[0].refs = ["魔法结社"];
+    files.set(STAFF + "/index.md", "杖身刻着星图。");
+    files.set(GUILD + "/index.md", "结社在旧城的地下。");
+    return index;
+  }
+
+  it("命中的条目所引用的条目跟着进来，但只给摘要", async () => {
+    const { text, report } = await selectLore("Aria walked in.", refIndex(), []);
+    expect(text).toContain("## 星辉之杖");
+    expect(text).toContain("变身时召唤的法杖");
+    // 正文不给——这是「提醒它存在」，不是「把它讲一遍」。
+    expect(text).not.toContain("杖身刻着星图。");
+    const staff = report.entities.find((e) => e.name === "星辉之杖")!;
+    expect(staff.reason).toBe("ref");
+    expect(staff.refFrom).toBe("Aria");
+    expect(staff.layers.map((l) => l.kind)).toEqual(["summary"]);
+  });
+
+  it("只走一跳：被引用条目自己的引用不再展开", async () => {
+    const { text, report } = await selectLore("Aria walked in.", refIndex(), []);
+    expect(text).not.toContain("魔法结社");
+    expect(report.entities.some((e) => e.name === "魔法结社")).toBe(false);
+  });
+
+  it("引用带入的条目不激活任何特征，连 always 的也不", async () => {
+    const index = refIndex();
+    index.items[0].facets = [facet({ file: "voice.md", title: "杖语", mode: "always" })];
+    files.set(STAFF + "/voice.md", "---\nfacet: 杖语\n---\n杖会低声说话。");
+    const { text } = await selectLore("Aria walked in.", index, []);
+    expect(text).not.toContain("杖会低声说话。");
+  });
+
+  it("引用排在直接命中之后：预算不够时先牺牲引用", async () => {
+    const index = refIndex();
+    // 只装得下 Aria 的头/摘要/正文，装不下杖。
+    const budget = "## Aria".length + 1 + "> 北境骑士团副团长".length + 1
+      + "Aria is a bard.".length + 1 + "Speaks tersely.".length + 12;
+    const { text, report } = await selectLore("Aria walked in.", index, [], budget);
+    expect(text).toContain("Aria is a bard.");
+    expect(text).not.toContain("变身时召唤的法杖");
+    // 仍然被选中、仍然出现在报告里——只是没贡献正文。
+    expect(report.entities.find((e) => e.name === "星辉之杖")?.layers).toEqual([]);
+  });
+
+  it("已经直接命中的条目不会被重复算成引用", async () => {
+    const { report } = await selectLore("Aria and 星辉之杖", refIndex(), []);
+    const staff = report.entities.filter((e) => e.name === "星辉之杖");
+    expect(staff).toHaveLength(1);
+    expect(staff[0].reason).toBe("auto");
+  });
+
+  it("取材范围挡得住引用，但挡不住置顶", async () => {
+    const index = refIndex();
+    index.characters[0].collections = ["卷一"];
+    index.items[0].collections = ["卷二"];
+    const fenced = await selectLore("Aria walked in.", index, [], undefined, { scope: "卷一" });
+    expect(fenced.text).not.toContain("变身时召唤的法杖");
+    expect(fenced.report.refOutOfScope).toBe(1);
+    // 围栏挡的是自动发现；作者亲手置顶的照进不误。
+    const pinned = await selectLore("Aria walked in.", index, [STAFF], undefined, { scope: "卷一" });
+    expect(pinned.text).toContain("变身时召唤的法杖");
+    expect(pinned.report.entities.find((e) => e.name === "星辉之杖")?.reason).toBe("pinned");
+  });
+
+  it("已在上下文里的条目不重复带入，也不记成丢弃", async () => {
+    const { report } = await selectLore("Aria walked in.", refIndex(), [], undefined, {
+      excludeDirs: new Set([STAFF]),
+    });
+    expect(report.entities.some((e) => e.name === "星辉之杖")).toBe(false);
+    expect(report.refCapped).toBeUndefined();
+    expect(report.refOutOfScope).toBeUndefined();
+  });
+
+  it("单条的引用数有上限，超出的条数报出来", async () => {
+    const index = makeIndex();
+    index.items = [];
+    const targets: string[] = [];
+    for (let i = 0; i < MAX_REFS_PER_ENTITY + 3; i++) {
+      const dir = "/proj/.ai-writer/lore/items/i" + i;
+      index.items.push(entity({ dirPath: dir, category: "items", name: "道具" + i, summary: "s" + i }));
+      files.set(dir + "/index.md", "body");
+      targets.push("道具" + i);
+    }
+    index.characters[0].refs = targets;
+    const { report } = await selectLore("Aria walked in.", index, []);
+    expect(report.entities.filter((e) => e.reason === "ref")).toHaveLength(MAX_REFS_PER_ENTITY);
+    expect(report.refCapped).toBe(3);
+  });
+
+  it("解析不出来的引用目标静默跳过，不占名额", async () => {
+    const index = refIndex();
+    index.characters[0].refs = ["打错的名字", "星辉之杖"];
+    const { report } = await selectLore("Aria walked in.", index, []);
+    expect(report.entities.some((e) => e.name === "星辉之杖")).toBe(true);
+    expect(report.refCapped).toBeUndefined();
+  });
+
+  it("没有引用的知识库行为与从前完全一致", async () => {
+    const before = await selectLore("Aria rode to battle.", makeIndex(), []);
+    const index = makeIndex();
+    index.characters[0].refs = [];
+    const after = await selectLore("Aria rode to battle.", index, []);
+    expect(after.text).toBe(before.text);
+    expect(after.report).toEqual(before.report);
   });
 });

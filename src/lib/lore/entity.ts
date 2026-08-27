@@ -5,6 +5,7 @@
 
 import { fileExists, makeDir, readDir, readFile, renamePath, writeBinaryFile, writeFile } from "../fs/fileio";
 import { parseFrontmatter } from "../fs/markdown";
+import { collectCiteTargets } from "./citations";
 import { parseImagesMd } from "./gallery";
 import { loreCategories } from "../profile/active";
 import { addCollection, normalizeCollections, removeCollection, renameCollection, sameCollection } from "./collections";
@@ -119,9 +120,15 @@ async function readEntity(
   let dict = false;
   let collections: string[] = [];
 
+  const citeTargets: string[] = [];
   try {
     const raw = await readFile(indexPath);
-    const { data } = parseFrontmatter(raw);
+    const { data, content } = parseFrontmatter(raw);
+    // The `[[lore:…]]` targets this entry declares. Harvested here rather than
+    // in a pass of its own because the bytes are already in hand — the scan
+    // reads index.md and every facet file anyway, so the reference graph costs
+    // one string scan and no extra IO (docs/feature/lore/lore-retrieval-plan.md §4.1).
+    citeTargets.push(...collectCiteTargets(content));
     if (typeof data.name === "string") name = data.name;
     if (Array.isArray(data.aliases)) aliases = data.aliases as string[];
     if (typeof data.summary === "string") summary = data.summary;
@@ -182,12 +189,26 @@ async function readEntity(
       const raw = await readFile(`${dirPath}/${file}`);
       const facet = parseFacetMeta(raw, file);
       if (facet) facets.push(facet);
+      // Facet prose cites too — an outfit naming the weapon it is worn with is
+      // the same declaration as one in index.md, and the expansion is
+      // entity-level either way.
+      citeTargets.push(...collectCiteTargets(parseFrontmatter(raw).content));
     } catch {
       // unreadable file — treat as inert attachment
     }
   }
 
-  return { id, category, dirPath, name, aliases, summary, dict, collections, avatarPath, mdFiles, images, facets };
+  // Deduplicated across index.md and every facet: the same target cited twice
+  // is one edge, and `refs` is read once per selection.
+  const seen = new Set<string>();
+  const refs = citeTargets.filter((t) => {
+    const key = t.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  return { id, category, dirPath, name, aliases, summary, dict, collections, avatarPath, mdFiles, images, facets, refs };
 }
 
 /**

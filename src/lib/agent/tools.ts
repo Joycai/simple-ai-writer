@@ -147,13 +147,29 @@ export async function readLoreEntity(
     };
   }
 
+  // Mutual-exclusion groups, from the scan. The injection path enforces them
+  // (lib/context/loreSelect picks one member per group); this path cannot,
+  // because reading an entity means reading all of it. So say so: without the
+  // note the model gets both of a character's outfits with equal standing and
+  // writes a scene that mixes them — which reads as a model failure and is
+  // actually a missing sentence. Result text, not schema: it costs nothing
+  // until the tool is actually called.
+  const groupOf = new Map<string, string>();
+  for (const f of found.facets ?? []) {
+    if (f.group) groupOf.set(f.file, f.group);
+  }
+
   const filenames = found.mdFiles?.length ? found.mdFiles : ["index.md"];
   const parts: string[] = [];
   for (const filename of filenames) {
     if (filename === "images.md") continue; // surfaced separately as the gallery block
     try {
       const content = await readEntityFile(found.dirPath, filename);
-      parts.push(`=== ${filename} ===\n${content}`);
+      const group = groupOf.get(filename);
+      const note = group
+        ? ` [group: ${group} — mutually exclusive with the other facets in this group; use only one of them in any single scene]`
+        : "";
+      parts.push(`=== ${filename} ===${note}\n${content}`);
     } catch {
       // skip unreadable files silently
     }
