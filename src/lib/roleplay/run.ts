@@ -31,7 +31,10 @@ import {
 import type { ConversationReader } from "./conversationTools";
 import { loadMemoryDoc } from "./memory";
 import type { AuthorPersona, MemoryRecord, RoleplayAgent, SceneTurn } from "./model";
-import { loadPersonaCard, loadSummary, memoryPath, transcriptPath } from "./store";
+import {
+  listArchives, loadPersonaCard, loadSummary, memoryPath, transcriptPath,
+} from "./store";
+import { currentSceneNo } from "./scene";
 import {
   primaryPiece, residentPieces, type PreflightEstimate, type ResidentPiece,
 } from "./trace";
@@ -116,8 +119,21 @@ export function conversationReader(
   agentId: string,
 ): ConversationReader {
   return {
-    read: async () => {
-      const { turns, renumbered } = await loadTranscript(transcriptPath(projectPath, agentId));
+    scenes: async () => {
+      // 目录每次重读：作者可能刚在别处转了一场。**作废的在这里就被滤掉**，
+      // 所以工具层根本拿不到它们的场号。
+      const list = await listArchives(projectPath, agentId);
+      return {
+        current: currentSceneNo(list.map((a) => a.no)),
+        past: list.filter((a) => !a.discarded).map((a) => a.no),
+      };
+    },
+    read: async (scene) => {
+      const hit = (await listArchives(projectPath, agentId))
+        .find((a) => a.no === scene && !a.discarded);
+      const { turns, renumbered } = await loadTranscript(
+        hit ? hit.path : transcriptPath(projectPath, agentId),
+      );
       return { turns, renumbered };
     },
   };

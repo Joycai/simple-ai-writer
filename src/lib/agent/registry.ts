@@ -2665,11 +2665,15 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "search_conversation",
         description:
-          "Search everything said so far in THIS conversation — your own record of it, including the early parts you no longer remember word for word. Returns matching turn numbers with the matching line; read_conversation then gives you what was actually said around them. This is how you answer \"do you remember what we said back then\" instead of guessing. Matching is literal and case-insensitive: search a distinctive word that was actually spoken.",
+          "Search your own record of every scene you have been through with this person — the one you are in now and the earlier ones — including the parts you no longer remember word for word. Returns matching turn numbers with the matching line; read_conversation then gives you what was actually said around them. This is how you answer \"do you remember what we said back then\" instead of guessing. Matching is literal and case-insensitive: search a distinctive word that was actually spoken.",
         parameters: {
           type: "object",
           properties: {
             query: { type: "string", description: "Text to look for, as it was said" },
+            scene: {
+              type: "integer",
+              description: "Restrict to one of your scenes. Omit to search all of them, which is usually what you want.",
+            },
           },
           required: ["query"],
         },
@@ -2685,10 +2689,14 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "read_conversation",
         description:
-          "Read this conversation back, verbatim, by turn number — use it on the turns search_conversation pointed at. Omit from/to to re-read the most recent turns. The recent ones are usually still fresh in your mind; what this is for is the earlier stretch that has faded.",
+          "Read your own record back, verbatim, by turn number — use it on the turns search_conversation pointed at. Omit scene to read the one you are in now; pass an earlier scene number to read a scene that has already ended. Omit from/to to re-read the most recent turns. The recent ones are usually still fresh in your mind; what this is for is the stretch that has faded. Turn numbers restart in every scene, so a turn number only means something together with its scene.",
         parameters: {
           type: "object",
           properties: {
+            scene: {
+              type: "integer",
+              description: "Which of your scenes. Omit for the one you are in now.",
+            },
             from: { type: "integer", description: "First turn number (1-based, inclusive). Omit for the latest window." },
             to: { type: "integer", description: "Last turn number (inclusive)." },
           },

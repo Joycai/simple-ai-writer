@@ -162,13 +162,14 @@ describe("conversationReader", () => {
     files.set(path, renderTranscript("rp-abc-0001", [turn(1, "author", "「你还在等？」")]));
     const reader = conversationReader("/p", "rp-abc-0001");
 
-    const first = await reader.read();
+    const { current } = await reader.scenes();
+    const first = await reader.read(current);
     expect(first.turns).toHaveLength(1);
 
     files.set(path, renderTranscript("rp-abc-0001", [
       turn(1, "author", "「你还在等？」"), turn(2, "agent", "「等谁不重要。」"),
     ]));
-    const second = await reader.read();
+    const second = await reader.read(current);
     expect(second.turns).toHaveLength(2);
     expect(second.turns[1].speaker).toBe("agent");
   });

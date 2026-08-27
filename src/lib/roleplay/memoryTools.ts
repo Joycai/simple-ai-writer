@@ -33,7 +33,11 @@ function isKind(v: unknown): v is MemoryKind {
 function describe(r: MemoryRecord): string {
   const subject = r.subject ? ` (${r.subject})` : "";
   const body = r.body ? ` — ${r.body.replace(/\s*\n\s*/g, " ")}` : "";
-  return `[${r.id}] ${kindLabel(r.kind)}${subject} · ${r.status} · turn ${r.turn}: ${r.title}${body}`;
+  // 场号让一条记忆变成一个**可以回去读的坐标**：轮号在每一场里各数各的，单给
+  // 「turn 14」指不到任何东西。0 = 不详（这个字段出现之前记的），那就不写——
+  // 写一个 `scene 0` 只会让模型拿着它去 read_conversation 然后扑空。
+  const where = r.scene > 0 ? `scene ${r.scene} · turn ${r.turn}` : `turn ${r.turn}`;
+  return `[${r.id}] ${kindLabel(r.kind)}${subject} · ${r.status} · ${where}: ${r.title}${body}`;
 }
 
 interface RememberArgs {
