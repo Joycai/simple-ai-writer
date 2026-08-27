@@ -248,13 +248,20 @@ export function ContextBar({ context, preflight, onCompact, compacting }: {
   const label = (key: ContextSegmentKey) =>
     t(SEGMENT_LABELS[key].key, { defaultValue: SEGMENT_LABELS[key].fallback, entry: terms.entry });
 
+  // Two reasons to warn, one appearance: crossing the fold line, or outgrowing
+  // the ceiling with no fold available to fix it. They used to be one flag; the
+  // sentence the legend prints is what forced them apart.
+  const warned = context.willCompact || context.over;
+
   return (
     <div className={styles.ctx}>
       <button
         // Warned once past the *mark* the bar itself draws (COMPACT_TRIGGER),
         // not once packed full — a bar standing beyond its own line while
-        // looking calm was the state 2c exists to fix.
-        className={`${styles.ctxBar} ${context.willCompact ? styles.ctxBarWarn : ""}`}
+        // looking calm was the state 2c exists to fix. `over` is the second
+        // reason to warn and no longer implies the first: past the ceiling with
+        // nothing foldable, compaction is not coming to help.
+        className={`${styles.ctxBar} ${warned ? styles.ctxBarWarn : ""}`}
         onClick={() => setShowLegend((v) => !v)}
         aria-expanded={showLegend}
         title={t("ai.chat.ctxToggle", { defaultValue: "展开/收起上下文构成" })}
@@ -280,18 +287,23 @@ export function ContextBar({ context, preflight, onCompact, compacting }: {
           />
         )}
         {/* Where compaction starts folding the oldest turns — the one threshold
-            on this bar the author can actually anticipate. */}
-        <span
-          className={styles.ctxMark}
-          style={{ left: `${context.compactMarkerPct}%` }}
-          title={t("ai.chat.ctxCompactAt", { defaultValue: "超过此处将折叠最早的对话" })}
-        />
+            on this bar the author can actually anticipate. Absent when there is
+            nothing to fold (fresh session, or fewer turns than planFold keeps
+            verbatim): a line promising a consequence that cannot happen is the
+            same lie the pre-flight bar drops it to avoid. */}
+        {context.compactMarkerPct !== null && (
+          <span
+            className={styles.ctxMark}
+            style={{ left: `${context.compactMarkerPct}%` }}
+            title={t("ai.chat.ctxCompactAt", { defaultValue: "超过此处将折叠最早的对话" })}
+          />
+        )}
       </button>
 
       <div className={styles.ctxMeter}>
         <span>
           {t("ai.chat.contextMeter", { defaultValue: "上下文" })}{" "}
-          <span className={context.willCompact ? styles.ctxCountWarn : undefined}>
+          <span className={warned ? styles.ctxCountWarn : undefined}>
             {formatTokens(context.usedTokens)}
           </span>{" "}
           / {formatTokens(context.ceilingTokens)} tk
@@ -338,15 +350,25 @@ export function ContextBar({ context, preflight, onCompact, compacting }: {
         </div>
       )}
 
-      {/* What crossing the mark means, said once and only to someone looking:
-          the legend is the bar's opened state, and permanent chrome above the
-          input costs message space on every session (see the legend note). */}
-      {showLegend && context.willCompact && (
+      {/* What the warning means, said once and only to someone looking: the
+          legend is the bar's opened state, and permanent chrome above the input
+          costs message space on every session (see the legend note).
+
+          Two different pieces of news, so two sentences. 「下一轮会归纳」 is only
+          true while there is something to fold; when the request is simply past
+          the ceiling and compaction can't reach it, saying that would send the
+          author to wait for a fold that never comes. */}
+      {showLegend && warned && (
         <div className={styles.ctxExplain}>
-          {t("ai.chat.ctxCompactExplain", {
-            defaultValue:
-              "越过竖线后，下一轮把最早的对话归纳成摘要——执行日志里出现「已归纳前 N 轮对话」，摘要段随之变宽。",
-          })}
+          {context.willCompact
+            ? t("ai.chat.ctxCompactExplain", {
+                defaultValue:
+                  "越过竖线后，下一轮把最早的对话归纳成摘要——执行日志里出现「已归纳前 N 轮对话」，摘要段随之变宽。",
+              })
+            : t("ai.chat.ctxOverExplain", {
+                defaultValue:
+                  "已经超出这次请求的上限，而归纳帮不上忙——最近两轮对话不会被折叠，工具说明也撤不掉。可以调高「窗口占用」，或开一个新会话。",
+              })}
         </div>
       )}
     </div>

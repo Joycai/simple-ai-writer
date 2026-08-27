@@ -58,7 +58,6 @@ import { splitMentions } from "../../lib/agent/mentionText";
 import {
   computeContextBreakdown,
 } from "../../lib/agent/contextBreakdown";
-import { MIN_KEEP_TURNS, segmentHistory } from "../../lib/agent/compact";
 import { AGENT_ASSIST_PRESET } from "../../lib/agent/presets";
 import { plannedToolTokens } from "../../lib/agent/toolCost";
 import { inputCeilingFor } from "../../lib/context/budget";
@@ -555,16 +554,12 @@ export function AgentChat() {
     [chatHistory, chatMeta, chatContextVersion, toolTokens, activeModel?.contextSize, contextUtilization],
   );
   // The 立即归纳 affordance appears only when a forced fold would actually fold
-  // something — planFold keeps the last MIN_KEEP_TURNS verbatim no matter what,
-  // so fewer turns than that means a button that does nothing.
-  const canCompact = useMemo(
-    () =>
-      !!chatHistory && !!chatMeta
-      && segmentHistory(chatHistory, chatMeta).turns.length > MIN_KEEP_TURNS,
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- same in-place
-    // mutation story as the breakdown above: the version is the real trigger.
-    [chatHistory, chatMeta, chatContextVersion],
-  );
+  // something. Read off the breakdown rather than re-derived here: this used to
+  // test the turn count alone and miss planFold's *other* refusal (a
+  // non-positive message ceiling), so on a model whose tool schemas fill the
+  // window the button showed up and then silently did nothing. The bar needs
+  // the same answer for its own line — two copies of one rule is how they drift.
+  const canCompact = context.canFold;
 
   return (
     <div className={styles.chat}>
