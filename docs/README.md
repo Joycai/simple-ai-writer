@@ -68,6 +68,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [parallel-tools-plan.md](feature/agent/parallel-tools-plan.md) | `shipped` | 同轮工具调用并行执行：read 层（含 delegate）并发、写工具作屏障；history 顺序/配对不变量与 writeChain 的重入禁令 |
 | [writer-subagent-plan.md](feature/agent/writer-subagent-plan.md) | `shipped` `unverified` | 写手子代理：收尾成文交给作者另绑的模型（`finishPolicy: "handoff"`），开关式硬委托、交接单、引用式写入；只做对话助手，roleplay/AiPanel 不在第一期 |
 | [writer-subagent-ui-brief.md](feature/agent/writer-subagent-ui-brief.md) | `shipped` | 写手的 UI 任务书 + 设计稿回来之后：署名是左槽里那道**长度等于写手正文**的 1px 线；工单搬出执行日志；写手不是第七个芯片 |
+| [context-meters.md](feature/agent/context-meters.md) | `living` | 三条上下文计量条（生成的分配条 / 助手+扮演的构成条 / 预估态）：哪些必须一致（颜色语汇）、哪些故意不一致（控件 vs 读数），以及各自已知未做的部分 |
 
 ### feature/lore/ — the knowledge base
 
