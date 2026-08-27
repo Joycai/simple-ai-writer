@@ -47,7 +47,7 @@ const AGENT_ID = "rp-test-0001";
 
 function fixture(): { session: RoleplaySession; history: StreamMessage[] } {
   const system: StreamMessage = { role: "system", content: "人设。" };
-  const bound: StreamMessage = { role: "user", content: "【绑定设定】\n## 沈砚\n正文" };
+  const bound: StreamMessage = { role: "user", content: "【绑定条目】\n## 沈砚\n正文" };
   const memory: StreamMessage = { role: "user", content: "【记忆】\n- (m1) 雪停了一起去塔下" };
   const q: StreamMessage = { role: "user", content: "「你还在等？」" };
   const a: StreamMessage = { role: "assistant", content: "「等谁不重要。」" };

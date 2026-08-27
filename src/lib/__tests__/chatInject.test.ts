@@ -129,7 +129,7 @@ describe("injection ledger", () => {
 
   it("keeps injection carriers out of the summarizer input", () => {
     const meta = createSessionMeta();
-    const injMsg: StreamMessage = { role: "user", content: "【设定资料】Aria is a bard." };
+    const injMsg: StreamMessage = { role: "user", content: "【知识库】Aria is a bard." };
     recordInjections(meta, [makeIndex().characters[0]], injMsg);
     const start: StreamMessage = { role: "user", content: "q1" };
     noteTurnStart(meta, start);
@@ -143,7 +143,7 @@ describe("injection ledger", () => {
     );
     expect(rendered).toContain("[user] q1");
     expect(rendered).toContain("[assistant] a1");
-    expect(rendered).not.toContain("设定资料");
+    expect(rendered).not.toContain("Aria is a bard");
   });
 });
 
@@ -297,8 +297,8 @@ describe("injection ledger — 分层", () => {
   it("正文和特征各记各的 carrier，互不覆盖", () => {
     const meta = createSessionMeta();
     const idx = facetIndex();
-    const bound: StreamMessage = { role: "user", content: "【绑定设定】…" };
-    const turn: StreamMessage = { role: "user", content: "【设定资料】…" };
+    const bound: StreamMessage = { role: "user", content: "【绑定条目】…" };
+    const turn: StreamMessage = { role: "user", content: "【知识库】…" };
 
     recordInjection(meta, ariaOf(idx), bound, { core: true });
     recordInjection(meta, ariaOf(idx), turn, { facets: ["outfit.md"] });
@@ -315,8 +315,8 @@ describe("injection ledger — 分层", () => {
   it("clearCarrier 只忘掉这一条消息带来的东西", () => {
     const meta = createSessionMeta();
     const idx = facetIndex();
-    const bound: StreamMessage = { role: "user", content: "【绑定设定】…" };
-    const turn: StreamMessage = { role: "user", content: "【设定资料】…" };
+    const bound: StreamMessage = { role: "user", content: "【绑定条目】…" };
+    const turn: StreamMessage = { role: "user", content: "【知识库】…" };
     recordInjection(meta, ariaOf(idx), bound, { core: true, facets: ["outfit.md"] });
     recordInjection(meta, ariaOf(idx), turn, { facets: ["voice.md"] });
 
@@ -336,7 +336,7 @@ describe("injection ledger — 分层", () => {
     const idx = facetIndex();
     // 正文住在 prelude 的一个常驻块里（扮演的绑定块就是这个形状），
     // 特征挂在某一轮的尾部。
-    const bound: StreamMessage = { role: "user", content: "【绑定设定】Aria is a bard." };
+    const bound: StreamMessage = { role: "user", content: "【绑定条目】Aria is a bard." };
     recordInjection(meta, ariaOf(idx), bound, { core: true });
 
     const history: StreamMessage[] = [{ role: "system", content: "sys" }, bound];

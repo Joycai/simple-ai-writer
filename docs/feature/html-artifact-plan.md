@@ -41,7 +41,7 @@
 blob iframe 没有文档基址，解析不了项目相对路径。两头解决：
 
 - **预览侧**：喂给 iframe 前，把相对 `<img src>` 重写为 data URL——`export.ts` 的 `inlineImages`/`imageToDataUrl` 就是干这个的，直接复用同一条路。
-- **生成侧**：引导（D7）要求产出**单文件自包含** HTML——inline CSS/JS、图示用 inline SVG、不依赖外链 CDN（离线也要能看；iframe 内的网络请求不受主 CSP 限制，有网时外链能通，但不作为依赖）。图片资源如需外置，沿用文档插图既有约定（`assets/<文档名>/` + 相对链接，`lib/image/assets.ts`）。
+- **生成侧**：引导（D7）要求产出**单文件自包含** HTML——inline CSS/JS、图示用 inline SVG、不依赖外链 CDN（离线也要能看；iframe 内的网络请求不受主 CSP 限制，有网时外链能通，但不作为依赖）。图片资源如需外置，沿用文档配图既有约定（`assets/<文档名>/` + 相对链接，`lib/image/assets.ts`）。
 
 ### D4 审批卡就是预览
 

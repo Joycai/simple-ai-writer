@@ -24,7 +24,7 @@
 
 > **交接单该多大，取决于写手需要多少才写得好，不取决于省多少 token。**
 
-搞混这条的后果是具体的：为了"看起来像个子代理"去压缩交接单，然后拿到一段没有文风、把作者的设定转述过一道的正文——而文风正是启用写手的唯一理由。
+搞混这条的后果是具体的：为了"看起来像个子代理"去压缩交接单，然后拿到一段没有文风、把作者的条目转述过一道的正文——而文风正是启用写手的唯一理由。
 
 ---
 
@@ -52,7 +52,7 @@
 
 ```
 主跑（对话助手，AGENT_ASSIST_PRESET，作者的主模型）
-  │  正常工具循环：读文件 / 查设定 / delegate(search|vision|longread|pdf)
+  │  正常工具循环：读文件 / 查知识库 / delegate(search|vision|longread|pdf)
   │  材料按老规矩落进 .ai-writer/tasks/<taskId>/notes/*.md
   │  handoff 工具**从第 1 轮起就在工具集里**（为什么不是收尾轮，见 §3.1）
   │
@@ -114,11 +114,11 @@ deliver_to 存在时，runtime 用写手的输出组一张 Proposal 交给审批
 interface HandoffBrief {
   /** 这一轮要交付什么。一句话。 */
   goal: string;
-  /** 不可违背的东西：设定、情节点、作者刚提的要求。 */
+  /** 不可违背的东西：条目、情节点、作者刚提的要求。 */
   constraints: string[];
   /** 文风锚点：从前文/知识库里摘的**原文片段**，不是形容词。 */
   styleAnchors: string[];
-  /** 材料索引：note / 文档 / 词条路径。写手自己去读。 */
+  /** 材料索引：note / 文档 / 条目路径。写手自己去读。 */
   notes: string[];
   /** 交付形态：正文 / 分析 / 直接回答。决定写手的成文指令走哪一支。 */
   kind: "prose" | "analysis" | "answer";
@@ -149,7 +149,7 @@ interface HandoffBrief {
 - 不需要新的 Proposal 类型——它们的 `content` 本来就是字符串，区别只在于**这一次没有任何模型打过这些字**；
 - 卡上显示的是真实内容，作者审的是要落盘的那段字，不是「插入笔记 X」这种没法审的东西；
 - `propose_edit` 那条路的 occurrence 校验一字不改（`EditProposal.occurrences` 仍在提案构造时记录）；
-- **写手确实没写盘**，是 runtime 写的 —— 所以 `subagent-plan.md` §5 的「子代理不写正文、不写设定」不用推翻。
+- **写手确实没写盘**，是 runtime 写的 —— 所以 `subagent-plan.md` §5 的「子代理不写正文、不写知识库」不用推翻。
 
 ---
 

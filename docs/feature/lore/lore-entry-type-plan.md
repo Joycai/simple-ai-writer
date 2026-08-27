@@ -270,7 +270,7 @@ mode: auto
 | **1** | **槽位骨架**：`FacetSlot`/`ImageSlot` 类型与校验、`ResolvedCategory` 并集合并、facet frontmatter `slot` 解析/序列化、写入路径保值、novel 包的槽位表、单测。零 UI、零行为变化。 | ✅ 已实现 |
 | **2** | **孤儿分类**（§5）+ §7 坑 1 的那批循环 + `lib/lore/categories.ts` 的两问分家。 | ✅ 已实现 |
 | **3** | **创作侧接线**：`lib/lore/slots.ts`（`slotStatuses` / `unslottedFacets` / `slotChecklistText` / `withSlotDefaults`）；拆分整理与「生成新特征」的 prompt 带清单；`split_facet`、`update_facet_meta`、`draft_lore_facet` 加 `slot`（**不带 enum**，改为执行时按分类校验——见 §3.4）；`read_lore_entity` 多一段槽位清单；ttrpg/copy/wechat/bid 的槽位表。 | ✅ 已实现 |
-| **4** | **UI 呈现**（设计稿屏 19–23）：详情页特征栏按槽位分段、缺口邀请、类型行与覆盖小结、特征编辑的归属槽位与预填、配图按 imageSlot 分段（含 `images.md` 的 `slot:` 行）、降级条与「启用 <包>」。落地口径记在 [`design-system.md`](../../reference/design-system.md) → 设定集设计语言 → 类型系统。 | ✅ 已实现 |
+| **4** | **UI 呈现**（设计稿屏 19–23）：详情页特征栏按槽位分段、缺口邀请、类型行与覆盖小结、特征编辑的归属槽位与预填、配图按 imageSlot 分段（含 `images.md` 的 `slot:` 行）、降级条与「启用 <包>」。落地口径记在 [`design-system.md`](../../reference/design-system.md) → 知识库设计语言 → 类型系统。 | ✅ 已实现 |
 | 5 | `subtypes`（§2 末）——等真有一个能力包需要再说。 | 不做 |
 
 其余内置包的槽位表放到第 3 期、和消费它的提示词一起给：第 1 期只有 novel 有槽位，
@@ -357,7 +357,7 @@ mode: auto
 ```
 
 设计稿落地后，把口径（尤其是"设计稿要求但数据模型没接"的部分）记进
-[`design-system.md`](../../reference/design-system.md) → 设定集设计语言，与前四轮 v1~v4 的记法一致——
+[`design-system.md`](../../reference/design-system.md) → 知识库设计语言，与前四轮 v1~v4 的记法一致——
 提交信息和代码注释不算记录。
 
 ---

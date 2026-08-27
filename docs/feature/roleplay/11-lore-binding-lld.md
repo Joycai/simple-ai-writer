@@ -1,6 +1,6 @@
 # 绑定与自动注入的粒度 · 详细设计（LLD）
 
-> 状态：**shipped** —— 四片 PR 全部实现（§6 每格记着与设计的出入）。背景：第十轮审查确认，扮演 agent 的「绑定词条」语义与作者的
+> 状态：**shipped** —— 四片 PR 全部实现（§6 每格记着与设计的出入）。背景：第十轮审查确认，扮演 agent 的「绑定条目」语义与作者的
 > 预期存在 6 个 gap，其中两个是**粒度错配**（账本按条目、期望按特征），一个是
 > **匹配门槛**（特征要先命中条目名才可能激活，而扮演里作者对着角色说话不写名字）。
 > 本文档是把现状改成 §1 那两条预期的执行设计。
@@ -224,9 +224,9 @@ recordInjectionsFromReport(meta, report, byDir, seedBlock);
 **续跑**（`run.ts` `prepareContinuedHistory`）：`assembleTurnInjection` 增
 `pinPaths?: string[]`（默认 `[]`，主聊天不传）并透传 `coreDone` / `excludeFacets`；
 扮演传 `[primaryDirPath]`。记账改用 `recordInjectionsFromReport`。**排序一个字
-不动**——修对配对 → 压缩 → 刷新记忆块 → 词条注入 → 区检索 → 提问。
+不动**——修对配对 → 压缩 → 刷新记忆块 → 条目注入 → 区检索 → 提问。
 
-**刷新设定**（`refreshBoundBlock`）：重建文本之前先 `clearCarrier(meta, boundBlock)`，
+**刷新绑定**（`refreshBoundBlock`）：重建文本之前先 `clearCarrier(meta, boundBlock)`，
 再按新的 `resident` 记账。少了这一步，取消勾选的那段特征会永远被当成常驻，从此
 既不在块里也不会被检索——和 G6 同一种死法。
 
@@ -365,7 +365,7 @@ pin 主角）、`lib/roleplay/run.ts`（三个入参 + `refDirs`）、`stores/ro
 - c. 作者只写 key、不写角色名 → 主角的特征仍被注入（P2）
 - d. 主角的正文不出现在任何逐轮注入块里（P1）
 - e. 超预算占位的绑定项不算常驻，会被自动检索补上（G6）
-- f. 取消一段特征绑定 + 刷新设定 → 该段回到自动池
+- f. 取消一段特征绑定 + 刷新绑定 → 该段回到自动池
 - g. `@` 一个非常驻条目 → 本轮注入块里没有它，下一轮也不重复（P6）
 - h. 压缩之后：折叠掉的特征可重新注入，绑定块承载的不重复（P7）
 
@@ -376,11 +376,11 @@ pin 主角）、`lib/roleplay/run.ts`（三个入参 + `refDirs`）、`stores/ro
 1. `BoundContent.resident.facets` 是 `{ dirPath, file }[]`，不是设计里写的 `dir#file`
    字符串数组。账本要的就是这两半，拼成一个 key 再拆回来，等于把「dirPath 里含 `#`」
    那个坑重新挖一遍——而 `buildBoundContent` 刚刚才把它解析清楚。
-2. 多了一个导出的 `recordPrimaryCore`，而且**「刷新设定」里也要调一次**：system 层
+2. 多了一个导出的 `recordPrimaryCore`，而且**「刷新绑定」里也要调一次**：system 层
    刚被重写，主角条目的指纹也跟着换了，不重记这一笔，检索就会把刚写进 system 的
    同一份正文再注入一遍。设计里只写了播种那一次。
 3. **记账顺序**：主角（carrier = system 消息）排在绑定块之后，于是同一条目两处都有
-   正文时 system 那份赢。它活得更久——「刷新设定」清的是绑定块那一版的账，system
+   正文时 system 那份赢。它活得更久——「刷新绑定」清的是绑定块那一版的账，system
    里的那份不该跟着失效。这条写进了代码注释和一条测试。
 4. `contributingEntities`（PR-2 加的）也接到了扮演的 `context-seeded` 事件上：主角
    每轮都在候选里，正文常驻、这轮没有新特征时它什么都不贡献，计数不该把它算进去。
@@ -391,7 +391,7 @@ pin 主角）、`lib/roleplay/run.ts`（三个入参 + `refDirs`）、`stores/ro
 
 **迁移**（新增的一条风险）：升级前就存在的 `session.json`，账本里绑定条目仍记着
 「整条 core」。所以「勾一段 = 整条失联」在**那些正在进行的会话**里会保留到作者点一次
-「刷新设定」（`clearCarrier` + 按新语义重记）或开新的一场。新会话立即生效。
+「刷新绑定」（`clearCarrier` + 按新语义重记）或开新的一场。新会话立即生效。
 
 验收状态：`pnpm vitest run` 190 文件 2599 例全绿（新增 11 例），`pnpm build` 通过。
 
@@ -431,11 +431,11 @@ pin 主角）、`lib/roleplay/run.ts`（三个入参 + `refDirs`）、`stores/ro
 
 | 风险 | 处理 |
 |---|---|
-| 剥离主角裸 pin 会改变 `boundText` → `contextHash` 变 → 全体 agent 亮一次「设定已更新」 | **接受**。点一次刷新即可，而「静默重算基线」要区分两种变化，复杂度不值 |
+| 剥离主角裸 pin 会改变 `boundText` → `contextHash` 变 → 全体 agent 亮一次「绑定内容已更新」 | **接受**。点一次刷新即可，而「静默重算基线」要区分两种变化，复杂度不值 |
 | 旧 `session.json` 的三元组账本 | §4.3 的兼容读；最坏是某条目多注入一次 |
 | 主角 pin 之后，`mode:"always"` 的特征在每次折叠后会重新注入 | 按设计——`always` 就是作者要求它恒在 |
 | 主角条目正文读不出来（条目被删）时，system 层为空而绑定块又不再兜底 | 既有行为不变：`buildSystemPrompt` 本来就跳过空的那一节，UI 报「主角条目已删除」。不新增兜底 |
-| 主角条目正文被作者改了 → `entityVersion` 变 → core 会被自动重注入一份 | **接受且是想要的**：一份新正文进上下文，胜过角色继续按旧设定说话；此时「设定已更新」也正亮着 |
+| 主角条目正文被作者改了 → `entityVersion` 变 → core 会被自动重注入一份 | **接受且是想要的**：一份新正文进上下文，胜过角色继续按旧条目说话；此时「绑定内容已更新」也正亮着 |
 
 ## 8. 被否掉的方案
 
@@ -444,7 +444,7 @@ pin 主角）、`lib/roleplay/run.ts`（三个入参 + `refDirs`）、`stores/ro
 都要改——省下的只有 `compact.ts` 那几十行。
 
 **B. 不记账本，从 agent 配置推导常驻集。** 否：配置和绑定块之间有一个「作者改了
-绑定但还没点刷新设定」的窗口。推导集会把一段**其实不在任何一层里**的特征当成
+绑定但还没点刷新绑定」的窗口。推导集会把一段**其实不在任何一层里**的特征当成
 常驻，于是它彻底消失——正是 G6 那种死法，只不过换了个入口。账本记的是块里
 实际有什么。
 

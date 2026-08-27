@@ -1972,7 +1972,8 @@ export function parseProfile(data: unknown, fallback: WorkspaceProfile): ParsedP
   // the full set they want") but wasn't: an unnamed section does not come out
   // blank, it falls through `sectionLabel` to `DEFAULT_SECTION_LABELS` — which
   // *are* the novel labels. So `{"id":"ttrpg","sections":{"outline":"…"}}`
-  // prompted a TTRPG author with 【上一章结尾】/【设定资料】, exactly the
+  // prompted a TTRPG author with 【上一章结尾】/【设定资料】 (that lore block
+  // has since been renamed 【知识库】), exactly the
   // mislabelling profiles exist to prevent. An author who does want the shared
   // default for one section can still say so by setting it explicitly.
   const sections: Partial<Record<SectionId, string>> = { ...fallback.sections };

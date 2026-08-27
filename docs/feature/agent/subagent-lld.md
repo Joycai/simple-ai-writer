@@ -157,9 +157,9 @@ export interface TaskWorkspaceHandle {
 
 ## 步骤 <!-- ai-writer-task-steps -->
 
-- [x] 检索东境三大家族设定
+- [x] 检索东境三大家族条目
 - [/] 分析初代家主与禁忌魔法关联
-- [ ] 起草补充设定并更新词条
+- [ ] 起草补充条目并更新条目
 
 ## 进度记录 <!-- ai-writer-task-log -->
 
@@ -825,7 +825,7 @@ export async function executeDelegate(call: ToolCall, ctx: ToolContext): Promise
         // 子代理自己的多模态能力，与主模型无关。
         multimodal: conn.model.type === "multimodal",
         // 沙箱：没有审批通道、没有方案门、没有工作区句柄 ⇒ 它既写不了正文
-        // 与设定，也调不动 delegate（后者还被 SUB_PRESETS 的工具集挡了一道）。
+        // 与知识库，也调不动 delegate（后者还被 SUB_PRESETS 的工具集挡了一道）。
         taskWorkspace: undefined,
         signal: ctx.signal,
       },
@@ -910,7 +910,7 @@ UI 的灰显判断需要的是另一个概念，单独给：
 
 ```ts
 // lib/agent/subagent.ts
-/** 这条链路上有没有人能看图 —— 只给 UI 用（设定库的「AI 描述」按钮等）。 */
+/** 这条链路上有没有人能看图 —— 只给 UI 用（知识库的「AI 描述」按钮等）。 */
 export function chainCanSeeImages(mainModel: Model, subs: Record<SubAgentKind, SubAgentConfig>): boolean {
   return mainModel.type === "multimodal" || (subs.vision.enabled && !!subs.vision.modelId);
 }
@@ -918,7 +918,7 @@ export function chainCanSeeImages(mainModel: Model, subs: Record<SubAgentKind, S
 
 ### 6.1.1 直接 UI 动作也走同一条优先级（PR-D 定）
 
-设定库的「AI 描述」这类**不经 agent 的直接动作**，同样是 **子代理可用就优先子代理**
+知识库的「AI 描述」这类**不经 agent 的直接动作**，同样是 **子代理可用就优先子代理**
 （`resolveVisionConn`）。理由不是省事，是让开关只有一个含义：`routeTools` 已经在
 工具集层把图片工具从主模型手里拿走了，若 UI 动作反过来优先主模型，同一个开关在
 两处表示相反的事——而且对一个用多模态主模型的作者，那个开关将永远不产生任何效果。
@@ -1272,4 +1272,4 @@ CI 是 PR 门禁（`docs/reference/ci.md`：tsc + vitest + build，Rust fmt/clip
 - **不替代 `PlanGate`**：那是授权，这是记忆。`task.md` 的步骤**不授予任何写权限**。
 - **不做通用多智能体框架**：无子代理间通信、无并行编排、无递归。
 - **工作区不进文档树**，不参与导出。
-- **子代理不写正文、不写设定、不生图。**
+- **子代理不写正文、不写知识库、不生图。**

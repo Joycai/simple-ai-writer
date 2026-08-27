@@ -13,7 +13,7 @@
  *   3. **Recent-window floor** — the verbatim text immediately before the anchor.
  *      Prose the model can actually quote outranks any summary of it, so this
  *      layer keeps its historical size before a recap layer gets anything.
- *   4. **Lore** (`【设定资料】`) — the author's explicit setting, honored as-is
+ *   4. **Lore** (`【知识库】`) — the author's explicit setting, honored as-is
  *      and only trimmed if the window physically can't hold it.
  *   5. **Leftover** — first *grows* the recent window (again: verbatim beats
  *      summary), then splits by weight between `【前情提要】` (this document's
@@ -156,7 +156,7 @@ export interface ContextBudgetInput {
   maxOutputTokens?: number;
   /** Share of the window one request may use (see CONTEXT_UTILIZATION_*). */
   utilization: number;
-  /** The author's 【设定资料】 setting, in tokens. */
+  /** The author's 【知识库】 setting, in tokens. */
   loreBudgetTokens: number;
   /** Chars the request spends before any planned layer — see fixedContextChars. */
   fixedChars: number;

@@ -7,9 +7,9 @@
 > 本文保留作为设计决策记录。方向 2（状态跟踪）与方向 4/6（递归激活/向量兜底）
 > 未实现，见 [`lore-granularity-research.md`](lore-granularity-research.md)。
 >
-> **一处措辞已过时**：本文里的注入块名 **【设定资料】** 在能力包上线时改成了
-> **【知识库】**（`DEFAULT_SECTION_LABELS.knowledge`，且是唯一一个能力包不许
-> 改名的块）。正文按当时的原样保留——搜代码时搜 `sectionLabel("knowledge")`。
+> **一处改过名**：本文写作时注入块叫 **【设定资料】**，能力包上线时改成了
+> **【知识库】**（`DEFAULT_SECTION_LABELS.knowledge`，唯一一个能力包不许改名
+> 的块）。正文已按今天的名字更新——搜代码时搜 `sectionLabel("knowledge")`。
 > 词表见 [`terminology.md`](../../reference/terminology.md)。
 >
 > 目标：把 lore 的注入粒度从"实体"降到"特征（facet）"，配合分层预算注入（调研方向 1+3），并用 AI 自动拆解已有条目降低作者负担。涵盖数据模型、注入引擎、AI 拆解流程、UI 更新、迁移兼容与分期计划。
@@ -104,7 +104,7 @@ export interface LoreEntity {
 
 ```ts
 export interface LoreSelection {
-  text: string;                 // 拼好的【设定资料】内容
+  text: string;                 // 拼好的【知识库】内容
   report: LoreActivationReport; // 给 UI 的透明度报告
 }
 
@@ -138,7 +138,7 @@ export async function selectLore(
    - L2 facets——对每个 `mode:auto` 的 facet 做二级匹配：`keys` 任一出现在 matchTarget 中（不区分大小写子串，与实体匹配同规则）；`mode:always` 直接视为命中；`mode:manual` 只认 pin。
 3. **互斥组裁决**：同实体同 `group` 的命中 facet，只保留 `priority` 最高者（同分取文件名字典序，保证确定性）；被 pin 的 facet 无条件赢得其组。落选者进 `droppedFacets(group-lost)`。
 4. **预算填充**：按 `实体顺序 × priority` 将命中 facet 依次装入剩余预算；装不下的进 `droppedFacets(budget)`，**绝不截断 facet 正文**（facet 本身就短，截断只会产生半句话；装不下就整个不装，报告说明）。
-5. **输出格式**（`bundleToMessages` 的【设定资料】块内）：
+5. **输出格式**（`bundleToMessages` 的【知识库】块内）：
 
 ```
 ◆ 爱丽丝（人物）
@@ -211,7 +211,7 @@ Apply             写文件 + 备份 + rescan
 
 系统提示词要点（新增 `ai.instructions.loreSplit` 到 i18n 两语言 + prompts 默认模板）：
 
-- **逐字搬运，禁止改写**——拆解是重组不是润色，作者的措辞就是设定本身；
+- **逐字搬运，禁止改写**——拆解是重组不是润色，作者的措辞就是内容本身；
 - 核心卡保留：身份、外貌不变项、性格内核、说话方式，目标 ≤500 字；
 - 互斥识别：服装/形态/阶段性状态等"同一时刻只有一个为真"的内容 → 同 `group`；
 - keys 生成规则：包含正文中的指称词 + 场景触发词 + 常见同义词（如"战甲"补"铠甲、披挂"），4–8 个；避免过泛词（"她""走"）——每个 key 要过"出现即几乎必相关"测试；
@@ -279,13 +279,13 @@ facet frontmatter 的路径，而对话助手/Agent 模式走不到它。** 于�
 
 ### 4.4 注入透明度（新增，分层机制的信任基础）
 
-- AiPanel 任务卡片顶部增加可折叠的 **"本次注入设定"** 条：`selectLore` 的 report 渲染为 chips——`爱丽丝 ▸ 核心 + 战甲形象 (180tk)`；被丢弃项灰色显示原因（组内落选/超预算/未命中）；
+- AiPanel 任务卡片顶部增加可折叠的 **"本次注入条目"** 条：`selectLore` 的 report 渲染为 chips——`爱丽丝 ▸ 核心 + 战甲形象 (180tk)`；被丢弃项灰色显示原因（组内落选/超预算/未命中）；
 - chips 点击跳转对应 lore 文件；
 - 报告在任务开始时即可显示（assembleContext 先于请求完成），作者发现"注错了"可以立即 abort、调 pin 重跑。这个反馈回路是作者调 keys 的主要工具，优先级不低于拆解本身。
 
 ### 4.5 设置项（SettingsModal → AI）
 
-- "设定资料 token 预算"（默认 600，滑条 200–2000）；
+- "条目预算"（默认 600，滑条 200–2000）；
 - "自动匹配实体上限"（默认 5）。
 
 ### 4.6 i18n

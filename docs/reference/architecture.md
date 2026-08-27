@@ -370,7 +370,7 @@ Every model-supplied path goes through `resolveWorkspacePath` (same file) first,
 2. **走缩略图（`imageToThumbnailDataUrl`，长边 640）而不是原图**：理由和同文件里的 `TurnImages` 一样——生成图可以是 4096²，超过某个大小 WebKit 会**无声地**拒绝解码 `data:` URI，而这一栏只有几百 CSS 像素宽。
 3. **解析前要 percent-decode**：markdown-it 把每个链接过一遍 `encodeURI`，所以中文条目名到这里已经是 `%E7%99%BD…`。用 `resolveLinkPath`（逐段 `decodeURIComponent`）而不是 `decodeURI`，与预览和导出同一条规则。
 
-**还得让模型有路径可写。** 它看到的图集本来只有文件名（`read_lore_entity` 的 `=== images ===` 块、注入块里的「配图：文件名（描述）」），照抄下来就是一个解析不到任何地方的裸文件名——这正是这条路最初坏掉的样子。所以工具结果的图集标题带上条目目录（一次，不是每行一遍），`ai.instructions.agent` 的「配图」一节要求回复里插图写完整路径。没找到的图不是消失，而是一个虚线框，框里印着那条路径（`alt` 兜底成原始链接）——错的链接要看得见，否则作者只会看到助手少说了一段话。
+**还得让模型有路径可写。** 它看到的图集本来只有文件名（`read_lore_entity` 的 `=== images ===` 块、注入块里的「配图：文件名（描述）」），照抄下来就是一个解析不到任何地方的裸文件名——这正是这条路最初坏掉的样子。所以工具结果的图集标题带上条目目录（一次，不是每行一遍），`ai.instructions.agent` 的「配图」一节要求回复里配图写完整路径。没找到的图不是消失，而是一个虚线框，框里印着那条路径（`alt` 兜底成原始链接）——错的链接要看得见，否则作者只会看到助手少说了一段话。
 
 ### Paths across Windows and Linux/macOS
 

@@ -27,7 +27,7 @@
 重复沉降的姊妹问题、播种轮没有记忆区检索）本质上都是「历史准备的某条排序 /
 某个状态迁移只存在于这段没人能跑的代码里」。修完时补的测试也只能测到它调用
 的纯函数（`seedRoleplayHistory` / `takeSinkable`），测不到**编排本身**——
-「压缩之后才刷新记忆块」「区检索排在词条注入之后、提问之前」「提问永远是
+「压缩之后才刷新记忆块」「区检索排在条目注入之后、提问之前」「提问永远是
 最后一条且带 turnStart」这些排序，今天仍然只由没有测试的店内代码保证。
 
 ## 2. 设计原则（三条约束，定了就不再讨论）
@@ -78,7 +78,7 @@ export interface SeedOutcome {
   bound: BoundContent;             // stalePaths 给 UI
   report: LoreActivationReport | null;   // context-seeded 事件的数字
   memoryRecords: MemoryRecord[];   // 记事本面板的初始数据
-  contextHash: string;             // 「设定已更新」的新基线，store 写进花名册
+  contextHash: string;             // 「绑定内容已更新」的新基线，store 写进花名册
   recalled: RecalledEntity[];
 }
 export async function prepareSeededHistory(opts: {
@@ -194,7 +194,7 @@ conversationReader(projectPath, agent.id)`。
 
 ## 4. 不变量清单（重构期间逐条对照）
 
-1. 历史突变顺序：压缩 → 记忆块刷新 → 词条注入 → 区检索 → 提问。
+1. 历史突变顺序：压缩 → 记忆块刷新 → 条目注入 → 区检索 → 提问。
 2. `lastJob.committed = true` 恰好发生在提问进入 history **之后**、runAgent
    **之前**；prepare 任何一步抛出时 committed 仍是 false，重试整套重来。
 3. liveLog 事件顺序：`context-seeded` / 压缩事件出现的时机与今天逐帧相同。
@@ -225,7 +225,7 @@ compact / loreSelect）：
 - 无回放 + 区命中 → 载体在提问前一位，且是轮起点（不变量 8）。
 
 **prepareContinuedHistory**（这组是本次重构的全部意义所在）
-- 不触发压缩：顺序 = [词条注入?]→[区检索?]→提问；提问带 turnStart；账本
+- 不触发压缩：顺序 = [条目注入?]→[区检索?]→提问；提问带 turnStart；账本
   记了注入条目。
 - 触发压缩（喂长历史 + 假 summarize）：`compactedEvent` 非空、
   `summaryToSave` = meta.summaryText、`memoryRecords` 从盘上重读、
