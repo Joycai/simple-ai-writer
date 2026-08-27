@@ -31,9 +31,7 @@ import { useAiStore } from "../../stores/aiStore";
 import { readPref, writePref } from "../../lib/prefs";
 import { useAppStore } from "../../stores/appStore";
 import { computeContextBreakdown } from "../../lib/agent/contextBreakdown";
-import { getToolDefinitions } from "../../lib/agent/registry";
-import { routePlannedTools } from "../../lib/agent/routing";
-import { estimateToolsTokens } from "../../lib/ai/tokenEstimate";
+import { plannedToolTokens } from "../../lib/agent/toolCost";
 import { inputCeilingFor } from "../../lib/context/budget";
 import { presetFor } from "../../lib/roleplay/presets";
 import { residentCoreDirs } from "../../lib/roleplay/context";
@@ -334,11 +332,15 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   /**
    * 工具 schema 的开销。按**路由之后**的工具算（子代理会摘掉 read_image、补上
    * delegate），否则这一段会和它旁边那排芯片说的不是同一回事。
+   *
+   * 走 `plannedToolTokens` 而不是自己拼 `estimateToolsTokens(getToolDefinitions(
+   * routePlannedTools(...)))`：`roleplayStore` 算 `messageCeiling` 用的就是它，
+   * 而构成条画的那条折叠线必须和运行时真正的触发点是同一个数。手抄一份等价实现
+   * 是这类漂移的标准起点——它今天恰好相等（扮演的 finishPolicy 是 force-text，
+   * 没有 handoff 那一项），明天就未必。`toolCost` 的注释写着「一个函数，一个定义」。
    */
   const toolTokens = useMemo(
-    () => estimateToolsTokens(
-      getToolDefinitions(routePlannedTools(presetFor(agent.kind), effectiveSubs, models).tools),
-    ),
+    () => plannedToolTokens(presetFor(agent.kind), effectiveSubs, models),
     [agent.kind, effectiveSubs, models],
   );
   const contextVersion = session?.contextVersion ?? 0;

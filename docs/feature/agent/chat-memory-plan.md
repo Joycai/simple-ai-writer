@@ -210,10 +210,36 @@ assistant/tool 配对；`MIN_KEEP_TURNS` 恒成立;插桩后边界仍然正确�
   会把「渲染一个仪表」变成「创建 workspace」的副作用）。响应会话内子代理开关
   （`disabledSubAgents`）：路由会剥 `read_image`/图像工具、追加 `delegate`，
   无视旁边芯片的 系统+工具 段与它声称描述的请求是两回事。
-- **`willCompact` vs `over`**：`willCompact`（> 上限 × `COMPACT_TRIGGER`，即条上
-  画的那条竖线）驱动警示视觉——竖线就是触发线，只在 100% 才警示意味着条可以
-  站在自己画的线外面还一脸平静；`over`（> 上限）保留为几何事实（空余为 0、
-  刻度改按 used 缩放），蕴含 `willCompact`。
+- **`willCompact` vs `over`**：`willCompact`（越过条上画的那条竖线）驱动警示
+  视觉——竖线就是触发线，只在 100% 才警示意味着条可以站在自己画的线外面还
+  一脸平静；`over`（> 上限）保留为几何事实（空余为 0、刻度改按 used 缩放），
+  蕴含 `willCompact`。
+- **但那条竖线不在 `上限 × COMPACT_TRIGGER` 上**（2026-08-27 订正）。条的横轴
+  是整个请求、工具 schema 计入；而 `planFold` 拿 **messages** 去比一个**已经
+  扣掉 schema** 的上限（`messageCeilingFor`）。所以触发点是「schema 之后那一段
+  的 70%」，不是「整条的 70%」：
+
+  ```
+  compactAt = T + τ·(C − T)          而不是   τ·C
+            = C·(τ + (1−τ)·T/C)      即 70 + 30·T/C 个百分点
+  ```
+
+  按 `τ·C` 画的时候，条比压缩**早**变黄、线也偏左：messages 落在
+  `(τC − T, τC − 0.7T)` 这一段时，作者会看着条越过「越过此处将折叠最早的对话」
+  那道线，然后什么都不发生。T/C 很小时是舍入误差（524k 上限 + 4.9k 工具 ≈ 差
+  0.3 个百分点），接一个 8k 窗口的本地模型就是十五个百分点。方向是虚报不是
+  漏报，但那道线声称的事没有发生，就不该画在那里。
+
+  `planFold` 的 `ceilingTokens` 注释记的是这个症状的前一半——那次把 `planFold`
+  自己那一侧从裸上限改成了 messages 上限，条这一侧没跟着改。**测试用例一律传
+  `toolTokens: 0` 是它绿了这么久的原因**：在 0 上两个公式恰好重合。
+  `contextBreakdown.test.ts` 现在有一组带真实工具开销的用例，且**不复述阈值
+  公式**——它跑真的 `planFold`，逐点问它折不折。
+- **工具开销的来源只有 `plannedToolTokens` 一处。** 两个 ContextBar 的调用方
+  （AgentChat / RoleplayChat）和 `roleplayStore` 的 `messageCeilingFor` 必须读到
+  同一个数，否则线和触发点又会分家。扮演面板原先手抄了一份等价实现
+  （`estimateToolsTokens(getToolDefinitions(routePlannedTools(...)))`），今天恰好
+  相等（它的 `finishPolicy` 是 `force-text`，没有 handoff 那一项），明天未必。
 - **模型未声明窗口时整条隐藏**（`contextSize <= 0` 返 null）——分母会退到假设值，
   对着猜出来的分母画精确的条，是错误的自信。
 - `context-compacted` 行留在它先于的那一轮轮体内（不上提为带间分隔）：设计稿

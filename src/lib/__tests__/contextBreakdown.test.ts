@@ -4,7 +4,9 @@
  * how close it is to compaction.
  */
 import { describe, expect, it } from "vitest";
-import { createSessionMeta, noteTurnStart, recordInjections, COMPACT_TRIGGER } from "../agent/compact";
+import {
+  createSessionMeta, noteTurnStart, planFold, recordInjections, COMPACT_TRIGGER,
+} from "../agent/compact";
 import { computeContextBreakdown } from "../agent/contextBreakdown";
 import { estimateMessagesTokens } from "../ai/tokenEstimate";
 import type { StreamMessage } from "../ai/types";
@@ -125,5 +127,88 @@ describe("computeContextBreakdown", () => {
   it("stays calm on an empty session with no ceiling to cross", () => {
     const b = computeContextBreakdown(null, null, 0, 0, 0);
     expect(b.willCompact).toBe(false);
+  });
+});
+
+/**
+ * 折叠线画在哪。
+ *
+ * 上面那组把 `toolTokens` 一律传 0——而在 0 上，旧口径和真实触发点恰好重合，
+ * 所以整组绿着，条却一直画错。这一组的每个用例都带一份真实大小的工具 schema，
+ * 并且**不自己复述阈值公式**：它跑真的 `planFold`，问它到底折不折。
+ *
+ * 差在哪：条的横轴是整个请求（schema 计入），而 `planFold` 拿 messages 去比一个
+ * **已经扣掉 schema** 的上限（`messageCeilingFor`）。展开成对 messages 的阈值，
+ * 一个是 `0.7C − 1.0T`，一个是 `0.7C − 0.7T`——前者更小，所以条比压缩**早**
+ * 警告，那道线也偏左。1M 窗口上是个舍入误差，8k 的本地模型上是十五个百分点。
+ */
+describe("折叠线 vs planFold 的真实触发点", () => {
+  /** 一段有头有尾的对话：system 进 prelude，turns 足够多，planFold 不会因轮数退出。 */
+  function conversation(turns: number, charsPerTurn: number) {
+    const meta = createSessionMeta();
+    const history: StreamMessage[] = [{ role: "system", content: "系统提示" }];
+    for (let i = 0; i < turns; i++) {
+      const q: StreamMessage = { role: "user", content: "问".repeat(charsPerTurn) };
+      noteTurnStart(meta, q);
+      history.push(q, { role: "assistant", content: "答".repeat(charsPerTurn) });
+    }
+    return { history, meta };
+  }
+
+  it("带着真实工具开销逐点扫过去，willCompact 和 planFold 从不分家", () => {
+    const TOOLS = 4_900;
+    const { history, meta } = conversation(8, 120);
+    const messages = estimateMessagesTokens(history);
+
+    for (let ceiling = TOOLS + 50; ceiling <= TOOLS + messages * 2; ceiling += 37) {
+      const bar = computeContextBreakdown(history, meta, TOOLS, ceiling, 128_000);
+      const fold = planFold(history, meta, ceiling - TOOLS);
+      expect({ ceiling, willCompact: bar.willCompact })
+        .toEqual({ ceiling, willCompact: fold !== null });
+    }
+  });
+
+  /**
+   * 这一条是漂移本身：messages 落在 `(0.7C − T, 0.7C − 0.7T)` 这一段时，旧口径
+   * 已经变黄、竖线也被越过，而 `planFold` 什么都不做。条上写着「越过此处将折叠
+   * 最早的对话」，越过了，然后没有任何事发生。
+   */
+  it("旧口径会在这一段变黄，而压缩根本不会发生", () => {
+    const TOOLS = 4_900;
+    const C = 10_000;
+    const { history, meta } = conversation(6, 190);
+    const messages = estimateMessagesTokens(history);
+
+    // 先证明这段历史确实落在那个窗口里，否则下面两条断言可能只是碰巧成立。
+    expect(messages).toBeGreaterThan(COMPACT_TRIGGER * C - TOOLS);
+    expect(messages).toBeLessThan(COMPACT_TRIGGER * (C - TOOLS));
+
+    const bar = computeContextBreakdown(history, meta, TOOLS, C, 128_000);
+    expect(bar.willCompact).toBe(false);
+    expect(planFold(history, meta, C - TOOLS)).toBeNull();
+    // 竖线也跟着挪到了真实触发点，不再是死板的 70%。
+    expect(bar.compactMarkerPct).toBeCloseTo(70 + 30 * (TOOLS / C), 5);
+    // 旧口径下 used 已经越过 0.7C——条会变黄、线会被越过，而上面刚证明不折。
+    expect(bar.usedTokens).toBeGreaterThan(COMPACT_TRIGGER * C);
+    // 新口径下它还没够到那条线。
+    expect(bar.usedTokens).toBeLessThan((bar.compactMarkerPct / 100) * C);
+  });
+
+  it("没有工具的界面上，线仍然正好在 70%——这次改动不动它们", () => {
+    const { history, meta } = conversation(4, 50);
+    const bar = computeContextBreakdown(history, meta, 0, 100_000, 128_000);
+    expect(bar.compactMarkerPct).toBeCloseTo(COMPACT_TRIGGER * 100, 5);
+  });
+
+  /**
+   * schema 自己就吃光了上限。`planFold` 遇到非正的 ceiling 直接退出，所以压缩
+   * 帮不上任何忙——但条**不能**因此一脸平静：那正是警示存在的理由。
+   */
+  it("工具 schema 吃光上限时压缩救不了，可条不能装作没事", () => {
+    const { history, meta } = conversation(4, 50);
+    const bar = computeContextBreakdown(history, meta, 9_000, 8_000, 128_000);
+    expect(bar.over).toBe(true);
+    expect(bar.willCompact).toBe(true);
+    expect(planFold(history, meta, 8_000 - 9_000)).toBeNull();
   });
 });
