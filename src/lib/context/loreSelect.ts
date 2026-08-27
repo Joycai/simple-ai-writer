@@ -194,6 +194,49 @@ export interface LoreActivationReport {
   entities: LoreEntityReport[];
   budgetChars: number;
   usedChars: number;
+  /**
+   * Auto-matches that {@link MAX_AUTO_LORE_ENTITIES} cut. Absent when none were.
+   *
+   * A cap that shortens the list in silence reads as "this is everything that
+   * matched" — the one reading that sends the author off tuning an entry which
+   * was never in the running. Same rule as a facet's `budget` drop: say how many
+   * and let them judge.
+   */
+  autoCapped?: number;
+}
+
+/**
+ * Order auto-matches by how much evidence put them there, so the cap keeps the
+ * likeliest ones rather than the ones that happened to be scanned first.
+ *
+ * Until now the match loop stopped at the twentieth hit in `Object.values`
+ * order — which is *category* order, not relevance. A chapter naming a lot of
+ * people could spend the whole cap inside 人物 and leave every 道具 out, and
+ * nothing in the report said so. That was survivable while the match target was
+ * a 500-char tail; feeding it the author's outline (see the caller's
+ * `extraMatchText`) turns a latent flaw into the normal case, which is why the
+ * two changes have to land together.
+ *
+ * The key is deliberately crude, because it has to stay explainable next to
+ * `matchedTerms`:
+ *   1. longest matched term — 「星辉之杖」 is stronger evidence than 「渚」,
+ *      which is also the only lever against a one-character alias hitting half
+ *      the manuscript (there is no word boundary to appeal to in CJK);
+ *   2. how many distinct terms fired;
+ *   3. dirPath, so the order never depends on scan order.
+ *
+ * Deliberately *not* occurrence count: a name written ten times in an outline
+ * is one fact stated ten times, not a stronger fact — and weighting it would
+ * make a long entry beat a precisely-named one.
+ */
+export function rankAutoMatches<T extends { dirPath: string; terms: string[] }>(
+  matches: readonly T[],
+): T[] {
+  const longest = (m: T) => m.terms.reduce((n, t) => Math.max(n, t.length), 0);
+  return matches.slice().sort((a, b) =>
+    longest(b) - longest(a) ||
+    b.terms.length - a.terms.length ||
+    a.dirPath.localeCompare(b.dirPath));
 }
 
 /**
@@ -387,28 +430,31 @@ export async function selectLore(
     pinnedFacetsByDir.get(pin.dirPath)!.add(pin.facetFile);
   }
 
-  // Auto-match entities by name/alias substring (CJK-friendly), capped.
-  const autoDirs: string[] = [];
-  // Which term actually fired, not just that one did. `some` → `filter` is the
-  // whole change, and it is what lets the UI say 「由「铁鳞」命中」 instead of
-  // just listing the entity: an entry answers to its name *and* every alias, so
-  // "it matched" leaves the author guessing which spelling their sentence hit —
-  // and that guess is exactly what they are trying to tune.
-  const autoTerms = new Map<string, string[]>();
-  outer: for (const entities of Object.values(loreIndex)) {
+  // Auto-match entities by name/alias substring (CJK-friendly). Collect every
+  // hit first and rank before capping — stopping mid-scan would make the
+  // *category* iteration order decide who gets in (see `rankAutoMatches`).
+  //
+  // Which term actually fired is recorded, not just that one did. `some` →
+  // `filter` is the whole change, and it is what lets the UI say 「由「铁鳞」命中」
+  // instead of just listing the entity: an entry answers to its name *and* every
+  // alias, so "it matched" leaves the author guessing which spelling their
+  // sentence hit — and that guess is exactly what they are trying to tune.
+  const allMatches: { dirPath: string; terms: string[] }[] = [];
+  for (const entities of Object.values(loreIndex)) {
     for (const entity of entities ?? []) {
       if (pinnedFacetsByDir.has(entity.dirPath)) continue; // already pinned
       if (opts?.excludeDirs?.has(entity.dirPath)) continue; // already in context
       if (!inScope(entity, opts?.scope ?? null)) continue;  // outside 取材范围
       const terms = [entity.name, ...(entity.aliases ?? [])];
       const hit = terms.filter((t) => t && lower.includes(t.toLowerCase()));
-      if (hit.length > 0) {
-        autoDirs.push(entity.dirPath);
-        autoTerms.set(entity.dirPath, hit);
-        if (autoDirs.length >= MAX_AUTO_LORE_ENTITIES) break outer;
-      }
+      if (hit.length > 0) allMatches.push({ dirPath: entity.dirPath, terms: hit });
     }
   }
+  const ranked = rankAutoMatches(allMatches);
+  const kept = ranked.slice(0, MAX_AUTO_LORE_ENTITIES);
+  const autoCapped = ranked.length - kept.length;
+  const autoDirs = kept.map((m) => m.dirPath);
+  const autoTerms = new Map(kept.map((m) => [m.dirPath, m.terms]));
 
   const selected: Selected[] = [...pinnedDirs, ...autoDirs].map((dir) => {
     const entity = byDir.get(dir)!;
@@ -671,6 +717,7 @@ export async function selectLore(
       entities: selected.map((s) => s.report),
       budgetChars,
       usedChars: used,
+      ...(autoCapped > 0 ? { autoCapped } : {}),
     },
   };
 }

@@ -1015,6 +1015,7 @@
       "draftLabel": "版本 {{n}}",
       "loreFacetCount": "{{n}} 条",
       "loreDroppedTitle": "超出预算未注入",
+      "loreAutoCapped": "另有 {{n}} 条匹配未列入（每次最多取 {{cap}} 条，按命中词长度排序）",
       "loreRaiseBudget": "提高预算",
       "retry": "重试",
       "copyError": "复制错误",

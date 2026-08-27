@@ -62,7 +62,7 @@ import {
 } from "../../lib/context/rag";
 import { clearTarget } from "../../lib/editor/aiTarget";
 import { flashInserted } from "../../lib/editor/insertFlash";
-import { parsePins, type LoreActivationReport } from "../../lib/context/loreSelect";
+import { parsePins, MAX_AUTO_LORE_ENTITIES, type LoreActivationReport } from "../../lib/context/loreSelect";
 import {
   indexCategories,
   loadPinnedLore,
@@ -656,6 +656,20 @@ function LoreReportSection({
           </div>
         ))
       )}
+      {/* No silent caps: an auto-match the entity cap cut never appears above,
+          so without this line a shortened list reads as "this is everything
+          that matched" — and the author goes off tuning an entry that was
+          never in the running. Raising the budget does not buy these back
+          (the cap counts entities, not chars), so no action link. */}
+      {report.autoCapped ? (
+        <div className={styles.hintLine}>
+          {t("ai.panel.loreAutoCapped", {
+            n: report.autoCapped,
+            cap: MAX_AUTO_LORE_ENTITIES,
+            defaultValue: "另有 {{n}} 条匹配未列入（每次最多取 {{cap}} 条，按命中词长度排序）",
+          })}
+        </div>
+      ) : null}
       {overBudget && (
         <button className={styles.linkBtn} onClick={onRaiseBudget}>
           {t("ai.panel.loreRaiseBudget", { defaultValue: "提高预算" })} →

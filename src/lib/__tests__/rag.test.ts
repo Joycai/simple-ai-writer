@@ -83,6 +83,25 @@ describe("assembleContext", () => {
     expect(bundle.loreSnippets).not.toContain("Bran is a smith.");
   });
 
+  it("matches lore on the author's own instruction, not just the manuscript", async () => {
+    // 作者意图进匹配靶（docs/feature/lore/lore-retrieval-plan.md §3）。在此之前
+    // 面板任务的靶子只有「选中文本 + 锚点前 500 字」，于是一句「写 Bran 打铁那场戏」
+    // 既召不来 Bran，也激活不了他任何一条特征——而作者看到的只是一个空的知识库块。
+    const bundle = await assembleContext(
+      "SYS", makeLoreIndex(), "A quiet morning in the valley.", "", "Continue.",
+      { extraMatchText: "写 Bran 打铁那场戏" },
+    );
+    expect(bundle.loreSnippets).toContain("Bran is a smith.");
+  });
+
+  it("不传 extraMatchText 时靶子和从前一样", async () => {
+    const base = "A quiet morning in the valley.";
+    const before = await assembleContext("SYS", makeLoreIndex(), base, "", "Continue.");
+    const after = await assembleContext("SYS", makeLoreIndex(), base, "", "Continue.", {});
+    expect(after.loreSnippets).toBe(before.loreSnippets);
+    expect(before.loreSnippets).not.toContain("Bran is a smith.");
+  });
+
   it("matches lore near the selection anchor, not the unrelated document tail", async () => {
     const { doc, selection } = makeAnchoredDoc();
     const bundle = await assembleContext("SYS", makeLoreIndex(), doc, selection, "Rewrite.");
