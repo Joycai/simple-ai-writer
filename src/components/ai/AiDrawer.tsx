@@ -18,13 +18,17 @@ import styles from "./AiDrawer.module.css";
 
 type Mode = AiDrawerMode;
 
-/** Global binding that opens each mode (see App.tsx). Shown in the header so the
- *  shortcut is discoverable from the surface it opens. */
-const MODE_SHORTCUT: Record<Mode, string | null> = {
+/** Global binding that reaches each mode (see useGlobalShortcuts). Shown in the
+ *  header so the shortcut is discoverable from the surface it opens.
+ *
+ *  ⌘J opens no particular tab — it reopens the drawer on the last one used — so
+ *  it is the honest hint on every tab that has no opener of its own. 对话 keeps
+ *  ⌘L, which lands there whatever tab was last. */
+const MODE_SHORTCUT: Record<Mode, string> = {
   generate: "J",
   chat: "L",
-  consistency: null,
-  roleplay: null,
+  consistency: "J",
+  roleplay: "J",
 };
 
 export function AiDrawer() {
@@ -186,11 +190,9 @@ export function AiDrawer() {
                 {t("ai.chat.newSession")}
               </button>
             )}
-            {shortcut && (
-              <span className={styles.shortcutHint}>
-                {MOD_KEY === "⌘" ? `⌘${shortcut}` : `Ctrl ${shortcut}`}
-              </span>
-            )}
+            <span className={styles.shortcutHint}>
+              {MOD_KEY === "⌘" ? `⌘${shortcut}` : `Ctrl ${shortcut}`}
+            </span>
             <button className={styles.closeBtn} onClick={close} aria-label="Close">
               <X size={15} strokeWidth={1.6} />
             </button>
