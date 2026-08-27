@@ -344,9 +344,24 @@
   background: var(--color-bg-inset);
   border: 1px solid var(--color-border-panel);
   overflow: hidden;
+  transition: border-color var(--transition-fast);
+}
+/* 超上限。条本身画不出这件事——`free` 被 clamp 到 0，所以它永远是满的、一脸
+   平静，而这次请求已经会被预检门挡下来了。同助手那条的 `.ctxBarWarn`。 */
+.allocBarOver { border-color: var(--color-warning); }
+.allocOverNote {
+  font: 400 11px/1.6 var(--font-sans);
+  color: var(--color-warning);
 }
 .allocSeg { display: block; min-width: 1px; }
 
+/* 与助手那条上下文构成条同名同色：系统+工具 折的是同一批东西，选区/附加对应
+   它的「种子」——两者都是「这一次带进来的材料」。
+   注意 `.allocSeg_lore` 也必须已经收敛到 `--color-success`（PR #363）：在那之前
+   它是 `--color-alloc-lore`，浅色下和 `--color-border-accent` 是同一个 #C9966A，
+   两段会糊在一起。 */
+.allocSeg_system { background: var(--color-text-dim); }
+.allocSeg_input  { background: var(--color-border-accent); }
 .allocSeg_recent { background: var(--color-sienna); }
 .allocSeg_lore   { background: var(--color-alloc-lore); }
 .allocSeg_memory { background: var(--color-alloc-memory); }
@@ -913,7 +928,6 @@
 
 /* 工具 schema：每一轮都要付、又不属于任何可规划的层，所以给它一个自己的颜色，
    而不是并进「近期」或藏在余量里——藏起来的固定开销正是这条分段存在的理由。 */
-.allocSeg_tools { background: var(--color-alloc-tools); }
 
 /* reduced-motion 下加载指示仍需转动——静止的残环与卡死无法区分。
    本地类 + !important 压过 global.css 的一刀切兜底（specificity 0,1,0 > 0,0,0）。 */

@@ -42,6 +42,8 @@ import { RoundLimitCard } from "./RoundLimitCard";
 import { TruncationCard } from "./TruncationCard";
 import { AutoApproveChip } from "./AutoApproveChip";
 import { useAiStore } from "../../stores/aiStore";
+import { useDocFormatStore } from "../../stores/docFormatStore";
+import { docxBriefingSection } from "../../lib/docx/briefing";
 import {
   useAppStore, LORE_BUDGET_MIN, LORE_BUDGET_MAX, LORE_BUDGET_OPTIONS,
 } from "../../stores/appStore";
@@ -79,7 +81,9 @@ import { BOOK_PREV_TAIL_NEAR_START_CHARS } from "../../lib/context/bookContext";
 import {
   RECENT_WINDOW_MIN_CHARS, STATIC_LORE_BUDGET_MAX_TOKENS,
 } from "../../lib/context/budget";
-import { planForecast, type ContextForecast } from "../../lib/context/forecast";
+import {
+  planForecast, type ContextForecast, type ForecastSegmentKey,
+} from "../../lib/context/forecast";
 import { chapterTitle, resolveVolumes } from "../../lib/context/outline";
 import { contextLabel } from "../../lib/ai/modelLabel";
 import { MOD_KEY } from "../../lib/platform";
@@ -174,10 +178,12 @@ function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
   const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId));
   const contextSize = activeModel?.contextSize ?? 0;
 
-  const LEGEND: Record<string, { labelKey: string; fallback: string }> = {
-    tools:  { labelKey: "ai.panel.allocTools",  fallback: "工具" },
+  const LEGEND: Record<ForecastSegmentKey, { labelKey: string; fallback: string }> = {
+    // 与助手那条同名同色——它折进的东西也一样（工具 schema + 系统层）。
+    system: { labelKey: "ai.panel.allocSystem", fallback: "系统+工具" },
+    input:  { labelKey: "ai.panel.allocInput",  fallback: "选区/附加" },
     recent: { labelKey: "ai.panel.allocRecent", fallback: "近期" },
-    lore:   { labelKey: "ai.panel.allocLore",   fallback: "设定" },
+    lore:   { labelKey: "ai.panel.allocLore",   fallback: "{{entry}}" },
     memory: { labelKey: "ai.panel.allocMemory", fallback: "前情" },
     free:   { labelKey: "ai.panel.allocFree",   fallback: "余量" },
   };
@@ -197,7 +203,10 @@ function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
 
       {forecast && total > 0 ? (
         <>
-          <div className={styles.allocBar}>
+          {/* 超上限时框变色。`free` 被 clamp 到 0，所以条本身永远画得满满当当
+              ——不点出来，一次会被预检门直接挡下的请求看上去和一次刚好装满的
+              一模一样。助手那条在同样的处境是红框加红数字。 */}
+          <div className={`${styles.allocBar} ${forecast.over ? styles.allocBarOver : ""}`}>
             {forecast.segments.map((seg) => (
               seg.chars > 0 && (
                 <span
@@ -224,6 +233,19 @@ function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
       ) : (
         <div className={styles.hintLine}>
           {t("ai.panel.contextUtilizationUnset")}
+        </div>
+      )}
+
+      {/* 超上限的那句话，就在条底下。段里已经画出**是什么**占满了窗口（多半是
+          选区），这里说的是能拿它怎么办。 */}
+      {forecast?.over && (
+        <div className={styles.allocOverNote}>
+          {t("ai.panel.allocOver", {
+            defaultValue:
+              "这次请求预计 {{used}} tk，超过上限 {{ceiling}} tk——可以缩小选区、调高「窗口占用」，或换一个上下文更大的模型。",
+            used: formatBudget(forecast.usedTokens),
+            ceiling: formatBudget(forecast.ceilingTokens),
+          })}
         </div>
       )}
 
@@ -923,6 +945,9 @@ export function AiPanel() {
     }
   }, [requestedTask, requestedInstruction, isRunning, setRequestedTask, clearOutput]);
 
+  const docxPresets = useDocFormatStore((s) => s.presets);
+  const docxDefaultId = useDocFormatStore((s) => s.defaultId);
+
   const activeModel = models.find((m) => m.id === activeModelId);
   const activeProvider = activeModel ? providers.find((p) => p.id === activeModel.providerId) : null;
   const hasConfig = !!activeModel;
@@ -1200,6 +1225,14 @@ export function AiPanel() {
     ? memory?.segments.reduce((n, s) => n + s.summary.length, 0) ?? 0
     : 0;
 
+  // 「可用排版格式」清单，runTask 也会接在 full 层任务的指令尾部。给的是未过滤
+  // 的字数——该不该算由 planForecast 按 runTask.tools 决定，那里已经管着另外三
+  // 条同源的分支。
+  const docxRosterChars = useMemo(
+    () => docxBriefingSection(docxPresets, docxDefaultId).length,
+    [docxPresets, docxDefaultId],
+  );
+
   // Same anchor runTask applies — the forecast must describe the request that
   // will actually be sent, not one built on an offset from another file.
   const anchorOffset =
@@ -1223,6 +1256,8 @@ export function AiPanel() {
         models,
         systemPromptChars: systemPrompt.length,
         instructionChars: instructionText.length,
+        docxRosterChars,
+        isZh,
         selectionChars: selection.length,
         outlineChars: outline.length,
         knowledgeChars: additionalKnowledge.length,
@@ -1235,6 +1270,7 @@ export function AiPanel() {
     [
       runTaskDef, activeModel?.contextSize, activeModel?.maxOutput, contextUtilization,
       loreBudgetTokens, subAgents, models, systemPrompt.length, instructionText.length,
+      docxRosterChars, isZh,
       selection.length, outline.length, additionalKnowledge.length, content, anchorOffset,
       contextChars, continueLength, memoryChars,
     ],
