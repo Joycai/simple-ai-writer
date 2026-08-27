@@ -620,14 +620,14 @@ footer{padding:2.6rem 0 4rem;color:var(--ink-3);font-size:.85rem;}
 
     <figure>
       <div class="figbox">
-        <svg viewBox="0 0 900 360" role="img" aria-label="At a scene change, open pacts, todos and bonds stay in standing memory while events, notes, old recaps and closed pacts sink into the memory area as lore-shaped entries; the area is later searched by keyword and injected as its own separate block.">
+        <svg viewBox="0 0 900 360" role="img" aria-label="At a kept scene change, open pacts, todos and bonds stay in standing memory while events, notes, old recaps and closed pacts sink into the memory area as lore-shaped entries; the area is later searched by keyword and injected as its own separate block. A discarded scene change sorts nothing at all.">
           <defs>
             <marker id="ar5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
               <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/>
             </marker>
           </defs>
           <g font-family="Chivo, sans-serif" font-size="12">
-            <text x="20" y="24" font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" fill="currentColor" opacity=".55">AT THE TRANSITION &mdash; takeSinkable()</text>
+            <text x="20" y="24" font-family="JetBrains Mono, monospace" font-size="10.5" font-weight="700" fill="currentColor" opacity=".55">AT A KEPT TRANSITION (&#25509;&#32493;) &mdash; takeSinkable()</text>
 
             <!-- source -->
             <rect x="20" y="40" width="200" height="120" rx="8" fill="#A64B08" fill-opacity=".08" stroke="#A64B08" stroke-width="1.5"/>
@@ -684,16 +684,26 @@ footer{padding:2.6rem 0 4rem;color:var(--ink-3);font-size:.85rem;}
           </g>
         </svg>
       </div>
-      <figcaption><b>Two tiers, sorted by nature rather than by budget.</b> An unresolved promise never sinks, however old it is; a thing that merely happened always does. The area is reused <em>code</em> &mdash; the same entity folder format, the same <code>selectLore</code>, the same detail view &mdash; but never the same index.</figcaption>
+      <figcaption><b>Two tiers, sorted by nature rather than by budget &mdash; on a kept transition.</b> An unresolved promise never sinks, however old it is; a thing that merely happened always does. The area is reused <em>code</em> &mdash; the same entity folder format, the same <code>selectLore</code>, the same detail view &mdash; but never the same index. <b>A discarded transition (&ldquo;another scene&rdquo;) sorts nothing:</b> see below.</figcaption>
     </figure>
+
+    <h3>Two transitions, and only one of them keeps anything</h3>
+
+    <p>A transition means <em>this scene counts</em>: it is archived, and a recap carries forward as memory. &ldquo;Another scene&rdquo; (&#21478;&#36215;&#19968;&#22330;) means the opposite &mdash; the scene was a trial run and is <b>void</b>. That distinction is the author&rsquo;s, and for a long time the code did not honour it: sorting ran unconditionally, so a character&rsquo;s <code>remember</code> calls from a throwaway scene sank into the memory area with their keywords intact and surfaced three scenes later. Nothing was discarded except the author&rsquo;s intent.</p>
+
+    <div class="callout acc">
+      <h4>Discarding is semantic, never physical</h4>
+      <p>No transcript is ever deleted. A discarded scene is archived as <code>transcript-NN.discarded.md</code> &mdash; the marker rides the rename that was happening anyway, so there is no second source of truth to keep in step. The author can still read it in the archive viewer; the character and the narrator cannot. That last part is what matters: the narrator writes into the manuscript, and a trial run must not become plot.</p>
+    </div>
 
     <h3>The transition, in order</h3>
     <ol class="steps">
-      <li><b>Compute the scene number first</b><span><code>peekNextArchiveNo</code> &mdash; max existing number + 1, never the file count. After the author hand-deletes one archived scene, counting files would make &ldquo;from scene N&rdquo; point at the wrong scene.</span></li>
+      <li><b>Compute the scene number first</b><span><code>peekNextArchiveNo</code> &mdash; max existing number + 1, never the file count. After the author hand-deletes one archived scene, counting files would make &ldquo;from scene N&rdquo; point at the wrong scene. The same number is stamped on every record written during the scene (<code>MemoryRecord.scene</code>), which is what makes the next step addressable at all.</span></li>
       <li><b>Write the memories, then archive</b><span>The reverse order loses a scene: if the recap fails to save after the transcript was already moved away, the author is looking at a blank screen with nothing kept.</span></li>
-      <li><b>Sink, one entry per record</b><span>Each sunk record becomes its own area entry with its own keys. Merging them into one prose block would turn them back into a summary &mdash; the exact thing the memory tier exists to avoid. Records only leave standing memory after every entry is written, so a mid-way failure duplicates at worst.</span></li>
-      <li><b>Optionally write the recap</b><span>If the author chose &ldquo;continue&rdquo;, the generated recap is added as the one <code>scene</code> record. With no memory area configured, the previous <code>scene</code> record is voided instead &mdash; text kept, just no longer findable.</span></li>
-      <li><b>Archive by rename</b><span><code>transcript.md</code> &rarr; <code>archive/transcript-NN.md</code>. A rename, never a truncation &mdash; the transcript is append-only and must not lose a character. <code>session.json</code> is the one file simply deleted: it is a cache, and a wire history that reconnects to no transcript is unreadable to anyone.</span></li>
+      <li><b>Kept &rarr; sink, one entry per record</b><span>Each sunk record becomes its own area entry with its own keys. Merging them into one prose block would turn them back into a summary &mdash; the exact thing the memory tier exists to avoid. Records only leave standing memory after every entry is written, so a mid-way failure duplicates at worst.</span></li>
+      <li><b>Discarded &rarr; sort nothing, drop this scene&rsquo;s records</b><span>Everything stamped with this scene number leaves standing memory and never reaches the area. A record whose scene is <code>0</code> &mdash; written before the field existed &mdash; is <b>never</b> matched: nobody knows which scene it belongs to, and guessing &ldquo;this one&rdquo; would delete something the author did not mean to delete. As with every author-driven removal, the file is backed up first.</span></li>
+      <li><b>Kept &rarr; write the recap</b><span>The generated recap is added as the one <code>scene</code> record, stamped with the scene that just <em>ended</em> &mdash; so it doubles as a pointer back to that transcript. With no memory area configured, the previous <code>scene</code> record is voided instead &mdash; text kept, just no longer findable.</span></li>
+      <li><b>Archive by rename</b><span><code>transcript.md</code> &rarr; <code>archive/transcript-NN.md</code>, or <code>-NN.discarded.md</code>. A rename, never a truncation &mdash; the transcript is append-only and must not lose a character. <b>The number-picking regex and the listing regex must accept the same names</b>: teach only the listing about the discard suffix and the next scene reuses a taken number, silently overwriting that scene&rsquo;s summary. <code>session.json</code> is the one file simply deleted: it is a cache, and a wire history that reconnects to no transcript is unreadable to anyone.</span></li>
     </ol>
 
     <div class="callout acc">
@@ -781,7 +791,7 @@ footer{padding:2.6rem 0 4rem;color:var(--ink-3);font-size:.85rem;}
         <thead><tr><th>Constant</th><th>Value</th><th>Governs</th></tr></thead>
         <tbody>
           <tr><td class="mono">BOUND_BLOCK_CHAR_CAP</td><td class="num-cell">12 000 chars</td><td>The &#12304;&#32465;&#23450;&#35774;&#23450;&#12305; block. Overflow is named, not expanded.</td></tr>
-          <tr><td class="mono">MEMORY_BLOCK_CHAR_CAP</td><td class="num-cell">4 000 chars</td><td>The &#12304;&#35760;&#24518;&#12305; block. Overflow becomes &ldquo;N more &mdash; use recall&rdquo;.</td></tr>
+          <tr><td class="mono">MEMORY_BLOCK_CHAR_CAP</td><td class="num-cell">4 000 chars</td><td>The &#12304;&#35760;&#24518;&#12305; block &mdash; <b>titles only</b>, bodies are expanded on demand with <code>recall</code>. The same budget therefore holds far more records, and the overflow line (&ldquo;N more &mdash; use recall&rdquo;) has become rare.</td></tr>
           <tr><td class="mono">AREA_BUDGET_TOKENS</td><td class="num-cell">800 tokens</td><td>Memory-area recall per turn. Small and separate so a character&rsquo;s recollections can never crowd out its own persona.</td></tr>
           <tr><td class="mono">COMPACT_TRIGGER</td><td class="num-cell">0.70</td><td>Share of the message ceiling above which compaction runs.</td></tr>
           <tr><td class="mono">RETAIN_TARGET</td><td class="num-cell">0.45</td><td>Share to fold down to. The wide gap protects the prompt cache.</td></tr>
