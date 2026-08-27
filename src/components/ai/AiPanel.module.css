@@ -347,9 +347,25 @@
 }
 .allocSeg { display: block; min-width: 1px; }
 
+/* 与助手/扮演那条上下文构成条同一套配色（`AgentChat.module.css` 的 `.ctxSeg_*`）。
+   同一样东西不该在两块面板上是两个颜色——作者在这两栏之间来回切，而这两条条
+   讲的是同一件事的两个时刻（这次请求怎么分配 / 这场对话还剩多少）。
+
+   对应关系，以及为什么是这个方向：那条条的颜色是照设计稿 02 屏 2c 的十六进制
+   逐段取的，这条条的 `--color-alloc-*` 是当时就地起的三个 token。所以往有出处
+   的那一侧收敛，三个 token 随之退休。
+
+     工具   → 系统+工具（--color-text-dim）  两者都是不可回收的固定成本
+     近期   → 对话（--color-sienna）          都是稿子自己的原文
+     条目   → 注入条目（--color-success）     字面上就是同一样东西
+     前情   → 摘要（--color-accent-mid）      都是对更早内容的压缩
+     余量   → 空余                            那条留白见轨道，这条明写轨道色
+
+   高度、图例默认收起与否、边框恒亮与否**不对齐**——理由见
+   `docs/feature/agent/context-meters.md`（一个是读数，一个是控件）。 */
 .allocSeg_recent { background: var(--color-sienna); }
-.allocSeg_lore   { background: var(--color-alloc-lore); }
-.allocSeg_memory { background: var(--color-alloc-memory); }
+.allocSeg_lore   { background: var(--color-success); }
+.allocSeg_memory { background: var(--color-accent-mid); }
 .allocSeg_free   { background: var(--color-bar-track); }
 
 .allocLegend {
@@ -913,7 +929,8 @@
 
 /* 工具 schema：每一轮都要付、又不属于任何可规划的层，所以给它一个自己的颜色，
    而不是并进「近期」或藏在余量里——藏起来的固定开销正是这条分段存在的理由。 */
-.allocSeg_tools { background: var(--color-alloc-tools); }
+/* 见 .allocSeg_recent 上方那段对应关系：这一段等同那条条的「系统+工具」。 */
+.allocSeg_tools { background: var(--color-text-dim); }
 
 /* reduced-motion 下加载指示仍需转动——静止的残环与卡死无法区分。
    本地类 + !important 压过 global.css 的一刀切兜底（specificity 0,1,0 > 0,0,0）。 */
