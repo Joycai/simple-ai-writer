@@ -59,7 +59,8 @@ import {
 } from "../lib/roleplay/memory";
 import type { AgentMemoryStore } from "../lib/roleplay/memoryTools";
 import {
-  AREA_BUDGET_TOKENS, MAX_CONCURRENT_RUNS, NO_PERSONA, ROSTER_PREVIEW_CHARS, generateAgentId,
+  AREA_BUDGET_TOKENS, ARCHIVE_DETAIL_LIMIT, MAX_CONCURRENT_RUNS, NO_PERSONA,
+  ROSTER_PREVIEW_CHARS, generateAgentId,
   type AgentKind, type AuthorPersona, type MemoryRecord, type MemoryStatus,
   type RoleplayAgent, type SceneTurn,
 } from "../lib/roleplay/model";
@@ -74,19 +75,24 @@ import {
   namedRefs, type PreflightEstimate, type TurnContextTrace,
 } from "../lib/roleplay/trace";
 import {
-  addAreaEntry, createArea, isValidAreaId, listAreas, loadAreaMeta,
-  saveAreaMeta, type AreaSummary,
+  addAreaEntry, areaEntities, createArea, isValidAreaId, listAreas, loadAreaMeta,
+  saveAreaMeta, scanArea, type AreaSummary,
 } from "../lib/roleplay/area";
-import type { SceneInfo, SceneReader, SceneSlice } from "../lib/roleplay/sceneTools";
+import type {
+  AreaNote, ArchiveInfo, SceneInfo, SceneReader, SceneSlice,
+} from "../lib/roleplay/sceneTools";
+import { currentSceneNo } from "../lib/roleplay/scene";
 import {
-  archiveSession, deleteAgentDir, loadPersonaCard, loadRoster, loadSession, loadSummary,
-  memoryPath, peekNextArchiveNo, saveRoster, savePersonaCard, saveSession, saveSummary,
-  sessionPath, summaryPath, transcriptPath,
+  archiveDir, archiveSession, deleteAgentDir, listArchives, loadPersonaCard, loadRoster,
+  loadSession, loadSummary, memoryPath, peekNextArchiveNo, saveRoster, savePersonaCard,
+  saveSession, saveSummary, sessionPath, summaryPath, transcriptPath,
+  type ArchivedScene,
 } from "../lib/roleplay/store";
 import {
-  appendTurn, loadTranscript, renderTranscript, truncateTurns,
+  appendTurn, loadTranscript, renderTranscript, truncateTurns, type ParsedTranscript,
 } from "../lib/roleplay/transcript";
-import { fileExists, removeFile, writeFile } from "../lib/fs/fileio";
+import { fileExists, readFile, removeFile, writeFile } from "../lib/fs/fileio";
+import { parseFrontmatter } from "../lib/fs/markdown";
 import { contributingEntities } from "../lib/context/loreSelect";
 import { readEntityFile } from "../lib/lore/entity";
 import type { AttachedItem } from "../lib/lore/aiTask";
@@ -1723,46 +1729,164 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
       }
     },
 
-    sceneReader: (): SceneReader => ({
-      list: async (): Promise<SceneInfo[]> => {
-        const { projectPath, order, agents } = get();
-        if (!projectPath) return [];
-        const out: SceneInfo[] = [];
-        for (const id of order) {
-          const agent = agents[id];
-          if (!agent || agent.kind !== "character") continue;
-          const { turns } = await loadTranscript(transcriptPath(projectPath, id));
-          const summary = await loadSummary(projectPath, id);
-          const memory = await loadMemoryDoc(memoryPath(projectPath, id));
-          const last = turns[turns.length - 1];
-          out.push({
-            agentId: id,
-            name: agent.name,
-            primary: agent.primaryDirPath?.split(/[/\\]/).pop() ?? "",
-            turnCount: turns.length,
-            openMemory: memory.records.filter((r) => r.status === "open").length,
-            lastAt: last?.at ?? 0,
-            gist: summary.split(/\r?\n/)[0] ?? (last ? scriptPreview(last.text, ROSTER_PREVIEW_CHARS) : ""),
-          });
-        }
-        return out;
-      },
-      read: async (agentId): Promise<SceneSlice> => {
-        const { projectPath } = get();
-        if (!projectPath) return { turns: [], total: 0, renumbered: false };
-        const { turns, renumbered } = await loadTranscript(transcriptPath(projectPath, agentId));
-        return { turns, total: turns.length, renumbered };
-      },
-      summary: async (agentId) => {
-        const { projectPath } = get();
-        return projectPath ? loadSummary(projectPath, agentId) : "";
-      },
-      memory: async (agentId, includeClosed) => {
-        const { projectPath } = get();
-        if (!projectPath) return [];
-        const doc = await loadMemoryDoc(memoryPath(projectPath, agentId));
-        return includeClosed ? doc.records : doc.records.filter((r) => r.status === "open");
-      },
-    }),
+    sceneReader: (): SceneReader => {
+      /**
+       * 归档**内容**的缓存，作用域是这一次运行（`sceneReader()` 每次运行调一次）。
+       *
+       * 安全的理由很具体：归档文件 rename 进 `archive/` 之后**永不再改**。而缓存
+       * 它是必须的——一次跨场检索要把每个角色的每一场都读一遍。
+       *
+       * **只缓存内容，绝不缓存目录列表**：作者可能在旁白讨论到一半时转了一场，
+       * 那一场必须立刻出现在清单里。当前 transcript 同理，一律读盘（见
+       * sceneTools 的文件头）。
+       */
+      const archived = new Map<string, ParsedTranscript>();
+      const archivedText = new Map<string, string>();
+
+      const readArchivedTranscript = async (path: string): Promise<ParsedTranscript> => {
+        const hit = archived.get(path);
+        if (hit) return hit;
+        const parsed = await loadTranscript(path);
+        archived.set(path, parsed);
+        return parsed;
+      };
+
+      const readArchivedText = async (path: string): Promise<string> => {
+        const hit = archivedText.get(path);
+        if (hit !== undefined) return hit;
+        let text = "";
+        try {
+          if (await fileExists(path)) text = (await readFile(path)).trim();
+        } catch { /* 归档摘要读不出来不该毁掉一次列表 */ }
+        archivedText.set(path, text);
+        return text;
+      };
+
+      /** 一个 agent 的归档清单（每次重读目录），新的在前。 */
+      const archivesOf = async (projectPath: string, agentId: string) =>
+        listArchives(projectPath, agentId);
+
+      /** 场号 → transcript 路径。当前场走 `transcript.md`。 */
+      const transcriptFor = (
+        projectPath: string, agentId: string, scene: number, list: ArchivedScene[],
+      ): { path: string; isArchive: boolean } => {
+        const hit = list.find((a) => a.no === scene);
+        return hit
+          ? { path: hit.path, isArchive: true }
+          : { path: transcriptPath(projectPath, agentId), isArchive: false };
+      };
+
+      return {
+        list: async (): Promise<SceneInfo[]> => {
+          const { projectPath, order, agents } = get();
+          if (!projectPath) return [];
+          const out: SceneInfo[] = [];
+          for (const id of order) {
+            const agent = agents[id];
+            if (!agent || agent.kind !== "character") continue;
+            const { turns } = await loadTranscript(transcriptPath(projectPath, id));
+            const summary = await loadSummary(projectPath, id);
+            const memory = await loadMemoryDoc(memoryPath(projectPath, id));
+            const last = turns[turns.length - 1];
+            const list = await archivesOf(projectPath, id);
+
+            const archives: ArchiveInfo[] = [];
+            let detailed = 0;
+            for (const a of list) {
+              // 标题从 `summary-NN.md` 首行来——文件很小，每一场都读得起，而它
+              // 是「转述也能找到」的主力。
+              const title = (await readArchivedText(
+                `${archiveDir(projectPath, id)}/summary-${String(a.no).padStart(2, "0")}.md`,
+              )).split(/\r?\n/)[0]?.trim() ?? "";
+              // 轮数和日期要解析整份 transcript，所以只给最近几场算——更早的
+              // 旁白按场号点名去读就是了。
+              let turnCount = 0;
+              let from = 0;
+              let to = 0;
+              if (!a.discarded && detailed < ARCHIVE_DETAIL_LIMIT) {
+                detailed += 1;
+                const parsed = await readArchivedTranscript(a.path);
+                turnCount = parsed.turns.length;
+                from = parsed.turns[0]?.at ?? 0;
+                to = parsed.turns[parsed.turns.length - 1]?.at ?? 0;
+              }
+              archives.push({ no: a.no, discarded: a.discarded, title, turnCount, from, to });
+            }
+
+            out.push({
+              agentId: id,
+              name: agent.name,
+              primary: agent.primaryDirPath?.split(/[/\\]/).pop() ?? "",
+              turnCount: turns.length,
+              openMemory: memory.records.filter((r) => r.status === "open").length,
+              lastAt: last?.at ?? 0,
+              gist: summary.split(/\r?\n/)[0] ?? (last ? scriptPreview(last.text, ROSTER_PREVIEW_CHARS) : ""),
+              sceneNo: currentSceneNo(list.map((a) => a.no)),
+              archives,
+            });
+          }
+          return out;
+        },
+
+        read: async (agentId, scene): Promise<SceneSlice> => {
+          const { projectPath } = get();
+          if (!projectPath) return { turns: [], total: 0, renumbered: false };
+          const list = await archivesOf(projectPath, agentId);
+          const { path, isArchive } = transcriptFor(projectPath, agentId, scene, list);
+          const { turns, renumbered } = isArchive
+            ? await readArchivedTranscript(path)
+            : await loadTranscript(path);
+          return { turns, total: turns.length, renumbered };
+        },
+
+        summary: async (agentId, scene) => {
+          const { projectPath } = get();
+          if (!projectPath) return "";
+          const list = await archivesOf(projectPath, agentId);
+          if (!list.some((a) => a.no === scene)) return loadSummary(projectPath, agentId);
+          return readArchivedText(
+            `${archiveDir(projectPath, agentId)}/summary-${String(scene).padStart(2, "0")}.md`,
+          );
+        },
+
+        memory: async (agentId, includeClosed) => {
+          const { projectPath } = get();
+          if (!projectPath) return [];
+          const doc = await loadMemoryDoc(memoryPath(projectPath, agentId));
+          return includeClosed ? doc.records : doc.records.filter((r) => r.status === "open");
+        },
+
+        /**
+         * 记忆区。**读的是区目录，不是 `loreIndex`**——记忆区绝不并进项目索引，
+         * 那会把隔离从「它不在那里」降级成一个要在六处同时正确的过滤器（06 §4）。
+         * 这里是一条显式的只读路径，六条隔离仍然自动成立。
+         */
+        area: async (agentId): Promise<AreaNote[]> => {
+          const { projectPath, agents } = get();
+          const areaId = agents[agentId]?.areaId;
+          if (!projectPath || !areaId) return [];
+          try {
+            const entities = areaEntities(await scanArea(projectPath, areaId));
+            const notes: AreaNote[] = [];
+            for (const e of entities) {
+              // 场号只在 frontmatter 里，索引里没有。按命中之后再读代价太绕
+              // （调用方要拿着 dirPath 回头找），而一个区的条目是几十条量级、
+              // 文件都很小，一次列全比多绕一层值。
+              let scene = 0;
+              try {
+                const { data } = parseFrontmatter(await readFile(`${e.dirPath}/index.md`));
+                if (typeof data.scene === "number") scene = data.scene;
+              } catch { /* 读不出就是不详，不猜 */ }
+              notes.push({ title: e.name, summary: e.summary, keys: e.aliases, scene });
+            }
+            // 新的在前：作者问「之前那件事」时，近的比远的更可能是答案。
+            return notes.sort((a, b) => b.scene - a.scene);
+          } catch (e) {
+            console.warn("[roleplay] memory area not read for narrator:", e);
+            return [];
+          }
+        },
+      };
+    },
   };
 });

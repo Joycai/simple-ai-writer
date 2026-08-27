@@ -135,6 +135,26 @@ export const DEFAULT_SCENE_WINDOW = 20;
 export const SCENE_READ_CHAR_CAP = 8000;
 
 /**
+ * `list_scenes` 里每个角色展开几场归档的细节（轮数、日期）。
+ *
+ * 归档压成**一条附行**，绝不一场一行——旁白一开口就吃几十行清单，`list_scenes`
+ * 本身就成了上下文负担。更早的只报个数，让它自己按场号去读。
+ */
+export const ARCHIVE_DETAIL_LIMIT = 6;
+
+/**
+ * `search_scenes` 的**逐字层**往回搜几场。
+ *
+ * 逐字检索要把整份 transcript 读进来，而索引层（场次前情 + 记忆区）几乎不要钱。
+ * 所以逐字层封顶、索引层不封顶——超出的部分要在输出里**说出来**，不然「搜过了
+ * 没有」和「压根没搜到那么早」在旁白眼里是同一句话。
+ */
+export const SEARCH_ARCHIVE_LIMIT = 12;
+
+/** `read_scene_memory` 里记忆区那一层最多列几条。 */
+export const AREA_NOTE_LIMIT = 20;
+
+/**
  * 记忆区每轮最多注入多少 token。
  *
  * 和知识库的预算**分开**，而且小得多：一场戏聊到深处时最不该发生的事，是角色的
