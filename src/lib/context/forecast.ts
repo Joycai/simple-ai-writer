@@ -24,7 +24,7 @@
  * 函数里，调用点再也没有可以取错的第二个候选。
  *
  * 界面用哪个任务是另一回事（画哪些控件跟着作者点的那个格子走），这条边界本身
- * 就是这个模块存在的理由——见 `docs/feature/context-meters.md`。
+ * 就是这个模块存在的理由——见 `docs/feature/agent/context-meters.md`。
  */
 
 import type { Model } from "../ai/configDb";
@@ -109,7 +109,7 @@ export interface ForecastInput {
    *
    * **工作流卡清单故意不算**：`workflowBriefingSection` 要读盘（async），为了几百
    * 个 token 在组件里加一段异步加载 + 失效处理不划算。方向是**低估**，也就是条
-   * 偏乐观——记在 `docs/feature/agent/context-meters.md` §5。
+   * 偏乐观——记在 `docs/feature/agent/context-meters.md` §6。
    */
   docxRosterChars?: number;
   /** 中文界面。`toolBriefingFor` 要用它挑措辞。 */
