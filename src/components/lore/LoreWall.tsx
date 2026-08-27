@@ -613,7 +613,7 @@ export function LoreWall() {
           <button
             className={styles.btnSecondary}
             onClick={() => setNewMode("ai")}
-            title={t("lore.newEntry.aiHint", { defaultValue: "从手稿或描述中提取设定" })}
+            title={t("lore.newEntry.aiHint", { defaultValue: "从手稿或描述中提取条目" })}
           >
             <Sparkles size={12} strokeWidth={1.8} />
             {t("lore.newEntry.ai", { defaultValue: "AI 提取" })}

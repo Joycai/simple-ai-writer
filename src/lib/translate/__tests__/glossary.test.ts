@@ -72,7 +72,7 @@ describe("collectGlossary", () => {
     expect(formatGlossary(collectGlossary(idx, "原名"))).toBe("原名->译名");
   });
 
-  it("别名与条目名相同的词条不进表 —— 它什么都不表达，只占一行", () => {
+  it("别名与条目名相同的词对不进表 —— 它什么都不表达，只占一行", () => {
     const idx: LoreIndex = { characters: [entity("文香", ["文香"])] };
     expect(collectGlossary(idx, "文香は。")).toEqual([]);
   });
@@ -117,7 +117,7 @@ describe("parseDictBody", () => {
   });
 
   it("同一行里箭头优先于 = —— src 懒匹配切在第一个分隔符上", () => {
-    // 备注里出现 = 不该把词条切错。
+    // 备注里出现 = 不该把词对切错。
     const [e] = parseDictBody("文香->芙美香 #罗马字 fumika=ka");
     expect(e).toEqual({ src: "文香", dst: "芙美香", note: "罗马字 fumika=ka" });
   });

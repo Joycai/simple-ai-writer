@@ -89,7 +89,7 @@ function Row({ agent }: { agent: RoleplayAgent }) {
     statusRow = (
       <div className={styles.status}>
         <span className={styles.dotAccentHollow} />
-        <span className={styles.statusDim}>{t("roleplay.roster.stale", { defaultValue: "设定已更新" })}</span>
+        <span className={styles.statusDim}>{t("roleplay.roster.stale", { defaultValue: "绑定内容已更新" })}</span>
       </div>
     );
   } else if (last) {

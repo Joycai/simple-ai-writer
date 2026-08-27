@@ -1,5 +1,5 @@
 /**
- * Story memory ("前情记忆") — a per-document rolling summary that lets AI tasks
+ * Story memory ("前情提要") — a per-document rolling summary that lets AI tasks
  * see the plot of everything *before* the verbatim reference window.
  *
  * File format (`.ai-writer/memory/<relative doc path>.md`):

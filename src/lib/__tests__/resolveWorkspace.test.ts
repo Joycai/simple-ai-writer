@@ -88,7 +88,7 @@ describe("category union", () => {
     // A shared id is the same directory: label from the first declarer, both
     // packs on record (style exists in novel and bid alike).
     const style = w.categories.find((c) => c.id === "style")!;
-    expect(style.labelZh).toBe("风格"); // novel's, not bid's 措辞风格
+    expect(style.labelZh).toBe("文风"); // novel's, not bid's 措辞风格
     expect(style.packIds).toEqual(["novel", "bid"]);
     const caps = w.categories.find((c) => c.id === "capabilities")!;
     expect(caps.packIds).toEqual(["bid"]);
@@ -101,7 +101,7 @@ describe("category union", () => {
     );
     const style = w.categories.filter((c) => c.id.toLowerCase() === "style");
     expect(style).toHaveLength(1);
-    expect(style[0].labelZh).toBe("风格");
+    expect(style[0].labelZh).toBe("文风");
     expect(style[0].userDefined).toBeUndefined();
   });
 

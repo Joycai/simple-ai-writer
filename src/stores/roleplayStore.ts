@@ -538,7 +538,7 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         }));
         noteRecalled(job.agentId, seeded.recalled);
       } else {
-        // 排序（修对 → 压缩 → 刷新记忆块 → 词条注入 → 区检索 → 提问）住在
+        // 排序（修对 → 压缩 → 刷新记忆块 → 条目注入 → 区检索 → 提问）住在
         // lib（prepareContinuedHistory），这里只剩状态：历史/事件/记事本/
         // 「想起了…」，和摘要的 fire-and-forget 落盘。
         const charsPerToken = measureCharsPerToken(job.match);

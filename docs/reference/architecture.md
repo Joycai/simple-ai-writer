@@ -351,7 +351,7 @@ A picture reaches a model exactly one way: an `image_url` part on a `role: "user
 | `read_image` tool | the model | any image file **inside the project** — document illustrations in a sibling `assets/`, reference art anywhere else |
 | chat `@`-mention | the author | any image `scanProjectFiles` found; inlined by `lib/agent/chatRefs`, ≤ `MAX_MESSAGE_IMAGES` per message |
 
-The model only *knows* a lore picture exists because the injected 【设定资料】 block says so — `selectLore` writes one bounded 配图 line per matched entity (filenames + descriptions, never pixels). See RAG → 配图在注入里 below.
+The model only *knows* a lore picture exists because the injected 【知识库】 block says so — `selectLore` writes one bounded 配图 line per matched entity (filenames + descriptions, never pixels). See RAG → 配图在注入里 below.
 
 `read_image` is contained against the *whole project*, where `read_file` (and the other text tools) additionally exclude `.ai-writer/` (`isWorkspacePath` in `lib/paths.ts`). The text tools are narrower because a prompt-injected model could read `profile.json` or the lore back to whoever planted the instruction; an image tool decodes one file, by extension, into pixels — and lore gallery images live under `.ai-writer/lore/`, where it must still reach. Both refuse outright when there is no project path — every absolute path is "inside" an empty prefix.
 
@@ -555,7 +555,7 @@ So the setting stays as a **local-endpoint escape hatch**, not as a tuning knob 
 
 Two related gaps stay open on purpose, both bigger than a setting: the full toolset ships **39 schemas ≈ 9k tokens on every request** with no tiering, and `discoverOllama` reads limits out of `/api/show` but not its `capabilities` array (`tools` / `vision` / `thinking`), so `model.type` remains author-declared.
 
-### Story Memory (前情记忆)
+### Story Memory (前情提要)
 
 Per-document rolling summary so long manuscripts don't lose early plot in AI tasks — the assembled context carries a `【前情提要】` layer (compacted summaries of everything before the verbatim window) ahead of `【近期内容】`.
 
@@ -687,7 +687,7 @@ The workspace is the **whole project directory** — documents live wherever the
 
 ### `@` 引用的候选文件（与外部改动同步）
 
-`@` 在聊天与三个设定 AI 弹窗里给出的**文件**候选，来自 `projectStore.fileTree`——即侧栏那棵树——经 `projectFilesFromTree`（`lib/fs/images`）按扩展名分类，`useProjectFiles()` 是唯一入口。
+`@` 在聊天与三个知识库 AI 弹窗里给出的**文件**候选，来自 `projectStore.fileTree`——即侧栏那棵树——经 `projectFilesFromTree`（`lib/fs/images`）按扩展名分类，`useProjectFiles()` 是唯一入口。
 
 - **为什么不再各扫各的**：原先每个界面在项目打开时各调一次 `scanProjectFiles(projectPath)`，自己存一份快照。之后新增的文件（agent 写的、Finder 里拷进来的）在侧栏看得见、`@` 里选不到，屏幕上没有任何东西解释这个差异。一棵树、一条刷新路径，这类不一致就没有藏身处。
 - **哪些算文本**：`md` / `markdown` / `txt` / `html` / `htm`。`.html` 是交付物不是章节（`docs/feature/html-artifact-plan.md` D6，`isChapterFile` 不动），但**读**它没有任何理由排除——`search_text` 早就扫它（`isSearchableFile`），写这个页面的助手正是作者接着要它改页面的那个助手。图片候选另外还要模型链看得见图（`chainCanSeeImages`），否则挂上去的附件这条消息物理上带不走。

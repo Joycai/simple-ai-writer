@@ -111,8 +111,7 @@
     "markClear": "Clear",
     "markClearHint": "Clear the AI range ({{mod}}+Shift+\\)",
     "paragraph": "Paragraph {{p}} · sentence {{s}}",
-    "cumulative": "Total {{n}} words",
-    "refs": "{{n}} lore refs"
+    "cumulative": "Total {{n}} words"
   },
   "editorNav": {
     "toTop": "Jump to top",
@@ -236,7 +235,7 @@
       "newCategoryPlaceholder": "New category name, e.g. Meeting notes"
     },
     "workflows": {
-      "section": "Workflows",
+      "section": "Workflow cards",
       "hint": "Pin down the routine for a kind of task: the AI assistant's instructions always carry a name — description roster, and when a request matches a card's description it reads that card's steps before acting. Cards are advisory — what you say in chat always wins. Stored under the project's .ai-writer/workflows/; built-in cards can be overridden, disabled, and restored.",
       "builtin": "Built-in",
       "overridden": "Overridden",
@@ -247,7 +246,7 @@
       "deleteConfirm": "Click again to confirm deletion",
       "enableCard": "Enable {{card}}",
       "disableCard": "Disable {{card}}",
-      "newCard": "+ New workflow",
+      "newCard": "+ New card",
       "namePlaceholder": "Name (shown in the roster)",
       "descPlaceholder": "One line — the only thing the AI judges \"should I use this card\" by",
       "bodyPlaceholder": "Steps (markdown): order, format samples, and the don'ts"
@@ -267,7 +266,7 @@
         "aiGenerateDrawer": "Toggle the AI generate-task panel",
         "closeOverlays": "Close the command palette / AI drawer",
         "openSettings": "Open Settings",
-        "viewFiles": "Go to Files (workbench)",
+        "viewFiles": "Go to Files",
         "viewOutline": "Go to Outline",
         "viewKnowledge": "Go to Knowledge Base",
         "viewLibrary": "Go to Library",
@@ -498,7 +497,7 @@
       "writerCostNote": "a full extra request, so replies take longer",
       "writerSeeIntro": "Show the explanation again",
       "writerIntroReset": "It will be shown again next time you open the chat",
-      "writerScopeLabel": "SCOPE",
+      "writerScopeLabel": "APPLIES TO",
       "writerScope": "Applies to the AI assistant conversation only. Roleplay does not go through the writer — every line there is still written by each agent's own bound model.",
       "writerUnbound": "The switch is on but no model is bound — a turn will produce no reply, only an explanation of why.",
       "writerUseAssistant": "Use the assistant's model ({{model}})",
@@ -554,7 +553,7 @@
       "undo": "Undo",
       "redo": "Redo",
       "heading": "Heading level",
-      "paragraph": "Body text",
+      "paragraph": "Body paragraph",
       "orderedList": "Numbered list",
       "taskList": "Task list",
       "codeBlock": "Code block",
@@ -627,7 +626,7 @@
   },
   "ai": {
     "tasks": {
-      "continue": "Continue",
+      "continue": "Continue writing",
       "continueDesc": "Continue writing at the chosen position (opening / end / marked range)",
       "polish": "Polish",
       "polishDesc": "Polish selected content",
@@ -644,7 +643,7 @@
       "encounterDesc": "An encounter a GM can run as written",
       "randomTable": "Table",
       "randomTableDesc": "A random table, rollable as written",
-      "headlines": "Headlines",
+      "headlines": "Ad lines",
       "headlinesDesc": "Several headline options, each a different angle",
       "channel": "Adapt",
       "channelDesc": "Rework the selection for another channel",
@@ -664,14 +663,13 @@
       "extractDesc": "Extract key facts from material into the knowledge base",
       "topic": "Topics",
       "topicDesc": "Turn a direction into angles that are ready to write",
-      "titles": "Titles",
+      "titles": "Draft titles",
       "titlesDesc": "Draft several title angles for the current article",
-      "hook": "Opening",
+      "hook": "Hook",
       "hookDesc": "Draft several openings for the current article",
       "compliance": "Compliance",
       "complianceDesc": "Check the current article line by line for platform risk",
-      "system": "System identity",
-      "lore": "Lore extraction"
+      "system": "System identity"
     },
     "instructions": {
       "continue": "Continue writing the next passage from where the text ends.\n- Source fidelity: Any names, facts, or established rules appearing in 【{{knowledge}}】 must be followed exactly — do not invent contradictory details.\n- Style matching: Preserve the sentence rhythm, vocabulary level, and narrative manner of the preceding text.\n- Length: Approximately {{length}} characters, adjusted to match the author's natural paragraph length.\n- Output only the continuation — no headings, no commentary.",
@@ -1020,7 +1018,7 @@
     "bubble": {
       "drawer": "Drawer",
       "ask": "Ask AI",
-      "extractLore": "Extract as lore",
+      "extractLore": "Extract as an entry",
       "checkConsistency": "Check consistency",
       "customPlaceholder": "Custom instruction…"
     },
@@ -1217,7 +1215,7 @@
       "stripComposing": "Writer is composing",
       "introTitle": "From your next message on, the writer writes the text",
       "introOnce": "said once",
-      "intro1a": "The assistant still reads files, checks lore and thinks — it just stops writing the final text. Every turn's prose is written by ",
+      "intro1a": "The assistant still reads files, checks the knowledge base and thinks — it just stops writing the final text. Every turn's prose is written by ",
       "intro1b": " in a clean context; it cannot see this conversation.",
       "intro2": "The work order it was given sits on the line just above each reply. Click to open it.",
       "intro3": "Not right now: \"off for this session\" at the right end of the line above the composer. Each turn costs one extra request and takes a little longer.",
@@ -1226,7 +1224,7 @@
     },
     "errors": {
       "noProject": "Please open a project first",
-      "taskNotFound": "This workspace profile has no task called \"{{task}}\".",
+      "taskNotFound": "No enabled pack defines a task called \"{{task}}\".",
       "taskWorkspaceNotFound": "Task workspace not found",
       "noModel": "Please select a model in AI Config first",
       "modelNotFound": "Selected model not found",
@@ -1624,7 +1622,7 @@
       "capsDialectNanobanana": "Nano Banana (Gemini family)",
       "capsDialectGptImage2": "GPT Image 2 (OpenAI)",
       "capsDialectWan27": "Wan 2.7 (DashScope)",
-      "capsEditLabel": "Supports image editing",
+      "capsEditLabel": "Supports image edits",
       "capsEditHint": "Whether the endpoint accepts input images (edit / img2img). Relays and xAI commonly offer generation only.",
       "capsRouteLabel": "Generation endpoint",
       "capsRouteAuto": "Auto (from the API standard)",
@@ -1810,7 +1808,7 @@
     "modelTypes": {
       "text": "Text",
       "multimodal": "Multimodal",
-      "image": "Image Generation",
+      "image": "Image generation",
       "video": "Video"
     },
     "apiStandards": {
@@ -1890,7 +1888,7 @@
       "importFailed": "Failed to import the {{kb}} bundle:",
       "emptyBundle": "The selected file is not a valid {{kb}} bundle (no entries found).",
       "stagedSummary": "{{count}} entries in this bundle",
-      "sourceProfile": "source workspace: {{profile}}",
+      "sourceProfile": "source packs: {{profile}}",
       "conflictCount": "{{count}} entries clash with existing ones",
       "strategyLabel": "For clashing entries",
       "strategySkip": "Skip",
@@ -1938,7 +1936,7 @@
       "noContent": "No content",
       "addTagHint": "Add aliases / tags in edit mode",
       "moreActions": "More actions",
-      "colIndex": "Entry · index.md",
+      "colIndex": "Headword · index.md",
       "colImages": "Images · images.md",
       "summaryHead": "Summary · injected on match",
       "summaryEmpty": "(No summary — click to write one)",
@@ -2016,7 +2014,7 @@
       }
     },
     "split": {
-      "title": "Reorganize & split",
+      "title": "Split & organize",
       "current": "Current entry",
       "instructionLabel": "Guidance (optional)",
       "instructionPlaceholder": "e.g. put outfits/forms in one exclusion group; merge backstory into one facet…",
@@ -2027,7 +2025,7 @@
       "coreLabel": "Keep as body overview (index.md)",
       "facetsLabel": "Extracted facets (injected on demand)",
       "before": "was",
-      "groupPlaceholder": "group",
+      "groupPlaceholder": "exclusion group",
       "addKey": "+ key",
       "apply": "Apply split",
       "applying": "Applying…",
@@ -2049,7 +2047,7 @@
     },
     "improve": {
       "instructionLabel": "Instruction",
-      "atHint": "type @ to reference another lore entry",
+      "atHint": "type @ to reference another entry",
       "instructionPlaceholder": "e.g. Add more backstory, expand her abilities section, fix inconsistencies…",
       "currentContent": "Current index.md",
       "charCount": "{{count}} chars",
@@ -2174,7 +2172,7 @@
     "newEntry": {
       "manual": "Manual",
       "ai": "AI Generate",
-      "aiHint": "Extract lore from the manuscript or a description"
+      "aiHint": "Extract an entry from the manuscript or a description"
     },
     "form": {
       "title": "Create New Entry",
@@ -2672,7 +2670,7 @@
       "open": "New scene",
       "title": "New scene",
       "scale": "scene {{scene}} · {{n}} turns · ~{{tok}} tok",
-      "continue": "Continue",
+      "continue": "Continue the scene",
       "continueDesc": "Somewhere else, same story. The detail is archived, the recap comes along.",
       "fresh": "Start over",
       "freshDesc": "Unrelated to the last scene. The whole thing is archived; the character starts from zero.",
@@ -2740,19 +2738,19 @@
     "section": {
       "recall": "Memory",
       "recallLead": "Things you have just remembered. This is **what you recall** — it need not agree with what others say.",
-      "bound": "Bound setting",
+      "bound": "Bound entries",
       "scene": "Scene",
       "memory": "Memory",
       "memoryLead": "What you have written down and that still holds. It does not fade as the conversation grows.",
       "memoryNone": "(Nothing yet.)",
-      "boundNone": "(No bound entries yet. Use read_lore_entity when you need the setting.)"
+      "boundNone": "(No bound entries yet. Use read_lore_entity when you need the material.)"
     },
     "roster": {
       "search": "Search agents",
       "turns": "{{n}} turns",
       "generating": "generating",
       "queuedAt": "queued · #{{n}}",
-      "stale": "setting updated",
+      "stale": "binding updated",
       "primaryGone": "character entry deleted",
       "remove": "Remove"
     },
@@ -2772,7 +2770,7 @@
       "narratorScope": "Reads every character's transcript"
     },
     "stale": {
-      "body": "A setting changed (a bound entry, the character sheet, or your identity); this conversation is still using the old version.",
+      "body": "A binding changed (an entry, the character sheet, or your identity); this conversation is still using the old version.",
       "refresh": "Refresh"
     },
     "chatEmpty": {
@@ -2852,7 +2850,7 @@
       "pickWhole": "Bind whole entry",
       "unpickWhole": "Unbind whole entry",
       "whole": "whole entry",
-      "core": "Core card (index.md)",
+      "core": "Headword (index.md)",
       "primaryResident": "Already in context — the lead entry's body is always there; no need to bind it again",
       "refResident": "already in context",
       "noEntities": "The knowledge base is empty.",

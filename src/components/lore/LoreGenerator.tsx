@@ -89,7 +89,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
       status: "done",
       meta: `${description.trim().length}${isZh ? " 字" : " ch"}${refCount > 0 ? ` · ${refCount}${isZh ? " 引用" : " refs"}` : ""}`,
     },
-    { label: t("lore.generator.stepExtract", { defaultValue: "提取条目 · 生成主词条与概要" }), status: "active" },
+    { label: t("lore.generator.stepExtract", { defaultValue: "提取条目 · 生成主条目与概要" }), status: "active" },
     { label: t("lore.generator.stepConfirm", { defaultValue: "交给你确认后入库" }), status: "pending" },
   ];
 
@@ -294,7 +294,7 @@ export function LoreGenerator({ onClose, onModeChange, initialDescription }: Pro
           {/* Error */}
           {error && <div className={styles.error}><AlertTriangle size={13} style={{ flexShrink: 0 }} /> {error}</div>}
 
-          {/* ── Generating: 步骤列 + 思维链 (设计稿 17) ── */}
+          {/* ── Generating: 步骤列 + 思考过程 (设计稿 17) ── */}
           {phase === "generating" && (
             <>
               <div className={styles.statusRow}>

@@ -7,6 +7,11 @@
 > 本文保留作为设计决策记录。方向 2（状态跟踪）与方向 4/6（递归激活/向量兜底）
 > 未实现，见 [`lore-granularity-research.md`](lore-granularity-research.md)。
 >
+> **一处措辞已过时**：本文里的注入块名 **【设定资料】** 在能力包上线时改成了
+> **【知识库】**（`DEFAULT_SECTION_LABELS.knowledge`，且是唯一一个能力包不许
+> 改名的块）。正文按当时的原样保留——搜代码时搜 `sectionLabel("knowledge")`。
+> 词表见 [`terminology.md`](../../reference/terminology.md)。
+>
 > 目标：把 lore 的注入粒度从"实体"降到"特征（facet）"，配合分层预算注入（调研方向 1+3），并用 AI 自动拆解已有条目降低作者负担。涵盖数据模型、注入引擎、AI 拆解流程、UI 更新、迁移兼容与分期计划。
 >
 > 日期：2026-07-18 · 基于当前 main 分支代码阅读（rag.ts / entity.ts / model.ts / loreStore / LoreDetail / LoreImproveModal / AiPanel / generator.ts）

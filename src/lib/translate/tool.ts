@@ -60,7 +60,7 @@ async function resolveTranslateConn(): Promise<AiConn | { error: string }> {
 }
 
 /**
- * 读勾了「翻译词典」开关的条目正文，解析成词条。
+ * 读勾了「翻译词典」开关的条目正文，解析成词对。
  *
  * 别名通道一个条目只能表达一个译名；词典条目用正文整批装 `原文->译文 #备注`
  * （`=`/`→` 也认，见 parseDictBody）。正文不在 LoreIndex 里（懒加载），所以
@@ -84,7 +84,7 @@ async function loadTranslateDict(
         const raw = await readFile(`${e.dirPath}/index.md`);
         entries.push(...parseDictBody(parseFrontmatter(raw).content));
       } catch {
-        // 条目可能正被删或还没有 index.md——词典缺席只是少一批词条，不是错误。
+        // 条目可能正被删或还没有 index.md——词典缺席只是少一批词对，不是错误。
       }
     }
   }

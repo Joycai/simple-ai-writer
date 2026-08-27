@@ -16,7 +16,7 @@
 | [03-plan.md](03-plan.md) | 执行方案：6 个 PR 的切分、逐条验收标准、风险清单、回归重点 | 排期和 review 时 |
 | [04-ui-brief.md](04-ui-brief.md) | 给 Claude Design 的自包含设计任务书 | 做 UI 时 |
 | [05-implementation-notes.md](05-implementation-notes.md) | **实现记录**：这一轮做了什么、与设计的差异、新增令牌、验证到哪一步 | 接着往下做之前 |
-| [06-scene-and-memory-area.md](06-scene-and-memory-area.md) | 转场与记忆区：为什么不需要「场」这根轴、沉降规则、前情摘要由角色自己写 | 改转场 / `lib/roleplay/area.ts` 前 |
+| [06-scene-and-memory-area.md](06-scene-and-memory-area.md) | 转场与记忆区：为什么不需要「场」这根轴、沉降规则、前情由角色自己写 | 改转场 / `lib/roleplay/area.ts` 前 |
 | [07-area-ui-brief.md](07-area-ui-brief.md) | TURN 2 的 UI 任务书（转场与记忆区），自包含 | 做记忆区 UI 时 |
 | [08-verification-checklist.md](08-verification-checklist.md) | 给作者试用的验证清单——**问法比条目重要** | 交给作者试之前 |
 | [09-runjob-refactor-lld.md](09-runjob-refactor-lld.md) | `runJob` 的历史准备路径抽进 `lib/roleplay/run.ts`：只动形状，不动行为 | 改 `runJob` 的排序前 |

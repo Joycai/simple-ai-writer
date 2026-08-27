@@ -593,9 +593,9 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
         : t("lore.facet.modeManualShort", { defaultValue: "手动" });
   const modeTitle = (mode: LoreFacet["mode"]) =>
     mode === "auto"
-      ? t("lore.facet.modeAutoHint", { defaultValue: "主词条命中 + 出现任一触发词" })
+      ? t("lore.facet.modeAutoHint", { defaultValue: "主条目命中 + 出现任一触发词" })
       : mode === "always"
-        ? t("lore.facet.modeAlwaysHint", { defaultValue: "主词条命中即注入" })
+        ? t("lore.facet.modeAlwaysHint", { defaultValue: "主条目命中即注入" })
         : t("lore.facet.modeManualHint", { defaultValue: "仅在对话中手动引用时注入" });
   const MODE_CLASS: Record<LoreFacet["mode"], string> = {
     auto: styles.facetModeAuto,
@@ -1140,14 +1140,14 @@ export function LoreDetail({ entity: initialEntity, onBack, initialEditing = fal
       )}
 
       {/* 设计稿 03 · 屏 15 — 三段结构直接对应数据模型:
-          主词条 index.md | 特征 *.md | 配图 images.md */}
+          主条目 index.md | 特征 *.md | 配图 images.md */}
       <div className={styles.cols}>
 
-        {/* ── 主词条 · index.md ─────────────────────────────────────────── */}
+        {/* ── 主条目 · index.md ─────────────────────────────────────────── */}
         <div className={styles.colIndex}>
           <div className={styles.indexHead}>
             <span className={styles.colHead}>
-              {t("lore.detail.colIndex", { defaultValue: "主词条 · index.md" })}
+              {t("lore.detail.colIndex", { defaultValue: "主条目 · index.md" })}
             </span>
           </div>
 

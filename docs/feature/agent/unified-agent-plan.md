@@ -15,7 +15,7 @@
 | --- | --- | --- | --- |
 | 续写 continue | `stores/aiTaskStore.ts` | **agent loop**（唯一） | 预算化 RAG 注入 + 4 个只读工具 |
 | 润色/改写/总结/自定义 | `stores/aiTaskStore.ts` | 单次流式 | 预算化 RAG 注入 |
-| 前情记忆摘要 | `stores/memoryStore.ts` | 单次流式 | 分段正文切片 |
+| 前情提要摘要 | `stores/memoryStore.ts` | 单次流式 | 分段正文切片 |
 | Lore 新建实体提取 | `lib/lore/generator.ts` | 单次流式（JSON 结构化） | 描述 + @附件 |
 | Lore 特征拆解 | `lib/lore/splitter.ts` | 单次流式 | 实体全文 |
 | 图集 AI 描述 | `lib/lore/vision.ts` | 单次流式（多模态） | 单张图片 |
@@ -73,7 +73,7 @@ lib/ai/*（streamCompletion 等，不动） · lib/context/*（预算化注入�
 | `list_files` | 读 | 递归列出工作区全树（含子目录；`.ai-writer/` 除外），按 `ls -R` 分组输出：绝对目录路径一行，其下文件名缩进。不逐行重复项目前缀是为了省 context——几百章各带一遍长前缀，光目录就能吃掉几千 token |
 | `read_file` | 读 | 单次上限 4000 字符，**按行边界切**；截断时回报 `lines a-b of N` 与下一个 `start_line`，长章节可顺序翻页。分页坐标用行号而非字符偏移，因为 `search_text` 给的就是行号（`L34`），「从第 34 行读」是直接的后续动作 |
 | `search_text` | 读 | 在工作区内全文检索：递归扫所有章节文件（`.ai-writer/` 除外），返回 `路径 + 行号 + 片段`。字面匹配、大小写不敏感，**不支持正则**（模型给的病态正则会卡死 UI 线程且无法中断）。结果有上限（全局 40 行 / 单文件 8 行），长段落按命中位置开窗截断——否则一个常用词就能吃光整个上下文 |
-| `read_memory` | 读 | 读当前文档的前情记忆 |
+| `read_memory` | 读 | 读当前文档的前情提要 |
 | `propose_lore_plan` | 写·审批 | 提交设定改动方案（步骤 = action + entity + detail），阻塞等作者批准；**四个 lore 写工具的准入门槛** |
 | `create_lore_entity` | 写·L1 | 新建实体（name/category/summary/content），落盘前校验 frontmatter |
 | `update_lore_file` | 写·L1 | 改写实体的 index.md 或特征 md（整文件替换，沿用 splitter 的逐字校验思路）。**兜底手段**：整篇重排或新建特征文件才用它，小改动见下面三个 |
@@ -84,7 +84,7 @@ lib/ai/*（streamCompletion 等，不动） · lib/context/*（预算化注入�
 | `delete_lore_file` | 写·L1 | 删掉实体下的单个特征/附件 md（先备份；index.md 与 images.md 拒绝） |
 | `move_lore_entity` | 写·L1 | 改名 / 换分类。换分类只能走它——扫描器认的是文件夹位置，只改 frontmatter 会在下次重扫时被还原 |
 | `delete_lore_entity` | 写·L1 | 删除实体：整个文件夹 rename 进 `.ai-writer/backups/deleted-…`，图库等二进制资产一并保住，可整目录搬回还原 |
-| `update_memory` | 写·L1 | 更新前情记忆段落（走 memory.ts 的分段协议，不允许破坏元数据注释） |
+| `update_memory` | 写·L1 | 更新前情提要段落（走 memory.ts 的分段协议，不允许破坏元数据注释） |
 | `propose_edit` | 写·L2 | 对工作区正文文件提出修改（find + 新文本；`.ai-writer/` 不可触及），**只产生提案不落盘**。find 重复时用 `occurrence=N` 指定第几处、`replace_all` 改全部——见 §8.5 |
 | `rewrite_document` | 写·L2 | 整文件替换工作区内的某个正文文件（完整新内容；`.ai-writer/` 不可触及），**只产生提案不落盘** |
 | `rewrite_lines` | 写·L2 | 按**行号**替换文件的一段（只发替换内容，原文由工具从盘上取），长文件的分段改写路径——见 §8.6 |

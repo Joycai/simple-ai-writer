@@ -252,7 +252,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
   // 语义步骤 (设计稿 17): 读取 → 生成建议 → 交给作者确认。
   const metaSteps: RunStep[] = [
     {
-      label: t("lore.meta.stepRead", { defaultValue: "读取主词条与配图" }),
+      label: t("lore.meta.stepRead", { defaultValue: "读取主条目与配图" }),
       status: "done",
       meta: `${body.length}${isZh ? " 字" : " ch"}${willSendImages ? ` · ${imageCount}${isZh ? " 图" : " img"}` : ""}`,
     },
@@ -277,7 +277,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
               : <div className={styles.headerAvatarPlaceholder}>{entity.name.charAt(0)}</div>}
             <div>
               <div className={styles.headerName}>
-                {entity.name} · {t("lore.meta.title", { defaultValue: "主词条补全" })}
+                {entity.name} · {t("lore.meta.title", { defaultValue: "主条目补全" })}
               </div>
               <div className={styles.headerSub}>
                 {t("lore.meta.subtitle", { defaultValue: "缺失的概要与别名会显著降低命中率" })}
@@ -309,7 +309,7 @@ export function LoreMetaImproveModal({ entity, onClose }: Props) {
           )}
           {/* Current snapshot */}
           <div className={styles.section}>
-            <label className={styles.label}>{t("lore.meta.currentLabel", { defaultValue: "当前主词条" })}</label>
+            <label className={styles.label}>{t("lore.meta.currentLabel", { defaultValue: "当前主条目" })}</label>
             <pre className={styles.currentPre}>
 {`---
 name: ${entity.name}
@@ -339,7 +339,7 @@ summary: ${entity.summary}
             />
           </div>
 
-          {/* 运行进度: 状态行 + 步骤列 + 思维链 (设计稿 17) */}
+          {/* 运行进度: 状态行 + 步骤列 + 思考过程 (设计稿 17) */}
           {phase === "generating" && (
             <div className={styles.section}>
               <div className={styles.label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -454,7 +454,7 @@ summary: ${entity.summary}
             />
             <span className={styles.footerNote}>
               {t("lore.meta.footerNote", {
-                defaultValue: "「应用」只写入主词条四个字段：名称 · 别名 · 分类 · 概要，不改特征正文",
+                defaultValue: "「应用」只写入主条目四个字段：名称 · 别名 · 分类 · 概要，不改特征正文",
               })}
             </span>
           </div>
