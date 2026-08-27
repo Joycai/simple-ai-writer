@@ -22,6 +22,7 @@ import { listArchives, type ArchivedScene } from "../../lib/roleplay/store";
 import { useProjectStore } from "../../stores/projectStore";
 import { ModelSelector } from "../ai/ModelSelector";
 import { AgentLog } from "../ai/AgentLog";
+import type { AgentEvent } from "../../lib/agent/events";
 import { foldBoundary } from "../../lib/agent/transcriptFold";
 import { ApprovalCard } from "../ai/ApprovalCard";
 import { RoundLimitCard } from "../ai/RoundLimitCard";
@@ -29,13 +30,15 @@ import { TruncationCard } from "../ai/TruncationCard";
 import { useAgentStore } from "../../stores/agentStore";
 import { useAiStore } from "../../stores/aiStore";
 import { readPref, writePref } from "../../lib/prefs";
-import { useAppStore } from "../../stores/appStore";
+import { useAppStore, LORE_BUDGET_MAX, LORE_BUDGET_OPTIONS } from "../../stores/appStore";
 import { computeContextBreakdown } from "../../lib/agent/contextBreakdown";
 import { plannedToolTokens } from "../../lib/agent/toolCost";
 import { inputCeilingFor } from "../../lib/context/budget";
 import { presetFor } from "../../lib/roleplay/presets";
 import { residentCoreDirs } from "../../lib/roleplay/context";
-import { recalledNames } from "../../lib/roleplay/trace";
+import { recalledNames, type TurnContextTrace } from "../../lib/roleplay/trace";
+import { TraceBody, TraceToggle } from "./TurnTrace";
+import trace_ from "./TurnTrace.module.css";
 import {
   chainCanSeeImages, withSessionOverrides, type SubAgentKind,
 } from "../../lib/agent/subagent";
@@ -127,9 +130,62 @@ function ComposerMirror({ text, innerRef }: {
   );
 }
 
-function TurnBlock({ turn, log, memories, recalled, onOpenArea, onRewind, confirm, doomed }: {
+/**
+ * 回复末尾那两本账：取材条 + 执行日志。
+ *
+ * 并排一行、都用三角，是因为它们是同一类东西——**事件用箭头，账目用三角**
+ * （设计稿 13 · 1a）。「← 想起了」「→ 记下了」是这一轮发生的事，方向就是它们
+ * 和这一轮的关系；这两条不是事件，是事后可以查的账。
+ *
+ * 取材条**恒在**（哪怕这一轮零命中，甚至没有记录），执行日志只在有步骤时出现：
+ * 「这一轮什么都没命中」是一句有价值的话，而「这一轮没调工具」不是。
+ */
+function TurnLedger({
+  trace, log, traceOpen, logOpen, onToggleTrace, onToggleLog, onRaiseBudget, onOpenArea,
+}: {
+  trace: TurnContextTrace | undefined;
+  log: AgentEvent[] | undefined;
+  traceOpen: boolean;
+  logOpen: boolean;
+  onToggleTrace: () => void;
+  onToggleLog: () => void;
+  onRaiseBudget: () => void;
+  onOpenArea: () => void;
+}) {
+  const { t } = useTranslation();
+  const steps = log?.filter((e) => e.kind === "tool-step").length ?? 0;
+  return (
+    <div className={`${styles.logLine} ${trace_.ledger}`}>
+      <div className={styles.ledgerRow}>
+        <TraceToggle trace={trace} open={traceOpen} onToggle={onToggleTrace} />
+        {steps > 0 && (
+          <>
+            <span className={styles.ledgerSep} />
+            <button type="button" className={styles.logToggle} onClick={onToggleLog}>
+              <ChevronRight
+                size={8}
+                strokeWidth={2.6}
+                style={{ transform: logOpen ? "rotate(90deg)" : undefined }}
+              />
+              {t("roleplay.log.line", { n: steps, defaultValue: `执行日志 · ${steps} 步` })}
+            </button>
+          </>
+        )}
+      </div>
+      {traceOpen && trace && (
+        <TraceBody trace={trace} onRaiseBudget={onRaiseBudget} onOpenArea={onOpenArea} />
+      )}
+      {logOpen && log && (
+        <div className={styles.logBody}><AgentLog log={log} isRunning={false} compact /></div>
+      )}
+    </div>
+  );
+}
+
+function TurnBlock({ turn, ledger, memories, recalled, onOpenArea, onRewind, confirm, doomed }: {
   turn: SceneTurn;
-  log?: React.ReactNode;
+  /** 回复末尾那两本可以查的账：取材条 + 执行日志（设计稿 13 · 1a）。 */
+  ledger?: React.ReactNode;
   /** 这一轮里角色记下的东西。作者手加的 `turn: 0`，永远不会落在这里。 */
   memories?: MemoryRecord[];
   /** 这一轮从记忆区里想起来的东西。 */
@@ -204,7 +260,7 @@ function TurnBlock({ turn, log, memories, recalled, onOpenArea, onRewind, confir
           {t("roleplay.memory.recorded", { title: m.title, defaultValue: `记下了：${m.title}` })}
         </div>
       ))}
-      {log}
+      {ledger}
     </>
   );
 }
@@ -234,6 +290,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const [showSyntax, setShowSyntax] = useState(() => readPref("app:roleplaySyntaxSeen") !== "1");
   const [showBindings, setShowBindings] = useState(false);
   const [openLog, setOpenLog] = useState<number | null>(null);
+  const [openTrace, setOpenTrace] = useState<number | null>(null);
   const [refs, setRefs] = useState<AttachedItem[]>([]);
   /** 被拒的附件（太大 / 读不到）。下一次挑选会清掉它。 */
   const [refError, setRefError] = useState<string | null>(null);
@@ -328,6 +385,17 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
   const selection = useAiTaskStore((s) => s.selection);
   useEffect(() => { setDetached(false); }, [selection]);
   const quote = !detached && selection ? selection : undefined;
+
+  const loreBudgetTokens = useAppStore((s) => s.loreBudgetTokens);
+  const setLoreBudgetTokens = useAppStore((s) => s.setLoreBudgetTokens);
+  /**
+   * 「提高预算」跨一档，和写作面板那个同名入口走同一条梯子——两处都叫「提高
+   * 预算」，点下去却跨不同的步长，是最容易让作者对不上账的一种不一致。
+   */
+  const raiseLoreBudget = () => {
+    const next = LORE_BUDGET_OPTIONS.find((n) => n > loreBudgetTokens);
+    setLoreBudgetTokens(next ?? Math.min(LORE_BUDGET_MAX, loreBudgetTokens * 2));
+  };
 
   const contextUtilization = useAppStore((s) => s.contextUtilization);
   /**
@@ -861,30 +929,21 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
                  那一句可能在几屏之上——那等于问了一个问题却没人看见。 */
               confirm={rewindTo === turn.index ? rewindConfirm : undefined}
               doomed={rewindTo !== null && turn.index > rewindTo}
-              log={
-                session.log[turn.index]?.length ? (
-                  <div className={styles.logLine}>
-                    <button
-                      type="button"
-                      className={styles.logToggle}
-                      onClick={() => setOpenLog(openLog === turn.index ? null : turn.index)}
-                    >
-                      <ChevronRight
-                        size={8}
-                        strokeWidth={2.6}
-                        style={{ transform: openLog === turn.index ? "rotate(90deg)" : undefined }}
-                      />
-                      {t("roleplay.log.line", {
-                        n: session.log[turn.index].filter((e) => e.kind === "tool-step").length,
-                        defaultValue: `执行日志 · ${session.log[turn.index].filter((e) => e.kind === "tool-step").length} 步`,
-                      })}
-                    </button>
-                    {openLog === turn.index && (
-                      <div className={styles.logBody}><AgentLog log={session.log[turn.index]} isRunning={false} compact /></div>
-                    )}
-                  </div>
-                ) : undefined
-              }
+              ledger={turn.speaker === "agent" ? (
+                <TurnLedger
+                  /* 取材条和执行日志是同一类东西——都不是一次性事件，是可以查
+                     的账，所以并排在回复末尾、都用三角（设计稿 13 · 1a：事件用
+                     箭头，账目用三角）。 */
+                  trace={session.contextTrace[turn.index]}
+                  log={session.log[turn.index]}
+                  traceOpen={openTrace === turn.index}
+                  logOpen={openLog === turn.index}
+                  onToggleTrace={() => setOpenTrace(openTrace === turn.index ? null : turn.index)}
+                  onToggleLog={() => setOpenLog(openLog === turn.index ? null : turn.index)}
+                  onRaiseBudget={raiseLoreBudget}
+                  onOpenArea={() => setShowMemory(true)}
+                />
+              ) : undefined}
             />
           ))}
 

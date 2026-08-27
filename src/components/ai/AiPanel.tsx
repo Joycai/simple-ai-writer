@@ -44,7 +44,9 @@ import { RoundLimitCard } from "./RoundLimitCard";
 import { TruncationCard } from "./TruncationCard";
 import { AutoApproveChip } from "./AutoApproveChip";
 import { useAiStore } from "../../stores/aiStore";
-import { useAppStore, LORE_BUDGET_MIN, LORE_BUDGET_MAX } from "../../stores/appStore";
+import {
+  useAppStore, LORE_BUDGET_MIN, LORE_BUDGET_MAX, LORE_BUDGET_OPTIONS,
+} from "../../stores/appStore";
 import { MAX_DRAFTS } from "../../lib/ai/drafts";
 import { focusBlockedByImage, useEditorStore, useWritingFocus } from "../../stores/editorStore";
 import { useLoreStore } from "../../stores/loreStore";
@@ -102,7 +104,6 @@ const DEFAULT_DETAIL_SPAN = RECENT_WINDOW_MIN_CHARS;
  * the common tiers; the adjacent number field takes any value in
  * [LORE_BUDGET_MIN, LORE_BUDGET_MAX] for large-context models.
  */
-const LORE_BUDGET_OPTIONS = [600, 2000, 8000, 32000];
 
 /** Context-window utilization presets (see lib/context/budget). */
 const UTILIZATION_OPTIONS = [0.25, 0.5, 0.75, 0.9];
