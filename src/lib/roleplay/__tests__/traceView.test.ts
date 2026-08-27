@@ -43,7 +43,7 @@ describe("收起行的三个数", () => {
    * 收起行写「常驻 5 · 本轮 6」，展开是 3 + 2 + 1。**两个数必须对得上**，
    * 否则展开的那一刻整条就失去信任。
    */
-  it("「本轮」是三段之和：知识库 + 记忆区 + 你 @ 的", () => {
+  it("「本轮」是三段之和：知识库 + 记忆区 + 引用", () => {
     const hit = (n: string) => entity({ name: n, dirPath: `/lore/${n}`, layers: [{ kind: "core", chars: 100 }] });
     const t = trace({
       resident: [piece(), piece({ name: "口癖" })],
@@ -58,10 +58,10 @@ describe("收起行的三个数", () => {
   });
 
   /**
-   * 常驻上一场就装订好了，这一轮不必重复计。把它并进「本轮 3.8k」，作者每一轮
-   * 都会看到一个虚高的数，并据此去调一个没问题的预算。
+   * 常驻上一轮就装订好了，这一轮不必重复计。把它并进「本轮 2,480 字」，作者每
+   * 一轮都会看到一个虚高的数，并据此去调一个没问题的预算。
    */
-  it("常驻的字数不计进本轮 tk", () => {
+  it("常驻的字数不计进本轮", () => {
     const s = summarize(trace({
       resident: [piece({ chars: 9999 }), piece({ chars: 9999 })],
       lore: report([], 2500),
@@ -70,15 +70,47 @@ describe("收起行的三个数", () => {
     expect(s.turnChars).toBe(2900);
   });
 
-  /** 匹配到了但一层都没贡献的（`coreDone`）不算「本轮命中」。 */
-  it("匹配了却一个字都没贡献的条目不计进本轮", () => {
-    const s = summarize(trace({
+  /**
+   * `coreResident`（0 字）的那些**要算进本轮**。
+   *
+   * 它的意思是「命中了，但正文已经在常驻段里，去重后不重复装」——把它滤掉，
+   * 作者会以为这一句话没能唤起这个条目，然后去给一个工作正常的条目加关键字。
+   * 设计稿把「0 字」列为五句不能互相代替的话之一，就是这个原因。
+   */
+  it("0 字的条目（coreResident）算进本轮，但不加字数", () => {
+    const t = trace({
       lore: report([
         entity({ name: "已常驻", coreResident: true, layers: [] }),
         entity({ name: "真命中", dirPath: "/lore/x", layers: [{ kind: "summary", chars: 40 }] }),
       ], 40),
+    });
+    expect(summarize(t).turnCount).toBe(2);
+    expect(summarize(t).turnChars).toBe(40);
+    const rows = hitRows(t.lore);
+    expect(rows.map((r) => [r.name, r.chars])).toEqual([["真命中", 40], ["已常驻", 0]]);
+    expect(rows[1].coreResident).toBe(true);
+  });
+
+  /** 引用**算一条**（它确实在上下文里），但 refs 没有 chars，所以不加字数。 */
+  it("引用算一条，但不进字数合计", () => {
+    const s = summarize(trace({
+      lore: report([], 500),
+      refs: [{ name: "雪原三月", dirPath: "/doc/a" }, { name: "军械册", dirPath: "/doc/b" }],
     }));
-    expect(s.turnCount).toBe(1);
+    expect(s.turnCount).toBe(2);
+    expect(s.turnChars).toBe(500);
+  });
+
+  /**
+   * 「只进了标题」要报到收起行。这是作者最容易误判的一种——清单里明明有它，
+   * 角色却对它一无所知，而不展开就看不见。
+   */
+  it("只进了标题的常驻项单独计数", () => {
+    const s = summarize(trace({
+      resident: [piece(), piece({ name: "旧城地图", unexpanded: true, chars: 18 })],
+    }));
+    expect(s.residentCount).toBe(2);
+    expect(s.unexpandedCount).toBe(1);
   });
 
   it("落选与失效各自成一个数", () => {

@@ -28,6 +28,8 @@
 .caret { flex-shrink: 0; transition: transform var(--transition-fast); }
 
 .tkSeg { color: var(--color-text-kbd); }
+/* 「本轮 0」「本轮未检索」比数字段亮一档：它们是这一行的正文，不是尾注。 */
+.midSeg { color: var(--color-text-dim); }
 .dimSeg { color: var(--color-text-kbd); }
 .warnSeg { color: var(--color-error); }
 
@@ -54,27 +56,31 @@
 .body section { position: relative; padding-left: 17px; }
 .body section + section { margin-top: 20px; }
 
-/* ── 四种装订 ──
-   一条 3px 宽的骑缝：两条 1px 竖线之间是书脊。**上下出血**（top/bottom 为负）
-   ——线不在段内起笔也不在段内收笔，它从上一场穿进来、往下一轮穿出去，这就是
-   「不随轮次变」的字面画法。 */
+/* ── 四种装订 · 同一根线的不同终止方式 ──
+   **3px 双线一次都不用**：本仓的规则是「分类用颜色，集合用装订」，而 3px 双线
+   已经归集合所有。这四段是上下文的四个块，不是分类也不是集合，所以它们只借
+   同一根 1px 线的四种终止方式：出血 / 止笔 / 断线 / 加粗成赭石。
+
+   常驻：**上下出血**（top/bottom 为负）——线不在段内起笔也不在段内收笔，它从
+   上一轮穿进来、往下一轮穿出去。这就是「一直都在」的字面画法，也是「本轮 +0」
+   为什么不是失败的视觉解释。 */
 .bindResident {
   position: absolute;
-  left: 0;
-  top: -6px;
-  bottom: -6px;
-  width: 3px;
-  border-left: 1px solid var(--color-border-input);
-  border-right: 1px solid var(--color-border-input);
+  left: 1px;
+  top: -8px;
+  bottom: -8px;
+  width: 1px;
+  background: var(--color-border-input);
 }
 
-/* 单线 + 两端止笔：把这一段封成闭合区间——这些是这一轮才来的，下一轮很可能换
-   一批。和常驻并排时，出血与止笔的差别在 320px 下也看得清。 */
+/* 知识库：**同粗同色**，只有终止方式不同——两端的止笔把这一段封成闭合区间：
+   这些是这一轮才来的，下一轮很可能换一批。出血对止笔是这一稿最重的一组对比，
+   320px 下也分得开。 */
 .bindHit {
   position: absolute;
   left: 1px;
-  top: 4px;
-  bottom: 4px;
+  top: 5px;
+  bottom: 5px;
   width: 1px;
   background: var(--color-border-input);
 }
@@ -94,8 +100,8 @@
 .bindArea {
   position: absolute;
   left: 1px;
-  top: 4px;
-  bottom: 4px;
+  top: 5px;
+  bottom: 5px;
   width: 1px;
   background: repeating-linear-gradient(
     var(--color-border-input) 0 2px,
@@ -107,8 +113,8 @@
 .bindRef {
   position: absolute;
   left: 0;
-  top: 4px;
-  bottom: 4px;
+  top: 5px;
+  bottom: 5px;
   width: 2px;
   background: var(--color-border-accent);
 }
@@ -138,6 +144,14 @@
 }
 
 .headRule { flex: 1; height: 1px; background: var(--color-hairline); }
+
+/* 「没跑过」和「跑了、0 条」是同一段的两种不同缺席，版式上必须一眼分开——
+   一个 0 会把前者说成后者。 */
+.headRuleDashed {
+  height: 0;
+  background: none;
+  border-top: 1px dashed var(--color-border-muted);
+}
 
 .headRight {
   flex-shrink: 0;
@@ -195,13 +209,17 @@
   color: var(--color-text-kbd);
 }
 
-.staleRow {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--color-hairline);
+.staleGroup { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--color-hairline); }
+.staleRow + .staleRow { margin-top: 8px; }
+
+/* 失效的绑定连路径一起留着：光有名字，作者认不出他绑的是哪一条。 */
+.stalePath {
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  line-height: 1.5;
+  color: var(--color-text-kbd);
+  word-break: break-all;
 }
 
 /* 失效条目留着删除线，不悄悄抹掉——作者得看见他绑过它。 */
@@ -235,6 +253,20 @@
   color: var(--color-text-dim);
 }
 .chipGhost { border-style: dashed; color: var(--color-text-kbd); }
+
+/* 位置词 / 「特征」/「全文」——比层芯片再小一档：它们说的是「它是什么」，
+   而层芯片说的是「它带了多少」。 */
+.chipSm {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border: 1px solid var(--color-border-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1.5;
+  color: var(--color-text-dim);
+}
+/* 「只进了标题」——警示色只染这一枚，不染整行。 */
+.chipWarn { border-color: var(--color-error); color: var(--color-error); }
 
 .chipRow { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
 
@@ -271,6 +303,14 @@
   font-size: 10px;
   line-height: 1;
   color: var(--color-text-hint);
+}
+/* 「0 字」比别的数字再淡一档，但**不是**警示色——它不是失败。 */
+.hitTkZero {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--color-text-kbd);
 }
 
 /* ── 激活词那一行 ──
@@ -392,6 +432,31 @@
   font-size: 11.5px;
   line-height: 1.4;
   color: var(--color-text-hint);
+}
+
+/* `resident` 不是失败——画成芯片就成了第五种失败。一句带点线下划的话，颜色比
+   上面四行**亮**一档，并且单独排在组内一道细线之下。 */
+.dropResidentGroup {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-hairline);
+}
+
+.dropResident { display: flex; align-items: baseline; gap: 8px; padding: 4px 0; }
+
+.dropResidentName {
+  font-family: var(--font-serif);
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--color-text-soft);
+}
+
+.dropResidentNote {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--color-text-dim);
+  border-bottom: 1px dotted var(--color-border-input);
 }
 
 .dropDetail {
