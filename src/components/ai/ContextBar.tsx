@@ -16,8 +16,11 @@ import { useTranslation } from "react-i18next";
 import { useTerms } from "../../stores/projectStore";
 import {
   CONTEXT_SEGMENT_ORDER,
+  PREFLIGHT_SEGMENT_ORDER,
   type ContextBreakdown,
   type ContextSegmentKey,
+  type PreflightBreakdown,
+  type PreflightSegmentKey,
 } from "../../lib/agent/contextBreakdown";
 import styles from "./AgentChat.module.css";
 
@@ -36,6 +39,13 @@ const SEGMENT_LABELS: Record<ContextSegmentKey, { key: string; fallback: string 
   free:         { key: "ai.chat.ctxFree",         fallback: "空余" },
 };
 
+const PREFLIGHT_LABELS: Record<PreflightSegmentKey, { key: string; fallback: string }> = {
+  system:  { key: "ai.chat.ctxSystem",   fallback: "系统+工具" },
+  bound:   { key: "ai.chat.preBound",    fallback: "绑定块" },
+  memory:  { key: "ai.chat.preMemory",   fallback: "记忆块" },
+  unknown: { key: "ai.chat.preUnknown",  fallback: "检索 —— 发送后才知道" },
+};
+
 /**
  * The composer's memory strip: what the next request's context is made of, and
  * how much room is left before compaction folds the oldest turns away.
@@ -45,8 +55,129 @@ const SEGMENT_LABELS: Record<ContextSegmentKey, { key: string; fallback: string 
  * rail, and this sits directly above the input — permanent chrome there costs
  * message space on every session, whether or not the author is watching memory.
  */
-export function ContextBar({ context, onCompact, compacting }: {
+/**
+ * 预估态：一场对话开始之前。
+ *
+ * 同一个组件、同样的高度（6px 条 + 一行 11px 读数），只换三样东西——读数的**动词**
+ * （Context → 预估 ≥）、右侧轨道的**纹样**（空余 → 未定纹）、以及**撤掉折叠竖线**。
+ * 变的只有这三处，而这三处恰好就是「估」和「量」的全部差别，所以作者不需要学第二
+ * 套东西。
+ *
+ * 未定纹用既有 token 里的两档底色斜纹——**未知不该有自己的颜色，它该是纹理**。
+ */
+function PreflightBar({ pre, resident, unexpanded, stale }: {
+  pre: PreflightBreakdown;
+  /** 图例里点名「哪些常驻在场」用。 */
+  resident: string[];
+  unexpanded: number;
+  stale: number;
+}) {
+  const { t } = useTranslation();
+  const [showLegend, setShowLegend] = useState(false);
+  if (pre.contextSize <= 0) return null;
+
+  const label = (key: PreflightSegmentKey) =>
+    t(PREFLIGHT_LABELS[key].key, { defaultValue: PREFLIGHT_LABELS[key].fallback });
+
+  return (
+    <div className={styles.ctx}>
+      <button
+        className={styles.ctxBar}
+        onClick={() => setShowLegend((v) => !v)}
+        aria-expanded={showLegend}
+        title={t("ai.chat.ctxToggle", { defaultValue: "展开/收起上下文构成" })}
+      >
+        {pre.segments.map((seg) =>
+          seg.tokens > 0 ? (
+            <span
+              key={seg.key}
+              className={`${styles.ctxSeg} ${styles[`pre_${seg.key}`]}`}
+              style={{ flexGrow: seg.tokens }}
+              title={`${label(seg.key)} ≈ ${formatTokens(seg.tokens)} tk`}
+            />
+          ) : null,
+        )}
+        {/* 同一道 1px 线，相反的含义：它说「至少到这里」，不说「到这里就要归纳」。 */}
+        <span
+          className={styles.ctxFloor}
+          style={{ left: `${pre.lowerBoundPct}%` }}
+          title={t("ai.chat.preFloorTitle", { defaultValue: "下界：至少到这里" })}
+        />
+      </button>
+
+      <div className={styles.ctxMeter}>
+        <span>
+          {t("ai.chat.preMeter", { defaultValue: "预估" })}{" "}
+          <span className={pre.over ? styles.ctxCountWarn : styles.ctxCountFloor}>
+            {`≥ ${formatTokens(pre.lowerBoundTokens)}`}
+          </span>{" "}
+          / {formatTokens(pre.ceilingTokens)} tk
+        </span>
+        <span className={styles.ctxWindow}>
+          {/* 有失效绑定时右侧让位给它——它比「检索未发生」急。 */}
+          {stale > 0
+            ? t("ai.chat.preStale", { n: stale, defaultValue: `${stale} 条失效` })
+            : t("ai.chat.preNotYet", { defaultValue: "检索未发生" })}
+        </span>
+      </div>
+
+      {/* 图例是唯一能长高的地方（它本来就要展开），所以「哪些常驻在场」「有没有
+          只进了标题的」都放这里，不挤进那一行读数。 */}
+      {showLegend && (
+        <div className={styles.ctxLegend}>
+          {PREFLIGHT_SEGMENT_ORDER.map((key) => {
+            const seg = pre.segments.find((s) => s.key === key);
+            if (!seg || seg.tokens <= 0) return null;
+            return (
+              <span key={key} className={styles.ctxLegendItem}>
+                <span className={`${styles.ctxSwatch} ${styles[`pre_${key}`]}`} />
+                {label(key)}
+                {key === "unknown" ? null : (
+                  <span className={styles.ctxLegendValue}>{formatTokens(seg.tokens)}</span>
+                )}
+                {key === "system" && resident.length > 0 && (
+                  <span className={styles.ctxLegendNote}>
+                    {t("ai.chat.preResident", {
+                      name: resident[0],
+                      defaultValue: `含 ${resident[0]} 人设`,
+                    })}
+                  </span>
+                )}
+                {key === "bound" && unexpanded > 0 && (
+                  <span className={styles.ctxLegendWarn}>
+                    {t("ai.chat.preUnexpanded", {
+                      n: unexpanded, defaultValue: `${unexpanded} 条只进了标题`,
+                    })}
+                  </span>
+                )}
+              </span>
+            );
+          })}
+          <span className={styles.ctxLegendItem}>
+            <span className={`${styles.ctxSwatch} ${styles.pre_track}`} />
+            {t("ai.chat.ctxWindow", {
+              defaultValue: "窗口 {{n}}", n: formatTokens(pre.contextSize),
+            })}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ContextBar({ context, preflight, onCompact, compacting }: {
   context: ContextBreakdown;
+  /**
+   * 还没发过第一条时的预估（`lib/roleplay/trace`）。传了就画预估态。
+   *
+   * 只有扮演面板传它：对话助手没有「发送前就知道会带什么」这份数据。
+   */
+  preflight?: {
+    pre: PreflightBreakdown;
+    resident: string[];
+    unexpanded: number;
+    stale: number;
+  } | null;
   /**
    * Author-requested compaction ("立即归纳"). Absent = no button — the chat
    * passes its handler only when something is actually foldable; the roleplay
@@ -64,6 +195,17 @@ export function ContextBar({ context, onCompact, compacting }: {
   // to an assumed one, and drawing a precise-looking bar against a guess would
   // be the wrong kind of confidence.
   if (context.contextSize <= 0) return null;
+
+  if (preflight) {
+    return (
+      <PreflightBar
+        pre={preflight.pre}
+        resident={preflight.resident}
+        unexpanded={preflight.unexpanded}
+        stale={preflight.stale}
+      />
+    );
+  }
 
   const label = (key: ContextSegmentKey) =>
     t(SEGMENT_LABELS[key].key, { defaultValue: SEGMENT_LABELS[key].fallback, entry: terms.entry });

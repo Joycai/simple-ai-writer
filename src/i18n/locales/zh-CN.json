@@ -1438,7 +1438,16 @@
         "writerActive": "写手子代理已启用：本次对话的成文由它完成（点击停用）",
         "writerDisabled": "写手子代理已在本次对话停用（点击启用）"
       },
-      "imageDownscaled": "已缩小以适应发送上限（{{detail}}）"
+      "imageDownscaled": "已缩小以适应发送上限（{{detail}}）",
+      "preMeter": "预估",
+      "preNotYet": "检索未发生",
+      "preStale": "{{n}} 条失效",
+      "preBound": "绑定块",
+      "preMemory": "记忆块",
+      "preUnknown": "检索 —— 发送后才知道",
+      "preResident": "含 {{name}} 人设",
+      "preUnexpanded": "{{n}} 条只进了标题",
+      "preFloorTitle": "下界：至少到这里，检索还会往右加"
     },
     "drawer": {
       "tabGenerate": "生成",

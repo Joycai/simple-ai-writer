@@ -31,7 +31,9 @@ import { useAgentStore } from "../../stores/agentStore";
 import { useAiStore } from "../../stores/aiStore";
 import { readPref, writePref } from "../../lib/prefs";
 import { useAppStore, LORE_BUDGET_MAX, LORE_BUDGET_OPTIONS } from "../../stores/appStore";
-import { computeContextBreakdown } from "../../lib/agent/contextBreakdown";
+import {
+  computeContextBreakdown, computePreflightBreakdown,
+} from "../../lib/agent/contextBreakdown";
 import { plannedToolTokens } from "../../lib/agent/toolCost";
 import { inputCeilingFor } from "../../lib/context/budget";
 import { presetFor } from "../../lib/roleplay/presets";
@@ -425,6 +427,29 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [session?.history, session?.meta, contextVersion, toolTokens, boundModel?.contextSize, contextUtilization],
   );
+
+  /**
+   * 预估态要的四样：三段 token、常驻里的主角名、只进了标题的条数、失效条数。
+   *
+   * `preflight` 由 `checkBindings` / `refreshPreflight` 维护（store 级，因为它对
+   * 没打开过的 agent 也要存在）。没有它就不画预估——宁可维持现状，也别画一条
+   * 编出来的条。
+   */
+  const preflight = useRoleplayStore((s) => s.preflight[agent.id]);
+  const preflightBar = useMemo(() => {
+    if (!preflight) return null;
+    return {
+      pre: computePreflightBreakdown(
+        preflight,
+        toolTokens,
+        inputCeilingFor(boundModel?.contextSize, contextUtilization),
+        boundModel?.contextSize ?? 0,
+      ),
+      resident: preflight.resident.filter((p) => p.kind === "primary").map((p) => p.name),
+      unexpanded: preflight.resident.filter((p) => p.unexpanded).length,
+      stale: preflight.stalePaths.length,
+    };
+  }, [preflight, toolTokens, boundModel?.contextSize, contextUtilization]);
 
   const candidates: MentionItem[] = useMemo(() => [
     ...Object.values(loreIndex).flat().map((entity): MentionItem => ({ type: "lore", entity })),
@@ -1144,7 +1169,13 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
             />
           )}
 
-          <ContextBar context={context} />
+          <ContextBar
+            context={context}
+            /* 还没发第一条时画预估态：这时 `history` 是 null，实测只量得出工具
+               schema，而首次请求真正会带的 system 层 / 绑定块 / 记忆块一样都还
+               没装配（见 12-context-trace-plan §4）。 */
+            preflight={session?.history ? null : preflightBar}
+          />
 
           {/* 附件行：这条消息**带着什么**（芯片）和这一场**怎么工作**（子代理）。
               原来只有一句「N 项引用」，删不掉任何一项——芯片本身就是删除入口。 */}

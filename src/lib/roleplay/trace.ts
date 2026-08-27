@@ -100,6 +100,16 @@ export interface PreflightEstimate {
   boundChars: number;
   /** 记忆注入块正文的字符数。 */
   memoryChars: number;
+  /**
+   * 同样三块的 **token** 数，由 `blockSizes` 用权威估算器当场数出来。
+   *
+   * 分开存而不是留给显示层换算：字→token 的比值随语种差四倍（中文 ~1、拉丁
+   * ~4），而构成条的读数写着「预估 ≥」——那是一个下界声明，用常数换算会把它变成
+   * 一个可能高四倍的假数。只有 `blockSizes` 同时握着那三段真正的文本。
+   */
+  systemTokens: number;
+  boundTokens: number;
+  memoryTokens: number;
   resident: ResidentPiece[];
   stalePaths: string[];
 }
