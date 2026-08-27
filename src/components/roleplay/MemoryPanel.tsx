@@ -30,21 +30,33 @@ import type { MemoryKind, MemoryRecord } from "../../lib/roleplay/model";
 import styles from "./MemoryPanel.module.css";
 
 function Record({
-  agentId, record, onJump,
+  agentId, record, sceneNo, onJump,
 }: {
   agentId: string;
   record: MemoryRecord;
+  /** 当前这一场的号，用来判断这条记忆是不是本场记的。 */
+  sceneNo: number;
   onJump: (turn: number) => void;
 }) {
   const { t } = useTranslation();
   const reviseMemory = useRoleplayStore((s) => s.reviseMemory);
   const closed = record.status !== "open";
+  // 场号是 0（改动之前记的）时按「本场」处理，维持原来的行为——那时还没有场号，
+  // 猜一个「它来自别处」只会把一批本来能用的跳转按钮关掉。
+  const older = record.scene > 0 && record.scene < sceneNo;
 
   return (
     <div className={`${styles.record} ${closed ? styles.recordClosed : ""}`}>
       <div className={styles.recordHead}>
         <span className={styles.recordTitle}>{record.title}</span>
-        {record.turn > 0 && (
+        {/* 跳转**只对本场的记录**给：轮号是每场自己数的，拿一条上一场的记录去跳
+            当前这一场的第 14 轮，落点是一段不相干的对话。旧场次的记录改成显示
+            场号，等旁白/角色能读归档时它就是那一场的地址（13 §PR4/PR6）。 */}
+        {older ? (
+          <span className={styles.sceneTag}>
+            {t("roleplay.memory.fromScene", { n: record.scene, defaultValue: `第 ${record.scene} 场` })}
+          </span>
+        ) : record.turn > 0 && (
           <button type="button" className={styles.turnLink} onClick={() => onJump(record.turn)}>
             {t("roleplay.memory.jumpToTurn", { n: record.turn, defaultValue: `第 ${record.turn} 轮` })}
           </button>
@@ -157,6 +169,7 @@ export function MemoryPanel({
   const [showClosed, setShowClosed] = useState(false);
 
   const records = session?.memory ?? [];
+  const sceneNo = session?.sceneNo ?? 1;
   const open = useMemo(() => records.filter((r) => r.status === "open"), [records]);
   const closed = useMemo(() => records.filter((r) => r.status !== "open"), [records]);
 
@@ -246,7 +259,7 @@ export function MemoryPanel({
             <section key={kind} className={styles.group}>
               <div className={styles.groupLabel}>{kindLabel(kind)}</div>
               {group.map((r) => (
-                <Record key={r.id} agentId={agentId} record={r} onJump={onJump} />
+                <Record key={r.id} agentId={agentId} record={r} sceneNo={sceneNo} onJump={onJump} />
               ))}
             </section>
           );
@@ -264,7 +277,7 @@ export function MemoryPanel({
                 : t("roleplay.memory.showClosed", { n: closed.length, defaultValue: `看已了结的（${closed.length}）` })}
             </button>
             {showClosed && closed.map((r) => (
-              <Record key={r.id} agentId={agentId} record={r} onJump={onJump} />
+              <Record key={r.id} agentId={agentId} record={r} sceneNo={sceneNo} onJump={onJump} />
             ))}
           </section>
         )}

@@ -84,6 +84,16 @@ export function AreaPicker({ areas, value, agentId, nameOf, query, onQuery, onPi
         </button>
       </div>
 
+      {/* 没有区不是一个中性的选择：转场分拣无处可去，上一场的前情只能标 `void`，
+          于是这个角色两场之后就永久失忆。这里说出后果，而不是替作者选。 */}
+      {value === null && (
+        <div className={styles.warn}>
+          {t("roleplay.area.noneWarn", {
+            defaultValue: "没有记忆区：转场时这个角色会忘掉上一场，而且找不回来。",
+          })}
+        </div>
+      )}
+
       {value !== "new" && (
         <div className={styles.list}>
           <div className={styles.listHead}>

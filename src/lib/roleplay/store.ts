@@ -333,6 +333,15 @@ export async function saveSummary(projectPath: string, agentId: string, text: st
 export const archiveDir = (p: string, id: string) => `${agentDir(p, id)}/archive`;
 
 /**
+ * 归档 transcript 的文件名。`.discarded` 后缀＝这一场被作者作废（「另起一场」，
+ * 见 13-scene-memory-and-narrator-archive-plan §2）。
+ *
+ * **两处使用它的地方（编号推进和列表）必须是同一个正则**：只让列表认废弃后缀
+ * 而编号不认，下一场就会拿到一个已经被占用的号，直接覆盖掉那一场的 summary。
+ */
+const ARCHIVE_TRANSCRIPT_RE = /^transcript-(\d+)(\.discarded)?\.md$/;
+
+/**
  * 下一个存档编号。按**已有文件名解析出的最大值 + 1**，不按文件个数——作者
  * 手动删掉中间一场之后，按个数会撞名并覆盖掉另一场的记录。
  */
@@ -340,7 +349,7 @@ async function nextArchiveNo(dir: string): Promise<number> {
   if (!(await fileExists(dir))) return 1;
   let max = 0;
   for (const e of await readDir(dir)) {
-    const m = /^transcript-(\d+)\.md$/.exec(e.name);
+    const m = ARCHIVE_TRANSCRIPT_RE.exec(e.name);
     if (m) max = Math.max(max, Number(m[1]));
   }
   return max + 1;
@@ -407,6 +416,11 @@ async function dropIfPresent(path: string): Promise<void> {
 export interface ArchivedScene {
   no: number;
   path: string;
+  /**
+   * 作者作废了这一场（「另起一场」）。文件还在盘上，但它**不属于故事**——
+   * 任何面向模型的读路径都要先问这一句，默认答案是不给。
+   */
+  discarded: boolean;
 }
 
 /**
@@ -422,8 +436,10 @@ export async function listArchives(
   if (!(await fileExists(dir))) return [];
   const out: ArchivedScene[] = [];
   for (const e of await readDir(dir)) {
-    const m = /^transcript-(\d+)\.md$/.exec(e.name);
-    if (m) out.push({ no: Number(m[1]), path: `${dir}/${e.name}` });
+    const m = ARCHIVE_TRANSCRIPT_RE.exec(e.name);
+    if (m) {
+      out.push({ no: Number(m[1]), path: `${dir}/${e.name}`, discarded: m[2] !== undefined });
+    }
   }
   return out.sort((a, b) => b.no - a.no);
 }

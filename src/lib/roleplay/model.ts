@@ -102,6 +102,16 @@ export interface MemoryRecord {
   status: MemoryStatus;
   /** 记下时的 transcript 轮号，让作者能跳回当时的对话。0 = 不详。 */
   turn: number;
+  /**
+   * 记下时是第几场（该 agent 自己的归档序号，`peekNextArchiveNo` 的口径）。
+   * `0` = 不详——改动之前记的记录读回来都是这个值。
+   *
+   * `turn` 单独不够用：转场会把 `turnCount` 归零，所以一条旧记录的 `turn: 14`
+   * 指的是「某个已归档场次的第 14 轮」，而没有任何字段说是哪一场。有了它，
+   * 三件事才成立：作者/模型能从一条记忆跳回原始场次、「另起一场」能精确地只
+   * 丢弃本场记下的东西、记忆区条目的 `scene:` 在常驻层这一段不再是断的。
+   */
+  scene: number;
   /** 这条是关于谁/什么的。可空。 */
   subject: string | null;
   updatedAt: number;

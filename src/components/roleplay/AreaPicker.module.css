@@ -39,6 +39,19 @@
 
 .modes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
 
+/* 「没有记忆区」的后果。左规一道竖线，不用图标也不用整块底色——它是一句提醒，
+   不是一次报错，而这一节本身已经够满了。 */
+.warn {
+  font-family: var(--font-serif);
+  font-size: 12.5px;
+  line-height: 1.75;
+  color: var(--color-text-dim);
+  border-left: 2px solid var(--color-warning);
+  padding-left: 10px;
+  margin-bottom: 12px;
+  text-wrap: pretty;
+}
+
 .mode {
   display: flex;
   flex-direction: column;

@@ -131,6 +131,16 @@
 
 .turnLink:hover { color: var(--color-accent); }
 
+/* 旧场次的记录：同一个位置、同一套字，但**不是按钮**——它现在还跳不过去，
+   而一个点了没反应的链接比一行说明文字更糟。 */
+.sceneTag {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--color-text-label);
+}
+
 .subject {
   font-family: var(--font-mono);
   font-size: 10px;
