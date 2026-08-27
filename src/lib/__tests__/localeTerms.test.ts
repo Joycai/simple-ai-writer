@@ -55,15 +55,14 @@ const RETIRED: Retired[] = [
   {
     // 「设定」 survives in three senses that are not the knowledge base: the verb
     // (不设定 / 无身份设定) and one line of roleplay prose. Naming them is the
-    // point — a looser regex would let the noun back in.
+    // point — a looser regex would let the noun back in. The `ai.instructions.`
+    // blanket exemption is gone as of batch F: the prompt layer is swept too.
     word: "设定",
     instead: "知识库 / 条目",
     allow: [
       "roleplay.persona.none",
       "roleplay.persona.narratorNote",
       "roleplay.empty.body",
-      // The model-facing prompt layer is batch F, deliberately not done yet.
-      "ai.instructions.",
     ],
   },
 ];
