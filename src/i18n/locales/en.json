@@ -1408,6 +1408,7 @@
       "ctxToggle": "Show/hide the context breakdown",
       "ctxCompactAt": "Past here the earliest turns get folded away",
       "ctxCompactExplain": "Past the tick, the next turn folds the oldest conversation into a summary — the log shows \"Compacted first N rounds\" and the summary segment widens.",
+      "ctxOverExplain": "Already past this request's ceiling, and compacting can't reach it — the last two turns are never folded and the tool schemas can't be dropped. Raise Window usage, or start a new conversation.",
       "ctxCompactNow": "Compact now",
       "ctxCompacting": "Compacting…",
       "ctxCompactNowTitle": "Fold the earlier conversation into a summary now, freeing context room",

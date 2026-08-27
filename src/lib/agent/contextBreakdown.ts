@@ -31,11 +31,24 @@
  *    is a snapshot from mid-turn: zero on a fresh session, and between turns it
  *    describes the previous turn's last round rather than the history that has
  *    since gained a summary and this turn's injection block.
+ * 4. **A fold that cannot happen is not drawn.** Size alone was the trigger, so
+ *    on turn 1 of a big seeded session — routine on a 32k local model, where the
+ *    toolset alone leaves four thousand tokens of message ceiling — the bar went
+ *    yellow, crossed its own "past here the oldest turns get folded" line, and
+ *    offered to explain a fold `planFold` would refuse (it keeps the last
+ *    {@link MIN_KEEP_TURNS} turns verbatim). `canFold` mirrors both of that
+ *    function's refusals, and `over` was split back out of `willCompact` so the
+ *    bar can still warn when the request is simply too big to send — a case
+ *    where compaction is not the answer and saying it would be sends the author
+ *    off to wait for nothing.
  */
 
 import { estimateMessagesTokens } from "../ai/tokenEstimate";
 import type { StreamMessage } from "../ai/types";
-import { COMPACT_TRIGGER, injectionCarriers, type ChatSessionMeta } from "./compact";
+import {
+  COMPACT_TRIGGER, MIN_KEEP_TURNS, injectionCarriers, segmentHistory,
+  type ChatSessionMeta,
+} from "./compact";
 
 /**
  * Bar segments, in wire order. `system` folds the tool schemas in with the
@@ -68,8 +81,28 @@ export interface ContextBreakdown {
   ceilingTokens: number;
   /** The model's declared window, for context. 0 when it declares none. */
   contextSize: number;
-  /** Where compaction triggers, as a percentage of the bar's full width. */
-  compactMarkerPct: number;
+  /**
+   * Whether compaction could fold anything at all — `planFold`'s two refusals,
+   * mirrored: a non-positive message ceiling, or no more turns than the
+   * {@link MIN_KEEP_TURNS} it always keeps verbatim.
+   *
+   * Everything the bar says about folding hangs off this, and so does the
+   * 立即归纳 button. That button used to test the turn count on its own and
+   * skip the ceiling half, so on a model whose schemas fill the window it
+   * offered a fold that `planFold` then silently refused. One flag, one answer.
+   */
+  canFold: boolean;
+  /**
+   * Where compaction triggers, as a percentage of the bar's full width — or
+   * **null when {@link canFold} is false**, and the bar must therefore not draw
+   * the line at all.
+   *
+   * Same argument the pre-flight bar makes for dropping it (see
+   * {@link PreflightBreakdown}): the mark means "past here the next turn folds
+   * the oldest turns away", so on a fresh session — or a first turn that is
+   * simply enormous — the line is drawing a consequence that cannot happen.
+   */
+  compactMarkerPct: number | null;
   /**
    * True once the estimate has crossed the compaction trigger — the threshold
    * mark the bar draws. This is what the warning visuals key on: warning only
@@ -80,12 +113,23 @@ export interface ContextBreakdown {
    * `COMPACT_TRIGGER` of this bar's own width: compaction weighs the *messages*
    * against the *messages'* ceiling, and the tool schemas are off both sides of
    * that comparison (lib/agent/toolCost). See {@link computeContextBreakdown}.
+   *
+   * False whenever {@link compactMarkerPct} is null — a fold that cannot happen
+   * is not a fold that is about to happen. `over` is the separate warning for
+   * that case.
    */
   willCompact: boolean;
   /**
    * True once the estimate has outgrown the ceiling — the bar has no free room
-   * and the scale becomes `used`. Implies `willCompact`; kept separate because
-   * it drives geometry (span packing), not the warning state.
+   * and the scale becomes `used`.
+   *
+   * **Does not imply `willCompact` any more.** The two used to be joined
+   * (`willCompact = over || …`) because compaction was assumed to be the answer
+   * to being over. It isn't always: with too few turns to fold, or a toolset
+   * that already fills the window, the request is over the ceiling *and*
+   * compaction can do nothing about it. That is the state most worth warning
+   * about, and it needs its own name so the bar can say the right sentence —
+   * 「下一轮会归纳」 and 「压缩救不了这一轮」 are not the same news.
    */
   over: boolean;
 }
@@ -241,14 +285,27 @@ export function computeContextBreakdown(
   const messageTokens = Math.max(0, usedTokens - toolTokens);
   const messageCeiling = Math.max(0, ceiling - toolTokens);
   const compactAtTokens = toolTokens + messageCeiling * COMPACT_TRIGGER;
-  // Schemas alone at or over the ceiling: `planFold` bails on a non-positive
-  // ceiling, so compaction cannot fire however long the conversation gets. The
-  // `over` disjunct keeps `over ⇒ willCompact` true in that corner — everything
-  // else the bar says is already wrong there, and a calm bar past its ceiling is
-  // the exact state the warning exists to prevent.
+
+  // Can compaction fold anything at all? Both halves are `planFold`'s own
+  // refusals, mirrored:
+  //
+  //   - a non-positive message ceiling (schemas alone fill the window) makes it
+  //     bail before it looks at the history;
+  //   - it keeps the last MIN_KEEP_TURNS turns verbatim however full the bar
+  //     is, so a session with no more than that has nothing foldable.
+  //
+  // Without this the bar would go yellow on turn 1 of a big seeded session,
+  // cross its own "past here the oldest turns get folded" line, and offer to
+  // explain a fold that never comes — the same class of lie the mark was added
+  // to remove, arriving by a different route. A fresh session (`history` null,
+  // zero turns) falls through the same gate, which is why it needs no case of
+  // its own.
+  const foldableTurns =
+    history && meta ? segmentHistory(history, meta).turns.length - MIN_KEEP_TURNS : 0;
+  const canFold = messageCeiling > 0 && foldableTurns > 0;
+
   const over = usedTokens > ceiling;
-  const willCompact =
-    over || (messageCeiling > 0 && messageTokens > messageCeiling * COMPACT_TRIGGER);
+  const willCompact = canFold && messageTokens > messageCeiling * COMPACT_TRIGGER;
 
   return {
     segments: [
@@ -262,7 +319,8 @@ export function computeContextBreakdown(
     usedTokens,
     ceilingTokens: ceiling,
     contextSize,
-    compactMarkerPct: Math.min(100, (compactAtTokens * 100) / span),
+    canFold,
+    compactMarkerPct: canFold ? Math.min(100, (compactAtTokens * 100) / span) : null,
     willCompact,
     over,
   };

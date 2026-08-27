@@ -231,12 +231,6 @@
   --color-diff-add-text:   #55663F;
   --color-diff-add-bg:     rgba(141, 168, 118, 0.18);
   --color-bar-track:       #E5DCC9;   /* progress/alloc track */
-  --color-alloc-lore:      #C9966A;   /* context-allocation bar: 设定 segment */
-  --color-alloc-memory:    #D9BC94;   /*                          前情 segment */
-  --color-alloc-tools:     #A2937C;   /*                          工具 segment —
-                                          deliberately the desaturated one: it is
-                                          a fixed cost, not a content layer the
-                                          author can trade against the others. */
 
   /* Previously referenced but never defined — real definitions so the
      TaskWorkspaceView status badges stop rendering unstyled. */
@@ -515,9 +509,6 @@
   --color-diff-add-text:   #9AB080;
   --color-diff-add-bg:     rgba(76, 92, 63, 0.16);
   --color-bar-track:       #241F19;
-  --color-alloc-lore:      #B3764A;
-  --color-alloc-memory:    #6B4B2E;
-  --color-alloc-tools:     #554E42;
 
   --color-info-bg:         var(--color-type-video-bg);
   --color-info-text:       var(--color-type-video-fg);
