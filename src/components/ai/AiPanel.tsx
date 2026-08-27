@@ -31,8 +31,6 @@ import { useBatchStore } from "../../stores/batchStore";
 import { draftCountFor, totalUsage, useAiTaskStore, type TaskKind } from "../../stores/aiTaskStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { cardsForSurface } from "../../lib/agent/approvalRouting";
-import { presetForTools } from "../../lib/agent/presets";
-import { plannedToolTokens } from "../../lib/agent/toolCost";
 import { useComposerStore } from "../../stores/composerStore";
 import { AgentLog } from "./AgentLog";
 import { TaskPanel } from "./TaskPanel";
@@ -77,13 +75,11 @@ import {
   categoryLabel, defaultTask, findTask, profileLabel, taskDesc, taskLabel,
   visibleTaskGroups, type ResolvedTask,
 } from "../../lib/profile";
+import { BOOK_PREV_TAIL_NEAR_START_CHARS } from "../../lib/context/bookContext";
 import {
-  BOOK_PREV_TAIL_CHARS, BOOK_PREV_TAIL_NEAR_START_CHARS,
-} from "../../lib/context/bookContext";
-import {
-  fixedContextChars, measureCharsPerToken, planContextBudget,
   RECENT_WINDOW_MIN_CHARS, STATIC_LORE_BUDGET_MAX_TOKENS,
 } from "../../lib/context/budget";
+import { planForecast, type ContextForecast } from "../../lib/context/forecast";
 import { chapterTitle, resolveVolumes } from "../../lib/context/outline";
 import { contextLabel } from "../../lib/ai/modelLabel";
 import { MOD_KEY } from "../../lib/platform";
@@ -162,118 +158,12 @@ function SectionHead({
 }
 
 // ─── Context allocation forecast ──────────────────────────────────────────────
-
-interface ContextForecast {
-  /** Ordered bar segments; `chars` sum to the request's whole input ceiling. */
-  segments: { key: "tools" | "recent" | "lore" | "memory" | "free"; chars: number }[];
-  charsPerToken: number;
-  /** Ceiling this request may spend on input (tokens). */
-  ceilingTokens: number;
-  /** Estimated tokens the request will actually spend. */
-  usedTokens: number;
-  /** Tokens held back for the reply. */
-  reservedOutputTokens: number;
-}
-
-/**
- * Live pre-flight forecast of how the model's window gets divided.
- *
- * Mirrors the planning `aiTaskStore.runTask` performs for real, minus what
- * needs disk I/O (the book-context build, the actual lore selection). It is a
- * forecast, not a record: the realized split is what the run reports afterwards.
- * Returns null when the model declares no context size — there is no plan to
- * show in that case, only the static-fallback notice.
- */
-function useContextForecast(opts: {
-  contextSize: number;
-  maxOutputTokens: number | undefined;
-  utilization: number;
-  loreBudgetTokens: number;
-  systemPromptChars: number;
-  instructionChars: number;
-  selectionChars: number;
-  outlineChars: number;
-  knowledgeChars: number;
-  documentText: string;
-  anchorOffset: number;
-  /** Explicit 参考上文 choice; undefined for tasks without the picker. */
-  recentWindowChars: number | undefined;
-  isContinue: boolean;
-  replyChars: number | undefined;
-  memoryChars: number;
-  /** Tokens this task's agent toolset will occupy, 0 for a toolless task. */
-  toolSchemaTokens: number;
-}): ContextForecast | null {
-  const {
-    contextSize, maxOutputTokens, utilization, loreBudgetTokens, systemPromptChars,
-    instructionChars, selectionChars, outlineChars, knowledgeChars, documentText,
-    anchorOffset, recentWindowChars, isContinue, replyChars, memoryChars,
-    toolSchemaTokens,
-  } = opts;
-
-  return useMemo(() => {
-    if (contextSize <= 0) return null;
-    const charsPerToken = measureCharsPerToken(documentText);
-    const fixedChars = fixedContextChars({
-      systemPromptChars,
-      taskInstructionChars: instructionChars,
-      selectionChars,
-      outlineChars,
-      knowledgeChars,
-      prevChapterTailChars: isContinue ? BOOK_PREV_TAIL_CHARS : 0,
-    });
-    const plan = planContextBudget({
-      contextSize,
-      maxOutputTokens,
-      utilization,
-      loreBudgetTokens,
-      toolSchemaTokens,
-      fixedChars,
-      recentWindowChars,
-      availableRecentChars: Math.max(0, anchorOffset),
-      hasMemory: memoryChars > 0,
-      includeBookContext: isContinue,
-      replyChars,
-      charsPerToken,
-    });
-
-    // Clip each layer to what actually exists — a budget the manuscript can't
-    // fill is headroom, not usage, and showing it as usage would make the bar
-    // lie about how much room is left for lore.
-    const recent = Math.min(plan.recentWindowChars, Math.max(0, anchorOffset));
-    const lore = plan.loreChars;
-    const memory = Math.min(plan.memoryChars, memoryChars) + plan.bookPriorChars;
-
-    // The plannable layers are measured against the **message** ceiling; the
-    // tool schemas sit outside it, so the bar's full width is still the whole
-    // input ceiling and the toolset reads as space taken from the layers.
-    const ceilingChars = Math.floor(plan.messageCeilingTokens * charsPerToken);
-    const free = Math.max(0, ceilingChars - fixedChars - recent - lore - memory);
-    const toTokens = (chars: number) => Math.round(chars / charsPerToken);
-    // Converted for geometry only, and it round-trips exactly: the tooltip
-    // divides by the same ratio to print the token count back.
-    const toolChars = plan.toolSchemaTokens * charsPerToken;
-
-    return {
-      segments: [
-        { key: "tools", chars: toolChars },
-        { key: "recent", chars: recent },
-        { key: "lore", chars: lore },
-        { key: "memory", chars: memory },
-        { key: "free", chars: free },
-      ],
-      charsPerToken,
-      ceilingTokens: plan.inputCeilingTokens,
-      usedTokens: toTokens(fixedChars + recent + lore + memory) + plan.toolSchemaTokens,
-      reservedOutputTokens: plan.reservedOutputTokens,
-    };
-  }, [
-    contextSize, maxOutputTokens, utilization, loreBudgetTokens, systemPromptChars,
-    instructionChars, selectionChars, outlineChars, knowledgeChars, documentText,
-    anchorOffset, recentWindowChars, isContinue, replyChars, memoryChars,
-    toolSchemaTokens,
-  ]);
-}
+//
+// The forecast itself lives in lib/context/forecast.ts — a pure function that
+// takes **one** task object (the one that will actually run) and derives every
+// task-shaped branch from it. It used to be a useMemo right here, in a scope
+// that also held the *selected* task, and the tool-schema line read the wrong
+// one. See that file's header for what that cost.
 
 /** Stacked bar + legend + the 窗口占用 control that resizes the whole budget. */
 function ContextAllocation({ forecast }: { forecast: ContextForecast | null }) {
@@ -1039,13 +929,6 @@ export function AiPanel() {
 
   const isContinue = !!task.continuation;
   const supportsExtras = !!task.referenceWindow;
-  // What this task's toolset costs, so the budget bar accounts for the schemas
-  // the request will carry. Same function runTask plans with — the forecast and
-  // the run cannot disagree about the toolset's size.
-  const toolSchemaTokens = useMemo(
-    () => plannedToolTokens(presetForTools(task.tools), subAgents, models),
-    [task.tools, subAgents, models],
-  );
 
   // The Agent 模式 toggle switches to a *different* task (its own prompt and
   // toolset), so resolve that before asking anything about what will run.
@@ -1317,30 +1200,45 @@ export function AiPanel() {
     ? memory?.segments.reduce((n, s) => n + s.summary.length, 0) ?? 0
     : 0;
 
-  const forecast = useContextForecast({
-    contextSize: activeModel?.contextSize ?? 0,
-    maxOutputTokens: activeModel?.maxOutput,
-    utilization: contextUtilization,
-    loreBudgetTokens,
-    systemPromptChars: systemPrompt.length,
-    instructionChars: instructionText.length,
-    selectionChars: isContinue ? 0 : selection.length,
-    outlineChars: isContinue ? outline.length : 0,
-    knowledgeChars: isContinue ? additionalKnowledge.length : 0,
-    documentText: content,
-    // Same anchor runTask applies — the forecast must describe the request that
-    // will actually be sent, not one built on an offset from another file.
-    anchorOffset:
-      continueAnchor ??
-      (selectionRange && content.slice(selectionRange.from, selectionRange.to) === selection
-        ? selectionRange.to
-        : content.length),
-    recentWindowChars: supportsExtras ? contextChars : undefined,
-    isContinue,
-    replyChars: isContinue ? continueLength : undefined,
-    memoryChars,
-    toolSchemaTokens,
-  });
+  // Same anchor runTask applies — the forecast must describe the request that
+  // will actually be sent, not one built on an offset from another file.
+  const anchorOffset =
+    continueAnchor ??
+    (selectionRange && content.slice(selectionRange.from, selectionRange.to) === selection
+      ? selectionRange.to
+      : content.length);
+  // `runTaskDef`, never `task` — Agent 模式 runs a different task with a
+  // different toolset, and the forecast has to describe the request that will
+  // actually be sent. planForecast takes that one object and derives 续写 /
+  // 参考窗口 / 工具档 from it, so there is no second candidate to pick wrong.
+  const forecast = useMemo(
+    () =>
+      planForecast({
+        runTask: runTaskDef,
+        contextSize: activeModel?.contextSize ?? 0,
+        maxOutputTokens: activeModel?.maxOutput,
+        utilization: contextUtilization,
+        loreBudgetTokens,
+        subAgents,
+        models,
+        systemPromptChars: systemPrompt.length,
+        instructionChars: instructionText.length,
+        selectionChars: selection.length,
+        outlineChars: outline.length,
+        knowledgeChars: additionalKnowledge.length,
+        documentText: content,
+        anchorOffset,
+        contextChars,
+        continueLength,
+        memoryChars,
+      }),
+    [
+      runTaskDef, activeModel?.contextSize, activeModel?.maxOutput, contextUtilization,
+      loreBudgetTokens, subAgents, models, systemPrompt.length, instructionText.length,
+      selection.length, outline.length, additionalKnowledge.length, content, anchorOffset,
+      contextChars, continueLength, memoryChars,
+    ],
+  );
   // Report/estimate conversions share the forecast's measured ratio when there
   // is one, so the panel never shows two different token counts for one block.
   const charsPerToken = forecast?.charsPerToken ?? 3;
