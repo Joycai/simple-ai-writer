@@ -1439,7 +1439,16 @@
         "writerActive": "Writer subagent on — it produces this conversation's final text (click to disable)",
         "writerDisabled": "Writer subagent disabled for this session (click to enable)"
       },
-      "imageDownscaled": "Scaled down to fit the send limit ({{detail}})"
+      "imageDownscaled": "Scaled down to fit the send limit ({{detail}})",
+      "preMeter": "Estimate",
+      "preNotYet": "retrieval hasn't run",
+      "preStale": "{{n}} stale",
+      "preBound": "bound block",
+      "preMemory": "memory block",
+      "preUnknown": "retrieval — known only after sending",
+      "preResident": "includes {{name}}'s sheet",
+      "preUnexpanded": "{{n}} title-only",
+      "preFloorTitle": "Lower bound: at least this far; retrieval adds to the right"
     },
     "drawer": {
       "tabGenerate": "Generate",

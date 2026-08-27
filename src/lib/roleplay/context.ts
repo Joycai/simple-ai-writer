@@ -31,6 +31,7 @@ import {
   clearCarrier, coreDoneFor, createSessionMeta, injectedFacetsFor, noteTurnStart,
   recordInjection, recordInjectionsFromReport, type ChatSessionMeta,
 } from "../agent/compact";
+import { estimateTextTokens } from "../ai/tokenEstimate";
 import type { MessageContent, StreamMessage } from "../ai/types";
 import { parsePins, selectLore, type LoreActivationReport } from "../context/loreSelect";
 import { readEntityFile } from "../lore/entity";
@@ -595,18 +596,31 @@ export async function seedRoleplayHistory(opts: {
  *
  * 三块都用真的构造函数，含 `【…】` 块头和那句引导语——少算四十个字符事小，
  * 让两份代码各自演化事大。检索块不在这里：它取决于作者还没打出来的那句话。
+ *
+ * **字数和 token 数一起给**，因为只有这里同时握着那三段**真正的文本**。上下文
+ * 构成条要的是 token，而字→token 的比值随语种在 1（中文）和 4（拉丁字母）之间
+ * 差四倍——拿一个常数去换算，等于在一条写着「≥」的读数上报一个可能高四倍的数，
+ * 而「≥」是个下界声明，高报就是假的。用权威估算器（`estimateTextTokens`，预检
+ * 门用的同一个）当场数，一次换算、不猜比值。
  */
 export function blockSizes(opts: {
   system: SystemPromptInput;
   boundText: string;
   memory: readonly MemoryRecord[];
-}): { systemChars: number; boundChars: number; memoryChars: number } {
+}): {
+  systemChars: number; boundChars: number; memoryChars: number;
+  systemTokens: number; boundTokens: number; memoryTokens: number;
+} {
+  const system = buildSystemPrompt(opts.system);
+  const bound = boundBlockContent(opts.boundText);
+  const memory = memoryBlockContent(renderMemoryBlock(opts.memory) || memoryNoneText());
   return {
-    systemChars: buildSystemPrompt(opts.system).length,
-    boundChars: boundBlockContent(opts.boundText).length,
-    memoryChars: memoryBlockContent(
-      renderMemoryBlock(opts.memory) || memoryNoneText(),
-    ).length,
+    systemChars: system.length,
+    boundChars: bound.length,
+    memoryChars: memory.length,
+    systemTokens: estimateTextTokens(system),
+    boundTokens: estimateTextTokens(bound),
+    memoryTokens: estimateTextTokens(memory),
   };
 }
 

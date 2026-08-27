@@ -7,7 +7,9 @@ import { describe, expect, it } from "vitest";
 import {
   createSessionMeta, noteTurnStart, planFold, recordInjections, COMPACT_TRIGGER,
 } from "../agent/compact";
-import { computeContextBreakdown } from "../agent/contextBreakdown";
+import {
+  computeContextBreakdown, computePreflightBreakdown,
+} from "../agent/contextBreakdown";
 import { estimateMessagesTokens } from "../ai/tokenEstimate";
 import type { StreamMessage } from "../ai/types";
 import type { LoreEntity } from "../lore/model";
@@ -210,5 +212,63 @@ describe("折叠线 vs planFold 的真实触发点", () => {
     expect(bar.over).toBe(true);
     expect(bar.willCompact).toBe(true);
     expect(planFold(history, meta, 8_000 - 9_000)).toBeNull();
+  });
+});
+
+/**
+ * 预估态（设计稿 13 · 2h）。
+ *
+ * 它的全部设计是那个「**≥**」：发送之前算得出三块固定的（系统提示 / 绑定块 /
+ * 记忆块），算不出检索会拿到什么——那取决于作者还没打出来的一句话。所以这条画
+ * 的是**下界**，而这一组守的就是「下界」这件事没有被悄悄画成「总量」。
+ */
+describe("computePreflightBreakdown", () => {
+  const pre = (systemTokens = 12_400, boundTokens = 1_100, memoryTokens = 1_700) =>
+    ({ systemTokens, boundTokens, memoryTokens });
+
+  it("工具 schema 也在下界里——第一条请求一样带着它们", () => {
+    const b = computePreflightBreakdown(pre(12_400, 1_100, 1_700), 4_900, 524_000, 1_049_000);
+    const by = Object.fromEntries(b.segments.map((s) => [s.key, s.tokens]));
+    expect(by.system).toBe(12_400 + 4_900);
+    expect(b.lowerBoundTokens).toBe(12_400 + 1_100 + 1_700 + 4_900);
+  });
+
+  /**
+   * **折叠竖线必须没有。**
+   *
+   * 那道线的意思是「越过这里，下一轮开始把最早的对话折叠成摘要」；发送之前一条
+   * 对话都没有，画它就是画一个不存在的风险。更糟的是位置会骗人——预估是下界，
+   * 条只会往右长，作者看到「离竖线还很远」，发送后可能已经越过去了。
+   *
+   * 所以类型里根本没有 `compactMarkerPct` / `willCompact` 这两个字段：让它画不
+   * 出来，比让它算出来再嘱咐别画可靠。
+   */
+  it("没有折叠竖线，只有下界刻线", () => {
+    const b = computePreflightBreakdown(pre(), 0, 524_000, 1_049_000);
+    expect(b).not.toHaveProperty("compactMarkerPct");
+    expect(b).not.toHaveProperty("willCompact");
+    // 下界刻线落在三块之和上，不是 70%。
+    expect(b.lowerBoundPct).toBeCloseTo((15_200 * 100) / 524_000, 5);
+  });
+
+  it("右边那一段是「还不知道」，不是「空余」——它一直撑到上限", () => {
+    const b = computePreflightBreakdown(pre(), 0, 524_000, 1_049_000);
+    const unknown = b.segments.find((s) => s.key === "unknown")!;
+    expect(unknown.tokens).toBe(524_000 - 15_200);
+    expect(b.segments.map((s) => s.key)).toEqual(["system", "bound", "memory", "unknown"]);
+  });
+
+  /** 三块固定的就已经超了上限：检索还没跑，条已经满了——这时候必须能看出来。 */
+  it("下界本身就超出上限时 over 为真，未定纹被挤没", () => {
+    const b = computePreflightBreakdown(pre(9_000, 500, 500), 0, 8_000, 16_000);
+    expect(b.over).toBe(true);
+    expect(b.segments.find((s) => s.key === "unknown")!.tokens).toBe(0);
+    expect(b.lowerBoundPct).toBe(100);
+  });
+
+  it("还没算过预估时是一条只有工具开销的下界，不是崩", () => {
+    const b = computePreflightBreakdown(null, 4_900, 524_000, 1_049_000);
+    expect(b.lowerBoundTokens).toBe(4_900);
+    expect(b.over).toBe(false);
   });
 });

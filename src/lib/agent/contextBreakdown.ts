@@ -90,6 +90,74 @@ export interface ContextBreakdown {
   over: boolean;
 }
 
+// ── Pre-flight ───────────────────────────────────────────────────────────────
+
+/**
+ * The bar **before the first send**, where there is no history to measure.
+ *
+ * Its whole design is the «≥». The three blocks the first request will carry are
+ * knowable (system prompt, bound block, memory block); what retrieval will pull
+ * is not — it depends on a sentence the author has not typed yet. So this is a
+ * *lower bound*, and the bar says so three ways: the readout's verb («预估 ≥»
+ * rather than «Context»), a hatched track where the free run would be, and — the
+ * one that matters most — **no compaction mark**.
+ *
+ * Dropping that mark is not cosmetic. The mark means "past here the next turn
+ * folds the oldest turns away", and before the first send there are no turns to
+ * fold: drawing it would draw a risk that does not exist. Worse, its position
+ * would lie — the estimate is a floor, so the bar only ever grows rightward, and
+ * an author reading "still far from the line" may already be past it once the
+ * request is assembled. The same 1px rule is therefore reused with the opposite
+ * meaning: `lowerBoundPct` says "at least this far", not "fold at this point".
+ */
+export interface PreflightBreakdown {
+  segments: { key: PreflightSegmentKey; tokens: number }[];
+  /** The floor — what the three knowable blocks come to, tool schemas included. */
+  lowerBoundTokens: number;
+  ceilingTokens: number;
+  contextSize: number;
+  /** Where the floor falls on the bar, as a percentage of its full width. */
+  lowerBoundPct: number;
+  /** The floor alone already exceeds the ceiling — nothing left for retrieval. */
+  over: boolean;
+}
+
+export type PreflightSegmentKey = "system" | "bound" | "memory" | "unknown";
+
+export const PREFLIGHT_SEGMENT_ORDER: readonly PreflightSegmentKey[] = [
+  "system", "bound", "memory", "unknown",
+];
+
+export function computePreflightBreakdown(
+  pre: { systemTokens: number; boundTokens: number; memoryTokens: number } | null,
+  toolTokens: number,
+  ceilingTokens: number,
+  contextSize: number,
+): PreflightBreakdown {
+  // Tool schemas ride on the very first request too, so they belong in the floor
+  // — same reasoning as the measured bar folding them into `system`.
+  const system = toolTokens + (pre?.systemTokens ?? 0);
+  const bound = pre?.boundTokens ?? 0;
+  const memory = pre?.memoryTokens ?? 0;
+  const lowerBoundTokens = system + bound + memory;
+  const ceiling = Math.max(0, ceilingTokens);
+  const unknown = Math.max(0, ceiling - lowerBoundTokens);
+  const span = Math.max(lowerBoundTokens + unknown, 1);
+  return {
+    segments: [
+      { key: "system", tokens: system },
+      { key: "bound", tokens: bound },
+      { key: "memory", tokens: memory },
+      { key: "unknown", tokens: unknown },
+    ],
+    lowerBoundTokens,
+    ceilingTokens: ceiling,
+    contextSize,
+    lowerBoundPct: Math.min(100, (lowerBoundTokens * 100) / span),
+    over: lowerBoundTokens > ceiling,
+  };
+}
+
 /**
  * Classify every message in `history` and total each bucket.
  *

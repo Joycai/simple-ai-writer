@@ -428,6 +428,45 @@
 .ctxSeg_free         { background: transparent; }
 .ctxSwatch.ctxSeg_free { box-shadow: inset 0 0 0 1px var(--color-border-input); }
 
+/* ── 预估态（设计稿 13 · 2h）──
+   同一根条、同样的高度，只换三样：读数的动词、右侧轨道的纹样、以及撤掉折叠竖线。
+   前三段和实测态用同一批 token（系统+工具 / 绑定 / 记忆），因为它们就是同一批
+   东西；只有第四段是新的。 */
+.pre_system { background: var(--color-text-dim); }
+.pre_bound  { background: var(--color-border-accent); }
+.pre_memory { background: var(--color-accent-mid); }
+
+/* 未定纹：**未知不该有自己的颜色，它该是纹理**。最淡的一档墨在轨道底色上拉斜纹，
+   没有引入任何新颜色。
+
+   **不能用 `--color-border`**（设计稿暗色稿里那一档的原值）：浅色下它和
+   `--color-bar-track` 是同一个 `#E5DCC9`，斜纹当场消失，整段读成「空余」——而
+   那正是这一段要表达的反面。这类塌陷只有量出来（四个色标全等）才看得见，截图上
+   它只是一条平淡的米色带子。`--color-text-ghost` 在两个主题下都和轨道分得开。 */
+.pre_unknown {
+  background: repeating-linear-gradient(
+    115deg,
+    var(--color-text-ghost) 0 1px,
+    var(--color-bar-track) 1px 5px
+  );
+}
+.pre_track { background: var(--color-bar-track); box-shadow: inset 0 0 0 1px var(--color-border-muted); }
+
+/* 下界刻线：和折叠竖线同一根 1px 线，**相反的含义**——它说「至少到这里」，不说
+   「到这里就要归纳」。所以它比那道线更实：折叠是威胁，下界是事实。 */
+.ctxFloor {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 1px;
+  background: var(--color-text-primary);
+}
+
+.ctxCountFloor { color: var(--color-text-soft); }
+
+.ctxLegendNote { color: var(--color-text-hint); }
+.ctxLegendWarn { color: var(--color-warning); }
+
 /* The compaction threshold, drawn over the fills so it stays readable
    whichever segment happens to reach it. */
 .ctxMark {
