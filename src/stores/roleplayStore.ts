@@ -166,6 +166,12 @@ export interface LiveSession {
    *
    * 上下文构成条要靠它才知道该重算：那个数组是**就地** push 的（`runJob` 里
    * 的注入、提问、runAgent 自己的工具轮），引用从头到尾不变，React 看不见。
+   *
+   * **就地改一条消息的 `content` 也算**，而且是更容易漏的那一半：
+   * `refreshBoundBlock` / `refreshMemoryBlock` / `refreshSystemPrompt` 全都刻意
+   * 不换消息对象（`meta` 和账本按身份持有它们），于是连 `meta` 的引用都不动。
+   * 凡是走这条路的地方，`patchSession` 必须自己带上一次 `+ 1`——否则作者点完
+   * 「刷新绑定」，构成条会一直画着刷新之前的尺寸。见 05-implementation-notes §12。
    */
   contextVersion: number;
   error: string | null;
@@ -1403,7 +1409,15 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         },
         stale: { ...st.stale, [agentId]: false },
       }));
-      patchSession(agentId, (s) => ({ ...s, stalePaths: bound.stalePaths }));
+      // 上下文构成条要靠 `contextVersion` 才知道该重算。这一次刷新**就地**改了
+      // 绑定块和 system 层的 content（对象身份必须不变，账本按身份持有它们），
+      // 于是 `history` / `meta` 的引用都没动——不碰这个数字的话，那条计量条会
+      // 一直画着刷新之前的尺寸，直到下一轮跑完才跳。作者刚加进去几千字的设定
+      // 而条纹丝不动，正是 `refreshSystemPrompt` 注释里那句「操作看起来生效了，
+      // 其实没有」的另一半。
+      patchSession(agentId, (s) => ({
+        ...s, stalePaths: bound.stalePaths, contextVersion: s.contextVersion + 1,
+      }));
       void persistRoster();
     },
 
@@ -1418,7 +1432,10 @@ export const useRoleplayStore = create<RoleplayState>((set, get) => {
         ensureBlocks(session.history, session.meta);
         refreshMemoryBlock(session.meta, doc.records);
       }
-      patchSession(agentId, (s) => ({ ...s, memory: doc.records, memoryStale: false }));
+      // 同 refreshBinding：记忆块也是就地改 content，引用不动，计量条看不见。
+      patchSession(agentId, (s) => ({
+        ...s, memory: doc.records, memoryStale: false, contextVersion: s.contextVersion + 1,
+      }));
     },
 
     addMemory: async (agentId, rec) => {
