@@ -35,6 +35,7 @@ import { plannedToolTokens } from "../../lib/agent/toolCost";
 import { inputCeilingFor } from "../../lib/context/budget";
 import { presetFor } from "../../lib/roleplay/presets";
 import { residentCoreDirs } from "../../lib/roleplay/context";
+import { recalledNames } from "../../lib/roleplay/trace";
 import {
   chainCanSeeImages, withSessionOverrides, type SubAgentKind,
 } from "../../lib/agent/subagent";
@@ -848,7 +849,7 @@ export function RoleplayChat({ agent, onEdit }: { agent: RoleplayAgent; onEdit: 
               key={turn.index}
               turn={turn}
               memories={memoriesByTurn.get(turn.index)}
-              recalled={session.recalled[turn.index]}
+              recalled={recalledNames(session.contextTrace[turn.index]?.area ?? null)}
               onOpenArea={() => setShowMemory(true)}
               onRewind={
                 rewindTo === null && turn.speaker === "author" && !isRunning && queuePos < 0
