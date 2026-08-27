@@ -135,6 +135,7 @@ const subs = (modelId: string | null): Record<SubAgentKind, SubAgentConfig> => (
   imagegen: { kind: "imagegen", modelId: null, enabled: false },
   translate: { kind: "translate", modelId: null, enabled: false },
   writer: { kind: "writer", modelId, enabled: modelId !== null },
+  retrieval: { kind: "retrieval", modelId: null, enabled: false },
 });
 
 describe("subAgentModel(writer)", () => {

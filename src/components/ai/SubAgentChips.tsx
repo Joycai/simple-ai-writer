@@ -5,9 +5,18 @@ import { useAgentStore } from "../../stores/agentStore";
 import { subAgentModel, SUBAGENT_KINDS, type SubAgentKind } from "../../lib/agent/subagent";
 import styles from "./toggleChip.module.css";
 
-/** Every kind that is a chip — i.e. all of them except the writer. See below. */
-type ChipKind = Exclude<SubAgentKind, "writer">;
-const CHIP_KINDS = SUBAGENT_KINDS.filter((k): k is ChipKind => k !== "writer");
+/**
+ * Every kind that is a chip — i.e. all of them except the two nobody calls.
+ *
+ * The writer is excluded because its switch is a session-level decision made
+ * elsewhere (see below). `retrieval` is excluded for a plainer reason: by the
+ * time these chips are on screen it has already run, and a control that only
+ * takes effect on the *next* turn does not belong in a row of "for this turn"
+ * toggles. It lives in Settings alone.
+ */
+type ChipKind = Exclude<SubAgentKind, "writer" | "retrieval">;
+const OFF_CHIP: SubAgentKind[] = ["writer", "retrieval"];
+const CHIP_KINDS = SUBAGENT_KINDS.filter((k): k is ChipKind => !OFF_CHIP.includes(k));
 
 const ICONS: Record<ChipKind, LucideIcon> = {
   search: Globe,

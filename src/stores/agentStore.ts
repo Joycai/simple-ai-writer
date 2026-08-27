@@ -108,6 +108,7 @@ import { type AttachedItem } from "../lib/lore/aiTask";
 import type { StreamMessage } from "../lib/ai/types";
 import { fileExists, readFile, writeFile } from "../lib/fs/fileio";
 import { loadApiKey } from "../lib/keyStore";
+import { expandAuthorIntent } from "../lib/context/expand";
 import { recordRunOutcome } from "../lib/ai/modelHealth";
 import { costFor } from "../lib/ai/configDb";
 import { connOptions, resolveConn } from "../lib/ai/conn";
@@ -972,6 +973,31 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       useAiStore.getState().subAgents, get().disabledSubAgents,
     );
 
+    /**
+     * 查询扩展的一次调用，接在 `effectiveSubs` 上——所以「本次对话关掉它」这个
+     * 芯片对它也有效……除了它没有芯片（见 SubAgentChips：轮到芯片渲染的时候它
+     * 已经跑完了）。走 `effectiveSubs` 而不是原始配置仍然是对的：这一条不变量
+     * 是「本轮谁是活的」只有一个答案。
+     *
+     * 永不抛、永不阻塞：没绑模型就整段不跑，其余一切失败都退回未扩展的行为。
+     */
+    const expandForRetrieval = async (intent: string, signal: AbortSignal): Promise<string[]> => {
+      const cfg = effectiveSubs.retrieval;
+      if (!cfg?.enabled || !cfg.modelId || !intent.trim()) return [];
+      const { models: allModels, providers: allProviders } = useAiStore.getState();
+      const conn = await resolveSubAgentConn(
+        "retrieval", allModels, allProviders, effectiveSubs, loadApiKey,
+      );
+      if ("error" in conn) return [];
+      return expandAuthorIntent({
+        intent,
+        loreIndex: useLoreStore.getState().index,
+        scope: useLoreStore.getState().scope,
+        conn,
+        signal,
+      });
+    };
+
     const { buildChatMessage, withDirective } = await import("../lib/agent/chatRefs");
     const { text: wireMessage, content: composed, imagePaths } = await buildChatMessage(
       message, quoted, refs,
@@ -1145,6 +1171,15 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         const { loreBudgetTokens } = useAppStore.getState();
         const charsPerToken = measureCharsPerToken(documentText);
 
+        // 查询扩展——把这一句问话扩成知识库自己的词，并进同一个匹配靶。
+        // 只有首轮走这里；后续轮在 assembleTurnInjection 那侧（见下）。
+        // 没绑模型 / 超时 / 出错都退回未扩展的行为，绝不让一次取材优化变成一次
+        // 失败的对话。见 docs/feature/lore/lore-retrieval-plan.md §5.3
+        const seedTerms = await expandForRetrieval(wireMessage, controller.signal);
+        const seedMatch = seedTerms.length
+          ? `${wireMessage}\n${seedTerms.join(" ")}`
+          : wireMessage;
+
         const bundle = await assembleContext(
           systemPrompt,
           useLoreStore.getState().index,
@@ -1162,7 +1197,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             // With no window in the context, the question is the only thing
             // left to match lore against — and it was always the better
             // target for a conversation anyway.
-            extraMatchText: wireMessage,
+            extraMatchText: seedMatch,
             loreScope: useLoreStore.getState().scope,
           },
           null,
@@ -1270,11 +1305,16 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             : null;
           const loreIdx = useLoreStore.getState().index;
           const { loreBudgetTokens } = useAppStore.getState();
+          // Same expansion as the seed, per turn: the question changes every
+          // turn, and 「那根杖呢」 is exactly the sort of turn whose words reach
+          // nothing on their own.
+          const turnTerms = await expandForRetrieval(wireMessage, controller.signal);
           const inj = await assembleTurnInjection({
             loreIndex: loreIdx,
             // Same match targets as the seed: the question (with its quote and
             // @refs inlined) plus the document's tail neighborhood.
-            matchTarget: wireMessage + focus.text.slice(-500),
+            matchTarget: wireMessage + focus.text.slice(-500)
+              + (turnTerms.length ? `\n${turnTerms.join(" ")}` : ""),
             // Per layer, not per entity: an entity already introduced keeps
             // its body out of the wire and still brings a facet the author
             // has just asked about ("他那件外套") — which entity-level

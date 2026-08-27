@@ -54,6 +54,7 @@ const NO_SUBS: Record<SubAgentKind, SubAgentConfig> = {
   imagegen: { kind: "imagegen", modelId: null, enabled: false },
   translate: { kind: "translate", modelId: null, enabled: false },
   writer: { kind: "writer", modelId: null, enabled: false },
+  retrieval: { kind: "retrieval", modelId: null, enabled: false },
 };
 
 describe("toolTokensOf", () => {
