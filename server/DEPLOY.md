@@ -219,7 +219,7 @@ curl -s -H "Authorization: Bearer $T" -H 'Content-Type: application/json' \
 
 | 配置项 | 环境变量 | 默认 | 说明 |
 |---|---|---|---|
-| `server.data_dir` | `AIW_KB_DATA_DIR` | `./data` | 数据目录 |
+| `server.data_dir` | `AIW_KB_DATA_DIR` | `./data` | 数据目录。首次生成的配置里写的是配置文件旁的绝对路径 |
 | `server.bind` | `AIW_KB_BIND` | `127.0.0.1:8787` | 监听地址。默认只听回环 |
 | `server.max_entry_mb` | `AIW_KB_MAX_ENTRY_MB` | `64` | 单条目请求体上限。条目含配图,图多的话调大 |
 | `server.config_max_mb` | `AIW_KB_CONFIG_MAX_MB` | `4` | 单个**应用配置备份**请求体上限。一份通常只有几十 KB,不必动 |
@@ -356,11 +356,14 @@ cargo build --release
 - 双击即启动:图标进托盘(实心 = 运行中,空心 = 已停止),没有控制台窗口;
 - 首次启动生成配置文件时,管理密码和同步 token **弹在对话框里**(headless 版
   打印到终端的那份信息,换了一个观众);
-- 托盘菜单:启动/停止服务器 · 打开管理后台 · 服务器状态 · **开机自启**
+- 托盘菜单:启动/停止服务器 · 打开管理后台 · 服务器状态 · **数据目录**
+  (换个地方存数据:可选把现有数据复制过去,原目录保留)· **开机自启**
   (写 HKCU Run 键,不需要管理员权限,取消勾选即撤销)· 退出;
-- 它会把工作目录定到 exe 所在目录,所以默认布局是 exe 旁边的
-  `aiw-kb.toml` + `data\`,无论是双击还是开机自启拉起的;
-- 日志在 `data\tray.log`(GUI 进程没有终端可打)。
+- 默认布局:配置在 `%APPDATA%\aiw-kb\config.toml`,数据在它旁边的
+  `%APPDATA%\aiw-kb\data`(首次生成的配置里写的是这个绝对路径)。exe 旁边
+  已有 `aiw-kb.toml` 的旧布局照常生效——托盘会把工作目录定到 exe 所在目录,
+  所以那里面的 `./data` 仍指 exe 旁,无论双击还是开机自启拉起;
+- 日志在数据目录里的 `tray.log`(GUI 进程没有终端可打)。
 
 配置编辑、token 管理、活动日志、备份都在管理后台(菜单一键直达),托盘自己
 不再长一套界面。设计与取舍:

@@ -606,6 +606,28 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+/// The `data_dir` a *generated* config file gets: `data/` beside the config
+/// file itself, as an absolute-as-the-config-path string.
+///
+/// The runtime default (`DEFAULT_DATA_DIR`, resolved against the working
+/// directory) is kept for files that simply omit the key — but writing that
+/// relative form into a fresh file would tie the data's location to wherever
+/// the process happened to be started from. On Windows that is the difference
+/// between `%APPDATA%\aiw-kb\data` (the config file's own home) and a `data\`
+/// folder materialising beside whatever launched the exe. Forward slashes on
+/// purpose: valid in a TOML basic string on every platform, where a Windows
+/// `\` would be an escape.
+fn starter_data_dir(config_path: &Path) -> String {
+    match config_path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent
+            .join("data")
+            .to_string_lossy()
+            .replace('\\', "/")
+            .to_string(),
+        _ => DEFAULT_DATA_DIR.to_string(),
+    }
+}
+
 /// Write a first config file, with credentials generated here.
 ///
 /// The comments matter as much as the values: this file is the manual for
@@ -617,6 +639,7 @@ fn write_starter(path: &Path) -> std::io::Result<()> {
             std::fs::create_dir_all(parent)?;
         }
     }
+    let data_dir = starter_data_dir(path);
     let token = generate_token();
     let password = generate_password();
     let created = now_ms();
@@ -632,7 +655,7 @@ fn write_starter(path: &Path) -> std::io::Result<()> {
 bind = "{DEFAULT_BIND}"
 
 # 数据目录。整个目录打包就是一次完整备份，没有数据库、不需要停机。
-data_dir = "{DEFAULT_DATA_DIR}"
+data_dir = "{data_dir}"
 
 # 单个条目（含配图）的上传上限，单位 MB。改大它时记得同步调大反向代理的 body 上限。
 max_entry_mb = {DEFAULT_MAX_ENTRY_MB}
@@ -686,5 +709,39 @@ pub fn harden_permissions(path: &Path) {
     #[cfg(not(unix))]
     {
         let _ = path;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn starter_data_dir_lands_beside_the_config_file() {
+        // A Windows path only parses as one on Windows — `\` is not a
+        // separator to a Unix `Path`, so this half stays off the ubuntu CI.
+        #[cfg(windows)]
+        assert_eq!(
+            starter_data_dir(Path::new(r"C:\Users\a\AppData\Roaming\aiw-kb\config.toml")),
+            "C:/Users/a/AppData/Roaming/aiw-kb/data"
+        );
+        assert_eq!(
+            starter_data_dir(Path::new("/home/a/.config/aiw-kb/config.toml")),
+            "/home/a/.config/aiw-kb/data"
+        );
+        // The bare-filename fallback keeps the runtime default, not "" + /data.
+        assert_eq!(starter_data_dir(Path::new("aiw-kb.toml")), DEFAULT_DATA_DIR);
+    }
+
+    #[test]
+    fn a_generated_file_parses_and_carries_its_own_data_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        write_starter(&path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        let raw: RawFile = toml::from_str(&text).expect("the starter must be valid TOML");
+        let expected = dir.path().join("data").to_string_lossy().replace('\\', "/");
+        assert_eq!(raw.server.unwrap().data_dir.unwrap(), expected);
+        assert!(raw.tokens.first().unwrap().value.starts_with("aiw_"));
     }
 }

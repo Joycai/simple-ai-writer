@@ -31,8 +31,10 @@ fn main() {
 #[cfg(windows)]
 mod app {
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+    use std::path::{Path, PathBuf};
 
-    use aiw_kb_server::config::{self, Config};
+    use aiw_kb_server::confedit::{self, Setting};
+    use aiw_kb_server::config::{self, Config, Source};
     use tao::event::{Event, StartCause};
     use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy};
     use tray_icon::menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem};
@@ -59,6 +61,7 @@ mod app {
         toggle: MenuItem,
         admin: MenuItem,
         status: MenuItem,
+        datadir: MenuItem,
         autostart: CheckMenuItem,
         quit: MenuItem,
     }
@@ -156,6 +159,7 @@ mod app {
             let toggle = MenuItem::new("启动服务器", true, None);
             let admin = MenuItem::new("打开管理后台", false, None);
             let status = MenuItem::new("服务器状态…", true, None);
+            let datadir = MenuItem::new("数据目录…", true, None);
             let autostart = CheckMenuItem::new("开机自启", true, autostart::enabled(), None);
             let quit = MenuItem::new("退出", true, None);
             let menu = Menu::new();
@@ -164,6 +168,7 @@ mod app {
                 &admin,
                 &status,
                 &PredefinedMenuItem::separator(),
+                &datadir,
                 &autostart,
                 &PredefinedMenuItem::separator(),
                 &quit,
@@ -180,6 +185,7 @@ mod app {
                 toggle,
                 admin,
                 status,
+                datadir,
                 autostart,
                 quit,
             });
@@ -200,6 +206,8 @@ mod app {
                         self.open_admin();
                     } else if e.id() == ui.status.id() {
                         self.show_status();
+                    } else if e.id() == ui.datadir.id() {
+                        self.change_data_dir();
                     } else if e.id() == ui.autostart.id() {
                         // A CheckMenuItem toggles itself before the event
                         // arrives; is_checked() is already the desired state.
@@ -359,6 +367,163 @@ mod app {
                 .show();
         }
 
+        /// Move the data directory: pick a folder, optionally copy the current
+        /// data over, write `server.data_dir` back through `confedit` (the same
+        /// comment-preserving writer the admin console uses), restart.
+        ///
+        /// Every question is asked *before* the server stops, so a 取消 at any
+        /// point leaves a running server running. The copy never deletes the
+        /// old directory — a migration that ends with "and then it removed the
+        /// only copy" is not a migration anyone asked for.
+        fn change_data_dir(&mut self) {
+            let config = match Config::load(&self.argv) {
+                Ok(c) => c,
+                Err(e) => {
+                    error_dialog("无法读取配置", &e);
+                    return;
+                }
+            };
+            if let Some(err) = &config.file_error {
+                error_dialog(
+                    "数据目录",
+                    &format!(
+                        "配置文件解析失败，先修好它再改数据目录（管理后台或手工编辑）：\n{err}"
+                    ),
+                );
+                return;
+            }
+            if config.source_of("server.data_dir") == Source::Env {
+                // Writing the file would succeed and change nothing — the
+                // provenance model exists precisely to catch this lie early.
+                error_dialog(
+                    "数据目录",
+                    "数据目录当前由环境变量 AIW_KB_DATA_DIR 指定，改配置文件不会生效。\n\
+                     先去掉那个环境变量，或直接改它。",
+                );
+                return;
+            }
+
+            let current = absolute(&config.server.data_dir);
+            let start_in = if current.exists() {
+                current.clone()
+            } else {
+                std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+            };
+            let Some(picked) = rfd::FileDialog::new()
+                .set_title("选择新的数据目录")
+                .set_directory(start_in)
+                .pick_folder()
+            else {
+                return;
+            };
+            if same_path(&picked, &current) {
+                rfd::MessageDialog::new()
+                    .set_level(rfd::MessageLevel::Info)
+                    .set_title("数据目录")
+                    .set_description(format!("已经是这个目录了：\n{}", current.display()))
+                    .show();
+                return;
+            }
+
+            let old_has_data = dir_has_entries(&current);
+            let target_clean = !dir_has_entries(&picked);
+            let migrate = if old_has_data && target_clean {
+                let result = rfd::MessageDialog::new()
+                    .set_level(rfd::MessageLevel::Warning)
+                    .set_title("数据目录")
+                    .set_description(format!(
+                        "把数据目录改为：\n{}\n\n现有数据在：\n{}\n\n\
+                         「搬运并切换」：复制现有数据到新目录再切换，原目录保留，\
+                         确认无误后可自行删除。\n\
+                         「只切换」：直接指向新目录，原数据留在原处（服务器将看不到它们）。",
+                        picked.display(),
+                        current.display(),
+                    ))
+                    .set_buttons(rfd::MessageButtons::YesNoCancelCustom(
+                        "搬运并切换".to_string(),
+                        "只切换".to_string(),
+                        "取消".to_string(),
+                    ))
+                    .show();
+                match result {
+                    rfd::MessageDialogResult::Custom(ref s) if s == "搬运并切换" => true,
+                    rfd::MessageDialogResult::Yes => true,
+                    rfd::MessageDialogResult::Custom(ref s) if s == "只切换" => false,
+                    rfd::MessageDialogResult::No => false,
+                    _ => return,
+                }
+            } else {
+                let note = if old_has_data {
+                    // A non-empty target is not a copy destination: merging two
+                    // data trees silently is how entries get half-overwritten.
+                    "目标目录已有内容，不做搬运——现有数据留在原处。"
+                } else {
+                    "当前数据目录是空的，直接切换。"
+                };
+                let result = rfd::MessageDialog::new()
+                    .set_level(rfd::MessageLevel::Info)
+                    .set_title("数据目录")
+                    .set_description(format!("把数据目录改为：\n{}\n\n{note}", picked.display()))
+                    .set_buttons(rfd::MessageButtons::OkCancelCustom(
+                        "切换".to_string(),
+                        "取消".to_string(),
+                    ))
+                    .show();
+                let ok = matches!(result, rfd::MessageDialogResult::Ok)
+                    || matches!(result, rfd::MessageDialogResult::Custom(ref s) if s == "切换");
+                if !ok {
+                    return;
+                }
+                false
+            };
+
+            let was_running = self.running.is_some();
+            self.stop();
+            if migrate {
+                if let Err(e) = copy_tree(&current, &picked) {
+                    error_dialog(
+                        "搬运失败",
+                        &format!("复制数据时出错，配置未改动：{e}\n目标目录可能残留半份拷贝。"),
+                    );
+                    if was_running {
+                        self.start();
+                    }
+                    return;
+                }
+            }
+            let value = picked.to_string_lossy().replace('\\', "/");
+            if let Err(e) =
+                confedit::apply(&config.file_path, &[Setting::Str("server.data_dir", value)])
+            {
+                error_dialog("数据目录", &format!("写配置文件失败，未切换：{e}"));
+                if was_running {
+                    self.start();
+                }
+                return;
+            }
+            if was_running {
+                self.start();
+            } else if let Ok(c) = Config::load(&self.argv) {
+                self.config = Some(c);
+            }
+            // The log file follows the data directory, but tracing was pinned
+            // to the old location when this process initialised it — worth one
+            // honest line instead of a mystery.
+            rfd::MessageDialog::new()
+                .set_level(rfd::MessageLevel::Info)
+                .set_title("数据目录")
+                .set_description(format!(
+                    "数据目录已改为：\n{}\n\n{}日志文件（tray.log）在下次启动 aiw-kb-tray 后跟过去。",
+                    picked.display(),
+                    if migrate {
+                        "数据已复制，原目录保留。\n"
+                    } else {
+                        ""
+                    },
+                ))
+                .show();
+        }
+
         /// The tray-side twin of `main.rs`'s `announce_new_config`: the one
         /// moment the generated password exists anywhere a person can read it,
         /// shown where a tray user actually looks.
@@ -427,6 +592,56 @@ mod app {
                 self.log_guard = Some(guard);
             }
         }
+    }
+
+    /// Resolve a possibly-relative path against the working directory — which
+    /// `run()` pinned to the exe's directory, so "./data" means the same thing
+    /// here as it does to the server.
+    fn absolute(p: &Path) -> PathBuf {
+        if p.is_absolute() {
+            p.to_path_buf()
+        } else {
+            std::env::current_dir()
+                .map(|cwd| cwd.join(p))
+                .unwrap_or_else(|_| p.to_path_buf())
+        }
+    }
+
+    /// "Is this the directory we already use" — for a no-op guard, not for
+    /// security, so a lossy case-insensitive compare of the absolute forms is
+    /// the right amount of effort on a case-insensitive filesystem.
+    fn same_path(a: &Path, b: &Path) -> bool {
+        let norm = |p: &Path| {
+            absolute(p)
+                .to_string_lossy()
+                .replace('\\', "/")
+                .trim_end_matches('/')
+                .to_lowercase()
+        };
+        norm(a) == norm(b)
+    }
+
+    fn dir_has_entries(p: &Path) -> bool {
+        std::fs::read_dir(p)
+            .map(|mut it| it.next().is_some())
+            .unwrap_or(false)
+    }
+
+    /// Copy `src` into `dst` recursively. Never deletes anything: the caller's
+    /// migration story is copy-verify-switch, with the old tree left as the
+    /// fallback it is.
+    fn copy_tree(src: &Path, dst: &Path) -> std::io::Result<()> {
+        std::fs::create_dir_all(dst)?;
+        for entry in std::fs::read_dir(src)? {
+            let entry = entry?;
+            let target = dst.join(entry.file_name());
+            if entry.file_type()?.is_dir() {
+                copy_tree(&entry.path(), &target)?;
+            } else {
+                std::fs::copy(entry.path(), &target)?;
+            }
+        }
+        Ok(())
     }
 
     /// The address a browser should open — an unspecified bind (0.0.0.0)
@@ -540,6 +755,36 @@ mod app {
             assert_eq!(off.len(), on.len());
             // The two states must actually look different.
             assert_ne!(on, off);
+        }
+
+        #[test]
+        fn copy_tree_copies_nested_files_and_leaves_the_source() {
+            let src = tempfile::tempdir().unwrap();
+            let dst = tempfile::tempdir().unwrap();
+            let dst_root = dst.path().join("data");
+            std::fs::create_dir_all(src.path().join("kbs/k1/entries")).unwrap();
+            std::fs::write(src.path().join("kbs/k1/meta.json"), b"{}").unwrap();
+            std::fs::write(src.path().join("audit.log"), b"line").unwrap();
+
+            copy_tree(src.path(), &dst_root).unwrap();
+
+            assert_eq!(
+                std::fs::read(dst_root.join("kbs/k1/meta.json")).unwrap(),
+                b"{}"
+            );
+            assert!(dst_root.join("kbs/k1/entries").is_dir());
+            assert_eq!(std::fs::read(dst_root.join("audit.log")).unwrap(), b"line");
+            // The source is untouched — copy, never move.
+            assert!(src.path().join("kbs/k1/meta.json").exists());
+        }
+
+        #[test]
+        fn same_path_ignores_case_and_separators() {
+            assert!(same_path(
+                Path::new("C:\\Data\\KB"),
+                Path::new("c:/data/kb/")
+            ));
+            assert!(!same_path(Path::new("C:\\Data\\KB"), Path::new("C:\\Data")));
         }
 
         #[test]
