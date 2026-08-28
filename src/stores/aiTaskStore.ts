@@ -8,7 +8,7 @@ import {
 import { docModel, findTask, promptParams } from "../lib/profile/active";
 import { taskLabel } from "../lib/profile";
 import { notify } from "../lib/notify";
-import { presetForTools, toolBriefingFor } from "../lib/agent/presets";
+import { AGENT_ASSIST_PRESET, presetForTools, toolBriefingFor } from "../lib/agent/presets";
 import { runAgent } from "../lib/agent/runtime";
 import {
   ASSUMED_INPUT_CEILING_TOKENS, fixedContextChars, measureCharsPerToken, planContextBudget,
@@ -594,7 +594,14 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
         const workspace = createTaskWorkspace(projectPath, model.id);
         set({ taskWorkspace: workspace });
         const subAgents = useAiStore.getState().subAgents;
-        const routed = routeTools(preset!, subAgents, workspace, models);
+        // ask_author needs someone watching the panel: the full-tool Agent
+        // mode outside a batch run. A batch covers the panel with its modal,
+        // so a question card there would block the sweep unseen — same rule
+        // as onRoundLimit below. Dynamic import for the same cycle reason.
+        const { useBatchStore } = await import("./batchStore");
+        const canAsk =
+          preset === AGENT_ASSIST_PRESET && !useBatchStore.getState().running;
+        const routed = routeTools(preset!, subAgents, workspace, models, { askAuthor: canAsk });
         const effectivePreset = {
           ...preset!,
           tools: routed.tools,
@@ -647,6 +654,9 @@ export const useAiTaskStore = create<AiTaskState>((set, get) => ({
             // so each task starts with a clean slate.
             requestPlanApproval: (p) =>
               useAgentStore.getState().requestPlanApproval(p, controller, controller),
+            askAuthor: canAsk
+              ? (q) => useAgentStore.getState().requestQuestion(q, controller)
+              : undefined,
             lorePlan: createPlanGate(),
             // Disk workspace for the scratchpad tools. Per-run here (a panel
             // task is one job, start to finish) rather than per-session as in
