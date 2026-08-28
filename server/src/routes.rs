@@ -5,6 +5,8 @@
 //! GET    /v1/kbs                                     list knowledge bases
 //! POST   /v1/kbs                                     create one
 //! GET    /v1/kbs/{kb}/manifest                       every entry's hash — the sync plan's input
+//! GET    /v1/kbs/{kb}/syncs                          recent sync runs, newest first
+//! POST   /v1/kbs/{kb}/syncs                          a client reports one completed sync
 //! GET    /v1/kbs/{kb}/entries/{category}/{id}        download one entry (zip)
 //! PUT    /v1/kbs/{kb}/entries/{category}/{id}        upload one entry (zip)
 //! DELETE /v1/kbs/{kb}/entries/{category}/{id}        remove one entry (mirror semantics)
@@ -56,7 +58,7 @@ use crate::error::ApiError;
 use crate::session::SessionStore;
 use crate::store::{
     ConfigWrite, EntryWrite, KbSummary, Manifest, Precondition, PutOutcome, SlotSummary,
-    SlotVersion, Store,
+    SlotVersion, Store, SyncRecord,
 };
 
 pub struct AppState {
@@ -102,6 +104,7 @@ pub fn router(state: Arc<AppState>, max_entry_bytes: usize, max_config_bytes: us
     let kb_api = Router::new()
         .route("/v1/kbs", get(list_kbs).post(create_kb))
         .route("/v1/kbs/{kb}/manifest", get(manifest))
+        .route("/v1/kbs/{kb}/syncs", get(list_sync_log).post(report_sync))
         .route(
             "/v1/kbs/{kb}/entries/{category}/{id}",
             get(get_entry).put(put_entry).delete(delete_entry),
@@ -282,6 +285,71 @@ async fn manifest(
     let store = Arc::clone(&state);
     let manifest = blocking(move || store.store.manifest(&kb)).await??;
     Ok(Json(manifest))
+}
+
+// ─── Sync log ────────────────────────────────────────────────────────────────
+
+async fn list_sync_log(
+    State(state): State<Arc<AppState>>,
+    Path(kb): Path<String>,
+) -> Result<Json<Vec<SyncRecord>>, ApiError> {
+    let store = Arc::clone(&state);
+    let log = blocking(move || store.store.list_syncs(&kb)).await??;
+    Ok(Json(log))
+}
+
+#[derive(Deserialize)]
+struct ReportSync {
+    direction: String,
+    #[serde(default)]
+    created: u32,
+    #[serde(default)]
+    replaced: u32,
+    #[serde(default)]
+    deleted: u32,
+}
+
+/// A client says "I just finished a sync run against this base".
+///
+/// Direction and counts come from the body; the machine name rides the same
+/// `X-Source-Device` header every write already carries, and the timestamp is
+/// stamped by the store, not taken from the client.
+async fn report_sync(
+    State(state): State<Arc<AppState>>,
+    Extension(TokenPrefix(token)): Extension<TokenPrefix>,
+    Path(kb): Path<String>,
+    headers: HeaderMap,
+    Json(body): Json<ReportSync>,
+) -> Result<(StatusCode, Json<SyncRecord>), ApiError> {
+    let device = device_from(&headers);
+    let kb_id = kb.clone();
+    let logged_device = device.clone();
+    let store = Arc::clone(&state);
+    let record = blocking(move || {
+        store.store.record_sync(
+            &kb,
+            &body.direction,
+            device.as_deref(),
+            body.created,
+            body.replaced,
+            body.deleted,
+        )
+    })
+    .await??;
+    state.audit.record(crate::audit::AuditEvent {
+        at_ms: now_ms(),
+        action: "sync".into(),
+        kb: Some(kb_id),
+        path: None,
+        device: logged_device,
+        token,
+        status: 201,
+        detail: Some(format!(
+            "{} · +{} ~{} -{}",
+            record.direction, record.created, record.replaced, record.deleted
+        )),
+    });
+    Ok((StatusCode::CREATED, Json(record)))
 }
 
 // ─── Entries ─────────────────────────────────────────────────────────────────

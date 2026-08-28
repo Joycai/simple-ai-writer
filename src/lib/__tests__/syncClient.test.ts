@@ -146,6 +146,41 @@ describe("error handling", () => {
   });
 });
 
+describe("sync log", () => {
+  it("reads the per-base history and reports a run as a stamped write", async () => {
+    respond = () => json([{ atMs: 1, direction: "push", device: "A", created: 1, replaced: 0, deleted: 0 }]);
+    const log = await client().listSyncs("kb");
+    expect(log[0].direction).toBe("push");
+    expect(calls[0].url).toBe("http://box:8787/v1/kbs/kb/syncs");
+    expect(new Headers(calls[0].init.headers).get("X-Source-Device")).toBeNull();
+
+    // The report is a write like any other: it carries the machine name, and
+    // the counts the author just watched land — never a timestamp, which is
+    // the server's to stamp.
+    calls.length = 0;
+    const named = createSyncClient("http://box:8787", "tok", "MacBook-Pro");
+    respond = () => json({}, 201);
+    await named.reportSync("kb", { direction: "pull", created: 0, replaced: 2, deleted: 1 });
+    expect(calls[0].init.method).toBe("POST");
+    expect(header("X-Source-Device")).toBe("MacBook-Pro");
+    expect(JSON.parse(String(calls[0].init.body))).toEqual({
+      direction: "pull",
+      created: 0,
+      replaced: 2,
+      deleted: 1,
+    });
+  });
+
+  it("lets a report fail loudly — being best-effort is the caller's decision", async () => {
+    // An older server has no /syncs route; the *store* swallows that, so the
+    // client must not, or a real failure would vanish twice.
+    respond = () => json({ code: "not_found", message: "no such route" }, 404);
+    await expect(
+      client().reportSync("kb", { direction: "push", created: 1, replaced: 0, deleted: 0 }),
+    ).rejects.toBeInstanceOf(SyncHttpError);
+  });
+});
+
 describe("manifest", () => {
   it("reduces to the hash map the planner takes", () => {
     expect(

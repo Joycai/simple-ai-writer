@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useProjectStore } from "../../../stores/projectStore";
 import { useSyncStore } from "../../../stores/syncStore";
-import type { RemoteKb } from "../../../lib/sync/client";
+import type { RemoteKb, RemoteSyncRecord } from "../../../lib/sync/client";
+import type { Freshness } from "../../../lib/sync/status";
 import { ConfigBackupSection } from "./ConfigBackupSection";
 import { Pane, PaneHeader, Section, Row, Toggle } from "./bits";
 import ui from "../settingsUi.module.css";
@@ -194,13 +195,23 @@ export function SyncPane() {
               </div>
             </div>
             <Row
+              title={sync.freshness ? freshnessText(sync.freshness, t) : undefined}
               desc={
                 bound.lastSyncAt
                   ? t("sync.lastSync", { when: new Date(bound.lastSyncAt).toLocaleString() })
                   : t("sync.neverSynced")
               }
+              warn={
+                sync.freshness?.verdict === "diverged" ? t("sync.freshDivergedWarn") : undefined
+              }
               last
-            />
+            >
+              {connected && (
+                <button className={ui.rowBtn} onClick={() => void sync.refreshCounts(projectPath)}>
+                  {t("sync.refresh")}
+                </button>
+              )}
+            </Row>
           </Section>
 
           <Section label={t("sync.sectionSync")}>
@@ -235,6 +246,21 @@ export function SyncPane() {
             </Row>
           </Section>
 
+          <Section label={t("sync.sectionHistory")}>
+            {sync.records.length === 0 ? (
+              <Row desc={t(connected ? "sync.historyEmpty" : "sync.historyOffline")} last />
+            ) : (
+              sync.records.map((r, i) => (
+                <Row
+                  key={`${r.atMs}-${i}`}
+                  title={`${t(r.direction === "push" ? "sync.historyPush" : "sync.historyPull")} · ${new Date(r.atMs).toLocaleString()}`}
+                  desc={recordSubtitle(r, t)}
+                  last={i === sync.records.length - 1}
+                />
+              ))
+            )}
+          </Section>
+
           {!connected && (
             <Section label={t("sync.sectionServer")}>
               <Row desc={t("sync.reconnectHint")} last>
@@ -264,6 +290,48 @@ function kbSubtitle(kb: RemoteKb, t: (k: string, o?: Record<string, unknown>) =>
     parts.push(t("sync.kbUpdated", { when: new Date(kb.updatedAtMs).toLocaleString() }));
   }
   if (kb.lastDevice) parts.push(t("sync.kbFrom", { device: kb.lastDevice }));
+  return parts.join(" · ");
+}
+
+/**
+ * 谁比较新,一句话。The verdict comes from the three-way hash comparison
+ * (`lib/sync/status`), so it can never contradict the preview the author is
+ * about to read — both are drawn from the same maps.
+ */
+function freshnessText(f: Freshness, t: (k: string, o?: Record<string, unknown>) => string): string {
+  switch (f.verdict) {
+    case "in-sync":
+      return t("sync.freshInSync");
+    case "local-ahead":
+      return t("sync.freshLocalAhead", { n: f.localAhead });
+    case "remote-ahead":
+      return t("sync.freshRemoteAhead", { n: f.remoteAhead });
+    case "diverged":
+      return t("sync.freshDiverged", {
+        local: f.localAhead + f.diverged,
+        remote: f.remoteAhead + f.diverged,
+      });
+    case "first-sync":
+      return t("sync.freshFirstSync", { n: f.localAhead + f.remoteAhead + f.diverged });
+  }
+}
+
+/**
+ * "来自 MacBook-Pro · 新增 3 · 覆盖 2" — same rule as `kbSubtitle`: a clause
+ * with nothing to say is dropped, and a run whose surviving clauses are all
+ * zero (possible only from an older client) still gets a line rather than an
+ * empty subtitle.
+ */
+function recordSubtitle(
+  r: RemoteSyncRecord,
+  t: (k: string, o?: Record<string, unknown>) => string,
+): string {
+  const parts: string[] = [];
+  if (r.device) parts.push(t("sync.kbFrom", { device: r.device }));
+  if (r.created > 0) parts.push(t("sync.historyCreated", { n: r.created }));
+  if (r.replaced > 0) parts.push(t("sync.historyReplaced", { n: r.replaced }));
+  if (r.deleted > 0) parts.push(t("sync.historyDeleted", { n: r.deleted }));
+  if (parts.length === 0) parts.push(t("sync.historyNoCounts"));
   return parts.join(" · ");
 }
 

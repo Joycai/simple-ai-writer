@@ -5,6 +5,7 @@
 //! ```text
 //! kbs/<kb-id>/meta.json                          { id, name, createdAtMs }
 //! kbs/<kb-id>/entries/<category>/<id>.<hash>.zip the entry payload
+//! kbs/<kb-id>/syncs.json                         recent sync runs, newest first
 //! kbs/<kb-id>/tmp/                               staging for atomic renames
 //! ```
 //!
@@ -90,6 +91,37 @@ struct LastWrite {
     #[serde(rename = "atMs")]
     at_ms: u64,
 }
+
+/// One completed sync run, as the client that ran it reported it.
+///
+/// The server cannot derive these from what it sees: an upload is one entry,
+/// not a run, and a *pull* touches nothing here at all — only the client knows
+/// where one sync ends and the next begins, so the client reports. The server's
+/// contribution is the one field the client cannot be trusted with: the
+/// timestamp that orders the list, because client clocks disagree across
+/// machines and machines are exactly what this list exists to compare.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SyncRecord {
+    /// When the server stored it, epoch millis. Forced strictly upward past the
+    /// previous record so the list stays ordered even across a clock step.
+    #[serde(rename = "atMs")]
+    pub at_ms: u64,
+    /// `"push"` (client → server) or `"pull"` (server → client), from the
+    /// reporting client's point of view.
+    pub direction: String,
+    /// The reporting machine, as it named itself; `None` when it sent nothing.
+    pub device: Option<String>,
+    /// How many entries the run created / replaced / deleted on the receiving
+    /// side. Client-reported display counts, like everything else here.
+    pub created: u32,
+    pub replaced: u32,
+    pub deleted: u32,
+}
+
+/// How many sync runs a knowledge base remembers. Enough to answer "which
+/// machine synced when" across a handful of devices; old runs beyond that are
+/// history nobody asks about, not truth — the entries themselves are the truth.
+const SYNC_LOG_KEEP: usize = 20;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ManifestEntry {
@@ -739,6 +771,88 @@ impl Store {
             digest: format!("{:x}", hasher.finalize()),
             entries,
         })
+    }
+
+    // ── Sync log ────────────────────────────────────────────────────────────
+
+    fn sync_log_path(&self, kb: &str) -> PathBuf {
+        self.kb_dir(kb).join("syncs.json")
+    }
+
+    /// The recent sync runs, newest first.
+    ///
+    /// A missing or unreadable file is an empty history, not an error: a base
+    /// nobody has synced since this file existed genuinely has none, and the
+    /// log is a record of runs, never an input to any decision — sync decisions
+    /// are made on hashes, same as everywhere else in this module.
+    pub fn list_syncs(&self, kb: &str) -> Result<Vec<SyncRecord>> {
+        self.require_kb(kb)?;
+        Ok(self.read_sync_log(kb))
+    }
+
+    fn read_sync_log(&self, kb: &str) -> Vec<SyncRecord> {
+        fs::read_to_string(self.sync_log_path(kb))
+            .ok()
+            .and_then(|raw| serde_json::from_str(&raw).ok())
+            .unwrap_or_default()
+    }
+
+    /// Record one completed sync, keeping the newest `SYNC_LOG_KEEP`.
+    ///
+    /// Under the kb lock so two machines finishing at once cannot each rewrite
+    /// the file from the same starting point and drop the other's record, and
+    /// committed by rename through the kb's own `tmp/` like every other write
+    /// here — this file is served back verbatim by `list_syncs`, and a torn
+    /// write would take the whole history with it.
+    pub fn record_sync(
+        &self,
+        kb: &str,
+        direction: &str,
+        device: Option<&str>,
+        created: u32,
+        replaced: u32,
+        deleted: u32,
+    ) -> Result<SyncRecord> {
+        self.require_kb(kb)?;
+        if direction != "push" && direction != "pull" {
+            return Err(StoreError::Invalid(
+                "direction must be \"push\" or \"pull\"".into(),
+            ));
+        }
+
+        let lock = self.lock_for(kb);
+        let _guard = lock.lock().expect("kb lock poisoned");
+
+        let mut log = self.read_sync_log(kb);
+        let at_ms = match log.first() {
+            Some(newest) if newest.at_ms >= now_ms() => newest.at_ms + 1,
+            _ => now_ms(),
+        };
+        let record = SyncRecord {
+            at_ms,
+            direction: direction.to_string(),
+            device: device.map(str::to_string),
+            created,
+            replaced,
+            deleted,
+        };
+        log.insert(0, record.clone());
+        log.truncate(SYNC_LOG_KEEP);
+
+        let tmp_dir = self.kb_dir(kb).join("tmp");
+        fs::create_dir_all(&tmp_dir)?;
+        let tmp_path = tmp_dir.join(format!(
+            "syncs-{}-{}-{}.json",
+            now_ms(),
+            std::process::id(),
+            TMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::write(&tmp_path, serde_json::to_vec_pretty(&log).unwrap())?;
+        if let Err(e) = fs::rename(&tmp_path, self.sync_log_path(kb)) {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(e.into());
+        }
+        Ok(record)
     }
 
     // ── Application-config backups ──────────────────────────────────────────
@@ -1514,6 +1628,45 @@ mod tests {
             s.list_kbs().unwrap()[0].last_device.as_deref(),
             Some("MacBook-Pro")
         );
+    }
+
+    #[test]
+    fn sync_log_is_newest_first_and_capped() {
+        let (_d, s) = store();
+        let kb = s.create_kb("k", None).unwrap().meta;
+        assert!(s.list_syncs(&kb.id).unwrap().is_empty(), "no runs yet");
+
+        for i in 0..25u32 {
+            s.record_sync(&kb.id, "push", Some("MacBook-Pro"), i, 0, 0)
+                .unwrap();
+        }
+        let log = s.list_syncs(&kb.id).unwrap();
+        assert_eq!(log.len(), 20, "keeps only the newest SYNC_LOG_KEEP");
+        assert_eq!(log[0].created, 24, "newest first");
+        assert_eq!(log[19].created, 5, "oldest surviving run");
+        // Server-stamped and forced strictly upward: 25 records inside one test
+        // run land within the same millisecond, and the order must hold anyway.
+        assert!(
+            log.windows(2).all(|w| w[0].at_ms > w[1].at_ms),
+            "timestamps strictly descend"
+        );
+
+        // A pull is a run too — the whole reason the client reports instead of
+        // the server inferring from writes (a pull performs none here).
+        s.record_sync(&kb.id, "pull", None, 0, 2, 1).unwrap();
+        let log = s.list_syncs(&kb.id).unwrap();
+        assert_eq!(log[0].direction, "pull");
+        assert_eq!(log[0].device, None);
+        assert_eq!((log[0].replaced, log[0].deleted), (2, 1));
+    }
+
+    #[test]
+    fn sync_log_rejects_unknown_directions_and_bases() {
+        let (_d, s) = store();
+        let kb = s.create_kb("k", None).unwrap().meta;
+        assert!(s.record_sync(&kb.id, "sideways", None, 0, 0, 0).is_err());
+        assert!(s.record_sync("no-such-kb", "push", None, 0, 0, 0).is_err());
+        assert!(s.list_syncs("no-such-kb").is_err());
     }
 
     #[test]
