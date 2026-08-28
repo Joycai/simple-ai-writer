@@ -232,3 +232,25 @@
 .wrap :global(.cm-activeLineGutter) {
   background: transparent;
 }
+
+/* 「跳到结尾」的落点提示：光标被静默搬到文末，用一次渐隐的暖色带把视线接住。
+   选择器带 :global(.cm-line) 是为了压过上面 .cm-activeLine 的背景——两条规则
+   命中同一个元素，(0,3,0) 胜 (0,2,0)，不靠书写顺序。 */
+.wrap :global(.cm-line).caretFlash {
+  animation: caretLandFlash 1.6s var(--ease-out) forwards;
+}
+
+@keyframes caretLandFlash {
+  from { background-color: var(--color-mention-bg); }
+  to   { background-color: transparent; }
+}
+
+/* reduced-motion 下 global.css 会把 animation-duration 压到 0.001ms，动画那支
+   等于一帧都不播——而这条提示本身就是「光标动了」的唯一告知，压没了就等于
+   回到缺陷状态。所以这里换成不动的色带，由同一个 1.6s 定时器摘掉。 */
+@media (prefers-reduced-motion: reduce) {
+  .wrap :global(.cm-line).caretFlash {
+    animation: none;
+    background-color: var(--color-mention-bg);
+  }
+}
