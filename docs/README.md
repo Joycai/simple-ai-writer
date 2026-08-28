@@ -69,6 +69,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [writer-subagent-plan.md](feature/agent/writer-subagent-plan.md) | `shipped` `unverified` | 写手子代理：收尾成文交给作者另绑的模型（`finishPolicy: "handoff"`），开关式硬委托、交接单、引用式写入；只做对话助手，roleplay/AiPanel 不在第一期 |
 | [writer-subagent-ui-brief.md](feature/agent/writer-subagent-ui-brief.md) | `shipped` | 写手的 UI 任务书 + 设计稿回来之后：署名是左槽里那道**长度等于写手正文**的 1px 线；工单搬出执行日志；写手不是第七个芯片 |
 | [context-meters.md](feature/agent/context-meters.md) | `living` | 三条上下文计量条（生成的分配条 / 助手+扮演的构成条 / 预估态）：哪些必须一致（颜色语汇 + 段的合计等于上限）、哪些故意不一致（控件 vs 读数），以及各自已知未做的部分 |
+| [ask-author-plan.md](feature/agent/ask-author-plan.md) | `shipped` | `ask_author` 提问卡：模型出 2–4 个选项 + 恒在的自由输入，阻塞契约同 L2 审批；第五个待决队列，路由追加装载（批量/lore 弹窗拿不到工具），连批永不覆盖 |
 
 ### feature/lore/ — the knowledge base
 

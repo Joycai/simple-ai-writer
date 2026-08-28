@@ -8,6 +8,7 @@
  * - If the PPTX export Beta is off: strip export_pptx
  * - If the translation Beta is on AND a translation model is bound: append translate
  * - If any delegate-capable subagent is active and workspace exists: append delegate tool
+ * - If the surface opts in (it can render the question card): append ask_author
  * - If the surface opts in AND a usable writer is bound: finishPolicy → "handoff"
  */
 
@@ -45,6 +46,14 @@ export interface RoutedTools {
 export interface RouteOptions {
   /** May this surface end a run by handing off to the writer subagent? */
   handoff?: boolean;
+  /**
+   * Can this surface render the `ask_author` question card? Opt-in like
+   * `handoff` and for the same reason: whether the card has anywhere to appear
+   * is a property of the surface, unknowable where the presets are declared.
+   * Off means the tool is *absent*, not refused — a batch run blocked on an
+   * invisible card would hang the whole sweep.
+   */
+  askAuthor?: boolean;
 }
 
 /**
@@ -140,6 +149,14 @@ function route(
   // see it, which is why that file gains its own assertion on the routed set.
   if (isTranslateEnabled() && live("translate") && !tools.includes("translate")) {
     tools.push("translate");
+  }
+
+  // Appended for the surfaces that can render the question card (chat, the
+  // task panel outside a batch run) — same shape as `translate` above, and the
+  // same consequence: the raw-preset ratchet in agentToolBudget.test.ts cannot
+  // see it, so its cost is pinned in that file's routed-tools assertion.
+  if (options?.askAuthor && !tools.includes("ask_author")) {
+    tools.push("ask_author");
   }
 
   // Search subagent takes over web search: withhold serverTools from main agent.

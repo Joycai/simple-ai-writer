@@ -102,7 +102,8 @@ import {
 } from "../lib/context/rag";
 import { docModel, promptParams } from "../lib/profile/active";
 import type {
-  AppendProposal, ApprovalDecision, EditProposal, Proposal, RewriteProposal,
+  AppendProposal, ApprovalDecision, AskAnswer, AskQuestion, EditProposal, Proposal,
+  RewriteProposal,
 } from "../lib/agent/registry";
 import { type AttachedItem } from "../lib/lore/aiTask";
 import type { StreamMessage } from "../lib/ai/types";
@@ -206,6 +207,21 @@ export interface PendingTruncation extends SurfaceTagged {
   runId: RunId;
 }
 
+/**
+ * A question the model put to the author (`ask_author`), blocking its run.
+ *
+ * Unlike the round-limit card there can be several per run — the read tier
+ * executes in parallel, so two questions can land in one round — which is why
+ * resolveQuestion keys on `id` where resolveRoundLimit keys on the run.
+ */
+export interface PendingQuestion extends SurfaceTagged {
+  id: string;
+  question: string;
+  options: string[];
+  resolve: (answer: AskAnswer) => void;
+  runId: RunId;
+}
+
 export interface ChatTurn {
   id: string;
   role: "user" | "assistant";
@@ -249,6 +265,8 @@ interface AgentState {
   pendingRoundLimits: PendingRoundLimit[];
   /** Repeated-truncation questions awaiting the author — one per blocked run. */
   pendingTruncations: PendingTruncation[];
+  /** `ask_author` questions awaiting the author — each blocks its tool call. */
+  pendingQuestions: PendingQuestion[];
   /**
    * The one surface currently auto-approving, if any (lib/agent/autoApprove).
    * Null is the normal state: every card is asked.
@@ -368,6 +386,13 @@ interface AgentState {
   /** Resolve a blocked run's truncation question: keep going, or stop here. */
   resolveTruncation: (runId: RunId, decision: TruncationDecision) => void;
 
+  /** Called by the ask_author tool (via ToolContext.askAuthor). */
+  requestQuestion: (
+    q: AskQuestion, runId: RunId, surface?: string,
+  ) => Promise<AskAnswer>;
+  /** Author answered a question card: an option, or free text. */
+  resolveQuestion: (id: string, answer: AskAnswer) => void;
+
   /** Called by propose_lore_plan (via ToolContext.requestPlanApproval). */
   requestPlanApproval: (
     plan: LorePlan, runId: RunId, autoApproveKey?: unknown, surface?: string,
@@ -411,6 +436,7 @@ interface AgentState {
 let turnCounter = 0;
 let roundLimitCounter = 0;
 let truncationCounter = 0;
+let questionCounter = 0;
 /**
  * The in-flight manual compaction's abort handle (compactChatNow). Module-level
  * rather than state: nothing renders from it — stopChat/resetChat just need a
@@ -706,6 +732,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   pendingPlans: [],
   pendingRoundLimits: [],
   pendingTruncations: [],
+  pendingQuestions: [],
   autoApprove: null,
 
   turns: [],
@@ -864,6 +891,24 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     item.resolve(decision);
   },
 
+  requestQuestion: (q, runId, surface) =>
+    new Promise<AskAnswer>((resolve) => {
+      const id = `question-${++questionCounter}`;
+      set((s) => ({
+        pendingQuestions: [
+          ...s.pendingQuestions,
+          { id, question: q.question, options: q.options, resolve, runId, surface },
+        ],
+      }));
+      notifyApproval("notify.approvalQuestion");
+    }),
+  resolveQuestion: (id, answer) => {
+    const item = get().pendingQuestions.find((p) => p.id === id);
+    if (!item) return;
+    set((s) => ({ pendingQuestions: s.pendingQuestions.filter((p) => p.id !== id) }));
+    item.resolve(answer);
+  },
+
   rejectAll: (reason, runId) => {
     // A panel task's grant is scoped to its run, and this is the one place
     // every finish/abort path already goes through. Chat's grant is keyed
@@ -880,20 +925,24 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         : {});
     }
 
-    const { pending, pendingPlans, pendingRoundLimits, pendingTruncations } = get();
+    const {
+      pending, pendingPlans, pendingRoundLimits, pendingTruncations, pendingQuestions,
+    } = get();
     const drainP = pending.filter((p) => p.runId === runId);
     const drainL = pendingPlans.filter((p) => p.runId === runId);
     const drainR = pendingRoundLimits.filter((p) => p.runId === runId);
     const drainT = pendingTruncations.filter((p) => p.runId === runId);
+    const drainQ = pendingQuestions.filter((p) => p.runId === runId);
     if (
       drainP.length === 0 && drainL.length === 0
-      && drainR.length === 0 && drainT.length === 0
+      && drainR.length === 0 && drainT.length === 0 && drainQ.length === 0
     ) return;
     set({
       pending: pending.filter((p) => p.runId !== runId),
       pendingPlans: pendingPlans.filter((p) => p.runId !== runId),
       pendingRoundLimits: pendingRoundLimits.filter((p) => p.runId !== runId),
       pendingTruncations: pendingTruncations.filter((p) => p.runId !== runId),
+      pendingQuestions: pendingQuestions.filter((p) => p.runId !== runId),
     });
     for (const item of drainP) item.resolve({ approved: false, reason });
     for (const item of drainL) item.resolve({ approved: false, reason });
@@ -902,6 +951,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     // Stop, for the same reason: the run is over, and answering 继续 into a
     // dead run would leave the loop trying to recover from nothing.
     for (const item of drainT) item.resolve({ action: "stop" });
+    // Dismissed, not answered: a dangling Promise here would leave the tool
+    // call awaiting forever behind a card that no longer exists.
+    for (const item of drainQ) item.resolve({ kind: "dismissed" });
   },
 
   requestPlanApproval: (plan, runId, autoApproveKey, surface) =>
@@ -1379,7 +1431,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       // which runs the very same preset object — out of it.
       const routed = routeTools(
         AGENT_ASSIST_PRESET, effectiveSubs, tw, useAiStore.getState().models,
-        { handoff: true },
+        // askAuthor: the question card renders in the approvals area below.
+        { handoff: true, askAuthor: true },
       );
       const effectivePreset = {
         ...AGENT_ASSIST_PRESET,
@@ -1446,6 +1499,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
             }),
           requestPlanApproval: (p) =>
             get().requestPlanApproval(p, controller, CHAT_AUTO_APPROVE_KEY),
+          askAuthor: (q) => get().requestQuestion(q, controller),
           // One gate per turn: a plan the author approved for *this* request
           // does not silently authorise the next one.
           lorePlan: createPlanGate(),

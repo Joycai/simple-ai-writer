@@ -411,6 +411,29 @@ export type ApprovalDecision =
   | { approved: false; reason?: string };
 
 /**
+ * A question the model puts to the author mid-run (the `ask_author` tool).
+ * The tool call blocks on the answer — the same contract as an L2 approval,
+ * except nothing is applied: the answer itself is the whole outcome.
+ */
+export interface AskQuestion {
+  /** The decision being asked for, one sentence. */
+  question: string;
+  /** 2–4 mutually exclusive options, rendered as the card's buttons. */
+  options: string[];
+}
+
+/**
+ * What the author did with a question card. `other` exists structurally — the
+ * free-text field is part of the card, not one of the model's options — so the
+ * model can never switch it off.
+ */
+export type AskAnswer =
+  | { kind: "option"; index: number; text: string }
+  | { kind: "other"; text: string }
+  /** Only ever produced by rejectAll: the run was stopped with the card open. */
+  | { kind: "dismissed" };
+
+/**
  * 重整知识库组织结构的能力（见 `ToolContext.organize`）。
  *
  * `collections` 随上下文带上而不是让工具再去要一次：验证「这个集合存不存在」是每
@@ -491,6 +514,13 @@ export interface ToolContext {
   requestPlanApproval?: (plan: LorePlan) => Promise<PlanDecision>;
   /** This run's approved-plan record — see lib/agent/plan.ts. */
   lorePlan?: PlanGate;
+  /**
+   * 提问通道：`ask_author` 阻塞在这里，直到作者点了一个选项或自由作答——契约
+   * 与 `requestApproval` 相同。缺席意味着当前 surface 渲染不了提问卡；路由
+   * （routing.ts 的 `askAuthor`）应保证那样的 surface 根本拿不到这个工具，
+   * handler 里的报错只是兜底。
+   */
+  askAuthor?: (q: AskQuestion) => Promise<AskAnswer>;
   /**
    * Collector for a facet-split run (lib/agent/splitTools). Nothing is written
    * to disk — the modal reviews the sink and the author's Apply does the
@@ -597,6 +627,7 @@ export type ToolId =
   | "search_text"
   | "read_memory"
   | "read_workflow"
+  | "ask_author"
   | "propose_lore_plan"
   | "create_lore_entity"
   | "create_lore_facet"
@@ -956,6 +987,72 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
         };
       }
       return { toolCallId: call.id, content: `# ${card.name}\n\n${card.body}` };
+    },
+  },
+
+  // Read-tier but BLOCKING: nothing is written, yet the call awaits the author
+  // the way an L2 approval does. Access tiers gate writes; blocking is
+  // orthogonal (every approval tool blocks too).
+  ask_author: {
+    access: "read",
+    definition: {
+      type: "function",
+      function: {
+        name: "ask_author",
+        description:
+          "Ask the author ONE question you are blocked on, with 2-4 short mutually exclusive options; the run pauses until they answer, and the card always offers a free-text field besides your options — whatever comes back is the author's decision, follow it verbatim. Use it only for a decision you cannot settle from the project or the task (a direction to take, a fact only the author knows); anything findable in the project you look up yourself. Never use it to ask permission for a write — the write tools already show an approval card, so asking first makes the author decide twice. Consecutive questions are an interruption: fold related decisions into one.",
+        parameters: {
+          type: "object",
+          properties: {
+            question: {
+              type: "string",
+              description: "The decision you need, as one clear sentence",
+            },
+            options: {
+              type: "array",
+              items: { type: "string" },
+              description: "2-4 short, mutually exclusive answers the author can pick with one click",
+            },
+          },
+          required: ["question", "options"],
+        },
+      },
+    },
+    execute: async (call, ctx) => {
+      const args = parseArgs<{ question?: string; options?: unknown }>(call.arguments);
+      const question = args.question?.trim();
+      const options = Array.isArray(args.options)
+        ? args.options
+            .filter((o): o is string => typeof o === "string")
+            .map((o) => o.trim())
+            .filter(Boolean)
+        : [];
+      if (!question) {
+        return { toolCallId: call.id, content: "Error: 'question' is required." };
+      }
+      if (options.length < 2 || options.length > 4) {
+        return {
+          toolCallId: call.id,
+          content: "Error: 'options' must list 2-4 non-empty strings.",
+        };
+      }
+      // Routing should keep this tool off any surface that cannot render the
+      // card; this is the defensive floor, and it tells the model what to do
+      // instead of leaving it to retry.
+      if (!ctx.askAuthor) {
+        return {
+          toolCallId: call.id,
+          content: "Error: no one is watching this run — decide yourself and proceed.",
+        };
+      }
+      const answer = await ctx.askAuthor({ question, options });
+      const content =
+        answer.kind === "option"
+          ? `作者选择：「${answer.text}」`
+          : answer.kind === "other"
+            ? `作者的回答：「${answer.text}」`
+            : "运行已停止，问题未获回答。";
+      return { toolCallId: call.id, content };
     },
   },
 

@@ -40,6 +40,7 @@ import { ApprovalCard } from "./ApprovalCard";
 import { PlanCard } from "./PlanCard";
 import { RoundLimitCard } from "./RoundLimitCard";
 import { TruncationCard } from "./TruncationCard";
+import { QuestionCard } from "./QuestionCard";
 import { AutoApproveChip } from "./AutoApproveChip";
 import { useAiStore } from "../../stores/aiStore";
 import { useDocFormatStore } from "../../stores/docFormatStore";
@@ -961,6 +962,7 @@ export function AiPanel() {
   const pendingPlans = cardsForSurface(useAgentStore((s) => s.pendingPlans), null);
   const pendingRoundLimits = cardsForSurface(useAgentStore((s) => s.pendingRoundLimits), null);
   const pendingTruncations = cardsForSurface(useAgentStore((s) => s.pendingTruncations), null);
+  const pendingQuestions = cardsForSurface(useAgentStore((s) => s.pendingQuestions), null);
   const taskAbortController = useAiTaskStore((s) => s.abortController);
   const outputRef = useRef<HTMLDivElement>(null);
 
@@ -1860,13 +1862,17 @@ export function AiPanel() {
             {/* Pending lore plans + manuscript edits + round-cap questions — the
                 loop is blocked on these */}
             {(pendingPlans.length > 0 || pendingApprovals.length > 0
-              || pendingTruncations.length > 0 || pendingRoundLimits.length > 0) && (
+              || pendingTruncations.length > 0 || pendingRoundLimits.length > 0
+              || pendingQuestions.length > 0) && (
               <div className={styles.approvals}>
                 {pendingPlans.map((p) => (
                   <PlanCard key={p.plan.id} item={p} />
                 ))}
                 {pendingApprovals.map((p) => (
                   <ApprovalCard key={p.proposal.id} item={p} />
+                ))}
+                {pendingQuestions.map((p) => (
+                  <QuestionCard key={p.id} item={p} />
                 ))}
                 {pendingTruncations.map((p) => (
                   <TruncationCard key={p.id} item={p} />

@@ -1,0 +1,84 @@
+/* Question card — the run is blocked until the author answers. */
+
+/* Same frame vocabulary as RoundLimitCard: plain panel, serif message. */
+.card {
+  border: 1px solid var(--color-border-panel);
+  background: var(--color-bg-inset);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 10px var(--space-3);
+  border-bottom: 1px solid var(--color-hairline);
+}
+.headerTitle {
+  font: 400 12px/1.5 var(--font-sans);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.body {
+  padding: var(--space-3);
+  font: 400 13px/1.6 var(--font-serif);
+  color: var(--color-text-soft);
+  white-space: pre-wrap;
+}
+
+/* Options stack vertically: they carry prose, not verbs, so a footer row of
+   equal-width buttons would truncate exactly the words being decided on. */
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) var(--space-3);
+}
+.option {
+  padding: 8px 12px;
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--color-border-muted);
+  color: var(--color-text-soft);
+  font: 400 12px/1.6 var(--font-sans);
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+.option:hover {
+  color: var(--color-text-primary);
+  border-color: var(--color-border-emphasis);
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border-top: 1px solid var(--color-hairline);
+}
+.otherInput {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  background: var(--color-bg-panel);
+  border: 1px solid var(--color-border-muted);
+  color: var(--color-text-primary);
+  font: 400 12px/1.6 var(--font-sans);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+.otherInput:focus { border-color: var(--color-border-emphasis); }
+.otherInput::placeholder { color: var(--color-text-hint); }
+
+.btnSend {
+  padding: 8px 14px;
+  background: var(--color-sienna);
+  border: none;
+  color: var(--color-on-accent);
+  font: 500 11px/1.6 var(--font-sans);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast), opacity var(--transition-fast);
+}
+.btnSend:hover { background: var(--color-sienna-hover); }
+.btnSend:disabled { opacity: 0.4; cursor: default; }

@@ -1354,6 +1354,11 @@
       "pause": "Save & Pause",
       "continue": "Continue (+{{n}} rounds)"
     },
+    "question": {
+      "title": "The assistant needs your decision",
+      "otherPlaceholder": "Another answer…",
+      "send": "Answer"
+    },
     "plan": {
       "title": "{{entry}} plan awaiting approval",
       "stepCount": "{{count}} change",
@@ -2460,6 +2465,7 @@
     "approvalPlan": "The assistant submitted a knowledge-base write plan and is waiting for approval",
     "approvalRound": "The assistant hit this round's tool limit and is waiting for continue or wrap up",
     "approvalTruncation": "The assistant's output was cut off and is waiting for continue or stop",
+    "approvalQuestion": "The assistant has a question for you",
     "doneTitle": "Run finished",
     "failedTitle": "Run failed",
     "chatDone": "The assistant finished its reply",

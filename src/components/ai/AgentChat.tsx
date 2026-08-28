@@ -47,6 +47,7 @@ import { ApprovalCard } from "./ApprovalCard";
 import { PlanCard } from "./PlanCard";
 import { RoundLimitCard } from "./RoundLimitCard";
 import { TruncationCard } from "./TruncationCard";
+import { QuestionCard } from "./QuestionCard";
 import { TaskPanel } from "./TaskPanel";
 import { sumTokens, taskDocRevision } from "../../lib/agent/logModel";
 import { useImeGuard } from "../../lib/ime";
@@ -106,6 +107,7 @@ export function AgentChat() {
   const allPlans = useAgentStore((s) => s.pendingPlans);
   const allRoundLimits = useAgentStore((s) => s.pendingRoundLimits);
   const allTruncations = useAgentStore((s) => s.pendingTruncations);
+  const allQuestions = useAgentStore((s) => s.pendingQuestions);
   const sendChat = useAgentStore((s) => s.sendChat);
   const stopChat = useAgentStore((s) => s.stopChat);
   const toggleSubAgent = useAgentStore((s) => s.toggleSubAgent);
@@ -120,6 +122,7 @@ export function AgentChat() {
   const pendingPlans = cardsForSurface(allPlans, null);
   const pendingRoundLimits = cardsForSurface(allRoundLimits, null);
   const pendingTruncations = cardsForSurface(allTruncations, null);
+  const pendingQuestions = cardsForSurface(allQuestions, null);
   const activeModelId = useAiStore((s) => s.activeModelId);
   const activeModel = useAiStore((s) => s.models.find((m) => m.id === s.activeModelId));
   const subAgents = useAiStore((s) => s.subAgents);
@@ -629,15 +632,18 @@ export function AgentChat() {
 
       {chatError && <div className={styles.error}>{chatError}</div>}
 
-      {/* Lore plans + manuscript edits + round-cap questions — the loop is blocked on these */}
+      {/* Lore plans + manuscript edits + questions + round-cap cards — the loop is blocked on these */}
       {(pendingPlans.length > 0 || pending.length > 0 || pendingRoundLimits.length > 0
-        || pendingTruncations.length > 0) && (
+        || pendingTruncations.length > 0 || pendingQuestions.length > 0) && (
         <div className={styles.approvals}>
           {pendingPlans.map((p) => (
             <PlanCard key={p.plan.id} item={p} />
           ))}
           {pending.map((p) => (
             <ApprovalCard key={p.proposal.id} item={p} />
+          ))}
+          {pendingQuestions.map((p) => (
+            <QuestionCard key={p.id} item={p} />
           ))}
           {pendingRoundLimits.map((p) => (
             // Keyed by the run, like the other two lists are keyed by their

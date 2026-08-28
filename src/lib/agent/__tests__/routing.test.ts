@@ -452,3 +452,35 @@ describe("routeTools — writer handoff", () => {
       .toBe("handoff");
   });
 });
+
+/**
+ * ask_author rides on whether the surface can render the question card — a
+ * per-surface opt-in like `handoff`, appended like `translate`. Off must mean
+ * ABSENT: a batch run blocked on an invisible card would hang the whole sweep.
+ */
+describe("routeTools — ask_author", () => {
+  const allDisabled: Record<SubAgentKind, SubAgentConfig> = {
+    search: { kind: "search", modelId: null, enabled: false },
+    vision: { kind: "vision", modelId: null, enabled: false },
+    longread: { kind: "longread", modelId: null, enabled: false },
+    pdf: { kind: "pdf", modelId: null, enabled: false },
+    imagegen: { kind: "imagegen", modelId: null, enabled: false },
+    translate: { kind: "translate", modelId: null, enabled: false },
+    writer: { kind: "writer", modelId: null, enabled: false },
+    retrieval: { kind: "retrieval", modelId: null, enabled: false },
+  };
+
+  it("is absent unless the surface says it can render the question card", () => {
+    expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS).tools)
+      .not.toContain("ask_author");
+    expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS, { askAuthor: false }).tools)
+      .not.toContain("ask_author");
+  });
+
+  it("is appended when the surface opts in — in the planning view too", () => {
+    expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS, { askAuthor: true }).tools)
+      .toContain("ask_author");
+    expect(routePlannedTools(AGENT_ASSIST_PRESET, allDisabled, MODELS, { askAuthor: true }).tools)
+      .toContain("ask_author");
+  });
+});

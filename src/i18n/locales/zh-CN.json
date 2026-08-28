@@ -1354,6 +1354,11 @@
       "pause": "存盘并暂停",
       "continue": "继续（再 {{n}} 轮）"
     },
+    "question": {
+      "title": "助手在等你决定",
+      "otherPlaceholder": "其他答案…",
+      "send": "回答"
+    },
     "plan": {
       "title": "待批准的{{entry}}方案",
       "stepCount": "{{count}} 项改动",
@@ -2455,6 +2460,7 @@
     "approvalPlan": "AI 提交了一份知识库写入计划，等待确认",
     "approvalRound": "AI 已达到本轮工具上限，等待你决定继续还是收尾",
     "approvalTruncation": "AI 的输出被截断，等待你决定继续还是停止",
+    "approvalQuestion": "AI 有一个问题需要你回答",
     "doneTitle": "执行完成",
     "failedTitle": "执行失败",
     "chatDone": "对话助手已完成回复",
