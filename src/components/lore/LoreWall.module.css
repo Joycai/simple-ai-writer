@@ -81,6 +81,15 @@
   align-items: center;
   gap: 6px;
 }
+/* 「内容操作」与「同步状态件」之间的一根竖线(设计稿 14 屏 1k)。 */
+.headDivider {
+  width: 1px;
+  height: 22px;
+  background: var(--color-border);
+  align-self: center;
+  margin: 0 3px;
+}
+
 /* Overflow (⋯) — same height rhythm as the two buttons beside it, quieter than
    both. Mirrors LoreDetail's .heroBtnGhost. */
 .btnGhost {

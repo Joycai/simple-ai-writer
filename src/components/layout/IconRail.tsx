@@ -5,6 +5,7 @@ import {
 import { useAppStore, type SideTab, type MainView } from "../../stores/appStore";
 import { useDocModel, useMainView, useTerms } from "../../stores/projectStore";
 import { useLoreStore } from "../../stores/loreStore";
+import { useSyncStore } from "../../stores/syncStore";
 import { loreEntityCount } from "../../lib/lore";
 import { comboLabel } from "../../lib/shortcuts";
 
@@ -76,6 +77,9 @@ export function IconRail({ onOpenSettings }: Props) {
   const mainView = useMainView();
   // 设计稿 01: the knowledge-base icon carries an entity-count badge.
   const loreCount = useLoreStore((s) => loreEntityCount(s.index));
+  // 设计稿 14 屏 1k:同步只在「两边都有改动」时才配得上写作时的余光——
+  // 一枚 5px 点,其余四档什么都不画。点开知识库墙,状态件在那里说全。
+  const syncAttention = useSyncStore((s) => s.freshness?.verdict === "diverged");
 
   const handleSideClick = (id: SideTab) => {
     if (id === "search") {
@@ -134,6 +138,7 @@ export function IconRail({ onOpenSettings }: Props) {
             {it.id === "lore-wall" && loreCount > 0 && (
               <span className={styles.badge}>{loreCount}</span>
             )}
+            {it.id === "lore-wall" && syncAttention && <span className={styles.syncDot} />}
           </button>
         );
       })}
