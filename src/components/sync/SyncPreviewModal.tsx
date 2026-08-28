@@ -64,6 +64,7 @@ export function SyncPreviewModal() {
   const setDecision = useSyncStore((p) => p.setDecision);
   const closeModal = useSyncStore((p) => p.closeModal);
   const startPreview = useSyncStore((p) => p.startPreview);
+  const checking = useSyncStore((p) => p.checking);
 
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -105,7 +106,20 @@ export function SyncPreviewModal() {
           )}
         </div>
 
-        {phase === "planning" && <div className={s.centered}><div className={s.centeredBody}>{t("sync.planning")}</div></div>}
+        {phase === "planning" && (
+          <div className={s.centered}>
+            <div className={s.centeredBody}>
+              {t("sync.planning")}
+              {/* 本地哈希的逐条进度——大库要读全部配图,没有数字就像挂了。 */}
+              {checking && checking.total > 0 && (
+                <>
+                  {" "}
+                  {checking.done} / {checking.total} · {checking.path}
+                </>
+              )}
+            </div>
+          </div>
+        )}
 
         {phase === "preview" && plan && (
           <PreviewBody

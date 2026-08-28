@@ -13,9 +13,8 @@ vi.mock("../http", () => ({
   isLocalUrl: () => true,
 }));
 
-const { createSyncClient, SyncConflictError, SyncHttpError, manifestHashes } = await import(
-  "../sync/client"
-);
+const { createSyncClient, SyncConflictError, SyncHttpError, manifestHashes, probeHealth } =
+  await import("../sync/client");
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -204,5 +203,26 @@ describe("manifest", () => {
     const got = await client().downloadEntry("kb", "a/x");
     expect(got.hash).toBe("deadbeef");
     expect([...got.bytes]).toEqual([1, 2, 3]);
+  });
+});
+
+describe("health probe", () => {
+  it("asks /health unauthenticated and answers with a boolean, never a throw", async () => {
+    respond = () => json({ status: "ok" });
+    expect(await probeHealth("http://box:8787/")).toBe(true);
+    expect(calls[0].url).toBe("http://box:8787/health");
+    expect(header("Authorization")).toBeNull();
+
+    // The whole point of the probe is that a dead server is a calm `false`
+    // the automatic paths can act on — not an exception to route around.
+    respond = () => {
+      throw new Error("connection refused");
+    };
+    expect(await probeHealth("http://box:8787")).toBe(false);
+
+    respond = () => new Response(null, { status: 502 });
+    expect(await probeHealth("http://box:8787")).toBe(false);
+
+    expect(await probeHealth("   ")).toBe(false);
   });
 });

@@ -468,6 +468,7 @@ function Connector({ verdict }: { verdict: AnchorVerdict }) {
 function VerdictHead({ verdict }: { verdict: AnchorVerdict }) {
   const { t } = useTranslation();
   const f = useSyncStore((s) => s.freshness);
+  const checking = useSyncStore((s) => s.checking);
   switch (verdict) {
     case "in-sync":
       return (
@@ -513,10 +514,17 @@ function VerdictHead({ verdict }: { verdict: AnchorVerdict }) {
         </div>
       );
     default:
+      // 比对中。哈希会读知识库里每一张配图的每一个字节,大库要跑上几秒——
+      // 逐条进度是它和「挂了」之间的全部区别。
       return (
         <div className={sp.verdictHead}>
           <span className={`${sp.dot} ${sp.dotSpin}`} />
           <span className={`${sp.verdictName} ${sp.verdictNameDim}`}>{t("sync.vLoading")}</span>
+          {checking && checking.total > 0 && (
+            <span className={sp.verdictDesc}>
+              {checking.done} / {checking.total} · {checking.path}
+            </span>
+          )}
         </div>
       );
   }

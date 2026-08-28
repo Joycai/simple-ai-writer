@@ -17,7 +17,9 @@ import { create } from "zustand";
 import {
   createSyncClient,
   manifestHashes,
+  probeHealth,
   type RemoteKb,
+  type RemoteManifest,
   type RemoteSyncRecord,
   type SyncClient,
 } from "../lib/sync/client";
@@ -78,6 +80,11 @@ interface SyncState {
   /** Recent sync runs from the server's per-base log, newest first — every
    *  machine's, which is what a local record could never show. */
   records: RemoteSyncRecord[];
+  /** Local hashing in flight for the comparison (refreshCounts / startPreview).
+   *  Hashing reads every byte of every gallery image, so a picture-heavy
+   *  knowledge base takes seconds — this is what keeps that from looking like
+   *  a hang. null = not hashing. */
+  checking: SyncProgress | null;
 
   phase: SyncPhase;
   direction: SyncDirection;
@@ -127,6 +134,14 @@ function requireClient(): SyncClient {
   return client;
 }
 
+/**
+ * One comparison at a time. `refreshCounts` is called from several surfaces
+ * (the wall widget's mount, hydrate, a reconnect) that can land together, and
+ * hashing the whole tree twice in parallel doubles the slowest thing the sync
+ * feature does for zero information.
+ */
+let refreshing = false;
+
 export const useSyncStore = create<SyncState>((set, get) => ({
   serverUrl: "",
   token: "",
@@ -140,6 +155,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
   remoteCount: -1,
   freshness: null,
   records: [],
+  checking: null,
   phase: "idle",
   direction: "push",
   plan: null,
@@ -203,7 +219,20 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     if (get().hydratedFor !== projectPath) await get().hydrate(projectPath);
     const { binding, token, connection } = get();
     if (!binding) return;
-    if (connection === "disconnected" && token) {
+    const wantsConnect = connection === "disconnected" && Boolean(token);
+    if (!wantsConnect && connection !== "connected") return;
+    // Fast liveness gate for this automatic path only: a dead server becomes
+    // one bounded /health probe instead of a full API call riding into the
+    // OS's TCP timeout — and nothing downstream (hashing the whole local
+    // tree included) runs at all. The manual 连接 button deliberately skips
+    // this and makes the real attempt, whose error can tell a bad token
+    // from a dead server.
+    if (!(await probeHealth(get().serverUrl))) {
+      client = null;
+      set({ connection: "error", error: "服务器无响应（/health 超时或不可达）", kbs: [] });
+      return;
+    }
+    if (wantsConnect) {
       // Quiet by design: the author bound this project to this server, so a
       // bound project reaching for its server is expected — the rule that
       // opening *settings* must not dial out (see hydrate) is about surfaces
@@ -211,7 +240,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       // "error"` and the widget shows 连不上 with a manual 重连.
       await get().connect();
       if (get().connection === "connected") await get().refreshCounts(projectPath);
-    } else if (connection === "connected") {
+    } else {
       await get().refreshCounts(projectPath);
     }
   },
@@ -284,33 +313,50 @@ export const useSyncStore = create<SyncState>((set, get) => ({
 
   refreshCounts: async (projectPath) => {
     const { binding } = get();
-    let local: HashMap | null = null;
-    try {
-      local = await localEntryHashes(projectPath);
-      set({ localCount: Object.keys(local).length });
-    } catch {
-      set({ localCount: -1 });
-    }
+    // 没连上就不比对: the local hashing below is the slowest thing this store
+    // does, and without a reachable server there is nothing to compare it to.
     if (!binding || !client) return;
+    if (refreshing) return;
+    refreshing = true;
     try {
-      const manifest = await client.manifest(binding.kbId);
+      // Remote side first — it fails fast when the server is gone, *before*
+      // any disk work starts, and its entry count is on screen while the
+      // local hashing below still runs.
+      let manifest: RemoteManifest;
+      try {
+        manifest = await client.manifest(binding.kbId);
+      } catch {
+        set({ remoteCount: -1, freshness: null });
+        return;
+      }
       set({
         remoteCount: manifest.entries.length,
         binding: { ...binding, kbName: manifest.kb.name },
+      });
+      let local: HashMap | null = null;
+      try {
+        set({ checking: { done: 0, total: 0, path: "" } });
+        local = await localEntryHashes(projectPath, undefined, (p) => set({ checking: p }));
+        set({ localCount: Object.keys(local).length });
+      } catch {
+        set({ localCount: -1 });
+      }
+      set({
         // Who is newer — the same three maps the plan reads, so this verdict
         // and the preview the author will see can never disagree.
         freshness: local
           ? compareFreshness(local, manifestHashes(manifest), binding.snapshot)
           : null,
       });
-    } catch {
-      set({ remoteCount: -1, freshness: null });
-    }
-    try {
-      set({ records: await client.listSyncs(binding.kbId) });
-    } catch {
-      // The log is decoration: a server built before the endpoint existed
-      // answers 404, and a failed fetch keeps the list already on screen.
+      try {
+        set({ records: await client.listSyncs(binding.kbId) });
+      } catch {
+        // The log is decoration: a server built before the endpoint existed
+        // answers 404, and a failed fetch keeps the list already on screen.
+      }
+    } finally {
+      refreshing = false;
+      set({ checking: null });
     }
   },
 
@@ -328,7 +374,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     });
     try {
       const [local, manifest] = await Promise.all([
-        localEntryHashes(projectPath),
+        localEntryHashes(projectPath, undefined, (p) => set({ checking: p })),
         requireClient().manifest(binding.kbId),
       ]);
       const remote = manifestHashes(manifest);
@@ -342,6 +388,8 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       });
     } catch (e) {
       set({ phase: "idle", error: e instanceof Error ? e.message : String(e) });
+    } finally {
+      set({ checking: null });
     }
   },
 

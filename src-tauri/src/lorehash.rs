@@ -37,6 +37,7 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tauri::command;
+use tauri::ipc::Channel;
 
 use crate::scope::FsScope;
 
@@ -101,27 +102,23 @@ pub struct EntryHash {
     pub hash: String,
 }
 
-/// Hash every entry under a lore root (`<project>/.ai-writer/lore`), in one
-/// call.
-///
-/// Batched deliberately: a project can hold hundreds of entries, and one IPC
-/// hop per entry would make opening the sync screen visibly slow for no reason.
-/// Every `<category>/<entity>` directory is reported; deciding which category
-/// ids are real is the frontend's job, because that rule lives in the workspace
-/// profile (`CATEGORY_ID_RE` and the enabled packs) and duplicating it here
-/// would give the app two answers that can drift apart.
-#[command]
-pub fn lore_tree_hashes(
-    path: String,
-    scope: tauri::State<'_, FsScope>,
-) -> Result<Vec<EntryHash>, String> {
-    scope.check(&path)?;
-    let root = Path::new(&path);
-    let mut out = Vec::new();
+/// One tick of `lore_tree_hashes` progress: `done` entries finished out of
+/// `total`, and the entry (`category/id`) being hashed right now.
+#[derive(Clone, Serialize)]
+pub struct HashProgress {
+    pub done: usize,
+    pub total: usize,
+    pub path: String,
+}
 
+/// The `<category>/<entity>` directories under a lore root, sorted. Split out
+/// of the hashing loop so the entry count exists *before* the slow part starts
+/// — that count is what makes a progress report possible at all.
+fn collect_entries(root: &Path) -> Vec<(String, String, PathBuf)> {
+    let mut out = Vec::new();
     let Ok(categories) = fs::read_dir(root) else {
         // No lore directory yet — a project with no knowledge base at all.
-        return Ok(out);
+        return out;
     };
     for category in categories.flatten() {
         if !category.file_type().map(|t| t.is_dir()).unwrap_or(false) {
@@ -142,17 +139,52 @@ pub fn lore_tree_hashes(
             if is_ignored(&id) {
                 continue;
             }
-            out.push(EntryHash {
-                category: cat_name.clone(),
-                id,
-                hash: hash_entry_dir(&entity.path())?,
-            });
+            out.push((cat_name.clone(), id, entity.path()));
         }
     }
+    out.sort_by(|a, b| (a.0.as_str(), a.1.as_str()).cmp(&(b.0.as_str(), b.1.as_str())));
+    out
+}
 
-    out.sort_by(|a, b| {
-        (a.category.as_str(), a.id.as_str()).cmp(&(b.category.as_str(), b.id.as_str()))
-    });
+/// Hash every entry under a lore root (`<project>/.ai-writer/lore`), in one
+/// call.
+///
+/// Batched deliberately: a project can hold hundreds of entries, and one IPC
+/// hop per entry would make opening the sync screen visibly slow for no reason.
+/// Every `<category>/<entity>` directory is reported; deciding which category
+/// ids are real is the frontend's job, because that rule lives in the workspace
+/// profile (`CATEGORY_ID_RE` and the enabled packs) and duplicating it here
+/// would give the app two answers that can drift apart.
+///
+/// `on_progress` streams one tick per entry (sent *before* hashing it, so what
+/// the author sees is the entry currently being read). Hashing reads every
+/// byte of every gallery image, so on a picture-heavy knowledge base this call
+/// runs for seconds — the channel is what keeps that from looking like a hang.
+/// Required rather than `Option<Channel<…>>` because `Channel` implements
+/// `CommandArg`, not `Deserialize` — an optional channel does not compile.
+#[command]
+pub fn lore_tree_hashes(
+    path: String,
+    on_progress: Channel<HashProgress>,
+    scope: tauri::State<'_, FsScope>,
+) -> Result<Vec<EntryHash>, String> {
+    scope.check(&path)?;
+    let entries = collect_entries(Path::new(&path));
+    let total = entries.len();
+    let mut out = Vec::with_capacity(total);
+    for (done, (category, id, dir)) in entries.into_iter().enumerate() {
+        // Best-effort: a closed channel must not fail the hashing.
+        let _ = on_progress.send(HashProgress {
+            done,
+            total,
+            path: format!("{category}/{id}"),
+        });
+        out.push(EntryHash {
+            category,
+            id,
+            hash: hash_entry_dir(&dir)?,
+        });
+    }
     Ok(out)
 }
 
