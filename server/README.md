@@ -59,6 +59,11 @@ cargo build --release
 没有开着终端的机器上(NAS、双击运行的 Windows)等于死路。它**仍然是 fail-closed**
 —— 服务端从不在没有凭据的情况下起来,只是凭据由它自己生成。
 
+**Windows 上**用第二个二进制 `aiw-kb-tray`(同一次 `cargo build` 一起产出):
+同一个服务器跑在托盘图标后面,没有控制台窗口,首启凭据弹对话框,菜单里有
+启动/停止、打开管理后台、开机自启。见 `DEPLOY.md` §4.3;设计:
+[`docs/feature/knowledge-base/kb-server-tray.md`](../docs/feature/knowledge-base/kb-server-tray.md)。
+
 完整流程(交叉编译、systemd 单元、Docker、TLS、token 轮换)见
 [`DEPLOY.md`](DEPLOY.md)。
 

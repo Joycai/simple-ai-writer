@@ -342,6 +342,35 @@ services:
 后台的配置页里是锁着的(显示「环境变量覆盖」)。想在后台里改 bind 或数据目录,
 就别在这里设它们。
 
+### 4.3 Windows:托盘启动器(aiw-kb-tray)
+
+Windows 上不需要 systemd 也不需要包装服务 —— 仓库里有第二个二进制
+`aiw-kb-tray`,把同一个服务器**在进程内**跑在一个托盘图标后面:
+
+```powershell
+cd server
+cargo build --release
+# 得到 target\release\aiw-kb-tray.exe,放到哪个目录都行,双击运行
+```
+
+- 双击即启动:图标进托盘(实心 = 运行中,空心 = 已停止),没有控制台窗口;
+- 首次启动生成配置文件时,管理密码和同步 token **弹在对话框里**(headless 版
+  打印到终端的那份信息,换了一个观众);
+- 托盘菜单:启动/停止服务器 · 打开管理后台 · 服务器状态 · **开机自启**
+  (写 HKCU Run 键,不需要管理员权限,取消勾选即撤销)· 退出;
+- 它会把工作目录定到 exe 所在目录,所以默认布局是 exe 旁边的
+  `aiw-kb.toml` + `data\`,无论是双击还是开机自启拉起的;
+- 日志在 `data\tray.log`(GUI 进程没有终端可打)。
+
+配置编辑、token 管理、活动日志、备份都在管理后台(菜单一键直达),托盘自己
+不再长一套界面。设计与取舍:
+[`docs/feature/knowledge-base/kb-server-tray.md`](../docs/feature/knowledge-base/kb-server-tray.md)。
+
+「无人登录也要跑」的场景(机房里的 Windows Server),Run 键不够 —— 用
+[WinSW](https://github.com/winsw/winsw) 之类的包装器把 **headless 的
+`aiw-kb-server.exe`** 注册成 Windows 服务即可,托盘版不适合做服务(它假设
+有一个能显示图标和对话框的桌面会话)。
+
 ---
 
 ## 5. 轮换 token
