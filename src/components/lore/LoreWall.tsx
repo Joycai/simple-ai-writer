@@ -45,6 +45,8 @@ import { useImeGuard } from "../../lib/ime";
 import { LoreGenerator } from "./LoreGenerator";
 import { NewEntryTabs, type NewEntryMode } from "./ai/NewEntryTabs";
 import { LoreDetail } from "./LoreDetail";
+import { SyncPresence } from "./SyncPresence";
+import { useSyncStore } from "../../stores/syncStore";
 import { ContextMenu, type ContextMenuEntry } from "../common/ContextMenu";
 import { ModalShell } from "../common/ModalShell";
 import { fillLayer, pushBackdrop, pushForward, springScreen, useMotionPreset } from "../../lib/motion";
@@ -423,7 +425,25 @@ export function LoreWall() {
   const buildMenuItems = (m: { entity: LoreEntity | null; header?: boolean }): ContextMenuEntry[] => {
     const e = m.entity;
     if (m.header) {
-      return [...transferItems(), { kind: "divider" }, refreshItem()];
+      // AI 提取从第一行下沉到这里(设计稿 14 屏 1k):它是每周一次的动作,
+      // 不是每天,腾出的位置给同步状态件。未绑定时,绑定入口也只在这里留一项
+      // ——工具带上不放「去绑定」的常驻广告。
+      const items: ContextMenuEntry[] = [
+        { kind: "item", icon: <Sparkles size={13} />, label: t("lore.newEntry.ai", { defaultValue: "AI 提取" }),
+          action: () => setNewMode("ai") },
+        { kind: "divider" },
+        ...transferItems(),
+        { kind: "divider" },
+        refreshItem(),
+      ];
+      if (projectPath && !useSyncStore.getState().binding) {
+        items.push({ kind: "divider" }, {
+          kind: "item",
+          label: t("sync.wBind"),
+          action: () => useAppStore.getState().openSettings("sync"),
+        });
+      }
+      return items;
     }
     if (!e) {
       return [
@@ -610,18 +630,14 @@ export function LoreWall() {
 
           <ScopeButton scope={scope} onOpen={setScopeMenu} />
 
-          <button
-            className={styles.btnSecondary}
-            onClick={() => setNewMode("ai")}
-            title={t("lore.newEntry.aiHint", { defaultValue: "从手稿或描述中提取条目" })}
-          >
-            <Sparkles size={12} strokeWidth={1.8} />
-            {t("lore.newEntry.ai", { defaultValue: "AI 提取" })}
-          </button>
           <button className={styles.btnPrimary} onClick={() => setNewMode("manual")}>
             <Plus size={12} strokeWidth={2.5} />
             {t("lore.panel.newEntry")}
           </button>
+          {/* 一根 1px 竖线把「操作这面墙的内容」与「这面墙和服务器的关系」切开;
+              状态件只在项目绑定后存在(设计稿 14 屏 1i/1k)。 */}
+          <span className={styles.headDivider} />
+          <SyncPresence />
           <button
             className={styles.btnGhost}
             onClick={(ev) => {

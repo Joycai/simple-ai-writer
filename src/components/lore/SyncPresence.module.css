@@ -1,0 +1,167 @@
+/**
+ * 墙上的同步状态件 —— 锚点卡的缩写(设计稿 14 屏 1i–1k)。
+ *
+ * 一枚 6px 点 + 两个字 + 一个数,借工具带既有的 1px 细框 + --color-card 底,
+ * 坐在头部最右、⋯ 左边。它不用 3px double(那属于取材范围)、不用装订、
+ * 不用分类六色;只有「两边都有改动」允许淡染赭石,用的是同步预览里
+ * 「需要注意」行的同一记号(--sync-risk-bg + 3px 实线左边)。
+ */
+.chip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  cursor: pointer;
+  user-select: none;
+}
+.chipRisk {
+  border: none;
+  padding: 8px 10px 8px 8px;
+  background: var(--sync-risk-bg);
+  box-shadow: inset 3px 0 0 var(--color-sienna);
+}
+.chipOffline { background: var(--color-bg-tinted); }
+
+.dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+.dotOutline { border: 1.5px solid var(--color-text-faint); }
+.dotFilled { background: var(--color-text-muted); }
+.dotRisk { background: var(--color-sienna); }
+.dotDashed { border: 1.5px dashed var(--color-border-strong); }
+.dotSpin {
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--color-border);
+  border-top-color: var(--color-sienna);
+  animation: presenceSpin 800ms linear infinite;
+}
+@keyframes presenceSpin { to { transform: rotate(360deg); } }
+
+.label { font: 500 12.5px/1 var(--font-serif); color: var(--color-text-primary); }
+.labelRisk { color: var(--sync-risk-text); }
+.labelDim { color: var(--color-text-muted); }
+.count { font: 400 11px/1 var(--font-mono); color: var(--color-text-muted); }
+.countRisk { color: var(--sync-risk-text); }
+.sep { width: 1px; height: 14px; background: var(--color-border); }
+.sepRisk { background: var(--sync-risk-line); }
+
+.action {
+  font: 500 11.5px/1 var(--font-sans);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  transition: color var(--transition-fast);
+}
+.action:hover:not(:disabled) { color: var(--color-sienna); }
+.actionOn { color: var(--color-sienna); }
+.actionRisk { color: var(--sync-risk-text); }
+.action:disabled { color: var(--color-text-faint); cursor: default; }
+
+/* 执行中:件底压一根 2px 进度线,宽度不变。 */
+.progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--color-border-soft);
+}
+.progressFill { position: absolute; inset: 0 auto 0 0; background: var(--color-sienna); }
+
+/* ── 点开的浮层:锚点卡的缩略版 ─────────────────────────────────────────── */
+.pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  width: 330px;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-xl);
+  cursor: default;
+}
+.popHead { padding: 13px 15px 11px; border-bottom: 1px solid var(--color-border-soft); }
+.popVerdict { display: flex; align-items: center; gap: 9px; }
+.popVerdictText { font: 500 13.5px/1 var(--font-serif); color: var(--color-text-primary); }
+.popBand {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr 60px 1fr;
+  align-items: center;
+  gap: 6px;
+}
+.popSide { font: 400 12px/1.4 var(--font-serif); color: var(--color-text-dim); }
+.popSideEnd { text-align: right; }
+.popSideMeta { font: 400 10.5px var(--font-mono); color: var(--color-text-faint); }
+.popLine { display: flex; align-items: center; }
+.popBar { flex: 1; height: 1.5px; background: var(--color-border-strong); }
+.popBarDashed { flex: 1; height: 0; border-top: 1.5px dashed var(--color-border-strong); }
+.popHeadRight {
+  width: 0; height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 6px solid var(--color-border-strong);
+}
+.popHeadLeft {
+  width: 0; height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-right: 6px solid var(--color-border-strong);
+}
+.popRecent { padding: 11px 15px; border-bottom: 1px solid var(--color-border-soft); }
+.popRecentLabel {
+  font: 500 9.5px/1 var(--font-sans);
+  letter-spacing: 0.16em;
+  color: var(--color-text-faint);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.popRecentRows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font: 400 11.5px/1.4 var(--font-mono);
+  color: var(--color-text-dim);
+}
+.popRecentDir { color: var(--color-text-muted); }
+.popRecentDevice { color: var(--color-text-primary); }
+.popRecentSelf { color: var(--color-text-faint); }
+.popActions { padding: 11px 15px; display: flex; align-items: center; gap: 10px; }
+.popBtnPrimary {
+  cursor: pointer;
+  border: none;
+  font: 500 11.5px/1 var(--font-sans);
+  padding: 8px 13px;
+  background: var(--color-sienna);
+  color: var(--color-on-accent);
+}
+.popBtnPrimary:hover { background: var(--color-sienna-hover); }
+.popBtnGhost {
+  cursor: pointer;
+  font: 500 11.5px/1 var(--font-sans);
+  padding: 7px 13px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-bg-surface);
+  color: var(--color-text-dim);
+}
+.popBtnGhost:hover { border-color: var(--color-sienna); color: var(--color-sienna); }
+.popSettings {
+  margin-left: auto;
+  font: 500 11px/1 var(--font-sans);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+.popSettings:hover { color: var(--color-sienna); }

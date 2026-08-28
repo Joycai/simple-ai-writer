@@ -16,7 +16,7 @@
 
 import { fetch } from "../http";
 import { normalizeServerUrl } from "./config";
-import type { HashMap } from "./model";
+import type { HashMap, SyncDirection } from "./model";
 
 export interface RemoteKb {
   id: string;
@@ -42,6 +42,30 @@ export interface RemoteManifest {
   /** sha256 over the sorted path+hash list — "has anything changed at all". */
   digest: string;
   entries: RemoteManifestEntry[];
+}
+
+/**
+ * One completed sync run, as the machine that ran it reported it and the
+ * server stored it. Server-timestamped — client clocks disagree across exactly
+ * the machines this list compares — and purely a display record: nothing in
+ * the plan or the executor ever reads one.
+ */
+export interface RemoteSyncRecord {
+  atMs: number;
+  direction: SyncDirection;
+  /** The reporting machine, as it named itself; null when it sent nothing. */
+  device: string | null;
+  created: number;
+  replaced: number;
+  deleted: number;
+}
+
+/** The counts a completed run reports — `RemoteSyncRecord` minus what the server adds. */
+export interface SyncReport {
+  direction: SyncDirection;
+  created: number;
+  replaced: number;
+  deleted: number;
 }
 
 /** A precondition on a write, mirroring `server/src/store.rs`'s `Precondition`. */
@@ -86,6 +110,14 @@ export interface SyncClient {
   downloadEntry(kbId: string, path: string): Promise<{ bytes: Uint8Array; hash: string }>;
   uploadEntry(kbId: string, path: string, hash: string, bytes: Uint8Array, expect: Expect): Promise<void>;
   deleteEntry(kbId: string, path: string, expect: Expect): Promise<void>;
+  /** Recent sync runs, newest first — every machine's, not just this one's. */
+  listSyncs(kbId: string): Promise<RemoteSyncRecord[]>;
+  /**
+   * Report a completed run to the server's per-base log. Best-effort at the
+   * call site: the sync itself already landed, and a server built before this
+   * endpoint existed answers 404 — neither is a reason to report failure.
+   */
+  reportSync(kbId: string, report: SyncReport): Promise<void>;
 }
 
 /**
@@ -198,6 +230,23 @@ export function createSyncClient(serverUrl: string, token: string, device = ""):
         body,
       });
       if (!r.ok) await fail(r, path);
+    },
+
+    async listSyncs(kbId) {
+      const r = await fetch(`${base}/v1/kbs/${encodeURIComponent(kbId)}/syncs`, {
+        headers: authHeaders(),
+      });
+      if (!r.ok) await fail(r);
+      return (await r.json()) as RemoteSyncRecord[];
+    },
+
+    async reportSync(kbId, report) {
+      const r = await fetch(`${base}/v1/kbs/${encodeURIComponent(kbId)}/syncs`, {
+        method: "POST",
+        headers: { ...authHeaders(), ...writeHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify(report),
+      });
+      if (!r.ok) await fail(r);
     },
 
     async deleteEntry(kbId, path, expect) {

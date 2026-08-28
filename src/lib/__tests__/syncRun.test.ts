@@ -50,6 +50,8 @@ const client = {
   downloadEntry: async () => ({ bytes: new Uint8Array(), hash: A }),
   uploadEntry: async (_kb: string, path: string) => void written.push(`put ${path}`),
   deleteEntry: async (_kb: string, path: string) => void written.push(`del ${path}`),
+  listSyncs: async () => [],
+  reportSync: async () => {},
 } satisfies SyncClient;
 
 function binding(snapshot: Record<string, string>): SyncBinding {

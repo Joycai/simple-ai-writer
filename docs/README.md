@@ -88,6 +88,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [remote-knowledge-base-feasibility.md](feature/knowledge-base/remote-knowledge-base-feasibility.md) | `research` | Can it be done, what blocks it, in what order. **§13–§19 have since shipped as `server/`** — the file's own status line predates that |
 | [kb-admin-console.md](feature/knowledge-base/kb-admin-console.md) | `shipped` | Why the `/admin` console looks the way it does; TOML config, two separate credentials |
 | [config-backup-plan.md](feature/knowledge-base/config-backup-plan.md) | `shipped` | 应用配置（供应商 / 模型 / Prompt / 偏好 + API Key）备份到服务端：信封格式、带 Key 必须加密、服务端为什么不解析它 |
+| [sync-lore-ui-brief.md](feature/knowledge-base/sync-lore-ui-brief.md) | `shipped` | 同步与备份设置页重整（锚点卡 + 两张纸、唯一的连接入口）+ 知识库墙同步状态件：任务书与实现出入 |
 
 ### feature/ — single-doc subsystems
 

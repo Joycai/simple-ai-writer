@@ -124,6 +124,8 @@ created_at_ms   = 1787191234718
 | `GET` | `/v1/kbs` | 列出知识库 |
 | `POST` | `/v1/kbs` | 新建:`{"name": "我的武侠世界", "id": "可选"}` |
 | `GET` | `/v1/kbs/{kb}/manifest` | 每个条目的 hash —— 同步计划的输入 |
+| `GET` | `/v1/kbs/{kb}/syncs` | 最近的同步记录,新的在前(最多保留 20 条) |
+| `POST` | `/v1/kbs/{kb}/syncs` | 客户端上报一次完成的同步:`{"direction": "push", "created": 3, "replaced": 2, "deleted": 0}`;机器名走 `X-Source-Device`,时间戳由服务端盖章 |
 | `GET` | `/v1/kbs/{kb}/entries/{category}/{id}` | 下载条目 zip |
 | `PUT` | `/v1/kbs/{kb}/entries/{category}/{id}` | 上传条目 zip |
 | `DELETE` | `/v1/kbs/{kb}/entries/{category}/{id}` | 删除(镜像语义) |

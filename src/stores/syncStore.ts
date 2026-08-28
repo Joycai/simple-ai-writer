@@ -18,6 +18,7 @@ import {
   createSyncClient,
   manifestHashes,
   type RemoteKb,
+  type RemoteSyncRecord,
   type SyncClient,
 } from "../lib/sync/client";
 import {
@@ -31,12 +32,14 @@ import { deviceLabel, localEntryHashes } from "../lib/sync/local";
 import type {
   EntryPath,
   HashMap,
+  SyncAction,
   SyncBinding,
   SyncDecision,
   SyncDirection,
   SyncPlan,
 } from "../lib/sync/model";
 import { actionableSteps, planSync, withDecisions } from "../lib/sync/plan";
+import { compareFreshness, type Freshness } from "../lib/sync/status";
 import { runSync, type SyncRunResult } from "../lib/sync/run";
 import { clearBinding, loadBinding, saveBinding } from "../lib/sync/store";
 import { useLoreStore } from "./loreStore";
@@ -55,6 +58,10 @@ export interface SyncProgress {
 interface SyncState {
   serverUrl: string;
   token: string;
+  /** This machine's own name (`deviceLabel`), for the 「本机」 tag on records. */
+  device: string;
+  /** Which project the last hydrate ran for — `ensureReady`'s guard. */
+  hydratedFor: string | null;
   connection: ConnectionState;
   /** Why the last connect attempt failed; also used for pane-level errors. */
   error: string | null;
@@ -65,6 +72,12 @@ interface SyncState {
   /** Entry counts for the binding card. -1 = not known yet. */
   localCount: number;
   remoteCount: number;
+  /** Who is newer, from the three-way hash comparison. null = not known
+   *  (disconnected, or the manifest could not be fetched). */
+  freshness: Freshness | null;
+  /** Recent sync runs from the server's per-base log, newest first — every
+   *  machine's, which is what a local record could never show. */
+  records: RemoteSyncRecord[];
 
   phase: SyncPhase;
   direction: SyncDirection;
@@ -81,6 +94,12 @@ interface SyncState {
   setServerUrlDraft: (url: string) => void;
   setTokenDraft: (token: string) => void;
   hydrate: (projectPath: string) => Promise<void>;
+  /**
+   * The wall widget's entry point: hydrate once per project, quietly connect
+   * when a binding and a saved token exist, refresh the comparison. Unlike
+   * `hydrate` it never knocks a live connection back to "disconnected".
+   */
+  ensureReady: (projectPath: string) => Promise<void>;
   connect: () => Promise<void>;
   disconnect: () => void;
   createKb: (name: string) => Promise<RemoteKb | null>;
@@ -111,12 +130,16 @@ function requireClient(): SyncClient {
 export const useSyncStore = create<SyncState>((set, get) => ({
   serverUrl: "",
   token: "",
+  device: "",
+  hydratedFor: null,
   connection: "disconnected",
   error: null,
   kbs: [],
   binding: null,
   localCount: -1,
   remoteCount: -1,
+  freshness: null,
+  records: [],
   phase: "idle",
   direction: "push",
   plan: null,
@@ -135,10 +158,15 @@ export const useSyncStore = create<SyncState>((set, get) => ({
    * and the binding. Deliberately does NOT connect — opening settings should
    * not reach out to a server on its own, and an unreachable one would make
    * the pane look broken rather than merely disconnected.
+   *
+   * It does, however, respect a connection that already exists: the module's
+   * `client` outlives any one surface, and re-opening settings while the wall
+   * widget is happily synced must not repaint everything as disconnected.
    */
   hydrate: async (projectPath) => {
     const serverUrl = getServerUrl();
     const binding = await loadBinding(projectPath);
+    const alive = client !== null;
     let token = "";
     if (serverUrl) {
       try {
@@ -149,8 +177,43 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         set({ error: e instanceof Error ? e.message : String(e) });
       }
     }
-    set({ serverUrl, token, binding, connection: "disconnected", kbs: [] });
+    let device = get().device;
+    try {
+      device = await deviceLabel();
+    } catch {
+      // Purely the 「本机」 tag on record rows; an unnamed machine loses nothing.
+    }
+    set({
+      serverUrl,
+      token,
+      device,
+      binding,
+      // The empty string ("no project") is a real hydrated state, not null:
+      // the pane's cold-start effect keys on "has hydrate run at all".
+      hydratedFor: projectPath,
+      connection: alive ? "connected" : "disconnected",
+      kbs: alive ? get().kbs : [],
+      freshness: null,
+      records: [],
+    });
     if (binding) await get().refreshCounts(projectPath);
+  },
+
+  ensureReady: async (projectPath) => {
+    if (get().hydratedFor !== projectPath) await get().hydrate(projectPath);
+    const { binding, token, connection } = get();
+    if (!binding) return;
+    if (connection === "disconnected" && token) {
+      // Quiet by design: the author bound this project to this server, so a
+      // bound project reaching for its server is expected — the rule that
+      // opening *settings* must not dial out (see hydrate) is about surfaces
+      // that merely display configuration. A failure lands in `connection:
+      // "error"` and the widget shows 连不上 with a manual 重连.
+      await get().connect();
+      if (get().connection === "connected") await get().refreshCounts(projectPath);
+    } else if (connection === "connected") {
+      await get().refreshCounts(projectPath);
+    }
   },
 
   connect: async () => {
@@ -216,13 +279,14 @@ export const useSyncStore = create<SyncState>((set, get) => ({
 
   unbind: async (projectPath) => {
     await clearBinding(projectPath);
-    set({ binding: null, localCount: -1, remoteCount: -1 });
+    set({ binding: null, localCount: -1, remoteCount: -1, freshness: null, records: [] });
   },
 
   refreshCounts: async (projectPath) => {
     const { binding } = get();
+    let local: HashMap | null = null;
     try {
-      const local = await localEntryHashes(projectPath);
+      local = await localEntryHashes(projectPath);
       set({ localCount: Object.keys(local).length });
     } catch {
       set({ localCount: -1 });
@@ -230,9 +294,23 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     if (!binding || !client) return;
     try {
       const manifest = await client.manifest(binding.kbId);
-      set({ remoteCount: manifest.entries.length, binding: { ...binding, kbName: manifest.kb.name } });
+      set({
+        remoteCount: manifest.entries.length,
+        binding: { ...binding, kbName: manifest.kb.name },
+        // Who is newer — the same three maps the plan reads, so this verdict
+        // and the preview the author will see can never disagree.
+        freshness: local
+          ? compareFreshness(local, manifestHashes(manifest), binding.snapshot)
+          : null,
+      });
     } catch {
-      set({ remoteCount: -1 });
+      set({ remoteCount: -1, freshness: null });
+    }
+    try {
+      set({ records: await client.listSyncs(binding.kbId) });
+    } catch {
+      // The log is decoration: a server built before the endpoint existed
+      // answers 404, and a failed fetch keeps the list already on screen.
     }
   },
 
@@ -312,6 +390,25 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       });
       await saveBinding(projectPath, result.binding);
       set({ phase: "done", result, binding: result.binding, progress: null });
+      // Report the run to the server's per-base sync log — the record another
+      // machine will read to learn this one synced. Best-effort: the sync
+      // itself already landed, and an older server without the endpoint
+      // answers 404; neither is worth an error over a history line.
+      if (result.succeeded.length > 0) {
+        const done = new Set(result.succeeded);
+        const ran = actionableSteps(plan).filter((s) => done.has(s.path));
+        const count = (action: SyncAction) => ran.filter((s) => s.action === action).length;
+        try {
+          await requireClient().reportSync(binding.kbId, {
+            direction: plan.direction,
+            created: count("create"),
+            replaced: count("overwrite"),
+            deleted: count("delete"),
+          });
+        } catch {
+          // Recorded nowhere, shown nowhere — the next completed run reports again.
+        }
+      }
       // The lore tree may have changed under the app — a pull rewrites entity
       // folders the index was built from, so it has to be rebuilt before any
       // surface reads it again.
