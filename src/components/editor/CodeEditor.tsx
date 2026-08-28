@@ -32,6 +32,7 @@ import {
   markTargetStart,
 } from "../../lib/editor/aiTarget";
 import { insertFlashExtension } from "../../lib/editor/insertFlash";
+import { caretFlashExtension } from "../../lib/editor/caretFlash";
 import {
   toggleBold,
   toggleItalic,
@@ -176,6 +177,7 @@ export function CodeEditor({ value, onChange, toolbar = true }: Props) {
         keymap.of([...aiTargetKeymap, ...formatKeymap, ...defaultKeymap, ...historyKeymap, ...searchKeymap]),
         aiTargetExtension(styles.aiTarget),
         insertFlashExtension,
+        caretFlashExtension(styles.caretFlash),
         markdown({
           base: markdownLanguage,
           codeLanguages: languages,

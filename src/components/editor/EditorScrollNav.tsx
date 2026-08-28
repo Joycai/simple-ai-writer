@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ChevronsUp, ChevronsDown } from "lucide-react";
 import { EditorView } from "@codemirror/view";
 import { useEditorStore } from "../../stores/editorStore";
+import { flashCaretLanding } from "../../lib/editor/caretFlash";
 import styles from "./EditorScrollNav.module.css";
 
 /** Distance (px) from an edge within which we consider the editor "already there"
@@ -70,6 +71,7 @@ export function EditorScrollNav() {
       selection: { anchor: end },
       effects: EditorView.scrollIntoView(end, { y: "end" }),
     });
+    flashCaretLanding(view, end);
     view.focus();
   };
 

@@ -36,6 +36,7 @@
 | 027 | [一致性检查结果统一淡入落位](027-consistency-findings-stagger.md) | MEDIUM | DONE |
 | 028 | [生成图落位时淡入显影](028-generated-image-reveal.md) | LOW | DONE |
 | 029 | [提示词库痕迹行补上退场淡出](029-snippet-trace-exit.md) | MEDIUM | DONE |
+| 030 | [「跳到结尾」的光标落点提示](030-caret-landing-flash.md) | LOW | DONE（目检待作者） |
 
 > 001–005 已随 [PR #273](https://github.com/Joycai/simple-ai-writer/pull/273) 合入 main（基准 0f49132）。
 > 006–012（backlog 第二批，基准 9e16885）已于 2026-08-22 执行完毕，`pnpm tsc --noEmit` 与 `pnpm build` 通过。
@@ -375,3 +376,56 @@ $ pnpm exec tsc --noEmit   →  src/__tsc_probe.ts(1,14): error TS2322 ... EXIT=
 
 至此第六批（026–029）全部落地并验收完毕。每份方案的 Verification 一节保留了具体
 步骤，以后回归照跑。
+
+## 第七批（030，基准 5f9d25a）
+
+来源不是审计,是一次 `find-animation-opportunities` 扫描:作者问「跳到最顶/最后
+能不能加滚动动画」。**滚动动画被否掉**(CodeMirror 只渲染视口附近的行,跨全文的
+原生平滑滚动会中途取消——`EditorScrollNav.tsx:60` 的注释就是踩过之后写的;何况
+唯一能平滑滚完的距离恰恰是最不需要动画的那种)。扫描里活下来的是另一件事:
+
+- **030**:`toEnd` 和 `toTop` 两颗按钮外观完全一样,`toEnd` 却额外把光标搬到文末
+  并抢走焦点,而界面上没有一处说出这件事。`highlightActiveLine` 有,但被刻意调到
+  4% alpha——写作时不打扰,代价是一次几千像素的瞬移之后也接不住视线。
+
+**依赖**:无。与 012（插入落点闪烁）共用 `--color-mention-bg` 与 1.6s 的落点词汇,
+但代码互不相干,012 已 DONE,不需要按顺序。
+
+**一条执行时容易踩空的地方**(已写进方案的 Repo conventions):这次的样式**不能**
+照 012 走 `EditorView.baseTheme`,必须照 `aiTargetExtension` 把类名传进来、样式留在
+`CodeEditor.module.css`。原因是落点行同时是 `.cm-activeLine`,而后者的规则是
+`.wrap :global(.cm-activeLine)`(0,2,0),baseTheme 注入的类只有 (0,1,0)——动画播放
+期间还能靠 animation origin 压过去,但 **reduced-motion 那支的静态色带会被直接盖掉,
+一片都看不见**,且不报任何错。
+
+| 方案 | 触及文件 |
+| --- | --- |
+| 030 | 新建 `lib/editor/caretFlash.ts`、`editor/CodeEditor.tsx`、`editor/CodeEditor.module.css`、`editor/EditorScrollNav.tsx` |
+
+### 030 执行记录（2026-08-29）
+
+已落地，机械验证全过：`tsc --noEmit` 无错、`vitest run` 204 文件 / 2827 用例全绿、
+`cssKeyframeNames.test.ts` 单独跑过（`caretLandFlash` 无重名）。
+
+两条“静默失败”风险已用 lightningcss 编译产物**实测**而非推断确认（tsc 查不出来，
+CSS Module 的类型是松散 record，拼错只会得到 `undefined`）：
+
+```
+caretFlash exported? -> true          # styles.caretFlash 确实解析得出
+落点规则  ._4-Qu6q_wrap .cm-line._4-Qu6q_caretFlash   → (0,3,0)
+活动行    ._4-Qu6q_wrap .cm-activeLine                 → (0,2,0)
+@keyframes caretLandFlash             # 未被哈希（cssModules.animation:false），
+                                      #   全局命名空间不变量成立
+```
+
+reduced-motion 块也已确认按 (0,3,0) 发出（`animation: none` + 静态
+`background-color`）——这正是 012 没做、本方案特意补上的那一支。
+
+**一处执行者的合理偏离**：方案说“接在 `.cm-activeLine` 规则之后”，但紧跟着的
+`.cm-activeLineGutter` 是同一对，插中间会把它们拆开，故改为追到文末。方案本身已声明
+“不靠书写顺序”，产物也证实了，无影响。
+
+**尚未验证的**：Feel check 一组全部未跑（需要 `pnpm tauri dev` + 一份上千字的文档）。
+尤其是三条：空行结尾的文档能否看到整行色带（选 `Decoration.line` 的全部理由）、
+reduced-motion 下色带是否仍然出现、以及 **1.6s 的整行色带会不会太抢眼**——最后这条
+是方案里明写的、唯一允许调整的值（1.6s → 1s），由作者目检后定。
