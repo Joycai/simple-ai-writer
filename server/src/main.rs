@@ -1,49 +1,12 @@
-//! Knowledge-base backup / sync server for Simple AI Writer.
+//! Headless entry point (`aiw-kb-server`).
 //!
-//! Holds named knowledge bases. A client binds one project to one of them and
-//! then pushes its whole `.ai-writer/lore/` tree up or pulls it down — one
-//! direction at a time, no merging. Each entry (one lore entity: its markdown,
-//! its facets, its gallery) travels as a zip identified by a content hash the
-//! *client* computes.
-//!
-//! The server is deliberately ignorant of what is inside those zips: it stores
-//! blobs and reports hashes. Nothing here parses markdown, reads frontmatter or
-//! knows what a facet is, so the app's knowledge-base format can keep evolving
-//! without this binary having to follow.
-//!
-//! Beside the knowledge bases it holds **application-config backups** — the
-//! app's providers, models, prompts and preferences, so a second machine can
-//! pull a setup down instead of having it re-typed. Those arrive encrypted
-//! whenever they carry API keys, with a password this server never sees and
-//! cannot recover; here too it stores an opaque blob and reports a hash.
-//!
-//! It also serves an **admin console** at `/admin` — a small self-contained page
-//! that does the things `DEPLOY.md` used to describe as shell commands. That is
-//! a second HTTP surface with a second kind of credential (a password, not a
-//! token); see `admin` for why the two never meet.
-//!
-//! Design and rationale: `docs/feature/knowledge-base/remote-knowledge-base-feasibility.md` §13–§18.
-//! Deployment and the full API: `server/README.md`.
+//! All the substance lives in the library (see `lib.rs` for what this server
+//! is); this file is presentation for a terminal: CLI flags, logging to
+//! stderr, the first-run credentials printed to stdout, Ctrl-C / SIGTERM as
+//! the shutdown signal. The Windows tray launcher (`src/bin/tray.rs`) is the
+//! same skeleton with dialogs where this has prints.
 
-mod admin;
-mod audit;
-mod confedit;
-mod config;
-mod error;
-mod ids;
-mod maint;
-mod routes;
-mod session;
-mod store;
-
-use std::sync::{Arc, RwLock};
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use audit::AuditLog;
-use config::Config;
-use routes::AppState;
-use session::SessionStore;
-use store::Store;
+use aiw_kb_server::config::{self, Config};
 
 #[tokio::main]
 async fn main() {
@@ -98,50 +61,18 @@ async fn run() -> Result<(), String> {
         );
     }
 
-    let store = Store::new(config.server.data_dir.clone()).map_err(|e| {
-        format!(
-            "could not open the data directory {:?}: {e}",
-            config.server.data_dir
-        )
-    })?;
-    let audit = AuditLog::open(&config.server.data_dir);
-
-    let bind = config.server.bind;
+    let bind_addr = config.server.bind;
     let data_dir = config.server.data_dir.clone();
     let config_path = config.file_path.clone();
-    let max_entry_bytes = config.max_entry_bytes();
-    let max_config_bytes = config.max_config_bytes();
 
-    let state = Arc::new(AppState {
-        store,
-        config: RwLock::new(config),
-        argv,
-        sessions: SessionStore::default(),
-        audit,
-        started_at_ms: now_ms(),
-    });
-    let app = routes::router(Arc::clone(&state), max_entry_bytes, max_config_bytes);
-
-    let listener = tokio::net::TcpListener::bind(bind)
-        .await
-        .map_err(|e| format!("could not bind {bind}: {e}"))?;
+    let server = aiw_kb_server::bind(config, argv).await?;
     tracing::info!(
-        "listening on {bind}, data in {data_dir:?}, config {}",
+        "listening on {bind_addr}, data in {data_dir:?}, config {}",
         config_path.display()
     );
-    tracing::info!("admin console: http://{bind}/admin");
+    tracing::info!("admin console: http://{bind_addr}/admin");
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .map_err(|e| format!("server error: {e}"))
-}
-
-fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
+    server.run(shutdown_signal()).await
 }
 
 fn print_help() {
@@ -152,7 +83,8 @@ fn print_help() {
          查找顺序：--config > AIW_KB_CONFIG > 可执行文件同目录的 aiw-kb.toml > 系统配置目录。\n\
          环境变量（AIW_KB_BIND / AIW_KB_DATA_DIR / AIW_KB_TOKENS / AIW_KB_ALLOW_ANONYMOUS /\n\
          AIW_KB_MAX_ENTRY_MB / RUST_LOG）优先于文件里的值。\n\n\
-         启动后：管理后台在 http://<监听地址>/admin",
+         启动后：管理后台在 http://<监听地址>/admin\n\
+         Windows 上想常驻托盘、开机自启：运行 aiw-kb-tray。",
         env!("CARGO_PKG_VERSION")
     );
 }
@@ -198,10 +130,6 @@ fn announce_new_config(config: &Config) {
 }
 
 /// Stop accepting on Ctrl-C or SIGTERM and let in-flight requests finish.
-///
-/// Matters more than it looks: a write commits by renaming a staged file, and
-/// killing the process between the two leaves a stray file in `tmp/` that
-/// nothing cleans up. Draining first keeps that to actual crashes.
 async fn shutdown_signal() {
     let ctrl_c = async {
         let _ = tokio::signal::ctrl_c().await;

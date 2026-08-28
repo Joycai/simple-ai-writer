@@ -5,6 +5,17 @@ description = "Knowledge-base backup/sync server for Simple AI Writer"
 edition = "2021"
 publish = false
 
+[[bin]]
+name = "aiw-kb-server"
+path = "src/main.rs"
+
+# Windows tray launcher. On any other platform this compiles as a stub that
+# prints an explanation and exits — which is what lets the ubuntu CI job's
+# `clippy --all-targets` still cover the file.
+[[bin]]
+name = "aiw-kb-tray"
+path = "src/bin/tray.rs"
+
 [dependencies]
 axum = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "io-util", "time"] }
@@ -25,6 +36,16 @@ tokio-util = { version = "0.7", features = ["io", "io-util"] }
 # (the health check's "not running as root") and the config file's mode.
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+# The tray launcher (src/bin/tray.rs) only. None of this compiles anywhere else,
+# so the headless Linux/NAS builds stay exactly as lean as before.
+[target.'cfg(windows)'.dependencies]
+tray-icon = "0.21"
+tao = "0.30"
+rfd = "0.15"
+winreg = "0.52"
+open = "5"
+tracing-appender = "0.2"
 
 [dev-dependencies]
 tempfile = "3"
