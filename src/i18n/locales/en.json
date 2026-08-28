@@ -2427,6 +2427,7 @@
     "newFile": "New File",
     "open": "Open",
     "insertImage": "Insert at cursor",
+    "sendToAssistant": "Send to assistant",
     "rename": "Rename",
     "reveal": "Reveal in File Explorer",
     "delete": "Delete",

@@ -704,6 +704,7 @@ The workspace is the **whole project directory** — documents live wherever the
 - **哪些算文本**：`md` / `markdown` / `txt` / `html` / `htm`。`.html` 是交付物不是章节（`docs/feature/html-artifact-plan.md` D6，`isChapterFile` 不动），但**读**它没有任何理由排除——`search_text` 早就扫它（`isSearchableFile`），写这个页面的助手正是作者接着要它改页面的那个助手。图片候选另外还要模型链看得见图（`chainCanSeeImages`），否则挂上去的附件这条消息物理上带不走。
 - **外部改动怎么进来**：`useExternalFileRefresh`（`src/useExternalFileRefresh.ts`）在**窗口重新获得焦点**时 `refreshFileTree()`，1.5s 内不重复。焦点正好是这件事的形状——作者去了文件管理器又回来。不上目录监听：对任意项目目录做 watch 是新的权限面，事件流最后还是要 UI 自己去抖，收益只有"应用在前台时别人改了文件"这一种边角情形。
 - **不覆盖的**：知识库条目仍只在项目打开 / 写操作后扫（`loreStore.scanProject`）；外部直接往 `.ai-writer/lore/` 里塞条目仍需重开项目。
+- **第二个入口——文件树右键「发送到助手」**：同一份分类（`classifyProjectFile`，`projectFilesFromTree` 的单文件形态）决定条目是否出现，同一条构造路（`lib/lore/aiTask` 的 `attachProjectFile`——读文本 / `imageForModel` 归一化 + 12MB 上限，`@` 选择也走它）产出同一种附件，挂进 `composerStore.chatRefs` 并照 `@` 的约定在草稿里落 `@[名字]`，然后打开抽屉的 chat 模式。刻意**不**在树上按 `chainCanSeeImages` 过滤图片：树不认识模型、作者发送前还能换模型，而 `buildChatMessage` 对读不了图的模型会点名附件并给出 vision 子代理的读法——降级是诚实的，不值得为它把 AI 配置耦合进文件树。
 
 ### 读 .pptx（导入转换 + 按页读）
 

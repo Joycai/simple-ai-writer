@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@tauri-apps/plugin-fs", () => ({ readFile: vi.fn() }));
 
-const { projectFilesFromTree } = await import("../fs/images");
+const { classifyProjectFile, projectFilesFromTree } = await import("../fs/images");
 type Node = Parameters<typeof projectFilesFromTree>[0][number];
 
 const file = (name: string, dir = "/p"): Node => ({
@@ -53,5 +53,23 @@ describe("projectFilesFromTree", () => {
       file("大纲.md"),
     ]);
     expect(files.map((f) => f.path)).toEqual(["/p/第一卷/第1章.md", "/p/大纲.md"]);
+  });
+});
+
+// The single-file entry point (file tree's 发送到助手) must answer exactly as
+// the tree walk does — it is the same classification, exposed for one node.
+describe("classifyProjectFile", () => {
+  it("agrees with projectFilesFromTree on every kind", () => {
+    expect(classifyProjectFile("第1章.md", "/p/第1章.md")).toEqual({
+      name: "第1章.md", path: "/p/第1章.md", kind: "text",
+    });
+    expect(classifyProjectFile("封面.PNG", "/p/封面.PNG")?.kind).toBe("image");
+    expect(classifyProjectFile("页面.htm", "/p/页面.htm")?.kind).toBe("text");
+  });
+
+  it("refuses what no model can take raw", () => {
+    expect(classifyProjectFile("标书.docx", "/p/标书.docx")).toBeNull();
+    expect(classifyProjectFile("project.db", "/p/project.db")).toBeNull();
+    expect(classifyProjectFile("noext", "/p/noext")).toBeNull();
   });
 });

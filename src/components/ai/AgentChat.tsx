@@ -28,12 +28,10 @@ import {
 } from "../common/MentionPicker";
 import { useStickToBottom } from "../common/useStickToBottom";
 import { renderMarkdown } from "../../lib/fs/markdown";
-import {
-  MAX_IMAGE_BYTES, imageToThumbnailDataUrl, readTextFileContent,
-} from "../../lib/fs/images";
+import { imageToThumbnailDataUrl } from "../../lib/fs/images";
 import { chatImageSource } from "../../lib/agent/chatImages";
-import { downscaleNote, imageForModel } from "../../lib/image/normalize";
-import { attachedKey } from "../../lib/lore/aiTask";
+import { downscaleNote } from "../../lib/image/normalize";
+import { attachProjectFile, attachedKey } from "../../lib/lore/aiTask";
 import { chainCanSeeImages, subAgentModel, withSessionOverrides } from "../../lib/agent/subagent";
 import { useImageThumbnails } from "../lore/useImageDataUrl";
 import { useLoreStore } from "../../stores/loreStore";
@@ -248,43 +246,28 @@ export function AgentChat() {
     setRefError(null);
     if (item.type === "lore") {
       setRefs((prev) => [...prev, { kind: "lore", entity: item.entity }]);
-    } else if (item.file.kind === "image") {
-      try {
-        // May come back re-encoded: an oversized picture is shrunk to fit
-        // rather than refused, and only a picture that survives even that is
-        // turned away below.
-        const { dataUrl, bytes, downscaled } = await imageForModel(item.file.path);
-        // Refused here rather than at send time: the author is choosing the
-        // picture *now*, and a message that quietly loses one of its
-        // attachments minutes later is unexplainable from the transcript.
-        if (bytes.length > MAX_IMAGE_BYTES) {
-          setRefError(t("ai.chat.imageTooLarge", {
-            defaultValue: "{{name}} 太大（{{size}}MB，上限 {{max}}MB）",
-            name: item.file.name,
-            size: (bytes.length / 1024 / 1024).toFixed(1),
-            max: MAX_IMAGE_BYTES / 1024 / 1024,
-          }));
-          return;
-        }
-        setRefs((prev) => [...prev, { kind: "image", file: item.file, dataUrl, downscaled }]);
-      } catch {
-        setRefError(t("ai.chat.refUnreadable", {
-          defaultValue: "读不到 {{name}}",
-          name: item.file.name,
-        }));
-        return;
-      }
     } else {
-      try {
-        const content = await readTextFileContent(item.file.path);
-        setRefs((prev) => [...prev, { kind: "text", file: item.file, content }]);
-      } catch {
-        setRefError(t("ai.chat.refUnreadable", {
-          defaultValue: "读不到 {{name}}",
-          name: item.file.name,
-        }));
+      // Shared with the file tree's 发送到助手 — one construction path, so a
+      // file attached from either side is the same attachment. An oversized
+      // picture is refused here rather than at send time: the author is
+      // choosing it *now*, and a message that quietly loses an attachment
+      // minutes later is unexplainable from the transcript.
+      const outcome = await attachProjectFile(item.file);
+      if (!outcome.ok) {
+        setRefError(outcome.reason === "too-large"
+          ? t("ai.chat.imageTooLarge", {
+              defaultValue: "{{name}} 太大（{{size}}MB，上限 {{max}}MB）",
+              name: item.file.name,
+              size: outcome.sizeMb,
+              max: outcome.maxMb,
+            })
+          : t("ai.chat.refUnreadable", {
+              defaultValue: "读不到 {{name}}",
+              name: item.file.name,
+            }));
         return;
       }
+      setRefs((prev) => [...prev, outcome.item]);
     }
     // Not inside a state updater: `accept` calls setState itself, and React
     // runs an updater twice under StrictMode. The ref supplies the live value

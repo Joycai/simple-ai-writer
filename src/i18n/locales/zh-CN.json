@@ -2422,6 +2422,7 @@
     "newFile": "新建文件",
     "open": "打开",
     "insertImage": "插入到当前位置",
+    "sendToAssistant": "发送到助手",
     "rename": "重命名",
     "reveal": "在文件浏览器中显示",
     "delete": "删除",
