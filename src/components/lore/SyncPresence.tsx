@@ -100,15 +100,21 @@ export function SyncPresence() {
       : verdict === "loading"
         ? t("sync.vLoading")
         : t(VERDICT_KEY[verdict]);
-  const count = !f
-    ? null
-    : verdict === "local-ahead"
-      ? String(f.localAhead)
-      : verdict === "remote-ahead"
-        ? String(f.remoteAhead)
-        : risk
-          ? `${f.localAhead + f.diverged} · ${f.remoteAhead + f.diverged}`
-          : null;
+  const count =
+    verdict === "loading"
+      ? // 比对进度:大库的本地哈希要跑上几秒,数字是它和「挂了」之间的区别。
+        sync.checking && sync.checking.total > 0
+        ? `${sync.checking.done}/${sync.checking.total}`
+        : null
+      : !f
+        ? null
+        : verdict === "local-ahead"
+          ? String(f.localAhead)
+          : verdict === "remote-ahead"
+            ? String(f.remoteAhead)
+            : risk
+              ? `${f.localAhead + f.diverged} · ${f.remoteAhead + f.diverged}`
+              : null;
 
   // 待办的那一侧动作着赭石,另一侧留中性灰;两边都改过时两个都着色。
   const pushHot = risk || verdict === "local-ahead" || verdict === "in-sync" || verdict === "first-sync";

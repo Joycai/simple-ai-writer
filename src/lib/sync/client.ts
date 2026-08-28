@@ -262,6 +262,27 @@ export function createSyncClient(serverUrl: string, token: string, device = ""):
   };
 }
 
+/**
+ * Is the server reachable at all — `GET /health`, unauthenticated, with a hard
+ * timeout.
+ *
+ * Exists so the automatic paths (the wall widget's quiet connect, a background
+ * comparison refresh) can find out *fast* that the server is gone, instead of
+ * riding a full API call into the OS's TCP timeout. Never used to gate a
+ * manual connect: the author pressing 连接 deserves the real attempt and its
+ * real error, which also distinguishes a bad token from a dead server.
+ */
+export async function probeHealth(serverUrl: string, timeoutMs = 4000): Promise<boolean> {
+  const base = normalizeServerUrl(serverUrl);
+  if (!base) return false;
+  try {
+    const r = await fetch(`${base}/health`, { signal: AbortSignal.timeout(timeoutMs) });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** A manifest reduced to the hash map the planner takes. */
 export function manifestHashes(manifest: RemoteManifest): HashMap {
   const out: Record<string, string> = {};

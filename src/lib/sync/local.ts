@@ -9,7 +9,7 @@
  * on the *download* path.
  */
 
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import type { HashMap } from "./model";
 import { toPosixPath } from "../paths";
 
@@ -17,6 +17,13 @@ interface RawEntryHash {
   category: string;
   id: string;
   hash: string;
+}
+
+/** One tick of local hashing: `done` of `total` entries, `path` = the one being read. */
+export interface HashProgress {
+  done: number;
+  total: number;
+  path: string;
 }
 
 export function loreRoot(projectPath: string): string {
@@ -37,12 +44,25 @@ export function entryDir(projectPath: string, path: string): string {
  * one, everything on disk is included — which is the right default, because a
  * category whose pack is currently disabled still holds the author's entries
  * (the same reason `scanLore` keeps orphan categories).
+ *
+ * `onProgress` streams one tick per entry from the Rust side. Hashing reads
+ * every byte of every gallery image, so on a picture-heavy knowledge base the
+ * single IPC call runs for seconds; without the ticks it looks like a hang.
  */
 export async function localEntryHashes(
   projectPath: string,
   isSyncable?: (category: string, id: string) => boolean,
+  onProgress?: (progress: HashProgress) => void,
 ): Promise<HashMap> {
-  const rows = await invoke<RawEntryHash[]>("lore_tree_hashes", { path: loreRoot(projectPath) });
+  // Always a channel, even with no listener: the Rust side takes it as a
+  // required argument (tauri's Channel is a CommandArg, not a Deserialize,
+  // so it cannot be optional there).
+  const channel = new Channel<HashProgress>();
+  if (onProgress) channel.onmessage = onProgress;
+  const rows = await invoke<RawEntryHash[]>("lore_tree_hashes", {
+    path: loreRoot(projectPath),
+    onProgress: channel,
+  });
   const out: Record<string, string> = {};
   for (const row of rows) {
     if (isSyncable && !isSyncable(row.category, row.id)) continue;
