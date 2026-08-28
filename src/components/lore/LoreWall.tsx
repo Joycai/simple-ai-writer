@@ -646,8 +646,9 @@ export function LoreWall() {
             }}
             title={t("lore.detail.moreActions", { defaultValue: "更多操作" })}
           >
-            {/* Icon, not a ⋯ glyph: the header row is baseline-aligned and the
-                ellipsis character's fallback-font baseline sits 2px low. */}
+            {/* Icon, not a ⋯ glyph: an icon centers identically everywhere,
+                while the ellipsis character's vertical position depends on
+                whichever fallback font supplies it. */}
             <MoreHorizontal size={12} strokeWidth={2} />
           </button>
         </div>

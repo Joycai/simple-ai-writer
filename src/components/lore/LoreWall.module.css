@@ -35,6 +35,12 @@
   color: var(--color-text-muted);
 }
 .spacer { flex: 1; }
+/* 行是 baseline 对齐的——那是给左侧眉题/标题/副标题共享文字基线用的。
+   spacer 右边的控件全是 flex 盒子,它们上报的基线取各自第一个子项:
+   新建条目是 Plus 图标(SVG 基线在底边)、取材范围是 9px 小标签、同步件是
+   6px 空圆点(合成基线)——三家基线互不相同,盒子就各错开 2-3px。
+   统一退出基线、按盒子居中(和 .headDivider 同一处理)。 */
+.headerRow > .spacer ~ * { align-self: center; }
 
 .search {
   display: flex;
