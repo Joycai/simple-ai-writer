@@ -118,13 +118,27 @@ export function projectFilesFromTree(nodes: FileNode[]): ProjectFile[] {
   const walk = (list: FileNode[]) => {
     for (const n of list) {
       if (n.is_dir) { walk(n.children ?? []); continue; }
-      const ext = n.name.split(".").pop()?.toLowerCase() ?? "";
-      if (IMAGE_EXTS.has(ext)) out.push({ name: n.name, path: n.path, kind: "image" });
-      else if (TEXT_EXTS.has(ext)) out.push({ name: n.name, path: n.path, kind: "text" });
+      const f = classifyProjectFile(n.name, n.path);
+      if (f) out.push(f);
     }
   };
   walk(nodes);
   return out;
+}
+
+/**
+ * Classify one file the way the `@` picker classifies the whole tree —
+ * `null` means "not attachable" (a .docx, a .db: nothing a model can take raw).
+ *
+ * Exists for call sites holding a single node rather than the tree — the file
+ * tree's 发送到助手 — so their answer to "can this be handed to the assistant"
+ * can never drift from the picker's.
+ */
+export function classifyProjectFile(name: string, path: string): ProjectFile | null {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  if (IMAGE_EXTS.has(ext)) return { name, path, kind: "image" };
+  if (TEXT_EXTS.has(ext)) return { name, path, kind: "text" };
+  return null;
 }
 
 /**

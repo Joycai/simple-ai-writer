@@ -9,10 +9,10 @@
  * `streamLoreTask`, gaining tool use and execution-log events.
  */
 
-import type { Downscaled } from "../image/normalize";
+import { imageForModel, type Downscaled } from "../image/normalize";
 import { readEntityFile } from "./entity";
 import type { LoreEntity } from "./model";
-import type { ProjectFile } from "../fs/images";
+import { MAX_IMAGE_BYTES, readTextFileContent, type ProjectFile } from "../fs/images";
 import type { ContentPart } from "../ai/types";
 
 // ── Attachments ──────────────────────────────────────────────────────────────
@@ -35,6 +35,48 @@ export type AttachedItem  = AttachedLore | AttachedImage | AttachedText;
 /** Stable identity for an attachment, used for dedupe and chip keys. */
 export function attachedKey(a: AttachedItem): string {
   return a.kind === "lore" ? `lore:${a.entity.id}` : `file:${a.file.path}`;
+}
+
+/** Why a file could not become an attachment — the two ways a pick fails. */
+export type AttachFailure =
+  | { ok: false; reason: "too-large"; sizeMb: string; maxMb: number }
+  | { ok: false; reason: "unreadable" };
+export type AttachOutcome = { ok: true; item: AttachedItem } | AttachFailure;
+
+/**
+ * Turn a project file into the attachment the composer carries — the one
+ * construction path behind every way of picking a file (the `@` mention and
+ * the file tree's 发送到助手).
+ *
+ * Failures are values, not throws, because both matter to the author *now*:
+ * an oversized picture is refused at pick time rather than silently dropped
+ * from a message sent minutes later, and each caller words the refusal for
+ * its own surface. A picture may come back re-encoded (`imageForModel`) — an
+ * oversized one is shrunk to fit, and only one that survives even that is
+ * turned away.
+ */
+export async function attachProjectFile(file: ProjectFile): Promise<AttachOutcome> {
+  if (file.kind === "image") {
+    try {
+      const { dataUrl, bytes, downscaled } = await imageForModel(file.path);
+      if (bytes.length > MAX_IMAGE_BYTES) {
+        return {
+          ok: false,
+          reason: "too-large",
+          sizeMb: (bytes.length / 1024 / 1024).toFixed(1),
+          maxMb: MAX_IMAGE_BYTES / 1024 / 1024,
+        };
+      }
+      return { ok: true, item: { kind: "image", file, dataUrl, downscaled } };
+    } catch {
+      return { ok: false, reason: "unreadable" };
+    }
+  }
+  try {
+    return { ok: true, item: { kind: "text", file, content: await readTextFileContent(file.path) } };
+  } catch {
+    return { ok: false, reason: "unreadable" };
+  }
 }
 
 // Model resolution used to live here as `resolveModel`. It is now

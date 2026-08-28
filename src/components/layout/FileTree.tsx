@@ -6,10 +6,10 @@ import { useTranslation } from "react-i18next";
 import {
   Folder, FolderOpen, FolderInput, FileText, File, FileCode, FileImage, ChevronRight,
   FilePlus, FolderPlus, FileInput, RotateCw, LogOut, Pencil, Trash2,
-  Scissors, Copy, ClipboardPaste, TextCursorInput, AppWindow,
+  Scissors, Copy, ClipboardPaste, TextCursorInput, AppWindow, Sparkles,
 } from "lucide-react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { isHtmlPath, isImagePath } from "../../lib/fs/images";
+import { classifyProjectFile, isHtmlPath, isImagePath, type ProjectFile } from "../../lib/fs/images";
 import { fileExists } from "../../lib/fs/fileio";
 import { baseNameOf, dropRejection, parentDirOf, type TransferMode } from "../../lib/fs/moveCopy";
 import {
@@ -22,6 +22,9 @@ import { useImeGuard } from "../../lib/ime";
 import { openInNewWindow } from "../../lib/instance";
 import { isSamePath, relativePathFrom } from "../../lib/paths";
 import { IS_MAC } from "../../lib/platform";
+import { attachProjectFile, attachedKey } from "../../lib/lore/aiTask";
+import { useAppStore } from "../../stores/appStore";
+import { useComposerStore } from "../../stores/composerStore";
 import { useEditorStore } from "../../stores/editorStore";
 import { useProjectStore } from "../../stores/projectStore";
 import type { FileNode } from "../../lib/project";
@@ -827,6 +830,38 @@ export function FileTree() {
     insertAtCursor(editorView, imageMarkdown(rel, node.name.replace(/\.[^.]+$/, "")));
   };
 
+  /**
+   * 发送到助手：把这份文件作为 `@` 引用挂进对话助手的输入框，并打开抽屉。
+   *
+   * 与 `@` 选择器同一条构造路（attachProjectFile）、同一份去重键——从树上送
+   * 过去和在输入框里 @ 出来，得到的是同一种附件，也照 `@` 的约定在草稿里落
+   * 一个 `@[名字]`。图片不看当前模型是否读图：树不认识模型，作者发送前还可
+   * 能换模型，而 buildChatMessage 对读不了图的模型会点名附件并给出 vision
+   * 子代理的读法——降级是诚实的，不值得为它把 AI 配置耦合进文件树。
+   */
+  const sendToAssistant = async (file: ProjectFile) => {
+    setMenu(null);
+    const outcome = await attachProjectFile(file);
+    if (!outcome.ok) {
+      window.alert(
+        outcome.reason === "too-large"
+          ? t("ai.chat.imageTooLarge", { name: file.name, size: outcome.sizeMb, max: outcome.maxMb })
+          : t("ai.chat.refUnreadable", { name: file.name }),
+      );
+      return;
+    }
+    const { chatRefs, setChatRefs, setChatDraft } = useComposerStore.getState();
+    if (!chatRefs.some((r) => attachedKey(r) === attachedKey(outcome.item))) {
+      setChatRefs((prev) => [...prev, outcome.item]);
+      setChatDraft((prev) => {
+        const sep = prev && !/\s$/.test(prev) ? " " : "";
+        return `${prev}${sep}@[${file.name}] `;
+      });
+    }
+    // 已经挂着同一份时只打开抽屉——重复的 chip 和重复的 @ 都是噪声。
+    useAppStore.getState().setShowAiDrawer(true, "chat");
+  };
+
   const buildMenuItems = (node: FileNode | null): ContextMenuEntry[] => {
     const reveal = (path: string) => {
       revealItemInDir(path).catch(() => { /* best-effort */ });
@@ -905,6 +940,17 @@ export function FileTree() {
         { kind: "item", icon: <FileText size={13} />, label: t("fileTree.open"),
           action: () => setActiveFilePath(node.path) },
       );
+      // Only on files the assistant can take (the `@` picker's own kinds) —
+      // on a .docx the entry would be a promise the composer can't keep.
+      const attachable = classifyProjectFile(node.name, node.path);
+      if (attachable) {
+        items.push({
+          kind: "item",
+          icon: <Sparkles size={13} />,
+          label: t("fileTree.sendToAssistant"),
+          action: () => void sendToAssistant(attachable),
+        });
+      }
       // Only on a picture, so it isn't noise on every file — but shown greyed
       // rather than hidden when there is nowhere to insert into: the author
       // right-clicked an image meaning to place it, and a missing entry would
