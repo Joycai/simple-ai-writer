@@ -224,20 +224,6 @@
 .row:hover .pinned .iconOff,
 .pinned:focus-visible .iconOff { opacity: 1; }
 
-/*
- * The focus ring, restated. `global.css` carries one on `:focus-visible`, but
- * every button here starts with `all: unset` — same specificity (one class vs
- * one pseudo-class), and this stylesheet is injected after global.css, so the
- * reset wins the tie and the ring never paints.
- */
-.open:focus-visible,
-.pinBtn:focus-visible,
-.clearBtn:focus-visible,
-.sectionToggle:focus-visible,
-.undo:focus-visible {
-  box-shadow: var(--shadow-focus);
-}
-
 /* ── 清空后的就地确认条 ───────────────────────────────────────────────── */
 
 .confirm {

@@ -41,8 +41,24 @@ body {
   background: var(--color-border-strong);
 }
 
-/* Unified focus ring (keyboard nav) */
-:focus-visible {
+/*
+ * Unified focus ring (keyboard nav).
+ *
+ * The selector is doubled on purpose, and removing the repetition breaks it.
+ * The ring is a `box-shadow`, so any component rule that also sets `box-shadow`
+ * on the element competes with this one — and a plain `.class { all: unset }`
+ * (the app's usual button reset) ties a single `:focus-visible` at 0-1-0.
+ * A tie falls to source order, and CSS Modules are injected *after* this file:
+ * the reset wins and the control focuses with nothing on screen at all.
+ * `:focus-visible:focus-visible` is 0-2-0, which no single class can tie.
+ *
+ * A component that deliberately shows focus some other way (AgentChat's input,
+ * where the whole row lights up via `:focus-within`) still wins: its own
+ * `.class:focus-visible` is also 0-2-0 and loads later. So this only reaches
+ * the controls that specify nothing — exactly the ones that were silently
+ * losing their ring. `docs/reference/design-system.md` → 组件模式.
+ */
+:focus-visible:focus-visible {
   outline: none;
   box-shadow: var(--shadow-focus);
 }
