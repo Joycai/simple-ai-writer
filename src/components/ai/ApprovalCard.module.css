@@ -427,6 +427,49 @@
 /* 这次被改过的那一行提亮——「和平常不一样的是哪两条」要在表里也看得见 */
 .docxSpecValueChanged { color: var(--color-text-primary); }
 
+/* 页数与分节依据，一行。左边是数字（作者核对的就是它），右边贴边的是分节用的
+   选择器——两者站开，因为「12 张」和「凭什么是 12 张」是两个问题。 */
+.pptxSplit {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-3) 0 var(--space-1);
+}
+
+.pptxSlides {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--color-text-primary);
+}
+
+.pptxTier {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-text-hint);
+  white-space: nowrap;
+}
+
+/* 「整页压成一张」不是错误——单页海报本来就该这样——但它几乎总是作者没料到的
+   那一种，所以和缺字体那条note用同一种处理：说清楚，不拦着。 */
+.pptxWarn {
+  font: 400 11px/1.7 var(--font-sans);
+  color: var(--color-text-secondary);
+  background: var(--color-diff-del-bg);
+  padding: 10px 12px;
+}
+
+/* 文档内容的构成，一行几个数。和下面那张规格表刻意不同重：规格表是作者要看清
+   的（等宽、成列），这一行只是「有什么」的一瞥。 */
+.docxOutline {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3) 0 var(--space-1);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-text-secondary);
+}
+
 /* 工作表清单：一行一张表。左边是名字（作者拿它去 Excel 里找），右边贴边的是
    类型统计——这张卡唯一替作者核对的事就是「数字有没有被当成数字」，所以那组
    数字要靠右站成一列，扫一眼就能发现其中一张写着「数字 0」。 */

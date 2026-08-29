@@ -66,7 +66,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [measurements/briefing-ab-2026-08.md](feature/agent/measurements/briefing-ab-2026-08.md) | `research` | briefing A/B on gemma4:12b-mlx, 2026-08-21 |
 | [workflow-cards-plan.md](feature/agent/workflow-cards-plan.md) | `shipped` | 工作流卡：内置开箱即用、项目文件可覆盖的任务套路（best-effort 提示注入，两级渐进披露）；与 B 类"流水线进工具"的分工 |
 | [parallel-tools-plan.md](feature/agent/parallel-tools-plan.md) | `shipped` | 同轮工具调用并行执行：read 层（含 delegate）并发、写工具作屏障；history 顺序/配对不变量与 writeChain 的重入禁令 |
-| [edit-loop-plan.md](feature/agent/edit-loop-plan.md) | `partial` | 行号契约与轮数：read_file 逐行行号、read_slides 的行区间与整册目录、写入回执带回「现在长什么样」+ 位移（取代那次重读）；以及为什么这些全部落在运行时输出而不是 schema 上。二期的 `inspect_html`／审批卡预检、三期的 HTML 专用 preset 也记在这里 |
+| [edit-loop-plan.md](feature/agent/edit-loop-plan.md) | `partial` | agent 的编辑回路，尺子是「省一轮 ≈ 15.1k token」：①行号契约（read_file 逐行行号、read_slides 行区间、写入回执带回位移与应用后片段）②结构读（read_file 的标题索引、search_text 的命中上下文）③验证回路（`inspect_html` 把页面真渲染出来报溢出/空白页/坏图，三条导出线的提案时预检拉齐）。还记着工具表在 32k 模型上已经吃满输入上限这件事 |
 | [writer-subagent-plan.md](feature/agent/writer-subagent-plan.md) | `shipped` `unverified` | 写手子代理：收尾成文交给作者另绑的模型（`finishPolicy: "handoff"`），开关式硬委托、交接单、引用式写入；只做对话助手，roleplay/AiPanel 不在第一期 |
 | [writer-subagent-ui-brief.md](feature/agent/writer-subagent-ui-brief.md) | `shipped` | 写手的 UI 任务书 + 设计稿回来之后：署名是左槽里那道**长度等于写手正文**的 1px 线；工单搬出执行日志；写手不是第七个芯片 |
 | [context-meters.md](feature/agent/context-meters.md) | `living` | 三条上下文计量条（生成的分配条 / 助手+扮演的构成条 / 预估态）：哪些必须一致（颜色语汇 + 段的合计等于上限）、哪些故意不一致（控件 vs 读数），以及各自已知未做的部分 |

@@ -25,6 +25,7 @@ import {
   resolveRelativePath,
   resolveWorkspacePath,
 } from "../paths";
+import { extractHeadings } from "../fs/markdown";
 import { readDirRecursive, type FileNode } from "../project";
 import { numberLines } from "./lineEcho";
 
@@ -496,6 +497,65 @@ const SEARCH_MAX_PER_FILE = 8;
 const SNIPPET_MAX = 160;
 
 /**
+ * At or below this many hits, each one comes back with its neighbouring lines.
+ *
+ * A search that returns a handful of hits has *found the place*, and what the
+ * model does next is write an edit there — which needs the surrounding text.
+ * Without the context that is another read_file round for a passage this call
+ * already had in memory, and a round costs the entire tool schema again. A
+ * search that returns thirty hits has not found anything yet, so it stays
+ * terse and the model narrows the query instead.
+ */
+const SEARCH_CONTEXT_MAX_HITS = 6;
+
+/** Lines of context shown either side of a hit, when hits are few. */
+const SEARCH_CONTEXT_LINES = 2;
+
+/** One hit's position: 0-based line, and the column the needle starts at. */
+interface HitAt {
+  line: number;
+  col: number;
+}
+
+/** One file's hits, held until the whole search decides how to render them. */
+interface FileHits {
+  path: string;
+  lines: string[];
+  at: HitAt[];
+  /** Hits found in this file beyond the per-file cap. */
+  omitted: number;
+}
+
+/**
+ * A hit and its neighbours, numbered the way read_file numbers them.
+ *
+ * The lines come back whole rather than windowed around the match: this is
+ * text the model may copy into `propose_edit`'s `find`, and a snippet with an
+ * ellipsis in it cannot be. Only a line long enough to be a budget problem is
+ * cut, and then it is marked so it is visibly not quotable.
+ */
+function hitWithContext(lines: string[], hit: HitAt, needleLen: number): string {
+  const top = Math.max(0, hit.line - SEARCH_CONTEXT_LINES);
+  const bottom = Math.min(lines.length - 1, hit.line + SEARCH_CONTEXT_LINES);
+  const out: string[] = [];
+  for (let i = top; i <= bottom; i++) {
+    const line = lines[i];
+    const short = line.length <= SNIPPET_MAX;
+    // The hit line is still windowed around the match when it is too long —
+    // a search result that does not show what it matched is no result at all.
+    // Context lines are cut from their start instead, since nothing in them is
+    // the reason this line came back.
+    const text = short
+      ? line
+      : i === hit.line
+        ? snippetAround(line, hit.col, needleLen)
+        : `${line.slice(0, SNIPPET_MAX)}…`;
+    out.push(`${i === hit.line ? ">" : " "} L${i + 1}: ${text}`);
+  }
+  return out.join("\n");
+}
+
+/**
  * What full-text search scans: manuscript files plus .html deliverables.
  * A separate predicate rather than widening `isChapterFile` — that one also
  * decides what enters the outline/spine, and an HTML artifact is a deliverable,
@@ -564,6 +624,7 @@ export async function searchWritingFiles(
   let shownHits = 0;
   let matchedFiles = 0;
 
+  const found: FileHits[] = [];
   for (const path of files) {
     let text: string;
     try {
@@ -575,23 +636,34 @@ export async function searchWritingFiles(
     matchedFiles++;
 
     const lines = text.split(/\r?\n/);
-    const hits: string[] = [];
+    const at: HitAt[] = [];
     let inFile = 0;
     for (let i = 0; i < lines.length; i++) {
-      const at = lines[i].toLowerCase().indexOf(needle);
-      if (at < 0) continue;
+      const col = lines[i].toLowerCase().indexOf(needle);
+      if (col < 0) continue;
       inFile++;
       totalHits++;
-      if (hits.length < SEARCH_MAX_PER_FILE && shownHits < SEARCH_MAX_HITS) {
-        hits.push(`  L${i + 1}: ${snippetAround(lines[i], at, q.length)}`);
+      if (at.length < SEARCH_MAX_PER_FILE && shownHits < SEARCH_MAX_HITS) {
+        at.push({ line: i, col });
         shownHits++;
       }
     }
-    if (!hits.length) continue; // counted above; the global cap ate its budget
-    const omitted = inFile - hits.length;
+    if (!at.length) continue; // counted above; the global cap ate its budget
+    found.push({ path, lines, at, omitted: inFile - at.length });
+  }
+
+  // Few enough hits that the model has plainly located its target: give the
+  // lines around each one, so the edit can be written from this result instead
+  // of costing a read_file round for the same passage (edit-loop-plan.md §5.2).
+  const withContext = shownHits > 0 && shownHits <= SEARCH_CONTEXT_MAX_HITS;
+  for (const file of found) {
+    const body = withContext
+      ? file.at.map((h) => hitWithContext(file.lines, h, q.length)).join("\n  ⋮\n")
+      : file.at.map((h) => `  L${h.line + 1}: ${snippetAround(file.lines[h.line], h.col, q.length)}`)
+          .join("\n");
     blocks.push(
-      `${path}\n${hits.join("\n")}` +
-        (omitted > 0 ? `\n  [... ${omitted} more in this file ...]` : ""),
+      `${file.path}\n${body}` +
+        (file.omitted > 0 ? `\n  [... ${file.omitted} more in this file ...]` : ""),
     );
   }
 
@@ -606,7 +678,10 @@ export async function searchWritingFiles(
 
   const header =
     `${totalHits} matching line${totalHits === 1 ? "" : "s"} in ${matchedFiles} file${matchedFiles === 1 ? "" : "s"} ` +
-    `for "${q}" (${files.length} searched):`;
+    `for "${q}" (${files.length} searched):` +
+    (withContext
+      ? '\n(">" marks the matching line, the rest is the text around it — enough to write the edit from, without reading the file again.)'
+      : "");
   const trailer =
     shownHits < totalHits
       ? `\n\n[... ${totalHits - shownHits} more matching lines not shown — narrow the query, or pass 'folder' to scope the search ...]`
@@ -616,6 +691,50 @@ export async function searchWritingFiles(
 
 /** Characters one read_file call may return, before it pages. */
 const READ_MAX_CHARS = 4000;
+
+/** Headings a document needs before an index of them earns its tokens. */
+const INDEX_MIN_HEADINGS = 2;
+
+/** Longest index emitted; a document with more headings than this is summarised. */
+const INDEX_MAX_ROWS = 60;
+
+/**
+ * The document's headings and the lines they sit on — read_file's answer to
+ * "where is the part I want", and the exact counterpart of `read_slides`'
+ * deck index.
+ *
+ * Rides along on a paged response rather than being asked for (no parameter —
+ * docs/feature/agent/edit-loop-plan.md §D2): it costs nothing to compute (the
+ * file is already in hand), the model needs it precisely when the response
+ * could not carry the whole file, and a parameter would mean spending one
+ * round to ask and another to read. Without it, "rewrite the 风险 section" of
+ * a 900-line document begins with paging 4000 characters at a time until that
+ * section goes by.
+ *
+ * No file-type test is needed: the pattern is a markdown ATX heading, so a
+ * .txt without headings and an .html page both simply produce nothing — and an
+ * .html deck has `read_slides`' index instead, which divides it the way the
+ * exporter does.
+ */
+export function headingIndex(text: string): string {
+  const headings = extractHeadings(text);
+  if (headings.length < INDEX_MIN_HEADINGS) return "";
+
+  const shown = headings.slice(0, INDEX_MAX_ROWS);
+  const rows = shown.map(
+    // `line` is a 0-based index; every line number the model is given is 1-based.
+    (h) => `${"  ".repeat(Math.max(0, h.level - 1))}L${h.line + 1}  ${h.text}`,
+  );
+  const omitted = headings.length - shown.length;
+  return [
+    "Headings in this file — rewrite_lines takes these line numbers, so a section can be " +
+      "named without paging to it:",
+    ...rows,
+    omitted > 0 ? `[... ${omitted} more heading(s) further down ...]` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
 
 /**
  * Read a manuscript file, optionally starting partway in.
@@ -700,7 +819,14 @@ export async function readWritingFile(
     );
   }
   if (to < lines.length) notes.push(`call read_file again with start_line=${to + 1} to continue`);
-  return { toolCallId, content: `${numberLines(content, from)}\n\n[... ${notes.join("; ")} ...]` };
+
+  // The map goes in front of the page, and only when there is more file than
+  // the page carries — a response holding the whole file needs no map of it.
+  const index = isWholeFile ? "" : headingIndex(raw);
+  return {
+    toolCallId,
+    content: `${index ? `${index}\n\n` : ""}${numberLines(content, from)}\n\n[... ${notes.join("; ")} ...]`,
+  };
 }
 
 /** Characters one read_slides call may return, before it pages. */

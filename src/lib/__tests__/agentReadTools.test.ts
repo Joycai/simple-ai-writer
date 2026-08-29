@@ -280,6 +280,59 @@ describe("read_file", () => {
     expect(out.split("\n\n[...")[0]).toHaveLength(4000 + "     1\t".length);
   });
 
+  // The counterpart of read_slides' deck index: a map of the file arrives with
+  // the page that could not hold it, so "rewrite the 风险 section" does not
+  // begin by paging 4000 characters at a time until that section goes by.
+  describe("heading index", () => {
+    // Seven lines per section, so the fourth heading is well past one page.
+    const long = (headings: string[]) =>
+      headings.map((h) => `${h}\n${`${"文".repeat(199)}\n`.repeat(6)}`).join("");
+
+    it("leads a paged document with its headings and their line numbers", async () => {
+      fs.set(`${PROJECT}/报告.md`, long(["# 总述", "## 现状", "## 风险", "## 建议"]));
+
+      const out = await read({ path: `${PROJECT}/报告.md` });
+
+      expect(out).toContain("Headings in this file");
+      expect(out).toContain("L1  总述");
+      expect(out).toContain("L15  风险");
+      // Nesting is visible, so the model can tell a section from a subsection.
+      expect(out).toContain("  L8  现状");
+      // And it comes before the page it indexes.
+      expect(out.indexOf("L22  建议")).toBeLessThan(out.indexOf("     1\t# 总述"));
+    });
+
+    it("omits the index when the whole file came back", async () => {
+      fs.set(`${PROJECT}/短.md`, "# 一\n正文\n## 二\n正文");
+      expect(await read({ path: `${PROJECT}/短.md` })).not.toContain("Headings in this file");
+    });
+
+    it("omits it for a document with nothing to index", async () => {
+      fs.set(`${PROJECT}/白.txt`, `${"字".repeat(199)}\n`.repeat(40));
+      const out = await read({ path: `${PROJECT}/白.txt` });
+      expect(out).toContain("lines 1-20 of");
+      expect(out).not.toContain("Headings in this file");
+    });
+
+    // extractHeadings skips fenced code, which is what keeps a shell prompt or
+    // a CSS id in an .html page from being indexed as a section.
+    it("does not index a '#' inside a code fence", async () => {
+      fs.set(
+        `${PROJECT}/手册.md`,
+        `# 标题\n\n\`\`\`sh\n# 这是注释\n\`\`\`\n\n## 小节\n${`${"文".repeat(199)}\n`.repeat(30)}`,
+      );
+
+      const out = await read({ path: `${PROJECT}/手册.md` });
+      const index = out.split("     1\t")[0];
+
+      expect(index).toContain("L1  标题");
+      expect(index).toContain("L7  小节");
+      // The comment is in the page below, of course — what matters is that it
+      // is not offered as a section anyone could name.
+      expect(index).not.toContain("这是注释");
+    });
+  });
+
   it("errors when start_line is past the end", async () => {
     fs.set(`${PROJECT}/writing/ch1.md`, "一\n二");
 
@@ -387,6 +440,40 @@ describe("search_text", () => {
     expect(snippet.length).toBeLessThan(220);
     expect(snippet.startsWith("…")).toBe(true);
     expect(snippet.endsWith("…")).toBe(true);
+  });
+
+  // A handful of hits means the search FOUND the place, and what happens next
+  // is an edit there — which needs the surrounding text. Without this it is
+  // another read_file round for a passage this call already had in memory.
+  describe("context around a hit", () => {
+    it("gives the neighbouring lines when there are few hits", async () => {
+      fs.set(`${PROJECT}/writing/ch1.md`, "一\n二\n他握紧那柄断剑。\n四\n五");
+
+      const out = await search({ query: "断剑" });
+
+      expect(out).toContain("> L3: 他握紧那柄断剑。");
+      expect(out).toContain("  L1: 一");
+      expect(out).toContain("  L5: 五");
+      expect(out).toContain('">" marks the matching line');
+    });
+
+    it("does not run off the top or bottom of the file", async () => {
+      fs.set(`${PROJECT}/writing/ch1.md`, "断剑\n二");
+      const out = await search({ query: "断剑" });
+      expect(out).toContain("> L1: 断剑");
+      expect(out).toContain("  L2: 二");
+    });
+
+    // Thirty hits means the query has not found anything yet — the answer is a
+    // narrower query, not five times more text.
+    it("stays terse when the hits are many", async () => {
+      fs.set(`${PROJECT}/writing/ch1.md`, Array.from({ length: 12 }, (_, i) => `剑 ${i}`).join("\n"));
+
+      const out = await search({ query: "剑" });
+
+      expect(out).not.toContain("> L");
+      expect(out).toContain("  L1: 剑 0");
+    });
   });
 
   it("caps hits per file and reports how many were omitted", async () => {

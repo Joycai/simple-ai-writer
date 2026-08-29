@@ -106,9 +106,28 @@ describe("条的几何", () => {
       const f = planForecast(input({ runTask: taskById(task), systemPromptChars: 2_000 }))!;
       const total = f.segments.reduce((n, s) => n + s.chars, 0);
       const filled = total - seg(f, "free");
-      expect(Math.round(total / f.charsPerToken)).toBe(f.ceilingTokens);
+      // 「非 free 的合计 = 预计输入」是无条件的：那两个数说的是同一件事。
       expect(Math.round(filled / f.charsPerToken)).toBe(f.usedTokens);
+      // 「合计 = 上限」只在没超的时候成立——超了 `free` 被 clamp 到 0，条画不
+      // 出负数（这正是 `over` 存在的理由）。断言它此时不该悄悄地看着正常。
+      if (f.over) expect(seg(f, "free")).toBe(0);
+      else expect(Math.round(total / f.charsPerToken)).toBe(f.ceilingTokens);
     }
+  });
+
+  /**
+   * 32k 的本地模型上，**助手的工具 schema 已经吃掉整个输入预算**。
+   *
+   * 这不是这条用例发现的边角：`agent` 档的工具表实测 15.3k，而这里的模型
+   * （32k × 0.5 利用率）只有 14k 能花在输入上——固定成本还没算进去就已经超了。
+   * 大模型上无关紧要，小模型上它意味着知识库分到零。钉在这里是为了让「工具集
+   * 又长了」在这个尺度上有一个会说话的地方，而不是只在棘轮里变成一个更大的数
+   * 字：真正的答案是按任务收窄工具集（见 docs/feature/agent/edit-loop-plan.md §8）。
+   */
+  it("小模型上 agent 档的工具表就已经超出输入上限", () => {
+    const f = planForecast(input({ runTask: taskById("agent") }))!;
+    expect(f.over).toBe(true);
+    expect(seg(f, "free")).toBe(0);
   });
 
   /**

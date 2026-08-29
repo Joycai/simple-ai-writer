@@ -146,6 +146,7 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "list_files",
     "read_file",
     "read_slides",
+    "inspect_html",
     "search_text",
     "read_memory",
     "read_workflow",

@@ -9,7 +9,7 @@ import { readBinaryFile, readFile, writeBinaryFile } from "../fs/fileio";
 import { parseFrontmatter } from "../fs/markdown";
 import { readImageHeader } from "../image/imageSize";
 import { dirName, resolveLinkPath } from "../paths";
-import { markdownToBlocks } from "./blocks";
+import { markdownToBlocks, type DocBlock } from "./blocks";
 import { blocksToDocx, type ResolvedImage } from "./write";
 import type { DocFormat } from "./format";
 
@@ -30,6 +30,44 @@ export interface DocxExportResult {
 /** "周报.md" → "周报.docx"。默认目的地，不是固定的。 */
 export function docxPathFor(mdPath: string): string {
   return mdPath.replace(/\.(md|markdown|txt)$/i, "") + ".docx";
+}
+
+/**
+ * 转换**将会**产出什么——在提案时就数出来，给审批卡和模型看。
+ *
+ * 为什么值得单独有一份：这条线的正确性完全取决于源文档合不合约定，而不合约定
+ * 的后果原先只有批准之后才看得见。一份被当成正文导出的 frontmatter、一张模型
+ * 以为写了其实没解析成表格的表、四十处会降级的公式——这些在 markdown 里就已经
+ * 定了，`markdownToBlocks` 是纯函数，数一遍不花什么。
+ *
+ * 只数**markdown 本身就能知道**的降级。配图能不能读到要碰盘，那一半仍然留在
+ * 导出结果里报（`loadImages` 的 notes）——把它挪到提案时就要在工具循环里做 IO，
+ * 而卡片上多一行「图读不到」换不来这个。
+ */
+export interface DocxOutline {
+  blocks: number;
+  headings: number;
+  paragraphs: number;
+  listItems: number;
+  tables: number;
+  images: number;
+  /** 光看 markdown 就已经确定的降级项。 */
+  degraded: string[];
+}
+
+export function outlineMarkdown(source: string): DocxOutline {
+  const { content } = parseFrontmatter(source);
+  const { blocks, degraded } = markdownToBlocks(content);
+  const count = (kind: DocBlock["kind"]) => blocks.filter((b) => b.kind === kind).length;
+  return {
+    blocks: blocks.length,
+    headings: count("heading"),
+    paragraphs: count("paragraph"),
+    listItems: count("listItem"),
+    tables: count("table"),
+    images: count("image"),
+    degraded,
+  };
 }
 
 const IMAGE_TYPES: Record<string, ResolvedImage["type"]> = {

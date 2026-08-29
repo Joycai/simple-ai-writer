@@ -1565,6 +1565,25 @@ describe("write receipts", () => {
     expect(res.content).toContain("no line number below it moved");
   });
 
+  // Building a page section by section means the next call often edits what
+  // this one wrote — and the point of appending is that the model never read
+  // the file to do it, so it has no idea where the file now ends.
+  it("append_file reports the file's new end line", async () => {
+    fs.set(DOC, "<h1>一</h1>\n");
+    const ctx = makeCtx({
+      requestApproval: async (p) => {
+        const proposal = p as { path: string; content: string };
+        fs.set(proposal.path, fs.get(proposal.path)! + proposal.content);
+        return { approved: true };
+      },
+    });
+
+    const res = await run("append_file", { path: DOC, content: "<h2>二</h2>\n<p>三</p>\n" }, ctx);
+
+    expect(res.content).toContain("ends at line 3");
+    expect(res.content).toContain("nothing before the addition moved");
+  });
+
   it("propose_edit reports where its change landed", async () => {
     fs.set(DOC, "<h1>标题</h1>\n<p>正文</p>\n<p>结尾</p>\n");
 

@@ -190,21 +190,59 @@ function elementEnd(html: string, tags: Tag[], at: number): number {
  * matters more than either being clever.
  */
 export function splitHtmlSlides(html: string): HtmlSlide[] {
-  return withLines(html, splitRaw(html));
+  return splitHtmlDeck(html).slides;
 }
 
-/** The split itself; {@link splitHtmlSlides} adds the line numbers. */
-function splitRaw(html: string): Omit<HtmlSlide, "startLine" | "endLine">[] {
+/**
+ * What the fallback tier is called when no selector matched.
+ *
+ * Its own name rather than `"body"` because that is the fact worth telling
+ * whoever asks: a page with no sections is not divided, it is one slide the
+ * size of the whole page. Reviewing a "1 slide" card is how an author catches
+ * a deck whose slides were spelled `<div class="page">`.
+ */
+export const WHOLE_PAGE_TIER = "the whole page (no slide sections found)";
+
+/** A split page, and which selector decided the division. */
+export interface HtmlDeck {
+  /** The matched selector, or {@link WHOLE_PAGE_TIER}. */
+  tier: string;
+  slides: HtmlSlide[];
+}
+
+/**
+ * The split plus the tier that produced it.
+ *
+ * The tier is reportable on its own: "12 slides on `section.slide`" and "1
+ * slide, the whole page" are the difference between a deck and a page the
+ * author *thinks* is a deck, and that is knowable before anything is
+ * converted — see `export_pptx`'s approval card.
+ */
+export function splitHtmlDeck(html: string): HtmlDeck {
+  const raw = splitRaw(html);
+  return { tier: raw.tier, slides: withLines(html, raw.slides) };
+}
+
+interface RawSplit {
+  tier: string;
+  slides: Omit<HtmlSlide, "startLine" | "endLine">[];
+}
+
+/** The split itself; {@link splitHtmlDeck} adds the line numbers. */
+function splitRaw(html: string): RawSplit {
   const tags = scanTags(html);
   for (const tier of SLIDE_TIERS) {
     const hits = tags
       .map((tag, at) => ({ tag, at }))
       .filter(({ tag }) => !tag.closing && matchesTier(tag, tier));
     if (!hits.length) continue;
-    return hits.map(({ tag, at }, n) => {
-      const end = elementEnd(html, tags, at);
-      return { index: n + 1, start: tag.start, end, html: html.slice(tag.start, end) };
-    });
+    return {
+      tier,
+      slides: hits.map(({ tag, at }, n) => {
+        const end = elementEnd(html, tags, at);
+        return { index: n + 1, start: tag.start, end, html: html.slice(tag.start, end) };
+      }),
+    };
   }
 
   // No sections at all: the body is one slide, exactly as harvester.js decides.
@@ -212,9 +250,9 @@ function splitRaw(html: string): Omit<HtmlSlide, "startLine" | "endLine">[] {
   if (body >= 0) {
     const start = tags[body].start;
     const end = elementEnd(html, tags, body);
-    return [{ index: 1, start, end, html: html.slice(start, end) }];
+    return { tier: WHOLE_PAGE_TIER, slides: [{ index: 1, start, end, html: html.slice(start, end) }] };
   }
-  return [{ index: 1, start: 0, end: html.length, html }];
+  return { tier: WHOLE_PAGE_TIER, slides: [{ index: 1, start: 0, end: html.length, html }] };
 }
 
 /**

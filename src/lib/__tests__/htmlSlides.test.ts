@@ -10,7 +10,14 @@
 import { describe, expect, it } from "vitest";
 
 import { HARVESTER_SOURCE } from "../pptx/harvest";
-import { SLIDE_TIERS, readHtmlSlideRange, slideTitle, splitHtmlSlides } from "../pptx/htmlSlides";
+import {
+  SLIDE_TIERS,
+  WHOLE_PAGE_TIER,
+  readHtmlSlideRange,
+  slideTitle,
+  splitHtmlDeck,
+  splitHtmlSlides,
+} from "../pptx/htmlSlides";
 
 describe("the slide convention", () => {
   it("is the same list the exporter's harvester uses", () => {
@@ -106,6 +113,23 @@ describe("splitHtmlSlides", () => {
     const slides = splitHtmlSlides(page(`<section>1</section><section>unterminated`));
     expect(slides).toHaveLength(2);
     expect(slides[1].html).toContain("unterminated");
+  });
+});
+
+// "12 slides on section.slide" and "1 slide, the whole page" are the difference
+// between a deck and a page someone only thinks is a deck — and the approval
+// card could not tell them apart until the tier came back with the split.
+describe("splitHtmlDeck", () => {
+  it("names the selector that divided the page", () => {
+    expect(splitHtmlDeck(page("<section>一</section><section>二</section>")).tier).toBe("section");
+    expect(splitHtmlDeck(page('<div class="slide">一</div>')).tier).toBe(".slide");
+    expect(splitHtmlDeck(page('<div data-slide="1">一</div>')).tier).toBe("[data-slide]");
+  });
+
+  it("names the fallback as what it is, not as 'body'", () => {
+    const deck = splitHtmlDeck(page("<div><p>一张海报</p></div>"));
+    expect(deck.tier).toBe(WHOLE_PAGE_TIER);
+    expect(deck.slides).toHaveLength(1);
   });
 });
 
