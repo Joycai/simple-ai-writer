@@ -17,6 +17,7 @@ import {
   loadPinnedLore,
   passesFilter,
   pinnedEntityDirs,
+  relocationTargets,
   savePinnedLore,
   setEntityAvatar,
   slugifyEntityId,
@@ -27,6 +28,7 @@ import {
   type CategoryId,
   type CollectionFilter,
   type ConflictStrategy,
+  type IndexedCategory,
   type LoreEntity,
   type StagedLoreImport,
 } from "../../lib/lore";
@@ -34,6 +36,7 @@ import { CollectionRail } from "./collections/CollectionRail";
 import { BindingEdge } from "./collections/BindingEdge";
 import { CollectionAssignMenu, type AssignMode } from "./collections/CollectionAssignMenu";
 import { CategoryMoveMenu } from "./CategoryMoveMenu";
+import { CategoryDeleteModal, type CategoryDeleteChoice } from "./CategoryDeleteModal";
 import { CollectionsManageModal } from "./collections/CollectionsManageModal";
 import { ScopeBand, ScopeButton, ScopeMenu, type ScopeMenuAnchor } from "./collections/ScopePicker";
 import cs from "./collections/collections.module.css";
@@ -73,6 +76,8 @@ export function LoreWall() {
   const { projectPath } = useProjectStore();
   const collections = useProjectStore((s) => s.collections);
   const fileIntoCollections = useProjectStore((s) => s.fileIntoCollections);
+  const customCategories = useProjectStore((s) => s.customCategories);
+  const setCustomCategories = useProjectStore((s) => s.setCustomCategories);
   const terms = useTerms();
   // The eyebrow is decorative English regardless of UI language (matching
   // "DOCUMENTS · 文档"), so it resolves the en term explicitly.
@@ -106,6 +111,9 @@ export function LoreWall() {
   >(null);
   /** 「移到分类」的浮层。和归集清单分开两个状态：两块板子的语汇不同，合并只会长出一堆 if。 */
   const [catMove, setCatMove] = useState<{ x: number; y: number; above?: boolean } | null>(null);
+  /** 分类芯片的右键菜单，和卡片那个 `menu` 分开——菜单项的来源不同，合进去要在每一项上判类型。 */
+  const [catMenu, setCatMenu] = useState<{ x: number; y: number; cat: IndexedCategory } | null>(null);
+  const [deleteCat, setDeleteCat] = useState<IndexedCategory | null>(null);
   const [showManage, setShowManage] = useState(false);
   const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const cardRefs = useRef(new Map<string, HTMLElement>());
@@ -351,6 +359,58 @@ export function LoreWall() {
     const targets = allEntities.filter((e) => entityCollections(e).length === 0);
     if (targets.length === 0) return;
     await commitAssign(targets, [scope], []);
+  };
+
+  /** 作者自建的分类才可以删——能力包带来的那些，删除的地方在工作台的包开关。 */
+  const isUserCategory = (id: string) => customCategories.some((c) => c.id === id);
+
+  /**
+   * 删掉一个分类。两条出口在 `CategoryDeleteModal` 里由作者选，这里只负责按顺序执行。
+   *
+   * **先搬条目、再摘声明**：反过来的话，摘声明会先让这个分类变成 orphan，而搬家失败
+   * 时作者就同时失去了分类和一次干净的重试——现在失败会抛回弹窗，profile.json 一个
+   * 字都没动。
+   *
+   * orphan 分类没有声明可摘，搬空就是全部：`scanLore` 只把**至少有一条**的目录算成
+   * orphan，空掉的那个文件夹自己就从墙上消失了。
+   */
+  const handleCategoryDelete = async (cat: IndexedCategory, choice: CategoryDeleteChoice) => {
+    if (!projectPath) return;
+    if (choice.kind === "move") {
+      const inCat = index[cat.id] ?? [];
+      const { failed } = await moveToCategory(projectPath, inCat, choice.target);
+      if (failed.length > 0) {
+        throw new Error(t("lore.categoryMove.failed", { list: failed.join("、") }));
+      }
+    }
+    if (!cat.orphan) {
+      await setCustomCategories(customCategories.filter((c) => c.id !== cat.id));
+    }
+    // 正筛着它的时候把它删了，筛选得跟着回到「全部」，否则墙上空空如也而作者不知道
+    // 自己还在一个已经不存在的筛选里。
+    if (filter === cat.id) setFilter("all");
+  };
+
+  const categoryMenuItems = (cat: IndexedCategory): ContextMenuEntry[] => {
+    const n = counts[cat.id] ?? 0;
+    if (cat.orphan) {
+      // orphan ＝ 有条目、但没有能力包声明它。删不了「声明」（本来就没有），但把条目
+      // 搬走是真的出路——搬空之后这个文件夹就不再是一个分类。
+      return [
+        { kind: "item", icon: <FolderOpen size={13} />, label: t("lore.categoryDelete.menuEmpty", { n }),
+          action: () => setDeleteCat(cat) },
+      ];
+    }
+    if (!isUserCategory(cat.id)) {
+      // 藏掉菜单项会让作者以为自己点错了地方。留着、禁用、把理由写在标签上。
+      return [
+        { kind: "item", label: t("lore.categoryDelete.menuFromPack"), disabled: true, action: () => {} },
+      ];
+    }
+    return [
+      { kind: "item", icon: <Trash2 size={13} />, danger: true, label: t("lore.categoryDelete.menu"),
+        action: () => setDeleteCat(cat) },
+    ];
   };
 
   /**
@@ -718,14 +778,19 @@ export function LoreWall() {
                   className={`${styles.chip} ${filter === cat.id ? styles.chipActive : ""}`}
                   style={filter === cat.id ? undefined : { borderLeft: `3px solid ${categoryColor(cat.id)}` }}
                   onClick={() => setFilter(cat.id)}
+                  // 右键是删除分类的入口，和「+ 新建分类」同一处——建和删本来就该在一起。
+                  onContextMenu={(ev) => {
+                    ev.preventDefault();
+                    setCatMenu({ x: ev.clientX, y: ev.clientY, cat });
+                  }}
                   // Orphans look like any other chip on purpose: their entries are
                   // intact, so an alarming treatment would misreport the state. The
                   // dedicated presentation is 设计稿 03 屏 23 (plan phase 4).
                   title={cat.orphan
                     ? (isZh
-                        ? "这个分类来自未启用的能力包 · 条目完好，只是不能在这里新建"
-                        : "From a pack that isn't enabled — entries are intact, but nothing new can be created here")
-                    : undefined}
+                        ? "这个分类来自未启用的能力包 · 条目完好，只是不能在这里新建 · 右键可把条目搬走"
+                        : "From a pack that isn't enabled — entries are intact, but nothing new can be created here. Right-click to move them out")
+                    : t("lore.categoryDelete.chipHint")}
                 >
                   {categoryLabel(cat, isZh)}
                   <span className={styles.chipCount}>{counts[cat.id] ?? 0}</span>
@@ -1067,6 +1132,27 @@ export function LoreWall() {
           anchor={catMove}
           onPick={(category) => void moveSelectedToCategory(category)}
           onClose={() => setCatMove(null)}
+        />
+      )}
+
+      {catMenu && (
+        <ContextMenu
+          x={catMenu.x}
+          y={catMenu.y}
+          items={categoryMenuItems(catMenu.cat)}
+          onClose={() => setCatMenu(null)}
+        />
+      )}
+
+      {deleteCat && (
+        <CategoryDeleteModal
+          categoryId={deleteCat.id}
+          label={categoryLabel(deleteCat, isZh)}
+          entities={index[deleteCat.id] ?? []}
+          targets={relocationTargets(deleteCat.id)}
+          orphan={deleteCat.orphan}
+          onConfirm={(choice) => handleCategoryDelete(deleteCat, choice)}
+          onClose={() => setDeleteCat(null)}
         />
       )}
 

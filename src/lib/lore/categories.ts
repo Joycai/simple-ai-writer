@@ -82,3 +82,20 @@ export function assignableCategories(current?: CategoryId | null): IndexedCatego
   if (!current || known.some((cat) => cat.id === current)) return known;
   return [...known, orphanCategory(current)];
 }
+
+/**
+ * 一个分类要被删掉时，它的条目可以搬去哪：**已声明的分类，除掉 `exclude` 自己**。
+ *
+ * 和 `assignableCategories` 只差一条，而那一条正是这个文件开头的不对称：orphan 是
+ * 「有什么」的答案，永远不是「能放哪」的答案。`assignableCategories` 之所以破例带上
+ * *当前* 的 orphan，是为了让单条编辑时「留在原地」还在菜单上；而这里的动作是把条目
+ * 搬**出去**，把它们搬进另一个 orphan 只是把同一个问题换个文件夹再问一遍。
+ *
+ * 存在于这里而不是在两个删除入口各写一遍：知识库墙的分类右键和设置 → 工作台是同一次
+ * 确认的两扇门，候选名单在两边算得不一样是这类重复最典型的走样方式。
+ */
+export function relocationTargets(exclude?: CategoryId | null): IndexedCategory[] {
+  return loreCategories()
+    .filter((cat) => cat.id !== exclude)
+    .map((cat) => ({ ...cat, orphan: false }));
+}

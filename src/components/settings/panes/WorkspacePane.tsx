@@ -22,6 +22,12 @@ import {
   type WorkflowCard,
 } from "../../../lib/workflow";
 import { useImeGuard } from "../../../lib/ime";
+import { useLoreStore } from "../../../stores/loreStore";
+import { relocationTargets } from "../../../lib/lore";
+import {
+  CategoryDeleteModal,
+  type CategoryDeleteChoice,
+} from "../../lore/CategoryDeleteModal";
 import { Pane, PaneHeader, Section, Row, Toggle } from "./bits";
 import ui from "../settingsUi.module.css";
 import common from "../settingsCommon.module.css";
@@ -409,9 +415,14 @@ function WorkflowCardsSection() {
 
 /**
  * The project's own categories, alongside whatever the enabled packs bring:
- * add, rename (labels only — the folder id is stable), remove. Removing only
- * hides the directory, the same never-silently-lose-data rule pack toggles
- * follow.
+ * add, rename (labels only — the folder id is stable), remove.
+ *
+ * Removing still never deletes an entry — the same never-silently-lose-data rule
+ * pack toggles follow — but it no longer *only* hides the directory behind a
+ * bare `X`. That `X`摘掉一个装着 30 条条目的分类时不确认、不报数，而留下的东西会以
+ * orphan 分类的样子继续挂在墙上、标签退化成文件夹 id：作者的感受是「我删了，它还在，
+ * 而且名字变丑了」。现在它开的是知识库墙那一扇同样的确认（`CategoryDeleteModal`），
+ * 两处共用一次确认，不会有一扇门带确认、另一扇不带。
  */
 function CustomCategoriesSection() {
   const { t, i18n: i18nInst } = useTranslation();
@@ -423,6 +434,9 @@ function CustomCategoriesSection() {
   const [error, setError] = useState<string | null>(null);
   const [newLabel, setNewLabel] = useState("");
   const [editing, setEditing] = useState<{ id: string; label: string } | null>(null);
+  const [deleting, setDeleting] = useState<ProfileCategory | null>(null);
+  const loreIndex = useLoreStore((s) => s.index);
+  const moveToCategory = useLoreStore((s) => s.moveToCategory);
   const ime = useImeGuard();
 
   const apply = async (next: ProfileCategory[]) => {
@@ -456,6 +470,22 @@ function CustomCategoriesSection() {
       ),
     );
     setEditing(null);
+  };
+
+  /**
+   * 和知识库墙上的删除是同一条路（LoreWall 的 handleCategoryDelete）：先搬条目、
+   * 再摘声明。搬家失败就抛回弹窗，profile.json 一个字都没动。
+   */
+  const handleDelete = async (cat: ProfileCategory, choice: CategoryDeleteChoice) => {
+    if (!projectPath) return;
+    if (choice.kind === "move") {
+      const inCat = loreIndex[cat.id] ?? [];
+      const { failed } = await moveToCategory(projectPath, inCat, choice.target);
+      if (failed.length > 0) {
+        throw new Error(t("lore.categoryMove.failed", { list: failed.join("、") }));
+      }
+    }
+    await setCustomCategories(customCategories.filter((c) => c.id !== cat.id));
   };
 
   if (!projectPath) return null;
@@ -502,7 +532,8 @@ function CustomCategoriesSection() {
                 <button
                   className={ui.iconBtn}
                   title={t("systemSettings.workspace.removeCategory")}
-                  onClick={() => void apply(customCategories.filter((x) => x.id !== c.id))}
+                  disabled={busy}
+                  onClick={() => setDeleting(c)}
                 >
                   <X size={14} />
                 </button>
@@ -529,6 +560,17 @@ function CustomCategoriesSection() {
         </div>
         {error && <div className={ui.statusError}>{error}</div>}
       </div>
+
+      {deleting && (
+        <CategoryDeleteModal
+          categoryId={deleting.id}
+          label={categoryLabel(deleting, isZh)}
+          entities={loreIndex[deleting.id] ?? []}
+          targets={relocationTargets(deleting.id)}
+          onConfirm={(choice) => handleDelete(deleting, choice)}
+          onClose={() => setDeleting(null)}
+        />
+      )}
     </Section>
   );
 }

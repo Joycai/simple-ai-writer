@@ -228,9 +228,9 @@
       "disablePack": "停用 {{pack}}",
       "disabledHasData": "{{count}} 个分类目录仍有内容 · 条目照常可见可编辑，重新启用可恢复分类名与类型",
       "categoriesSection": "自定义知识库分类",
-      "categoriesHint": "在能力包提供的分类之外，为这个项目自定义知识库分类，方便按自己的方式组织。移除分类不会删除其文件夹与条目，重新添加同名分类即可看到。",
+      "categoriesHint": "在能力包提供的分类之外，为这个项目自定义知识库分类，方便按自己的方式组织。移除分类时会先问里面的条目去哪——一条都不会被删掉。知识库墙上右键分类是同一个入口。",
       "addCategory": "添加",
-      "removeCategory": "移除分类（目录保留）",
+      "removeCategory": "移除分类…",
       "renameCategory": "重命名",
       "newCategoryPlaceholder": "新分类名称，如：会议纪要"
     },
@@ -2253,6 +2253,24 @@
       "someHere": "{{n}} 条已在",
       "note": "分类是磁盘上的文件夹，这一批会连文件夹一起搬走；写成 [[lore:分类/id]] 的引用会改指新位置。",
       "failed": "这几条没能移动：{{list}}"
+    },
+    "categoryDelete": {
+      "menu": "删除分类…",
+      "menuEmpty": "把 {{n}} 条搬走并清空…",
+      "menuFromPack": "来自能力包 · 到设置 → 工作台关掉整包",
+      "chipHint": "右键管理这个分类",
+      "eyebrow": "删除分类",
+      "eyebrowEmpty": "清空分类",
+      "empty": "这个分类是空的。移除它只是从项目里去掉这个筛选。",
+      "count": "条条目在这里。分类是磁盘上的文件夹，删掉它不会删掉它们——你得先说它们去哪。",
+      "moveLabel": "连同 {{n}} 条一起移到…",
+      "moveNote": "条目搬进新分类的文件夹，写成 [[lore:分类/id]] 的引用改指新位置。",
+      "noTargets": "没有别的分类可搬——先新建一个。",
+      "keepLabel": "只移除分类，保留文件夹与条目",
+      "keepNote": "条目一条都不会少，AI 照常读得到；但这个分类会退化成「未声明」，标签变成文件夹名「{{id}}」，也不能再在里面新建条目。",
+      "confirm": "删除分类",
+      "confirmEmpty": "搬走并清空",
+      "working": "处理中…"
     },
     "run": {
       "generating": "生成中",

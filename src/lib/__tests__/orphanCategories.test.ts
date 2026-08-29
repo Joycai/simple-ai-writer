@@ -33,7 +33,13 @@ vi.mock("../fs/fileio", () => ({
   removeFile: vi.fn(),
 }));
 
-import { assignableCategories, indexCategories, scanLore, type LoreIndex } from "../lore";
+import {
+  assignableCategories,
+  indexCategories,
+  relocationTargets,
+  scanLore,
+  type LoreIndex,
+} from "../lore";
 import { NOVEL_PROFILE, isKnownCategory, resetActiveWorkspace } from "../profile";
 
 const ROOT = "/proj";
@@ -169,5 +175,35 @@ describe("assignableCategories — the other question", () => {
     // text into a directory goes through; listing an orphan must not widen it.
     expect(isKnownCategory("npcs")).toBe(false);
     expect(isKnownCategory("characters")).toBe(true);
+  });
+});
+
+/**
+ * 删一个分类时，它的条目可以搬去哪。同一个不对称的第三次应用：这里问的是「能放哪」，
+ * 所以 orphan 一个都不出现——连正在被删的那个是 orphan 时也不例外（把条目从一个
+ * orphan 搬进另一个 orphan，只是把同一个问题换个文件夹再问一遍）。
+ */
+describe("relocationTargets", () => {
+  it("是已声明分类减去它自己", () => {
+    const ids = relocationTargets("characters").map((c) => c.id);
+    expect(ids).not.toContain("characters");
+    expect(ids).toEqual(
+      [...NOVEL_PROFILE.categories.map((c) => c.id), "custom"].filter((id) => id !== "characters"),
+    );
+  });
+
+  it("绝不列出 orphan——包括正在被清空的那一个", () => {
+    // 被删的是 orphan 时，它本来就不在 loreCategories() 里，排除它是个空操作；
+    // 真正要守住的是别的 orphan 也不许出现在候选里。
+    const ids = relocationTargets("npcs").map((c) => c.id);
+    expect(ids).not.toContain("npcs");
+    expect(relocationTargets("npcs").some((c) => c.orphan)).toBe(false);
+    expect(relocationTargets().some((c) => c.orphan)).toBe(false);
+  });
+
+  it("不传 exclude 时就是完整的已声明列表", () => {
+    expect(relocationTargets().map((c) => c.id)).toEqual(
+      assignableCategories().map((c) => c.id),
+    );
   });
 });
