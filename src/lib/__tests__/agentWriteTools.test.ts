@@ -1517,6 +1517,80 @@ describe("propose_edit targeting", () => {
   });
 });
 
+// ─── the applied-region echo ─────────────────────────────────────────────────
+
+/**
+ * What an approved write hands back (docs/feature/agent/edit-loop-plan.md §4.3).
+ *
+ * The approver here writes before resolving, exactly as agentStore's
+ * `settleApproval` does — the echo reads the file *after* the apply, so a
+ * fake that only said "approved" would test the wrong file.
+ */
+describe("write receipts", () => {
+  const DOC = `${PROJECT}/deck.html`;
+  const applying = () =>
+    makeCtx({
+      requestApproval: async (p) => {
+        const proposal = p as { path: string; find?: string; replace?: string };
+        if (proposal.find !== undefined) {
+          fs.set(proposal.path, fs.get(proposal.path)!.replace(proposal.find, proposal.replace!));
+        }
+        return { approved: true };
+      },
+    });
+
+  it("rewrite_lines reports the new range, the shift, and the applied text", async () => {
+    fs.set(DOC, "一\n二\n三\n四\n五\n");
+
+    const res = await run("rewrite_lines", {
+      path: DOC, start_line: 2, end_line: 3, content: "贰\n叁\n肆",
+    }, applying());
+
+    // The three things that replace a re-read: where it is now, what moved,
+    // and what it says.
+    expect(res.content).toContain("It now occupies lines 2-4");
+    expect(res.content).toContain("+1 line(s)");
+    expect(res.content).toContain("     2\t贰");
+    expect(res.content).toContain("     4\t肆");
+    // Context either side, so the next range can be named without reading.
+    expect(res.content).toContain("     1\t一");
+    expect(res.content).toContain("     5\t四");
+    // And the instruction it replaces is gone.
+    expect(res.content).not.toContain("re-read around the region");
+  });
+
+  it("says nothing moved when the replacement is the same height", async () => {
+    fs.set(DOC, "一\n二\n三\n");
+    const res = await run("rewrite_lines", { path: DOC, start_line: 2, end_line: 2, content: "貳" }, applying());
+    expect(res.content).toContain("no line number below it moved");
+  });
+
+  it("propose_edit reports where its change landed", async () => {
+    fs.set(DOC, "<h1>标题</h1>\n<p>正文</p>\n<p>结尾</p>\n");
+
+    const res = await run("propose_edit", {
+      path: DOC, find: "<p>正文</p>", replace: "<p>正文</p>\n<p>补充</p>",
+    }, applying());
+
+    expect(res.content).toContain("It now occupies lines 2-3");
+    expect(res.content).toContain("     3\t<p>补充</p>");
+  });
+
+  // The one case with no single answer: the shifts accumulate down the file,
+  // so an invented number would point the next edit at the wrong place.
+  it("propose_edit refuses to guess after replace_all over several hits", async () => {
+    fs.set(DOC, "<p>x</p>\n<p>x</p>\n<p>x</p>\n");
+
+    const res = await run("propose_edit", {
+      path: DOC, find: "<p>x</p>", replace: "<p>y</p>\n<p>z</p>", replace_all: true,
+    }, applying());
+
+    expect(res.content).toContain("3 places changed");
+    expect(res.content).toContain("read the file again");
+    expect(res.content).not.toContain("It now occupies");
+  });
+});
+
 // ─── rewrite_lines ───────────────────────────────────────────────────────────
 
 describe("rewrite_lines", () => {

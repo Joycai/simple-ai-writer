@@ -50,6 +50,10 @@ export interface HtmlSlide {
   end: number;
   /** The element's source, verbatim — quotable straight into propose_edit. */
   html: string;
+  /** 1-based line the slide opens on — what `rewrite_lines` takes. */
+  startLine: number;
+  /** 1-based line the slide's closing tag ends on, inclusive. */
+  endLine: number;
 }
 
 interface Tag {
@@ -186,6 +190,11 @@ function elementEnd(html: string, tags: Tag[], at: number): number {
  * matters more than either being clever.
  */
 export function splitHtmlSlides(html: string): HtmlSlide[] {
+  return withLines(html, splitRaw(html));
+}
+
+/** The split itself; {@link splitHtmlSlides} adds the line numbers. */
+function splitRaw(html: string): Omit<HtmlSlide, "startLine" | "endLine">[] {
   const tags = scanTags(html);
   for (const tier of SLIDE_TIERS) {
     const hits = tags
@@ -208,11 +217,68 @@ export function splitHtmlSlides(html: string): HtmlSlide[] {
   return [{ index: 1, start: 0, end: html.length, html }];
 }
 
-/** 1-based line number of an offset, for the read_file hand-off below. */
-function lineAt(html: string, offset: number): number {
+/**
+ * 1-based line number for each of `offsets`, counted in one pass.
+ *
+ * Sorted rather than walked in slide order because slides may nest (the
+ * splitter returns nested matches, deliberately — see above), so their offsets
+ * are not monotonic and a single forward scan over them would run backwards.
+ */
+function lineMapFor(html: string, offsets: readonly number[]): Map<number, number> {
+  const map = new Map<number, number>();
   let line = 1;
-  for (let i = 0; i < offset && i < html.length; i++) if (html[i] === "\n") line++;
-  return line;
+  let i = 0;
+  for (const off of [...new Set(offsets)].sort((a, b) => a - b)) {
+    for (; i < off && i < html.length; i++) if (html[i] === "\n") line++;
+    map.set(off, line);
+  }
+  return map;
+}
+
+/**
+ * Attach each slide's line range.
+ *
+ * These are what make a targeted `rewrite_lines` possible at all: without them
+ * the only way to change slide 7 is to quote its entire source into
+ * `propose_edit`'s `find`, which pays for the same bytes a second time and
+ * fails outright if the model reconstructs one space wrong.
+ * `end` is exclusive, so the last line the slide occupies is the one holding
+ * `end - 1`.
+ */
+function withLines(
+  html: string,
+  slides: Omit<HtmlSlide, "startLine" | "endLine">[],
+): HtmlSlide[] {
+  const lines = lineMapFor(
+    html,
+    slides.flatMap((s) => [s.start, Math.max(s.start, s.end - 1)]),
+  );
+  return slides.map((s) => ({
+    ...s,
+    startLine: lines.get(s.start) ?? 1,
+    endLine: lines.get(Math.max(s.start, s.end - 1)) ?? 1,
+  }));
+}
+
+/**
+ * A short label for a slide, for the index — the first heading's text, or
+ * failing that the first text of any kind.
+ *
+ * Text only, and short: the index exists to be read *instead of* the deck, so
+ * a line of it that approaches the size of the slide it describes has defeated
+ * its own purpose.
+ */
+export function slideTitle(slideHtml: string, max = 40): string {
+  const heading = slideHtml.match(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/i);
+  const source = heading ? heading[1] : slideHtml;
+  const text = source
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return "(no text)";
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
 /**
@@ -239,7 +305,7 @@ export function readHtmlSlideRange(
   let chars = 0;
   for (let n = from; n <= total; n++) {
     const slide = slides[n - 1];
-    const head = `## Slide ${slide.index}\n`;
+    const head = `## Slide ${slide.index} (lines ${slide.startLine}-${slide.endLine})\n`;
     const cost = head.length + slide.html.length + 2;
     if (n > from && chars + cost > maxChars) break;
 
@@ -248,11 +314,10 @@ export function readHtmlSlideRange(
     // would spend the run's context on one call, so it is cut here and handed
     // to read_file, which is the tool for reading a long file in order.
     if (n === from && slide.html.length > maxChars) {
-      const line = lineAt(html, slide.start);
       parts.push(
         `${head}${slide.html.slice(0, maxChars)}\n` +
           `[... slide ${slide.index} is ${slide.html.length} chars and was cut at ${maxChars}; ` +
-          `read the rest with read_file (start_line=${line}) ...]`,
+          `read the rest with read_file (start_line=${slide.startLine}) ...]`,
       );
       chars += maxChars;
       break;
@@ -263,11 +328,36 @@ export function readHtmlSlideRange(
     to = n;
   }
 
+  const body = parts.join("\n\n");
+  const whole = from === 1 && to === total;
   return {
-    markdown: parts.join("\n\n"),
+    markdown: whole ? body : `${slideIndex(slides)}\n\n${body}`,
     total_slides: total,
     from_slide: from,
     to_slide: to,
     next_slide: to < total ? to + 1 : null,
   };
+}
+
+/**
+ * One line per slide: number, label, line range, size.
+ *
+ * Rides along on any response that could not carry the whole deck, rather than
+ * being asked for (no `outline` parameter — plan §D2). The information is free
+ * here (the splitter has already divided the entire file to answer this call
+ * at all) and it is exactly what the model needs at that moment: without it,
+ * "change slide 7" begins with paging 4000 characters at a time until slide 7
+ * goes by, which on a 30-slide deck is most of a context window spent on
+ * finding the thing rather than on doing it.
+ */
+export function slideIndex(slides: readonly HtmlSlide[]): string {
+  const rows = slides.map(
+    (s) =>
+      `${s.index}. ${slideTitle(s.html)} (lines ${s.startLine}-${s.endLine}, ` +
+      `${s.html.length >= 1000 ? `${(s.html.length / 1000).toFixed(1)}k` : s.html.length} chars)`,
+  );
+  return [
+    `This deck has ${slides.length} slide(s); the line ranges below are what rewrite_lines takes:`,
+    ...rows,
+  ].join("\n");
 }

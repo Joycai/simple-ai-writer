@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 
 import { HARVESTER_SOURCE } from "../pptx/harvest";
-import { SLIDE_TIERS, readHtmlSlideRange, splitHtmlSlides } from "../pptx/htmlSlides";
+import { SLIDE_TIERS, readHtmlSlideRange, slideTitle, splitHtmlSlides } from "../pptx/htmlSlides";
 
 describe("the slide convention", () => {
   it("is the same list the exporter's harvester uses", () => {
@@ -109,6 +109,27 @@ describe("splitHtmlSlides", () => {
   });
 });
 
+describe("slideTitle", () => {
+  it("prefers the slide's heading", () => {
+    expect(slideTitle("<section><p>正文</p><h2>标题</h2></section>")).toBe("标题");
+  });
+
+  it("falls back to any text, and says so when there is none", () => {
+    expect(slideTitle("<section><p>只有正文</p></section>")).toBe("只有正文");
+    expect(slideTitle('<section><img src="x.png"></section>')).toBe("(no text)");
+  });
+
+  // An index line that approaches the size of the slide it describes has
+  // defeated its own purpose.
+  it("truncates a long one", () => {
+    expect(slideTitle(`<h1>${"字".repeat(80)}</h1>`)).toHaveLength(40);
+  });
+
+  it("does not mistake a script's contents for the slide's text", () => {
+    expect(slideTitle("<section><script>var x = 1;</script><h1>真标题</h1></section>")).toBe("真标题");
+  });
+});
+
 describe("readHtmlSlideRange", () => {
   const deck = (n: number) =>
     page(Array.from({ length: n }, (_, i) => `<section><h1>第 ${i + 1} 页</h1></section>`).join("\n"));
@@ -132,6 +153,48 @@ describe("readHtmlSlideRange", () => {
     const second = readHtmlSlideRange(deck(20), first.next_slide!, 200);
     expect(second.from_slide).toBe(first.next_slide);
     expect(second.markdown).toContain(`## Slide ${first.next_slide}`);
+  });
+
+  // The line range is what makes a targeted rewrite_lines possible: without
+  // it, changing slide 7 means quoting its whole source into propose_edit's
+  // `find` — the same bytes paid for twice, and a failed match if one space is
+  // reconstructed wrong.
+  it("labels each slide with the lines it occupies", () => {
+    const range = readHtmlSlideRange(deck(3));
+
+    expect(range.markdown).toContain("## Slide 1 (lines 4-4)");
+    expect(range.markdown).toContain("## Slide 3 (lines 6-6)");
+  });
+
+  it("counts a multi-line slide's range to its closing tag", () => {
+    const html = page("<section>\n  <h1>一</h1>\n</section>\n<section>二</section>");
+    const [first, second] = splitHtmlSlides(html);
+
+    expect([first.startLine, first.endLine]).toEqual([4, 6]);
+    expect([second.startLine, second.endLine]).toEqual([7, 7]);
+  });
+
+  // Rides along on any partial response rather than being asked for: it is
+  // free here (the splitter has already divided the whole file) and it is
+  // exactly what the model needs before it can address anything.
+  it("leads a paged response with an index of the whole deck", () => {
+    const first = readHtmlSlideRange(deck(20), undefined, 200);
+
+    expect(first.markdown).toContain("This deck has 20 slide(s)");
+    expect(first.markdown).toContain("1. 第 1 页 (lines 4-4");
+    expect(first.markdown).toContain("20. 第 20 页 (lines 23-23");
+    // The index comes before the slides it indexes.
+    expect(first.markdown.indexOf("20. 第 20 页")).toBeLessThan(first.markdown.indexOf("## Slide 1"));
+  });
+
+  it("indexes a response that starts partway in, too", () => {
+    const range = readHtmlSlideRange(deck(20), 10, 200);
+    expect(range.markdown).toContain("This deck has 20 slide(s)");
+  });
+
+  // A response that carries the whole deck needs no map of it.
+  it("omits the index when every slide is in the response", () => {
+    expect(readHtmlSlideRange(deck(3)).markdown).not.toContain("This deck has");
   });
 
   it("cuts a single oversized slide and points at read_file for the rest", () => {

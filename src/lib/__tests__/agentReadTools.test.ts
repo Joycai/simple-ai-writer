@@ -212,12 +212,28 @@ describe("list_files", () => {
 });
 
 describe("read_file", () => {
-  it("returns a short file whole, with no paging note", async () => {
+  // The line numbers are the whole point of the contract rewrite_lines and
+  // propose_edit depend on (docs/feature/agent/edit-loop-plan.md §4.1): a model
+  // that has to COUNT lines in 4000 unnumbered characters cannot name a region,
+  // and a `find` rebuilt from memory loses a space and fails the match.
+  it("numbers every line and says the numbers are not file content", async () => {
     fs.set(`${PROJECT}/writing/ch1.md`, "第一行\n第二行");
 
     const out = await read({ path: `${PROJECT}/writing/ch1.md` });
 
-    expect(out).toBe("第一行\n第二行");
+    expect(out).toContain("     1\t第一行\n     2\t第二行");
+    expect(out).toContain("whole file, 2 lines");
+    expect(out).toContain("never copy it into an edit");
+  });
+
+  // Uniform, not conditional: "read_file output has line numbers" is a fact the
+  // model can rely on; "long reads have line numbers" is a judgement it has to
+  // make first, and it would make it while writing the very argument that then
+  // fails to match.
+  it("numbers a whole short file too, not just a paged one", async () => {
+    fs.set(`${PROJECT}/writing/ch1.md`, "只有一行");
+
+    expect(await read({ path: `${PROJECT}/writing/ch1.md` })).toContain("     1\t只有一行");
   });
 
   // 【当前文件】 hands the model a project-relative path, so it answers with
@@ -225,7 +241,7 @@ describe("read_file", () => {
   it("accepts a project-relative path", async () => {
     fs.set(`${PROJECT}/卷一/第1章.md`, "第一行");
 
-    expect(await read({ path: "卷一/第1章.md" })).toBe("第一行");
+    expect(await read({ path: "卷一/第1章.md" })).toContain("     1\t第一行");
   });
 
   it("pages a long file on line boundaries and hands back the next start_line", async () => {
@@ -240,12 +256,15 @@ describe("read_file", () => {
     expect(out.split("\n\n[...")[0].split("\n")).toHaveLength(20);
   });
 
-  it("continues from a given start_line", async () => {
+  // The numbers a continued read carries are the file's, not the page's —
+  // otherwise every rewrite_lines after the first page would name a region
+  // 20 lines above the one the model meant.
+  it("continues from a given start_line and numbers from there", async () => {
     fs.set(`${PROJECT}/writing/ch1.md`, "一\n二\n三\n四");
 
     const out = await read({ path: `${PROJECT}/writing/ch1.md`, start_line: 3 });
 
-    expect(out).toContain("三\n四");
+    expect(out).toContain("     3\t三\n     4\t四");
     expect(out).not.toContain("一");
     expect(out).toContain("lines 3-4 of 4 shown");
   });
@@ -256,7 +275,9 @@ describe("read_file", () => {
     const out = await read({ path: `${PROJECT}/writing/ch1.md` });
 
     expect(out).toContain("cut mid-line");
-    expect(out.split("\n\n[...")[0]).toHaveLength(4000);
+    // The budget is spent on file content; the gutter rides on top of it, so
+    // the cut is still exactly 4000 characters of the file itself.
+    expect(out.split("\n\n[...")[0]).toHaveLength(4000 + "     1\t".length);
   });
 
   it("errors when start_line is past the end", async () => {
@@ -270,7 +291,7 @@ describe("read_file", () => {
   it("reads a file anywhere in the project, not just under writing/", async () => {
     fs.set(`${PROJECT}/大纲.md`, "自由组织");
 
-    expect(await read({ path: `${PROJECT}/大纲.md` })).toBe("自由组织");
+    expect(await read({ path: `${PROJECT}/大纲.md` })).toContain("自由组织");
   });
 
   it("rejects a path outside the project", async () => {
