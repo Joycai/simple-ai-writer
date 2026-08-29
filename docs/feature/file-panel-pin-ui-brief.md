@@ -51,6 +51,17 @@
 一整个项目，不是一个名字。回收改在撤销窗口关闭时发生（`collectUnlistedProjectPrefs`，
 定时器到点或面板卸载都算），应用在窗口内退出则留给下次的同一次回收。
 
+### 代码评审之后修掉的五处
+
+| 处 | 问题 | 修法 |
+|---|---|---|
+| [`lib/prefs.ts`](../../src/lib/prefs.ts) 启动清理 | `collectOrphanedProjectPrefs` 只认 `app:recentProjects`，而这一期让**固定可以活得比最近列表长**（`splitProjects` 从固定行渲染，跨实例竞态会把路径挤出最近行）——于是一个屏幕上还挂着的固定项，`ai:pinnedLore:` 会在下次启动时被静默删掉 | 两行并集才算「还在」，且用 `isSamePath` 而不是字符串相等（老版本写的行是宿主拼法）；任一行读不出来就整轮不删 |
+| `.pinBtn` 的显隐 | 未固定行的图标静息是 `width: 0; opacity: 0`，但它**仍在 tab 序列里**：键盘用户会聚焦到一个零宽、不可见的按钮上 | `:focus-visible` 并进 `.row:hover` 那条显形规则，Pin↔PinOff 的交叉淡出同理 |
+| 同上 | 焦点环也没画出来——`all: unset` 与 global.css 的 `:focus-visible` **同特异性**，而 CSS Module 在后加载，重置赢了 | 在本模块里把 `--shadow-focus` 重述一次（`.open` / `.pinBtn` / `.clearBtn` / `.sectionToggle` / `.undo`） |
+| 撤销 | 撤销原样重放清空前那份列表，所以窗口内做的**别的**改动会被它悄悄回滚——刚「从列表移除」的项目会被撤销带回来 | 任何别的列表编辑（移除 / 取消固定）**先关掉撤销窗口**再执行：条子是一个五秒的提议，动列表就是对它的回答 |
+| `undoClear` | store 写在 `setPending` 的 updater 里——React 会不止一次调用 updater（StrictMode、被丢弃的并发渲染） | 直接读 `pending`，写在 updater 外面 |
+| `openedAtKind` | 「昨天」的边界写成 `今天零点 − 24h`，夏令时前移那天它落在前一天 23:00，把 00:30 判成 older | 边界改成**前一个日历零点**（`new Date(y, m, d - 1)`，月/年借位它自己会算） |
+
 浏览器实测过的屏：1a 常态（浅/深）· 1b 悬停/固定/取消固定/右键菜单 · 1c 清空 → 确认条 →
 撤销 · 1d 三种空状态 · 1e 160 / 240 / 500 三档与 8 条固定的折叠。
 

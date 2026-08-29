@@ -191,7 +191,12 @@
     margin-right var(--transition-fast), background var(--transition-fast),
     color var(--transition-fast);
 }
+/* `:focus-visible` is in this list for a reason: the button stays in the tab
+   order while it is 0px wide, and the app's focus ring is a box-shadow — on a
+   zero-width box it paints nothing, so a keyboard user would be focused on an
+   invisible control. */
 .row:hover .pinBtn,
+.pinBtn:focus-visible,
 .pinBtn.pinned {
   width: 22px;
   margin-right: 4px;
@@ -214,8 +219,24 @@
 /* Pinned + hover ⇒ the filled Pin crossfades into PinOff in place: the icon
    stops reporting the state and starts offering the action. */
 .iconOff { opacity: 0; }
-.row:hover .pinned .iconRest { opacity: 0; }
-.row:hover .pinned .iconOff { opacity: 1; }
+.row:hover .pinned .iconRest,
+.pinned:focus-visible .iconRest { opacity: 0; }
+.row:hover .pinned .iconOff,
+.pinned:focus-visible .iconOff { opacity: 1; }
+
+/*
+ * The focus ring, restated. `global.css` carries one on `:focus-visible`, but
+ * every button here starts with `all: unset` — same specificity (one class vs
+ * one pseudo-class), and this stylesheet is injected after global.css, so the
+ * reset wins the tie and the ring never paints.
+ */
+.open:focus-visible,
+.pinBtn:focus-visible,
+.clearBtn:focus-visible,
+.sectionToggle:focus-visible,
+.undo:focus-visible {
+  box-shadow: var(--shadow-focus);
+}
 
 /* ── 清空后的就地确认条 ───────────────────────────────────────────────── */
 

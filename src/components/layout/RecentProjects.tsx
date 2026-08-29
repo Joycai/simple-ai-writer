@@ -84,14 +84,16 @@ export function RecentProjects() {
     useAppStore.getState().collectUnlistedProjectPrefs();
   }, []);
 
+  // The store call sits outside the state updater on purpose: React invokes an
+  // updater more than once (StrictMode, a discarded concurrent render), and a
+  // write to an external store is not something to run twice.
   const undoClear = useCallback(() => {
+    if (!pending) return;
     window.clearTimeout(undoTimer.current);
     undoTimer.current = undefined;
-    setPending((p) => {
-      if (p) useAppStore.getState().restoreRecentProjects(p.previous);
-      return null;
-    });
-  }, []);
+    useAppStore.getState().restoreRecentProjects(pending.previous);
+    setPending(null);
+  }, [pending]);
 
   const onClear = () => {
     const previous = useAppStore.getState().clearRecentProjects();
@@ -100,6 +102,20 @@ export function RecentProjects() {
     setPending({ previous, cleared: previous.length - kept, kept });
     window.clearTimeout(undoTimer.current);
     undoTimer.current = window.setTimeout(commitClear, UNDO_MS);
+  };
+
+  /**
+   * Any *other* edit to the list closes the undo window first.
+   *
+   * The undo replays the pre-clear list verbatim, so a removal or an unpin
+   * made while the bar is up would be silently reverted by it — 「撤销」 would
+   * hand back the very project the author had just deleted. Ending the window
+   * is the honest resolution: the bar is a five-second offer, and touching the
+   * list is an answer to it.
+   */
+  const afterUndoWindow = (edit: () => void) => {
+    if (pending) commitClear();
+    edit();
   };
 
   // ⌘Z / Ctrl+Z while the bar is up — the same undo, from the keyboard. No
@@ -116,10 +132,10 @@ export function RecentProjects() {
     return () => window.removeEventListener("keydown", onKey);
   }, [pending, undoClear]);
 
-  const togglePin = (path: string) => {
+  const togglePin = (path: string) => afterUndoWindow(() => {
     if (isProjectPinned(pinnedProjects, path)) unpinProject(path);
     else pinProject(path);
-  };
+  });
 
   /** Last-opened stamp, printed only by the widest layout (CSS decides). */
   const openedLabel = (path: string): string => {
@@ -170,7 +186,7 @@ export function RecentProjects() {
         icon: <X size={13} />,
         label: t("project.removeRecent"),
         danger: true,
-        action: () => removeRecentProject(path),
+        action: () => afterUndoWindow(() => removeRecentProject(path)),
       },
     ];
   };

@@ -243,9 +243,14 @@ export function pruneOpenedAt(
  * `Intl.DateTimeFormat`, so this stays pure and locale-free.
  */
 export function openedAtKind(ts: number, now: number): "today" | "yesterday" | "older" {
-  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const today = startOfDay(new Date(now));
-  if (ts >= today) return "today";
-  if (ts >= today - 86_400_000) return "yesterday";
+  const n = new Date(now);
+  // Yesterday's boundary is the *previous calendar midnight*, not `today - 24h`
+  // — on the day a clock springs forward that subtraction lands at 23:00 and
+  // stamps the missing hour read as "older". `new Date(y, m, d - 1)` handles
+  // the month and year underflow on its own.
+  const midnight = (dayOffset: number) =>
+    new Date(n.getFullYear(), n.getMonth(), n.getDate() + dayOffset).getTime();
+  if (ts >= midnight(0)) return "today";
+  if (ts >= midnight(-1)) return "yesterday";
   return "older";
 }

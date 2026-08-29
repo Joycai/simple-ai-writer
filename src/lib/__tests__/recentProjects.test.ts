@@ -254,4 +254,18 @@ describe("openedAtKind", () => {
     const now = at(2026, 7, 29);
     expect(openedAtKind(at(2026, 7, 27, 23, 59), now)).toBe("older");
   });
+
+  it("crosses a month boundary without arithmetic", () => {
+    const now = at(2026, 8, 1, 9);
+    expect(openedAtKind(at(2026, 7, 31, 22), now)).toBe("yesterday");
+    expect(openedAtKind(at(2026, 7, 30, 22), now)).toBe("older");
+  });
+
+  it("keeps a whole calendar day of yesterday even across a DST shift", () => {
+    // `today - 86_400_000` lands at 23:00 on a spring-forward day and would
+    // call 00:30 yesterday "older". The boundary is the previous midnight.
+    const now = at(2026, 2, 9, 10);           // day after a US spring-forward
+    expect(openedAtKind(at(2026, 2, 8, 0, 30), now)).toBe("yesterday");
+    expect(openedAtKind(at(2026, 2, 7, 23, 30), now)).toBe("older");
+  });
 });

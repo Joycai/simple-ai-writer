@@ -217,6 +217,51 @@ describe("collecting per-project preferences", () => {
     expect(deleted().sort()).toEqual([pin("D:/books/deleted"), pin("D:/books/renamed-away")]);
   });
 
+  it("counts a pinned project as live even when it is not in the recents", async () => {
+    // A pin can outlive the recents row (lib/recentProjects → splitProjects,
+    // and the cross-instance race its header documents), and it is still on
+    // screen in 「已固定」 — sweeping it would delete the lore pins of a
+    // project the author deliberately kept.
+    h.select.mockResolvedValueOnce([
+      { key: "app:recentProjects", value: JSON.stringify(["D:/books/live"]) },
+      { key: "app:pinnedProjects", value: JSON.stringify(["D:/books/kept"]) },
+      { key: pin("D:/books/kept"), value: "[]" },
+      { key: pin("D:/books/gone"), value: "[]" },
+    ]);
+
+    await prefs.hydratePrefs();
+    await prefs.flushPrefs();
+
+    expect(prefs.readPref(pin("D:/books/kept"))).toBe("[]");
+    expect(deleted()).toEqual([pin("D:/books/gone")]);
+  });
+
+  it("matches by path identity, not by spelling", async () => {
+    h.select.mockResolvedValueOnce([
+      { key: "app:recentProjects", value: JSON.stringify(["D:/books/live"]) },
+      { key: pin("D:\\books\\live"), value: "[]" },
+    ]);
+
+    await prefs.hydratePrefs();
+    await prefs.flushPrefs();
+
+    expect(deleted()).toEqual([]);
+  });
+
+  it("deletes nothing when the pin list is unreadable", async () => {
+    h.select.mockResolvedValueOnce([
+      { key: "app:recentProjects", value: JSON.stringify(["D:/books/live"]) },
+      { key: "app:pinnedProjects", value: "{not json" },
+      { key: pin("D:/books/other"), value: "[]" },
+    ]);
+
+    await prefs.hydratePrefs();
+    await prefs.flushPrefs();
+
+    expect(prefs.readPref(pin("D:/books/other"))).toBe("[]");
+    expect(deleted()).toEqual([]);
+  });
+
   it("deletes nothing when the recents list is unreadable", async () => {
     h.select.mockResolvedValueOnce([
       { key: "app:recentProjects", value: "{not json" },
