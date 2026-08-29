@@ -26,6 +26,7 @@ import {
   resolveWorkspacePath,
 } from "../paths";
 import { readDirRecursive, type FileNode } from "../project";
+import { numberLines } from "./lineEcho";
 
 export interface ToolCall {
   id: string;
@@ -683,16 +684,23 @@ export async function readWritingFile(
   if (cutMidLine) content = content.slice(0, READ_MAX_CHARS);
 
   const isWholeFile = from === 1 && to === lines.length && !cutMidLine;
-  if (isWholeFile) return { toolCallId, content };
-
-  const notes = [`lines ${from}-${to} of ${lines.length} shown`];
+  // The gutter note rides on every read, whole file included: it is the only
+  // place the "these digits are not in the file" rule is stated, and stating it
+  // here — in the same result the numbers arrive in — is both free and better
+  // placed than a sentence in four tool descriptions would be (plan §D1).
+  const notes = [
+    isWholeFile
+      ? `whole file, ${lines.length} line${lines.length === 1 ? "" : "s"}`
+      : `lines ${from}-${to} of ${lines.length} shown`,
+    "the number before each tab is the line number, not file content — never copy it into an edit",
+  ];
   if (cutMidLine) {
     notes.push(
       `line ${from} is longer than the ${READ_MAX_CHARS}-character limit and was cut mid-line`,
     );
   }
   if (to < lines.length) notes.push(`call read_file again with start_line=${to + 1} to continue`);
-  return { toolCallId, content: `${content}\n\n[... ${notes.join("; ")} ...]` };
+  return { toolCallId, content: `${numberLines(content, from)}\n\n[... ${notes.join("; ")} ...]` };
 }
 
 /** Characters one read_slides call may return, before it pages. */

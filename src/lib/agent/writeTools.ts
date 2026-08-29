@@ -62,6 +62,7 @@ import { IMAGE_EXT_LIST, isImagePath } from "../fs/images";
 import { readDirRecursive, type FileNode } from "../project";
 import { backupFile, backupFileByMove } from "./backup";
 import { countLines, describeEditTarget, findOccurrences, occurrenceAt, sliceLines } from "./editApply";
+import { echoRegion, lineOfOffset, shiftNote } from "./lineEcho";
 import {
   LORE_PLAN_ACTIONS,
   LORE_PLAN_TARGETS,
@@ -2401,6 +2402,82 @@ export async function deleteDirectoryTool(
   );
 }
 
+// ─── the applied-region receipt ──────────────────────────────────────────────
+
+/**
+ * What an approved write hands back instead of "re-read before naming another
+ * range": where the change now sits, what moved, and what the file says there.
+ *
+ * The shift is measured from the file — `countLines(after) - countLines(before)`
+ * — rather than reasoned about from the text that was sent. That is not
+ * fastidiousness: a replacement's line span depends on whether it ends in a
+ * newline, whether the slice it replaced did, and whether the tool restored a
+ * terminator the model omitted, and each of those is a place to be off by one.
+ * An off-by-one here is silent and lands the *next* edit on the wrong lines.
+ * The file already knows the answer.
+ *
+ * Read back rather than reconstructed for the same reason: this shows what
+ * actually landed, which is the only version that can catch an apply that did
+ * something other than what the model expected.
+ *
+ * Best-effort by design — a failed read must never turn a write that succeeded
+ * into a tool result that reads like a failure, so it degrades to nothing at
+ * all. The line before it already reports the range that was rewritten.
+ */
+async function appliedReceipt(
+  path: string,
+  before: string,
+  from: number,
+  oldTo: number,
+): Promise<string> {
+  let after: string;
+  try {
+    after = await readFile(path);
+  } catch {
+    return "";
+  }
+  const shift = countLines(after) - countLines(before);
+  const newTo = oldTo + shift;
+  return ` ${shiftNote(from, newTo, shift)}\n\n${echoRegion(after, from, newTo)}`;
+}
+
+/**
+ * The same receipt for `propose_edit`, which names its target by text rather than
+ * by line — so where the change landed has to be derived from the occurrence.
+ *
+ * `replace_all` over several occurrences is the one case that gets no receipt and
+ * an explicit instruction to re-read: the shifts accumulate down the file, so
+ * there is no single region to show and no single number that describes what
+ * moved. Saying so is the honest answer; inventing one would be the dangerous
+ * one, because a wrong line range does not fail — it edits the wrong place.
+ */
+async function editReceipt(
+  path: string,
+  before: string,
+  find: string,
+  target: number | "all" | undefined,
+): Promise<string> {
+  const positions = findOccurrences(before, find);
+  if (target === "all" && positions.length > 1) {
+    return (
+      ` ${positions.length} places changed, so line numbers below the first one have all moved —` +
+      " read the file again before naming a line range."
+    );
+  }
+  const at = positions[target === "all" || target === undefined ? 0 : target - 1];
+  if (at === undefined) return "";
+
+  // Everything before the occurrence is untouched, so its offset means the
+  // same thing in both versions of the file — which is what lets the region be
+  // located in the old text and the shift be measured from the new.
+  return appliedReceipt(
+    path,
+    before,
+    lineOfOffset(before, at),
+    lineOfOffset(before, at + Math.max(0, find.length - 1)),
+  );
+}
+
 // ─── propose_edit ────────────────────────────────────────────────────────────
 
 /** Count non-overlapping occurrences of `find` in `text`. */
@@ -2497,7 +2574,8 @@ export async function proposeEditTool(
     toolCallId,
     content:
       `Edit approved and applied${scope ? ` (${scope})` : ""}.` +
-      (decision.backupPath ? ` Previous version backed up to ${decision.backupPath}.` : ""),
+      (decision.backupPath ? ` Previous version backed up to ${decision.backupPath}.` : "") +
+      (await editReceipt(path, content, args.find, target)),
   };
 }
 
@@ -2608,10 +2686,10 @@ export async function rewriteLinesTool(
     toolCallId,
     content:
       `Rewrote lines ${from}-${slice.to} of ${target.path} (${slice.text.length} → ${replacement.length} chars, ` +
-      `${grew >= 0 ? "+" : ""}${grew}). The rest of the file is untouched — re-read around the region before ` +
-      `naming another range, since the line numbers after it have shifted.` +
+      `${grew >= 0 ? "+" : ""}${grew}). The rest of the file is untouched.` +
       (decision.auto ? " Applied under a standing grant — nobody read it." : "") +
-      (decision.backupPath ? ` Previous version backed up to ${decision.backupPath}.` : ""),
+      (decision.backupPath ? ` Previous version backed up to ${decision.backupPath}.` : "") +
+      (await appliedReceipt(target.path, original, from, slice.to)),
   };
 }
 

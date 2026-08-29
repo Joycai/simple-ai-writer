@@ -130,6 +130,14 @@ import { estimateToolsTokens } from "../ai/tokenEstimate";
  * export pays 0 of these 274. What this cap measures is the all-three-Betas-on
  * worst case. Headroom 65: the next tool that lands here needs a wider read
  * than a wider number.
+ *
+ * **Still 15,135** after the edit-loop work (docs/feature/agent/edit-loop-plan.md),
+ * and that is the design rather than a coincidence: read_file's line numbers,
+ * read_slides' deck index and the receipt an approved write hands back are all
+ * *runtime output*, not schema. With 65 tokens of headroom, "say it in the
+ * result the model is already reading" was the only affordable place to put any
+ * of it — and it is the better place anyway, since the rule then arrives at the
+ * moment it applies instead of thousands of tokens earlier.
  */
 const AGENT_ASSIST_CAP = 15_200;
 /** The read tier a 续写 carries. Measured 1,738. */
