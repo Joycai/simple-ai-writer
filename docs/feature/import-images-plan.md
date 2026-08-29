@@ -1,6 +1,6 @@
 # 导入文档的图片抽取（PDF · docx）
 
-> **Status: `planned`** — 方案已定，未实现。切两片 PR：PR-1 开接缝 + PDF 侧全链路，PR-2 让 docx 复用同一条接缝。实现落地后此行改 `shipped` 并补记出入。
+> **Status: `shipped`** — PR-1（#389：`ConvertResult` 接缝 + PDF 全链路）、PR-2（#390：docx 复用）均已合并，真机验证 2026-08-29 通过。实现出入记在 §8；pptx 抽图（§2 非目标）仍未做。
 
 ## 1. 背景与现状
 
@@ -109,3 +109,14 @@ docx 不需要定位层——图片本来就在 HTML 流里的正确位置。
 - **图片内联 base64 进正文。** `markdown.ts` 里 `dropImages` 的注释已经把它埋了：编辑器、RAG、diff 三处死重。落盘约定就是为此存在的。
 - **资产进统一平铺目录（如 `.ai-writer/media/`）。** 违背 `assets.ts` 的既有理由——按文档分组才能手工整理、删章节时知道哪些图随之作废，且移动/复制/删除的跟随机制（`moveDocumentAssets` 等）只认这套布局。
 - **抽图作为导入后的独立动作（先纯文本导入，再让 agent 补图）。** 定位信息（y 坐标）只在转换现场有，事后补插只能靠猜。
+
+## 8. 实现出入（PR #389 / #390）
+
+按方案落地，出入四条：
+
+- **mammoth 的输入要两个 key 都给。** 它有两副面孔：browser 构建（应用里）只认 `{arrayBuffer}`，Node 构建（vitest 里）只认 `{buffer}`/`{path}`，各自忽略对方的 key。`docxToMarkdown` 因此同时传 `arrayBuffer` 和 `buffer`（声明的 `Input` 类型一次只许一个，带一个 cast）——否则真 mammoth 进不了单测。
+- **不支持的图片格式走「空 src」信道。** 方案 §3.4 没写不支持的 content-type 怎么办；实现里 `imageCollector` 的白名单是应用自己打得开的图（png/jpg/gif/webp，对齐 `lib/fs/images`），白名单外（Office 爱嵌的 EMF/WMF 矢量图）返回空 `src`，由 `markdown.ts` 收窄后的 `dropDataUrlImages` 规则（空 src 或 `data:` 皆删）丢掉。命名计数器只为留下的图前进，文件名不留空洞。
+- **docx 全链路测试靠手写 zip 打包器，不靠检入二进制样本。** §5 说「构造带图 docx 固定样本」；实现是测试文件里 ~50 行的存储式（不压缩）zip 写入器 + 最小 DrawingML 文档，穿过真 mammoth 断言资产字节、相对链接和 alt（取自 `wp:docPr@descr`）。
+- **PDF 胶水层对 `page.objs` 的两种对象形态都接**（新版 pdfjs 的 `{bitmap: ImageBitmap}` 与旧形态 `{data, width, height, kind}`），方案只提了要接、没定形状；全局资源（`g_` 前缀 id）落在 `commonObjs`，也在实现里补上了。
+
+其余与方案一致：三条取舍规则的阈值原样（24pt / 32px / ≥3 页且 ≥30%）、含 alpha → PNG 否则 JPEG 0.9、`p<页>-<序>` 命名、抽取整体 try/catch 丢图不丢文。
