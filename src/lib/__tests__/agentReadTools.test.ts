@@ -384,7 +384,7 @@ describe("search_text", () => {
 
     const out = await search({ query: "断剑" });
 
-    expect(out).toContain("2 matching lines in 2 files");
+    expect(out).toContain("2 matching lines in 2 documents");
     expect(out).toContain(`${PROJECT}/writing/卷一/第1章.md`);
     expect(out).toContain("L2: 他握紧那柄断剑。");
     expect(out).toContain(`${PROJECT}/writing/卷二/第10章.md`);
@@ -413,7 +413,7 @@ describe("search_text", () => {
 
     const out = await search({ query: "断剑", folder: "卷一" });
 
-    expect(out).toContain("in 1 file");
+    expect(out).toContain("in 1 document");
     expect(out).toContain("卷一");
     expect(out).not.toContain("卷二");
   });
@@ -425,7 +425,7 @@ describe("search_text", () => {
 
     const out = await search({ query: "sword" });
 
-    expect(out).toContain("in 2 files"); // .md and .txt count; .png doesn't
+    expect(out).toContain("in 2 documents"); // .md and .txt count; .png doesn't
     expect(out).not.toContain("cover.png");
   });
 
@@ -481,7 +481,7 @@ describe("search_text", () => {
 
     const out = await search({ query: "剑" });
 
-    expect(out).toContain("20 matching lines in 1 file");
+    expect(out).toContain("20 matching lines in 1 document");
     expect(out).toContain("[... 12 more in this file ...]");
     expect(out).toContain("L8:");
     expect(out).not.toContain("L9:");
@@ -494,8 +494,8 @@ describe("search_text", () => {
 
     const out = await search({ query: "剑" });
 
-    expect(out).toContain("80 matching lines in 10 files");
-    expect(out).toContain("40 more matching lines not shown");
+    expect(out).toContain("80 matching lines in 10 documents");
+    expect(out).toContain("40 more matching lines in documents not shown");
   });
 
   it("reports no matches without pretending to have searched nothing", async () => {
@@ -504,7 +504,7 @@ describe("search_text", () => {
     const out = await search({ query: "断剑" });
 
     expect(out).toContain('No matches for "断剑"');
-    expect(out).toContain("1 file searched");
+    expect(out).toContain("1 document and 0 knowledge-base files searched");
   });
 
   it("requires a non-empty query", async () => {
@@ -530,7 +530,7 @@ describe("search_text", () => {
 
     const out = await search({ query: "断剑" });
 
-    expect(out).toContain("in 1 file");
+    expect(out).toContain("in 1 document");
     expect(out).toContain("ch1.md");
   });
 });
@@ -826,6 +826,142 @@ describe("formatLoreIndex", () => {
   it("says so when the active collection is empty rather than looking like an empty project", () => {
     const index = { characters: [{ name: "Aria", summary: "", collections: ["小说A"] }] as never[] };
     expect(formatLoreIndex(index, "小说B")).toContain('No lore entities in the collection "小说B"');
+  });
+});
+
+describe("search_text — 知识库这一侧", () => {
+  /**
+   * 在这一片之前，`.ai-writer/lore/` 对任何搜索都不可见（Rust 的 read_dir_recursive
+   * 跳点目录），于是「哪一条条目提到了青铜钥匙」只能靠逐条 read_lore_entity 试——
+   * 五十条条目就是最多五十轮，每轮重发整份工具 schema。
+   */
+  const LORE = "/proj/.ai-writer/lore";
+  const entity = (
+    name: string,
+    id: string,
+    mdFiles: string[],
+    collections: string[] = [],
+  ) => ({ name, dirPath: `${LORE}/characters/${id}`, mdFiles, images: [], facets: [], collections });
+
+  const KEY = entity("云锦", "yunjin", ["index.md", "outfit.md"]);
+  const OTHER = entity("陆沉", "luchen", ["index.md"]);
+  const withLore = (args: Record<string, unknown>, over: Partial<ToolContext> = {}) =>
+    callFull("search_text", args, { loreIndex: { characters: [KEY, OTHER] } as never, ...over })
+      .then((r) => r.content);
+
+  beforeEach(() => {
+    fs.set(`${KEY.dirPath}/index.md`, "她收着一枚青铜钥匙。");
+    fs.set(`${KEY.dirPath}/outfit.md`, "素色长衫。");
+    fs.set(`${OTHER.dirPath}/index.md`, "无关。");
+  });
+
+  it("finds the entry that mentions a term, without opening entries one by one", async () => {
+    const out = await withLore({ query: "青铜钥匙" });
+
+    expect(out).toContain("Knowledge base — 1 matching line in 1 entry file");
+    expect(out).toContain("云锦 · index.md");
+    expect(out).toContain("> L1: 她收着一枚青铜钥匙。");
+  });
+
+  /**
+   * The label is the whole point: `edit_lore_file` takes entity + file, so a
+   * hit reported as a path would be a coordinate no write tool on that side
+   * accepts — and the model would reach for propose_edit, which refuses
+   * .ai-writer.
+   */
+  it("names the two arguments edit_lore_file actually takes", async () => {
+    const out = await withLore({ query: "青铜钥匙" });
+
+    expect(out).toContain("edit_lore_file's 'entity' and 'file' arguments");
+    expect(out).not.toContain(`${LORE}/characters/yunjin/index.md`);
+  });
+
+  it("keeps the two sides in their own blocks, each with its own counts", async () => {
+    fs.set(`${PROJECT}/writing/ch1.md`, "青铜钥匙躺在桌上。");
+
+    const out = await withLore({ query: "青铜钥匙" });
+
+    expect(out).toContain("1 matching line in 1 document");
+    expect(out).toContain("Knowledge base — 1 matching line in 1 entry file");
+    expect(out.indexOf("/proj/writing/ch1.md")).toBeLessThan(out.indexOf("云锦 · index.md"));
+  });
+
+  /**
+   * A shared cap would let a common word in the manuscript spend the whole
+   * allowance before the entry that *defines* it is ever reported.
+   */
+  it("does not let a flooded manuscript starve the knowledge base", async () => {
+    for (let f = 0; f < 10; f++) {
+      fs.set(`${PROJECT}/writing/ch${f}.md`, Array.from({ length: 8 }, () => "钥匙").join("\n"));
+    }
+    fs.set(`${KEY.dirPath}/index.md`, "她收着一枚钥匙。");
+
+    const out = await withLore({ query: "钥匙" });
+
+    expect(out).toContain("40 more matching lines in documents not shown");
+    expect(out).toContain("云锦 · index.md");
+  });
+
+  /**
+   * The context decision is per section: the manuscript here is past the
+   * threshold and the knowledge base is not, so only one side loses it.
+   */
+  it("still gives the lore hit its context when the manuscript is drowning", async () => {
+    for (let f = 0; f < 10; f++) {
+      fs.set(`${PROJECT}/writing/ch${f}.md`, Array.from({ length: 8 }, () => "钥匙").join("\n"));
+    }
+    fs.set(`${KEY.dirPath}/index.md`, "上一行\n她收着一枚钥匙。\n下一行");
+
+    const out = await withLore({ query: "钥匙" });
+
+    expect(out).toContain("> L2: 她收着一枚钥匙。");
+    expect(out).toContain("  L1: 上一行");
+    expect(out).toContain("  L3: 下一行");
+  });
+
+  it("skips the gallery manifest, which is not prose", async () => {
+    const g = entity("图鉴", "tujian", ["index.md", "images.md"]);
+    fs.set(`${g.dirPath}/index.md`, "无关。");
+    fs.set(`${g.dirPath}/images.md`, "## a.png\n青铜钥匙");
+
+    const out = await callFull(
+      "search_text", { query: "青铜钥匙" }, { loreIndex: { items: [g] } as never },
+    ).then((r) => r.content);
+
+    expect(out).toContain('No matches for "青铜钥匙"');
+  });
+
+  /**
+   * A scan is automatic discovery, which is the one thing 取材范围 narrows —
+   * so the fence holds, and the count of what it held back is reported rather
+   * than hidden (an entry can still be read by name).
+   */
+  it("honours 取材范围 and says how many entries it did not search", async () => {
+    const inScope = entity("云锦", "yunjin", ["index.md"], ["小说A"]);
+    const out = await callFull(
+      "search_text",
+      { query: "青铜钥匙" },
+      { loreIndex: { characters: [inScope, OTHER] } as never, loreScope: "小说A" },
+    ).then((r) => r.content);
+
+    expect(out).toContain("云锦 · index.md");
+    expect(out).toContain('limited to the collection "小说A"');
+    expect(out).toContain("1 further entry is filed elsewhere");
+  });
+
+  /**
+   * A folder is a manuscript path, so narrowing to one is narrowing to that
+   * subtree — not "narrow one side and quietly ignore it on the other". The
+   * miss says so, because that is where the wrong conclusion gets drawn.
+   */
+  it("skips the knowledge base when 'folder' narrows the call, and says it did", async () => {
+    fs.set(`${PROJECT}/卷一/ch1.md`, "无关。");
+
+    const out = await withLore({ query: "青铜钥匙", folder: "卷一" });
+
+    expect(out).toContain('No matches for "青铜钥匙"');
+    expect(out).toContain("The knowledge base was not searched");
+    expect(out).not.toContain("云锦");
   });
 });
 

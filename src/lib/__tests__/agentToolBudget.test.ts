@@ -161,13 +161,26 @@ import { estimateToolsTokens } from "../ai/tokenEstimate";
  * can come out of it without taking capability away; the answer to "the
  * toolset keeps growing" is a narrower *tier*, not a bigger number here.
  * See docs/feature/agent/edit-loop-plan.md §7.
+ *
+ * **15,385** after `search_text` grew to cover the knowledge base (+48; the cap
+ * is unchanged, and this now sits 15 tokens under it). That +48 is the cheapest
+ * thing measured on this line: before it, "which entry mentions the bronze key"
+ * had no search at all — `read_dir_recursive` skips dotfiles, so `.ai-writer/`
+ * was invisible — and was answered by `read_lore_entity` on candidate after
+ * candidate, up to one round of the *whole* schema per entry. A second tool
+ * would have cost ~250 every round to say what this one now says for 48.
+ * See docs/feature/agent/edit-loop-plan.md §10.
+ *
+ * At 15 tokens of headroom the next addition to this preset does not fit at
+ * all. That is the intended state, not a problem to solve by raising the number
+ * again: read §5 of agent-tool-context-lld.md, then put it in a tier.
  */
 const AGENT_ASSIST_CAP = 15_400;
 /**
  * The `write` tier — a task whose product is a document (docs/feature/agent/
- * edit-loop-plan.md §7). **Measured 4,017**, against the assistant's 15,337
- * whole / 9,948 resident: the same run, minus every tool it was never going to
- * call.
+ * edit-loop-plan.md §7). **Measured 4,065** (4,017 before search_text grew),
+ * against the assistant's 15,385 whole / 9,996 resident: the same run, minus
+ * every tool it was never going to call.
  *
  * This is the cap that matters now. The assistant's is a worst case nobody can
  * shrink without taking capability away; this one is the shape a *task* should
