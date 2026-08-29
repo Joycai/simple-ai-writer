@@ -65,6 +65,12 @@ gethostname = "1"
 # date instead of the raw serial number Excel stores it as — without it every
 # date in an imported sheet reads as "45678".
 calamine = { version = "0.36", features = ["chrono"] }
+# .xlsx export (see xlsx_write.rs). Already in the tree as a dev-dependency —
+# it builds the workbooks the import tests read back — so the write side is a
+# promotion rather than a new name. Generating in Rust is right here and wrong
+# for .docx: nothing markdown crosses the IPC boundary, only a grid whose cell
+# types the frontend has already settled.
+rust_xlsxwriter = "0.97"
 # .pptx import + the agent's paged slide reader (see pptx.rs). Already in the
 # tree under calamine at this version, so declaring it directly adds a name to
 # this file and nothing to the build.
@@ -110,11 +116,6 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
 objc2-web-kit = { version = "0.3", default-features = false, features = ["std", "WKWebView", "objc2-app-kit"] }
 
 [dev-dependencies]
-# Builds the workbooks the xlsx.rs round-trip tests read back. Checking a
-# binary .xlsx fixture into the repo would make those tests unreadable and
-# unmaintainable — generating one in the test states the input in the same
-# place as the expectation.
-rust_xlsxwriter = "0.97"
 # Scratch entry directories for the `lorehash.rs` tests — the hash is defined by
 # what is on disk, so the tests have to put things there.
 tempfile = "3"

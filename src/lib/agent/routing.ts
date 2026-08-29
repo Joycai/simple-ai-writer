@@ -5,7 +5,7 @@
  * - If search subagent is active: withhold serverTools from main agent
  * - If vision subagent is active: strip read_image and read_lore_image from main agent
  * - If the imagegen subagent is NOT active: strip the three image tools
- * - If the PPTX export Beta is off: strip export_pptx
+ * - If an export Beta is off: strip its tools (pptx / docx / xlsx)
  * - If the translation Beta is on AND a translation model is bound: append translate
  * - If any delegate-capable subagent is active and workspace exists: append delegate tool
  * - If the surface opts in (it can render the question card): append ask_author
@@ -18,6 +18,7 @@ import type { TaskWorkspaceHandle } from "./taskWorkspace";
 import { subAgentModel, DELEGATE_KINDS, type SubAgentConfig, type SubAgentKind } from "./subagent";
 import { isPptxExportEnabled } from "../pptx/flag";
 import { isDocxExportEnabled } from "../docx/flag";
+import { isXlsxExportEnabled } from "../xlsx/flag";
 import { isTranslateEnabled } from "../translate/flag";
 import type { Model } from "../ai/configDb";
 
@@ -131,6 +132,9 @@ function route(
   if (!isDocxExportEnabled()) {
     const wordTools = new Set<ToolId>(["export_docx", "read_doc_format"]);
     tools = tools.filter((t) => !wordTools.has(t));
+  }
+  if (!isXlsxExportEnabled()) {
+    tools = tools.filter((t) => t !== "export_xlsx");
   }
 
   // If any delegate-capable subagent is enabled and we have an

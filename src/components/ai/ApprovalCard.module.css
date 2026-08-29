@@ -427,6 +427,50 @@
 /* 这次被改过的那一行提亮——「和平常不一样的是哪两条」要在表里也看得见 */
 .docxSpecValueChanged { color: var(--color-text-primary); }
 
+/* 工作表清单：一行一张表。左边是名字（作者拿它去 Excel 里找），右边贴边的是
+   类型统计——这张卡唯一替作者核对的事就是「数字有没有被当成数字」，所以那组
+   数字要靠右站成一列，扫一眼就能发现其中一张写着「数字 0」。 */
+.xlsxSheets {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space-3) 0 var(--space-1);
+}
+
+.xlsxSheet {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.xlsxSheetName {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--color-text-primary);
+  overflow-wrap: anywhere;
+}
+
+.xlsxSheetSize {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-text-hint);
+  white-space: nowrap;
+}
+
+.xlsxTypes {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+/* 一个格子都没被判成数字——多半是表里带了单位或千分位以外的写法。不报错，
+   只是安静下去，让它和旁边有数字的那几行拉开。 */
+.xlsxTypeZero { color: var(--color-text-hint); }
+
 .docxFontNote {
   font-family: var(--font-mono);
   font-size: 10.5px;

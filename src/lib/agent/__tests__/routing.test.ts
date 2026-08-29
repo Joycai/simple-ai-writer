@@ -12,6 +12,10 @@ vi.mock("../../pptx/flag", () => ({ isPptxExportEnabled: () => beta.on }));
 const docxBeta = { on: false };
 vi.mock("../../docx/flag", () => ({ isDocxExportEnabled: () => docxBeta.on }));
 
+/** Same, for the Excel-export Beta. */
+const xlsxBeta = { on: false };
+vi.mock("../../xlsx/flag", () => ({ isXlsxExportEnabled: () => xlsxBeta.on }));
+
 /** Same, for the translation Beta. */
 const translateBeta = { on: false };
 vi.mock("../../translate/flag", () => ({ isTranslateEnabled: () => translateBeta.on }));
@@ -58,6 +62,7 @@ describe("routeTools", () => {
     (t) => !["generate_image", "edit_image", "redraw_lore_image"].includes(t)
       && t !== "export_pptx"
       && t !== "export_docx"
+      && t !== "export_xlsx"
       && t !== "read_doc_format",
   );
 
@@ -299,14 +304,31 @@ describe("the PPTX export Beta gate", () => {
     }
   });
 
-  it("the two Beta exports are independent switches", () => {
-    // One Beta turning on must not drag the other in: they are separate
-    // features and an author who wants slides has not asked for Word.
+  it("withholds export_xlsx entirely while its own switch is off", () => {
+    xlsxBeta.on = false;
+    expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS).tools).not.toContain("export_xlsx");
+  });
+
+  it("offers export_xlsx once the author turns it on", () => {
+    xlsxBeta.on = true;
+    try {
+      expect(routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS).tools).toContain("export_xlsx");
+      expect(routePlannedTools(AGENT_ASSIST_PRESET, allDisabled, MODELS).tools).toContain("export_xlsx");
+    } finally {
+      xlsxBeta.on = false;
+    }
+  });
+
+  it("the three Beta exports are independent switches", () => {
+    // One Beta turning on must not drag the others in: they are separate
+    // features, and an author who wants slides has asked for neither Word nor
+    // Excel.
     beta.on = true;
     try {
       const tools = routeTools(AGENT_ASSIST_PRESET, allDisabled, WS, MODELS).tools;
       expect(tools).toContain("export_pptx");
       expect(tools).not.toContain("export_docx");
+      expect(tools).not.toContain("export_xlsx");
     } finally {
       beta.on = false;
     }

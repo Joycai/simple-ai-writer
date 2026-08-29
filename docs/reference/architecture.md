@@ -745,6 +745,34 @@ The workspace is the **whole project directory** — documents live wherever the
 
 设计、被否掉的方案（让模型写 Python 转换、slides markdown、模型直接调 pptx 工具、整页截图）、以及验证时抓到的三个 bug：`docs/feature/pptx-plan.md` §4。
 
+### markdown 表格 → XLSX 导出（Beta）
+
+同一条分工的第三次应用：**模型写 markdown 表格，转换一步不经过模型**。一张表格变成一个
+工作表，名字取自它上面最近的那个标题——和导入侧（`xlsx.rs` 把工作簿写成 `## 工作表名` +
+表格）严格对称，所以作者见过这个形状。
+
+- **实质在类型判定**（`lib/xlsx/cells.ts`）：一份所有格子都是文本的 .xlsx 不是电子表格，
+  是表格的截图——求和不出数、排序按字典序。所以数字、百分数、ISO 日期、`=` 开头的公式
+  都写成真类型。**兜底方向永远是「判不出来就留成文本」**：把文本错判成数字是**静默的**
+  数据损坏（`007` → `7`，18 位身份证末三位 → `000`），反过来作者一眼就看见。因此前导零、
+  15 位以上的数字串、带单位的 `12000元` 一律不转；百分数存 `0.12` 而不是 `12`，否则整列
+  求和错一个数量级而单元格显示照常。
+- **生成在 Rust**（`src-tauri/src/xlsx_write.rs`，`rust_xlsxwriter`，此前已作为 dev-dependency
+  给导入侧的往返测试造 fixture）。这和 docx「生成在 TS」是**同一条**规则——跟着已有的那
+  一份走：docx 要生成就得先解析 markdown，而方言在 TS；这里方言一个字都不过界，`sheets.ts`
+  和 `cells.ts` 已经把格子定型，Rust 侧不解析任何 markdown。字节按 base64 回来。
+- **工作簿在提案时就建好**，落盘时不再读源文件——pptx 必须等批准后才能转（它得先有 DOM
+  才能量版面），而这条链上没有这种约束，于是「作者批的」和「写下去的」严格是同一本。
+- **审批卡一行一张工作表**：名字、`行×列`、以及被判成数字/日期/公式的格子数。可审的是
+  **判断**而不是字节：一张报价表写着「数字 0」在卡上一眼可见，所以那一栏为 0 时也照显示。
+- **入口只有 `export_xlsx`**（L2 审批），Beta 关时 `routeTools` 直接把它删掉。导出菜单里
+  没有对应项——同 docx，出口是 agent。
+- **公式不带缓存结果**：Excel / LibreOffice 打开时自己算，只读存储值的预览器在那之前显示
+  空白。这一条报给模型让它转告作者，不绕开——绕开意味着这个 app 自己实现电子表格求值。
+
+设计、五个「看起来对其实是数据损坏」的细节、四条弃案（JSON 网格进工具参数 / HTML 表格 /
+合并成一个 `export_document` / 一期不做的合并单元格与公式块回读）：`docs/feature/xlsx-export-plan.md`。
+
 ### Export / Import (lore bundles & config backup)
 - **Lore bundle** (`src/lib/lore/transfer.ts`, UI in `LoreWall`): a zip with root `manifest.json` + the whole on-disk `.ai-writer/lore/` tree under `lore/…` — *all* categories on disk, not just the active profile's, so bundles survive profile switches. Import is two-phase: `stageLoreImport` extracts into `.ai-writer/lore-import-tmp` and reports conflicts; `applyLoreImport` moves entity dirs in under a user-chosen strategy (skip / overwrite / keep-both via `uniqueEntityId`), then deletes the staging dir. **Overwrite displaces rather than deletes**: the entity being replaced is renamed into `.ai-writer/backups/replaced-<ts>-<category>-<id>` (the same directory `delete_lore_entity` uses), and if the move-in then fails it is renamed back. The previous `removeDir`-then-`rename` both destroyed an entry — gallery images included — with no undo, and left a window where a failed rename lost the folder from both places. Categories that fail `CATEGORY_ID_RE` are ignored.
 - **Project backup** (`src/lib/fs/projectBackup.ts`, UI in Settings → 工作台): the whole project folder as one zip under `project/…` + root `manifest.json` (`kind: "ai-writer-project-bundle"`). Scope is deliberately wider than the lore bundle — `profile.json`, `outline.json`, `.ai-writer/memory/`, `imagegen.json` and each document's `assets/` are all things *the model sees*, so a project missing them behaves differently with nothing on screen saying why. `PROJECT_BACKUP_EXCLUDES` drops `.ai-writer/backups`, the scratch/staging dirs, the SQLite `-wal`/`-shm` sidecars, `.git` and `node_modules`; `project.db` is WAL-checkpointed first (`PRAGMA wal_checkpoint(TRUNCATE)` via `select`, best-effort) so the single archived file is complete. Restore takes an **empty** folder picked through `project_open_dialog` (which is also what allows it as an fs root), and `zip_import_dialog` is given `requireManifestKind` so a wrong zip is refused before a single file is written. Not included: `config.db` and the keyring — those belong to the installation, and the UI says so.

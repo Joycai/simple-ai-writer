@@ -27,6 +27,7 @@ import type {
   IllustrateProposal,
   PptxProposal,
   DocxProposal,
+  XlsxProposal,
   MoveProposal,
   Proposal,
 } from "../../lib/agent/registry";
@@ -73,6 +74,8 @@ function headerTitle(proposal: Proposal, t: TFunction, terms: ResolvedTerms): st
       return t("ai.approval.titlePptx");
     case "docx":
       return t("ai.approval.titleDocx");
+    case "xlsx":
+      return t("ai.approval.titleXlsx", { defaultValue: "导出 Excel" });
   }
 }
 
@@ -114,6 +117,13 @@ function headerMeta(proposal: Proposal, t: TFunction): string {
       // size of what is being converted. The *format* is the thing to weigh
       // here, and it gets the band below rather than this one line.
       return `${kilo(proposal.sourceChars)} ${chars}`;
+    case "xlsx":
+      // 工作表数是这张卡最上面该有的那个数：它是「这份文档被读成了几张表」的
+      // 全部答案，而每张表多大、格子被判成了什么在下面逐行写着。
+      return t("ai.approval.xlsxSheetCount", {
+        n: proposal.summaries.length,
+        defaultValue: "{{n}} 个工作表",
+      });
   }
 }
 
@@ -387,6 +397,63 @@ function DocxBody({ proposal }: { proposal: DocxProposal }) {
 }
 
 /**
+ * 导出 Excel。
+ *
+ * 这张卡要替作者核对的只有一件事，而它恰恰是打开 Excel 之前唯一看不出来的：
+ * **数字有没有被当成数字**。所以每张工作表一行，右边写着这张表里有多少个格子
+ * 被判成了数字 / 日期 / 公式——一张明明是报价表却写着「数字 0」的表，在这里
+ * 一眼就能看见，而不是等到求和栏里出现 0 才发现。
+ *
+ * 表格之外的段落不进工作簿（工作表没有地方放一段话），所以最后那句把跳过的
+ * 东西数出来：悄悄扔掉才是错的。
+ */
+function XlsxBody({ proposal }: { proposal: XlsxProposal }) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <div className={styles.moveBlock}>
+        <span className={styles.movePath}>{projectRelative(proposal.sourcePath)}</span>
+        <ArrowRight size={12} className={styles.moveArrow} />
+        <span className={styles.movePath}>{projectRelative(proposal.path)}</span>
+      </div>
+
+      <div className={styles.xlsxSheets}>
+        {proposal.summaries.map((sheet, i) => (
+          <div key={i} className={styles.xlsxSheet}>
+            <span className={styles.xlsxSheetName}>{sheet.name}</span>
+            <span className={styles.xlsxSheetSize}>
+              {sheet.rows}×{sheet.cols}
+            </span>
+            <span className={styles.xlsxTypes}>
+              <span className={sheet.numbers === 0 ? styles.xlsxTypeZero : undefined}>
+                {t("ai.approval.xlsxNumbers", { n: sheet.numbers, defaultValue: "数字 {{n}}" })}
+              </span>
+              {sheet.dates > 0 && (
+                <span>{t("ai.approval.xlsxDates", { n: sheet.dates, defaultValue: "日期 {{n}}" })}</span>
+              )}
+              {sheet.formulas > 0 && (
+                <span>
+                  {t("ai.approval.xlsxFormulas", { n: sheet.formulas, defaultValue: "公式 {{n}}" })}
+                </span>
+              )}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {proposal.skipped.length > 0 && (
+        <div className={styles.emptyNote}>
+          {t("ai.approval.xlsxSkipped", {
+            what: proposal.skipped.join("、"),
+            defaultValue: "不会进工作簿：{{what}}",
+          })}
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
  * Source → destination folder. The copy's decision is only "should this exist
  * twice" — no content to weigh, so the card stays two lines plus the note
  * that a name collision auto-numbers rather than overwrites.
@@ -528,6 +595,8 @@ function ProposalBody({ proposal }: { proposal: Proposal }) {
       return <PptxBody proposal={proposal} />;
     case "docx":
       return <DocxBody proposal={proposal} />;
+    case "xlsx":
+      return <XlsxBody proposal={proposal} />;
   }
 }
 
