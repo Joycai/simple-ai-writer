@@ -1608,6 +1608,81 @@ describe("write receipts", () => {
     expect(res.content).toContain("read the file again");
     expect(res.content).not.toContain("It now occupies");
   });
+
+  /**
+   * A create is the one write whose content the model knows perfectly and whose
+   * coordinates it does not know at all — so the map rides back with it rather
+   * than costing a round to read a file the model just wrote itself.
+   */
+  describe("a create hands back the map of what it made", () => {
+    const writing = () =>
+      makeCtx({
+        requestApproval: async (p) => {
+          const proposal = p as { path: string; content?: string };
+          fs.set(proposal.path, proposal.content ?? "");
+          return { approved: true };
+        },
+      });
+
+    const SKELETON = "# 报告\n\n## 背景\n\n## 风险\n\n## 结论\n";
+
+    it("create_file: the line count and where the headings landed", async () => {
+      const res = await run(
+        "create_file", { path: `${PROJECT}/报告.html`, content: SKELETON }, writing(),
+      );
+
+      expect(res.content).toContain("It is 7 lines long.");
+      expect(res.content).toContain("L3  背景");
+      expect(res.content).toContain("L7  结论");
+    });
+
+    it("create_chapter: the same map, so a section can be named either way", async () => {
+      const res = await run(
+        "create_chapter", { path: `${PROJECT}/writing/新章.md`, content: SKELETON }, writing(),
+      );
+
+      expect(res.content).toContain("It is 7 lines long.");
+      expect(res.content).toContain("L5  风险");
+    });
+
+    // Below `INDEX_MIN_HEADINGS`, and for .json/.csv, an index is noise — but
+    // the line count is what `rewrite_lines` needs and is always worth its ~5
+    // tokens.
+    it("gives the count alone when there is no heading structure to map", async () => {
+      const res = await run(
+        "create_file", { path: `${PROJECT}/data.csv`, content: "a,b\n1,2\n" }, writing(),
+      );
+
+      expect(res.content).toContain("It is 2 lines long.");
+      expect(res.content).not.toContain("Headings in this file");
+    });
+
+    // Measured from the file, not counted off the argument: the two differ
+    // whenever a trailing newline is normalised, and being off by one here is
+    // silent (edit-loop-plan.md I3).
+    it("counts the file that landed, not the string that was sent", async () => {
+      const ctx = makeCtx({
+        requestApproval: async (p) => {
+          const proposal = p as { path: string; content?: string };
+          fs.set(proposal.path, `${(proposal.content ?? "").trimEnd()}\n\n<!-- stamped -->\n`);
+          return { approved: true };
+        },
+      });
+
+      const res = await run("create_file", { path: `${PROJECT}/x.html`, content: "一\n二\n" }, ctx);
+
+      expect(res.content).toContain("It is 4 lines long.");
+    });
+
+    it("says nothing about a file the author rejected", async () => {
+      const ctx = makeCtx({ requestApproval: async () => ({ approved: false, reason: "不用了" }) });
+
+      const res = await run("create_file", { path: `${PROJECT}/x.md`, content: SKELETON }, ctx);
+
+      expect(res.content).toContain("REJECTED");
+      expect(res.content).not.toContain("lines long");
+    });
+  });
 });
 
 // ─── rewrite_lines ───────────────────────────────────────────────────────────
