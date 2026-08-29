@@ -162,9 +162,9 @@ export interface ConvertResult {
  *
  * `assetRelDir` is the document-relative folder image links point at
  * ("assets/<group>") — computable before conversion because the import loop
- * fixes the target path first. Only the pdf converter extracts images today;
- * the others return an empty asset list (docx is the planned next slice —
- * docs/feature/import-images-plan.md §6).
+ * fixes the target path first. The pdf and docx converters extract images;
+ * xlsx and pptx return an empty asset list (pptx converts in Rust — its
+ * extraction is a slice of its own, docs/feature/import-images-plan.md §2).
  */
 export async function convertToMarkdown(
   ext: ConvertExt,
@@ -174,7 +174,7 @@ export async function convertToMarkdown(
   switch (ext) {
     case "docx": {
       const { docxToMarkdown } = await import("./docx");
-      return { markdown: await docxToMarkdown(data), assets: [] };
+      return docxToMarkdown(data, assetRelDir);
     }
     case "xlsx":
       return { markdown: tidyMarkdown(await xlsxToMarkdown(data)), assets: [] };

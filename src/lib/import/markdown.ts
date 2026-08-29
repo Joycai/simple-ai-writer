@@ -22,12 +22,18 @@ function turndown(): TurndownService {
     bulletListMarker: "-",
   });
   service.use(gfm);
-  // Word documents arrive with images inlined as base64 data URLs. A data URL
-  // in the middle of a line is dead weight for the editor, the RAG context and
-  // the diff view alike — the imported markdown is source *text*, so images
-  // are dropped rather than materialised as files.
-  service.addRule("dropImages", {
-    filter: "img",
+  // Images whose src is a data URL — or nothing at all — are dropped. The
+  // docx path materialises pictures as files and links them relatively
+  // (`docx.ts`), so a data URL reaching this pass means something upstream
+  // didn't, and inlining megabytes of base64 into the editor, the RAG context
+  // and the diff view is never the right fallback. An empty src is the docx
+  // collector's "unsupported format" signal (EMF/WMF and friends).
+  service.addRule("dropDataUrlImages", {
+    filter: (node) => {
+      if (node.nodeName !== "IMG") return false;
+      const src = node.getAttribute("src") ?? "";
+      return src === "" || src.startsWith("data:");
+    },
     replacement: () => "",
   });
   return service;

@@ -6,6 +6,7 @@
  * pure layers.
  */
 import { describe, expect, it } from "vitest";
+import { docxToMarkdown, imageCollector } from "../import/docx";
 import { htmlToMarkdown, tidyMarkdown } from "../import/markdown";
 import {
   itemsToLines,
@@ -46,14 +47,21 @@ describe("htmlToMarkdown", () => {
     expect(md).toMatch(/\| ---/);
   });
 
-  it("drops images instead of inlining data URLs", () => {
+  it("drops data-URL and src-less images, never inlining base64", () => {
     const md = htmlToMarkdown(
-      '<p>前文</p><p><img src="data:image/png;base64,AAAA" alt="盖章页"></p><p>后文</p>',
+      '<p>前文</p><p><img src="data:image/png;base64,AAAA" alt="盖章页"><img alt="EMF 图表"></p><p>后文</p>',
     );
     expect(md).not.toContain("data:image");
     expect(md).not.toContain("![");
     expect(md).toContain("前文");
     expect(md).toContain("后文");
+  });
+
+  it("keeps file-linked images with their alt text", () => {
+    const md = htmlToMarkdown(
+      '<p>前文</p><p><img src="assets/bid/img-1.png" alt="盖章页"></p>',
+    );
+    expect(md).toContain("![盖章页](assets/bid/img-1.png)");
   });
 
   it("collapses the blank runs image removal leaves behind", () => {
@@ -170,6 +178,146 @@ describe("pageToMarkdown image placement", () => {
     expect(md).toBe(
       "![](assets/bid/p1-1.jpg)\n\n第一段第一行\n第一段第二行\n\n第二段",
     );
+  });
+});
+
+describe("docx image collector", () => {
+  it("names images in document order and percent-encodes the link", () => {
+    const c = imageCollector("assets/标书");
+    expect(c.collect("image/png", new Uint8Array([1]))).toEqual({
+      src: "assets/%E6%A0%87%E4%B9%A6/img-1.png",
+    });
+    expect(c.collect("image/jpeg", new Uint8Array([2])).src).toContain("img-2.jpg");
+    expect(c.assets.map((a) => a.name)).toEqual(["img-1.png", "img-2.jpg"]);
+  });
+
+  it("signals unsupported formats with an empty src, keeping no bytes", () => {
+    const c = imageCollector("assets/bid");
+    // EMF/WMF — the vector drawings Office embeds for charts and formulas.
+    expect(c.collect("image/x-emf", new Uint8Array([1]))).toEqual({ src: "" });
+    expect(c.collect("image/png", new Uint8Array())).toEqual({ src: "" });
+    expect(c.assets).toEqual([]);
+    // The counter only advances for kept images — no gaps in the names.
+    expect(c.collect("image/png", new Uint8Array([1])).src).toContain("img-1.png");
+  });
+});
+
+/**
+ * Minimal stored (uncompressed) zip writer — enough of the format for a
+ * hand-built .docx fixture, so the mammoth image path is tested end to end
+ * without a binary checked into the repo.
+ */
+function storedZip(entries: Array<[string, Uint8Array]>): Uint8Array {
+  const crcTable = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+  });
+  const crc32 = (data: Uint8Array) => {
+    let c = 0xffffffff;
+    for (const byte of data) c = crcTable[(c ^ byte) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunks: number[] = [];
+  const push = (bytes: number[] | Uint8Array) => chunks.push(...bytes);
+  const u16 = (v: number) => [v & 0xff, (v >> 8) & 0xff];
+  const u32 = (v: number) => [v & 0xff, (v >> 8) & 0xff, (v >> 16) & 0xff, (v >>> 24) & 0xff];
+  const central: number[] = [];
+  for (const [name, data] of entries) {
+    const nameBytes = new TextEncoder().encode(name);
+    const crc = crc32(data);
+    const offset = chunks.length;
+    push(u32(0x04034b50));
+    push(u16(20)); // version needed
+    push(u16(0)); // flags
+    push(u16(0)); // method: stored
+    push(u32(0)); // dos time+date
+    push(u32(crc));
+    push(u32(data.length));
+    push(u32(data.length));
+    push(u16(nameBytes.length));
+    push(u16(0)); // extra
+    push(nameBytes);
+    push(data);
+    central.push(
+      ...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0), ...u16(0),
+      ...u32(0), ...u32(crc), ...u32(data.length), ...u32(data.length),
+      ...u16(nameBytes.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0),
+      ...u32(0), ...u32(offset), ...nameBytes,
+    );
+  }
+  const cdOffset = chunks.length;
+  push(central);
+  push(u32(0x06054b50));
+  push(u16(0));
+  push(u16(0));
+  push(u16(entries.length));
+  push(u16(entries.length));
+  push(u32(central.length));
+  push(u32(cdOffset));
+  push(u16(0)); // comment length
+  return new Uint8Array(chunks);
+}
+
+describe("docxToMarkdown", () => {
+  const xml = (s: string) => new TextEncoder().encode(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${s}`);
+  const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const fixture = storedZip([
+    [
+      "[Content_Types].xml",
+      xml(
+        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+          '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+          '<Default Extension="xml" ContentType="application/xml"/>' +
+          '<Default Extension="png" ContentType="image/png"/>' +
+          '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+          "</Types>",
+      ),
+    ],
+    [
+      "_rels/.rels",
+      xml(
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+          '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+          "</Relationships>",
+      ),
+    ],
+    [
+      "word/_rels/document.xml.rels",
+      xml(
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+          '<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/>' +
+          "</Relationships>",
+      ),
+    ],
+    [
+      "word/document.xml",
+      xml(
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"' +
+          ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"' +
+          ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"' +
+          ' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"' +
+          ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+          "<w:body>" +
+          "<w:p><w:r><w:t>前文</w:t></w:r></w:p>" +
+          '<w:p><w:r><w:drawing><wp:inline><wp:docPr id="1" name="图1" descr="盖章页"/>' +
+          '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+          '<pic:pic><pic:blipFill><a:blip r:embed="rId4"/></pic:blipFill></pic:pic>' +
+          "</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>" +
+          "<w:p><w:r><w:t>后文</w:t></w:r></w:p>" +
+          "</w:body></w:document>",
+      ),
+    ],
+    ["word/media/image1.png", pngBytes],
+  ]);
+
+  it("lands the embedded picture as an asset and a relative link", async () => {
+    const { markdown, assets } = await docxToMarkdown(fixture, "assets/标书");
+    expect(assets).toEqual([{ name: "img-1.png", bytes: pngBytes }]);
+    expect(markdown).toContain("前文");
+    expect(markdown).toContain("![盖章页](assets/%E6%A0%87%E4%B9%A6/img-1.png)");
+    expect(markdown).toContain("后文");
+    expect(markdown).not.toContain("data:image");
   });
 });
 
