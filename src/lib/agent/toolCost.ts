@@ -23,7 +23,7 @@ import type { Model } from "../ai/configDb";
 import { loreCategoryIds } from "../profile/active";
 import { inputCeilingFor } from "../context/budget";
 import type { TaskPreset } from "./presets";
-import { getToolDefinitions, type ToolId } from "./registry";
+import { getToolDefinitions, partitionByGroup, type ToolId } from "./registry";
 import { routePlannedTools, type RouteOptions } from "./routing";
 import type { SubAgentConfig, SubAgentKind } from "./subagent";
 
@@ -71,6 +71,21 @@ export function handoffToolTokens(): number {
  * vision subagent is live, drops `export_pptx` / `export_docx` / `export_xlsx`
  * when their Beta switches are off, and appends `delegate`. A budget taken from the unrouted preset describes a
  * request nobody sends.
+ *
+ * And measured off the **resident** half of that toolset only. The deferred
+ * groups (`lore_write` / `lore_organize`) load when the author approves a lore
+ * plan, and the plan gate is created fresh for every run (`createPlanGate()` in
+ * the stores) — so a request planned *before* a run starts cannot be carrying
+ * them, ever. Counting them anyway is what this used to do, and it made every
+ * assistant meter over-report by ~5.4k: on a 32k local model that was the
+ * difference between "the knowledge base gets a layer" and "the knowledge base
+ * gets zero", charged against schemas that were not on the wire.
+ *
+ * A mid-run plan approval does grow the toolset past this number. That case is
+ * the runtime's to handle, and it does: `runAgent` shrinks its own message
+ * ceiling by the loaded group's measured cost at the moment it loads
+ * (edit-loop-plan.md §13) — the one place that *knows* the load happened,
+ * where a planner can only guess.
  */
 export function plannedToolTokens(
   preset: TaskPreset | null,
@@ -80,8 +95,9 @@ export function plannedToolTokens(
 ): number {
   if (!preset) return 0;
   const routed = routePlannedTools(preset, subs, models, options);
+  const { resident } = partitionByGroup(routed.tools);
   return (
-    toolTokensOf(routed.tools) +
+    toolTokensOf(resident) +
     (routed.finishPolicy === "handoff" ? handoffToolTokens() : 0)
   );
 }

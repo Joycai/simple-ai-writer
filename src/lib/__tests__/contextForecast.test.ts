@@ -63,10 +63,12 @@ describe("预估读的是**会跑的那个任务**", () => {
 
     expect(seg(shown, "lore")).toBe(4_000);
     expect(seg(shown, "recent")).toBeGreaterThan(4_000);
-    // 工具折进「系统+工具」段，所以看差值：真正跑的那个多带了整个助手工具集。
-    expect(seg(real, "system") - seg(shown, "system")).toBeGreaterThan(9_000);
-    expect(seg(real, "lore")).toBe(0);
-    expect(seg(real, "recent")).toBeLessThan(1_000);
+    // 工具折进「系统+工具」段，所以看差值：真正跑的那个多带了助手工具集的**常驻**
+    // 那半（延迟组在方案批准前不上线，预估不再把它算满——§13）。
+    expect(seg(real, "system") - seg(shown, "system")).toBeGreaterThan(5_000);
+    // 知识库和参考窗口都被工具集挤小了——这正是取错任务对象时面板骗人的方式。
+    expect(seg(real, "lore")).toBeLessThan(seg(shown, "lore"));
+    expect(seg(real, "recent")).toBeLessThan(seg(shown, "recent") / 2);
     // 上限没变——变的是这条上限里还剩下什么。
     expect(real.ceilingTokens).toBe(shown.ceilingTokens);
   });
@@ -116,18 +118,19 @@ describe("条的几何", () => {
   });
 
   /**
-   * 32k 的本地模型上，**助手的工具 schema 已经吃掉整个输入预算**。
+   * 32k 的本地模型上，助手档现在**装得下了，而且知识库分到了预算**。
    *
-   * 这不是这条用例发现的边角：`agent` 档的工具表实测 15.3k，而这里的模型
-   * （32k × 0.5 利用率）只有 14k 能花在输入上——固定成本还没算进去就已经超了。
-   * 大模型上无关紧要，小模型上它意味着知识库分到零。钉在这里是为了让「工具集
-   * 又长了」在这个尺度上有一个会说话的地方，而不是只在棘轮里变成一个更大的数
-   * 字：真正的答案是按任务收窄工具集（见 docs/feature/agent/edit-loop-plan.md §7）。
+   * 这条用例的上一版钉的是相反的事实（over=true、知识库为零），而那一半是虚
+   * 的：预估把 `lore_write` 那组延迟装载的工具也算满了，可方案闸门每次运行都
+   * 新建，**任何一条在运行之前规划的请求都不可能带着它们**。修掉之后（见
+   * docs/feature/agent/edit-loop-plan.md §13），同一个模型、同一份任务，知识库
+   * 从零变成有——这正是那 5.4k 的虚报此前一直在吃掉的东西。方案批准后中途装载
+   * 的那次增长由 runtime 自己收缩 ceiling 兜住，不再摊进每一次预估。
    */
-  it("小模型上 agent 档的工具表就已经超出输入上限", () => {
+  it("小模型上 agent 档现在装得下，知识库不再分到零", () => {
     const f = planForecast(input({ runTask: taskById("agent") }))!;
-    expect(f.over).toBe(true);
-    expect(seg(f, "free")).toBe(0);
+    expect(f.over).toBe(false);
+    expect(seg(f, "lore")).toBeGreaterThan(2_000);
   });
 
   /**
@@ -193,17 +196,20 @@ describe("条的几何", () => {
    * 收窄工具集的整个理由，钉成一个数。
    *
    * 同一个模型、同一份指令，只有档位不同：`write` 档不带知识库写工具、生图、
-   * memory 和另外两条导出线，于是它的工具段明显更短，「余量」也就真的还剩下
-   * 一些——而 `agent` 在这个 32k 的模型上已经把上限吃光了。
+   * memory 和另外两条导出线，于是它的工具段明显更短。预估改按常驻算之后
+   * （§13）full 档在 32k 上不再直接爆表，但差距仍然是真金白银：full 把 14k 的
+   * 上限用到一字不剩（free=0，知识库被挤小），write 还真的剩下余量、知识库拿到
+   * 完整的一层。
    */
   it("write 档的工具段明显小于 full 档，而且没有把预算吃光", () => {
     const write = planForecast(input({ runTask: taskById("htmlArtifact") }))!;
     const full = planForecast(input({ runTask: taskById("agent") }))!;
 
     expect(write.usedTokens).toBeLessThan(full.usedTokens);
-    expect(full.over).toBe(true);
-    expect(write.over).toBe(false);
+    expect(seg(write, "system")).toBeLessThan(seg(full, "system"));
+    expect(seg(full, "free")).toBe(0);
     expect(seg(write, "free")).toBeGreaterThan(0);
+    expect(seg(write, "lore")).toBeGreaterThan(seg(full, "lore"));
   });
 
   /** 工具段走 token→字→token 的往返，必须原样回来（提示词里印的就是回来那个数）。 */
@@ -213,7 +219,7 @@ describe("条的几何", () => {
     const back = Math.round(
       (seg(withTools, "system") - seg(noTools, "system")) / withTools.charsPerToken,
     );
-    expect(back).toBeGreaterThan(9_000);
+    expect(back).toBeGreaterThan(5_000);
     expect(withTools.usedTokens).toBeGreaterThanOrEqual(back);
   });
 
@@ -251,8 +257,10 @@ describe("装不下的两个角落", () => {
    * 红数字，这条以前什么都不说。
    */
   it("条画得满满当当时，over 是唯一说得出「已经超了」的那个字段", () => {
+    // 系统提示得大到「固定成本 + 常驻工具」自己就越过 14k——可规划的层（近期/
+    // 知识库）是会被挤到零的，挤完还超才是 over。
     const f = planForecast(input({
-      runTask: taskById("agent"), contextSize: 32_000, systemPromptChars: 6_000,
+      runTask: taskById("agent"), contextSize: 32_000, systemPromptChars: 12_000,
     }))!;
     expect(seg(f, "free")).toBe(0);
     expect(seg(f, "system")).toBeGreaterThan(9_000);

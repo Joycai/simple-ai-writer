@@ -16,6 +16,8 @@ import type { TaskPreset } from "../agent/presets";
 import { runAgent, type AgentRuntimeOptions } from "../agent/runtime";
 import { createPlanGate, type PlanGate } from "../agent/plan";
 import { partitionByGroup } from "../agent/registry";
+import { toolTokensOf } from "../agent/toolCost";
+import { estimateMessagesTokens } from "../ai/tokenEstimate";
 import type { LoreIndex } from "../lore";
 
 vi.mock("../ai", () => ({ streamCompletion: vi.fn() }));
@@ -217,6 +219,56 @@ describe("lore_write is withheld until a plan is approved", () => {
     expect(offered[0]).toEqual(["list_lore_entities", "propose_lore_plan"]);
     expect(offered[1]).toEqual(["list_lore_entities", "propose_lore_plan"]);
     expect(opts.events.some((e) => e.kind === "tools-loaded")).toBe(false);
+  });
+
+  /**
+   * The other half of the resident-only planning contract (toolCost): the
+   * caller budgets `inputCeilingTokens` against the resident schemas, so when
+   * a group loads mid-run the runtime must shrink its own ceiling by that
+   * group's measured cost. Without this, a run that earns `lore_write` on a
+   * small window keeps trimming to a ceiling ~5k too generous — the silent
+   * overflow the ceiling exists to prevent, back again for exactly the runs
+   * that write lore.
+   */
+  it("shrinks its message ceiling by the loaded group's cost", async () => {
+    const gate = createPlanGate();
+    // A paired old tool exchange with a fat payload — trimHistory's one
+    // eligible victim. Everything else in history is text it never touches.
+    const fat = "设定资料。".repeat(1_600);
+    const seed: AgentRuntimeOptions["messages"] = [
+      { role: "system", content: "sys" },
+      { role: "user", content: "go" },
+      { role: "assistant", content: null, tool_calls: [
+        { id: "old1", type: "function", function: { name: "list_lore_entities", arguments: "{}" } },
+      ] },
+      { role: "tool", tool_call_id: "old1", content: fat },
+    ];
+    const seedTokens = estimateMessagesTokens(seed);
+    const groupCost = toolTokensOf(partitionByGroup(PRESET.tools).deferred.lore_write);
+    expect(groupCost).toBeGreaterThan(300); // the premise: the load is not free
+
+    queueRound([
+      { toolCalls: [{ index: 0, id: "c1", name: "list_lore_entities", arguments: "{}" }] },
+      done,
+    ], () => {
+      gate.steps.push({ action: "create", entity: "Ava", detail: "新建" });
+    });
+    queueRound([{ text: "done" }, done]);
+    const opts = { ...makeOptions(gate), messages: seed };
+    // Above the seed (round 1 must not trim), below seed + groupCost (round 2,
+    // with the group loaded and the ceiling shrunk, must).
+    opts.inputCeilingTokens = seedTokens + Math.floor(groupCost / 2);
+
+    await runAgent(opts);
+
+    const trims = opts.events.filter(
+      (e): e is Extract<AgentEvent, { kind: "context-trimmed" }> => e.kind === "context-trimmed",
+    );
+    expect(trims).toHaveLength(1);
+    // And what it trimmed is the fat old result — the ceiling moved, the
+    // mechanism stayed trimHistory's own.
+    expect(seed.find((m) => m.role === "tool" && m.tool_call_id === "old1")!.content)
+      .not.toContain("设定资料");
   });
 
   it("reports the round's real tool cost, which grows with the load", async () => {
