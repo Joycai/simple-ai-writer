@@ -70,6 +70,7 @@ Facts first, then our choices. [`README.md`](api/README.md) is the entry point.
 | [writer-subagent-ui-brief.md](feature/agent/writer-subagent-ui-brief.md) | `shipped` | 写手的 UI 任务书 + 设计稿回来之后：署名是左槽里那道**长度等于写手正文**的 1px 线；工单搬出执行日志；写手不是第七个芯片 |
 | [context-meters.md](feature/agent/context-meters.md) | `living` | 三条上下文计量条（生成的分配条 / 助手+扮演的构成条 / 预估态）：哪些必须一致（颜色语汇 + 段的合计等于上限）、哪些故意不一致（控件 vs 读数），以及各自已知未做的部分 |
 | [ask-author-plan.md](feature/agent/ask-author-plan.md) | `shipped` | `ask_author` 提问卡：模型出 2–4 个选项 + 恒在的自由输入，阻塞契约同 L2 审批；第五个待决队列，路由追加装载（批量/lore 弹窗拿不到工具），连批永不覆盖 |
+| [lore-category-visibility-plan.md](feature/agent/lore-category-visibility-plan.md) | `planned` | Agent 建重复分类的修复：模型从未见过分类标签、空分类在列表里隐形、`create_lore_category` 不查重、指令文案陈旧——PR-A 读侧 id↔标签对照（description + 结果文本，常驻预算随之放宽到 12,000），PR-B 写侧幂等查重 + 文案纠偏；与 lore-category-manage-plan 分片 3 互补 |
 
 ### feature/lore/ — the knowledge base
 

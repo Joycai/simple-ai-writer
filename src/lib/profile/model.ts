@@ -1446,6 +1446,20 @@ export function categoryLabel(cat: ProfileCategory, isZh: boolean): string {
   return isZh ? cat.labelZh : cat.labelEn;
 }
 
+/**
+ * A category as **model-facing text**: `id(label)` when the label says more
+ * than the id, the bare id otherwise. The id is the wire value (folder name,
+ * enum member); the label is what the author actually says — a model that has
+ * only ever seen `characters` cannot tell it is the category the author calls
+ * 「人物」, and invents a duplicate instead of using it. One format everywhere
+ * (tool descriptions, list_lore_entities output), so the pairing reads as one
+ * fact rather than two spellings.
+ */
+export function categoryRef(cat: ProfileCategory, isZh: boolean): string {
+  const label = categoryLabel(cat, isZh).trim();
+  return label.toLowerCase() === cat.id.toLowerCase() ? cat.id : `${cat.id}(${label})`;
+}
+
 /** Facet- or image-slot label in the active UI language (as `categoryLabel`). */
 export function slotLabel(slot: { labelZh: string; labelEn: string }, isZh: boolean): string {
   return isZh ? slot.labelZh : slot.labelEn;

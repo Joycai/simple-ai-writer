@@ -34,7 +34,11 @@ vi.mock("../fs/fileio", () => ({
   readDir: vi.fn(async () => []),
 }));
 vi.mock("../project", () => ({ readDirRecursive: vi.fn(async () => []) }));
-vi.mock("../../i18n", () => ({ default: { t: (key: string) => key } }));
+// `language` is set so the budget is measured at its worst case: the category
+// id↔label pairs substituted into list_lore_entities' description only differ
+// from the bare ids when the labels do (they always do in Chinese, mostly not
+// in English), so an unset language would measure the cheap variant.
+vi.mock("../../i18n", () => ({ default: { t: (key: string) => key, language: "zh-CN" } }));
 
 import { getToolDefinitions, partitionByGroup } from "../agent/registry";
 import { AGENT_ASSIST_PRESET, CONTINUE_PRESET } from "../agent/presets";
@@ -96,6 +100,12 @@ import { estimateToolsTokens } from "../ai/tokenEstimate";
  * Note the headroom this leaves: ~200. The next tool to land here should be
  * read against docs/feature/agent/agent-tool-context-lld.md §5 rather than
  * against a bigger number.
+ *
+ * 14,870 with the lore-plan category-target rewording (+51 on move_lore_entity,
+ * −4 resident) and the category id(label) pairs in list_lore_entities'
+ * description (+19 resident, zh worst case — the i18n mock pins zh-CN so this
+ * file measures the expensive variant). Headroom 130: the next description
+ * that grows here should check this number first.
  *
  * What the ratchet is still for is the thing it was always for — a NEW TOOL, or
  * a run of them, slipping in unpriced. At 15,000 that signal is weaker, so the
@@ -182,9 +192,20 @@ describe("tool schema budget", () => {
     // deferred: a run pays it only once the author has approved a plan, which
     // is the only moment "one category step, not twelve entity steps" could
     // change what the model does.
+    // 9,472 (of 14,870 full) after list_lore_entities' description started
+    // substituting id(label) pairs instead of bare ids — +19, measured at the
+    // zh worst case, which is why the i18n mock above pins zh-CN. The pairing
+    // is the fix for a real failure: asked in Chinese to organise by the novel
+    // pack's categories, the model — which had only ever seen the English
+    // folder ids — proposed creating 「人物」/「势力」 as new categories beside
+    // characters/factions. The resident cap moved 9,500 → 12,000 in the same
+    // commit (author's call, 2026-08-29,
+    // docs/feature/agent/lore-category-visibility-plan.md): the tight cap was
+    // making a ~20-token honesty fix look like a regression. The 15,000
+    // full-preset cap did NOT move and is now the binding one — headroom 130.
     const { resident } = partitionByGroup(AGENT_ASSIST_PRESET.tools);
     const residentTokens = estimateToolsTokens(getToolDefinitions(resident));
-    expect(residentTokens).toBeLessThanOrEqual(9_500);
+    expect(residentTokens).toBeLessThanOrEqual(12_000);
     // A guard against the deferral quietly becoming a no-op: someone drops the
     // `group` tag off a tool and the only symptom is a bigger bill.
     expect(tokensOf(AGENT_ASSIST_PRESET) - residentTokens).toBeGreaterThan(2_000);
