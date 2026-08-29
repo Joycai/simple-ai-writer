@@ -61,7 +61,10 @@ import { fileExists, makeDir, readBinaryFile, readDir, readFile, removeFile, ren
 import { IMAGE_EXT_LIST, isImagePath } from "../fs/images";
 import { readDirRecursive, type FileNode } from "../project";
 import { backupFile, backupFileByMove } from "./backup";
-import { countLines, describeEditTarget, findOccurrences, occurrenceAt, sliceLines } from "./editApply";
+import {
+  applyFindReplace, countLines, describeEditTarget, findOccurrences, occurrenceAt, sliceLines,
+  type EditTarget,
+} from "./editApply";
 import { echoRegion, lineOfOffset, shiftNote } from "./lineEcho";
 import {
   LORE_PLAN_ACTIONS,
@@ -743,19 +746,41 @@ export async function appendLoreFileTool(
   refreshFacetInSnapshot(entity, file, next);
 
   await syncLore(ctx);
+  // Where the entry now ends. Nothing above the addition moved, so one number
+  // is the whole update — the same answer append_file gives on the manuscript
+  // side (edit-loop-plan.md §5.3), and the coordinate search_text reports for
+  // a knowledge-base hit.
+  const endLine = await loreEndLine(entity.dirPath, file);
   return {
     toolCallId,
     content:
       `Appended ${addition.length} chars to the end of ${file} on entity "${entity.name}". ` +
       `Everything already in the file is unchanged.` +
+      (endLine ? ` It now ends at line ${endLine}.` : "") +
       (backupPath ? ` Previous version backed up to ${backupPath}.` : "") +
       ` Plan step: ${gated.step.detail}.`,
   };
 }
 
+/** An entry file's last line number, or 0 if it cannot be read back. */
+async function loreEndLine(dirPath: string, file: string): Promise<number> {
+  try {
+    return countLines(await readEntityFile(dirPath, file));
+  } catch {
+    return 0;
+  }
+}
+
 export async function editLoreFileTool(
   toolCallId: string,
-  args: { entity?: string; file?: string; find?: string; replace?: string },
+  args: {
+    entity?: string;
+    file?: string;
+    find?: string;
+    replace?: string;
+    occurrence?: number;
+    replace_all?: boolean;
+  },
   ctx: ToolContext,
 ): Promise<ToolResult> {
   const found = requireEntity(toolCallId, ctx, args.entity);
@@ -792,8 +817,8 @@ export async function editLoreFileTool(
   // untouched: metadata has its own tools precisely because find/replace over
   // YAML is how a facet silently stops being injected.
   const { head, body } = splitFrontmatter(raw);
-  const hits = body.split(find).length - 1;
-  if (hits === 0) {
+  const positions = findOccurrences(body, find);
+  if (positions.length === 0) {
     return {
       toolCallId,
       content:
@@ -803,34 +828,128 @@ export async function editLoreFileTool(
           : "Read the file with read_lore_entity and copy the snippet exactly, whitespace and line breaks included."),
     };
   }
-  if (hits > 1) {
-    return {
-      toolCallId,
-      content: `Error: that 'find' text appears ${hits} times in ${file} — it must be unique. Include enough surrounding text to pin down the one you mean.`,
-    };
-  }
+
+  const target = resolveEditTarget(toolCallId, args, positions.length, () =>
+    // The lines are the *file's*, frontmatter counted — the same coordinates
+    // search_text reports for a knowledge-base hit. Naming them turns an
+    // ambiguity refusal into something the model can act on in this same
+    // round, instead of a read to find out where the other matches were.
+    positions.map((at) => lineOfOffset(raw, head.length + at)).join(", "),
+  );
+  if (typeof target === "object") return target;
 
   const gated = gate(toolCallId, ctx, "update", entity.name, file);
   if ("refusal" in gated) return gated.refusal;
 
-  // split/join rather than String.replace: a replacement containing `$&` or
-  // `$1` would otherwise be expanded as a pattern reference, silently writing
-  // something other than what the author approved. `find` is unique, so this
-  // is the same single substitution, taken literally.
-  const next = head + body.split(find).join(replace);
+  // Sliced rather than String.replace: a replacement containing `$&` or `$1`
+  // would otherwise be expanded as a pattern reference, silently writing
+  // something other than what was approved. Shared with propose_edit's apply
+  // step, so "the third occurrence" means the same thing on both sides of the
+  // app — `positions.length` is passed as the count because counting and
+  // applying happen in the same call here, with no card in between for the
+  // author to invalidate.
+  const next = head + applyFindReplace(body, find, replace, positions.length, target);
   const backupPath = await backupFile(ctx.projectPath, `${entity.dirPath}/${file}`);
   await writeEntityFile(entity.dirPath, file, next);
   refreshFacetInSnapshot(entity, file, next);
 
   await syncLore(ctx);
+  const which = describeEditTarget(positions.length, target);
   return {
     toolCallId,
     content:
-      `Replaced ${find.length} chars with ${replace.length} in ${file} on entity "${entity.name}". ` +
-      `The rest of the file, and its frontmatter, are unchanged.` +
+      `Replaced ${find.length} chars with ${replace.length} in ${file} on entity "${entity.name}"` +
+      `${which ? ` (${which})` : ""}. The rest of the file, and its frontmatter, are unchanged.` +
       (backupPath ? ` Previous version backed up to ${backupPath}.` : "") +
-      ` Plan step: ${gated.step.detail}.`,
+      ` Plan step: ${gated.step.detail}.` +
+      (await loreEditReceipt(entity.dirPath, file, raw, head.length, find, positions, target)),
   };
+}
+
+/**
+ * Which occurrence(s) an edit means, or the refusal to hand back.
+ *
+ * The three ways out of an ambiguous `find` are `propose_edit`'s, deliberately:
+ * a model that has learned "make it unique, or say which one, or say all of
+ * them" on the manuscript should not have to learn a different answer for the
+ * knowledge base. Before this, the knowledge base had only the first of the
+ * three, so repeated text — the same phrase in two facets' worth of prose, a
+ * name in a timeline — was not addressable at all and the only way through was
+ * `update_lore_file` re-emitting the whole entry.
+ */
+function resolveEditTarget(
+  toolCallId: string,
+  args: { occurrence?: number; replace_all?: boolean },
+  hits: number,
+  where: () => string,
+): EditTarget | ToolResult {
+  const all = args.replace_all === true;
+  const nth = typeof args.occurrence === "number" ? args.occurrence : undefined;
+
+  if (all && nth !== undefined) {
+    return {
+      toolCallId,
+      content: "Error: pass either 'occurrence' or replace_all=true, not both.",
+    };
+  }
+  if (nth !== undefined && (!Number.isInteger(nth) || nth < 1 || nth > hits)) {
+    return {
+      toolCallId,
+      content:
+        `Error: 'occurrence' must be a whole number between 1 and ${hits} — that text appears ${hits} time(s) ` +
+        `in this file (on line(s) ${where()}).`,
+    };
+  }
+  if (hits > 1 && !all && nth === undefined) {
+    return {
+      toolCallId,
+      content:
+        `Error: that 'find' text appears ${hits} times in this file, on line(s) ${where()}. ` +
+        "Say which one you mean: include enough surrounding text to make 'find' unique, pass 'occurrence' " +
+        "for the Nth, or pass replace_all=true to change every one.",
+    };
+  }
+  return all ? "all" : nth;
+}
+
+/**
+ * What the entry now says where the edit landed — the knowledge base's half of
+ * §4.3.
+ *
+ * Until this existed a lore edit came back as "Replaced 12 chars with 15", from
+ * which the model can tell that *something* was written and nothing about
+ * whether the sentence it now sits in reads correctly. On the manuscript side
+ * that gap was worth a whole extra round; here it was worth the same round and
+ * additionally hid the failure mode that matters most in an entry — a snippet
+ * that matched inside a neighbouring sentence and welded two of them together.
+ *
+ * Line numbers count the frontmatter, because those are the coordinates
+ * everything else on this side reports (search_text's knowledge-base hits) and
+ * two numbering schemes for one file is worse than none.
+ */
+async function loreEditReceipt(
+  dirPath: string,
+  file: string,
+  before: string,
+  headLength: number,
+  find: string,
+  positions: number[],
+  target: EditTarget,
+): Promise<string> {
+  // Several places changed at once: the shifts accumulate down the file, so
+  // there is no single region to show and no single number that describes what
+  // moved. Saying so is the honest answer (propose_edit gives the same one).
+  if (target === "all" && positions.length > 1) {
+    return (
+      ` ${positions.length} places changed, so line numbers below the first one have all moved —` +
+      " read the entry again before relying on them."
+    );
+  }
+  const at = positions[typeof target === "number" ? target - 1 : 0];
+  if (at === undefined) return "";
+  const from = lineOfOffset(before, headLength + at);
+  const to = lineOfOffset(before, headLength + at + Math.max(0, find.length - 1));
+  return appliedReceipt(`${dirPath}/${file}`, before, from, to);
 }
 
 // ─── update_facet_meta / delete_lore_file (facet-level surgery) ──────────────

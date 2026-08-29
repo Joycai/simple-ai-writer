@@ -392,6 +392,17 @@ describe("append_lore_file", () => {
     expect(ctx.loreChanged).toBe(1);
   });
 
+  // Nothing above the addition moved, so where the file now ends is the whole
+  // update — the same answer append_file gives (edit-loop-plan.md §5.3), and
+  // the point of appending is that the model never read the file to begin with.
+  it("reports where the entry now ends", async () => {
+    const res = await run(
+      "append_lore_file", { entity: "Ava", content: "## 经历\n\n加冕于第二卷。" }, makeCtx(),
+    );
+
+    expect(res.content).toContain("It now ends at line 12.");
+  });
+
   it("appends to a facet without disturbing its frontmatter, and refreshes charCount", async () => {
     const ctx = makeCtx();
     await run("append_lore_file", { entity: "Ava", file: "armor.md", content: "肩甲刻着家纹。" }, ctx);
@@ -476,6 +487,124 @@ describe("edit_lore_file", () => {
     expect(fs.get(AVA)).toBe(INDEX_MD);
     expect(backupsOf()).toHaveLength(0);
     expect(ctx.loreChanged).toBe(0);
+  });
+
+  /**
+   * Repeated text used to be unaddressable here: `find` had to be unique, so
+   * the same phrase in two sentences of an entry left `update_lore_file`
+   * re-emitting the whole entry as the only way through. The three ways out
+   * are propose_edit's, deliberately — one answer for both sides of the app.
+   */
+  describe("says which occurrence, the way propose_edit does", () => {
+    const TWICE = `---\nfacet: "战甲"\nkeys: ["战甲"]\n---\n\n黑色的披风。\n黑色的手套。\n`;
+
+    it("replaces the Nth and leaves the others", async () => {
+      const ctx = makeCtx();
+      fs.set(ARMOR, TWICE);
+
+      const res = await run("edit_lore_file", {
+        entity: "Ava", file: "armor.md", find: "黑色", replace: "银色", occurrence: 2,
+      }, ctx);
+
+      expect(fs.get(ARMOR)).toContain("黑色的披风。\n银色的手套。");
+      expect(res.content).toContain("occurrence 2 of 2");
+    });
+
+    it("replaces every one under replace_all", async () => {
+      const ctx = makeCtx();
+      fs.set(ARMOR, TWICE);
+
+      const res = await run("edit_lore_file", {
+        entity: "Ava", file: "armor.md", find: "黑色", replace: "银色", replace_all: true,
+      }, ctx);
+
+      expect(fs.get(ARMOR)).toContain("银色的披风。\n银色的手套。");
+      expect(res.content).toContain("all 2 occurrences");
+    });
+
+    // The refusal is worth more than the count alone: the model can act on
+    // line numbers in this same round, and they are the file's own lines —
+    // the coordinates search_text reports for a knowledge-base hit.
+    it("names the lines the matches are on when asked to guess", async () => {
+      const ctx = makeCtx();
+      fs.set(ARMOR, TWICE);
+
+      const res = await run("edit_lore_file", {
+        entity: "Ava", file: "armor.md", find: "黑色", replace: "银色",
+      }, ctx);
+
+      expect(res.content).toContain("appears 2 times");
+      expect(res.content).toContain("on line(s) 6, 7");
+      expect(res.content).toContain("replace_all=true");
+      expect(fs.get(ARMOR)).toBe(TWICE);
+    });
+
+    it("refuses an occurrence that does not exist, and the two flags together", async () => {
+      const ctx = makeCtx();
+      fs.set(ARMOR, TWICE);
+
+      const past = await run("edit_lore_file", {
+        entity: "Ava", file: "armor.md", find: "黑色", replace: "银色", occurrence: 3,
+      }, ctx);
+      expect(past.content).toContain("between 1 and 2");
+
+      const both = await run("edit_lore_file", {
+        entity: "Ava", file: "armor.md", find: "黑色", replace: "银色",
+        occurrence: 1, replace_all: true,
+      }, ctx);
+      expect(both.content).toContain("not both");
+
+      expect(fs.get(ARMOR)).toBe(TWICE);
+      expect(ctx.loreChanged).toBe(0);
+    });
+  });
+
+  /**
+   * The knowledge base's half of §4.3. Before it, an edit came back as
+   * "Replaced 12 chars with 15" — from which the model can tell that something
+   * was written and nothing about whether the sentence it now sits in reads
+   * correctly.
+   */
+  describe("hands back what the entry now says there", () => {
+    it("echoes the applied region, numbered from the top of the FILE", async () => {
+      const ctx = makeCtx();
+
+      const res = await run("edit_lore_file", {
+        entity: "Ava", file: "armor.md", find: "黑色", replace: "银色",
+      }, ctx);
+
+      // Line 6 counts the frontmatter — two numbering schemes for one file
+      // would be worse than none.
+      expect(res.content).toContain("     6\t她的战甲是银色的。");
+      expect(res.content).toContain("no line number below it moved");
+    });
+
+    it("reports the shift when the replacement changes the line count", async () => {
+      const ctx = makeCtx();
+
+      const res = await run("edit_lore_file", {
+        entity: "Ava", file: "armor.md", find: "黑色", replace: "银色，\n而且很旧",
+      }, ctx);
+
+      expect(res.content).toContain("It now occupies lines 6-7");
+      expect(res.content).toContain("+1 line(s)");
+    });
+
+    // Shifts accumulate down the file, so there is no single region and no
+    // single number. Saying so is the honest answer; inventing one would land
+    // the next edit on the wrong lines without failing.
+    it("refuses to guess after replace_all over several hits", async () => {
+      const ctx = makeCtx();
+      fs.set(ARMOR, `---\nfacet: "战甲"\nkeys: ["战甲"]\n---\n\n黑色的披风。\n黑色的手套。\n`);
+
+      const res = await run("edit_lore_file", {
+        entity: "Ava", file: "armor.md", find: "黑色", replace: "银色", replace_all: true,
+      }, ctx);
+
+      expect(res.content).toContain("2 places changed");
+      expect(res.content).toContain("read the entry again");
+      expect(res.content).not.toContain("It now occupies");
+    });
   });
 });
 

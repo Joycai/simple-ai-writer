@@ -1397,7 +1397,7 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       function: {
         name: "edit_lore_file",
         description:
-          "Replace ONE exact snippet inside an entity's .md file — correct a sentence, update a number, fix a name in the prose — without resending the rest. What propose_edit is for the manuscript, this is for the knowledge base (applied immediately with a backup, once the approved lore plan covers it). 'find' must be text that currently exists in the file's BODY and must occur exactly once: include enough surrounding text to make it unique. Read the file with read_lore_entity first and copy the snippet verbatim, whitespace included. Pass an empty 'replace' to delete the found text. Frontmatter is never touched — use update_lore_meta or update_facet_meta for metadata. Defaults to index.md.",
+          "Replace an exact snippet inside an entity's .md file — correct a sentence, update a number, fix a name in the prose — without resending the rest. What propose_edit is for the manuscript, this is for the knowledge base (applied immediately with a backup, once the approved lore plan covers it). 'find' must be text that currently exists in the file's BODY. When it occurs more than once you have the same three ways to say which one you mean as propose_edit: make 'find' unique by including surrounding text, pass 'occurrence' for the Nth, or pass replace_all=true to change every one — the refusal names the lines they are on. Read the file with read_lore_entity or search_text first and copy the snippet verbatim, whitespace included. Pass an empty 'replace' to delete the found text. Frontmatter is never touched — use update_lore_meta or update_facet_meta for metadata. Defaults to index.md.",
         parameters: {
           type: "object",
           properties: {
@@ -1411,11 +1411,20 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
             },
             find: {
               type: "string",
-              description: "Exact existing text to replace (must be unique within the file body)",
+              description: "Exact existing text to replace, from the file body",
             },
             replace: {
               type: "string",
               description: "The replacement text; an empty string deletes the found text",
+            },
+            occurrence: {
+              type: "number",
+              description:
+                "1-based: which occurrence of 'find' to replace, when it appears more than once. Omit when 'find' is unique.",
+            },
+            replace_all: {
+              type: "boolean",
+              description: "Replace EVERY occurrence of 'find' in the file body. Cannot be combined with 'occurrence'.",
             },
           },
           required: ["entity", "find", "replace"],
