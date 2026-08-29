@@ -1,6 +1,6 @@
 # 导入文档的图片抽取（PDF · docx · pptx）
 
-> **Status: `shipped`** — PR-1（#389：`ConvertResult` 接缝 + PDF 全链路）、PR-2（#390：docx 复用）均已合并，真机验证 2026-08-29 通过。实现出入记在 §8。§2 里推迟的 pptx 抽图随后补上（§9，Rust 侧解 media）。
+> **Status: `shipped`** — PR-1（#389：`ConvertResult` 接缝 + PDF 全链路）、PR-2（#390：docx 复用）均已合并，真机验证 2026-08-29 通过。实现出入记在 §8。§2 里推迟的 pptx 抽图随后补上（#392，设计在 §9，Rust 侧解 media），同日真机验证通过——三种带图格式至此全部落地。
 
 ## 1. 背景与现状
 
