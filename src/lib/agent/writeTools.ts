@@ -2767,13 +2767,28 @@ export async function appendFileTool(
       content: `The author REJECTED this addition${decision.reason ? ` — reason: ${decision.reason}` : "."} Do not resend the same text; adjust per the reason or move on.`,
     };
   }
+  // Where the file now ends, because building a deliverable section by section
+  // means the next call often edits what this one just wrote — and the whole
+  // point of appending is that the model never had to read the file to do it.
+  // Nothing above the addition moved, so a line number is all it needs.
+  const endLine = await appendedEndLine(target.path);
   return {
     toolCallId,
     content:
       `Appended ${args.content.length} chars to ${target.path} (now ${original.length + args.content.length}).` +
+      (endLine ? ` The file now ends at line ${endLine}; nothing before the addition moved.` : "") +
       (decision.auto ? " Applied under a standing grant — nobody read it." : "") +
       (decision.backupPath ? ` Previous version backed up to ${decision.backupPath}.` : ""),
   };
+}
+
+/** The file's last line number after an append, or 0 if it cannot be read. */
+async function appendedEndLine(path: string): Promise<number> {
+  try {
+    return countLines(await readFile(path));
+  } catch {
+    return 0;
+  }
 }
 
 export async function rewriteDocumentTool(
