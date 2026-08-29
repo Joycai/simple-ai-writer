@@ -117,8 +117,21 @@ import { estimateToolsTokens } from "../ai/tokenEstimate";
  * pushes past 15,000, do not raise it again by reflex — read
  * docs/feature/agent/agent-tool-context-lld.md §5 first, because at that size
  * deferred loading is the answer and a bigger number is not.
+ *
+ * 15,135 with export_xlsx: **+274**, and the cap moved to 15,200 rather than the
+ * tool being deferred — §5 was read first, and its mechanism does not fit. What
+ * makes `lore_write` safe to withhold is a gate that makes those tools
+ * *unusable* until it opens (no approved plan → every call comes back as an
+ * error), so the model's path is unchanged by the deferral. An export has no
+ * such gate: it is callable from the first round, and holding it back would
+ * only mean the model cannot see a feature the author turned on. Its real gate
+ * is the Beta switch, and that one already costs nothing — routing strips the
+ * tool before the request is built, so an author who has not enabled Excel
+ * export pays 0 of these 274. What this cap measures is the all-three-Betas-on
+ * worst case. Headroom 65: the next tool that lands here needs a wider read
+ * than a wider number.
  */
-const AGENT_ASSIST_CAP = 15_000;
+const AGENT_ASSIST_CAP = 15_200;
 /** The read tier a 续写 carries. Measured 1,738. */
 const CONTINUE_CAP = 2_000;
 /** 旁白 reads other scenes and can write back; 扮演 is deliberately tiny. */

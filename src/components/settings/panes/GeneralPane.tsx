@@ -7,6 +7,7 @@ import { MARKDOWN_THEMES } from "../../../lib/theme/markdownThemes";
 import { isApiLogEnabled, setApiLogEnabled, getApiLogRevealTarget } from "../../../lib/ai/apiLog";
 import { isPptxExportEnabled, setPptxExportEnabled } from "../../../lib/pptx/flag";
 import { isDocxExportEnabled, setDocxExportEnabled } from "../../../lib/docx/flag";
+import { isXlsxExportEnabled, setXlsxExportEnabled } from "../../../lib/xlsx/flag";
 import { isRoleplayEnabled, setRoleplayEnabled } from "../../../lib/roleplay/flag";
 import { isTranslateEnabled, setTranslateEnabled } from "../../../lib/translate/flag";
 import { isComfyUiEnabled, setComfyUiEnabled } from "../../../lib/comfy/flag";
@@ -72,6 +73,7 @@ export function GeneralPane({ onEscapeInterceptChange }: Props) {
   const [notifyStatus, setNotifyStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [pptxOn, setPptxOn] = useState(isPptxExportEnabled());
   const [docxOn, setDocxOn] = useState(isDocxExportEnabled());
+  const [xlsxOn, setXlsxOn] = useState(isXlsxExportEnabled());
   const [roleplayOn, setRoleplayOn] = useState(isRoleplayEnabled());
   const [translateOn, setTranslateOn] = useState(isTranslateEnabled());
   const [comfyOn, setComfyOn] = useState(isComfyUiEnabled());
@@ -340,6 +342,16 @@ export function GeneralPane({ onEscapeInterceptChange }: Props) {
             on={docxOn}
             onChange={(next) => { setDocxExportEnabled(next); setDocxOn(next); }}
             label={t("systemSettings.general.docxLabel")}
+          />
+        </Row>
+        <Row
+          title={t("systemSettings.general.xlsxLabel")}
+          desc={t("systemSettings.general.xlsxHint")}
+        >
+          <Toggle
+            on={xlsxOn}
+            onChange={(next) => { setXlsxExportEnabled(next); setXlsxOn(next); }}
+            label={t("systemSettings.general.xlsxLabel")}
           />
         </Row>
         <Row

@@ -51,6 +51,7 @@ export const PREF_KEYS = [
   "app:apiLogEnabled",
   "app:pptxExportBeta",
   "app:docxExportBeta",
+  "app:xlsxExportBeta",
   // Which 排版格式 preset an export uses when the model names none. An id, and
   // an installation property: one 公文 format is reused across every project.
   "app:docxDefaultFormat",

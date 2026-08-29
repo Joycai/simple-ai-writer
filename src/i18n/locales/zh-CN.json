@@ -356,7 +356,9 @@
       "imageLongEdgeOff": "不缩",
       "docxLabel": "Word 排版导出（Beta）",
       "docxHint": "AI 助手可以把文档导出成 .docx，并按「排版格式」页里的预设排版。结构来自 markdown，字体字号行距页边距全部来自预设。",
-      "docxOffHint": "关掉后左侧导航里没有「排版格式」这一项，AI 助手的工具清单里也没有导出 Word——它不会提出一次自己无法执行的导出。已建的预设留在盘上，重新打开就回到原样。"
+      "docxOffHint": "关掉后左侧导航里没有「排版格式」这一项，AI 助手的工具清单里也没有导出 Word——它不会提出一次自己无法执行的导出。已建的预设留在盘上，重新打开就回到原样。",
+      "xlsxLabel": "Excel 导出（Beta）",
+      "xlsxHint": "AI 助手可以把文档里的 markdown 表格导出成 .xlsx：一张表格一个工作表，名字取自它上面的标题。数字、百分数、日期和 = 开头的公式会写成真的数字、日期和公式，其余留成文本——批准前的卡片上逐张写着判成了什么。"
     },
     "backup": {
       "section": "配置备份",
@@ -1349,6 +1351,12 @@
       "docxChangeMark": "改",
       "docxFontMissing": "{{fonts}} 本机未装（不影响导出：文件里写的就是它，在装了这个字体的机器上会正常排版）",
       "docxNote": "转换不经过模型：结构来自 markdown，字体字号行距页边距全部来自这套格式。",
+      "titleXlsx": "导出 Excel",
+      "xlsxSheetCount": "{{n}} 个工作表",
+      "xlsxNumbers": "数字 {{n}}",
+      "xlsxDates": "日期 {{n}}",
+      "xlsxFormulas": "公式 {{n}}",
+      "xlsxSkipped": "不会进工作簿：{{what}}",
       "imageNegative": "不要出现：{{text}}"
     },
     "autoApprove": {

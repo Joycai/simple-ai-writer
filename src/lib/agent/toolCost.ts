@@ -68,8 +68,8 @@ export function handoffToolTokens(): number {
  *
  * Measured off the *routed* toolset — what the run will actually put on the
  * wire — rather than the raw preset: routing strips the image tools when a
- * vision subagent is live, drops `export_pptx` / `export_docx` when their
- * Beta switches are off, and appends `delegate`. A budget taken from the unrouted preset describes a
+ * vision subagent is live, drops `export_pptx` / `export_docx` / `export_xlsx`
+ * when their Beta switches are off, and appends `delegate`. A budget taken from the unrouted preset describes a
  * request nobody sends.
  */
 export function plannedToolTokens(

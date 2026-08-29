@@ -185,6 +185,7 @@ export const AGENT_ASSIST_PRESET: TaskPreset = {
     "redraw_lore_image",
     "export_pptx",
     "export_docx",
+    "export_xlsx",
     "read_doc_format",
     "task_plan",
     "task_progress",

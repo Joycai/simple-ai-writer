@@ -356,7 +356,9 @@
       "imageLongEdgeOff": "No limit",
       "docxLabel": "Word export (Beta)",
       "docxHint": "Lets the assistant export a document as .docx, laid out by a preset from the Word format pane. Structure comes from the markdown; fonts, sizes, line spacing and margins all come from the preset.",
-      "docxOffHint": "With this off there is no Word format item in the nav and no Word export in the assistant's toolset — it will never propose an export it cannot carry out. Presets you have made stay on disk and come back when you switch it on again."
+      "docxOffHint": "With this off there is no Word format item in the nav and no Word export in the assistant's toolset — it will never propose an export it cannot carry out. Presets you have made stay on disk and come back when you switch it on again.",
+      "xlsxLabel": "Excel export (Beta)",
+      "xlsxHint": "Lets the assistant turn a document's markdown tables into an .xlsx: one table per sheet, named by the heading above it. Numbers, percentages, dates and cells starting with = are written as real numbers, dates and formulas; everything else stays text — the approval card lists what each sheet was read as."
     },
     "backup": {
       "section": "Config Backup",
@@ -1349,6 +1351,12 @@
       "docxChangeMark": "≠",
       "docxFontMissing": "{{fonts}} is not installed here (the export is unaffected — the file names that font and will lay out correctly wherever it exists)",
       "docxNote": "No model runs in the conversion: structure comes from the markdown, every font, size, line spacing and margin comes from this format.",
+      "titleXlsx": "Export Excel",
+      "xlsxSheetCount": "{{n}} sheet(s)",
+      "xlsxNumbers": "numbers {{n}}",
+      "xlsxDates": "dates {{n}}",
+      "xlsxFormulas": "formulas {{n}}",
+      "xlsxSkipped": "Not in the workbook: {{what}}",
       "imageNegative": "Avoid: {{text}}"
     },
     "autoApprove": {

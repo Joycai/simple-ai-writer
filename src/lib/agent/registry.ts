@@ -19,6 +19,7 @@
 
 import type { ToolDefinition } from "../ai/types";
 import type { DocFormat, SpecRow } from "../docx/format";
+import type { SheetSpec, SheetSummary } from "../xlsx/sheets";
 import type { FormatChange, FormatOrigin } from "../docx/resolve";
 import i18n from "../../i18n";
 import { type LoreIndex } from "../lore";
@@ -45,6 +46,7 @@ import {
   manageCollectionTool,
 } from "./organizeTools";
 import { exportDocxTool, readDocFormatTool } from "./docxTools";
+import { exportXlsxTool } from "./xlsxTools";
 import {
   listScenesTool,
   readSceneMemoryTool,
@@ -372,6 +374,28 @@ export interface DocxProposal extends ProposalBase {
 }
 
 /**
+ * Turn a markdown document's tables into an Excel workbook.
+ *
+ * The card's job is the one thing an author cannot check afterwards without
+ * opening Excel: **whether the numbers are numbers**. So the proposal carries
+ * the finished grid — every cell already classified — and a per-sheet tally of
+ * those decisions. Nothing is re-derived at apply time, which is why what was
+ * approved and what lands are the same workbook even if the source file moves
+ * on in between (pptx cannot promise that: it must render to measure).
+ */
+export interface XlsxProposal extends ProposalBase {
+  kind: "xlsx";
+  /** The `.md` the tables come from. `path` is where the .xlsx lands. */
+  sourcePath: string;
+  /** Exactly what will be written. Built once, at proposal time. */
+  sheets: SheetSpec[];
+  /** One row per sheet on the card: size, and how the cells were read. */
+  summaries: SheetSummary[];
+  /** What the document holds that a worksheet has nowhere to put. */
+  skipped: string[];
+}
+
+/**
  * Something the agent wants done that only the author may authorise. Nothing
  * happens until the card is approved, and the tool call stays blocked until it
  * is decided either way.
@@ -390,7 +414,8 @@ export type Proposal =
   | CopyProposal
   | IllustrateProposal
   | PptxProposal
-  | DocxProposal;
+  | DocxProposal
+  | XlsxProposal;
 
 export type ApprovalDecision =
   | {
@@ -665,6 +690,7 @@ export type ToolId =
   | "delete_directory"
   | "export_pptx"
   | "export_docx"
+  | "export_xlsx"
   | "read_doc_format"
   | "generate_image"
   | "edit_image"
@@ -2231,6 +2257,38 @@ const REGISTRY: Record<ToolId, RegisteredTool> = {
       },
     },
     execute: (call, ctx) => exportDocxTool(call.id, parseArgs(call.arguments), ctx),
+  },
+
+  export_xlsx: {
+    access: "write-approval",
+    definition: {
+      type: "function",
+      function: {
+        name: "export_xlsx",
+        description:
+          "Turn a project markdown document's tables into an Excel workbook (.xlsx). NOTHING is written until the author approves the card. Write the tables with create_file first: each table becomes one sheet named by the heading above it. Cells are typed by deterministic rules — a bare number, a percentage, an ISO date and a cell starting with = become a real number, percentage, date and formula; a value carrying a unit ('12000元') or a leading zero stays text. So write bare values, and real =SUM(...) formulas where a total belongs. Text outside tables is left behind; the result lists the sheets and what was skipped.",
+        parameters: {
+          type: "object",
+          properties: {
+            source_path: {
+              type: "string",
+              description: "Full path of the .md document whose tables to convert",
+            },
+            out_path: {
+              type: "string",
+              description:
+                "Full path for the .xlsx. Omit to write it beside the document under the same name.",
+            },
+            reason: {
+              type: "string",
+              description: "One-line justification shown to the author on the review card",
+            },
+          },
+          required: ["source_path"],
+        },
+      },
+    },
+    execute: (call, ctx) => exportXlsxTool(call.id, parseArgs(call.arguments), ctx),
   },
 
   read_doc_format: {

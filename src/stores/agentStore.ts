@@ -675,6 +675,43 @@ async function applyProposal(proposal: Proposal, signal?: AbortSignal): Promise<
         ].filter(Boolean).join("\n"),
       };
     }
+
+    case "xlsx": {
+      // Unlike the two above, nothing is converted here: the workbook was built
+      // when the card was raised, so this step only turns the approved grid
+      // into bytes (lib/xlsx/write.ts) and puts them on disk.
+      const { writeWorkbook } = await import("../lib/xlsx");
+      await writeWorkbook(proposal.sheets, proposal.path);
+      // Written with the raw byte writer, which the file tree knows nothing
+      // about — without this the new file is invisible until something else
+      // refreshes.
+      await useProjectStore.getState().refreshFileTree();
+      const cells = proposal.summaries.reduce(
+        (acc, s) => ({
+          numbers: acc.numbers + s.numbers,
+          dates: acc.dates + s.dates,
+          formulas: acc.formulas + s.formulas,
+        }),
+        { numbers: 0, dates: 0, formulas: 0 },
+      );
+      return {
+        resultPath: proposal.path,
+        report: [
+          `Exported ${proposal.summaries.length} sheet(s) to ${proposal.path}: ${proposal.summaries
+            .map((s) => `"${s.name}" ${s.rows}×${s.cols}`)
+            .join(", ")}.`,
+          `Typed cells: ${cells.numbers} number(s), ${cells.dates} date(s), ${cells.formulas} formula(s). Everything else is text.`,
+          proposal.skipped.length
+            ? `These are in the document but not in the workbook — a worksheet has nowhere to put them. State them plainly to the author:\n- ${proposal.skipped.join("\n- ")}`
+            : "",
+          // Without this the assistant promises a total the author will not see
+          // until they open the file in a real spreadsheet app.
+          cells.formulas > 0
+            ? "NOTE: formulas are written without a cached result, so Excel and LibreOffice compute them on open; a preview that only reads stored values may show those cells blank until then."
+            : "",
+        ].filter(Boolean).join("\n"),
+      };
+    }
   }
 }
 
