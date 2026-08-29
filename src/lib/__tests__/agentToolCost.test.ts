@@ -35,6 +35,8 @@ import {
   toolTokensOf,
 } from "../agent/toolCost";
 import { AGENT_ASSIST_PRESET, CONTINUE_PRESET, LORE_GENERATE_PRESET } from "../agent/presets";
+import { partitionByGroup } from "../agent/registry";
+import { routePlannedTools } from "../agent/routing";
 import { resetActiveWorkspace, setActiveWorkspace } from "../profile/active";
 import { resolveWorkspace } from "../profile/resolve";
 import { NOVEL_PROFILE, TTRPG_PROFILE } from "../profile/model";
@@ -90,6 +92,23 @@ describe("plannedToolTokens", () => {
 
   it("is zero for a null preset (a task with no tools at all)", () => {
     expect(plannedToolTokens(null, NO_SUBS, [])).toBe(0);
+  });
+
+  /**
+   * The deferred groups are not on the wire of any request planned before a
+   * run: the lore-plan gate is created fresh per run, so `lore_write` /
+   * `lore_organize` load only mid-run, after an approval — and the runtime
+   * compensates for that moment by shrinking its own ceiling (runAgent).
+   * Counting them here anyway is the ~5.4k over-report every assistant meter
+   * used to carry (edit-loop-plan.md §13).
+   */
+  it("counts only the resident half — deferred groups are the runtime's business", () => {
+    const routed = routePlannedTools(AGENT_ASSIST_PRESET, NO_SUBS, []);
+    const { resident, deferred } = partitionByGroup(routed.tools);
+    // The premise, so this test fails loudly if the groups ever empty out.
+    expect(Object.values(deferred).flat().length).toBeGreaterThan(10);
+    expect(plannedToolTokens(AGENT_ASSIST_PRESET, NO_SUBS, []))
+      .toBe(toolTokensOf(resident));
   });
 });
 

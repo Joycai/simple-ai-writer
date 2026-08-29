@@ -408,6 +408,19 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
   const { resident, deferred } = partitionByGroup(preset.tools);
   const activeTools: ToolId[] = [...resident];
   const loadedGroups = new Set<ToolGroup>();
+  /**
+   * The message ceiling as it stands *now*. The caller computed
+   * `inputCeilingTokens` against the resident toolset (`plannedToolTokens`
+   * counts only that half, because no request planned before a run can carry a
+   * deferred group — the plan gate is per-run). When a group loads mid-run, the
+   * schemas grow and the messages' share of the window shrinks by exactly that
+   * much; this is the one place that knows the load happened, so this is where
+   * the ceiling moves. Without it, a run that earns `lore_write` after a long
+   * conversation would keep trimming to a ceiling ~5k too generous — the same
+   * silent overflow this ceiling exists to prevent, reintroduced only for the
+   * runs that write lore on a small window.
+   */
+  let messageCeiling = opts.inputCeilingTokens;
 
   // The run's own lore snapshot. The write tools patch it and resync it in
   // place (see writeTools.syncLore) — but the object callers hand in is the
@@ -497,6 +510,9 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       if (!wanted || loadedGroups.has(group) || deferred[group].length === 0) continue;
       loadedGroups.add(group);
       activeTools.push(...deferred[group]);
+      if (messageCeiling !== undefined) {
+        messageCeiling = Math.max(0, messageCeiling - toolTokensOf(deferred[group]));
+      }
       opts.onEvent({
         kind: "tools-loaded",
         group,
@@ -636,8 +652,11 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
     let checkpointNotice: StreamMessage | null = null;
     if (
       preset.scratchpad === "required" &&
-      opts.inputCeilingTokens &&
-      estimateMessagesTokens(history) > opts.inputCeilingTokens * CHECKPOINT_RATIO &&
+      // The live ceiling, not opts.inputCeilingTokens: this nudge exists to get
+      // conclusions into notes *before* trimming starts, and trimming follows
+      // the ceiling as group loads shrink it.
+      messageCeiling &&
+      estimateMessagesTokens(history) > messageCeiling * CHECKPOINT_RATIO &&
       !checkpointArmed
     ) {
       checkpointNotice = {
@@ -684,7 +703,7 @@ export async function runAgent(opts: AgentRuntimeOptions): Promise<AgentRunResul
       }
     }
 
-    const dropped = trimHistory(history, opts.inputCeilingTokens);
+    const dropped = trimHistory(history, messageCeiling);
     if (dropped > 0) {
       opts.onEvent({ kind: "context-trimmed", count: dropped, at: Date.now() });
       checkpointArmed = false;
